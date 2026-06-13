@@ -150,9 +150,6 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
       |  private to prevent external dependency on specific values.          |
       +======================================================================+*/
 
-    /// @dev Share of ticket purchases routed to future prize pool (10%).
-    uint16 private constant PURCHASE_TO_FUTURE_BPS = 1000;
-
     /// @dev DGNRS bounty share for biggest flip payout (0.2% of reward pool).
     uint16 private constant COINFLIP_BOUNTY_DGNRS_BPS = 20;
     uint256 private constant COINFLIP_BOUNTY_DGNRS_MIN_BET = 50_000 ether;
@@ -433,60 +430,6 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
             .GAME_AFKING_MODULE
             .delegatecall(msg.data);
         if (!ok) _revertDelegate(data);
-    }
-
-    /*+======================================================================+
-      |                       MINT RECORDING                                 |
-      +======================================================================+
-      |  Functions called by the game contract to record mints and process         |
-      |  payments. ETH and claimable winnings can both fund purchases.       |
-      +======================================================================+*/
-
-    /// @notice Record a mint, funded by ETH or claimable winnings.
-    /// @dev Access: self-call only (from delegate modules).
-    ///      Payment modes:
-    ///      - DirectEth: msg.value must be >= costWei (overage ignored for accounting)
-    ///      - Claimable: deduct from claimableWinnings (msg.value must be 0)
-    ///      - Combined: ETH first, then claimable for remainder
-    ///
-    ///      SECURITY: Validates minimum payment amounts; overage is ignored for accounting.
-    ///      Prize contribution is split between nextPrizePool and futurePrizePool.
-    ///
-    /// @param player The player address to record mint for.
-    /// @param costWei Total cost in wei for this mint.
-    /// @param payKind Payment method (DirectEth, Claimable, or Combined).
-    /// @return newClaimableBalance Player's claimable balance after deduction (0 if DirectEth).
-    /// @custom:reverts E If caller is not self-call context or payment validation fails.
-    function recordMint(
-        address player,
-        uint256 costWei,
-        MintPaymentKind payKind
-    ) external payable returns (uint256 newClaimableBalance) {
-        if (msg.sender != address(this)) revert E();
-        uint256 prizeContribution;
-        (prizeContribution, newClaimableBalance) = _processMintPayment(
-            player,
-            costWei,
-            payKind
-        );
-        if (prizeContribution != 0) {
-            uint256 futureShare = (prizeContribution * PURCHASE_TO_FUTURE_BPS) /
-                10_000;
-            uint256 nextShare = prizeContribution - futureShare;
-            if (prizePoolFrozen) {
-                (uint128 pNext, uint128 pFuture) = _getPendingPools();
-                _setPendingPools(
-                    pNext + uint128(nextShare),
-                    pFuture + uint128(futureShare)
-                );
-            } else {
-                (uint128 next, uint128 future) = _getPrizePools();
-                _setPrizePools(
-                    next + uint128(nextShare),
-                    future + uint128(futureShare)
-                );
-            }
-        }
     }
 
     /// @notice Pay DGNRS bounty for the biggest flip record holder.
@@ -960,98 +903,6 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         if (!ok) _revertDelegate(data);
     }
 
-    /// @dev Process mint payment and return amount contributed to prize pool.
-    ///      Handles three payment modes with strict validation:
-    ///
-    ///      DirectEth: msg.value must be >= amount (overage ignored for accounting)
-    ///      Claimable: msg.value must be 0, deduct from claimableWinnings
-    ///      Combined: ETH first (any amount ≤ cost), then claimable for rest
-    ///
-    ///      SECURITY: Leaves 1 wei sentinel in claimable to prevent zeroing.
-    ///      INVARIANT: claimablePool is decremented by claimableUsed.
-    ///
-    /// @param player Player whose claimable balance to check/deduct.
-    /// @param amount Total cost in wei to cover.
-    /// @param payKind Payment method enum.
-    /// @return prizeContribution Amount contributing to next/future prize pools.
-    /// @return newClaimableBalance Player's claimable balance after deduction (0 if DirectEth).
-    function _processMintPayment(
-        address player,
-        uint256 amount,
-        MintPaymentKind payKind
-    ) private returns (uint256 prizeContribution, uint256 newClaimableBalance) {
-        uint256 ethUsed;
-        uint256 claimableUsed;
-        if (payKind == MintPaymentKind.DirectEth) {
-            // Direct ETH: fresh ETH first (overpay ignored), afking covers any shortfall;
-            // claimable is skipped on this kind.
-            ethUsed = msg.value < amount ? msg.value : amount;
-        } else if (payKind == MintPaymentKind.Claimable) {
-            // No fresh ETH allowed: draw claimable to the 1-wei sentinel, then afking.
-            if (msg.value != 0) revert E();
-            uint256 claimable = _claimableOf(player);
-            if (claimable > 1) {
-                uint256 available = claimable - 1; // Preserve 1 wei sentinel
-                claimableUsed = amount < available ? amount : available;
-                if (claimableUsed != 0) {
-                    unchecked {
-                        newClaimableBalance = claimable - claimableUsed;
-                    }
-                    _debitClaimable(player, claimableUsed);
-                }
-            }
-        } else if (payKind == MintPaymentKind.Combined) {
-            // ETH first, then claimable to the sentinel, then afking for any remainder.
-            if (msg.value > amount) revert E();
-            ethUsed = msg.value;
-            uint256 remaining = amount - msg.value;
-            if (remaining != 0) {
-                uint256 claimable = _claimableOf(player);
-                if (claimable > 1) {
-                    uint256 available = claimable - 1; // Preserve 1 wei sentinel
-                    claimableUsed = remaining < available
-                        ? remaining
-                        : available;
-                    if (claimableUsed != 0) {
-                        unchecked {
-                            newClaimableBalance = claimable - claimableUsed;
-                        }
-                        _debitClaimable(player, claimableUsed);
-                    }
-                }
-            }
-        } else {
-            revert E();
-        }
-
-        // Afking tier: the player's prepaid afking covers whatever fresh ETH + claimable did
-        // not. afking is fresh-ETH-equivalent (own deposited principal), so it counts toward
-        // prizeContribution. Reverts when the three tiers together fall short of the cost.
-        uint256 afkingUsed;
-        uint256 shortfall = amount - ethUsed - claimableUsed;
-        if (shortfall != 0) {
-            if (_afkingOf(player) < shortfall) revert E();
-            afkingUsed = shortfall;
-            _debitAfking(player, afkingUsed);
-        }
-        prizeContribution = ethUsed + claimableUsed + afkingUsed;
-
-        if (claimableUsed != 0) {
-            claimablePool -= uint128(claimableUsed);
-            emit ClaimableSpent(
-                player,
-                claimableUsed,
-                newClaimableBalance,
-                payKind,
-                amount
-            );
-        }
-        if (afkingUsed != 0) {
-            claimablePool -= uint128(afkingUsed);
-            emit AfkingSpent(player, afkingUsed);
-        }
-    }
-
     /*+======================================================================+
       |                       TICKET QUEUEING                                |
       +======================================================================+
@@ -1334,20 +1185,6 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     /// @param amount ETH amount withdrawn (wei).
     event AfkingWithdrew(address indexed player, uint256 amount);
 
-    /// @notice Emitted when claimable winnings are spent during a mint payment.
-    /// @param player The player whose claimable balance was used.
-    /// @param amount Amount of claimable ETH spent.
-    /// @param newBalance Player's new claimable balance after spending.
-    /// @param payKind Payment method used for the mint.
-    /// @param costWei Total mint cost in wei.
-    event ClaimableSpent(
-        address indexed player,
-        uint256 amount,
-        uint256 newBalance,
-        MintPaymentKind payKind,
-        uint256 costWei
-    );
-
     /// @notice Claim accrued ETH winnings.
     /// @dev Aggregates all winnings: affiliates, ContractAddresses.JACKPOTS, endgame payouts.
     ///      Uses pull pattern for security (CEI: check balance, update state, then transfer).
@@ -1387,16 +1224,15 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         uint256 afking = gameOver ? _afkingOf(player) : 0;
         if (amount <= 1 && afking == 0) revert E();
         uint256 payout;
+        uint256 claimDebit;
         unchecked {
             if (amount > 1) {
-                _debitClaimable(player, amount - 1); // Leave sentinel
-                payout = amount - 1;
+                claimDebit = amount - 1; // Leave sentinel
             }
-            if (afking != 0) {
-                _debitAfking(player, afking);
-                payout += afking;
-            }
+            payout = claimDebit + afking;
         }
+        // Both halves of the packed per-player slot debited in one load + store.
+        _debitClaimableAndAfking(player, claimDebit, afking);
         claimablePool -= uint128(payout); // CEI: update state before external call (checked math)
         emit WinningsClaimed(player, msg.sender, payout);
         if (stethFirst) {
@@ -1497,12 +1333,15 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
 
         // AUTO-02 short-circuit: probe item 0 (the caller's own choice). A resolved
         // bet is deleted (slot == 0), so a zero slot means a competitor got ahead.
-        if (degeneretteBets[players[0]][betIds[0]] == 0) revert BatchAlreadyTaken();
+        // The probe read doubles as iteration 0's bet read (do-while; len >= 1 here),
+        // so later items load their slot at the loop bottom instead of re-reading item 0.
+        uint256 betPacked = degeneretteBets[players[0]][betIds[0]];
+        if (betPacked == 0) revert BatchAlreadyTaken();
 
         uint256 successCount;
         uint256 totalResolved;
-        for (uint256 i; i < len; ) {
-            uint256 betPacked = degeneretteBets[players[i]][betIds[i]];
+        uint256 i;
+        do {
             // currency bits [42..43]: WWXRP is the most +EV currency, so it is excluded
             // from the >=3 reward gate to keep the faucet closed (AUTO-04).
             uint8 currency = uint8((betPacked >> 42) & 0x3);
@@ -1518,7 +1357,9 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
             unchecked {
                 ++i;
             }
-        }
+            if (i == len) break;
+            betPacked = degeneretteBets[players[i]][betIds[i]];
+        } while (true);
 
         // Flat ~1-BURNIE "lose" (D-05b): pay ONCE at >=3 non-WWXRP resolutions; revert
         // NoWork() if nothing resolved; 1-2 resolved commit UNPAID (never strand the tail).
@@ -1669,68 +1510,23 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
       +======================================================================+*/
 
     /// @notice Resolve redemption lootboxes for an sDGNRS gambling burn claim.
-    /// @dev Called by sDGNRS during claimRedemption. The owed value arrives as forwarded ETH
-    ///      (msg.value) plus a stETH top-up for any remainder: msg.value covers 0..amount and the
-    ///      rest is pulled via transferFrom (sDGNRS pre-approves GAME for max). This lets a
-    ///      partial- or zero-ETH sDGNRS (mid-game depletion) still settle — an ETH-only forward
-    ///      would revert and strand the whole claim. Both media credit futurePrizePool and count
-    ///      toward the game's claimablePool backing identically. No claimableWinnings[SDGNRS]
-    ///      debit occurs — the value was already pulled out of claimable at submit via
-    ///      pullRedemptionReserve, so reclassifying claimable here would double-spend it. Splits
-    ///      into 5 ETH boxes and resolves each via lootbox module delegatecall.
-    /// @param player Player receiving lootbox rewards
-    /// @param amount Total lootbox value to resolve (msg.value ETH + the stETH remainder pulled here)
-    /// @param rngWord RNG entropy for lootbox resolution
-    /// @param activityScore Snapshotted activity score (bps) from burn submission
+    /// @dev Called by sDGNRS during claimRedemption. Thin delegatecall dispatch stub into
+    ///      DegenerusGameLootboxModule's resolveRedemptionLootbox body (auth, funding-mix pull,
+    ///      pool credit, and the 5-ETH chunked resolution all live there). The signature matches
+    ///      the module function exactly (identical selector), so the calldata + msg.value forward
+    ///      as-is — re-encoding here would cost contract-size headroom for no behavior change.
+    ///      Signature: resolveRedemptionLootbox(address player, uint256 amount, uint256 rngWord,
+    ///      uint16 activityScore).
     function resolveRedemptionLootbox(
-        address player,
-        uint256 amount,
-        uint256 rngWord,
-        uint16 activityScore
+        address,
+        uint256,
+        uint256,
+        uint16
     ) external payable {
-        if (msg.sender != ContractAddresses.SDGNRS) revert E();
-        if (amount == 0) return;
-        // Forwarded ETH (msg.value) funds the leg; any remainder is pulled as stETH so a
-        // partial-ETH sDGNRS can still settle. msg.value must not exceed the leg amount.
-        if (msg.value > amount) revert E();
-        uint256 stethPortion;
-        unchecked { stethPortion = amount - msg.value; }
-        if (stethPortion != 0) {
-            if (!steth.transferFrom(msg.sender, address(this), stethPortion)) revert E();
-        }
-
-        // Credit the just-arrived value to the future prize pool (respects freeze state). The
-        // value was segregated out of claimableWinnings[SDGNRS] at submit, so there is no
-        // claimable debit here — only a real-value-in credit.
-        if (prizePoolFrozen) {
-            (uint128 pNext, uint128 pFuture) = _getPendingPools();
-            _setPendingPools(pNext, pFuture + uint128(amount));
-        } else {
-            (uint128 next, uint128 future) = _getPrizePools();
-            _setPrizePools(next, future + uint128(amount));
-        }
-
-        // Resolve lootboxes in 5 ETH chunks via delegatecall to lootbox module
-        uint256 remaining = amount;
-        while (remaining != 0) {
-            uint256 box = remaining > 5 ether ? 5 ether : remaining;
-            (bool ok, bytes memory data) = ContractAddresses
-                .GAME_LOOTBOX_MODULE
-                .delegatecall(
-                    abi.encodeWithSelector(
-                        IDegenerusGameLootboxModule
-                            .resolveRedemptionLootbox
-                            .selector,
-                        player,
-                        box,
-                        rngWord,
-                        activityScore
-                    )
-                );
-            if (!ok) _revertDelegate(data);
-            remaining -= box;
-            rngWord = uint256(keccak256(abi.encode(rngWord)));
-        }
+        (bool ok, bytes memory data) = ContractAddresses
+            .GAME_LOOTBOX_MODULE
+            .delegatecall(msg.data);
+        if (!ok) _revertDelegate(data);
     }
 
     /// @notice Credit the direct half of an sDGNRS redemption claim to `player`'s claimable winnings.

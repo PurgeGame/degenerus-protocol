@@ -338,9 +338,10 @@ interface IDegenerusGameLootboxModule {
         uint16 activityScore
     ) external;
 
-    /// @notice Resolves a redemption lootbox with a snapshotted activity score
+    /// @notice Resolves an sDGNRS redemption's full lootbox leg (auth, funding-mix pull, pool
+    ///         credit, 5-ETH chunked resolution) — delegatecall target of the Game's thin stub.
     /// @param player Player receiving lootbox rewards
-    /// @param amount ETH amount for lootbox resolution
+    /// @param amount Total lootbox value (msg.value ETH + the stETH remainder pulled inside)
     /// @param rngWord RNG word for entropy
     /// @param activityScore Raw activity score (bps) snapshotted at burn submission
     function resolveRedemptionLootbox(

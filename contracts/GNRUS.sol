@@ -72,15 +72,12 @@ contract GNRUS {
     /// @notice Thrown when setCharity attempts to replace or remove a filled locked slot (0, 1, or 2)
     error SlotLocked();
 
-    /// @notice Thrown when post-flush active count would exceed MAX_ACTIVE_SLOTS
-    error CapExceeded();
-
     /// @notice Thrown by vote() when the slot fails a state-based pre-condition.
     /// @dev Reason codes: REJECT_EMPTY_SLOT (0), REJECT_ALREADY_VOTED (1), REJECT_ZERO_WEIGHT (2)
     error VoteRejected(uint8 reason);
 
     /// @notice Thrown by pickCharity() when the level argument fails a state-based pre-condition.
-    /// @dev Reason codes: REJECT_LEVEL_NOT_ACTIVE (0), REJECT_LEVEL_ALREADY_RESOLVED (1)
+    /// @dev Reason code: REJECT_LEVEL_NOT_ACTIVE (0)
     error PickCharityRejected(uint8 reason);
 
     /// @notice Thrown by vote() when the targeted slot's current recipient equals the previous level's winner.
@@ -161,9 +158,6 @@ contract GNRUS {
 
     // ^ currentLevel (3) + finalized (1) + currentActiveBitmap (4) + pendingEditSet (4) = 12 bytes, one slot, 20 free
 
-    /// @notice Whether a given level has been resolved
-    mapping(uint24 => bool) public levelResolved;
-
     /// @notice Whether a voter has already voted for a given (level, voter, slot) tuple
     mapping(uint24 => mapping(address => mapping(uint8 => bool))) public hasVoted;
 
@@ -172,7 +166,9 @@ contract GNRUS {
     address[20] private currentSlate;
 
     /// @notice Pending edit queue. Recipient value at slot index; sentinel via `pendingEditSet` bitmap.
-    /// @dev bit set + value zero  = pending-remove; bit set + value !zero = pending-replace; bit clear = no pending edit.
+    /// @dev bit set + value zero  = pending-remove; bit set + value !zero = pending-replace; bit clear = no
+    ///      pending edit. Values are NOT zeroed when a bit clears — every read is gated on the bit, so a
+    ///      stale value is unobservable, and a later re-queue overwrites it (nonzero→nonzero SSTORE).
     mapping(uint8 => address) private pendingEdit;
 
     /// @notice Per-(level, slot) accumulator for approve weight cast via vote(). Old-level entries persist deliberately.
@@ -219,9 +215,6 @@ contract GNRUS {
 
     /// @notice PickCharityRejected reason: level argument does not match currentLevel
     uint8 private constant REJECT_LEVEL_NOT_ACTIVE = 0;
-
-    /// @notice PickCharityRejected reason: level has already been resolved
-    uint8 private constant REJECT_LEVEL_ALREADY_RESOLVED = 1;
 
     // =====================================================================
     //                       IMMUTABLE REFERENCES
@@ -316,8 +309,10 @@ contract GNRUS {
         uint256 ethOut = owed <= ethBal ? owed : ethBal;
         uint256 stethOut = owed - ethOut;
 
-        // CEI: burn tokens before external transfers
-        balanceOf[burner] -= amount; // reverts on underflow via Solidity 0.8
+        // CEI: burn tokens before external transfers. burnerBal (read above) is still fresh here:
+        // the intervening calls are STATICCALLs plus game.claimWinnings, none of which can write
+        // GNRUS balances. Checked subtraction — the underflow revert is the over-burn guard.
+        balanceOf[burner] = burnerBal - amount;
         unchecked { totalSupply = supply - amount; }
 
         emit Transfer(burner, address(0), amount);
@@ -387,64 +382,24 @@ contract GNRUS {
             if (recipient == address(0)) {
                 // Removal special case: empty current + zero recipient.
                 // SlotAlreadyEmpty fires only when no pending edit exists for this slot.
-                // If a pending edit IS set, this call cancels the queued add: clear pendingEdit[slot] and the bitmap bit.
+                // If a pending edit IS set, this call cancels the queued add: clear the bitmap bit
+                // (the stale mapping value is never read while the bit is clear).
                 if ((pendingEditSet & slotMask) == 0) revert SlotAlreadyEmpty();
-                pendingEdit[slot] = address(0);
                 pendingEditSet &= ~slotMask;
                 emit CharityQueued(slot, address(0));
                 return;
             }
-            // Cap check (instant-apply branch, recipient != 0)
-            uint32 futureBitmap = _futureBitmapAfter(slot, recipient, slotMask);
-            if (_popcount32(futureBitmap) > MAX_ACTIVE_SLOTS) revert CapExceeded();
-            // Apply
+            // Apply. The 20-slot cap is structural: the slot < MAX_ACTIVE_SLOTS guard above bounds
+            // every bitmap bit to positions 0..19, so no post-flush slate can exceed the cap.
             currentSlate[slot] = recipient;
             currentActiveBitmap = currentActiveBitmap | slotMask;
             emit CharityApplied(slot, recipient);
         } else {
             // Queue branch (current != 0; locked-slot guard already passed → slot in 3..19)
-            uint32 futureBitmap = _futureBitmapAfter(slot, recipient, slotMask);
-            if (_popcount32(futureBitmap) > MAX_ACTIVE_SLOTS) revert CapExceeded();
             // Apply (mapping write + bitmap bit set; if bit already set, this is a pending-overwrite — replace value)
             pendingEdit[slot] = recipient;
             pendingEditSet = pendingEditSet | slotMask;
             emit CharityQueued(slot, recipient);
-        }
-    }
-
-    /// @dev Compute the future currentActiveBitmap as if (a) the proposed setCharity write applied,
-    ///      then (b) all pending edits flushed to current slate. Used for cap-check in setCharity.
-    /// @param slot The slot being written
-    /// @param recipient The recipient being written (zero = remove)
-    /// @param slotMask uint32(1) << slot (cached by caller)
-    /// @return future The post-flush currentActiveBitmap if this setCharity call is applied + all pending edits flush
-    function _futureBitmapAfter(
-        uint8  slot,
-        address recipient,
-        uint32 slotMask
-    ) private view returns (uint32 future) {
-        future = currentActiveBitmap;
-
-        // Treat the proposed write as a pending entry for the slot, then iterate the union of
-        // (pendingEditSet ∪ {slot}) and apply each pending value to the future bitmap.
-        uint32 pSet = pendingEditSet | slotMask;
-
-        for (uint8 i; i < MAX_ACTIVE_SLOTS;) {
-            uint32 mask_i = uint32(1) << i;
-            if ((pSet & mask_i) != 0) {
-                address pendingValue;
-                if (i == slot) {
-                    pendingValue = recipient;
-                } else {
-                    pendingValue = pendingEdit[i];
-                }
-                if (pendingValue == address(0)) {
-                    future = future & ~mask_i;
-                } else {
-                    future = future | mask_i;
-                }
-            }
-            unchecked { ++i; }
         }
     }
 
@@ -596,9 +551,10 @@ contract GNRUS {
 
     /// @notice Atomically resolve a level: pick winner from CURRENT slate, distribute 2% of unallocated GNRUS, then flush queued edits for next level.
     /// @dev Caller must be the game contract (onlyGame). Operation is atomic per call:
-    ///      (1) Argument validation (level matches currentLevel, not already resolved).
-    ///      (2) Idempotence: levelResolved[level] = true; currentLevel = level + 1; SET FIRST so re-entrant
-    ///          guards lock before any further work (defense-in-depth — D-255-CEI-01 confirms zero external
+    ///      (1) Argument validation (level matches currentLevel). This alone enforces idempotence:
+    ///          currentLevel only ever advances (sole writer is step 2, strictly increasing), so a
+    ///          resolved level can never match again.
+    ///      (2) currentLevel = level + 1 SET FIRST so state locks before any further work (zero external
     ///          calls in the rest of the function, so re-entrancy is impossible by absence of callable surface).
     ///      (3) Winner phase against CURRENT (pre-flush) slate: iterate slots 0..MAX_ACTIVE_SLOTS-1 with strict `>`
     ///          so ties resolve to lowest active slot index.
@@ -612,29 +568,29 @@ contract GNRUS {
     ///          L+1, not L. The vault-owner cannot redirect votes already cast for the current level by
     ///          queueing a recipient swap mid-level.
     ///      (7) Terminal LevelSkipped emit when the level was not paid (single emission per call).
-    /// @param level The level to resolve (must equal currentLevel and not be levelResolved).
+    /// @param level The level to resolve (must equal currentLevel).
     function pickCharity(uint24 level) external onlyGame {
-        // 1. Argument validation
+        // 1. Argument validation — currentLevel only ever advances (sole writer is step 2 below,
+        //    strictly increasing), so this check alone enforces once-per-level resolution.
         if (level != currentLevel) revert PickCharityRejected(REJECT_LEVEL_NOT_ACTIVE);
-        if (levelResolved[level]) revert PickCharityRejected(REJECT_LEVEL_ALREADY_RESOLVED);
 
-        // 2. Idempotence guards SET FIRST — locks state before winner/distribution/flush.
-        levelResolved[level] = true;
+        // 2. Advance currentLevel FIRST — locks state before winner/distribution/flush.
         currentLevel = level + 1;
 
         // 3. Winner phase against CURRENT (pre-flush) slate — strict `>` so ties resolve to lowest slot.
         uint32 bitmap = currentActiveBitmap;
         uint8 bestSlot = type(uint8).max;
         uint256 bestWeight = 0;
+        uint32 mask = 1;
         for (uint8 i; i < MAX_ACTIVE_SLOTS;) {
-            if ((bitmap & (uint32(1) << i)) != 0) {
+            if ((bitmap & mask) != 0) {
                 uint256 w = slotApproveWeight[level][i];
                 if (w > bestWeight) {
                     bestWeight = w;
                     bestSlot = i;
                 }
             }
-            unchecked { ++i; }
+            unchecked { ++i; mask <<= 1; }
         }
 
         // 4. Distribution math — 2% of remaining unallocated GNRUS.
@@ -656,24 +612,30 @@ contract GNRUS {
 
         // 6. Flush phase — runs AFTER payout so queued edits during level L apply to L+1, not L.
         //    Invariant: flush MUST NOT revert (admin validates in setCharity per Phase 254).
+        //    Skipped entirely when no edits are pending (the loop would be a no-op and both writes
+        //    would rewrite their current values). pendingEdit values are left in place: the
+        //    pendingEditSet zeroing below clears every gate atomically, so stale values are
+        //    unobservable, and skipping the deletes keeps advance-chain execution gas down
+        //    (refunds do not reduce execution counted against the block ceiling).
         uint32 pSet = pendingEditSet;
-        for (uint8 i; i < MAX_ACTIVE_SLOTS;) {
-            uint32 mask_i = uint32(1) << i;
-            if ((pSet & mask_i) != 0) {
-                address pendingValue = pendingEdit[i];
-                currentSlate[i] = pendingValue;
-                if (pendingValue == address(0)) {
-                    bitmap = bitmap & ~mask_i;
-                } else {
-                    bitmap = bitmap | mask_i;
+        if (pSet != 0) {
+            uint32 mask_i = 1;
+            for (uint8 i; i < MAX_ACTIVE_SLOTS;) {
+                if ((pSet & mask_i) != 0) {
+                    address pendingValue = pendingEdit[i];
+                    currentSlate[i] = pendingValue;
+                    if (pendingValue == address(0)) {
+                        bitmap = bitmap & ~mask_i;
+                    } else {
+                        bitmap = bitmap | mask_i;
+                    }
+                    emit CharityFlushed(i, pendingValue);
                 }
-                delete pendingEdit[i];
-                emit CharityFlushed(i, pendingValue);
+                unchecked { ++i; mask_i <<= 1; }
             }
-            unchecked { ++i; }
+            currentActiveBitmap = bitmap;
+            pendingEditSet = 0;
         }
-        currentActiveBitmap = bitmap;
-        pendingEditSet = 0;
 
         // 7. Terminal event in the not-paid branch (paid branch already emitted LevelResolved at step 5).
         if (!paid) {

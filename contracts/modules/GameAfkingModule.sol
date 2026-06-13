@@ -1391,7 +1391,7 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
 
     /// @dev Route a chunk's batched afking spend to the prize pools, mirroring the normal-buy
     ///      splits: lootbox ETH 90% future / 10% next (100% next in distress, matching
-    ///      `_purchaseForWith`), ticket ETH 90% next / 10% future (matching `recordMint`). One
+    ///      `_purchaseForWith`), ticket ETH 90% next / 10% future (matching `_recordMintPayment`). One
     ///      pooled read+write per chunk; routes to the pending pools while the prize pool is
     ///      frozen. The per-buy debit already moved the ETH out of the funding source, so this
     ///      only credits the pools (the SOLVENCY-01 counterpart of that debit).

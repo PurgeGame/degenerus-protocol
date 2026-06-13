@@ -70,18 +70,6 @@ interface IDegenerusGame {
     /// @return approved True if operator can act for owner.
     function isOperatorApproved(address owner, address operator) external view returns (bool);
 
-    /// @notice Record a ticket purchase and calculate rewards.
-    /// @dev Access restricted to GAME self-call only (delegatecall modules via address(this)).
-    /// @param player The player making the purchase.
-    /// @param costWei Total cost in wei.
-    /// @param payKind Payment method used.
-    /// @return newClaimableBalance Updated claimable balance if using claimable payment.
-    function recordMint(
-        address player,
-        uint256 costWei,
-        MintPaymentKind payKind
-    ) external payable returns (uint256 newClaimableBalance);
-
     /// @notice Consume coinflip boon for next coinflip stake bonus.
     /// @dev Grants bonus to the next coinflip deposit.
     /// @param player The player consuming the boon.

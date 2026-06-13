@@ -877,18 +877,62 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         );
     }
 
-    /// @notice Resolve a redemption lootbox with a snapshotted activity score
-    /// @dev Called via delegatecall from Game when sDGNRS sends lootbox ETH during claimRedemption.
-    ///      Payable: the Game stub forwards sDGNRS's ETH leg and delegatecall keeps that msg.value
-    ///      in flight here. Uses provided activity score instead of reading current (score was
-    ///      snapshotted at submission).
+    /// @notice Resolve redemption lootboxes for an sDGNRS gambling burn claim.
+    /// @dev Delegatecall target of the Game's resolveRedemptionLootbox stub, so msg.sender
+    ///      (sDGNRS), msg.value, and address(this) (the Game) are all the caller's. The owed value
+    ///      arrives as forwarded ETH (msg.value) plus a stETH top-up for any remainder: msg.value
+    ///      covers 0..amount and the rest is pulled via transferFrom (sDGNRS pre-approves GAME for
+    ///      max). This lets a partial- or zero-ETH sDGNRS (mid-game depletion) still settle — an
+    ///      ETH-only forward would revert and strand the whole claim. Both media credit
+    ///      futurePrizePool and count toward the game's claimablePool backing identically. No
+    ///      claimableWinnings[SDGNRS] debit occurs — the value was already pulled out of claimable
+    ///      at submit via pullRedemptionReserve, so reclassifying claimable here would double-spend
+    ///      it. Splits into 5 ETH boxes resolved by plain internal calls inside this one
+    ///      delegatecall frame (same Game storage context, identical per-chunk seed-rehash chain).
+    /// @param player Player receiving lootbox rewards
+    /// @param amount Total lootbox value to resolve (msg.value ETH + the stETH remainder pulled here)
+    /// @param rngWord RNG entropy for lootbox resolution
+    /// @param activityScore Snapshotted activity score (bps) from burn submission
+    function resolveRedemptionLootbox(address player, uint256 amount, uint256 rngWord, uint16 activityScore) external payable {
+        if (msg.sender != ContractAddresses.SDGNRS) revert E();
+        if (amount == 0) return;
+        // Forwarded ETH (msg.value) funds the leg; any remainder is pulled as stETH so a
+        // partial-ETH sDGNRS can still settle. msg.value must not exceed the leg amount.
+        if (msg.value > amount) revert E();
+        uint256 stethPortion;
+        unchecked { stethPortion = amount - msg.value; }
+        if (stethPortion != 0) {
+            if (!steth.transferFrom(msg.sender, address(this), stethPortion)) revert E();
+        }
+
+        // Credit the just-arrived value to the future prize pool (respects freeze state). The
+        // value was segregated out of claimableWinnings[SDGNRS] at submit, so there is no
+        // claimable debit here — only a real-value-in credit.
+        if (prizePoolFrozen) {
+            (uint128 pNext, uint128 pFuture) = _getPendingPools();
+            _setPendingPools(pNext, pFuture + uint128(amount));
+        } else {
+            (uint128 next, uint128 future) = _getPrizePools();
+            _setPrizePools(next, future + uint128(amount));
+        }
+
+        // Resolve lootboxes in 5 ETH chunks
+        uint256 remaining = amount;
+        while (remaining != 0) {
+            uint256 box = remaining > 5 ether ? 5 ether : remaining;
+            _resolveRedemptionChunk(player, box, rngWord, activityScore);
+            remaining -= box;
+            rngWord = uint256(keccak256(abi.encode(rngWord)));
+        }
+    }
+
+    /// @dev Resolve one redemption lootbox chunk (≤ 5 ETH, never 0) with a snapshotted activity
+    ///      score. Uses the provided score instead of reading current (snapshotted at submission).
     /// @param player Player address to resolve for
-    /// @param amount ETH amount for the lootbox resolution
+    /// @param amount ETH amount for this chunk's resolution
     /// @param rngWord RNG word to use for resolution
     /// @param activityScore Raw activity score (bps) snapshotted at burn submission
-    function resolveRedemptionLootbox(address player, uint256 amount, uint256 rngWord, uint16 activityScore) external payable {
-        if (amount == 0) return;
-
+    function _resolveRedemptionChunk(address player, uint256 amount, uint256 rngWord, uint16 activityScore) private {
         uint24 currentLevel = level + 1;
         // Freeze-safe seed with NO live day: claim timing must not re-roll the outcome (rngWord,
         // frozen at submission, already domain-separates). No live day is read here — boon expiry

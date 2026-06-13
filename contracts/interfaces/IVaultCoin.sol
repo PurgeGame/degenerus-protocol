@@ -5,10 +5,6 @@ pragma solidity 0.8.34;
 /// @dev Used by DegenerusVault and game modules for minting tokens
 ///      from vault escrow without requiring token transfers.
 interface IVaultCoin {
-    /// @notice Increase the vault's mint allowance without transferring tokens.
-    /// @param amount Amount to add to vault's mint allowance.
-    function vaultEscrow(uint256 amount) external;
-
     /// @notice Mint tokens to recipient from vault's allowance.
     /// @param to Recipient address.
     /// @param amount Amount to mint.

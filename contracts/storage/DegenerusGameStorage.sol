@@ -923,6 +923,22 @@ abstract contract DegenerusGameStorage {
         balancesPacked[player] -= weiAmount << 128;
     }
 
+    /// @dev Debit claimable (low half) and afking (high half) in ONE load + store. Each half is
+    ///      guarded explicitly BEFORE the combined subtraction: a low-half borrow is invisible to
+    ///      0.8's full-word check, and an oversized afking amount would silently truncate in the
+    ///      unchecked-by-construction `<< 128` — the guards close both. Reverts match the
+    ///      sequential _debitClaimable + _debitAfking exactly.
+    function _debitClaimableAndAfking(
+        address player,
+        uint256 claimableAmount,
+        uint256 afkingAmount
+    ) internal {
+        uint256 packed = balancesPacked[player];
+        if (uint128(packed) < claimableAmount) revert E();
+        if ((packed >> 128) < afkingAmount) revert E();
+        balancesPacked[player] = packed - claimableAmount - (afkingAmount << 128);
+    }
+
     /// @notice Emitted when ETH is credited to a player's prepaid afking balance.
     event AfkingFunded(address indexed player, uint256 amount);
 

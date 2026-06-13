@@ -4,10 +4,7 @@ pragma solidity 0.8.34;
 import {IDegenerusAffiliate} from "../interfaces/IDegenerusAffiliate.sol";
 import {IDegenerusCoin} from "../interfaces/IDegenerusCoin.sol";
 import {IBurnieCoinflip} from "../interfaces/IBurnieCoinflip.sol";
-import {
-    IDegenerusGame,
-    MintPaymentKind
-} from "../interfaces/IDegenerusGame.sol";
+import {MintPaymentKind} from "../interfaces/IDegenerusGame.sol";
 import {IDegenerusQuests} from "../interfaces/IDegenerusQuests.sol";
 import {IDegenerusGameBoonModule} from "../interfaces/IDegenerusGameModules.sol";
 import {ContractAddresses} from "../ContractAddresses.sol";
@@ -117,12 +114,29 @@ contract DegenerusGameMintModule is
     uint16 private constant LOOTBOX_SPLIT_FUTURE_BPS = 9000;
     uint16 private constant LOOTBOX_SPLIT_NEXT_BPS = 1000;
 
+    /// @dev Share of ticket purchases routed to future prize pool (10%).
+    uint16 private constant PURCHASE_TO_FUTURE_BPS = 1000;
+
     /// @dev Number of daily jackpots per level (must match AdvanceModule).
     uint8 private constant JACKPOT_LEVEL_CAP = 5;
 
     // -------------------------------------------------------------------------
     // Events
     // -------------------------------------------------------------------------
+
+    /// @notice Emitted when claimable winnings are spent during a mint payment.
+    /// @param player The player whose claimable balance was used.
+    /// @param amount Amount of claimable ETH spent.
+    /// @param newBalance Player's new claimable balance after spending.
+    /// @param payKind Payment method used for the mint.
+    /// @param costWei Total mint cost in wei.
+    event ClaimableSpent(
+        address indexed player,
+        uint256 amount,
+        uint256 newBalance,
+        MintPaymentKind payKind,
+        uint256 costWei
+    );
 
     event LootBoxBuy(
         address indexed buyer,
@@ -151,12 +165,158 @@ contract DegenerusGameMintModule is
     );
 
     // -------------------------------------------------------------------------
-    // Mint Data Recording
+    // Mint Payment + Data Recording
     // -------------------------------------------------------------------------
+
+    /// @notice Record a mint payment, funded by ETH, claimable winnings, and/or afking.
+    /// @dev Direct internal call on the ETH-purchase path (this frame already runs in the
+    ///      Game's storage context). `ethForLeg` is the exact fresh-ETH value the caller
+    ///      allocates to this leg — every payment-mode check binds to it, never to the outer
+    ///      purchase tx's msg.value (a combined purchase splits one msg.value across legs).
+    ///      Payment modes:
+    ///      - DirectEth: ethForLeg must be >= costWei (overage ignored for accounting)
+    ///      - Claimable: deduct from claimableWinnings (ethForLeg must be 0)
+    ///      - Combined: ETH first, then claimable for remainder
+    ///      Afking covers any remaining shortfall on every mode.
+    ///
+    ///      SECURITY: Validates minimum payment amounts; overage is ignored for accounting.
+    ///      Prize contribution is split between nextPrizePool and futurePrizePool.
+    ///
+    /// @param player The player address to record mint for.
+    /// @param costWei Total cost in wei for this mint.
+    /// @param payKind Payment method (DirectEth, Claimable, or Combined).
+    /// @param ethForLeg Fresh ETH allocated to this leg by the caller.
+    /// @custom:reverts E If payment validation fails or the funding tiers fall short.
+    function _recordMintPayment(
+        address player,
+        uint256 costWei,
+        MintPaymentKind payKind,
+        uint256 ethForLeg
+    ) internal {
+        uint256 prizeContribution = _processMintPayment(
+            player,
+            costWei,
+            payKind,
+            ethForLeg
+        );
+        if (prizeContribution != 0) {
+            uint256 futureShare = (prizeContribution * PURCHASE_TO_FUTURE_BPS) /
+                10_000;
+            uint256 nextShare = prizeContribution - futureShare;
+            if (prizePoolFrozen) {
+                (uint128 pNext, uint128 pFuture) = _getPendingPools();
+                _setPendingPools(
+                    pNext + uint128(nextShare),
+                    pFuture + uint128(futureShare)
+                );
+            } else {
+                (uint128 next, uint128 future) = _getPrizePools();
+                _setPrizePools(
+                    next + uint128(nextShare),
+                    future + uint128(futureShare)
+                );
+            }
+        }
+    }
+
+    /// @dev Process mint payment and return amount contributed to prize pool.
+    ///      Handles three payment modes with strict validation:
+    ///
+    ///      DirectEth: ethForLeg must be >= amount (overage ignored for accounting)
+    ///      Claimable: ethForLeg must be 0, deduct from claimableWinnings
+    ///      Combined: ETH first (any amount ≤ cost), then claimable for rest
+    ///
+    ///      SECURITY: Leaves 1 wei sentinel in claimable to prevent zeroing.
+    ///      INVARIANT: claimablePool is decremented by claimableUsed + afkingUsed.
+    ///
+    /// @param player Player whose claimable balance to check/deduct.
+    /// @param amount Total cost in wei to cover.
+    /// @param payKind Payment method enum.
+    /// @param ethForLeg Fresh ETH allocated to this leg by the caller.
+    /// @return prizeContribution Amount contributing to next/future prize pools.
+    function _processMintPayment(
+        address player,
+        uint256 amount,
+        MintPaymentKind payKind,
+        uint256 ethForLeg
+    ) private returns (uint256 prizeContribution) {
+        uint256 ethUsed;
+        uint256 claimableUsed;
+        uint256 newClaimableBalance;
+        if (payKind == MintPaymentKind.DirectEth) {
+            // Direct ETH: fresh ETH first (overpay ignored), afking covers any shortfall;
+            // claimable is skipped on this kind.
+            ethUsed = ethForLeg < amount ? ethForLeg : amount;
+        } else if (payKind == MintPaymentKind.Claimable) {
+            // No fresh ETH allowed: draw claimable to the 1-wei sentinel, then afking.
+            if (ethForLeg != 0) revert E();
+            uint256 claimable = _claimableOf(player);
+            if (claimable > 1) {
+                uint256 available = claimable - 1; // Preserve 1 wei sentinel
+                claimableUsed = amount < available ? amount : available;
+                if (claimableUsed != 0) {
+                    unchecked {
+                        newClaimableBalance = claimable - claimableUsed;
+                    }
+                }
+            }
+        } else if (payKind == MintPaymentKind.Combined) {
+            // ETH first, then claimable to the sentinel, then afking for any remainder.
+            if (ethForLeg > amount) revert E();
+            ethUsed = ethForLeg;
+            uint256 remaining = amount - ethForLeg;
+            if (remaining != 0) {
+                uint256 claimable = _claimableOf(player);
+                if (claimable > 1) {
+                    uint256 available = claimable - 1; // Preserve 1 wei sentinel
+                    claimableUsed = remaining < available
+                        ? remaining
+                        : available;
+                    if (claimableUsed != 0) {
+                        unchecked {
+                            newClaimableBalance = claimable - claimableUsed;
+                        }
+                    }
+                }
+            }
+        } else {
+            revert E();
+        }
+
+        // Afking tier: the player's prepaid afking covers whatever fresh ETH + claimable did
+        // not. afking is fresh-ETH-equivalent (own deposited principal), so it counts toward
+        // prizeContribution. Reverts when the three tiers together fall short of the cost.
+        uint256 afkingUsed = amount - ethUsed - claimableUsed;
+
+        if (claimableUsed != 0 || afkingUsed != 0) {
+            // One load + store of the packed per-player slot; the helper's per-half guards
+            // reproduce the sequential claimable-then-afking debit reverts exactly (the
+            // high-half guard IS the afking-sufficiency check).
+            _debitClaimableAndAfking(player, claimableUsed, afkingUsed);
+            // One claimablePool RMW for both tiers. Checked uint128 casts/adds — each addend
+            // is bounded by its uint128 balance half, and underflow reverts exactly when the
+            // sequential debits would.
+            claimablePool -= uint128(claimableUsed) + uint128(afkingUsed);
+        }
+        prizeContribution = ethUsed + claimableUsed + afkingUsed;
+
+        if (claimableUsed != 0) {
+            emit ClaimableSpent(
+                player,
+                claimableUsed,
+                newClaimableBalance,
+                payKind,
+                amount
+            );
+        }
+        if (afkingUsed != 0) {
+            emit AfkingSpent(player, afkingUsed);
+        }
+    }
 
     /**
      * @notice Record mint metadata and update Activity Score metrics.
-     * @dev Runs at the return point of the recordMint self-call on the ETH-purchase path
+     * @dev Runs directly after the mint payment on the ETH-purchase path
      *      (the coin path never records mint data). Pure mintPacked_ accounting — touches
      *      no claimable or pool state.
      *
@@ -1844,20 +2004,17 @@ contract DegenerusGameMintModule is
             uint32 mintUnits = adjustedQty32;
 
             uint256 claimableBefore = _claimableOf(buyer);
-            IDegenerusGame(address(this)).recordMint{value: value}(
-                buyer,
-                costWei,
-                payKind
-            );
-            // Mint-data recording runs at the self-call's return point — after recordMint's
-            // payment processing, before the freshEth read (it touches neither claimable nor
-            // pool state either way).
+            // Direct internal payment processing — `value` is the exact ETH this leg carries
+            // (what the former value-bearing self-call re-scoped into its msg.value).
+            _recordMintPayment(buyer, costWei, payKind, value);
+            // Mint-data recording runs after the payment processing, before the freshEth
+            // read (it touches neither claimable nor pool state either way).
             _recordMintData(buyer, targetLevel, mintUnits);
 
             // Fresh ETH for the affiliate split = ticket cost minus the recycled claimable
-            // portion recordMint just drew; the afking-drawn portion counts as fresh (own
+            // portion the payment just drew; the afking-drawn portion counts as fresh (own
             // principal -> fresh-rate affiliate, including the lootbox activity score). Pay-kind
-            // validation already ran inside recordMint's payment processing.
+            // validation already ran inside the payment processing.
             uint256 freshEth = costWei - (claimableBefore - _claimableOf(buyer));
 
             // Day before final jackpot draw (not turbo): +100 BURNIE per ticket for affiliates
