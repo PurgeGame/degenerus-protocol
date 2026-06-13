@@ -4,9 +4,10 @@ Generated 2026-06-11 after commits 16f57728 / dd09cb99 / 554f83fd.
 Reconciled 2026-06-12 after round 4 (ca0efea5): the 50 round-4 IDs moved from the open table into Handled.
 Round 5 applied 2026-06-12 (Game core + Vault + GNRUS): 17 more IDs moved into Handled.
 Round 6 applied 2026-06-12 (WWXRP + Degenerette + Bingo, commit bfd639be): 17 more IDs moved into Handled (14 edits + 3 subsumed/already-applied).
+Round 7 applied 2026-06-12 (small-contract sweep: Admin/Deity/Jackpots/Stonk/StakedStonk/libs/MintStreak/storage): 22 more IDs moved into Handled — the LAST non-storage-packing APPROVED items; the remaining open APPROVED set is entirely the deferred packing family.
 IDs below are HANDLED — do not re-apply. Everything else in GAS-AUDIT-2026-06-10.{md,json} is open.
 
-## Handled (137 + 62 round 3 + 50 round 4 + 17 round 5 + 17 round 6)
+## Handled (137 + 62 round 3 + 50 round 4 + 17 round 5 + 17 round 6 + 22 round 7)
 
 - **ADMIN-01** — APPLIED commit dd09cb99 — proposeFeedSwap: hoisted sDGNRS.votingSupply() into a single `circ` read above the path branch; votingSnapshot now uses 
 - **ADMIN-02** — APPLIED commit dd09cb99 — propose: identical hoist — single votingSupply() read above the path branch, votingSnapshot reuses `circ` in contracts/D
@@ -315,39 +316,45 @@ Packets + adjudications + applied records: `.planning/gas-round6/packet-{wwxrp,d
 - **SMALLMODS-09** — APPLIED round 6 — inheritance reduced to DegenerusGameStorage (parents were storage-free abstracts); gates: storageLayout byte-identical, methodIdentifiers delta = {curseCountOf} only, no test calls curseCountOf on the module address
 - **SMALLMODS-17** — CLOSED round 6 — ALREADY APPLIED in live source (stale open entry): both Game stubs (claimBingo, claimAffiliateDgnrs) forward msg.data with unnamed params since the round-1 msg.data-forwarding family
 
-## Open, non-rejected (76 after round 6)
+### Round 7 (2026-06-12) — small-contract sweep
+
+Packets: `.planning/gas-round7/packet-{admin-deity,jackpots,stonk,libs,mintstreak-storage}.md` + APPLIED-LEDGER.md.
+3 reviewer passes: all contract findings FAITHFUL; all 11 RNG-site migrations byte-identical; forge 845/0/110 incl. 8 new R7LibEquivalence gates.
+
+- **ADMIN-05** — APPLIED round 7 — linkAmountToEth internalized (`_linkAmountToEth(amount, feed)`, try/catch on latestRoundData + pre-mul overflow guard); external fn kept as thin wrapper
+- **ADMIN-06** — APPLIED round 7 — onTokenTransfer skips getSubscription+multiplier while no feed configured; funding leg unconditional; feed==0 exits at the mult==0 return
+- **ADMIN-10** — APPLIED round 7 — guards reuse the existing _isActiveProposal (createdAt==0 short-circuit unreachable for real ids); void loops cache a per-iteration storage pointer
+- **DEITY-01** — APPLIED round 7 — tokenURI: external renderer first, internal render only on unset/failure/empty (byte-identical output)
+- **JACKPOTS-06** — APPLIED round 7 — slices D/D2 → 2-pass loop, ++salt first statement (salt 2,3 + entropy chain unchanged)
+- **JACKPOTS-09** — APPLIED round 7 — _updateBafTop Case 1 → shift-then-place, strict-> preserved (truth-table verified)
+- **JACKPOTS-11** — APPLIED round 7 (user-confirmed in diff review) — onlyCoin → COINFLIP-only (strict narrowing; BurnieCoin provably cannot call); natspec ×5; tests recalibrated to coinflip impersonation + COIN-rejects pin
+- **RT-CLAIMS-13** — CLOSED round 7 — SUBSUMED by JACKPOTS-06 (loop form of the same D/D2 dedup)
+- **STONK-01** — APPLIED round 7 — burnWrapped caches gameOver() (no external calls in burnForSdgnrs)
+- **STONK-02** — APPLIED round 7 — yearSweep's gameOver() staticcall deleted (goTime==0 dominates, same selector)
+- **STONK-03** — APPLIED round 7 — unreachable BURNIE-forward leg + burnie constant + IERC20Minimal deleted; ABI/event unchanged
+- **STONK-04** — APPLIED round 7 — burnForSdgnrs → auth + _burn (byte-identical dedup)
+- **STONK-08** — APPLIED round 7 — single pendingRedemptions load (memory copy, bool return); accepted both-fail revert-priority deltas (EDGE-13 repinned NoClaim→NotResolved)
+- **LIBS-01** — APPLIED round 7 — PriceLookupLib first-cycle branches collapsed into the modulo chain (uint24-proven identical)
+- **LIBS-02** — APPLIED round 7 — branch-free nibble table 0x4333222111 (unchecked mul; R7LibEquivalence gates green)
+- **LIBS-03** — APPLIED round 7 — remaining hash2 sites: Lootbox seed, Degenerette betId ×2, StakedStonk entropy, JackpotModule TAG ×3, AdvanceModule TAG + (combined,w); DegenerusJackpots ×4 were already applied (stale sub-entries). Residual: one more TAG site at AdvanceModule:~484 not listed in the audit body — future one-liner
+- **LIBS-04** — APPLIED round 7 — EntropyLib.hash1 added; redemption-chunk reseed migrated (site relocated to LootboxModule:925 by round-5 LOOTBOX-12)
+- **MINT-12** — APPLIED round 7 — (cl, oneTicketWei, seed) threaded through the salvage quote helpers; _farFutureSeed single computation site (preview/exec parity by construction)
+- **MINT-15** — APPLIED round 7 — curseCountOf relocated verbatim into the Game; 4 module dispatchers shed the entry
+- **RT-AFKING-WHALE-07** — CLOSED round 7 — hot path ALREADY APPLIED (FromPacked variant, earlier round); residual finished (ethMintStats packed variant + orphaned wrapper deleted)
+- **STORAGE-03** — APPLIED round 7 — _queueTicketRange hoists rngLockedCached + writeSlotBit (~10k per 100-level whale bundle)
+- **RT-IDIOMS-08** — CLOSED round 7 — SUBSUMED by STORAGE-03 (same hoist, different ID)
+
+## Open, non-rejected (54 after round 7 — the 7 remaining APPROVED are ALL deferred storage_packing)
 
 | id | verdict | category | freq | file | est. save |
 |---|---|---|---|---|---|
 | RT-PACKING-08 | APPROVED | storage_packing | hot | BurnieCoinflip.sol | Daily resolution: ~15,000/day average (zero-to-nonzero only  |
-| ADMIN-05 | APPROVED | idiom | warm | DegenerusAdmin.sol | ~1500-2500 per LINK donation (external self-call frame + ABI |
-| ADMIN-06 | APPROVED | redundant_external_call | warm | DegenerusAdmin.sol | ~3000-5000 per donation while no feed is configured (cold st |
 | ADMIN-09 | APPROVED | storage_packing | cold | DegenerusAdmin.sol | ~22100 per first-time voter per proposal (one cold SLOAD ~21 |
-| ADMIN-10 | APPROVED | bytecode_dedup | cold | DegenerusAdmin.sol | ~100 per killed proposal in void loops (one keccak avoided); |
-| DEITY-01 | APPROVED | other | cold | DegenerusDeityPass.sol | 0 on-chain (tokenURI has zero production on-chain callers —  |
-| JACKPOTS-06 | APPROVED | bytecode_dedup | cold | DegenerusJackpots.sol | ~0 (a few gas of loop overhead per resolution; negligible) |
-| JACKPOTS-09 | APPROVED | idiom | hot | DegenerusJackpots.sol | ~200-3000 per leaderboard-climbing flip settle (one SSTORE + |
-| JACKPOTS-11 | APPROVED | redundant_check | hot | DegenerusJackpots.sol | ~25-40 per recordBafFlip (one address compare + short-circui |
-| RT-CLAIMS-13 | APPROVED | bytecode_dedup | warm | DegenerusJackpots.sol | 0 (or ~-50 per resolution from the extra internal call) |
-| STONK-02 | APPROVED | redundant_check | cold | DegenerusStonk.sol | ~2700 on first call in tx (cold GAME account moves to the ga |
-| STONK-03 | APPROVED | dead_code | cold | DegenerusStonk.sol | ~20-30 per post-gameOver burn-through (dead JUMPI + zero-che |
-| STONK-04 | APPROVED | bytecode_dedup | warm | DegenerusStonk.sol | ~0 (internal jump overhead ~20 gas added, negligible) |
-| LIBS-03 | APPROVED | idiom | warm | libraries/EntropyLib.sol | ~30-60 gas per call site execution (skips free-memory-pointe |
-| LIBS-04 | APPROVED | idiom | warm | libraries/EntropyLib.sol | ~40-70 gas per loop iteration (one iteration per 5 ETH of re |
-| LIBS-01 | APPROVED | bytecode_dedup | hot | libraries/PriceLookupLib.sol | Levels >=100 (the long-run regime, called per purchase/quote |
-| LIBS-02 | APPROVED | idiom | hot | libraries/PriceLookupLib.sol | ~10-20 gas/call vs the branch chain (DIV+SHR+AND+MUL ≈ 4 ops |
-| MINT-12 | APPROVED | redundant_check | cold | modules/DegenerusGameMintStreakUtils.sol | ~600-1000 per salvage swap (1 warm SLOAD + keccak + encodePa |
-| MINT-15 | APPROVED | bytecode_dedup | cold | modules/DegenerusGameMintStreakUtils.sol | ~0 on-chain (marginally shallower selector search in 5 modul |
-| RT-AFKING-WHALE-07 | APPROVED | redundant_sload | hot | modules/DegenerusGameMintStreakUtils.sol | ~97 per activity-score computation (warm SLOAD avoided) — fi |
-| STONK-01 | APPROVED | redundant_external_call | cold | StakedDegenerusStonk.sol | ~200-600 per post-gameOver wrapped burn (1-2 warm staticcall |
-| STONK-08 | APPROVED | redundant_sload | warm | StakedDegenerusStonk.sol | ~100-200 per claim (one duplicate warm SLOAD + field masking |
-| STORAGE-03 | APPROVED | loop | warm | storage/DegenerusGameStorage.sol | ~200/iteration (2 warm SLOADs at 100 each, assuming the opti |
 | RT-PACKING-02 | APPROVED | storage_packing | warm | storage/DegenerusGameStorage.sol | ~5,000/day on _applyDailyRng (one cold access + one SSTORE o |
 | RT-PACKING-03 | APPROVED | storage_packing | warm | storage/DegenerusGameStorage.sol | ~4,200 per boon grant (one cold SLOAD + one cold SSTORE acce |
 | RT-PACKING-04 | APPROVED | storage_packing | warm | storage/DegenerusGameStorage.sol | ~2,100 per claimBingo (one cold SLOAD removed); ~21,200 extr |
 | RT-PACKING-05 | APPROVED | storage_packing | warm | storage/DegenerusGameStorage.sol | ~2,100 per whale-pass/deity purchase (reserved check: 2 cold |
 | RT-PACKING-06 | APPROVED | storage_packing | warm | storage/DegenerusGameStorage.sol | ~2,100 per decimator claim (poolWei+totalBurn now one cold S |
-| RT-IDIOMS-08 | APPROVED | loop | warm | storage/DegenerusGameStorage.sol | ~20,000 per 100-level whale bundle purchase (~200/iteration  |
 | RT-COINFLIP-10 | NEEDS_HUMAN_REVIEW | dead_code | hot | BurnieCoin.sol | ~15-20 per third-party transferFrom (one PUSH20+EQ+JUMPI) |
 | BURNIE-10 | NEEDS_HUMAN_REVIEW | loop | hot | BurnieCoinflip.sol | ~50 per loop iteration if the compiler hoists the invariant  |
 | BURNIE-16 | NEEDS_HUMAN_REVIEW | unused_function | cold | BurnieCoinflip.sol | ~22 dispatcher comparison per call to later selectors (negli |
