@@ -1031,11 +1031,14 @@ contract RedemptionEdgeCases is DeployProtocol {
         assertEq(uint256(ePool), 0, "EDGE-13: pool ethBase remains zero under sub-gwei rounding");
         assertGt(uint256(bnPool), 0, "EDGE-13: pool burned increments (ceiling-divide on amount)");
 
-        // Resolve, then claim — v47: a zero-ethValueOwed claim reverts NoClaim (ETH-only guard).
+        // Resolve, then claim. resolveRedemptionPeriod early-returns on a zero-ethBase
+        // day (nothing to reconcile), so redemptionPeriods[dayD] stays 0 and the claim
+        // fails at the resolution gate — NotResolved (the gate ordering checks the
+        // period before the per-player slot; the slot's emptiness is asserted below).
         _advanceWallDay();
         _resolveDay(dayD, roll);
         vm.prank(playerA);
-        vm.expectRevert(StakedDegenerusStonk.NoClaim.selector);
+        vm.expectRevert(StakedDegenerusStonk.NotResolved.selector);
         sdgnrs.claimRedemption(playerA, uint24(dayD));
 
         // Slot remains zero-ethValueOwed (nothing was claimable; the reverting claim mutates nothing).

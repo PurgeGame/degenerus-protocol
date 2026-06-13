@@ -16,7 +16,7 @@ import {
  * DegenerusJackpots Unit Tests
  * ============================
  * Covers:
- *  - recordBafFlip (onlyCoin: coin or coinflip contract only)
+ *  - recordBafFlip (onlyCoin: coinflip contract only)
  *    - happy path: accumulates bafTotals, updates leaderboard
  *    - ignores vault address
  *    - emits BafFlipRecorded
@@ -33,24 +33,6 @@ import {
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-/**
- * Impersonate the coin contract to call recordBafFlip.
- */
-async function recordBafFlipAsCoin(hreEthers, coin, jackpots, player, lvl, amount) {
-  const coinAddr = await coin.getAddress();
-  await hreEthers.provider.send("hardhat_impersonateAccount", [coinAddr]);
-  await hreEthers.provider.send("hardhat_setBalance", [
-    coinAddr,
-    "0x1000000000000000000",
-  ]);
-  const coinSigner = await hreEthers.getSigner(coinAddr);
-  const tx = await jackpots
-    .connect(coinSigner)
-    .recordBafFlip(player, lvl, amount);
-  await hreEthers.provider.send("hardhat_stopImpersonatingAccount", [coinAddr]);
-  return tx;
-}
 
 /**
  * Impersonate the coinflip contract to call recordBafFlip.
@@ -111,11 +93,19 @@ describe("DegenerusJackpots", function () {
       ).to.be.revertedWithCustomError(jackpots, "OnlyCoin");
     });
 
-    it("succeeds when called by coin contract", async function () {
+    it("reverts OnlyCoin when called by the coin contract (coinflip-only gate)", async function () {
       const { jackpots, coin, alice } = await loadFixture(deployFullProtocol);
+      const coinAddr = await coin.getAddress();
+      await hre.ethers.provider.send("hardhat_impersonateAccount", [coinAddr]);
+      await hre.ethers.provider.send("hardhat_setBalance", [
+        coinAddr,
+        "0x1000000000000000000",
+      ]);
+      const coinSigner = await hre.ethers.getSigner(coinAddr);
       await expect(
-        recordBafFlipAsCoin(hre.ethers, coin, jackpots, alice.address, 10, eth(100))
-      ).to.not.be.reverted;
+        jackpots.connect(coinSigner).recordBafFlip(alice.address, 10, eth(100))
+      ).to.be.revertedWithCustomError(jackpots, "OnlyCoin");
+      await hre.ethers.provider.send("hardhat_stopImpersonatingAccount", [coinAddr]);
     });
 
     it("succeeds when called by coinflip contract", async function () {
@@ -138,10 +128,10 @@ describe("DegenerusJackpots", function () {
   // =========================================================================
   describe("recordBafFlip - happy path", function () {
     it("emits BafFlipRecorded with correct fields", async function () {
-      const { jackpots, coin, alice } = await loadFixture(deployFullProtocol);
-      const tx = await recordBafFlipAsCoin(
+      const { jackpots, coinflip, alice } = await loadFixture(deployFullProtocol);
+      const tx = await recordBafFlipAsCoinflip(
         hre.ethers,
-        coin,
+        coinflip,
         jackpots,
         alice.address,
         10,
@@ -155,18 +145,18 @@ describe("DegenerusJackpots", function () {
     });
 
     it("accumulates total across multiple flips for same player/level", async function () {
-      const { jackpots, coin, alice } = await loadFixture(deployFullProtocol);
-      await recordBafFlipAsCoin(
+      const { jackpots, coinflip, alice } = await loadFixture(deployFullProtocol);
+      await recordBafFlipAsCoinflip(
         hre.ethers,
-        coin,
+        coinflip,
         jackpots,
         alice.address,
         10,
         eth(200)
       );
-      const tx = await recordBafFlipAsCoin(
+      const tx = await recordBafFlipAsCoinflip(
         hre.ethers,
-        coin,
+        coinflip,
         jackpots,
         alice.address,
         10,
@@ -177,11 +167,11 @@ describe("DegenerusJackpots", function () {
     });
 
     it("silently ignores vault address", async function () {
-      const { jackpots, coin, vault } = await loadFixture(deployFullProtocol);
+      const { jackpots, coinflip, vault } = await loadFixture(deployFullProtocol);
       const vaultAddr = await vault.getAddress();
-      const tx = await recordBafFlipAsCoin(
+      const tx = await recordBafFlipAsCoinflip(
         hre.ethers,
-        coin,
+        coinflip,
         jackpots,
         vaultAddr,
         10,
@@ -193,18 +183,18 @@ describe("DegenerusJackpots", function () {
     });
 
     it("different levels are tracked independently", async function () {
-      const { jackpots, coin, alice } = await loadFixture(deployFullProtocol);
-      await recordBafFlipAsCoin(
+      const { jackpots, coinflip, alice } = await loadFixture(deployFullProtocol);
+      await recordBafFlipAsCoinflip(
         hre.ethers,
-        coin,
+        coinflip,
         jackpots,
         alice.address,
         10,
         eth(100)
       );
-      const tx = await recordBafFlipAsCoin(
+      const tx = await recordBafFlipAsCoinflip(
         hre.ethers,
-        coin,
+        coinflip,
         jackpots,
         alice.address,
         20,
@@ -222,15 +212,15 @@ describe("DegenerusJackpots", function () {
   // =========================================================================
   describe("recordBafFlip - leaderboard maintenance", function () {
     it("inserts new player into top-4 in sorted order", async function () {
-      const { jackpots, coin, alice, bob, carol, dan } = await loadFixture(
+      const { jackpots, coinflip, alice, bob, carol, dan } = await loadFixture(
         deployFullProtocol
       );
       const lvl = 10;
       // Insert 4 players in unsorted order
-      await recordBafFlipAsCoin(hre.ethers, coin, jackpots, carol.address, lvl, eth(300));
-      await recordBafFlipAsCoin(hre.ethers, coin, jackpots, alice.address, lvl, eth(500));
-      await recordBafFlipAsCoin(hre.ethers, coin, jackpots, dan.address, lvl, eth(100));
-      await recordBafFlipAsCoin(hre.ethers, coin, jackpots, bob.address, lvl, eth(400));
+      await recordBafFlipAsCoinflip(hre.ethers, coinflip, jackpots, carol.address, lvl, eth(300));
+      await recordBafFlipAsCoinflip(hre.ethers, coinflip, jackpots, alice.address, lvl, eth(500));
+      await recordBafFlipAsCoinflip(hre.ethers, coinflip, jackpots, dan.address, lvl, eth(100));
+      await recordBafFlipAsCoinflip(hre.ethers, coinflip, jackpots, bob.address, lvl, eth(400));
 
       // Run jackpot to verify ordering; top should be alice (500)
       // We can verify via running the jackpot (which reads top-4)
@@ -252,20 +242,20 @@ describe("DegenerusJackpots", function () {
     });
 
     it("updates existing player score when they flip more", async function () {
-      const { jackpots, coin, alice } = await loadFixture(deployFullProtocol);
+      const { jackpots, coinflip, alice } = await loadFixture(deployFullProtocol);
       const lvl = 15;
-      await recordBafFlipAsCoin(
+      await recordBafFlipAsCoinflip(
         hre.ethers,
-        coin,
+        coinflip,
         jackpots,
         alice.address,
         lvl,
         eth(100)
       );
       // Alice flips more
-      const tx = await recordBafFlipAsCoin(
+      const tx = await recordBafFlipAsCoinflip(
         hre.ethers,
-        coin,
+        coinflip,
         jackpots,
         alice.address,
         lvl,
@@ -276,46 +266,46 @@ describe("DegenerusJackpots", function () {
     });
 
     it("replaces lowest score when board is full and new player is higher", async function () {
-      const { jackpots, coin, alice, bob, carol, dan, eve } =
+      const { jackpots, coinflip, alice, bob, carol, dan, eve } =
         await loadFixture(deployFullProtocol);
       const lvl = 20;
       // Fill top-4
-      await recordBafFlipAsCoin(
+      await recordBafFlipAsCoinflip(
         hre.ethers,
-        coin,
+        coinflip,
         jackpots,
         alice.address,
         lvl,
         eth(400)
       );
-      await recordBafFlipAsCoin(
+      await recordBafFlipAsCoinflip(
         hre.ethers,
-        coin,
+        coinflip,
         jackpots,
         bob.address,
         lvl,
         eth(300)
       );
-      await recordBafFlipAsCoin(
+      await recordBafFlipAsCoinflip(
         hre.ethers,
-        coin,
+        coinflip,
         jackpots,
         carol.address,
         lvl,
         eth(200)
       );
-      await recordBafFlipAsCoin(
+      await recordBafFlipAsCoinflip(
         hre.ethers,
-        coin,
+        coinflip,
         jackpots,
         dan.address,
         lvl,
         eth(100)
       );
       // eve beats dan (lowest) with eth(150)
-      const tx = await recordBafFlipAsCoin(
+      const tx = await recordBafFlipAsCoinflip(
         hre.ethers,
-        coin,
+        coinflip,
         jackpots,
         eve.address,
         lvl,
@@ -327,36 +317,36 @@ describe("DegenerusJackpots", function () {
     });
 
     it("does not replace lowest score when new player is equal or lower", async function () {
-      const { jackpots, coin, alice, bob, carol, dan, eve } =
+      const { jackpots, coinflip, alice, bob, carol, dan, eve } =
         await loadFixture(deployFullProtocol);
       const lvl = 25;
-      await recordBafFlipAsCoin(
+      await recordBafFlipAsCoinflip(
         hre.ethers,
-        coin,
+        coinflip,
         jackpots,
         alice.address,
         lvl,
         eth(400)
       );
-      await recordBafFlipAsCoin(
+      await recordBafFlipAsCoinflip(
         hre.ethers,
-        coin,
+        coinflip,
         jackpots,
         bob.address,
         lvl,
         eth(300)
       );
-      await recordBafFlipAsCoin(
+      await recordBafFlipAsCoinflip(
         hre.ethers,
-        coin,
+        coinflip,
         jackpots,
         carol.address,
         lvl,
         eth(200)
       );
-      await recordBafFlipAsCoin(
+      await recordBafFlipAsCoinflip(
         hre.ethers,
-        coin,
+        coinflip,
         jackpots,
         dan.address,
         lvl,
@@ -367,9 +357,9 @@ describe("DegenerusJackpots", function () {
       // But the event is still emitted for the flip recording; the leaderboard just won't change.
       // Verify that alice still holds top spot (not displaced) by checking jackpot output.
       // The BafFlipRecorded event is always emitted.
-      const tx = await recordBafFlipAsCoin(
+      const tx = await recordBafFlipAsCoinflip(
         hre.ethers,
-        coin,
+        coinflip,
         jackpots,
         eve.address,
         lvl,
@@ -488,9 +478,8 @@ describe("DegenerusJackpots", function () {
     });
 
     it("clears leaderboard after resolution (BAF top slots empty on re-run)", async function () {
-      const { jackpots, game, coin, alice, bob } = await loadFixture(deployFullProtocol);
+      const { jackpots, game, coinflip, alice, bob } = await loadFixture(deployFullProtocol);
       const gameAddr = await game.getAddress();
-      const coinAddr = await coin.getAddress();
       await hre.ethers.provider.send("hardhat_impersonateAccount", [gameAddr]);
       await hre.ethers.provider.send("hardhat_setBalance", [
         gameAddr,
@@ -499,8 +488,8 @@ describe("DegenerusJackpots", function () {
       const gameSigner = await hre.ethers.getSigner(gameAddr);
 
       // Record some BAF flips first
-      await recordBafFlipAsCoin(hre.ethers, coin, jackpots, alice.address, 10, eth(500));
-      await recordBafFlipAsCoin(hre.ethers, coin, jackpots, bob.address, 10, eth(300));
+      await recordBafFlipAsCoinflip(hre.ethers, coinflip, jackpots, alice.address, 10, eth(500));
+      await recordBafFlipAsCoinflip(hre.ethers, coinflip, jackpots, bob.address, 10, eth(300));
 
       // Run once — clears leaderboard
       const [winners1] = await jackpots
@@ -614,13 +603,13 @@ describe("DegenerusJackpots", function () {
     });
 
     it("100 ETH pool, with BAF bettors — shows leaderboard payouts", async function () {
-      const { jackpots, game, coin, alice, bob, carol } = await loadFixture(deployFullProtocol);
+      const { jackpots, game, coinflip, alice, bob, carol } = await loadFixture(deployFullProtocol);
       const pool = eth(100);
 
       // Record BAF flips for leaderboard
-      await recordBafFlipAsCoin(hre.ethers, coin, jackpots, alice.address, 10, eth(500));
-      await recordBafFlipAsCoin(hre.ethers, coin, jackpots, bob.address, 10, eth(300));
-      await recordBafFlipAsCoin(hre.ethers, coin, jackpots, carol.address, 10, eth(100));
+      await recordBafFlipAsCoinflip(hre.ethers, coinflip, jackpots, alice.address, 10, eth(500));
+      await recordBafFlipAsCoinflip(hre.ethers, coinflip, jackpots, bob.address, 10, eth(300));
+      await recordBafFlipAsCoinflip(hre.ethers, coinflip, jackpots, carol.address, 10, eth(100));
 
       const gameAddr = await game.getAddress();
       await hre.ethers.provider.send("hardhat_impersonateAccount", [gameAddr]);
@@ -752,7 +741,7 @@ describe("DegenerusJackpots", function () {
     }
 
     it("100 ETH pool, lvl 10, full trait tickets + FF tickets — complete payout", async function () {
-      const { jackpots, game, coin, alice, bob, carol } = await loadFixture(deployFullProtocol);
+      const { jackpots, game, coinflip, alice, bob, carol } = await loadFixture(deployFullProtocol);
       const signers = await hre.ethers.getSigners();
       const gameAddr = await game.getAddress();
 
@@ -797,9 +786,9 @@ describe("DegenerusJackpots", function () {
       }
 
       // Record BAF flips for leaderboard (top 3)
-      await recordBafFlipAsCoin(hre.ethers, coin, jackpots, alice.address, 10, eth(500));
-      await recordBafFlipAsCoin(hre.ethers, coin, jackpots, bob.address, 10, eth(300));
-      await recordBafFlipAsCoin(hre.ethers, coin, jackpots, carol.address, 10, eth(100));
+      await recordBafFlipAsCoinflip(hre.ethers, coinflip, jackpots, alice.address, 10, eth(500));
+      await recordBafFlipAsCoinflip(hre.ethers, coinflip, jackpots, bob.address, 10, eth(300));
+      await recordBafFlipAsCoinflip(hre.ethers, coinflip, jackpots, carol.address, 10, eth(100));
 
       // Run BAF
       const pool = eth(100);

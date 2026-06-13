@@ -173,12 +173,13 @@ contract BafRebuyReconciliationTest is DeployProtocol {
     }
 
     /// @notice Inject buyer into the BAF leaderboard at level.
-    /// @dev Uses vm.prank(coin) to call recordBafFlip (onlyCoin gate). The buyer gets a
-    ///      massive BAF stake so they are guaranteed the #1 position (Slice A: 10%).
+    /// @dev Uses vm.prank(coinflip) to call recordBafFlip (onlyCoin gate, coinflip-only).
+    ///      The buyer gets a massive BAF stake so they are guaranteed the #1 position
+    ///      (Slice A: 10%).
     function _injectBafTopAndAutoRebuy(address who, uint24 lvl) internal {
         // Record a large BAF flip to put the buyer at the top of the leaderboard.
         // 1000 ether stake = score 1000, guaranteed #1 position for Slice A (10% of BAF pool).
-        vm.prank(address(coin));
+        vm.prank(address(coinflip));
         jackpots.recordBafFlip(who, lvl, 1000 ether);
     }
 
