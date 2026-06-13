@@ -313,6 +313,15 @@ contract StakedDegenerusStonk {
     ///      semantics. Floor enforced via `BurnTooSmall` revert in `_submitGamblingClaimFrom`.
     uint256 private constant MIN_BURN_AMOUNT = 1e18;
 
+    /// @dev Minimum ETH size for a redemption lootbox (0.01 ETH). At claim the rolled value splits
+    ///      50/50 into a direct-ETH leg and a lootbox leg; if the lootbox half lands below this floor
+    ///      (i.e. total rolled value under ~0.02 ETH), the lootbox leg is dropped entirely. The player
+    ///      keeps only the direct half plus the BURNIE share settled at submit; the dropped lootbox
+    ///      value is NOT paid out to the player — it is forfeited back to sDGNRS's own claimable on the
+    ///      Game as free backing, raising backing for remaining holders. Live-game only; gameOver claims
+    ///      are already 100% direct.
+    uint256 private constant MIN_REDEMPTION_LOOTBOX_ETH = 0.01 ether;
+
     /// @dev Game contract reference for player actions and claimable queries
     IDegenerusGamePlayer private constant game = IDegenerusGamePlayer(ContractAddresses.GAME);
 
@@ -758,11 +767,22 @@ contract StakedDegenerusStonk {
         // 50/50 split (unless gameOver → 100% direct)
         uint256 ethDirect;
         uint256 lootboxEth;
+        uint256 forfeitEth;
         if (isGameOver) {
             ethDirect = totalRolledEth;
         } else {
             ethDirect = totalRolledEth / 2;
             lootboxEth = totalRolledEth - ethDirect;
+            // Drop dust-sized lootboxes: when the lootbox half lands below the 0.01 ETH floor (rolled
+            // value under ~0.02 ETH), the lootbox leg is dropped. Its value is NOT paid to the player
+            // and NOT turned into a lootbox — it is forfeited back to sDGNRS's own claimable on the
+            // Game (its canonical backing ledger), raising backing for remaining holders. The player
+            // keeps only the direct half (plus the BURNIE share settled at submit). The lootbox leg
+            // is then skipped by its `lootboxEth != 0` guard and the forfeit leg credits sDGNRS.
+            if (lootboxEth < MIN_REDEMPTION_LOOTBOX_ETH) {
+                forfeitEth = lootboxEth;
+                lootboxEth = 0;
+            }
         }
 
         // Release the rolled ETH segregation (both direct and lootbox portions leave sDGNRS).
@@ -804,6 +824,16 @@ contract StakedDegenerusStonk {
             uint256 bal = address(this).balance;
             uint256 ethForDirect = bal < ethDirect ? bal : ethDirect;
             game.creditRedemptionDirect{value: ethForDirect}(player, ethDirect);
+        }
+
+        // Forfeited dust-lootbox half → sDGNRS's OWN claimable on the Game (player == address(this)),
+        // using the same ETH/stETH funding mix as the direct leg. With this leg the full rolled amount
+        // leaves the contract (direct half to the player, forfeited half to sDGNRS), so it reconciles
+        // exactly with the pendingRedemptionEthValue release — no ETH is stranded in the contract.
+        if (forfeitEth != 0) {
+            uint256 bal = address(this).balance;
+            uint256 ethForForfeit = bal < forfeitEth ? bal : forfeitEth;
+            game.creditRedemptionDirect{value: ethForForfeit}(address(this), forfeitEth);
         }
         return true;
     }

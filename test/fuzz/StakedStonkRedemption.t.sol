@@ -948,7 +948,10 @@ contract StakedStonkRedemption is DeployProtocol {
             "REDEEM-08 full-flow: claimablePool diverged from claimableWinnings[SDGNRS]"
         );
 
-        // Resolve the shared day, then both claim. Claims must not wrap claimable (no debit at claim).
+        // Resolve the shared day, then both claim. The REDEEM-08 safety property is that a claim never
+        // DEBITS claimableWinnings[SDGNRS] (which could underflow/wrap). With this harness's 1-trillion
+        // supply the redemption value is dust (well under the 0.02 ETH lootbox floor), so each claim
+        // drops the lootbox half and forfeits it BACK to claimable[SDGNRS] — a credit, never a debit.
         _advanceWallDay();
         _resolveDay(dayBurn, 100);
 
@@ -958,10 +961,10 @@ contract StakedStonkRedemption is DeployProtocol {
         sdgnrs.claimRedemption(playerB, uint24(dayBurn));
 
         uint256 claimableAfterClaims = _claimableSdgnrs();
-        assertEq(
+        assertGe(
             claimableAfterClaims,
             claimableAfterSubmits,
-            "REDEEM-08 full-flow: claim-time path debited claimableWinnings[SDGNRS] (must be no-op)"
+            "REDEEM-08 full-flow: claim-time path must never debit claimableWinnings[SDGNRS]"
         );
         assertLt(
             claimableAfterClaims,

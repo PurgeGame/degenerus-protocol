@@ -283,15 +283,18 @@ contract RedemptionStethFallback is DeployProtocol {
 
         _assertSolvency("(b) post-submit");
 
-        // === Claim moves the direct half in stETH (RFALL-03 claim-asset selection matches the
-        //     reserved asset; the medium lands at the GAME, backing the player's claimable credit) ===
-        // Resolve at roll=100 (1:1) and claim. With game.gameOver()==false the claim splits 50/50
-        // (direct/lootbox); the lootbox leg is mocked to a no-op, so only the direct half moves.
+        // === Claim moves the direct half AND the forfeited dust-lootbox half in stETH (RFALL-03
+        //     claim-asset selection matches the reserved asset; both media land at the GAME) ===
+        // Resolve at roll=100 (1:1) and claim. This redemption is dust (far under the 0.02 ETH lootbox
+        // floor), so the lootbox leg is dropped: the player keeps the direct half (credited to their
+        // game claimable) and the dropped lootbox half is forfeited to sDGNRS's OWN claimable on the
+        // Game. Both legs move via creditRedemptionDirect; with the game ETH-depleted both arrive as stETH.
         _advanceWallDayAndResolve(burnDay, 100);
 
         uint256 playerEthBefore = playerA.balance;
         uint256 playerStethBefore = mockStETH.balanceOf(playerA);
         uint256 playerClaimableBefore = game.claimableWinningsOf(playerA);
+        uint256 sdgnrsClaimableBefore = _claimableSdgnrs();
         uint256 gameStethBefore = mockStETH.balanceOf(address(game));
 
         vm.prank(playerA);
@@ -307,19 +310,24 @@ contract RedemptionStethFallback is DeployProtocol {
         uint256 credited = game.claimableWinningsOf(playerA) - playerClaimableBefore;
         assertGt(credited, 0, "(b) claim: direct half must credit the player's game claimable");
 
-        // sDGNRS held ZERO ETH (game depleted, ETH leg never ran), so the direct half MUST move
-        // into the GAME as stETH (msg.value == 0 → the full amount arrives via the stETH pull).
+        // Dust redemption: the dropped lootbox half is forfeited to sDGNRS's own claimable on the Game.
+        uint256 forfeitCredit = _claimableSdgnrs() - sdgnrsClaimableBefore;
+        assertGt(forfeitCredit, 0, "(b) claim: dropped lootbox half must forfeit to claimable[SDGNRS]");
+
+        // sDGNRS held ZERO ETH (game depleted, ETH leg never ran), so BOTH the direct half and the
+        // forfeited half MUST move into the GAME as stETH (msg.value == 0 → the full amounts arrive
+        // via the stETH pull).
         assertEq(
             mockStETH.balanceOf(address(game)) - gameStethBefore,
-            credited,
-            "(b) claim: direct half must arrive at the game in stETH (RFALL-03)"
+            credited + forfeitCredit,
+            "(b) claim: direct + forfeit halves must arrive at the game in stETH (RFALL-03)"
         );
 
-        // Conservation: the credited amount equals the segregated value leaving sDGNRS's stETH balance.
+        // Conservation: the moved value equals the segregated value leaving sDGNRS's stETH balance.
         assertEq(
             mockStETH.balanceOf(address(sdgnrs)),
-            sdgnrsStethBefore - credited,
-            "(b) conservation: sDGNRS stETH decreased by exactly the direct credit"
+            sdgnrsStethBefore - (credited + forfeitCredit),
+            "(b) conservation: sDGNRS stETH decreased by exactly the direct + forfeit credits"
         );
 
         _assertSolvency("(b) post-claim");
@@ -356,7 +364,10 @@ contract RedemptionStethFallback is DeployProtocol {
         vm.deal(address(game), 0);
         _setGameClaimableSdgnrs(0);
         _setGameClaimablePool(0);
-        mockStETH.mint(address(sdgnrs), 100 ether);
+        // Size the backing so the redemption clears the 0.02 ETH floor (lootbox half >= 0.01 ETH) and the
+        // REAL lootbox leg actually forwards — a dust redemption would drop the lootbox and never exercise
+        // it. With the 1-trillion supply the redemption value ≈ backing / 1e6, so 50_000 ETH → ~0.05 ETH.
+        mockStETH.mint(address(sdgnrs), 50_000 ether);
 
         uint32 burnDay = game.currentDayView();
         _primeCurrentDayRng();
