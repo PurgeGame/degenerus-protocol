@@ -122,3 +122,19 @@ burnCoin and burnEth each make a dedicated staticcall share.totalSupply() that r
 **Finder risk notes:** Reordering effects near a payout path: the share token is in-repo, onlyVault-controlled and hook-free, so burn-first does not open reentrancy, but burnEth's current sequence (compute -> claim -> check -> burn) is deliberate-looking; restrict to burnCoin unless validated. Failure-path revert sites shift.
 
 
+
+## APPLIED (round-5 session, pending validation)
+- VAULT-01: deposit() + _pullSteth + onlyGame + vault-scope Unauthorized deleted; header diagram
+  FUNDING FLOW + KEY INVARIANTS + Deposit event natspec rewritten to what-IS; IVaultCoin.vaultEscrow
+  decl trimmed (vault was the only importer). BurnieCoin untouched (vaultEscrow impl stays, out of scope).
+- VAULT-02: coinTracked + constructor sync + _syncCoinReserves deleted; burnCoin reads
+  coinToken.vaultMintAllowance() directly. Vault now has ZERO storage variables.
+- VAULT-04: claimable != 0 conjunct dropped in burnEth (dominance comment added).
+- VAULT-06: _netClaimableWinnings() helper added; burnEth + _ethReservesView use it;
+  _ethReservesView composed from _syncEthReserves.
+- VAULT-13: gameDegeneretteBet overpay guard deleted (game-side _collectBetFunds dominates);
+  docblock revert note updated.
+- VAULT-08 (burnCoin leg only): DegenerusVaultShare.vaultBurn returns pre-burn supply; burnCoin
+  burns before computing coinOut using the returned supplyBefore (event order unchanged:
+  Transfer(burn) → optional refill Transfer → Claim). burnEth ignores the new return — REJECTED leg
+  not applied.

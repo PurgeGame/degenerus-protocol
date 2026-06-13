@@ -2,9 +2,10 @@
 
 Generated 2026-06-11 after commits 16f57728 / dd09cb99 / 554f83fd.
 Reconciled 2026-06-12 after round 4 (ca0efea5): the 50 round-4 IDs moved from the open table into Handled.
+Round 5 applied 2026-06-12 (Game core + Vault + GNRUS): 17 more IDs moved into Handled.
 IDs below are HANDLED — do not re-apply. Everything else in GAS-AUDIT-2026-06-10.{md,json} is open.
 
-## Handled (137 + 62 round 3 + 50 round 4)
+## Handled (137 + 62 round 3 + 50 round 4 + 17 round 5)
 
 - **ADMIN-01** — APPLIED commit dd09cb99 — proposeFeedSwap: hoisted sDGNRS.votingSupply() into a single `circ` read above the path branch; votingSnapshot now uses 
 - **ADMIN-02** — APPLIED commit dd09cb99 — propose: identical hoist — single votingSupply() read above the path branch, votingSnapshot reuses `circ` in contracts/D
@@ -266,7 +267,31 @@ Commit ca0efea5 (contracts) + 575fdd82 (test recalibrations). Full bodies + veri
 - **QUESTS-13** — APPLIED round 4 — new lean questCompletionToday(player) view in DegenerusQuests (delegates to _questCompleted per slot, day-roll semantics inherited); afking call site swapped off the fat playerQuestStates
 - **RT-QUESTS-AFFILIATE-15** — APPLIED round 4 — with QUESTS-13 (module-local IQuestCompletionView interface)
 
-## Open, non-rejected (110 after round 4)
+### Round 5 (2026-06-12) — DegenerusGame core / DegenerusVault / GNRUS
+
+Packets + adjudications + applied records: `.planning/gas-round5/packet-{game,vault,gnrus}.md`.
+NHR/PARTIAL items were adjudicated in-packet before application; the 3 reviewer fan-out passes
+returned 17/17 FAITHFUL with zero unexplained hunks.
+
+- **GAME-08** — APPLIED round 5 (NHR adjudicated) — recordMint + _processMintPayment relocated into MintModule as _recordMintPayment/_processMintPayment with explicit ethForLeg (all 5 msg.value reads converted); value-bearing self-call deleted; Game loses recordMint + dispatcher + ClaimableSpent decl + PURCHASE_TO_FUTURE_BPS; IDegenerusGame.recordMint decl deleted
+- **GAME-14** — APPLIED round 5 — merged claimablePool RMW `-= uint128(claimableUsed) + uint128(afkingUsed)` in the relocated payment body; emits unchanged
+- **GAME-15** — APPLIED round 5 (NHR adjudicated) — new DegenerusGameStorage._debitClaimableAndAfking (one SLOAD, explicit per-half guards, one SSTORE); call sites _claimWinningsInternal + relocated _processMintPayment; existing four helpers untouched
+- **GAME-16** — APPLIED round 5 — degeneretteResolve probe folded into do-while loop-peel (probe SLOAD = iteration 0's read); identical read/resolve interleaving
+- **RT-CLAIMS-08** — APPLIED round 5 — subsumed by LOOTBOX-12 (chunk loop now internal to the module)
+- **LOOTBOX-12** — APPLIED round 5 (NHR adjudicated) — Game.resolveRedemptionLootbox → delegatecall(msg.data) thin stub; full body (auth → bound → stETH pull → pool credit → chunked resolution w/ identical rehash) in LootboxModule; per-chunk fn → private _resolveRedemptionChunk; Game 20,493 → 19,143 bytes (with GAME-08)
+- **VAULT-01** — APPLIED round 5 — unreachable deposit() + _pullSteth + onlyGame + vault-scope Unauthorized deleted; header/diagram/natspec rewritten to what-IS; IVaultCoin.vaultEscrow decl trimmed (vault-only import)
+- **VAULT-02** — APPLIED round 5 — write-only coinTracked + _syncCoinReserves deleted; burnCoin reads live vaultMintAllowance(); vault now has zero storage variables
+- **VAULT-04** — APPLIED round 5 — dominated `claimable != 0` conjunct dropped in burnEth
+- **VAULT-06** — APPLIED round 5 — _netClaimableWinnings() helper dedups the 1-wei-sentinel normalization; _ethReservesView composed from _syncEthReserves
+- **VAULT-08** — APPLIED round 5 burnCoin leg ONLY (PARTIAL per skeptic; burnEth leg REJECTED) — DegenerusVaultShare.vaultBurn returns pre-burn supply; burnCoin burns first; burnEth sequence untouched
+- **VAULT-13** — APPLIED round 5 — gameDegeneretteBet overpay guard deleted (game-side _collectBetFunds dominates); _combinedValue balance check retained
+- **TOKENS-01** — APPLIED round 5 — levelResolved mapping + check + write + REJECT_LEVEL_ALREADY_RESOLVED deleted (currentLevel monotonicity = idempotence); −22.1k per level transition in the advance chain; GNRUS layout shifted (hasVoted→slot 3)
+- **TOKENS-02** — APPLIED round 5 — unreachable cap-checks + _futureBitmapAfter + CapExceeded deleted (20-bit structural domain)
+- **TOKENS-05** — APPLIED round 5 — observationally-redundant pendingEdit zero-writes removed (cancel branch + flush loop); ceiling-vs-net resolved for the worst-case ceiling
+- **TOKENS-06** — APPLIED round 5 — burn() writes cached `burnerBal - amount` (checked; freshness proven across the claim call)
+- **TOKENS-08** — APPLIED round 5 sub-changes (b)+(c) ONLY (PARTIAL per skeptic; (a) omitted — never trade worst-case for typical in the advance chain) — flush phase incl. both packed writes gated on pSet != 0; running masks in both pickCharity loops
+
+## Open, non-rejected (93 after round 5)
 
 | id | verdict | category | freq | file | est. save |
 |---|---|---|---|---|---|
@@ -276,9 +301,6 @@ Commit ca0efea5 (contracts) + 575fdd82 (test recalibrations). Full bodies + veri
 | ADMIN-09 | APPROVED | storage_packing | cold | DegenerusAdmin.sol | ~22100 per first-time voter per proposal (one cold SLOAD ~21 |
 | ADMIN-10 | APPROVED | bytecode_dedup | cold | DegenerusAdmin.sol | ~100 per killed proposal in void loops (one keccak avoided); |
 | DEITY-01 | APPROVED | other | cold | DegenerusDeityPass.sol | 0 on-chain (tokenURI has zero production on-chain callers —  |
-| GAME-14 | APPROVED | redundant_sload | hot | DegenerusGame.sol | ~150-250 gas on combined claimable+afking-funded mints; 0 on |
-| GAME-16 | APPROVED | redundant_sload | warm | DegenerusGame.sol | ~100 gas per degeneretteResolve call (+ ~15 for the i==0 bra |
-| RT-CLAIMS-08 | APPROVED | redundant_external_call | warm | DegenerusGame.sol | ~1,500-2,500 gas per chunk beyond the first (0 for redemptio |
 | JACKPOTS-06 | APPROVED | bytecode_dedup | cold | DegenerusJackpots.sol | ~0 (a few gas of loop overhead per resolution; negligible) |
 | JACKPOTS-09 | APPROVED | idiom | hot | DegenerusJackpots.sol | ~200-3000 per leaderboard-climbing flip settle (one SSTORE + |
 | JACKPOTS-11 | APPROVED | redundant_check | hot | DegenerusJackpots.sol | ~25-40 per recordBafFlip (one address compare + short-circui |
@@ -286,15 +308,6 @@ Commit ca0efea5 (contracts) + 575fdd82 (test recalibrations). Full bodies + veri
 | STONK-02 | APPROVED | redundant_check | cold | DegenerusStonk.sol | ~2700 on first call in tx (cold GAME account moves to the ga |
 | STONK-03 | APPROVED | dead_code | cold | DegenerusStonk.sol | ~20-30 per post-gameOver burn-through (dead JUMPI + zero-che |
 | STONK-04 | APPROVED | bytecode_dedup | warm | DegenerusStonk.sol | ~0 (internal jump overhead ~20 gas added, negligible) |
-| VAULT-01 | APPROVED | unused_function | cold | DegenerusVault.sol | 0 (never executed) |
-| VAULT-02 | APPROVED | dead_code | warm | DegenerusVault.sol | ~5,200 per burnCoin (cold slot access 2100 + SSTORE_RESET 29 |
-| VAULT-04 | APPROVED | redundant_check | warm | DegenerusVault.sol | ~10-20 per burnEth taking the shortfall branch |
-| VAULT-06 | APPROVED | bytecode_dedup | cold | DegenerusVault.sol | ~0 (via_ir may inline; runtime neutral) |
-| VAULT-13 | APPROVED | redundant_check | cold | DegenerusVault.sol | ~60-90 per vault-owner ETH bet (one uint128 widening mul + c |
-| TOKENS-01 | APPROVED | redundant_check | warm | GNRUS.sol | ~22,100 per level transition (2,100 cold SLOAD at L626 + 20, |
-| TOKENS-02 | APPROVED | dead_code | cold | GNRUS.sol | ~700-1,000 per setCharity call typical (20-iteration loop +  |
-| TOKENS-05 | APPROVED | other | warm | GNRUS.sol | Worst-case execution: -2,900 per flushed edit in pickCharity |
-| TOKENS-06 | APPROVED | redundant_sload | warm | GNRUS.sol | ~100 per burn (warm SLOAD avoided; mapping-slot keccak recom |
 | LIBS-03 | APPROVED | idiom | warm | libraries/EntropyLib.sol | ~30-60 gas per call site execution (skips free-memory-pointe |
 | LIBS-04 | APPROVED | idiom | warm | libraries/EntropyLib.sol | ~40-70 gas per loop iteration (one iteration per 5 ETH of re |
 | LIBS-01 | APPROVED | bytecode_dedup | hot | libraries/PriceLookupLib.sol | Levels >=100 (the long-run regime, called per purchase/quote |
@@ -332,9 +345,6 @@ Commit ca0efea5 (contracts) + 575fdd82 (test recalibrations). Full bodies + veri
 | BURNIE-16 | NEEDS_HUMAN_REVIEW | unused_function | cold | BurnieCoinflip.sol | ~22 dispatcher comparison per call to later selectors (negli |
 | AFFILIATE-11 | NEEDS_HUMAN_REVIEW | unused_function | cold | DegenerusAffiliate.sol | 0 (also shortens the function-selector dispatch chain by one |
 | AFFILIATE-12 | NEEDS_HUMAN_REVIEW | unused_function | cold | DegenerusAffiliate.sol | 0 |
-| GAME-08 | NEEDS_HUMAN_REVIEW | redundant_external_call | hot | DegenerusGame.sol | ~7,500-9,000 gas per direct-ETH purchase; ~1,500-2,500 per c |
-| GAME-15 | NEEDS_HUMAN_REVIEW | redundant_sload | warm | DegenerusGame.sol | ~200-400 gas per claim / per multi-tier mint payment (3-4 wa |
-| LOOTBOX-12 | NEEDS_HUMAN_REVIEW | bytecode_dedup | warm | DegenerusGame.sol | ~800-1200 per chunk beyond the first (delegatecall frame + a |
 | JACKPOTS-10 | NEEDS_HUMAN_REVIEW | idiom | warm | DegenerusJackpots.sol | ~5-10 per iteration across ~60 iterations per BAF resolution |
 | QUESTS-05 | NEEDS_HUMAN_REVIEW | redundant_sload | hot | DegenerusQuests.sol | ~400-600 on the first action of each day per player (3-5 RMW |
 | QUESTS-06 | NEEDS_HUMAN_REVIEW | redundant_sload | warm | DegenerusQuests.sol | ~400-600 per quest completion (at most 2/day/player, inside  |
@@ -363,8 +373,6 @@ Commit ca0efea5 (contracts) + 575fdd82 (test recalibrations). Full bodies + veri
 | RT-PACKING-09 | PARTIAL | storage_packing | hot | BurnieCoinflip.sol | ~8,500/day average for a daily flipper on the stake write (z |
 | AFFILIATE-08 | PARTIAL | redundant_sload | warm | DegenerusAffiliate.sol | ~100 gas per referral registration (warm re-SLOAD of affilia |
 | SMALLMODS-02 | PARTIAL | dead_code | cold | DegenerusTraitUtils.sol | 0 |
-| VAULT-08 | PARTIAL | redundant_external_call | warm | DegenerusVault.sol | ~600-1,000 per burnCoin/burnEth (eliminates one warm staticc |
-| TOKENS-08 | PARTIAL | loop | warm | GNRUS.sol | ~500-800 per pickCharity in the common case (no pending edit |
 | LIBS-06 | PARTIAL | idiom | hot | libraries/BitPackingLib.sol | ~6-12 gas per fused field beyond the first; ~30-50 gas per p |
 | ADVANCE-06 | PARTIAL | redundant_sload | warm | modules/DegenerusGameAdvanceModule.sol | ~800-900 gas per call (4 avoided warm SLOADs ~400 + 2 avoide |
 | ADVANCE-10 | PARTIAL | bytecode_dedup | warm | modules/DegenerusGameAdvanceModule.sol | 0 (runtime-neutral, +1 internal jump) |

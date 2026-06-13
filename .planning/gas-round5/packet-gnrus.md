@@ -103,3 +103,17 @@ pickCharity always runs two fixed 20-iteration loops even when most iterations a
 **Finder risk notes:** (b) is safe because pSet == 0 implies bitmap is unmodified and pendingEditSet is already 0 — skipping the writes is state-identical. (a) is safe because no bit >= i can match once bitmap >> i == 0. Keep the strict `>` tie-break semantics untouched.
 
 
+
+## APPLIED (round-5 session, pending validation)
+- TOKENS-01: levelResolved mapping + L-check + write + REJECT_LEVEL_ALREADY_RESOLVED deleted; pickCharity
+  docblock/step comments reworded (currentLevel monotonicity = the idempotence proof). Storage layout
+  shifted (hasVoted and below move up one slot).
+- TOKENS-02: both cap-check blocks + _futureBitmapAfter + CapExceeded error deleted; structural-cap
+  comment left at the instant-apply site.
+- TOKENS-05: cancel-branch zero-write + flush-loop delete removed; pendingEdit natspec reworded
+  (bit = sole sentinel, stale values unobservable).
+- TOKENS-06: balanceOf[burner] = burnerBal - amount (checked); freshness comment added.
+- TOKENS-08 (b)+(c): flush phase (incl. both packed-field writes) wrapped in if (pSet != 0); running
+  mask in winner + flush loops. Sub-change (a) omitted per adjudication.
+
+## APPLIED (vault) — see packet-vault.md

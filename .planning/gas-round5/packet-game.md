@@ -143,3 +143,29 @@ Game.resolveRedemptionLootbox carries a full body in the size-critical Game: SDG
 **Finder risk notes:** Touches mainnet Game (commit approval required). Must preserve EXACT ordering: auth -> msg.value bound -> stETH pull -> pool credit (frozen/unfrozen branch) -> chunked resolution with the same per-chunk rngWord rehash (L1990). msg.value forwards correctly through delegatecall. Verify the module has EIP-170 headroom for the added body. No RNG-derivation change: identical seed chain.
 
 
+
+## APPLIED (round-5 session, pending validation)
+- GAME-08: recordMint + _processMintPayment + PURCHASE_TO_FUTURE_BPS + ClaimableSpent decl deleted
+  from DegenerusGame; IDegenerusGame.recordMint decl deleted; MintModule gains
+  _recordMintPayment(player, costWei, payKind, ethForLeg) + _processMintPayment(..., ethForLeg)
+  (every msg.value read → ethForLeg; the sole call site passes the same `value` it used to attach
+  to the self-call, so the binding is identical by construction); self-call replaced by the direct
+  internal call; IDegenerusGame import trimmed to MintPaymentKind. msg.value-read enumeration at
+  relocation: DirectEth min, Claimable !=0 revert, Combined >amount revert + ethUsed + remaining —
+  all five now read ethForLeg.
+- GAME-14 (in the relocated copy): both claimablePool RMWs merged to one
+  `claimablePool -= uint128(claimableUsed) + uint128(afkingUsed);` under a nonzero gate; emits
+  unchanged in order/content.
+- GAME-15: new DegenerusGameStorage._debitClaimableAndAfking (one SLOAD, explicit low-half +
+  high-half guards, one SSTORE; existing four helpers untouched). Call sites: _claimWinningsInternal
+  (claimDebit+afking) and the relocated _processMintPayment (the high-half guard IS the old
+  afking-sufficiency check).
+- GAME-16: degeneretteResolve probe folded into a do-while loop-peel (probe SLOAD = iteration 0's
+  read; later items load at loop bottom). Same revert (BatchAlreadyTaken before any state write).
+- LOOTBOX-12 (+ RT-CLAIMS-08 subsumed): Game.resolveRedemptionLootbox → delegatecall(msg.data) thin
+  stub (same pattern as creditRedemptionDirect); full body (SDGNRS auth → msg.value bound → stETH
+  pull → frozen/unfrozen pool credit → 5-ETH chunk loop with per-chunk keccak rehash) moved
+  byte-faithfully into LootboxModule's payable external; old per-chunk external became private
+  _resolveRedemptionChunk (its amount==0 guard dropped — chunks are min(remaining, 5 ether) with
+  remaining != 0, never zero). Module-direct calls now revert on the SDGNRS gate (tighter than
+  before, matches creditRedemptionDirect). The 403afc62 payable fix predates this and carries over.
