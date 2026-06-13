@@ -180,7 +180,7 @@ const DEITY_SENTINEL_TICKET_IDX =
 // test runtime via `forge inspect storageLayout`. These match Phase 294 §2
 // EMPTY-diff attestation against the v41 close pin.
 const FALLBACK_TRAIT_BURN_TICKET_SLOT = 8n;
-const FALLBACK_DEITY_BY_SYMBOL_SLOT = 30n;
+const FALLBACK_DEITY_BY_SYMBOL_SLOT = 29n; // Stage B Game-storage packing shifted 30 -> 29
 
 // -----------------------------------------------------------------------------
 // Module-level helpers
@@ -427,7 +427,7 @@ describe("DeityPassGoldNerfRegression — Phase 295 v42.0 DPNERF regression fixt
   describe(
     "TST-DPNERF setup-and-sanity — JS-replay oracle wiring + forge-inspect storage-layout baseSlot derivation",
     function () {
-      it("derives deityBySymbol base slot from forge inspect storageLayout and matches the v41 close pin (slot 30)", function () {
+      it("derives deityBySymbol base slot from forge inspect storageLayout and matches the close pin (slot 29)", function () {
         const slot = deriveStorageSlot("deityBySymbol");
         expect(typeof slot).to.equal("bigint");
         expect(slot >= 0n).to.equal(true);

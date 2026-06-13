@@ -71,17 +71,17 @@ contract KeeperRouterOneCategory is DeployProtocol {
     // pins are now stale; corrected to the authoritative values below.)
     // -------------------------------------------------------------------------
 
-    uint256 private constant SUBOF_SLOT = 58; // _subOf mapping root (address => Sub, one packed slot)
+    uint256 private constant SUBOF_SLOT = 54; // _subOf mapping root (address => Sub, one packed slot)
     uint256 private constant OFF_LASTBOUGHT = 11; // uint24 lastAutoBoughtDay (bytes 11..13)
     uint256 private constant OFF_LASTOPENED = 14; // uint24 lastOpenedDay     (bytes 14..16)
-    uint256 private constant SUBSCRIBERS_SLOT = 60; // _subscribers address[] (length here)
+    uint256 private constant SUBSCRIBERS_SLOT = 56; // _subscribers address[] (length here)
     uint256 private constant MINTPACKED_SLOT = 9; // mintPacked_ mapping root (deity bit)
     uint256 private constant DEITY_SHIFT = 184; // HAS_DEITY_PASS_SHIFT in mintPacked_
 
-    /// @dev lootboxRngPacked at slot 35; index = low 48 bits.
-    uint256 private constant LOOTBOX_RNG_PACKED_SLOT = 35;
+    /// @dev lootboxRngPacked at slot 34; index = low 48 bits.
+    uint256 private constant LOOTBOX_RNG_PACKED_SLOT = 34;
     /// @dev lootboxRngWordByIndex mapping root slot.
-    uint256 private constant LOOTBOX_RNG_WORD_SLOT = 36;
+    uint256 private constant LOOTBOX_RNG_WORD_SLOT = 35;
     /// @dev lootboxEth (the single folded box word) mapping root slot. The amount sub-field (low 128
     ///      bits) is the first-deposit / box-owed signal that replaced the removed lootboxEthBase.
     uint256 private constant LOOTBOX_ETH_SLOT = 15;
@@ -567,7 +567,7 @@ contract KeeperRouterOneCategory is DeployProtocol {
         vm.store(address(game), slot, bytes32(packed));
     }
 
-    // ---- Sub field reads (_subOf slot 62 + verified offsets) ----
+    // ---- Sub field reads (_subOf slot 54 + verified offsets) ----
 
     function _subField(address who, uint256 off, uint256 widthBits) internal view returns (uint256) {
         uint256 p = uint256(vm.load(address(game), keccak256(abi.encode(who, uint256(SUBOF_SLOT))))) >> (off * 8);
@@ -605,19 +605,19 @@ contract KeeperRouterOneCategory is DeployProtocol {
         );
     }
 
-    /// @dev Active daily lootbox index (low 48 bits of lootboxRngPacked at slot 35).
+    /// @dev Active daily lootbox index (low 48 bits of lootboxRngPacked at slot 34).
     function _activeLootboxIndex() internal view returns (uint48) {
         uint256 packed = uint256(vm.load(address(game), bytes32(uint256(LOOTBOX_RNG_PACKED_SLOT))));
         return uint48(packed & 0xFFFFFFFFFFFF);
     }
 
-    /// @dev Inject a lootbox RNG word for an index (lootboxRngWordByIndex mapping at slot 36).
+    /// @dev Inject a lootbox RNG word for an index (lootboxRngWordByIndex mapping at slot 35).
     function _injectLootboxRngWord(uint48 index, uint256 rngWord) internal {
         bytes32 slot = keccak256(abi.encode(uint256(index), uint256(LOOTBOX_RNG_WORD_SLOT)));
         vm.store(address(game), slot, bytes32(rngWord));
     }
 
-    /// @dev Bump the active lootbox RNG index (low 48 bits of lootboxRngPacked, slot 35) by one,
+    /// @dev Bump the active lootbox RNG index (low 48 bits of lootboxRngPacked, slot 34) by one,
     ///      mirroring requestLootboxRng's pre-increment, so a box queued at the prior index sits at
     ///      LR_INDEX-1 — the finalized index the relocated multi-index sweep reads.
     function _advanceLootboxRngIndexByOne() internal {
@@ -627,10 +627,10 @@ contract KeeperRouterOneCategory is DeployProtocol {
         vm.store(address(game), bytes32(uint256(LOOTBOX_RNG_PACKED_SLOT)), bytes32(packed));
     }
 
-    /// @dev Park the auto-open frontier (boxCursorIndex byte 13 + boxCursor byte 7, both slot 62)
+    /// @dev Park the auto-open frontier (boxCursorIndex byte 13 + boxCursor byte 7, both slot 58)
     ///      at `index` so the relocated sweep begins exactly at this finalized index.
     function _parkBoxFrontier(uint48 index) internal {
-        bytes32 slot = bytes32(uint256(62));
+        bytes32 slot = bytes32(uint256(58));
         uint256 packed = uint256(vm.load(address(game), slot));
         uint256 cursorMask = (uint256(1) << 48) - 1;
         packed &= ~(cursorMask << (7 * 8));   // boxCursor = 0

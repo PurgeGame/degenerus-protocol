@@ -270,9 +270,11 @@ contract DegenerusGameDecimatorModule is DegenerusGamePayoutUtils {
         emit DecimatorResolved(lvl, packedOffsets, poolWei, totalBurn);
 
         // Snapshot claim round for this level (persistent — no expiry)
-        round.poolWei = poolWei;
-        round.totalBurn = uint232(totalBurn);
-        round.rngWord = rngWord;
+        round.poolWei = uint96(poolWei);
+        round.totalBurn = uint128(totalBurn);
+        // Winners were already selected from the full VRF word above (decSeed) and packed
+        // into decBucketOffsetPacked; only the claim-time lootbox seed is stored, narrowed.
+        round.rngWord = uint32(rngWord);
 
         return 0; // All funds held for claims
     }

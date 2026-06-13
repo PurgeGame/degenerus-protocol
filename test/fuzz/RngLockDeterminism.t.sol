@@ -44,11 +44,10 @@ contract RngLockDeterminism is DeployProtocol {
     uint256 constant SLOT_PACKED_0 = 0;
     uint256 constant SLOT_RNG_WORD_CURRENT = 3;
     uint256 constant SLOT_VRF_REQUEST_ID = 4;
-    // Via `solc --storage-layout` on the working tree (post V62 lootbox repack — the folded
-    // lootboxEth word + removed lootboxEthBase/Burnie/Purchase/Distress shifted later slots down):
-    // lootboxRngPacked = slot 35 (the lootbox RNG index lives in bits[0:47]), lootboxRngWordByIndex = slot 36.
-    uint256 constant SLOT_LOOTBOX_RNG_INDEX = 35;
-    uint256 constant SLOT_LOOTBOX_RNG_WORD_BY_INDEX = 36;
+    // Via forge inspect (Stage B Game-storage packing shifted these down):
+    // lootboxRngPacked = slot 34 (the lootbox RNG index lives in bits[0:47]), lootboxRngWordByIndex = slot 35.
+    uint256 constant SLOT_LOOTBOX_RNG_INDEX = 34;
+    uint256 constant SLOT_LOOTBOX_RNG_WORD_BY_INDEX = 35;
     // lootboxEth (the single folded box word) = slot 15; amount is the low 128 bits (the box-owed signal).
     uint256 constant SLOT_LOOTBOX_ETH = 15;
     uint256 constant LB_AMOUNT_MASK = (uint256(1) << 128) - 1;
@@ -1872,7 +1871,16 @@ contract RngLockDeterminism is DeployProtocol {
     uint256 constant SLOT_TOTAL_FLIP_REVERSALS = 5; // verified via forge inspect (VRFStallEdgeCases.t.sol:346)
 
     function _readTotalFlipReversals() internal view returns (uint256) {
-        return uint256(vm.load(address(game), bytes32(uint256(SLOT_TOTAL_FLIP_REVERSALS))));
+        // Slot 5 now packs totalFlipReversals (uint64, low) + lastVrfProcessedTimestamp
+        // (uint48, bytes 8-13). Mask to the low 64 bits.
+        return uint64(uint256(vm.load(address(game), bytes32(uint256(SLOT_TOTAL_FLIP_REVERSALS)))));
+    }
+
+    /// @dev Zero the reversals lane of slot 5, preserving the co-resident timestamp.
+    function _zeroTotalFlipReversals() internal {
+        bytes32 slot = bytes32(uint256(SLOT_TOTAL_FLIP_REVERSALS));
+        uint256 w = uint256(vm.load(address(game), slot));
+        vm.store(address(game), slot, bytes32(w & ~uint256(type(uint64).max)));
     }
 
     /// @dev Mint BURNIE to `who` via the GAME-gated mintForGame (the project idiom,
@@ -1972,7 +1980,7 @@ contract RngLockDeterminism is DeployProtocol {
         // Proves the captured word genuinely incorporates totalFlipReversals (the consume is the
         // frozen `cw += totalFlipReversals`), so the byte-identity above cannot pass vacuously.
         _revertToPreLock(preLockSnap);
-        vm.store(address(game), bytes32(uint256(SLOT_TOTAL_FLIP_REVERSALS)), bytes32(uint256(0)));
+        _zeroTotalFlipReversals();
         assertEq(_readTotalFlipReversals(), 0, "TST-01 control: reversals zeroed");
         game.advanceGame();
         uint256 controlReqId = mockVRF.lastRequestId();
@@ -2159,7 +2167,7 @@ contract RngLockDeterminism is DeployProtocol {
         // Per T-336-01-03 STRIDE row: ALWAYS _revertToPreLock(snapshotId) BEFORE re-staging the
         // second env. The helper at lines 130-144 enforces revert-before-re-stage by construction.
         _revertToPreLock(preLockSnap);
-        vm.store(address(game), bytes32(uint256(SLOT_TOTAL_FLIP_REVERSALS)), bytes32(uint256(0)));
+        _zeroTotalFlipReversals();
         assertEq(_readTotalFlipReversals(), 0, "TST-01 claim control: reversals zeroed");
         game.advanceGame();
         uint256 controlReqId = mockVRF.lastRequestId();
@@ -2332,7 +2340,7 @@ contract RngLockDeterminism is DeployProtocol {
     ///      62) at `index` with a zero in-index cursor, so the relocated multi-index sweep begins
     ///      exactly at this finalized index (the realistic state where every lower index is already
     ///      drained). Without this the sweep would orphan-break at the first un-worded lower index.
-    uint256 constant SLOT_BOX_CURSORS = 62;
+    uint256 constant SLOT_BOX_CURSORS = 58;
     function _parkBoxFrontier(uint48 index) internal {
         bytes32 slot = bytes32(uint256(SLOT_BOX_CURSORS));
         uint256 packed = uint256(vm.load(address(game), slot));

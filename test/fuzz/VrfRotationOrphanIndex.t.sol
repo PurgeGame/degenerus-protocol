@@ -12,17 +12,17 @@ import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 ///         asserts a real VRF-derived word lands in lootboxRngWordByIndex[N] after a
 ///         REAL mid-flight emergency rotation. A single forge-test invocation runs both.
 /// @dev    Storage slots are authoritative per `forge inspect DegenerusGame storage-layout`:
-///         slot 36 = lootboxRngPacked (LR_INDEX in low bits, LR_MID_DAY at bit 224 mask 0xFF),
-///         slot 37 = lootboxRngWordByIndex mapping (lootboxRngWordByIndex[i] at
-///         keccak256(abi.encode(uint256(i), uint256(37)))).
+///         slot 34 = lootboxRngPacked (LR_INDEX in low bits, LR_MID_DAY at bit 224 mask 0xFF),
+///         slot 35 = lootboxRngWordByIndex mapping (lootboxRngWordByIndex[i] at
+///         keccak256(abi.encode(uint256(i), uint256(35)))).
 ///         The consumer at DegenerusGameMintModule:686 reads
 ///         entropy = lootboxRngWordByIndex[LR_INDEX - 1] and flows it unguarded into
 ///         _processOneTicketEntry; that index is the slot both arms target.
 ///         ZERO contracts/ mutation -- audit-only (D-43N-AUDIT-ONLY-01).
 contract VrfRotationOrphanIndex is DeployProtocol {
     /// @dev Storage slot constants (authoritative storage-layout, not the drifted analog).
-    uint256 private constant SLOT_LOOTBOX_PACKED = 35;   // post V62 lootbox repack: was 36
-    uint256 private constant SLOT_LOOTBOX_WORD_MAP = 36;  // post V62 lootbox repack: was 37
+    uint256 private constant SLOT_LOOTBOX_PACKED = 34;   // post Stage B Game pack: was 35
+    uint256 private constant SLOT_LOOTBOX_WORD_MAP = 35;  // post Stage B Game pack: was 36
     /// @dev LR_MID_DAY occupies byte 28 of lootboxRngPacked (bit offset 224, mask 0xFF).
     uint256 private constant LR_MID_DAY_BIT = 224;
 
@@ -39,7 +39,7 @@ contract VrfRotationOrphanIndex is DeployProtocol {
     // Storage-read helpers (slots authoritative per forge inspect)
     // ──────────────────────────────────────────────────────────────────────
 
-    /// @dev Read LR_INDEX (the low bits of lootboxRngPacked at slot 36).
+    /// @dev Read LR_INDEX (the low bits of lootboxRngPacked at slot 34).
     function _readLootboxRngIndex() internal view returns (uint48) {
         return uint48(uint256(vm.load(address(game), bytes32(SLOT_LOOTBOX_PACKED))));
     }
@@ -50,7 +50,7 @@ contract VrfRotationOrphanIndex is DeployProtocol {
         return (packed >> LR_MID_DAY_BIT) & 0xFF;
     }
 
-    /// @dev Read lootboxRngWordByIndex[index] from the slot-37 mapping.
+    /// @dev Read lootboxRngWordByIndex[index] from the slot-35 mapping.
     function _readLootboxWord(uint48 index) internal view returns (uint256) {
         bytes32 slot = keccak256(abi.encode(uint256(index), SLOT_LOOTBOX_WORD_MAP));
         return uint256(vm.load(address(game), slot));

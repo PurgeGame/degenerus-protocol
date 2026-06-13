@@ -59,8 +59,8 @@ import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 ///      `_settleGame`/`_settleClean` VRF drain, the funded-sub setup, `depositAfkingFunding` funding,
 ///      `_grantDeityPass`, the Sub-slot reads, the snapshot/revert two-near-N form) ported from
 ///      V55AfkingGasMarginal. All pinned slots taken from `forge inspect DegenerusGame storageLayout`
-///      against the v61 subject (`_subOf = 62`, `_subscribers = 64`, `_subCursor = 66:0`,
-///      `_subOpenCursor = 66:2`, `rngWordByDay = 10`; the Sub field byte offsets are the v56 re-pack,
+///      against the POST subject (`_subOf = 54`, `_subscribers = 56`, `_subCursor = 58:0`,
+///      `_subOpenCursor = 58:2`, `rngWordByDay = 10`; the Sub field byte offsets are the v56 re-pack,
 ///      unchanged by the PACK fold). Test-only: ZERO contracts/*.sol mutated.
 contract V56AfkingGasMarginal is DeployProtocol {
     // -------------------------------------------------------------------------
@@ -70,9 +70,9 @@ contract V56AfkingGasMarginal is DeployProtocol {
     // RE-DERIVED via `solc --storage-layout` on the working tree after the V62 lootbox repack — the
     // folded lootboxEth word + removed lootboxEthBase/Burnie/Purchase/Distress shifted later slots down.
     uint256 private constant RNG_WORD_BY_DAY_SLOT = 10; // mapping(uint24 => uint256) — the afking box's DAY-keyed word + readiness gate
-    uint256 private constant SUBOF_SLOT = 58;           // _subOf mapping root (address => Sub, one packed slot)
-    uint256 private constant SUBSCRIBERS_SLOT = 60;     // address[] _subscribers (slot holds the length)
-    uint256 private constant SUBCURSOR_SLOT = 62;       // _subCursor (uint16 @ byte 0) + _subOpenCursor (uint16 @ byte 2) + _afkingResetDay (uint24 @ byte 4) + boxCursor (uint48 @ byte 7) + boxCursorIndex (uint48 @ byte 13)
+    uint256 private constant SUBOF_SLOT = 54;           // _subOf mapping root (address => Sub, one packed slot)
+    uint256 private constant SUBSCRIBERS_SLOT = 56;     // address[] _subscribers (slot holds the length)
+    uint256 private constant SUBCURSOR_SLOT = 58;       // _subCursor (uint16 @ byte 0) + _subOpenCursor (uint16 @ byte 2) + _afkingResetDay (uint24 @ byte 4) + boxCursor (uint48 @ byte 7) + boxCursorIndex (uint48 @ byte 13)
 
     // Sub packed-field byte offsets — RE-DERIVED via `forge inspect DegenerusGame storageLayout` after the
     // v56 compute-on-read re-pack: `amount` narrowed uint32→uint24 (so everything after it shifts down one

@@ -61,19 +61,18 @@ import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 contract RngFreezeAndRemovalProofs is DeployProtocol {
     // -------------------------------------------------------------------------
     // Storage slot constants (DegenerusGame; RE-DERIVED via `solc --storage-layout` on the working
-    // tree after the V62 lootbox repack — the folded lootboxEth word + removed
-    // lootboxEthBase/Burnie/Purchase/Distress shifted later slots down. The prior 43/44 degenerette
-    // pins were ALSO stale pre-repack; corrected to the authoritative 40/41 here.)
+    // tree after the Stage B Game-storage packing — lootboxRngPacked moved to 34,
+    // lootboxRngWordByIndex to 35, degeneretteBets to 38, degeneretteBetNonce to 39.)
     // -------------------------------------------------------------------------
 
-    /// @dev lootboxRngPacked at slot 35; lootboxRngIndex is the low 48 bits.
-    uint256 private constant LOOTBOX_RNG_PACKED_SLOT = 35;
+    /// @dev lootboxRngPacked at slot 34; lootboxRngIndex is the low 48 bits.
+    uint256 private constant LOOTBOX_RNG_PACKED_SLOT = 34;
     /// @dev lootboxRngWordByIndex mapping root slot.
-    uint256 private constant LOOTBOX_RNG_WORD_SLOT = 36;
+    uint256 private constant LOOTBOX_RNG_WORD_SLOT = 35;
     /// @dev degeneretteBets mapping root slot (address => betId => packed).
-    uint256 private constant DEGENERETTE_BETS_SLOT = 40;
+    uint256 private constant DEGENERETTE_BETS_SLOT = 38;
     /// @dev degeneretteBetNonce mapping root slot (address => uint64).
-    uint256 private constant DEGENERETTE_BET_NONCE_SLOT = 41;
+    uint256 private constant DEGENERETTE_BET_NONCE_SLOT = 39;
     /// @dev lootboxEth (the single folded box word) mapping root slot. The amount sub-field (low
     ///      128 bits) is the box-owed signal (set on first deposit, zeroed on open) — it replaced
     ///      the removed lootboxEthBase mapping the old pin read.
@@ -926,7 +925,7 @@ contract RngFreezeAndRemovalProofs is DeployProtocol {
         vm.store(address(game), slot, bytes32(rngWord));
     }
 
-    /// @dev Bump the active lootbox RNG index (low 48 bits of lootboxRngPacked, slot 35) by one,
+    /// @dev Bump the active lootbox RNG index (low 48 bits of lootboxRngPacked, slot 34) by one,
     ///      mirroring requestLootboxRng's pre-increment, so a box queued at the prior index now sits
     ///      at LR_INDEX-1 — the just-finalized index the relocated multi-index sweep opens.
     function _advanceLootboxRngIndexByOne() internal {
@@ -942,12 +941,12 @@ contract RngFreezeAndRemovalProofs is DeployProtocol {
         );
     }
 
-    /// @dev Park the auto-open frontier (boxCursorIndex byte 13 + boxCursor byte 7, both slot 62)
+    /// @dev Park the auto-open frontier (boxCursorIndex byte 13 + boxCursor byte 7, both slot 58)
     ///      at `index` with a zero in-index cursor, so the relocated sweep begins exactly at this
     ///      finalized index (the realistic state where lower indices are drained). Without this the
     ///      sweep would orphan-break at the first un-worded lower index.
     function _parkBoxFrontier(uint48 index) internal {
-        bytes32 slot = bytes32(uint256(62));
+        bytes32 slot = bytes32(uint256(58));
         uint256 packed = uint256(vm.load(address(game), slot));
         uint256 cursorMask = (uint256(1) << 48) - 1;
         packed &= ~(cursorMask << (7 * 8));   // boxCursor = 0
@@ -1040,7 +1039,7 @@ contract RngFreezeAndRemovalProofs is DeployProtocol {
         creditDelta = game.claimableWinningsOf(who) - pre;
     }
 
-    /// @dev Set the live daily lootboxRngIndex (low 48 bits of lootboxRngPacked slot 35).
+    /// @dev Set the live daily lootboxRngIndex (low 48 bits of lootboxRngPacked slot 34).
     function _setLootboxRngIndex(uint48 idx) internal {
         uint256 packed = uint256(
             vm.load(address(game), bytes32(uint256(LOOTBOX_RNG_PACKED_SLOT)))

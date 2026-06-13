@@ -57,11 +57,11 @@ contract SweepViewer is DegenerusGame {
 ///      pokes (the established BoxCreationHandler / PresaleBoxDrain idiom). A read-only viewer is
 ///      etched to inspect internal maps; the real code is restored after every read.
 contract SweepWorstCaseDrain is DeployProtocol {
-    // Authoritative slots (post V62 lootbox repack), RE-DERIVED via `solc --storage-layout`.
-    uint256 private constant SLOT_LOOTBOX_RNG_PACKED = 35;   // [0:47] lootboxRngIndex
-    uint256 private constant SLOT_LOOTBOX_RNG_WORD = 36;     // mapping(uint48 => uint256)
-    uint256 private constant SLOT_BOX_PLAYERS = 63;          // mapping(uint48 => address[])
-    uint256 private constant SLOT_BOX_CURSORS = 62;          // boxCursor @ byte 7, boxCursorIndex @ byte 13
+    // Authoritative slots (post Stage B pack), RE-DERIVED via `solc --storage-layout`.
+    uint256 private constant SLOT_LOOTBOX_RNG_PACKED = 34;   // [0:47] lootboxRngIndex
+    uint256 private constant SLOT_LOOTBOX_RNG_WORD = 35;     // mapping(uint48 => uint256)
+    uint256 private constant SLOT_BOX_PLAYERS = 59;          // mapping(uint48 => address[])
+    uint256 private constant SLOT_BOX_CURSORS = 58;          // boxCursor @ byte 7, boxCursorIndex @ byte 13
     uint256 private constant LR_INDEX_MASK = 0xFFFFFFFFFFFF;
 
     // Hard per-tx ceilings (mirrors V56AfkingGasMarginal): 16.7M = the gameover-composition gg bound.
@@ -140,7 +140,7 @@ contract SweepWorstCaseDrain is DeployProtocol {
         vm.store(address(game), slot, bytes32(word));
     }
 
-    /// @dev Park the open frontier (boxCursorIndex @ byte 13, boxCursor @ byte 7, both slot 62) at
+    /// @dev Park the open frontier (boxCursorIndex @ byte 13, boxCursor @ byte 7, both slot 58) at
     ///      `index` with a zero in-index cursor, so the sweep begins exactly there.
     function _parkFrontier(uint48 index) internal {
         bytes32 slot = bytes32(uint256(SLOT_BOX_CURSORS));
@@ -154,8 +154,8 @@ contract SweepWorstCaseDrain is DeployProtocol {
 
     /// @dev Append `count` no-box addresses to boxPlayers[index] — a pure skip-prefix. Each entry has
     ///      a zero lootbox amount AND zero presale leg, so the sweep skips it (one step, no
-    ///      resolution, never reverts). boxPlayers[index] is mapping(uint48 => address[]) at slot 63:
-    ///      length at keccak(index, 63); element i at keccak(keccak(index,63)) + i.
+    ///      resolution, never reverts). boxPlayers[index] is mapping(uint48 => address[]) at slot 59:
+    ///      length at keccak(index, 59); element i at keccak(keccak(index,59)) + i.
     function _appendSkipPrefix(uint48 index, uint256 count, uint256 saltSeed) internal {
         bytes32 lenSlot = keccak256(abi.encode(uint256(index), uint256(SLOT_BOX_PLAYERS)));
         uint256 len = uint256(vm.load(address(game), lenSlot));

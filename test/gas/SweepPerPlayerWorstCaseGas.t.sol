@@ -39,7 +39,7 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 ///      driving harness ported from V55RevertFreeEvCap (`_settleClean` VRF drain, `_setupFundedSubs`,
 ///      `depositAfkingFunding`, `_grantDeityPass`, the Sub-stamp slot reads). All pinned slots taken from
 ///      `forge inspect DegenerusGame storageLayout` against the v61 subject: the game-resident
-///      `_subOf = 62`, `_subscribers = 64`, `_subscriberIndex = 65`, and `balancesPacked = 7` (its low-128
+///      `_subOf = 54`, `_subscribers = 56`, `_subscriberIndex = 57`, and `balancesPacked = 7` (its low-128
 ///      half holds the claimable semantics). Test-only: ZERO contracts/*.sol mutated.
 contract SweepPerPlayerWorstCaseGas is DeployProtocol {
     // -------------------------------------------------------------------------
@@ -49,9 +49,9 @@ contract SweepPerPlayerWorstCaseGas is DeployProtocol {
     uint256 private constant CLAIMABLE_WINNINGS_SLOT = 7;   // balancesPacked root — the SUB-04 reinvest read masks the low-128 claimable half
     uint256 private constant CLAIMABLE_POOL_SLOT = 1;       // uint128 @ slot 1, byte 16 (SOLVENCY-01 tandem)
     uint256 private constant CLAIMABLE_POOL_OFFBYTES = 16;
-    uint256 private constant SUBOF_SLOT = 62;              // _subOf mapping root (address => Sub, one packed slot)
-    uint256 private constant SUBSCRIBERS_SLOT = 64;        // address[] _subscribers (slot holds the length)
-    uint256 private constant SUBSCRIBER_INDEX_SLOT = 65;   // mapping(address => uint256) _subscriberIndex
+    uint256 private constant SUBOF_SLOT = 54;              // _subOf mapping root (address => Sub, one packed slot)
+    uint256 private constant SUBSCRIBERS_SLOT = 56;        // address[] _subscribers (slot holds the length)
+    uint256 private constant SUBSCRIBER_INDEX_SLOT = 57;   // mapping(address => uint256) _subscriberIndex
 
     // Sub packed-field byte offsets (DegenerusGameStorage.sol; the v56 re-packed single 256-bit slot —
     // the markers are uint24 each, not the old uint32 232-bit layout).
@@ -300,7 +300,7 @@ contract SweepPerPlayerWorstCaseGas is DeployProtocol {
         }
     }
 
-    // ---- Sub-stamp slot reads (_subOf at slot 62 + verified offsets) ----
+    // ---- Sub-stamp slot reads (_subOf at slot 54 + verified offsets) ----
 
     function _lastBoughtDayOf(address who) internal view returns (uint32) {
         uint256 p = uint256(vm.load(address(game), keccak256(abi.encode(who, uint256(SUBOF_SLOT))))) >> (OFF_LASTBOUGHT * 8);

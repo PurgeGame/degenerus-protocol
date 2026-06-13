@@ -51,10 +51,10 @@ contract AfKingFundingWaterfall is DeployProtocol {
     // -------------------------------------------------------------------------
     // Game-resident storage slots (RE-DERIVED via `forge inspect storage DegenerusGame`).
     // -------------------------------------------------------------------------
-    uint256 private constant SUBOF_SLOT = 58; // _subOf mapping root (post V62 repack: was 65, also stale pre-repack)
-    uint256 private constant FUNDINGSOURCE_SLOT = 59; // _fundingSourceOf mapping root (post V62 repack: was 66)
-    uint256 private constant SUBSCRIBER_INDEX_SLOT = 61; // _subscriberIndex mapping root (1-indexed) (post V62 repack: was 68)
-    uint256 private constant MINTPACKED_SLOT = 9; // mintPacked_ mapping root (deity bit) (post V62 repack: was 10)
+    uint256 private constant SUBOF_SLOT = 54; // _subOf mapping root
+    uint256 private constant FUNDINGSOURCE_SLOT = 55; // _fundingSourceOf mapping root
+    uint256 private constant SUBSCRIBER_INDEX_SLOT = 57; // _subscriberIndex mapping root (1-indexed)
+    uint256 private constant MINTPACKED_SLOT = 9; // mintPacked_ mapping root (deity bit)
     uint256 private constant GAME_CLAIMABLE_SLOT = 7; // claimableWinnings mapping root
 
     // Sub packed-field byte offsets (DegenerusGameStorage.sol:1895; the v56 compute-on-read re-pack

@@ -76,14 +76,14 @@ contract VRFStallEdgeCases is DeployProtocol {
     }
 
     /// @dev Read lootboxRngIndex directly from storage slot 35 (lower 48 bits of lootboxRngPacked)
-    ///      (post V62 lootbox repack: was 36).
+    ///      (Stage B packing: lootboxRngPacked = slot 34).
     function _lootboxRngIndex() internal view returns (uint48) {
-        return uint48(uint256(vm.load(address(game), bytes32(uint256(35)))));
+        return uint48(uint256(vm.load(address(game), bytes32(uint256(34)))));
     }
 
-    /// @dev Read lootboxRngWordByIndex[index] from storage (mapping at slot 36, post V62 repack: was 37).
+    /// @dev Read lootboxRngWordByIndex[index] from storage (mapping at slot 35, Stage B Game pack).
     function _lootboxRngWord(uint48 index) internal view returns (uint256) {
-        bytes32 slot = keccak256(abi.encode(uint256(index), uint256(36)));
+        bytes32 slot = keccak256(abi.encode(uint256(index), uint256(35)));
         return uint256(vm.load(address(game), slot));
     }
 
@@ -350,7 +350,7 @@ contract VRFStallEdgeCases is DeployProtocol {
     /// @dev Storage slot for totalFlipReversals (verified via forge inspect).
     uint256 constant SLOT_TOTAL_FLIP_REVERSALS = 5;
     /// @dev Storage slot for lootboxRngPacked (post V62 lootbox repack: was 36).
-    uint256 constant SLOT_LOOTBOX_RNG_PACKED = 35;
+    uint256 constant SLOT_LOOTBOX_RNG_PACKED = 34;
 
     /// @notice Unit: coordinator swap with a daily request in flight preserves the RNG lock
     ///         and re-issues the request on the new coordinator; intentionally-kept variables
@@ -430,7 +430,7 @@ contract VRFStallEdgeCases is DeployProtocol {
 
         // Record totalFlipReversals before swap
         uint256 preSwapReversals = uint256(
-            vm.load(address(game), bytes32(uint256(SLOT_TOTAL_FLIP_REVERSALS)))
+            uint64(uint256(vm.load(address(game), bytes32(uint256(SLOT_TOTAL_FLIP_REVERSALS)))))
         );
 
         // Warp to the next day (day 3 absolute), trigger VRF request, then swap
@@ -440,7 +440,7 @@ contract VRFStallEdgeCases is DeployProtocol {
 
         // totalFlipReversals must be preserved
         uint256 postSwapReversals = uint256(
-            vm.load(address(game), bytes32(uint256(SLOT_TOTAL_FLIP_REVERSALS)))
+            uint64(uint256(vm.load(address(game), bytes32(uint256(SLOT_TOTAL_FLIP_REVERSALS)))))
         );
         assertEq(
             postSwapReversals,

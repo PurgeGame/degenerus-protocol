@@ -385,8 +385,16 @@ abstract contract DegenerusGameStorage {
     uint256 internal vrfRequestId;
 
     /// @dev Number of reverse flips purchased against current RNG word.
-    ///      Tracks flip activity for jackpot sizing adjustments.
-    uint256 internal totalFlipReversals;
+    ///      Tracks flip activity for jackpot sizing adjustments. Co-resident with
+    ///      lastVrfProcessedTimestamp (both written in _applyDailyRng); bounded by
+    ///      supply/RNG_NUDGE_BASE_COST << 2^64 since every nudge burns >= 100 BURNIE.
+    uint64 internal totalFlipReversals;
+
+    /// @dev Timestamp of the last successfully processed VRF word.
+    ///      Used by governance to detect VRF stalls (time-based vs day-gap-based).
+    ///      Initialized in wireVrf(), updated in _applyDailyRng(). Shares the slot
+    ///      with totalFlipReversals.
+    uint48 internal lastVrfProcessedTimestamp;
 
     /// @dev Packed daily jackpot ticket data for two-phase execution.
     ///      Layout: [counterStep (8 bits @ 0)] [dailyTicketUnits (64 bits @ 8)]
@@ -1115,13 +1123,39 @@ abstract contract DegenerusGameStorage {
     mapping(uint24 => mapping(address => bool))
         internal affiliateDgnrsClaimedBy;
 
-    /// @dev Segregated DGNRS allocation per level (5% of affiliate pool at transition time).
-    ///      Set during level transition in rewardTopAffiliate. Claims draw against this
-    ///      fixed amount instead of the live pool balance, eliminating first-mover advantage.
-    mapping(uint24 => uint256) internal levelDgnrsAllocation;
+    /// @dev Segregated DGNRS allocation + cumulative claimed per level, packed into one
+    ///      slot: bits [0:128) = allocation (5% of affiliate pool, snapshot at transition),
+    ///      bits [128:256) = cumulative claimed. Both are DGNRS base units, bounded by the
+    ///      sDGNRS supply (~1e30) << uint128 (3.4e38). Claims draw against the fixed
+    ///      allocation, not the live pool, eliminating first-mover advantage.
+    mapping(uint24 => uint256) internal levelDgnrsPacked;
 
-    /// @dev Cumulative DGNRS claimed per level from the segregated allocation.
-    mapping(uint24 => uint256) internal levelDgnrsClaimed;
+    /// @dev Unpack a level's (allocation, claimed) from the packed slot.
+    function _getLevelDgnrs(uint24 lvl)
+        internal
+        view
+        returns (uint256 allocation, uint256 claimed)
+    {
+        uint256 w = levelDgnrsPacked[lvl];
+        allocation = uint128(w);
+        claimed = w >> 128;
+    }
+
+    /// @dev Set a level's allocation half, preserving the claimed half.
+    function _setLevelDgnrsAllocation(uint24 lvl, uint256 allocation) internal {
+        uint256 w = levelDgnrsPacked[lvl];
+        levelDgnrsPacked[lvl] =
+            (w & (uint256(type(uint128).max) << 128)) |
+            uint128(allocation);
+    }
+
+    /// @dev Add to a level's claimed half, preserving the allocation half. claimed is
+    ///      monotone toward allocation (<= uint128), so the high half never overflows.
+    function _addLevelDgnrsClaimed(uint24 lvl, uint256 add) internal {
+        uint256 w = levelDgnrsPacked[lvl];
+        uint256 newClaimed = (w >> 128) + add;
+        levelDgnrsPacked[lvl] = uint128(w) | (newClaimed << 128);
+    }
 
     // =========================================================================
     // Deity Pass (Perma Whale) Grants
@@ -1606,11 +1640,12 @@ abstract contract DegenerusGameStorage {
     // Deity Boon Tracking
     // =========================================================================
 
-    /// @dev Day when deity's boon slots were assigned.
-    mapping(address => uint24) internal deityBoonDay;
-
-    /// @dev Bitmask of used slots for the current day (bit i = slot i used).
-    mapping(address => uint8) internal deityBoonUsedMask;
+    /// @dev Per-deity boon assignment day + used-slot mask, packed into one slot:
+    ///      bits [0:24) = day the boon slots were assigned, bits [24:32) = bitmask of
+    ///      used slots for that day (bit i = slot i used). A stale day reads its mask
+    ///      as irrelevant because every reader gates on the day matching; the day-roll
+    ///      write re-stamps the day with a fresh (zero) mask in one store.
+    mapping(address => uint32) internal deityBoonPacked;
 
     /// @dev Day when recipient last received a deity boon (prevents double-receipt).
     mapping(address => uint24) internal deityBoonRecipientDay;
@@ -1639,10 +1674,62 @@ abstract contract DegenerusGameStorage {
     // Lootbox EV Multiplier Cap Tracking
     // =========================================================================
 
-    /// @dev Amount of lootbox ETH that has received EV multiplier benefit per player per level.
-    ///      Capped at 10 ETH per account per level to prevent excessive EV boost exploitation.
-    mapping(address => mapping(uint24 => uint256))
-        internal lootboxEvBenefitUsedByLevel;
+    /// @dev Per-player lootbox EV-multiplier benefit used, two level-stamped windows in
+    ///      one slot. At any instant only the keys {currentLevel, currentLevel+1} are live
+    ///      (opens RMW currentLevel, deposits RMW level+1), so two windows hold the full
+    ///      live set with no eviction of a live key. Each window: used (64 bits) + level
+    ///      stamp (24 bits). `used` is clamped to LOOTBOX_EV_BENEFIT_CAP = 10 ether = 1e19
+    ///      < 2^64 at every write. A non-matching stamp reads as 0 (a fresh allowance).
+    ///      Window A: bits [0:64) used, [64:88) level. Window B: bits [88:152) used, [152:176) level.
+    mapping(address => uint256) internal lootboxEvCapPacked;
+
+    uint256 private constant _EV_USED_MASK = (uint256(1) << 64) - 1;
+    uint256 private constant _EV_WINDOW_A_MASK = (uint256(1) << 88) - 1;
+    uint256 private constant _EV_WINDOW_B_MASK =
+        ((uint256(1) << 88) - 1) << 88;
+
+    /// @dev A player's EV benefit used for `level`; 0 if neither window is stamped to it.
+    function _lootboxEvUsedFor(address player, uint24 level)
+        internal
+        view
+        returns (uint256)
+    {
+        uint256 packed = lootboxEvCapPacked[player];
+        if (uint24(packed >> 64) == level) return packed & _EV_USED_MASK;
+        if (uint24(packed >> 152) == level) return (packed >> 88) & _EV_USED_MASK;
+        return 0;
+    }
+
+    /// @dev Record `used` for `level`: into the window already stamped to `level`, else
+    ///      evict the smaller-level window (the older of the two; never a live key, since
+    ///      the live set is {currentLevel, currentLevel+1}).
+    function _setLootboxEvUsedFor(
+        address player,
+        uint24 level,
+        uint256 used
+    ) internal {
+        uint256 packed = lootboxEvCapPacked[player];
+        uint24 lvlA = uint24(packed >> 64);
+        uint24 lvlB = uint24(packed >> 152);
+        uint256 windowA = (uint256(level) << 64) | (used & _EV_USED_MASK);
+        if (lvlA == level) {
+            lootboxEvCapPacked[player] =
+                (packed & ~_EV_WINDOW_A_MASK) |
+                windowA;
+        } else if (lvlB == level) {
+            lootboxEvCapPacked[player] =
+                (packed & ~_EV_WINDOW_B_MASK) |
+                (windowA << 88);
+        } else if (lvlA <= lvlB) {
+            lootboxEvCapPacked[player] =
+                (packed & ~_EV_WINDOW_A_MASK) |
+                windowA;
+        } else {
+            lootboxEvCapPacked[player] =
+                (packed & ~_EV_WINDOW_B_MASK) |
+                (windowA << 88);
+        }
+    }
 
     // =========================================================================
     // Decimator Jackpot State
@@ -1662,14 +1749,24 @@ abstract contract DegenerusGameStorage {
         uint8 claimed;
     }
 
-    /// @dev Snapshot of a decimator jackpot for claim processing.
+    /// @dev Snapshot of a decimator jackpot for claim processing. All three fields pack
+    ///      into ONE slot (96 + 128 + 32 = 256 bits).
     struct DecClaimRound {
-        /// @notice ETH prize pool available for claims.
-        uint256 poolWei;
-        /// @notice VRF random word for lootbox entropy derivation.
-        uint256 rngWord;
-        /// @notice Total qualifying burn across winning subbuckets (denominator for pro-rata).
-        uint232 totalBurn;
+        /// @notice ETH prize pool available for claims. uint96 (7.9e28 wei = 7.9e10 ETH,
+        ///         far above any reachable pool; mirrors TerminalDecClaimRound.poolWei).
+        uint96 poolWei;
+        /// @notice Total qualifying burn across winning subbuckets (denominator for
+        ///         pro-rata). Sum of per-burn effective amounts (<= ~2.35x the BURNIE
+        ///         burned, supply-capped at uint128); realistic per-level totals sit
+        ///         ~1e8x under uint128. Mirrors TerminalDecClaimRound.totalBurn.
+        uint128 totalBurn;
+        /// @notice Stored seed for the claim-time lootbox draw only. The winning subbuckets
+        ///         are selected from the FULL VRF word at snapshot and stored separately in
+        ///         decBucketOffsetPacked, so this never gates winner selection. Its sole
+        ///         consumer (resolveLootboxDirect) combines it via keccak with frozen inputs
+        ///         (winner address, sealed amount/evScore) — no player-controlled input — so
+        ///         32 bits of post-fulfillment-revealed entropy cannot be ground or predicted.
+        uint32 rngWord;
     }
 
     /// @dev Player decimator entries per level.
@@ -1735,15 +1832,6 @@ abstract contract DegenerusGameStorage {
     function _setCenturyUsedFor(address player, uint256 level, uint256 used) internal {
         centuryBonusUsed[player] = (level << 224) | (used & _CENTURY_USED_MASK);
     }
-
-    // =========================================================================
-    // VRF Liveness Timestamp (Governance)
-    // =========================================================================
-
-    /// @dev Timestamp of the last successfully processed VRF word.
-    ///      Used by governance to detect VRF stalls (time-based vs day-gap-based).
-    ///      Initialized in wireVrf(), updated in _applyDailyRng().
-    uint48 internal lastVrfProcessedTimestamp;
 
     // =========================================================================
     // Terminal Decimator (Always-Open Death Bet)
@@ -1836,13 +1924,10 @@ abstract contract DegenerusGameStorage {
     ///      claimed on a level (max 4 claims/player/level). bingoClaimed[level][player].
     mapping(uint24 => mapping(address => uint8)) internal bingoClaimed;
 
-    /// @dev Systemwide 4-bit quadrant mask: which quadrants have had their first
-    ///      bingo on a level (max 4 quadrant-firsts/level). firstQuadrant[level].
-    mapping(uint24 => uint8) internal firstQuadrant;
-
-    /// @dev Systemwide 32-bit symbol mask: which symbols (0-31) have had their first
-    ///      bingo on a level (max 32 symbol-firsts/level). firstSymbol[level].
-    mapping(uint24 => uint32) internal firstSymbol;
+    /// @dev Systemwide bingo-first bitfields per level, packed: bits [0:32) = symbol mask
+    ///      (which symbols 0-31 have had their first bingo), bits [32:36) = quadrant mask
+    ///      (which of 4 quadrants have had their first bingo). bingoFirsts[level].
+    mapping(uint24 => uint64) internal bingoFirsts;
 
     // ---- Slot 0 shifts ----
     uint256 internal constant BP_COINFLIP_DAY_SHIFT = 0;

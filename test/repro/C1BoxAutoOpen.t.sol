@@ -97,12 +97,12 @@ contract C1BoxAutoOpen is DeployProtocol {
         vm.etch(address(game), real);
     }
 
-    /// @dev Park the auto-open frontier (boxCursorIndex @ byte 13, boxCursor @ byte 7, both slot 62)
+    /// @dev Park the auto-open frontier (boxCursorIndex @ byte 13, boxCursor @ byte 7, both slot 58)
     ///      at `index` with a zero in-index cursor, so the O(1) boxesPending hint + the multi-index
     ///      sweep begin exactly at this finalized index (the realistic state where the empty lower
     ///      indices are already drained). No contract mutation — a field-isolated slot poke.
     function _parkBoxFrontier(uint48 index) internal {
-        bytes32 slot = bytes32(uint256(62));
+        bytes32 slot = bytes32(uint256(58));
         uint256 packed = uint256(vm.load(address(game), slot));
         uint256 m = (uint256(1) << 48) - 1;
         packed &= ~(m << (7 * 8));   // boxCursor = 0

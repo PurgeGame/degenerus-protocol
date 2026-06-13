@@ -51,10 +51,10 @@ contract AfKingConcurrency is DeployProtocol {
     // -------------------------------------------------------------------------
     // Game-resident storage slots (via `forge inspect DegenerusGame storageLayout`).
     // -------------------------------------------------------------------------
-    uint256 private constant SUBOF_SLOT = 58; // _subOf mapping root (address => Sub, one packed slot) (post V62 repack: was 62)
-    uint256 private constant SUBSCRIBERS_SLOT = 60; // _subscribers address[] (length here; data at keccak(60)) (post V62 repack: was 64)
-    uint256 private constant SUBSCRIBER_INDEX_SLOT = 61; // _subscriberIndex mapping root (1-indexed) (post V62 repack: was 65)
-    uint256 private constant SUBCURSOR_SLOT = 62; // _subCursor uint16 at offset 0 (the STAGE walk cursor) (post V62 repack: was 66)
+    uint256 private constant SUBOF_SLOT = 54; // _subOf mapping root (address => Sub, one packed slot)
+    uint256 private constant SUBSCRIBERS_SLOT = 56; // _subscribers address[] (length here; data at keccak(56))
+    uint256 private constant SUBSCRIBER_INDEX_SLOT = 57; // _subscriberIndex mapping root (1-indexed)
+    uint256 private constant SUBCURSOR_SLOT = 58; // _subCursor uint16 at offset 0 (the STAGE walk cursor)
     uint256 private constant MINTPACKED_SLOT = 9; // mintPacked_ mapping root (deity bit lives here)
 
     // Sub packed-field byte offsets (cumulative little-endian within the single packed slot —
@@ -583,7 +583,7 @@ contract AfKingConcurrency is DeployProtocol {
         }
     }
 
-    // ---- Sub field reads (game-resident _subOf slot 62 + the verified packed offsets) ----
+    // ---- Sub field reads (game-resident _subOf slot 54 + the verified packed offsets) ----
 
     function _subSlot(address who) internal pure returns (bytes32) {
         return keccak256(abi.encode(who, uint256(SUBOF_SLOT)));
@@ -616,7 +616,7 @@ contract AfKingConcurrency is DeployProtocol {
         return uint8(p0 >> (29 * 8)) != 0;
     }
 
-    /// @dev `_subCursor` (slot 66, offset 0, uint16) — the STAGE walk cursor.
+    /// @dev `_subCursor` (slot 58, offset 0, uint16) — the STAGE walk cursor.
     function _subCursorVal() internal view returns (uint16) {
         return uint16(uint256(vm.load(address(game), bytes32(uint256(SUBCURSOR_SLOT)))));
     }
@@ -627,7 +627,7 @@ contract AfKingConcurrency is DeployProtocol {
     ///      fields the contract writes (the idle fixture's real day index saturates without ticket
     ///      purchases, so the gate is opened directly rather than via a real day rollover).
     function _openAfkingResetGate() internal {
-        // _subCursor = 0 (slot 66, offset 0, uint16).
+        // _subCursor = 0 (slot 58, offset 0, uint16).
         bytes32 sCursor = bytes32(uint256(SUBCURSOR_SLOT));
         uint256 pCursor = uint256(vm.load(address(game), sCursor));
         pCursor &= ~uint256(0xFFFF);
@@ -648,17 +648,17 @@ contract AfKingConcurrency is DeployProtocol {
         vm.store(address(game), slot, bytes32(packed));
     }
 
-    /// @dev Read `who`'s 1-indexed subscriber index (slot 65); 0 = not in set.
+    /// @dev Read `who`'s 1-indexed subscriber index (slot 57); 0 = not in set.
     function _subscriberIndexOf(address who) internal view returns (uint256) {
         return uint256(vm.load(address(game), keccak256(abi.encode(who, uint256(SUBSCRIBER_INDEX_SLOT)))));
     }
 
-    /// @dev `_subscribers.length` (slot 64 holds the array length).
+    /// @dev `_subscribers.length` (slot 56 holds the array length).
     function _subscribersLen() internal view returns (uint256) {
         return uint256(vm.load(address(game), bytes32(uint256(SUBSCRIBERS_SLOT))));
     }
 
-    /// @dev `_subscribers[i]` (data at keccak256(64) + i).
+    /// @dev `_subscribers[i]` (data at keccak256(56) + i).
     function _subscriberAt(uint256 i) internal view returns (address) {
         bytes32 base = keccak256(abi.encode(uint256(SUBSCRIBERS_SLOT)));
         return address(uint160(uint256(vm.load(address(game), bytes32(uint256(base) + i)))));

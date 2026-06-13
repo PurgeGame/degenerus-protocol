@@ -85,13 +85,13 @@ contract MintModuleDivergenceAcrossSplitTest is DeployProtocol {
     /// @dev packed slot 14: ticketCursor (uint32) offset 0; ticketLevel (uint24) offset 4.
     uint256 private constant SLOT_TICKET_CURSOR_LEVEL = 14;
 
-    /// @dev lootboxRngPacked (uint256) — slot 35 (post V62 lootbox repack: was 37). low 48 bits = lootboxRngIndex.
-    uint256 private constant SLOT_LOOTBOX_RNG_PACKED = 35;
+    /// @dev lootboxRngPacked (uint256) — slot 34 (post V62 lootbox repack: was 35). low 48 bits = lootboxRngIndex.
+    uint256 private constant SLOT_LOOTBOX_RNG_PACKED = 34;
 
-    /// @dev lootboxRngWordByIndex (mapping(uint48 => uint256)) — slot 36 (post V62 lootbox repack: was 38).
+    /// @dev lootboxRngWordByIndex (mapping(uint48 => uint256)) — slot 35 (post V62 lootbox repack: was 36).
     ///      Mint module reads `lootboxRngWordByIndex[uint48(lrIndex) - 1]`,
     ///      with lrIndex default-initialized to 1, so the consumed slot is index 0.
-    uint256 private constant SLOT_LOOTBOX_RNG_WORD_BY_INDEX = 36;
+    uint256 private constant SLOT_LOOTBOX_RNG_WORD_BY_INDEX = 35;
 
     /// @dev TICKET_SLOT_BIT mirror from DegenerusGameStorage.sol:182. With
     ///      ticketWriteSlot=false (default), _tqReadKey(lvl) returns lvl | TICKET_SLOT_BIT.

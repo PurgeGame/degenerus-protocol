@@ -979,12 +979,12 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
                 _lootboxEvMultiplierFromScore(activityScore) >
                 LOOTBOX_EV_NEUTRAL_BPS
             ) {
-                uint256 used = lootboxEvBenefitUsedByLevel[player][capKey];
+                uint256 used = _lootboxEvUsedFor(player, capKey);
                 uint256 remaining = used >= LOOTBOX_EV_BENEFIT_CAP
                     ? 0
                     : LOOTBOX_EV_BENEFIT_CAP - used;
                 uint256 add = amount < remaining ? amount : remaining;
-                lootboxEvBenefitUsedByLevel[player][capKey] = used + add;
+                _setLootboxEvUsedFor(player, capKey, used + add);
                 adj = uint64(add);
             }
             // First deposit for this (index, player): enqueue for the permissionless auto-open
@@ -1004,13 +1004,13 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
                     _lootboxEvMultiplierFromScore(uint256(priorScore)) >
                     LOOTBOX_EV_NEUTRAL_BPS
                 ) {
-                    uint256 used = lootboxEvBenefitUsedByLevel[player][capKey];
+                    uint256 used = _lootboxEvUsedFor(player, capKey);
                     uint256 remaining = used >= LOOTBOX_EV_BENEFIT_CAP
                         ? 0
                         : LOOTBOX_EV_BENEFIT_CAP - used;
                     uint256 add = amount < remaining ? amount : remaining;
                     if (add != 0) {
-                        lootboxEvBenefitUsedByLevel[player][capKey] = used + add;
+                        _setLootboxEvUsedFor(player, capKey, used + add);
                         adj = priorAdj + uint64(add);
                     }
                 }

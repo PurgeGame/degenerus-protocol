@@ -45,7 +45,7 @@ contract V55FreezeDeterminism is DeployProtocol {
     // RE-DERIVED via `solc --storage-layout` on the working tree after the V62 lootbox repack (the
     // folded lootboxEth word + removed lootboxEthBase/Burnie/Purchase/Distress shifted later slots
     // down). The prior 65/10/11/16/23/38/39 pins were stale; corrected to authoritative values.
-    uint256 private constant SUBOF_SLOT = 58; // _subOf mapping root (address => Sub, one packed slot)
+    uint256 private constant SUBOF_SLOT = 54; // _subOf mapping root (address => Sub, one packed slot)
     uint256 private constant MINTPACKED_SLOT = 9; // mintPacked_ mapping root (deity bit)
     uint256 private constant RNG_WORD_BY_DAY_SLOT = 10; // mapping(uint24 => uint256) — the afking box's DAY-keyed word
     // lootboxEth (the single folded box word): amount[0:128] | adj[128:192] | scorePlus1[192:208] |
@@ -54,8 +54,8 @@ contract V55FreezeDeterminism is DeployProtocol {
     uint256 private constant LB_AMOUNT_MASK = (uint256(1) << 128) - 1;
     uint256 private constant LB_ADJ_SHIFT = 128;
     uint256 private constant LB_SCORE_SHIFT = 192;
-    uint256 private constant LOOTBOX_RNG_PACKED_SLOT = 35; // [0:47] lootboxRngIndex
-    uint256 private constant LOOTBOX_RNG_WORD_BY_INDEX_SLOT = 36; // mapping(uint48 => uint256)
+    uint256 private constant LOOTBOX_RNG_PACKED_SLOT = 34; // [0:47] lootboxRngIndex
+    uint256 private constant LOOTBOX_RNG_WORD_BY_INDEX_SLOT = 35; // mapping(uint48 => uint256)
 
     // Sub packed-field byte offsets — the v56 compute-on-read re-pack (single 256-bit slot):
     //   scorePlus1 u16 @6 · amount u24 @8 · lastAutoBoughtDay u24 @11 · lastOpenedDay u24 @14.

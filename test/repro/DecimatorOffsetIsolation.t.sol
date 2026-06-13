@@ -21,11 +21,11 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 /// claimable beyond the reserved pool and/or revert honest regular claims).
 contract DecimatorOffsetIsolationTest is DeployProtocol {
     // Authoritative slots from `forge inspect DegenerusGame storageLayout`:
-    //   decBucketOffsetPacked      mapping(uint24  => uint64)   slot 46
-    //   terminalDecBucketBurnTotal mapping(bytes32 => uint256)  slot 52
-    //   lastTerminalDecClaimRound  struct (lvl in low bytes)    slot 53 (fresh game => 0)
-    uint256 internal constant SLOT_DEC_OFFSET_PACKED = 46;
-    uint256 internal constant SLOT_TERMINAL_BUCKET_BURN = 52;
+    //   decBucketOffsetPacked      mapping(uint24  => uint64)   slot 44
+    //   terminalDecBucketBurnTotal mapping(bytes32 => uint256)  slot 49
+    //   lastTerminalDecClaimRound  struct (lvl in low bytes)    slot 50 (fresh game => 0)
+    uint256 internal constant SLOT_DEC_OFFSET_PACKED = 44;
+    uint256 internal constant SLOT_TERMINAL_BUCKET_BURN = 49;
 
     // Mirror of the module's denominator span (2..12 inclusive).
     uint8 internal constant DECIMATOR_MAX_DENOM = 12;

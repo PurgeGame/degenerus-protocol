@@ -466,7 +466,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         }
 
         // Check how much EV benefit capacity remains for this level
-        uint256 usedBenefit = lootboxEvBenefitUsedByLevel[player][lvl];
+        uint256 usedBenefit = _lootboxEvUsedFor(player, lvl);
         uint256 remainingCap = usedBenefit >= LOOTBOX_EV_BENEFIT_CAP
             ? 0
             : LOOTBOX_EV_BENEFIT_CAP - usedBenefit;
@@ -481,7 +481,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         uint256 neutralPortion = amount - adjustedPortion;
 
         // Update tracking
-        lootboxEvBenefitUsedByLevel[player][lvl] = usedBenefit + adjustedPortion;
+        _setLootboxEvUsedFor(player, lvl, usedBenefit + adjustedPortion);
 
         // Calculate scaled amount:
         // - adjustedPortion gets the full EV multiplier
@@ -1001,8 +1001,8 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     ///      the level, so the level freeze is unnecessary; the freeze proof is §2, LOCKED),
     ///      and the SINGLE `_applyEvMultiplierWithCap(player, currentLevel, amount,
     ///      evMultiplierBps)` RMW — the sole residual live-read, a benign monotonic
-    ///      down-clamp (FREEZE-01b), keyed on the SAME
-    ///      `lootboxEvBenefitUsedByLevel[player][level+1]` map the human buy-time write uses
+    ///      down-clamp (FREEZE-01b), keyed on the SAME per-level window of
+    ///      `lootboxEvCapPacked[player]` the human buy-time write uses
     ///      so the human + afking boxes share the one per-level 10-ETH EV budget (BOX-05).
     ///      The buy-time EV write is bypassed for afking boxes (the process pass STAMPS only —
     ///      DegenerusGameMintModule:1303/1327 are never reached for this box), so this is the
@@ -1102,20 +1102,19 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         uint24 day = _simulatedDayIndex();
         uint256 rngWord = rngWordByDay[day];
         if (rngWord == 0) revert E();
-        // Day rollover starts from an empty mask without zeroing storage: a stale
-        // mask under a stale day is never read (every reader gates on
-        // deityBoonDay[deity] == day) and the single terminal write below replaces it.
-        uint8 mask;
-        if (deityBoonDay[deity] != day) {
-            deityBoonDay[deity] = day;
-        } else {
-            mask = deityBoonUsedMask[deity];
-        }
+        // Day + used-mask share one slot (deityBoonPacked). On a day rollover the mask
+        // starts empty: a stale day's mask is never read (every reader gates on the day
+        // matching), and the single packed write below re-stamps the day with the fresh
+        // mask in one store.
+        uint32 boonPacked = deityBoonPacked[deity];
+        uint8 mask = uint24(boonPacked) == day ? uint8(boonPacked >> 24) : 0;
         if (deityBoonRecipientDay[recipient] == day) revert E();
 
         uint8 slotMask = uint8(1) << slot;
         if ((mask & slotMask) != 0) revert E();
-        deityBoonUsedMask[deity] = mask | slotMask;
+        deityBoonPacked[deity] =
+            uint32(day) |
+            (uint32(mask | slotMask) << 24);
         deityBoonRecipientDay[recipient] = day;
 
         bool decimatorAllowed = _isDecimatorWindow();

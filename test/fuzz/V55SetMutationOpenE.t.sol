@@ -41,12 +41,12 @@ import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 ///      WRONG). Test-only: no contracts/*.sol mutated.
 contract V55SetMutationOpenE is DeployProtocol {
     // -------------------------------------------------------------------------
-    // Game-resident storage slots (RE-DERIVED via `solc --storage-layout`, working tree, post V62
-    // lootbox repack — the prior 65/67/68/10 pins were stale; corrected to authoritative values).
+    // Game-resident storage slots (RE-DERIVED via `forge inspect DegenerusGame storageLayout`, post
+    // Stage B Game-storage packing — corrected to authoritative values).
     // -------------------------------------------------------------------------
-    uint256 private constant SUBOF_SLOT = 58; // _subOf mapping root
-    uint256 private constant SUBSCRIBERS_SLOT = 60; // _subscribers address[] (length here; data at keccak(60))
-    uint256 private constant SUBSCRIBER_INDEX_SLOT = 61; // _subscriberIndex mapping root (1-indexed)
+    uint256 private constant SUBOF_SLOT = 54; // _subOf mapping root
+    uint256 private constant SUBSCRIBERS_SLOT = 56; // _subscribers address[] (length here; data at keccak(56))
+    uint256 private constant SUBSCRIBER_INDEX_SLOT = 57; // _subscriberIndex mapping root (1-indexed)
     uint256 private constant MINTPACKED_SLOT = 9; // mintPacked_ mapping root (deity bit)
 
     // Sub packed-field byte offsets — the v56 compute-on-read re-pack (single 256-bit slot).
@@ -459,7 +459,7 @@ contract V55SetMutationOpenE is DeployProtocol {
         vm.store(address(game), keccak256(abi.encode(who, uint256(SUBSCRIBER_INDEX_SLOT))), bytes32(uint256(0)));
     }
 
-    // ---- Sub field reads (RE-DERIVED slot 66 + verified offsets) ----
+    // ---- Sub field reads (RE-DERIVED slot 54 + verified offsets) ----
 
     function _subSlot(address who) internal pure returns (bytes32) {
         return keccak256(abi.encode(who, uint256(SUBOF_SLOT)));
@@ -500,7 +500,7 @@ contract V55SetMutationOpenE is DeployProtocol {
     }
 
     function _fundingSourceOf(address who) internal view returns (address) {
-        return address(uint160(uint256(vm.load(address(game), keccak256(abi.encode(who, uint256(66)))))));
+        return address(uint160(uint256(vm.load(address(game), keccak256(abi.encode(who, uint256(55)))))));
     }
 
     // ---- Event drain (emitter == address(game) — the game-resident module emits via delegatecall) ----

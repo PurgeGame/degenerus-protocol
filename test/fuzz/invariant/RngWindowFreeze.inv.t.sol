@@ -20,8 +20,8 @@ import {RngWindowFreezeHandler} from "../handlers/RngWindowFreezeHandler.sol";
 ///
 ///         THE ENUMERATED IN-WINDOW SLOAD SET (the RngWindowFreezeHandler backward trace):
 ///           (1) rngWordByDay[currentDay]     — slot 10 : the VRF-DERIVED day word.
-///           (2) lootboxRngWordByIndex[index] — slot 37 : the VRF-DERIVED lootbox word.
-///           (3) lootboxRngPacked cursor      — slot 36 low 48 bits : the NON-VRF index read alongside
+///           (2) lootboxRngWordByIndex[index] — slot 35 : the VRF-DERIVED lootbox word.
+///           (3) lootboxRngPacked cursor      — slot 34 low 48 bits : the NON-VRF index read alongside
 ///                                                       the word.
 ///           (4) dailyIdx                     — slot 0, byte 3 : the NON-VRF day cursor the consumption
 ///                                                       keys against (included precisely because it is
@@ -33,13 +33,13 @@ import {RngWindowFreezeHandler} from "../handlers/RngWindowFreezeHandler.sol";
 ///         ghost_windowsOpened > 0 AND ghost_inWindowActions > 0 (a "passes because nothing happened"
 ///         green is impossible).
 ///
-/// @dev Test-only: ZERO contracts/*.sol mutation. The only vm.store is the standard slot-36 lootbox-index
+/// @dev Test-only: ZERO contracts/*.sol mutation. The only vm.store is the standard slot-34 lootbox-index
 ///      seed inside the handler (mirroring RngFreezeAndRemovalProofs.setUp) so an active index exists to
 ///      snapshot, plus the seeded-violation vm.store in the falsifiability test (reverted in-test).
 contract RngWindowFreeze is DeployProtocol {
     RngWindowFreezeHandler public handler;
 
-    uint256 private constant LOOTBOX_RNG_PACKED_SLOT = 35; // post V62 lootbox repack: was 36
+    uint256 private constant LOOTBOX_RNG_PACKED_SLOT = 34; // post Stage B pack: was 35
     uint256 private constant LR_INDEX_MASK = 0xFFFFFFFFFFFF;
     uint256 private constant RNG_WORD_BY_DAY_SLOT = 10;
 

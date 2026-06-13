@@ -40,7 +40,7 @@ contract BoxCreationHandler is Test {
     // -------------------------------------------------------------------------
     uint256 private constant MINTPACKED_SLOT = 9;
     uint256 private constant DEITY_SHIFT = 184; // HAS_DEITY_PASS score bit (subscribe/pass gate)
-    uint256 private constant LR_PACKED_SLOT = 35; // lootboxRngPacked; LR_INDEX = low 48 bits (post V62 repack)
+    uint256 private constant LR_PACKED_SLOT = 34; // lootboxRngPacked; LR_INDEX = low 48 bits (post Stage B pack: was 35)
     uint256 private constant LR_INDEX_MASK = 0xFFFFFFFFFFFF;
     uint256 private constant PRESALE_BOX_CREDIT_SLOT = 17; // mapping(address => uint256)
     // The folded lootboxEth word: amount[0:128] | adj[128:192] | scorePlus1[192:208] | distress[208:256].
@@ -322,7 +322,7 @@ contract BoxCreationHandler is Test {
         return true;
     }
 
-    /// @dev Active lootbox RNG index (low 48 bits of lootboxRngPacked, slot 36).
+    /// @dev Active lootbox RNG index (low 48 bits of lootboxRngPacked, slot 34).
     function _lrIndex() internal view returns (uint48) {
         uint256 packed = uint256(vm.load(address(game), bytes32(LR_PACKED_SLOT)));
         return uint48(packed & LR_INDEX_MASK);

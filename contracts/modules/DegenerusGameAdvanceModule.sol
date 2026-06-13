@@ -741,10 +741,10 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
 
     /// @dev Reward the top affiliate for a level and segregate per-level DGNRS allocation.
     ///      After the 1% top-affiliate draw, snapshots 5% of the remaining affiliate
-    ///      pool into levelDgnrsAllocation[lvl]. Affiliate scores always route to
-    ///      level + 1 during gameplay, so at transition time (when level becomes lvl),
-    ///      all scores at index lvl are frozen — new scores go to lvl + 1.
-    ///      Claims read levelDgnrsAllocation[currLevel] directly.
+    ///      pool into the allocation half of levelDgnrsPacked[lvl]. Affiliate scores
+    ///      always route to level + 1 during gameplay, so at transition time (when level
+    ///      becomes lvl), all scores at index lvl are frozen — new scores go to lvl + 1.
+    ///      Claims read the allocation half of levelDgnrsPacked[currLevel] directly.
     ///      Unclaimed tokens are never physically moved — they remain in the pool
     ///      and naturally roll into the next level's snapshot.
     function _rewardTopAffiliate(uint24 lvl) private {
@@ -770,9 +770,10 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
 
         // Segregate 5% of remaining affiliate pool for per-affiliate claims.
         // Scores at index lvl are frozen (new scores go to lvl + 1).
-        levelDgnrsAllocation[lvl] =
-            (poolBalance * AFFILIATE_DGNRS_LEVEL_BPS) /
-            10_000;
+        _setLevelDgnrsAllocation(
+            lvl,
+            (poolBalance * AFFILIATE_DGNRS_LEVEL_BPS) / 10_000
+        );
     }
 
     /// @dev Distribute yield surplus via JackpotModule delegatecall.

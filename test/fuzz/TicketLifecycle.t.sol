@@ -2046,15 +2046,15 @@ contract TicketLifecycleTest is DeployProtocol {
     ///      Checks the current read key for the queue autoBuy. The write side may have
     ///      nonzero entries from later transitions (vault perpetual writes to past levels).
     ///      The read key being zero proves the level was fully processed during its lifecycle.
-    /// @dev Read lootboxRngIndex directly from storage slot 35 (low 48 bits of lootboxRngPacked)
-    ///      (post V62 lootbox repack: was 36).
+    /// @dev Read lootboxRngIndex directly from storage slot 34 (low 48 bits of lootboxRngPacked)
+    ///      (post V62 lootbox repack: was 35).
     function _lootboxRngIndex() internal view returns (uint48) {
-        return uint48(uint256(vm.load(address(game), bytes32(uint256(35)))));
+        return uint48(uint256(vm.load(address(game), bytes32(uint256(34)))));
     }
 
-    /// @dev Read lootboxRngWordByIndex[index] from storage (mapping at slot 36, post V62 repack: was 37).
+    /// @dev Read lootboxRngWordByIndex[index] from storage (mapping at slot 35, post V62 repack: was 36).
     function _lootboxRngWord(uint48 index) internal view returns (uint256) {
-        bytes32 slot = keccak256(abi.encode(uint256(index), uint256(36)));
+        bytes32 slot = keccak256(abi.encode(uint256(index), uint256(35)));
         return uint256(vm.load(address(game), slot));
     }
 
@@ -2093,8 +2093,8 @@ contract TicketLifecycleTest is DeployProtocol {
 
     // ==================== Lootbox Helpers ====================
 
-    /// @dev Storage slot for lootboxRngWordByIndex mapping (post V62 lootbox repack: was 37).
-    uint256 private constant LOOTBOX_RNG_WORD_SLOT = 36;
+    /// @dev Storage slot for lootboxRngWordByIndex mapping (post V62 lootbox repack: was 36).
+    uint256 private constant LOOTBOX_RNG_WORD_SLOT = 35;
 
     /// @notice Purchase tickets with a lootbox ETH allocation. Returns the lootbox RNG index.
     /// @param who Buyer address
@@ -2140,8 +2140,8 @@ contract TicketLifecycleTest is DeployProtocol {
     }
 
     /// @notice Store a deterministic lootbox RNG word via vm.store.
-    /// @dev lootboxRngWordByIndex is mapping(uint48 => uint256) at slot 37.
-    ///      mapping slot = keccak256(abi.encode(uint256(index), uint256(37)))
+    /// @dev lootboxRngWordByIndex is mapping(uint48 => uint256) at slot 35.
+    ///      mapping slot = keccak256(abi.encode(uint256(index), uint256(35)))
     function _storeLootboxRngWord(uint48 index, uint256 rngWord) internal {
         bytes32 slot = keccak256(abi.encode(uint256(index), uint256(LOOTBOX_RNG_WORD_SLOT)));
         vm.store(address(game), slot, bytes32(rngWord));

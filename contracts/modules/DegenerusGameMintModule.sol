@@ -1678,13 +1678,13 @@ contract DegenerusGameMintModule is
                 lbScore = uint16(cachedScore);
                 uint256 mult = _lootboxEvMultiplierFromScore(cachedScore);
                 if (mult > LOOTBOX_EV_NEUTRAL_BPS) {
-                    uint256 used = lootboxEvBenefitUsedByLevel[buyer][cachedLevel + 1];
+                    uint256 used = _lootboxEvUsedFor(buyer, cachedLevel + 1);
                     uint256 remaining = used >= LOOTBOX_EV_BENEFIT_CAP
                         ? 0
                         : LOOTBOX_EV_BENEFIT_CAP - used;
                     uint256 add = lootBoxAmount < remaining ? lootBoxAmount : remaining;
                     if (add != 0) {
-                        lootboxEvBenefitUsedByLevel[buyer][cachedLevel + 1] = used + add;
+                        _setLootboxEvUsedFor(buyer, cachedLevel + 1, used + add);
                         lbAdj = uint64(add);
                     }
                 }
@@ -1699,13 +1699,13 @@ contract DegenerusGameMintModule is
                         uint256(lbPriorScore)
                     );
                     if (mult > LOOTBOX_EV_NEUTRAL_BPS) {
-                        uint256 used = lootboxEvBenefitUsedByLevel[buyer][cachedLevel + 1];
+                        uint256 used = _lootboxEvUsedFor(buyer, cachedLevel + 1);
                         uint256 remaining = used >= LOOTBOX_EV_BENEFIT_CAP
                             ? 0
                             : LOOTBOX_EV_BENEFIT_CAP - used;
                         uint256 add = lootBoxAmount < remaining ? lootBoxAmount : remaining;
                         if (add != 0) {
-                            lootboxEvBenefitUsedByLevel[buyer][cachedLevel + 1] = used + add;
+                            _setLootboxEvUsedFor(buyer, cachedLevel + 1, used + add);
                             lbAdj = lbPriorAdj + uint64(add);
                         }
                     }

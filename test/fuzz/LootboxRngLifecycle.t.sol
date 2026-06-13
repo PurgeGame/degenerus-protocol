@@ -100,15 +100,15 @@ contract LootboxRngLifecycle is DeployProtocol {
         ts = block.timestamp;
     }
 
-    /// @dev Read lootboxRngIndex directly from storage slot 35 (low 48 bits of lootboxRngPacked)
-    ///      (post V62 lootbox repack: was 36).
+    /// @dev Read lootboxRngIndex directly from storage slot 34 (low 48 bits of lootboxRngPacked)
+    ///      (post V62 lootbox repack: was 35).
     function _readLootboxRngIndex() internal view returns (uint48) {
-        return uint48(uint256(vm.load(address(game), bytes32(uint256(35)))));
+        return uint48(uint256(vm.load(address(game), bytes32(uint256(34)))));
     }
 
-    /// @dev Read lootboxRngWordByIndex[index] from storage (mapping at slot 36, post V62 repack: was 37).
+    /// @dev Read lootboxRngWordByIndex[index] from storage (mapping at slot 35, post V62 repack: was 36).
     function _lootboxRngWord(uint48 index) internal view returns (uint256) {
-        bytes32 slot = keccak256(abi.encode(uint256(index), uint256(36)));
+        bytes32 slot = keccak256(abi.encode(uint256(index), uint256(35)));
         return uint256(vm.load(address(game), slot));
     }
 

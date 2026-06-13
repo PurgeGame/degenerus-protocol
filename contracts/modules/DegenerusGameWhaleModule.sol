@@ -732,8 +732,8 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
         if (affiliateReserve == 0) return;
         // Reserve the outstanding level claim allocation so whale purchases
         // cannot drain tokens owed to affiliate claimants.
-        uint256 reserved = levelDgnrsAllocation[level] -
-            levelDgnrsClaimed[level];
+        (uint256 allocation, uint256 claimed) = _getLevelDgnrs(level);
+        uint256 reserved = allocation - claimed;
         if (reserved >= affiliateReserve) return;
         affiliateReserve -= reserved;
 
@@ -801,8 +801,8 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
         if (affiliateReserve == 0) return;
         // Reserve the outstanding level claim allocation so deity purchases
         // cannot drain tokens owed to affiliate claimants.
-        uint256 reserved = levelDgnrsAllocation[level] -
-            levelDgnrsClaimed[level];
+        (uint256 allocation, uint256 claimed) = _getLevelDgnrs(level);
+        uint256 reserved = allocation - claimed;
         if (reserved >= affiliateReserve) return;
         affiliateReserve -= reserved;
 
@@ -871,12 +871,12 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
             score = uint16(activityScore);
             uint256 mult = _lootboxEvMultiplierFromScore(activityScore);
             if (mult > LOOTBOX_EV_NEUTRAL_BPS) {
-                uint256 used = lootboxEvBenefitUsedByLevel[buyer][capKey];
+                uint256 used = _lootboxEvUsedFor(buyer, capKey);
                 uint256 remaining = used >= LOOTBOX_EV_BENEFIT_CAP
                     ? 0
                     : LOOTBOX_EV_BENEFIT_CAP - used;
                 uint256 add = lootboxAmount < remaining ? lootboxAmount : remaining;
-                lootboxEvBenefitUsedByLevel[buyer][capKey] = used + add;
+                _setLootboxEvUsedFor(buyer, capKey, used + add);
                 adj = uint64(add);
             }
             // First deposit for this (index, buyer): enqueue for the permissionless
@@ -894,13 +894,13 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
             adj = priorAdj;
             uint256 mult = _lootboxEvMultiplierFromScore(uint256(priorScore));
             if (mult > LOOTBOX_EV_NEUTRAL_BPS) {
-                uint256 used = lootboxEvBenefitUsedByLevel[buyer][capKey];
+                uint256 used = _lootboxEvUsedFor(buyer, capKey);
                 uint256 remaining = used >= LOOTBOX_EV_BENEFIT_CAP
                     ? 0
                     : LOOTBOX_EV_BENEFIT_CAP - used;
                 uint256 add = lootboxAmount < remaining ? lootboxAmount : remaining;
                 if (add != 0) {
-                    lootboxEvBenefitUsedByLevel[buyer][capKey] = used + add;
+                    _setLootboxEvUsedFor(buyer, capKey, used + add);
                     adj = priorAdj + uint64(add);
                 }
             }

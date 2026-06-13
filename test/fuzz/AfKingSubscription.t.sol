@@ -50,9 +50,9 @@ contract AfKingSubscription is DeployProtocol {
     // -------------------------------------------------------------------------
     // Game-resident storage slots (RE-DERIVED via `forge inspect storage DegenerusGame`).
     // -------------------------------------------------------------------------
-    uint256 private constant SUBOF_SLOT = 58; // _subOf mapping root (address => Sub, one packed slot) (post V62 repack: was 62)
-    uint256 private constant FUNDING_SOURCE_SLOT = 59; // _fundingSourceOf mapping root (address => address) (post V62 repack: was 63)
-    uint256 private constant SUBSCRIBER_INDEX_SLOT = 61; // _subscriberIndex mapping root (1-indexed) (post V62 repack: was 65)
+    uint256 private constant SUBOF_SLOT = 54; // _subOf mapping root (address => Sub, one packed slot)
+    uint256 private constant FUNDING_SOURCE_SLOT = 55; // _fundingSourceOf mapping root (address => address)
+    uint256 private constant SUBSCRIBER_INDEX_SLOT = 57; // _subscriberIndex mapping root (1-indexed)
     uint256 private constant MINTPACKED_SLOT = 9; // mintPacked_ mapping root (deity bit lives here)
 
     // Sub packed-field byte offsets (DegenerusGameStorage.sol:1895; the v56 compute-on-read re-pack
@@ -404,7 +404,7 @@ contract AfKingSubscription is DeployProtocol {
         }
     }
 
-    // ---- Sub field reads (game-resident _subOf slot 62 + verified packed offsets) ----
+    // ---- Sub field reads (game-resident _subOf slot 54 + verified packed offsets) ----
 
     function _subField(address who, uint256 off, uint256 widthBits) internal view returns (uint256) {
         uint256 p = uint256(vm.load(address(game), keccak256(abi.encode(who, uint256(SUBOF_SLOT))))) >> (off * 8);
@@ -419,12 +419,12 @@ contract AfKingSubscription is DeployProtocol {
         return uint32(_subField(who, OFF_VALIDTHROUGH, 24));
     }
 
-    /// @dev Read `who`'s 1-indexed subscriber index (slot 65); 0 = not in set.
+    /// @dev Read `who`'s 1-indexed subscriber index (slot 57); 0 = not in set.
     function _subscriberIndexOf(address who) internal view returns (uint256) {
         return uint256(vm.load(address(game), keccak256(abi.encode(who, uint256(SUBSCRIBER_INDEX_SLOT)))));
     }
 
-    /// @dev Read `who`'s fundingSource from the sparse `_fundingSourceOf` map (slot 63).
+    /// @dev Read `who`'s fundingSource from the sparse `_fundingSourceOf` map (slot 55).
     ///      address(0) = self-funded (the common case stores nothing).
     function _fundingSourceOf(address who) internal view returns (address) {
         return address(uint160(uint256(vm.load(address(game), keccak256(abi.encode(who, uint256(FUNDING_SOURCE_SLOT)))))));

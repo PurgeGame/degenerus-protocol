@@ -21,12 +21,11 @@ contract AffiliateDgnrsClaim is DeployProtocol {
     bytes32 constant CODE_BOB   = bytes32("BOB");
     bytes32 constant CODE_CAROL = bytes32("CAROL");
 
-    // Storage slots (RE-DERIVED via `solc --storage-layout`, working tree, post V62 lootbox repack:
-    // the folded lootboxEth word + removed lootboxEthBase/Burnie/Purchase/Distress shifted later
-    // slots down. levelDgnrsAllocation/Claimed were 27/28; now 26/27.)
+    // Storage slots (forge inspect, Stage B packing). levelDgnrsAllocation + levelDgnrsClaimed
+    // are merged into one packed mapping levelDgnrsPacked @ slot 26: bits [0:128) = allocation,
+    // bits [128:256) = claimed.
     uint256 constant SLOT_LEVEL = 0; // level is at slot 0, offset 12, 3 bytes (uint24)
-    uint256 constant SLOT_LEVEL_DGNRS_ALLOCATION = 26;
-    uint256 constant SLOT_LEVEL_DGNRS_CLAIMED = 27;
+    uint256 constant SLOT_LEVEL_DGNRS_PACKED = 26;
 
     uint256 buyerNonce;
 
@@ -69,14 +68,18 @@ contract AffiliateDgnrsClaim is DeployProtocol {
         return keccak256(abi.encode(uint256(key), baseSlot));
     }
 
-    /// @dev Set levelDgnrsAllocation[lvl] = value via vm.store.
+    /// @dev Set levelDgnrsPacked[lvl] allocation half (low 128) via vm.store, preserving the
+    ///      claimed half (high 128).
     function _setAllocation(uint24 lvl, uint256 value) internal {
-        vm.store(address(game), _mappingSlot(SLOT_LEVEL_DGNRS_ALLOCATION, lvl), bytes32(value));
+        bytes32 slot = _mappingSlot(SLOT_LEVEL_DGNRS_PACKED, lvl);
+        uint256 w = uint256(vm.load(address(game), slot));
+        uint256 packed = (w & (uint256(type(uint128).max) << 128)) | uint128(value);
+        vm.store(address(game), slot, bytes32(packed));
     }
 
-    /// @dev Read levelDgnrsClaimed[lvl] via vm.load.
+    /// @dev Read levelDgnrsClaimed[lvl] = high 128 bits of the packed slot.
     function _getClaimed(uint24 lvl) internal view returns (uint256) {
-        return uint256(vm.load(address(game), _mappingSlot(SLOT_LEVEL_DGNRS_CLAIMED, lvl)));
+        return uint256(vm.load(address(game), _mappingSlot(SLOT_LEVEL_DGNRS_PACKED, lvl))) >> 128;
     }
 
     /// @dev Set game.level = lvl in packed slot 0.

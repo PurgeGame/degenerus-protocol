@@ -41,7 +41,7 @@ import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 ///      drain, `_setupFundedLootboxSubs`, `depositAfkingFunding` funding, `_grantDeityPass`, the Sub-stamp
 ///      slot reads). The OLD `_buyBox` HUMAN-deposit helper is REFRAMED to a funded LOOTBOX-mode SUB
 ///      stamped via a new-day STAGE. All pinned slots RE-DERIVED via `solc --storage-layout` on the
-///      working tree after the V62 lootbox repack: `_subOf = 58`, `_subscribers = 60`, `rngWordByDay
+///      working tree after the V62 lootbox repack: `_subOf = 54`, `_subscribers = 56`, `rngWordByDay
 ///      = 10`; the afking open reads NO cold ledger so the folded lootboxEth word is not load-bearing
 ///      here. Test-only: ZERO contracts/*.sol mutated.
 contract KeeperOpenBoxWorstCaseGas is DeployProtocol {
@@ -50,8 +50,8 @@ contract KeeperOpenBoxWorstCaseGas is DeployProtocol {
     // -------------------------------------------------------------------------
 
     uint256 private constant RNG_WORD_BY_DAY_SLOT = 10; // mapping(uint24 => uint256) — the afking box's DAY-keyed word + readiness gate
-    uint256 private constant SUBOF_SLOT = 58;           // _subOf mapping root (address => Sub, one packed slot)
-    uint256 private constant SUBSCRIBERS_SLOT = 60;     // address[] _subscribers (slot holds the length)
+    uint256 private constant SUBOF_SLOT = 54;           // _subOf mapping root (address => Sub, one packed slot)
+    uint256 private constant SUBSCRIBERS_SLOT = 56;     // address[] _subscribers (slot holds the length)
 
     // Sub packed-field byte offsets (DegenerusGameStorage.sol; the v56 re-packed single 256-bit slot,
     // 241/256 bits used — the markers are uint24 each, not the old uint32 232-bit layout).

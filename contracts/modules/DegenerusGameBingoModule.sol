@@ -18,7 +18,7 @@ import {PriceLookupLib} from "../libraries/PriceLookupLib.sol";
  *      All storage reads/writes operate on the inherited DegenerusGameStorage layout.
  *      claimBingo is a strict READ-ONLY consumer of traitBurnTicket — it adds NO write
  *      to it (RNG-freeze-safe per 339-BINGO06-FREEZE-PROOF). The only state it writes is
- *      its own three bitfields (bingoClaimed / firstQuadrant / firstSymbol). CEI:
+ *      its own bitfields (bingoClaimed / bingoFirsts). CEI:
  *      effects (the bit sets) precede interactions (transferFromPool / creditFlip).
  */
 contract DegenerusGameBingoModule is DegenerusGameStorage {
@@ -154,21 +154,25 @@ contract DegenerusGameBingoModule is DegenerusGameStorage {
         // Quadrant-first is checked BEFORE symbol-first (the binding ordering,
         // 339-TIER-PRECEDENCE §2). A quadrant-first marks BOTH bits — the
         // double-pay-trap guard (§4) — and suppresses the symbol-first bonus.
-        uint8 fq = firstQuadrant[level];
-        uint32 fs = firstSymbol[level];
+        uint64 bf = bingoFirsts[level];
+        uint8 fq = uint8(bf >> 32); // quadrant mask in bits [32:36)
+        uint32 fs = uint32(bf); // symbol mask in bits [0:32)
         bool isQuadrantFirst = (fq & qMask) == 0;
         bool isSymbolFirst = (fs & sMask) == 0;
 
         uint256 dgnrsBps;
         uint256 burnie;
         if (isQuadrantFirst) {
-            firstQuadrant[level] = fq | qMask;
-            firstSymbol[level] = fs | sMask; // BOTH bits — closes the double-pay window
+            // BOTH bits — closes the double-pay window — in one packed write
+            bingoFirsts[level] =
+                uint64(uint32(fs | sMask)) |
+                (uint64(uint8(fq | qMask)) << 32);
             dgnrsBps = FIRST_QUADRANT_DGNRS_BPS;
             burnie = FIRST_QUADRANT_BURNIE;
             emit FirstQuadrantBingo(msg.sender, level, symbol);
         } else if (isSymbolFirst) {
-            firstSymbol[level] = fs | sMask;
+            // mark only the symbol bit, preserving the co-resident quadrant mask
+            bingoFirsts[level] = (bf & ~uint64(0xFFFFFFFF)) | uint64(fs | sMask);
             dgnrsBps = REGULAR_DGNRS_BPS + FIRST_SYMBOL_BONUS_DGNRS_BPS;
             burnie = REGULAR_BURNIE + FIRST_SYMBOL_BONUS_BURNIE;
             emit FirstSymbolBingo(msg.sender, level, symbol);
@@ -228,7 +232,7 @@ contract DegenerusGameBingoModule is DegenerusGameStorage {
         uint256 denominator = affiliate.totalAffiliateScore(currLevel);
         if (denominator == 0) revert E();
 
-        uint256 allocation = levelDgnrsAllocation[currLevel];
+        (uint256 allocation, ) = _getLevelDgnrs(currLevel);
         if (allocation == 0) revert E();
         uint256 reward = (allocation * score) / denominator;
         if (reward == 0) revert E();
@@ -240,7 +244,7 @@ contract DegenerusGameBingoModule is DegenerusGameStorage {
         );
         if (paid == 0) revert E();
 
-        levelDgnrsClaimed[currLevel] += paid;
+        _addLevelDgnrsClaimed(currLevel, paid);
 
         // score != 0 is guaranteed here: reward = (allocation * score) / denominator
         // reverted above when reward == 0, which a zero score would force.

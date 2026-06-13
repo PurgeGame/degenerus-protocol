@@ -42,8 +42,8 @@ contract RedemptionLootboxPayableForward is DeployProtocol {
     uint256 internal constant GAME_CLAIMABLE_SLOT = 7;
     /// @dev claimablePool in the upper 128 bits of slot 1.
     uint256 internal constant GAME_SLOT1 = 1;
-    /// @dev boonPacked (DegenerusGame) mapping(address => BoonPacked{slot0, slot1}) at slot 54.
-    uint256 internal constant SLOT_BOON_PACKED = 54;
+    /// @dev boonPacked (DegenerusGame) mapping(address => BoonPacked{slot0, slot1}) at slot 51.
+    uint256 internal constant SLOT_BOON_PACKED = 51;
     /// @dev BoonPacked.slot0 bit layout (coinflip fields).
     uint256 internal constant BP_COINFLIP_DAY_SHIFT = 0;
     uint256 internal constant BP_COINFLIP_TIER_SHIFT = 48;

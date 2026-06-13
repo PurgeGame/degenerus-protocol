@@ -24,16 +24,16 @@ import {StakedDegenerusStonk} from "../../contracts/StakedDegenerusStonk.sol";
 /// Credit, the per-index VRF word, and (where a SMALL-pool clamp scenario is needed) the pool
 /// balance are seeded via vm.store -- test scaffolding only; ZERO contracts/*.sol modifications.
 contract PresaleBoxDrain is DeployProtocol {
-    // ── Storage slots (RE-DERIVED via `solc --storage-layout`, working tree, post V62 lootbox repack.
+    // ── Storage slots (RE-DERIVED via `solc --storage-layout`, working tree, post Stage B Game-storage packing.
     //    presaleBoxEth* / credit / sold are BEFORE the first removed mapping → unchanged; the rng pack/
-    //    word + presaleBoxDgnrsPoolStart shifted down by the removed/folded lootbox mappings.) ──
+    //    word + presaleBoxDgnrsPoolStart shifted down by the deity/VRF/boon packing.) ──
     uint256 constant SLOT_PACKED_0 = 0;                 // presaleOver @ byte 28
     uint256 constant SLOT_PRESALE_BOX_ETH_SOLD = 16;    // uint96
     uint256 constant SLOT_PRESALE_BOX_CREDIT = 17;      // mapping(address => uint256)
     uint256 constant SLOT_PRESALE_BOX_ETH = 18;         // mapping(uint48 => mapping(address => uint256))
-    uint256 constant SLOT_PRESALE_BOX_DGNRS_POOL_START = 31; // uint256
-    uint256 constant SLOT_LOOTBOX_RNG_PACKED = 35;      // LR_INDEX = low 48 bits
-    uint256 constant SLOT_LOOTBOX_RNG_WORD = 36;        // mapping(uint48 => uint256)
+    uint256 constant SLOT_PRESALE_BOX_DGNRS_POOL_START = 30; // uint256
+    uint256 constant SLOT_LOOTBOX_RNG_PACKED = 34;      // LR_INDEX = low 48 bits
+    uint256 constant SLOT_LOOTBOX_RNG_WORD = 35;        // mapping(uint48 => uint256)
 
     // ── Contract constants mirrored from DegenerusGameLootboxModule (the FIXED curve) ──
     // base = poolStart / 40 DGNRS-per-ETH; tier multiplier in tenths; reward divisor 400.

@@ -42,8 +42,8 @@ contract V56SecUnmanipulable is DeployProtocol {
     // -------------------------------------------------------------------------
     // Game-resident storage slots + the v56 Sub-slot offset block (V56AfkingGasMarginal:68-89)
     // -------------------------------------------------------------------------
-    uint256 private constant SUBOF_SLOT = 58;            // _subOf mapping root (address => Sub, one packed slot) (post V62 repack: was 62)
-    uint256 private constant SUBSCRIBER_INDEX_SLOT = 61; // mapping(address => uint256) _subscriberIndex (1-indexed) (post V62 repack: was 65)
+    uint256 private constant SUBOF_SLOT = 54;            // _subOf mapping root (address => Sub, one packed slot) (was 58)
+    uint256 private constant SUBSCRIBER_INDEX_SLOT = 57; // mapping(address => uint256) _subscriberIndex (1-indexed) (was 61)
     uint256 private constant MINTPACKED_SLOT = 9;        // mintPacked_ mapping root (deity bit @ bit 184)
 
     //   dailyQuantity u8 @0 · validThroughLevel u24 @1 · reinvestPct u8 @4 · flags u8 @5

@@ -869,7 +869,8 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         )
     {
         day = _simulatedDayIndex();
-        usedMask = deityBoonDay[deity] == day ? deityBoonUsedMask[deity] : 0;
+        uint32 boonPacked = deityBoonPacked[deity];
+        usedMask = uint24(boonPacked) == day ? uint8(boonPacked >> 24) : 0;
         decimatorOpen = decWindowOpen;
         deityPassAvailable = deityPassOwners.length < 32; // DEITY_PASS_MAX_TOTAL (see LootboxModule)
         // 0 until today's VRF word lands — callers render no boons while it's 0
@@ -1808,7 +1809,10 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         uint256 cost = _currentNudgeCost(reversals);
         coin.burnCoin(msg.sender, cost);
         uint256 newCount = reversals + 1;
-        totalFlipReversals = newCount;
+        // Fits uint64: every nudge burns >= RNG_NUDGE_BASE_COST (100 BURNIE), so the
+        // count is bounded by supply/1e20 << 2^64. Masked RMW preserves the co-resident
+        // lastVrfProcessedTimestamp.
+        totalFlipReversals = uint64(newCount);
         emit ReverseFlip(msg.sender, newCount, cost);
     }
 

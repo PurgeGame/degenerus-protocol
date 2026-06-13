@@ -15,14 +15,14 @@ contract DegeneretteHandler is Test {
     DegenerusGame public game;
     MockVRFCoordinator public vrf;
 
-    /// @dev Re-attested @ c4d48008 (forge inspect DegenerusGame storageLayout):
-    ///      `lootboxRngPacked` slot 36 (LR_INDEX lives in its low 48 bits) and
-    ///      `lootboxRngWordByIndex` slot 37 (mapping(uint48 => uint256)). placeDegeneretteBet
+    /// @dev Re-attested via game-layout-POST.txt (forge inspect DegenerusGame storageLayout):
+    ///      `lootboxRngPacked` slot 34 (LR_INDEX lives in its low 48 bits) and
+    ///      `lootboxRngWordByIndex` slot 35 (mapping(uint48 => uint256)). placeDegeneretteBet
     ///      gates on (LR_INDEX != 0) AND (lootboxRngWordByIndex[LR_INDEX] == 0); resolution
     ///      gates on lootboxRngWordByIndex[betIndex] != 0. The handler seeds both so the fuzzer
     ///      reaches a non-vacuous place->resolve sequence regardless of call ordering.
-    uint256 private constant LOOTBOX_RNG_PACKED_SLOT = 35; // post V62 lootbox repack: was 36
-    uint256 private constant LOOTBOX_RNG_WORD_SLOT = 36;   // post V62 lootbox repack: was 37
+    uint256 private constant LOOTBOX_RNG_PACKED_SLOT = 34; // post Stage-B game-storage repack: was 35
+    uint256 private constant LOOTBOX_RNG_WORD_SLOT = 35;   // post Stage-B game-storage repack: was 36
     uint48 private constant SEED_LR_INDEX = 1;
 
     // --- Ghost variables ---

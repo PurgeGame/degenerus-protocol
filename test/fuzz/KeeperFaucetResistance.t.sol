@@ -51,17 +51,17 @@ contract KeeperFaucetResistance is DeployProtocol {
     // 37/38/19 and the AfKing-standalone SUBOF_SLOT=65 were WRONG).
     // -------------------------------------------------------------------------
 
-    /// @dev lootboxRngPacked at slot 35 (post V62 lootbox repack: was 36); lootboxRngIndex is the low 48 bits.
-    uint256 private constant LOOTBOX_RNG_PACKED_SLOT = 35;
+    /// @dev lootboxRngPacked at slot 34; lootboxRngIndex is the low 48 bits.
+    uint256 private constant LOOTBOX_RNG_PACKED_SLOT = 34;
 
-    /// @dev lootboxRngWordByIndex mapping root slot (post V62 lootbox repack: was 37).
-    uint256 private constant LOOTBOX_RNG_WORD_SLOT = 36;
+    /// @dev lootboxRngWordByIndex mapping root slot.
+    uint256 private constant LOOTBOX_RNG_WORD_SLOT = 35;
 
-    /// @dev degeneretteBets mapping root slot (post V62 repack: was 43, also stale pre-repack).
-    uint256 private constant DEGENERETTE_BETS_SLOT = 40;
+    /// @dev degeneretteBets mapping root slot.
+    uint256 private constant DEGENERETTE_BETS_SLOT = 38;
 
-    /// @dev degeneretteBetNonce mapping root slot (post V62 repack: was 44, also stale pre-repack).
-    uint256 private constant DEGENERETTE_BET_NONCE_SLOT = 41;
+    /// @dev degeneretteBetNonce mapping root slot.
+    uint256 private constant DEGENERETTE_BET_NONCE_SLOT = 39;
 
     /// @dev WWXRP balanceOf mapping root slot.
     uint256 private constant WWXRP_BALANCEOF_SLOT = 2;
@@ -114,8 +114,8 @@ contract KeeperFaucetResistance is DeployProtocol {
     // Game-resident afking storage-slot constants (RE-DERIVED via `forge inspect storage DegenerusGame`).
     // -------------------------------------------------------------------------
 
-    /// @dev _subOf mapping root (one packed Sub slot per subscriber) (post V62 repack: was 62).
-    uint256 private constant SUBOF_SLOT = 58;
+    /// @dev _subOf mapping root (one packed Sub slot per subscriber).
+    uint256 private constant SUBOF_SLOT = 54;
     uint256 private constant OFF_LASTBOUGHT = 11; // uint24 lastAutoBoughtDay (bytes 11..13)
     uint256 private constant OFF_LASTOPENED = 14; // uint24 lastOpenedDay     (bytes 14..16)
     uint256 private constant MINTPACKED_SLOT = 9; // mintPacked_ mapping root (deity bit)
@@ -671,20 +671,20 @@ contract KeeperFaucetResistance is DeployProtocol {
         );
     }
 
-    /// @dev Inject a lootbox RNG word for an index (lootboxRngWordByIndex mapping at slot 37).
+    /// @dev Inject a lootbox RNG word for an index (lootboxRngWordByIndex mapping at slot 35).
     function _injectLootboxRngWord(uint48 index, uint256 rngWord) internal {
         bytes32 slot = keccak256(abi.encode(uint256(index), uint256(LOOTBOX_RNG_WORD_SLOT)));
         vm.store(address(game), slot, bytes32(rngWord));
     }
 
-    /// @dev Read the packed bet for (owner, betId) from degeneretteBets (slot 43).
+    /// @dev Read the packed bet for (owner, betId) from degeneretteBets (slot 38).
     function _readBetPacked(address owner, uint64 id) internal view returns (uint256) {
         bytes32 inner = keccak256(abi.encode(owner, uint256(DEGENERETTE_BETS_SLOT)));
         bytes32 leaf = keccak256(abi.encode(uint256(id), uint256(inner)));
         return uint256(vm.load(address(game), leaf));
     }
 
-    /// @dev Read the current degeneretteBetNonce for a player (slot 44).
+    /// @dev Read the current degeneretteBetNonce for a player (slot 39).
     function _betNonce(address who) internal view returns (uint64) {
         bytes32 slot = keccak256(abi.encode(who, uint256(DEGENERETTE_BET_NONCE_SLOT)));
         return uint64(uint256(vm.load(address(game), slot)));
@@ -814,7 +814,7 @@ contract KeeperFaucetResistance is DeployProtocol {
         vm.store(address(game), slot, bytes32(packed));
     }
 
-    /// @dev Read `who`'s lastAutoBoughtDay (_subOf slot 62, uint24 bytes 11..13) — the buy non-vacuity oracle.
+    /// @dev Read `who`'s lastAutoBoughtDay (_subOf slot 54, uint24 bytes 11..13) — the buy non-vacuity oracle.
     function _lastAutoBoughtDayOf(address who) internal view returns (uint32) {
         bytes32 slot = keccak256(abi.encode(who, uint256(SUBOF_SLOT)));
         uint256 packed = uint256(vm.load(address(game), slot));

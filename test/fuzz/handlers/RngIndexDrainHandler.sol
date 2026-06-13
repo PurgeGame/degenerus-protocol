@@ -74,10 +74,10 @@ contract RngIndexDrainHandler is Test {
     uint256 public calls_warp;
 
     /// @dev Storage slot for lootboxRngWordByIndex mapping. RE-DERIVED via `solc --storage-layout`
-    ///      on the working tree (post V62 lootbox repack: was 38, also stale pre-repack).
-    uint256 internal constant SLOT_LOOTBOX_MAPPING = 36;
-    /// @dev Storage slot for lootboxRngPacked (LR_INDEX at low 48 bits) (post V62 repack: was 37).
-    uint256 internal constant SLOT_LR_INDEX = 35;
+    ///      on the working tree (post Stage B pack: was 36, also stale pre-repack).
+    uint256 internal constant SLOT_LOOTBOX_MAPPING = 35;
+    /// @dev Storage slot for lootboxRngPacked (LR_INDEX at low 48 bits) (post Stage B pack: was 35).
+    uint256 internal constant SLOT_LR_INDEX = 34;
 
     /// @dev Keccak topic-0 for TraitsGenerated(address,uint24,uint32,uint32,uint32,uint256).
     bytes32 internal constant TOPIC_TRAITS_GENERATED =
@@ -111,7 +111,7 @@ contract RngIndexDrainHandler is Test {
         return uint256(vm.load(address(game), slot));
     }
 
-    /// @dev Read LR_INDEX from storage slot 35.
+    /// @dev Read LR_INDEX from storage slot 34.
     function _lrIndex() internal view returns (uint48) {
         return uint48(uint256(vm.load(address(game), bytes32(SLOT_LR_INDEX))));
     }
@@ -212,7 +212,7 @@ contract RngIndexDrainHandler is Test {
 
         // Mid-day branch detection: if LR_MID_DAY flag is set before the
         // advance, the mid-day branch may execute. Packed flag lives in slot
-        // 38; bit offset for LR_MID_DAY is compile-dependent, so use a
+        // 34; bit offset for LR_MID_DAY is compile-dependent, so use a
         // conservative heuristic: LR_INDEX advanced by at least 2 during the
         // call (request + mid-day in same advance window).
         if (indexAfter > indexBefore + 1) {

@@ -46,16 +46,16 @@ contract DegeneretteResolveRepeg is DeployProtocol {
     // Storage slot constants (confirmed via `forge inspect ... storage`)
     // =========================================================================
 
-    /// @dev lootboxRngWordByIndex mapping root slot (post V62 lootbox repack: was 37).
-    uint256 private constant LOOTBOX_RNG_WORD_SLOT = 36;
-    /// @dev lootboxRngPacked at slot 35 (post V62 lootbox repack: was 36); lootboxRngIndex is the low 48 bits.
-    uint256 private constant LOOTBOX_RNG_PACKED_SLOT = 35;
+    /// @dev lootboxRngWordByIndex mapping root slot (post Stage-B game-storage repack: was 36).
+    uint256 private constant LOOTBOX_RNG_WORD_SLOT = 35;
+    /// @dev lootboxRngPacked at slot 34 (post Stage-B game-storage repack: was 35); lootboxRngIndex is the low 48 bits.
+    uint256 private constant LOOTBOX_RNG_PACKED_SLOT = 34;
     /// @dev prizePoolsPacked: [upper 128: futurePrizePool] [lower 128: nextPrizePool].
     uint256 private constant PRIZE_POOLS_PACKED_SLOT = 2;
     /// @dev claimablePool (uint128) lives in slot 1, byte 16 (high 128 bits).
     uint256 private constant CLAIMABLE_POOL_SLOT = 1;
-    /// @dev degeneretteBetNonce mapping root slot (address => uint64) (post V62 repack: was 44, also stale pre-repack).
-    uint256 private constant DEGENERETTE_BET_NONCE_SLOT = 41;
+    /// @dev degeneretteBetNonce mapping root slot (address => uint64) (post Stage-B game-storage repack: was 41).
+    uint256 private constant DEGENERETTE_BET_NONCE_SLOT = 39;
 
     /// @dev Salt used in degenerette bet resolution for the first spin.
     bytes1 private constant QUICK_PLAY_SALT = 0x51; // 'Q'
@@ -593,8 +593,8 @@ contract DegeneretteResolveRepeg is DeployProtocol {
     // (byte-faithful copies of DegeneretteFreezeResolution.t.sol)
     // =========================================================================
 
-    /// @dev degeneretteBets mapping root slot (address => betId => packed) (post V62 repack: was 43, also stale pre-repack).
-    uint256 private constant DEGENERETTE_BETS_SLOT = 40;
+    /// @dev degeneretteBets mapping root slot (address => betId => packed) (post Stage-B game-storage repack: was 40).
+    uint256 private constant DEGENERETTE_BETS_SLOT = 38;
 
     /// @dev Read the packed degeneretteBets slot for (player, betId). Non-zero == unresolved.
     function _betSlot(address who, uint64 betId) internal view returns (uint256) {
@@ -715,13 +715,13 @@ contract DegeneretteResolveRepeg is DeployProtocol {
         return DegenerusTraitUtils.packedTraitsDegenerette(resultSeed);
     }
 
-    /// @dev Inject a lootbox RNG word for a given index (lootboxRngWordByIndex mapping, slot 37).
+    /// @dev Inject a lootbox RNG word for a given index (lootboxRngWordByIndex mapping, slot 35).
     function _injectLootboxRngWord(uint48 index, uint256 rngWord) internal {
         bytes32 slot = keccak256(abi.encode(uint256(index), uint256(LOOTBOX_RNG_WORD_SLOT)));
         vm.store(address(game), slot, bytes32(rngWord));
     }
 
-    /// @dev Read the current degeneretteBetNonce for a player (slot 44) = newest betId.
+    /// @dev Read the current degeneretteBetNonce for a player (slot 39) = newest betId.
     function _betNonce(address who) internal view returns (uint64) {
         bytes32 slot = keccak256(abi.encode(who, uint256(DEGENERETTE_BET_NONCE_SLOT)));
         return uint64(uint256(vm.load(address(game), slot)));

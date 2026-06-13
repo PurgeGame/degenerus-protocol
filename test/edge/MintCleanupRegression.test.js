@@ -87,7 +87,7 @@ const TICKET_FAR_FUTURE_BIT = 0x400000n;
 //
 //   Path B (lvl=1, current-level via processTicketBatch L686): entropy is
 //     loaded from `lootboxRngWordByIndex[lrIndex - 1]` where `lrIndex` is
-//     bits 0..47 of `lootboxRngPacked` (storage slot 35). The index does
+//     bits 0..47 of `lootboxRngPacked` (storage slot 34). The index does
 //     not change while alice's ticket queue at lvl=1 drains, so a single
 //     post-drain read is sufficient for every Path B emission.
 //   Path A (lvl>=2, future-pool via processFutureTicketBatch): entropy is
@@ -274,8 +274,8 @@ async function pinDailyEntropy(game, deployer, mockVRF, word) {
 // Storage slots for entropy source lookup (post-MINTCLN; v42 contract).
 // Source: `forge inspect contracts/storage/DegenerusGameStorage.sol:DegenerusGameStorage storage-layout`.
 const RNG_WORD_BY_DAY_BASE_SLOT = 10n;
-const LOOTBOX_RNG_PACKED_SLOT = 35n;
-const LOOTBOX_RNG_WORD_BY_INDEX_BASE_SLOT = 36n;
+const LOOTBOX_RNG_PACKED_SLOT = 34n; // Stage B Game-storage packing shifted 35 -> 34
+const LOOTBOX_RNG_WORD_BY_INDEX_BASE_SLOT = 35n; // Stage B Game-storage packing shifted 36 -> 35
 
 async function readLootboxEntropy(gameAddr) {
   const packed = BigInt(

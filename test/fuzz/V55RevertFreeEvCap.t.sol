@@ -48,12 +48,13 @@ contract V55RevertFreeEvCap is DeployProtocol {
     uint256 private constant MINTPACKED_SLOT = 9; // mintPacked_ mapping root (deity bit @ bit 184)
     uint256 private constant RNG_WORD_BY_DAY_SLOT = 10; // mapping(uint24 => uint256) — the afking box's DAY-keyed word
     uint256 private constant LOOTBOX_ETH_SLOT = 15; // the single folded box word (amount[0:128] = box-owed signal)
-    uint256 private constant LOOTBOX_RNG_PACKED_SLOT = 35; // [0:47] lootboxRngIndex
-    uint256 private constant LOOTBOX_RNG_WORD_BY_INDEX_SLOT = 36; // mapping(uint48 => uint256)
-    uint256 private constant EV_BENEFIT_USED_SLOT = 42; // mapping(address => mapping(uint24 => uint256)) — the TST-03 budget
-    uint256 private constant SUBOF_SLOT = 58; // _subOf mapping root (address => Sub, one packed slot)
-    uint256 private constant SUBSCRIBERS_SLOT = 60; // address[] _subscribers
-    uint256 private constant SUBSCRIBER_INDEX_SLOT = 61; // mapping(address => uint256) _subscriberIndex
+    uint256 private constant LOOTBOX_RNG_PACKED_SLOT = 34; // [0:47] lootboxRngIndex
+    uint256 private constant LOOTBOX_RNG_WORD_BY_INDEX_SLOT = 35; // mapping(uint48 => uint256)
+    uint256 private constant EV_CAP_PACKED_SLOT = 40; // mapping(address => uint256) lootboxEvCapPacked — two level-stamped windows (TST-03 budget)
+    uint256 private constant EV_USED_MASK = (uint256(1) << 64) - 1;
+    uint256 private constant SUBOF_SLOT = 54; // _subOf mapping root (address => Sub, one packed slot)
+    uint256 private constant SUBSCRIBERS_SLOT = 56; // address[] _subscribers
+    uint256 private constant SUBSCRIBER_INDEX_SLOT = 57; // mapping(address => uint256) _subscriberIndex
 
     uint256 private constant GAME_OVER_SHIFT = 184;
 
@@ -605,17 +606,23 @@ contract V55RevertFreeEvCap is DeployProtocol {
         vm.store(address(game), keccak256(abi.encode(uint256(day), uint256(RNG_WORD_BY_DAY_SLOT))), bytes32(word));
     }
 
-    /// @dev Read the per-(player, level) EV-cap budget `lootboxEvBenefitUsedByLevel[who][lvl]` (the TST-03
-    ///      subject; RE-DERIVED root slot 48 — mapping(address => mapping(uint24 => uint256))).
+    /// @dev Read the per-(player, level) EV-cap budget from lootboxEvCapPacked[who] (the TST-03
+    ///      subject). Two level-stamped windows: A bits [0:64) used | [64:88) level; B bits
+    ///      [88:152) used | [152:176) level. Mirrors the contract's _lootboxEvUsedFor decode.
     function _evBenefitUsed(address who, uint24 lvl) internal view returns (uint256) {
-        bytes32 inner = keccak256(abi.encode(who, uint256(EV_BENEFIT_USED_SLOT)));
-        return uint256(vm.load(address(game), keccak256(abi.encode(uint256(lvl), uint256(inner)))));
+        uint256 packed = uint256(
+            vm.load(address(game), keccak256(abi.encode(who, uint256(EV_CAP_PACKED_SLOT))))
+        );
+        if (uint24(packed >> 64) == lvl) return packed & EV_USED_MASK;
+        if (uint24(packed >> 152) == lvl) return (packed >> 88) & EV_USED_MASK;
+        return 0;
     }
 
-    /// @dev Pre-seed the per-level EV-cap budget (the cap-clamp setup).
+    /// @dev Pre-seed the per-level EV-cap budget into window A stamped to `lvl` (each test keys
+    ///      a single level per player, so one window suffices).
     function _setEvBenefitUsed(address who, uint24 lvl, uint256 value) internal {
-        bytes32 inner = keccak256(abi.encode(who, uint256(EV_BENEFIT_USED_SLOT)));
-        vm.store(address(game), keccak256(abi.encode(uint256(lvl), uint256(inner))), bytes32(value));
+        bytes32 slot = keccak256(abi.encode(who, uint256(EV_CAP_PACKED_SLOT)));
+        vm.store(address(game), slot, bytes32((uint256(lvl) << 64) | (value & EV_USED_MASK)));
     }
 
     /// @dev Buy a real human ETH lootbox for `buyer` (a deity-passed bonus-score buyer ⇒ the buy-time EV

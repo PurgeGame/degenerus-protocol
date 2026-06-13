@@ -26,12 +26,12 @@ import {MintPaymentKind} from "../../../contracts/interfaces/IDegenerusGame.sol"
 ///
 ///      THE ENUMERATED IN-WINDOW SLOAD SET (the backward trace), with AUTHORITATIVE slots taken
 ///      from 380-01-LAYOUT-KEY (c4d48008; the v61 PACK shift is region-dependent — these are the
-///      confirmed post-fold values, matching RngFreezeAndRemovalProofs 36/37 and V56FreezeSolvency
-///      10/36/37; NOT the stale VRFPathHandler 37/38 literals):
+///      confirmed post-fold values, matching RngFreezeAndRemovalProofs 34/35 and V56FreezeSolvency
+///      10/34/35; NOT the stale VRFPathHandler 37/38 literals):
 ///        (1) rngWordByDay[currentDay]         — slot 10  : the VRF-DERIVED day word the daily
 ///                                                          consumption resolves against.
-///        (2) lootboxRngWordByIndex[index]     — slot 37  : the VRF-DERIVED lootbox word.
-///        (3) lootboxRngPacked                 — slot 36  : the packed lootbox cursor — its low 48
+///        (2) lootboxRngWordByIndex[index]     — slot 35  : the VRF-DERIVED lootbox word.
+///        (3) lootboxRngPacked                 — slot 34  : the packed lootbox cursor — its low 48
 ///                                                          bits (lootboxRngIndex) are the NON-VRF
 ///                                                          index the consumption reads ALONGSIDE
 ///                                                          the word ([[feedback_rng_window_storage_read_freshness]]).
@@ -52,7 +52,7 @@ import {MintPaymentKind} from "../../../contracts/interfaces/IDegenerusGame.sol"
 ///      the freeze assertion is vacuous (the window never opened or no in-window action fired). The
 ///      invariant test gates acceptance on both being positive.
 ///
-///      Test-only: NO contracts/*.sol is mutated. The only vm.store is the standard slot-36
+///      Test-only: NO contracts/*.sol is mutated. The only vm.store is the standard slot-34
 ///      lootbox-index seed (mirroring RngFreezeAndRemovalProofs.setUp) so an active lootbox index
 ///      exists to snapshot. Slot reads are vm.load against the authoritative layout.
 contract RngWindowFreezeHandler is Test {
@@ -64,9 +64,9 @@ contract RngWindowFreezeHandler is Test {
     // RngFreezeAndRemovalProofs + V56FreezeSolvency — NOT the stale VRFPath literals).
     // -------------------------------------------------------------------------
     uint256 private constant RNG_WORD_BY_DAY_SLOT = 10; // mapping(uint24 => uint256) day word
-    uint256 private constant LOOTBOX_RNG_PACKED_SLOT = 35; // lootboxRngPacked (post V62 repack: was 36); low 48 bits = index cursor
-    uint256 private constant LOOTBOX_RNG_WORD_SLOT = 36; // mapping(uint48 => uint256) lootbox word (post V62 repack: was 37)
-    uint256 private constant LR_INDEX_MASK = 0xFFFFFFFFFFFF; // low 48 bits of slot 35
+    uint256 private constant LOOTBOX_RNG_PACKED_SLOT = 34; // lootboxRngPacked (post Stage B pack: was 35); low 48 bits = index cursor
+    uint256 private constant LOOTBOX_RNG_WORD_SLOT = 35; // mapping(uint48 => uint256) lootbox word (post Stage B pack: was 36)
+    uint256 private constant LR_INDEX_MASK = 0xFFFFFFFFFFFF; // low 48 bits of slot 34
     uint256 private constant DAILY_IDX_BYTE_OFF = 3; // dailyIdx uint24 @ slot 0 byte 3
     uint256 private constant DAILY_IDX_MASK = 0xFFFFFF; // uint24
 
@@ -129,7 +129,7 @@ contract RngWindowFreezeHandler is Test {
 
         // Seed lootboxRngIndex = 1 (word stays 0) so an ACTIVE lootbox index exists to snapshot
         // and so placeDegeneretteBet's index!=0 / word==0 placement precondition can hold. This is
-        // the identical slot-36 index seed RngFreezeAndRemovalProofs.setUp uses — a field-isolated
+        // the identical slot-34 index seed RngFreezeAndRemovalProofs.setUp uses — a field-isolated
         // cursor write, NOT a balance or word write.
         uint256 lrPacked = uint256(vm.load(address(game), bytes32(LOOTBOX_RNG_PACKED_SLOT)));
         lrPacked = (lrPacked & ~LR_INDEX_MASK) | uint256(1);

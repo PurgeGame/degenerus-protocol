@@ -80,9 +80,9 @@ contract KeeperRewardRoutingSameResults is DeployProtocol {
     // the AfKing-standalone SUBOF_SLOT=65 / TICKET_QUEUE_SLOT=12 / TICKETS_OWED_PACKED_SLOT=13 were WRONG).
     // -------------------------------------------------------------------------
 
-    uint256 private constant SUBOF_SLOT = 58; // _subOf mapping root (address => Sub, one packed slot) (post V62 repack: was 62)
+    uint256 private constant SUBOF_SLOT = 54; // _subOf mapping root (address => Sub, one packed slot)
     uint256 private constant OFF_LASTBOUGHT = 11; // uint24 lastAutoBoughtDay (bytes 11..13 of the Sub slot)
-    uint256 private constant SUBSCRIBERS_SLOT = 60; // _subscribers address[] (length here) (post V62 repack: was 64)
+    uint256 private constant SUBSCRIBERS_SLOT = 56; // _subscribers address[] (length here)
     uint256 private constant MINTPACKED_SLOT = 9; // mintPacked_ mapping root (deity bit)
     uint256 private constant DEITY_SHIFT = 184; // HAS_DEITY_PASS_SHIFT in mintPacked_
 
@@ -517,7 +517,7 @@ contract KeeperRewardRoutingSameResults is DeployProtocol {
         game.depositAfkingFunding{value: amount}(who);
     }
 
-    /// @dev Read `who`'s lastAutoBoughtDay (_subOf slot 62, uint24 bytes 11..13 of the packed Sub slot).
+    /// @dev Read `who`'s lastAutoBoughtDay (_subOf slot 54, uint24 bytes 11..13 of the packed Sub slot).
     function _lastAutoBoughtDayOf(address who) internal view returns (uint32) {
         bytes32 slot = keccak256(abi.encode(who, uint256(SUBOF_SLOT)));
         uint256 packed = uint256(vm.load(address(game), slot));

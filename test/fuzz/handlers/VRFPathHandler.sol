@@ -46,10 +46,10 @@ contract VRFPathHandler is Test {
     uint256 public calls_requestLootboxRng;
     uint256 public calls_warpTime;
 
-    /// @dev Read lootboxRngIndex directly from storage slot 35 (low 48 bits of lootboxRngPacked)
-    ///      (post V62 lootbox repack: was 37).
+    /// @dev Read lootboxRngIndex directly from storage slot 34 (low 48 bits of lootboxRngPacked)
+    ///      (post V62 lootbox repack: was 35).
     function _lootboxRngIndex() internal view returns (uint48) {
-        return uint48(uint256(vm.load(address(game), bytes32(uint256(35)))));
+        return uint48(uint256(vm.load(address(game), bytes32(uint256(34)))));
     }
 
     /// @dev Read dailyIdx from storage slot 0 (uint24 at byte offset 3 = bits 24-47).
@@ -58,9 +58,9 @@ contract VRFPathHandler is Test {
         return uint48(uint24(raw >> 24));
     }
 
-    /// @dev Read lootboxRngWordByIndex[index] from storage (mapping at slot 36, post V62 repack: was 38).
+    /// @dev Read lootboxRngWordByIndex[index] from storage (mapping at slot 35, post V62 repack: was 36).
     function _lootboxRngWord(uint48 index) internal view returns (uint256) {
-        bytes32 slot = keccak256(abi.encode(uint256(index), uint256(36)));
+        bytes32 slot = keccak256(abi.encode(uint256(index), uint256(35)));
         return uint256(vm.load(address(game), slot));
     }
 
