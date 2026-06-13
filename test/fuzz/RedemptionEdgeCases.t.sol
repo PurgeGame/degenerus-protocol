@@ -3,6 +3,7 @@ pragma solidity ^0.8.26;
 
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {StakedDegenerusStonk} from "../../contracts/StakedDegenerusStonk.sol";
+import {Vm} from "forge-std/Vm.sol";
 
 /// @notice Local mirror of the coinflip player interface used for `vm.mockCall` selectors.
 ///         Re-declared locally so the test file does not depend on importing the full
@@ -94,6 +95,14 @@ contract RedemptionEdgeCases is DeployProtocol {
     ///      self-contained). v47: shifted from 11 to 10 because the `pendingRedemptionBurnie`
     ///      (internal uint256) at slot 10 was removed (BURNIE settled at submit).
     uint256 internal constant SLOT_PENDING_BY_DAY = 10;
+
+    // Keeper box-bounty mirror (StakedDegenerusStonk private constants). TEST-MIRROR SYNC: if the
+    // contract changes these, re-sync — the bounty assertion cross-validates the observed creditFlip.
+    uint256 internal constant BOX_BOUNTY_ETH_TARGET = 24_000_000_000_000;
+    uint256 internal constant PRICE_COIN_UNIT = 1000 ether;
+    /// @dev keccak256("CoinflipStakeUpdated(address,uint24,uint256,uint256)") — creditFlip emits this.
+    bytes32 internal constant COINFLIP_STAKE_UPDATED_SIG =
+        keccak256("CoinflipStakeUpdated(address,uint24,uint256,uint256)");
 
     // =====================================================================
     //                          ACTORS
@@ -1544,5 +1553,60 @@ contract RedemptionEdgeCases is DeployProtocol {
         vm.prank(playerD);
         sdgnrs.claimRedemptionMany(players, uint24(dayD));
         assertEq(game.claimableWinningsOf(playerA), aAfter, "PERM-02: re-sweep must not double-credit");
+    }
+
+    /// @dev Sum the `amount` of every CoinflipStakeUpdated event crediting `who` in `logs`.
+    function _sumKeeperBounty(Vm.Log[] memory logs, address who) internal pure returns (uint256 total) {
+        bytes32 whoTopic = bytes32(uint256(uint160(who)));
+        for (uint256 i; i < logs.length; ++i) {
+            if (
+                logs[i].topics[0] == COINFLIP_STAKE_UPDATED_SIG &&
+                logs[i].topics[1] == whoTopic
+            ) {
+                (uint256 amount, ) = abi.decode(logs[i].data, (uint256, uint256));
+                total += amount;
+            }
+        }
+    }
+
+    /// @notice BOUNTY-01: claimRedemptionMany pays the keeper a BURNIE flip-credit per box it settles,
+    ///         pegged to the per-box settle gas (settled × BOX_BOUNTY_ETH_TARGET × PRICE_COIN_UNIT /
+    ///         mintPrice). Skipped (empty) entries earn nothing, and a no-work re-sweep pays zero.
+    function test_BOUNTY01_RedemptionKeeperBountyPerSettledBox() public {
+        uint32 dayD = game.currentDayView();
+        _primeCurrentDayRng();
+        vm.prank(playerA);
+        sdgnrs.burn(ACTOR_FUNDING / 100);
+        vm.prank(playerB);
+        sdgnrs.burn(ACTOR_FUNDING / 100);
+        // playerC never burns — the empty entry that must earn no bounty.
+
+        _advanceWallDay();
+        _resolveDay(dayD, 100);
+
+        address[] memory players = new address[](3);
+        players[0] = playerA;
+        players[1] = playerC; // empty — skipped, no bounty
+        players[2] = playerB;
+
+        // Keeper (playerD, not a redeemer) sweeps: 2 boxes settle, 1 skipped → bounty for exactly 2.
+        vm.recordLogs();
+        vm.prank(playerD);
+        sdgnrs.claimRedemptionMany(players, uint24(dayD));
+        uint256 bounty = _sumKeeperBounty(vm.getRecordedLogs(), playerD);
+
+        uint256 unit = (BOX_BOUNTY_ETH_TARGET * PRICE_COIN_UNIT) / game.mintPrice();
+        assertGt(unit, 0, "BOUNTY-01: per-box unit must be non-zero");
+        assertEq(bounty, 2 * unit, "BOUNTY-01: keeper paid exactly 2 settled-box units");
+
+        // No-work re-sweep: every slot now empty → zero settled → zero bounty.
+        vm.recordLogs();
+        vm.prank(playerD);
+        sdgnrs.claimRedemptionMany(players, uint24(dayD));
+        assertEq(
+            _sumKeeperBounty(vm.getRecordedLogs(), playerD),
+            0,
+            "BOUNTY-01: no-work sweep pays no bounty"
+        );
     }
 }

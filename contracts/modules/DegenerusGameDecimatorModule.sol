@@ -8,6 +8,7 @@ import {IDegenerusGame} from "../interfaces/IDegenerusGame.sol";
 import {IDegenerusQuests} from "../interfaces/IDegenerusQuests.sol";
 import {DegenerusGamePayoutUtils} from "./DegenerusGamePayoutUtils.sol";
 import {ContractAddresses} from "../ContractAddresses.sol";
+import {PriceLookupLib} from "../libraries/PriceLookupLib.sol";
 
 /**
  * @title DegenerusGameDecimatorModule
@@ -107,6 +108,13 @@ contract DegenerusGameDecimatorModule is DegenerusGamePayoutUtils {
 
     /// @dev Maximum denominator for Decimator buckets (2-12 inclusive).
     uint8 private constant DECIMATOR_MAX_DENOM = 12;
+
+    /// @dev Keeper box-bounty target (ETH wei) per settled decimator claim. Sized so the BURNIE
+    ///      bounty's ETH-value reimburses the ~30k-gas per-box settle at the ~0.5-gwei reference.
+    ///      The reward is an illiquid coinflip credit, and every claimable entry costs a real
+    ///      decimator burn to create, so permissionlessly cranking others' claims is liveness work
+    ///      rather than a clean farm even when it roughly breaks even.
+    uint256 private constant BOX_BOUNTY_ETH_TARGET = 15_000_000_000_000;
 
     // -------------------------------------------------------------------------
     // External Entry Points (delegatecall targets)
@@ -329,6 +337,7 @@ contract DegenerusGameDecimatorModule is DegenerusGamePayoutUtils {
         uint256 totalBurn = uint256(round.totalBurn);
         mapping(address => DecEntry) storage levelEntries = decBurn[lvl];
         bool over = gameOver;
+        uint256 settled;
         for (uint256 i; i < players.length; ++i) {
             DecEntry storage e = levelEntries[players[i]];
             if (e.claimed != 0) continue;
@@ -340,7 +349,30 @@ contract DegenerusGameDecimatorModule is DegenerusGamePayoutUtils {
             );
             if (amountWei == 0) continue;
             _claimDecimatorJackpotFor(players[i], lvl, e, round, amountWei, over);
+            unchecked {
+                ++settled;
+            }
         }
+
+        // Keeper bounty: a small BURNIE flip-credit per box actually settled this call, paid to the
+        // caller during a live game (no liveness need post-gameOver). Counts only settled boxes —
+        // already-claimed and non-winner entries are skipped above and earn nothing. The ETH-value
+        // tracks the per-box settle gas at the 0.5-gwei reference (BURNIE per ETH = PRICE_COIN_UNIT /
+        // mintPrice, so the credit holds its gas-reimbursement value across the price curve).
+        if (!over && settled != 0) {
+            coinflip.creditFlip(
+                msg.sender,
+                (settled * BOX_BOUNTY_ETH_TARGET * PRICE_COIN_UNIT) /
+                    _mintPriceInContext()
+            );
+        }
+    }
+
+    /// @dev In-context mint price for the box-bounty ETH→BURNIE conversion, mirroring the Game's
+    ///      `mintPrice` (the active ticket level's price): jackpot phase targets the current level,
+    ///      purchase phase the next. Read from shared storage so the bounty math needs no self-call.
+    function _mintPriceInContext() private view returns (uint256) {
+        return PriceLookupLib.priceForLevel(jackpotPhaseFlag ? level : level + 1);
     }
 
     /// @dev Shared claim core for the single and batch entry points. Callers must check

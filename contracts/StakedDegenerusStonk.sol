@@ -41,6 +41,8 @@ interface IDegenerusGamePlayer {
     function livenessTriggered() external view returns (bool);
     /// @notice Get RNG word for a specific day.
     function rngWordForDay(uint24 day) external view returns (uint256);
+    /// @notice Current mint price in wei (the active ticket level's price).
+    function mintPrice() external view returns (uint256);
     /// @notice Get player's activity score.
     function playerActivityScore(address player) external view returns (uint256);
     /// @notice Resolve a redemption lootbox (sDGNRS forwards ETH as msg.value; GAME pulls any stETH remainder).
@@ -67,6 +69,8 @@ interface IBurnieCoinflipPlayer {
     function previewClaimCoinflips(address player) external view returns (uint256 mintable);
     /// @notice Settle a redemption's BURNIE share at submit: burn+consume sDGNRS backing, credit redeemer.
     function redeemBurnieShare(address redeemer, uint256 base) external;
+    /// @notice Credit a BURNIE flip stake to a player (sDGNRS is an authorized flip creditor).
+    function creditFlip(address player, uint256 amount) external;
 }
 
 /// @notice Interface for DGNRS wrapper contract used by sDGNRS.
@@ -321,6 +325,17 @@ contract StakedDegenerusStonk {
     ///      Game as free backing, raising backing for remaining holders. Live-game only; gameOver claims
     ///      are already 100% direct.
     uint256 private constant MIN_REDEMPTION_LOOTBOX_ETH = 0.01 ether;
+
+    /// @dev BURNIE base unit (1000 ETH worth) — the ETH→BURNIE conversion numerator for the keeper
+    ///      box-bounty, matching the Game's PRICE_COIN_UNIT. BURNIE per ETH = PRICE_COIN_UNIT / mintPrice.
+    uint256 private constant PRICE_COIN_UNIT = 1000 ether;
+
+    /// @dev Keeper box-bounty target (ETH wei) per settled redemption claim. Sized so the BURNIE
+    ///      bounty's ETH-value reimburses the ~48k-gas per-box settle at the ~0.5-gwei reference.
+    ///      The reward is an illiquid coinflip credit, and every pending claim costs a real sDGNRS
+    ///      gambling burn (>=1 whole token, one box per wallet per day) to create, so permissionlessly
+    ///      cranking others' claims is liveness work rather than a clean farm.
+    uint256 private constant BOX_BOUNTY_ETH_TARGET = 24_000_000_000_000;
 
     /// @dev Game contract reference for player actions and claimable queries
     IDegenerusGamePlayer private constant game = IDegenerusGamePlayer(ContractAddresses.GAME);
@@ -744,10 +759,28 @@ contract StakedDegenerusStonk {
         if (roll == 0) revert NotResolved();
 
         bool isGameOver = game.gameOver();
+        uint256 settled;
         for (uint256 i; i < players.length; ++i) {
             address player = players[i];
             if (isGameOver && player != msg.sender) continue;
-            _claimRedemptionFor(player, day, roll, isGameOver);
+            if (_claimRedemptionFor(player, day, roll, isGameOver)) {
+                unchecked {
+                    ++settled;
+                }
+            }
+        }
+
+        // Keeper bounty: a small BURNIE flip-credit per box actually settled this call, paid to the
+        // caller during a live game (no liveness need post-gameOver, where only self-claims settle).
+        // Counts only settled boxes — empty (player, day) slots are skipped and earn nothing. The
+        // ETH-value tracks the per-box settle gas at the 0.5-gwei reference (BURNIE per ETH =
+        // PRICE_COIN_UNIT / mintPrice), so the credit holds its gas-reimbursement value across the
+        // price curve. sDGNRS is an authorized flip creditor, so this credits AS sDGNRS.
+        if (!isGameOver && settled != 0) {
+            coinflip.creditFlip(
+                msg.sender,
+                (settled * BOX_BOUNTY_ETH_TARGET * PRICE_COIN_UNIT) / game.mintPrice()
+            );
         }
     }
 
