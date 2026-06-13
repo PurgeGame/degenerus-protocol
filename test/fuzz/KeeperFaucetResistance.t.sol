@@ -96,7 +96,7 @@ contract KeeperFaucetResistance is DeployProtocol {
     //   unit       = (BOUNTY_ETH_TARGET * PRICE_COIN_UNIT) / mintPrice()        (GameAfkingModule.sol:987)
     //   advance    = unit * ADVANCE_RATIO_NUM * mult                            (GameAfkingModule.sol:995)
     //   open leg   = (unit * min(opened, OPEN_KNEE)) / OPEN_KNEE                (GameAfkingModule.sol:1003-1004)
-    // BOUNTY_ETH_TARGET is a HARDCODED internal constant in v55 (885_000_000; no game getter, no longer a
+    // BOUNTY_ETH_TARGET is a HARDCODED internal constant (885_000_000_000_000; no game getter, no longer a
     // deploy param) — mirrored here. ADVANCE_RATIO_NUM=2 / OPEN_KNEE=5 are `internal constant`s with no
     // on-chain getter, mirrored here. TEST-MIRROR SYNC: if the contract changes them, re-sync. The guards
     // CROSS-VALIDATE the live reward (OBSERVED off the mintBurnie credit delta) against the mirror, so a
@@ -104,7 +104,7 @@ contract KeeperFaucetResistance is DeployProtocol {
     // -------------------------------------------------------------------------
 
     /// @dev GameAfkingModule.sol:173 — the (hardcoded) ETH-target the break-even unit divides.
-    uint256 private constant BOUNTY_ETH_TARGET = 885_000_000;
+    uint256 private constant BOUNTY_ETH_TARGET = 885_000_000_000_000;
     /// @dev GameAfkingModule.sol:178 — advance-leg multiplier numerator.
     uint256 private constant ADVANCE_RATIO_NUM = 2;
     /// @dev GameAfkingModule.sol:184 — open reward pro-rate knee (1x at/above the knee, pro-rated below).
