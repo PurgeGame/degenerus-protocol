@@ -893,11 +893,7 @@ contract DegenerusGameDecimatorModule is DegenerusGamePayoutUtils {
         }
         if (e.boosted) revert TerminalDecAlreadyBoosted();
 
-        uint256 effectiveStreak = uint256(
-            IDegenerusQuests(ContractAddresses.QUESTS).effectiveBaseStreak(
-                player
-            )
-        );
+        uint256 effectiveStreak = uint256(_effectiveQuestStreak(player));
         if (effectiveStreak == 0) revert TerminalDecNotBoostable();
 
         uint256 oldWeighted = uint256(e.weightedBurn);
@@ -952,7 +948,7 @@ contract DegenerusGameDecimatorModule is DegenerusGamePayoutUtils {
     }
 
     /// @dev Streak → weight multiplier in bps (1x floor at streak 0, 4x at 10,
-    ///      20x at 100, capped at 20x). The quest streak itself caps at 100.
+    ///      20x at 100, capped at 20x). The incoming streak is clamped to 100 here.
     function _terminalDecBoostFactorBps(
         uint256 streak
     ) private pure returns (uint256) {

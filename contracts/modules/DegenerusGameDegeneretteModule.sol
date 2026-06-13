@@ -516,7 +516,7 @@ contract DegenerusGameDegeneretteModule is
         // stale-high streak into the bet's activityScore (which scales the ETH ROI and the
         // lootbox-share EV multiplier). WWXRP bets never sync via handleDegenerette, so a raw
         // playerQuestStates read would let the zombie streak persist indefinitely.
-        uint32 questStreak = quests.effectiveBaseStreak(player);
+        uint32 questStreak = _effectiveQuestStreak(player);
         uint16 activityScore = uint16(
             _playerActivityScore(player, questStreak, lvl + 1)
         );

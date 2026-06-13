@@ -136,6 +136,12 @@ abstract contract DegenerusGameStorage {
     /// @dev Deity pass activity bonus (+80% in basis points).
     uint16 internal constant DEITY_PASS_ACTIVITY_BONUS_BPS = 8000;
 
+    /// @dev Hard ceiling on the total activity score (bps). Quest completions are
+    ///      uncapped, so this bounds the sum. Set one below uint16 max because the
+    ///      sDGNRS redemption snapshot stores uint16(score) + 1 (a 0 = unset sentinel),
+    ///      which would overflow at 65,535.
+    uint16 internal constant ACTIVITY_SCORE_HARD_CAP_BPS = 65_534;
+
     /// @dev Floor streak points for active pass holders (50 = 50%).
     uint16 internal constant PASS_STREAK_FLOOR_POINTS = 50;
 
@@ -2138,7 +2144,7 @@ abstract contract DegenerusGameStorage {
     ///          accrued per delivered day (the slot-0 quest reward every mode + the
     ///          ticket-mode 10%/20% buyer bonus). Paid out only by the player-pull
     ///          `claimAfkingBurnie`, zeroed there.
-    ///        • `subStreakLatch` — bits 0-6 the afking-run streak snapshot (bit 7 unused).
+    ///        • `subStreakLatch` — the full-byte afking-run streak base (snapshot + in-run secondaries).
     ///      `affiliateBase` and `pendingBurnie` are uint32 with a 100M-whole-BURNIE
     ///      saturating clamp at the accrue write — uint32 holds ~4.29e9 > 100M so the
     ///      clamp binds first, and it can only ever UNDER-credit a pathological
@@ -2218,27 +2224,72 @@ abstract contract DegenerusGameStorage {
         ///      Same uint32 + 100M saturating clamp + under-credit-only behaviour as
         ///      `affiliateBase`.
         uint32 pendingBurnie;
-        /// @dev `streakAtAfkingStart` — the quest streak snapshot at the start of the current
-        ///      afking run (0..100, the score's effective cap; fits bits 0-6, bit 7 unused). The
-        ///      compute-on-read effective streak adds the funded delivered days
-        ///      `(afkCoveredThroughDay - afkingStartDay)` to this base. Written rarely (subscribe +
-        ///      gap-resume); read per buy as a mask op, so `affiliateBase`/`pendingBurnie` stay
-        ///      unmasked for the hot accrue.
+        /// @dev `streakAtAfkingStart` — the afking-run streak base (0..255): the snapshot at run
+        ///      start plus the secondary/level completions the player makes during the run
+        ///      (bumped via recordAfkingSecondary). The compute-on-read effective streak adds the
+        ///      funded delivered days `(afkCoveredThroughDay - afkingStartDay)` to this base. Read
+        ///      per buy as a mask op, so `affiliateBase`/`pendingBurnie` stay unmasked for the hot
+        ///      accrue.
         uint8 subStreakLatch;
     }
 
-    /// @dev `subStreakLatch` bits 0-6 — `streakAtAfkingStart` (0..100, clamped on write).
-    ///      Bit 7 is unused (formerly a first-sub latch, removed with the head-start).
-    uint8 internal constant SUB_STREAK_MASK = 0x7f;
+    /// @dev `subStreakLatch` is the full byte — `streakAtAfkingStart` (0..255). It carries the
+    ///      run's pre-run snapshot plus the secondary/level completions the player makes during
+    ///      the run (bumped via recordAfkingSecondary); the funded delivered days add on top of
+    ///      this base. Clamped at 255, far past where the activity-score caps make it matter.
+    uint8 internal constant SUB_STREAK_MASK = 0xff;
 
-    /// @dev Read the afking-run streak snapshot (bits 0-6 of the packed latch byte).
+    /// @dev Read the afking-run streak base (the full packed latch byte).
     function _streakBaseOf(Sub storage sub) internal view returns (uint8) {
         return sub.subStreakLatch & SUB_STREAK_MASK;
     }
 
-    /// @dev Write the afking-run streak snapshot, clamped to 100 (the score cap).
+    /// @dev Write the afking-run streak base, clamped to 255.
     function _setStreakBase(Sub storage sub, uint256 value) internal {
-        sub.subStreakLatch = value > 100 ? 100 : uint8(value);
+        sub.subStreakLatch = value > 255 ? 255 : uint8(value);
+    }
+
+    /// @dev Compute-on-read effective afking quest streak from the Sub slot — no DegenerusQuests
+    ///      STATICCALL. The run's streak base (`streakAtAfkingStart`: snapshot + in-run
+    ///      secondaries) plus the funded delivered days since the run's base day, while the last
+    ///      funded day is no older than yesterday; otherwise 0 (decay-on-read: miss one full day
+    ///      and the streak is gone).
+    function _afkingStreak(Sub storage sub, uint24 currentDay) internal view returns (uint32) {
+        uint24 covered = sub.afkCoveredThroughDay;
+        if (currentDay == 0 || covered + 1 < currentDay) return 0;
+        return uint32(_streakBaseOf(sub)) + uint32(covered - sub.afkingStartDay);
+    }
+
+    /// @dev The live (non-lapsed) afking streak for `player` if they are mid-run; otherwise
+    ///      (false, 0). A lapsed run, a sub with no active run, and a non-subscriber all return
+    ///      (false, 0) so callers fall back to the manual streak — a lapsed-but-still-minting sub
+    ///      is never zeroed. No DegenerusQuests STATICCALL on the live-run path.
+    function _liveAfkingStreak(address player) internal view returns (bool live, uint32 streak) {
+        // `afkingStartDay` is set at run start and cleared at finalize (every sub-ending path),
+        // and a non-subscriber's Sub slot is zero — so a non-zero start day alone identifies a
+        // live run, off the single Sub-slot SLOAD _afkingStreak needs anyway (no _subscriberIndex
+        // read). A paused/lapsed run keeps a start day but _afkingStreak decays it to 0 below.
+        Sub storage sub = _subOf[player];
+        if (sub.afkingStartDay != 0) {
+            uint32 a = _afkingStreak(sub, _simulatedDayIndex());
+            if (a != 0) return (true, a);
+        }
+        return (false, 0);
+    }
+
+    /// @dev Single source of truth for a player's effective quest streak, so the activity score
+    ///      is one unified value everywhere it is read. A live afking sub reads the Sub-side
+    ///      compute-on-read (carrying the run's funded days + in-run secondaries); everyone else
+    ///      (and a lapsed run) reads the manual decay-aware streak.
+    function _effectiveQuestStreak(address player) internal view returns (uint32) {
+        // Most players are not afking subs, so learn the afking flag from the quest-streak read we
+        // make anyway: a non-afker returns here with no Sub-slot lookup. Only an afking player pays
+        // the extra Sub read for the compute-on-read (funded days + in-run secondaries); a lapsed
+        // run falls back to the manual streak just read.
+        (uint32 manualStreak, bool afking) = quests.effectiveBaseStreakAndAfking(player);
+        if (!afking) return manualStreak;
+        (bool live, uint32 a) = _liveAfkingStreak(player);
+        return live ? a : manualStreak;
     }
 
     /// @dev Per-subscriber record (the iterable set's value): the per-sub stamp, the

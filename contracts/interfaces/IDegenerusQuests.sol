@@ -214,4 +214,10 @@ interface IDegenerusQuests {
     /// @return The effective (decay-applied) reward streak.
     function effectiveBaseStreak(address player) external view returns (uint32);
 
+    /// @notice effectiveBaseStreak plus the player's afking-run flag, from one quest-state read.
+    /// @param player The player address to query.
+    /// @return streak The effective (decay-applied) reward streak.
+    /// @return afking True while the player is mid afking-run.
+    function effectiveBaseStreakAndAfking(address player) external view returns (uint32 streak, bool afking);
+
 }

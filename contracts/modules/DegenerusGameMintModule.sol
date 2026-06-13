@@ -1604,7 +1604,11 @@ contract DegenerusGameMintModule is
                         ? PriceLookupLib.priceForLevel(cachedLevel + 1)
                         : priceWei
                 );
-            questStreak = streak;
+            // Unified score: a live afking sub reads the Sub-side streak (the run's funded days +
+            // in-run secondaries, reflecting any secondary just completed by this buy); a non-afker
+            // uses the streak the handler returned (no second quest STATICCALL).
+            (bool afkLive, uint32 afkStreak) = _liveAfkingStreak(buyer);
+            questStreak = afkLive ? afkStreak : streak;
             if (questCompleted) {
                 lootboxFlipCredit += questReward;
                 if (ethMintSpendWei > 0 && questType == 1) {

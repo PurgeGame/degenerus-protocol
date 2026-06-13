@@ -866,7 +866,7 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
             // per-(player, level) accumulator; sub-neutral/neutral boxes draw zero cap.
             uint256 activityScore = _playerActivityScore(
                 buyer,
-                quests.effectiveBaseStreak(buyer)
+                _effectiveQuestStreak(buyer)
             );
             score = uint16(activityScore);
             uint256 mult = _lootboxEvMultiplierFromScore(activityScore);

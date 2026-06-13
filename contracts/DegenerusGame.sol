@@ -432,6 +432,17 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         if (!ok) _revertDelegate(data);
     }
 
+    /// @notice Record a secondary/level quest completion against an afking sub's streak base.
+    /// @dev QUESTS-only. Thin delegatecall dispatch stub into GameAfkingModule; the module impl
+    ///      enforces the QUESTS-only gate under delegatecall (msg.sender preserved).
+    ///      Signature: recordAfkingSecondary(address player) — matches the module selector.
+    function recordAfkingSecondary(address) external {
+        (bool ok, bytes memory data) = ContractAddresses
+            .GAME_AFKING_MODULE
+            .delegatecall(msg.data);
+        if (!ok) _revertDelegate(data);
+    }
+
     /// @notice Pay DGNRS bounty for the biggest flip record holder.
     /// @dev Access: COIN or COINFLIP contract only.
     ///      Pays a share of the remaining DGNRS reward pool.
@@ -2204,11 +2215,11 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     function playerActivityScore(
         address player
     ) external view returns (uint256 scoreBps) {
-        // Decay-aware effective reward streak: effectiveBaseStreak zeroes a streak that lapsed
-        // past its shields, so a stale-high RAW streak (built then abandoned with no quest sync)
-        // can no longer inflate terminal-decimator weight, lootbox EV, or sDGNRS claims. Cheap
-        // read (decay logic only — no quest-view materialization).
-        uint32 streak = quests.effectiveBaseStreak(player);
+        // Unified effective quest streak: a live afking sub reads the Sub-side compute-on-read
+        // (the run's funded days + in-run secondaries); everyone else reads the decay-aware manual
+        // streak, which zeroes a lapsed stale-high streak so it can't inflate terminal-decimator
+        // weight, lootbox EV, or sDGNRS claims.
+        uint32 streak = _effectiveQuestStreak(player);
         return _playerActivityScore(player, streak);
     }
 

@@ -310,9 +310,9 @@ abstract contract DegenerusGameMintStreakUtils is DegenerusGameStorage {
                 bonusBps += mintCountPoints * 100;
             }
 
-            // Quest streak: 1% per quest streak, max 100%
-            uint256 questStreakCapped = questStreak > 100 ? 100 : uint256(questStreak);
-            bonusBps += questStreakCapped * 100;
+            // Quest streak: 0.5% per quest completion, uncapped (the hard cap on the
+            // total score below bounds the sum).
+            bonusBps += uint256(questStreak) * 50;
 
             // Affiliate bonus (cached in mintPacked_ on level transitions)
             {
@@ -346,7 +346,9 @@ abstract contract DegenerusGameMintStreakUtils is DegenerusGameStorage {
             bonusBps = bonusBps > penaltyBps ? bonusBps - penaltyBps : 0;
         }
 
-        scoreBps = bonusBps;
+        scoreBps = bonusBps > ACTIVITY_SCORE_HARD_CAP_BPS
+            ? ACTIVITY_SCORE_HARD_CAP_BPS
+            : bonusBps;
     }
 
     /// @dev Convenience wrapper using the active ticket level (current level during

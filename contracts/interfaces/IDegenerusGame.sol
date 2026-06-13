@@ -449,6 +449,10 @@ interface IDegenerusGame {
     /// @return base The drained whole-BURNIE affiliate base (0 if already drained).
     function drainAffiliateBase(address sub) external returns (uint256 base);
 
+    /// @notice QUESTS-only: bump an afking sub's streak base for a secondary/level completion.
+    /// @param player The afking subscriber whose secondary completion is recorded.
+    function recordAfkingSecondary(address player) external;
+
     /// @notice Permissionless paid cure: clear `target`'s cashout/smite curse for 100 BURNIE.
     /// @param target The cursed player to cure.
     function decurse(address target) external;

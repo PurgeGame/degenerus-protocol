@@ -1040,21 +1040,6 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
         );
     }
 
-    /// @dev Compute-on-read effective afking quest streak from the Sub slot — no DegenerusQuests
-    ///      STATICCALL. The run's snapshot (`streakAtAfkingStart`) plus the funded delivered days
-    ///      since the run's base day, while the last funded day is no older than yesterday;
-    ///      otherwise 0 (decay-on-read: miss one full day and the streak is gone). Capped to 100
-    ///      downstream by the activity score.
-    function _afkingStreak(Sub storage sub, uint24 currentDay)
-        private
-        view
-        returns (uint32)
-    {
-        uint24 covered = sub.afkCoveredThroughDay;
-        if (currentDay == 0 || covered + 1 < currentDay) return 0;
-        return uint32(_streakBaseOf(sub)) + uint32(covered - sub.afkingStartDay);
-    }
-
     /// @dev Hand the afking-computed streak back to the manual quest system on a sub-ending path,
     ///      BEFORE the Sub slot is deleted. Computes the run's earned streak (snapshot + funded
     ///      delivered days) and the afking funded high-water day, then defers the decay decision
@@ -1720,6 +1705,21 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
         Sub storage s = _subOf[sub];
         base = s.affiliateBase;
         s.affiliateBase = 0;
+    }
+
+    /// @notice QUESTS-only: record a secondary/level quest completion against an afking sub's
+    ///         streak base, so the run's compute-on-read activity score reflects the player's own
+    ///         quest effort (the primary rides the funded delivered days).
+    /// @dev No-op unless `player` has a live afking run (`afkingStartDay != 0`); otherwise a +1
+    ///      bump to the Sub streak base, saturating at 255. Runs in the Game's storage context
+    ///      under delegatecall; `msg.sender` is the original caller (DegenerusQuests).
+    /// @param player The afking subscriber whose secondary completion is being recorded.
+    function recordAfkingSecondary(address player) external {
+        if (msg.sender != ContractAddresses.QUESTS) revert NotApproved();
+        if (_subscriberIndex[player] == 0) return;
+        Sub storage s = _subOf[player];
+        if (s.afkingStartDay == 0) return;
+        _setStreakBase(s, uint256(_streakBaseOf(s)) + 1);
     }
 
     /// @notice Emitted when a curse is cleared via the permissionless paid cure.
