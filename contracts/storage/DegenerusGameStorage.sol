@@ -548,7 +548,7 @@ abstract contract DegenerusGameStorage {
     event FinalSwept(uint256 totalFunds);
 
     /// @dev Emitted when ETH is credited to a player's claimable balance.
-    event PlayerCredited(address indexed player, address indexed recipient, uint256 amount);
+    event PlayerCredited(address indexed player, uint256 amount);
 
     /// @dev Emitted whenever prepaid afking ETH is spent to fund a buy (the afking-as-payment
     ///      waterfall's third tier) — full observability of where afking principal goes.
@@ -912,7 +912,7 @@ abstract contract DegenerusGameStorage {
     function _creditClaimable(address beneficiary, uint256 weiAmount) internal {
         if (weiAmount == 0) return;
         balancesPacked[beneficiary] += weiAmount;
-        emit PlayerCredited(beneficiary, beneficiary, weiAmount);
+        emit PlayerCredited(beneficiary, weiAmount);
     }
 
     /// @dev Debit claimable (the low half). Guard low >= amount so the subtraction never borrows

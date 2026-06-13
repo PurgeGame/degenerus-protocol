@@ -1909,11 +1909,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         if (roll < 11) {
             // 55% chance: tickets (returned as scaled × TICKET_SCALE)
             uint256 ticketBudget = (amount * LOOTBOX_TICKET_ROLL_BPS) / 10_000;
-            uint32 ticketsScaled =
-                _lootboxTicketCount(ticketBudget, targetPrice, seed);
-            if (ticketsScaled != 0) {
-                ticketsOut = ticketsScaled;
-            }
+            ticketsOut = _lootboxTicketCount(ticketBudget, targetPrice, seed);
         } else if (roll < 13) {
             // 10% chance: DGNRS tokens
             uint256 dgnrsAmount = _lootboxDgnrsReward(amount, seed);
@@ -1931,10 +1927,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
             // 10% chance: WWXRP tokens. Payout via `wwxrp.mintPrize`; observable
             // off-chain through the WWXRP ERC-20 `Transfer` event (`0x0` -> player)
             // together with the same-tx lootbox context.
-            uint256 wwxrpAmount = LOOTBOX_WWXRP_PRIZE;
-            if (wwxrpAmount != 0) {
-                wwxrp.mintPrize(player, wwxrpAmount);
-            }
+            wwxrp.mintPrize(player, LOOTBOX_WWXRP_PRIZE);
         } else {
             // 25% chance: large BURNIE reward with variance
             uint256 varianceRoll = uint16(seed >> 80) % 20;

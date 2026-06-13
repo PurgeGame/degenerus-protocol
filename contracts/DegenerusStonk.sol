@@ -154,7 +154,6 @@ contract DegenerusStonk {
                 newAllowance = allowed - amount;
             }
             allowance[from][msg.sender] = newAllowance;
-            emit Approval(from, msg.sender, newAllowance);
         }
         return _transfer(from, to, amount);
     }

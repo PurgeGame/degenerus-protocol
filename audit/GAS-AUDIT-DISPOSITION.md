@@ -5,6 +5,7 @@ Reconciled 2026-06-12 after round 4 (ca0efea5): the 50 round-4 IDs moved from th
 Round 5 applied 2026-06-12 (Game core + Vault + GNRUS): 17 more IDs moved into Handled.
 Round 6 applied 2026-06-12 (WWXRP + Degenerette + Bingo, commit bfd639be): 17 more IDs moved into Handled (14 edits + 3 subsumed/already-applied).
 Round 7 applied 2026-06-12 (small-contract sweep: Admin/Deity/Jackpots/Stonk/StakedStonk/libs/MintStreak/storage): 22 more IDs moved into Handled — the LAST non-storage-packing APPROVED items; the remaining open APPROVED set is entirely the deferred packing family.
+Round 8 applied 2026-06-13 (non-packing NHR/PARTIAL adjudication: all 38 remaining non-packing NHR/PARTIAL items re-verified against current source by 16 read-only agents): outcome = 3 applied, 7 already-applied (rounds 3-7 subsumed them), 22 rejected, 6 deferred. The 3 applied are the only net edits; the backlog of meaningful non-packing wins is now exhausted.
 IDs below are HANDLED — do not re-apply. Everything else in GAS-AUDIT-2026-06-10.{md,json} is open.
 
 ## Handled (137 + 62 round 3 + 50 round 4 + 17 round 5 + 17 round 6 + 22 round 7)
@@ -344,7 +345,21 @@ Packets: `.planning/gas-round7/packet-{admin-deity,jackpots,stonk,libs,mintstrea
 - **STORAGE-03** — APPLIED round 7 — _queueTicketRange hoists rngLockedCached + writeSlotBit (~10k per 100-level whale bundle)
 - **RT-IDIOMS-08** — CLOSED round 7 — SUBSUMED by STORAGE-03 (same hoist, different ID)
 
-## Open, non-rejected (54 after round 7 — the 7 remaining APPROVED are ALL deferred storage_packing)
+### Round 8 (2026-06-13) — non-packing NHR/PARTIAL adjudication (forge 853/0/110; JS DGNRS 34/6 baseline-identical)
+
+Verified per-id verdicts: `/tmp/gas-round8/verdict-G*.json` (regenerable from GAS-AUDIT-2026-06-10.json). All 38 non-packing NHR/PARTIAL items re-checked against current HEAD source. 3 applied:
+
+- **LOOTBOX-14** — APPLIED round 8 — LootboxModule `_resolveLootboxRoll`: dropped the `ticketsScaled != 0` guard (ticketsOut is the 0-default named return, so guarded-assign is identical to direct-assign) and the always-true `LOOTBOX_WWXRP_PRIZE != 0` guard (1 ether constant). Byte-equivalent; ~10-20 gas + ~40 bytecode.
+- **STORAGE-10** — APPLIED round 8 (event ABI, user sign-off) — `PlayerCredited(player, recipient, amount)` → `PlayerCredited(player, amount)`: the sole emit site passes `beneficiary` for BOTH topics, so `recipient` carries zero information. ~375 gas/credit (LOG3→LOG2) on a hot path; pulls Game off the EIP-170 ceiling. Lockstep: test/fuzz/V61Pack.t.sol event decl + expectEmit flags + emit. Zero in-repo off-chain consumers.
+- **STONK-05** — APPLIED round 8 (event ABI, user sign-off) — DegenerusStonk.transferFrom drops the finite-allowance `emit Approval(...)` (mirrors round-6 TOKENS-19 for WWXRP; makes the token more ERC20-standard). ~1700 gas/finite-allowance transferFrom. DGNRSLiquid.test.js Approval test pins approve() only — unaffected.
+
+ALREADY_APPLIED (rounds 3-7 / GAME-08 subsumed them — do not re-flag): RT-MINT-02, RT-IDIOMS-06 (payment-port already in MintModule), RT-AFKING-WHALE-08 (closed-form TicketsQueuedRange), RT-CLAIMS-04, BURNIE-08, ADVANCE-06, ADVANCE-20.
+
+REJECTED round 8 (marginal / via_ir-coalesced / net-negative / behavioral-subtlety — do not re-flag): ADVANCE-10, ADVANCE-13, AFFILIATE-08, JACKPOTS-10, LIBS-06, LOOTBOX-09, LOOTBOX-10, QUESTS-05, QUESTS-06, RT-ADVANCE-06, RT-ADVANCE-10, RT-AFKING-WHALE-05, RT-AFKING-WHALE-10, RT-AFKING-WHALE-16, RT-COINFLIP-10, RT-MINT-06, RT-QUESTS-AFFILIATE-05, SMALLMODS-02, SMALLMODS-16, STONK-13, WHALEBOON-06, WHALEBOON-16.
+
+DEFERRED round 8 (out of scope: storage-layout/packing, Halmos-proven capBucketCounts, or needs frontend-dependency confirmation): AFFILIATE-11, AFFILIATE-12, BURNIE-10, BURNIE-16, JACKPOTMOD-14, JACKPOTMOD-15.
+
+## Open, non-rejected (storage_packing family only after round 8 — the non-packing backlog is exhausted)
 
 | id | verdict | category | freq | file | est. save |
 |---|---|---|---|---|---|
