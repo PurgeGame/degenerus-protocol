@@ -65,17 +65,23 @@ describe("DegenerusVault", function () {
   });
 
   // ---------------------------------------------------------------------------
-  // 2. deposit (onlyGame)
+  // 2. funding (deposit entry point removed; ETH arrives via receive())
   // ---------------------------------------------------------------------------
-  describe("deposit", function () {
-    it("reverts when called by non-game address", async function () {
+  describe("funding", function () {
+    it("old deposit selector reverts (entry point removed, no fallback)", async function () {
       const { vault, alice } = await loadFixture(deployFullProtocol);
+      // selector of deposit(uint256,uint256) — unmatched calldata hits no fallback → revert
+      // (receive() only fires on empty calldata).
       await expect(
-        vault.connect(alice).deposit(0n, 0n, { value: eth("1") })
-      ).to.be.revertedWithCustomError(vault, "Unauthorized");
+        alice.sendTransaction({
+          to: await vault.getAddress(),
+          data: "0xe2bbb158",
+          value: eth("1"),
+        })
+      ).to.be.reverted;
     });
 
-    it("game contract can deposit ETH", async function () {
+    it("plain ETH send emits Deposit via receive()", async function () {
       const { vault, game } = await loadFixture(deployFullProtocol);
       const gameAddr = await game.getAddress();
 
@@ -89,9 +95,10 @@ describe("DegenerusVault", function () {
       ]);
       const gameSigner = await hre.ethers.getSigner(gameAddr);
 
-      const tx = await vault
-        .connect(gameSigner)
-        .deposit(0n, 0n, { value: eth("1") });
+      const tx = await gameSigner.sendTransaction({
+        to: await vault.getAddress(),
+        value: eth("1"),
+      });
       const ev = await getEvent(tx, vault, "Deposit");
       expect(ev.args.ethAmount).to.equal(eth("1"));
       expect(ev.args.from).to.equal(gameAddr);
@@ -487,32 +494,13 @@ describe("DegenerusVault", function () {
         deployFullProtocol
       );
       const vaultAddr = await vault.getAddress();
-      const gameAddr = await game.getAddress();
 
-      // Donate ETH and impersonate game to deposit stETH
+      // Donate ETH via receive(), fund stETH via direct mint
       await alice.sendTransaction({ to: vaultAddr, value: eth("5") });
 
-      // Mint stETH to game and deposit via impersonation
-      await mockStETH.connect(deployer).mint(gameAddr, eth("3"));
-      await hre.network.provider.request({
-        method: "hardhat_impersonateAccount",
-        params: [gameAddr],
-      });
-      await hre.ethers.provider.send("hardhat_setBalance", [
-        gameAddr,
-        "0x56BC75E2D63100000",
-      ]);
-      const gameSigner = await hre.ethers.getSigner(gameAddr);
-
-      await mockStETH
-        .connect(gameSigner)
-        .approve(vaultAddr, eth("3"));
-      await vault.connect(gameSigner).deposit(0n, eth("3"));
-
-      await hre.network.provider.request({
-        method: "hardhat_stopImpersonatingAccount",
-        params: [gameAddr],
-      });
+      // Mint stETH directly to the vault (the production stETH channel is a direct
+      // ERC20 transfer — the vault reads its own balance, no announce call exists).
+      await mockStETH.connect(deployer).mint(vaultAddr, eth("3"));
 
       // previewEth should show ETH preferred, stETH for remainder
       const INITIAL_SUPPLY = 1_000_000_000_000n * eth("1");

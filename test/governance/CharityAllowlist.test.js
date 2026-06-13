@@ -32,9 +32,8 @@ const REJECT_EMPTY_SLOT = 0;
 const REJECT_ALREADY_VOTED = 1;
 const REJECT_ZERO_WEIGHT = 2;
 
-// pickCharity() reject reasons (consumed by Plan 03c pickCharity describe)
+// pickCharity() reject reason (consumed by Plan 03c pickCharity describe)
 const REJECT_LEVEL_NOT_ACTIVE = 0;
-const REJECT_LEVEL_ALREADY_RESOLVED = 1;
 
 // Distribution math (consumed by Plan 03c)
 const DISTRIBUTION_BPS = 200n;
@@ -627,9 +626,10 @@ describe("GNRUS Charity Allowlist (v33.0)", function () {
 
   // -------------------------------------------------------------------
   //  Section 7: pickCharity(uint24 level) (TST-04 + D-256-PICKCHARITY-REJECT-01 + D-256-TIEBREAK-01)
-  //  Covers both PickCharityRejected reason codes (NOT_ACTIVE direct,
-  //  ALREADY_RESOLVED via hardhat_setStorageAt-driven state per Blocker #1),
-  //  Unauthorized (onlyGame), idempotence ordering (L606-608: state writes
+  //  Covers the PickCharityRejected reason code (NOT_ACTIVE — both the wrong-level
+  //  call and the duplicate-resolve re-call, which the currentLevel monotonicity
+  //  guard rejects with the same code),
+  //  Unauthorized (onlyGame), idempotence ordering (currentLevel advance
   //  before flush+winner+distribution), single-active winner with distribution
   //  math (DISTRIBUTION_BPS / BPS_DENOM), multi-vote winner, tie-break (D-256-
   //  TIEBREAK-01 cases A and B), and all 3 LevelSkipped paths (A: zero active
@@ -646,35 +646,20 @@ describe("GNRUS Charity Allowlist (v33.0)", function () {
       await stopImpersonating(gameAddress);
     });
 
-    it("PickCharityRejected(REJECT_LEVEL_ALREADY_RESOLVED) on re-call with already-resolved level", async function () {
-      // Blocker #1 resolution per checker iteration 1 — drive state directly via
-      // hardhat_setStorageAt rather than dropping the test. Storage layout per
-      // contracts/GNRUS.sol L144-184:
-      //   slot 0 = totalSupply (uint256)
-      //   slot 1 = balanceOf (mapping address => uint256)
-      //   slot 2 = currentLevel(3) + finalized(1) + currentActiveBitmap(4) + pendingEditSet(4) packed
-      //   slot 3 = levelResolved (mapping uint24 => bool)
-      // For levelResolved[level], slot index = keccak256(abi.encode(uint24(level), uint256(3))).
-      // We set levelResolved[0] = true while leaving currentLevel == 0 unchanged.
-      // This produces (level == currentLevel) AND (levelResolved[level] == true)
-      // → first check passes (level != currentLevel is false), second check fires.
-      const { charity, charityAddress, gameAddress } = await loadFixture(deployGNRUSFixture);
-      const levelResolvedSlot = hre.ethers.keccak256(
-        hre.ethers.AbiCoder.defaultAbiCoder().encode(["uint24", "uint256"], [0, 3])
-      );
-      await hre.network.provider.send("hardhat_setStorageAt", [
-        charityAddress,
-        levelResolvedSlot,
-        "0x0000000000000000000000000000000000000000000000000000000000000001",
-      ]);
-      // Verify forged state.
-      expect(await charity.levelResolved(0)).to.equal(true);
-      expect(await charity.currentLevel()).to.equal(0);
+    it("re-call for an already-resolved level reverts PickCharityRejected(REJECT_LEVEL_NOT_ACTIVE)", async function () {
+      // The resolved-level guard is currentLevel monotonicity alone: pickCharity(level)
+      // requires level == currentLevel and a successful resolve advances currentLevel
+      // (its sole writer, strictly increasing), so a duplicate call for the same level
+      // can never match again. A forged "resolved but currentLevel unchanged" state is
+      // structurally unrepresentable.
+      const { charity, gameAddress } = await loadFixture(deployGNRUSFixture);
+      await runLevelTransitionViaGame(charity, gameAddress, 0);
+      expect(await charity.currentLevel()).to.equal(1n);
 
       const gameSigner = await impersonate(gameAddress);
       await expect(charity.connect(gameSigner).pickCharity(0))
         .to.be.revertedWithCustomError(charity, "PickCharityRejected")
-        .withArgs(REJECT_LEVEL_ALREADY_RESOLVED);
+        .withArgs(REJECT_LEVEL_NOT_ACTIVE);
       await stopImpersonating(gameAddress);
     });
 
@@ -685,16 +670,15 @@ describe("GNRUS Charity Allowlist (v33.0)", function () {
       ).to.be.revertedWithCustomError(charity, "Unauthorized");
     });
 
-    it("idempotence: state writes (levelResolved + currentLevel) happen BEFORE flush + winner", async function () {
-      // Locks the L606-608 ordering: levelResolved[level] = true and currentLevel = level + 1
-      // are SET FIRST in pickCharity, BEFORE the flush/winner/distribution work. After a clean
-      // resolve at level 0 we observe both writes regardless of which downstream path is taken.
+    it("idempotence: the currentLevel advance happens BEFORE flush + winner", async function () {
+      // Locks the ordering: currentLevel = level + 1 is SET FIRST in pickCharity, BEFORE the
+      // flush/winner/distribution work. After a clean resolve at level 0 we observe the
+      // advance regardless of which downstream path is taken.
       const { charity, deployer, recipient1, voter1, gameAddress } =
         await loadFixture(deployGNRUSFixture);
       await setCharityFromVaultOwner(charity, deployer, 5, recipient1.address);
       await charity.connect(voter1).vote(5);
       await runLevelTransitionViaGame(charity, gameAddress, 0);
-      expect(await charity.levelResolved(0)).to.equal(true);
       expect(await charity.currentLevel()).to.equal(1n);
     });
 

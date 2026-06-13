@@ -140,7 +140,6 @@ describe("CharityGameHooks", function () {
 
       // Verify initial state
       expect(await charity.currentLevel()).to.equal(0);
-      expect(await charity.levelResolved(0)).to.equal(false);
 
       // Fill prize pool past 50 ETH bootstrap target
       const buyers = [alice, bob, carol, dan, eve, ...others.slice(0, 5)];
@@ -162,8 +161,6 @@ describe("CharityGameHooks", function () {
       // Verify: charity pickCharity was called (currentLevel advanced)
       expect(await charity.currentLevel()).to.equal(1,
         "Charity currentLevel should be 1 after pickCharity(0) called");
-      expect(await charity.levelResolved(0)).to.equal(true,
-        "Level 0 should be marked as resolved");
     });
 
     it("emits LevelSkipped(0) when no active slots in slate (skip-path A)", async function () {
@@ -201,8 +198,6 @@ describe("CharityGameHooks", function () {
       // Verify charity state advanced (pickCharity was called)
       expect(await charity.currentLevel()).to.equal(1,
         "Charity currentLevel should be 1 (pickCharity was called)");
-      expect(await charity.levelResolved(0)).to.equal(true,
-        "Level 0 should be marked as resolved");
     });
 
     it("conservation: 2% distribution preserves totalSupplies and soulbound enforcement (TST-05)", async function () {
@@ -318,7 +313,6 @@ describe("CharityGameHooks", function () {
 
       // SANITY: charity state still reflects the single resolved level.
       expect(await charity.currentLevel()).to.equal(1, "Charity currentLevel should be 1");
-      expect(await charity.levelResolved(0)).to.equal(true, "Level 0 should be marked as resolved");
 
       // SOULBOUND SMOKE: transfer / transferFrom / approve still revert post-transition.
       await expect(

@@ -13,14 +13,6 @@ interface IBurnieCoinflipPlayerMock {
     function redeemBurnieShare(address redeemer, uint256 base) external;
 }
 
-/// @notice Selector mirror for the MODULE-side resolveRedemptionLootbox (the delegatecall target
-///         inside the Game-side resolveRedemptionLootbox 5-ETH-chunk loop). Mocked to a no-op so the
-///         lootbox materialization loop returns without seeded game lootbox state, while the
-///         Game-side body (the stETH pull that drains the lootbox half out of sDGNRS) runs for real.
-interface IGameLootboxModuleRRL {
-    function resolveRedemptionLootbox(address player, uint256 amount, uint256 rngWord, uint16 activityScore) external;
-}
-
 /// @title V62RedemptionReentrancy -- regression for finding V62-03 (verifies the layered FIX).
 ///        The vuln description below is retained as context for what the fixes prevent.
 ///
@@ -93,12 +85,10 @@ contract V62RedemptionReentrancy is DeployProtocol {
         // Mock the coinflip surface so the BURNIE settle leg (redeemBurnieShare) and the
         // previewClaimCoinflips backing read are no-ops, keeping the focus on the ETH/stETH reserve
         // identity. previewClaimCoinflips returns 0 so BURNIE never inflates totalMoney.
-        // The lootbox forward (game.resolveRedemptionLootbox) is left REAL so the claim's 50%
-        // lootbox half physically LEAVES sDGNRS (pulled by the game as stETH when ETH is short),
-        // exactly as in production — this removes the artificial over-collateral residual a no-op
-        // mock would leave behind. The MODULE-side delegatecall target is mocked to a no-op so the
-        // lootbox materialization loop returns without seeded game lootbox state, while the Game-side
-        // body (the stETH pull that drains the lootbox half out of sDGNRS) runs for real.
+        // The lootbox forward (game.resolveRedemptionLootbox) runs fully UNMOCKED: the module body
+        // (auth, msg.value bound, stETH pull, pool credit, chunked materialization) executes for
+        // real, so the claim's 50% lootbox half physically LEAVES sDGNRS exactly as in production
+        // and the no-claimant-code / value-arrival assertions cover the end-to-end path.
         vm.mockCall(
             address(coinflip),
             abi.encodeWithSelector(IBurnieCoinflipPlayerMock.previewClaimCoinflips.selector),
@@ -107,11 +97,6 @@ contract V62RedemptionReentrancy is DeployProtocol {
         vm.mockCall(
             address(coinflip),
             abi.encodeWithSelector(IBurnieCoinflipPlayerMock.redeemBurnieShare.selector),
-            abi.encode()
-        );
-        vm.mockCall(
-            ContractAddresses.GAME_LOOTBOX_MODULE,
-            abi.encodeWithSelector(IGameLootboxModuleRRL.resolveRedemptionLootbox.selector),
             abi.encode()
         );
     }

@@ -303,7 +303,8 @@ contract KeeperLeversAndPacking is DeployProtocol {
 
         // G5 — double-crank short-circuit BatchAlreadyTaken (degeneretteResolve).
         assertGt(_countOccurrences(game_, "revert BatchAlreadyTaken();"), 0, "G5: double-crank short-circuit BatchAlreadyTaken");
-        assertGt(_countOccurrences(game_, "if (degeneretteBets[players[0]][betIds[0]] == 0) revert BatchAlreadyTaken();"), 0, "G5: item-0 probe short-circuit");
+        assertGt(_countOccurrences(game_, "uint256 betPacked = degeneretteBets[players[0]][betIds[0]];"), 0, "G5: item-0 probe read");
+        assertGt(_countOccurrences(game_, "if (betPacked == 0) revert BatchAlreadyTaken();"), 0, "G5: item-0 probe short-circuit");
 
         // G6 — (v49 batchPurchase per-player slice try/catch) DROPPED, D-351-02 (removed surface). The
         // afking per-sub STAGE is revert-free by construction (D-348-04 no valve); asserted ABSENT.

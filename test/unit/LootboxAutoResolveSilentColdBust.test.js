@@ -157,7 +157,9 @@ describe("LootboxAutoResolveSilentColdBust — Phase 275 Wave 2 TST-LBX-AR-03", 
       // allowSplit(11). The auto-resolve callers pass `index = 0`,
       // `emitLootboxEvent = false`, and `payColdBustConsolation = false`
       // (silent on cold-bust).
-      for (const fnName of ["function resolveLootboxDirect(", "function resolveRedemptionLootbox("]) {
+      // The redemption auto-resolve path holds its `_resolveLootboxCommon` call in the
+      // private `_resolveRedemptionChunk` helper (one per 5-ETH chunk).
+      for (const fnName of ["function resolveLootboxDirect(", "function _resolveRedemptionChunk("]) {
         const fnIdx = source.indexOf(fnName);
         expect(fnIdx, `${fnName} not found`).to.be.greaterThan(-1);
         const body = source.slice(fnIdx, fnIdx + 3000);

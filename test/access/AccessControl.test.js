@@ -142,16 +142,17 @@ describe("AccessControl", function () {
       ).to.be.reverted;
     });
 
-    it("recordMint: reverts when called by alice (only self-call)", async function () {
+    it("recordMint: entry point removed (mint payment is module-internal)", async function () {
       const { game, alice } = await loadFixture(deployFullProtocol);
 
+      // The former value-bearing self-call entry no longer exists on the Game.
+      // selector of recordMint(address,uint256,uint8) — unmatched, no fallback → revert.
       await expect(
-        game.connect(alice).recordMint(
-          alice.address, // player
-          eth("0.01"),   // costWei
-          0              // payKind = DirectEth
-        )
-      ).to.be.revertedWithCustomError(game, "E");
+        alice.sendTransaction({
+          to: await game.getAddress(),
+          data: "0x505164fb",
+        })
+      ).to.be.reverted;
     });
 
   });
@@ -192,20 +193,18 @@ describe("AccessControl", function () {
   // ---------------------------------------------------------------------------
 
   describe("DegenerusVault", function () {
-    it("deposit: reverts when called by alice (onlyGame → Unauthorized)", async function () {
+    it("deposit: entry point removed (funding is receive()/direct transfers/coin-internal escrow)", async function () {
       const { vault, alice } = await loadFixture(deployFullProtocol);
 
+      // selector of deposit(uint256,uint256) — unmatched calldata hits no fallback → revert
+      // (receive() only fires on empty calldata).
       await expect(
-        vault.connect(alice).deposit(eth("100"), 0n, { value: eth("0") })
-      ).to.be.revertedWithCustomError(vault, "Unauthorized");
-    });
-
-    it("deposit with ETH: reverts when called by alice (onlyGame → Unauthorized)", async function () {
-      const { vault, alice } = await loadFixture(deployFullProtocol);
-
-      await expect(
-        vault.connect(alice).deposit(0n, 0n, { value: eth("1") })
-      ).to.be.revertedWithCustomError(vault, "Unauthorized");
+        alice.sendTransaction({
+          to: await vault.getAddress(),
+          data: "0xe2bbb158",
+          value: eth("1"),
+        })
+      ).to.be.reverted;
     });
   });
 

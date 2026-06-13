@@ -294,9 +294,11 @@ describe("EventSurfaceUnification — Phase 277 Wave 2 TST-EVT-UNI-01..06", func
       //   1 player, 2 index, 3 amount, 4 targetLevel, 5 currentLevel,
       //   6 seed, 7 emitLootboxEvent, 8 payColdBustConsolation,
       //   9 distressEth, 10 totalPackedEth, 11 allowSplit
+      // The redemption auto-resolve path holds its `_resolveLootboxCommon` call in the
+      // private `_resolveRedemptionChunk` helper (one per 5-ETH chunk).
       for (const fnSig of [
         "function resolveLootboxDirect(",
-        "function resolveRedemptionLootbox(",
+        "function _resolveRedemptionChunk(",
       ]) {
         const body = extractBody(src, fnSig);
         expect(body, `${fnSig} body not found`).to.not.equal(null);

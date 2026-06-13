@@ -256,7 +256,9 @@ describe("LootboxAutoResolveRegression — Phase 274 Wave 2 TST-REG-01..04", fun
 
     it("[03b] resolveRedemptionLootbox passes `index = 0` and `emitLootboxEvent = false` to _resolveLootboxCommon", function () {
       const source = fs.readFileSync(MODULE_SOURCE_PATH, "utf8");
-      const fnIdx = source.indexOf("function resolveRedemptionLootbox(");
+      // The redemption path resolves each 5-ETH chunk through the private
+      // `_resolveRedemptionChunk` helper, which holds the `_resolveLootboxCommon` call.
+      const fnIdx = source.indexOf("function _resolveRedemptionChunk(");
       expect(fnIdx).to.be.greaterThan(-1);
       const body = source.slice(fnIdx, fnIdx + 2500);
       expect(body.includes("_resolveLootboxCommon(")).to.equal(true);
@@ -305,9 +307,11 @@ describe("LootboxAutoResolveRegression — Phase 274 Wave 2 TST-REG-01..04", fun
       // (3) Both auto-resolve callers pass emitLootboxEvent = false (7th
       //     positional) AND payColdBustConsolation = false (8th positional) — the
       //     `day` arg was dropped from the helper in 4cb9ccbf (11-arg shape).
+      // The redemption auto-resolve path holds its `_resolveLootboxCommon` call in the
+      // private `_resolveRedemptionChunk` helper (one per 5-ETH chunk).
       for (const fnSig of [
         "function resolveLootboxDirect(",
-        "function resolveRedemptionLootbox(",
+        "function _resolveRedemptionChunk(",
       ]) {
         const fnIdx = source.indexOf(fnSig);
         const body = source.slice(fnIdx, fnIdx + 2500);
@@ -460,9 +464,11 @@ describe("LootboxAutoResolveRegression — Phase 274 Wave 2 TST-REG-01..04", fun
       // clean `0` default (D-277-AR-INDEX-01). It is the 2nd positional arg of
       // `_resolveLootboxCommon` (the `day` arg was dropped from the helper in
       // 4cb9ccbf "lootbox event day cleanup").
+      // The redemption auto-resolve path holds its `_resolveLootboxCommon` call in the
+      // private `_resolveRedemptionChunk` helper (one per 5-ETH chunk).
       for (const fnSig of [
         "function resolveLootboxDirect(",
-        "function resolveRedemptionLootbox(",
+        "function _resolveRedemptionChunk(",
       ]) {
         const fnIdx = source.indexOf(fnSig);
         expect(fnIdx, `${fnSig} not found`).to.be.greaterThan(-1);

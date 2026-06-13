@@ -738,9 +738,11 @@ describe("LootboxWholeTicket — Phase 274 Wave 2 TST-WT-01..07", function () {
         source.includes("type(uint48).max"),
         "no `type(uint48).max` sentinel value should remain in the module"
       ).to.equal(false);
+      // The redemption auto-resolve path holds its `_resolveLootboxCommon` call in the
+      // private `_resolveRedemptionChunk` helper (one per 5-ETH chunk).
       for (const fnSig of [
         "function resolveLootboxDirect(",
-        "function resolveRedemptionLootbox(",
+        "function _resolveRedemptionChunk(",
       ]) {
         const fnIdx = source.indexOf(fnSig);
         expect(fnIdx, `${fnSig} not found`).to.be.greaterThan(-1);
