@@ -33,12 +33,14 @@ contract BurnieEmissionSeeds is DeployProtocol {
         _deployProtocol();
     }
 
-    /// @dev coinflipBalance is internal; read mapping(uint24 => mapping(address => uint256))
-    ///      at root slot 0 directly.
+    /// @dev coinflipStakePacked is internal at root slot 0 and banks 2 days per slot
+    ///      (key = day>>1, 128-bit wei lanes: low = even day, high = odd day). Read the
+    ///      packed word and decode `day`'s lane.
     function _stakeOf(uint24 day, address player) internal view returns (uint256) {
-        bytes32 inner = keccak256(abi.encode(uint256(day), uint256(0)));
+        bytes32 inner = keccak256(abi.encode(uint256(day >> 1), uint256(0)));
         bytes32 slot = keccak256(abi.encode(player, uint256(inner)));
-        return uint256(vm.load(address(coinflip), slot));
+        uint256 word = uint256(vm.load(address(coinflip), slot));
+        return uint128(word >> ((uint256(day) & 1) * 128));
     }
 
     /// @dev Resolve day `epoch` as the GAME with a win (bit 0 = 1) or loss (bit 0 = 0) word.

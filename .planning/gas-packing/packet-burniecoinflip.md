@@ -6,12 +6,18 @@ so **no declaration-slot shift** for any variable and **no slot-hardcoded harnes
 two mappings (grep-clean; the only `FLIP` slot const in the suite is the *Game* `totalFlipReversals`).
 Recalibration is behavioral only (day-lane boundary tests).
 
-## RT-PACKING-08 — coinflipDayResult (APPROVED, hot)
+## REFINEMENT (user-driven, 2026-06-12) — maximal lane widths
+User pushed both lanes tighter than the audit's framing, accepting the trade-offs explicitly:
+- **Day-result → 8-bit lanes (32/slot), 3-state.** rewardPercent's real max is 156 (`50 / 150 / [78,115]` + bonus 0/2/6 — comment confirms "max 156"), so it fits uint8. reward(8) + win(1) = 9 bits can't share a byte as separate fields, so encode 3 states in one byte: `0`=unresolved, `1`=resolved-loss, `50..156`=resolved-win@reward. `win` is derived (`byte >= 50`); losing days drop the (functionally unused) reward%. **Audited ALL getCoinflipDayResult consumers** (BafCreditRouting, StallResilience, VRFStallEdgeCases, CoinflipCarryClaim, BurnieEmissionSeeds + redemption mocks): every one reads the `win` bool, checks `reward != 0` (resolution detection — a resolved loss reads back as `1`, still nonzero), or reads reward in a win context. NONE assert the exact reward on a losing day → safe. Resolution detection and the claim loop's `rewardPercent == 0 && !win` skip both still hold.
+- **Stake → 128-bit wei lanes (2/slot), LOSSLESS.** The whole-BURNIE truncation experiment (uint32, 8/slot) was REVERTED — the full forge suite caught that flip credits are NOT always large player stakes: keeper advance rewards (~1.77e14 wei = 0.000177 BURNIE) and `redeemBurnieShare` settlement amounts are **sub-1-BURNIE**, so whole-token granularity zeroed them — breaking `testRouterAdvanceRewardMatchesLiveUnitRatio`, `testMintBurnieEligibleKeeperEarnsAdvanceBounty` (keeper incentive → 0) and `testRedeemBurnieNetMintZero` (BURNIE conservation). Lesson: "dust" reasoning was wrong for system credits. A stake is provably ≤ uint128 (BurnieCoin supply cap), so 128-bit wei lanes = max LOSSLESS density (2/slot). No clamp, no revert, no truncation. ⚠ `_setFlipStake` is advance-reachable (`creditFlip`→`_addDailyFlip`), so it must never revert — the lossless wei form has no revert path.
+
+Net density: day-result 1→32/slot, stake 2→8/slot. Helper bodies changed; the 11 call sites are unchanged (they pass/receive wei; helpers convert).
+
+## RT-PACKING-08 — coinflipDayResult (APPROVED, hot) — original framing
 `mapping(uint24 => CoinflipDayResult{uint16 rewardPercent; bool win})` → `mapping(uint24 => uint256)`.
 Today: one full slot per day, fresh zero→nonzero SSTORE each resolution; one cold SLOAD per scanned day.
 
-**Encoding:** key = `day >> 3`; lane = `day & 7`; laneShift = `lane * 32`; bits `[0:16]` rewardPercent, `[16]` win.
-8 results / slot.
+**Original encoding (superseded by 8-bit above):** key = `day >> 3`; bits `[0:16]` rewardPercent, `[16]` win. 8 results / slot.
 
 **Sentinel safety (stronger than the finding):** the resolution roll always stores `rewardPercent >= 50`
 (branches give 50 / 150 / [78,115]+bonus), so every resolved lane is nonzero and an all-zero 32-bit lane
