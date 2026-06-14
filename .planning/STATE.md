@@ -2,13 +2,13 @@
 gsd_state_version: 1.0
 milestone: v63.0
 milestone_name: Post-v62 Audit (Critical Invariants + Reward Game-Theory)
-status: planning
-last_updated: "2026-06-14T12:00:00.000Z"
-last_activity: 2026-06-14 -- v63.0 STARTED (Post-v62 Audit -- Critical Invariants + Reward Game-Theory). Scoped + roadmapped (phases 388-396, 58 reqs; method = council + Claude both; folded in the deferred debt: mutation campaign + capBucketCounts + v50/v51/v52). Baseline = v62.0 closure subject 77580320; subject = HEAD a8b702a7 (freeze at FOUNDATION). 8-agent read-only surface map = 0 HIGH on inspection; MED design-intent leads (BURNIE backing gaps top). NEXT = /gsd-plan-phase 388.
+status: executing
+last_updated: "2026-06-14T21:00:14.622Z"
+last_activity: 2026-06-14 -- Phase 388 planning complete
 progress:
-  total_phases: 9
+  total_phases: 17
   completed_phases: 0
-  total_plans: 0
+  total_plans: 3
   completed_plans: 0
   percent: 0
 ---
@@ -37,10 +37,10 @@ See: .planning/PROJECT.md (Current State section) + .planning/ROADMAP.md (v63.0 
 Milestone: v63.0 — ▶ ACTIVE (started 2026-06-14). Post-v62 Audit (Critical Invariants + Reward Game-Theory).
 Phase: Not started (388 FOUNDATION next).
 Plan: —
-Status: Roadmap approved (9 phases 388-396, 58 reqs); planning docs ready to commit.
+Status: Ready to execute
 Baseline = v62.0 closure subject `77580320`; subject = HEAD `a8b702a7` (byte-frozen at FOUNDATION 388).
 Method = COUNCIL + CLAUDE both; posture = audit-only by default (a surfaced/adjudicated/skeptic-passed finding → gated USER-hand-review fix, else document-only).
-Last activity: 2026-06-14 — Milestone v63.0 started; 8-agent surface map = 0 HIGH on inspection, MED leads routed to sweeps.
+Last activity: 2026-06-14 -- Phase 388 planning complete
 Next: `/gsd-plan-phase 388` (FOUNDATION — subject freeze + green baseline + slot recalibration).
 
 ## ✅ SHIPPED Milestone Roadmap (v62.0 — phases 380-387 — SHIPPED 2026-06-09; baseline = v61.0 closure HEAD `b97a7a2e`; subject `c4d48008`; remediated `77580320`; closure signal `MILESTONE_V62_AT_HEAD_77580320b88e77438c893602a068548961824893`)
