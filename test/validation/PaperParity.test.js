@@ -464,10 +464,10 @@ describe("Paper Parity (Phase 46)", function () {
   // Verified through source code inspection and behavioral testing in unit/DegenerusGame.test.js.
   // The _lootboxEvMultiplierFromScore function uses these exact constants; static assertion
   // is the correct approach because the EV computation is private and cannot be called externally.
-  describe("PAR-07: Lootbox EV breakpoints (80%->100% at 0-60%, 100%->135% at 60-255%)", function () {
-    it("EV minimum at 0% activity: 80% (8000 BPS)", async function () {
-      // LOOTBOX_EV_MIN_BPS = 8_000
-      expect(8000).to.equal(8000);
+  describe("PAR-07: Lootbox EV breakpoints (90%->100% at 0-60%, 100%->145% at 60-400%)", function () {
+    it("EV minimum at 0% activity: 90% (9000 BPS)", async function () {
+      // LOOTBOX_EV_MIN_BPS = 9_000
+      expect(9000).to.equal(9000);
     });
 
     it("EV neutral at 60% activity: 100% (10000 BPS)", async function () {
@@ -477,30 +477,30 @@ describe("Paper Parity (Phase 46)", function () {
       expect(10000).to.equal(10000, "Neutral EV = 100%");
     });
 
-    it("EV maximum at 255%+ activity: 135% (13500 BPS)", async function () {
-      // ACTIVITY_SCORE_MAX_BPS = 25_500 (255%)
-      // LOOTBOX_EV_MAX_BPS = 13_500
-      expect(25500).to.equal(25500, "Max activity = 255%");
-      expect(13500).to.equal(13500, "Max EV = 135%");
+    it("EV maximum at 400%+ activity: 145% (14500 BPS)", async function () {
+      // LOOTBOX_EV_ACTIVITY_MAX_BPS = 40_000 (400%)
+      // LOOTBOX_EV_MAX_BPS = 14_500
+      expect(40000).to.equal(40000, "Max activity = 400%");
+      expect(14500).to.equal(14500, "Max EV = 145%");
     });
 
-    it("EV linear interpolation: 0-60% maps linearly to 80%-100%", async function () {
+    it("EV linear interpolation: 0-60% maps linearly to 90%-100%", async function () {
       // From contract: score <= neutral => min + (neutral-min) * score / neutral
-      // At score 3000 (30%): EV = 8000 + (10000-8000) * 3000/6000 = 8000 + 1000 = 9000 (90%)
+      // At score 3000 (30%): EV = 9000 + (10000-9000) * 3000/6000 = 9000 + 500 = 9500 (95%)
       const score = 3000;
       const ev =
-        8000 + Math.floor(((10000 - 8000) * score) / 6000);
-      expect(ev).to.equal(9000, "30% activity = 90% EV");
+        9000 + Math.floor(((10000 - 9000) * score) / 6000);
+      expect(ev).to.equal(9500, "30% activity = 95% EV");
     });
 
-    it("EV linear interpolation: 60-255% maps linearly to 100%-135%", async function () {
+    it("EV linear interpolation: 60-400% maps linearly to 100%-145%", async function () {
       // From contract: score > neutral => neutral_ev + (max_ev-neutral_ev) * (score-neutral) / (max-neutral)
-      // At score 15750 (157.5%, midpoint): EV = 10000 + (13500-10000) * (15750-6000)/(25500-6000)
-      const score = 15750;
+      // At score 23000 (230%, midpoint): EV = 10000 + (14500-10000) * (23000-6000)/(40000-6000)
+      const score = 23000;
       const ev =
         10000 +
-        Math.floor(((13500 - 10000) * (score - 6000)) / (25500 - 6000));
-      expect(ev).to.equal(11750, "157.5% activity = 117.5% EV");
+        Math.floor(((14500 - 10000) * (score - 6000)) / (40000 - 6000));
+      expect(ev).to.equal(12250, "230% activity = 122.5% EV");
     });
   });
 
@@ -982,29 +982,29 @@ describe("Paper Parity (Phase 46)", function () {
   // =========================================================================
 
   // Future ticket roll logic uses private constants in DegenerusGameLootboxModule.sol.
-  // The 95%/5% split and offset ranges [0,5]/[5,50] are verified statically.
+  // The 80%/20% split and offset ranges [0,4]/[5,50] are verified statically.
   // Behavioral testing would require VRF fulfillment to observe actual ticket
   // level assignments.
-  describe("PAR-18: Future ticket odds (90% near k in [0,4], 10% far k in [5,50])", function () {
-    it("90% near future: 0-4 levels ahead", async function () {
-      // _rollTargetLevel: rangeRoll < 10 => far (10%), else near (90%)
+  describe("PAR-18: Future ticket odds (80% near k in [0,4], 20% far k in [5,50])", function () {
+    it("80% near future: 0-4 levels ahead", async function () {
+      // _rollTargetLevel: rangeRoll < 20 => far (20%), else near (80%)
       // Near: levelOffset = entropy % 5 => [0, 4]
-      expect(90).to.equal(90, "Near probability = 90%");
+      expect(80).to.equal(80, "Near probability = 80%");
       // Near offset range: 0 to 4 (inclusive)
       expect(5 - 1).to.equal(4, "Max near offset = 4");
     });
 
-    it("10% far future: 5-50 levels ahead", async function () {
+    it("20% far future: 5-50 levels ahead", async function () {
       // Far: levelOffset = (entropy % 46) + 5 => [5, 50]
-      expect(10).to.equal(10, "Far probability = 10%");
+      expect(20).to.equal(20, "Far probability = 20%");
       expect(5).to.equal(5, "Min far offset = 5");
       expect(46 + 5 - 1).to.equal(50, "Max far offset = 50");
     });
 
-    it("roll logic: rangeRoll = entropy % 100; < 10 = far, >= 10 = near", async function () {
-      // 10 out of 100 = 10%
-      expect(10 / 100).to.equal(0.1, "10% far threshold");
-      expect(90 / 100).to.equal(0.9, "90% near probability");
+    it("roll logic: rangeRoll = entropy % 100; < 20 = far, >= 20 = near", async function () {
+      // 20 out of 100 = 20%
+      expect(20 / 100).to.equal(0.2, "20% far threshold");
+      expect(80 / 100).to.equal(0.8, "80% near probability");
     });
   });
 

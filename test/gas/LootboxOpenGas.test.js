@@ -2,11 +2,11 @@
 //
 // LBX-02 — v38 FORMAL RE-DEFER (carry-forward from v37.0 §9.NN.iv).
 //
-// Goal: empirical pin for "v37.0 LBX-01 saves 20-50 gas on 55%-tickets-path".
+// Goal: empirical pin for "v37.0 LBX-01 saves 20-50 gas on tickets-path".
 //
 // Phase 269 attempted this and was blocked by a structural fixture-coverage
 // gap: the existing reachOpenableLootbox harness cannot deterministically
-// reach the 55%-tickets-path branch with the same gas envelope pre- vs
+// reach the tickets-path branch with the same gas envelope pre- vs
 // post-LBX-01 without a Phase-266-GAS-01-style synthetic fixture. The
 // closure-of-record at Phase 269 was the analytical worst-case derivation
 // (per feedback_gas_worst_case.md); v37.0 audit FINDINGS-v37.0.md §9.NN.iv
@@ -14,11 +14,11 @@
 //
 // Path-of-investigation for v39+ pickup:
 //   (1) Build a deterministic lootbox-state fixture that lands on the
-//       55%-tickets-path branch. The existing reachOpenableLootbox helper
+//       tickets-path branch. The existing reachOpenableLootbox helper
 //       walks the production path which is non-deterministic on branch
 //       selection without VRF rigging.
 //   (2) Capture gasUsed pre- vs post-LBX-01 against the same fixture seed.
-//   (3) Pin PER_OPEN_GAS_DELTA_BOUND for the 55%-tickets-path at the
+//   (3) Pin PER_OPEN_GAS_DELTA_BOUND for the tickets-path at the
 //       observed delta (analytical estimate: 20-50 gas saved per LBX-01
 //       Phase 269 commit `8fd5c2e1` -14/+1 LOC plus signature cascade).
 //

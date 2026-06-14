@@ -76,7 +76,7 @@ contract V55RevertFreeEvCap is DeployProtocol {
     /// @dev LOOTBOX_EV_NEUTRAL_BPS = 10_000 (a score whose multiplier > NEUTRAL draws the cap).
     uint256 private constant EV_NEUTRAL_BPS = 10_000;
     /// @dev A bonus activity score (raw bps) that yields a multiplier > NEUTRAL (so the cap is drawn).
-    uint16 private constant BONUS_SCORE = 25_500; // -> the 135% max multiplier
+    uint16 private constant BONUS_SCORE = 40_000; // -> the 145% max multiplier
 
     uint256 private constant DRAIN_MAX_ITERATIONS = 60;
     uint256 private _lastFulfilledReqId;

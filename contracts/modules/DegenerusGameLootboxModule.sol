@@ -237,26 +237,39 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     uint16 private constant LOOTBOX_QUEST_SHIELD_GRANT = 1;
 
     // Lootbox roll constants
-    /// @dev Base ticket roll budget in BPS (~127% EV after variance, 55% chance path)
-    uint16 private constant LOOTBOX_TICKET_ROLL_BPS = 16_100;
-    /// @dev 1% chance for tier 1 ticket variance (4.6x multiplier)
+    /// @dev Base ticket roll budget in BPS (~155% EV after variance, 45% chance path).
+    ///      Sized so the 45%-frequency ticket path distributes the same aggregate ETH
+    ///      value as the prior 55%-frequency path (16_100 * 11 / 9).
+    uint16 private constant LOOTBOX_TICKET_ROLL_BPS = 19_678;
+    /// @dev Budget weighting by target-level distance, applied to the ticket roll budget.
+    ///      Far-future ticket rolls (20% of ticket rolls) capture 30% of the aggregate
+    ///      ticket budget at 1.5x; near rolls take 0.875x. EV-neutral across the 20%/80%
+    ///      far/near split (0.8*0.875 + 0.2*1.5 = 1.0), so total ticket value is unchanged.
+    uint16 private constant LOOTBOX_TICKET_FAR_BUDGET_BPS = 15_000;
+    uint16 private constant LOOTBOX_TICKET_NEAR_BUDGET_BPS = 8_750;
+    /// @dev 1% chance for tier 1 ticket variance (4.6x mean)
     uint16 private constant LOOTBOX_TICKET_VARIANCE_TIER1_CHANCE_BPS = 100;
-    /// @dev 4% chance for tier 2 ticket variance (2.3x multiplier)
+    /// @dev 4% chance for tier 2 ticket variance (2.3x mean)
     uint16 private constant LOOTBOX_TICKET_VARIANCE_TIER2_CHANCE_BPS = 400;
-    /// @dev 20% chance for tier 3 ticket variance (1.1x multiplier)
+    /// @dev 20% chance for tier 3 ticket variance (1.1x mean)
     uint16 private constant LOOTBOX_TICKET_VARIANCE_TIER3_CHANCE_BPS = 2000;
-    /// @dev 45% chance for tier 4 ticket variance (0.651x multiplier)
+    /// @dev 45% chance for tier 4 ticket variance (0.651x mean)
     uint16 private constant LOOTBOX_TICKET_VARIANCE_TIER4_CHANCE_BPS = 4500;
-    /// @dev 4.6x ticket multiplier for tier 1
-    uint16 private constant LOOTBOX_TICKET_VARIANCE_TIER1_BPS = 46_000;
-    /// @dev 2.3x ticket multiplier for tier 2
-    uint16 private constant LOOTBOX_TICKET_VARIANCE_TIER2_BPS = 23_000;
-    /// @dev 1.1x ticket multiplier for tier 3
-    uint16 private constant LOOTBOX_TICKET_VARIANCE_TIER3_BPS = 11_000;
-    /// @dev 0.651x ticket multiplier for tier 4
-    uint16 private constant LOOTBOX_TICKET_VARIANCE_TIER4_BPS = 6_510;
-    /// @dev 0.45x ticket multiplier for tier 5 (default)
-    uint16 private constant LOOTBOX_TICKET_VARIANCE_TIER5_BPS = 4_500;
+    /// @dev Per-tier multiplier ranges (BPS). Each [LOW, HIGH] band is symmetric about the
+    ///      prior static value, so the per-tier mean — and the overall variance EV (~0.786x)
+    ///      — is unchanged. The position within a tier reuses the same varianceRoll that
+    ///      selected the tier (uniform within the tier's chance window), so no extra entropy
+    ///      is drawn. Tier 5 (default, ~30%) covers the remaining window.
+    uint16 private constant LOOTBOX_TICKET_VARIANCE_TIER1_LOW_BPS = 32_000; // 3.20x
+    uint16 private constant LOOTBOX_TICKET_VARIANCE_TIER1_HIGH_BPS = 60_000; // 6.00x
+    uint16 private constant LOOTBOX_TICKET_VARIANCE_TIER2_LOW_BPS = 16_000; // 1.60x
+    uint16 private constant LOOTBOX_TICKET_VARIANCE_TIER2_HIGH_BPS = 30_000; // 3.00x
+    uint16 private constant LOOTBOX_TICKET_VARIANCE_TIER3_LOW_BPS = 8_000; // 0.80x
+    uint16 private constant LOOTBOX_TICKET_VARIANCE_TIER3_HIGH_BPS = 14_000; // 1.40x
+    uint16 private constant LOOTBOX_TICKET_VARIANCE_TIER4_LOW_BPS = 4_510; // 0.451x
+    uint16 private constant LOOTBOX_TICKET_VARIANCE_TIER4_HIGH_BPS = 8_510; // 0.851x
+    uint16 private constant LOOTBOX_TICKET_VARIANCE_TIER5_LOW_BPS = 3_000; // 0.30x
+    uint16 private constant LOOTBOX_TICKET_VARIANCE_TIER5_HIGH_BPS = 6_000; // 0.60x
     /// @dev 0.001% of DGNRS pool per ETH for small tier
     uint16 private constant LOOTBOX_DGNRS_POOL_SMALL_PPM = 10;
     /// @dev 0.039% of DGNRS pool per ETH for medium tier
@@ -1130,7 +1143,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     // =========================================================================
 
     /// @dev Roll a target level for lootbox resolution.
-    ///      90% chance: 0-4 levels above base. 10% chance: 5-50 levels above base.
+    ///      80% chance: 0-4 levels above base. 20% chance: 5-50 levels above base.
     ///      Bit budget (consumed from `seed`):
     ///        - rangeRoll: bits[0..15]   via uint16(seed)         % 100   (bias 0.05%)
     ///        - near-level offset: bits[16..23] via uint8(seed >> 16) % 5 (bias 0.39%)
@@ -1143,12 +1156,12 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         uint256 seed
     ) private pure returns (uint24 targetLevel) {
         uint256 rangeRoll = uint16(seed) % 100;
-        if (rangeRoll < 10) {
-            // 10% chance: far future (5-50 levels ahead)
+        if (rangeRoll < 20) {
+            // 20% chance: far future (5-50 levels ahead)
             uint256 farOffset = uint16(seed >> 24) % 46;
             targetLevel = baseLevel + uint24(farOffset + 5);
         } else {
-            // 90% chance: near future (0-4 levels ahead)
+            // 80% chance: near future (0-4 levels ahead)
             uint256 nearOffset = uint8(seed >> 16) % 5;
             targetLevel = baseLevel + uint24(nearOffset);
         }
@@ -1241,9 +1254,12 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         }
 
         // Roll 1 settles at the caller-rolled `targetLevel` (from the primary seed).
+        // A target >= base + 5 is a far-future roll (near offsets are 0-4), which weights
+        // the ticket budget up.
         _settleLootboxRoll(
             player, index, amountFirst, amount, targetLevel, seed,
-            emitLootboxEvent, payColdBustConsolation, distressEth, totalPackedEth
+            emitLootboxEvent, payColdBustConsolation, distressEth, totalPackedEth,
+            targetLevel >= currentLevel + 5
         );
 
         // Roll 2 (split paths only) draws from the counter-tagged seed2 and RE-ROLLS its own
@@ -1254,7 +1270,8 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
             uint24 level2 = _rollTargetLevel(currentLevel, seed2);
             _settleLootboxRoll(
                 player, index, amountSecond, amount, level2, seed2,
-                emitLootboxEvent, payColdBustConsolation, distressEth, totalPackedEth
+                emitLootboxEvent, payColdBustConsolation, distressEth, totalPackedEth,
+                level2 >= currentLevel + 5
             );
         }
     }
@@ -1269,6 +1286,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     /// @param fullAmount The box's full ETH-equivalent amount (reward basis + event amount).
     /// @param rollLevel The target level this roll's tickets queue at.
     /// @param rollSeed This roll's seed (primary `seed` for roll 1, `seed2` for roll 2).
+    /// @param isFarFuture True when rollLevel is far-future (>= base + 5) — weights the ticket budget.
     function _settleLootboxRoll(
         address player,
         uint48 index,
@@ -1279,7 +1297,8 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         bool emitLootboxEvent,
         bool payColdBustConsolation,
         uint256 distressEth,
-        uint256 totalPackedEth
+        uint256 totalPackedEth,
+        bool isFarFuture
     ) private {
         if (rollAmount == 0) return;
         // priceForLevel returns a non-zero constant for every level, so targetPrice is
@@ -1287,7 +1306,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         uint256 targetPrice = PriceLookupLib.priceForLevel(rollLevel);
 
         (uint256 burnieOut, uint32 scaledTickets) =
-            _resolveLootboxRoll(player, rollAmount, fullAmount, targetPrice, rollSeed);
+            _resolveLootboxRoll(player, rollAmount, fullAmount, targetPrice, rollSeed, isFarFuture);
 
         // Floored to whole-BURNIE (1 BURNIE = 1 ether); sub-1-BURNIE residue evaporates.
         uint256 burnieAmount = (burnieOut / 1 ether) * 1 ether;
@@ -1881,12 +1900,14 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     }
 
     /// @dev Resolve a single lootbox roll to determine reward type.
-    ///      55% tickets, 10% DGNRS, 10% WWXRP, 25% BURNIE.
+    ///      45% tickets, 15% DGNRS, 15% WWXRP, 25% BURNIE.
     /// @param player Player receiving the reward
     /// @param amount Amount for this roll (may be half of total for split lootboxes)
     /// @param lootboxAmount Total lootbox amount (for events)
     /// @param targetPrice Price at target level
     /// @param seed Per-resolution 256-bit keccak seed (sliced inline; first invocation uses primary chunk, ETH-amount-second branch uses seed2 = EntropyLib.hash2(seed, 1))
+    /// @param isFarFuture True when this roll's target level is far-future (>= base + 5),
+    ///        weighting the ticket budget up (1.5x) vs near (0.875x).
     /// @return burnieOut BURNIE tokens to award
     /// @return ticketsOut Tickets to queue for future level
     /// @dev Bit budget (consumed from `seed`):
@@ -1898,7 +1919,8 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         uint256 amount,
         uint256 lootboxAmount,
         uint256 targetPrice,
-        uint256 seed
+        uint256 seed,
+        bool isFarFuture
     )
         private
         returns (uint256 burnieOut, uint32 ticketsOut)
@@ -1906,12 +1928,20 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         if (amount == 0) return (0, 0);
 
         uint256 roll = uint16(seed >> 40) % 20;
-        if (roll < 11) {
-            // 55% chance: tickets (returned as scaled × TICKET_SCALE)
+        if (roll < 9) {
+            // 45% chance: tickets (returned as scaled × TICKET_SCALE).
+            // Far-future ticket rolls capture 30% of the aggregate ticket budget (1.5x);
+            // near rolls take 0.875x — EV-neutral across the 20%/80% far/near split.
             uint256 ticketBudget = (amount * LOOTBOX_TICKET_ROLL_BPS) / 10_000;
+            ticketBudget =
+                (ticketBudget *
+                    (isFarFuture
+                        ? LOOTBOX_TICKET_FAR_BUDGET_BPS
+                        : LOOTBOX_TICKET_NEAR_BUDGET_BPS)) /
+                10_000;
             ticketsOut = _lootboxTicketCount(ticketBudget, targetPrice, seed);
-        } else if (roll < 13) {
-            // 10% chance: DGNRS tokens
+        } else if (roll < 12) {
+            // 15% chance: DGNRS tokens
             uint256 dgnrsAmount = _lootboxDgnrsReward(amount, seed);
             if (dgnrsAmount != 0) {
                 uint256 paid = _creditDgnrsReward(player, dgnrsAmount);
@@ -1924,7 +1954,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
                 }
             }
         } else if (roll < 15) {
-            // 10% chance: WWXRP tokens. Payout via `wwxrp.mintPrize`; observable
+            // 15% chance: WWXRP tokens. Payout via `wwxrp.mintPrize`; observable
             // off-chain through the WWXRP ERC-20 `Transfer` event (`0x0` -> player)
             // together with the same-tx lootbox context.
             wwxrp.mintPrize(player, LOOTBOX_WWXRP_PRIZE);
@@ -1947,9 +1977,15 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         }
     }
 
-    /// @dev Calculate scaled ticket count from budget with variance tiers.
-    ///      Returns count × TICKET_SCALE (100) for fractional ticket support.
-    ///      1% get 4.6x, 4% get 2.3x, 20% get 1.1x, 45% get 0.651x, 30% get 0.45x.
+    /// @dev Calculate scaled ticket count from budget with ranged variance tiers.
+    ///      Returns count × TICKET_SCALE (100) for fractional ticket support. The tier
+    ///      chances are unchanged (1% / 4% / 20% / 45% / 30%), but each tier draws a
+    ///      multiplier uniformly across a symmetric BPS band whose mean is the tier's
+    ///      prior static value, so the overall variance EV (~0.786x) is unchanged:
+    ///        1% -> 3.20x-6.00x, 4% -> 1.60x-3.00x, 20% -> 0.80x-1.40x,
+    ///        45% -> 0.451x-0.851x, 30% -> 0.300x-0.600x.
+    ///      The within-tier position reuses the SAME varianceRoll that selects the tier
+    ///      (uniform within the tier's chance window), so no extra entropy is drawn.
     ///      Bit budget (consumed from `seed`):
     ///        - varianceRoll: bits[96..119] via uint24(seed >> 96) % 10_000 (bias 0.045%)
     /// @param budgetWei ETH budget for tickets
@@ -1966,38 +2002,63 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         }
 
         uint256 varianceRoll = uint24(seed >> 96) % 10_000;
-        uint256 ticketBps;
+        uint256 c1 = LOOTBOX_TICKET_VARIANCE_TIER1_CHANCE_BPS;
+        uint256 c2 = c1 + LOOTBOX_TICKET_VARIANCE_TIER2_CHANCE_BPS;
+        uint256 c3 = c2 + LOOTBOX_TICKET_VARIANCE_TIER3_CHANCE_BPS;
+        uint256 c4 = c3 + LOOTBOX_TICKET_VARIANCE_TIER4_CHANCE_BPS;
 
-        if (varianceRoll < LOOTBOX_TICKET_VARIANCE_TIER1_CHANCE_BPS) {
-            ticketBps = LOOTBOX_TICKET_VARIANCE_TIER1_BPS;
-        } else if (
-            varianceRoll <
-            LOOTBOX_TICKET_VARIANCE_TIER1_CHANCE_BPS +
-                LOOTBOX_TICKET_VARIANCE_TIER2_CHANCE_BPS
-        ) {
-            ticketBps = LOOTBOX_TICKET_VARIANCE_TIER2_BPS;
-        } else if (
-            varianceRoll <
-            LOOTBOX_TICKET_VARIANCE_TIER1_CHANCE_BPS +
-                LOOTBOX_TICKET_VARIANCE_TIER2_CHANCE_BPS +
-                LOOTBOX_TICKET_VARIANCE_TIER3_CHANCE_BPS
-        ) {
-            ticketBps = LOOTBOX_TICKET_VARIANCE_TIER3_BPS;
-        } else if (
-            varianceRoll <
-            LOOTBOX_TICKET_VARIANCE_TIER1_CHANCE_BPS +
-                LOOTBOX_TICKET_VARIANCE_TIER2_CHANCE_BPS +
-                LOOTBOX_TICKET_VARIANCE_TIER3_CHANCE_BPS +
-                LOOTBOX_TICKET_VARIANCE_TIER4_CHANCE_BPS
-        ) {
-            ticketBps = LOOTBOX_TICKET_VARIANCE_TIER4_BPS;
+        uint256 ticketBps;
+        if (varianceRoll < c1) {
+            ticketBps = _ticketRangeBps(
+                varianceRoll, 0, c1,
+                LOOTBOX_TICKET_VARIANCE_TIER1_LOW_BPS,
+                LOOTBOX_TICKET_VARIANCE_TIER1_HIGH_BPS
+            );
+        } else if (varianceRoll < c2) {
+            ticketBps = _ticketRangeBps(
+                varianceRoll, c1, c2,
+                LOOTBOX_TICKET_VARIANCE_TIER2_LOW_BPS,
+                LOOTBOX_TICKET_VARIANCE_TIER2_HIGH_BPS
+            );
+        } else if (varianceRoll < c3) {
+            ticketBps = _ticketRangeBps(
+                varianceRoll, c2, c3,
+                LOOTBOX_TICKET_VARIANCE_TIER3_LOW_BPS,
+                LOOTBOX_TICKET_VARIANCE_TIER3_HIGH_BPS
+            );
+        } else if (varianceRoll < c4) {
+            ticketBps = _ticketRangeBps(
+                varianceRoll, c3, c4,
+                LOOTBOX_TICKET_VARIANCE_TIER4_LOW_BPS,
+                LOOTBOX_TICKET_VARIANCE_TIER4_HIGH_BPS
+            );
         } else {
-            ticketBps = LOOTBOX_TICKET_VARIANCE_TIER5_BPS;
+            ticketBps = _ticketRangeBps(
+                varianceRoll, c4, 10_000,
+                LOOTBOX_TICKET_VARIANCE_TIER5_LOW_BPS,
+                LOOTBOX_TICKET_VARIANCE_TIER5_HIGH_BPS
+            );
         }
 
         uint256 adjustedBudget = (budgetWei * ticketBps) / 10_000;
         uint256 base = (adjustedBudget * TICKET_SCALE) / priceWei;
         countScaled = uint32(base);
+    }
+
+    /// @dev Linearly map a uniform `roll` within [windowLow, windowHigh) onto the inclusive
+    ///      BPS range [bpsLow, bpsHigh]: the window's first index maps to bpsLow, its last to
+    ///      bpsHigh. A roll uniform over the window yields a uniform multiplier whose mean is
+    ///      the range midpoint (the tier's prior static value), so per-tier EV is preserved.
+    function _ticketRangeBps(
+        uint256 roll,
+        uint256 windowLow,
+        uint256 windowHigh,
+        uint256 bpsLow,
+        uint256 bpsHigh
+    ) private pure returns (uint256) {
+        uint256 span = windowHigh - windowLow - 1;
+        if (span == 0) return bpsLow;
+        return bpsLow + ((roll - windowLow) * (bpsHigh - bpsLow)) / span;
     }
 
     /// @dev Calculate DGNRS reward amount from the lootbox pool.

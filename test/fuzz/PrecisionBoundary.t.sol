@@ -208,8 +208,8 @@ contract PrecisionBoundaryTest is Test {
         uint256 boonBudget = (amount * boonBps) / 10_000;
         assertTrue(boonBudget > 0, "boonBudget must be > 0 at LOOTBOX_MIN");
 
-        // Ticket budget: 16100 BPS (161%)
-        uint256 ticketBps = 16100;
+        // Ticket budget: 19678 BPS (~196.78%)
+        uint256 ticketBps = 19678;
         uint256 ticketBudget = (amount * ticketBps) / 10_000;
         assertTrue(ticketBudget > 0, "ticketBudget must be > 0 at LOOTBOX_MIN");
 

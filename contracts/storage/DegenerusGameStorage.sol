@@ -1537,14 +1537,14 @@ abstract contract DegenerusGameStorage {
     // Activity score EV multiplier constants (ETH lootbox only)
     /// @dev 60% activity score = neutral 100% EV
     uint16 internal constant LOOTBOX_EV_ACTIVITY_NEUTRAL_BPS = 6_000;
-    /// @dev 255%+ activity score = maximum 135% EV
-    uint16 internal constant LOOTBOX_EV_ACTIVITY_MAX_BPS = 25_500;
-    /// @dev Minimum EV at 0% activity (80%)
-    uint16 internal constant LOOTBOX_EV_MIN_BPS = 8_000;
+    /// @dev 400%+ activity score = maximum 145% EV
+    uint16 internal constant LOOTBOX_EV_ACTIVITY_MAX_BPS = 40_000;
+    /// @dev Minimum EV at 0% activity (90%)
+    uint16 internal constant LOOTBOX_EV_MIN_BPS = 9_000;
     /// @dev Neutral EV at 60% activity (100%)
     uint16 internal constant LOOTBOX_EV_NEUTRAL_BPS = 10_000;
-    /// @dev Maximum EV at 255%+ activity (135%)
-    uint16 internal constant LOOTBOX_EV_MAX_BPS = 13_500;
+    /// @dev Maximum EV at 400%+ activity (145%)
+    uint16 internal constant LOOTBOX_EV_MAX_BPS = 14_500;
     /// @dev Maximum EV benefit cap per account per level (10 ETH scaled)
     uint256 internal constant LOOTBOX_EV_BENEFIT_CAP =
         10 ether;
@@ -1615,12 +1615,12 @@ abstract contract DegenerusGameStorage {
     /// @dev Calculates EV multiplier from a raw activity score.
     ///      Linear interpolation between thresholds.
     /// @param score The activity score in basis points
-    /// @return The EV multiplier in basis points (8000-13500)
+    /// @return The EV multiplier in basis points (9000-14500)
     function _lootboxEvMultiplierFromScore(
         uint256 score
     ) internal pure returns (uint256) {
         if (score <= LOOTBOX_EV_ACTIVITY_NEUTRAL_BPS) {
-            // Linear: 0% → 80% EV, 60% → 100% EV
+            // Linear: 0% → 90% EV, 60% → 100% EV
             return LOOTBOX_EV_MIN_BPS +
                 (score * (LOOTBOX_EV_NEUTRAL_BPS - LOOTBOX_EV_MIN_BPS)) /
                 LOOTBOX_EV_ACTIVITY_NEUTRAL_BPS;
@@ -1630,7 +1630,7 @@ abstract contract DegenerusGameStorage {
             return LOOTBOX_EV_MAX_BPS;
         }
 
-        // Linear: 60% → 100% EV, 255% → 135% EV
+        // Linear: 60% → 100% EV, 400% → 145% EV
         uint256 excess = score - LOOTBOX_EV_ACTIVITY_NEUTRAL_BPS;
         uint256 maxExcess = LOOTBOX_EV_ACTIVITY_MAX_BPS - LOOTBOX_EV_ACTIVITY_NEUTRAL_BPS;
         return

@@ -667,7 +667,7 @@ contract TicketLifecycleTest is DeployProtocol {
     // =========================================================================
 
     /// @notice Purchase multiple lootboxes with buyer3 (not used by _driveToLevel), finalize RNG,
-    ///         open all. With 90% near-roll probability per open and 55% ticket chance per roll,
+    ///         open all. With 80% near-roll probability per open and 45% ticket chance per roll,
     ///         multiple opens ensure at least some ticket output. After transitions, verify buyer3's
     ///         ticketsOwed at near-future levels are fully processed to zero.
     /// @dev SRC-04: Lootbox near roll queues to write key, processed by _prepareFutureTickets
@@ -676,7 +676,7 @@ contract TicketLifecycleTest is DeployProtocol {
 
         // Use buyer3 exclusively for lootbox (buyer1/buyer2 are used by _driveToLevel).
         // Purchase multiple lootboxes with substantial ETH to maximize ticket output.
-        // Each open has 55% chance of ticket roll * 90% near roll = ~49.5% near tickets per open.
+        // Each open has 45% chance of ticket roll * 80% near roll = ~36% near tickets per open.
         // Multiple purchases on same index/day for same buyer accumulate in lootboxEth.
         uint48[] memory indices = new uint48[](8);
         for (uint256 i = 0; i < 8; i++) {
