@@ -2,15 +2,16 @@
 gsd_state_version: 1.0
 milestone: v63.0
 milestone_name: Post-v62 Audit (Critical Invariants + Reward Game-Theory)
-status: executing
-last_updated: "2026-06-14T22:32:00.000Z"
+status: ready_to_plan
+last_updated: 2026-06-14T22:10:29.554Z
 last_activity: 2026-06-14 -- Phase 388 Plan 03 complete (FND-01 byte-freeze pin + FND-03 GREEN forge baseline 854/0/110); Phase 388 FOUNDATION DONE
 progress:
   total_phases: 17
   completed_phases: 1
   total_plans: 3
   completed_plans: 3
-  percent: 100
+  percent: 6
+stopped_at: Phase 388 complete (3/3) — ready to discuss Phase 389
 ---
 
 # Project State
@@ -20,7 +21,7 @@ progress:
 See: .planning/PROJECT.md (Current State section) + .planning/ROADMAP.md (v63.0 = top milestone, ▶ ACTIVE) + .planning/MILESTONES.md (v63.0 entry, top) + .planning/AUDIT-V63-PLAN.md (the full method doc) + .planning/REQUIREMENTS.md (the 58 REQ-IDs) + .planning/v63-surface-map/ (the 7 read-only dimension maps) + .planning/PAPER-REWARD-CHANGES-BRIEF.md (the reward design-intent anchor). v62.0 archive: .planning/milestones/v62.0-{ROADMAP,REQUIREMENTS,phases}; canonical v62 deliverable audit/FINDINGS-v62.0.md (chmod 444) + AUDIT-V62-REPORT.html. v63 baseline = v62.0 closure subject `77580320`; v63 subject = HEAD `a8b702a7` (byte-frozen at FOUNDATION 388). **NEXT = /gsd-plan-phase 388** (FOUNDATION — subject freeze + green baseline + slot recalibration).
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Current focus:** Phase 388 FOUNDATION ✅ COMPLETE — subject byte-frozen + pinned + GREEN baseline recorded; next = /gsd-plan-phase 389 PACKING-IDENTITY.
+**Current focus:** Phase 389 — packing identity
 
 ## ⚠ v50.0 + v51.0 AUDIT DEBT → FOLDED INTO v63.0 Phase 394 LEGACY-DEBT (USER 2026-06-14; was a separate v52 track)
 
@@ -35,12 +36,12 @@ See: .planning/PROJECT.md (Current State section) + .planning/ROADMAP.md (v63.0 
 ## Current Position
 
 Milestone: v63.0 — ▶ ACTIVE (started 2026-06-14). Post-v62 Audit (Critical Invariants + Reward Game-Theory).
-Phase: 388 (FOUNDATION — Subject Freeze & Green Baseline) — ✅ COMPLETE (3/3 plans)
-Plan: 3 of 3 ✅ (Plan 01 ✅ FND-02 layout key + canary, commits `2bcb4d3e`/`4e7223f5`; Plan 02 ✅ FND-04 — oracle-hole audit [9 tests: 7 EXERCISED, 1 game-side/gap-routed, 1 HOLE = legacy RedemptionInvariants 7-INV un-wired claim/stETH + stale slots → 390] + 45-lead 7-map intake ledger [389:9 390:7 391:5 392:20 393:4 394:0], commits `1e5fd2f7`/`ccf620f1`; Plan 03 ✅ FND-01 byte-freeze pin [`a8b702a7:contracts` tree `2934d3d8` + content sha256 `0c684378`, diff empty] + 77580320→a8b702a7 audit-delta [40 files +4322/−3489, per-family characterized] + FND-03 GREEN forge baseline **854/0/110, 0 deterministic failures, ZERO carried bucket-A reds** [v62's 3 VRF-path reds now pass 7/7] superseding the carried-red ledger; Hardhat 1105/121/5 corroborating [carried gameover-VRF-drive harness drift, no hard-floor breach: ACCT-08=gameOver-never-latches, RngStall=RngNotReady() guard]; commits `a631e02e`/`222d87dd`; deliverables `388-03-BASELINE-DIFF.md` + `test/REGRESSION-BASELINE-v63.md`)
-Status: Phase 388 FOUNDATION COMPLETE — ready to plan Phase 389
+Phase: 389
+Plan: Not started
+Status: Ready to plan
 Baseline = v62.0 closure subject `77580320`; subject = HEAD `a8b702a7` (byte-frozen at FOUNDATION 388; pin = `contracts` tree `2934d3d8987a09c5f073549a0cb499f6c5f28620`).
 Method = COUNCIL + CLAUDE both; posture = audit-only by default (a surfaced/adjudicated/skeptic-passed finding → gated USER-hand-review fix, else document-only).
-Last activity: 2026-06-14 -- Phase 388 Plan 03 complete (FND-01 + FND-03); Phase 388 FOUNDATION DONE
+Last activity: 2026-06-14
 Next: `/gsd-plan-phase 389` PACKING-IDENTITY (intake = the 9 FC-389-* candidates from the 388-02 ledger; assert `git diff a8b702a7 -- contracts/` empty + reproduce vs the GREEN `test/REGRESSION-BASELINE-v63.md` 854/0/110 counts). Routed to 390: the legacy RedemptionInvariants 7-INV oracle HOLE.
 
 ## ✅ SHIPPED Milestone Roadmap (v62.0 — phases 380-387 — SHIPPED 2026-06-09; baseline = v61.0 closure HEAD `b97a7a2e`; subject `c4d48008`; remediated `77580320`; closure signal `MILESTONE_V62_AT_HEAD_77580320b88e77438c893602a068548961824893`)
