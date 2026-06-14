@@ -335,8 +335,9 @@ interface IDegenerusGameLootboxModule {
         address player,
         uint256 amount,
         uint256 rngWord,
-        uint16 activityScore
-    ) external;
+        uint16 activityScore,
+        bool emitLootboxEvent
+    ) external payable;
 
     /// @notice Resolves an sDGNRS redemption's full lootbox leg (auth, funding-mix pull, pool
     ///         credit, 5-ETH chunked resolution) — delegatecall target of the Game's thin stub.
@@ -437,6 +438,42 @@ interface IDegenerusGameDegeneretteModule {
         address player,
         uint64[] calldata betIds
     ) external;
+
+    /// @notice Resolve a lootbox WWXRP roll as a single WWXRP Degenerette spin.
+    /// @param player The reward recipient.
+    /// @param stake The WWXRP bet amount staked for the one spin.
+    /// @param activityScore Frozen activity-score bps from the box's commitment.
+    /// @param seed Domain-separated spin seed (hash2-tagged off the box seed).
+    function resolveWwxrpSpinFromBox(
+        address player,
+        uint256 stake,
+        uint16 activityScore,
+        uint256 seed
+    ) external payable;
+
+    /// @notice Resolve a lootbox roll as three BURNIE Degenerette spins under one survival flip.
+    /// @param player The reward recipient.
+    /// @param totalStake The total BURNIE budget split across the three spins.
+    /// @param activityScore Frozen activity-score bps from the box's commitment.
+    /// @param seed Domain-separated spin seed (hash2-tagged off the box seed).
+    function resolveBurnieSpinsFromBox(
+        address player,
+        uint256 totalStake,
+        uint16 activityScore,
+        uint256 seed
+    ) external payable;
+
+    /// @notice Resolve a lootbox roll as one ETH Degenerette spin (claimable + recirc split).
+    /// @param player The reward recipient.
+    /// @param stake The ETH bet amount for the one spin (the ticket budget it replaces).
+    /// @param activityScore Frozen activity-score bps from the box's commitment.
+    /// @param seed Domain-separated spin seed (hash2-tagged off the box seed).
+    function resolveEthSpinFromBox(
+        address player,
+        uint256 stake,
+        uint16 activityScore,
+        uint256 seed
+    ) external payable;
 }
 
 /// @title IDegenerusGameBingoModule

@@ -149,14 +149,14 @@ describe("LootboxAutoResolveSilentColdBust — Phase 275 Wave 2 TST-LBX-AR-03", 
 
     it("[02b] both auto-resolve callers (resolveLootboxDirect + resolveRedemptionLootbox) pass `index = 0`, `emitLootboxEvent = false`, and `payColdBustConsolation = false`", function () {
       const source = fs.readFileSync(MODULE_SOURCE_PATH, "utf8");
-      // `_resolveLootboxCommon` positional args (11 — `day` was threaded out of the
-      // resolve helpers in 4cb9ccbf "lootbox event day cleanup"; the trailing
-      // `bool allowSplit` remains): player(1), index(2), amount(3),
+      // `_resolveLootboxCommon` positional args (13): player(1), index(2), amount(3),
       // targetLevel(4), currentLevel(5), seed(6), emitLootboxEvent(7),
       // payColdBustConsolation(8), distressEth(9), totalPackedEth(10),
-      // allowSplit(11). The auto-resolve callers pass `index = 0`,
-      // `emitLootboxEvent = false`, and `payColdBustConsolation = false`
-      // (silent on cold-bust).
+      // allowSplit(11), activityScore(12), allowEthSpin(13) — the last two thread the
+      // frozen score + the ETH-spin gate down to the Degenerette-spin rolls. The
+      // auto-resolve callers pass `index = 0`, `emitLootboxEvent = false`, and
+      // `payColdBustConsolation = false` (silent on cold-bust); allowEthSpin(13) differs
+      // by caller (false on the resolveLootboxDirect recirc, true on the redemption chunk).
       // The redemption auto-resolve path holds its `_resolveLootboxCommon` call in the
       // private `_resolveRedemptionChunk` helper (one per 5-ETH chunk).
       for (const fnName of ["function resolveLootboxDirect(", "function _resolveRedemptionChunk("]) {
@@ -187,10 +187,14 @@ describe("LootboxAutoResolveSilentColdBust — Phase 275 Wave 2 TST-LBX-AR-03", 
           .split(",")
           .map((a) => a.replace(/\/\/.*$/gm, "").trim())
           .filter((a) => a.length > 0);
-        expect(args.length, `${fnName}: _resolveLootboxCommon must receive 11 positional args (day-dropped allowSplit shape)`).to.equal(11);
+        expect(args.length, `${fnName}: _resolveLootboxCommon must receive 13 positional args (allowSplit + activityScore + allowEthSpin)`).to.equal(13);
         expect(args[1], `${fnName} must pass index = 0 (2nd positional)`).to.equal("0");
-        expect(args[6], `${fnName} must pass emitLootboxEvent = false (7th positional)`).to.equal("false");
+        // emitLootboxEvent (7th positional): resolveLootboxDirect now THREADS the param (so the
+        // box ETH-spin recirc can itemize its contents); the redemption chunk stays hardcoded false.
+        const expectedEmit = fnName.includes("resolveLootboxDirect") ? "emitLootboxEvent" : "false";
+        expect(args[6], `${fnName} must pass ${expectedEmit} (7th positional emitLootboxEvent)`).to.equal(expectedEmit);
         expect(args[7], `${fnName} must pass payColdBustConsolation = false (8th positional)`).to.equal("false");
+        expect(args[11], `${fnName} must pass activityScore (12th positional)`).to.equal("activityScore");
         expect(
           body.includes("type(uint48).max"),
           `${fnName} must NOT reference the retired type(uint48).max sentinel`

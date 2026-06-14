@@ -315,16 +315,19 @@ describe("EventSurfaceUnification — Phase 277 Wave 2 TST-EVT-UNI-01..06", func
         const args = splitTopLevelArgs(callArgs);
         expect(
           args.length,
-          `${fnSig} _resolveLootboxCommon must receive 11 positional args (day-dropped allowSplit shape)`
-        ).to.equal(11);
+          `${fnSig} _resolveLootboxCommon must receive 13 positional args (allowSplit + activityScore + allowEthSpin)`
+        ).to.equal(13);
         expect(
           args[1],
           `${fnSig} must pass index=0 as the 2nd positional arg (D-277-AR-INDEX-01)`
         ).to.equal("0");
+        // emitLootboxEvent (7th positional): resolveLootboxDirect now THREADS the param (so the
+        // box ETH-spin recirc can itemize its contents); the redemption chunk stays hardcoded false.
+        const expectedEmit = fnSig.includes("resolveLootboxDirect") ? "emitLootboxEvent" : "false";
         expect(
           args[6],
-          `${fnSig} must pass emitLootboxEvent=false as the 7th positional arg (D-277-AR-SILENT-01)`
-        ).to.equal("false");
+          `${fnSig} must pass ${expectedEmit} as the 7th positional emitLootboxEvent arg`
+        ).to.equal(expectedEmit);
         expect(
           args[7],
           `${fnSig} must pass payColdBustConsolation=false as the 8th positional arg (D-277-AR-SILENT-01)`
@@ -468,7 +471,7 @@ describe("EventSurfaceUnification — Phase 277 Wave 2 TST-EVT-UNI-01..06", func
   });
 
   describe("TST-EVT-UNI-05 — auto-resolve field-consistency, EVT-UNI-06 resolved form (auto-resolve is SILENT; consolation is payColdBustConsolation-gated)", function () {
-    it("[05a] the only `emit LootBoxOpened` site in _settleLootboxRoll is inside the `if (emitLootboxEvent)` gate", function () {
+    it("[05a] the only `emit LootBoxOpened` site in _settleLootboxRoll is inside the `if (emitLootboxEvent && !wasSpin)` gate", function () {
       const src = fs.readFileSync(LOOTBOX_SOURCE_PATH, "utf8");
       const body = extractBody(src, "function _settleLootboxRoll(");
       expect(body, "_settleLootboxRoll body not found").to.not.equal(null);
@@ -478,12 +481,13 @@ describe("EventSurfaceUnification — Phase 277 Wave 2 TST-EVT-UNI-01..06", func
         "_settleLootboxRoll must contain exactly one `emit LootBoxOpened` site"
       ).to.equal(1);
       const emitIdx = emitMatches[0].index;
-      // Walk back: the nearest preceding `if (emitLootboxEvent)` must enclose it.
+      // Walk back: the nearest preceding `if (emitLootboxEvent` gate must enclose it. The gate is
+      // now `if (emitLootboxEvent && !wasSpin)` — spin rolls emit a single BoxSpin instead.
       const preamble = body.slice(0, emitIdx);
-      const gateIdx = preamble.lastIndexOf("if (emitLootboxEvent)");
+      const gateIdx = preamble.lastIndexOf("if (emitLootboxEvent");
       expect(
         gateIdx,
-        "the LootBoxOpened emit must sit inside an `if (emitLootboxEvent)` gate"
+        "the LootBoxOpened emit must sit inside an `if (emitLootboxEvent && !wasSpin)` gate"
       ).to.be.greaterThan(-1);
     });
 

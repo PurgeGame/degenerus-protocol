@@ -173,7 +173,7 @@ contract KeeperResolveBetWorstCaseGas is DeployProtocol {
         game.degeneretteResolve(players, betIds);
         uint256 gasUsed = gasBefore - gasleft();
 
-        (uint256 spinResults, uint256 lootboxFlips) = _countResolveEffects();
+        (uint256 spinResults, uint256 lootboxFlips) = _countResolveEffects(betIds);
 
         // assert-is-worst-case precondition (2/2): all 10 spins ran and EVERY spin drove the lootbox
         // materialization branch (one PayoutCapped per spin whose payout flipped into the lootbox).
@@ -305,7 +305,7 @@ contract KeeperResolveBetWorstCaseGas is DeployProtocol {
         game.degeneretteResolve(players, betIds);
         uint256 gasUsed = gasBefore - gasleft();
 
-        (uint256 spinResults, uint256 lootboxFlips) = _countResolveEffects();
+        (uint256 spinResults, uint256 lootboxFlips) = _countResolveEffects(betIds);
 
         // assert-is-worst-case (2/2): the full 25-iteration spin loop ran (the structural gas driver),
         // and the WINNING spins all drove the cap-flip branch (each winning ETH spin's share exceeds
@@ -396,7 +396,7 @@ contract KeeperResolveBetWorstCaseGas is DeployProtocol {
         uint256 gasUsed = gasBefore - gasleft();
 
         // Non-vacuity: all three bets resolved (slots deleted) and all 45 spins ran.
-        (uint256 spinResults, ) = _countResolveEffects();
+        (uint256 spinResults, ) = _countResolveEffects(betIds);
         assertEq(spinResults, uint256(MAX_SPINS_ETH) + MAX_SPINS_BURNIE + MAX_SPINS_WWXRP,
             "mixed batch: all 45 spins resolved (ETH 25 + BURNIE 15 + WWXRP 5)");
         assertEq(_readBetPacked(player, ethBet), 0, "non-vacuity: ETH bet resolved");
@@ -648,13 +648,28 @@ contract KeeperResolveBetWorstCaseGas is DeployProtocol {
 
     /// @dev Count the on-chain resolve effects from the recorded logs: FullTicketResult emissions
     ///      (one per spin) and PayoutCapped emissions (one per spin that flipped into the lootbox).
-    function _countResolveEffects() internal returns (uint256 spinResults, uint256 lootboxFlips) {
+    function _countResolveEffects(uint64[] memory realBetIds)
+        internal
+        returns (uint256 spinResults, uint256 lootboxFlips)
+    {
         Vm.Log[] memory logs = vm.getRecordedLogs();
         for (uint256 i; i < logs.length; ++i) {
             if (logs[i].topics.length == 0) continue;
             bytes32 t0 = logs[i].topics[0];
-            if (t0 == FULL_TICKET_RESULT_SIG) ++spinResults;
-            else if (t0 == PAYOUT_CAPPED_SIG) ++lootboxFlips;
+            if (t0 == FULL_TICKET_RESULT_SIG) {
+                // Count only the bets under test. A resolved bet's lootbox-share recircs into
+                // a box that can itself roll a WWXRP/BURNIE Degenerette spin, which emits
+                // FullTicketResult too — under a synthetic seed-derived betId (the 2nd topic).
+                if (logs[i].topics.length > 2) {
+                    uint64 bid = uint64(uint256(logs[i].topics[2]));
+                    for (uint256 j; j < realBetIds.length; ++j) {
+                        if (bid == realBetIds[j]) {
+                            ++spinResults;
+                            break;
+                        }
+                    }
+                }
+            } else if (t0 == PAYOUT_CAPPED_SIG) ++lootboxFlips;
         }
     }
 }

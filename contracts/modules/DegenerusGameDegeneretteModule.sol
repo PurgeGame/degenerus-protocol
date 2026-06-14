@@ -123,6 +123,28 @@ contract DegenerusGameDegeneretteModule is
     /// @param bracket The level/10 bracket whose one halfpass is now claimed.
     event WwxrpJackpotWhalePass(address indexed player, uint256 indexed bracket);
 
+    /// @notice A lootbox roll resolved as a Degenerette spin (WWXRP / BURNIE×3 / ETH) — the single
+    ///         self-contained record of a box-spin outcome (replaces the per-spin FullTicketResult /
+    ///         FullTicketResolved for box rolls). Every reel + every output reward is here or, for
+    ///         the ETH recirc, in the fresh box's own (now-emitted) events.
+    /// @param player The reward recipient.
+    /// @param betId Self-classifying id: bit 63 = box-origin sentinel, bits 62-60 = spin type
+    ///        (0=WWXRP, 1=BURNIE, 2=ETH), bits 59-0 = seed entropy (unique per box-spin).
+    /// @param packedSpins Per-spin reels packed low→high, each spin = [playerTicket:32 |
+    ///        resultTicket:32 | score:8] (72 bits, spin 0 lowest); bits 216-223 = spin count;
+    ///        bit 224 = BURNIE survival flag (1 = the survival flip won; unused for WWXRP/ETH).
+    /// @param payout Total reward: BURNIE/WWXRP minted, or the ETH gross (= ethShare + the recirc).
+    /// @param ethShare ETH credited to the player's claimable winnings (0 for WWXRP/BURNIE). The
+    ///        recirculated remainder is derivable as `payout - ethShare` (ETH only); that recirc
+    ///        box emits its own LootBoxOpened / BoxSpin so its contents are itemized.
+    event BoxSpin(
+        address indexed player,
+        uint64 betId,
+        uint256 packedSpins,
+        uint256 payout,
+        uint256 ethShare
+    );
+
     // -------------------------------------------------------------------------
     // Internal Helpers
     // -------------------------------------------------------------------------
@@ -761,11 +783,14 @@ contract DegenerusGameDegeneretteModule is
         // betId (keccak'd with the index word) so each of a player's bets at the same index rolls
         // independently; the live lootbox-share is NOT a seed input. Never summed across betIds.
         if (betLootboxShare > 0) {
+            // Regular bet-win recirc stays silent (emitLootboxEvent=false) — the box-spin path
+            // passes true; this bet path keeps its prior behavior.
             _resolveLootboxDirect(
                 player,
                 betLootboxShare,
                 EntropyLib.hash2(rngWord, betId),
-                activityScore
+                activityScore,
+                false
             );
         }
 
@@ -887,11 +912,14 @@ contract DegenerusGameDegeneretteModule is
 
     /// @dev Delegates to the lootbox open module to resolve lootbox rewards directly.
     ///      Applies activity-score EV multiplier (80-135%) to match regular lootbox opens.
+    ///      `emitLootboxEvent` is true for the box ETH-spin recirc (so the recirculated box's
+    ///      contents are itemized for the UI) and false for the regular bet-win recirc.
     function _resolveLootboxDirect(
         address player,
         uint256 amount,
         uint256 rngWord,
-        uint16 activityScore
+        uint16 activityScore,
+        bool emitLootboxEvent
     ) private {
         (bool ok, bytes memory data) = ContractAddresses
             .GAME_LOOTBOX_MODULE
@@ -901,7 +929,8 @@ contract DegenerusGameDegeneretteModule is
                     player,
                     amount,
                     rngWord,
-                    activityScore
+                    activityScore,
+                    emitLootboxEvent
                 )
             );
         if (!ok) _revertDelegate(data);
@@ -1202,5 +1231,235 @@ contract DegenerusGameDegeneretteModule is
             player,
             reward
         );
+    }
+
+    // -------------------------------------------------------------------------
+    // Lootbox-triggered Degenerette spins
+    // -------------------------------------------------------------------------
+    // Three lootbox value rolls resolve as Degenerette spins instead of flat awards.
+    // Each is delegatecalled by the lootbox module in the Game's storage context; the
+    // `address(this) != GAME` guard rejects any direct call on the deployed module
+    // instance. Spin draws derive purely from the passed (hash2-tagged, freeze-safe)
+    // seed — no live state enters the seed, so the outcome is fixed at fulfillment.
+    // Each spin emits the same FullTicketResult / FullTicketResolved pair a regular bet
+    // does (synthetic betId = low 64 bits of the seed) so the off-chain indexer renders
+    // box spins exactly like ordinary spins, plus one Box* marker carrying the box-origin
+    // stake / split.
+
+    uint256 private constant BOX_BURNIE_SPINS = 3;
+    uint256 private constant BOX_SURVIVAL_TAG = 0x537572766976616c; // "Survival"
+    uint256 private constant BOX_RECIRC_TAG = 0x5265636972; // "Recir"
+
+    // Box-spin BoxSpin.betId header. Bit 63 is a box-origin sentinel (real bet nonces increment
+    // from 1, so they never reach it); bits 62-60 carry the spin type; bits 59-0 are seed entropy
+    // (a unique per-box-spin id). The off-chain UI reads `betId >> 63` (is-box-spin) and
+    // `(betId >> 60) & 7` (type) directly off the indexed topic.
+    uint256 private constant BOX_BETID_SENTINEL = uint256(1) << 63;
+    uint8 private constant BOX_SPIN_TYPE_WWXRP = 0;
+    uint8 private constant BOX_SPIN_TYPE_BURNIE = 1;
+    uint8 private constant BOX_SPIN_TYPE_ETH = 2;
+    // BoxSpin.packedSpins layout: spin i occupies bits [i*72 .. i*72+71] as
+    // [playerTicket:32 | resultTicket:32 | score:8]; bits 216-223 = spin count; bit 224 = survived.
+    uint256 private constant BOX_SPIN_COUNT_SHIFT = 216;
+    uint256 private constant BOX_SPIN_SURVIVED_SHIFT = 224;
+
+    function _boxBetId(uint256 seed, uint8 spinType) private pure returns (uint64) {
+        return uint64(
+            BOX_BETID_SENTINEL |
+            (uint256(spinType) << 60) |
+            (seed & ((uint256(1) << 60) - 1))
+        );
+    }
+
+    /// @dev Pack one spin's reel into `packedSpins` at slot `i` (72 bits): player ticket,
+    ///      result ticket, score. OR the returned word into the accumulator.
+    function _packSpin(
+        uint256 i,
+        uint32 playerTicket,
+        uint32 resultTicket,
+        uint8 score
+    ) private pure returns (uint256) {
+        return
+            (uint256(playerTicket) |
+                (uint256(resultTicket) << 32) |
+                (uint256(score) << 64)) << (i * 72);
+    }
+
+    /// @notice One WWXRP Degenerette spin staking a lootbox WWXRP roll (replaces the flat mint).
+    /// @dev Mirrors a regular WWXRP bet spin: high-value ROI bonus redistribution and the
+    ///      S==9 bracket whale-halfpass award (deduped one-per-10-level-bracket, shared with
+    ///      ordinary WWXRP jackpots). No pool / ETH touch — WWXRP is minted directly.
+    function resolveWwxrpSpinFromBox(
+        address player,
+        uint256 stake,
+        uint16 activityScore,
+        uint256 seed
+    ) external payable {
+        if (address(this) != ContractAddresses.GAME) revert E();
+        if (stake == 0 || stake > type(uint128).max) return;
+        uint64 betId = _boxBetId(seed, BOX_SPIN_TYPE_WWXRP);
+        uint128 betAmount = uint128(stake);
+        uint256 roiBps = _roiBpsFromScore(activityScore);
+        uint256 wwxrpHighRoi = _wwxrpHighValueRoi(activityScore);
+
+        uint32 playerTicket = DegenerusTraitUtils.packedTraitsDegenerette(seed);
+        uint32 resultTicket = DegenerusTraitUtils.packedTraitsDegenerette(
+            EntropyLib.hash2(seed, 1)
+        );
+        uint8 s = _score(playerTicket, resultTicket, uint8(seed & MASK_2));
+        uint256 payout = _fullTicketPayout(
+            _countGoldQuadrants(playerTicket),
+            s,
+            CURRENCY_WWXRP,
+            betAmount,
+            roiBps,
+            wwxrpHighRoi
+        );
+
+        if (payout != 0) wwxrp.mintPrize(player, payout);
+
+        // S==9 jackpot grants the bracket's one whale halfpass (identical to a regular
+        // WWXRP bet jackpot; the per-bracket flag is shared, so still one award per bracket).
+        if (s == 9 && betAmount >= MIN_BET_WWXRP) {
+            uint256 bracket = uint256(level) / 10;
+            if (!wwxrpJackpotWhalePassBracketAwarded[bracket]) {
+                whalePassClaims[player] += 1;
+                wwxrpJackpotWhalePassBracketAwarded[bracket] = true;
+                emit WwxrpJackpotWhalePass(player, bracket);
+            }
+        }
+
+        // One self-contained record: the single reel + WWXRP-minted payout (no ETH split).
+        emit BoxSpin(
+            player,
+            betId,
+            _packSpin(0, playerTicket, resultTicket, s) |
+                (uint256(1) << BOX_SPIN_COUNT_SHIFT),
+            payout,
+            0
+        );
+    }
+
+    /// @notice Three BURNIE Degenerette spins under one survival flip (mint-only, safe on any box).
+    /// @dev The total stake is split evenly across three spins; the summed payout then double-or-
+    ///      nothings on one fair flip (EV-neutral) before a single BURNIE mint. No pool / ETH /
+    ///      recirc touch, so this is solvency-safe on every box path including recirc.
+    function resolveBurnieSpinsFromBox(
+        address player,
+        uint256 totalStake,
+        uint16 activityScore,
+        uint256 seed
+    ) external payable {
+        if (address(this) != ContractAddresses.GAME) revert E();
+        if (totalStake == 0) return;
+        uint128 perSpin = uint128(totalStake / BOX_BURNIE_SPINS);
+        if (perSpin == 0) return;
+        uint64 betId = _boxBetId(seed, BOX_SPIN_TYPE_BURNIE);
+        uint256 roiBps = _roiBpsFromScore(activityScore);
+
+        uint256 total;
+        uint256 packedSpins;
+        for (uint256 i; i < BOX_BURNIE_SPINS; ) {
+            uint256 ss = EntropyLib.hash2(seed, i);
+            uint32 playerTicket = DegenerusTraitUtils.packedTraitsDegenerette(ss);
+            uint32 resultTicket = DegenerusTraitUtils.packedTraitsDegenerette(
+                EntropyLib.hash2(ss, 1)
+            );
+            uint8 s = _score(playerTicket, resultTicket, uint8(ss & MASK_2));
+            total += _fullTicketPayout(
+                _countGoldQuadrants(playerTicket),
+                s,
+                CURRENCY_BURNIE,
+                perSpin,
+                roiBps,
+                0
+            );
+            packedSpins |= _packSpin(i, playerTicket, resultTicket, s);
+            unchecked {
+                ++i;
+            }
+        }
+
+        // Survival flip on the summed payout (the seed bit never otherwise consumed by the spins).
+        bool survived = total != 0 &&
+            (EntropyLib.hash2(seed, BOX_SURVIVAL_TAG) & 1 == 1);
+        total = survived ? total * 2 : 0;
+        if (total != 0) coin.mintForGame(player, total);
+
+        // One self-contained record: all three reels + count + survival + the final BURNIE mint.
+        packedSpins |=
+            (uint256(BOX_BURNIE_SPINS) << BOX_SPIN_COUNT_SHIFT) |
+            (survived ? (uint256(1) << BOX_SPIN_SURVIVED_SHIFT) : 0);
+        emit BoxSpin(player, betId, packedSpins, total, 0);
+    }
+
+    /// @notice One ETH Degenerette spin staking a lootbox roll's ticket budget.
+    /// @dev Reuses the regular 3-tier ETH split (`_distributePayout`): the ETH share credits
+    ///      claimable and the lootbox share recircs into a fresh re-hashed box. This spin's
+    ///      pool/claimable writes are flushed to storage BEFORE the recirc so the recirc reads
+    ///      fresh state, and the recirc box is opened with the ETH-spin path disabled (the box
+    ///      module passes allowEthSpin=false on the recirc entry) so no ETH-spin can cascade.
+    function resolveEthSpinFromBox(
+        address player,
+        uint256 stake,
+        uint16 activityScore,
+        uint256 seed
+    ) external payable {
+        if (address(this) != ContractAddresses.GAME) revert E();
+        if (stake == 0 || stake > type(uint128).max) return;
+        uint64 betId = _boxBetId(seed, BOX_SPIN_TYPE_ETH);
+        uint128 betAmount = uint128(stake);
+        uint256 roiBps = _roiBpsFromScore(activityScore);
+
+        uint32 playerTicket = DegenerusTraitUtils.packedTraitsDegenerette(seed);
+        uint32 resultTicket = DegenerusTraitUtils.packedTraitsDegenerette(
+            EntropyLib.hash2(seed, 1)
+        );
+        uint8 s = _score(playerTicket, resultTicket, uint8(seed & MASK_2));
+        uint256 payout = _fullTicketPayout(
+            _countGoldQuadrants(playerTicket),
+            s,
+            CURRENCY_ETH,
+            betAmount,
+            roiBps,
+            0
+        );
+
+        uint256 packed = _packSpin(0, playerTicket, resultTicket, s) |
+            (uint256(1) << BOX_SPIN_COUNT_SHIFT);
+        if (payout == 0) {
+            emit BoxSpin(player, betId, packed, 0, 0);
+            return;
+        }
+
+        ResolveAcc memory acc;
+        uint256 lootboxShare = _distributePayout(player, CURRENCY_ETH, betAmount, payout, acc);
+        if (s >= 7) _awardDegeneretteDgnrs(player, betAmount, s);
+
+        // Flush THIS spin's pool/claimable BEFORE recirc so recirc reads fresh storage.
+        if (acc.ethClaimable != 0) _addClaimableEth(player, acc.ethClaimable);
+        if (acc.poolLoaded) {
+            if (acc.poolFrozen) {
+                _setPendingPools(acc.pendingNext, acc.pendingFuture);
+            } else {
+                _setFuturePrizePool(acc.runningFuture);
+            }
+        }
+
+        // One self-contained record: the reel + ETH gross + the claimable share. The
+        // recirculated remainder (payout - ethShare) is itemized by the recirc box's own events.
+        emit BoxSpin(player, betId, packed, payout, acc.ethClaimable);
+
+        // Recirc into a fresh re-hashed box; allowEthSpin=false there -> no ETH-spin cascade.
+        // emitLootboxEvent=true so the recirculated box's contents are itemized for the UI.
+        if (lootboxShare != 0) {
+            _resolveLootboxDirect(
+                player,
+                lootboxShare,
+                EntropyLib.hash2(seed, BOX_RECIRC_TAG),
+                activityScore,
+                true
+            );
+        }
     }
 }

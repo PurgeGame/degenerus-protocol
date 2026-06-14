@@ -658,7 +658,7 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
 
         uint256 ethCreditedOneCall = game.claimableWinningsOf(player) - preA;
         // Two betIds resolved -> two FullTicketResolved, two PayoutCapped (one spin each).
-        (uint256 resolvedCount, uint256 cappedCount) = _countResolvedAndCapped();
+        (uint256 resolvedCount, uint256 cappedCount) = _countResolvedAndCapped(bet1, bet2);
         assertEq(resolvedCount, 2, "two betIds resolved -> two FullTicketResolved (per-bet unit)");
         assertEq(cappedCount, 2,
             "per-betId: each bet's single spin capped independently -> two PayoutCapped");
@@ -1046,13 +1046,21 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
     }
 
     /// @dev Count FullTicketResolved + PayoutCapped from the recorded logs.
-    function _countResolvedAndCapped() internal returns (uint256 resolved, uint256 capped) {
+    function _countResolvedAndCapped(uint64 betA, uint64 betB)
+        internal
+        returns (uint256 resolved, uint256 capped)
+    {
         Vm.Log[] memory logs = vm.getRecordedLogs();
         for (uint256 i; i < logs.length; ++i) {
             if (logs[i].topics.length == 0) continue;
             bytes32 t0 = logs[i].topics[0];
-            if (t0 == FULL_TICKET_RESOLVED_SIG) ++resolved;
-            else if (t0 == PAYOUT_CAPPED_SIG) ++capped;
+            if (t0 == FULL_TICKET_RESOLVED_SIG) {
+                // betId is the 2nd indexed topic. Lootbox-triggered box spins (a recirc
+                // box's WWXRP/BURNIE spin) emit FullTicketResolved too, under a synthetic
+                // seed-derived betId; count only the two real player bets under test.
+                uint64 bid = uint64(uint256(logs[i].topics[2]));
+                if (bid == betA || bid == betB) ++resolved;
+            } else if (t0 == PAYOUT_CAPPED_SIG) ++capped;
         }
     }
 

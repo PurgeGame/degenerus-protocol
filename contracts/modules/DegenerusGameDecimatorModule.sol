@@ -674,7 +674,8 @@ contract DegenerusGameDecimatorModule is DegenerusGamePayoutUtils {
                     winner,
                     amount,
                     rngWord,
-                    evScore
+                    evScore,
+                    false
                 )
             );
         if (!ok) _revertDelegate(data);

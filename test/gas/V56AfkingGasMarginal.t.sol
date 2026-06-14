@@ -83,8 +83,11 @@ contract V56AfkingGasMarginal is DeployProtocol {
     //   lastAutoBoughtDay u24 @11 · lastOpenedDay u24 @14 · afkCoveredThroughDay u24 @17 · afkingStartDay u24 @20
     //   affiliateBase u32 @23 · pendingBurnie u32 @27 · subStreakLatch u8 @31
     uint256 private constant OFF_VALIDTHROUGH = 1; // uint24 validThroughLevel   (bytes 1..3)
+    uint256 private constant OFF_AMOUNT = 8;      // uint24 amount (milli-ETH)   (bytes 8..10)
     uint256 private constant OFF_LASTBOUGHT = 11; // uint24 lastAutoBoughtDay    (bytes 11..13)
     uint256 private constant OFF_LASTOPENED = 14; // uint24 lastOpenedDay        (bytes 14..16)
+    /// @dev milli-ETH packing scale (DegenerusGameStorage.LR_ETH_SCALE) — sub.amount * this = box wei.
+    uint256 private constant MILLI_ETH_SCALE = 1e15;
     uint256 private constant OFF_AFKCOVERED = 17; // uint24 afkCoveredThroughDay (bytes 17..19)
     uint256 private constant OFF_AFKINGSTART = 20; // uint24 afkingStartDay      (bytes 20..22)
     uint256 private constant OFF_AFFBASE = 23;    // uint32 affiliateBase        (bytes 23..26)
@@ -680,35 +683,85 @@ contract V56AfkingGasMarginal is DeployProtocol {
     ///         SLOAD each), the higher per-box marginal. This measures a mixed-day open and asserts both the
     ///         per-box marginal and the full OPEN_BATCH chunk at the mixed-day cost stay < the EIP cap.
     function testResidualR3MixedStampDayOpenBatch() public {
-        uint256 snap = vm.snapshotState();
-        // SHARED prefix (see testPerOpenMarginal): the mixed-day word is injected PER box by index
-        // (keccak(prefix,"wd",i)), so a shared prefix gives box i the same boon-roll seed in both runs even
-        // though its injected stamp DAY differs by one — the day only keys the cold rngWordByDay SLOAD (equal
-        // 2100 gas either way; lootboxDay is removed from the seed). The first N-1 boxes cancel exactly.
-        uint256 mixedN = _measureMixedDayOpenLegGas(N_HI, "r3mx_");
-        vm.revertToState(snap);
-        uint256 mixedNm1 = _measureMixedDayOpenLegGas(N_LO, "r3mx_");
-        require(mixedN > mixedNm1, "R3: the Nth mixed-day box materialized (non-vacuous)");
-        uint256 perBoxMixed = mixedN - mixedNm1;
+        // The per-box open is NO LONGER a uniform O(1) constant: a box can roll into a Degenerette
+        // spin (WWXRP / BURNIE-spins / ETH-spin), so the old diff-of-two-batches marginal (which
+        // assumed the first N-1 boxes cancel exactly) is unsound — box i's roll value depends on its
+        // stamp DAY, which differs by one between the N and N-1 runs. Measure the WORST CASE directly
+        // instead: FORCE every box in a full OPEN_BATCH to the heaviest path — the ETH-spin (roll 19),
+        // which credits ETH AND recircs a winning payout into a fresh re-hashed box (the deepest
+        // single-box work; the recirc cannot itself cascade an ETH-spin, allowEthSpin=false there).
+        // This is the binding worst-case OPEN_BATCH chunk for the fixed `_autoOpen(OPEN_BATCH)` crank.
+        (uint256 chunkGas, uint256 ethSpins) = _forceEthSpinOpenChunk("r3eth_");
 
-        // Compare to the uniform-day per-box marginal (the cache-hit baseline) — mixed-day is >= uniform.
-        vm.revertToState(snap);
-        uint256 uniN = _measureOpenLegGas(N_HI, "r3un_");
-        vm.revertToState(snap);
-        uint256 uniNm1 = _measureOpenLegGas(N_LO, "r3un_");
-        uint256 perBoxUniform = uniN > uniNm1 ? uniN - uniNm1 : 1;
+        emit log_named_uint("r3_forced_eth_spin_OPEN_BATCH_chunk_gas", chunkGas);
+        emit log_named_uint("r3_forced_eth_spin_count", ethSpins);
+        emit log_named_uint("r3_forced_eth_spin_per_box_gas", chunkGas / OPEN_BATCH);
 
-        uint256 fixedOpenOverhead = mixedN > perBoxMixed * N_HI ? mixedN - perBoxMixed * N_HI : 0;
-        uint256 mixedChunkAtBatch = fixedOpenOverhead + OPEN_BATCH * perBoxMixed;
+        // Non-vacuity: every box actually took the ETH-spin path (proves the worst-case forcing worked).
+        assertEq(ethSpins, OPEN_BATCH, "R3: every forced box rolled the ETH-spin (the heaviest outcome)");
+        // The full forced all-ETH-spin OPEN_BATCH chunk stays under the 16,777,216 EIP-7825 per-tx cap,
+        // so the fixed-OPEN_BATCH mintBurnie crank can never become un-submittable on a worst-case batch.
+        assertLt(chunkGas, EIP7825_TX_GAS_CAP, "R3: forced all-ETH-spin OPEN_BATCH chunk stays < 16,777,216");
+    }
 
-        emit log_named_uint("r3_per_box_mixed_day_gas", perBoxMixed);
-        emit log_named_uint("r3_per_box_uniform_day_gas", perBoxUniform);
-        emit log_named_uint("r3_mixed_day_OPEN_BATCH_chunk_gas", mixedChunkAtBatch);
+    /// @dev Build a full OPEN_BATCH of distinct-stamp-day afking boxes whose injected rngWordByDay is
+    ///      brute-forced so EVERY box rolls the ETH-spin (roll 19 — the heaviest box outcome), then
+    ///      bracket one openBoxes(OPEN_BATCH) call. Returns the measured chunk gas and the count of
+    ///      ETH-type BoxSpin events (must equal OPEN_BATCH — proves the forcing landed). The recirc box
+    ///      each winning ETH-spin opens is in the same chunk (allowEthSpin=false there, so its BoxSpins
+    ///      carry the WWXRP/BURNIE type — the ETH-type count is exactly the forced first-level spins).
+    function _forceEthSpinOpenChunk(string memory prefix)
+        internal
+        returns (uint256 chunkGas, uint256 ethSpins)
+    {
+        uint256 m = OPEN_BATCH; // 80 distinct-day boxes — the full fixed crank chunk
+        address[] memory subs = _setupFundedSubs(m, prefix, 5 ether, false);
+        _runStageNewDay(uint256(keccak256(abi.encodePacked(prefix, "w"))) | 1);
+        _settleClean(uint256(keccak256(abi.encodePacked(prefix, "clean"))) | 1);
+        require(!game.advanceDue(), "fixture: clean so the open chunk runs");
 
-        // R3: the mixed-day per-box marginal is a cheap uniform-O(1) resolve (just an extra cold SLOAD vs the
-        // cache hit — NO cold-ledger walk), and the full mixed-day OPEN_BATCH chunk stays < the EIP cap.
-        assertLt(perBoxMixed, 300_000, "R3: the mixed-day per-box marginal is a cheap O(1) resolve (cold rngWordByDay SLOAD, no ledger walk)");
-        assertLt(mixedChunkAtBatch, EIP7825_TX_GAS_CAP, "R3: the cache-defeating mixed-day OPEN_BATCH chunk stays < 16,777,216");
+        uint32 anchor = _lastBoughtDayOf(subs[0]) + uint32(m) + 1;
+        for (uint256 i; i < m; ++i) {
+            uint32 d = anchor - uint32(i);
+            _pokeLastBoughtDay(subs[i], d);
+            _pokeLastOpenedDay(subs[i], d - 1);
+            // The box seed = keccak256(rngWord, player, day, rawAmountWei); brute-force the (injected)
+            // rngWord so its roll value (bits[40..55] % 20) is 19 = the ETH-spin path.
+            uint256 amtWei = _subField(subs[i], OFF_AMOUNT, 24) * MILLI_ETH_SCALE;
+            _injectRngWordByDay(d, _findEthSpinWord(subs[i], d, amtWei, i));
+        }
+
+        vm.recordLogs();
+        vm.prank(makeAddr(string(abi.encodePacked(prefix, "op"))));
+        uint256 gasBefore = gasleft();
+        game.openBoxes(OPEN_BATCH);
+        chunkGas = gasBefore - gasleft();
+
+        // Count the first-level ETH spins: BoxSpin events whose betId encodes the ETH type
+        // (bits 62-60 == 2). Recirc boxes (allowEthSpin=false) may emit WWXRP/BURNIE BoxSpins,
+        // which carry a different type and are excluded here.
+        VmSafe.Log[] memory logs = vm.getRecordedLogs();
+        bytes32 boxSpinSig = keccak256("BoxSpin(address,uint64,uint256,uint256,uint256)");
+        for (uint256 i; i < logs.length; ++i) {
+            if (logs[i].topics.length != 0 && logs[i].topics[0] == boxSpinSig) {
+                (uint64 betId, , , ) = abi.decode(logs[i].data, (uint64, uint256, uint256, uint256));
+                if ((betId >> 60) & 7 == 2) ++ethSpins;
+            }
+        }
+    }
+
+    /// @dev Brute-force an injected stamp-day word so the afking box's roll lands on the ETH-spin (19).
+    function _findEthSpinWord(address player, uint32 day, uint256 amountWei, uint256 salt)
+        internal
+        pure
+        returns (uint256 w)
+    {
+        for (uint256 k; k < 8000; ++k) {
+            w = uint256(keccak256(abi.encodePacked("r3ethspin", salt, k))) | 1;
+            uint256 seed = uint256(keccak256(abi.encode(w, player, uint256(day), amountWei)));
+            if (uint16(seed >> 40) % 20 == 19) return w;
+        }
+        revert("no eth-spin word found");
     }
 
     // =========================================================================
