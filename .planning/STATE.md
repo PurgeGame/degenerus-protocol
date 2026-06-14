@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v63.0
 milestone_name: Post-v62 Audit (Critical Invariants + Reward Game-Theory)
 status: executing
-last_updated: "2026-06-14T21:21:00.000Z"
-last_activity: 2026-06-14 -- Phase 388 Plan 01 complete (FND-02 layout key + canary)
+last_updated: "2026-06-14T22:05:00.000Z"
+last_activity: 2026-06-14 -- Phase 388 Plan 02 complete (FND-04 oracle holes + 7-map intake ledger)
 progress:
   total_phases: 17
   completed_phases: 0
   total_plans: 3
-  completed_plans: 1
-  percent: 33
+  completed_plans: 2
+  percent: 67
 ---
 
 # Project State
@@ -36,12 +36,12 @@ See: .planning/PROJECT.md (Current State section) + .planning/ROADMAP.md (v63.0 
 
 Milestone: v63.0 — ▶ ACTIVE (started 2026-06-14). Post-v62 Audit (Critical Invariants + Reward Game-Theory).
 Phase: 388 (FOUNDATION — Subject Freeze & Green Baseline) — EXECUTING
-Plan: 2 of 3 (Plan 01 ✅ complete — FND-02 authoritative a8b702a7 layout key + per-harness reconciliation ledger + StorageFoundation tail-pack canary; commits `2bcb4d3e`, `4e7223f5`)
+Plan: 3 of 3 (Plan 01 ✅ FND-02 layout key + canary, commits `2bcb4d3e`/`4e7223f5`; Plan 02 ✅ FND-04 — oracle-hole audit [9 tests: 7 EXERCISED, 1 game-side/gap-routed, 1 HOLE = legacy RedemptionInvariants 7-INV un-wired claim/stETH + stale slots → 390] + 45-lead 7-map intake ledger [389:9 390:7 391:5 392:20 393:4 394:0], commits `1e5fd2f7`/`ccf620f1`)
 Status: Executing Phase 388
 Baseline = v62.0 closure subject `77580320`; subject = HEAD `a8b702a7` (byte-frozen at FOUNDATION 388).
 Method = COUNCIL + CLAUDE both; posture = audit-only by default (a surfaced/adjudicated/skeptic-passed finding → gated USER-hand-review fix, else document-only).
-Last activity: 2026-06-14 -- Phase 388 Plan 01 complete (FND-02)
-Next: `/gsd-execute-phase 388` Plan 02 (FND-04 — close verifier oracle holes + intake the 7 surface-maps into the routed finding-candidate ledger).
+Last activity: 2026-06-14 -- Phase 388 Plan 02 complete (FND-04)
+Next: `/gsd-execute-phase 388` Plan 03 (FND-03 — GREEN forge + JS regression baseline, 0 deterministic failures). Then `/gsd-plan-phase 389` PACKING-IDENTITY (intake = the 9 FC-389-* candidates).
 
 ## ✅ SHIPPED Milestone Roadmap (v62.0 — phases 380-387 — SHIPPED 2026-06-09; baseline = v61.0 closure HEAD `b97a7a2e`; subject `c4d48008`; remediated `77580320`; closure signal `MILESTONE_V62_AT_HEAD_77580320b88e77438c893602a068548961824893`)
 
