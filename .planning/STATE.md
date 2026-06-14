@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v63.0
 milestone_name: Post-v62 Audit (Critical Invariants + Reward Game-Theory)
 status: executing
-last_updated: "2026-06-14T21:00:14.622Z"
-last_activity: 2026-06-14 -- Phase 388 planning complete
+last_updated: "2026-06-14T21:21:00.000Z"
+last_activity: 2026-06-14 -- Phase 388 Plan 01 complete (FND-02 layout key + canary)
 progress:
   total_phases: 17
   completed_phases: 0
   total_plans: 3
-  completed_plans: 0
-  percent: 0
+  completed_plans: 1
+  percent: 33
 ---
 
 # Project State
@@ -20,7 +20,7 @@ progress:
 See: .planning/PROJECT.md (Current State section) + .planning/ROADMAP.md (v63.0 = top milestone, ▶ ACTIVE) + .planning/MILESTONES.md (v63.0 entry, top) + .planning/AUDIT-V63-PLAN.md (the full method doc) + .planning/REQUIREMENTS.md (the 58 REQ-IDs) + .planning/v63-surface-map/ (the 7 read-only dimension maps) + .planning/PAPER-REWARD-CHANGES-BRIEF.md (the reward design-intent anchor). v62.0 archive: .planning/milestones/v62.0-{ROADMAP,REQUIREMENTS,phases}; canonical v62 deliverable audit/FINDINGS-v62.0.md (chmod 444) + AUDIT-V62-REPORT.html. v63 baseline = v62.0 closure subject `77580320`; v63 subject = HEAD `a8b702a7` (byte-frozen at FOUNDATION 388). **NEXT = /gsd-plan-phase 388** (FOUNDATION — subject freeze + green baseline + slot recalibration).
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Current focus:** **v63.0 ACTIVE (started 2026-06-14)** — the formal audit of the ~60 commits (40 contract files, +4322/−3489) that landed since the v62.0 close `77580320` without an audit-milestone close (storage packing · BURNIE zero-start emission rework · gas-identity refactors · 4 new permissionless/keeper entrypoints · reward rebalances). Confirms solvency, RNG-freeze, storage-layout correctness, and the game-theory of the rebalanced rewards. Method (USER) = COUNCIL + CLAUDE BOTH (two independent finding nets per sweep); folded in the deferred debt (mutation campaign + capBucketCounts + v50/v51/v52). 8-agent read-only surface map = **0 HIGH on inspection** (preserves the claimablePool identity, sDGNRS backing identity, RNG-freeze spine, packing value-identities); MED design-intent leads are the prime sweep targets (top: BURNIE auto-rebuy-carry redemption-backing gap + VAULT seed-stake window-aging). 9 phases (388-396) / 58 reqs, foundation-first; audit-only posture by default.
+**Current focus:** Phase 388 — FOUNDATION — Subject Freeze & Green Baseline
 
 ## ⚠ v50.0 + v51.0 AUDIT DEBT → FOLDED INTO v63.0 Phase 394 LEGACY-DEBT (USER 2026-06-14; was a separate v52 track)
 
@@ -35,13 +35,13 @@ See: .planning/PROJECT.md (Current State section) + .planning/ROADMAP.md (v63.0 
 ## Current Position
 
 Milestone: v63.0 — ▶ ACTIVE (started 2026-06-14). Post-v62 Audit (Critical Invariants + Reward Game-Theory).
-Phase: Not started (388 FOUNDATION next).
-Plan: —
-Status: Ready to execute
+Phase: 388 (FOUNDATION — Subject Freeze & Green Baseline) — EXECUTING
+Plan: 2 of 3 (Plan 01 ✅ complete — FND-02 authoritative a8b702a7 layout key + per-harness reconciliation ledger + StorageFoundation tail-pack canary; commits `2bcb4d3e`, `4e7223f5`)
+Status: Executing Phase 388
 Baseline = v62.0 closure subject `77580320`; subject = HEAD `a8b702a7` (byte-frozen at FOUNDATION 388).
 Method = COUNCIL + CLAUDE both; posture = audit-only by default (a surfaced/adjudicated/skeptic-passed finding → gated USER-hand-review fix, else document-only).
-Last activity: 2026-06-14 -- Phase 388 planning complete
-Next: `/gsd-plan-phase 388` (FOUNDATION — subject freeze + green baseline + slot recalibration).
+Last activity: 2026-06-14 -- Phase 388 Plan 01 complete (FND-02)
+Next: `/gsd-execute-phase 388` Plan 02 (FND-04 — close verifier oracle holes + intake the 7 surface-maps into the routed finding-candidate ledger).
 
 ## ✅ SHIPPED Milestone Roadmap (v62.0 — phases 380-387 — SHIPPED 2026-06-09; baseline = v61.0 closure HEAD `b97a7a2e`; subject `c4d48008`; remediated `77580320`; closure signal `MILESTONE_V62_AT_HEAD_77580320b88e77438c893602a068548961824893`)
 

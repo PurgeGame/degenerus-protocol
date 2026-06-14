@@ -55,7 +55,7 @@ Goal: a byte-frozen subject `a8b702a7` + a green forge+JS baseline that is the a
 Type: FOUND (Claude-built) · Depends on: nothing (first v63 phase) · Requirements: FND-01..04
 Success criteria: (1) subject frozen + baseline diff recorded; (2) authoritative layout re-derived + slot-hardcoded harnesses recalibrated; (3) GREEN forge+JS baseline recorded; (4) verifier oracle holes closed + 7 maps intaken.
 Plans: 3 plans (2 parallel in wave 1 + the wave-2 green-baseline gate)
-- [ ] 388-01-PLAN.md — FND-02: re-derive the authoritative a8b702a7 layout (forge inspect) for the 4 reshuffled contracts + reconcile the slot-hardcoded harness pokes against the post-v62 packing shifts + extend the StorageFoundation tail-pack canary
+- [x] 388-01-PLAN.md — FND-02: re-derive the authoritative a8b702a7 layout (forge inspect) for the 4 reshuffled contracts + reconcile the slot-hardcoded harness pokes against the post-v62 packing shifts + extend the StorageFoundation tail-pack canary ✅ (commits `2bcb4d3e`, `4e7223f5`; layout key + per-harness ledger; canary 25/25; every moved-field poke confirmed correct, 0 re-derivations; subject byte-frozen)
 - [ ] 388-02-PLAN.md — FND-04: close the verifier oracle holes (each changed-surface invariant actually exercises its target) + intake all 7 surface-maps into the routed finding-candidate ledger (389-394)
 - [ ] 388-03-PLAN.md — FND-01 + FND-03: record the a8b702a7 byte-freeze pin + the 77580320 audit-delta surface + the GREEN forge baseline (REGRESSION-BASELINE-v63.md) superseding the carried-red ledger (wave 2; depends on 01+02)
 

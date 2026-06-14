@@ -17,7 +17,7 @@
 
 ### FND — Foundation (green baseline + subject freeze)
 - [ ] **FND-01**: The audit subject is byte-frozen at HEAD `a8b702a7`; the baseline diff vs `77580320` is recorded; `git diff` against the frozen SHA is empty throughout the sweep phases.
-- [ ] **FND-02**: The authoritative storage layout is re-derived via `forge inspect storageLayout` at `a8b702a7`; all slot-hardcoded harnesses are recalibrated against the packing-phase slot shifts (Game tail, sDGNRS, BurnieCoinflip, Admin).
+- [x] **FND-02**: The authoritative storage layout is re-derived via `forge inspect storageLayout` at `a8b702a7`; all slot-hardcoded harnesses are recalibrated against the packing-phase slot shifts (Game tail, sDGNRS, BurnieCoinflip, Admin). ✅ 388-01 (layout key + per-harness reconciliation ledger; every moved-field poke confirmed correct, 0 re-derivations; StorageFoundation tail-pack canary 25/25).
 - [ ] **FND-03**: A GREEN forge + JS regression baseline is established and recorded (supersedes any carried-red ledger); 0 deterministic failures.
 - [ ] **FND-04**: Verifier oracle holes are closed (each invariant test actually exercises its target code); the seven surface-maps are intaken as tracked finding-candidates routed to their sweep phases.
 
