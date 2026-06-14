@@ -20,6 +20,82 @@
 - ✅ **v60.0 Council-Findings Remediation + Pass-Stat Front-Load (v59 IMPL) + Maximal Cross-Model Pre-C4A Audit** — Phases 370-374 (folded) + the off-phase v60 audit (SHIPPED 2026-06-06 — single combined close; closure signal `MILESTONE_V60_AT_HEAD_2bee6d6faa2f66a9231d4b9bd01a53d09f40ff5e`; baseline `2b26ec91`, v59 IMPL `4577cfb6` → v60 fix HEAD `2bee6d6f`; the v59 batched diff [5 council fixes SALV/AFAFF/SOLV-01/SOLV-02/PRESALE + pass-stat WINDOW/STREAK/CENTURY] PLUS a full external-led maximal audit [round 1: 6 findings → 5 fixed + PRESALE wontfix; round 2: every-surface rotation — RNGRETRY/DECSTREAK/RNGREUSE/coinflip/GASCEIL 17.54M→6.37M/WHALE-01]; RNG-freeze + SOLVENCY-01 + the 16.7M ceiling all re-attested; 7 commits NOT pushed)
 - ✅ **v61.0 AfKing-as-Payment-Source + Cashout-Curse + Deity-Smite** — Phases 375-379 (SHIPPED 2026-06-07; closure signal `MILESTONE_V61_AT_HEAD_b97a7a2e56144114eece7d4ab7e597483bc14f89`; baseline = v60.0 closure HEAD `2bee6d6f`; contract subject FROZEN at the 376 IMPL `b97a7a2e` [byte-identical through close — 377 GAS Outcome-A, 378 TST test-only, 379 TERMINAL read-only]; afking-as-payment waterfall + claimable/afking slot-packing + cashout-curse + deity-smite; 378 proved TST-01..06 + SEC-01/02 [8/8] empirically + non-widening by name [forge 711/66/103, 0 new regression]; 379 3-lens genuine-parallel adversarial sweep = 0 contract-change-needed; `audit/FINDINGS-v61.0.md` chmod 444; NOT pushed)
 - ✅ **v62.0 Cross-Model-Led Blind-Spot Audit (Foundation-First) + Findings Remediation** — Phases 380-387 (SHIPPED 2026-06-09; closure signal `MILESTONE_V62_AT_HEAD_77580320b88e77438c893602a068548961824893`; baseline = v61.0 closure HEAD `b97a7a2e`; subject locked at `c4d48008`; **CROSS-MODEL-LED** — the Gemini+Codex council surfaced 3 actionable findings prior Claude-only audits missed [V62-01 MED-HIGH lootbox auto-open dead · V62-02 HIGH advanceGame gas-brick 20.26M, convergent · V62-03 HIGH sDGNRS redemption reentrancy] → ALL REMEDIATED + coinflip-freshness MED + 2 whale LOWs fixed; V62-04 monitor-by-design, V62-07 wontfix; remediation delta `c4d48008`→`77580320` [13 files +515/−508]; `audit/FINDINGS-v62.0.md` chmod 444; PUSHED; 38 reqs; full detail archived `.planning/milestones/v62.0-ROADMAP.md`)
+- ▶ **v63.0 Post-v62 Audit — Critical Invariants + Reward Game-Theory** — Phases 388-396 (ACTIVE, scoped 2026-06-14; baseline = v62.0 closure subject `77580320`; subject = HEAD `a8b702a7`; audits the ~60 unaudited post-v62 commits [40 files +4322/−3489: storage packing · BURNIE zero-start emission rework · gas-identity refactors · 4 new permissionless/keeper entrypoints · reward rebalances] + the folded deferred debt [full mutation campaign · capBucketCounts exactness · v50/v51/v52 consolidated]; method = **council + Claude both**; 58 reqs; 8-agent surface map = 0 HIGH on inspection)
+
+---
+
+## ▶ v63.0 Post-v62 Audit — Critical Invariants + Reward Game-Theory (ACTIVE — scoped 2026-06-14; baseline = v62.0 closure subject `77580320`; subject = HEAD `a8b702a7`; phases 388-396; method doc `.planning/AUDIT-V63-PLAN.md`; surface maps `.planning/v63-surface-map/`)
+
+> **Scope (USER-confirmed 2026-06-14):** the formal audit of the ~60 commits (40 contract files, +4322/−3489) that landed since the v62.0 close `77580320` **without** an audit-milestone close — storage packing, the BURNIE zero-start emission rework, gas-identity refactors, four new permissionless/keeper entrypoints, and the reward/economic rebalances — confirming **solvency, RNG-freeze, storage-layout correctness**, and the **game-theory of the rebalanced rewards**. Per USER, **fold in** the deferred audit debt (the long-pole full mutation campaign + capBucketCounts exactness + the v50/v51/v52 consolidated cross-model debt). Full scope + the 58 REQ-IDs: `.planning/REQUIREMENTS.md`.
+
+> **THE METHOD = COUNCIL + CLAUDE, BOTH (USER 2026-06-14).** Two independent finding nets in every sweep phase: (1) the Gemini+Codex **cross-model council** (`gemini`/`codex` CLIs, both confirmed installed) as primary finders, charged neutrally, adjudicated vs frozen `a8b702a7` — honoring the v62 premise that Claude-only audits miss what the council catches; (2) the **Claude Workflow net** — deep multi-agent adversarial Workflows per dimension (adversarial-verify · loop-until-dry · completeness-critic). Claude orchestrates, ADJUDICATES every lead vs frozen source, runs the skeptic gate before any CATASTROPHE/HIGH, and synthesizes. **A no-finding verdict for any sweep area requires BOTH nets on record.** git-status-verify any Write-capable subagent didn't mutate the source after each fan-out.
+
+> **Ordering = FOUNDATION-FIRST.** The packing phase moved storage slots, so the slot-hardcoded harnesses must be recalibrated FIRST; you can't adjudicate findings without a green oracle. Phase 388 (FOUNDATION) is Claude-built; 389-394 are dual-net sweeps; 395 (MUTATION) is a Claude-built harness; 396 is the terminal close.
+
+> **Posture — AUDIT-ONLY by default.** No NEW contract change planned; the subject is byte-frozen at `a8b702a7`. A council/Workflow-surfaced, adjudicated, skeptic-passed finding routes to a gated fix (USER hand-review, batched, never pre-approved); otherwise v63 ships document-only (`audit/FINDINGS-v63.0.md`). **Design-intent anchor:** the reward changes are documented in `.planning/PAPER-REWARD-CHANGES-BRIEF.md` (mostly EV-neutral redistributions; only the EV-multiplier lift + recycle-bonus relaxation change EV) → the ECON sweep VERIFIES the stated claims, it does not re-litigate intent.
+
+> **Phase numbering** continues from v62.0 (closed at Phase 387) — **v63.0 starts at Phase 388.** Not reset.
+
+### Phases
+
+- [ ] **Phase 388: FOUNDATION — Subject Freeze & Green Baseline (Claude-built)** - Byte-freeze the subject at `a8b702a7`; re-derive the authoritative layout via `forge inspect storageLayout` and recalibrate the slot-hardcoded harnesses against the packing-phase slot shifts (Game tail, sDGNRS, BurnieCoinflip, Admin); establish + record a GREEN forge+JS baseline; close verifier oracle holes; intake the 7 surface-maps as tracked finding-candidates. ⚠ guard the `hardhat compile --force` → ContractAddresses.sol regen landmine. FND-01..04.
+- [ ] **Phase 389: PACKING-IDENTITY — Storage Correctness + Gas Behavior-Identity (dual-net sweep)** - Storage-layout correctness and gas/refactor behavior-identity together (they share the packing/refactor surface): narrowed-width truncation bounds, masked RMW helpers preserve co-residents, identical cross-module shift/mask conventions, the two-window EV-cap eviction under cursor-lag, ABI getters preserved, no harness hardcoded-slot dependence, capBucketCounts exactness; delegatecall(msg.data) selector identity, hash1/hash2 preimage identity, nibble-table output-identity, trait-roll/_farFutureSeed equivalence. STORAGE-01..07, GASID-01..05.
+- [ ] **Phase 390: SOLVENCY-SPINE (dual-net sweep)** - The claimablePool / ETH-stETH / sDGNRS-backing accounting under the redemption rework: the claimablePool identity, pendingRedemptionEthValue backing, submit/claim conservation, the dust-forfeit self-credit backing, the redemption-claim liveness-window ordering, CEI/yield-surplus reentrancy, JackpotModule delta-fold completeness. SOLV-01..07.
+- [ ] **Phase 391: RNG-SPINE (dual-net sweep)** - VRF freshness/freeze backward-trace across all new/changed consumers: the decimator uint32 claim-seed entropy floor + distribution bias, box-spin one-shot replay safety, spin/resolveLootboxDirect seed domain-separation, the redemption day+1 pre-draw gate, in-window SLOAD enumeration over the repacked slots. RNG-01..06.
+- [ ] **Phase 392: ENTROPY-AND-ECON — Reward Game-Theory + BURNIE/Coinflip Rework (dual-net sweep)** - Reward game-theory and the BURNIE/coinflip subsystem (coupled via emission, survival flips, carry, seed stakes): EV-neutrality re-verification vs the PAPER brief, money-pump search across recycle/spin/recirc/carry/affiliate, scarce-asset invariants (whale-pass channel, sDGNRS backing), streak rate-bound; survive-before-mint invariant, total-emission conservation, auto-rebuy latch monotonicity, carry-claim + redemption BURNIE backing completeness, VAULT seed-stake window-aging, lossless packed round-trip. ECON-01..06, BURNIE-01..06.
+- [ ] **Phase 393: PERMISSIONLESS-COMPOSITION (dual-net sweep)** - The new permissionless/keeper entrypoints + adversarial composition across the boundaries the other sweeps touch: beneficiary-only credit, keeper box-bounty net-negative vs real gas + un-manufacturable, forced claim-timing, partial-balance redemption bursts, freeze/rngLocked/liveness/gameOver gates + reentrancy. ACCESS-01..05.
+- [ ] **Phase 394: LEGACY-DEBT — v50/v51/v52 Consolidated (dual-net sweep — folded)** - The cumulative deferred surface: v50 (whale-pass O(1) deferred-claim + AFSUB pass-gating + MINTDIV alignment), v51 (claimBingo color-completion/BingoModule + sDGNRS Pool.Reward rebalance + jackpot final-day Pool.Reward deletion); author `audit/FINDINGS-v50.0.md` + `audit/FINDINGS-v51.0.md`. LEGACY-01..06.
+- [ ] **Phase 395: MUTATION — Full Campaign (Claude-built harness — folded)** - The long-pole full mutation campaign over the frozen subject: fix-site functions + a comprehensive oracle (narrow per-file oracles produce false survivors), via_ir, CI/overnight pacing; measure + record the mutation score; triage survivors; kill or route each genuine survivor. MUT-01..03.
+- [ ] **Phase 396: TERMINAL — Synthesis + FINDINGS-v63.0 + Closure** - Consolidate + dedupe both finding nets; re-run the council on all Claude-REFUTED findings; skeptic gate before any CATASTROPHE/HIGH; adjudicate every lead vs the frozen subject; `audit/FINDINGS-v63.0.md` (chmod 444) + `AUDIT-V63-REPORT.html`; any CONFIRMED finding → gated fix (USER hand-review) else document-only; the atomic closure flip `MILESTONE_V63_AT_HEAD_<sha>`; re-attest all 58 reqs. TERM-01..03.
+
+### Phase Details (v63.0)
+
+**Phase 388: FOUNDATION — Subject Freeze & Green Baseline**
+Goal: a byte-frozen subject `a8b702a7` + a green forge+JS baseline that is the audit's safety floor and the oracle every lead is reproduced against.
+Type: FOUND (Claude-built) · Depends on: nothing (first v63 phase) · Requirements: FND-01..04
+Success criteria: (1) subject frozen + baseline diff recorded; (2) authoritative layout re-derived + slot-hardcoded harnesses recalibrated; (3) GREEN forge+JS baseline recorded; (4) verifier oracle holes closed + 7 maps intaken.
+
+**Phase 389: PACKING-IDENTITY**
+Goal: prove the packing + gas refactors are value-/behavior-identical (no silent truncation, no co-resident clobber, no slot collision, no diverging refactor).
+Type: SWEEP (dual-net) · Depends on: 388 · Requirements: STORAGE-01..07, GASID-01..05
+Success criteria: (1) every narrowing bounded; (2) masked RMW + cross-module conventions proven; (3) the two-window EV-cap eviction proven safe under the real cursor-lag bound; (4) selector/preimage/nibble-table/trait-roll identity proven; both nets on record.
+
+**Phase 390: SOLVENCY-SPINE**
+Goal: the claimablePool / sDGNRS backing identities hold across the redemption rework, dust-forfeit, CEI, and JackpotModule fold.
+Type: SWEEP (dual-net) · Depends on: 388 · Requirements: SOLV-01..07
+Success criteria: (1) claimablePool + sDGNRS backing identities re-attested; (2) submit/claim conservation + dust-forfeit backing proven; (3) the redemption-claim liveness-window ordering proven strand/double-credit-free; (4) CEI/yield-surplus reentrancy closed; both nets on record.
+
+**Phase 391: RNG-SPINE**
+Goal: every new/changed RNG consumer is freeze-safe (word unknown at commitment; in-window reads frozen; narrowing entropy adequate).
+Type: SWEEP (dual-net) · Depends on: 388 · Requirements: RNG-01..06
+Success criteria: (1) backward-trace clean for each consumer; (2) decimator uint32 entropy floor + unbiased distribution; (3) box-spin replay-safe + domain-separated; (4) redemption day+1 gate + in-window SLOAD enumeration clean; both nets on record.
+
+**Phase 392: ENTROPY-AND-ECON**
+Goal: the reward rebalances preserve their documented EV/neutrality + bounded accrual with no money-pump, and the BURNIE rework is conservative + correctly backed.
+Type: SWEEP (dual-net) · Depends on: 388 · Requirements: ECON-01..06, BURNIE-01..06
+Success criteria: (1) EV-neutrality re-verified vs the PAPER brief + the two EV changes match intent; (2) no positive-EV money pump; (3) scarce-asset invariants (whale-pass channel, sDGNRS backing) hold; (4) survive-before-mint + emission conservation + auto-rebuy/carry/VAULT-window accounting resolved (incl. the two top BURNIE leads); both nets on record.
+
+**Phase 393: PERMISSIONLESS-COMPOSITION**
+Goal: the new permissionless/keeper surface cannot grief, faucet, or steer, and composition across boundaries is safe.
+Type: SWEEP (dual-net) · Depends on: 388-392 (consumes their boundary results) · Requirements: ACCESS-01..05
+Success criteria: (1) permissionless claims beneficiary-only; (2) keeper bounty net-negative vs real gas + un-manufacturable; (3) forced claim-timing inert; (4) partial-balance burst solvency + all gates/reentrancy intact; both nets on record.
+
+**Phase 394: LEGACY-DEBT — v50/v51/v52 Consolidated (folded)**
+Goal: the long-deferred v50/v51 surface is swept and its FINDINGS deliverables authored.
+Type: SWEEP (dual-net) · Depends on: 388 · Requirements: LEGACY-01..06
+Success criteria: (1) v50 surface swept (whale-pass O(1) + AFSUB pass-gating + MINTDIV); (2) v51 surface swept (claimBingo/BingoModule + sDGNRS Pool.Reward rebalance + jackpot final-day deletion); (3) `FINDINGS-v50.0.md` + `FINDINGS-v51.0.md` authored; both nets on record.
+
+**Phase 395: MUTATION — Full Campaign (folded)**
+Goal: the full mutation campaign is run, scored, and its survivors triaged/killed/routed.
+Type: MUTATION (Claude-built harness) · Depends on: 388 (green baseline) · Requirements: MUT-01..03
+Success criteria: (1) campaign run over the frozen subject with fix-site + comprehensive oracle scope (via_ir, CI/overnight); (2) mutation score measured + recorded + survivors triaged; (3) each genuine survivor killed by a new test or routed to a finding.
+
+**Phase 396: TERMINAL — Synthesis + FINDINGS-v63.0 + Closure**
+Goal: a consolidated, adjudicated, dual-net-backed FINDINGS deliverable and the milestone closure flip.
+Type: TERMINAL · Depends on: 389-395 · Requirements: TERM-01..03
+Success criteria: (1) both nets consolidated + deduped + council-on-refuted re-run + skeptic gate cleared; (2) `audit/FINDINGS-v63.0.md` (chmod 444) + `AUDIT-V63-REPORT.html` produced, every lead adjudicated vs frozen subject, any CONFIRMED finding routed to a gated fix; (3) contracts re-frozen + `MILESTONE_V63_AT_HEAD_<sha>` + 58 reqs re-attested + milestone flipped.
+
+**Coverage:** 58/58 requirements mapped to exactly one phase (388: 4 · 389: 12 · 390: 7 · 391: 6 · 392: 12 · 393: 5 · 394: 6 · 395: 3 · 396: 3); 0 orphaned, 0 duplicated. Per-category: FND 4 · STORAGE 7 · GASID 5 · SOLV 7 · RNG 6 · ECON 6 · BURNIE 6 · ACCESS 5 · LEGACY 6 · MUT 3 · TERM 3.
 
 ---
 

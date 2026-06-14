@@ -1,28 +1,30 @@
 ---
 gsd_state_version: 1.0
-milestone: v62.0
-milestone_name: Blind-Spot-Driven Pre-C4A Audit
-status: milestone-complete
-last_updated: "2026-06-09T15:00:00.000Z"
-last_activity: 2026-06-09 -- v62.0 SHIPPED + CLOSED. The cross-model council found 3 actionable findings (V62-01 MED-HIGH lootbox auto-open dead, V62-02 HIGH advanceGame gas-brick 20.26M, V62-03 HIGH sDGNRS redemption reentrancy) -- ALL REMEDIATED under USER hand-review + coinflip-freshness MED + 2 whale LOWs fixed; V62-04 monitor-by-design, V62-07 WONTFIX. Remediation c4d48008->77580320 (13 files +515/-508). PUSHED to origin/main @ 77580320. Closure signal MILESTONE_V62_AT_HEAD_77580320b88e77438c893602a068548961824893. Archived to .planning/milestones/v62.0-{ROADMAP,REQUIREMENTS,phases}. NEXT = /gsd-new-milestone.
+milestone: v63.0
+milestone_name: Post-v62 Audit (Critical Invariants + Reward Game-Theory)
+status: planning
+last_updated: "2026-06-14T12:00:00.000Z"
+last_activity: 2026-06-14 -- v63.0 STARTED (Post-v62 Audit -- Critical Invariants + Reward Game-Theory). Scoped + roadmapped (phases 388-396, 58 reqs; method = council + Claude both; folded in the deferred debt: mutation campaign + capBucketCounts + v50/v51/v52). Baseline = v62.0 closure subject 77580320; subject = HEAD a8b702a7 (freeze at FOUNDATION). 8-agent read-only surface map = 0 HIGH on inspection; MED design-intent leads (BURNIE backing gaps top). NEXT = /gsd-plan-phase 388.
 progress:
-  total_phases: 13
-  completed_phases: 13
-  total_plans: 10
-  completed_plans: 10
-  percent: 100
+  total_phases: 9
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
 
 # Project State
 
 ## Project Reference
 
-See: .planning/PROJECT.md (Current State section) + .planning/ROADMAP.md (v62.0 = top milestone, ✅ SHIPPED) + .planning/MILESTONES.md (v62.0 entry, top) + .planning/AUDIT-V62-PLAN.md (the full STEP 0–5 plan). v62.0 archive: .planning/milestones/v62.0-ROADMAP.md + v62.0-REQUIREMENTS.md + v62.0-phases/; canonical audit deliverable audit/FINDINGS-v62.0.md (chmod 444) + AUDIT-V62-REPORT.html. Baseline was v61.0 closure HEAD `b97a7a2e`; audit subject `c4d48008`; remediated to `77580320` (PUSHED — `origin/main` @ `77580320`, in sync; the milestone-close doc commits ride on top, unpushed). **NEXT = /gsd-new-milestone** (scope the next cycle — candidate: the still-separate v50/v51 FINDINGS backfill + v52 consolidated cross-model audit; one pre-C4A thread = confirm the coinflip presale-flag MED backward-trace agrees with its `3444aed0` fix).
+See: .planning/PROJECT.md (Current State section) + .planning/ROADMAP.md (v63.0 = top milestone, ▶ ACTIVE) + .planning/MILESTONES.md (v63.0 entry, top) + .planning/AUDIT-V63-PLAN.md (the full method doc) + .planning/REQUIREMENTS.md (the 58 REQ-IDs) + .planning/v63-surface-map/ (the 7 read-only dimension maps) + .planning/PAPER-REWARD-CHANGES-BRIEF.md (the reward design-intent anchor). v62.0 archive: .planning/milestones/v62.0-{ROADMAP,REQUIREMENTS,phases}; canonical v62 deliverable audit/FINDINGS-v62.0.md (chmod 444) + AUDIT-V62-REPORT.html. v63 baseline = v62.0 closure subject `77580320`; v63 subject = HEAD `a8b702a7` (byte-frozen at FOUNDATION 388). **NEXT = /gsd-plan-phase 388** (FOUNDATION — subject freeze + green baseline + slot recalibration).
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Current focus:** Between milestones — **v62.0 SHIPPED + CLOSED 2026-06-09.** The Blind-Spot-Driven Pre-C4A Audit (CROSS-MODEL-LED, foundation-first) ran phases 380-387 and validated its defining premise: the convergent council (Gemini + Codex) surfaced **3 actionable findings prior Claude-only audits missed** — V62-01 MED-HIGH (permissionless lootbox auto-open dead for human/presale boxes), V62-02 HIGH (advanceGame gas-brick composition, reproduced cold 20,255,533 gas > 16.7M, convergent), V62-03 HIGH (sDGNRS redemption reentrancy breaking SOLVENCY-01). **ALL actionable findings REMEDIATED** under USER hand-review (V62-01 `32f0cb43` · V62-03 `c4a6c81c` · V62-02 `7e54f450` · coinflip-freshness MED `3444aed0` · V62-05/06 LOW `77580320`); V62-04 = monitor-by-design; V62-07 = WONTFIX (USER ruling 2026-06-09). +4 LOW + ~15 refuted/by-design. AUDIT FULLY CLOSED — every finding fixed / by-design / wontfix; PUSHED to origin. Closure signal `MILESTONE_V62_AT_HEAD_77580320b88e77438c893602a068548961824893`.
+**Current focus:** **v63.0 ACTIVE (started 2026-06-14)** — the formal audit of the ~60 commits (40 contract files, +4322/−3489) that landed since the v62.0 close `77580320` without an audit-milestone close (storage packing · BURNIE zero-start emission rework · gas-identity refactors · 4 new permissionless/keeper entrypoints · reward rebalances). Confirms solvency, RNG-freeze, storage-layout correctness, and the game-theory of the rebalanced rewards. Method (USER) = COUNCIL + CLAUDE BOTH (two independent finding nets per sweep); folded in the deferred debt (mutation campaign + capBucketCounts + v50/v51/v52). 8-agent read-only surface map = **0 HIGH on inspection** (preserves the claimablePool identity, sDGNRS backing identity, RNG-freeze spine, packing value-identities); MED design-intent leads are the prime sweep targets (top: BURNIE auto-rebuy-carry redemption-backing gap + VAULT seed-stake window-aging). 9 phases (388-396) / 58 reqs, foundation-first; audit-only posture by default.
 
-## ⚠ v50.0 + v51.0 AUDIT DEBT → v52 (carry forward — separate cross-model track)
+## ⚠ v50.0 + v51.0 AUDIT DEBT → FOLDED INTO v63.0 Phase 394 LEGACY-DEBT (USER 2026-06-14; was a separate v52 track)
+
+> **2026-06-14:** the USER folded this deferred debt INTO v63.0 — it is now Phase 394 (LEGACY-DEBT), reqs LEGACY-01..06, including authoring `audit/FINDINGS-v50.0.md` + `audit/FINDINGS-v51.0.md`. The detail below is retained as the charge spec for that phase.
 
 **v50.0** closed 2026-05-28 via USER-approved MINIMAL CLOSE without running Phase 338's internal adversarial sweep. **The v52 consolidated audit MUST cover the cumulative v50 + v51 contract surface**, specifically the v50 changes that never got the 3-skill sweep + delta-audit: the whale-pass O(1) deferred-claim path (`claimWhalePass` + box-open record), AFSUB pass-gating (`validThroughLevel` eviction/refresh + OPEN-E re-attest), and the MINTDIV index alignment — plus authoring `audit/FINDINGS-v50.0.md` (deferred). Mitigation already in place: WHALE-04 freeze proven at SPEC (334), TST-01/03 empirical coverage (336), pre-launch (no live funds), v50 contract history UNPUSHED. SWEEP-01/02/03 + BATCH-03-findings = the v52 charge.
 
@@ -32,10 +34,14 @@ See: .planning/PROJECT.md (Current State section) + .planning/ROADMAP.md (v62.0 
 
 ## Current Position
 
-Milestone: v62.0 — ✅ SHIPPED + CLOSED 2026-06-09 (between milestones; no active phase).
-Audit outcome: 3 actionable findings (V62-01 MED-HIGH, V62-02/03 HIGH) FOUND by the cross-model council + ALL REMEDIATED; coinflip-freshness MED + 2 whale LOWs fixed; V62-04 monitor-by-design; V62-07 WONTFIX; ~15 refuted/by-design. 0 OPEN findings.
-Closure: signal `MILESTONE_V62_AT_HEAD_77580320b88e77438c893602a068548961824893`; remediation `c4d48008`→`77580320` (13 files +515/−508); PUSHED (`origin/main` @ `77580320`). Archived to `.planning/milestones/v62.0-{ROADMAP,REQUIREMENTS,phases}`.
-Next: `/gsd-new-milestone` — scope the next cycle.
+Milestone: v63.0 — ▶ ACTIVE (started 2026-06-14). Post-v62 Audit (Critical Invariants + Reward Game-Theory).
+Phase: Not started (388 FOUNDATION next).
+Plan: —
+Status: Roadmap approved (9 phases 388-396, 58 reqs); planning docs ready to commit.
+Baseline = v62.0 closure subject `77580320`; subject = HEAD `a8b702a7` (byte-frozen at FOUNDATION 388).
+Method = COUNCIL + CLAUDE both; posture = audit-only by default (a surfaced/adjudicated/skeptic-passed finding → gated USER-hand-review fix, else document-only).
+Last activity: 2026-06-14 — Milestone v63.0 started; 8-agent surface map = 0 HIGH on inspection, MED leads routed to sweeps.
+Next: `/gsd-plan-phase 388` (FOUNDATION — subject freeze + green baseline + slot recalibration).
 
 ## ✅ SHIPPED Milestone Roadmap (v62.0 — phases 380-387 — SHIPPED 2026-06-09; baseline = v61.0 closure HEAD `b97a7a2e`; subject `c4d48008`; remediated `77580320`; closure signal `MILESTONE_V62_AT_HEAD_77580320b88e77438c893602a068548961824893`)
 
