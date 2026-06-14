@@ -1732,16 +1732,12 @@ contract DegenerusGameMintModule is
         uint256 totalClaimableUsed = initialClaimable > finalClaimable
             ? initialClaimable - finalClaimable
             : 0;
-        uint256 availableClaimable = finalClaimable > 1
-            ? finalClaimable - 1
-            : 0;
-        uint256 minTicketUnitCost = priceWei / (4 * TICKET_SCALE);
-        bool spentAllClaimable = totalClaimableUsed != 0 &&
-            (availableClaimable == 0 ||
-                (minTicketUnitCost != 0 &&
-                    availableClaimable < minTicketUnitCost));
 
-        if (spentAllClaimable && totalClaimableUsed >= priceWei * 3) {
+        // Recycle bonus: spending at least 3 whole tickets' worth of claimable
+        // winnings (priceWei is the per-whole-ticket cost) earns 10% of the
+        // recycled value back as BURNIE flip credit, regardless of any remaining
+        // claimable balance.
+        if (totalClaimableUsed >= priceWei * 3) {
             lootboxFlipCredit +=
                 (totalClaimableUsed * PRICE_COIN_UNIT * 10) /
                 (priceWei * 100);

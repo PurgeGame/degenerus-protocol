@@ -541,7 +541,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
 
     /// @notice Purchase any combination of tickets and loot boxes with ETH or claimable.
     /// @dev Main entry point for all ETH/claimable purchases. For BURNIE purchases, use purchaseCoin().
-    ///      Spending all claimable winnings earns a 10% bonus across the combined purchase.
+    ///      Recycling at least 3 tickets' worth of claimable winnings earns a 10% BURNIE flip-credit bonus.
     ///      Adds affiliate support for loot box purchases.
     ///      SECURITY: Blocked when RNG is locked.
     /// @param buyer Player address to receive purchases (address(0) = msg.sender).

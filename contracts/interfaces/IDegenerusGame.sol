@@ -356,7 +356,7 @@ interface IDegenerusGame {
 
     /// @notice Purchase tickets and loot boxes with ETH or claimable.
     /// @dev Main entry point for all ETH/claimable purchases.
-    ///      Spending all claimable winnings earns a 10% bonus across the combined purchase.
+    ///      Recycling at least 3 tickets' worth of claimable winnings earns a 10% BURNIE flip-credit bonus.
     /// @param buyer Player address to receive purchases (address(0) = msg.sender).
     /// @param ticketQuantity Number of tickets to purchase (0 to skip).
     /// @param lootBoxAmount ETH amount for loot boxes, minimum 0.01 ETH (0 to skip).
