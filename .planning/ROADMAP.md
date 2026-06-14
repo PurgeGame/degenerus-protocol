@@ -50,47 +50,51 @@
 
 ### Phase Details (v63.0)
 
-**Phase 388: FOUNDATION — Subject Freeze & Green Baseline**
+### Phase 388: FOUNDATION — Subject Freeze & Green Baseline
 Goal: a byte-frozen subject `a8b702a7` + a green forge+JS baseline that is the audit's safety floor and the oracle every lead is reproduced against.
 Type: FOUND (Claude-built) · Depends on: nothing (first v63 phase) · Requirements: FND-01..04
 Success criteria: (1) subject frozen + baseline diff recorded; (2) authoritative layout re-derived + slot-hardcoded harnesses recalibrated; (3) GREEN forge+JS baseline recorded; (4) verifier oracle holes closed + 7 maps intaken.
+Plans: 3 plans (2 parallel in wave 1 + the wave-2 green-baseline gate)
+- [ ] 388-01-PLAN.md — FND-02: re-derive the authoritative a8b702a7 layout (forge inspect) for the 4 reshuffled contracts + reconcile the slot-hardcoded harness pokes against the post-v62 packing shifts + extend the StorageFoundation tail-pack canary
+- [ ] 388-02-PLAN.md — FND-04: close the verifier oracle holes (each changed-surface invariant actually exercises its target) + intake all 7 surface-maps into the routed finding-candidate ledger (389-394)
+- [ ] 388-03-PLAN.md — FND-01 + FND-03: record the a8b702a7 byte-freeze pin + the 77580320 audit-delta surface + the GREEN forge baseline (REGRESSION-BASELINE-v63.md) superseding the carried-red ledger (wave 2; depends on 01+02)
 
-**Phase 389: PACKING-IDENTITY**
+### Phase 389: PACKING-IDENTITY
 Goal: prove the packing + gas refactors are value-/behavior-identical (no silent truncation, no co-resident clobber, no slot collision, no diverging refactor).
 Type: SWEEP (dual-net) · Depends on: 388 · Requirements: STORAGE-01..07, GASID-01..05
 Success criteria: (1) every narrowing bounded; (2) masked RMW + cross-module conventions proven; (3) the two-window EV-cap eviction proven safe under the real cursor-lag bound; (4) selector/preimage/nibble-table/trait-roll identity proven; both nets on record.
 
-**Phase 390: SOLVENCY-SPINE**
+### Phase 390: SOLVENCY-SPINE
 Goal: the claimablePool / sDGNRS backing identities hold across the redemption rework, dust-forfeit, CEI, and JackpotModule fold.
 Type: SWEEP (dual-net) · Depends on: 388 · Requirements: SOLV-01..07
 Success criteria: (1) claimablePool + sDGNRS backing identities re-attested; (2) submit/claim conservation + dust-forfeit backing proven; (3) the redemption-claim liveness-window ordering proven strand/double-credit-free; (4) CEI/yield-surplus reentrancy closed; both nets on record.
 
-**Phase 391: RNG-SPINE**
+### Phase 391: RNG-SPINE
 Goal: every new/changed RNG consumer is freeze-safe (word unknown at commitment; in-window reads frozen; narrowing entropy adequate).
 Type: SWEEP (dual-net) · Depends on: 388 · Requirements: RNG-01..06
 Success criteria: (1) backward-trace clean for each consumer; (2) decimator uint32 entropy floor + unbiased distribution; (3) box-spin replay-safe + domain-separated; (4) redemption day+1 gate + in-window SLOAD enumeration clean; both nets on record.
 
-**Phase 392: ENTROPY-AND-ECON**
+### Phase 392: ENTROPY-AND-ECON
 Goal: the reward rebalances preserve their documented EV/neutrality + bounded accrual with no money-pump, and the BURNIE rework is conservative + correctly backed.
 Type: SWEEP (dual-net) · Depends on: 388 · Requirements: ECON-01..06, BURNIE-01..06
 Success criteria: (1) EV-neutrality re-verified vs the PAPER brief + the two EV changes match intent; (2) no positive-EV money pump; (3) scarce-asset invariants (whale-pass channel, sDGNRS backing) hold; (4) survive-before-mint + emission conservation + auto-rebuy/carry/VAULT-window accounting resolved (incl. the two top BURNIE leads); both nets on record.
 
-**Phase 393: PERMISSIONLESS-COMPOSITION**
+### Phase 393: PERMISSIONLESS-COMPOSITION
 Goal: the new permissionless/keeper surface cannot grief, faucet, or steer, and composition across boundaries is safe.
 Type: SWEEP (dual-net) · Depends on: 388-392 (consumes their boundary results) · Requirements: ACCESS-01..05
 Success criteria: (1) permissionless claims beneficiary-only; (2) keeper bounty net-negative vs real gas + un-manufacturable; (3) forced claim-timing inert; (4) partial-balance burst solvency + all gates/reentrancy intact; both nets on record.
 
-**Phase 394: LEGACY-DEBT — v50/v51/v52 Consolidated (folded)**
+### Phase 394: LEGACY-DEBT — v50/v51/v52 Consolidated (folded)
 Goal: the long-deferred v50/v51 surface is swept and its FINDINGS deliverables authored.
 Type: SWEEP (dual-net) · Depends on: 388 · Requirements: LEGACY-01..06
 Success criteria: (1) v50 surface swept (whale-pass O(1) + AFSUB pass-gating + MINTDIV); (2) v51 surface swept (claimBingo/BingoModule + sDGNRS Pool.Reward rebalance + jackpot final-day deletion); (3) `FINDINGS-v50.0.md` + `FINDINGS-v51.0.md` authored; both nets on record.
 
-**Phase 395: MUTATION — Full Campaign (folded)**
+### Phase 395: MUTATION — Full Campaign (folded)
 Goal: the full mutation campaign is run, scored, and its survivors triaged/killed/routed.
 Type: MUTATION (Claude-built harness) · Depends on: 388 (green baseline) · Requirements: MUT-01..03
 Success criteria: (1) campaign run over the frozen subject with fix-site + comprehensive oracle scope (via_ir, CI/overnight); (2) mutation score measured + recorded + survivors triaged; (3) each genuine survivor killed by a new test or routed to a finding.
 
-**Phase 396: TERMINAL — Synthesis + FINDINGS-v63.0 + Closure**
+### Phase 396: TERMINAL — Synthesis + FINDINGS-v63.0 + Closure
 Goal: a consolidated, adjudicated, dual-net-backed FINDINGS deliverable and the milestone closure flip.
 Type: TERMINAL · Depends on: 389-395 · Requirements: TERM-01..03
 Success criteria: (1) both nets consolidated + deduped + council-on-refuted re-run + skeptic gate cleared; (2) `audit/FINDINGS-v63.0.md` (chmod 444) + `AUDIT-V63-REPORT.html` produced, every lead adjudicated vs frozen subject, any CONFIRMED finding routed to a gated fix; (3) contracts re-frozen + `MILESTONE_V63_AT_HEAD_<sha>` + 58 reqs re-attested + milestone flipped.
