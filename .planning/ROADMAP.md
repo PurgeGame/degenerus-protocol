@@ -64,6 +64,11 @@ Goal: prove the packing + gas refactors are value-/behavior-identical (no silent
 Type: SWEEP (dual-net) · Depends on: 388 · Requirements: STORAGE-01..07, GASID-01..05
 Success criteria: (1) every narrowing bounded; (2) masked RMW + cross-module conventions proven; (3) the two-window EV-cap eviction proven safe under the real cursor-lag bound; (4) selector/preimage/nibble-table/trait-roll identity proven; both nets on record.
 
+Plans: 2 plans (dual-net) in 2 waves
+Plans:
+- [ ] 389-01-PLAN.md — NET 1 (council): neutral STORAGE + GASID council prompts, council.sh fan-out to gemini+codex, raw capture under council/, byte-freeze verify (Wave 1)
+- [ ] 389-02-PLAN.md — NET 2 (Claude) + adjudication: independent adversarial net over the same surface, adjudicate STORAGE-01..07 + GASID-01..05 + FC-389-01..09 vs frozen a8b702a7, skeptic gate, 389-FINDINGS.md verdict table (Wave 2, depends 389-01)
+
 ### Phase 390: SOLVENCY-SPINE
 Goal: the claimablePool / sDGNRS backing identities hold across the redemption rework, dust-forfeit, CEI, and JackpotModule fold.
 Type: SWEEP (dual-net) · Depends on: 388 · Requirements: SOLV-01..07
