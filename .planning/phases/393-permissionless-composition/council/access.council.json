@@ -1,0 +1,7 @@
+{
+  "label": "access",
+  "schema": "",
+  "models": ["gemini"],
+  "skipped": ["codex"],
+  "outputs": {"gemini": ".planning/phases/393-permissionless-composition/council/access.gemini.txt"}
+}
