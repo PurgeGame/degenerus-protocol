@@ -189,6 +189,13 @@ Success criteria: (1) both nets consolidated + deduped + council-on-refuted re-r
 
 **Coverage:** 58/58 requirements mapped to exactly one phase (388: 4 · 389: 12 · 390: 7 · 391: 6 · 392: 12 · 393: 5 · 394: 6 · 395: 3 · 396: 3); 0 orphaned, 0 duplicated. Per-category: FND 4 · STORAGE 7 · GASID 5 · SOLV 7 · RNG 6 · ECON 6 · BURNIE 6 · ACCESS 5 · LEGACY 6 · MUT 3 · TERM 3.
 
+**Plans:** 3 plans
+
+Plans:
+- [ ] 396-01-PLAN.md — TERM-01: consolidate both nets (389-395) + council-on-refuted re-run (the 4 refuted HIGH candidates + pending 392/393/394 second-sources) + skeptic gate
+- [ ] 396-02-PLAN.md — TERM-02: author audit/FINDINGS-v63.0.md (chmod 444) + AUDIT-V63-REPORT.html; route BURNIE-04 to its gated fix
+- [ ] 396-03-PLAN.md — TERM-03: re-attest 58 reqs + re-confirm byte-freeze + emit MILESTONE_V63_AT_HEAD_<sha> + flip milestone to SHIPPED
+
 ---
 
 ## ✅ v62.0 Cross-Model-Led Blind-Spot Audit (Foundation-First) + Findings Remediation (SHIPPED 2026-06-09 — baseline = v61.0 closure HEAD `b97a7a2e`; subject locked at `c4d48008`; phases 380-387; planned audit-only → 3 actionable findings FOUND by the council + ALL REMEDIATED to `77580320`; closure signal `MILESTONE_V62_AT_HEAD_77580320b88e77438c893602a068548961824893`; canonical deliverable `audit/FINDINGS-v62.0.md` chmod 444; full archive `.planning/milestones/v62.0-ROADMAP.md`)
