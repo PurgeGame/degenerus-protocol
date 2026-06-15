@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v63.0
 milestone_name: Post-v62 Audit (Critical Invariants + Reward Game-Theory)
 status: executing
-last_updated: "2026-06-15T14:05:00.000Z"
-last_activity: 2026-06-15 -- Phase 396 Plan 01 (TERM-01) complete — consolidated ledger + council-on-refuted + skeptic gate
+last_updated: "2026-06-15T14:27:00.000Z"
+last_activity: 2026-06-15 -- Phase 396 Plan 02 (TERM-02) complete — audit/FINDINGS-v63.0.md (chmod 444) + AUDIT-V63-REPORT.html authored; BURNIE-04 routed to its gated fix (NOT applied)
 progress:
   total_phases: 17
   completed_phases: 8
   total_plans: 25
-  completed_plans: 23
-  percent: 49
+  completed_plans: 24
+  percent: 51
 ---
 
 # Project State
@@ -20,7 +20,7 @@ progress:
 See: .planning/PROJECT.md (Current State section) + .planning/ROADMAP.md (v63.0 = top milestone, ▶ ACTIVE) + .planning/MILESTONES.md (v63.0 entry, top) + .planning/AUDIT-V63-PLAN.md (the full method doc) + .planning/REQUIREMENTS.md (the 58 REQ-IDs) + .planning/v63-surface-map/ (the 7 read-only dimension maps) + .planning/PAPER-REWARD-CHANGES-BRIEF.md (the reward design-intent anchor). v62.0 archive: .planning/milestones/v62.0-{ROADMAP,REQUIREMENTS,phases}; canonical v62 deliverable audit/FINDINGS-v62.0.md (chmod 444) + AUDIT-V62-REPORT.html. v63 baseline = v62.0 closure subject `77580320`; v63 subject = HEAD `a8b702a7` (byte-frozen at FOUNDATION 388). **NEXT = /gsd-plan-phase 388** (FOUNDATION — subject freeze + green baseline + slot recalibration).
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Current focus:** Phase 396 — TERMINAL
+**Current focus:** Phase 396 — TERMINAL (Plan 02 done; NEXT = Plan 03 / TERM-03 closure flip)
 
 ## ⚠ v50.0 + v51.0 AUDIT DEBT → FOLDED INTO v63.0 Phase 394 LEGACY-DEBT (USER 2026-06-14; was a separate v52 track)
 

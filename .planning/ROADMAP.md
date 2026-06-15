@@ -198,7 +198,7 @@ Plans:
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 396-02-PLAN.md — TERM-02: author audit/FINDINGS-v63.0.md (chmod 444) + AUDIT-V63-REPORT.html; route BURNIE-04 to its gated fix
+- [x] 396-02-PLAN.md — TERM-02: author audit/FINDINGS-v63.0.md (chmod 444) + AUDIT-V63-REPORT.html; route BURNIE-04 to its gated fix ✅ COMPLETE 2026-06-15 (commits `937422f9` FINDINGS, `fabb2bdc` HTML report; **both v63.0 deliverables produced in the v62 house style** — `audit/FINDINGS-v63.0.md` [125 lines, chmod 444 immutable] consolidates every req + lead + final verdict vs frozen `a8b702a7`: **1 CONFIRMED MED = BURNIE-04** [sDGNRS auto-rebuy carry excluded from the redemption BURNIE backing → progressive under-credit; conservative, off the ETH spine; USER REAL GAP] **ROUTED to a gated post-audit USER-hand-reviewed fix [NOT applied]** with the aggregate-`burnieBase`-lane direction + submit-time carry decrement + D+1 contingency coin + `uint96` re-pack and the **5 pending USER decisions** carried verbatim [`392-BURNIE-04-FIX-DESIGN.md` §8]; BURNIE-05 USER BY-DESIGN/WONTFIX; R-389-01 LOW test-only + G-BPL-01 + K1-K6 KILLED-by-regression; **0 HIGH/CATASTROPHE** — the 4 council candidates ECON-04/ECON-06/SOLV-07/RNG-04 REFUTED + council-on-refuted re-confirmed; both nets on record per area; exec-summary disposition table + per-area table + durable-foundation [388 green oracle + 395 mutation net]]; `AUDIT-V63-REPORT.html` [201 lines, dark-themed, self-contained, content-consistent with the markdown]; subject byte-frozen throughout [git diff `a8b702a7` empty + tree `2934d3d8…` MATCH]; `audit/FINDINGS-v63.0.md` + `AUDIT-V63-REPORT.html` + `396-02-SUMMARY.md`)
 
 **Wave 3** *(blocked on Wave 2 completion)*
 

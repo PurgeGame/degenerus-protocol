@@ -92,7 +92,7 @@
 
 ### TERM — Terminal close
 - [ ] **TERM-01**: The two finding nets (council + Claude) are consolidated + deduped; the council is re-run on all Claude-REFUTED findings (the v60 LIFECYCLE lesson); the skeptic gate clears before any CATASTROPHE/HIGH.
-- [ ] **TERM-02**: Every lead and finding is adjudicated vs the frozen subject; `audit/FINDINGS-v63.0.md` (chmod 444) + `AUDIT-V63-REPORT.html` are produced; any CONFIRMED finding routes to a gated fix (USER hand-review) else document-only.
+- [x] **TERM-02**: Every lead and finding is adjudicated vs the frozen subject; `audit/FINDINGS-v63.0.md` (chmod 444) + `AUDIT-V63-REPORT.html` are produced; any CONFIRMED finding routes to a gated fix (USER hand-review) else document-only. ✅ 396-02 (commits `937422f9`/`fabb2bdc`; both deliverables in the FINDINGS-v62 house style; every req + lead carries its final verdict vs frozen `a8b702a7`; **1 CONFIRMED MED BURNIE-04 ROUTED to a gated USER-hand-review fix [NOT applied; 5 pending design decisions]**; BURNIE-05 WONTFIX; R-389-01 + 7 mutation gaps KILLED; ECON-04/ECON-06/SOLV-07/RNG-04 REFUTED + council-on-refuted re-confirmed; 0 HIGH/CATASTROPHE; `FINDINGS-v63.0.md` chmod 444; subject byte-frozen [tree `2934d3d8…`]).
 - [ ] **TERM-03**: Contracts are re-frozen; the closure signal `MILESTONE_V63_AT_HEAD_<sha>` is emitted; all requirements are re-attested; the milestone is flipped.
 
 ---
