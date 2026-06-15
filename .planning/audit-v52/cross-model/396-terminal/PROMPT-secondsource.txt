@@ -1,0 +1,59 @@
+You are reviewing a frozen Solidity smart-contract subject for defensive-engineering soundness. The
+subject is byte-frozen at git commit a8b702a7 (contracts tree-hash
+2934d3d8987a09c5f073549a0cb499f6c5f28620). READ-ONLY: read source with `git show a8b702a7:contracts/<path>`.
+Do NOT modify any file. Do NOT run hardhat. The contracts/ directory is the only source of truth.
+
+Several earlier review areas had only one external reviewer on record (a usage cap or a non-response left
+the second model absent). Provide the missing independent second opinion on the areas below. For each, state
+whether you can construct a concrete, source-anchored defect, or confirm the area is sound and cite the
+structural fact. Anchor every claim to file:line at a8b702a7. Be specific and adversarial.
+
+--- AREA A: sDGNRS redemption backing completeness (BURNIE-04) ---
+Examine the sDGNRS (StakedDegenerusStonk) redemption backing computation `burnieOwed` (around
+StakedDegenerusStonk.sol:1029-1031) which reads `burnieBal + previewClaimCoinflips(sDGNRS)`. The
+auto-rebuy carry (`autoRebuyCarry` in BurnieCoinflip) accrues every post-day-20 sDGNRS win but is NOT read
+by `previewClaimCoinflips` (= `_viewClaimableCoin` + `claimableStored`) nor by the `redeemBurnieShare`
+waterfall, and there is no sDGNRS-reachable carry-liquidation path. Question: is this an under-credit /
+strand of redeemers (a backing-completeness gap), is it conservative (no over-credit / no insolvency), and
+is BURNIE off the ETH/claimablePool solvency spine? Confirm or refute the under-credit conclusion.
+
+--- AREA B: VAULT coinflip seed window-aging (BURNIE-05) ---
+The constructor seeds days 1-20 coinflip stakes to BOTH the sDGNRS address and the VAULT address
+(BurnieCoinflip around :178-197). Only sDGNRS is auto-claimed/armed by `processCoinflipPayouts`
+(around :877-892). The VAULT acts only via `onlyVaultOwner coinClaimCoinflips` / `coinSetAutoRebuy`
+(DegenerusVault:630-646), neither at construction. The claim window clamp
+`if (start < minClaimableDay) start = minClaimableDay` with `minClaimableDay = latest - 30` (first claim)
+silently skips below-window days. Question: if the VAULT first claims at flipsClaimableDay >= 51, are seed
+days 1-20 silently forfeited? Is this a player-exploitable extraction or a self-inflicted operational risk
+(VAULT is protocol-owned)? Confirm or refute.
+
+--- AREA C: keeper box-bounty economics vs real gas (ACCESS-02) ---
+Two keeper bounties exist: decimator `BOX_BOUNTY_ETH_TARGET = 15e12` (DegenerusGameDecimatorModule:117) and
+redemption `= 24e12` (StakedDegenerusStonk:348). They are paid as illiquid BURNIE flip-credit (`creditFlip`
+→ `_addDailyFlip`). Question: at REAL prevailing gas (5-50 gwei, not a 0.5-gwei reference), and accounting
+for the flip-credit illiquidity (×0.5 survive-flip × ~0.59 peg ≈ 0.30·V realized), is the bounty net-
+negative for a keeper? Can a keeper MANUFACTURE settle-able boxes (Sybil), or does each require a real
+on-chain burn (decimator `e.claimed=1`; redemption `claim.ethValueOwed==0 → return false`)? Confirm net-
+negative + un-manufacturable, or find the positive-EV faucet.
+
+--- AREA D: partial-balance redemption-leg burst solvency (ACCESS-04) ---
+In a same-block burst of redemption claims, each leg recomputes a fresh `bal = address(this).balance`, sends
+`min(bal, legAmount)` ETH, and the GAME pulls the stETH remainder `amount - msg.value` via `transferFrom`
+(reverting fail-closed if short). `_pendingRedemptionEthValue` is released once before the legs; the
+MAX(175%) reservation is segregated at submit. Question: does Σ(legs) == Σ(rolled) == Σ(released) hold under
+an adversarial K-claim same-block drain, or can an earlier claim's ETH-drain strand a later claim or cause an
+under-pull? Confirm the conservation identity or find the strand.
+
+--- AREA E: claimBingo color-completion freeze + Pool.Reward (LEGACY-03 / LEGACY-04) ---
+Examine `claimBingo` in the BingoModule (3-tier color-completion, dedup, freeze) and the sDGNRS
+`Pool.Reward` split rebalance + the jackpot final-day Pool.Reward handling. Questions: (1) does claimBingo
+read trait/color state over a FROZEN population during the rng-window (no live-read that an in-window
+mutation could steer), with correct tier-precedence + per-player dedup + CEI? (2) does the Pool.Reward split
+conserve (sum == BPS_DENOM, every draw clamps), and is there any LIVE sDGNRS final-day Reward path, or is the
+old branch orphaned/vacuous? Confirm sound or find the defect.
+
+--- OUTPUT ---
+For each area A-E, output a short verdict block:
+  AREA <X>: <DEFECT | SOUND>
+  Mechanism / structural fact: <exact source-anchored reasoning, file:line at a8b702a7>
+If you find a genuine defect, make it unmistakable (prefix the line with "ACTIONABLE:").

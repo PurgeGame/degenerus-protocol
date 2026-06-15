@@ -1,0 +1,7 @@
+{
+  "label": "secondsource",
+  "schema": "",
+  "models": ["gemini", "codex"],
+  "skipped": [],
+  "outputs": {"gemini": ".planning/audit-v52/cross-model/396-terminal/council/secondsource.gemini.txt", "codex": ".planning/audit-v52/cross-model/396-terminal/council/secondsource.codex.txt"}
+}

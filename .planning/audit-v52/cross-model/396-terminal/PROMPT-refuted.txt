@@ -1,0 +1,65 @@
+You are reviewing a frozen Solidity smart-contract subject for defensive-engineering soundness. The
+subject is byte-frozen at git commit a8b702a7 (contracts tree-hash
+2934d3d8987a09c5f073549a0cb499f6c5f28620). READ-ONLY: read source with `git show a8b702a7:contracts/<path>`.
+Do NOT modify any file. Do NOT run hardhat. The contracts/ directory is the only source of truth.
+
+Four specific mechanisms below were each evaluated by an earlier reviewer who concluded they are SAFE
+(not a defect). Your task is to independently re-examine each one and find where that safety conclusion
+is WRONG, if it is. For each, state whether you can construct a concrete, source-anchored mechanism that
+breaks the stated safety claim. Anchor every claim to a file:line at a8b702a7. If you cannot break it,
+say so plainly and cite the structural fact that prevents the break. Be specific and adversarial; vague
+"could be risky" notes are not useful — give the exact call path and the exact storage/arithmetic step
+that fails.
+
+--- CANDIDATE 1: reward money-pump (ECON-04) ---
+Claim said SAFE: there is NO closed positive-expected-value money pump across the recycle / box-spin /
+recirculation / coinflip-carry / affiliate paths. The reviewer's reasoning: the 10% mint-recycle kicker
+(`coinflip.creditFlip`, DegenerusGameMintModule around the `>= priceWei * 3` gate, → `_addDailyFlip` in
+BurnieCoinflip) is ILLIQUID BURNIE flip-credit that must survive a 50/50 flip (×0.5) and a peg-vs-realizable
+discount (~0.59), so it realizes ~0.030·V not 0.10·V; the lootbox at neutral EV returns its own sub-unity
+reward components (40% non-ETH: BURNIE/WWXRP/finite DGNRS pool); the value-in is REAL won claimable
+(positive-variance must occur first); the presale 25% box-credit is box-spend-restricted + presale-windowed;
+the ETH-spin recirculation is depth 1 (`allowEthSpin=false`); the EV uplift is capped at 10 ETH per
+(player,level). FIND THE BREAK: is there any composition where liquid value-out > value-in per iteration?
+
+--- CANDIDATE 2: quest-streak pump (ECON-06) ---
+Claim said SAFE: the quest-streak input (uncapped, halved to *50/day) is rate-bounded (≤3/day) and
+decay-gated, and the afking↔manual same-day double-channel does NOT exist. The reviewer's reasoning:
+`completionMask` (per-day, per-slot) blocks a same-slot double-count; the afking branch makes slot-0
+streak-NEUTRAL (`if (!afking)` skip) specifically to prevent the double-channel; `_effectiveQuestStreak`
+reads the manual OR the afking compute MUTUALLY-EXCLUSIVELY (never summed); the decay anchor `lastActiveDay`
+updates only on slot-0; and every downstream ceiling is FIXED (40,000 EV / 30,500 ROI / streak-clamp-100,
+all < the 65,534 hard cap) so a faster ramp only changes time-to-ceiling, never raises a ceiling. FIND THE
+BREAK: is there any sequence (across day boundaries, afking toggles, multiple slots) that counts a streak
+increment twice in one day, OR that raises a downstream ceiling rather than just the ramp speed?
+
+--- CANDIDATE 3: whalePassCost double-credit (SOLV-07) ---
+Claim said SAFE: the JackpotModule daily delta-fold does NOT credit a pool twice for the whale-pass cost.
+The reviewer's reasoning, in `_processSoloBucketWinner` / `_handleSoloBucketWinner` / `payDailyJackpot`
+(DegenerusGameJackpotModule, roughly lines 1183-1281 and 442-452): claimablePool gets only
+`ethAmount = perWinner - whalePassCost`; futurePrizePool gets `whalePassCost` exactly ONCE via
+`_addFuturePrizePool`; the whale pass itself is a NON-ETH tickets claim (no claimablePool, no ETH);
+`_handleSoloBucketWinner` adds `wpSpent` into `paidDelta` so `paidDailyEth` INCLUDES whalePassCost,
+therefore `unpaidDailyEth = dailyEthBudget - paidDailyEth` EXCLUDES it and the non-final-day
+`currentPrizePool -= paidDailyEth` removes it. FIND THE BREAK: is `whalePassCost` ever added to an
+obligation pool twice, or is `paidDailyEth` actually ETH-only (so the cost is double-counted)? Trace the
+exact wei into and out of claimablePool, futurePrizePool, and currentPrizePool.
+
+--- CANDIDATE 4: cross-round decimator seed collision (RNG-04) ---
+Claim said SAFE (benign, not a manipulability/freeze break): the decimator claim narrows the VRF word to
+uint32 (`round.rngWord = uint32(rngWord)` in DegenerusGameDecimatorModule) and the direct-lootbox claim
+seed is `hash2(uint32_word, uint160(player))` (DegenerusGameLootboxModule resolveLootboxDirect). A single
+player winning at TWO decimator levels where `uint32(VRF_L2) == uint32(VRF_L)` gets the identical claim seed.
+The reviewer's reasoning that this is benign: both VRF words are fixed at each level's resolution AFTER the
+player's burn commitment (no player control / no grindability); the reward MAGNITUDE scales by each claim's
+own independent `amount` (the seed only sets the tier/outcome TYPE); the lootbox tier is BURNIE/ticket-
+adjacent, OFF the ETH/claimablePool solvency spine; collision probability ~ K^2/2^33 for K levels. FIND THE
+BREAK: is there ANY player-controllable input into either word at burn time, OR any value-extraction (not
+just an identical-distribution draw) that the collision enables, OR any on-chain-readable state that lets a
+player predict/steer the collision before committing?
+
+--- OUTPUT ---
+For each of the four candidates, output a short verdict block:
+  CANDIDATE <n>: <BREAKS | HOLDS>
+  Mechanism / structural fact: <the exact source-anchored reasoning, file:line at a8b702a7>
+If you find a genuine break in any candidate, make it unmistakable (prefix the line with "ACTIONABLE:").

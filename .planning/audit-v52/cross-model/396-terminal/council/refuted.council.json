@@ -1,0 +1,7 @@
+{
+  "label": "refuted",
+  "schema": "",
+  "models": ["gemini", "codex"],
+  "skipped": [],
+  "outputs": {"gemini": ".planning/audit-v52/cross-model/396-terminal/council/refuted.gemini.txt", "codex": ".planning/audit-v52/cross-model/396-terminal/council/refuted.codex.txt"}
+}
