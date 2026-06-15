@@ -2,16 +2,15 @@
 gsd_state_version: 1.0
 milestone: v63.0
 milestone_name: Post-v62 Audit (Critical Invariants + Reward Game-Theory)
-status: ready_to_plan
-last_updated: 2026-06-15T07:46:01.342Z
-last_activity: 2026-06-15 -- 394-04 complete (v51 dual-net adjudication; 0 CONFIRMED; Pool.Reward final-day premise VACUOUS; audit/FINDINGS-v51.0.md authored; 394-FINDINGS.md ties v50+v51; Phase 394 COMPLETE)
+status: executing
+last_updated: "2026-06-15T07:57:59.897Z"
+last_activity: 2026-06-15 -- Phase 395 planning complete
 progress:
   total_phases: 17
   completed_phases: 7
-  total_plans: 19
+  total_plans: 22
   completed_plans: 19
   percent: 41
-stopped_at: Phase 394 complete (4/4) — ready to discuss Phase 395
 ---
 
 # Project State
@@ -38,10 +37,10 @@ See: .planning/PROJECT.md (Current State section) + .planning/ROADMAP.md (v63.0 
 Milestone: v63.0 — ▶ ACTIVE (started 2026-06-14). Post-v62 Audit (Critical Invariants + Reward Game-Theory).
 Phase: 395
 Plan: Not started
-Status: Ready to plan
+Status: Ready to execute
 Baseline = v62.0 closure subject `77580320`; subject = HEAD `a8b702a7` (byte-frozen at FOUNDATION 388; pin = `contracts` tree `2934d3d8987a09c5f073549a0cb499f6c5f28620`).
 Method = COUNCIL + CLAUDE both; posture = audit-only by default (a surfaced/adjudicated/skeptic-passed finding → gated USER-hand-review fix, else document-only).
-Last activity: 2026-06-15
+Last activity: 2026-06-15 -- Phase 395 planning complete
 391 outcome: BOTH NETS on record for RNG-01..06 + FC-391-01..05 + FC-389-05/FC-392-11; **0 CONFIRMED contract findings — the DOMINANT freeze/manipulability class is clean; RNG-01..06 attested at `a8b702a7`.** NET 2 ran independently (per-consumer backward-trace to the commitment point + the dedicated decimator random-oracle distribution argument + the RNG-04 cross-round skeptic dual-gate + the RNG-05 day-boundary divergence bound + the RNG-06 in-window SLOAD enumeration over slots 10/34/35+dailyIdx), council folded after. **RNG-04 cross-round `uint32` decimator claim-seed collision (codex INFO/LOW vs gemini SOUND) RESOLVED = REFUTED-as-break, benign INFO/LOW** (skeptic dual-gate: not grindable [word VRF-fixed after address commitment], no value extraction [magnitude set by independent `amount`, off the ETH spine], ~10^-5 reachability — reconciles both models). **RNG-02/FC-391-04 decimator distribution = REFUTED (unbiased + non-grindable)** by a real keccak random-oracle argument over the winner population; the missing distribution oracle ROUTED as a test-hardening item (NOT a contract change). FC-389-05 STORAGE-half → 389; FC-392-11 backing/EV-dynamics half → 392. Subject byte-frozen throughout (`git diff a8b702a7 -- contracts/` empty). Deliverables `391-FINDINGS.md` + `391-02-CLAUDE-NET.md`.
 392-01 outcome: **NET 1 (cross-model council) ON RECORD for the ECON slice** (ECON-01..06 + owned FC-392 reward-economics leads). Neutral prompt `392-01-COUNCIL-PROMPT-ECON.md` (money-pump search + whale-half-pass channel + redemption ETH-spin value-extraction charged hard; design-intent anchor + bounded-accrual sweep encoded) fanned via `council.sh --label econ`. **gemini on record** (2 HIGH candidates + ECON-02/05/01 VERIFIED SOUND); **codex skipped** (hard usage-limit cap, recorded in `skipped[]`+`skip_reasons` → opportunistic post-reset re-run at 392-03/396). Gemini's 2 HIGH candidates routed RAW to 392-03 for the skeptic dual-gate vs frozen source: (1) PRIORITY — claimed positive-EV money pump = 100% neutral-EV lootbox floor + 10% recycle kicker (needs per-leg accounting: flip-credit illiquidity + sub-100% direct box EV + claimable-won-first); (2) streak-pump via afking↔manual same-day toggle (needs the frozen `_questCompleteWithPair` afking slot-0-skip + decay anchors re-read + magnitude lens — ceilings FIXED, so ramp-speed gaming not a breach). Non-prime charged targets (whale-pass acquisition-cost quant, redemption ETH-spin value-extraction, EV-cap-bound, ramp/comment/sentinel, affiliate composition) received no explicit council verdict → carried Claude-net-primary to 392-03. Subject byte-frozen throughout (`git diff a8b702a7 -- contracts/` empty; stray gemini repro artifact outside subject removed). Deliverables `392-01-COUNCIL-PROMPT-ECON.md` + `392-01-COUNCIL-NET.md` + `council/econ.*`.
 392-02 outcome: **NET 1 (cross-model council) ON RECORD for the BURNIE/coinflip-rework slice** (BURNIE-01..06 + owned FC-392-16..20 + cross-ref FC-392-11/-12/-13). Neutral prompt `392-02-COUNCIL-PROMPT-BURNIE.md` (307 lines; the two prime backing leads FC-392-16 carry-excluded-from-redemption-backing + FC-392-17 VAULT seed 30-day window-aging charged HARD as dedicated CONFIRM/REFUTE/BY-DESIGN targets demanding the backing accounting traced; survive-before-mint + emission-conservation + off-the-ETH-spine + intended-variance-trade doctrine encoded) fanned via `council.sh --label burnie`. **gemini on record** with a substantive traced audit: **two FINDINGS landing EXACTLY on the two prime targets** — PRIME-01/BURNIE-04/FC-392-16 (sDGNRS auto-rebuy carry stranded from redemption backing — `autoRebuyCarry` invisible to `previewClaimCoinflips` + the `redeemBurnieShare` consume waterfall, progressive under-credit, no liquidation path, "black hole for value") + PRIME-02/BURNIE-05/FC-392-17 (VAULT seed window-aging — day-1-20 ~half-of-4M seed silently+unrecoverably forfeited if not claimed within the 30-day `COIN_CLAIM_FIRST_DAYS` window; no VAULT auto-claim safety net unlike sDGNRS); **VERIFIED SOUND** on BURNIE-01 (survive-before-mint), BURNIE-02 (emission conservation 8M-stake/~4M-EV vs removed 2M+2M), BURNIE-03 (latch monotonicity), BURNIE-06 (packed-lane round-trip + off-spine). **codex skipped** (same hard usage-limit cap as 392-01, recorded in `skipped[]` → opportunistic post-reset re-run at 392-04/396). Both prime FINDINGS routed RAW to 392-04 for the skeptic dual-gate + a design-intent-vs-defect disposition (the intended variance trade + BURNIE "worthless except the whale pass" bounds severity to under-credit/strand or lost-emission, NOT ETH insolvency — but a confirmed under-credit/lost-emission window is still value-bearing). Cross-ref + LOW/INFO leads (FC-392-11 loss-sequence backing / FC-392-13 carry settle double-count / FC-392-18/-19/-12/-20) received no explicit gemini verdict → carried Claude-net-primary to 392-04. Subject byte-frozen throughout (`git diff a8b702a7 -- contracts/` empty; gemini's claimed `BURNIE-AUDIT-REPORT.md` write blocked by read-only mode — never landed; no stray files). Deliverables `392-02-COUNCIL-PROMPT-BURNIE.md` + `392-02-COUNCIL-NET.md` + `council/burnie.*`.
