@@ -85,10 +85,10 @@
 ### LEGACY — v50/v51/v52 consolidated debt *(folded)*
 - [x] **LEGACY-01**: The v50 surface is swept — the whale-pass O(1) deferred-claim path + the box-open record. *(394-03: both nets on record; 0 CONFIRMED; value-equivalence + freeze attested, claim-time horizon BY-DESIGN D-04/D-20.)*
 - [x] **LEGACY-02**: The v50 surface — AFSUB pass-gating (`validThroughLevel` eviction/refresh + OPEN-E re-attest) + the MINTDIV index alignment. *(394-03: both nets on record; 0 CONFIRMED; AFSUB boundary/consent as-coded BY-DESIGN, MINTDIV count-lockstep exact, quadrant REFUTED.)*
-- [ ] **LEGACY-03**: The v51 surface — claimBingo color-completion / BingoModule (3-tier reward selection, per-player `(level,quadrant)` dedup, freeze-safety of the post-resolution `traitBurnTicket` read).
-- [ ] **LEGACY-04**: The v51 surface — the sDGNRS `Pool.Reward` rebalance + the jackpot final-day `Pool.Reward` deletion side-effects.
+- [x] **LEGACY-03**: The v51 surface — claimBingo color-completion / BingoModule (3-tier reward selection, per-player `(level,quadrant)` dedup, freeze-safety of the post-resolution `traitBurnTicket` read). *(394-04: both nets on record; 0 CONFIRMED; freeze REFUTED [read over a frozen population, sole writer in the swapped/frozen buffer], tier-precedence + dedup + CEI + empty-pool + gameOver REFUTED [CEI-tight].)*
+- [x] **LEGACY-04**: The v51 surface — the sDGNRS `Pool.Reward` rebalance + the jackpot final-day `Pool.Reward` deletion side-effects. *(394-04: both nets on record; 0 CONFIRMED; rebalance REFUTED [split conserved sum=BPS_DENOM, every draw clamps, no stale-split consumer]; final-day deletion REFUTED — premise VACUOUS [no sDGNRS Reward final-day path; orphaned at v51 D-12; real surface = ETH pools, FUZZ-05-conserved] + 1 INFO stale-comment.)*
 - [x] **LEGACY-05**: `audit/FINDINGS-v50.0.md` is authored (the deferred v50 deliverable). *(394-03: authored matching the FINDINGS-v62.0 format; both nets attested; 0 actionable.)*
-- [ ] **LEGACY-06**: `audit/FINDINGS-v51.0.md` is authored (the deferred v51 deliverable).
+- [x] **LEGACY-06**: `audit/FINDINGS-v51.0.md` is authored (the deferred v51 deliverable). *(394-04: authored matching the FINDINGS-v62.0 format; both nets attested; 0 actionable; LEGACY-04b premise VACUOUS recorded.)*
 
 ### TERM — Terminal close
 - [ ] **TERM-01**: The two finding nets (council + Claude) are consolidated + deduped; the council is re-run on all Claude-REFUTED findings (the v60 LIFECYCLE lesson); the skeptic gate clears before any CATASTROPHE/HIGH.
