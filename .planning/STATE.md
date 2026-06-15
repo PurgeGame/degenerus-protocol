@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v63.0
 milestone_name: Post-v62 Audit (Critical Invariants + Reward Game-Theory)
 status: shipped
-last_updated: "2026-06-15T18:00:00.000Z"
-last_activity: 2026-06-15 -- Phase 396 Plan 03 (TERM-03) complete — v63.0 SHIPPED; all 58 reqs re-attested; subject re-confirmed byte-frozen at a8b702a7 (contracts tree 2934d3d8); closure signal MILESTONE_V63_AT_HEAD_a8b702a73e34ab7fd87008cdc830a7e90c54a9f5 emitted; milestone flipped across MILESTONES/ROADMAP/STATE; NOT pushed
+last_updated: "2026-06-15T22:00:00.000Z"
+last_activity: 2026-06-15 -- v63.0 milestone COMPLETED (archived + tagged). Audit re-verified PASSED (gsd-audit-milestone: 58/58 reqs, 9/9 phases, integration PASS); archives written to .planning/milestones/v63.0-{ROADMAP,REQUIREMENTS,MILESTONE-AUDIT}; live REQUIREMENTS.md removed (fresh for next milestone); tag v63.0 -> 520c1d4e PUSHED to origin/main. The routed BURNIE-04 fix SHIPPED 98c4f049 (+CoinflipClaimState indexer event). NEXT = /gsd-new-milestone.
 progress:
   total_phases: 17
   completed_phases: 9
@@ -17,10 +17,10 @@ progress:
 
 ## Project Reference
 
-See: .planning/PROJECT.md (Current State section) + .planning/ROADMAP.md (v63.0 = top milestone, ▶ ACTIVE) + .planning/MILESTONES.md (v63.0 entry, top) + .planning/AUDIT-V63-PLAN.md (the full method doc) + .planning/REQUIREMENTS.md (the 58 REQ-IDs) + .planning/v63-surface-map/ (the 7 read-only dimension maps) + .planning/PAPER-REWARD-CHANGES-BRIEF.md (the reward design-intent anchor). v62.0 archive: .planning/milestones/v62.0-{ROADMAP,REQUIREMENTS,phases}; canonical v62 deliverable audit/FINDINGS-v62.0.md (chmod 444) + AUDIT-V62-REPORT.html. v63 baseline = v62.0 closure subject `77580320`; v63 subject = HEAD `a8b702a7` (byte-frozen at FOUNDATION 388). **NEXT = /gsd-plan-phase 388** (FOUNDATION — subject freeze + green baseline + slot recalibration).
+See: .planning/PROJECT.md (Current State section) + .planning/MILESTONES.md (v63.0 entry, top). **v63.0 ARCHIVED 2026-06-15** → .planning/milestones/v63.0-{ROADMAP,REQUIREMENTS,MILESTONE-AUDIT}.md (phase dirs kept in .planning/phases/388-396 — archive retroactively via /gsd-cleanup; the BURNIE-04 fix-design docs under 392-entropy-and-econ/ are still referenced). Canonical v63 deliverable audit/FINDINGS-v63.0.md (chmod 444) + AUDIT-V63-REPORT.html. v63 baseline = v62.0 closure subject `77580320`; v63 audit subject byte-frozen `a8b702a7` (contracts tree `2934d3d8`); post-close BURNIE-04 fix moved the subject to `520c1d4e` (contracts tree `3264a4f8`). The live REQUIREMENTS.md was removed at close (fresh one comes with the next milestone). **NEXT = /gsd-new-milestone.**
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Current focus:** v63.0 SHIPPED 2026-06-15 — milestone CLOSED. NEXT = USER push (commits ahead of origin/main, unpushed) + the routed BURNIE-04 gated post-audit fix (5 pending USER design decisions).
+**Current focus:** v63.0 SHIPPED + ARCHIVED + TAGGED (`v63.0` → `520c1d4e`), PUSHED to origin/main. The routed BURNIE-04 gated fix is DONE (shipped `98c4f049`, +CoinflipClaimState event, 864/0/110, 0 HIGH/MED on review). No open v63 work. NEXT = /gsd-new-milestone (fresh requirements + roadmap).
 
 ## ⚠ v50.0 + v51.0 AUDIT DEBT → FOLDED INTO v63.0 Phase 394 LEGACY-DEBT (USER 2026-06-14; was a separate v52 track)
 
@@ -37,7 +37,7 @@ See: .planning/PROJECT.md (Current State section) + .planning/ROADMAP.md (v63.0 
 Milestone: v63.0 — ✅ SHIPPED 2026-06-15. Post-v62 Audit (Critical Invariants + Reward Game-Theory).
 Phase: 396 (TERMINAL) — ✅ COMPLETE (3/3 plans)
 Plan: 3 of 3 (TERM-01/-02/-03 all complete)
-Status: v63.0 CLOSED — closure signal `MILESTONE_V63_AT_HEAD_a8b702a73e34ab7fd87008cdc830a7e90c54a9f5` emitted; all 58 reqs re-attested; milestone flipped to SHIPPED across MILESTONES/ROADMAP/STATE. NOT pushed (USER pushes).
+Status: v63.0 COMPLETED — closure signal `MILESTONE_V63_AT_HEAD_a8b702a73e34ab7fd87008cdc830a7e90c54a9f5` emitted; all 58 reqs re-attested; milestone audit re-verified PASSED; archived to .planning/milestones/v63.0-*; tagged `v63.0` → `520c1d4e`; PUSHED to origin/main. The routed BURNIE-04 fix shipped post-close (`98c4f049`). NEXT = /gsd-new-milestone.
 Baseline = v62.0 closure subject `77580320`; subject byte-frozen `a8b702a7` through close (pin = `contracts` tree `2934d3d8987a09c5f073549a0cb499f6c5f28620` == `HEAD:contracts`; `git diff a8b702a7 -- contracts/` empty).
 Method = COUNCIL + CLAUDE both; posture = audit-only (the sole CONFIRMED finding BURNIE-04 MED routed to a SEPARATE gated post-audit USER-hand-review fix, NOT applied in-milestone).
 Outcome = 0 CATASTROPHE/0 HIGH; 1 bounded MED (BURNIE-04 redemption-backing under-credit, CONSERVATIVE, off the ETH spine) routed; BURNIE-05 USER BY-DESIGN/WONTFIX; R-389-01 + 7 mutation survivors KILLED-by-regression; the 4 refuted-HIGH candidates survived the council-on-refuted re-run + remain REFUTED. Canonical deliverable `audit/FINDINGS-v63.0.md` (chmod 444) + `AUDIT-V63-REPORT.html`; closure record `.planning/phases/396-terminal/396-CLOSURE.md`.
