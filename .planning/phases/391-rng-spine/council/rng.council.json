@@ -1,0 +1,7 @@
+{
+  "label": "rng",
+  "schema": "",
+  "models": ["gemini", "codex"],
+  "skipped": [],
+  "outputs": {"gemini": ".planning/phases/391-rng-spine/council/rng.gemini.txt", "codex": ".planning/phases/391-rng-spine/council/rng.codex.txt"}
+}

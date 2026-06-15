@@ -1,0 +1,27 @@
+**FINDING**
+
+**RNG-04 / FC-391-01: strict direct-lootbox domain separation is not absolute for decimator claims. Severity: INFO/LOW, not a freeze/manipulability break.**
+
+Ordered sequence:
+1. Player `P` records a decimator entry for level `L` in `decBurn` via `recordDecBurn` (`contracts/modules/DegenerusGameDecimatorModule.sol:142`, `:151`, `:190`).
+2. `runDecimatorJackpot` snapshots level `L`; winners use the full VRF word, but the claim lootbox seed stores only `round.rngWord = uint32(rngWord)` (`contracts/modules/DegenerusGameDecimatorModule.sol:269`, `:277`; state field `DecClaimRound.rngWord` at `contracts/storage/DegenerusGameStorage.sol:1769`).
+3. `P` claims; `_claimDecimatorJackpotFor` passes `round.rngWord` (`contracts/modules/DegenerusGameDecimatorModule.sol:407`-`:411`) into `resolveLootboxDirect`, whose seed is only `hash2(rngWord, uint160(player))` (`contracts/modules/DegenerusGameLootboxModule.sol:883`).
+4. At a later decimator level `L2`, if `uint32(VRF_L2) == uint32(VRF_L)`, the same player’s direct-lootbox seed is identical. The old `amount` term would have separated claims with different lootbox portions; the current seed has no level/round/amount domain.
+
+Why protections do not stop it: `e.claimed = 1` is per level/entry (`contracts/modules/DegenerusGameDecimatorModule.sol:399`), so it prevents same-round replay, not cross-round `uint32` equality. This is not a player-steered re-roll because the later low-32 VRF word is unknown at burn time.
+
+**Verified Sound**
+
+- **RNG-01 freshness:** sound. Lootbox/bet commitments bind to the current lootbox index before the word is written: buys read `lootboxRngPacked` index at `MintModule.sol:1501`-`:1502`, bets reject already-worded indices at `DegeneretteModule.sol:531`-`:533`, and RNG requests advance the index before fulfillment (`AdvanceModule.sol:1150`-`:1154`, `:1664`-`:1671`). Resolution reads the finalized word later (`LootboxModule.sol:525`, `DegeneretteModule.sol:652`).
+
+- **RNG-02 decimator 32-bit distribution:** verified sound for one level. Winner selection uses the full word before storage narrowing (`DecimatorModule.sol:241`-`:269`). Claim outcomes use `keccak256(32-byte word, 32-byte address)` via `hash2` (`EntropyLib.sol:23`-`:28`), so distinct winner addresses are distinct random-oracle inputs under the same 32-bit salt. Claim order is non-grindable: the claim credits `player`, marks `e.claimed`, and cannot redirect value (`DecimatorModule.sol:293`, `:399`).
+
+- **RNG-03 one-shot/replay:** sound. Human lootboxes zero `lootboxEth[index][player]` before common resolution (`LootboxModule.sol:578`-`:580`); presale boxes zero before resolve (`:632`, `:707`); Degenerette bets `delete degeneretteBets[player][betId]` before payout/recirc (`DegeneretteModule.sol:655`). Box-spin module calls are delegatecall-only via `address(this) == GAME` guards (`DegeneretteModule.sol:1298`, `:1353`, `:1408`).
+
+- **BURNIE survival flip / accumulator:** sound. Each BURNIE spin payout is added to `acc.burnieMint` in `_distributePayout` before the survival branch can subtract the same bet’s `totalPayout` (`DegeneretteModule.sol:720`-`:731`, `:906`-`:908`, `:773`-`:778`). No cross-bet ordering can make the accumulator transiently negative.
+
+- **RNG-05 redemption day+1 gate:** sound. Burns revert while daily RNG is locked (`StakedDegenerusStonk.sol:627`-`:629`) and require the current wall-day word to exist (`:983`, `:991`). The next-day lootbox leg reads `rngWordForDay(day + 1)` only during claim (`:878`-`:882`), after the period is resolved. Backfill writes up to the current wall day, not `currentPeriod + 1`, so the burn cannot stamp a day whose next word is already on-chain.
+
+- **Coinflip carry RNG lock:** sound. Daily request sets `rngLockedFlag = true` (`AdvanceModule.sol:1696`-`:1699`), the callback only stores `rngWordCurrent` while keeping the lock (`:1805`-`:1808`), and unlock happens after processing (`:1779`-`:1785`). Carry claim checks `rngLocked()` before reading `autoRebuyCarry` (`BurnieCoinflip.sol:754`-`:770`); Game-only settlement writes the day result and advances `flipsClaimableDay` (`:789`-`:825`, `:850`-`:851`).
+
+- **RNG-06 SLOAD / hash migration:** verified sound for the targeted spine. The enumerated slots are confirmed in `test/fuzz/handlers/RngWindowFreezeHandler.sol:66`-`:71`: `rngWordByDay`, `lootboxRngPacked`, `lootboxRngWordByIndex`, and `dailyIdx`. `hash2` is byte-identical to `abi.encode(uint256,uint256)` and all migrated short values are explicitly widened; `hash1` is the single 32-byte word preimage (`EntropyLib.sol:23`-`:42`). Box-spin `activityScore` is threaded from packed/frozen records, not live player score (`LootboxModule.sol:541`-`:567`, `DegeneretteModule.sol:648`-`:649`, `:1295`, `:1350`, `:1405`).
