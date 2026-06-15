@@ -1,0 +1,62 @@
+No findings found. I reviewed the frozen `a8b702a7` source via `git show`; line refs below are for that commit.
+
+**Thesis Results**
+
+- **GASID-01: VERIFIED IDENTICAL/SOUND.** All 30 raw `delegatecall(msg.data)` wrappers have selectors identical to their module functions. Wrapper-side gates remain before delegation for `consumeCoinflipBoon` and game-only jackpot runners; module-side gates rely on preserved `msg.sender`. Dynamic array wrappers share the same ABI schema; short/bad offsets fail before or inside identical module decoding, with no alternate interpretation.
+
+- **GASID-02: VERIFIED IDENTICAL/SOUND.** `EntropyLib.hash2` writes exactly two 32-byte words and hashes 64 bytes; `hash1` hashes one 32-byte word (`contracts/libraries/EntropyLib.sol:23`, `:38`). Migrated address sites widen as `uint256(uint160(player))`, matching `abi.encode(address)` high-zero padding, e.g. `StakedDegenerusStonk.sol:879`, `DegenerusGameLootboxModule.sol:883`.
+
+- **GASID-03: VERIFIED IDENTICAL/SOUND.** Recomputed explicit tier oracle vs nibble table over `level ∈ [0, 99999]`: **0 mismatches**. Intro tiers `0..4 = 0.01 ETH`, `5..9 = 0.02 ETH`, milestone `cycleOffset == 0 = 0.24 ETH`, and decade multipliers `1/2/3/4` match `contracts/libraries/PriceLookupLib.sol:21`.
+
+- **GASID-04: VERIFIED IDENTICAL/SOUND.** `_rollWinningTraitsPair` computes `_rollHeroSymbol(dailyIdx, randWord)` once, then applies the same hero to main and bonus with per-roll colors (`DegenerusGameJackpotModule.sol:1778`). `rBonus = hash2(randWord, BONUS_TRAITS_TAG)` matches the old bonus domain (`:1791`). `_farFutureSeed` is a single shared helper over `abi.encodePacked(player, rngWordByDay[_simulatedDayIndex() - 1])` used by preview and execute (`DegenerusGameMintStreakUtils.sol:232`; call sites `DegenerusGameMintModule.sol:1185`, `:1227`).
+
+- **GASID-05: VERIFIED IDENTICAL/SOUND.** I found no gas/refactor edit in this slice changing an externally observable output, revert, or event.
+
+**Selector Table**
+
+All matched:
+
+```text
+advanceGame() 0x75b5e924 Game:279 -> Advance:173
+wireVrf(address,uint256,bytes32) 0x06349d97 Game:302 -> Advance:594
+claimBingo(uint24,uint8,uint32[8]) 0x039349d9 Game:317 -> Bingo:114
+subscribe(address,bool,bool,uint8,uint8,address) 0x51224ba5 Game:357 -> Afking:300
+mintBurnie() 0xfe617549 Game:376 -> Afking:1559
+claimAfkingBurnie(address[]) 0xa95b5052 Game:389 -> Afking:1672
+drainAffiliateBase(address) 0xe8c83c90 Game:402 -> Afking:1703
+decurse(address) 0xc0d7e31c Game:416 -> Afking:1764
+smite(uint256,address) 0x8a70a1cc Game:428 -> Afking:1778
+recordAfkingSecondary(address) 0xbdfaeaf3 Game:439 -> Afking:1717
+consumeCoinflipBoon(address) 0x9a0e1436 Game:827 -> Boon:39
+recordDecBurn(address,uint24,uint8,uint256,uint256) 0xbd225b88 Game:968 -> Decimator:142
+runDecimatorJackpot(uint256,uint24,uint256) 0x275d3a40 Game:991 -> Decimator:224
+runBafJackpot(uint256,uint24,uint256) 0x4181af8e Game:1013 -> Jackpot:1911
+recordTerminalDecBurn(address,uint24,uint256) 0x397c1a5d Game:1038 -> Decimator:782
+boostTerminalDecimator() 0x04ed6823 Game:1053 -> Decimator:882
+runTerminalDecimatorJackpot(uint256,uint24,uint256) 0x59207bfc Game:1068 -> Decimator:978
+runTerminalJackpot(uint256,uint24,uint256) 0xa56efd97 Game:1099 -> Jackpot:232
+emitDailyWinningTraits(uint24,uint256,uint24) 0x1fe49a5a Game:1121 -> Jackpot:1568
+claimDecimatorJackpot(address,uint24) 0x57f5faf5 Game:1138 -> Decimator:293
+claimDecimatorJackpotMany(address[],uint24) 0x1961741f Game:1150 -> Decimator:325
+claimTerminalDecimatorJackpot() 0x4a18a7de Game:1164 -> Decimator:1042
+claimAffiliateDgnrs(address) 0x92060938 Game:1304 -> Bingo:220
+resolveRedemptionLootbox(address,uint256,uint256,uint16) 0xcf78fe26 Game:1532 -> Lootbox:926
+creditRedemptionDirect(address,uint256) 0x83cbf60c Game:1552 -> Lootbox:1004
+previewSellFarFutureTickets(address,uint32[],uint256[]) 0x78857860 Game:1648 -> Mint:1168
+updateVrfCoordinatorAndSub(address,uint256,bytes32) 0x049d4020 Game:1776 -> Advance:1737
+requestLootboxRng() 0xb9073281 Game:1792 -> Advance:1090
+retryLootboxRng() 0x342535bb Game:1804 -> Advance:1164
+rawFulfillRandomWords(uint256,uint256[]) 0x1fe543e3 Game:1856 -> Advance:1795
+```
+
+**Lead Results**
+
+- **FC-389-05: VERIFIED IDENTICAL/SOUND.** `DecClaimRound.rngWord` is only the claim-time lootbox seed field (`DegenerusGameStorage.sol:1760`). Winner selection uses full `rngWord` before truncation (`DegenerusGameDecimatorModule.sol:242`, `:269`), then stores only `uint32(rngWord)` for claim lootboxes (`:277`). The only read is `round.rngWord` into `_creditDecJackpotClaimCore` (`:410`), then into `resolveLootboxDirect`; no other caller expects full width.
+
+- **FC-389-06: VERIFIED IDENTICAL/SOUND.** `lootboxEvCapPacked` returns initial-window “used” only for level 0 (`DegenerusGameStorage.sol:1698`). All call paths key with `level + 1`, `cachedLevel + 1`, or `currentLevel + 1` (`DegenerusGameLootboxModule.sol:877`, `DegenerusGameMintModule.sol:1685`, `DegenerusGameWhaleModule.sol:852`, `GameAfkingModule.sol:970`). Solidity 0.8 checked arithmetic prevents `uint24` wrap to 0.
+
+- **FC-389-07: VERIFIED IDENTICAL/SOUND.** `_addLevelDgnrsClaimed` is unclamped (`DegenerusGameStorage.sol:1160`), but the direct Bingo writer pays `paid <= reward`, and aggregate rewards are bounded by `allocation * score / totalScore` with one claim per player (`DegenerusGameBingoModule.sol:235`, `:247`, `:263`; affiliate denominator at `DegenerusAffiliate.sol:692`, `:703`). Whale/deity paths reserve `allocation - claimed` before spending affiliate pool (`DegenerusGameWhaleModule.sol:735`, `:804`).
+
+- **FC-389-08: VERIFIED IDENTICAL/SOUND.** `_totalSupply` starts at `INITIAL_SUPPLY = 1e30` and is monotone non-increasing after constructor (`StakedDegenerusStonk.sol:213`, `:299`, `:401`). `_pendingRedemptionEthValue` is `uint96`; each wallet/day base is capped at 160 ETH and max segregation is 175% (`:315`, `:322`, `:1081`), with a single unresolved day sentinel (`:996`).
+
+- **FC-389-09: VERIFIED IDENTICAL/SOUND.** Dynamic wrappers `claimAfkingBurnie`, `previewSellFarFutureTickets`, and `rawFulfillRandomWords` have matching module selectors and parameter layouts. Solidity 0.8.34 wrapper entry decoding validates dynamic offsets/bounds; module reads validate narrow elements when used. No calldata form produces wrapper/module decode divergence.

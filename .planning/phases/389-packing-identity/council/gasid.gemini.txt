@@ -1,0 +1,47 @@
+I have completed the audit of the **Degenerus Protocol** at commit `a8b702a7`, focusing on the gas optimization and refactor behavior-identity slice (GASID-01..05) and the specific FC-389 leads.
+
+### Audit Summary & Findings (Commit `a8b702a7`)
+
+1.  **(GASID-01) Wrapper Dispatch:** Verified that the 30+ routed wrappers in `DegenerusGame.sol` (e.g., `advanceGame`, `claimBingo`, `claimAfkingBurnie`) use typed signatures matching the modules exactly. Access gates (e.g., `msg.sender != address(this)` for self-calls and `msg.sender != ContractAddresses.VAULT`) are correctly **preserved** in the wrapper bodies.
+2.  **(GASID-02) EntropyLib Identity:** `EntropyLib.hash2(a, b)` correctly replicates the 64-byte `abi.encode(a, b)` preimage by writing directly to scratch space (0x00-0x3F). The migration `hash2(rngWord, uint256(uint160(player)))` is byte-identical to the prior `abi.encode(rngWord, player)` because `abi.encode(address)` zero-pads the high 12 bytes.
+3.  **(GASID-03) PriceLookupLib:** The nibble-table `0x4333222111` correctly maps decade indices to multipliers for the 0.04 ETH base price, preserving the full repeating 100-level cycle. Intro tiers (0-9) and milestones (x00) are correctly handled.
+4.  **(GASID-04) Trait Consolidation:** `_rollWinningTraitsPair` is mathematically identical to the previous logic; it invokes `_rollHeroSymbol` once and reuses the result for both rolls, ensuring the main and bonus paths land on the same hero while maintaining independent trait/color entropy via the `BONUS_TRAITS_TAG` salt.
+5.  **(FC-389-05) `rngWord` uint32 Narrowing:** **VERIFIED SOUND.** The narrowing to 32 bits for claim-time lootboxes is safe as the opening is deterministic and cannot be ground. `resolveLootboxDirect` zero-pads the input, maintaining the expected entropy distribution.
+6.  **(FC-389-06) Level-0 Stamp Collision:** **VERIFIED SOUND.** All callers (Mint, Whale, Afking, Lootbox modules) pass `level + 1`. Since `level` starts at 0 and Solidity 0.8.x reverts on overflow, `level 0` is unreachable by any caller path.
+7.  **(FC-389-07) Unclamped `newClaimed`:** **VERIFIED SOUND.** In all claim paths (e.g., `claimAffiliateDgnrs`), `reward` is mathematically bounded by `allocation` (division of `totalScore`), ensuring `newClaimed` stays within the `uint128` slot. No bleeding into the allocation half is possible.
+8.  **(FC-389-08) StakedStonk Narrowing:** **VERIFIED SOUND.** `pendingRedemptionEthValue` uint96 narrowing is safe as 2^96 wei exceeds the total supply of Ether. `totalSupply` fits in `uint128`.
+9.  **(FC-389-09) Dynamic-Array Wrappers:** **VERIFIED SOUND.** Wrappers for `claimAfkingBurnie` and `previewSellFarFutureTickets` have signatures matching the modules exactly. The wrapper's ABI decoder validates calldata on entry, preventing any decoder divergence in the module.
+
+I have documented the full implementation plan in `/home/zak/.gemini/tmp/degenerus-audit/38d6f2fe-a676-4938-ad4e-7b0f81037d89/plans/council-sweep-389.md`.
+
+Do you agree with this assessment, or would you like me to investigate any specific selector or preimage in more detail?
+
+The **Council Sweep 389 Investigation** is complete. Based on a deep-trace of the frozen source at `a8b702a7`, I have verified all "behavior-identical" claims and investigated all specific leads. No behavioral discrepancies or silent regressions were found in this gas/refactor slice.
+
+### Verdict: ALL BEHAVIOR-IDENTITY CLAIMS VERIFIED
+
+#### 1. (GASID-01) Selector & Dispatch Identity
+*   **VERIFIED IDENTICAL:** The 30+ routed wrappers in `DegenerusGame.sol` (e.g., `advanceGame`, `claimBingo`, `claimAfkingBurnie`) use signatures identical to their module implementations.
+*   **ABI Decoding:** Solidity's `calldata` ABI decoder validates inputs in the wrapper before the `delegatecall(msg.data)`. Since both wrapper and module share the same signature and compiler version (`0.8.34`), they decode the same payload identically.
+*   **Access Gates:** Critical gates (e.g., `msg.sender != address(this)` in `runBafJackpot`, `msg.sender != ContractAddresses.VAULT` in `claimWinningsStethFirst`) are correctly preserved in the wrapper before the delegate.
+
+#### 2. (GASID-02) `hash1`/`hash2` Preimage Equality
+*   **VERIFIED IDENTICAL:** `EntropyLib.hash2(a, b)` writes `a` and `b` to the scratch space (0x00-0x3F) and hashes 64 bytes. This exactly matches the `abi.encode(uint256, uint256)` layout.
+*   **Address Padding:** `hash2(rngWord, uint256(uint160(player)))` is byte-identical to the prior `keccak256(abi.encode(rngWord, player))` because `abi.encode(address)` zero-pads the high 12 bytes, matching the explicit `uint256` cast of the address.
+
+#### 3. (GASID-03) PriceLookupLib Nibble Table
+*   **VERIFIED IDENTICAL:** The nibble table `0x4333222111` correctly implements the 100-level cycle.
+    *   **Mapping:** Indices 0-2 (decades 0-29) = 1x (0.04 ETH); 3-5 (30-59) = 2x (0.08 ETH); 6-8 (60-89) = 3x (0.12 ETH); 9 (90-99) = 4x (0.16 ETH).
+    *   **Intro/Milestones:** Levels 0-4 (0.01 ETH), 5-9 (0.02 ETH), and x00 milestones (0.24 ETH) remain guarded by the same explicit logic.
+
+#### 4. (GASID-04) Jackpot/Mint Consolidation
+*   **VERIFIED IDENTICAL:** `_rollWinningTraitsPair` uses a single `_rollHeroSymbol` call for both main and bonus rolls, ensuring the same hero lands on both. Entropy independence is maintained by salting the bonus roll's `randomWord` with `BONUS_TRAITS_TAG`.
+*   **FarFutureSeed:** `_farFutureSeed` extraction in `DegenerusGameMintStreakUtils` is a simple functional refactor using `abi.encodePacked(player, rngWordByDay[...])`, maintaining the established seed derivation.
+
+### Lead Investigations (FC-389-05..09)
+
+*   **(FC-389-05) `rngWord` Narrowing:** **SOUND.** The 32-bit truncation of the claim-time lootbox seed is sufficient for its deterministic, non-grindable resolution path. `resolveLootboxDirect` zero-pads the word back to `uint256`, preventing entropy bias.
+*   **(FC-389-06) Level-0 Stamp Collision:** **SOUND.** All callers pass `level + 1`. Since `level` starts at 0 and Solidity 0.8.x reverts on `uint24` overflow, the input key is strictly `>= 1`. Level 0 is unreachable.
+*   **(FC-389-07) Unclamped `newClaimed`:** **SOUND.** The invariant `claimed <= allocation` is naturally enforced by the pro-rata reward calculation (`reward = allocation * score / totalScore`). No overflow into the allocation bits is possible.
+*   **(FC-389-08) StakedStonk Narrowings:** **SOUND.** `pendingRedemptionEthValue` uint96 (79B ETH capacity) and `totalSupply` uint128 are safe as they exceed the physical supply of the underlying assets.
+*   **(FC-389-09) Dynamic Array Wrappers:** **SOUND.** Wrapper signatures match modules exactly; the wrapper's native ABI decoder rejects malformed calldata before delegation.
