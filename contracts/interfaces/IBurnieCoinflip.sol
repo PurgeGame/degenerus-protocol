@@ -8,6 +8,15 @@ pragma solidity 0.8.34;
  *      Integrates with BurnieCoin for burn/mint operations and DegenerusGame for game state.
  */
 interface IBurnieCoinflip {
+    /// @notice Emitted whenever a player's coinflip claim-state changes (claimable + carry + claim
+    ///         cursor), so off-chain consumers can reconstruct valuation from logs without an eth_call.
+    event CoinflipClaimState(
+        address indexed player,
+        uint128 claimableStored,
+        uint128 autoRebuyCarry,
+        uint24  lastClaim
+    );
+
     /*+======================================================================+
       |                          CORE ACTIONS                                |
       +======================================================================+*/
@@ -129,6 +138,21 @@ interface IBurnieCoinflip {
         address[] calldata players,
         uint256[] calldata amounts
     ) external;
+
+    /// @notice Settle-then-read sDGNRS's redeemable coinflip backing (claimableStored + carry).
+    /// @dev sDGNRS-only. Settles all resolved days first so the two summed components are disjoint
+    ///      and current; the held wallet balance is read separately by sDGNRS.
+    /// @return backing claimableStored + autoRebuyCarry for sDGNRS.
+    /// @custom:reverts OnlyStakedDegenerusStonk If caller is not the sDGNRS contract.
+    function redeemableCoinBacking() external returns (uint256 backing);
+
+    /// @notice Remove `base` (wei) of sDGNRS's BURNIE backing at redemption submit.
+    /// @dev sDGNRS-only. Waterfall: held wallet balance (burned) → settled claimable (consumed) →
+    ///      auto-rebuy carry (decremented). Credits nothing; the redeemer's escrowed slice is paid
+    ///      later on the resolving day's coinflip win via creditFlip. Fail-closed if backing < base.
+    /// @param base Whole-token-aligned BURNIE backing (wei) to remove from sDGNRS.
+    /// @custom:reverts OnlyStakedDegenerusStonk If caller is not the sDGNRS contract.
+    function withdrawRedeemedBurnie(uint256 base) external;
 
     /*+======================================================================+
       |                          VIEW FUNCTIONS                              |

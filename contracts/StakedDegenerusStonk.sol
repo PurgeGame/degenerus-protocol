@@ -67,8 +67,14 @@ interface IBurnieCoinflipPlayer {
     function claimCoinflips(address player, uint256 amount) external returns (uint256 claimed);
     /// @notice Preview claimable coinflip winnings for a player.
     function previewClaimCoinflips(address player) external view returns (uint256 mintable);
-    /// @notice Settle a redemption's BURNIE share at submit: burn+consume sDGNRS backing, credit redeemer.
-    function redeemBurnieShare(address redeemer, uint256 base) external;
+    /// @notice Settle-then-read sDGNRS's redeemable coinflip backing (claimableStored + carry, disjoint).
+    function redeemableCoinBacking() external returns (uint256 backing);
+    /// @notice Remove `base` (wei) of sDGNRS's BURNIE backing at submit (held → claimable → carry).
+    function withdrawRedeemedBurnie(uint256 base) external;
+    /// @notice Read a coinflip day's result (rewardPercent 0 = unresolved; win is true only on a resolved win).
+    function getCoinflipDayResult(uint24 day) external view returns (uint16 rewardPercent, bool win);
+    /// @notice Read a player's auto-rebuy config; `carry` is the rolling BURNIE bankroll.
+    function coinflipAutoRebuyInfo(address player) external view returns (bool enabled, uint256 stop, uint256 carry, uint24 startDay);
     /// @notice Credit a BURNIE flip stake to a player (sDGNRS is an authorized flip creditor).
     function creditFlip(address player, uint256 amount) external;
 }
@@ -183,14 +189,17 @@ contract StakedDegenerusStonk {
     event PoolRebalance(Pool indexed from, Pool indexed to, uint256 amount);
 
     /// @notice Emitted when a player submits a gambling burn redemption
-    /// @param burnieSettled BURNIE backing settled at submit (burned/consumed and credited as a flip)
-    event RedemptionSubmitted(address indexed player, uint256 sdgnrsAmount, uint256 ethValueOwed, uint256 burnieSettled, uint24 periodIndex);
+    /// @param burnieEscrowed BURNIE backing (wei) removed from sDGNRS at submit and escrowed,
+    ///        contingent on the resolving day's coinflip (paid to the redeemer only on a win)
+    event RedemptionSubmitted(address indexed player, uint256 sdgnrsAmount, uint256 ethValueOwed, uint256 burnieEscrowed, uint24 periodIndex);
 
     /// @notice Emitted when a redemption period is resolved with a roll
     event RedemptionResolved(uint24 indexed periodIndex, uint16 roll);
 
-    /// @notice Emitted when a player claims their resolved redemption (ETH-only; BURNIE settled at submit)
-    event RedemptionClaimed(address indexed player, uint16 roll, uint256 ethPayout, uint256 lootboxEth);
+    /// @notice Emitted when a player claims their resolved redemption.
+    /// @param burniePaid Escrowed BURNIE (wei) minted to the redeemer as a flip credit — nonzero only
+    ///        on a winning resolving-day coinflip; 0 on a loss or after gameOver (BURNIE ignored).
+    event RedemptionClaimed(address indexed player, uint16 roll, uint256 ethPayout, uint256 lootboxEth, uint256 burniePaid);
 
     // =====================================================================
     //                          ERC20 METADATA
@@ -259,8 +268,10 @@ contract StakedDegenerusStonk {
     struct PendingRedemption {
         uint96  ethValueOwed;   // base (100%) ETH-equivalent owed (max ~79B ETH)
         uint16  activityScore;  // snapshotted activity score + 1 (0 = not yet set)
-    } // 96 + 16 = 112 bits (1 slot); composite outer key (player, day) carries the day reference per SPEC-02.
-      // BURNIE is settled entirely at submit (redeemBurnieShare) — nothing BURNIE-related is recorded per claim.
+        uint96  burnieEscrow;   // whole-token BURNIE removed from sDGNRS at submit; paid as a flip
+                                // credit on a winning resolving-day coinflip (uint96 whole tokens ≫
+                                // the uint128-bounded BURNIE supply ceiling), else forfeited.
+    } // 96 + 16 + 96 = 208 bits (1 slot); composite outer key (player, day) carries the day reference per SPEC-02.
 
     /// @dev Per-day unresolved gambling-burn pool (SPEC-01, tightened per D-305-STRUCT-TIGHTEN-01
     ///      to 1 slot via denomination conversion).
@@ -820,7 +831,10 @@ contract StakedDegenerusStonk {
     ///      empty (player, day) slot so the batch path skips and the single path reverts.
     function _claimRedemptionFor(address player, uint24 day, uint16 roll, bool isGameOver) private returns (bool) {
         PendingRedemption memory claim = pendingRedemptions[player][day];
-        if (claim.ethValueOwed == 0) return false;
+        // Existence: a live-game claim is reachable on a nonzero ETH base OR a nonzero BURNIE escrow
+        // (a gwei-floored zero-ETH claim can still owe escrowed BURNIE). Post-gameOver BURNIE is
+        // worthless and ignored, so only the ETH base keeps a claim alive.
+        if (claim.ethValueOwed == 0 && (isGameOver || claim.burnieEscrow == 0)) return false;
         uint16 claimActivityScore = claim.activityScore;
 
         // Total rolled ETH. Per-claimant floor division may leave up to (n-1) wei
@@ -856,7 +870,26 @@ contract StakedDegenerusStonk {
         // Full claim: clear the (player, day) slot entirely per SPEC-04 (d).
         delete pendingRedemptions[player][day];
 
-        emit RedemptionClaimed(player, roll, ethDirect, lootboxEth);
+        // Contingent BURNIE escrow: the whole-token slice removed from sDGNRS's backing at submit is
+        // minted to the redeemer as a flip credit ONLY if the resolving day's (day + 1) coinflip won;
+        // a loss pays nothing (symmetric with the auto-rebuy carry zeroing for every holder on a
+        // losing flip). Read the ABSOLUTE day+1 result, never a resolve-time word — stall-correct.
+        // Post-gameOver BURNIE is worthless and skipped entirely. The slot is already cleared (CEI)
+        // and creditFlip makes no callback into this contract.
+        uint256 burniePaid;
+        if (!isGameOver && claim.burnieEscrow != 0) {
+            // In a live game day + 1 is normally resolved by claim time (resolveRedemptionPeriod for
+            // `day` runs on the advance that settles day + 1). `win` is true only on a resolved win;
+            // a resolved loss — or an unresolved day in the narrow level-0 gameOver pre-latch window,
+            // where day + 1's coinflip is never stored — reads false and correctly pays nothing.
+            (, bool burnieWon) = coinflip.getCoinflipDayResult(day + 1);
+            if (burnieWon) {
+                burniePaid = uint256(claim.burnieEscrow) * 1e18;
+                coinflip.creditFlip(player, burniePaid);
+            }
+        }
+
+        emit RedemptionClaimed(player, roll, ethDirect, lootboxEth, burniePaid);
 
         if (isGameOver) {
             // 100% direct push (self-claim enforced by callers; the untrusted .call comes after
@@ -937,24 +970,31 @@ contract StakedDegenerusStonk {
             stethOut = totalValueOwed - ethOut;
         }
 
-        // GameOver burns pay no BURNIE. No reserve term: BURNIE is settled atomically at submit
-        // (redeemBurnieShare), so backing is never reserved for an unclaimed period.
+        // GameOver burns pay no BURNIE. The full sDGNRS BURNIE backing is held wallet balance +
+        // claimable coinflip winnings + the auto-rebuy carry (where sDGNRS's BURNIE lives post-day-20).
+        // No reserve term: a submit removes its escrowed slice from this backing immediately, so these
+        // live reads are already net of outstanding redemptions. Best-effort (the carry/claimable can
+        // momentarily lag a stalled advance); truncated to whole BURNIE to match the settled submit path.
         if (!game.gameOver()) {
             uint256 burnieBal = coin.balanceOf(address(this));
             uint256 claimableBurnie = coinflip.previewClaimCoinflips(address(this));
-            uint256 totalBurnie = burnieBal + claimableBurnie;
-            burnieOut = (totalBurnie * amount) / supply;
+            (, , uint256 carry, ) = coinflip.coinflipAutoRebuyInfo(address(this));
+            uint256 totalBurnie = burnieBal + claimableBurnie + carry;
+            burnieOut = ((totalBurnie * amount) / supply / 1e18) * 1e18;
         }
     }
 
 
-    /// @notice Get BURNIE backing available for new burns (balance + claimable coinflips).
-    /// @dev No reserve subtraction: BURNIE is settled at submit, never reserved across a period.
-    /// @return BURNIE backing value (balance + claimable coinflips).
+    /// @notice Get BURNIE backing available for new burns (balance + claimable coinflips + carry).
+    /// @dev No reserve subtraction: a submit removes its escrowed slice from this backing immediately,
+    ///      so these live reads are already net of outstanding redemptions. Includes the auto-rebuy
+    ///      carry, where sDGNRS's BURNIE lives once perpetual auto-rebuy arms post-day-20.
+    /// @return BURNIE backing value (balance + claimable coinflips + auto-rebuy carry).
     function burnieReserve() external view returns (uint256) {
         uint256 burnieBal = coin.balanceOf(address(this));
         uint256 claimableBurnie = coinflip.previewClaimCoinflips(address(this));
-        return burnieBal + claimableBurnie;
+        (, , uint256 carry, ) = coinflip.coinflipAutoRebuyInfo(address(this));
+        return burnieBal + claimableBurnie + carry;
     }
 
     // =====================================================================
@@ -1023,12 +1063,14 @@ contract StakedDegenerusStonk {
         uint256 totalMoney = ethBal + stethBal + claimableEth - _pendingRedemptionEthValue;
         uint256 ethValueOwed = (totalMoney * amount) / supplyBefore;
 
-        // Compute proportional BURNIE base from sDGNRS's full BURNIE backing (held + coinflip stake).
-        // No reserve subtraction: prior BURNIE shares were already settled (burned/consumed) at their
-        // own submit, so the backing reads here already exclude them.
-        uint256 burnieBal = coin.balanceOf(address(this));
-        uint256 claimableBurnie = coinflip.previewClaimCoinflips(address(this));
-        uint256 burnieOwed = ((burnieBal + claimableBurnie) * amount) / supplyBefore;
+        // Compute the proportional BURNIE share of sDGNRS's full BURNIE backing: held wallet balance
+        // + settled coinflip backing (claimableStored + auto-rebuy carry, where sDGNRS's BURNIE lives
+        // post-day-20). redeemableCoinBacking settles sDGNRS to current so its two components are
+        // disjoint. The share is truncated to whole BURNIE; the sub-token dust stays as backing for
+        // remaining holders. No reserve subtraction: the slice is removed from the backing just below.
+        uint256 burnieHeld = coin.balanceOf(address(this));
+        uint256 coinBacking = coinflip.redeemableCoinBacking();
+        uint256 burnieEscrowWhole = ((burnieHeld + coinBacking) * amount) / supplyBefore / 1e18;
 
         // Snap ETH base to gwei at the source (D-305-GWEI-SNAP-01). Eliminates pool↔cumulative-scalar
         // drift by ensuring pool.ethBase × 1e9 reconstructs the exact sum-of-claims at resolve.
@@ -1065,29 +1107,36 @@ contract StakedDegenerusStonk {
         // Checked add preserved; narrowing cast is safe (cumulative segregated ETH << uint96 max).
         _pendingRedemptionEthValue = uint96(_pendingRedemptionEthValue + maxIncrement);
 
-        // === BURNIE: settle the whole share at submit (conserved, no reserve, no roll) ===
-        // redeemBurnieShare burns/consumes `burnieOwed` of sDGNRS's own BURNIE backing and credits
-        // an equal flip stake to the beneficiary → net new BURNIE = 0. The beneficiary gambles the
-        // credit via the normal coinflip (BURNIE already double-gambles), so there is no ETH-style roll.
-        if (burnieOwed != 0) {
-            coinflip.redeemBurnieShare(beneficiary, burnieOwed);
+        // === BURNIE: remove the escrowed share from sDGNRS's backing now; pay later on the flip ===
+        // The whole-token slice is destroyed out of sDGNRS's backing (held → claimable → carry) and
+        // escrowed against this (beneficiary, day) slot. It is minted to the beneficiary as a flip
+        // credit ONLY if the resolving day's (currentPeriod + 1) coinflip wins — resolved at claim.
+        // On a loss it pays nothing, symmetric with the auto-rebuy carry zeroing for every holder on a
+        // losing flip. Removing it here keeps the next submit's backing read net of outstanding escrow.
+        uint256 burnieEscrowWei;
+        if (burnieEscrowWhole != 0) {
+            burnieEscrowWei = burnieEscrowWhole * 1e18;
+            coinflip.withdrawRedeemedBurnie(burnieEscrowWei);
         }
 
-        // Composite-keyed per-claim slot for (beneficiary, currentPeriod) (SPEC-02). ETH-only: the
-        // BURNIE share is fully settled above, so nothing BURNIE-related is recorded per claim.
+        // Composite-keyed per-claim slot for (beneficiary, currentPeriod) (SPEC-02): records the ETH
+        // base and the contingent whole-token BURNIE escrow removed from sDGNRS's backing above.
         PendingRedemption storage claim = pendingRedemptions[beneficiary][currentPeriod];
 
         // Enforce 160 ETH per-(wallet, day) EV cap on the BASE (resets naturally on a new day under composite keying).
         if (claim.ethValueOwed + ethValueOwed > MAX_DAILY_REDEMPTION_EV) revert ExceedsDailyRedemptionCap();
 
         claim.ethValueOwed += uint96(ethValueOwed);
+        if (burnieEscrowWhole != 0) {
+            claim.burnieEscrow += uint96(burnieEscrowWhole);
+        }
 
         // Snapshot activity score on first burn of day (0 = not yet set, stored as score + 1)
         if (claim.activityScore == 0) {
             claim.activityScore = uint16(game.playerActivityScore(beneficiary)) + 1;
         }
 
-        emit RedemptionSubmitted(beneficiary, amount, ethValueOwed, burnieOwed, currentPeriod);
+        emit RedemptionSubmitted(beneficiary, amount, ethValueOwed, burnieEscrowWei, currentPeriod);
     }
 
     /// @dev Pay the redemption from this contract's balance: ETH first, falling back to stETH if the

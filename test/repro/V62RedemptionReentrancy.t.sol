@@ -6,11 +6,14 @@ import {StakedDegenerusStonk} from "../../contracts/StakedDegenerusStonk.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 
 /// @notice Local mirror of the coinflip player surface for vm.mockCall selectors. The submit BURNIE
-///         settle leg (redeemBurnieShare) and its backing read (previewClaimCoinflips) are mocked to
-///         no-ops so the focus stays on the ETH/stETH reserve identity.
+///         leg (the settled backing read redeemableCoinBacking and the backing withdraw
+///         withdrawRedeemedBurnie) is mocked to no-ops so the focus stays on the ETH/stETH reserve
+///         identity; with redeemableCoinBacking forced to 0 the escrowed slice is 0, so the
+///         claim-time BURNIE leg is skipped entirely.
 interface IBurnieCoinflipPlayerMock {
     function previewClaimCoinflips(address player) external view returns (uint256 mintable);
-    function redeemBurnieShare(address redeemer, uint256 base) external;
+    function redeemableCoinBacking() external returns (uint256 backing);
+    function withdrawRedeemedBurnie(uint256 base) external;
 }
 
 /// @title V62RedemptionReentrancy -- regression for finding V62-03 (verifies the layered FIX).
@@ -82,9 +85,9 @@ contract V62RedemptionReentrancy is DeployProtocol {
         sdgnrs.transferFromPool(StakedDegenerusStonk.Pool.Reward, address(attacker), ATTACKER_FUNDING);
         vm.stopPrank();
 
-        // Mock the coinflip surface so the BURNIE settle leg (redeemBurnieShare) and the
-        // previewClaimCoinflips backing read are no-ops, keeping the focus on the ETH/stETH reserve
-        // identity. previewClaimCoinflips returns 0 so BURNIE never inflates totalMoney.
+        // Mock the coinflip surface so the submit BURNIE leg is a no-op, keeping the focus on the
+        // ETH/stETH reserve identity. redeemableCoinBacking returns 0 so the escrowed slice is 0 (the
+        // claim-time BURNIE leg is then skipped); withdrawRedeemedBurnie is a no-op belt-and-suspenders.
         // The lootbox forward (game.resolveRedemptionLootbox) runs fully UNMOCKED: the module body
         // (auth, msg.value bound, stETH pull, pool credit, chunked materialization) executes for
         // real, so the claim's 50% lootbox half physically LEAVES sDGNRS exactly as in production
@@ -96,7 +99,12 @@ contract V62RedemptionReentrancy is DeployProtocol {
         );
         vm.mockCall(
             address(coinflip),
-            abi.encodeWithSelector(IBurnieCoinflipPlayerMock.redeemBurnieShare.selector),
+            abi.encodeWithSelector(IBurnieCoinflipPlayerMock.redeemableCoinBacking.selector),
+            abi.encode(uint256(0))
+        );
+        vm.mockCall(
+            address(coinflip),
+            abi.encodeWithSelector(IBurnieCoinflipPlayerMock.withdrawRedeemedBurnie.selector),
             abi.encode()
         );
     }
@@ -150,7 +158,7 @@ contract V62RedemptionReentrancy is DeployProtocol {
         _primeCurrentDayRng();
         attacker.outerBurn(BURN_AMOUNT);
 
-        (uint96 owedBase, ) = sdgnrs.pendingRedemptions(address(attacker), uint24(dayD));
+        (uint96 owedBase, , ) = sdgnrs.pendingRedemptions(address(attacker), uint24(dayD));
         assertGt(uint256(owedBase), 0, "precondition: outer burn must record a positive claim base");
         assertTrue(_reserveIdentityHolds(), "precondition: reserve identity holds right after submit");
 
@@ -227,7 +235,7 @@ contract V62RedemptionReentrancy is DeployProtocol {
         _primeCurrentDayRng();
         attacker.outerBurn(BURN_AMOUNT);
 
-        (uint96 owedBase, ) = sdgnrs.pendingRedemptions(address(attacker), uint24(dayD));
+        (uint96 owedBase, , ) = sdgnrs.pendingRedemptions(address(attacker), uint24(dayD));
         assertGt(uint256(owedBase), 0, "precondition: outer burn must record a positive claim base");
 
         vm.warp(block.timestamp + 1 days);

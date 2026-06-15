@@ -311,7 +311,7 @@ contract RedemptionHandler is Test {
 
         // Per-(actor, day) EV cap clamp — read existing pendingRedemptions[actor][today]
         // and skip if already at 160 ETH (a re-burn would revert with ExceedsDailyRedemptionCap).
-        (uint96 existingEth, ) = sdgnrs.pendingRedemptions(currentActor, uint24(today));
+        (uint96 existingEth, , ) = sdgnrs.pendingRedemptions(currentActor, uint24(today));
         if (uint256(existingEth) >= 160 ether) return;
 
         // Sentinel single-pool guard: if another day's pool is still pending, this burn would
@@ -355,7 +355,7 @@ contract RedemptionHandler is Test {
             uint32 burnDay = game.currentDayView(); // re-read defensively (in case advanceGame fires inside burn)
             // v47: PendingRedemption.burnieOwed removed (BURNIE settled at submit) — only the
             // ethValueOwed leg is tracked; the legacy BURNIE ghosts are left at zero.
-            (uint96 ethOwed, ) = sdgnrs.pendingRedemptions(currentActor, uint24(burnDay));
+            (uint96 ethOwed, , ) = sdgnrs.pendingRedemptions(currentActor, uint24(burnDay));
 
             // Per-burn delta = post - prior tracked. Cumulative because same-day re-burns
             // accumulate additively per claim.ethValueOwed += ethValueOwed semantics.
@@ -479,7 +479,7 @@ contract RedemptionHandler is Test {
             if (ghost_dayResolved[candidate] && !ghost_claimDone[candidate][currentActor]) {
                 // Also require the actor actually has a claim slot to settle.
                 // v47: only ethValueOwed remains (burnieOwed field removed).
-                (uint96 ev, ) = sdgnrs.pendingRedemptions(currentActor, uint24(candidate));
+                (uint96 ev, , ) = sdgnrs.pendingRedemptions(currentActor, uint24(candidate));
                 if (ev != 0) {
                     claimDay = candidate;
                     break;
@@ -503,17 +503,18 @@ contract RedemptionHandler is Test {
             ghost_totalBurnieClaimed += coin.balanceOf(currentActor) - burnieBefore;
 
             // Parse RedemptionClaimed event for split tracking (INV-08 in legacy harness).
-            // v47: event reshaped to RedemptionClaimed(address indexed player, uint16 roll,
-            // uint256 ethPayout, uint256 lootboxEth) — dropped flipResolved + burniePayout
-            // (BURNIE settled at submit, claim is ETH-only). With `player` now indexed, only
-            // (roll, ethPayout, lootboxEth) sit in the non-indexed data tuple.
+            // RedemptionClaimed(address indexed player, uint16 roll, uint256 ethPayout,
+            // uint256 lootboxEth, uint256 burniePaid) — `player` indexed, so (roll, ethPayout,
+            // lootboxEth, burniePaid) sit in the non-indexed data tuple. burniePaid (the
+            // contingent BURNIE flip-credit minted on a winning resolving-day coinflip) is read
+            // but not aggregated here — BURNIE conservation is covered by the carry-side ghosts.
             Vm.Log[] memory logs = vm.getRecordedLogs();
-            bytes32 claimedSig = keccak256("RedemptionClaimed(address,uint16,uint256,uint256)");
+            bytes32 claimedSig = keccak256("RedemptionClaimed(address,uint16,uint256,uint256,uint256)");
             bool claimSettled;
             for (uint256 i = 0; i < logs.length; i++) {
                 if (logs[i].topics[0] == claimedSig) {
-                    (, uint256 ethPayout, uint256 lootboxEth) =
-                        abi.decode(logs[i].data, (uint16, uint256, uint256));
+                    (, uint256 ethPayout, uint256 lootboxEth, ) =
+                        abi.decode(logs[i].data, (uint16, uint256, uint256, uint256));
                     ghost_totalEthDirect += ethPayout;
                     ghost_totalLootboxEth += lootboxEth;
                     ghost_totalRolledEth += ethPayout + lootboxEth;

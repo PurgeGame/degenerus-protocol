@@ -129,7 +129,7 @@ contract RedemptionAccounting is DeployProtocol {
                 for (uint256 j = 0; j < actorN; j++) {
                     address actor = handler.getActor(j);
                     if (handler.ghost_claimDone(d, actor)) continue;
-                    (uint96 ev, ) = sdgnrs.pendingRedemptions(actor, uint24(d));
+                    (uint96 ev, , ) = sdgnrs.pendingRedemptions(actor, uint24(d));
                     expected += (uint256(ev) * uint256(roll)) / 100;
                 }
             }
@@ -145,14 +145,14 @@ contract RedemptionAccounting is DeployProtocol {
     //              INV-03: BURNIE conservation (EXACT)
     // =====================================================================
 
-    /// @notice INV-03 — 304-SPEC §1 lines 118-139 (v47-revised). In v47 the redemption BURNIE
-    ///         RESERVE apparatus was removed entirely: BURNIE is settled at SUBMIT (redeemBurnieShare
-    ///         → burnForCoinflip), so the `pendingRedemptionBurnie` cumulative scalar, the per-day
-    ///         `pendingByDay[D].burnieBase` field, and the resolve-time `pendingRedemptionBurnie -=`
-    ///         release were all deleted. There is no longer any reserved-BURNIE accounting state to
-    ///         conserve across the burn→resolve→claim window — the invariant is structurally
-    ///         discharged by construction (no field exists to diverge). The net-BURNIE-conservation
-    ///         property (net new BURNIE == 0 at submit) is proven by REDEEM-08 (plan 323-03), not here.
+    /// @notice INV-03 — 304-SPEC §1 lines 118-139. The redemption BURNIE leg keeps NO aggregate
+    ///         reserve scalar: the redeemed slice is removed from sDGNRS's backing at SUBMIT
+    ///         (withdrawRedeemedBurnie) and escrowed per-(redeemer, day) as PendingRedemption.burnieEscrow,
+    ///         so single-counting is structural (each submit reads backing already net of prior escrows)
+    ///         — there is no `pendingRedemptionBurnie` cumulative scalar or per-day `burnieBase` field to
+    ///         diverge. Conservation across submit→resolve→claim (slice removed at submit, minted to the
+    ///         redeemer only on a winning resolving-day coinflip, else forfeited) is exercised by the
+    ///         StakedStonkRedemption BURNIE-escrow tests, not here.
     /// @dev Retained as a documented no-op so the §3.F attestation matrix keeps its INV-03 row;
     ///      asserting against a deleted storage slot would be vacuous (always zero).
     function invariant_INV_03_BurnieConservationExact() public view {
@@ -181,7 +181,7 @@ contract RedemptionAccounting is DeployProtocol {
             uint256 sumEth;
             for (uint256 j = 0; j < actorN; j++) {
                 address actor = handler.getActor(j);
-                (uint96 ev, ) = sdgnrs.pendingRedemptions(actor, uint24(d));
+                (uint96 ev, , ) = sdgnrs.pendingRedemptions(actor, uint24(d));
                 sumEth += uint256(ev);
             }
             assertEq(
@@ -216,7 +216,7 @@ contract RedemptionAccounting is DeployProtocol {
                 for (uint256 j = 0; j < actorN; j++) {
                     address actor = handler.getActor(j);
                     if (handler.ghost_claimDone(d, actor)) continue;
-                    (uint96 ev, ) = sdgnrs.pendingRedemptions(actor, uint24(d));
+                    (uint96 ev, , ) = sdgnrs.pendingRedemptions(actor, uint24(d));
                     expected += (uint256(ev) * uint256(roll)) / 100;
                 }
             }
@@ -282,7 +282,7 @@ contract RedemptionAccounting is DeployProtocol {
                 uint96 locked = handler.ghost_perPlayer_locked_ethValueOwed(d, actor);
                 if (locked == 0) continue;
                 if (handler.ghost_claimDone(d, actor)) continue;
-                (uint96 ev, ) = sdgnrs.pendingRedemptions(actor, uint24(d));
+                (uint96 ev, , ) = sdgnrs.pendingRedemptions(actor, uint24(d));
                 assertEq(
                     uint256(ev),
                     uint256(locked),
@@ -384,7 +384,7 @@ contract RedemptionAccounting is DeployProtocol {
             uint32 d = handler.getDayWritten(i);
             for (uint256 j = 0; j < actorN; j++) {
                 address actor = handler.getActor(j);
-                (uint96 ev, ) = sdgnrs.pendingRedemptions(actor, uint24(d));
+                (uint96 ev, , ) = sdgnrs.pendingRedemptions(actor, uint24(d));
                 if (ev == 0) continue;
                 assertLe(
                     uint256(ev),

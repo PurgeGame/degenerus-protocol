@@ -99,6 +99,20 @@ contract BurnieCoinflip {
     event BountyOwed(address indexed player, uint128 bounty, uint256 recordFlip);
     event BountyPaid(address indexed to, uint256 amount);
 
+    /// @notice Emitted whenever a player's coinflip claim-state changes, so off-chain consumers can
+    ///         reconstruct claimable + carry from logs alone (no eth_call). Carries the committed
+    ///         post-update state of the three mutable PlayerCoinflipState fields.
+    /// @param claimableStored Post-update PlayerCoinflipState.claimableStored.
+    /// @param autoRebuyCarry  Post-update PlayerCoinflipState.autoRebuyCarry.
+    /// @param lastClaim       Post-update PlayerCoinflipState.lastClaim (the claim cursor; lets an
+    ///        indexer recompute lazy pending winnings from the day-result + per-day-stake events).
+    event CoinflipClaimState(
+        address indexed player,
+        uint128 claimableStored,
+        uint128 autoRebuyCarry,
+        uint24  lastClaim
+    );
+
     /*+======================================================================+
       |                          CUSTOM ERRORS                               |
       +======================================================================+*/
@@ -209,8 +223,9 @@ contract BurnieCoinflip {
     /// @notice Restricts access to authorized flip creditors.
     /// @dev Allowed callers: GAME (delegatecall modules — incl. the afking router's
     ///      in-context creditFlip bounty, which pays AS the GAME, not a separate keeper contract),
-    ///      QUESTS (level quest rewards), AFFILIATE, ADMIN, SDGNRS (redemption flip-credit at
-    ///      submit via redeemBurnieShare — net BURNIE neutral, offset by burn+consume).
+    ///      QUESTS (level quest rewards), AFFILIATE, ADMIN, SDGNRS (redemption win-credit at claim:
+    ///      the escrowed slice was already removed from sDGNRS's backing at submit via
+    ///      withdrawRedeemedBurnie, so the claim-time mint to the redeemer is BURNIE-neutral).
     modifier onlyFlipCreditors() {
         address sender = msg.sender;
         if (
@@ -264,6 +279,9 @@ contract BurnieCoinflip {
             storedAfter = uint128(uint256(storedAfter) + mintable);
             state.claimableStored = storedAfter;
         }
+        // claimableStored / lastClaim / carry are finalized here — nothing below mutates them
+        // (_addDailyFlip writes only per-day stake). One emit covers both exits.
+        _emitClaimState(caller);
 
         if (amount == 0) {
             emit CoinflipDeposit(caller, 0);
@@ -363,6 +381,15 @@ contract BurnieCoinflip {
         return _claimCoinflipsAmount(player, amount, false);
     }
 
+    /// @dev Emit the player's committed coinflip claim-state (claimable + carry + cursor) for
+    ///      off-chain reconstruction without an eth_call. Call as the LAST statement after the three
+    ///      PlayerCoinflipState fields are finalized; never inside _claimCoinflipsInternal (its
+    ///      callers finalize claimableStored after it returns, so an emit there would be stale).
+    function _emitClaimState(address player) private {
+        PlayerCoinflipState storage s = playerState[player];
+        emit CoinflipClaimState(player, s.claimableStored, s.autoRebuyCarry, s.lastClaim);
+    }
+
     /// @dev Internal claim exact amount.
     function _claimCoinflipsAmount(
         address player,
@@ -372,7 +399,11 @@ contract BurnieCoinflip {
         PlayerCoinflipState storage state = playerState[player];
         uint256 mintable = _claimCoinflipsInternal(player, false);
         uint256 stored = state.claimableStored + mintable;
-        if (stored == 0) return 0;
+        if (stored == 0) {
+            // _claimCoinflipsInternal may still have advanced lastClaim / settled carry.
+            _emitClaimState(player);
+            return 0;
+        }
 
         uint256 toClaim = amount;
         if (toClaim > stored) {
@@ -388,6 +419,7 @@ contract BurnieCoinflip {
             }
             claimed = toClaim;
         }
+        _emitClaimState(player);
     }
 
     /// @dev Process daily coinflip claims and calculate winnings.
@@ -718,6 +750,7 @@ contract BurnieCoinflip {
         if (mintable != 0) {
             burnie.mintForGame(player, mintable);
         }
+        _emitClaimState(player);
     }
 
     /// @dev Internal auto-rebuy take profit configuration.
@@ -737,6 +770,7 @@ contract BurnieCoinflip {
         if (mintable != 0) {
             burnie.mintForGame(player, mintable);
         }
+        _emitClaimState(player);
     }
 
     /// @notice Claim up to `amount` of the auto-rebuy carry as minted BURNIE while
@@ -775,6 +809,7 @@ contract BurnieCoinflip {
             }
             burnie.mintForGame(player, claimed);
         }
+        _emitClaimState(player);
     }
 
     /*+======================================================================+
@@ -891,6 +926,9 @@ contract BurnieCoinflip {
                 emit CoinflipAutoRebuyToggled(ContractAddresses.SDGNRS, true);
             }
         }
+        // sDGNRS's claim-state was mutated above (the armed branch settles via _claimCoinflipsInternal,
+        // which does not emit); surface the committed post-state for log-only reconstruction.
+        _emitClaimState(ContractAddresses.SDGNRS);
     }
 
     /*+======================================================================+
@@ -928,39 +966,63 @@ contract BurnieCoinflip {
         }
     }
 
-    /// @notice Settle a redemption's BURNIE share entirely at submit (sDGNRS only).
-    /// @dev Atomic, BURNIE-conserving: destroys `base` of sDGNRS's own BURNIE backing (held
-    ///      balance first, then its coinflip stake), then credits an equal flip stake to the
-    ///      redeemer. The deferred creditFlip mint of `base` is exactly offset by the burn+consume,
-    ///      so net new BURNIE across the call == 0.
-    ///      Airtight by construction: sDGNRS computes base = (held + stake) * amount / supply at
-    ///      submit, so base <= held + stake and the burn→consume waterfall always covers base.
-    /// @param redeemer The player receiving the flip credit.
-    /// @param base The proportional BURNIE backing to settle (no roll — BURNIE gambles via the flip).
-    function redeemBurnieShare(address redeemer, uint256 base) external {
+    /// @notice Settle-then-read sDGNRS's redeemable BURNIE coinflip backing (sDGNRS only).
+    /// @dev Forces all resolved days into claimableStored / autoRebuyCarry first so the two summed
+    ///      components are disjoint and current even after a multi-day advance stall (otherwise a
+    ///      resolved-but-unsettled win day could be counted in both claimable and the carry). In
+    ///      steady state sDGNRS is already settled each advance, so the walk is a no-op.
+    /// @return backing sDGNRS's claimableStored + autoRebuyCarry. The held wallet balance is read
+    ///         separately by sDGNRS as the first waterfall source.
+    function redeemableCoinBacking() external returns (uint256 backing) {
+        if (msg.sender != ContractAddresses.SDGNRS) revert OnlyStakedDegenerusStonk();
+        address s = ContractAddresses.SDGNRS;
+        uint256 mintable = _claimCoinflipsInternal(s, false);
+        PlayerCoinflipState storage state = playerState[s];
+        if (mintable != 0) {
+            state.claimableStored = uint128(uint256(state.claimableStored) + mintable);
+        }
+        _emitClaimState(s);
+        return uint256(state.claimableStored) + uint256(state.autoRebuyCarry);
+    }
+
+    /// @notice Remove `base` (wei) of sDGNRS's own BURNIE backing at redemption submit (sDGNRS only).
+    /// @dev Waterfall: held wallet balance (burned) → settled claimable (consumed, no mint) →
+    ///      auto-rebuy carry (decremented). Credits NOTHING — the redeemer's escrowed slice is paid
+    ///      later, only on the resolving day's coinflip win, via creditFlip, so the win path is a pure
+    ///      deferred mint of an amount already removed from sDGNRS's backing here. Fail-closed if the
+    ///      backing falls short (cannot happen: sDGNRS sizes base from the same settled backing read
+    ///      via redeemableCoinBacking earlier in the same submit).
+    /// @param base The whole-token-aligned BURNIE backing (wei) to remove from sDGNRS.
+    function withdrawRedeemedBurnie(uint256 base) external {
         if (msg.sender != ContractAddresses.SDGNRS) revert OnlyStakedDegenerusStonk();
         if (base == 0) return;
+        address s = ContractAddresses.SDGNRS;
 
-        // Burn from sDGNRS's held wallet balance first via the COINFLIP-gated burn
-        // (this contract IS COINFLIP; burnForCoinflip is BurnieCoin's generic _burn entry).
-        uint256 held = burnie.balanceOf(ContractAddresses.SDGNRS);
+        // Burn from the held wallet balance first (this contract IS COINFLIP; burnForCoinflip is
+        // BurnieCoin's generic _burn entry).
+        uint256 held = burnie.balanceOf(s);
         uint256 burnFromHeld = base <= held ? base : held;
         if (burnFromHeld != 0) {
-            burnie.burnForCoinflip(ContractAddresses.SDGNRS, burnFromHeld);
+            burnie.burnForCoinflip(s, burnFromHeld);
         }
 
-        // Consume the remainder from sDGNRS's own coinflip stake (no token mint — this removes a
-        // future mint of `remainder`, the conservation analogue of the held-balance burn above).
         uint256 remainder = base - burnFromHeld;
-        if (remainder != 0) {
-            uint256 consumed = _claimCoinflipsAmount(ContractAddresses.SDGNRS, remainder, false);
-            // Defense-in-depth: airtight by construction (remainder <= claimable stake), but
-            // fail-closed rather than over-credit if the stake somehow falls short.
-            if (consumed < remainder) revert Insufficient();
-        }
+        if (remainder == 0) return;
 
-        // Deferred mint of `base` to the redeemer, offset 1:1 by the burn+consume ⇒ conserved.
-        _addDailyFlip(redeemer, base, 0, false, false);
+        // Consume settled claimable next (no token mint — removes a future mint of `consumed`).
+        uint256 consumed = _claimCoinflipsAmount(s, remainder, false);
+        remainder -= consumed;
+        if (remainder == 0) return;
+
+        // Decrement the rolling auto-rebuy carry for the rest (post-day-20 steady state, where
+        // sDGNRS's BURNIE lives entirely in the carry).
+        PlayerCoinflipState storage state = playerState[s];
+        uint256 carry = state.autoRebuyCarry;
+        if (remainder > carry) revert Insufficient();
+        unchecked {
+            state.autoRebuyCarry = uint128(carry - remainder);
+        }
+        _emitClaimState(s);
     }
 
     /*+======================================================================+

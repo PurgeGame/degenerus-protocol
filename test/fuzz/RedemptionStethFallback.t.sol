@@ -582,11 +582,12 @@ contract RedemptionStethFallback is DeployProtocol {
     //   (f) test_RFALL05_BurnieCannotBlockEth
     // =====================================================================
 
-    /// @notice BURNIE-can't-block-ETH (v47 REDEEM-08 property preserved under the fallback): the
-    ///         ETH/stETH redemption path settles independently of any BURNIE state. BURNIE is settled
-    ///         at submit (redeemBurnieShare → conserved flip credit; claim is ETH-only), so even with
-    ///         a depleted coinflip pool the ETH claim still pays. We drive the stETH leg (worst case)
-    ///         and confirm the claim still delivers ETH-value to the player.
+    /// @notice BURNIE-can't-block-ETH (REDEEM-08 property): the ETH/stETH redemption path settles
+    ///         independently of any BURNIE state. The redeemed BURNIE slice is removed from sDGNRS's
+    ///         backing at submit and escrowed; its claim-time leg (paid only on the resolving day's
+    ///         coinflip win) is a separate flip credit that never touches the ETH/stETH legs, so even
+    ///         with a depleted coinflip pool the ETH claim still pays. We drive the stETH leg (worst
+    ///         case) and confirm the claim still delivers ETH-value to the player.
     function test_RFALL05_BurnieCannotBlockEth() public {
         // stETH-leg setup (ETH side starved); coinflip claim mocked to return 0 (depleted pool),
         // mirroring the v47 REDEEM-08 assertion that a BURNIE shortfall cannot block the ETH leg.

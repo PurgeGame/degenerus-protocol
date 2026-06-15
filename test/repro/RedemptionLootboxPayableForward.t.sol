@@ -5,11 +5,14 @@ import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
 import {StakedDegenerusStonk} from "../../contracts/StakedDegenerusStonk.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 
-/// @notice Coinflip surface mirror (interface-only) so the BURNIE settle leg and the backing
-///         preview are mockable without importing the coinflip contract.
+/// @notice Coinflip surface mirror (interface-only) so the submit BURNIE leg (settled backing read
+///         + backing withdraw) is mockable without importing the coinflip contract. With
+///         redeemableCoinBacking forced to 0 the escrowed slice is 0, so the claim-time BURNIE leg
+///         is skipped and the focus stays on the live-game ETH-forward path.
 interface IBurnieCoinflipPlayerMock {
     function previewClaimCoinflips(address player) external view returns (uint256);
-    function redeemBurnieShare(address player, uint256 burnieAmount) external;
+    function redeemableCoinBacking() external returns (uint256 backing);
+    function withdrawRedeemedBurnie(uint256 base) external;
 }
 
 /// @title RedemptionLootboxPayableForward — regression for the live-game redemption ETH-forward.
@@ -86,7 +89,12 @@ contract RedemptionLootboxPayableForward is DeployProtocol {
         );
         vm.mockCall(
             address(coinflip),
-            abi.encodeWithSelector(IBurnieCoinflipPlayerMock.redeemBurnieShare.selector),
+            abi.encodeWithSelector(IBurnieCoinflipPlayerMock.redeemableCoinBacking.selector),
+            abi.encode(uint256(0))
+        );
+        vm.mockCall(
+            address(coinflip),
+            abi.encodeWithSelector(IBurnieCoinflipPlayerMock.withdrawRedeemedBurnie.selector),
             abi.encode()
         );
     }
@@ -140,7 +148,7 @@ contract RedemptionLootboxPayableForward is DeployProtocol {
         vm.prank(player);
         sdgnrs.burn(BURN_AMOUNT);
 
-        (uint96 owedBase, ) = sdgnrs.pendingRedemptions(player, dayD);
+        (uint96 owedBase, , ) = sdgnrs.pendingRedemptions(player, dayD);
         assertGt(uint256(owedBase), 0, "precondition: burn must record a positive claim base");
 
         vm.warp(block.timestamp + 1 days);
