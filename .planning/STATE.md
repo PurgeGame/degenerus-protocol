@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v63.0
 milestone_name: Post-v62 Audit (Critical Invariants + Reward Game-Theory)
 status: executing
-last_updated: "2026-06-15T00:27:48Z"
-last_activity: 2026-06-15 -- Phase 389 Plan 01 (NET 1 council) complete
+last_updated: "2026-06-15T01:30:00Z"
+last_activity: 2026-06-15 -- Phase 389 Plan 02 (NET 2 Claude + adjudication) complete — Phase 389 CLOSED
 progress:
   total_phases: 17
-  completed_phases: 1
+  completed_phases: 2
   total_plans: 5
-  completed_plans: 4
-  percent: 8
+  completed_plans: 5
+  percent: 12
 ---
 
 # Project State
@@ -35,13 +35,13 @@ See: .planning/PROJECT.md (Current State section) + .planning/ROADMAP.md (v63.0 
 ## Current Position
 
 Milestone: v63.0 — ▶ ACTIVE (started 2026-06-14). Post-v62 Audit (Critical Invariants + Reward Game-Theory).
-Phase: 389 (PACKING-IDENTITY) — EXECUTING (Plan 01 NET 1 done)
-Plan: 2 of 2
-Status: Executing Phase 389 (Plan 01 council net on record; Plan 02 = Claude net + adjudication next)
+Phase: 389 (PACKING-IDENTITY) — ✅ CLOSED (both plans complete; both nets on record + adjudicated)
+Plan: 2 of 2 (complete)
+Status: Phase 389 closed — STORAGE-01..05/07 + GASID-01..05 ATTESTED at `a8b702a7`; STORAGE-06 = 1 CONFIRMED LOW oracle-integrity finding (R-389-01, test-only). NEXT = `/gsd-plan-phase 390` SOLVENCY-SPINE.
 Baseline = v62.0 closure subject `77580320`; subject = HEAD `a8b702a7` (byte-frozen at FOUNDATION 388; pin = `contracts` tree `2934d3d8987a09c5f073549a0cb499f6c5f28620`).
 Method = COUNCIL + CLAUDE both; posture = audit-only by default (a surfaced/adjudicated/skeptic-passed finding → gated USER-hand-review fix, else document-only).
-Last activity: 2026-06-15 -- Phase 389 Plan 01 (NET 1 cross-model council) complete — gemini+codex on record for STORAGE-01..07 + GASID-01..05 vs frozen `a8b702a7`; 0 CLIs skipped; aggregate council verdict = no production packing/identity defect (all FC-389-* + theses SOUND/IDENTICAL); subject byte-frozen. STORAGE/GASID req checkboxes intentionally NOT ticked yet (verdict is 389-02's after both-nets-on-record + adjudication).
-Next: `/gsd-execute-phase 389` Plan 02 — NET 2 (Claude) independent adversarial net over the same surface + adjudication of STORAGE-01..07 + GASID-01..05 + FC-389-01..09 vs frozen `a8b702a7`, skeptic gate, 389-FINDINGS.md verdict table. RAW council leads to fold in: (1) codex STORAGE-06 3 stale-harness leads (Composition slot-10 · SweepWorstCase/RngLock box-cursor 58/59 · HeroOverride*.test.js lootboxRng 35) — check each vs `forge inspect`; (2) FC-389-03 raw-vs-effective model divergence on `DecClaimRound.totalBurn`/`DecEntry.burn` comment framing (uint128 bound agreed sound). See `389-01-COUNCIL-NET.md`.
+Last activity: 2026-06-15 -- Phase 389 Plan 02 (NET 2 Claude adversarial net + adjudication) complete — NET 2 on record independent of the council (per-item break attempt + provisional verdict over all 12 reqs + 9 leads); `389-FINDINGS.md` = both-nets-on-record per slice + per-item verdict table + skeptic gate (0 HIGH) + routing. VERDICT: **0 CONFIRMED contract findings**; STORAGE-01..05/07 + GASID-01..05 ATTESTED; STORAGE-04/FC-389-01 settled by a cursor-lag proof (deferred opens write no cap + live level+1 keying + +1-monotone level → live key set ⊆ {currentLevel,+1}, 10 ETH cap not re-earnable); STORAGE-06/FC-389-04 = **1 CONFIRMED LOW oracle-integrity finding R-389-01** (2 stale test harnesses: Composition `mintPacked_` slot-10 vacuous canary, HeroOverride JS `lootboxRngPacked` slot-35 no-op seed — test-only fix, contract unaffected; the council box-cursor candidate REFUTED vs forge inspect: boxCursor@58 off7 / boxPlayers@59). FC-389-03 = INFO (`DecEntry.burn` comment); 02/08 → 390; 05 distribution → 391. Subject byte-frozen (`git diff a8b702a7 -- contracts/` empty). Commits `bbd7721c` (NET 2), `c25978a0` (FINDINGS).
+Next: `/gsd-plan-phase 390` SOLVENCY-SPINE (dual-net sweep; SOLV-01..07; intake FC-390-01..07 + the 389 cross-refs FC-389-02/-08 narrowing solvency-conservation half). See `389-FINDINGS.md` + `389-02-CLAUDE-NET.md`.
 
 ## ✅ SHIPPED Milestone Roadmap (v62.0 — phases 380-387 — SHIPPED 2026-06-09; baseline = v61.0 closure HEAD `b97a7a2e`; subject `c4d48008`; remediated `77580320`; closure signal `MILESTONE_V62_AT_HEAD_77580320b88e77438c893602a068548961824893`)
 

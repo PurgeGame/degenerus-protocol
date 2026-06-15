@@ -22,20 +22,20 @@
 - [x] **FND-04**: Verifier oracle holes are closed (each invariant test actually exercises its target code); the seven surface-maps are intaken as tracked finding-candidates routed to their sweep phases. ✅ 388-02 (9 changed-surface tests slot-validated vs `forge inspect` @ subject: 7 EXERCISED, 1 game-side+gap-routed, 1 HOLE [legacy RedemptionInvariants 7-INV un-wired claim+stETH leg + stale slots → routed 390, superseded]; decimator-uint32 distribution = missing property → routed 391; `388-02-FINDING-CANDIDATES.md` intakes 45/45 leads from all 7 maps routed 389-394 with per-phase rollup; commits `1e5fd2f7`/`ccf620f1`).
 
 ### STORAGE — Packing correctness
-- [ ] **STORAGE-01**: Every narrowed packed field's width is ≥ its real-world maximum (no silent truncating cast); each narrowing is enumerated with the bound that makes it safe.
-- [ ] **STORAGE-02**: Masked read-modify-write helpers (`_set*`/`_add*`/`_get*`) preserve every co-resident field; round-trip property checks pass.
-- [ ] **STORAGE-03**: Cross-module readers and writers of a delegatecall-shared packed slot use identical shift/mask conventions (slot agreement holds by construction).
-- [ ] **STORAGE-04**: Level/day-stamped window packs (the two-window `lootboxEvCapPacked`) never evict a still-live key under the real resolve-cursor-lag bound (the 10 ETH EV cap cannot be re-earned).
-- [ ] **STORAGE-05**: External ABI getters are preserved for every privatized/packed field (no interface break for off-chain consumers).
-- [ ] **STORAGE-06**: No test or harness depends on a hard-coded storage slot that the packing moved (runtime correctness over compile-only green).
-- [ ] **STORAGE-07**: capBucketCounts cap-exactness — the `≤ maxTotal+4` imprecision is characterized and proven defended by downstream clamps, or tightened. *(folded debt)*
+- [x] **STORAGE-01**: Every narrowed packed field's width is ≥ its real-world maximum (no silent truncating cast); each narrowing is enumerated with the bound that makes it safe. ✅ ATTESTED 389-02 (both nets; each cast enumerated with its bound — 389-FINDINGS §2a / 389-02-CLAUDE-NET §STORAGE-01).
+- [x] **STORAGE-02**: Masked read-modify-write helpers (`_set*`/`_add*`/`_get*`) preserve every co-resident field; round-trip property checks pass. ✅ ATTESTED 389-02 (mask construction + green-baseline pokes; 389-FINDINGS §2a).
+- [x] **STORAGE-03**: Cross-module readers and writers of a delegatecall-shared packed slot use identical shift/mask conventions (slot agreement holds by construction). ✅ ATTESTED 389-02 (one inherited storage base + single-sourced helpers; 389-FINDINGS §2a).
+- [x] **STORAGE-04**: Level/day-stamped window packs (the two-window `lootboxEvCapPacked`) never evict a still-live key under the real resolve-cursor-lag bound (the 10 ETH EV cap cannot be re-earned). ✅ ATTESTED 389-02 via a cursor-lag PROOF (deferred opens write no cap + live level+1 keying + +1-monotone level → live key set ⊆ {currentLevel,+1}; 389-FINDINGS §2a / 389-02-CLAUDE-NET §STORAGE-04).
+- [x] **STORAGE-05**: External ABI getters are preserved for every privatized/packed field (no interface break for off-chain consumers). ✅ ATTESTED 389-02 (sDGNRS + Admin getters preserved; 389-FINDINGS §2a).
+- [ ] **STORAGE-06**: No test or harness depends on a hard-coded storage slot that the packing moved (runtime correctness over compile-only green). ⚠ FINDING R-389-01 (389-02): 2 stale test harnesses CONFIRMED vs fresh `forge inspect` — Composition `mintPacked_` slot-10 (is slot 9) vacuous canary + HeroOverride JS `lootboxRngPacked` slot-35 (is slot 34) no-op seed; LOW oracle-integrity, test-only fix, contract unaffected, forge primary baseline intact; DOCUMENTED + ROUTED (not fixed). Council box-cursor candidate REFUTED. See 389-FINDINGS §4a.
+- [x] **STORAGE-07**: capBucketCounts cap-exactness — the `≤ maxTotal+4` imprecision is characterized and proven defended by downstream clamps, or tightened. *(folded debt)* ✅ ATTESTED 389-02 (bounds to ≤ maxTotal by trim/remainder construction + 250-clamp + remainder-share; "+4" is a TEST-slack constant, not a contract property; 389-FINDINGS §2a).
 
 ### GASID — Gas / refactor behavior-identity
-- [ ] **GASID-01**: The raw `delegatecall(msg.data)` dispatch resolves the same selector and ABI-decodes identically to the prior typed dispatch for every routed function.
-- [ ] **GASID-02**: The hash1/hash2 RNG-byte migrations produce byte-identical keccak preimages (the RNG byte-image is preserved).
-- [ ] **GASID-03**: The PriceLookup nibble-table is output-identical to the prior table over the full input domain.
-- [ ] **GASID-04**: The trait-roll consolidation and `_farFutureSeed` extraction are equivalent to the pre-refactor semantics across all inputs, boundaries, and revert paths.
-- [ ] **GASID-05**: No gas/refactor edit changed an externally-observable behavior (output / revert / event) — behavior-identity is asserted, not assumed.
+- [x] **GASID-01**: The raw `delegatecall(msg.data)` dispatch resolves the same selector and ABI-decodes identically to the prior typed dispatch for every routed function. ✅ ATTESTED 389-02 (30/30 selectors + shared ABI decoder; 389-FINDINGS §2b).
+- [x] **GASID-02**: The hash1/hash2 RNG-byte migrations produce byte-identical keccak preimages (the RNG byte-image is preserved). ✅ ATTESTED 389-02 (operand-width rule: every migrated operand is 32-byte; 389-FINDINGS §2b).
+- [x] **GASID-03**: The PriceLookup nibble-table is output-identical to the prior table over the full input domain. ✅ ATTESTED 389-02 (differential = 0 mismatches over the domain; 389-FINDINGS §2b).
+- [x] **GASID-04**: The trait-roll consolidation and `_farFutureSeed` extraction are equivalent to the pre-refactor semantics across all inputs, boundaries, and revert paths. ✅ ATTESTED 389-02 (single-hero roll trace + literal seed extraction; 389-FINDINGS §2b).
+- [x] **GASID-05**: No gas/refactor edit changed an externally-observable behavior (output / revert / event) — behavior-identity is asserted, not assumed. ✅ ATTESTED 389-02 (anchored on GASID-01..04 + empty expected-red name-set; 389-FINDINGS §2b).
 
 ### SOLV — Solvency spine
 - [ ] **SOLV-01**: The `claimablePool == Σ claimable + Σ afking` identity holds across every changed credit/debit path (the `_debitClaimableAndAfking` per-half guards).
