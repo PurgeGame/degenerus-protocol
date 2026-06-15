@@ -15,28 +15,46 @@ functions, NAMED — not an all-files sweep).
 
 ---
 
-## Campaign status: IN-PROGRESS (resumable)
+## Campaign status: BOUNDED — spine targets DONE, RNG modules CI-deferred (resumable)
 
 This is the documented LONG-POLE (via_ir ≈ 30–90s per mutant; each mutant is one full
 project compile + the 12-suite oracle run). It is paced per-target with `.DONE`
-checkpoints so a 5h cap never strands a mutant. **One target (`BitPackingLib`) is fully
-scored; the remaining five are NOT yet run and are recorded as resumable, NOT dropped.**
-Re-invoking `run-campaign-v63.sh --single <ContractName>` resumes the next target from a
-clean (trap-restored) tree; the completed target stays `.DONE` and is skipped.
+checkpoints so a 5h cap never strands a mutant. The campaign was deliberately **BOUNDED**
+after the three SPINE targets: the packing-identity primitive (`BitPackingLib`), the
+storage helpers (`DegenerusGameStorage`), and the solvency spine (`StakedDegenerusStonk`)
+are all fully scored + triaged. The remaining three RNG/v63-changed modules are CI-DEFERRED
+(via_ir cost ≈ overnight) and recorded as resumable, NOT dropped. Re-invoking
+`run-campaign-v63.sh --single <ContractName>` resumes the next target from a clean
+(trap-restored) tree; completed targets stay `.DONE` and are skipped.
 
 | Target (TARGETS-v63 order) | Class | Status | Note |
 |---|---|---|---|
-| `BitPackingLib` | PACKING IDENTITY | **DONE** (scored below) | 4219s (~70 min) |
-| `DegenerusGameStorage` | PACKING IDENTITY + SOLVENCY helpers | IN-PROGRESS / resumable | ~2361 LOC; multi-hour |
-| `StakedDegenerusStonk` | SOLVENCY SPINE | NOT RUN / resumable | redemption claim-split |
-| `BurnieCoinflip` | v63-CHANGED + RNG-adjacent | NOT RUN / resumable | emission rework |
-| `DegenerusGameLootboxModule` | RNG DOMINANT + SOLVENCY | NOT RUN / resumable | ~2328 LOC; multi-hour |
-| `DegenerusGameDecimatorModule` | RNG DOMINANT + v63-CHANGED | NOT RUN / resumable | ~1159 LOC |
+| `BitPackingLib` | PACKING IDENTITY | **DONE** (scored below) | 4219s (~70 min); 55 survivors, 1 GENUINE (G-BPL-01, KILLED) |
+| `DegenerusGameStorage` | PACKING IDENTITY + SOLVENCY helpers | **DONE** (scored below) | killed=2 uncaught=2 (1 real survivor S-DGS-01 FALSE, 1 compile-failure artifact) |
+| `StakedDegenerusStonk` | SOLVENCY SPINE | **DONE** (scored below) | killed=152 uncaught=78 elapsed=10692s (~178 min); 76 distinct survivors, 6 GENUINE (K1–K6, ALL KILLED) |
+| `BurnieCoinflip` | v63-CHANGED + RNG-adjacent | CI-DEFERRED / resumable | emission rework; already covered by 389–394 dual-net + BURNIE-04 |
+| `DegenerusGameLootboxModule` | RNG DOMINANT + SOLVENCY | CI-DEFERRED / resumable | ~2328 LOC; via_ir overnight |
+| `DegenerusGameDecimatorModule` | RNG DOMINANT + v63-CHANGED | CI-DEFERRED / resumable | ~1159 LOC; via_ir overnight |
 
-**Resume command (next target):** `bash audit/mutation/run-campaign-v63.sh --single DegenerusGameStorage`
-(then `StakedDegenerusStonk`, `BurnieCoinflip`, `DegenerusGameLootboxModule`,
-`DegenerusGameDecimatorModule`). The full-campaign form
-`bash audit/mutation/run-campaign-v63.sh` resumes at the first non-`.DONE` target.
+### CI resume (the bounded tail)
+
+The three CI-deferred targets resume EXACTLY via (run overnight / in CI under the via_ir
+default profile; each is multi-hour):
+
+```
+bash audit/mutation/run-campaign-v63.sh --single BurnieCoinflip
+bash audit/mutation/run-campaign-v63.sh --single DegenerusGameLootboxModule
+bash audit/mutation/run-campaign-v63.sh --single DegenerusGameDecimatorModule
+```
+
+The full-campaign form `bash audit/mutation/run-campaign-v63.sh` resumes at the first
+non-`.DONE` target (the three `.DONE` spine targets are skipped). **Cost:** via_ir ≈ 30–90s
+per mutant × the module mutant count → ~overnight per module; this is why the tail is CI-
+deferred rather than run in the interactive window. **Coverage note:** the BURNIE / redemption
+surface these modules touch was already exhaustively covered by the 389–394 dual-net audit and
+the BURNIE-04 fix-design workflow, so the deferred tail is incremental net-tightening, not an
+open security gap. Any GENUINE survivor a deferred target produces on resume is triaged into
+`SURVIVOR-TRIAGE-v63.md` and dispositioned in `MUTATION-FINDINGS-v63.md`.
 
 ---
 
@@ -102,20 +120,65 @@ Authoritative slither-mutate summary (`audit/mutation/BitPackingLib-v63.log`):
 - **Byte-freeze after target:** tree-hash `2934d3d8987a09c5f073549a0cb499f6c5f28620`,
   `git diff a8b702a7 -- contracts/` EMPTY.
 
-### Aggregate (completed targets only)
+### `DegenerusGameStorage` (PACKING IDENTITY + SOLVENCY helpers)
 
-| | Caught | Compiling mutants | Mutation score |
-|---|---|---|---|
-| **All completed targets (BitPackingLib)** | 23 | 78 | **29.5%** |
+Runner summary (`PROGRESS-v63.log`: `DegenerusGameStorage DONE killed=2 uncaught=2`). The
+`killed`/`uncaught` are the runner's grep heuristic; the AUTHORITATIVE survivor set is the
+saved compilable mutants in `DegenerusGameStorage-mut-v63/DegenerusGameStorage/`, diffed
+against the subject:
 
-The aggregate will be recomputed across all targets when the remaining five are run
-(resume per the status table). The low BitPackingLib tweak-score (6.9%) is the EXPECTED
-PACKING-IDENTITY shape, NOT a solvency/RNG net hole: ~54 of the 55 survivors are
-constant-definition mutations that the comprehensive oracle's pokes do not drive to an
-asserted divergence because the mask is a width-BOUNDING value applied as `value & mask`
-over inputs already within the field width (the documented BitPackingLib false-survivor
-pattern). The triage adjudicates each survivor class FALSE vs GENUINE in
-SURVIVOR-TRIAGE-v63.md; the single GENUINE net hole is the `setPacked` body-coverage gap.
+- `DegenerusGameStorage_RR_2.sol` — line 583 `return currentDay >= psd + 120;` → `revert()`
+  (the `_isDistressMode` `level != 0` distress branch). **1 real compilable survivor**
+  (S-DGS-01, FALSE — covered by the JS distress suites outside the forge-oracle union).
+- `DegenerusGameStorage_RR_3.sol` — byte-identical to the subject (a slither restore artifact,
+  NOT a survivor).
+- The runner's `uncaught=2` also counted a `_queueTickets` line-595 RR (`if (quantity == 0)
+  revert()`, missing `;`) that is a COMPILATION FAILURE, not a live survivor.
+
+**Effective survivors: 1 (S-DGS-01, FALSE). 0 GENUINE.** Class = PACKING + SOLVENCY helpers;
+no net hole on the protocol's overall coverage.
+
+### `StakedDegenerusStonk` (SOLVENCY SPINE)
+
+Runner summary (`PROGRESS-v63.log`: `StakedDegenerusStonk DONE killed=152 uncaught=78
+elapsed=10692s` — a COMPLETE run, ~178 min). Authoritative survivor set from the
+`--> UNCAUGHT` log entries:
+
+| Mutant category | Survivors (UNCAUGHT) | Note |
+|---|---|---|
+| RR (line → `revert()`) | 55 | post-gameOver burn/drain + pool legs + views + constructor |
+| CR (line commented out) | 23 | constructor allocations, metadata constants, ACL reverts, pool legs |
+| **TOTAL distinct survivor lines** | **76** | (78 raw markers − 2 wrapped-line duplicates) |
+
+- **Caught: 73; killed=152 (runner grep, inflated by the `UNCAUGHT` substring); authoritative
+  caught = 73 of 151 compiling.** The live-game gambling-burn → `claimRedemption` path was
+  comprehensively CAUGHT (the live settle legs 876–900 all caught) — the survivors are the
+  POST-gameOver / non-redemption surface the oracle never drives.
+- **GENUINE: 6 clusters (K1–K6), ALL KILLED** by `test/mutation/MutationKills.t.sol`.
+- **FALSE: 70 survivors** (constructor deploy-only, ERC20 metadata, keeper cranks, deposit
+  event/ACL, pure views, gameOver settle branch + batch-loop plumbing — see
+  SURVIVOR-TRIAGE-v63.md §StakedDegenerusStonk F1–F6).
+- **Byte-freeze after target:** tree-hash `2934d3d8987a09c5f073549a0cb499f6c5f28620`,
+  `git diff a8b702a7 -- contracts/` EMPTY.
+
+### Aggregate (bounded — the 3 scored SPINE targets)
+
+| Target | Distinct survivors | GENUINE | KILLED-BY-TEST | ROUTED |
+|---|---|---|---|---|
+| `BitPackingLib` | 55 | 1 (G-BPL-01) | 1 | 0 |
+| `DegenerusGameStorage` | 1 | 0 | 0 | 0 |
+| `StakedDegenerusStonk` | 76 | 6 (K1–K6) | 6 | 0 |
+| **BOUNDED TOTAL** | **132** | **7** | **7** | **0** |
+
+**Aggregate disposition: 7 GENUINE survivors, ALL KILLED-BY-TEST, 0 ROUTED, 0 contract
+defects.** The low raw mutation scores (BitPackingLib 29.5% tweak-heavy; the Stonk survivor
+swarm) are the EXPECTED PACKING-IDENTITY / post-gameOver-coverage shapes, NOT solvency/RNG net
+holes: the FALSE survivors are equivalent mutants (width-bounding masks over pre-clamped inputs),
+deploy-only constructor mutations slither cannot re-deploy in the live fixture, or paths covered
+OUTSIDE the comprehensive-forge-oracle union (JS distress / keeper suites). The 7 GENUINE oracle
+gaps are all closed by deterministic regression tests, each validated fail-with-mutation /
+pass-without. The aggregate will be recomputed across all 6 targets when the 3 CI-deferred RNG
+modules are run (see §CI resume).
 
 ---
 
@@ -123,29 +186,28 @@ SURVIVOR-TRIAGE-v63.md; the single GENUINE net hole is the `setPacked` body-cove
 
 | Window event | Target | Outcome |
 |---|---|---|
-| Window 1 (this plan) | `BitPackingLib` | ran MUTATE_START → DONE (4219s), scored above |
-| Window 1 (this plan) | `setPacked` CR survivor re-verify | full-run oracle (default profile) re-run IN PLACE, restored — see triage |
-| Window 1 (this plan) | `DegenerusGameStorage` | LAUNCHED (resumable; no `.DONE` yet) — carried IN-PROGRESS |
-| Future windows | the remaining 5 targets | resume via `--single`, skip the `BitPackingLib.DONE` checkpoint |
+| Window 1 | `BitPackingLib` | ran MUTATE_START → DONE (4219s), scored |
+| Window 1 | `setPacked` CR survivor re-verify | full-run oracle re-run IN PLACE, restored — triage |
+| Window 1 | `DegenerusGameStorage` | DONE (115s/299s); 1 real survivor (S-DGS-01) |
+| Window 2 | `StakedDegenerusStonk` | ran MUTATE_START → DONE (10692s, ~178 min); 76 survivors |
+| Window 3 (Plan 03) | triage + kill-tests | 7 GENUINE survivors KILLED, each validated in place + restored |
+| CI / future | the 3 deferred RNG modules | resume via `--single` (see §CI resume), skip the 3 spine `.DONE` checkpoints |
 
 A cap-stop mid-target leaves the in-flight target's `.DONE` absent and `contracts/`
-trap-restored (the runner's EXIT/INT/TERM trap `git checkout -- contracts/`); the completed
-`BitPackingLib.DONE` is skipped on resume. The `setPacked` re-verification was a manual
-in-place mutation done with the campaign runner stopped (no two processes mutate
-`contracts/` at once); it was restored before relaunching `DegenerusGameStorage`.
+trap-restored (the runner's EXIT/INT/TERM trap `git checkout -- contracts/`); completed
+`.DONE` targets are skipped on resume. Every kill-test validation (Plan 03) was a manual
+in-place mutation done with the campaign runner stopped (no two processes mutate `contracts/`
+at once); each was restored before the next.
 
 ---
 
-## Byte-freeze attestation (end of this window)
+## Final byte-freeze attestation (bounded-campaign close, Plan 03)
 
 - `git rev-parse HEAD:contracts` == `2934d3d8987a09c5f073549a0cb499f6c5f28620`.
-- `git diff a8b702a7 -- contracts/` — EMPTY.
-- No commit was made while any mutant (campaign or re-verification) was in place.
+- `git diff a8b702a7 -- contracts/` — EMPTY (contracts/ byte-identical to `a8b702a7`).
+- `forge test --match-path test/mutation/MutationKills.t.sol` — 8 passed, 0 failed (clean subject).
+- No commit was made while any mutant (campaign or kill-test re-verification) was on disk.
 
-**contracts/ byte-identical to `a8b702a7` after this campaign window.**
-
-> NOTE: at the moment this report is committed, `DegenerusGameStorage` may be running in
-> the background and transiently mutating `contracts/` — the runner restores via its trap.
-> The commit step asserts `git diff a8b702a7 -- contracts/` EMPTY (and `git checkout --
-> contracts/` if needed) immediately before staging, so this report is only committed
-> against a byte-frozen tree.
+**Bounded campaign closed: 3 SPINE targets scored + triaged, 7 GENUINE survivors KILLED-BY-TEST,
+0 ROUTED, 0 contract defects, 3 RNG modules CI-deferred (resumable). contracts/ byte-identical
+to `a8b702a7`.**

@@ -73,3 +73,10 @@ campaign-v63 SINGLE-END DegenerusGameStorage 2026-06-15T09:39:47Z
 campaign-v63 SINGLE-END DegenerusGameStorage 2026-06-15T09:39:47Z
 campaign TRAP_EXIT 2026-06-15T09:39:47Z
 campaign TRAP_EXIT 2026-06-15T09:39:47Z
+campaign-v63 START 2026-06-15T09:48:32Z HEAD=862e543a subject=a8b702a7
+StakedDegenerusStonk BASELINE_CHECK 2026-06-15T09:48:32Z
+StakedDegenerusStonk MUTATE_START 2026-06-15T09:49:42Z src=contracts/StakedDegenerusStonk.sol
+campaign TRAP_EXIT 2026-06-15T12:47:54Z
+StakedDegenerusStonk DONE killed=152 uncaught=78 elapsed=10692s 2026-06-15T12:47:54Z
+campaign-v63 SINGLE-END StakedDegenerusStonk 2026-06-15T12:47:54Z
+campaign TRAP_EXIT 2026-06-15T12:47:54Z

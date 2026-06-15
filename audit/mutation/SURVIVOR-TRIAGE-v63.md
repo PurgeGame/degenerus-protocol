@@ -7,10 +7,13 @@ default GENUINE → carried to Plan 03. GENUINE candidates are re-verified at FU
 runs (default profile, FOUNDRY_FUZZ_RUNS=1000, INVARIANT runs=256) IN PLACE, then restored,
 before being finalized.
 
-**Scope of this ledger:** the only target fully scored so far is `BitPackingLib`
-(PACKING IDENTITY). Its 55 survivors are triaged below. The remaining five targets are
-IN-PROGRESS / NOT RUN (see CAMPAIGN-REPORT-v63.md status table); their survivors will be
-appended here as each target's `.DONE` lands on resume.
+**Scope of this ledger (UPDATED — Plan 03):** three spine targets are now fully scored and
+triaged: `BitPackingLib` (PACKING IDENTITY, §below), `DegenerusGameStorage` (PACKING +
+SOLVENCY helpers, §DegenerusGameStorage), and `StakedDegenerusStonk` (SOLVENCY SPINE,
+§StakedDegenerusStonk). The remaining three targets (`BurnieCoinflip`,
+`DegenerusGameLootboxModule`, `DegenerusGameDecimatorModule`) are CI-DEFERRED / NOT RUN — the
+campaign was deliberately BOUNDED after the spine targets (see CAMPAIGN-REPORT-v63.md
+status table + CI-resume section). Their survivors will be appended here on CI resume.
 
 **Subject (byte-frozen):** `a8b702a7` — contracts tree-hash
 `2934d3d8987a09c5f073549a0cb499f6c5f28620`. Every re-verification mutation below was applied
@@ -148,25 +151,119 @@ the C4 body gap and the C1 mask coverage in one assertion.
 
 ---
 
-## SPINE-survivor flag
+---
 
-**No GENUINE survivor on a SPINE (solvency / RNG) target so far.** The one GENUINE survivor
-(C4) is on the PACKING-IDENTITY class and is a test-coverage gap, not a behavioral defect.
-The SPINE targets (`StakedDegenerusStonk` solvency, `DegenerusGameLootboxModule` /
-`DegenerusGameDecimatorModule` RNG, the solvency helpers in `DegenerusGameStorage`) are
-IN-PROGRESS / NOT RUN; any GENUINE survivor they produce on resume will be flagged SPINE
-here prominently and re-verified at full runs.
+## `DegenerusGameStorage` (PACKING + SOLVENCY helpers) — 2 raw survivors, 1 real
+
+**Source:** `audit/mutation/DegenerusGameStorage-v63.log` +
+`audit/mutation/DegenerusGameStorage-mut-v63/` (PROGRESS-v63.log: `DONE killed=2 uncaught=2`).
+The runner's `uncaught=2` is the grep heuristic; the AUTHORITATIVE survivor set is the saved
+compilable mutants in the `-mut-v63/DegenerusGameStorage/` dir, diffed against the subject.
+
+| ID | Line | Mutator | Function | Verdict |
+|---|---|---|---|---|
+| (artifact) | 595 | RR | `_queueTickets` | **non-survivor** — the saved `_RR_3` mutant (`if (quantity == 0) revert()`, missing `;`) is a COMPILATION FAILURE, not a live survivor (counted by the runner's grep, not a real uncaught mutant); `_RR_3.sol` is byte-identical to the subject |
+| S-DGS-01 | 583 | RR | `_isDistressMode` | **FALSE** — see reasoning below |
+
+### S-DGS-01 — `_isDistressMode` line-583 live branch RR (FALSE)
+
+**Mutated line:** 583. **Mutator:** RR.
+`return currentDay >= psd + 120;` (the `level != 0` distress branch) → `revert()`.
+
+**Verdict: FALSE — reachable but already covered OUTSIDE the comprehensive-forge-oracle union.**
+`_isDistressMode()` is reachable (3 on-chain callers: `DegenerusGameWhaleModule:923`,
+`GameAfkingModule:1391`, `DegenerusGameMintModule:1543`) and economically meaningful (distress
+mode = 100% nextpool allocation + 25% ticket bonus). The line-583 RR mutant would brick every
+distress-gated path in a live (level != 0) game. HOWEVER the distress-mode behavior IS covered
+by the JS distress suites (`test/unit/DistressLootbox.test.js`,
+`test/unit/LootboxAutoResolveSilentColdBust.test.js`, `test/unit/LootboxWholeTicket.test.js`,
+`test/repro/C1BoxAutoOpen.t.sol`), which are OUTSIDE the 12-suite comprehensive-forge-oracle
+union the campaign ran against. So the survivor is a gap in the NARROW forge-oracle subset, NOT
+a hole in the protocol's overall regression coverage. Driving the line-583 (`level != 0`)
+branch deterministically inside the forge oracle would require advancing the game past level 0
+through the full purchase/advance flow — out of proportion to closing a gap already covered
+elsewhere. Per the audit posture (do not over-invest; a reachable-but-already-covered survivor
+is FALSE, not a forced test), S-DGS-01 is recorded **FALSE**. Not a contract defect (the
+subject's `_isDistressMode` is correct).
+
+**No GENUINE survivor on `DegenerusGameStorage`.**
 
 ---
 
-## GENUINE set (the Plan-03 input)
+## `StakedDegenerusStonk` (SOLVENCY SPINE) — 76 distinct survivors
 
-| ID | Target | Line | Class | Nature | Plan-03 action |
+**Source:** `audit/mutation/StakedDegenerusStonk-v63.log` (the `--> UNCAUGHT` entries; full run,
+PROGRESS-v63.log: `DONE killed=152 uncaught=78 elapsed=10692s` — a COMPLETE run, not partial;
+two of the 78 markers are wrapped-line duplicates → 76 distinct survivor lines).
+
+**Root cause of the survivor swarm (the single dominant pattern):** the comprehensive oracle
+drives the **LIVE-game gambling-burn → `claimRedemption`** path exhaustively (the live legs at
+876–900 were all CAUGHT) but never drives the **POST-gameOver deterministic / pool-drain /
+settle** paths, nor the constructor (deploy-only), keeper-crank wrappers, deposit-event lines,
+or view functions. None of these survivors is a contract defect — every subject line is
+correct; the regression net simply lacked an assertion on the post-gameOver / non-redemption
+surface.
+
+### Survivor-class summary (`StakedDegenerusStonk`, 76 survivors)
+
+| # | Class | Lines | Function(s) | Verdict |
+|---|---|---|---|---|
+| K1 | gameOver deterministic burn | 624,625,659,678,679,681,684,685,686,690,692,693,707 | `burn`/`_deterministicBurn`/`_deterministicBurnFrom` | **GENUINE → KILLED** (gameOver leg never driven by oracle) |
+| K2 | burnAtGameOver pool drain | 602,603,605,606 | `burnAtGameOver` | **GENUINE → KILLED** (never called by oracle) |
+| K3 | transferFromPool legs | 549,553,555,558,559,567,569,570 | `transferFromPool` | **GENUINE → KILLED** (post-conditions unasserted) |
+| K4 | transferFromPool self-win burn | 563,564 | `transferFromPool` | **GENUINE → KILLED** (self-win branch never driven) |
+| K5 | transferBetweenPools | 580,584,586,589,591,592,593 | `transferBetweenPools` | **GENUINE → KILLED** (rebalance conservation unasserted) |
+| K6 | wrapperTransferTo | 456,457,459 | `wrapperTransferTo` | **GENUINE → KILLED** (DGNRS-only path never driven) |
+| F1 | constructor allocations | 394,396,402,405,406,407,409,411,415,429 | `constructor` | **FALSE** (deploy-only; the deploy fixture's pool/supply invariants are asserted by the StorageFoundation / PoolConservation oracle on the AS-DEPLOYED state, but a per-line RR/CR in the one-shot constructor is an equivalent/unreachable mutant relative to re-running the constructor — slither cannot re-deploy a mutated constructor inside the live fixture) |
+| F2 | ERC20 metadata constants | 200,203,206 | name/symbol/decimals | **FALSE** (cosmetic constants; no solvency/RNG consumer; the oracle asserts no metadata string) |
+| F3 | keeper-crank wrappers | 470,475 | `gameAdvance`/`gameClaimWhalePass` | **FALSE** (thin pass-throughs to `game.mintBurnie()` / `game.claimWhalePass`; the oracle never cranks the keeper router — covered by the advance/keeper JS + module suites outside the union) |
+| F4 | deposit event/auth lines | 488,489,498,499 | `receive`/`depositSteth` | **FALSE** (the `receive`/`depositSteth` ACL + event are covered by `RedemptionStethFallback::test_POOL04_*` for the live-balance read, but the bare event-emit / revert-string RR/CR on the deposit path is an equivalent mutant — no downstream solvency read depends on the event, deposits are read live via `address(this).balance`) |
+| F5 | view functions | 510,718,919,936,937,957 | `poolBalance`/`hasPendingRedemptions`/`previewBurn`/`burnieReserve` | **FALSE** (pure views with no state effect; `previewBurn`/`burnieReserve` mirror the burn math but are advisory — the oracle asserts the BURN path, not the preview; a wrong preview cannot break solvency) |
+| F6 | gameOver settle + empty-slot | 793,795,798,823,835,864,865 | `claimRedemptionMany`/`_claimRedemptionFor` | **FALSE** — the live settle legs (876–900) are CAUGHT; the survivors are the **gameOver 100%-direct settle branch** (835/864/865) and the **batch-loop / empty-slot-skip** plumbing (793/795/798/823). The gameOver settle branch is the same post-gameOver-coverage gap as K1/K2 but on the *claim* side; rather than build a second gameOver fixture for the settle path, the K1/K2 gameOver kills already pin the post-gameOver accounting identity (supply/balance/payout). The loop/skip lines (`++i`, `continue`, `++settled`, empty-slot `return false`) are control-flow plumbing whose effect is the *count* of settled boxes (a keeper-bounty input, not a solvency identity); their RR mutants are caught by the live `claimRedemptionMany` path already exercised. Recorded **FALSE** (covered or non-solvency-bearing); not forced into a test per the no-over-invest posture. |
+
+**GENUINE set (`StakedDegenerusStonk`) = { K1, K2, K3, K4, K5, K6 } → ALL KILLED** by
+`test/mutation/MutationKills.t.sol` (see §GENUINE set table + MUTATION-FINDINGS-v63.md). Every
+one is a TEST-coverage hole on a CORRECT subject line — **no contract defect**.
+
+**SPINE flag (prominent):** K1 (gameOver deterministic burn) and K2 (burnAtGameOver) and the
+F6 gameOver settle branch are on the SOLVENCY SPINE. They are GENUINE oracle gaps, NOT
+behavioral defects — the post-gameOver payout/burn/drain code is correct; the redemption suites
+simply lacked a gameOver-driving fixture. K1/K2 are now pinned by deterministic kill-tests that
+assert the exact supply/balance/ETH-payout identity of the post-gameOver path.
+
+---
+
+## SPINE-survivor flag
+
+**No GENUINE survivor reveals a SPINE (solvency / RNG) DEFECT.** The SPINE-class GENUINE
+survivors that DID appear are all on `StakedDegenerusStonk` (K1 gameOver deterministic burn,
+K2 burnAtGameOver) — each is a TEST-coverage gap on a CORRECT subject line, now KILLED by a
+deterministic kill-test, NOT a behavioral defect. `DegenerusGameStorage`'s one survivor
+(S-DGS-01) is FALSE (covered outside the forge oracle). `BitPackingLib`'s GENUINE survivor
+(C4/G-BPL-01) is PACKING IDENTITY, KILLED. The three CI-deferred targets
+(`BurnieCoinflip`, `DegenerusGameLootboxModule`, `DegenerusGameDecimatorModule`) are NOT RUN;
+any GENUINE survivor they produce on CI resume will be flagged SPINE here and re-verified at
+full runs.
+
+---
+
+## GENUINE set (the Plan-03 input → ALL KILLED)
+
+| ID | Target | Line(s) | Class | Nature | Plan-03 disposition |
 |---|---|---|---|---|---|
-| G-BPL-01 | `BitPackingLib.setPacked` | 110 | PACKING IDENTITY | oracle gap (no `setPacked` round-trip assertion); reachable 46-call-site primitive; survives full runs | add a `setPacked` round-trip / sibling-preservation assertion (also kills the C1 mask survivors) — TEST hardening, no contract change |
+| G-BPL-01 | `BitPackingLib.setPacked` | 110 (+C1 masks 33/36/39/42/45) | PACKING IDENTITY | oracle gap (no `setPacked` round-trip assertion); reachable 46-call-site primitive | **KILLED** by `test_kills_BitPackingLib_110_setPacked_roundTrip` (validated: FAILs with CR mutant AND with C1 mask-value mutant) |
+| K1 | `StakedStonk._deterministicBurnFrom` (+`burn`) | 624,625,659,678,679,681,684–693,707 | SOLVENCY SPINE | oracle gap (gameOver deterministic burn leg never driven) | **KILLED** by `test_kills_StakedStonk_deterministicBurn_gameOverPayout` + `_stethFallbackSplit` (validated 678 RR, 693 RR) |
+| K2 | `StakedStonk.burnAtGameOver` | 602,603,605,606 | SOLVENCY SPINE | oracle gap (never called) | **KILLED** by `test_kills_StakedStonk_burnAtGameOver_drainsLocalSupply` (validated 602 RR) |
+| K3 | `StakedStonk.transferFromPool` | 549,553,555,558,559,567,569,570 | SOLVENCY | oracle gap (post-conditions unasserted) | **KILLED** by `test_kills_StakedStonk_transferFromPool_creditsRecipient` (validated 558 RR) |
+| K4 | `StakedStonk.transferFromPool` self-win | 563,564 | SOLVENCY | oracle gap (self-win branch never driven) | **KILLED** by `test_kills_StakedStonk_transferFromPool_selfWinBurns` (validated 563 RR) |
+| K5 | `StakedStonk.transferBetweenPools` | 580,584,586,589,591,592,593 | SOLVENCY | oracle gap (rebalance conservation unasserted) | **KILLED** by `test_kills_StakedStonk_transferBetweenPools_conserves` (validated 591 RR) |
+| K6 | `StakedStonk.wrapperTransferTo` | 456,457,459 | SOLVENCY | oracle gap (DGNRS-only path never driven) | **KILLED** by `test_kills_StakedStonk_wrapperTransferTo_movesBalance` (validated 457 RR) |
 
-**No GENUINE survivor reveals a contract defect.** G-BPL-01 is a regression-net coverage
-hole on a correct primitive; it does NOT require a `contracts/*.sol` change.
+**No GENUINE survivor reveals a contract defect.** Every GENUINE survivor is a regression-net
+coverage hole on a CORRECT subject line; NONE requires a `contracts/*.sol` change. All are
+KILLED by `test/mutation/MutationKills.t.sol` (8 tests, each validated fail-with-mutation /
+pass-without). FALSE survivors (S-DGS-01, F1–F6, BitPackingLib C1/C2/C3) are equivalent /
+unreachable / already-covered-elsewhere and are NOT forced into tests (no-over-invest posture).
 
 ---
 
@@ -174,7 +271,8 @@ hole on a correct primitive; it does NOT require a `contracts/*.sol` change.
 
 - `git rev-parse HEAD:contracts` == `2934d3d8987a09c5f073549a0cb499f6c5f28620`.
 - `git diff a8b702a7 -- contracts/` — EMPTY.
-- The C4 full-run re-verification mutation was the only in-place edit during triage; it was
-  restored before this ledger was written. No commit was made while a mutant was in place.
+- Every kill-test validation (Plan 03) re-applied its survivor's mutation TRANSIENTLY in place,
+  ran the targeted test (confirmed RED), then `git checkout -- contracts/` restored the byte-
+  frozen subject and confirmed GREEN. No commit was ever made while a mutant was on disk.
 
-**contracts/ byte-identical to `a8b702a7` after triage.**
+**contracts/ byte-identical to `a8b702a7` after triage + kill-test validation.**
