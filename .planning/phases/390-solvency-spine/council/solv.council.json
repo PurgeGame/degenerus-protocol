@@ -1,0 +1,7 @@
+{
+  "label": "solv",
+  "schema": "",
+  "models": ["gemini", "codex"],
+  "skipped": [],
+  "outputs": {"gemini": ".planning/phases/390-solvency-spine/council/solv.gemini.txt", "codex": ".planning/phases/390-solvency-spine/council/solv.codex.txt"}
+}
