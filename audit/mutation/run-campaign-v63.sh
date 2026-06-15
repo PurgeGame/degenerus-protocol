@@ -69,7 +69,10 @@ run_target() {
   echo "$name BASELINE_CHECK $(date -u +%FT%TZ)" >> "$PROG"
   local out
   out=$(bash "$ORACLE" 2>&1)
-  if echo "$out" | grep -qE 'No tests to run' || ! echo "$out" | grep -qE 'Suite result: ok'; then
+  # Here-strings (not `echo | grep -q`): grep -q exits on first match and closes the
+  # pipe; under `pipefail` echo then takes SIGPIPE (141) and the pipeline reports
+  # failure even though the oracle was green, falsely tripping the baseline gate.
+  if grep -qE 'No tests to run' <<<"$out" || ! grep -qE 'Suite result: ok' <<<"$out"; then
     echo "$name BASELINE_BAD(no-tests-or-red) abort-target $(date -u +%FT%TZ)" >> "$PROG"
     echo "$out" | grep -E 'Suite result|No tests|FAIL' | tail -8 >> "$PROG"
     return 1
