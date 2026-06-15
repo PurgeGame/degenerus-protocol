@@ -78,8 +78,8 @@
 - [x] **ACCESS-05**: The freeze / rngLocked / liveness / gameOver gates are intact on all new and widened entrypoints; reentrancy is closed across the ETH/stETH legs. ✅ ATTESTED 393-02 (both nets; per-entrypoint gates + slot-delete-before-untrusted-call CEI + stETH-first/ETH-last + SDGNRS-gated callees + internal-only yield-surplus + V62-03 reorder intact — 393-FINDINGS §2a).
 
 ### MUT — Mutation campaign *(folded debt)*
-- [ ] **MUT-01**: The full mutation campaign is run over the frozen subject with fix-site functions + a comprehensive oracle scope (per the mutation-oracle lesson — narrow per-file oracles produce false survivors); via_ir, CI/overnight pacing.
-- [ ] **MUT-02**: The mutation score is measured and recorded; surviving mutants are triaged (false-survivor vs genuine oracle gap).
+- [~] **MUT-01** *(IN-PROGRESS — 395-02)*: The full mutation campaign is run over the frozen subject with fix-site functions + a comprehensive oracle scope (per the mutation-oracle lesson — narrow per-file oracles produce false survivors); via_ir, CI/overnight pacing. **Method established + 1 of 6 fix-site/spine targets scored (`BitPackingLib` DONE); the 5 remaining targets are resumable IN-PROGRESS (none dropped) — resume `run-campaign-v63.sh --single DegenerusGameStorage`.** The corrected comprehensive-oracle harness runs (the 395-01 false-survivor mistake replaced); subject byte-frozen `a8b702a7` throughout.
+- [x] **MUT-02** *(395-02)*: The mutation score is measured and recorded; surviving mutants are triaged (false-survivor vs genuine oracle gap). **`BitPackingLib` = 23 caught / 78 compiling = 29.5%, 55 survivors; every survivor triaged in SURVIVOR-TRIAGE-v63.md = 54 FALSE + 1 GENUINE (G-BPL-01 `setPacked` body-coverage gap, re-verified at full runs).** Per-target scores append on campaign resume. (commits `e067c714`, `af44ea1b`)
 - [ ] **MUT-03**: Each genuine surviving mutant is either killed by a new test or routed to a finding.
 
 ### LEGACY — v50/v51/v52 consolidated debt *(folded)*
