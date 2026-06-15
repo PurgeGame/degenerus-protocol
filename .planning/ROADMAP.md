@@ -115,6 +115,18 @@ Goal: the reward rebalances preserve their documented EV/neutrality + bounded ac
 Type: SWEEP (dual-net) · Depends on: 388 · Requirements: ECON-01..06, BURNIE-01..06
 Success criteria: (1) EV-neutrality re-verified vs the PAPER brief + the two EV changes match intent; (2) no positive-EV money pump; (3) scarce-asset invariants (whale-pass channel, sDGNRS backing) hold; (4) survive-before-mint + emission conservation + auto-rebuy/carry/VAULT-window accounting resolved (incl. the two top BURNIE leads); both nets on record.
 
+Plans: 4 plans (dual-net, slice-split ECON + BURNIE) in 2 waves
+Plans:
+**Wave 1** *(council net -- two slices, parallel, no file overlap)*
+
+- [ ] 392-01-PLAN.md -- NET 1 (council) ECON slice: neutral reward-economics council prompt (ECON-01..06 + FC-392-01..10 + FC-392-14/-15; the ECON-04 money-pump search across recycle/spin/recirc/carry/affiliate + FC-392-07 box WWXRP-spin whale-half-pass channel + FC-392-08 redemption ETH-spin CEI charged hard; the design-intent anchor [EV-neutral redistributions + the two documented EV changes are BY-DESIGN, VERIFY in code] + the bounded-accrual sweep encoded), council.sh fan-out to gemini+codex, raw capture under council/, byte-freeze verify (Wave 1)
+- [ ] 392-02-PLAN.md -- NET 1 (council) BURNIE slice: neutral BURNIE/coinflip-rework council prompt (BURNIE-01..06 + FC-392-16..20 + cross-ref backing-dynamics FC-392-11/-12/-13; the two prime backing leads FC-392-16 [auto-rebuy carry excluded from sDGNRS redemption backing] + FC-392-17 [VAULT seed 30-day window-aging forfeiture, "most likely to need a contract change"] charged hard demanding a CONFIRM/REFUTE/BY-DESIGN with the backing accounting traced; the survive-before-mint + emission-conservation + off-the-ETH-spine doctrine encoded), council.sh fan-out to gemini+codex, raw capture under council/, byte-freeze verify (Wave 1)
+
+**Wave 2** *(Claude net + adjudication -- blocked on the matching Wave-1 council slice)*
+
+- [ ] 392-03-PLAN.md -- NET 2 (Claude) + adjudication ECON slice: independent adversarial net over the reward-economics surface, adjudicate ECON-01..06 + FC-392-01..10 + FC-392-14/-15 vs frozen a8b702a7, EV-neutrality re-verified IN CODE vs the PAPER brief (split / x11/9 / far-near 1.0 / variance 0.786x) + the two EV changes confirmed in code + the money-pump composition search + the whale-pass P(S==9)xboxes-per-pass quantification + supply-cap proof + the bounded-accrual sweep, skeptic gate, 392-FINDINGS-ECON.md verdict table (Wave 2, depends 392-01)
+- [ ] 392-04-PLAN.md -- NET 2 (Claude) + adjudication BURNIE slice + phase index: independent adversarial net over the BURNIE/coinflip-rework surface, adjudicate BURNIE-01..06 + FC-392-16..20 + FC-392-11/-12/-13 vs frozen a8b702a7, the dedicated EXHAUSTIVE carry-backing trace (FC-392-16) + the VAULT-window determination (FC-392-17) + emission-conservation re-verify (BurnieEmissionSeeds 5/5) + survive-before-mint enumeration + latch-monotonicity proof + packed-lane round-trip + loss-sequence backing model, skeptic gate, 392-FINDINGS-BURNIE.md verdict table + the consolidated 392-FINDINGS.md index tying both slices (all 12 reqs re-attested, both nets on record for both slices) (Wave 2, depends 392-02 + 392-03)
+
 ### Phase 393: PERMISSIONLESS-COMPOSITION
 
 Goal: the new permissionless/keeper surface cannot grief, faucet, or steer, and composition across boundaries is safe.
