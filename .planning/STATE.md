@@ -2,8 +2,8 @@
 gsd_state_version: 1.0
 milestone: v63.0
 milestone_name: Post-v62 Audit (Critical Invariants + Reward Game-Theory)
-status: executing
-last_updated: "2026-06-15T01:30:00Z"
+status: ready_to_plan
+last_updated: 2026-06-15T00:49:12.468Z
 last_activity: 2026-06-15 -- Phase 389 Plan 02 (NET 2 Claude + adjudication) complete — Phase 389 CLOSED
 progress:
   total_phases: 17
@@ -11,6 +11,7 @@ progress:
   total_plans: 5
   completed_plans: 5
   percent: 12
+stopped_at: Phase 389 complete (2/2) — ready to discuss Phase 390
 ---
 
 # Project State
@@ -20,7 +21,7 @@ progress:
 See: .planning/PROJECT.md (Current State section) + .planning/ROADMAP.md (v63.0 = top milestone, ▶ ACTIVE) + .planning/MILESTONES.md (v63.0 entry, top) + .planning/AUDIT-V63-PLAN.md (the full method doc) + .planning/REQUIREMENTS.md (the 58 REQ-IDs) + .planning/v63-surface-map/ (the 7 read-only dimension maps) + .planning/PAPER-REWARD-CHANGES-BRIEF.md (the reward design-intent anchor). v62.0 archive: .planning/milestones/v62.0-{ROADMAP,REQUIREMENTS,phases}; canonical v62 deliverable audit/FINDINGS-v62.0.md (chmod 444) + AUDIT-V62-REPORT.html. v63 baseline = v62.0 closure subject `77580320`; v63 subject = HEAD `a8b702a7` (byte-frozen at FOUNDATION 388). **NEXT = /gsd-plan-phase 388** (FOUNDATION — subject freeze + green baseline + slot recalibration).
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Current focus:** Phase 389 — PACKING-IDENTITY
+**Current focus:** Phase 390 — solvency spine
 
 ## ⚠ v50.0 + v51.0 AUDIT DEBT → FOLDED INTO v63.0 Phase 394 LEGACY-DEBT (USER 2026-06-14; was a separate v52 track)
 
@@ -35,12 +36,12 @@ See: .planning/PROJECT.md (Current State section) + .planning/ROADMAP.md (v63.0 
 ## Current Position
 
 Milestone: v63.0 — ▶ ACTIVE (started 2026-06-14). Post-v62 Audit (Critical Invariants + Reward Game-Theory).
-Phase: 389 (PACKING-IDENTITY) — ✅ CLOSED (both plans complete; both nets on record + adjudicated)
-Plan: 2 of 2 (complete)
-Status: Phase 389 closed — STORAGE-01..05/07 + GASID-01..05 ATTESTED at `a8b702a7`; STORAGE-06 = 1 CONFIRMED LOW oracle-integrity finding (R-389-01, test-only). NEXT = `/gsd-plan-phase 390` SOLVENCY-SPINE.
+Phase: 390
+Plan: Not started
+Status: Ready to plan
 Baseline = v62.0 closure subject `77580320`; subject = HEAD `a8b702a7` (byte-frozen at FOUNDATION 388; pin = `contracts` tree `2934d3d8987a09c5f073549a0cb499f6c5f28620`).
 Method = COUNCIL + CLAUDE both; posture = audit-only by default (a surfaced/adjudicated/skeptic-passed finding → gated USER-hand-review fix, else document-only).
-Last activity: 2026-06-15 -- Phase 389 Plan 02 (NET 2 Claude adversarial net + adjudication) complete — NET 2 on record independent of the council (per-item break attempt + provisional verdict over all 12 reqs + 9 leads); `389-FINDINGS.md` = both-nets-on-record per slice + per-item verdict table + skeptic gate (0 HIGH) + routing. VERDICT: **0 CONFIRMED contract findings**; STORAGE-01..05/07 + GASID-01..05 ATTESTED; STORAGE-04/FC-389-01 settled by a cursor-lag proof (deferred opens write no cap + live level+1 keying + +1-monotone level → live key set ⊆ {currentLevel,+1}, 10 ETH cap not re-earnable); STORAGE-06/FC-389-04 = **1 CONFIRMED LOW oracle-integrity finding R-389-01** (2 stale test harnesses: Composition `mintPacked_` slot-10 vacuous canary, HeroOverride JS `lootboxRngPacked` slot-35 no-op seed — test-only fix, contract unaffected; the council box-cursor candidate REFUTED vs forge inspect: boxCursor@58 off7 / boxPlayers@59). FC-389-03 = INFO (`DecEntry.burn` comment); 02/08 → 390; 05 distribution → 391. Subject byte-frozen (`git diff a8b702a7 -- contracts/` empty). Commits `bbd7721c` (NET 2), `c25978a0` (FINDINGS).
+Last activity: 2026-06-15
 Next: `/gsd-plan-phase 390` SOLVENCY-SPINE (dual-net sweep; SOLV-01..07; intake FC-390-01..07 + the 389 cross-refs FC-389-02/-08 narrowing solvency-conservation half). See `389-FINDINGS.md` + `389-02-CLAUDE-NET.md`.
 
 ## ✅ SHIPPED Milestone Roadmap (v62.0 — phases 380-387 — SHIPPED 2026-06-09; baseline = v61.0 closure HEAD `b97a7a2e`; subject `c4d48008`; remediated `77580320`; closure signal `MILESTONE_V62_AT_HEAD_77580320b88e77438c893602a068548961824893`)
