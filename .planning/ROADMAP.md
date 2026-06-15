@@ -164,6 +164,12 @@ Goal: the full mutation campaign is run, scored, and its survivors triaged/kille
 Type: MUTATION (Claude-built harness) · Depends on: 388 (green baseline) · Requirements: MUT-01..03
 Success criteria: (1) campaign run over the frozen subject with fix-site + comprehensive oracle scope (via_ir, CI/overnight); (2) mutation score measured + recorded + survivors triaged; (3) each genuine survivor killed by a new test or routed to a finding.
 
+**Plans:** 3 plans (3 waves — sequential: build → run+score+triage → kill/route; the campaign is the paced long-pole)
+Plans:
+- [ ] 395-01-PLAN.md — Build the CORRECTED harness: name the fix-site/spine target set + the COMPREHENSIVE oracle (the 388-02 EXERCISED green-baseline tests, NOT a narrow per-file --match-contract regex), the kill-safe resumable runner (EXIT/INT/TERM restore trap + per-target .DONE), and validate the false-survivor collapse + the byte-freeze trap (MUT-01)
+- [ ] 395-02-PLAN.md — Run the paced/resumable campaign over the fix-site target set with the comprehensive oracle (via_ir); measure + record the per-target + aggregate mutation score; triage every survivor FALSE (equivalent/unreachable) vs GENUINE (reachable behavioral gap), GENUINE re-verified at full oracle runs (MUT-01, MUT-02)
+- [ ] 395-03-PLAN.md — Kill each GENUINE survivor with a new regression test (validated fail-with-mutation / pass-without) OR route it to a gated finding (real defect → 396, never fixed in-phase); final byte-freeze verification (git diff a8b702a7 empty + tree-hash 2934d3d8…) (MUT-03)
+
 ### Phase 396: TERMINAL — Synthesis + FINDINGS-v63.0 + Closure
 
 Goal: a consolidated, adjudicated, dual-net-backed FINDINGS deliverable and the milestone closure flip.
