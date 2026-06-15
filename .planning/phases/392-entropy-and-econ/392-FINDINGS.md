@@ -118,3 +118,21 @@ strand, BURNIE-05 VAULT window-aging — both off the ETH spine, both routed to 
 boundary, the USER may rule either BY-DESIGN), **0 CONFIRMED in the ECON slice**, and a recommended post-reset
 codex second-source for both the ECON HIGH candidates and the BURNIE prime leads carried to 396. The byte-
 frozen subject `a8b702a7` is attested throughout.
+
+---
+
+## 6. USER dispositions (2026-06-15)
+
+- **BURNIE-04 / FC-392-16 — CONFIRMED MED, USER-ruled REAL GAP → route a gated fix.** The USER confirmed the
+  INTENDED design: the redemption value for the BURNIE part = the amount **owned + the amount in the flip
+  carry** (`autoRebuyCarry`); the redeemer's share is **flip-contingent** — if the next coinflip loses, that
+  share pays nothing; if it wins, the redeemer gets their share and it is **deducted from the carry (or the
+  balance if there is one)**. The current code under-implements this (carry omitted from
+  `previewClaimCoinflips`; no sDGNRS-reachable liquidation path). Disposition: **NOT BY-DESIGN — fix it.** The
+  fix is to be **designed now, applied LATER as a USER-gated, USER-approved contract change AFTER the v63
+  sweeps finish** (the subject stays byte-frozen through the sweeps). Adversarially-validated fix-design spec:
+  `392-BURNIE-04-FIX-DESIGN.md` (this phase dir).
+- **BURNIE-05 / FC-392-17 — CONFIRMED-as-risk MED, USER-ruled BY-DESIGN / WONTFIX.** The USER ruled the VAULT
+  seed 30-day window is fine ("I'll claim") — the VAULT is a protocol-owned address and the owner will claim
+  (or arm) within the window. No contract change; not carried as an open finding. (No KNOWN-ISSUES disclosure
+  required — this is an operational runbook item for the protocol owner, not a player-facing defect.)
