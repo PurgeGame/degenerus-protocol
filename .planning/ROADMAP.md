@@ -87,7 +87,7 @@ Plans: 2 plans (dual-net) in 2 waves
 Plans:
 **Wave 1**
 
-- [ ] 390-01-PLAN.md — NET 1 (council): neutral SOLVENCY council prompt (SOLV-01..07 + FC-390-01..07 + inherited cross-refs FC-389-02/-08, FC-392-08, FC-393-02/-03; the three §6-prime targets charged hard), council.sh fan-out to gemini+codex, raw capture under council/, byte-freeze verify (Wave 1)
+- [x] 390-01-PLAN.md — NET 1 (council): neutral SOLVENCY council prompt (SOLV-01..07 + FC-390-01..07 + inherited cross-refs FC-389-02/-08, FC-392-08, FC-393-02/-03; the three §6-prime targets charged hard), council.sh fan-out to gemini+codex, raw capture under council/, byte-freeze verify (Wave 1) ✅ (commits `562c3abc` prompt, `e2e9e042` fan-out + capture; both models on record, skipped[] empty; **codex VERIFIED SOUND all SOLV-01..07 + FC leads**; **gemini surfaced 1 HIGH SOLV-07 `whalePassCost` double-credit lead** [cross-model divergence — codex traces the same split single-counted] → routed to 390-02 as PRIORITY; codex decimator pre-reservation INFO caveat also routed; subject byte-frozen after fan-out; `390-01-COUNCIL-NET.md` + `390-01-COUNCIL-PROMPT-SOLV.md`)
 
 **Wave 2** *(blocked on Wave 1 completion)*
 

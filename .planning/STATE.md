@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v63.0
 milestone_name: Post-v62 Audit (Critical Invariants + Reward Game-Theory)
 status: executing
-last_updated: "2026-06-15T01:09:22.702Z"
-last_activity: 2026-06-15 -- Phase 390 planning complete
+last_updated: "2026-06-15T01:30:00.000Z"
+last_activity: 2026-06-15 -- Phase 390 Plan 01 (NET 1 SOLVENCY council) ON RECORD
 progress:
   total_phases: 17
   completed_phases: 2
   total_plans: 7
-  completed_plans: 5
-  percent: 12
+  completed_plans: 6
+  percent: 13
 ---
 
 # Project State
@@ -20,7 +20,7 @@ progress:
 See: .planning/PROJECT.md (Current State section) + .planning/ROADMAP.md (v63.0 = top milestone, ▶ ACTIVE) + .planning/MILESTONES.md (v63.0 entry, top) + .planning/AUDIT-V63-PLAN.md (the full method doc) + .planning/REQUIREMENTS.md (the 58 REQ-IDs) + .planning/v63-surface-map/ (the 7 read-only dimension maps) + .planning/PAPER-REWARD-CHANGES-BRIEF.md (the reward design-intent anchor). v62.0 archive: .planning/milestones/v62.0-{ROADMAP,REQUIREMENTS,phases}; canonical v62 deliverable audit/FINDINGS-v62.0.md (chmod 444) + AUDIT-V62-REPORT.html. v63 baseline = v62.0 closure subject `77580320`; v63 subject = HEAD `a8b702a7` (byte-frozen at FOUNDATION 388). **NEXT = /gsd-plan-phase 388** (FOUNDATION — subject freeze + green baseline + slot recalibration).
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Current focus:** Phase 390 — solvency spine
+**Current focus:** Phase 390 — SOLVENCY-SPINE
 
 ## ⚠ v50.0 + v51.0 AUDIT DEBT → FOLDED INTO v63.0 Phase 394 LEGACY-DEBT (USER 2026-06-14; was a separate v52 track)
 
@@ -35,13 +35,13 @@ See: .planning/PROJECT.md (Current State section) + .planning/ROADMAP.md (v63.0 
 ## Current Position
 
 Milestone: v63.0 — ▶ ACTIVE (started 2026-06-14). Post-v62 Audit (Critical Invariants + Reward Game-Theory).
-Phase: 390
-Plan: Not started
-Status: Ready to execute
+Phase: 390 (SOLVENCY-SPINE) — EXECUTING (Plan 01 done; Wave 2 next)
+Plan: 1 of 2 complete (NET 1 council ON RECORD)
+Status: Executing Phase 390 — 390-01 NET 1 done, 390-02 (Claude net + adjudication) pending
 Baseline = v62.0 closure subject `77580320`; subject = HEAD `a8b702a7` (byte-frozen at FOUNDATION 388; pin = `contracts` tree `2934d3d8987a09c5f073549a0cb499f6c5f28620`).
 Method = COUNCIL + CLAUDE both; posture = audit-only by default (a surfaced/adjudicated/skeptic-passed finding → gated USER-hand-review fix, else document-only).
-Last activity: 2026-06-15 -- Phase 390 planning complete
-Next: `/gsd-plan-phase 390` SOLVENCY-SPINE (dual-net sweep; SOLV-01..07; intake FC-390-01..07 + the 389 cross-refs FC-389-02/-08 narrowing solvency-conservation half). See `389-FINDINGS.md` + `389-02-CLAUDE-NET.md`.
+Last activity: 2026-06-15 -- Phase 390 Plan 01 (NET 1 SOLVENCY council) ON RECORD (commits `562c3abc` prompt + `e2e9e042` fan-out/capture; both models on record skipped[] empty; codex VERIFIED SOUND all SOLV-01..07; gemini surfaced 1 HIGH SOLV-07 `whalePassCost` double-credit lead [cross-model divergence vs codex single-counted] → routed to 390-02 PRIORITY; subject byte-frozen)
+Next: `/gsd-execute-phase 390` Wave 2 → 390-02 NET 2 (Claude adversarial net + adjudication over the same solvency surface; fold in the SOLV-07 whalePassCost divergence + the decimator pre-reservation INFO caveat from `390-01-COUNCIL-NET.md`; SOLV-01..07 + FC-390-01..07 + the 5 inherited cross-refs vs frozen a8b702a7; skeptic gate; `390-FINDINGS.md` verdict table). See `390-01-COUNCIL-NET.md` + `council/solv.{gemini,codex}.txt`.
 
 ## ✅ SHIPPED Milestone Roadmap (v62.0 — phases 380-387 — SHIPPED 2026-06-09; baseline = v61.0 closure HEAD `b97a7a2e`; subject `c4d48008`; remediated `77580320`; closure signal `MILESTONE_V62_AT_HEAD_77580320b88e77438c893602a068548961824893`)
 
