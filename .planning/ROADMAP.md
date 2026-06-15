@@ -99,6 +99,16 @@ Goal: every new/changed RNG consumer is freeze-safe (word unknown at commitment;
 Type: SWEEP (dual-net) · Depends on: 388 · Requirements: RNG-01..06
 Success criteria: (1) backward-trace clean for each consumer; (2) decimator uint32 entropy floor + unbiased distribution; (3) box-spin replay-safe + domain-separated; (4) redemption day+1 gate + in-window SLOAD enumeration clean; both nets on record.
 
+Plans: 2 plans (dual-net) in 2 waves
+Plans:
+**Wave 1**
+
+- [ ] 391-01-PLAN.md — NET 1 (council): neutral RNG-FREEZE council prompt (RNG-01..06 + FC-391-01..05 + inherited cross-refs FC-389-05, FC-392-11; the decimator uint32 distribution-bias prime target charged hard; backward-trace + in-window-SLOAD doctrine encoded), council.sh fan-out to gemini+codex, raw capture under council/, byte-freeze verify (Wave 1)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
+- [ ] 391-02-PLAN.md — NET 2 (Claude) + adjudication: independent adversarial backward-trace over every new/changed RNG consumer, adjudicate RNG-01..06 + FC-391-01..05 + the 2 inherited cross-refs vs frozen a8b702a7, dedicated real-distribution treatment for the decimator uint32 (RNG-02/FC-391-04) + in-window SLOAD enumeration (RNG-06), skeptic gate, 391-FINDINGS.md verdict table (Wave 2, depends 391-01)
+
 ### Phase 392: ENTROPY-AND-ECON
 
 Goal: the reward rebalances preserve their documented EV/neutrality + bounded accrual with no money-pump, and the BURNIE rework is conservative + correctly backed.
