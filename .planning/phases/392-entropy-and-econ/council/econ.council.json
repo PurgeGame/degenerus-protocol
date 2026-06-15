@@ -1,0 +1,9 @@
+{
+  "label": "econ",
+  "schema": "",
+  "models": ["gemini"],
+  "skipped": ["codex"],
+  "outputs": {"gemini": ".planning/phases/392-entropy-and-econ/council/econ.gemini.txt"},
+  "skip_reasons": {"codex": "usage limit reached (ChatGPT plan): 'You've hit your usage limit ... try again at 11:56 PM' — hard cap, not transient; re-run not possible until reset"},
+  "notes": "council.sh fan-out 2026-06-15: codex hit a hard usage limit (recorded in skipped[]). gemini's first fan-out attempt returned an empty answer (CLI swallowed stderr); a direct re-run produced the substantive audit captured in econ.gemini.txt (timeout rc=124 on gemini's trailing read-only-forbidden report-write step, AFTER the full answer was emitted to stdout). One model on record with real content; codex skip documented."
+}

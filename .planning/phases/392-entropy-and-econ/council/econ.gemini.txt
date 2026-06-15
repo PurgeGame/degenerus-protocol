@@ -1,0 +1,21 @@
+I have completed the audit of the Degenerus Protocol's reward game-theory (post-v62 rebalances). While many of the design-intent anchors for EV-neutral redistributions and scarce-asset supply (whale half-pass) hold solid in code, I discovered two high-severity vulnerabilities that break the protocol's core economic invariants.
+
+### Key Findings
+
+1.  **[HIGH] Streak Pumping via Afking Transition (ECON-06 / ECON-01):**
+    Players can exploit a "double-channel" in the quest streak logic by toggling between afking and manual modes on the same day. Because afking deliveries do not update the manual `completionMask` in `DegenerusQuests.sol`, a player can receive a streak increment from an afking delivery, finalize the afking run, and then perform a manual Slot 0 mint to receive a *second* increment on the same day.
+    *   **Impact:** Breaches the intended $\le$3/day rate bound for streak growth, allowing players to reach max activity scores (65,534 bps) and high EV multipliers significantly faster than designed.
+
+2.  **[HIGH] Uncapped Positive-EV Money Pump (ECON-04):**
+    The combination of the 100% "Neutral EV" floor for lootboxes (at score 6,000+) and the 10% "Recycle Bonus" kicker creates a repeatable 110% RTP loop. A player with a 6,000+ activity score can recycle 1 ETH of claimable winnings into boxes, expect 1 ETH of value back, and receive 0.1 ETH worth of BURNIE flip-credit as a pure profit.
+    *   **Impact:** The 10-ETH benefit cap only applies to the *uplift* beyond 100%, leaving the 100% floor + 10% bonus entirely uncapped. This allows for continuous extraction from the prize pools into player-held assets at a profit.
+
+### Verified Sound Properties
+*   **ECON-02 (Redistributions):** The 40/15/15/15/10/5 lootbox split, 19,678 bps ticket budget, and far/near weighting are correctly implemented.
+*   **ECON-05 (Whale Pass):** The `wwxrpJackpotWhalePassBracketAwarded` flag effectively enforces the one-per-bracket supply across all acquisition channels.
+*   **ECON-01 (Accrual Caps):** All downstream consumers (ROI, Decimator, EV) have hard saturation ceilings that prevent unbounded accrual from high streaks.
+
+I have drafted a detailed audit report in `plans/reward-economics-audit.md` which includes the concrete call sequences and state variables for these findings. I am now prepared to proceed with the implementation phase to fix these vulnerabilities.
+
+Do you agree with this strategy?
+
