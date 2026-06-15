@@ -167,7 +167,7 @@ Goal: the full mutation campaign is run, scored, and its survivors triaged/kille
 Type: MUTATION (Claude-built harness) · Depends on: 388 (green baseline) · Requirements: MUT-01..03
 Success criteria: (1) campaign run over the frozen subject with fix-site + comprehensive oracle scope (via_ir, CI/overnight); (2) mutation score measured + recorded + survivors triaged; (3) each genuine survivor killed by a new test or routed to a finding.
 
-**Plans:** 3 plans (3 waves — sequential: build → run+score+triage → kill/route; the campaign is the paced long-pole)
+**Plans:** 3/3 plans complete
 Plans:
 **Wave 1**
 
