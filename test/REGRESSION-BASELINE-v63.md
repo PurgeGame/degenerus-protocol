@@ -1,5 +1,17 @@
 # Regression Baseline — v63.0 (GREEN full-suite baseline at subject `a8b702a7`)
 
+> **POST-AUDIT UPDATE 2026-06-15 — BURNIE-04 fix applied (commit `98c4f049`, local, UNPUSHED).** The
+> audit freeze was lifted to apply the one routed finding — BURNIE-04 (sDGNRS redemption carry-escrow:
+> the auto-rebuy carry is now included in the redemption BURNIE backing, removed from sDGNRS at submit
+> and paid flip-contingently on the resolving day's coinflip) — plus the `CoinflipClaimState` indexer
+> event. **New green full-suite baseline: 864 / 0 / 110** at commit `98c4f049`. **New `contracts/`
+> byte-freeze tree-hash: `3264a4f8da8b0a8704d2f82c8eeb603e422a678a`** (`git rev-parse 98c4f049:contracts`).
+> Storage layout is UNSHIFTED vs the audit subject — the new `PendingRedemption.burnieEscrow` is in-slot
+> (96+16+96=208 bits) and no scalar/mapping-root slot moved (re-verified via `forge inspect`). A
+> 20-agent adversarial review across 7 correctness axes found 0 HIGH/MEDIUM contract defects. The
+> audit-subject record below (`a8b702a7` / tree `2934d3d8`, 854/0/110) is preserved as the v63 audit
+> oracle; this fix supersedes it as the current head baseline. 110 commits ahead of origin (USER pushes).
+
 **Subject under test (the audit oracle):** `a8b702a7` — the v63.0 audit subject, byte-frozen at
 FOUNDATION (Phase 388). It is the v62.0 closure subject `77580320` plus the ~60 post-v62 commits that
 landed on `main` without a formal audit-milestone close (40 contract-source files, +4322/−3489: a full
