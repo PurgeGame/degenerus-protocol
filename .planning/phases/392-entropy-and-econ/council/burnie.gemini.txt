@@ -1,0 +1,41 @@
+I have completed the audit of the **BURNIE / coinflip-seeded-emission rework** at commit `a8b702a7`. 
+
+My investigation confirms that the core **"survive-before-mint"** invariant is strictly maintained across all BURNIE sources, including seeds, degenerette spins, lootboxes, and afking rewards. The packed storage lanes for flip stakes and results are implemented correctly and round-trip losslessly.
+
+However, I have identified two significant findings that break the protocol's intended backing and emission beliefs:
+
+1.  **sDGNRS Auto-Rebuy Carry Stranded (PRIME-01):** The `autoRebuyCarry` accumulated by sDGNRS after Day 20 is invisible to the `previewClaimCoinflips` function used by `StakedDegenerusStonk`. This leads to a progressive under-credit for redeemers, as the entire rolling coinflip position is ignored in the `burnieOwed` calculation.
+2.  **VAULT Seed Window-Aging Forfeiture (PRIME-02):** The VAULT's initial 20-day seed emission is vulnerable to a narrow 30-day claim window. If the VAULT owner does not claim within the first 30 days of the game, the entire seeded stake (~2M BURNIE expected) is silently and unrecoverably forfeited.
+
+### Audit Summary
+- **(BURNIE-01) Survive-before-mint:** VERIFIED SOUND.
+- **(BURNIE-02) Emission Conservation:** VERIFIED SOUND.
+- **(BURNIE-03) Armed Latch Monotonicity:** VERIFIED SOUND.
+- **(BURNIE-04) sDGNRS Redemption Backing:** **FINDING (PRIME-01).** Carry is excluded from backing.
+- **(BURNIE-05) VAULT Seed Recoverability:** **FINDING (PRIME-02).** Seeds age out unrecoverably.
+- **(BURNIE-06) Packed Lanes & Solvency:** VERIFIED SOUND.
+
+The detailed audit report has been saved to `BURNIE-AUDIT-REPORT.md`. I am now ready to present the findings for formal approval.
+
+I have completed the audit of the **BURNIE / coinflip-seeded-emission rework** at commit `a8b702a7`. The investigation focused on verifying the protocol's core invariants regarding BURNIE emission, sDGNRS backing, and storage efficiency.
+
+### Summary of Findings
+
+#### 1. (PRIME-01 — BURNIE-04) sDGNRS Auto-Rebuy Carry Stranded
+**FINDING:** The `autoRebuyCarry` accumulated by the sDGNRS contract is invisible to its redemption backing.
+- **Root Cause:** `StakedDegenerusStonk.sol` calculates `burnieOwed` using `previewClaimCoinflips`, which only considers settled `claimableStored` and unresolved winning days. It does **not** read the `autoRebuyCarry`.
+- **Impact:** Since sDGNRS is auto-claimed every resolved day (keeping its `lastClaim` current), the `autoRebuyCarry` is a "black hole" for value. Redeemers are progressively **under-credited** as sDGNRS's rolling coinflip position grows, and the contract lacks a mechanism to claim or liquidate this carry.
+
+#### 2. (PRIME-02 — BURNIE-05) VAULT Seed Window-Aging Forfeiture
+**FINDING:** The VAULT's 4M BURNIE seed emission is at risk of silent forfeiture.
+- **Root Cause:** The `BurnieCoinflip._claimCoinflipsInternal` logic enforces a 30-day claim window for players with `lastClaim == 0`.
+- **Impact:** Unlike sDGNRS, the VAULT is not auto-claimed. If the operator fails to call `coinClaimCoinflips` within the first 30 days of the game, the entire Day 1-20 seed window (~2M BURNIE expected) is **unrecoverably forfeited**.
+
+### Thesis Verifications
+
+*   **(BURNIE-01) Survive-before-mint:** **VERIFIED SOUND.** Every BURNIE source (Seeds, Degenerette, Afking, Lootbox, Redemptions) gates on a survived coinflip before minting.
+*   **(BURNIE-02) Seed Emission Conservation:** **VERIFIED SOUND.** The 8M total stake (~4M EV) accurately replaces the removed 2M+2M fixed lumps.
+*   **(BURNIE-03) Auto-Rebuy Latch Monotonicity:** **VERIFIED SOUND.** The `sdgnrsAutoRebuyArmed` latch is monotone and correctly handles the transition from wallet-mints to carry-rolling.
+*   **(BURNIE-06) Packed Lane Integrity:** **VERIFIED SOUND.** The 128-bit wei stake lanes and 8-bit day-result lanes are lossless and correctly isolate BURNIE from the ETH solvency path.
+
+The full audit report including the technical trace for each finding is available for review.

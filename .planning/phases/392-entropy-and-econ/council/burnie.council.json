@@ -1,0 +1,7 @@
+{
+  "label": "burnie",
+  "schema": "",
+  "models": ["gemini"],
+  "skipped": ["codex"],
+  "outputs": {"gemini": ".planning/phases/392-entropy-and-econ/council/burnie.gemini.txt"}
+}
