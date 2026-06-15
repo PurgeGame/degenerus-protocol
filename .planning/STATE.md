@@ -2,16 +2,15 @@
 gsd_state_version: 1.0
 milestone: v63.0
 milestone_name: Post-v62 Audit (Critical Invariants + Reward Game-Theory)
-status: ready_to_plan
-last_updated: 2026-06-15T00:49:12.468Z
-last_activity: 2026-06-15 -- Phase 389 Plan 02 (NET 2 Claude + adjudication) complete — Phase 389 CLOSED
+status: executing
+last_updated: "2026-06-15T01:09:22.702Z"
+last_activity: 2026-06-15 -- Phase 390 planning complete
 progress:
   total_phases: 17
   completed_phases: 2
-  total_plans: 5
+  total_plans: 7
   completed_plans: 5
   percent: 12
-stopped_at: Phase 389 complete (2/2) — ready to discuss Phase 390
 ---
 
 # Project State
@@ -38,10 +37,10 @@ See: .planning/PROJECT.md (Current State section) + .planning/ROADMAP.md (v63.0 
 Milestone: v63.0 — ▶ ACTIVE (started 2026-06-14). Post-v62 Audit (Critical Invariants + Reward Game-Theory).
 Phase: 390
 Plan: Not started
-Status: Ready to plan
+Status: Ready to execute
 Baseline = v62.0 closure subject `77580320`; subject = HEAD `a8b702a7` (byte-frozen at FOUNDATION 388; pin = `contracts` tree `2934d3d8987a09c5f073549a0cb499f6c5f28620`).
 Method = COUNCIL + CLAUDE both; posture = audit-only by default (a surfaced/adjudicated/skeptic-passed finding → gated USER-hand-review fix, else document-only).
-Last activity: 2026-06-15
+Last activity: 2026-06-15 -- Phase 390 planning complete
 Next: `/gsd-plan-phase 390` SOLVENCY-SPINE (dual-net sweep; SOLV-01..07; intake FC-390-01..07 + the 389 cross-refs FC-389-02/-08 narrowing solvency-conservation half). See `389-FINDINGS.md` + `389-02-CLAUDE-NET.md`.
 
 ## ✅ SHIPPED Milestone Roadmap (v62.0 — phases 380-387 — SHIPPED 2026-06-09; baseline = v61.0 closure HEAD `b97a7a2e`; subject `c4d48008`; remediated `77580320`; closure signal `MILESTONE_V62_AT_HEAD_77580320b88e77438c893602a068548961824893`)
