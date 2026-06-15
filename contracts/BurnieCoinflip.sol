@@ -381,6 +381,35 @@ contract BurnieCoinflip {
         return _claimCoinflipsAmount(player, amount, false);
     }
 
+    /// @notice Consume `amount` of `player`'s coinflip-resident BURNIE backing for a salvage swap (BurnieCoin only).
+    /// @dev Settle-then-drain waterfall matching the redemption desk's withdrawRedeemedBurnie: settled
+    ///      claimable FIRST (no mint — removes a future mint of the consumed slice), then the rolling
+    ///      auto-rebuy carry. The held wallet leg is burned by BurnieCoin before this call; this covers
+    ///      only the coinflip-resident backing (claimable + carry), which is where sDGNRS (and a
+    ///      rebuy-armed vault) concentrate their BURNIE in steady state. Reaching the carry is freeze-safe
+    ///      because the salvage entrypoint reverts under the RNG lock, so this never runs mid-window.
+    /// @param player The backing owner (sDGNRS or the vault).
+    /// @param amount Maximum BURNIE (wei) to consume from claimable + carry.
+    /// @return consumed Actual amount removed (claimable consumed + carry decremented).
+    function consumeBurnieForSalvage(
+        address player,
+        uint256 amount
+    ) external onlyBurnieCoin returns (uint256 consumed) {
+        consumed = _claimCoinflipsAmount(player, amount, false);
+        uint256 remainder = amount - consumed;
+        if (remainder == 0) return consumed;
+        PlayerCoinflipState storage state = playerState[player];
+        uint256 carry = state.autoRebuyCarry;
+        uint256 fromCarry = remainder <= carry ? remainder : carry;
+        if (fromCarry != 0) {
+            unchecked {
+                state.autoRebuyCarry = uint128(carry - fromCarry);
+            }
+            consumed += fromCarry;
+            _emitClaimState(player);
+        }
+    }
+
     /// @dev Emit the player's committed coinflip claim-state (claimable + carry + cursor) for
     ///      off-chain reconstruction without an eth_call. Call as the LAST statement after the three
     ///      PlayerCoinflipState fields are finalized; never inside _claimCoinflipsInternal (its
@@ -1034,6 +1063,16 @@ contract BurnieCoinflip {
         uint256 daily = _viewClaimableCoin(player);
         uint256 stored = playerState[player].claimableStored;
         return daily + stored;
+    }
+
+    /// @notice Preview `player`'s salvage-spendable coinflip backing: claimable + auto-rebuy carry (view).
+    /// @dev The carry-inclusive read the salvage quote caps against, mirroring redeemableCoinBacking's
+    ///      components but as a pure VIEW (no settle) so the preview and execution offer stay re-derivable.
+    ///      Conservative: reads the carry before any pending settle, so a resolving win day not yet rolled
+    ///      in is excluded — the cap can only under-state, never over-state, the burnable backing.
+    function previewSalvageBurnieBacking(address player) external view returns (uint256) {
+        PlayerCoinflipState storage state = playerState[player];
+        return _viewClaimableCoin(player) + state.claimableStored + state.autoRebuyCarry;
     }
 
     /// @notice Get player's current coinflip stake for next day.

@@ -25,4 +25,16 @@ interface IDegenerusCoin {
     function balanceOfWithClaimable(
         address player
     ) external view returns (uint256 spendable);
+
+    /// @notice Salvage-spendable BURNIE: burnable held + claimable + auto-rebuy carry.
+    /// @param player The address to read.
+    /// @return spendable The amount the player can fund a salvage BURNIE leg with.
+    function balanceOfSpendableForSalvage(
+        address player
+    ) external view returns (uint256 spendable);
+
+    /// @notice Burn BURNIE for a salvage swap, draining held -> claimable -> auto-rebuy carry.
+    /// @param target The buyer whose BURNIE backs the swap.
+    /// @param amount The BURNIE (wei) to destroy.
+    function burnCoinForSalvage(address target, uint256 amount) external;
 }

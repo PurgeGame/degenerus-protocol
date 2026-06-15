@@ -44,6 +44,15 @@ interface IBurnieCoinflip {
         address player,
         uint256 amount
     ) external returns (uint256 consumed);
+    /// @notice Consume coinflip-resident backing (claimable -> carry) for a salvage swap.
+    function consumeBurnieForSalvage(
+        address player,
+        uint256 amount
+    ) external returns (uint256 consumed);
+    /// @notice Preview claimable + auto-rebuy carry coinflip backing (view).
+    function previewSalvageBurnieBacking(
+        address player
+    ) external view returns (uint256);
 }
 
 contract BurnieCoin {
@@ -241,6 +250,28 @@ contract BurnieCoin {
         }
         unchecked {
             spendable += coinflip.previewClaimCoinflips(player);
+        }
+    }
+
+    /// @notice BURNIE a player can spend into a salvage swap: burnable held + claimable + auto-rebuy carry.
+    /// @dev The carry-inclusive twin of balanceOfWithClaimable, used by the far-future salvage quote so
+    ///      its BURNIE-leg cap matches exactly what burnCoinForSalvage can destroy (symmetry with the
+    ///      redemption desk, which already taps the carry). The two salvage operators are sDGNRS and the
+    ///      vault. The "held" leg is the ACTUALLY-burnable balance: for ContractAddresses.VAULT that is the
+    ///      virtual vaultAllowance (the only held slice _burn can spend for the vault — a stray
+    ///      balanceOf[VAULT] transfer is not burnable here), and for sDGNRS it is the wallet balance.
+    ///      previewSalvageBurnieBacking adds the claimable + carry, which BurnieCoinflip drains in
+    ///      consumeBurnieForSalvage.
+    /// @param player The address to read.
+    /// @return spendable Total BURNIE the player can fund a salvage BURNIE leg with right now.
+    function balanceOfSpendableForSalvage(
+        address player
+    ) external view returns (uint256 spendable) {
+        spendable = player == ContractAddresses.VAULT
+            ? uint256(_supply.vaultAllowance)
+            : balanceOf[player];
+        unchecked {
+            spendable += coinflip.previewSalvageBurnieBacking(player);
         }
     }
 
@@ -562,6 +593,31 @@ contract BurnieCoin {
     function burnCoin(address target, uint256 amount) external onlyGame {
         uint256 consumed = _consumeCoinflipShortfall(target, amount);
         _burn(target, amount - consumed);
+    }
+
+    /// @notice Burn `amount` of `target`'s BURNIE for a far-future salvage swap, draining all sources.
+    /// @dev Access: GAME only. The salvage twin of burnCoin: where burnCoin stops at held + settled
+    ///      claimable, this also reaches the auto-rebuy carry (held -> claimable -> carry), matching the
+    ///      redemption desk so the salvage BURNIE leg can tap the carry where sDGNRS (and a rebuy-armed
+    ///      vault) park their backing in steady state. The two salvage operators are sDGNRS and the vault.
+    ///      Held leg first: for the vault that is the virtual vaultAllowance (via _burn's VAULT branch),
+    ///      for sDGNRS the wallet balance. The remainder routes to BurnieCoinflip.consumeBurnieForSalvage
+    ///      (claimable then carry). Caller caps `amount` at balanceOfSpendableForSalvage(target), so the
+    ///      drain always covers; fail-closed otherwise.
+    /// @param target The buyer whose BURNIE backs the swap (sDGNRS or the vault).
+    /// @param amount The BURNIE (wei) to destroy.
+    function burnCoinForSalvage(address target, uint256 amount) external onlyGame {
+        if (amount == 0) return;
+        uint256 held = target == ContractAddresses.VAULT
+            ? uint256(_supply.vaultAllowance)
+            : balanceOf[target];
+        uint256 fromHeld = amount <= held ? amount : held;
+        if (fromHeld != 0) _burn(target, fromHeld);
+        uint256 remainder = amount - fromHeld;
+        if (remainder == 0) return;
+        if (degenerusGame.rngLocked()) revert Insufficient();
+        uint256 consumed = coinflip.consumeBurnieForSalvage(target, remainder);
+        if (remainder > consumed) revert Insufficient();
     }
 
     /*+======================================================================+

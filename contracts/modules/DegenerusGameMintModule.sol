@@ -9,7 +9,7 @@ import {IDegenerusQuests} from "../interfaces/IDegenerusQuests.sol";
 import {IDegenerusGameBoonModule} from "../interfaces/IDegenerusGameModules.sol";
 import {ContractAddresses} from "../ContractAddresses.sol";
 import {DegenerusGameStorage} from "../storage/DegenerusGameStorage.sol";
-import {DegenerusGameMintStreakUtils} from "./DegenerusGameMintStreakUtils.sol";
+import {DegenerusGameMintStreakUtils, IDegenerusVaultOwner} from "./DegenerusGameMintStreakUtils.sol";
 import {DegenerusGamePayoutUtils} from "./DegenerusGamePayoutUtils.sol";
 import {DegenerusTraitUtils} from "../DegenerusTraitUtils.sol";
 import {BitPackingLib} from "../libraries/BitPackingLib.sol";
@@ -1143,10 +1143,13 @@ contract DegenerusGameMintModule is
     }
 
     /// @notice Emitted on a far-future salvage swap (sellFarFutureTickets).
-    /// @dev cashWei subdivides into ethCashWei (relabeled claimable) + burnieTokens (sDGNRS-owned
-    ///      BURNIE transferred to the player). value(burnieTokens) + ethCashWei == cashWei.
+    /// @dev `buyer` is the counterparty that funded the swap and received the far-future tickets:
+    ///      sDGNRS normally, or the vault on the owner-enabled fallback when sDGNRS cannot fund it.
+    ///      cashWei subdivides into ethCashWei (relabeled claimable) + burnieTokens (buyer-owned BURNIE
+    ///      burned, paid to the player as flip credit). value(burnieTokens) + ethCashWei == cashWei.
     event FarFutureSwap(
         address indexed player,
+        address indexed buyer,
         uint256 lineCount,
         uint256 totalBudgetWei,
         uint256 ticketWei,
@@ -1157,14 +1160,17 @@ contract DegenerusGameMintModule is
     /// @notice Quote a far-future salvage swap WITHOUT executing (the UI offer; -EV by design).
     /// @dev Read-only twin of sellFarFutureTickets: shares the exact valuation (curve + daily
     ///      per-player jitter + ETH/BURNIE split) the executing path uses, so the displayed offer
-    ///      matches what would be paid. Reverts on an ineligible distance / zero quantity; does NOT
-    ///      check ownership (a quote for the given bundle). When sDGNRS holds no BURNIE (or the seed
-    ///      targets zero) the whole cash leg is paid in ETH; conserved as ethCashWei + value(burnieTokens).
+    ///      matches what would be paid. Resolves the same buyer the executing path would (sDGNRS, or
+    ///      the vault on the owner-enabled fallback) so the ETH/BURNIE breakdown reflects the actual
+    ///      counterparty's BURNIE inventory. Reverts on an ineligible distance / zero quantity; does
+    ///      NOT check ownership (a quote for the given bundle). When the resolved buyer holds no BURNIE
+    ///      (or the seed targets zero) the whole cash leg is paid in ETH; conserved as ethCashWei +
+    ///      value(burnieTokens).
     /// @return totalFaceWei Sum of priceForLevel(L) * n over all lines (the bundle's face value).
-    /// @return totalBudget Total ETH sDGNRS would pay (the -EV offer).
+    /// @return totalBudget Total ETH the buyer would pay (the -EV offer).
     /// @return ticketWei Portion delivered as current-level tickets.
     /// @return ethCashWei Cash portion delivered as withdrawable ETH claimable.
-    /// @return burnieTokens Cash portion delivered as BURNIE (transferred from sDGNRS).
+    /// @return burnieTokens Cash portion delivered as BURNIE (burned from the buyer, paid as flip credit).
     function previewSellFarFutureTickets(
         address player,
         uint32[] calldata levels,
@@ -1191,19 +1197,32 @@ contract DegenerusGameMintModule is
             oneTicketWei,
             seed
         );
-        (ethCashWei, burnieTokens) = _quoteFarFutureBurnieSplit(cashWei, oneTicketWei, seed);
+        // Display the split for the buyer the executing path would resolve; fall back to sDGNRS as the
+        // nominal counterparty when neither can fund (the preview still shows the -EV offer).
+        address buyer = _resolveSalvageBuyer(totalBudget);
+        if (buyer == address(0)) buyer = ContractAddresses.SDGNRS;
+        (ethCashWei, burnieTokens) = _quoteFarFutureBurnieSplit(
+            cashWei,
+            oneTicketWei,
+            seed,
+            buyer
+        );
     }
 
-    /// @notice Sell far-future ticket entries to sDGNRS (current-level tickets + cash; -EV exit).
+    /// @notice Sell far-future ticket entries (current-level tickets + cash; -EV exit) to sDGNRS, or to
+    ///         the vault on the owner-enabled fallback when sDGNRS cannot fund the swap.
     /// @dev Delegatecalled from DegenerusGame.sellFarFutureTickets with an already-resolved `player`
     ///      (so no _resolvePlayer here). Mass-sells WHOLE far-future tickets (6 <= d = L - currentLevel
     ///      <= 100) for ONE aggregated current-level mint (a normal recycled Claimable mint) + a cash
-    ///      residual, funded fail-closed from claimableWinnings[SDGNRS] to a >=1 ETH floor (no
-    ///      pendingRedemptionEthValue term, no daily cap). Valuation + daily jitter are shared with the
-    ///      preview via _quoteFarFutureSwap. The fully-liquidated seller is swap-popped from ticketQueue
-    ///      (membership <=> packed != 0 maintained; far-future jackpot samplers unchanged).
-    /// @custom:reverts E On bad input/distance/holdings, too-small budget, insufficient sDGNRS
-    ///                   claimable (>=1 ETH floor), gameOver/liveness, or a stale queue index.
+    ///      residual. The counterparty is resolved by _resolveSalvageBuyer: sDGNRS first (funded from
+    ///      claimableWinnings[SDGNRS] above a >=1 ETH floor), else the vault if its owner enabled the
+    ///      fallback and it can fund above its owner-set reserve floor; the offer price is identical
+    ///      either way. No pendingRedemptionEthValue term, no daily cap. Valuation + daily jitter are
+    ///      shared with the preview via _quoteFarFutureSwap. The fully-liquidated seller is swap-popped
+    ///      from ticketQueue (membership <=> packed != 0 maintained; far-future jackpot samplers unchanged).
+    /// @custom:reverts E On bad input/distance/holdings, too-small budget, no buyer able to fund (sDGNRS
+    ///                   below its >=1 ETH floor and no vault fallback), gameOver/liveness, or a stale
+    ///                   queue index.
     /// @custom:reverts RngLocked While the RNG window is locked (freeze invariant).
     function sellFarFutureTickets(
         address player,
@@ -1233,48 +1252,53 @@ contract DegenerusGameMintModule is
         ) = _quoteFarFutureSwap(levels, quantities, cl, oneTicketWei, seed);
         if (totalBudget < oneTicketWei) revert E(); // too small to deliver even 1 whole ticket
 
-        // Fund fail-closed from sDGNRS's OWN claimable, leaving a >=1 ETH floor. The gambling-burn
-        // redemption desk is protected STRUCTURALLY (its ETH is segregated out of claimable at submit),
-        // so NO pendingRedemptionEthValue term is needed; NO daily cap. The full budget is gated even
-        // though only the ETH part leaves claimable below (the BURNIE part is paid from sDGNRS-owned
-        // BURNIE) — a strictly more conservative funding check.
-        if (_claimableOf(ContractAddresses.SDGNRS) < totalBudget + 1 ether)
-            revert E();
+        // Resolve the counterparty fail-closed: sDGNRS funds from its OWN claimable above a >=1 ETH
+        // floor; if it cannot and the vault owner enabled the fallback, the vault buys above its
+        // owner-set reserve floor; otherwise address(0) -> revert. The gambling-burn redemption desk is
+        // protected STRUCTURALLY (its ETH is segregated out of claimable at submit), so NO
+        // pendingRedemptionEthValue term is needed; NO daily cap. The full budget is gated against the
+        // buyer's claimable even though only the ETH part leaves claimable below (the BURNIE part is paid
+        // from the buyer's BURNIE) — a strictly more conservative funding check.
+        address buyer = _resolveSalvageBuyer(totalBudget);
+        if (buyer == address(0)) revert E();
 
-        // Split the cash leg: pay an ETH part (claimable relabel) + a BURNIE part transferred from
-        // sDGNRS-owned BURNIE, with an ETH fallback when sDGNRS holds no BURNIE. The split conserves
-        // the cash-leg value (ethCashWei + value(burnieTokens) == cashWei), so the offer is unchanged.
+        // Split the cash leg: pay an ETH part (claimable relabel) + a BURNIE part burned from the buyer's
+        // BURNIE, with an ETH fallback when the buyer holds no BURNIE. The split conserves the cash-leg
+        // value (ethCashWei + value(burnieTokens) == cashWei), so the offer is unchanged.
         (uint256 ethCashWei, uint256 burnieTokens) = _quoteFarFutureBurnieSplit(
             cashWei,
             oneTicketWei,
-            seed
+            seed,
+            buyer
         );
 
         // Debit the seller's far entries (owed is in entries, 4 per whole ticket; swap-pop on full
-        // sell-out) and credit sDGNRS the same entries. Distances were validated by _quoteFarFutureSwap;
+        // sell-out) and credit the buyer the same entries. Distances were validated by _quoteFarFutureSwap;
         // sequential processing handles duplicate levels (a later same-level line reads the decremented
         // balance and reverts if it over-sells; only the line that zeroes the packed slot pops).
         for (uint256 i; i < len; ) {
             uint24 L = uint24(levels[i]);
             uint32 entries = uint32(quantities[i]) * 4;
             _removeFarFutureTickets(player, L, entries, queueIndices[i]);
-            _queueTickets(ContractAddresses.SDGNRS, L, entries, false);
+            _queueTickets(buyer, L, entries, false);
             unchecked {
                 ++i;
             }
         }
 
-        // Relabel only the ETH portion (ticket leg + ETH cash) sDGNRS -> player as claimable; the
-        // BURNIE part never touches claimable (claimablePool unchanged) — solvency-positive:
-        // ethRelabel <= totalBudget.
+        // Relabel only the ETH portion (ticket leg + ETH cash) buyer -> player as claimable; the buyer
+        // funds from its claimable (and, for the vault, its prepaid afking) — both claimablePool-backed,
+        // so the move is total-preserving (claimablePool unchanged). The BURNIE part never touches
+        // claimable. Solvency-positive: ethRelabel <= totalBudget.
         uint256 ethRelabel = ticketWei + ethCashWei;
-        _debitClaimable(ContractAddresses.SDGNRS, ethRelabel);
+        _debitSalvageEth(buyer, ethRelabel);
         _creditClaimable(player, ethRelabel);
-        // BURNIE part: deduct from sDGNRS (wallet holdings first, then its claimable coinflip
-        // stake — the burnCoin shortfall path) and pay the player as flip credit, not a token
-        // transfer. burnieTokens <= sDGNRS's spendable (quote cap), so the burn always covers.
+        // BURNIE part: drain the buyer's BURNIE (held first, then claimable coinflip stake, then the
+        // auto-rebuy carry — the full salvage waterfall, symmetric with the redemption desk) and pay the
+        // player as flip credit, not a token transfer. burnieTokens <= the buyer's spendable (quote cap),
+        // so the burn always covers.
         if (burnieTokens != 0) {
-            _coinReceive(ContractAddresses.SDGNRS, burnieTokens);
+            coin.burnCoinForSalvage(buyer, burnieTokens);
             coinflip.creditFlip(player, burnieTokens);
         }
 
@@ -1284,7 +1308,52 @@ contract DegenerusGameMintModule is
         uint256 qty = (ticketWei * 4 * TICKET_SCALE) / oneTicketWei;
         _purchaseFor(player, qty, 0, bytes32(0), MintPaymentKind.Claimable);
 
-        emit FarFutureSwap(player, len, totalBudget, ticketWei, ethCashWei, burnieTokens);
+        emit FarFutureSwap(player, buyer, len, totalBudget, ticketWei, ethCashWei, burnieTokens);
+    }
+
+    /// @dev Resolve the salvage-swap counterparty for a budget, fail-closed. sDGNRS first when its OWN
+    ///      claimable covers totalBudget above a >=1 ETH floor; else the vault when its owner has enabled
+    ///      the salvage-buy fallback AND its game-side ETH (claimable + prepaid afking, both backed by
+    ///      claimablePool) covers totalBudget above the owner-set reserve floor; else address(0) (no buyer
+    ///      can fund). The vault owner stages reserve ETH into the afking half via depositAfkingFunding.
+    ///      Shared by the executing path and the preview so the displayed counterparty matches the one
+    ///      charged. The vault config is a freeze-safe owner storage read (never a VRF-window value), and
+    ///      the whole swap reverts under rngLockedFlag at the entrypoint, so this never runs in the lock.
+    /// @param totalBudget The -EV ETH budget the buyer must fund above its floor.
+    /// @return buyer The counterparty (sDGNRS, the vault, or address(0) if none can fund).
+    function _resolveSalvageBuyer(uint256 totalBudget) internal view returns (address buyer) {
+        if (_claimableOf(ContractAddresses.SDGNRS) >= totalBudget + 1 ether) {
+            return ContractAddresses.SDGNRS;
+        }
+        (bool enabled, uint256 vaultFloorWei) = IDegenerusVaultOwner(
+            ContractAddresses.VAULT
+        ).salvageBuyConfig();
+        if (
+            enabled &&
+            _claimableOf(ContractAddresses.VAULT) +
+                _afkingOf(ContractAddresses.VAULT) >=
+            totalBudget + vaultFloorWei
+        ) {
+            return ContractAddresses.VAULT;
+        }
+        return address(0);
+    }
+
+    /// @dev Debit `amount` of a salvage buyer's game-side ETH and book it where solvency stays intact.
+    ///      sDGNRS funds purely from its claimable. The vault funds from claimable FIRST, then its prepaid
+    ///      afking half (both are claimablePool-backed, so the buyer->seller move is total-preserving and
+    ///      leaves claimablePool unchanged). The caller guarantees the resolved buyer covers `amount`.
+    function _debitSalvageEth(address buyer, uint256 amount) private {
+        if (buyer == ContractAddresses.VAULT) {
+            uint256 fromClaimable = _claimableOf(buyer);
+            if (fromClaimable >= amount) {
+                _debitClaimable(buyer, amount);
+            } else {
+                _debitClaimableAndAfking(buyer, fromClaimable, amount - fromClaimable);
+            }
+        } else {
+            _debitClaimable(buyer, amount);
+        }
     }
 
     /// @dev Debit `entries` (owed is in entries, 4 per whole ticket) of the player's far-future tickets

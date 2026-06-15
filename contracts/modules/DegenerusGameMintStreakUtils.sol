@@ -9,6 +9,9 @@ import {PriceLookupLib} from "../libraries/PriceLookupLib.sol";
 /// @dev Vault interface for the DGVE-majority bounty-eligibility tier (cold path).
 interface IDegenerusVaultOwner {
     function isVaultOwner(address account) external view returns (bool);
+    /// @notice Vault-owner salvage-buyer fallback config: whether the vault buys far-future tickets
+    ///         when sDGNRS cannot fund the swap, and the ETH (wei) reserve it keeps untouched.
+    function salvageBuyConfig() external view returns (bool enabled, uint256 floorWei);
 }
 
 /// @dev Shared mint streak and activity score utilities. Contains _playerActivityScore
@@ -191,20 +194,22 @@ abstract contract DegenerusGameMintStreakUtils is DegenerusGameStorage {
     /// @dev Splits the cash leg of a salvage swap into an ETH part and a BURNIE part, sharing the
     ///      SAME settled prior-day seed as _quoteFarFutureSwap (no new VRF). A third bit-slice of the
     ///      seed picks an ETH-denominated target in [0, cashWei]; the BURNIE part is capped at the
-    ///      BURNIE sDGNRS actually owns (wallet balance + claimable coinflip stake), with the
-    ///      shortfall and the zero-available case falling back to ETH. The value of the cash leg is
-    ///      conserved: ethCashWei + (value of burnieTokens) == cashWei, so the offer stays <= the
-    ///      no-arb ceiling regardless of the split. Both the preview and the executing path call this,
-    ///      so the displayed ETH/BURNIE breakdown matches what is paid.
+    ///      BURNIE the buyer actually owns (burnable held + claimable coinflip stake + auto-rebuy
+    ///      carry), with the shortfall and the zero-available case falling back to ETH. The value of
+    ///      the cash leg is conserved: ethCashWei + (value of burnieTokens) == cashWei, so the offer
+    ///      stays <= the no-arb ceiling regardless of the split. Both the preview and the executing
+    ///      path call this, so the displayed ETH/BURNIE breakdown matches what is paid.
     /// @param cashWei The cash residual being split (totalBudget - ticketWei).
     /// @param priceWei priceForLevel(active ticket level) (caller-computed).
     /// @param seed The per-player daily salvage seed (same word as _quoteFarFutureSwap).
+    /// @param buyer The counterparty funding the swap (sDGNRS, or the vault on the owner-enabled fallback).
     /// @return ethCashWei ETH part relabeled to the player (cashWei - the BURNIE part's ETH value).
-    /// @return burnieTokens BURNIE base units transferred from sDGNRS to the player.
+    /// @return burnieTokens BURNIE base units transferred from the buyer to the player.
     function _quoteFarFutureBurnieSplit(
         uint256 cashWei,
         uint256 priceWei,
-        uint256 seed
+        uint256 seed,
+        address buyer
     ) internal view returns (uint256 ethCashWei, uint256 burnieTokens) {
         if (cashWei == 0) return (0, 0);
 
@@ -215,9 +220,9 @@ abstract contract DegenerusGameMintStreakUtils is DegenerusGameStorage {
 
         if (priceWei == 0) return (cashWei, 0);
 
-        // Cap the BURNIE part at sDGNRS-owned BURNIE (wallet + claimable coinflip stake), valued at
-        // the current ticket price. The uncovered remainder is paid as ETH.
-        uint256 ownedBurnie = coin.balanceOfWithClaimable(ContractAddresses.SDGNRS);
+        // Cap the BURNIE part at buyer-owned BURNIE (burnable held + claimable coinflip stake +
+        // auto-rebuy carry), valued at the current ticket price. The uncovered remainder is paid as ETH.
+        uint256 ownedBurnie = coin.balanceOfSpendableForSalvage(buyer);
         uint256 targetBurnie = (targetEth * PRICE_COIN_UNIT) / priceWei;
         burnieTokens = targetBurnie <= ownedBurnie ? targetBurnie : ownedBurnie;
         // ETH value of the BURNIE actually payable (re-derived from tokens so conservation is exact).

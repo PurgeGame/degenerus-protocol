@@ -414,6 +414,16 @@ contract DegenerusVault {
         IStakedDegenerusStonkBurn(ContractAddresses.SDGNRS);
 
     // ---------------------------------------------------------------------
+    // SALVAGE-BUYER FALLBACK CONFIG (owner-settable; packed into one slot)
+    // ---------------------------------------------------------------------
+    /// @dev True when the vault buys far-future salvage tickets that sDGNRS cannot fund. Owner-gated.
+    bool private _salvageBuyEnabled;
+    /// @dev ETH (wei) reserve the vault keeps untouched when acting as salvage buyer-of-last-resort.
+    ///      The game buys for the vault only while its game-side ETH (claimable + prepaid afking) >=
+    ///      totalBudget + this floor.
+    uint96 private _salvageVaultFloorWei;
+
+    // ---------------------------------------------------------------------
     // MODIFIERS
     // ---------------------------------------------------------------------
     /// @dev Restricts function to accounts holding >50.1% of DGVE supply
@@ -606,6 +616,31 @@ contract DegenerusVault {
         uint256[] calldata queueIndices
     ) external onlyVaultOwner {
         gamePlayer.sellFarFutureTickets(address(this), levels, quantities, queueIndices);
+    }
+
+    /// @notice Enable/disable the salvage-buyer fallback and set the protected ETH reserve floor.
+    /// @dev When enabled, the game routes a far-future salvage swap to the vault as buyer when sDGNRS
+    ///      cannot fund it, spending the vault's game-side ETH — claimable first, then prepaid afking
+    ///      (staged from reserves via the game's depositAfkingFunding) — down to `floorWei`, plus
+    ///      vault-owned BURNIE, and parking the bought far-future tickets in the vault. This commits
+    ///      DGVE/DGVB backing as buyer-of-last-resort at the same -EV quote sDGNRS pays, so it is
+    ///      vault-owner gated.
+    /// @param enabled Whether the vault acts as salvage buyer-of-last-resort.
+    /// @param floorWei ETH (wei) reserve kept untouched; the vault buys only while its claimable + afking
+    ///        covers totalBudget + floorWei.
+    /// @custom:reverts NotVaultOwner If caller does not hold >50.1% of DGVE.
+    /// @custom:reverts Insufficient If floorWei exceeds the uint96 reserve-floor width.
+    function setSalvageBuyFallback(bool enabled, uint256 floorWei) external onlyVaultOwner {
+        if (floorWei > type(uint96).max) revert Insufficient();
+        _salvageBuyEnabled = enabled;
+        _salvageVaultFloorWei = uint96(floorWei);
+    }
+
+    /// @notice The salvage-buyer fallback config the game reads when sDGNRS cannot fund a salvage swap.
+    /// @return enabled Whether the vault buys far-future salvage tickets as last resort.
+    /// @return floorWei ETH (wei) reserve the vault keeps untouched as buyer.
+    function salvageBuyConfig() external view returns (bool enabled, uint256 floorWei) {
+        return (_salvageBuyEnabled, _salvageVaultFloorWei);
     }
 
     /// @notice Approve or revoke an operator for the vault's game actions
