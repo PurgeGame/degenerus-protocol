@@ -2,8 +2,8 @@
 gsd_state_version: 1.0
 milestone: v63.0
 milestone_name: Post-v62 Audit (Critical Invariants + Reward Game-Theory)
-status: executing
-last_updated: "2026-06-15T04:15:00.000Z"
+status: ready_to_plan
+last_updated: 2026-06-15T02:36:07.990Z
 last_activity: 2026-06-15 -- 391-02 NET 2 + RNG-spine adjudication; Phase 391 COMPLETE (0 confirmed)
 progress:
   total_phases: 17
@@ -11,6 +11,7 @@ progress:
   total_plans: 9
   completed_plans: 9
   percent: 24
+stopped_at: Phase 391 complete (2/2) — ready to discuss Phase 392
 ---
 
 # Project State
@@ -20,7 +21,7 @@ progress:
 See: .planning/PROJECT.md (Current State section) + .planning/ROADMAP.md (v63.0 = top milestone, ▶ ACTIVE) + .planning/MILESTONES.md (v63.0 entry, top) + .planning/AUDIT-V63-PLAN.md (the full method doc) + .planning/REQUIREMENTS.md (the 58 REQ-IDs) + .planning/v63-surface-map/ (the 7 read-only dimension maps) + .planning/PAPER-REWARD-CHANGES-BRIEF.md (the reward design-intent anchor). v62.0 archive: .planning/milestones/v62.0-{ROADMAP,REQUIREMENTS,phases}; canonical v62 deliverable audit/FINDINGS-v62.0.md (chmod 444) + AUDIT-V62-REPORT.html. v63 baseline = v62.0 closure subject `77580320`; v63 subject = HEAD `a8b702a7` (byte-frozen at FOUNDATION 388). **NEXT = /gsd-plan-phase 388** (FOUNDATION — subject freeze + green baseline + slot recalibration).
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Current focus:** Phase 391 — RNG-SPINE
+**Current focus:** Phase 392 — entropy and econ
 
 ## ⚠ v50.0 + v51.0 AUDIT DEBT → FOLDED INTO v63.0 Phase 394 LEGACY-DEBT (USER 2026-06-14; was a separate v52 track)
 
@@ -35,12 +36,12 @@ See: .planning/PROJECT.md (Current State section) + .planning/ROADMAP.md (v63.0 
 ## Current Position
 
 Milestone: v63.0 — ▶ ACTIVE (started 2026-06-14). Post-v62 Audit (Critical Invariants + Reward Game-Theory).
-Phase: 391 (RNG-SPINE) — ✅ COMPLETE (both waves done; both nets on record)
-Plan: 2 of 2 (391-01 NET 1 ✅; 391-02 NET 2 + adjudication ✅)
-Status: Phase 391 COMPLETE — next = Phase 392 ENTROPY-AND-ECON
+Phase: 392
+Plan: Not started
+Status: Ready to plan
 Baseline = v62.0 closure subject `77580320`; subject = HEAD `a8b702a7` (byte-frozen at FOUNDATION 388; pin = `contracts` tree `2934d3d8987a09c5f073549a0cb499f6c5f28620`).
 Method = COUNCIL + CLAUDE both; posture = audit-only by default (a surfaced/adjudicated/skeptic-passed finding → gated USER-hand-review fix, else document-only).
-Last activity: 2026-06-15 -- 391-02 NET 2 (Claude) + RNG-spine adjudication; Phase 391 COMPLETE (commits `9e34485a` NET 2, `33c0e478` FINDINGS)
+Last activity: 2026-06-15
 391 outcome: BOTH NETS on record for RNG-01..06 + FC-391-01..05 + FC-389-05/FC-392-11; **0 CONFIRMED contract findings — the DOMINANT freeze/manipulability class is clean; RNG-01..06 attested at `a8b702a7`.** NET 2 ran independently (per-consumer backward-trace to the commitment point + the dedicated decimator random-oracle distribution argument + the RNG-04 cross-round skeptic dual-gate + the RNG-05 day-boundary divergence bound + the RNG-06 in-window SLOAD enumeration over slots 10/34/35+dailyIdx), council folded after. **RNG-04 cross-round `uint32` decimator claim-seed collision (codex INFO/LOW vs gemini SOUND) RESOLVED = REFUTED-as-break, benign INFO/LOW** (skeptic dual-gate: not grindable [word VRF-fixed after address commitment], no value extraction [magnitude set by independent `amount`, off the ETH spine], ~10^-5 reachability — reconciles both models). **RNG-02/FC-391-04 decimator distribution = REFUTED (unbiased + non-grindable)** by a real keccak random-oracle argument over the winner population; the missing distribution oracle ROUTED as a test-hardening item (NOT a contract change). FC-389-05 STORAGE-half → 389; FC-392-11 backing/EV-dynamics half → 392. Subject byte-frozen throughout (`git diff a8b702a7 -- contracts/` empty). Deliverables `391-FINDINGS.md` + `391-02-CLAUDE-NET.md`.
 Next: `/gsd-execute-phase 392` — ENTROPY-AND-ECON (reward game-theory + BURNIE/coinflip rework; ECON-01..06 + BURNIE-01..06; owns the FC-392-11 backing/EV-dynamics half cross-referenced from 391, plus FC-392-01..20).
 
