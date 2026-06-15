@@ -83,11 +83,11 @@
 - [ ] **MUT-03**: Each genuine surviving mutant is either killed by a new test or routed to a finding.
 
 ### LEGACY — v50/v51/v52 consolidated debt *(folded)*
-- [ ] **LEGACY-01**: The v50 surface is swept — the whale-pass O(1) deferred-claim path + the box-open record.
-- [ ] **LEGACY-02**: The v50 surface — AFSUB pass-gating (`validThroughLevel` eviction/refresh + OPEN-E re-attest) + the MINTDIV index alignment.
+- [x] **LEGACY-01**: The v50 surface is swept — the whale-pass O(1) deferred-claim path + the box-open record. *(394-03: both nets on record; 0 CONFIRMED; value-equivalence + freeze attested, claim-time horizon BY-DESIGN D-04/D-20.)*
+- [x] **LEGACY-02**: The v50 surface — AFSUB pass-gating (`validThroughLevel` eviction/refresh + OPEN-E re-attest) + the MINTDIV index alignment. *(394-03: both nets on record; 0 CONFIRMED; AFSUB boundary/consent as-coded BY-DESIGN, MINTDIV count-lockstep exact, quadrant REFUTED.)*
 - [ ] **LEGACY-03**: The v51 surface — claimBingo color-completion / BingoModule (3-tier reward selection, per-player `(level,quadrant)` dedup, freeze-safety of the post-resolution `traitBurnTicket` read).
 - [ ] **LEGACY-04**: The v51 surface — the sDGNRS `Pool.Reward` rebalance + the jackpot final-day `Pool.Reward` deletion side-effects.
-- [ ] **LEGACY-05**: `audit/FINDINGS-v50.0.md` is authored (the deferred v50 deliverable).
+- [x] **LEGACY-05**: `audit/FINDINGS-v50.0.md` is authored (the deferred v50 deliverable). *(394-03: authored matching the FINDINGS-v62.0 format; both nets attested; 0 actionable.)*
 - [ ] **LEGACY-06**: `audit/FINDINGS-v51.0.md` is authored (the deferred v51 deliverable).
 
 ### TERM — Terminal close
