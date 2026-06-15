@@ -148,7 +148,7 @@ contract BurnieCoinflip {
     uint16 private constant RECYCLE_BONUS_BPS = 75;
     uint256 private constant PRICE_COIN_UNIT = 1000 ether;
     uint16 private constant COIN_CLAIM_DAYS = 365;
-    uint16 private constant COIN_CLAIM_FIRST_DAYS = 30;
+    uint16 private constant COIN_CLAIM_FIRST_DAYS = 180;
     uint16 private constant AUTO_REBUY_OFF_CLAIM_DAYS_MAX = 1460;
     uint24 private constant MAX_BAF_BRACKET = (type(uint24).max / 10) * 10;
     /// @dev Initial-emission seed stakes: 200k BURNIE per day for days 1-20, each to
