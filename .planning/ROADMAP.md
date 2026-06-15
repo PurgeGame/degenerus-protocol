@@ -83,6 +83,16 @@ Goal: the claimablePool / sDGNRS backing identities hold across the redemption r
 Type: SWEEP (dual-net) · Depends on: 388 · Requirements: SOLV-01..07
 Success criteria: (1) claimablePool + sDGNRS backing identities re-attested; (2) submit/claim conservation + dust-forfeit backing proven; (3) the redemption-claim liveness-window ordering proven strand/double-credit-free; (4) CEI/yield-surplus reentrancy closed; both nets on record.
 
+Plans: 2 plans (dual-net) in 2 waves
+Plans:
+**Wave 1**
+
+- [ ] 390-01-PLAN.md — NET 1 (council): neutral SOLVENCY council prompt (SOLV-01..07 + FC-390-01..07 + inherited cross-refs FC-389-02/-08, FC-392-08, FC-393-02/-03; the three §6-prime targets charged hard), council.sh fan-out to gemini+codex, raw capture under council/, byte-freeze verify (Wave 1)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
+- [ ] 390-02-PLAN.md — NET 2 (Claude) + adjudication: independent adversarial net over the same solvency surface, adjudicate SOLV-01..07 + FC-390-01..07 + the 5 inherited cross-refs vs frozen a8b702a7, dedicated treatment for the liveness-ordering / dust-forfeit / CEI prime targets, skeptic gate, 390-FINDINGS.md verdict table (Wave 2, depends 390-01)
+
 ### Phase 391: RNG-SPINE
 
 Goal: every new/changed RNG consumer is freeze-safe (word unknown at commitment; in-window reads frozen; narrowing entropy adequate).
