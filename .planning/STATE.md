@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v63.0
 milestone_name: Post-v62 Audit (Critical Invariants + Reward Game-Theory)
 status: executing
-last_updated: "2026-06-15T02:54:39.309Z"
-last_activity: 2026-06-15 -- Phase 392 planning complete
+last_updated: "2026-06-15T03:10:00.000Z"
+last_activity: 2026-06-15 -- 392-01 NET 1 (council) ECON slice complete
 progress:
   total_phases: 17
   completed_phases: 4
   total_plans: 13
-  completed_plans: 9
-  percent: 24
+  completed_plans: 10
+  percent: 26
 ---
 
 # Project State
@@ -20,7 +20,7 @@ progress:
 See: .planning/PROJECT.md (Current State section) + .planning/ROADMAP.md (v63.0 = top milestone, ▶ ACTIVE) + .planning/MILESTONES.md (v63.0 entry, top) + .planning/AUDIT-V63-PLAN.md (the full method doc) + .planning/REQUIREMENTS.md (the 58 REQ-IDs) + .planning/v63-surface-map/ (the 7 read-only dimension maps) + .planning/PAPER-REWARD-CHANGES-BRIEF.md (the reward design-intent anchor). v62.0 archive: .planning/milestones/v62.0-{ROADMAP,REQUIREMENTS,phases}; canonical v62 deliverable audit/FINDINGS-v62.0.md (chmod 444) + AUDIT-V62-REPORT.html. v63 baseline = v62.0 closure subject `77580320`; v63 subject = HEAD `a8b702a7` (byte-frozen at FOUNDATION 388). **NEXT = /gsd-plan-phase 388** (FOUNDATION — subject freeze + green baseline + slot recalibration).
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Current focus:** Phase 392 — entropy and econ
+**Current focus:** Phase 392 — ENTROPY-AND-ECON
 
 ## ⚠ v50.0 + v51.0 AUDIT DEBT → FOLDED INTO v63.0 Phase 394 LEGACY-DEBT (USER 2026-06-14; was a separate v52 track)
 
@@ -35,14 +35,15 @@ See: .planning/PROJECT.md (Current State section) + .planning/ROADMAP.md (v63.0 
 ## Current Position
 
 Milestone: v63.0 — ▶ ACTIVE (started 2026-06-14). Post-v62 Audit (Critical Invariants + Reward Game-Theory).
-Phase: 392
-Plan: Not started
-Status: Ready to execute
+Phase: 392 (ENTROPY-AND-ECON) — EXECUTING
+Plan: 2 of 4
+Status: Executing Phase 392 (392-01 ECON NET-1 council complete; next 392-02 BURNIE NET-1 council)
 Baseline = v62.0 closure subject `77580320`; subject = HEAD `a8b702a7` (byte-frozen at FOUNDATION 388; pin = `contracts` tree `2934d3d8987a09c5f073549a0cb499f6c5f28620`).
 Method = COUNCIL + CLAUDE both; posture = audit-only by default (a surfaced/adjudicated/skeptic-passed finding → gated USER-hand-review fix, else document-only).
-Last activity: 2026-06-15 -- Phase 392 planning complete
+Last activity: 2026-06-15 -- 392-01 NET 1 (council) ECON slice complete
 391 outcome: BOTH NETS on record for RNG-01..06 + FC-391-01..05 + FC-389-05/FC-392-11; **0 CONFIRMED contract findings — the DOMINANT freeze/manipulability class is clean; RNG-01..06 attested at `a8b702a7`.** NET 2 ran independently (per-consumer backward-trace to the commitment point + the dedicated decimator random-oracle distribution argument + the RNG-04 cross-round skeptic dual-gate + the RNG-05 day-boundary divergence bound + the RNG-06 in-window SLOAD enumeration over slots 10/34/35+dailyIdx), council folded after. **RNG-04 cross-round `uint32` decimator claim-seed collision (codex INFO/LOW vs gemini SOUND) RESOLVED = REFUTED-as-break, benign INFO/LOW** (skeptic dual-gate: not grindable [word VRF-fixed after address commitment], no value extraction [magnitude set by independent `amount`, off the ETH spine], ~10^-5 reachability — reconciles both models). **RNG-02/FC-391-04 decimator distribution = REFUTED (unbiased + non-grindable)** by a real keccak random-oracle argument over the winner population; the missing distribution oracle ROUTED as a test-hardening item (NOT a contract change). FC-389-05 STORAGE-half → 389; FC-392-11 backing/EV-dynamics half → 392. Subject byte-frozen throughout (`git diff a8b702a7 -- contracts/` empty). Deliverables `391-FINDINGS.md` + `391-02-CLAUDE-NET.md`.
-Next: `/gsd-execute-phase 392` — ENTROPY-AND-ECON (reward game-theory + BURNIE/coinflip rework; ECON-01..06 + BURNIE-01..06; owns the FC-392-11 backing/EV-dynamics half cross-referenced from 391, plus FC-392-01..20).
+392-01 outcome: **NET 1 (cross-model council) ON RECORD for the ECON slice** (ECON-01..06 + owned FC-392 reward-economics leads). Neutral prompt `392-01-COUNCIL-PROMPT-ECON.md` (money-pump search + whale-half-pass channel + redemption ETH-spin value-extraction charged hard; design-intent anchor + bounded-accrual sweep encoded) fanned via `council.sh --label econ`. **gemini on record** (2 HIGH candidates + ECON-02/05/01 VERIFIED SOUND); **codex skipped** (hard usage-limit cap, recorded in `skipped[]`+`skip_reasons` → opportunistic post-reset re-run at 392-03/396). Gemini's 2 HIGH candidates routed RAW to 392-03 for the skeptic dual-gate vs frozen source: (1) PRIORITY — claimed positive-EV money pump = 100% neutral-EV lootbox floor + 10% recycle kicker (needs per-leg accounting: flip-credit illiquidity + sub-100% direct box EV + claimable-won-first); (2) streak-pump via afking↔manual same-day toggle (needs the frozen `_questCompleteWithPair` afking slot-0-skip + decay anchors re-read + magnitude lens — ceilings FIXED, so ramp-speed gaming not a breach). Non-prime charged targets (whale-pass acquisition-cost quant, redemption ETH-spin value-extraction, EV-cap-bound, ramp/comment/sentinel, affiliate composition) received no explicit council verdict → carried Claude-net-primary to 392-03. Subject byte-frozen throughout (`git diff a8b702a7 -- contracts/` empty; stray gemini repro artifact outside subject removed). Deliverables `392-01-COUNCIL-PROMPT-ECON.md` + `392-01-COUNCIL-NET.md` + `council/econ.*`.
+Next: `/gsd-execute-phase 392` plan 392-02 — NET 1 (council) BURNIE slice (BURNIE-01..06 + FC-392-16..20 + cross-ref FC-392-11/-12/-13; the two prime backing leads FC-392-16/-17 charged hard).
 
 ## ✅ SHIPPED Milestone Roadmap (v62.0 — phases 380-387 — SHIPPED 2026-06-09; baseline = v61.0 closure HEAD `b97a7a2e`; subject `c4d48008`; remediated `77580320`; closure signal `MILESTONE_V62_AT_HEAD_77580320b88e77438c893602a068548961824893`)
 
