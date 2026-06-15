@@ -133,6 +133,16 @@ Goal: the new permissionless/keeper surface cannot grief, faucet, or steer, and 
 Type: SWEEP (dual-net) · Depends on: 388-392 (consumes their boundary results) · Requirements: ACCESS-01..05
 Success criteria: (1) permissionless claims beneficiary-only; (2) keeper bounty net-negative vs real gas + un-manufacturable; (3) forced claim-timing inert; (4) partial-balance burst solvency + all gates/reentrancy intact; both nets on record.
 
+Plans: 2 plans (dual-net) in 2 waves
+Plans:
+**Wave 1**
+
+- [ ] 393-01-PLAN.md — NET 1 (council): neutral PERMISSIONLESS-COMPOSITION council prompt (ACCESS-01..05 + FC-393-01..04 + inherited cross-refs FC-390-03, FC-390-06, FC-392-08, FC-392-20; ACCESS-02 keeper-bounty-vs-REAL-gas + flip-credit illiquidity + un-manufacturability charged hard, ACCESS-04 partial-balance same-block burst-solvency charged hard; beneficiary-only + forced-timing-magnitude doctrine + the by-design exclusions [permissionless/lootbox timing, operator-approval trust boundary, genesis self-break, dust-drop] encoded), council.sh fan-out to gemini+codex (expect codex usage-cap skip → flag 396 re-run), raw capture under council/, byte-freeze verify (Wave 1)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
+- [ ] 393-02-PLAN.md — NET 2 (Claude) + adjudication: independent adversarial net over the new/widened permissionless/keeper entrypoints, adjudicate ACCESS-01..05 + FC-393-01..04 + the 4 inherited cross-refs vs frozen a8b702a7 (consuming the 390/392 solvency/ECON halves), dedicated real-gas economic treatment of the keeper box-bounty (ACCESS-02) + the partial-balance same-block burst-solvency leg-accounting (ACCESS-04/FC-393-03) + the forced-timing adjacent-level magnitude analysis (ACCESS-03/FC-393-01) + the gate/reentrancy CEI enumeration on every entrypoint (ACCESS-05), cross-ref consistency block, skeptic gate, 393-FINDINGS.md verdict table (Wave 2, depends 393-01)
+
 ### Phase 394: LEGACY-DEBT — v50/v51/v52 Consolidated (folded)
 
 Goal: the long-deferred v50/v51 surface is swept and its FINDINGS deliverables authored.
