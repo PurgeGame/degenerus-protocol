@@ -192,8 +192,16 @@ Success criteria: (1) both nets consolidated + deduped + council-on-refuted re-r
 **Plans:** 3 plans
 
 Plans:
-- [ ] 396-01-PLAN.md — TERM-01: consolidate both nets (389-395) + council-on-refuted re-run (the 4 refuted HIGH candidates + pending 392/393/394 second-sources) + skeptic gate
+**Wave 1**
+
+- [x] 396-01-PLAN.md — TERM-01: consolidate both nets (389-395) + council-on-refuted re-run (the 4 refuted HIGH candidates + pending 392/393/394 second-sources) + skeptic gate ✅ COMPLETE 2026-06-15 (commits `7b78d36d` ledger, `910b1a60` council, `13ac16a3` skeptic+summary; **89-row deduped master ledger** [convergent council+Claude collapsed to "both"; **CONFIRMED = 1, BURNIE-04 MED routed gated fix**; BURNIE-05 USER BY-DESIGN/WONTFIX; 7 mutation survivors KILLED-by-regression; R-389-01 LOW test-only]; **council re-run** [gemini-3-pro + codex, both read-only] **on charge set A** [the 4 refuted-HIGH] **+ charge set B** [the pending 392/393 codex usage-cap + 394 v51 gemini non-response, ALL resolved]; **all 4 refuted-HIGH remain REFUTED** — ECON-04/ECON-06/SOLV-07 confirmed HOLDS by both models, **RNG-04 codex "BREAKS (ACTIONABLE)" adjudicated REFUTED at frozen source** [the `reverseFlip` +1 nudge is a documented by-design PRE-reveal blind offset gated by `rngLockedFlag`, committed before the base word lands — predictability-without-control, not after-reveal steering; gemini independently HOLDS]; **charge set B converges on every prior verdict** [BURNIE-04 both DEFECT/conservative; BURNIE-05 both protocol-owned-op-risk; ACCESS-02/04 + LEGACY-03/04 both SOUND]; **no new actionable lead**; **skeptic gate CLEARS — no severity above MED**; subject byte-frozen verified after the council fan-out [git diff a8b702a7 empty + tree `2934d3d8…`]; `396-CONSOLIDATED-LEDGER.md` + `396-COUNCIL-ON-REFUTED.md` + `396-SKEPTIC-GATE.md` + `396-01-SUMMARY.md` + raw `council/*`)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
 - [ ] 396-02-PLAN.md — TERM-02: author audit/FINDINGS-v63.0.md (chmod 444) + AUDIT-V63-REPORT.html; route BURNIE-04 to its gated fix
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
 - [ ] 396-03-PLAN.md — TERM-03: re-attest 58 reqs + re-confirm byte-freeze + emit MILESTONE_V63_AT_HEAD_<sha> + flip milestone to SHIPPED
 
 ---
