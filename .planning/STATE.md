@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v63.0
 milestone_name: Post-v62 Audit (Critical Invariants + Reward Game-Theory)
 status: executing
-last_updated: "2026-06-14T23:52:10.592Z"
-last_activity: 2026-06-14 -- Phase 389 planning complete
+last_updated: "2026-06-15T00:27:48Z"
+last_activity: 2026-06-15 -- Phase 389 Plan 01 (NET 1 council) complete
 progress:
   total_phases: 17
   completed_phases: 1
   total_plans: 5
-  completed_plans: 3
-  percent: 6
+  completed_plans: 4
+  percent: 8
 ---
 
 # Project State
@@ -20,7 +20,7 @@ progress:
 See: .planning/PROJECT.md (Current State section) + .planning/ROADMAP.md (v63.0 = top milestone, ▶ ACTIVE) + .planning/MILESTONES.md (v63.0 entry, top) + .planning/AUDIT-V63-PLAN.md (the full method doc) + .planning/REQUIREMENTS.md (the 58 REQ-IDs) + .planning/v63-surface-map/ (the 7 read-only dimension maps) + .planning/PAPER-REWARD-CHANGES-BRIEF.md (the reward design-intent anchor). v62.0 archive: .planning/milestones/v62.0-{ROADMAP,REQUIREMENTS,phases}; canonical v62 deliverable audit/FINDINGS-v62.0.md (chmod 444) + AUDIT-V62-REPORT.html. v63 baseline = v62.0 closure subject `77580320`; v63 subject = HEAD `a8b702a7` (byte-frozen at FOUNDATION 388). **NEXT = /gsd-plan-phase 388** (FOUNDATION — subject freeze + green baseline + slot recalibration).
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Current focus:** Phase 389 — packing identity
+**Current focus:** Phase 389 — PACKING-IDENTITY
 
 ## ⚠ v50.0 + v51.0 AUDIT DEBT → FOLDED INTO v63.0 Phase 394 LEGACY-DEBT (USER 2026-06-14; was a separate v52 track)
 
@@ -35,13 +35,13 @@ See: .planning/PROJECT.md (Current State section) + .planning/ROADMAP.md (v63.0 
 ## Current Position
 
 Milestone: v63.0 — ▶ ACTIVE (started 2026-06-14). Post-v62 Audit (Critical Invariants + Reward Game-Theory).
-Phase: 389
-Plan: Not started
-Status: Ready to execute
+Phase: 389 (PACKING-IDENTITY) — EXECUTING (Plan 01 NET 1 done)
+Plan: 2 of 2
+Status: Executing Phase 389 (Plan 01 council net on record; Plan 02 = Claude net + adjudication next)
 Baseline = v62.0 closure subject `77580320`; subject = HEAD `a8b702a7` (byte-frozen at FOUNDATION 388; pin = `contracts` tree `2934d3d8987a09c5f073549a0cb499f6c5f28620`).
 Method = COUNCIL + CLAUDE both; posture = audit-only by default (a surfaced/adjudicated/skeptic-passed finding → gated USER-hand-review fix, else document-only).
-Last activity: 2026-06-14 -- Phase 389 planning complete
-Next: `/gsd-plan-phase 389` PACKING-IDENTITY (intake = the 9 FC-389-* candidates from the 388-02 ledger; assert `git diff a8b702a7 -- contracts/` empty + reproduce vs the GREEN `test/REGRESSION-BASELINE-v63.md` 854/0/110 counts). Routed to 390: the legacy RedemptionInvariants 7-INV oracle HOLE.
+Last activity: 2026-06-15 -- Phase 389 Plan 01 (NET 1 cross-model council) complete — gemini+codex on record for STORAGE-01..07 + GASID-01..05 vs frozen `a8b702a7`; 0 CLIs skipped; aggregate council verdict = no production packing/identity defect (all FC-389-* + theses SOUND/IDENTICAL); subject byte-frozen. STORAGE/GASID req checkboxes intentionally NOT ticked yet (verdict is 389-02's after both-nets-on-record + adjudication).
+Next: `/gsd-execute-phase 389` Plan 02 — NET 2 (Claude) independent adversarial net over the same surface + adjudication of STORAGE-01..07 + GASID-01..05 + FC-389-01..09 vs frozen `a8b702a7`, skeptic gate, 389-FINDINGS.md verdict table. RAW council leads to fold in: (1) codex STORAGE-06 3 stale-harness leads (Composition slot-10 · SweepWorstCase/RngLock box-cursor 58/59 · HeroOverride*.test.js lootboxRng 35) — check each vs `forge inspect`; (2) FC-389-03 raw-vs-effective model divergence on `DecClaimRound.totalBurn`/`DecEntry.burn` comment framing (uint128 bound agreed sound). See `389-01-COUNCIL-NET.md`.
 
 ## ✅ SHIPPED Milestone Roadmap (v62.0 — phases 380-387 — SHIPPED 2026-06-09; baseline = v61.0 closure HEAD `b97a7a2e`; subject `c4d48008`; remediated `77580320`; closure signal `MILESTONE_V62_AT_HEAD_77580320b88e77438c893602a068548961824893`)
 

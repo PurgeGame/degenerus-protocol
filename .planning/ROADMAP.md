@@ -51,55 +51,70 @@
 ### Phase Details (v63.0)
 
 ### Phase 388: FOUNDATION — Subject Freeze & Green Baseline
+
 Goal: a byte-frozen subject `a8b702a7` + a green forge+JS baseline that is the audit's safety floor and the oracle every lead is reproduced against.
 Type: FOUND (Claude-built) · Depends on: nothing (first v63 phase) · Requirements: FND-01..04
 Success criteria: (1) subject frozen + baseline diff recorded; (2) authoritative layout re-derived + slot-hardcoded harnesses recalibrated; (3) GREEN forge+JS baseline recorded; (4) verifier oracle holes closed + 7 maps intaken.
 Plans: 3 plans (2 parallel in wave 1 + the wave-2 green-baseline gate)
+
 - [x] 388-01-PLAN.md — FND-02: re-derive the authoritative a8b702a7 layout (forge inspect) for the 4 reshuffled contracts + reconcile the slot-hardcoded harness pokes against the post-v62 packing shifts + extend the StorageFoundation tail-pack canary ✅ (commits `2bcb4d3e`, `4e7223f5`; layout key + per-harness ledger; canary 25/25; every moved-field poke confirmed correct, 0 re-derivations; subject byte-frozen)
 - [x] 388-02-PLAN.md — FND-04: close the verifier oracle holes (each changed-surface invariant actually exercises its target) + intake all 7 surface-maps into the routed finding-candidate ledger (389-394) ✅ (commits `1e5fd2f7`, `ccf620f1`; 9 tests classified 7 EXERCISED / 1 game-side+gap-routed / 1 HOLE [legacy RedemptionInvariants 7-INV: un-wired claim+stETH leg `calls_claim:0` + stale slots 10/13/15 → routed 390; superseded by RedemptionStethFallback 10/10 + RedemptionAccounting]; decimator-uint32 = missing distribution property → routed 391; 45-lead 7-map intake ledger, exhaustive 45/45, all 9 §6 leads same-phase-routed; rollup 389:9 390:7 391:5 392:20 393:4 394:0; subject byte-frozen)
 - [x] 388-03-PLAN.md — FND-01 + FND-03: recorded the a8b702a7 byte-freeze pin (`contracts` tree `2934d3d8987a09c5f073549a0cb499f6c5f28620` == HEAD:contracts, content sha256 `0c684378`, `git diff a8b702a7 -- contracts/` empty) + the 77580320→a8b702a7 audit-delta surface (40 files +4322/−3489, per-family characterized → 389-394) + the GREEN forge baseline **854/0/110** (`test/REGRESSION-BASELINE-v63.md`) superseding the carried-red ledger — the 3 v62 carried VRF-path bucket-A reds now pass 7/7, ZERO permitted residuals; Hardhat 1105/121/5 corroborating (carried gameover-VRF-drive harness drift: ACCT-08 = gameOver-never-latches, RngStall = RngNotReady() guard; no solvency/conservation/RNG-freeze breach) ✅ (commits `a631e02e`, `222d87dd`; deliverables `388-03-BASELINE-DIFF.md` + `test/REGRESSION-BASELINE-v63.md`; subject byte-frozen throughout)
 
 ### Phase 389: PACKING-IDENTITY
+
 Goal: prove the packing + gas refactors are value-/behavior-identical (no silent truncation, no co-resident clobber, no slot collision, no diverging refactor).
 Type: SWEEP (dual-net) · Depends on: 388 · Requirements: STORAGE-01..07, GASID-01..05
 Success criteria: (1) every narrowing bounded; (2) masked RMW + cross-module conventions proven; (3) the two-window EV-cap eviction proven safe under the real cursor-lag bound; (4) selector/preimage/nibble-table/trait-roll identity proven; both nets on record.
 
 Plans: 2 plans (dual-net) in 2 waves
 Plans:
-- [ ] 389-01-PLAN.md — NET 1 (council): neutral STORAGE + GASID council prompts, council.sh fan-out to gemini+codex, raw capture under council/, byte-freeze verify (Wave 1)
+**Wave 1**
+
+- [x] 389-01-PLAN.md — NET 1 (council): neutral STORAGE + GASID council prompts, council.sh fan-out to gemini+codex, raw capture under council/, byte-freeze verify (Wave 1) ✅ (commits `4c4043ca`, `32556a05`; both slices fanned, 0 CLIs skipped, all 4 model outputs captured; aggregate council verdict = no production packing/identity defect [all FC-389-* + STORAGE/GASID theses SOUND/IDENTICAL]; raw leads for 389-02 = codex 3 STORAGE-06 stale-harness candidates + FC-389-03 raw-vs-effective comment divergence; subject byte-frozen; `389-01-COUNCIL-NET.md`)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
 - [ ] 389-02-PLAN.md — NET 2 (Claude) + adjudication: independent adversarial net over the same surface, adjudicate STORAGE-01..07 + GASID-01..05 + FC-389-01..09 vs frozen a8b702a7, skeptic gate, 389-FINDINGS.md verdict table (Wave 2, depends 389-01)
 
 ### Phase 390: SOLVENCY-SPINE
+
 Goal: the claimablePool / sDGNRS backing identities hold across the redemption rework, dust-forfeit, CEI, and JackpotModule fold.
 Type: SWEEP (dual-net) · Depends on: 388 · Requirements: SOLV-01..07
 Success criteria: (1) claimablePool + sDGNRS backing identities re-attested; (2) submit/claim conservation + dust-forfeit backing proven; (3) the redemption-claim liveness-window ordering proven strand/double-credit-free; (4) CEI/yield-surplus reentrancy closed; both nets on record.
 
 ### Phase 391: RNG-SPINE
+
 Goal: every new/changed RNG consumer is freeze-safe (word unknown at commitment; in-window reads frozen; narrowing entropy adequate).
 Type: SWEEP (dual-net) · Depends on: 388 · Requirements: RNG-01..06
 Success criteria: (1) backward-trace clean for each consumer; (2) decimator uint32 entropy floor + unbiased distribution; (3) box-spin replay-safe + domain-separated; (4) redemption day+1 gate + in-window SLOAD enumeration clean; both nets on record.
 
 ### Phase 392: ENTROPY-AND-ECON
+
 Goal: the reward rebalances preserve their documented EV/neutrality + bounded accrual with no money-pump, and the BURNIE rework is conservative + correctly backed.
 Type: SWEEP (dual-net) · Depends on: 388 · Requirements: ECON-01..06, BURNIE-01..06
 Success criteria: (1) EV-neutrality re-verified vs the PAPER brief + the two EV changes match intent; (2) no positive-EV money pump; (3) scarce-asset invariants (whale-pass channel, sDGNRS backing) hold; (4) survive-before-mint + emission conservation + auto-rebuy/carry/VAULT-window accounting resolved (incl. the two top BURNIE leads); both nets on record.
 
 ### Phase 393: PERMISSIONLESS-COMPOSITION
+
 Goal: the new permissionless/keeper surface cannot grief, faucet, or steer, and composition across boundaries is safe.
 Type: SWEEP (dual-net) · Depends on: 388-392 (consumes their boundary results) · Requirements: ACCESS-01..05
 Success criteria: (1) permissionless claims beneficiary-only; (2) keeper bounty net-negative vs real gas + un-manufacturable; (3) forced claim-timing inert; (4) partial-balance burst solvency + all gates/reentrancy intact; both nets on record.
 
 ### Phase 394: LEGACY-DEBT — v50/v51/v52 Consolidated (folded)
+
 Goal: the long-deferred v50/v51 surface is swept and its FINDINGS deliverables authored.
 Type: SWEEP (dual-net) · Depends on: 388 · Requirements: LEGACY-01..06
 Success criteria: (1) v50 surface swept (whale-pass O(1) + AFSUB pass-gating + MINTDIV); (2) v51 surface swept (claimBingo/BingoModule + sDGNRS Pool.Reward rebalance + jackpot final-day deletion); (3) `FINDINGS-v50.0.md` + `FINDINGS-v51.0.md` authored; both nets on record.
 
 ### Phase 395: MUTATION — Full Campaign (folded)
+
 Goal: the full mutation campaign is run, scored, and its survivors triaged/killed/routed.
 Type: MUTATION (Claude-built harness) · Depends on: 388 (green baseline) · Requirements: MUT-01..03
 Success criteria: (1) campaign run over the frozen subject with fix-site + comprehensive oracle scope (via_ir, CI/overnight); (2) mutation score measured + recorded + survivors triaged; (3) each genuine survivor killed by a new test or routed to a finding.
 
 ### Phase 396: TERMINAL — Synthesis + FINDINGS-v63.0 + Closure
+
 Goal: a consolidated, adjudicated, dual-net-backed FINDINGS deliverable and the milestone closure flip.
 Type: TERMINAL · Depends on: 389-395 · Requirements: TERM-01..03
 Success criteria: (1) both nets consolidated + deduped + council-on-refuted re-run + skeptic gate cleared; (2) `audit/FINDINGS-v63.0.md` (chmod 444) + `AUDIT-V63-REPORT.html` produced, every lead adjudicated vs frozen subject, any CONFIRMED finding routed to a gated fix; (3) contracts re-frozen + `MILESTONE_V63_AT_HEAD_<sha>` + 58 reqs re-attested + milestone flipped.
@@ -385,6 +400,7 @@ Plans:
 **Wave 6** *(blocked on Wave 5)*
 
 - [x] 378-06-PLAN.md — SEC-01 (RNG-freeze empirical determinism) + SEC-02 (SOLVENCY-01 invariant across the afking spend paths): 3 new forge files, 13 tests all GREEN vs the shipped v61 impl (V61RngFreezeIntact 6 · V61AfkingSpendHandler + V61SolvencyAfpay.inv 7); SEC-01 = a two-block determinism replay (snapshot/revert + perturbed prevrandao/coinbase/number/timestamp) proving the AFPAY waterfall + cashout-curse SET + smite byte-identical across block contexts + the curse*100 bps penalty a pure fn of curseCount + a static no-rngWord grep leg; SEC-02 = invariant_v61PoolEqualsSumOfHalves (claimablePool == Σ halves, REAL slot 7) + invariant_v61PoolNeverExceedsBacking (<= bal+stETH), both 256×128/32768 calls/0 reverts, handler drives all afking spend paths via real paired entrypoints + 4 focused scenarios (smite/decurse pool-neutral); SEC-01 + SEC-02 BOTH PROVEN, NO CONTRACT-CHANGE-NEEDED; falsifiability spot-checked both; contracts byte-frozen `87e3b45b`/`fcdd999c`; zero .sol edits (SEC-01/02) ✅ `56976c38`/`d2c35ff2`
+
 **UI hint**: no
 
 ### Phase 379: TERMINAL — Delta Audit + 3-Skill Adversarial Sweep + FINDINGS-v61.0 + Closure Flip
