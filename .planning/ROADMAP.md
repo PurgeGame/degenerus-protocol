@@ -149,6 +149,15 @@ Goal: the long-deferred v50/v51 surface is swept and its FINDINGS deliverables a
 Type: SWEEP (dual-net) · Depends on: 388 · Requirements: LEGACY-01..06
 Success criteria: (1) v50 surface swept (whale-pass O(1) + AFSUB pass-gating + MINTDIV); (2) v51 surface swept (claimBingo/BingoModule + sDGNRS Pool.Reward rebalance + jackpot final-day deletion); (3) `FINDINGS-v50.0.md` + `FINDINGS-v51.0.md` authored; both nets on record.
 
+Plans: 4 plans (dual-net, slice-split v50 + v51) in 2 waves
+Plans:
+**Wave 1** *(council net -- two slices, parallel, no file overlap)*
+- [ ] 394-01-PLAN.md -- NET 1 (council) v50 slice: neutral council prompt + fan-out for the whale-pass O(1) deferred-claim path + box-open record, AFSUB pass-gating (validThroughLevel evict/refresh + OPEN-E re-attest), MINTDIV index alignment (LEGACY-01, LEGACY-02)
+- [ ] 394-02-PLAN.md -- NET 1 (council) v51 slice: neutral council prompt + fan-out for claimBingo/BingoModule (3-tier + tier-precedence + dedup + freeze-safe traitBurnTicket read), the sDGNRS Pool.Reward rebalance, the jackpot final-day Pool.Reward deletion (LEGACY-03, LEGACY-04)
+**Wave 2** *(Claude net + adjudication -- each blocked on its matching Wave-1 slice)*
+- [ ] 394-03-PLAN.md -- NET 2 (Claude) + adjudication v50 slice + author `audit/FINDINGS-v50.0.md` (LEGACY-01, LEGACY-02, LEGACY-05)
+- [ ] 394-04-PLAN.md -- NET 2 (Claude) + adjudication v51 slice + author `audit/FINDINGS-v51.0.md` + the consolidated 394-FINDINGS.md index (LEGACY-03, LEGACY-04, LEGACY-06)
+
 ### Phase 395: MUTATION — Full Campaign (folded)
 
 Goal: the full mutation campaign is run, scored, and its survivors triaged/killed/routed.
