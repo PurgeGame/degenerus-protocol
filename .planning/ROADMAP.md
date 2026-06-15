@@ -103,7 +103,7 @@ Plans: 2 plans (dual-net) in 2 waves
 Plans:
 **Wave 1**
 
-- [ ] 391-01-PLAN.md — NET 1 (council): neutral RNG-FREEZE council prompt (RNG-01..06 + FC-391-01..05 + inherited cross-refs FC-389-05, FC-392-11; the decimator uint32 distribution-bias prime target charged hard; backward-trace + in-window-SLOAD doctrine encoded), council.sh fan-out to gemini+codex, raw capture under council/, byte-freeze verify (Wave 1)
+- [x] 391-01-PLAN.md — NET 1 (council): neutral RNG-FREEZE council prompt (RNG-01..06 + FC-391-01..05 + inherited cross-refs FC-389-05, FC-392-11; the decimator uint32 distribution-bias prime target charged hard; backward-trace + in-window-SLOAD doctrine encoded), council.sh fan-out to gemini+codex, raw capture under council/, byte-freeze verify (Wave 1) ✅ (commits `bb0c85bc` prompt, `61b55436` fan-out+net; **NET 1 on record**, gemini+codex both available 0 skipped; **both VERIFIED SOUND on RNG-01/02/03/05/06** w/ backward-traced commitment points + a real decimator-distribution argument [keccak diffusion of `hash2(uint32-word, address)` → independent/uniform per-address outcomes under the shared 32-bit salt, non-grindable]; **codex 1 INFO/LOW lead RNG-04** = cross-round `uint32` claim-seed collision [same player wins L/L2 with `uint32(VRF_L2)==uint32(VRF_L)` → identical direct-lootbox seed; dropped-`amount` + `uint32` combo; codex itself "not a freeze/manipulability break"] vs gemini SOUND → the single divergence routed RAW to 391-02; subject byte-frozen `git diff a8b702a7` empty; `391-01-COUNCIL-PROMPT-RNG.md` + `391-01-COUNCIL-NET.md`)
 
 **Wave 2** *(blocked on Wave 1 completion)*
 

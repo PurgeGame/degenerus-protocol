@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v63.0
 milestone_name: Post-v62 Audit (Critical Invariants + Reward Game-Theory)
 status: executing
-last_updated: "2026-06-15T02:02:05.992Z"
-last_activity: 2026-06-15 -- Phase 391 planning complete
+last_updated: "2026-06-15T03:30:00.000Z"
+last_activity: 2026-06-15 -- 391-01 NET 1 (RNG-freeze council) on record
 progress:
   total_phases: 17
   completed_phases: 3
   total_plans: 9
-  completed_plans: 7
-  percent: 18
+  completed_plans: 8
+  percent: 20
 ---
 
 # Project State
@@ -20,7 +20,7 @@ progress:
 See: .planning/PROJECT.md (Current State section) + .planning/ROADMAP.md (v63.0 = top milestone, ▶ ACTIVE) + .planning/MILESTONES.md (v63.0 entry, top) + .planning/AUDIT-V63-PLAN.md (the full method doc) + .planning/REQUIREMENTS.md (the 58 REQ-IDs) + .planning/v63-surface-map/ (the 7 read-only dimension maps) + .planning/PAPER-REWARD-CHANGES-BRIEF.md (the reward design-intent anchor). v62.0 archive: .planning/milestones/v62.0-{ROADMAP,REQUIREMENTS,phases}; canonical v62 deliverable audit/FINDINGS-v62.0.md (chmod 444) + AUDIT-V62-REPORT.html. v63 baseline = v62.0 closure subject `77580320`; v63 subject = HEAD `a8b702a7` (byte-frozen at FOUNDATION 388). **NEXT = /gsd-plan-phase 388** (FOUNDATION — subject freeze + green baseline + slot recalibration).
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Current focus:** Phase 391 — rng spine
+**Current focus:** Phase 391 — RNG-SPINE
 
 ## ⚠ v50.0 + v51.0 AUDIT DEBT → FOLDED INTO v63.0 Phase 394 LEGACY-DEBT (USER 2026-06-14; was a separate v52 track)
 
@@ -35,13 +35,14 @@ See: .planning/PROJECT.md (Current State section) + .planning/ROADMAP.md (v63.0 
 ## Current Position
 
 Milestone: v63.0 — ▶ ACTIVE (started 2026-06-14). Post-v62 Audit (Critical Invariants + Reward Game-Theory).
-Phase: 391
-Plan: Not started
-Status: Ready to execute
+Phase: 391 (RNG-SPINE) — EXECUTING (Wave 1 done; Wave 2 next)
+Plan: 2 of 2 (391-01 NET 1 ✅; 391-02 NET 2 + adjudication NEXT)
+Status: Executing Phase 391
 Baseline = v62.0 closure subject `77580320`; subject = HEAD `a8b702a7` (byte-frozen at FOUNDATION 388; pin = `contracts` tree `2934d3d8987a09c5f073549a0cb499f6c5f28620`).
 Method = COUNCIL + CLAUDE both; posture = audit-only by default (a surfaced/adjudicated/skeptic-passed finding → gated USER-hand-review fix, else document-only).
-Last activity: 2026-06-15 -- Phase 391 planning complete
-Next: `/gsd-plan-phase 391` RNG-SPINE (dual-net; RNG-01..06; backward-trace every new/changed RNG consumer for freeze-safety; decimator uint32 entropy floor + unbiased distribution; box-spin replay-safety; redemption day+1 gate). Owned leads FC-391-01..05 (388-02-FINDING-CANDIDATES row D), MED prime = FC-391-04 (decimator uint32 distribution).
+Last activity: 2026-06-15 -- 391-01 NET 1 (RNG-freeze council) on record (commits `bb0c85bc` prompt, `61b55436` fan-out+net)
+391-01 outcome: NET 1 (gemini+codex, 0 skipped) on record for RNG-01..06; both VERIFIED SOUND on RNG-01/02/03/05/06 + the decimator-distribution prime (real keccak-diffusion argument); **codex 1 INFO/LOW lead RNG-04** = cross-round `uint32` decimator claim-seed collision (same player wins L/L2 with `uint32(VRF_L2)==uint32(VRF_L)` → identical direct-lootbox seed; dropped-`amount` + `uint32` combo; codex itself "not a freeze/manipulability break") vs gemini SOUND → the single divergence routed RAW to 391-02. Subject byte-frozen throughout. RNG-01..06 NOT yet marked (verdict needs both nets on record → issued at 391-02).
+Next: `/gsd-execute-phase 391` Wave 2 — 391-02 NET 2 (Claude) + adjudication: independent adversarial backward-trace, adjudicate RNG-01..06 + FC-391-01..05 + FC-389-05/FC-392-11 vs frozen `a8b702a7`; PRIORITY = the codex RNG-04 cross-round `uint32` collision divergence (skeptic dual-gate, jointly with the RNG-02 distribution prime — both touch the dropped-`amount`+`uint32` narrowings); re-attest the convergent-SOUND items; skeptic gate; `391-FINDINGS.md` verdict table. Owned leads FC-391-01..05 (388-02-FINDING-CANDIDATES row D), MED prime = FC-391-04 (decimator uint32 distribution).
 
 ## ✅ SHIPPED Milestone Roadmap (v62.0 — phases 380-387 — SHIPPED 2026-06-09; baseline = v61.0 closure HEAD `b97a7a2e`; subject `c4d48008`; remediated `77580320`; closure signal `MILESTONE_V62_AT_HEAD_77580320b88e77438c893602a068548961824893`)
 
