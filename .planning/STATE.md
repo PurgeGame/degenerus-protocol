@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v63.0
 milestone_name: Post-v62 Audit (Critical Invariants + Reward Game-Theory)
 status: executing
-last_updated: "2026-06-15T03:30:00.000Z"
-last_activity: 2026-06-15 -- 391-01 NET 1 (RNG-freeze council) on record
+last_updated: "2026-06-15T04:15:00.000Z"
+last_activity: 2026-06-15 -- 391-02 NET 2 + RNG-spine adjudication; Phase 391 COMPLETE (0 confirmed)
 progress:
   total_phases: 17
-  completed_phases: 3
+  completed_phases: 4
   total_plans: 9
-  completed_plans: 8
-  percent: 20
+  completed_plans: 9
+  percent: 24
 ---
 
 # Project State
@@ -35,14 +35,14 @@ See: .planning/PROJECT.md (Current State section) + .planning/ROADMAP.md (v63.0 
 ## Current Position
 
 Milestone: v63.0 — ▶ ACTIVE (started 2026-06-14). Post-v62 Audit (Critical Invariants + Reward Game-Theory).
-Phase: 391 (RNG-SPINE) — EXECUTING (Wave 1 done; Wave 2 next)
-Plan: 2 of 2 (391-01 NET 1 ✅; 391-02 NET 2 + adjudication NEXT)
-Status: Executing Phase 391
+Phase: 391 (RNG-SPINE) — ✅ COMPLETE (both waves done; both nets on record)
+Plan: 2 of 2 (391-01 NET 1 ✅; 391-02 NET 2 + adjudication ✅)
+Status: Phase 391 COMPLETE — next = Phase 392 ENTROPY-AND-ECON
 Baseline = v62.0 closure subject `77580320`; subject = HEAD `a8b702a7` (byte-frozen at FOUNDATION 388; pin = `contracts` tree `2934d3d8987a09c5f073549a0cb499f6c5f28620`).
 Method = COUNCIL + CLAUDE both; posture = audit-only by default (a surfaced/adjudicated/skeptic-passed finding → gated USER-hand-review fix, else document-only).
-Last activity: 2026-06-15 -- 391-01 NET 1 (RNG-freeze council) on record (commits `bb0c85bc` prompt, `61b55436` fan-out+net)
-391-01 outcome: NET 1 (gemini+codex, 0 skipped) on record for RNG-01..06; both VERIFIED SOUND on RNG-01/02/03/05/06 + the decimator-distribution prime (real keccak-diffusion argument); **codex 1 INFO/LOW lead RNG-04** = cross-round `uint32` decimator claim-seed collision (same player wins L/L2 with `uint32(VRF_L2)==uint32(VRF_L)` → identical direct-lootbox seed; dropped-`amount` + `uint32` combo; codex itself "not a freeze/manipulability break") vs gemini SOUND → the single divergence routed RAW to 391-02. Subject byte-frozen throughout. RNG-01..06 NOT yet marked (verdict needs both nets on record → issued at 391-02).
-Next: `/gsd-execute-phase 391` Wave 2 — 391-02 NET 2 (Claude) + adjudication: independent adversarial backward-trace, adjudicate RNG-01..06 + FC-391-01..05 + FC-389-05/FC-392-11 vs frozen `a8b702a7`; PRIORITY = the codex RNG-04 cross-round `uint32` collision divergence (skeptic dual-gate, jointly with the RNG-02 distribution prime — both touch the dropped-`amount`+`uint32` narrowings); re-attest the convergent-SOUND items; skeptic gate; `391-FINDINGS.md` verdict table. Owned leads FC-391-01..05 (388-02-FINDING-CANDIDATES row D), MED prime = FC-391-04 (decimator uint32 distribution).
+Last activity: 2026-06-15 -- 391-02 NET 2 (Claude) + RNG-spine adjudication; Phase 391 COMPLETE (commits `9e34485a` NET 2, `33c0e478` FINDINGS)
+391 outcome: BOTH NETS on record for RNG-01..06 + FC-391-01..05 + FC-389-05/FC-392-11; **0 CONFIRMED contract findings — the DOMINANT freeze/manipulability class is clean; RNG-01..06 attested at `a8b702a7`.** NET 2 ran independently (per-consumer backward-trace to the commitment point + the dedicated decimator random-oracle distribution argument + the RNG-04 cross-round skeptic dual-gate + the RNG-05 day-boundary divergence bound + the RNG-06 in-window SLOAD enumeration over slots 10/34/35+dailyIdx), council folded after. **RNG-04 cross-round `uint32` decimator claim-seed collision (codex INFO/LOW vs gemini SOUND) RESOLVED = REFUTED-as-break, benign INFO/LOW** (skeptic dual-gate: not grindable [word VRF-fixed after address commitment], no value extraction [magnitude set by independent `amount`, off the ETH spine], ~10^-5 reachability — reconciles both models). **RNG-02/FC-391-04 decimator distribution = REFUTED (unbiased + non-grindable)** by a real keccak random-oracle argument over the winner population; the missing distribution oracle ROUTED as a test-hardening item (NOT a contract change). FC-389-05 STORAGE-half → 389; FC-392-11 backing/EV-dynamics half → 392. Subject byte-frozen throughout (`git diff a8b702a7 -- contracts/` empty). Deliverables `391-FINDINGS.md` + `391-02-CLAUDE-NET.md`.
+Next: `/gsd-execute-phase 392` — ENTROPY-AND-ECON (reward game-theory + BURNIE/coinflip rework; ECON-01..06 + BURNIE-01..06; owns the FC-392-11 backing/EV-dynamics half cross-referenced from 391, plus FC-392-01..20).
 
 ## ✅ SHIPPED Milestone Roadmap (v62.0 — phases 380-387 — SHIPPED 2026-06-09; baseline = v61.0 closure HEAD `b97a7a2e`; subject `c4d48008`; remediated `77580320`; closure signal `MILESTONE_V62_AT_HEAD_77580320b88e77438c893602a068548961824893`)
 

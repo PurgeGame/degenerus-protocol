@@ -47,12 +47,12 @@
 - [x] **SOLV-07**: JackpotModule delta-fold completeness — no pool is credited or deleted twice across the rework. — REFUTED (whalePassCost single-counted; cross-model divergence resolved, gemini HIGH lead REFUTED at frozen source).
 
 ### RNG — Freeze spine
-- [ ] **RNG-01**: Every new/changed RNG consumer is traced backward to confirm the VRF word was unknown when the player committed their input.
-- [ ] **RNG-02**: The decimator `uint32` claim-seed retains an adequate entropy floor, is non-grindable, and yields an unbiased aggregate per-bucket reward distribution across many winners of one level.
-- [ ] **RNG-03**: The box-spin resolvers (WWXRP / BURNIE / ETH spins) are one-shot and replay-safe (no double-resolve via `lastOpenedDay` or the spin cursor).
-- [ ] **RNG-04**: `resolveLootboxDirect` and the spin seeds are domain-separated (no cross-consumer seed collision).
-- [ ] **RNG-05**: The redemption day+1 pre-draw gate (`BurnsBlockedBeforeDailyRng`) holds on the burn side; no zero-seed grind.
-- [ ] **RNG-06**: Every SLOAD inside an rng-window over the repacked slots is freeze-invariant (no player-controllable non-VRF read consumed alongside the word).
+- [x] **RNG-01**: Every new/changed RNG consumer is traced backward to confirm the VRF word was unknown when the player committed their input. ✅ ATTESTED 391-02 (both nets; per-consumer commitment points — 391-FINDINGS §2a / 391-02-CLAUDE-NET §A).
+- [x] **RNG-02**: The decimator `uint32` claim-seed retains an adequate entropy floor, is non-grindable, and yields an unbiased aggregate per-bucket reward distribution across many winners of one level. ✅ ATTESTED 391-02 (both nets; dedicated keccak random-oracle distribution argument = unbiased + non-grindable; missing distribution oracle ROUTED test-hardening — 391-FINDINGS §3b).
+- [x] **RNG-03**: The box-spin resolvers (WWXRP / BURNIE / ETH spins) are one-shot and replay-safe (no double-resolve via `lastOpenedDay` or the spin cursor). ✅ ATTESTED 391-02 (both nets; record-clear-before-resolution + delegatecall `address(this)!=GAME` guard — 391-FINDINGS §2a).
+- [x] **RNG-04**: `resolveLootboxDirect` and the spin seeds are domain-separated (no cross-consumer seed collision). ✅ ATTESTED 391-02 (both nets; per-caller domain separation; the cross-round `uint32` collision REFUTED-as-break = benign INFO/LOW via the skeptic dual-gate — 391-FINDINGS §3a).
+- [x] **RNG-05**: The redemption day+1 pre-draw gate (`BurnsBlockedBeforeDailyRng`) holds on the burn side; no zero-seed grind. ✅ ATTESTED 391-02 (both nets; the gate pins `currentPeriod <= dailyIdx` so day+1 is undrawn at burn time — 391-FINDINGS §2a).
+- [x] **RNG-06**: Every SLOAD inside an rng-window over the repacked slots is freeze-invariant (no player-controllable non-VRF read consumed alongside the word). ✅ ATTESTED 391-02 (both nets; in-window SLOAD enumeration over slots 10/34/35+dailyIdx; EntropyLib byte-identity + activityScore frozen-snapshot — 391-FINDINGS §2a).
 
 ### ECON — Reward game-theory
 - [ ] **ECON-01**: Reward accrual saturates below every hard ceiling (activity-score cap, EV/ROI band, decimator clamps); no unbounded grind exists.
