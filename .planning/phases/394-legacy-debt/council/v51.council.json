@@ -1,0 +1,7 @@
+{
+  "label": "v51",
+  "schema": "",
+  "models": ["codex"],
+  "skipped": ["gemini"],
+  "outputs": {"codex": ".planning/phases/394-legacy-debt/council/v51.codex.txt"}
+}

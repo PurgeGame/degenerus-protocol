@@ -1,0 +1,1 @@
+ask-gemini: gemini-3-pro-preview produced NO output within an 8-minute hard cap (rc=124, timeout) on 2 successive runs for the v51 slice — non-responsive/effectively unavailable for this prompt; recorded as skipped[]. codex returned a full traced audit. (re-run gemini opportunistically once it responds → 396 second-source.)
