@@ -37,14 +37,14 @@
 - [x] **GASID-04**: The trait-roll consolidation and `_farFutureSeed` extraction are equivalent to the pre-refactor semantics across all inputs, boundaries, and revert paths. ✅ ATTESTED 389-02 (single-hero roll trace + literal seed extraction; 389-FINDINGS §2b).
 - [x] **GASID-05**: No gas/refactor edit changed an externally-observable behavior (output / revert / event) — behavior-identity is asserted, not assumed. ✅ ATTESTED 389-02 (anchored on GASID-01..04 + empty expected-red name-set; 389-FINDINGS §2b).
 
-### SOLV — Solvency spine
-- [ ] **SOLV-01**: The `claimablePool == Σ claimable + Σ afking` identity holds across every changed credit/debit path (the `_debitClaimableAndAfking` per-half guards).
-- [ ] **SOLV-02**: The sDGNRS `pendingRedemptionEthValue` backing identity is preserved; `balance + steth.balanceOf(this) ≥ obligations` under the redemption rework.
-- [ ] **SOLV-03**: Redemption submit/claim conservation — ethDirect + lootboxEth + forfeitEth equals the released value; no path double-counts or leaks.
-- [ ] **SOLV-04**: The dust-lootbox forfeit self-credit is always backed by value actually leaving sDGNRS and never bumps claimable beyond the pending release.
-- [ ] **SOLV-05**: The redemption CLAIM path's liveness-window ordering cannot strand or double-credit across the `handleGameOverDrain` totalFunds snapshot / `livenessTriggered()→gameOver()` latch.
-- [ ] **SOLV-06**: CEI / yield-surplus reentrancy is closed on the ETH/stETH payout legs (stETH-before-ETH ordering; the V62-03 class).
-- [ ] **SOLV-07**: JackpotModule delta-fold completeness — no pool is credited or deleted twice across the rework.
+### SOLV — Solvency spine (✅ ATTESTED at `a8b702a7`, Phase 390, both nets on record, 0 CONFIRMED)
+- [x] **SOLV-01**: The `claimablePool == Σ claimable + Σ afking` identity holds across every changed credit/debit path (the `_debitClaimableAndAfking` per-half guards). — REFUTED (every spine touch pairs a pool move; 390-FINDINGS §2a).
+- [x] **SOLV-02**: The sDGNRS `pendingRedemptionEthValue` backing identity is preserved; `balance + steth.balanceOf(this) ≥ obligations` under the redemption rework. — REFUTED (backing read excludes pending; widths bounded).
+- [x] **SOLV-03**: Redemption submit/claim conservation — ethDirect + lootboxEth + forfeitEth equals the released value; no path double-counts or leaks. — REFUTED (legs sum = rolled = release in every branch).
+- [x] **SOLV-04**: The dust-lootbox forfeit self-credit is always backed by value actually leaving sDGNRS and never bumps claimable beyond the pending release. — REFUTED (GAME pulls stETH remainder fail-closed before crediting; backed under MAX reservation).
+- [x] **SOLV-05**: The redemption CLAIM path's liveness-window ordering cannot strand or double-credit across the `handleGameOverDrain` totalFunds snapshot / `livenessTriggered()→gameOver()` latch. — REFUTED (reserve segregated out of drain totalFunds; tx-atomicity + single snapshot + atomic release/slot-delete).
+- [x] **SOLV-06**: CEI / yield-surplus reentrancy is closed on the ETH/stETH payout legs (stETH-before-ETH ordering; the V62-03 class). — REFUTED (CEI on all 4 payout legs; RedemptionStethFallback 10/10 anchor).
+- [x] **SOLV-07**: JackpotModule delta-fold completeness — no pool is credited or deleted twice across the rework. — REFUTED (whalePassCost single-counted; cross-model divergence resolved, gemini HIGH lead REFUTED at frozen source).
 
 ### RNG — Freeze spine
 - [ ] **RNG-01**: Every new/changed RNG consumer is traced backward to confirm the VRF word was unknown when the player committed their input.
