@@ -2,16 +2,15 @@
 gsd_state_version: 1.0
 milestone: v63.0
 milestone_name: Post-v62 Audit (Critical Invariants + Reward Game-Theory)
-status: ready_to_plan
-last_updated: 2026-06-15T01:50:34.548Z
-last_activity: 2026-06-15 -- Phase 390 Plan 02 (NET 2 Claude + dual-net adjudication) DONE — Phase 390 COMPLETE
+status: executing
+last_updated: "2026-06-15T02:02:05.992Z"
+last_activity: 2026-06-15 -- Phase 391 planning complete
 progress:
   total_phases: 17
   completed_phases: 3
-  total_plans: 7
+  total_plans: 9
   completed_plans: 7
   percent: 18
-stopped_at: Phase 390 complete (2/2) — ready to discuss Phase 391
 ---
 
 # Project State
@@ -38,10 +37,10 @@ See: .planning/PROJECT.md (Current State section) + .planning/ROADMAP.md (v63.0 
 Milestone: v63.0 — ▶ ACTIVE (started 2026-06-14). Post-v62 Audit (Critical Invariants + Reward Game-Theory).
 Phase: 391
 Plan: Not started
-Status: Ready to plan
+Status: Ready to execute
 Baseline = v62.0 closure subject `77580320`; subject = HEAD `a8b702a7` (byte-frozen at FOUNDATION 388; pin = `contracts` tree `2934d3d8987a09c5f073549a0cb499f6c5f28620`).
 Method = COUNCIL + CLAUDE both; posture = audit-only by default (a surfaced/adjudicated/skeptic-passed finding → gated USER-hand-review fix, else document-only).
-Last activity: 2026-06-15
+Last activity: 2026-06-15 -- Phase 391 planning complete
 Next: `/gsd-plan-phase 391` RNG-SPINE (dual-net; RNG-01..06; backward-trace every new/changed RNG consumer for freeze-safety; decimator uint32 entropy floor + unbiased distribution; box-spin replay-safety; redemption day+1 gate). Owned leads FC-391-01..05 (388-02-FINDING-CANDIDATES row D), MED prime = FC-391-04 (decimator uint32 distribution).
 
 ## ✅ SHIPPED Milestone Roadmap (v62.0 — phases 380-387 — SHIPPED 2026-06-09; baseline = v61.0 closure HEAD `b97a7a2e`; subject `c4d48008`; remediated `77580320`; closure signal `MILESTONE_V62_AT_HEAD_77580320b88e77438c893602a068548961824893`)
