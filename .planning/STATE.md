@@ -2,8 +2,8 @@
 gsd_state_version: 1.0
 milestone: v63.0
 milestone_name: Post-v62 Audit (Critical Invariants + Reward Game-Theory)
-status: executing
-last_updated: "2026-06-15T02:00:00.000Z"
+status: ready_to_plan
+last_updated: 2026-06-15T01:50:34.548Z
 last_activity: 2026-06-15 -- Phase 390 Plan 02 (NET 2 Claude + dual-net adjudication) DONE — Phase 390 COMPLETE
 progress:
   total_phases: 17
@@ -11,6 +11,7 @@ progress:
   total_plans: 7
   completed_plans: 7
   percent: 18
+stopped_at: Phase 390 complete (2/2) — ready to discuss Phase 391
 ---
 
 # Project State
@@ -20,7 +21,7 @@ progress:
 See: .planning/PROJECT.md (Current State section) + .planning/ROADMAP.md (v63.0 = top milestone, ▶ ACTIVE) + .planning/MILESTONES.md (v63.0 entry, top) + .planning/AUDIT-V63-PLAN.md (the full method doc) + .planning/REQUIREMENTS.md (the 58 REQ-IDs) + .planning/v63-surface-map/ (the 7 read-only dimension maps) + .planning/PAPER-REWARD-CHANGES-BRIEF.md (the reward design-intent anchor). v62.0 archive: .planning/milestones/v62.0-{ROADMAP,REQUIREMENTS,phases}; canonical v62 deliverable audit/FINDINGS-v62.0.md (chmod 444) + AUDIT-V62-REPORT.html. v63 baseline = v62.0 closure subject `77580320`; v63 subject = HEAD `a8b702a7` (byte-frozen at FOUNDATION 388). **NEXT = /gsd-plan-phase 388** (FOUNDATION — subject freeze + green baseline + slot recalibration).
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Current focus:** Phase 391 — RNG-SPINE (Phase 390 SOLVENCY-SPINE complete, 0 CONFIRMED)
+**Current focus:** Phase 391 — rng spine
 
 ## ⚠ v50.0 + v51.0 AUDIT DEBT → FOLDED INTO v63.0 Phase 394 LEGACY-DEBT (USER 2026-06-14; was a separate v52 track)
 
@@ -35,12 +36,12 @@ See: .planning/PROJECT.md (Current State section) + .planning/ROADMAP.md (v63.0 
 ## Current Position
 
 Milestone: v63.0 — ▶ ACTIVE (started 2026-06-14). Post-v62 Audit (Critical Invariants + Reward Game-Theory).
-Phase: 390 (SOLVENCY-SPINE) — ✅ COMPLETE (both plans done; dual-net adjudication on record). NEXT phase = 391 RNG-SPINE.
-Plan: 2 of 2 complete (NET 1 council + NET 2 Claude + dual-net adjudication ON RECORD)
-Status: Phase 390 SOLVENCY-SPINE COMPLETE — both nets on record, skeptic gate run, 0 CONFIRMED contract findings; SOLV-01..07 attested at a8b702a7.
+Phase: 391
+Plan: Not started
+Status: Ready to plan
 Baseline = v62.0 closure subject `77580320`; subject = HEAD `a8b702a7` (byte-frozen at FOUNDATION 388; pin = `contracts` tree `2934d3d8987a09c5f073549a0cb499f6c5f28620`).
 Method = COUNCIL + CLAUDE both; posture = audit-only by default (a surfaced/adjudicated/skeptic-passed finding → gated USER-hand-review fix, else document-only).
-Last activity: 2026-06-15 -- Phase 390 Plan 02 (NET 2 Claude adversarial net + dual-net adjudication) DONE (commits `fc97d904` 390-02-CLAUDE-NET + `09274eaf` 390-FINDINGS; **SOLV-07 `whalePassCost` cross-model divergence RESOLVED at frozen source = single-counted** [paidDailyEth INCLUDES wpSpent @ JackpotModule:1214-1215, so unpaidDailyEth excludes it; gemini HIGH premise FALSE; NET 2 sides with codex], skeptic dual-gate fails reachability cond-1; **0 CONFIRMED contract findings**, SOLV-01..07 ATTESTED; three prime targets settled [SOLV-05 multi-tx liveness ordering, SOLV-04 dust-forfeit backing under MAX-reservation, SOLV-06 CEI over 4 payout legs]; EthSolvency redemption-leg invariant gap routed as a test-hardening note; subject byte-frozen `git diff a8b702a7 -- contracts/` EMPTY)
+Last activity: 2026-06-15
 Next: `/gsd-plan-phase 391` RNG-SPINE (dual-net; RNG-01..06; backward-trace every new/changed RNG consumer for freeze-safety; decimator uint32 entropy floor + unbiased distribution; box-spin replay-safety; redemption day+1 gate). Owned leads FC-391-01..05 (388-02-FINDING-CANDIDATES row D), MED prime = FC-391-04 (decimator uint32 distribution).
 
 ## ✅ SHIPPED Milestone Roadmap (v62.0 — phases 380-387 — SHIPPED 2026-06-09; baseline = v61.0 closure HEAD `b97a7a2e`; subject `c4d48008`; remediated `77580320`; closure signal `MILESTONE_V62_AT_HEAD_77580320b88e77438c893602a068548961824893`)
