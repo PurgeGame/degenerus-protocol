@@ -1,0 +1,23 @@
+**Finding**
+**[LOW] First-Claim Window Still Forfeits Older Coinflip Seed/Win Value**
+
+Location: [BurnieCoinflip.sol:151](/home/zak/Dev/PurgeGame/degenerus-audit/contracts/BurnieCoinflip.sol:151), [BurnieCoinflip.sol:483](/home/zak/Dev/PurgeGame/degenerus-audit/contracts/BurnieCoinflip.sol:483), [BurnieCoinflip.sol:1123](/home/zak/Dev/PurgeGame/degenerus-audit/contracts/BurnieCoinflip.sol:1123)
+
+Invariant: first-claim window change should strand no seed/winning value.
+
+Code: `COIN_CLAIM_FIRST_DAYS = 180`, but first-time claimers with `lastClaim == 0` still clamp `start` to `latest - 180`. Any winning stake before that clamped start is skipped and later made unreachable once `lastClaim` advances. Same clamp exists in the preview path.
+
+Concrete effect: a first claimant after the 180-day lookback can lose old coinflip wins. This especially matters for VAULT seed stakes; sDGNRS is auto-settled during daily coinflip processing, but VAULT is not. This is not an ETH solvency drift, but it diverges from “no seed/winning value stranded.”
+
+**Invariant Verdicts**
+`SOLV-01` holds for the changed ETH accounting paths. Redemption direct credits pull ETH/stETH then credit claimable and increment `claimablePool` equally at [DegenerusGameLootboxModule.sol:1004](/home/zak/Dev/PurgeGame/degenerus-audit/contracts/modules/DegenerusGameLootboxModule.sol:1004). Dust forfeits route through the same function to sDGNRS at [StakedDegenerusStonk.sol:935](/home/zak/Dev/PurgeGame/degenerus-audit/contracts/StakedDegenerusStonk.sol:935). Salvage ETH is a relabel: buyer claimable/afking is debited and seller claimable credited with no aggregate pool move at [DegenerusGameMintModule.sol:1307](/home/zak/Dev/PurgeGame/degenerus-audit/contracts/modules/DegenerusGameMintModule.sol:1307).
+
+`SOLV-02` holds. Submit removes BURNIE backing via `withdrawRedeemedBurnie` at [StakedDegenerusStonk.sol:1121](/home/zak/Dev/PurgeGame/degenerus-audit/contracts/StakedDegenerusStonk.sol:1121), draining held → claimable → carry at [BurnieCoinflip.sol:1025](/home/zak/Dev/PurgeGame/degenerus-audit/contracts/BurnieCoinflip.sol:1025). Claim deletes the slot before crediting any win at [StakedDegenerusStonk.sol:868](/home/zak/Dev/PurgeGame/degenerus-audit/contracts/StakedDegenerusStonk.sol:868), so double-pay is blocked.
+
+`SOLV-03` holds. Salvage buyer selection is bounded by sDGNRS claimable floor or vault owner toggle plus `claimable + afking >= totalBudget + floor` at [DegenerusGameMintModule.sol:1338](/home/zak/Dev/PurgeGame/degenerus-audit/contracts/modules/DegenerusGameMintModule.sol:1338). Vault config is owner-gated at [DegenerusVault.sol:633](/home/zak/Dev/PurgeGame/degenerus-audit/contracts/DegenerusVault.sol:633). BURNIE spend is capped by spendable held + claimable + carry and reverts if not covered.
+
+`SOLV-04` holds. Live redemption legs either fully fund Game accounting or revert atomically. stETH-before-ETH CEI holds in Game payouts at [DegenerusGame.sol:1888](/home/zak/Dev/PurgeGame/degenerus-audit/contracts/DegenerusGame.sol:1888) and sDGNRS `_payEth` at [StakedDegenerusStonk.sol:1152](/home/zak/Dev/PurgeGame/degenerus-audit/contracts/StakedDegenerusStonk.sol:1152). Nested boon functions used under payable delegatecall are payable, preserving callvalue guards.
+
+`SOLV-05` partially diverges due the first-claim window finding above. Keeper bounties are not a faucet at real gas: redemption pays 0.000024 ETH-equivalent per settled claim, decimator 0.000015, and afking/open bounties are pegged to 0.5 gwei but paid as illiquid flip credit. At 5-50+ gwei, those are net-negative against the documented gas units.
+
+No files were modified. I did not run tests because the requested scope was read-only review of the checked-out `contracts/` tree.

@@ -3,14 +3,15 @@ gsd_state_version: 1.0
 milestone: v64.0
 milestone_name: Recent-Changes Re-Audit + Level-Semantics Correctness Sweep
 status: planning
-last_updated: "2026-06-15T23:55:00.000Z"
-last_activity: 2026-06-15 -- v64.0 phase 399 REWARD-MECHANICS COMPLETE (committed 342ea1c3; subject still byte-frozen 402855e1). Dual-net: NET-1 council (gemini CLEAN + codex 2 EV-accounting divergences), NET-2 Claude (CLEAN + INFO doc-drift), NET-2b Claude (corroborating, RWD-02 convergent). VERDICT 0 CATASTROPHE/0 HIGH/0 MED/0 LOW. RWD-A INFO USER-CONFIRMED BY-DESIGN 2026-06-15 (codex-unique catch — BURNIE seed = 8M staked at a deliberately near-fair coinflip, win pays ~1.97x => EV ~0.984x => ~7.87M expected emission, NOT the ~4M the v63 prior believed; USER confirmed the magnitude is intended; bounded + survive-before-mint; corrects the v63 "conservation ~4M" attestation). RWD-B spins carry the std Degenerette house edge (90-99.9% ROI) = by-design "real spin", not a leak. RWD-C/D/E = INFO doc-drift + correct-by-design comment + sub-wei dust. RWD-01..06 attested. SIDEBAR: USER design concept captured as SEED-001 (century quest-streak shield grant, +1/century, cap 10, post-audit feature) committed 682b6afa. NEXT = 400 SOLVENCY-CARRY-REDEMPTION.
+last_updated: "2026-06-16T00:30:00.000Z"
+last_activity: 2026-06-16 -- v64.0 phase 400 SOLVENCY-CARRY-REDEMPTION COMPLETE (subject still byte-frozen 402855e1). Dual-net: NET-1 council (gemini CLEAN all 5 + codex 1 LOW on SOLV-05), NET-2 Claude (0 leads across 5 dims + 5 cross-path compositions clean). VERDICT 0 CATASTROPHE/0 HIGH/0 MED/0 LOW. SOLV-01..04 convergent CLEAN all 3 nets (claimablePool identity = salvage relabel pool-neutral + dust-forfeit + payable redemption all tandem-backed; BURNIE-04 carry-escrow paid/forfeit once + slot-delete-before-credit; salvage vault fallback bounded by toggle+ETH-floor; stETH-before-ETH CEI intact V62-03 class). SOLV-05 = 1 INFO (codex first-claim window LOW adjudicated BY-DESIGN: forgone out-of-window win = deflationary un-mint NOT stranded value, BURNIE burned-at-deposit/minted-at-claim; sDGNRS auto-settles every resolution so backing never strands; 30->180 change strictly improved forfeiture; VAULT operational note = claim seed wins within 180d). SOLV-01..05 attested. NEXT = 401 PACKING-GAS-IDENTITY.
+PRIOR_last_activity_399: v64.0 phase 399 REWARD-MECHANICS COMPLETE (342ea1c3; dual-net 0 HIGH/MED/LOW; RWD-A codex-unique BURNIE seed-emission ~7.87M INFO USER-confirmed by-design 39b2f344; RWD-B spins = Degenerette house edge by-design; RWD-01..06 attested). SEED-001 century streak-shield (+1/century cap 10, post-audit) captured 682b6afa.
 progress:
   total_phases: 9
-  completed_phases: 3
+  completed_phases: 4
   total_plans: 0
   completed_plans: 0
-  percent: 33
+  percent: 44
 ---
 
 # Project State
