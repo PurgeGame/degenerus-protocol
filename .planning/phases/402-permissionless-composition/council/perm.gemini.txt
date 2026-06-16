@@ -1,0 +1,48 @@
+The review of the Degenerus Protocol regarding permissionless entrypoints, decimator offset-key isolation, redemption RNG gates, and indexer-parity events is complete.
+
+### Summary of Findings
+
+- **PERM-01 (Permissionless Access & Composition): HOLDS.** Entrypoints for decimator and redemption batches are correctly implemented. Value is always credited to the original winner/player, and reentrancy is mitigated via the Check-Effects-Interactions (CEI) pattern. Decimator offset-key isolation correctly uses `lvl + 1` for terminal rounds to avoid aliasing with live regular rounds.
+- **PERM-02 (Keeper Bounties): HOLDS.** Bounties for batch processing are pegged to a 0.5-gwei reference and are net-negative or neutral against realistic gas prices (5–50+ gwei). They do not constitute a faucet.
+- **PERM-03 (Redemption RNG Gates): HOLDS.** The pre-draw RNG gate (`rngWordForDay(today) == 0`) and the mid-day RNG threshold gate (`rngLocked()`) effectively prevent grinding. Redemptions for day `D` are resolved in the same transaction that applies the RNG word for day `D + 1`, closing the zero-word window before claim is possible.
+- **PERM-04 (Indexer-Parity Events): DIVERGES.** While `AffiliateEarningsRecorded` and `AfkingDelivered` are correctly emitted, `MintStreakRecorded` is missing on critical state-advancement paths. Specifically, whale/lazy pass purchases and whale pass claims that "front-load" the mint streak update the `LEVEL_STREAK` storage field without emitting the event.
+
+---
+
+### Invariant Review Detail
+
+#### PERM-01 — Permissionless Access & Composition
+- **Verdict: HOLDS**
+- **Analysis:**
+    - **Access Control:** `claimDecimatorJackpotMany` (`DegenerusGameDecimatorModule.sol:278`) and `claimRedemptionMany` (`StakedDegenerusStonk.sol:1007`) are permissionless but correctly use the `players` array to identify beneficiaries. In both cases, the value (ETH or Lootbox) is credited strictly to the winner/original burner, never the caller.
+    - **Reentrancy:** Both entrypoints follow CEI. The decimator module marks `e.claimed = 1` before credits (`:353`), and the Staked Stonk module deletes the `pendingRedemptions` record before payouts (`:1083`).
+    - **Offset-Key Isolation:** The terminal decimator round correctly uses `decBucketOffsetPacked[lvl + 1]` (`DegenerusGameDecimatorModule.sol:697`), while regular rounds use `decBucketOffsetPacked[lvl]`. Since `level` only increases and GAMEOVER stops regular rounds, the `lvl + 1` slot for level `L` will never be used by a regular round of level `L+1` because the game terminates at `L`.
+
+#### PERM-02 — Keeper Box-Bounty is not a Faucet
+- **Verdict: HOLDS**
+- **Analysis:**
+    - **Decimator Bounty:** Fixed at `1.5e13 wei` (0.000015 ETH) per box. At a realistic 10 gwei gas price, the gas cost for the ~30k-gas settle is `3e14 wei`, 20x the reward.
+    - **Redemption Bounty:** Fixed at `2.4e13 wei` (0.000024 ETH) per box. At 10 gwei, the gas cost for the ~48k-gas settle is `4.8e14 wei`, 20x the reward.
+    - The bounty calculation in BURNIE units scales with `mintPrice`, but the underlying ETH value remains fixed at the 0.5-gwei reference level, ensuring it never becomes profitable to "farm" against realistic gas.
+
+#### PERM-03 — Redemption RNG Gates
+- **Verdict: HOLDS**
+- **Analysis:**
+    - **Burn Gate:** `StakedDegenerusStonk.sol:1242` reverts with `BurnsBlockedBeforeDailyRng()` if `game.rngWordForDay(today) == 0`. This ensures the current day's randomness is already public before a burn is admitted.
+    - **Claim Window:** The lootbox outcome for a burn on day `D` depends on `rngWordForDay(D + 1)`. The day `D` pool is resolved via `resolveRedemptionPeriod` in `DegenerusGameAdvanceModule.sol:1257`, which is called within the same `rngGate` transaction that sets `rngWordByDay[D + 1]`. Therefore, by the time a claim for day `D` is enabled, the randomness for its lootbox leg is already determined and non-zero, preventing the zero-word grinding window.
+
+#### PERM-04 — Indexer-Parity Events
+- **Verdict: DIVERGES**
+- **Analysis:**
+    - **AffiliateEarningsRecorded:** Emitted correctly in `DegenerusAffiliate.sol` during both purchases (`:531`) and affiliate claims (`:665`).
+    - **AfkingDelivered:** Emitted correctly in `GameAfkingModule.sol:948` during daily processing and initial cover-buys.
+    - **MintStreakRecorded:** **Missing on front-load paths.**
+        - `DegenerusGameWhaleModule.sol:217` (`_purchaseWhaleBundle`) and `:1018` (`claimWhalePass`) both update the `LEVEL_STREAK` field via `_withPassStreakFrontLoad`.
+        - `_withPassStreakFrontLoad` and `_activate10LevelPass` (`DegenerusGameStorage.sol:1202, 1247`) update storage but do not emit `MintStreakRecorded`.
+    - **Effect:** The indexer will fail to track streak advancements granted by passes, leading to a de-sync between the on-chain `LEVEL_STREAK` field and the indexer's reconstructed state.
+
+### Final Summary of Divergences
+
+| Invariant | File:Line | Finding | Effect |
+| :--- | :--- | :--- | :--- |
+| **PERM-04** | `WhaleModule.sol:217`, `Storage.sol:1247` | `MintStreakRecorded` missing on pass front-load paths. | Indexer de-sync; inability to reconstruct `LEVEL_STREAK` from events. |

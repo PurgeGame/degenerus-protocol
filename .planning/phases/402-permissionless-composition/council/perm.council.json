@@ -1,0 +1,7 @@
+{
+  "label": "perm",
+  "schema": "",
+  "models": ["gemini"],
+  "skipped": ["codex"],
+  "outputs": {"gemini": ".planning/phases/402-permissionless-composition/council/perm.gemini.txt"}
+}
