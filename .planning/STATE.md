@@ -40,7 +40,7 @@ See: .planning/PROJECT.md (Current State + Current Milestone: v64.0 sections) + 
 
 ## Current Position
 
-Milestone: v65.0 — ✅ RENAME APPLIED + COMMITTED 2026-06-16 (`44642aba`, UNPUSHED). BURNIE → FLIP + Stonk → DGNRS/sDGNRS (this-repo-only, BROAD rebrand).
+Milestone: v65.0 — ✅ RENAME SHIPPED + PUSHED 2026-06-16 (`44642aba`; origin/main `30f72395`). BURNIE → FLIP + Stonk → DGNRS/sDGNRS (this-repo-only, BROAD rebrand).
 Phase: 406 FOUNDATION ✅ + 407 CONTRACT REFACTOR ✅ + 408 TESTS & SCRIPTS ✅ (all in commit `44642aba`) → 409 VERIFY mostly done. NEXT = USER review of the diff + push when ready; finalize the EXT-01 indexer manifest + milestone close/archive.
 VALIDATION: forge **889/0/110 IDENTICAL to baseline**; hardhat back to baseline parity (the 2 byte-identical-to-HEAD guards self-resolved post-commit); gas tests (AdvanceGameGas/LootboxOpenGas/Phase26x) PASS → **advanceGame 16.7M ceiling holds** at runs=1000 (higher runs lowered gas; no recalibration needed); EIP-170 OK (Game margin 4,149; MintModule 23,156/margin 1,420); engine idempotent (0 changes on re-run); 31 mainnet files 1037+/1037- balanced = proven name-only.
 Plan: implementation milestone — deterministic ordered exact-match rename; carve-outs = creator persona / burn verb / coinflip action / generic coin. Full FUNCTIONAL PARITY (names/selectors/strings only, zero logic change).
