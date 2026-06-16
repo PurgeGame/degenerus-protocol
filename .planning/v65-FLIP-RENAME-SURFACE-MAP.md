@@ -88,3 +88,26 @@ Even under BROAD, **do NOT** touch: `burnCoin`, `mintForGame`, `PRICE_COIN_UNIT`
 4. **`OnlyBurnieCoin`/`onlyBurnieCoin`** → `OnlyFLIP`/`onlyFLIP` (consistent w/ contract name). Confirm.
 5. **`name`** display string → `"Degenerus Gambling Token"` (confirm long name).
 6. `IDegenerusCoin` / `IVaultCoin` (other token interface views) → **KEEP** (no `burnie`; generic).
+
+## 10. DegenerusStonk → DGNRS / StakedDegenerusStonk → sDGNRS — FULL rebrand (USER 2026-06-16)
+
+Second rename folded into v65.0. Symbols are **already** `DGNRS`/`sDGNRS` (no symbol change). 13 contract files + ~40 test/script files. No `@author` in these files.
+
+**Contracts / files:**
+- `DegenerusStonk` (liquid token) → `DGNRS`; file `DegenerusStonk.sol` → `DGNRS.sol`
+- `StakedDegenerusStonk` (staked token) → `sDGNRS`; file `StakedDegenerusStonk.sol` → `sDGNRS.sol`
+
+**Display-name strings:** `"Degenerus Stonk"` → `"Degenerus Protocol Equity Token"`; `"Staked Degenerus Stonk"` → `"Degenerus Protocol Equity Token (staked)"`.
+
+**Interfaces / errors / vars (with collision fix, ordered):**
+- existing `IsDGNRS` (Admin minimal votes view) → `IsDGNRSVotes`  ← **collision fix, applied FIRST** to free the name
+- `IStakedDegenerusStonk` (56) → `IsDGNRS`
+- `IStakedDegenerusStonkBurn` → `IsDGNRSBurn`
+- `IDegenerusStonkWrapper` → `IDGNRS`
+- `OnlyStakedDegenerusStonk` (error) → `OnlysDGNRS`
+- `stonk` (local var → the staked token) → `staked`
+- **KEEP:** `ISDGNRSSnapshot` (GNRUS, already DGNRS-named), `ContractAddresses.SDGNRS`/`DGNRS` (address keys), `dgnrsWrapper` var.
+
+**Ordering hazard:** `DegenerusStonk` ⊂ `StakedDegenerusStonk` ⊂ `IStakedDegenerusStonk{,Burn}`; word-boundary exact-match handles all. The import-path strings (`"…/IStakedDegenerusStonk.sol"` etc.) are rewritten by the same rules → match the new filenames.
+
+**Engine:** `scripts/v65_flip_rename.py` (BURNIE block + STONK block). Validated by dry-run — correctness (creator/email/burn-verb/coinflip-action preserved) + completeness (zero residual old tokens; KEEP set intact) on a representative set.

@@ -1,6 +1,6 @@
-# Requirements — v65.0 BURNIE → FLIP Currency Rename
+# Requirements — v65.0 Token Rename (BURNIE→FLIP + Stonk→DGNRS/sDGNRS)
 
-> Scope = this repo only (contracts + forge/JS tests + deploy scripts). Website/papers repo is separate (out of scope). **BROAD rebrand** chosen. Authoritative surface: `.planning/v65-FLIP-RENAME-SURFACE-MAP.md`. Hard invariant across all reqs: **full FUNCTIONAL PARITY — only names/selectors/metadata strings change, zero logic change.**
+> Scope = this repo only (contracts + forge/JS tests + deploy scripts). Website/papers repo is separate (out of scope). **Two renames, both FULL/BROAD rebrand:** (1) currency `BURNIE`→`FLIP`; (2) equity tokens `DegenerusStonk`→`DGNRS` / `StakedDegenerusStonk`→`sDGNRS`. Authoritative surface: `.planning/v65-FLIP-RENAME-SURFACE-MAP.md`; engine `scripts/v65_flip_rename.py`. Hard invariant across all reqs: **full FUNCTIONAL PARITY — only names/selectors/metadata strings change, zero logic change.**
 
 ## Contract & file renames (CTR)
 - [ ] **CTR-01**: `BurnieCoin` contract → `FLIP`; file `BurnieCoin.sol` → `FLIP.sol`.
@@ -16,6 +16,11 @@
 - [ ] **IDT-01**: every `burnie*`/`Burnie*`/`BURNIE*` token identifier (functions, params, constants, state vars, struct fields, events, errors, modifiers) → `flip*`/`Flip*`/`FLIP*` per the canonical table (§3), in dependency/longest-first order.
 - [ ] **IDT-02**: the 11 `coin`-as-the-token identifiers (§4: `coinOut`, `coinShare`, `coinToken`, `coin`, `coinPlayer`, `COIN_JACKPOT_TAG`/`COIN_LEVEL_TAG`, `_runCoinJackpot`, `payDailyCoinJackpot`, `redeemableCoinBacking`, `FarFutureCoinJackpotWinner`, `FAR_FUTURE_COIN_*`) → `flip*`.
 - [ ] **IDT-03**: comments / docstrings / string-literals naming the token (~200 `BURNIE` tokens / 17 files) → `FLIP`.
+
+## Stonk → DGNRS/sDGNRS rebrand (STK)
+- [ ] **STK-01**: `DegenerusStonk` contract → `DGNRS`; file `DegenerusStonk.sol` → `DGNRS.sol`. `StakedDegenerusStonk` → `sDGNRS`; file → `sDGNRS.sol`.
+- [ ] **STK-02**: display-name strings — `"Degenerus Stonk"` → `"Degenerus Protocol Equity Token"`; `"Staked Degenerus Stonk"` → `"Degenerus Protocol Equity Token (staked)"`. (Symbols already `DGNRS`/`sDGNRS` — unchanged.)
+- [ ] **STK-03**: interfaces/errors/vars — `IStakedDegenerusStonk`→`IsDGNRS` (with the collision fix: existing Admin `IsDGNRS`→`IsDGNRSVotes`), `IStakedDegenerusStonkBurn`→`IsDGNRSBurn`, `IDegenerusStonkWrapper`→`IDGNRS`, `OnlyStakedDegenerusStonk`→`OnlysDGNRS`, `stonk`→`staked`. KEEP `ISDGNRSSnapshot`, `ContractAddresses.SDGNRS`/`DGNRS`.
 
 ## Carve-outs / parity (KEEP)
 - [ ] **KEEP-01**: creator persona untouched — `@author Burnie Degenerus` (17 files), `burnie@degener.us`.
@@ -44,8 +49,8 @@
 | Phase | Requirements |
 |---|---|
 | 406 FOUNDATION | KEEP-01, KEEP-02, KEEP-03, EXT-01 (draft) |
-| 407 CONTRACT REFACTOR | CTR-01, CTR-02, CTR-03, CTR-04, STR-01, STR-02, IDT-01, IDT-02, IDT-03, KEEP-01, KEEP-02, KEEP-03 |
+| 407 CONTRACT REFACTOR | CTR-01..04, STR-01/02, IDT-01/02/03, STK-01/02/03, KEEP-01/02/03 |
 | 408 TESTS & SCRIPTS | TST-01, TST-02, TST-03 |
 | 409 VERIFY & RE-ATTEST | VER-01, VER-02, VER-03, EXT-01 (final) |
 
-All 18 requirements mapped; KEEP-* and EXT-01 span phases (defined at 406, enforced/finalized downstream). 100% coverage.
+All 21 requirements mapped; KEEP-* and EXT-01 span phases (defined at 406, enforced/finalized downstream). 100% coverage.
