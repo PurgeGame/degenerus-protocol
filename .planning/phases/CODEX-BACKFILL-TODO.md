@@ -14,8 +14,9 @@ bash .planning/audit-v52/cross-model/bin/ask-codex.sh \
 
 ## Deferred phases (update as the run proceeds)
 - [ ] **401 PACKING-GAS-IDENTITY** — `pack` — dir `401-packing-gas-identity` (gemini CLEAN all 4 + scripts; NET-2 0 surviving leads)
-- [ ] **402 PERMISSIONLESS-COMPOSITION** — `perm` — dir `402-permissionless-composition` (gemini + NET-2; codex deferred)
-<!-- add 403/etc here if they also land before the 02:33 reset -->
+- [ ] **402 PERMISSIONLESS-COMPOSITION** — `perm` — dir `402-permissionless-composition` (gemini + NET-2; codex deferred). ⭐ PRIORITY for codex 2nd opinion: PERM-04 (MintStreakRecorded front-load — USER ruled by-design/event-derivable) + PERM-CRIT-01 (freeze-window ETH-spin deep-revert — USER ruled by-design) + PERM-03-L1 (zero-word defense-in-depth INFO).
+- [ ] **403 RNG-FREEZE SPINE** — `rng` — dir `403-rng-freeze-spine` (gemini + NET-2; codex deferred)
+<!-- add 404/etc here if they also land before the reset -->
 
 ## After backfill
 - Reconcile each codex output into the phase findings + flip the "codex deferred" note to "codex on record".
