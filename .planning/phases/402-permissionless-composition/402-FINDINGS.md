@@ -3,7 +3,7 @@
 **Status:** ✅ COMPLETE — both nets on record (codex deferred), adjudicated vs frozen source.
 **Requirements:** PERM-01..04 · **Subject frozen** `402855e1` (working tree == frozen, verified clean).
 **Nets:**
-- **NET-1 council** — `gemini` (PERM-01/02/03 HOLDS; PERM-04 flagged the `MintStreakRecorded` front-load gap). **`codex` DEFERRED** — usage cap until ~02:33 (backfill: `phases/CODEX-BACKFILL-TODO.md`). **PERM-04 + PERM-CRIT-01 are tagged for codex's second council opinion.**
+- **NET-1 council** — `gemini` (PERM-01/02/03 HOLDS; PERM-04 flagged the `MintStreakRecorded` front-load gap) + **`codex` (BACKFILLED after the cap reset): ALL FOUR INVARIANTS HOLD, no findings** — codex independently confirms PERM-04 holds (notes `MintStreakRecorded` correctly scopes to the manual-mint quest path, *not* flagging the front-load omission as a defect — corroborates the by-design ruling), PERM-01 holds (no PERM-CRIT-01 escalation), bounty ~1–10% of real gas, no reachable zero-word. **Full council + NET-2 + USER converge: 0 actionable.**
 - **NET-2 Claude Workflow** — 4 dimension finders + per-lead refute + completeness critic (`wydep6v2v`, 8 agents): PERM-01/02 = 0 leads; PERM-03 = 1 lead → INFO; PERM-04 = 1 lead → **LOW (confirmed)**; critic = 1 lead → **LOW (confirmed)**.
 
 ## Outcome: 0 CATASTROPHE / 0 HIGH / 0 MED / 0 LOW. 3 INFO (all USER-adjudicated by-design / defense-in-depth). PERM-01..04 attested.

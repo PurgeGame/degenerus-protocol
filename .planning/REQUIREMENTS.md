@@ -89,44 +89,44 @@
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| FND-01 | 397 | Pending |
-| FND-02 | 397 | Pending |
-| FND-03 | 397 | Pending |
-| FND-04 | 397 | Pending |
-| FND-05 | 397 | Pending |
-| LVL-01 | 398 | Pending |
-| LVL-02 | 398 | Pending |
-| LVL-03 | 398 | Pending |
-| LVL-04 | 398 | Pending |
-| LVL-05 | 398 | Pending |
-| LVL-06 | 398 | Pending |
-| LVL-07 | 398 | Pending |
-| RWD-01 | 399 | Pending |
-| RWD-02 | 399 | Pending |
-| RWD-03 | 399 | Pending |
-| RWD-04 | 399 | Pending |
-| RWD-05 | 399 | Pending |
-| RWD-06 | 399 | Pending |
-| SOLV-01 | 400 | Pending |
-| SOLV-02 | 400 | Pending |
-| SOLV-03 | 400 | Pending |
-| SOLV-04 | 400 | Pending |
-| SOLV-05 | 400 | Pending |
-| PACK-01 | 401 | Pending |
-| PACK-02 | 401 | Pending |
-| PACK-03 | 401 | Pending |
-| PACK-04 | 401 | Pending |
-| PERM-01 | 402 | Pending |
-| PERM-02 | 402 | Pending |
-| PERM-03 | 402 | Pending |
-| PERM-04 | 402 | Pending |
-| RNG-01 | 403 | Pending |
-| RNG-02 | 403 | Pending |
-| RNG-03 | 403 | Pending |
-| MUT-01 | 404 | Pending |
-| TERM-01 | 405 | Pending |
-| TERM-02 | 405 | Pending |
-| TERM-03 | 405 | Pending |
+| FND-01 | 397 | ✅ Attested |
+| FND-02 | 397 | ✅ Attested |
+| FND-03 | 397 | ✅ Attested |
+| FND-04 | 397 | ✅ Attested |
+| FND-05 | 397 | ✅ Attested |
+| LVL-01 | 398 | ✅ Attested |
+| LVL-02 | 398 | ✅ Attested |
+| LVL-03 | 398 | ✅ Attested |
+| LVL-04 | 398 | ✅ Attested |
+| LVL-05 | 398 | ✅ Attested |
+| LVL-06 | 398 | ✅ Attested |
+| LVL-07 | 398 | ✅ Attested |
+| RWD-01 | 399 | ✅ Attested |
+| RWD-02 | 399 | ✅ Attested |
+| RWD-03 | 399 | ✅ Attested |
+| RWD-04 | 399 | ✅ Attested |
+| RWD-05 | 399 | ✅ Attested |
+| RWD-06 | 399 | ✅ Attested |
+| SOLV-01 | 400 | ✅ Attested |
+| SOLV-02 | 400 | ✅ Attested |
+| SOLV-03 | 400 | ✅ Attested |
+| SOLV-04 | 400 | ✅ Attested |
+| SOLV-05 | 400 | ✅ Attested |
+| PACK-01 | 401 | ✅ Attested |
+| PACK-02 | 401 | ✅ Attested |
+| PACK-03 | 401 | ✅ Attested |
+| PACK-04 | 401 | ✅ Attested |
+| PERM-01 | 402 | ✅ Attested |
+| PERM-02 | 402 | ✅ Attested |
+| PERM-03 | 402 | ✅ Attested |
+| PERM-04 | 402 | ✅ Attested |
+| RNG-01 | 403 | ✅ Attested |
+| RNG-02 | 403 | ✅ Attested |
+| RNG-03 | 403 | ✅ Attested |
+| MUT-01 | 404 | ✅ Attested |
+| TERM-01 | 405 | ✅ Attested |
+| TERM-02 | 405 | ✅ Attested |
+| TERM-03 | 405 | ✅ Attested |
 
 **Coverage:**
 - v64.0 requirements: 38 total
