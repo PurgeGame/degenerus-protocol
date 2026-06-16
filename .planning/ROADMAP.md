@@ -25,87 +25,9 @@
 
 ---
 
-## ▶ v64.0 Recent-Changes Re-Audit + Level-Semantics Correctness Sweep (ACTIVE — started 2026-06-15; baseline = v62.0 closure subject `77580320`; subject = HEAD `78eb3dd2` to byte-freeze at FOUNDATION/397; phases 397-405; reqs `.planning/REQUIREMENTS.md`; method = council + Claude dual-net per slice)
+## ✅ v64.0 Recent-Changes Re-Audit + Level-Semantics Correctness Sweep — SHIPPED 2026-06-16
 
-> **Scope (USER-confirmed 2026-06-15):** a cross-model dual-net re-audit of the **full post-v62 contract delta** (`77580320..HEAD`, 41 files / +4902/−3697 / 33 commits — gas rounds, storage packing, the reward overhaul [EV/split rebalance · Degenerette spins · recycle relaxation · quest-streak unification], the BURNIE zero-start emission rework, the permissionless decimator/redemption entrypoints, the payable-chain CEI fixes, and the 5 genuinely-new post-v63 commits [BURNIE-04 carry-escrow fix `98c4f049` · salvage carry+vault fallback `a8fa3afa` · coinflip 180-day window `c78ea3db` · redeem-window gate `0eb90eb9` · the 3 indexer-parity events `78eb3dd2`]) PLUS a dedicated **whole-codebase `lvl` vs `lvl+1` correctness examination** (USER's explicit ask — 119 `+1` arithmetic sites / 165 level-mentions). Broadest surface chosen over post-v63-diff-only. Full scope + the 38 REQ-IDs: `.planning/REQUIREMENTS.md`.
-
-> **THE METHOD = COUNCIL + CLAUDE dual-net per slice.** Two independent finding nets in every sweep phase: (1) the Gemini+Codex **cross-model council** (`gemini`/`codex` CLIs) as primary finders, charged neutrally, adjudicated vs frozen `78eb3dd2` — honoring the premise that Claude-only audits miss what the council catches; (2) the **Claude Workflow net** — deep multi-agent adversarial Workflows per dimension (adversarial-verify · loop-until-dry · completeness-critic). Claude orchestrates, ADJUDICATES every lead vs frozen source, runs the skeptic gate before any CATASTROPHE/HIGH, and synthesizes. **A no-finding verdict for any sweep area requires BOTH nets on record.** git-status-verify any Write-capable subagent didn't mutate the source after each fan-out.
-
-> **v63 dispositions carried as PRIORS.** BURNIE-04 fixed `98c4f049`, BURNIE-05 by-design, the 4 refuted HIGHs (money-pump · streak-pump · SOLV-07 whalePassCost · RNG-04 cross-round collision), R-389-01 LOW — not re-litigated; re-examined only where the new delta interacts with them. The genuinely-new post-v63 delta (`a8b702a7..HEAD`) is priority surface.
-
-> **Ordering = FOUNDATION-FIRST.** The packing phase moved storage slots, so the slot-hardcoded harnesses must be reconciled FIRST; you can't adjudicate findings without a green oracle. Phase 397 (FOUNDATION) is Claude-built; 398 (LEVEL-SEMANTICS) + 399-403 are dual-net sweeps; 404 (MUTATION) resumes the v63 CI-resumable harness; 405 is the terminal close. The level-semantics sweep (398) runs early so its cross-cutting map informs the subsystem slices.
-
-> **Posture — AUDIT-ONLY by default.** No NEW contract change planned; the subject is byte-frozen at HEAD `78eb3dd2`. A council/Workflow-surfaced, adjudicated, skeptic-passed finding routes to a gated fix (USER hand-review, batched, never pre-approved); otherwise v64 ships document-only (`audit/FINDINGS-v64.0.md`). **Design-intent anchor:** the reward changes are documented in `.planning/PAPER-REWARD-CHANGES-BRIEF.md` (mostly EV-neutral redistributions; only the EV-multiplier lift + recycle-bonus relaxation change EV) → the RWD sweep VERIFIES the stated claims, it does not re-litigate intent.
-
-> **Phase numbering** continues from v63.0 (closed at Phase 396) — **v64.0 starts at Phase 397.** Not reset.
-
-### Phases
-
-- [x] **Phase 397: FOUNDATION — Subject Freeze & Green Baseline (Claude-built)** - Byte-freeze the subject at HEAD `78eb3dd2`; record the `77580320..HEAD` audit-delta surface (per-file/per-family characterization routed to the sweeps); re-derive the authoritative storage layout (`forge inspect`) + reconcile slot-hardcoded harnesses against the post-packing slots; establish the GREEN forge baseline + characterize the JS pre-existing reds by name; intake the v63 dispositions as explicit PRIORS + flag the post-v63 delta; close verifier oracle holes. FND-01..05.
-- [x] **Phase 398: LEVEL-SEMANTICS — Whole-Codebase `lvl` vs `lvl+1` Sweep (dual-net)** - A COMPLETE census of every level/level+1/`_activeTicketLevel`/`streakBaseLevel`/`afkingDrain.level()+1`/jackpot-phase site (not a sample); verify each against intended phase semantics (purchase target · jackpot resolve · leaderboard key · streak basis · EV-cap key · price lookup · boundary guard); disposition the affiliate-score level asymmetry + the level-0 vacuous-comparison boundary; produce a level-semantics map. LVL-01..07.
-- [x] **Phase 399: REWARD-MECHANICS (dual-net)** - The reward overhaul: lootbox EV-multiplier/split, the 3 Degenerette-spin outcomes (one-shot + freeze-safe + EV-neutral per category), ticket-budget/far-future value preservation, the recycle-bonus money-pump check, BURNIE emission conservation (survive-before-mint), quest-streak double-channel + activity-score cap. RWD-01..06.
-- [x] **Phase 400: SOLVENCY · CARRY · REDEMPTION (dual-net)** - The claimablePool identity across changed paths, the BURNIE-04 carry-escrow fix re-verify (no over-credit/double-count), salvage carry+vault fallback value-conservation, permissionless/live-game/dust/payable redemption + stETH-before-ETH CEI, coinflip claim windows + keeper bounty. SOLV-01..05.
-- [x] **Phase 401: PACKING & GAS-IDENTITY (dual-net)** - Narrowed packed-field widths (Game 6-slot merge · StakedStonk · coinflip · Admin), masked-RMW co-resident preservation + cross-module slot agreement, raw `delegatecall(msg.data)` + gas hot-path behavior-identity (selector/ABI/output/revert/event), ABI getter preservation (incl. the indexer). PACK-01..04.
-- [x] **Phase 402: PERMISSIONLESS-COMPOSITION (dual-net)** - Permissionless decimator/redemption access + composition + the offset-key isolation (no lagged-gameover live-round overwrite), keeper box-bounty net-negative vs real prevailing gas, the redemption pre-draw + mid-day RNG gates, the 3 indexer-parity events' correctness (emit site/args/once-per-event/emission-only). PERM-01..04.
-- [x] **Phase 403: RNG-FREEZE SPINE (dual-net)** - Backward-trace every new/changed RNG consumer (spin seeds · decimator claim-seed · redemption lootbox seed) to its commitment point, enumerate the in-window SLOADs over the repacked slots, prove one-shot replay-safety (record-clear-before-resolution + the delegatecall `address(this)!=GAME` guard). RNG-01..03.
-- [x] **Phase 404: MUTATION — Resume CI-Resumable Tail (Claude-built — folded)** *(BOUNDED — v63 spine 0-defects carries; BurnieCoinflip baseline-green validated, CI-resumable; dual-net primary coverage)* - Resume the v63 CI-resumable mutation campaign over the changed spine targets (BurnieCoinflip · Lootbox · Decimator + the v64 delta); triage survivors FALSE (oracle gap) vs GENUINE (test gap); kill every GENUINE survivor with a regression test. MUT-01.
-- [x] **Phase 405: TERMINAL — Synthesis + FINDINGS-v64.0 + Closure** *(SHIPPED — closure signal `MILESTONE_V64_AT_HEAD_891f7a8f8bacb163140ebcd7abbb001fb4d1366d`; 0 CAT/HIGH/MED, 1 LOW fixed in-milestone, all else INFO/by-design)* - Consolidate + dedupe both finding nets; adjudicate vs the frozen subject + skeptic-gate; author `audit/FINDINGS-v64.0.md` (chmod 444) + the HTML report; emit the closure signal `MILESTONE_V64_AT_HEAD_<sha>`; re-attest all 38 reqs; route any confirmed finding to a gated post-audit USER-hand-review fix (not applied in-milestone). TERM-01..03.
-
-### Phase Details (v64.0)
-
-### Phase 397: FOUNDATION — Subject Freeze & Green Baseline
-
-Goal: a byte-frozen subject `78eb3dd2` + a green forge baseline that is the audit's safety floor and the oracle every lead is reproduced against, with the v63 dispositions intaken as priors and the post-v63 delta flagged as priority surface.
-Type: FOUND (Claude-built) · Depends on: nothing (first v64 phase) · Requirements: FND-01..05
-Success criteria: (1) subject frozen + `77580320..HEAD` delta surface recorded; (2) authoritative layout re-derived (`forge inspect`) + slot-hardcoded harnesses reconciled, runtime-correct; (3) GREEN forge baseline recorded + JS pre-existing reds named; (4) v63 priors intaken + post-v63 delta flagged; (5) verifier oracle holes closed.
-
-### Phase 398: LEVEL-SEMANTICS — Whole-Codebase `lvl` vs `lvl+1` Sweep
-
-Goal: every level / level+1 site across the codebase is enumerated and verified correct against intended phase semantics — no off-by-one in purchase target, streak basis, leaderboard key, resolve key, EV-cap key, or boundary.
-Type: SWEEP (dual-net) · Depends on: 397 · Requirements: LVL-01..07
-Success criteria: (1) a COMPLETE census produced (not a sample), each site role-classified; (2) purchase-target + `_activeTicketLevel`/open-coded equivalents proven consistent at every call site; (3) streak basis + the affiliate-score level asymmetry dispositioned; (4) resolve-key agreement + the level-0/century/terminal boundaries proven; both nets on record; a level-semantics map produced.
-
-### Phase 399: REWARD-MECHANICS
-
-Goal: the reward overhaul preserves its documented EV/neutrality with no money-pump, the spins are one-shot + freeze-safe, and BURNIE emission stays conserved (survive-before-mint).
-Type: SWEEP (dual-net) · Depends on: 397, 398 (level map) · Requirements: RWD-01..06
-Success criteria: (1) lootbox EV-multiplier/split EV-consistent with the PAPER brief (only the stated EV changes change EV); (2) the 3 Degenerette spins EV-neutral per category + one-shot + freeze-safe; (3) ticket-budget/far-future value-conserving + no recycle money-pump; (4) BURNIE emission conserved + no afking↔manual streak double-channel; both nets on record.
-
-### Phase 400: SOLVENCY · CARRY · REDEMPTION
-
-Goal: the claimablePool / sDGNRS-backing identities hold across the carry-escrow fix, salvage, and every redemption path; CEI is closed; coinflip windows strand no value.
-Type: SWEEP (dual-net) · Depends on: 397 · Requirements: SOLV-01..05
-Success criteria: (1) claimablePool identity re-attested across changed paths; (2) the BURNIE-04 carry-escrow fix re-verified (no over-credit/double-count); (3) salvage carry+vault + permissionless/payable redemption conservation proven + stETH-before-ETH CEI closed; (4) coinflip windows strand no seed value + no keeper faucet vs real gas; both nets on record.
-
-### Phase 401: PACKING & GAS-IDENTITY
-
-Goal: the storage packing + gas refactors are value-/behavior-identical (no silent truncation, no co-resident clobber, no slot collision, no diverging dispatch).
-Type: SWEEP (dual-net) · Depends on: 397 · Requirements: PACK-01..04
-Success criteria: (1) every narrowing bounded ≥ its real max; (2) masked RMW preserves co-residents + cross-module shift/mask conventions agree; (3) raw `delegatecall(msg.data)` + gas hot-path behavior-identity (selector/ABI/output/revert/event); (4) ABI getters preserved for every privatized/packed field; both nets on record.
-
-### Phase 402: PERMISSIONLESS-COMPOSITION
-
-Goal: the permissionless/keeper entrypoints are access-correct + composition-safe, the keeper bounties are not a faucet, and the new indexer events are correct + emission-only.
-Type: SWEEP (dual-net) · Depends on: 397 · Requirements: PERM-01..04
-Success criteria: (1) decimator/redemption permissionless paths access-correct + composition-safe + offset-key isolation holds; (2) keeper box-bounties net-negative-or-neutral vs real prevailing gas; (3) the pre-draw + mid-day RNG gates hold against a grindable zero-word; (4) the 3 indexer events correct (site/args/once-per-event/emission-only); both nets on record.
-
-### Phase 403: RNG-FREEZE SPINE
-
-Goal: every new/changed RNG consumer is freeze-safe — the word was unknown at commitment, in-window reads are frozen, and resolvers are one-shot.
-Type: SWEEP (dual-net) · Depends on: 397 · Requirements: RNG-01..03
-Success criteria: (1) backward-trace clean for each consumer (spin/decimator/redemption seeds); (2) in-window SLOADs enumerated over the repacked slots — no player-controllable shift; (3) resolvers one-shot + replay-safe; both nets on record.
-
-### Phase 404: MUTATION — Resume CI-Resumable Tail
-
-Goal: the v63 CI-resumable mutation campaign is resumed over the changed spine; every GENUINE survivor is killed by a regression test (no contract defect expected).
-Type: SWEEP (Claude-built harness, folded) · Depends on: 397 (green oracle) · Requirements: MUT-01
-Success criteria: (1) the changed spine targets re-scored; (2) survivors triaged FALSE vs GENUINE; (3) every GENUINE survivor killed by a validated regression test; 0 contract defects expected.
-
-### Phase 405: TERMINAL — Synthesis + FINDINGS-v64.0 + Closure
-
-Goal: both nets are consolidated, adjudicated, and skeptic-gated; the canonical findings + report ship; the milestone closes at the frozen subject with all reqs re-attested.
-Type: TERMINAL · Depends on: 398-404 · Requirements: TERM-01..03
-Success criteria: (1) deduped consolidated ledger, every lead adjudicated + skeptic-gated + severity/disposition-assigned; (2) `audit/FINDINGS-v64.0.md` (chmod 444) + HTML report authored, both nets on record for every no-finding verdict; (3) closure signal `MILESTONE_V64_AT_HEAD_<sha>` emitted + all 38 reqs re-attested + any routed fix recorded as a gated post-audit item.
+> Archived → `.planning/milestones/v64.0-{ROADMAP,REQUIREMENTS,MILESTONE-AUDIT}.md`. **0 CAT / 0 HIGH / 0 MED · 1 LOW found+FIXED in-milestone (LVL-A afking lootbox streak-basis `891f7a8f`) · all else INFO/by-design/refuted.** Subject byte-frozen `402855e1` @ `891f7a8f`; closure signal `MILESTONE_V64_AT_HEAD_891f7a8f8bacb163140ebcd7abbb001fb4d1366d`; deliverables `audit/FINDINGS-v64.0.md` (444) + `AUDIT-V64-REPORT.html`; 38 reqs attested; milestone-audit PASSED. Phase dirs 397-405 retained in `.planning/phases/` (gsd-cleanup later). Method = council+Claude dual-net per slice.
 
 ## ✅ v63.0 Post-v62 Audit — Critical Invariants + Reward Game-Theory (SHIPPED 2026-06-15; baseline = v62.0 closure subject `77580320`; subject byte-frozen `a8b702a7` through close; closure signal `MILESTONE_V63_AT_HEAD_a8b702a73e34ab7fd87008cdc830a7e90c54a9f5`; phases 388-396; method doc `.planning/AUDIT-V63-PLAN.md`; surface maps `.planning/v63-surface-map/`; closure record `.planning/phases/396-terminal/396-CLOSURE.md`)
 
