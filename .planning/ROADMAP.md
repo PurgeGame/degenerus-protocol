@@ -4,6 +4,7 @@
 
 ## Milestones
 
+- ▶ **v66.0 RNG-Surface & Cross-Contract-Call Manipulability Re-Audit (Cross-Model Council)** — Phases 410-415 (ACTIVE 2026-06-16; AUDIT-ONLY on byte-frozen post-rename HEAD `bb0912a6`; re-derive the VRF-consumer net FROM HEAD [the trusted RNG corpus is stale] + hunt the cross-contract freeze seams the inherited net never covered; method = cross-model council [Gemini+Codex] primary finder + Claude adjudicate/synthesize, every candidate adversarially verified; 21 reqs / 6 phases [FOUND · RNGNET · RNGSEAM · RNGSEL+RNGFALL · RNGNET-MECH test-only · COUNCIL terminal]; blind-spot panel `.planning/v66-BLIND-SPOT-PANEL.md`)
 - ✅ **v44.0 sStonk Per-Day Redemption Refactor** — Phases 304-308 (shipped 2026-05-20)
 - ✅ **v45.0 VRF-Rotation Liveness Fix** — Phases 309-314 (shipped 2026-05-23, minimal close)
 - ✅ **v46.0 Do-Work Crank + AfKing Subscription** — Phases 316-320 (shipped 2026-05-24)
@@ -23,6 +24,95 @@
 - ✅ **v63.0 Post-v62 Audit — Critical Invariants + Reward Game-Theory** — Phases 388-396 (SHIPPED 2026-06-15; baseline = v62.0 closure subject `77580320`; subject byte-frozen `a8b702a7` through close [contracts tree `2934d3d8`]; closure signal `MILESTONE_V63_AT_HEAD_a8b702a73e34ab7fd87008cdc830a7e90c54a9f5`; audited the ~60 unaudited post-v62 commits [40 files +4322/−3489: storage packing · BURNIE zero-start emission rework · gas-identity refactors · 4 new permissionless/keeper entrypoints · reward rebalances] + the folded deferred debt [full mutation campaign · capBucketCounts exactness · v50/v51/v52 consolidated]; method = **council + Claude both**; 58 reqs; **0 CATASTROPHE/0 HIGH; 1 bounded MED [BURNIE-04 redemption-backing under-credit] routed to a gated post-audit fix, NOT applied; BURNIE-05 USER BY-DESIGN/WONTFIX**; canonical `audit/FINDINGS-v63.0.md` chmod 444 + `AUDIT-V63-REPORT.html`; NOT pushed)
 - ✅ **v64.0 Recent-Changes Re-Audit + Level-Semantics Correctness Sweep** — Phases 397-405 (SHIPPED 2026-06-16; closure signal `MILESTONE_V64_AT_HEAD_891f7a8f8bacb163140ebcd7abbb001fb4d1366d`; subject byte-frozen `402855e1` @ `891f7a8f`; **VERDICT 0 CAT / 0 HIGH / 0 MED · 1 LOW found+FIXED in-milestone [LVL-A afking lootbox streak-basis] · all else INFO/by-design/refuted**; deliverables `audit/FINDINGS-v64.0.md` [chmod 444] + `AUDIT-V64-REPORT.html`; 404 mutation bounded+CI-resumable [v63 spine 0-defects carries]; codex usage-capped mid-run then fully backfilled; baseline = v62.0 closure subject `77580320`; subject froze at HEAD `78eb3dd2`→`402855e1` after the 398 fix; cross-model dual-net re-audit of the full post-v62 contract delta [41 files +4902/−3697, 33 commits — gas rounds · storage packing · the reward overhaul · BURNIE emission rework · permissionless decimator/redemption · payable-chain fixes · the 5 post-v63 commits] PLUS a whole-codebase `lvl` vs `lvl+1` correctness sweep [USER's explicit ask]; v63 dispositions carried as PRIORS; method = council + Claude dual-net per slice; posture = audit-only; 38 reqs / 9 categories)
 - ✅ **v65.0 Token Rename (BURNIE→FLIP + Stonk→DGNRS/sDGNRS)** — Phases 406-409 (SHIPPED 2026-06-16; rename `44642aba`; origin/main `4adcd5f4`; full functional-parity rename, forge 889/0/110 identical; archived `milestones/v65.0-*`)
+
+---
+
+## ▶ v66.0 RNG-Surface & Cross-Contract-Call Manipulability Re-Audit (Cross-Model Council) — ACTIVE 2026-06-16
+
+> **Scope:** re-verify the VRF-freeze invariant across **every** RNG consumer and exhaustively sweep all cross-contract calls for any player-manipulable state between VRF request and consumption — confirm nothing is missing before C4A. Seed hypotheses: `.planning/v66-BLIND-SPOT-PANEL.md` (six-lens blind-spot panel; the convergent meta-finding is that the trusted RNG corpus — `RNGLOCK-CATALOG.md`, `v30-RNGLOCK-STATE-MACHINE`, `v30-FREEZE-PROOF`, §11/§12 — is a STALE snapshot keyed to deleted `BurnieCoinflip`/`StakedDegenerusStonk` names, and the audit net was drawn against it, never re-derived from current code). Full scope + the 21 REQ-IDs: `.planning/REQUIREMENTS.md`.
+
+> **Subject = post-rename HEAD (origin/main `bb0912a6`), byte-frozen at FOUNDATION (410)** and held byte-stable through close. **Posture = AUDIT-ONLY** — no contract change planned; a council-surfaced, adversarially-verified finding routes to a gated fix (USER hand-review, batched, never pre-approved). The RNGNET-MECH (MECH-01..04) requirements are TEST-ONLY additions that commit autonomously.
+
+> **THE METHOD = CROSS-MODEL COUNCIL, primary finder.** The Gemini+Codex council is the PRIMARY finder over every RNGNET / RNGSEAM / RNGSEL / RNGFALL surface, seeded with the blind-spot-panel hypotheses; Claude builds the FOUNDATION, ADJUDICATES every candidate vs frozen `bb0912a6`, and SYNTHESIZES. **Every candidate finding is adversarially verified (independent refutation; majority-refute kills it) before it is recorded as confirmed.** COUNCIL-01/02/03 is the method APPLIED WITHIN every hunt phase, and is formally attested + synthesized in the single TERMINAL phase (415). For audit phases a verified-OR-refuted disposition is a complete outcome — a finding is not required for success.
+
+> **Ordering = FOUNDATION-FIRST, then RE-DERIVE-THE-NET.** The load-bearing insight: prior passes inherited a STALE consumer net from the trusted catalog. RNGNET (411 — re-derive the net FROM HEAD by mechanical enumeration) is the foundation every later hunt phase depends on → it is sequenced immediately after FOUNDATION (410). The seam/selection/fallback hunts (412-413) read against the re-derived net, not the catalog; the mechanical-net closure (414) is committable test work; 415 is the terminal council synthesis + FINDINGS + closure.
+
+> **Phase numbering** continues from v65.0 (closed at Phase 409) — **v66.0 starts at Phase 410.** Not reset.
+
+### Phases
+
+- [ ] **Phase 410: FOUNDATION — Subject Freeze & Green Baseline** - Byte-freeze the audit subject at post-rename HEAD `bb0912a6` (record the commit hash + contracts-tree hash as the v66 freeze anchor); capture + document a GREEN baseline oracle (forge full-suite pass/skip counts + hardhat parity) as the v66 regression baseline, cataloguing any pre-existing reds as carried-not-new. FOUND-01, FOUND-02.
+- [ ] **Phase 411: RNGNET — Re-Derive the VRF-Consumer Net From HEAD** - Mechanically enumerate the COMPLETE set of VRF-derived-value consumers from current HEAD source (every read of a VRF word / `rngWordByDay` / `rngWordForDay` / `rngWordCurrent` / `lootboxRngWordByIndex` / every `EntropyLib` derivation), independently of the existing catalog; diff against `RNGLOCK-CATALOG.md` and enroll + freeze-classify every absent/mis-classified consumer; reconcile (or supersede) the stale trusted RNG docs to current code. RNGNET-01, RNGNET-02, RNGNET-03. **Load-bearing — every later hunt phase reads against this re-derived net.**
+- [ ] **Phase 412: RNGSEAM — Cross-Contract Freeze Seams** - Prove the cross-contract VRF freeze seams that the inherited net never covered: `claimRedemption(player,day)` argument-selection (no path lets a caller pick a `day` whose `day+1` word/coinflip result is already on-chain); the redemption FLIP-escrow leg `getCoinflipDayResult(day+1)` freshness + packed-lane non-aliasing; the BAF winner-select + `coinflipTopByDay` leaderboard freeze across Game↔Jackpots↔Coinflip; the VRF-stall gap-backfill entropy-collapse (single post-gap word feeding multiple consumers); and the reworked `updateVrfCoordinatorAndSub` keep-lock/re-request rotation holding every freeze-relevant variable consistent. RNGSEAM-01, RNGSEAM-02, RNGSEAM-03, RNGSEAM-04, RNGSEAM-05.
+- [ ] **Phase 413: RNGSEL + RNGFALL — Input-Selection Grinding & Gameover Fallback** - Hunt player-controllable input selection + the prevrandao fallback window: the far-future salvage seed `keccak(player, settled prior-day word)` for address-selection grinding (quantify the `jitterMult`/`ticketShareBps`/ETH-FLIP-split swing, decide if it erodes the by-design discount); the Degenerette index-keyed score-seed `keccak(rngWord, index, spinIdx)` for any word-set/accepting-placement coincidence; the redemption/lootbox claim path for elective-resolution / first-mover capture; and the gameover prevrandao fallback (which never sets `rngLockedFlag`) re-derived under the current reworked consumers, every player-controllable input verified frozen or its mutability dispositioned. RNGSEL-01, RNGSEL-02, RNGSEL-03, RNGFALL-01.
+- [ ] **Phase 414: RNGNET-MECH — Close the Mechanical-Net Gaps (test-only)** - Close the mechanical-net blind spots with committable test work (no contract change): a real un-mocked redemption submit→resolve→claim regression test the `rngWordForDay(day+1)→rngWordForDay(day)` mutant must FAIL (v62 REDEMPTION-ZERO-SEED class), with the existing suite shown blind to it; rewrite the `vm.skip`'d mid-day cross-day lootbox binding test to read `lootboxRngWordByIndex` from storage and assert live-index binding; a focused mutation pass on the Coinflip RNG spine (`processCoinflipPayouts`/`_storeDayResult`/`_dayResult`) replacing the source-string net with behavioral coverage; and a win-classification floor assertion (`COINFLIP_EXTRA_MIN_PERCENT >= 50` + boundary test). MECH-01, MECH-02, MECH-03, MECH-04.
+- [ ] **Phase 415: TERMINAL — Council Synthesis + FINDINGS-v66.0 + Closure** - The cross-model council runs as primary finder over every RNGNET/RNGSEAM/RNGSEL/RNGFALL surface (seeded with the blind-spot panel); every candidate is adversarially verified (majority-refute kills it) before it is recorded; produce a canonical `audit/FINDINGS-v66.0.md` (+ report) recording confirmed findings, refutations, and by-design dispositions; route any contract fix through the contract-commit approval gate; record the milestone closure signal. COUNCIL-01, COUNCIL-02, COUNCIL-03.
+
+### Phase Details (v66.0)
+
+### Phase 410: FOUNDATION — Subject Freeze & Green Baseline
+**Goal**: a byte-frozen audit subject at post-rename HEAD `bb0912a6` + a documented GREEN baseline oracle that is the audit's regression floor and the oracle every lead is reproduced against.
+**Depends on**: Nothing (first v66 phase)
+**Requirements**: FOUND-01, FOUND-02
+**Success Criteria** (what must be TRUE):
+  1. The audit subject is byte-frozen at post-rename HEAD with the commit hash AND the contracts-tree hash recorded as the v66 freeze anchor (`git diff <anchor> -- contracts/` empty).
+  2. A GREEN baseline oracle is captured and documented (forge full-suite pass/skip counts + hardhat parity) as the v66 regression baseline.
+  3. Any pre-existing reds are catalogued as carried-not-new, with no undocumented residual masking a regression.
+**Plans**: TBD
+
+### Phase 411: RNGNET — Re-Derive the VRF-Consumer Net From HEAD
+**Goal**: the COMPLETE VRF-derived-value consumer set is re-derived from current HEAD source (not inherited from the stale catalog), every gap enrolled + freeze-classified, and the stale trusted RNG docs reconciled or superseded.
+**Depends on**: Phase 410
+**Requirements**: RNGNET-01, RNGNET-02, RNGNET-03
+**Success Criteria** (what must be TRUE):
+  1. The complete consumer set is re-derived by mechanical enumeration over current HEAD source (every VRF-word / `rngWordByDay` / `rngWordForDay` / `rngWordCurrent` / `lootboxRngWordByIndex` / `EntropyLib` read), independently of `RNGLOCK-CATALOG.md`.
+  2. The re-derived set is diffed against `RNGLOCK-CATALOG.md` and every consumer absent or mis-classified in the catalog (at minimum BAF winner-select, far-future salvage seed, `coinflipTopByDay` leaderboard, Degenerette survival flip, redemption FLIP-escrow leg) is enrolled + freeze-classified.
+  3. Every stale trusted-RNG anchor (deleted `BurnieCoinflip`/`StakedDegenerusStonk` names, the removed rotation clear-site, the removed stored `flipDay`, the removed `currentDayView()` cross-call) is corrected against current code or explicitly marked superseded by a current-HEAD consumer-net document.
+**Plans**: TBD
+
+### Phase 412: RNGSEAM — Cross-Contract Freeze Seams
+**Goal**: every cross-contract VRF freeze seam the inherited net never covered is proven frozen — no player-manipulable state exists between VRF request and consumption across any contract boundary.
+**Depends on**: Phase 411
+**Requirements**: RNGSEAM-01, RNGSEAM-02, RNGSEAM-03, RNGSEAM-04, RNGSEAM-05
+**Success Criteria** (what must be TRUE):
+  1. `claimRedemption(player,day)` argument-selection is proven safe (a non-empty `pendingRedemptions[player][d]` exists only for `d == currentDayIndex()` with `d+1` undrawn) or any selectable-stale-day path is recorded as a confirmed finding.
+  2. The redemption FLIP-escrow leg `getCoinflipDayResult(day+1)` is backward-traced for freshness — `day+1`'s result provably unwritten at submit, committed atomically by the resolving advance, packed-lane read non-aliasing — with the disposition recorded.
+  3. The BAF winner-select path and the `coinflipTopByDay` leaderboard slice are proven frozen across Game↔Jackpots↔Coinflip (no sampled queue/leaderboard write reachable after the daily word is observable but before the BAF resolves), verified-or-refuted.
+  4. The VRF-stall gap-backfill entropy-collapse is analyzed (single post-gap word feeding redemption roll + coinflip win + lootbox seed); any economic invariant assuming independence is identified and the EV deviation quantified, with the disposition recorded.
+  5. The reworked `updateVrfCoordinatorAndSub` is proven to hold every freeze-relevant variable consistent across a coordinator swap (no branch strands the lock, accepts an untrusted word, or de-syncs `vrfRequestId`/`rngWordCurrent`), verified-or-refuted.
+**Plans**: TBD
+
+### Phase 413: RNGSEL + RNGFALL — Input-Selection Grinding & Gameover Fallback
+**Goal**: every player-controllable RNG input (address-selection, index-keyed seed, elective self-claim) and every consumer in the gameover prevrandao fallback window is proven frozen, or its mutability is quantified and dispositioned.
+**Depends on**: Phase 411
+**Requirements**: RNGSEL-01, RNGSEL-02, RNGSEL-03, RNGFALL-01
+**Success Criteria** (what must be TRUE):
+  1. The far-future salvage seed `keccak(player, settled prior-day word)` is quantified against address-selection grinding — the realized `jitterMult`/`ticketShareBps`/ETH-FLIP-split swing an actor obtains by choosing which controlled address sells is measured, and whether it erodes the by-design salvage discount is determined.
+  2. The Degenerette score-seed `keccak(rngWord, index, spinIdx)` is proven safe by exhaustively showing no `lootboxRngWordByIndex[index]` write coincides with an accepting placement at the same active index (incl. gap-backfill and mid-day-retry interleavings), or a coincidence path is recorded as a finding.
+  3. The redemption/lootbox claim path is dispositioned for elective-resolution / first-mover capture (whether a player can precompute a favorable self-claim outcome a passive holder would not receive, given no claim deadline during a live game).
+  4. The gameover prevrandao fallback path (which never sets `rngLockedFlag`) is re-derived under the current reworked consumers — every player-controllable input to `processCoinflipPayouts` / `resolveRedemptionPeriod` / `_finalizeLootboxRng` during the fallback window is verified frozen or its mutability dispositioned, accounting for proposer influence on `block.prevrandao`.
+**Plans**: TBD
+
+### Phase 414: RNGNET-MECH — Close the Mechanical-Net Gaps (test-only)
+**Goal**: the mechanical-net blind spots are closed with real behavioral coverage (committable test work, no contract change) so the exact mutants the current suite is blind to now fail a test.
+**Depends on**: Phase 411
+**Requirements**: MECH-01, MECH-02, MECH-03, MECH-04
+**Success Criteria** (what must be TRUE):
+  1. A real (un-mocked) redemption submit→resolve→claim regression test exists, the `rngWordForDay(day+1)→rngWordForDay(day)` mutant (v62 REDEMPTION-ZERO-SEED class) FAILS it, and the pre-existing suite is shown blind to that mutant.
+  2. The mid-day cross-day lootbox binding test (`RngIndexDrainBinding.t.sol`) is rewritten from its `vm.skip(true)` + vacuous early-return to read `lootboxRngWordByIndex` from storage and assert post-request boxes/tickets bind to the live index, not the in-flight word.
+  3. A focused mutation pass on the Coinflip RNG spine (`processCoinflipPayouts` / `_storeDayResult` / `_dayResult`) augments/replaces the source-string "byte-unmodified" net with behavioral coverage, and every surviving mutant is dispositioned.
+  4. The coinflip win-classification floor is asserted by reading current constants (`COINFLIP_EXTRA_MIN_PERCENT >= 50`, no win stores `b ∈ [2,49]`, no `+bonus` byte overflow) plus a boundary test.
+**Plans**: TBD
+
+### Phase 415: TERMINAL — Council Synthesis + FINDINGS-v66.0 + Closure
+**Goal**: the cross-model council finding/verification METHOD is formally attested and synthesized into a canonical FINDINGS deliverable, any contract fix is routed through the approval gate, and the milestone closure signal is recorded.
+**Depends on**: Phase 412, Phase 413, Phase 414
+**Requirements**: COUNCIL-01, COUNCIL-02, COUNCIL-03
+**Success Criteria** (what must be TRUE):
+  1. It is attested on record that the cross-model council (Gemini+Codex) ran as the primary finder over every RNGNET/RNGSEAM/RNGSEL/RNGFALL surface, seeded with the blind-spot-panel hypotheses.
+  2. It is attested on record that every candidate finding was adversarially verified (independent refutation; majority-refute kills it) before being recorded as confirmed.
+  3. A canonical `audit/FINDINGS-v66.0.md` (+ report) records confirmed findings, refutations, and by-design dispositions; any contract fix is routed through the contract-commit approval gate; and the milestone closure signal is recorded.
+**Plans**: TBD
 
 ---
 

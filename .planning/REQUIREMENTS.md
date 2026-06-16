@@ -73,37 +73,37 @@ Deferred — not in this milestone's roadmap.
 
 ## Traceability
 
-Filled during roadmap creation. Each requirement maps to exactly one phase.
+Each requirement maps to exactly one phase. v66.0 phases continue 410-415.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| FOUND-01 | TBD | Pending |
-| FOUND-02 | TBD | Pending |
-| RNGNET-01 | TBD | Pending |
-| RNGNET-02 | TBD | Pending |
-| RNGNET-03 | TBD | Pending |
-| RNGSEAM-01 | TBD | Pending |
-| RNGSEAM-02 | TBD | Pending |
-| RNGSEAM-03 | TBD | Pending |
-| RNGSEAM-04 | TBD | Pending |
-| RNGSEAM-05 | TBD | Pending |
-| RNGSEL-01 | TBD | Pending |
-| RNGSEL-02 | TBD | Pending |
-| RNGSEL-03 | TBD | Pending |
-| RNGFALL-01 | TBD | Pending |
-| MECH-01 | TBD | Pending |
-| MECH-02 | TBD | Pending |
-| MECH-03 | TBD | Pending |
-| MECH-04 | TBD | Pending |
-| COUNCIL-01 | TBD | Pending |
-| COUNCIL-02 | TBD | Pending |
-| COUNCIL-03 | TBD | Pending |
+| FOUND-01 | Phase 410 | Pending |
+| FOUND-02 | Phase 410 | Pending |
+| RNGNET-01 | Phase 411 | Pending |
+| RNGNET-02 | Phase 411 | Pending |
+| RNGNET-03 | Phase 411 | Pending |
+| RNGSEAM-01 | Phase 412 | Pending |
+| RNGSEAM-02 | Phase 412 | Pending |
+| RNGSEAM-03 | Phase 412 | Pending |
+| RNGSEAM-04 | Phase 412 | Pending |
+| RNGSEAM-05 | Phase 412 | Pending |
+| RNGSEL-01 | Phase 413 | Pending |
+| RNGSEL-02 | Phase 413 | Pending |
+| RNGSEL-03 | Phase 413 | Pending |
+| RNGFALL-01 | Phase 413 | Pending |
+| MECH-01 | Phase 414 | Pending |
+| MECH-02 | Phase 414 | Pending |
+| MECH-03 | Phase 414 | Pending |
+| MECH-04 | Phase 414 | Pending |
+| COUNCIL-01 | Phase 415 | Pending |
+| COUNCIL-02 | Phase 415 | Pending |
+| COUNCIL-03 | Phase 415 | Pending |
 
 **Coverage:**
 - v1 requirements: 21 total
-- Mapped to phases: 0 (roadmap pending)
-- Unmapped: 21 ⚠️
+- Mapped to phases: 21 ✓
+- Unmapped: 0 ✓
 
 ---
 *Requirements defined: 2026-06-16 — grounded in the v66 blind-spot panel.*
-*Last updated: 2026-06-16 after initial definition.*
+*Last updated: 2026-06-16 — traceability filled by roadmapper; 21/21 mapped across phases 410-415.*
