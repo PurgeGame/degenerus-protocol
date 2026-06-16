@@ -1,0 +1,207 @@
+contracts/GNRUS.sol:557:    ///      (2) currentLevel = level + 1 SET FIRST so state locks before any further work (zero external
+contracts/GNRUS.sol:578:        currentLevel = level + 1;
+contracts/DegenerusJackpots.sol:377:                // Non-x00: 20 rounds from lvl, 30 rounds random from lvl+1..lvl+4
+contracts/DegenerusJackpots.sol:378:                // x00:     4 rounds lvl, 8 rounds lvl+1..lvl+3, 38 random from past 99
+contracts/DegenerusJackpots.sol:382:                    else if (round < 12) targetLvl = lvl + 1 + uint24(entropy % 3);
+contracts/DegenerusJackpots.sol:386:                    else targetLvl = lvl + 1 + uint24(entropy % 4);
+contracts/modules/DegenerusGameGameOverModule.sol:180:            IDegenerusGame(address(this)).runTerminalJackpot(remaining, lvl + 1, rngWord);
+contracts/modules/DegenerusGameBingoModule.sol:217:    ///      Affiliate scores always route to level + 1 during gameplay, so at
+contracts/DegenerusAffiliate.sol:654:        uint24 lvl = afkingDrain.level() + 1;
+contracts/modules/DegenerusGameMintStreakUtils.sol:131:    function _activeTicketLevel() internal view returns (uint24) {
+contracts/modules/DegenerusGameMintStreakUtils.sol:132:        return jackpotPhaseFlag ? level : level + 1;
+contracts/modules/DegenerusGameMintStreakUtils.sol:254:    ///      and streakBaseLevel (allowing DegeneretteModule to pass level + 1 instead of _activeTicketLevel()).
+contracts/modules/DegenerusGameMintStreakUtils.sol:257:    /// @param streakBaseLevel Level used for mint streak calculation (typically _activeTicketLevel() or level + 1).
+contracts/modules/DegenerusGameMintStreakUtils.sol:262:        uint24 streakBaseLevel
+contracts/modules/DegenerusGameMintStreakUtils.sol:264:        return _playerActivityScoreAt(player, questStreak, streakBaseLevel, level);
+contracts/modules/DegenerusGameMintStreakUtils.sol:271:    /// @param streakBaseLevel Level used for mint streak calculation.
+contracts/modules/DegenerusGameMintStreakUtils.sol:277:        uint24 streakBaseLevel,
+contracts/modules/DegenerusGameMintStreakUtils.sol:287:        uint24 streak = _mintStreakEffectiveFromPacked(packed, streakBaseLevel);
+contracts/modules/DegenerusGameMintStreakUtils.sol:367:    ///      jackpot phase, next level otherwise) as streakBaseLevel, derived from a
+contracts/interfaces/IDegenerusQuests.sol:124:    /// @param levelQuestPrice Price for level quest targets (level+1 price)
+contracts/BurnieCoinflip.sol:599:            // The active ticket level is level+1 during the purchase phase and level
+contracts/BurnieCoinflip.sol:621:                bafLevel = cachedLevel + 1;
+contracts/modules/DegenerusGameWhaleModule.sol:177:        uint24 passLevel = level + 1;
+contracts/modules/DegenerusGameWhaleModule.sol:379:     *      - Grants 4 tickets per level for the next 10 levels (starting at current level + 1).
+contracts/modules/DegenerusGameWhaleModule.sol:439:        uint24 startLevel = currentLevel == 0 ? 1 : currentLevel + 1;
+contracts/modules/DegenerusGameWhaleModule.sol:588:        uint24 passLevel = level + 1;
+contracts/modules/DegenerusGameWhaleModule.sol:629:        // for 100 levels from passLevel (= level + 1), 40/lvl over the level-1-10 bonus window +
+contracts/modules/DegenerusGameWhaleModule.sol:852:        uint24 capKey = level + 1; // resolver open level == the per-(player, level) cap key
+contracts/modules/DegenerusGameWhaleModule.sol:864:            // level + 1 (== the resolver's currentLevel = level + 1). A bonus box
+contracts/modules/DegenerusGameWhaleModule.sol:989:    ///      Tickets start at current level + 1 to avoid giving tickets for an already-active level.
+contracts/modules/DegenerusGameWhaleModule.sol:1000:        // Tickets start at level+1 to avoid giving tickets for an already-active level
+contracts/modules/DegenerusGameWhaleModule.sol:1003:        uint24 startLevel = level + 1;
+contracts/BurnieCoin.sol:652:        uint24 lvl = degenerusGame.level() + 1;
+contracts/test/LootboxBernoulliTester.sol:72:    ///           _queueTickets(player, targetLevel, whole, false);
+contracts/DegenerusQuests.sol:791:     * @param levelQuestPrice Price for level quest targets (level+1 price).
+contracts/DegenerusQuests.sol:1378:     * @param levelQuestPrice Price for level quest target (level+1 price during purchase).
+contracts/DegenerusQuests.sol:1984:        if (unitsLvl != lvl + 1) return false;
+contracts/DegenerusQuests.sol:2089:            emit LevelQuestCompleted(player, lvl + 1, lqType, 800 ether);
+contracts/modules/DegenerusGameDecimatorModule.sol:377:        return PriceLookupLib.priceForLevel(jackpotPhaseFlag ? level : level + 1);
+contracts/modules/DegenerusGameDecimatorModule.sol:656:            uint24 startLevel = level + 1;
+contracts/modules/DegenerusGameDecimatorModule.sol:1017:        // Store packed offsets at lvl + 1, not lvl, so they never alias the regular decimator
+contracts/modules/DegenerusGameDecimatorModule.sol:1021:        // lvl + 1 is safe — that level's regular round can only resolve once `level` reaches it
+contracts/modules/DegenerusGameDecimatorModule.sol:1023:        // exclusively this terminal round's. The terminal claim path reads the same lvl + 1 slot.
+contracts/modules/DegenerusGameDecimatorModule.sol:1024:        decBucketOffsetPacked[lvl + 1] = packedOffsets;
+contracts/modules/DegenerusGameDecimatorModule.sol:1066:        // Terminal offset lives at lvl + 1 (see runTerminalDecimatorJackpot) to avoid aliasing the
+contracts/modules/DegenerusGameDecimatorModule.sol:1068:        uint64 packedOffsets = decBucketOffsetPacked[lvl + 1];
+contracts/modules/DegenerusGameDecimatorModule.sol:1098:        // Terminal offset lives at lvl + 1 (see runTerminalDecimatorJackpot) to avoid aliasing the
+contracts/modules/DegenerusGameDecimatorModule.sol:1100:        uint64 packedOffsets = decBucketOffsetPacked[lvl + 1];
+contracts/modules/DegenerusGameJackpotModule.sol:174:    /// @dev Max forward offset for carryover source selection (lvl+1..lvl+4).
+contracts/modules/DegenerusGameJackpotModule.sol:229:    /// @param targetLvl Level to sample winners from (typically lvl+1).
+contracts/modules/DegenerusGameJackpotModule.sol:278:    ///        for winners from a random source level in [lvl+1, lvl+4], deposited into nextPool.
+contracts/modules/DegenerusGameJackpotModule.sol:342:                    _runEarlyBirdLootboxJackpot(lvl + 1, randWord);
+contracts/modules/DegenerusGameJackpotModule.sol:354:                    lvl + 1
+contracts/modules/DegenerusGameJackpotModule.sol:574:        _runCoinJackpot(lvl, lvl, lvl + 1, lvl + 4, bonusTraitsPacked, randWord);
+contracts/modules/DegenerusGameJackpotModule.sol:581:                lvl + 1,
+contracts/modules/DegenerusGameJackpotModule.sol:593:        // (or lvl+1 on final day since current level is about to end). Uses bonus traits.
+contracts/modules/DegenerusGameJackpotModule.sol:599:                isFinalDay ? lvl + 1 : lvl,
+contracts/modules/DegenerusGameJackpotModule.sol:620:    ///      coin jackpot). All tickets queued at `lvl` (= outer level + 1).
+contracts/modules/DegenerusGameJackpotModule.sol:767:        uint256 ticketUnits = _budgetToTicketUnits(ticketBasis, lvl + 1);
+contracts/modules/DegenerusGameJackpotModule.sol:771:                lvl + 1,
+contracts/modules/DegenerusGameJackpotModule.sol:1071:        uint256 unit = PriceLookupLib.priceForLevel(lvl + 1) >> 2;
+contracts/modules/DegenerusGameJackpotModule.sol:1798:    ///      derived from the day's VRF word (lvl+1 .. lvl+4).
+contracts/modules/DegenerusGameJackpotModule.sol:1809:        uint24 bonusTargetLevel = lvl + 1 + uint24(coinEntropy % 4);
+contracts/modules/DegenerusGameJackpotModule.sol:1948:                    // with the real targetLevel and scaled ticketCount.
+contracts/modules/DegenerusGameJackpotModule.sol:2088:        uint24 targetLevel;
+contracts/modules/DegenerusGameJackpotModule.sol:2092:            targetLevel = minTargetLevel;
+contracts/modules/DegenerusGameJackpotModule.sol:2096:            targetLevel = minTargetLevel + uint24(offset);
+contracts/modules/DegenerusGameJackpotModule.sol:2100:            targetLevel = minTargetLevel + uint24(offset);
+contracts/modules/DegenerusGameJackpotModule.sol:2104:        uint256 targetPrice = PriceLookupLib.priceForLevel(targetLevel);
+contracts/modules/DegenerusGameJackpotModule.sol:2121:        _queueTickets(winner, targetLevel, whole, true);
+contracts/modules/DegenerusGameJackpotModule.sol:2127:            targetLevel,
+contracts/modules/GameAfkingModule.sol:489:                            jackpotPhaseFlag ? level : level + 1,
+contracts/modules/GameAfkingModule.sol:561:                            jackpotPhaseFlag ? level : level + 1,
+contracts/modules/GameAfkingModule.sol:780:    ///        currentLevel, else currentLevel + 1) — read once by the caller, since
+contracts/modules/GameAfkingModule.sol:819:            uint24 targetLevel = ticketTargetLevel;
+contracts/modules/GameAfkingModule.sol:826:            if (targetLevel % 100 == 0) {
+contracts/modules/GameAfkingModule.sol:830:                    targetLevel
+contracts/modules/GameAfkingModule.sol:833:                    uint256 priceWei = PriceLookupLib.priceForLevel(targetLevel);
+contracts/modules/GameAfkingModule.sol:838:                        uint256 used = _centuryUsedFor(player, targetLevel);
+contracts/modules/GameAfkingModule.sol:842:                            _setCenturyUsedFor(player, targetLevel, used + bonusQty);
+contracts/modules/GameAfkingModule.sol:849:            _queueTicketsScaled(player, targetLevel, adjustedQty, false);
+contracts/modules/GameAfkingModule.sol:877:                currentLevel + 1
+contracts/modules/GameAfkingModule.sol:957:    ///      multiplier frozen from the first-deposit score. The EV-cap key is `currentLevel + 1`
+contracts/modules/GameAfkingModule.sol:958:    ///      (== the resolver's open level = level + 1).
+contracts/modules/GameAfkingModule.sol:977:        uint24 capKey = currentLevel + 1; // resolver open level == the per-(player, level) cap key
+contracts/modules/GameAfkingModule.sol:1163:            : currentLevel + 1;
+contracts/modules/GameAfkingModule.sol:1641:                : lvl + 1;
+contracts/modules/GameAfkingModule.sol:1652:        return PriceLookupLib.priceForLevel(_activeTicketLevel());
+contracts/modules/DegenerusGameAdvanceModule.sol:208:        uint24 purchaseLevel = (lastPurchase && locked) ? lvl : lvl + 1;
+contracts/modules/DegenerusGameAdvanceModule.sol:406:                // purchaseLevel = level + 1, so the FF level is purchaseLevel + 4 = level + 5.
+contracts/modules/DegenerusGameAdvanceModule.sol:447:            // Purchase phase processes purchaseLevel (= level+1) where new tickets route.
+contracts/modules/DegenerusGameAdvanceModule.sol:669:                        lvl + 1
+contracts/modules/DegenerusGameAdvanceModule.sol:683:                _swapTicketSlot(lvl + 1);
+contracts/modules/DegenerusGameAdvanceModule.sol:684:                if (ticketQueue[_tqReadKey(lvl + 1)].length == 0) {
+contracts/modules/DegenerusGameAdvanceModule.sol:734:    ///      always route to level + 1 during gameplay, so at transition time (when level
+contracts/modules/DegenerusGameAdvanceModule.sol:735:    ///      becomes lvl), all scores at index lvl are frozen — new scores go to lvl + 1.
+contracts/modules/DegenerusGameAdvanceModule.sol:761:        // Scores at index lvl are frozen (new scores go to lvl + 1).
+contracts/modules/DegenerusGameAdvanceModule.sol:1128:            uint24 purchaseLevel_ = level + 1;
+contracts/modules/DegenerusGameAdvanceModule.sol:1465:    /// @param lvl Target level to activate (typically current level + 1).
+contracts/modules/DegenerusGameAdvanceModule.sol:1489:    ///      Caller passes level during jackpot phase (range lvl+1..lvl+4) or
+contracts/modules/DegenerusGameAdvanceModule.sol:1499:        uint24 startLevel = lvl + 1;
+contracts/modules/DegenerusGameAdvanceModule.sol:1560:    /// @param purchaseLevel Current purchase level (level + 1).
+contracts/modules/DegenerusGameAdvanceModule.sol:1563:        uint24 targetLevel = purchaseLevel + 99;
+contracts/modules/DegenerusGameAdvanceModule.sol:1566:            targetLevel,
+contracts/modules/DegenerusGameAdvanceModule.sol:1572:            targetLevel,
+contracts/modules/DegenerusGameAdvanceModule.sol:1699:        // new tickets begin routing to the next level (mirrors the route-to-level+1 step in the mint
+contracts/modules/DegenerusGameAdvanceModule.sol:1720:        // lvl is already purchaseLevel (= level + 1), so set directly.
+contracts/modules/DegenerusGameAdvanceModule.sol:1725:            // Scores routed to lvl (= level + 1) during the purchase phase just ended.
+contracts/modules/DegenerusGameAdvanceModule.sol:1741:            // lvl is the NEW level (old level + 1). CHARITY.currentLevel tracks
+contracts/modules/DegenerusGameDegeneretteModule.sol:495:                    ? PriceLookupLib.priceForLevel(lvl + 1)
+contracts/modules/DegenerusGameDegeneretteModule.sol:543:            _playerActivityScore(player, questStreak, lvl + 1)
+contracts/libraries/PriceLookupLib.sol:19:    /// @param targetLevel Level to query price for
+contracts/libraries/PriceLookupLib.sol:21:    function priceForLevel(uint24 targetLevel) internal pure returns (uint256) {
+contracts/libraries/PriceLookupLib.sol:23:        if (targetLevel < 5) return 0.01 ether;
+contracts/libraries/PriceLookupLib.sol:24:        if (targetLevel < 10) return 0.02 ether;
+contracts/libraries/PriceLookupLib.sol:29:        uint256 cycleOffset = targetLevel % 100;
+contracts/DegenerusGame.sol:1394:                : lvl + 1;
+contracts/DegenerusGame.sol:2082:        return PriceLookupLib.priceForLevel(_activeTicketLevel());
+contracts/DegenerusGame.sol:2154:        lvl = _activeTicketLevel();
+contracts/DegenerusGame.sol:2184:        streak = _mintStreakEffectiveFromPacked(packed, _activeTicketLevel());
+contracts/DegenerusGame.sol:2264:        mintPriceWei = PriceLookupLib.priceForLevel(_activeTicketLevel());
+contracts/storage/DegenerusGameStorage.sol:233:    /// @notice Current jackpot level (starts at 0). Purchase phase targets level + 1.
+contracts/storage/DegenerusGameStorage.sol:521:        uint24 targetLevel,
+contracts/storage/DegenerusGameStorage.sol:528:        uint24 targetLevel,
+contracts/storage/DegenerusGameStorage.sol:592:    /// @param targetLevel Level for which tickets are queued.
+contracts/storage/DegenerusGameStorage.sol:596:        uint24 targetLevel,
+contracts/storage/DegenerusGameStorage.sol:605:        emit TicketsQueued(buyer, targetLevel, quantity);
+contracts/storage/DegenerusGameStorage.sol:606:        bool isFarFuture = targetLevel > level + 5;
+contracts/storage/DegenerusGameStorage.sol:609:            ? _tqFarFutureKey(targetLevel)
+contracts/storage/DegenerusGameStorage.sol:610:            : _tqWriteKey(targetLevel);
+contracts/storage/DegenerusGameStorage.sol:626:    /// @param targetLevel Level for which tickets are queued.
+contracts/storage/DegenerusGameStorage.sol:630:        uint24 targetLevel,
+contracts/storage/DegenerusGameStorage.sol:637:        emit TicketsQueuedScaled(buyer, targetLevel, quantityScaled);
+contracts/storage/DegenerusGameStorage.sol:638:        bool isFarFuture = targetLevel > level + 5;
+contracts/storage/DegenerusGameStorage.sol:641:            ? _tqFarFutureKey(targetLevel)
+contracts/storage/DegenerusGameStorage.sol:642:            : _tqWriteKey(targetLevel);
+contracts/storage/DegenerusGameStorage.sol:1216:        // un-minted level (alive at lastCompleted+1, breaks at +2), and startLevel == currentLevel+1,
+contracts/storage/DegenerusGameStorage.sol:1686:    ///      one slot. At any instant only the keys {currentLevel, currentLevel+1} are live
+contracts/storage/DegenerusGameStorage.sol:1687:    ///      (opens RMW currentLevel, deposits RMW level+1), so two windows hold the full
+contracts/storage/DegenerusGameStorage.sol:1713:    ///      the live set is {currentLevel, currentLevel+1}).
+contracts/modules/DegenerusGameMintModule.sol:322:     * @param lvl Target level for this purchase (level+1 during purchase phase, level during jackpot phase).
+contracts/modules/DegenerusGameMintModule.sol:1116:                uint24 targetLevel,
+contracts/modules/DegenerusGameMintModule.sol:1135:                    cachedLevel + 1
+contracts/modules/DegenerusGameMintModule.sol:1154:                _queueTicketsScaled(buyer, targetLevel, adjustedQty32, false);
+contracts/modules/DegenerusGameMintModule.sol:1203:        uint24 cl = _activeTicketLevel();
+contracts/modules/DegenerusGameMintModule.sol:1258:        uint24 cl = _activeTicketLevel();
+contracts/modules/DegenerusGameMintModule.sol:1455:            cachedJpFlag ? cachedLevel : cachedLevel + 1
+contracts/modules/DegenerusGameMintModule.sol:1547:        uint24 targetLevel;
+contracts/modules/DegenerusGameMintModule.sol:1552:                targetLevel,
+contracts/modules/DegenerusGameMintModule.sol:1683:                    // During the purchase phase the purchase level IS cachedLevel + 1,
+contracts/modules/DegenerusGameMintModule.sol:1684:                    // so priceWei already equals priceForLevel(cachedLevel + 1); only
+contracts/modules/DegenerusGameMintModule.sol:1687:                        ? PriceLookupLib.priceForLevel(cachedLevel + 1)
+contracts/modules/DegenerusGameMintModule.sol:1698:                    _recordMintStreakForLevel(buyer, _activeTicketLevel());
+contracts/modules/DegenerusGameMintModule.sol:1713:        if (ticketCost != 0 && targetLevel % 100 == 0 && cachedScore != 0) {
+contracts/modules/DegenerusGameMintModule.sol:1718:                uint256 used = _centuryUsedFor(buyer, targetLevel);
+contracts/modules/DegenerusGameMintModule.sol:1722:                    _setCenturyUsedFor(buyer, targetLevel, used + bonusQty);
+contracts/modules/DegenerusGameMintModule.sol:1730:            _queueTicketsScaled(buyer, targetLevel, adjustedQty, false);
+contracts/modules/DegenerusGameMintModule.sol:1740:                    cachedLevel + 1,
+contracts/modules/DegenerusGameMintModule.sol:1750:                    cachedLevel + 1,
+contracts/modules/DegenerusGameMintModule.sol:1756:            // first-deposit score snapshot; the cap key is cachedLevel + 1 (the lootbox
+contracts/modules/DegenerusGameMintModule.sol:1757:            // open level == the resolver's currentLevel = level + 1). Bonus boxes
+contracts/modules/DegenerusGameMintModule.sol:1768:                    uint256 used = _lootboxEvUsedFor(buyer, cachedLevel + 1);
+contracts/modules/DegenerusGameMintModule.sol:1774:                        _setLootboxEvUsedFor(buyer, cachedLevel + 1, used + add);
+contracts/modules/DegenerusGameMintModule.sol:1789:                        uint256 used = _lootboxEvUsedFor(buyer, cachedLevel + 1);
+contracts/modules/DegenerusGameMintModule.sol:1795:                            _setLootboxEvUsedFor(buyer, cachedLevel + 1, used + add);
+contracts/modules/DegenerusGameMintModule.sol:1999:    /// @return targetLevel The level tickets are queued to
+contracts/modules/DegenerusGameMintModule.sol:2015:            uint24 targetLevel,
+contracts/modules/DegenerusGameMintModule.sol:2040:        targetLevel = cachedJpFlag ? cachedLevel : cachedLevel + 1;
+contracts/modules/DegenerusGameMintModule.sol:2041:        // Last jackpot day fix: route to level+1 to prevent stranded tickets
+contracts/modules/DegenerusGameMintModule.sol:2046:                targetLevel = cachedLevel + 1;
+contracts/modules/DegenerusGameMintModule.sol:2048:        // Affiliate scores always route to level + 1 so they freeze at
+contracts/modules/DegenerusGameMintModule.sol:2050:        uint24 affiliateLevel = cachedLevel + 1;
+contracts/modules/DegenerusGameMintModule.sol:2052:        uint256 priceWei = PriceLookupLib.priceForLevel(targetLevel);
+contracts/modules/DegenerusGameMintModule.sol:2103:            _recordMintData(buyer, targetLevel, mintUnits);
+contracts/modules/DegenerusGameMintModule.sol:2118:                    freshBurnie = targetLevel <= 3
+contracts/modules/DegenerusGameLootboxModule.sol:77:    /// @param targetLevel Level AT BOX-OPEN TIME (`level + 1`) — historical
+contracts/modules/DegenerusGameLootboxModule.sol:88:        uint24 targetLevel,
+contracts/modules/DegenerusGameLootboxModule.sol:547:        uint24 currentLevel = level + 1;
+contracts/modules/DegenerusGameLootboxModule.sol:561:        uint24 targetLevel = _rollTargetLevel(currentLevel, seed);
+contracts/modules/DegenerusGameLootboxModule.sol:584:            targetLevel,
+contracts/modules/DegenerusGameLootboxModule.sol:773:            uint256 priceWei = PriceLookupLib.priceForLevel(level + 1);
+contracts/modules/DegenerusGameLootboxModule.sol:877:        uint24 currentLevel = level + 1;
+contracts/modules/DegenerusGameLootboxModule.sol:884:        uint24 targetLevel = _rollTargetLevel(currentLevel, seed);
+contracts/modules/DegenerusGameLootboxModule.sol:897:            targetLevel,
+contracts/modules/DegenerusGameLootboxModule.sol:966:        uint24 currentLevel = level + 1;
+contracts/modules/DegenerusGameLootboxModule.sol:971:        uint24 targetLevel = _rollTargetLevel(currentLevel, seed);
+contracts/modules/DegenerusGameLootboxModule.sol:982:            targetLevel,
+contracts/modules/DegenerusGameLootboxModule.sol:1033:    ///      1` LIVE, `targetLevel = _rollTargetLevel(currentLevel, seed)` rolls from the LIVE
+contracts/modules/DegenerusGameLootboxModule.sol:1089:        uint24 currentLevel = level + 1;
+contracts/modules/DegenerusGameLootboxModule.sol:1090:        uint24 targetLevel = _rollTargetLevel(currentLevel, seed);
+contracts/modules/DegenerusGameLootboxModule.sol:1103:            targetLevel,
+contracts/modules/DegenerusGameLootboxModule.sol:1176:    /// @return targetLevel The rolled target level
+contracts/modules/DegenerusGameLootboxModule.sol:1180:    ) private pure returns (uint24 targetLevel) {
+contracts/modules/DegenerusGameLootboxModule.sol:1185:            targetLevel = baseLevel + uint24(farOffset + 5);
+contracts/modules/DegenerusGameLootboxModule.sol:1189:            targetLevel = baseLevel + uint24(nearOffset);
+contracts/modules/DegenerusGameLootboxModule.sol:1211:    /// @param targetLevel Target level for future tickets
+contracts/modules/DegenerusGameLootboxModule.sol:1251:        uint24 targetLevel,
+contracts/modules/DegenerusGameLootboxModule.sol:1287:        // Roll 1 settles at the caller-rolled `targetLevel` (from the primary seed).
+contracts/modules/DegenerusGameLootboxModule.sol:1291:            player, index, amountFirst, amount, targetLevel, seed,
+contracts/modules/DegenerusGameLootboxModule.sol:1293:            targetLevel >= currentLevel + 5, activityScore, allowEthSpin
+contracts/modules/DegenerusGameLootboxModule.sol:1401:    /// @param currentLevel Current game level (level + 1, threaded from the resolution caller)
+contracts/modules/DegenerusGameLootboxModule.sol:1426:        uint256 lazyPassValue = _lazyPassPriceForLevel(currentLevel + 1);
+contracts/modules/DegenerusGameLootboxModule.sol:1496:    /// @param currentLevel Current game level (level + 1, threaded from the caller)
+contracts/modules/DegenerusGameLootboxModule.sol:1507:        // currentLevel == level + 1, so this is the price at the stored `level`.
+contracts/modules/DegenerusGameLootboxModule.sol:1903:                // `targetLevel` records the level AT BOX-OPEN TIME for historical
+contracts/modules/DegenerusGameLootboxModule.sol:1907:                // `level + 1` here.
+contracts/modules/DegenerusGameLootboxModule.sol:1908:                emit LootBoxWhalePassJackpot(player, originalAmount, level + 1, WHALE_PASS_TICKETS_PER_LEVEL, 0, 0);

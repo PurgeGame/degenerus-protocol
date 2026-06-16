@@ -1,0 +1,49 @@
+# Level-Semantics Correctness Review
+
+## 1. Purchase Targets
+**Role:** Direct, whale, and afking ticket buys queue tickets for the active window.
+**Intended Level:** `_activeTicketLevel()` (or `jackpotPhaseFlag ? level : level + 1`).
+**Actual Level Used:**
+- Direct buys (`DegenerusGameMintModule.sol`): `jackpotPhaseFlag ? cachedLevel : cachedLevel + 1`. Matches intended.
+- Afking buys (`GameAfkingModule.sol`): `jackpotPhaseFlag ? level : level + 1`. Matches intended.
+- Pass buys (`DegenerusGameWhaleModule.sol`): Unconditionally uses a bare `level + 1`.
+**Divergence:** **Yes.** `DegenerusGameWhaleModule.sol` ignores the phase and targets `level + 1` for `_purchaseWhaleBundle` (line 147), `_purchaseLazyPass` (line 349), `_purchaseDeityPass` (line 440), and `claimWhalePass` (line 830). If purchased during the jackpot phase, these passes queue tickets starting at `level + 1`, completely skipping the current active ticket window (`level`), directly violating the rule that all ticket buys must target `_activeTicketLevel()`.
+
+## 2. Affiliate Leaderboard (Producer vs. Consumer Asymmetry)
+**Role:** Tracking and reading affiliate earnings across levels for the activity score bonus.
+**Intended Level:** The consumer (`affiliateBonusPointsBest`) should read the same level basis that the producers (`payAffiliate`, `claim`) write to.
+**Actual Level Used:**
+- **Producers:** `DegenerusGameMintModule.sol` routes `payAffiliate` to `cachedLevel + 1` (line 2068: `uint24 affiliateLevel = cachedLevel + 1`). `GameAfkingModule.sol`'s `claim()` writes to `afkingDrain.level() + 1` (line 1072). Both write to `L + 1`.
+- **Consumer:** `DegenerusAffiliate.sol`'s `affiliateBonusPointsBest` reads `currLevel - 1` down to `currLevel - 5` (line 489). Called by `DegenerusGameMintStreakUtils.sol:372` with `currLevel = level`.
+**Divergence:** **Yes.** A strict 1-level gap exists. Earnings generated during game level `L` are recorded in bucket `L + 1`. When the game advances to level `L + 1` and evaluates scores, `affiliateBonusPointsBest(L + 1)` reads buckets `L` down to `L - 4`. This completely misses bucket `L + 1` (which holds the fully completed earnings from level `L`).
+
+## 3. Mint Streak Basis
+**Role:** Validating manual mint streaks against the current target level during score computations.
+**Intended Level:** Mint streak is recorded against `_activeTicketLevel()`. The reader should compare against `streakBaseLevel = _activeTicketLevel()`.
+**Actual Level Used:**
+- Recording (`DegenerusGameMintModule.sol`): Sets `lastLevel` to `_activeTicketLevel()`. Matches intended.
+- Reading (Standard): `DegenerusGameMintStreakUtils.sol:372` uses `jackpotPhaseFlag ? currLevel : currLevel + 1`. Matches intended.
+- Reading (Afking): `GameAfkingModule.sol:677` hardcodes `streakBaseLevel` as `currentLevel + 1`.
+**Divergence:** **Yes.** In `GameAfkingModule.sol:677`, passing `currentLevel + 1` during the jackpot phase evaluates `currentMintLevel > lastCompleted + 1` as `currentLevel + 1 > lastCompleted + 1`. If an afking player's last manual buy was for `currentLevel - 1`, the check evaluates `currentLevel + 1 > (currentLevel - 1) + 1` (i.e., `currentLevel + 1 > currentLevel`), which is true. This silently zeroes their active manual mint streak, even though the current ticket window (`currentLevel`) is still open.
+
+## 4. Jackpot Accrual
+**Role:** Resolving the current level and accruing the next-level prize pool.
+**Intended Level:** Current level resolves; next-level accrues to `level + 1`.
+**Actual Level Used:** `DegenerusGameAdvanceModule.sol` freezes `nextPrizePool` into `levelPrizePool[newLevel - 1]`. For `newLevel = level + 1`, it writes to `levelPrizePool[level]`. `DegenerusGameJackpotModule.sol:1543` reads `levelPrizePool[lvl - 1]`.
+**Divergence:** None. The level offsets correctly align.
+
+## 5. Lootbox Resolution and EV-Cap
+**Role:** Tallying EV-caps and opening lootboxes at the correct target level.
+**Intended Level:** Open level and EV-cap key is `currentLevel + 1` during purchase. Far-future salvage distance `d = targetLevel - _activeTicketLevel()`.
+**Actual Level Used:**
+- EV-cap keys: `DegenerusGameMintModule.sol` uses `cachedLevel + 1`; `GameAfkingModule.sol` uses `currentLevel + 1`.
+- Salvage: `DegenerusGameMintStreakUtils.sol:178` (`_quoteFarFutureSwap`) correctly validates distance using `cl` passed from `_activeTicketLevel()`.
+**Divergence:** None. Keys correctly target the future opening level.
+
+## 6. Boundaries (Level 0, Century, GAMEOVER)
+**Role:** Edge cases for level 0, x00 levels, and GAMEOVER offsets.
+**Intended Level:** Safely handle `level == 0` without underflows; avoid decBucket aliasing at GAMEOVER.
+**Actual Level Used:**
+- Level 0: `_mintStreakEffectiveFromPacked` and `affiliateBonusPointsBest` return 0 early.
+- GAMEOVER (`DegenerusGameDecimatorModule.sol`): `runTerminalDecimatorJackpot` safely isolates offsets by writing to `decBucketOffsetPacked[lvl + 1]` (line 1066), which the consumer `terminalDecClaimable` correctly reads.
+**Divergence:** None. Handled safely.

@@ -1,0 +1,7 @@
+{
+  "label": "lvl",
+  "schema": "",
+  "models": ["gemini", "codex"],
+  "skipped": [],
+  "outputs": {"gemini": ".planning/phases/398-level-semantics/council/lvl.gemini.txt", "codex": ".planning/phases/398-level-semantics/council/lvl.codex.txt"}
+}

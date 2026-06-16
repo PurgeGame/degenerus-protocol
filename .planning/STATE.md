@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v64.0
 milestone_name: Recent-Changes Re-Audit + Level-Semantics Correctness Sweep
 status: planning
-last_updated: "2026-06-15T22:30:00.000Z"
-last_activity: 2026-06-15 -- v64.0 milestone STARTED (defining requirements + roadmap). Cross-model dual-net re-audit of the full post-v62 contract delta (77580320..HEAD; subject HEAD 78eb3dd2 to freeze at FOUNDATION) + whole-codebase lvl vs lvl+1 correctness sweep. Method = COUNCIL + CLAUDE dual-net per slice; posture = audit-only. Phase numbering continues 396 -> 397. NEXT = define REQUIREMENTS.md -> roadmapper.
+last_updated: "2026-06-15T23:30:00.000Z"
+last_activity: 2026-06-15 -- v64.0 phases 397 FOUNDATION + 398 LEVEL-SEMANTICS COMPLETE. 398 dual-net (council gemini+codex + Claude NET-2, 199-207 sites): 1 CONFIRMED LOW afking lootbox streak-basis off-by-one (convergent) FIXED; affiliate freshest-bucket exclusion USER BY-DESIGN; codex level-quest lead REFUTED; getPlayerPurchases INFO; whale/pass level+1 by-design. PLUS a USER-raised redemption BURNIE day+1 win-multiplier finding FIXED. Two fixes batch-committed 891f7a8f (subject de0e03d5 -> 402855e1). NEXT = 399 REWARD-MECHANICS.
 progress:
   total_phases: 9
-  completed_phases: 0
+  completed_phases: 2
   total_plans: 0
   completed_plans: 0
-  percent: 0
+  percent: 22
 ---
 
 # Project State
@@ -34,13 +34,13 @@ See: .planning/PROJECT.md (Current State + Current Milestone: v64.0 sections) + 
 
 ## Current Position
 
-Milestone: v64.0 — ▶ STARTED 2026-06-15. Recent-Changes Re-Audit + Level-Semantics Correctness Sweep.
-Phase: Not started (defining requirements + roadmap)
-Plan: —
-Status: Defining requirements → roadmap. Cross-model dual-net re-audit of the full post-v62 contract delta PLUS a whole-codebase `lvl` vs `lvl+1` correctness examination. Method = COUNCIL + CLAUDE dual-net per slice; posture = audit-only (a surfaced/adjudicated/skeptic-passed finding routes to a gated USER-hand-review fix; contract frozen in-milestone).
-Baseline = v62.0 closure subject `77580320`; subject = HEAD `78eb3dd2` (to byte-freeze at FOUNDATION/397). Surface = the full post-v62 delta `77580320..HEAD` (41 files, +4902/−3697, 33 commits). v63 dispositions carried as PRIORS (BURNIE-04 fixed, BURNIE-05 by-design, refuted HIGHs not re-litigated).
+Milestone: v64.0 — ▶ EXECUTING 2026-06-15. Recent-Changes Re-Audit + Level-Semantics Correctness Sweep.
+Phase: 397 FOUNDATION ✅ + 398 LEVEL-SEMANTICS ✅ COMPLETE → NEXT 399 REWARD-MECHANICS.
+Plan: dual-net per sweep (council gemini+codex NET-1 + Claude NET-2).
+Status: Method = COUNCIL + CLAUDE dual-net per slice; posture = audit-only (a surfaced/adjudicated/skeptic-passed finding routes to a gated USER-hand-review fix). 398 outcome: 1 CONFIRMED LOW (afking lootbox streak-basis off-by-one, convergent NET-2+gemini) FIXED; affiliate freshest-bucket exclusion USER BY-DESIGN ("no inter-level bullshit"); codex level-quest lead REFUTED (level+1 = filled level, gate satisfiable in purchase phase); getPlayerPurchases INFO; whale/pass level+1 by-design. PLUS a USER-raised redemption BURNIE day+1 win-multiplier finding (redeemer was paid face, not the holder's rewardPercent multiplier) FIXED. See `.planning/phases/398-level-semantics/398-FINDINGS.md`.
+Subject = re-frozen at `402855e1` (HEAD:contracts) after the batched fix `891f7a8f` (was `de0e03d5` at 397/398 sweep time; the 398 + redemption fixes moved it). Baseline = v62.0 closure `77580320`; surface `77580320..HEAD` (41 files). v63 dispositions carried as PRIORS. Remaining sweeps 399-405 run against `402855e1`.
 Phase numbering continues 396 → v64.0 starts at 397.
-Last activity: 2026-06-15 -- v64.0 milestone STARTED (PROJECT.md + STATE.md reset; defining REQUIREMENTS.md next).
+Last activity: 2026-06-15 -- 397 + 398 complete; 2 fixes batch-committed `891f7a8f` (redemption BURNIE multiplier + afking streak-basis), redemption 58/0 + afking 38/0 green.
 
 ---
 _Below: v63.0 phase-outcome log + accumulated context (historical; retained across the milestone switch)._
