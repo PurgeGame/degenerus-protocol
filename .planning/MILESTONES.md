@@ -1,5 +1,17 @@
 # Milestones
 
+## v65.0 Token Rename — BURNIE→FLIP + Stonk→DGNRS/sDGNRS (Shipped: 2026-06-16)
+
+Implementation milestone (not an audit): rebrand the protocol currency + equity tokens in the contracts repo, with **full FUNCTIONAL PARITY** (only names / selectors / metadata strings change, zero logic change). Baseline = v64.0 closure `891f7a8f`; rename commit `44642aba`; `origin/main` `4adcd5f4`. BROAD rebrand.
+
+**Renames:** `BurnieCoin`→`FLIP`, `BurnieCoinflip`→`Coinflip`, `IBurnieCoinflip`→`ICoinflip`; `DegenerusStonk`→`DGNRS`, `StakedDegenerusStonk`→`sDGNRS`, `IStakedDegenerusStonk`→`IsDGNRS` (Admin minimal→`IsDGNRSVotes` collision fix); `DGVB`→`DGVF`; `flipWindowOpen`→`ticketRedemptionOpen`. Strings: `"Burnies"`→`"Degenerus Gambling Token"`, `"BURNIE"`→`"FLIP"`, `"Degenerus Stonk"`→`"Degenerus Protocol Equity Token"` (+ staked). **KEEP:** creator persona `Burnie Degenerus`, the `burn` verb, the `coinflip`/`flip` action, `DGVE`, generic `coin`.
+
+**Phases (406-409):** 406 FOUNDATION ✅ (surface map from an 8-agent classification + deterministic engine `scripts/v65_flip_rename.py`, dry-run validated + idempotent) · 407 CONTRACT REFACTOR ✅ (31 contracts + 6 `.sol` renames; USER-approved batched commit) · 408 TESTS & SCRIPTS ✅ (107 files + 9 test renames + artifact-name deps) · 409 VERIFY ✅.
+
+**OUTCOME: forge 889/0/110 — byte-identical to baseline; hardhat baseline-parity; gas + 16.7M advanceGame ceiling + EIP-170 all hold.** Contract diff 31 files **1037+/1037− balanced** (proven name-only) + 15 file renames; full range 149 files +3205/−2848 across 5 commits. **Key wrinkle:** the rename tipped `_purchaseForWithCached` over the via_ir stack limit (a marginal function the warm caches had masked) → USER chose **`optimizer_runs` 200/50→1000** (lowers gas, fits EIP-170). An engine non-idempotency bug (collision rule) was found + fixed (Admin-scoped).
+
+**ARCHIVED** → `.planning/milestones/v65.0-{ROADMAP,REQUIREMENTS}.md` (live REQUIREMENTS.md removed; no phase dirs — executed hands-on). **Tag `v65.0`; PUSHED to origin/main.** **Follow-ups:** off-chain indexer/ABI re-vendor (selector/event/artifact changes — manifest in the surface map); the website/papers repo rename (separate); the 3 post-v64 contract commits (`eb8e91b2`/`ab1214c3`/`ff09d19b`) remain UNAUDITED.
+
 ## v64.0 Recent-Changes Re-Audit + Level-Semantics Correctness Sweep (Shipped: 2026-06-16)
 
 Cross-model dual-net (Gemini+Codex council + Claude Workflow) re-audit of the full post-v62 contract delta (`77580320..HEAD`, 41 files / +4902/−3697 / 33 commits) PLUS a whole-codebase `lvl` vs `lvl+1` correctness sweep. Posture = audit-only; subject byte-frozen `402855e1` @ `891f7a8f`.
