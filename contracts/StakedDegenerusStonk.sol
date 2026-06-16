@@ -870,21 +870,26 @@ contract StakedDegenerusStonk {
         // Full claim: clear the (player, day) slot entirely per SPEC-04 (d).
         delete pendingRedemptions[player][day];
 
-        // Contingent BURNIE escrow: the whole-token slice removed from sDGNRS's backing at submit is
-        // minted to the redeemer as a flip credit ONLY if the resolving day's (day + 1) coinflip won;
-        // a loss pays nothing (symmetric with the auto-rebuy carry zeroing for every holder on a
-        // losing flip). Read the ABSOLUTE day+1 result, never a resolve-time word — stall-correct.
-        // Post-gameOver BURNIE is worthless and skipped entirely. The slot is already cleared (CEI)
-        // and creditFlip makes no callback into this contract.
+        // Contingent BURNIE escrow: the whole-token slice removed from sDGNRS's backing at submit
+        // rides the resolving day's (day + 1) community coinflip exactly as a non-redeeming holder's
+        // backing would. A win pays the principal PLUS that day's win multiplier — principal +
+        // principal * rewardPercent% — the identical payout every holder's backing earns on the flip
+        // (the bonus is fresh flip credit; the flip is net-emissive — a losing flip deletes coin, a
+        // win mints it). A loss pays nothing (symmetric with the auto-rebuy carry zeroing for every
+        // holder on a losing flip). Read the ABSOLUTE day+1 result, never a resolve-time word —
+        // stall-correct. Post-gameOver BURNIE is worthless and skipped entirely. The slot is already
+        // cleared (CEI) and creditFlip makes no callback into this contract.
         uint256 burniePaid;
         if (!isGameOver && claim.burnieEscrow != 0) {
             // In a live game day + 1 is normally resolved by claim time (resolveRedemptionPeriod for
             // `day` runs on the advance that settles day + 1). `win` is true only on a resolved win;
             // a resolved loss — or an unresolved day in the narrow level-0 gameOver pre-latch window,
             // where day + 1's coinflip is never stored — reads false and correctly pays nothing.
-            (, bool burnieWon) = coinflip.getCoinflipDayResult(day + 1);
+            (uint16 rewardPercent, bool burnieWon) = coinflip.getCoinflipDayResult(day + 1);
             if (burnieWon) {
-                burniePaid = uint256(claim.burnieEscrow) * 1e18;
+                // Same win payout a held backing slice earns: principal + principal * rewardPercent%.
+                uint256 principal = uint256(claim.burnieEscrow) * 1e18;
+                burniePaid = principal + (principal * uint256(rewardPercent)) / 100;
                 coinflip.creditFlip(player, burniePaid);
             }
         }

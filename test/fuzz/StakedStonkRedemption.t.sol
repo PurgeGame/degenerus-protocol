@@ -1219,16 +1219,50 @@ contract StakedStonkRedemption is DeployProtocol {
         vm.prank(playerA);
         sdgnrs.claimRedemption(playerA, uint24(dayBurn));
 
-        // The escrow is minted to the redeemer as a flip credit (it now rides their own next flip).
+        // On a win the escrow earns the day+1 win multiplier (principal + principal*rewardPercent%),
+        // the same payout a held backing slice earns; rewardPercent=100 here -> 2x. The minted credit
+        // then rides the redeemer's own next flip.
         assertEq(
             coinflip.coinflipAmount(playerA) - redeemerStakeBefore,
-            escrowWei,
-            "win: redeemer must receive the escrowed BURNIE as a flip credit"
+            escrowWei * 2,
+            "win: redeemer must receive escrow + day+1 win multiplier (2x at rewardPercent=100)"
         );
         // Slot fully cleared (ETH + BURNIE).
         (uint96 evAfter, , uint96 escAfter) = sdgnrs.pendingRedemptions(playerA, uint24(dayBurn));
         assertEq(uint256(evAfter), 0, "win: ethValueOwed not cleared");
         assertEq(uint256(escAfter), 0, "win: burnieEscrow not cleared");
+    }
+
+    /// @notice Win-multiplier formula: on a winning resolving-day (day+1) coinflip the escrow pays
+    ///         principal + principal*rewardPercent% — the identical payout a non-redeeming holder's
+    ///         backing earns — not face. Pins the general formula at a non-trivial percent (78).
+    function testRedeemBurnieEscrowPaidWithDayPlus1WinMultiplier() public {
+        _seedRedemptionBacking(100 ether);
+        uint32 dayBurn = game.currentDayView();
+        _fundSdgnrsBurnie(SDGNRS_BURNIE_FUND);
+
+        _primeCurrentDayRng();
+        vm.prank(playerA);
+        sdgnrs.burn(1000 ether);
+        (, , uint96 escrowWhole) = sdgnrs.pendingRedemptions(playerA, uint24(dayBurn));
+        assertGt(uint256(escrowWhole), 0, "mult: escrow must be recorded at submit");
+        uint256 escrowWei = uint256(escrowWhole) * 1e18;
+
+        _advanceWallDay();
+        _resolveDay(dayBurn, 100);
+        _setRealDayResult(uint24(dayBurn) + 1, 78); // resolving-day coinflip WON at rewardPercent 78
+
+        uint256 redeemerStakeBefore = coinflip.coinflipAmount(playerA);
+        vm.prank(playerA);
+        sdgnrs.claimRedemption(playerA, uint24(dayBurn));
+
+        // principal + principal*78/100 (computed the same way the contract does).
+        uint256 expected = escrowWei + (escrowWei * 78) / 100;
+        assertEq(
+            coinflip.coinflipAmount(playerA) - redeemerStakeBefore,
+            expected,
+            "mult: redeemer must receive principal + principal*rewardPercent%"
+        );
     }
 
     /// @notice BURNIE-04 loss-path: on a LOSING resolving-day (day+1) coinflip, the escrowed slice

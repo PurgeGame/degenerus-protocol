@@ -874,7 +874,11 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
             uint256 activityScore = _playerActivityScore(
                 player,
                 _afkingStreak(sub, processDay),
-                currentLevel + 1
+                // Streak basis is the phase-correct active ticket level (== the level the manual mint
+                // streak is recorded against), NOT the EV-cap/resolver open level (currentLevel + 1):
+                // in jackpot phase those differ, and currentLevel + 1 would silently zero a streak
+                // whose lastCompleted == level - 1.
+                ticketTargetLevel
             );
             uint16 score = activityScore > type(uint16).max
                 ? type(uint16).max
