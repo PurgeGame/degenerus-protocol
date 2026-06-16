@@ -1,5 +1,7 @@
 # Requirements — v65.0 Token Rename (BURNIE→FLIP + Stonk→DGNRS/sDGNRS)
 
+> **✅ STATUS 2026-06-16: ALL APPLIED + COMMITTED `44642aba` (UNPUSHED).** CTR/STR/IDT/STK/KEEP/TST all satisfied (+ the follow-ons DGVB→DGVF, flipWindowOpen→ticketRedemptionOpen, optimizer_runs→1000). VER: forge 889/0/110 identical, hardhat baseline-parity, EIP-170 OK, gas+ceiling pass — parity proven (VER-01/02/03). **EXT-01 manifest** = the surface-map §6/§10/§11 external-impact lists (indexer re-vendor); finalize as a standalone doc if the indexer team wants it. Remaining: USER review+push, milestone close/archive.
+
 > Scope = this repo only (contracts + forge/JS tests + deploy scripts). Website/papers repo is separate (out of scope). **Two renames, both FULL/BROAD rebrand:** (1) currency `BURNIE`→`FLIP`; (2) equity tokens `DegenerusStonk`→`DGNRS` / `StakedDegenerusStonk`→`sDGNRS`. Authoritative surface: `.planning/v65-FLIP-RENAME-SURFACE-MAP.md`; engine `scripts/v65_flip_rename.py`. Hard invariant across all reqs: **full FUNCTIONAL PARITY — only names/selectors/metadata strings change, zero logic change.**
 
 ## Contract & file renames (CTR)
