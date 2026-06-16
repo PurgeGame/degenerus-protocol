@@ -1,26 +1,26 @@
 ---
 gsd_state_version: 1.0
-milestone: v63.0
-milestone_name: Post-v62 Audit (Critical Invariants + Reward Game-Theory)
-status: shipped
-last_updated: "2026-06-15T22:00:00.000Z"
-last_activity: 2026-06-15 -- v63.0 milestone COMPLETED (archived + tagged). Audit re-verified PASSED (gsd-audit-milestone: 58/58 reqs, 9/9 phases, integration PASS); archives written to .planning/milestones/v63.0-{ROADMAP,REQUIREMENTS,MILESTONE-AUDIT}; live REQUIREMENTS.md removed (fresh for next milestone); tag v63.0 -> 520c1d4e PUSHED to origin/main. The routed BURNIE-04 fix SHIPPED 98c4f049 (+CoinflipClaimState indexer event). NEXT = /gsd-new-milestone.
+milestone: v64.0
+milestone_name: Recent-Changes Re-Audit + Level-Semantics Correctness Sweep
+status: planning
+last_updated: "2026-06-15T22:30:00.000Z"
+last_activity: 2026-06-15 -- v64.0 milestone STARTED (defining requirements + roadmap). Cross-model dual-net re-audit of the full post-v62 contract delta (77580320..HEAD; subject HEAD 78eb3dd2 to freeze at FOUNDATION) + whole-codebase lvl vs lvl+1 correctness sweep. Method = COUNCIL + CLAUDE dual-net per slice; posture = audit-only. Phase numbering continues 396 -> 397. NEXT = define REQUIREMENTS.md -> roadmapper.
 progress:
-  total_phases: 17
-  completed_phases: 9
-  total_plans: 25
-  completed_plans: 25
-  percent: 100
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
 
 # Project State
 
 ## Project Reference
 
-See: .planning/PROJECT.md (Current State section) + .planning/MILESTONES.md (v63.0 entry, top). **v63.0 ARCHIVED 2026-06-15** → .planning/milestones/v63.0-{ROADMAP,REQUIREMENTS,MILESTONE-AUDIT}.md (phase dirs kept in .planning/phases/388-396 — archive retroactively via /gsd-cleanup; the BURNIE-04 fix-design docs under 392-entropy-and-econ/ are still referenced). Canonical v63 deliverable audit/FINDINGS-v63.0.md (chmod 444) + AUDIT-V63-REPORT.html. v63 baseline = v62.0 closure subject `77580320`; v63 audit subject byte-frozen `a8b702a7` (contracts tree `2934d3d8`); post-close BURNIE-04 fix moved the subject to `520c1d4e` (contracts tree `3264a4f8`). The live REQUIREMENTS.md was removed at close (fresh one comes with the next milestone). **NEXT = /gsd-new-milestone.**
+See: .planning/PROJECT.md (Current State + Current Milestone: v64.0 sections) + .planning/MILESTONES.md. **v64.0 ACTIVE 2026-06-15** — recent-changes re-audit + level-semantics sweep. Baseline = v62.0 closure subject `77580320`; subject = HEAD `78eb3dd2` (to byte-freeze at FOUNDATION/397); surface = the full post-v62 delta `77580320..HEAD` (41 files, +4902/−3697, 33 commits). v63.0 ARCHIVED 2026-06-15 → .planning/milestones/v63.0-{ROADMAP,REQUIREMENTS,MILESTONE-AUDIT}.md (v63 dispositions carried as PRIORS: BURNIE-04 fixed `98c4f049`, BURNIE-05 by-design, refuted HIGHs); v63 phase dirs kept in .planning/phases/388-396 (archive retroactively via /gsd-cleanup). REQUIREMENTS.md + ROADMAP.md (v64.0) defined during this milestone init.
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Current focus:** v63.0 SHIPPED + ARCHIVED + TAGGED (`v63.0` → `520c1d4e`), PUSHED to origin/main. The routed BURNIE-04 gated fix is DONE (shipped `98c4f049`, +CoinflipClaimState event, 864/0/110, 0 HIGH/MED on review). No open v63 work. NEXT = /gsd-new-milestone (fresh requirements + roadmap).
+**Current focus:** v64.0 STARTING — defining REQUIREMENTS.md → roadmapper. Cross-model dual-net re-audit of the full post-v62 contract delta + a whole-codebase `lvl` vs `lvl+1` correctness examination. Method = COUNCIL + CLAUDE dual-net per slice; posture = audit-only (findings → gated USER-hand-review fix; contract frozen in-milestone).
 
 ## ⚠ v50.0 + v51.0 AUDIT DEBT → FOLDED INTO v63.0 Phase 394 LEGACY-DEBT (USER 2026-06-14; was a separate v52 track)
 
@@ -34,14 +34,16 @@ See: .planning/PROJECT.md (Current State section) + .planning/MILESTONES.md (v63
 
 ## Current Position
 
-Milestone: v63.0 — ✅ SHIPPED 2026-06-15. Post-v62 Audit (Critical Invariants + Reward Game-Theory).
-Phase: 396 (TERMINAL) — ✅ COMPLETE (3/3 plans)
-Plan: 3 of 3 (TERM-01/-02/-03 all complete)
-Status: v63.0 COMPLETED — closure signal `MILESTONE_V63_AT_HEAD_a8b702a73e34ab7fd87008cdc830a7e90c54a9f5` emitted; all 58 reqs re-attested; milestone audit re-verified PASSED; archived to .planning/milestones/v63.0-*; tagged `v63.0` → `520c1d4e`; PUSHED to origin/main. The routed BURNIE-04 fix shipped post-close (`98c4f049`). NEXT = /gsd-new-milestone.
-Baseline = v62.0 closure subject `77580320`; subject byte-frozen `a8b702a7` through close (pin = `contracts` tree `2934d3d8987a09c5f073549a0cb499f6c5f28620` == `HEAD:contracts`; `git diff a8b702a7 -- contracts/` empty).
-Method = COUNCIL + CLAUDE both; posture = audit-only (the sole CONFIRMED finding BURNIE-04 MED routed to a SEPARATE gated post-audit USER-hand-review fix, NOT applied in-milestone).
-Outcome = 0 CATASTROPHE/0 HIGH; 1 bounded MED (BURNIE-04 redemption-backing under-credit, CONSERVATIVE, off the ETH spine) routed; BURNIE-05 USER BY-DESIGN/WONTFIX; R-389-01 + 7 mutation survivors KILLED-by-regression; the 4 refuted-HIGH candidates survived the council-on-refuted re-run + remain REFUTED. Canonical deliverable `audit/FINDINGS-v63.0.md` (chmod 444) + `AUDIT-V63-REPORT.html`; closure record `.planning/phases/396-terminal/396-CLOSURE.md`.
-Last activity: 2026-06-15 -- Phase 396 Plan 03 (TERM-03) complete — v63.0 SHIPPED
+Milestone: v64.0 — ▶ STARTED 2026-06-15. Recent-Changes Re-Audit + Level-Semantics Correctness Sweep.
+Phase: Not started (defining requirements + roadmap)
+Plan: —
+Status: Defining requirements → roadmap. Cross-model dual-net re-audit of the full post-v62 contract delta PLUS a whole-codebase `lvl` vs `lvl+1` correctness examination. Method = COUNCIL + CLAUDE dual-net per slice; posture = audit-only (a surfaced/adjudicated/skeptic-passed finding routes to a gated USER-hand-review fix; contract frozen in-milestone).
+Baseline = v62.0 closure subject `77580320`; subject = HEAD `78eb3dd2` (to byte-freeze at FOUNDATION/397). Surface = the full post-v62 delta `77580320..HEAD` (41 files, +4902/−3697, 33 commits). v63 dispositions carried as PRIORS (BURNIE-04 fixed, BURNIE-05 by-design, refuted HIGHs not re-litigated).
+Phase numbering continues 396 → v64.0 starts at 397.
+Last activity: 2026-06-15 -- v64.0 milestone STARTED (PROJECT.md + STATE.md reset; defining REQUIREMENTS.md next).
+
+---
+_Below: v63.0 phase-outcome log + accumulated context (historical; retained across the milestone switch)._
 391 outcome: BOTH NETS on record for RNG-01..06 + FC-391-01..05 + FC-389-05/FC-392-11; **0 CONFIRMED contract findings — the DOMINANT freeze/manipulability class is clean; RNG-01..06 attested at `a8b702a7`.** NET 2 ran independently (per-consumer backward-trace to the commitment point + the dedicated decimator random-oracle distribution argument + the RNG-04 cross-round skeptic dual-gate + the RNG-05 day-boundary divergence bound + the RNG-06 in-window SLOAD enumeration over slots 10/34/35+dailyIdx), council folded after. **RNG-04 cross-round `uint32` decimator claim-seed collision (codex INFO/LOW vs gemini SOUND) RESOLVED = REFUTED-as-break, benign INFO/LOW** (skeptic dual-gate: not grindable [word VRF-fixed after address commitment], no value extraction [magnitude set by independent `amount`, off the ETH spine], ~10^-5 reachability — reconciles both models). **RNG-02/FC-391-04 decimator distribution = REFUTED (unbiased + non-grindable)** by a real keccak random-oracle argument over the winner population; the missing distribution oracle ROUTED as a test-hardening item (NOT a contract change). FC-389-05 STORAGE-half → 389; FC-392-11 backing/EV-dynamics half → 392. Subject byte-frozen throughout (`git diff a8b702a7 -- contracts/` empty). Deliverables `391-FINDINGS.md` + `391-02-CLAUDE-NET.md`.
 392-01 outcome: **NET 1 (cross-model council) ON RECORD for the ECON slice** (ECON-01..06 + owned FC-392 reward-economics leads). Neutral prompt `392-01-COUNCIL-PROMPT-ECON.md` (money-pump search + whale-half-pass channel + redemption ETH-spin value-extraction charged hard; design-intent anchor + bounded-accrual sweep encoded) fanned via `council.sh --label econ`. **gemini on record** (2 HIGH candidates + ECON-02/05/01 VERIFIED SOUND); **codex skipped** (hard usage-limit cap, recorded in `skipped[]`+`skip_reasons` → opportunistic post-reset re-run at 392-03/396). Gemini's 2 HIGH candidates routed RAW to 392-03 for the skeptic dual-gate vs frozen source: (1) PRIORITY — claimed positive-EV money pump = 100% neutral-EV lootbox floor + 10% recycle kicker (needs per-leg accounting: flip-credit illiquidity + sub-100% direct box EV + claimable-won-first); (2) streak-pump via afking↔manual same-day toggle (needs the frozen `_questCompleteWithPair` afking slot-0-skip + decay anchors re-read + magnitude lens — ceilings FIXED, so ramp-speed gaming not a breach). Non-prime charged targets (whale-pass acquisition-cost quant, redemption ETH-spin value-extraction, EV-cap-bound, ramp/comment/sentinel, affiliate composition) received no explicit council verdict → carried Claude-net-primary to 392-03. Subject byte-frozen throughout (`git diff a8b702a7 -- contracts/` empty; stray gemini repro artifact outside subject removed). Deliverables `392-01-COUNCIL-PROMPT-ECON.md` + `392-01-COUNCIL-NET.md` + `council/econ.*`.
 392-02 outcome: **NET 1 (cross-model council) ON RECORD for the BURNIE/coinflip-rework slice** (BURNIE-01..06 + owned FC-392-16..20 + cross-ref FC-392-11/-12/-13). Neutral prompt `392-02-COUNCIL-PROMPT-BURNIE.md` (307 lines; the two prime backing leads FC-392-16 carry-excluded-from-redemption-backing + FC-392-17 VAULT seed 30-day window-aging charged HARD as dedicated CONFIRM/REFUTE/BY-DESIGN targets demanding the backing accounting traced; survive-before-mint + emission-conservation + off-the-ETH-spine + intended-variance-trade doctrine encoded) fanned via `council.sh --label burnie`. **gemini on record** with a substantive traced audit: **two FINDINGS landing EXACTLY on the two prime targets** — PRIME-01/BURNIE-04/FC-392-16 (sDGNRS auto-rebuy carry stranded from redemption backing — `autoRebuyCarry` invisible to `previewClaimCoinflips` + the `redeemBurnieShare` consume waterfall, progressive under-credit, no liquidation path, "black hole for value") + PRIME-02/BURNIE-05/FC-392-17 (VAULT seed window-aging — day-1-20 ~half-of-4M seed silently+unrecoverably forfeited if not claimed within the 30-day `COIN_CLAIM_FIRST_DAYS` window; no VAULT auto-claim safety net unlike sDGNRS); **VERIFIED SOUND** on BURNIE-01 (survive-before-mint), BURNIE-02 (emission conservation 8M-stake/~4M-EV vs removed 2M+2M), BURNIE-03 (latch monotonicity), BURNIE-06 (packed-lane round-trip + off-spine). **codex skipped** (same hard usage-limit cap as 392-01, recorded in `skipped[]` → opportunistic post-reset re-run at 392-04/396). Both prime FINDINGS routed RAW to 392-04 for the skeptic dual-gate + a design-intent-vs-defect disposition (the intended variance trade + BURNIE "worthless except the whale pass" bounds severity to under-credit/strand or lost-emission, NOT ETH insolvency — but a confirmed under-credit/lost-emission window is still value-bearing). Cross-ref + LOW/INFO leads (FC-392-11 loss-sequence backing / FC-392-13 carry settle double-count / FC-392-18/-19/-12/-20) received no explicit gemini verdict → carried Claude-net-primary to 392-04. Subject byte-frozen throughout (`git diff a8b702a7 -- contracts/` empty; gemini's claimed `BURNIE-AUDIT-REPORT.md` write blocked by read-only mode — never landed; no stray files). Deliverables `392-02-COUNCIL-PROMPT-BURNIE.md` + `392-02-COUNCIL-NET.md` + `council/burnie.*`.
