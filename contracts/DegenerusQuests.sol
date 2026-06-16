@@ -155,7 +155,16 @@ contract DegenerusQuests is IDegenerusQuests {
     uint256 private constant QUEST_SLOT0_REWARD = 100 ether;
 
     /// @dev Fixed reward for the random (slot 1) quest.
-    uint256 private constant QUEST_RANDOM_REWARD = 200 ether;
+    uint256 private constant QUEST_RANDOM_REWARD = 100 ether;
+
+    /// @dev Milestone streak-shield grant: +1 shield each time the quest streak reaches a
+    ///      new multiple of this interval (100, 200, …). Idempotent via shieldCenturyHighWater.
+    uint16 private constant CENTURY_SHIELD_INTERVAL = 100;
+
+    /// @dev Held-balance cap for the century milestone grant: the milestone path never lifts a
+    ///      player's streakShield above this. Other shield sources (lootbox/deity boons) are
+    ///      unaffected and keep their own uint8-saturating semantics.
+    uint8 private constant CENTURY_SHIELD_MAX_HELD = 10;
 
     /// @dev Quest type: mint tickets using ETH.
     uint8 private constant QUEST_TYPE_MINT_ETH = 1;
@@ -278,6 +287,7 @@ contract DegenerusQuests is IDegenerusQuests {
         uint16 progress1;          // Slot 1: accumulated progress in stored units
         uint8 completionMask;      // Bits 0-1: per-slot completion (deduped once-per-day; every completion credits the streak)
         uint8 streakShield;        // Stackable quest-streak shields, consumed on missed days to preserve streak
+        uint8 shieldCenturyHighWater; // Highest streak-century credited a milestone shield this run; re-arms down on a streak reset so a genuine re-climb re-earns, while preventing double-credit of a century already passed within the run
     }
 
     // =========================================================================
@@ -418,6 +428,7 @@ contract DegenerusQuests is IDegenerusQuests {
         uint32 updated = uint32(prevStreak) + uint32(amount);
         uint16 newStreak = updated > type(uint16).max ? type(uint16).max : uint16(updated);
         state.streak = newStreak;
+        _grantCenturyShield(player, state);
 
         uint24 currentDay24 = uint24(currentDay);
         if (state.lastActiveDay < currentDay24) {
@@ -443,6 +454,33 @@ contract DegenerusQuests is IDegenerusQuests {
         uint8 newShield = updated > type(uint8).max ? type(uint8).max : uint8(updated);
         state.streakShield = newShield;
         emit QuestStreakShieldGranted(player, amount, newShield);
+    }
+
+    /// @dev Milestone streak-shield grant. Called after every write to `state.streak`: each
+    ///      newly-reached streak-century (100, 200, …) grants +1 shield, but never lifts the held
+    ///      balance above CENTURY_SHIELD_MAX_HELD — a player already at or above the cap gets
+    ///      nothing. `shieldCenturyHighWater` tracks the highest century already credited and
+    ///      re-arms DOWN when the streak drops below it (a reset/decay), so a player who loses the
+    ///      streak and genuinely re-climbs earns each century marker again. Within a run it prevents
+    ///      double-crediting a century already passed. Reuses streakShield consumed in `_questSyncState`.
+    function _grantCenturyShield(address player, PlayerQuestState storage state) private {
+        uint256 century = uint256(state.streak) / CENTURY_SHIELD_INTERVAL;
+        uint256 highWater = state.shieldCenturyHighWater;
+        if (century < highWater) {
+            state.shieldCenturyHighWater = uint8(century);
+            return;
+        }
+        if (century == highWater) return;
+        uint256 owed = century - highWater;
+        state.shieldCenturyHighWater = century > type(uint8).max ? type(uint8).max : uint8(century);
+        uint256 held = state.streakShield;
+        if (held >= CENTURY_SHIELD_MAX_HELD) return;
+        uint256 granted = held + owed > CENTURY_SHIELD_MAX_HELD
+            ? CENTURY_SHIELD_MAX_HELD - held
+            : owed;
+        uint8 newShield = uint8(held + granted);
+        state.streakShield = newShield;
+        emit QuestStreakShieldGranted(player, uint16(granted), newShield);
     }
 
     /**
@@ -506,6 +544,7 @@ contract DegenerusQuests is IDegenerusQuests {
             ? earnedStreak
             : 0;
         state.streak = finalStreak > type(uint16).max ? type(uint16).max : uint16(finalStreak);
+        _grantCenturyShield(player, state);
         uint24 d = lastValid;
         state.lastActiveDay = d;
         state.lastCompletedDay = d;
@@ -1461,6 +1500,7 @@ contract DegenerusQuests is IDegenerusQuests {
             }
         }
         if (prevStreak != 0 && state.streak == 0) {
+            state.shieldCenturyHighWater = 0; // streak broke — re-arm so a genuine re-climb re-earns each century shield
             emit QuestStreakReset(player, prevStreak, currentDay);
         }
         uint24 currentDay24 = uint24(currentDay);
@@ -1765,6 +1805,7 @@ contract DegenerusQuests is IDegenerusQuests {
                 newStreak += 1;
             }
             state.streak = uint16(newStreak);
+            _grantCenturyShield(player, state);
             if (slot == 0) {
                 state.lastCompletedDay = questDay24;
             }
@@ -2083,6 +2124,7 @@ contract DegenerusQuests is IDegenerusQuests {
                 questGame.recordAfkingSecondary(player);
             } else if (qs.streak < type(uint16).max) {
                 qs.streak = qs.streak + 1;
+                _grantCenturyShield(player, qs);
             }
 
             coinflip.creditFlip(player, 800 ether);
