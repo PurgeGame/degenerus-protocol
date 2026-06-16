@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.34;
 
-import {IStakedDegenerusStonk} from "../interfaces/IStakedDegenerusStonk.sol";
+import {IsDGNRS} from "../interfaces/IsDGNRS.sol";
 import {DegenerusGameStorage} from "../storage/DegenerusGameStorage.sol";
 import {BitPackingLib} from "../libraries/BitPackingLib.sol";
 import {PriceLookupLib} from "../libraries/PriceLookupLib.sol";
@@ -12,9 +12,9 @@ import {PriceLookupLib} from "../libraries/PriceLookupLib.sol";
  * @notice Delegate-called module handling claimBingo color-completion claims (v51.0).
  * @dev A player who owns one post-RNG-resolved ticket entry in each of the 8 color
  *      buckets of a single symbol on a level may claim a tiered reward:
- *        - regular         (0.05% Pool.Reward + 1_000e18 BURNIE),
- *        - symbol-first     (additive: 0.1% + 2_000e18 BURNIE),
- *        - quadrant-first   (replacement: 0.5% + 5_000e18 BURNIE, suppresses symbol bonus).
+ *        - regular         (0.05% Pool.Reward + 1_000e18 FLIP),
+ *        - symbol-first     (additive: 0.1% + 2_000e18 FLIP),
+ *        - quadrant-first   (replacement: 0.5% + 5_000e18 FLIP, suppresses symbol bonus).
  *      All storage reads/writes operate on the inherited DegenerusGameStorage layout.
  *      claimBingo is a strict READ-ONLY consumer of traitBurnTicket — it adds NO write
  *      to it (RNG-freeze-safe per 339-BINGO06-FREEZE-PROOF). The only state it writes is
@@ -52,21 +52,21 @@ contract DegenerusGameBingoModule is DegenerusGameStorage {
     /// @dev Quadrant-first sDGNRS: 0.5% REPLACEMENT (supersedes regular + symbol bonus).
     uint256 internal constant FIRST_QUADRANT_DGNRS_BPS = 50;
 
-    /// @dev Baseline BURNIE flip credit.
-    uint256 internal constant REGULAR_BURNIE = 1_000e18;
-    /// @dev Symbol-first bonus BURNIE: ADDED to regular (-> 2_000e18 total).
-    uint256 internal constant FIRST_SYMBOL_BONUS_BURNIE = 1_000e18;
-    /// @dev Quadrant-first BURNIE: REPLACES regular + symbol bonus.
-    uint256 internal constant FIRST_QUADRANT_BURNIE = 5_000e18;
+    /// @dev Baseline FLIP flip credit.
+    uint256 internal constant REGULAR_FLIP = 1_000e18;
+    /// @dev Symbol-first bonus FLIP: ADDED to regular (-> 2_000e18 total).
+    uint256 internal constant FIRST_SYMBOL_BONUS_FLIP = 1_000e18;
+    /// @dev Quadrant-first FLIP: REPLACES regular + symbol bonus.
+    uint256 internal constant FIRST_QUADRANT_FLIP = 5_000e18;
 
     // -------------------------------------------------------------------------
     // claimAffiliateDgnrs constants
     // -------------------------------------------------------------------------
 
-    /// @dev Bonus BURNIE flip credit for deity pass affiliate claims (20% of payout).
+    /// @dev Bonus FLIP flip credit for deity pass affiliate claims (20% of payout).
     uint16 private constant AFFILIATE_DGNRS_DEITY_BONUS_BPS = 2000;
 
-    /// @dev Max deity bonus per level, denominated in ETH (converted to BURNIE at current price).
+    /// @dev Max deity bonus per level, denominated in ETH (converted to FLIP at current price).
     uint256 private constant AFFILIATE_DGNRS_DEITY_BONUS_CAP_ETH = 5 ether;
 
     /// @dev Minimum affiliate score (approx 10 ETH of referral volume).
@@ -87,7 +87,7 @@ contract DegenerusGameBingoModule is DegenerusGameStorage {
         address indexed player,
         uint256 level,
         uint8 symbol,
-        uint256 burnieReward,
+        uint256 flipReward,
         uint256 dgnrsPaid
     );
 
@@ -161,41 +161,41 @@ contract DegenerusGameBingoModule is DegenerusGameStorage {
         bool isSymbolFirst = (fs & sMask) == 0;
 
         uint256 dgnrsBps;
-        uint256 burnie;
+        uint256 flip;
         if (isQuadrantFirst) {
             // BOTH bits — closes the double-pay window — in one packed write
             bingoFirsts[level] =
                 uint64(uint32(fs | sMask)) |
                 (uint64(uint8(fq | qMask)) << 32);
             dgnrsBps = FIRST_QUADRANT_DGNRS_BPS;
-            burnie = FIRST_QUADRANT_BURNIE;
+            flip = FIRST_QUADRANT_FLIP;
             emit FirstQuadrantBingo(msg.sender, level, symbol);
         } else if (isSymbolFirst) {
             // mark only the symbol bit, preserving the co-resident quadrant mask
             bingoFirsts[level] = (bf & ~uint64(0xFFFFFFFF)) | uint64(fs | sMask);
             dgnrsBps = REGULAR_DGNRS_BPS + FIRST_SYMBOL_BONUS_DGNRS_BPS;
-            burnie = REGULAR_BURNIE + FIRST_SYMBOL_BONUS_BURNIE;
+            flip = REGULAR_FLIP + FIRST_SYMBOL_BONUS_FLIP;
             emit FirstSymbolBingo(msg.sender, level, symbol);
         } else {
             dgnrsBps = REGULAR_DGNRS_BPS;
-            burnie = REGULAR_BURNIE;
+            flip = REGULAR_FLIP;
         }
 
         // ---- Interactions (after all effects) ----
         // sDGNRS draw: transferFromPool clamps to the available Reward pool and
         // returns the actual amount paid. An empty/0 pool is a graceful no-op
-        // (dgnrsPaid == 0, no revert; bits stay set and BURNIE is still credited).
-        uint256 poolBal = dgnrs.poolBalance(IStakedDegenerusStonk.Pool.Reward);
+        // (dgnrsPaid == 0, no revert; bits stay set and FLIP is still credited).
+        uint256 poolBal = dgnrs.poolBalance(IsDGNRS.Pool.Reward);
         uint256 dgnrsPaid = dgnrs.transferFromPool(
-            IStakedDegenerusStonk.Pool.Reward,
+            IsDGNRS.Pool.Reward,
             msg.sender,
             (poolBal * dgnrsBps) / 10_000
         );
 
-        // BURNIE flip credit (always paid; tier amount is always non-zero).
-        coinflip.creditFlip(msg.sender, burnie);
+        // FLIP flip credit (always paid; tier amount is always non-zero).
+        coinflip.creditFlip(msg.sender, flip);
 
-        emit BingoClaimed(msg.sender, level, symbol, burnie, dgnrsPaid);
+        emit BingoClaimed(msg.sender, level, symbol, flip, dgnrsPaid);
     }
 
     // -------------------------------------------------------------------------
@@ -238,7 +238,7 @@ contract DegenerusGameBingoModule is DegenerusGameStorage {
         if (reward == 0) revert E();
 
         uint256 paid = dgnrs.transferFromPool(
-            IStakedDegenerusStonk.Pool.Affiliate,
+            IsDGNRS.Pool.Affiliate,
             player,
             reward
         );

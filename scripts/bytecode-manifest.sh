@@ -13,9 +13,9 @@ cd "$(dirname "$0")/.."
 
 MANIFEST=".bytecode-manifest"
 CONTRACTS=(
-  BurnieCoin BurnieCoinflip DegenerusAdmin DegenerusAffiliate DegenerusDeityPass
-  DegenerusGame DegenerusJackpots DegenerusQuests DegenerusStonk DegenerusTraitUtils
-  DegenerusVault DeityBoonViewer GNRUS Icons32Data StakedDegenerusStonk
+  FLIP Coinflip DegenerusAdmin DegenerusAffiliate DegenerusDeityPass
+  DegenerusGame DegenerusJackpots DegenerusQuests DGNRS DegenerusTraitUtils
+  DegenerusVault DeityBoonViewer GNRUS Icons32Data sDGNRS
   WrappedWrappedXRP DegenerusGameAdvanceModule DegenerusGameBingoModule
   DegenerusGameBoonModule DegenerusGameDecimatorModule DegenerusGameDegeneretteModule
   DegenerusGameGameOverModule DegenerusGameJackpotModule DegenerusGameLootboxModule

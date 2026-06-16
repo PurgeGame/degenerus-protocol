@@ -6,7 +6,7 @@ import {VRFHandler} from "../helpers/VRFHandler.sol";
 import {VaultHandler} from "../handlers/VaultHandler.sol";
 import {GameHandler} from "../handlers/GameHandler.sol";
 import {DegenerusVault} from "../../../contracts/DegenerusVault.sol";
-import {BurnieCoin} from "../../../contracts/BurnieCoin.sol";
+import {FLIP} from "../../../contracts/FLIP.sol";
 import {SolvencyObligations} from "../helpers/SolvencyObligations.sol";
 
 /// @title VaultShareMathInvariant -- Proves vault share math consistency under deposit/withdraw
@@ -17,7 +17,7 @@ import {SolvencyObligations} from "../helpers/SolvencyObligations.sol";
 ///         Invariants tested:
 ///         1. After any burn, share supply decreases by exactly the burned amount
 ///         2. ETH received from burnEth <= vault ETH+stETH balance before burn
-///         3. BURNIE received from burnCoin <= vault BURNIE reserve before burn
+///         3. FLIP received from burnCoin <= vault FLIP reserve before burn
 ///         4. Refill mechanism: supply never reaches zero (always >= REFILL_SUPPLY after full burn)
 ///         5. No rounding exploit: burning 1 share never yields more than proportional assets
 contract VaultShareMathInvariant is DeployProtocol {
@@ -56,7 +56,7 @@ contract VaultShareMathInvariant is DeployProtocol {
         assertGe(vaultBal, 0, "Vault ETH balance underflow (impossible but sanity check)");
     }
 
-    /// @notice BurnieCoin supply consistency still holds after vault burn operations
+    /// @notice FLIP supply consistency still holds after vault burn operations
     /// @dev The fundamental identity: totalSupply + vaultMintAllowance == supplyIncUncirculated
     function invariant_coinSupplyConsistencyAfterVaultOps() public view {
         uint256 total = coin.totalSupply();
@@ -66,7 +66,7 @@ contract VaultShareMathInvariant is DeployProtocol {
         assertEq(
             total + allowance,
             combined,
-            "VaultShareMath: BurnieCoin supply consistency violated after vault operations"
+            "VaultShareMath: FLIP supply consistency violated after vault operations"
         );
     }
 

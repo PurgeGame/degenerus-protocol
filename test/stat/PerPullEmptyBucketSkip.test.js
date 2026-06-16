@@ -54,7 +54,7 @@
 // from the helper's deterministic share-math:
 //
 //   baseAmount = coinBudget / cap                   // cap = 50
-//   extra      = coinBudget % cap                   // typically 0 (BURNIE values divide cleanly)
+//   extra      = coinBudget % cap                   // typically 0 (FLIP values divide cleanly)
 //   per-pull amount_i = baseAmount + (cursor_i < extra ? 1 : 0)
 //
 // Across all 50 i, the sum of (cursor_i < extra ? 1 : 0) is exactly extra
@@ -71,7 +71,7 @@
 //                + (extra - count(emitted amount == baseAmount + 1))
 //   where count(emitted amount == baseAmount + 1) <= extra always.
 //
-// In particular when extra == 0 (the common case — BURNIE wei divides cleanly
+// In particular when extra == 0 (the common case — FLIP wei divides cleanly
 // by cap = 50), the full underspend is exactly:
 //   underspend = baseAmount * skippedPulls
 // and underspendRatio = skippedPulls / cap = per-call skipRate. The assertion
@@ -152,11 +152,11 @@ async function driveOneDailyCycle(
   return receipts;
 }
 
-// Harvest JackpotBurnieWin events from a list of receipts and return them
+// Harvest JackpotFlipWin events from a list of receipts and return them
 // flat (in transaction-emission order). The helper emits only with lvl in
 // [minLevel, maxLevel] per the call's range, so the call-B emit subset can
 // be filtered by lvl >= 2.
-function harvestJackpotBurnieWinEvents(receipts, jackpotInterface) {
+function harvestJackpotFlipWinEvents(receipts, jackpotInterface) {
   const events = [];
   for (const { receipt } of receipts) {
     for (const log of receipt.logs) {
@@ -165,7 +165,7 @@ function harvestJackpotBurnieWinEvents(receipts, jackpotInterface) {
           topics: log.topics,
           data: log.data,
         });
-        if (parsed && parsed.name === "JackpotBurnieWin") {
+        if (parsed && parsed.name === "JackpotFlipWin") {
           events.push({
             lvl: Number(parsed.args.level),
             traitId: Number(parsed.args.traitId),
@@ -173,7 +173,7 @@ function harvestJackpotBurnieWinEvents(receipts, jackpotInterface) {
           });
         }
       } catch {
-        // Not a JackpotBurnieWin event — skip.
+        // Not a JackpotFlipWin event — skip.
       }
     }
   }
@@ -283,7 +283,7 @@ describe("STAT-03 — empty-bucket skip rate and cumulative underspend over N>=5
       // single bucket is non-empty -> 50/50 emit) or all skip (single bucket
       // empty -> 0/50 emit), which conflates the empty-bucket skip rate with
       // single-bucket emptiness.
-      const allEvents = harvestJackpotBurnieWinEvents(
+      const allEvents = harvestJackpotFlipWinEvents(
         receipts,
         jackpotInterface,
       );
@@ -320,7 +320,7 @@ describe("STAT-03 — empty-bucket skip rate and cumulative underspend over N>=5
     expect(
       callsWithEvents >= Math.floor(N_CALLS / 2),
       `STAT-03 fixture sparse: only ${callsWithEvents}/${N_CALLS} calls produced ` +
-      `JackpotBurnieWin events — drive cycle did not reach the daily-RNG branch ` +
+      `JackpotFlipWin events — drive cycle did not reach the daily-RNG branch ` +
       `for the majority of iterations. Investigate fixture state.`,
     ).to.be.true;
 

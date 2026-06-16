@@ -2,9 +2,9 @@
 pragma solidity 0.8.34;
 
 import {IDegenerusCoin} from "../interfaces/IDegenerusCoin.sol";
-import {IBurnieCoinflip} from "../interfaces/IBurnieCoinflip.sol";
+import {ICoinflip} from "../interfaces/ICoinflip.sol";
 import {IDegenerusGame} from "../interfaces/IDegenerusGame.sol";
-import {IStakedDegenerusStonk} from "../interfaces/IStakedDegenerusStonk.sol";
+import {IsDGNRS} from "../interfaces/IsDGNRS.sol";
 import {IStETH} from "../interfaces/IStETH.sol";
 
 import {IDegenerusGameBoonModule, IDegenerusGameDegeneretteModule} from "../interfaces/IDegenerusGameModules.sol";
@@ -58,7 +58,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     /// @param amount The ETH amount of the lootbox (in wei)
     /// @param futureLevel The target level for future tickets
     /// @param futureTickets The pre-Bernoulli scaled (× TICKET_SCALE) future ticket count
-    /// @param burnie The total BURNIE tokens awarded (in wei)
+    /// @param flip The total FLIP tokens awarded (in wei)
     /// @param roundedUp True iff the Bernoulli round-up incremented the awarded
     ///        whole-ticket count by 1
     event LootBoxOpened(
@@ -67,7 +67,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         uint256 amount,
         uint24 futureLevel,
         uint32 futureTickets,
-        uint256 burnie,
+        uint256 flip,
         bool roundedUp
     );
 
@@ -105,7 +105,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     /// @param player The box owner.
     /// @param index The box's RNG index.
     /// @param amount The box ETH resolved.
-    /// @param burnie BURNIE credited (0 if not a BURNIE roll).
+    /// @param flip FLIP credited (0 if not a FLIP roll).
     /// @param dgnrs DGNRS paid (roll award + any closing-box sweep).
     /// @param wwxrp WWXRP minted (0 unless the 10% dud roll).
     /// @param closing True iff this was the 50-ETH-crossing closing box.
@@ -113,7 +113,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         address indexed player,
         uint48 indexed index,
         uint256 amount,
-        uint256 burnie,
+        uint256 flip,
         uint256 dgnrs,
         uint256 wwxrp,
         bool closing
@@ -122,7 +122,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     /// @notice Unified lootbox reward event for boon awards
     /// @param player The player receiving the reward
     /// @param rewardType The type of reward (2=CoinflipBoon, 4=Boost5, 5=Boost15, 6=Boost25/Purchase, 8=DecimatorBoost, 9=WhaleBoon, 10=ActivityBoon/DeityPassBoon, 11=LazyPassBoon)
-    /// @param lootboxAmount The lootbox amount spent (ETH-equivalent for BURNIE lootboxes)
+    /// @param lootboxAmount The lootbox amount spent (ETH-equivalent for FLIP lootboxes)
     /// @param amount Primary reward amount (varies by type: BPS for boosts, token amount for boons)
     event LootBoxReward(
         address indexed player,
@@ -189,11 +189,11 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     // Boon bonus values
     /// @dev 5% bonus in basis points for coinflip boon
     uint16 private constant LOOTBOX_BOON_BONUS_BPS = 500;
-    /// @dev Maximum bonus amount for coinflip boon (5000 BURNIE)
+    /// @dev Maximum bonus amount for coinflip boon (5000 FLIP)
     uint256 private constant LOOTBOX_BOON_MAX_BONUS = 5000 ether;
-    /// @dev Coinflip boon cap for max deposit (100k BURNIE) used in EV estimation.
+    /// @dev Coinflip boon cap for max deposit (100k FLIP) used in EV estimation.
     uint256 private constant COINFLIP_BOON_MAX_DEPOSIT = 100_000 ether;
-    /// @dev Decimator boon cap for base amount (50k BURNIE) used in EV estimation.
+    /// @dev Decimator boon cap for base amount (50k FLIP) used in EV estimation.
     uint256 private constant DECIMATOR_BOON_CAP = 50_000 ether;
     /// @dev Whale bundle standard price (used for whale discount boon EV estimation).
     uint256 private constant WHALE_BUNDLE_STANDARD_PRICE =
@@ -290,28 +290,28 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     ///      Degenerette-spin sub-seed. Counter-tagged off the primary chunk, so the spins
     ///      consume no primary-chunk bits and never collide with the box's own draws.
     uint256 private constant BOX_WWXRP_SPIN_TAG = 0x57777872705370696e; // "WwxrpSpin"
-    uint256 private constant BOX_BURNIE_SPIN_TAG = 0x4275726e69655370696e; // "BurnieSpin"
+    uint256 private constant BOX_FLIP_SPIN_TAG = 0x4275726e69655370696e; // "FlipSpin"
     uint256 private constant BOX_ETH_SPIN_TAG = 0x4574685370696e; // "EthSpin"
-    /// @dev Base BPS for low BURNIE path (58.1%)
-    uint16 private constant LOOTBOX_LARGE_BURNIE_LOW_BASE_BPS = 5_808;
-    /// @dev Step increase in BPS for low BURNIE path (4.77% per step)
-    uint16 private constant LOOTBOX_LARGE_BURNIE_LOW_STEP_BPS = 477;
-    /// @dev Base BPS for high BURNIE path (307%)
-    uint16 private constant LOOTBOX_LARGE_BURNIE_HIGH_BASE_BPS = 30_705;
-    /// @dev Step increase in BPS for high BURNIE path (94.3% per step)
-    uint16 private constant LOOTBOX_LARGE_BURNIE_HIGH_STEP_BPS = 9_430;
+    /// @dev Base BPS for low FLIP path (58.1%)
+    uint16 private constant LOOTBOX_LARGE_FLIP_LOW_BASE_BPS = 5_808;
+    /// @dev Step increase in BPS for low FLIP path (4.77% per step)
+    uint16 private constant LOOTBOX_LARGE_FLIP_LOW_STEP_BPS = 477;
+    /// @dev Base BPS for high FLIP path (307%)
+    uint16 private constant LOOTBOX_LARGE_FLIP_HIGH_BASE_BPS = 30_705;
+    /// @dev Step increase in BPS for high FLIP path (94.3% per step)
+    uint16 private constant LOOTBOX_LARGE_FLIP_HIGH_STEP_BPS = 9_430;
 
-    // ---- Coin-presale-box BURNIE band (lootbox band recentered on a 400% branch mean) ----
-    // E[largeBurnieBps] = 0.8*lowMean + 0.2*highMean = 40000 (400% of box ETH on the
-    // BURNIE branch -> 200% all-boxes average since BURNIE rolls 50%).
-    /// @dev Base BPS for low presale-box BURNIE path (rolls 0-15, p=80%).
-    uint32 private constant PRESALE_BOX_BURNIE_LOW_BASE_BPS = 14_098;
-    /// @dev Step BPS per roll for low presale-box BURNIE path.
-    uint32 private constant PRESALE_BOX_BURNIE_LOW_STEP_BPS = 1_158;
-    /// @dev Base BPS for high presale-box BURNIE path (rolls 16-19, p=20%).
-    uint32 private constant PRESALE_BOX_BURNIE_HIGH_BASE_BPS = 74_534;
-    /// @dev Step BPS per roll for high presale-box BURNIE path.
-    uint32 private constant PRESALE_BOX_BURNIE_HIGH_STEP_BPS = 22_890;
+    // ---- Coin-presale-box FLIP band (lootbox band recentered on a 400% branch mean) ----
+    // E[largeFlipBps] = 0.8*lowMean + 0.2*highMean = 40000 (400% of box ETH on the
+    // FLIP branch -> 200% all-boxes average since FLIP rolls 50%).
+    /// @dev Base BPS for low presale-box FLIP path (rolls 0-15, p=80%).
+    uint32 private constant PRESALE_BOX_FLIP_LOW_BASE_BPS = 14_098;
+    /// @dev Step BPS per roll for low presale-box FLIP path.
+    uint32 private constant PRESALE_BOX_FLIP_LOW_STEP_BPS = 1_158;
+    /// @dev Base BPS for high presale-box FLIP path (rolls 16-19, p=20%).
+    uint32 private constant PRESALE_BOX_FLIP_HIGH_BASE_BPS = 74_534;
+    /// @dev Step BPS per roll for high presale-box FLIP path.
+    uint32 private constant PRESALE_BOX_FLIP_HIGH_STEP_BPS = 22_890;
 
     // ---- Coin-presale-box DGNRS curve (5 tiers x 10 ETH cumulative box volume) ----
     // Relative DGNRS-per-ETH rates [3.0, 2.5, 2.0, 1.5, 1.0] x base, base = poolStart/40.
@@ -623,7 +623,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         if (_openLootBoxLeg(player, index)) any = true;
         // Presale-box leg: probed only while presale boxes are outstanding. Boon-less, own
         // resolution (NOT a _resolveLootboxCommon caller): a credit-funded box can never mint a
-        // whale pass. 50/40/10 BURNIE/DGNRS/WWXRP.
+        // whale pass. 50/40/10 FLIP/DGNRS/WWXRP.
         if (checkPresale) {
             uint256 stored = presaleBoxEth[index][player];
             if (stored != 0) {
@@ -728,7 +728,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         if (presaleOver && !presaleDrained && idx > presaleCloseIndex) presaleDrained = true;
     }
 
-    /// @dev Resolve a presale box: 50% BURNIE / 40% DGNRS / 10% WWXRP off the salted
+    /// @dev Resolve a presale box: 50% FLIP / 40% DGNRS / 10% WWXRP off the salted
     ///      committed word. The closing box also sweeps the Pool.PresaleBox remainder.
     /// @param player Box owner.
     /// @param index The box's RNG index (event tag).
@@ -755,28 +755,28 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         );
 
         uint256 outcome = uint16(seed) % 100;
-        uint256 burnieOut;
+        uint256 flipOut;
         uint256 dgnrsOut;
         uint256 wwxrpOut;
         if (outcome < 50) {
-            // 50% BURNIE: variance band recentered on a 400% branch mean.
+            // 50% FLIP: variance band recentered on a 400% branch mean.
             uint256 varianceRoll = uint16(seed >> 80) % 20;
-            uint256 burnieBps;
+            uint256 flipBps;
             if (varianceRoll < 16) {
-                burnieBps = PRESALE_BOX_BURNIE_LOW_BASE_BPS +
-                    varianceRoll * PRESALE_BOX_BURNIE_LOW_STEP_BPS;
+                flipBps = PRESALE_BOX_FLIP_LOW_BASE_BPS +
+                    varianceRoll * PRESALE_BOX_FLIP_LOW_STEP_BPS;
             } else {
-                burnieBps = PRESALE_BOX_BURNIE_HIGH_BASE_BPS +
-                    (varianceRoll - 16) * PRESALE_BOX_BURNIE_HIGH_STEP_BPS;
+                flipBps = PRESALE_BOX_FLIP_HIGH_BASE_BPS +
+                    (varianceRoll - 16) * PRESALE_BOX_FLIP_HIGH_STEP_BPS;
             }
             // priceForLevel returns a non-zero constant for every level.
             uint256 priceWei = PriceLookupLib.priceForLevel(level + 1);
-            uint256 burnieBudget = (amount * burnieBps) / 10_000;
-            burnieOut = (burnieBudget * PRICE_COIN_UNIT) / priceWei;
-            // Floor to whole BURNIE (1 BURNIE = 1 ether), mirroring the lootbox.
-            burnieOut = (burnieOut / 1 ether) * 1 ether;
-            if (burnieOut != 0) {
-                coinflip.creditFlip(player, burnieOut);
+            uint256 flipBudget = (amount * flipBps) / 10_000;
+            flipOut = (flipBudget * PRICE_COIN_UNIT) / priceWei;
+            // Floor to whole FLIP (1 FLIP = 1 ether), mirroring the lootbox.
+            flipOut = (flipOut / 1 ether) * 1 ether;
+            if (flipOut != 0) {
+                coinflip.creditFlip(player, flipOut);
             }
         } else if (outcome < 90) {
             // 40% DGNRS: 5-tier %-of-pool curve keyed on the FROZEN buy-time cumulative.
@@ -792,11 +792,11 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         uint256 swept;
         if (closing) {
             uint256 remaining = dgnrs.poolBalance(
-                IStakedDegenerusStonk.Pool.PresaleBox
+                IsDGNRS.Pool.PresaleBox
             );
             if (remaining != 0) {
                 swept = dgnrs.transferFromPool(
-                    IStakedDegenerusStonk.Pool.PresaleBox,
+                    IsDGNRS.Pool.PresaleBox,
                     player,
                     remaining
                 );
@@ -804,7 +804,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
             }
         }
 
-        emit PresaleBoxOpened(player, index, amount, burnieOut, dgnrsOut, wwxrpOut, closing);
+        emit PresaleBoxOpened(player, index, amount, flipOut, dgnrsOut, wwxrpOut, closing);
     }
 
     /// @dev Presale-box DGNRS award: tierMultiplier x base x boxEth, base = poolStart/40,
@@ -821,7 +821,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     ) private returns (uint256 paid) {
         uint256 poolStart = presaleBoxDgnrsPoolStart;
         if (poolStart == 0) {
-            poolStart = dgnrs.poolBalance(IStakedDegenerusStonk.Pool.PresaleBox);
+            poolStart = dgnrs.poolBalance(IsDGNRS.Pool.PresaleBox);
             if (poolStart == 0) return 0;
             presaleBoxDgnrsPoolStart = poolStart;
         }
@@ -832,7 +832,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         uint256 dgnrsAmount = (poolStart * tierTenths * amount) / (400 * 1 ether);
         if (dgnrsAmount == 0) return 0;
         paid = dgnrs.transferFromPool(
-            IStakedDegenerusStonk.Pool.PresaleBox,
+            IsDGNRS.Pool.PresaleBox,
             player,
             dgnrsAmount
         );
@@ -1201,8 +1201,8 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         }
     }
 
-    /// @dev Common lootbox resolution logic shared by ETH and BURNIE lootboxes.
-    ///      Handles whale pass jackpots, lazy pass awards, ticket/BURNIE rolls, and boons.
+    /// @dev Common lootbox resolution logic shared by ETH and FLIP lootboxes.
+    ///      Handles whale pass jackpots, lazy pass awards, ticket/FLIP rolls, and boons.
     /// @param player Player receiving rewards
     /// @param index Per-player storage index of the lootbox being opened. Used purely as
     ///        the `lootboxIndex` identifier on the manual `LootBoxOpened` emit; auto-resolve
@@ -1219,7 +1219,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     ///        bits[24..39]   far-offset % 46         (_rollTargetLevel)
     ///        bits[40..55]   pathRoll % 20           (_resolveLootboxRoll)
     ///        bits[56..79]   tierRoll % 1000         (_lootboxDgnrsReward sub-call)
-    ///        bits[80..95]   varianceRoll % 20       (_resolveLootboxRoll large-BURNIE)
+    ///        bits[80..95]   varianceRoll % 20       (_resolveLootboxRoll large-FLIP)
     ///        bits[96..119]  ticketVariance % 10000  (_lootboxTicketCount)
     ///        bits[120..151] boon roll % BOON_PPM_SCALE (_rollLootboxBoons)
     ///        bits[152..167] fracRoundUp % 100      (_settleLootboxRoll ticket whole-collapse, per roll; bias 0.10%)
@@ -1227,7 +1227,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     ///      The split second roll uses seed2 = EntropyLib.hash2(seed, 1) (counter-tagged chunk 1,
     ///      collision-free vs primary chunk 0) for BOTH its reward draw AND its own re-rolled
     ///      target level (seed2 bits[0..39], unused by chunk 1's reward draw).
-    ///      The Degenerette-spin rolls (WWXRP / BURNIE-spins / ETH-spin) derive their sub-seeds
+    ///      The Degenerette-spin rolls (WWXRP / FLIP-spins / ETH-spin) derive their sub-seeds
     ///      via hash2(seed, BOX_*_SPIN_TAG) — fresh tagged chunks that consume no primary bits.
     /// @param emitLootboxEvent Whether to emit the `LootBoxOpened` event; `true` for
     ///        `_openLootBoxLeg`, `false` for both auto-resolve callers
@@ -1241,7 +1241,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     ///        independent rolls (the 2nd re-rolling its own target level); afking passes false
     ///        so afking boxes always resolve as a single roll (a bounded per-open cost).
     /// @param activityScore Frozen activity-score bps threaded to the Degenerette spin rolls
-    ///        (WWXRP / BURNIE-spins / ETH-spin); identical to the score the box committed.
+    ///        (WWXRP / FLIP-spins / ETH-spin); identical to the score the box committed.
     /// @param allowEthSpin When false (recirc entry), the 5% ETH-spin roll awards tickets
     ///        instead — see `_resolveLootboxRoll`. Directly-opened boxes pass true.
     function _resolveLootboxCommon(
@@ -1308,7 +1308,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     }
 
     /// @dev Settle ONE reward roll: the reward-type draw, then (for a ticket roll) the distress
-    ///      bonus + single Bernoulli whole-collapse + queue at `rollLevel`, the whole-BURNIE
+    ///      bonus + single Bernoulli whole-collapse + queue at `rollLevel`, the whole-FLIP
     ///      floor + creditFlip, and one LootBoxOpened. `fullAmount` (the box's pre-split amount)
     ///      feeds the reward calc and the event's amount field, so an UNSPLIT box settles and
     ///      emits exactly as a single combined resolution did; a split box runs this twice, each
@@ -1338,11 +1338,11 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         // always a safe divisor downstream.
         uint256 targetPrice = PriceLookupLib.priceForLevel(rollLevel);
 
-        (uint256 burnieOut, uint32 scaledTickets, bool wasSpin) =
+        (uint256 flipOut, uint32 scaledTickets, bool wasSpin) =
             _resolveLootboxRoll(player, rollAmount, fullAmount, targetPrice, rollSeed, isFarFuture, activityScore, allowEthSpin);
 
-        // Floored to whole-BURNIE (1 BURNIE = 1 ether); sub-1-BURNIE residue evaporates.
-        uint256 burnieAmount = (burnieOut / 1 ether) * 1 ether;
+        // Floored to whole-FLIP (1 FLIP = 1 ether); sub-1-FLIP residue evaporates.
+        uint256 flipAmount = (flipOut / 1 ether) * 1 ether;
 
         bool roundedUp;
         if (scaledTickets != 0) {
@@ -1370,11 +1370,11 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
             }
         }
 
-        if (burnieAmount != 0) {
-            coinflip.creditFlip(player, burnieAmount);
+        if (flipAmount != 0) {
+            coinflip.creditFlip(player, flipAmount);
         }
 
-        // Spin rolls (WWXRP / BURNIE-spins / ETH-spin) are recorded by their own single BoxSpin
+        // Spin rolls (WWXRP / FLIP-spins / ETH-spin) are recorded by their own single BoxSpin
         // event from the Degenerette module, so the (all-zero) LootBoxOpened is suppressed for them
         // — every box roll emits exactly one settlement event.
         if (emitLootboxEvent && !wasSpin) {
@@ -1384,7 +1384,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
                 fullAmount,
                 rollLevel,
                 scaledTickets,
-                burnieAmount,
+                flipAmount,
                 roundedUp
             );
         }
@@ -1465,14 +1465,14 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         _applyBoon(player, boonType, 0, currentDay, originalAmount, false);
     }
 
-    /// @dev Convert BURNIE amount to ETH value using current price (`priceWei` is
+    /// @dev Convert FLIP amount to ETH value using current price (`priceWei` is
     ///      always a non-zero price-table constant).
-    function _burnieToEthValue(
-        uint256 burnieAmount,
+    function _flipToEthValue(
+        uint256 flipAmount,
         uint256 priceWei
     ) private pure returns (uint256 valueWei) {
-        if (burnieAmount == 0) return 0;
-        valueWei = (burnieAmount * priceWei) / PRICE_COIN_UNIT;
+        if (flipAmount == 0) return 0;
+        valueWei = (flipAmount * priceWei) / PRICE_COIN_UNIT;
     }
 
     /// @dev Activate a 100-level whale pass for a player by recording an O(1)
@@ -1507,16 +1507,16 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         // currentLevel == level + 1, so this is the price at the stored `level`.
         uint256 priceWei = PriceLookupLib.priceForLevel(currentLevel - 1);
 
-        // Coinflip boons (max bonus on 100k BURNIE deposit)
-        uint256 coinflipMax5 = _burnieToEthValue(
+        // Coinflip boons (max bonus on 100k FLIP deposit)
+        uint256 coinflipMax5 = _flipToEthValue(
             (COINFLIP_BOON_MAX_DEPOSIT * LOOTBOX_BOON_BONUS_BPS) / 10_000,
             priceWei
         );
-        uint256 coinflipMax10 = _burnieToEthValue(
+        uint256 coinflipMax10 = _flipToEthValue(
             (COINFLIP_BOON_MAX_DEPOSIT * LOOTBOX_COINFLIP_10_BONUS_BPS) / 10_000,
             priceWei
         );
-        uint256 coinflipMax25 = _burnieToEthValue(
+        uint256 coinflipMax25 = _flipToEthValue(
             (COINFLIP_BOON_MAX_DEPOSIT * LOOTBOX_COINFLIP_25_BONUS_BPS) / 10_000,
             priceWei
         );
@@ -1554,15 +1554,15 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         weightedMax += BOON_WEIGHT_PURCHASE_25 * purchaseMax25;
 
         if (decimatorAllowed) {
-            uint256 decMax10 = _burnieToEthValue(
+            uint256 decMax10 = _flipToEthValue(
                 (DECIMATOR_BOON_CAP * LOOTBOX_DECIMATOR_10_BONUS_BPS) / 10_000,
                 priceWei
             );
-            uint256 decMax25 = _burnieToEthValue(
+            uint256 decMax25 = _flipToEthValue(
                 (DECIMATOR_BOON_CAP * LOOTBOX_DECIMATOR_25_BONUS_BPS) / 10_000,
                 priceWei
             );
-            uint256 decMax50 = _burnieToEthValue(
+            uint256 decMax50 = _flipToEthValue(
                 (DECIMATOR_BOON_CAP * LOOTBOX_DECIMATOR_50_BONUS_BPS) / 10_000,
                 priceWei
             );
@@ -1936,8 +1936,8 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     }
 
     /// @dev Resolve a single lootbox roll to determine reward type. Split (roll % 20):
-    ///      40% tickets, 15% DGNRS, 15% WWXRP-spin, 15% BURNIE (flat),
-    ///      10% BURNIE-spins ×3, 5% ETH-spin. The three spin rolls dispatch into the
+    ///      40% tickets, 15% DGNRS, 15% WWXRP-spin, 15% FLIP (flat),
+    ///      10% FLIP-spins ×3, 5% ETH-spin. The three spin rolls dispatch into the
     ///      Degenerette module; their sub-seeds are hash2-tagged off `seed` (no primary-
     ///      chunk bits consumed). The ETH-spin only fires on directly-opened boxes
     ///      (`allowEthSpin`); on recirc boxes roll 19 awards tickets instead, which keeps
@@ -1954,12 +1954,12 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     ///        scales the spin ROI / EV exactly as a regular bet's snapshot does.
     /// @param allowEthSpin When false (recirc boxes), roll 19 awards tickets instead of an
     ///        ETH spin — no ETH-pool RMW can race a deferred `resolveBets` pool flush.
-    /// @return burnieOut BURNIE tokens to award
+    /// @return flipOut FLIP tokens to award
     /// @return ticketsOut Tickets to queue for future level
     /// @dev Bit budget (consumed from `seed`):
     ///        - pathRoll: bits[40..55]     via uint16(seed >> 40) % 20  (bias 0.02%)
     ///        - DGNRS tier sub-call slice: bits[56..79] (consumed by _lootboxDgnrsReward)
-    ///        - large-BURNIE varianceRoll: bits[80..95]   via uint16(seed >> 80) % 20  (bias 0.02%)
+    ///        - large-FLIP varianceRoll: bits[80..95]   via uint16(seed >> 80) % 20  (bias 0.02%)
     ///      Spin sub-seeds use hash2-tagged chunks (BOX_*_SPIN_TAG), counter-tagged and
     ///      collision-free vs the primary chunk, so they consume no additional primary bits.
     function _resolveLootboxRoll(
@@ -1973,7 +1973,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         bool allowEthSpin
     )
         private
-        returns (uint256 burnieOut, uint32 ticketsOut, bool wasSpin)
+        returns (uint256 flipOut, uint32 ticketsOut, bool wasSpin)
     {
         if (amount == 0) return (0, 0, false);
 
@@ -2008,18 +2008,18 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
             );
             wasSpin = true;
         } else if (roll < 17) {
-            // 15% chance: large BURNIE reward with variance (flat → creditFlip).
-            burnieOut = _largeBurnieOut(amount, targetPrice, seed);
+            // 15% chance: large FLIP reward with variance (flat → creditFlip).
+            flipOut = _largeFlipOut(amount, targetPrice, seed);
         } else if (roll < 19) {
-            // 10% chance: three BURNIE Degenerette spins under one survival flip. Stake = the
-            // would-be large BURNIE. Mint-only (no pool / recirc) → safe on every box path.
-            uint256 stake = _largeBurnieOut(amount, targetPrice, seed);
+            // 10% chance: three FLIP Degenerette spins under one survival flip. Stake = the
+            // would-be large FLIP. Mint-only (no pool / recirc) → safe on every box path.
+            uint256 stake = _largeFlipOut(amount, targetPrice, seed);
             if (stake != 0) {
-                _callBurnieSpins(
+                _callFlipSpins(
                     player,
                     stake,
                     activityScore,
-                    EntropyLib.hash2(seed, BOX_BURNIE_SPIN_TAG)
+                    EntropyLib.hash2(seed, BOX_FLIP_SPIN_TAG)
                 );
                 wasSpin = true;
             }
@@ -2066,26 +2066,26 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
                     : LOOTBOX_TICKET_NEAR_BUDGET_BPS)) / 10_000;
     }
 
-    /// @dev The large-BURNIE output for a roll: variance-tiered BPS of `amount`, converted to
-    ///      BURNIE at the target price. Shared by the flat BURNIE roll and the BURNIE-spins stake.
-    function _largeBurnieOut(
+    /// @dev The large-FLIP output for a roll: variance-tiered BPS of `amount`, converted to
+    ///      FLIP at the target price. Shared by the flat FLIP roll and the FLIP-spins stake.
+    function _largeFlipOut(
         uint256 amount,
         uint256 targetPrice,
         uint256 seed
     ) private pure returns (uint256) {
         uint256 varianceRoll = uint16(seed >> 80) % 20;
-        uint256 largeBurnieBps;
+        uint256 largeFlipBps;
         if (varianceRoll < 16) {
             // Low path (80%): rolls 0-15, 58%-130% of value
-            largeBurnieBps = LOOTBOX_LARGE_BURNIE_LOW_BASE_BPS +
-                varianceRoll * LOOTBOX_LARGE_BURNIE_LOW_STEP_BPS;
+            largeFlipBps = LOOTBOX_LARGE_FLIP_LOW_BASE_BPS +
+                varianceRoll * LOOTBOX_LARGE_FLIP_LOW_STEP_BPS;
         } else {
             // High path (20%): rolls 16-19, 307%-590% of value
-            largeBurnieBps = LOOTBOX_LARGE_BURNIE_HIGH_BASE_BPS +
-                (varianceRoll - 16) * LOOTBOX_LARGE_BURNIE_HIGH_STEP_BPS;
+            largeFlipBps = LOOTBOX_LARGE_FLIP_HIGH_BASE_BPS +
+                (varianceRoll - 16) * LOOTBOX_LARGE_FLIP_HIGH_STEP_BPS;
         }
-        uint256 burnieBudget = (amount * largeBurnieBps) / 10_000;
-        return (burnieBudget * PRICE_COIN_UNIT) / targetPrice;
+        uint256 flipBudget = (amount * largeFlipBps) / 10_000;
+        return (flipBudget * PRICE_COIN_UNIT) / targetPrice;
     }
 
     /// @dev Delegatecall the Degenerette module's WWXRP box-spin resolver (Game storage context).
@@ -2107,8 +2107,8 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         if (!ok) revert E();
     }
 
-    /// @dev Delegatecall the Degenerette module's triple-BURNIE box-spin resolver.
-    function _callBurnieSpins(
+    /// @dev Delegatecall the Degenerette module's triple-FLIP box-spin resolver.
+    function _callFlipSpins(
         address player,
         uint256 stake,
         uint16 activityScore,
@@ -2116,7 +2116,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     ) private {
         (bool ok, ) = ContractAddresses.GAME_DEGENERETTE_MODULE.delegatecall(
             abi.encodeWithSelector(
-                IDegenerusGameDegeneretteModule.resolveBurnieSpinsFromBox.selector,
+                IDegenerusGameDegeneretteModule.resolveFlipSpinsFromBox.selector,
                 player,
                 stake,
                 activityScore,
@@ -2254,7 +2254,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
             ppm = LOOTBOX_DGNRS_POOL_MEGA_PPM;
         }
 
-        uint256 poolBalance = dgnrs.poolBalance(IStakedDegenerusStonk.Pool.Lootbox);
+        uint256 poolBalance = dgnrs.poolBalance(IsDGNRS.Pool.Lootbox);
 
         if (poolBalance == 0 || ppm == 0) return 0;
         dgnrsAmount = (poolBalance * ppm * amount) /
@@ -2271,7 +2271,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     function _creditDgnrsReward(address player, uint256 amount) private returns (uint256 paid) {
         if (amount == 0) return 0;
         paid = dgnrs.transferFromPool(
-            IStakedDegenerusStonk.Pool.Lootbox,
+            IsDGNRS.Pool.Lootbox,
             player,
             amount
         );

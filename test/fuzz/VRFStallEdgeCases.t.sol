@@ -406,14 +406,14 @@ contract VRFStallEdgeCases is DeployProtocol {
 
     /// @notice Fuzz: totalFlipReversals preserved across coordinator swap.
     function test_coordinatorSwapPreservesTotalFlipReversals_fuzz(uint8 nudges) public {
-        // Bound to 0-3 nudges (reverseFlip costs BURNIE, which must be minted via purchases)
+        // Bound to 0-3 nudges (reverseFlip costs FLIP, which must be minted via purchases)
         nudges = uint8(bound(nudges, 0, 3));
 
-        // Day 1: complete normally (to get BURNIE minted for nudge purchases)
+        // Day 1: complete normally (to get FLIP minted for nudge purchases)
         address buyer = makeAddr("nudgeBuyer");
         vm.deal(buyer, 100 ether);
 
-        // Purchase enough to mint BURNIE for nudges
+        // Purchase enough to mint FLIP for nudges
         for (uint256 i = 0; i < 10; i++) {
             vm.prank(buyer);
             game.purchase{value: 0.5 ether}(buyer, 400, 0, bytes32(0), MintPaymentKind.DirectEth);
@@ -424,7 +424,7 @@ contract VRFStallEdgeCases is DeployProtocol {
         for (uint8 n = 0; n < nudges; n++) {
             vm.prank(buyer);
             try game.reverseFlip() {} catch {
-                break; // Not enough BURNIE or RNG locked
+                break; // Not enough FLIP or RNG locked
             }
         }
 

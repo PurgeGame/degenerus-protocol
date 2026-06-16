@@ -14,7 +14,7 @@ import {
     VRFRandomWordsRequest
 } from "../interfaces/IVRFCoordinator.sol";
 import {IStETH} from "../interfaces/IStETH.sol";
-import {IStakedDegenerusStonk} from "../interfaces/IStakedDegenerusStonk.sol";
+import {IsDGNRS} from "../interfaces/IsDGNRS.sol";
 import {EntropyLib} from "../libraries/EntropyLib.sol";
 import {DegenerusGameStorage} from "../storage/DegenerusGameStorage.sol";
 import {ContractAddresses} from "../ContractAddresses.sol";
@@ -210,7 +210,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
             (bool goReturn, uint8 goStage) = _handleGameOverPath(day, lvl);
             if (goReturn) {
                 // Gameover path: advance ran but earns NO router bounty (the flip-credit
-                // coin is worthless at gameover) — return mult = 0 so mintBurnie pays nothing.
+                // coin is worthless at gameover) — return mult = 0 so mintFlip pays nothing.
                 emit Advance(goStage, lvl);
                 return 0;
             }
@@ -740,13 +740,13 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         (address top, ) = affiliate.affiliateTop(lvl);
 
         uint256 poolBalance = dgnrs.poolBalance(
-            IStakedDegenerusStonk.Pool.Affiliate
+            IsDGNRS.Pool.Affiliate
         );
         if (top != address(0)) {
             uint256 dgnrsReward = (poolBalance * AFFILIATE_POOL_REWARD_BPS) /
                 10_000;
             uint256 paid = dgnrs.transferFromPool(
-                IStakedDegenerusStonk.Pool.Affiliate,
+                IsDGNRS.Pool.Affiliate,
                 top,
                 dgnrsReward
             );
@@ -1045,9 +1045,9 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         if (!ok) _revertDelegate(data);
     }
 
-    /// @dev Pay daily BURNIE jackpot via jackpot module delegatecall.
+    /// @dev Pay daily FLIP jackpot via jackpot module delegatecall.
     ///      Called each day during purchase phase in its own transaction.
-    ///      Awards 0.5% of prize pool target in BURNIE to trait-matched winners in [minLevel, maxLevel].
+    ///      Awards 0.5% of prize pool target in FLIP to trait-matched winners in [minLevel, maxLevel].
     /// @param lvl Current level.
     /// @param randWord VRF random word for winner selection.
     /// @param minLevel Minimum target level for near-future coin distribution (inclusive).
@@ -1062,7 +1062,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
             .GAME_JACKPOT_MODULE
             .delegatecall(
                 abi.encodeWithSelector(
-                    IDegenerusGameJackpotModule.payDailyCoinJackpot.selector,
+                    IDegenerusGameJackpotModule.payDailyFlipJackpot.selector,
                     lvl,
                     randWord,
                     minLevel,
@@ -1097,23 +1097,23 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         );
         if (linkBal < MIN_LINK_FOR_LOOTBOX_RNG) revert E();
 
-        // Threshold check: pending ETH plus the BURNIE ETH-equivalent (valued at the
+        // Threshold check: pending ETH plus the FLIP ETH-equivalent (valued at the
         // current ticket price) must clear the owner-tunable threshold. This gates
         // only the mid-day fast path — the daily advance assigns the day's word to
         // the current index regardless, so pending boxes never wait past one cycle.
         uint256 pendingEth = _unpackMilliEthToWei(
             uint64(_lrRead(LR_PENDING_ETH_SHIFT, LR_PENDING_ETH_MASK))
         );
-        uint256 pendingBurnie = _unpackWholeBurnieToWei(
-            uint40(_lrRead(LR_PENDING_BURNIE_SHIFT, LR_PENDING_BURNIE_MASK))
+        uint256 pendingFlip = _unpackWholeFlipToWei(
+            uint40(_lrRead(LR_PENDING_FLIP_SHIFT, LR_PENDING_FLIP_MASK))
         );
-        if (pendingEth == 0 && pendingBurnie == 0) revert E();
+        if (pendingEth == 0 && pendingFlip == 0) revert E();
         uint256 totalEthEquivalent = pendingEth;
-        if (pendingBurnie != 0) {
+        if (pendingFlip != 0) {
             uint256 priceWei = PriceLookupLib.priceForLevel(level);
             if (priceWei != 0) {
                 totalEthEquivalent +=
-                    (pendingBurnie * priceWei) /
+                    (pendingFlip * priceWei) /
                     PRICE_COIN_UNIT;
             }
         }
@@ -1174,10 +1174,10 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
     //
     // Bit(s)   Consumer                    Operation                         Location
     // ------   --------                    ---------                         --------
-    // 0        Coinflip win/loss           rngWord & 1                       BurnieCoinflip._resolveDay
+    // 0        Coinflip win/loss           rngWord & 1                       Coinflip._resolveDay
     // 0        BAF fire gate               rngWord & 1                       AdvanceModule._consolidatePoolsAndRewardJackpots
     // 8+       Redemption roll             (currentWord >> 8) % 151 + 25     AdvanceModule.rngGate
-    // full     Coinflip reward percent     keccak256(rngWord, epoch) % 20    BurnieCoinflip._resolveDay
+    // full     Coinflip reward percent     keccak256(rngWord, epoch) % 20    Coinflip._resolveDay
     // full     Jackpot winner selection    via delegatecall (full word)      JackpotModule (payDailyJackpot)
     // full     Coin jackpot                via delegatecall (full word)      JackpotModule (_payDailyCoinJackpot)
     // full     Lootbox RNG                 stored as lootboxRngWordByIndex   AdvanceModule._applyDailyRng
@@ -1232,8 +1232,8 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
             // Normal daily RNG processing (request from current day)
             currentWord = _applyDailyRng(day, currentWord);
             coinflip.processCoinflipPayouts(coinflipBonus, currentWord, day);
-            // Force the MINT_BURNIE daily on the first jackpot day (lastPurchaseDay still set here,
-            // jackpot not yet entered) so the BURNIE-mint quest only lands when the redeem window is
+            // Force the MINT_FLIP daily on the first jackpot day (lastPurchaseDay still set here,
+            // jackpot not yet entered) so the FLIP-mint quest only lands when the redeem window is
             // live. Turbo (compressedJackpotFlag == 2) is skipped — its jackpot collapses at this
             // request, leaving no full open day for that quest.
             quests.rollDailyQuest(
@@ -1247,7 +1247,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
             // construction: the sentinel always names the (at most one) unresolved day, so a
             // single resolve call after the stall recovers covers the stuck pool exactly.
             {
-                IStakedDegenerusStonk sdgnrs = IStakedDegenerusStonk(
+                IsDGNRS sdgnrs = IsDGNRS(
                     ContractAddresses.SDGNRS
                 );
                 uint24 toResolve = sdgnrs.pendingResolveDay();
@@ -1309,7 +1309,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
             // rngGate redemption resolution path — sentinel-keyed so multi-day stalls resolve
             // by construction.
             {
-                IStakedDegenerusStonk sdgnrs = IStakedDegenerusStonk(
+                IsDGNRS sdgnrs = IsDGNRS(
                     ContractAddresses.SDGNRS
                 );
                 uint24 toResolve = sdgnrs.pendingResolveDay();
@@ -1344,7 +1344,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                 // uses fallbackWord for the roll; sentinel still names the stuck day so resolves
                 // are correct even after a 3-day GAMEOVER_RNG_FALLBACK_DELAY stall.
                 {
-                    IStakedDegenerusStonk sdgnrs = IStakedDegenerusStonk(
+                    IsDGNRS sdgnrs = IsDGNRS(
                         ContractAddresses.SDGNRS
                     );
                     uint24 toResolve = sdgnrs.pendingResolveDay();
@@ -1656,13 +1656,13 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
 
     /// @dev Advance the lootbox RNG index and zero both pending accumulators in a
     ///      single read-modify-write of the packed slot: new purchases target the
-    ///      NEXT RNG index and the pending ETH/BURNIE totals restart at zero.
+    ///      NEXT RNG index and the pending ETH/FLIP totals restart at zero.
     function _lrAdvanceIndexClearPending() private {
         uint256 packed = lootboxRngPacked;
         uint256 nextIndex = ((packed >> LR_INDEX_SHIFT) & LR_INDEX_MASK) + 1;
         packed &= ~((LR_INDEX_MASK << LR_INDEX_SHIFT) |
             (LR_PENDING_ETH_MASK << LR_PENDING_ETH_SHIFT) |
-            (LR_PENDING_BURNIE_MASK << LR_PENDING_BURNIE_SHIFT));
+            (LR_PENDING_FLIP_MASK << LR_PENDING_FLIP_SHIFT));
         lootboxRngPacked =
             packed |
             ((nextIndex & LR_INDEX_MASK) << LR_INDEX_SHIFT);
@@ -1695,12 +1695,12 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         rngRequestTime = uint48(block.timestamp);
         rngLockedFlag = true;
 
-        // Close the BURNIE purchase window at the final jackpot day's RNG request — the boundary where
+        // Close the FLIP purchase window at the final jackpot day's RNG request — the boundary where
         // new tickets begin routing to the next level (mirrors the route-to-level+1 step in the mint
         // module). jackpotCounter + step catches the final daily jackpot; the isTicketJackpotDay
         // (level-transition) request catches the single-day turbo jackpot, where jackpotPhaseFlag is
         // not yet set here.
-        if (burnieWindowOpen && (jackpotPhaseFlag || isTicketJackpotDay)) {
+        if (ticketRedemptionOpen && (jackpotPhaseFlag || isTicketJackpotDay)) {
             uint8 jpStep = 1;
             if (compressedJackpotFlag == 2 && jackpotCounter == 0) {
                 jpStep = JACKPOT_LEVEL_CAP;
@@ -1712,7 +1712,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                 jpStep = 2;
             }
             if (jackpotCounter + jpStep >= JACKPOT_LEVEL_CAP) {
-                burnieWindowOpen = false;
+                ticketRedemptionOpen = false;
             }
         }
 
@@ -1784,9 +1784,9 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         // else: nothing in flight -> config repoint only; no re-issue, no flag change.
 
         // Intentional: totalFlipReversals is NOT reset here. Nudges were purchased
-        // with irreversible BURNIE burns before or during the stall. They carry over
+        // with irreversible FLIP burns before or during the stall. They carry over
         // and apply to the first post-swap VRF word via _applyDailyRng. Resetting
-        // would steal user value (burned BURNIE for zero effect).
+        // would steal user value (burned FLIP for zero effect).
 
         emit VrfCoordinatorUpdated(current, newCoordinator);
     }

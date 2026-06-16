@@ -2,19 +2,19 @@
 pragma solidity 0.8.34;
 
 /**
- * @title BurnieCoin
+ * @title FLIP
  * @author Burnie Degenerus
- * @notice ERC20 in-game token (BURNIE, 18 decimals) with minting, burning, and supply management.
+ * @notice ERC20 in-game token (FLIP, 18 decimals) with minting, burning, and supply management.
  *
  * @dev ARCHITECTURE:
  *      - ERC20 standard with game contract transfer bypass
  *      - Mint/burn interface for game contract, coinflip contract, and vault
- *      - Coinflip integration: claims via BurnieCoinflip.sol for transfer shortfall coverage
+ *      - Coinflip integration: claims via Coinflip.sol for transfer shortfall coverage
  *      - Decimator burns: Burn-to-participate for decimator jackpot eligibility
  *      - Quest integration: Daily quest rolls, streak tracking, slot rewards
- *      - Vault escrow: virtual BURNIE reserve, minted only on ContractAddresses.VAULT withdrawal
- *      - Initial emission: no direct seeds — BurnieCoinflip stakes 200k/day for the first
- *        20 days each to VAULT and sDGNRS, so all BURNIE survives a coinflip before minting
+ *      - Vault escrow: virtual FLIP reserve, minted only on ContractAddresses.VAULT withdrawal
+ *      - Initial emission: no direct seeds — Coinflip stakes 200k/day for the first
+ *        20 days each to VAULT and sDGNRS, so all FLIP survives a coinflip before minting
  *
  * @dev CRITICAL INVARIANTS:
  *      - totalSupply + vaultAllowance = supplyIncUncirculated
@@ -28,34 +28,34 @@ import {IDegenerusGame} from "./interfaces/IDegenerusGame.sol";
 import {IDegenerusQuests} from "./interfaces/IDegenerusQuests.sol";
 import {ContractAddresses} from "./ContractAddresses.sol";
 
-/// @notice Interface for BurnieCoinflip contract methods used by BurnieCoin.
-interface IBurnieCoinflip {
+/// @notice Interface for Coinflip contract methods used by FLIP.
+interface ICoinflip {
     /// @notice Preview claimable coinflip winnings for a player.
     function previewClaimCoinflips(
         address player
     ) external view returns (uint256 mintable);
-    /// @notice Claim coinflip winnings via BurnieCoin to cover token transfers/burns.
-    function claimCoinflipsFromBurnie(
+    /// @notice Claim coinflip winnings via FLIP to cover token transfers/burns.
+    function claimCoinflipsFromFlip(
         address player,
         uint256 amount
     ) external returns (uint256 claimed);
-    /// @notice Consume coinflip winnings via BurnieCoin for burns (no mint).
+    /// @notice Consume coinflip winnings via FLIP for burns (no mint).
     function consumeCoinflipsForBurn(
         address player,
         uint256 amount
     ) external returns (uint256 consumed);
     /// @notice Consume coinflip-resident backing (claimable -> carry) for a salvage swap.
-    function consumeBurnieForSalvage(
+    function consumeFlipForSalvage(
         address player,
         uint256 amount
     ) external returns (uint256 consumed);
     /// @notice Preview claimable + auto-rebuy carry coinflip backing (view).
-    function previewSalvageBurnieBacking(
+    function previewSalvageFlipBacking(
         address player
     ) external view returns (uint256);
 }
 
-contract BurnieCoin {
+contract FLIP {
     /*+======================================================================+
       |                              EVENTS                                  |
       +======================================================================+
@@ -75,7 +75,7 @@ contract BurnieCoin {
         uint256 amount
     );
 
-    /// @notice Emitted when a player burns BURNIE during a decimator window.
+    /// @notice Emitted when a player burns FLIP during a decimator window.
     /// @param player The burner's address.
     /// @param amountBurned The amount burned (18 decimals).
     /// @param bucket The effective bucket weight assigned (lower = more valuable).
@@ -113,7 +113,7 @@ contract BurnieCoin {
     /// @notice Requested amount exceeds available balance or allowance.
     error Insufficient();
 
-    /// @notice Deposit/burn amount is below the minimum threshold (1,000 BURNIE).
+    /// @notice Deposit/burn amount is below the minimum threshold (1,000 FLIP).
     error AmountLTMin();
 
     /// @notice Zero address not allowed for transfers, mints, or wiring.
@@ -145,12 +145,12 @@ contract BurnieCoin {
       +======================================================================+*/
 
     /// @notice Token name displayed in wallets and explorers.
-    string public constant name = "Burnies";
+    string public constant name = "Degenerus Gambling Token";
 
     /// @notice Token symbol (ticker).
-    string public constant symbol = "BURNIE";
+    string public constant symbol = "FLIP";
 
-    /// @dev Minimum BURNIE amount for decimator burns (prevents dust spam).
+    /// @dev Minimum FLIP amount for decimator burns (prevents dust spam).
     uint256 private constant DECIMATOR_MIN = 1_000 ether;
 
     /// @dev Base bucket denominator for decimator weighting (lower = better odds).
@@ -169,10 +169,10 @@ contract BurnieCoin {
     /// @dev Basis points denominator (10000 = 1x).
     uint16 private constant BPS_DENOMINATOR = 10_000;
 
-    /// @dev Gameover tombstone flood: 1e36 wei (1 quintillion BURNIE) added one-shot to the
+    /// @dev Gameover tombstone flood: 1e36 wei (1 quintillion FLIP) added one-shot to the
     ///      VAULT mint allowance as a worthless-token overhang signal. ~340x headroom under
     ///      uint128 max (~3.4e38), so the checked add never realistically reverts.
-    uint256 private constant BURNIE_TOMBSTONE_WEI = 1e36;
+    uint256 private constant FLIP_TOMBSTONE_WEI = 1e36;
 
     /// @dev Packed supply state to keep total/vault allowance in a single slot.
     struct Supply {
@@ -182,11 +182,11 @@ contract BurnieCoin {
 
     /// @notice Total circulating supply (excludes ContractAddresses.VAULT's virtual allowance).
     /// @dev Increases on mint, decreases on burn. Always equals sum of all balanceOf entries.
-    ///      Starts fully zero: the initial emission arrives as BurnieCoinflip seed stakes,
-    ///      so every BURNIE survives a coinflip before it can mint.
+    ///      Starts fully zero: the initial emission arrives as Coinflip seed stakes,
+    ///      so every FLIP survives a coinflip before it can mint.
     Supply private _supply;
 
-    /// @notice One-shot latch for the gameover BURNIE tombstone flood (set on first flood).
+    /// @notice One-shot latch for the gameover FLIP tombstone flood (set on first flood).
     bool private _tombstoneFlooded;
 
     /// @notice Token balance for each address.
@@ -225,8 +225,8 @@ contract BurnieCoin {
         IDegenerusQuests(ContractAddresses.QUESTS);
 
     /// @dev Reference to the coinflip contract for claim/consume operations.
-    IBurnieCoinflip internal constant coinflip =
-        IBurnieCoinflip(ContractAddresses.COINFLIP);
+    ICoinflip internal constant coinflip =
+        ICoinflip(ContractAddresses.COINFLIP);
 
     /*+======================================================================+
       |                         VIEW HELPERS                                 |
@@ -234,7 +234,7 @@ contract BurnieCoin {
       |  Read-only functions for UIs and external contracts to query state.  |
       +======================================================================+*/
 
-    /// @notice Total spendable BURNIE at the current time (balance + claimable coinflips).
+    /// @notice Total spendable FLIP at the current time (balance + claimable coinflips).
     /// @dev For ContractAddresses.VAULT, includes virtual vault allowance + any actual balance.
     ///      Known: conservatively underreports during RNG lock since previewClaimCoinflips
     ///      may exclude in-flight coinflip results; claims still succeed so the gap is
@@ -253,17 +253,17 @@ contract BurnieCoin {
         }
     }
 
-    /// @notice BURNIE a player can spend into a salvage swap: burnable held + claimable + auto-rebuy carry.
+    /// @notice FLIP a player can spend into a salvage swap: burnable held + claimable + auto-rebuy carry.
     /// @dev The carry-inclusive twin of balanceOfWithClaimable, used by the far-future salvage quote so
-    ///      its BURNIE-leg cap matches exactly what burnCoinForSalvage can destroy (symmetry with the
+    ///      its FLIP-leg cap matches exactly what burnCoinForSalvage can destroy (symmetry with the
     ///      redemption desk, which already taps the carry). The two salvage operators are sDGNRS and the
     ///      vault. The "held" leg is the ACTUALLY-burnable balance: for ContractAddresses.VAULT that is the
     ///      virtual vaultAllowance (the only held slice _burn can spend for the vault — a stray
     ///      balanceOf[VAULT] transfer is not burnable here), and for sDGNRS it is the wallet balance.
-    ///      previewSalvageBurnieBacking adds the claimable + carry, which BurnieCoinflip drains in
-    ///      consumeBurnieForSalvage.
+    ///      previewSalvageFlipBacking adds the claimable + carry, which Coinflip drains in
+    ///      consumeFlipForSalvage.
     /// @param player The address to read.
-    /// @return spendable Total BURNIE the player can fund a salvage BURNIE leg with right now.
+    /// @return spendable Total FLIP the player can fund a salvage FLIP leg with right now.
     function balanceOfSpendableForSalvage(
         address player
     ) external view returns (uint256 spendable) {
@@ -271,7 +271,7 @@ contract BurnieCoin {
             ? uint256(_supply.vaultAllowance)
             : balanceOf[player];
         unchecked {
-            spendable += coinflip.previewSalvageBurnieBacking(player);
+            spendable += coinflip.previewSalvageFlipBacking(player);
         }
     }
 
@@ -289,7 +289,7 @@ contract BurnieCoin {
 
     /// @notice Virtual coin reserved for the ContractAddresses.VAULT (not yet circulating).
     /// @dev Exposed for the ContractAddresses.VAULT share math and external dashboards.
-    /// @return The current ContractAddresses.VAULT mint allowance in BURNIE (18 decimals).
+    /// @return The current ContractAddresses.VAULT mint allowance in FLIP (18 decimals).
     function vaultMintAllowance() external view returns (uint256) {
         return _supply.vaultAllowance;
     }
@@ -298,14 +298,14 @@ contract BurnieCoin {
       |                         BOUNTY STATE                                 |
       +======================================================================+*/
 
-    // Bounty state (currentBounty, biggestFlipEver, bountyOwedTo) is in BurnieCoinflip.
+    // Bounty state (currentBounty, biggestFlipEver, bountyOwedTo) is in Coinflip.
 
     /*+======================================================================+
       |                       ERC20 DECIMALS                                 |
       +======================================================================+*/
 
-    /// @notice Number of decimal places for BURNIE token.
-    /// @dev 18 decimals (standard ERC20). 1 BURNIE = 1e18 base units.
+    /// @notice Number of decimal places for FLIP token.
+    /// @dev 18 decimals (standard ERC20). 1 FLIP = 1e18 base units.
     uint8 public constant decimals = 18;
 
     /*+======================================================================+
@@ -386,7 +386,7 @@ contract BurnieCoin {
         uint256 balance = balanceOf[from];
         if (balance < amount && !degenerusGame.rngLocked()) {
             unchecked {
-                coinflip.claimCoinflipsFromBurnie(from, amount - balance);
+                coinflip.claimCoinflipsFromFlip(from, amount - balance);
             }
             balance = balanceOf[from];
         }
@@ -394,7 +394,7 @@ contract BurnieCoin {
         balanceOf[from] = balance - amount;
 
         if (to == ContractAddresses.VAULT) {
-            // Vault receives no circulating BURNIE; redirect to mint allowance.
+            // Vault receives no circulating FLIP; redirect to mint allowance.
             uint128 amount128 = _toUint128(amount);
             unchecked {
                 _supply.totalSupply -= amount128;
@@ -455,23 +455,23 @@ contract BurnieCoin {
     /*+======================================================================+
       |                  COINFLIP CONTRACT INTEGRATION                       |
       +======================================================================+
-      |  Permission functions for BurnieCoinflip contract to burn/mint      |
-      |  BURNIE tokens. Only the designated coinflip contract can call.     |
+      |  Permission functions for Coinflip contract to burn/mint      |
+      |  FLIP tokens. Only the designated coinflip contract can call.     |
       +======================================================================+*/
 
-    /// @notice Burns BURNIE from a player for coinflip deposits.
-    /// @dev Only callable by the BurnieCoinflip contract.
+    /// @notice Burns FLIP from a player for coinflip deposits.
+    /// @dev Only callable by the Coinflip contract.
     /// @param from The player's address to burn from.
-    /// @param amount The amount of BURNIE to burn (18 decimals).
+    /// @param amount The amount of FLIP to burn (18 decimals).
     function burnForCoinflip(address from, uint256 amount) external {
         if (msg.sender != ContractAddresses.COINFLIP) revert OnlyGame();
         _burn(from, amount);
     }
 
-    /// @notice Mint BURNIE to a player (coinflip claims, degenerette wins).
+    /// @notice Mint FLIP to a player (coinflip claims, degenerette wins).
     /// @dev Only callable by COINFLIP or GAME.
     /// @param to The player's address to mint to.
-    /// @param amount The amount of BURNIE to mint (18 decimals).
+    /// @param amount The amount of FLIP to mint (18 decimals).
     function mintForGame(address to, uint256 amount) external {
         if (
             msg.sender != ContractAddresses.COINFLIP &&
@@ -536,7 +536,7 @@ contract BurnieCoin {
       +======================================================================+*/
 
     /// @notice Increase the vault's mint allowance without transferring tokens.
-    /// @dev Called by GAME (delegatecall modules) or VAULT to credit virtual BURNIE to the vault.
+    /// @dev Called by GAME (delegatecall modules) or VAULT to credit virtual FLIP to the vault.
     /// @param amount Amount to add to vault's mint allowance.
     function vaultEscrow(uint256 amount) external {
         address sender = msg.sender;
@@ -561,9 +561,9 @@ contract BurnieCoin {
         if (_tombstoneFlooded) return;
         _tombstoneFlooded = true;
         _supply.vaultAllowance = _toUint128(
-            uint256(_supply.vaultAllowance) + BURNIE_TOMBSTONE_WEI
+            uint256(_supply.vaultAllowance) + FLIP_TOMBSTONE_WEI
         );
-        emit VaultEscrowRecorded(msg.sender, BURNIE_TOMBSTONE_WEI);
+        emit VaultEscrowRecorded(msg.sender, FLIP_TOMBSTONE_WEI);
     }
 
     /// @notice Mint tokens to recipient from vault's allowance.
@@ -584,7 +584,7 @@ contract BurnieCoin {
         emit Transfer(address(0), to, amount);
     }
 
-    /// @notice Burn BURNIE from `target` during gameplay/affiliate flows.
+    /// @notice Burn FLIP from `target` during gameplay/affiliate flows.
     /// @dev Access: GAME only (onlyGame modifier).
     ///      Used for purchases, fees, and affiliate utilities.
     ///      Reverts on zero address or insufficient balance.
@@ -595,17 +595,17 @@ contract BurnieCoin {
         _burn(target, amount - consumed);
     }
 
-    /// @notice Burn `amount` of `target`'s BURNIE for a far-future salvage swap, draining all sources.
+    /// @notice Burn `amount` of `target`'s FLIP for a far-future salvage swap, draining all sources.
     /// @dev Access: GAME only. The salvage twin of burnCoin: where burnCoin stops at held + settled
     ///      claimable, this also reaches the auto-rebuy carry (held -> claimable -> carry), matching the
-    ///      redemption desk so the salvage BURNIE leg can tap the carry where sDGNRS (and a rebuy-armed
+    ///      redemption desk so the salvage FLIP leg can tap the carry where sDGNRS (and a rebuy-armed
     ///      vault) park their backing in steady state. The two salvage operators are sDGNRS and the vault.
     ///      Held leg first: for the vault that is the virtual vaultAllowance (via _burn's VAULT branch),
-    ///      for sDGNRS the wallet balance. The remainder routes to BurnieCoinflip.consumeBurnieForSalvage
+    ///      for sDGNRS the wallet balance. The remainder routes to Coinflip.consumeFlipForSalvage
     ///      (claimable then carry). Caller caps `amount` at balanceOfSpendableForSalvage(target), so the
     ///      drain always covers; fail-closed otherwise.
-    /// @param target The buyer whose BURNIE backs the swap (sDGNRS or the vault).
-    /// @param amount The BURNIE (wei) to destroy.
+    /// @param target The buyer whose FLIP backs the swap (sDGNRS or the vault).
+    /// @param amount The FLIP (wei) to destroy.
     function burnCoinForSalvage(address target, uint256 amount) external onlyGame {
         if (amount == 0) return;
         uint256 held = target == ContractAddresses.VAULT
@@ -616,23 +616,23 @@ contract BurnieCoin {
         uint256 remainder = amount - fromHeld;
         if (remainder == 0) return;
         if (degenerusGame.rngLocked()) revert Insufficient();
-        uint256 consumed = coinflip.consumeBurnieForSalvage(target, remainder);
+        uint256 consumed = coinflip.consumeFlipForSalvage(target, remainder);
         if (remainder > consumed) revert Insufficient();
     }
 
     /*+======================================================================+
       |                          DECIMATOR                                  |
       +======================================================================+
-      |  Burn BURNIE during active decimator windows to accrue weighted      |
+      |  Burn FLIP during active decimator windows to accrue weighted      |
       |  participation for the decimator jackpot.                            |
       +======================================================================+*/
 
-    /// @notice Burn BURNIE during an active Decimator window to accrue weighted participation.
+    /// @notice Burn FLIP during an active Decimator window to accrue weighted participation.
     /// @dev SECURITY: Burns BEFORE downstream calls (CEI pattern).
     ///      Quest rewards are added to the base amount before bucket calculation.
     ///      Bucket determines jackpot weight (lower = better odds).
     /// @param player Player address to burn for (address(0) = msg.sender).
-    /// @param amount Amount (18 decimals) to burn; must satisfy MIN (1,000 BURNIE).
+    /// @param amount Amount (18 decimals) to burn; must satisfy MIN (1,000 FLIP).
     function decimatorBurn(address player, uint256 amount) external {
         address caller;
         if (player == address(0) || player == msg.sender) {
@@ -674,7 +674,7 @@ contract BurnieCoin {
             : DECIMATOR_MIN_BUCKET_NORMAL;
         uint8 bucket = _adjustDecimatorBucket(bonusBps, minBucket);
 
-        // Decimator boon: percent boost on base amount (capped to 50k BURNIE).
+        // Decimator boon: percent boost on base amount (capped to 50k FLIP).
         uint16 boonBps = degenerusGame.consumeDecimatorBoon(caller);
         if (boonBps > 0) {
             uint256 cappedBase = baseAmount > DECIMATOR_BOON_CAP
@@ -702,12 +702,12 @@ contract BurnieCoin {
       |  early conviction. Total loss if level completes normally.           |
       +======================================================================+*/
 
-    /// @notice Burn BURNIE as a terminal decimator (death bet).
+    /// @notice Burn FLIP as a terminal decimator (death bet).
     /// @dev Always open (no milestone gating). Blocked on lastPurchaseDay
     ///      (level completing, death bet can never fire) and after death clock expires.
     ///      Bucket computed internally using lvl 100 rules (min bucket 2).
     /// @param player Player address to burn for (address(0) = msg.sender).
-    /// @param amount Amount (18 decimals) to burn; must satisfy MIN (1,000 BURNIE).
+    /// @param amount Amount (18 decimals) to burn; must satisfy MIN (1,000 FLIP).
     function terminalDecimatorBurn(address player, uint256 amount) external {
         address caller;
         if (player == address(0) || player == msg.sender) {

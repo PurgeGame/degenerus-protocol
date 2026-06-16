@@ -51,8 +51,8 @@ contract LockRemovalHarness is DegenerusGameStorage {
         // Guard removed entirely -- no rngLockedFlag check
     }
 
-    // --- LOCK-04: openBurnieLootBox guard (removed entirely) ---
-    function openBurnieLootBoxGuard() external pure {
+    // --- LOCK-04: openFlipLootBox guard (removed entirely) ---
+    function openFlipLootBoxGuard() external pure {
         // Guard removed entirely -- no rngLockedFlag check
     }
 
@@ -134,13 +134,13 @@ contract LockRemovalTest is Test {
     }
 
     // ========================================================================
-    // LOCK-04: openBurnieLootBox guard removed
+    // LOCK-04: openFlipLootBox guard removed
     // ========================================================================
 
-    function test_LOCK04_openBurnieLootBoxDuringLock() public {
+    function test_LOCK04_openFlipLootBoxDuringLock() public {
         harness.setRngLockedFlag(true);
         // Must NOT revert
-        harness.openBurnieLootBoxGuard();
+        harness.openFlipLootBoxGuard();
     }
 
     // ========================================================================
@@ -203,7 +203,7 @@ contract LockRemovalTest is Test {
 
         // LOCK-03 + LOCK-04: never revert
         harness.openLootBoxGuard();
-        harness.openBurnieLootBoxGuard();
+        harness.openFlipLootBoxGuard();
 
         // LOCK-05: jackpotResolutionActive depends only on lastPurchaseDay and level
         bool active = harness.jackpotResolutionActive();

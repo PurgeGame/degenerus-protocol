@@ -2,7 +2,7 @@
 pragma solidity ^0.8.26;
 
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
-import {StakedDegenerusStonk} from "../../contracts/StakedDegenerusStonk.sol";
+import {sDGNRS} from "../../contracts/sDGNRS.sol";
 
 /// @title PresaleBoxDrain -- F-47-01 closing-box DGNRS over-distribution fix proofs
 /// @notice Proves the PFIX fix (divisor 1_000 -> 400, base poolStart/100 -> poolStart/40)
@@ -45,7 +45,7 @@ contract PresaleBoxDrain is DeployProtocol {
     uint256 constant PRESALE_BOX_MIN = 0.01 ether;
 
     // Outcome bands off the seed: outcome = uint16(keccak(rngWord,"PRESALE_BOX",player,amount)) % 100.
-    // BURNIE < 50, DGNRS in [50,90), WWXRP >= 90.
+    // FLIP < 50, DGNRS in [50,90), WWXRP >= 90.
 
     function setUp() public {
         _deployProtocol();
@@ -59,7 +59,7 @@ contract PresaleBoxDrain is DeployProtocol {
 
     /// @dev The live presale-box DGNRS pool balance.
     function _poolBal() internal view returns (uint256) {
-        return sdgnrs.poolBalance(StakedDegenerusStonk.Pool.PresaleBox);
+        return sdgnrs.poolBalance(sDGNRS.Pool.PresaleBox);
     }
 
     /// @dev Current LR_INDEX (the index every same-day box queues at).
@@ -94,7 +94,7 @@ contract PresaleBoxDrain is DeployProtocol {
         uint256 cur = _poolBal();
         if (cur <= target) return;
         vm.prank(address(game));
-        sdgnrs.transferFromPool(StakedDegenerusStonk.Pool.PresaleBox, address(0xDEAD), cur - target);
+        sdgnrs.transferFromPool(sDGNRS.Pool.PresaleBox, address(0xDEAD), cur - target);
         assertEq(_poolBal(), target, "pool seeded to target");
     }
 
@@ -288,7 +288,7 @@ contract PresaleBoxDrain is DeployProtocol {
     // ──────────────────────────────────────────────────────────────────────
 
     /// @dev Brute-force a rngWord (>0) so (player, amount) lands a chosen outcome BAND.
-    ///      band: 0 = BURNIE [0,50), 1 = DGNRS [50,90), 2 = WWXRP [90,100).
+    ///      band: 0 = FLIP [0,50), 1 = DGNRS [50,90), 2 = WWXRP [90,100).
     function _wordForBand(address player, uint256 amount, uint8 band) internal pure returns (uint256 w) {
         for (w = 1; w < 20000; ++w) {
             uint256 o = _outcome(w, player, amount);
@@ -300,8 +300,8 @@ contract PresaleBoxDrain is DeployProtocol {
     }
 
     /// @notice Realistic ~50-ETH presale run across MANY boxes with a realized ~50/40/10
-    ///         BURNIE/DGNRS/WWXRP branch mix (PRNG-driven, asserted ~40% DGNRS within a
-    ///         tolerance band so a degenerate all-BURNIE run FAILS, never silently passes).
+    ///         FLIP/DGNRS/WWXRP branch mix (PRNG-driven, asserted ~40% DGNRS within a
+    ///         tolerance band so a degenerate all-FLIP run FAILS, never silently passes).
     ///         Proves the closing-box sweep is variance DUST (<= poolStart/100), the residual
     ///         pool ends ~empty, and the cumulative per-box DGNRS draw is the dominant share of
     ///         poolStart (>= 90%) -- the curve-exercised guard that the OLD /1_000 curve fails.
@@ -333,7 +333,7 @@ contract PresaleBoxDrain is DeployProtocol {
             buyers[i] = buyer;
 
             uint256 draw = uint256(keccak256(abi.encodePacked(prngSeed, i))) % 100;
-            uint8 band = draw < 50 ? 0 : (draw < 90 ? 1 : 2); // 50% BURNIE / 40% DGNRS / 10% WWXRP
+            uint8 band = draw < 50 ? 0 : (draw < 90 ? 1 : 2); // 50% FLIP / 40% DGNRS / 10% WWXRP
             bands[i] = band;
             if (band == 1) dgnrsBranchCount++;
 
@@ -365,7 +365,7 @@ contract PresaleBoxDrain is DeployProtocol {
         }
 
         // Realized-mix guard (T-327-01-FC1): the run must genuinely be the ~40% DGNRS
-        // distribution that exposed F-47-01. A degenerate all-BURNIE run FAILS here.
+        // distribution that exposed F-47-01. A degenerate all-FLIP run FAILS here.
         // Tolerance band: 30%..50% of boxes hit the DGNRS branch.
         assertGe(dgnrsBranchCount * 100, nBoxes * 30, "realized DGNRS branch rate >= 30%");
         assertLe(dgnrsBranchCount * 100, nBoxes * 50, "realized DGNRS branch rate <= 50%");

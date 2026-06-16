@@ -17,7 +17,7 @@ contract FFKeyHarness is DegenerusGameStorage {
 }
 
 /// @title KeeperRewardRoutingSameResults -- TST-02 (Phase 351, v55.0 game-resident): the afking router
-///        reward-routing (the advance bounty re-homed onto `mintBurnie()`) proven EMPIRICALLY, plus the
+///        reward-routing (the advance bounty re-homed onto `mintFlip()`) proven EMPIRICALLY, plus the
 ///        `afkingSnapshot` batched-read same-results + the `owedMap` pointer-hoist same-results.
 ///
 /// @notice This file is the PRIMARY DIFFERENTIAL same-results scaffolding (D-351-05): the
@@ -25,11 +25,11 @@ contract FFKeyHarness is DegenerusGameStorage {
 ///         `_settleGame` VRF-drain helper are the exact instruments the v55 box differential proofs
 ///         (351-04/05/08) port. Both are preserved VERBATIM here.
 ///
-///         The reward routing (the load-bearing re-home proof, reframed onto `mintBurnie`):
+///         The reward routing (the load-bearing re-home proof, reframed onto `mintFlip`):
 ///   - `advanceGame()` called STANDALONE (directly on GAME) earns the caller NOTHING — `advanceGame`
 ///     returns only `uint8 mult` and self-credits nobody (the 3 in-callee `creditFlip` sites were removed
 ///     at ADV-01 and never restored; v55 keeps the advance leg unrewarded standalone).
-///   - The SAME advance driven via `game.mintBurnie()` CREDITS the keeper: the router pays
+///   - The SAME advance driven via `game.mintFlip()` CREDITS the keeper: the router pays
 ///     `unit * ADVANCE_RATIO_NUM * mult` (GameAfkingModule.sol:995). The stall multiplier is HONORED — a
 ///     stalled new-day advance (`mult > 1`) credits STRICTLY MORE than the un-stalled (`mult == 1`)
 ///     advance, proven by RELATIVE magnitude (not the GAS-calibrated peg constant). The mid-day
@@ -55,7 +55,7 @@ contract FFKeyHarness is DegenerusGameStorage {
 ///     contract's own `ticketsOwedPacked` storage (the per-player owed truth) after a real advance drain.
 ///
 /// @dev The five call-site deltas applied (D-351-01, PATTERNS §"five call-site deltas"):
-///   Δ3 doWork→mintBurnie: `afKing.doWork()` -> `game.mintBurnie()` (the rewarded router).
+///   Δ3 doWork→mintFlip: `afKing.doWork()` -> `game.mintFlip()` (the rewarded router).
 ///   Δ4 autoBuy: `afKing.autoBuy(N)` has NO successor — the per-sub buy folded into `advanceGame()`'s
 ///      required-path STAGE; driven via a new-day `advanceGame()` + the `_settleGame` VRF drain.
 ///   Δ5 views/funding: `afKing.subscriberCount()` -> `_subscribers.length` via vm.load (RE-DERIVED slot
@@ -129,7 +129,7 @@ contract KeeperRewardRoutingSameResults is DeployProtocol {
     }
 
     // =========================================================================
-    // Task 1 — advanceGame UNREWARDED-standalone vs REWARDED-via-mintBurnie (multiplier honored)
+    // Task 1 — advanceGame UNREWARDED-standalone vs REWARDED-via-mintFlip (multiplier honored)
     // =========================================================================
 
     /// @notice STANDALONE advanceGame() earns the caller NOTHING (the in-callee creditFlip sites were
@@ -149,7 +149,7 @@ contract KeeperRewardRoutingSameResults is DeployProtocol {
         vm.prank(caller);
         uint8 mult = game.advanceGame();
 
-        // The caller earned ZERO router bounty — the standalone advance pays nothing (re-homed to mintBurnie).
+        // The caller earned ZERO router bounty — the standalone advance pays nothing (re-homed to mintFlip).
         assertEq(
             _countCoinflipStakeUpdatedFor(caller),
             0,
@@ -165,12 +165,12 @@ contract KeeperRewardRoutingSameResults is DeployProtocol {
         assertTrue(progressed, "non-vacuity: the standalone advance ticked the day (still fully functional)");
     }
 
-    /// @notice REWARDED via mintBurnie with the MULTIPLIER HONORED: the SAME new-day advance, driven via
-    ///         mintBurnie at a HIGHER STALL, credits the keeper STRICTLY MORE than at the un-stalled base.
+    /// @notice REWARDED via mintFlip with the MULTIPLIER HONORED: the SAME new-day advance, driven via
+    ///         mintFlip at a HIGHER STALL, credits the keeper STRICTLY MORE than at the un-stalled base.
     ///         Proven by RELATIVE magnitude (the 1/2/4/6 ladder flows through `unit * ADVANCE_RATIO_NUM *
     ///         mult`), never by the GAS-calibrated peg constant. mintPrice is identical across both
     ///         scenarios (same deploy level), so `unit` is identical and the credit ratio == the mult ratio.
-    function testAdvanceViaMintBurnieRewardedMultiplierHonored() public {
+    function testAdvanceViaMintFlipRewardedMultiplierHonored() public {
         // Settle so we start from a clean, not-due, not-locked baseline.
         _settleGame(0xADADAD0002);
         assertFalse(game.advanceDue(), "pre: settled");
@@ -179,12 +179,12 @@ contract KeeperRewardRoutingSameResults is DeployProtocol {
         uint256 snap = vm.snapshot();
 
         // --- Scenario A: lightly-stalled new-day advance (mult == 2: >= 20 min past the day boundary) ---
-        uint256 lowStallCredit = _mintBurnieAdvanceCreditAtStall(31 minutes);
+        uint256 lowStallCredit = _mintFlipAdvanceCreditAtStall(31 minutes);
         assertGt(lowStallCredit, 0, "REWARDED: the lightly-stalled advance credited the keeper (mult==2)");
 
         // --- Scenario B: heavily-stalled new-day advance (mult == 6: >= 2 hours past the day boundary) ---
         vm.revertTo(snap);
-        uint256 highStallCredit = _mintBurnieAdvanceCreditAtStall(2 hours + 1 minutes);
+        uint256 highStallCredit = _mintFlipAdvanceCreditAtStall(2 hours + 1 minutes);
         assertGt(highStallCredit, 0, "REWARDED: the heavily-stalled advance credited the keeper (mult==6)");
 
         // The multiplier is HONORED: the higher stall credits STRICTLY MORE (unit identical, only mult
@@ -197,12 +197,12 @@ contract KeeperRewardRoutingSameResults is DeployProtocol {
         );
     }
 
-    /// @dev Drive ONE mintBurnie() advance leg at `stallElapsed` past a fresh day boundary and return the
+    /// @dev Drive ONE mintFlip() advance leg at `stallElapsed` past a fresh day boundary and return the
     ///      keeper's credited router-bounty amount. Aligns the wall clock so a new-day advance is due and
-    ///      the stall window resolves to the intended multiplier. In v55 mintBurnie's structural
+    ///      the stall window resolves to the intended multiplier. In v55 mintFlip's structural
     ///      early-return takes the advance leg directly whenever `advanceDue()` is TRUE (no separate buy
     ///      leg to pin — the buy folded into advanceGame's STAGE), so no buy-leg pinning is needed.
-    function _mintBurnieAdvanceCreditAtStall(uint256 stallElapsed) internal returns (uint256) {
+    function _mintFlipAdvanceCreditAtStall(uint256 stallElapsed) internal returns (uint256) {
         // Move to the START of the NEXT calendar-day window, then add the stall offset. The advance
         // module derives day = _simulatedDayIndexAt(ts) = (ts-82620)/1days + 1, and the stall window is
         // elapsed = (ts-82620) mod 1days (DEPLOY_DAY_BOUNDARY==0). Rolling _today() forward by 1 makes a
@@ -215,13 +215,13 @@ contract KeeperRewardRoutingSameResults is DeployProtocol {
 
         vm.recordLogs();
         vm.prank(keeper);
-        game.mintBurnie();
+        game.mintFlip();
 
         // Read the recorded logs ONCE (vm.getRecordedLogs drains them) and derive BOTH the count and the
         // credited amount in a single pass, so the amount is not lost to a prior drain.
         (uint256 count, uint256 amount) = _keeperCreditCountAndAmount();
         // Exactly one router bounty credit on the advance leg.
-        assertEq(count, 1, "REWARDED: the advance leg credits the keeper exactly once via mintBurnie");
+        assertEq(count, 1, "REWARDED: the advance leg credits the keeper exactly once via mintFlip");
         return amount;
     }
 
@@ -242,14 +242,14 @@ contract KeeperRewardRoutingSameResults is DeployProtocol {
         }
     }
 
-    /// @notice MID-DAY partial-drain leg (mult == 1) is REWARDED via mintBurnie: a `day == dailyIdx`
+    /// @notice MID-DAY partial-drain leg (mult == 1) is REWARDED via mintFlip: a `day == dailyIdx`
     ///         advance that drains a non-empty read slot returns mult=1 (ADV-05/D-07, no escalation), so
     ///         the router credits the keeper exactly once. The mid-day partial-drain path is reachable
     ///         only at `day == dailyIdx`; after a clean settle we stage it by seeding a multi-player
     ///         read-slot backlog with `ticketsFullyProcessed = false` (the same condition the contract
     ///         reaches when tickets are bought after the day already advanced). The advance then takes
     ///         the mid-day branch, `_runProcessTicketBatch` WORKS, and `mult` returns 1.
-    function testMidDayPartialDrainRewardedViaMintBurnie() public {
+    function testMidDayPartialDrainRewardedViaMintFlip() public {
         // Settle to a clean, not-due, not-locked baseline: `day == dailyIdx` (the mid-day precondition).
         _settleGame(0x1D0E0003);
         assertFalse(game.advanceDue(), "pre: settled (advance not due)");
@@ -279,7 +279,7 @@ contract KeeperRewardRoutingSameResults is DeployProtocol {
 
         vm.recordLogs();
         vm.prank(keeper);
-        game.mintBurnie();
+        game.mintFlip();
 
         // The mid-day partial-drain leg IS rewardable advance-leg work - exactly one creditFlip (mult==1).
         assertEq(
@@ -289,7 +289,7 @@ contract KeeperRewardRoutingSameResults is DeployProtocol {
         );
     }
 
-    /// @notice GAMEOVER leg (mult == 0) is UNREWARDED via mintBurnie: the advance runs the gameover path
+    /// @notice GAMEOVER leg (mult == 0) is UNREWARDED via mintFlip: the advance runs the gameover path
     ///         (the flip-credit coin is worthless at gameover) and returns mult=0, so the router skips
     ///         the creditFlip entirely — zero credit. The one-category early-return RETURNS (does not
     ///         revert NoWork) — the advance category ran, it just earned nothing.
@@ -309,7 +309,7 @@ contract KeeperRewardRoutingSameResults is DeployProtocol {
 
         vm.recordLogs();
         vm.prank(keeper);
-        game.mintBurnie();
+        game.mintFlip();
 
         // mult==0 => the advance leg's `if (mult > 0)` guard skips the bounty, and the CEI-last creditFlip
         // is the `bountyEarned > 0` skip — ZERO credit to the keeper.

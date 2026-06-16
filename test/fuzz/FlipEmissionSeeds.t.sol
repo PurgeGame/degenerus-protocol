@@ -4,12 +4,12 @@ pragma solidity ^0.8.26;
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 
-/// @title BurnieEmissionSeeds — initial BURNIE emission as coinflip seed stakes
+/// @title FlipEmissionSeeds — initial FLIP emission as coinflip seed stakes
 /// @notice Proves the emission scheme end to end:
-///         1. SEEDS    — BurnieCoinflip's constructor stakes 200k for days 1-20, each
+///         1. SEEDS    — Coinflip's constructor stakes 200k for days 1-20, each
 ///                       to VAULT and sDGNRS; nothing is minted up front (totalSupply
 ///                       and vaultMintAllowance both start at 0).
-///         2. SURVIVAL — a seeded day's BURNIE only ever mints if it wins that day's
+///         2. SURVIVAL — a seeded day's FLIP only ever mints if it wins that day's
 ///                       flip; sDGNRS wins are claimed-and-minted straight to its
 ///                       wallet balance by the daily resolution (redemption backing),
 ///                       with no claimable residue left behind.
@@ -21,7 +21,7 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 ///
 /// @dev Drives `processCoinflipPayouts` directly as the GAME (the AdvanceModule call
 ///      shape) so each day's win/loss is chosen via the word's bit 0.
-contract BurnieEmissionSeeds is DeployProtocol {
+contract FlipEmissionSeeds is DeployProtocol {
     address internal constant GAME = ContractAddresses.GAME;
     address internal constant VAULT = ContractAddresses.VAULT;
     address internal constant SDGNRS = ContractAddresses.SDGNRS;
@@ -158,7 +158,7 @@ contract BurnieEmissionSeeds is DeployProtocol {
         assertEq(carry, payout + bonus, "win rolls into carry (with recycle bonus)");
         assertEq(coin.balanceOf(SDGNRS), 0, "post-arming win never mints to the wallet");
         assertEq(coinflip.previewClaimCoinflips(SDGNRS), 0, "nothing claimable post-arming");
-        assertEq(coin.totalSupply(), 0, "no BURNIE entered existence");
+        assertEq(coin.totalSupply(), 0, "no FLIP entered existence");
 
         // Day 22 LOSS: the whole carry gambles again and dies - rebuy forever.
         _resolveDay(SEED_DAYS + 2, false);

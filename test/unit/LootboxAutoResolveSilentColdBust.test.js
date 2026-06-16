@@ -242,8 +242,8 @@ describe("LootboxAutoResolveSilentColdBust — Phase 275 Wave 2 TST-LBX-AR-03", 
       //   - Manual caller `openBox` (payColdBustConsolation = true): the
       //     `if (payColdBustConsolation && whole == 0)` gate opens — pays
       //     LOOTBOX_WWXRP_CONSOLATION via wwxrp.mintPrize (observable via the WWXRP
-      //     ERC-20 `Transfer` event). (v47: the BURNIE-lootbox manual caller
-      //     openBurnieLootBox, which also passed payColdBustConsolation=true, was
+      //     ERC-20 `Transfer` event). (v47: the FLIP-lootbox manual caller
+      //     openFlipLootBox, which also passed payColdBustConsolation=true, was
       //     removed — terminal-paradox closure.)
       //   - Auto-resolve callers (payColdBustConsolation = false): the gate
       //     stays shut; `_queueTickets(0)` early-returns → fully silent.

@@ -93,7 +93,7 @@ contract SweepPerPlayerWorstCaseGas is DeployProtocol {
     ///         / N measured at N=32 — the loop-N-divide MARGINAL, NEVER a single-sub total (CR-01). Asserts
     ///         the converged marginal fits the ceiling and that 50 × it projects under the 16.7M HARD
     ///         ceiling (the SUB_STAGE_BATCH chunk is safe). The marginal INCLUDES the 349.2-restored per-sub
-    ///         BURNIE quest/affiliate/creditFlip side-effects (intended behavior, not subtracted).
+    ///         FLIP quest/affiliate/creditFlip side-effects (intended behavior, not subtracted).
     function testPerSubStageMarginalAndChunkFitsCeiling() public {
         vm.skip(true, "357-00b D-12 supersession: the per-player sweep-gas harness subscribes ungrounded subs then measures the STAGE per-sub marginal; the grounded subscribe buys at subscribe, perturbing the marginal; re-proven by V56AfkingGasMarginal (the per-sub marginal + chunk-fits-ceiling, all green)");
         uint256 totalN = _measureStageAdvanceGas(N_MARGINAL, "swpA_", /*reinvestPct*/ 0, /*claimable*/ 0);
@@ -147,7 +147,7 @@ contract SweepPerPlayerWorstCaseGas is DeployProtocol {
         uint256 reinvestPer = reinvestTotal / N_MARGINAL;
 
         // The per-sub marginal is shape-INSENSITIVE: reinvest is within TOLERANCE_BPS of typical (a broad
-        // band — the per-sub STAGE work is dominated by the stamp + the restored BURNIE side-effects, not
+        // band — the per-sub STAGE work is dominated by the stamp + the restored FLIP side-effects, not
         // the one extra reinvest read; neither direction hides a material divergence).
         uint256 hi = typicalPer > reinvestPer ? typicalPer : reinvestPer;
         uint256 lo = typicalPer > reinvestPer ? reinvestPer : typicalPer;

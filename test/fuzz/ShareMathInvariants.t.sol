@@ -4,8 +4,8 @@ pragma solidity ^0.8.26;
 import "forge-std/Test.sol";
 
 /// @title Share-Based Payout Math Fuzz Tests
-/// @notice Tests the core (reserve * amount) / supply formula used by DegenerusVault and DegenerusStonk.
-/// @dev These formulas determine how much ETH/stETH/BURNIE a user receives when burning shares.
+/// @notice Tests the core (reserve * amount) / supply formula used by DegenerusVault and DGNRS.
+/// @dev These formulas determine how much ETH/stETH/FLIP a user receives when burning shares.
 ///      Key properties: no overflow, no division-by-zero, proportional fairness.
 contract ShareMathInvariantsTest is Test {
     uint256 constant REFILL_SUPPLY = 1_000_000_000_000 ether; // 1T tokens

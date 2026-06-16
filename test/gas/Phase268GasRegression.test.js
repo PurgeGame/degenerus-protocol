@@ -159,7 +159,7 @@ const STAGE_RNG_REQUESTED = 1n;
 const STAGE_PURCHASE_DAILY = 6n;
 
 // v47: the retired single per-bet spin cap (=10) was replaced by per-currency caps
-// (MAX_SPINS_ETH=25 / MAX_SPINS_BURNIE=15 / MAX_SPINS_WWXRP=5) at
+// (MAX_SPINS_ETH=25 / MAX_SPINS_FLIP=15 / MAX_SPINS_WWXRP=5) at
 // DegenerusGameDegeneretteModule.sol L226-228. This regression benches the ETH
 // tier-3 worst case (see the worst-case derivation above), so it uses the ETH cap.
 // The worst-case spin count rises 10 -> 25, so the absolute worst-case gas number

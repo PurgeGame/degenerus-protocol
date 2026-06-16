@@ -40,7 +40,7 @@ interface IDegenerusQuestsAffiliate {
 }
 
 /// @notice Interface for crediting FLIP stakes directly via the coinflip contract.
-interface IBurnieCoinflipAffiliate {
+interface ICoinflipAffiliate {
     /// @notice Credit FLIP to a single player.
     /// @param player Recipient address.
     /// @param amount Amount of FLIP (18 decimals).
@@ -49,14 +49,14 @@ interface IBurnieCoinflipAffiliate {
 
 /// @notice Game-side accessor for the afking affiliate-base PULL (354-03 producer, 354-04 consumer).
 /// @dev The atomic read-and-zero of a sub's accrued `affiliateBase` (the running unclaimed flat-7%
-///      affiliate balance, WHOLE BURNIE) happens AT THE STORAGE OWNER (the Game / GameAfkingModule via
+///      affiliate balance, WHOLE FLIP) happens AT THE STORAGE OWNER (the Game / GameAfkingModule via
 ///      delegatecall) — AFF-PULL guardrail 1: the affiliate `claim` consumer can NEVER pre-load the
 ///      bases into a memory array, so a duplicate sub in `subs[]` drains 0 the second time. The accessor
 ///      is AFFILIATE-gated on the Game side (only `ContractAddresses.AFFILIATE` may drain).
 interface IGameAfkingDrain {
-    /// @notice Atomic read-and-zero of a sub's accrued affiliate base (whole BURNIE).
+    /// @notice Atomic read-and-zero of a sub's accrued affiliate base (whole FLIP).
     /// @param sub The subscriber whose affiliate base is drained.
-    /// @return base The drained whole-BURNIE affiliate base (0 if already drained / never accrued).
+    /// @return base The drained whole-FLIP affiliate base (0 if already drained / never accrued).
     function drainAffiliateBase(address sub) external returns (uint256 base);
 
     /// @notice Current game level (the claim-time level basis for the leaderboard write).
@@ -148,7 +148,7 @@ contract DegenerusAffiliate {
      * STORAGE LAYOUT (32 bytes):
      * +----------------------------------------------------+
      * | [0:20]  player   address   Top affiliate address   |
-     * | [20:32] score    uint96    Raw BURNIE earned       |
+     * | [20:32] score    uint96    Raw FLIP earned       |
      * +----------------------------------------------------+
      */
     struct PlayerScore {
@@ -198,8 +198,8 @@ contract DegenerusAffiliate {
 
     /// @notice DegenerusQuests contract for direct quest handler calls (constant).
     IDegenerusQuestsAffiliate internal constant quests = IDegenerusQuestsAffiliate(ContractAddresses.QUESTS);
-    /// @notice BurnieCoinflip contract for direct flip crediting (constant).
-    IBurnieCoinflipAffiliate internal constant coinflip = IBurnieCoinflipAffiliate(ContractAddresses.COINFLIP);
+    /// @notice Coinflip contract for direct flip crediting (constant).
+    ICoinflipAffiliate internal constant coinflip = ICoinflipAffiliate(ContractAddresses.COINFLIP);
     /// @notice Game contract for presale status checks (constant).
     IDegenerusGame internal constant game = IDegenerusGame(ContractAddresses.GAME);
     /// @notice Game-side afking accessor for the affiliate-base PULL drain + claim-time level (constant).
@@ -592,7 +592,7 @@ contract DegenerusAffiliate {
      *      `skipU1`/`skipU2` drop the share for the rare case where an upline is itself the sub (A is
      *      never the sub — self-referral resolves to VAULT). No-referrer subs split 50/50 VAULT/DGNRS.
      *      The split is fixed (no roll, no seed), so claiming on any day yields the same result.
-     *      Recipients are paid directly via `creditFlip` (BURNIE; no ETH/`claimablePool` touch).
+     *      Recipients are paid directly via `creditFlip` (FLIP; no ETH/`claimablePool` touch).
      * @param subs Afking subscribers to settle; all must share the same direct affiliate `A` (from subs[0]).
      */
     function claim(address[] calldata subs) external {
@@ -637,7 +637,7 @@ contract DegenerusAffiliate {
         if (sumB == 0) return; // nothing accrued / already drained — no-op (idempotent re-claim)
 
         if (noReferrer) {
-            // No referrer: 50/50 VAULT/DGNRS, remainder to VAULT (×1e18: whole BURNIE → base units).
+            // No referrer: 50/50 VAULT/DGNRS, remainder to VAULT (×1e18: whole FLIP → base units).
             uint256 dgnrsShare = sumB / 2;
             uint256 vaultShare = sumB - dgnrsShare;
             coinflip.creditFlip(ContractAddresses.VAULT, vaultShare * 1 ether);
@@ -679,7 +679,7 @@ contract DegenerusAffiliate {
      *      Used for trophies and jackpot affiliate selection.
      * @param lvl The game level to query.
      * @return player Address of the top affiliate.
-     * @return score Their score in BURNIE base units (18 decimals).
+     * @return score Their score in FLIP base units (18 decimals).
      */
     function affiliateTop(uint24 lvl) external view returns (address player, uint96 score) {
         PlayerScore memory stored = affiliateTopByLevel[lvl];

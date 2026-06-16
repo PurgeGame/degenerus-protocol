@@ -220,8 +220,8 @@ contract DustAccumulationTest is Test {
     // 6. Price Conversion Dust (PREC-04)
     // =========================================================================
 
-    /// @notice ETH-to-BURNIE conversion dust bounded
-    function testFuzz_ethToBurnie_dustBounded(
+    /// @notice ETH-to-FLIP conversion dust bounded
+    function testFuzz_ethToFlip_dustBounded(
         uint128 amountWei,
         uint8 tierIndex
     ) public pure {
@@ -237,7 +237,7 @@ contract DustAccumulationTest is Test {
         else if (tierIndex == 5) priceWei = 0.16 ether;
         else priceWei = 0.24 ether;
 
-        // _ethToBurnieValue: (amountWei * PRICE_COIN_UNIT) / priceWei
+        // _ethToFlipValue: (amountWei * PRICE_COIN_UNIT) / priceWei
         uint256 product = uint256(amountWei) * PRICE_COIN_UNIT;
         // Overflow guard
         vm.assume(product / PRICE_COIN_UNIT == uint256(amountWei));

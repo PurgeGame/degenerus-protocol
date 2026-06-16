@@ -2,8 +2,8 @@
 //
 // JackpotNearFutureCoinFloor.test.js — Phase 279 Wave 2 TST-BUR-02
 //
-// Whole-BURNIE floor + dead-variable removal regression on the near-future
-// coin-jackpot BURNIE-award site.
+// Whole-FLIP floor + dead-variable removal regression on the near-future
+// coin-jackpot FLIP-award site.
 //   `_awardDailyCoinToTraitWinners` in
 //   `contracts/modules/DegenerusGameJackpotModule.sol` floors `baseAmount` via
 //   `((coinBudget / cap) / 1 ether) * 1 ether` (D-279-INLINE-01), and the
@@ -16,7 +16,7 @@
 //
 //   Budget evaporation: when `baseAmount < 1 ether`, the floor yields
 //   `amount == 0` and the existing `if (winner != address(0) && amount != 0)`
-//   guard silently skips both the `JackpotBurnieWin` emit and the
+//   guard silently skips both the `JackpotFlipWin` emit and the
 //   `coinflip.creditFlip(winner, amount)` call — the full daily near-future
 //   budget evaporates with no consolation (D-40N-BUR-DUST-01 / D-40N-BUR-SILENT-01).
 //
@@ -32,7 +32,7 @@
 // CROSS-CITES:
 //   - D-279-INLINE-01 (inline `(x / 1 ether) * 1 ether` floor — no shared helper)
 //   - D-279-BUR02-DEADVAR-01 (full `extra`/`cursor` dead-var removal)
-//   - D-40N-BUR-DUST-01 (sub-1-BURNIE residue evaporates)
+//   - D-40N-BUR-DUST-01 (sub-1-FLIP residue evaporates)
 //   - D-40N-BUR-SILENT-01 (no consolation / replacement event / redistribution)
 //   - D-279-DISAMBIG-01 (the ticket-award cursor-rotation near :1003 is OUT OF SCOPE)
 //   - test/unit/JackpotTicketRollSilentColdBust.test.js (extractBody + stripLineComments infra)
@@ -84,8 +84,8 @@ function stripLineComments(body) {
     .join("\n");
 }
 
-// The whole-BURNIE floor as applied on-chain: `(x / 1 ether) * 1 ether`.
-function floorWholeBurnie(x) {
+// The whole-FLIP floor as applied on-chain: `(x / 1 ether) * 1 ether`.
+function floorWholeFlip(x) {
   return (x / ONE_ETHER) * ONE_ETHER;
 }
 
@@ -93,7 +93,7 @@ describe("JackpotNearFutureCoinFloor — Phase 279 Wave 2 TST-BUR-02", function 
   this.timeout(30_000);
 
   describe("Source-structural proof: `_awardDailyCoinToTraitWinners` floors `baseAmount` and the `extra`/`cursor` machinery is fully removed", function () {
-    it("[01a] body contains the inline whole-BURNIE floor `baseAmount = ((coinBudget / cap) / 1 ether) * 1 ether`", function () {
+    it("[01a] body contains the inline whole-FLIP floor `baseAmount = ((coinBudget / cap) / 1 ether) * 1 ether`", function () {
       const source = fs.readFileSync(MODULE_SOURCE_PATH, "utf8");
       const body = stripLineComments(
         extractBody(source, "function _awardDailyCoinToTraitWinners(")
@@ -176,8 +176,8 @@ describe("JackpotNearFutureCoinFloor — Phase 279 Wave 2 TST-BUR-02", function 
     });
   });
 
-  describe("Budget-evaporation structural proof: a sub-1-BURNIE `baseAmount` floors `amount` to 0 and the selection loop is skipped before any emit or credit", function () {
-    it("[02a] index-ordering: the `baseAmount == 0` early-return precedes the loop; inside it the winner-guard precedes the `JackpotBurnieWin` emit, which precedes the batch accumulation; the single `creditFlipBatch` call sits after the loop behind `anyWinner`", function () {
+  describe("Budget-evaporation structural proof: a sub-1-FLIP `baseAmount` floors `amount` to 0 and the selection loop is skipped before any emit or credit", function () {
+    it("[02a] index-ordering: the `baseAmount == 0` early-return precedes the loop; inside it the winner-guard precedes the `JackpotFlipWin` emit, which precedes the batch accumulation; the single `creditFlipBatch` call sits after the loop behind `anyWinner`", function () {
       const source = fs.readFileSync(MODULE_SOURCE_PATH, "utf8");
       const body = stripLineComments(
         extractBody(source, "function _awardDailyCoinToTraitWinners(")
@@ -190,7 +190,7 @@ describe("JackpotNearFutureCoinFloor — Phase 279 Wave 2 TST-BUR-02", function 
       const guardIdx = body.search(
         /if\s*\(\s*winner\s*!=\s*address\(0\)\s*&&\s*amount\s*!=\s*0\s*\)/
       );
-      const emitIdx = body.indexOf("emit JackpotBurnieWin(");
+      const emitIdx = body.indexOf("emit JackpotFlipWin(");
       const accumIdx = body.indexOf("batchPlayers[i] = winner");
       const batchCallIdx = body.indexOf(
         "coinflip.creditFlipBatch(batchPlayers, batchAmounts)"
@@ -205,7 +205,7 @@ describe("JackpotNearFutureCoinFloor — Phase 279 Wave 2 TST-BUR-02", function 
         guardIdx,
         "`if (winner != address(0) && amount != 0)` guard not found"
       ).to.be.greaterThan(-1);
-      expect(emitIdx, "`JackpotBurnieWin` emit not found").to.be.greaterThan(-1);
+      expect(emitIdx, "`JackpotFlipWin` emit not found").to.be.greaterThan(-1);
       expect(
         accumIdx,
         "`batchPlayers[i] = winner` batch accumulation not found"
@@ -225,11 +225,11 @@ describe("JackpotNearFutureCoinFloor — Phase 279 Wave 2 TST-BUR-02", function 
       ).to.be.lessThan(guardIdx);
       expect(
         guardIdx,
-        "the `amount != 0` guard must precede the `JackpotBurnieWin` emit so a zero `amount` silently skips the emit"
+        "the `amount != 0` guard must precede the `JackpotFlipWin` emit so a zero `amount` silently skips the emit"
       ).to.be.lessThan(emitIdx);
       expect(
         emitIdx,
-        "the `JackpotBurnieWin` emit must precede the batch accumulation (both inside the guard)"
+        "the `JackpotFlipWin` emit must precede the batch accumulation (both inside the guard)"
       ).to.be.lessThan(accumIdx);
       expect(
         anyWinnerGateIdx,
@@ -243,23 +243,23 @@ describe("JackpotNearFutureCoinFloor — Phase 279 Wave 2 TST-BUR-02", function 
   });
 
   describe("JS boundary math: `((coinBudget / cap) / 1 ether) * 1 ether` floor cases (confirmation layer)", function () {
-    it("coinBudget=50 BURNIE, cap=100 → baseAmount = 0.5 BURNIE → floors to 0 (full daily budget evaporates)", function () {
+    it("coinBudget=50 FLIP, cap=100 → baseAmount = 0.5 FLIP → floors to 0 (full daily budget evaporates)", function () {
       const coinBudget = ONE_ETHER * 50n;
       const cap = 100n;
-      const baseAmount = floorWholeBurnie(coinBudget / cap);
+      const baseAmount = floorWholeFlip(coinBudget / cap);
       expect(baseAmount).to.equal(0n);
     });
 
-    it("coinBudget=150 BURNIE, cap=100 → baseAmount = 1.5 BURNIE → floors to 1 BURNIE per winner", function () {
+    it("coinBudget=150 FLIP, cap=100 → baseAmount = 1.5 FLIP → floors to 1 FLIP per winner", function () {
       const coinBudget = ONE_ETHER * 150n;
       const cap = 100n;
-      const baseAmount = floorWholeBurnie(coinBudget / cap);
+      const baseAmount = floorWholeFlip(coinBudget / cap);
       expect(baseAmount).to.equal(ONE_ETHER);
     });
 
-    it("the floored `baseAmount` is always a whole-BURNIE multiple (`% 1 ether == 0`)", function () {
-      for (const budgetBurnie of [50n, 150n, 99n, 100n, 250n, 1000n]) {
-        const baseAmount = floorWholeBurnie((ONE_ETHER * budgetBurnie) / 100n);
+    it("the floored `baseAmount` is always a whole-FLIP multiple (`% 1 ether == 0`)", function () {
+      for (const budgetFlip of [50n, 150n, 99n, 100n, 250n, 1000n]) {
+        const baseAmount = floorWholeFlip((ONE_ETHER * budgetFlip) / 100n);
         expect(baseAmount % ONE_ETHER).to.equal(0n);
       }
     });

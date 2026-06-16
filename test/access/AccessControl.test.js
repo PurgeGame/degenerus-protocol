@@ -19,10 +19,10 @@ import {
  * .to.be.reverted is used.
  *
  * Error name mapping (from source files):
- *  BurnieCoin       : OnlyFlipCreditors, OnlyGame, OnlyVault
- *  BurnieCoinflip   : OnlyFlipCreditors, OnlyDegenerusGame, OnlyBurnieCoin
+ *  FLIP       : OnlyFlipCreditors, OnlyGame, OnlyVault
+ *  Coinflip   : OnlyFlipCreditors, OnlyDegenerusGame, OnlyFLIP
  *  DegenerusGame    : E (generic guard)
- *  DegenerusStonk   : Unauthorized
+ *  DGNRS   : Unauthorized
  *  DegenerusVault   : Unauthorized
  *  DegenerusJackpots: OnlyCoin, OnlyGame
  *  DegenerusQuests  : OnlyCoin, OnlyGame
@@ -35,13 +35,13 @@ describe("AccessControl", function () {
   });
 
   // ---------------------------------------------------------------------------
-  // BurnieCoin
+  // FLIP
   // ---------------------------------------------------------------------------
 
-  describe("BurnieCoin", function () {
-    // creditFlip, creditFlipBatch, creditCoin removed from BurnieCoin in Phase 146 ABI cleanup
+  describe("FLIP", function () {
+    // creditFlip, creditFlipBatch, creditCoin removed from FLIP in Phase 146 ABI cleanup
 
-    // rollDailyQuest removed from BurnieCoin — moved to DegenerusQuests (v13.0)
+    // rollDailyQuest removed from FLIP — moved to DegenerusQuests (v13.0)
 
     it("vaultEscrow: reverts when called by alice (OnlyVault)", async function () {
       const { coin, alice } = await loadFixture(deployFullProtocol);
@@ -69,10 +69,10 @@ describe("AccessControl", function () {
   });
 
   // ---------------------------------------------------------------------------
-  // BurnieCoinflip
+  // Coinflip
   // ---------------------------------------------------------------------------
 
-  describe("BurnieCoinflip", function () {
+  describe("Coinflip", function () {
     it("processCoinflipPayouts: reverts when called by alice (OnlyDegenerusGame)", async function () {
       const { coinflip, alice } = await loadFixture(deployFullProtocol);
 
@@ -81,12 +81,12 @@ describe("AccessControl", function () {
       ).to.be.revertedWithCustomError(coinflip, "OnlyDegenerusGame");
     });
 
-    it("claimCoinflipsFromBurnie: reverts when called by alice (OnlyBurnieCoin)", async function () {
+    it("claimCoinflipsFromFlip: reverts when called by alice (OnlyFLIP)", async function () {
       const { coinflip, alice } = await loadFixture(deployFullProtocol);
 
       await expect(
-        coinflip.connect(alice).claimCoinflipsFromBurnie(alice.address, eth("100"))
-      ).to.be.revertedWithCustomError(coinflip, "OnlyBurnieCoin");
+        coinflip.connect(alice).claimCoinflipsFromFlip(alice.address, eth("100"))
+      ).to.be.revertedWithCustomError(coinflip, "OnlyFLIP");
     });
 
     it("creditFlip: reverts when called by alice (OnlyFlipCreditors)", async function () {
@@ -158,10 +158,10 @@ describe("AccessControl", function () {
   });
 
   // ---------------------------------------------------------------------------
-  // DegenerusStonk (DGNRS)
+  // DGNRS (DGNRS)
   // ---------------------------------------------------------------------------
 
-  describe("DegenerusStonk (DGNRS)", function () {
+  describe("DGNRS (DGNRS)", function () {
     it("depositSteth: reverts when called by alice (onlyGame → Unauthorized)", async function () {
       const { sdgnrs, alice } = await loadFixture(deployFullProtocol);
 
@@ -425,7 +425,7 @@ describe("AccessControl", function () {
       ).to.be.revertedWithCustomError(coin, "OnlyGame");
     });
 
-    // coin.mintForCoinflip removed from BurnieCoin in Phase 146 (merged into mintForGame)
+    // coin.mintForCoinflip removed from FLIP in Phase 146 (merged into mintForGame)
 
     it("coin.vaultMintTo reverts when called by alice (onlyVault → OnlyVault)", async function () {
       const { coin, alice } = await loadFixture(deployFullProtocol);

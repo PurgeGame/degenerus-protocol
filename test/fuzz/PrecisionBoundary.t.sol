@@ -227,9 +227,9 @@ contract PrecisionBoundaryTest is Test {
     function test_decimator_atCapBoundary_effectiveAmountNonZero() public pure {
         uint256 DECIMATOR_MULTIPLIER_CAP = 200 * PRICE_COIN_UNIT;
 
-        // Scenario: prevBurn just below cap, baseAmount = 1 BURNIE, multBps = 15000 (1.5x)
+        // Scenario: prevBurn just below cap, baseAmount = 1 FLIP, multBps = 15000 (1.5x)
         uint256 prevBurn = DECIMATOR_MULTIPLIER_CAP - 1;
-        uint256 baseAmount = PRICE_COIN_UNIT; // 1 full BURNIE
+        uint256 baseAmount = PRICE_COIN_UNIT; // 1 full FLIP
         uint256 multBps = 15_000;
 
         // Replicate _decEffectiveAmount logic

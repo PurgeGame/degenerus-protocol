@@ -21,10 +21,10 @@ import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 ///             `boxPlayers` walk, NO `lootboxEth*` read/zero (the afking open is uniform O(1) per box, the
 ///             anti-gas-DoS property);
 ///           - it is driven by `_autoOpen(maxCount)` (:938), gated by `_afkingBoxReady` (:918), reached
-///             ONLY via `game.mintBurnie()` (the open leg at :1000-1009). `game.autoOpen(uint256)` is the
+///             ONLY via `game.mintFlip()` (the open leg at :1000-1009). `game.autoOpen(uint256)` is the
 ///             HUMAN `boxPlayers` selector (DegenerusGame.sol:1787) and does NOT reach the afking open —
-///             so EVERY afking open in this suite is driven by `mintBurnie()` after a `_settleClean` (so it
-///             routes to OPEN, advance-not-due). N < OPEN_BATCH so one `mintBurnie()` opens all N.
+///             so EVERY afking open in this suite is driven by `mintFlip()` after a `_settleClean` (so it
+///             routes to OPEN, advance-not-due). N < OPEN_BATCH so one `mintFlip()` opens all N.
 ///
 ///         The MARGINAL rule PRESERVED VERBATIM (CR-01 / 350-SPEC §0, load-bearing): Test D's loop-N-divide
 ///         MARGINAL — `perBoxMarginal = totalGas / nBoxes`, asserted < `SINGLE_BOX_TOTAL_REF_GAS` — is kept
@@ -106,7 +106,7 @@ contract KeeperOpenBoxWorstCaseGas is DeployProtocol {
     // =========================================================================
 
     /// @notice TST-06 / 350-SPEC §2: with exactly one stamped + RNG-ready + un-opened AFKING box, measure
-    ///         the `mintBurnie()` open leg gas. Asserts the box is queued (a stamped sub), RNG-ready
+    ///         the `mintFlip()` open leg gas. Asserts the box is queued (a stamped sub), RNG-ready
     ///         (`rngWordByDay[stampDay] != 0` so the `_afkingBoxReady` gate does NOT skip it), and un-opened
     ///         (`lastOpenedDay < lastAutoBoughtDay`) BEFORE the measurement is trusted; asserts the measured
     ///         gas < the 30M mainnet block limit; asserts (non-vacuity) the box ACTUALLY opened
@@ -126,14 +126,14 @@ contract KeeperOpenBoxWorstCaseGas is DeployProtocol {
         assertTrue(rngWordByDay(stampDay) != 0, "worst case: the stamp-day word landed (box RNG-ready, not the _afkingBoxReady skip)");
         assertTrue(_lastOpenedDayOf(subs[0]) < stampDay, "worst case: the box is queued + un-opened");
 
-        // Settle clean so mintBurnie routes to the OPEN leg (advance not due), then measure opening exactly
-        // ONE queued afking box (the afking open is mintBurnie-only; game.autoOpen is the human path).
+        // Settle clean so mintFlip routes to the OPEN leg (advance not due), then measure opening exactly
+        // ONE queued afking box (the afking open is mintFlip-only; game.autoOpen is the human path).
         _settleClean(0x09E20FE);
-        assertFalse(game.advanceDue(), "mintBurnie routes to OPEN (advance not due)");
+        assertFalse(game.advanceDue(), "mintFlip routes to OPEN (advance not due)");
         vm.recordLogs();
         vm.prank(cranker);
         uint256 gasBefore = gasleft();
-        game.mintBurnie();
+        game.mintFlip();
         uint256 gasUsed = gasBefore - gasleft();
 
         // Non-vacuity: the box actually opened — its day-keyed marker advanced to the stamp day (NOT a
@@ -160,14 +160,14 @@ contract KeeperOpenBoxWorstCaseGas is DeployProtocol {
     /// @notice TST-06 / 350-SPEC §2 + CR-01 (350-SPEC §0): the per-OPEN marginal — the marginal cost of
     ///         opening one more box in an N-box afking open. Measured by the SAME loop-N-divide idiom the
     ///         donor's Test D (:163-217) used: queue N distinct READY un-opened AFKING boxes, drive the
-    ///         afking open leg (`mintBurnie()`) ONCE, divide the gasleft-delta by N so the per-call fixed
+    ///         afking open leg (`mintFlip()`) ONCE, divide the gasleft-delta by N so the per-call fixed
     ///         overhead (the cursor SLOAD/SSTORE, the once-per-tx `creditFlip`) amortizes away. A large N
     ///         (32) converges the marginal to the true per-box materialization cost. Asserts the per-box
     ///         marginal is materially BELOW the single-box reference total (the gap is the mis-attributed
     ///         fixed overhead, CR-01) and is uniform O(1) (no cold-ledger walk — the anti-gas-DoS property
     ///         the afking open was designed for, 350-SPEC §2).
     ///
-    ///         The afking open is reached ONLY via `mintBurnie()` (the open leg `_autoOpen(OPEN_BATCH)`).
+    ///         The afking open is reached ONLY via `mintFlip()` (the open leg `_autoOpen(OPEN_BATCH)`).
     ///         The 2 deploy subs (VAULT + SDGNRS) become ready boxes too; the marginal divides by the boxes
     ///         ACTUALLY opened (N + 2) so the number is a conservative per-box figure, never a single-box
     ///         total.
@@ -189,14 +189,14 @@ contract KeeperOpenBoxWorstCaseGas is DeployProtocol {
         }
         assertTrue(rngWordByDay(stampDay) != 0, "pre: the stamp-day word landed (boxes ready)");
 
-        // Settle clean so mintBurnie routes to OPEN, then bracket the whole afking open leg over the N (+2
+        // Settle clean so mintFlip routes to OPEN, then bracket the whole afking open leg over the N (+2
         // deploy) ready boxes; divide by the boxes actually opened for the per-box marginal (fixed overhead
-        // paid once). N + 2 < OPEN_BATCH so one mintBurnie opens them all.
+        // paid once). N + 2 < OPEN_BATCH so one mintFlip opens them all.
         _settleClean(0x09E20FE);
-        assertFalse(game.advanceDue(), "mintBurnie routes to OPEN (advance not due)");
+        assertFalse(game.advanceDue(), "mintFlip routes to OPEN (advance not due)");
         vm.prank(cranker);
         uint256 gasBefore = gasleft();
-        game.mintBurnie();
+        game.mintFlip();
         uint256 totalGas = gasBefore - gasleft();
 
         // Non-vacuity: every queued box actually opened (lastOpenedDay advanced on open), so the marginal is
@@ -280,7 +280,7 @@ contract KeeperOpenBoxWorstCaseGas is DeployProtocol {
 
     /// @dev Measure the afking open-leg per-box marginal over `n` freshly-stamped + ready afking boxes:
     ///      stamp n funded lootbox subs (new-day STAGE), land the stamp-day word, settle clean (so
-    ///      mintBurnie routes to OPEN), open ALL of them in one mintBurnie, divide by the boxes actually
+    ///      mintFlip routes to OPEN), open ALL of them in one mintFlip, divide by the boxes actually
     ///      opened (n + 2 deploy subs). The loop-N-divide MARGINAL (never a single-box total).
     function _measureOpenLegPerBox(uint256 n, string memory prefix) internal returns (uint256 perBox) {
         address[] memory subs = _setupFundedLootboxSubs(n, prefix, 5 ether);
@@ -293,10 +293,10 @@ contract KeeperOpenBoxWorstCaseGas is DeployProtocol {
         }
 
         _settleClean(uint256(keccak256(abi.encodePacked(prefix, "clean"))) | 1);
-        require(!game.advanceDue(), "fixture: clean so mintBurnie opens");
+        require(!game.advanceDue(), "fixture: clean so mintFlip opens");
         vm.prank(makeAddr(string(abi.encodePacked(prefix, "opener"))));
         uint256 gasBefore = gasleft();
-        game.mintBurnie();
+        game.mintFlip();
         uint256 totalGas = gasBefore - gasleft();
 
         for (uint256 i; i < n; ++i) {
@@ -362,7 +362,7 @@ contract KeeperOpenBoxWorstCaseGas is DeployProtocol {
     }
 
     /// @dev A robust settle DEMANDING a clean (`!advanceDue && !rngLocked`) state before returning — used
-    ///      before a mintBurnie open so it reliably takes the OPEN leg.
+    ///      before a mintFlip open so it reliably takes the OPEN leg.
     function _settleClean(uint256 vrfWord) internal {
         for (uint256 d; d < 240; d++) {
             if (!game.advanceDue() && !game.rngLocked()) return;

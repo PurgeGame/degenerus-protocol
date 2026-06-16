@@ -30,14 +30,14 @@ import {PriceLookupLib} from "../../contracts/libraries/PriceLookupLib.sol";
 ///
 ///   DECURSE (CURSE-06, GameAfkingModule.decurse:1696, dispatched DegenerusGame.sol:443): permissionless;
 ///   reverts E() if the target's curse is already 0 (no wasted burn); burns exactly PRICE_COIN_UNIT/10
-///   (100 BURNIE) from msg.sender via burnCoin; clears the curse to 0; emits Decursed(msg.sender, target).
-///   Proven: a clear + the exact 100-BURNIE burn + the Decursed expectEmit, a revert-if-already-0, and a
+///   (100 FLIP) from msg.sender via burnCoin; clears the curse to 0; emits Decursed(msg.sender, target).
+///   Proven: a clear + the exact 100-FLIP burn + the Decursed expectEmit, a revert-if-already-0, and a
 ///   permissionless clear (a non-owner curer clears another player's curse).
 ///
 /// @dev Reuses the funded-sub + new-day STAGE harness + the canonical-layout seeders from V61CurseSet. The
 ///   staleness basis maybeCurse uses is _currentMintDay() == dailyIdx (the monotonic advance counter, == 1 at
 ///   fresh deploy), so dailyIdx is seeded to 100 in setUp (field-isolated slot-0 RMW) — irrelevant to the CURE
-///   itself (the curse is seeded directly) but kept consistent with the curse-SET harness. BURNIE is minted
+///   itself (the curse is seeded directly) but kept consistent with the curse-SET harness. FLIP is minted
 ///   via the GAME-gated coin.mintForGame; balances read via coin.balanceOf. Seeded-fuzz deterministic.
 ///   Test-only: ZERO contracts/*.sol mutation.
 contract V61CureBountyDecurse is DeployProtocol {
@@ -53,9 +53,9 @@ contract V61CureBountyDecurse is DeployProtocol {
     uint256 private constant CURSE_COUNT_SHIFT = 215; // (8 bits)
     uint256 private constant CURSE_COUNT_CAP = 20;
 
-    // PRICE_COIN_UNIT = 1000 ether (BurnieCoin/Storage); decurse burns PRICE_COIN_UNIT/10 = 100 BURNIE.
+    // PRICE_COIN_UNIT = 1000 ether (FLIP/Storage); decurse burns PRICE_COIN_UNIT/10 = 100 FLIP.
     uint256 private constant PRICE_COIN_UNIT = 1000 ether;
-    uint256 private constant DECURSE_BURN = PRICE_COIN_UNIT / 10; // 100 BURNIE
+    uint256 private constant DECURSE_BURN = PRICE_COIN_UNIT / 10; // 100 FLIP
 
     uint256 private constant DRAIN_MAX_ITERATIONS = 60;
     uint256 private _lastFulfilledReqId;
@@ -306,19 +306,19 @@ contract V61CureBountyDecurse is DeployProtocol {
     }
 
     // =========================================================================
-    // DECURSE — permissionless paid clear: 100 BURNIE, Decursed emit, revert-if-0
+    // DECURSE — permissionless paid clear: 100 FLIP, Decursed emit, revert-if-0
     // =========================================================================
 
-    /// @notice decurse clears the target's curse to 0, burns EXACTLY 100 BURNIE (PRICE_COIN_UNIT/10) from the
+    /// @notice decurse clears the target's curse to 0, burns EXACTLY 100 FLIP (PRICE_COIN_UNIT/10) from the
     ///         caller, and emits Decursed(msg.sender, target). Falsifiable: the burn delta is pinned to 100
-    ///         BURNIE and the expectEmit pins both topics.
+    ///         FLIP and the expectEmit pins both topics.
     function testDecurseClearsBurns100AndEmits() public {
         address target = makeAddr("decurse_target");
         address curer = makeAddr("decurse_curer");
         _seedCurse(target, 6);
-        _fundBurnie(curer, DECURSE_BURN); // exactly 100 BURNIE — proves the exact cost
+        _fundFlip(curer, DECURSE_BURN); // exactly 100 FLIP — proves the exact cost
 
-        uint256 burnieBefore = coin.balanceOf(curer);
+        uint256 flipBefore = coin.balanceOf(curer);
         assertEq(game.curseCountOf(target), 6, "pre: target cursed");
 
         vm.expectEmit(true, true, false, false, address(game));
@@ -327,32 +327,32 @@ contract V61CureBountyDecurse is DeployProtocol {
         game.decurse(target);
 
         assertEq(game.curseCountOf(target), 0, "decurse cleared the curse to 0");
-        assertEq(burnieBefore - coin.balanceOf(curer), DECURSE_BURN, "decurse burned EXACTLY 100 BURNIE (PRICE_COIN_UNIT/10)");
-        assertEq(coin.balanceOf(curer), 0, "the curer's 100 BURNIE was fully consumed");
+        assertEq(flipBefore - coin.balanceOf(curer), DECURSE_BURN, "decurse burned EXACTLY 100 FLIP (PRICE_COIN_UNIT/10)");
+        assertEq(coin.balanceOf(curer), 0, "the curer's 100 FLIP was fully consumed");
     }
 
-    /// @notice decurse reverts when the target's curse is already 0 — no wasted burn. The caller's BURNIE
+    /// @notice decurse reverts when the target's curse is already 0 — no wasted burn. The caller's FLIP
     ///         balance is asserted UNCHANGED (the revert fires before burnCoin).
     function testDecurseRevertsIfAlreadyZeroNoBurn() public {
         address target = makeAddr("decurse_zero_target");
         address curer = makeAddr("decurse_zero_curer");
-        _fundBurnie(curer, 500 ether);
+        _fundFlip(curer, 500 ether);
         assertEq(game.curseCountOf(target), 0, "pre: target has no curse");
 
-        uint256 burnieBefore = coin.balanceOf(curer);
+        uint256 flipBefore = coin.balanceOf(curer);
         vm.prank(curer);
         vm.expectRevert();
         game.decurse(target);
-        assertEq(coin.balanceOf(curer), burnieBefore, "revert-if-0: no BURNIE burned");
+        assertEq(coin.balanceOf(curer), flipBefore, "revert-if-0: no FLIP burned");
     }
 
     /// @notice decurse is PERMISSIONLESS — any non-owner can clear ANOTHER player's curse (it is purely
-    ///         beneficial). The curer (unrelated to the target) pays the 100 BURNIE and clears the target.
+    ///         beneficial). The curer (unrelated to the target) pays the 100 FLIP and clears the target.
     function testDecursePermissionlessThirdPartyClear() public {
         address target = makeAddr("decurse_3p_target");
         address stranger = makeAddr("decurse_3p_stranger");
         _seedCurse(target, 4);
-        _fundBurnie(stranger, 200 ether);
+        _fundFlip(stranger, 200 ether);
         assertEq(game.curseCountOf(target), 4, "pre: target cursed");
 
         vm.prank(stranger);
@@ -452,11 +452,11 @@ contract V61CureBountyDecurse is DeployProtocol {
     }
 
     // =========================================================================
-    // BURNIE + affiliate helpers
+    // FLIP + affiliate helpers
     // =========================================================================
 
-    /// @dev Mint BURNIE to `who` via the GAME-gated mintForGame (the established test pattern).
-    function _fundBurnie(address who, uint256 amount) internal {
+    /// @dev Mint FLIP to `who` via the GAME-gated mintForGame (the established test pattern).
+    function _fundFlip(address who, uint256 amount) internal {
         vm.prank(address(game));
         coin.mintForGame(who, amount);
     }

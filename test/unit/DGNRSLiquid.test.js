@@ -100,7 +100,7 @@ async function depositETH(sdgnrs, game, amount) {
   await hre.network.provider.request({ method: "hardhat_stopImpersonatingAccount", params: [gameAddr] });
 }
 
-describe("DegenerusStonk (DGNRS Liquid Token)", function () {
+describe("DGNRS (DGNRS Liquid Token)", function () {
   after(() => restoreAddresses());
 
   // ===========================================================================
@@ -109,7 +109,7 @@ describe("DegenerusStonk (DGNRS Liquid Token)", function () {
   describe("Constructor", function () {
     it("name is 'Degenerus Stonk'", async function () {
       const { dgnrs } = await loadFixture(deployFullProtocol);
-      expect(await dgnrs.name()).to.equal("Degenerus Stonk");
+      expect(await dgnrs.name()).to.equal("Degenerus Protocol Equity Token");
     });
 
     it("symbol is 'DGNRS'", async function () {
@@ -405,9 +405,9 @@ describe("DegenerusStonk (DGNRS Liquid Token)", function () {
       expect(stethAfter - stethBefore).to.equal(ev.args.stethOut);
     });
 
-    // BURNIE burn path not testable without fixture modification — fixture deploys
-    // BURNIE (COIN contract) but no BURNIE is deposited/transferred to sDGNRS.
-    // BURNIE backing arrives via manual transfers or coinflip claimables which
+    // FLIP burn path not testable without fixture modification — fixture deploys
+    // FLIP (COIN contract) but no FLIP is deposited/transferred to sDGNRS.
+    // FLIP backing arrives via manual transfers or coinflip claimables which
     // require game state that the unit test fixture does not set up.
   });
 
@@ -420,12 +420,12 @@ describe("DegenerusStonk (DGNRS Liquid Token)", function () {
       await depositETH(sdgnrs, game, eth("100"));
 
       const amount = eth("1000");
-      const [ethD, stethD, burnieD] = await dgnrs.previewBurn(amount);
-      const [ethS, stethS, burnieS] = await sdgnrs.previewBurn(amount);
+      const [ethD, stethD, flipD] = await dgnrs.previewBurn(amount);
+      const [ethS, stethS, flipS] = await sdgnrs.previewBurn(amount);
 
       expect(ethD).to.equal(ethS);
       expect(stethD).to.equal(stethS);
-      expect(burnieD).to.equal(burnieS);
+      expect(flipD).to.equal(flipS);
     });
   });
 
@@ -435,7 +435,7 @@ describe("DegenerusStonk (DGNRS Liquid Token)", function () {
   describe("sDGNRS soulbound enforcement", function () {
     it("sDGNRS has no transfer function", async function () {
       const { sdgnrs } = await loadFixture(deployFullProtocol);
-      // StakedDegenerusStonk should not have a transfer function
+      // sDGNRS should not have a transfer function
       expect(sdgnrs.transfer).to.be.undefined;
     });
 

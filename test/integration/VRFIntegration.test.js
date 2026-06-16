@@ -280,10 +280,10 @@ describe("VRFIntegration", function () {
       ).to.be.revertedWithCustomError(advanceModule, "RngLocked");
     });
 
-    it("reverseFlip() fails for a different reason when RNG is not locked (no BURNIE)", async function () {
+    it("reverseFlip() fails for a different reason when RNG is not locked (no FLIP)", async function () {
       const { game, deployer, advanceModule } = await loadFixture(deployFullProtocol);
 
-      // RNG not locked — deployer has no BURNIE, so burnCoin fails, not RngLocked.
+      // RNG not locked — deployer has no FLIP, so burnCoin fails, not RngLocked.
       expect(await game.rngLocked()).to.equal(false);
 
       await expect(

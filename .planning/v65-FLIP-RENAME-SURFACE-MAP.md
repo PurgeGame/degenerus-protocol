@@ -110,4 +110,12 @@ Second rename folded into v65.0. Symbols are **already** `DGNRS`/`sDGNRS` (no sy
 
 **Ordering hazard:** `DegenerusStonk` ⊂ `StakedDegenerusStonk` ⊂ `IStakedDegenerusStonk{,Burn}`; word-boundary exact-match handles all. The import-path strings (`"…/IStakedDegenerusStonk.sol"` etc.) are rewritten by the same rules → match the new filenames.
 
-**Engine:** `scripts/v65_flip_rename.py` (BURNIE block + STONK block). Validated by dry-run — correctness (creator/email/burn-verb/coinflip-action preserved) + completeness (zero residual old tokens; KEEP set intact) on a representative set.
+**Engine:** `scripts/v65_flip_rename.py` (BURNIE block + STONK block + ABBREV + SEMANTIC). Validated by dry-run — correctness (creator/email/burn-verb/coinflip-action preserved) + completeness (zero residual old tokens; KEEP set intact) on a representative set.
+
+## 11. Follow-on additions + the via_ir stack-too-deep resolution (2026-06-16)
+
+**Additional renames (USER-spotted, folded in):**
+- `DGVB` (vault share-class symbol = "Degenerus Vault **B**urnie") → `DGVF` ("…Vault **F**lip"). **`DGVE`** (the ETH share class) KEPT. Symbol string + ~18 doc refs in `DegenerusVault.sol` + 4 test files. (Abbreviation — the literal "burnie" isn't present, so the BURNIE block missed it.)
+- `flipWindowOpen` (was `burnieWindowOpen`) → `ticketRedemptionOpen` (semantic clarity; the FLIP→ticket redemption window latch). State var — **storage-layout-neutral**. 10 occ (storage + Advance/Mint modules + 3 tests).
+
+**COMPILE RESOLUTION — via_ir "stack too deep":** the rename tipped `_purchaseForWithCached` (`DegenerusGameMintModule`) one slot over the via_ir stack limit at `optimizer_runs=200` — the function sat *exactly* at the edge; both forge & hardhat baselines masked it via warm cache ("No files changed, compilation skipped"). A pure name change perturbs solc's brittle stack-layout heuristic (Yul variable names are tie-breakers), which can flip a marginal function over. Proven pre-existing: pre-rename fresh-compiles at runs=200, post-rename doesn't; the MintModule diff is 65−/65+ name-only. **RESOLUTION (USER, Option B): bump `optimizer_runs` 200→1000 (foundry.toml) and 50→1000 (hardhat.config.js).** Both toolchains compile; all contracts fit EIP-170 (Game 20,427/margin 4,149; MintModule 23,156/margin 1,420; 0 over-limit); higher runs *lowers* runtime gas. **Consequence:** deployed bytecode + all gas shift → the gas-regression tests (`Phase26x`/`*Gas*`) need recalibration and the 16.7M advanceGame ceiling must be re-verified (Phase 409); these are optimizer-bump effects, NOT rename defects.

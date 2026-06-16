@@ -13,13 +13,13 @@ import {
 } from "../helpers/testUtils.js";
 
 /*
- * BurnieCoin Unit Tests
+ * FLIP Unit Tests
  *
- * Contract: contracts/BurnieCoin.sol
+ * Contract: contracts/FLIP.sol
  *
  * Architecture summary:
- *   - Custom ERC20 "BURNIE" with 18 decimals
- *   - Initial totalSupply = 0, vaultAllowance = 2,000,000 BURNIE
+ *   - Custom ERC20 "FLIP" with 18 decimals
+ *   - Initial totalSupply = 0, vaultAllowance = 2,000,000 FLIP
  *   - Vault escrow: virtual reserve, minted via vaultMintTo()
  *   - Game/Affiliate bypass for minting, burning, and flip credits
  *   - Transfers to ContractAddresses.VAULT redirect to allowance (no circulating balance)
@@ -30,7 +30,7 @@ import {
  * COINFLIP is f.coinflip.
  */
 
-describe("BurnieCoin", function () {
+describe("FLIP", function () {
   after(function () {
     restoreAddresses();
   });
@@ -68,14 +68,14 @@ describe("BurnieCoin", function () {
   // ---------------------------------------------------------------------------
 
   describe("initial state", function () {
-    it("name is 'Burnies'", async function () {
+    it("name is 'Flips'", async function () {
       const { coin } = await getFixture();
-      expect(await coin.name()).to.equal("Burnies");
+      expect(await coin.name()).to.equal("Degenerus Gambling Token");
     });
 
-    it("symbol is 'BURNIE'", async function () {
+    it("symbol is 'FLIP'", async function () {
       const { coin } = await getFixture();
-      expect(await coin.symbol()).to.equal("BURNIE");
+      expect(await coin.symbol()).to.equal("FLIP");
     });
 
     it("decimals is 18", async function () {
@@ -322,7 +322,7 @@ describe("BurnieCoin", function () {
   // ---------------------------------------------------------------------------
 
   describe("mintForGame()", function () {
-    it("mints BURNIE to recipient and emits Transfer from zero address", async function () {
+    it("mints FLIP to recipient and emits Transfer from zero address", async function () {
       const { coin, game, alice } = await getFixture();
       const gameAddr = await game.getAddress();
       const gameSigner = await impersonate(gameAddr);
@@ -411,7 +411,7 @@ describe("BurnieCoin", function () {
     // mintForCoinflip removed in Phase 146 (merged into mintForGame, which now accepts COINFLIP + GAME)
   });
 
-  // creditCoin() removed from BurnieCoin in Phase 146 ABI cleanup (dead function, zero callers)
+  // creditCoin() removed from FLIP in Phase 146 ABI cleanup (dead function, zero callers)
 
   // ---------------------------------------------------------------------------
   // vaultEscrow() — only GAME or VAULT
@@ -637,7 +637,7 @@ describe("BurnieCoin", function () {
     });
   });
 
-  // creditFlip() and creditFlipBatch() removed from BurnieCoin in Phase 146 ABI cleanup
+  // creditFlip() and creditFlipBatch() removed from FLIP in Phase 146 ABI cleanup
   // (forwarding wrappers; callers now call coinflip.creditFlip / coinflip.creditFlipBatch directly)
 
   // ---------------------------------------------------------------------------
@@ -646,7 +646,7 @@ describe("BurnieCoin", function () {
 
   describe("view helpers", function () {
     // claimableCoin, previewClaimCoinflips, coinflipAmount, coinflipAutoRebuyInfo
-    // removed from BurnieCoin in Phase 146 ABI cleanup (forwarding wrappers to coinflip)
+    // removed from FLIP in Phase 146 ABI cleanup (forwarding wrappers to coinflip)
 
     it("balanceOfWithClaimable returns at least the on-chain balance", async function () {
       const { coin, game, alice } = await getFixture();
@@ -670,7 +670,7 @@ describe("BurnieCoin", function () {
   });
 
   // affiliateQuestReward, rollDailyQuest, notifyQuestMint, notifyQuestLootBox,
-  // notifyQuestDegenerette removed from BurnieCoin — quest handling moved to
+  // notifyQuestDegenerette removed from FLIP — quest handling moved to
   // DegenerusQuests.sol (v13.0 Phase 158.1)
 
   // ---------------------------------------------------------------------------

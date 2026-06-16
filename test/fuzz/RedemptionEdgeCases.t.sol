@@ -2,13 +2,13 @@
 pragma solidity ^0.8.26;
 
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
-import {StakedDegenerusStonk} from "../../contracts/StakedDegenerusStonk.sol";
+import {sDGNRS} from "../../contracts/sDGNRS.sol";
 import {Vm} from "forge-std/Vm.sol";
 
 /// @notice Local mirror of the coinflip player interface used for `vm.mockCall` selectors.
 ///         Re-declared locally so the test file does not depend on importing the full
 ///         coinflip contract.
-interface IBurnieCoinflipPlayerMock {
+interface IFlipCoinflipPlayerMock {
     function getCoinflipDayResult(uint32 day) external view returns (uint16 rewardPercent, bool win);
     function claimCoinflipsForRedemption(address player, uint256 amount) external returns (uint256 claimed);
 }
@@ -17,13 +17,13 @@ interface IBurnieCoinflipPlayerMock {
 ///         `claimRedemption` — under the live-game claim (game-claimable credit, no ETH
 ///         push at the claimant) the hook must never fire at all (reentryCount stays 0).
 contract MaliciousReceiver {
-    StakedDegenerusStonk public immutable sdgnrs;
+    sDGNRS public immutable sdgnrs;
     uint32 public targetDay;
     uint256 public reentryCount;
     uint256 public reentrySuccessCount;
     bool internal reentered;
 
-    constructor(StakedDegenerusStonk sdgnrs_) {
+    constructor(sDGNRS sdgnrs_) {
         sdgnrs = sdgnrs_;
     }
 
@@ -73,10 +73,10 @@ contract RedemptionEdgeCases is DeployProtocol {
     //                          CONSTANTS
     // =====================================================================
 
-    /// @dev Mirrors `StakedDegenerusStonk.MIN_BURN_AMOUNT` (private literal `1e18`).
+    /// @dev Mirrors `sDGNRS.MIN_BURN_AMOUNT` (private literal `1e18`).
     uint256 internal constant MIN_BURN_AMOUNT = 1e18;
 
-    /// @dev Mirrors `StakedDegenerusStonk.MAX_DAILY_REDEMPTION_EV` (private literal `160 ether`).
+    /// @dev Mirrors `sDGNRS.MAX_DAILY_REDEMPTION_EV` (private literal `160 ether`).
     uint256 internal constant MAX_DAILY_REDEMPTION_EV = 160 ether;
 
     /// @dev Per-actor sDGNRS funding (1M tokens) — enough headroom for 160-ETH cap accumulation
@@ -95,7 +95,7 @@ contract RedemptionEdgeCases is DeployProtocol {
     ///      self-contained). POST RT-PACKING-12: scalars packed into slot 0, mappings shifted down 10->7.
     uint256 internal constant SLOT_PENDING_BY_DAY = 7;
 
-    // Keeper box-bounty mirror (StakedDegenerusStonk private constants). TEST-MIRROR SYNC: if the
+    // Keeper box-bounty mirror (sDGNRS private constants). TEST-MIRROR SYNC: if the
     // contract changes these, re-sync — the bounty assertion cross-validates the observed creditFlip.
     uint256 internal constant BOX_BOUNTY_ETH_TARGET = 24_000_000_000_000;
     uint256 internal constant PRICE_COIN_UNIT = 1000 ether;
@@ -138,10 +138,10 @@ contract RedemptionEdgeCases is DeployProtocol {
         vm.deal(playerC, 10 ether);
         vm.deal(playerD, 10 ether);
         vm.startPrank(address(game));
-        sdgnrs.transferFromPool(StakedDegenerusStonk.Pool.Reward, playerA, ACTOR_FUNDING);
-        sdgnrs.transferFromPool(StakedDegenerusStonk.Pool.Reward, playerB, ACTOR_FUNDING);
-        sdgnrs.transferFromPool(StakedDegenerusStonk.Pool.Reward, playerC, ACTOR_FUNDING);
-        sdgnrs.transferFromPool(StakedDegenerusStonk.Pool.Reward, playerD, ACTOR_FUNDING);
+        sdgnrs.transferFromPool(sDGNRS.Pool.Reward, playerA, ACTOR_FUNDING);
+        sdgnrs.transferFromPool(sDGNRS.Pool.Reward, playerB, ACTOR_FUNDING);
+        sdgnrs.transferFromPool(sDGNRS.Pool.Reward, playerC, ACTOR_FUNDING);
+        sdgnrs.transferFromPool(sDGNRS.Pool.Reward, playerD, ACTOR_FUNDING);
         vm.stopPrank();
 
         // Mock the coinflip player surface so claim paths complete the full-payout branch
@@ -149,12 +149,12 @@ contract RedemptionEdgeCases is DeployProtocol {
         // partial-claim branch which preserves the slot and breaks delete-at-claim assertions.
         vm.mockCall(
             address(coinflip),
-            abi.encodeWithSelector(IBurnieCoinflipPlayerMock.getCoinflipDayResult.selector),
+            abi.encodeWithSelector(IFlipCoinflipPlayerMock.getCoinflipDayResult.selector),
             abi.encode(uint16(100), true)
         );
         vm.mockCall(
             address(coinflip),
-            abi.encodeWithSelector(IBurnieCoinflipPlayerMock.claimCoinflipsForRedemption.selector),
+            abi.encodeWithSelector(IFlipCoinflipPlayerMock.claimCoinflipsForRedemption.selector),
             abi.encode(uint256(0))
         );
         // Mock `resolveRedemptionLootbox` to a no-op so claims that route 50% to the lootbox
@@ -189,9 +189,9 @@ contract RedemptionEdgeCases is DeployProtocol {
     }
 
     /// @dev Read packed `pendingByDay[day]` slot and unpack the 3×uint64 fields.
-    ///      v47: the per-day BURNIE base was removed (BURNIE is settled at submit, not per-day),
+    ///      v47: the per-day FLIP base was removed (FLIP is settled at submit, not per-day),
     ///      so `DayPending` is now `{ethBase (bits 0-63), supplySnapshot (bits 64-127),
-    ///      burned (bits 128-191)}` — the former `burnieBase` slot at bits 64-127 is gone and
+    ///      burned (bits 128-191)}` — the former `flipBase` slot at bits 64-127 is gone and
     ///      supplySnapshot/burned shifted down one field each.
     function _readPendingByDay(uint32 day)
         internal
@@ -273,7 +273,7 @@ contract RedemptionEdgeCases is DeployProtocol {
             uint64 bnPostResolve
         ) = _readPendingByDay(dayPrior);
         assertEq(uint256(ePostResolve), 0, "EDGE-01: post-resolve ethBase should be zero (delete-at-resolve)");
-        // v47: per-day burnieBase removed (BURNIE settled at submit) — no field to assert.
+        // v47: per-day flipBase removed (FLIP settled at submit) — no field to assert.
         assertEq(uint256(sPostResolve), 0, "EDGE-01: post-resolve supplySnapshot should be zero");
         assertEq(uint256(bnPostResolve), 0, "EDGE-01: post-resolve burned should be zero");
 
@@ -304,7 +304,7 @@ contract RedemptionEdgeCases is DeployProtocol {
             uint64 bnPriorPost
         ) = _readPendingByDay(dayPrior);
         assertEq(uint256(ePriorPost), uint256(ePostResolve), "EDGE-01: prior-day ethBase mutated by day-D burn");
-        // v47: per-day burnieBase removed — no field to assert byte-identity against.
+        // v47: per-day flipBase removed — no field to assert byte-identity against.
         assertEq(uint256(sPriorPost), uint256(sPostResolve), "EDGE-01: prior-day supplySnapshot mutated by day-D burn");
         assertEq(uint256(bnPriorPost), uint256(bnPostResolve), "EDGE-01: prior-day burned mutated by day-D burn");
     }
@@ -433,7 +433,7 @@ contract RedemptionEdgeCases is DeployProtocol {
         sdgnrs.claimRedemption(playerA, uint24(dayD2));
 
         // Day D+2 slot now deleted per SPEC-04 (d)
-        // v47: PendingRedemption.burnieOwed removed (BURNIE settled at submit); the "burnieOwed
+        // v47: PendingRedemption.flipOwed removed (FLIP settled at submit); the "flipOwed
         // cleared on claim" assertions are now structurally guaranteed (no field).
         (uint96 evD2_Post, , ) = sdgnrs.pendingRedemptions(playerA, uint24(dayD2));
         assertEq(uint256(evD2_Post), 0, "EDGE-03: day-D+2 ethValueOwed cleared on full claim");
@@ -544,11 +544,11 @@ contract RedemptionEdgeCases is DeployProtocol {
 
         // Negative assertion: claim reverts NotResolved
         vm.prank(playerA);
-        vm.expectRevert(StakedDegenerusStonk.NotResolved.selector);
+        vm.expectRevert(sDGNRS.NotResolved.selector);
         sdgnrs.claimRedemption(playerA, uint24(dayD));
 
         // Byte-identity: claim slot + cumulative scalar untouched
-        // v47: PendingRedemption.burnieOwed removed — no field to byte-compare.
+        // v47: PendingRedemption.flipOwed removed — no field to byte-compare.
         (uint96 evPost, uint16 asPost, ) = sdgnrs.pendingRedemptions(playerA, uint24(dayD));
         assertEq(uint256(evPost), uint256(evPre), "EDGE-05: ethValueOwed mutated by failed claim");
         assertEq(uint256(asPost), uint256(asPre), "EDGE-05: activityScore mutated by failed claim");
@@ -591,7 +591,7 @@ contract RedemptionEdgeCases is DeployProtocol {
         }
 
         // Mid-stall: claim slot still byte-identical (no time-degradation).
-        // v47: burnieOwed field removed — only ethValueOwed + activityScore remain.
+        // v47: flipOwed field removed — only ethValueOwed + activityScore remain.
         (uint96 evMid, uint16 asMid, ) = sdgnrs.pendingRedemptions(playerA, uint24(dayD));
         assertEq(uint256(evMid), uint256(evAtBurn), "EDGE-06: ethValueOwed time-degraded during stall");
         assertEq(uint256(asMid), uint256(asAtBurn), "EDGE-06: activityScore time-degraded during stall");
@@ -765,12 +765,12 @@ contract RedemptionEdgeCases is DeployProtocol {
         // Re-arm the coinflip + lootbox mocks (they get cleared by clearMockedCalls)
         vm.mockCall(
             address(coinflip),
-            abi.encodeWithSelector(IBurnieCoinflipPlayerMock.getCoinflipDayResult.selector),
+            abi.encodeWithSelector(IFlipCoinflipPlayerMock.getCoinflipDayResult.selector),
             abi.encode(uint16(100), true)
         );
         vm.mockCall(
             address(coinflip),
-            abi.encodeWithSelector(IBurnieCoinflipPlayerMock.claimCoinflipsForRedemption.selector),
+            abi.encodeWithSelector(IFlipCoinflipPlayerMock.claimCoinflipsForRedemption.selector),
             abi.encode(uint256(0))
         );
         vm.mockCall(
@@ -878,7 +878,7 @@ contract RedemptionEdgeCases is DeployProtocol {
         // Deploy malicious receiver and fund it with sDGNRS via the Reward pool
         MaliciousReceiver malicious = new MaliciousReceiver(sdgnrs);
         vm.prank(address(game));
-        sdgnrs.transferFromPool(StakedDegenerusStonk.Pool.Reward, address(malicious), ACTOR_FUNDING);
+        sdgnrs.transferFromPool(sDGNRS.Pool.Reward, address(malicious), ACTOR_FUNDING);
 
         uint32 dayD = game.currentDayView();
         // The malicious contract calls burn() itself via internal helper (since burn() uses
@@ -913,7 +913,7 @@ contract RedemptionEdgeCases is DeployProtocol {
         // Storage slot fully cleared; a repeat claim reverts NoClaim (no double-credit).
         (uint96 evPost, , ) = sdgnrs.pendingRedemptions(address(malicious), uint24(dayD));
         assertEq(uint256(evPost), 0, "EDGE-10: claim slot not cleared post-claim");
-        vm.expectRevert(StakedDegenerusStonk.NoClaim.selector);
+        vm.expectRevert(sDGNRS.NoClaim.selector);
         malicious.claim(dayD);
     }
 
@@ -943,7 +943,7 @@ contract RedemptionEdgeCases is DeployProtocol {
 
         // Burn must revert BurnsBlockedDuringRng
         vm.prank(playerA);
-        vm.expectRevert(StakedDegenerusStonk.BurnsBlockedDuringRng.selector);
+        vm.expectRevert(sDGNRS.BurnsBlockedDuringRng.selector);
         sdgnrs.burn(amount);
 
         // Byte-identity: no state mutated by failed burn
@@ -990,7 +990,7 @@ contract RedemptionEdgeCases is DeployProtocol {
 
         // Burn must revert BurnsBlockedDuringLiveness
         vm.prank(playerA);
-        vm.expectRevert(StakedDegenerusStonk.BurnsBlockedDuringLiveness.selector);
+        vm.expectRevert(sDGNRS.BurnsBlockedDuringLiveness.selector);
         sdgnrs.burn(amount);
 
         // Byte-identity assertions
@@ -1031,10 +1031,10 @@ contract RedemptionEdgeCases is DeployProtocol {
         sdgnrs.burn(amount);
 
         // Per-claim ethValueOwed is zero (zero-rounded under sub-gwei truncation).
-        // v47: BURNIE is settled at SUBMIT (no per-claim burnieOwed field), and the claim guard is
-        // now `if (claim.ethValueOwed == 0) revert NoClaim()` — the v46 `&& burnieOwed == 0`
+        // v47: FLIP is settled at SUBMIT (no per-claim flipOwed field), and the claim guard is
+        // now `if (claim.ethValueOwed == 0) revert NoClaim()` — the v46 `&& flipOwed == 0`
         // disjunct was removed. So a zero-ethValueOwed burn has NOTHING to claim and the claim
-        // reverts NoClaim (in v46 the BURNIE leg let a zero-ETH claim proceed).
+        // reverts NoClaim (in v46 the FLIP leg let a zero-ETH claim proceed).
         (uint96 ev, , ) = sdgnrs.pendingRedemptions(playerA, uint24(dayD));
         assertEq(uint256(ev), 0, "EDGE-13: claim ethValueOwed must be zero under sub-gwei rounding");
 
@@ -1054,7 +1054,7 @@ contract RedemptionEdgeCases is DeployProtocol {
         _advanceWallDay();
         _resolveDay(dayD, roll);
         vm.prank(playerA);
-        vm.expectRevert(StakedDegenerusStonk.NotResolved.selector);
+        vm.expectRevert(sDGNRS.NotResolved.selector);
         sdgnrs.claimRedemption(playerA, uint24(dayD));
 
         // Slot remains zero-ethValueOwed (nothing was claimable; the reverting claim mutates nothing).
@@ -1082,7 +1082,7 @@ contract RedemptionEdgeCases is DeployProtocol {
 
         // Pre-seed pendingByDay[dayD] with supplySnapshot = 1000 whole tokens (cap = 500).
         // v47 DayPending packing: (ethBase << 0) | (supplySnapshot << 64) | (burned << 128)
-        // — the former per-day burnieBase field was removed, so supplySnapshot moved to bit 64.
+        // — the former per-day flipBase field was removed, so supplySnapshot moved to bit 64.
         uint256 packed = (uint256(1000) << 64);
         bytes32 slotPbD = keccak256(abi.encode(uint256(dayD), uint256(SLOT_PENDING_BY_DAY)));
         vm.store(address(sdgnrs), slotPbD, bytes32(packed));
@@ -1110,7 +1110,7 @@ contract RedemptionEdgeCases is DeployProtocol {
 
         // Sub-scenario 2: one additional token tips over cap. 500 + 1 > 500 → revert Insufficient.
         vm.prank(actor);
-        vm.expectRevert(StakedDegenerusStonk.Insufficient.selector);
+        vm.expectRevert(sDGNRS.Insufficient.selector);
         sdgnrs.burn(1 ether);
 
         // Snapshot + burned byte-identical post failed burn
@@ -1145,7 +1145,7 @@ contract RedemptionEdgeCases is DeployProtocol {
         // Seed claim slot: ethValueOwed = MAX_DAILY_REDEMPTION_EV exactly (gwei-aligned —
         // 160 ether = 160e18 wei is a multiple of 1e9).
         // v47 PendingRedemption packing: (ethValueOwed uint96, bits 0-95) | (activityScore uint16,
-        // bits 96-111). The former burnieOwed field (old bits 96-191) was removed, so activityScore
+        // bits 96-111). The former flipOwed field (old bits 96-191) was removed, so activityScore
         // moved from bit 192 down to bit 96.
         uint256 packed = uint256(MAX_DAILY_REDEMPTION_EV) | (uint256(1) << 96); // activityScore=1 (set)
         bytes32 outerSlot = keccak256(abi.encode(actor, uint256(5))); // SLOT_PENDING_REDEMPTIONS=5 (POST RT-PACKING-12)
@@ -1166,13 +1166,13 @@ contract RedemptionEdgeCases is DeployProtocol {
         uint256 amount = FUZZ_MIN_AMOUNT;
         _primeCurrentDayRng();
         vm.prank(actor);
-        vm.expectRevert(StakedDegenerusStonk.ExceedsDailyRedemptionCap.selector);
+        vm.expectRevert(sDGNRS.ExceedsDailyRedemptionCap.selector);
         sdgnrs.burn(amount);
 
         // Byte-identity: claim slot byte-identical post failed burn
         (uint96 evPost, uint16 asPost, ) = sdgnrs.pendingRedemptions(actor, uint24(dayD));
         assertEq(uint256(evPost), MAX_DAILY_REDEMPTION_EV, "EDGE-15: ethValueOwed mutated by failed burn");
-        // v47: burnieOwed field removed — nothing to byte-compare.
+        // v47: flipOwed field removed — nothing to byte-compare.
         assertEq(uint256(asPost), 1, "EDGE-15: activityScore mutated by failed burn");
     }
 
@@ -1200,7 +1200,7 @@ contract RedemptionEdgeCases is DeployProtocol {
         // simulates a (player, D) pair that accumulated to the cap on day D; the cap-check
         // strict `>` operator must NOT block any day-(D+1) burn under composite-key
         // independence.
-        // v47 packing: activityScore is at bit 96 (burnieOwed field removed).
+        // v47 packing: activityScore is at bit 96 (flipOwed field removed).
         uint256 packedD = uint256(MAX_DAILY_REDEMPTION_EV) | (uint256(1) << 96);
         bytes32 outerSlot = keccak256(abi.encode(actor, uint256(5))); // SLOT_PENDING_REDEMPTIONS=5 (POST RT-PACKING-12)
         bytes32 claimSlotD = keccak256(abi.encode(uint256(dayD), outerSlot));
@@ -1284,7 +1284,7 @@ contract RedemptionEdgeCases is DeployProtocol {
         (, , uint64 bnDPostBurn) = _readPendingByDay(dayD);
         assertGt(uint256(bnDPostBurn), 0, "EDGE-17: pendingByDay[D] must populate from late-day burn");
 
-        // pendingByDay[D-1] remains deleted (zero across all 3 v47 fields — burnieBase removed)
+        // pendingByDay[D-1] remains deleted (zero across all 3 v47 fields — flipBase removed)
         (uint64 ePriorPost, uint64 sPriorPost, uint64 bnPriorPost) =
             _readPendingByDay(dayPrior);
         assertEq(uint256(ePriorPost), 0, "EDGE-17: pendingByDay[D-1].ethBase resurrected");
@@ -1308,14 +1308,14 @@ contract RedemptionEdgeCases is DeployProtocol {
     // =====================================================================
 
     /// @notice EDGE-18 — 304-SPEC §3 lines 645-657. The original test covered a claim-time
-    ///         BURNIE-insufficient fallback (`_payBurnie` → coinflip push → coin.transfer) that no
-    ///         longer exists: the redeemed BURNIE slice is removed from sDGNRS's backing at SUBMIT
-    ///         (withdrawRedeemedBurnie) and escrowed per-(redeemer, day) as PendingRedemption.burnieEscrow.
-    ///         The claim-time BURNIE leg is now a contingent flip credit (paid only on the resolving
+    ///         FLIP-insufficient fallback (`_payFlip` → coinflip push → coin.transfer) that no
+    ///         longer exists: the redeemed FLIP slice is removed from sDGNRS's backing at SUBMIT
+    ///         (withdrawRedeemedFlip) and escrowed per-(redeemer, day) as PendingRedemption.flipEscrow.
+    ///         The claim-time FLIP leg is now a contingent flip credit (paid only on the resolving
     ///         day's coinflip win) with no shortfall/transfer path that could fail the claim. The
     ///         intent-preserving residue is: a claim of a resolved day succeeds and fully clears the slot.
-    /// @dev Exercises the live claim path; the old BURNIE-shortfall seeding/mock was deleted because
-    ///      its subject (`_payBurnie`) was removed from the frozen contract.
+    /// @dev Exercises the live claim path; the old FLIP-shortfall seeding/mock was deleted because
+    ///      its subject (`_payFlip`) was removed from the frozen contract.
     /// forge-config: default.fuzz.runs = 10000
     function testFuzz_EDGE_18_EthOnlyClaimCompletesAndClears(uint256 actorSeed) public {
         address actor = _pickActor(actorSeed);
@@ -1329,7 +1329,7 @@ contract RedemptionEdgeCases is DeployProtocol {
         _advanceWallDay();
         _resolveDay(dayD, 100);
 
-        // Claim must succeed (no revert); the contingent BURNIE leg cannot fail the claim.
+        // Claim must succeed (no revert); the contingent FLIP leg cannot fail the claim.
         vm.prank(actor);
         sdgnrs.claimRedemption(actor, uint24(dayD));
 
@@ -1419,12 +1419,12 @@ contract RedemptionEdgeCases is DeployProtocol {
         // Sub-scenario A: fuzzed amount in [1, MIN_BURN_AMOUNT - 1] reverts BurnTooSmall
         uint256 subMin = bound(amountSeed, 1, MIN_BURN_AMOUNT - 1);
         vm.prank(playerA);
-        vm.expectRevert(StakedDegenerusStonk.BurnTooSmall.selector);
+        vm.expectRevert(sDGNRS.BurnTooSmall.selector);
         sdgnrs.burn(subMin);
 
         // Sub-scenario B: exact boundary at MIN_BURN_AMOUNT - 1 reverts BurnTooSmall
         vm.prank(playerB);
-        vm.expectRevert(StakedDegenerusStonk.BurnTooSmall.selector);
+        vm.expectRevert(sDGNRS.BurnTooSmall.selector);
         sdgnrs.burn(MIN_BURN_AMOUNT - 1);
 
         // Sub-scenario C: exact MIN_BURN_AMOUNT succeeds (no revert)
@@ -1492,7 +1492,7 @@ contract RedemptionEdgeCases is DeployProtocol {
         (uint96 evPost, , ) = sdgnrs.pendingRedemptions(playerA, uint24(dayD));
         assertEq(uint256(evPost), 0, "PERM-01: winner's claim slot must clear");
         vm.prank(playerC);
-        vm.expectRevert(StakedDegenerusStonk.NoClaim.selector);
+        vm.expectRevert(sDGNRS.NoClaim.selector);
         sdgnrs.claimRedemption(playerA, uint24(dayD));
     }
 
@@ -1573,7 +1573,7 @@ contract RedemptionEdgeCases is DeployProtocol {
         }
     }
 
-    /// @notice BOUNTY-01: claimRedemptionMany pays the keeper a BURNIE flip-credit per box it settles,
+    /// @notice BOUNTY-01: claimRedemptionMany pays the keeper a FLIP flip-credit per box it settles,
     ///         pegged to the per-box settle gas (settled × BOX_BOUNTY_ETH_TARGET × PRICE_COIN_UNIT /
     ///         mintPrice). Skipped (empty) entries earn nothing, and a no-work re-sweep pays zero.
     function test_BOUNTY01_RedemptionKeeperBountyPerSettledBox() public {

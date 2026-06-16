@@ -13,7 +13,7 @@ import {
   ZERO_ADDRESS,
 } from "../helpers/testUtils.js";
 
-// Pool enum mapping (from DegenerusStonk.sol)
+// Pool enum mapping (from DGNRS.sol)
 // v47: the 4-ordinal pool was renamed Earlybird -> PresaleBox (the earlybird
 // subsystem was removed; the pool itself survives, renamed, still seeded at deploy).
 const Pool = { Whale: 0, Affiliate: 1, Lootbox: 2, Reward: 3, PresaleBox: 4 };
@@ -86,7 +86,7 @@ async function fundGameClaimableForSdgnrs(gameAddr, sdgnrsAddr, amount) {
   ]);
 }
 
-describe("DegenerusStonk", function () {
+describe("DGNRS", function () {
   after(() => restoreAddresses());
 
   // ---------------------------------------------------------------------------
@@ -95,7 +95,7 @@ describe("DegenerusStonk", function () {
   describe("Initial state", function () {
     it("token name is 'Staked Degenerus Stonk'", async function () {
       const { sdgnrs } = await loadFixture(deployFullProtocol);
-      expect(await sdgnrs.name()).to.equal("Staked Degenerus Stonk");
+      expect(await sdgnrs.name()).to.equal("Degenerus Protocol Equity Token (staked)");
     });
 
     it("token symbol is 'sDGNRS'", async function () {
@@ -605,7 +605,7 @@ describe("DegenerusStonk", function () {
       await fundGameClaimableForSdgnrs(gameAddr, sdgnrsAddr, eth("100"));
 
       // Preview before burn
-      const [ethOut, stethOut, burnieOut] = await sdgnrs.previewBurn(sdgnrsAmount);
+      const [ethOut, stethOut, flipOut] = await sdgnrs.previewBurn(sdgnrsAmount);
 
       // Burn — during active game this enters the gambling path (RedemptionSubmitted).
       // ETH is segregated but not immediately paid; payout is deferred until redemption is claimed.
@@ -696,8 +696,8 @@ describe("DegenerusStonk", function () {
       expect(stethAfter).to.equal(stethBefore);
     });
 
-    // BURNIE burn path not testable without fixture modification — fixture does not
-    // deposit BURNIE into sDGNRS. BURNIE backing arrives via manual transfers or
+    // FLIP burn path not testable without fixture modification — fixture does not
+    // deposit FLIP into sDGNRS. FLIP backing arrives via manual transfers or
     // coinflip claimables which require game state the unit test fixture does not set up.
   });
 
@@ -707,20 +707,20 @@ describe("DegenerusStonk", function () {
   describe("previewBurn", function () {
     it("returns zeros when amount is 0", async function () {
       const { sdgnrs } = await loadFixture(deployFullProtocol);
-      const [ethOut, stethOut, burnieOut] = await sdgnrs.previewBurn(0n);
+      const [ethOut, stethOut, flipOut] = await sdgnrs.previewBurn(0n);
       expect(ethOut).to.equal(0n);
       expect(stethOut).to.equal(0n);
-      expect(burnieOut).to.equal(0n);
+      expect(flipOut).to.equal(0n);
     });
 
     it("returns zeros when amount exceeds total supply", async function () {
       const { sdgnrs } = await loadFixture(deployFullProtocol);
-      const [ethOut, stethOut, burnieOut] = await sdgnrs.previewBurn(
+      const [ethOut, stethOut, flipOut] = await sdgnrs.previewBurn(
         INITIAL_SUPPLY * 2n
       );
       expect(ethOut).to.equal(0n);
       expect(stethOut).to.equal(0n);
-      expect(burnieOut).to.equal(0n);
+      expect(flipOut).to.equal(0n);
     });
 
     it("proportional preview when ETH exists", async function () {
@@ -745,19 +745,19 @@ describe("DegenerusStonk", function () {
 
       // Preview for 1% of supply
       const onePercent = INITIAL_SUPPLY / 100n;
-      const [ethOut, stethOut, burnieOut] = await sdgnrs.previewBurn(onePercent);
+      const [ethOut, stethOut, flipOut] = await sdgnrs.previewBurn(onePercent);
       // 1% of 100 ETH = 1 ETH
       expect(ethOut).to.be.closeTo(eth("1"), eth("0.01"));
     });
   });
 
   // ---------------------------------------------------------------------------
-  // 12. burnieReserve
+  // 12. flipReserve
   // ---------------------------------------------------------------------------
-  describe("burnieReserve", function () {
-    it("returns 0 initially when no BURNIE deposited", async function () {
+  describe("flipReserve", function () {
+    it("returns 0 initially when no FLIP deposited", async function () {
       const { sdgnrs } = await loadFixture(deployFullProtocol);
-      const reserve = await sdgnrs.burnieReserve();
+      const reserve = await sdgnrs.flipReserve();
       expect(reserve).to.be.gte(0n);
     });
   });

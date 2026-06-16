@@ -74,23 +74,23 @@ contract CoverageGap222 is DeployProtocol {
         assertTrue(address(game).code.length > 0, "game contract alive after advance");
     }
 
-    /// @notice Exercise the redeemBurnie path (Burnie token mint).
-    /// @dev Closes gap: game.redeemBurnie. D-13 natural caller: game.redeemBurnie
+    /// @notice Exercise the redeemFlip path (Flip token mint).
+    /// @dev Closes gap: game.redeemFlip. D-13 natural caller: game.redeemFlip
     ///      directly from an externally-owned buyer.
-    /// @dev D-14 conditional branch: redeemBurnie dispatches to the MintModule
-    ///      via delegatecall with MintPaymentKind.Burnie — exercises the
+    /// @dev D-14 conditional branch: redeemFlip dispatches to the MintModule
+    ///      via delegatecall with MintPaymentKind.Flip — exercises the
     ///      non-trivial branch of `_purchaseFor`.
-    function test_gap_redeemBurnie_path() public {
+    function test_gap_redeemFlip_path() public {
         vm.prank(buyer);
         (bool ok, ) = address(game).call(
             abi.encodeWithSignature(
-                "redeemBurnie(address,uint256,uint256)",
+                "redeemFlip(address,uint256,uint256)",
                 buyer,
                 100,
                 0
             )
         );
-        // redeemBurnie may revert early if buyer has no BURNIE balance;
+        // redeemFlip may revert early if buyer has no FLIP balance;
         // the reachability assertion is that the selector dispatches and
         // the revert (if any) comes from inside the delegatecall target,
         // not from a missing function.
@@ -289,19 +289,19 @@ contract CoverageGap222 is DeployProtocol {
     }
 
     // ====================================================================
-    //  SECTION B: BurnieCoin.sol — external ERC20 + coin paths.
+    //  SECTION B: FLIP.sol — external ERC20 + coin paths.
     // ====================================================================
 
-    /// @notice Exercise BurnieCoin.approve (standard ERC20).
-    function test_gap_burnieCoin_approve() public {
+    /// @notice Exercise FLIP.approve (standard ERC20).
+    function test_gap_flipCoin_approve() public {
         address spender = makeAddr("spender");
         vm.prank(buyer);
         bool ok = coin.approve(spender, 1 ether);
         assertTrue(ok, "approve returned true");
     }
 
-    /// @notice Exercise BurnieCoin.transfer (zero balance — expect revert).
-    function test_gap_burnieCoin_transfer_zeroBalance() public {
+    /// @notice Exercise FLIP.transfer (zero balance — expect revert).
+    function test_gap_flipCoin_transfer_zeroBalance() public {
         vm.prank(buyer);
         (bool ok, ) = address(coin).call(
             abi.encodeWithSignature(
@@ -314,8 +314,8 @@ contract CoverageGap222 is DeployProtocol {
         assertFalse(ok, "transfer rejected zero-balance caller");
     }
 
-    /// @notice Exercise BurnieCoin.transferFrom (no allowance — expect revert).
-    function test_gap_burnieCoin_transferFrom_noAllowance() public {
+    /// @notice Exercise FLIP.transferFrom (no allowance — expect revert).
+    function test_gap_flipCoin_transferFrom_noAllowance() public {
         vm.prank(buyer2);
         (bool ok, ) = address(coin).call(
             abi.encodeWithSignature(
@@ -332,7 +332,7 @@ contract CoverageGap222 is DeployProtocol {
     /// @notice Exercise guarded mutators (onlyGame / onlyVault / etc.)
     /// via their external entry points. Each revert path exercises the
     /// guard-check branch (D-14) — observable via selector dispatch.
-    function test_gap_burnieCoin_guarded_mutators() public {
+    function test_gap_flipCoin_guarded_mutators() public {
         vm.prank(buyer);
         (bool o1, ) = address(coin).call(
             abi.encodeWithSignature(
@@ -398,7 +398,7 @@ contract CoverageGap222 is DeployProtocol {
     }
 
     // ====================================================================
-    //  SECTION C: BurnieCoinflip.sol — coinflip-path tests.
+    //  SECTION C: Coinflip.sol — coinflip-path tests.
     // ====================================================================
 
     /// @notice Exercise the coinflip credit / deposit / claim guarded paths.
@@ -422,7 +422,7 @@ contract CoverageGap222 is DeployProtocol {
         vm.prank(buyer);
         (bool o3, ) = address(coinflip).call(
             abi.encodeWithSignature(
-                "claimCoinflipsFromBurnie(address,uint256)",
+                "claimCoinflipsFromFlip(address,uint256)",
                 buyer,
                 uint256(1)
             )
@@ -450,14 +450,14 @@ contract CoverageGap222 is DeployProtocol {
                 buyer
             )
         );
-        // depositCoinflip is onlyBurnieCoin-gated; EOA caller rejected.
+        // depositCoinflip is onlyFLIP-gated; EOA caller rejected.
         assertFalse(o1, "coinflip.depositCoinflip rejected non-coin caller");
         // claimCoinflips(buyer, 1) from EOA is self-service; no coinflip
         // balance → the call succeeds as a no-op for zero-balance caller.
         assertTrue(o2, "coinflip.claimCoinflips completed for zero-balance self-service caller");
-        // claimCoinflipsFromBurnie / ForRedemption / consumeCoinflipsForBurn /
+        // claimCoinflipsFromFlip / ForRedemption / consumeCoinflipsForBurn /
         // settleFlipModeChange are all gated to a specific caller contract.
-        assertFalse(o3, "coinflip.claimCoinflipsFromBurnie rejected non-authorized caller");
+        assertFalse(o3, "coinflip.claimCoinflipsFromFlip rejected non-authorized caller");
         assertFalse(o4, "coinflip.claimCoinflipsForRedemption rejected non-authorized caller");
         assertFalse(o5, "coinflip.consumeCoinflipsForBurn rejected non-authorized caller");
         assertFalse(o6, "coinflip.settleFlipModeChange rejected non-authorized caller");
@@ -785,7 +785,7 @@ contract CoverageGap222 is DeployProtocol {
     }
 
     // ====================================================================
-    //  SECTION H: DegenerusStonk.sol — DGNRS ERC20 paths.
+    //  SECTION H: DGNRS.sol — DGNRS ERC20 paths.
     // ====================================================================
 
     function test_gap_stonk_approve_transfer_guards() public {
@@ -815,11 +815,11 @@ contract CoverageGap222 is DeployProtocol {
             )
         );
         // approve is standard ERC20 — records allowance unconditionally.
-        assertTrue(o1, "stonk.approve stored allowance");
+        assertTrue(o1, "staked.approve stored allowance");
         // transfer / transferFrom are disabled (TransferDisabled guard) outside
         // whitelisted paths and must revert.
-        assertFalse(o2, "stonk.transfer rejected non-whitelisted caller");
-        assertFalse(o3, "stonk.transferFrom rejected caller without allowance");
+        assertFalse(o2, "staked.transfer rejected non-whitelisted caller");
+        assertFalse(o3, "staked.transferFrom rejected caller without allowance");
     }
 
     function test_gap_stonk_unwrap_burn_guards() public {
@@ -851,15 +851,15 @@ contract CoverageGap222 is DeployProtocol {
                 uint256(1)
             )
         );
-        assertFalse(o1, "stonk.unwrapTo rejected caller without balance");
-        assertFalse(o2, "stonk.claimVested rejected caller without vest");
-        assertFalse(o3, "stonk.burn rejected caller without balance");
-        assertFalse(o4, "stonk.yearAutoBuy rejected caller before autoBuy window");
-        assertFalse(o5, "stonk.burnForSdgnrs rejected non-sdgnrs caller");
+        assertFalse(o1, "staked.unwrapTo rejected caller without balance");
+        assertFalse(o2, "staked.claimVested rejected caller without vest");
+        assertFalse(o3, "staked.burn rejected caller without balance");
+        assertFalse(o4, "staked.yearAutoBuy rejected caller before autoBuy window");
+        assertFalse(o5, "staked.burnForSdgnrs rejected non-sdgnrs caller");
     }
 
     // ====================================================================
-    //  SECTION I: StakedDegenerusStonk.sol — sDGNRS paths.
+    //  SECTION I: sDGNRS.sol — sDGNRS paths.
     // ====================================================================
 
     function test_gap_sdgnrs_burn_zero_reverts() public {
@@ -1091,11 +1091,11 @@ contract CoverageGap222 is DeployProtocol {
         vm.prank(buyer);
         (bool o2, ) = address(vault).call(
             abi.encodeWithSignature(
-                "gamePurchaseTicketsBurnie(uint256)",
+                "gamePurchaseTicketsFlip(uint256)",
                 uint256(100)
             )
         );
-        // v47: vault.gamePurchaseBurnieLootbox removed (BURNIE-lootbox surface deleted); its
+        // v47: vault.gamePurchaseFlipLootbox removed (FLIP-lootbox surface deleted); its
         // negative-auth probe is dropped — the selector no longer exists to be access-controlled.
         // vault.gameOpenLootBox removed: opening boxes for any address is permissionless, so the
         // vault needs no owner-gated open wrapper — there is no selector left to access-control.
@@ -1108,7 +1108,7 @@ contract CoverageGap222 is DeployProtocol {
             )
         );
         assertFalse(o1, "vault.gamePurchase rejected non-vaultOwner caller");
-        assertFalse(o2, "vault.gamePurchaseTicketsBurnie rejected non-vaultOwner caller");
+        assertFalse(o2, "vault.gamePurchaseTicketsFlip rejected non-vaultOwner caller");
         assertFalse(o5, "vault.gamePurchaseDeityPassFromBoon rejected non-vaultOwner caller");
     }
 
@@ -1219,7 +1219,7 @@ contract CoverageGap222 is DeployProtocol {
         assertFalse(o1, "vault.wwxrpMint rejected non-vaultOwner caller");
         assertFalse(o3, "vault.sdgnrsBurn rejected non-vaultOwner caller");
         assertFalse(o4, "vault.sdgnrsClaimRedemption rejected non-vaultOwner caller");
-        assertFalse(o5, "vault.burnCoin rejected caller with no DGVB shares");
+        assertFalse(o5, "vault.burnCoin rejected caller with no DGVF shares");
         assertFalse(o6, "vault.burnEth rejected caller with no DGVE shares");
     }
 
@@ -1554,7 +1554,7 @@ contract CoverageGap222 is DeployProtocol {
                 uint48(0)
             )
         );
-        // v47: game.openBurnieLootBox removed (BURNIE-lootbox surface deleted); its negative-auth
+        // v47: game.openFlipLootBox removed (FLIP-lootbox surface deleted); its negative-auth
         // probe is dropped — the selector no longer exists to be access-controlled.
         assertFalse(o1, "game.openBox reverts when no box is queued for caller");
     }
@@ -1640,7 +1640,7 @@ contract CoverageGap222 is DeployProtocol {
                 uint8(0)
             )
         );
-        // v47: game.purchaseBurnieLootbox removed (BURNIE-lootbox surface deleted); its
+        // v47: game.purchaseFlipLootbox removed (FLIP-lootbox surface deleted); its
         // negative-auth probe is dropped — the selector no longer exists to be access-controlled.
         // Whale bundle (2.4 ETH) and deity pass (24 ETH) are underfunded by the 1 ETH
         // send and still revert. The lazy pass (0.24 ETH benefit) now succeeds: the 0.76

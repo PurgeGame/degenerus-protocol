@@ -2,12 +2,12 @@
 pragma solidity 0.8.34;
 
 /**
- * @title IBurnieCoinflip
- * @notice Interface for BurnieCoinflip contract - handles all BURNIE coinflip wagering logic.
- * @dev Standalone daily coinflip wagering system extracted from BurnieCoin to reduce contract size.
- *      Integrates with BurnieCoin for burn/mint operations and DegenerusGame for game state.
+ * @title ICoinflip
+ * @notice Interface for Coinflip contract - handles all FLIP coinflip wagering logic.
+ * @dev Standalone daily coinflip wagering system extracted from FLIP to reduce contract size.
+ *      Integrates with FLIP for burn/mint operations and DegenerusGame for game state.
  */
-interface IBurnieCoinflip {
+interface ICoinflip {
     /// @notice Emitted whenever a player's coinflip claim-state changes (claimable + carry + claim
     ///         cursor), so off-chain consumers can reconstruct valuation from logs without an eth_call.
     event CoinflipClaimState(
@@ -21,19 +21,19 @@ interface IBurnieCoinflip {
       |                          CORE ACTIONS                                |
       +======================================================================+*/
 
-    /// @notice Deposit BURNIE into the daily coinflip system.
-    /// @dev Burns BURNIE from caller via BurnieCoin.burnForCoinflip, processes any pending claims,
+    /// @notice Deposit FLIP into the daily coinflip system.
+    /// @dev Burns FLIP from caller via FLIP.burnForCoinflip, processes any pending claims,
     ///      applies quest bonuses and recycling bonuses, then adds stake for the next day's flip.
     ///      Can be called by player directly (player=address(0) or player=msg.sender) or by an
     ///      approved operator on behalf of a player.
     /// @param player The player making the deposit (address(0) or msg.sender for direct deposit).
-    /// @param amount Amount of BURNIE to deposit (must be >= 100 BURNIE minimum).
-    /// @custom:reverts AmountLTMin If amount is non-zero but less than 100 BURNIE.
+    /// @param amount Amount of FLIP to deposit (must be >= 100 FLIP minimum).
+    /// @custom:reverts AmountLTMin If amount is non-zero but less than 100 FLIP.
     /// @custom:reverts CoinflipLocked If deposits are locked during level transition RNG resolution.
     /// @custom:reverts NotApproved If caller is not the player and not an approved operator.
     function depositCoinflip(address player, uint256 amount) external;
 
-    /// @notice Claim an exact amount of coinflip winnings as BURNIE tokens.
+    /// @notice Claim an exact amount of coinflip winnings as FLIP tokens.
     /// @dev Processes pending daily claims, then mints up to the requested amount.
     ///      Caller can claim for themselves or as an approved operator for another player.
     /// @param player The player claiming (address(0) for msg.sender).
@@ -42,7 +42,7 @@ interface IBurnieCoinflip {
     /// @custom:reverts NotApproved If caller is not the player and not an approved operator.
     function claimCoinflips(address player, uint256 amount) external returns (uint256 claimed);
 
-    /// @notice Claim up to `amount` of the auto-rebuy carry as minted BURNIE while staying on auto-rebuy.
+    /// @notice Claim up to `amount` of the auto-rebuy carry as minted FLIP while staying on auto-rebuy.
     /// @dev Settles all resolved days first (wins roll into the carry, a pending loss zeroes it),
     ///      then withdraws from the settled carry; the remainder keeps rolling. Blocked during
     ///      the RNG lock. Take-profit chunks surfaced by the settle bank into the claimable side.
@@ -54,20 +54,20 @@ interface IBurnieCoinflip {
     /// @custom:reverts AutoRebuyNotEnabled If the player is not on auto-rebuy.
     function claimCoinflipCarry(address player, uint256 amount) external returns (uint256 claimed);
 
-    /// @notice Claim coinflip winnings via BurnieCoin contract to cover token transfers/burns.
-    /// @dev Access restricted to BurnieCoin contract only. Processes pending claims and mints tokens.
+    /// @notice Claim coinflip winnings via FLIP contract to cover token transfers/burns.
+    /// @dev Access restricted to FLIP contract only. Processes pending claims and mints tokens.
     /// @param player The player claiming.
     /// @param amount Amount to claim.
     /// @return claimed The actual amount claimed and minted.
-    /// @custom:reverts OnlyBurnieCoin If caller is not the BurnieCoin contract.
-    function claimCoinflipsFromBurnie(address player, uint256 amount) external returns (uint256 claimed);
+    /// @custom:reverts OnlyFLIP If caller is not the FLIP contract.
+    function claimCoinflipsFromFlip(address player, uint256 amount) external returns (uint256 claimed);
 
-    /// @notice Consume coinflip winnings via BurnieCoin for burns without minting new tokens.
-    /// @dev Access restricted to BurnieCoin contract only. Reduces claimable balance without minting.
+    /// @notice Consume coinflip winnings via FLIP for burns without minting new tokens.
+    /// @dev Access restricted to FLIP contract only. Reduces claimable balance without minting.
     /// @param player The player whose balance to consume.
     /// @param amount Amount to consume.
     /// @return consumed The actual amount consumed.
-    /// @custom:reverts OnlyBurnieCoin If caller is not the BurnieCoin contract.
+    /// @custom:reverts OnlyFLIP If caller is not the FLIP contract.
     function consumeCoinflipsForBurn(address player, uint256 amount) external returns (uint256 consumed);
 
     /// @notice Configure auto-rebuy mode for coinflips.
@@ -143,22 +143,22 @@ interface IBurnieCoinflip {
     /// @dev sDGNRS-only. Settles all resolved days first so the two summed components are disjoint
     ///      and current; the held wallet balance is read separately by sDGNRS.
     /// @return backing claimableStored + autoRebuyCarry for sDGNRS.
-    /// @custom:reverts OnlyStakedDegenerusStonk If caller is not the sDGNRS contract.
-    function redeemableCoinBacking() external returns (uint256 backing);
+    /// @custom:reverts OnlysDGNRS If caller is not the sDGNRS contract.
+    function redeemableFlipBacking() external returns (uint256 backing);
 
-    /// @notice Remove `base` (wei) of sDGNRS's BURNIE backing at redemption submit.
+    /// @notice Remove `base` (wei) of sDGNRS's FLIP backing at redemption submit.
     /// @dev sDGNRS-only. Waterfall: held wallet balance (burned) → settled claimable (consumed) →
     ///      auto-rebuy carry (decremented). Credits nothing; the redeemer's escrowed slice is paid
     ///      later on the resolving day's coinflip win via creditFlip. Fail-closed if backing < base.
-    /// @param base Whole-token-aligned BURNIE backing (wei) to remove from sDGNRS.
-    /// @custom:reverts OnlyStakedDegenerusStonk If caller is not the sDGNRS contract.
-    function withdrawRedeemedBurnie(uint256 base) external;
+    /// @param base Whole-token-aligned FLIP backing (wei) to remove from sDGNRS.
+    /// @custom:reverts OnlysDGNRS If caller is not the sDGNRS contract.
+    function withdrawRedeemedFlip(uint256 base) external;
 
     /*+======================================================================+
       |                          VIEW FUNCTIONS                              |
       +======================================================================+*/
 
-    /// @notice Preview total claimable BURNIE for a player including pending daily claims.
+    /// @notice Preview total claimable FLIP for a player including pending daily claims.
     /// @dev Calculates claimable from stored balance plus unprocessed winning days within claim window.
     /// @param player The player to check.
     /// @return mintable Total amount that would be claimable if claimed now.
@@ -169,7 +169,7 @@ interface IBurnieCoinflip {
     /// @notice Get player's current coinflip stake for the next day's flip.
     /// @dev Returns the stake amount deposited for the upcoming flip day.
     /// @param player The player to check.
-    /// @return The stake amount in BURNIE for the next flip.
+    /// @return The stake amount in FLIP for the next flip.
     function coinflipAmount(address player) external view returns (uint256);
 
     /// @notice Get player's auto-rebuy configuration.

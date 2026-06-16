@@ -7,10 +7,10 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 
 /// @title KeeperRouterOneCategory -- TST-02 (Phase 351, v55.0 game-resident): one-rewarded-category-per-tx
-///        (no bounty-stacking) on `mintBurnie()` + the router->game->creditFlip double-pay disposition + the
+///        (no bounty-stacking) on `mintFlip()` + the router->game->creditFlip double-pay disposition + the
 ///        standalone UNREWARDED human `autoOpen(count)` escape.
 ///
-/// @notice The v55 router (`game.mintBurnie()`, GameAfkingModule.sol:985) is a STRUCTURAL one-category
+/// @notice The v55 router (`game.mintFlip()`, GameAfkingModule.sol:985) is a STRUCTURAL one-category
 ///         early-return: `if (advanceDue) {advance leg} else {open leg}` (GameAfkingModule.sol:993 vs :1000).
 ///         There are exactly TWO router categories — advance (the buy folded into advanceGame's required-path
 ///         STAGE, so it rides the advance bounty) and the afking-box open. The else-if XOR is the mitigation
@@ -18,7 +18,7 @@ import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 ///         (GameAfkingModule.sol:1014-1016) is the mitigation for a composed reentrant double-pay. Security
 ///         is the HARD FLOOR.
 ///
-///   D-02 (no-stacking proven by COUNTING `creditFlip`, NOT exact amounts): each `mintBurnie()` tx fires
+///   D-02 (no-stacking proven by COUNTING `creditFlip`, NOT exact amounts): each `mintFlip()` tx fires
 ///   EXACTLY ONE `coinflip.creditFlip` across both category branches (advance / open), ZERO on the
 ///   `bountyEarned==0` skip (a mult==0 gameover advance runs the category but credits nothing, still no
 ///   revert), and ZERO + `revert NoWork()` when BOTH O(1) predicates are empty. The count is taken via the
@@ -27,32 +27,32 @@ import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 ///   COUNT (==1 / ==0) across both branches IS the proof the else early-return can never credit two
 ///   categories in one tx.
 ///
-///   D-01 (reentrancy is STRUCTURAL, NO attacker harness): `mintBurnie` pays only minted FLIP CREDIT, makes
+///   D-01 (reentrancy is STRUCTURAL, NO attacker harness): `mintFlip` pays only minted FLIP CREDIT, makes
 ///   NO ETH push, and every external call in every leg targets either a self-call
 ///   (`IGameRouter(address(this))`) or the pinned `coinflip` immutable. There is no untrusted call to
 ///   re-enter through, so a synthetic reentrant attacker has no hook. The disposition is satisfied by a
 ///   comment-stripped source grep-attestation: (a) the single `creditFlip(msg.sender, bountyEarned)`
-///   occurrence (==1, CEI-last), and (b) ZERO low-level ETH-push primitives in the mintBurnie legs (the
+///   occurrence (==1, CEI-last), and (b) ZERO low-level ETH-push primitives in the mintFlip legs (the
 ///   module pushes no ETH at all — funding withdraw moved to DegenerusGame). NO attacker/reentrant mock
 ///   exists in this file (User verbatim: "reentrancy is not an issue, nothing here pays eth and this only
 ///   interacts with trusted contracts.").
 ///
-///   D-03 (default-batch / escapes): `mintBurnie()` runs the fixed open-leg default batch (OPEN_BATCH=200)
+///   D-03 (default-batch / escapes): `mintFlip()` runs the fixed open-leg default batch (OPEN_BATCH=200)
 ///   and does NOT OOG; the standalone parametered HUMAN `game.openBoxes(count)` is an emergency escape that
-///   runs the human box leg but credits NOTHING (only `mintBurnie` credits). The afking-module standalone
+///   runs the human box leg but credits NOTHING (only `mintFlip` credits). The afking-module standalone
 ///   `autoOpen` selector COLLIDES with the human `autoOpen(uint256)` so the afking open is reachable ONLY
-///   through `mintBurnie` (DegenerusGame.sol:352-353) — there is no separately-callable unrewarded afking
+///   through `mintFlip` (DegenerusGame.sol:352-353) — there is no separately-callable unrewarded afking
 ///   escape to test here.
 ///
 /// @dev The five call-site deltas applied (D-351-01):
-///   Δ3 doWork->mintBurnie: `afKing.doWork()` -> `game.mintBurnie()` (all sites).
+///   Δ3 doWork->mintFlip: `afKing.doWork()` -> `game.mintFlip()` (all sites).
 ///   Δ4 autoBuy: the per-sub buy folded into `advanceGame()`'s STAGE — driven via a new-day advanceGame()
 ///      + the `_settleGame` VRF drain; the standalone `autoBuy(count)` has NO successor.
 ///   Δ5 views: `afKing.subscriberCount()`/`autoBuyProgress()` -> read `_subscribers.length`/`_subCursor` via
 ///      vm.load (RE-DERIVED slots).
 ///   Two runtime traps cleared: AFKING_SRC repointed from the deleted standalone-contract path to
 ///   "contracts/modules/GameAfkingModule.sol" (the deleted file THROWS at runtime under vm.readFile) +
-///   every grepped token re-derived for the relocated mintBurnie body.
+///   every grepped token re-derived for the relocated mintFlip body.
 ///   Pinned slots RE-DERIVED via `forge inspect storage DegenerusGame`. Zero contracts/*.sol mutation.
 contract KeeperRouterOneCategory is DeployProtocol {
     // -------------------------------------------------------------------------
@@ -66,7 +66,7 @@ contract KeeperRouterOneCategory is DeployProtocol {
 
     // -------------------------------------------------------------------------
     // Game-resident storage slots (RE-DERIVED via `solc --storage-layout` on the working tree after
-    // the V62 lootbox repack — the folded lootboxEth word + removed lootboxEthBase/Burnie/Purchase/
+    // the V62 lootbox repack — the folded lootboxEth word + removed lootboxEthBase/Flip/Purchase/
     // Distress shifted later slots down. The prior _subOf=62 / _subscribers=64 / lootbox 36/37/22
     // pins are now stale; corrected to the authoritative values below.)
     // -------------------------------------------------------------------------
@@ -139,7 +139,7 @@ contract KeeperRouterOneCategory is DeployProtocol {
     // Task 1 — D-02 one-category creditFlip COUNT across both branches + skip + NoWork
     // =========================================================================
 
-    /// @notice ADVANCE branch: with `advanceDue()` true, `mintBurnie()` takes the advance leg (the
+    /// @notice ADVANCE branch: with `advanceDue()` true, `mintFlip()` takes the advance leg (the
     ///         structural early-return's `if (advanceDue)` arm); a multiplier > 0 credits EXACTLY ONCE.
     ///         The buy folded into advanceGame's STAGE rides this single advance bounty.
     function testAdvanceBranchCreditsExactlyOnce() public {
@@ -157,12 +157,12 @@ contract KeeperRouterOneCategory is DeployProtocol {
 
         vm.recordLogs();
         vm.prank(keeper);
-        game.mintBurnie();
+        game.mintFlip();
 
         // The advance leg credited exactly once (mult > 0 on a normal day-advance).
-        assertEq(_countCoinflipStakeUpdatedFor(keeper), 1, "ADVANCE branch: exactly one mintBurnie creditFlip to the keeper");
+        assertEq(_countCoinflipStakeUpdatedFor(keeper), 1, "ADVANCE branch: exactly one mintFlip creditFlip to the keeper");
 
-        // Non-vacuity: the advance leg actually ran — mintBurnie's advanceGame() either cleared the
+        // Non-vacuity: the advance leg actually ran — mintFlip's advanceGame() either cleared the
         // advance-due predicate or engaged rngLock for the day it just advanced (the multi-stage
         // day-advance locks RNG mid-flight). Either is observable state progress only the advance leg produces.
         bool progressed = (dueBefore && !game.advanceDue()) || (!lockedBefore && game.rngLocked());
@@ -170,8 +170,8 @@ contract KeeperRouterOneCategory is DeployProtocol {
     }
 
     /// @notice OPEN branch: advance NOT due + an afking-stamped box pending (RNG-ready, un-opened) ->
-    ///         `mintBurnie()` takes the `else` open leg and credits EXACTLY ONCE. (The afking open is
-    ///         reachable ONLY via mintBurnie — the module's standalone autoOpen selector collides with the
+    ///         `mintFlip()` takes the `else` open leg and credits EXACTLY ONCE. (The afking open is
+    ///         reachable ONLY via mintFlip — the module's standalone autoOpen selector collides with the
     ///         human autoOpen(uint256) and is not re-exposed on the Game.)
     function testOpenBranchCreditsExactlyOnce() public {
         vm.skip(true, "357-00b D-12 supersession: the one-category router harness subscribes an ungrounded sub then routes the STAGE buy/open; the grounded subscribe perturbs the single-category early-return + open-credit path; re-proven by V56AfkingGasMarginal + V56SubHardening");
@@ -195,10 +195,10 @@ contract KeeperRouterOneCategory is DeployProtocol {
 
         vm.recordLogs();
         vm.prank(keeper);
-        game.mintBurnie();
+        game.mintFlip();
 
         // The open leg credited exactly once.
-        assertEq(_countCoinflipStakeUpdatedFor(keeper), 1, "OPEN branch: exactly one mintBurnie creditFlip to the keeper");
+        assertEq(_countCoinflipStakeUpdatedFor(keeper), 1, "OPEN branch: exactly one mintFlip creditFlip to the keeper");
 
         // Non-vacuity: the stamped afking box actually opened (its open marker advanced to the stamp day).
         assertEq(_lastOpenedDayOf(sub), stampDay, "non-vacuity: the open leg materialized the afking box");
@@ -207,7 +207,7 @@ contract KeeperRouterOneCategory is DeployProtocol {
     /// @notice bountyEarned==0 SKIP path: a gameover advance (mult==0) runs the advance CATEGORY (the
     ///         `if (advanceDue)` arm executes advanceGame) but credits ZERO (no creditFlip) and does NOT
     ///         revert. Proves the early-return took a category yet the single CEI-last creditFlip was
-    ///         skipped at bountyEarned==0 (the category still ran, so mintBurnie RETURNS, not NoWork()).
+    ///         skipped at bountyEarned==0 (the category still ran, so mintFlip RETURNS, not NoWork()).
     function testBountyEarnedZeroSkipCreditsNothing() public {
         _settleGame(0x5C1F0001);
         assertFalse(game.advanceDue(), "pre: settled");
@@ -217,19 +217,19 @@ contract KeeperRouterOneCategory is DeployProtocol {
         // Latch gameOver so the advance leg returns mult==0 (the flip-credit is worthless at gameover).
         _latchGameOver();
         assertTrue(game.gameOver(), "pre: gameOver latched");
-        assertTrue(game.advanceDue(), "pre: advance still due (mintBurnie routes to the advance leg)");
+        assertTrue(game.advanceDue(), "pre: advance still due (mintFlip routes to the advance leg)");
 
         vm.recordLogs();
         vm.prank(keeper);
-        // Must NOT revert: the advance category ran (it just earned mult==0) so mintBurnie returns, not NoWork().
-        game.mintBurnie();
+        // Must NOT revert: the advance category ran (it just earned mult==0) so mintFlip returns, not NoWork().
+        game.mintFlip();
 
         // ZERO router creditFlips — the bounty was skipped at bountyEarned == 0.
         assertEq(_countCoinflipStakeUpdatedFor(keeper), 0, "SKIP path: zero creditFlip when the advance leg earned mult==0");
         assertEq(_countCoinflipStakeUpdated(), 0, "SKIP path: zero creditFlip emissions at all (no stacking, no winnings credit)");
     }
 
-    /// @notice NoWork: BOTH O(1) predicates empty -> `mintBurnie()` reverts `NoWork()` and credits
+    /// @notice NoWork: BOTH O(1) predicates empty -> `mintFlip()` reverts `NoWork()` and credits
     ///         nothing. Advance not due + no afking boxes pending.
     function testNoWorkRevertsAndCreditsNothing() public {
         // Settle the deploy-day advance so advance is NOT due and we are not locked.
@@ -241,7 +241,7 @@ contract KeeperRouterOneCategory is DeployProtocol {
         vm.recordLogs();
         vm.prank(keeper);
         vm.expectRevert(); // GameAfkingModule.NoWork()
-        game.mintBurnie();
+        game.mintFlip();
 
         // Nothing credited (the revert rolls back, but assert the count is zero regardless).
         assertEq(_countCoinflipStakeUpdated(), 0, "NoWork: zero creditFlip emissions on the empty-work revert");
@@ -254,21 +254,21 @@ contract KeeperRouterOneCategory is DeployProtocol {
     /// @notice STRUCTURAL reentrancy attestation (D-01), grep over the COMMENT-STRIPPED GameAfkingModule
     ///         source — NO attacker harness. Proves (a) the single `creditFlip(msg.sender, bountyEarned)`
     ///         occurrence (CEI-last, one money edge per tx) and (b) ZERO low-level ETH-push primitives in
-    ///         the mintBurnie legs (the module pushes no ETH at all). The source-grep finds the relocated
-    ///         mintBurnie body at the new GameAfkingModule.sol location (no runtime throw on the deleted
+    ///         the mintFlip legs (the module pushes no ETH at all). The source-grep finds the relocated
+    ///         mintFlip body at the new GameAfkingModule.sol location (no runtime throw on the deleted
     ///         AfKing.sol).
-    function testMintBurnieReentrancyStructurallySafeSourceAttest() public view {
+    function testMintFlipReentrancyStructurallySafeSourceAttest() public view {
         string memory afking = _stripComments(vm.readFile(AFKING_SRC));
-        // Scope the attestation to the mintBurnie() function body (the router legs).
-        string memory body = _extractFunctionBody(afking, "function mintBurnie() external {");
-        assertGt(bytes(body).length, 0, "D-01: mintBurnie() body extracted (source-grep repointed, no readFile throw)");
+        // Scope the attestation to the mintFlip() function body (the router legs).
+        string memory body = _extractFunctionBody(afking, "function mintFlip() external {");
+        assertGt(bytes(body).length, 0, "D-01: mintFlip() body extracted (source-grep repointed, no readFile throw)");
 
-        // (a) The single unified bounty credit is byte-present EXACTLY ONCE in mintBurnie (CEI-last after
+        // (a) The single unified bounty credit is byte-present EXACTLY ONCE in mintFlip (CEI-last after
         // the one-category early-return). This is the ONLY money edge in the router per tx.
         assertEq(
             _countOccurrences(body, "creditFlip(msg.sender, bountyEarned)"),
             1,
-            "D-01: exactly one CEI-last mintBurnie creditFlip (the only money edge per tx)"
+            "D-01: exactly one CEI-last mintFlip creditFlip (the only money edge per tx)"
         );
         // The same gate over the whole file proves the unified bounty is the SOLE `creditFlip(msg.sender,...)`
         // site — there is no second router self-credit (the other creditFlip in the file is the 349.2 per-buy
@@ -280,13 +280,13 @@ contract KeeperRouterOneCategory is DeployProtocol {
             "D-01: the unified bounty is the ONLY creditFlip(msg.sender, bountyEarned) site (no per-leg self-credit)"
         );
 
-        // (b) NO untrusted external-call primitive inside the mintBurnie legs that could hand control to an
+        // (b) NO untrusted external-call primitive inside the mintFlip legs that could hand control to an
         // arbitrary address. The bounty is a minted flip-credit ledger move (NO ETH push), so a low-level
         // `.call{value:` / `.transfer(` / `.send(` ETH-push has NO place in any router leg. Asserting ZERO
-        // over the comment-stripped mintBurnie body pins the no-ETH-push / no-untrusted-call shape.
-        assertEq(_countOccurrences(body, ".call{value:"), 0, "D-01: no low-level ETH-push call in the mintBurnie legs");
-        assertEq(_countOccurrences(body, ".transfer("), 0, "D-01: no .transfer ETH-push in the mintBurnie legs");
-        assertEq(_countOccurrences(body, ".send("), 0, "D-01: no .send ETH-push in the mintBurnie legs");
+        // over the comment-stripped mintFlip body pins the no-ETH-push / no-untrusted-call shape.
+        assertEq(_countOccurrences(body, ".call{value:"), 0, "D-01: no low-level ETH-push call in the mintFlip legs");
+        assertEq(_countOccurrences(body, ".transfer("), 0, "D-01: no .transfer ETH-push in the mintFlip legs");
+        assertEq(_countOccurrences(body, ".send("), 0, "D-01: no .send ETH-push in the mintFlip legs");
 
         // (c) File-wide, the GameAfkingModule pushes NO ETH at all (the funding self-send was re-homed to
         // DegenerusGame.withdrawAfkingFunding, NOT this module). Pin the module's low-level ETH-push count at
@@ -299,10 +299,10 @@ contract KeeperRouterOneCategory is DeployProtocol {
     }
 
     /// @notice D-03 ONE-CATEGORY structural early-return (the load-bearing no-stack property): a single
-    ///         `mintBurnie()` tx credits EXACTLY ONE category. When advance is due it credits the advance
+    ///         `mintFlip()` tx credits EXACTLY ONE category. When advance is due it credits the advance
     ///         leg ONCE and does NOT additionally open a pending afking box in the SAME tx (the `else` arm
     ///         is unreachable when the `if (advanceDue)` arm is taken). Proven by: stage a pending afking
-    ///         box AND make advance due, then assert the single mintBurnie credits once AND leaves the
+    ///         box AND make advance due, then assert the single mintFlip credits once AND leaves the
     ///         afking box unopened (the open leg never ran — no stacking).
     function testOneCategoryEarlyReturnNoStack() public {
         vm.skip(true, "357-00b D-12 supersession: the one-category router harness subscribes an ungrounded sub then routes the STAGE buy/open; the grounded subscribe perturbs the single-category early-return + open-credit path; re-proven by V56AfkingGasMarginal + V56SubHardening");
@@ -332,7 +332,7 @@ contract KeeperRouterOneCategory is DeployProtocol {
 
         vm.recordLogs();
         vm.prank(keeper);
-        game.mintBurnie();
+        game.mintFlip();
 
         // Exactly ONE category credited (the advance leg) — no second open-leg credit.
         assertEq(_countCoinflipStakeUpdatedFor(keeper), 1, "ONE-CATEGORY: exactly one credit (advance), no stacked open credit");
@@ -344,7 +344,7 @@ contract KeeperRouterOneCategory is DeployProtocol {
     }
 
     /// @notice D-03 UNREWARDED escape: the standalone parametered HUMAN `game.openBoxes(count)` runs the
-    ///         human box leg (a queued human box opens) but credits NOTHING (only `mintBurnie` credits).
+    ///         human box leg (a queued human box opens) but credits NOTHING (only `mintFlip` credits).
     function testStandaloneAutoOpenEscapeUnrewarded() public {
         address boxOwner = makeAddr("esc_open_box_owner");
         vm.deal(boxOwner, 100_000 ether);
@@ -369,8 +369,8 @@ contract KeeperRouterOneCategory is DeployProtocol {
         // Work happened: the human box opened (first-deposit signal zeroed).
         assertEq(_lootboxEthBase(index, boxOwner), 0, "non-vacuity: the standalone autoOpen opened the human box");
 
-        // ...but the keeper got NO bounty credit (only mintBurnie credits). A box open can itself credit
-        // BURNIE winnings to the BOX OWNER, so isolate the keeper's count: it is 0.
+        // ...but the keeper got NO bounty credit (only mintFlip credits). A box open can itself credit
+        // FLIP winnings to the BOX OWNER, so isolate the keeper's count: it is 0.
         assertEq(_countCoinflipStakeUpdatedFor(keeper), 0, "UNREWARDED: standalone autoOpen(count) credits the keeper zero");
     }
 

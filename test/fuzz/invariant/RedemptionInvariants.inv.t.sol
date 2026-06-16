@@ -5,7 +5,7 @@ import "forge-std/Test.sol";
 import {DeployProtocol} from "../helpers/DeployProtocol.sol";
 import {VRFHandler} from "../helpers/VRFHandler.sol";
 import {RedemptionHandler} from "../handlers/RedemptionHandler.sol";
-import {StakedDegenerusStonk} from "../../../contracts/StakedDegenerusStonk.sol";
+import {sDGNRS} from "../../../contracts/sDGNRS.sol";
 
 /// @title RedemptionInvariants -- Proves gambling burn redemption system invariants
 /// @notice 7 invariants encoding Phase 44 corrected properties (INV-01 through INV-07).
@@ -17,7 +17,7 @@ contract RedemptionInvariants is DeployProtocol {
     VRFHandler public vrfHandler;
 
     // Storage slot constants for internal sDGNRS state
-    uint256 private constant SLOT_PENDING_BURNIE = 10;
+    uint256 private constant SLOT_PENDING_FLIP = 10;
     uint256 private constant SLOT_SUPPLY_SNAPSHOT = 13;
     uint256 private constant SLOT_PERIOD_INDEX = 14;
     uint256 private constant SLOT_PERIOD_BURNED = 15;
@@ -136,7 +136,7 @@ contract RedemptionInvariants is DeployProtocol {
     /// @notice pendingRedemptionEthValue tracks sum of individual claims (bounded dust).
     /// @dev Verifies two aggregate tracking properties:
     ///      1. ETH: segregated <= balance + stETH (overlap with INV-01 via different path)
-    ///      2. BURNIE: reserved <= balance + tolerance (generous 1 ether dust bound)
+    ///      2. FLIP: reserved <= balance + tolerance (generous 1 ether dust bound)
     function invariant_aggregateTracking() public view {
         // ETH tracking: segregated <= balance + stETH
         uint256 segregatedEth = sdgnrs.pendingRedemptionEthValue();
@@ -148,42 +148,42 @@ contract RedemptionInvariants is DeployProtocol {
             "INV-07: ETH aggregate tracking exceeds balance"
         );
 
-        // BURNIE tracking: reserved <= available + tolerance
-        uint256 pendingBurnie = uint256(vm.load(address(sdgnrs), bytes32(uint256(SLOT_PENDING_BURNIE))));
-        uint256 burnieBal = coin.balanceOf(address(sdgnrs));
+        // FLIP tracking: reserved <= available + tolerance
+        uint256 pendingFlip = uint256(vm.load(address(sdgnrs), bytes32(uint256(SLOT_PENDING_FLIP))));
+        uint256 flipBal = coin.balanceOf(address(sdgnrs));
         // Dust bound: O(N * 99) wei per period. With 5 actors and ~256 runs,
         // max dust ~ 5 * 99 * 256 = 126720 wei. Use generous 1 ether bound.
-        if (pendingBurnie > 0) {
+        if (pendingFlip > 0) {
             assertGe(
-                burnieBal + 1 ether,
-                pendingBurnie,
-                "INV-07: BURNIE aggregate tracking exceeds balance + tolerance"
+                flipBal + 1 ether,
+                pendingFlip,
+                "INV-07: FLIP aggregate tracking exceeds balance + tolerance"
             );
         }
     }
 
     // =========================================================================
-    //                    INV-07b: BURNIE CLAIMED MONOTONIC
+    //                    INV-07b: FLIP CLAIMED MONOTONIC
     // =========================================================================
 
-    /// @notice Cumulative BURNIE claimed is monotonically non-decreasing.
-    /// @dev ghost_totalBurnieClaimed only increases (claims add, never subtract).
-    ///      This ensures no accounting underflow in BURNIE claim tracking.
-    function invariant_burnieClaimedMonotonic() public view {
-        // ghost_totalBurnieClaimed is only ever incremented (+=), never decremented.
+    /// @notice Cumulative FLIP claimed is monotonically non-decreasing.
+    /// @dev ghost_totalFlipClaimed only increases (claims add, never subtract).
+    ///      This ensures no accounting underflow in FLIP claim tracking.
+    function invariant_flipClaimedMonotonic() public view {
+        // ghost_totalFlipClaimed is only ever incremented (+=), never decremented.
         // If it were to decrease, the uint256 would underflow and revert in the handler.
         // This invariant documents the monotonic property explicitly.
         // Additionally verify it is bounded by a reasonable upper limit:
-        // total BURNIE claimed cannot exceed the initial BURNIE balance of sDGNRS
+        // total FLIP claimed cannot exceed the initial FLIP balance of sDGNRS
         // plus any credited flips (generous bound: initial coin supply).
-        uint256 claimed = handler.ghost_totalBurnieClaimed();
+        uint256 claimed = handler.ghost_totalFlipClaimed();
         // Monotonicity is enforced by the += operator (underflow reverts in 0.8.x).
-        // Boundedness: claimed should not exceed total BURNIE ever in the system.
-        // We use a generous bound: 1e30 (matches BURNIE initial supply order of magnitude).
+        // Boundedness: claimed should not exceed total FLIP ever in the system.
+        // We use a generous bound: 1e30 (matches FLIP initial supply order of magnitude).
         assertLe(
             claimed,
             1e30,
-            "INV-07b: cumulative BURNIE claimed exceeds system maximum"
+            "INV-07b: cumulative FLIP claimed exceeds system maximum"
         );
     }
 
@@ -230,7 +230,7 @@ contract RedemptionInvariants is DeployProtocol {
         console.log("  ghost_periodsResolved:", handler.ghost_periodsResolved());
         console.log("  ghost_claimCount:     ", handler.ghost_claimCount());
         console.log("  ghost_totalEthClaimed:", handler.ghost_totalEthClaimed());
-        console.log("  ghost_totalBurnieClaimed:", handler.ghost_totalBurnieClaimed());
+        console.log("  ghost_totalFlipClaimed:", handler.ghost_totalFlipClaimed());
         console.log("  ghost_doubleClaim:    ", handler.ghost_doubleClaim());
         console.log("  ghost_rollOutOfBounds:", handler.ghost_rollOutOfBounds());
         console.log("  ghost_periodIdxDecr:  ", handler.ghost_periodIndexDecreased());

@@ -3,7 +3,7 @@ pragma solidity ^0.8.26;
 
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
-import {StakedDegenerusStonk} from "../../contracts/StakedDegenerusStonk.sol";
+import {sDGNRS} from "../../contracts/sDGNRS.sol";
 
 /// @title AffiliateDgnrsClaim -- Tests for segregated affiliate DGNRS claim system
 /// @notice Validates proportional distribution, claim window, and edge cases.
@@ -269,7 +269,7 @@ contract AffiliateDgnrsClaim is DeployProtocol {
     function test_totalClaimsMatchPoolDelta() public {
         uint24 lvl = _buildScoresAndSetupClaim(CODE_ALICE, 30, CODE_BOB, 25);
 
-        uint256 poolBefore = sdgnrs.poolBalance(StakedDegenerusStonk.Pool.Affiliate);
+        uint256 poolBefore = sdgnrs.poolBalance(sDGNRS.Pool.Affiliate);
 
         uint256 bal;
         uint256 totalClaimed;
@@ -282,7 +282,7 @@ contract AffiliateDgnrsClaim is DeployProtocol {
         _claimDgnrs(bob);
         totalClaimed += sdgnrs.balanceOf(bob) - bal;
 
-        uint256 poolAfter = sdgnrs.poolBalance(StakedDegenerusStonk.Pool.Affiliate);
+        uint256 poolAfter = sdgnrs.poolBalance(sDGNRS.Pool.Affiliate);
         assertEq(totalClaimed, poolBefore - poolAfter, "Claims match pool delta");
     }
 

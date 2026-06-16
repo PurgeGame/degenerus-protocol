@@ -22,14 +22,14 @@ import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 ///             (`afkingFunding[src] -= ethValue; claimablePool -= uint128(ethValue)`, byte-frozen from v55) ->
 ///             the per-mode primitive (lootbox box-stamp OR the ticket minimal-write `_queueTicketsScaled`,
 ///             replacing the ~262k purchaseWith heavyweight) -> the MODE-AGNOSTIC in-slot accrue (affiliateBase
-///             flat-7% += and the slot-0 reward into pendingBurnie) + the compute-on-read streak markers
+///             flat-7% += and the slot-0 reward into pendingFlip) + the compute-on-read streak markers
 ///             (gap-resume + afkCoveredThroughDay) -> the lastAutoBoughtDay marker. There is NO per-buy
 ///             DegenerusQuests STATICCALL (the streak is computed on read from the Sub slot) and NO settle day.
 ///
 ///         (2) The Sub slot is a SINGLE 256-bit slot, EXACTLY full (0 free): config 40 + stamp 40 (scorePlus1
 ///             uint16 / amount uint24 milli-ETH) + markers 96 (lastAutoBoughtDay / lastOpenedDay /
 ///             afkCoveredThroughDay / afkingStartDay uint24 each) + accumulator 72 (affiliateBase uint32 /
-///             pendingBurnie uint32 / subStreakLatch uint8). The accumulator is IN-SLOT — the per-buy accrue
+///             pendingFlip uint32 / subStreakLatch uint8). The accumulator is IN-SLOT — the per-buy accrue
 ///             is a warm write on the SAME slot the stamp dirtied, NOT a new cold slot.
 ///
 ///         (3) Sub-ending finalize (cancel / cancel-reclaim / pass-evict / funding-kill): the only cross-contract
@@ -68,7 +68,7 @@ contract V56AfkingGasMarginal is DeployProtocol {
     // -------------------------------------------------------------------------
 
     // RE-DERIVED via `solc --storage-layout` on the working tree after the V62 lootbox repack — the
-    // folded lootboxEth word + removed lootboxEthBase/Burnie/Purchase/Distress shifted later slots down.
+    // folded lootboxEth word + removed lootboxEthBase/Flip/Purchase/Distress shifted later slots down.
     uint256 private constant RNG_WORD_BY_DAY_SLOT = 10; // mapping(uint24 => uint256) — the afking box's DAY-keyed word + readiness gate
     uint256 private constant SUBOF_SLOT = 54;           // _subOf mapping root (address => Sub, one packed slot)
     uint256 private constant SUBSCRIBERS_SLOT = 56;     // address[] _subscribers (slot holds the length)
@@ -81,7 +81,7 @@ contract V56AfkingGasMarginal is DeployProtocol {
     //   dailyQuantity u8 @0 · validThroughLevel u24 @1 · reinvestPct u8 @4 · flags u8 @5
     //   scorePlus1 u16 @6 · amount u24 @8
     //   lastAutoBoughtDay u24 @11 · lastOpenedDay u24 @14 · afkCoveredThroughDay u24 @17 · afkingStartDay u24 @20
-    //   affiliateBase u32 @23 · pendingBurnie u32 @27 · subStreakLatch u8 @31
+    //   affiliateBase u32 @23 · pendingFlip u32 @27 · subStreakLatch u8 @31
     uint256 private constant OFF_VALIDTHROUGH = 1; // uint24 validThroughLevel   (bytes 1..3)
     uint256 private constant OFF_AMOUNT = 8;      // uint24 amount (milli-ETH)   (bytes 8..10)
     uint256 private constant OFF_LASTBOUGHT = 11; // uint24 lastAutoBoughtDay    (bytes 11..13)
@@ -91,7 +91,7 @@ contract V56AfkingGasMarginal is DeployProtocol {
     uint256 private constant OFF_AFKCOVERED = 17; // uint24 afkCoveredThroughDay (bytes 17..19)
     uint256 private constant OFF_AFKINGSTART = 20; // uint24 afkingStartDay      (bytes 20..22)
     uint256 private constant OFF_AFFBASE = 23;    // uint32 affiliateBase        (bytes 23..26)
-    uint256 private constant OFF_PENDINGBURNIE = 27; // uint32 pendingBurnie     (bytes 27..30)
+    uint256 private constant OFF_PENDINGFLIP = 27; // uint32 pendingFlip     (bytes 27..30)
     uint256 private constant OFF_STREAKLATCH = 31; // uint8 subStreakLatch       (byte 31; bit7 ever-sub, bits0-6 streak)
 
     uint256 private constant MINTPACKED_SLOT = 9;
@@ -258,7 +258,7 @@ contract V56AfkingGasMarginal is DeployProtocol {
 
     /// @notice The per-buy TICKET marginal = (gas for N funded ticket subs − gas for N−1) / 1, NON-settle-day
     ///         STAGE, snapshot/revert. The ticket leg is the NEW minimal-write `_queueTicketsScaled` primitive
-    ///         + the buyerOwedBurnie in-slot accrue (off the old ~262k purchaseWith heavyweight that dragged
+    ///         + the buyerOwedFlip in-slot accrue (off the old ~262k purchaseWith heavyweight that dragged
     ///         in recordMint + the whole quests/affiliate/coinflip work). Asserts under the ceiling; emits the
     ///         structural-win comparison vs the ~262k purchaseWith reference.
     function testPerBuyTicketMarginal() public {
@@ -290,7 +290,7 @@ contract V56AfkingGasMarginal is DeployProtocol {
     // =========================================================================
 
     /// @notice The per-open marginal = (gas for N opens − gas for N−1 opens) / 1, snapshot/revert. The afking
-    ///         open leg is `_autoOpen(OPEN_BATCH)`, reached via `mintBurnie()`; each afking box rolls boons
+    ///         open leg is `_autoOpen(OPEN_BATCH)`, reached via `mintFlip()`; each afking box rolls boons
     ///         like a human box (~75k/box, uniform O(1) — a cheap stamp-derived resolve, no boxPlayers walk /
     ///         no lootboxEth read-zero, the anti-gas-DoS property the human openLootBox lacks). All numbers
     ///         are EMITTED first (the measured per-box marginal + the OPEN_BATCH chunk + the derived max-safe
@@ -315,7 +315,7 @@ contract V56AfkingGasMarginal is DeployProtocol {
         uint256 perOpen = gasN - gasNm1; // (gas for N − gas for N−1) / 1 — the loop-N-divide MARGINAL
 
         // Derive the OPEN_BATCH chunk. fixed_open_overhead = the open-leg tx overhead at N opens minus the N
-        // per-box marginals (the constant mintBurnie entry/exit + advance-check + bounty cost shared by any
+        // per-box marginals (the constant mintFlip entry/exit + advance-check + bounty cost shared by any
         // open chunk size). The chunk at a batch B = fixed + B×perOpen.
         uint256 fixedOpenOverhead = gasN > perOpen * N_HI ? gasN - perOpen * N_HI : 0;
         uint256 openChunkAtBatch = fixedOpenOverhead + OPEN_BATCH * perOpen;
@@ -684,7 +684,7 @@ contract V56AfkingGasMarginal is DeployProtocol {
     ///         per-box marginal and the full OPEN_BATCH chunk at the mixed-day cost stay < the EIP cap.
     function testResidualR3MixedStampDayOpenBatch() public {
         // The per-box open is NO LONGER a uniform O(1) constant: a box can roll into a Degenerette
-        // spin (WWXRP / BURNIE-spins / ETH-spin), so the old diff-of-two-batches marginal (which
+        // spin (WWXRP / FLIP-spins / ETH-spin), so the old diff-of-two-batches marginal (which
         // assumed the first N-1 boxes cancel exactly) is unsound — box i's roll value depends on its
         // stamp DAY, which differs by one between the N and N-1 runs. Measure the WORST CASE directly
         // instead: FORCE every box in a full OPEN_BATCH to the heaviest path — the ETH-spin (roll 19),
@@ -700,7 +700,7 @@ contract V56AfkingGasMarginal is DeployProtocol {
         // Non-vacuity: every box actually took the ETH-spin path (proves the worst-case forcing worked).
         assertEq(ethSpins, OPEN_BATCH, "R3: every forced box rolled the ETH-spin (the heaviest outcome)");
         // The full forced all-ETH-spin OPEN_BATCH chunk stays under the 16,777,216 EIP-7825 per-tx cap,
-        // so the fixed-OPEN_BATCH mintBurnie crank can never become un-submittable on a worst-case batch.
+        // so the fixed-OPEN_BATCH mintFlip crank can never become un-submittable on a worst-case batch.
         assertLt(chunkGas, EIP7825_TX_GAS_CAP, "R3: forced all-ETH-spin OPEN_BATCH chunk stays < 16,777,216");
     }
 
@@ -709,7 +709,7 @@ contract V56AfkingGasMarginal is DeployProtocol {
     ///      bracket one openBoxes(OPEN_BATCH) call. Returns the measured chunk gas and the count of
     ///      ETH-type BoxSpin events (must equal OPEN_BATCH — proves the forcing landed). The recirc box
     ///      each winning ETH-spin opens is in the same chunk (allowEthSpin=false there, so its BoxSpins
-    ///      carry the WWXRP/BURNIE type — the ETH-type count is exactly the forced first-level spins).
+    ///      carry the WWXRP/FLIP type — the ETH-type count is exactly the forced first-level spins).
     function _forceEthSpinOpenChunk(string memory prefix)
         internal
         returns (uint256 chunkGas, uint256 ethSpins)
@@ -738,7 +738,7 @@ contract V56AfkingGasMarginal is DeployProtocol {
         chunkGas = gasBefore - gasleft();
 
         // Count the first-level ETH spins: BoxSpin events whose betId encodes the ETH type
-        // (bits 62-60 == 2). Recirc boxes (allowEthSpin=false) may emit WWXRP/BURNIE BoxSpins,
+        // (bits 62-60 == 2). Recirc boxes (allowEthSpin=false) may emit WWXRP/FLIP BoxSpins,
         // which carry a different type and are excluded here.
         VmSafe.Log[] memory logs = vm.getRecordedLogs();
         bytes32 boxSpinSig = keccak256("BoxSpin(address,uint64,uint256,uint256,uint256)");
@@ -933,12 +933,12 @@ contract V56AfkingGasMarginal is DeployProtocol {
     }
 
     /// @notice LIVE-01 (f) individual-open byte-unchanged: the box a sub gets via the unified valve (openBoxes
-    ///         -> drainAfkingBoxes -> _openAfkingBox) is the SAME materialized box as via the rewarded mintBurnie
+    ///         -> drainAfkingBoxes -> _openAfkingBox) is the SAME materialized box as via the rewarded mintFlip
     ///         open leg — both route through _autoOpen with the same frozen stamp-day word, so the open path is
     ///         byte-unchanged across the two reachable afking-open entrypoints (the valve and the bounty router).
     function testLive01IndividualOpenPathByteUnchanged() public {
         // Two identical funded subs stamped on the same day with the same word; open one via the valve, one via
-        // mintBurnie. Each opens to the SAME stamp-day marker (lastOpenedDay == lastAutoBoughtDay) — the open
+        // mintFlip. Each opens to the SAME stamp-day marker (lastOpenedDay == lastAutoBoughtDay) — the open
         // outcome is identical (same _autoOpen path, same rngWordByDay[stampDay] seed).
         address viaValve = makeAddr("vbu_valve");
         address viaBounty = makeAddr("vbu_bounty");
@@ -962,14 +962,14 @@ contract V56AfkingGasMarginal is DeployProtocol {
         // Open one via the unified valve.
         vm.prank(makeAddr("vbu_op1"));
         game.openBoxes(SUBSCRIBER_CAP);
-        // Open the rest via the rewarded bounty router (mintBurnie).
+        // Open the rest via the rewarded bounty router (mintFlip).
         vm.prank(makeAddr("vbu_op2"));
-        try game.mintBurnie() {} catch {}
+        try game.mintFlip() {} catch {}
 
         // Both materialized to the SAME open marker (lastOpenedDay == the shared stamp day) — byte-unchanged
         // open outcome across the valve path and the bounty path.
         assertEq(_lastOpenedDayOf(viaValve), stampValve, "LIVE-01(f): valve-opened box materialized at the stamp day");
-        assertEq(_lastOpenedDayOf(viaBounty), stampBounty, "LIVE-01(f): bounty(mintBurnie)-opened box materialized at the same stamp day");
+        assertEq(_lastOpenedDayOf(viaBounty), stampBounty, "LIVE-01(f): bounty(mintFlip)-opened box materialized at the same stamp day");
         assertEq(_lastOpenedDayOf(viaValve), _lastOpenedDayOf(viaBounty), "LIVE-01(f): the two open entrypoints produce the identical open marker (byte-unchanged path)");
     }
 
@@ -1241,10 +1241,10 @@ contract V56AfkingGasMarginal is DeployProtocol {
     }
 
     /// @dev Measure the afking open-leg gas over N freshly-stamped + ready LOOTBOX afking boxes, returning
-    ///      the bracketed `mintBurnie()` open-leg gas. The 2 deploy subs add a CONSTANT 2 ready boxes to BOTH
+    ///      the bracketed `mintFlip()` open-leg gas. The 2 deploy subs add a CONSTANT 2 ready boxes to BOTH
     ///      the N and N−1 measurements, so they cancel in the (gasN − gasNm1) difference — the marginal
     ///      isolates exactly one box. Each call stamps N subs (new-day STAGE), lands the stamp-day word,
-    ///      settles clean (so mintBurnie routes to OPEN), opens all.
+    ///      settles clean (so mintFlip routes to OPEN), opens all.
     function _measureOpenLegGas(uint256 n, string memory prefix) internal returns (uint256 openGas) {
         address[] memory subs = _setupFundedSubs(n, prefix, 5 ether, false);
         _runStageNewDay(uint256(keccak256(abi.encodePacked(prefix, "word"))) | 1);
@@ -1256,10 +1256,10 @@ contract V56AfkingGasMarginal is DeployProtocol {
         }
 
         _settleClean(uint256(keccak256(abi.encodePacked(prefix, "clean"))) | 1);
-        require(!game.advanceDue(), "fixture: clean so mintBurnie opens");
+        require(!game.advanceDue(), "fixture: clean so mintFlip opens");
         vm.prank(makeAddr(string(abi.encodePacked(prefix, "opener"))));
         uint256 gasBefore = gasleft();
-        game.mintBurnie();
+        game.mintFlip();
         openGas = gasBefore - gasleft();
 
         for (uint256 i; i < n; ++i) {
@@ -1346,7 +1346,7 @@ contract V56AfkingGasMarginal is DeployProtocol {
     }
 
     /// @dev A robust settle DEMANDING a clean (`!advanceDue && !rngLocked`) state before returning — used
-    ///      before a mintBurnie open so it reliably takes the OPEN leg.
+    ///      before a mintFlip open so it reliably takes the OPEN leg.
     function _settleClean(uint256 vrfWord) internal {
         for (uint256 d; d < 240; d++) {
             if (!game.advanceDue() && !game.rngLocked()) return;
@@ -1396,8 +1396,8 @@ contract V56AfkingGasMarginal is DeployProtocol {
         return uint32(_subField(who, OFF_AFKINGSTART, 24)); // uint24
     }
 
-    function _pendingBurnieOf(address who) internal view returns (uint32) {
-        return uint32(_subField(who, OFF_PENDINGBURNIE, 32)); // uint32
+    function _pendingFlipOf(address who) internal view returns (uint32) {
+        return uint32(_subField(who, OFF_PENDINGFLIP, 32)); // uint32
     }
 
     function _streakBaseOf(address who) internal view returns (uint8) {

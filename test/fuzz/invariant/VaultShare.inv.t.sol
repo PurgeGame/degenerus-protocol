@@ -6,7 +6,7 @@ import {VRFHandler} from "../helpers/VRFHandler.sol";
 import {GameHandler} from "../handlers/GameHandler.sol";
 import {WhaleHandler} from "../handlers/WhaleHandler.sol";
 import {DegenerusVault} from "../../../contracts/DegenerusVault.sol";
-import {BurnieCoin} from "../../../contracts/BurnieCoin.sol";
+import {FLIP} from "../../../contracts/FLIP.sol";
 
 /// @title VaultShareInvariant -- Proves vault share math consistency (FUZZ-04)
 /// @notice Asserts that vault reserves are non-negative and share token supplies
@@ -37,7 +37,7 @@ contract VaultShareInvariant is DeployProtocol {
     }
 
     /// @notice Vault coin reserves track correctly
-    /// @dev The vault's BURNIE reserves are: vaultMintAllowance + coin.balanceOf(vault) + claimable.
+    /// @dev The vault's FLIP reserves are: vaultMintAllowance + coin.balanceOf(vault) + claimable.
     ///      The vaultMintAllowance should be <= supplyIncUncirculated since it's a subset.
     function invariant_vaultCoinReservesConsistent() public view {
         uint256 vaultAllowance = coin.vaultMintAllowance();
@@ -51,7 +51,7 @@ contract VaultShareInvariant is DeployProtocol {
         );
     }
 
-    /// @notice Vault should not hold more BURNIE allowance than what was escrowed
+    /// @notice Vault should not hold more FLIP allowance than what was escrowed
     /// @dev vaultMintAllowance starts at 2M and increases via vaultEscrow().
     ///      It decreases via vaultMintTo(). It should never exceed the uncirculated total.
     function invariant_vaultAllowanceBounded() public view {

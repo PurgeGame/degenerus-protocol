@@ -2,7 +2,7 @@
 pragma solidity ^0.8.26;
 
 import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
-import {StakedDegenerusStonk} from "../../contracts/StakedDegenerusStonk.sol";
+import {sDGNRS} from "../../contracts/sDGNRS.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {BitPackingLib} from "../../contracts/libraries/BitPackingLib.sol";
 
@@ -78,7 +78,7 @@ contract MutationKills is DeployProtocol {
     }
 
     // ---------------------------------------------------------------------
-    //               StakedDegenerusStonk — gameOver deterministic burn
+    //               sDGNRS — gameOver deterministic burn
     // ---------------------------------------------------------------------
 
     /// @dev Per-actor sDGNRS funding routed through the Reward pool (game is the authorized caller).
@@ -94,7 +94,7 @@ contract MutationKills is DeployProtocol {
 
         // Fund a burner with sDGNRS from the Reward pool (game is the onlyGame caller).
         vm.prank(address(game));
-        sdgnrs.transferFromPool(StakedDegenerusStonk.Pool.Reward, burner, ACTOR_FUNDING);
+        sdgnrs.transferFromPool(sDGNRS.Pool.Reward, burner, ACTOR_FUNDING);
     }
 
     /// @dev Force game.gameOver() == true via mockCall so burn() takes the deterministic leg.
@@ -112,7 +112,7 @@ contract MutationKills is DeployProtocol {
         );
     }
 
-    /// @notice KILLS StakedDegenerusStonk.sol:624/625/659/666-707 [RR] — the gameOver deterministic
+    /// @notice KILLS sDGNRS.sol:624/625/659/666-707 [RR] — the gameOver deterministic
     ///         burn leg (burn() → _deterministicBurn → _deterministicBurnFrom). The comprehensive
     ///         oracle only drives the LIVE gambling-burn path, so the whole post-gameOver payout
     ///         (supply burn, balance debit, ETH payout, Burn event) survived.
@@ -135,19 +135,19 @@ contract MutationKills is DeployProtocol {
         assertTrue(game.gameOver(), "branch-proof: gameOver must be active for the deterministic leg");
 
         vm.prank(burner);
-        (uint256 ethOut, uint256 stethOut, uint256 burnieOut) = sdgnrs.burn(burnAmount);
+        (uint256 ethOut, uint256 stethOut, uint256 flipOut) = sdgnrs.burn(burnAmount);
 
         // (a) supply burned exactly, (b) burner balance debited exactly.
         assertEq(sdgnrs.totalSupply(), supplyBefore - burnAmount, "supply not burned by exact amount");
         assertEq(sdgnrs.balanceOf(burner), balBefore - burnAmount, "burner balance not debited exactly");
-        // (c) a positive ETH payout landed (gameOver burns pay no BURNIE).
+        // (c) a positive ETH payout landed (gameOver burns pay no FLIP).
         assertGt(ethOut, 0, "deterministic gameOver burn paid zero ETH (payout leg removed)");
-        assertEq(burnieOut, 0, "gameOver burn must pay no BURNIE");
+        assertEq(flipOut, 0, "gameOver burn must pay no FLIP");
         assertEq(burner.balance, ethBefore + ethOut, "ETH not delivered to burner");
         assertEq(stethOut, 0, "fixture seeds full ETH coverage; no stETH leg expected");
     }
 
-    /// @notice KILLS StakedDegenerusStonk.sol:685/686/690-693/707 [RR] — the stETH-fallback split
+    /// @notice KILLS sDGNRS.sol:685/686/690-693/707 [RR] — the stETH-fallback split
     ///         inside _deterministicBurnFrom (ethBal/stethBal reads + the ethOut=ethBal /
     ///         stethOut=totalValueOwed-ethOut split). Drives a partially-ETH-depleted contract so the
     ///         payout must split across ETH and the stETH fallback leg.
@@ -182,10 +182,10 @@ contract MutationKills is DeployProtocol {
     }
 
     // ---------------------------------------------------------------------
-    //                  StakedDegenerusStonk — burnAtGameOver
+    //                  sDGNRS — burnAtGameOver
     // ---------------------------------------------------------------------
 
-    /// @notice KILLS StakedDegenerusStonk.sol:602/603/605/606 [RR] — burnAtGameOver zeroes the
+    /// @notice KILLS sDGNRS.sol:602/603/605/606 [RR] — burnAtGameOver zeroes the
     ///         contract's own balance, decrements supply by it, deletes poolBalances, emits Transfer.
     ///         The comprehensive oracle never calls burnAtGameOver.
     /// @dev Branch-proof: assert the contract holds undistributed tokens (the targeted branch's
@@ -195,7 +195,7 @@ contract MutationKills is DeployProtocol {
         uint256 localBal = sdgnrs.balanceOf(address(sdgnrs));
         require(localBal > 0, "fixture: contract holds no undistributed tokens");
         uint256 supplyBefore = sdgnrs.totalSupply();
-        uint256 rewardPoolBefore = sdgnrs.poolBalance(StakedDegenerusStonk.Pool.Reward);
+        uint256 rewardPoolBefore = sdgnrs.poolBalance(sDGNRS.Pool.Reward);
         assertGt(rewardPoolBefore, 0, "branch-proof: pool balances must be non-zero pre-drain");
 
         vm.prank(address(game));
@@ -204,83 +204,83 @@ contract MutationKills is DeployProtocol {
         assertEq(sdgnrs.balanceOf(address(sdgnrs)), 0, "local balance not zeroed");
         assertEq(sdgnrs.totalSupply(), supplyBefore - localBal, "supply not reduced by burned local bal");
         // delete poolBalances cleared every pool slot.
-        assertEq(sdgnrs.poolBalance(StakedDegenerusStonk.Pool.Reward), 0, "Reward pool not cleared");
-        assertEq(sdgnrs.poolBalance(StakedDegenerusStonk.Pool.Whale), 0, "Whale pool not cleared");
-        assertEq(sdgnrs.poolBalance(StakedDegenerusStonk.Pool.Lootbox), 0, "Lootbox pool not cleared");
+        assertEq(sdgnrs.poolBalance(sDGNRS.Pool.Reward), 0, "Reward pool not cleared");
+        assertEq(sdgnrs.poolBalance(sDGNRS.Pool.Whale), 0, "Whale pool not cleared");
+        assertEq(sdgnrs.poolBalance(sDGNRS.Pool.Lootbox), 0, "Lootbox pool not cleared");
     }
 
     // ---------------------------------------------------------------------
-    //                  StakedDegenerusStonk — transferFromPool
+    //                  sDGNRS — transferFromPool
     // ---------------------------------------------------------------------
 
-    /// @notice KILLS StakedDegenerusStonk.sol:549/553/555/558/559/567/569/570 [RR] — the regular
+    /// @notice KILLS sDGNRS.sol:549/553/555/558/559/567/569/570 [RR] — the regular
     ///         (to != this) transferFromPool leg: pool debit, contract-balance debit, recipient
     ///         credit, return value. setUp already exercises this (it funds the burner), but no
     ///         assertion pinned the post-conditions; this test pins them.
     function test_kills_StakedStonk_transferFromPool_creditsRecipient() public {
         address sink = makeAddr("poolSink");
-        uint256 poolBefore = sdgnrs.poolBalance(StakedDegenerusStonk.Pool.Reward);
+        uint256 poolBefore = sdgnrs.poolBalance(sDGNRS.Pool.Reward);
         uint256 sinkBefore = sdgnrs.balanceOf(sink);
         uint256 contractBefore = sdgnrs.balanceOf(address(sdgnrs));
         uint256 req = 10_000 ether;
         require(poolBefore >= req, "fixture: reward pool too small");
 
         vm.prank(address(game));
-        uint256 transferred = sdgnrs.transferFromPool(StakedDegenerusStonk.Pool.Reward, sink, req);
+        uint256 transferred = sdgnrs.transferFromPool(sDGNRS.Pool.Reward, sink, req);
 
         assertEq(transferred, req, "return value wrong (return-mutant)");
-        assertEq(sdgnrs.poolBalance(StakedDegenerusStonk.Pool.Reward), poolBefore - req, "pool not debited");
+        assertEq(sdgnrs.poolBalance(sDGNRS.Pool.Reward), poolBefore - req, "pool not debited");
         assertEq(sdgnrs.balanceOf(sink), sinkBefore + req, "recipient not credited");
         assertEq(sdgnrs.balanceOf(address(sdgnrs)), contractBefore - req, "contract balance not debited");
     }
 
-    /// @notice KILLS StakedDegenerusStonk.sol:563/564 [RR] — the SELF-WIN branch of transferFromPool
+    /// @notice KILLS sDGNRS.sol:563/564 [RR] — the SELF-WIN branch of transferFromPool
     ///         (to == address(this)): burns instead of a no-op transfer, decrementing supply and
     ///         emitting Transfer to address(0). The oracle never drives the self-win branch.
     /// @dev Branch-proof: target to == address(this) and assert supply DROPPED (the burn happened),
     ///      while the contract balance is unchanged on net (debited then NOT re-credited — burned).
     function test_kills_StakedStonk_transferFromPool_selfWinBurns() public {
-        uint256 poolBefore = sdgnrs.poolBalance(StakedDegenerusStonk.Pool.Reward);
+        uint256 poolBefore = sdgnrs.poolBalance(sDGNRS.Pool.Reward);
         uint256 supplyBefore = sdgnrs.totalSupply();
         uint256 contractBalBefore = sdgnrs.balanceOf(address(sdgnrs));
         uint256 req = 5_000 ether;
         require(poolBefore >= req, "fixture: reward pool too small");
 
         vm.prank(address(game));
-        uint256 transferred = sdgnrs.transferFromPool(StakedDegenerusStonk.Pool.Reward, address(sdgnrs), req);
+        uint256 transferred = sdgnrs.transferFromPool(sDGNRS.Pool.Reward, address(sdgnrs), req);
 
         assertEq(transferred, req, "self-win return value wrong");
         // Self-win burns: supply drops by req; contract balance net unchanged (debit then burn).
         assertEq(sdgnrs.totalSupply(), supplyBefore - req, "self-win did not burn supply (branch removed)");
         assertEq(sdgnrs.balanceOf(address(sdgnrs)), contractBalBefore - req, "contract balance not debited by burn");
-        assertEq(sdgnrs.poolBalance(StakedDegenerusStonk.Pool.Reward), poolBefore - req, "pool not debited");
+        assertEq(sdgnrs.poolBalance(sDGNRS.Pool.Reward), poolBefore - req, "pool not debited");
     }
 
     // ---------------------------------------------------------------------
-    //                  StakedDegenerusStonk — transferBetweenPools
+    //                  sDGNRS — transferBetweenPools
     // ---------------------------------------------------------------------
 
-    /// @notice KILLS StakedDegenerusStonk.sol:580/584/586/589/591/592/593 [RR] — pool-to-pool
+    /// @notice KILLS sDGNRS.sol:580/584/586/589/591/592/593 [RR] — pool-to-pool
     ///         rebalance: from-pool debit, to-pool credit, return value. Conservation: the two pools'
     ///         combined balance is invariant; no token movement.
     function test_kills_StakedStonk_transferBetweenPools_conserves() public {
-        uint256 fromBefore = sdgnrs.poolBalance(StakedDegenerusStonk.Pool.Reward);
-        uint256 toBefore = sdgnrs.poolBalance(StakedDegenerusStonk.Pool.Lootbox);
+        uint256 fromBefore = sdgnrs.poolBalance(sDGNRS.Pool.Reward);
+        uint256 toBefore = sdgnrs.poolBalance(sDGNRS.Pool.Lootbox);
         uint256 supplyBefore = sdgnrs.totalSupply();
         uint256 req = 7_000 ether;
         require(fromBefore >= req, "fixture: source pool too small");
 
         vm.prank(address(game));
         uint256 moved = sdgnrs.transferBetweenPools(
-            StakedDegenerusStonk.Pool.Reward, StakedDegenerusStonk.Pool.Lootbox, req
+            sDGNRS.Pool.Reward, sDGNRS.Pool.Lootbox, req
         );
 
         assertEq(moved, req, "rebalance return value wrong");
-        assertEq(sdgnrs.poolBalance(StakedDegenerusStonk.Pool.Reward), fromBefore - req, "from pool not debited");
-        assertEq(sdgnrs.poolBalance(StakedDegenerusStonk.Pool.Lootbox), toBefore + req, "to pool not credited");
+        assertEq(sdgnrs.poolBalance(sDGNRS.Pool.Reward), fromBefore - req, "from pool not debited");
+        assertEq(sdgnrs.poolBalance(sDGNRS.Pool.Lootbox), toBefore + req, "to pool not credited");
         // Conservation: combined pool balance and total supply both unchanged.
         assertEq(
-            sdgnrs.poolBalance(StakedDegenerusStonk.Pool.Reward) + sdgnrs.poolBalance(StakedDegenerusStonk.Pool.Lootbox),
+            sdgnrs.poolBalance(sDGNRS.Pool.Reward) + sdgnrs.poolBalance(sDGNRS.Pool.Lootbox),
             fromBefore + toBefore,
             "rebalance did not conserve combined pool balance"
         );
@@ -288,10 +288,10 @@ contract MutationKills is DeployProtocol {
     }
 
     // ---------------------------------------------------------------------
-    //                  StakedDegenerusStonk — wrapperTransferTo
+    //                  sDGNRS — wrapperTransferTo
     // ---------------------------------------------------------------------
 
-    /// @notice KILLS StakedDegenerusStonk.sol:456/457/459 [RR] — wrapperTransferTo moves sDGNRS from
+    /// @notice KILLS sDGNRS.sol:456/457/459 [RR] — wrapperTransferTo moves sDGNRS from
     ///         the DGNRS wrapper to a recipient (DGNRS-only). The oracle never exercises this path.
     /// @dev Seed the DGNRS wrapper with sDGNRS (via the Reward pool), then transfer as DGNRS and
     ///      assert the wrapper debit + recipient credit (supply unchanged — pure transfer).
@@ -299,7 +299,7 @@ contract MutationKills is DeployProtocol {
         // Fund the DGNRS wrapper address with sDGNRS so wrapperTransferTo has balance to move.
         uint256 seed = 12_000 ether;
         vm.prank(address(game));
-        sdgnrs.transferFromPool(StakedDegenerusStonk.Pool.Reward, ContractAddresses.DGNRS, seed);
+        sdgnrs.transferFromPool(sDGNRS.Pool.Reward, ContractAddresses.DGNRS, seed);
 
         address recipient = makeAddr("wrapperRecipient");
         uint256 wrapperBefore = sdgnrs.balanceOf(ContractAddresses.DGNRS);

@@ -14,13 +14,13 @@ contract FFKeyHarness2 is DegenerusGameStorage {
 }
 
 /// @title FarFutureVaultFallbackTest -- proves two coupled changes to the far-future salvage swap:
-///        (1) the BURNIE leg now draws from the auto-rebuy CARRY (symmetric with the redemption desk),
-///            so the leg no longer degenerates to all-ETH once sDGNRS's BURNIE concentrates in the carry;
+///        (1) the FLIP leg now draws from the auto-rebuy CARRY (symmetric with the redemption desk),
+///            so the leg no longer degenerates to all-ETH once sDGNRS's FLIP concentrates in the carry;
 ///        (2) a vault-owner toggle lets the VAULT buy the swap when sDGNRS cannot fund it, above an
 ///            owner-set ETH reserve floor, at the identical -EV quote.
 ///
 /// @dev Far-future entries / claimable / the jitter word are seeded via vm.store exactly as the SWAP-08/09
-///      suite does; the sDGNRS auto-rebuy carry is seeded directly into BurnieCoinflip.playerState (slot 2),
+///      suite does; the sDGNRS auto-rebuy carry is seeded directly into Coinflip.playerState (slot 2),
 ///      and the vault toggle is set through the real owner-gated setter (caller = ContractAddresses.CREATOR,
 ///      who holds the DGVE supply). ZERO contracts/*.sol behaviour is mocked.
 contract FarFutureVaultFallbackTest is DeployProtocol {
@@ -31,14 +31,14 @@ contract FarFutureVaultFallbackTest is DeployProtocol {
     uint256 private constant TICKETS_OWED_PACKED_SLOT = 13;
     uint256 private constant CLAIMABLE_POOL_SLOT = 1;
 
-    // --- BurnieCoinflip storage: playerState mapping base slot (declaration order: coinflipStakePacked=0,
+    // --- Coinflip storage: playerState mapping base slot (declaration order: coinflipStakePacked=0,
     //     coinflipDayResultPacked=1, playerState=2). The PlayerCoinflipState struct packs autoRebuyStop
     //     (low 128 bits) | autoRebuyCarry (high 128 bits) into its second slot (+1). ---
     uint256 private constant PLAYERSTATE_SLOT = 2;
 
-    // --- BurnieCoin storage: balanceOf mapping at slot 2 (order: _supply=0, _tombstoneFlooded=1, balanceOf=2). ---
-    uint256 private constant BURNIE_BALANCEOF_SLOT = 2;
-    /// @dev BURNIE base unit (1000 ETH worth) — the ETH<->BURNIE conversion denominator for the split.
+    // --- FLIP storage: balanceOf mapping at slot 2 (order: _supply=0, _tombstoneFlooded=1, balanceOf=2). ---
+    uint256 private constant FLIP_BALANCEOF_SLOT = 2;
+    /// @dev FLIP base unit (1000 ETH worth) — the ETH<->FLIP conversion denominator for the split.
     uint256 private constant PRICE_COIN_UNIT = 1000 ether;
 
     FFKeyHarness2 private ffk;
@@ -52,7 +52,7 @@ contract FarFutureVaultFallbackTest is DeployProtocol {
         uint256 totalBudgetWei,
         uint256 ticketWei,
         uint256 ethCashWei,
-        uint256 burnieTokens
+        uint256 flipTokens
     );
 
     function setUp() public {
@@ -118,7 +118,7 @@ contract FarFutureVaultFallbackTest is DeployProtocol {
         vm.store(address(game), bytes32(CLAIMABLE_POOL_SLOT), bytes32((pool << 128) | lower));
     }
 
-    /// @dev Set BurnieCoinflip.playerState[who].autoRebuyCarry (high 128 bits of struct slot +1).
+    /// @dev Set Coinflip.playerState[who].autoRebuyCarry (high 128 bits of struct slot +1).
     function _setCarry(address who, uint128 carry) internal {
         bytes32 base = keccak256(abi.encode(who, PLAYERSTATE_SLOT));
         bytes32 slot1 = bytes32(uint256(base) + 1);
@@ -184,7 +184,7 @@ contract FarFutureVaultFallbackTest is DeployProtocol {
     }
 
     // =====================================================================================
-    // BURNIE carry symmetry
+    // FLIP carry symmetry
     // =====================================================================================
 
     /// @notice The salvage-spendable read includes the auto-rebuy carry; the legacy claimable read does not.
@@ -203,15 +203,15 @@ contract FarFutureVaultFallbackTest is DeployProtocol {
         assertEq(salvageAfter - legacyAfter, carry, "salvage read adds exactly the carry");
     }
 
-    /// @notice With sDGNRS BURNIE entirely in the carry (held + claimable == 0), a salvage swap's BURNIE
+    /// @notice With sDGNRS FLIP entirely in the carry (held + claimable == 0), a salvage swap's FLIP
     ///         leg drains the carry and pays the seller flip credit -- where the legacy read would see 0.
-    function test_SalvageBurnieLegDrainsCarry() public {
-        // Precondition: sDGNRS holds no wallet/claimable BURNIE, so the legacy cap is 0 and the carry is
-        // the sole BURNIE source the burn waterfall can reach.
-        assertEq(coin.balanceOf(ContractAddresses.SDGNRS), 0, "fixture: no wallet BURNIE");
-        assertEq(coinflip.previewClaimCoinflips(ContractAddresses.SDGNRS), 0, "fixture: no claimable BURNIE");
+    function test_SalvageFlipLegDrainsCarry() public {
+        // Precondition: sDGNRS holds no wallet/claimable FLIP, so the legacy cap is 0 and the carry is
+        // the sole FLIP source the burn waterfall can reach.
+        assertEq(coin.balanceOf(ContractAddresses.SDGNRS), 0, "fixture: no wallet FLIP");
+        assertEq(coinflip.previewClaimCoinflips(ContractAddresses.SDGNRS), 0, "fixture: no claimable FLIP");
 
-        // Steady-state sDGNRS: rebuy-armed and already settled, with its BURNIE parked entirely in the carry.
+        // Steady-state sDGNRS: rebuy-armed and already settled, with its FLIP parked entirely in the carry.
         _seedRebuyCarry(ContractAddresses.SDGNRS, 5_000_000 ether);
 
         uint24 cl = game.level() + 1;
@@ -219,8 +219,8 @@ contract FarFutureVaultFallbackTest is DeployProtocol {
         uint256 idx = _seedFarTickets(seller, L, 100);
         (uint32[] memory levels, uint256[] memory qtys, uint256[] memory idxs) = _single(L, 100, idx);
 
-        // Find a jitter word that yields a non-zero BURNIE leg (carry-funded).
-        (uint256 word, uint256 budget) = _findBurnieWord(levels, qtys, 0);
+        // Find a jitter word that yields a non-zero FLIP leg (carry-funded).
+        (uint256 word, uint256 budget) = _findFlipWord(levels, qtys, 0);
 
         // The legacy cap excludes the carry -> would be 0; the new cap includes it.
         assertEq(coin.balanceOfWithClaimable(ContractAddresses.SDGNRS), 0, "legacy cap excludes carry");
@@ -229,8 +229,8 @@ contract FarFutureVaultFallbackTest is DeployProtocol {
         _setPriorDayRngWord(word);
         _seedClaimable(ContractAddresses.SDGNRS, budget + 1 ether); // sDGNRS funds the ETH leg (the buyer)
 
-        (, , , , uint256 burnieExec) = game.previewSellFarFutureTickets(seller, levels, qtys);
-        assertGt(burnieExec, 0, "BURNIE leg must be non-zero");
+        (, , , , uint256 flipExec) = game.previewSellFarFutureTickets(seller, levels, qtys);
+        assertGt(flipExec, 0, "FLIP leg must be non-zero");
 
         (, , uint256 carryBefore, ) = coinflip.coinflipAutoRebuyInfo(ContractAddresses.SDGNRS);
         uint256 sellerStakeBefore = coinflip.coinflipAmount(seller);
@@ -239,23 +239,23 @@ contract FarFutureVaultFallbackTest is DeployProtocol {
         game.sellFarFutureTickets(seller, levels, qtys, idxs);
 
         (, , uint256 carryAfter, ) = coinflip.coinflipAutoRebuyInfo(ContractAddresses.SDGNRS);
-        assertEq(carryBefore - carryAfter, burnieExec, "carry drained by exactly the BURNIE leg");
-        assertGt(coinflip.coinflipAmount(seller), sellerStakeBefore, "seller received the BURNIE as flip credit");
+        assertEq(carryBefore - carryAfter, flipExec, "carry drained by exactly the FLIP leg");
+        assertGt(coinflip.coinflipAmount(seller), sellerStakeBefore, "seller received the FLIP as flip credit");
     }
 
-    /// @dev Search a band of jitter words for one whose preview BURNIE leg is non-zero. Returns the word
+    /// @dev Search a band of jitter words for one whose preview FLIP leg is non-zero. Returns the word
     ///      and the (buyer-independent) budget.
-    function _findBurnieWord(uint32[] memory levels, uint256[] memory qtys, uint256 minBurnie)
+    function _findFlipWord(uint32[] memory levels, uint256[] memory qtys, uint256 minFlip)
         internal
         returns (uint256 word, uint256 budget)
     {
         for (uint256 i = 1; i < 5_000; ++i) {
-            uint256 w = uint256(keccak256(abi.encodePacked("burnie", i)));
+            uint256 w = uint256(keccak256(abi.encodePacked("flip", i)));
             _setPriorDayRngWord(w);
-            (, uint256 b, , , uint256 burnie) = game.previewSellFarFutureTickets(seller, levels, qtys);
-            if (burnie > minBurnie) return (w, b);
+            (, uint256 b, , , uint256 flip) = game.previewSellFarFutureTickets(seller, levels, qtys);
+            if (flip > minFlip) return (w, b);
         }
-        revert("no word produced a large enough BURNIE leg");
+        revert("no word produced a large enough FLIP leg");
     }
 
     // =====================================================================================
@@ -506,11 +506,11 @@ contract FarFutureVaultFallbackTest is DeployProtocol {
         assertGe(_afkOf(ContractAddresses.VAULT), 1 ether, "floor preserved in the afking half");
     }
 
-    /// @notice The BURNIE burn waterfall destroys the held wallet balance BEFORE the carry.
-    function test_SalvageBurnieLeg_HeldBurnedBeforeCarry() public {
+    /// @notice The FLIP burn waterfall destroys the held wallet balance BEFORE the carry.
+    function test_SalvageFlipLeg_HeldBurnedBeforeCarry() public {
         uint256 held = 50 ether;
         vm.prank(ContractAddresses.GAME);
-        coin.mintForGame(ContractAddresses.SDGNRS, held); // wallet BURNIE
+        coin.mintForGame(ContractAddresses.SDGNRS, held); // wallet FLIP
         _seedRebuyCarry(ContractAddresses.SDGNRS, 5_000_000 ether); // plus a large carry
 
         uint24 cl = game.level() + 1;
@@ -518,20 +518,20 @@ contract FarFutureVaultFallbackTest is DeployProtocol {
         uint256 idx = _seedFarTickets(seller, L, 100);
         (uint32[] memory levels, uint256[] memory qtys, uint256[] memory idxs) = _single(L, 100, idx);
 
-        // Find a word whose BURNIE leg exceeds the wallet balance so the burn must spill into the carry.
-        (uint256 word, uint256 budget) = _findBurnieWord(levels, qtys, held);
+        // Find a word whose FLIP leg exceeds the wallet balance so the burn must spill into the carry.
+        (uint256 word, uint256 budget) = _findFlipWord(levels, qtys, held);
         _setPriorDayRngWord(word);
         _seedClaimable(ContractAddresses.SDGNRS, budget + 1 ether);
-        (, , , , uint256 burnieExec) = game.previewSellFarFutureTickets(seller, levels, qtys);
-        assertGt(burnieExec, held, "fixture: BURNIE leg must exceed the wallet balance");
+        (, , , , uint256 flipExec) = game.previewSellFarFutureTickets(seller, levels, qtys);
+        assertGt(flipExec, held, "fixture: FLIP leg must exceed the wallet balance");
 
         (, , uint256 carryBefore, ) = coinflip.coinflipAutoRebuyInfo(ContractAddresses.SDGNRS);
         vm.prank(seller);
         game.sellFarFutureTickets(seller, levels, qtys, idxs);
 
-        assertEq(coin.balanceOf(ContractAddresses.SDGNRS), 0, "held wallet BURNIE burned first");
+        assertEq(coin.balanceOf(ContractAddresses.SDGNRS), 0, "held wallet FLIP burned first");
         (, , uint256 carryAfter, ) = coinflip.coinflipAutoRebuyInfo(ContractAddresses.SDGNRS);
-        assertEq(carryBefore - carryAfter, burnieExec - held, "carry drained by exactly the remainder after held");
+        assertEq(carryBefore - carryAfter, flipExec - held, "carry drained by exactly the remainder after held");
     }
 
     /// @notice The vault path inherits the carry-inclusive spendable read (so it does not re-introduce the
@@ -557,14 +557,14 @@ contract FarFutureVaultFallbackTest is DeployProtocol {
     /// @notice A stray balanceOf[VAULT] ERC-20 transfer is NOT burnable for the vault (only vaultAllowance
     ///         is) and must not inflate the salvage cap — the deliberate vault-vs-sDGNRS held-leg asymmetry.
     function test_VaultSalvageCapExcludesStrayWallet() public {
-        bytes32 slot = keccak256(abi.encode(ContractAddresses.VAULT, BURNIE_BALANCEOF_SLOT));
+        bytes32 slot = keccak256(abi.encode(ContractAddresses.VAULT, FLIP_BALANCEOF_SLOT));
         vm.store(address(coin), slot, bytes32(uint256(777 ether)));
-        assertEq(coin.balanceOf(ContractAddresses.VAULT), 777 ether, "fixture: stray vault wallet BURNIE set");
+        assertEq(coin.balanceOf(ContractAddresses.VAULT), 777 ether, "fixture: stray vault wallet FLIP set");
 
         // Salvage cap = burnable vaultAllowance + claimable + carry; the stray wallet balance is excluded.
         assertEq(
             coin.balanceOfSpendableForSalvage(ContractAddresses.VAULT),
-            coin.vaultMintAllowance() + coinflip.previewSalvageBurnieBacking(ContractAddresses.VAULT),
+            coin.vaultMintAllowance() + coinflip.previewSalvageFlipBacking(ContractAddresses.VAULT),
             "salvage cap excludes the non-burnable stray vault wallet balance"
         );
         // Legacy read DOES count it (proving the asymmetry is deliberate, not an oversight).
@@ -578,8 +578,8 @@ contract FarFutureVaultFallbackTest is DeployProtocol {
     /// @notice burnCoinForSalvage is fail-closed: a request above the buyer's spendable reverts (never an
     ///         over-drain); exactly at the cap it drains to zero.
     function test_BurnCoinForSalvage_FailsClosedOnShortfall() public {
-        assertEq(coin.balanceOf(ContractAddresses.SDGNRS), 0, "fixture: no wallet BURNIE");
-        _seedRebuyCarry(ContractAddresses.SDGNRS, 100 ether); // carry is the sole BURNIE source
+        assertEq(coin.balanceOf(ContractAddresses.SDGNRS), 0, "fixture: no wallet FLIP");
+        _seedRebuyCarry(ContractAddresses.SDGNRS, 100 ether); // carry is the sole FLIP source
 
         // One wei over the cap -> fail-closed revert (the partial drain rolls back).
         vm.prank(ContractAddresses.GAME);
@@ -594,21 +594,21 @@ contract FarFutureVaultFallbackTest is DeployProtocol {
     }
 
     /// @notice The executing swap charges EXACTLY the previewed offer: buyer + every FarFutureSwap field
-    ///         (lineCount, totalBudget, ticketWei, ethCashWei, burnieTokens) matches the preview.
+    ///         (lineCount, totalBudget, ticketWei, ethCashWei, flipTokens) matches the preview.
     function test_PreviewExecSplitParity() public {
-        assertEq(coin.balanceOf(ContractAddresses.SDGNRS), 0, "fixture: no wallet BURNIE");
+        assertEq(coin.balanceOf(ContractAddresses.SDGNRS), 0, "fixture: no wallet FLIP");
         _seedRebuyCarry(ContractAddresses.SDGNRS, 5_000_000 ether);
 
         uint24 cl = game.level() + 1;
         uint24 L = uint24(cl + 6);
         uint256 idx = _seedFarTickets(seller, L, 100);
         (uint32[] memory levels, uint256[] memory qtys, uint256[] memory idxs) = _single(L, 100, idx);
-        (uint256 word, uint256 budget) = _findBurnieWord(levels, qtys, 0);
+        (uint256 word, uint256 budget) = _findFlipWord(levels, qtys, 0);
         _setPriorDayRngWord(word);
         _seedClaimable(ContractAddresses.SDGNRS, budget + 1 ether);
 
         (, uint256 tb, uint256 tw, uint256 ec, uint256 bt) = game.previewSellFarFutureTickets(seller, levels, qtys);
-        assertGt(bt, 0, "fixture: a BURNIE leg to make the parity check meaningful");
+        assertGt(bt, 0, "fixture: a FLIP leg to make the parity check meaningful");
 
         vm.expectEmit(true, true, true, true, address(game));
         emit FarFutureSwap(seller, ContractAddresses.SDGNRS, 1, tb, tw, ec, bt);
@@ -616,8 +616,8 @@ contract FarFutureVaultFallbackTest is DeployProtocol {
         game.sellFarFutureTickets(seller, levels, qtys, idxs);
     }
 
-    /// @notice Value conservation: ethCashWei + value(burnieTokens) == cashWei for every jitter word, so the
-    ///         offer total never drifts with the ETH/BURNIE split (swept across words incl. zero-BURNIE).
+    /// @notice Value conservation: ethCashWei + value(flipTokens) == cashWei for every jitter word, so the
+    ///         offer total never drifts with the ETH/FLIP split (swept across words incl. zero-FLIP).
     function test_ValueConservationAcrossSplit() public {
         _seedRebuyCarry(ContractAddresses.SDGNRS, 5_000_000 ether);
         uint24 cl = game.level() + 1;
@@ -626,17 +626,17 @@ contract FarFutureVaultFallbackTest is DeployProtocol {
         (uint32[] memory levels, uint256[] memory qtys, ) = _single(L, 100, idx);
         uint256 priceWei = PriceLookupLib.priceForLevel(cl);
 
-        uint256 burnieWords;
-        for (uint256 i = 1; i < 400 && burnieWords < 8; ++i) {
+        uint256 flipWords;
+        for (uint256 i = 1; i < 400 && flipWords < 8; ++i) {
             _setPriorDayRngWord(uint256(keccak256(abi.encodePacked("conserve", i))));
             (, uint256 tb, uint256 tw, uint256 ec, uint256 bt) = game.previewSellFarFutureTickets(seller, levels, qtys);
             uint256 cashWei = tb - tw;
-            uint256 burnieEth = (bt * priceWei) / PRICE_COIN_UNIT;
-            if (burnieEth > cashWei) burnieEth = cashWei; // mirror the defensive clamp
-            assertEq(ec + burnieEth, cashWei, "value conserved: ethCash + value(burnie) == cashWei");
-            if (bt > 0) ++burnieWords;
+            uint256 flipEth = (bt * priceWei) / PRICE_COIN_UNIT;
+            if (flipEth > cashWei) flipEth = cashWei; // mirror the defensive clamp
+            assertEq(ec + flipEth, cashWei, "value conserved: ethCash + value(flip) == cashWei");
+            if (bt > 0) ++flipWords;
         }
-        assertGt(burnieWords, 0, "swept at least one word with a BURNIE leg");
+        assertGt(flipWords, 0, "swept at least one word with a FLIP leg");
     }
 
     /// @notice The vault is already a perpetual FF-queue member, so when it buys it is NOT double-pushed:

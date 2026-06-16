@@ -34,9 +34,9 @@ import {
  *  - Progress versioning (stale progress reset)
  *
  * Quest Type Constants (from contract):
- *   0 = MINT_BURNIE, 1 = MINT_ETH, 2 = FLIP, 3 = AFFILIATE,
+ *   0 = MINT_FLIP, 1 = MINT_ETH, 2 = FLIP, 3 = AFFILIATE,
  *   4 = RESERVED, 5 = DECIMATOR, 6 = LOOTBOX, 7 = DEGENERETTE_ETH,
- *   8 = DEGENERETTE_BURNIE
+ *   8 = DEGENERETTE_FLIP
  */
 
 // ---------------------------------------------------------------------------
@@ -48,7 +48,7 @@ const QUEST_TYPE_AFFILIATE = 3;
 const QUEST_TYPE_LOOTBOX = 6;
 const QUEST_SLOT0_REWARD = eth(100);
 const QUEST_RANDOM_REWARD = eth(200);
-const QUEST_BURNIE_TARGET = eth(2000); // 2 * 1000 BURNIE
+const QUEST_FLIP_TARGET = eth(2000); // 2 * 1000 FLIP
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -58,7 +58,7 @@ const QUEST_BURNIE_TARGET = eth(2000); // 2 * 1000 BURNIE
  * Impersonate the game contract and call rollDailyQuest.
  * (rollDailyQuest access changed from onlyCoin to onlyGame in v13.0)
  */
-async function rollQuestAsGame(hreEthers, game, quests, day, entropy, forceMintBurnie = false) {
+async function rollQuestAsGame(hreEthers, game, quests, day, entropy, forceMintFlip = false) {
   const gameAddr = await game.getAddress();
   await hreEthers.provider.send("hardhat_impersonateAccount", [gameAddr]);
   await hreEthers.provider.send("hardhat_setBalance", [
@@ -66,7 +66,7 @@ async function rollQuestAsGame(hreEthers, game, quests, day, entropy, forceMintB
     "0x1000000000000000000",
   ]);
   const gameSigner = await hreEthers.getSigner(gameAddr);
-  const tx = await quests.connect(gameSigner).rollDailyQuest(day, entropy, forceMintBurnie);
+  const tx = await quests.connect(gameSigner).rollDailyQuest(day, entropy, forceMintFlip);
   await hreEthers.provider.send("hardhat_stopImpersonatingAccount", [gameAddr]);
   return { tx };
 }
@@ -244,18 +244,18 @@ describe("DegenerusQuests", function () {
       expect(active[0].day).to.equal(99n);
     });
 
-    it("MINT_BURNIE is auto-assigned to slot 1 only when forced, never randomly rolled", async function () {
+    it("MINT_FLIP is auto-assigned to slot 1 only when forced, never randomly rolled", async function () {
       const { quests, game } = await loadFixture(deployFullProtocol);
-      const QUEST_TYPE_MINT_BURNIE = 9;
-      // forceMintBurnie = true: slot 1 is MINT_BURNIE (the lastPurchaseDay auto-quest).
+      const QUEST_TYPE_MINT_FLIP = 9;
+      // forceMintFlip = true: slot 1 is MINT_FLIP (the lastPurchaseDay auto-quest).
       await rollQuestAsGame(hre.ethers, game, quests, 200n, 12345n, true);
       let active = await quests.getActiveQuests();
-      expect(Number(active[1].questType)).to.equal(QUEST_TYPE_MINT_BURNIE);
-      // forceMintBurnie = false: MINT_BURNIE is excluded from the random pool entirely.
+      expect(Number(active[1].questType)).to.equal(QUEST_TYPE_MINT_FLIP);
+      // forceMintFlip = false: MINT_FLIP is excluded from the random pool entirely.
       for (let i = 1n; i <= 64n; i++) {
         await rollQuestAsGame(hre.ethers, game, quests, 200n + i, i * 7919n, false);
         active = await quests.getActiveQuests();
-        expect(Number(active[1].questType)).to.not.equal(QUEST_TYPE_MINT_BURNIE);
+        expect(Number(active[1].questType)).to.not.equal(QUEST_TYPE_MINT_FLIP);
       }
     });
   });
@@ -434,7 +434,7 @@ describe("DegenerusQuests", function () {
       );
       const [reward, , streak, completed] = result;
       if (completed) {
-        // Slot 0 reward is QUEST_SLOT0_REWARD = 100 BURNIE
+        // Slot 0 reward is QUEST_SLOT0_REWARD = 100 FLIP
         // (may also include slot 1 if auto-completed)
         expect(reward).to.be.gte(QUEST_SLOT0_REWARD);
         expect(streak).to.be.gte(1n);
@@ -560,7 +560,7 @@ describe("DegenerusQuests", function () {
         coin,
         quests,
         "handleFlip",
-        [alice.address, QUEST_BURNIE_TARGET]
+        [alice.address, QUEST_FLIP_TARGET]
       );
       const [reward, , , completed] = result;
       if (completed) {
@@ -585,7 +585,7 @@ describe("DegenerusQuests", function () {
         coin,
         quests,
         "handleFlip",
-        [alice.address, QUEST_BURNIE_TARGET]
+        [alice.address, QUEST_FLIP_TARGET]
       );
       const [, , , completed] = result;
       // Should NOT complete because slot 0 is not done
@@ -677,7 +677,7 @@ describe("DegenerusQuests", function () {
       ).to.not.be.reverted;
     });
 
-    it("coin can call handleDegenerette (BURNIE) without revert", async function () {
+    it("coin can call handleDegenerette (FLIP) without revert", async function () {
       const { quests, coin, game, alice } = await loadFixture(deployFullProtocol);
       await rollQuestAsGame(hre.ethers, game, quests, 13n, 99n);
       await expect(

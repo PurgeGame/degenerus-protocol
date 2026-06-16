@@ -4,7 +4,7 @@ pragma solidity ^0.8.26;
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {DegenerusTraitUtils} from "../../contracts/DegenerusTraitUtils.sol";
 import {Vm} from "forge-std/Vm.sol";
-import {StakedDegenerusStonk} from "../../contracts/StakedDegenerusStonk.sol";
+import {sDGNRS} from "../../contracts/sDGNRS.sol";
 
 /// @title DegeneretteFreezeResolutionTest -- Proves FIX-04 (freeze-routing) AND
 ///        DGAS-05 same-results: the v47 Degenerette `resolveBets` write-batching
@@ -14,7 +14,7 @@ import {StakedDegenerusStonk} from "../../contracts/StakedDegenerusStonk.sol";
 ///         _getPendingPools/_setPendingPools during prizePoolFrozen, keeping the
 ///         live futurePrizePool snapshot untouched (tests 1-3).
 ///
-/// @notice DGAS-05 (tests 4-7): the v47 refactor accumulates ETH/BURNIE/WWXRP
+/// @notice DGAS-05 (tests 4-7): the v47 refactor accumulates ETH/FLIP/WWXRP
 ///         payouts CROSS-BET into a `ResolveAcc` memory struct and flushes ONCE
 ///         per currency (one mint per currency, one claimable+claimablePool write,
 ///         one pool write, one box per betId). The HARD floor is "same results" —
@@ -27,7 +27,7 @@ import {StakedDegenerusStonk} from "../../contracts/StakedDegenerusStonk.sol";
 ///         batching and are NOT recomputed here; only the AGGREGATION the batching
 ///         changed is replayed). Any divergence by even one wei is surfaced as a
 ///         real regression, never adjusted away.
-///         - Tier-1 (additive): BURNIE/WWXRP mint sums + ETH claimable sum.
+///         - Tier-1 (additive): FLIP/WWXRP mint sums + ETH claimable sum.
 ///         - Tier-2 (running-pool-local): the ETH cap binds on the IDENTICAL spin.
 ///         - DGAS-03: lootbox-share summed PER betId (one box per bet).
 ///         - DGAS-04: DGNRS award stays PER SPIN (reads poolBalance fresh).
@@ -66,22 +66,22 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
     uint256 private constant DEGENERETTE_BETS_SLOT = 38;
     /// @dev degeneretteBetNonce mapping root slot (post Stage-B game-storage repack: was 41).
     uint256 private constant DEGENERETTE_BET_NONCE_SLOT = 39;
-    /// @dev BurnieCoin.balanceOf mapping root slot.
-    uint256 private constant BURNIE_BALANCEOF_SLOT = 1;
+    /// @dev FLIP.balanceOf mapping root slot.
+    uint256 private constant FLIP_BALANCEOF_SLOT = 1;
     /// @dev WrappedWrappedXRP.balanceOf / totalSupply slots.
     uint256 private constant WWXRP_BALANCEOF_SLOT = 2;
     uint256 private constant WWXRP_TOTAL_SUPPLY_SLOT = 0;
 
     /// @dev Degenerette bet currencies (DegeneretteModule:208-214).
     uint8 private constant CURRENCY_ETH = 0;
-    uint8 private constant CURRENCY_BURNIE = 1;
+    uint8 private constant CURRENCY_FLIP = 1;
     uint8 private constant CURRENCY_WWXRP = 3;
 
     /// @dev ETH win pool cap: 10% of futurePool (DegeneretteModule:196).
     uint256 private constant ETH_WIN_CAP_BPS = 1_000;
     /// @dev Per-currency minimum bets (DegeneretteModule:217-223).
     uint256 private constant MIN_BET_ETH = 5 ether / 1000;
-    uint256 private constant MIN_BET_BURNIE = 100 ether;
+    uint256 private constant MIN_BET_FLIP = 100 ether;
     uint256 private constant MIN_BET_WWXRP = 1 ether;
 
     /// @dev FullTicketResult topic0 — one per spin (the raw per-spin payout source).
@@ -337,10 +337,10 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
     // =========================================================================
 
     /// @notice Prove the cross-bet flush is ADDITIVE — byte-identical to a per-spin
-    ///         baseline. Places a MIXED-currency multi-bet batch (ETH + BURNIE +
+    ///         baseline. Places a MIXED-currency multi-bet batch (ETH + FLIP +
     ///         WWXRP bets, various spin counts within the per-currency caps),
     ///         resolves them in ONE resolveBets call, and asserts:
-    ///           - BURNIE balance delta == Σ (every BURNIE spin's payout)
+    ///           - FLIP balance delta == Σ (every FLIP spin's payout)
     ///           - WWXRP balance delta == Σ (every WWXRP spin's payout)
     ///           - claimableWinnings ETH delta == Σ (every ETH spin's ethShare)
     ///           - claimablePool moved by exactly the same ETH sum (additive)
@@ -353,30 +353,30 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
         _seedFuturePrizePool(1_000_000 ether);
 
         // Three bets sharing the seeded lootbox index 1 (placement requires word==0).
-        // Word chosen so the BURNIE bet (betId 2) WINS its bet-keyed survival flip
+        // Word chosen so the FLIP bet (betId 2) WINS its bet-keyed survival flip
         // (keccak(word, betId) & 1 == 1) — the doubled-mint path is exercised
         // non-vacuously below.
         uint48 index = 1;
         uint256 word = uint256(keccak256("tier1_mixed_batch_word_v3"));
 
-        // ETH bet: 4 spins, winning ticket; BURNIE bet: 3 spins; WWXRP bet: 2 spins.
+        // ETH bet: 4 spins, winning ticket; FLIP bet: 3 spins; WWXRP bet: 2 spins.
         // Use the spin-0 winning combo as the custom ticket for each (>= 2 matches
         // on spin 0 guarantees the bet is non-vacuous; other spins vary).
         uint32 ethTicket = _winningTicketFor(index, word);
-        uint32 burnieTicket = ethTicket;
+        uint32 flipTicket = ethTicket;
         uint32 wwxrpTicket = ethTicket;
 
         uint128 ethPerTicket = 0.01 ether;     // >= MIN_BET_ETH
-        uint128 burniePerTicket = 200 ether;   // >= MIN_BET_BURNIE
+        uint128 flipPerTicket = 200 ether;   // >= MIN_BET_FLIP
         uint128 wwxrpPerTicket = 2 ether;      // >= MIN_BET_WWXRP
 
-        // Fund the player for BURNIE + WWXRP bets (game-gated mints).
-        _fundBurnie(player, uint256(burniePerTicket) * 3 + 1 ether);
+        // Fund the player for FLIP + WWXRP bets (game-gated mints).
+        _fundFlip(player, uint256(flipPerTicket) * 3 + 1 ether);
         _fundWwxrp(player, uint256(wwxrpPerTicket) * 2 + 1 ether);
 
-        // Place all three (nonce increments per place: ETH=1, BURNIE=2, WWXRP=3).
+        // Place all three (nonce increments per place: ETH=1, FLIP=2, WWXRP=3).
         uint64 ethBet = _placeBet(CURRENCY_ETH, ethPerTicket, 4, ethTicket);
-        uint64 burnieBet = _placeBet(CURRENCY_BURNIE, burniePerTicket, 3, burnieTicket);
+        uint64 flipBet = _placeBet(CURRENCY_FLIP, flipPerTicket, 3, flipTicket);
         uint64 wwxrpBet = _placeBet(CURRENCY_WWXRP, wwxrpPerTicket, 2, wwxrpTicket);
 
         _injectLootboxRngWord(index, word);
@@ -384,13 +384,13 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
         // Pre-resolve balances.
         uint256 preClaimable = game.claimableWinningsOf(player);
         uint256 preClaimablePool = _readClaimablePool();
-        uint256 preBurnie = coin.balanceOf(player);
+        uint256 preFlip = coin.balanceOf(player);
         uint256 preWwxrp = wwxrp.balanceOf(player);
 
         // Resolve all three in ONE call (the cross-bet flush under test).
         uint64[] memory betIds = new uint64[](3);
         betIds[0] = ethBet;
-        betIds[1] = burnieBet;
+        betIds[1] = flipBet;
         betIds[2] = wwxrpBet;
 
         vm.recordLogs();
@@ -398,34 +398,34 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
         game.resolveDegeneretteBets(address(0), betIds);
 
         // Replay the per-spin baseline from the contract's own per-spin events.
-        // BURNIE/WWXRP: pure additive sum of raw payouts. ETH: 3-tier split of each
+        // FLIP/WWXRP: pure additive sum of raw payouts. ETH: 3-tier split of each
         // raw payout (no cap binds — large pool). Cap-flips would emit PayoutCapped;
         // assert none fired in this Tier-1 batch (so ethShare == split(payout)).
         (
             uint256 expectedEthShare,
-            uint256 expectedBurnie,
+            uint256 expectedFlip,
             uint256 expectedWwxrp,
             uint256 payoutCappedCount
-        ) = _replayPerSpinBaseline(ethPerTicket, burniePerTicket, wwxrpPerTicket);
+        ) = _replayPerSpinBaseline(ethPerTicket, flipPerTicket, wwxrpPerTicket);
 
         assertEq(payoutCappedCount, 0, "Tier-1: large pool -> no spin should cap");
 
-        // BURNIE survival flip (bet-keyed double-or-nothing on the bet's summed payout):
+        // FLIP survival flip (bet-keyed double-or-nothing on the bet's summed payout):
         // the mint is 2x the per-spin sum on a winning flip, 0 on a losing one. The
         // chosen word wins the flip for this bet, so the doubled path is live.
-        uint256 expectedBurnieMint = (uint256(
-            keccak256(abi.encode(word, burnieBet))
-        ) & 1 == 1) ? expectedBurnie * 2 : 0;
-        assertGt(expectedBurnieMint, 0, "Tier-1: word must win the BURNIE survival flip");
+        uint256 expectedFlipMint = (uint256(
+            keccak256(abi.encode(word, flipBet))
+        ) & 1 == 1) ? expectedFlip * 2 : 0;
+        assertGt(expectedFlipMint, 0, "Tier-1: word must win the FLIP survival flip");
 
         // Tier-1 byte-identical assertions.
-        uint256 burnieDelta = coin.balanceOf(player) - preBurnie;
+        uint256 flipDelta = coin.balanceOf(player) - preFlip;
         uint256 wwxrpDelta = wwxrp.balanceOf(player) - preWwxrp;
         uint256 claimableDelta = game.claimableWinningsOf(player) - preClaimable;
         uint256 claimablePoolDelta = _readClaimablePool() - preClaimablePool;
 
-        assertEq(burnieDelta, expectedBurnieMint,
-            "Tier-1: BURNIE mint delta == 2x Sum of per-spin BURNIE payouts (survival flip won)");
+        assertEq(flipDelta, expectedFlipMint,
+            "Tier-1: FLIP mint delta == 2x Sum of per-spin FLIP payouts (survival flip won)");
         assertEq(wwxrpDelta, expectedWwxrp,
             "Tier-1: WWXRP mint delta == Sum of per-spin WWXRP payouts (additive)");
         assertEq(claimableDelta, expectedEthShare,
@@ -434,19 +434,19 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
             "Tier-1: claimablePool moved by exactly the ETH sum (additive, disjoint slot)");
 
         // Non-vacuity: every payout currency was actually exercised.
-        assertGt(expectedBurnie, 0, "Tier-1 non-vacuity: BURNIE payout exercised");
+        assertGt(expectedFlip, 0, "Tier-1 non-vacuity: FLIP payout exercised");
         assertGt(expectedWwxrp, 0, "Tier-1 non-vacuity: WWXRP payout exercised");
         assertGt(expectedEthShare, 0, "Tier-1 non-vacuity: ETH payout exercised");
 
         emit log_named_uint("tier1_eth_claimable_delta", claimableDelta);
-        emit log_named_uint("tier1_burnie_delta", burnieDelta);
+        emit log_named_uint("tier1_flip_delta", flipDelta);
         emit log_named_uint("tier1_wwxrp_delta", wwxrpDelta);
     }
 
-    /// @notice BURNIE survival-flip LOSS path: a bet whose bet-keyed flip
+    /// @notice FLIP survival-flip LOSS path: a bet whose bet-keyed flip
     ///         (keccak(word, betId) & 1 == 0) loses mints NOTHING, even though its
     ///         raw spins paid (per-spin FullTicketResult events sum > 0).
-    function testBurnieSurvivalFlipLossZeroesMint() public {
+    function testFlipSurvivalFlipLossZeroesMint() public {
         _seedFuturePrizePool(1_000_000 ether);
 
         // Word chosen so betId 1 LOSES the survival flip; the spin-0 self-match
@@ -455,8 +455,8 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
         uint256 word = uint256(keccak256("survival_flip_loss_word_v3"));
         uint32 ticket = _winningTicketFor(index, word);
 
-        _fundBurnie(player, 1_000 ether);
-        uint64 betId = _placeBet(CURRENCY_BURNIE, 200 ether, 3, ticket);
+        _fundFlip(player, 1_000 ether);
+        uint64 betId = _placeBet(CURRENCY_FLIP, 200 ether, 3, ticket);
         assertEq(
             uint256(keccak256(abi.encode(word, betId))) & 1,
             0,
@@ -465,7 +465,7 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
 
         _injectLootboxRngWord(index, word);
 
-        uint256 preBurnie = coin.balanceOf(player);
+        uint256 preFlip = coin.balanceOf(player);
 
         uint64[] memory betIds = new uint64[](1);
         betIds[0] = betId;
@@ -487,8 +487,8 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
 
         assertEq(
             coin.balanceOf(player),
-            preBurnie,
-            "losing survival flip zeroes the BURNIE mint"
+            preFlip,
+            "losing survival flip zeroes the FLIP mint"
         );
     }
 
@@ -733,7 +733,7 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
         _injectLootboxRngWord(index, word);
 
         // Snapshot the live Reward poolBalance + the player's sDGNRS BEFORE resolve.
-        uint256 rewardPoolBefore = sdgnrs.poolBalance(StakedDegenerusStonk.Pool.Reward);
+        uint256 rewardPoolBefore = sdgnrs.poolBalance(sDGNRS.Pool.Reward);
         require(rewardPoolBefore > 0, "Reward pool must be funded at deploy");
         uint256 sdgnrsBefore = sdgnrs.balanceOf(player);
 
@@ -919,30 +919,30 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
     ///      from the bet amount each spin used) and applies the additive rule:
     ///        - ETH: Σ _ethShareOf(payout) (cap-free; PayoutCapped count returned for
     ///          the caller to assert zero in Tier-1).
-    ///        - BURNIE/WWXRP: Σ payout (pure additive mint).
+    ///        - FLIP/WWXRP: Σ payout (pure additive mint).
     ///      Currency is inferred from the per-spin betAmount (the three bets used
-    ///      distinct, disjoint per-ticket amounts: ethPerTicket / burniePerTicket /
+    ///      distinct, disjoint per-ticket amounts: ethPerTicket / flipPerTicket /
     ///      wwxrpPerTicket), which the FullTicketResult does NOT carry — so we read
     ///      the playerTicket field is identical; instead we attribute by the contract's
-    ///      emission order (ETH bet first, BURNIE second, WWXRP third) using the
+    ///      emission order (ETH bet first, FLIP second, WWXRP third) using the
     ///      per-bet FullTicketResolved boundaries.
     function _replayPerSpinBaseline(
         uint128 ethPerTicket,
-        uint128 burniePerTicket,
+        uint128 flipPerTicket,
         uint128 wwxrpPerTicket
     )
         internal
         returns (
             uint256 ethShareSum,
-            uint256 burnieSum,
+            uint256 flipSum,
             uint256 wwxrpSum,
             uint256 payoutCappedCount
         )
     {
         Vm.Log[] memory logs = vm.getRecordedLogs();
-        // Walk logs in order. The batch resolves ETH bet, then BURNIE, then WWXRP.
+        // Walk logs in order. The batch resolves ETH bet, then FLIP, then WWXRP.
         // Each bet's spins emit FullTicketResult, terminated by one FullTicketResolved.
-        // betPhase: 0 = ETH, 1 = BURNIE, 2 = WWXRP.
+        // betPhase: 0 = ETH, 1 = FLIP, 2 = WWXRP.
         uint256 betPhase;
         for (uint256 i; i < logs.length; ++i) {
             if (logs[i].topics.length == 0) continue;
@@ -953,7 +953,7 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
                 if (betPhase == 0) {
                     ethShareSum += _ethShareOf(payout, ethPerTicket);
                 } else if (betPhase == 1) {
-                    burnieSum += payout;
+                    flipSum += payout;
                 } else {
                     wwxrpSum += payout;
                 }
@@ -1052,7 +1052,7 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
             bytes32 t0 = logs[i].topics[0];
             if (t0 == FULL_TICKET_RESOLVED_SIG) {
                 // betId is the 2nd indexed topic. Lootbox-triggered box spins (a recirc
-                // box's WWXRP/BURNIE spin) emit FullTicketResolved too, under a synthetic
+                // box's WWXRP/FLIP spin) emit FullTicketResolved too, under a synthetic
                 // seed-derived betId; count only the two real player bets under test.
                 uint64 bid = uint64(uint256(logs[i].topics[2]));
                 if (bid == betA || bid == betB) ++resolved;
@@ -1114,8 +1114,8 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
     // Token funding helpers (game-gated mints)
     // =========================================================================
 
-    /// @dev Mint BURNIE to `who` via the GAME-gated mintForGame (keeps supply consistent).
-    function _fundBurnie(address who, uint256 amount) internal {
+    /// @dev Mint FLIP to `who` via the GAME-gated mintForGame (keeps supply consistent).
+    function _fundFlip(address who, uint256 amount) internal {
         vm.prank(address(game));
         coin.mintForGame(who, amount);
     }

@@ -22,7 +22,7 @@ contract LootboxBoonCoexistence is DeployProtocol {
     // Authoritative slots from `solc --storage-layout` on the working tree (post Stage B Game-storage packing).
     // The V62 lootbox repack FOLDED lootboxEthBase / lootboxPurchasePacked / lootboxDistressEth into
     // the single lootboxEth word (amount[0:128] | adj[128:192] | scorePlus1[192:208] |
-    // distressUnits[208:256]) and removed the dead lootboxBurnie mapping; the Stage B packing further
+    // distressUnits[208:256]) and removed the dead lootboxFlip mapping; the Stage B packing further
     // folded deity/VRF/boon fields, shifting lootboxRngPacked, lootboxRngWordByIndex, and boonPacked down.
     uint256 constant SLOT_BOON_PACKED     = 51;   // mapping(address => BoonPacked)
     uint256 constant SLOT_LOOTBOX_ETH     = 15;   // mapping(uint48 => mapping(address => uint256)) (folded word)

@@ -14,7 +14,7 @@ contract FFKeyHarness is DegenerusGameStorage {
     }
 }
 
-/// @title FarFutureSalvageSwapTest -- SWAP-08 (no-arb at the jitter band CEILING + BURNIE-can't-mint-far)
+/// @title FarFutureSalvageSwapTest -- SWAP-08 (no-arb at the jitter band CEILING + FLIP-can't-mint-far)
 ///        and SWAP-09 (solvency-safe + ticket/ETH floors + array bound + swap-pop membership) proofs for
 ///        the sDGNRS far-future salvage swap (`sellFarFutureTickets`), against the applied Phase-326 diff.
 ///
@@ -24,9 +24,9 @@ contract FFKeyHarness is DegenerusGameStorage {
 ///            (~21% of face). The proof drives the jitter to the CEILING (the band a grinder/waiter captures),
 ///            NOT the mean, and sweeps EVERY distance d in [6,100]. If ANY distance violates the no-arb floor
 ///            the test FAILS (no band-widening) and the executor emits ## STOP -- NO-ARB MARGIN VIOLATED.
-///          - BURNIE cannot mint a far (d>=6) entry: proven BEHAVIORALLY (vm.ffi is DISABLED in foundry.toml;
-///            fs_permissions is read-only) -- a BURNIE purchase only ever lands at cachedLevel/+1, never far,
-///            and there is no BURNIE-funded entrypoint that places a d>=6 entry.
+///          - FLIP cannot mint a far (d>=6) entry: proven BEHAVIORALLY (vm.ffi is DISABLED in foundry.toml;
+///            fs_permissions is read-only) -- a FLIP purchase only ever lands at cachedLevel/+1, never far,
+///            and there is no FLIP-funded entrypoint that places a d>=6 entry.
 ///          - Solvency: claimablePool <= balance + stETH holds across the swap (ticket leg routes ETH into
 ///            pools = slack; cash leg is a claimant-to-claimant relabel = neutral).
 ///
@@ -292,13 +292,13 @@ contract FarFutureSalvageSwapTest is DeployProtocol {
         assertGe(10_000 - CEILING_D6_BPS, 1000, "ceiling d6 must still keep >= 10% below present EV");
     }
 
-    /// @notice (d) BURNIE cannot mint a far (d>=6) entry -- proven BEHAVIORALLY (vm.ffi is DISABLED).
-    ///         A BURNIE purchase (the only BURNIE mint entrypoint, redeemBurnie, which takes NO level arg)
+    /// @notice (d) FLIP cannot mint a far (d>=6) entry -- proven BEHAVIORALLY (vm.ffi is DISABLED).
+    ///         A FLIP purchase (the only FLIP mint entrypoint, redeemFlip, which takes NO level arg)
     ///         only ever queues entries at cachedLevel / cachedLevel+1 -- never at a far key. We snapshot
-    ///         all far-future queue lengths, drive a BURNIE mint, and assert no far queue grew. We also
-    ///         assert the absence of a BURNIE-funded far-creating entrypoint by exercised behavior.
-    function test_SWAP08_BurnieCannotMintFarEntry() public {
-        address burnieBuyer = makeAddr("burnie_buyer");
+    ///         all far-future queue lengths, drive a FLIP mint, and assert no far queue grew. We also
+    ///         assert the absence of a FLIP-funded far-creating entrypoint by exercised behavior.
+    function test_SWAP08_FlipCannotMintFarEntry() public {
+        address flipBuyer = makeAddr("flip_buyer");
 
         // Snapshot far-future queue lengths for the whole far band (current+6 .. current+100) BEFORE the mint.
         uint24 cl = game.level() + 1;
@@ -307,34 +307,34 @@ contract FarFutureSalvageSwapTest is DeployProtocol {
             beforeLens[d] = _ffQueueLen(uint24(cl + d));
         }
 
-        // Drive a BURNIE mint via redeemBurnie. redeemBurnie(buyer, ticketQuantity) takes NO level/distance
+        // Drive a FLIP mint via redeemFlip. redeemFlip(buyer, ticketQuantity) takes NO level/distance
         // argument -- the caller cannot direct the mint at a far level. The buyer calls for itself
-        // (_resolvePlayer self-path; a low-level call after vm.prank makes burnieBuyer the msg.sender).
-        // It may revert under harness conditions (e.g. insufficient BURNIE / gameOverPossible); the
+        // (_resolvePlayer self-path; a low-level call after vm.prank makes flipBuyer the msg.sender).
+        // It may revert under harness conditions (e.g. insufficient FLIP / gameOverPossible); the
         // load-bearing assertion is that NO far queue grows regardless of whether the mint lands (state
         // is unchanged on revert).
-        vm.prank(burnieBuyer);
+        vm.prank(flipBuyer);
         (bool mintOk, ) = address(game).call(
-            abi.encodeWithSignature("redeemBurnie(address,uint256)", burnieBuyer, uint256(4000))
+            abi.encodeWithSignature("redeemFlip(address,uint256)", flipBuyer, uint256(4000))
         );
         mintOk; // outcome irrelevant: the proof is that no far entry exists either way
 
-        // Assert NO far-future queue grew from the BURNIE mint (behavioral: BURNIE never creates a d>=6 entry).
+        // Assert NO far-future queue grew from the FLIP mint (behavioral: FLIP never creates a d>=6 entry).
         for (uint256 d = 6; d <= 100; ++d) {
             assertEq(
                 _ffQueueLen(uint24(cl + d)),
                 beforeLens[d],
-                string.concat("BURNIE mint created a far entry at d=", vm.toString(d))
+                string.concat("FLIP mint created a far entry at d=", vm.toString(d))
             );
         }
 
-        // Behavioral absence proof: there is no BURNIE-funded entrypoint that accepts a far level. The only
-        // BURNIE mint entrypoint is redeemBurnie, which has no level arg; the v47 BURNIE-lootbox->future path
+        // Behavioral absence proof: there is no FLIP-funded entrypoint that accepts a far level. The only
+        // FLIP mint entrypoint is redeemFlip, which has no level arg; the v47 FLIP-lootbox->future path
         // was removed in Phase 326. We additionally exercise the direct ticket-purchase path with a far level
-        // is simply not expressible: redeemBurnie's signature cannot carry one. Confirm the buyer also holds
+        // is simply not expressible: redeemFlip's signature cannot carry one. Confirm the buyer also holds
         // zero far entries at every distance.
         for (uint256 d = 6; d <= 100; ++d) {
-            assertEq(_ownedEntries(burnieBuyer, uint24(cl + d)), 0, "BURNIE buyer holds a far entry (impossible)");
+            assertEq(_ownedEntries(flipBuyer, uint24(cl + d)), 0, "FLIP buyer holds a far entry (impossible)");
         }
     }
 

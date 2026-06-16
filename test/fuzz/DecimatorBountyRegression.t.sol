@@ -5,7 +5,7 @@ import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 
 /// @title DecimatorBountyRegression — keeper box-bounty on claimDecimatorJackpotMany
-/// @notice Pins the per-settled-box BURNIE flip-credit the decimator batch claim pays its caller
+/// @notice Pins the per-settled-box FLIP flip-credit the decimator batch claim pays its caller
 ///         during a live game:
 ///           bounty = settled * BOX_BOUNTY_ETH_TARGET * PRICE_COIN_UNIT / mintPrice
 ///         and the rules around it:
@@ -15,9 +15,9 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 ///           2. SCALES    — N settled winners credit N * the per-box bounty.
 ///           3. GAME-OVER — no liveness is needed post-gameOver, so the bounty is NOT paid (the
 ///                          winners still settle into claimable, the keeper just earns nothing).
-///           4. ETH-VALUE — the BURNIE credit holds its ETH-reimbursement value across the price
+///           4. ETH-VALUE — the FLIP credit holds its ETH-reimbursement value across the price
 ///                          curve: credit * mintPrice / PRICE_COIN_UNIT == settled * target.
-///           5. FAUCET    — the bounty is far below the BURNIE a winner had to burn to exist, so a
+///           5. FAUCET    — the bounty is far below the FLIP a winner had to burn to exist, so a
 ///                          keeper cannot manufacture boxes to farm it.
 ///
 /// @dev A winning DecEntry + claim round + winning-subbucket offset are installed directly via
@@ -145,17 +145,17 @@ contract DecimatorBountyRegression is DeployProtocol {
         assertGt(expected, 0, "fixture: nonzero bounty");
         assertEq(credited, expected, "one settled box credits exactly one box-bounty to the keeper");
 
-        // ETH-VALUE: the BURNIE credit reimburses exactly the per-box ETH target at this price.
+        // ETH-VALUE: the FLIP credit reimburses exactly the per-box ETH target at this price.
         assertEq(
             (credited * game.mintPrice()) / PRICE_COIN_UNIT,
             BOX_BOUNTY_ETH_TARGET,
             "bounty holds its ETH-reimbursement value across the price curve"
         );
 
-        // FAUCET: far below the 500 BURNIE the winner had to burn to be a box at all.
+        // FAUCET: far below the 500 FLIP the winner had to burn to be a box at all.
         assertLt(credited, 500 ether, "bounty << burn cost to manufacture a winning box");
 
-        emit log_named_uint("dec_box_bounty_burnie", credited);
+        emit log_named_uint("dec_box_bounty_flip", credited);
         emit log_named_uint("mint_price", game.mintPrice());
     }
 

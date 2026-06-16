@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 //
-// WholeBurnieFloorInvariant.test.js — Phase 279 Wave 2 TST-BUR-04
+// WholeFlipFloorInvariant.test.js — Phase 279 Wave 2 TST-BUR-04
 //
-// Whole-BURNIE floor invariant sweep across all 3 RNG-amount BURNIE-award
+// Whole-FLIP floor invariant sweep across all 3 RNG-amount FLIP-award
 // sites, plus a negative cross-site assertion that the mint-boost flip-credit
 // path stayed status-quo fractional.
 //
 // THE INVARIANT:
-//   Every observable BURNIE-mint amount producible from the 3 BUR sites —
+//   Every observable FLIP-mint amount producible from the 3 BUR sites —
 //     BUR-01  `_settleLootboxRoll`            (DegenerusGameLootboxModule.sol)
 //     BUR-02  `_awardDailyCoinToTraitWinners` (DegenerusGameJackpotModule.sol)
 //     BUR-03  `_awardFarFutureCoinJackpot`    (DegenerusGameJackpotModule.sol)
@@ -25,7 +25,7 @@
 //   inside `_purchaseForWithCached` (DegenerusGameMintModule.sol) — is explicitly OUT
 //   of v40.0 BUR scope: `lootboxFlipCredit` is a deterministic
 //   mint-amount-derived value, NOT an RNG amount, and stays status-quo
-//   fractional. This test proves NO whole-BURNIE floor was added to that path.
+//   fractional. This test proves NO whole-FLIP floor was added to that path.
 //
 // TEST STRATEGY:
 //   The 3 BUR sites are all `private` with a documented fixture-coverage gap
@@ -109,49 +109,49 @@ function makeRng(seedHex) {
   };
 }
 
-// The whole-BURNIE floor as applied on-chain: `(x / 1 ether) * 1 ether`.
-function floorWholeBurnie(x) {
+// The whole-FLIP floor as applied on-chain: `(x / 1 ether) * 1 ether`.
+function floorWholeFlip(x) {
   return (x / ONE_ETHER) * ONE_ETHER;
 }
 
-describe("WholeBurnieFloorInvariant (stat-suite) — Phase 279 Wave 2 TST-BUR-04", function () {
+describe("WholeFlipFloorInvariant (stat-suite) — Phase 279 Wave 2 TST-BUR-04", function () {
   this.timeout(120_000);
 
-  describe("Whole-BURNIE floor invariant sweep: every floored BUR-site amount is a multiple of 1 ether", function () {
+  describe("Whole-FLIP floor invariant sweep: every floored BUR-site amount is a multiple of 1 ether", function () {
     const N = 20_000;
 
-    it(`[01a] BUR-01 sweep: representative post-bonus burnieAmount accumulators floor to whole-BURNIE multiples (N=${N})`, function () {
-      // Representative variance-roll BURNIE accumulator amounts: spin BURNIE is
-      // an arbitrary wei accumulator (burnieNoMultiplier + burniePresale +
-      // bonusBurnie), bounded but not 1-ether-aligned. Sweep arbitrary wei
-      // values in [0, ~50 BURNIE) and assert the floor invariant.
+    it(`[01a] BUR-01 sweep: representative post-bonus flipAmount accumulators floor to whole-FLIP multiples (N=${N})`, function () {
+      // Representative variance-roll FLIP accumulator amounts: spin FLIP is
+      // an arbitrary wei accumulator (flipNoMultiplier + flipPresale +
+      // bonusFlip), bounded but not 1-ether-aligned. Sweep arbitrary wei
+      // values in [0, ~50 FLIP) and assert the floor invariant.
       const rng = makeRng("0x" + "279b04a01".padStart(64, "0"));
       for (let i = 0; i < N; i++) {
-        const burnieAmount = rng() % (ONE_ETHER * 50n);
-        const floored = floorWholeBurnie(burnieAmount);
+        const flipAmount = rng() % (ONE_ETHER * 50n);
+        const floored = floorWholeFlip(flipAmount);
         expect(
           floored % ONE_ETHER,
-          `BUR-01: floored burnieAmount ${floored} (from ${burnieAmount}) is not a 1-ether multiple`
+          `BUR-01: floored flipAmount ${floored} (from ${flipAmount}) is not a 1-ether multiple`
         ).to.equal(0n);
         expect(
-          floored <= burnieAmount,
-          `BUR-01: floor must never increase the amount (${floored} > ${burnieAmount})`
+          floored <= flipAmount,
+          `BUR-01: floor must never increase the amount (${floored} > ${flipAmount})`
         ).to.equal(true);
         expect(
-          burnieAmount - floored < ONE_ETHER,
-          `BUR-01: residue must be strictly < 1 BURNIE (${burnieAmount - floored})`
+          flipAmount - floored < ONE_ETHER,
+          `BUR-01: residue must be strictly < 1 FLIP (${flipAmount - floored})`
         ).to.equal(true);
       }
     });
 
-    it(`[01b] BUR-02 sweep: representative (coinBudget, cap) pairs floor baseAmount to whole-BURNIE multiples (N=${N})`, function () {
+    it(`[01b] BUR-02 sweep: representative (coinBudget, cap) pairs floor baseAmount to whole-FLIP multiples (N=${N})`, function () {
       // baseAmount = ((coinBudget / cap) / 1 ether) * 1 ether. Sweep
-      // representative coinBudget in [0, ~10000 BURNIE) and cap in [1, 100].
+      // representative coinBudget in [0, ~10000 FLIP) and cap in [1, 100].
       const rng = makeRng("0x" + "279b04a02".padStart(64, "0"));
       for (let i = 0; i < N; i++) {
         const coinBudget = rng() % (ONE_ETHER * 10_000n);
         const cap = (rng() % 100n) + 1n;
-        const baseAmount = floorWholeBurnie(coinBudget / cap);
+        const baseAmount = floorWholeFlip(coinBudget / cap);
         expect(
           baseAmount % ONE_ETHER,
           `BUR-02: floored baseAmount ${baseAmount} (coinBudget=${coinBudget}, cap=${cap}) is not a 1-ether multiple`
@@ -163,14 +163,14 @@ describe("WholeBurnieFloorInvariant (stat-suite) — Phase 279 Wave 2 TST-BUR-04
       }
     });
 
-    it(`[01c] BUR-03 sweep: representative (farBudget, found) pairs floor perWinner to whole-BURNIE multiples (N=${N})`, function () {
+    it(`[01c] BUR-03 sweep: representative (farBudget, found) pairs floor perWinner to whole-FLIP multiples (N=${N})`, function () {
       // perWinner = ((farBudget / found) / 1 ether) * 1 ether. Sweep
-      // representative farBudget in [0, ~5000 BURNIE) and found in [1, 10].
+      // representative farBudget in [0, ~5000 FLIP) and found in [1, 10].
       const rng = makeRng("0x" + "279b04a03".padStart(64, "0"));
       for (let i = 0; i < N; i++) {
         const farBudget = rng() % (ONE_ETHER * 5_000n);
         const found = (rng() % 10n) + 1n;
-        const perWinner = floorWholeBurnie(farBudget / found);
+        const perWinner = floorWholeFlip(farBudget / found);
         expect(
           perWinner % ONE_ETHER,
           `BUR-03: floored perWinner ${perWinner} (farBudget=${farBudget}, found=${found}) is not a 1-ether multiple`
@@ -183,21 +183,21 @@ describe("WholeBurnieFloorInvariant (stat-suite) — Phase 279 Wave 2 TST-BUR-04
     });
   });
 
-  describe("3-site source-structural combined gate: all 3 BUR sites carry the inline whole-BURNIE floor", function () {
-    it("[02a] BUR-01 `_settleLootboxRoll` floors this roll's `burnieOut` into `burnieAmount`", function () {
+  describe("3-site source-structural combined gate: all 3 BUR sites carry the inline whole-FLIP floor", function () {
+    it("[02a] BUR-01 `_settleLootboxRoll` floors this roll's `flipOut` into `flipAmount`", function () {
       const source = fs.readFileSync(LOOTBOX_MODULE_PATH, "utf8");
       // The per-roll floor moved into `_settleLootboxRoll` (the refactor split
-      // the per-roll ticket/BURNIE/emit logic out of `_resolveLootboxCommon`).
-      // The floor now derives `burnieAmount` from this roll's raw `burnieOut`.
+      // the per-roll ticket/FLIP/emit logic out of `_resolveLootboxCommon`).
+      // The floor now derives `flipAmount` from this roll's raw `flipOut`.
       const body = stripLineComments(
         extractBody(source, "function _settleLootboxRoll(")
       );
       expect(body, "`_settleLootboxRoll` body not found").to.not.equal(null);
       expect(
-        /burnieAmount\s*=\s*\(\s*burnieOut\s*\/\s*1 ether\s*\)\s*\*\s*1 ether/.test(
+        /flipAmount\s*=\s*\(\s*flipOut\s*\/\s*1 ether\s*\)\s*\*\s*1 ether/.test(
           body
         ),
-        "BUR-01: `_settleLootboxRoll` must floor this roll's `burnieOut` via `(burnieOut / 1 ether) * 1 ether`"
+        "BUR-01: `_settleLootboxRoll` must floor this roll's `flipOut` via `(flipOut / 1 ether) * 1 ether`"
       ).to.equal(true);
     });
 
@@ -246,7 +246,7 @@ describe("WholeBurnieFloorInvariant (stat-suite) — Phase 279 Wave 2 TST-BUR-04
       ).to.equal(true);
     });
 
-    it("[03b] `_purchaseForWithCached` applies NO whole-BURNIE floor to `lootboxFlipCredit` — the mint-boost path is OUT of v40.0 BUR scope (D-40N-BUR-MINTBOOST-OUT-01)", function () {
+    it("[03b] `_purchaseForWithCached` applies NO whole-FLIP floor to `lootboxFlipCredit` — the mint-boost path is OUT of v40.0 BUR scope (D-40N-BUR-MINTBOOST-OUT-01)", function () {
       const source = fs.readFileSync(MINT_MODULE_PATH, "utf8");
       const body = stripLineComments(
         extractBody(source, "function _purchaseForWithCached(")
@@ -256,12 +256,12 @@ describe("WholeBurnieFloorInvariant (stat-suite) — Phase 279 Wave 2 TST-BUR-04
       // function body — the mint-boost flip-credit stays status-quo fractional.
       expect(
         /\/\s*1 ether\s*\)\s*\*\s*1 ether/.test(body),
-        "`_purchaseForWithCached` must NOT apply a `/ 1 ether) * 1 ether` whole-BURNIE floor (mint-boost is OUT of BUR scope — D-40N-BUR-MINTBOOST-OUT-01)"
+        "`_purchaseForWithCached` must NOT apply a `/ 1 ether) * 1 ether` whole-FLIP floor (mint-boost is OUT of BUR scope — D-40N-BUR-MINTBOOST-OUT-01)"
       ).to.equal(false);
       // Specifically, `lootboxFlipCredit` is never reassigned through a floor.
       expect(
         /lootboxFlipCredit\s*=\s*\(\s*lootboxFlipCredit\s*\/\s*1 ether/.test(body),
-        "`lootboxFlipCredit` must NOT be reassigned through a whole-BURNIE floor"
+        "`lootboxFlipCredit` must NOT be reassigned through a whole-FLIP floor"
       ).to.equal(false);
     });
   });

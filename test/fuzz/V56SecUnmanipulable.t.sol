@@ -13,13 +13,13 @@ import {IGameAfkingModule} from "../../contracts/interfaces/IDegenerusGameModule
 /// @notice The shipped streak is COMPUTE-ON-READ with decay — there is NO settle day. `_afkingStreak`
 ///   (GameAfkingModule.sol:778) returns 0 when `covered + 1 < currentDay` (decay-on-read: miss one funded
 ///   day and the streak is gone), else `_streakBaseOf(sub) + (covered - afkingStartDay)`. The per-day reward
-///   is the `pendingBurnie` accumulator (100 whole BURNIE / delivered buy, the slot-0 quest reward) pulled
-///   via the permissionless CEI `claimAfkingBurnie` (zero-before-credit at :1277). The affiliate base accrues
-///   7%-of-spend whole-BURNIE per delivered buy and PERSISTS across unsub (:315) — drained AFFILIATE-only,
+///   is the `pendingFlip` accumulator (100 whole FLIP / delivered buy, the slot-0 quest reward) pulled
+///   via the permissionless CEI `claimAfkingFlip` (zero-before-credit at :1277). The affiliate base accrues
+///   7%-of-spend whole-FLIP per delivered buy and PERSISTS across unsub (:315) — drained AFFILIATE-only,
 ///   read-and-zero, at `drainAffiliateBase` (:1300).
 ///
 /// @notice The delivery model the harness exercises: each delivered day is a STAGE buy (stamps the pending
-///   box + accrues pendingBurnie/affiliateBase + advances the covered high-water) FOLLOWED BY an open (the
+///   box + accrues pendingFlip/affiliateBase + advances the covered high-water) FOLLOWED BY an open (the
 ///   no-orphan guard, :892, skips a sub with a pending unopened box, so the box must be opened before the
 ///   next day's buy). Strategic churn = unsub/re-sub/claim sequenced around that buy+open.
 ///
@@ -28,7 +28,7 @@ import {IGameAfkingModule} from "../../contracts/interfaces/IDegenerusGameModule
 ///      total drained EQUALS honest continuous accrual.
 ///   2. Streak decay / gap dodge — miss one funded day -> the read decays to 0; resume after a gap -> the run
 ///      re-bases (`afkingStartDay`/streak base reset on the delivered day); advances ONLY on delivered days.
-///   3. pendingBurnie double-claim CEI idempotency (Task 2).
+///   3. pendingFlip double-claim CEI idempotency (Task 2).
 ///   4. The four finalize hooks write the decay-applied streak BEFORE the slot delete (Task 2).
 ///
 /// @dev Reuses the funded-sub + deity-pass + new-day STAGE harness ported from the v56-migrated
@@ -49,7 +49,7 @@ contract V56SecUnmanipulable is DeployProtocol {
     //   dailyQuantity u8 @0 · validThroughLevel u24 @1 · reinvestPct u8 @4 · flags u8 @5
     //   scorePlus1 u16 @6 · amount u24 @8
     //   lastAutoBoughtDay u24 @11 · lastOpenedDay u24 @14 · afkCoveredThroughDay u24 @17 · afkingStartDay u24 @20
-    //   affiliateBase u32 @23 · pendingBurnie u32 @27 · subStreakLatch u8 @31
+    //   affiliateBase u32 @23 · pendingFlip u32 @27 · subStreakLatch u8 @31
     uint256 private constant OFF_DAILY = 0;           // uint8  dailyQuantity        (byte 0)
     uint256 private constant OFF_VALIDTHROUGH = 1;     // uint24 validThroughLevel    (bytes 1..3)
     uint256 private constant OFF_LASTBOUGHT = 11;     // uint24 lastAutoBoughtDay    (bytes 11..13)
@@ -57,7 +57,7 @@ contract V56SecUnmanipulable is DeployProtocol {
     uint256 private constant OFF_AFKCOVERED = 17;     // uint24 afkCoveredThroughDay (bytes 17..19)
     uint256 private constant OFF_AFKINGSTART = 20;    // uint24 afkingStartDay       (bytes 20..22)
     uint256 private constant OFF_AFFBASE = 23;        // uint32 affiliateBase        (bytes 23..26)
-    uint256 private constant OFF_PENDINGBURNIE = 27;  // uint32 pendingBurnie        (bytes 27..30)
+    uint256 private constant OFF_PENDINGFLIP = 27;  // uint32 pendingFlip        (bytes 27..30)
     uint256 private constant OFF_STREAKLATCH = 31;    // uint8  subStreakLatch       (byte 31; bit7 ever-sub, bits0-6 streak)
 
     uint256 private constant DEITY_SHIFT = 184;
@@ -66,8 +66,8 @@ contract V56SecUnmanipulable is DeployProtocol {
     ///      crossing (the fixture level does not advance organically over the harness's day loop).
     uint256 private constant LEVEL_OFF = 12;
 
-    /// @dev QUEST_SLOT0_REWARD / 1 ether = 100 whole BURNIE accrued to pendingBurnie per delivered buy.
-    uint256 private constant SLOT0_BURNIE_PER_BUY = 100;
+    /// @dev QUEST_SLOT0_REWARD / 1 ether = 100 whole FLIP accrued to pendingFlip per delivered buy.
+    uint256 private constant SLOT0_FLIP_PER_BUY = 100;
 
     /// @dev SubscriptionExpired(player indexed, uint8 reason): reason 1 = pass-evict / funding-kill,
     ///      reason 2 = cancel-reclaim (the in-stage tombstone reclaim).
@@ -92,9 +92,9 @@ contract V56SecUnmanipulable is DeployProtocol {
     ///         as an honest continuous sub over the same number of delivered buys.
     /// @dev DEF-380-04-FC4 (finding-candidate routed to the council, 382+ PRIME/ASYMMETRY sweep).
     ///      SKIPPED against the frozen subject c4d48008: this test's stated model — "affiliateBase PERSISTS
-    ///      byte-identical across the unsub tombstone; the cancel never touches affiliateBase/pendingBurnie"
+    ///      byte-identical across the unsub tombstone; the cancel never touches affiliateBase/pendingFlip"
     ///      — is contradicted by the FROZEN cancel branch. At c4d48008 the dailyQuantity==0 cancel path
-    ///      AUTO-CLAIMS before tombstoning (GameAfkingModule:349-369): it pays the sub its pendingBurnie
+    ///      AUTO-CLAIMS before tombstoning (GameAfkingModule:349-369): it pays the sub its pendingFlip
     ///      (zeroed at :355) and DRAINS affiliateBase to the upline tree via
     ///      IDegenerusAffiliate.claim(drainOne) (:367-369), so `_affiliateBaseOf(churner)` reads 0 right
     ///      after the unsub (observed 0 != 140). The anti-manipulation PROPERTY the test targets
@@ -262,8 +262,8 @@ contract V56SecUnmanipulable is DeployProtocol {
     // =========================================================================
 
     /// @notice Drive a random {sub, unsub, buy, claim, open} churn sequence and assert two global invariants:
-    ///         (a) the cumulative BURNIE the churner can pull (already-claimed + still-pending) is <= the
-    ///             honest continuous accrual over the SAME number of delivered buys (100 whole BURNIE per
+    ///         (a) the cumulative FLIP the churner can pull (already-claimed + still-pending) is <= the
+    ///             honest continuous accrual over the SAME number of delivered buys (100 whole FLIP per
     ///             delivered buy; churn can only DELAY or LOSE a day, never manufacture one);
     ///         (b) the effective streak span (covered - afkingStartDay) never exceeds the churner's
     ///             funded-delivered-day count (it credits no non-delivered day).
@@ -280,7 +280,7 @@ contract V56SecUnmanipulable is DeployProtocol {
         _fundPool(churner, 80 ether);
         _subscribeLootbox(churner, 1);
 
-        uint256 churnClaimed; // whole BURNIE pulled out of the churner's pendingBurnie via claimAfkingBurnie
+        uint256 churnClaimed; // whole FLIP pulled out of the churner's pendingFlip via claimAfkingFlip
 
         for (uint256 d; d < D; d++) {
             // Deliver the day to both arms: STAGE buy + open (the honest control always delivers; the churner
@@ -291,11 +291,11 @@ contract V56SecUnmanipulable is DeployProtocol {
             // The churner's random actions AROUND the day's buy+open: nibble per day.
             uint8 act = uint8((actions >> (d * 4)) & 0x0F);
             if ((act & 0x1) != 0 && _subscriberIndexOf(churner) != 0) {
-                churnClaimed += _pendingBurnieOf(churner);
-                game.claimAfkingBurnie(_singleton(churner)); // zeroes pendingBurnie; a re-claim later finds 0
+                churnClaimed += _pendingFlipOf(churner);
+                game.claimAfkingFlip(_singleton(churner)); // zeroes pendingFlip; a re-claim later finds 0
             }
             if ((act & 0x2) != 0 && _subscriberIndexOf(churner) != 0) {
-                vm.prank(churner); // unsub (tombstone) — base + pendingBurnie persist
+                vm.prank(churner); // unsub (tombstone) — base + pendingFlip persist
                 game.subscribe(address(0), false, false, 0, 0, address(0));
             }
             if ((act & 0x4) != 0 && _subscriberIndexOf(churner) == 0) {
@@ -304,24 +304,24 @@ contract V56SecUnmanipulable is DeployProtocol {
             }
         }
 
-        // (a) NO MANUFACTURING: a sub accrues at most ONE slot-0 (100 BURNIE) per day it participates,
+        // (a) NO MANUFACTURING: a sub accrues at most ONE slot-0 (100 FLIP) per day it participates,
         //     each backed by an mp-debited paid buy — the same-day guard caps a sub at one buy/day, and a
         //     cancel tombstone only reclaims at the NEXT advance (never mid-day), so churn can never stack
         //     two buys onto one day. The churner participated on at most (D+1) distinct days (the join-day
-        //     cover-buy + the D delivered days), so its total reachable BURNIE is bounded by (D+1)·100. The
+        //     cover-buy + the D delivered days), so its total reachable FLIP is bounded by (D+1)·100. The
         //     OLD "churn <= honest absolute" bound was wrong: the honest control's lootbox boxes can be
         //     open-throttle-skipped (a paid day it simply doesn't buy), so honest can accrue LESS — that is
         //     honest losing a buy, not the churner gaining a free one (per-ETH they are identical). Each
-        //     reachable total is a whole-BURNIE multiple (no fractional manufactured credit).
-        uint256 churnReachable = churnClaimed + _pendingBurnieOf(churner);
-        assertLe(churnReachable, (D + 1) * SLOT0_BURNIE_PER_BUY, "no sub exceeds one slot-0 (100 BURNIE) per participating day (no manufacturing)");
-        assertEq(churnReachable % SLOT0_BURNIE_PER_BUY, 0, "churn reachable is a whole-BURNIE multiple of the 100/paid-buy reward (no manufactured fractional credit)");
+        //     reachable total is a whole-FLIP multiple (no fractional manufactured credit).
+        uint256 churnReachable = churnClaimed + _pendingFlipOf(churner);
+        assertLe(churnReachable, (D + 1) * SLOT0_FLIP_PER_BUY, "no sub exceeds one slot-0 (100 FLIP) per participating day (no manufacturing)");
+        assertEq(churnReachable % SLOT0_FLIP_PER_BUY, 0, "churn reachable is a whole-FLIP multiple of the 100/paid-buy reward (no manufactured fractional credit)");
 
         // (b) The compute-on-read streak credits no non-delivered / non-existent day. The streak inputs are
         //     `afkingStartDay` and the `covered` high-water (`_afkingStreak = base + (covered - start)`); the
         //     contract advances `covered` ONLY on a debit-delivered day and never past the current day. So
         //     for the churner: afkingStartDay <= covered <= currentDay — the span never reaches into a
-        //     non-delivered future day, and the realizable BURNIE (bound (a)) caps the economic value.
+        //     non-delivered future day, and the realizable FLIP (bound (a)) caps the economic value.
         if (_subscriberIndexOf(churner) != 0) {
             uint32 cov = _afkCoveredOf(churner);
             uint32 st = _afkingStartOf(churner);
@@ -332,12 +332,12 @@ contract V56SecUnmanipulable is DeployProtocol {
     }
 
     // =========================================================================
-    // Repro 3 — pendingBurnie double-claim CEI idempotency (pays EXACTLY once)
+    // Repro 3 — pendingFlip double-claim CEI idempotency (pays EXACTLY once)
     // =========================================================================
 
-    /// @notice claimAfkingBurnie pays the accrued pendingBurnie EXACTLY ONCE. The CEI zero-before-credit
-    ///         (`s.pendingBurnie = 0;` precedes `coinflip.creditFlip`, GameAfkingModule.sol:1277) means a
-    ///         double-call in one block credits the BURNIE on the first call and ZERO on the second (the
+    /// @notice claimAfkingFlip pays the accrued pendingFlip EXACTLY ONCE. The CEI zero-before-credit
+    ///         (`s.pendingFlip = 0;` precedes `coinflip.creditFlip`, GameAfkingModule.sol:1277) means a
+    ///         double-call in one block credits the FLIP on the first call and ZERO on the second (the
     ///         second sees owed == 0 and `creditFlip(_, 0)` early-returns). Observed via the recipient's
     ///         next-day coinflip stake delta: it rises by exactly `owed * 1e18` once, then not again.
     function testDoubleClaimPaysExactlyOnceCEI() public {
@@ -348,32 +348,32 @@ contract V56SecUnmanipulable is DeployProtocol {
         _deliverDay(_singleton(p), 0xDB1C01); // next-day STAGE buy accrues another 100
 
         // The join-day cover-buy fires after that day's STAGE and the next day is a normal STAGE
-        // member, so subscribe + one delivered day = TWO paid buys = 200 whole BURNIE.
-        uint256 owedWhole = _pendingBurnieOf(p);
-        assertEq(owedWhole, 2 * SLOT0_BURNIE_PER_BUY, "non-vacuity: cover-buy + one delivered STAGE buy = 200 whole BURNIE");
+        // member, so subscribe + one delivered day = TWO paid buys = 200 whole FLIP.
+        uint256 owedWhole = _pendingFlipOf(p);
+        assertEq(owedWhole, 2 * SLOT0_FLIP_PER_BUY, "non-vacuity: cover-buy + one delivered STAGE buy = 200 whole FLIP");
         uint256 expectedCredit = owedWhole * 1 ether;
 
-        // FIRST claim: credits owed * 1e18 to the recipient's flip stake and zeroes pendingBurnie.
+        // FIRST claim: credits owed * 1e18 to the recipient's flip stake and zeroes pendingFlip.
         uint256 stakeBefore = coinflip.coinflipAmount(p);
-        game.claimAfkingBurnie(_singleton(p));
+        game.claimAfkingFlip(_singleton(p));
         uint256 stakeAfter1 = coinflip.coinflipAmount(p);
-        assertEq(_pendingBurnieOf(p), 0, "CEI: pendingBurnie zeroed before the credit (reads 0 after the first claim)");
-        assertEq(stakeAfter1 - stakeBefore, expectedCredit, "first claim credited exactly the accrued BURNIE");
+        assertEq(_pendingFlipOf(p), 0, "CEI: pendingFlip zeroed before the credit (reads 0 after the first claim)");
+        assertEq(stakeAfter1 - stakeBefore, expectedCredit, "first claim credited exactly the accrued FLIP");
 
         // SECOND claim in the same block: the CEI zero means owed == 0 -> creditFlip(_, 0) is a no-op.
-        game.claimAfkingBurnie(_singleton(p));
+        game.claimAfkingFlip(_singleton(p));
         assertEq(coinflip.coinflipAmount(p), stakeAfter1, "double-call: the SECOND claim credited 0 (pays exactly once)");
 
-        // claim -> unsub -> claim variant: unsub does not re-arm pendingBurnie; the post-unsub claim is a no-op.
+        // claim -> unsub -> claim variant: unsub does not re-arm pendingFlip; the post-unsub claim is a no-op.
         _deliverDay(_singleton(p), 0xDB1C02); // re-accrue
-        assertEq(_pendingBurnieOf(p), SLOT0_BURNIE_PER_BUY, "re-accrued 100 for the claim->unsub->claim variant");
+        assertEq(_pendingFlipOf(p), SLOT0_FLIP_PER_BUY, "re-accrued 100 for the claim->unsub->claim variant");
         uint256 stakeBefore2 = coinflip.coinflipAmount(p);
-        game.claimAfkingBurnie(_singleton(p)); // claim
+        game.claimAfkingFlip(_singleton(p)); // claim
         uint256 stakeAfterClaim2 = coinflip.coinflipAmount(p);
-        assertEq(stakeAfterClaim2 - stakeBefore2, SLOT0_BURNIE_PER_BUY * 1 ether, "claim credited the re-accrued BURNIE once");
+        assertEq(stakeAfterClaim2 - stakeBefore2, SLOT0_FLIP_PER_BUY * 1 ether, "claim credited the re-accrued FLIP once");
         vm.prank(p);
-        game.subscribe(address(0), false, false, 0, 0, address(0)); // unsub (pendingBurnie persists at 0)
-        game.claimAfkingBurnie(_singleton(p)); // re-claim after unsub
+        game.subscribe(address(0), false, false, 0, 0, address(0)); // unsub (pendingFlip persists at 0)
+        game.claimAfkingFlip(_singleton(p)); // re-claim after unsub
         assertEq(coinflip.coinflipAmount(p), stakeAfterClaim2, "claim->unsub->claim: the post-unsub re-claim credited 0 (idempotent)");
     }
 
@@ -560,7 +560,7 @@ contract V56SecUnmanipulable is DeployProtocol {
 
     /// @dev Deliver ONE funded day to `who`: a new-day STAGE buy (stamps each pending box + accrues), then
     ///      settle clean and OPEN every pending box (so the no-orphan guard does not skip the next day's buy).
-    ///      Each delivered day advances the covered high-water and accrues 100 pendingBurnie per in-set sub.
+    ///      Each delivered day advances the covered high-water and accrues 100 pendingFlip per in-set sub.
     ///      Uses a rich, distinct VRF word each call (a degenerate small word routes into a non-stamping
     ///      branch); the stage word and the clean word are kept distinct.
     function _deliverDay(address[] memory who, uint256 vrfWord) internal {
@@ -766,8 +766,8 @@ contract V56SecUnmanipulable is DeployProtocol {
         return uint32(_subField(who, OFF_AFFBASE, 32));
     }
 
-    function _pendingBurnieOf(address who) internal view returns (uint32) {
-        return uint32(_subField(who, OFF_PENDINGBURNIE, 32));
+    function _pendingFlipOf(address who) internal view returns (uint32) {
+        return uint32(_subField(who, OFF_PENDINGFLIP, 32));
     }
 
     function _streakBaseOf(address who) internal view returns (uint8) {

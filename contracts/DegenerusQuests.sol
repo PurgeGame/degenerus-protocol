@@ -3,7 +3,7 @@ pragma solidity 0.8.34;
 
 import "./interfaces/IDegenerusQuests.sol";
 import "./interfaces/IDegenerusGame.sol";
-import {IBurnieCoinflip} from "./interfaces/IBurnieCoinflip.sol";
+import {ICoinflip} from "./interfaces/ICoinflip.sol";
 import {ContractAddresses} from "./ContractAddresses.sol";
 
 /**
@@ -141,7 +141,7 @@ contract DegenerusQuests is IDegenerusQuests {
     // Unit Conversions
     // -------------------------------------------------------------------------
 
-    /// @dev Price unit for reward calculations (1000 BURNIE).
+    /// @dev Price unit for reward calculations (1000 FLIP).
     uint256 private constant PRICE_COIN_UNIT = 1000 ether;
 
     // -------------------------------------------------------------------------
@@ -169,7 +169,7 @@ contract DegenerusQuests is IDegenerusQuests {
     /// @dev Quest type: mint tickets using ETH.
     uint8 private constant QUEST_TYPE_MINT_ETH = 1;
 
-    /// @dev Quest type: stake BURNIE in the coinflip mechanism.
+    /// @dev Quest type: stake FLIP in the coinflip mechanism.
     uint8 private constant QUEST_TYPE_FLIP = 2;
 
     /// @dev Quest type: earn affiliate commissions.
@@ -187,12 +187,12 @@ contract DegenerusQuests is IDegenerusQuests {
     /// @dev Quest type: place Degenerette bets using ETH.
     uint8 private constant QUEST_TYPE_DEGENERETTE_ETH = 7;
 
-    /// @dev Quest type: place Degenerette bets using BURNIE.
-    uint8 private constant QUEST_TYPE_DEGENERETTE_BURNIE = 8;
+    /// @dev Quest type: place Degenerette bets using FLIP.
+    uint8 private constant QUEST_TYPE_DEGENERETTE_FLIP = 8;
 
-    /// @dev Quest type: mint tickets using BURNIE tokens. Value 9 avoids collision
+    /// @dev Quest type: mint tickets using FLIP tokens. Value 9 avoids collision
     ///      with Solidity's default mapping value (0), which signals "no quest rolled".
-    uint8 private constant QUEST_TYPE_MINT_BURNIE = 9;
+    uint8 private constant QUEST_TYPE_MINT_FLIP = 9;
 
     /// @dev Total number of quest types for iteration bounds.
     uint8 private constant QUEST_TYPE_COUNT = 10;
@@ -201,11 +201,11 @@ contract DegenerusQuests is IDegenerusQuests {
     // Quest Targets (fixed)
     // -------------------------------------------------------------------------
 
-    /// @dev Fixed mint target in whole tickets (1 ticket = 1000 BURNIE).
+    /// @dev Fixed mint target in whole tickets (1 ticket = 1000 FLIP).
     uint32 private constant QUEST_MINT_TARGET = 1;
 
-    /// @dev Fixed BURNIE target for flip/affiliate/decimator quests (2x price in BURNIE).
-    uint256 private constant QUEST_BURNIE_TARGET = 2 * PRICE_COIN_UNIT;
+    /// @dev Fixed FLIP target for flip/affiliate/decimator quests (2x price in FLIP).
+    uint256 private constant QUEST_FLIP_TARGET = 2 * PRICE_COIN_UNIT;
 
     /// @dev Fixed ETH multiplier for lootbox quests (2x current mint price).
     uint256 private constant QUEST_LOOTBOX_TARGET_MULTIPLIER = 2;
@@ -227,7 +227,7 @@ contract DegenerusQuests is IDegenerusQuests {
     IDegenerusGame internal constant questGame = IDegenerusGame(ContractAddresses.GAME);
 
     /// @dev Reference to the coinflip contract for crediting flip stakes.
-    IBurnieCoinflip internal constant coinflip = IBurnieCoinflip(ContractAddresses.COINFLIP);
+    ICoinflip internal constant coinflip = ICoinflip(ContractAddresses.COINFLIP);
 
     // =========================================================================
     //                                 STRUCTS
@@ -283,7 +283,7 @@ contract DegenerusQuests is IDegenerusQuests {
         bool afkingActive;         // While set (GAME-only, subscribe→finalize): slot-0 completions are streak-neutral and pay no immediate reward (the afking compute-on-read owns the primary); a secondary/level completion bumps the afking sub's streak base (recordAfkingSecondary) so the unified score reflects it
         uint24 lastProgressDay0;   // Slot 0: day when progress was recorded
         uint24 lastProgressDay1;   // Slot 1: day when progress was recorded
-        uint16 progress0;          // Slot 0: accumulated progress in stored units (milli-ETH / whole-BURNIE / ticket count)
+        uint16 progress0;          // Slot 0: accumulated progress in stored units (milli-ETH / whole-FLIP / ticket count)
         uint16 progress1;          // Slot 1: accumulated progress in stored units
         uint8 completionMask;      // Bits 0-1: per-slot completion (deduped once-per-day; every completion credits the streak)
         uint8 streakShield;        // Stackable quest-streak shields, consumed on missed days to preserve streak
@@ -371,26 +371,26 @@ contract DegenerusQuests is IDegenerusQuests {
     // =========================================================================
 
     /// @notice Roll the daily quest set. Slot 0 is always MINT_ETH; slot 1 is random, except on the
-    ///         first jackpot day where it is forced to MINT_BURNIE.
+    ///         first jackpot day where it is forced to MINT_FLIP.
     /// @dev Idempotent per day. Called by AdvanceModule when RNG word is available.
     /// @param day Quest day identifier.
     /// @param entropy VRF entropy word.
-    /// @param forceMintBurnie When true, slot 1 is MINT_BURNIE (the BURNIE redeem window is live this
-    ///        day); when false, MINT_BURNIE is excluded from the slot 1 roll so a player is never handed
-    ///        a daily BURNIE-mint quest they cannot complete while the window is shut.
-    function rollDailyQuest(uint24 day, uint256 entropy, bool forceMintBurnie) external onlyGame {
+    /// @param forceMintFlip When true, slot 1 is MINT_FLIP (the FLIP redeem window is live this
+    ///        day); when false, MINT_FLIP is excluded from the slot 1 roll so a player is never handed
+    ///        a daily FLIP-mint quest they cannot complete while the window is shut.
+    function rollDailyQuest(uint24 day, uint256 entropy, bool forceMintFlip) external onlyGame {
         DailyQuest[QUEST_SLOT_COUNT] memory quests = _loadActiveQuests();
         if (quests[0].day == day) return;
 
         // Slot 0: always MINT_ETH — just stamp the day
         _seedQuestType(quests[0], day, QUEST_TYPE_MINT_ETH);
 
-        // Slot 1: MINT_BURNIE auto-assigned on the first jackpot day (redeem window live), else a
-        // weighted random distinct from slot 0. MINT_BURNIE is never in the random pool (it lives
+        // Slot 1: MINT_FLIP auto-assigned on the first jackpot day (redeem window live), else a
+        // weighted random distinct from slot 0. MINT_FLIP is never in the random pool (it lives
         // outside the roll system, see _bonusQuestType), so it only ever lands on this day.
         uint8 bonusType;
-        if (forceMintBurnie) {
-            bonusType = QUEST_TYPE_MINT_BURNIE;
+        if (forceMintFlip) {
+            bonusType = QUEST_TYPE_MINT_FLIP;
         } else {
             uint256 bonusEntropy = (entropy >> 128) | (entropy << 128);
             bonusType = _bonusQuestType(
@@ -569,20 +569,20 @@ contract DegenerusQuests is IDegenerusQuests {
     // 6. On completion, credit rewards and check if other slot also completes
     //
     // Return values are consistent across all handlers:
-    // - reward: BURNIE tokens to credit (in base units, 18 decimals)
+    // - reward: FLIP tokens to credit (in base units, 18 decimals)
     // - questType: The type of quest that was processed
     // - streak: Player's current streak after this action
     // - completed: True if a quest was completed by this action
 
     /**
-     * @notice Handle mint progress for a player; covers both BURNIE and ETH paid mints.
+     * @notice Handle mint progress for a player; covers both FLIP and ETH paid mints.
      * @dev Access: COIN or COINFLIP contract only.
      *      Slot 0 is always the MINT_ETH quest and the slot-1 bonus roll excludes the
      *      primary type, so each mint kind checks exactly one slot.
      * @param player The player who performed the mint.
      * @param quantity Number of tickets minted.
-     * @param paidWithEth True if ETH was used (MINT_ETH quest), false for BURNIE (MINT_BURNIE).
-     * @return reward BURNIE tokens earned (in base units, 18 decimals).
+     * @param paidWithEth True if ETH was used (MINT_ETH quest), false for FLIP (MINT_FLIP).
+     * @return reward FLIP tokens earned (in base units, 18 decimals).
      * @return questType The type of quest that was processed.
      * @return streak Player's current streak after this action.
      * @return completed True if a quest was completed by this action.
@@ -607,12 +607,12 @@ contract DegenerusQuests is IDegenerusQuests {
 
         _questSyncState(state, player, currentDay);
 
-        uint8 outQuestType = paidWithEth ? QUEST_TYPE_MINT_ETH : QUEST_TYPE_MINT_BURNIE;
+        uint8 outQuestType = paidWithEth ? QUEST_TYPE_MINT_ETH : QUEST_TYPE_MINT_FLIP;
         uint32 outStreak = state.streak;
 
         // Slot 0 is always the MINT_ETH quest and the slot-1 bonus roll excludes the
         // primary type, so each mint kind can only ever match one fixed slot:
-        // MINT_ETH -> slot 0, MINT_BURNIE -> slot 1.
+        // MINT_ETH -> slot 0, MINT_FLIP -> slot 1.
         uint8 slot = paidWithEth ? 0 : 1;
         DailyQuest memory quest = quests[slot];
         if (quest.day == currentDay && quest.questType == outQuestType) {
@@ -642,18 +642,18 @@ contract DegenerusQuests is IDegenerusQuests {
             // No daily quest slot matched — still credit level quest progress
             _handleLevelQuestProgress(player, QUEST_TYPE_MINT_ETH, uint256(quantity) * mintPrice, mintPrice);
         } else {
-            _handleLevelQuestProgress(player, QUEST_TYPE_MINT_BURNIE, quantity, 0);
+            _handleLevelQuestProgress(player, QUEST_TYPE_MINT_FLIP, quantity, 0);
         }
         return (0, outQuestType, outStreak, false);
     }
 
     /**
-     * @notice Handle flip/unstake progress credited in BURNIE base units (18 decimals).
+     * @notice Handle flip/unstake progress credited in FLIP base units (18 decimals).
      * @dev Access: COIN or COINFLIP contract only.
      *      Progress tracks cumulative flip volume for the day.
      * @param player The player who staked/unstaked.
-     * @param flipCredit Amount of BURNIE staked/unstaked (in base units).
-     * @return reward BURNIE tokens earned (in base units, 18 decimals).
+     * @param flipCredit Amount of FLIP staked/unstaked (in base units).
+     * @return reward FLIP tokens earned (in base units, 18 decimals).
      * @return questType The type of quest that was processed.
      * @return streak Player's current streak after this action.
      * @return completed True if a quest was completed by this action.
@@ -706,12 +706,12 @@ contract DegenerusQuests is IDegenerusQuests {
     }
 
     /**
-     * @notice Handle decimator burns counted in BURNIE base units (18 decimals).
+     * @notice Handle decimator burns counted in FLIP base units (18 decimals).
      * @dev Access: COIN or COINFLIP contract only.
-     *      Decimator quests share the same BURNIE target as flip quests (2000 BURNIE).
+     *      Decimator quests share the same FLIP target as flip quests (2000 FLIP).
      * @param player The player who performed the decimator burn.
-     * @param burnAmount Amount of BURNIE burned (in base units).
-     * @return reward BURNIE tokens earned (in base units, 18 decimals).
+     * @param burnAmount Amount of FLIP burned (in base units).
+     * @return reward FLIP tokens earned (in base units, 18 decimals).
      * @return questType The type of quest that was processed.
      * @return streak Player's current streak after this action.
      * @return completed True if a quest was completed by this action.
@@ -765,11 +765,11 @@ contract DegenerusQuests is IDegenerusQuests {
     }
 
     /**
-     * @notice Handle affiliate earnings credited in BURNIE base units (18 decimals).
+     * @notice Handle affiliate earnings credited in FLIP base units (18 decimals).
      * @dev Access: COIN or COINFLIP contract only.
      * @param player The affiliate who earned commission.
-     * @param amount BURNIE earned from affiliate referrals (in base units).
-     * @return reward BURNIE tokens earned (in base units, 18 decimals).
+     * @param amount FLIP earned from affiliate referrals (in base units).
+     * @return reward FLIP tokens earned (in base units, 18 decimals).
      * @return questType The type of quest that was processed.
      * @return streak Player's current streak after this action.
      * @return completed True if a quest was completed by this action.
@@ -823,17 +823,17 @@ contract DegenerusQuests is IDegenerusQuests {
      * @notice Handle combined purchase-path activity (mint tickets + lootbox) in a single call.
      * @dev Access: COIN or COINFLIP contract only.
      *      Combines the mint + lootbox quest legs for the purchase path.
-     *      BURNIE mint rewards are creditFlipped internally; ETH mint and lootbox rewards are
+     *      FLIP mint rewards are creditFlipped internally; ETH mint and lootbox rewards are
      *      returned for the caller to batch (the caller credits the lootbox reward exactly
      *      once). Returns streak for compute-once score forwarding.
      * @param player The player who purchased.
      * @param ethMintSpendWei Gross ETH-denominated spend on tickets + lootbox in wei
      *        (fresh + recycled), credited 1:1 to MINT_ETH quest.
-     * @param burnieMintQty BURNIE-paid ticket-equivalent mint units.
+     * @param flipMintQty FLIP-paid ticket-equivalent mint units.
      * @param lootBoxAmount ETH spent on lootbox in wei (full amount, fresh + recycled).
      * @param mintPrice Current ticket price in wei (purchaseLevel price for daily targets).
      * @param levelQuestPrice Price for level quest targets (level+1 price).
-     * @return reward BURNIE tokens earned (in base units, 18 decimals).
+     * @return reward FLIP tokens earned (in base units, 18 decimals).
      * @return questType The type of quest that was processed.
      * @return streak Player's current streak after this action.
      * @return completed True if a quest was completed by this action.
@@ -842,7 +842,7 @@ contract DegenerusQuests is IDegenerusQuests {
     function handlePurchase(
         address player,
         uint256 ethMintSpendWei,
-        uint32 burnieMintQty,
+        uint32 flipMintQty,
         uint256 lootBoxAmount,
         uint256 mintPrice,
         uint256 levelQuestPrice
@@ -857,14 +857,14 @@ contract DegenerusQuests is IDegenerusQuests {
         if (player == address(0) || currentDay == 0) {
             return (0, quests[0].questType, state.streak, false);
         }
-        if (ethMintSpendWei == 0 && burnieMintQty == 0 && lootBoxAmount == 0) {
+        if (ethMintSpendWei == 0 && flipMintQty == 0 && lootBoxAmount == 0) {
             return (0, quests[0].questType, state.streak, false);
         }
 
         _questSyncState(state, player, currentDay);
 
         uint256 ethMintReward;
-        uint256 burnieMintReward;
+        uint256 flipMintReward;
         uint256 lootboxReward;
         bool anyCompleted;
         uint8 outQuestType;
@@ -896,28 +896,28 @@ contract DegenerusQuests is IDegenerusQuests {
             }
         }
 
-        // --- BURNIE mint quest progress ---
-        // The slot-1 bonus roll excludes the primary MINT_ETH type, so MINT_BURNIE
+        // --- FLIP mint quest progress ---
+        // The slot-1 bonus roll excludes the primary MINT_ETH type, so MINT_FLIP
         // can only ever be the slot-1 quest.
-        if (burnieMintQty != 0) {
+        if (flipMintQty != 0) {
             DailyQuest memory quest = quests[1];
-            if (quest.day == currentDay && quest.questType == QUEST_TYPE_MINT_BURNIE) {
-                outQuestType = QUEST_TYPE_MINT_BURNIE;
+            if (quest.day == currentDay && quest.questType == QUEST_TYPE_MINT_FLIP) {
+                outQuestType = QUEST_TYPE_MINT_FLIP;
                 uint256 target = _questTargetValue(quest, 1, 0);
                 (uint256 r, uint8 qt, uint32 s, bool c) = _questHandleProgressSlot(
                     player, state, quests, quest, 1,
-                    burnieMintQty, target, currentDay, 0,
-                    QUEST_TYPE_MINT_BURNIE, burnieMintQty,
+                    flipMintQty, target, currentDay, 0,
+                    QUEST_TYPE_MINT_FLIP, flipMintQty,
                     levelQuestPrice
                 );
                 if (c) {
-                    burnieMintReward += r;
+                    flipMintReward += r;
                     outQuestType = qt;
                     outStreak = s;
                     anyCompleted = true;
                 }
             } else {
-                _handleLevelQuestProgress(player, QUEST_TYPE_MINT_BURNIE, burnieMintQty, levelQuestPrice);
+                _handleLevelQuestProgress(player, QUEST_TYPE_MINT_FLIP, flipMintQty, levelQuestPrice);
             }
         }
 
@@ -956,11 +956,11 @@ contract DegenerusQuests is IDegenerusQuests {
             }
         }
 
-        // Reward routing: MINT_ETH, LOOTBOX and MINT_BURNIE are quest TYPES, not
-        // payout currencies — every quest reward is paid as a BURNIE flip stake.
+        // Reward routing: MINT_ETH, LOOTBOX and MINT_FLIP are quest TYPES, not
+        // payout currencies — every quest reward is paid as a FLIP flip stake.
         // No reward is credited here; the full earned amount is returned to the
         // caller, which adds it to lootboxFlipCredit and credits it exactly once.
-        uint256 totalReturned = ethMintReward + lootboxReward + burnieMintReward;
+        uint256 totalReturned = ethMintReward + lootboxReward + flipMintReward;
         if (anyCompleted) {
             return (totalReturned, outQuestType, outStreak, true);
         }
@@ -971,10 +971,10 @@ contract DegenerusQuests is IDegenerusQuests {
      * @notice Handle Degenerette bet progress for a player.
      * @dev Access: COIN or COINFLIP contract only.
      * @param player The player who placed the Degenerette bet.
-     * @param amount The bet amount (wei for ETH, base units for BURNIE).
-     * @param paidWithEth True if bet was paid with ETH, false for BURNIE.
-     * @param mintPrice Current ticket price in wei (0 for BURNIE bets).
-     * @return reward BURNIE tokens earned (in base units, 18 decimals).
+     * @param amount The bet amount (wei for ETH, base units for FLIP).
+     * @param paidWithEth True if bet was paid with ETH, false for FLIP.
+     * @param mintPrice Current ticket price in wei (0 for FLIP bets).
+     * @return reward FLIP tokens earned (in base units, 18 decimals).
      * @return questType The type of quest that was processed.
      * @return streak Player's current streak after this action.
      * @return completed True if a quest was completed by this action.
@@ -998,7 +998,7 @@ contract DegenerusQuests is IDegenerusQuests {
         }
         _questSyncState(state, player, currentDay);
 
-        uint8 targetType = paidWithEth ? QUEST_TYPE_DEGENERETTE_ETH : QUEST_TYPE_DEGENERETTE_BURNIE;
+        uint8 targetType = paidWithEth ? QUEST_TYPE_DEGENERETTE_ETH : QUEST_TYPE_DEGENERETTE_FLIP;
         (DailyQuest memory quest, uint8 slotIndex) = _currentDayQuestOfType(quests, currentDay, targetType);
         if (slotIndex == type(uint8).max) {
             _handleLevelQuestProgress(player, targetType, amount, mintPrice);
@@ -1217,15 +1217,15 @@ contract DegenerusQuests is IDegenerusQuests {
     /**
      * @dev Decode quest requirements (fixed targets, no tiers or difficulty variance).
      *      Different quest types use different requirement fields:
-     *      - MINT_BURNIE → req.mints (small integer count)
+     *      - MINT_FLIP → req.mints (small integer count)
      *      - MINT_ETH, LOOTBOX → req.tokenAmount (ETH wei)
-     *      - FLIP, DECIMATOR, AFFILIATE → req.tokenAmount (BURNIE base units)
+     *      - FLIP, DECIMATOR, AFFILIATE → req.tokenAmount (FLIP base units)
      * @param quest The quest to calculate requirements for.
      * @return req Requirements struct with either mints count or tokenAmount.
      */
     function _questRequirements(DailyQuest memory quest, uint8 slot) private view returns (QuestRequirements memory req) {
         uint8 qType = quest.questType;
-        if (qType == QUEST_TYPE_MINT_BURNIE) {
+        if (qType == QUEST_TYPE_MINT_FLIP) {
             req.mints = uint32(_questTargetValue(quest, slot, 0));
         } else {
             uint256 currentPrice = 0;
@@ -1335,8 +1335,8 @@ contract DegenerusQuests is IDegenerusQuests {
     // -------------------------------------------------------------------------
     // Daily progress is stored in a compact per-family unit so it fits uint16:
     //   ETH-value quests    -> milli-ETH   (wei / 1e15; target <= 500)
-    //   BURNIE-value quests -> whole BURNIE (wei / 1e18; target = 2000)
-    //   MINT_BURNIE         -> ticket count (already a count; target = 1)
+    //   FLIP-value quests -> whole FLIP (wei / 1e18; target = 2000)
+    //   MINT_FLIP         -> ticket count (already a count; target = 1)
     // Accumulation converts the native delta to stored units before adding, and the
     // stored target compares against it like-for-like. View/event surfaces convert
     // back so the external ABI keeps reporting native wei / counts.
@@ -1350,10 +1350,10 @@ contract DegenerusQuests is IDegenerusQuests {
         ) {
             return 1e15; // milli-ETH
         }
-        if (questType == QUEST_TYPE_MINT_BURNIE) {
+        if (questType == QUEST_TYPE_MINT_FLIP) {
             return 1; // ticket count
         }
-        return 1e18; // whole BURNIE: FLIP / DECIMATOR / AFFILIATE / DEGENERETTE_BURNIE
+        return 1e18; // whole FLIP: FLIP / DECIMATOR / AFFILIATE / DEGENERETTE_FLIP
     }
 
     /// @dev Native delta (wei / count) -> stored progress units. Truncates toward zero.
@@ -1420,7 +1420,7 @@ contract DegenerusQuests is IDegenerusQuests {
      * @param handlerQuestType The quest type this handler tracks for level quest routing.
      * @param levelDelta Progress delta to forward to level quest handler (0 to skip).
      * @param levelQuestPrice Price for level quest target (level+1 price during purchase).
-     * @return reward BURNIE tokens earned (in base units).
+     * @return reward FLIP tokens earned (in base units).
      * @return questType The completed quest type.
      * @return streak Player's streak after completion.
      * @return completed True if completion was successful.
@@ -1616,20 +1616,20 @@ contract DegenerusQuests is IDegenerusQuests {
         } else if (qType == QUEST_TYPE_LOOTBOX || qType == QUEST_TYPE_DEGENERETTE_ETH) {
             nativeTarget = mintPrice * QUEST_LOOTBOX_TARGET_MULTIPLIER;
             if (nativeTarget > QUEST_ETH_TARGET_CAP) nativeTarget = QUEST_ETH_TARGET_CAP;
-        } else if (qType == QUEST_TYPE_MINT_BURNIE) {
+        } else if (qType == QUEST_TYPE_MINT_FLIP) {
             nativeTarget = QUEST_MINT_TARGET;
         } else if (
             qType == QUEST_TYPE_FLIP ||
             qType == QUEST_TYPE_DECIMATOR ||
             qType == QUEST_TYPE_AFFILIATE ||
-            qType == QUEST_TYPE_DEGENERETTE_BURNIE
+            qType == QUEST_TYPE_DEGENERETTE_FLIP
         ) {
-            nativeTarget = QUEST_BURNIE_TARGET;
+            nativeTarget = QUEST_FLIP_TARGET;
         } else {
             return 0;
         }
         // Convert to the stored unit that daily progress accumulates in (milli-ETH /
-        // whole-BURNIE / ticket count) so `progress >= target` compares like-for-like.
+        // whole-FLIP / ticket count) so `progress >= target` compares like-for-like.
         return nativeTarget / _progressUnit(qType);
     }
 
@@ -1644,9 +1644,9 @@ contract DegenerusQuests is IDegenerusQuests {
      *      - Excludes the primary type (no duplicate quests)
      *      - Base weight is 1 for all types (more uniform)
      *      - FLIP gets 4x weight
-     *      - MINT_BURNIE is never rolled here — it is auto-assigned as the slot-1 daily on the first
+     *      - MINT_FLIP is never rolled here — it is auto-assigned as the slot-1 daily on the first
      *        jackpot day (rollDailyQuest) and excluded from the random pool everywhere else
-     *      - DEGENERETTE_ETH and DEGENERETTE_BURNIE use base weight (1x)
+     *      - DEGENERETTE_ETH and DEGENERETTE_FLIP use base weight (1x)
      *      - Decimator gets 4x weight when allowed
      *      - Lootbox gets 3x weight
      * @param entropy VRF entropy (typically swapped halves of primary entropy).
@@ -1684,9 +1684,9 @@ contract DegenerusQuests is IDegenerusQuests {
                 }
                 continue;
             }
-            // MINT_BURNIE is never rolled randomly — it is auto-assigned as the slot-1 daily on the
+            // MINT_FLIP is never rolled randomly — it is auto-assigned as the slot-1 daily on the
             // first jackpot day (rollDailyQuest) and excluded from the pool everywhere else.
-            if (candidate == QUEST_TYPE_MINT_BURNIE) {
+            if (candidate == QUEST_TYPE_MINT_FLIP) {
                 unchecked {
                     ++candidate;
                 }
@@ -1747,12 +1747,12 @@ contract DegenerusQuests is IDegenerusQuests {
      *      - lastCompletedDay updates only on the primary (slot 0), keying the reset to it
      *
      *      Reward Calculation:
-     *      - Slot 0 (deposit ETH) pays a fixed 100 BURNIE
-     *      - Slot 1 (random quest) pays a fixed 200 BURNIE
+     *      - Slot 0 (deposit ETH) pays a fixed 100 FLIP
+     *      - Slot 1 (random quest) pays a fixed 200 FLIP
      * @param state Storage reference to player's quest state.
      * @param slot The slot index being completed.
      * @param quest The quest being completed.
-     * @return reward BURNIE tokens earned (in base units).
+     * @return reward FLIP tokens earned (in base units).
      * @return questType The completed quest type.
      * @return streak Player's streak after completion.
      * @return completed True if completion was successful.
@@ -1776,7 +1776,7 @@ contract DegenerusQuests is IDegenerusQuests {
 
         // While afking, the compute-on-read owns the streak (off the Game-side Sub slot), so
         // a completion of EITHER slot is streak-neutral here, and the slot-0 reward is the
-        // per-delivered-day pendingBurnie accrual (paying it here too would double-credit). The
+        // per-delivered-day pendingFlip accrual (paying it here too would double-credit). The
         // slot-1 (manual) quest stays fully accessible and pays its reward normally.
         bool afking = state.afkingActive;
 
@@ -1843,7 +1843,7 @@ contract DegenerusQuests is IDegenerusQuests {
      * @param quest The quest being completed.
      * @param currentDay Current quest day for pair checks.
      * @param mintPrice Optional cached mint price in wei for ETH-based quests (0 to fetch).
-     * @return reward BURNIE tokens earned (in base units).
+     * @return reward FLIP tokens earned (in base units).
      * @return questType The completed quest type.
      * @return streak Player's streak after completion.
      * @return completed True if completion was successful.
@@ -1903,7 +1903,7 @@ contract DegenerusQuests is IDegenerusQuests {
      * @param slot The slot to check for completion.
      * @param currentDay Current quest day for validation.
      * @param mintPrice Optional cached mint price in wei for ETH-based quests (0 to fetch).
-     * @return reward BURNIE tokens earned (in base units).
+     * @return reward FLIP tokens earned (in base units).
      * @return questType The completed quest type.
      * @return streak Player's streak after completion.
      * @return completed True if completion was successful.
@@ -2045,15 +2045,15 @@ contract DegenerusQuests is IDegenerusQuests {
     }
 
     /// @dev Returns the 10x target for a level quest type.
-    ///      MINT_BURNIE targets 10 tickets, MINT_ETH targets mintPrice * 10,
+    ///      MINT_FLIP targets 10 tickets, MINT_ETH targets mintPrice * 10,
     ///      LOOTBOX and DEGENERETTE_ETH target mintPrice * 20,
-    ///      BURNIE-denominated types target 20,000 BURNIE.
+    ///      FLIP-denominated types target 20,000 FLIP.
     ///      No ETH cap applied (unlike daily quests).
     /// @param questType The quest type constant (1-9, 0 reserved as unrolled sentinel).
     /// @param mintPrice Current mint price in wei.
     /// @return Target value in the same units as handler progress deltas.
     function _levelQuestTargetValue(uint8 questType, uint256 mintPrice) internal pure returns (uint256) {
-        if (questType == QUEST_TYPE_MINT_BURNIE) return 10;
+        if (questType == QUEST_TYPE_MINT_FLIP) return 10;
         if (questType == QUEST_TYPE_MINT_ETH) return mintPrice * 10;
         if (questType == QUEST_TYPE_LOOTBOX || questType == QUEST_TYPE_DEGENERETTE_ETH) {
             return mintPrice * 20;
@@ -2062,7 +2062,7 @@ contract DegenerusQuests is IDegenerusQuests {
             questType == QUEST_TYPE_FLIP ||
             questType == QUEST_TYPE_DECIMATOR ||
             questType == QUEST_TYPE_AFFILIATE ||
-            questType == QUEST_TYPE_DEGENERETTE_BURNIE
+            questType == QUEST_TYPE_DEGENERETTE_FLIP
         ) {
             return 20_000 ether;
         }
@@ -2077,7 +2077,7 @@ contract DegenerusQuests is IDegenerusQuests {
     /// @param player The player earning progress.
     /// @param handlerQuestType The quest type this handler tracks.
     /// @param delta The progress delta (units match quest type).
-    /// @param mintPrice Current mint price in wei (for ETH-based targets; 0 for BURNIE types).
+    /// @param mintPrice Current mint price in wei (for ETH-based targets; 0 for FLIP types).
     function _handleLevelQuestProgress(
         address player,
         uint8 handlerQuestType,

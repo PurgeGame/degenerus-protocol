@@ -56,17 +56,17 @@ describe("Deploy Pipeline", function () {
       expect(await f.game.gameOver()).to.equal(false);
     });
 
-    it("BurnieCoin: initial totalSupply is 0 (emission arrives as coinflip seed stakes)", async function () {
+    it("FLIP: initial totalSupply is 0 (emission arrives as coinflip seed stakes)", async function () {
       const f = await loadFixture(deployFullProtocol);
       expect(await f.coin.totalSupply()).to.equal(0n);
     });
 
-    it("BurnieCoin: vaultMintAllowance is 0 (vault emission arrives as coinflip seed stakes)", async function () {
+    it("FLIP: vaultMintAllowance is 0 (vault emission arrives as coinflip seed stakes)", async function () {
       const f = await loadFixture(deployFullProtocol);
       expect(await f.coin.vaultMintAllowance()).to.equal(0n);
     });
 
-    it("BurnieCoinflip: days 1-20 each stake 200k for VAULT and sDGNRS", async function () {
+    it("Coinflip: days 1-20 each stake 200k for VAULT and sDGNRS", async function () {
       const f = await loadFixture(deployFullProtocol);
       const seed = hre.ethers.parseEther("200000");
       const vaultAddr = await f.vault.getAddress();
@@ -90,7 +90,7 @@ describe("Deploy Pipeline", function () {
       expect(byKey.has(`${sdgnrsAddr}-${21n}`)).to.equal(false);
     });
 
-    it("StakedDegenerusStonk: DGNRS contract holds creator's 20% as sDGNRS", async function () {
+    it("sDGNRS: DGNRS contract holds creator's 20% as sDGNRS", async function () {
       const f = await loadFixture(deployFullProtocol);
       const totalSupply = await f.sdgnrs.totalSupply();
       const dgnrsAddr = await f.dgnrs.getAddress();
@@ -98,7 +98,7 @@ describe("Deploy Pipeline", function () {
       expect(wrapperBal).to.equal((totalSupply * 2000n) / 10000n);
     });
 
-    it("DegenerusStonk: creator holds initial vesting (50B) as DGNRS", async function () {
+    it("DGNRS: creator holds initial vesting (50B) as DGNRS", async function () {
       const f = await loadFixture(deployFullProtocol);
       const CREATOR_INITIAL = 50_000_000_000n * 10n ** 18n;
       const creatorDgnrs = await f.dgnrs.balanceOf(f.deployer.address);

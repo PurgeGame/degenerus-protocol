@@ -239,7 +239,7 @@ contract AfKingConcurrency is DeployProtocol {
     }
 
     /// @notice v55 cancel-reclaim ALWAYS deletes the full Sub record (the v47 `preservePaidWindow`
-    ///         carve-out is gone -- AFSUB-01 retired the BURNIE-prepaid window): a cancelled sub whose
+    ///         carve-out is gone -- AFSUB-01 retired the FLIP-prepaid window): a cancelled sub whose
     ///         record holds any non-zero stored value (validThroughLevel) has it zeroed at the deferred
     ///         STAGE reclaim, with no opt-in preservation path.
     function testCancelReclaimAlwaysDeletesSubRecord() public {

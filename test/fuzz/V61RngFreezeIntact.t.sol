@@ -40,7 +40,7 @@ import {PriceLookupLib} from "../../contracts/libraries/PriceLookupLib.sol";
 ///   accessors) via vm.readFile (foundry.toml fs_permissions grants read access to ./contracts) and asserts
 ///   they contain NO `rngWord` token — a structural attestation backing the dynamic proof.
 ///
-/// @dev Reuses the canonical-layout seeders + the dailyIdx seed + the real-deity-pass mint + the BURNIE mint
+/// @dev Reuses the canonical-layout seeders + the dailyIdx seed + the real-deity-pass mint + the FLIP mint
 ///   from V61CurseSet / V61Smite / V61AfpayWaterfall. Seeded-fuzz deterministic (foundry seed 0xdeadbeef).
 ///   Test-only: ZERO contracts/*.sol mutation.
 contract V61RngFreezeIntact is DeployProtocol {
@@ -61,7 +61,7 @@ contract V61RngFreezeIntact is DeployProtocol {
     uint256 private constant CURSE_COUNT_SHIFT = 215; // (8 bits)
 
     uint256 private constant PRICE_COIN_UNIT = 1000 ether;
-    uint256 private constant SMITE_BURN = PRICE_COIN_UNIT / 5; // 200 BURNIE
+    uint256 private constant SMITE_BURN = PRICE_COIN_UNIT / 5; // 200 FLIP
 
     bytes32 private constant AFKING_SPENT_SIG = keccak256("AfkingSpent(address,uint256)");
 
@@ -195,7 +195,7 @@ contract V61RngFreezeIntact is DeployProtocol {
     function testSmiteByteIdenticalTwoBlocks() public {
         (address deity, uint256 deityId) = _mintDeity("smite_freeze_deity");
         address smitee = makeAddr("smite_freeze_smitee");
-        _fundBurnie(deity, SMITE_BURN * 2); // funded for both runs (each run burns 200; revert restores it)
+        _fundFlip(deity, SMITE_BURN * 2); // funded for both runs (each run burns 200; revert restores it)
         uint256 snap = vm.snapshotState();
 
         uint8 c1 = _runSmite(deity, deityId, smitee, 5, 11 minutes, 0xAA11AA11, "cb_s1");
@@ -505,7 +505,7 @@ contract V61RngFreezeIntact is DeployProtocol {
     }
 
     // =========================================================================
-    // Deity pass + BURNIE
+    // Deity pass + FLIP
     // =========================================================================
 
     function _mintDeity(string memory name) internal returns (address holder, uint256 deityId) {
@@ -515,7 +515,7 @@ contract V61RngFreezeIntact is DeployProtocol {
         deityPass.mint(holder, deityId);
     }
 
-    function _fundBurnie(address who, uint256 amount) internal {
+    function _fundFlip(address who, uint256 amount) internal {
         vm.prank(address(game));
         coin.mintForGame(who, amount);
     }

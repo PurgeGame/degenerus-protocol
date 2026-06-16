@@ -19,7 +19,7 @@ const MintPaymentKind = { DirectEth: 0, Claimable: 1, Combined: 2 };
 /**
  * Affiliate Bonus in Compressed Jackpot Mode
  *
- * The MintModule inflates freshBurnie by 7/5 (level 0-3) or 3/2 (level 4+)
+ * The MintModule inflates freshFlip by 7/5 (level 0-3) or 3/2 (level 4+)
  * on the physical day before the final jackpot draw. This bonus must fire
  * correctly in all three compression tiers:
  *
@@ -27,8 +27,8 @@ const MintPaymentKind = { DirectEth: 0, Claimable: 1, Combined: 2 };
  *   Compressed (flag=1): counter=4, nextStep=1, 4+1≥5 → bonus
  *   Turbo (flag=2):      excluded by outer guard → no bonus
  *
- * Per-referrer commission cap (0.5 ETH BURNIE) means each test buyer
- * can only be used ONCE — a single ticket purchase in BURNIE units
+ * Per-referrer commission cap (0.5 ETH FLIP) means each test buyer
+ * can only be used ONCE — a single ticket purchase in FLIP units
  * exceeds the cap. Tests use separate buyers for baseline vs bonus day.
  */
 describe("CompressedAffiliateBonus", function () {
@@ -108,7 +108,7 @@ describe("CompressedAffiliateBonus", function () {
   }
 
   /**
-   * Get the raw freshBurnie value passed to payAffiliate from a purchase tx.
+   * Get the raw freshFlip value passed to payAffiliate from a purchase tx.
    * Uses the Affiliate(amount, code, sender) event emitted at the end of
    * payAffiliate's normal path (line 622). This captures the pre-scaling,
    * pre-cap value — exactly what MintModule passes after potential inflation.
@@ -208,7 +208,7 @@ describe("CompressedAffiliateBonus", function () {
       const tx1 = await buyFullTickets(game, buyerBaseline, 10, 0.1, aliceCode);
       const baseline = await getRawAffiliateBasis(tx1, affiliate, buyerBaseline.address);
       expect(baseline).to.not.be.null;
-      expect(baseline).to.be.gt(0n, "Baseline freshBurnie should be non-zero");
+      expect(baseline).to.be.gt(0n, "Baseline freshFlip should be non-zero");
 
       // Advance to penultimate day (bonus expected)
       await driveOneCycle(game, deployer, mockVRF, advanceModule, 5000n);
@@ -218,9 +218,9 @@ describe("CompressedAffiliateBonus", function () {
       const tx2 = await buyFullTickets(game, buyerBonus, 10, 0.1, aliceCode);
       const bonus = await getRawAffiliateBasis(tx2, affiliate, buyerBonus.address);
       expect(bonus).to.not.be.null;
-      expect(bonus).to.be.gt(0n, "Bonus day freshBurnie should be non-zero");
+      expect(bonus).to.be.gt(0n, "Bonus day freshFlip should be non-zero");
 
-      // Bonus day freshBurnie should be 7/5 of baseline (same ETH → same base BURNIE, inflated)
+      // Bonus day freshFlip should be 7/5 of baseline (same ETH → same base FLIP, inflated)
       const ratio = (bonus * 10000n) / baseline;
       expect(ratio).to.be.gte(13900n, "Compressed bonus should inflate by ~7/5");
       expect(ratio).to.be.lte(14100n, "Compressed bonus should inflate by ~7/5");
@@ -293,7 +293,7 @@ describe("CompressedAffiliateBonus", function () {
       const txBaseline = await buyFullTickets(game, buyerPre, 10, 0.1, aliceCode);
       const baseline = await getRawAffiliateBasis(txBaseline, affiliate, buyerPre.address);
       expect(baseline).to.not.be.null;
-      expect(baseline).to.be.gt(0n, "Should have baseline freshBurnie pre-compressed");
+      expect(baseline).to.be.gt(0n, "Should have baseline freshFlip pre-compressed");
 
       // Trigger compressed via full cycle (day 3, purchaseDays=2)
       // Compressed tier is set during daily processing, not at advanceGame entry
@@ -307,9 +307,9 @@ describe("CompressedAffiliateBonus", function () {
         const compressedAmount = await getRawAffiliateBasis(txCompressed, affiliate, buyerCompressed.address);
 
         if (compressedAmount !== null && compressedAmount > 0n) {
-          // First compressed day freshBurnie should NOT be inflated — ratio should be ~1:1
+          // First compressed day freshFlip should NOT be inflated — ratio should be ~1:1
           const ratio = (compressedAmount * 10000n) / baseline;
-          expect(ratio).to.be.lte(10100n, "First compressed day should NOT inflate affiliate freshBurnie");
+          expect(ratio).to.be.lte(10100n, "First compressed day should NOT inflate affiliate freshFlip");
         }
       }
     });

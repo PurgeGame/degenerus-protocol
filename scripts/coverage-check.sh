@@ -67,7 +67,7 @@ NON_DEPLOYABLE_MODULES=("DegenerusGameMintStreakUtils.sol" "DegenerusGamePayoutU
 # matching the source file being scanned (Gap 2 fix from 222-VERIFICATION.md).
 # Without scoping, a same-name fn in one contract masks drift in another
 # (e.g., a drifted transfer() in DeityBoonViewer would be hidden by
-# BurnieCoin's transfer() row).
+# FLIP's transfer() row).
 declare -A contract_fns
 _current_section=""
 _tick=$'\x60'

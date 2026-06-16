@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.34;
 
-/// @title IStakedDegenerusStonk
+/// @title IsDGNRS
 /// @notice Interface for the sDGNRS token contract (contract-to-contract calls only)
-/// @dev sDGNRS is backed by ETH, stETH, and BURNIE reserves with pool-based distribution
-interface IStakedDegenerusStonk {
+/// @dev sDGNRS is backed by ETH, stETH, and FLIP reserves with pool-based distribution
+interface IsDGNRS {
     /// @notice sDGNRS reward pools (pre-minted supply buckets)
     /// @dev Each pool has a dedicated balance for specific distribution purposes
     enum Pool {
@@ -49,8 +49,8 @@ interface IStakedDegenerusStonk {
     /// @param amount Amount of sDGNRS to burn
     /// @return ethOut ETH received (0 during active game)
     /// @return stethOut stETH received (0 during active game)
-    /// @return burnieOut BURNIE received (0 during active game)
-    function burn(uint256 amount) external returns (uint256 ethOut, uint256 stethOut, uint256 burnieOut);
+    /// @return flipOut FLIP received (0 during active game)
+    function burn(uint256 amount) external returns (uint256 ethOut, uint256 stethOut, uint256 flipOut);
 
     /// @notice Transfer sDGNRS from the wrapper to a recipient (DGNRS wrapper only)
     /// @param to Recipient address
@@ -67,10 +67,10 @@ interface IStakedDegenerusStonk {
     /// @return Total number of sDGNRS tokens in circulation
     function totalSupply() external view returns (uint256);
 
-    /// @notice Get the BURNIE reserve backing sDGNRS
+    /// @notice Get the FLIP reserve backing sDGNRS
     /// @dev Includes claimable coinflip backing
-    /// @return Amount of BURNIE in reserves
-    function burnieReserve() external view returns (uint256);
+    /// @return Amount of FLIP in reserves
+    function flipReserve() external view returns (uint256);
 
 
     /// @notice Preview the output amounts from burning sDGNRS tokens
@@ -78,12 +78,12 @@ interface IStakedDegenerusStonk {
     /// @param amount Amount of sDGNRS to simulate burning
     /// @return ethOut Amount of ETH that would be returned
     /// @return stethOut Amount of stETH that would be returned
-    /// @return burnieOut Amount of BURNIE that would be minted
-    function previewBurn(uint256 amount) external view returns (uint256 ethOut, uint256 stethOut, uint256 burnieOut);
+    /// @return flipOut Amount of FLIP that would be minted
+    function previewBurn(uint256 amount) external view returns (uint256 ethOut, uint256 stethOut, uint256 flipOut);
 
     /// @notice Check if day `day` has an unresolved gambling-burn pool (SPEC-03).
     /// @param day Wall-clock day to query.
-    /// @return True if `pendingByDay[day]` has non-zero ETH or BURNIE base.
+    /// @return True if `pendingByDay[day]` has non-zero ETH or FLIP base.
     function hasPendingRedemptions(uint24 day) external view returns (bool);
 
     /// @notice Sentinel for the single-pool invariant (INV-13).

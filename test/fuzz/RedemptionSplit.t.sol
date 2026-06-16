@@ -4,7 +4,7 @@ pragma solidity 0.8.34;
 import {Test} from "forge-std/Test.sol";
 
 /// @title RedemptionSplitTest -- Proves the redemption payout-split conservation identity (INV-03)
-/// @notice Mirrors the claim-time split in StakedDegenerusStonk._claimRedemptionFor: 50/50
+/// @notice Mirrors the claim-time split in sDGNRS._claimRedemptionFor: 50/50
 ///         direct/lootbox during a live game, with the dust-lootbox drop — when the lootbox half
 ///         lands below the 0.01 ETH floor it is forfeited to sDGNRS's claimable instead of paid out.
 ///         The full rolled amount always leaves the contract across the three legs. Fuzzes all inputs.

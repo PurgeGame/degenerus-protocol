@@ -7,7 +7,7 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 
 /// @title AfKingSubscription -- Proves the v55.0 game-resident afking subscription acceptance
 ///        properties: the pass-eviction-OR-refresh crossing gate (AFSUB-02/03), the absence of any
-///        BURNIE-prepay window (AFSUB-01), the single-creditFlip mintBurnie bounty (REW-02), and the
+///        FLIP-prepay window (AFSUB-01), the single-creditFlip mintFlip bounty (REW-02), and the
 ///        OPEN-E cross-account subscribe-only auth (OPENE-04). The afking surface is now GAME-resident
 ///        (GameAfkingModule reached via DegenerusGame delegatecall) -- the standalone `AfKing` contract
 ///        was DISSOLVED (D-351-01, PATTERNS §2).
@@ -15,13 +15,13 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 /// @notice Specifically:
 ///   - Pass-eviction-OR-refresh (AFSUB-02/03): at the `currentLevel > validThroughLevel` crossing the
 ///     STAGE re-reads `_passHorizonOf(player)` EXACTLY ONCE; a subscriber whose horizon still covers
-///     `currentLevel` REFRESHES (SubscriptionExtendedFree, validThroughLevel = h, NO BURNIE burn); a
+///     `currentLevel` REFRESHES (SubscriptionExtendedFree, validThroughLevel = h, NO FLIP burn); a
 ///     subscriber whose horizon no longer covers `currentLevel` is EVICTED via the tombstone-then-
 ///     reclaim path (dailyQuantity = 0, _removeFromSet, SubscriptionExpired(.,1)) WITHOUT reverting.
-///   - No BURNIE in subscribe (AFSUB-01): subscribe never issues any BURNIE keeper-burn; a no-pass
-///     subscriber's BURNIE balance is UNTOUCHED across subscribe.
-///   - Bounty (REW-02 / PLACE-02): the REWARDED entrypoint is the parameterless `mintBurnie()` router;
-///     a mintBurnie() whose advance leg processes the buy STAGE emits exactly ONE creditFlip to the
+///   - No FLIP in subscribe (AFSUB-01): subscribe never issues any FLIP keeper-burn; a no-pass
+///     subscriber's FLIP balance is UNTOUCHED across subscribe.
+///   - Bounty (REW-02 / PLACE-02): the REWARDED entrypoint is the parameterless `mintFlip()` router;
+///     a mintFlip() whose advance leg processes the buy STAGE emits exactly ONE creditFlip to the
 ///     caller (never per-item).
 ///   - OPEN-E (OPENE-04): a non-zero non-self fundingSource MUST be operator-approved by the source for
 ///     the subscriber AT subscribe (the consent gate at GameAfkingModule.sol:259-265); no later re-check
@@ -34,7 +34,7 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 ///      compare `currentLevel <= sub.validThroughLevel`, GameAfkingModule.sol:612 — only the crossing
 ///      branch re-reads the horizon).
 ///   Δ2 subscribe: `afKing.subscribe(...)` -> `game.subscribe(...)` (identical 6-arg sig).
-///   Δ3 doWork: `afKing.doWork()` -> `game.mintBurnie()`.
+///   Δ3 doWork: `afKing.doWork()` -> `game.mintFlip()`.
 ///   Δ4 autoBuy: `afKing.autoBuy(N)` -> the per-sub buy folded into `advanceGame()`'s STAGE; driven via
 ///      a new-day advanceGame + the `_settleGame` VRF drain.
 ///   Δ5 views/cancel: `afKing.subscriptionOf(x).field` -> read `_subOf[x]` via vm.load (RE-DERIVED
@@ -86,7 +86,7 @@ contract AfKingSubscription is DeployProtocol {
     /// @notice AFSUB-03 (REFRESH branch): at the crossing (`currentLevel > sub.validThroughLevel`) a
     ///         subscriber whose `_passHorizonOf(player)` STILL COVERS `currentLevel` is REFRESHED in
     ///         place — SubscriptionExtendedFree emitted, `validThroughLevel` stamped to `h`,
-    ///         dailyQuantity preserved, NO eviction, NO BURNIE burn. Deity = sentinel horizon
+    ///         dailyQuantity preserved, NO eviction, NO FLIP burn. Deity = sentinel horizon
     ///         (`type(uint24).max`), which always covers the current level.
     function testCrossingPassHolderRefreshedNotEvicted() public {
         address pass = makeAddr("pass_holder");
@@ -95,7 +95,7 @@ contract AfKingSubscription is DeployProtocol {
         _subscribeLootboxMode(pass, 1);
         _forceCrossingDue(pass); // validThroughLevel = 0 -> currentLevel > 0 -> crossing fires
 
-        uint256 burnieBefore = coin.balanceOf(pass);
+        uint256 flipBefore = coin.balanceOf(pass);
 
         vm.recordLogs();
         _runStageOnce();
@@ -104,8 +104,8 @@ contract AfKingSubscription is DeployProtocol {
         assertEq(_countEvent(address(game), EXTENDED_FREE_SIG), 1, "pass-holder refreshed at crossing");
         assertEq(_countEventFor(address(game), SUB_EXPIRED_SIG, pass), 0, "pass-holder NOT evicted");
 
-        // NO BURNIE involvement: AFSUB-01 removed the BURNIE-prepay window entirely.
-        assertEq(coin.balanceOf(pass), burnieBefore, "no BURNIE burned at crossing (AFSUB-01)");
+        // NO FLIP involvement: AFSUB-01 removed the FLIP-prepay window entirely.
+        assertEq(coin.balanceOf(pass), flipBefore, "no FLIP burned at crossing (AFSUB-01)");
 
         // Refresh stamped a horizon strictly past the current level (deity = uint24.max).
         assertGt(
@@ -137,7 +137,7 @@ contract AfKingSubscription is DeployProtocol {
         _subscribeLootboxMode(nopass, 1);
         _forceCrossingDue(nopass);
 
-        uint256 burnieBefore = coin.balanceOf(nopass);
+        uint256 flipBefore = coin.balanceOf(nopass);
 
         vm.recordLogs();
         _runStageOnce(); // MUST NOT revert despite the eviction
@@ -147,43 +147,43 @@ contract AfKingSubscription is DeployProtocol {
         assertEq(_dailyQtyOf(nopass), 0, "tombstoned (dailyQuantity zeroed)");
         assertEq(_subscriberIndexOf(nopass), 0, "removed from iterable set (swap-pop)");
 
-        assertEq(coin.balanceOf(nopass), burnieBefore, "no BURNIE burned on eviction (AFSUB-01)");
+        assertEq(coin.balanceOf(nopass), flipBefore, "no FLIP burned on eviction (AFSUB-01)");
     }
 
     // =========================================================================
-    // Task 3b — AFSUB-01: no BURNIE prepay window at subscribe; horizon-encoded only
+    // Task 3b — AFSUB-01: no FLIP prepay window at subscribe; horizon-encoded only
     // =========================================================================
 
-    /// @notice AFSUB-01: subscribe NEVER charges BURNIE. A no-pass subscriber's BURNIE balance is
+    /// @notice AFSUB-01: subscribe NEVER charges FLIP. A no-pass subscriber's FLIP balance is
     ///         UNCHANGED across subscribe; their `validThroughLevel` is encoded as `_passHorizonOf`
     ///         (zero for a no-pass subscriber).
-    function testSubscribeNoBurnieChargeRegardlessOfPass() public {
+    function testSubscribeNoFlipChargeRegardlessOfPass() public {
         // 357-00d HEAD'''' supersession: arm (a) relied on the pre-HEAD'''' level-0 D-11 vacuity ("a no-pass
         // sub clears D-11 (validThroughLevel 0 < level 0 is false)") to subscribe a PASSLESS sub at level 0.
         // The USER-caught HEAD'''' fix (77d8bc88) now rejects a zero horizon at level 0 too, so the passless
-        // subscribe reverts NoPass(). The AFSUB-01 no-BURNIE-charge successor is re-proven GREEN by
+        // subscribe reverts NoPass(). The AFSUB-01 no-FLIP-charge successor is re-proven GREEN by
         // V56SubHardening::testD11RealPassSubscribesAtLevelZero / testD11DeityHolderSubscribesAtLevelZero
-        // (a real-pass/deity subscribe at level 0 charges no BURNIE). Skip-with-reason (§3b/§8c discipline).
+        // (a real-pass/deity subscribe at level 0 charges no FLIP). Skip-with-reason (§3b/§8c discipline).
         vm.skip(true, "357-00d: HEAD'''' D-11 rejects passless-at-level-0 subscribe; AFSUB-01 re-proven by V56SubHardening");
-        // (a) no-pass subscriber: zero BURNIE → subscribe charges no BURNIE; balance unchanged. At level 0 a
+        // (a) no-pass subscriber: zero FLIP → subscribe charges no FLIP; balance unchanged. At level 0 a
         // no-pass sub clears D-11 (validThroughLevel 0 < level 0 is false); funded (the grounding deposit)
-        // clears D-12. AFSUB-01 (no BURNIE charge at subscribe) is the property under test.
+        // clears D-12. AFSUB-01 (no FLIP charge at subscribe) is the property under test.
         address nopass = makeAddr("subscribe_nopass");
-        _fundPool(nopass, 1 ether); // grounds the NEW-run cover-buy (D-12); the deposit is ETH, not BURNIE
+        _fundPool(nopass, 1 ether); // grounds the NEW-run cover-buy (D-12); the deposit is ETH, not FLIP
         uint256 nopassBefore = coin.balanceOf(nopass); // == 0
         vm.prank(nopass);
-        game.subscribe(address(0), false, true, 1, 0, address(0)); // MUST NOT revert; charges no BURNIE
-        assertEq(coin.balanceOf(nopass), nopassBefore, "AFSUB-01: no BURNIE burned at subscribe (no-pass)");
+        game.subscribe(address(0), false, true, 1, 0, address(0)); // MUST NOT revert; charges no FLIP
+        assertEq(coin.balanceOf(nopass), nopassBefore, "AFSUB-01: no FLIP burned at subscribe (no-pass)");
         assertEq(_validThroughLevelOf(nopass), 0, "no-pass subscriber: validThroughLevel = 0");
 
-        // (b) pass-holder: ditto — deity holder also has zero BURNIE charge.
+        // (b) pass-holder: ditto — deity holder also has zero FLIP charge.
         address pass = makeAddr("subscribe_pass");
         _grantDeityPass(pass);
         _fundPool(pass, 1 ether); // grounds the NEW-run cover-buy (D-12)
         uint256 passBefore = coin.balanceOf(pass);
         vm.prank(pass);
         game.subscribe(address(0), false, true, 1, 0, address(0));
-        assertEq(coin.balanceOf(pass), passBefore, "AFSUB-01: no BURNIE burned at subscribe (pass-holder)");
+        assertEq(coin.balanceOf(pass), passBefore, "AFSUB-01: no FLIP burned at subscribe (pass-holder)");
         assertEq(
             _validThroughLevelOf(pass),
             uint32(type(uint24).max),
@@ -216,14 +216,14 @@ contract AfKingSubscription is DeployProtocol {
     }
 
     // =========================================================================
-    // Task 3c — Single-creditFlip mintBurnie bounty (REW-02 / PLACE-02)
+    // Task 3c — Single-creditFlip mintFlip bounty (REW-02 / PLACE-02)
     // =========================================================================
 
     /// @notice REW-02 (PLACE-02 bounty folded into advance): the REWARDED entrypoint is the
-    ///         parameterless `mintBurnie()` router. A mintBurnie() whose advance leg runs the buy STAGE
+    ///         parameterless `mintFlip()` router. A mintFlip() whose advance leg runs the buy STAGE
     ///         emits AT MOST ONE creditFlip to the caller (never per-item) — the one-bounty-per-tx
     ///         property. (The advance leg pays `unit·2·mult`; a `mult==0` gameover advance pays none.)
-    function testMintBurnieEmitsAtMostOneBuyBounty() public {
+    function testMintFlipEmitsAtMostOneBuyBounty() public {
         address s1 = makeAddr("buy_s1");
         address s2 = makeAddr("buy_s2");
         _setupHealthyBuyingSub(s1);
@@ -231,15 +231,15 @@ contract AfKingSubscription is DeployProtocol {
 
         address keeper = makeAddr("bounty_keeper");
 
-        // mintBurnie routes ONE category (advance, here) and pays ONE bounty CEI-last. The advance leg
+        // mintFlip routes ONE category (advance, here) and pays ONE bounty CEI-last. The advance leg
         // runs the buy STAGE in-context. Assert at most one creditFlip emission to the caller.
         vm.recordLogs();
         vm.prank(keeper);
-        try game.mintBurnie() {} catch {} // may revert NoWork() if nothing is due — that is the no-bounty case
-        assertLe(_countCreditFlipTo(keeper), 1, "at most one bounty creditFlip per mintBurnie tx (REW-02)");
+        try game.mintFlip() {} catch {} // may revert NoWork() if nothing is due — that is the no-bounty case
+        assertLe(_countCreditFlipTo(keeper), 1, "at most one bounty creditFlip per mintFlip tx (REW-02)");
     }
 
-    /// @notice REW-02 tail: a standalone `autoOpen` is UNREWARDED — only mintBurnie() credits. An
+    /// @notice REW-02 tail: a standalone `autoOpen` is UNREWARDED — only mintFlip() credits. An
     ///         autoOpen with no openable boxes is a NO-OP that emits no creditFlip.
     function testAutoOpenIsUnrewardedNoOp() public {
         address keeper = makeAddr("autoopen_keeper");
@@ -304,7 +304,7 @@ contract AfKingSubscription is DeployProtocol {
         // grounded (D-12); the trust-the-sub revoke semantics are the property under test.
         _fundPool(s, 1 ether); // S funds the per-day ETH draw + grounds the subscribe cover-buy
         vm.prank(m);
-        game.subscribe(address(0), false, true, 1, 0, s); // source = S, no BURNIE charge (AFSUB-01)
+        game.subscribe(address(0), false, true, 1, 0, s); // source = S, no FLIP charge (AFSUB-01)
 
         assertEq(_fundingSourceOf(m), s, "M's sub funded by S");
         assertGt(_subscriberIndexOf(m), 0, "M's sub in the set");

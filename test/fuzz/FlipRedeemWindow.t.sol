@@ -3,23 +3,23 @@ pragma solidity ^0.8.26;
 
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 
-/// @title BurnieRedeemWindow -- regression suite for the BURNIE purchase-window gate in
-///        DegenerusGameMintModule._redeemBurnieFor.
+/// @title FlipRedeemWindow -- regression suite for the FLIP purchase-window gate in
+///        DegenerusGameMintModule._redeemFlipFor.
 ///
-/// @notice BURNIE redemptions are blocked during an open/stalled purchase phase and allowed only
+/// @notice FLIP redemptions are blocked during an open/stalled purchase phase and allowed only
 ///         once a jackpot is locked in or live, so bonus tickets and prize ETH accrue to real-ETH
 ///         buyers. The gate (MintModule:1102-1109): if the window is not open, revert when
 ///         rngLockedFlag is set OR (purchase phase AND nextPrizePool < levelPrizePool[level]);
-///         otherwise latch burnieWindowOpen=true. Once latched the gate is bypassed; the window is
+///         otherwise latch ticketRedemptionOpen=true. Once latched the gate is bypassed; the window is
 ///         closed again at the final jackpot day's RNG request (verified separately in the advance
 ///         chain). These tests pin the player-facing open/close truth table by forcing the slot-0
 ///         flags + prize pool directly.
-contract BurnieRedeemWindowTest is DeployProtocol {
+contract FlipRedeemWindowTest is DeployProtocol {
     // Slot 0 byte offsets (confirmed via `forge inspect DegenerusGame storageLayout`).
     uint256 private constant SLOT_0 = 0;
     uint256 private constant JACKPOT_PHASE_SHIFT = 120; // byte 15: jackpotPhaseFlag
     uint256 private constant RNG_LOCKED_SHIFT = 152; // byte 19: rngLockedFlag
-    uint256 private constant WINDOW_OPEN_SHIFT = 240; // byte 30: burnieWindowOpen
+    uint256 private constant WINDOW_OPEN_SHIFT = 240; // byte 30: ticketRedemptionOpen
     uint256 private constant PRIZE_POOLS_PACKED_SLOT = 2; // [future:128][next:128]
 
     // levelPrizePool[0] = BOOTSTRAP_PRIZE_POOL (DegenerusGame constructor).
@@ -33,17 +33,17 @@ contract BurnieRedeemWindowTest is DeployProtocol {
     function setUp() public {
         _deployProtocol();
         vm.warp(block.timestamp + 1 days);
-        buyer = makeAddr("burnie_buyer");
+        buyer = makeAddr("flip_buyer");
         vm.deal(address(game), 5_000 ether);
-        // Fund enough BURNIE that the in-path burn (the only cost on the redeem leg) never binds.
-        _fundBurnie(buyer, 1_000_000 ether);
+        // Fund enough FLIP that the in-path burn (the only cost on the redeem leg) never binds.
+        _fundFlip(buyer, 1_000_000 ether);
     }
 
     // ---------------------------------------------------------------------
     // Helpers
     // ---------------------------------------------------------------------
 
-    function _fundBurnie(address who, uint256 amount) internal {
+    function _fundFlip(address who, uint256 amount) internal {
         vm.prank(address(game));
         coin.mintForGame(who, amount);
     }
@@ -76,7 +76,7 @@ contract BurnieRedeemWindowTest is DeployProtocol {
         vm.prank(buyer);
         (ok, ) = address(game).call(
             abi.encodeWithSignature(
-                "redeemBurnie(address,uint256)",
+                "redeemFlip(address,uint256)",
                 buyer,
                 REDEEM_QTY
             )

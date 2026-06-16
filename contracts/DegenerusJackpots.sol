@@ -34,7 +34,7 @@ interface IDegenerusCoinJackpotView {
 /// @title DegenerusJackpots
 /// @author Burnie Degenerus
 /// @notice Standalone contract managing the BAF jackpot system.
-/// @dev BurnieCoinflip forwards flips into this contract; game calls to resolve jackpots.
+/// @dev Coinflip forwards flips into this contract; game calls to resolve jackpots.
 ///      - BAF: Leaderboard-based distribution to top coinflip bettors
 ///      - Decimator: handled in the game decimator module
 /// @custom:security-contact burnie@degener.us
@@ -174,7 +174,7 @@ contract DegenerusJackpots is IDegenerusJackpots {
     /*+======================================================================+
       |                      COINFLIP CONTRACT HOOKS                         |
       +======================================================================+
-      |  Called by BurnieCoinflip to record coinflip activity.               |
+      |  Called by Coinflip to record coinflip activity.               |
       |  These hooks build state used by jackpot resolution.                 |
       +======================================================================+*/
 
@@ -488,7 +488,7 @@ contract DegenerusJackpots is IDegenerusJackpots {
 
     /// @notice Mark a BAF bracket as skipped because the daily flip lost.
     /// @dev Bumps lastBafResolvedDay so pre-skip winning-flip credit is filtered
-    ///      out of future claims (BurnieCoinflip gates winningBafCredit on
+    ///      out of future claims (Coinflip gates winningBafCredit on
     ///      cursor > lastBafResolvedDay). Leaderboard state for lvl is left
     ///      as-is — no new writes ever target a past bracket, so clearing
     ///      would only burn gas.

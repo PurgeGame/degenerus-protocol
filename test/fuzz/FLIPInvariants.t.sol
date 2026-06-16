@@ -3,12 +3,12 @@ pragma solidity ^0.8.26;
 
 import "forge-std/Test.sol";
 
-/// @title BurnieCoin Supply Invariant Fuzz Tests
+/// @title FLIP Supply Invariant Fuzz Tests
 /// @notice Verifies core ERC20 supply invariants under random operations.
-/// @dev Uses a minimal standalone token that mirrors BurnieCoin's supply accounting.
-///      We can't deploy the real BurnieCoin because ContractAddresses are compile-time
+/// @dev Uses a minimal standalone token that mirrors FLIP's supply accounting.
+///      We can't deploy the real FLIP because ContractAddresses are compile-time
 ///      constants (address(0) in source). These tests validate the MATH is sound.
-contract MockBurnieSupply {
+contract MockFlipSupply {
     struct Supply {
         uint128 totalSupply;
         uint128 vaultAllowance;
@@ -100,14 +100,14 @@ contract MockBurnieSupply {
     }
 }
 
-contract BurnieCoinInvariantsTest is Test {
-    MockBurnieSupply token;
+contract FlipCoinInvariantsTest is Test {
+    MockFlipSupply token;
     address alice = address(0xA11CE);
     address bob = address(0xB0B);
     uint128 constant INITIAL_VAULT = uint128(2_000_000 ether);
 
     function setUp() public {
-        token = new MockBurnieSupply(INITIAL_VAULT);
+        token = new MockFlipSupply(INITIAL_VAULT);
     }
 
     /// @notice supplyIncUncirculated == totalSupply + vaultAllowance always holds
@@ -179,7 +179,7 @@ contract BurnieCoinInvariantsTest is Test {
         vm.assume(extra > 0 && extra <= type(uint128).max - INITIAL_VAULT);
         uint256 amount = uint256(INITIAL_VAULT) + uint256(extra);
 
-        vm.expectRevert(MockBurnieSupply.Insufficient.selector);
+        vm.expectRevert(MockFlipSupply.Insufficient.selector);
         token.vaultMintTo(alice, amount);
     }
 

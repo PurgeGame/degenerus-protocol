@@ -2,14 +2,14 @@
 pragma solidity ^0.8.26;
 
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
-import {BurnieCoinflip} from "../../contracts/BurnieCoinflip.sol";
+import {Coinflip} from "../../contracts/Coinflip.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {IDegenerusGame} from "../../contracts/interfaces/IDegenerusGame.sol";
 
 /// @title CoinflipCarryClaim — partial carry withdrawal while staying on auto-rebuy
 /// @notice Proves claimCoinflipCarry:
 ///         1. PARTIAL  — settles resolved days first (win rolls into carry with the
-///                       recycle bonus), withdraws exactly `amount` as minted BURNIE,
+///                       recycle bonus), withdraws exactly `amount` as minted FLIP,
 ///                       and the remainder keeps riding the next flip.
 ///         2. CAP      — `amount` above the carry claims the whole carry and leaves
 ///                       auto-rebuy ENABLED (it is a withdrawal, not an exit).
@@ -98,7 +98,7 @@ contract CoinflipCarryClaim is DeployProtocol {
         uint256 claimed = coinflip.claimCoinflipCarry(address(0), take);
 
         assertEq(claimed, take, "claims exactly the requested amount");
-        assertEq(coin.balanceOf(player) - balBefore, take, "claimed BURNIE minted to wallet");
+        assertEq(coin.balanceOf(player) - balBefore, take, "claimed FLIP minted to wallet");
         (bool enabled, , uint256 carry, ) = coinflip.coinflipAutoRebuyInfo(player);
         assertTrue(enabled, "still on auto-rebuy");
         assertEq(carry, expectedCarry - take, "remainder stays as carry");
@@ -142,7 +142,7 @@ contract CoinflipCarryClaim is DeployProtocol {
         assertEq(claimed, 0, "the loss is settled first - nothing to extract around it");
         (, , uint256 carry, ) = coinflip.coinflipAutoRebuyInfo(player);
         assertEq(carry, 0, "carry wiped by the settled loss");
-        assertEq(coin.balanceOf(player), 0, "no BURNIE escaped the loss");
+        assertEq(coin.balanceOf(player), 0, "no FLIP escaped the loss");
     }
 
     function test_TakeProfitBanksReservedChunksAndCarriesRemainder() public {
@@ -205,14 +205,14 @@ contract CoinflipCarryClaim is DeployProtocol {
             abi.encode(true)
         );
         vm.prank(player);
-        vm.expectRevert(BurnieCoinflip.RngLocked.selector);
+        vm.expectRevert(Coinflip.RngLocked.selector);
         coinflip.claimCoinflipCarry(address(0), 1 ether);
         vm.clearMockedCalls();
     }
 
     function test_RevertsWithoutAutoRebuy() public {
         vm.prank(player);
-        vm.expectRevert(BurnieCoinflip.AutoRebuyNotEnabled.selector);
+        vm.expectRevert(Coinflip.AutoRebuyNotEnabled.selector);
         coinflip.claimCoinflipCarry(address(0), 1 ether);
     }
 }

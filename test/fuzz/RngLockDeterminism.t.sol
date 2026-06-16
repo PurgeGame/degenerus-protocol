@@ -14,7 +14,7 @@ pragma solidity ^0.8.26;
 //   02-JACKPOT      : sec2 PayDailyJackpotCoinAndTickets + sec4 RunTerminalDecimatorJackpot
 //   03-LOOTBOX      : sec6 ResolveRedemptionLootbox + sec7 ResolveLootboxCommon
 //                     + sec8 DegeneretteLootboxDirect + sec13 DecimatorAwardLootbox
-//   04-MIXED        : sec10 MintTraitGeneration + sec11 BurnieCoinflipResolve
+//   04-MIXED        : sec10 MintTraitGeneration + sec11 FlipCoinflipResolve
 //                     + sec12 StakedStonkRedemption + sec5 GameOverRngSubstitution
 //                     + sec9 RetryLootboxRng (opposite-direction)
 //   05-EDGECASE     : 5 edge-case functions + _perturbAdminOnly helper
@@ -153,10 +153,10 @@ contract RngLockDeterminism is DeployProtocol {
     // ────────────────────────────────────────────────────────────────────
 
     // 9 legacy v43 classes (0..8) + 2 v55 game-resident router classes (9..10) + 1 v50
-    // whale-pass-claim class (11). [v55 Δ3: doWork→mintBurnie; the standalone autoBuy
+    // whale-pass-claim class (11). [v55 Δ3: doWork→mintFlip; the standalone autoBuy
     // escape has no successor (the buy folded into advanceGame's STAGE), reframed to the
     // box-open no-op.]
-    // cls 9 = game.mintBurnie() — the v55 unified router (the Δ3 doWork successor) fired
+    // cls 9 = game.mintFlip() — the v55 unified router (the Δ3 doWork successor) fired
     //   same-tx inside the locked window (RD-1..5): the advance-consume `cw +=
     //   totalFlipReversals` (DegenerusGameAdvanceModule.sol:257) must read only FROZEN state.
     // cls 10 = game.openBoxes(0) — the v55 box-open clear (the standalone afKing.autoBuy
@@ -231,15 +231,15 @@ contract RngLockDeterminism is DeployProtocol {
             vm.warp(block.timestamp + 6 hours + 1);
             try game.retryLootboxRng() {} catch { return; }
         } else if (cls == 9) {
-            // v55 game-resident router (Δ3 doWork→mintBurnie): fire the one-category router
-            // same-tx inside the locked window. mintBurnie routes advance → afking-box open by
+            // v55 game-resident router (Δ3 doWork→mintFlip): fire the one-category router
+            // same-tx inside the locked window. mintFlip routes advance → afking-box open by
             // priority; every leg targets a pinned ContractAddresses.* (GAME self-call /
             // LootboxModule delegatecall / COINFLIP) and the advance-consume reads only FROZEN
             // state. May revert NoWork() depending on the routed leg — the try/catch absorbs
             // that (the freeze proof is the byte-identity of the consumed word, not whether
-            // mintBurnie found work).
+            // mintFlip found work).
             vm.prank(actor);
-            try game.mintBurnie() {} catch { return; }
+            try game.mintFlip() {} catch { return; }
         } else if (cls == 10) {
             // v55 reframe (the standalone afKing.autoBuy escape has NO successor — the per-sub
             // buy folded into advanceGame's required-path STAGE, 349-05). The faithful v55
@@ -338,12 +338,12 @@ contract RngLockDeterminism is DeployProtocol {
         if (action == 7) {
             uint256 tickets = bound(nonce, 1, 2);
             vm.prank(vaultOwner);
-            try vault.gamePurchaseTicketsBurnie(tickets) {} catch { return; }
+            try vault.gamePurchaseTicketsFlip(tickets) {} catch { return; }
             return;
         }
         if (action == 8) {
-            // BURNIE-lootbox surface removed in v47 (gamePurchaseBurnieLootbox / openBurnieLootBox
-            // deleted — terminal-paradox: unguardable BURNIE→future-ticket path). No-op slot.
+            // FLIP-lootbox surface removed in v47 (gamePurchaseFlipLootbox / openFlipLootBox
+            // deleted — terminal-paradox: unguardable FLIP→future-ticket path). No-op slot.
             return;
         }
         if (action == 9) {
@@ -816,7 +816,7 @@ contract RngLockDeterminism is DeployProtocol {
 
         uint256 storedVrfWord = _lootboxRngWord(indexBefore);
         (uint256 amountAtIndex, ) = game.lootboxStatus(buyer, indexBefore);
-        uint256 buyerBurnieBalance = coin.balanceOf(buyer);
+        uint256 buyerFlipBalance = coin.balanceOf(buyer);
         uint256 buyerWwxrpBalance = wwxrp.balanceOf(buyer);
         uint256 buyerClaimable = game.claimableWinningsOf(buyer);
 
@@ -824,7 +824,7 @@ contract RngLockDeterminism is DeployProtocol {
             abi.encode(
                 storedVrfWord,
                 amountAtIndex,
-                buyerBurnieBalance,
+                buyerFlipBalance,
                 buyerWwxrpBalance,
                 buyerClaimable
             )
@@ -840,7 +840,7 @@ contract RngLockDeterminism is DeployProtocol {
 
         uint256 baselineStoredVrfWord = _lootboxRngWord(indexBefore);
         (uint256 baselineAmount, ) = game.lootboxStatus(buyer, indexBefore);
-        uint256 baselineBurnie = coin.balanceOf(buyer);
+        uint256 baselineFlip = coin.balanceOf(buyer);
         uint256 baselineWwxrp = wwxrp.balanceOf(buyer);
         uint256 baselineClaimable = game.claimableWinningsOf(buyer);
 
@@ -848,7 +848,7 @@ contract RngLockDeterminism is DeployProtocol {
             abi.encode(
                 baselineStoredVrfWord,
                 baselineAmount,
-                baselineBurnie,
+                baselineFlip,
                 baselineWwxrp,
                 baselineClaimable
             )
@@ -922,7 +922,7 @@ contract RngLockDeterminism is DeployProtocol {
         );
 
         uint256 buyerEthPre = buyer.balance;
-        uint256 buyerBurniePre = coin.balanceOf(buyer);
+        uint256 buyerFlipPre = coin.balanceOf(buyer);
         uint256 buyerWwxrpPre = wwxrp.balanceOf(buyer);
         uint256 buyerDgnrsPre = dgnrs.balanceOf(buyer);
         uint256 buyerClaimablePre = game.claimableWinningsOf(buyer);
@@ -939,7 +939,7 @@ contract RngLockDeterminism is DeployProtocol {
                 amountAfterOpen,
                 presaleAfterOpen,
                 buyer.balance - buyerEthPre,
-                coin.balanceOf(buyer) - buyerBurniePre,
+                coin.balanceOf(buyer) - buyerFlipPre,
                 wwxrp.balanceOf(buyer) - buyerWwxrpPre,
                 dgnrs.balanceOf(buyer) - buyerDgnrsPre,
                 game.claimableWinningsOf(buyer) - buyerClaimablePre
@@ -958,7 +958,7 @@ contract RngLockDeterminism is DeployProtocol {
         uint256 baselineStoredRngWord = _lootboxRngWord(purchaseIndex);
 
         uint256 buyerEthPreB = buyer.balance;
-        uint256 buyerBurniePreB = coin.balanceOf(buyer);
+        uint256 buyerFlipPreB = coin.balanceOf(buyer);
         uint256 buyerWwxrpPreB = wwxrp.balanceOf(buyer);
         uint256 buyerDgnrsPreB = dgnrs.balanceOf(buyer);
         uint256 buyerClaimablePreB = game.claimableWinningsOf(buyer);
@@ -975,7 +975,7 @@ contract RngLockDeterminism is DeployProtocol {
                 baselineAmount,
                 baselinePresale,
                 buyer.balance - buyerEthPreB,
-                coin.balanceOf(buyer) - buyerBurniePreB,
+                coin.balanceOf(buyer) - buyerFlipPreB,
                 wwxrp.balanceOf(buyer) - buyerWwxrpPreB,
                 dgnrs.balanceOf(buyer) - buyerDgnrsPreB,
                 game.claimableWinningsOf(buyer) - buyerClaimablePreB
@@ -1029,7 +1029,7 @@ contract RngLockDeterminism is DeployProtocol {
         );
 
         uint256 playerEthPre = player.balance;
-        uint256 playerBurniePre = coin.balanceOf(player);
+        uint256 playerFlipPre = coin.balanceOf(player);
         uint256 playerWwxrpPre = wwxrp.balanceOf(player);
         uint256 playerDgnrsPre = dgnrs.balanceOf(player);
         uint256 playerClaimablePre = game.claimableWinningsOf(player);
@@ -1039,7 +1039,7 @@ contract RngLockDeterminism is DeployProtocol {
         bytes32 perturbedOutputs = keccak256(
             abi.encode(
                 player.balance - playerEthPre,
-                coin.balanceOf(player) - playerBurniePre,
+                coin.balanceOf(player) - playerFlipPre,
                 wwxrp.balanceOf(player) - playerWwxrpPre,
                 dgnrs.balanceOf(player) - playerDgnrsPre,
                 game.claimableWinningsOf(player) - playerClaimablePre
@@ -1051,7 +1051,7 @@ contract RngLockDeterminism is DeployProtocol {
         _deliverMockVrf(reqId, vrfWord);
 
         uint256 playerEthPreB = player.balance;
-        uint256 playerBurniePreB = coin.balanceOf(player);
+        uint256 playerFlipPreB = coin.balanceOf(player);
         uint256 playerWwxrpPreB = wwxrp.balanceOf(player);
         uint256 playerDgnrsPreB = dgnrs.balanceOf(player);
         uint256 playerClaimablePreB = game.claimableWinningsOf(player);
@@ -1061,7 +1061,7 @@ contract RngLockDeterminism is DeployProtocol {
         bytes32 baselineOutputs = keccak256(
             abi.encode(
                 player.balance - playerEthPreB,
-                coin.balanceOf(player) - playerBurniePreB,
+                coin.balanceOf(player) - playerFlipPreB,
                 wwxrp.balanceOf(player) - playerWwxrpPreB,
                 dgnrs.balanceOf(player) - playerDgnrsPreB,
                 game.claimableWinningsOf(player) - playerClaimablePreB
@@ -1109,7 +1109,7 @@ contract RngLockDeterminism is DeployProtocol {
         );
 
         uint256 playerEthPre = player.balance;
-        uint256 playerBurniePre = coin.balanceOf(player);
+        uint256 playerFlipPre = coin.balanceOf(player);
         uint256 playerWwxrpPre = wwxrp.balanceOf(player);
         uint256 playerDgnrsPre = dgnrs.balanceOf(player);
         uint256 playerClaimablePre = game.claimableWinningsOf(player);
@@ -1121,7 +1121,7 @@ contract RngLockDeterminism is DeployProtocol {
             abi.encode(
                 _readDecClaimRoundsRngWord(claimLevel),
                 player.balance - playerEthPre,
-                coin.balanceOf(player) - playerBurniePre,
+                coin.balanceOf(player) - playerFlipPre,
                 wwxrp.balanceOf(player) - playerWwxrpPre,
                 dgnrs.balanceOf(player) - playerDgnrsPre,
                 game.claimableWinningsOf(player) - playerClaimablePre
@@ -1135,7 +1135,7 @@ contract RngLockDeterminism is DeployProtocol {
         );
 
         uint256 playerEthPreB = player.balance;
-        uint256 playerBurniePreB = coin.balanceOf(player);
+        uint256 playerFlipPreB = coin.balanceOf(player);
         uint256 playerWwxrpPreB = wwxrp.balanceOf(player);
         uint256 playerDgnrsPreB = dgnrs.balanceOf(player);
         uint256 playerClaimablePreB = game.claimableWinningsOf(player);
@@ -1147,7 +1147,7 @@ contract RngLockDeterminism is DeployProtocol {
             abi.encode(
                 _readDecClaimRoundsRngWord(claimLevel),
                 player.balance - playerEthPreB,
-                coin.balanceOf(player) - playerBurniePreB,
+                coin.balanceOf(player) - playerFlipPreB,
                 wwxrp.balanceOf(player) - playerWwxrpPreB,
                 dgnrs.balanceOf(player) - playerDgnrsPreB,
                 game.claimableWinningsOf(player) - playerClaimablePreB
@@ -1251,11 +1251,11 @@ contract RngLockDeterminism is DeployProtocol {
     }
 
     // ════════════════════════════════════════════════════════════════════
-    // sec11 -- BurnieCoinflipResolve (RNGLOCK-CATALOG sec11)
+    // sec11 -- FlipCoinflipResolve (RNGLOCK-CATALOG sec11)
     // From 301-04 MIXED-CLUSTER contribution.
     // ════════════════════════════════════════════════════════════════════
 
-    function testFuzz_RngLockDeterminism_BurnieCoinflipResolve(
+    function testFuzz_RngLockDeterminism_FlipCoinflipResolve(
         uint256 vrfWord,
         uint256 perturbSeed
     ) public {
@@ -1278,11 +1278,11 @@ contract RngLockDeterminism is DeployProtocol {
 
         game.advanceGame();
         uint256 reqId = mockVRF.lastRequestId();
-        assertTrue(game.rngLocked(), "BurnieCoinflipResolve: rngLock must engage");
-        assertTrue(reqId != 0, "BurnieCoinflipResolve: VRF request must be pending");
+        assertTrue(game.rngLocked(), "FlipCoinflipResolve: rngLock must engage");
+        assertTrue(reqId != 0, "FlipCoinflipResolve: VRF request must be pending");
 
         _perturb(perturbSeed);
-        assertTrue(game.rngLocked(), "BurnieCoinflipResolve: lock must not lift under perturbation");
+        assertTrue(game.rngLocked(), "FlipCoinflipResolve: lock must not lift under perturbation");
 
         _deliverMockVrf(reqId, vrfWord);
 
@@ -1297,7 +1297,7 @@ contract RngLockDeterminism is DeployProtocol {
         _assertVrfOutputByteIdentity(
             perturbedOutputs,
             baselineOutputs,
-            "BurnieCoinflipResolve: VRF-derived coinflip outputs must be byte-identical under mid-window perturbation (RNGLOCK-CATALOG.md sec11)"
+            "FlipCoinflipResolve: VRF-derived coinflip outputs must be byte-identical under mid-window perturbation (RNGLOCK-CATALOG.md sec11)"
         );
     }
 
@@ -1344,7 +1344,7 @@ contract RngLockDeterminism is DeployProtocol {
         }
 
         // At c4d48008 a game purchase routes proceeds to the staking pools, not a direct
-        // sDGNRS mint to the buyer — so seed the holder's sDGNRS balance (StakedDegenerusStonk
+        // sDGNRS mint to the buyer — so seed the holder's sDGNRS balance (sDGNRS
         // balanceOf @ slot 1) and bump totalSupply (slot 0) to keep the supply identity intact,
         // so the redemption burn below is reachable for the fuzzer (avoids the vm.assume(false)
         // exhaustion the empty-balance buy used to cause). This exercises the SAME per-day-keyed
@@ -1857,7 +1857,7 @@ contract RngLockDeterminism is DeployProtocol {
     // _finalizeLootboxRng(cw)` (DegenerusGameAdvanceModule.sol:254-259) reads
     // `totalFlipReversals` INSIDE the daily drain. ADV-04 / v45-vrf-freeze-invariant
     // require that read to be FROZEN between the VRF request and the consume — even
-    // when the v55 unified router (game.mintBurnie, the Δ3 doWork successor) or the box-open
+    // when the v55 unified router (game.mintFlip, the Δ3 doWork successor) or the box-open
     // clear (game.autoOpen, the standalone-autoBuy-escape successor) fires same-tx inside the
     // locked window (RD-1..5).
     //
@@ -1883,9 +1883,9 @@ contract RngLockDeterminism is DeployProtocol {
         vm.store(address(game), slot, bytes32(w & ~uint256(type(uint64).max)));
     }
 
-    /// @dev Mint BURNIE to `who` via the GAME-gated mintForGame (the project idiom,
+    /// @dev Mint FLIP to `who` via the GAME-gated mintForGame (the project idiom,
     ///      AfKingConcurrency.t.sol:761) so they can pay the reverseFlip nudge cost.
-    function _fundBurnie(address who, uint256 amount) internal {
+    function _fundFlip(address who, uint256 amount) internal {
         if (amount == 0) return;
         vm.prank(ContractAddresses.GAME);
         coin.mintForGame(who, amount);
@@ -1922,7 +1922,7 @@ contract RngLockDeterminism is DeployProtocol {
 
         // Move totalFlipReversals nonzero PRE-lock (reverseFlip is RngLocked-gated). 1-3 nudges.
         uint256 nudges = 1 + (seed % 3);
-        _fundBurnie(buyer, 100_000 ether); // ample BURNIE for the compounding nudge cost
+        _fundFlip(buyer, 100_000 ether); // ample FLIP for the compounding nudge cost
         for (uint256 n = 0; n < nudges; n++) {
             vm.prank(buyer);
             try game.reverseFlip() {} catch { break; }
@@ -2078,7 +2078,7 @@ contract RngLockDeterminism is DeployProtocol {
         // a zero-reversals control run would yield the same word as a nudged run, making the
         // byte-identity oracle vacuous. The nudge here is the same shape as the AutoBuy template.
         uint256 nudges = 1 + (seed % 3);
-        _fundBurnie(buyer, 100_000 ether); // ample BURNIE for the compounding nudge cost
+        _fundFlip(buyer, 100_000 ether); // ample FLIP for the compounding nudge cost
         for (uint256 n = 0; n < nudges; n++) {
             vm.prank(buyer);
             try game.reverseFlip() {} catch { break; }
@@ -2208,14 +2208,14 @@ contract RngLockDeterminism is DeployProtocol {
         uint256 opened = game.openBoxes(100);
         assertEq(opened, 0, "autoOpen-noop: autoOpen must return 0 during rngLock");
 
-        // The v55 unified router mintBurnie() (the ONLY afking-open entry — the standalone afking
+        // The v55 unified router mintFlip() (the ONLY afking-open entry — the standalone afking
         // autoOpen selector collides with the human autoOpen(uint256) so it is NOT re-exposed on the
         // Game) is likewise safe during lock: its open leg no-ops via the `rngLockedFlag` entry-gate
         // (_autoOpen, GameAfkingModule.sol:941), and a NoWork() on an empty router is the expected
         // clean signal — never a freeze-aborting revert.
         address keeperCaller = makeAddr("tst01-autoopen-keeper");
         vm.prank(keeperCaller);
-        try game.mintBurnie() {} catch {} // must not abort the lock
+        try game.mintFlip() {} catch {} // must not abort the lock
     }
 
     /// @dev Read the lootboxEth amount sub-field (bits [0:128]) for [index][who] — the box-owed
@@ -2266,7 +2266,7 @@ contract RngLockDeterminism is DeployProtocol {
         assertFalse(game.boxesPending(), "no-maroon: boxesPending() false during lock (RD-3)");
         assertEq(game.openBoxes(100), 0, "no-maroon: zero boxes open during lock (RD-5 no-op)");
         vm.prank(keeper);
-        try game.mintBurnie() {} catch {} // v55 unified router: must not abort the lock (afking open no-ops via the entry-gate)
+        try game.mintFlip() {} catch {} // v55 unified router: must not abort the lock (afking open no-ops via the entry-gate)
         assertGt(
             _lootboxEthBase(boxIndex, boxOwner), 0,
             "no-maroon: the queued box is NOT consumed by the lock (deferred, not dropped)"

@@ -2,24 +2,24 @@
 pragma solidity ^0.8.26;
 
 import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
-import {StakedDegenerusStonk} from "../../contracts/StakedDegenerusStonk.sol";
+import {sDGNRS} from "../../contracts/sDGNRS.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 
-/// @notice Local mirror of the coinflip player surface for vm.mockCall selectors. The submit BURNIE
-///         leg (the settled backing read redeemableCoinBacking and the backing withdraw
-///         withdrawRedeemedBurnie) is mocked to no-ops so the focus stays on the ETH/stETH reserve
-///         identity; with redeemableCoinBacking forced to 0 the escrowed slice is 0, so the
-///         claim-time BURNIE leg is skipped entirely.
-interface IBurnieCoinflipPlayerMock {
+/// @notice Local mirror of the coinflip player surface for vm.mockCall selectors. The submit FLIP
+///         leg (the settled backing read redeemableFlipBacking and the backing withdraw
+///         withdrawRedeemedFlip) is mocked to no-ops so the focus stays on the ETH/stETH reserve
+///         identity; with redeemableFlipBacking forced to 0 the escrowed slice is 0, so the
+///         claim-time FLIP leg is skipped entirely.
+interface IFlipCoinflipPlayerMock {
     function previewClaimCoinflips(address player) external view returns (uint256 mintable);
-    function redeemableCoinBacking() external returns (uint256 backing);
-    function withdrawRedeemedBurnie(uint256 base) external;
+    function redeemableFlipBacking() external returns (uint256 backing);
+    function withdrawRedeemedFlip(uint256 base) external;
 }
 
 /// @title V62RedemptionReentrancy -- regression for finding V62-03 (verifies the layered FIX).
 ///        The vuln description below is retained as context for what the fixes prevent.
 ///
-/// @notice V62-03 (adjudicated vs frozen c4d48008): StakedDegenerusStonk.sol has NO reentrancy
+/// @notice V62-03 (adjudicated vs frozen c4d48008): sDGNRS.sol has NO reentrancy
 ///         guard. `claimRedemption` decrements `pendingRedemptionEthValue -= totalRolledEth`
 ///         and deletes the per-(player,day) claim slot BEFORE the payout. The payout's
 ///         `_payEth(player, ethDirect)` MIXED branch (ethDirect > liquid ETH) originally sent
@@ -82,29 +82,29 @@ contract V62RedemptionReentrancy is DeployProtocol {
 
         // Fund the attacker contract with sDGNRS via the Reward pool (game is the authorized caller).
         vm.startPrank(address(game));
-        sdgnrs.transferFromPool(StakedDegenerusStonk.Pool.Reward, address(attacker), ATTACKER_FUNDING);
+        sdgnrs.transferFromPool(sDGNRS.Pool.Reward, address(attacker), ATTACKER_FUNDING);
         vm.stopPrank();
 
-        // Mock the coinflip surface so the submit BURNIE leg is a no-op, keeping the focus on the
-        // ETH/stETH reserve identity. redeemableCoinBacking returns 0 so the escrowed slice is 0 (the
-        // claim-time BURNIE leg is then skipped); withdrawRedeemedBurnie is a no-op belt-and-suspenders.
+        // Mock the coinflip surface so the submit FLIP leg is a no-op, keeping the focus on the
+        // ETH/stETH reserve identity. redeemableFlipBacking returns 0 so the escrowed slice is 0 (the
+        // claim-time FLIP leg is then skipped); withdrawRedeemedFlip is a no-op belt-and-suspenders.
         // The lootbox forward (game.resolveRedemptionLootbox) runs fully UNMOCKED: the module body
         // (auth, msg.value bound, stETH pull, pool credit, chunked materialization) executes for
         // real, so the claim's 50% lootbox half physically LEAVES sDGNRS exactly as in production
         // and the no-claimant-code / value-arrival assertions cover the end-to-end path.
         vm.mockCall(
             address(coinflip),
-            abi.encodeWithSelector(IBurnieCoinflipPlayerMock.previewClaimCoinflips.selector),
+            abi.encodeWithSelector(IFlipCoinflipPlayerMock.previewClaimCoinflips.selector),
             abi.encode(uint256(0))
         );
         vm.mockCall(
             address(coinflip),
-            abi.encodeWithSelector(IBurnieCoinflipPlayerMock.redeemableCoinBacking.selector),
+            abi.encodeWithSelector(IFlipCoinflipPlayerMock.redeemableFlipBacking.selector),
             abi.encode(uint256(0))
         );
         vm.mockCall(
             address(coinflip),
-            abi.encodeWithSelector(IBurnieCoinflipPlayerMock.withdrawRedeemedBurnie.selector),
+            abi.encodeWithSelector(IFlipCoinflipPlayerMock.withdrawRedeemedFlip.selector),
             abi.encode()
         );
     }
@@ -309,7 +309,7 @@ contract V62RedemptionReentrancy is DeployProtocol {
 /// @notice Attacker contract: holds sDGNRS, drives an outer gambling burn + claim, and re-enters
 ///         burn() inside its receive() hook (fired by the mixed _payEth ETH .call).
 contract Attacker {
-    StakedDegenerusStonk private immutable sdgnrs;
+    sDGNRS private immutable sdgnrs;
     IMockStETHReader private immutable steth;
 
     bool private armed;
@@ -324,7 +324,7 @@ contract Attacker {
     uint256 public pendingSeenAfterReentrantBurns;
 
     constructor(address _sdgnrs, address _steth) {
-        sdgnrs = StakedDegenerusStonk(payable(_sdgnrs));
+        sdgnrs = sDGNRS(payable(_sdgnrs));
         steth = IMockStETHReader(_steth);
     }
 

@@ -92,7 +92,7 @@
 const PER_OPEN_GAS_DELTA_BOUND       = 300;       // GAS-01 ±300 gas per-open
 const ENTRY_POINT_DELTA_TOLERANCE    = 2000;      // ±2000 gas per-site tolerance vs pinned REF (codegen variance)
 const OPEN_LOOTBOX_GAS_REF             = 0;       // executor-pinned post REF-CAPTURE first run
-// OPEN_BURNIE_LOOTBOX_GAS_REF removed (v47): openBurnieLootBox surface deleted.
+// OPEN_FLIP_LOOTBOX_GAS_REF removed (v47): openFlipLootBox surface deleted.
 const RESOLVE_LOOTBOX_DIRECT_GAS_REF   = 0;       // executor-pinned post REF-CAPTURE first run
 
 import { loadFixture } from "@nomicfoundation/hardhat-toolbox/network-helpers.js";
@@ -250,8 +250,8 @@ describe("Phase 266 GAS-01 — lootbox-open entry-point gas regression at v36.0 
     });
   });
 
-  // openBurnieLootBox (BURNIE lootbox) per-open gas envelope — REMOVED (v47): the
-  // BURNIE-lootbox surface (openBurnieLootBox + the game.lootboxBurnie view) was
+  // openFlipLootBox (FLIP lootbox) per-open gas envelope — REMOVED (v47): the
+  // FLIP-lootbox surface (openFlipLootBox + the game.lootboxFlip view) was
   // removed (terminal-paradox closure). The openBox describe above exercises the
   // same _resolveLootboxCommon body and provides the primary GAS-01 measurement.
   // Removed-by-design, not skipped.

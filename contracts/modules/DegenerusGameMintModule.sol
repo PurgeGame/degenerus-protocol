@@ -3,7 +3,7 @@ pragma solidity 0.8.34;
 
 import {IDegenerusAffiliate} from "../interfaces/IDegenerusAffiliate.sol";
 import {IDegenerusCoin} from "../interfaces/IDegenerusCoin.sol";
-import {IBurnieCoinflip} from "../interfaces/IBurnieCoinflip.sol";
+import {ICoinflip} from "../interfaces/ICoinflip.sol";
 import {MintPaymentKind} from "../interfaces/IDegenerusGame.sol";
 import {IDegenerusQuests} from "../interfaces/IDegenerusQuests.sol";
 import {IDegenerusGameBoonModule} from "../interfaces/IDegenerusGameModules.sol";
@@ -1072,41 +1072,41 @@ contract DegenerusGameMintModule is
         );
     }
 
-    /// @notice Redeem BURNIE for current-jackpot tickets — allowed only inside the jackpot window.
-    /// @dev Reverts unless the BURNIE purchase window is open: the prize target is met in the purchase
-    ///      phase, or the jackpot phase is live, with no RNG in flight. Outside that window BURNIE ticket
+    /// @notice Redeem FLIP for current-jackpot tickets — allowed only inside the jackpot window.
+    /// @dev Reverts unless the FLIP purchase window is open: the prize target is met in the purchase
+    ///      phase, or the jackpot phase is live, with no RNG in flight. Outside that window FLIP ticket
     ///      purchases revert so bonus tickets and prize ETH accrue to real-ETH buyers.
     /// @param buyer Recipient of the purchased tickets.
     /// @param ticketQuantity Number of tickets to purchase (2 decimals, scaled by 100).
-    function redeemBurnie(
+    function redeemFlip(
         address buyer,
         uint256 ticketQuantity
     ) external {
-        _redeemBurnieFor(buyer, ticketQuantity);
+        _redeemFlipFor(buyer, ticketQuantity);
     }
 
-    function _redeemBurnieFor(
+    function _redeemFlipFor(
         address buyer,
         uint256 ticketQuantity
     ) private {
         if (_livenessTriggered()) revert E();
 
         if (ticketQuantity != 0) {
-            // BURNIE purchase window: opens the first time a redeem lands once the prize target is met
+            // FLIP purchase window: opens the first time a redeem lands once the prize target is met
             // in the purchase phase with no RNG in flight, latching a single warm slot-0 bit. It stays
             // open through the jackpot days and is cleared in the advance at the final jackpot day's RNG
             // request — the boundary where new tickets route to the next level (rngLockedFlag stays set
             // from that request until _unlockRng, so it can never flip back on during the wind-down).
-            // While it is closed (an open/stalled purchase phase) BURNIE purchases revert, so bonus
+            // While it is closed (an open/stalled purchase phase) FLIP purchases revert, so bonus
             // tickets and prize ETH accrue to real-ETH buyers. The target-met condition holds for the
             // whole of lastPurchaseDay, so even a one-day purchase phase still offers that day as a
             // redemption window.
-            if (!burnieWindowOpen) {
+            if (!ticketRedemptionOpen) {
                 if (
                     rngLockedFlag ||
                     _getNextPrizePool() < levelPrizePool[level]
                 ) revert E();
-                burnieWindowOpen = true;
+                ticketRedemptionOpen = true;
             }
 
             uint24 cachedLevel = level;
@@ -1114,7 +1114,7 @@ contract DegenerusGameMintModule is
                 ,
                 uint32 adjustedQty32,
                 uint24 targetLevel,
-                uint32 burnieMintUnits
+                uint32 flipMintUnits
             ) = _callTicketPurchase(
                     buyer,
                     ticketQuantity,
@@ -1126,8 +1126,8 @@ contract DegenerusGameMintModule is
                     jackpotPhaseFlag
                 );
 
-            // MINT_BURNIE quest leg only (no ETH spend, no lootbox): skips activity
-            // score, affiliate, and non-mint quests. The returned reward is a BURNIE
+            // MINT_FLIP quest leg only (no ETH spend, no lootbox): skips activity
+            // score, affiliate, and non-mint quests. The returned reward is a FLIP
             // flip stake, awarded via creditFlip — the full coin cost was already
             // burned inside _callTicketPurchase.
             {
@@ -1138,7 +1138,7 @@ contract DegenerusGameMintModule is
                     .handlePurchase(
                         buyer,
                         0,
-                        burnieMintUnits,
+                        flipMintUnits,
                         0,
                         nextLevelPrice,
                         nextLevelPrice
@@ -1149,7 +1149,7 @@ contract DegenerusGameMintModule is
             }
 
             // Queue tickets on the captured adjusted quantity (the coin path previously
-            // discarded these returns and queued nothing — a pure BURNIE sink).
+            // discarded these returns and queued nothing — a pure FLIP sink).
             if (adjustedQty32 != 0) {
                 _queueTicketsScaled(buyer, targetLevel, adjustedQty32, false);
             }
@@ -1159,8 +1159,8 @@ contract DegenerusGameMintModule is
     /// @notice Emitted on a far-future salvage swap (sellFarFutureTickets).
     /// @dev `buyer` is the counterparty that funded the swap and received the far-future tickets:
     ///      sDGNRS normally, or the vault on the owner-enabled fallback when sDGNRS cannot fund it.
-    ///      cashWei subdivides into ethCashWei (relabeled claimable) + burnieTokens (buyer-owned BURNIE
-    ///      burned, paid to the player as flip credit). value(burnieTokens) + ethCashWei == cashWei.
+    ///      cashWei subdivides into ethCashWei (relabeled claimable) + flipTokens (buyer-owned FLIP
+    ///      burned, paid to the player as flip credit). value(flipTokens) + ethCashWei == cashWei.
     event FarFutureSwap(
         address indexed player,
         address indexed buyer,
@@ -1168,23 +1168,23 @@ contract DegenerusGameMintModule is
         uint256 totalBudgetWei,
         uint256 ticketWei,
         uint256 ethCashWei,
-        uint256 burnieTokens
+        uint256 flipTokens
     );
 
     /// @notice Quote a far-future salvage swap WITHOUT executing (the UI offer; -EV by design).
     /// @dev Read-only twin of sellFarFutureTickets: shares the exact valuation (curve + daily
-    ///      per-player jitter + ETH/BURNIE split) the executing path uses, so the displayed offer
+    ///      per-player jitter + ETH/FLIP split) the executing path uses, so the displayed offer
     ///      matches what would be paid. Resolves the same buyer the executing path would (sDGNRS, or
-    ///      the vault on the owner-enabled fallback) so the ETH/BURNIE breakdown reflects the actual
-    ///      counterparty's BURNIE inventory. Reverts on an ineligible distance / zero quantity; does
-    ///      NOT check ownership (a quote for the given bundle). When the resolved buyer holds no BURNIE
+    ///      the vault on the owner-enabled fallback) so the ETH/FLIP breakdown reflects the actual
+    ///      counterparty's FLIP inventory. Reverts on an ineligible distance / zero quantity; does
+    ///      NOT check ownership (a quote for the given bundle). When the resolved buyer holds no FLIP
     ///      (or the seed targets zero) the whole cash leg is paid in ETH; conserved as ethCashWei +
-    ///      value(burnieTokens).
+    ///      value(flipTokens).
     /// @return totalFaceWei Sum of priceForLevel(L) * n over all lines (the bundle's face value).
     /// @return totalBudget Total ETH the buyer would pay (the -EV offer).
     /// @return ticketWei Portion delivered as current-level tickets.
     /// @return ethCashWei Cash portion delivered as withdrawable ETH claimable.
-    /// @return burnieTokens Cash portion delivered as BURNIE (burned from the buyer, paid as flip credit).
+    /// @return flipTokens Cash portion delivered as FLIP (burned from the buyer, paid as flip credit).
     function previewSellFarFutureTickets(
         address player,
         uint32[] calldata levels,
@@ -1197,7 +1197,7 @@ contract DegenerusGameMintModule is
             uint256 totalBudget,
             uint256 ticketWei,
             uint256 ethCashWei,
-            uint256 burnieTokens
+            uint256 flipTokens
         )
     {
         uint24 cl = _activeTicketLevel();
@@ -1215,7 +1215,7 @@ contract DegenerusGameMintModule is
         // nominal counterparty when neither can fund (the preview still shows the -EV offer).
         address buyer = _resolveSalvageBuyer(totalBudget);
         if (buyer == address(0)) buyer = ContractAddresses.SDGNRS;
-        (ethCashWei, burnieTokens) = _quoteFarFutureBurnieSplit(
+        (ethCashWei, flipTokens) = _quoteFarFutureFlipSplit(
             cashWei,
             oneTicketWei,
             seed,
@@ -1271,15 +1271,15 @@ contract DegenerusGameMintModule is
         // owner-set reserve floor; otherwise address(0) -> revert. The gambling-burn redemption desk is
         // protected STRUCTURALLY (its ETH is segregated out of claimable at submit), so NO
         // pendingRedemptionEthValue term is needed; NO daily cap. The full budget is gated against the
-        // buyer's claimable even though only the ETH part leaves claimable below (the BURNIE part is paid
-        // from the buyer's BURNIE) — a strictly more conservative funding check.
+        // buyer's claimable even though only the ETH part leaves claimable below (the FLIP part is paid
+        // from the buyer's FLIP) — a strictly more conservative funding check.
         address buyer = _resolveSalvageBuyer(totalBudget);
         if (buyer == address(0)) revert E();
 
-        // Split the cash leg: pay an ETH part (claimable relabel) + a BURNIE part burned from the buyer's
-        // BURNIE, with an ETH fallback when the buyer holds no BURNIE. The split conserves the cash-leg
-        // value (ethCashWei + value(burnieTokens) == cashWei), so the offer is unchanged.
-        (uint256 ethCashWei, uint256 burnieTokens) = _quoteFarFutureBurnieSplit(
+        // Split the cash leg: pay an ETH part (claimable relabel) + a FLIP part burned from the buyer's
+        // FLIP, with an ETH fallback when the buyer holds no FLIP. The split conserves the cash-leg
+        // value (ethCashWei + value(flipTokens) == cashWei), so the offer is unchanged.
+        (uint256 ethCashWei, uint256 flipTokens) = _quoteFarFutureFlipSplit(
             cashWei,
             oneTicketWei,
             seed,
@@ -1302,18 +1302,18 @@ contract DegenerusGameMintModule is
 
         // Relabel only the ETH portion (ticket leg + ETH cash) buyer -> player as claimable; the buyer
         // funds from its claimable (and, for the vault, its prepaid afking) — both claimablePool-backed,
-        // so the move is total-preserving (claimablePool unchanged). The BURNIE part never touches
+        // so the move is total-preserving (claimablePool unchanged). The FLIP part never touches
         // claimable. Solvency-positive: ethRelabel <= totalBudget.
         uint256 ethRelabel = ticketWei + ethCashWei;
         _debitSalvageEth(buyer, ethRelabel);
         _creditClaimable(player, ethRelabel);
-        // BURNIE part: drain the buyer's BURNIE (held first, then claimable coinflip stake, then the
+        // FLIP part: drain the buyer's FLIP (held first, then claimable coinflip stake, then the
         // auto-rebuy carry — the full salvage waterfall, symmetric with the redemption desk) and pay the
-        // player as flip credit, not a token transfer. burnieTokens <= the buyer's spendable (quote cap),
+        // player as flip credit, not a token transfer. flipTokens <= the buyer's spendable (quote cap),
         // so the burn always covers.
-        if (burnieTokens != 0) {
-            coin.burnCoinForSalvage(buyer, burnieTokens);
-            coinflip.creditFlip(player, burnieTokens);
+        if (flipTokens != 0) {
+            coin.burnCoinForSalvage(buyer, flipTokens);
+            coinflip.creditFlip(player, flipTokens);
         }
 
         // Ticket leg = NORMAL recycled mint of `ticketWei` of current-level tickets from the player's
@@ -1322,7 +1322,7 @@ contract DegenerusGameMintModule is
         uint256 qty = (ticketWei * 4 * TICKET_SCALE) / oneTicketWei;
         _purchaseFor(player, qty, 0, bytes32(0), MintPaymentKind.Claimable);
 
-        emit FarFutureSwap(player, buyer, len, totalBudget, ticketWei, ethCashWei, burnieTokens);
+        emit FarFutureSwap(player, buyer, len, totalBudget, ticketWei, ethCashWei, flipTokens);
     }
 
     /// @dev Resolve the salvage-swap counterparty for a budget, fail-closed. sDGNRS first when its OWN
@@ -1542,7 +1542,7 @@ contract DegenerusGameMintModule is
         }
 
         // --- Ticket purchase (returns quest units, defers x00 bonus + ticket queuing) ---
-        uint32 burnieMintUnits;
+        uint32 flipMintUnits;
         uint32 adjustedQty;
         uint24 targetLevel;
         if (ticketCost != 0) {
@@ -1550,7 +1550,7 @@ contract DegenerusGameMintModule is
                 lootboxFlipCredit,
                 adjustedQty,
                 targetLevel,
-                burnieMintUnits
+                flipMintUnits
             ) = _callTicketPurchase(
                     buyer,
                     ticketQuantity,
@@ -1677,7 +1677,7 @@ contract DegenerusGameMintModule is
             ) = quests.handlePurchase(
                     buyer,
                     ethMintSpendWei,
-                    burnieMintUnits,
+                    flipMintUnits,
                     lootBoxAmount,
                     priceWei,
                     // During the purchase phase the purchase level IS cachedLevel + 1,
@@ -1734,7 +1734,7 @@ contract DegenerusGameMintModule is
         if (lootBoxAmount != 0) {
             if (lootboxFreshEth != 0) {
                 lootboxFlipCredit += affiliate.payAffiliate(
-                    _ethToBurnieValue(lootboxFreshEth, priceWei),
+                    _ethToFlipValue(lootboxFreshEth, priceWei),
                     affiliateCode,
                     buyer,
                     cachedLevel + 1,
@@ -1744,7 +1744,7 @@ contract DegenerusGameMintModule is
             }
             if (lootboxClaimableUsed != 0) {
                 lootboxFlipCredit += affiliate.payAffiliate(
-                    _ethToBurnieValue(lootboxClaimableUsed, priceWei),
+                    _ethToFlipValue(lootboxClaimableUsed, priceWei),
                     affiliateCode,
                     buyer,
                     cachedLevel + 1,
@@ -1818,7 +1818,7 @@ contract DegenerusGameMintModule is
 
         // Recycle bonus: spending at least 3 whole tickets' worth of claimable
         // winnings (priceWei is the per-whole-ticket cost) earns 10% of the
-        // recycled value back as BURNIE flip credit, regardless of any remaining
+        // recycled value back as FLIP flip credit, regardless of any remaining
         // claimable balance.
         if (totalClaimableUsed >= priceWei * 3) {
             lootboxFlipCredit +=
@@ -1997,7 +1997,7 @@ contract DegenerusGameMintModule is
     /// @return bonusCredit Affiliate kickback + bulk bonus flip credit
     /// @return adjustedQty32 Adjusted ticket quantity (with boost, without x00 bonus)
     /// @return targetLevel The level tickets are queued to
-    /// @return burnieMintUnits BURNIE-paid mint quest units
+    /// @return flipMintUnits FLIP-paid mint quest units
     function _callTicketPurchase(
         address buyer,
         uint256 quantity,
@@ -2013,11 +2013,11 @@ contract DegenerusGameMintModule is
             uint256 bonusCredit,
             uint32 adjustedQty32,
             uint24 targetLevel,
-            uint32 burnieMintUnits
+            uint32 flipMintUnits
         )
     {
         if (quantity == 0) revert E();
-        // Liveness is gated by both callers (_purchaseForWithCached / _redeemBurnieFor)
+        // Liveness is gated by both callers (_purchaseForWithCached / _redeemFlipFor)
         // before any state is touched, so it is not re-evaluated here.
         // compressedJackpotFlag / jackpotCounter are consumed only on jackpot-phase
         // buys (every use below is short-circuit-gated on cachedJpFlag), so the
@@ -2086,10 +2086,10 @@ contract DegenerusGameMintModule is
                 TICKET_SCALE;
             _coinReceive(buyer, coinCost);
 
-            // MINT_BURNIE quest units (the reward is credited by the caller).
+            // MINT_FLIP quest units (the reward is credited by the caller).
             uint32 questQty = uint32(quantity / (4 * TICKET_SCALE));
             if (questQty != 0) {
-                burnieMintUnits += questQty;
+                flipMintUnits += questQty;
             }
         } else {
             uint32 mintUnits = adjustedQty32;
@@ -2108,23 +2108,23 @@ contract DegenerusGameMintModule is
             // validation already ran inside the payment processing.
             uint256 freshEth = costWei - (claimableBefore - _claimableOf(buyer));
 
-            // Day before final jackpot draw (not turbo): +100 BURNIE per ticket for affiliates
+            // Day before final jackpot draw (not turbo): +100 FLIP per ticket for affiliates
             // Basis inflated by 7/5 (lvl 0-3, 25% rate) or 3/2 (lvl 4+, 20% rate) to yield +100 after scaling
-            uint256 freshBurnie = freshEth != 0
-                ? _ethToBurnieValue(freshEth, priceWei)
+            uint256 freshFlip = freshEth != 0
+                ? _ethToFlipValue(freshEth, priceWei)
                 : 0;
-            if (freshBurnie != 0 && cachedJpFlag && cachedComp != 2) {
+            if (freshFlip != 0 && cachedJpFlag && cachedComp != 2) {
                 if (cachedCnt + nextStep >= JACKPOT_LEVEL_CAP) {
-                    freshBurnie = targetLevel <= 3
-                        ? (freshBurnie * 7) / 5
-                        : (freshBurnie * 3) / 2;
+                    freshFlip = targetLevel <= 3
+                        ? (freshFlip * 7) / 5
+                        : (freshFlip * 3) / 2;
                 }
             }
 
             uint256 kickback;
             if (payKind == MintPaymentKind.Combined && freshEth != 0) {
                 kickback += affiliate.payAffiliate(
-                    freshBurnie,
+                    freshFlip,
                     affiliateCode,
                     buyer,
                     affiliateLevel,
@@ -2134,7 +2134,7 @@ contract DegenerusGameMintModule is
                 uint256 recycled = costWei - freshEth;
                 if (recycled != 0) {
                     kickback += affiliate.payAffiliate(
-                        _ethToBurnieValue(recycled, priceWei),
+                        _ethToFlipValue(recycled, priceWei),
                         affiliateCode,
                         buyer,
                         affiliateLevel,
@@ -2144,7 +2144,7 @@ contract DegenerusGameMintModule is
                 }
             } else if (payKind == MintPaymentKind.DirectEth) {
                 kickback += affiliate.payAffiliate(
-                    freshBurnie,
+                    freshFlip,
                     affiliateCode,
                     buyer,
                     affiliateLevel,
@@ -2156,7 +2156,7 @@ contract DegenerusGameMintModule is
                 // any afking-drawn portion (freshEth) earns the fresh rate.
                 if (freshEth != 0) {
                     kickback += affiliate.payAffiliate(
-                        freshBurnie,
+                        freshFlip,
                         affiliateCode,
                         buyer,
                         affiliateLevel,
@@ -2167,7 +2167,7 @@ contract DegenerusGameMintModule is
                 uint256 recycled = costWei - freshEth;
                 if (recycled != 0) {
                     kickback += affiliate.payAffiliate(
-                        _ethToBurnieValue(recycled, priceWei),
+                        _ethToFlipValue(recycled, priceWei),
                         affiliateCode,
                         buyer,
                         affiliateLevel,
@@ -2193,8 +2193,8 @@ contract DegenerusGameMintModule is
         coin.burnCoin(payer, amount);
     }
 
-    /// @dev Convert ETH-denominated spend to BURNIE base units at current ticket price.
-    function _ethToBurnieValue(
+    /// @dev Convert ETH-denominated spend to FLIP base units at current ticket price.
+    function _ethToFlipValue(
         uint256 amountWei,
         uint256 priceWei
     ) private pure returns (uint256) {

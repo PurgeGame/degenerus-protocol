@@ -24,7 +24,7 @@ import {IDegenerusJackpots} from "../interfaces/IDegenerusJackpots.sol";
  *      JACKPOT FLOW OVERVIEW:
  *      1. Pool consolidation at level transition (prize pool splits and merges).
  *      2. `payDailyJackpot` — Handles purchase phase jackpots and rolling dailies at EOL.
- *      3. `payDailyCoinJackpot` — BURNIE jackpot distribution to near-future ticket holders.
+ *      3. `payDailyFlipJackpot` — FLIP jackpot distribution to near-future ticket holders.
  *
  *      FUND ACCOUNTING:
  *      - ETH flows through `futurePrizePool` (unified reserve), `currentPrizePool`,
@@ -48,9 +48,9 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     // Events
     // -------------------------------------------------------------------------
 
-    /// @dev Emitted when a far-future ticket holder (5-99 levels ahead) wins the daily BURNIE jackpot.
+    /// @dev Emitted when a far-future ticket holder (5-99 levels ahead) wins the daily FLIP jackpot.
     ///      These winners are drawn from ticketQueue (traits not yet assigned).
-    event FarFutureCoinJackpotWinner(
+    event FarFutureFlipJackpotWinner(
         address indexed winner,
         uint24 indexed currentLevel,
         uint24 indexed winnerLevel,
@@ -85,8 +85,8 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         bool roundedUp
     );
 
-    /// @dev BURNIE coin win (near-future, trait-matched).
-    event JackpotBurnieWin(
+    /// @dev FLIP coin win (near-future, trait-matched).
+    event JackpotFlipWin(
         address indexed winner,
         uint24 indexed level,
         uint8 indexed traitId,
@@ -153,12 +153,12 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     // -------------------------------------------------------------------------
 
     /// @dev Domain separator for coin jackpot entropy derivation.
-    bytes32 private constant COIN_JACKPOT_TAG = keccak256("coin-jackpot");
+    bytes32 private constant FLIP_JACKPOT_TAG = keccak256("coin-jackpot");
 
     /// @dev Domain separator for per-pull level sampling in the daily coin jackpot.
-    ///      Distinct from COIN_JACKPOT_TAG so (randomWord, COIN_JACKPOT_TAG, ·) and
-    ///      (randomWord, COIN_LEVEL_TAG, ·) keccaks cannot collide.
-    bytes32 private constant COIN_LEVEL_TAG = keccak256("coin-level");
+    ///      Distinct from FLIP_JACKPOT_TAG so (randomWord, FLIP_JACKPOT_TAG, ·) and
+    ///      (randomWord, FLIP_LEVEL_TAG, ·) keccaks cannot collide.
+    bytes32 private constant FLIP_LEVEL_TAG = keccak256("coin-level");
 
     /// @dev Domain separator for rolling current-pool daily jackpot percentage.
     bytes32 private constant DAILY_CURRENT_BPS_TAG =
@@ -200,14 +200,14 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     /// @dev Maximum winners for daily coin jackpot (coinflip.creditFlip is 1 external call each).
     uint16 private constant DAILY_COIN_MAX_WINNERS = 50;
 
-    /// @dev Share of daily BURNIE budget awarded to far-future ticket holders (25%).
-    uint16 private constant FAR_FUTURE_COIN_BPS = 2500;
+    /// @dev Share of daily FLIP budget awarded to far-future ticket holders (25%).
+    uint16 private constant FAR_FUTURE_FLIP_BPS = 2500;
 
-    /// @dev Number of far-future levels to sample for BURNIE jackpot (10 winners max).
-    uint8 private constant FAR_FUTURE_COIN_SAMPLES = 10;
+    /// @dev Number of far-future levels to sample for FLIP jackpot (10 winners max).
+    uint8 private constant FAR_FUTURE_FLIP_SAMPLES = 10;
 
     /// @dev Domain separator for far-future coin jackpot entropy derivation.
-    bytes32 private constant FAR_FUTURE_COIN_TAG = keccak256("far-future-coin");
+    bytes32 private constant FAR_FUTURE_FLIP_TAG = keccak256("far-future-coin");
 
     /// @dev Maximum winners for lootbox jackpot distributions (gas safety).
     ///      Lower than the daily ETH winner ceiling because lootboxes do multiple rolls per winner.
@@ -464,7 +464,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
             return;
         }
 
-        // Purchase phase path - BURNIE and ETH bonuses
+        // Purchase phase path - FLIP and ETH bonuses
         uint8[4] memory traitIds = JackpotBucketLib.unpackWinningTraits(winningTraitsPacked);
         uint256 effectiveEntropy = _soloAdjustedEntropy(
             traitIds,
@@ -571,7 +571,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         ) = _rollWinningTraitsPair(randWord);
 
         // --- Coin Jackpot ---
-        _runCoinJackpot(lvl, lvl, lvl + 1, lvl + 4, bonusTraitsPacked, randWord);
+        _runFlipJackpot(lvl, lvl, lvl + 1, lvl + 4, bonusTraitsPacked, randWord);
 
         // --- Ticket Distribution ---
         // Distribute daily tickets to current level trait winners (main traits)
@@ -1513,26 +1513,26 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         }
     }
 
-    /// @notice Pays daily BURNIE jackpot to random ticket holders.
-    /// @dev Runs every day in its own transaction. Awards 0.5% of prize pool target in BURNIE.
+    /// @notice Pays daily FLIP jackpot to random ticket holders.
+    /// @dev Runs every day in its own transaction. Awards 0.5% of prize pool target in FLIP.
     ///      75% goes to near-future trait-matched winners in [minLevel, maxLevel].
     ///      25% goes to far-future ticketQueue holders ([lvl+5, lvl+99]).
     /// @param lvl Current level.
     /// @param randWord VRF entropy for winner selection.
     /// @param minLevel Minimum target level for near-future coin distribution (inclusive).
     /// @param maxLevel Maximum target level for near-future coin distribution (inclusive).
-    function payDailyCoinJackpot(uint24 lvl, uint256 randWord, uint24 minLevel, uint24 maxLevel) external {
+    function payDailyFlipJackpot(uint24 lvl, uint256 randWord, uint24 minLevel, uint24 maxLevel) external {
         uint32 bonusTraitsPacked = _rollWinningTraits(randWord, true);
-        _runCoinJackpot(lvl, level, minLevel, maxLevel, bonusTraitsPacked, randWord);
+        _runFlipJackpot(lvl, level, minLevel, maxLevel, bonusTraitsPacked, randWord);
     }
 
-    /// @dev Daily BURNIE jackpot core: 25% of the budget to far-future
+    /// @dev Daily FLIP jackpot core: 25% of the budget to far-future
     ///      ticketQueue holders, 75% to near-future trait-matched winners in
     ///      [minLevel, maxLevel].
     /// @param lvl Level keying the prize pool snapshot for the budget.
     /// @param currLevel Current game level (storage `level` at call time), used
-    ///        for BURNIE pricing.
-    function _runCoinJackpot(
+    ///        for FLIP pricing.
+    function _runFlipJackpot(
         uint24 lvl,
         uint24 currLevel,
         uint24 minLevel,
@@ -1544,7 +1544,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         if (coinBudget == 0) return;
 
         // Split: 25% far-future, 75% near-future
-        uint256 farBudget = (coinBudget * FAR_FUTURE_COIN_BPS) / 10_000;
+        uint256 farBudget = (coinBudget * FAR_FUTURE_FLIP_BPS) / 10_000;
         _awardFarFutureCoinJackpot(lvl, farBudget, randWord);
 
         uint256 nearBudget = coinBudget - farBudget;
@@ -1574,11 +1574,11 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         emit DailyWinningTraits(questDay, mainTraitsPacked, bonusTraitsPacked, bonusTargetLevel);
     }
 
-    /// @dev Awards BURNIE to per-pull random ticket holders across [minLevel, maxLevel].
-    ///      Each pull samples its own random level via keccak256(randomWord, COIN_LEVEL_TAG, i)
+    /// @dev Awards FLIP to per-pull random ticket holders across [minLevel, maxLevel].
+    ///      Each pull samples its own random level via keccak256(randomWord, FLIP_LEVEL_TAG, i)
     ///      and rotates trait deterministically via i % 4. Each pull awards the floored
-    ///      whole-BURNIE `baseAmount` (1 BURNIE = 1 ether); empty (lvl', trait_i) buckets
-    ///      silently skip. Sub-1-BURNIE residues — the `coinBudget % cap` remainder and any
+    ///      whole-FLIP `baseAmount` (1 FLIP = 1 ether); empty (lvl', trait_i) buckets
+    ///      silently skip. Sub-1-FLIP residues — the `coinBudget % cap` remainder and any
     ///      sub-1-ether base — evaporate.
     ///      Per-trait deity addresses are cached at loop entry; the holder-index keccak is
     ///      keccak256(randomWord, trait_i, lvlPrime, i) so two pulls at the same (trait, i)
@@ -1611,7 +1611,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         }
 
         uint256 baseAmount = ((coinBudget / cap) / 1 ether) * 1 ether;
-        // Sub-1-BURNIE per-pull budget: every pull would award 0, so the
+        // Sub-1-FLIP per-pull budget: every pull would award 0, so the
         // selection loop has no effect — skip it entirely.
         if (baseAmount == 0) return;
         uint24 range = maxLevel - minLevel + 1;
@@ -1627,7 +1627,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
             uint8 trait_i = traitIds[traitIdx];
 
             uint24 lvlPrime = minLevel + uint24(uint256(keccak256(
-                abi.encode(randomWord, COIN_LEVEL_TAG, i)
+                abi.encode(randomWord, FLIP_LEVEL_TAG, i)
             )) % range);
 
             address[] storage holders = traitBurnTicket[lvlPrime][trait_i];
@@ -1657,7 +1657,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
             uint256 amount = baseAmount;
 
             if (winner != address(0) && amount != 0) {
-                emit JackpotBurnieWin(
+                emit JackpotFlipWin(
                     winner,
                     lvlPrime,
                     trait_i,
@@ -1679,7 +1679,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         }
     }
 
-    /// @dev Awards 25% of the BURNIE coin budget to random ticket holders on far-future levels.
+    /// @dev Awards 25% of the FLIP coin budget to random ticket holders on far-future levels.
     ///      Samples up to 10 random levels in [lvl+5, lvl+99], picks 1 winner per level from
     ///      that level's ticketQueue (traits not yet assigned), and splits the budget evenly.
     function _awardFarFutureCoinJackpot(
@@ -1690,15 +1690,15 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         if (farBudget == 0) return;
 
         uint256 entropy = uint256(
-            keccak256(abi.encode(rngWord, lvl, FAR_FUTURE_COIN_TAG))
+            keccak256(abi.encode(rngWord, lvl, FAR_FUTURE_FLIP_TAG))
         );
 
-        // First pass: find up to FAR_FUTURE_COIN_SAMPLES winners from ticketQueue
+        // First pass: find up to FAR_FUTURE_FLIP_SAMPLES winners from ticketQueue
         address[10] memory winners;
         uint24[10] memory winnerLevels;
         uint8 found;
 
-        for (uint8 s; s < FAR_FUTURE_COIN_SAMPLES; ) {
+        for (uint8 s; s < FAR_FUTURE_FLIP_SAMPLES; ) {
             entropy = EntropyLib.hash2(entropy, s);
 
             // Pick a random level in [lvl+5, lvl+99]
@@ -1725,8 +1725,8 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
 
         if (found == 0) return;
 
-        // Distribute evenly among found winners, floored to whole-BURNIE
-        // (1 BURNIE = 1 ether); sub-1-BURNIE residue evaporates.
+        // Distribute evenly among found winners, floored to whole-FLIP
+        // (1 FLIP = 1 ether); sub-1-FLIP residue evaporates.
         uint256 perWinner = ((farBudget / found) / 1 ether) * 1 ether;
         if (perWinner == 0) return;
 
@@ -1734,7 +1734,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         uint256[] memory batchAmounts = new uint256[](found);
 
         for (uint8 i; i < found; ) {
-            emit FarFutureCoinJackpotWinner(
+            emit FarFutureFlipJackpotWinner(
                 winners[i],
                 lvl,
                 winnerLevels[i],
@@ -1804,7 +1804,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         uint24 lvl
     ) private {
         uint256 coinEntropy = uint256(
-            keccak256(abi.encode(randWord, lvl, COIN_JACKPOT_TAG))
+            keccak256(abi.encode(randWord, lvl, FLIP_JACKPOT_TAG))
         );
         uint24 bonusTargetLevel = lvl + 1 + uint24(coinEntropy % 4);
         emit DailyWinningTraits(
@@ -1815,10 +1815,10 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         );
     }
 
-    /// @dev Calculate 0.5% of prize pool target in BURNIE.
+    /// @dev Calculate 0.5% of prize pool target in FLIP.
     /// @param lvl Level keying the prize pool snapshot (purchase level on the
-    ///        payDailyCoinJackpot path, where it differs from the current level).
-    /// @param currLevel Current game level, used for BURNIE pricing.
+    ///        payDailyFlipJackpot path, where it differs from the current level).
+    /// @param currLevel Current game level, used for FLIP pricing.
     function _calcDailyCoinBudget(
         uint24 lvl,
         uint24 currLevel

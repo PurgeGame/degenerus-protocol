@@ -26,7 +26,7 @@ import {QuestInfo} from "../../contracts/interfaces/IDegenerusQuests.sol";
 ///       subs (have `afkingActive` set). The per-player `questPlayerState[target]` slot is keyed only
 ///       on `target`, so a sibling's `beginAfking`/`finalizeAfking` write cannot perturb it; the test
 ///       asserts the full packed PlayerQuestState word is identical across the two worlds. The O1
-///       single-credit invariant rides along: a completed quest credits its BURNIE reward exactly once
+///       single-credit invariant rides along: a completed quest credits its FLIP reward exactly once
 ///       across the two worlds.
 ///
 /// @dev Drives the DegenerusQuests core directly through its access-gated entrypoints — pranking the
@@ -57,8 +57,8 @@ contract V56QuestNonPerturb is DeployProtocol {
     uint8 private constant QT_DECIMATOR = 5;
     uint8 private constant QT_LOOTBOX = 6;
     uint8 private constant QT_DEGENERETTE_ETH = 7;
-    uint8 private constant QT_DEGENERETTE_BURNIE = 8;
-    uint8 private constant QT_MINT_BURNIE = 9;
+    uint8 private constant QT_DEGENERETTE_FLIP = 8;
+    uint8 private constant QT_MINT_FLIP = 9;
 
     /// @dev A mint price comfortably above the slot-0 MINT_ETH target so one handleMint completes it.
     ///      Slot-0 target = min(mintPrice * 1, 0.5 ether); a 1-ticket ETH mint at this price clears it.
@@ -326,7 +326,7 @@ contract V56QuestNonPerturb is DeployProtocol {
         uint8 t = active[1].questType;
         uint8 qt;
         uint32 s;
-        // Volumes are sized well above every slot-1 target (BURNIE types target 2000 whole BURNIE,
+        // Volumes are sized well above every slot-1 target (FLIP types target 2000 whole FLIP,
         // ETH types target mintPrice * 20) so the completion clears in one call whatever type lands.
         if (t == QT_FLIP) {
             vm.prank(ContractAddresses.COIN);
@@ -337,13 +337,13 @@ contract V56QuestNonPerturb is DeployProtocol {
         } else if (t == QT_AFFILIATE) {
             vm.prank(ContractAddresses.COIN);
             (reward, qt, s, completed) = quests.handleAffiliate(player, 100_000 ether);
-        } else if (t == QT_DEGENERETTE_BURNIE) {
+        } else if (t == QT_DEGENERETTE_FLIP) {
             vm.prank(ContractAddresses.COIN);
             (reward, qt, s, completed) = quests.handleDegenerette(player, 100_000 ether, false, MINT_PRICE);
         } else if (t == QT_DEGENERETTE_ETH) {
             vm.prank(ContractAddresses.COIN);
             (reward, qt, s, completed) = quests.handleDegenerette(player, 10_000 ether, true, MINT_PRICE);
-        } else if (t == QT_MINT_BURNIE) {
+        } else if (t == QT_MINT_FLIP) {
             vm.prank(ContractAddresses.COIN);
             (reward, qt, s, completed) = quests.handleMint(player, 100, false, MINT_PRICE);
         } else {

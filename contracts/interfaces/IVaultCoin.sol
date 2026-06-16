@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.34;
 
-/// @notice Interface for tokens with vault mint allowance (BURNIE).
+/// @notice Interface for tokens with vault mint allowance (FLIP).
 /// @dev Used by DegenerusVault and game modules for minting tokens
 ///      from vault escrow without requiring token transfers.
 interface IVaultCoin {
@@ -16,10 +16,10 @@ interface IVaultCoin {
 
     /// @notice Get token balance for an address.
     /// @param account Address to query.
-    /// @return Balance of BURNIE.
+    /// @return Balance of FLIP.
     function balanceOf(address account) external view returns (uint256);
 
-    /// @notice Transfer BURNIE to a recipient.
+    /// @notice Transfer FLIP to a recipient.
     /// @param to Recipient address.
     /// @param amount Amount to transfer.
     /// @return success True on success.

@@ -3,7 +3,7 @@ pragma solidity ^0.8.26;
 
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
-import {StakedDegenerusStonk} from "../../contracts/StakedDegenerusStonk.sol";
+import {sDGNRS} from "../../contracts/sDGNRS.sol";
 
 /// @title RedemptionGasTest -- Gas benchmarks for all sDGNRS redemption functions
 /// @notice Exercises burn, burnWrapped, resolveRedemptionPeriod, claimRedemption,
@@ -51,7 +51,7 @@ contract RedemptionGasTest is DeployProtocol {
         // Give the player sDGNRS tokens via game's transferFromPool
         // (game contract is the authorized caller)
         vm.prank(address(game));
-        sdgnrs.transferFromPool(StakedDegenerusStonk.Pool.Reward, player, PLAYER_SDGNRS);
+        sdgnrs.transferFromPool(sDGNRS.Pool.Reward, player, PLAYER_SDGNRS);
 
         // Fund the Game with ETH and credit sDGNRS's claimable balance.
         // (during active game, all sDGNRS ETH backing is in claimable on the Game)
@@ -181,9 +181,9 @@ contract RedemptionGasTest is DeployProtocol {
 
     /// @notice Gas benchmark: previewBurn() view function
     function test_gas_previewBurn() external view {
-        (uint256 ethOut, uint256 stethOut, uint256 burnieOut) = sdgnrs.previewBurn(PLAYER_SDGNRS / 10);
+        (uint256 ethOut, uint256 stethOut, uint256 flipOut) = sdgnrs.previewBurn(PLAYER_SDGNRS / 10);
         // Sanity: ETH backing exists so ethOut should be nonzero
-        assertTrue(ethOut > 0 || stethOut > 0 || burnieOut > 0, "Expected non-zero preview");
+        assertTrue(ethOut > 0 || stethOut > 0 || flipOut > 0, "Expected non-zero preview");
     }
 
     // =====================================================================

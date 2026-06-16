@@ -3,10 +3,10 @@ pragma solidity 0.8.34;
 
 import {ContractAddresses} from "../ContractAddresses.sol";
 import {IVRFCoordinator} from "../interfaces/IVRFCoordinator.sol";
-import {IStakedDegenerusStonk} from "../interfaces/IStakedDegenerusStonk.sol";
+import {IsDGNRS} from "../interfaces/IsDGNRS.sol";
 import {IDegenerusAffiliate} from "../interfaces/IDegenerusAffiliate.sol";
 import {IDegenerusCoin} from "../interfaces/IDegenerusCoin.sol";
-import {IBurnieCoinflip} from "../interfaces/IBurnieCoinflip.sol";
+import {ICoinflip} from "../interfaces/ICoinflip.sol";
 import {IDegenerusQuests} from "../interfaces/IDegenerusQuests.sol";
 import {BitPackingLib} from "../libraries/BitPackingLib.sol";
 import {GameTimeLib} from "../libraries/GameTimeLib.sol";
@@ -63,7 +63,7 @@ import {GameTimeLib} from "../libraries/GameTimeLib.sol";
  * | [27:28] presaleOver              bool     Coin-presale-box terminal latch    |
  * | [28:29] subsFullyProcessed       bool     Afking STAGE drain-complete flag    |
  * | [29:30] presaleDrained           bool     All presale boxes opened (sweep)    |
- * | [30:31] burnieWindowOpen         bool     BURNIE ticket purchase window latch |
+ * | [30:31] ticketRedemptionOpen         bool     FLIP ticket purchase window latch |
  * +-----------------------------------------------------------------------------+
  *   Total: 31 bytes used (1 byte padding)
  *
@@ -124,14 +124,14 @@ abstract contract DegenerusGameStorage {
 
     IDegenerusCoin internal constant coin =
         IDegenerusCoin(ContractAddresses.COIN);
-    IBurnieCoinflip internal constant coinflip =
-        IBurnieCoinflip(ContractAddresses.COINFLIP);
+    ICoinflip internal constant coinflip =
+        ICoinflip(ContractAddresses.COINFLIP);
     IDegenerusQuests internal constant quests =
         IDegenerusQuests(ContractAddresses.QUESTS);
     IDegenerusAffiliate internal constant affiliate =
         IDegenerusAffiliate(ContractAddresses.AFFILIATE);
-    IStakedDegenerusStonk internal constant dgnrs =
-        IStakedDegenerusStonk(ContractAddresses.SDGNRS);
+    IsDGNRS internal constant dgnrs =
+        IsDGNRS(ContractAddresses.SDGNRS);
 
     /// @dev Deity pass activity bonus (+80% in basis points).
     uint16 internal constant DEITY_PASS_ACTIVITY_BONUS_BPS = 8000;
@@ -148,9 +148,9 @@ abstract contract DegenerusGameStorage {
     /// @dev Floor mint count points for active pass holders (25 = 25%).
     uint16 internal constant PASS_MINT_COUNT_FLOOR_POINTS = 25;
 
-    /// @dev Conversion factor for BURNIE token amounts.
-    ///      BURNIE uses 18 decimals, so 1000 BURNIE = 1e21 base units.
-    ///      Used in price calculations: price / PRICE_COIN_UNIT = BURNIE per mint.
+    /// @dev Conversion factor for FLIP token amounts.
+    ///      FLIP uses 18 decimals, so 1000 FLIP = 1e21 base units.
+    ///      Used in price calculations: price / PRICE_COIN_UNIT = FLIP per mint.
     uint256 internal constant PRICE_COIN_UNIT = 1000 ether;
 
     /// @dev Scale factor for fractional ticket calculations (2 decimal places).
@@ -336,14 +336,14 @@ abstract contract DegenerusGameStorage {
     ///      manual open of the closing box cannot trip it early and strand a still-queued box.
     bool internal presaleDrained;
 
-    /// @dev BURNIE ticket purchase window latch. redeemBurnie lazily opens it the moment the prize
+    /// @dev FLIP ticket purchase window latch. redeemFlip lazily opens it the moment the prize
     ///      target is met in the purchase phase (_getNextPrizePool() >= levelPrizePool[level], with no
     ///      RNG in flight); it persists through the jackpot days and is cleared in the advance at the
     ///      final jackpot day's RNG request — the same boundary where new tickets route to the next
-    ///      level. While closed, BURNIE ticket purchases revert, so BURNIE tickets only ever join a
+    ///      level. While closed, FLIP ticket purchases revert, so FLIP tickets only ever join a
     ///      happening jackpot, never an open/stalled purchase phase. Occupies slot-0 byte [31:32], which
     ///      the purchase/advance paths already SLOAD, so the gate is a free read.
-    bool internal burnieWindowOpen;
+    bool internal ticketRedemptionOpen;
 
     // =========================================================================
     // EVM SLOT 1: Prize Pools
@@ -395,7 +395,7 @@ abstract contract DegenerusGameStorage {
     /// @dev Number of reverse flips purchased against current RNG word.
     ///      Tracks flip activity for jackpot sizing adjustments. Co-resident with
     ///      lastVrfProcessedTimestamp (both written in _applyDailyRng); bounded by
-    ///      supply/RNG_NUDGE_BASE_COST << 2^64 since every nudge burns >= 100 BURNIE.
+    ///      supply/RNG_NUDGE_BASE_COST << 2^64 since every nudge burns >= 100 FLIP.
     uint64 internal totalFlipReversals;
 
     /// @dev Timestamp of the last successfully processed VRF word.
@@ -1524,7 +1524,7 @@ abstract contract DegenerusGameStorage {
     //   [bits  48:111]  lootboxRngPendingEth     uint64   (scaled /1e15, 0.001 ETH res, max ~18,446 ETH)
     //   [bits 112:175]  lootboxRngThreshold      uint64   (scaled /1e15, 0.001 ETH res, max ~18,446 ETH)
     //   [bits 176:183]  (unused)
-    //   [bits 184:223]  lootboxRngPendingBurnie  uint40   (scaled /1e18, 1 BURNIE res, max ~1.1T BURNIE)
+    //   [bits 184:223]  lootboxRngPendingFlip  uint40   (scaled /1e18, 1 FLIP res, max ~1.1T FLIP)
     //   [bits 224:231]  midDayTicketRngPending   uint8    (bool flag, 8 bits)
 
     /// @dev Packed lootbox RNG state. See layout comment above.
@@ -1540,15 +1540,15 @@ abstract contract DegenerusGameStorage {
     uint256 internal constant LR_PENDING_ETH_MASK = 0xFFFFFFFFFFFFFFFF;      // 64 bits
     uint256 internal constant LR_THRESHOLD_SHIFT = 112;
     uint256 internal constant LR_THRESHOLD_MASK = 0xFFFFFFFFFFFFFFFF;        // 64 bits
-    uint256 internal constant LR_PENDING_BURNIE_SHIFT = 184;
-    uint256 internal constant LR_PENDING_BURNIE_MASK = 0xFFFFFFFFFF;         // 40 bits
+    uint256 internal constant LR_PENDING_FLIP_SHIFT = 184;
+    uint256 internal constant LR_PENDING_FLIP_MASK = 0xFFFFFFFFFF;         // 40 bits
     uint256 internal constant LR_MID_DAY_SHIFT = 224;
     uint256 internal constant LR_MID_DAY_MASK = 0xFF;                       // 8 bits
 
     /// @dev Scale factor for ETH/LINK packing (0.001 resolution).
     uint256 internal constant LR_ETH_SCALE = 1e15;
-    /// @dev Scale factor for BURNIE packing (1 token resolution).
-    uint256 internal constant LR_BURNIE_SCALE = 1e18;
+    /// @dev Scale factor for FLIP packing (1 token resolution).
+    uint256 internal constant LR_FLIP_SCALE = 1e18;
 
     // Activity score EV multiplier constants (ETH lootbox only)
     /// @dev 60% activity score = neutral 100% EV
@@ -1595,14 +1595,14 @@ abstract contract DegenerusGameStorage {
         return uint256(milli) * LR_ETH_SCALE;
     }
 
-    /// @dev Pack a wei amount to whole BURNIE (divide by 1e18). 1 BURNIE resolution.
-    function _packBurnieToWhole(uint256 wei_) internal pure returns (uint40) {
-        return uint40(wei_ / LR_BURNIE_SCALE);
+    /// @dev Pack a wei amount to whole FLIP (divide by 1e18). 1 FLIP resolution.
+    function _packFlipToWhole(uint256 wei_) internal pure returns (uint40) {
+        return uint40(wei_ / LR_FLIP_SCALE);
     }
 
-    /// @dev Unpack whole BURNIE to wei (multiply by 1e18).
-    function _unpackWholeBurnieToWei(uint40 whole) internal pure returns (uint256) {
-        return uint256(whole) * LR_BURNIE_SCALE;
+    /// @dev Unpack whole FLIP to wei (multiply by 1e18).
+    function _unpackWholeFlipToWei(uint40 whole) internal pure returns (uint256) {
+        return uint256(whole) * LR_FLIP_SCALE;
     }
 
     /// @dev Pack a lootbox box into one uint256 word (the lootboxEth slot).
@@ -1682,7 +1682,7 @@ abstract contract DegenerusGameStorage {
     /// - [1]        isRandom
     /// - [2..33]    customTicket (packed 4×8-bit quadrants)
     /// - [34..41]   ticketCount (uint8, used as "spin count" for Degenerette)
-    /// - [42..43]   currency (0=ETH,1=BURNIE,2=unsupported,3=WWXRP)
+    /// - [42..43]   currency (0=ETH,1=FLIP,2=unsupported,3=WWXRP)
     /// - [44..171]  amountPerTicket (uint128)
     /// - [172..219] RNG index (uint48)
     /// - [220..235] activity score bps (uint16)
@@ -1761,7 +1761,7 @@ abstract contract DegenerusGameStorage {
 
     /// @dev Player's decimator burn entry per level.
     struct DecEntry {
-        /// @notice Total BURNIE burned by player this level (capped at uint192.max).
+        /// @notice Total FLIP burned by player this level (capped at uint192.max).
         uint192 burn;
         /// @notice Player's denominator choice (2-12), may improve to lower denom during level.
         uint8 bucket;
@@ -1778,7 +1778,7 @@ abstract contract DegenerusGameStorage {
         ///         far above any reachable pool; mirrors TerminalDecClaimRound.poolWei).
         uint96 poolWei;
         /// @notice Total qualifying burn across winning subbuckets (denominator for
-        ///         pro-rata). Sum of per-burn effective amounts (<= ~2.35x the BURNIE
+        ///         pro-rata). Sum of per-burn effective amounts (<= ~2.35x the FLIP
         ///         burned, supply-capped at uint128); realistic per-level totals sit
         ///         ~1e8x under uint128. Mirrors TerminalDecClaimRound.totalBurn.
         uint128 totalBurn;
@@ -2131,7 +2131,7 @@ abstract contract DegenerusGameStorage {
     ///        config (40b):  dailyQuantity(8) + validThroughLevel(24) + reinvestPct(8) + flags(8)
     ///        per-sub stamp (40b): score(16) + amount(24, milli-ETH)
     ///        markers (96b): lastAutoBoughtDay(24) + lastOpenedDay(24) + afkCoveredThroughDay(24) + afkingStartDay(24)
-    ///        accumulator (72b): affiliateBase(32) + pendingBurnie(32) + subStreakLatch(8)
+    ///        accumulator (72b): affiliateBase(32) + pendingFlip(32) + subStreakLatch(8)
     ///      There is NO per-day epoch: the box resolves at the LIVE level at open (no
     ///      stored roll floor) and sources its RNG word from
     ///      `rngWordByDay[lastAutoBoughtDay]`, so the only frozen-at-stamp inputs are the
@@ -2154,14 +2154,14 @@ abstract contract DegenerusGameStorage {
     ///      In-slot accumulator (cheap per-buy; advanced by the per-buy accrue write into this
     ///      already-warm slot, so no new cold slot):
     ///        • `affiliateBase` — per-sub running unclaimed AFFILIATE balance, whole
-    ///          BURNIE; drained and paid out by `DegenerusAffiliate.claim`, zeroed there
+    ///          FLIP; drained and paid out by `DegenerusAffiliate.claim`, zeroed there
     ///          so a re-claim finds 0.
-    ///        • `pendingBurnie` — per-sub running CLAIMABLE BURNIE balance, whole BURNIE,
+    ///        • `pendingFlip` — per-sub running CLAIMABLE FLIP balance, whole FLIP,
     ///          accrued per delivered day (the slot-0 quest reward every mode + the
     ///          ticket-mode 10%/20% buyer bonus). Paid out only by the player-pull
-    ///          `claimAfkingBurnie`, zeroed there.
+    ///          `claimAfkingFlip`, zeroed there.
     ///        • `subStreakLatch` — the full-byte afking-run streak base (snapshot + in-run secondaries).
-    ///      `affiliateBase` and `pendingBurnie` are uint32 with a 100M-whole-BURNIE
+    ///      `affiliateBase` and `pendingFlip` are uint32 with a 100M-whole-FLIP
     ///      saturating clamp at the accrue write — uint32 holds ~4.29e9 > 100M so the
     ///      clamp binds first, and it can only ever UNDER-credit a pathological
     ///      reinvest-whale (off the solvency path). The accumulator fields are written on
@@ -2225,26 +2225,26 @@ abstract contract DegenerusGameStorage {
         ///      index, same width as the other day markers.
         uint24 afkingStartDay;
         // --- in-slot accumulator (72 bits) ---
-        /// @dev Per-sub running unclaimed affiliate balance, whole BURNIE. Accrued a flat
+        /// @dev Per-sub running unclaimed affiliate balance, whole FLIP. Accrued a flat
         ///      7% per buy (one warm in-slot `+=`); drained and paid out by
         ///      `DegenerusAffiliate.claim`, zeroed there so a re-claim finds 0. uint32
-        ///      with a 100,000,000-whole-BURNIE saturating clamp at the accrue write
+        ///      with a 100,000,000-whole-FLIP saturating clamp at the accrue write
         ///      (uint32 holds ~4.29e9 > 100M, so the clamp binds first); the clamp can
         ///      only ever under-credit, off the solvency path.
         uint32 affiliateBase;
-        /// @dev Per-sub running CLAIMABLE BURNIE balance, whole BURNIE. Accrued per
+        /// @dev Per-sub running CLAIMABLE FLIP balance, whole FLIP. Accrued per
         ///      delivered day by the warm in-slot buy accrue: the slot-0 quest reward
         ///      (every mode) plus the ticket-mode 10%/20% buyer bonus. Paid out only by the
-        ///      player-pull `claimAfkingBurnie` (one creditFlip, zeroed there so a re-claim
+        ///      player-pull `claimAfkingFlip` (one creditFlip, zeroed there so a re-claim
         ///      finds 0); the sub claims whenever, so there is no settle/claim-timing edge.
         ///      Same uint32 + 100M saturating clamp + under-credit-only behaviour as
         ///      `affiliateBase`.
-        uint32 pendingBurnie;
+        uint32 pendingFlip;
         /// @dev `streakAtAfkingStart` — the afking-run streak base (0..255): the snapshot at run
         ///      start plus the secondary/level completions the player makes during the run
         ///      (bumped via recordAfkingSecondary). The compute-on-read effective streak adds the
         ///      funded delivered days `(afkCoveredThroughDay - afkingStartDay)` to this base. Read
-        ///      per buy as a mask op, so `affiliateBase`/`pendingBurnie` stay unmasked for the hot
+        ///      per buy as a mask op, so `affiliateBase`/`pendingFlip` stay unmasked for the hot
         ///      accrue.
         uint8 subStreakLatch;
     }
@@ -2310,7 +2310,7 @@ abstract contract DegenerusGameStorage {
 
     /// @dev Per-subscriber record (the iterable set's value): the per-sub stamp, the
     ///      day markers (incl. `afkingStartDay` / `afkCoveredThroughDay` for the compute-on-read
-    ///      streak), and the in-slot accumulator (affiliateBase / pendingBurnie / subStreakLatch).
+    ///      streak), and the in-slot accumulator (affiliateBase / pendingFlip / subStreakLatch).
     mapping(address => Sub) internal _subOf;
 
     /// @dev Sparse funder map — the wallet whose `afkingFunding` funds a sub.

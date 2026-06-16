@@ -27,7 +27,7 @@ import {
  *  - TICKET_SCALE = 100 (ticketQuantity=100 = 1 full ticket unit)
  *
  * advanceGame():
- *  - Standard flow, always grants BURNIE bounty; requires mint-gate pass (CREATOR bypass).
+ *  - Standard flow, always grants FLIP bounty; requires mint-gate pass (CREATOR bypass).
  *
  * Advance event is emitted by DegenerusGameAdvanceModule (via delegatecall),
  * so it must be parsed with advanceModule.interface, not game.interface.
@@ -504,7 +504,7 @@ describe("GameLifecycle", function () {
       const { game, coinflip, coin, deployer, alice, vault } =
         await loadFixture(deployFullProtocol);
 
-      // Give alice BURNIE for coinflip deposit
+      // Give alice FLIP for coinflip deposit
       const vaultAddr = await vault.getAddress();
       await hre.ethers.provider.send("hardhat_setBalance", [
         vaultAddr,

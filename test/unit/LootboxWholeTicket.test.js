@@ -41,7 +41,7 @@
 // CROSS-CITES:
 //   - D-274-BIT-SLICE-01 (post-c21f833a supersession: uint16 / bits[152..167])
 //   - D-274-NO-EVT-BREAK-01 (LootBoxOpened.futureTickets + TicketsQueuedScaled
-//     semantics UNCHANGED; BurnieLootOpen removed in v47 — BURNIE-lootbox surface
+//     semantics UNCHANGED; FlipLootOpen removed in v47 — FLIP-lootbox surface
 //     deleted, terminal-paradox closure)
 //   - feedback_rng_backward_trace.md (slice consumed only on manual paths;
 //     auto-resolve never reads bits[152..167])
@@ -87,7 +87,7 @@ function extractFnBody(source, signature) {
   return null;
 }
 
-// The per-roll ticket/BURNIE/emit/consolation logic now lives in
+// The per-roll ticket/FLIP/emit/consolation logic now lives in
 // `_settleLootboxRoll` (post-refactor; `_resolveLootboxCommon` became a void
 // dispatcher that calls this helper once per roll).
 function extractSettleBody(source) {
@@ -586,7 +586,7 @@ describe("LootboxWholeTicket — Phase 274 Wave 2 TST-WT-01..07", function () {
     });
   });
 
-  describe("TST-WT-05 — `LootBoxOpened.futureTickets` scaled-preservation (D-274-NO-EVT-BREAK-01; BurnieLootOpen removed in v47)", function () {
+  describe("TST-WT-05 — `LootBoxOpened.futureTickets` scaled-preservation (D-274-NO-EVT-BREAK-01; FlipLootOpen removed in v47)", function () {
     it("[05a] `_settleLootboxRoll` carries this roll's `scaledTickets` (scaled) and the `LootBoxOpened` emit consumes the same scaled value", function () {
       const source = fs.readFileSync(MODULE_SOURCE_PATH, "utf8");
       // The `LootBoxOpened` emit must reference `scaledTickets` (this roll's
@@ -594,7 +594,7 @@ describe("LootboxWholeTicket — Phase 274 Wave 2 TST-WT-01..07", function () {
       // local; `scaledTickets` is reassigned only by the distress bonus (a
       // still-scaled value) BEFORE the collapse, never by the collapse itself.
       // The emit signature is the 7-arg `(player, index, fullAmount, rollLevel,
-      // scaledTickets, burnieAmount, roundedUp)` (the `day` arg was dropped in
+      // scaledTickets, flipAmount, roundedUp)` (the `day` arg was dropped in
       // 4cb9ccbf "lootbox event day cleanup").
       const lootboxOpenedEmit =
         /emit LootBoxOpened\(\s*player,\s*index,\s*fullAmount,\s*rollLevel,\s*scaledTickets,/;
@@ -622,7 +622,7 @@ describe("LootboxWholeTicket — Phase 274 Wave 2 TST-WT-01..07", function () {
       ).to.equal(1);
       // The scaled count is produced by the `_resolveLootboxRoll` destructure.
       expect(
-        /\(\s*uint256 burnieOut\s*,\s*uint32 scaledTickets\s*,/.test(body),
+        /\(\s*uint256 flipOut\s*,\s*uint32 scaledTickets\s*,/.test(body),
         "scaledTickets must be the scaled roll result from the `_resolveLootboxRoll` destructure"
       ).to.equal(true);
       // The distress-bonus reassignment stays a scaled value.
@@ -642,21 +642,21 @@ describe("LootboxWholeTicket — Phase 274 Wave 2 TST-WT-01..07", function () {
       ).to.equal(false);
     });
 
-    // [05c] BurnieLootOpen scaled-tickets preservation — REMOVED (v47): the
-    // BURNIE-lootbox manual caller `openBurnieLootBox` and its `BurnieLootOpen`
+    // [05c] FlipLootOpen scaled-tickets preservation — REMOVED (v47): the
+    // FLIP-lootbox manual caller `openFlipLootBox` and its `FlipLootOpen`
     // emit were removed (terminal-paradox closure). The scaled-futureTickets
     // preservation invariant for the surviving LootBoxOpened emit is covered by
     // [05a]/[05b] above. Removed-by-design, not skipped — assert the symbols are
     // gone from the source.
-    it("[05c] the v47 LootboxModule source no longer references openBurnieLootBox / BurnieLootOpen (removed-by-design)", function () {
+    it("[05c] the v47 LootboxModule source no longer references openFlipLootBox / FlipLootOpen (removed-by-design)", function () {
       const source = fs.readFileSync(MODULE_SOURCE_PATH, "utf8");
       expect(
-        source.includes("openBurnieLootBox"),
-        "openBurnieLootBox must be fully removed from DegenerusGameLootboxModule.sol"
+        source.includes("openFlipLootBox"),
+        "openFlipLootBox must be fully removed from DegenerusGameLootboxModule.sol"
       ).to.equal(false);
       expect(
-        source.includes("BurnieLootOpen"),
-        "BurnieLootOpen must be fully removed from DegenerusGameLootboxModule.sol"
+        source.includes("FlipLootOpen"),
+        "FlipLootOpen must be fully removed from DegenerusGameLootboxModule.sol"
       ).to.equal(false);
     });
   });
@@ -781,13 +781,13 @@ describe("LootboxWholeTicket — Phase 274 Wave 2 TST-WT-01..07", function () {
     it("[07b] the `LootBoxOpened` emit threads the `index` parameter into the `lootboxIndex` slot", function () {
       const source = fs.readFileSync(MODULE_SOURCE_PATH, "utf8");
       // The per-roll 7-arg emit signature is
-      // `(player, index, fullAmount, rollLevel, scaledTickets, burnieAmount,
+      // `(player, index, fullAmount, rollLevel, scaledTickets, flipAmount,
       //   roundedUp)` (the `day` arg was dropped in 4cb9ccbf).
       expect(
-        /emit LootBoxOpened\(\s*player,\s*index,\s*fullAmount,\s*rollLevel,\s*scaledTickets,\s*burnieAmount,\s*roundedUp\s*\)/.test(
+        /emit LootBoxOpened\(\s*player,\s*index,\s*fullAmount,\s*rollLevel,\s*scaledTickets,\s*flipAmount,\s*roundedUp\s*\)/.test(
           source
         ),
-        "LootBoxOpened emit must thread (player, index, fullAmount, rollLevel, scaledTickets, burnieAmount, roundedUp)"
+        "LootBoxOpened emit must thread (player, index, fullAmount, rollLevel, scaledTickets, flipAmount, roundedUp)"
       ).to.equal(true);
 
       // `_resolveLootboxCommon` signature still carries `uint48 index` (it

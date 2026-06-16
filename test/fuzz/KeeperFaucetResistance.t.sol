@@ -9,22 +9,22 @@ import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 
 /// @title KeeperFaucetResistance -- Proves the v55.0 game-resident permissionless router
-///        (`game.mintBurnie()` advance/open legs + degeneretteResolve) is faucet-bounded by three
+///        (`game.mintFlip()` advance/open legs + degeneretteResolve) is faucet-bounded by three
 ///        caller-independent locks:
 ///        (1) the purchase-gate (an item must already be a real, purchased, RNG-ready bet/box/stamp),
 ///        (2) the flat-per-tx LIVE-unit reward judged against the REAL prevailing gas of the identical
 ///            work at the >=1 gwei market floor (never measured gas, never the peg ref), and
-///        (3) the coinflip-credit illiquidity (creditFlip = pending stake, not liquid BURNIE).
+///        (3) the coinflip-credit illiquidity (creditFlip = pending stake, not liquid FLIP).
 ///
 /// @notice A self-keeper / Sybil round-trip is net-zero-or-negative across the v55 router legs: the
-///         `mintBurnie()` open-leg pro-rated below-knee reward (`unit * min(opened, OPEN_KNEE) / OPEN_KNEE`,
+///         `mintFlip()` open-leg pro-rated below-knee reward (`unit * min(opened, OPEN_KNEE) / OPEN_KNEE`,
 ///         GameAfkingModule.sol:1003-1004), the advance-leg bounty (`unit * ADVANCE_RATIO_NUM * mult`,
 ///         GameAfkingModule.sol:995 — the buy folded into advanceGame's STAGE, so the buy reward rides this
-///         advance bounty), and the degeneretteResolve flat >=3-gate RESOLVE_FLAT_BURNIE grant, each valued
+///         advance bounty), and the degeneretteResolve flat >=3-gate RESOLVE_FLAT_FLIP grant, each valued
 ///         at the 0.5-gwei peg, stay strictly below the REAL gas the identical work burns at every realistic
 ///         submission price (>= 1 gwei). The reward never reads gasleft()/tx.gasprice, so it cannot scale up
 ///         to chase a higher submission price, and the credit lands as illiquid coinflip stake (not liquid
-///         BURNIE), so it cannot be immediately round-tripped to a profit.
+///         FLIP), so it cannot be immediately round-tripped to a profit.
 ///
 ///         Also asserts WWXRP (currency==3) earns exactly zero reward, the one-reward-per-item lock
 ///         (re-resolve of a committed bet reverts BatchAlreadyTaken at item 0), the degeneretteResolve
@@ -32,17 +32,17 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 ///         block (an attempt before the word lands skips, no reward).
 ///
 /// @dev The five call-site deltas applied (D-351-01):
-///   Δ3 doWork->mintBurnie: `afKing.doWork()` -> `game.mintBurnie()`.
+///   Δ3 doWork->mintFlip: `afKing.doWork()` -> `game.mintFlip()`.
 ///   Δ4 autoBuy: the per-sub buy folded into `advanceGame()`'s STAGE; the standalone autoBuy has NO
 ///      successor. The faucet BUY-leg round-trip reframes onto the ADVANCE-leg bounty (the buy reward rides
 ///      `unit * ADVANCE_RATIO_NUM * mult`; there is NO separate flat-1.5x buy bounty in v55). The faucet
 ///      OPEN-leg round-trip reframes onto the AFKING open leg (a STAGE-stamped afking box, opened via
-///      `mintBurnie`'s open branch — the afking-module standalone autoOpen selector collides with the human
-///      autoOpen(uint256) so it is reachable ONLY via mintBurnie). The reward is OBSERVED off the credit
+///      `mintFlip`'s open branch — the afking-module standalone autoOpen selector collides with the human
+///      autoOpen(uint256) so it is reachable ONLY via mintFlip). The reward is OBSERVED off the credit
 ///      delta (not modeled), so the guard holds for whatever the contract pegs.
 ///   Δ5 funding: `afKing.depositFor` -> `game.depositAfkingFunding`; `afKing.subscribe` -> `game.subscribe`;
 ///      `afKing.BOUNTY_ETH_TARGET()` -> the module's hardcoded `BOUNTY_ETH_TARGET` constant (no game getter;
-///      it is no longer a deploy param); `SUB_COST_ETH_TARGET` is GONE (no subscribe-time BURNIE charge).
+///      it is no longer a deploy param); `SUB_COST_ETH_TARGET` is GONE (no subscribe-time FLIP charge).
 ///   Pinned slots RE-DERIVED via `forge inspect storage DegenerusGame`. Zero contracts/*.sol mutation;
 ///   test-only; FROZEN subject (453f8073) honored.
 contract KeeperFaucetResistance is DeployProtocol {
@@ -73,7 +73,7 @@ contract KeeperFaucetResistance is DeployProtocol {
     // Router reward peg mirror (the contract's own FIXED constants, REW-03)
     // -------------------------------------------------------------------------
 
-    /// @dev BURNIE per-ETH conversion unit (DegenerusGameStorage / Coinflip).
+    /// @dev FLIP per-ETH conversion unit (DegenerusGameStorage / Coinflip).
     uint256 private constant PRICE_COIN_UNIT = 1000 ether;
 
     /// @dev keccak256("CoinflipStakeUpdated(address,uint24,uint256,uint256)") — the event creditFlip
@@ -91,7 +91,7 @@ contract KeeperFaucetResistance is DeployProtocol {
     // -------------------------------------------------------------------------
     // v55 game-resident router reward mirror (the GAS-05 round-trip guard target)
     //
-    // The v55 mintBurnie() router (GameAfkingModule.sol:985) computes a level-invariant break-even unit
+    // The v55 mintFlip() router (GameAfkingModule.sol:985) computes a level-invariant break-even unit
     // then applies a per-category factor:
     //   unit       = (BOUNTY_ETH_TARGET * PRICE_COIN_UNIT) / mintPrice()        (GameAfkingModule.sol:987)
     //   advance    = unit * ADVANCE_RATIO_NUM * mult                            (GameAfkingModule.sol:995)
@@ -99,7 +99,7 @@ contract KeeperFaucetResistance is DeployProtocol {
     // BOUNTY_ETH_TARGET is a HARDCODED internal constant (885_000_000_000_000; no game getter, no longer a
     // deploy param) — mirrored here. ADVANCE_RATIO_NUM=2 / OPEN_KNEE=5 are `internal constant`s with no
     // on-chain getter, mirrored here. TEST-MIRROR SYNC: if the contract changes them, re-sync. The guards
-    // CROSS-VALIDATE the live reward (OBSERVED off the mintBurnie credit delta) against the mirror, so a
+    // CROSS-VALIDATE the live reward (OBSERVED off the mintFlip credit delta) against the mirror, so a
     // drift trips a test rather than silently passing.
     // -------------------------------------------------------------------------
 
@@ -210,7 +210,7 @@ contract KeeperFaucetResistance is DeployProtocol {
     }
 
     // =========================================================================
-    // GAS-05 v55 ROUTER round-trip guards (the mintBurnie() open afking-box hot corner + the
+    // GAS-05 v55 ROUTER round-trip guards (the mintFlip() open afking-box hot corner + the
     //          advance-leg bounty the buy now rides).
     //
     // The structural faucet risk is the OPEN small-batch corner: below the OPEN_KNEE the per-box reward
@@ -218,12 +218,12 @@ contract KeeperFaucetResistance is DeployProtocol {
     // fraction of `unit` — which the OPEN_KNEE pro-rate exists to keep strictly below the real one-box tx
     // gas. These guards prove the reward valued at the 0.5-gwei peg is below the REAL gas of the identical
     // work at every realistic market price (>=1 gwei), judged against REAL prevailing gas + flip-credit
-    // illiquidity (NOT the 0.5-gwei peg ref). The reward is OBSERVED off the mintBurnie credit delta, never
+    // illiquidity (NOT the 0.5-gwei peg ref). The reward is OBSERVED off the mintFlip credit delta, never
     // measured gas, and the credit is illiquid coinflip flip-credit, never a liquid/withdrawable balance.
     // =========================================================================
 
     /// @notice GAS-05 (open hot corner, BELOW-KNEE k=3): a self-cranker stamps 3 OWN afking boxes (via the
-    ///         STAGE) then opens them through `mintBurnie()`'s open leg; the OBSERVED reward valued back at
+    ///         STAGE) then opens them through `mintFlip()`'s open leg; the OBSERVED reward valued back at
     ///         the 0.5-gwei peg is STRICTLY below the REAL gas the identical open work burns at the >=1 gwei
     ///         market floor. k=3 < OPEN_KNEE is the hottest pro-rated corner (reward = unit * 3 / KNEE). Each
     ///         k value runs in its OWN test (one new-day STAGE cycle per fixture — multiple cycles cross the
@@ -240,7 +240,7 @@ contract KeeperFaucetResistance is DeployProtocol {
         _assertOpenRoundTripNonPositive(12);
     }
 
-    /// @dev Stamp k afking boxes, open them via mintBurnie's open leg, and assert the OBSERVED reward (the
+    /// @dev Stamp k afking boxes, open them via mintFlip's open leg, and assert the OBSERVED reward (the
     ///      credit delta) valued at the peg is strictly below the real open gas at 1 gwei + 20 gwei.
     function _assertOpenRoundTripNonPositive(uint256 k) internal {
         (address[] memory subs, uint32 stampDay) = _stampKAfkingBoxes(k, 0);
@@ -251,7 +251,7 @@ contract KeeperFaucetResistance is DeployProtocol {
 
         vm.prank(opener);
         uint256 gasBefore = gasleft();
-        game.mintBurnie(); // takes the open leg (advance not due): opens up to OPEN_BATCH=200, i.e. all k
+        game.mintFlip(); // takes the open leg (advance not due): opens up to OPEN_BATCH=200, i.e. all k
         uint256 gasUsed = gasBefore - gasleft();
         uint256 stakeDelta = coinflip.coinflipAmount(opener) - preStake;
 
@@ -294,7 +294,7 @@ contract KeeperFaucetResistance is DeployProtocol {
         uint256 preStake = coinflip.coinflipAmount(opener);
         vm.prank(opener);
         uint256 gasBefore = gasleft();
-        game.mintBurnie();
+        game.mintFlip();
         uint256 gasUsed = gasBefore - gasleft();
         uint256 stakeDelta = coinflip.coinflipAmount(opener) - preStake;
 
@@ -310,12 +310,12 @@ contract KeeperFaucetResistance is DeployProtocol {
         );
     }
 
-    /// @notice GAS-05 (advance leg — the buy rides it): the flat-per-tx mintBurnie() advance reward valued
-    ///         at the 0.5-gwei peg is strictly below the REAL gas the mintBurnie() advance-leg tx burns at
+    /// @notice GAS-05 (advance leg — the buy rides it): the flat-per-tx mintFlip() advance reward valued
+    ///         at the 0.5-gwei peg is strictly below the REAL gas the mintFlip() advance-leg tx burns at
     ///         the >=1 gwei floor. In v55 the per-sub buy folded into advanceGame's STAGE, so the buy reward
     ///         IS the advance bounty (`unit * ADVANCE_RATIO_NUM * mult`); a farmer driving the advance funds
     ///         real subscription buys (each bounded once/day/sub) far in excess of the bounty. The reward is
-    ///         OBSERVED directly off the mintBurnie() credit delta.
+    ///         OBSERVED directly off the mintFlip() credit delta.
     function testRouterAdvanceSelfKeeperRoundTripNonPositive() public {
         vm.skip(true, "357-00b D-12 supersession: the round-trip faucet-resistance harness subscribes ungrounded subs to measure keeper round-trips; the grounded subscribe changes the STAGE-first-buy economics; re-proven by V56SubHardening + V56AfkingGasMarginal (the gas marginals)");
         // Healthy funded subs so the advance-leg STAGE does real buy work; then make advance due.
@@ -329,11 +329,11 @@ contract KeeperFaucetResistance is DeployProtocol {
 
         vm.prank(keeper);
         uint256 gasBefore = gasleft();
-        game.mintBurnie();
+        game.mintFlip();
         uint256 gasUsed = gasBefore - gasleft();
 
         uint256 stakeDelta = coinflip.coinflipAmount(keeper) - pre;
-        assertGt(stakeDelta, 0, "mintBurnie advance leg pays a positive bounty (the buy rides it)");
+        assertGt(stakeDelta, 0, "mintFlip advance leg pays a positive bounty (the buy rides it)");
 
         uint256 rewardEthAtPeg = (stakeDelta * PriceLookupLib.priceForLevel(_lvl())) / PRICE_COIN_UNIT;
 
@@ -351,7 +351,7 @@ contract KeeperFaucetResistance is DeployProtocol {
     }
 
     /// @notice GAS-05 advance-leg fuzz: across fuzzed realistic submission prices the observed advance
-    ///         reward at the 0.5-gwei peg is always below the real mintBurnie() advance-leg gas —
+    ///         reward at the 0.5-gwei peg is always below the real mintFlip() advance-leg gas —
     ///         price-independent reward.
     function testFuzz_RouterAdvanceRoundTripNonPositiveAcrossGasPrices(uint256 gasPriceWei) public {
         vm.skip(true, "357-00b D-12 supersession: the round-trip faucet-resistance harness subscribes ungrounded subs to measure keeper round-trips; the grounded subscribe changes the STAGE-first-buy economics; re-proven by V56SubHardening + V56AfkingGasMarginal (the gas marginals)");
@@ -366,10 +366,10 @@ contract KeeperFaucetResistance is DeployProtocol {
         uint256 pre = coinflip.coinflipAmount(keeper);
         vm.prank(keeper);
         uint256 gasBefore = gasleft();
-        game.mintBurnie();
+        game.mintFlip();
         uint256 gasUsed = gasBefore - gasleft();
         uint256 stakeDelta = coinflip.coinflipAmount(keeper) - pre;
-        assertGt(stakeDelta, 0, "mintBurnie advance leg pays a positive bounty");
+        assertGt(stakeDelta, 0, "mintFlip advance leg pays a positive bounty");
 
         uint256 rewardEthAtPeg = (stakeDelta * PriceLookupLib.priceForLevel(_lvl())) / PRICE_COIN_UNIT;
         assertLt(
@@ -379,7 +379,7 @@ contract KeeperFaucetResistance is DeployProtocol {
         );
     }
 
-    /// @notice GUARD-the-guard / test-mirror sync: the advance reward mintBurnie() actually credits equals
+    /// @notice GUARD-the-guard / test-mirror sync: the advance reward mintFlip() actually credits equals
     ///         the LIVE break-even unit times ADVANCE_RATIO_NUM times the day-epoch stall mult. This binds
     ///         the mirrored ADVANCE_RATIO_NUM (and the `unit` formula the open guard reuses) to the deployed
     ///         contract: if the contract changes BOUNTY_ETH_TARGET or ADVANCE_RATIO_NUM without re-syncing
@@ -396,14 +396,14 @@ contract KeeperFaucetResistance is DeployProtocol {
         vm.deal(keeper, 1000 ether);
         uint256 pre = coinflip.coinflipAmount(keeper);
         vm.prank(keeper);
-        game.mintBurnie();
+        game.mintFlip();
         uint256 stakeDelta = coinflip.coinflipAmount(keeper) - pre;
 
         uint256 unit = _liveUnit();
         assertEq(
             stakeDelta,
             unit * ADVANCE_RATIO_NUM * 1,
-            "mintBurnie advance reward == live unit * ADVANCE_RATIO_NUM * mult(==1) (mirror in sync)"
+            "mintFlip advance reward == live unit * ADVANCE_RATIO_NUM * mult(==1) (mirror in sync)"
         );
     }
 
@@ -437,18 +437,18 @@ contract KeeperFaucetResistance is DeployProtocol {
     }
 
     // =========================================================================
-    // GAS-06 degeneretteResolve flat ~1-BURNIE round-trip guard + the >=3 non-WWXRP gate /
+    // GAS-06 degeneretteResolve flat ~1-FLIP round-trip guard + the >=3 non-WWXRP gate /
     //          1-2-unpaid / 0-reverts / WWXRP-excl.
     //
-    // The degeneretteResolve (DegenerusGame.sol) pays a count-independent flat RESOLVE_FLAT_BURNIE
+    // The degeneretteResolve (DegenerusGame.sol) pays a count-independent flat RESOLVE_FLAT_FLIP
     // flip-credit ONCE per tx at >=3 successfully-resolved NON-WWXRP bets (D-05b). The anti-exploit basis
-    // (D-05c, NOT the 0.5-gwei peg ref): ~1 BURNIE is illiquid flip-credit worth <= mintPrice/1000 ETH,
+    // (D-05c, NOT the 0.5-gwei peg ref): ~1 FLIP is illiquid flip-credit worth <= mintPrice/1000 ETH,
     // while the keeper pays REAL prevailing gas on every qualifying tx -> a net loss at any realistic price;
     // the >=3 gate widens the margin. The reward is read off the keeper's credit delta (NOT hardcoded 1e18).
     // =========================================================================
 
     /// @notice GAS-06 round-trip: a self-cranker resolves exactly 3 non-WWXRP bets (the minimum paid case),
-    ///         earns the flat ~1-BURNIE flip-credit ONCE. That credit valued back at the level price is <=
+    ///         earns the flat ~1-FLIP flip-credit ONCE. That credit valued back at the level price is <=
     ///         mintPrice/1000 ETH (the D-05c illiquid-credit ceiling), and the REAL measured
     ///         degeneretteResolve gas * realPrice strictly exceeds it at 1 gwei and 20 gwei -> net loss.
     function testDegeneretteResolveFlatRewardRoundTripNonPositive() public {
@@ -485,11 +485,11 @@ contract KeeperFaucetResistance is DeployProtocol {
             "GAS-06: resolve round-trip strictly negative at a realistic 20 gwei price"
         );
 
-        // (c) Illiquidity: the credit never landed as a liquid/withdrawable BURNIE balance.
-        assertEq(coin.balanceOf(player), 0, "resolve reward is illiquid coinflip stake, never liquid BURNIE");
+        // (c) Illiquidity: the credit never landed as a liquid/withdrawable FLIP balance.
+        assertEq(coin.balanceOf(player), 0, "resolve reward is illiquid coinflip stake, never liquid FLIP");
     }
 
-    /// @notice GAS-06 resolve fuzz: across fuzzed realistic submission prices the flat ~1-BURNIE credit
+    /// @notice GAS-06 resolve fuzz: across fuzzed realistic submission prices the flat ~1-FLIP credit
     ///         (valued at peg) is ALWAYS below the real >=3-resolution gas — the reward never reads
     ///         tx.gasprice so the round-trip cannot be pushed positive by choosing the price.
     function testFuzz_DegeneretteResolveRoundTripNonPositiveAcrossGasPrices(uint256 gasPriceWei) public {
@@ -733,7 +733,7 @@ contract KeeperFaucetResistance is DeployProtocol {
     // v55 router round-trip helpers (the afking open + advance bounty)
     // -------------------------------------------------------------------------
 
-    /// @dev The LIVE break-even unit mintBurnie() computes: (BOUNTY_ETH_TARGET * PRICE_COIN_UNIT) / mintPrice.
+    /// @dev The LIVE break-even unit mintFlip() computes: (BOUNTY_ETH_TARGET * PRICE_COIN_UNIT) / mintPrice.
     ///      BOUNTY_ETH_TARGET is the v55 hardcoded module constant (mirrored here; no game getter exists).
     function _liveUnit() internal view returns (uint256) {
         return (BOUNTY_ETH_TARGET * PRICE_COIN_UNIT) / game.mintPrice();
@@ -757,7 +757,7 @@ contract KeeperFaucetResistance is DeployProtocol {
     }
 
     /// @dev Stamp exactly `k` afking boxes: subscribe k funded LOOTBOX-mode subs (deity-passed so they
-    ///      survive any level crossing), run a new-day STAGE to stamp them, then settle so mintBurnie's
+    ///      survive any level crossing), run a new-day STAGE to stamp them, then settle so mintFlip's
     ///      `else` open arm is reachable (advance not due). Returns the subs + the stamp day.
     function _stampKAfkingBoxes(uint256 k, uint256 salt) internal returns (address[] memory subs, uint32 stampDay) {
         subs = new address[](k);

@@ -13,22 +13,22 @@ import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 /// @notice Leg 1 (forge arm). The ETH/claimablePool debit happens at exactly one in-context site —
 ///   `_deliverAfkingBuy` (GameAfkingModule.sol): `afkingFunding[src] -= ethValue; claimablePool -=
 ///   uint128(ethValue);` — and the debit equals the delivered ethValue EXACTLY. The affiliate base and the
-///   slot-0 quest reward are accrued as BURNIE (pendingBurnie / affiliateBase, claimed via creditFlip), OFF
-///   the ETH/claimablePool path: claiming BURNIE leaves claimablePool byte-unchanged. The literal git
+///   slot-0 quest reward are accrued as FLIP (pendingFlip / affiliateBase, claimed via creditFlip), OFF
+///   the ETH/claimablePool path: claiming FLIP leaves claimablePool byte-unchanged. The literal git
 ///   byte-diff anchor (`git diff 453f8073 HEAD` shows the debit two-liner re-added verbatim) is recorded by
-///   356-07's ledger; this file asserts the BEHAVIOR (debit == delivered value; BURNIE claim moves no pool).
+///   356-07's ledger; this file asserts the BEHAVIOR (debit == delivered value; FLIP claim moves no pool).
 ///
 /// @notice Leg 2 (solvency invariant). The master invariant the Game maintains (DegenerusGame.sol:18) is
 ///   `address(this).balance + steth.balanceOf(this) >= claimablePool`. Across random {sub, unsub, buy,
-///   accrue, claimAfkingBurnie} sequences it always holds: the buy-delivery debit decreases claimablePool by
-///   exactly the fresh-ETH it spends from the (already-reserved) afking funding, and the BURNIE accrue/claim
+///   accrue, claimAfkingFlip} sequences it always holds: the buy-delivery debit decreases claimablePool by
+///   exactly the fresh-ETH it spends from the (already-reserved) afking funding, and the FLIP accrue/claim
 ///   never touches the pool.
 ///
 /// @notice Leg 3 (RNG-freeze determinism). The subscribe min-buy STAMPS a box for-later-open and NEVER
 ///   inline-resolves pre-RNG (no LootBoxOpened at subscribe time). The single-roll open seed is
 ///   `keccak256(abi.encode(rngWordByDay[stampDay], player, stampDay, amount))` — it carries NO block.*
 ///   entropy, so two opens of the SAME stamp at DIFFERENT blocks (vm.roll/warp + perturbed
-///   prevrandao/coinbase) materialize byte-identical boxes. The afking open is reached via mintBurnie() (the
+///   prevrandao/coinbase) materialize byte-identical boxes. The afking open is reached via mintFlip() (the
 ///   autoOpen selector was dropped — not re-exposed on the Game).
 ///
 /// @dev Reuses the funded-sub + deity-pass + new-day STAGE harness (the accumulating-`_t` warp +
@@ -56,13 +56,13 @@ contract V56FreezeSolvency is DeployProtocol {
     //   dailyQuantity u8 @0 · validThroughLevel u24 @1 · reinvestPct u8 @4 · flags u8 @5
     //   scorePlus1 u16 @6 · amount u24 @8 (milli-ETH)
     //   lastAutoBoughtDay u24 @11 · lastOpenedDay u24 @14 · afkCoveredThroughDay u24 @17 · afkingStartDay u24 @20
-    //   affiliateBase u32 @23 · pendingBurnie u32 @27 · subStreakLatch u8 @31
+    //   affiliateBase u32 @23 · pendingFlip u32 @27 · subStreakLatch u8 @31
     uint256 private constant OFF_SCOREPLUS1 = 6; // uint16 scorePlus1        (bytes 6..7)
     uint256 private constant OFF_AMOUNT = 8; // uint24 amount (milli-ETH)   (bytes 8..10)
     uint256 private constant OFF_LASTBOUGHT = 11; // uint24 lastAutoBoughtDay (bytes 11..13)
     uint256 private constant OFF_LASTOPENED = 14; // uint24 lastOpenedDay     (bytes 14..16)
     uint256 private constant OFF_AFKCOVERED = 17; // uint24 afkCoveredThroughDay (bytes 17..19)
-    uint256 private constant OFF_PENDINGBURNIE = 27; // uint32 pendingBurnie (bytes 27..30)
+    uint256 private constant OFF_PENDINGFLIP = 27; // uint32 pendingFlip (bytes 27..30)
 
     uint256 private constant DEITY_SHIFT = 184;
 
@@ -70,8 +70,8 @@ contract V56FreezeSolvency is DeployProtocol {
     bytes32 private constant LOOTBOX_OPENED_SIG =
         keccak256("LootBoxOpened(address,uint48,uint256,uint24,uint32,uint256,bool)");
 
-    /// @dev QUEST_SLOT0_REWARD / 1 ether = 100 whole BURNIE accrued to pendingBurnie per delivered buy.
-    uint256 private constant SLOT0_BURNIE_PER_BUY = 100;
+    /// @dev QUEST_SLOT0_REWARD / 1 ether = 100 whole FLIP accrued to pendingFlip per delivered buy.
+    uint256 private constant SLOT0_FLIP_PER_BUY = 100;
 
     uint256 private constant DRAIN_MAX_ITERATIONS = 60;
     uint256 private _lastFulfilledReqId;
@@ -85,7 +85,7 @@ contract V56FreezeSolvency is DeployProtocol {
         uint256 amount;
         uint24 futureLevel;
         uint32 futureTickets;
-        uint256 burnie;
+        uint256 flip;
         bool roundedUp;
     }
 
@@ -101,11 +101,11 @@ contract V56FreezeSolvency is DeployProtocol {
     // =========================================================================
 
     /// @notice The master solvency invariant `game.balance + steth.balanceOf(game) >= claimablePool` holds
-    ///         after EVERY action in a fuzzed {sub, unsub, buy(=deliver a funded day), claimAfkingBurnie}
+    ///         after EVERY action in a fuzzed {sub, unsub, buy(=deliver a funded day), claimAfkingFlip}
     ///         sequence. Each delivered day debits claimablePool by exactly its fresh-ETH spend (already
-    ///         reserved inside the pool by the funding deposit), and the BURNIE accrue/claim moves no ETH —
+    ///         reserved inside the pool by the funding deposit), and the FLIP accrue/claim moves no ETH —
     ///         so the invariant is never broken by the v56 accrual/settle redesign. Non-vacuous: at least one
-    ///         delivered buy actually moved the pool and accrued claimable BURNIE.
+    ///         delivered buy actually moved the pool and accrued claimable FLIP.
     function testFuzzSolvencyInvariantUnderChurn(uint256 seq, uint8 rounds) public {
         address a = makeAddr("solv_a");
         address b = makeAddr("solv_b");
@@ -133,10 +133,10 @@ contract V56FreezeSolvency is DeployProtocol {
                 _deliverDay(uint256(keccak256(abi.encode("solvbuy", seq, i))) | 1);
                 delivered++;
             } else if (action == 4) {
-                // claimAfkingBurnie: pulls the accrued BURNIE — must NOT move claimablePool.
+                // claimAfkingFlip: pulls the accrued FLIP — must NOT move claimablePool.
                 uint256 poolBefore = _claimablePool();
-                game.claimAfkingBurnie(_pair(a, b));
-                assertEq(_claimablePool(), poolBefore, "claimAfkingBurnie left claimablePool byte-unchanged (OFF the ETH path)");
+                game.claimAfkingFlip(_pair(a, b));
+                assertEq(_claimablePool(), poolBefore, "claimAfkingFlip left claimablePool byte-unchanged (OFF the ETH path)");
             } else if (action == 5) {
                 // unsub a (tombstone) — only if currently an active sub (a real user can't cancel a
                 // non-existent sub; the contract reverts NotSubscribed otherwise). Refunds nothing, so the
@@ -161,15 +161,15 @@ contract V56FreezeSolvency is DeployProtocol {
             _assertSolvent("post-action");
         }
 
-        // Non-vacuity: the churn delivered at least one buy that moved the pool + accrued claimable BURNIE.
+        // Non-vacuity: the churn delivered at least one buy that moved the pool + accrued claimable FLIP.
         assertGt(delivered, 0, "non-vacuity: at least one delivered buy");
         _assertSolvent("final");
     }
 
     /// @notice A focused named repro of leg 2's core: a delivered funded buy debits claimablePool, and a
-    ///         subsequent claimAfkingBurnie leaves the pool byte-unchanged. The solvency invariant holds
+    ///         subsequent claimAfkingFlip leaves the pool byte-unchanged. The solvency invariant holds
     ///         across both.
-    function testSolvencyHoldsBuyThenBurnieClaim() public {
+    function testSolvencyHoldsBuyThenFlipClaim() public {
         address p = makeAddr("solv_repro");
         _grantDeityPass(p);
         // Fund-before-subscribe grounds the NEW-run cover-buy (D-12); under the hardened gate the grounded
@@ -184,20 +184,20 @@ contract V56FreezeSolvency is DeployProtocol {
         assertLt(poolAfterBuy, poolBeforeBuy, "the delivered buy debited claimablePool by its fresh-ETH spend");
         _assertSolvent("post-buy");
 
-        // The buy accrued claimable BURNIE OFF the ETH path.
-        assertEq(_pendingBurnieOf(p), SLOT0_BURNIE_PER_BUY, "the buy accrued 100 whole BURNIE into pendingBurnie (OFF the ETH path)");
+        // The buy accrued claimable FLIP OFF the ETH path.
+        assertEq(_pendingFlipOf(p), SLOT0_FLIP_PER_BUY, "the buy accrued 100 whole FLIP into pendingFlip (OFF the ETH path)");
 
-        // Claiming the BURNIE moves no ETH: the pool is byte-unchanged across the claim.
+        // Claiming the FLIP moves no ETH: the pool is byte-unchanged across the claim.
         uint256 poolBeforeClaim = _claimablePool();
-        game.claimAfkingBurnie(_singleton(p));
-        assertEq(_claimablePool(), poolBeforeClaim, "claimAfkingBurnie: claimablePool byte-unchanged (BURNIE is OFF the ETH/pool path)");
-        assertEq(_pendingBurnieOf(p), 0, "the BURNIE was paid (pendingBurnie zeroed)");
+        game.claimAfkingFlip(_singleton(p));
+        assertEq(_claimablePool(), poolBeforeClaim, "claimAfkingFlip: claimablePool byte-unchanged (FLIP is OFF the ETH/pool path)");
+        assertEq(_pendingFlipOf(p), 0, "the FLIP was paid (pendingFlip zeroed)");
         _assertSolvent("post-claim");
     }
 
     // =========================================================================
     // Leg 1 (forge arm) — the SOLVENCY-01 debit equals the delivered ethValue EXACTLY,
-    //                     and the BURNIE accrue/claim is OFF the ETH/claimablePool path
+    //                     and the FLIP accrue/claim is OFF the ETH/claimablePool path
     // =========================================================================
 
     /// @notice The ETH/claimablePool debit happens ONLY at the buy-delivery site and equals the delivered
@@ -237,31 +237,31 @@ contract V56FreezeSolvency is DeployProtocol {
         _assertSolvent("post-debit");
     }
 
-    /// @notice The BURNIE accrual + claim is OFF the ETH/claimablePool path: across a delivered buy that
-    ///         accrues both the slot-0 pendingBurnie reward AND the affiliate base, then a claimAfkingBurnie,
-    ///         the claimablePool delta is attributable ENTIRELY to the ETH buy debit — the BURNIE legs add
+    /// @notice The FLIP accrual + claim is OFF the ETH/claimablePool path: across a delivered buy that
+    ///         accrues both the slot-0 pendingFlip reward AND the affiliate base, then a claimAfkingFlip,
+    ///         the claimablePool delta is attributable ENTIRELY to the ETH buy debit — the FLIP legs add
     ///         and remove ZERO from the pool. (affiliate/quest rewards are creditFlip-paid, never an ETH
     ///         debit.) Asserted by isolating the claim: the pool is byte-unchanged across the claim alone.
-    function testBurnieClaimLeavesClaimablePoolUnchanged() public {
-        address p = makeAddr("burnie_offpath");
+    function testFlipClaimLeavesClaimablePoolUnchanged() public {
+        address p = makeAddr("flip_offpath");
         _grantDeityPass(p);
         _fundPool(p, 50 ether);
         _subscribeLootbox(p, 1); // join-day cover-buy accrues 100
         _deliverDay(0xB04E0FF); // next-day STAGE buy accrues another 100 + affiliateBase
 
-        // Cover-buy (join day) + one delivered STAGE day = TWO paid buys = 200 whole BURNIE.
-        uint256 owed = _pendingBurnieOf(p);
-        assertEq(owed, 2 * SLOT0_BURNIE_PER_BUY, "non-vacuity: cover-buy + one delivered STAGE buy accrued claimable BURNIE (200)");
+        // Cover-buy (join day) + one delivered STAGE day = TWO paid buys = 200 whole FLIP.
+        uint256 owed = _pendingFlipOf(p);
+        assertEq(owed, 2 * SLOT0_FLIP_PER_BUY, "non-vacuity: cover-buy + one delivered STAGE buy accrued claimable FLIP (200)");
 
-        // Isolate the BURNIE claim: the pool must be byte-identical before/after (BURNIE is a creditFlip, not
+        // Isolate the FLIP claim: the pool must be byte-identical before/after (FLIP is a creditFlip, not
         // an ETH/pool debit) — this is the exact equality the acceptance criterion demands.
         uint256 poolBefore = _claimablePool();
         uint256 stakeBefore = coinflip.coinflipAmount(p);
-        game.claimAfkingBurnie(_singleton(p));
-        assertEq(_claimablePool(), poolBefore, "BURNIE claim: claimablePool byte-unchanged (OFF the ETH path)");
-        assertEq(coinflip.coinflipAmount(p) - stakeBefore, owed * 1 ether, "BURNIE claim paid via creditFlip (not an ETH move)");
-        assertEq(_pendingBurnieOf(p), 0, "pendingBurnie zeroed (paid exactly once, CEI)");
-        _assertSolvent("post-burnie-claim");
+        game.claimAfkingFlip(_singleton(p));
+        assertEq(_claimablePool(), poolBefore, "FLIP claim: claimablePool byte-unchanged (OFF the ETH path)");
+        assertEq(coinflip.coinflipAmount(p) - stakeBefore, owed * 1 ether, "FLIP claim paid via creditFlip (not an ETH move)");
+        assertEq(_pendingFlipOf(p), 0, "pendingFlip zeroed (paid exactly once, CEI)");
+        _assertSolvent("post-flip-claim");
     }
 
     // =========================================================================
@@ -340,7 +340,7 @@ contract V56FreezeSolvency is DeployProtocol {
 
     /// @notice TWO-BLOCK DETERMINISM fuzz: for RANDOM perturbed open-block contexts (prevrandao/coinbase/
     ///         number/timestamp), the SAME stamp opens to a byte-identical box — ANY two block contexts agree,
-    ///         so the single-roll open + pendingBurnie credit consume ONLY the frozen rngWordByDay[stampDay].
+    ///         so the single-roll open + pendingFlip credit consume ONLY the frozen rngWordByDay[stampDay].
     function testFuzzTwoBlockOpenNoBlockEntropy(uint256 r1, uint256 r2, uint64 dt1, uint64 dt2) public {
         address afk = makeAddr("freeze_twoblock_fz");
         _grantDeityPass(afk);
@@ -380,7 +380,7 @@ contract V56FreezeSolvency is DeployProtocol {
     /// @dev Open `afk`'s stamped afking box at a perturbed block context and return the materialized box
     ///      decoded from the LootBoxOpened event. Perturbs block number / timestamp (sub-day, level held) /
     ///      prevrandao / coinbase (NONE enter the single-roll afking seed by design), then settles any
-    ///      in-flight advance so mintBurnie takes the OPEN leg (!advanceDue) and fires the open. Uses a FIXED
+    ///      in-flight advance so mintFlip takes the OPEN leg (!advanceDue) and fires the open. Uses a FIXED
     ///      drain word (NOT derived from the perturbation — the perturbation touches only the block context).
     function _openAfkingBoxAt(
         address afk,
@@ -398,7 +398,7 @@ contract V56FreezeSolvency is DeployProtocol {
 
         vm.recordLogs();
         vm.prank(makeAddr("freeze_opener"));
-        try game.mintBurnie() {} catch {}
+        try game.mintFlip() {} catch {}
         return _decodeLootBoxOpenedFor(afk);
     }
 
@@ -414,7 +414,7 @@ contract V56FreezeSolvency is DeployProtocol {
             ) {
                 b.present = true;
                 b.lootboxIndex = uint48(uint256(logs[i].topics[2]));
-                (b.amount, b.futureLevel, b.futureTickets, b.burnie, b.roundedUp) =
+                (b.amount, b.futureLevel, b.futureTickets, b.flip, b.roundedUp) =
                     abi.decode(logs[i].data, (uint256, uint24, uint32, uint256, bool));
                 return b;
             }
@@ -439,7 +439,7 @@ contract V56FreezeSolvency is DeployProtocol {
         assertEq(a.amount, b.amount, string(abi.encodePacked(tag, ": amount")));
         assertEq(a.futureLevel, b.futureLevel, string(abi.encodePacked(tag, ": futureLevel")));
         assertEq(a.futureTickets, b.futureTickets, string(abi.encodePacked(tag, ": futureTickets")));
-        assertEq(a.burnie, b.burnie, string(abi.encodePacked(tag, ": burnie")));
+        assertEq(a.flip, b.flip, string(abi.encodePacked(tag, ": flip")));
         assertEq(a.roundedUp, b.roundedUp, string(abi.encodePacked(tag, ": roundedUp")));
     }
 
@@ -467,7 +467,7 @@ contract V56FreezeSolvency is DeployProtocol {
     /// @dev Deliver ONE funded day to the in-set subs: a new-day STAGE buy (stamps each pending box +
     ///      debits the fresh-ETH spend + accrues), then settle clean and OPEN every pending box (so the
     ///      no-orphan guard does not skip the next day's buy). Each delivered day debits claimablePool by the
-    ///      fresh-ETH spend and accrues 100 pendingBurnie per in-set sub.
+    ///      fresh-ETH spend and accrues 100 pendingFlip per in-set sub.
     function _deliverDay(uint256 vrfWord) internal {
         uint256 w = uint256(keccak256(abi.encode("dlv", vrfWord, _deliverNonce++))) | 1;
         _runStageNewDay(w);
@@ -496,7 +496,7 @@ contract V56FreezeSolvency is DeployProtocol {
     }
 
     /// @dev A robust settle DEMANDING a clean (`!advanceDue && !rngLocked`) state before returning — used
-    ///      before an afking open so mintBurnie reliably takes the OPEN leg (Don't-Hand-Roll).
+    ///      before an afking open so mintFlip reliably takes the OPEN leg (Don't-Hand-Roll).
     function _settleClean(uint256 vrfWord) internal {
         for (uint256 d; d < 240; d++) {
             if (!game.advanceDue() && !game.rngLocked()) return;
@@ -565,8 +565,8 @@ contract V56FreezeSolvency is DeployProtocol {
         return uint32(_subField(who, OFF_LASTOPENED, 24));
     }
 
-    function _pendingBurnieOf(address who) internal view returns (uint32) {
-        return uint32(_subField(who, OFF_PENDINGBURNIE, 32));
+    function _pendingFlipOf(address who) internal view returns (uint32) {
+        return uint32(_subField(who, OFF_PENDINGFLIP, 32));
     }
 
     function _subscriberIndexOf(address who) internal view returns (uint256) {

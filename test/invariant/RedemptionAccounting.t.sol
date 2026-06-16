@@ -4,7 +4,7 @@ pragma solidity ^0.8.26;
 import "forge-std/Test.sol";
 import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
 import {RedemptionHandler} from "../fuzz/handlers/RedemptionHandler.sol";
-import {StakedDegenerusStonk} from "../../contracts/StakedDegenerusStonk.sol";
+import {sDGNRS} from "../../contracts/sDGNRS.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 
 /// @title RedemptionAccounting -- 13 invariant_INV_NN_* functions for v44 sStonk per-day source
@@ -19,13 +19,13 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 contract RedemptionAccounting is DeployProtocol {
     RedemptionHandler public handler;
 
-    /// @dev Mirrors `StakedDegenerusStonk.MAX_DAILY_REDEMPTION_EV` (private literal `160 ether`).
+    /// @dev Mirrors `sDGNRS.MAX_DAILY_REDEMPTION_EV` (private literal `160 ether`).
     uint256 internal constant MAX_DAILY_REDEMPTION_EV = 160 ether;
 
-    /// @dev Mirrors `StakedDegenerusStonk.MIN_BURN_AMOUNT` (private literal `1e18`).
+    /// @dev Mirrors `sDGNRS.MIN_BURN_AMOUNT` (private literal `1e18`).
     uint256 internal constant MIN_BURN_AMOUNT = 1e18;
 
-    /// @dev Mirrors `StakedDegenerusStonk.MAX_ROLL` (private literal `175`). v47: at SUBMIT the
+    /// @dev Mirrors `sDGNRS.MAX_ROLL` (private literal `175`). v47: at SUBMIT the
     ///      contract physically segregates the MAX possible payout (base × MAX_ROLL / 100 = 175%)
     ///      into `pendingRedemptionEthValue`; at RESOLVE that reservation is lowered from MAX to the
     ///      rolled amount (base × roll / 100). So an UNRESOLVED day contributes 175% of its base to
@@ -142,21 +142,21 @@ contract RedemptionAccounting is DeployProtocol {
     }
 
     // =====================================================================
-    //              INV-03: BURNIE conservation (EXACT)
+    //              INV-03: FLIP conservation (EXACT)
     // =====================================================================
 
-    /// @notice INV-03 — 304-SPEC §1 lines 118-139. The redemption BURNIE leg keeps NO aggregate
+    /// @notice INV-03 — 304-SPEC §1 lines 118-139. The redemption FLIP leg keeps NO aggregate
     ///         reserve scalar: the redeemed slice is removed from sDGNRS's backing at SUBMIT
-    ///         (withdrawRedeemedBurnie) and escrowed per-(redeemer, day) as PendingRedemption.burnieEscrow,
+    ///         (withdrawRedeemedFlip) and escrowed per-(redeemer, day) as PendingRedemption.flipEscrow,
     ///         so single-counting is structural (each submit reads backing already net of prior escrows)
-    ///         — there is no `pendingRedemptionBurnie` cumulative scalar or per-day `burnieBase` field to
+    ///         — there is no `pendingRedemptionFlip` cumulative scalar or per-day `flipBase` field to
     ///         diverge. Conservation across submit→resolve→claim (slice removed at submit, minted to the
     ///         redeemer only on a winning resolving-day coinflip, else forfeited) is exercised by the
-    ///         StakedStonkRedemption BURNIE-escrow tests, not here.
+    ///         StakedStonkRedemption FLIP-escrow tests, not here.
     /// @dev Retained as a documented no-op so the §3.F attestation matrix keeps its INV-03 row;
     ///      asserting against a deleted storage slot would be vacuous (always zero).
-    function invariant_INV_03_BurnieConservationExact() public view {
-        // No-op: the redemption-BURNIE reserve was removed in v47 (settled at submit). See NatSpec.
+    function invariant_INV_03_FlipConservationExact() public view {
+        // No-op: the redemption-FLIP reserve was removed in v47 (settled at submit). See NatSpec.
         // Touch state read-only so the function body is non-trivial under the view mutability.
         assertTrue(address(sdgnrs) != address(0), "INV-03: harness wiring");
     }
@@ -175,7 +175,7 @@ contract RedemptionAccounting is DeployProtocol {
         for (uint256 i = 0; i < bound; i++) {
             uint32 d = handler.getDayWritten(i);
             if (handler.ghost_dayResolved(d)) continue;
-            // v47: per-day burnieBase + per-(P,D) burnieOwed removed; only the ETH leg remains.
+            // v47: per-day flipBase + per-(P,D) flipOwed removed; only the ETH leg remains.
             (uint64 ethBase, , ) = _readPendingByDay(d);
             if (ethBase == 0) continue;
             uint256 sumEth;
@@ -308,7 +308,7 @@ contract RedemptionAccounting is DeployProtocol {
             uint32 d = handler.getDayWritten(i);
             if (d >= today) continue;
             if (!handler.ghost_dayResolved(d)) continue;
-            // v47: per-day burnieBase removed; delete-at-resolve clears the 3 surviving fields.
+            // v47: per-day flipBase removed; delete-at-resolve clears the 3 surviving fields.
             (uint64 ethBase, uint64 supplySnapshot, uint64 burned) = _readPendingByDay(d);
             assertEq(uint256(ethBase), 0, "INV-08: resolved day D < today retained ethBase");
             assertEq(uint256(supplySnapshot), 0, "INV-08: resolved day D < today retained supplySnapshot");
@@ -332,7 +332,7 @@ contract RedemptionAccounting is DeployProtocol {
         uint256 bound = len < SCAN_CAP ? len : SCAN_CAP;
         for (uint256 i = 0; i < bound; i++) {
             uint32 d = handler.getDayWritten(i);
-            // v47: per-day burnieBase removed. `supplySnapshot` (lazy-init on the FIRST burn of a
+            // v47: per-day flipBase removed. `supplySnapshot` (lazy-init on the FIRST burn of a
             // day, independent of sub-gwei ethBase rounding) is the pool-existence indicator — it
             // matches the sentinel-set condition, whereas ethBase can round to 0 for a tiny burn
             // while the sentinel is still legitimately stamped to that day.
@@ -411,7 +411,7 @@ contract RedemptionAccounting is DeployProtocol {
         for (uint256 i = 0; i < bound; i++) {
             uint32 d = handler.getDayWritten(i);
             if (handler.ghost_dayResolved(d)) continue;
-            // v47: per-day burnieBase removed; `supplySnapshot` (lazy-init on first burn, sentinel-set
+            // v47: per-day flipBase removed; `supplySnapshot` (lazy-init on first burn, sentinel-set
             // condition) is the pool-existence indicator — ethBase can round to 0 for a tiny burn
             // while the pool legitimately exists and is stamped.
             (, uint64 supplySnapshot, ) = _readPendingByDay(d);
@@ -442,7 +442,7 @@ contract RedemptionAccounting is DeployProtocol {
         uint256 bound = len < SCAN_CAP ? len : SCAN_CAP;
         for (uint256 i = 0; i < bound; i++) {
             uint32 d = handler.getDayWritten(i);
-            // v47: per-day burnieBase removed; `supplySnapshot` (lazy-init on first burn, the
+            // v47: per-day flipBase removed; `supplySnapshot` (lazy-init on first burn, the
             // sentinel-set condition) is the pool-existence indicator. ethBase can round to 0 for a
             // tiny burn while the pool legitimately exists and the sentinel names it.
             (, uint64 supplySnapshot, ) = _readPendingByDay(d);
@@ -665,7 +665,7 @@ contract RedemptionAccounting is DeployProtocol {
 
     /// @dev Read the packed `DayPending` slot for day D and unpack its 3×uint64 fields. Mirrors
     ///      the handler's reader so the harness has direct access without an extra hop.
-    ///      v47: per-day burnieBase removed (BURNIE settled at submit). DayPending is now
+    ///      v47: per-day flipBase removed (FLIP settled at submit). DayPending is now
     ///      `{ethBase (bits 0-63), supplySnapshot (bits 64-127), burned (bits 128-191)}`.
     function _readPendingByDay(uint32 day)
         internal

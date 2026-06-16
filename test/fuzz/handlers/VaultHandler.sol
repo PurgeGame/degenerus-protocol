@@ -4,7 +4,7 @@ pragma solidity ^0.8.26;
 import "forge-std/Test.sol";
 import {DegenerusGame} from "../../../contracts/DegenerusGame.sol";
 import {DegenerusVault} from "../../../contracts/DegenerusVault.sol";
-import {BurnieCoin} from "../../../contracts/BurnieCoin.sol";
+import {FLIP} from "../../../contracts/FLIP.sol";
 import {MockVRFCoordinator} from "../../../contracts/mocks/MockVRFCoordinator.sol";
 import {MintPaymentKind} from "../../../contracts/interfaces/IDegenerusGame.sol";
 
@@ -16,14 +16,14 @@ import {MintPaymentKind} from "../../../contracts/interfaces/IDegenerusGame.sol"
 contract VaultHandler is Test {
     DegenerusGame public game;
     DegenerusVault public vault;
-    BurnieCoin public coin;
+    FLIP public coin;
     MockVRFCoordinator public vrf;
 
     // --- Ghost variables ---
     uint256 public ghost_ethBurned;      // Total DGVE shares burned
     uint256 public ghost_ethReceived;    // Total ETH+stETH received from burns
-    uint256 public ghost_coinBurned;     // Total DGVB shares burned
-    uint256 public ghost_coinReceived;   // Total BURNIE received from burns
+    uint256 public ghost_coinBurned;     // Total DGVF shares burned
+    uint256 public ghost_coinReceived;   // Total FLIP received from burns
     uint256 public ghost_depositsTriggered;
     uint256 public ghost_burnEthSuccess;
     uint256 public ghost_burnCoinSuccess;
@@ -48,7 +48,7 @@ contract VaultHandler is Test {
     constructor(
         DegenerusGame game_,
         DegenerusVault vault_,
-        BurnieCoin coin_,
+        FLIP coin_,
         MockVRFCoordinator vrf_,
         address creator_,
         uint256 numActors
@@ -82,18 +82,18 @@ contract VaultHandler is Test {
         } catch {}
     }
 
-    /// @notice Burn DGVB shares for BURNIE (acts as creator)
-    /// @param amount Raw amount of DGVB shares to burn (bounded to small fraction)
+    /// @notice Burn DGVF shares for FLIP (acts as creator)
+    /// @param amount Raw amount of DGVF shares to burn (bounded to small fraction)
     function burnCoin(uint256 amount) external {
         calls_burnCoin++;
 
         amount = bound(amount, 1, 1e18);
 
         vm.prank(creator);
-        try vault.burnCoin(amount) returns (uint256 coinOut) {
+        try vault.burnCoin(amount) returns (uint256 flipOut) {
             ghost_burnCoinSuccess++;
             ghost_coinBurned += amount;
-            ghost_coinReceived += coinOut;
+            ghost_coinReceived += flipOut;
         } catch {}
     }
 

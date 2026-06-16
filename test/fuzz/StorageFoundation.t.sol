@@ -102,7 +102,7 @@ contract StorageFoundationTest is Test {
     /// @dev Verify ticketWriteSlot at Slot 0, offset 25; prizePoolFrozen at offset 26.
     ///      ticketsFullyProcessed at Slot 0 offset 24. presaleOver (offset 27),
     ///      subsFullyProcessed (offset 28), presaleDrained (offset 29) and
-    ///      burnieWindowOpen (offset 30) occupy the high bytes of slot 0 above these flags.
+    ///      ticketRedemptionOpen (offset 30) occupy the high bytes of slot 0 above these flags.
     function testSlot0FieldOffsets() public {
         // ticketWriteSlot at slot 0 offset 25 (bit 200)
         harness.setTicketWriteSlot(true);

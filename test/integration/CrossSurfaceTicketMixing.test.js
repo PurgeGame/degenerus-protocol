@@ -396,8 +396,8 @@ describe("CrossSurfaceTicketMixing — Phase 278 Wave 2 TST-CLEAN-02/03 + TST-CR
     // surfaces (manual lootbox, auto-resolve lootbox, jackpot ticket-roll) plus
     // a mint-boost open to be driven full-stack through their real entry
     // points. The current test harness can deterministically drive ONLY the
-    // manual `openBox` entry point end-to-end (v47: the `openBurnieLootBox`
-    // BURNIE-lootbox entry point was removed — terminal-paradox closure):
+    // manual `openBox` entry point end-to-end (v47: the `openFlipLootBox`
+    // FLIP-lootbox entry point was removed — terminal-paradox closure):
     //   - `resolveLootboxDirect` has NO public DegenerusGame entry point — it is
     //     a cross-module delegatecall target only (documented in
     //     test/gas/LootboxOpenGas.test.js: "no public-entry-point harness

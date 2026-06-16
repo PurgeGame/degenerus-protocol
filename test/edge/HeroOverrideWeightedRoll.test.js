@@ -42,7 +42,7 @@
 //       pass-2 cursor walk entirely) is log-only traceability — the
 //       per-sample delta, mean, and stddev are captured and logged but
 //       NOT asserted against any soft/hard window. Rationale: the
-//       worst-case-seeded path triggers downstream JackpotBurnieWin /
+//       worst-case-seeded path triggers downstream JackpotFlipWin /
 //       coin-jackpot cascades that fire differently from the all-zero-
 //       seeded path (the trait-byte rewrite at `_applyHeroOverride`
 //       L1623 affects bucket selection downstream); the observed delta
@@ -1013,7 +1013,7 @@ describe("HeroOverrideWeightedRoll — Phase 293 v42.0 HRROLL regression fixture
   // against any soft/hard window. The production path
   //   `advanceGame()` → state machine → _emitDailyWinningTraits →
   //   _rollWinningTraits → _applyHeroOverride → _rollHeroSymbol
-  // triggers downstream JackpotBurnieWin / coin-jackpot cascades that fire
+  // triggers downstream JackpotFlipWin / coin-jackpot cascades that fire
   // differently between the two seeded states (the trait-byte rewrite at
   // _applyHeroOverride L1623 affects bucket selection downstream); the
   // observed delta is dominated by those downstream cascades rather than
@@ -1234,7 +1234,7 @@ describe("HeroOverrideWeightedRoll — Phase 293 v42.0 HRROLL regression fixture
             )} gas; theoretical anchor = +${GAS_DELTA_THEORETICAL} gas (292-01-MEASUREMENT.md §3.c — load-bearing acceptance evidence; production-path delta is NOT asserted against this anchor under the RELAX disposition)`
           );
           console.log(
-            `      [TST-HRROLL-06] PASS — DailyWinningTraits fired under both worst-case-seeded and all-zero-seeded paths across all ${N_GAS_SAMPLES} samples; production-path delta is dominated by downstream JackpotBurnieWin / coin-jackpot branch-cost cascades (the trait-byte rewrite at _applyHeroOverride L1623 changes downstream bucket selection), not the _rollHeroSymbol body's ~+${GAS_DELTA_THEORETICAL} gas contribution`
+            `      [TST-HRROLL-06] PASS — DailyWinningTraits fired under both worst-case-seeded and all-zero-seeded paths across all ${N_GAS_SAMPLES} samples; production-path delta is dominated by downstream JackpotFlipWin / coin-jackpot branch-cost cascades (the trait-byte rewrite at _applyHeroOverride L1623 changes downstream bucket selection), not the _rollHeroSymbol body's ~+${GAS_DELTA_THEORETICAL} gas contribution`
           );
         }
       );

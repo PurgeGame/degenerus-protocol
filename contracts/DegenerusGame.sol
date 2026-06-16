@@ -29,9 +29,9 @@ pragma solidity 0.8.34;
  */
 
 import {IDegenerusCoin} from "./interfaces/IDegenerusCoin.sol";
-import {IBurnieCoinflip} from "./interfaces/IBurnieCoinflip.sol";
+import {ICoinflip} from "./interfaces/ICoinflip.sol";
 import {IDegenerusAffiliate} from "./interfaces/IDegenerusAffiliate.sol";
-import {IStakedDegenerusStonk} from "./interfaces/IStakedDegenerusStonk.sol";
+import {IsDGNRS} from "./interfaces/IsDGNRS.sol";
 import {IStETH} from "./interfaces/IStETH.sol";
 import {
     IDegenerusGameAdvanceModule,
@@ -123,7 +123,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     /// @notice Emitted when a player nudges the next RNG word.
     /// @param caller The player who paid the nudge cost.
     /// @param totalQueued Total nudges queued for the next VRF word.
-    /// @param cost BURNIE burned for this nudge.
+    /// @param cost FLIP burned for this nudge.
     event ReverseFlip(
         address indexed caller,
         uint256 totalQueued,
@@ -155,7 +155,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     uint256 private constant COINFLIP_BOUNTY_DGNRS_MIN_BET = 50_000 ether;
     uint256 private constant COINFLIP_BOUNTY_DGNRS_MIN_POOL = 20_000 ether;
 
-    /// @dev Base cost for RNG nudge (100 BURNIE), compounds +50% per queued nudge.
+    /// @dev Base cost for RNG nudge (100 FLIP), compounds +50% per queued nudge.
     uint256 private constant RNG_NUDGE_BASE_COST = 100 ether;
 
     /*+======================================================================+
@@ -248,7 +248,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
       |  • RNG must be ready (not locked) or recently stale (12h timeout)                      |
       |                                                                                        |
       |  Presale: packed presale-active toggle (orthogonal to state machine)                    |
-      |  • Starts active: 62% bonus BURNIE from loot boxes                                       |
+      |  • Starts active: 62% bonus FLIP from loot boxes                                       |
       |  • Auto-ends when PURCHASE→JACKPOT, or admin can end manually (one-way, cannot re-enable) |
       +========================================================================================+*/
 
@@ -266,7 +266,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     ///      6. Execute state-specific logic:
     ///         - TRANSITION: Housekeeping + near-future ticket prep after burn completes
     ///         - PURCHASE/JACKPOT: Process phase-specific logic
-    ///      7. Credit caller with BURNIE bounty during jackpot time when not requesting or unlocking RNG
+    ///      7. Credit caller with FLIP bounty during jackpot time when not requesting or unlocking RNG
     ///
     ///      SECURITY:
     ///      - Liveness guards prevent abandoned game lockup
@@ -333,12 +333,12 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
       |  The afking subscriber set / cursors / Sub stamps live in this Game's     |
       |  storage (DegenerusGameStorage), so the module MUST run in this           |
       |  contract's context — delegatecall preserves msg.sender, so the SUB-02 /  |
-      |  OPENE-04 consent gates and the mintBurnie bounty payee read the real         |
+      |  OPENE-04 consent gates and the mintFlip bounty payee read the real         |
       |  caller. These are the canonical entrypoints (there is no longer a        |
       |  separate afking logic host). `subscribe` is the SINGLE subscription       |
       |  mutator (create / replace / cancel — the 4 per-field setters are folded  |
-      |  into it), so only 2 stubs remain (subscribe / mintBurnie); none is            |
-      |  `view`. The afking box-open is reached via mintBurnie's router (the          |
+      |  into it), so only 2 stubs remain (subscribe / mintFlip); none is            |
+      |  `view`. The afking box-open is reached via mintFlip's router (the          |
       |  module's autoOpen would collide with this Game's existing human-box      |
       |  autoOpen(uint256) selector, so it is not re-exposed as a stub here).     |
       +======================================================================+*/
@@ -373,20 +373,20 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     ///         credits msg.sender (preserved via delegatecall).
     /// @dev The signature matches the module function exactly (identical selector), so the calldata
     ///      forwards as-is — re-encoding here would cost contract-size headroom for no behavior change.
-    function mintBurnie() external {
+    function mintFlip() external {
         (bool ok, bytes memory data) = ContractAddresses
             .GAME_AFKING_MODULE
             .delegatecall(msg.data);
         if (!ok) _revertDelegate(data);
     }
 
-    /// @notice Permissionless BURNIE claim — pays each listed sub its accrued `pendingBurnie`
+    /// @notice Permissionless FLIP claim — pays each listed sub its accrued `pendingFlip`
     ///         (the per-delivered-day quest reward + ticket buyer-bonus) in one creditFlip,
     ///         zeroed. Always credits the sub, never the caller.
-    /// @dev Signature: claimAfkingBurnie(address[] subs). The signature matches the module
+    /// @dev Signature: claimAfkingFlip(address[] subs). The signature matches the module
     ///      function exactly (identical selector), so the calldata forwards as-is — re-encoding
     ///      the array here would cost contract-size headroom for no behavior change.
-    function claimAfkingBurnie(address[] calldata) external {
+    function claimAfkingFlip(address[] calldata) external {
         (bool ok, bytes memory data) = ContractAddresses
             .GAME_AFKING_MODULE
             .delegatecall(msg.data);
@@ -408,7 +408,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         return abi.decode(data, (uint256));
     }
 
-    /// @notice Permissionless paid cure of `target`'s cashout/smite curse (100 BURNIE).
+    /// @notice Permissionless paid cure of `target`'s cashout/smite curse (100 FLIP).
     /// @dev Thin delegatecall dispatch stub into GameAfkingModule's decurse body.
     ///      Signature: decurse(address target). The signature matches the module function
     ///      exactly (identical selector), so the calldata forwards as-is — re-encoding here
@@ -420,7 +420,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         if (!ok) _revertDelegate(data);
     }
 
-    /// @notice Deity-gated smite: add a curse stack to `smitee` for 200 BURNIE.
+    /// @notice Deity-gated smite: add a curse stack to `smitee` for 200 FLIP.
     /// @dev Thin delegatecall dispatch stub into GameAfkingModule's smite body.
     ///      Signature: smite(uint256 deityId, address smitee). The signature matches the module
     ///      function exactly (identical selector), so the calldata forwards as-is — re-encoding
@@ -463,13 +463,13 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         if (winningBet < COINFLIP_BOUNTY_DGNRS_MIN_BET) return;
         if (bountyPool < COINFLIP_BOUNTY_DGNRS_MIN_POOL) return;
         uint256 poolBalance = dgnrs.poolBalance(
-            IStakedDegenerusStonk.Pool.Reward
+            IsDGNRS.Pool.Reward
         );
         if (poolBalance == 0) return;
         uint256 payout = (poolBalance * COINFLIP_BOUNTY_DGNRS_BPS) / 10_000;
         if (payout == 0) return;
         dgnrs.transferFromPool(
-            IStakedDegenerusStonk.Pool.Reward,
+            IsDGNRS.Pool.Reward,
             player,
             payout
         );
@@ -540,8 +540,8 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     }
 
     /// @notice Purchase any combination of tickets and loot boxes with ETH or claimable.
-    /// @dev Main entry point for all ETH/claimable purchases. For BURNIE purchases, use redeemBurnie().
-    ///      Recycling at least 3 tickets' worth of claimable winnings earns a 10% BURNIE flip-credit bonus.
+    /// @dev Main entry point for all ETH/claimable purchases. For FLIP purchases, use redeemFlip().
+    ///      Recycling at least 3 tickets' worth of claimable winnings earns a 10% FLIP flip-credit bonus.
     ///      Adds affiliate support for loot box purchases.
     ///      SECURITY: Blocked when RNG is locked.
     /// @param buyer Player address to receive purchases (address(0) = msg.sender).
@@ -588,12 +588,12 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         if (!ok) _revertDelegate(data);
     }
 
-    /// @notice Purchase tickets with BURNIE.
-    /// @dev Main entry point for BURNIE ticket purchases. Mirrors purchase() but for BURNIE payments.
+    /// @notice Purchase tickets with FLIP.
+    /// @dev Main entry point for FLIP ticket purchases. Mirrors purchase() but for FLIP payments.
     ///      SECURITY: Blocked when RNG is locked.
     /// @param buyer Player address to receive purchases (address(0) = msg.sender).
     /// @param ticketQuantity Number of tickets to purchase (2 decimals, scaled by 100; 0 to skip).
-    function redeemBurnie(
+    function redeemFlip(
         address buyer,
         uint256 ticketQuantity
     ) external {
@@ -602,7 +602,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
             .GAME_MINT_MODULE
             .delegatecall(
                 abi.encodeWithSelector(
-                    IDegenerusGameMintModule.redeemBurnie.selector,
+                    IDegenerusGameMintModule.redeemFlip.selector,
                     buyer,
                     ticketQuantity
                 )
@@ -766,7 +766,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
 
     /// @notice Place Full Ticket Degenerette bets (4 traits, match-based payouts).
     /// @param player The betting player (address(0) = msg.sender).
-    /// @param currency Currency type (0=ETH, 1=BURNIE, 2=unsupported, 3=WWXRP).
+    /// @param currency Currency type (0=ETH, 1=FLIP, 2=unsupported, 3=WWXRP).
     /// @param amountPerTicket Bet amount per ticket.
     /// @param ticketCount Number of spins (1-10). Each spin resolves independently.
     /// @param customTicket Custom packed traits.
@@ -1312,16 +1312,16 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
       |                 AUTO-WORK + AFKING BATCH                        |
       +======================================================================+
       |  Permissionless layer letting any caller settle pending game work    |
-      |  on others' behalf for a small gas-pegged BURNIE reward paid as       |
+      |  on others' behalf for a small gas-pegged FLIP reward paid as       |
       |  coinflip stake credit (deferred mint). Resolution writes game        |
       |  storage directly, so it lives in-game by construction.               |
       +======================================================================+*/
 
-    /// @dev Flat ~1-BURNIE "lose" reward for the Degenerette resolve helper, paid ONCE per tx
+    /// @dev Flat ~1-FLIP "lose" reward for the Degenerette resolve helper, paid ONCE per tx
     ///      at >=3 non-WWXRP resolutions (D-05b). A count-independent consolation flip-credit;
     ///      the bet-stake gate (>=3 placed bets at the house edge) makes every self-resolve
     ///      farm net-negative, so it is intentionally NOT pegged to the per-resolve marginal.
-    uint256 private constant RESOLVE_FLAT_BURNIE = 1e18;
+    uint256 private constant RESOLVE_FLAT_FLIP = 1e18;
 
     /// @notice Permissionlessly resolve a caller-supplied list of Degenerette bets.
     /// @dev AUTO-01/02. Items are parallel arrays: item i = (players[i], betIds[i]),
@@ -1329,7 +1329,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     ///      (degeneretteBets[players[0]][betIds[0]] == 0) a competitor got ahead, so the
     ///      whole list reverts with BatchAlreadyTaken (a loser-gas cap, reusing the SLOAD
     ///      item 0 needs anyway). Items 1..N are isolated per-item (a stale/reverting item
-    ///      skips). The reward is a FLAT ~1-BURNIE creditFlip granted ONCE (REW-02) at >=3
+    ///      skips). The reward is a FLAT ~1-FLIP creditFlip granted ONCE (REW-02) at >=3
     ///      successfully-resolved NON-WWXRP bets (D-05b); WWXRP (currency == 3) resolves but
     ///      never counts toward the gate (AUTO-04). Zero resolutions revert NoWork(); 1-2
     ///      resolved commit UNPAID (never strand the trailing tail). Any caller including a
@@ -1373,10 +1373,10 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
             betPacked = degeneretteBets[players[i]][betIds[i]];
         } while (true);
 
-        // Flat ~1-BURNIE "lose" (D-05b): pay ONCE at >=3 non-WWXRP resolutions; revert
+        // Flat ~1-FLIP "lose" (D-05b): pay ONCE at >=3 non-WWXRP resolutions; revert
         // NoWork() if nothing resolved; 1-2 resolved commit UNPAID (never strand the tail).
         if (totalResolved == 0) revert NoWork();
-        if (successCount >= 3) coinflip.creditFlip(msg.sender, RESOLVE_FLAT_BURNIE);
+        if (successCount >= 3) coinflip.creditFlip(msg.sender, RESOLVE_FLAT_FLIP);
     }
 
     /// @notice O(1) discovery: does advanceGame() have pending work?
@@ -1397,7 +1397,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         return false;
     }
 
-    /// @notice Would `who` earn the mintBurnie advance bounty if they cranked right now?
+    /// @notice Would `who` earn the mintFlip advance bounty if they cranked right now?
     /// @dev The advance work is always permitted; this only reflects pay-eligibility
     ///      (the soft must-mint gate), so off-chain keepers can pre-check before cranking.
     function bountyEligible(address who) external view returns (bool) {
@@ -1436,7 +1436,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     ///         opened; for the human sweep the remaining budget caps ENTRIES SCANNED (opens + skips),
     ///         which keeps the tx gas-bounded even past a long already-opened / presale-only prefix and
     ///         lets successive calls catch the open frontier up across many finalized indices.
-    ///         Unrewarded — only mintBurnie() pays a bounty.
+    ///         Unrewarded — only mintFlip() pays a bounty.
     /// @param maxCount Afking boxes opened + human-sweep entries scanned, both bounded by this.
     /// @return opened Total boxes opened (afking + human).
     function openBoxes(uint256 maxCount) external returns (uint256 opened) {
@@ -1629,18 +1629,18 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     }
 
     /// @notice Quote a far-future salvage swap WITHOUT executing (the UI offer; -EV by design).
-    /// @dev Read-only; shares the exact valuation (curve + daily per-player jitter + ETH/BURNIE
+    /// @dev Read-only; shares the exact valuation (curve + daily per-player jitter + ETH/FLIP
     ///      split) the executing path uses, so the displayed offer matches what would be paid.
     ///      Reverts on an ineligible distance / zero quantity; does NOT check ownership (a quote
     ///      for the given bundle). For a bundle too small to fund one whole current ticket,
     ///      ticketWei == totalBudget and the cash legs are 0 (the executing path reverts on that).
-    ///      The cash leg splits into ETH + BURNIE: when sDGNRS holds no BURNIE (or the seed targets
-    ///      zero) the whole cash leg is paid in ETH; conserved as ethCashWei + value(burnieTokens).
+    ///      The cash leg splits into ETH + FLIP: when sDGNRS holds no FLIP (or the seed targets
+    ///      zero) the whole cash leg is paid in ETH; conserved as ethCashWei + value(flipTokens).
     /// @return totalFaceWei Sum of priceForLevel(L) * n over all lines (the bundle's face value).
     /// @return totalBudget Total ETH sDGNRS would pay (the -EV offer).
     /// @return ticketWei Portion delivered as current-level tickets.
     /// @return ethCashWei Cash portion delivered as withdrawable ETH claimable.
-    /// @return burnieTokens Cash portion delivered as BURNIE (transferred from sDGNRS).
+    /// @return flipTokens Cash portion delivered as FLIP (transferred from sDGNRS).
     /// @dev Signature: previewSellFarFutureTickets(address player, uint32[] levels,
     ///      uint256[] quantities). The signature matches the module function exactly (identical
     ///      selector), so the calldata forwards as-is — re-encoding the arrays here would cost
@@ -1656,7 +1656,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
             uint256 totalBudget,
             uint256 ticketWei,
             uint256 ethCashWei,
-            uint256 burnieTokens
+            uint256 flipTokens
         )
     {
         (bool ok, bytes memory data) = ContractAddresses
@@ -1808,7 +1808,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         if (!ok) _revertDelegate(data);
     }
 
-    /// @notice Pay BURNIE to nudge the next RNG word by +1.
+    /// @notice Pay FLIP to nudge the next RNG word by +1.
     /// @dev Cost scales +50% per queued nudge and resets after fulfillment.
     ///      Only available while RNG is unlocked (before VRF request is in-flight).
     ///      MECHANISM: Adds 1 to the VRF word for each nudge, changing outcomes.
@@ -1820,7 +1820,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         uint256 cost = _currentNudgeCost(reversals);
         coin.burnCoin(msg.sender, cost);
         uint256 newCount = reversals + 1;
-        // Fits uint64: every nudge burns >= RNG_NUDGE_BASE_COST (100 BURNIE), so the
+        // Fits uint64: every nudge burns >= RNG_NUDGE_BASE_COST (100 FLIP), so the
         // count is bounded by supply/1e20 << 2^64. Masked RMW preserves the co-resident
         // lastVrfProcessedTimestamp.
         totalFlipReversals = uint64(newCount);
@@ -1828,9 +1828,9 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     }
 
     /// @dev Calculate nudge cost with compounding.
-    ///      Base cost is 100 BURNIE, +50% per queued nudge.
+    ///      Base cost is 100 FLIP, +50% per queued nudge.
     /// @param reversals Number of nudges already queued.
-    /// @return cost BURNIE cost for the next nudge.
+    /// @return cost FLIP cost for the next nudge.
     function _currentNudgeCost(
         uint256 reversals
     ) private pure returns (uint256 cost) {

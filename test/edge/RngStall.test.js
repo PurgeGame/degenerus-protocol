@@ -422,7 +422,7 @@ describe("RngStall", function () {
       // Fresh state: no VRF request outstanding.
       expect(await game.rngLocked()).to.equal(false);
 
-      // reverseFlip requires BURNIE, which the deployer does not have, so it
+      // reverseFlip requires FLIP, which the deployer does not have, so it
       // will revert for a different reason. The key assertion is that the error
       // is NOT RngLocked — confirming the lock check is not reached.
       await expect(

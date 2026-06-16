@@ -23,9 +23,9 @@ const JACKPOT_MODULE_PATH = "contracts/modules/DegenerusGameJackpotModule.sol";
 //
 // The v35.0 SURF preservation gate proves that Phase 263's per-pull-level
 // resample (HEAD `cf564816`) modifies ONLY:
-//   - the constants block (COIN_LEVEL_TAG addition; DAILY_COIN_SALT_BASE removal),
+//   - the constants block (FLIP_LEVEL_TAG addition; DAILY_COIN_SALT_BASE removal),
 //   - the per-pull-resample helper rewrite at `_awardDailyCoinToTraitWinners`,
-//   - the two callers `payDailyCoinJackpot` (~L1710 HEAD) and
+//   - the two callers `payDailyFlipJackpot` (~L1710 HEAD) and
 //     `payDailyJackpotCoinAndTickets` (~L595 HEAD, near the dead-derivation
 //     cleanup).
 //
@@ -991,7 +991,7 @@ describe("v38.0 SURF-01..02 — protected surfaces vs v37.0 baseline 2654fcc2", 
 //                added) and the 3 emit sites (4th arg de-scaled to whole,
 //                roundedUp arg appended);
 //            (c) the contract-header NatSpec line naming the entropy helper.
-//            (d) Phase 279 BUR-02/BUR-03 whole-BURNIE floor: the
+//            (d) Phase 279 BUR-02/BUR-03 whole-FLIP floor: the
 //                _awardDailyCoinToTraitWinners baseAmount floor + the
 //                extra/cursor dead-var removal + the NatSpec rewrite, and the
 //                _awardFarFutureCoinJackpot perWinner floor + its comment.

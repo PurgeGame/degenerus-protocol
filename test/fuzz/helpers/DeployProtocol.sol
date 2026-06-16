@@ -17,8 +17,8 @@ import {DegenerusGameBoonModule} from "../../../contracts/modules/DegenerusGameB
 import {DegenerusGameDegeneretteModule} from "../../../contracts/modules/DegenerusGameDegeneretteModule.sol";
 import {DegenerusGameBingoModule} from "../../../contracts/modules/DegenerusGameBingoModule.sol";
 import {GameAfkingModule} from "../../../contracts/modules/GameAfkingModule.sol";
-import {BurnieCoin} from "../../../contracts/BurnieCoin.sol";
-import {BurnieCoinflip} from "../../../contracts/BurnieCoinflip.sol";
+import {FLIP} from "../../../contracts/FLIP.sol";
+import {Coinflip} from "../../../contracts/Coinflip.sol";
 import {DegenerusGame} from "../../../contracts/DegenerusGame.sol";
 import {WrappedWrappedXRP} from "../../../contracts/WrappedWrappedXRP.sol";
 import {DegenerusAffiliate} from "../../../contracts/DegenerusAffiliate.sol";
@@ -26,8 +26,8 @@ import {DegenerusJackpots} from "../../../contracts/DegenerusJackpots.sol";
 import {DegenerusQuests} from "../../../contracts/DegenerusQuests.sol";
 import {DegenerusDeityPass} from "../../../contracts/DegenerusDeityPass.sol";
 import {DegenerusVault} from "../../../contracts/DegenerusVault.sol";
-import {StakedDegenerusStonk} from "../../../contracts/StakedDegenerusStonk.sol";
-import {DegenerusStonk} from "../../../contracts/DegenerusStonk.sol";
+import {sDGNRS} from "../../../contracts/sDGNRS.sol";
+import {DGNRS} from "../../../contracts/DGNRS.sol";
 import {DegenerusAdmin} from "../../../contracts/DegenerusAdmin.sol";
 import {GNRUS} from "../../../contracts/GNRUS.sol";
 
@@ -64,8 +64,8 @@ abstract contract DeployProtocol is Test {
     DegenerusGameDegeneretteModule public degeneretteModule;
     DegenerusGameBingoModule public bingoModule;
     GameAfkingModule public afkingModule;
-    BurnieCoin public coin;
-    BurnieCoinflip public coinflip;
+    FLIP public coin;
+    Coinflip public coinflip;
     DegenerusGame public game;
     WrappedWrappedXRP public wwxrp;
     DegenerusAffiliate public affiliate;
@@ -73,8 +73,8 @@ abstract contract DeployProtocol is Test {
     DegenerusQuests public quests;
     DegenerusDeityPass public deityPass;
     DegenerusVault public vault;
-    StakedDegenerusStonk public sdgnrs;
-    DegenerusStonk public dgnrs;
+    sDGNRS public sdgnrs;
+    DGNRS public dgnrs;
     DegenerusAdmin public admin;
     GNRUS public gnrus;
 
@@ -105,16 +105,16 @@ abstract contract DeployProtocol is Test {
         degeneretteModule = new DegenerusGameDegeneretteModule(); // N+9 = nonce 14
 
         // v55.0: the two new game-resident delegatecall modules (no ctor args — same shape as the
-        // 10 siblings above). They MUST be deployed before VAULT/SDGNRS: the vault/stonk constructor
+        // 10 siblings above). They MUST be deployed before VAULT/SDGNRS: the vault/staked constructor
         // self-subscribes hit the game-resident afking surface (DegenerusGame delegatecalls
         // GameAfkingModule), which only resolves if the afking module sits at GAME_AFKING_MODULE.
         // Order mirrors predictAddresses.js DEPLOY_ORDER (GAME_BINGO_MODULE N+10, GAME_AFKING_MODULE N+11).
         bingoModule = new DegenerusGameBingoModule();  // N+10 = nonce 15
         afkingModule = new GameAfkingModule();         // N+11 = nonce 16
 
-        coin = new BurnieCoin();                       // N+12 = nonce 17
+        coin = new FLIP();                       // N+12 = nonce 17
 
-        coinflip = new BurnieCoinflip();                // N+13 = nonce 18
+        coinflip = new Coinflip();                // N+13 = nonce 18
 
         game = new DegenerusGame();                    // N+14 = nonce 19
         wwxrp = new WrappedWrappedXRP();               // N+15 = nonce 20
@@ -135,7 +135,7 @@ abstract contract DeployProtocol is Test {
         // v55.0: the standalone AfKing contract was DISSOLVED — its subscriber state + logic are
         // game-resident (GameAfkingModule, deployed at N+11 above). VAULT/SDGNRS self-subscribe via
         // the game-resident path: DegenerusVault.sol calls gamePlayer.subscribe(address(this), …,
-        // address(0)) (SUB-09) and StakedDegenerusStonk.sol calls game.subscribe(address(this), …,
+        // address(0)) (SUB-09) and sDGNRS.sol calls game.subscribe(address(this), …,
         // address(0)) (SUB-09 self-subscribe; OPEN-E default-self) — both hit live GameAfkingModule
         // code because GAME + the afking module are already deployed.
 
@@ -144,10 +144,10 @@ abstract contract DeployProtocol is Test {
 
         // Stonk constructor calls GAME.claimWhalePass() + game.subscribe(...) (SUB-09 self-subscribe)
         // Mints creator's 20% to DGNRS address
-        sdgnrs = new StakedDegenerusStonk();           // N+21 = nonce 26
+        sdgnrs = new sDGNRS();           // N+21 = nonce 26
 
         // DGNRS reads its sDGNRS balance and mints DGNRS to CREATOR
-        dgnrs = new DegenerusStonk();                  // N+22 = nonce 27
+        dgnrs = new DGNRS();                  // N+22 = nonce 27
 
         // Admin constructor calls VRF.createSubscription() + GAME.wireVrf()
         admin = new DegenerusAdmin();                  // N+23 = nonce 28

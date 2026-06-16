@@ -12,14 +12,14 @@ import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 ///         (`contracts/AfKing.sol` deleted); the afking router/packing surface is GAME-resident in
 ///         `contracts/modules/GameAfkingModule.sol` (logic) + `contracts/storage/DegenerusGameStorage.sol`
 ///         (the packed `Sub` struct). This suite REPOINTS the `vm.readFile` source-grep gates:
-///           - the afking-LOGIC gates  -> `GameAfkingModule.sol` (`AFKING_SRC`): the `mintBurnie` router's
+///           - the afking-LOGIC gates  -> `GameAfkingModule.sol` (`AFKING_SRC`): the `mintFlip` router's
 ///             read-once `_mintPriceInContext()` + the single CEI-last bounty `creditFlip`, the swap-pop
 ///             `_removeFromSet`/`_subscribers.pop()`, the subscribe-time consent gate `operatorApprovals`,
 ///             the per-entry day-stamp.
 ///           - the Sub packed-LAYOUT gate -> `DegenerusGameStorage.sol` (`STORAGE_SRC`): the `struct Sub`
 ///             field widths (RE-DERIVED — the game-resident Sub is 8 fields summing to 29 bytes, one slot;
 ///             the old AfKing-standalone 6-field/31-byte offsets are WRONG).
-///           - `afKing.doWork()`        -> `game.mintBurnie()` (Δ3) for the driving helpers.
+///           - `afKing.doWork()`        -> `game.mintFlip()` (Δ3) for the driving helpers.
 ///
 ///         D-351-02 REMOVED-SURFACE DROP (BY NAME, for the 351-09 REGRESSION-BASELINE-v55 ledger): the v49
 ///         keeper `batchPurchase` is GONE from contracts (`grep -rn "function batchPurchase" contracts/`
@@ -27,13 +27,13 @@ import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 ///         NO behavioral successor (the per-buy work folded into `advanceGame()`'s required-path STAGE,
 ///         which fires NO batched value-transfer). The DROPPED assertions (by their old token):
 ///           - GAS-02 AfKing `batchPurchase{value: totalValue}(players, amounts, modes)` one-transfer
-///           - GAS-02 AfKing `creditFlip(msg.sender, bountyEarned)` (REFRAMED onto mintBurnie's, kept)
+///           - GAS-02 AfKing `creditFlip(msg.sender, bountyEarned)` (REFRAMED onto mintFlip's, kept)
 ///           - GAS-02 `_batchPurchaseUnit{value: slice}` one-refund (G6 — removed; the STAGE is per-sub)
 ///           - GAS-03 `function batchPurchase(` + `uint256[] calldata amounts` + `uint8[] calldata modes`
 ///             parallel-array grouping (removed; the STAGE iterates the in-context `_subscribers` set)
 ///           - G9 `if (msg.sender != ContractAddresses.AF_KING) revert E();` batchPurchase keeper gate
-///         REFRAMED (kept): the read-once mintPrice → mintBurnie's `_mintPriceInContext()`; the one
-///         creditFlip/tx → mintBurnie's single CEI-last bounty; the keeper auth → the subscribe-time
+///         REFRAMED (kept): the read-once mintPrice → mintFlip's `_mintPriceInContext()`; the one
+///         creditFlip/tx → mintFlip's single CEI-last bounty; the keeper auth → the subscribe-time
 ///         `operatorApprovals` consent gate (CONSENT-01/OPENE-04); G10 swap-pop → `_removeFromSet`.
 ///
 /// @dev Comment-stripping (the `_stripComments` / `_countOccurrences` helpers are byte-faithful copies of
@@ -109,7 +109,7 @@ contract KeeperLeversAndPacking is DeployProtocol {
 
     /// @notice GAS-02 read-once + one-reward-per-tx, v55-reframed. The game crank reward path
     ///         (degeneretteResolve) holds exactly ONE post-loop creditFlip (the flat-≥3 grant). The v55
-    ///         afking router `mintBurnie()` reads `_mintPriceInContext()` once and pays exactly ONE
+    ///         afking router `mintFlip()` reads `_mintPriceInContext()` once and pays exactly ONE
     ///         CEI-last bounty creditFlip per tx (the one-category early-return). The v49 AfKing
     ///         `batchPurchase` one-transfer/one-refund gates are DROPPED (removed surface, D-351-02).
     function testGas02ReadOnceAndOneRewardSourcePresence() public view {
@@ -125,23 +125,23 @@ contract KeeperLeversAndPacking is DeployProtocol {
         );
         // The per-tx crank reward creditFlip is byte-present exactly ONCE (degeneretteResolve's flat-≥3 grant).
         assertEq(
-            _countOccurrences(game_, "coinflip.creditFlip(msg.sender, RESOLVE_FLAT_BURNIE);"),
+            _countOccurrences(game_, "coinflip.creditFlip(msg.sender, RESOLVE_FLAT_FLIP);"),
             1,
             "GAS-02: one guarded post-loop creditFlip in degeneretteResolve (flat->=3 re-peg, one-per-tx)"
         );
 
-        // v55 REFRAME: the afking router mintBurnie reads mintPrice ONCE into a local (read-once lever).
+        // v55 REFRAME: the afking router mintFlip reads mintPrice ONCE into a local (read-once lever).
         assertGt(
             _countOccurrences(afking, "_mintPriceInContext()"),
             0,
-            "GAS-02 (v55): mintBurnie reads _mintPriceInContext() (the hoisted-once mint price)"
+            "GAS-02 (v55): mintFlip reads _mintPriceInContext() (the hoisted-once mint price)"
         );
-        // v55 REFRAME: mintBurnie pays exactly ONE unified bounty creditFlip per tx, CEI-LAST, after the
+        // v55 REFRAME: mintFlip pays exactly ONE unified bounty creditFlip per tx, CEI-LAST, after the
         // one-category early-return (the v49 AfKing autoBuy `creditFlip(msg.sender, bountyEarned)` lever).
         assertEq(
             _countOccurrences(afking, "coinflip.creditFlip(msg.sender, bountyEarned);"),
             1,
-            "GAS-02 (v55): mintBurnie does ONE CEI-last bounty creditFlip per tx (one-category router)"
+            "GAS-02 (v55): mintFlip does ONE CEI-last bounty creditFlip per tx (one-category router)"
         );
         // The one-category structural early-return (no advance+open bounty stacked in one tx): the advance
         // branch then the `else` open branch — exactly one category routed per call. The predicate is the
@@ -149,7 +149,7 @@ contract KeeperLeversAndPacking is DeployProtocol {
         assertGt(
             _countOccurrences(afking, "if (_advanceDueInContext()) {"),
             0,
-            "GAS-02 (v55): mintBurnie's one-category early-return (advance branch) byte-present"
+            "GAS-02 (v55): mintFlip's one-category early-return (advance branch) byte-present"
         );
 
         // D-351-02 DROP (removed surface — batchPurchase GONE from contracts): the GAS-02 AfKing
@@ -228,7 +228,7 @@ contract KeeperLeversAndPacking is DeployProtocol {
 
         // Sub struct: the thirteen game-resident fields at their exact widths sum to 32 bytes (= one slot).
         // The v56 re-pack added the markers (afkCoveredThroughDay / afkingStartDay) + the in-slot accumulator
-        // (affiliateBase / pendingBurnie / subStreakLatch) and narrowed the v55 uint32 day markers + uint96
+        // (affiliateBase / pendingFlip / subStreakLatch) and narrowed the v55 uint32 day markers + uint96
         // amount to uint24, so the record still fits a single 256-bit slot.
         uint256 subBytes =
             _structFieldBytes(storage_, "uint8 dailyQuantity;", 1) +
@@ -242,7 +242,7 @@ contract KeeperLeversAndPacking is DeployProtocol {
             _structFieldBytes(storage_, "uint24 afkCoveredThroughDay;", 3) +
             _structFieldBytes(storage_, "uint24 afkingStartDay;", 3) +
             _structFieldBytes(storage_, "uint32 affiliateBase;", 4) +
-            _structFieldBytes(storage_, "uint32 pendingBurnie;", 4) +
+            _structFieldBytes(storage_, "uint32 pendingFlip;", 4) +
             _structFieldBytes(storage_, "uint8 subStreakLatch;", 1);
         assertLe(subBytes, 32, "GAS-04: Sub struct fields sum to <= 32 bytes (one slot)");
         assertEq(subBytes, 32, "GAS-04 (v56): the game-resident Sub is 32 used bytes (13 fields, one full slot)");
@@ -357,7 +357,7 @@ contract KeeperLeversAndPacking is DeployProtocol {
         assertGt(bytes(storage_).length, 1000, "stripped DegenerusGameStorage source is non-empty (repoint live)");
         // Known code identifiers that unquestionably exist post-strip in each repointed source.
         assertGt(_countOccurrences(game_, "function degeneretteResolve("), 0, "harness live: a known Game code symbol is found");
-        assertGt(_countOccurrences(afking, "function mintBurnie()"), 0, "harness live: a known GameAfkingModule code symbol is found");
+        assertGt(_countOccurrences(afking, "function mintFlip()"), 0, "harness live: a known GameAfkingModule code symbol is found");
         assertGt(_countOccurrences(storage_, "struct Sub {"), 0, "harness live: a known DegenerusGameStorage code symbol is found");
         // A comment-only sentinel must be STRIPPED (proves comments are actually removed).
         assertEq(

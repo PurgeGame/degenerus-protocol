@@ -4,7 +4,7 @@ pragma solidity 0.8.34;
 import {IDegenerusAffiliate} from "../interfaces/IDegenerusAffiliate.sol";
 import {IDegenerusCoin} from "../interfaces/IDegenerusCoin.sol";
 import {IDegenerusQuests} from "../interfaces/IDegenerusQuests.sol";
-import {IStakedDegenerusStonk} from "../interfaces/IStakedDegenerusStonk.sol";
+import {IsDGNRS} from "../interfaces/IsDGNRS.sol";
 import {
     IDegenerusGameLootboxModule
 } from "../interfaces/IDegenerusGameModules.sol";
@@ -34,9 +34,9 @@ interface IWrappedWrappedXRP {
  * @author Burnie Degenerus
  * @notice Delegate-called module handling Degenerette symbol-roll bets.
  * @dev Uses lootbox RNG index/word for randomness. All storage reads/writes operate
- *      on the inherited DegenerusGameStorage. Supports ETH, BURNIE, and WWXRP currencies.
- *      BURNIE payouts face a per-bet survival flip (double-or-nothing) at resolution,
- *      so all BURNIE entering existence survives at least one coinflip.
+ *      on the inherited DegenerusGameStorage. Supports ETH, FLIP, and WWXRP currencies.
+ *      FLIP payouts face a per-bet survival flip (double-or-nothing) at resolution,
+ *      so all FLIP entering existence survives at least one coinflip.
  */
 contract DegenerusGameDegeneretteModule is
     DegenerusGamePayoutUtils,
@@ -80,7 +80,7 @@ contract DegenerusGameDegeneretteModule is
     /// @param player The player address.
     /// @param betId The bet ID.
     /// @param ticketCount Number of spins resolved.
-    /// @param totalPayout Total payout across all tickets (for BURNIE bets: after the
+    /// @param totalPayout Total payout across all tickets (for FLIP bets: after the
     ///        survival flip — doubled or zeroed vs the per-spin FullTicketResult sums).
     /// @param resultTicket The spin-0 result ticket (additional spin results are derived per spinIndex).
     event FullTicketResolved(
@@ -123,18 +123,18 @@ contract DegenerusGameDegeneretteModule is
     /// @param bracket The level/10 bracket whose one halfpass is now claimed.
     event WwxrpJackpotWhalePass(address indexed player, uint256 indexed bracket);
 
-    /// @notice A lootbox roll resolved as a Degenerette spin (WWXRP / BURNIE×3 / ETH) — the single
+    /// @notice A lootbox roll resolved as a Degenerette spin (WWXRP / FLIP×3 / ETH) — the single
     ///         self-contained record of a box-spin outcome (replaces the per-spin FullTicketResult /
     ///         FullTicketResolved for box rolls). Every reel + every output reward is here or, for
     ///         the ETH recirc, in the fresh box's own (now-emitted) events.
     /// @param player The reward recipient.
     /// @param betId Self-classifying id: bit 63 = box-origin sentinel, bits 62-60 = spin type
-    ///        (0=WWXRP, 1=BURNIE, 2=ETH), bits 59-0 = seed entropy (unique per box-spin).
+    ///        (0=WWXRP, 1=FLIP, 2=ETH), bits 59-0 = seed entropy (unique per box-spin).
     /// @param packedSpins Per-spin reels packed low→high, each spin = [playerTicket:32 |
     ///        resultTicket:32 | score:8] (72 bits, spin 0 lowest); bits 216-223 = spin count;
-    ///        bit 224 = BURNIE survival flag (1 = the survival flip won; unused for WWXRP/ETH).
-    /// @param payout Total reward: BURNIE/WWXRP minted, or the ETH gross (= ethShare + the recirc).
-    /// @param ethShare ETH credited to the player's claimable winnings (0 for WWXRP/BURNIE). The
+    ///        bit 224 = FLIP survival flag (1 = the survival flip won; unused for WWXRP/ETH).
+    /// @param payout Total reward: FLIP/WWXRP minted, or the ETH gross (= ethShare + the recirc).
+    /// @param ethShare ETH credited to the player's claimable winnings (0 for WWXRP/FLIP). The
     ///        recirculated remainder is derivable as `payout - ethShare` (ETH only); that recirc
     ///        box emits its own LootBoxOpened / BoxSpin so its contents are itemized.
     event BoxSpin(
@@ -220,8 +220,8 @@ contract DegenerusGameDegeneretteModule is
     uint16 private constant ETH_WIN_CAP_BPS = 1_000;
 
     /// @dev sDGNRS contract reference for degenerette DGNRS rewards
-    IStakedDegenerusStonk private constant sdgnrs =
-        IStakedDegenerusStonk(ContractAddresses.SDGNRS);
+    IsDGNRS private constant sdgnrs =
+        IsDGNRS(ContractAddresses.SDGNRS);
 
     /// @dev Degenerette DGNRS reward BPS (per ETH wagered, % of remaining Reward pool),
     ///      keyed on the top-3 score tiers S=7/8/9 (rarity preserved; shift-by-one from M=6/7/8).
@@ -232,8 +232,8 @@ contract DegenerusGameDegeneretteModule is
     /// @dev Currency type identifier for ETH.
     uint8 private constant CURRENCY_ETH = 0;
 
-    /// @dev Currency type identifier for BURNIE token.
-    uint8 private constant CURRENCY_BURNIE = 1;
+    /// @dev Currency type identifier for FLIP token.
+    uint8 private constant CURRENCY_FLIP = 1;
 
     /// @dev Currency type identifier for WWXRP token.
     uint8 private constant CURRENCY_WWXRP = 3;
@@ -241,15 +241,15 @@ contract DegenerusGameDegeneretteModule is
     /// @dev Minimum bet amount for ETH (0.005 ETH on mainnet).
     uint256 private constant MIN_BET_ETH = 5 ether / 1000;
 
-    /// @dev Minimum bet amount for BURNIE (100 tokens with 18 decimals).
-    uint256 private constant MIN_BET_BURNIE = 100 ether;
+    /// @dev Minimum bet amount for FLIP (100 tokens with 18 decimals).
+    uint256 private constant MIN_BET_FLIP = 100 ether;
 
     /// @dev Minimum bet amount for WWXRP (1 token with 18 decimals).
     uint256 private constant MIN_BET_WWXRP = 1 ether;
 
     /// @dev Maximum spins per bet, per currency (encoded as ticketCount in the packed bet).
     uint8 private constant MAX_SPINS_ETH = 25;
-    uint8 private constant MAX_SPINS_BURNIE = 15;
+    uint8 private constant MAX_SPINS_FLIP = 15;
     uint8 private constant MAX_SPINS_WWXRP = 5;
 
     // -------------------------------------------------------------------------
@@ -332,7 +332,7 @@ contract DegenerusGameDegeneretteModule is
     // [0]        mode (1 bit): 1=full ticket
     // [1]        isRandom (1 bit): must be 0 (no random tickets)
     // [2..33]    customTicket (32 bits): packed traits (required)
-    // [34..41]   ticketCount (8 bits): spin count (per-currency cap: ETH 25 / BURNIE 15 / WWXRP 5)
+    // [34..41]   ticketCount (8 bits): spin count (per-currency cap: ETH 25 / FLIP 15 / WWXRP 5)
     // [42..43]   currency (2 bits)
     // [44..171]  amountPerTicket (128 bits)
     // [172..219] index (48 bits)
@@ -375,9 +375,9 @@ contract DegenerusGameDegeneretteModule is
     ///      ticketCount is treated as "spin count": each spin resolves independently but shares
     ///      the same lootbox RNG index/word (derived per spin).
     /// @param player The player address (use zero address for msg.sender).
-    /// @param currency Currency type (0=ETH, 1=BURNIE, 2=unsupported, 3=WWXRP).
+    /// @param currency Currency type (0=ETH, 1=FLIP, 2=unsupported, 3=WWXRP).
     /// @param amountPerTicket Bet amount per ticket.
-    /// @param ticketCount Number of spins (per-currency cap: ETH 25 / BURNIE 15 / WWXRP 5).
+    /// @param ticketCount Number of spins (per-currency cap: ETH 25 / FLIP 15 / WWXRP 5).
     /// @param customTicket Custom packed traits. Format: [D:24-31][C:16-23][B:8-15][A:0-7].
     /// @param heroQuadrant Hero quadrant (0-3) for payout boost. Required; inputs >= 4 (including 0xFF) revert with `InvalidBet`.
     function placeDegeneretteBet(
@@ -410,7 +410,7 @@ contract DegenerusGameDegeneretteModule is
     ///      inside _resolveFullTicketBet (resolution-batch-invariant).
     struct ResolveAcc {
         uint256 ethClaimable; // summed ETH claimable across all bets
-        uint256 burnieMint; // summed BURNIE mint across all bets
+        uint256 flipMint; // summed FLIP mint across all bets
         uint256 wwxrpMint; // summed WWXRP mint across all bets
         bool poolFrozen; // prizePoolFrozen snapshot (loaded with the pool locals)
         bool poolLoaded; // running pool locals initialized?
@@ -421,7 +421,7 @@ contract DegenerusGameDegeneretteModule is
 
     /// @notice Resolves one or more pending bets for a player.
     /// @dev Requires RNG word to be available. Processes wins by minting tokens or crediting ETH.
-    ///      ETH/BURNIE/WWXRP payouts are accumulated across the whole call and flushed
+    ///      ETH/FLIP/WWXRP payouts are accumulated across the whole call and flushed
     ///      once per currency (one mint per currency, one claimable + claimablePool write,
     ///      one prize-pool write); lootbox-share is summed per betId and resolved per bet.
     /// @param player The player address (use zero address for msg.sender).
@@ -444,7 +444,7 @@ contract DegenerusGameDegeneretteModule is
         }
 
         // Single per-currency flush (additive → byte-identical to the per-spin writes).
-        if (acc.burnieMint != 0) coin.mintForGame(player, acc.burnieMint);
+        if (acc.flipMint != 0) coin.mintForGame(player, acc.flipMint);
         if (acc.wwxrpMint != 0) wwxrp.mintPrize(player, acc.wwxrpMint);
         if (acc.ethClaimable != 0) _addClaimableEth(player, acc.ethClaimable);
 
@@ -486,7 +486,7 @@ contract DegenerusGameDegeneretteModule is
         _collectBetFunds(player, currency, totalBet, msg.value);
 
         // Quest progress for Degenerette bets (slot 1 only).
-        if (currency == CURRENCY_ETH || currency == CURRENCY_BURNIE) {
+        if (currency == CURRENCY_ETH || currency == CURRENCY_FLIP) {
             quests.handleDegenerette(
                 player,
                 totalBet,
@@ -515,9 +515,9 @@ contract DegenerusGameDegeneretteModule is
         if (currency == CURRENCY_ETH) {
             maxSpins = MAX_SPINS_ETH;
             minBet = MIN_BET_ETH;
-        } else if (currency == CURRENCY_BURNIE) {
-            maxSpins = MAX_SPINS_BURNIE;
-            minBet = MIN_BET_BURNIE;
+        } else if (currency == CURRENCY_FLIP) {
+            maxSpins = MAX_SPINS_FLIP;
+            minBet = MIN_BET_FLIP;
         } else if (currency == CURRENCY_WWXRP) {
             maxSpins = MAX_SPINS_WWXRP;
             minBet = MIN_BET_WWXRP;
@@ -609,9 +609,9 @@ contract DegenerusGameDegeneretteModule is
             _lrAdd(LR_PENDING_ETH_SHIFT, LR_PENDING_ETH_MASK, _packEthToMilliEth(totalBet));
             // No max payout check needed: ETH payouts are capped at 10% of pool at distribution
             // time, so solvency is guaranteed regardless of jackpot size
-        } else if (currency == CURRENCY_BURNIE) {
+        } else if (currency == CURRENCY_FLIP) {
             coin.burnCoin(player, totalBet);
-            _lrAdd(LR_PENDING_BURNIE_SHIFT, LR_PENDING_BURNIE_MASK, _packBurnieToWhole(totalBet));
+            _lrAdd(LR_PENDING_FLIP_SHIFT, LR_PENDING_FLIP_MASK, _packFlipToWhole(totalBet));
         } else if (currency == CURRENCY_WWXRP) {
             wwxrp.burnForGame(player, totalBet);
         }
@@ -760,21 +760,21 @@ contract DegenerusGameDegeneretteModule is
             }
         }
 
-        // BURNIE survival flip: every BURNIE payout must survive one fair coinflip before
+        // FLIP survival flip: every FLIP payout must survive one fair coinflip before
         // it mints — the bet's whole payout double-or-nothings on a single bet-keyed flip
-        // (EV-neutral: x2 at 50/50). The seed is the per-bet lootbox seed, which BURNIE
+        // (EV-neutral: x2 at 50/50). The seed is the per-bet lootbox seed, which FLIP
         // bets never otherwise consume (lootbox-share is ETH-only). Both rngWord and betId
         // are committed before the VRF word lands, so the outcome is fixed at fulfillment;
         // a losing bet pays zero whether resolved or abandoned, so selective resolution
         // earns nothing. The accumulator holds exactly this bet's payout once (added per
         // spin), so doubling adds it again and zeroing subtracts it back out. The outcome
         // reads off FullTicketResolved: totalPayout vs the per-spin FullTicketResult sums.
-        if (currency == CURRENCY_BURNIE && totalPayout != 0) {
+        if (currency == CURRENCY_FLIP && totalPayout != 0) {
             if (EntropyLib.hash2(rngWord, betId) & 1 == 1) {
-                acc.burnieMint += totalPayout;
+                acc.flipMint += totalPayout;
                 totalPayout *= 2;
             } else {
-                acc.burnieMint -= totalPayout;
+                acc.flipMint -= totalPayout;
                 totalPayout = 0;
             }
         }
@@ -820,19 +820,19 @@ contract DegenerusGameDegeneretteModule is
     ///      emitted. Frozen-pool branch retains its solvency-check posture
     ///      (pending future debit with revert-on-insufficient).
     ///
-    ///      CURRENCY_BURNIE accumulates toward the coin mint (the per-bet survival
+    ///      CURRENCY_FLIP accumulates toward the coin mint (the per-bet survival
     ///      flip in _resolveFullTicketBet then doubles or zeroes the bet's total
     ///      before the flush); CURRENCY_WWXRP pays directly via the wwxrp mint.
     ///      Neither honors the 3-tier split (which applies only to the
     ///      lootbox-convertible ETH path).
     /// @param player The player to receive the payout.
-    /// @param currency The currency type (0=ETH, 1=BURNIE, 3=WWXRP).
+    /// @param currency The currency type (0=ETH, 1=FLIP, 3=WWXRP).
     /// @param betAmount The per-ticket bet amount (uint128) — the tier-threshold reference.
     /// @param payout The total payout amount (uint256).
     /// @param acc Cross-bet accumulator: ETH claimable + the running prize-pool
-    ///        local accumulate here (flushed once by resolveBets); BURNIE/WWXRP
+    ///        local accumulate here (flushed once by resolveBets); FLIP/WWXRP
     ///        mint totals accumulate here too.
-    /// @return lootboxShare The ETH lootbox-share for this spin (0 for BURNIE/WWXRP),
+    /// @return lootboxShare The ETH lootbox-share for this spin (0 for FLIP/WWXRP),
     ///         summed by the caller into the per-bet box.
     function _distributePayout(
         address player,
@@ -903,8 +903,8 @@ contract DegenerusGameDegeneretteModule is
             // Accumulate ETH claimable cross-bet (flushed once). The lootbox-share
             // is returned to the caller, summed per betId, and resolved once per bet.
             acc.ethClaimable += ethShare;
-        } else if (currency == CURRENCY_BURNIE) {
-            acc.burnieMint += payout;
+        } else if (currency == CURRENCY_FLIP) {
+            acc.flipMint += payout;
         } else if (currency == CURRENCY_WWXRP) {
             acc.wwxrpMint += payout;
         }
@@ -1063,7 +1063,7 @@ contract DegenerusGameDegeneretteModule is
     ///      scored into S (S = A + 2*H), so there is no separate hero multiplier.
     /// @param N Gold-quadrant count of the player ticket (0..4).
     /// @param s The composite score (0-9).
-    /// @param currency Currency type (0=ETH, 1=BURNIE, 3=WWXRP).
+    /// @param currency Currency type (0=ETH, 1=FLIP, 3=WWXRP).
     /// @param betAmount The bet amount per ticket.
     /// @param roiBps The ROI in basis points (from activity score).
     /// @param wwxrpHighRoi The WWXRP high-value ROI (0 if not WWXRP).
@@ -1218,7 +1218,7 @@ contract DegenerusGameDegeneretteModule is
         else bps = DEGEN_DGNRS_9_BPS;
 
         uint256 poolBalance = sdgnrs.poolBalance(
-            IStakedDegenerusStonk.Pool.Reward
+            IsDGNRS.Pool.Reward
         );
         if (poolBalance == 0) return;
 
@@ -1227,7 +1227,7 @@ contract DegenerusGameDegeneretteModule is
         if (reward == 0) return;
 
         sdgnrs.transferFromPool(
-            IStakedDegenerusStonk.Pool.Reward,
+            IsDGNRS.Pool.Reward,
             player,
             reward
         );
@@ -1246,7 +1246,7 @@ contract DegenerusGameDegeneretteModule is
     // box spins exactly like ordinary spins, plus one Box* marker carrying the box-origin
     // stake / split.
 
-    uint256 private constant BOX_BURNIE_SPINS = 3;
+    uint256 private constant BOX_FLIP_SPINS = 3;
     uint256 private constant BOX_SURVIVAL_TAG = 0x537572766976616c; // "Survival"
     uint256 private constant BOX_RECIRC_TAG = 0x5265636972; // "Recir"
 
@@ -1256,7 +1256,7 @@ contract DegenerusGameDegeneretteModule is
     // `(betId >> 60) & 7` (type) directly off the indexed topic.
     uint256 private constant BOX_BETID_SENTINEL = uint256(1) << 63;
     uint8 private constant BOX_SPIN_TYPE_WWXRP = 0;
-    uint8 private constant BOX_SPIN_TYPE_BURNIE = 1;
+    uint8 private constant BOX_SPIN_TYPE_FLIP = 1;
     uint8 private constant BOX_SPIN_TYPE_ETH = 2;
     // BoxSpin.packedSpins layout: spin i occupies bits [i*72 .. i*72+71] as
     // [playerTicket:32 | resultTicket:32 | score:8]; bits 216-223 = spin count; bit 224 = survived.
@@ -1340,11 +1340,11 @@ contract DegenerusGameDegeneretteModule is
         );
     }
 
-    /// @notice Three BURNIE Degenerette spins under one survival flip (mint-only, safe on any box).
+    /// @notice Three FLIP Degenerette spins under one survival flip (mint-only, safe on any box).
     /// @dev The total stake is split evenly across three spins; the summed payout then double-or-
-    ///      nothings on one fair flip (EV-neutral) before a single BURNIE mint. No pool / ETH /
+    ///      nothings on one fair flip (EV-neutral) before a single FLIP mint. No pool / ETH /
     ///      recirc touch, so this is solvency-safe on every box path including recirc.
-    function resolveBurnieSpinsFromBox(
+    function resolveFlipSpinsFromBox(
         address player,
         uint256 totalStake,
         uint16 activityScore,
@@ -1352,14 +1352,14 @@ contract DegenerusGameDegeneretteModule is
     ) external payable {
         if (address(this) != ContractAddresses.GAME) revert E();
         if (totalStake == 0) return;
-        uint128 perSpin = uint128(totalStake / BOX_BURNIE_SPINS);
+        uint128 perSpin = uint128(totalStake / BOX_FLIP_SPINS);
         if (perSpin == 0) return;
-        uint64 betId = _boxBetId(seed, BOX_SPIN_TYPE_BURNIE);
+        uint64 betId = _boxBetId(seed, BOX_SPIN_TYPE_FLIP);
         uint256 roiBps = _roiBpsFromScore(activityScore);
 
         uint256 total;
         uint256 packedSpins;
-        for (uint256 i; i < BOX_BURNIE_SPINS; ) {
+        for (uint256 i; i < BOX_FLIP_SPINS; ) {
             uint256 ss = EntropyLib.hash2(seed, i);
             uint32 playerTicket = DegenerusTraitUtils.packedTraitsDegenerette(ss);
             uint32 resultTicket = DegenerusTraitUtils.packedTraitsDegenerette(
@@ -1369,7 +1369,7 @@ contract DegenerusGameDegeneretteModule is
             total += _fullTicketPayout(
                 _countGoldQuadrants(playerTicket),
                 s,
-                CURRENCY_BURNIE,
+                CURRENCY_FLIP,
                 perSpin,
                 roiBps,
                 0
@@ -1386,9 +1386,9 @@ contract DegenerusGameDegeneretteModule is
         total = survived ? total * 2 : 0;
         if (total != 0) coin.mintForGame(player, total);
 
-        // One self-contained record: all three reels + count + survival + the final BURNIE mint.
+        // One self-contained record: all three reels + count + survival + the final FLIP mint.
         packedSpins |=
-            (uint256(BOX_BURNIE_SPINS) << BOX_SPIN_COUNT_SHIFT) |
+            (uint256(BOX_FLIP_SPINS) << BOX_SPIN_COUNT_SHIFT) |
             (survived ? (uint256(1) << BOX_SPIN_SURVIVED_SHIFT) : 0);
         emit BoxSpin(player, betId, packedSpins, total, 0);
     }

@@ -2,17 +2,17 @@
 pragma solidity ^0.8.26;
 
 import "forge-std/Test.sol";
-import {StakedDegenerusStonk} from "../../../contracts/StakedDegenerusStonk.sol";
+import {sDGNRS} from "../../../contracts/sDGNRS.sol";
 import {DegenerusGame} from "../../../contracts/DegenerusGame.sol";
 import {MockVRFCoordinator} from "../../../contracts/mocks/MockVRFCoordinator.sol";
-import {BurnieCoin} from "../../../contracts/BurnieCoin.sol";
+import {FLIP} from "../../../contracts/FLIP.sol";
 import {MockStETH} from "../../../contracts/mocks/MockStETH.sol";
 import {ContractAddresses} from "../../../contracts/ContractAddresses.sol";
 
 /// @notice Local view of the coinflip surface sDGNRS reads from. Re-declared here so the
 ///         handler can mock `getCoinflipDayResult` via `vm.mockCall` without importing the
 ///         full coinflip contract.
-interface IBurnieCoinflipPlayer {
+interface ICoinflipPlayer {
     function getCoinflipDayResult(uint32 day) external view returns (uint16 rewardPercent, bool win);
     function claimCoinflipsForRedemption(address player, uint256 amount) external returns (uint256 claimed);
 }
@@ -23,15 +23,15 @@ interface IBurnieCoinflipPlayer {
 ///         post-action, plus per-day pool aggregates and a first-write roll/flipDay record
 ///         (INV-01 anchor). Multi-actor (≥4 actors funded from the Reward pool) and supports
 ///         multi-day claims (claim selector picks a random resolved+unclaimed day from history).
-/// @dev Slot constants below derived via `forge inspect contracts/StakedDegenerusStonk.sol
-///      :StakedDegenerusStonk storage-layout` against v44 source (HEAD 213f9184). Recorded
+/// @dev Slot constants below derived via `forge inspect contracts/sDGNRS.sol
+///      :sDGNRS storage-layout` against v44 source (HEAD 213f9184). Recorded
 ///      inline so a future layout change is detected at the slot-read site, not by silent
 ///      drift.
 contract RedemptionHandler is Test {
-    StakedDegenerusStonk public sdgnrs;
+    sDGNRS public sdgnrs;
     DegenerusGame public game;
     MockVRFCoordinator public vrf;
-    BurnieCoin public coin;
+    FLIP public coin;
     address public coinflip;
 
     // =========================================================================
@@ -71,8 +71,8 @@ contract RedemptionHandler is Test {
     //                       V44 STORAGE SLOT CONSTANTS
     // =========================================================================
     //
-    // Slot indices recorded from `forge inspect contracts/StakedDegenerusStonk.sol
-    //   :StakedDegenerusStonk storage-layout` against v44 source (post-305-01).
+    // Slot indices recorded from `forge inspect contracts/sDGNRS.sol
+    //   :sDGNRS storage-layout` against v44 source (post-305-01).
     //
     //  Name                       | Slot | Type
     //  ---------------------------|------|-----------------------------------------------------
@@ -115,7 +115,7 @@ contract RedemptionHandler is Test {
     uint256 public ghost_totalBurned;            // cumulative sDGNRS supply decreases
     uint256 public ghost_totalMinted;            // cumulative sDGNRS supply increases
     uint256 public ghost_totalEthClaimed;        // cumulative ETH received from claims
-    uint256 public ghost_totalBurnieClaimed;     // cumulative BURNIE received from claims
+    uint256 public ghost_totalFlipClaimed;     // cumulative FLIP received from claims
     uint256 public ghost_periodsResolved;        // count of resolved periods
     uint256 public ghost_claimCount;             // successful claim calls
     uint256 public ghost_lastPeriodIndex;        // unused under v44 — retained for legacy
@@ -141,14 +141,14 @@ contract RedemptionHandler is Test {
     ///         (exact, since `ethValueOwed` is gwei-snapped at source per D-305-GWEI-SNAP-01).
     mapping(uint32 => uint256) public ghost_perDay_ethBase;
 
-    /// @notice Symmetric for BURNIE (in RAW BURNIE units).
-    mapping(uint32 => uint256) public ghost_perDay_burnieBase;
+    /// @notice Symmetric for FLIP (in RAW FLIP units).
+    mapping(uint32 => uint256) public ghost_perDay_flipBase;
 
     /// @notice Per-(player, day) running sum of ethValueOwed credited by burns.
     mapping(uint32 => mapping(address => uint256)) public ghost_perDay_perPlayer_ethValueOwed;
 
-    /// @notice Symmetric for BURNIE.
-    mapping(uint32 => mapping(address => uint256)) public ghost_perDay_perPlayer_burnieOwed;
+    /// @notice Symmetric for FLIP.
+    mapping(uint32 => mapping(address => uint256)) public ghost_perDay_perPlayer_flipOwed;
 
     /// @notice First-write value of `redemptionPeriods[D].roll`. Set once on detection of a
     ///         fresh resolve (in `_checkResolvedPeriods`); never overwritten thereafter.
@@ -179,8 +179,8 @@ contract RedemptionHandler is Test {
     ///         value. Read by INV-07 to assert byte-identity until claim.
     mapping(uint32 => mapping(address => uint96)) public ghost_perPlayer_locked_ethValueOwed;
 
-    /// @notice Symmetric snapshot for BURNIE.
-    mapping(uint32 => mapping(address => uint96)) public ghost_perPlayer_locked_burnieOwed;
+    /// @notice Symmetric snapshot for FLIP.
+    mapping(uint32 => mapping(address => uint96)) public ghost_perPlayer_locked_flipOwed;
 
     // =========================================================================
     //                          CALL COUNTERS
@@ -210,10 +210,10 @@ contract RedemptionHandler is Test {
     // =========================================================================
 
     constructor(
-        StakedDegenerusStonk sdgnrs_,
+        sDGNRS sdgnrs_,
         DegenerusGame game_,
         MockVRFCoordinator vrf_,
-        BurnieCoin coin_,
+        FLIP coin_,
         uint256 numActors
     ) {
         sdgnrs = sdgnrs_;
@@ -230,7 +230,7 @@ contract RedemptionHandler is Test {
 
             // Give each actor sDGNRS from the Reward pool
             vm.prank(address(game_));
-            sdgnrs_.transferFromPool(StakedDegenerusStonk.Pool.Reward, actor, 1_000_000 ether);
+            sdgnrs_.transferFromPool(sDGNRS.Pool.Reward, actor, 1_000_000 ether);
         }
         actorCount = numActors;
     }
@@ -240,17 +240,17 @@ contract RedemptionHandler is Test {
     ///      `getCoinflipDayResult` to return `(uint16(100), true)` for ANY day, so claims
     ///      that target resolved days complete the full-payout path (`flipResolved == true`
     ///      && `flipWon == true`). Also mocks `claimCoinflipsForRedemption` to return 0 so
-    ///      `_payBurnie` doesn't revert on a depleted coinflip pool.
+    ///      `_payFlip` doesn't revert on a depleted coinflip pool.
     function setCoinflip(address coinflip_) external {
         coinflip = coinflip_;
         vm.mockCall(
             coinflip_,
-            abi.encodeWithSelector(IBurnieCoinflipPlayer.getCoinflipDayResult.selector),
+            abi.encodeWithSelector(ICoinflipPlayer.getCoinflipDayResult.selector),
             abi.encode(uint16(100), true)
         );
         vm.mockCall(
             coinflip_,
-            abi.encodeWithSelector(IBurnieCoinflipPlayer.claimCoinflipsForRedemption.selector),
+            abi.encodeWithSelector(ICoinflipPlayer.claimCoinflipsForRedemption.selector),
             abi.encode(uint256(0))
         );
     }
@@ -353,8 +353,8 @@ contract RedemptionHandler is Test {
             }
             // Successful burn — update ghosts.
             uint32 burnDay = game.currentDayView(); // re-read defensively (in case advanceGame fires inside burn)
-            // v47: PendingRedemption.burnieOwed removed (BURNIE settled at submit) — only the
-            // ethValueOwed leg is tracked; the legacy BURNIE ghosts are left at zero.
+            // v47: PendingRedemption.flipOwed removed (FLIP settled at submit) — only the
+            // ethValueOwed leg is tracked; the legacy FLIP ghosts are left at zero.
             (uint96 ethOwed, , ) = sdgnrs.pendingRedemptions(currentActor, uint24(burnDay));
 
             // Per-burn delta = post - prior tracked. Cumulative because same-day re-burns
@@ -478,7 +478,7 @@ contract RedemptionHandler is Test {
             uint32 candidate = ghost_daysWritten[(startIdx + i) % daysLen];
             if (ghost_dayResolved[candidate] && !ghost_claimDone[candidate][currentActor]) {
                 // Also require the actor actually has a claim slot to settle.
-                // v47: only ethValueOwed remains (burnieOwed field removed).
+                // v47: only ethValueOwed remains (flipOwed field removed).
                 (uint96 ev, , ) = sdgnrs.pendingRedemptions(currentActor, uint24(candidate));
                 if (ev != 0) {
                     claimDay = candidate;
@@ -491,7 +491,7 @@ contract RedemptionHandler is Test {
         uint256 supplyBefore = sdgnrs.totalSupply();
         uint256 ethBefore = currentActor.balance;
         uint256 claimableBefore = game.claimableWinningsOf(currentActor);
-        uint256 burnieBefore = coin.balanceOf(currentActor);
+        uint256 flipBefore = coin.balanceOf(currentActor);
 
         vm.recordLogs();
         vm.prank(currentActor);
@@ -500,14 +500,14 @@ contract RedemptionHandler is Test {
             // Live game credits the direct half into game claimable; gameOver pushes wallet ETH.
             ghost_totalEthClaimed += (currentActor.balance - ethBefore) +
                 (game.claimableWinningsOf(currentActor) - claimableBefore);
-            ghost_totalBurnieClaimed += coin.balanceOf(currentActor) - burnieBefore;
+            ghost_totalFlipClaimed += coin.balanceOf(currentActor) - flipBefore;
 
             // Parse RedemptionClaimed event for split tracking (INV-08 in legacy harness).
             // RedemptionClaimed(address indexed player, uint16 roll, uint256 ethPayout,
-            // uint256 lootboxEth, uint256 burniePaid) — `player` indexed, so (roll, ethPayout,
-            // lootboxEth, burniePaid) sit in the non-indexed data tuple. burniePaid (the
-            // contingent BURNIE flip-credit minted on a winning resolving-day coinflip) is read
-            // but not aggregated here — BURNIE conservation is covered by the carry-side ghosts.
+            // uint256 lootboxEth, uint256 flipPaid) — `player` indexed, so (roll, ethPayout,
+            // lootboxEth, flipPaid) sit in the non-indexed data tuple. flipPaid (the
+            // contingent FLIP flip-credit minted on a winning resolving-day coinflip) is read
+            // but not aggregated here — FLIP conservation is covered by the carry-side ghosts.
             Vm.Log[] memory logs = vm.getRecordedLogs();
             bytes32 claimedSig = keccak256("RedemptionClaimed(address,uint16,uint256,uint256,uint256)");
             bool claimSettled;
@@ -649,7 +649,7 @@ contract RedemptionHandler is Test {
     // =========================================================================
 
     /// @notice Read the packed `DayPending` slot for day D and unpack its 3×uint64 fields.
-    /// @dev v47: the per-day BURNIE base was removed (BURNIE is settled at submit). DayPending is
+    /// @dev v47: the per-day FLIP base was removed (FLIP is settled at submit). DayPending is
     ///      now `{ethBase (bits 0-63), supplySnapshot (bits 64-127), burned (bits 128-191)}`.
     /// @param day Wall-clock day to read.
     /// @return ethBase Pool ETH base in GWEI units (1e9 wei divisor).

@@ -28,8 +28,8 @@ contract DegeneretteHandler is Test {
     // --- Ghost variables ---
     uint256 public ghost_totalEthWagered;
     uint256 public ghost_totalEthPayout;
-    uint256 public ghost_totalBurnieWagered;
-    uint256 public ghost_totalBurniePayout;
+    uint256 public ghost_totalFlipWagered;
+    uint256 public ghost_totalFlipPayout;
     uint256 public ghost_betsPlaced;
     uint256 public ghost_betsResolved;
     uint256 public ghost_betsFailed;

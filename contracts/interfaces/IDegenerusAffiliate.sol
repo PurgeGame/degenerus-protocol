@@ -39,7 +39,7 @@ interface IDegenerusAffiliate {
     ///      Used for affiliate trophies and jackpot selections.
     /// @param lvl The game level to query.
     /// @return player Address of the top affiliate.
-    /// @return score Their score in BURNIE base units (18 decimals).
+    /// @return score Their score in FLIP base units (18 decimals).
     function affiliateTop(uint24 lvl) external view returns (address player, uint96 score);
 
     /// @notice Get an affiliate's base earnings score for a level.

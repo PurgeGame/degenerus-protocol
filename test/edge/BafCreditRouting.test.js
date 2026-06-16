@@ -14,7 +14,7 @@ import {
 } from "../helpers/testUtils.js";
 
 /**
- * BafCreditRouting — verifies the BAF credit-routing changes in BurnieCoinflip.sol:
+ * BafCreditRouting — verifies the BAF credit-routing changes in Coinflip.sol:
  *   - :525  cursor >= bafResolvedDay  (was strict >, orphaned the resolution day)
  *   - :585  RngLocked guard now keys off storage `level` (was `purchaseLevel_ = level + 1`,
  *           which never matched at x10 boundaries because level is pre-bumped in
@@ -117,7 +117,7 @@ describe("BafCreditRouting", function () {
     ]);
   }
 
-  async function mintBurnieToAlice(coin, vault, alice, amount = eth(10000)) {
+  async function mintFlipToAlice(coin, vault, alice, amount = eth(10000)) {
     const vaultAddr = await vault.getAddress();
     await hre.ethers.provider.send("hardhat_setBalance", [
       vaultAddr,
@@ -157,7 +157,7 @@ describe("BafCreditRouting", function () {
 
   /**
    * Set up alice with a winning claimable flip:
-   *   - mint BURNIE to alice
+   *   - mint FLIP to alice
    *   - alice deposits coinflip stake during day N
    *   - advanceGame + fulfill VRF with odd word → day N+1 resolves as a win
    *   - drive cycle to completion (RNG unlocked)
@@ -166,9 +166,9 @@ describe("BafCreditRouting", function () {
   async function setupAliceWinningFlip(fixture) {
     const { game, coin, coinflip, deployer, mockVRF, alice, vault } = fixture;
 
-    await mintBurnieToAlice(coin, vault, alice);
+    await mintFlipToAlice(coin, vault, alice);
 
-    // alice places a coinflip stake (deposit). This routes the BURNIE into the
+    // alice places a coinflip stake (deposit). This routes the FLIP into the
     // coinflipBalance[nextDay][alice] mapping.
     await coinflip
       .connect(alice)
@@ -227,7 +227,7 @@ describe("BafCreditRouting", function () {
       const fixture = await loadFixture(deployFullProtocol);
       const { game, coinflip, coin, alice, vault } = fixture;
 
-      await mintBurnieToAlice(coin, vault, alice);
+      await mintFlipToAlice(coin, vault, alice);
       const gameAddr = await game.getAddress();
 
       await setLevel(gameAddr, 10);
@@ -289,7 +289,7 @@ describe("BafCreditRouting", function () {
       const fixture = await loadFixture(deployFullProtocol);
       const { game, coinflip, coin, alice, vault } = fixture;
 
-      await mintBurnieToAlice(coin, vault, alice);
+      await mintFlipToAlice(coin, vault, alice);
       const gameAddr = await game.getAddress();
 
       await setLevel(gameAddr, 5);

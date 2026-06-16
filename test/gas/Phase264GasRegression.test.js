@@ -8,7 +8,7 @@
 //
 // D-IMPL-04: paired-empty-wrapper REJECTED for SURF-05. The PPL helper has 50
 // cold/warm length SLOADs + 50 deity-cache hits + 50 keccak inside loop body +
-// 50 JackpotBurnieWin emits + 50 coinflip.creditFlip cross-contract calls — none
+// 50 JackpotFlipWin emits + 50 coinflip.creditFlip cross-contract calls — none
 // can cleanly noOp in a wrapper without distorting the measurement. Use entry-
 // point measurement via the deployFullProtocol fixture instead.
 //
@@ -17,7 +17,7 @@
 // ============================================================================
 //
 // Per-pull body opcode walk (under unchecked where possible):
-//   - keccak256(abi.encode(randomWord, COIN_LEVEL_TAG, i))     ~  60 gas
+//   - keccak256(abi.encode(randomWord, FLIP_LEVEL_TAG, i))     ~  60 gas
 //     (per-pull lvlPrime sample; MSTORE × 3 + KECCAK256(96 bytes))
 //   - % range modulo                                           ~   8 gas
 //   - traitBurnTicket[lvlPrime][trait_i].length SLOAD          : cold 2100 / warm 100 (EIP-2929)
@@ -28,7 +28,7 @@
 //   - % effectiveLen modulo                                    ~   8 gas
 //   - holders[idx] cold/warm SLOAD                             : cold 2100 / warm 100
 //     (slot is per-(lvlPrime, trait_i, idx); distinct from length slot)
-//   - JackpotBurnieWin emit (5 fields, no indexed)             ~ 1500-1900 gas
+//   - JackpotFlipWin emit (5 fields, no indexed)             ~ 1500-1900 gas
 //   - coinflip.creditFlip(winner, amount) cross-contract       ~  700-2000 gas
 //   - cursor advance + loop overhead                           ~  50 gas
 //
@@ -264,7 +264,7 @@ function firstAt(observations, targetStage) {
 // ----------------------------------------------------------------------------
 
 /**
- * Measure stage 6 (STAGE_PURCHASE_DAILY) gasUsed where `payDailyCoinJackpot`
+ * Measure stage 6 (STAGE_PURCHASE_DAILY) gasUsed where `payDailyFlipJackpot`
  * runs the per-pull-level resample helper, AND the corresponding stage-1
  * (STAGE_RNG_REQUESTED) baseline gas from the SAME cycle.
  *
@@ -372,7 +372,7 @@ describe("Phase 264 SURF-05 — per-pull-level resample entry-point gas regressi
   this.timeout(2_400_000); // 40 min — heavy lifecycle drives × 2 measured surfaces
   after(function () { restoreAddresses(); });
 
-  describe("payDailyCoinJackpot (purchase-phase, stage 6) entry-point delta", function () {
+  describe("payDailyFlipJackpot (purchase-phase, stage 6) entry-point delta", function () {
     it(`gasUsed at stage 6 within ENTRY_POINT_DELTA_TOLERANCE of pinned REF; helper-growth ≤ ${PER_CALL_GAS_DELTA_BOUND}`, async function () {
       const fixture = await loadFixture(deployFullProtocol);
       const { measured, baseline } = await measurePayDailyCoinJackpotGas(fixture);
@@ -380,18 +380,18 @@ describe("Phase 264 SURF-05 — per-pull-level resample entry-point gas regressi
       const literalDelta = measured - baseline;
       console.log(`[REF-CAPTURE] PAY_DAILY_COIN_JACKPOT_GAS_REF              = ${measured}`);
       console.log(`[REF-CAPTURE] BASELINE_NO_COIN_JACKPOT_GAS               = ${baseline}`);
-      console.log(`[SURF-05] payDailyCoinJackpot literal delta (stage6 - stage1) = ${literalDelta} gas; helper-growth bound ${PER_CALL_GAS_DELTA_BOUND}; per-site tolerance ${ENTRY_POINT_DELTA_TOLERANCE}`);
+      console.log(`[SURF-05] payDailyFlipJackpot literal delta (stage6 - stage1) = ${literalDelta} gas; helper-growth bound ${PER_CALL_GAS_DELTA_BOUND}; per-site tolerance ${ENTRY_POINT_DELTA_TOLERANCE}`);
 
       // Outer-envelope sanity: literal delta must not exceed the structural-
       // regression bound (≤ 8M gas — well above any realistic stage-6 gross
       // difference vs the stage-1 floor at HEAD).
       expect(
         literalDelta <= LITERAL_DELTA_HARD_BOUND,
-        `payDailyCoinJackpot literal delta ${literalDelta} > ${LITERAL_DELTA_HARD_BOUND} — structural regression (advanceGame stage 6 path grew dramatically vs stage-1 floor)`,
+        `payDailyFlipJackpot literal delta ${literalDelta} > ${LITERAL_DELTA_HARD_BOUND} — structural regression (advanceGame stage 6 path grew dramatically vs stage-1 floor)`,
       ).to.equal(true);
       expect(
         literalDelta > 0,
-        `payDailyCoinJackpot literal delta ${literalDelta} non-positive — stage-6 cheaper than stage-1 floor; fixture / measurement regression`,
+        `payDailyFlipJackpot literal delta ${literalDelta} non-positive — stage-6 cheaper than stage-1 floor; fixture / measurement regression`,
       ).to.equal(true);
 
       // Pinned-REF tolerance check (placeholder 0 means "not yet pinned —
@@ -401,7 +401,7 @@ describe("Phase 264 SURF-05 — per-pull-level resample entry-point gas regressi
         const drift = Math.abs(measured - PAY_DAILY_COIN_JACKPOT_GAS_REF);
         expect(
           drift <= ENTRY_POINT_DELTA_TOLERANCE,
-          `payDailyCoinJackpot drift ${drift} > tolerance ${ENTRY_POINT_DELTA_TOLERANCE}; measured ${measured} vs REF ${PAY_DAILY_COIN_JACKPOT_GAS_REF}`,
+          `payDailyFlipJackpot drift ${drift} > tolerance ${ENTRY_POINT_DELTA_TOLERANCE}; measured ${measured} vs REF ${PAY_DAILY_COIN_JACKPOT_GAS_REF}`,
         ).to.equal(true);
 
         // Helper-growth bound (D-IMPL-05): helper's regression contribution
@@ -411,7 +411,7 @@ describe("Phase 264 SURF-05 — per-pull-level resample entry-point gas regressi
         const helperGrowth = measured - PAY_DAILY_COIN_JACKPOT_GAS_REF;
         expect(
           helperGrowth <= PER_CALL_GAS_DELTA_BOUND,
-          `payDailyCoinJackpot helper-growth ${helperGrowth} > ${PER_CALL_GAS_DELTA_BOUND} (D-IMPL-05 — re-derive worst case before re-pinning)`,
+          `payDailyFlipJackpot helper-growth ${helperGrowth} > ${PER_CALL_GAS_DELTA_BOUND} (D-IMPL-05 — re-derive worst case before re-pinning)`,
         ).to.equal(true);
       }
       if (BASELINE_NO_COIN_JACKPOT_GAS > 0) {

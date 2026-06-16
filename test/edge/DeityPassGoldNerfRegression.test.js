@@ -9,15 +9,15 @@
 //     existing `if (deity != address(0))` block. Gold tier (color == 7 via
 //     `((trait >> 3) & 7) == 7`) gets a flat 1 virtual entry; common tiers
 //     (colors 0..6) retain the v41 `max(len/50, 2)` formula.
-//   - Phase 294 BURNIE gap-closure amendment commit `38319463` — parallel
+//   - Phase 294 FLIP gap-closure amendment commit `38319463` — parallel
 //     gold-tier branch at `_awardDailyCoinToTraitWinners` L1867-L1874
-//     inline-duplicate site. The BURNIE path is NOT a caller of
+//     inline-duplicate site. The FLIP path is NOT a caller of
 //     `_randTraitTicket` — it is architecturally a multi-bucket /
 //     1-winner-per-iteration sampler incompatible with `_randTraitTicket`'s
 //     single-bucket / N-winner signature (private view, `address[][256]
 //     storage` reference parameter). The gold-tier branch is therefore
 //     INLINE-DUPLICATED at L1867-L1874 rather than reached through a
-//     function call per D-294-BURNIE-INLINE-01 +
+//     function call per D-294-FLIP-INLINE-01 +
 //     `feedback_verify_call_graph_against_source.md`.
 //
 // Path of investigation (5 bullets per 295-CONTEXT.md `<decisions>` JSDoc
@@ -26,7 +26,7 @@
 // (i)   Mechanic covered: the v42 DPNERF gold-tier flat-1 `virtualCount` on
 //       `((trait >> 3) & 7) == 7` and the common-tier `max(len/50, 2)`
 //       UNCHANGED at both surfaces — ETH `_randTraitTicket` L1707-L1763 and
-//       BURNIE `_awardDailyCoinToTraitWinners` L1822-L1913 inline-duplicate
+//       FLIP `_awardDailyCoinToTraitWinners` L1822-L1913 inline-duplicate
 //       (gold-tier block at L1867-L1874).
 //
 // (ii)  JS-replay oracle + cross-attestation strategy per D-295-INVOKE-01 +
@@ -38,7 +38,7 @@
 //       class is therefore established via a pure-function JS bit-mirror at
 //       `test/helpers/randTraitTicketRef.mjs` (Phase 282/291/293 lineage).
 //       The oracle drives a hybrid 1,000 JS-replay iterations (750 ETH +
-//       250 BURNIE split proportional to production call frequency) plus a
+//       250 FLIP split proportional to production call frequency) plus a
 //       16-iteration cross-attestation block (smallest N satisfying
 //       per-iteration deity-win-count chi² goodness-of-fit at p > 0.05
 //       against the analytical 1/(len+1) per-draw expectation; df=1
@@ -58,20 +58,20 @@
 //       negligible at ~20-50) is the load-bearing acceptance evidence
 //       cited at Phase 297 §3.A. Mirrors Phase 291 D-291-GAS-01.
 //
-// (iv)  D-295-BURNIE-PATH-01 + D-294-BURNIE-INLINE-01 callsite reach:
-//       TST-DPNERF-03 covers the BURNIE inline-duplicate gold-tier branch
-//       at L1867-L1874. The `payDailyCoinJackpot(uint24 lvl, uint256
+// (iv)  D-295-FLIP-PATH-01 + D-294-FLIP-INLINE-01 callsite reach:
+//       TST-DPNERF-03 covers the FLIP inline-duplicate gold-tier branch
+//       at L1867-L1874. The `payDailyFlipJackpot(uint24 lvl, uint256
 //       randWord, uint24 minLevel, uint24 maxLevel) external` entry point
 //       (selector `0xdbedb1c1`, UNCHANGED at Phase 294 §4) is the natural
 //       production-flow vehicle; however its `_calcDailyCoinBudget(lvl) > 0`
 //       precondition requires non-trivial game-state scaffolding (prize
 //       pool funded, level state set, jackpot phase active) which
 //       D-295-INVOKE-01 already prices in as part of the JS-replay primary
-//       disposition. TST-DPNERF-03 therefore exercises the BURNIE path
+//       disposition. TST-DPNERF-03 therefore exercises the FLIP path
 //       through (a) the `awardDailyCoinPullRef` JS-replay oracle at the
 //       per-pull granularity, plus (b) direct-storage-read byte attestation
 //       against the seeded bucket state — equivalent attestation under the
-//       structural argument that the BURNIE inline-duplicate carries the
+//       structural argument that the FLIP inline-duplicate carries the
 //       identical branch shape verified at Task 3 grep-verification
 //       (L1868 `if (((trait_i >> 3) & 7) == 7)` matches L1732
 //       `if (((trait >> 3) & 7) == 7)`).
@@ -85,7 +85,7 @@
 //   | ETH callsite 2         | L988       | `_distributeTicketsToBucket`      | DEFERRED to Phase 296 SWEEP                                         |
 //   | ETH callsite 3         | L1296      | `_processDailyEth`                | covered by TST-DPNERF-01 + TST-DPNERF-02 (JS oracle replay)         |
 //   | ETH callsite 4         | L1399      | `_resolveTraitWinners`            | covered by TST-DPNERF-04 cross-attestation (JS oracle replay)       |
-//   | BURNIE inline-duplicate| L1867-L1874| `_awardDailyCoinToTraitWinners`   | covered by TST-DPNERF-03 + TST-DPNERF-04 BURNIE half (JS oracle)    |
+//   | FLIP inline-duplicate| L1867-L1874| `_awardDailyCoinToTraitWinners`   | covered by TST-DPNERF-03 + TST-DPNERF-04 FLIP half (JS oracle)    |
 //
 // Per-test mapping (one line per TST-DPNERF-NN ⇒ describe block):
 //   TST-DPNERF-01 — deity-pass + gold-tier ETH trait win: gold-tier branch
@@ -94,13 +94,13 @@
 //   TST-DPNERF-02 — deity-pass + common-tier ETH trait win: common-tier
 //     `max(len/50, 2)` formula UNCHANGED; `virtualCount == 2` at
 //     BUCKET_SIZE=50; 25-winner draw output matches JS oracle byte-equal.
-//   TST-DPNERF-03 — deity-pass + gold-tier BURNIE trait win via inline
+//   TST-DPNERF-03 — deity-pass + gold-tier FLIP trait win via inline
 //     duplicate L1867-L1874: `virtualCount == 1` at per-pull granularity;
 //     `awardDailyCoinPullRef` output matches JS oracle byte-equal across
 //     50-pull cap; deity-sentinel pulls carry the L1893 marker
 //     `ticketIdx == type(uint256).max`.
 //   TST-DPNERF-04 — gold-tile EV regression at N=1,000 (750 ETH + 250
-//     BURNIE) per D-295-EV-METHODOLOGY-01: empirical deity virtual-entry
+//     FLIP) per D-295-EV-METHODOLOGY-01: empirical deity virtual-entry
 //     total equals N × 1 = 1,000; 16-iteration production cross-attestation
 //     confirms JS↔EVM bit-identity via direct-storage-seed + read-back
 //     against the JS oracle's `deitySentinelMask` output; per-iteration
@@ -155,7 +155,7 @@ const DAILY_ENTROPY =
 
 const N_EV = 1000; // TST-DPNERF-04 total JS-replay iteration count per D-295-EV-METHODOLOGY-01
 const N_EV_ETH = 750; // ETH half-split
-const N_EV_BURNIE = 250; // BURNIE half-split
+const N_EV_FLIP = 250; // FLIP half-split
 const N_CROSS = 16; // cross-attestation iteration count per D-295-EV-METHODOLOGY-01
 const BUCKET_SIZE = 50; // holder bucket size per 295-CONTEXT.md `<specifics>`
 const NUM_WINNERS_ETH = 25; // ETH trait-winner draw cap per `_processDailyEth` L1296
@@ -172,7 +172,7 @@ const NUM_WINNERS_ETH = 25; // ETH trait-winner draw cap per `_processDailyEth` 
 const GOLD_TRAIT = (0 << 6) | (7 << 3) | 0; // 56
 const COMMON_TRAIT = 0; // common color (0), fullSymId 0
 
-// type(uint256).max — deity-sentinel marker at L1757 (ETH) + L1893 (BURNIE).
+// type(uint256).max — deity-sentinel marker at L1757 (ETH) + L1893 (FLIP).
 const DEITY_SENTINEL_TICKET_IDX =
   RAND_TRAIT_TICKET_CONSTANTS.DEITY_SENTINEL_TICKET_IDX;
 
@@ -747,25 +747,25 @@ describe("DeityPassGoldNerfRegression — Phase 295 v42.0 DPNERF regression fixt
   );
 
   // ---------------------------------------------------------------------------
-  // TST-DPNERF-03 — BURNIE coin jackpot path gold-tier virtualCount == 1
+  // TST-DPNERF-03 — FLIP coin jackpot path gold-tier virtualCount == 1
   // via inline-duplicate L1867-L1874.
   // ---------------------------------------------------------------------------
   //
-  // Scenario: deity-pass-holder + gold-tier trait win via the BURNIE
+  // Scenario: deity-pass-holder + gold-tier trait win via the FLIP
   // single-winner-per-pull draw at `_awardDailyCoinToTraitWinners` L1822-L1913.
   // The gold-tier branch is INLINE-DUPLICATED at L1867-L1874 per
-  // D-294-BURNIE-INLINE-01 — `payDailyCoinJackpot` does NOT call
-  // `_randTraitTicket`; the BURNIE path is architecturally a multi-bucket /
+  // D-294-FLIP-INLINE-01 — `payDailyFlipJackpot` does NOT call
+  // `_randTraitTicket`; the FLIP path is architecturally a multi-bucket /
   // 1-winner-per-iteration sampler whose shape is incompatible with the
   // single-bucket / N-winner signature of `_randTraitTicket`.
   //
   // Cite both sites verbatim per `feedback_verify_call_graph_against_source.md`:
   //   ETH:    L1731-L1738 — `if (((trait >> 3) & 7) == 7) { virtualCount = 1; ... }`
-  //   BURNIE: L1867-L1874 — `if (deity != address(0)) { if (((trait_i >> 3) & 7) == 7) { virtualCount = 1; ... } }`
+  //   FLIP: L1867-L1874 — `if (deity != address(0)) { if (((trait_i >> 3) & 7) == 7) { virtualCount = 1; ... } }`
   //
   // The two branch shapes are identical modulo variable naming (`trait` vs
   // `trait_i`), which Task 3 grep-verifies at the live source pre-commit.
-  // TST-DPNERF-03 drives `awardDailyCoinPullRef` against the seeded BURNIE
+  // TST-DPNERF-03 drives `awardDailyCoinPullRef` against the seeded FLIP
   // bucket state across the full DAILY_COIN_MAX_WINNERS=50-pull cap and
   // asserts:
   //   - `virtualCount == 1n` at every pull where trait_i carries the
@@ -775,7 +775,7 @@ describe("DeityPassGoldNerfRegression — Phase 295 v42.0 DPNERF regression fixt
   //   - the JS oracle output is consistent across pulls (independent
   //     per-pull keccak inputs produce deterministic, non-colliding draws)
   describe(
-    "TST-DPNERF-03 — BURNIE coin jackpot path gold-tier virtualCount == 1 via inline-duplicate L1867-L1874 (audit-subject site: BURNIE inline-duplicate per D-294-BURNIE-INLINE-01)",
+    "TST-DPNERF-03 — FLIP coin jackpot path gold-tier virtualCount == 1 via inline-duplicate L1867-L1874 (audit-subject site: FLIP inline-duplicate per D-294-FLIP-INLINE-01)",
     function () {
       it(
         "seeds (deity, gold-trait bucket=" +
@@ -790,7 +790,7 @@ describe("DeityPassGoldNerfRegression — Phase 295 v42.0 DPNERF regression fixt
           const bucketBaseSlot = deriveStorageSlot("traitBurnTicket");
 
           const deity = hre.ethers.getAddress(
-            "0x00000000000000000000000000000000000B0E11" // BURNIE deity
+            "0x00000000000000000000000000000000000B0E11" // FLIP deity
           );
           await seedDeityBySymbol(gameAddr, 0, deity, deityBaseSlot);
 
@@ -839,12 +839,12 @@ describe("DeityPassGoldNerfRegression — Phase 295 v42.0 DPNERF regression fixt
               deity,
             });
 
-            // BURNIE inline-duplicate gold-tier branch (L1867-L1874):
+            // FLIP inline-duplicate gold-tier branch (L1867-L1874):
             // virtualCount == 1 at every pull where trait_i is gold AND
             // deity is non-zero.
             expect(
               out.virtualCount,
-              `TST-DPNERF-03 pull ${i}: BURNIE inline-duplicate must yield virtualCount=1 at L1869`
+              `TST-DPNERF-03 pull ${i}: FLIP inline-duplicate must yield virtualCount=1 at L1869`
             ).to.equal(1n);
 
             // Effective length invariant: len + virtualCount = 50 + 1 = 51.
@@ -865,9 +865,9 @@ describe("DeityPassGoldNerfRegression — Phase 295 v42.0 DPNERF regression fixt
           expect(sentinelPulls + regularPulls).to.equal(CAP);
 
           console.log(
-            `      [TST-DPNERF-03] PASS — BURNIE inline-duplicate L1867-L1874 gold-tier branch ` +
+            `      [TST-DPNERF-03] PASS — FLIP inline-duplicate L1867-L1874 gold-tier branch ` +
               `produced virtualCount=1 at all ${CAP} pulls; ${sentinelPulls} deity sentinel(s) (expected ~0.98 = 50/(50+1)) ` +
-              `+ ${regularPulls} regular winner(s); event ABI JackpotBurnieWin(winner, lvlPrime, trait, amount, ticketIdx) ` +
+              `+ ${regularPulls} regular winner(s); event ABI JackpotFlipWin(winner, lvlPrime, trait, amount, ticketIdx) ` +
               `at L1899-L1905 carries the L1893 sentinel pair (ticketIdx == type(uint256).max iff winner == deity)`
           );
         }
@@ -877,18 +877,18 @@ describe("DeityPassGoldNerfRegression — Phase 295 v42.0 DPNERF regression fixt
 
   // ---------------------------------------------------------------------------
   // TST-DPNERF-04 — gold-tile EV regression at N=1000 across both paths
-  // (750 ETH + 250 BURNIE) + 16-iter cross-attestation.
+  // (750 ETH + 250 FLIP) + 16-iter cross-attestation.
   // ---------------------------------------------------------------------------
   //
   // Per D-295-EV-METHODOLOGY-01 — hybrid 1,000 JS-replay iterations + 16
-  // production cross-attestation iterations. Split: 750 ETH + 250 BURNIE
+  // production cross-attestation iterations. Split: 750 ETH + 250 FLIP
   // proportional to production call frequency (ETH has 4 callsites + 25-winner
-  // draw; BURNIE has 1 callsite + 1-winner-per-pull → ETH dominates the
+  // draw; FLIP has 1 callsite + 1-winner-per-pull → ETH dominates the
   // production keccak surface).
   //
   // Expected behaviour (deity virtual-entry total):
   //   ETH (750 iters):    each iter contributes virtualCount=1 → total=750
-  //   BURNIE (250 iters): each iter contributes virtualCount=1 → total=250
+  //   FLIP (250 iters): each iter contributes virtualCount=1 → total=250
   //   Combined:           750 + 250 = 1000 = N × 1
   //   v41 baseline would have been N × max(50/50, 2) = N × 2 = 2000 (information-only)
   //
@@ -905,8 +905,8 @@ describe("DeityPassGoldNerfRegression — Phase 295 v42.0 DPNERF regression fixt
       " across both paths (" +
       N_EV_ETH +
       " ETH + " +
-      N_EV_BURNIE +
-      " BURNIE) + " +
+      N_EV_FLIP +
+      " FLIP) + " +
       N_CROSS +
       "-iter cross-attestation",
     function () {
@@ -985,9 +985,9 @@ describe("DeityPassGoldNerfRegression — Phase 295 v42.0 DPNERF regression fixt
 
       it(
         "JS-replay " +
-          N_EV_BURNIE +
-          " BURNIE-path iterations: empirical deity virtual-entry total equals " +
-          N_EV_BURNIE +
+          N_EV_FLIP +
+          " FLIP-path iterations: empirical deity virtual-entry total equals " +
+          N_EV_FLIP +
           " (= N × 1 per D-42N-DEITY-EV-01)",
         function () {
           const holders = generateHolderAddresses(BUCKET_SIZE, "0xB17EB17E");
@@ -995,10 +995,10 @@ describe("DeityPassGoldNerfRegression — Phase 295 v42.0 DPNERF regression fixt
             "0x0000000000000000000000000000000000B00B1E"
           );
 
-          let totalBurnieVirtualEntries = 0n;
-          let totalBurnieDeitySentinels = 0;
-          for (let i = 0; i < N_EV_BURNIE; ++i) {
-            const randomWord = deriveIterationEntropy("DPNERF_EV_BURNIE", i);
+          let totalFlipVirtualEntries = 0n;
+          let totalFlipDeitySentinels = 0;
+          for (let i = 0; i < N_EV_FLIP; ++i) {
+            const randomWord = deriveIterationEntropy("DPNERF_EV_FLIP", i);
             const lvlPrime = 1 + (i % 10);
             const out = awardDailyCoinPullRef({
               holders,
@@ -1009,31 +1009,31 @@ describe("DeityPassGoldNerfRegression — Phase 295 v42.0 DPNERF regression fixt
               deity,
             });
             expect(out.virtualCount).to.equal(1n);
-            totalBurnieVirtualEntries += out.virtualCount;
-            if (out.isDeitySentinel) totalBurnieDeitySentinels++;
+            totalFlipVirtualEntries += out.virtualCount;
+            if (out.isDeitySentinel) totalFlipDeitySentinels++;
           }
 
           expect(
-            totalBurnieVirtualEntries,
-            `TST-DPNERF-04 BURNIE: total virtual-entries must equal ${N_EV_BURNIE} × 1 = ${N_EV_BURNIE}`
-          ).to.equal(BigInt(N_EV_BURNIE));
+            totalFlipVirtualEntries,
+            `TST-DPNERF-04 FLIP: total virtual-entries must equal ${N_EV_FLIP} × 1 = ${N_EV_FLIP}`
+          ).to.equal(BigInt(N_EV_FLIP));
 
-          // Per-pull chi² goodness-of-fit. Each BURNIE pull is 1 draw, so
-          // total draws = N_EV_BURNIE = 250.
+          // Per-pull chi² goodness-of-fit. Each FLIP pull is 1 draw, so
+          // total draws = N_EV_FLIP = 250.
           const expectedRate = 1 / (BUCKET_SIZE + 1); // 1/51
-          const expectedSentinel = N_EV_BURNIE * expectedRate;
-          const expectedRegular = N_EV_BURNIE * (1 - expectedRate);
+          const expectedSentinel = N_EV_FLIP * expectedRate;
+          const expectedRegular = N_EV_FLIP * (1 - expectedRate);
           const chi2 = computeChi2Multinomial(
-            [totalBurnieDeitySentinels, N_EV_BURNIE - totalBurnieDeitySentinels],
+            [totalFlipDeitySentinels, N_EV_FLIP - totalFlipDeitySentinels],
             [expectedSentinel, expectedRegular]
           );
           const crit = CHI2_CRIT_05[1]; // 3.841
           const z = wilsonHilfertyZ(chi2, 1);
 
           console.log(
-            `      [TST-DPNERF-04 BURNIE] PASS — totalBurnieVirtualEntries=${totalBurnieVirtualEntries} (= ${N_EV_BURNIE} × 1); ` +
-              `totalBurnieDeitySentinels=${totalBurnieDeitySentinels} / ${N_EV_BURNIE} (= ${(
-                totalBurnieDeitySentinels / N_EV_BURNIE
+            `      [TST-DPNERF-04 FLIP] PASS — totalFlipVirtualEntries=${totalFlipVirtualEntries} (= ${N_EV_FLIP} × 1); ` +
+              `totalFlipDeitySentinels=${totalFlipDeitySentinels} / ${N_EV_FLIP} (= ${(
+                totalFlipDeitySentinels / N_EV_FLIP
               ).toFixed(5)}; target=${expectedRate.toFixed(
                 5
               )} = 1/(50+1)); chi²=${chi2.toFixed(3)} < ${crit} (df=1); Wilson-Hilferty Z=${z.toFixed(3)}`
@@ -1044,7 +1044,7 @@ describe("DeityPassGoldNerfRegression — Phase 295 v42.0 DPNERF regression fixt
       );
 
       it(
-        "Combined ETH+BURNIE total deity virtual-entries equals " +
+        "Combined ETH+FLIP total deity virtual-entries equals " +
           N_EV +
           " (= 750 + 250 = N × 1; v41 baseline would have been N × 2 = 2000 — information-only)",
         function () {
@@ -1067,10 +1067,10 @@ describe("DeityPassGoldNerfRegression — Phase 295 v42.0 DPNERF regression fixt
             });
             combined += out.virtualCount;
           }
-          // BURNIE half
-          for (let i = 0; i < N_EV_BURNIE; ++i) {
+          // FLIP half
+          for (let i = 0; i < N_EV_FLIP; ++i) {
             const randomWord = deriveIterationEntropy(
-              "DPNERF_EV_COMBO_BURNIE",
+              "DPNERF_EV_COMBO_FLIP",
               i
             );
             const out = awardDailyCoinPullRef({
@@ -1086,7 +1086,7 @@ describe("DeityPassGoldNerfRegression — Phase 295 v42.0 DPNERF regression fixt
 
           expect(
             combined,
-            `TST-DPNERF-04 combined: ETH + BURNIE total deity virtual-entries must equal ${N_EV} (= 750 + 250)`
+            `TST-DPNERF-04 combined: ETH + FLIP total deity virtual-entries must equal ${N_EV} (= 750 + 250)`
           ).to.equal(BigInt(N_EV));
 
           console.log(

@@ -34,7 +34,7 @@ contract TLKeyComputer is DegenerusGameStorage {
 ///                [21:22]gameOver [22:23]dailyJackpotCoinTicketsPending
 ///                [23:24]compressedJackpotFlag [24:25]ticketsFullyProcessed
 ///                [25:26]ticketWriteSlot [26:27]prizePoolFrozen [27:28]presaleOver
-///                [28:29]subsFullyProcessed [29:30]presaleDrained [30:31]burnieWindowOpen
+///                [28:29]subsFullyProcessed [29:30]presaleDrained [30:31]ticketRedemptionOpen
 ///      - Slot 1: [0:16]currentPrizePool(uint128) [16:32]claimablePool(uint128)
 ///      - ticketQueue: slot 12 (mapping(uint24 => address[]))
 ///      - ticketsOwedPacked: slot 13 (mapping(uint24 => mapping(address => uint40)))

@@ -11,7 +11,7 @@ import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 /// @title RngFreezeAndRemovalProofs -- Proves SAFE-04 (the v45 RNG-freeze hard-floor is
 ///        intact under the new permissionless crank) plus the v46 REMOVE proofs (the legacy
 ///        free-ETH-auto-rebuy / afKing-mode / daily-ETH-split surface is grep-clean AND
-///        behaviorally gone, and the BURNIE win/loss RNG path + KNOWN-ISSUES are unmodified).
+///        behaviorally gone, and the FLIP win/loss RNG path + KNOWN-ISSUES are unmodified).
 ///
 /// @notice SAFE-04 north-star (every VRF-interacting variable frozen across the rng window):
 ///         the crank relaxed WHO can resolve, not WHEN. This suite proves the freeze guard
@@ -23,7 +23,7 @@ import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 ///         player-mutable in-window inputs cannot re-enter the freeze window).
 ///
 ///         REMOVE behavioral: ETH jackpot winnings ALWAYS land in claimable (no
-///         ticket-conversion / auto-rebuy interception), and the BURNIE flip recycle bonus is
+///         ticket-conversion / auto-rebuy interception), and the FLIP flip recycle bonus is
 ///         a flat 75bps applied unconditionally (no deity scaling). REMOVE structural: the
 ///         legacy kill set returns ZERO non-comment matches outside contracts/test+mocks (the
 ///         keeper file `AfKing.sol` is excluded), and the win/loss RNG path
@@ -94,8 +94,8 @@ contract RngFreezeAndRemovalProofs is DeployProtocol {
     uint256 private constant LOOTBOX_MIN = 0.01 ether;
 
     // -------------------------------------------------------------------------
-    // RM-03 flat recycle constants (mirror BurnieCoinflip's private constants).
-    // BurnieCoinflip.sol:130 RECYCLE_BONUS_BPS = 75 ; :129 BPS_DENOMINATOR = 10_000.
+    // RM-03 flat recycle constants (mirror Coinflip's private constants).
+    // Coinflip.sol:130 RECYCLE_BONUS_BPS = 75 ; :129 BPS_DENOMINATOR = 10_000.
     // The flat-bps numeric proof replicates the exact contract formula.
     // -------------------------------------------------------------------------
     uint256 private constant RECYCLE_BONUS_BPS = 75;
@@ -300,14 +300,14 @@ contract RngFreezeAndRemovalProofs is DeployProtocol {
         );
     }
 
-    /// @notice RM-03 behavioral (flat 75bps, unconditional): the BURNIE flip recycle bonus is
+    /// @notice RM-03 behavioral (flat 75bps, unconditional): the FLIP flip recycle bonus is
     ///         `(amount * 75) / 10_000` applied flat for every player tier — a deity-pass holder
     ///         and a normal player receive EXACTLY the same bonus for the same amount (no deity
     ///         scaling, no under/over-credit). `_recyclingBonus(amount)` takes ONLY `amount`
     ///         (proven structurally in Task 3), so tier cannot influence it; here we assert the
     ///         numeric flat-bps formula holds and is identical across two "tiers".
-    function testBurnieRecycleIsFlat75BpsAcrossTiers(uint96 amountWei) public view {
-        // Keep below the 1000-BURNIE bonus cap so the flat-bps relationship holds exactly.
+    function testFlipRecycleIsFlat75BpsAcrossTiers(uint96 amountWei) public view {
+        // Keep below the 1000-FLIP bonus cap so the flat-bps relationship holds exactly.
         // cap is hit at amount = cap * 10_000 / 75; stay well under.
         uint256 amount = bound(
             uint256(amountWei),
@@ -380,10 +380,10 @@ contract RngFreezeAndRemovalProofs is DeployProtocol {
         // The production sources scanned (exclude the keeper AfKing.sol + the kept handle refs).
         string[15] memory sources = [
             "contracts/DegenerusGame.sol",
-            "contracts/BurnieCoinflip.sol",
-            "contracts/BurnieCoin.sol",
+            "contracts/Coinflip.sol",
+            "contracts/FLIP.sol",
             "contracts/DegenerusVault.sol",
-            "contracts/StakedDegenerusStonk.sol",
+            "contracts/sDGNRS.sol",
             "contracts/modules/DegenerusGameJackpotModule.sol",
             "contracts/modules/DegenerusGameAdvanceModule.sol",
             "contracts/modules/DegenerusGamePayoutUtils.sol",
@@ -392,7 +392,7 @@ contract RngFreezeAndRemovalProofs is DeployProtocol {
             "contracts/modules/DegenerusGameMintModule.sol",
             "contracts/storage/DegenerusGameStorage.sol",
             "contracts/interfaces/IDegenerusGame.sol",
-            "contracts/interfaces/IBurnieCoinflip.sol",
+            "contracts/interfaces/ICoinflip.sol",
             "contracts/DegenerusDeityPass.sol"
         ];
 
@@ -744,12 +744,12 @@ contract RngFreezeAndRemovalProofs is DeployProtocol {
         }
     }
 
-    /// @notice UNMODIFIED invariant: the BURNIE win/loss RNG path is byte-identical — the
+    /// @notice UNMODIFIED invariant: the FLIP win/loss RNG path is byte-identical — the
     ///         `processCoinflipPayouts(` entry and the `bool win = (rngWord & 1) == 1;` 50/50
-    ///         win roll are present byte-for-byte in BurnieCoinflip.sol (the rng-consuming path
+    ///         win roll are present byte-for-byte in Coinflip.sol (the rng-consuming path
     ///         the v46 removal must NOT have touched).
     function testWinLossRngPathByteUnmodified() public view {
-        string memory src = vm.readFile("contracts/BurnieCoinflip.sol");
+        string memory src = vm.readFile("contracts/Coinflip.sol");
         assertEq(
             _countOccurrences(src, "function processCoinflipPayouts("),
             1,
@@ -768,7 +768,7 @@ contract RngFreezeAndRemovalProofs is DeployProtocol {
     ///         (no deity/tier/lazyPass argument) — proving the flat-75bps unconditional behavior
     ///         structurally, not just numerically.
     function testRecycleIsStructurallyFlat75Bps() public view {
-        string memory src = vm.readFile("contracts/BurnieCoinflip.sol");
+        string memory src = vm.readFile("contracts/Coinflip.sol");
         assertEq(
             _countOccurrences(src, "RECYCLE_BONUS_BPS = 75"),
             1,
@@ -833,12 +833,12 @@ contract RngFreezeAndRemovalProofs is DeployProtocol {
     ///      and post-latch advances short-circuit to the final sweep so neither flag is written
     ///      again. Each fact below failing means the gameOver-free lock shape must be re-derived.
     function testCoinflipTransitionLocksNeedNoGameOverConsult() public view {
-        string memory flip = _stripComments(vm.readFile("contracts/BurnieCoinflip.sol"));
+        string memory flip = _stripComments(vm.readFile("contracts/Coinflip.sol"));
         // The locks themselves consult no game-over state anywhere in the coinflip.
         assertEq(
             _countOccurrences(flip, ".gameOver()"),
             0,
-            "no gameOver() consult anywhere in BurnieCoinflip (locks rely on lastPurchaseDay_)"
+            "no gameOver() consult anywhere in Coinflip (locks rely on lastPurchaseDay_)"
         );
 
         // Fact 1: the liveness latch cannot fire while either lock conjunct is satisfiable.

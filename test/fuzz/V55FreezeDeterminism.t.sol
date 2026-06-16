@@ -27,10 +27,10 @@ import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 /// @dev DRIVING (from the 351-02 V55SetMutationOpenE / 351-03 KeeperRewardRoutingSameResults harness):
 ///   - per-sub buy STAGE = a new-day `advanceGame()` (`_runStageNewDay` → the pre-RNG STAGE stamps the sub,
 ///     then `_settleGame` lands `rngWordByDay[stampDay]`).
-///   - afking box open = `game.mintBurnie()`'s open leg (GameAfkingModule.sol:1000-1009, only when
+///   - afking box open = `game.mintFlip()`'s open leg (GameAfkingModule.sol:1000-1009, only when
 ///     `!advanceDue`) — the afking standalone `autoOpen` selector collides with the human `autoOpen(uint256)`
-///     so it is NOT re-exposed on the Game; the open is reached through `mintBurnie`.
-///   - the `LootBoxOpened(player, lootboxIndex, amount, futureLevel, futureTickets, burnie, roundedUp)`
+///     so it is NOT re-exposed on the Game; the open is reached through `mintFlip`.
+///   - the `LootBoxOpened(player, lootboxIndex, amount, futureLevel, futureTickets, flip, roundedUp)`
 ///     event (LootboxModule.sol:63) is the materialized-traits observable: both `resolveAfkingBox` and
 ///     `openLootBox` pass `emitLootboxEvent = true`, so a byte-by-byte field compare IS the box-identity
 ///     oracle (robust to any future resolution refactor — NOT golden snapshots).
@@ -43,7 +43,7 @@ contract V55FreezeDeterminism is DeployProtocol {
     // Game-resident storage slots (RE-DERIVED via `forge inspect storage DegenerusGame`).
     // -------------------------------------------------------------------------
     // RE-DERIVED via `solc --storage-layout` on the working tree after the V62 lootbox repack (the
-    // folded lootboxEth word + removed lootboxEthBase/Burnie/Purchase/Distress shifted later slots
+    // folded lootboxEth word + removed lootboxEthBase/Flip/Purchase/Distress shifted later slots
     // down). The prior 65/10/11/16/23/38/39 pins were stale; corrected to authoritative values.
     uint256 private constant SUBOF_SLOT = 54; // _subOf mapping root (address => Sub, one packed slot)
     uint256 private constant MINTPACKED_SLOT = 9; // mintPacked_ mapping root (deity bit)
@@ -80,7 +80,7 @@ contract V55FreezeDeterminism is DeployProtocol {
         uint256 amount;
         uint24 futureLevel;
         uint32 futureTickets;
-        uint256 burnie;
+        uint256 flip;
         bool roundedUp;
     }
 
@@ -179,7 +179,7 @@ contract V55FreezeDeterminism is DeployProtocol {
     // =========================================================================
 
     /// @notice DIFFERENTIAL afking-vs-human at a FIXED live level: for the SAME `(player, amount, day,
-    ///         rngWord, score)`, the afking open (`resolveAfkingBox`, reached via the real `mintBurnie`
+    ///         rngWord, score)`, the afking open (`resolveAfkingBox`, reached via the real `mintFlip`
     ///         open leg over a poked stamp) and the human `openLootBox` materialize BYTE-IDENTICAL traits.
     ///         The two arms share one `abi.encode(rngWord, player, day, amount)` preimage
     ///         (LootboxModule.sol:889 ≡ :534) — so the SAME `player` MUST be used on both arms (player is
@@ -235,17 +235,17 @@ contract V55FreezeDeterminism is DeployProtocol {
 
         uint256 snap = vm.snapshot();
 
-        // ----- AFKING arm: clean FIRST (so mintBurnie takes the OPEN leg), THEN poke the stamp + day word
+        // ----- AFKING arm: clean FIRST (so mintFlip takes the OPEN leg), THEN poke the stamp + day word
         // (poking after the settle so the settle's advanceGame can't re-derive/clobber rngWordByDay[day]),
-        // then open via mintBurnie. -----
+        // then open via mintFlip. -----
         _settleClean(0xC1EA13);
         _pokeAfkingStamp(player, amount, day, score);
         _setRngWordByDay(day, rngWord);
         assertTrue(_lastOpenedDayOf(player) < _lastBoughtDayOf(player), "afking box pending (poked)");
-        assertFalse(game.rngLocked(), "afking open: not locked (mintBurnie takes the OPEN leg)");
+        assertFalse(game.rngLocked(), "afking open: not locked (mintFlip takes the OPEN leg)");
         vm.recordLogs();
         vm.prank(makeAddr("diff_afk_opener"));
-        try game.mintBurnie() {} catch {}
+        try game.mintFlip() {} catch {}
         Box memory afkBox = _decodeLootBoxOpenedFor(player);
         assertTrue(afkBox.present, "afking arm materialized a box (non-vacuous)");
         assertEq(uint24(game.level()) + 1, currentLevel, "afking open at the pinned live level");
@@ -265,7 +265,7 @@ contract V55FreezeDeterminism is DeployProtocol {
         // the same-seed-day equivalence (the event no longer carries a `day` field to re-assert here).
         assertEq(afkBox.amount, humBox.amount, "DIFFERENTIAL: same scaledAmount (adj == amount, no cap divergence)");
         assertEq(afkBox.futureTickets, humBox.futureTickets, "DIFFERENTIAL: same futureTickets");
-        assertEq(afkBox.burnie, humBox.burnie, "DIFFERENTIAL: same BURNIE award");
+        assertEq(afkBox.flip, humBox.flip, "DIFFERENTIAL: same FLIP award");
         assertEq(afkBox.roundedUp, humBox.roundedUp, "DIFFERENTIAL: same Bernoulli round-up bit");
     }
 
@@ -324,7 +324,7 @@ contract V55FreezeDeterminism is DeployProtocol {
     ///         sub PRE-RNG (before `rngGate` commits `rngWordByDay[day]`), so the box is NOT openable while
     ///         the stamped day's word is still zero, and becomes openable the moment it lands. Asserted via
     ///         the OBSERVABLE consequence (the private `_afkingBoxReady` is reached through the open leg):
-    ///         with the word zeroed, `mintBurnie`'s open leg materializes NOTHING (box stays pending); once
+    ///         with the word zeroed, `mintFlip`'s open leg materializes NOTHING (box stays pending); once
     ///         the word lands, the SAME stamp opens. Non-vacuous control: the post-RNG open succeeds.
     function testPreRngStampNotOpenableUntilWordLands() public {
         vm.skip(true, "357-00b D-12 supersession: the v55 freeze-determinism harness subscribes an ungrounded sub then drives the STAGE stamp/open; the grounded subscribe stamps at subscribe (the v56 milli-ETH/min-buy unmask, ledger 356-07 D1); re-proven by V56FreezeSolvency (STAMP-not-resolve + two-block determinism, all green)");
@@ -342,10 +342,10 @@ contract V55FreezeDeterminism is DeployProtocol {
         uint256 savedWord = _rngWordByDay(stampDay);
         assertTrue(savedWord != 0, "control: the word DID land (so zeroing it models the pre-RNG window)");
         _setRngWordByDay(stampDay, 0);
-        _settleGame(0xBADBAD); // clean any advance so mintBurnie routes to the OPEN leg
+        _settleGame(0xBADBAD); // clean any advance so mintFlip routes to the OPEN leg
 
         vm.prank(makeAddr("prerng_opener_a"));
-        try game.mintBurnie() {} catch {}
+        try game.mintFlip() {} catch {}
         // READY is FALSE while the word is zero: the box did NOT materialize (still pending).
         assertTrue(
             _lastOpenedDayOf(afk) < stampDay,
@@ -356,7 +356,7 @@ contract V55FreezeDeterminism is DeployProtocol {
         _setRngWordByDay(stampDay, savedWord == 0 ? uint256(keccak256("post-rng-word")) : savedWord);
         _settleGame(0xF1F1F1);
         vm.prank(makeAddr("prerng_opener_b"));
-        try game.mintBurnie() {} catch {}
+        try game.mintFlip() {} catch {}
         // READY flips true across the word commit: the box materialized (the pre-RNG/post-RNG boundary).
         assertEq(
             _lastOpenedDayOf(afk),
@@ -406,8 +406,8 @@ contract V55FreezeDeterminism is DeployProtocol {
 
     /// @dev Open `afk`'s stamped afking box at a perturbed block context and return the materialized box
     ///      decoded from the `LootBoxOpened` event. Perturbs block number / timestamp (sub-day, level held)
-    ///      / prevrandao / coinbase, then settles any in-flight advance so `mintBurnie` takes the OPEN leg
-    ///      (`!advanceDue`), and fires the afking open via `mintBurnie`. The open is recipient-isolated to
+    ///      / prevrandao / coinbase, then settles any in-flight advance so `mintFlip` takes the OPEN leg
+    ///      (`!advanceDue`), and fires the afking open via `mintFlip`. The open is recipient-isolated to
     ///      `afk` (the box owner is the event's indexed player).
     function _openAfkingBoxAt(
         address afk,
@@ -421,7 +421,7 @@ contract V55FreezeDeterminism is DeployProtocol {
         vm.warp(block.timestamp + warpBump);
         vm.prevrandao(bytes32(prevrandao));
         vm.coinbase(coinbase);
-        // Settle any in-flight advance so `mintBurnie` routes to the OPEN leg (not the advance leg) and the
+        // Settle any in-flight advance so `mintFlip` routes to the OPEN leg (not the advance leg) and the
         // open is not blocked by `rngLockedFlag` (RD-3). Use a FIXED, reliable drain word (NOT derived from
         // the block perturbation — the perturbation must touch only the block context, never the VRF drain)
         // and DEMAND a clean (`!advanceDue && !rngLocked`) state before opening, so the open is the OPEN leg.
@@ -429,7 +429,7 @@ contract V55FreezeDeterminism is DeployProtocol {
 
         vm.recordLogs();
         vm.prank(makeAddr("freeze_opener"));
-        try game.mintBurnie() {} catch {}
+        try game.mintFlip() {} catch {}
         return _decodeLootBoxOpenedFor(afk);
     }
 
@@ -509,7 +509,7 @@ contract V55FreezeDeterminism is DeployProtocol {
             ) {
                 b.present = true;
                 b.lootboxIndex = uint48(uint256(logs[i].topics[2]));
-                (b.amount, b.futureLevel, b.futureTickets, b.burnie, b.roundedUp) =
+                (b.amount, b.futureLevel, b.futureTickets, b.flip, b.roundedUp) =
                     abi.decode(logs[i].data, (uint256, uint24, uint32, uint256, bool));
                 return b;
             }
@@ -524,7 +524,7 @@ contract V55FreezeDeterminism is DeployProtocol {
         assertEq(a.amount, b.amount, string(abi.encodePacked(tag, ": amount")));
         assertEq(a.futureLevel, b.futureLevel, string(abi.encodePacked(tag, ": futureLevel")));
         assertEq(a.futureTickets, b.futureTickets, string(abi.encodePacked(tag, ": futureTickets")));
-        assertEq(a.burnie, b.burnie, string(abi.encodePacked(tag, ": burnie")));
+        assertEq(a.flip, b.flip, string(abi.encodePacked(tag, ": flip")));
         assertEq(a.roundedUp, b.roundedUp, string(abi.encodePacked(tag, ": roundedUp")));
     }
 
@@ -555,7 +555,7 @@ contract V55FreezeDeterminism is DeployProtocol {
 
     /// @dev A robust settle that DEMANDS a clean (`!advanceDue && !rngLocked`) state before returning — a
     ///      larger drain budget than `_settleGame` (some perturbed fixture states need >60 advance/fulfill
-    ///      cycles to converge). Used before an afking open so `mintBurnie` reliably takes the OPEN leg.
+    ///      cycles to converge). Used before an afking open so `mintFlip` reliably takes the OPEN leg.
     function _settleClean(uint256 vrfWord) internal {
         for (uint256 d; d < 240; d++) {
             if (!game.advanceDue() && !game.rngLocked()) return;

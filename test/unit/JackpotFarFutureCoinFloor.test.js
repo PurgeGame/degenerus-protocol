@@ -2,8 +2,8 @@
 //
 // JackpotFarFutureCoinFloor.test.js — Phase 279 Wave 2 TST-BUR-03
 //
-// Whole-BURNIE floor + early-bail-ordering regression on the far-future
-// coin-jackpot BURNIE-award site.
+// Whole-FLIP floor + early-bail-ordering regression on the far-future
+// coin-jackpot FLIP-award site.
 //   `_awardFarFutureCoinJackpot` in
 //   `contracts/modules/DegenerusGameJackpotModule.sol` floors `perWinner` via
 //   `((farBudget / found) / 1 ether) * 1 ether` (D-279-INLINE-01) immediately
@@ -28,7 +28,7 @@
 // CROSS-CITES:
 //   - D-279-INLINE-01 (inline `(x / 1 ether) * 1 ether` floor — no shared helper)
 //   - D-279-BUR03-ORDER-01 (floor BEFORE the `if (perWinner == 0) return` early-bail)
-//   - D-40N-BUR-DUST-01 (sub-1-BURNIE residue evaporates)
+//   - D-40N-BUR-DUST-01 (sub-1-FLIP residue evaporates)
 //   - D-40N-BUR-SILENT-01 (no consolation / replacement event / redistribution)
 //   - test/unit/JackpotTicketRollSilentColdBust.test.js (extractBody + stripLineComments infra)
 
@@ -79,8 +79,8 @@ function stripLineComments(body) {
     .join("\n");
 }
 
-// The whole-BURNIE floor as applied on-chain: `(x / 1 ether) * 1 ether`.
-function floorWholeBurnie(x) {
+// The whole-FLIP floor as applied on-chain: `(x / 1 ether) * 1 ether`.
+function floorWholeFlip(x) {
   return (x / ONE_ETHER) * ONE_ETHER;
 }
 
@@ -88,7 +88,7 @@ describe("JackpotFarFutureCoinFloor — Phase 279 Wave 2 TST-BUR-03", function (
   this.timeout(30_000);
 
   describe("Source-structural proof: `_awardFarFutureCoinJackpot` floors `perWinner` BEFORE the `if (perWinner == 0) return` early-bail", function () {
-    it("[01a] body contains the inline whole-BURNIE floor `perWinner = ((farBudget / found) / 1 ether) * 1 ether`", function () {
+    it("[01a] body contains the inline whole-FLIP floor `perWinner = ((farBudget / found) / 1 ether) * 1 ether`", function () {
       const source = fs.readFileSync(MODULE_SOURCE_PATH, "utf8");
       const body = stripLineComments(
         extractBody(source, "function _awardFarFutureCoinJackpot(")
@@ -129,7 +129,7 @@ describe("JackpotFarFutureCoinFloor — Phase 279 Wave 2 TST-BUR-03", function (
 
       expect(
         floorIdx,
-        "the floor MUST precede the `if (perWinner == 0) return` early-bail so a sub-1-BURNIE `perWinner` cannot reach `creditFlipBatch` (D-279-BUR03-ORDER-01)"
+        "the floor MUST precede the `if (perWinner == 0) return` early-bail so a sub-1-FLIP `perWinner` cannot reach `creditFlipBatch` (D-279-BUR03-ORDER-01)"
       ).to.be.lessThan(bailIdx);
       expect(
         bailIdx,
@@ -139,29 +139,29 @@ describe("JackpotFarFutureCoinFloor — Phase 279 Wave 2 TST-BUR-03", function (
   });
 
   describe("JS boundary math: `((farBudget / found) / 1 ether) * 1 ether` floor cases (confirmation layer)", function () {
-    it("farBudget=5 BURNIE, found=10 → perWinner = 0.5 BURNIE → floors to 0 (early-bail fires, no creditFlipBatch)", function () {
+    it("farBudget=5 FLIP, found=10 → perWinner = 0.5 FLIP → floors to 0 (early-bail fires, no creditFlipBatch)", function () {
       const farBudget = ONE_ETHER * 5n;
       const found = 10n;
-      const perWinner = floorWholeBurnie(farBudget / found);
+      const perWinner = floorWholeFlip(farBudget / found);
       expect(perWinner).to.equal(0n);
     });
 
-    it("farBudget=25 BURNIE, found=10 → perWinner = 2.5 BURNIE → floors to 2 BURNIE per winner", function () {
+    it("farBudget=25 FLIP, found=10 → perWinner = 2.5 FLIP → floors to 2 FLIP per winner", function () {
       const farBudget = ONE_ETHER * 25n;
       const found = 10n;
-      const perWinner = floorWholeBurnie(farBudget / found);
+      const perWinner = floorWholeFlip(farBudget / found);
       expect(perWinner).to.equal(ONE_ETHER * 2n);
     });
 
-    it("the floored `perWinner` is always a whole-BURNIE multiple (`% 1 ether == 0`)", function () {
-      for (const [budgetBurnie, found] of [
+    it("the floored `perWinner` is always a whole-FLIP multiple (`% 1 ether == 0`)", function () {
+      for (const [budgetFlip, found] of [
         [5n, 10n],
         [25n, 10n],
         [99n, 7n],
         [100n, 4n],
         [3n, 10n],
       ]) {
-        const perWinner = floorWholeBurnie((ONE_ETHER * budgetBurnie) / found);
+        const perWinner = floorWholeFlip((ONE_ETHER * budgetFlip) / found);
         expect(perWinner % ONE_ETHER).to.equal(0n);
       }
     });

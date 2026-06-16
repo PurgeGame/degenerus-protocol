@@ -14,10 +14,10 @@ import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 ///
 /// @notice The two open routes are GENUINELY SEPARATE (no selector / queue overlap):
 ///   - HUMAN box open: `game.openBoxes(maxCount)` (DegenerusGame.sol:1787) walks `boxPlayers[index]`.
-///   - AFKING box open: `game.mintBurnie()`'s open leg (GameAfkingModule.sol:1000-1009, only when
+///   - AFKING box open: `game.mintFlip()`'s open leg (GameAfkingModule.sol:1000-1009, only when
 ///     !advanceDue) walks `_subscribers` via `_autoOpen`. The afking module's own `autoOpen` selector
 ///     COLLIDES with the human `autoOpen(uint256)` so it is NOT re-exposed on the Game (DegenerusGame.sol
-///     :352-353) — the afking open is reached ONLY through `mintBurnie`. The two paths share no mutable
+///     :352-353) — the afking open is reached ONLY through `mintFlip`. The two paths share no mutable
 ///     state: distinct queues (`boxPlayers` vs `_subscribers`), distinct cursors (`boxCursor` vs
 ///     `_subOpenCursor`), distinct per-box records (`lootboxEth[index][player]` vs the warm Sub stamp).
 ///
@@ -102,7 +102,7 @@ contract V55SetMutationOpenE is DeployProtocol {
         vm.prank(human);
         game.purchase{value: 1.01 ether}(human, 400, 1 ether, bytes32(0), MintPaymentKind.DirectEth);
 
-        // Settle so the afking open leg (mintBurnie, !advanceDue) and the human autoOpen can run.
+        // Settle so the afking open leg (mintFlip, !advanceDue) and the human autoOpen can run.
         _settleGame(0xC0A2);
 
         // Snapshot the afking sub's pending-box stamp BEFORE the human open.
@@ -116,10 +116,10 @@ contract V55SetMutationOpenE is DeployProtocol {
         assertEq(_lastBoughtDayOf(afk), afkBoughtBefore, "human open did not mutate the afking stamp (lastAutoBoughtDay)");
         assertEq(_lastOpenedDayOf(afk), afkOpenedBefore, "human open did not open the afking box (lastOpenedDay unchanged)");
 
-        // Now open the AFKING box path (mintBurnie open leg). It materializes the afking box; the human
+        // Now open the AFKING box path (mintFlip open leg). It materializes the afking box; the human
         // path's already-opened state is independent.
         vm.prank(makeAddr("afk_opener"));
-        try game.mintBurnie() {} catch {}
+        try game.mintFlip() {} catch {}
         // The afking box opened iff lastOpenedDay advanced to lastAutoBoughtDay (the open marker).
         assertEq(_lastOpenedDayOf(afk), afkBoughtBefore, "afking open materialized the afking box (lastOpenedDay == lastAutoBoughtDay)");
     }
@@ -144,7 +144,7 @@ contract V55SetMutationOpenE is DeployProtocol {
 
         _settleGame(0xCC02);
         vm.prank(makeAddr("control_opener"));
-        try game.mintBurnie() {} catch {}
+        try game.mintFlip() {} catch {}
 
         // In-set + stamped -> the box OPENS (the control: a box WOULD materialize).
         assertEq(_lastOpenedDayOf(p), stampDay, "in-set sub's box opened (control materializes)");
@@ -173,7 +173,7 @@ contract V55SetMutationOpenE is DeployProtocol {
 
         _settleGame(0xCD02);
         vm.prank(makeAddr("orphan_opener"));
-        try game.mintBurnie() {} catch {}
+        try game.mintFlip() {} catch {}
 
         // ORPHAN: the box was NEVER materialized — lastOpenedDay stayed < lastAutoBoughtDay (no free box).
         assertTrue(_lastOpenedDayOf(p) < stampDay, "NO-ORPHAN: removed sub's box never materialized (no free box)");

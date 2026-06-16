@@ -18,7 +18,7 @@ import {
  * Targeted tests for Phase 44 affiliate hardening features:
  *
  * Commission Cap (AFF-01 through AFF-04):
- *   - 0.5 ETH BURNIE cap per sender per affiliate per level
+ *   - 0.5 ETH FLIP cap per sender per affiliate per level
  *   - Cumulative tracking across multiple purchases
  *   - Cap resets at each new level
  *   - Independent caps per affiliate
@@ -199,7 +199,7 @@ describe("AffiliateHardening", function () {
   // =========================================================================
   describe("Per-Referrer Commission Cap", function () {
 
-    // AFF-01: Affiliate earns at most 0.5 ETH BURNIE from single sender per level
+    // AFF-01: Affiliate earns at most 0.5 ETH FLIP from single sender per level
     describe("AFF-01: Single large purchase hits cap", function () {
 
       it("caps commission at 0.5 ETH when scaled amount exceeds cap", async function () {

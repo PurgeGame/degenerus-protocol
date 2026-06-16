@@ -378,10 +378,10 @@ describe("SecurityEconHardening", function () {
   });
 
   // =========================================================================
-  // FIX-08: BURNIE ticket purchases revert within 30 days of liveness timeout
+  // FIX-08: FLIP ticket purchases revert within 30 days of liveness timeout
   // =========================================================================
-  describe("FIX-08: BURNIE ticket purchase cutoff", function () {
-    it("redeemBurnie reverts after 882 days at level 0 (within 30 days of timeout)", async function () {
+  describe("FIX-08: FLIP ticket purchase cutoff", function () {
+    it("redeemFlip reverts after 882 days at level 0 (within 30 days of timeout)", async function () {
       const { game, alice } =
         await loadFixture(deployFullProtocol);
 
@@ -398,10 +398,10 @@ describe("SecurityEconHardening", function () {
       // Advance time past the cutoff (882 days = 912 - 30)
       await advanceTime(COIN_PURCHASE_CUTOFF_LVL0 * DAY + DAY);
 
-      // Past the liveness cutoff, redeemBurnie reverts (the liveness gate fires
+      // Past the liveness cutoff, redeemFlip reverts (the liveness gate fires
       // before any purchase work). The call must revert regardless.
       await expect(
-        game.connect(alice).redeemBurnie(ZERO_ADDRESS, 400n)
+        game.connect(alice).redeemFlip(ZERO_ADDRESS, 400n)
       ).to.be.reverted;
     });
   });
@@ -627,18 +627,18 @@ describe("SecurityEconHardening", function () {
   // ECON-02: MintModule has no level-dependent coin cost modifiers
   // =========================================================================
   describe("ECON-02: No level-dependent coin cost modifiers", function () {
-    it("BURNIE ticket cost is independent of level (1000 BURNIE = 1 ticket)", async function () {
+    it("FLIP ticket cost is independent of level (1000 FLIP = 1 ticket)", async function () {
       const { game } = await loadFixture(deployFullProtocol);
 
-      // The MintModule converts BURNIE to tickets at a fixed rate:
-      // 1000 BURNIE (1e21 wei) buys 1 full ticket regardless of level.
-      // There is no level multiplier on the BURNIE cost.
+      // The MintModule converts FLIP to tickets at a fixed rate:
+      // 1000 FLIP (1e21 wei) buys 1 full ticket regardless of level.
+      // There is no level multiplier on the FLIP cost.
       //
-      // The price in ETH changes per level, but BURNIE cost stays flat.
-      // redeemBurnie uses a fixed COIN_PER_TICKET constant.
+      // The price in ETH changes per level, but FLIP cost stays flat.
+      // redeemFlip uses a fixed COIN_PER_TICKET constant.
       //
       // Verify via purchaseInfo: the ETH price changes per level,
-      // but BURNIE cost is a separate constant.
+      // but FLIP cost is a separate constant.
       const info = await game.purchaseInfo();
       expect(info.priceWei).to.equal(eth(0.01)); // Level 1 price
     });

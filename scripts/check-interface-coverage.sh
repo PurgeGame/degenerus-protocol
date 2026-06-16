@@ -26,14 +26,14 @@ NC=$'\033[0m'
 # Interface -> implementation mapping.
 # Skipped (external protocols): IStETH (Lido), IVRFCoordinator (Chainlink).
 MAPPINGS=(
-  "contracts/interfaces/IBurnieCoinflip.sol:IBurnieCoinflip|contracts/BurnieCoinflip.sol:BurnieCoinflip"
+  "contracts/interfaces/ICoinflip.sol:ICoinflip|contracts/Coinflip.sol:Coinflip"
   "contracts/interfaces/IDegenerusAffiliate.sol:IDegenerusAffiliate|contracts/DegenerusAffiliate.sol:DegenerusAffiliate"
-  "contracts/interfaces/IDegenerusCoin.sol:IDegenerusCoin|contracts/BurnieCoin.sol:BurnieCoin"
+  "contracts/interfaces/IDegenerusCoin.sol:IDegenerusCoin|contracts/FLIP.sol:FLIP"
   "contracts/interfaces/IDegenerusGame.sol:IDegenerusGame|contracts/DegenerusGame.sol:DegenerusGame"
   "contracts/interfaces/IDegenerusJackpots.sol:IDegenerusJackpots|contracts/DegenerusJackpots.sol:DegenerusJackpots"
   "contracts/interfaces/IDegenerusQuests.sol:IDegenerusQuests|contracts/DegenerusQuests.sol:DegenerusQuests"
-  "contracts/interfaces/IStakedDegenerusStonk.sol:IStakedDegenerusStonk|contracts/StakedDegenerusStonk.sol:StakedDegenerusStonk"
-  "contracts/interfaces/IVaultCoin.sol:IVaultCoin|contracts/BurnieCoin.sol:BurnieCoin"
+  "contracts/interfaces/IsDGNRS.sol:IsDGNRS|contracts/sDGNRS.sol:sDGNRS"
+  "contracts/interfaces/IVaultCoin.sol:IVaultCoin|contracts/FLIP.sol:FLIP"
   # IDegenerusGameModules.sol contains 9 module interfaces. Each module is deployed
   # as a separate contract that DegenerusGame delegatecalls into. Check the module
   # contract itself (code runs from the module, storage lives on DegenerusGame via

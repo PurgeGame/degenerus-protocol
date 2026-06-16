@@ -5,12 +5,12 @@ import {DeployProtocol} from "../helpers/DeployProtocol.sol";
 import {VRFHandler} from "../helpers/VRFHandler.sol";
 import {GameHandler} from "../handlers/GameHandler.sol";
 import {WhaleHandler} from "../handlers/WhaleHandler.sol";
-import {BurnieCoin} from "../../../contracts/BurnieCoin.sol";
+import {FLIP} from "../../../contracts/FLIP.sol";
 
-/// @title CoinSupplyInvariant -- Proves BurnieCoin supply conservation (FUZZ-02)
+/// @title CoinSupplyInvariant -- Proves FLIP supply conservation (FUZZ-02)
 /// @notice Asserts that totalSupply + vaultAllowance == supplyIncUncirculated.
-///         There is no supply floor: BurnieCoin deploys with zero supply and zero
-///         vault allowance (the initial emission arrives as BurnieCoinflip seed
+///         There is no supply floor: FLIP deploys with zero supply and zero
+///         vault allowance (the initial emission arrives as Coinflip seed
 ///         stakes), and burns shrink the combined supply.
 contract CoinSupplyInvariant is DeployProtocol {
     GameHandler public gameHandler;
@@ -31,7 +31,7 @@ contract CoinSupplyInvariant is DeployProtocol {
     }
 
     /// @notice Supply struct consistency: totalSupply + vaultAllowance == supplyIncUncirculated
-    /// @dev This is the critical accounting identity from BurnieCoin's Supply struct.
+    /// @dev This is the critical accounting identity from FLIP's Supply struct.
     ///      If this breaks, token accounting is corrupted.
     function invariant_supplyConsistency() public view {
         uint256 total = coin.totalSupply();
@@ -41,7 +41,7 @@ contract CoinSupplyInvariant is DeployProtocol {
         assertEq(
             total + allowance,
             combined,
-            "BurnieCoin: totalSupply + vaultAllowance != supplyIncUncirculated"
+            "FLIP: totalSupply + vaultAllowance != supplyIncUncirculated"
         );
     }
 

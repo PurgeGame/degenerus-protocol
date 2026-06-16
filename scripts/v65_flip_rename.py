@@ -57,7 +57,6 @@ GLOBAL = [
 # Stonk -> DGNRS / sDGNRS (FULL rebrand). Ordered: free up IsDGNRS first (collision fix),
 # longest-first for the substring chain DegenerusStonk < StakedDegenerusStonk < IStakedDegenerusStonk.
 STONK = [
-    (r'\bIsDGNRS\b', 'IsDGNRSVotes'),                         # existing Admin minimal view -> frees the IsDGNRS name
     (r'\bIStakedDegenerusStonkBurn\b', 'IsDGNRSBurn'),
     (r'\bIStakedDegenerusStonk\b', 'IsDGNRS'),                # main staked interface takes the freed name
     (r'\bIDegenerusStonkWrapper\b', 'IDGNRS'),
@@ -67,6 +66,24 @@ STONK = [
     (r'\bStakedDegenerusStonk\b', 'sDGNRS'),                  # concrete staked contract
     (r'\bDegenerusStonk\b', 'DGNRS'),                         # concrete liquid contract
     (r'\bstonk\b', 'staked'),                                 # local var in DGNRS.sol -> the staked token
+]
+
+# The Admin-local minimal sDGNRS view ("IsDGNRS") collides with the main interface's new name.
+# Renamed ONLY in DegenerusAdmin.sol (where it is declared + used), so the engine stays IDEMPOTENT:
+# re-running on any other file (which now holds the main IsDGNRS) must not touch it.
+ADMIN_ONLY = [
+    (r'\bIsDGNRS\b', 'IsDGNRSVotes'),
+]
+
+# Abbreviation where a letter stands for the token: DGVB = "Degenerus Vault Burnie" share-class
+# symbol -> DGVF ("...Vault Flip"). DGVE (the ETH share class) is KEPT.
+ABBREV = [
+    (r'\bDGVB\b', 'DGVF'),
+]
+
+# Semantic-clarity renames (USER-requested; not part of the token rebrand; storage-layout-neutral):
+SEMANTIC = [
+    (r'\bflipWindowOpen\b', 'ticketRedemptionOpen'),  # the FLIP->ticket redemption window latch
 ]
 
 # BROAD scope: coin-as-the-token identifiers (word-bounded, enumerated). Bare `coin` excluded.
@@ -87,9 +104,12 @@ BROAD = [
 ]
 
 
-def transform(text):
+def transform(text, path=""):
     text = text.replace("Burnie Degenerus", CREATOR_SENT)
     text = text.replace("burnie@degener.us", EMAIL_SENT)
+    if "DegenerusAdmin.sol" in path:
+        for pat, rep in ADMIN_ONLY:
+            text = re.sub(pat, rep, text)
     for pat, rep in SPECIAL:
         text = re.sub(pat, rep, text)
     for s, r in GLOBAL:
@@ -97,6 +117,10 @@ def transform(text):
     for pat, rep in BROAD:
         text = re.sub(pat, rep, text)
     for pat, rep in STONK:
+        text = re.sub(pat, rep, text)
+    for pat, rep in ABBREV:
+        text = re.sub(pat, rep, text)
+    for pat, rep in SEMANTIC:
         text = re.sub(pat, rep, text)
     text = text.replace(CREATOR_SENT, "Burnie Degenerus")
     text = text.replace(EMAIL_SENT, "burnie@degener.us")
@@ -112,7 +136,7 @@ def main():
     for path in files:
         with open(path, "r") as f:
             src = f.read()
-        out = transform(src)
+        out = transform(src, path)
         if out == src:
             continue
         changed += 1

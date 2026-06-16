@@ -28,7 +28,7 @@ import {IGameAfkingModule} from "../../contracts/interfaces/IDegenerusGameModule
 ///     reverting.
 ///
 /// @notice F-356-01 (drainAffiliateBase Game dispatch stub, DegenerusGame.sol:428): the guard-less
-///   delegatecall to GAME_AFKING_MODULE.drainAffiliateBase (mirrors claimAfkingBurnie), `_revertDelegate`
+///   delegatecall to GAME_AFKING_MODULE.drainAffiliateBase (mirrors claimAfkingFlip), `_revertDelegate`
 ///   on failure, `data.length == 0` guard, `abi.decode(data,(uint256))` return tail (mirrors
 ///   runDecimatorJackpot). The module impl owns the AFFILIATE-only access gate
 ///   (GameAfkingModule.sol:1328 `if (msg.sender != ContractAddresses.AFFILIATE) revert NotApproved()`),
@@ -50,7 +50,7 @@ contract V56SubHardening is DeployProtocol {
     //   dailyQuantity u8 @0 · validThroughLevel u24 @1 · reinvestPct u8 @4 · flags u8 @5
     //   scorePlus1 u16 @6 · amount u24 @8
     //   lastAutoBoughtDay u24 @11 · lastOpenedDay u24 @14 · afkCoveredThroughDay u24 @17 · afkingStartDay u24 @20
-    //   affiliateBase u32 @23 · pendingBurnie u32 @27 · subStreakLatch u8 @31
+    //   affiliateBase u32 @23 · pendingFlip u32 @27 · subStreakLatch u8 @31
     uint256 private constant OFF_DAILY = 0;           // uint8  dailyQuantity        (byte 0)
     uint256 private constant OFF_VALIDTHROUGH = 1;     // uint24 validThroughLevel    (bytes 1..3)
     uint256 private constant OFF_LASTBOUGHT = 11;     // uint24 lastAutoBoughtDay    (bytes 11..13)
@@ -58,7 +58,7 @@ contract V56SubHardening is DeployProtocol {
     uint256 private constant OFF_AFKCOVERED = 17;     // uint24 afkCoveredThroughDay (bytes 17..19)
     uint256 private constant OFF_AFKINGSTART = 20;    // uint24 afkingStartDay       (bytes 20..22)
     uint256 private constant OFF_AFFBASE = 23;        // uint32 affiliateBase        (bytes 23..26)
-    uint256 private constant OFF_PENDINGBURNIE = 27;  // uint32 pendingBurnie        (bytes 27..30)
+    uint256 private constant OFF_PENDINGFLIP = 27;  // uint32 pendingFlip        (bytes 27..30)
     uint256 private constant OFF_STREAKLATCH = 31;    // uint8  subStreakLatch       (byte 31)
 
     uint256 private constant DEITY_SHIFT = 184;       // HAS_DEITY_PASS_SHIFT in mintPacked_
@@ -239,7 +239,7 @@ contract V56SubHardening is DeployProtocol {
     // =========================================================================
     // CHURN-IDEMPOTENCY (HEAD''' = 7b0b2a0b) — the NEW-run subscribe per-day slot-0
     // guard: subscribe -> funded cover-buy -> cancel -> subscribe (same day) accrues
-    // the flat per-day slot-0 BURNIE (pendingBurnie) EXACTLY ONCE, not once-per-cycle.
+    // the flat per-day slot-0 FLIP (pendingFlip) EXACTLY ONCE, not once-per-cycle.
     // The cancel branch tombstones in place (dailyQuantity = 0, record kept), so the
     // lastAutoBoughtDay stamp survives the unsub; the re-subscribe re-enters the NEW
     // run (wasActive == false) but now takes the new `else if (s.lastAutoBoughtDay ==
@@ -248,9 +248,9 @@ contract V56SubHardening is DeployProtocol {
     // =========================================================================
 
     /// @notice CHURN-IDEMPOTENCY: a pass-holding + funded EOA subscribes (a grounded NEW run whose funded
-    ///         cover-buy stamps `lastAutoBoughtDay = today` and accrues the flat per-day slot-0 BURNIE into
-    ///         `pendingBurnie` ONCE), then churns subscribe(dailyQuantity 0) [cancel] -> subscribe N times
-    ///         in the SAME day. After every same-day churn cycle `pendingBurnie` is UNCHANGED — the per-day
+    ///         cover-buy stamps `lastAutoBoughtDay = today` and accrues the flat per-day slot-0 FLIP into
+    ///         `pendingFlip` ONCE), then churns subscribe(dailyQuantity 0) [cancel] -> subscribe N times
+    ///         in the SAME day. After every same-day churn cycle `pendingFlip` is UNCHANGED — the per-day
     ///         flat slot-0 reward is accrued EXACTLY ONCE, not N×. Pre-HEAD''' the NEW-run cover-buy guarded
     ///         only on the manual `done[0]` (which an afking buy never sets), so each re-subscribe re-ran the
     ///         cover-buy and re-accrued the flat reward; the HEAD''' guard (`s.lastAutoBoughtDay ==
@@ -262,32 +262,32 @@ contract V56SubHardening is DeployProtocol {
         _fundPool(p, 200 ether);       // funds the FIRST cover-buy (grounds D-12) + leaves headroom
 
         // FIRST subscribe — a grounded NEW run; the funded cover-buy stamps lastAutoBoughtDay = today and
-        // accrues the flat slot-0 BURNIE into pendingBurnie ONCE.
+        // accrues the flat slot-0 FLIP into pendingFlip ONCE.
         _subscribeLootbox(p, 1);
         uint32 today = uint32(game.currentDayView());
         assertEq(_lastBoughtDayOf(p), today, "non-vacuity: the first funded cover-buy stamped today");
-        uint32 pendingAfterFirst = _pendingBurnieOf(p);
-        assertGt(pendingAfterFirst, 0, "non-vacuity: the first cover-buy accrued the flat slot-0 BURNIE");
+        uint32 pendingAfterFirst = _pendingFlipOf(p);
+        assertGt(pendingAfterFirst, 0, "non-vacuity: the first cover-buy accrued the flat slot-0 FLIP");
 
         // Churn N times in the SAME day: cancel (dailyQuantity = 0) -> re-subscribe. The frozen cancel
         // branch (GameAfkingModule:349-363) AUTO-CLAIMS before tombstoning — it pays out the accrued
-        // pendingBurnie via coinflip.creditFlip and zeroes the slot (c.pendingBurnie = 0 at :355) — so
-        // pendingBurnie reads 0 right after each cancel. The re-subscribe is a NEW run (wasActive == false,
+        // pendingFlip via coinflip.creditFlip and zeroes the slot (c.pendingFlip = 0 at :355) — so
+        // pendingFlip reads 0 right after each cancel. The re-subscribe is a NEW run (wasActive == false,
         // stored dailyQuantity is 0) but lastAutoBoughtDay == today, so the idempotency guard at :521 keeps
         // the snapshot and SKIPS a second cover-buy -> NO slot-0 re-accrual. So after each cancel/re-sub
-        // cycle pendingBurnie stays 0: the per-day flat reward was accrued (and paid out) EXACTLY ONCE,
+        // cycle pendingFlip stays 0: the per-day flat reward was accrued (and paid out) EXACTLY ONCE,
         // never re-accrued per cycle. (The drain-on-cancel is the c4d48008 behavior; the prior model
-        // expected pendingBurnie to PERSIST unchanged at 100, which the auto-claim cancel contradicts.)
+        // expected pendingFlip to PERSIST unchanged at 100, which the auto-claim cancel contradicts.)
         for (uint256 i; i < 5; i++) {
-            _subscribeLootbox(p, 0);   // cancel — auto-claims + zeroes pendingBurnie, tombstones in place
+            _subscribeLootbox(p, 0);   // cancel — auto-claims + zeroes pendingFlip, tombstones in place
             assertEq(_dailyQtyOf(p), 0, "cancel wrote the dailyQuantity=0 tombstone in place");
-            assertEq(_pendingBurnieOf(p), 0, "cancel auto-claimed + zeroed pendingBurnie (drain-on-cancel)");
+            assertEq(_pendingFlipOf(p), 0, "cancel auto-claimed + zeroed pendingFlip (drain-on-cancel)");
             _subscribeLootbox(p, 1);   // re-subscribe SAME day — the NEW-run idempotency guard fires
             assertGt(_subscriberIndexOf(p), 0, "re-subscribe keeps the sub active");
             assertEq(_dailyQtyOf(p), 1, "re-subscribe restored the dailyQuantity (a NEW run, wasActive==false)");
             assertEq(_lastBoughtDayOf(p), today, "the stamp survived the churn (still today)");
             assertEq(
-                _pendingBurnieOf(p),
+                _pendingFlipOf(p),
                 0,
                 "CHURN-IDEMPOTENCY: re-subscribe does NOT re-accrue the slot-0 flat reward (guard skips the cover-buy; cancel already paid it out)"
             );
@@ -297,7 +297,7 @@ contract V56SubHardening is DeployProtocol {
         // skips a SAME-day re-entry. Roll a clean fresh day, re-subscribe, assert the stamp advances AND
         // the cover-buy accrues exactly one fresh slot-0. Measured as a DELTA so it holds whether or not
         // the settle reclaimed the cancelled tombstone first (reclaim wipes the cancelled run's unclaimed
-        // pendingBurnie — a cancelled sub forfeits unclaimed BURNIE unless it claims before the sweep,
+        // pendingFlip — a cancelled sub forfeits unclaimed FLIP unless it claims before the sweep,
         // consistent with ticket subs; either way the new-day cover-buy adds one fresh 100).
         _subscribeLootbox(p, 0);       // cancel before the day roll (so the next subscribe is a NEW run)
         _settleClean(uint256(keccak256("churn_nextday")) | 1);
@@ -306,11 +306,11 @@ contract V56SubHardening is DeployProtocol {
         _settleClean(uint256(keccak256("churn_nextday2")) | 1);
         uint32 nextDay = uint32(game.currentDayView());
         require(nextDay > today, "fixture: the day actually rolled forward");
-        uint32 pendingBeforeNextDay = _pendingBurnieOf(p);
+        uint32 pendingBeforeNextDay = _pendingFlipOf(p);
         _subscribeLootbox(p, 1);       // NEW run on the fresh day — lastAutoBoughtDay != today -> fresh buy
         assertEq(_lastBoughtDayOf(p), nextDay, "NEXT-day subscribe did a fresh funded cover-buy (stamp advanced)");
         assertEq(
-            _pendingBurnieOf(p) - pendingBeforeNextDay,
+            _pendingFlipOf(p) - pendingBeforeNextDay,
             pendingAfterFirst,
             "NEXT-day cover-buy accrued exactly one fresh slot-0 (a real new day is not suppressed)"
         );
@@ -440,7 +440,7 @@ contract V56SubHardening is DeployProtocol {
     // =========================================================================
     // 357 advance-incentive redesign (HEAD'' = 61315ecd) — advanceGame is pure
     // liveness; the must-mint ladder is the SOFT pay-gate _bountyEligible(addr),
-    // surfaced as game.bountyEligible(addr). mintBurnie() reads it BEFORE the
+    // surfaced as game.bountyEligible(addr). mintFlip() reads it BEFORE the
     // self-call and pays the advance bounty only when mult>0 && eligible.
     // =========================================================================
 
@@ -508,13 +508,13 @@ contract V56SubHardening is DeployProtocol {
         assertTrue(game.bountyEligible(fresh), "after 30 min: anyone-tier flips the fresh keeper eligible");
     }
 
-    /// @notice mintBurnie pay soft-gate (ELIGIBLE): a deity-holding keeper cranking mintBurnie when an
+    /// @notice mintFlip pay soft-gate (ELIGIBLE): a deity-holding keeper cranking mintFlip when an
     ///         advance is due earns the advance bounty (coinflipAmount strictly increases). The deity tier
     ///         makes the keeper eligible regardless of the clock, so mult>0 && eligible -> bountyEarned>0.
-    function testMintBurnieEligibleKeeperEarnsAdvanceBounty() public {
+    function testMintFlipEligibleKeeperEarnsAdvanceBounty() public {
         _settleClean(uint256(keccak256("pay_e_settle")) | 1);
         _warpToDayBoundary(5);
-        assertTrue(game.advanceDue(), "fixture: advance due so mintBurnie runs the advance leg");
+        assertTrue(game.advanceDue(), "fixture: advance due so mintFlip runs the advance leg");
 
         address keeper = makeAddr("pay_eligible");
         _grantDeityPass(keeper);       // eligible via the deity tier (time-independent)
@@ -522,36 +522,36 @@ contract V56SubHardening is DeployProtocol {
 
         uint256 before = coinflip.coinflipAmount(keeper);
         vm.prank(keeper);
-        game.mintBurnie();             // advance leg runs; mult>0 && eligible -> bounty credited
+        game.mintFlip();             // advance leg runs; mult>0 && eligible -> bounty credited
         assertGt(coinflip.coinflipAmount(keeper), before, "ELIGIBLE keeper earned a nonzero advance bounty");
     }
 
-    /// @notice mintBurnie pay soft-gate (INELIGIBLE): a fresh non-minter keeper (first 15 min, no pass,
-    ///         no sub, non-DGVE) cranking mintBurnie still performs the advance WORK but earns ZERO
+    /// @notice mintFlip pay soft-gate (INELIGIBLE): a fresh non-minter keeper (first 15 min, no pass,
+    ///         no sub, non-DGVE) cranking mintFlip still performs the advance WORK but earns ZERO
     ///         advance bounty (mult>0 but !eligible -> bountyEarned == 0; the creditFlip is skipped).
     ///         Directional invariant: the work is done (advance consumed), the keeper's flip balance is
     ///         byte-unchanged.
-    function testMintBurnieIneligibleKeeperEarnsZeroButWorkRuns() public {
+    function testMintFlipIneligibleKeeperEarnsZeroButWorkRuns() public {
         _settleClean(uint256(keccak256("pay_i_settle")) | 1);
         _warpToDayBoundary(5);         // < 15 min in
-        assertTrue(game.advanceDue(), "fixture: advance due so mintBurnie runs the advance leg");
+        assertTrue(game.advanceDue(), "fixture: advance due so mintFlip runs the advance leg");
 
         address keeper = makeAddr("pay_ineligible"); // passless, unfunded, non-DGVE, no sub
         assertFalse(game.bountyEligible(keeper), "fixture: the keeper is NOT bounty-eligible");
 
         uint256 before = coinflip.coinflipAmount(keeper);
         vm.prank(keeper);
-        game.mintBurnie();             // advance work runs regardless; bounty withheld
+        game.mintFlip();             // advance work runs regardless; bounty withheld
         assertEq(coinflip.coinflipAmount(keeper), before, "INELIGIBLE keeper earned ZERO advance bounty");
         // The work still ran (the due-state was consumed or the word was requested) — pure liveness.
         assertTrue(!game.advanceDue() || game.rngLocked(), "the advance work ran for the ineligible keeper too");
     }
 
-    /// @notice Vault keeper routing: DegenerusVault.gameAdvance() now routes through game.mintBurnie()
+    /// @notice Vault keeper routing: DegenerusVault.gameAdvance() now routes through game.mintFlip()
     ///         (earning the bounty); it performs the crank when work is due and reverts NoWork() when
     ///         idle. The vault is owner-gated (onlyVaultOwner) — prank as CREATOR (the DGVE majority
     ///         owner, also a permanent deity holder -> always eligible). Both arms asserted.
-    function testVaultGameAdvanceRoutesThroughMintBurnie() public {
+    function testVaultGameAdvanceRoutesThroughMintFlip() public {
         // Idle arm first: settle clean, do NOT roll the day -> nothing due -> NoWork().
         _settleClean(uint256(keccak256("vault_idle")) | 1);
         require(!game.advanceDue(), "fixture: clean so the idle arm is genuine");
@@ -559,20 +559,20 @@ contract V56SubHardening is DeployProtocol {
         vm.expectRevert(abi.encodeWithSignature("NoWork()"));
         vault.gameAdvance();
 
-        // Work-due arm: roll a fresh day -> advance due -> gameAdvance cranks via mintBurnie (no revert).
+        // Work-due arm: roll a fresh day -> advance due -> gameAdvance cranks via mintFlip (no revert).
         _warpToDayBoundary(5);
         assertTrue(game.advanceDue(), "fixture: advance due for the vault crank");
         vm.prank(ContractAddresses.CREATOR);
-        vault.gameAdvance();           // MUST NOT revert — routes through mintBurnie and does the work
+        vault.gameAdvance();           // MUST NOT revert — routes through mintFlip and does the work
         assertTrue(!game.advanceDue() || game.rngLocked(), "vault.gameAdvance ran the due advance work");
     }
 
-    /// @notice sDGNRS keeper routing: StakedDegenerusStonk.gameAdvance() routes through game.mintBurnie()
+    /// @notice sDGNRS keeper routing: sDGNRS.gameAdvance() routes through game.mintFlip()
     ///         and is PERMISSIONLESS (no owner gate). It performs the crank when work is due and reverts
     ///         NoWork() when idle. (sDGNRS self-subscribed at construction -> it holds an afking sub, so
-    ///         when it is the msg.sender of mintBurnie it is bounty-eligible — but the routing/NoWork
+    ///         when it is the msg.sender of mintFlip it is bounty-eligible — but the routing/NoWork
     ///         behavior is what this proves.)
-    function testSdgnrsGameAdvanceRoutesThroughMintBurnie() public {
+    function testSdgnrsGameAdvanceRoutesThroughMintFlip() public {
         // Idle arm: clean, no day-roll -> NoWork().
         _settleClean(uint256(keccak256("sdgnrs_idle")) | 1);
         require(!game.advanceDue(), "fixture: clean so the idle arm is genuine");
@@ -580,11 +580,11 @@ contract V56SubHardening is DeployProtocol {
         vm.expectRevert(abi.encodeWithSignature("NoWork()"));
         sdgnrs.gameAdvance();
 
-        // Work-due arm: roll a fresh day -> advance due -> gameAdvance cranks via mintBurnie (no revert).
+        // Work-due arm: roll a fresh day -> advance due -> gameAdvance cranks via mintFlip (no revert).
         _warpToDayBoundary(5);
         assertTrue(game.advanceDue(), "fixture: advance due for the sDGNRS crank");
         vm.prank(makeAddr("anyone_sdgnrs2"));
-        sdgnrs.gameAdvance();          // MUST NOT revert — routes through mintBurnie and does the work
+        sdgnrs.gameAdvance();          // MUST NOT revert — routes through mintFlip and does the work
         assertTrue(!game.advanceDue() || game.rngLocked(), "sdgnrs.gameAdvance ran the due advance work");
     }
 
@@ -748,8 +748,8 @@ contract V56SubHardening is DeployProtocol {
         return uint32(_subField(who, OFF_AFFBASE, 32));
     }
 
-    function _pendingBurnieOf(address who) internal view returns (uint32) {
-        return uint32(_subField(who, OFF_PENDINGBURNIE, 32));
+    function _pendingFlipOf(address who) internal view returns (uint32) {
+        return uint32(_subField(who, OFF_PENDINGFLIP, 32));
     }
 
     function _subscriberIndexOf(address who) internal view returns (uint256) {

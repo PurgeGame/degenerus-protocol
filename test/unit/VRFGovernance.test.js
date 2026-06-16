@@ -363,7 +363,7 @@ describe("VRF Governance", function () {
   });
 
   // =========================================================================
-  // 8. DegenerusStonk unwrapTo block during VRF stall
+  // 8. DGNRS unwrapTo block during VRF stall
   // =========================================================================
   describe("unwrapTo VRF stall guard", function () {
     it("unwrapTo works normally (rngLocked=false)", async function () {

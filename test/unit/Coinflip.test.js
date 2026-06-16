@@ -13,14 +13,14 @@ import {
 } from "../helpers/testUtils.js";
 
 /*
- * BurnieCoinflip Unit Tests
+ * Coinflip Unit Tests
  * ========================
  * Covers:
  *  - Constructor / immutable addresses
  *  - depositCoinflip (happy path, min amount, access control)
  *  - processCoinflipPayouts (onlyGame, win/loss outcomes, bounty)
  *  - claimCoinflips (happy path, rngLocked guard)
- *  - claimCoinflipsFromBurnie / consumeCoinflipsForBurn (onlyBurnie)
+ *  - claimCoinflipsFromFlip / consumeCoinflipsForBurn (onlyFlip)
  *  - creditFlip / creditFlipBatch (onlyFlipCreditors)
  *  - setCoinflipAutoRebuy (enable, disable, rngLocked guard)
  *  - setCoinflipAutoRebuyTakeProfit
@@ -34,11 +34,11 @@ import {
 // ---------------------------------------------------------------------------
 
 /**
- * Mint BURNIE to `player` using the vault contract's vaultMintTo function.
+ * Mint FLIP to `player` using the vault contract's vaultMintTo function.
  * The vault must first escrow the tokens via vaultEscrow (callable by the vault itself).
  * We impersonate the vault contract address to call both.
  */
-async function giveBurnie(coin, player, amount, vaultAddr) {
+async function giveFlip(coin, player, amount, vaultAddr) {
   await hre.ethers.provider.send("hardhat_setBalance", [
     vaultAddr,
     "0x1000000000000000000",
@@ -84,7 +84,7 @@ async function resolveDay(hreEthers, game, coinflip, epoch, rngWord, bonus = 0) 
 // Test Suite
 // ---------------------------------------------------------------------------
 
-describe("BurnieCoinflip", function () {
+describe("Coinflip", function () {
   after(() => restoreAddresses());
 
   // =========================================================================
@@ -95,13 +95,13 @@ describe("BurnieCoinflip", function () {
       const { coinflip, coin, game, jackpots, wwxrp } = await loadFixture(
         deployFullProtocol
       );
-      expect(await coinflip.burnie()).to.equal(await coin.getAddress());
+      expect(await coinflip.flip()).to.equal(await coin.getAddress());
       expect(await coinflip.degenerusGame()).to.equal(await game.getAddress());
       expect(await coinflip.jackpots()).to.equal(await jackpots.getAddress());
       expect(await coinflip.wwxrp()).to.equal(await wwxrp.getAddress());
     });
 
-    it("initial currentBounty is 1000 BURNIE", async function () {
+    it("initial currentBounty is 1000 FLIP", async function () {
       const { coinflip } = await loadFixture(deployFullProtocol);
       expect(await coinflip.currentBounty()).to.equal(eth(1000));
     });
@@ -116,26 +116,26 @@ describe("BurnieCoinflip", function () {
   // 2. depositCoinflip
   // =========================================================================
   describe("depositCoinflip", function () {
-    it("reverts when amount is below 100 BURNIE minimum", async function () {
+    it("reverts when amount is below 100 FLIP minimum", async function () {
       const { coinflip, coin, alice, vault } = await loadFixture(deployFullProtocol);
       const vaultAddr = await vault.getAddress();
-      await giveBurnie(coin, alice, eth(200), vaultAddr);
+      await giveFlip(coin, alice, eth(200), vaultAddr);
       await expect(
         deposit(coinflip, alice, eth(99))
       ).to.be.revertedWithCustomError(coinflip, "AmountLTMin");
     });
 
-    it("accepts minimum deposit of exactly 100 BURNIE", async function () {
+    it("accepts minimum deposit of exactly 100 FLIP", async function () {
       const { coinflip, coin, alice, vault } = await loadFixture(deployFullProtocol);
       const vaultAddr = await vault.getAddress();
-      await giveBurnie(coin, alice, eth(200), vaultAddr);
+      await giveFlip(coin, alice, eth(200), vaultAddr);
       await expect(deposit(coinflip, alice, eth(100))).to.not.be.reverted;
     });
 
     it("emits CoinflipDeposit event", async function () {
       const { coinflip, coin, alice, vault } = await loadFixture(deployFullProtocol);
       const vaultAddr = await vault.getAddress();
-      await giveBurnie(coin, alice, eth(500), vaultAddr);
+      await giveFlip(coin, alice, eth(500), vaultAddr);
       const tx = await deposit(coinflip, alice, eth(200));
       const ev = await getEvent(tx, coinflip, "CoinflipDeposit");
       expect(ev.args.player).to.equal(alice.address);
@@ -147,7 +147,7 @@ describe("BurnieCoinflip", function () {
         deployFullProtocol
       );
       const vaultAddr = await vault.getAddress();
-      await giveBurnie(coin, alice, eth(500), vaultAddr);
+      await giveFlip(coin, alice, eth(500), vaultAddr);
       const currentDay = await game.currentDayView();
       const tx = await deposit(coinflip, alice, eth(200));
       const ev = await getEvent(tx, coinflip, "CoinflipStakeUpdated");
@@ -159,7 +159,7 @@ describe("BurnieCoinflip", function () {
     it("records coinflipAmount for next day", async function () {
       const { coinflip, coin, alice, vault } = await loadFixture(deployFullProtocol);
       const vaultAddr = await vault.getAddress();
-      await giveBurnie(coin, alice, eth(500), vaultAddr);
+      await giveFlip(coin, alice, eth(500), vaultAddr);
       await deposit(coinflip, alice, eth(300));
       // coinflipAmount() returns stake for the next day
       const stake = await coinflip.coinflipAmount(alice.address);
@@ -169,7 +169,7 @@ describe("BurnieCoinflip", function () {
     it("emits CoinflipTopUpdated on deposit", async function () {
       const { coinflip, coin, alice, vault } = await loadFixture(deployFullProtocol);
       const vaultAddr = await vault.getAddress();
-      await giveBurnie(coin, alice, eth(1000), vaultAddr);
+      await giveFlip(coin, alice, eth(1000), vaultAddr);
       const tx = await deposit(coinflip, alice, eth(500));
       const evs = await getEvents(tx, coinflip, "CoinflipTopUpdated");
       expect(evs.length).to.equal(1);
@@ -265,7 +265,7 @@ describe("BurnieCoinflip", function () {
       if (!found) this.skip();
     });
 
-    it("bounty pool grows by 1000 BURNIE per resolved day", async function () {
+    it("bounty pool grows by 1000 FLIP per resolved day", async function () {
       const { coinflip, game } = await loadFixture(deployFullProtocol);
       const before = await coinflip.currentBounty();
       await resolveDay(hre.ethers, game, coinflip, 1n, 2n);
@@ -289,7 +289,7 @@ describe("BurnieCoinflip", function () {
     it("emits BiggestFlipUpdated when deposit exceeds current record", async function () {
       const { coinflip, coin, alice, vault } = await loadFixture(deployFullProtocol);
       const vaultAddr = await vault.getAddress();
-      await giveBurnie(coin, alice, eth(2000), vaultAddr);
+      await giveFlip(coin, alice, eth(2000), vaultAddr);
       const tx = await deposit(coinflip, alice, eth(500));
       const evs = await getEvents(tx, coinflip, "BiggestFlipUpdated");
       expect(evs.length).to.equal(1);
@@ -300,7 +300,7 @@ describe("BurnieCoinflip", function () {
     it("emits BountyOwed when setting new record from zero", async function () {
       const { coinflip, coin, alice, vault } = await loadFixture(deployFullProtocol);
       const vaultAddr = await vault.getAddress();
-      await giveBurnie(coin, alice, eth(2000), vaultAddr);
+      await giveFlip(coin, alice, eth(2000), vaultAddr);
       const tx = await deposit(coinflip, alice, eth(500));
       const evs = await getEvents(tx, coinflip, "BountyOwed");
       expect(evs.length).to.equal(1);
@@ -312,8 +312,8 @@ describe("BurnieCoinflip", function () {
         deployFullProtocol
       );
       const vaultAddr = await vault.getAddress();
-      await giveBurnie(coin, alice, eth(2000), vaultAddr);
-      await giveBurnie(coin, bob, eth(2000), vaultAddr);
+      await giveFlip(coin, alice, eth(2000), vaultAddr);
+      await giveFlip(coin, bob, eth(2000), vaultAddr);
 
       // Alice sets the record first
       await deposit(coinflip, alice, eth(1000));
@@ -331,12 +331,12 @@ describe("BurnieCoinflip", function () {
         deployFullProtocol
       );
       const vaultAddr = await vault.getAddress();
-      await giveBurnie(coin, alice, eth(2000), vaultAddr);
-      await giveBurnie(coin, bob, eth(2000), vaultAddr);
+      await giveFlip(coin, alice, eth(2000), vaultAddr);
+      await giveFlip(coin, bob, eth(2000), vaultAddr);
 
       await deposit(coinflip, alice, eth(1000));
 
-      // Bob deposits >1% more than alice (1001 BURNIE >= threshold 1010 after 1% of 1000 = 10)
+      // Bob deposits >1% more than alice (1001 FLIP >= threshold 1010 after 1% of 1000 = 10)
       // 1% of 1000 = 10, so threshold = 1000 + 10 = 1010
       const tx = await deposit(coinflip, bob, eth(1010));
       const evs = await getEvents(tx, coinflip, "BountyOwed");
@@ -347,7 +347,7 @@ describe("BurnieCoinflip", function () {
     it("biggestFlipEver tracks the largest direct deposit", async function () {
       const { coinflip, coin, alice, vault } = await loadFixture(deployFullProtocol);
       const vaultAddr = await vault.getAddress();
-      await giveBurnie(coin, alice, eth(5000), vaultAddr);
+      await giveFlip(coin, alice, eth(5000), vaultAddr);
       await deposit(coinflip, alice, eth(200));
       await deposit(coinflip, alice, eth(500));
       expect(await coinflip.biggestFlipEver()).to.equal(eth(500));
@@ -395,7 +395,7 @@ describe("BurnieCoinflip", function () {
         deployFullProtocol
       );
       const vaultAddr = await vault.getAddress();
-      await giveBurnie(coin, alice, eth(2000), vaultAddr);
+      await giveFlip(coin, alice, eth(2000), vaultAddr);
       await deposit(coinflip, alice, eth(1000));
 
       const currentDay = await game.currentDayView();
@@ -411,21 +411,21 @@ describe("BurnieCoinflip", function () {
   });
 
   // =========================================================================
-  // 6. claimCoinflipsFromBurnie / consumeCoinflipsForBurn (onlyBurnieCoin)
+  // 6. claimCoinflipsFromFlip / consumeCoinflipsForBurn (onlyFLIP)
   // =========================================================================
-  describe("claimCoinflipsFromBurnie / consumeCoinflipsForBurn", function () {
-    it("claimCoinflipsFromBurnie reverts when called by non-coin address", async function () {
+  describe("claimCoinflipsFromFlip / consumeCoinflipsForBurn", function () {
+    it("claimCoinflipsFromFlip reverts when called by non-coin address", async function () {
       const { coinflip, alice } = await loadFixture(deployFullProtocol);
       await expect(
-        coinflip.connect(alice).claimCoinflipsFromBurnie(alice.address, eth(100))
-      ).to.be.revertedWithCustomError(coinflip, "OnlyBurnieCoin");
+        coinflip.connect(alice).claimCoinflipsFromFlip(alice.address, eth(100))
+      ).to.be.revertedWithCustomError(coinflip, "OnlyFLIP");
     });
 
     it("consumeCoinflipsForBurn reverts when called by non-coin address", async function () {
       const { coinflip, alice } = await loadFixture(deployFullProtocol);
       await expect(
         coinflip.connect(alice).consumeCoinflipsForBurn(alice.address, eth(100))
-      ).to.be.revertedWithCustomError(coinflip, "OnlyBurnieCoin");
+      ).to.be.revertedWithCustomError(coinflip, "OnlyFLIP");
     });
   });
 
@@ -692,7 +692,7 @@ describe("BurnieCoinflip", function () {
         deployFullProtocol
       );
       const vaultAddr = await vault.getAddress();
-      await giveBurnie(coin, alice, eth(1000), vaultAddr);
+      await giveFlip(coin, alice, eth(1000), vaultAddr);
       await deposit(coinflip, alice, eth(500));
 
       const currentDay = await game.currentDayView();
@@ -711,7 +711,7 @@ describe("BurnieCoinflip", function () {
     it("coinflipAmount increases after deposit", async function () {
       const { coinflip, coin, alice, vault } = await loadFixture(deployFullProtocol);
       const vaultAddr = await vault.getAddress();
-      await giveBurnie(coin, alice, eth(1000), vaultAddr);
+      await giveFlip(coin, alice, eth(1000), vaultAddr);
       await deposit(coinflip, alice, eth(500));
       expect(await coinflip.coinflipAmount(alice.address)).to.be.gte(eth(500));
     });
@@ -734,7 +734,7 @@ describe("BurnieCoinflip", function () {
         deployFullProtocol
       );
       const vaultAddr = await vault.getAddress();
-      await giveBurnie(coin, alice, eth(2000), vaultAddr);
+      await giveFlip(coin, alice, eth(2000), vaultAddr);
       const balBefore = await coin.balanceOf(alice.address);
 
       await deposit(coinflip, alice, eth(1000));
@@ -748,7 +748,7 @@ describe("BurnieCoinflip", function () {
         deployFullProtocol
       );
       const vaultAddr = await vault.getAddress();
-      await giveBurnie(coin, alice, eth(2000), vaultAddr);
+      await giveFlip(coin, alice, eth(2000), vaultAddr);
       await deposit(coinflip, alice, eth(1000));
 
       const currentDay = await game.currentDayView();
@@ -771,7 +771,7 @@ describe("BurnieCoinflip", function () {
         deployFullProtocol
       );
       const vaultAddr = await vault.getAddress();
-      await giveBurnie(coin, alice, eth(2000), vaultAddr);
+      await giveFlip(coin, alice, eth(2000), vaultAddr);
       await deposit(coinflip, alice, eth(1000));
 
       const currentDay = await game.currentDayView();
@@ -792,7 +792,7 @@ describe("BurnieCoinflip", function () {
         deployFullProtocol
       );
       const vaultAddr = await vault.getAddress();
-      await giveBurnie(coin, alice, eth(5000), vaultAddr);
+      await giveFlip(coin, alice, eth(5000), vaultAddr);
 
       // Enable auto-rebuy with no take profit (all carries forward)
       await coinflip.connect(alice).setCoinflipAutoRebuy(ZERO_ADDRESS, true, 0n);

@@ -200,31 +200,31 @@ describe("DegenerusAdmin", function () {
     // ---------------------------------------------------------------------------
     // creditLinkReward — flip credit amounts per LINK at each sub tier
     //
-    // Formula: BURNIE = linkAmount × (LINK/ETH price) × PRICE_COIN_UNIT / priceWei × mult
-    //          PRICE_COIN_UNIT = 1000 BURNIE/ticket (contract constant)
+    // Formula: FLIP = linkAmount × (LINK/ETH price) × PRICE_COIN_UNIT / priceWei × mult
+    //          PRICE_COIN_UNIT = 1000 FLIP/ticket (contract constant)
     //          mock feed       = 0.004 ETH/LINK
     //          fixture level   = L0 (0.01 ETH/ticket)
-    //          base rate       = 1 LINK × 0.004 / 0.01 × 1000 = 400 BURNIE (at 1x)
+    //          base rate       = 1 LINK × 0.004 / 0.01 × 1000 = 400 FLIP (at 1x)
     //
     // The formula is level-invariant in ticket value:
     //   ticket value = ethEquivalent × mult  (priceWei cancels out)
     //   At 3x: 0.004 × 3 = 0.012 ETH ticket value regardless of level
     //
-    // BURNIE per LINK at L0 (test fixture level):
-    //  Sub bal  │ Mult │  BURNIE/LINK  │ Ticket value (any level)
+    // FLIP per LINK at L0 (test fixture level):
+    //  Sub bal  │ Mult │  FLIP/LINK  │ Ticket value (any level)
     //  ─────────┼──────┼───────────────┼──────────────────────────
-    //    0 LINK │  3x  │  1200 BURNIE  │ 0.012 Ξ (300% of 0.004 Ξ donated)
-    //  100 LINK │  2x  │   800 BURNIE  │ 0.008 Ξ (200%)
-    //  200 LINK │  1x  │   400 BURNIE  │ 0.004 Ξ (100%)
-    //  600 LINK │ 0.5x │   200 BURNIE  │ 0.002 Ξ  (50%)
-    // 1000 LINK │  0x  │     0 BURNIE  │ —
+    //    0 LINK │  3x  │  1200 FLIP  │ 0.012 Ξ (300% of 0.004 Ξ donated)
+    //  100 LINK │  2x  │   800 FLIP  │ 0.008 Ξ (200%)
+    //  200 LINK │  1x  │   400 FLIP  │ 0.004 Ξ (100%)
+    //  600 LINK │ 0.5x │   200 FLIP  │ 0.002 Ξ  (50%)
+    // 1000 LINK │  0x  │     0 FLIP  │ —
     //
-    // BURNIE accumulation value: 1200 BURNIE earned at L0 can be spent at any level.
-    // At L100 (0.24 ETH/ticket), those same 1200 BURNIE are worth 24× more ticket value
-    // than at L0 — rewarding early donors who hold their BURNIE.
+    // FLIP accumulation value: 1200 FLIP earned at L0 can be spent at any level.
+    // At L100 (0.24 ETH/ticket), those same 1200 FLIP are worth 24× more ticket value
+    // than at L0 — rewarding early donors who hold their FLIP.
     // ---------------------------------------------------------------------------
 
-    it("3x tier (sub empty): 1 LINK → 1200 BURNIE flip stake", async function () {
+    it("3x tier (sub empty): 1 LINK → 1200 FLIP flip stake", async function () {
       const { admin, sdgnrs, game, mockLINK, mockVRF, mockFeed, coinflip, deployer, alice } =
         await loadFixture(deployFullProtocol);
 
@@ -240,7 +240,7 @@ describe("DegenerusAdmin", function () {
       expect(flipAfter).to.equal(eth("1200"));
     });
 
-    it("2x tier (100 LINK in sub): 1 LINK → 800 BURNIE flip stake", async function () {
+    it("2x tier (100 LINK in sub): 1 LINK → 800 FLIP flip stake", async function () {
       const { admin, sdgnrs, game, mockLINK, mockVRF, mockFeed, coinflip, deployer, alice } =
         await loadFixture(deployFullProtocol);
 
@@ -256,7 +256,7 @@ describe("DegenerusAdmin", function () {
       expect(flipAfter).to.equal(eth("800"));
     });
 
-    it("1x tier (200 LINK in sub): 1 LINK → 400 BURNIE flip stake", async function () {
+    it("1x tier (200 LINK in sub): 1 LINK → 400 FLIP flip stake", async function () {
       const { admin, sdgnrs, game, mockLINK, mockVRF, mockFeed, coinflip, deployer, alice } =
         await loadFixture(deployFullProtocol);
 
@@ -272,7 +272,7 @@ describe("DegenerusAdmin", function () {
       expect(flipAfter).to.equal(eth("400"));
     });
 
-    it("0.5x tier (600 LINK in sub): 1 LINK → 200 BURNIE flip stake", async function () {
+    it("0.5x tier (600 LINK in sub): 1 LINK → 200 FLIP flip stake", async function () {
       const { admin, sdgnrs, game, mockLINK, mockVRF, mockFeed, coinflip, deployer, alice } =
         await loadFixture(deployFullProtocol);
 
@@ -302,11 +302,11 @@ describe("DegenerusAdmin", function () {
       expect(flipAfter).to.equal(0n);
     });
 
-    it("scales linearly with LINK amount: 10 LINK at 3x = 12000 BURNIE", async function () {
+    it("scales linearly with LINK amount: 10 LINK at 3x = 12000 FLIP", async function () {
       const { admin, sdgnrs, game, mockLINK, mockVRF, mockFeed, coinflip, deployer, alice } =
         await loadFixture(deployFullProtocol);
 
-      // 10 LINK × 0.004 / 0.01 × 1000 × 3 = 12000 BURNIE
+      // 10 LINK × 0.004 / 0.01 × 1000 × 3 = 12000 FLIP
       const { event, flipAfter } = await donateLink({
         admin, sdgnrs, game, mockLINK, mockVRF, mockFeed, coinflip, deployer, alice,
         subPrefund: 0n,
@@ -327,20 +327,20 @@ describe("DegenerusAdmin", function () {
       const expected = ethEquiv * mult; // 0.012 ETH
       // verify at several levels — all within 1 wei of invariant due to integer division
       for (const priceWei of [eth("0.01"), eth("0.04"), eth("0.12"), eth("0.24")]) {
-        const burnie = ethEquiv * PRICE_COIN_UNIT / priceWei * mult;
-        const ticketValue = burnie * priceWei / PRICE_COIN_UNIT;
+        const flip = ethEquiv * PRICE_COIN_UNIT / priceWei * mult;
+        const ticketValue = flip * priceWei / PRICE_COIN_UNIT;
         const diff = ticketValue > expected ? ticketValue - expected : expected - ticketValue;
         expect(diff).to.be.lessThanOrEqual(1n);
       }
     });
 
-    it("game-level value: 1200 BURNIE earned at L0 is worth 24x more at L100 than at L0", async function () {
-      // BURNIE earned early (at low price) retains value when spent at high price.
+    it("game-level value: 1200 FLIP earned at L0 is worth 24x more at L100 than at L0", async function () {
+      // FLIP earned early (at low price) retains value when spent at high price.
       // L0: 1200 × 0.01 / 1000 = 0.012 ETH; L100: 1200 × 0.24 / 1000 = 0.288 ETH → 24x ratio
       const PRICE_COIN_UNIT = eth("1000");
-      const burnie = eth("1200");   // what 1 LINK at 3x earns at L0
-      const l0Value = burnie * eth("0.01") / PRICE_COIN_UNIT;
-      const l100Value = burnie * eth("0.24") / PRICE_COIN_UNIT;
+      const flip = eth("1200");   // what 1 LINK at 3x earns at L0
+      const l0Value = flip * eth("0.01") / PRICE_COIN_UNIT;
+      const l100Value = flip * eth("0.24") / PRICE_COIN_UNIT;
       expect(l100Value / l0Value).to.equal(24n);
     });
 

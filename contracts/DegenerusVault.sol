@@ -9,7 +9,7 @@ import {IVaultCoin} from "./interfaces/IVaultCoin.sol";
 /// @notice Interface for game player actions on DegenerusGame contract used by DegenerusVault.
 interface IDegenerusGamePlayerActions {
     /// @notice Crank the unified keeper router (advance + box opens), paying any earned bounty.
-    function mintBurnie() external;
+    function mintFlip() external;
     /// @notice Queue this caller's perpetual tickets for levels 1-100 (VAULT/SDGNRS only, once).
     function initPerpetualTickets() external;
     /// @notice Start or extend a daily afking subscription for `player` (self when 0/msg.sender).
@@ -55,8 +55,8 @@ interface IDegenerusGamePlayerActions {
     function setOperatorApproval(address operator, bool approved) external;
     /// @notice View claimable ETH winnings for a player.
     function claimableWinningsOf(address player) external view returns (uint256);
-    /// @notice Purchase tickets using BURNIE.
-    function redeemBurnie(
+    /// @notice Purchase tickets using FLIP.
+    function redeemFlip(
         address buyer,
         uint256 ticketQuantity
     ) external;
@@ -75,7 +75,7 @@ interface IDegenerusGamePlayerActions {
 
 /// @notice Interface for coinflip player actions used by DegenerusVault.
 interface ICoinflipPlayerActions {
-    /// @notice Deposit BURNIE into daily coinflip system.
+    /// @notice Deposit FLIP into daily coinflip system.
     function depositCoinflip(address player, uint256 amount) external;
     /// @notice Claim coinflip winnings (exact amount).
     function claimCoinflips(address player, uint256 amount) external returns (uint256 claimed);
@@ -87,16 +87,16 @@ interface ICoinflipPlayerActions {
     function setCoinflipAutoRebuyTakeProfit(address player, uint256 takeProfit) external;
 }
 
-/// @notice Interface for BurnieCoin decimator burn used by DegenerusVault.
+/// @notice Interface for FLIP decimator burn used by DegenerusVault.
 interface ICoinPlayerActions {
-    /// @notice Burn BURNIE for decimator jackpot eligibility.
+    /// @notice Burn FLIP for decimator jackpot eligibility.
     function decimatorBurn(address player, uint256 amount) external;
 }
 
 /// @notice Interface for sDGNRS player actions used by DegenerusVault.
-interface IStakedDegenerusStonkBurn {
+interface IsDGNRSBurn {
     /// @notice Burn sDGNRS to claim proportional backing assets.
-    function burn(uint256 amount) external returns (uint256 ethOut, uint256 stethOut, uint256 burnieOut);
+    function burn(uint256 amount) external returns (uint256 ethOut, uint256 stethOut, uint256 flipOut);
     /// @notice Claim a resolved gambling-burn redemption for `player` on day `day` (SPEC-02 composite key).
     function claimRedemption(address player, uint24 day) external;
 }
@@ -126,10 +126,10 @@ interface IWWXRPMint {
 |  |   |  ETH            |----►|  ethShare       |  DGVE - Claims ETH + stETH proportionally           | |
 |  |   |  stETH          |----►|  (combined)     |                                                     | |
 |  |   +-----------------+     +-----------------+                                                     | |
-|  |   |  BURNIE         |----►|  coinShare      |  DGVB - Claims BURNIE only                          | |
+|  |   |  FLIP         |----►|  flipShare      |  DGVF - Claims FLIP only                          | |
 |  |   +-----------------+     +-----------------+                                                     | |
 |  |                                                                                                   | |
-|  |   DGVE and DGVB have independent supply and proportional claim rights.                            | |
+|  |   DGVE and DGVF have independent supply and proportional claim rights.                            | |
 |  +---------------------------------------------------------------------------------------------------+ |
 |                                                                                                        |
 |  +---------------------------------------------------------------------------------------------------+ |
@@ -137,15 +137,15 @@ interface IWWXRPMint {
 |  |                                                                                                   | |
 |  |   ETH    ----► receive() donations + game claimable-winnings credits claimed by the vault         | |
 |  |   stETH  ----► direct ERC20 transfers from game flows                                             | |
-|  |   BURNIE ----► BurnieCoin credits the vault's mint allowance internally (virtual, no transfer)    | |
+|  |   FLIP ----► FLIP credits the vault's mint allowance internally (virtual, no transfer)    | |
 |  |                                                                                                   | |
-|  |   Split: ETH+stETH accrue to DGVE. BURNIE mint allowance is claimable by DGVB.                    | |
+|  |   Split: ETH+stETH accrue to DGVE. FLIP mint allowance is claimable by DGVF.                    | |
 |  +---------------------------------------------------------------------------------------------------+ |
 |                                                                                                        |
 |  +---------------------------------------------------------------------------------------------------+ |
 |  |                              CLAIM FLOW (Burn Shares)                                             | |
 |  |                                                                                                   | |
-|  |   User ----► burnCoin(amount) ----► Burns coinShare ----► Mints BURNIE to user                    | |
+|  |   User ----► burnCoin(amount) ----► Burns flipShare ----► Mints FLIP to user                    | |
 |  |   User ----► burnEth(amount) -----► Burns ethShare -----► Sends ETH + stETH to user               | |
 |  |   (No DGNRS share class in the vault)                                                              | |
 |  |                                                                                                   | |
@@ -170,7 +170,7 @@ interface IWWXRPMint {
 // -----------------------------------------------------------------------------
 
 /// @title DegenerusVaultShare
-/// @notice Minimal ERC20 for vault share classes (DGVB, DGVE)
+/// @notice Minimal ERC20 for vault share classes (DGVF, DGVE)
 /// @dev Only the parent vault can mint/burn. Standard ERC20 transfer/approve for users.
 contract DegenerusVaultShare {
     // ---------------------------------------------------------------------
@@ -200,9 +200,9 @@ contract DegenerusVaultShare {
     // ---------------------------------------------------------------------
     // ERC20 STATE
     // ---------------------------------------------------------------------
-    /// @notice Token name (e.g., "Degenerus Vault Burnie")
+    /// @notice Token name (e.g., "Degenerus Vault Flip")
     string public name;
-    /// @notice Token symbol (e.g., "DGVB")
+    /// @notice Token symbol (e.g., "DGVF")
     string public symbol;
     /// @notice Token decimals (always 18)
     uint8 public constant decimals = 18;
@@ -361,15 +361,15 @@ contract DegenerusVault {
     /// @param from Depositor address
     /// @param ethAmount ETH deposited (via msg.value)
     /// @param stEthAmount Always 0 (stETH arrives via direct ERC20 transfers, which do not announce)
-    /// @param coinAmount Always 0 (BURNIE arrives as mint allowance credited inside BurnieCoin)
+    /// @param coinAmount Always 0 (FLIP arrives as mint allowance credited inside FLIP)
     event Deposit(address indexed from, uint256 ethAmount, uint256 stEthAmount, uint256 coinAmount);
-    /// @notice Emitted when user burns DGVB or DGVE shares to claim assets
+    /// @notice Emitted when user burns DGVF or DGVE shares to claim assets
     /// @param from User who burned shares
     /// @param sharesBurned Amount of shares burned
     /// @param ethOut ETH sent to user
     /// @param stEthOut stETH sent to user
-    /// @param coinOut BURNIE minted to user
-    event Claim(address indexed from, uint256 sharesBurned, uint256 ethOut, uint256 stEthOut, uint256 coinOut);
+    /// @param flipOut FLIP minted to user
+    event Claim(address indexed from, uint256 sharesBurned, uint256 ethOut, uint256 stEthOut, uint256 flipOut);
 
     // ---------------------------------------------------------------------
     // CONSTANTS
@@ -386,8 +386,8 @@ contract DegenerusVault {
     // ---------------------------------------------------------------------
     // SHARE CLASS TOKENS (Immutable)
     // ---------------------------------------------------------------------
-    /// @notice Share token for BURNIE claims (symbol: DGVB)
-    DegenerusVaultShare private immutable coinShare;
+    /// @notice Share token for FLIP claims (symbol: DGVF)
+    DegenerusVaultShare private immutable flipShare;
     /// @notice Share token for ETH+stETH claims (symbol: DGVE)
     DegenerusVaultShare private immutable ethShare;
 
@@ -401,17 +401,17 @@ contract DegenerusVault {
     ICoinflipPlayerActions internal constant coinflipPlayer =
         ICoinflipPlayerActions(ContractAddresses.COINFLIP);
     /// @dev Coin contract for decimator actions
-    ICoinPlayerActions internal constant coinPlayer =
+    ICoinPlayerActions internal constant flipPlayer =
         ICoinPlayerActions(ContractAddresses.COIN);
-    /// @dev BURNIE token contract for minting and transfers
-    IVaultCoin internal constant coinToken = IVaultCoin(ContractAddresses.COIN);
+    /// @dev FLIP token contract for minting and transfers
+    IVaultCoin internal constant flipToken = IVaultCoin(ContractAddresses.COIN);
     /// @dev WWXRP token contract for vault minting
     IWWXRPMint internal constant wwxrpToken = IWWXRPMint(ContractAddresses.WWXRP);
     /// @dev stETH (Lido) token contract
     IStETH internal constant steth = IStETH(ContractAddresses.STETH_TOKEN);
     /// @dev sDGNRS contract for burning vault-held sDGNRS
-    IStakedDegenerusStonkBurn internal constant sdgnrsToken =
-        IStakedDegenerusStonkBurn(ContractAddresses.SDGNRS);
+    IsDGNRSBurn internal constant sdgnrsToken =
+        IsDGNRSBurn(ContractAddresses.SDGNRS);
 
     // ---------------------------------------------------------------------
     // SALVAGE-BUYER FALLBACK CONFIG (owner-settable; packed into one slot)
@@ -452,13 +452,13 @@ contract DegenerusVault {
     // CONSTRUCTOR
     // ---------------------------------------------------------------------
     /// @notice Deploy the vault and create all share class tokens
-    /// @dev Deploys DGVB and DGVE tokens. Creator receives initial 1T supply of each.
+    /// @dev Deploys DGVF and DGVE tokens. Creator receives initial 1T supply of each.
     constructor() {
-        coinShare = new DegenerusVaultShare("Degenerus Vault Burnie", "DGVB");
+        flipShare = new DegenerusVaultShare("Degenerus Vault Flip", "DGVF");
         ethShare = new DegenerusVaultShare("Degenerus Vault Eth", "DGVE");
 
         // SUB-09 protocol-owned self-subscription: claimable-only daily lootbox
-        // buy of flat quantity 1, no reinvest, no BURNIE rebuy. Self-consent —
+        // buy of flat quantity 1, no reinvest, no FLIP rebuy. Self-consent —
         // the vault IS the player (player == msg.sender). The vault holds the
         // permanent deity pass (granted in the DegenerusGame constructor), so the
         // afking's pass-OR-pay gate takes the free 30-day extend at zero cost.
@@ -496,11 +496,11 @@ contract DegenerusVault {
     // ---------------------------------------------------------------------
 
     /// @notice Crank the game keeper router on behalf of the vault (advance + box opens)
-    /// @dev Requires caller to hold >50.1% of DGVE supply. Routes through mintBurnie so the
+    /// @dev Requires caller to hold >50.1% of DGVE supply. Routes through mintFlip so the
     ///      vault earns the keeper bounty for the work; reverts NoWork() when nothing is due.
     /// @custom:reverts NotVaultOwner If caller does not hold >50.1% of DGVE
     function gameAdvance() external onlyVaultOwner {
-        gamePlayer.mintBurnie();
+        gamePlayer.mintFlip();
     }
 
     /// @notice Purchase tickets and lootboxes for the vault
@@ -529,13 +529,13 @@ contract DegenerusVault {
         );
     }
 
-    /// @notice Purchase BURNIE tickets through the game contract
+    /// @notice Purchase FLIP tickets through the game contract
     /// @param ticketQuantity Number of tickets to purchase
     /// @custom:reverts NotVaultOwner If caller does not hold >50.1% of DGVE
     /// @custom:reverts Insufficient If ticketQuantity is zero
-    function gamePurchaseTicketsBurnie(uint256 ticketQuantity) external onlyVaultOwner {
+    function gamePurchaseTicketsFlip(uint256 ticketQuantity) external onlyVaultOwner {
         if (ticketQuantity == 0) revert Insufficient();
-        gamePlayer.redeemBurnie(address(this), ticketQuantity);
+        gamePlayer.redeemFlip(address(this), ticketQuantity);
     }
 
     /// @notice Purchase a deity pass using an active boon for the vault
@@ -622,8 +622,8 @@ contract DegenerusVault {
     /// @dev When enabled, the game routes a far-future salvage swap to the vault as buyer when sDGNRS
     ///      cannot fund it, spending the vault's game-side ETH — claimable first, then prepaid afking
     ///      (staged from reserves via the game's depositAfkingFunding) — down to `floorWei`, plus
-    ///      vault-owned BURNIE, and parking the bought far-future tickets in the vault. This commits
-    ///      DGVE/DGVB backing as buyer-of-last-resort at the same -EV quote sDGNRS pays, so it is
+    ///      vault-owned FLIP, and parking the bought far-future tickets in the vault. This commits
+    ///      DGVE/DGVF backing as buyer-of-last-resort at the same -EV quote sDGNRS pays, so it is
     ///      vault-owner gated.
     /// @param enabled Whether the vault acts as salvage buyer-of-last-resort.
     /// @param floorWei ETH (wei) reserve kept untouched; the vault buys only while its claimable + afking
@@ -670,7 +670,7 @@ contract DegenerusVault {
     /// @param amount Amount of coins to burn
     /// @custom:reverts NotVaultOwner If caller does not hold >50.1% of DGVE
     function coinDecimatorBurn(uint256 amount) external onlyVaultOwner {
-        coinPlayer.decimatorBurn(address(this), amount);
+        flipPlayer.decimatorBurn(address(this), amount);
     }
 
     /// @notice Configure coinflip auto-rebuy for the vault
@@ -702,9 +702,9 @@ contract DegenerusVault {
     /// @param amount Amount of sDGNRS to burn
     /// @return ethOut ETH received
     /// @return stethOut stETH received
-    /// @return burnieOut BURNIE received
+    /// @return flipOut FLIP received
     /// @custom:reverts NotVaultOwner If caller does not hold >50.1% of DGVE
-    function sdgnrsBurn(uint256 amount) external onlyVaultOwner returns (uint256 ethOut, uint256 stethOut, uint256 burnieOut) {
+    function sdgnrsBurn(uint256 amount) external onlyVaultOwner returns (uint256 ethOut, uint256 stethOut, uint256 flipOut) {
         return sdgnrsToken.burn(amount);
     }
 
@@ -722,51 +722,51 @@ contract DegenerusVault {
     // CLAIMS (Burn Shares to Redeem Assets)
     // ---------------------------------------------------------------------
 
-    /// @notice Burn DGVB shares to redeem proportional BURNIE
-    /// @dev Formula: coinOut = (DGVB reserve * sharesBurned) / totalSupply.
+    /// @notice Burn DGVF shares to redeem proportional FLIP
+    /// @dev Formula: flipOut = (DGVF reserve * sharesBurned) / totalSupply.
     ///      If burning entire supply, caller receives 1T new shares (refill mechanism).
     ///      Pays from vault balance first, then claimable coinflips, then mints remainder.
-    /// @param amount Amount of DGVB shares to burn
-    /// @return coinOut Amount of BURNIE sent to caller
+    /// @param amount Amount of DGVF shares to burn
+    /// @return flipOut Amount of FLIP sent to caller
     /// @custom:reverts Insufficient If amount is 0 or reserve is insufficient
-    /// @custom:reverts TransferFailed If BURNIE transfer fails
-    function burnCoin(uint256 amount) external returns (uint256 coinOut) {
-        DegenerusVaultShare share = coinShare;
+    /// @custom:reverts TransferFailed If FLIP transfer fails
+    function burnCoin(uint256 amount) external returns (uint256 flipOut) {
+        DegenerusVaultShare share = flipShare;
         if (amount == 0) revert Insufficient();
 
-        uint256 coinBal = coinToken.vaultMintAllowance();
-        uint256 vaultBal = coinToken.balanceOf(address(this));
+        uint256 coinBal = flipToken.vaultMintAllowance();
+        uint256 vaultBal = flipToken.balanceOf(address(this));
         uint256 claimable = coinflipPlayer.previewClaimCoinflips(address(this));
         coinBal += vaultBal + claimable;
 
         // vaultBurn returns the pre-burn supply, so no separate totalSupply() round-trip is
         // needed; it touches only share-token storage, never the coin/coinflip state read above.
         uint256 supplyBefore = share.vaultBurn(msg.sender, amount);
-        coinOut = (coinBal * amount) / supplyBefore;
+        flipOut = (coinBal * amount) / supplyBefore;
         if (supplyBefore == amount) {
             share.vaultMint(msg.sender, REFILL_SUPPLY);
         }
 
-        emit Claim(msg.sender, amount, 0, 0, coinOut);
-        if (coinOut != 0) {
-            uint256 remaining = coinOut;
+        emit Claim(msg.sender, amount, 0, 0, flipOut);
+        if (flipOut != 0) {
+            uint256 remaining = flipOut;
             if (vaultBal != 0) {
                 uint256 payBal = remaining <= vaultBal ? remaining : vaultBal;
                 remaining -= payBal;
-                if (!coinToken.transfer(msg.sender, payBal)) revert TransferFailed();
+                if (!flipToken.transfer(msg.sender, payBal)) revert TransferFailed();
             }
 
             if (remaining != 0 && claimable != 0) {
                 uint256 claimed = coinflipPlayer.claimCoinflips(address(this), remaining);
                 if (claimed != 0) {
                     remaining -= claimed;
-                    if (!coinToken.transfer(msg.sender, claimed)) revert TransferFailed();
+                    if (!flipToken.transfer(msg.sender, claimed)) revert TransferFailed();
                 }
             }
 
             if (remaining != 0) {
                 // Any over-mint attempt reverts inside vaultMintTo against the live allowance.
-                coinToken.vaultMintTo(msg.sender, remaining);
+                flipToken.vaultMintTo(msg.sender, remaining);
             }
         }
     }
@@ -823,16 +823,16 @@ contract DegenerusVault {
     // VIEW FUNCTIONS - Reverse Calculations (Target Output → Required Burn)
     // ---------------------------------------------------------------------
 
-    /// @notice Calculate DGVB shares required to receive a target BURNIE amount
+    /// @notice Calculate DGVF shares required to receive a target FLIP amount
     /// @dev Uses ceiling division to ensure user burns enough shares
-    /// @param coinOut Target BURNIE amount to receive
-    /// @return burnAmount DGVB shares required to burn
-    /// @custom:reverts Insufficient If coinOut is 0 or exceeds available reserve
-    function previewBurnForCoinOut(uint256 coinOut) external view returns (uint256 burnAmount) {
+    /// @param flipOut Target FLIP amount to receive
+    /// @return burnAmount DGVF shares required to burn
+    /// @custom:reverts Insufficient If flipOut is 0 or exceeds available reserve
+    function previewBurnForCoinOut(uint256 flipOut) external view returns (uint256 burnAmount) {
         uint256 reserve = _coinReservesView();
-        if (coinOut == 0 || coinOut > reserve) revert Insufficient();
-        uint256 supply = coinShare.totalSupply();
-        burnAmount = (coinOut * supply + reserve - 1) / reserve;
+        if (flipOut == 0 || flipOut > reserve) revert Insufficient();
+        uint256 supply = flipShare.totalSupply();
+        burnAmount = (flipOut * supply + reserve - 1) / reserve;
     }
 
     /// @notice Calculate DGVE shares required to receive a target ETH-equivalent value
@@ -864,15 +864,15 @@ contract DegenerusVault {
     // VIEW FUNCTIONS - Forward Calculations (Shares to Burn → Expected Output)
     // ---------------------------------------------------------------------
 
-    /// @notice Preview BURNIE output for burning a given amount of DGVB shares
-    /// @param amount DGVB shares to burn
-    /// @return coinOut BURNIE that would be received
+    /// @notice Preview FLIP output for burning a given amount of DGVF shares
+    /// @param amount DGVF shares to burn
+    /// @return flipOut FLIP that would be received
     /// @custom:reverts Insufficient If amount is 0 or exceeds total supply
-    function previewCoin(uint256 amount) external view returns (uint256 coinOut) {
-        uint256 supply = coinShare.totalSupply();
+    function previewCoin(uint256 amount) external view returns (uint256 flipOut) {
+        uint256 supply = flipShare.totalSupply();
         if (amount == 0 || amount > supply) revert Insufficient();
         uint256 coinBal = _coinReservesView();
-        coinOut = (coinBal * amount) / supply;
+        flipOut = (coinBal * amount) / supply;
     }
 
     /// @notice Preview ETH/stETH output for burning a given amount of DGVE shares
@@ -927,12 +927,12 @@ contract DegenerusVault {
         claimable = claimable <= 1 ? 0 : claimable - 1;
     }
 
-    /// @dev View helper for BURNIE reserves.
-    /// @return mainReserve DGVB claimable reserve (allowance + vault balance + claimable)
+    /// @dev View helper for FLIP reserves.
+    /// @return mainReserve DGVF claimable reserve (allowance + vault balance + claimable)
     function _coinReservesView() private view returns (uint256 mainReserve) {
-        uint256 allowance = coinToken.vaultMintAllowance();
+        uint256 allowance = flipToken.vaultMintAllowance();
         mainReserve = allowance;
-        uint256 vaultBal = coinToken.balanceOf(address(this));
+        uint256 vaultBal = flipToken.balanceOf(address(this));
         uint256 claimable = coinflipPlayer.previewClaimCoinflips(address(this));
         unchecked {
             mainReserve += vaultBal + claimable;

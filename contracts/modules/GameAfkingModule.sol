@@ -61,14 +61,14 @@ interface IQuestCompletionView {
  *      afking-stamp open leg, driven by `_subOpenCursor`, materializing each box
  *      from its frozen stamp via a delegatecall to the LootboxModule's
  *      `resolveAfkingBox` — the FROZEN-INPUT twin of `resolveLootboxDirect`) and
- *      the ROUTER (`mintBurnie`/`autoOpen`, the one-category early-return
+ *      the ROUTER (`mintFlip`/`autoOpen`, the one-category early-return
  *      dispatch). The open consumes the stamp the PART-A process STAGE produces.
  * @dev PLACE-02 bounty: the buy/process bounty FOLDS INTO the advance bounty
- *      (`mintBurnie`'s advance leg pays `2×·mult`, scaling the AdvanceModule's
+ *      (`mintFlip`'s advance leg pays `2×·mult`, scaling the AdvanceModule's
  *      day-epoch stall `mult` 2×/4×/6× — the process STAGE rides it); the OPEN
  *      stays a NORMAL post-RNG `OPEN_BATCH`-style router category with the
  *      `OPEN_KNEE` work-scaled pro-rate (farm-by-splitting resistant). Payment is
- *      the deferred `creditFlip` BURNIE flip-credit (never a transfer / mintForGame).
+ *      the deferred `creditFlip` FLIP flip-credit (never a transfer / mintForGame).
  *
  * @custom:invariant No reentrancy guard — strict CEI everywhere; the module is
  *                   never a payee. The two-tier funding-skip exemption keys on
@@ -99,7 +99,7 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
     /// @dev subscribe would grow the active subscriber set past the uint16 cursor
     ///      cap (65,535). NEW-subscriber path only — re-subscribe never trips it.
     error SubscriberCapReached();
-    /// @dev mintBurnie() found all router categories empty — the clean no-work signal
+    /// @dev mintFlip() found all router categories empty — the clean no-work signal
     ///      (ROUTER-06; the unbounded-scan-free early-return on no pending work).
     error NoWork();
     /// @dev subscribe (upsert) where the subscriber's live pass horizon does not reach
@@ -222,8 +222,8 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
 
     /// @dev Slot-0 quest completion reward — mirrors `DegenerusQuests.QUEST_SLOT0_REWARD`
     ///      (a private constant not visible cross-contract). Each delivered afking buy accrues
-    ///      `QUEST_SLOT0_REWARD` (whole BURNIE) into the sub's claimable `pendingBurnie`, pulled
-    ///      via `claimAfkingBurnie`. Only values the BURNIE mint, off the solvency path.
+    ///      `QUEST_SLOT0_REWARD` (whole FLIP) into the sub's claimable `pendingFlip`, pulled
+    ///      via `claimAfkingFlip`. Only values the FLIP mint, off the solvency path.
     uint256 internal constant QUEST_SLOT0_REWARD = 100 ether;
 
     /// @dev Prize-pool routing splits for the batched afking buy, mirroring the canonical
@@ -238,7 +238,7 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
     ------------------------------------------------------------------*/
     /// @dev ETH-equivalent advance/open-bounty target per unit of work (in ETH wei).
     ///      A frozen constant (a module cannot hold a deploy-time immutable in the
-    ///      Game's storage context). Sized so the BURNIE bounty's ETH-value reimburses
+    ///      Game's storage context). Sized so the FLIP bounty's ETH-value reimburses
     ///      the crank's gas at the ~0.5-gwei reference: the advance leg (unit·2·mult)
     ///      covers a heavy multi-million-gas advance, the open leg (unit·k/5) a
     ///      ~74k/box drain. The reward is an illiquid coinflip credit, so cranking is
@@ -246,7 +246,7 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
     uint256 internal constant BOUNTY_ETH_TARGET = 885_000_000_000_000;
 
     /// @dev Advance reward ratio (2× · mult). The process STAGE rides the advance
-    ///      bounty (PLACE-02 §6): mintBurnie's advance leg pays `unit · 2 · mult`, scaling
+    ///      bounty (PLACE-02 §6): mintFlip's advance leg pays `unit · 2 · mult`, scaling
     ///      the AdvanceModule's day-epoch stall `mult` (1/2/4/6, AdvanceModule:226-242).
     uint256 internal constant ADVANCE_RATIO_NUM = 2;
 
@@ -282,7 +282,7 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
     ///      NEVER re-checked at process-time.
     /// @dev AFSUB-02 pass-gating: subscribe encodes the subscriber's current pass
     ///      horizon (in-context `_passHorizonOf(subscriber)`) into
-    ///      `Sub.validThroughLevel` with a SINGLE read. No BURNIE charge — the
+    ///      `Sub.validThroughLevel` with a SINGLE read. No FLIP charge — the
     ///      v50.0 pass-gated model. The per-iter process validity check is the
     ///      cheap stored-field compare `level <= sub.validThroughLevel`; at the
     ///      crossing the pass is re-read EXACTLY ONCE and refresh-or-evicted.
@@ -364,9 +364,9 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
             Sub storage c = _subOf[subscriber];
             // Auto-claim BEFORE clearing: the next advance-driven reclaim deletes the
             // slot (wiping both accumulators), so leaving them for a later pull would
-            // lose them in that race. Pay the sub its own pendingBurnie (CEI: zero
+            // lose them in that race. Pay the sub its own pendingFlip (CEI: zero
             // first), then settle the upline affiliate tree, THEN finalize + tombstone.
-            _settlePendingBurnie(subscriber, c);
+            _settlePendingFlip(subscriber, c);
             // Drain affiliateBase to the 75/20/5 upline tree (50/50 VAULT/DGNRS if no
             // referrer). The affiliate consumes the base via the AFFILIATE-only
             // drainAffiliateBase callback, so this must run while the slot still holds it.
@@ -403,9 +403,9 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
         // new / cancelled / evicted (afkingActive cleared by a prior finalize) — a fresh run.
         bool wasActive = s.dailyQuantity != 0;
 
-        // Settle the prior run's pendingBurnie under its CURRENT flag + dailyQuantity before the
+        // Settle the prior run's pendingFlip under its CURRENT flag + dailyQuantity before the
         // overwrite below, so the presale-box credit keys on the state in force during accrual.
-        if (wasActive) _settlePendingBurnie(subscriber, s);
+        if (wasActive) _settlePendingFlip(subscriber, s);
 
         s.dailyQuantity = dailyQuantity;
         if (drainGameCreditFirst) s.flags |= FLAG_DRAIN_FIRST;
@@ -758,7 +758,7 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
     ///      tandem, fail-loud on underflow — a debit can never exceed afkingFunding[src] ≤ the
     ///      claimablePool reservation, so a revert here means solvency is already violated and
     ///      must propagate), materializes the buy per mode, accrues the day's affiliate base + the
-    ///      slot-0 pendingBurnie reward, advances the compute-on-read streak markers (gap-resuming
+    ///      slot-0 pendingFlip reward, advances the compute-on-read streak markers (gap-resuming
     ///      a fresh run from zero if the last funded day is older than yesterday), and sets the
     ///      success marker. The frozen activity score reads the COMPUTE-ON-READ streak off the Sub
     ///      slot — no DegenerusQuests STATICCALL on the hot path. boons OFF ⇒ amount == spend.
@@ -848,8 +848,8 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
 
             _queueTicketsScaled(player, targetLevel, adjustedQty, false);
 
-            // 10%/20% ticket buyer-bonus → claimable pendingBurnie (pulled via
-            // claimAfkingBurnie). Uses the pre-bonus `amount`; whole BURNIE with the 100M clamp.
+            // 10%/20% ticket buyer-bonus → claimable pendingFlip (pulled via
+            // claimAfkingFlip). Uses the pre-bonus `amount`; whole FLIP with the 100M clamp.
             uint256 coinCost = (amount * (PRICE_COIN_UNIT / 4)) / TICKET_SCALE;
             uint256 bonusBase = coinCost / 10; // flat 10%
             if (amount >= 10 * 4 * TICKET_SCALE) {
@@ -857,9 +857,9 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
             }
             uint256 bonusWhole = bonusBase / 1 ether;
             if (bonusWhole != 0) {
-                uint256 newOwed = uint256(sub.pendingBurnie) + bonusWhole;
+                uint256 newOwed = uint256(sub.pendingFlip) + bonusWhole;
                 if (newOwed > 100_000_000) newOwed = 100_000_000;
-                sub.pendingBurnie = uint32(newOwed);
+                sub.pendingFlip = uint32(newOwed);
             }
 
             // No pending box: keep lastOpenedDay == lastAutoBoughtDay so the no-orphan guard and
@@ -868,7 +868,7 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
         } else {
             // Lootbox box. The per-buy manual side-effects (handlePurchase, affiliate ×2, the
             // per-buy creditFlip) are deferred to the in-slot accrue (affiliate pulled via
-            // drainAffiliateBase; the slot-0 reward into pendingBurnie). The frozen score
+            // drainAffiliateBase; the slot-0 reward into pendingFlip). The frozen score
             // (the EV input at open, off the compute-on-read streak — no STATICCALL) is computed
             // once for either box shape.
             uint256 activityScore = _playerActivityScore(
@@ -908,23 +908,23 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
 
         // Mode-agnostic accrue — one warm in-slot write, zero cross-contract calls:
         //   • affiliate base: flat 7% of the full wei spend (ethValue + claimableUse = the cost in
-        //     both modes; the dual-unit `amount` is entry-units in ticket mode), whole BURNIE, 100M clamp;
-        //   • slot-0 quest reward: QUEST_SLOT0_REWARD (whole BURNIE) into the claimable pendingBurnie;
+        //     both modes; the dual-unit `amount` is entry-units in ticket mode), whole FLIP, 100M clamp;
+        //   • slot-0 quest reward: QUEST_SLOT0_REWARD (whole FLIP) into the claimable pendingFlip;
         //   • compute-on-read streak markers: gap-resume a fresh run from zero if the last funded
         //     day is older than yesterday (matching the decay-on-read), then advance the
         //     funded-day high-water mark afkCoveredThroughDay.
         {
-            uint256 base = ((_ethToBurnie(ethValue + claimableUse, mp) * 7) / 100) / 1 ether;
+            uint256 base = ((_ethToFlip(ethValue + claimableUse, mp) * 7) / 100) / 1 ether;
             if (base != 0) {
                 uint256 newBase = uint256(sub.affiliateBase) + base;
                 if (newBase > 100_000_000) newBase = 100_000_000;
                 sub.affiliateBase = uint32(newBase);
             }
             {
-                uint256 newOwed = uint256(sub.pendingBurnie) +
+                uint256 newOwed = uint256(sub.pendingFlip) +
                     (QUEST_SLOT0_REWARD / 1 ether);
                 if (newOwed > 100_000_000) newOwed = 100_000_000;
-                sub.pendingBurnie = uint32(newOwed);
+                sub.pendingFlip = uint32(newOwed);
             }
             if (sub.afkCoveredThroughDay + 1 < processDay) {
                 sub.afkingStartDay = uint24(processDay);
@@ -1080,23 +1080,23 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
         _setStreakBase(sub, 0);
     }
 
-    /// @dev Settle a sub's accrued `pendingBurnie` (the per-delivered-day slot-0 quest
+    /// @dev Settle a sub's accrued `pendingFlip` (the per-delivered-day slot-0 quest
     ///      reward + the ticket buyer-bonus): zero it FIRST (CEI — before the external
     ///      credit, so a re-entrant claim finds 0), grant the presale-box credit while
-    ///      presale is open (the slot-0 BURNIE owed approximates the afking mint spend;
+    ///      presale is open (the slot-0 FLIP owed approximates the afking mint spend;
     ///      25% of that spend is the manual buyer's presale-box credit; a ticket sub's
     ///      owed also carries the quantity-scaling buyer-bonus on top of the flat slot-0,
     ///      overstating the mint spend — divide the ticket grant back toward it: /3 for
     ///      heavy buyers (dailyQuantity >= 10, where the bonus doubles to 20%), else /2),
-    ///      then pay the whole-BURNIE owed in ONE `creditFlip`. Always credits the sub,
+    ///      then pay the whole-FLIP owed in ONE `creditFlip`. Always credits the sub,
     ///      never the caller; no-op at owed == 0. Keyed on the record's CURRENT flags +
     ///      dailyQuantity, so the credit reflects the state in force during accrual.
     /// @param player The subscriber credited.
-    /// @param s The subscriber's record (storage ref — pendingBurnie zeroed here).
-    function _settlePendingBurnie(address player, Sub storage s) private {
-        uint256 owed = uint256(s.pendingBurnie); // whole BURNIE
+    /// @param s The subscriber's record (storage ref — pendingFlip zeroed here).
+    function _settlePendingFlip(address player, Sub storage s) private {
+        uint256 owed = uint256(s.pendingFlip); // whole FLIP
         if (owed == 0) return;
-        s.pendingBurnie = 0;
+        s.pendingFlip = 0;
         if (!presaleOver) {
             uint256 credit = (owed * 0.0025 ether) / 100;
             if ((s.flags & FLAG_USE_TICKETS) != 0)
@@ -1198,7 +1198,7 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
             // Positioned BEFORE the cancel-reclaim so it dominates ALL FOUR orphan paths
             // (re-stamp / cancel-reclaim / pass-evict / funding-kill). SKIP, not
             // force-open (LOCKED §3): keeps the heavy open out of the gas-critical advance
-            // chain; the BURNIE open-bounty keeps opens prompt so it ~never skips a buy. No
+            // chain; the FLIP open-bounty keeps opens prompt so it ~never skips a buy. No
             // double-charge — the debit is downstream of this guard. Composes with the
             // same-day idempotency skip at (1) (lastAutoBoughtDay >= processDay), which
             // still handles the chunked-same-day case.
@@ -1264,7 +1264,7 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
                     // EVICT — finalize the afking streak (hand it back), then delete the slot
                     // and swap-pop out of the set (no cursor advance after the swap-pop). The
                     // finalize is the EVICT_WEIGHT cross-call. A got-kicked sub forfeits both
-                    // accumulators: deleting _subOf wipes pendingBurnie / affiliateBase so
+                    // accumulators: deleting _subOf wipes pendingFlip / affiliateBase so
                     // nothing survives claimable out-of-set.
                     _finalizeAfking(player, sub, processDay);
                     delete _subOf[player];
@@ -1327,7 +1327,7 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
                 // Funding-kill of a NORMAL underfunded sub — finalize the afking streak (hand it
                 // back; its decay-on-read zeroes only if a full prior day was missed with NO
                 // valid mint, afking OR manual), then delete the slot + swap-pop. A got-kicked
-                // sub forfeits both accumulators: deleting _subOf wipes pendingBurnie /
+                // sub forfeits both accumulators: deleting _subOf wipes pendingFlip /
                 // affiliateBase so nothing survives claimable out-of-set.
                 _finalizeAfking(player, sub, processDay);
                 delete _subOf[player];
@@ -1347,7 +1347,7 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
             // revert-free by construction (no try/catch) by the shared `_deliverAfkingBuy`:
             // debit `afkingFunding[src]` (claimablePool in tandem, fail-loud on underflow),
             // stamp the lootbox box / queue the tickets, accrue the day's affiliate + the
-            // pendingBurnie reward, advance the compute-on-read streak markers (gap-resuming a
+            // pendingFlip reward, advance the compute-on-read streak markers (gap-resuming a
             // fresh run if a day was missed), and set the success marker. A lootbox buy is weight
             // SUB_STAGE_LOOTBOX_WEIGHT; a ticket buy SUB_STAGE_TICKET_WEIGHT (the cold ticketQueue
             // push makes it ~2x a lootbox), so the budget binds on the true per-buy cost.
@@ -1559,7 +1559,7 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
     ///      [GAME self-call / LootboxModule delegatecall / COINFLIP], player value flows
     ///      through the game's claimable pull ledger, and the bounty is minted flip-credit
     ///      — never an ETH push the router receives). The legs return raw counts/mult and
-    ///      NEVER self-credit; only `mintBurnie` credits, ONCE, CEI-last after the
+    ///      NEVER self-credit; only `mintFlip` credits, ONCE, CEI-last after the
     ///      one-category early-return.
     /// @dev PLACE-02 bounty: the buy/process bounty FOLDS INTO the advance bounty — the
     ///      process STAGE runs inside `advanceGame` (the required path, 349-05), so the
@@ -1567,7 +1567,7 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
     ///      AdvanceModule's day-epoch stall `mult` (1/2/4/6, :226-242). The OPEN leg pays
     ///      the `OPEN_KNEE` work-scaled pro-rate (pay for work done, farm-by-splitting
     ///      resistant). `mult == 0` (the gameover advance path) pays no bounty.
-    function mintBurnie() external {
+    function mintFlip() external {
         uint256 bountyEarned;
 
         // (1) advance — highest priority, liveness-critical (TRUE regardless of rngLock).
@@ -1618,7 +1618,7 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
 
     /// @notice Drain up to `count` ready afking boxes (walks `_subOpenCursor`); returns the
     ///         number opened so the caller can budget the remaining per-tx work. Unrewarded —
-    ///         only mintBurnie() credits. Reached via the Game's openBoxes() liveness valve
+    ///         only mintFlip() credits. Reached via the Game's openBoxes() liveness valve
     ///         (a distinct selector from the Game's human-box autoOpen(uint256), so the two
     ///         do not collide; calling this module contract directly hits empty storage).
     /// @param count Max afking boxes to open this call (0 = the default OPEN_BATCH).
@@ -1648,7 +1648,7 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
         return false;
     }
 
-    /// @dev In-context mint price (the bounty's ETH→BURNIE conversion divisor). Mirrors
+    /// @dev In-context mint price (the bounty's ETH→FLIP conversion divisor). Mirrors
     ///      the Game's `mintPrice` (:2501) — the price for the active ticket level —
     ///      read in-context so the bounty math needs no external/self call. Single use
     ///      site (the bounty `unit`); never an open-time seed input (FREEZE-safe).
@@ -1656,13 +1656,13 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
         return PriceLookupLib.priceForLevel(_activeTicketLevel());
     }
 
-    /// @dev ETH-denominated spend → BURNIE base units at the buy-context ticket price —
+    /// @dev ETH-denominated spend → FLIP base units at the buy-context ticket price —
     ///      the VALUATION BASIS for the lootbox-branch affiliate routing (DESIGN §3:
-    ///      affiliate + quest rewards are BURNIE flip-credit, never an ETH cut). A faithful
-    ///      copy of MintModule._ethToBurnieValue (:1669-1675); PRICE_COIN_UNIT (= 1000 ETH)
+    ///      affiliate + quest rewards are FLIP flip-credit, never an ETH cut). A faithful
+    ///      copy of MintModule._ethToFlipValue (:1669-1675); PRICE_COIN_UNIT (= 1000 ETH)
     ///      is the inherited Storage constant already used at the bounty unit (:913). Pure —
     ///      no ETH moves, no state.
-    function _ethToBurnie(
+    function _ethToFlip(
         uint256 amountWei,
         uint256 priceWei
     ) private pure returns (uint256) {
@@ -1671,26 +1671,26 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
     }
 
     /*------------------------------------------------------------------
-                                  BURNIE claim
+                                  FLIP claim
     ------------------------------------------------------------------*/
-    /// @notice Permissionless BURNIE claim — pays each sub its accrued `pendingBurnie` (the
+    /// @notice Permissionless FLIP claim — pays each sub its accrued `pendingFlip` (the
     ///         per-delivered-day slot-0 quest reward + the ticket buyer-bonus) in ONE
     ///         `creditFlip` and zeroes it, so a re-claim finds 0. Always credits the sub, never
     ///         the caller; callable anytime — the reward is already earned per delivered day,
     ///         so there is no settle-timing or claim-timing edge to exploit. Off the solvency
-    ///         path: a BURNIE flip-credit, never an ETH cut.
-    /// @param subs The subscribers to pay (each credited its own accrued `pendingBurnie`).
-    function claimAfkingBurnie(address[] calldata subs) external {
+    ///         path: a FLIP flip-credit, never an ETH cut.
+    /// @param subs The subscribers to pay (each credited its own accrued `pendingFlip`).
+    function claimAfkingFlip(address[] calldata subs) external {
         uint256 len = subs.length;
         // Presale-box eligibility for afking buyers, materialized at claim (no advance-path cost).
-        // The slot-0 BURNIE owed approximates the afking mint spend (100 whole BURNIE == one
+        // The slot-0 FLIP owed approximates the afking mint spend (100 whole FLIP == one
         // 0.01-ETH early-level buy, the price at the levels presale spans), and 25% of that spend is
         // the manual buyer's presale-box credit. Granting it off the DRAINED `owed` counts each
-        // BURNIE exactly once (cover-buys included — they accrue slot-0 like any buy), so there is no
+        // FLIP exactly once (cover-buys included — they accrue slot-0 like any buy), so there is no
         // double-count. Only while presale is open; the credit is unspendable once presaleOver.
         for (uint256 i; i < len; ) {
             address player = subs[i];
-            _settlePendingBurnie(player, _subOf[player]);
+            _settlePendingFlip(player, _subOf[player]);
             unchecked {
                 ++i;
             }
@@ -1701,7 +1701,7 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
                             Affiliate base accessor
     ------------------------------------------------------------------*/
     /// @notice Affiliate-only atomic read-and-zero of a sub's accrued `affiliateBase` (the
-    ///         running unclaimed flat-7% affiliate balance, whole BURNIE), which the affiliate
+    ///         running unclaimed flat-7% affiliate balance, whole FLIP), which the affiliate
     ///         `claim` consumes.
     /// @dev The read-and-zero happen together at the storage owner, so a duplicate sub in the
     ///      affiliate `claim` array drains 0 the second time — the key guard against
@@ -1710,7 +1710,7 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
     ///      so a non-affiliate caller can never redirect a sub's base to a wrong recipient.
     ///      Runs in the Game's storage context; `msg.sender` is the original caller.
     /// @param sub The subscriber whose affiliate base is drained.
-    /// @return base The drained whole-BURNIE affiliate base (0 if already drained / never accrued).
+    /// @return base The drained whole-FLIP affiliate base (0 if already drained / never accrued).
     function drainAffiliateBase(address sub) external returns (uint256 base) {
         if (msg.sender != ContractAddresses.AFFILIATE) revert NotApproved();
         Sub storage s = _subOf[sub];
@@ -1769,7 +1769,7 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
         _applyCurseStack(player);
     }
 
-    /// @notice Permissionless paid cure: clear `target`'s cashout/smite curse for 100 BURNIE.
+    /// @notice Permissionless paid cure: clear `target`'s cashout/smite curse for 100 FLIP.
     /// @dev No _resolvePlayer — clearing another player's curse is purely beneficial. Reverts
     ///      when the target already has no curse so the caller never wastes the burn.
     function decurse(address target) external {
@@ -1782,7 +1782,7 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
     }
 
     /// @notice A deity (soulbound pass owner) adds a saturating +2 curse stack to `smitee` for
-    ///         200 BURNIE. Validated before the burn: active afkers are immune (the sole
+    ///         200 FLIP. Validated before the burn: active afkers are immune (the sole
     ///         immunity), the smite path caps at a 10-point (5-stack) ceiling below the 20-point
     ///         counter cap, and the protocol addresses are skipped (the redemption-snapshot
     ///         reason). Self-smite is allowed — harmless, since the counter only lowers the score.

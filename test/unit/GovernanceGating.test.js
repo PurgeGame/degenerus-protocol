@@ -29,7 +29,7 @@ const DAY_SECONDS = 86400;
  * Derive the DGVE (ethShare) token address from the vault address.
  *
  * The DegenerusVault constructor deploys two child contracts via `new`:
- *   1. coinShare = new DegenerusVaultShare(...) at vault nonce 1
+ *   1. flipShare = new DegenerusVaultShare(...) at vault nonce 1
  *   2. ethShare  = new DegenerusVaultShare(...) at vault nonce 2
  *
  * Since `ethShare` is private immutable, we compute its CREATE address.
@@ -446,7 +446,7 @@ describe("Governance & Gating (Phase 43)", function () {
   });
 
   // ===========================================================================
-  // GATE-01 through GATE-04: advanceGame liveness + the mintBurnie advance-bounty
+  // GATE-01 through GATE-04: advanceGame liveness + the mintFlip advance-bounty
   // SOFT pay-gate (357 advance-incentive redesign, HEAD'' 61315ecd)
   // ===========================================================================
   //
@@ -459,7 +459,7 @@ describe("Governance & Gating (Phase 43)", function () {
   //
   // The must-mint tier ladder moved to _bountyEligible(address) in
   // DegenerusGameMintStreakUtils, surfaced as the view game.bountyEligible(addr).
-  // It is now a SOFT PAY gate: mintBurnie() reads bountyEligible(msg.sender)
+  // It is now a SOFT PAY gate: mintFlip() reads bountyEligible(msg.sender)
   // BEFORE the self-call and pays the advance bounty only when mult>0 && eligible.
   // The advance WORK is always permitted regardless of eligibility.
   //

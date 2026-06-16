@@ -4,7 +4,7 @@ pragma solidity ^0.8.26;
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {DegenerusTraitUtils} from "../../contracts/DegenerusTraitUtils.sol";
 import {Vm} from "forge-std/Vm.sol";
-import {StakedDegenerusStonk} from "../../contracts/StakedDegenerusStonk.sol";
+import {sDGNRS} from "../../contracts/sDGNRS.sol";
 import {GameTimeLib} from "../../contracts/libraries/GameTimeLib.sol";
 
 /// @title DegeneretteHeroScoreTest — Proves the v48 Degenerette hero 2-point
@@ -35,11 +35,11 @@ contract DegeneretteHeroScoreTest is DeployProtocol {
     bytes1 private constant QUICK_PLAY_SALT = 0x51; // 'Q'
 
     uint8 private constant CURRENCY_ETH = 0;
-    uint8 private constant CURRENCY_BURNIE = 1;
+    uint8 private constant CURRENCY_FLIP = 1;
     uint8 private constant CURRENCY_WWXRP = 3;
 
     uint256 private constant MIN_BET_ETH = 5 ether / 1000;
-    uint256 private constant MIN_BET_BURNIE = 100 ether;
+    uint256 private constant MIN_BET_FLIP = 100 ether;
     uint256 private constant MIN_BET_WWXRP = 1 ether;
 
     /// @dev DGNRS award bps tiers (DegeneretteModule:205-207): S=7/8/9.
@@ -139,12 +139,12 @@ contract DegeneretteHeroScoreTest is DeployProtocol {
             20_916_435
         ];
 
-        // Use BURNIE currency: no ETH/WWXRP bonus uplift (baseBonus stays 0 for
-        // CURRENCY_BURNIE), no ETH pool cap, no DGNRS award — so the spin payout is
+        // Use FLIP currency: no ETH/WWXRP bonus uplift (baseBonus stays 0 for
+        // CURRENCY_FLIP), no ETH pool cap, no DGNRS award — so the spin payout is
         // cleanly betAmount * basePayout * roiBps / 1e6, and basePayout for S=9 is
         // the FINAL S9 constant for the ticket's N. This isolates the relabel value.
-        uint128 perTicket = 1_000_000; // small BURNIE-unit bet; >= MIN_BET handled via funding
-        // BURNIE min bet is 100 ether; use that scale to satisfy _validateMinBet.
+        uint128 perTicket = 1_000_000; // small FLIP-unit bet; >= MIN_BET handled via funding
+        // FLIP min bet is 100 ether; use that scale to satisfy _validateMinBet.
         perTicket = 100 ether;
 
         for (uint8 N = 0; N < 5; ++N) {
@@ -156,11 +156,11 @@ contract DegeneretteHeroScoreTest is DeployProtocol {
             uint8 heroQuadrant = 0;
 
             (uint8 s, uint256 payout, uint256 roiBps) =
-                _resolveBurnieAndReadScore(index, word, playerTicket, heroQuadrant, perTicket);
+                _resolveFlipAndReadScore(index, word, playerTicket, heroQuadrant, perTicket);
             assertEq(s, 9, "self-match must score the S=9 jackpot");
 
             // payout = perTicket * basePayout * roiBps / 1e6  →  basePayout =
-            // payout * 1e6 / (perTicket * roiBps). Exact integer (no cap/bonus on BURNIE).
+            // payout * 1e6 / (perTicket * roiBps). Exact integer (no cap/bonus on FLIP).
             uint256 basePayout = (payout * 1_000_000) / (uint256(perTicket) * roiBps);
             assertEq(
                 basePayout,
@@ -298,7 +298,7 @@ contract DegeneretteHeroScoreTest is DeployProtocol {
     /// @notice Resolve a set of N bets in ONE resolveBets call, then resolve the
     ///         SAME N bets one-at-a-time (fresh state via snapshot, identical VRF
     ///         words + tickets), and assert the cumulative claimable, claimablePool,
-    ///         BURNIE/WWXRP mint deltas, and the per-bet FullTicketResult events are
+    ///         FLIP/WWXRP mint deltas, and the per-bet FullTicketResult events are
     ///         byte-identical between the batched and per-bet paths. The cross-bet
     ///         `acc` flush must be same-results (the HERO-06 DGAS constraint — the
     ///         rescale changed payout SHAPE only, never the aggregation).
@@ -311,15 +311,15 @@ contract DegeneretteHeroScoreTest is DeployProtocol {
         uint256 word = uint256(keccak256("hero06_dgas_word"));
         uint32 ticket = _resultTicketForSpin(index, word, 0); // 8/8 self-match on spin 0
 
-        // Mixed-currency batch: ETH(4 spins) + BURNIE(3) + WWXRP(2), same ticket.
+        // Mixed-currency batch: ETH(4 spins) + FLIP(3) + WWXRP(2), same ticket.
         uint128 ethPerTicket = 0.01 ether;
-        uint128 burniePerTicket = 200 ether;
+        uint128 flipPerTicket = 200 ether;
         uint128 wwxrpPerTicket = 2 ether;
-        _fundBurnie(player, uint256(burniePerTicket) * 3 + 1 ether);
+        _fundFlip(player, uint256(flipPerTicket) * 3 + 1 ether);
         _fundWwxrp(player, uint256(wwxrpPerTicket) * 2 + 1 ether);
 
         uint64 ethBet = _placeBet(CURRENCY_ETH, ethPerTicket, 4, ticket, 0);
-        uint64 burnieBet = _placeBet(CURRENCY_BURNIE, burniePerTicket, 3, ticket, 1);
+        uint64 flipBet = _placeBet(CURRENCY_FLIP, flipPerTicket, 3, ticket, 1);
         uint64 wwxrpBet = _placeBet(CURRENCY_WWXRP, wwxrpPerTicket, 2, ticket, 2);
         _injectLootboxRngWord(index, word);
 
@@ -328,12 +328,12 @@ contract DegeneretteHeroScoreTest is DeployProtocol {
         // --- Run A: ONE resolveBets call (the cross-bet batch) ---
         uint256 preClaimableA = game.claimableWinningsOf(player);
         uint256 preClaimablePoolA = _readClaimablePool();
-        uint256 preBurnieA = coin.balanceOf(player);
+        uint256 preFlipA = coin.balanceOf(player);
         uint256 preWwxrpA = wwxrp.balanceOf(player);
 
         uint64[] memory all = new uint64[](3);
         all[0] = ethBet;
-        all[1] = burnieBet;
+        all[1] = flipBet;
         all[2] = wwxrpBet;
         vm.recordLogs();
         vm.prank(player);
@@ -342,40 +342,40 @@ contract DegeneretteHeroScoreTest is DeployProtocol {
 
         uint256 claimableDeltaA = game.claimableWinningsOf(player) - preClaimableA;
         uint256 claimablePoolDeltaA = _readClaimablePool() - preClaimablePoolA;
-        uint256 burnieDeltaA = coin.balanceOf(player) - preBurnieA;
+        uint256 flipDeltaA = coin.balanceOf(player) - preFlipA;
         uint256 wwxrpDeltaA = wwxrp.balanceOf(player) - preWwxrpA;
 
         // --- Run B: revert, resolve the SAME bets one-at-a-time ---
         vm.revertToState(snap);
         uint256 preClaimableB = game.claimableWinningsOf(player);
         uint256 preClaimablePoolB = _readClaimablePool();
-        uint256 preBurnieB = coin.balanceOf(player);
+        uint256 preFlipB = coin.balanceOf(player);
         uint256 preWwxrpB = wwxrp.balanceOf(player);
 
         vm.recordLogs();
         vm.prank(player);
         game.resolveDegeneretteBets(address(0), _one(ethBet));
         vm.prank(player);
-        game.resolveDegeneretteBets(address(0), _one(burnieBet));
+        game.resolveDegeneretteBets(address(0), _one(flipBet));
         vm.prank(player);
         game.resolveDegeneretteBets(address(0), _one(wwxrpBet));
         bytes32 eventsDigestB = _fullTicketResultDigest();
 
         uint256 claimableDeltaB = game.claimableWinningsOf(player) - preClaimableB;
         uint256 claimablePoolDeltaB = _readClaimablePool() - preClaimablePoolB;
-        uint256 burnieDeltaB = coin.balanceOf(player) - preBurnieB;
+        uint256 flipDeltaB = coin.balanceOf(player) - preFlipB;
         uint256 wwxrpDeltaB = wwxrp.balanceOf(player) - preWwxrpB;
 
         // Byte-identical assertions (HERO-06 DGAS same-results).
         assertEq(claimableDeltaA, claimableDeltaB, "DGAS: batched ETH claimable == per-bet");
         assertEq(claimablePoolDeltaA, claimablePoolDeltaB, "DGAS: batched claimablePool == per-bet");
-        assertEq(burnieDeltaA, burnieDeltaB, "DGAS: batched BURNIE mint == per-bet");
+        assertEq(flipDeltaA, flipDeltaB, "DGAS: batched FLIP mint == per-bet");
         assertEq(wwxrpDeltaA, wwxrpDeltaB, "DGAS: batched WWXRP mint == per-bet");
         assertEq(eventsDigestA, eventsDigestB, "DGAS: per-spin FullTicketResult stream byte-identical");
 
         // Non-vacuity: the rescaled payouts actually exercised each currency.
         assertGt(claimableDeltaA, 0, "non-vacuity: ETH payout exercised");
-        assertGt(burnieDeltaA, 0, "non-vacuity: BURNIE payout exercised");
+        assertGt(flipDeltaA, 0, "non-vacuity: FLIP payout exercised");
         assertGt(wwxrpDeltaA, 0, "non-vacuity: WWXRP payout exercised");
     }
 
@@ -578,23 +578,23 @@ contract DegeneretteHeroScoreTest is DeployProtocol {
         _injectLootboxRngWord(index, 0);
     }
 
-    /// @dev Resolve a BURNIE single-spin bet and return (score, payout, roiBps).
-    ///      BURNIE has no ETH/WWXRP bonus uplift, no pool cap, no DGNRS award, so
+    /// @dev Resolve a FLIP single-spin bet and return (score, payout, roiBps).
+    ///      FLIP has no ETH/WWXRP bonus uplift, no pool cap, no DGNRS award, so
     ///      payout = perTicket * basePayout * roiBps / 1e6 exactly — isolating the
     ///      basePayout (used to anchor the S=9 jackpot relabel constant). roiBps is
     ///      decoded from the bet's stored activityScore via the ROI curve mirror.
-    function _resolveBurnieAndReadScore(
+    function _resolveFlipAndReadScore(
         uint48 index,
         uint256 word,
         uint32 customTicket,
         uint8 heroQuadrant,
         uint128 perTicket
     ) internal returns (uint8 s, uint256 payout, uint256 roiBps) {
-        _fundBurnie(player, uint256(perTicket) + 1 ether);
+        _fundFlip(player, uint256(perTicket) + 1 ether);
         vm.prank(player);
         game.placeDegeneretteBet(
             address(0),
-            CURRENCY_BURNIE,
+            CURRENCY_FLIP,
             perTicket,
             1,
             customTicket,
@@ -626,13 +626,13 @@ contract DegeneretteHeroScoreTest is DeployProtocol {
         uint64 betId = _placeEthBet(perTicket, 1, customTicket, heroQuadrant);
         _injectLootboxRngWord(index, word);
 
-        poolBefore = sdgnrs.poolBalance(StakedDegenerusStonk.Pool.Reward);
+        poolBefore = sdgnrs.poolBalance(sDGNRS.Pool.Reward);
 
         vm.recordLogs();
         vm.prank(player);
         game.resolveDegeneretteBets(address(0), _one(betId));
         (s, ) = _firstSpinScoreAndPayout();
-        uint256 poolAfter = sdgnrs.poolBalance(StakedDegenerusStonk.Pool.Reward);
+        uint256 poolAfter = sdgnrs.poolBalance(sDGNRS.Pool.Reward);
         award = poolBefore - poolAfter;
 
         _injectLootboxRngWord(index, 0);
@@ -644,8 +644,8 @@ contract DegeneretteHeroScoreTest is DeployProtocol {
         a[0] = betId;
     }
 
-    /// @dev Mint BURNIE to `who` via the GAME-gated mintForGame.
-    function _fundBurnie(address who, uint256 amount) internal {
+    /// @dev Mint FLIP to `who` via the GAME-gated mintForGame.
+    function _fundFlip(address who, uint256 amount) internal {
         vm.prank(address(game));
         coin.mintForGame(who, amount);
     }

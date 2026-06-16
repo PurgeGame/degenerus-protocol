@@ -38,9 +38,9 @@ describe("DegenerusVault", function () {
       expect(await vault.decimals()).to.equal(18n);
     });
 
-    it("DGVB share token has correct name and symbol", async function () {
+    it("DGVF share token has correct name and symbol", async function () {
       const { vault } = await loadFixture(deployFullProtocol);
-      // The DGVB token is deployed by the vault constructor; we can't directly get it
+      // The DGVF token is deployed by the vault constructor; we can't directly get it
       // but we can test via previewCoin (which will return 0 with zero supply balance)
       // Just verify vault is deployed correctly
       expect(await vault.getAddress()).to.be.a("string");
@@ -148,7 +148,7 @@ describe("DegenerusVault", function () {
   });
 
   // ---------------------------------------------------------------------------
-  // 4. burnCoin (DGVB redemption)
+  // 4. burnCoin (DGVF redemption)
   // ---------------------------------------------------------------------------
   describe("burnCoin", function () {
     it("reverts when amount is zero", async function () {
@@ -158,19 +158,19 @@ describe("DegenerusVault", function () {
       ).to.be.revertedWithCustomError(vault, "Insufficient");
     });
 
-    it("reverts when player has no DGVB shares", async function () {
+    it("reverts when player has no DGVF shares", async function () {
       const { vault, alice } = await loadFixture(deployFullProtocol);
       await expect(
         vault.connect(alice).burnCoin(eth("1"))
       ).to.be.reverted;
     });
 
-    it("deployer can burn DGVB shares (has initial supply)", async function () {
+    it("deployer can burn DGVF shares (has initial supply)", async function () {
       const { vault, deployer } = await loadFixture(deployFullProtocol);
-      // Deployer has 1T DGVB shares from constructor
+      // Deployer has 1T DGVF shares from constructor
       // Try burning a small amount - may have 0 coin reserve which is fine
-      // burnCoin will emit Claim(player, amount, 0, 0, coinOut) even if coinOut = 0
-      const smallAmount = eth("1"); // burn 1 DGVB
+      // burnCoin will emit Claim(player, amount, 0, 0, flipOut) even if flipOut = 0
+      const smallAmount = eth("1"); // burn 1 DGVF
       const tx = await vault.connect(deployer).burnCoin(smallAmount);
       const ev = await getEvent(tx, vault, "Claim");
       expect(ev.args.sharesBurned).to.equal(smallAmount);
@@ -217,7 +217,7 @@ describe("DegenerusVault", function () {
       const tx = await vault.connect(deployer).burnEth(eth("1"));
       const ev = await getEvent(tx, vault, "Claim");
       expect(ev.args.sharesBurned).to.equal(eth("1"));
-      expect(ev.args.coinOut).to.equal(0n);
+      expect(ev.args.flipOut).to.equal(0n);
     });
 
     it("ETH is redeemed proportionally when vault has ETH balance", async function () {
@@ -266,7 +266,7 @@ describe("DegenerusVault", function () {
 
     it("returns proportional coin for a small burn (initial reserve is non-zero)", async function () {
       const { vault } = await loadFixture(deployFullProtocol);
-      // BurnieCoin has a non-zero vaultMintAllowance at deployment, so the reserve
+      // FLIP has a non-zero vaultMintAllowance at deployment, so the reserve
       // is non-zero from the start. The result will be > 0 for any non-zero amount.
       const result = await vault.previewCoin(eth("1"));
       // Burn 1 token out of 1T supply: result is tiny but proportional
@@ -305,19 +305,19 @@ describe("DegenerusVault", function () {
   // 8. previewBurnForCoinOut
   // ---------------------------------------------------------------------------
   describe("previewBurnForCoinOut", function () {
-    it("reverts when coinOut is zero", async function () {
+    it("reverts when flipOut is zero", async function () {
       const { vault } = await loadFixture(deployFullProtocol);
       await expect(
         vault.previewBurnForCoinOut(0n)
       ).to.be.revertedWithCustomError(vault, "Insufficient");
     });
 
-    it("reverts when coinOut exceeds total available reserve", async function () {
+    it("reverts when flipOut exceeds total available reserve", async function () {
       const { vault, coin } = await loadFixture(deployFullProtocol);
-      // The vault has a non-zero initial reserve (from BurnieCoin vaultMintAllowance).
+      // The vault has a non-zero initial reserve (from FLIP vaultMintAllowance).
       // To exceed it, request more than the total coin reserve.
       // Use a very large amount that cannot be in the reserve.
-      const HUGE = hre.ethers.parseEther("1000000000"); // 1 billion BURNIE
+      const HUGE = hre.ethers.parseEther("1000000000"); // 1 billion FLIP
       await expect(
         vault.previewBurnForCoinOut(HUGE)
       ).to.be.revertedWithCustomError(vault, "Insufficient");
@@ -438,23 +438,23 @@ describe("DegenerusVault", function () {
       ).to.not.be.reverted;
     });
 
-    it("gamePurchaseTicketsBurnie reverts when caller is not vault owner", async function () {
+    it("gamePurchaseTicketsFlip reverts when caller is not vault owner", async function () {
       const { vault, alice } = await loadFixture(deployFullProtocol);
       await expect(
-        vault.connect(alice).gamePurchaseTicketsBurnie(400n)
+        vault.connect(alice).gamePurchaseTicketsFlip(400n)
       ).to.be.revertedWithCustomError(vault, "NotVaultOwner");
     });
 
-    it("gamePurchaseTicketsBurnie reverts when ticketQuantity is zero", async function () {
+    it("gamePurchaseTicketsFlip reverts when ticketQuantity is zero", async function () {
       const { vault, deployer } = await loadFixture(deployFullProtocol);
       await expect(
-        vault.connect(deployer).gamePurchaseTicketsBurnie(0n)
+        vault.connect(deployer).gamePurchaseTicketsFlip(0n)
       ).to.be.revertedWithCustomError(vault, "Insufficient");
     });
 
-    // gamePurchaseBurnieLootbox revert-on-zero — REMOVED (v47): the vault's
-    // BURNIE-lootbox wrapper was removed (terminal-paradox closure). The
-    // BURNIE->tickets wrapper (gamePurchaseTicketsBurnie) is KEPT and still tested
+    // gamePurchaseFlipLootbox revert-on-zero — REMOVED (v47): the vault's
+    // FLIP-lootbox wrapper was removed (terminal-paradox closure). The
+    // FLIP->tickets wrapper (gamePurchaseTicketsFlip) is KEPT and still tested
     // above. Removed-by-design, not skipped.
 
     it("gameSetAutoRebuyTakeProfit accessible by vault owner", async function () {
@@ -467,7 +467,7 @@ describe("DegenerusVault", function () {
   });
 
   // ---------------------------------------------------------------------------
-  // 11. DegenerusVaultShare (DGVB/DGVE) token functionality
+  // 11. DegenerusVaultShare (DGVF/DGVE) token functionality
   // ---------------------------------------------------------------------------
   describe("DegenerusVaultShare (share token)", function () {
     it("DGVE initial supply is minted to creator", async function () {

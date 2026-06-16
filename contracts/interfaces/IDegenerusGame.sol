@@ -156,7 +156,7 @@ interface IDegenerusGame {
     /// @notice Record a terminal decimator burn entry for a player.
     /// @param player The player burning.
     /// @param lvl The current game level.
-    /// @param baseAmount The base BURNIE amount burned.
+    /// @param baseAmount The base FLIP amount burned.
     function recordTerminalDecBurn(
         address player,
         uint24 lvl,
@@ -219,8 +219,8 @@ interface IDegenerusGame {
     /// @notice Pay DGNRS bounty for biggest flip record holder.
     /// @dev Called by COIN contract when bounty is paid.
     /// @param player Player receiving the bounty payout.
-    /// @param winningBet BURNIE value of the winning flip (must meet minimum bet threshold).
-    /// @param bountyPool BURNIE value of the bounty pool (must meet minimum pool threshold).
+    /// @param winningBet FLIP value of the winning flip (must meet minimum bet threshold).
+    /// @param bountyPool FLIP value of the bounty pool (must meet minimum pool threshold).
     function payCoinflipBountyDgnrs(address player, uint256 winningBet, uint256 bountyPool) external;
 
     /// @notice Check if RNG is currently locked (VRF request pending).
@@ -288,7 +288,7 @@ interface IDegenerusGame {
 
     /// @notice Place Full Ticket Degenerette bets (4 traits, match-based payouts).
     /// @param player The betting player (address(0) = msg.sender).
-    /// @param currency Currency type (0=ETH, 1=BURNIE, 2=unsupported, 3=WWXRP).
+    /// @param currency Currency type (0=ETH, 1=FLIP, 2=unsupported, 3=WWXRP).
     /// @param amountPerTicket Bet amount per ticket.
     /// @param ticketCount Number of spins (1-10). Each spin resolves independently.
     /// @param customTicket Custom packed traits (use 0 for random).
@@ -356,7 +356,7 @@ interface IDegenerusGame {
 
     /// @notice Purchase tickets and loot boxes with ETH or claimable.
     /// @dev Main entry point for all ETH/claimable purchases.
-    ///      Recycling at least 3 tickets' worth of claimable winnings earns a 10% BURNIE flip-credit bonus.
+    ///      Recycling at least 3 tickets' worth of claimable winnings earns a 10% FLIP flip-credit bonus.
     /// @param buyer Player address to receive purchases (address(0) = msg.sender).
     /// @param ticketQuantity Number of tickets to purchase (0 to skip).
     /// @param lootBoxAmount ETH amount for loot boxes, minimum 0.01 ETH (0 to skip).
@@ -370,11 +370,11 @@ interface IDegenerusGame {
         MintPaymentKind payKind
     ) external payable;
 
-    /// @notice Purchase tickets with BURNIE.
-    /// @dev Entry point for BURNIE ticket purchases.
+    /// @notice Purchase tickets with FLIP.
+    /// @dev Entry point for FLIP ticket purchases.
     /// @param buyer Player address to receive purchases (address(0) = msg.sender).
     /// @param ticketQuantity Number of tickets to purchase (0 to skip).
-    function redeemBurnie(
+    function redeemFlip(
         address buyer,
         uint256 ticketQuantity
     ) external;
@@ -439,25 +439,25 @@ interface IDegenerusGame {
         address fundingSource
     ) external payable;
 
-    /// @notice Permissionless BURNIE claim — pays each sub its accrued pendingBurnie in one
+    /// @notice Permissionless FLIP claim — pays each sub its accrued pendingFlip in one
     ///         creditFlip and zeroes it; always credits the sub, never the caller.
     /// @param subs Subscribers to pay out.
-    function claimAfkingBurnie(address[] calldata subs) external;
+    function claimAfkingFlip(address[] calldata subs) external;
 
     /// @notice Affiliate-only atomic read-and-zero of a sub's accrued affiliateBase.
     /// @param sub The subscriber whose affiliate base is drained.
-    /// @return base The drained whole-BURNIE affiliate base (0 if already drained).
+    /// @return base The drained whole-FLIP affiliate base (0 if already drained).
     function drainAffiliateBase(address sub) external returns (uint256 base);
 
     /// @notice QUESTS-only: bump an afking sub's streak base for a secondary/level completion.
     /// @param player The afking subscriber whose secondary completion is recorded.
     function recordAfkingSecondary(address player) external;
 
-    /// @notice Permissionless paid cure: clear `target`'s cashout/smite curse for 100 BURNIE.
+    /// @notice Permissionless paid cure: clear `target`'s cashout/smite curse for 100 FLIP.
     /// @param target The cursed player to cure.
     function decurse(address target) external;
 
-    /// @notice Deity-gated smite: add a saturating curse stack to `smitee` for 200 BURNIE.
+    /// @notice Deity-gated smite: add a saturating curse stack to `smitee` for 200 FLIP.
     /// @param deityId The smiting deity's pass ID (caller must hold it).
     /// @param smitee The player receiving the curse stack.
     function smite(uint256 deityId, address smitee) external;
@@ -475,7 +475,7 @@ interface IDegenerusGame {
     /// @return totalBudget Salvage budget available against the quote.
     /// @return ticketWei Per-ticket face value used for the quote.
     /// @return ethCashWei ETH leg of the offer.
-    /// @return burnieTokens BURNIE leg of the offer.
+    /// @return flipTokens FLIP leg of the offer.
     function previewSellFarFutureTickets(
         address player,
         uint32[] calldata levels,
@@ -487,7 +487,7 @@ interface IDegenerusGame {
             uint256 totalBudget,
             uint256 ticketWei,
             uint256 ethCashWei,
-            uint256 burnieTokens
+            uint256 flipTokens
         );
 
     /// @notice Credit the direct half of an sDGNRS redemption claim to `player`'s claimable winnings.

@@ -5,7 +5,7 @@ pragma solidity 0.8.34;
 struct QuestRequirements {
     /// @notice Number of mints required (whole tickets)
     uint32 mints;
-    /// @notice Token amount required - BURNIE in base units (18 decimals) for token quests, wei for ETH quests
+    /// @notice Token amount required - FLIP in base units (18 decimals) for token quests, wei for ETH quests
     uint256 tokenAmount;
 }
 
@@ -43,16 +43,16 @@ interface IDegenerusQuests {
     /// @dev Called by AdvanceModule (via GAME delegatecall) to determine which quests are active.
     /// @param day The unix day to roll quests for
     /// @param entropy Random entropy used to determine the slot 1 quest type
-    /// @param forceMintBurnie Force slot 1 to MINT_BURNIE (the first jackpot day, when the BURNIE
-    ///        redeem window is live); otherwise MINT_BURNIE is excluded from the slot 1 roll.
-    function rollDailyQuest(uint24 day, uint256 entropy, bool forceMintBurnie) external;
+    /// @param forceMintFlip Force slot 1 to MINT_FLIP (the first jackpot day, when the FLIP
+    ///        redeem window is live); otherwise MINT_FLIP is excluded from the slot 1 roll.
+    function rollDailyQuest(uint24 day, uint256 entropy, bool forceMintFlip) external;
 
     /// @notice Records player minting activity and checks quest completion
     /// @dev Called by the game contract when a player mints tickets
     /// @param player The address of the player who minted
     /// @param quantity The number of tickets minted
     /// @param paidWithEth Whether the mint was paid for with ETH (vs tokens)
-    /// @param mintPrice Current ticket price in wei (0 for BURNIE mints)
+    /// @param mintPrice Current ticket price in wei (0 for FLIP mints)
     /// @return reward The quest reward amount earned (0 if quest not completed)
     /// @return questType The type of quest that was completed
     /// @return streak The player's current quest streak
@@ -100,9 +100,9 @@ interface IDegenerusQuests {
     /// @notice Records player Degenerette activity and checks quest completion
     /// @dev Called by the game contract when a player places a Degenerette bet
     /// @param player The address of the player
-    /// @param amount The bet amount (wei for ETH, base units for BURNIE)
-    /// @param paidWithEth True if the bet was paid with ETH, false if paid with BURNIE
-    /// @param mintPrice Current ticket price in wei (0 for BURNIE bets)
+    /// @param amount The bet amount (wei for ETH, base units for FLIP)
+    /// @param paidWithEth True if the bet was paid with ETH, false if paid with FLIP
+    /// @param mintPrice Current ticket price in wei (0 for FLIP bets)
     /// @return reward The quest reward amount earned (0 if quest not completed)
     /// @return questType The type of quest that was completed
     /// @return streak The player's current quest streak
@@ -118,7 +118,7 @@ interface IDegenerusQuests {
     /// @param player The address of the player
     /// @param ethMintSpendWei Gross ETH-denominated spend on tickets + lootbox in wei
     ///        (fresh + recycled), credited 1:1 to MINT_ETH quest
-    /// @param burnieMintQty BURNIE-paid ticket-equivalent mint units
+    /// @param flipMintQty FLIP-paid ticket-equivalent mint units
     /// @param lootBoxAmount ETH spent on lootbox in wei (full amount, fresh + recycled)
     /// @param mintPrice Current ticket price in wei (purchaseLevel price for daily targets)
     /// @param levelQuestPrice Price for level quest targets (level+1 price)
@@ -129,7 +129,7 @@ interface IDegenerusQuests {
     function handlePurchase(
         address player,
         uint256 ethMintSpendWei,
-        uint32 burnieMintQty,
+        uint32 flipMintQty,
         uint256 lootBoxAmount,
         uint256 mintPrice,
         uint256 levelQuestPrice

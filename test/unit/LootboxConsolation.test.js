@@ -23,8 +23,8 @@
 // `payColdBustConsolation` flag, NOT by `emitLootboxEvent`. The two
 // auto-resolve callers (`resolveLootboxDirect`, `resolveRedemptionLootbox`)
 // pass `payColdBustConsolation = false`, so cold-bust is silent for them.
-// (v47: the BURNIE-lootbox manual caller `openBurnieLootBox` — which also passed
-// `payColdBustConsolation = true` while emitting `BurnieLootOpen` — was removed,
+// (v47: the FLIP-lootbox manual caller `openFlipLootBox` — which also passed
+// `payColdBustConsolation = true` while emitting `FlipLootOpen` — was removed,
 // terminal-paradox closure.)
 //
 // TEST STRATEGY:
@@ -45,9 +45,9 @@
 //     the `LootboxBernoulliTester.coldBustConsolationFires` mirror of the
 //     production gate, driven with each of the four callers' actual flag values.
 //     This exercises the `payColdBustConsolation && whole == 0` decision that
-//     CR-01 got wrong. (The `openBurnieLootBox` cold-bust case the prior
+//     CR-01 got wrong. (The `openFlipLootBox` cold-bust case the prior
 //     emitLootboxEvent-gated surface silently dropped is moot in v47 — that
-//     BURNIE-lootbox caller was removed.)
+//     FLIP-lootbox caller was removed.)
 //
 // CROSS-CITES:
 //   - D-274-WX-AMOUNT-01 (magnitude equivalence LOOTBOX_WWXRP_CONSOLATION ==
@@ -140,8 +140,8 @@ describe("LootboxConsolation — Phase 274 Wave 2 TST-WX-01..03", function () {
       // comment block between the gate and the call widens the gap).
       // Auto-resolve callers pass `payColdBustConsolation = false`, so they never
       // reach the consolation; the surviving manual caller (`openBox`) passes
-      // `payColdBustConsolation = true` and can trigger it. (v47: the BURNIE-lootbox
-      // manual caller `openBurnieLootBox` was removed.)
+      // `payColdBustConsolation = true` and can trigger it. (v47: the FLIP-lootbox
+      // manual caller `openFlipLootBox` was removed.)
       const window = source.slice(Math.max(0, mintPrize - 600), mintPrize);
       expect(
         window.includes("if (payColdBustConsolation && whole == 0)"),
@@ -269,7 +269,7 @@ describe("LootboxConsolation — Phase 274 Wave 2 TST-WX-01..03", function () {
     // the literal `payColdBustConsolation` value the corresponding caller passes.
     //
     // FIXTURE-COVERAGE NOTE: a pure end-to-end fixture driving the real
-    // `openBurnieLootBox` entry point to a deterministic `whole == 0` ticket-path
+    // `openFlipLootBox` entry point to a deterministic `whole == 0` ticket-path
     // cold-bust is infeasible with the current harness — it requires VRF rigging
     // to force the per-resolution seed's bits[152..167] slice, which the
     // `reachOpenableLootbox` lifecycle helper (test/gas/LootboxOpenGas.test.js)
@@ -285,8 +285,8 @@ describe("LootboxConsolation — Phase 274 Wave 2 TST-WX-01..03", function () {
     const COLD_BUST_SEED = BigInt(99) << 152n;
     const WARM_SEED = 0n; // slice == 0 — wins for every frac >= 1
 
-    // [04a] openBurnieLootBox cold-bust — REMOVED (v47): the BURNIE-lootbox manual
-    // caller `openBurnieLootBox` was removed (terminal-paradox closure). This case
+    // [04a] openFlipLootBox cold-bust — REMOVED (v47): the FLIP-lootbox manual
+    // caller `openFlipLootBox` was removed (terminal-paradox closure). This case
     // exercised the gate decision with payColdBustConsolation=true on behalf of that
     // removed caller; the identical gate decision for the surviving manual caller
     // (openBox, also payColdBustConsolation=true) is covered by [04b], so no

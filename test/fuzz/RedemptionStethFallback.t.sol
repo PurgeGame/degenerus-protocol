@@ -2,17 +2,17 @@
 pragma solidity ^0.8.26;
 
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
-import {StakedDegenerusStonk} from "../../contracts/StakedDegenerusStonk.sol";
+import {sDGNRS} from "../../contracts/sDGNRS.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 // v55.0 D-351-02: the `AfKing` import is DROPPED — the standalone de-custody contract
 // (contracts/AfKing.sol) was DELETED (ARCH-03; funding is game-resident afkingFunding).
 // The redemption ETH-vs-stETH core does not need the AfKing type; the POOL-04 receive()
-// tests reframe onto the GAME-only receive() gate (StakedDegenerusStonk.sol:433-434).
+// tests reframe onto the GAME-only receive() gate (sDGNRS.sol:433-434).
 
 /// @notice Local mirror of the coinflip player surface for vm.mockCall selectors. Mirrors the
 ///         interface in StakedStonkRedemption.t.sol / RedemptionGas.t.sol; redeclared locally so
 ///         this file does not depend on the coinflip contract import.
-interface IBurnieCoinflipPlayerMock {
+interface IFlipCoinflipPlayerMock {
     function getCoinflipDayResult(uint32 day) external view returns (uint16 rewardPercent, bool win);
     function claimCoinflipsForRedemption(address player, uint256 amount) external returns (uint256 claimed);
 }
@@ -26,14 +26,14 @@ interface IBurnieCoinflipPlayerMock {
 ///         v55.0 D-351-02 adaptation: the v54 de-custody machinery dissolved (AfKing removed,
 ///         funding is game-resident `afkingFunding`). Two changes vs the v54 baseline:
 ///           (1) the POOL-04 receive() tests are REFRAMED onto the v55 GAME-only `receive()` gate
-///               (StakedDegenerusStonk.sol:433-434 now `if (msg.sender != GAME) revert Unauthorized`);
+///               (sDGNRS.sol:433-434 now `if (msg.sender != GAME) revert Unauthorized`);
 ///               the v54 AF_KING relaxation is GONE (the afking-funding withdraw send-back routes
 ///               through GAME — the Game's `.call` has `msg.sender == GAME`). The live-balance /
 ///               counted-once / arbitrary-vector properties are UNCHANGED — only the authorized
 ///               sender moved from AF_KING to GAME.
 ///           (2) the v54 `burnAtGameOver`-recovers-the-AfKing-prepaid-pool leg is DROPPED BY NAME
 ///               (no behavioral successor — `burnAtGameOver` is now a pure local-token burn,
-///               StakedDegenerusStonk.sol:526-535, and `depositFor`/`poolOf`/`withdraw` no longer
+///               sDGNRS.sol:526-535, and `depositFor`/`poolOf`/`withdraw` no longer
 ///               exist). See 351-06-SUMMARY for the BY-NAME drop ledger entry.
 ///
 ///         The fix is the pure-ETH-OR-pure-stETH coverage branch in `pullRedemptionReserve`
@@ -97,20 +97,20 @@ contract RedemptionStethFallback is DeployProtocol {
 
         // Fund actors with sDGNRS via the Reward pool (game is the authorized caller).
         vm.startPrank(address(game));
-        sdgnrs.transferFromPool(StakedDegenerusStonk.Pool.Reward, playerA, ACTOR_FUNDING);
-        sdgnrs.transferFromPool(StakedDegenerusStonk.Pool.Reward, playerB, ACTOR_FUNDING);
+        sdgnrs.transferFromPool(sDGNRS.Pool.Reward, playerA, ACTOR_FUNDING);
+        sdgnrs.transferFromPool(sDGNRS.Pool.Reward, playerB, ACTOR_FUNDING);
         vm.stopPrank();
 
         // Mock coinflip player surface so the claim full-payout branch resolves without seeded
         // coinflip state (StakedStonkRedemption.t.sol precedent).
         vm.mockCall(
             address(coinflip),
-            abi.encodeWithSelector(IBurnieCoinflipPlayerMock.getCoinflipDayResult.selector),
+            abi.encodeWithSelector(IFlipCoinflipPlayerMock.getCoinflipDayResult.selector),
             abi.encode(uint16(100), true)
         );
         vm.mockCall(
             address(coinflip),
-            abi.encodeWithSelector(IBurnieCoinflipPlayerMock.claimCoinflipsForRedemption.selector),
+            abi.encodeWithSelector(IFlipCoinflipPlayerMock.claimCoinflipsForRedemption.selector),
             abi.encode(uint256(0))
         );
         // Mock the lootbox materialization (the 50% lootbox routing in claim) to a no-op so the
@@ -351,12 +351,12 @@ contract RedemptionStethFallback is DeployProtocol {
         vm.clearMockedCalls();
         vm.mockCall(
             address(coinflip),
-            abi.encodeWithSelector(IBurnieCoinflipPlayerMock.getCoinflipDayResult.selector),
+            abi.encodeWithSelector(IFlipCoinflipPlayerMock.getCoinflipDayResult.selector),
             abi.encode(uint16(100), true)
         );
         vm.mockCall(
             address(coinflip),
-            abi.encodeWithSelector(IBurnieCoinflipPlayerMock.claimCoinflipsForRedemption.selector),
+            abi.encodeWithSelector(IFlipCoinflipPlayerMock.claimCoinflipsForRedemption.selector),
             abi.encode(uint256(0))
         );
 
@@ -579,18 +579,18 @@ contract RedemptionStethFallback is DeployProtocol {
     }
 
     // =====================================================================
-    //   (f) test_RFALL05_BurnieCannotBlockEth
+    //   (f) test_RFALL05_FlipCannotBlockEth
     // =====================================================================
 
-    /// @notice BURNIE-can't-block-ETH (REDEEM-08 property): the ETH/stETH redemption path settles
-    ///         independently of any BURNIE state. The redeemed BURNIE slice is removed from sDGNRS's
+    /// @notice FLIP-can't-block-ETH (REDEEM-08 property): the ETH/stETH redemption path settles
+    ///         independently of any FLIP state. The redeemed FLIP slice is removed from sDGNRS's
     ///         backing at submit and escrowed; its claim-time leg (paid only on the resolving day's
     ///         coinflip win) is a separate flip credit that never touches the ETH/stETH legs, so even
     ///         with a depleted coinflip pool the ETH claim still pays. We drive the stETH leg (worst
     ///         case) and confirm the claim still delivers ETH-value to the player.
-    function test_RFALL05_BurnieCannotBlockEth() public {
+    function test_RFALL05_FlipCannotBlockEth() public {
         // stETH-leg setup (ETH side starved); coinflip claim mocked to return 0 (depleted pool),
-        // mirroring the v47 REDEEM-08 assertion that a BURNIE shortfall cannot block the ETH leg.
+        // mirroring the v47 REDEEM-08 assertion that a FLIP shortfall cannot block the ETH leg.
         vm.deal(address(game), 0);
         _setGameClaimableSdgnrs(0);
         _setGameClaimablePool(0);
@@ -604,7 +604,7 @@ contract RedemptionStethFallback is DeployProtocol {
 
         _advanceWallDayAndResolve(day, 100);
 
-        // The coinflip claimCoinflipsForRedemption mock returns 0 (BURNIE side delivers nothing), yet
+        // The coinflip claimCoinflipsForRedemption mock returns 0 (FLIP side delivers nothing), yet
         // the ETH-value (stETH here) claim path completes and credits the player's game claimable.
         uint256 claimableBefore = game.claimableWinningsOf(playerA);
         vm.prank(playerA);
@@ -612,7 +612,7 @@ contract RedemptionStethFallback is DeployProtocol {
         assertGt(
             game.claimableWinningsOf(playerA) - claimableBefore,
             0,
-            "(f) BURNIE shortfall must NOT block the ETH/stETH redemption credit"
+            "(f) FLIP shortfall must NOT block the ETH/stETH redemption credit"
         );
 
         _assertSolvency("(f)");
@@ -642,7 +642,7 @@ contract RedemptionStethFallback is DeployProtocol {
         (uint256 ethOutBefore, , ) = sdgnrs.previewBurn(BURN_AMOUNT);
 
         // Send ETH in via the GAME-gated receive() (the afking-funding withdraw send-back path —
-        // the Game's `.call` carries msg.sender == GAME, StakedDegenerusStonk.sol:433-434).
+        // the Game's `.call` carries msg.sender == GAME, sDGNRS.sol:433-434).
         uint256 credit = 10 ether;
         vm.deal(ContractAddresses.GAME, credit);
         vm.prank(ContractAddresses.GAME);
@@ -689,14 +689,14 @@ contract RedemptionStethFallback is DeployProtocol {
 
     /// @notice (c) A receive() from any sender != GAME reverts Unauthorized — the receive() path did
     ///         NOT open an arbitrary deposit vector. v55.0 D-351-02: under the GAME-only gate
-    ///         (StakedDegenerusStonk.sol:433-434) this is STRICTLY TIGHTER than the v54 GAME||AF_KING
+    ///         (sDGNRS.sol:433-434) this is STRICTLY TIGHTER than the v54 GAME||AF_KING
     ///         relaxation — only GAME is authorized now, so a stranger (and, implicitly, the old
     ///         AF_KING sender) reverts.
     function test_POOL04_NonGameReceiveReverts() public {
         address stranger = makeAddr("stranger");
         vm.deal(stranger, 1 ether);
         vm.prank(stranger);
-        vm.expectRevert(StakedDegenerusStonk.Unauthorized.selector);
+        vm.expectRevert(sDGNRS.Unauthorized.selector);
         (bool ok, ) = address(sdgnrs).call{value: 1 ether}("");
         // Foundry: with expectRevert on a low-level call, the call returns ok==false on revert; the
         // expectRevert cheatcode asserts the revert reason. Reference ok to silence the warning.
@@ -716,7 +716,7 @@ contract RedemptionStethFallback is DeployProtocol {
     //     `depositFor` / `poolOf` / `withdraw` external API no longer exists (funding is game-resident
     //     `afkingFunding`, recovered per-player via DegenerusGame.withdrawAfkingFunding — there is NO
     //     game-resident recovery of a PREPAID third-party pool keyed to sDGNRS).
-    //   - `sDGNRS.burnAtGameOver()` is now a pure local-token burn (StakedDegenerusStonk.sol:526-535:
+    //   - `sDGNRS.burnAtGameOver()` is now a pure local-token burn (sDGNRS.sol:526-535:
     //     `bal = balanceOf[this]; if (bal==0) return; balanceOf[this]=0; totalSupply-=bal; delete
     //     poolBalances;`) — it no longer folds any AfKing withdraw, so the property under test is gone.
     // Per D-351-02 (bias=adapt; removal is the exception only when the entire subject is a fully-removed

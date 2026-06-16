@@ -19,22 +19,22 @@ interface IDegenerusCoin {
     /// @param amount The amount of coins to mint
     function mintForGame(address player, uint256 amount) external;
 
-    /// @notice Spendable BURNIE for a player: wallet balance + claimable coinflip stake.
+    /// @notice Spendable FLIP for a player: wallet balance + claimable coinflip stake.
     /// @param player The address to read.
     /// @return spendable The total amount the player can spend on a burn/transfer.
     function balanceOfWithClaimable(
         address player
     ) external view returns (uint256 spendable);
 
-    /// @notice Salvage-spendable BURNIE: burnable held + claimable + auto-rebuy carry.
+    /// @notice Salvage-spendable FLIP: burnable held + claimable + auto-rebuy carry.
     /// @param player The address to read.
-    /// @return spendable The amount the player can fund a salvage BURNIE leg with.
+    /// @return spendable The amount the player can fund a salvage FLIP leg with.
     function balanceOfSpendableForSalvage(
         address player
     ) external view returns (uint256 spendable);
 
-    /// @notice Burn BURNIE for a salvage swap, draining held -> claimable -> auto-rebuy carry.
-    /// @param target The buyer whose BURNIE backs the swap.
-    /// @param amount The BURNIE (wei) to destroy.
+    /// @notice Burn FLIP for a salvage swap, draining held -> claimable -> auto-rebuy carry.
+    /// @param target The buyer whose FLIP backs the swap.
+    /// @param amount The FLIP (wei) to destroy.
     function burnCoinForSalvage(address target, uint256 amount) external;
 }

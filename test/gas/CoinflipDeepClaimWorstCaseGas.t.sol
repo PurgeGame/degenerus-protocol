@@ -20,7 +20,7 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 ///      SSTORE fires), almost all wins (the win branch runs the take-profit
 ///      division + the BAF leaderboard accumulation), plus a single loss so the
 ///      end-of-walk wwxrp loss-prize call also fires alongside recordBafFlip and
-///      mintForGame. Take-profit = 1 BURNIE divides each whole-BURNIE payout
+///      mintForGame. Take-profit = 1 FLIP divides each whole-FLIP payout
 ///      evenly, so the rolling carry stays 0 and the compounding payout cannot
 ///      overflow across 1460 days.
 ///

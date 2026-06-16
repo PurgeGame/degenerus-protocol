@@ -246,7 +246,7 @@ contract V61SolvencyAfpay is DeployProtocol {
 
         (address d, uint256 dId) = _mintDeity("scen_smite_deity");
         address smitee = makeAddr("scen_smitee");
-        _fundBurnie(d, SMITE_BURN);
+        _fundFlip(d, SMITE_BURN);
 
         uint256 poolBefore = game.claimablePoolView();
         vm.prank(d);
@@ -258,7 +258,7 @@ contract V61SolvencyAfpay is DeployProtocol {
 
         // decurse is likewise pool-neutral.
         address curer = makeAddr("scen_curer");
-        _fundBurnie(curer, PRICE_COIN_UNIT / 10);
+        _fundFlip(curer, PRICE_COIN_UNIT / 10);
         uint256 poolBeforeDecurse = game.claimablePoolView();
         vm.prank(curer);
         game.decurse(smitee);
@@ -414,7 +414,7 @@ contract V61SolvencyAfpay is DeployProtocol {
         deityPass.mint(holder, dId);
     }
 
-    function _fundBurnie(address who, uint256 amount) internal {
+    function _fundFlip(address who, uint256 amount) internal {
         vm.prank(address(game));
         coin.mintForGame(who, amount);
     }

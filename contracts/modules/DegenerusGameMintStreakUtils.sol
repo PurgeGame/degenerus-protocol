@@ -29,7 +29,7 @@ abstract contract DegenerusGameMintStreakUtils is DegenerusGameStorage {
         (BitPackingLib.MASK_24 << BitPackingLib.MINT_STREAK_LAST_COMPLETED_SHIFT) |
         (BitPackingLib.MASK_24 << BitPackingLib.LEVEL_STREAK_SHIFT);
 
-    /// @dev Soft pay-gate for the mintBurnie advance bounty: is `who` entitled to the
+    /// @dev Soft pay-gate for the mintFlip advance bounty: is `who` entitled to the
     ///      advance bounty right now? The advance work itself is always permitted — this
     ///      only decides whether the keeper earns the re-homed bounty, so real participants
     ///      get first shot while anyone may still do the work for free. Tiers, cheapest
@@ -198,26 +198,26 @@ abstract contract DegenerusGameMintStreakUtils is DegenerusGameStorage {
         cashWei = totalBudget - ticketWei;
     }
 
-    /// @dev Splits the cash leg of a salvage swap into an ETH part and a BURNIE part, sharing the
+    /// @dev Splits the cash leg of a salvage swap into an ETH part and a FLIP part, sharing the
     ///      SAME settled prior-day seed as _quoteFarFutureSwap (no new VRF). A third bit-slice of the
-    ///      seed picks an ETH-denominated target in [0, cashWei]; the BURNIE part is capped at the
-    ///      BURNIE the buyer actually owns (burnable held + claimable coinflip stake + auto-rebuy
+    ///      seed picks an ETH-denominated target in [0, cashWei]; the FLIP part is capped at the
+    ///      FLIP the buyer actually owns (burnable held + claimable coinflip stake + auto-rebuy
     ///      carry), with the shortfall and the zero-available case falling back to ETH. The value of
-    ///      the cash leg is conserved: ethCashWei + (value of burnieTokens) == cashWei, so the offer
+    ///      the cash leg is conserved: ethCashWei + (value of flipTokens) == cashWei, so the offer
     ///      stays <= the no-arb ceiling regardless of the split. Both the preview and the executing
-    ///      path call this, so the displayed ETH/BURNIE breakdown matches what is paid.
+    ///      path call this, so the displayed ETH/FLIP breakdown matches what is paid.
     /// @param cashWei The cash residual being split (totalBudget - ticketWei).
     /// @param priceWei priceForLevel(active ticket level) (caller-computed).
     /// @param seed The per-player daily salvage seed (same word as _quoteFarFutureSwap).
     /// @param buyer The counterparty funding the swap (sDGNRS, or the vault on the owner-enabled fallback).
-    /// @return ethCashWei ETH part relabeled to the player (cashWei - the BURNIE part's ETH value).
-    /// @return burnieTokens BURNIE base units transferred from the buyer to the player.
-    function _quoteFarFutureBurnieSplit(
+    /// @return ethCashWei ETH part relabeled to the player (cashWei - the FLIP part's ETH value).
+    /// @return flipTokens FLIP base units transferred from the buyer to the player.
+    function _quoteFarFutureFlipSplit(
         uint256 cashWei,
         uint256 priceWei,
         uint256 seed,
         address buyer
-    ) internal view returns (uint256 ethCashWei, uint256 burnieTokens) {
+    ) internal view returns (uint256 ethCashWei, uint256 flipTokens) {
         if (cashWei == 0) return (0, 0);
 
         // Third slice (distinct window from the jitter [bits 0..] and ticket-share [bits 128..]
@@ -227,20 +227,20 @@ abstract contract DegenerusGameMintStreakUtils is DegenerusGameStorage {
 
         if (priceWei == 0) return (cashWei, 0);
 
-        // Cap the BURNIE part at buyer-owned BURNIE (burnable held + claimable coinflip stake +
+        // Cap the FLIP part at buyer-owned FLIP (burnable held + claimable coinflip stake +
         // auto-rebuy carry), valued at the current ticket price. The uncovered remainder is paid as ETH.
-        uint256 ownedBurnie = coin.balanceOfSpendableForSalvage(buyer);
-        uint256 targetBurnie = (targetEth * PRICE_COIN_UNIT) / priceWei;
-        burnieTokens = targetBurnie <= ownedBurnie ? targetBurnie : ownedBurnie;
-        // ETH value of the BURNIE actually payable (re-derived from tokens so conservation is exact).
-        uint256 burnieEth = (burnieTokens * priceWei) / PRICE_COIN_UNIT;
-        if (burnieEth > cashWei) burnieEth = cashWei; // defensive; rounding can never exceed cashWei
-        ethCashWei = cashWei - burnieEth;
+        uint256 ownedFlip = coin.balanceOfSpendableForSalvage(buyer);
+        uint256 targetFlip = (targetEth * PRICE_COIN_UNIT) / priceWei;
+        flipTokens = targetFlip <= ownedFlip ? targetFlip : ownedFlip;
+        // ETH value of the FLIP actually payable (re-derived from tokens so conservation is exact).
+        uint256 flipEth = (flipTokens * priceWei) / PRICE_COIN_UNIT;
+        if (flipEth > cashWei) flipEth = cashWei; // defensive; rounding can never exceed cashWei
+        ethCashWei = cashWei - flipEth;
     }
 
     /// @dev Per-player daily salvage seed: the seller hashed with the SETTLED prior-day
     ///      VRF word (freeze-safe). Single computation site shared by the swap quote and
-    ///      the BURNIE split so preview and execution always derive the same offer.
+    ///      the FLIP split so preview and execution always derive the same offer.
     function _farFutureSeed(address player) internal view returns (uint256) {
         return uint256(
             keccak256(

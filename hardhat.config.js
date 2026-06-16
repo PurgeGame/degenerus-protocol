@@ -43,7 +43,7 @@ const config = {
           evmVersion: "osaka",
           optimizer: {
             enabled: true,
-            runs: 50
+            runs: 1000
           },
           outputSelection: {
             "*": {

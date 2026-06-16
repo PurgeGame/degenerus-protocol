@@ -5,15 +5,15 @@ import {ContractAddresses} from "./ContractAddresses.sol";
 import {IStETH} from "./interfaces/IStETH.sol";
 
 /// @notice Interface for sDGNRS contract methods used by DGNRS.
-interface IStakedDegenerusStonk {
+interface IsDGNRS {
     /// @notice Burn sDGNRS to claim proportional backing assets.
-    function burn(uint256 amount) external returns (uint256 ethOut, uint256 stethOut, uint256 burnieOut);
+    function burn(uint256 amount) external returns (uint256 ethOut, uint256 stethOut, uint256 flipOut);
     /// @notice Get token balance for an address.
     function balanceOf(address account) external view returns (uint256);
     /// @notice Transfer sDGNRS from wrapper to recipient (wrapper only).
     function wrapperTransferTo(address to, uint256 amount) external;
-    /// @notice Preview ETH, stETH, and BURNIE output for a given burn amount.
-    function previewBurn(uint256 amount) external view returns (uint256 ethOut, uint256 stethOut, uint256 burnieOut);
+    /// @notice Preview ETH, stETH, and FLIP output for a given burn amount.
+    function previewBurn(uint256 amount) external view returns (uint256 ethOut, uint256 stethOut, uint256 flipOut);
 }
 
 /// @dev Game interface for RNG lock (unwrap guard), game-over check (burn guard), and level (vesting).
@@ -30,12 +30,12 @@ interface IDegenerusVault {
 }
 
 /**
- * @title DegenerusStonk (DGNRS)
+ * @title DGNRS (DGNRS)
  * @notice Transferable ERC20 — the liquid face of the DGNRS token
- * @dev Holders burn DGNRS to claim proportional ETH + stETH + BURNIE backing.
+ * @dev Holders burn DGNRS to claim proportional ETH + stETH + FLIP backing.
  *      DGVE majority holder can unwrap DGNRS back to soulbound sDGNRS for specific recipients.
  */
-contract DegenerusStonk {
+contract DGNRS {
     // =====================================================================
     //                              ERRORS
     // =====================================================================
@@ -59,8 +59,8 @@ contract DegenerusStonk {
     event Transfer(address indexed from, address indexed to, uint256 amount);
     /// @notice Emitted when an allowance is set via approve
     event Approval(address indexed owner, address indexed spender, uint256 amount);
-    /// @notice Emitted when DGNRS is burned through to sDGNRS for ETH + stETH + BURNIE
-    event BurnThrough(address indexed from, uint256 amount, uint256 ethOut, uint256 stethOut, uint256 burnieOut);
+    /// @notice Emitted when DGNRS is burned through to sDGNRS for ETH + stETH + FLIP
+    event BurnThrough(address indexed from, uint256 amount, uint256 ethOut, uint256 stethOut, uint256 flipOut);
     /// @notice Emitted when DGVE majority holder unwraps DGNRS back to soulbound sDGNRS
     event UnwrapTo(address indexed recipient, uint256 amount);
 
@@ -68,7 +68,7 @@ contract DegenerusStonk {
     //                          ERC20 METADATA
     // =====================================================================
 
-    string public constant name = "Degenerus Stonk";
+    string public constant name = "Degenerus Protocol Equity Token";
     string public constant symbol = "DGNRS";
     uint8 public constant decimals = 18;
 
@@ -94,7 +94,7 @@ contract DegenerusStonk {
     uint256 private constant VEST_PER_LEVEL  = 5_000_000_000 * 1e18;    // 5B per level
     uint256 private constant CREATOR_TOTAL   = 200_000_000_000 * 1e18;  // 200B total
 
-    IStakedDegenerusStonk private constant stonk = IStakedDegenerusStonk(ContractAddresses.SDGNRS);
+    IsDGNRS private constant staked = IsDGNRS(ContractAddresses.SDGNRS);
     IStETH private constant steth = IStETH(ContractAddresses.STETH_TOKEN);
     IDegenerusVault private constant vault = IDegenerusVault(ContractAddresses.VAULT);
     IDegenerusGame private constant game = IDegenerusGame(ContractAddresses.GAME);
@@ -104,7 +104,7 @@ contract DegenerusStonk {
     // =====================================================================
 
     constructor() {
-        uint256 deposited = stonk.balanceOf(address(this));
+        uint256 deposited = staked.balanceOf(address(this));
         if (deposited == 0) revert Insufficient();
         totalSupply = deposited;
         uint256 unvested = deposited - CREATOR_INITIAL;
@@ -118,7 +118,7 @@ contract DegenerusStonk {
     /// @notice Accepts ETH from sDGNRS during burn-through
     /// @custom:reverts Unauthorized if sender is not sDGNRS
     receive() external payable {
-        if (msg.sender != address(stonk)) revert Unauthorized();
+        if (msg.sender != address(staked)) revert Unauthorized();
     }
 
     // =====================================================================
@@ -181,7 +181,7 @@ contract DegenerusStonk {
         if (recipient == address(0)) revert ZeroAddress();
         if (game.rngLocked()) revert Unauthorized();
         _burn(msg.sender, amount);
-        stonk.wrapperTransferTo(recipient, amount);
+        staked.wrapperTransferTo(recipient, amount);
         emit UnwrapTo(recipient, amount);
     }
 
@@ -211,18 +211,18 @@ contract DegenerusStonk {
     /// @notice Burn DGNRS to claim proportional ETH + stETH from sDGNRS backing
     /// @dev ETH sent last (checks-effects-interactions). Only available post-gameOver;
     ///      during active game, players must use burnWrapped() via sDGNRS gambling path.
-    ///      The post-gameOver sDGNRS burn pays no BURNIE (burnieOut is always 0; the
+    ///      The post-gameOver sDGNRS burn pays no FLIP (flipOut is always 0; the
     ///      return slot is kept for ABI stability).
     /// @param amount Amount of DGNRS to burn (18 decimals).
     /// @return ethOut ETH received from backing.
     /// @return stethOut stETH received from backing.
-    /// @return burnieOut Always 0 (kept for ABI stability).
+    /// @return flipOut Always 0 (kept for ABI stability).
     /// @custom:reverts GameNotOver If called during active game (Seam-1 fix).
-    function burn(uint256 amount) external returns (uint256 ethOut, uint256 stethOut, uint256 burnieOut) {
+    function burn(uint256 amount) external returns (uint256 ethOut, uint256 stethOut, uint256 flipOut) {
         _burn(msg.sender, amount);
         if (!game.gameOver()) revert GameNotOver();
 
-        (ethOut, stethOut, burnieOut) = stonk.burn(amount);
+        (ethOut, stethOut, flipOut) = staked.burn(amount);
 
         if (stethOut != 0) {
             if (!steth.transfer(msg.sender, stethOut)) revert TransferFailed();
@@ -232,21 +232,21 @@ contract DegenerusStonk {
             if (!success) revert TransferFailed();
         }
 
-        emit BurnThrough(msg.sender, amount, ethOut, stethOut, burnieOut);
+        emit BurnThrough(msg.sender, amount, ethOut, stethOut, flipOut);
     }
 
     // =====================================================================
     //                          VIEW FUNCTIONS
     // =====================================================================
 
-    /// @notice Preview ETH, stETH, and BURNIE output for burning a given amount of DGNRS
+    /// @notice Preview ETH, stETH, and FLIP output for burning a given amount of DGNRS
     /// @dev Delegates to sDGNRS.previewBurn; does not modify state
     /// @param amount Amount of DGNRS to simulate burning (18 decimals)
     /// @return ethOut ETH that would be received
     /// @return stethOut stETH that would be received
-    /// @return burnieOut BURNIE that would be received
-    function previewBurn(uint256 amount) external view returns (uint256 ethOut, uint256 stethOut, uint256 burnieOut) {
-        return stonk.previewBurn(amount);
+    /// @return flipOut FLIP that would be received
+    function previewBurn(uint256 amount) external view returns (uint256 ethOut, uint256 stethOut, uint256 flipOut) {
+        return staked.previewBurn(amount);
     }
 
     // =====================================================================
@@ -298,10 +298,10 @@ contract DegenerusStonk {
         uint48 goTime = game.gameOverTimestamp();
         if (goTime == 0 || block.timestamp < uint256(goTime) + 365 days) revert SweepNotReady();
 
-        uint256 remaining = stonk.balanceOf(address(this));
+        uint256 remaining = staked.balanceOf(address(this));
         if (remaining == 0) revert NothingToSweep();
 
-        (uint256 ethOut, uint256 stethOut,) = stonk.burn(remaining);
+        (uint256 ethOut, uint256 stethOut,) = staked.burn(remaining);
 
         // 50-50 split
         uint256 stethToGnrus = stethOut / 2;

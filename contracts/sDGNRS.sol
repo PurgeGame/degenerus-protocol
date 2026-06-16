@@ -12,7 +12,7 @@ interface IDegenerusGamePlayer {
     /// @notice Advance the game to the next level/day.
     function advanceGame() external;
     /// @notice Crank the unified keeper router (advance + box opens), paying any earned bounty.
-    function mintBurnie() external;
+    function mintFlip() external;
     /// @notice Queue this caller's perpetual tickets for levels 1-100 (VAULT/SDGNRS only, once).
     function initPerpetualTickets() external;
     /// @notice Start or extend a daily afking subscription for `player` (self when 0/msg.sender).
@@ -53,7 +53,7 @@ interface IDegenerusGamePlayer {
     function pullRedemptionReserve(uint256 amount) external;
 }
 
-/// @notice Interface for BURNIE coin contract player-facing functions used by sDGNRS.
+/// @notice Interface for FLIP coin contract player-facing functions used by sDGNRS.
 interface IDegenerusCoinPlayer {
     /// @notice Get token balance for an address.
     function balanceOf(address account) external view returns (uint256);
@@ -61,33 +61,33 @@ interface IDegenerusCoinPlayer {
     function transfer(address to, uint256 amount) external returns (bool);
 }
 
-/// @notice Interface for BurnieCoinflip contract methods used by sDGNRS.
-interface IBurnieCoinflipPlayer {
+/// @notice Interface for Coinflip contract methods used by sDGNRS.
+interface ICoinflipPlayer {
     /// @notice Claim coinflip winnings for a player.
     function claimCoinflips(address player, uint256 amount) external returns (uint256 claimed);
     /// @notice Preview claimable coinflip winnings for a player.
     function previewClaimCoinflips(address player) external view returns (uint256 mintable);
     /// @notice Settle-then-read sDGNRS's redeemable coinflip backing (claimableStored + carry, disjoint).
-    function redeemableCoinBacking() external returns (uint256 backing);
-    /// @notice Remove `base` (wei) of sDGNRS's BURNIE backing at submit (held → claimable → carry).
-    function withdrawRedeemedBurnie(uint256 base) external;
+    function redeemableFlipBacking() external returns (uint256 backing);
+    /// @notice Remove `base` (wei) of sDGNRS's FLIP backing at submit (held → claimable → carry).
+    function withdrawRedeemedFlip(uint256 base) external;
     /// @notice Read a coinflip day's result (rewardPercent 0 = unresolved; win is true only on a resolved win).
     function getCoinflipDayResult(uint24 day) external view returns (uint16 rewardPercent, bool win);
-    /// @notice Read a player's auto-rebuy config; `carry` is the rolling BURNIE bankroll.
+    /// @notice Read a player's auto-rebuy config; `carry` is the rolling FLIP bankroll.
     function coinflipAutoRebuyInfo(address player) external view returns (bool enabled, uint256 stop, uint256 carry, uint24 startDay);
-    /// @notice Credit a BURNIE flip stake to a player (sDGNRS is an authorized flip creditor).
+    /// @notice Credit a FLIP flip stake to a player (sDGNRS is an authorized flip creditor).
     function creditFlip(address player, uint256 amount) external;
 }
 
 /// @notice Interface for DGNRS wrapper contract used by sDGNRS.
-interface IDegenerusStonkWrapper {
+interface IDGNRS {
     /// @notice Burn DGNRS from a player on behalf of sDGNRS.
     function burnForSdgnrs(address player, uint256 amount) external;
 }
 
 /**
- * @title StakedDegenerusStonk (sDGNRS)
- * @notice Soulbound token backed by ETH, stETH, and BURNIE reserves
+ * @title sDGNRS (sDGNRS)
+ * @notice Soulbound token backed by ETH, stETH, and FLIP reserves
  * @dev Receives ETH/stETH from game distributions; rewards are distributed from pre-minted pools.
  *      Creator allocation is minted to the DGNRS wrapper contract; all other holders receive
  *      sDGNRS directly from reward pools (soulbound — no transfer function).
@@ -95,12 +95,12 @@ interface IDegenerusStonkWrapper {
  * ARCHITECTURE:
  * - Receives ETH deposits from game distributions
  * - Receives stETH deposits from game distributions
- * - Accrues BURNIE backing via manual transfers and coinflip claimables (withdrawn on burn)
+ * - Accrues FLIP backing via manual transfers and coinflip claimables (withdrawn on burn)
  * - Pre-minted supply split into DGNRS wrapper allocation + reward pools
  * - Game distributes sDGNRS to players by drawing down pools
- * - Users burn sDGNRS to claim proportional ETH + stETH + BURNIE
+ * - Users burn sDGNRS to claim proportional ETH + stETH + FLIP
  */
-contract StakedDegenerusStonk {
+contract sDGNRS {
     // =====================================================================
     //                              ERRORS
     // =====================================================================
@@ -166,15 +166,15 @@ contract StakedDegenerusStonk {
     /// @param amount Amount of sDGNRS burned
     /// @param ethOut ETH received
     /// @param stethOut stETH received
-    /// @param burnieOut BURNIE received
-    event Burn(address indexed from, uint256 amount, uint256 ethOut, uint256 stethOut, uint256 burnieOut);
+    /// @param flipOut FLIP received
+    event Burn(address indexed from, uint256 amount, uint256 ethOut, uint256 stethOut, uint256 flipOut);
 
     /// @notice Emitted when backing assets are deposited into reserves
     /// @param from Address that deposited
     /// @param ethAmount ETH deposited
     /// @param stethAmount stETH deposited
-    /// @param burnieAmount BURNIE amount (always 0; BURNIE arrives via manual transfers or coinflip claims)
-    event Deposit(address indexed from, uint256 ethAmount, uint256 stethAmount, uint256 burnieAmount);
+    /// @param flipAmount FLIP amount (always 0; FLIP arrives via manual transfers or coinflip claims)
+    event Deposit(address indexed from, uint256 ethAmount, uint256 stethAmount, uint256 flipAmount);
 
     /// @notice Emitted when sDGNRS is transferred from a reward pool
     /// @param pool Pool from which tokens were transferred
@@ -189,24 +189,24 @@ contract StakedDegenerusStonk {
     event PoolRebalance(Pool indexed from, Pool indexed to, uint256 amount);
 
     /// @notice Emitted when a player submits a gambling burn redemption
-    /// @param burnieEscrowed BURNIE backing (wei) removed from sDGNRS at submit and escrowed,
+    /// @param flipEscrowed FLIP backing (wei) removed from sDGNRS at submit and escrowed,
     ///        contingent on the resolving day's coinflip (paid to the redeemer only on a win)
-    event RedemptionSubmitted(address indexed player, uint256 sdgnrsAmount, uint256 ethValueOwed, uint256 burnieEscrowed, uint24 periodIndex);
+    event RedemptionSubmitted(address indexed player, uint256 sdgnrsAmount, uint256 ethValueOwed, uint256 flipEscrowed, uint24 periodIndex);
 
     /// @notice Emitted when a redemption period is resolved with a roll
     event RedemptionResolved(uint24 indexed periodIndex, uint16 roll);
 
     /// @notice Emitted when a player claims their resolved redemption.
-    /// @param burniePaid Escrowed BURNIE (wei) minted to the redeemer as a flip credit — nonzero only
-    ///        on a winning resolving-day coinflip; 0 on a loss or after gameOver (BURNIE ignored).
-    event RedemptionClaimed(address indexed player, uint16 roll, uint256 ethPayout, uint256 lootboxEth, uint256 burniePaid);
+    /// @param flipPaid Escrowed FLIP (wei) minted to the redeemer as a flip credit — nonzero only
+    ///        on a winning resolving-day coinflip; 0 on a loss or after gameOver (FLIP ignored).
+    event RedemptionClaimed(address indexed player, uint16 roll, uint256 ethPayout, uint256 lootboxEth, uint256 flipPaid);
 
     // =====================================================================
     //                          ERC20 METADATA
     // =====================================================================
 
     /// @notice Token name
-    string public constant name = "Staked Degenerus Stonk";
+    string public constant name = "Degenerus Protocol Equity Token (staked)";
 
     /// @notice Token symbol
     string public constant symbol = "sDGNRS";
@@ -268,15 +268,15 @@ contract StakedDegenerusStonk {
     struct PendingRedemption {
         uint96  ethValueOwed;   // base (100%) ETH-equivalent owed (max ~79B ETH)
         uint16  activityScore;  // snapshotted activity score + 1 (0 = not yet set)
-        uint96  burnieEscrow;   // whole-token BURNIE removed from sDGNRS at submit; paid as a flip
+        uint96  flipEscrow;   // whole-token FLIP removed from sDGNRS at submit; paid as a flip
                                 // credit on a winning resolving-day coinflip (uint96 whole tokens ≫
-                                // the uint128-bounded BURNIE supply ceiling), else forfeited.
+                                // the uint128-bounded FLIP supply ceiling), else forfeited.
     } // 96 + 16 + 96 = 208 bits (1 slot); composite outer key (player, day) carries the day reference per SPEC-02.
 
     /// @dev Per-day unresolved gambling-burn pool (SPEC-01, tightened per D-305-STRUCT-TIGHTEN-01
     ///      to 1 slot via denomination conversion).
-    ///      Three fields packed into a single 256-bit slot (BURNIE is settled at submit, so no
-    ///      per-day BURNIE base is tracked):
+    ///      Three fields packed into a single 256-bit slot (FLIP is settled at submit, so no
+    ///      per-day FLIP base is tracked):
     ///        bits 0-63   : ethBase    — gwei units (1e9 wei divisor)
     ///        bits 64-127 : supplySnapshot — whole tokens (1e18 raw divisor)
     ///        bits 128-191: burned     — whole tokens (1e18 raw divisor)
@@ -341,17 +341,17 @@ contract StakedDegenerusStonk {
     /// @dev Minimum ETH size for a redemption lootbox (0.01 ETH). At claim the rolled value splits
     ///      50/50 into a direct-ETH leg and a lootbox leg; if the lootbox half lands below this floor
     ///      (i.e. total rolled value under ~0.02 ETH), the lootbox leg is dropped entirely. The player
-    ///      keeps only the direct half plus the BURNIE share settled at submit; the dropped lootbox
+    ///      keeps only the direct half plus the FLIP share settled at submit; the dropped lootbox
     ///      value is NOT paid out to the player — it is forfeited back to sDGNRS's own claimable on the
     ///      Game as free backing, raising backing for remaining holders. Live-game only; gameOver claims
     ///      are already 100% direct.
     uint256 private constant MIN_REDEMPTION_LOOTBOX_ETH = 0.01 ether;
 
-    /// @dev BURNIE base unit (1000 ETH worth) — the ETH→BURNIE conversion numerator for the keeper
-    ///      box-bounty, matching the Game's PRICE_COIN_UNIT. BURNIE per ETH = PRICE_COIN_UNIT / mintPrice.
+    /// @dev FLIP base unit (1000 ETH worth) — the ETH→FLIP conversion numerator for the keeper
+    ///      box-bounty, matching the Game's PRICE_COIN_UNIT. FLIP per ETH = PRICE_COIN_UNIT / mintPrice.
     uint256 private constant PRICE_COIN_UNIT = 1000 ether;
 
-    /// @dev Keeper box-bounty target (ETH wei) per settled redemption claim. Sized so the BURNIE
+    /// @dev Keeper box-bounty target (ETH wei) per settled redemption claim. Sized so the FLIP
     ///      bounty's ETH-value reimburses the ~48k-gas per-box settle at the ~0.5-gwei reference.
     ///      The reward is an illiquid coinflip credit, and every pending claim costs a real sDGNRS
     ///      gambling burn (>=1 whole token, one box per wallet per day) to create, so permissionlessly
@@ -361,14 +361,14 @@ contract StakedDegenerusStonk {
     /// @dev Game contract reference for player actions and claimable queries
     IDegenerusGamePlayer private constant game = IDegenerusGamePlayer(ContractAddresses.GAME);
 
-    /// @dev BURNIE token reference for payout accounting
+    /// @dev FLIP token reference for payout accounting
     IDegenerusCoinPlayer private constant coin = IDegenerusCoinPlayer(ContractAddresses.COIN);
-    /// @dev Coinflip contract for claimable BURNIE withdrawals during burns
-    IBurnieCoinflipPlayer private constant coinflip =
-        IBurnieCoinflipPlayer(ContractAddresses.COINFLIP);
+    /// @dev Coinflip contract for claimable FLIP withdrawals during burns
+    ICoinflipPlayer private constant coinflip =
+        ICoinflipPlayer(ContractAddresses.COINFLIP);
 
     /// @dev DGNRS wrapper contract for burning wrapped DGNRS to receive sDGNRS backing
-    IDegenerusStonkWrapper private constant dgnrsWrapper = IDegenerusStonkWrapper(ContractAddresses.DGNRS);
+    IDGNRS private constant dgnrsWrapper = IDGNRS(ContractAddresses.DGNRS);
 
     /// @dev stETH token reference
     IStETH private constant steth = IStETH(ContractAddresses.STETH_TOKEN);
@@ -435,7 +435,7 @@ contract StakedDegenerusStonk {
         // the GAME's SUB-02 self-consent path, no operator approval needed).
         // Coinflip auto-rebuy is NOT enabled here: during the 20-day seed window
         // sDGNRS's daily flip wins mint to its wallet balance (redemption backing);
-        // BurnieCoinflip arms perpetual auto-rebuy (0 take-profit) once the final
+        // Coinflip arms perpetual auto-rebuy (0 take-profit) once the final
         // seeded day settles.
         game.subscribe(address(this), true, false, 1, 2, address(0));
 
@@ -475,10 +475,10 @@ contract StakedDegenerusStonk {
     // =====================================================================
 
     /// @notice Crank the game keeper router on behalf of sDGNRS (advance + box opens)
-    /// @dev Routes through mintBurnie so sDGNRS earns the keeper bounty for the work;
+    /// @dev Routes through mintFlip so sDGNRS earns the keeper bounty for the work;
     ///      reverts NoWork() when nothing is due.
     function gameAdvance() external {
-        game.mintBurnie();
+        game.mintFlip();
     }
 
     /// @notice Claim whale pass on behalf of sDGNRS
@@ -627,10 +627,10 @@ contract StakedDegenerusStonk {
     /// @param amount Amount of sDGNRS to burn
     /// @return ethOut ETH received (deterministic path only)
     /// @return stethOut stETH received (deterministic path only)
-    /// @return burnieOut BURNIE received (deterministic path only)
+    /// @return flipOut FLIP received (deterministic path only)
     /// @custom:reverts BurnsBlockedDuringRng If called during active VRF request (rngLocked).
     /// @custom:reverts BurnsBlockedDuringLiveness If liveness fired but gameOver has not yet latched.
-    function burn(uint256 amount) external returns (uint256 ethOut, uint256 stethOut, uint256 burnieOut) {
+    function burn(uint256 amount) external returns (uint256 ethOut, uint256 stethOut, uint256 flipOut) {
         if (game.gameOver()) {
             (ethOut, stethOut) = _deterministicBurn(msg.sender, amount);
             return (ethOut, stethOut, 0);
@@ -647,10 +647,10 @@ contract StakedDegenerusStonk {
     /// @param amount Amount of sDGNRS-equivalent to burn (from DGNRS wrapper balance)
     /// @return ethOut ETH received (deterministic path only)
     /// @return stethOut stETH received (deterministic path only)
-    /// @return burnieOut BURNIE received (deterministic path only)
+    /// @return flipOut FLIP received (deterministic path only)
     /// @custom:reverts BurnsBlockedDuringRng If called during active VRF request (rngLocked).
     /// @custom:reverts BurnsBlockedDuringLiveness If liveness fired but gameOver has not yet latched.
-    function burnWrapped(uint256 amount) external returns (uint256 ethOut, uint256 stethOut, uint256 burnieOut) {
+    function burnWrapped(uint256 amount) external returns (uint256 ethOut, uint256 stethOut, uint256 flipOut) {
         // burnForSdgnrs makes no external calls, so gameOver cannot change
         // between the gate and the branch — one read serves both.
         bool isOver = game.gameOver();
@@ -672,7 +672,7 @@ contract StakedDegenerusStonk {
 
     /// @dev Deterministic burn parameterized by beneficiary and burnFrom.
     ///      Used for the wrapped case where sDGNRS is burned from DGNRS contract's balance
-    ///      but ETH/stETH goes to beneficiary. No BURNIE payout (gameOver burns are pure ETH/stETH).
+    ///      but ETH/stETH goes to beneficiary. No FLIP payout (gameOver burns are pure ETH/stETH).
     ///      Deducts pendingRedemptionEthValue to exclude reserved gambling burn amounts from payout (CP-08).
     function _deterministicBurnFrom(address beneficiary, address burnFrom, uint256 amount) private returns (uint256 ethOut, uint256 stethOut) {
         uint256 bal = balanceOf[burnFrom];
@@ -714,7 +714,7 @@ contract StakedDegenerusStonk {
             if (!success) revert TransferFailed();
         }
 
-        // No BURNIE payout for gameOver burns — pure ETH/stETH only
+        // No FLIP payout for gameOver burns — pure ETH/stETH only
         emit Burn(beneficiary, amount, ethOut, stethOut, 0);
     }
 
@@ -736,7 +736,7 @@ contract StakedDegenerusStonk {
     ///      ETH-only: at submit the MAX (175%) payout was physically segregated and tracked in
     ///      pendingRedemptionEthValue; here that reservation is lowered from MAX to the rolled
     ///      amount (accounting only — the over-pull stays in this contract as free backing, no
-    ///      transfer back to claimable). BURNIE is already fully settled at submit (no roll).
+    ///      transfer back to claimable). FLIP is already fully settled at submit (no roll).
     /// @param roll The random roll result (range 25-175, applied as percentage).
     /// @param dayToResolve Wall-clock day whose pool this call resolves.
     function resolveRedemptionPeriod(uint16 roll, uint24 dayToResolve) external {
@@ -770,7 +770,7 @@ contract StakedDegenerusStonk {
     /// @notice Claim a resolved gambling-burn redemption for `player` on day `day` (SPEC-02).
     /// @dev Requires `redemptionPeriods[day] != 0` (period resolved). Reads composite-keyed
     ///      `pendingRedemptions[player][day]`; deletes that slot per SPEC-04 (d).
-    ///      ETH-only: BURNIE is fully settled at submit (no claim-time BURNIE leg).
+    ///      ETH-only: FLIP is fully settled at submit (no claim-time FLIP leg).
     ///      Live game: PERMISSIONLESS — anyone may settle `player`'s claim, all value to `player`.
     ///      Both halves of the rolled ETH route to the Game (50% credits the player's claimable
     ///      winnings, 50% funds lootbox rewards), so a third-party trigger pushes no ETH and the
@@ -811,10 +811,10 @@ contract StakedDegenerusStonk {
             }
         }
 
-        // Keeper bounty: a small BURNIE flip-credit per box actually settled this call, paid to the
+        // Keeper bounty: a small FLIP flip-credit per box actually settled this call, paid to the
         // caller during a live game (no liveness need post-gameOver, where only self-claims settle).
         // Counts only settled boxes — empty (player, day) slots are skipped and earn nothing. The
-        // ETH-value tracks the per-box settle gas at the 0.5-gwei reference (BURNIE per ETH =
+        // ETH-value tracks the per-box settle gas at the 0.5-gwei reference (FLIP per ETH =
         // PRICE_COIN_UNIT / mintPrice), so the credit holds its gas-reimbursement value across the
         // price curve. sDGNRS is an authorized flip creditor, so this credits AS sDGNRS.
         if (!isGameOver && settled != 0) {
@@ -831,10 +831,10 @@ contract StakedDegenerusStonk {
     ///      empty (player, day) slot so the batch path skips and the single path reverts.
     function _claimRedemptionFor(address player, uint24 day, uint16 roll, bool isGameOver) private returns (bool) {
         PendingRedemption memory claim = pendingRedemptions[player][day];
-        // Existence: a live-game claim is reachable on a nonzero ETH base OR a nonzero BURNIE escrow
-        // (a gwei-floored zero-ETH claim can still owe escrowed BURNIE). Post-gameOver BURNIE is
+        // Existence: a live-game claim is reachable on a nonzero ETH base OR a nonzero FLIP escrow
+        // (a gwei-floored zero-ETH claim can still owe escrowed FLIP). Post-gameOver FLIP is
         // worthless and ignored, so only the ETH base keeps a claim alive.
-        if (claim.ethValueOwed == 0 && (isGameOver || claim.burnieEscrow == 0)) return false;
+        if (claim.ethValueOwed == 0 && (isGameOver || claim.flipEscrow == 0)) return false;
         uint16 claimActivityScore = claim.activityScore;
 
         // Total rolled ETH. Per-claimant floor division may leave up to (n-1) wei
@@ -854,7 +854,7 @@ contract StakedDegenerusStonk {
             // value under ~0.02 ETH), the lootbox leg is dropped. Its value is NOT paid to the player
             // and NOT turned into a lootbox — it is forfeited back to sDGNRS's own claimable on the
             // Game (its canonical backing ledger), raising backing for remaining holders. The player
-            // keeps only the direct half (plus the BURNIE share settled at submit). The lootbox leg
+            // keeps only the direct half (plus the FLIP share settled at submit). The lootbox leg
             // is then skipped by its `lootboxEth != 0` guard and the forfeit leg credits sDGNRS.
             if (lootboxEth < MIN_REDEMPTION_LOOTBOX_ETH) {
                 forfeitEth = lootboxEth;
@@ -870,31 +870,31 @@ contract StakedDegenerusStonk {
         // Full claim: clear the (player, day) slot entirely per SPEC-04 (d).
         delete pendingRedemptions[player][day];
 
-        // Contingent BURNIE escrow: the whole-token slice removed from sDGNRS's backing at submit
+        // Contingent FLIP escrow: the whole-token slice removed from sDGNRS's backing at submit
         // rides the resolving day's (day + 1) community coinflip exactly as a non-redeeming holder's
         // backing would. A win pays the principal PLUS that day's win multiplier — principal +
         // principal * rewardPercent% — the identical payout every holder's backing earns on the flip
         // (the bonus is fresh flip credit; the flip is net-emissive — a losing flip deletes coin, a
         // win mints it). A loss pays nothing (symmetric with the auto-rebuy carry zeroing for every
         // holder on a losing flip). Read the ABSOLUTE day+1 result, never a resolve-time word —
-        // stall-correct. Post-gameOver BURNIE is worthless and skipped entirely. The slot is already
+        // stall-correct. Post-gameOver FLIP is worthless and skipped entirely. The slot is already
         // cleared (CEI) and creditFlip makes no callback into this contract.
-        uint256 burniePaid;
-        if (!isGameOver && claim.burnieEscrow != 0) {
+        uint256 flipPaid;
+        if (!isGameOver && claim.flipEscrow != 0) {
             // In a live game day + 1 is normally resolved by claim time (resolveRedemptionPeriod for
             // `day` runs on the advance that settles day + 1). `win` is true only on a resolved win;
             // a resolved loss — or an unresolved day in the narrow level-0 gameOver pre-latch window,
             // where day + 1's coinflip is never stored — reads false and correctly pays nothing.
-            (uint16 rewardPercent, bool burnieWon) = coinflip.getCoinflipDayResult(day + 1);
-            if (burnieWon) {
+            (uint16 rewardPercent, bool flipWon) = coinflip.getCoinflipDayResult(day + 1);
+            if (flipWon) {
                 // Same win payout a held backing slice earns: principal + principal * rewardPercent%.
-                uint256 principal = uint256(claim.burnieEscrow) * 1e18;
-                burniePaid = principal + (principal * uint256(rewardPercent)) / 100;
-                coinflip.creditFlip(player, burniePaid);
+                uint256 principal = uint256(claim.flipEscrow) * 1e18;
+                flipPaid = principal + (principal * uint256(rewardPercent)) / 100;
+                coinflip.creditFlip(player, flipPaid);
             }
         }
 
-        emit RedemptionClaimed(player, roll, ethDirect, lootboxEth, burniePaid);
+        emit RedemptionClaimed(player, roll, ethDirect, lootboxEth, flipPaid);
 
         if (isGameOver) {
             // 100% direct push (self-claim enforced by callers; the untrusted .call comes after
@@ -944,15 +944,15 @@ contract StakedDegenerusStonk {
     //                          VIEW FUNCTIONS
     // =====================================================================
 
-    /// @notice Preview ETH, stETH, and BURNIE output for burning sDGNRS
+    /// @notice Preview ETH, stETH, and FLIP output for burning sDGNRS
     /// @dev Reflects ETH-preferential payout logic using current balances and claimables.
     ///      Deducts pendingRedemptionEthValue to exclude the ETH physically segregated for
-    ///      gambling-burn claimants (CP-08). GameOver burns pay no BURNIE (pure ETH/stETH).
+    ///      gambling-burn claimants (CP-08). GameOver burns pay no FLIP (pure ETH/stETH).
     /// @param amount Amount of sDGNRS to burn
     /// @return ethOut ETH that would be received
     /// @return stethOut stETH that would be received
-    /// @return burnieOut BURNIE that would be received (0 during gameOver)
-    function previewBurn(uint256 amount) external view returns (uint256 ethOut, uint256 stethOut, uint256 burnieOut) {
+    /// @return flipOut FLIP that would be received (0 during gameOver)
+    function previewBurn(uint256 amount) external view returns (uint256 ethOut, uint256 stethOut, uint256 flipOut) {
         uint256 supply = _totalSupply;
         if (amount == 0 || amount > supply) return (0, 0, 0);
 
@@ -975,31 +975,31 @@ contract StakedDegenerusStonk {
             stethOut = totalValueOwed - ethOut;
         }
 
-        // GameOver burns pay no BURNIE. The full sDGNRS BURNIE backing is held wallet balance +
-        // claimable coinflip winnings + the auto-rebuy carry (where sDGNRS's BURNIE lives post-day-20).
+        // GameOver burns pay no FLIP. The full sDGNRS FLIP backing is held wallet balance +
+        // claimable coinflip winnings + the auto-rebuy carry (where sDGNRS's FLIP lives post-day-20).
         // No reserve term: a submit removes its escrowed slice from this backing immediately, so these
         // live reads are already net of outstanding redemptions. Best-effort (the carry/claimable can
-        // momentarily lag a stalled advance); truncated to whole BURNIE to match the settled submit path.
+        // momentarily lag a stalled advance); truncated to whole FLIP to match the settled submit path.
         if (!game.gameOver()) {
-            uint256 burnieBal = coin.balanceOf(address(this));
-            uint256 claimableBurnie = coinflip.previewClaimCoinflips(address(this));
+            uint256 flipBal = coin.balanceOf(address(this));
+            uint256 claimableFlip = coinflip.previewClaimCoinflips(address(this));
             (, , uint256 carry, ) = coinflip.coinflipAutoRebuyInfo(address(this));
-            uint256 totalBurnie = burnieBal + claimableBurnie + carry;
-            burnieOut = ((totalBurnie * amount) / supply / 1e18) * 1e18;
+            uint256 totalFlip = flipBal + claimableFlip + carry;
+            flipOut = ((totalFlip * amount) / supply / 1e18) * 1e18;
         }
     }
 
 
-    /// @notice Get BURNIE backing available for new burns (balance + claimable coinflips + carry).
+    /// @notice Get FLIP backing available for new burns (balance + claimable coinflips + carry).
     /// @dev No reserve subtraction: a submit removes its escrowed slice from this backing immediately,
     ///      so these live reads are already net of outstanding redemptions. Includes the auto-rebuy
-    ///      carry, where sDGNRS's BURNIE lives once perpetual auto-rebuy arms post-day-20.
-    /// @return BURNIE backing value (balance + claimable coinflips + auto-rebuy carry).
-    function burnieReserve() external view returns (uint256) {
-        uint256 burnieBal = coin.balanceOf(address(this));
-        uint256 claimableBurnie = coinflip.previewClaimCoinflips(address(this));
+    ///      carry, where sDGNRS's FLIP lives once perpetual auto-rebuy arms post-day-20.
+    /// @return FLIP backing value (balance + claimable coinflips + auto-rebuy carry).
+    function flipReserve() external view returns (uint256) {
+        uint256 flipBal = coin.balanceOf(address(this));
+        uint256 claimableFlip = coinflip.previewClaimCoinflips(address(this));
         (, , uint256 carry, ) = coinflip.coinflipAutoRebuyInfo(address(this));
-        return burnieBal + claimableBurnie + carry;
+        return flipBal + claimableFlip + carry;
     }
 
     // =====================================================================
@@ -1013,8 +1013,8 @@ contract StakedDegenerusStonk {
 
     /// @dev Core gambling burn logic. Burns sDGNRS from burnFrom, physically segregates the MAX
     ///      (175%) proportional ETH payout out of claimableWinnings[SDGNRS] into this contract's
-    ///      balance (fail-closed if it cannot), and settles the proportional BURNIE share entirely
-    ///      at submit as a conserved coinflip flip-credit (no reserve, no roll, no claim-time BURNIE).
+    ///      balance (fail-closed if it cannot), and settles the proportional FLIP share entirely
+    ///      at submit as a conserved coinflip flip-credit (no reserve, no roll, no claim-time FLIP).
     ///      Enforces 50% supply cap per day (SPEC-05 lazy-init) and 160 ETH per-(wallet, day) EV cap.
     ///      Per SPEC-02, writes the per-claim slot at composite key `pendingRedemptions[beneficiary][currentPeriod]`,
     ///      so a wallet can accumulate distinct claims across multiple unresolved days.
@@ -1068,14 +1068,14 @@ contract StakedDegenerusStonk {
         uint256 totalMoney = ethBal + stethBal + claimableEth - _pendingRedemptionEthValue;
         uint256 ethValueOwed = (totalMoney * amount) / supplyBefore;
 
-        // Compute the proportional BURNIE share of sDGNRS's full BURNIE backing: held wallet balance
-        // + settled coinflip backing (claimableStored + auto-rebuy carry, where sDGNRS's BURNIE lives
-        // post-day-20). redeemableCoinBacking settles sDGNRS to current so its two components are
-        // disjoint. The share is truncated to whole BURNIE; the sub-token dust stays as backing for
+        // Compute the proportional FLIP share of sDGNRS's full FLIP backing: held wallet balance
+        // + settled coinflip backing (claimableStored + auto-rebuy carry, where sDGNRS's FLIP lives
+        // post-day-20). redeemableFlipBacking settles sDGNRS to current so its two components are
+        // disjoint. The share is truncated to whole FLIP; the sub-token dust stays as backing for
         // remaining holders. No reserve subtraction: the slice is removed from the backing just below.
-        uint256 burnieHeld = coin.balanceOf(address(this));
-        uint256 coinBacking = coinflip.redeemableCoinBacking();
-        uint256 burnieEscrowWhole = ((burnieHeld + coinBacking) * amount) / supplyBefore / 1e18;
+        uint256 flipHeld = coin.balanceOf(address(this));
+        uint256 coinBacking = coinflip.redeemableFlipBacking();
+        uint256 flipEscrowWhole = ((flipHeld + coinBacking) * amount) / supplyBefore / 1e18;
 
         // Snap ETH base to gwei at the source (D-305-GWEI-SNAP-01). Eliminates pool↔cumulative-scalar
         // drift by ensuring pool.ethBase × 1e9 reconstructs the exact sum-of-claims at resolve.
@@ -1112,28 +1112,28 @@ contract StakedDegenerusStonk {
         // Checked add preserved; narrowing cast is safe (cumulative segregated ETH << uint96 max).
         _pendingRedemptionEthValue = uint96(_pendingRedemptionEthValue + maxIncrement);
 
-        // === BURNIE: remove the escrowed share from sDGNRS's backing now; pay later on the flip ===
+        // === FLIP: remove the escrowed share from sDGNRS's backing now; pay later on the flip ===
         // The whole-token slice is destroyed out of sDGNRS's backing (held → claimable → carry) and
         // escrowed against this (beneficiary, day) slot. It is minted to the beneficiary as a flip
         // credit ONLY if the resolving day's (currentPeriod + 1) coinflip wins — resolved at claim.
         // On a loss it pays nothing, symmetric with the auto-rebuy carry zeroing for every holder on a
         // losing flip. Removing it here keeps the next submit's backing read net of outstanding escrow.
-        uint256 burnieEscrowWei;
-        if (burnieEscrowWhole != 0) {
-            burnieEscrowWei = burnieEscrowWhole * 1e18;
-            coinflip.withdrawRedeemedBurnie(burnieEscrowWei);
+        uint256 flipEscrowWei;
+        if (flipEscrowWhole != 0) {
+            flipEscrowWei = flipEscrowWhole * 1e18;
+            coinflip.withdrawRedeemedFlip(flipEscrowWei);
         }
 
         // Composite-keyed per-claim slot for (beneficiary, currentPeriod) (SPEC-02): records the ETH
-        // base and the contingent whole-token BURNIE escrow removed from sDGNRS's backing above.
+        // base and the contingent whole-token FLIP escrow removed from sDGNRS's backing above.
         PendingRedemption storage claim = pendingRedemptions[beneficiary][currentPeriod];
 
         // Enforce 160 ETH per-(wallet, day) EV cap on the BASE (resets naturally on a new day under composite keying).
         if (claim.ethValueOwed + ethValueOwed > MAX_DAILY_REDEMPTION_EV) revert ExceedsDailyRedemptionCap();
 
         claim.ethValueOwed += uint96(ethValueOwed);
-        if (burnieEscrowWhole != 0) {
-            claim.burnieEscrow += uint96(burnieEscrowWhole);
+        if (flipEscrowWhole != 0) {
+            claim.flipEscrow += uint96(flipEscrowWhole);
         }
 
         // Snapshot activity score on first burn of day (0 = not yet set, stored as score + 1)
@@ -1141,7 +1141,7 @@ contract StakedDegenerusStonk {
             claim.activityScore = uint16(game.playerActivityScore(beneficiary)) + 1;
         }
 
-        emit RedemptionSubmitted(beneficiary, amount, ethValueOwed, burnieEscrowWei, currentPeriod);
+        emit RedemptionSubmitted(beneficiary, amount, ethValueOwed, flipEscrowWei, currentPeriod);
     }
 
     /// @dev Pay the redemption from this contract's balance: ETH first, falling back to stETH if the

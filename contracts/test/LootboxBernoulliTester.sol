@@ -73,7 +73,7 @@ contract LootboxBernoulliTester {
     ///           if (payColdBustConsolation && whole == 0) {
     ///               wwxrp.mintPrize(player, LOOTBOX_WWXRP_CONSOLATION);
     ///           }
-    ///         The manual callers (`openLootBox`, `openBurnieLootBox`) pass
+    ///         The manual callers (`openLootBox`, `openFlipLootBox`) pass
     ///         `payColdBustConsolation = true`; the auto-resolve callers
     ///         (`resolveLootboxDirect`, `resolveRedemptionLootbox`) pass `false`.
     /// @param payColdBustConsolation The per-caller flag gating the consolation payout.

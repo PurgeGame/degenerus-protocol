@@ -8,7 +8,7 @@
 //          - near-offset      bits[16..23]   % 5     (_rollTargetLevel)
 //          - far-offset       bits[24..39]   % 46    (_rollTargetLevel)
 //          - pathRoll         bits[40..55]   % 20    (_resolveLootboxRoll)
-//          - varianceRoll     bits[80..95]   % 20    (_resolveLootboxRoll large-BURNIE)
+//          - varianceRoll     bits[80..95]   % 20    (_resolveLootboxRoll large-FLIP)
 //          - ticketVariance   bits[96..119]  % 10000 (_lootboxTicketCount)
 //          The DGNRS tier slice (bits[56..79] % 1000) and the boon roll
 //          (bits[120..151] % 1_000_000) are bit-disjoint from the above and

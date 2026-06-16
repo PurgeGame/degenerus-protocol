@@ -2,7 +2,7 @@
 // Phase 264 STAT-01 + STAT-02 + D-IMPL-01 boundary cross-validation harness.
 //
 // STAT-01: per-pull level distribution chi² uniformity over [minLevel, maxLevel].
-//          lvlPrime = minLevel + (uint256(keccak256(abi.encode(randomWord, COIN_LEVEL_TAG, i))) % range)
+//          lvlPrime = minLevel + (uint256(keccak256(abi.encode(randomWord, FLIP_LEVEL_TAG, i))) % range)
 //          N = 200 calls × 50 pulls/call = 10_000 aggregated samples (D-IMPL-03).
 //          Asserts chi² < CHI2_CRIT_05[range - 1] at α=0.05.
 //
@@ -19,7 +19,7 @@
 //          named seed; the harness harvests the DailyRngApplied event to learn
 //          the exact `randomWord` flowed into _awardDailyCoinToTraitWinners
 //          (raw VRF word + totalFlipReversals nudge — the helper's actual
-//          `randomWord` parameter). For every emitted JackpotBurnieWin event
+//          `randomWord` parameter). For every emitted JackpotFlipWin event
 //          the harness recovers the i-index from traitId/64 (each quadrant
 //          spans 64 trait IDs and is monotonic in i-order, so the i-index of
 //          the k-th emitted event is uniquely determined as the smallest i
@@ -61,12 +61,12 @@ import {
 // Constants
 // ---------------------------------------------------------------------------
 
-// COIN_LEVEL_TAG = keccak256("coin-level"). The contract declares this as
-// `bytes32 private constant COIN_LEVEL_TAG = keccak256("coin-level");`
+// FLIP_LEVEL_TAG = keccak256("coin-level"). The contract declares this as
+// `bytes32 private constant FLIP_LEVEL_TAG = keccak256("coin-level");`
 // at contracts/modules/DegenerusGameJackpotModule.sol:171. The value is
 // computed once here from the same UTF-8 input; STAT-04 sanity test below
 // asserts equality with the recomputed digest as a structural pin.
-const COIN_LEVEL_TAG = hre.ethers.keccak256(hre.ethers.toUtf8Bytes("coin-level"));
+const FLIP_LEVEL_TAG = hre.ethers.keccak256(hre.ethers.toUtf8Bytes("coin-level"));
 
 const PULLS_PER_CALL = 50; // DAILY_COIN_MAX_WINNERS — Phase 263 D-SHAPE-01.
 
@@ -107,14 +107,14 @@ function wilsonHilfertyZ(chi2, df) {
 // (Phase 263 helper body, lines 1794-1796):
 //
 //   uint24 lvlPrime = minLevel + uint24(uint256(keccak256(
-//       abi.encode(randomWord, COIN_LEVEL_TAG, i)
+//       abi.encode(randomWord, FLIP_LEVEL_TAG, i)
 //   )) % range);
 //
 // where range = uint24(maxLevel - minLevel + 1).
 //
 // Drift guard: the D-IMPL-01 boundary harness (describe block 4 below) asserts
 // the JS replica produces the EXACT same lvl series as the on-chain
-// JackpotBurnieWin.lvl emitted across the actual helper invocation under a
+// JackpotFlipWin.lvl emitted across the actual helper invocation under a
 // fixed VRF seed. JS-replica drift is structurally impossible without the
 // boundary harness failing first.
 // ---------------------------------------------------------------------------
@@ -123,7 +123,7 @@ function jsLvlPrime(randomWord, minLevel, maxLevel, i) {
   const range = BigInt(maxLevel) - BigInt(minLevel) + 1n;
   const encoded = hre.ethers.AbiCoder.defaultAbiCoder().encode(
     ["uint256", "bytes32", "uint256"],
-    [BigInt(randomWord), COIN_LEVEL_TAG, BigInt(i)],
+    [BigInt(randomWord), FLIP_LEVEL_TAG, BigInt(i)],
   );
   const digest = BigInt(hre.ethers.keccak256(encoded));
   return Number(BigInt(minLevel) + (digest % range));
@@ -174,15 +174,15 @@ after(function () {
 });
 
 // ---------------------------------------------------------------------------
-// (1) STAT-04 — Phase 261 infrastructure reuse + COIN_LEVEL_TAG sanity.
+// (1) STAT-04 — Phase 261 infrastructure reuse + FLIP_LEVEL_TAG sanity.
 // ---------------------------------------------------------------------------
 
-describe("STAT-04 — Phase 261 infrastructure reuse + COIN_LEVEL_TAG sanity", function () {
-  it("COIN_LEVEL_TAG matches keccak256('coin-level')", function () {
+describe("STAT-04 — Phase 261 infrastructure reuse + FLIP_LEVEL_TAG sanity", function () {
+  it("FLIP_LEVEL_TAG matches keccak256('coin-level')", function () {
     const recomputed = hre.ethers.keccak256(
       hre.ethers.toUtf8Bytes("coin-level"),
     );
-    expect(COIN_LEVEL_TAG).to.equal(recomputed);
+    expect(FLIP_LEVEL_TAG).to.equal(recomputed);
   });
 
   it("makeRng / CHI2_CRIT_05 / wilsonHilfertyZ are byte-identical to Phase 261 source", function () {
@@ -334,8 +334,8 @@ describe("STAT-02 — per-trait share under deterministic `i % 4` rotation", fun
 // At purchaseLevel == 1 (level 0, freshly deployed), the advance flow makes
 // TWO coin jackpot calls per the contract's `purchaseLevel == 1` branch in
 // DegenerusGameAdvanceModule.sol:
-//   - First call:  payDailyCoinJackpot(1, rngWord, 1, 1)         range=1
-//   - Second call: payDailyCoinJackpot(1, saltedRng, 2, 5)       range=4
+//   - First call:  payDailyFlipJackpot(1, rngWord, 1, 1)         range=1
+//   - Second call: payDailyFlipJackpot(1, saltedRng, 2, 5)       range=4
 //                  saltedRng = keccak256(abi.encodePacked(rngWord, keccak256("BONUS_TRAITS")))
 //
 // The first call has range=1 (lvlPrime always 1 — degenerate); the second has
@@ -381,12 +381,12 @@ async function harvestDailyRngFinalWord(receipts, advanceModule) {
   return null;
 }
 
-async function harvestJackpotBurnieWinByCall(receipts, jackpotInterface) {
-  // Group emitted JackpotBurnieWin events by transaction so we can isolate
+async function harvestJackpotFlipWinByCall(receipts, jackpotInterface) {
+  // Group emitted JackpotFlipWin events by transaction so we can isolate
   // each individual `_awardDailyCoinToTraitWinners` invocation.
   //
   // Event signature (DegenerusGameJackpotModule.sol L96-102):
-  //   event JackpotBurnieWin(
+  //   event JackpotFlipWin(
   //       address indexed winner,
   //       uint24  indexed level,   // <- positional arg: lvlPrime sampled per pull
   //       uint8   indexed traitId,
@@ -403,7 +403,7 @@ async function harvestJackpotBurnieWinByCall(receipts, jackpotInterface) {
           topics: log.topics,
           data: log.data,
         });
-        if (parsed && parsed.name === "JackpotBurnieWin") {
+        if (parsed && parsed.name === "JackpotFlipWin") {
           groupForTx.push({
             txHash: tx.hash,
             args: {
@@ -416,7 +416,7 @@ async function harvestJackpotBurnieWinByCall(receipts, jackpotInterface) {
           });
         }
       } catch {
-        // Not a JackpotBurnieWin event — skip.
+        // Not a JackpotFlipWin event — skip.
       }
     }
     if (groupForTx.length > 0) {
@@ -428,10 +428,10 @@ async function harvestJackpotBurnieWinByCall(receipts, jackpotInterface) {
 
 
 // ---------------------------------------------------------------------------
-// (4) D-IMPL-01 — JS replica jsLvlPrime == on-chain JackpotBurnieWin.lvl.
+// (4) D-IMPL-01 — JS replica jsLvlPrime == on-chain JackpotFlipWin.lvl.
 // ---------------------------------------------------------------------------
 
-describe("D-IMPL-01 — JS replica jsLvlPrime EXACTLY matches on-chain JackpotBurnieWin.lvl at fixed seeds", function () {
+describe("D-IMPL-01 — JS replica jsLvlPrime EXACTLY matches on-chain JackpotFlipWin.lvl at fixed seeds", function () {
   this.timeout(900_000); // 15 min — heavy lifecycle drive across N seeds
 
   // Distinct deterministic seeds per harness call (D-APPROVAL-04 spirit).
@@ -529,24 +529,24 @@ describe("D-IMPL-01 — JS replica jsLvlPrime EXACTLY matches on-chain JackpotBu
         `— totalFlipReversals nudge unexpected; check fixture state`,
       ).to.equal(seed);
 
-      // Harvest emitted JackpotBurnieWin events.
+      // Harvest emitted JackpotFlipWin events.
       //
       // The advance flow at purchaseLevel==1 makes TWO coin jackpot calls
       // inside ONE advance transaction:
-      //   call A: payDailyCoinJackpot(1, rngWord,    1, 1)  range = 1, lvl=1
-      //   call B: payDailyCoinJackpot(1, saltedRng,  2, 5)  range = 4, lvl in [2, 5]
+      //   call A: payDailyFlipJackpot(1, rngWord,    1, 1)  range = 1, lvl=1
+      //   call B: payDailyFlipJackpot(1, saltedRng,  2, 5)  range = 4, lvl in [2, 5]
       // The two calls share an emit stream within the same tx. We split them
       // by emitted lvl: call A's events all have lvl == 1; call B's events
       // all have lvl in [2, 5]. Helper invocation order means call A's
       // events come BEFORE call B's events.
       const jackpotInterface = jackpotModule.interface;
-      const callGroups = await harvestJackpotBurnieWinByCall(
+      const callGroups = await harvestJackpotFlipWinByCall(
         receipts,
         jackpotInterface,
       );
       expect(
         callGroups.length,
-        `Expected >=1 transaction emitting JackpotBurnieWin events; got ${callGroups.length}`,
+        `Expected >=1 transaction emitting JackpotFlipWin events; got ${callGroups.length}`,
       ).to.be.greaterThanOrEqual(1);
 
       // Find the transaction containing call B by scanning for events with
@@ -561,7 +561,7 @@ describe("D-IMPL-01 — JS replica jsLvlPrime EXACTLY matches on-chain JackpotBu
           if (callBEvents !== null) {
             throw new Error(
               `seed=0x${seed.toString(16)}: multiple transactions emitted ` +
-              `JackpotBurnieWin with lvl in [2, 5] — fixture drove an ` +
+              `JackpotFlipWin with lvl in [2, 5] — fixture drove an ` +
               `unexpected branch. Investigate before relaxing the assertion.`,
             );
           }
@@ -571,7 +571,7 @@ describe("D-IMPL-01 — JS replica jsLvlPrime EXACTLY matches on-chain JackpotBu
 
       if (callBEvents === null) {
         throw new Error(
-          `seed=0x${seed.toString(16)}: no JackpotBurnieWin events with ` +
+          `seed=0x${seed.toString(16)}: no JackpotFlipWin events with ` +
           `lvl in [2, 5] observed — call B (saltedRng, range=[2, 5]) did not ` +
           `emit. Investigate before relaxing the assertion.`,
         );

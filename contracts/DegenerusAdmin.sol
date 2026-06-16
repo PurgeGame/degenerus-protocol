@@ -152,11 +152,11 @@ interface ILinkTokenLike {
     ) external returns (bool success);
 }
 
-/// @dev BurnieCoinflip interface for LINK donation flip credits.
-interface IBurnieCoinflipLinkReward {
+/// @dev Coinflip interface for LINK donation flip credits.
+interface ICoinflipLinkReward {
     /// @notice Credit FLIP stake to a player as a LINK donation reward.
     /// @param player Recipient address.
-    /// @param amount Amount of BURNIE-denominated flip stake to credit (18 decimals).
+    /// @param amount Amount of FLIP-denominated flip stake to credit (18 decimals).
     function creditFlip(address player, uint256 amount) external;
 }
 
@@ -181,7 +181,7 @@ interface IDegenerusVaultOwner {
 }
 
 /// @dev sDGNRS interface for governance voting weight and voting supply.
-interface IsDGNRS {
+interface IsDGNRSVotes {
     function totalSupply() external view returns (uint256);
     function balanceOf(address account) external view returns (uint256);
     function votingSupply() external view returns (uint256);
@@ -288,10 +288,10 @@ contract DegenerusAdmin {
         IDegenerusGameAdmin(ContractAddresses.GAME);
     ILinkTokenLike internal constant linkToken =
         ILinkTokenLike(ContractAddresses.LINK_TOKEN);
-    IBurnieCoinflipLinkReward internal constant coinflipReward =
-        IBurnieCoinflipLinkReward(ContractAddresses.COINFLIP);
-    IsDGNRS internal constant sDGNRS =
-        IsDGNRS(ContractAddresses.SDGNRS);
+    ICoinflipLinkReward internal constant coinflipReward =
+        ICoinflipLinkReward(ContractAddresses.COINFLIP);
+    IsDGNRSVotes internal constant sDGNRS =
+        IsDGNRSVotes(ContractAddresses.SDGNRS);
 
     // =========================================================================
     // VRF STATE
@@ -409,7 +409,7 @@ contract DegenerusAdmin {
     /// @notice Chainlink LINK/ETH price feed address.
     address public linkEthPriceFeed;
 
-    /// @dev BURNIE conversion constant: 1000 BURNIE = 1e21 base units.
+    /// @dev FLIP conversion constant: 1000 FLIP = 1e21 base units.
     uint256 private constant PRICE_COIN_UNIT = 1000 ether;
 
     /// @dev Expected LINK/ETH feed decimals.

@@ -734,10 +734,10 @@ describe("Paper Parity (Phase 46)", function () {
   // PAR-13: Coinflip payout distribution
   // =========================================================================
 
-  // Coinflip constants are private in BurnieCoinflip.sol:121-122.
+  // Coinflip constants are private in Coinflip.sol:121-122.
   // The payout distribution (5%/90%/5%) and mean ~1.97x are verified through
   // mathematical reconstruction of the payout formula. Behavioral testing
-  // is in unit/BurnieCoinflip.test.js.
+  // is in unit/Coinflip.test.js.
   describe("PAR-13: Coinflip payout distribution (5%/90%/5% tiers)", function () {
     it("5% chance for 50% bonus (unlucky: 1.5x total payout)", async function () {
       // roll == 0 out of 20 = 5%: rewardPercent = 50
@@ -818,28 +818,28 @@ describe("Paper Parity (Phase 46)", function () {
   });
 
   // =========================================================================
-  // PAR-15: BURNIE entry cost
+  // PAR-15: FLIP entry cost
   // =========================================================================
 
   // PRICE_COIN_UNIT = 1000 ether is a private constant in DegenerusGameStorage.
-  // The arithmetic is verified statically; behavioral verification of BURNIE ticket
-  // purchases is covered in unit/DegenerusGame.test.js and unit/BurnieCoin.test.js.
-  describe("PAR-15: BURNIE entry cost (250 BURNIE = 1 entry, 1000 BURNIE = 1 full ticket)", function () {
-    it("PRICE_COIN_UNIT = 1000 ether (1000 BURNIE with 18 decimals)", async function () {
+  // The arithmetic is verified statically; behavioral verification of FLIP ticket
+  // purchases is covered in unit/DegenerusGame.test.js and unit/FLIP.test.js.
+  describe("PAR-15: FLIP entry cost (250 FLIP = 1 entry, 1000 FLIP = 1 full ticket)", function () {
+    it("PRICE_COIN_UNIT = 1000 ether (1000 FLIP with 18 decimals)", async function () {
       // PRICE_COIN_UNIT = 1000 ether in DegenerusGameStorage
       const unit = ethers.parseEther("1000");
       expect(unit).to.equal(ethers.parseEther("1000"));
     });
 
-    it("1 entry costs PRICE_COIN_UNIT/4 = 250 BURNIE", async function () {
+    it("1 entry costs PRICE_COIN_UNIT/4 = 250 FLIP", async function () {
       // coinCost = (quantity * (PRICE_COIN_UNIT / 4)) / TICKET_SCALE
       // 1 entry = qty 100 (TICKET_SCALE=100):
-      // coinCost = (100 * 250 ether) / 100 = 250 ether = 250 BURNIE
+      // coinCost = (100 * 250 ether) / 100 = 250 ether = 250 FLIP
       const pricePerEntry = ethers.parseEther("1000") / 4n;
       expect(pricePerEntry).to.equal(ethers.parseEther("250"));
     });
 
-    it("1 full ticket (4 entries, qty=400) costs 1000 BURNIE", async function () {
+    it("1 full ticket (4 entries, qty=400) costs 1000 FLIP", async function () {
       // coinCost = (400 * (1000 ether / 4)) / 100 = (400 * 250 ether) / 100 = 1000 ether
       const qty = 400n;
       const ticketScale = 100n;
@@ -1059,13 +1059,13 @@ describe("Paper Parity (Phase 46)", function () {
       expect(price).to.equal(520n, "32nd deity pass = 520 ETH");
     });
 
-    it("coinflip minimum deposit: 100 BURNIE", async function () {
-      // BurnieCoinflip: MIN = 100 ether
+    it("coinflip minimum deposit: 100 FLIP", async function () {
+      // Coinflip: MIN = 100 ether
       expect(ethers.parseEther("100")).to.equal(ethers.parseEther("100"));
     });
 
     it("PRICE_COIN_UNIT consistent across all contracts (1000 ether)", async function () {
-      // Verified in source: DegenerusGameStorage, BurnieCoinflip, DegenerusStonk,
+      // Verified in source: DegenerusGameStorage, Coinflip, DGNRS,
       // DegenerusQuests, DegenerusAdmin all define PRICE_COIN_UNIT = 1000 ether
       const unit = ethers.parseEther("1000");
       expect(unit).to.equal(1000n * 10n ** 18n);

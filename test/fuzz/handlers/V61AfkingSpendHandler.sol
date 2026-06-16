@@ -3,7 +3,7 @@ pragma solidity ^0.8.26;
 
 import "forge-std/Test.sol";
 import {DegenerusGame} from "../../../contracts/DegenerusGame.sol";
-import {BurnieCoin} from "../../../contracts/BurnieCoin.sol";
+import {FLIP} from "../../../contracts/FLIP.sol";
 import {DegenerusDeityPass} from "../../../contracts/DegenerusDeityPass.sol";
 import {MockVRFCoordinator} from "../../../contracts/mocks/MockVRFCoordinator.sol";
 import {ContractAddresses} from "../../../contracts/ContractAddresses.sol";
@@ -13,7 +13,7 @@ import {MintPaymentKind} from "../../../contracts/interfaces/IDegenerusGame.sol"
 /// @notice Exercises the NEW v61 spend surfaces in a randomized sequence: (1) an afking-funded buy (the
 ///         msg.value -> claimable -> afking waterfall through the live _processMintPayment / _settleShortfall),
 ///         (2) a packed credit/debit (a real depositAfkingFunding credit + a subsequent draw), (3) a stale
-///         cashout (claimWinnings -> maybeCurse), (4) a deity smite (BURNIE-only, off the ETH path), (5) a
+///         cashout (claimWinnings -> maybeCurse), (4) a deity smite (FLIP-only, off the ETH path), (5) a
 ///         decurse, and (6) an advance (drives jackpot claimable credits + fulfills VRF). Every ETH balance is
 ///         created ONLY through real paired contract entrypoints (depositAfkingFunding pairs claimablePool +=;
 ///         the waterfall debits pair claimablePool -=; jackpot wins pair the claimablePool credit) so the
@@ -29,7 +29,7 @@ import {MintPaymentKind} from "../../../contracts/interfaces/IDegenerusGame.sol"
 ///      diagnostic invariants.
 contract V61AfkingSpendHandler is Test {
     DegenerusGame public game;
-    BurnieCoin public coin;
+    FLIP public coin;
     DegenerusDeityPass public deityPass;
     MockVRFCoordinator public vrf;
 
@@ -40,14 +40,14 @@ contract V61AfkingSpendHandler is Test {
     uint256 private constant DEITY_SHIFT = 184; // HAS_DEITY_PASS score bit (subscribe gate)
     uint256 private constant CURSE_COUNT_SHIFT = 215;
     uint256 private constant PRICE_COIN_UNIT = 1000 ether;
-    uint256 private constant SMITE_BURN = PRICE_COIN_UNIT / 5; // 200 BURNIE
-    uint256 private constant DECURSE_BURN = PRICE_COIN_UNIT / 10; // 100 BURNIE
+    uint256 private constant SMITE_BURN = PRICE_COIN_UNIT / 5; // 200 FLIP
+    uint256 private constant DECURSE_BURN = PRICE_COIN_UNIT / 10; // 100 FLIP
 
     // --- Ghost accounting (deposits >= draws sanity) ---
     uint256 public ghost_afkingDeposited; // total ETH credited via depositAfkingFunding
     uint256 public ghost_afkingDrawn; // total afking drawn by the waterfall (AfkingSpent)
     uint256 public ghost_cashedOut; // total ETH paid out by claimWinnings
-    uint256 public ghost_smiteBurned; // total BURNIE burned by smites
+    uint256 public ghost_smiteBurned; // total FLIP burned by smites
 
     // --- Call counters (coverage visibility) ---
     uint256 public calls_fundAfking;
@@ -75,7 +75,7 @@ contract V61AfkingSpendHandler is Test {
 
     constructor(
         DegenerusGame game_,
-        BurnieCoin coin_,
+        FLIP coin_,
         DegenerusDeityPass deityPass_,
         MockVRFCoordinator vrf_,
         uint256 numActors
@@ -193,30 +193,30 @@ contract V61AfkingSpendHandler is Test {
     }
 
     // =========================================================================
-    // Action 4: smite (BURNIE-only; off the ETH path ⇒ claimablePool unchanged)
+    // Action 4: smite (FLIP-only; off the ETH path ⇒ claimablePool unchanged)
     // =========================================================================
 
-    /// @notice The deity smites a random actor for 200 BURNIE. Pure curse-counter effect — no ETH, no
-    ///         claimablePool touch — so the Σ identity is byte-unchanged by a smite. Funds the deity's BURNIE
+    /// @notice The deity smites a random actor for 200 FLIP. Pure curse-counter effect — no ETH, no
+    ///         claimablePool touch — so the Σ identity is byte-unchanged by a smite. Funds the deity's FLIP
     ///         first (the GAME-gated mint) so a revert is the contract's validation, not insufficient balance.
     function smite(uint256 targetSeed) external {
         calls_smite++;
         address smitee = actors[bound(targetSeed, 0, actors.length - 1)];
         vm.prank(address(game));
         try coin.mintForGame(deity, SMITE_BURN) {} catch {}
-        uint256 burnieBefore = coin.balanceOf(deity);
+        uint256 flipBefore = coin.balanceOf(deity);
         vm.prank(deity);
         try game.smite(deityId, smitee) {
             success_smite++;
-            if (burnieBefore > coin.balanceOf(deity)) ghost_smiteBurned += burnieBefore - coin.balanceOf(deity);
+            if (flipBefore > coin.balanceOf(deity)) ghost_smiteBurned += flipBefore - coin.balanceOf(deity);
         } catch {}
     }
 
     // =========================================================================
-    // Action 5: decurse (BURNIE-only; off the ETH path)
+    // Action 5: decurse (FLIP-only; off the ETH path)
     // =========================================================================
 
-    /// @notice Clear a random actor's curse for 100 BURNIE via the permissionless decurse. BURNIE-only — the
+    /// @notice Clear a random actor's curse for 100 FLIP via the permissionless decurse. FLIP-only — the
     ///         claimablePool is untouched.
     function decurse(uint256 actorSeed, uint256 targetSeed) external useActor(actorSeed) {
         calls_decurse++;

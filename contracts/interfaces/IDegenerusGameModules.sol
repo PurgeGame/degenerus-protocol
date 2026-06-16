@@ -80,7 +80,7 @@ interface IDegenerusGameJackpotModule {
     /// @param randWord Random word for winner selection
     /// @param minLevel Minimum target level for near-future coin distribution (inclusive)
     /// @param maxLevel Maximum target level for near-future coin distribution (inclusive)
-    function payDailyCoinJackpot(uint24 lvl, uint256 randWord, uint24 minLevel, uint24 maxLevel) external;
+    function payDailyFlipJackpot(uint24 lvl, uint256 randWord, uint24 minLevel, uint24 maxLevel) external;
 
     /// @notice Emit DailyWinningTraits without running distribution.
     /// @param lvl Current level.
@@ -237,10 +237,10 @@ interface IDegenerusGameMintModule {
         uint256 ethValue
     ) external;
 
-    /// @notice Processes a BURNIE purchase of tickets
+    /// @notice Processes a FLIP purchase of tickets
     /// @param buyer Address of the buyer
     /// @param ticketQuantity Number of tickets to purchase
-    function redeemBurnie(
+    function redeemFlip(
         address buyer,
         uint256 ticketQuantity
     ) external;
@@ -270,7 +270,7 @@ interface IDegenerusGameMintModule {
             uint256 totalBudget,
             uint256 ticketWei,
             uint256 ethCashWei,
-            uint256 burnieTokens
+            uint256 flipTokens
         );
 
     /// @notice Buys a credit-gated coin-presale box (ETH + claimable shortfall)
@@ -417,7 +417,7 @@ interface IDegenerusGameBoonModule {
 interface IDegenerusGameDegeneretteModule {
     /// @notice Places Full Ticket bets (4 traits, match-based payouts)
     /// @param player The player address (use zero address for msg.sender)
-    /// @param currency Currency type (0=ETH, 1=BURNIE, 2=unsupported, 3=WWXRP)
+    /// @param currency Currency type (0=ETH, 1=FLIP, 2=unsupported, 3=WWXRP)
     /// @param amountPerTicket Bet amount per ticket
     /// @param ticketCount Number of spins (1..10). Each spin resolves independently.
     /// @param customTicket Custom packed traits
@@ -451,12 +451,12 @@ interface IDegenerusGameDegeneretteModule {
         uint256 seed
     ) external payable;
 
-    /// @notice Resolve a lootbox roll as three BURNIE Degenerette spins under one survival flip.
+    /// @notice Resolve a lootbox roll as three FLIP Degenerette spins under one survival flip.
     /// @param player The reward recipient.
-    /// @param totalStake The total BURNIE budget split across the three spins.
+    /// @param totalStake The total FLIP budget split across the three spins.
     /// @param activityScore Frozen activity-score bps from the box's commitment.
     /// @param seed Domain-separated spin seed (hash2-tagged off the box seed).
-    function resolveBurnieSpinsFromBox(
+    function resolveFlipSpinsFromBox(
         address player,
         uint256 totalStake,
         uint16 activityScore,
@@ -520,32 +520,32 @@ interface IGameAfkingModule {
 
     /// @notice Unified permissionless router: do ONE category of pending work this call
     ///         (advance → afking-box open) and pay ONE bounty (PLACE-02).
-    function mintBurnie() external;
+    function mintFlip() external;
 
     /// @notice Drain up to `count` ready afking boxes (walks _subOpenCursor); returns the
     ///         number opened. Unrewarded; reached via the Game's openBoxes() valve.
     function drainAfkingBoxes(uint256 count) external returns (uint256 opened);
 
-    /// @notice Permissionless BURNIE claim — pays each sub its accrued pendingBurnie (the
+    /// @notice Permissionless FLIP claim — pays each sub its accrued pendingFlip (the
     ///         per-delivered-day slot-0 quest reward + ticket buyer-bonus) in one creditFlip
     ///         and zeroes it; always credits the sub, never the caller. Off the solvency path.
-    function claimAfkingBurnie(address[] calldata subs) external;
+    function claimAfkingFlip(address[] calldata subs) external;
 
     /// @notice Affiliate-only atomic read-and-zero of a sub's accrued affiliateBase (the
-    ///         running flat-7% affiliate balance, whole BURNIE). Read and zero happen
+    ///         running flat-7% affiliate balance, whole FLIP). Read and zero happen
     ///         together so a duplicate sub drains 0 the second time; there is no separate
     ///         read accessor.
     /// @param sub The subscriber whose affiliate base is drained.
-    /// @return base The drained whole-BURNIE affiliate base (0 if already drained).
+    /// @return base The drained whole-FLIP affiliate base (0 if already drained).
     function drainAffiliateBase(address sub) external returns (uint256 base);
 
     /// @notice Cashout-curse SET hook, delegatecalled from the Game's claimWinnings.
     function maybeCurse(address player) external;
 
-    /// @notice Permissionless paid cure: clear `target`'s cashout/smite curse for 100 BURNIE.
+    /// @notice Permissionless paid cure: clear `target`'s cashout/smite curse for 100 FLIP.
     function decurse(address target) external;
 
-    /// @notice Deity-gated smite: add a saturating curse stack to `smitee` for 200 BURNIE.
+    /// @notice Deity-gated smite: add a saturating curse stack to `smitee` for 200 FLIP.
     function smite(uint256 deityId, address smitee) external;
 
     /// @notice For each funded sub it stamps the per-sub box fields (lootbox mode) or

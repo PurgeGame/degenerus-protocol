@@ -2,14 +2,14 @@
 pragma solidity ^0.8.26;
 
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
-import {StakedDegenerusStonk} from "../../contracts/StakedDegenerusStonk.sol";
+import {sDGNRS} from "../../contracts/sDGNRS.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {SettleClaimableShortfallTester} from "../../contracts/test/SettleClaimableShortfallTester.sol";
 
 /// @notice Local mirror of the coinflip player surface for vm.mockCall selectors. Mirrors the
 ///         interface in RedemptionEdgeCases.t.sol and RedemptionGas.t.sol; redeclared locally
 ///         so this file does not depend on the coinflip contract import.
-interface IBurnieCoinflipPlayerMock {
+interface IFlipCoinflipPlayerMock {
     function getCoinflipDayResult(uint32 day) external view returns (uint16 rewardPercent, bool win);
     function claimCoinflipsForRedemption(address player, uint256 amount) external returns (uint256 claimed);
 }
@@ -59,10 +59,10 @@ contract StakedStonkRedemption is DeployProtocol {
     //                          CONSTANTS
     // =====================================================================
 
-    /// @dev Mirrors `StakedDegenerusStonk.MIN_BURN_AMOUNT` (private literal `1e18`).
+    /// @dev Mirrors `sDGNRS.MIN_BURN_AMOUNT` (private literal `1e18`).
     uint256 internal constant MIN_BURN_AMOUNT = 1e18;
 
-    /// @dev Mirrors `StakedDegenerusStonk.MAX_DAILY_REDEMPTION_EV` (private literal `160 ether`).
+    /// @dev Mirrors `sDGNRS.MAX_DAILY_REDEMPTION_EV` (private literal `160 ether`).
     uint256 internal constant MAX_DAILY_REDEMPTION_EV = 160 ether;
 
     /// @dev Per-actor sDGNRS funding (1M tokens). Enough headroom for repeated burns without
@@ -77,7 +77,7 @@ contract StakedStonkRedemption is DeployProtocol {
     uint256 internal constant FUZZ_MIN_AMOUNT = 100 ether;
 
     /// @dev Storage slot of the `pendingByDay` mapping. v47: shifted from 11 to 10 because the
-    ///      `pendingRedemptionBurnie` (internal uint256) at slot 10 was removed (BURNIE settled at
+    ///      `pendingRedemptionFlip` (internal uint256) at slot 10 was removed (FLIP settled at
     ///      submit). Embedded inline so the test file is self-contained.
     /// @dev POST RT-PACKING-12: scalars packed into slot 0, mappings shifted down (pendingByDay 10->7).
     uint256 internal constant SLOT_PENDING_BY_DAY = 7;
@@ -125,10 +125,10 @@ contract StakedStonkRedemption is DeployProtocol {
         vm.deal(playerC, 10 ether);
         vm.deal(playerD, 10 ether);
         vm.startPrank(address(game));
-        sdgnrs.transferFromPool(StakedDegenerusStonk.Pool.Reward, playerA, ACTOR_FUNDING);
-        sdgnrs.transferFromPool(StakedDegenerusStonk.Pool.Reward, playerB, ACTOR_FUNDING);
-        sdgnrs.transferFromPool(StakedDegenerusStonk.Pool.Reward, playerC, ACTOR_FUNDING);
-        sdgnrs.transferFromPool(StakedDegenerusStonk.Pool.Reward, playerD, ACTOR_FUNDING);
+        sdgnrs.transferFromPool(sDGNRS.Pool.Reward, playerA, ACTOR_FUNDING);
+        sdgnrs.transferFromPool(sDGNRS.Pool.Reward, playerB, ACTOR_FUNDING);
+        sdgnrs.transferFromPool(sDGNRS.Pool.Reward, playerC, ACTOR_FUNDING);
+        sdgnrs.transferFromPool(sDGNRS.Pool.Reward, playerD, ACTOR_FUNDING);
         vm.stopPrank();
 
         // Mock coinflip player surface so claim path takes the full-payout branch (precedent
@@ -137,12 +137,12 @@ contract StakedStonkRedemption is DeployProtocol {
         // testFuzz_ClaimReadsCorrectDay.
         vm.mockCall(
             address(coinflip),
-            abi.encodeWithSelector(IBurnieCoinflipPlayerMock.getCoinflipDayResult.selector),
+            abi.encodeWithSelector(IFlipCoinflipPlayerMock.getCoinflipDayResult.selector),
             abi.encode(uint16(100), true)
         );
         vm.mockCall(
             address(coinflip),
-            abi.encodeWithSelector(IBurnieCoinflipPlayerMock.claimCoinflipsForRedemption.selector),
+            abi.encodeWithSelector(IFlipCoinflipPlayerMock.claimCoinflipsForRedemption.selector),
             abi.encode(uint256(0))
         );
         // Mock resolveRedemptionLootbox to a no-op so the 50%-lootbox-routing branch in claim
@@ -167,7 +167,7 @@ contract StakedStonkRedemption is DeployProtocol {
         sdgnrs.resolveRedemptionPeriod(roll, uint24(dayToResolve));
     }
 
-    /// @dev Write day `day`'s REAL coinflip result into BurnieCoinflip storage so the redemption
+    /// @dev Write day `day`'s REAL coinflip result into Coinflip storage so the redemption
     ///      claim's contingency leg reads it through the production getCoinflipDayResult(uint24) ->
     ///      _dayResult path (no mockCall shim — this also exercises the real coinflipDayResultPacked
     ///      packing: slot 1, 32 days/slot, 8-bit lanes; win -> reward byte 50..156, loss -> 1).
@@ -192,7 +192,7 @@ contract StakedStonkRedemption is DeployProtocol {
     }
 
     /// @dev Read packed `pendingByDay[day]` slot and unpack the 3×uint64 fields per the v47 layout
-    ///      defined in `StakedDegenerusStonk.DayPending`. v47: per-day burnieBase removed (BURNIE
+    ///      defined in `sDGNRS.DayPending`. v47: per-day flipBase removed (FLIP
     ///      settled at submit) — `{ethBase (0-63), supplySnapshot (64-127), burned (128-191)}`.
     function _readPendingByDay(uint32 day)
         internal
@@ -237,7 +237,7 @@ contract StakedStonkRedemption is DeployProtocol {
     // =====================================================================
 
     /// @notice Pins the `BurnsBlockedBeforeDailyRng` admission gate (the post-v62 redemption
-    ///         pre-draw guard in `StakedDegenerusStonk._submitGamblingClaimFrom`): a gambling burn
+    ///         pre-draw guard in `sDGNRS._submitGamblingClaimFrom`): a gambling burn
     ///         submitted before the current day's VRF word is recorded must revert. Every other
     ///         test in this suite calls `_primeCurrentDayRng()` first, so removing the gate would
     ///         otherwise go undetected — the lootbox leg would then read a zero, fully-predictable
@@ -252,7 +252,7 @@ contract StakedStonkRedemption is DeployProtocol {
         // Valid gambling burn (>= MIN_BURN_AMOUNT, <= funding, well under the 160-ETH EV cap):
         // the only admission failure it can hit is the pre-draw gate.
         vm.prank(playerA);
-        vm.expectRevert(StakedDegenerusStonk.BurnsBlockedBeforeDailyRng.selector);
+        vm.expectRevert(sDGNRS.BurnsBlockedBeforeDailyRng.selector);
         sdgnrs.burn(FUZZ_MIN_AMOUNT);
     }
 
@@ -465,7 +465,7 @@ contract StakedStonkRedemption is DeployProtocol {
             "claim: game claimable credited != expected (ethValueOwed * roll / 100 / 2)"
         );
 
-        // Slot cleared on claim (v47 claim is ETH-only; burnieOwed field removed).
+        // Slot cleared on claim (v47 claim is ETH-only; flipOwed field removed).
         (uint96 evBurnPost, , ) = sdgnrs.pendingRedemptions(actor, uint24(dayBurn));
         assertEq(uint256(evBurnPost), 0, "claim: full-claim path must delete ethValueOwed");
 
@@ -577,7 +577,7 @@ contract StakedStonkRedemption is DeployProtocol {
         uint32 dayD = game.currentDayView();
 
         // Seed pendingByDay[dayD] with supplySnapshot = 1000 whole tokens (cap = 500).
-        // v47 DayPending packing: (ethBase, supplySnapshot, burned) — burnieBase field removed.
+        // v47 DayPending packing: (ethBase, supplySnapshot, burned) — flipBase field removed.
         uint256 packed = _packPendingByDay(0, 1000, 0);
         bytes32 slotPbD = keccak256(abi.encode(uint256(dayD), uint256(SLOT_PENDING_BY_DAY)));
         vm.store(address(sdgnrs), slotPbD, bytes32(packed));
@@ -615,7 +615,7 @@ contract StakedStonkRedemption is DeployProtocol {
         // amount in [1e18, ACTOR_FUNDING / 100] to ensure all probe values would push burned ≥ 501.
         uint256 overCap = bound(secondBurnSeed, MIN_BURN_AMOUNT, ACTOR_FUNDING / 100);
         vm.prank(actor);
-        vm.expectRevert(StakedDegenerusStonk.Insufficient.selector);
+        vm.expectRevert(sDGNRS.Insufficient.selector);
         sdgnrs.burn(overCap);
 
         // Pool state byte-identical post failed burn
@@ -649,12 +649,12 @@ contract StakedStonkRedemption is DeployProtocol {
         address actor = _pickActor(actorSeed);
         uint32 dayD = game.currentDayView();
 
-        // Pack PendingRedemption: bits 0-95 = ethValueOwed, 96-191 = burnieOwed, 192-207 =
+        // Pack PendingRedemption: bits 0-95 = ethValueOwed, 96-191 = flipOwed, 192-207 =
         // activityScore. Seed ethValueOwed = MAX_DAILY_REDEMPTION_EV (gwei-aligned since 160e18
         // is a multiple of 1e9); activityScore = 1 (treat as set so the lazy-init branch in
         // _submitGamblingClaimFrom does NOT overwrite it).
         // v47 PendingRedemption packing: ethValueOwed (bits 0-95) | activityScore (bits 96-111).
-        // The former burnieOwed field (old bits 96-191) was removed, so activityScore is at bit 96.
+        // The former flipOwed field (old bits 96-191) was removed, so activityScore is at bit 96.
         uint256 packed = uint256(MAX_DAILY_REDEMPTION_EV) | (uint256(1) << 96);
         bytes32 outerSlot = keccak256(abi.encode(actor, uint256(SLOT_PENDING_REDEMPTIONS)));
         bytes32 claimSlot = keccak256(abi.encode(uint256(dayD), outerSlot));
@@ -677,13 +677,13 @@ contract StakedStonkRedemption is DeployProtocol {
         // amount in [FUZZ_MIN_AMOUNT, ACTOR_FUNDING / 100] to assert the revert across a range.
         uint256 amount = bound(amountSeed, FUZZ_MIN_AMOUNT, ACTOR_FUNDING / 100);
         vm.prank(actor);
-        vm.expectRevert(StakedDegenerusStonk.ExceedsDailyRedemptionCap.selector);
+        vm.expectRevert(sDGNRS.ExceedsDailyRedemptionCap.selector);
         sdgnrs.burn(amount);
 
         // Negative assertion: claim slot byte-identical post failed burn
         (uint96 evPost, uint16 asPost, ) = sdgnrs.pendingRedemptions(actor, uint24(dayD));
         assertEq(uint256(evPost), MAX_DAILY_REDEMPTION_EV, "evCap: ethValueOwed mutated by failed burn");
-        // v47: burnieOwed field removed — nothing to byte-compare.
+        // v47: flipOwed field removed — nothing to byte-compare.
         assertEq(uint256(asPost), 1, "evCap: activityScore mutated by failed burn");
     }
 
@@ -720,7 +720,7 @@ contract StakedStonkRedemption is DeployProtocol {
 
         // Reverting call
         vm.prank(caller);
-        vm.expectRevert(StakedDegenerusStonk.Unauthorized.selector);
+        vm.expectRevert(sDGNRS.Unauthorized.selector);
         sdgnrs.resolveRedemptionPeriod(roll, uint24(day));
 
         // Negative assertions: no state change.
@@ -1060,12 +1060,12 @@ contract StakedStonkRedemption is DeployProtocol {
     }
 
     // =====================================================================
-    //   REDEEM-08: BURNIE-can't-block-ETH + R1/R3/R4 refinement coverage
+    //   REDEEM-08: FLIP-can't-block-ETH + R1/R3/R4 refinement coverage
     // =====================================================================
 
-    /// @dev Fund sDGNRS's held BURNIE balance via the GAME-gated mint (the post-seed-window
+    /// @dev Fund sDGNRS's held FLIP balance via the GAME-gated mint (the post-seed-window
     ///      state: daily-claimed flip wins sit on its wallet as redemption backing).
-    function _fundSdgnrsBurnie(uint256 amount) internal {
+    function _fundSdgnrsFlip(uint256 amount) internal {
         vm.prank(address(game));
         coin.mintForGame(ContractAddresses.SDGNRS, amount);
     }
@@ -1084,35 +1084,35 @@ contract StakedStonkRedemption is DeployProtocol {
         vm.deal(address(game), amount);
     }
 
-    /// @notice REDEEM-08 BURNIE-can't-block-ETH: the ETH leg of claimRedemption pays in full from
-    ///         the segregated balance regardless of the redeemer's BURNIE share. The redeemed BURNIE
-    ///         slice is removed from sDGNRS at submit and escrowed; the claim-time BURNIE leg (a
+    /// @notice REDEEM-08 FLIP-can't-block-ETH: the ETH leg of claimRedemption pays in full from
+    ///         the segregated balance regardless of the redeemer's FLIP share. The redeemed FLIP
+    ///         slice is removed from sDGNRS at submit and escrowed; the claim-time FLIP leg (a
     ///         contingent flip credit paid only on the resolving day's coinflip win) is independent of
     ///         the ETH/stETH legs and cannot stall them. The claim's ETH delivered equals the rolled
     ///         segregated amount, period.
-    /// @dev Drives a full submit → resolve → claim with sDGNRS holding a large BURNIE balance (so a
-    ///      pre-fix BURNIE-reserve apparatus would have had a fat BURNIE leg to settle/stall on). The
+    /// @dev Drives a full submit → resolve → claim with sDGNRS holding a large FLIP balance (so a
+    ///      pre-fix FLIP-reserve apparatus would have had a fat FLIP leg to settle/stall on). The
     ///      direct credit (game claimable) is asserted to equal (claim.ethValueOwed * roll / 100) / 2
     ///      (the live-game 50% direct split — the 50% lootbox leg is routed via the setUp no-op
-    ///      mock), independent of any BURNIE.
-    function testBurnieCannotBlockEthLeg() public {
+    ///      mock), independent of any FLIP.
+    function testFlipCannotBlockEthLeg() public {
         _seedRedemptionBacking(100 ether);
 
         uint32 dayBurn = game.currentDayView();
         uint256 burnAmount = 1000 ether;
         uint16 roll = 100;
 
-        // Fund sDGNRS with a large held BURNIE balance (the post-seed-window state: claimed
-        // flip wins sit on its wallet), so the redeemer's proportional BURNIE share is
-        // non-trivial — exactly the case a pre-fix BURNIE-reserve leg could have stalled.
+        // Fund sDGNRS with a large held FLIP balance (the post-seed-window state: claimed
+        // flip wins sit on its wallet), so the redeemer's proportional FLIP share is
+        // non-trivial — exactly the case a pre-fix FLIP-reserve leg could have stalled.
         // Submit settles it all at submit.
-        _fundSdgnrsBurnie(2_000_000 ether);
+        _fundSdgnrsFlip(2_000_000 ether);
         _primeCurrentDayRng();
         vm.prank(playerA);
         sdgnrs.burn(burnAmount);
 
         (uint96 evOwed, , ) = sdgnrs.pendingRedemptions(playerA, uint24(dayBurn));
-        assertGt(uint256(evOwed), 0, "burnie-block: claim slot must populate post-burn");
+        assertGt(uint256(evOwed), 0, "flip-block: claim slot must populate post-burn");
 
         _advanceWallDay();
         _resolveDay(dayBurn, roll);
@@ -1125,42 +1125,42 @@ contract StakedStonkRedemption is DeployProtocol {
         sdgnrs.claimRedemption(playerA, uint24(dayBurn));
         uint256 creditDelta = game.claimableWinningsOf(playerA) - claimableBefore;
 
-        // ETH leg credits in full irrespective of BURNIE — there is no BURNIE leg to block it.
+        // ETH leg credits in full irrespective of FLIP — there is no FLIP leg to block it.
         assertEq(
             creditDelta,
             expectedEthDirect,
-            "REDEEM-08: ETH leg did not credit full rolled/2 - BURNIE must not be able to block ETH"
+            "REDEEM-08: ETH leg did not credit full rolled/2 - FLIP must not be able to block ETH"
         );
         // Claim slot fully cleared (ETH-only full-claim path).
         (uint96 evAfter, , ) = sdgnrs.pendingRedemptions(playerA, uint24(dayBurn));
         assertEq(uint256(evAfter), 0, "REDEEM-08: claim slot not cleared after ETH-only claim");
     }
 
-    /// @dev Fund sDGNRS with enough held BURNIE that a 1000-token burn escrows a nonzero WHOLE-token
+    /// @dev Fund sDGNRS with enough held FLIP that a 1000-token burn escrows a nonzero WHOLE-token
     ///      slice. backing*amount/supply >= 1e18 needs backing >= supply/amount whole tokens; at the
-    ///      ~1e12-token deploy supply with a 1000-token burn that is ~1e9 BURNIE, so 1e12 BURNIE
+    ///      ~1e12-token deploy supply with a 1000-token burn that is ~1e9 FLIP, so 1e12 FLIP
     ///      yields ~1000 whole-token escrow with comfortable headroom.
-    uint256 internal constant SDGNRS_BURNIE_FUND = 1_000_000_000_000 ether;
+    uint256 internal constant SDGNRS_FLIP_FUND = 1_000_000_000_000 ether;
 
-    /// @notice BURNIE-04 (submit-time backing removal): the redeemed BURNIE share is REMOVED from
+    /// @notice FLIP-04 (submit-time backing removal): the redeemed FLIP share is REMOVED from
     ///         sDGNRS's backing at submit (held burned → claimable consumed → carry decremented) and
     ///         escrowed WHOLE-token against (redeemer, day) — NOT credited to the redeemer. The
     ///         redeemer is paid only later, on a winning resolving-day (day+1) coinflip. So the
-    ///         "spendable BURNIE universe" DROPS by exactly the escrowed amount at submit: the slice
+    ///         "spendable FLIP universe" DROPS by exactly the escrowed amount at submit: the slice
     ///         leaves sDGNRS now and re-enters as the redeemer's flip credit only on a win (else it
     ///         is forfeited, symmetric with the auto-rebuy carry zeroing for every holder on a loss).
     /// @dev Universe scalar = coin.totalSupply() + coinflipAmount(SDGNRS) + coinflipAmount(redeemer).
-    ///      Pre-day-20 sDGNRS holds its backing as wallet BURNIE, so withdrawRedeemedBurnie burns the
+    ///      Pre-day-20 sDGNRS holds its backing as wallet FLIP, so withdrawRedeemedFlip burns the
     ///      whole escrow out of held → totalSupply drops by escrowWei; the redeemer's stake is
     ///      untouched at submit; the escrow is recorded in pendingRedemptions[redeemer][day].
-    function testRedeemBurnieRemovedFromBackingAtSubmit() public {
+    function testRedeemFlipRemovedFromBackingAtSubmit() public {
         _seedRedemptionBacking(100 ether);
 
         uint32 dayBurn = game.currentDayView();
         uint256 burnAmount = 1000 ether;
         address SDGNRS = ContractAddresses.SDGNRS;
 
-        _fundSdgnrsBurnie(SDGNRS_BURNIE_FUND);
+        _fundSdgnrsFlip(SDGNRS_FLIP_FUND);
 
         uint256 universeBefore = coin.totalSupply()
             + coinflip.coinflipAmount(SDGNRS)
@@ -1173,7 +1173,7 @@ contract StakedStonkRedemption is DeployProtocol {
 
         // The escrowed slice is recorded WHOLE-token against (redeemer, dayBurn).
         (, , uint96 escrowWhole) = sdgnrs.pendingRedemptions(playerA, uint24(dayBurn));
-        assertGt(uint256(escrowWhole), 0, "BURNIE-04: escrow not recorded (backing*amount/supply should be > 0)");
+        assertGt(uint256(escrowWhole), 0, "FLIP-04: escrow not recorded (backing*amount/supply should be > 0)");
         uint256 escrowWei = uint256(escrowWhole) * 1e18;
 
         uint256 universeAfter = coin.totalSupply()
@@ -1185,24 +1185,24 @@ contract StakedStonkRedemption is DeployProtocol {
         assertEq(
             universeBefore - universeAfter,
             escrowWei,
-            "BURNIE-04: submit must remove exactly the escrowed slice from the spendable universe"
+            "FLIP-04: submit must remove exactly the escrowed slice from the spendable universe"
         );
 
         // The redeemer is credited NOTHING at submit (contingent on the resolving flip).
         assertEq(
             coinflip.coinflipAmount(playerA),
             redeemerStakeBefore,
-            "BURNIE-04: redeemer must receive no flip credit at submit (paid only on a day+1 win)"
+            "FLIP-04: redeemer must receive no flip credit at submit (paid only on a day+1 win)"
         );
     }
 
-    /// @notice BURNIE-04 win-path: on a WINNING resolving-day (day+1) coinflip, the escrowed
+    /// @notice FLIP-04 win-path: on a WINNING resolving-day (day+1) coinflip, the escrowed
     ///         whole-token slice is minted to the redeemer as a flip credit at claim (and the slot
     ///         is cleared). The ETH leg is unaffected.
-    function testRedeemBurnieEscrowPaidOnDayPlus1Win() public {
+    function testRedeemFlipEscrowPaidOnDayPlus1Win() public {
         _seedRedemptionBacking(100 ether);
         uint32 dayBurn = game.currentDayView();
-        _fundSdgnrsBurnie(SDGNRS_BURNIE_FUND);
+        _fundSdgnrsFlip(SDGNRS_FLIP_FUND);
 
         _primeCurrentDayRng();
         vm.prank(playerA);
@@ -1227,19 +1227,19 @@ contract StakedStonkRedemption is DeployProtocol {
             escrowWei * 2,
             "win: redeemer must receive escrow + day+1 win multiplier (2x at rewardPercent=100)"
         );
-        // Slot fully cleared (ETH + BURNIE).
+        // Slot fully cleared (ETH + FLIP).
         (uint96 evAfter, , uint96 escAfter) = sdgnrs.pendingRedemptions(playerA, uint24(dayBurn));
         assertEq(uint256(evAfter), 0, "win: ethValueOwed not cleared");
-        assertEq(uint256(escAfter), 0, "win: burnieEscrow not cleared");
+        assertEq(uint256(escAfter), 0, "win: flipEscrow not cleared");
     }
 
     /// @notice Win-multiplier formula: on a winning resolving-day (day+1) coinflip the escrow pays
     ///         principal + principal*rewardPercent% — the identical payout a non-redeeming holder's
     ///         backing earns — not face. Pins the general formula at a non-trivial percent (78).
-    function testRedeemBurnieEscrowPaidWithDayPlus1WinMultiplier() public {
+    function testRedeemFlipEscrowPaidWithDayPlus1WinMultiplier() public {
         _seedRedemptionBacking(100 ether);
         uint32 dayBurn = game.currentDayView();
-        _fundSdgnrsBurnie(SDGNRS_BURNIE_FUND);
+        _fundSdgnrsFlip(SDGNRS_FLIP_FUND);
 
         _primeCurrentDayRng();
         vm.prank(playerA);
@@ -1265,13 +1265,13 @@ contract StakedStonkRedemption is DeployProtocol {
         );
     }
 
-    /// @notice BURNIE-04 loss-path: on a LOSING resolving-day (day+1) coinflip, the escrowed slice
+    /// @notice FLIP-04 loss-path: on a LOSING resolving-day (day+1) coinflip, the escrowed slice
     ///         pays nothing — it was already removed from sDGNRS at submit, so the loss simply
     ///         forfeits it (the redeemer gets no flip credit), and the slot is cleared.
-    function testRedeemBurnieEscrowForfeitedOnDayPlus1Loss() public {
+    function testRedeemFlipEscrowForfeitedOnDayPlus1Loss() public {
         _seedRedemptionBacking(100 ether);
         uint32 dayBurn = game.currentDayView();
-        _fundSdgnrsBurnie(SDGNRS_BURNIE_FUND);
+        _fundSdgnrsFlip(SDGNRS_FLIP_FUND);
 
         _primeCurrentDayRng();
         vm.prank(playerA);
@@ -1287,14 +1287,14 @@ contract StakedStonkRedemption is DeployProtocol {
         vm.prank(playerA);
         sdgnrs.claimRedemption(playerA, uint24(dayBurn));
 
-        // Redeemer receives no BURNIE flip credit on a losing resolving-day flip.
+        // Redeemer receives no FLIP flip credit on a losing resolving-day flip.
         assertEq(
             coinflip.coinflipAmount(playerA),
             redeemerStakeBefore,
-            "loss: redeemer must receive no BURNIE on a losing resolving-day coinflip"
+            "loss: redeemer must receive no FLIP on a losing resolving-day coinflip"
         );
         (, , uint96 escAfter) = sdgnrs.pendingRedemptions(playerA, uint24(dayBurn));
-        assertEq(uint256(escAfter), 0, "loss: burnieEscrow not cleared");
+        assertEq(uint256(escAfter), 0, "loss: flipEscrow not cleared");
     }
 
     /// @notice REDEEM-08 R4 (resolveRedemptionPeriod 2-arg): the v47 2-arg signature

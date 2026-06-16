@@ -109,7 +109,7 @@ contract DegenerusGameDecimatorModule is DegenerusGamePayoutUtils {
     /// @dev Maximum denominator for Decimator buckets (2-12 inclusive).
     uint8 private constant DECIMATOR_MAX_DENOM = 12;
 
-    /// @dev Keeper box-bounty target (ETH wei) per settled decimator claim. Sized so the BURNIE
+    /// @dev Keeper box-bounty target (ETH wei) per settled decimator claim. Sized so the FLIP
     ///      bounty's ETH-value reimburses the ~30k-gas per-box settle at the ~0.5-gwei reference.
     ///      The reward is an illiquid coinflip credit, and every claimable entry costs a real
     ///      decimator burn to create, so permissionlessly cranking others' claims is liveness work
@@ -153,7 +153,7 @@ contract DegenerusGameDecimatorModule is DegenerusGamePayoutUtils {
         uint192 prevBurn = m.burn;
 
         // First burn this level: set bucket and deterministic subbucket.
-        // `bucket` arrives coin-validated in [2,12] (BurnieCoin._adjustDecimatorBucket
+        // `bucket` arrives coin-validated in [2,12] (FLIP._adjustDecimatorBucket
         // floors at 2), so a nonzero check is unnecessary on the migration branch.
         if (m.bucket == 0) {
             m.bucket = bucket;
@@ -356,10 +356,10 @@ contract DegenerusGameDecimatorModule is DegenerusGamePayoutUtils {
             }
         }
 
-        // Keeper bounty: a small BURNIE flip-credit per box actually settled this call, paid to the
+        // Keeper bounty: a small FLIP flip-credit per box actually settled this call, paid to the
         // caller during a live game (no liveness need post-gameOver). Counts only settled boxes —
         // already-claimed and non-winner entries are skipped above and earn nothing. The ETH-value
-        // tracks the per-box settle gas at the 0.5-gwei reference (BURNIE per ETH = PRICE_COIN_UNIT /
+        // tracks the per-box settle gas at the 0.5-gwei reference (FLIP per ETH = PRICE_COIN_UNIT /
         // mintPrice, so the credit holds its gas-reimbursement value across the price curve).
         if (!over && settled != 0) {
             coinflip.creditFlip(
@@ -370,7 +370,7 @@ contract DegenerusGameDecimatorModule is DegenerusGamePayoutUtils {
         }
     }
 
-    /// @dev In-context mint price for the box-bounty ETH→BURNIE conversion, mirroring the Game's
+    /// @dev In-context mint price for the box-bounty ETH→FLIP conversion, mirroring the Game's
     ///      `mintPrice` (the active ticket level's price): jackpot phase targets the current level,
     ///      purchase phase the next. Read from shared storage so the bounty math needs no self-call.
     function _mintPriceInContext() private view returns (uint256) {
@@ -623,7 +623,7 @@ contract DegenerusGameDecimatorModule is DegenerusGamePayoutUtils {
     ///      Hash of (player, lvl, bucket) ensures consistent assignment.
     /// @param player Address.
     /// @param lvl Level number.
-    /// @param bucket Denominator; always in [2,12] (BurnieCoin._adjustDecimatorBucket
+    /// @param bucket Denominator; always in [2,12] (FLIP._adjustDecimatorBucket
     ///        and _terminalDecBucket both floor at 2).
     /// @return Subbucket index (0 to bucket-1).
     function _decSubbucketFor(
@@ -681,10 +681,10 @@ contract DegenerusGameDecimatorModule is DegenerusGamePayoutUtils {
         if (!ok) _revertDelegate(data);
     }
 
-    /// @dev Inverse of BurnieCoin._adjustDecimatorBucket: the minimum activity score (bps)
+    /// @dev Inverse of FLIP._adjustDecimatorBucket: the minimum activity score (bps)
     ///      that lands a burn in `bucket`. The decimator-claim lootbox EV multiplier reads
     ///      this frozen value (sealed when the winning burn was bucketed) rather than a live
-    ///      score. Mirrors BurnieCoin's bucket scale: base 12, floor 5 (or 2 on x100 levels),
+    ///      score. Mirrors FLIP's bucket scale: base 12, floor 5 (or 2 on x100 levels),
     ///      activity cap 23500.
     function _minScoreForBucket(uint8 bucket, uint24 lvl) private pure returns (uint16) {
         if (bucket >= 12) return 0; // base bucket = score ~0 -> 80% EV floor
@@ -828,7 +828,7 @@ contract DegenerusGameDecimatorModule is DegenerusGamePayoutUtils {
         }
 
         // Apply activity multiplier and cap; nonzero since the coin enforces a
-        // 1,000 BURNIE minimum and at the cap the extra burn still counts at 1x.
+        // 1,000 FLIP minimum and at the cap the extra burn still counts at 1x.
         uint256 effectiveAmount = _decEffectiveAmount(
             uint256(e.totalBurn),
             baseAmount,
@@ -868,7 +868,7 @@ contract DegenerusGameDecimatorModule is DegenerusGamePayoutUtils {
     /// @notice Final-day streak boost: scales an existing terminal decimator
     ///         entry by the player's effective quest streak and, if the live
     ///         activity score now qualifies a better (lower) bucket, promotes it.
-    /// @dev Weight-only — the ETH/BURNIE payout path is untouched. Gated by
+    /// @dev Weight-only — the ETH/FLIP payout path is untouched. Gated by
     ///      `!_livenessTriggered()` (the death-clock predicate is day-constant),
     ///      so the boost and any promotion provably commit BEFORE the game-over
     ///      resolution word exists: the placement is deterministic from the

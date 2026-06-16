@@ -7,8 +7,8 @@
 //     LootboxModule contract and the IDegenerusGameModules interface.
 //   - LootBoxOpened / JackpotTicketWin carry their current signatures (both gain a
 //     trailing non-indexed `bool roundedUp`; LootBoxOpened dropped its `day` arg in
-//     4cb9ccbf "lootbox event day cleanup" — now 7 args, 2 indexed). BurnieLootOpen
-//     is REMOVED in v47 (BURNIE-lootbox surface deleted — terminal-paradox closure).
+//     4cb9ccbf "lootbox event day cleanup" — now 7 args, 2 indexed). FlipLootOpen
+//     is REMOVED in v47 (FLIP-lootbox surface deleted — terminal-paradox closure).
 //   - The `index != type(uint48).max` behavior-gating sentinel in
 //     _resolveLootboxCommon is retired; auto-resolve callers pass index=0,
 //     emitLootboxEvent=false, and payColdBustConsolation=false; the unified
@@ -26,7 +26,7 @@
 //   end-to-end resolution fixture is attempted here.
 //
 // CROSS-CITES:
-//   - D-277-EVT-WIDE-01 (LootBoxOpened amount/burnie stay uint256 wei)
+//   - D-277-EVT-WIDE-01 (LootBoxOpened amount/flip stay uint256 wei)
 //   - D-277-NO-PREROLL-01 (no preRollTickets field; consumers derive whole from
 //     the already-emitted scaled futureTickets/tickets + roundedUp)
 //   - D-277-ROUNDEDUP-01 (roundedUp is the only new field on all 3 events)
@@ -154,8 +154,8 @@ describe("EventSurfaceUnification — Phase 277 Wave 2 TST-EVT-UNI-01..06", func
         null
       );
       // Current field list (the `day` arg was dropped in commit 4cb9ccbf "lootbox
-      // event day cleanup"): trailing roundedUp; the bonusBurnie breakdown field is
-      // folded into `burnie`. 7 args, 2 indexed (player + lootboxIndex).
+      // event day cleanup"): trailing roundedUp; the bonusFlip breakdown field is
+      // folded into `flip`. 7 args, 2 indexed (player + lootboxIndex).
       const types = frag.inputs.map((i) => `${i.type}${i.indexed ? " indexed" : ""}`);
       expect(types).to.deep.equal([
         "address indexed",
@@ -173,7 +173,7 @@ describe("EventSurfaceUnification — Phase 277 Wave 2 TST-EVT-UNI-01..06", func
         "amount",
         "futureLevel",
         "futureTickets",
-        "burnie",
+        "flip",
         "roundedUp",
       ]);
       // Exactly 2 indexed topics (player + lootboxIndex).
@@ -183,16 +183,16 @@ describe("EventSurfaceUnification — Phase 277 Wave 2 TST-EVT-UNI-01..06", func
       expect(BigInt(frag.topicHash)).to.not.equal(0n);
     });
 
-    // [01b] BurnieLootOpen — REMOVED (v47): the BURNIE-lootbox surface is gone by
-    // design (terminal-paradox closure); the `BurnieLootOpen` event no longer exists
+    // [01b] FlipLootOpen — REMOVED (v47): the FLIP-lootbox surface is gone by
+    // design (terminal-paradox closure); the `FlipLootOpen` event no longer exists
     // in the ABI. The event-fragment assertion for it was removed, not skipped.
-    it("[01b] the v47 ABI no longer declares BurnieLootOpen (removed-by-design)", async function () {
+    it("[01b] the v47 ABI no longer declares FlipLootOpen (removed-by-design)", async function () {
       const abi = await loadAbi("DegenerusGameLootboxModule");
       const names = abi.filter((x) => x.type === "event").map((x) => x.name);
       expect(
         names,
-        "BurnieLootOpen must be fully removed from the v47 ABI (BURNIE-lootbox surface deleted)"
-      ).to.not.include("BurnieLootOpen");
+        "FlipLootOpen must be fully removed from the v47 ABI (FLIP-lootbox surface deleted)"
+      ).to.not.include("FlipLootOpen");
     });
 
     it("[01c] JackpotTicketWin resolves to the post-Phase-277 signature: trailing non-indexed bool roundedUp, exactly 3 indexed params", async function () {
@@ -361,7 +361,7 @@ describe("EventSurfaceUnification — Phase 277 Wave 2 TST-EVT-UNI-01..06", func
     });
   });
 
-  describe("TST-EVT-UNI-04 — manual-path LootBoxOpened field-consistency (whole derived from scaled futureTickets + roundedUp; no preRollTickets; BurnieLootOpen removed in v47)", function () {
+  describe("TST-EVT-UNI-04 — manual-path LootBoxOpened field-consistency (whole derived from scaled futureTickets + roundedUp; no preRollTickets; FlipLootOpen removed in v47)", function () {
     it("[04a] no contract source declares a preRollTickets event field (D-277-NO-PREROLL-01)", function () {
       for (const file of collectSolFiles(CONTRACTS_DIR)) {
         const src = fs.readFileSync(file, "utf8");
@@ -416,7 +416,7 @@ describe("EventSurfaceUnification — Phase 277 Wave 2 TST-EVT-UNI-01..06", func
       // Positional order matches the current 7-arg event def (the `day` arg was
       // dropped in 4cb9ccbf "lootbox event day cleanup"):
       //   player, lootboxIndex(index), amount(fullAmount), futureLevel(rollLevel),
-      //   futureTickets(scaledTickets), burnie(burnieAmount), roundedUp
+      //   futureTickets(scaledTickets), flip(flipAmount), roundedUp
       expect(emitArgs.length).to.equal(7);
       expect(emitArgs[0]).to.equal("player");
       expect(emitArgs[1]).to.equal("index"); // lootboxIndex slot fed the `index` param
@@ -426,20 +426,20 @@ describe("EventSurfaceUnification — Phase 277 Wave 2 TST-EVT-UNI-01..06", func
       expect(emitArgs[6]).to.equal("roundedUp");
     });
 
-    // [04d] BurnieLootOpen manual-emit field-consistency — REMOVED (v47): the
-    // BURNIE-lootbox manual caller `openBurnieLootBox` and its `BurnieLootOpen`
+    // [04d] FlipLootOpen manual-emit field-consistency — REMOVED (v47): the
+    // FLIP-lootbox manual caller `openFlipLootBox` and its `FlipLootOpen`
     // emit are gone by design (terminal-paradox closure). This block tested a
     // removed source surface and is deleted, not skipped. Confirm the source no
     // longer declares the removed symbols.
-    it("[04d] the v47 LootboxModule source no longer references openBurnieLootBox / BurnieLootOpen (removed-by-design)", function () {
+    it("[04d] the v47 LootboxModule source no longer references openFlipLootBox / FlipLootOpen (removed-by-design)", function () {
       const src = fs.readFileSync(LOOTBOX_SOURCE_PATH, "utf8");
       expect(
-        src.includes("openBurnieLootBox"),
-        "openBurnieLootBox must be fully removed from DegenerusGameLootboxModule.sol"
+        src.includes("openFlipLootBox"),
+        "openFlipLootBox must be fully removed from DegenerusGameLootboxModule.sol"
       ).to.equal(false);
       expect(
-        src.includes("BurnieLootOpen"),
-        "BurnieLootOpen must be fully removed from DegenerusGameLootboxModule.sol"
+        src.includes("FlipLootOpen"),
+        "FlipLootOpen must be fully removed from DegenerusGameLootboxModule.sol"
       ).to.equal(false);
     });
 
@@ -525,8 +525,8 @@ describe("EventSurfaceUnification — Phase 277 Wave 2 TST-EVT-UNI-01..06", func
       // The consolation predicate explicitly tests payColdBustConsolation —
       // proving it cannot fire on the auto-resolve (payColdBustConsolation=false)
       // path, while the surviving manual caller (openBox) passes
-      // payColdBustConsolation=true and DOES pay it. (The BURNIE-lootbox manual
-      // caller openBurnieLootBox was removed in v47.) The gate now lives in the
+      // payColdBustConsolation=true and DOES pay it. (The FLIP-lootbox manual
+      // caller openFlipLootBox was removed in v47.) The gate now lives in the
       // per-roll `_settleLootboxRoll` helper.
       const body = extractBody(src, "function _settleLootboxRoll(");
       expect(

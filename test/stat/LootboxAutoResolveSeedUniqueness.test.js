@@ -7,7 +7,7 @@
 // callers:
 //   (a) DecimatorModule:594 — claimDecimatorJackpot single-shot per call
 //   (b) DegeneretteModule:786 — single-shot per payout
-//   (c) StakedDegenerusStonk:672 — single-shot per redemption; upstream
+//   (c) sDGNRS:672 — single-shot per redemption; upstream
 //       entropy = keccak(rngWord, player)
 //   (d) DegenerusGame:1721 redemption-loop — rngWord EVOLVES per iteration
 //       via `rngWord = keccak256(abi.encode(rngWord))` at L1769
@@ -81,7 +81,7 @@ function makeCallerBSeeds(N) {
 }
 
 function makeCallerCSeeds(N) {
-  // StakedDegenerusStonk: single-shot per redemption; entropy = keccak(rngWord, player) upstream.
+  // sDGNRS: single-shot per redemption; entropy = keccak(rngWord, player) upstream.
   const seeds = [];
   for (let i = 0; i < N; i++) {
     // Seed prefix `c0275c` chosen empirically to land in a representative bucket
@@ -121,12 +121,12 @@ function makeCallerDSeeds(N) {
 describe("LootboxAutoResolveSeedUniqueness (stat-suite, heavy-MC) — TST-LBX-AR-04 chi-square across 4 upstream callers", function () {
   this.timeout(600_000);
 
-  describe("Per-caller chi² uniformity of bits[152..167] % 100 at N=10K per caller (DecimatorModule / DegeneretteModule / StakedDegenerusStonk / DegenerusGame redemption-loop)", function () {
+  describe("Per-caller chi² uniformity of bits[152..167] % 100 at N=10K per caller (DecimatorModule / DegeneretteModule / sDGNRS / DegenerusGame redemption-loop)", function () {
     const N = 10_000;
     const CALLERS = [
       { id: "a-DecimatorModule", gen: makeCallerASeeds },
       { id: "b-DegeneretteModule", gen: makeCallerBSeeds },
-      { id: "c-StakedDegenerusStonk", gen: makeCallerCSeeds },
+      { id: "c-sDGNRS", gen: makeCallerCSeeds },
       { id: "d-DegenerusGame-1721-redemption-loop-L1769", gen: makeCallerDSeeds },
     ];
 

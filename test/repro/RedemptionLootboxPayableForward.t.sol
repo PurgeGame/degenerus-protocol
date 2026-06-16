@@ -2,17 +2,17 @@
 pragma solidity ^0.8.0;
 
 import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
-import {StakedDegenerusStonk} from "../../contracts/StakedDegenerusStonk.sol";
+import {sDGNRS} from "../../contracts/sDGNRS.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 
-/// @notice Coinflip surface mirror (interface-only) so the submit BURNIE leg (settled backing read
+/// @notice Coinflip surface mirror (interface-only) so the submit FLIP leg (settled backing read
 ///         + backing withdraw) is mockable without importing the coinflip contract. With
-///         redeemableCoinBacking forced to 0 the escrowed slice is 0, so the claim-time BURNIE leg
+///         redeemableFlipBacking forced to 0 the escrowed slice is 0, so the claim-time FLIP leg
 ///         is skipped and the focus stays on the live-game ETH-forward path.
-interface IBurnieCoinflipPlayerMock {
+interface IFlipCoinflipPlayerMock {
     function previewClaimCoinflips(address player) external view returns (uint256);
-    function redeemableCoinBacking() external returns (uint256 backing);
-    function withdrawRedeemedBurnie(uint256 base) external;
+    function redeemableFlipBacking() external returns (uint256 backing);
+    function withdrawRedeemedFlip(uint256 base) external;
 }
 
 /// @title RedemptionLootboxPayableForward — regression for the live-game redemption ETH-forward.
@@ -76,25 +76,25 @@ contract RedemptionLootboxPayableForward is DeployProtocol {
 
         // Fund the player with sDGNRS via the Reward pool (game is the authorized caller).
         vm.startPrank(address(game));
-        sdgnrs.transferFromPool(StakedDegenerusStonk.Pool.Reward, player, PLAYER_FUNDING);
+        sdgnrs.transferFromPool(sDGNRS.Pool.Reward, player, PLAYER_FUNDING);
         vm.stopPrank();
 
-        // Mock ONLY the coinflip surface (BURNIE settle leg + backing preview). The lootbox
+        // Mock ONLY the coinflip surface (FLIP settle leg + backing preview). The lootbox
         // module delegatecall target is deliberately REAL — that dispatch is the regression
         // under pin.
         vm.mockCall(
             address(coinflip),
-            abi.encodeWithSelector(IBurnieCoinflipPlayerMock.previewClaimCoinflips.selector),
+            abi.encodeWithSelector(IFlipCoinflipPlayerMock.previewClaimCoinflips.selector),
             abi.encode(uint256(0))
         );
         vm.mockCall(
             address(coinflip),
-            abi.encodeWithSelector(IBurnieCoinflipPlayerMock.redeemableCoinBacking.selector),
+            abi.encodeWithSelector(IFlipCoinflipPlayerMock.redeemableFlipBacking.selector),
             abi.encode(uint256(0))
         );
         vm.mockCall(
             address(coinflip),
-            abi.encodeWithSelector(IBurnieCoinflipPlayerMock.withdrawRedeemedBurnie.selector),
+            abi.encodeWithSelector(IFlipCoinflipPlayerMock.withdrawRedeemedFlip.selector),
             abi.encode()
         );
     }

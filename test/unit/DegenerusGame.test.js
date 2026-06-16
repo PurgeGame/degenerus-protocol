@@ -213,10 +213,10 @@ describe("DegenerusGame", function () {
       ).to.be.reverted;
     });
 
-    it("redeemBurnie reverts when ticket buy-in is below 0.0025 ETH minimum", async function () {
+    it("redeemFlip reverts when ticket buy-in is below 0.0025 ETH minimum", async function () {
       const { game, alice } = await loadFixture(deployFullProtocol);
       await expect(
-        game.connect(alice).redeemBurnie(ZERO_ADDRESS, 99n)
+        game.connect(alice).redeemFlip(ZERO_ADDRESS, 99n)
       ).to.be.reverted;
     });
 
@@ -266,11 +266,11 @@ describe("DegenerusGame", function () {
       ).to.be.reverted;
     });
 
-    it("redeemBurnie with zero tickets succeeds as no-op", async function () {
+    it("redeemFlip with zero tickets succeeds as no-op", async function () {
       const { game, alice } = await loadFixture(deployFullProtocol);
       // Zero ticketQuantity skips the purchase path entirely (no tickets purchased).
       await expect(
-        game.connect(alice).redeemBurnie(ZERO_ADDRESS, 0n)
+        game.connect(alice).redeemFlip(ZERO_ADDRESS, 0n)
       ).to.not.be.reverted;
     });
 
