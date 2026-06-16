@@ -18,6 +18,12 @@ interface IDegenerusVaultOwner {
 ///      (5-component scoring: mint streak, mint count, quest streak, affiliate bonus, deity/whale pass)
 ///      and mint streak helpers (credits on completed 1x price ETH quest).
 abstract contract DegenerusGameMintStreakUtils is DegenerusGameStorage {
+    /// @notice Emitted when a player's mint streak advances a step.
+    /// @param player The player whose mint streak advanced.
+    /// @param mintLevel The level whose mint advanced the streak step.
+    /// @param streak The new mint-streak value (the on-chain LEVEL_STREAK field, post-update).
+    event MintStreakRecorded(address indexed player, uint24 mintLevel, uint24 streak);
+
     /// @dev Mask for clearing last-completed + streak fields in one pass.
     uint256 private constant MINT_STREAK_FIELDS_MASK =
         (BitPackingLib.MASK_24 << BitPackingLib.MINT_STREAK_LAST_COMPLETED_SHIFT) |
@@ -97,6 +103,7 @@ abstract contract DegenerusGameMintStreakUtils is DegenerusGameStorage {
             (uint256(mintLevel) << BitPackingLib.MINT_STREAK_LAST_COMPLETED_SHIFT) |
             (uint256(newStreak) << BitPackingLib.LEVEL_STREAK_SHIFT);
         mintPacked_[player] = updated;
+        emit MintStreakRecorded(player, mintLevel, newStreak);
     }
 
     /// @dev Effective mint streak computed from an already-loaded mintPacked_ word

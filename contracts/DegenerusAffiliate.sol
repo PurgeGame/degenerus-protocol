@@ -658,6 +658,10 @@ contract DegenerusAffiliate {
         earned[a] = newTotal;
         _totalAffiliateScore[lvl] += scaled;
         _updateTopAffiliate(a, newTotal, lvl);
+        // Mirror the auto-path AffiliateEarningsRecorded at the claim() leaderboard write so the
+        // per-level affiliate score is fully event-derived: the affiliate is the subject in the
+        // sender slot; code 0x0 and isFreshEth false identify the manual-claim path.
+        emit AffiliateEarningsRecorded(lvl, a, scaled, newTotal, a, bytes32(0), false);
 
         // Pay the (at most 3) recipients directly. creditFlip is a pure ledger add (recordAmount=0).
         coinflip.creditFlip(a, aShare * 1 ether);

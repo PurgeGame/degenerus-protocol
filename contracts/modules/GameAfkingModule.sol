@@ -153,6 +153,12 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
         bool presale
     );
 
+    /// @notice Emitted once per subscriber per delivered afking day — the authoritative
+    ///         afking-buy delivery signal (covers VAULT / sDGNRS and every real afker).
+    /// @param player The subscriber the afking buy was delivered to.
+    /// @param day The delivered afking day (the funded-day high-water the delivery covers).
+    event AfkingDelivered(address indexed player, uint24 day);
+
     /*------------------------------------------------------------------
                               Constants
     ------------------------------------------------------------------*/
@@ -933,6 +939,7 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
             if (isTicket) _routeAfkingPoolEth(0, cost);
             else _routeAfkingPoolEth(cost, 0);
         }
+        emit AfkingDelivered(player, processDay);
     }
 
     /// @dev Write a subscribe-time grounding lootbox as a full INDEXED box on the live lootbox
