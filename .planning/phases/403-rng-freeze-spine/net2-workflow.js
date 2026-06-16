@@ -30,7 +30,7 @@ Report the in-window SLOAD set per consumer with file:line; list any player-muta
   { key: 'RNG-03-oneshot-replay', prompt: `${READONLY}
 
 DIMENSION RNG-03 — one-shot + replay-safe resolvers.
-For the box-spin / decimator / redemption resolvers: (1) confirm the seed/claim RECORD is cleared (deleted/zeroed) BEFORE the value/external effect, so a reentrant or repeated call cannot resolve the same seed twice (record-clear-before-resolution); (2) confirm each delegatecall resolver is guarded `address(this) != GAME ⇒ revert`, so it is reachable ONLY via the Game's delegatecall and never callable on the deployed module instance directly; (3) check the redemption pre-draw + mid-day RNG gate blocks a consuming action until the relevant word exists (no zero/stale-word grind). Find any double-resolve, missing clear-before-effect, missing guard, or grindable-word path.
+For the box-spin / decimator / redemption resolvers: (1) confirm the seed/claim RECORD is cleared (deleted/zeroed) BEFORE the value/external effect, so a reentrant or repeated call cannot resolve the same seed twice (record-clear-before-resolution); (2) confirm each delegatecall resolver is guarded 'address(this) != GAME reverts', so it is reachable ONLY via the Game's delegatecall and never callable on the deployed module instance directly; (3) check the redemption pre-draw + mid-day RNG gate blocks a consuming action until the relevant word exists (no zero/stale-word grind). Find any double-resolve, missing clear-before-effect, missing guard, or grindable-word path.
 ${PRIORS}
 Report each resolver with file:line + clear-order/guard status; list any double-resolve or missing guard as a lead.` },
 ]

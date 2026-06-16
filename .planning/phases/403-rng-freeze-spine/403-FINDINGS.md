@@ -1,0 +1,29 @@
+# Phase 403 — RNG-FREEZE SPINE: dual-net findings (v64.0)
+
+**Status:** ✅ COMPLETE — both nets on record (codex available again), adjudicated vs frozen source.
+**Requirements:** RNG-01..03 · **Subject frozen** `402855e1` (working tree == frozen, verified clean).
+**Threat-model weight:** RNG-freeze is the protocol's **DOMINANT** invariant.
+**Nets:**
+- **NET-1 cross-model council** — `gemini` (CLEAN, all 3 consumers FROZEN) + `codex` (no RNG-freeze/double-resolve findings; one INFO guard-shape note). **0 skipped** — codex's usage cap reset, so 403 has a full council.
+- **NET-2 Claude Workflow** — 3 dimension finders + per-lead refute + completeness critic (`ws271acw4`, 4 agents): RNG-01/02/03 = **0 leads**; critic = **0 leads**.
+- **Orchestrator cross-check** — independently verified the highest-risk RNG-02 vector (the activity-scored spins) against source.
+
+## Outcome: 0 CATASTROPHE / 0 HIGH / 0 MED / 0 LOW. 1 INFO (codex guard-shape note, by-design). RNG-01..03 attested clean. The dominant invariant holds.
+
+| # | Site | Disposition | Detail |
+|---|------|-------------|--------|
+| RNG-A | Resolver guard-shape varies across delegatecall targets · `DegeneretteModule.sol:1298/1353/1408` (`address(this)==GAME`) vs `LootboxModule.sol:927` (`msg.sender==SDGNRS`) vs decimator claims / `resolveLootboxDirect`/`resolveAfkingBox` (no explicit `address(this)` guard) | **INFO — by-design (equally-effective guards; no double-resolve path)** | **codex.** The box-spin resolvers use `address(this)==GAME`; other delegatecall-reached resolvers use a different but equally-effective guard — `resolveRedemptionLootbox` gates `msg.sender==SDGNRS`; decimator claim entrypoints + `resolveLootboxDirect`/`resolveAfkingBox` rely on module-instance-storage isolation + downstream auth gates. Codex's concrete finding: a direct call "execute[s] against module-instance storage or hit[s] downstream auth gates, not Game storage, so I did not find a path to resolve a Game seed twice or mutate protocol payouts." Guard-shape inconsistency, **not an exploitable defect.** Optional hardening: unify on the `address(this)==GAME` shape. |
+
+## Verification map — RNG-01..03 attested (gemini + codex + NET-2)
+
+- **RNG-01 — backward-trace to commitment:** every new/changed consumer's scored input is locked strictly **before** its VRF word is knowable.
+  - *Degenerette player bet:* placement reverts if `lootboxRngWordByIndex[index] != 0` (`DegeneretteModule:531-533`) — admitted only while unworded; the packed bet stores the index + the **frozen `activityScore`**; resolution reads the word + derives spin seeds purely via `keccak(rngWord, index, …)`.
+  - *The 3 box-spins (WWXRP / BURNIE×3+survival / ETH):* the box **deposit** is committed at the live unworded index (mint/presale deposit reverts if already worded); the box seed is set once from `keccak/hash2(rngWord, player, amount/day)`, spin sub-seeds = `hash2(seed, BOX_*_SPIN_TAG)`; **every reel + the hero quadrant + the spin-type are 100% seed-derived** — zero player-controllable scored input; `activityScore` threaded frozen from the box commitment.
+  - *Decimator claim-seed:* the player's subbucket is a **pure hash of (player, lvl, bucket)** fixed at burn (not VRF-derived); the burn window closes at the level-bump RNG request (`AdvanceModule:1737`, simultaneous `rngLockedFlag=true`/`rngWordCurrent=0`); the winning subbucket is drawn from the fulfilled word; claim EV score is frozen via `_minScoreForBucket(winBucket)`.
+  - *Redemption lootbox seed:* **dual-gate** — submit blocked pre-request by `rngWordForDay(currentPeriod)==0 ⇒ BurnsBlockedBeforeDailyRng` (`sDGNRS:1036`) and during request→fulfill by `game.rngLocked() ⇒ BurnsBlockedDuringRng` (`:639,:663`); the resolving word is `rngWordForDay(day+1)`, not drawn at submit; scored fields + `activityScore` snapshotted at submit. ✅ 0 leads.
+- **RNG-02 — in-window SLOADs over repacked slots:** the RNG-scored seed material is the fulfilled word + **frozen committed fields** — no player-controllable non-VRF SLOAD is read alongside the word. **Crux (orchestrator-verified):** the `activityScore` that scales both the lootbox EV multiplier and the box-spin ROI is **snapshotted at deposit/placement and frozen** (`DegeneretteModule:966` packs it at placement; `:649 → _roiBpsFromScore` reads it back from the packed record; `LootboxModule:552,564`: *"stays FROZEN at deposit — that is the anti-gaming knob"*). A player **cannot** bump their score in the rng-window to bias an activity-scored spin payout. The only live SLOADs (`level`, EV-cap state) affect deterministic pricing/scaling, not the random outcome. ✅ 0 leads (gemini + codex + NET-2 + orchestrator).
+- **RNG-03 — one-shot + replay-safe:** every resolver clears its record before the value effect (Degenerette bet `delete`d at resolve entry; box `lootboxEth` zeroed at `:579`; decimator `e.claimed=1` before credit at `:399`; redemption `delete pendingRedemptions[player][day]` at `:871`); double-resolve blocked by `poolWei!=0` / `ethBase==0` / `pendingResolveDay` sentinels. Resolvers are guard-protected (varied shapes — RNG-A INFO — all equally effective). ✅ 0 leads.
+
+## Verdict
+
+The **dominant RNG-freeze invariant holds** across every new/changed consumer in the v64 delta. Each scored input is committed strictly before its VRF word is knowable; the activity score that scales the spins is **frozen at deposit** (the explicit anti-gaming knob), so no in-window manipulation can bias a payout; and all resolvers are one-shot + replay-safe + guard-protected. The lone observation (codex's resolver guard-shape variance) is **INFO/by-design** — the differing guards are equally effective and no double-resolve path exists. **Both nets on record (full gemini+codex council + NET-2 + orchestrator cross-check); RNG-01..03 attested. No contract change.**
