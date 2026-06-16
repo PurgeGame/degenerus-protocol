@@ -146,6 +146,17 @@ contract DegenerusGameGameOverModule is DegenerusGameStorage {
         _setFuturePrizePool(0);
         _setCurrentPrizePool(0);
         yieldAccumulator = 0;
+        // All three pools are drained to zero at game over. Emit the terminal snapshot here —
+        // before the available==0 early return below — so every game-over path logs it once. The
+        // daily snapshot in _unlockRng skips game-over (gameOver is set above) to avoid a duplicate.
+        emit PrizePoolDailySnapshot(
+            0,
+            0,
+            0,
+            claimablePool,
+            address(this).balance + steth.balanceOf(address(this)),
+            yieldAccumulator
+        );
 
         // Recalculate available after refunds (claimablePool may have grown).
         // sDGNRS redemption ETH was already segregated out of the game at submit, so it is not

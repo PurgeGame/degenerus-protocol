@@ -1801,6 +1801,21 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         vrfRequestId = 0;
         rngRequestTime = 0;
         _unfreezePool();
+        // The day-seal is the one chokepoint every completed game-day passes through (purchase
+        // daily, jackpot coin+tickets, phase transition). Emit the daily pool snapshot here, after
+        // _unfreezePool folds the pending accumulators back into the live pools, so the indexer
+        // mirrors the settled end-of-day pools and a solvency total (ETH + stETH) from logs alone.
+        // Game-over also seals here but emits its own terminal snapshot in the drain, so skip it.
+        if (!gameOver) {
+            emit PrizePoolDailySnapshot(
+                _getNextPrizePool(),
+                _getFuturePrizePool(),
+                _getCurrentPrizePool(),
+                claimablePool,
+                address(this).balance + steth.balanceOf(address(this)),
+                yieldAccumulator
+            );
+        }
     }
 
     /// @notice Chainlink VRF callback for random word fulfillment.

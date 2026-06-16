@@ -552,6 +552,20 @@ abstract contract DegenerusGameStorage {
         uint256 claimablePool
     );
 
+    /// @notice Once-per-day snapshot of the prize-pool triple plus the claimable reserve, the
+    ///         solvency total (ETH + stETH), and the yield accumulator, emitted at the conclusion
+    ///         of each daily advance and once at game-over. Lets the off-chain indexer mirror the
+    ///         pool balances — which are mutated at many sites with no per-delta event — and keep a
+    ///         daily solvency checksum from logs alone. Field order/names are read by the indexer.
+    event PrizePoolDailySnapshot(
+        uint256 next,
+        uint256 future,
+        uint256 current,
+        uint256 claimable,
+        uint256 totalBalance,
+        uint256 yieldAccumulator
+    );
+
     /// @notice Emitted when final sweep forfeits unclaimed winnings 30 days post-gameover.
     event FinalSwept(uint256 totalFunds);
 
