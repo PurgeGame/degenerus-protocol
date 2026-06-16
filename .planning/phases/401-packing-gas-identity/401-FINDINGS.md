@@ -3,11 +3,22 @@
 **Status:** ✅ COMPLETE — both nets on record (codex deferred, see note), adjudicated vs frozen source.
 **Requirements:** PACK-01..04 · **Subject frozen** `402855e1` (working tree == frozen, verified clean).
 **Nets:**
-- **NET-1 council** — `gemini` (CLEAN on all 4 PACK invariants). **`codex` DEFERRED** — ChatGPT usage cap until ~02:33 (see `phases/CODEX-BACKFILL-TODO.md`; backfill after reset).
+- **NET-1 council** — `gemini` (CLEAN on all 4 PACK invariants) + **`codex` (BACKFILLED after the cap reset)** — codex returned "Not clean," raising 4 narrowing/RMW flags (PACK-A..D below), **all adjudicated INFO/defense-in-depth (unreachable)** vs the documented uint128 supply cap + realistic protocol scale. PACK-03/04 codex also HOLDS.
 - **NET-2 Claude Workflow** — 4 dimension finders + per-lead refute + completeness critic (`w1rh83t2x`, 7 agents): PACK-01/02/03 = 0 leads; PACK-04 = 2 leads **both REFUTED**; critic = 0 leads. Bounds derived against authoritative `forge inspect` layouts.
 - **Deterministic scripts** — `check-raw-selectors` PASS, `check-interface-coverage` PASS, `check-delegatecall-alignment` FAIL = stale-checker naming (see PACK-C).
 
-## Outcome: 0 CATASTROPHE / 0 HIGH / 0 MED / 0 LOW. PACK-01..04 attested clean. 2 PACK-04 leads REFUTED. 2 INFO doc-drift + 1 INFO checker-staleness + 1 dev-tooling note.
+## Outcome: 0 CATASTROPHE / 0 HIGH / 0 MED / 0 LOW. PACK-01..04 attested clean. 2 PACK-04 leads REFUTED + 4 codex narrowing flags REFUTED (unreachable). INFO residue: codex's 4 defense-in-depth narrowings + 2 stale comments + 1 checker-staleness + 1 dev-tooling note.
+
+### Codex backfill — 4 narrowing/RMW flags, all adjudicated INFO/defense-in-depth (unreachable)
+
+Codex computed against *theoretical type-max* ceilings; each is bounded below its width by the documented **uint128 BURNIE supply cap** (`BurnieCoin._toUint128:372` hard-reverts `SupplyOverflow` on any mint past `uint128.max`) and the realistic protocol scale (actual BURNIE supply is ~14 orders of magnitude below `uint128.max`; ETH flows ≪ 16,777 ETH). None are reachable defects.
+
+| # | codex flag | Adjudication |
+|---|---|---|
+| PACK-A | `BurnieCoinflip._setFlipStake:1184` ORs `weiAmount << shift` without masking the operand — claimed lane-spill/truncation for over-wide stake | **REFUTED (unreachable).** The lane IS mask-cleared (`w & ~(uint128.max << shift)`), and `weiAmount` is **provably ≤ uint128** — the code documents exactly this at `:1183-1185` ("weiAmount is provably <= uint128 … a stake never exceeds supply"). A stake ⊆ total BURNIE supply ≤ `uint128.max`. No spill. Operand-mask omission is cosmetic (the value is bounded). |
+| PACK-B | `autoRebuyStop` casts user `takeProfit` `uint256→uint128` (`:758/761/796`) — silent wrap | **INFO (unreachable + self-config).** A `takeProfit` above the entire BURNIE supply is meaningless (never triggers) and self-set; realistic `takeProfit` ≤ player BURNIE ≪ `uint128`. Cosmetic wrap at an unreachable magnitude. |
+| PACK-C | `autoRebuyCarry`/`claimableStored` not bounded to `uint128` — 2.56× win compounding could exceed it (`:632`) | **REFUTED (unreachable).** Carry ⊆ BURNIE supply ≤ `uint128`; the 2.56× overflow needs stake > 39% of the `uint128` cap (supply ~`1e38` wei — ~`1e14`× the real emission), and a winning mint that would push supply past `uint128` **reverts** in `_toUint128`. The truncation sits on a path whose mint cannot complete. |
+| PACK-D | `GameAfkingModule:905` `Sub.amount` (`uint24` milli-ETH, max 16,777 ETH) can wrap a claimable-funded auto-buy stamp | **INFO (unreachable + accounting-correct).** A single auto-buy > 16,777 ETH is unreachable at the game's ETH scale; and codex confirms the **actual ETH debit stays full-wei** — only the box-spin *display stamp* would wrap. No value/accounting impact. |
 
 | # | Site | Disposition | Detail |
 |---|------|-------------|--------|
@@ -25,4 +36,4 @@
 
 ## Verdict
 
-The storage-packing + gas-refactor delta is **behavior- and value-identical**: no silent truncation (every narrowing bounded ≥ its real max via `forge inspect`), no co-resident clobber, no cross-module slot disagreement, no dispatch divergence, and no production ABI/interface break (both PACK-04 removal leads REFUTED — never-vendored views + dead-code rename). Residue = 2 stale comments + 1 stale-checker naming + 1 local dev-script note, all INFO/non-contract. **PACK-01..04 attested.** NET-1 gemini + NET-2 Claude + the deterministic scripts on record; **codex deferred to post-reset backfill** (its lens is additive — the result is already convergent-clean across two independent nets + forge-inspect ground truth).
+The storage-packing + gas-refactor delta is **behavior- and value-identical**: no silent truncation (every narrowing bounded ≥ its real max via `forge inspect`), no co-resident clobber, no cross-module slot disagreement, no dispatch divergence, and no production ABI/interface break (both PACK-04 removal leads REFUTED — never-vendored views + dead-code rename). Residue = 2 stale comments + 1 stale-checker naming + 1 local dev-script note, all INFO/non-contract. **PACK-01..04 attested.** Full council on record: NET-1 **gemini + codex (backfilled)** + NET-2 Claude + the deterministic scripts. Codex's 4 narrowing flags (PACK-A..D) were the cross-model net doing its job — exactly the type-max concerns a warden would raise — and all adjudicate to **INFO/defense-in-depth, unreachable** against the documented uint128 supply cap + realistic scale (the `_setFlipStake` invariant is even documented in-code at `:1183-1185`). No reachable truncation; PACK-01's realistic-max safety holds from a second council angle.
