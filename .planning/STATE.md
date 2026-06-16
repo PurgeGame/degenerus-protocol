@@ -6,7 +6,7 @@ status: planning
 last_updated: "2026-06-15T22:30:00.000Z"
 last_activity: 2026-06-15 -- v64.0 milestone STARTED (defining requirements + roadmap). Cross-model dual-net re-audit of the full post-v62 contract delta (77580320..HEAD; subject HEAD 78eb3dd2 to freeze at FOUNDATION) + whole-codebase lvl vs lvl+1 correctness sweep. Method = COUNCIL + CLAUDE dual-net per slice; posture = audit-only. Phase numbering continues 396 -> 397. NEXT = define REQUIREMENTS.md -> roadmapper.
 progress:
-  total_phases: 0
+  total_phases: 9
   completed_phases: 0
   total_plans: 0
   completed_plans: 0
