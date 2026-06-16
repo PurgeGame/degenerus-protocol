@@ -39,13 +39,9 @@ import {StakedDegenerusStonk} from "../../contracts/StakedDegenerusStonk.sol";
 contract DegeneretteFreezeResolutionTest is DeployProtocol {
     // --- Storage slot constants (confirmed via `forge inspect DegenerusGameStorage storage`) ---
 
-    /// @dev Slot 0, byte 27 (bit 216): prizePoolFrozen (bool, 1 byte).
+    /// @dev Slot 0, byte 26 (bit 208): prizePoolFrozen (bool, 1 byte).
     uint256 private constant SLOT_0 = 0;
-    // prizePoolFrozen is at slot 0 offset 27 (bit 216) at c4d48008 — the v61 PACK appended
-    // presaleOver (offset 28) + subsFullyProcessed (offset 29), shifting the prior flag block
-    // down. The pre-PACK byte 29 (bit 232) is now subsFullyProcessed; poking it left
-    // prizePoolFrozen unset, so the frozen-branch bet routing never fired (bet hit live pool).
-    uint256 private constant FROZEN_BIT_SHIFT = 216;
+    uint256 private constant FROZEN_BIT_SHIFT = 208;
 
     /// @dev prizePoolsPacked: [upper 128: futurePrizePool] [lower 128: nextPrizePool]
     uint256 private constant PRIZE_POOLS_PACKED_SLOT = 2;
@@ -1152,7 +1148,7 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
         return uint256(uint128(packed >> 128));
     }
 
-    /// @notice Read prizePoolFrozen from slot 0, bit 216.
+    /// @notice Read prizePoolFrozen from slot 0, bit 208.
     function _readFrozen() internal view returns (bool) {
         uint256 s0 = uint256(vm.load(address(game), bytes32(uint256(SLOT_0))));
         return ((s0 >> FROZEN_BIT_SHIFT) & 0xFF) != 0;
@@ -1176,11 +1172,11 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
         vm.store(address(game), bytes32(uint256(PENDING_PACKED_SLOT)), bytes32(newPacked));
     }
 
-    /// @notice Set prizePoolFrozen flag (slot 0, bit 216).
+    /// @notice Set prizePoolFrozen flag (slot 0, bit 208).
     /// @dev Preserves all other bytes in slot 0.
     function _setFrozenFlag(bool frozen) internal {
         uint256 s0 = uint256(vm.load(address(game), bytes32(uint256(SLOT_0))));
-        // Clear the frozen byte (bit 216)
+        // Clear the frozen byte (bit 208)
         s0 = s0 & ~(uint256(0xFF) << FROZEN_BIT_SHIFT);
         // Set the frozen byte
         if (frozen) {

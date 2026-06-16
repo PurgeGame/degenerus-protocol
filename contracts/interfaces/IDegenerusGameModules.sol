@@ -240,7 +240,7 @@ interface IDegenerusGameMintModule {
     /// @notice Processes a BURNIE purchase of tickets
     /// @param buyer Address of the buyer
     /// @param ticketQuantity Number of tickets to purchase
-    function purchaseCoin(
+    function redeemBurnie(
         address buyer,
         uint256 ticketQuantity
     ) external;

@@ -43,7 +43,9 @@ interface IDegenerusQuests {
     /// @dev Called by AdvanceModule (via GAME delegatecall) to determine which quests are active.
     /// @param day The unix day to roll quests for
     /// @param entropy Random entropy used to determine the slot 1 quest type
-    function rollDailyQuest(uint24 day, uint256 entropy) external;
+    /// @param forceMintBurnie Force slot 1 to MINT_BURNIE (the first jackpot day, when the BURNIE
+    ///        redeem window is live); otherwise MINT_BURNIE is excluded from the slot 1 roll.
+    function rollDailyQuest(uint24 day, uint256 entropy, bool forceMintBurnie) external;
 
     /// @notice Records player minting activity and checks quest completion
     /// @dev Called by the game contract when a player mints tickets

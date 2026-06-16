@@ -593,13 +593,11 @@ contract KeeperRewardRoutingSameResults is DeployProtocol {
 
     uint24 private constant TICKET_SLOT_BIT = 1 << 23; // mirrors DegenerusGameStorage.TICKET_SLOT_BIT
 
-    /// @dev Read the GAME's live ticketWriteSlot bool (SLOT 0 byte 28) so the read key matches what the
+    /// @dev Read the GAME's live ticketWriteSlot bool (SLOT 0 byte 25) so the read key matches what the
     ///      contract computes (`_tqReadKey`: !writeSlot ? lvl|BIT : lvl).
     function _ticketWriteSlot() internal view returns (bool) {
         uint256 slot0 = uint256(vm.load(address(game), bytes32(uint256(0))));
-        // ticketWriteSlot is at slot 0 byte 26 at c4d48008 (the v61 PACK appended presaleOver@28 +
-        // subsFullyProcessed@29; the pre-PACK byte 28 is now presaleOver).
-        return ((slot0 >> (26 * 8)) & 0x1) != 0;
+        return ((slot0 >> (25 * 8)) & 0x1) != 0;
     }
 
     /// @dev The current read key for a level — byte-faithful to DegenerusGameStorage._tqReadKey.

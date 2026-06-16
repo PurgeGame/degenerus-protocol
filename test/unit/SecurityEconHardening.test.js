@@ -381,7 +381,7 @@ describe("SecurityEconHardening", function () {
   // FIX-08: BURNIE ticket purchases revert within 30 days of liveness timeout
   // =========================================================================
   describe("FIX-08: BURNIE ticket purchase cutoff", function () {
-    it("purchaseCoin reverts after 882 days at level 0 (within 30 days of timeout)", async function () {
+    it("redeemBurnie reverts after 882 days at level 0 (within 30 days of timeout)", async function () {
       const { game, alice } =
         await loadFixture(deployFullProtocol);
 
@@ -398,26 +398,11 @@ describe("SecurityEconHardening", function () {
       // Advance time past the cutoff (882 days = 912 - 30)
       await advanceTime(COIN_PURCHASE_CUTOFF_LVL0 * DAY + DAY);
 
-      // At level 0, GameOverPossible is always cleared (only active at L10+).
-      // purchaseCoin still reverts because alice has no BURNIE to burn.
-      // The call must revert regardless — time advance doesn't change that.
+      // Past the liveness cutoff, redeemBurnie reverts (the liveness gate fires
+      // before any purchase work). The call must revert regardless.
       await expect(
-        game.connect(alice).purchaseCoin(ZERO_ADDRESS, 400n, 0n)
+        game.connect(alice).redeemBurnie(ZERO_ADDRESS, 400n)
       ).to.be.reverted;
-    });
-
-    it("purchaseCoin works before 882 days at level 0", async function () {
-      const { game, alice, coin } = await loadFixture(deployFullProtocol);
-
-      // At day 0, purchaseCoin should not revert due to cutoff
-      // (It may revert for other reasons like insufficient BURNIE, but NOT GameOverPossible)
-      // Test by verifying no GameOverPossible error
-      try {
-        await game.connect(alice).purchaseCoin(ZERO_ADDRESS, 400n, 0n);
-      } catch (err) {
-        // If it reverts, make sure it's NOT GameOverPossible
-        expect(err.message).to.not.include("GameOverPossible");
-      }
     });
   });
 
@@ -650,7 +635,7 @@ describe("SecurityEconHardening", function () {
       // There is no level multiplier on the BURNIE cost.
       //
       // The price in ETH changes per level, but BURNIE cost stays flat.
-      // purchaseCoin uses a fixed COIN_PER_TICKET constant.
+      // redeemBurnie uses a fixed COIN_PER_TICKET constant.
       //
       // Verify via purchaseInfo: the ETH price changes per level,
       // but BURNIE cost is a separate constant.

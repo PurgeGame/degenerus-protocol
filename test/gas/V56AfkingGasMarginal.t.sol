@@ -103,7 +103,7 @@ contract V56AfkingGasMarginal is DeployProtocol {
     uint256 private constant HEADER_SLOT = 0;
     uint256 private constant OFF_PURCHASE_START_DAY = 0; // uint32 @ byte 0
     uint256 private constant OFF_DAILY_IDX = 4;          // uint32 @ byte 4
-    uint256 private constant OFF_SUBS_FULLY_PROCESSED = 29; // bool @ byte 29 (afking STAGE drain-complete flag)
+    uint256 private constant OFF_SUBS_FULLY_PROCESSED = 28; // bool @ byte 28 (afking STAGE drain-complete flag)
 
     // -------------------------------------------------------------------------
     // Dual-bound + worst-case / measurement constants

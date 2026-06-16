@@ -76,8 +76,6 @@ contract DegenerusGameMintModule is
     // -------------------------------------------------------------------------
 
     // error E() — inherited from DegenerusGameStorage
-    /// @notice BURNIE ticket purchases are blocked when drip projection cannot cover nextPool deficit.
-    error GameOverPossible();
 
     // -------------------------------------------------------------------------
     // External Contract References (compile-time constants)
@@ -1074,26 +1072,42 @@ contract DegenerusGameMintModule is
         );
     }
 
-    /// @notice Purchase tickets with BURNIE.
-    /// @dev BURNIE ticket purchases require RNG unlocked and gameOverPossible=false.
+    /// @notice Redeem BURNIE for current-jackpot tickets — allowed only inside the jackpot window.
+    /// @dev Reverts unless the BURNIE purchase window is open: the prize target is met in the purchase
+    ///      phase, or the jackpot phase is live, with no RNG in flight. Outside that window BURNIE ticket
+    ///      purchases revert so bonus tickets and prize ETH accrue to real-ETH buyers.
     /// @param buyer Recipient of the purchased tickets.
     /// @param ticketQuantity Number of tickets to purchase (2 decimals, scaled by 100).
-    function purchaseCoin(
+    function redeemBurnie(
         address buyer,
         uint256 ticketQuantity
     ) external {
-        _purchaseCoinFor(buyer, ticketQuantity);
+        _redeemBurnieFor(buyer, ticketQuantity);
     }
 
-    function _purchaseCoinFor(
+    function _redeemBurnieFor(
         address buyer,
         uint256 ticketQuantity
     ) private {
         if (_livenessTriggered()) revert E();
 
         if (ticketQuantity != 0) {
-            // Block BURNIE tickets when drip projection cannot cover nextPool deficit.
-            if (gameOverPossible) revert GameOverPossible();
+            // BURNIE purchase window: opens the first time a redeem lands once the prize target is met
+            // in the purchase phase with no RNG in flight, latching a single warm slot-0 bit. It stays
+            // open through the jackpot days and is cleared in the advance at the final jackpot day's RNG
+            // request — the boundary where new tickets route to the next level (rngLockedFlag stays set
+            // from that request until _unlockRng, so it can never flip back on during the wind-down).
+            // While it is closed (an open/stalled purchase phase) BURNIE purchases revert, so bonus
+            // tickets and prize ETH accrue to real-ETH buyers. The target-met condition holds for the
+            // whole of lastPurchaseDay, so even a one-day purchase phase still offers that day as a
+            // redemption window.
+            if (!burnieWindowOpen) {
+                if (
+                    rngLockedFlag ||
+                    _getNextPrizePool() < levelPrizePool[level]
+                ) revert E();
+                burnieWindowOpen = true;
+            }
 
             uint24 cachedLevel = level;
             (
@@ -2003,7 +2017,7 @@ contract DegenerusGameMintModule is
         )
     {
         if (quantity == 0) revert E();
-        // Liveness is gated by both callers (_purchaseForWithCached / _purchaseCoinFor)
+        // Liveness is gated by both callers (_purchaseForWithCached / _redeemBurnieFor)
         // before any state is touched, so it is not re-evaluated here.
         // compressedJackpotFlag / jackpotCounter are consumed only on jackpot-phase
         // buys (every use below is short-circuit-gated on cachedJpFlag), so the

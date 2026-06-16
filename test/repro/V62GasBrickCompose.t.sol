@@ -350,12 +350,12 @@ contract V62GasBrickCompose is DeployProtocol {
 
     /// @dev Read `subsFullyProcessed` (storage slot for the bool, packed in the slot-0 region per the
     ///      layout key). Surfaced for the diagnostic log only (composition is asserted via evicted +
-    ///      backfilled, which are unambiguous). subsFullyProcessed lives at slot 0 byte 29 (the
+    ///      backfilled, which are unambiguous). subsFullyProcessed lives at slot 0 byte 28 (the
     ///      DegenerusGameStorage layout comment), but to avoid depending on that exact packing for a
     ///      load-bearing check it is read leniently and used only as a log.
     function _subsFullyProcessed() internal view returns (bool) {
         uint256 s0 = uint256(vm.load(address(game), bytes32(uint256(HEADER_SLOT))));
-        return ((s0 >> (29 * 8)) & 0xFF) != 0;
+        return ((s0 >> (28 * 8)) & 0xFF) != 0;
     }
 
     function rngWordByDay(uint32 day) internal view returns (uint256) {

@@ -74,23 +74,23 @@ contract CoverageGap222 is DeployProtocol {
         assertTrue(address(game).code.length > 0, "game contract alive after advance");
     }
 
-    /// @notice Exercise the purchaseCoin path (Burnie token mint).
-    /// @dev Closes gap: game.purchaseCoin. D-13 natural caller: game.purchaseCoin
+    /// @notice Exercise the redeemBurnie path (Burnie token mint).
+    /// @dev Closes gap: game.redeemBurnie. D-13 natural caller: game.redeemBurnie
     ///      directly from an externally-owned buyer.
-    /// @dev D-14 conditional branch: purchaseCoin dispatches to the MintModule
+    /// @dev D-14 conditional branch: redeemBurnie dispatches to the MintModule
     ///      via delegatecall with MintPaymentKind.Burnie — exercises the
     ///      non-trivial branch of `_purchaseFor`.
-    function test_gap_purchaseCoin_path() public {
+    function test_gap_redeemBurnie_path() public {
         vm.prank(buyer);
         (bool ok, ) = address(game).call(
             abi.encodeWithSignature(
-                "purchaseCoin(address,uint256,uint256)",
+                "redeemBurnie(address,uint256,uint256)",
                 buyer,
                 100,
                 0
             )
         );
-        // purchaseCoin may revert early if buyer has no BURNIE balance;
+        // redeemBurnie may revert early if buyer has no BURNIE balance;
         // the reachability assertion is that the selector dispatches and
         // the revert (if any) comes from inside the delegatecall target,
         // not from a missing function.

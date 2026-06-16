@@ -293,7 +293,7 @@ contract FarFutureSalvageSwapTest is DeployProtocol {
     }
 
     /// @notice (d) BURNIE cannot mint a far (d>=6) entry -- proven BEHAVIORALLY (vm.ffi is DISABLED).
-    ///         A BURNIE purchase (the only BURNIE mint entrypoint, purchaseCoin, which takes NO level arg)
+    ///         A BURNIE purchase (the only BURNIE mint entrypoint, redeemBurnie, which takes NO level arg)
     ///         only ever queues entries at cachedLevel / cachedLevel+1 -- never at a far key. We snapshot
     ///         all far-future queue lengths, drive a BURNIE mint, and assert no far queue grew. We also
     ///         assert the absence of a BURNIE-funded far-creating entrypoint by exercised behavior.
@@ -307,7 +307,7 @@ contract FarFutureSalvageSwapTest is DeployProtocol {
             beforeLens[d] = _ffQueueLen(uint24(cl + d));
         }
 
-        // Drive a BURNIE mint via purchaseCoin. purchaseCoin(buyer, ticketQuantity) takes NO level/distance
+        // Drive a BURNIE mint via redeemBurnie. redeemBurnie(buyer, ticketQuantity) takes NO level/distance
         // argument -- the caller cannot direct the mint at a far level. The buyer calls for itself
         // (_resolvePlayer self-path; a low-level call after vm.prank makes burnieBuyer the msg.sender).
         // It may revert under harness conditions (e.g. insufficient BURNIE / gameOverPossible); the
@@ -315,7 +315,7 @@ contract FarFutureSalvageSwapTest is DeployProtocol {
         // is unchanged on revert).
         vm.prank(burnieBuyer);
         (bool mintOk, ) = address(game).call(
-            abi.encodeWithSignature("purchaseCoin(address,uint256)", burnieBuyer, uint256(4000))
+            abi.encodeWithSignature("redeemBurnie(address,uint256)", burnieBuyer, uint256(4000))
         );
         mintOk; // outcome irrelevant: the proof is that no far entry exists either way
 
@@ -329,9 +329,9 @@ contract FarFutureSalvageSwapTest is DeployProtocol {
         }
 
         // Behavioral absence proof: there is no BURNIE-funded entrypoint that accepts a far level. The only
-        // BURNIE mint entrypoint is purchaseCoin, which has no level arg; the v47 BURNIE-lootbox->future path
+        // BURNIE mint entrypoint is redeemBurnie, which has no level arg; the v47 BURNIE-lootbox->future path
         // was removed in Phase 326. We additionally exercise the direct ticket-purchase path with a far level
-        // is simply not expressible: purchaseCoin's signature cannot carry one. Confirm the buyer also holds
+        // is simply not expressible: redeemBurnie's signature cannot carry one. Confirm the buyer also holds
         // zero far entries at every distance.
         for (uint256 d = 6; d <= 100; ++d) {
             assertEq(_ownedEntries(burnieBuyer, uint24(cl + d)), 0, "BURNIE buyer holds a far entry (impossible)");

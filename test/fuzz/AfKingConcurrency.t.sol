@@ -610,10 +610,10 @@ contract AfKingConcurrency is DeployProtocol {
         return uint8(_subField(who, OFF_FLAGS, 8));
     }
 
-    /// @dev `subsFullyProcessed` (slot 0, offset 29, bool) — the per-day afking-done gate.
+    /// @dev `subsFullyProcessed` (slot 0, offset 28, bool) — the per-day afking-done gate.
     function _subsFullyProcessed() internal view returns (bool) {
         uint256 p0 = uint256(vm.load(address(game), bytes32(uint256(0))));
-        return uint8(p0 >> (29 * 8)) != 0;
+        return uint8(p0 >> (28 * 8)) != 0;
     }
 
     /// @dev `_subCursor` (slot 58, offset 0, uint16) — the STAGE walk cursor.
@@ -632,10 +632,10 @@ contract AfKingConcurrency is DeployProtocol {
         uint256 pCursor = uint256(vm.load(address(game), sCursor));
         pCursor &= ~uint256(0xFFFF);
         vm.store(address(game), sCursor, bytes32(pCursor));
-        // subsFullyProcessed = false (slot 0, offset 29).
+        // subsFullyProcessed = false (slot 0, offset 28).
         bytes32 s0 = bytes32(uint256(0));
         uint256 p0 = uint256(vm.load(address(game), s0));
-        p0 &= ~(uint256(0xFF) << (29 * 8));
+        p0 &= ~(uint256(0xFF) << (28 * 8));
         vm.store(address(game), s0, bytes32(p0));
     }
 

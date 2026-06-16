@@ -540,7 +540,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     }
 
     /// @notice Purchase any combination of tickets and loot boxes with ETH or claimable.
-    /// @dev Main entry point for all ETH/claimable purchases. For BURNIE purchases, use purchaseCoin().
+    /// @dev Main entry point for all ETH/claimable purchases. For BURNIE purchases, use redeemBurnie().
     ///      Recycling at least 3 tickets' worth of claimable winnings earns a 10% BURNIE flip-credit bonus.
     ///      Adds affiliate support for loot box purchases.
     ///      SECURITY: Blocked when RNG is locked.
@@ -593,7 +593,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     ///      SECURITY: Blocked when RNG is locked.
     /// @param buyer Player address to receive purchases (address(0) = msg.sender).
     /// @param ticketQuantity Number of tickets to purchase (2 decimals, scaled by 100; 0 to skip).
-    function purchaseCoin(
+    function redeemBurnie(
         address buyer,
         uint256 ticketQuantity
     ) external {
@@ -602,7 +602,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
             .GAME_MINT_MODULE
             .delegatecall(
                 abi.encodeWithSelector(
-                    IDegenerusGameMintModule.purchaseCoin.selector,
+                    IDegenerusGameMintModule.redeemBurnie.selector,
                     buyer,
                     ticketQuantity
                 )

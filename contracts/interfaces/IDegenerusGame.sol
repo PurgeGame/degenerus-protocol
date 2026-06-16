@@ -374,7 +374,7 @@ interface IDegenerusGame {
     /// @dev Entry point for BURNIE ticket purchases.
     /// @param buyer Player address to receive purchases (address(0) = msg.sender).
     /// @param ticketQuantity Number of tickets to purchase (0 to skip).
-    function purchaseCoin(
+    function redeemBurnie(
         address buyer,
         uint256 ticketQuantity
     ) external;

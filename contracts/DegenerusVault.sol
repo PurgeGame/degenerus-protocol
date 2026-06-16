@@ -56,7 +56,7 @@ interface IDegenerusGamePlayerActions {
     /// @notice View claimable ETH winnings for a player.
     function claimableWinningsOf(address player) external view returns (uint256);
     /// @notice Purchase tickets using BURNIE.
-    function purchaseCoin(
+    function redeemBurnie(
         address buyer,
         uint256 ticketQuantity
     ) external;
@@ -535,7 +535,7 @@ contract DegenerusVault {
     /// @custom:reverts Insufficient If ticketQuantity is zero
     function gamePurchaseTicketsBurnie(uint256 ticketQuantity) external onlyVaultOwner {
         if (ticketQuantity == 0) revert Insufficient();
-        gamePlayer.purchaseCoin(address(this), ticketQuantity);
+        gamePlayer.redeemBurnie(address(this), ticketQuantity);
     }
 
     /// @notice Purchase a deity pass using an active boon for the vault

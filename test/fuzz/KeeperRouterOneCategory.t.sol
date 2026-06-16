@@ -649,10 +649,10 @@ contract KeeperRouterOneCategory is DeployProtocol {
 
     // ---- read-slot ticket seeding (force advanceDue via a non-empty current-level read slot) ----
 
-    /// @dev Read the GAME's live ticketWriteSlot bool (SLOT 0 byte 28).
+    /// @dev Read the GAME's live ticketWriteSlot bool (SLOT 0 byte 25).
     function _ticketWriteSlot() internal view returns (bool) {
         uint256 slot0 = uint256(vm.load(address(game), bytes32(uint256(0))));
-        return ((slot0 >> (28 * 8)) & 0x1) != 0;
+        return ((slot0 >> (25 * 8)) & 0x1) != 0;
     }
 
     /// @dev The current read key for a level — byte-faithful to DegenerusGameStorage._tqReadKey.

@@ -229,7 +229,7 @@ contract V56QuestNonPerturb is DeployProtocol {
         uint256 wordB = _questStateWord(target);
 
         assertEq(wordB, wordA, "CrossCaller: byte-identical target PlayerQuestState (afking sibling present vs absent)");
-        assertEq(streakA, 7, "non-vacuity: the non-afking target advanced its streak (6 -> 7)");
+        assertEq(streakA, 8, "non-vacuity: the non-afking target advanced its streak (6 -> 8: slot-0 and slot-1 each +1)");
         assertEq(lastActiveA, uint24(day), "non-vacuity: the slot-0 completion bumped lastActiveDay");
     }
 
@@ -276,7 +276,7 @@ contract V56QuestNonPerturb is DeployProtocol {
     ///      as GAME. Returns the day so callers thread the same currentDay into the handlers.
     function _rollDay(uint32 day) internal returns (uint32) {
         vm.prank(ContractAddresses.GAME);
-        quests.rollDailyQuest(uint24(day), uint256(keccak256(abi.encode(day, "v56qnp"))));
+        quests.rollDailyQuest(uint24(day), uint256(keccak256(abi.encode(day, "v56qnp"))), false);
         return day;
     }
 
@@ -326,25 +326,32 @@ contract V56QuestNonPerturb is DeployProtocol {
         uint8 t = active[1].questType;
         uint8 qt;
         uint32 s;
+        // Volumes are sized well above every slot-1 target (BURNIE types target 2000 whole BURNIE,
+        // ETH types target mintPrice * 20) so the completion clears in one call whatever type lands.
         if (t == QT_FLIP) {
             vm.prank(ContractAddresses.COIN);
-            (reward, qt, s, completed) = quests.handleFlip(player, 100 ether);
+            (reward, qt, s, completed) = quests.handleFlip(player, 100_000 ether);
         } else if (t == QT_DECIMATOR) {
             vm.prank(ContractAddresses.COIN);
-            (reward, qt, s, completed) = quests.handleDecimator(player, 100 ether);
+            (reward, qt, s, completed) = quests.handleDecimator(player, 100_000 ether);
         } else if (t == QT_AFFILIATE) {
             vm.prank(ContractAddresses.COIN);
-            (reward, qt, s, completed) = quests.handleAffiliate(player, 100 ether);
+            (reward, qt, s, completed) = quests.handleAffiliate(player, 100_000 ether);
+        } else if (t == QT_DEGENERETTE_BURNIE) {
+            vm.prank(ContractAddresses.COIN);
+            (reward, qt, s, completed) = quests.handleDegenerette(player, 100_000 ether, false, MINT_PRICE);
+        } else if (t == QT_DEGENERETTE_ETH) {
+            vm.prank(ContractAddresses.COIN);
+            (reward, qt, s, completed) = quests.handleDegenerette(player, 10_000 ether, true, MINT_PRICE);
         } else if (t == QT_MINT_BURNIE) {
             vm.prank(ContractAddresses.COIN);
             (reward, qt, s, completed) = quests.handleMint(player, 100, false, MINT_PRICE);
         } else {
-            // LOOTBOX / DEGENERETTE_ETH / DEGENERETTE_BURNIE / MINT_ETH share the purchase path; an
-            // ETH-mint spend + lootbox spend covers the ETH-denominated slot-1 types, a BURNIE-mint
-            // qty covers DEGENERETTE_BURNIE. handlePurchase credits the lootbox reward via the caller,
-            // so the returned reward is the slot's QUEST_RANDOM_REWARD.
+            // LOOTBOX / MINT_ETH share the purchase path; an ETH-mint spend + lootbox spend clears the
+            // ETH-denominated target. handlePurchase credits the lootbox reward via the caller, so the
+            // returned reward is the slot's QUEST_RANDOM_REWARD.
             vm.prank(ContractAddresses.COIN);
-            (reward, qt, s, completed) = quests.handlePurchase(player, 1 ether, 100, 1 ether, MINT_PRICE, MINT_PRICE);
+            (reward, qt, s, completed) = quests.handlePurchase(player, 10 ether, 100, 10 ether, MINT_PRICE, MINT_PRICE);
         }
     }
 

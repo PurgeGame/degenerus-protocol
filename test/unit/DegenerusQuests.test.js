@@ -58,7 +58,7 @@ const QUEST_BURNIE_TARGET = eth(2000); // 2 * 1000 BURNIE
  * Impersonate the game contract and call rollDailyQuest.
  * (rollDailyQuest access changed from onlyCoin to onlyGame in v13.0)
  */
-async function rollQuestAsGame(hreEthers, game, quests, day, entropy) {
+async function rollQuestAsGame(hreEthers, game, quests, day, entropy, forceMintBurnie = false) {
   const gameAddr = await game.getAddress();
   await hreEthers.provider.send("hardhat_impersonateAccount", [gameAddr]);
   await hreEthers.provider.send("hardhat_setBalance", [
@@ -66,7 +66,7 @@ async function rollQuestAsGame(hreEthers, game, quests, day, entropy) {
     "0x1000000000000000000",
   ]);
   const gameSigner = await hreEthers.getSigner(gameAddr);
-  const tx = await quests.connect(gameSigner).rollDailyQuest(day, entropy);
+  const tx = await quests.connect(gameSigner).rollDailyQuest(day, entropy, forceMintBurnie);
   await hreEthers.provider.send("hardhat_stopImpersonatingAccount", [gameAddr]);
   return { tx };
 }
@@ -126,10 +126,10 @@ async function rollQuestWithBonusType(hreEthers, game, quests, day, targetBonusT
     try {
       const [, questTypes] = await quests
         .connect(gameSigner)
-        .rollDailyQuest.staticCall(day, i);
+        .rollDailyQuest.staticCall(day, i, false);
       if (Number(questTypes[1]) === targetBonusType) {
         // Actually roll it
-        await quests.connect(gameSigner).rollDailyQuest(day, i);
+        await quests.connect(gameSigner).rollDailyQuest(day, i, false);
         found = { entropy: i, questTypes };
         break;
       }
@@ -156,7 +156,7 @@ describe("DegenerusQuests", function () {
     it("reverts OnlyGame when called by a random EOA", async function () {
       const { quests, alice } = await loadFixture(deployFullProtocol);
       await expect(
-        quests.connect(alice).rollDailyQuest(1n, 12345n)
+        quests.connect(alice).rollDailyQuest(1n, 12345n, false)
       ).to.be.revertedWithCustomError(quests, "OnlyGame");
     });
 
@@ -170,7 +170,7 @@ describe("DegenerusQuests", function () {
       ]);
       const coinSigner = await hre.ethers.getSigner(coinAddr);
       await expect(
-        quests.connect(coinSigner).rollDailyQuest(1n, 12345n)
+        quests.connect(coinSigner).rollDailyQuest(1n, 12345n, false)
       ).to.be.revertedWithCustomError(quests, "OnlyGame");
       await hre.ethers.provider.send("hardhat_stopImpersonatingAccount", [coinAddr]);
     });
@@ -242,6 +242,21 @@ describe("DegenerusQuests", function () {
       const active = await quests.getActiveQuests();
       expect(Number(active[0].questType)).to.equal(QUEST_TYPE_MINT_ETH);
       expect(active[0].day).to.equal(99n);
+    });
+
+    it("MINT_BURNIE is auto-assigned to slot 1 only when forced, never randomly rolled", async function () {
+      const { quests, game } = await loadFixture(deployFullProtocol);
+      const QUEST_TYPE_MINT_BURNIE = 9;
+      // forceMintBurnie = true: slot 1 is MINT_BURNIE (the lastPurchaseDay auto-quest).
+      await rollQuestAsGame(hre.ethers, game, quests, 200n, 12345n, true);
+      let active = await quests.getActiveQuests();
+      expect(Number(active[1].questType)).to.equal(QUEST_TYPE_MINT_BURNIE);
+      // forceMintBurnie = false: MINT_BURNIE is excluded from the random pool entirely.
+      for (let i = 1n; i <= 64n; i++) {
+        await rollQuestAsGame(hre.ethers, game, quests, 200n + i, i * 7919n, false);
+        active = await quests.getActiveQuests();
+        expect(Number(active[1].questType)).to.not.equal(QUEST_TYPE_MINT_BURNIE);
+      }
     });
   });
 

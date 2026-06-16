@@ -33,8 +33,8 @@ contract TLKeyComputer is DegenerusGameStorage {
 ///                [18:19]decWindowOpen [19:20]rngLockedFlag [20:21]phaseTransitionActive
 ///                [21:22]gameOver [22:23]dailyJackpotCoinTicketsPending
 ///                [23:24]compressedJackpotFlag [24:25]ticketsFullyProcessed
-///                [25:26]gameOverPossible [26:27]ticketWriteSlot [27:28]prizePoolFrozen
-///                [28:29]presaleOver [29:30]subsFullyProcessed
+///                [25:26]ticketWriteSlot [26:27]prizePoolFrozen [27:28]presaleOver
+///                [28:29]subsFullyProcessed [29:30]presaleDrained [30:31]burnieWindowOpen
 ///      - Slot 1: [0:16]currentPrizePool(uint128) [16:32]claimablePool(uint128)
 ///      - ticketQueue: slot 12 (mapping(uint24 => address[]))
 ///      - ticketsOwedPacked: slot 13 (mapping(uint24 => mapping(address => uint40)))
@@ -93,8 +93,8 @@ contract TicketLifecycleTest is DeployProtocol {
     /// @dev rngLockedFlag is bool at slot 0 offset 19 bytes = bit 152
     uint256 private constant RNG_LOCKED_SHIFT = 152;
 
-    /// @dev ticketWriteSlot is bool at slot 0 offset 26 bytes = bit 208
-    uint256 private constant WRITE_SLOT_SHIFT = 208;
+    /// @dev ticketWriteSlot is bool at slot 0 offset 25 bytes = bit 200
+    uint256 private constant WRITE_SLOT_SHIFT = 200;
 
     /// @dev compressedJackpotFlag is uint8 at slot 0 offset 23 bytes = bits 184-191
     uint256 private constant COMPRESSED_FLAG_SHIFT = 184;
@@ -1251,7 +1251,7 @@ contract TicketLifecycleTest is DeployProtocol {
         uint256 L = game.level();
         assertGe(L, 2, "Must reach at least level 2");
 
-        // Set rngLockedFlag=true via vm.store on slot 0, bit 208
+        // Set rngLockedFlag=true via vm.store on slot 0, bit 152
         _setRngLocked(true);
 
         // Verify rngLocked is set
@@ -1959,7 +1959,7 @@ contract TicketLifecycleTest is DeployProtocol {
         // If RNG was requested, rngLockedFlag would be set to true.
         _fulfillVrfIfPending();
 
-        // Read rngLockedFlag before advanceGame (slot 0, offset 26 = bit 208)
+        // Read rngLockedFlag before advanceGame (slot 0, offset 19 = bit 152)
         // The daily drain gate (AM:204-219) should process tickets and return
         // before ever reaching rngGate.
         (bool ok, ) = address(game).call(abi.encodeWithSignature("advanceGame()"));
@@ -2222,8 +2222,8 @@ contract TicketLifecycleTest is DeployProtocol {
     }
 
     /// @notice Get the current ticketWriteSlot from game storage
-    /// @dev ticketWriteSlot is bool at slot 0 offset 28 bytes (bit 224).
-    ///      Confirmed via forge inspect: slot=0, offset=28, size=1.
+    /// @dev ticketWriteSlot is bool at slot 0 offset 25 bytes (bit 200).
+    ///      Confirmed via forge inspect: slot=0, offset=25, size=1.
     function _getWriteSlot() internal view returns (uint8) {
         bytes32 raw = vm.load(address(game), bytes32(uint256(SLOT_0)));
         return uint8(uint256(raw) >> WRITE_SLOT_SHIFT);

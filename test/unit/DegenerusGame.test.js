@@ -30,7 +30,7 @@ async function rollQuestAsGame(quests, game, day, entropy) {
     "0x1000000000000000000",
   ]);
   const gameSigner = await hre.ethers.getSigner(gameAddr);
-  await quests.connect(gameSigner).rollDailyQuest(day, entropy);
+  await quests.connect(gameSigner).rollDailyQuest(day, entropy, false);
   await hre.network.provider.request({
     method: "hardhat_stopImpersonatingAccount",
     params: [gameAddr],
@@ -213,10 +213,10 @@ describe("DegenerusGame", function () {
       ).to.be.reverted;
     });
 
-    it("purchaseCoin reverts when ticket buy-in is below 0.0025 ETH minimum", async function () {
+    it("redeemBurnie reverts when ticket buy-in is below 0.0025 ETH minimum", async function () {
       const { game, alice } = await loadFixture(deployFullProtocol);
       await expect(
-        game.connect(alice).purchaseCoin(ZERO_ADDRESS, 99n, 0n)
+        game.connect(alice).redeemBurnie(ZERO_ADDRESS, 99n)
       ).to.be.reverted;
     });
 
@@ -266,11 +266,11 @@ describe("DegenerusGame", function () {
       ).to.be.reverted;
     });
 
-    it("purchaseCoin with zero lootbox and zero tickets succeeds as no-op", async function () {
+    it("redeemBurnie with zero tickets succeeds as no-op", async function () {
       const { game, alice } = await loadFixture(deployFullProtocol);
-      // purchaseCoin with both zero succeeds (no-op: no tickets or lootboxes purchased)
+      // Zero ticketQuantity skips the purchase path entirely (no tickets purchased).
       await expect(
-        game.connect(alice).purchaseCoin(ZERO_ADDRESS, 0n, 0n)
+        game.connect(alice).redeemBurnie(ZERO_ADDRESS, 0n)
       ).to.not.be.reverted;
     });
 

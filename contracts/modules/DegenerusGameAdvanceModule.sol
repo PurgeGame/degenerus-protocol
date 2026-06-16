@@ -119,11 +119,6 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
     uint8 private constant JACKPOT_LEVEL_CAP = 5;
     uint32 private constant VRF_CALLBACK_GAS_LIMIT = 300_000;
 
-    /// @dev Daily decay factor for drip projection (1 - 0.0075 conservative rate).
-    ///      Projection uses 0.75% daily decay (conservative vs actual 1% drip)
-    ///      to determine whether futurePool drip can cover nextPool deficit.
-    uint256 private constant DECAY_RATE = 0.9925 ether;
-
     uint16 private constant VRF_REQUEST_CONFIRMATIONS = 10;
     uint16 private constant VRF_MIDDAY_CONFIRMATIONS = 4;
 
@@ -206,7 +201,6 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
             ) {
                 lastPurchaseDay = true;
                 compressedJackpotFlag = 2;
-                if (gameOverPossible) gameOverPossible = false; // FLAG-03: auto-clear when target met
             }
         }
         bool lastPurchase = (!inJackpot) && lastPurchaseDay;
@@ -431,8 +425,6 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                 _unlockRng(day);
                 purchaseStartDay = day;
                 jackpotPhaseFlag = false;
-                // evaluate endgame flag on purchase-phase entry at L10+
-                _evaluateGameOverAndTarget(lvl, day, day);
                 stage = STAGE_TRANSITION_DONE;
                 break;
             }
@@ -494,11 +486,8 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                             purchaseLevel + 4
                         );
                     }
-                    // FLAG-02: combined target + game-over check (shares SLOADs when flag is set)
-                    bool targetMet = gameOverPossible
-                        ? _evaluateGameOverAndTarget(lvl, psd, day)
-                        : _getNextPrizePool() >=
-                            levelPrizePool[purchaseLevel - 1];
+                    bool targetMet = _getNextPrizePool() >=
+                        levelPrizePool[purchaseLevel - 1];
                     if (targetMet) {
                         lastPurchaseDay = true;
                         if (day - psd <= 3) {
@@ -1243,7 +1232,15 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
             // Normal daily RNG processing (request from current day)
             currentWord = _applyDailyRng(day, currentWord);
             coinflip.processCoinflipPayouts(coinflipBonus, currentWord, day);
-            quests.rollDailyQuest(day, currentWord);
+            // Force the MINT_BURNIE daily on the first jackpot day (lastPurchaseDay still set here,
+            // jackpot not yet entered) so the BURNIE-mint quest only lands when the redeem window is
+            // live. Turbo (compressedJackpotFlag == 2) is skipped — its jackpot collapses at this
+            // request, leaving no full open day for that quest.
+            quests.rollDailyQuest(
+                day,
+                currentWord,
+                lastPurchaseDay && compressedJackpotFlag != 2
+            );
 
             // Resolve the sentinel-stamped gambling-burn pool if any (INV-13). Reading the
             // sentinel rather than deriving `day - 1` makes multi-day RNG stalls correct by
@@ -1698,6 +1695,27 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         rngRequestTime = uint48(block.timestamp);
         rngLockedFlag = true;
 
+        // Close the BURNIE purchase window at the final jackpot day's RNG request — the boundary where
+        // new tickets begin routing to the next level (mirrors the route-to-level+1 step in the mint
+        // module). jackpotCounter + step catches the final daily jackpot; the isTicketJackpotDay
+        // (level-transition) request catches the single-day turbo jackpot, where jackpotPhaseFlag is
+        // not yet set here.
+        if (burnieWindowOpen && (jackpotPhaseFlag || isTicketJackpotDay)) {
+            uint8 jpStep = 1;
+            if (compressedJackpotFlag == 2 && jackpotCounter == 0) {
+                jpStep = JACKPOT_LEVEL_CAP;
+            } else if (
+                compressedJackpotFlag == 1 &&
+                jackpotCounter > 0 &&
+                jackpotCounter < JACKPOT_LEVEL_CAP - 1
+            ) {
+                jpStep = 2;
+            }
+            if (jackpotCounter + jpStep >= JACKPOT_LEVEL_CAP) {
+                burnieWindowOpen = false;
+            }
+        }
+
         // Increment level at RNG request time when lastPurchaseDay = true.
         // lvl is already purchaseLevel (= level + 1), so set directly.
         // Only on a fresh daily request - a daily retry would double-increment, and an
@@ -1891,56 +1909,5 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         rngWordByDay[day] = finalWord;
         lastVrfProcessedTimestamp = uint48(block.timestamp);
         emit DailyRngApplied(day, rawWord, nudges, finalWord);
-    }
-
-    /*+======================================================================+
-      |                    DRIP PROJECTION MATH                             |
-      +======================================================================+*/
-
-    /// @dev Compute base^exp in 1e18 scale via repeated squaring.
-    ///      Max 7 iterations for exp <= 120. ~700 gas.
-    function _wadPow(uint256 base, uint256 exp) private pure returns (uint256) {
-        uint256 result = 1 ether;
-        while (exp > 0) {
-            if (exp & 1 == 1) {
-                result = (result * base) / 1 ether;
-            }
-            base = (base * base) / 1 ether;
-            exp >>= 1;
-        }
-        return result;
-    }
-
-    /// @dev Projected total drip from futurePool over n remaining days.
-    ///      Closed-form geometric series: futurePool * (1 - 0.9925^n).
-    function _projectedDrip(
-        uint256 futurePool,
-        uint256 daysRemaining
-    ) private pure returns (uint256) {
-        if (daysRemaining == 0) return 0;
-        uint256 decayN = _wadPow(DECAY_RATE, daysRemaining);
-        return (futurePool * (1 ether - decayN)) / 1 ether;
-    }
-
-    /// @dev Set or clear gameOverPossible based on drip projection vs nextPool deficit.
-    /// @dev Evaluates gameOverPossible flag and returns whether nextPool >= target.
-    ///      At L10+: flag is set if projected drip cannot cover the gap.
-    ///      Below L10: flag is always cleared.
-    function _evaluateGameOverAndTarget(
-        uint24 lvl,
-        uint24 psd,
-        uint24 day
-    ) private returns (bool targetMet) {
-        (uint128 nextPool, uint128 futurePool) = _getPrizePools();
-        uint256 target = levelPrizePool[lvl];
-        targetMet = nextPool >= target;
-        if (lvl < 10 || targetMet) {
-            gameOverPossible = false;
-            return targetMet;
-        }
-        uint256 deficit = target - nextPool;
-        uint256 daysRemaining = psd + 120 > day ? psd + 120 - day : 0;
-        gameOverPossible =
-            _projectedDrip(futurePool, daysRemaining) < deficit;
     }
 }

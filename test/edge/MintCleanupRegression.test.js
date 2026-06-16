@@ -172,7 +172,8 @@ async function readPlayerTraitMultiset(game, lvl, player) {
 
 async function readTicketWriteSlot(addr) {
   const s0 = await hre.ethers.provider.getStorage(addr, 0);
-  return ((BigInt(s0) >> 224n) & 0xFFn) !== 0n;
+  // ticketWriteSlot is at slot 0 byte 25 (bit 200).
+  return ((BigInt(s0) >> 200n) & 0xFFn) !== 0n;
 }
 
 async function readDailyIdx(addr) {

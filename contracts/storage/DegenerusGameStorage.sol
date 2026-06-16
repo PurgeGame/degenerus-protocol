@@ -58,12 +58,12 @@ import {GameTimeLib} from "../libraries/GameTimeLib.sol";
  * | [22:23] dailyJackpotCoinTicketsPending bool Split jackpot pending flag       |
  * | [23:24] compressedJackpotFlag    uint8    0=normal, 1=compressed, 2=turbo    |
  * | [24:25] ticketsFullyProcessed    bool     Read slot fully drained flag       |
- * | [25:26] gameOverPossible         bool     Drip projection endgame flag       |
- * | [26:27] ticketWriteSlot          bool     Double-buffer write toggle         |
- * | [27:28] prizePoolFrozen          bool     Prize pool freeze active flag      |
- * | [28:29] presaleOver              bool     Coin-presale-box terminal latch    |
- * | [29:30] subsFullyProcessed       bool     Afking STAGE drain-complete flag    |
- * | [30:31] presaleDrained           bool     All presale boxes opened (sweep)    |
+ * | [25:26] ticketWriteSlot          bool     Double-buffer write toggle         |
+ * | [26:27] prizePoolFrozen          bool     Prize pool freeze active flag      |
+ * | [27:28] presaleOver              bool     Coin-presale-box terminal latch    |
+ * | [28:29] subsFullyProcessed       bool     Afking STAGE drain-complete flag    |
+ * | [29:30] presaleDrained           bool     All presale boxes opened (sweep)    |
+ * | [30:31] burnieWindowOpen         bool     BURNIE ticket purchase window latch |
  * +-----------------------------------------------------------------------------+
  *   Total: 31 bytes used (1 byte padding)
  *
@@ -295,13 +295,6 @@ abstract contract DegenerusGameStorage {
     ///      Reset to false on every queue slot swap.
     bool internal ticketsFullyProcessed;
 
-    /// @dev True when drip projection shows futurePool cannot cover nextPool deficit.
-    ///      Evaluated in advanceGame at L10+ purchase-phase days.
-    ///      When active: BURNIE ticket purchases revert, BURNIE lootbox current-level
-    ///      tickets redirect to far-future key space.
-    ///      Cleared when: drip re-covers deficit, lastPurchaseDay is set, or phase transition.
-    bool internal gameOverPossible;
-
     // EVM SLOT 0 (continued): Double-Buffer + Freeze (moved from slot 1)
 
     /// @dev Active write buffer toggle for ticket queue double-buffering.
@@ -342,6 +335,15 @@ abstract contract DegenerusGameStorage {
     ///      SLOAD. Flipped only by the in-order sweep (never the manual path), so an out-of-order
     ///      manual open of the closing box cannot trip it early and strand a still-queued box.
     bool internal presaleDrained;
+
+    /// @dev BURNIE ticket purchase window latch. redeemBurnie lazily opens it the moment the prize
+    ///      target is met in the purchase phase (_getNextPrizePool() >= levelPrizePool[level], with no
+    ///      RNG in flight); it persists through the jackpot days and is cleared in the advance at the
+    ///      final jackpot day's RNG request — the same boundary where new tickets route to the next
+    ///      level. While closed, BURNIE ticket purchases revert, so BURNIE tickets only ever join a
+    ///      happening jackpot, never an open/stalled purchase phase. Occupies slot-0 byte [31:32], which
+    ///      the purchase/advance paths already SLOAD, so the gate is a free read.
+    bool internal burnieWindowOpen;
 
     // =========================================================================
     // EVM SLOT 1: Prize Pools

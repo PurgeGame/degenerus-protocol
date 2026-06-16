@@ -360,24 +360,35 @@ contract DegenerusQuests is IDegenerusQuests {
     //                            QUEST ROLLING
     // =========================================================================
 
-    /// @notice Roll the daily quest set. Slot 0 is always MINT_ETH; slot 1 is random.
+    /// @notice Roll the daily quest set. Slot 0 is always MINT_ETH; slot 1 is random, except on the
+    ///         first jackpot day where it is forced to MINT_BURNIE.
     /// @dev Idempotent per day. Called by AdvanceModule when RNG word is available.
     /// @param day Quest day identifier.
     /// @param entropy VRF entropy word.
-    function rollDailyQuest(uint24 day, uint256 entropy) external onlyGame {
+    /// @param forceMintBurnie When true, slot 1 is MINT_BURNIE (the BURNIE redeem window is live this
+    ///        day); when false, MINT_BURNIE is excluded from the slot 1 roll so a player is never handed
+    ///        a daily BURNIE-mint quest they cannot complete while the window is shut.
+    function rollDailyQuest(uint24 day, uint256 entropy, bool forceMintBurnie) external onlyGame {
         DailyQuest[QUEST_SLOT_COUNT] memory quests = _loadActiveQuests();
         if (quests[0].day == day) return;
 
         // Slot 0: always MINT_ETH — just stamp the day
         _seedQuestType(quests[0], day, QUEST_TYPE_MINT_ETH);
 
-        // Slot 1: weighted random (distinct from slot 0)
-        uint256 bonusEntropy = (entropy >> 128) | (entropy << 128);
-        uint8 bonusType = _bonusQuestType(
-            bonusEntropy,
-            QUEST_TYPE_MINT_ETH,
-            _canRollDecimatorQuest()
-        );
+        // Slot 1: MINT_BURNIE auto-assigned on the first jackpot day (redeem window live), else a
+        // weighted random distinct from slot 0. MINT_BURNIE is never in the random pool (it lives
+        // outside the roll system, see _bonusQuestType), so it only ever lands on this day.
+        uint8 bonusType;
+        if (forceMintBurnie) {
+            bonusType = QUEST_TYPE_MINT_BURNIE;
+        } else {
+            uint256 bonusEntropy = (entropy >> 128) | (entropy << 128);
+            bonusType = _bonusQuestType(
+                bonusEntropy,
+                QUEST_TYPE_MINT_ETH,
+                _canRollDecimatorQuest()
+            );
+        }
         _seedQuestType(quests[1], day, bonusType);
         _storeActiveQuests(quests);
 
@@ -1588,7 +1599,8 @@ contract DegenerusQuests is IDegenerusQuests {
      *      - Excludes the primary type (no duplicate quests)
      *      - Base weight is 1 for all types (more uniform)
      *      - FLIP gets 4x weight
-     *      - MINT_BURNIE gets 10x weight
+     *      - MINT_BURNIE is never rolled here — it is auto-assigned as the slot-1 daily on the first
+     *        jackpot day (rollDailyQuest) and excluded from the random pool everywhere else
      *      - DEGENERETTE_ETH and DEGENERETTE_BURNIE use base weight (1x)
      *      - Decimator gets 4x weight when allowed
      *      - Lootbox gets 3x weight
@@ -1627,12 +1639,18 @@ contract DegenerusQuests is IDegenerusQuests {
                 }
                 continue;
             }
+            // MINT_BURNIE is never rolled randomly — it is auto-assigned as the slot-1 daily on the
+            // first jackpot day (rollDailyQuest) and excluded from the pool everywhere else.
+            if (candidate == QUEST_TYPE_MINT_BURNIE) {
+                unchecked {
+                    ++candidate;
+                }
+                continue;
+            }
             // Apply type-specific weights
             uint16 weight = 1;
             if (candidate == QUEST_TYPE_FLIP) {
                 weight = 4;
-            } else if (candidate == QUEST_TYPE_MINT_BURNIE) {
-                weight = 10;
             } else if (candidate == QUEST_TYPE_DECIMATOR && decAllowed) {
                 weight = 4;
             } else if (candidate == QUEST_TYPE_LOOTBOX) {
