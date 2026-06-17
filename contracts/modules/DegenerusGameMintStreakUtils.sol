@@ -24,6 +24,14 @@ abstract contract DegenerusGameMintStreakUtils is DegenerusGameStorage {
     /// @param streak The new mint-streak value (the on-chain LEVEL_STREAK field, post-update).
     event MintStreakRecorded(address indexed player, uint24 mintLevel, uint24 streak);
 
+    /// @notice Emitted whenever a player's cashout/smite curse counter changes, carrying the
+    ///         resulting absolute value so indexers need no eth_call and never replay cap logic.
+    /// @param player The cursed (or cured) player.
+    /// @param newCurseCount The curse-counter field AFTER the change: stored curse points (0..20;
+    ///        each smite or cashout-curse adds +2 saturating at 20; mint penalty = value * 100 bps;
+    ///        0 means cured).
+    event CurseChanged(address indexed player, uint8 newCurseCount);
+
     /// @dev Mask for clearing last-completed + streak fields in one pass.
     uint256 private constant MINT_STREAK_FIELDS_MASK =
         (BitPackingLib.MASK_24 << BitPackingLib.MINT_STREAK_LAST_COMPLETED_SHIFT) |
@@ -404,6 +412,7 @@ abstract contract DegenerusGameMintStreakUtils is DegenerusGameStorage {
             BitPackingLib.MASK_8,
             newCurse
         );
+        emit CurseChanged(target, uint8(newCurse));
     }
 
     /// @dev Clear `target`'s curse counter to 0 (field-isolated; no SSTORE when already 0).
@@ -416,6 +425,7 @@ abstract contract DegenerusGameMintStreakUtils is DegenerusGameStorage {
             BitPackingLib.MASK_8,
             0
         );
+        emit CurseChanged(target, 0);
     }
 
     /// @dev Stamp the current simulated day into `player`'s DAY_SHIFT field for lootbox
