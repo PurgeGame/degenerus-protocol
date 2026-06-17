@@ -402,43 +402,48 @@ contract VRFCore is DeployProtocol {
 
     /// @notice After requestLootboxRng (rngLockedFlag stays false), daily flow proceeds.
     ///         Tests that a mid-day request does NOT block the next day's daily RNG.
-    /// @dev DEF-380-04-FC1 (finding-candidate routed to the council, 382+/385 VRF-path sweep).
-    ///      SKIPPED against the frozen subject c4d48008: the test's stated invariant ("a mid-day
-    ///      request does NOT block the next day's daily RNG, the daily timeout-retry path is
-    ///      reached") does NOT hold when `requestLootboxRng` swapped a NON-EMPTY ticket buffer.
-    ///      `_setupForMidDayRng` makes a purchase to create the pending-ETH that `requestLootboxRng`
-    ///      requires; that same purchase leaves tickets in the write slot, so `requestLootboxRng`
-    ///      executes its `_swapTicketSlot` + LR_MID_DAY=1 buffer freeze (AdvanceModule, the
-    ///      "Freeze ticket buffer" block — an anti-entropy-reroll measure). The NEXT `advanceGame`
-    ///      then enters the mid-day ticket-resolution path which reverts `RngNotReady()` (the word
-    ///      has not arrived) BEFORE rngGate's daily 12h timeout-retry at AdvanceModule:1266-1272 is
-    ///      reached. So the mid-day request DOES gate the next advance until the mid-day word
-    ///      arrives (or `retryLootboxRng()` re-fires it). The frozen behavior is plausibly
-    ///      correct-by-design (the buffer freeze prevents resolving post-VRF tickets with the
-    ///      committed word), but whether the mid-day-blocks-next-advance interaction is a real
-    ///      liveness concern is a judgment for the council's VRF/mid-day sweep — NOT a stale
-    ///      harness slot/precondition that can be re-derived without changing the asserted
-    ///      invariant. Aligning the test (e.g. asserting the RngNotReady + retry recovery) would
-    ///      mask the very interaction under question. Recorded in REGRESSION-BASELINE-v62.md
-    ///      "Known behavior-divergence — finding-candidates". The contract is NOT modified.
-    function test_midDayRequest_doesNotBlockDaily() public {
-        vm.skip(true); // DEF-380-04-FC1 — see @dev above; council adjudicates (382+/385)
+    /// @notice ADJUDICATED (v67.0 phase 421 MIDRNG / DEF-380-04-FC1). A mid-day ticket request
+    ///         whose word has NOT arrived DOES gate the next-day advance — by design. A purchase
+    ///         that creates pending lootbox ETH also leaves tickets in the write slot, so
+    ///         requestLootboxRng swaps a non-empty buffer (LR_MID_DAY=1, ticketsFullyProcessed=
+    ///         false). The new-day daily-drain gate then reverts RngNotReady until the bound word
+    ///         lands — the daily 12h timeout sits behind that gate (the buffer freeze is an
+    ///         anti-reroll measure). Recovery is the permissionless retryLootboxRng (or the
+    ///         natural late arrival): the heartbeat slows, never bricks — ruled acceptable. The
+    ///         separate LR_MID_DAY latch leak this interaction exposed (a delivered-but-undrained
+    ///         word crossing the day boundary) is fixed; see test_midDayLatch_clearsOnCrossDayDrain.
+    function test_midDayTicketRequest_gatesNextAdvanceUntilWordLands() public {
         _setupForMidDayRng();
 
-        // Fire mid-day request (does NOT set rngLockedFlag)
         game.requestLootboxRng();
-        assertFalse(game.rngLocked(), "Mid-day request should not lock rngLockedFlag");
+        assertFalse(game.rngLocked(), "mid-day request must not set the daily lock");
+        uint256 reqId = mockVRF.lastRequestId();
 
-        // Do NOT fulfill mid-day VRF
-        // Warp to day 3 + 13 hours so we're past the 12h timeout
-        // (rngRequestTime != 0, so rngGate enters waiting path)
+        // Word does NOT arrive; cross the day boundary (past the 6h mid-day retry timeout).
         vm.warp(block.timestamp + 1 days + 13 hours);
 
-        // advanceGame on day 3 should trigger timeout retry path
-        // (rngRequestTime was set by requestLootboxRng, elapsed > 12h)
-        // This overwrites vrfRequestId and sets rngLockedFlag = true
+        // By design, the new-day advance is gated until the bound mid-day word lands.
+        vm.expectRevert(); // RngNotReady — the buffer-freeze drain gate front-runs daily RNG
         game.advanceGame();
-        assertTrue(game.rngLocked(), "Daily RNG should lock after timeout retry");
+
+        // Recovery: permissionless retry re-fires the mid-day request.
+        game.retryLootboxRng();
+        uint256 retryId = mockVRF.lastRequestId();
+        assertTrue(retryId != reqId, "retry re-issued the mid-day request");
+        mockVRF.fulfillRandomWords(retryId, 0xBEEF);
+
+        // Advance now proceeds (drain + process the day); the latch releases (MIDRNG-02 fix).
+        uint256 lastFulfilled = retryId;
+        for (uint256 i = 0; i < 50; i++) {
+            game.advanceGame();
+            uint256 rid = mockVRF.lastRequestId();
+            if (rid != lastFulfilled && rid > 0) {
+                mockVRF.fulfillRandomWords(rid, 0xD00D);
+                lastFulfilled = rid;
+            }
+            if (!game.rngLocked() && _lrMidDay() == 0) break;
+        }
+        assertEq(_lrMidDay(), 0, "latch released after the mid-day word lands + drains");
     }
 
     /// @notice After mid-day VRF fulfills, vrfRequestId and rngRequestTime are cleared,
