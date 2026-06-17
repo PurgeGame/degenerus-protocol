@@ -59,13 +59,13 @@ Requirements for this milestone. Each maps to exactly one roadmap phase.
 
 - [x] **GAMEOVER-01** ✅ HOLDS (422): The terminal decimator (`runTerminalDecimatorJackpot`, level keyed at `lvl+1` per the DEC-ALIAS fix) is proven to resolve without aliasing a live regular round and without a reachable revert that strands the terminal payout.
 - [x] **GAMEOVER-02** ✅ HOLDS+INFO (422): The terminal jackpot (`runTerminalJackpot`) and `handleGameOverDrain` are proven to finalize for any reachable pre-gameover state (any pending pool, any winner-set size) within the gas ceiling, including the post-gameover claim path that also pays prepaid afking ETH. [worst-case ~7.2M<16.78M; FLIP-tombstone overflow boundary economically unreachable = INFO]
-- [x] **GAMEOVER-03** ✅ HOLDS (422):: The gameOver-trigger transition itself cannot wedge — the conditions that set `gameOver` (`lastPurchaseDay` etc.) leave every downstream terminal entrypoint callable; no mid-gameover partial state blocks finalization.
+- [x] **GAMEOVER-03** ✅ HOLDS (422): The gameOver-trigger transition itself cannot wedge — the conditions that set `gameOver` (`lastPurchaseDay` etc.) leave every downstream terminal entrypoint callable; no mid-gameover partial state blocks finalization.
 
 ### VRFSWAP — Honest Coordinator Rotation
 
-- [ ] **VRFSWAP-01**: `updateVrfCoordinatorAndSub` under honest governance holds every freeze-relevant variable consistent — no rotation branch strands the lock, de-syncs `vrfRequestId` / `rngWordCurrent`, or leaves the daily word permanently unobtainable; an in-flight request at rotation time is either preserved or cleanly re-requested.
-- [ ] **VRFSWAP-02**: A coordinator rotation performed while the game is mid-day / mid-request / stalled cannot brick liveness or corrupt the request↔word binding — the rotation + retry composition always restores a path to a fulfilled word and the correct day binds it.
-- [ ] **VRFSWAP-03**: `rawFulfillRandomWords` requestId / coordinator validation is correct across a rotation — a stale (pre-rotation) coordinator or requestId cannot write a word, and the post-rotation coordinator's fulfillment lands on the intended day / index.
+- [x] **VRFSWAP-01** ✅ HOLDS (423): `updateVrfCoordinatorAndSub` under honest governance holds every freeze-relevant variable consistent — no rotation branch strands the lock, de-syncs `vrfRequestId` / `rngWordCurrent`, or leaves the daily word permanently unobtainable; an in-flight request at rotation time is either preserved or cleanly re-requested.
+- [x] **VRFSWAP-02** ✅ HOLDS (423): A coordinator rotation performed while the game is mid-day / mid-request / stalled cannot brick liveness or corrupt the request↔word binding — the rotation + retry composition always restores a path to a fulfilled word and the correct day binds it.
+- [x] **VRFSWAP-03** ✅ HOLDS (423): `rawFulfillRandomWords` requestId / coordinator validation is correct across a rotation — a stale (pre-rotation) coordinator or requestId cannot write a word, and the post-rotation coordinator's fulfillment lands on the intended day / index.
 
 ### MECH — Close the Mechanical-Net Gaps (test-only)
 
