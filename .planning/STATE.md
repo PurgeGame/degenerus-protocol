@@ -14,10 +14,10 @@ PRIOR_last_activity_400: v64.0 phase 400 SOLVENCY-CARRY-REDEMPTION COMPLETE (sub
 PRIOR_last_activity_399: v64.0 phase 399 REWARD-MECHANICS COMPLETE (342ea1c3; dual-net 0 HIGH/MED/LOW; RWD-A codex-unique BURNIE seed-emission ~7.87M INFO USER-confirmed by-design 39b2f344; RWD-B spins = Degenerette house edge by-design; RWD-01..06 attested). SEED-001 century streak-shield (+1/century cap 10, post-audit) captured 682b6afa.
 progress:
   total_phases: 6
-  completed_phases: 0
+  completed_phases: 1
   total_plans: 0
   completed_plans: 0
-  percent: 0
+  percent: 17
 ---
 
 # Project State
@@ -41,14 +41,13 @@ See: .planning/PROJECT.md (Current State + Current Milestone: v64.0 sections) + 
 
 ## Current Position
 
-Milestone: v66.0 — RNG-Surface & Cross-Contract-Call Manipulability Re-Audit (Cross-Model Council). STARTING 2026-06-16 (audit-only; cross-model council = primary finder).
-Phase: Not started (defining requirements). Phases continue 409 -> 410.
-Plan: Re-derive the VRF-consumer net FROM current HEAD (not from the stale catalog), then hunt the cross-contract freeze seams the inherited net never covered. Blind-spot panel meta-gap = trusted RNG corpus (RNGLOCK-CATALOG v42/v43, v30 state-machine + freeze-proof, sections 11/12) stale vs post-rename code; >=5 VRF consumers unenrolled (BAF winner-select, far-future salvage seed, coinflipTopByDay leaderboard, Degenerette survival flip, redemption FLIP-escrow leg); coordinator-rotation / redemption-recompute / coinflip-day proofs anchored on deleted code.
-Subject = post-rename HEAD `42c8e9c6` (= origin/main `bb0912a6` + the additive CurseChanged indexer-parity emit, UNPUSHED), to byte-freeze + green-baseline at FOUNDATION (410).
-Tier-1 hunt targets (see .planning/v66-BLIND-SPOT-PANEL.md): gameover prevrandao fallback never sets rngLockedFlag (HIGH) - redemption claimRedemption(player,day) argument-selection (HIGH) - redemption claim-side seed mocked in every test so a day+1 -> day mutant stays green (HIGH) - mid-day cross-day lootbox binding test vm.skip + vacuous (HIGH) - BAF winner-set freeze (HIGH).
-Status: Defining requirements. 7 categories approved (FOUND, RNGNET, RNGSEAM, RNGSEL, RNGFALL, RNGNET-MECH, COUNCIL). NEXT = write REQUIREMENTS.md -> spawn gsd-roadmapper.
-Last activity: 2026-06-16 -- v66.0 milestone init; blind-spot panel run (wf_fd1bfbb7-e99); PROJECT.md + STATE.md updated; REQUIREMENTS.md next.
-
+Milestone: v66.0 — RNG-Surface & Cross-Contract-Call Manipulability Re-Audit (Cross-Model Council). RUNNING AUTONOMOUS (audit-only; council = primary finder; hard-stop only at a contract-commit boundary). 1/6 phases complete.
+Phase: 410 FOUNDATION ✅ DONE -> 411 RNGNET next.
+Subject = contract commit `42c8e9c6` / `contracts/` tree `0dd445a64cfe7e096427d44f058c40abb1233b5f` (= origin/main `bb0912a6` + the USER-approved CurseChanged indexer-parity emit). Held byte-stable through close; verify via `git rev-parse HEAD:contracts == 0dd445a6...`.
+Baseline (410, the regression floor): forge 889/0/110 (IDENTICAL to v65 -> 0 regressions, emit inert) + hardhat 1232 passing / 136 failing (known carried JS-test floor, 0 new, 0 curse/emit-related) / 14 pending. Rule + carried catalogue in .planning/phases/410-foundation-subject-freeze-green-baseline/410-FOUNDATION.md.
+Tier-1 hunt targets (.planning/v66-BLIND-SPOT-PANEL.md): gameover prevrandao fallback never sets rngLockedFlag (HIGH) - redemption claimRedemption(player,day) arg-selection (HIGH) - redemption claim-side seed mocked so day+1->day mutant stays green (HIGH, -> MECH-01) - mid-day cross-day lootbox binding test vm.skip+vacuous (HIGH, -> MECH-02) - BAF winner-set freeze (HIGH).
+Status: Phase 410 FOUNDATION complete + committed. NEXT = Phase 411 RNGNET (re-derive the VRF-consumer net FROM HEAD by mechanical enumeration; diff vs stale catalog; council-led).
+Last activity: 2026-06-16 -- 410 FOUNDATION shipped (freeze 42c8e9c6 + green baseline forge 889/0/110 + hardhat carried-floor parity); CurseChanged emit folded in pre-freeze + proven inert across both nets. Running autonomous -> 411 RNGNET.
 ---
 _Below: v63.0 phase-outcome log + accumulated context (historical; retained across the milestone switch)._
 391 outcome: BOTH NETS on record for RNG-01..06 + FC-391-01..05 + FC-389-05/FC-392-11; **0 CONFIRMED contract findings — the DOMINANT freeze/manipulability class is clean; RNG-01..06 attested at `a8b702a7`.** NET 2 ran independently (per-consumer backward-trace to the commitment point + the dedicated decimator random-oracle distribution argument + the RNG-04 cross-round skeptic dual-gate + the RNG-05 day-boundary divergence bound + the RNG-06 in-window SLOAD enumeration over slots 10/34/35+dailyIdx), council folded after. **RNG-04 cross-round `uint32` decimator claim-seed collision (codex INFO/LOW vs gemini SOUND) RESOLVED = REFUTED-as-break, benign INFO/LOW** (skeptic dual-gate: not grindable [word VRF-fixed after address commitment], no value extraction [magnitude set by independent `amount`, off the ETH spine], ~10^-5 reachability — reconciles both models). **RNG-02/FC-391-04 decimator distribution = REFUTED (unbiased + non-grindable)** by a real keccak random-oracle argument over the winner population; the missing distribution oracle ROUTED as a test-hardening item (NOT a contract change). FC-389-05 STORAGE-half → 389; FC-392-11 backing/EV-dynamics half → 392. Subject byte-frozen throughout (`git diff a8b702a7 -- contracts/` empty). Deliverables `391-FINDINGS.md` + `391-02-CLAUDE-NET.md`.
