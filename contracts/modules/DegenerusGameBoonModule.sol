@@ -66,6 +66,9 @@ contract DegenerusGameBoonModule is DegenerusGameStorage {
     /// @param player The player address to consume boost for
     /// @return boostBps The bonus in basis points (0 if no boost, 500/1500/2500 otherwise)
     function consumePurchaseBoost(address player) external payable returns (uint16 boostBps) {
+        // Delegatecall-only: address(this) == GAME under the nested dispatch. A direct call on the
+        // deployed module would trap the in-flight msg.value (empty local state returns silently).
+        if (address(this) != ContractAddresses.GAME) revert E();
         if (player == address(0)) return 0;
         BoonPacked storage bp = boonPacked[player];
         uint256 s0 = bp.slot0;
@@ -123,6 +126,9 @@ contract DegenerusGameBoonModule is DegenerusGameStorage {
     /// @param player The player address to check and clear expired boons for
     /// @return hasAnyBoon True if the player has at least one active (non-expired) boon
     function checkAndClearExpiredBoon(address player) external payable returns (bool hasAnyBoon) {
+        // Delegatecall-only: address(this) == GAME under the nested dispatch. A direct call on the
+        // deployed module would trap the in-flight msg.value (empty local state returns silently).
+        if (address(this) != ContractAddresses.GAME) revert E();
         uint24 currentDay = uint24(_simulatedDayIndex());
         BoonPacked storage bp = boonPacked[player];
         uint256 s0 = bp.slot0;
@@ -286,6 +292,9 @@ contract DegenerusGameBoonModule is DegenerusGameStorage {
     ///      which delegatecall keeps in flight through this nested dispatch.
     /// @param player Player address
     function consumeActivityBoon(address player) external payable {
+        // Delegatecall-only: address(this) == GAME under the nested dispatch. A direct call on the
+        // deployed module would trap the in-flight msg.value (empty local state returns silently).
+        if (address(this) != ContractAddresses.GAME) revert E();
         if (player == address(0)) return;
         BoonPacked storage bp = boonPacked[player];
         uint256 s1 = bp.slot1;

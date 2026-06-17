@@ -872,6 +872,9 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     // (`resolveEthSpinFromBox` -> `_resolveLootboxDirect`); delegatecall preserves the
     // in-flight msg.value, so a non-payable callvalue guard here would revert the claim.
     function resolveLootboxDirect(address player, uint256 amount, uint256 rngWord, uint16 activityScore, bool emitLootboxEvent) external payable {
+        // Delegatecall-only: address(this) == GAME under the nested dispatch. A direct call on the
+        // deployed module would trap the in-flight msg.value (the amount==0 early-return path).
+        if (address(this) != ContractAddresses.GAME) revert E();
         if (amount == 0) return;
 
         uint24 currentLevel = level + 1;
