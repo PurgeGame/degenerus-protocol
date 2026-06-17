@@ -1,0 +1,7 @@
+{
+  "label": "vrfswap",
+  "schema": ".planning/phases/423-vrfswap-coordinator-rotation/423-schema.json",
+  "models": ["gemini"],
+  "skipped": ["codex"],
+  "outputs": {"gemini": ".planning/phases/423-vrfswap-coordinator-rotation/council/vrfswap.gemini.json"}
+}
