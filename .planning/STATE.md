@@ -14,10 +14,10 @@ PRIOR_last_activity_400: v64.0 phase 400 SOLVENCY-CARRY-REDEMPTION COMPLETE (sub
 PRIOR_last_activity_399: v64.0 phase 399 REWARD-MECHANICS COMPLETE (342ea1c3; dual-net 0 HIGH/MED/LOW; RWD-A codex-unique BURNIE seed-emission ~7.87M INFO USER-confirmed by-design 39b2f344; RWD-B spins = Degenerette house edge by-design; RWD-01..06 attested). SEED-001 century streak-shield (+1/century cap 10, post-audit) captured 682b6afa.
 progress:
   total_phases: 6
-  completed_phases: 4
+  completed_phases: 5
   total_plans: 0
   completed_plans: 0
-  percent: 67
+  percent: 83
 ---
 
 # Project State
@@ -42,11 +42,11 @@ See: .planning/PROJECT.md (Current State + Current Milestone: v64.0 sections) + 
 ## Current Position
 
 Milestone: v66.0 — RNG re-audit (cross-model council). RUNNING AUTONOMOUS; audit-only; hard-stop only at a contract-commit boundary. 4/6 phases complete.
-Phase: 410 FOUNDATION ✅ + 411 RNGNET ✅ + 412 RNGSEAM ✅ + 413 RNGSEL/RNGFALL ✅ -> 414 RNGNET-MECH next.
+Phase: 410 ✅ 411 ✅ 412 ✅ 413 ✅ 414 RNGNET-MECH ✅ -> 415 TERMINAL next (FINDINGS-v66.0 + closure).
 Subject = contract commit `42c8e9c6` / `contracts/` tree `0dd445a64cfe7e096427d44f058c40abb1233b5f`. Tree verified frozen after every fan-out.
 AUDIT VERDICT SO FAR: **0 CATASTROPHE / 0 HIGH / 0 MEDIUM** across 412 (8 seams freeze-hold) + 413 (5 input-selection/fallback targets). Dispositions: 1 LOW (reward-pool live-read, by-design) + USER BY-DESIGN (salvage address-select; deity-boon) + INFO (prevrandao fallback emergency 1-bit bias). 0 real findings. Net re-derived 72 vs catalog 13; council found 5 missed consumers.
 Open items routed to 414 (test-only, committable): MECH-01 redemption claim-side day+1 mutant test · MECH-02 un-skip mid-day binding test (RngIndexDrainBinding) · MECH-03 Coinflip-spine mutation/behavioral net (RngFreezeAndRemovalProofs source-string-only) · MECH-04 coinflip b>=50 floor (CONSTANTS PROVE IT: COINFLIP_EXTRA_MIN_PERCENT=78>=50, range 38 -> wins [78,115] + fixed 50; no win in [2,49]).
-Status: 412+413 complete + committed. NEXT = Phase 414 RNGNET-MECH (close the 4 test-net gaps), then 415 TERMINAL (FINDINGS-v66.0 synthesis + closure).
+Status: 414 RNGNET-MECH complete (+10 tests; new baseline ~899/0/109; 0 regressions; tree frozen). NEXT = Phase 415 TERMINAL (synthesize audit/FINDINGS-v66.0 + record closure signal).
 Last activity: 2026-06-16 -- 412+413 shipped (0 real findings; cross-contract seams + input-selection all hold/by-design). codex-412 challenge rate-capped (non-blocking). Running autonomous -> 414.
 ---
 _Below: v63.0 phase-outcome log + accumulated context (historical; retained across the milestone switch)._

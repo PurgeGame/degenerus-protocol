@@ -5,6 +5,7 @@ import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {sDGNRS} from "../../contracts/sDGNRS.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {SettleClaimableShortfallTester} from "../../contracts/test/SettleClaimableShortfallTester.sol";
+import {EntropyLib} from "../../contracts/libraries/EntropyLib.sol";
 
 /// @notice Local mirror of the coinflip player surface for vm.mockCall selectors. Mirrors the
 ///         interface in RedemptionEdgeCases.t.sol and RedemptionGas.t.sol; redeclared locally
@@ -1375,5 +1376,140 @@ contract StakedStonkRedemption is DeployProtocol {
         uint256 cur = tester.getClaimable(buyer);
         vm.expectRevert(tester.sentinelError());
         tester.settle(buyer, cur, true); // shortfall == claimable: claimable to sentinel, then afking (0) short → revert E()
+    }
+
+    // =====================================================================
+    //   MECH-01: un-mocked lootbox seed pins the day+1 RNG operand
+    // =====================================================================
+
+    /// @dev Write `rngWordByDay[day] = word` on the GAME (mapping(uint32 => uint256) at slot 10,
+    ///      the same slot `_primeCurrentDayRng` writes). Lets the test give `day` and `day + 1`
+    ///      DISTINCT non-zero words so the seed derivation's choice of operand is observable.
+    function _setRngWordForDay(uint24 day, uint256 word) internal {
+        vm.store(address(game), keccak256(abi.encode(uint256(day), uint256(10))), bytes32(word));
+        require(game.rngWordForDay(day) == word, "setRngWordForDay: slot mismatch");
+    }
+
+    /// @notice MECH-01 — the live-game redemption claim derives the lootbox seed from the NEXT
+    ///         day's VRF word: `entropy = EntropyLib.hash2(game.rngWordForDay(day + 1), player)`
+    ///         (sDGNRS._claimRedemptionFor). This pins the `day + 1` operand by driving a REAL
+    ///         submit→resolve→claim with the lootbox half ABOVE the 0.01-ETH floor (so the leg
+    ///         actually fires) and the production seed source UN-mocked, then asserting via
+    ///         `vm.expectCall` that the real `game.resolveRedemptionLootbox` is invoked with
+    ///         `entropy == hash2(rngWordForDay(day + 1), player)` and NOT
+    ///         `hash2(rngWordForDay(day), player)`.
+    ///
+    ///         Why the rest of the suite is blind to a `day + 1 -> day` swap (the v62
+    ///         REDEMPTION-ZERO-SEED class): every other redemption test runs against the
+    ///         1-trillion-token deploy supply, where the rolled ETH is dust (well under the
+    ///         0.02-ETH rolled threshold) so the lootbox half is forfeited and
+    ///         `resolveRedemptionLootbox` is NEVER reached; and the few tests that do reach it
+    ///         mock `game.resolveRedemptionLootbox` to a no-op (setUp :151) and
+    ///         `getCoinflipDayResult` to a constant, so neither the `rngWordForDay(day + 1)` read
+    ///         nor the resulting `entropy` argument is ever observed. A mutant that reads
+    ///         `rngWordForDay(day)` instead would compute a different entropy yet keep the claim's
+    ///         ETH legs identical — invisible to every existing assertion. This test makes the two
+    ///         day-words distinct and pins the EXACT entropy argument, so the swap fails the
+    ///         `expectCall` match.
+    function test_LootboxSeedUsesDayPlusOneRngWord() public {
+        uint32 dayBurn = game.currentDayView();
+
+        // Distinct non-zero VRF words for `dayBurn` and the resolving day `dayBurn + 1`. If a
+        // mutant read `rngWordForDay(dayBurn)`, the derived entropy would differ from the value
+        // pinned below — provided the two words are distinct, which the assertion guarantees.
+        uint256 wordDay = uint256(keccak256(abi.encode("mech01-day", dayBurn)));
+        uint256 wordDayPlus1 = uint256(keccak256(abi.encode("mech01-dayPlus1", dayBurn)));
+        assertTrue(wordDay != wordDayPlus1, "MECH-01: day and day+1 words must differ to expose the operand");
+        _setRngWordForDay(uint24(dayBurn), wordDay);
+        _setRngWordForDay(uint24(dayBurn) + 1, wordDayPlus1);
+
+        // Seed a single (player, day) claim with a LARGE gwei-aligned ethValueOwed so the rolled
+        // ETH clears the 0.02-ETH lootbox-floor (lootboxEth >= 0.01 ETH) and the
+        // resolveRedemptionLootbox leg actually fires. PendingRedemption packing:
+        // ethValueOwed (bits 0-95) | activityScore (bits 96-111) | flipEscrow (bits 112-207).
+        // activityScore = 1 (treated as set; snapshotted score is activityScore - 1 = 0);
+        // flipEscrow = 0 so the contingent-FLIP branch is skipped and only the lootbox-seed path
+        // is exercised.
+        uint256 ethValueOwed = 1 ether; // gwei-aligned; roll 100 -> totalRolledEth = 1 ether
+        uint256 packedClaim = ethValueOwed | (uint256(1) << 96);
+        bytes32 outerSlot = keccak256(abi.encode(playerA, uint256(SLOT_PENDING_REDEMPTIONS)));
+        bytes32 claimSlot = keccak256(abi.encode(uint256(dayBurn), outerSlot));
+        vm.store(address(sdgnrs), claimSlot, bytes32(packedClaim));
+
+        // Seed _pendingRedemptionEthValue (slot 0, bits [128:223]) to the MAX(175%) reservation so
+        // the release `_pendingRedemptionEthValue - totalRolledEth` at the end of the claim does
+        // not underflow. Preserve the packed _totalSupply (bits [0:127]) and _pendingResolveDay
+        // (bits [224:247]) lanes.
+        uint256 maxReserve = (ethValueOwed * 175) / 100; // MAX_ROLL = 175 -> 1.75 ether
+        uint256 slot0 = uint256(vm.load(address(sdgnrs), bytes32(uint256(0))));
+        slot0 = (slot0 & ~(uint256(type(uint96).max) << 128)) | (uint256(uint96(maxReserve)) << 128);
+        vm.store(address(sdgnrs), bytes32(uint256(0)), bytes32(slot0));
+
+        // Mark the period resolved: redemptionPeriods (mapping(uint24=>uint16)) at slot 6.
+        uint16 roll = 100;
+        vm.store(
+            address(sdgnrs),
+            keccak256(abi.encode(uint256(dayBurn), uint256(6))),
+            bytes32(uint256(roll))
+        );
+        assertEq(uint256(sdgnrs.redemptionPeriods(uint24(dayBurn))), uint256(roll), "MECH-01: roll seed mismatch");
+
+        // Fund sDGNRS with ETH so both legs forward real msg.value (no stETH remainder pull).
+        vm.deal(address(sdgnrs), 100 ether);
+
+        // Swap the setUp shims: clear the GAME-side resolveRedemptionLootbox no-op (so the REAL
+        // Game-side stub runs and is recorded by expectCall) and instead no-op ONLY the MODULE-side
+        // delegatecall targets (resolveRedemptionLootbox + creditRedemptionDirect), so the deep
+        // lootbox materialization loop and the direct-credit body return cleanly without seeded
+        // game lootbox state. The production seed derivation in sDGNRS — rngWordForDay(day + 1) and
+        // hash2 — is NOT mocked and runs for real; expectCall observes its result on the wire.
+        vm.clearMockedCalls();
+        vm.mockCall(
+            ContractAddresses.GAME_LOOTBOX_MODULE,
+            abi.encodeWithSelector(IGameLootboxModuleRRL.resolveRedemptionLootbox.selector),
+            abi.encode()
+        );
+        vm.mockCall(
+            ContractAddresses.GAME_LOOTBOX_MODULE,
+            abi.encodeWithSelector(bytes4(keccak256("creditRedemptionDirect(address,uint256)"))),
+            abi.encode()
+        );
+
+        // Production-equivalent leg arithmetic (live game, not gameOver):
+        //   totalRolledEth = ethValueOwed * roll / 100
+        //   ethDirect      = totalRolledEth / 2
+        //   lootboxEth     = totalRolledEth - ethDirect   (>= 0.01 ETH here, so the leg fires)
+        //   actScore       = activityScore - 1 = 0
+        uint256 totalRolledEth = (ethValueOwed * uint256(roll)) / 100;
+        uint256 ethDirect = totalRolledEth / 2;
+        uint256 lootboxEth = totalRolledEth - ethDirect;
+        assertGe(lootboxEth, 0.01 ether, "MECH-01: lootbox half must clear the floor so the real leg fires");
+        uint16 actScore = 0;
+
+        // The CORRECT seed the production code must pass to resolveRedemptionLootbox: keyed to the
+        // NEXT day's word. A `day + 1 -> day` mutant would instead pass
+        // hash2(rngWordForDay(dayBurn), playerA), which differs (the words above are distinct), so
+        // this expectCall would not match and the test would FAIL.
+        uint256 expectedEntropy = EntropyLib.hash2(wordDayPlus1, uint256(uint160(playerA)));
+        // Sanity: the mutant's value is genuinely different, so the pin is discriminating.
+        uint256 mutantEntropy = EntropyLib.hash2(wordDay, uint256(uint160(playerA)));
+        assertTrue(expectedEntropy != mutantEntropy, "MECH-01: day+1 vs day entropy must differ to catch the mutant");
+
+        vm.expectCall(
+            address(game),
+            abi.encodeCall(
+                IGameLootboxModuleRRL.resolveRedemptionLootbox,
+                (playerA, lootboxEth, expectedEntropy, actScore)
+            ),
+            1
+        );
+
+        vm.prank(playerA);
+        sdgnrs.claimRedemption(playerA, uint24(dayBurn));
+
+        // Claim consumed the seeded slot (full-claim delete), confirming the path ran end-to-end.
+        (uint96 evAfter, , uint96 escAfter) = sdgnrs.pendingRedemptions(playerA, uint24(dayBurn));
+        assertEq(uint256(evAfter), 0, "MECH-01: claim slot must clear after full claim");
+        assertEq(uint256(escAfter), 0, "MECH-01: flipEscrow must remain zero");
     }
 }
