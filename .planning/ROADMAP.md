@@ -4,7 +4,8 @@
 
 ## Milestones
 
-- ✅ **v66.0 RNG-Surface & Cross-Contract-Call Manipulability Re-Audit (Cross-Model Council)** — Phases 410-415 (ACTIVE 2026-06-16; AUDIT-ONLY on byte-frozen post-rename HEAD `42c8e9c6` (= origin/main `bb0912a6` + the CurseChanged emit); re-derive the VRF-consumer net FROM HEAD [the trusted RNG corpus is stale] + hunt the cross-contract freeze seams the inherited net never covered; method = cross-model council [Gemini+Codex] primary finder + Claude adjudicate/synthesize, every candidate adversarially verified; 21 reqs / 6 phases [FOUND · RNGNET · RNGSEAM · RNGSEL+RNGFALL · RNGNET-MECH test-only · COUNCIL terminal]; blind-spot panel `.planning/v66-BLIND-SPOT-PANEL.md`)
+- ▶ **v67.0 Spinal-Column Brick & State-Corruption Audit (mintFlip / advanceGame chain) — Cross-Model Council** — Phases 416-425 (ACTIVE 2026-06-16; AUDIT-ONLY on the byte-frozen subject HEAD `fa7932f6` / `contracts/` tree `0dd445a6` [unchanged since the v66 freeze]; prove no reachable transaction in the game's spinal column — the `mintFlip()` / `purchase` mint chain + the `advanceGame()` core state machine, every delegatecall into the 13 modules, and the VRF / GAMEOVER paths — can revert-wedge the state machine into a permanent brick or leave its packed storage / accounting corrupted; honest admin/governance assumed; method = cross-model council [Gemini+Codex] primary finder + Claude foundation/adjudicate/synthesize, every candidate adversarially verified; 37 reqs / 10 phases [FOUND · COLMAP · BRICK(dominant) · DELEGATE · CORRUPT · MIDRNG · GAMEOVER · VRFSWAP · MECH test-only · COUNCIL terminal])
+- ✅ **v66.0 RNG-Surface & Cross-Contract-Call Manipulability Re-Audit (Cross-Model Council)** — Phases 410-415 (SHIPPED 2026-06-16; AUDIT-ONLY on byte-frozen post-rename HEAD `42c8e9c6` (= origin/main `bb0912a6` + the CurseChanged emit); re-derive the VRF-consumer net FROM HEAD [the trusted RNG corpus is stale] + hunt the cross-contract freeze seams the inherited net never covered; method = cross-model council [Gemini+Codex] primary finder + Claude adjudicate/synthesize, every candidate adversarially verified; 21 reqs / 6 phases [FOUND · RNGNET · RNGSEAM · RNGSEL+RNGFALL · RNGNET-MECH test-only · COUNCIL terminal]; blind-spot panel `.planning/v66-BLIND-SPOT-PANEL.md`)
 - ✅ **v44.0 sStonk Per-Day Redemption Refactor** — Phases 304-308 (shipped 2026-05-20)
 - ✅ **v45.0 VRF-Rotation Liveness Fix** — Phases 309-314 (shipped 2026-05-23, minimal close)
 - ✅ **v46.0 Do-Work Crank + AfKing Subscription** — Phases 316-320 (shipped 2026-05-24)
@@ -27,7 +28,169 @@
 
 ---
 
-## ▶ v66.0 RNG-Surface & Cross-Contract-Call Manipulability Re-Audit (Cross-Model Council) — ACTIVE 2026-06-16
+## ▶ v67.0 Spinal-Column Brick & State-Corruption Audit (mintFlip / advanceGame chain) — Cross-Model Council — ACTIVE 2026-06-16
+
+> **Scope:** Prove no reachable transaction in the game's spinal column — the `mintFlip()` / `purchase` mint chain and the `advanceGame()` core state machine, including every delegatecall into the 13 modules and the VRF / GAMEOVER paths — can revert-wedge the state machine into a **permanent brick** or leave its packed storage / accounting **corrupted**. Scope = column + synchronous callees (USER-confirmed): `DegenerusGame.sol` (`mintFlip` · `purchase` · `advanceGame` · `rawFulfillRandomWords` · `updateVrfCoordinatorAndSub` · `gameOver` terminal flag + thin delegatecall dispatch stubs) + the 13 `contracts/modules/*` delegatecall modules + the peripheral contracts the column synchronously calls in the critical path (FLIP · Coinflip · Vault · sDGNRS · Affiliate) — a revert in a synchronously-called contract bricks the spine just as hard as a revert inside the Game. Honest admin/governance assumed (a legitimate coordinator rotation must not be able to brick or corrupt; admin malice is out of scope). Full scope + the 37 REQ-IDs: `.planning/REQUIREMENTS.md`.
+
+> **Subject = HEAD `fa7932f6`, `contracts/` tree `0dd445a6` (unchanged since the v66 freeze), byte-frozen at FOUNDATION (416)** and held byte-stable through close. **Posture = AUDIT-ONLY** — no contract change planned; a council-surfaced, adversarially-verified finding routes to a gated fix (USER hand-review, batched, never pre-approved). The MECH (MECH-01..04) requirements are TEST-ONLY additions that commit autonomously.
+
+> **THE METHOD = CROSS-MODEL COUNCIL, primary finder.** The Gemini+Codex council is the PRIMARY finder over every COLMAP / BRICK / DELEGATE / CORRUPT / MIDRNG / GAMEOVER / VRFSWAP surface, seeded with the column map and the brick / corruption hypotheses; Claude builds the FOUNDATION, re-derives the column map, ADJUDICATES every candidate vs frozen `fa7932f6`, and SYNTHESIZES. **Every candidate finding is adversarially verified (independent refutation; majority-refute kills it) before it is recorded as confirmed.** COUNCIL-01/02/03 is the method APPLIED WITHIN every hunt phase, and is formally attested + synthesized in the single TERMINAL phase (425). For audit phases a verified-OR-refuted disposition is a complete outcome — a finding is not required for success.
+
+> **Ordering = FOUNDATION-FIRST, then RE-DERIVE-THE-COLUMN.** FOUND (416) freezes the subject + captures a green baseline. COLMAP (417 — re-derive the actual spinal-column call graph, revert sites, loops, and delegatecall storage writes FROM HEAD by mechanical enumeration) is the foundation every later hunt phase depends on → it is sequenced immediately after FOUNDATION. The dominant brick / corruption sweeps (418 BRICK · 419 DELEGATE · 420 CORRUPT) read against the re-derived map; the three edge surfaces (421 MIDRNG · 422 GAMEOVER · 423 VRFSWAP) drill the specific RNG / terminal / rotation paths that can brick or corrupt; MECH (424) is committable test work; 425 is the terminal council synthesis + FINDINGS + closure.
+
+> **Phase numbering** continues from v66.0 (closed at Phase 415) — **v67.0 starts at Phase 416.** Not reset.
+
+### Phases
+
+- [ ] **Phase 416: FOUND — Subject Freeze & Green Baseline** - Byte-freeze the audit subject at HEAD `fa7932f6` / tree `0dd445a6` (record the commit hash + contracts-tree hash as the v67 freeze anchor); capture + document a GREEN baseline oracle (forge full-suite pass/skip counts + hardhat parity) as the v67 regression baseline, cataloguing any pre-existing reds as carried-not-new. FOUND-01, FOUND-02.
+- [ ] **Phase 417: COLMAP — Re-Derive the Spinal-Column Call Graph From HEAD** - Mechanically re-derive the complete spinal-column call graph from current HEAD — every entry point → internal call → delegatecall (13 modules + nested Boon + the raw afking dispatch) → synchronous external call into FLIP / Coinflip / Vault / sDGNRS / Affiliate; enumerate every revert site (with its trigger), every unbounded/input-sized loop (with its bound), and every storage write performed under delegatecall against the Game's authoritative `forge inspect` layout. COLMAP-01, COLMAP-02, COLMAP-03, COLMAP-04. **Load-bearing — every later hunt phase reads against this re-derived map.**
+- [ ] **Phase 418: BRICK — Permanent-Brick / Liveness (DOMINANT)** - Classify every COLMAP revert site transient-vs-permanent (zero permanent-wedge survivors or each dispositioned); prove `advanceGame` can always make progress from any reachable state and `hasPendingWork` cannot diverge from execution; prove the terminal transition always finalizes; derive the worst-case gas composition FIRST and show it holds under the 16.7M ceiling (target < 10M); prove the VRF-stall / word-never-fulfilled paths recoverable. BRICK-01, BRICK-02, BRICK-03, BRICK-04, BRICK-05.
+- [ ] **Phase 419: DELEGATE — Delegatecall Integrity** - Prove Game↔module storage-layout compatibility (no module writes a slot the Game uses for a different variable); verify the nested-delegatecall (Mint/Lootbox → Boon) `msg.value`/`msg.sender` propagation neither double-spends nor strands ETH and resolves the intended actor; verify the raw `delegatecall(msg.data)` afking dispatch (selector routing, calldata forwarding, return-data, revert-bubbling, no selector collision); verify every thin dispatch stub bubbles module reverts; verify module addresses / immutables / init wiring (no zero/wrong module, no direct-call-against-empty-storage). DELEGATE-01, DELEGATE-02, DELEGATE-03, DELEGATE-04, DELEGATE-05.
+- [ ] **Phase 420: CORRUPT — State-Corruption Invariants** - Prove packed-slot integrity (the DEC-ALIAS class — no aliasing/overflow into a neighbour field under any reachable level/day/offset); prove write-after-write ordering leaves no exploitable intermediate at any external-call boundary; prove partial-failure atomicity (all-or-nothing where required); prove mid-advance reentrancy via the synchronous external calls cannot observe a half-updated invariant or double-count; prove the solvency identities (`claimablePool == Σ(claimable + afking)` + sDGNRS-backing) hold across every column path. CORRUPT-01, CORRUPT-02, CORRUPT-03, CORRUPT-04, CORRUPT-05.
+- [ ] **Phase 421: MIDRNG — Mid-Day RNG Edge Cases** - Prove the mid-day lootbox RNG swap / retry path cannot brick or mis-bind a box/ticket to the wrong (in-flight) word or strand the index; prove the mid-day partial-drain read slot is consistent (the next advance resumes correctly, no double-drain / skipped ticket); prove mid-day word binding (boxes/tickets/bets placed mid-day bind to the live index/day, not the in-flight word) across gap-backfill and retry interleavings — the `RngIndexDrainBinding` concern, exercised on the column. MIDRNG-01, MIDRNG-02, MIDRNG-03.
+- [ ] **Phase 422: GAMEOVER — Terminal-Branch Liveness** - Prove the terminal decimator (`runTerminalDecimatorJackpot`, keyed at `lvl+1` per the DEC-ALIAS fix) resolves without aliasing a live regular round or stranding the payout; prove the terminal jackpot (`runTerminalJackpot`) + `handleGameOverDrain` finalize for any reachable pre-gameover state within the gas ceiling (incl. the post-gameover claim path paying prepaid afking ETH); prove the gameOver-trigger transition itself cannot wedge any downstream terminal entrypoint. GAMEOVER-01, GAMEOVER-02, GAMEOVER-03.
+- [ ] **Phase 423: VRFSWAP — Honest Coordinator Rotation** - Prove `updateVrfCoordinatorAndSub` under honest governance holds every freeze-relevant variable consistent (no branch strands the lock, de-syncs `vrfRequestId`/`rngWordCurrent`, or leaves the daily word permanently unobtainable; an in-flight request is preserved or cleanly re-requested); prove a rotation mid-day / mid-request / stalled cannot brick liveness or corrupt the request↔word binding; prove `rawFulfillRandomWords` requestId / coordinator validation is correct across a rotation (no stale coordinator/requestId writes a word; the post-rotation coordinator lands on the intended day/index). VRFSWAP-01, VRFSWAP-02, VRFSWAP-03.
+- [ ] **Phase 424: MECH — Close the Mechanical-Net Gaps (test-only)** - Close the mechanical-net blind spots with committable test work (no contract change): a worst-case gas harness asserting every column transaction < 16.7M derived from the BRICK-04 worst-case branch (not typical seeds); a delegatecall storage-layout regression oracle (`forge inspect` snapshot + assertion) catching future layout drift; a state-invariant test (fuzz or targeted) asserting the BRICK liveness + CORRUPT solvency invariants across an advance/mint/gameover sequence; and any specific brick/corruption mutant surfaced in 417-420 captured as a regression the current suite is shown blind to, then closed. MECH-01, MECH-02, MECH-03, MECH-04.
+- [ ] **Phase 425: COUNCIL — Cross-Model Adjudication + Synthesis + FINDINGS-v67.0 + Closure** - The cross-model council runs as primary finder over every COLMAP/BRICK/DELEGATE/CORRUPT/MIDRNG/GAMEOVER/VRFSWAP surface (seeded with the column map + the brick/corruption hypotheses); every candidate is adversarially verified (majority-refute kills it) before it is recorded; produce a canonical `audit/FINDINGS-v67.0.md` (+ HTML report) recording confirmed findings, refutations, and by-design dispositions; route any contract fix through the contract-commit approval gate; record the milestone closure signal `MILESTONE_V67_AT_HEAD_<sha>`. COUNCIL-01, COUNCIL-02, COUNCIL-03.
+
+### Phase Details (v67.0)
+
+### Phase 416: FOUND — Subject Freeze & Green Baseline
+**Goal**: a byte-frozen audit subject at HEAD `fa7932f6` / `contracts/` tree `0dd445a6` + a documented GREEN baseline oracle that is the audit's regression floor and the oracle every lead is reproduced against.
+**Depends on**: Nothing (first v67 phase)
+**Requirements**: FOUND-01, FOUND-02
+**Method**: Claude builds the foundation; no contract change. The frozen subject anchors every subsequent council sweep.
+**Success Criteria** (what must be TRUE):
+  1. The audit subject is byte-frozen at HEAD with the commit hash (`fa7932f6`) AND the `contracts/`-tree hash (`0dd445a6`) recorded as the v67 freeze anchor (`git diff <anchor> -- contracts/` empty at every later checkpoint).
+  2. A GREEN baseline oracle is captured and documented (forge full-suite pass/skip counts + hardhat parity) as the v67 regression baseline.
+  3. Any pre-existing reds are catalogued as carried-not-new, with no undocumented residual masking a regression.
+**Plans**: TBD
+
+### Phase 417: COLMAP — Re-Derive the Spinal-Column Call Graph From HEAD
+**Goal**: an authoritative current-HEAD map of the spinal column — every entry point, internal call, delegatecall, and synchronous external call — with every revert site, unbounded loop, and delegatecall storage write enumerated, so the brick / corruption sweeps work from re-derived reality, not an inherited (possibly stale) catalog.
+**Depends on**: Phase 416
+**Requirements**: COLMAP-01, COLMAP-02, COLMAP-03, COLMAP-04
+**Method**: Mechanical enumeration from HEAD (Claude-built), seeded to the council in 425. Re-derivation from source is the structural defense against confirmation convergence (the v66 lesson: the trusted catalog under-counted ~5×).
+**Success Criteria** (what must be TRUE):
+  1. The complete spinal-column call graph is re-derived from HEAD — every entry point (`mintFlip`, `purchase`, `buyPresaleBox`, `buyLootboxAndPresaleBox`, `purchaseWhaleBundle`, `purchaseLazyPass`, `purchaseDeityPass`, `advanceGame`, `rawFulfillRandomWords`, keeper/permissionless entrypoints) → every internal call → every delegatecall (the 13 modules + nested Boon + the raw `delegatecall(msg.data)` afking dispatch) → every synchronous external call into FLIP / Coinflip / Vault / sDGNRS / Affiliate — captured as an authoritative map.
+  2. Every revert site reachable in the column (`revert`, `require`, custom errors, checked-arithmetic overflow points, low-level call-failure bubbles) is enumerated and tabulated with its trigger condition.
+  3. Every unbounded or input-sized loop in the column is enumerated with its iteration-count bound and the storage / gas it touches per iteration.
+  4. Every storage write performed under delegatecall (module → Game storage) is enumerated against the Game's authoritative storage layout (`forge inspect DegenerusGame storageLayout`), establishing the slot each module touches.
+**Plans**: TBD
+
+### Phase 418: BRICK — Permanent-Brick / Liveness (DOMINANT)
+**Goal**: no reachable transaction in the column can revert-wedge the state machine into a permanent brick — every revert is classified, `advanceGame` can always make progress, the terminal transition always finalizes, the worst-case gas composition holds under the ceiling, and stalled RNG is always recoverable.
+**Depends on**: Phase 417
+**Requirements**: BRICK-01, BRICK-02, BRICK-03, BRICK-04, BRICK-05
+**Method**: Cross-model council (Gemini + Codex) primary finder over the brick surface, seeded with the COLMAP revert-site / loop tables; Claude adjudicates each candidate against frozen source; every candidate adversarially verified before recording. The dominant invariant class for the milestone.
+**Success Criteria** (what must be TRUE):
+  1. Every revert site enumerated in COLMAP is classified transient (caller can retry / another actor can progress) vs. permanent (wedges the state machine forever), with zero permanent-wedge sites surviving — or each surviving one explicitly dispositioned.
+  2. `advanceGame()` is proven to always be able to make progress: no reachable (day, level, phase, jackpotPhaseFlag, gameOver) state exists from which every `advanceGame()` call reverts, the per-tick "one unit of work" invariant holds, and `hasPendingWork` cannot diverge from what `advanceGame` will execute.
+  3. The terminal transition is proven to always finalize — once `gameOver` is set it can always be driven to full settlement (terminal decimator + terminal jackpot + `handleGameOverDrain`) without a reachable revert that strands the terminal state.
+  4. The worst-case gas composition is derived FIRST (not sampled) and shown to hold under the 16.7M ceiling (target < 10M) — at minimum the subscriber-evict chunk + multi-day gap-backfill + terminal-jackpot composition (the V62-02 class) — with per-item marginal-gas-derived batch sizing.
+  5. The VRF-word-never-fulfilled and stalled-RNG conditions are proven recoverable: the retry / timeout and honest coordinator-rotation paths can always restore liveness, and no input or external state can make the daily word permanently unobtainable.
+**Plans**: TBD
+
+### Phase 419: DELEGATE — Delegatecall Integrity
+**Goal**: every one of the 13 delegatecall modules (plus nested Boon and the raw afking dispatch) executes correctly against the Game's storage — no layout drift writes the wrong slot, nested `msg.value` / `msg.sender` resolve to the intended actor, dispatch routes and bubbles reverts correctly, and no module address is unset or wrong.
+**Depends on**: Phase 417
+**Requirements**: DELEGATE-01, DELEGATE-02, DELEGATE-03, DELEGATE-04, DELEGATE-05
+**Method**: Cross-model council primary finder over the delegatecall surface, seeded with the COLMAP delegatecall-write table and the Game storage layout; Claude adjudicates against frozen source; every candidate adversarially verified.
+**Success Criteria** (what must be TRUE):
+  1. The storage layout of `DegenerusGame` and every one of the 13 delegatecall modules is proven compatible — each module's declared storage matches the Game slots it writes; no module can write a slot the Game uses for a different variable (silent corruption).
+  2. The nested-delegatecall paths (Mint / Lootbox → Boon) preserve `msg.value` and `msg.sender` correctly — the in-flight-`msg.value` behavior neither double-spends nor strands ETH, and `msg.sender`-derived authorization / credit resolves to the intended actor end-to-end.
+  3. The raw `delegatecall(msg.data)` afking dispatch is verified — selector routing, calldata forwarding, return-data handling, and revert-reason bubbling are correct; no selector collision or mis-dispatch is reachable.
+  4. Every thin Game dispatch stub correctly bubbles module reverts (no swallowed failure that leaves partial state committed) and correctly handles return data; a module revert never silently no-ops a state transition the Game assumes succeeded.
+  5. Module addresses / immutables and init wiring are verified — the column cannot delegatecall a zero / unset / wrong module address, and no module is reachable as a direct external call that would execute against its own (empty) storage.
+**Plans**: TBD
+
+### Phase 420: CORRUPT — State-Corruption Invariants
+**Goal**: no reachable column path can leave the Game's packed storage or accounting corrupted — packed slots never alias, write-after-write ordering leaves no exploitable intermediate, partial failures are all-or-nothing, mid-advance reentrancy cannot observe a half-updated invariant, and the solvency / pool identities hold everywhere.
+**Depends on**: Phase 417
+**Requirements**: CORRUPT-01, CORRUPT-02, CORRUPT-03, CORRUPT-04, CORRUPT-05
+**Method**: Cross-model council primary finder over the corruption surface (the DEC-ALIAS class, CEI / reentrancy, solvency identities), seeded with the COLMAP storage-write map; Claude adjudicates against frozen source; every candidate adversarially verified.
+**Success Criteria** (what must be TRUE):
+  1. Packed-slot integrity holds across the column — every packed storage write (the DEC-ALIAS class: terminal / offset-keyed level writes, packed day-result lanes, packed pool / credit slots) is proven not to alias or overflow into a neighbouring field under any reachable (level, day, offset) combination.
+  2. Write-after-write ordering across the multi-step advance / mint chain leaves no inconsistent intermediate a reentrant or follow-on call can observe and exploit; the phase / level / day / pool / queue-index counters are mutually consistent at every external-call boundary.
+  3. Partial-failure atomicity holds — if any sub-step of a column transaction reverts, no earlier sub-step's state write survives in a way that corrupts the accounting (CEI / checked-math / revert-bubbling enforces all-or-nothing where required).
+  4. Reentrancy into the column mid-advance (via the synchronous calls to FLIP / Coinflip / Vault / sDGNRS / Affiliate and any ETH transfer) cannot corrupt state or double-count — every external-call site is checked for a reentrant re-entry that observes a half-updated invariant.
+  5. The solvency / pool identities hold across every column path — `claimablePool == Σ(claimable + afking)` and the sDGNRS-backing identity are preserved by every mint / advance / jackpot / redemption / gameover path.
+**Plans**: TBD
+
+### Phase 421: MIDRNG — Mid-Day RNG Edge Cases
+**Goal**: every mid-day RNG interaction on the column — lootbox swap / retry, a partially-drained read slot, and mid-day word binding — is proven not to brick, corrupt, or mis-bind a box / ticket / bet to the wrong word across gap-backfill and retry interleavings.
+**Depends on**: Phase 418, Phase 420
+**Requirements**: MIDRNG-01, MIDRNG-02, MIDRNG-03
+**Method**: Cross-model council primary finder over the mid-day RNG surface, exercised on the column; Claude adjudicates against frozen source; every candidate adversarially verified. Scoped to the RNG paths that can BRICK or CORRUPT the column (the broad RNG-freeze surface was closed in v66).
+**Success Criteria** (what must be TRUE):
+  1. The mid-day lootbox RNG swap / retry path cannot brick or corrupt — a mid-day request that stalls can always be retried / resolved, and the retry cannot bind a box / ticket to the wrong (in-flight) word or strand the index.
+  2. The mid-day partial-drain read slot is proven consistent — a mid-day partial advance leaves the queue / index in a state the next advance resumes correctly, with no double-drain or skipped ticket.
+  3. Mid-day word binding holds — boxes / tickets / bets placed mid-day after a request bind to the live index / day, not the in-flight word, across gap-backfill and retry interleavings (the `RngIndexDrainBinding` concern).
+**Plans**: TBD
+
+### Phase 422: GAMEOVER — Terminal-Branch Liveness
+**Goal**: every GAMEOVER branch is proven to finalize for any reachable pre-gameover state — the terminal decimator and terminal jackpot + drain resolve within the gas ceiling without aliasing a live round, and the gameOver-trigger transition itself cannot wedge any downstream terminal entrypoint.
+**Depends on**: Phase 418, Phase 420
+**Requirements**: GAMEOVER-01, GAMEOVER-02, GAMEOVER-03
+**Method**: Cross-model council primary finder over the terminal surface; Claude adjudicates against frozen source; every candidate adversarially verified. Builds on the BRICK-03 terminal-finalization proof, drilling the specific terminal entrypoints.
+**Success Criteria** (what must be TRUE):
+  1. The terminal decimator (`runTerminalDecimatorJackpot`, level keyed at `lvl+1` per the DEC-ALIAS fix) is proven to resolve without aliasing a live regular round and without a reachable revert that strands the terminal payout.
+  2. The terminal jackpot (`runTerminalJackpot`) and `handleGameOverDrain` are proven to finalize for any reachable pre-gameover state (any pending pool, any winner-set size) within the gas ceiling, including the post-gameover claim path that also pays prepaid afking ETH.
+  3. The gameOver-trigger transition itself cannot wedge — the conditions that set `gameOver` (`lastPurchaseDay` etc.) leave every downstream terminal entrypoint callable; no mid-gameover partial state blocks finalization.
+**Plans**: TBD
+
+### Phase 423: VRFSWAP — Honest Coordinator Rotation
+**Goal**: an honest-governance coordinator rotation (`updateVrfCoordinatorAndSub`), performed at any point including mid-day / mid-request / stalled / while-locked, cannot brick liveness or corrupt the request↔word binding — every freeze-relevant variable stays consistent and a fulfilled word always remains obtainable on the correct day.
+**Depends on**: Phase 418
+**Requirements**: VRFSWAP-01, VRFSWAP-02, VRFSWAP-03
+**Method**: Cross-model council primary finder over the rotation surface; Claude adjudicates against frozen source; every candidate adversarially verified. Honest admin / governance assumed (admin malice out of scope); rotation liveness IS in scope.
+**Success Criteria** (what must be TRUE):
+  1. `updateVrfCoordinatorAndSub` under honest governance holds every freeze-relevant variable consistent — no rotation branch strands the lock, de-syncs `vrfRequestId` / `rngWordCurrent`, or leaves the daily word permanently unobtainable; an in-flight request at rotation time is either preserved or cleanly re-requested.
+  2. A rotation performed while the game is mid-day / mid-request / stalled cannot brick liveness or corrupt the request↔word binding — the rotation + retry composition always restores a path to a fulfilled word and the correct day binds it.
+  3. `rawFulfillRandomWords` requestId / coordinator validation is correct across a rotation — a stale (pre-rotation) coordinator or requestId cannot write a word, and the post-rotation coordinator's fulfillment lands on the intended day / index.
+**Plans**: TBD
+
+### Phase 424: MECH — Close the Mechanical-Net Gaps (test-only)
+**Goal**: the brick / corruption invariants proven by hand in BRICK / DELEGATE / CORRUPT / the edge phases are pinned by durable regressions, so any future drift that would re-open a brick or corruption is caught by a failing test rather than another manual audit.
+**Depends on**: Phase 418, Phase 419, Phase 420, Phase 421, Phase 422, Phase 423
+**Requirements**: MECH-01, MECH-02, MECH-03, MECH-04
+**Method**: Test-only — commits autonomously (no contract change). Derived from the worst-case branches and mutants surfaced in the preceding sweeps.
+**Success Criteria** (what must be TRUE):
+  1. A worst-case gas harness asserts every column transaction (advance composition, terminal finalization, max-batch mint) is < 16.7M, derived from the BRICK-04 worst-case branch (not typical seeds), wired so a regression that crosses the ceiling fails it.
+  2. A delegatecall storage-layout regression oracle pins the Game↔module slot alignment (a `forge inspect` layout snapshot + assertion) so any future layout drift that would silently corrupt is caught.
+  3. A state-invariant test (fuzz or targeted) asserts the BRICK liveness + CORRUPT solvency invariants across an advance / mint / gameover sequence — at minimum that `advanceGame` always progresses to settlement and `claimablePool == Σ` holds throughout.
+  4. Any specific brick / corruption mutant surfaced during COLMAP / BRICK / DELEGATE / CORRUPT (a revert made permanent, a slot mis-aligned) is captured as a regression the current suite is shown blind to, then closed.
+**Plans**: TBD
+
+### Phase 425: COUNCIL — Cross-Model Adjudication + Synthesis + FINDINGS-v67.0 + Closure
+**Goal**: the cross-model council finding/verification METHOD is formally attested and synthesized into a canonical FINDINGS deliverable, any contract fix is routed through the approval gate, and the milestone closure signal is recorded.
+**Depends on**: Phase 418, Phase 419, Phase 420, Phase 421, Phase 422, Phase 423, Phase 424
+**Requirements**: COUNCIL-01, COUNCIL-02, COUNCIL-03
+**Method**: Cross-model council (Gemini + Codex) primary finder + Claude synthesis; every candidate adversarially verified (independent refutation; majority-refute kills it) before it is recorded. Any contract fix routes through the contract-commit approval gate.
+**Success Criteria** (what must be TRUE):
+  1. It is attested on record that the cross-model council (Gemini + Codex) ran as the primary finder over every COLMAP/BRICK/DELEGATE/CORRUPT/MIDRNG/GAMEOVER/VRFSWAP surface, seeded with the column map and the brick / corruption hypotheses.
+  2. It is attested on record that every candidate finding was adversarially verified (independent refutation; majority-refute kills it) before being recorded as confirmed.
+  3. A canonical `audit/FINDINGS-v67.0.md` (+ HTML report) records confirmed findings, refutations, and by-design dispositions; any contract fix is routed through the contract-commit approval gate; and the milestone closure signal `MILESTONE_V67_AT_HEAD_<sha>` is recorded.
+**Plans**: TBD
+
+### Progress (v67.0)
+
+| Phase | Plans Complete | Status | Completed |
+|-------|----------------|--------|-----------|
+| 416. FOUND | 0/? | Not started | - |
+| 417. COLMAP | 0/? | Not started | - |
+| 418. BRICK | 0/? | Not started | - |
+| 419. DELEGATE | 0/? | Not started | - |
+| 420. CORRUPT | 0/? | Not started | - |
+| 421. MIDRNG | 0/? | Not started | - |
+| 422. GAMEOVER | 0/? | Not started | - |
+| 423. VRFSWAP | 0/? | Not started | - |
+| 424. MECH | 0/? | Not started | - |
+| 425. COUNCIL | 0/? | Not started | - |
+
+---
+
+## ✅ v66.0 RNG-Surface & Cross-Contract-Call Manipulability Re-Audit (Cross-Model Council) — SHIPPED 2026-06-16
 
 > **Scope:** re-verify the VRF-freeze invariant across **every** RNG consumer and exhaustively sweep all cross-contract calls for any player-manipulable state between VRF request and consumption — confirm nothing is missing before C4A. Seed hypotheses: `.planning/v66-BLIND-SPOT-PANEL.md` (six-lens blind-spot panel; the convergent meta-finding is that the trusted RNG corpus — `RNGLOCK-CATALOG.md`, `v30-RNGLOCK-STATE-MACHINE`, `v30-FREEZE-PROOF`, §11/§12 — is a STALE snapshot keyed to deleted `BurnieCoinflip`/`StakedDegenerusStonk` names, and the audit net was drawn against it, never re-derived from current code). Full scope + the 21 REQ-IDs: `.planning/REQUIREMENTS.md`.
 

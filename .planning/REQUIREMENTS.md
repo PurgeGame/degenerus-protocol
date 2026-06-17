@@ -101,10 +101,10 @@ Deferred — not in this milestone's roadmap.
 
 ## Traceability
 
-Each requirement maps to exactly one phase. v67.0 phases continue 415 → 416. **Phase assignment below is PROPOSED — the roadmapper finalizes it.**
+Each requirement maps to exactly one phase. v67.0 phases continue 415 → 416. The 9-requirement EDGE cluster in the original proposal was split into three dedicated, independently-verifiable phases — 421 MIDRNG, 422 GAMEOVER, 423 VRFSWAP — so MECH shifts to 424 and COUNCIL to 425.
 
-| Requirement | Proposed Phase | Status |
-|-------------|----------------|--------|
+| Requirement | Phase | Status |
+|-------------|-------|--------|
 | FOUND-01 | 416 FOUND | Pending |
 | FOUND-02 | 416 FOUND | Pending |
 | COLMAP-01 | 417 COLMAP | Pending |
@@ -126,27 +126,28 @@ Each requirement maps to exactly one phase. v67.0 phases continue 415 → 416. *
 | CORRUPT-03 | 420 CORRUPT | Pending |
 | CORRUPT-04 | 420 CORRUPT | Pending |
 | CORRUPT-05 | 420 CORRUPT | Pending |
-| MIDRNG-01 | 421 EDGE | Pending |
-| MIDRNG-02 | 421 EDGE | Pending |
-| MIDRNG-03 | 421 EDGE | Pending |
-| GAMEOVER-01 | 421 EDGE | Pending |
-| GAMEOVER-02 | 421 EDGE | Pending |
-| GAMEOVER-03 | 421 EDGE | Pending |
-| VRFSWAP-01 | 421 EDGE | Pending |
-| VRFSWAP-02 | 421 EDGE | Pending |
-| VRFSWAP-03 | 421 EDGE | Pending |
-| MECH-01 | 422 MECH | Pending |
-| MECH-02 | 422 MECH | Pending |
-| MECH-03 | 422 MECH | Pending |
-| MECH-04 | 422 MECH | Pending |
-| COUNCIL-01 | 423 COUNCIL | Pending |
-| COUNCIL-02 | 423 COUNCIL | Pending |
-| COUNCIL-03 | 423 COUNCIL | Pending |
+| MIDRNG-01 | 421 MIDRNG | Pending |
+| MIDRNG-02 | 421 MIDRNG | Pending |
+| MIDRNG-03 | 421 MIDRNG | Pending |
+| GAMEOVER-01 | 422 GAMEOVER | Pending |
+| GAMEOVER-02 | 422 GAMEOVER | Pending |
+| GAMEOVER-03 | 422 GAMEOVER | Pending |
+| VRFSWAP-01 | 423 VRFSWAP | Pending |
+| VRFSWAP-02 | 423 VRFSWAP | Pending |
+| VRFSWAP-03 | 423 VRFSWAP | Pending |
+| MECH-01 | 424 MECH | Pending |
+| MECH-02 | 424 MECH | Pending |
+| MECH-03 | 424 MECH | Pending |
+| MECH-04 | 424 MECH | Pending |
+| COUNCIL-01 | 425 COUNCIL | Pending |
+| COUNCIL-02 | 425 COUNCIL | Pending |
+| COUNCIL-03 | 425 COUNCIL | Pending |
 
 **Coverage:**
 - v1 requirements: 37 total
-- Mapped to phases: 37 ✓ (proposed)
+- Mapped to phases: 37 ✓ (1 requirement → exactly 1 phase; no orphans, no duplicates)
 - Unmapped: 0 ✓
+- Phases: 10 (416 FOUND · 417 COLMAP · 418 BRICK · 419 DELEGATE · 420 CORRUPT · 421 MIDRNG · 422 GAMEOVER · 423 VRFSWAP · 424 MECH · 425 COUNCIL)
 
 ---
-*Requirements defined: 2026-06-16 — grounded in a HEAD-scan of the spinal column (DegenerusGame + 13 delegatecall modules + synchronous callees).*
+*Requirements defined: 2026-06-16 — grounded in a HEAD-scan of the spinal column (DegenerusGame + 13 delegatecall modules + synchronous callees). Phases finalized by the roadmapper: 2026-06-16.*

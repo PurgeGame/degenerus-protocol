@@ -14,7 +14,7 @@ PRIOR_last_activity_401: v64.0 phase 401 PACKING-GAS-IDENTITY COMPLETE (subject 
 PRIOR_last_activity_400: v64.0 phase 400 SOLVENCY-CARRY-REDEMPTION COMPLETE (subject still byte-frozen 402855e1). Dual-net: NET-1 council (gemini CLEAN all 5 + codex 1 LOW on SOLV-05), NET-2 Claude (0 leads across 5 dims + 5 cross-path compositions clean). VERDICT 0 CATASTROPHE/0 HIGH/0 MED/0 LOW. SOLV-01..04 convergent CLEAN all 3 nets (claimablePool identity = salvage relabel pool-neutral + dust-forfeit + payable redemption all tandem-backed; BURNIE-04 carry-escrow paid/forfeit once + slot-delete-before-credit; salvage vault fallback bounded by toggle+ETH-floor; stETH-before-ETH CEI intact V62-03 class). SOLV-05 = 1 INFO (codex first-claim window LOW adjudicated BY-DESIGN: forgone out-of-window win = deflationary un-mint NOT stranded value, BURNIE burned-at-deposit/minted-at-claim; sDGNRS auto-settles every resolution so backing never strands; 30->180 change strictly improved forfeiture; VAULT operational note = claim seed wins within 180d). SOLV-01..05 attested. NEXT = 401 PACKING-GAS-IDENTITY.
 PRIOR_last_activity_399: v64.0 phase 399 REWARD-MECHANICS COMPLETE (342ea1c3; dual-net 0 HIGH/MED/LOW; RWD-A codex-unique BURNIE seed-emission ~7.87M INFO USER-confirmed by-design 39b2f344; RWD-B spins = Degenerette house edge by-design; RWD-01..06 attested). SEED-001 century streak-shield (+1/century cap 10, post-audit) captured 682b6afa.
 progress:
-  total_phases: 0
+  total_phases: 10
   completed_phases: 0
   total_plans: 0
   completed_plans: 0
@@ -42,10 +42,10 @@ See: .planning/PROJECT.md (Current State + Current Milestone: v64.0 sections) + 
 
 ## Current Position
 
-Phase: Not started (defining requirements)
+Phase: 416 FOUND — Subject Freeze & Green Baseline (not started)
 Plan: —
-Status: Defining requirements — milestone v67.0
-Last activity: 2026-06-16 — Milestone v67.0 started (Spinal-Column Brick & State-Corruption Audit; mintFlip/advanceGame chain; cross-model council). Subject `contracts/` tree 0dd445a6 to byte-freeze at FOUNDATION; phases continue 415 → 416. NEXT = REQUIREMENTS.md → roadmapper.
+Status: Roadmap APPROVED (10 phases 416-425; 37 reqs mapped 1:1). Ready to plan Phase 416.
+Last activity: 2026-06-16 — v67.0 roadmap approved + committed. Spinal-Column Brick & State-Corruption Audit (mintFlip/advanceGame chain); cross-model council; audit-only on byte-frozen subject `contracts/` tree 0dd445a6 @ HEAD fa7932f6. Phases 416 FOUND → 417 COLMAP → 418 BRICK → 419 DELEGATE → 420 CORRUPT → 421 MIDRNG → 422 GAMEOVER → 423 VRFSWAP → 424 MECH → 425 COUNCIL. NEXT = /gsd-plan-phase 416 (or /gsd-discuss-phase 416).
 
 ---
 _v66.0 CLOSED 2026-06-16: RNG-surface & cross-contract-call manipulability re-audit — 0 CATASTROPHE / 0 HIGH / 0 MEDIUM, 0 real findings; VRF-consumer net re-derived 13→72; archived + tagged `v66.0`; origin/main pushed. Below: v63.0 phase-outcome log + accumulated context (historical; retained across the milestone switch)._
