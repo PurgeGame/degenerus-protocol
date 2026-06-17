@@ -15,7 +15,7 @@ PRIOR_last_activity_400: v64.0 phase 400 SOLVENCY-CARRY-REDEMPTION COMPLETE (sub
 PRIOR_last_activity_399: v64.0 phase 399 REWARD-MECHANICS COMPLETE (342ea1c3; dual-net 0 HIGH/MED/LOW; RWD-A codex-unique BURNIE seed-emission ~7.87M INFO USER-confirmed by-design 39b2f344; RWD-B spins = Degenerette house edge by-design; RWD-01..06 attested). SEED-001 century streak-shield (+1/century cap 10, post-audit) captured 682b6afa.
 progress:
   total_phases: 10
-  completed_phases: 0
+  completed_phases: 1
   total_plans: 0
   completed_plans: 0
   percent: 100
@@ -42,10 +42,10 @@ See: .planning/PROJECT.md (Current State + Current Milestone: v64.0 sections) + 
 
 ## Current Position
 
-Phase: 416 FOUND — Subject Freeze & Green Baseline (not started)
+Phase: 417 COLMAP — Re-Derive the Spinal-Column Call Graph (next; load-bearing)
 Plan: —
-Status: Roadmap APPROVED (10 phases 416-425; 37 reqs mapped 1:1). Ready to plan Phase 416.
-Last activity: 2026-06-16 — v67.0 roadmap approved + committed. Spinal-Column Brick & State-Corruption Audit (mintFlip/advanceGame chain); cross-model council; audit-only on byte-frozen subject `contracts/` tree 0dd445a6 @ HEAD fa7932f6. Phases 416 FOUND → 417 COLMAP → 418 BRICK → 419 DELEGATE → 420 CORRUPT → 421 MIDRNG → 422 GAMEOVER → 423 VRFSWAP → 424 MECH → 425 COUNCIL. NEXT = /gsd-plan-phase 416 (or /gsd-discuss-phase 416).
+Status: AUTONOMOUS run in progress (audit-only; hard-stop only at a contract-commit boundary). 1/10 phases complete.
+Last activity: 2026-06-17 — ✅ 416 FOUND complete: subject byte-frozen tree `0dd445a6` @ HEAD `588bc858`; GREEN baseline forge 900/0/109, hardhat 1239/129/14 carried floor (carried-by-construction, forge authoritative). `416-BASELINE.md`. NEXT = 417 COLMAP (cross-model + Workflow fan-out: re-derive entry→delegatecall→callee call graph + revert/loop/delegatecall-write inventory).
 
 ---
 _v66.0 CLOSED 2026-06-16: RNG-surface & cross-contract-call manipulability re-audit — 0 CATASTROPHE / 0 HIGH / 0 MEDIUM, 0 real findings; VRF-consumer net re-derived 13→72; archived + tagged `v66.0`; origin/main pushed. Below: v63.0 phase-outcome log + accumulated context (historical; retained across the milestone switch)._
