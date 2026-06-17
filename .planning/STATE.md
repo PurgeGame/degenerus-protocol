@@ -15,7 +15,7 @@ PRIOR_last_activity_400: v64.0 phase 400 SOLVENCY-CARRY-REDEMPTION COMPLETE (sub
 PRIOR_last_activity_399: v64.0 phase 399 REWARD-MECHANICS COMPLETE (342ea1c3; dual-net 0 HIGH/MED/LOW; RWD-A codex-unique BURNIE seed-emission ~7.87M INFO USER-confirmed by-design 39b2f344; RWD-B spins = Degenerette house edge by-design; RWD-01..06 attested). SEED-001 century streak-shield (+1/century cap 10, post-audit) captured 682b6afa.
 progress:
   total_phases: 10
-  completed_phases: 3
+  completed_phases: 4
   total_plans: 0
   completed_plans: 0
   percent: 100
@@ -42,7 +42,8 @@ See: .planning/PROJECT.md (Current State + Current Milestone: v64.0 sections) + 
 
 ## Current Position
 
-Phase: 419 DELEGATE — Delegatecall Integrity (next)
+Phase: 420 CORRUPT — State-Corruption Invariants (next)
+⚑ 419 DELEGATE CLOSED 2026-06-17: 0 CAT/0 HIGH/0 MED; DELEGATE-FIND-01 (LOW, direct-call ETH-trap on 4 payable delegatecall-only entrypoints — Boon×3 + resolveLootboxDirect) FOUND (codex-unique) + FIXED `095a7ac9` (address(this)==GAME guard, USER-approved). Tree re-frozen `4a67209a`. 4/10 phases done. v67 findings so far: BRICK-FIND-01 gas-headroom (fixed 2aed5d28) + DELEGATE-FIND-01 (fixed 095a7ac9); 0 CAT/0 HIGH; both USER-approved in-milestone fixes. NEXT = 420 CORRUPT.
 ⚑ IN-MILESTONE FIX (USER-directed + approved): 418 BRICK surfaced a binding-stage gas-headroom finding — the afking subscriber-STAGE all-evict chunk sat at 13.6M (only ~3.1M under the 16.7M EIP-7825 cap), the SUB_STAGE weight model under-weighted evictions (EVICT_WEIGHT 1 vs true ~27k marginal; comments mis-stated all-evict as 5.5M), and the ceiling validation was an analytic projection that hardcoded stale weights. FIX SHIPPED `2aed5d28` (EVICT_WEIGHT 1→7, BUDGET 500→2500 + 2 other weights to true marginals; constants only, zero logic): all-evict → 9.7M (live-measured), headroom → 7.06M; + a real live worst-case harness (test_AllEvictSaturatedChunk_LIVE_Measured). Full suite 901/0/109. **NEW FREEZE TREE `4921a428`** (was `0dd445a6`); COLMAP (417) carries unchanged (no call-graph/revert/loop/delegatecall-write change — only weight VALUES). The other BRICK leads L1/L3/L4/L5/L6 = REFUTED (council + crux verification; L4/L6 cross-day VRF-stall deadlock recoverable via honest updateVrfCoordinatorAndSub re-issue).
 Plan: —
 Status: FULLY AUTONOMOUS run in progress (1/10 phases complete). ⚑ USER DIRECTIVE 2026-06-17 (going to bed): run ALL phases 416-425 to completion + local lifecycle (audit-milestone → complete → cleanup), DO NOT ASK AGAIN. Two hard lines preserved: (1) NEVER commit a contracts/*.sol change — a finding needing a contract fix is DOCUMENTED in FINDINGS-v67.0 + flagged, contract stays frozen (audit-only); test-only MECH commits autonomously. (2) STOP before `git push` — leave the push for USER on wake. No AskUserQuestion gates — auto-decide continue/accept.
