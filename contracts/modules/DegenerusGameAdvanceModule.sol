@@ -297,6 +297,13 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                     }
                 }
                 ticketsFullyProcessed = true;
+                // Release the mid-day latch when a swapped ticket batch finishes draining
+                // on the new-day path: the same-day release runs only while day == dIdx, so a
+                // batch whose drain crosses the day boundary completes here instead. Guarded so
+                // the daily-swapped drain (latch already clear) skips the write.
+                if (_lrRead(LR_MID_DAY_SHIFT, LR_MID_DAY_MASK) != 0) {
+                    _lrWrite(LR_MID_DAY_SHIFT, LR_MID_DAY_MASK, 0);
+                }
             }
 
             // --- Afking process STAGE: stamp the funded subscriber set BEFORE the day

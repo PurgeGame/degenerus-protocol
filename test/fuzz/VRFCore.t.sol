@@ -60,6 +60,11 @@ contract VRFCore is DeployProtocol {
         return uint256(vm.load(address(game), bytes32(uint256(SLOT_VRF_REQUEST_ID))));
     }
 
+    /// @dev Read LR_MID_DAY from lootboxRngPacked (slot 34, bits [224:232]).
+    function _lrMidDay() internal view returns (uint8) {
+        return uint8(uint256(vm.load(address(game), bytes32(uint256(34)))) >> 224);
+    }
+
     /// @dev Read rngWordCurrent directly from storage slot 3.
     function _readRngWordCurrent() internal view returns (uint256) {
         return uint256(vm.load(address(game), bytes32(uint256(SLOT_RNG_WORD_CURRENT))));
@@ -455,6 +460,42 @@ contract VRFCore is DeployProtocol {
         // Both should be cleared
         assertEq(_readVrfRequestId(), 0, "vrfRequestId cleared after mid-day fulfillment");
         assertEq(_readRngRequestTime(), 0, "rngRequestTime cleared after mid-day fulfillment");
+    }
+
+    /// @notice A mid-day ticket batch whose drain completes on the NEW-day path must still
+    ///         release the LR_MID_DAY latch. The same-day release runs only while day == dIdx,
+    ///         so a batch whose drain crosses the day boundary completes on the daily-drain gate
+    ///         instead; that gate must release the latch too, or the mid-day fast path
+    ///         (requestLootboxRng) stays permanently blocked for the rest of the game.
+    function test_midDayLatch_clearsOnCrossDayDrain() public {
+        _setupForMidDayRng();
+
+        // Mid-day request: swaps the non-empty ticket buffer -> LR_MID_DAY = 1, advances LR_INDEX.
+        game.requestLootboxRng();
+        uint256 reqId = mockVRF.lastRequestId();
+        assertEq(_lrMidDay(), 1, "LR_MID_DAY set by the mid-day ticket request");
+
+        // The mid-day word ARRIVES (no stall) — the failure mode is purely the cross-day drain.
+        mockVRF.fulfillRandomWords(reqId, 0xCAFE);
+
+        // No same-day advanceGame: cross the day boundary so the read-slot drain lands on the
+        // new-day daily-drain gate rather than the same-day mid-day block.
+        vm.warp(block.timestamp + 1 days);
+
+        // Drain the read slot + process the new day (fulfilling the daily VRF when requested).
+        uint256 lastFulfilled = reqId;
+        for (uint256 i = 0; i < 50; i++) {
+            game.advanceGame();
+            uint256 rid = mockVRF.lastRequestId();
+            if (rid != lastFulfilled && rid > 0) {
+                mockVRF.fulfillRandomWords(rid, 0xDEAD0003);
+                lastFulfilled = rid;
+            }
+            if (!game.rngLocked() && _lrMidDay() == 0) break;
+        }
+
+        // The latch is released once the batch fully drains — the mid-day fast path is not bricked.
+        assertEq(_lrMidDay(), 0, "LR_MID_DAY released after the batch drains on the new-day path");
     }
 
     /// @notice requestLootboxRng within 15 minutes of day boundary must revert.
