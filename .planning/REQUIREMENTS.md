@@ -57,9 +57,9 @@ Requirements for this milestone. Each maps to exactly one roadmap phase.
 
 ### GAMEOVER — Terminal-Branch Liveness
 
-- [ ] **GAMEOVER-01**: The terminal decimator (`runTerminalDecimatorJackpot`, level keyed at `lvl+1` per the DEC-ALIAS fix) is proven to resolve without aliasing a live regular round and without a reachable revert that strands the terminal payout.
-- [ ] **GAMEOVER-02**: The terminal jackpot (`runTerminalJackpot`) and `handleGameOverDrain` are proven to finalize for any reachable pre-gameover state (any pending pool, any winner-set size) within the gas ceiling, including the post-gameover claim path that also pays prepaid afking ETH.
-- [ ] **GAMEOVER-03**: The gameOver-trigger transition itself cannot wedge — the conditions that set `gameOver` (`lastPurchaseDay` etc.) leave every downstream terminal entrypoint callable; no mid-gameover partial state blocks finalization.
+- [x] **GAMEOVER-01** ✅ HOLDS (422): The terminal decimator (`runTerminalDecimatorJackpot`, level keyed at `lvl+1` per the DEC-ALIAS fix) is proven to resolve without aliasing a live regular round and without a reachable revert that strands the terminal payout.
+- [x] **GAMEOVER-02** ✅ HOLDS+INFO (422): The terminal jackpot (`runTerminalJackpot`) and `handleGameOverDrain` are proven to finalize for any reachable pre-gameover state (any pending pool, any winner-set size) within the gas ceiling, including the post-gameover claim path that also pays prepaid afking ETH. [worst-case ~7.2M<16.78M; FLIP-tombstone overflow boundary economically unreachable = INFO]
+- [x] **GAMEOVER-03** ✅ HOLDS (422):: The gameOver-trigger transition itself cannot wedge — the conditions that set `gameOver` (`lastPurchaseDay` etc.) leave every downstream terminal entrypoint callable; no mid-gameover partial state blocks finalization.
 
 ### VRFSWAP — Honest Coordinator Rotation
 
