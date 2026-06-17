@@ -1,0 +1,7 @@
+{
+  "label": "brick",
+  "schema": ".planning/phases/418-brick-permanent-brick-liveness/418-brick-schema.json",
+  "models": ["gemini", "codex"],
+  "skipped": [],
+  "outputs": {"gemini": ".planning/phases/418-brick-permanent-brick-liveness/council/brick.gemini.json", "codex": ".planning/phases/418-brick-permanent-brick-liveness/council/brick.codex.json"}
+}

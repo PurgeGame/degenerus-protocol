@@ -1,0 +1,7 @@
+{
+  "label": "corrupt",
+  "schema": ".planning/phases/420-corrupt-state-corruption-invariants/420-corrupt-schema.json",
+  "models": ["gemini", "codex"],
+  "skipped": [],
+  "outputs": {"gemini": ".planning/phases/420-corrupt-state-corruption-invariants/council/corrupt.gemini.json", "codex": ".planning/phases/420-corrupt-state-corruption-invariants/council/corrupt.codex.json"}
+}

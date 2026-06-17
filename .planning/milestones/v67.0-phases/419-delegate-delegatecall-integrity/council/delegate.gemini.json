@@ -1,0 +1,66 @@
+{
+  "findings": [
+    {
+      "lead": "DELEGATE-01",
+      "verdict": "REFUTED",
+      "severity": "NA",
+      "reachable": false,
+      "trigger": "",
+      "reasoning": "All 13 modules strictly inherit DegenerusGameStorage.sol, and state variables are declared exclusively in this canonical storage contract. The EVM compiler ensures the delegatecall environment correctly aligns with the game's storage layout. Packed multi-module slots uniformly utilize BitPackingLib shifts and local bitwise masks, preventing any layout drift or clobbered fields across the modules. (contracts/storage/DegenerusGameStorage.sol:100)"
+    },
+    {
+      "lead": "DELEGATE-02",
+      "verdict": "REFUTED",
+      "severity": "NA",
+      "reachable": false,
+      "trigger": "",
+      "reasoning": "Nested payable DC paths preserve msg.value, but modules never double-spend it because msg.value is only logically assigned once per execution path. For example, subscribe credits afkingFunding or claimablePool exactly once, and nested boons like consumePurchaseBoost do not consume msg.value. Internal accounting prevents multiple deductions. (contracts/modules/GameAfkingModule.sol:308)"
+    },
+    {
+      "lead": "DELEGATE-03",
+      "verdict": "REFUTED",
+      "severity": "NA",
+      "reachable": false,
+      "trigger": "",
+      "reasoning": "Raw delegatecall(msg.data) is safely scoped. The EVM routes the initial call to the DegenerusGame dispatch stubs (e.g., consumeCoinflipBoon) only if msg.sig strictly matches the function selector. The delegatecall forward therefore carries a static, non-colliding selector that the module executes. (contracts/DegenerusGame.sol:827)"
+    },
+    {
+      "lead": "DELEGATE-04",
+      "verdict": "REFUTED",
+      "severity": "NA",
+      "reachable": false,
+      "trigger": "",
+      "reasoning": "Revert bubbling correctly utilizes _revertDelegate across all normal stubs. The deliberate swallowed failure in _handleGameOverPath (if processTicketBatch fails) is safe and intentionally designed: it prevents an unexpected ticket batch revert from blocking handleGameOverDrain, ensuring the terminal fund release is never permanently trapped. (contracts/modules/DegenerusGameAdvanceModule.sol:650)"
+    },
+    {
+      "lead": "DELEGATE-05",
+      "verdict": "REFUTED",
+      "severity": "NA",
+      "reachable": false,
+      "trigger": "",
+      "reasoning": "Module addresses are securely hardcoded as internal constants in ContractAddresses.sol. While some modules expose external functions, a direct call executes against the module's own empty storage and cannot corrupt the game. Any module attempt to call outbound to tokens (COIN, FLIP) will revert because those contracts strictly require msg.sender == ContractAddresses.GAME, not the module's address. (contracts/ContractAddresses.sol:15)"
+    }
+    {
+      "title": "Depth >= 3 recirculation (resolveEthSpinFromBox -> resolveLootboxDirect)",
+      "verdict": "REFUTED",
+      "severity": "NA",
+      "reachable": false,
+      "trigger": "",
+      "reasoning": "The allowEthSpin flag is explicitly set to false during nested recursive calls, cleanly acting as a base case to terminate infinite delegatecall loops. The context and value persist predictably without escalation. (contracts/modules/DegenerusGameLootboxModule.sol)"
+    },
+    {
+      "title": "msg.value-in-flight at depth double-spend",
+      "verdict": "REFUTED",
+      "severity": "NA",
+      "reachable": false,
+      "trigger": "",
+      "reasoning": "Modules do not use msg.value as an ambient continuous balance. When msg.value is forwarded, the path preconditions define an exact credit destination (e.g., afking or fresh value limits) exactly once. (contracts/modules/DegenerusGameMintModule.sol:1402)"
+    },
+    {
+      "title": "Packed multi-module slots (7, 34, 5)",
+      "verdict": "REFUTED",
+      "severity": "NA",
+      "reachable": false,
+      "trigger": "",
+      "reasoning": "Multi-module packed slots utilize precise bitwise local masks (e.g., _lrWrite, _psWrite) and BitPackingLib to rewrite specific bitfields, completely preventing dropped masks from destroying or corrupting adjacent bit variables. (contracts/storage/DegenerusGameStorage.sol:1120)"
+    }

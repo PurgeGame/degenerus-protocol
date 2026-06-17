@@ -1,0 +1,7 @@
+{
+  "label": "midrng",
+  "schema": ".planning/phases/421-midrng-mid-day-rng/421-schema.json",
+  "models": ["gemini", "codex"],
+  "skipped": [],
+  "outputs": {"gemini": ".planning/phases/421-midrng-mid-day-rng/council/midrng.gemini.json", "codex": ".planning/phases/421-midrng-mid-day-rng/council/midrng.codex.json"}
+}

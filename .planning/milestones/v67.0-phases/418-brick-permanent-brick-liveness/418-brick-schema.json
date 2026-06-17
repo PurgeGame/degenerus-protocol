@@ -1,0 +1,40 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["findings", "newVectors", "overallVerdict"],
+  "properties": {
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["lead", "verdict", "severity", "reachable", "trigger", "reasoning"],
+        "properties": {
+          "lead": { "type": "string", "description": "L1..L6" },
+          "verdict": { "type": "string", "enum": ["REAL", "REFUTED", "UNCERTAIN"] },
+          "severity": { "type": "string", "enum": ["CATASTROPHE", "HIGH", "MEDIUM", "LOW", "INFO", "NA"] },
+          "reachable": { "type": "boolean" },
+          "trigger": { "type": "string", "description": "exact trigger sequence / PoC sketch if REAL, else empty" },
+          "reasoning": { "type": "string", "description": "with file:line citations" }
+        }
+      }
+    },
+    "newVectors": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["title", "verdict", "severity", "reachable", "trigger", "reasoning"],
+        "properties": {
+          "title": { "type": "string" },
+          "verdict": { "type": "string", "enum": ["REAL", "REFUTED", "UNCERTAIN"] },
+          "severity": { "type": "string", "enum": ["CATASTROPHE", "HIGH", "MEDIUM", "LOW", "INFO", "NA"] },
+          "reachable": { "type": "boolean" },
+          "trigger": { "type": "string" },
+          "reasoning": { "type": "string" }
+        }
+      }
+    },
+    "overallVerdict": { "type": "string" }
+  }
+}

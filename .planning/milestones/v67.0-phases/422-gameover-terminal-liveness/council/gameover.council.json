@@ -1,0 +1,7 @@
+{
+  "label": "gameover",
+  "schema": ".planning/phases/422-gameover-terminal-liveness/422-schema.json",
+  "models": ["gemini", "codex"],
+  "skipped": [],
+  "outputs": {"gemini": ".planning/phases/422-gameover-terminal-liveness/council/gameover.gemini.json", "codex": ".planning/phases/422-gameover-terminal-liveness/council/gameover.codex.json"}
+}
