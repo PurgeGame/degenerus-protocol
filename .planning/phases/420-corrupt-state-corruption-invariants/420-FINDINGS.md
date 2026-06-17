@@ -1,0 +1,45 @@
+# Phase 420 — CORRUPT (State-Corruption Invariants) — Findings
+
+**Phase:** 420 CORRUPT · **Date:** 2026-06-17 · **Reqs:** CORRUPT-01..05
+**Subject:** frozen `contracts/` tree `4a67209a` @ HEAD `0bb7deca` (post-419-fix; working tree clean, re-verified clean after the read-only fan-outs). No contract change this phase.
+**Method:** cross-model council (Gemini 3 Pro + Codex/gpt-5.5) = NET-1 primary finder · Claude Workflow NET-2 = 10 break-attempt verifiers (round 1) + completeness critic + 4 gap-closing verifiers (round 2), each adversarially refuting any non-clean candidate · orchestrator crux verification on the two load-bearing facts. Honest admin/governance assumed.
+
+## Verdict: 0 CATASTROPHE / 0 HIGH / 0 MEDIUM / 0 LOW real findings
+
+No reachable column path leaves the Game's packed storage or accounting corrupted. Packed slots never alias or overflow into a neighbour; write-after-write ordering exposes no exploitable intermediate at any external-call boundary; partial failures are all-or-nothing; mid-advance reentrancy observes no half-updated invariant; the solvency / pool identities hold (with one *documented, solvency-positive* temporary exception). **Two INFO items recorded** (one documentation/by-design, one future-edit-fragility defense-in-depth note); both routed to 424 MECH as test-only.
+
+## Leads adjudicated
+
+| Lead | NET-1 (council) | NET-2 r1 | NET-2 r2 / crux | Disposition |
+|------|-----------------|----------|-----------------|-------------|
+| **CORRUPT-01** packed-slot integrity (13 multi-module slots + DEC-ALIAS + EvCap two-window) | gemini + codex **REFUTED** | 6 verifiers **HOLDS** (DEC-ALIAS slot 44; EvCap slot 40; slot 5 reverseFlip mask; slot 7 balancesPacked halves; slot 54 Sub sub-slots; slots 0/1/2/9/11/13/26/51) | crux-confirmed DEC-ALIAS `lvl+1` isolation (`Decimator:1017-1024`) | **HOLDS** — every reachable write masks correctly; no alias |
+| **CORRUPT-02** write-after-write ordering | gemini + codex **REFUTED** | **HOLDS** (Mint 4-helper field-isolated RMW; advance counters under rngLock; degenerette flush-before-recirc with `allowEthSpin=false`) | — | **HOLDS** — every external-call boundary sees consistent counters |
+| **CORRUPT-03** partial-failure atomicity | gemini + codex **REFUTED** | **HOLDS** (all dispatch stubs bubble; the one swallowed `_handleGameOverPath` makes no external call + fresh-read idempotent drain) | — | **HOLDS** — all-or-nothing where required |
+| **CORRUPT-04** reentrancy mid-advance | gemini + codex **REFUTED** | **HOLDS** (claimWinnings CEI + 1-wei sentinel; maybeCurse disjoint storage; subscribe→AFFILIATE.claim FLIP-only read-and-zero; `_payoutWithStethFallback` stETH-first/ETH-last fix holds; single player ETH `call{value:}` always last) | — | **HOLDS** — no half-updated invariant observable |
+| **CORRUPT-05** solvency / pool identities | gemini **REFUTED**; codex **REAL/INFO** (identity statement is incomplete) | **HOLDS** (every `balancesPacked` credit/debit pairs an equal `claimablePool` move; sDGNRS INV-10/13/02 backing ≥ claims; both temporary breaks resolve over-reserved) | crux-confirmed the exception is documented at `DegenerusGameStorage.sol:361` | **HOLDS** + **INFO-01** (see below) |
+
+## Completeness critic → NET-2 round 2 (the 8 omitted slots)
+
+The first net's surface (the 417 COLMAP-04 "13 flagged slots") captured the *multi-module bit-masked* subset but **omitted 8 slots/identities**: slot 34 `lootboxRngPacked`, slot 46 `yieldAccumulator`, slots 41/42 `decBurn`↔`decBucketBurnTotal`, and the compiler-packed slots 58 (cursors) / 14 (ticketCursor+ticketLevel) / 52-53 (bingo dual bitmap) / 19-20 (presale/gameOver state). Round 2 independently verified **all 8 HOLD**:
+
+- **slot 34 `lootboxRngPacked`** (densest 5-writer mask-RMW; cached-writeback vs live-RMW disciplines) — **HOLDS / structural**. All 3 cached-writeback sites (Mint :1611, Whale :916, Afking :1043) write back only `LR_PENDING_ETH`; every in-window callee provably touches no slot-34 field, and no in-window call is state-mutating (only an `affiliateBonusPointsBest` staticcall) — so the other writers cannot interleave even absent a reentrancy guard.
+- **slots 41/42 `decBurn`↔`decBucketBurnTotal`** — **HOLDS / structural**. Per-player entry stays in lockstep with the aggregate across the better-bucket migration (carry=prevBurn / accrual=delta partition; field-granular RMW; no external call in `recordDecBurn`).
+- **slot 58 / 14 / 52-53 / 19-20** — **HOLDS / structural**. All compiler-managed masked word RMW (no raw assembly touches these slots); cursor/pair invariants hold across modules; Bingo dual-bitmap is CEI + double-claim-guarded; the Mint presaleStatePacked cached-RMW window contains no slot-19 writer.
+- **slot 46 `yieldAccumulator`** — **HOLDS** but **INFO-02** (see below).
+
+## INFO items (no finding; routed to 424 MECH as test-only)
+
+### INFO-01 — CORRUPT-05 invariant statement is incomplete (by-design, documented, solvency-POSITIVE)
+The literal identity `claimablePool == Σ(claimable + afking halves)` is *temporarily a reserve superset* during decimator settlement: `runDecimatorJackpot` / `runTerminalDecimatorJackpot` reserve the full pool into `claimablePool` up-front (`AdvanceModule:946-952`, `GameOverModule:174-181`) before per-player credits, and the per-claim lootbox portion *decreases* `claimablePool` rather than adding (`Decimator:398-463`). This is **explicitly documented in-code** (`DegenerusGameStorage.sol:361` NOTE) and resolves in the **over-reserved** (solvency-positive) direction — the game always holds ≥ `claimablePool`; residue stays reserved. Not an unbacked-credit or half-write corruption. The accurate liability identity must include outstanding decimator claim rounds. Codex flagged this as REAL/INFO; NET-2 and the crux confirm it is the documented exception. **Disposition: by-design, no change.** → 424 MECH: a solvency-invariant test should assert the *reserve-inclusive* identity, not the literal sum.
+
+### INFO-02 — slot 46 `yieldAccumulator` cache-overwrite is callee-protected, not CEI-protected (future-edit fragility)
+`_consolidatePoolsAndRewardJackpots` caches `memYieldAcc = yieldAccumulator` (`AdvanceModule:832`), makes external calls (`coinflip.creditFlip` :983, self-guarded `runBaf`/`runDecimator`), then unconditionally overwrites `yieldAccumulator = memYieldAcc` (:999). A reentrant `advanceGame → _distributeYieldSurplus` that did `yieldAccumulator += quarterShare` in this window would be erased by the :999 overwrite (understated obligations → over-distributed surplus = solvency break) — the **same shape as the previously-fixed `_payoutWithStethFallback` yield-surplus finding, at a different call site.** On the frozen tree this is **NOT reachable**: `coinflip.creditFlip` is callback-free (recordAmount=0 hardcoded skips `consumeCoinflipBoon` and the `rngLocked()` bounty callback — `Coinflip.sol:649-708`), the jackpot calls are self-guarded ledger-only credits, and `distributeYieldSurplus` has no external/Admin dispatcher (only reachable from `advanceGame`). So **layer-1 (no control transfer to attacker code) is a genuine structural guarantee → HOLDS.** The residual is that *layer-2* (re-entry being benign) is not airtight — safety rests on the callee, not on CEI / cache-after-external-call ordering. **Disposition: defense-in-depth, no change needed on the frozen tree.** → 424 MECH: a regression test pinning `creditFlip`'s no-callback / recordAmount=0 invariant (and/or a comment at `AdvanceModule:832/999` documenting the load-bearing assumption), so a future edit that adds an in-window external call cannot silently reopen the clobber.
+
+## Routed forward (424 MECH, test-only — no contract change)
+1. **Storage-layout regression oracle must snapshot the FULL packed-slot set**, not just the 13 COLMAP-04-flagged slots — the critic showed the flag-list under-counted the corruption surface by 8 (all verified clean, but the *net* would have missed them). (MECH-02.)
+2. **Solvency-invariant test (MECH-03)** asserts the reserve-inclusive identity (INFO-01), and exercises the decimator reserve window + gameover sweep.
+3. **`creditFlip` no-callback regression / comment (INFO-02)** pinning the slot-46 layer-1 assumption. (MECH-04.)
+4. (carryover) worst-case gas harness < 16.78M + P10 `_consolidatePoolsAndRewardJackpots` zero-next-pool regression — already routed from 418.
+
+## Coverage / transparency note
+Three independent nets (Gemini, Codex, two Claude rounds) + orchestrator crux converge on the 0-finding verdict; every CORRUPT-01..05 lead has ≥2 independent nets on record, and the completeness critic's 8 omitted slots were each independently re-verified in round 2. The **methodology lesson** (mirrors v66's "trusted catalog under-counted ~5×"): the inherited COLMAP-04 packed-slot flag-list was the *multi-module bit-masked* subset, not the exhaustive packed-state surface — re-deriving the full set from `forge inspect storageLayout` (round 2 did this) is the structural defense, and the 424 layout oracle should encode it.

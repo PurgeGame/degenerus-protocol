@@ -43,11 +43,11 @@ Requirements for this milestone. Each maps to exactly one roadmap phase.
 
 ### CORRUPT — State-Corruption Invariants
 
-- [ ] **CORRUPT-01**: Packed-slot integrity across the column — every packed storage write (the DEC-ALIAS class: terminal / offset-keyed level writes, packed day-result lanes, packed pool / credit slots) is proven not to alias or overflow into a neighbouring field under any reachable (level, day, offset) combination.
-- [ ] **CORRUPT-02**: Write-after-write ordering across the multi-step advance / mint chain leaves no inconsistent intermediate that a reentrant or follow-on call can observe and exploit; the phase / level / day / pool / queue-index counters are mutually consistent at every external-call boundary.
-- [ ] **CORRUPT-03**: Partial-failure atomicity — if any sub-step of a column transaction reverts, no earlier sub-step's state write survives in a way that corrupts the accounting (CEI / checked-math / revert-bubbling enforces all-or-nothing where required).
-- [ ] **CORRUPT-04**: Reentrancy into the column mid-advance (via the synchronous external calls to FLIP / Coinflip / Vault / sDGNRS / Affiliate and any ETH transfer) cannot corrupt state or double-count — every external-call site in the column is checked for a reentrant re-entry that observes a half-updated invariant.
-- [ ] **CORRUPT-05**: The solvency / pool identities hold across every column path — `claimablePool == Σ(claimable + afking)` and the sDGNRS-backing identity are preserved by every mint / advance / jackpot / redemption / gameover path in the column.
+- [x] **CORRUPT-01** ✅ HOLDS (420): Packed-slot integrity across the column — every packed storage write (the DEC-ALIAS class: terminal / offset-keyed level writes, packed day-result lanes, packed pool / credit slots) is proven not to alias or overflow into a neighbouring field under any reachable (level, day, offset) combination.
+- [x] **CORRUPT-02** ✅ HOLDS (420): Write-after-write ordering across the multi-step advance / mint chain leaves no inconsistent intermediate that a reentrant or follow-on call can observe and exploit; the phase / level / day / pool / queue-index counters are mutually consistent at every external-call boundary.
+- [x] **CORRUPT-03** ✅ HOLDS (420): Partial-failure atomicity — if any sub-step of a column transaction reverts, no earlier sub-step's state write survives in a way that corrupts the accounting (CEI / checked-math / revert-bubbling enforces all-or-nothing where required).
+- [x] **CORRUPT-04** ✅ HOLDS (420): Reentrancy into the column mid-advance (via the synchronous external calls to FLIP / Coinflip / Vault / sDGNRS / Affiliate and any ETH transfer) cannot corrupt state or double-count — every external-call site in the column is checked for a reentrant re-entry that observes a half-updated invariant.
+- [x] **CORRUPT-05** ✅ HOLDS+INFO-01 (420): The solvency / pool identities hold across every column path — `claimablePool == Σ(claimable + afking)` and the sDGNRS-backing identity are preserved by every mint / advance / jackpot / redemption / gameover path in the column.
 
 ### MIDRNG — Mid-Day RNG Edge Cases
 
