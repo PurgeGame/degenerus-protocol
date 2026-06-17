@@ -14,10 +14,10 @@ PRIOR_last_activity_400: v64.0 phase 400 SOLVENCY-CARRY-REDEMPTION COMPLETE (sub
 PRIOR_last_activity_399: v64.0 phase 399 REWARD-MECHANICS COMPLETE (342ea1c3; dual-net 0 HIGH/MED/LOW; RWD-A codex-unique BURNIE seed-emission ~7.87M INFO USER-confirmed by-design 39b2f344; RWD-B spins = Degenerette house edge by-design; RWD-01..06 attested). SEED-001 century streak-shield (+1/century cap 10, post-audit) captured 682b6afa.
 progress:
   total_phases: 6
-  completed_phases: 2
+  completed_phases: 4
   total_plans: 0
   completed_plans: 0
-  percent: 33
+  percent: 67
 ---
 
 # Project State
@@ -41,14 +41,13 @@ See: .planning/PROJECT.md (Current State + Current Milestone: v64.0 sections) + 
 
 ## Current Position
 
-Milestone: v66.0 — RNG-Surface & Cross-Contract-Call Manipulability Re-Audit (Cross-Model Council). RUNNING AUTONOMOUS (audit-only; council = primary finder; hard-stop only at a contract-commit boundary). 2/6 phases complete.
-Phase: 410 FOUNDATION ✅ + 411 RNGNET ✅ -> 412 RNGSEAM next.
-Subject = contract commit `42c8e9c6` / `contracts/` tree `0dd445a64cfe7e096427d44f058c40abb1233b5f` (= origin/main `bb0912a6` + the USER-approved CurseChanged emit). Held byte-stable; tree verified intact after every council fan-out.
-Baseline (410): forge 889/0/110 + hardhat 1232/136-carried/14. RNGNET (411): re-derived **72 VRF consumers** (catalog had 13) -> .planning/v66-RNGNET-CONSUMER-NET.md supersedes the stale catalog; 28 missing + 20 misclassified + 9 stale anchors; council (gemini-flash + codex) verified, codex FOUND 5 the Claude net missed (decimator/quests/deity-viewer).
-Candidate finding (triple-confirmed Claude+gemini+codex): `_deityBoonForSlot` MUTABLE-INPUT (deity picks recipient/slot AFTER the public day word; seed Lootbox:1138/1149/2319) -> 412/413 adversarial-verify + USER adjudication.
-Hunt queue -> 412 (seams) / 413 (input-selection + fallback): ~35 open-freeze consumers incl. BAF/jackpot mutable-pool selects, decimator subbuckets, quest rolls, salvage seed, drainable reward pool, prevrandao fallback; + 2 council DIVERGENCES (dailyHeroWagers gemini-open/codex-protected; sDGNRS day+1 gemini-open/codex-pinned) = priority adjudications.
-Status: Phase 411 RNGNET complete + committed. NEXT = Phase 412 RNGSEAM (cross-contract freeze-seam hunt; council-led + adversarial-verify each candidate).
-Last activity: 2026-06-16 -- 411 RNGNET shipped (72-consumer net supersedes catalog; council earned its keep — codex found 5 missed consumers; deity-boon MUTABLE-INPUT triple-confirmed). Running autonomous -> 412 RNGSEAM.
+Milestone: v66.0 — RNG re-audit (cross-model council). RUNNING AUTONOMOUS; audit-only; hard-stop only at a contract-commit boundary. 4/6 phases complete.
+Phase: 410 FOUNDATION ✅ + 411 RNGNET ✅ + 412 RNGSEAM ✅ + 413 RNGSEL/RNGFALL ✅ -> 414 RNGNET-MECH next.
+Subject = contract commit `42c8e9c6` / `contracts/` tree `0dd445a64cfe7e096427d44f058c40abb1233b5f`. Tree verified frozen after every fan-out.
+AUDIT VERDICT SO FAR: **0 CATASTROPHE / 0 HIGH / 0 MEDIUM** across 412 (8 seams freeze-hold) + 413 (5 input-selection/fallback targets). Dispositions: 1 LOW (reward-pool live-read, by-design) + USER BY-DESIGN (salvage address-select; deity-boon) + INFO (prevrandao fallback emergency 1-bit bias). 0 real findings. Net re-derived 72 vs catalog 13; council found 5 missed consumers.
+Open items routed to 414 (test-only, committable): MECH-01 redemption claim-side day+1 mutant test · MECH-02 un-skip mid-day binding test (RngIndexDrainBinding) · MECH-03 Coinflip-spine mutation/behavioral net (RngFreezeAndRemovalProofs source-string-only) · MECH-04 coinflip b>=50 floor (CONSTANTS PROVE IT: COINFLIP_EXTRA_MIN_PERCENT=78>=50, range 38 -> wins [78,115] + fixed 50; no win in [2,49]).
+Status: 412+413 complete + committed. NEXT = Phase 414 RNGNET-MECH (close the 4 test-net gaps), then 415 TERMINAL (FINDINGS-v66.0 synthesis + closure).
+Last activity: 2026-06-16 -- 412+413 shipped (0 real findings; cross-contract seams + input-selection all hold/by-design). codex-412 challenge rate-capped (non-blocking). Running autonomous -> 414.
 ---
 _Below: v63.0 phase-outcome log + accumulated context (historical; retained across the milestone switch)._
 391 outcome: BOTH NETS on record for RNG-01..06 + FC-391-01..05 + FC-389-05/FC-392-11; **0 CONFIRMED contract findings — the DOMINANT freeze/manipulability class is clean; RNG-01..06 attested at `a8b702a7`.** NET 2 ran independently (per-consumer backward-trace to the commitment point + the dedicated decimator random-oracle distribution argument + the RNG-04 cross-round skeptic dual-gate + the RNG-05 day-boundary divergence bound + the RNG-06 in-window SLOAD enumeration over slots 10/34/35+dailyIdx), council folded after. **RNG-04 cross-round `uint32` decimator claim-seed collision (codex INFO/LOW vs gemini SOUND) RESOLVED = REFUTED-as-break, benign INFO/LOW** (skeptic dual-gate: not grindable [word VRF-fixed after address commitment], no value extraction [magnitude set by independent `amount`, off the ETH spine], ~10^-5 reachability — reconciles both models). **RNG-02/FC-391-04 decimator distribution = REFUTED (unbiased + non-grindable)** by a real keccak random-oracle argument over the winner population; the missing distribution oracle ROUTED as a test-hardening item (NOT a contract change). FC-389-05 STORAGE-half → 389; FC-392-11 backing/EV-dynamics half → 392. Subject byte-frozen throughout (`git diff a8b702a7 -- contracts/` empty). Deliverables `391-FINDINGS.md` + `391-02-CLAUDE-NET.md`.
