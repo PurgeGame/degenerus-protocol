@@ -24,7 +24,7 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 ///         rngWordByDay[day] stays unset, so advanceDue() remains true and the next advance proceeds.
 ///
 ///         The control-flow gate this guards (AdvanceModule subscriber stage):
-///           1. `_runSubscriberStage(day)` runs (weight-budgeted, SUB_STAGE_WEIGHT_BUDGET = 500).
+///           1. `_runSubscriberStage(day)` runs (weight-budgeted, SUB_STAGE_WEIGHT_BUDGET = 2500).
 ///           2. If `_subCursor < _subscribers.length` after the stage -> BREAK STAGE_SUBS_WORKING
 ///              (partial drain; rngGate / backfill do NOT run this tx).
 ///           3. When the cursor reaches the (shrinking) set end -> `subsFullyProcessed = true`; if a
@@ -142,13 +142,13 @@ contract V62GasBrickCompose is DeployProtocol {
     ///         weight): the saturated chunk and the backfill canNOT share a tx. It also proves the verdict
     ///         test is measuring the REAL worst composable case, not an over-sized artifact.
     function testV62_02BoundaryFullBudgetBreaksNoCompose() public {
-        // 600 evicting subs -> the first chunk evicts ~500 (budget) and BREAKS; the cursor does not reach
+        // 600 evicting subs -> the first chunk evicts ~357 (budget) and BREAKS; the cursor does not reach
         // the end, subsFullyProcessed stays false, rngGate/backfill do not run this tx.
         Result memory r = _seedAndMeasure(600, true);
         _logResult("boundary_600", r);
         assertGt(r.evicted, 0, "control: the over-budget chunk still evicted subs");
         // The defining control assertion: the gap backfill did NOT run in the same tx (stage broke).
-        assertEq(r.backfilled, 0, "CONTROL: a full-budget (>=500) evict chunk BREAKS -> NO backfill composes in that tx");
+        assertEq(r.backfilled, 0, "CONTROL: a full-budget (>=357) evict chunk BREAKS -> NO backfill composes in that tx");
         assertEq(r.subsFullyProcessed ? uint256(1) : uint256(0), 0, "CONTROL: subsFullyProcessed stayed false (stage broke, did not fall through)");
     }
 

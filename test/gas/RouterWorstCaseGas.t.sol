@@ -78,8 +78,8 @@ contract RouterWorstCaseGas is DeployProtocol {
     uint256 internal constant EFFECTIVE_GAS_CEILING = 16_700_000;
 
     /// @dev The funded-sub count this test seeds. The contract no longer chunks the STAGE by a flat count —
-    ///      it advances under a gas-weight budget (SUB_STAGE_WEIGHT_BUDGET; lootbox weight 1, ticket weight 8),
-    ///      so a full budget drains up to ~1000 lootbox subs in one advance. The binding all-ticket worst-case
+    ///      it advances under a gas-weight budget (SUB_STAGE_WEIGHT_BUDGET 2500; lootbox weight 10, ticket weight 21),
+    ///      so a full budget drains up to ~250 lootbox subs in one advance. The binding all-ticket worst-case
     ///      STAGE chunk is measured directly in V56AfkingGasMarginal; this suite bounds the router-entry path
     ///      over a funded lootbox set.
     uint256 internal constant SUB_STAGE_BATCH = 50;
