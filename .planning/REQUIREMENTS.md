@@ -4,7 +4,7 @@
 **Core Value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
 **Milestone goal:** Re-verify the VRF-freeze invariant across every RNG consumer and exhaustively sweep all cross-contract calls for any player-manipulable state between VRF request and consumption — confirm nothing is missing before C4A.
 **Method:** Cross-model council (Gemini + Codex) is the PRIMARY finder; Claude builds the foundation, adjudicates, and synthesizes. Every candidate finding is adversarially verified before it is recorded.
-**Subject:** post-rename HEAD (origin/main `bb0912a6`), byte-frozen at FOUNDATION.
+**Subject:** post-rename HEAD `42c8e9c6` (= origin/main `bb0912a6` + the additive CurseChanged indexer-parity emit, UNPUSHED), byte-frozen at FOUNDATION.
 **Seed hypotheses:** `.planning/v66-BLIND-SPOT-PANEL.md` (six-lens blind-spot panel — the convergent meta-finding is that the trusted RNG corpus is stale vs current code, so the consumer net must be re-derived FROM HEAD).
 **Posture:** Audit-only on a byte-frozen subject. No contract changes expected; any that surface go through the standard contract-commit approval gate. Test-only additions (RNGNET-MECH) commit autonomously.
 
