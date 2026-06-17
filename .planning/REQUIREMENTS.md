@@ -69,10 +69,10 @@ Requirements for this milestone. Each maps to exactly one roadmap phase.
 
 ### MECH — Close the Mechanical-Net Gaps (test-only)
 
-- [ ] **MECH-01**: A worst-case gas harness asserts every column transaction (advance composition, terminal finalization, max-batch mint) is < 16.7M, derived from the BRICK-04 worst-case branch (not typical seeds), wired so a regression that crosses the ceiling fails it.
-- [ ] **MECH-02**: A delegatecall storage-layout regression oracle pins the Game↔module slot alignment (a `forge inspect` layout snapshot + assertion) so any future layout drift that would silently corrupt is caught.
-- [ ] **MECH-03**: A state-invariant test (fuzz or targeted) asserts the BRICK liveness + CORRUPT solvency invariants across an advance / mint / gameover sequence — at minimum that `advanceGame` always progresses to settlement and `claimablePool == Σ` holds throughout.
-- [ ] **MECH-04**: Any specific brick / corruption mutant surfaced during COLMAP / BRICK / DELEGATE / CORRUPT (a revert made permanent, a slot mis-aligned) is captured as a regression that the current suite is shown blind to, then closed.
+- [x] **MECH-01** ✅ COVERED (424): A worst-case gas harness asserts every column transaction (advance composition, terminal finalization, max-batch mint) is < 16.7M, derived from the BRICK-04 worst-case branch (not typical seeds), wired so a regression that crosses the ceiling fails it.
+- [x] **MECH-02** ✅ PARTIAL+rec (424): A delegatecall storage-layout regression oracle pins the Game↔module slot alignment (a `forge inspect` layout snapshot + assertion) so any future layout drift that would silently corrupt is caught.
+- [x] **MECH-03** ✅ COVERED (424): A state-invariant test (fuzz or targeted) asserts the BRICK liveness + CORRUPT solvency invariants across an advance / mint / gameover sequence — at minimum that `advanceGame` always progresses to settlement and `claimablePool == Σ` holds throughout.
+- [x] **MECH-04** ✅ DONE (424): Any specific brick / corruption mutant surfaced during COLMAP / BRICK / DELEGATE / CORRUPT (a revert made permanent, a slot mis-aligned) is captured as a regression that the current suite is shown blind to, then closed.
 
 ### COUNCIL — Cross-Model Adjudication + Synthesis
 
