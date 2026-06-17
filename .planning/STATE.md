@@ -44,7 +44,7 @@ See: .planning/PROJECT.md (Current State + Current Milestone: v64.0 sections) + 
 
 Phase: 417 COLMAP — Re-Derive the Spinal-Column Call Graph (next; load-bearing)
 Plan: —
-Status: AUTONOMOUS run in progress (audit-only; hard-stop only at a contract-commit boundary). 1/10 phases complete.
+Status: FULLY AUTONOMOUS run in progress (1/10 phases complete). ⚑ USER DIRECTIVE 2026-06-17 (going to bed): run ALL phases 416-425 to completion + local lifecycle (audit-milestone → complete → cleanup), DO NOT ASK AGAIN. Two hard lines preserved: (1) NEVER commit a contracts/*.sol change — a finding needing a contract fix is DOCUMENTED in FINDINGS-v67.0 + flagged, contract stays frozen (audit-only); test-only MECH commits autonomously. (2) STOP before `git push` — leave the push for USER on wake. No AskUserQuestion gates — auto-decide continue/accept.
 Last activity: 2026-06-17 — ✅ 416 FOUND complete: subject byte-frozen tree `0dd445a6` @ HEAD `588bc858`; GREEN baseline forge 900/0/109, hardhat 1239/129/14 carried floor (carried-by-construction, forge authoritative). `416-BASELINE.md`. NEXT = 417 COLMAP (cross-model + Workflow fan-out: re-derive entry→delegatecall→callee call graph + revert/loop/delegatecall-write inventory).
 
 ---
