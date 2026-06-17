@@ -15,7 +15,7 @@ PRIOR_last_activity_400: v64.0 phase 400 SOLVENCY-CARRY-REDEMPTION COMPLETE (sub
 PRIOR_last_activity_399: v64.0 phase 399 REWARD-MECHANICS COMPLETE (342ea1c3; dual-net 0 HIGH/MED/LOW; RWD-A codex-unique BURNIE seed-emission ~7.87M INFO USER-confirmed by-design 39b2f344; RWD-B spins = Degenerette house edge by-design; RWD-01..06 attested). SEED-001 century streak-shield (+1/century cap 10, post-audit) captured 682b6afa.
 progress:
   total_phases: 10
-  completed_phases: 1
+  completed_phases: 2
   total_plans: 0
   completed_plans: 0
   percent: 100
@@ -42,10 +42,10 @@ See: .planning/PROJECT.md (Current State + Current Milestone: v64.0 sections) + 
 
 ## Current Position
 
-Phase: 417 COLMAP — Re-Derive the Spinal-Column Call Graph (next; load-bearing)
+Phase: 418 BRICK — Permanent-Brick / Liveness (DOMINANT; next)
 Plan: —
 Status: FULLY AUTONOMOUS run in progress (1/10 phases complete). ⚑ USER DIRECTIVE 2026-06-17 (going to bed): run ALL phases 416-425 to completion + local lifecycle (audit-milestone → complete → cleanup), DO NOT ASK AGAIN. Two hard lines preserved: (1) NEVER commit a contracts/*.sol change — a finding needing a contract fix is DOCUMENTED in FINDINGS-v67.0 + flagged, contract stays frozen (audit-only); test-only MECH commits autonomously. (2) STOP before `git push` — leave the push for USER on wake. No AskUserQuestion gates — auto-decide continue/accept.
-Last activity: 2026-06-17 — ✅ 416 FOUND complete: subject byte-frozen tree `0dd445a6` @ HEAD `588bc858`; GREEN baseline forge 900/0/109, hardhat 1239/129/14 carried floor (carried-by-construction, forge authoritative). `416-BASELINE.md`. NEXT = 417 COLMAP (cross-model + Workflow fan-out: re-derive entry→delegatecall→callee call graph + revert/loop/delegatecall-write inventory).
+Last activity: 2026-06-17 — ✅ 417 COLMAP complete (Workflow wf_7cad471d-472, 12 slices + synth; tree re-verified frozen): 322 fns · 393 reverts (58 perm-cand) · 81 loops (17 unbounded) · 192 DC-writes · 36 nested DC. `417-COLMAP.md` + 12 slice maps + per-phase hotspot handoff + 9 openQuestions. #1 BRICK lead = sDGNRS resolveRedemptionPeriod:756 uint96 underflow (fires every advance with a stamped pool → could wedge). NEXT = 418 BRICK (dominant): cross-model council (council.sh gemini+codex) + Claude NET-2 Workflow, seeded by the COLMAP brick handoff; adversarially verify the perm-revert candidates + unbounded-loop gas ceiling + the sDGNRS lead.
 
 ---
 _v66.0 CLOSED 2026-06-16: RNG-surface & cross-contract-call manipulability re-audit — 0 CATASTROPHE / 0 HIGH / 0 MEDIUM, 0 real findings; VRF-consumer net re-derived 13→72; archived + tagged `v66.0`; origin/main pushed. Below: v63.0 phase-outcome log + accumulated context (historical; retained across the milestone switch)._
