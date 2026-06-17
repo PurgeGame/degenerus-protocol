@@ -201,24 +201,26 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
     uint256 internal constant SUBSCRIBER_CAP = 1000;
 
     /// @dev Per-sub gas-weight of a LOOTBOX buy — the unit the ticket/evict weights are ratioed
-    ///      against. Measured ≈34k marginal; pinned at 2 (not 1) so ticket (≈73k → 4) and evict
-    ///      (≈18k → 1) land on integer ratios and every op costs ~18k per weight-unit, making the
-    ///      chunk gas composition-flat (`per-call overhead + budget × ~18k`, any mix).
-    uint256 internal constant SUB_STAGE_LOOTBOX_WEIGHT = 2;
+    ///      against. Measured ≈34k marginal → weight 10 (≈3.4k per weight-unit), giving enough
+    ///      granularity for ticket (≈73k → 22) and evict (≈27k → 8) to ratio on real marginal
+    ///      cost, so the chunk gas is composition-flat (`per-call overhead + budget × ~3.4k`).
+    uint256 internal constant SUB_STAGE_LOOTBOX_WEIGHT = 10;
 
     /// @dev Per-sub gas-weight of an in-stage sub-ending finalize (cancel-reclaim / pass-evict
-    ///      / funding-kill) relative to the lootbox-buy unit (weight 2). The finalize does a
-    ///      cross-contract quest read + streak write the call-free buy does not; measured ≈18k vs
-    ///      the ≈34k lootbox marginal → weight 1. The chunk ends on accumulated weight, bounding
-    ///      every mix under the advance-chain ceiling.
-    uint256 internal constant SUB_STAGE_EVICT_WEIGHT = 1;
+    ///      / funding-kill) relative to the lootbox-buy unit (weight 10). The pass-evict finalize
+    ///      does a cross-contract quest streak write + a swap-pop the call-free buy does not;
+    ///      measured ≈27k (on par with a ticket, well above the old ≈18k estimate) → weight 7.
+    ///      Weighting it on the TRUE marginal (not the cheaper call-free reclaim) keeps a saturated
+    ///      all-evict chunk on the same <10M target as any other mix, so the budget binds on real
+    ///      gas, not sub count.
+    uint256 internal constant SUB_STAGE_EVICT_WEIGHT = 7;
 
-    /// @dev Per-sub gas-weight of a TICKET buy relative to the lootbox-buy unit (weight 2). A
+    /// @dev Per-sub gas-weight of a TICKET buy relative to the lootbox-buy unit (weight 10). A
     ///      ticket queues a cold ticketQueue push + an owed-mapping SSTORE the lootbox stamp does
-    ///      not — measured ≈73k vs the ≈34k lootbox marginal → weight 4. Weighting the two buy
-    ///      modes by true marginal cost makes the chunk gas composition-flat (~18k per weight-unit
-    ///      either way), so the budget binds on real gas, not sub count.
-    uint256 internal constant SUB_STAGE_TICKET_WEIGHT = 4;
+    ///      not — measured ≈73k vs the ≈34k lootbox marginal → weight 21. Weighting the buy modes
+    ///      by true marginal cost makes the chunk gas composition-flat, so the budget binds on real
+    ///      gas, not sub count.
+    uint256 internal constant SUB_STAGE_TICKET_WEIGHT = 21;
 
     /// @dev Slot-0 quest completion reward — mirrors `DegenerusQuests.QUEST_SLOT0_REWARD`
     ///      (a private constant not visible cross-contract). Each delivered afking buy accrues

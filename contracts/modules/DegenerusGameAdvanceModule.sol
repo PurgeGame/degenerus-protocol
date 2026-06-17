@@ -140,20 +140,19 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
     uint96 private constant MIN_LINK_FOR_LOOTBOX_RNG = 40 ether;
     uint48 private constant MIDDAY_RNG_RETRY_TIMEOUT = 6 hours;
 
-    /// @dev Per-call afking process-STAGE gas-weight budget. Every day is uniform now: the
-    ///      streak is computed on read from the Sub slot (no per-buy `playerQuestStates`
-    ///      STATICCALL, no settle day), so there is a SINGLE budget. The STAGE consumes a
-    ///      gas-weight per iteration — buys are weighted by true marginal cost (a lootbox buy
-    ///      ≈34k = `SUB_STAGE_LOOTBOX_WEIGHT` (2), a ticket buy ≈73k = `SUB_STAGE_TICKET_WEIGHT`
-    ///      (4)), and a cross-contract sub-ending finalize (cancel-reclaim / pass-evict /
-    ///      funding-kill) ≈18k = `SUB_STAGE_EVICT_WEIGHT` (1) — and ends the chunk on accumulated
-    ///      weight, not raw count, so the worst-case chunk (any mix) stays under the 16.7M
-    ///      advance-chain ceiling while a normal chunk targets <10M. A large set drains across
-    ///      several advanceGame calls. Composition-flat at ~18k per weight-unit: chunk gas ≈
-    ///      `per-call overhead (≈83k) + budget × ~18k`. At 500 the worst chunk is ~9.2M (all-ticket
-    ///      ≈9.2M / all-lootbox ≈8.6M / all-evict ≈5.5M), comfortably under 10M with ~7.5M headroom
-    ///      to the 16.7M ceiling. A large set drains across several advanceGame calls.
-    uint256 private constant SUB_STAGE_WEIGHT_BUDGET = 500;
+    /// @dev Per-call afking process-STAGE gas-weight budget. Every day is uniform: the streak is
+    ///      computed on read from the Sub slot (no per-buy `playerQuestStates` STATICCALL, no
+    ///      settle day), so there is a SINGLE budget. The STAGE consumes a gas-weight per
+    ///      iteration — buys and finalizes are weighted by true marginal cost (a lootbox buy
+    ///      ≈34k = `SUB_STAGE_LOOTBOX_WEIGHT` (10), a ticket buy ≈73k = `SUB_STAGE_TICKET_WEIGHT`
+    ///      (21), a cross-contract sub-ending finalize / pass-evict / funding-kill ≈27k =
+    ///      `SUB_STAGE_EVICT_WEIGHT` (7)) — and ends the chunk on accumulated weight, not raw
+    ///      count, so EVERY composition (including a saturated all-evict swap-pop chunk) stays on
+    ///      the <10M target with deep headroom to the 16.7M advance-chain ceiling. The lootbox and
+    ///      ticket per-chunk counts are unchanged from the prior calibration; only the evict chunk
+    ///      shrinks (≈500 → ≈357 finalizes) so a saturated all-evict crank lands ≈9.5M, not ≈13.6M.
+    ///      A large set drains across several advanceGame calls.
+    uint256 private constant SUB_STAGE_WEIGHT_BUDGET = 2500;
 
     /// @notice DGNRS reward for top affiliate: 1% of remaining affiliate pool.
     uint16 private constant AFFILIATE_POOL_REWARD_BPS = 100;

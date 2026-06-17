@@ -12,7 +12,7 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 ///         intervening stage-break. The v60 decouple (AdvanceModule STAGE_GAP_BACKFILLED) breaks
 ///         AFTER rngGate -- it decouples the gap backfill from the DOWNSTREAM daily jackpot, not
 ///         from the UPSTREAM subscriber stage. So a single advanceGame() could run BOTH a saturated
-///         all-evict subscriber chunk (~13.3M cold, measured in V56AfkingGasMarginal::testResidualR1)
+///         all-evict subscriber chunk (~9.7M cold, measured in V56AfkingGasMarginal::testResidualR1)
 ///         AND the 120-day gap backfill (~7M) in one tx -- summing past EIP-7825's 16,777,216 per-tx
 ///         cap, permanently bricking advanceGame during stall recovery.
 ///
@@ -64,20 +64,20 @@ contract V62GasBrickCompose is DeployProtocol {
     ///      complete -> permanent advanceGame DoS / forced unrecoverable game-over (the brick).
     uint256 internal constant EIP7825_TX_GAS_CAP = 16_777_216;
 
-    /// @dev SUB_STAGE_WEIGHT_BUDGET (AdvanceModule:158): the per-chunk gas-weight budget. With
-    ///      SUB_STAGE_EVICT_WEIGHT = 1 the budget admits BUDGET/EVICT_WEIGHT = 500 evicts per chunk
-    ///      (the saturated all-evict chunk, the binding STAGE worst case ~13.3M cold per testResidualR1).
-    uint256 internal constant SUB_STAGE_WEIGHT_BUDGET = 500;
+    /// @dev SUB_STAGE_WEIGHT_BUDGET (AdvanceModule): the per-chunk gas-weight budget. With
+    ///      SUB_STAGE_EVICT_WEIGHT = 7 the budget admits BUDGET/EVICT_WEIGHT = 357 evicts per chunk
+    ///      (the saturated all-evict chunk, ~9.7M cold per test_AllEvictSaturatedChunk_LIVE_Measured).
+    uint256 internal constant SUB_STAGE_WEIGHT_BUDGET = 2500;
 
     /// @dev The all-evict set size for the composed chunk. CRITICAL STRUCTURAL CONSTRAINT: for the
     ///      chunk to FALL THROUGH to rngGate (the composition), the loop must exit via
     ///      `cursor >= _subscribers.length` (cursor reached end -> subsFullyProcessed) and NOT via
-    ///      `weight >= SUB_STAGE_WEIGHT_BUDGET`. An evict is weight 1, so a chunk that fully drains
-    ///      (falls through) carries < 500 weight; a chunk that hits 500 weight BREAKS (STAGE_SUBS_WORKING)
+    ///      `weight >= SUB_STAGE_WEIGHT_BUDGET`. An evict is weight 7, so a chunk that fully drains
+    ///      (falls through) carries < 2500 weight; a chunk that hits 2500 weight BREAKS (STAGE_SUBS_WORKING)
     ///      and never reaches the backfill in that tx. So the worst COMPOSABLE evict count is just under
-    ///      the budget. 497 evicting subs (+ the 2 deploy-exempt VAULT/SDGNRS skips = 499 weight) is the
-    ///      heaviest set that still fully drains in ONE chunk and falls through to the 120-day backfill.
-    uint256 internal constant EVICTING_SUBS = 497;
+    ///      the budget: 356 evicting subs × 7 + the 2 deploy-exempt VAULT/SDGNRS skips (weight 1 each) = 2494
+    ///      weight is the heaviest set that still fully drains in ONE chunk and falls through to the backfill.
+    uint256 internal constant EVICTING_SUBS = 356;
 
     /// @dev The VRF/keeper stall length (days). _backfillGapDays caps the backfill loop at 120 days;
     ///      120 is the binding worst case. Stalling > 120 days still backfills exactly 120 (the cap).
@@ -135,12 +135,12 @@ contract V62GasBrickCompose is DeployProtocol {
         assertTrue(r.ranSecondTx && r.tx2Backfilled > 100, "warm: the backfill still runs in the separate follow-up tx");
     }
 
-    /// @notice CONTROL: the BOUNDARY. With a FULL-budget evicting set (>= 500 evicts) the chunk hits the
-    ///         SUB_STAGE_WEIGHT_BUDGET (500) BEFORE the cursor reaches the set end, so the stage BREAKS
+    /// @notice CONTROL: the BOUNDARY. With a FULL-budget evicting set (>= 357 evicts) the chunk hits the
+    ///         SUB_STAGE_WEIGHT_BUDGET (2500) BEFORE the cursor reaches the set end, so the stage BREAKS
     ///         (STAGE_SUBS_WORKING) and the gap backfill does NOT run in that tx — there is no
-    ///         composition. This proves the composition is bounded to the fall-through chunk (< 500
-    ///         weight): the saturated 500-weight chunk and the backfill canNOT share a tx. It also proves
-    ///         the verdict test is measuring the REAL worst composable case, not an over-sized artifact.
+    ///         composition. This proves the composition is bounded to the fall-through chunk (< 2500
+    ///         weight): the saturated chunk and the backfill canNOT share a tx. It also proves the verdict
+    ///         test is measuring the REAL worst composable case, not an over-sized artifact.
     function testV62_02BoundaryFullBudgetBreaksNoCompose() public {
         // 600 evicting subs -> the first chunk evicts ~500 (budget) and BREAKS; the cursor does not reach
         // the end, subsFullyProcessed stays false, rngGate/backfill do not run this tx.

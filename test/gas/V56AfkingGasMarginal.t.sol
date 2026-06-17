@@ -122,24 +122,25 @@ contract V56AfkingGasMarginal is DeployProtocol {
     /// @dev SUB_STAGE_WEIGHT_BUDGET (DegenerusGameAdvanceModule.sol:158): the per-call STAGE gas-weight budget.
     ///      Buys are weighted by true marginal cost (lootbox = SUB_STAGE_LOOTBOX_WEIGHT, ticket =
     ///      SUB_STAGE_TICKET_WEIGHT, evict = SUB_STAGE_EVICT_WEIGHT); a chunk ends when accumulated weight
-    ///      reaches the budget. At ~18k cold gas per weight-unit (composition-flat), a budget of 500 caps the
-    ///      worst chunk at ~9.2M (all-ticket) — under the 10M target, far under the 16.7M ceiling.
-    uint256 internal constant SUB_STAGE_WEIGHT_BUDGET = 500;
+    ///      reaches the budget. Weights ratio on true cold marginals (~3.4k per weight-unit), so a budget of
+    ///      2500 caps the worst chunk (any mix, incl. a saturated all-evict crank) near the <10M target, far
+    ///      under the 16.7M ceiling. Mirror of the contract constant — keep in sync.
+    uint256 internal constant SUB_STAGE_WEIGHT_BUDGET = 2500;
 
-    /// @dev SUB_STAGE_LOOTBOX_WEIGHT (GameAfkingModule.sol:193): the lootbox-buy gas-weight unit (≈34k cold
-    ///      marginal, per the large-scale bench). Pinned at 2 (not 1) so ticket (≈73k → 4) and evict (≈18k → 1)
-    ///      land on integer ratios and every op costs ~18k per weight-unit (chunk gas composition-flat).
-    uint256 internal constant SUB_STAGE_LOOTBOX_WEIGHT = 2;
+    /// @dev SUB_STAGE_LOOTBOX_WEIGHT (GameAfkingModule.sol): the lootbox-buy gas-weight unit (≈34k cold marginal)
+    ///      → weight 10, giving the granularity for ticket (≈73k → 21) and evict (≈27k → 7) to ratio on real
+    ///      marginal cost. Mirror of the contract constant — keep in sync.
+    uint256 internal constant SUB_STAGE_LOOTBOX_WEIGHT = 10;
 
-    /// @dev SUB_STAGE_EVICT_WEIGHT (GameAfkingModule.sol:200): the gas-weight of an in-stage sub-ending finalize
-    ///      (pass-evict / funding-kill / cancel-reclaim) — a cross-contract quest read + streak write, ≈18k cold
-    ///      vs the ≈34k lootbox marginal → weight 1 (half a lootbox unit).
-    uint256 internal constant SUB_STAGE_EVICT_WEIGHT = 1;
+    /// @dev SUB_STAGE_EVICT_WEIGHT (GameAfkingModule.sol): the gas-weight of an in-stage sub-ending finalize
+    ///      (pass-evict / funding-kill / cancel-reclaim) — a cross-contract quest streak write + swap-pop,
+    ///      measured ≈27k cold (on par with a ticket) → weight 7. Mirror of the contract constant — keep in sync.
+    uint256 internal constant SUB_STAGE_EVICT_WEIGHT = 7;
 
-    /// @dev SUB_STAGE_TICKET_WEIGHT (GameAfkingModule.sol:207): a ticket buy's gas-weight vs the lootbox unit —
-    ///      the cold ticketQueue push + owed-mapping SSTORE make it ≈73k vs ≈34k → weight 4. A budget-B chunk
-    ///      holds B/SUB_STAGE_TICKET_WEIGHT tickets (the binding all-ticket worst case).
-    uint256 internal constant SUB_STAGE_TICKET_WEIGHT = 4;
+    /// @dev SUB_STAGE_TICKET_WEIGHT (GameAfkingModule.sol): a ticket buy's gas-weight vs the lootbox unit — the
+    ///      cold ticketQueue push + owed-mapping SSTORE make it ≈73k → weight 21. A budget-B chunk holds
+    ///      B/SUB_STAGE_TICKET_WEIGHT tickets. Mirror of the contract constant — keep in sync.
+    uint256 internal constant SUB_STAGE_TICKET_WEIGHT = 21;
 
     /// @dev OPEN_BATCH (GameAfkingModule.sol:246): the flat per-box open-chunk budget; each afking box uniform
     ///      O(1) (~74k worst box) so 80 boxes ≈ 9.15M, under the 10M comfort target and far under 16.7M.
@@ -465,7 +466,7 @@ contract V56AfkingGasMarginal is DeployProtocol {
         // the three heavy legs each get their own tx: advance N = the STAGE chunk, advance N+1 = the gap
         // backfill alone, advance N+2 = the deferred daily jackpot. None of the three ever share a tx, so each
         // stays under the per-tx ceiling regardless of how heavy the STAGE chunk is (the V62-02 close — an
-        // all-evict ~13.3M chunk + a ~7M backfill would otherwise compose to ~20M > 16,777,216 and brick).
+        // all-evict ~9.7M chunk + a ~7M backfill would still compose to ~17M > 16,777,216 and brick).
         address[] memory subs = _setupFundedSubs(N_HI, "gr_", 5 ether, false);
 
         // Reconstruct the proof's reachable worst-case resume state (test-only direct-storage injection, the
@@ -586,14 +587,13 @@ contract V56AfkingGasMarginal is DeployProtocol {
     // (g) D-06 residual R1 — STAGE weight-model fidelity (level-cross / gap-resume per-iter <= weight)
     // =========================================================================
 
-    /// @notice Residual R1 (the proof's residual list): the all-evict SATURATED STAGE chunk is the BINDING
-    ///         advance-chain worst case — the theoretical-max pass showed it is HEAVIER than all-ticket (~9.6M).
-    ///         The in-stage finalize (a DegenerusQuests read + finalizeAfking write + _removeFromSet swap-pop) is
-    ///         weighted SUB_STAGE_EVICT_WEIGHT=1, so the budget admits BUDGET/EVICT_WEIGHT = 500 evicts/chunk.
-    ///         This measures the per-evict marginal COLD (vm.cool first-touch — the realistic regime, ~26.7k) and
-    ///         asserts the saturated all-evict chunk (~13.3M) stays under the 16.7M hard ceiling. It runs OVER the
-    ///         10M soft comfort target (USER-accepted: 13M is fine, evict stays weight 1) but UNDER the hard
-    ///         never-exceed ceiling. Measuring cold (not the warm same-tx ~5M) proves the REAL binding chunk.
+    /// @notice Residual R1 (the proof's residual list): the all-evict SATURATED STAGE chunk, projected from the
+    ///         live cold per-evict marginal as a cross-check on the direct LIVE measurement
+    ///         (test_AllEvictSaturatedChunk_LIVE_Measured). The in-stage finalize (a DegenerusQuests read +
+    ///         finalizeAfking write + _removeFromSet swap-pop) is weighted SUB_STAGE_EVICT_WEIGHT=7, so the budget
+    ///         admits BUDGET/EVICT_WEIGHT = 357 evicts/chunk. This measures the per-evict marginal COLD (vm.cool
+    ///         first-touch — the realistic regime, ~27k) and asserts the saturated all-evict chunk (~9.8M) stays
+    ///         on the <10M soft target. Measuring cold (not the warm same-tx ~5M) proves the REAL binding chunk.
     function testResidualR1StageWeightModelFidelity() public {
         uint256 snap = vm.snapshotState();
 
@@ -619,18 +619,18 @@ contract V56AfkingGasMarginal is DeployProtocol {
         emit log_named_uint("r1_per_buy_marginal_gas", perBuy);
         emit log_named_uint("r1_evict_weight_budget_units", SUB_STAGE_EVICT_WEIGHT);
 
-        // R1: the all-evict SATURATED STAGE chunk is the BINDING advance-chain worst case — heavier than
-        // all-ticket (~9.6M). With evict weight 1 the budget admits BUDGET/EVICT_WEIGHT = 500 evicts; at the
-        // realistic COLD per-evict (~26.7k, the cross-contract finalize + _removeFromSet swap-pop) the chunk is
-        // ~13.3M: OVER the 10M soft comfort target but UNDER the 16.7M hard never-exceed ceiling (USER-accepted —
-        // 13M is fine, evict stays weight 1). Asserting the COLD measurement proves the REAL binding chunk, not
-        // the warm same-tx understatement (~5M). Chunk = cold advance overhead + (BUDGET/EVICT_WEIGHT)×coldPerEvict.
-        uint256 evictsPerChunk = SUB_STAGE_WEIGHT_BUDGET / SUB_STAGE_EVICT_WEIGHT; // 500 evicts fill the budget
+        // R1: the all-evict SATURATED STAGE chunk, analytically projected from the live cold per-evict marginal.
+        // With evict weight 7 the budget admits BUDGET/EVICT_WEIGHT = 357 evicts; at the realistic COLD per-evict
+        // (~27k, the cross-contract finalize + _removeFromSet swap-pop) the chunk is ~9.8M — on the <10M soft
+        // target with deep headroom to the 16.7M ceiling. Asserting the COLD projection cross-checks the
+        // direct LIVE measurement in test_AllEvictSaturatedChunk_LIVE_Measured (~9.7M; the two agree). Chunk =
+        // cold advance overhead + (BUDGET/EVICT_WEIGHT)×coldPerEvict.
+        uint256 evictsPerChunk = SUB_STAGE_WEIGHT_BUDGET / SUB_STAGE_EVICT_WEIGHT; // 357 evicts fill the budget
         uint256 fixedEvictOverhead = coldEvN > coldPerEvict * N_HI ? coldEvN - coldPerEvict * N_HI : 0;
         uint256 allEvictChunk = fixedEvictOverhead + evictsPerChunk * coldPerEvict;
         emit log_named_uint("r1_evicts_per_budget_chunk", evictsPerChunk);
         emit log_named_uint("r1_cold_all_evict_saturated_chunk_gas", allEvictChunk);
-        assertLt(allEvictChunk, EFFECTIVE_GAS_CEILING, "R1: the COLD all-evict saturated chunk (the binding STAGE worst case, ~13.3M) stays < the 16.7M ceiling");
+        assertLt(allEvictChunk, 10_500_000, "R1: the COLD all-evict saturated chunk (~9.8M, post-reweight) stays on the <10M target");
         // R1: the per-evict finalize is a bounded O(1) cross-contract op (no scaling with player magnitude), so
         // the chunk bound holds at any reachable per-iter state.
         assertLt(coldPerEvict, 400_000, "R1: the per-evict finalize is a bounded O(1) op");
@@ -1638,6 +1638,20 @@ contract V56AfkingGasMarginal is DeployProtocol {
         advGas = gasBefore - gasleft();
 
         require(_subscriberCount() < preCount, "cold evict non-vacuity: the stage evicted subs");
+    }
+
+    /// @dev LIVE binding-stage worst case: a saturated all-evict crank measured cold through the REAL advanceGame
+    ///      STAGE loop (not the analytic projection). Builds more evicting subs than one chunk admits, so the
+    ///      contract's weight budget caps the chunk at SUB_STAGE_WEIGHT_BUDGET / SUB_STAGE_EVICT_WEIGHT finalizes;
+    ///      the measured single-tx gas is the true binding worst case. Asserts the <10M target and the EIP-7825 cap.
+    function test_AllEvictSaturatedChunk_LIVE_Measured() public {
+        uint256 capEvicts = SUB_STAGE_WEIGHT_BUDGET / SUB_STAGE_EVICT_WEIGHT;
+        uint256 chunkGas = _measureEvictStageGasCold(capEvicts + 5, "liveAllEv_");
+        emit log_named_uint("live_all_evict_saturated_chunk_gas", chunkGas);
+        emit log_named_uint("live_all_evict_evicts_per_chunk_cap", capEvicts);
+        emit log_named_uint("live_all_evict_headroom_to_16p7M_gas", EIP7825_TX_GAS_CAP - chunkGas);
+        assertLt(chunkGas, EIP7825_TX_GAS_CAP, "LIVE: the saturated all-evict chunk is strictly < the 16.7M EIP-7825 cap");
+        assertLt(chunkGas, 10_500_000, "LIVE: the saturated all-evict chunk lands on the <10M target");
     }
 
 }

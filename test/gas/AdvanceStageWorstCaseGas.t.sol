@@ -410,8 +410,10 @@ contract AdvanceStageWorstCaseGas is Test {
         tb.processTicketBatch(TARGET_LVL);
         uint256 ticketGas = gT0 - gasleft();
 
-        // Referenced from V56AfkingGasMarginal (measured cold there, re-run to refresh):
-        uint256 allEvictStageGas = 13_603_709; // testResidualR1... cold all-evict saturated chunk
+        // Referenced from V56AfkingGasMarginal (measured cold there): after the subscriber-STAGE reweight
+        // (SUB_STAGE_EVICT_WEIGHT 1→7, BUDGET 500→2500) the saturated all-evict chunk dropped 13.6M→~9.7M, so
+        // it is no longer the binding stage — the warm full-budget ticket-batch resume (measured live here) is.
+        uint256 allEvictStageGas = 9_712_869;  // test_AllEvictSaturatedChunk_LIVE_Measured cold all-evict chunk
         uint256 gapBackfillGas = 7_308_134;    // testGapResume... gap-backfill advance N (separate tx)
 
         emit log_named_uint("STAGE_2_all_evict_subscriber_chunk_cold_gas_referenced", allEvictStageGas);
@@ -419,7 +421,7 @@ contract AdvanceStageWorstCaseGas is Test {
         emit log_named_uint("STAGE_8_11_12_jackpot_305_gas_measured", jackpotGas);
         emit log_named_uint("STAGE_0_1_5_6_7_ticket_batch_chunk_gas_measured", ticketGas);
 
-        // The binding stage is the all-evict subscriber STAGE (2): the heaviest single advanceGame tx.
+        // The binding stage is the heaviest single advanceGame tx across all stages.
         uint256 binding = allEvictStageGas;
         if (gapBackfillGas > binding) binding = gapBackfillGas;
         if (jackpotGas > binding) binding = jackpotGas;
@@ -427,20 +429,13 @@ contract AdvanceStageWorstCaseGas is Test {
         emit log_named_uint("BINDING_STAGE_gas", binding);
         emit log_named_uint("TIGHTEST_HEADROOM_to_16p7M_gas", EIP7825_TX_GAS_CAP - binding);
 
-        // LOAD-BEARING safety check: no advanceGame stage reaches the EIP-7825 tx cap. This is the
-        // real correctness assertion and it depends only on numbers THIS file measures live
-        // (jackpotGas, ticketGas) plus the referenced subscriber/gap-backfill magnitudes.
+        // LOAD-BEARING safety check: no advanceGame stage reaches the EIP-7825 tx cap. This is the real
+        // correctness assertion — it depends on the two stages measured live here (jackpotGas, ticketGas)
+        // plus the referenced subscriber/gap-backfill magnitudes.
         assertLt(binding, EIP7825_TX_GAS_CAP, "no advanceGame stage reaches the 16,777,216 EIP-7825 cap");
-        // The two stages measured live in THIS file (jackpot ~7.5M, ticket batch) are each well
-        // below the referenced subscriber STAGE (2) magnitude — so the binding stage is the
-        // subscriber STAGE, not the jackpot. Asserted as a documented UPPER BOUND on the live
-        // stages rather than an exact `assertEq` to the cross-harness constant `allEvictStageGas`
-        // (13_603_709, copied from V56AfkingGasMarginal and NOT re-measured here): an exact equality
-        // would flip to a stale fiction the moment that constant drifts (compiler/refactor) or the
-        // measured live stages crossed it. The PRECISE binding-stage gas is (re-)measured by the
-        // Phase 384 end-to-end advanceGame harness, which supersedes this single-file probe.
-        assertLe(jackpotGas, allEvictStageGas, "live 305-winner jackpot stays within the referenced subscriber STAGE (2) magnitude (precise re-measure: Phase 384 e2e harness)");
-        assertLe(ticketGas, allEvictStageGas, "live ticket-batch chunk stays within the referenced subscriber STAGE (2) magnitude (precise re-measure: Phase 384 e2e harness)");
-        assertLt(jackpotGas, allEvictStageGas, "the 305-winner jackpot (~7.5M) is well below the binding subscriber STAGE (~13.6M)");
+        // Every advanceGame stage sits on the <10M soft target. The binding (heaviest) stage is the warm
+        // ticket-batch resume (~9.9M); the saturated all-evict subscriber chunk (~9.7M) sits just under it.
+        assertLt(binding, 10_500_000, "every advanceGame stage stays on the <10M soft target");
+        assertLt(jackpotGas, binding, "the 305-winner jackpot (~7.1M) is below the binding ticket-batch stage");
     }
 }
