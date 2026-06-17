@@ -76,9 +76,9 @@ Requirements for this milestone. Each maps to exactly one roadmap phase.
 
 ### COUNCIL — Cross-Model Adjudication + Synthesis
 
-- [ ] **COUNCIL-01**: The cross-model council (Gemini + Codex) runs as the primary finder over every COLMAP / BRICK / DELEGATE / CORRUPT / MIDRNG / GAMEOVER / VRFSWAP surface, seeded with the column map and the brick / corruption hypotheses.
-- [ ] **COUNCIL-02**: Every candidate finding is adversarially verified (independent refutation; majority-refute kills it) before it is recorded as confirmed.
-- [ ] **COUNCIL-03**: A canonical `audit/FINDINGS-v67.0.md` (+ HTML report) records confirmed findings, refutations, and by-design dispositions; any contract fix routes through the contract-commit approval gate; the milestone closure signal `MILESTONE_V67_AT_HEAD_<sha>` is recorded.
+- [x] **COUNCIL-01** ✅ DONE (425): The cross-model council (Gemini + Codex) runs as the primary finder over every COLMAP / BRICK / DELEGATE / CORRUPT / MIDRNG / GAMEOVER / VRFSWAP surface, seeded with the column map and the brick / corruption hypotheses.
+- [x] **COUNCIL-02** ✅ DONE (425): Every candidate finding is adversarially verified (independent refutation; majority-refute kills it) before it is recorded as confirmed.
+- [x] **COUNCIL-03** ✅ DONE (425): A canonical `audit/FINDINGS-v67.0.md` (+ HTML report) records confirmed findings, refutations, and by-design dispositions; any contract fix routes through the contract-commit approval gate; the milestone closure signal `MILESTONE_V67_AT_HEAD_<sha>` is recorded.
 
 ## v2 Requirements
 
