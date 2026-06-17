@@ -51,9 +51,9 @@ Requirements for this milestone. Each maps to exactly one roadmap phase.
 
 ### MIDRNG — Mid-Day RNG Edge Cases
 
-- [ ] **MIDRNG-01**: The mid-day lootbox RNG swap / retry path (the stalled-RNG retry + mid-day swap commit) cannot brick or corrupt — a mid-day request that stalls can always be retried / resolved, and the retry cannot bind a box / ticket to the wrong (in-flight) word or strand the index.
-- [ ] **MIDRNG-02**: The mid-day partial-drain read slot (a partially-drained queue whose read slot still holds queued tickets) is proven consistent — a mid-day partial advance leaves the queue / index in a state the next advance resumes correctly, with no double-drain or skipped ticket.
-- [ ] **MIDRNG-03**: Mid-day word binding — boxes / tickets / bets placed mid-day after a request bind to the live index / day, not the in-flight word, across gap-backfill and retry interleavings (the `RngIndexDrainBinding` concern, exercised on the column).
+- [x] **MIDRNG-01** ✅ HOLDS+LOW (421): The mid-day lootbox RNG swap / retry path (the stalled-RNG retry + mid-day swap commit) cannot brick or corrupt — a mid-day request that stalls can always be retried / resolved, and the retry cannot bind a box / ticket to the wrong (in-flight) word or strand the index.
+- [x] **MIDRNG-02** ✅ FOUND+FIXED `73eb242a` (421): The mid-day partial-drain read slot (a partially-drained queue whose read slot still holds queued tickets) is proven consistent — a mid-day partial advance leaves the queue / index in a state the next advance resumes correctly, with no double-drain or skipped ticket.
+- [x] **MIDRNG-03** ✅ HOLDS (421): Mid-day word binding — boxes / tickets / bets placed mid-day after a request bind to the live index / day, not the in-flight word, across gap-backfill and retry interleavings (the `RngIndexDrainBinding` concern, exercised on the column).
 
 ### GAMEOVER — Terminal-Branch Liveness
 

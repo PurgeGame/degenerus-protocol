@@ -4,13 +4,15 @@
 **Subject:** frozen `contracts/` tree `4a67209a` @ HEAD `0bb7deca` (clean).
 **Method:** cross-model council (Gemini 3 Pro + Codex) = NET-1 · Claude NET-2 (3 break-attempt verifiers + adversarial refute + completeness critic; **2 verifiers built+ran forge probes**) · orchestrator crux. Honest admin/governance assumed (rotation/keeper liveness IN scope).
 
-## Verdict: 0 CAT / 0 HIGH / **1 MEDIUM cluster (2 MED + 2 LOW, interrelated)** — CONTRACT FIX PENDING USER DECISION
+## Verdict: 0 CAT / 0 HIGH / 1 MEDIUM (MIDRNG-02) **FOUND + FIXED** `73eb242a` · 1 MED (MIDRNG-CRIT) by-design-acceptable · 2 LOW
+
+**Update 2026-06-17:** USER reviewed the cluster and approved **fix A only** (MIDRNG-02). Shipped `73eb242a` (subject re-frozen tree `4970ba5b`). MIDRNG-CRIT (B) ruled **acceptable as-is** by USER (a VRF stall that pauses until the word arrives or the permissionless `retryLootboxRng` re-fires is fine — recoverable, same class as a daily stall; the timeout-gated auto-takeover was a nice-to-have, declined). MIDRNG-01 + `:1843`-rebind (LOW) — `:1843` `==0` guard is optional hardening, mostly mooted now that A is fixed (the stuck-latch trigger is gone) → surfaced at 425 for final disposition.
 
 The mid-day RNG **word-binding and partial-drain DATA plane are sound** (no double-drain, no skipped ticket/box, no outcome-shifting rebind in the base case — MIDRNG-03 HOLDS, MIDRNG-01 data-plane HOLDS). But NET-2's adversarial probes (which the external council MISSED — both gemini+codex REFUTED MIDRNG-02) surfaced a real **mid-day CONTROL-plane cluster** on the heartbeat spine, centered on the cross-day-boundary interleaving of a stalled mid-day **ticket** request. This was **already known-open**: the skipped test `test_midDayRequest_doesNotBlockDaily` (`test/fuzz/VRFCore.t.sol:419`, `vm.skip(true)`, `DEF-380-04-FC1`) documents this exact divergence and **explicitly deferred it to this council sweep**.
 
 ## Findings
 
-### MIDRNG-02 — `LR_MID_DAY` latch leak across the day boundary — **MEDIUM** (confirmed by 2 independent forge probes)
+### MIDRNG-02 — `LR_MID_DAY` latch leak across the day boundary — **MEDIUM · FOUND + FIXED `73eb242a`**
 `LR_MID_DAY` has exactly ONE setter (`AdvanceModule:1131`, in `requestLootboxRng`'s ticket-swap block) and ONE clearer (`:241`, inside the same-day `if (day == dIdx)` mid-day block). If a mid-day ticket request's read-slot drain instead completes on the **new-day daily-drain gate** (`:274-300`, which sets `ticketsFullyProcessed=true` at `:299` but has **no** `LR_MID_DAY` clear), `LR_MID_DAY` stays `1` forever → `requestLootboxRng` permanently reverts at `:1082` → the mid-day lootbox fast-path is **permanently disabled** for the rest of the game (self-deadlock: the clearer needs the mid-day block, which needs `requestLootboxRng`, which the stuck flag blocks). **Reachable in honest flow** (no adversary): just requires no `advanceGame` between the mid-day VRF fulfillment and the day boundary — a normal keeper-timing race. NOT a brick / NOT a fund loss (boxes still resolve via the daily advance one cycle later), hence MEDIUM. Both the NET-2 verifier and its independent refuter reproduced it with forge probes (`LR_MID_DAY` stuck at 1 across 16+ days; `requestLootboxRng` reverts).
 
 ### MIDRNG-CRIT — ticket-stall-cross-day loses the daily 12h self-heal — **MEDIUM** (recoverable, but the automatic fallback is structurally bypassed)
