@@ -44,7 +44,7 @@
 set -uo pipefail
 cd /home/zak/Dev/PurgeGame/degenerus-audit
 
-ORACLE_CONTRACTS='^(RedemptionAccounting|RedemptionStethFallback|StakedStonkRedemption|EthSolvencyInvariant|PoolConservation|StorageFoundationTest|V61Pack|PrecisionBoundaryTest|BurnieEmissionSeeds|CoinflipCarryClaim|DecimatorOffsetIsolationTest|RngWindowFreeze)$'
+ORACLE_CONTRACTS='^(RedemptionAccounting|RedemptionStethFallback|StakedStonkRedemption|EthSolvencyInvariant|PoolConservation|StorageFoundationTest|V61Pack|PrecisionBoundaryTest|FlipEmissionSeeds|CoinflipCarryClaim|DecimatorOffsetIsolationTest|RngWindowFreeze)$'
 
 exec forge test \
   --no-match-contract VRFPath \
