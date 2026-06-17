@@ -1,0 +1,50 @@
+{
+  "findings": [
+    {
+      "lead": "L1",
+      "verdict": "REFUTED",
+      "severity": "NA",
+      "reachable": false,
+      "trigger": "",
+      "reasoning": "The telescoping sum logic in `sDGNRS.sol` exactly mirrors the deduction in `resolveRedemptionPeriod`. The sum of `maxIncrement` across all day's claims equals `(finalBaseWei * 175) / 100`. The subtraction in `resolveRedemptionPeriod` (`segregatedMax`) matches this precisely. `rolledEth` is strictly bounded by `MAX_ROLL` (175%), ensuring `- segregatedMax + rolledEth` operates safely without underflow. Furthermore, division by 100 perfectly divides the 1e9-aligned base values without leaving truncation dust."
+    },
+    {
+      "lead": "L2",
+      "verdict": "REFUTED",
+      "severity": "NA",
+      "reachable": false,
+      "trigger": "",
+      "reasoning": "`_backfillGapDays` is explicitly capped at 120 iterations (AdvanceModule:1865). `_backfillOrphanedLootboxIndices` only creates orphans upon admin VRF config rotation, keeping loop iterations near zero under honest governance. `runBafJackpot` iterates over a statically sized array of max 107 candidates (Jackpots:260). `resolveRedemptionLootbox` chunks 5 ETH, maxing out at ~28 chunks since `MAX_DAILY_REDEMPTION_EV` is 160 ETH. Finally, the `handleGameOverDrain` deity refund loop is strictly bounded by `DEITY_PASS_MAX_TOTAL` (32 iterations)."
+    },
+    {
+      "lead": "L3",
+      "verdict": "REFUTED",
+      "severity": "NA",
+      "reachable": false,
+      "trigger": "",
+      "reasoning": "The game-over finalization sequence enforces clean retries. If `handleGameOverDrain` or `handleFinalSweep` encounters a transfer failure or an unexpected sink revert, the entire transaction reverts, safely rolling back state latches like `gameOver` and `GO_SWEPT_MASK`. The sinks (`sDGNRS.burnAtGameOver`, `charityGameOver.burnAtGameOver`) perform simple O(1) balance clears with no external failure vectors, ensuring no permanent brick is possible."
+    },
+    {
+      "lead": "L4",
+      "verdict": "REAL",
+      "severity": "CATASTROPHE",
+      "reachable": true,
+      "trigger": "1. Game is in `lastPurchaseDay` (or `jackpotPhaseFlag`). 2. A daily VRF request is locked (`rngRequestTime != 0`). 3. Users queue tickets (`ticketsFullyProcessed = false`). 4. VRF stalls across a wall-clock day boundary (`day > dailyIdx`). 5. Keeper calls `advanceGame`.",
+      "reasoning": "If VRF stalls across a day boundary with pending tickets, `advanceGame` enters the `!ticketsFullyProcessed` multi-day gate. It sees an unfulfilled `lootboxRngWordByIndex[preIdx] == 0` and `rngWordCurrent == 0`, unconditionally reverting with `RngNotReady()` (AdvanceModule:289). This revert aborts the transaction before reaching `rngGate`, making the 12-hour timeout retry permanently unreachable. Simultaneously, `_livenessTriggered` forces `false` because `lastPurchaseDay` is true (Storage:1465), permanently blocking the 14-day liveness bailout. The game is permanently deadlocked."
+    },
+    {
+      "lead": "L5",
+      "verdict": "REFUTED",
+      "severity": "NA",
+      "reachable": false,
+      "trigger": "",
+      "reasoning": "Post-liveness, pending Degenerette bets and unrolled lootboxes are deliberately bypassed rather than individually resolved. Their associated ETH remains in `totalFunds` but is not credited to `claimablePool`. `handleGameOverDrain` automatically captures this value via `preRefundAvailable = totalFunds - claimablePool` and redistributes it cleanly to the terminal jackpot winners. No finalization state is stranded."
+    },
+    {
+      "lead": "L6",
+      "verdict": "REAL",
+      "severity": "CATASTROPHE",
+      "reachable": true,
+      "trigger": "Identical to L4. The pre-RNG `RngNotReady` gate inside `advanceGame` reverts the entire transaction, rendering the 12-hour retry unreachable.",
+      "reasoning": "The 12-hour VRF retry logic exists exclusively inside `rngGate`. When a VRF stall crosses a day boundary and tickets are pending, the `advanceGame` state machine checks `rngWordCurrent` inside the `!ticketsFullyProcessed` gate (AdvanceModule:289) and reverts with `RngNotReady()` before execution can reach `rngGate`. The stalled request can never be retried, making the VRF word permanently unobtainable."
+    }
