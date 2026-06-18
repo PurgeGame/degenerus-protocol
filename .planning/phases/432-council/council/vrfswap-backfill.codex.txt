@@ -1,0 +1,21 @@
+All citations are for `0bb7deca:contracts`.
+
+**Verdicts**
+- **VRFSWAP-01: REAL, HIGH, reachable.** A stale `LR_MID_DAY` can survive after a mid-day word is fulfilled but its ticket drain is completed on the next-day path. The only clear is the same-day branch at `contracts/modules/DegenerusGameAdvanceModule.sol:239-241`; the next-day pre-RNG drain sets `ticketsFullyProcessed = true` without clearing it at `:273-299`. `_unlockRng` clears daily VRF fields but not `LR_MID_DAY` at `:1796-1801`. A later rotation sees `LR_MID_DAY != 0` first at `:1768-1772`, reissues a bogus mid-day request, and the callback overwrites `lootboxRngWordByIndex[index]` unconditionally at `:1840-1844`.
+
+- **VRFSWAP-02: REAL, HIGH, reachable.** Trigger: `requestLootboxRng()` with a ticket-buffer swap sets `LR_MID_DAY=1` at `:1124-1132`, VRF fulfills and writes the reserved index at `:1840-1846`, no same-day drain happens, then next-day `advanceGame()` drains tickets via `:273-299`. The reserved index was already committed, but `LR_MID_DAY` remains set. Rotation after that can corrupt the old index binding. This violates “rotation at any point” and “correct index binds the word.”
+
+- **VRFSWAP-03: REAL for post-rotation intended-index binding, HIGH; REFUTED for stale sender/requestId writes.** Stale old coordinators are rejected by `msg.sender != address(vrfCoordinator)` at `:1831`, and stale request IDs silently return at `:1832`; that part is safe. The unsafe part is that a valid post-rotation coordinator can fulfill the bogus stale-`LR_MID_DAY` reissue and overwrite the wrong lootbox index at `:1842-1844`.
+
+**Hotspots**
+- **Slot 5 co-residence: REFUTED, INFO, reachable corruption not found.** `totalFlipReversals` and `lastVrfProcessedTimestamp` are typed packed fields at `contracts/storage/DegenerusGameStorage.sol:395-405`; `reverseFlip()` writes only `uint64(newCount)` at `contracts/DegenerusGame.sol:1819-1827`; `_applyDailyRng()` consumes/reset nudges and writes the timestamp through typed fields at `contracts/modules/DegenerusGameAdvanceModule.sol:1914-1925`. Rotation intentionally does not reset nudges at `:1785-1788`; that is consistent for the first post-swap daily word.
+
+- **`_gameOverEntropy`: REFUTED, INFO for nudge double-count/strand.** The fallback pre-subtracts `totalFlipReversals` before `_applyDailyRng()` re-adds and consumes them at `:1326-1337` and `:1914-1920`, so the fallback word is not committer-nudged twice. It clears the stall timer after fallback at `:1357-1361`.
+
+- **In-flight `vrfRequestId` atomicity vs slots 31/32/33: REFUTED locally, INFO.** `_setVrfConfig()` writes coordinator/sub/key together at `:1650-1654`, then rotation reissues and stores the new request id at `:1761-1778`. If `_requestVrfWord()` reverts, the transaction rolls back. No old-coordinator callback can write after the sender gate at `:1831`.
+
+- **Grace / retry timers: REFUTED locally, INFO; UNCERTAIN externally.** Rotation refreshes `rngRequestTime` for the new request at `:1771-1778`, so the 6h/12h retry and 14d fallback clocks restart. Admin intentionally does not reset `lastVrfProcessedTimestamp`, allowing rapid re-swap if the new coordinator fails (`contracts/DegenerusAdmin.sol:886-889`). External assumption: Admin funds the new subscription after `gameAdmin.updateVrfCoordinatorAndSub()` (`DegenerusAdmin.sol:931-947`); if the real coordinator rejects unfunded requests, `_requestVrfWord()` is uncaught and rotation reverts.
+
+**New Vectors**
+- **NV-01: stale `LR_MID_DAY` index overwrite, HIGH.** Primary finding above.
+- **NV-02: daily word sentinel collision, CATASTROPHE but negligible-probability and not rotation-specific.** `rawFulfillRandomWords()` maps word `0` to `1` at `DegenerusGameAdvanceModule.sol:1834-1835`; `advanceGame()` treats `rngWord == 1` as “request sent” sentinel at `:381-384`. A final daily word of `1` can loop without `_unlockRng()`, especially in jackpot/lastPurchase windows where `_livenessTriggered()` is suppressed at `contracts/storage/DegenerusGameStorage.sol:1464-1472`.

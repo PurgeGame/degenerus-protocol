@@ -1,0 +1,7 @@
+{
+  "label": "vrfswap-backfill",
+  "schema": "",
+  "models": ["gemini", "codex"],
+  "skipped": [],
+  "outputs": {"gemini": ".planning/phases/432-council/council/vrfswap-backfill.gemini.txt", "codex": ".planning/phases/432-council/council/vrfswap-backfill.codex.txt"}
+}
