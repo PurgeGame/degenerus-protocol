@@ -9,6 +9,11 @@ on:
     branches: [main]
   pull_request:
   workflow_dispatch:
+  schedule:
+    # Weekly (Mon 06:00 UTC) strong-but-slow guarantees that per-PR CI skips:
+    # Halmos symbolic proofs + the deep-profile invariant sweep. A proof that
+    # regresses fails this run instead of silently shipping green.
+    - cron: '0 6 * * 1'
 
 concurrency:
   group: ci-${{ github.ref }}
@@ -55,6 +60,12 @@ jobs:
           print("All contracts within the 24,576-byte ceiling.")
           PY
 
+      # MECH-02: deterministic storage-layout gate. Fails the PR if any slot/offset
+      # in DegenerusGame, a state contract, or a delegatecall module moves vs the
+      # committed golden (whole-protocol corruption risk under 155 delegatecall sites).
+      - name: Storage-layout oracle (MECH-02)
+        run: bash scripts/layout/storage_layout_oracle.sh
+
       - name: forge test
         run: forge test -vvv
 
@@ -92,3 +103,30 @@ jobs:
         with:
           name: aderyn-report
           path: aderyn-report.md
+
+  # Strong-but-slow guarantees the per-PR gate skips: the 31 Halmos symbolic proofs
+  # and the deep-profile invariant sweep (runs=1000/depth=256, ~8x the per-PR budget).
+  # Runs on the weekly schedule and on manual dispatch — a proof or deep invariant that
+  # regresses fails here instead of silently shipping green. (The mutation campaign is
+  # NOT wired here: its harness lives in the gitignored audit/ tree and a full run far
+  # exceeds the 6h job ceiling — it is run locally/overnight and its kill-rate evidence
+  # is committed to the audit pack.)
+  deep-guarantees:
+    name: Halmos proofs + deep invariant sweep (scheduled / manual)
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 330
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: Install Foundry
+        uses: foundry-rs/foundry-toolchain@v1
+      - name: Install npm deps (OpenZeppelin, etc.)
+        run: npm ci || npm install
+      - name: Install Halmos
+        run: pip install --upgrade halmos
+      - name: Halmos symbolic proofs
+        run: halmos --match-path 'test/halmos/*.t.sol'
+      - name: Deep invariant sweep (runs=1000 / depth=256)
+        run: FOUNDRY_PROFILE=deep forge test --match-path 'test/fuzz/invariant/*.inv.t.sol'
