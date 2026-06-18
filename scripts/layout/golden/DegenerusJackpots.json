@@ -1,0 +1,34 @@
+[
+  {
+    "bytes": "32",
+    "encoding": "mapping",
+    "label": "bafPlayer",
+    "offset": 0,
+    "slot": 0,
+    "typeLabel": "mapping(uint24 => mapping(address => struct DegenerusJackpots.BafPlayer))"
+  },
+  {
+    "bytes": "32",
+    "encoding": "mapping",
+    "label": "bafTop",
+    "offset": 0,
+    "slot": 1,
+    "typeLabel": "mapping(uint24 => struct DegenerusJackpots.PlayerScore[4])"
+  },
+  {
+    "bytes": "32",
+    "encoding": "mapping",
+    "label": "bafLevel",
+    "offset": 0,
+    "slot": 2,
+    "typeLabel": "mapping(uint24 => struct DegenerusJackpots.BafLevel)"
+  },
+  {
+    "bytes": "3",
+    "encoding": "inplace",
+    "label": "lastBafResolvedDay",
+    "offset": 0,
+    "slot": 3,
+    "typeLabel": "uint24"
+  }
+]
