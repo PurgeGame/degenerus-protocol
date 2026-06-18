@@ -386,10 +386,9 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
      * @custom:reverts E When level is not 0-2, x9 (excl. x99), x0, or a century x00 in its purchase phase (and no boon), pass has 8+ levels remaining, or msg.value is incorrect.
      */
     function purchaseLazyPass(address buyer) external payable {
-        _purchaseLazyPass(buyer);
-    }
-
-    function _purchaseLazyPass(address buyer) private {
+        // Delegatecall-only: address(this) == GAME under the nested dispatch. A direct call on the
+        // deployed module would trap the in-flight msg.value against empty local state.
+        if (address(this) != ContractAddresses.GAME) revert E();
         if (_livenessTriggered()) revert E();
         uint24 currentLevel = level;
         bool hasValidBoon = false;
@@ -537,10 +536,9 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
      * @custom:reverts E When msg.value does not match current deity pass price.
      */
     function purchaseDeityPass(address buyer, uint8 symbolId) external payable {
-        _purchaseDeityPass(buyer, symbolId);
-    }
-
-    function _purchaseDeityPass(address buyer, uint8 symbolId) private {
+        // Delegatecall-only: address(this) == GAME under the nested dispatch. A direct call on the
+        // deployed module would trap the in-flight msg.value against empty local state.
+        if (address(this) != ContractAddresses.GAME) revert E();
         if (rngLockedFlag) revert RngLocked();
         if (_livenessTriggered()) revert E();
         if (symbolId >= 32) revert E();

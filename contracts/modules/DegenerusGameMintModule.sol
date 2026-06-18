@@ -1838,6 +1838,9 @@ contract DegenerusGameMintModule is
     /// @param buyer Player receiving the box (already operator-resolved by the entrypoint).
     /// @param boxAmount Requested box ETH (>= PRESALE_BOX_MIN, checked pre-clamp).
     function buyPresaleBox(address buyer, uint256 boxAmount) external payable {
+        // Delegatecall-only: address(this) == GAME under the nested dispatch. A direct call on the
+        // deployed module would trap the in-flight msg.value against empty local state.
+        if (address(this) != ContractAddresses.GAME) revert E();
         _buyPresaleBoxFor(buyer, boxAmount, msg.value);
     }
 
