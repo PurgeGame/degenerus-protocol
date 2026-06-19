@@ -12,6 +12,7 @@ import {ContractAddresses} from "../ContractAddresses.sol";
 import {DegenerusTraitUtils} from "../DegenerusTraitUtils.sol";
 import {BitPackingLib} from "../libraries/BitPackingLib.sol";
 import {EntropyLib} from "../libraries/EntropyLib.sol";
+import {ActivityCurveLib} from "../libraries/ActivityCurveLib.sol";
 import {DegenerusGamePayoutUtils} from "./DegenerusGamePayoutUtils.sol";
 import {DegenerusGameMintStreakUtils} from "./DegenerusGameMintStreakUtils.sol";
 import {PriceLookupLib} from "../libraries/PriceLookupLib.sol";
@@ -184,36 +185,36 @@ contract DegenerusGameDegeneretteModule is
     // Constants
     // -------------------------------------------------------------------------
 
-    /// @dev Activity score threshold for mid-tier ROI (75 points).
-    uint16 private constant ACTIVITY_SCORE_MID_POINTS = 75;
-
-    /// @dev Activity score threshold for high-tier ROI (255 points).
-    uint16 private constant ACTIVITY_SCORE_HIGH_POINTS = 255;
-
-    /// @dev Maximum activity score cap (305 points, deity pass theoretical max).
+    /// @dev Activity score at the curve knee K (seg-A end; deity pass theoretical max).
     uint16 private constant ACTIVITY_SCORE_MAX_POINTS = 305;
 
-    /// @dev Minimum ROI in basis points (90%).
+    /// @dev Minimum ROI in basis points (90%, score 0).
     uint16 private constant ROI_MIN_BPS = 9_000;
 
-    /// @dev Mid-tier ROI in basis points (95%).
-    uint16 private constant ROI_MID_BPS = 9_500;
+    /// @dev ROI at the knee K (90% of the gain delivered).
+    uint16 private constant ROI_VA_BPS = 9_891;
 
-    /// @dev High-tier ROI in basis points (99.5%).
-    uint16 private constant ROI_HIGH_BPS = 9_950;
+    /// @dev ROI at the seg-B knee (98% of the gain).
+    uint16 private constant ROI_VB_BPS = 9_970;
 
-    /// @dev Maximum ROI in basis points (99.9%).
+    /// @dev Maximum ROI in basis points (99.9%, reached at the effective cap).
     uint16 private constant ROI_MAX_BPS = 9_990;
 
     /// @dev Bonus ROI for ETH bets in basis points (+5%), redistributed to high buckets.
     uint16 private constant ETH_ROI_BONUS_BPS = 500;
 
-    /// @dev WWXRP high-value ROI base in basis points (90%).
+    /// @dev WWXRP high-value ROI base in basis points (90%, score 0).
     ///      Used as the target ROI for full-ticket bonus redistribution
     ///      (top score tiers S=6-9).
     uint16 private constant WWXRP_HIGH_ROI_BASE_BPS = 9_000;
 
-    /// @dev WWXRP high-value ROI max in basis points (109.9%).
+    /// @dev WWXRP high-value ROI at the knee K (90% of the gain).
+    uint16 private constant WWXRP_HIGH_ROI_VA_BPS = 10_791;
+
+    /// @dev WWXRP high-value ROI at the seg-B knee (98% of the gain).
+    uint16 private constant WWXRP_HIGH_ROI_VB_BPS = 10_950;
+
+    /// @dev WWXRP high-value ROI max in basis points (109.9%, at the effective cap).
     uint16 private constant WWXRP_HIGH_ROI_MAX_BPS = 10_990;
 
     /// @dev Maximum ETH payout as percentage of futurePool in basis points (10%).
@@ -1134,59 +1135,70 @@ contract DegenerusGameDegeneretteModule is
     // -------------------------------------------------------------------------
 
     /// @dev Computes ROI in basis points based on activity score.
-    ///      Curve: quadratic 90%→95% (0-75-point activity), linear 95%→99.5% (75-255-point activity),
-    ///      linear 99.5%→99.9% (255-305-point activity).
+    ///      Steep ramp 90%→98.91% (0 to K=305 points), shallow leg 98.91%→99.7%
+    ///      (305 to the seg-B knee), then a near-flat crawl to 99.9% at the effective cap.
+    ///      Stays strictly below 100% at every score.
     /// @param score The activity score in whole points.
     /// @return roiBps The ROI in basis points.
     function _roiBpsFromScore(
         uint256 score
     ) private pure returns (uint256 roiBps) {
-        if (score > ACTIVITY_SCORE_MAX_POINTS) {
-            score = ACTIVITY_SCORE_MAX_POINTS;
+        if (score >= ActivityCurveLib.ACTIVITY_EFFECTIVE_CAP_POINTS) {
+            return ROI_MAX_BPS;
         }
-
-        if (score <= ACTIVITY_SCORE_MID_POINTS) {
-            // Quadratic segment: 0 to 75-point activity → 90% to 95% ROI
-            uint256 xNum = score;
-            uint256 xDen = ACTIVITY_SCORE_MID_POINTS;
-            uint256 term1 = (1000 * xNum) / xDen;
-            uint256 term2 = (500 * xNum * xNum) / (xDen * xDen);
-            roiBps = ROI_MIN_BPS + term1 - term2;
-        } else if (score <= ACTIVITY_SCORE_HIGH_POINTS) {
-            // Linear segment: 75 to 255-point activity → 95% to 99.5% ROI
-            uint256 delta = score - ACTIVITY_SCORE_MID_POINTS;
-            uint256 span = ACTIVITY_SCORE_HIGH_POINTS - ACTIVITY_SCORE_MID_POINTS;
-            uint256 roiDelta = ROI_HIGH_BPS - ROI_MID_BPS;
-            roiBps = ROI_MID_BPS + (delta * roiDelta) / span;
-        } else {
-            // Linear segment: 255 to 305-point activity → 99.5% to 99.9% ROI
-            uint256 delta = score - ACTIVITY_SCORE_HIGH_POINTS;
-            uint256 span = ACTIVITY_SCORE_MAX_POINTS - ACTIVITY_SCORE_HIGH_POINTS;
-            uint256 roiDelta = ROI_MAX_BPS - ROI_HIGH_BPS;
-            roiBps = ROI_HIGH_BPS + (delta * roiDelta) / span;
+        if (score <= ACTIVITY_SCORE_MAX_POINTS) {
+            return
+                ROI_MIN_BPS +
+                (score * (ROI_VA_BPS - ROI_MIN_BPS)) /
+                ACTIVITY_SCORE_MAX_POINTS;
         }
-
-        // ETH bonus is redistributed in full-ticket payouts (not added here).
+        if (score <= ActivityCurveLib.ACTIVITY_SEG_B_KNEE_POINTS) {
+            return
+                ROI_VA_BPS +
+                ((score - ACTIVITY_SCORE_MAX_POINTS) * (ROI_VB_BPS - ROI_VA_BPS)) /
+                (ActivityCurveLib.ACTIVITY_SEG_B_KNEE_POINTS -
+                    ACTIVITY_SCORE_MAX_POINTS);
+        }
+        return
+            ROI_VB_BPS +
+            ((score - ActivityCurveLib.ACTIVITY_SEG_B_KNEE_POINTS) *
+                (ROI_MAX_BPS - ROI_VB_BPS)) /
+            (ActivityCurveLib.ACTIVITY_EFFECTIVE_CAP_POINTS -
+                ActivityCurveLib.ACTIVITY_SEG_B_KNEE_POINTS);
     }
 
     /// @dev Calculates WWXRP high-value ROI based on activity score.
     ///      Used as the target ROI for full-ticket bonus redistribution into
-    ///      5+ match buckets.
-    ///      Scales from 90.0% base to 109.9% max.
+    ///      5+ match buckets. Steep ramp 90.0%→107.91% (0 to K=305), shallow leg to
+    ///      109.5% (seg-B knee), near-flat crawl to 109.9% at the effective cap.
     /// @param score The activity score in whole points.
     /// @return roiBps The WWXRP high-value ROI in basis points.
     function _wwxrpHighValueRoi(
         uint256 score
     ) private pure returns (uint256 roiBps) {
-        if (score > ACTIVITY_SCORE_MAX_POINTS) {
-            score = ACTIVITY_SCORE_MAX_POINTS;
+        if (score >= ActivityCurveLib.ACTIVITY_EFFECTIVE_CAP_POINTS) {
+            return WWXRP_HIGH_ROI_MAX_BPS;
         }
-
-        // Linear scale from 90.0% (9000 bps) to 109.9% (10990 bps)
-        roiBps =
-            WWXRP_HIGH_ROI_BASE_BPS +
-            (score * (WWXRP_HIGH_ROI_MAX_BPS - WWXRP_HIGH_ROI_BASE_BPS)) /
-            ACTIVITY_SCORE_MAX_POINTS;
+        if (score <= ACTIVITY_SCORE_MAX_POINTS) {
+            return
+                WWXRP_HIGH_ROI_BASE_BPS +
+                (score * (WWXRP_HIGH_ROI_VA_BPS - WWXRP_HIGH_ROI_BASE_BPS)) /
+                ACTIVITY_SCORE_MAX_POINTS;
+        }
+        if (score <= ActivityCurveLib.ACTIVITY_SEG_B_KNEE_POINTS) {
+            return
+                WWXRP_HIGH_ROI_VA_BPS +
+                ((score - ACTIVITY_SCORE_MAX_POINTS) *
+                    (WWXRP_HIGH_ROI_VB_BPS - WWXRP_HIGH_ROI_VA_BPS)) /
+                (ActivityCurveLib.ACTIVITY_SEG_B_KNEE_POINTS -
+                    ACTIVITY_SCORE_MAX_POINTS);
+        }
+        return
+            WWXRP_HIGH_ROI_VB_BPS +
+            ((score - ActivityCurveLib.ACTIVITY_SEG_B_KNEE_POINTS) *
+                (WWXRP_HIGH_ROI_MAX_BPS - WWXRP_HIGH_ROI_VB_BPS)) /
+            (ActivityCurveLib.ACTIVITY_EFFECTIVE_CAP_POINTS -
+                ActivityCurveLib.ACTIVITY_SEG_B_KNEE_POINTS);
     }
 
     // -------------------------------------------------------------------------

@@ -5,6 +5,7 @@ import {ContractAddresses} from "../ContractAddresses.sol";
 import {DegenerusGameMintStreakUtils} from "./DegenerusGameMintStreakUtils.sol";
 import {BitPackingLib} from "../libraries/BitPackingLib.sol";
 import {PriceLookupLib} from "../libraries/PriceLookupLib.sol";
+import {ActivityCurveLib} from "../libraries/ActivityCurveLib.sol";
 import {IDegenerusGameLootboxModule} from "../interfaces/IDegenerusGameModules.sol";
 import {IDegenerusAffiliate} from "../interfaces/IDegenerusAffiliate.sol";
 
@@ -832,8 +833,9 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
                 );
                 if (cachedScore != 0) {
                     uint256 priceWei = PriceLookupLib.priceForLevel(targetLevel);
-                    uint256 _score = cachedScore > 305 ? 305 : cachedScore;
-                    uint256 bonusQty = (uint256(adjustedQty) * _score) / 305;
+                    uint256 bonusQty = (uint256(adjustedQty) *
+                        ActivityCurveLib.centuryBps(cachedScore)) /
+                        ActivityCurveLib.CENTURY_MAX_BPS;
                     if (bonusQty != 0 && priceWei != 0) {
                         uint256 maxBonus = (20 ether) / (priceWei >> 2);
                         uint256 used = _centuryUsedFor(player, targetLevel);

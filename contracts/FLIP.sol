@@ -27,6 +27,7 @@ pragma solidity 0.8.34;
 import {IDegenerusGame} from "./interfaces/IDegenerusGame.sol";
 import {IDegenerusQuests} from "./interfaces/IDegenerusQuests.sol";
 import {ContractAddresses} from "./ContractAddresses.sol";
+import {ActivityCurveLib} from "./libraries/ActivityCurveLib.sol";
 
 /// @notice Interface for Coinflip contract methods used by FLIP.
 interface ICoinflip {
@@ -153,15 +154,9 @@ contract FLIP {
     /// @dev Minimum FLIP amount for decimator burns (prevents dust spam).
     uint256 private constant DECIMATOR_MIN = 1_000 ether;
 
-    /// @dev Base bucket denominator for decimator weighting (lower = better odds).
-    uint8 private constant DECIMATOR_BUCKET_BASE = 12;
-
     /// @dev Minimum bucket for normal and level-100 decimators.
     uint8 private constant DECIMATOR_MIN_BUCKET_NORMAL = 5;
     uint8 private constant DECIMATOR_MIN_BUCKET_100 = 2;
-
-    /// @dev Cap for activity score bonus applied to decimator buckets (lazy pass max = 235 points).
-    uint16 private constant DECIMATOR_ACTIVITY_CAP_POINTS = 235;
 
     /// @dev Max base amount eligible for decimator boon boost.
     uint256 private constant DECIMATOR_BOON_CAP = 50_000 ether;
@@ -662,17 +657,14 @@ contract FLIP {
         );
         uint256 baseAmount = amount + (completed ? questReward : 0);
 
-        // Activity score bonus (whole points), capped for decimator scaling.
+        // Activity score bonus (whole points); the curve self-saturates at its cap.
         uint256 bonusPoints = degenerusGame.playerActivityScore(caller);
-        if (bonusPoints > DECIMATOR_ACTIVITY_CAP_POINTS) {
-            bonusPoints = DECIMATOR_ACTIVITY_CAP_POINTS;
-        }
 
-        uint256 decBurnMultBps = _decimatorBurnMultiplier(bonusPoints);
+        uint256 decBurnMultBps = ActivityCurveLib.decMultBps(bonusPoints);
         uint8 minBucket = (lvl % 100 == 0)
             ? DECIMATOR_MIN_BUCKET_100
             : DECIMATOR_MIN_BUCKET_NORMAL;
-        uint8 bucket = _adjustDecimatorBucket(bonusPoints, minBucket);
+        uint8 bucket = ActivityCurveLib.decBucket(bonusPoints, minBucket);
 
         // Decimator boon: percent boost on base amount (capped to 50k FLIP).
         uint16 boonBps = degenerusGame.consumeDecimatorBoon(caller);
@@ -732,35 +724,4 @@ contract FLIP {
         emit TerminalDecimatorBurn(caller, amount);
     }
 
-    /*+======================================================================+
-      |                       DECIMATOR HELPERS                              |
-      +======================================================================+*/
-
-    /// @dev Adjust decimator bucket based on activity score bonus.
-    ///      Higher bonus yields lower bucket (better odds); bonusPoints arrives
-    ///      pre-capped at DECIMATOR_ACTIVITY_CAP_POINTS by the sole caller.
-    function _adjustDecimatorBucket(
-        uint256 bonusPoints,
-        uint8 minBucket
-    ) private pure returns (uint8 adjustedBucket) {
-        adjustedBucket = DECIMATOR_BUCKET_BASE;
-        if (bonusPoints == 0) return adjustedBucket;
-
-        uint256 range = uint256(DECIMATOR_BUCKET_BASE) - uint256(minBucket);
-        uint256 reduction = (range *
-            bonusPoints +
-            (DECIMATOR_ACTIVITY_CAP_POINTS / 2)) / DECIMATOR_ACTIVITY_CAP_POINTS;
-        uint256 bucket = uint256(DECIMATOR_BUCKET_BASE) - reduction;
-        if (bucket < minBucket) bucket = minBucket;
-        adjustedBucket = uint8(bucket);
-    }
-
-    /// @dev Decimator burn multiplier: 1x base plus one-third of activity bonus
-    ///      (score is whole points; ×100 restores the bps-domain divisor).
-    function _decimatorBurnMultiplier(
-        uint256 bonusPoints
-    ) private pure returns (uint256 decMultBps) {
-        if (bonusPoints == 0) return BPS_DENOMINATOR;
-        return BPS_DENOMINATOR + ((bonusPoints * 100) / 3);
-    }
 }

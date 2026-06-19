@@ -15,6 +15,7 @@ import {DegenerusTraitUtils} from "../DegenerusTraitUtils.sol";
 import {BitPackingLib} from "../libraries/BitPackingLib.sol";
 import {PriceLookupLib} from "../libraries/PriceLookupLib.sol";
 import {EntropyLib} from "../libraries/EntropyLib.sol";
+import {ActivityCurveLib} from "../libraries/ActivityCurveLib.sol";
 
 /**
  * @title DegenerusGameMintModule
@@ -1709,8 +1710,9 @@ contract DegenerusGameMintModule is
 
         // --- x00 century bonus (uses cached post-action score) ---
         if (ticketCost != 0 && targetLevel % 100 == 0 && cachedScore != 0) {
-            uint256 _score = cachedScore > 305 ? 305 : cachedScore;
-            uint256 bonusQty = (uint256(adjustedQty) * _score) / 305;
+            uint256 bonusQty = (uint256(adjustedQty) *
+                ActivityCurveLib.centuryBps(cachedScore)) /
+                ActivityCurveLib.CENTURY_MAX_BPS;
             if (bonusQty != 0) {
                 uint256 maxBonus = (20 ether) / (priceWei >> 2);
                 uint256 used = _centuryUsedFor(buyer, targetLevel);

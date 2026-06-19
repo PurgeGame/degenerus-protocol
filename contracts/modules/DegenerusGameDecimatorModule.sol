@@ -9,6 +9,7 @@ import {IDegenerusQuests} from "../interfaces/IDegenerusQuests.sol";
 import {DegenerusGamePayoutUtils} from "./DegenerusGamePayoutUtils.sol";
 import {ContractAddresses} from "../ContractAddresses.sol";
 import {PriceLookupLib} from "../libraries/PriceLookupLib.sol";
+import {ActivityCurveLib} from "../libraries/ActivityCurveLib.sol";
 
 /**
  * @title DegenerusGameDecimatorModule
@@ -153,8 +154,8 @@ contract DegenerusGameDecimatorModule is DegenerusGamePayoutUtils {
         uint192 prevBurn = m.burn;
 
         // First burn this level: set bucket and deterministic subbucket.
-        // `bucket` arrives coin-validated in [2,12] (FLIP._adjustDecimatorBucket
-        // floors at 2), so a nonzero check is unnecessary on the migration branch.
+        // `bucket` arrives coin-validated in [2,12] (FLIP derives it via
+        // ActivityCurveLib.decBucket, floor >=2), so a nonzero check is unnecessary on the migration branch.
         if (m.bucket == 0) {
             m.bucket = bucket;
             m.subBucket = _decSubbucketFor(player, lvl, bucket);
@@ -408,7 +409,7 @@ contract DegenerusGameDecimatorModule is DegenerusGamePayoutUtils {
             player,
             amountWei,
             round.rngWord,
-            _minScoreForBucket(winBucket, lvl)
+            _minScoreForBucket(winBucket)
         );
         if (lootboxPortion != 0) {
             _setFuturePrizePool(_getFuturePrizePool() + lootboxPortion);
@@ -623,8 +624,8 @@ contract DegenerusGameDecimatorModule is DegenerusGamePayoutUtils {
     ///      Hash of (player, lvl, bucket) ensures consistent assignment.
     /// @param player Address.
     /// @param lvl Level number.
-    /// @param bucket Denominator; always in [2,12] (FLIP._adjustDecimatorBucket
-    ///        and _terminalDecBucket both floor at 2).
+    /// @param bucket Denominator; always in [2,12] (FLIP's ActivityCurveLib.decBucket
+    ///        and _terminalDecBucket both floor at >=2).
     /// @return Subbucket index (0 to bucket-1).
     function _decSubbucketFor(
         address player,
@@ -681,21 +682,11 @@ contract DegenerusGameDecimatorModule is DegenerusGamePayoutUtils {
         if (!ok) _revertDelegate(data);
     }
 
-    /// @dev Inverse of FLIP._adjustDecimatorBucket: the minimum activity score (bps)
-    ///      that lands a burn in `bucket`. The decimator-claim lootbox EV multiplier reads
-    ///      this frozen value (sealed when the winning burn was bucketed) rather than a live
-    ///      score. Mirrors FLIP's bucket scale: base 12, floor 5 (or 2 on x100 levels),
-    ///      activity cap 235 points.
-    function _minScoreForBucket(uint8 bucket, uint24 lvl) private pure returns (uint16) {
-        if (bucket >= 12) return 0; // base bucket = score ~0 -> 80% EV floor
-        uint256 cap = 235;
-        uint256 floorBucket = (lvl % 100 == 0) ? 2 : 5;
-        uint256 reduction = 12 - uint256(bucket);
-        uint256 range = 12 - floorBucket;
-        uint256 numer = reduction * cap - cap / 2; // reduction >= 1 here, so no underflow
-        uint256 s = (numer + range - 1) / range;   // ceil: min score that produces this bucket
-        if (s > cap) s = cap;
-        return uint16(s);
+    /// @dev Minimum activity score that lands a burn in `bucket` — the inverse of the
+    ///      shared bucket ladder. The decimator-claim lootbox EV multiplier reads this
+    ///      sealed value (frozen when the winning burn was bucketed) rather than a live score.
+    function _minScoreForBucket(uint8 bucket) private pure returns (uint16) {
+        return ActivityCurveLib.minScoreForBucket(bucket);
     }
 
     /*+======================================================================+
@@ -766,10 +757,8 @@ contract DegenerusGameDecimatorModule is DegenerusGamePayoutUtils {
     // Terminal Decimator Burn Tracking
     // -------------------------------------------------------------------------
 
-    /// @dev Bucket base and min for terminal decimator (lvl 100 rules).
-    uint8 private constant TERMINAL_DEC_BUCKET_BASE = 12;
+    /// @dev Minimum bucket (floor) for terminal decimator (lvl 100 rules).
     uint8 private constant TERMINAL_DEC_MIN_BUCKET = 2;
-    uint16 private constant TERMINAL_DEC_ACTIVITY_CAP_POINTS = 235;
 
     /// @notice Record a terminal decimator burn for GAMEOVER eligibility.
     /// @dev Called by coin contract. Bucket and multiplier computed internally
@@ -793,14 +782,8 @@ contract DegenerusGameDecimatorModule is DegenerusGamePayoutUtils {
         uint256 bonusPoints = IDegenerusGame(address(this)).playerActivityScore(
             player
         );
-        if (bonusPoints > TERMINAL_DEC_ACTIVITY_CAP_POINTS)
-            bonusPoints = TERMINAL_DEC_ACTIVITY_CAP_POINTS;
         uint8 bucket = _terminalDecBucket(bonusPoints);
-        // Multiplier divides the bps-equivalent magnitude by 3, so scale the point
-        // score back up by 100 before the /3.
-        uint256 multBps = bonusPoints == 0
-            ? BPS_DENOMINATOR
-            : BPS_DENOMINATOR + (bonusPoints * 100) / 3;
+        uint256 multBps = ActivityCurveLib.decMultBps(bonusPoints);
 
         TerminalDecEntry storage e = terminalDecEntries[player];
 
@@ -915,9 +898,6 @@ contract DegenerusGameDecimatorModule is DegenerusGamePayoutUtils {
         uint256 bonusPoints = IDegenerusGame(address(this)).playerActivityScore(
             player
         );
-        if (bonusPoints > TERMINAL_DEC_ACTIVITY_CAP_POINTS) {
-            bonusPoints = TERMINAL_DEC_ACTIVITY_CAP_POINTS;
-        }
         uint8 liveBucket = _terminalDecBucket(bonusPoints);
 
         uint8 newBucket = oldBucket;
@@ -1131,18 +1111,9 @@ contract DegenerusGameDecimatorModule is DegenerusGamePayoutUtils {
         return 10000 + ((daysRemaining - 10) * 190000) / 110;
     }
 
-    /// @dev Compute terminal decimator bucket from activity score (lvl 100 rules).
+    /// @dev Terminal decimator bucket from activity score (floor 2; lvl 100 rules).
     function _terminalDecBucket(uint256 bonusPoints) private pure returns (uint8) {
-        if (bonusPoints == 0) return TERMINAL_DEC_BUCKET_BASE;
-        uint256 range = uint256(TERMINAL_DEC_BUCKET_BASE) -
-            uint256(TERMINAL_DEC_MIN_BUCKET);
-        uint256 reduction = (range *
-            bonusPoints +
-            (TERMINAL_DEC_ACTIVITY_CAP_POINTS / 2)) /
-            TERMINAL_DEC_ACTIVITY_CAP_POINTS;
-        uint256 b = uint256(TERMINAL_DEC_BUCKET_BASE) - reduction;
-        if (b < TERMINAL_DEC_MIN_BUCKET) b = TERMINAL_DEC_MIN_BUCKET;
-        return uint8(b);
+        return ActivityCurveLib.decBucket(bonusPoints, TERMINAL_DEC_MIN_BUCKET);
     }
 
     /// @dev Calculate days remaining on death clock using day-index arithmetic. Returns 0 if expired.

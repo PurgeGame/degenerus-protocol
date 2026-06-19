@@ -10,6 +10,7 @@ import {ICoinflip} from "../interfaces/ICoinflip.sol";
 import {IDegenerusQuests} from "../interfaces/IDegenerusQuests.sol";
 import {BitPackingLib} from "../libraries/BitPackingLib.sol";
 import {GameTimeLib} from "../libraries/GameTimeLib.sol";
+import {ActivityCurveLib} from "../libraries/ActivityCurveLib.sol";
 
 /**
  * @title DegenerusGameStorage
@@ -1551,13 +1552,17 @@ abstract contract DegenerusGameStorage {
     // Activity score EV multiplier constants (ETH lootbox only)
     /// @dev 60-point activity score = neutral 100% EV
     uint16 internal constant LOOTBOX_EV_ACTIVITY_NEUTRAL_POINTS = 60;
-    /// @dev 400+-point activity score = maximum 145% EV
+    /// @dev 400-point activity score = the seg-A knee (~139.5% EV)
     uint16 internal constant LOOTBOX_EV_ACTIVITY_MAX_POINTS = 400;
     /// @dev Minimum EV at 0-point activity (90%)
     uint16 internal constant LOOTBOX_EV_MIN_BPS = 9_000;
     /// @dev Neutral EV at 60-point activity (100%)
     uint16 internal constant LOOTBOX_EV_NEUTRAL_BPS = 10_000;
-    /// @dev Maximum EV at 400+-point activity (145%)
+    /// @dev EV at the seg-A knee (139.5%, 90% of the gain)
+    uint16 internal constant LOOTBOX_EV_VA_BPS = 13_950;
+    /// @dev EV at the seg-B knee (143.9%, 98% of the gain)
+    uint16 internal constant LOOTBOX_EV_VB_BPS = 14_390;
+    /// @dev Maximum EV (145%, reached at the effective cap)
     uint16 internal constant LOOTBOX_EV_MAX_BPS = 14_500;
     /// @dev Maximum EV benefit cap per account per level (10 ETH scaled)
     uint256 internal constant LOOTBOX_EV_BENEFIT_CAP =
@@ -1626,8 +1631,10 @@ abstract contract DegenerusGameStorage {
         distressUnits = (word >> LB_DISTRESS_SHIFT) & LB_DISTRESS_MASK;
     }
 
-    /// @dev Calculates EV multiplier from a raw activity score.
-    ///      Linear interpolation between thresholds.
+    /// @dev EV multiplier from a raw activity score (whole points).
+    ///      Unchanged low anchor 90%→100% (0 to 60 points), then a steep ramp to vA
+    ///      (139.5%) at the 400-point knee, a shallow leg to vB (143.9%) at the seg-B
+    ///      knee, and a near-flat crawl to 145% at the effective cap.
     /// @param score The activity score in whole points
     /// @return The EV multiplier in basis points (9000-14500)
     function _lootboxEvMultiplierFromScore(
@@ -1639,18 +1646,34 @@ abstract contract DegenerusGameStorage {
                 (score * (LOOTBOX_EV_NEUTRAL_BPS - LOOTBOX_EV_MIN_BPS)) /
                 LOOTBOX_EV_ACTIVITY_NEUTRAL_POINTS;
         }
-
-        if (score >= LOOTBOX_EV_ACTIVITY_MAX_POINTS) {
+        if (score >= ActivityCurveLib.ACTIVITY_EFFECTIVE_CAP_POINTS) {
             return LOOTBOX_EV_MAX_BPS;
         }
-
-        // Linear: 60-point → 100% EV, 400-point → 145% EV
-        uint256 excess = score - LOOTBOX_EV_ACTIVITY_NEUTRAL_POINTS;
-        uint256 maxExcess = LOOTBOX_EV_ACTIVITY_MAX_POINTS - LOOTBOX_EV_ACTIVITY_NEUTRAL_POINTS;
+        if (score <= LOOTBOX_EV_ACTIVITY_MAX_POINTS) {
+            // seg A: 60-point → 100% EV, 400-point → 139.5% EV
+            return
+                LOOTBOX_EV_NEUTRAL_BPS +
+                ((score - LOOTBOX_EV_ACTIVITY_NEUTRAL_POINTS) *
+                    (LOOTBOX_EV_VA_BPS - LOOTBOX_EV_NEUTRAL_BPS)) /
+                (LOOTBOX_EV_ACTIVITY_MAX_POINTS -
+                    LOOTBOX_EV_ACTIVITY_NEUTRAL_POINTS);
+        }
+        if (score <= ActivityCurveLib.ACTIVITY_SEG_B_KNEE_POINTS) {
+            // seg B: 400-point → 139.5% EV, seg-B knee → 143.9% EV
+            return
+                LOOTBOX_EV_VA_BPS +
+                ((score - LOOTBOX_EV_ACTIVITY_MAX_POINTS) *
+                    (LOOTBOX_EV_VB_BPS - LOOTBOX_EV_VA_BPS)) /
+                (ActivityCurveLib.ACTIVITY_SEG_B_KNEE_POINTS -
+                    LOOTBOX_EV_ACTIVITY_MAX_POINTS);
+        }
+        // seg C: seg-B knee → 143.9% EV, effective cap → 145% EV
         return
-            LOOTBOX_EV_NEUTRAL_BPS +
-            (excess * (LOOTBOX_EV_MAX_BPS - LOOTBOX_EV_NEUTRAL_BPS)) /
-            maxExcess;
+            LOOTBOX_EV_VB_BPS +
+            ((score - ActivityCurveLib.ACTIVITY_SEG_B_KNEE_POINTS) *
+                (LOOTBOX_EV_MAX_BPS - LOOTBOX_EV_VB_BPS)) /
+            (ActivityCurveLib.ACTIVITY_EFFECTIVE_CAP_POINTS -
+                ActivityCurveLib.ACTIVITY_SEG_B_KNEE_POINTS);
     }
 
     /// @dev RNG words keyed by lootbox RNG index.
