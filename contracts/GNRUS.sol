@@ -31,7 +31,7 @@ interface IDegenerusVaultOwner {
  * @dev GNRUS is minted entirely to this contract at deploy. Each level, the winning
  *      charity slot's recipient receives 2% of the remaining unallocated GNRUS.
  *      GNRUS holders can burn tokens to redeem a proportional share of both ETH and stETH
- *      held by this contract. Funding arrives via game distributions (Phase 124 wiring).
+ *      held by this contract. Funding arrives via game distributions.
  *
  * ARCHITECTURE:
  * - 1T GNRUS minted to address(this) at deploy (unallocated pool)
@@ -172,8 +172,8 @@ contract GNRUS {
     mapping(uint8 => address) private pendingEdit;
 
     /// @notice Per-(level, slot) accumulator for approve weight cast via vote(). Old-level entries persist deliberately.
-    /// @dev Wiping 20 cold SSTOREs per level for no functional benefit is wasted gas (per `feedback_no_dead_guards.md`).
-    ///      Indexers gain free historical query as a side-benefit.
+    /// @dev Old-level entries are never wiped — clearing 20 cold SSTOREs per level would burn gas for no
+    ///      functional benefit, and indexers gain free historical query as a side-benefit.
     mapping(uint24 => mapping(uint8 => uint256)) public slotApproveWeight;
 
     /// @notice Recipient that won the most recent paid level. Used by vote() to block consecutive wins.
@@ -511,12 +511,12 @@ contract GNRUS {
     ///      Voter may vote on multiple slots independently per level — each (level, voter, slot) tuple
     ///      is tracked separately via `hasVoted[level][voter][slot]`.
     ///      Locked slots (0/1/2) accept votes normally — the locked-slot guard lives exclusively in
-    ///      `setCharity` (Phase 254). Voters CAN vote on locked slots once filled.
+    ///      `setCharity`. Voters CAN vote on locked slots once filled.
     ///      CEI-clean: the only external interaction (`sdgnrs.balanceOf`) is a STATICCALL view BEFORE
-    ///      state writes; no callback surface (D-255-CEI-01).
+    ///      state writes; no callback surface.
     /// @param slot The current-slate slot index (0..MAX_ACTIVE_SLOTS-1) to vote for
     function vote(uint8 slot) external {
-        // 1. Slot bounds check (cheapest — calldata read + compare; reuses Phase 254 InvalidSlot)
+        // 1. Slot bounds check (cheapest — calldata read + compare; shares the InvalidSlot error)
         if (slot >= MAX_ACTIVE_SLOTS) revert InvalidSlot();
 
         // 2. Empty-slot rejection (one cold SLOAD)
@@ -611,7 +611,7 @@ contract GNRUS {
         }
 
         // 6. Flush phase — runs AFTER payout so queued edits during level L apply to L+1, not L.
-        //    Invariant: flush MUST NOT revert (admin validates in setCharity per Phase 254).
+        //    Invariant: flush MUST NOT revert (setCharity validates every queued edit up front).
         //    Skipped entirely when no edits are pending (the loop would be a no-op and both writes
         //    would rewrite their current values). pendingEdit values are left in place: the
         //    pendingEditSet zeroing below clears every gate atomically, so stale values are

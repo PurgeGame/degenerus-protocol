@@ -16,9 +16,9 @@ interface IDegenerusGamePlayer {
     /// @notice Queue this caller's perpetual tickets for levels 1-100 (VAULT/SDGNRS only, once).
     function initPerpetualTickets() external;
     /// @notice Start or extend a daily afking subscription for `player` (self when 0/msg.sender).
-    /// @dev v55.0 ARCH-03: the afking subscription surface is GAME-resident (AfKing dissolved).
-    ///      sDGNRS self-subscribes (player == address(this) == msg.sender) so the GAME's
-    ///      SUB-02 self-consent path passes with no operator approval.
+    /// @dev The afking subscription surface is GAME-resident. sDGNRS self-subscribes
+    ///      (player == address(this) == msg.sender) so the GAME's self-consent path passes
+    ///      with no operator approval.
     function subscribe(
         address player,
         bool drainGameCreditFirst,
@@ -140,14 +140,14 @@ contract sDGNRS {
     error ExceedsDailyRedemptionCap();
 
     /// @notice Thrown when a gambling burn is attempted while a prior day's pool remains unresolved.
-    /// @dev Enforces the single-pool invariant (INV-13): at most one day's gambling-burn pool
-    ///      can be unresolved at any time. Prevents multi-day pool accumulation during RNG stalls.
+    /// @dev Enforces the single-pool invariant: at most one day's gambling-burn pool can be
+    ///      unresolved at any time. Prevents multi-day pool accumulation during RNG stalls.
     error PriorDayUnresolved();
 
     /// @notice Thrown when a gambling burn amount is below the 1-whole-sDGNRS minimum (1e18 raw).
-    /// @dev D-305-DUST-FLOOR-01: required by the 1-slot DayPending packing — `burned` is stored
-    ///      in whole-token units (1e18 divisor), so sub-whole-token burns would either skip
-    ///      cap accounting (INV-10 violation) or accumulate without bound.
+    /// @dev Required by the 1-slot DayPending packing — `burned` is stored in whole-token units
+    ///      (1e18 divisor), so sub-whole-token burns would either skip cap accounting (breaking the
+    ///      per-day supply cap) or accumulate without bound.
     error BurnTooSmall();
 
 
@@ -232,7 +232,7 @@ contract sDGNRS {
     uint96 private _pendingRedemptionEthValue;
 
     /// @notice Wall-day of the currently-pending unresolved gambling-burn pool, or 0 if none.
-    /// @dev Enforces INV-13 (single-pool invariant): at most one day's pool may be unresolved at any
+    /// @dev Enforces the single-pool invariant: at most one day's pool may be unresolved at any
     ///      time. Set by `_submitGamblingClaimFrom` on the first burn of a day; cleared by
     ///      `resolveRedemptionPeriod` when that day's pool resolves. Read by AdvanceModule to derive
     ///      `dayToResolve` directly. Game day 0 is unreachable by construction, so 0 unambiguously
@@ -271,10 +271,9 @@ contract sDGNRS {
         uint96  flipEscrow;   // whole-token FLIP removed from sDGNRS at submit; paid as a flip
                                 // credit on a winning resolving-day coinflip (uint96 whole tokens ≫
                                 // the uint128-bounded FLIP supply ceiling), else forfeited.
-    } // 96 + 16 + 96 = 208 bits (1 slot); composite outer key (player, day) carries the day reference per SPEC-02.
+    } // 96 + 16 + 96 = 208 bits (1 slot); the composite outer key (player, day) carries the day reference.
 
-    /// @dev Per-day unresolved gambling-burn pool (SPEC-01, tightened per D-305-STRUCT-TIGHTEN-01
-    ///      to 1 slot via denomination conversion).
+    /// @dev Per-day unresolved gambling-burn pool, packed to 1 slot via denomination conversion.
     ///      Three fields packed into a single 256-bit slot (FLIP is settled at submit, so no
     ///      per-day FLIP base is tracked):
     ///        bits 0-63   : ethBase    — gwei units (1e9 wei divisor)
@@ -285,12 +284,12 @@ contract sDGNRS {
     ///      Bounds (uint64.max = 1.844e19):
     ///        - ethBase: realistic per-day pool ≤ 10k wallets × 160 ETH cap = 1.6e15 gwei,
     ///          ~11500× under uint64.max. ETH dust sub-1-gwei truncated at write — cumulative
-    ///          drift bounded by N×1 gwei per day, within INV-02 dust tolerance.
+    ///          drift bounded by N×1 gwei per day, within dust tolerance.
     ///        - supplySnapshot: INITIAL_SUPPLY = 1e12 whole tokens, 1.84e7× under uint64.max.
     ///        - burned: ≤ supplySnapshot/2, same headroom.
     ///
     ///      Min-burn floor (1 whole sDGNRS, `MIN_BURN_AMOUNT`) enforced via `BurnTooSmall` revert
-    ///      so amount→burned ceiling-conversion always increments by ≥1, preserving INV-10.
+    ///      so amount→burned ceiling-conversion always increments by ≥1, preserving the per-day cap.
     struct DayPending {
         uint64 ethBase;
         uint64 supplySnapshot;
@@ -334,8 +333,8 @@ contract sDGNRS {
 
     /// @dev Minimum gambling-burn amount (1 whole sDGNRS = 1e18 raw). Required by the 1-slot
     ///      DayPending packing: `burned` is stored in whole-token units, so sub-whole-token burns
-    ///      would either round to 0 in cap accounting (INV-10 violation) or require ceiling-up
-    ///      semantics. Floor enforced via `BurnTooSmall` revert in `_submitGamblingClaimFrom`.
+    ///      would either round to 0 in cap accounting (breaking the per-day supply cap) or require
+    ///      ceiling-up semantics. Floor enforced via `BurnTooSmall` revert in `_submitGamblingClaimFrom`.
     uint256 private constant MIN_BURN_AMOUNT = 1e18;
 
     /// @dev Minimum ETH size for a redemption lootbox (0.01 ETH). At claim the rolled value splits
@@ -425,14 +424,14 @@ contract sDGNRS {
         // constructor so GAME's deploy stays under the per-tx gas cap.
         game.initPerpetualTickets();
 
-        // SUB-09 protocol-owned self-subscription: claimable-only daily lootbox
+        // Protocol-owned self-subscription: claimable-only daily lootbox
         // buy of flat quantity 1 with a 2% claimable reinvest. Self-consent —
         // sDGNRS IS the player (player == msg.sender). sDGNRS holds the permanent
         // deity pass (granted in the DegenerusGame constructor), so the afking's
         // pass-OR-pay gate takes the free 30-day extend at zero cost.
-        // v55.0 ARCH-03: the afking surface is GAME-resident (AfKing dissolved);
-        // self-subscribe directly against the GAME (subscriber == msg.sender ⇒
-        // the GAME's SUB-02 self-consent path, no operator approval needed).
+        // The afking surface is GAME-resident; self-subscribe directly against the
+        // GAME (subscriber == msg.sender ⇒ the GAME's self-consent path, no operator
+        // approval needed).
         // Coinflip auto-rebuy is NOT enabled here: during the 20-day seed window
         // sDGNRS's daily flip wins mint to its wallet balance (redemption backing);
         // Coinflip arms perpetual auto-rebuy (0 take-profit) once the final
@@ -673,7 +672,7 @@ contract sDGNRS {
     /// @dev Deterministic burn parameterized by beneficiary and burnFrom.
     ///      Used for the wrapped case where sDGNRS is burned from DGNRS contract's balance
     ///      but ETH/stETH goes to beneficiary. No FLIP payout (gameOver burns are pure ETH/stETH).
-    ///      Deducts pendingRedemptionEthValue to exclude reserved gambling burn amounts from payout (CP-08).
+    ///      Deducts pendingRedemptionEthValue to exclude reserved gambling burn amounts from payout.
     function _deterministicBurnFrom(address beneficiary, address burnFrom, uint256 amount) private returns (uint256 ethOut, uint256 stethOut) {
         uint256 bal = balanceOf[burnFrom];
         if (amount == 0 || amount > bal) revert Insufficient();
@@ -722,17 +721,17 @@ contract sDGNRS {
     //                       GAMBLING BURN FUNCTIONS
     // =====================================================================
 
-    /// @notice Check whether day `day` has an unresolved gambling-burn pool (SPEC-03).
+    /// @notice Check whether day `day` has an unresolved gambling-burn pool.
     /// @param day Wall-clock day to query.
     /// @return True if `pendingByDay[day]` has a non-zero ETH base.
     function hasPendingRedemptions(uint24 day) external view returns (bool) {
         return pendingByDay[day].ethBase != 0;
     }
 
-    /// @notice Called by game contract to resolve day `dayToResolve`'s gambling-burn pool with a dice roll (SPEC-03).
-    /// @dev Per SPEC-04 (c): writes `redemptionPeriods[dayToResolve]`, emits `RedemptionResolved`,
-    ///      then deletes `pendingByDay[dayToResolve]` for storage refund. Each day's mapping slot is
-    ///      distinct, so no later resolve can overwrite a resolved day's roll (V-184 closure clause).
+    /// @notice Called by game contract to resolve day `dayToResolve`'s gambling-burn pool with a dice roll.
+    /// @dev Writes `redemptionPeriods[dayToResolve]`, emits `RedemptionResolved`, then deletes
+    ///      `pendingByDay[dayToResolve]` for storage refund. Each day's mapping slot is distinct,
+    ///      so no later resolve can overwrite a resolved day's roll.
     ///      ETH-only: at submit the MAX (175%) payout was physically segregated and tracked in
     ///      pendingRedemptionEthValue; here that reservation is lowered from MAX to the rolled
     ///      amount (accounting only — the over-pull stays in this contract as free backing, no
@@ -744,7 +743,7 @@ contract sDGNRS {
 
         DayPending storage pool = pendingByDay[dayToResolve];
         // Convert ethBase from gwei back to wei for the cumulative-scalar reconciliation.
-        // Drift vs claim-side sums bounded ≤ N gwei per day (INV-02 dust tolerance).
+        // Drift vs claim-side sums bounded ≤ N gwei per day (within dust tolerance).
         uint256 ethBase = uint256(pool.ethBase) * 1e9;
         if (ethBase == 0) return;
 
@@ -755,21 +754,21 @@ contract sDGNRS {
         // Checked arithmetic preserved (reverts on underflow as before); narrowing cast is safe.
         _pendingRedemptionEthValue = uint96(_pendingRedemptionEthValue - segregatedMax + rolledEth);
 
-        // Store per-day result (write before emit before delete per SPEC-04 (c))
+        // Store per-day result (write before emit before delete)
         redemptionPeriods[dayToResolve] = roll;
 
         emit RedemptionResolved(dayToResolve, roll);
 
-        // Storage refund: free the day's pool slot per SPEC-04 (c).
+        // Storage refund: free the day's pool slot.
         delete pendingByDay[dayToResolve];
 
-        // Clear the single-pool sentinel if this resolve targeted the stamped day (INV-13).
+        // Clear the single-pool sentinel if this resolve targeted the stamped day.
         if (_pendingResolveDay == dayToResolve) _pendingResolveDay = 0;
     }
 
-    /// @notice Claim a resolved gambling-burn redemption for `player` on day `day` (SPEC-02).
+    /// @notice Claim a resolved gambling-burn redemption for `player` on day `day`.
     /// @dev Requires `redemptionPeriods[day] != 0` (period resolved). Reads composite-keyed
-    ///      `pendingRedemptions[player][day]`; deletes that slot per SPEC-04 (d).
+    ///      `pendingRedemptions[player][day]`; deletes that slot on a full claim.
     ///      ETH-only: FLIP is fully settled at submit (no claim-time FLIP leg).
     ///      Live game: PERMISSIONLESS — anyone may settle `player`'s claim, all value to `player`.
     ///      Both halves of the rolled ETH route to the Game (50% credits the player's claimable
@@ -867,7 +866,7 @@ contract sDGNRS {
         // Checked arithmetic preserved; narrowing cast is safe (result is the remaining segregated ETH).
         _pendingRedemptionEthValue = uint96(_pendingRedemptionEthValue - totalRolledEth);
 
-        // Full claim: clear the (player, day) slot entirely per SPEC-04 (d).
+        // Full claim: clear the (player, day) slot entirely.
         delete pendingRedemptions[player][day];
 
         // Contingent FLIP escrow: the whole-token slice removed from sDGNRS's backing at submit
@@ -947,7 +946,7 @@ contract sDGNRS {
     /// @notice Preview ETH, stETH, and FLIP output for burning sDGNRS
     /// @dev Reflects ETH-preferential payout logic using current balances and claimables.
     ///      Deducts pendingRedemptionEthValue to exclude the ETH physically segregated for
-    ///      gambling-burn claimants (CP-08). GameOver burns pay no FLIP (pure ETH/stETH).
+    ///      gambling-burn claimants. GameOver burns pay no FLIP (pure ETH/stETH).
     /// @param amount Amount of sDGNRS to burn
     /// @return ethOut ETH that would be received
     /// @return stethOut stETH that would be received
@@ -1015,8 +1014,8 @@ contract sDGNRS {
     ///      (175%) proportional ETH payout out of claimableWinnings[SDGNRS] into this contract's
     ///      balance (fail-closed if it cannot), and settles the proportional FLIP share entirely
     ///      at submit as a conserved coinflip flip-credit (no reserve, no roll, no claim-time FLIP).
-    ///      Enforces 50% supply cap per day (SPEC-05 lazy-init) and 160 ETH per-(wallet, day) EV cap.
-    ///      Per SPEC-02, writes the per-claim slot at composite key `pendingRedemptions[beneficiary][currentPeriod]`,
+    ///      Enforces 50% supply cap per day (lazy-init) and 160 ETH per-(wallet, day) EV cap.
+    ///      Writes the per-claim slot at composite key `pendingRedemptions[beneficiary][currentPeriod]`,
     ///      so a wallet can accumulate distinct claims across multiple unresolved days.
     function _submitGamblingClaimFrom(address beneficiary, address burnFrom, uint256 amount) private {
         uint256 bal = balanceOf[burnFrom];
@@ -1035,7 +1034,7 @@ contract sDGNRS {
         // fully predictable) future word.
         if (game.rngWordForDay(currentPeriod) == 0) revert BurnsBlockedBeforeDailyRng();
 
-        // Single-pool invariant (INV-13): if any prior day still holds an unresolved pool,
+        // Single-pool invariant: if any prior day still holds an unresolved pool,
         // block this burn. AdvanceModule resolves the stamped day on the next successful advance;
         // burns are only permitted to land in today's pool or onto an already-active today's pool.
         uint24 stamp = _pendingResolveDay;
@@ -1044,14 +1043,14 @@ contract sDGNRS {
 
         DayPending storage pool = pendingByDay[currentPeriod];
 
-        // 50% supply cap per day — lazy-init the snapshot on the first burn of the day (SPEC-05).
+        // 50% supply cap per day — lazy-init the snapshot on the first burn of the day.
         // supplySnapshot stored in whole tokens (1e18 raw divisor): INITIAL_SUPPLY = 1e30 → 1e12
         // whole tokens, comfortably under uint64.max (~1.84e19).
         if (pool.supplySnapshot == 0 && pool.burned == 0) {
             pool.supplySnapshot = uint64(_totalSupply / 1e18);
         }
         // Ceiling-divide amount→whole tokens so cap accounting is conservative even when amount
-        // isn't an exact multiple of 1e18. INV-10 (per-day supply cap) holds: pool.burned * 1e18
+        // isn't an exact multiple of 1e18. The per-day supply cap holds: pool.burned * 1e18
         // is always ≥ actual cumulative burns for the day.
         uint256 amountWhole = (amount + 1e18 - 1) / 1e18;
         if (uint256(pool.burned) + amountWhole > uint256(pool.supplySnapshot) / 2) revert Insufficient();
@@ -1077,8 +1076,8 @@ contract sDGNRS {
         uint256 coinBacking = coinflip.redeemableFlipBacking();
         uint256 flipEscrowWhole = ((flipHeld + coinBacking) * amount) / supplyBefore / 1e18;
 
-        // Snap ETH base to gwei at the source (D-305-GWEI-SNAP-01). Eliminates pool↔cumulative-scalar
-        // drift by ensuring pool.ethBase × 1e9 reconstructs the exact sum-of-claims at resolve.
+        // Snap ETH base to gwei at the source. Eliminates pool↔cumulative-scalar drift by ensuring
+        // pool.ethBase × 1e9 reconstructs the exact sum-of-claims at resolve.
         unchecked {
             ethValueOwed = (ethValueOwed / 1e9) * 1e9;
         }
@@ -1091,7 +1090,7 @@ contract sDGNRS {
         emit Transfer(burnFrom, address(0), amount);
 
         // === Reserve the MAX (175%) payout for this burn (pure ETH OR pure stETH) ===
-        // Pull the MAX so no concurrent claimable drain (AfKing SUB-09 self-sub, a 2nd same-day
+        // Pull the MAX so no concurrent claimable drain (the protocol-owned self-sub, a 2nd same-day
         // claimant, claimWinnings) can under-fund a later claim. pullRedemptionReserve segregates the
         // reservation as pure ETH (moved out of claimableWinnings[SDGNRS]) when the ETH side covers it,
         // else pure stETH backed by sDGNRS's own balance (no game-side move); it reverts fail-closed
@@ -1124,8 +1123,8 @@ contract sDGNRS {
             coinflip.withdrawRedeemedFlip(flipEscrowWei);
         }
 
-        // Composite-keyed per-claim slot for (beneficiary, currentPeriod) (SPEC-02): records the ETH
-        // base and the contingent whole-token FLIP escrow removed from sDGNRS's backing above.
+        // Composite-keyed per-claim slot for (beneficiary, currentPeriod): records the ETH base
+        // and the contingent whole-token FLIP escrow removed from sDGNRS's backing above.
         PendingRedemption storage claim = pendingRedemptions[beneficiary][currentPeriod];
 
         // Enforce 160 ETH per-(wallet, day) EV cap on the BASE (resets naturally on a new day under composite keying).
@@ -1161,7 +1160,7 @@ contract sDGNRS {
             uint256 stethOut = amount - ethOut;
             // stETH first, untrusted ETH .call LAST (CEI): otherwise a reentrant burn()/claim in the
             // player's ETH hook sees the in-flight stETH (no longer reserved — claimRedemption already
-            // decremented pendingRedemptionEthValue) as free backing and over-reserves, breaking SOLVENCY-01.
+            // decremented pendingRedemptionEthValue) as free backing and over-reserves, breaking solvency.
             if (!steth.transfer(player, stethOut)) revert TransferFailed();
             if (ethOut > 0) {
                 (bool success, ) = player.call{value: ethOut}("");

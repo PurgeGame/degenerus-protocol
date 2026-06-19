@@ -74,11 +74,11 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     /// @notice Emitted when a lootbox awards a whale pass jackpot
     /// @param player The player who won the jackpot
     /// @param lootboxAmount The ETH amount of the lootbox
-    /// @param targetLevel Level AT BOX-OPEN TIME (`level + 1`) — historical
-    ///        context only. v50.0 WHALE-01 defers ticket queuing to the player-
-    ///        paid `claimWhalePass` endpoint at WhaleModule:1018; tickets actually
-    ///        get queued at the level when the beneficiary calls `claimWhalePass`,
-    ///        which may be greater than this value (the player can delay the claim).
+    /// @param targetLevel Level AT BOX-OPEN TIME (`level + 1`), reported for
+    ///        downstream indexers. Ticket queuing is deferred to the player-paid
+    ///        `claimWhalePass` endpoint; tickets actually get queued at the level
+    ///        when the beneficiary calls `claimWhalePass`, which may be greater
+    ///        than this value (the player can delay the claim).
     /// @param tickets Tickets per level the materialized whale pass grants
     /// @param statsBoost Reserved for future use (always 0)
     /// @param frozenUntilLevel Reserved for future use (always 0)
@@ -200,8 +200,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         4 ether;
     /// @dev Whale pass standard tickets per level. Reported in the
     ///      LootBoxWhalePassJackpot event for downstream indexers; the
-    ///      actual ticket materialization lives at WhaleModule:1018
-    ///      (claimWhalePass) post-v50.0 WHALE-01.
+    ///      actual ticket materialization happens in claimWhalePass.
     uint32 private constant WHALE_PASS_TICKETS_PER_LEVEL = 2;
     /// @dev Deity pass base price (used for deity discount boon EV estimation).
     uint256 private constant DEITY_PASS_BASE = 24 ether;
@@ -636,7 +635,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         }
     }
 
-    /// @notice AUTO-03 human-box leg of openBoxes(): a permissionless, gas-bounded MULTI-INDEX sweep.
+    /// @notice Human-box leg of openBoxes(): a permissionless, gas-bounded MULTI-INDEX sweep.
     /// @dev Delegatecall entrypoint from DegenerusGame.openBoxes — runs in the Game's storage
     ///      context, mirroring the afking leg's drainAfkingBoxes delegatecall. Walks the open
     ///      frontier from boxCursorIndex up to LR_INDEX-1 (the finalized indices — words land at
@@ -647,14 +646,14 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     ///      across calls via (boxCursorIndex, boxCursor). Each entry resolves BOTH legs
     ///      (lootbox + presale, robust to either empty) from values loaded once per entry —
     ///      the skip-check reads are threaded into the opens. Orphan-index
-    ///      coupling (the v45 landmine): the sweep STOPS at any index whose VRF word has not landed
+    ///      coupling: the sweep STOPS at any index whose VRF word has not landed
     ///      (orphaned mid-day by a coordinator rotation) instead of advancing past it, so its boxes
     ///      are never marooned — it resumes once the re-issued word lands. Every leg is O(1)
-    ///      (WHALE-01/02 defers materialization to claimWhalePass).
+    ///      (whale-pass materialization is deferred to claimWhalePass).
     /// @param budget Maximum entries (opens + skips + index-headers) scanned this call.
     /// @return opened Total human boxes opened this call.
     function openHumanBoxes(uint256 budget) external returns (uint256 opened) {
-        // Entry-gate (RD-5): the open path's revert sources — rngLock and the terminal-jackpot
+        // Entry-gate: the open path's revert sources — rngLock and the terminal-jackpot
         // liveness control — are excluded pre-loop so the loop body is guaranteed-non-reverting.
         if (rngLockedFlag || _livenessTriggered()) return 0;
 
@@ -747,7 +746,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         bool closing = (stored & PRESALE_BOX_CLOSING_FLAG) != 0;
 
         // Domain-separated draw off the committed word + the box's immutable buy data
-        // (player + amount). No new mutable SLOAD enters the roll (RNG freeze, R4).
+        // (player + amount). No new mutable SLOAD enters the roll (RNG freeze).
         uint256 seed = uint256(
             keccak256(
                 abi.encodePacked(rngWord, keccak256("PRESALE_BOX"), player, amount)
@@ -1019,39 +1018,36 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
 
     /// @notice Resolve an AfKing-subscription box at the LIVE level from a caller-passed
     ///         frozen-day word.
-    /// @dev The afking open route (BOX-04/05 / EVCAP-01 / FREEZE-03). Under the 349.1
-    ///      redesign it is the LIVE-LEVEL twin of `resolveLootboxDirect` (:763) — identical
+    /// @dev The afking open route: the LIVE-LEVEL twin of `resolveLootboxDirect` — identical
     ///      resolution shape (derive the seed, roll the target level from the LIVE level, do
     ///      the SINGLE `_applyEvMultiplierWithCap` RMW at open, then `_resolveLootboxCommon`)
     ///      — with exactly TWO deviations from `resolveLootboxDirect`:
     ///
     ///        1. the RNG `rngWord` is a CALLER-PASSED param (the GameAfkingModule open-leg
-    ///           passes `rngWordByDay[lastAutoBoughtDay]`, the frozen stamp day's word —
-    ///           §1), NOT read from any index-keyed map; and
+    ///           passes the frozen stamp day's word), NOT read from any index-keyed map; and
     ///        2. the seed `day` is the FROZEN stamped process day (a passed param), NOT the
     ///           live `_simulatedDayIndex()` — the day MUST stay frozen in the seed or a
-    ///           self-keepering player could grind the seed by open-timing (§1).
+    ///           self-keepering player could grind the seed by open-timing.
     ///
     ///      Everything else is IDENTICAL to `resolveLootboxDirect`: `currentLevel = level +
     ///      1` LIVE, `targetLevel = _rollTargetLevel(currentLevel, seed)` rolls from the LIVE
     ///      level (NO stored baseLevel floor — auto-open removes the player's ability to time
-    ///      the level, so the level freeze is unnecessary; the freeze proof is §2, LOCKED),
+    ///      the level, so the level freeze is unnecessary),
     ///      and the SINGLE `_applyEvMultiplierWithCap(player, currentLevel, amount,
     ///      evMultiplierBps)` RMW — the sole residual live-read, a benign monotonic
-    ///      down-clamp (FREEZE-01b), keyed on the SAME per-level window of
+    ///      down-clamp, keyed on the SAME per-level window of
     ///      `lootboxEvCapPacked[player]` the human buy-time write uses
-    ///      so the human + afking boxes share the one per-level 10-ETH EV budget (BOX-05).
-    ///      The buy-time EV write is bypassed for afking boxes (the process pass STAMPS only —
-    ///      DegenerusGameMintModule:1303/1327 are never reached for this box), so this is the
-    ///      single draw (no double-draw). The cap hard-clamps at 10 ETH with the no-write
-    ///      100%-EV short-circuit ⇒ NO revert (FREEZE-01b). The seed carries ZERO `block.*`
+    ///      so the human + afking boxes share the one per-level 10-ETH EV budget.
+    ///      The buy-time EV write is bypassed for afking boxes (the process pass STAMPS only),
+    ///      so this is the single draw (no double-draw). The cap hard-clamps at 10 ETH with the
+    ///      no-write 100%-EV short-circuit ⇒ NO revert. The seed carries ZERO `block.*`
     ///      entropy.
     ///
-    ///      BOX-01: boons OFF for afking boxes ⇒ `amount` IS the spend exactly (there is no
+    ///      Boons OFF for afking boxes ⇒ `amount` IS the spend exactly (there is no
     ///      boosted-amount freeze field — the stamped `amount` is the unboosted box value).
     ///      The boon/pass ROLL inside `_resolveLootboxCommon` still runs on every ETH-lootbox
-    ///      path (gated by real game-state, identical to the auto-resolve callers); BOX-01
-    ///      governs the AMOUNT field, not the roll.
+    ///      path (gated by real game-state, identical to the auto-resolve callers); the
+    ///      boons-off rule governs the AMOUNT field, not the roll.
     ///
     ///      Tail flags match the HUMAN box open (`_openLootBoxLeg`) for outcome parity (an afking box must be
     ///      identical to a normal box in every way that matters): `emitLootboxEvent = true`
@@ -1059,7 +1055,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     ///      bust pays the same WWXRP consolation a human box does). The ONE intentional
     ///      exception is the distress bonus — `distressEth = 0` / `totalPackedEth = 0`: the
     ///      human value is frozen at buy in the packed lootboxEth distress field, which the
-    ///      stamp-only afking box never writes (BOX-02). Deliberately omitted as a mega-niche
+    ///      stamp-only afking box never writes. Deliberately omitted as a mega-niche
     ///      end-game feature (active only the final day before game-over, by which point
     ///      afking subscribers are gone). No `RngNotReady` guard here — the caller (the
     ///      GameAfkingModule open leg `_autoOpen`) pre-gates on a landed `rngWordByDay[day] != 0`,
@@ -1069,8 +1065,8 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     ///      derives the seed from the LIVE day and would not freeze the seed `day`).
     /// @param player Box owner (resolved by the GameAfkingModule open-leg from the sub).
     /// @param amount The stamped spend in wei (boons OFF ⇒ amount == spend).
-    /// @param day The boundary-pinned PROCESS day stamped at process (FREEZE-03 seed).
-    /// @param rngWord The frozen stamp day's word `rngWordByDay[day]`, passed by the caller (§1).
+    /// @param day The boundary-pinned PROCESS day stamped at process (frozen in the seed).
+    /// @param rngWord The frozen stamp day's word `rngWordByDay[day]`, passed by the caller.
     /// @param activityScore The stamped activity-score bps (the FROZEN EV input).
     function resolveAfkingBox(
         address player,
@@ -1082,19 +1078,19 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         if (amount == 0) return;
 
         // Byte-identical to the human box open (`_openLootBoxLeg`) / resolveLootboxDirect: the
-        // abi.encode preimage — with the FROZEN stamped `day` (§1, prevents seed-grinding by
-        // open-timing) and the CALLER-PASSED frozen-day word `rngWordByDay[day]` (§1).
+        // abi.encode preimage — with the FROZEN stamped `day` (prevents seed-grinding by
+        // open-timing) and the CALLER-PASSED frozen-day word `rngWordByDay[day]`.
         uint256 seed = uint256(keccak256(abi.encode(rngWord, player, day, amount)));
 
-        // LIVE level, exactly like resolveLootboxDirect (:767): auto-open removes the
-        // player's ability to time the level (§2), so the box rolls from the live level with
+        // LIVE level, exactly like resolveLootboxDirect: auto-open removes the
+        // player's ability to time the level, so the box rolls from the live level with
         // NO stored baseLevel floor.
         uint24 currentLevel = level + 1;
         uint24 targetLevel = _rollTargetLevel(currentLevel, seed);
 
-        // The SINGLE EV-cap RMW at open (EVCAP-01) — the sole residual live-read, a benign
-        // monotonic down-clamp (FREEZE-01b), keyed [player][currentLevel] on the SAME
-        // per-level 10-ETH budget map the human buy-time write uses (BOX-05). Fed the FROZEN
+        // The SINGLE EV-cap RMW at open — the sole residual live-read, a benign
+        // monotonic down-clamp, keyed [player][currentLevel] on the SAME
+        // per-level 10-ETH budget map the human buy-time write uses. Fed the FROZEN
         // evMultiplierBps from the stamped activityScore. Hard-clamped, no revert.
         uint256 evMultiplierBps = _lootboxEvMultiplierFromScore(uint256(activityScore));
         uint256 scaledAmount = _applyEvMultiplierWithCap(player, currentLevel, amount, evMultiplierBps);
@@ -1479,16 +1475,12 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     }
 
     /// @dev Activate a 100-level whale pass for a player by recording an O(1)
-    ///      pending claim (D-20). Opens are uniform O(1) regardless of pass status.
+    ///      pending claim. Opens are uniform O(1) regardless of pass status.
     ///      Materialization (stats + 100 levels × tickets) is deferred to the
-    ///      player-paid `claimWhalePass` endpoint at WhaleModule:1018, where
-    ///      the stats helper is applied immediately after the read-then-zero
-    ///      of `whalePassClaims[player]` (D-04 — timing shifts from open-time
-    ///      to claim-time; the two other stats callers at WhaleModule:1032 +
-    ///      DecimatorModule:588 stay immediate-apply, untouched).
+    ///      player-paid `claimWhalePass` endpoint, where the stats helper is
+    ///      applied immediately after the read-then-zero of `whalePassClaims[player]`.
     function _activateWhalePass(address player) private {
-        // O(1) record of one half-pass claim (D-21 per-boon shape locked).
-        // Mirrors PayoutUtils:52 and JackpotModule:1410's existing writers.
+        // O(1) record of one half-pass claim.
         whalePassClaims[player] += 1;
     }
 
@@ -1738,7 +1730,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
             return;
         }
 
-        // Lootbox boost boons (types 5, 6, 22) — slot0, single tier field (BOON-05)
+        // Lootbox boost boons (types 5, 6, 22) — slot0, single tier field
         if (boonType == BOON_LOOTBOX_5 || boonType == BOON_LOOTBOX_15 || boonType == BOON_LOOTBOX_25) {
             uint8 newTier = boonType == BOON_LOOTBOX_25 ? uint8(3) :
                             (boonType == BOON_LOOTBOX_15 ? uint8(2) : uint8(1));
@@ -1830,7 +1822,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
             // ignored lower/equal-tier roll is a no-op and must not refresh the timer.
             if (newTier > existingTier) {
                 s0 = (s0 & ~(uint256(BP_MASK_8) << BP_WHALE_TIER_SHIFT)) | (uint256(newTier) << BP_WHALE_TIER_SHIFT);
-                // whaleDay = isDeity ? day : currentDay (matching original behavior)
+                // whaleDay = isDeity ? day : currentDay
                 uint24 whaleDayVal = isDeity ? uint24(day) : uint24(currentDay);
                 s0 = (s0 & ~(uint256(BP_MASK_24) << BP_WHALE_DAY_SHIFT)) | (uint256(whaleDayVal) << BP_WHALE_DAY_SHIFT);
                 // deityWhaleDay = isDeity ? day : 0
@@ -1903,11 +1895,10 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         if (boonType == BOON_WHALE_PASS) {
             _activateWhalePass(player);
             if (!isDeity) {
-                // `targetLevel` records the level AT BOX-OPEN TIME for historical
-                // context; v50.0 WHALE-01 defers actual ticket queuing to claim-
-                // time at WhaleModule:1018, so the queued tickets start at the
-                // level when the player calls claimWhalePass — not necessarily
-                // `level + 1` here.
+                // `level + 1` records the level AT BOX-OPEN TIME for indexers;
+                // actual ticket queuing is deferred to claim-time, so the queued
+                // tickets start at the level when the player calls claimWhalePass —
+                // not necessarily `level + 1` here.
                 emit LootBoxWhalePassJackpot(player, originalAmount, level + 1, WHALE_PASS_TICKETS_PER_LEVEL, 0, 0);
             }
             return;
@@ -1926,7 +1917,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
             // ignored lower/equal-tier roll is a no-op and must not refresh the timer.
             if (newTier > existingTier) {
                 s1 = (s1 & ~(uint256(BP_MASK_8) << BP_LAZY_PASS_TIER_SHIFT)) | (uint256(newTier) << BP_LAZY_PASS_TIER_SHIFT);
-                // lazyPassDay = isDeity ? day : currentDay (matching original behavior)
+                // lazyPassDay = isDeity ? day : currentDay
                 uint24 lazyDayVal = isDeity ? uint24(day) : uint24(currentDay);
                 s1 = (s1 & ~(uint256(BP_MASK_24) << BP_LAZY_PASS_DAY_SHIFT)) | (uint256(lazyDayVal) << BP_LAZY_PASS_DAY_SHIFT);
                 // deityLazyPassDay = isDeity ? day : 0

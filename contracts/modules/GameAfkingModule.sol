@@ -14,7 +14,7 @@ import {IDegenerusAffiliate} from "../interfaces/IDegenerusAffiliate.sol";
 ///         context (delegatecall), so `address(this)` IS the Game;
 ///         the self-call re-enters the Game's own `advanceGame` dispatch (which
 ///         delegatecalls the AdvanceModule, running the required-path process STAGE
-///         in-context — 349-05). The signature matches `DegenerusGame.sol` verbatim.
+///         in-context). The signature matches `DegenerusGame.sol`.
 ///         Advance-work discovery (`_advanceDueInContext`) and `mintPrice` / `level`
 ///         are read in-context (inherited storage/helpers), so they are NOT routed
 ///         through here.
@@ -52,18 +52,18 @@ interface IQuestCompletionView {
  *      invariant.
  *
  * @dev PART A: `subscribe` — the SINGLE consent-gated subscription
- *      entrypoint (create / replace / cancel) carrying the CONSENT-01 OPEN-E gates
- *      verbatim + the FREEZE-01 rngLock guard + the 500 active-sub cap guard — and
+ *      entrypoint (create / replace / cancel) carrying the consent + funding-source gates
+ *      + the rngLock guard + the active-sub cap guard — and
  *      the REQUIRED-PATH PROCESS
  *      STAGE (the chunked pre-RNG stamp pass the AdvanceModule STAGE drives across
- *      the set, 349-05).
- * @dev PART B (this plan, 349-04, same file): the post-RNG OPEN-PASS (the
+ *      the set).
+ * @dev PART B: the post-RNG OPEN-PASS (the
  *      afking-stamp open leg, driven by `_subOpenCursor`, materializing each box
  *      from its frozen stamp via a delegatecall to the LootboxModule's
  *      `resolveAfkingBox` — the FROZEN-INPUT twin of `resolveLootboxDirect`) and
  *      the ROUTER (`mintFlip`/`autoOpen`, the one-category early-return
  *      dispatch). The open consumes the stamp the PART-A process STAGE produces.
- * @dev PLACE-02 bounty: the buy/process bounty FOLDS INTO the advance bounty
+ * @dev Bounty: the buy/process bounty FOLDS INTO the advance bounty
  *      (`mintFlip`'s advance leg pays `2×·mult`, scaling the AdvanceModule's
  *      day-epoch stall `mult` 2×/4×/6× — the process STAGE rides it); the OPEN
  *      stays a NORMAL post-RNG `OPEN_BATCH`-style router category with the
@@ -74,11 +74,10 @@ interface IQuestCompletionView {
  *                   never a payee. The two-tier funding-skip exemption keys on
  *                   the un-spoofable pinned `ContractAddresses.VAULT` / `SDGNRS`
  *                   identity (on `player`, never `src`) — no settable exemption.
- * @custom:invariant NO error-swallowing valve anywhere (D-348-04 / REVERT-02
- *                   no-valve): the funded process buy is revert-free by
- *                   construction (obligation 1 — REVERT-01); a class-B solvency
- *                   underflow FAILS LOUD (the `claimablePool -=` propagates, it is
- *                   never swallowed). There is no try-block / handler pair.
+ * @custom:invariant NO error-swallowing valve anywhere: the funded process buy is
+ *                   revert-free by construction; a class-B solvency underflow FAILS
+ *                   LOUD (the `claimablePool -=` propagates, it is never swallowed).
+ *                   There is no try-block / handler pair.
  */
 contract GameAfkingModule is DegenerusGameMintStreakUtils {
     /*------------------------------------------------------------------
@@ -100,7 +99,7 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
     ///      cap (65,535). NEW-subscriber path only — re-subscribe never trips it.
     error SubscriberCapReached();
     /// @dev mintFlip() found all router categories empty — the clean no-work signal
-    ///      (ROUTER-06; the unbounded-scan-free early-return on no pending work).
+    ///      (the unbounded-scan-free early-return on no pending work).
     error NoWork();
     /// @dev subscribe (upsert) where the subscriber's live pass horizon does not reach
     ///      the current level — an active sub must hold a pass that covers `level` so it
@@ -108,7 +107,7 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
     error NoPass();
     /// @dev subscribe (upsert) starting a NEW afking run that is not grounded on a real
     ///      purchase — neither already bought today nor a funded in-tx cover-buy. An
-    ///      unfunded start now reverts instead of beginning an inert, free-riding run.
+    ///      unfunded start reverts rather than beginning an inert, free-riding run.
     error MustPurchaseToBeginAfking();
 
     /*------------------------------------------------------------------
@@ -167,7 +166,7 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
     ///      entry-units, which the Game's mint recompute divides by `4 * 100`
     ///      (the inherited Storage `TICKET_SCALE = 100`), so `cost` stays
     ///      `mintPrice * effectiveQty` in both ticket and lootbox mode.
-    ///      ⚠ 348-INVARIANT-CARRY §3-i (LOAD-BEARING dual constant): this 400 is
+    ///      ⚠ LOAD-BEARING dual constant: this 400 is
     ///      NUMERICALLY EQUAL to the Game's `4 * TICKET_SCALE` (= 4 × 100) but is a
     ///      DISTINCT named constant — it must NOT be collapsed with the inherited
     ///      `TICKET_SCALE` (100). They play different roles (entry-unit multiplier
@@ -186,10 +185,10 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
     ///      `fundingSource` is registered in the sparse `_fundingSourceOf` map.
     ///      Lets the common self-funded path resolve `src = player` from the
     ///      already-loaded flags byte and SKIP the per-sub `_fundingSourceOf` SLOAD
-    ///      (the map is read only for the rare OPEN-E operator-funded sub).
+    ///      (the map is read only for the rare operator-funded sub).
     uint8 internal constant FLAG_EXTERNAL_FUNDING = 1;
 
-    /// @dev Active-subscriber cap = 500. Bounds the iterable set the protocol pays
+    /// @dev Active-subscriber cap = 1000. Bounds the iterable set the protocol pays
     ///      to iterate every cycle — the advance chain walks `_subscribers` in the
     ///      process/open passes, so an unbounded set would bog the daily heartbeat.
     ///      1000 keeps the per-cycle work cheap (every pass is weight-/OPEN_BATCH-chunked,
@@ -209,7 +208,7 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
     /// @dev Per-sub gas-weight of an in-stage sub-ending finalize (cancel-reclaim / pass-evict
     ///      / funding-kill) relative to the lootbox-buy unit (weight 10). The pass-evict finalize
     ///      does a cross-contract quest streak write + a swap-pop the call-free buy does not;
-    ///      measured ≈27k (on par with a ticket, well above the old ≈18k estimate) → weight 7.
+    ///      measured ≈27k (on par with a ticket) → weight 7.
     ///      Weighting it on the TRUE marginal (not the cheaper call-free reclaim) keeps a saturated
     ///      all-evict chunk on the same <10M target as any other mix, so the budget binds on real
     ///      gas, not sub count.
@@ -236,7 +235,7 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
     uint256 internal constant AFKING_TICKET_FUTURE_BPS = 1000;
 
     /*------------------------------------------------------------------
-                          Router bounty constants (PLACE-02)
+                          Router bounty constants
     ------------------------------------------------------------------*/
     /// @dev ETH-equivalent advance/open-bounty target per unit of work (in ETH wei).
     ///      A frozen constant (a module cannot hold a deploy-time immutable in the
@@ -248,8 +247,8 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
     uint256 internal constant BOUNTY_ETH_TARGET = 885_000_000_000_000;
 
     /// @dev Advance reward ratio (2× · mult). The process STAGE rides the advance
-    ///      bounty (PLACE-02 §6): mintFlip's advance leg pays `unit · 2 · mult`, scaling
-    ///      the AdvanceModule's day-epoch stall `mult` (1/2/4/6, AdvanceModule:226-242).
+    ///      bounty: mintFlip's advance leg pays `unit · 2 · mult`, scaling
+    ///      the AdvanceModule's day-epoch stall `mult` (1/2/4/6).
     uint256 internal constant ADVANCE_RATIO_NUM = 2;
 
     /// @dev Open reward pro-rate knee (1× at/above, pro-rated below): a mid-day open of
@@ -265,34 +264,34 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
     uint256 internal constant OPEN_BATCH = 80;
 
     /*------------------------------------------------------------------
-                          Subscription entrypoint (CONSENT-01 carried verbatim)
+                          Subscription entrypoint
     ------------------------------------------------------------------*/
     /// @notice The SINGLE subscription entrypoint — create, replace, or cancel a
     ///         daily subscription for `player`. dailyQuantity >= 1 upserts
     ///         (create-or-replace in place); dailyQuantity == 0 cancels (writes the
-    ///         SUB-07 tombstone sentinel, relocating no one). Every mutation flows
+    ///         tombstone sentinel, relocating no one). Every mutation flows
     ///         through this one consent-gated path.
-    /// @dev FREEZE-01 rngLock guard: subscribe reverts during the RNG freeze window
+    /// @dev rngLock guard: subscribe reverts during the RNG freeze window
     ///      (`rngLockedFlag`), for ALL of create / replace / cancel — the subscriber
     ///      set must be frozen across [request -> unlock] so the stamped set the open
     ///      consumes cannot shift mid-cycle. Callers wait for the unlock.
-    /// @dev SUB-02 authorization is checked ONCE here, third-party path only:
+    /// @dev Authorization is checked ONCE here, third-party path only:
     ///      `player == address(0)` or `player == msg.sender` is self-consent (no
     ///      check); otherwise the caller must be a game operator the player
     ///      approved (in-context `operatorApprovals[subscriber][msg.sender]` —
     ///      the same predicate `isOperatorApproved` returns). Authorization is
     ///      NEVER re-checked at process-time.
-    /// @dev AFSUB-02 pass-gating: subscribe encodes the subscriber's current pass
+    /// @dev Pass-gating: subscribe encodes the subscriber's current pass
     ///      horizon (in-context `_passHorizonOf(subscriber)`) into
     ///      `Sub.validThroughLevel` with a SINGLE read. No FLIP charge — the
-    ///      v50.0 pass-gated model. The per-iter process validity check is the
+    ///      pass-gated model. The per-iter process validity check is the
     ///      cheap stored-field compare `level <= sub.validThroughLevel`; at the
     ///      crossing the pass is re-read EXACTLY ONCE and refresh-or-evicted.
     /// @dev msg.value > 0 credits the Game's afkingFunding ledger in-context
-    ///      (claimablePool moved in tandem — the SOLVENCY-01 invariant), keyed on the
+    ///      (claimablePool moved in tandem — the solvency invariant), keyed on the
     ///      resolved funding bucket (the funder for an operator-funded sub, else the
     ///      subscriber).
-    /// @dev OPEN-E 4-protection (re-attested):
+    /// @dev Funding-source 4-protection:
     ///        (1) consent-gate-at-subscribe — auth + fundingSource gate checked HERE only;
     ///        (2) default-self — `fundingSource == 0` resolves to `subscriber`, no gate;
     ///        (3) no-escalation — the source is fixed at subscribe, not changeable per-draw to escalate;
@@ -300,7 +299,7 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
     /// @param player Subscriber to act for (0 or msg.sender = self).
     /// @param drainGameCreditFirst When true, the buy spends claimable credit first.
     /// @param useTickets Mint mode — true = tickets, false = lootboxes.
-    /// @param dailyQuantity Daily buy units, 1..255 (upsert); 0 cancels (SUB-07 tombstone).
+    /// @param dailyQuantity Daily buy units, 1..255 (upsert); 0 cancels (tombstone).
     /// @param reinvestPct Claimable reinvest percentage, 0..100.
     /// @param fundingSource Wallet whose `afkingFunding` funds this sub; address(0) = self.
     ///        A non-zero, non-self source is honored ONLY when it has
@@ -313,13 +312,13 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
         uint8 reinvestPct,
         address fundingSource
     ) external payable {
-        // FREEZE-01 — block ALL subscribe (create / replace / cancel) during the
+        // Block ALL subscribe (create / replace / cancel) during the
         // RNG freeze window: the subscriber set the stamp pass + open consume must
         // stay frozen across [request -> unlock]. Callers wait for the unlock.
         if (rngLockedFlag) revert RngLocked();
         if (reinvestPct > 100) revert InvalidReinvestPct();
 
-        // SUB-02 — self-consent (player == 0 or msg.sender) or operator-approval.
+        // Self-consent (player == 0 or msg.sender) or operator-approval.
         address subscriber = player == address(0) ? msg.sender : player;
         if (subscriber != msg.sender) {
             if (!operatorApprovals[subscriber][msg.sender]) {
@@ -327,7 +326,7 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
             }
         }
 
-        // OPENE-04 — a non-zero, non-self fundingSource must have operator-approved
+        // A non-zero, non-self fundingSource must have operator-approved
         // the subscriber on the game. address(0) (self) short-circuits the read;
         // checked HERE only — the renewal and per-draw paths never re-check.
         if (
@@ -338,11 +337,11 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
             revert NotApproved();
         }
 
-        // msg.value > 0 credits the Game's afkingFunding ledger in-context (A2 —
-        // the Game holds the ETH; claimablePool moved in tandem so the invariant
+        // msg.value > 0 credits the Game's afkingFunding ledger in-context (the Game
+        // holds the ETH; claimablePool moved in tandem so the invariant
         // claimablePool == Σ claimableWinnings + Σ afkingFunding holds). It credits the
         // SAME bucket the draws debit: the resolved funding source — the non-self
-        // `fundingSource` for an operator-funded sub (already OPENE-04-approved just
+        // `fundingSource` for an operator-funded sub (already approved just
         // above, so the funder consented to fund this subscriber), else the subscriber
         // itself. So a deposit attached to subscribe always funds the bucket that
         // actually pays for this sub's auto-buys — never misdirected to an unused player
@@ -356,7 +355,7 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
             claimablePool += uint128(msg.value);
         }
 
-        // CANCEL branch — dailyQuantity == 0 writes the `dailyQuantity = 0` tombstone in
+        // Cancel branch — dailyQuantity == 0 writes the `dailyQuantity = 0` tombstone in
         // place and relocates no one (the in-pass reclaim swap-pops the tombstone when the
         // process stage reaches it). Revert if the caller has no active sub. Any msg.value
         // above was still credited to funding, so a cancel-with-ETH never strands the
@@ -594,9 +593,9 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
     }
 
     /*------------------------------------------------------------------
-                          In-context views (CONSENT-01)
+                          In-context views
     ------------------------------------------------------------------*/
-    /// @dev In-context pass-horizon read (the AFSUB pass-gating producer, D-11).
+    /// @dev In-context pass-horizon read (the pass-gating producer).
     ///      The canonical horizon semantics: deity holders return the type(uint24).max
     ///      sentinel; everyone else returns their frozenUntilLevel. Single definition
     ///      (one canonical horizon read), called at the subscribe-time write + the
@@ -618,13 +617,13 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
     ------------------------------------------------------------------*/
     /// @dev Iterable set insert. Idempotent on already-in-set. 1-indexed
     ///      `_subscriberIndex` (0 = not in set). Reverts a NEW insert at
-    ///      SUBSCRIBER_CAP (500 active subs) — the protocol caps the set it pays to
+    ///      SUBSCRIBER_CAP (1000 active subs) — the protocol caps the set it pays to
     ///      iterate each cycle. A re-subscribe of an existing member is
     ///      already-in-set (no growth) so it never trips the cap.
     function _addToSet(address player) internal {
         if (_subscriberIndex[player] == 0) {
             // Cap the NEW-subscriber path only: bound the active set the advance
-            // chain walks (SUBSCRIBER_CAP = 500) so the per-cycle work stays cheap.
+            // chain walks (SUBSCRIBER_CAP = 1000) so the per-cycle work stays cheap.
             if (_subscribers.length >= SUBSCRIBER_CAP) {
                 revert SubscriberCapReached();
             }
@@ -636,8 +635,8 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
     /// @dev Iterable set remove via swap-and-pop. Idempotent on not-in-set.
     ///      1-indexed: move the last element into the vacated slot (and update its
     ///      index), pop the tail, clear the removed player's index. The process
-    ///      pass's "no cursor-advance after swap-pop" pattern (CONSENT-02 —
-    ///      H-CANCEL-SWAP-MISS) enforces iteration safety; this helper is itself
+    ///      pass's "no cursor-advance after swap-pop" pattern enforces iteration
+    ///      safety; this helper is itself
     ///      iteration-safe (membership ⟺ packed-index != 0 preserved).
     function _removeFromSet(address player) internal {
         uint256 idxPlus1 = _subscriberIndex[player];
@@ -654,13 +653,13 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
     }
 
     /*------------------------------------------------------------------
-                  The _resolveBuy slice builder (REVERT-01)
+                  The _resolveBuy slice builder
     ------------------------------------------------------------------*/
-    /// @dev Per-player funding resolution for the process pass — SUB-04 effective
+    /// @dev Per-player funding resolution for the process pass — effective
     ///      quantity → cost → purchase mode + funding split, carrying the slice-builder
-    ///      validation invariants that make a funded buy revert-free BY CONSTRUCTION (REVERT-01,
-    ///      the SOLE no-brick guarantor under the D-348-04 no-valve model). The five
-    ///      obligation-1 invariants (348-INVARIANT-CARRY §1, /contract-auditor PASS §5):
+    ///      validation invariants that make a funded buy revert-free BY CONSTRUCTION (the
+    ///      SOLE no-brick guarantor under the no-valve model). The five
+    ///      obligation-1 invariants:
     ///        (1) effectiveQty = max(dailyQuantity, reinvestQty) ≥ 1 (dailyQuantity ≥ 1
     ///            is the subscribe-time floor) → never the Game's totalCost==0 / dust /
     ///            TICKET_MIN reverts;
@@ -668,27 +667,27 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
     ///        (3) cost ≥ mintPrice ≥ 0.01 ETH (the priceForLevel floor) → a lootbox amount
     ///            always meets any min-spend floor; no skip/decline needed;
     ///        (4) 1-wei claimable sentinel → leaves claimable > cost / basis > shortfall →
-    ///            never Game:976 (Claimable claimable<=amount) nor Storage:843 (settle);
-    ///        (5) ethValue = cost - claimableUse with claimableUse ∈ [0, cost] → never
-    ///            Game:985/1003/1006.
-    ///      ⚠ Dual TICKET_SCALE (§3-i, LOAD-BEARING): the ticket entry-unit `amount`
+    ///            never the Game's Claimable (claimable<=amount) nor the settle revert;
+    ///        (5) ethValue = cost - claimableUse with claimableUse ∈ [0, cost] → never the
+    ///            Game's downstream cost reverts.
+    ///      ⚠ Dual TICKET_SCALE (LOAD-BEARING): the ticket entry-unit `amount`
     ///      uses `AFKING_TICKET_SCALE = 400`; the Game's `/ (4 * 100)` recompute uses the
     ///      inherited Storage `TICKET_SCALE = 100` — the two constants are NOT collapsed,
     ///      so `cost` stays `mintPrice * effectiveQty`.
-    ///      ⚠ NO error-swallowing valve (REVERT-02 no-valve): a funded slice is revert-free
-    ///      by construction, with no pre-emptive decline and no reactive error-trap; the
-    ///      per-cycle eviction cap is DROPPED.
+    ///      ⚠ NO error-swallowing valve: a funded slice is revert-free
+    ///      by construction, with no pre-emptive decline and no reactive error-trap; there
+    ///      is no per-cycle eviction cap.
     ///      In-context: `claimable` is the swept-gated raw `claimableWinnings[player]`
     ///      (== afkingSnapshot's claimable / claimableWinningsOf, incl. the 1-wei sentinel)
-    ///      and `playerFunding` is the raw `afkingFunding[player]` (== afkingFundingOf,
-    ///      D-MR-01), read as in-context SLOADs. The GO_SWEPT gate arrives as the
+    ///      and `playerFunding` is the raw `afkingFunding[player]` (== afkingFundingOf),
+    ///      read as in-context SLOADs. The GO_SWEPT gate arrives as the
     ///      caller-read `swept` flag (written only by the one-time game-over sweep, so it
     ///      is invariant within a tx — the STAGE reads it once per chunk, the subscribe
     ///      cover-buys inline at the call). View — no state writes.
     /// @return ethValue Fresh-ETH portion debited from the funder's afkingFunding (0 = pure claimable).
     /// @return amount Ticket entry-units (isTicket) or lootbox spend in wei (!isTicket).
     /// @return isTicket True = buy `amount` ticket entry-units; false = buy an `amount`-wei lootbox.
-    /// @return playerFunding The player's afkingFunding (the common-path funding-skip source; D-MR-01).
+    /// @return playerFunding The player's afkingFunding (the common-path funding-skip source).
     /// @return claimableUse Claimable portion of `cost` (reinvest / drainFirst); cost == ethValue + claimableUse.
     function _resolveBuy(
         Sub storage sub,
@@ -709,7 +708,7 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
         bool drainFirst = (sub.flags & FLAG_DRAIN_FIRST) != 0;
         // ONE in-context read pair: the player's
         // claimable (reinvest / drainFirst funding split) AND afkingFunding (the
-        // common-path funding-skip source — D-MR-01; the src != player OPEN-E slice
+        // common-path funding-skip source; the src != player operator-funded slice
         // reads afkingFunding[src] separately at the call site). Swept-gated to mirror
         // afkingSnapshot / claimableWinningsOf exactly.
         uint256 claimable = swept ? 0 : _claimableOf(player);
@@ -808,7 +807,7 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
         }
         // Reinvest/drainFirst claimable portion of the cost. The _resolveBuy 1-wei sentinel
         // guarantees claimableUse <= claimable - 1, so this never underflows. claimableWinnings
-        // rides in claimablePool, so the pool moves in tandem (the SOLVENCY-01 invariant).
+        // rides in claimablePool, so the pool moves in tandem (the solvency invariant).
         if (claimableUse != 0) {
             _debitClaimable(player, claimableUse);
             claimablePool -= uint128(claimableUse);
@@ -1109,42 +1108,42 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
     }
 
     /*------------------------------------------------------------------
-              The REQUIRED-PATH process STAGE (BOX-02 stamp + BOX-03 debit + CONSENT-02)
+              The REQUIRED-PATH process STAGE (stamp + debit)
     ------------------------------------------------------------------*/
     /// @notice The chunked pre-RNG stamp/buy pass the AdvanceModule STAGE drives across
     ///         the subscriber set, immediately before `rngGate` on the new-day path
-    ///         (D-348-01 required-path; 349.1-04 owns the AdvanceModule insertion). A
-    ///         NO-ORPHAN guard (§3) runs FIRST per sub: a sub with a pending unopened box
+    ///         (the required path; the AdvanceModule owns the insertion). A
+    ///         NO-ORPHAN guard runs FIRST per sub: a sub with a pending unopened box
     ///         (`lastOpenedDay < lastAutoBoughtDay`) is left ENTIRELY untouched this cycle
     ///         (no reclaim / evict / funding-kill / re-stamp), so its paid-for box is never
     ///         orphaned. For each funded, well-formed sub it then builds the `_resolveBuy`
-    ///         slice (REVERT-01) and, per mode (P2): a LOOTBOX sub STAMPS the two
+    ///         slice and, per mode: a LOOTBOX sub STAMPS the two
     ///         genuinely-per-sub box inputs (`score`, `amount`) warm-dirty into the
-    ///         single-slot Sub record (BOX-02) — the box is materialized LATER by the open
-    ///         leg at the LIVE level (349.1-03); a TICKET sub QUEUES whole tickets NOW via
+    ///         single-slot Sub record — the box is materialized LATER by the open
+    ///         leg at the LIVE level; a TICKET sub QUEUES whole tickets NOW via
     ///         the MintModule `purchaseWith` path (no box). Both modes debit
     ///         `afkingFunding[src]` then set the `lastAutoBoughtDay` success-marker AFTER
-    ///         the debit (BOX-03; it also doubles as the lootbox seed `day`), and carry the
-    ///         CONSENT-02 set-mutation semantics (no cursor advance after swap-pop).
-    /// @dev FREEZE-02b: the STAGE runs strictly pre-RNG (before `rngGate`), so the day-D
-    ///      word `rngWordByDay[processDay]` is uncommitted at stamp — the freeze property
-    ///      (349.1-DESIGN §2). The lootbox open sources its word from
+    ///         the debit (it also doubles as the lootbox seed `day`), and carry the
+    ///         set-mutation semantics (no cursor advance after swap-pop).
+    /// @dev The STAGE runs strictly pre-RNG (before `rngGate`), so the day-D
+    ///      word `rngWordByDay[processDay]` is uncommitted at stamp — the freeze property.
+    ///      The lootbox open sources its word from
     ///      `rngWordByDay[lastAutoBoughtDay]` and rolls the level LIVE at open; there is no
     ///      stored per-day epoch. The boundary-pinned `processDay` is computed once by the
     ///      STAGE and passed in (it is the stamped `lastAutoBoughtDay`, the frozen seed
-    ///      `day`, FREEZE-03; never open-time `_simulatedDayIndex()`).
-    /// @dev BOX-02 stamp-only (lootbox mode): this pass writes NO cold box-ledger entry —
+    ///      `day`; never open-time `_simulatedDayIndex()`).
+    /// @dev Stamp-only (lootbox mode): this pass writes NO cold box-ledger entry —
     ///      the warm Sub stamp is the box record (no cold ledger). boons OFF ⇒ `amount` = spend.
-    /// @dev DOUBLE-DRAW GUARD (EVCAP-01 producer): the lootbox path STAMPS only — the
+    /// @dev DOUBLE-DRAW GUARD: the lootbox path STAMPS only — the
     ///      single EV-cap RMW happens at OPEN, fed the FROZEN `evMultiplierBps`
     ///      derived from the stamped `score`. The ticket path defers all EV to the
     ///      MintModule buy (it computes the ticket's own activity score on the buy path).
-    /// @dev NO error-swallowing valve (REVERT-02 no-valve, D-348-04): a funded slice is
-    ///      revert-free by construction (REVERT-01); there is no pre-emptive lootbox skip;
+    /// @dev NO error-swallowing valve: a funded slice is
+    ///      revert-free by construction; there is no pre-emptive lootbox skip;
     ///      rule-(1) unfunded eviction is a separate pre-buy decision
     ///      (a NORMAL sub is auto-paused via swap-pop; VAULT/SDGNRS are EXEMPT by pinned
-    ///      identity); the SOLVENCY-01 `claimablePool -=` site FAILS LOUD (class B, must
-    ///      propagate). The per-cycle eviction cap is DROPPED.
+    ///      identity); the `claimablePool -=` site FAILS LOUD (class B, must
+    ///      propagate). There is no per-cycle eviction cap.
     /// @param processDay The boundary-pinned process day (computed once by the STAGE).
     /// @param weightBudget Per-call gas-weight budget (caller-bounded — the anti-gas-DoS
     ///        property). Each iteration consumes weight — a cheap local buy/skip 1, a
@@ -1156,8 +1155,8 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
         uint256 weightBudget
     ) external returns (uint256 processed) {
         uint256 mp = _mintPriceInContext();
-        // AFSUB-02 — hoist the level read ONCE so the per-iter validity check is a pure
-        // stored-field compare (no SLOAD on the non-crossing path). GASOPT-05 preserved.
+        // Hoist the level read ONCE so the per-iter validity check is a pure
+        // stored-field compare (no SLOAD on the non-crossing path).
         uint24 currentLevel = level;
         // Chunk-invariant global reads, hoisted once: the GO_SWEPT flag (written only by
         // the one-time game-over sweep, unreachable from this loop) and the ticket target
@@ -1188,7 +1187,7 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
             address player = _subscribers[cursor];
             Sub storage sub = _subOf[player];
 
-            // (-1) NO-ORPHAN guard (§3 — the load-bearing correctness rule). A box is
+            // (-1) NO-ORPHAN guard (the load-bearing correctness rule). A box is
             // STAMPED at process (day D) but OPENED later; it exists ONLY as
             // (Sub stamp + lastAutoBoughtDay) with no cold ledger, so ANY mutation of the
             // Sub OR removal from `_subscribers` between stamp and open ORPHANS the
@@ -1199,7 +1198,7 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
             // cycle processes it (now boxless, lastOpenedDay == lastAutoBoughtDay).
             // Positioned BEFORE the cancel-reclaim so it dominates ALL FOUR orphan paths
             // (re-stamp / cancel-reclaim / pass-evict / funding-kill). SKIP, not
-            // force-open (LOCKED §3): keeps the heavy open out of the gas-critical advance
+            // force-open: keeps the heavy open out of the gas-critical advance
             // chain; the FLIP open-bounty keeps opens prompt so it ~never skips a buy. No
             // double-charge — the debit is downstream of this guard. Composes with the
             // same-day idempotency skip at (1) (lastAutoBoughtDay >= processDay), which
@@ -1213,7 +1212,7 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
                 continue;
             }
 
-            // (0) Cancel-tombstone reclaim (CONSENT-02 — SUB-07 / H-CANCEL-SWAP-MISS).
+            // (0) Cancel-tombstone reclaim.
             // An externally-cancelled sub (subscribe(_, 0)) is an in-set
             // `dailyQuantity == 0` tombstone: it relocated no one on cancel, so it cannot
             // have pushed a pending entry behind the cursor. The cancel branch — the ONLY
@@ -1239,8 +1238,8 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
                 continue;
             }
 
-            // (1) AlreadyAutoBoughtToday — cheapest SLOAD-only skip (the BOX-03 marker is
-            // the idempotency backstop: a sub stamped this cycle is not re-stamped).
+            // (1) AlreadyAutoBoughtToday — cheapest SLOAD-only skip (the lastAutoBoughtDay
+            // marker is the idempotency backstop: a sub stamped this cycle is not re-stamped).
             if (sub.lastAutoBoughtDay >= processDay) {
                 emit PlayerSkipped(player, 2);
                 unchecked {
@@ -1251,11 +1250,11 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
                 continue;
             }
 
-            // (2) AFSUB-02/03 pass-validity gate. Non-crossing path is a pure stored-field
+            // (2) Pass-validity gate. Non-crossing path is a pure stored-field
             // compare (currentLevel <= validThroughLevel) — no extra read. At the crossing
             // the pass re-reads the horizon EXACTLY ONCE and refreshes (still covered) or
-            // evicts via the tombstone-then-reclaim shape (CONSENT-02 — membership ⟺ packed
-            // != 0 preserved; a direct mid-pass removal would re-open H-CANCEL-SWAP-MISS).
+            // evicts via the tombstone-then-reclaim shape (membership ⟺ packed
+            // != 0 preserved; a direct mid-pass removal would re-open the swap-miss hazard).
             if (currentLevel > sub.validThroughLevel) {
                 uint24 h = _passHorizonOf(player);
                 if (currentLevel <= h) {
@@ -1430,11 +1429,11 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
     }
 
     /*==================================================================
-        PART B (349-04) — the post-RNG OPEN-PASS + the ROUTER + PLACE-02
+        PART B — the post-RNG OPEN-PASS + the ROUTER
     ==================================================================*/
 
     /// @dev Reverts with the delegatecall failure reason bytes. Canonical module tail
-    ///      (cf. DegenerusGameDegeneretteModule:123 / DecimatorModule:90) for the
+    ///      (cf. DegenerusGameDegeneretteModule / DecimatorModule) for the
     ///      nested delegatecall into the LootboxModule's `resolveAfkingBox`.
     function _revertDelegate(bytes memory reason) private pure {
         if (reason.length == 0) revert E();
@@ -1503,7 +1502,7 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
     /// @return opened The number of afking boxes materialized this call.
     function _autoOpen(uint256 maxCount) internal returns (uint256 opened) {
         if (maxCount == 0) maxCount = OPEN_BATCH;
-        // Entry-gate (RD-3/RD-5): the open path no-ops in the freeze / terminal control.
+        // Entry-gate: the open path no-ops in the freeze / terminal control.
         if (rngLockedFlag || _livenessTriggered()) return 0;
 
         uint256 len = _subscribers.length;
@@ -1553,20 +1552,20 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
     }
 
     /// @notice Unified permissionless afking router: do ONE category of pending work this
-    ///         call (priority advance → afking-box open) and pay ONE bounty (PLACE-02).
+    ///         call (priority advance → afking-box open) and pay ONE bounty.
     /// @dev ROUTER one-category STRUCTURAL early-return: the rngLock-aware O(1) predicates
     ///      pick the first category with work; the advance and open bounties can never
-    ///      stack in one tx. NO `nonReentrant` guard (ROUTER-07 — the module is
+    ///      stack in one tx. NO `nonReentrant` guard — the module is
     ///      afking-never-a-payee: every external call is to a pinned `ContractAddresses.*`
     ///      [GAME self-call / LootboxModule delegatecall / COINFLIP], player value flows
     ///      through the game's claimable pull ledger, and the bounty is minted flip-credit
-    ///      — never an ETH push the router receives). The legs return raw counts/mult and
+    ///      — never an ETH push the router receives. The legs return raw counts/mult and
     ///      NEVER self-credit; only `mintFlip` credits, ONCE, CEI-last after the
     ///      one-category early-return.
-    /// @dev PLACE-02 bounty: the buy/process bounty FOLDS INTO the advance bounty — the
-    ///      process STAGE runs inside `advanceGame` (the required path, 349-05), so the
+    /// @dev Bounty: the buy/process bounty FOLDS INTO the advance bounty — the
+    ///      process STAGE runs inside `advanceGame` (the required path), so the
     ///      advance leg's `unit · 2 · mult` IS the process bounty, scaled by the
-    ///      AdvanceModule's day-epoch stall `mult` (1/2/4/6, :226-242). The OPEN leg pays
+    ///      AdvanceModule's day-epoch stall `mult` (1/2/4/6). The OPEN leg pays
     ///      the `OPEN_KNEE` work-scaled pro-rate (pay for work done, farm-by-splitting
     ///      resistant). `mult == 0` (the gameover advance path) pays no bounty.
     function mintFlip() external {
@@ -1574,7 +1573,7 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
 
         // (1) advance — highest priority, liveness-critical (TRUE regardless of rngLock).
         // The self-call re-enters the Game's advanceGame, which runs the required-path
-        // process STAGE in-context (349-05); the process bounty rides this 2x·mult.
+        // process STAGE in-context; the process bounty rides this 2x·mult.
         if (_advanceDueInContext()) {
             // Read pay-eligibility BEFORE the advance — it sees the pre-advance day (the
             // advance bumps dailyIdx). The advance work runs regardless; an ineligible
@@ -1591,7 +1590,7 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
             uint8 mult = IGameRouter(address(this)).advanceGame();
             if (mult > 0 && eligible) bountyEarned = unit * ADVANCE_RATIO_NUM * mult;
         }
-        // (2) afking-box open — FALSE during rngLock (RD-3); opens mid-day-resolved
+        // (2) afking-box open — FALSE during rngLock; opens mid-day-resolved
         // stamped boxes via _subOpenCursor. 1x pro-rated below the knee, flat 1x
         // at/above — kills the small-batch farm-by-splitting corner.
         else {
@@ -1605,7 +1604,7 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
                 uint256 k = opened < OPEN_KNEE ? opened : OPEN_KNEE;
                 bountyEarned = (unit * k) / OPEN_KNEE;
             } else {
-                // (3) ROUTER-06 — both categories empty: the clean no-work signal.
+                // (3) both categories empty: the clean no-work signal.
                 revert NoWork();
             }
         }
@@ -1651,7 +1650,7 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
     }
 
     /// @dev In-context mint price (the bounty's ETH→FLIP conversion divisor). Mirrors
-    ///      the Game's `mintPrice` (:2501) — the price for the active ticket level —
+    ///      the Game's `mintPrice` — the price for the active ticket level —
     ///      read in-context so the bounty math needs no external/self call. Single use
     ///      site (the bounty `unit`); never an open-time seed input (FREEZE-safe).
     function _mintPriceInContext() internal view returns (uint256) {
@@ -1659,10 +1658,10 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
     }
 
     /// @dev ETH-denominated spend → FLIP base units at the buy-context ticket price —
-    ///      the VALUATION BASIS for the lootbox-branch affiliate routing (DESIGN §3:
-    ///      affiliate + quest rewards are FLIP flip-credit, never an ETH cut). A faithful
-    ///      copy of MintModule._ethToFlipValue (:1669-1675); PRICE_COIN_UNIT (= 1000 ETH)
-    ///      is the inherited Storage constant already used at the bounty unit (:913). Pure —
+    ///      the VALUATION BASIS for the lootbox-branch affiliate routing (affiliate +
+    ///      quest rewards are FLIP flip-credit, never an ETH cut). A faithful
+    ///      copy of MintModule._ethToFlipValue; PRICE_COIN_UNIT (= 1000 ETH)
+    ///      is the inherited Storage constant already used at the bounty unit. Pure —
     ///      no ETH moves, no state.
     function _ethToFlip(
         uint256 amountWei,

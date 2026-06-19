@@ -13,9 +13,9 @@ interface IDegenerusGamePlayerActions {
     /// @notice Queue this caller's perpetual tickets for levels 1-100 (VAULT/SDGNRS only, once).
     function initPerpetualTickets() external;
     /// @notice Start or extend a daily afking subscription for `player` (self when 0/msg.sender).
-    /// @dev v55.0 ARCH-03: the afking subscription surface is GAME-resident (AfKing dissolved).
-    ///      The vault self-subscribes (player == address(this) == msg.sender) so the GAME's
-    ///      SUB-02 self-consent path passes with no operator approval.
+    /// @dev The afking subscription surface is GAME-resident. The vault self-subscribes
+    ///      (player == address(this) == msg.sender) so the GAME's self-consent path passes
+    ///      with no operator approval.
     function subscribe(
         address player,
         bool drainGameCreditFirst,
@@ -97,7 +97,7 @@ interface ICoinPlayerActions {
 interface IsDGNRSBurn {
     /// @notice Burn sDGNRS to claim proportional backing assets.
     function burn(uint256 amount) external returns (uint256 ethOut, uint256 stethOut, uint256 flipOut);
-    /// @notice Claim a resolved gambling-burn redemption for `player` on day `day` (SPEC-02 composite key).
+    /// @notice Claim a resolved gambling-burn redemption for `player` on day `day` (per-(player, day) composite key).
     function claimRedemption(address player, uint24 day) external;
 }
 
@@ -457,14 +457,14 @@ contract DegenerusVault {
         flipShare = new DegenerusVaultShare("Degenerus Vault Flip", "DGVF");
         ethShare = new DegenerusVaultShare("Degenerus Vault Eth", "DGVE");
 
-        // SUB-09 protocol-owned self-subscription: claimable-only daily lootbox
+        // Protocol-owned self-subscription: claimable-only daily lootbox
         // buy of flat quantity 1, no reinvest, no FLIP rebuy. Self-consent —
         // the vault IS the player (player == msg.sender). The vault holds the
         // permanent deity pass (granted in the DegenerusGame constructor), so the
         // afking's pass-OR-pay gate takes the free 30-day extend at zero cost.
-        // v55.0 ARCH-03: the afking surface is GAME-resident (AfKing dissolved);
-        // self-subscribe directly against the GAME (subscriber == msg.sender ⇒
-        // the GAME's SUB-02 self-consent path, no operator approval needed).
+        // The afking surface is GAME-resident; self-subscribe directly against
+        // the GAME (subscriber == msg.sender ⇒ the GAME's self-consent path, no
+        // operator approval needed).
         gamePlayer.subscribe(address(this), true, false, 1, 0, address(0));
 
         // Queue this vault's perpetual tickets (levels 1-100). Moved out of the GAME
@@ -486,7 +486,7 @@ contract DegenerusVault {
     ///      vault), so the recovered ETH only ever lands in the vault's own receive() — an external
     ///      trigger cannot redirect it. A zero balance is a no-op (withdrawAfkingFunding(0) returns).
     ///      Available anytime pre-sweep; reverts after the 30-day final sweep (the afking reservation
-    ///      is forfeited with claimablePool, claimable-equivalent — GAMEOVER-02).
+    ///      is forfeited with claimablePool, claimable-equivalent).
     function recoverAfkingFunding() external {
         gamePlayer.withdrawAfkingFunding(gamePlayer.afkingFundingOf(address(this)));
     }
@@ -710,7 +710,7 @@ contract DegenerusVault {
 
     /// @notice Claim a resolved sDGNRS gambling-burn redemption for day `day` on behalf of the vault.
     /// @dev Caller must pass the wall-clock day for which the vault holds an unresolved+resolved
-    ///      gambling-burn entry (SPEC-02 composite key). Reverts if no such entry exists or the
+    ///      gambling-burn entry (per-(player, day) composite key). Reverts if no such entry exists or the
     ///      day has not been resolved.
     /// @param day Wall-clock day whose redemption to claim.
     /// @custom:reverts NotVaultOwner If caller does not hold >50.1% of DGVE

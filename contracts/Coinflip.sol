@@ -7,7 +7,7 @@ pragma solidity 0.8.34;
  * @notice Standalone daily coinflip wagering system for FLIP
  *
  * @dev ARCHITECTURE:
- *      - Extracted from FLIP to reduce contract size
+ *      - A standalone contract separate from FLIP, keeping FLIP within its size budget
  *      - Manages the daily coinflip system with a flat recycle bonus
  *      - Integrates with FLIP for burn/mint operations
  *      - Handles the bounty system and quest rewards
@@ -882,7 +882,7 @@ contract Coinflip {
             rewardPercent += bonus;
         }
 
-        // Preserve original 50/50 win roll.
+        // 50/50 win roll off the low bit of the VRF word.
         bool win = (rngWord & 1) == 1;
 
         // Record the day's result for future claims

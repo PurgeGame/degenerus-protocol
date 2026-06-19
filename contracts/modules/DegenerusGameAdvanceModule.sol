@@ -241,7 +241,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                             _lrWrite(LR_MID_DAY_SHIFT, LR_MID_DAY_MASK, 0);
                         }
                         emit Advance(STAGE_TICKETS_WORKING, lvl);
-                        // Mid-day partial-drain: mult = 1 (ADV-05/D-07 — no escalation).
+                        // Mid-day partial-drain: mult = 1 (no escalation).
                         return mult;
                     }
                 }
@@ -368,8 +368,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
             }
 
             // RNG: use existing word or request new one. Precompute the day's coinflip reward
-            // bonus from the frozen level (replacing the old player-flippable presale flag that
-            // was read live at payout): +2 on a bonus day (level 0 or a level's first jackpot
+            // bonus from the frozen level: +2 on a bonus day (level 0 or a level's first jackpot
             // day), +6 on a post-BAF x0-level first-jackpot-day (levels 10, 20, 30, …; level 0
             // is excluded — no BAF precedes it), 0 otherwise. Sized so a recycling (auto-rebuy)
             // player nets ~99.9% / ~101.9% RTP once the 0.75% recycle bonus compounds in.
@@ -459,7 +458,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                 stage = STAGE_TICKETS_WORKING;
                 break;
             }
-            ticketsFullyProcessed = true; // ADV-03: set before jackpot/phase logic
+            ticketsFullyProcessed = true; // set before jackpot/phase logic
 
             // === PURCHASE PHASE ===
             if (!inJackpot) {
@@ -793,12 +792,12 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
     ///      DegenerusGameStorage). For each funded sub the callee STAMPS the per-sub box
     ///      fields (lootbox mode) or QUEUES whole tickets via purchaseWith (ticket mode),
     ///      sets the lastAutoBoughtDay marker, debits afkingFunding (claimablePool in
-    ///      tandem, fail loud — D-348-04 no-valve), and advances _subCursor until the
+    ///      tandem, fail loud — no error-swallowing valve), and advances _subCursor until the
     ///      accumulated gas-weight reaches SUB_STAGE_WEIGHT_BUDGET; it persists _subCursor
     ///      itself. The STAGE caller decides drained-vs-partial by re-reading _subCursor against
     ///      _subscribers.length. No per-day epoch is written — the box reads the LIVE level +
     ///      rngWordByDay[day] at open.
-    /// @param processDay The boundary-pinned process day (seeds the open, FREEZE-03).
+    /// @param processDay The boundary-pinned process day (seeds the open).
     function _runSubscriberStage(uint24 processDay) private {
         (bool ok, bytes memory data) = ContractAddresses
             .GAME_AFKING_MODULE
@@ -1248,7 +1247,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                 lastPurchaseDay && compressedJackpotFlag != 2
             );
 
-            // Resolve the sentinel-stamped gambling-burn pool if any (INV-13). Reading the
+            // Resolve the sentinel-stamped gambling-burn pool if any. Reading the
             // sentinel rather than deriving `day - 1` makes multi-day RNG stalls correct by
             // construction: the sentinel always names the (at most one) unresolved day, so a
             // single resolve call after the stall recovers covers the stuck pool exactly.
@@ -1311,7 +1310,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                 // Gameover settles the final day's flips but never grants a bonus (0).
                 coinflip.processCoinflipPayouts(0, currentWord, day);
             }
-            // Resolve the sentinel-stamped gambling-burn pool if any (INV-13). Same shape as the
+            // Resolve the sentinel-stamped gambling-burn pool if any. Same shape as the
             // rngGate redemption resolution path — sentinel-keyed so multi-day stalls resolve
             // by construction.
             {
@@ -1346,7 +1345,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                     // Gameover settles the final day's flips but never grants a bonus (0).
                     coinflip.processCoinflipPayouts(0, fallbackWord, day);
                 }
-                // Resolve the sentinel-stamped gambling-burn pool if any (INV-13). Fallback path
+                // Resolve the sentinel-stamped gambling-burn pool if any. Fallback path
                 // uses fallbackWord for the roll; sentinel still names the stuck day so resolves
                 // are correct even after a 3-day GAMEOVER_RNG_FALLBACK_DELAY stall.
                 {
@@ -1768,7 +1767,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         address current = address(vrfCoordinator);
         _setVrfConfig(newCoordinator, newSubId, newKeyHash);
 
-        // Detect what is in flight and re-issue on the new coordinator (D-01/D-02).
+        // Detect what is in flight and re-issue on the new coordinator.
         // The request is accepted before the new subscription is LINK-funded; DegenerusAdmin
         // funds it in the same _executeSwap transaction (transferAndCall), and the VRF node
         // fulfills once funded. retryLootboxRng is the failsafe if the new coordinator stalls.

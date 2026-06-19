@@ -97,7 +97,7 @@ contract DegenerusGameDegeneretteModule is
     /// @param ticketIndex Index of this ticket (0 to count-1).
     /// @param playerTicket The player's ticket traits.
     /// @param matches Composite score S = A + 2*H (0-9). Field name retained for the
-    ///        off-chain indexer (range widening 0-8 → 0-9 is a separate out-of-scope track).
+    ///        off-chain indexer.
     /// @param payout Payout for this ticket.
     event FullTicketResult(
         address indexed player,
@@ -224,7 +224,7 @@ contract DegenerusGameDegeneretteModule is
         IsDGNRS(ContractAddresses.SDGNRS);
 
     /// @dev Degenerette DGNRS reward BPS (per ETH wagered, % of remaining Reward pool),
-    ///      keyed on the top-3 score tiers S=7/8/9 (rarity preserved; shift-by-one from M=6/7/8).
+    ///      keyed on the top-3 score tiers S=7/8/9.
     uint16 private constant DEGEN_DGNRS_7_BPS = 400; // S=7: 4% per ETH
     uint16 private constant DEGEN_DGNRS_8_BPS = 800; // S=8: 8% per ETH
     uint16 private constant DEGEN_DGNRS_9_BPS = 1500; // S=9: 15% per ETH
@@ -272,13 +272,11 @@ contract DegenerusGameDegeneretteModule is
     //
     // Bit layout (S=0..7 packed): 32 bits per score index, [S*32 .. S*32+31].
     // S=8 and S=9 exceed the packed jackpot range and are held as separate per-N
-    // uint256 constants below (S=9 is the jackpot relabel of the old M=8 event).
+    // uint256 constants below (S=9 is the jackpot tier).
     //
-    // The S∈{0..9} payout constants are recalibrated by
-    // .planning/notes/degenerette-recalibration/derive_5_tables.py to basePayoutEV =
-    // 100 centi-x per N and byte-reproduced under the Phase-267-style PASS_ALL gate.
-    // The S=0..7 values are packed below; S=8 and S=9 are held as separate per-N
-    // uint256 constants (S=9 is the jackpot relabel of the old M=8 event).
+    // The S∈{0..9} payout constants are calibrated to basePayoutEV =
+    // 100 centi-x per N. The S=0..7 values are packed below; S=8 and S=9 are
+    // held as separate per-N uint256 constants (S=9 is the jackpot tier).
     uint256 private constant QUICK_PLAY_PAYOUTS_N0_PACKED = 0x0000ccf1000027f8000008b700000311000000f9000000640000000000000000;
     uint256 private constant QUICK_PLAY_PAYOUTS_N1_PACKED = 0x0000f45d00002fa800000a61000003aa00000129000000770000000000000000;
     uint256 private constant QUICK_PLAY_PAYOUTS_N2_PACKED = 0x000120850000384600000c44000004560000015f0000008c0000000000000000;
@@ -286,16 +284,15 @@ contract DegenerusGameDegeneretteModule is
     uint256 private constant QUICK_PLAY_PAYOUTS_N4_PACKED = 0x00018aa100004cf0000010c8000005ea000001e0000000c00000000000000000;
 
     /// @dev Per-N S=9 jackpot tier (exceeds 32-bit slot; held as separate uint256).
-    ///      S=9 ≡ old M=8 (identical event + odds) — a relabel; values unchanged,
-    ///      strictly monotonic in N. FINAL (not a placeholder).
+    ///      Values are strictly monotonic in N.
     uint256 private constant QUICK_PLAY_PAYOUT_N0_S9 = 10_756_411; // 107,564.11x bet
     uint256 private constant QUICK_PLAY_PAYOUT_N1_S9 = 12_583_037; // 125,830.37x bet
     uint256 private constant QUICK_PLAY_PAYOUT_N2_S9 = 14_792_939; // 147,929.39x bet
     uint256 private constant QUICK_PLAY_PAYOUT_N3_S9 = 17_512_324; // 175,123.24x bet
     uint256 private constant QUICK_PLAY_PAYOUT_N4_S9 = 20_916_435; // 209,164.35x bet
 
-    /// @dev Per-N S=8 tier (separate uint256, exceeds 32-bit slot). Recalibrated to
-    ///      basePayoutEV = 100 centi-x per N by derive_5_tables.py.
+    /// @dev Per-N S=8 tier (separate uint256, exceeds 32-bit slot). Calibrated to
+    ///      basePayoutEV = 100 centi-x per N.
     uint256 private constant QUICK_PLAY_PAYOUT_N0_S8 = 2_623_243; // 26,232.43x bet
     uint256 private constant QUICK_PLAY_PAYOUT_N1_S8 = 3_127_840; // 31,278.40x bet
     uint256 private constant QUICK_PLAY_PAYOUT_N2_S8 = 3_693_049; // 36,930.49x bet
@@ -314,8 +311,8 @@ contract DegenerusGameDegeneretteModule is
     // Bit layout (B=6..9 packed): 64 bits per bucket index, [B=6 | B=7 | B=8 | B=9],
     // with B=6 in the low 64 bits. Read via `(packed >> ((bucket - 6) * 64)) & 0xFFFFFFFFFFFFFFFF`.
     //
-    // The factor constants below are calibrated for the S∈{0..9} distribution by
-    // derive_5_tables.py; total ETH bonus EV = exactly 5.000% per N.
+    // The factor constants below are calibrated for the S∈{0..9} distribution so that
+    // total ETH bonus EV = exactly 5.000% per N.
     uint256 private constant WWXRP_BONUS_FACTOR_SCALE = 1_000_000;
     uint256 private constant WWXRP_FACTORS_N0_PACKED = 0x0000000002278add0000000000301e470000000000769797000000000011b488;
     uint256 private constant WWXRP_FACTORS_N1_PACKED = 0x0000000003aef46a0000000000459aab000000000096dc93000000000014250d;
@@ -842,7 +839,7 @@ contract DegenerusGameDegeneretteModule is
         ResolveAcc memory acc
     ) private returns (uint256 lootboxShare) {
         if (currency == CURRENCY_ETH) {
-            // 3-tier split rule (PAY-SPLIT-01..02)
+            // 3-tier split rule
             uint256 ethShare;
             uint256 threeBet = uint256(betAmount) * 3;
             if (payout <= threeBet) {
@@ -885,7 +882,7 @@ contract DegenerusGameDegeneretteModule is
                 acc.pendingFuture -= uint128(ethShare);
             } else {
                 // Unfrozen path: pool cap (ETH_WIN_CAP_BPS) takes PRECEDENCE over
-                // the 3-tier split (PAY-SPLIT-03). After capping,
+                // the 3-tier split. After capping,
                 // ethShare ≤ pool × 10% < pool, so no further solvency check.
                 uint256 pool = acc.runningFuture;
                 uint256 maxEth = (pool * ETH_WIN_CAP_BPS) / 10_000;
@@ -1027,7 +1024,7 @@ contract DegenerusGameDegeneretteModule is
         }
     }
 
-    /// @dev Maps a score S to a WWXRP bonus bucket (shift-by-one from the old M scale).
+    /// @dev Maps a score S to a WWXRP bonus bucket.
     /// @return bucket 0=none, 6/7/8/9 for the top score tiers.
     function _wwxrpBonusBucket(
         uint8 s
@@ -1104,7 +1101,7 @@ contract DegenerusGameDegeneretteModule is
     /// @dev Dispatches to the per-N base payout table for the given score S.
     ///      S = 0..7 are packed 32 bits each into `QUICK_PLAY_PAYOUTS_N{N}_PACKED`;
     ///      S = 8 and S = 9 each exceed the 32-bit slot so each N has separate
-    ///      `QUICK_PLAY_PAYOUT_N{N}_S8` / `_S9` constants (S=9 is the M=8 jackpot relabel).
+    ///      `QUICK_PLAY_PAYOUT_N{N}_S8` / `_S9` constants (S=9 is the jackpot tier).
     /// @param N Gold-quadrant count of the player ticket (0..4).
     /// @param s Composite score (0..9).
     /// @return Base payout in centi-x (e.g. 204 = 2.04x at 100% ROI).

@@ -108,9 +108,7 @@ import {GameTimeLib} from "../libraries/GameTimeLib.sol";
  *
  * UPGRADE NOTES
  * -----------------------------------------------------------------------------
- * This contract is NOT upgradeable (no proxy pattern). However, if future
- * versions are deployed, they MUST preserve this exact layout to allow
- * state migration or fork compatibility. Document any additions here.
+ * This contract is NOT upgradeable (no proxy pattern).
  *
  * VARIABLE DOCUMENTATION
  * -----------------------------------------------------------------------------
@@ -295,7 +293,7 @@ abstract contract DegenerusGameStorage {
     ///      Reset to false on every queue slot swap.
     bool internal ticketsFullyProcessed;
 
-    // EVM SLOT 0 (continued): Double-Buffer + Freeze (moved from slot 1)
+    // EVM SLOT 0 (continued): Double-Buffer + Freeze
 
     /// @dev Active write buffer toggle for ticket queue double-buffering.
     ///      Toggled via negation (`ticketWriteSlot = !ticketWriteSlot`) during queue slot swaps.
@@ -1500,7 +1498,7 @@ abstract contract DegenerusGameStorage {
     }
 
     // =========================================================================
-    // VRF Configuration (moved from DegenerusGame for module access)
+    // VRF Configuration (on the shared base for module access)
     // =========================================================================
 
     /// @dev Chainlink VRF V2.5 coordinator contract.
@@ -1756,8 +1754,7 @@ abstract contract DegenerusGameStorage {
     // =========================================================================
     // Decimator Jackpot State
     // =========================================================================
-    // Migrated from DegenerusJackpots to consolidate all decimator logic
-    // into the DecimatorModule for cleaner architecture.
+    // All decimator logic is consolidated into the DecimatorModule.
 
     /// @dev Player's decimator burn entry per level.
     struct DecEntry {
@@ -1891,7 +1888,7 @@ abstract contract DegenerusGameStorage {
     TerminalDecClaimRound internal lastTerminalDecClaimRound;
 
     // =========================================================================
-    // Boon Packed Storage (replaces 29 per-player boon mappings above)
+    // Boon Packed Storage
     // =========================================================================
 
     /// @dev Packed boon state for a single player. 2 storage slots.
@@ -1928,18 +1925,16 @@ abstract contract DegenerusGameStorage {
         uint256 slot1;
     }
 
-    /// @dev Per-player packed boon state. Replaces the 29 individual boon mappings
-    ///      (slots 25-41, 72-82, 85-87, 93-95) which remain as slot placeholders.
-    ///      Public getter returns (uint256 slot0, uint256 slot1); bit layout above.
-    ///      UI readers combine with currentDayView() to compute per-category expiry.
+    /// @dev Per-player packed boon state. Public getter returns (uint256 slot0, uint256
+    ///      slot1); bit layout above. UI readers combine with currentDayView() to compute
+    ///      per-category expiry.
     mapping(address => BoonPacked) public boonPacked;
 
     // =========================================================================
-    // claimBingo color-completion bitfields (v51.0 — claimBingo-EXCLUSIVE)
+    // claimBingo color-completion bitfields (claimBingo-EXCLUSIVE)
     //
-    // Appended at the storage-layout tail; pre-launch redeploy-fresh, no migration.
-    // Keyed by uint24 level (the traitBurnTicket precedent at :416). The ONLY
-    // reader/writer of these three mappings is DegenerusGameBingoModule.claimBingo.
+    // Keyed by uint24 level. The ONLY reader/writer of these mappings is
+    // DegenerusGameBingoModule.claimBingo.
     // =========================================================================
 
     /// @dev Per-player 4-bit quadrant mask: which quadrants this player has already
@@ -2315,14 +2310,12 @@ abstract contract DegenerusGameStorage {
 
     /// @dev Sparse funder map — the wallet whose `afkingFunding` funds a sub.
     ///      Absent / address(0) ⇒ self-funded (the common case, which stores NOTHING).
-    ///      CONSENT-01 funder identity. Written at
-    ///      subscribe (set-if-nonzero / delete-if-self) and read once per process
-    ///      iteration to resolve `src` (and once at open is NOT needed — funding is
-    ///      already debited at process). OPEN-E 4-protection unchanged.
+    ///      Written at subscribe (set-if-nonzero / delete-if-self) and read once per
+    ///      process iteration to resolve `src` (not needed at open — funding is already
+    ///      debited at process).
     mapping(address => address) internal _fundingSourceOf;
 
-    /// @dev Insertion-ordered iterable subscriber set (swap-pop tombstone on
-    ///      cancel — the H-CANCEL-SWAP-MISS membership class).
+    /// @dev Insertion-ordered iterable subscriber set (swap-pop tombstone on cancel).
     address[] internal _subscribers;
 
     /// @dev 1-indexed membership ⟺ packed-index map (0 = not in set); the
@@ -2372,6 +2365,6 @@ abstract contract DegenerusGameStorage {
     ///      which re-couples to the VRF-rotation orphan-index keyspace — the box auto-open
     ///      walk MUST gate each open on lootboxRngWordByIndex[index] != 0 so an index
     ///      orphaned mid-day by an emergency coordinator rotation is skipped until the
-    ///      a303ae18 detect-preserve-re-issue path lands the re-issued word.
+    ///      detect-preserve-re-issue path lands the re-issued word.
     mapping(uint48 => address[]) internal boxPlayers;
 }

@@ -360,14 +360,14 @@ interface IDegenerusGameLootboxModule {
     /// @notice Resolve an AfKing-subscription box at the LIVE level from a caller-passed
     ///         frozen-day word.
     /// @dev The LIVE-level twin of resolveLootboxDirect — the box rolls from the LIVE level
-    ///      and the EV-cap RMW is the single draw at open (EVCAP-01), with two deviations:
-    ///      the word is a caller-passed param (rngWordByDay[stamp day], §1) and the seed
-    ///      `day` is the FROZEN stamped process day (§1). Called by the GameAfkingModule
+    ///      and the EV-cap RMW is the single draw at open, with two deviations:
+    ///      the word is a caller-passed param (rngWordByDay[stamp day]) and the seed
+    ///      `day` is the FROZEN stamped process day. Called by the GameAfkingModule
     ///      open-leg.
     /// @param player Box owner (resolved from the subscription)
     /// @param amount The stamped spend in wei (boons OFF ⇒ amount == spend)
     /// @param day The boundary-pinned process day stamped at process (frozen seed input)
-    /// @param rngWord The frozen stamp day's word rngWordByDay[day], passed by the caller (§1)
+    /// @param rngWord The frozen stamp day's word rngWordByDay[day], passed by the caller
     /// @param activityScore The stamped activity-score bps (the frozen EV input)
     function resolveAfkingBox(
         address player,
@@ -477,7 +477,7 @@ interface IDegenerusGameDegeneretteModule {
 }
 
 /// @title IDegenerusGameBingoModule
-/// @notice Interface for color-completion bingo claims (v51.0) + the affiliate-DGNRS claim.
+/// @notice Interface for color-completion bingo claims + the affiliate-DGNRS claim.
 interface IDegenerusGameBingoModule {
     /// @notice Claim color-completion bingo: all 8 colors of one symbol on a level.
     /// @param level The level to claim on (uint24 storage-key width).
@@ -504,11 +504,11 @@ interface IDegenerusGameBingoModule {
 ///      the bounty payee read the original caller).
 interface IGameAfkingModule {
     /// @notice The SINGLE subscription entrypoint: create / replace (dailyQuantity >= 1)
-    ///         or cancel (dailyQuantity == 0, SUB-07 tombstone) for `player`
+    ///         or cancel (dailyQuantity == 0, tombstone) for `player`
     ///         (self when 0/msg.sender).
-    /// @dev FREEZE-01 rngLock guard (all of create / replace / cancel); CONSENT-01:
-    ///      SUB-02 self-consent OR operator-approval (third-party path); OPENE-04
-    ///      funding-source operator-approval gate; AFSUB validThroughLevel write.
+    /// @dev rngLock guard on all of create / replace / cancel; self-consent OR
+    ///      operator-approval (third-party path); funding-source operator-approval
+    ///      gate; validThroughLevel write.
     function subscribe(
         address player,
         bool drainGameCreditFirst,
@@ -519,7 +519,7 @@ interface IGameAfkingModule {
     ) external payable;
 
     /// @notice Unified permissionless router: do ONE category of pending work this call
-    ///         (advance → afking-box open) and pay ONE bounty (PLACE-02).
+    ///         (advance → afking-box open) and pay ONE bounty.
     function mintFlip() external;
 
     /// @notice Drain up to `count` ready afking boxes (walks _subOpenCursor); returns the

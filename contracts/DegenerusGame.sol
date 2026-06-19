@@ -178,7 +178,6 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
       |  [209-214] affBonusPoints  - Cached affiliate bonus points (6b)     |
       |  [215-227] (reserved)      - 13 unused bits                          |
       |  [228-243] unitsAtLevel    - Mints at current level                  |
-      |  [244]    (deprecated)     - Previously used for bonus tracking      |
       +======================================================================+*/
 
     /*+======================================================================+
@@ -204,8 +203,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         mintPacked_[ContractAddresses.SDGNRS] = BitPackingLib.setPacked(mintPacked_[ContractAddresses.SDGNRS], BitPackingLib.HAS_DEITY_PASS_SHIFT, 1, 1);
         mintPacked_[ContractAddresses.VAULT] = BitPackingLib.setPacked(mintPacked_[ContractAddresses.VAULT], BitPackingLib.HAS_DEITY_PASS_SHIFT, 1, 1);
         // Perpetual vault/SDGNRS tickets (levels 1-100) are queued post-deploy by VAULT and
-        // SDGNRS via initPerpetualTickets() — moved out of this constructor so GAME's deploy
-        // stays under the per-tx gas cap.
+        // SDGNRS via initPerpetualTickets(), keeping GAME's deploy under the per-tx gas cap.
     }
 
     /// @notice Queue the perpetual vault/SDGNRS tickets for levels 1-100 (advance handles 101+).
@@ -306,7 +304,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         if (!ok) _revertDelegate(data);
     }
 
-    /// @notice Claim color-completion bingo: all 8 colors of one symbol on a level (v51.0).
+    /// @notice Claim color-completion bingo: all 8 colors of one symbol on a level.
     /// @dev Dispatches to GAME_BINGO_MODULE via delegatecall; void return.
     ///      Signature: claimBingo(uint24 level, uint8 symbol, uint32[8] slots) — the level to
     ///      claim on (uint24 storage-key width), the symbol 0-31 (quadrant = symbol >> 3,
@@ -326,28 +324,26 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     }
 
     /*+======================================================================+
-      |              AFKING DISPATCH STUBS (v55.0 ARCH-02/03)               |
+      |                      AFKING DISPATCH STUBS                          |
       +======================================================================+
       |  Thin delegatecall dispatch stubs into GAME_AFKING_MODULE (the AfKing     |
       |  subscription logic), shaped exactly like claimBingo.                     |
       |  The afking subscriber set / cursors / Sub stamps live in this Game's     |
       |  storage (DegenerusGameStorage), so the module MUST run in this           |
-      |  contract's context — delegatecall preserves msg.sender, so the SUB-02 /  |
-      |  OPENE-04 consent gates and the mintFlip bounty payee read the real         |
-      |  caller. These are the canonical entrypoints (there is no longer a        |
-      |  separate afking logic host). `subscribe` is the SINGLE subscription       |
-      |  mutator (create / replace / cancel — the 4 per-field setters are folded  |
-      |  into it), so only 2 stubs remain (subscribe / mintFlip); none is            |
-      |  `view`. The afking box-open is reached via mintFlip's router (the          |
-      |  module's autoOpen would collide with this Game's existing human-box      |
-      |  autoOpen(uint256) selector, so it is not re-exposed as a stub here).     |
+      |  contract's context — delegatecall preserves msg.sender, so the consent   |
+      |  gates and the mintFlip bounty payee read the real caller. These are the  |
+      |  canonical afking entrypoints. `subscribe` is the SINGLE subscription      |
+      |  mutator (create / replace / cancel). The afking box-open is reached via  |
+      |  mintFlip's router (the module's autoOpen would collide with this Game's  |
+      |  existing human-box autoOpen(uint256) selector, so it is not re-exposed   |
+      |  as a stub here).                                                         |
       +======================================================================+*/
 
     /// @notice Start or extend a daily afking subscription for `player`.
-    /// @dev CONSENT-01 (SUB-02 self-consent / OPENE-04 funding gate) runs in-context
-    ///      against the Game's operatorApprovals (delegatecall preserves msg.sender).
+    /// @dev The self-consent / funding-gate consent checks run in-context against the
+    ///      Game's operatorApprovals (delegatecall preserves msg.sender).
     ///      msg.value > 0 credits the RESOLVED funding bucket's afkingFunding — the
-    ///      non-self (OPENE-04-approved) fundingSource for an operator-funded sub, else the
+    ///      non-self (approved) fundingSource for an operator-funded sub, else the
     ///      subscriber (claimablePool in tandem) — so the deposit funds the bucket the
     ///      draws debit.
     ///      Signature: subscribe(address player, bool drainGameCreditFirst, bool useTickets,
@@ -369,7 +365,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     }
 
     /// @notice Unified permissionless afking router: do ONE category of pending work
-    ///         (advance → afking-box open) and pay ONE bounty (PLACE-02). The bounty
+    ///         (advance → afking-box open) and pay ONE bounty. The bounty
     ///         credits msg.sender (preserved via delegatecall).
     /// @dev The signature matches the module function exactly (identical selector), so the calldata
     ///      forwards as-is — re-encoding here would cost contract-size headroom for no behavior change.
@@ -610,7 +606,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         if (!ok) _revertDelegate(data);
     }
 
-    /// @notice Buy a credit-gated coin-presale box with ETH and/or claimable (CPAY-02).
+    /// @notice Buy a credit-gated coin-presale box with ETH and/or claimable.
     /// @dev Box is gated by presaleBoxCredit (earned 25% on prior ETH buys), consumes
     ///      credit 1:1, caps cumulatively at 50 ETH, and queues for later resolution.
     /// @param buyer Player to receive the box (address(0) = msg.sender).
@@ -1229,7 +1225,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     function _claimWinningsInternal(address player, bool stethFirst) private {
         if (_goRead(GO_SWEPT_SHIFT, GO_SWEPT_MASK) != 0) revert E();
         uint256 amount = _claimableOf(player);
-        // Decision B (GAMEOVER-01): post-gameOver the claim ALSO pays the caller's prepaid
+        // Post-gameOver the claim ALSO pays the caller's prepaid
         // afking ETH (lazy per-player merge — no unbounded loop). Pre-gameOver afkingFunding
         // stays its own bucket (spent by afking auto-buys / reclaimed via withdrawAfkingFunding).
         // Both this merge and withdrawAfkingFunding zero the SAME bucket → no double-spend.
@@ -1255,9 +1251,8 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     }
 
     /// @notice Fund a player's prepaid afking ETH bucket (consumed by the AfKing afking auto-buy).
-    /// @dev Permissionless (fund anyone) — the AfKing subscribe-forward (A2) and the OPEN-E
-    ///      operator-funding case both route here. The Game's bare receive() routes msg.value to
-    ///      the prize pool, so afking deposits MUST use this dedicated entrypoint. The reservation
+    /// @dev Permissionless (fund anyone) — the AfKing subscribe-forward and the
+    ///      operator-funding case both route here. The reservation
     ///      rides inside claimablePool (no separate aggregate) — credited in tandem.
     /// @param player The beneficiary whose afkingFunding bucket is credited.
     function depositAfkingFunding(address player) external payable {
@@ -1318,22 +1313,22 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
       +======================================================================+*/
 
     /// @dev Flat ~1-FLIP "lose" reward for the Degenerette resolve helper, paid ONCE per tx
-    ///      at >=3 non-WWXRP resolutions (D-05b). A count-independent consolation flip-credit;
+    ///      at >=3 non-WWXRP resolutions. A count-independent consolation flip-credit;
     ///      the bet-stake gate (>=3 placed bets at the house edge) makes every self-resolve
     ///      farm net-negative, so it is intentionally NOT pegged to the per-resolve marginal.
     uint256 private constant RESOLVE_FLAT_FLIP = 1e18;
 
     /// @notice Permissionlessly resolve a caller-supplied list of Degenerette bets.
-    /// @dev AUTO-01/02. Items are parallel arrays: item i = (players[i], betIds[i]),
+    /// @dev Items are parallel arrays: item i = (players[i], betIds[i]),
     ///      front-to-back. Item 0 is the caller's own probe: if it is already resolved
     ///      (degeneretteBets[players[0]][betIds[0]] == 0) a competitor got ahead, so the
     ///      whole list reverts with BatchAlreadyTaken (a loser-gas cap, reusing the SLOAD
     ///      item 0 needs anyway). Items 1..N are isolated per-item (a stale/reverting item
-    ///      skips). The reward is a FLAT ~1-FLIP creditFlip granted ONCE (REW-02) at >=3
-    ///      successfully-resolved NON-WWXRP bets (D-05b); WWXRP (currency == 3) resolves but
-    ///      never counts toward the gate (AUTO-04). Zero resolutions revert NoWork(); 1-2
+    ///      skips). The reward is a FLAT ~1-FLIP creditFlip granted ONCE at >=3
+    ///      successfully-resolved NON-WWXRP bets; WWXRP (currency == 3) resolves but
+    ///      never counts toward the gate. Zero resolutions revert NoWork(); 1-2
     ///      resolved commit UNPAID (never strand the trailing tail). Any caller including a
-    ///      self-resolver (REW-04, no caller restriction).
+    ///      self-resolver (no caller restriction).
     /// @param players Bet owners, grouped/ordered by the caller (item 0 is the probe).
     /// @param betIds Bet ids, parallel to players.
     function degeneretteResolve(
@@ -1343,7 +1338,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         uint256 len = players.length;
         if (len == 0 || betIds.length != len) revert E();
 
-        // AUTO-02 short-circuit: probe item 0 (the caller's own choice). A resolved
+        // Short-circuit: probe item 0 (the caller's own choice). A resolved
         // bet is deleted (slot == 0), so a zero slot means a competitor got ahead.
         // The probe read doubles as iteration 0's bet read (do-while; len >= 1 here),
         // so later items load their slot at the loop bottom instead of re-reading item 0.
@@ -1355,12 +1350,12 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         uint256 i;
         do {
             // currency bits [42..43]: WWXRP is the most +EV currency, so it is excluded
-            // from the >=3 reward gate to keep the faucet closed (AUTO-04).
+            // from the >=3 reward gate to keep the faucet closed.
             uint8 currency = uint8((betPacked >> 42) & 0x3);
             // Per-item isolation: a stale/reverting/not-ready bet skips, never bricks.
             try this._degeneretteResolveBet(players[i], betIds[i]) {
                 // Any resolution counts toward the no-work gate; only non-WWXRP
-                // resolutions count toward the >=3 flat-reward gate (AUTO-04).
+                // resolutions count toward the >=3 flat-reward gate.
                 unchecked {
                     ++totalResolved;
                     if (currency != 3) ++successCount;
@@ -1373,7 +1368,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
             betPacked = degeneretteBets[players[i]][betIds[i]];
         } while (true);
 
-        // Flat ~1-FLIP "lose" (D-05b): pay ONCE at >=3 non-WWXRP resolutions; revert
+        // Flat ~1-FLIP "lose": pay ONCE at >=3 non-WWXRP resolutions; revert
         // NoWork() if nothing resolved; 1-2 resolved commit UNPAID (never strand the tail).
         if (totalResolved == 0) revert NoWork();
         if (successCount >= 3) coinflip.creditFlip(msg.sender, RESOLVE_FLAT_FLIP);
@@ -1382,7 +1377,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     /// @notice O(1) discovery: does advanceGame() have pending work?
     /// @dev TRUE for a new-day advance (regardless of rngLock — advance is liveness-critical)
     ///      OR a mid-day partial-drain whose read slot still holds queued tickets. No
-    ///      unbounded scan (ROUTER-04).
+    ///      unbounded scan.
     function advanceDue() external view returns (bool) {
         if (_simulatedDayIndex() != dailyIdx) return true;
         if (!ticketsFullyProcessed) {
@@ -1455,7 +1450,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         uint256 openedAfking = abi.decode(data, (uint256));
         // Then human boxes with the remaining budget — the multi-index sweep lives in the
         // lootbox module (delegatecall runs it in this Game's storage), mirroring the afking
-        // leg above. AUTO-03 walk + per-entry both-leg open are byte-equivalent there.
+        // leg above. The walk + per-entry both-leg open are byte-equivalent there.
         if (openedAfking < maxCount) {
             (ok, data) = ContractAddresses
                 .GAME_LOOTBOX_MODULE
@@ -2252,9 +2247,9 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     }
 
     /// @notice Batched afking read — mintPrice + rngLock + per-player claimable in ONE call.
-    /// @dev GASOPT-03 (SUBSUMES GASOPT-02): collapses the afking's per-player
-    ///      claimableWinningsOf STATICCALLs into one batched call. Values are byte-identical
-    ///      to the single-value accessors (same priceForLevel / rngLockedFlag / swept-gate).
+    /// @dev Collapses the afking's per-player claimableWinningsOf STATICCALLs into one
+    ///      batched call. Values are byte-identical to the single-value accessors (same
+    ///      priceForLevel / rngLockedFlag / swept-gate).
     /// @param players The chunk of players to snapshot.
     /// @return mintPriceWei Current mint price (== mintPrice()).
     /// @return rngLocked_ Whether RNG is currently locked (== rngLocked()).
@@ -2269,7 +2264,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         afkingFundings = new uint256[](n);
         for (uint256 i; i < n; ) {
             claimables[i] = swept ? 0 : _claimableOf(players[i]);
-            afkingFundings[i] = _afkingOf(players[i]); // raw — mirrors afkingFundingOf (D-MR-01)
+            afkingFundings[i] = _afkingOf(players[i]); // raw — mirrors afkingFundingOf
             unchecked {
                 ++i;
             }

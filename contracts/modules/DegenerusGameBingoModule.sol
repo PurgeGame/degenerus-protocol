@@ -9,7 +9,7 @@ import {PriceLookupLib} from "../libraries/PriceLookupLib.sol";
 /**
  * @title DegenerusGameBingoModule
  * @author Burnie Degenerus
- * @notice Delegate-called module handling claimBingo color-completion claims (v51.0).
+ * @notice Delegate-called module handling claimBingo color-completion claims.
  * @dev A player who owns one post-RNG-resolved ticket entry in each of the 8 color
  *      buckets of a single symbol on a level may claim a tiered reward:
  *        - regular         (0.05% Pool.Reward + 1_000e18 FLIP),
@@ -17,7 +17,7 @@ import {PriceLookupLib} from "../libraries/PriceLookupLib.sol";
  *        - quadrant-first   (replacement: 0.5% + 5_000e18 FLIP, suppresses symbol bonus).
  *      All storage reads/writes operate on the inherited DegenerusGameStorage layout.
  *      claimBingo is a strict READ-ONLY consumer of traitBurnTicket — it adds NO write
- *      to it (RNG-freeze-safe per 339-BINGO06-FREEZE-PROOF). The only state it writes is
+ *      to it (RNG-freeze-safe). The only state it writes is
  *      its own bitfields (bingoClaimed / bingoFirsts). CEI:
  *      effects (the bit sets) precede interactions (transferFromPool / creditFlip).
  */
@@ -42,7 +42,7 @@ contract DegenerusGameBingoModule is DegenerusGameStorage {
     error NotApproved();
 
     // -------------------------------------------------------------------------
-    // Reward constants (transcribed VERBATIM from 339-DESIGN-LOCK-BINGO §5)
+    // Reward constants
     // -------------------------------------------------------------------------
 
     /// @dev Baseline sDGNRS draw: 0.05% of Pool.Reward.
@@ -73,7 +73,7 @@ contract DegenerusGameBingoModule is DegenerusGameStorage {
     uint256 private constant AFFILIATE_DGNRS_MIN_SCORE = 10 ether;
 
     // -------------------------------------------------------------------------
-    // Events (D-340-01: player-only indexed; amounts/level/symbol non-indexed)
+    // Events (player-only indexed; amounts/level/symbol non-indexed)
     // -------------------------------------------------------------------------
 
     /// @notice Emitted on a quadrant-first claim (the systemwide first bingo for a quadrant).
@@ -112,13 +112,13 @@ contract DegenerusGameBingoModule is DegenerusGameStorage {
     /// @param symbol Symbol 0-31 (quadrant = symbol >> 3, symInQ = symbol & 7).
     /// @param slots Per-color positions in traitBurnTicket[level][traitId] the caller occupies.
     function claimBingo(uint24 level, uint8 symbol, uint32[8] calldata slots) external {
-        // ---- Validation (D-08 hard cutoff + range gates) ----
+        // ---- Validation (gameOver hard cutoff + range gates) ----
         // No level upper-bound guard: the 8-color ownership check below is
         // self-gating — an unresolved/future-level bucket is empty, so the
         // require fails closed on its own. claimBingo only READS traitBurnTicket
         // (never writes it) and writes only its own 3 bitfields, so a read
         // against an in-flight/future bucket simply reverts; it cannot corrupt
-        // VRF state (freeze-safe; 339-BINGO06 re-attested without the level gate).
+        // VRF state (freeze-safe; no level gate is needed).
         if (gameOver) revert E();
         if (symbol >= 32) revert InvalidSymbol();
 
@@ -151,9 +151,9 @@ contract DegenerusGameBingoModule is DegenerusGameStorage {
         bingoClaimed[level][msg.sender] = claimedBits | qMask;
 
         // ---- Tier cascade (EFFECTS — bits set before any external call) ----
-        // Quadrant-first is checked BEFORE symbol-first (the binding ordering,
-        // 339-TIER-PRECEDENCE §2). A quadrant-first marks BOTH bits — the
-        // double-pay-trap guard (§4) — and suppresses the symbol-first bonus.
+        // Quadrant-first is checked BEFORE symbol-first (the binding ordering).
+        // A quadrant-first marks BOTH bits — the double-pay-trap guard — and
+        // suppresses the symbol-first bonus.
         uint64 bf = bingoFirsts[level];
         uint8 fq = uint8(bf >> 32); // quadrant mask in bits [32:36)
         uint32 fs = uint32(bf); // symbol mask in bits [0:32)

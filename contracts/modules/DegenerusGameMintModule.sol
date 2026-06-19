@@ -54,7 +54,7 @@ import {EntropyLib} from "../libraries/EntropyLib.sol";
  * Bits 209-214: affBonusPoints      - Cached affiliate bonus points (0-50)
  * Bits 215-227: (unused)
  * Bits 228-243: levelUnits         - Units minted this level
- * Bit 244:      (deprecated)       - Previously used for bonus tracking
+ * Bit 244:      (unused)
  * ```
  *
  * Note: Quest Streak is tracked in DegenerusQuests.questPlayerState.
@@ -894,10 +894,9 @@ contract DegenerusGameMintModule is
                     ++idx;
                     processed = 0;
                 } else {
-                    // MINTDIV-02: align with processFutureTicketBatch:502 — advance
-                    // the within-player startIndex by the per-iter ticket count, not
-                    // by the gas-budget-derived writesUsed>>1 heuristic (which diverged
-                    // for take > 256 per 334-MINTDIV01-REACHABILITY-VERDICT).
+                    // Advance the within-player startIndex by the per-iter ticket
+                    // count, matching processFutureTicketBatch. A gas-budget-derived
+                    // writesUsed>>1 heuristic would diverge for take > 256.
                     processed += take;
                 }
             }
@@ -1148,8 +1147,7 @@ contract DegenerusGameMintModule is
                 }
             }
 
-            // Queue tickets on the captured adjusted quantity (the coin path previously
-            // discarded these returns and queued nothing — a pure FLIP sink).
+            // Queue tickets on the captured adjusted quantity.
             if (adjustedQty32 != 0) {
                 _queueTicketsScaled(buyer, targetLevel, adjustedQty32, false);
             }
@@ -1706,7 +1704,7 @@ contract DegenerusGameMintModule is
             _clearCurse(buyer);
         }
 
-        // --- Compute score ONCE (post-action, per D-08) ---
+        // --- Compute score ONCE (post-action) ---
         uint256 cachedScore = _playerActivityScore(buyer, questStreak);
 
         // --- x00 century bonus (uses cached post-action score) ---
@@ -1725,7 +1723,7 @@ contract DegenerusGameMintModule is
             }
         }
 
-        // --- Queue tickets (moved from _callTicketPurchase) ---
+        // --- Queue tickets ---
         if (adjustedQty != 0) {
             _queueTicketsScaled(buyer, targetLevel, adjustedQty, false);
         }
@@ -1832,7 +1830,7 @@ contract DegenerusGameMintModule is
     }
 
     /// @notice Buy a credit-gated coin-presale box (standalone), funded by msg.value
-    ///         plus an optional claimable shortfall (CPAY-02).
+    ///         plus an optional claimable shortfall.
     /// @dev The box queues at the current lootbox RNG index and resolves off the
     ///      committed word later (RNG-freeze discipline). Reverts once presaleOver.
     /// @param buyer Player receiving the box (already operator-resolved by the entrypoint).
@@ -1846,7 +1844,7 @@ contract DegenerusGameMintModule is
 
     /// @notice Buy tickets/lootbox (earning 25% presale-box credit) AND a presale box
     ///         in one call, sharing one RNG index. The mint leg is funded by msg.value;
-    ///         the box leg is funded from the caller's claimable (CPAY-02 ledger move,
+    ///         the box leg is funded from the caller's claimable (a ledger move,
     ///         covered by the just-earned + banked credit gate).
     /// @param buyer Player receiving both legs (already operator-resolved by the entrypoint).
     /// @param ticketQuantity Tickets to buy (0 to skip).
@@ -1898,7 +1896,7 @@ contract DegenerusGameMintModule is
     }
 
     /// @dev Core credit-gated presale-box buy: clamp-to-50 close, 1:1 credit consume,
-    ///      msg.value + claimable-shortfall payment (CPAY-02), 80/20 ETH routing via
+    ///      msg.value + claimable-shortfall payment, 80/20 ETH routing via
     ///      _creditBoxProceeds, queue-at-index, last-buyer latch.
     /// @param buyer Player receiving the box.
     /// @param boxAmount Requested box ETH (the MIN floor + no-overpay checks key on this).
@@ -1959,7 +1957,7 @@ contract DegenerusGameMintModule is
 
         // Pack: [bit 255: closing][bits 96:191: soldBefore][bits 0:95: applied].
         // soldBefore (cumulative box ETH before this buy) freezes the 5-tier DGNRS
-        // curve input so the resolution reads no mutable SLOAD (RNG freeze, R4).
+        // curve input so the resolution reads no mutable SLOAD (RNG freeze).
         presaleBoxEth[index][buyer] =
             uint256(uint96(applied)) |
             (uint256(uint96(sold)) << PRESALE_BOX_SOLD_SHIFT) |

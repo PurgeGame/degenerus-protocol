@@ -81,12 +81,12 @@ interface IsDGNRS {
     /// @return flipOut Amount of FLIP that would be minted
     function previewBurn(uint256 amount) external view returns (uint256 ethOut, uint256 stethOut, uint256 flipOut);
 
-    /// @notice Check if day `day` has an unresolved gambling-burn pool (SPEC-03).
+    /// @notice Check if day `day` has an unresolved gambling-burn pool.
     /// @param day Wall-clock day to query.
     /// @return True if `pendingByDay[day]` has non-zero ETH or FLIP base.
     function hasPendingRedemptions(uint24 day) external view returns (bool);
 
-    /// @notice Sentinel for the single-pool invariant (INV-13).
+    /// @notice Sentinel for the single-pool invariant.
     /// @return The wall-day of the currently-pending unresolved gambling-burn pool, or 0 if none.
     ///         Read by AdvanceModule to derive `dayToResolve` under both normal and stall paths.
     function pendingResolveDay() external view returns (uint24);
@@ -95,9 +95,9 @@ interface IsDGNRS {
     /// @dev handleGameOverDrain subtracts this so reserved ETH is not swept into terminal payouts.
     function pendingRedemptionEthValue() external view returns (uint256);
 
-    /// @notice Resolve day `dayToResolve`'s gambling-burn pool with RNG results (SPEC-03).
+    /// @notice Resolve day `dayToResolve`'s gambling-burn pool with RNG results.
     /// @dev Only callable by game contract during advanceGame. Writes redemptionPeriods[dayToResolve],
-    ///      emits RedemptionResolved, then deletes pendingByDay[dayToResolve] per SPEC-04 (c).
+    ///      emits RedemptionResolved, then deletes pendingByDay[dayToResolve] at resolve.
     /// @param roll The random roll (25-175).
     /// @param dayToResolve Wall-clock day whose pool this call resolves.
     function resolveRedemptionPeriod(uint16 roll, uint24 dayToResolve) external;
