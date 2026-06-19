@@ -8,7 +8,7 @@ Smart contract audit repository for the Degenerus Protocol — an on-chain ETH g
 
 Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
 
-## Current Milestone: v69.0 Activity-Score Points + Streak/Sub Precision + pendingFlip Right-Size
+## ✅ SHIPPED 2026-06-19 (tag v69.0) — v69.0 Activity-Score Points + Streak/Sub Precision + pendingFlip Right-Size
 
 **Goal:** Represent the player activity score in whole points instead of bps, remove the integer-imprecision in the streak/sub path (including reworking how the carried-in pre-streak is capped/snapshotted into the afking run), and right-size the `pendingFlip` accumulator — then re-run the v68 detection nets on the resulting (subject-resetting) code.
 
