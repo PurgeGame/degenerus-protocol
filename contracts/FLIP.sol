@@ -160,8 +160,8 @@ contract FLIP {
     uint8 private constant DECIMATOR_MIN_BUCKET_NORMAL = 5;
     uint8 private constant DECIMATOR_MIN_BUCKET_100 = 2;
 
-    /// @dev Cap for activity score bonus applied to decimator buckets (lazy pass max = 235%).
-    uint16 private constant DECIMATOR_ACTIVITY_CAP_BPS = 23_500;
+    /// @dev Cap for activity score bonus applied to decimator buckets (lazy pass max = 235 points).
+    uint16 private constant DECIMATOR_ACTIVITY_CAP_POINTS = 235;
 
     /// @dev Max base amount eligible for decimator boon boost.
     uint256 private constant DECIMATOR_BOON_CAP = 50_000 ether;
@@ -662,17 +662,17 @@ contract FLIP {
         );
         uint256 baseAmount = amount + (completed ? questReward : 0);
 
-        // Activity score bonus (raw bps), capped for decimator scaling.
-        uint256 bonusBps = degenerusGame.playerActivityScore(caller);
-        if (bonusBps > DECIMATOR_ACTIVITY_CAP_BPS) {
-            bonusBps = DECIMATOR_ACTIVITY_CAP_BPS;
+        // Activity score bonus (whole points), capped for decimator scaling.
+        uint256 bonusPoints = degenerusGame.playerActivityScore(caller);
+        if (bonusPoints > DECIMATOR_ACTIVITY_CAP_POINTS) {
+            bonusPoints = DECIMATOR_ACTIVITY_CAP_POINTS;
         }
 
-        uint256 decBurnMultBps = _decimatorBurnMultiplier(bonusBps);
+        uint256 decBurnMultBps = _decimatorBurnMultiplier(bonusPoints);
         uint8 minBucket = (lvl % 100 == 0)
             ? DECIMATOR_MIN_BUCKET_100
             : DECIMATOR_MIN_BUCKET_NORMAL;
-        uint8 bucket = _adjustDecimatorBucket(bonusBps, minBucket);
+        uint8 bucket = _adjustDecimatorBucket(bonusPoints, minBucket);
 
         // Decimator boon: percent boost on base amount (capped to 50k FLIP).
         uint16 boonBps = degenerusGame.consumeDecimatorBoon(caller);
@@ -737,29 +737,30 @@ contract FLIP {
       +======================================================================+*/
 
     /// @dev Adjust decimator bucket based on activity score bonus.
-    ///      Higher bonus yields lower bucket (better odds); bonusBps arrives
-    ///      pre-capped at DECIMATOR_ACTIVITY_CAP_BPS by the sole caller.
+    ///      Higher bonus yields lower bucket (better odds); bonusPoints arrives
+    ///      pre-capped at DECIMATOR_ACTIVITY_CAP_POINTS by the sole caller.
     function _adjustDecimatorBucket(
-        uint256 bonusBps,
+        uint256 bonusPoints,
         uint8 minBucket
     ) private pure returns (uint8 adjustedBucket) {
         adjustedBucket = DECIMATOR_BUCKET_BASE;
-        if (bonusBps == 0) return adjustedBucket;
+        if (bonusPoints == 0) return adjustedBucket;
 
         uint256 range = uint256(DECIMATOR_BUCKET_BASE) - uint256(minBucket);
         uint256 reduction = (range *
-            bonusBps +
-            (DECIMATOR_ACTIVITY_CAP_BPS / 2)) / DECIMATOR_ACTIVITY_CAP_BPS;
+            bonusPoints +
+            (DECIMATOR_ACTIVITY_CAP_POINTS / 2)) / DECIMATOR_ACTIVITY_CAP_POINTS;
         uint256 bucket = uint256(DECIMATOR_BUCKET_BASE) - reduction;
         if (bucket < minBucket) bucket = minBucket;
         adjustedBucket = uint8(bucket);
     }
 
-    /// @dev Decimator burn multiplier: 1x base plus one-third of activity bonus.
+    /// @dev Decimator burn multiplier: 1x base plus one-third of activity bonus
+    ///      (score is whole points; ×100 restores the bps-domain divisor).
     function _decimatorBurnMultiplier(
-        uint256 bonusBps
+        uint256 bonusPoints
     ) private pure returns (uint256 decMultBps) {
-        if (bonusBps == 0) return BPS_DENOMINATOR;
-        return BPS_DENOMINATOR + (bonusBps / 3);
+        if (bonusPoints == 0) return BPS_DENOMINATOR;
+        return BPS_DENOMINATOR + ((bonusPoints * 100) / 3);
     }
 }

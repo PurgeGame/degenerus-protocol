@@ -685,10 +685,10 @@ contract DegenerusGameDecimatorModule is DegenerusGamePayoutUtils {
     ///      that lands a burn in `bucket`. The decimator-claim lootbox EV multiplier reads
     ///      this frozen value (sealed when the winning burn was bucketed) rather than a live
     ///      score. Mirrors FLIP's bucket scale: base 12, floor 5 (or 2 on x100 levels),
-    ///      activity cap 23500.
+    ///      activity cap 235 points.
     function _minScoreForBucket(uint8 bucket, uint24 lvl) private pure returns (uint16) {
         if (bucket >= 12) return 0; // base bucket = score ~0 -> 80% EV floor
-        uint256 cap = 23_500;
+        uint256 cap = 235;
         uint256 floorBucket = (lvl % 100 == 0) ? 2 : 5;
         uint256 reduction = 12 - uint256(bucket);
         uint256 range = 12 - floorBucket;

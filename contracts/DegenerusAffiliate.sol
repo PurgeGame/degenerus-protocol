@@ -184,8 +184,8 @@ contract DegenerusAffiliate {
     uint16 private constant REWARD_SCALE_FRESH_L4P_BPS = 2_000;
     uint16 private constant REWARD_SCALE_RECYCLED_BPS = 500;
     uint16 private constant BPS_DENOMINATOR = 10_000;
-    uint16 private constant LOOTBOX_TAPER_START_SCORE = 10_000;
-    uint16 private constant LOOTBOX_TAPER_END_SCORE = 25_500;
+    uint16 private constant LOOTBOX_TAPER_START_SCORE = 100;
+    uint16 private constant LOOTBOX_TAPER_END_SCORE = 255;
     uint16 private constant LOOTBOX_TAPER_MIN_BPS = 2_500;
     bytes32 private constant AFFILIATE_ROLL_TAG = keccak256("affiliate-payout-roll-v1");
 
@@ -391,16 +391,16 @@ contract DegenerusAffiliate {
      * - Recycled ETH (all levels): 5% (REWARD_SCALE_RECYCLED_BPS = 500)
      *
      * LOOTBOX TAPER (fresh ETH only):
-     * - Activity score < 10,000: no taper (100% payout)
-     * - Activity score 10,000-25,500: linear taper from 100% to 25%
-     * - Activity score >= 25,500: 25% payout floor (LOOTBOX_TAPER_MIN_BPS = 2500)
+     * - Activity score < 100: no taper (100% payout)
+     * - Activity score 100-255: linear taper from 100% to 25%
+     * - Activity score >= 255: 25% payout floor (LOOTBOX_TAPER_MIN_BPS = 2500)
      *
      * @param amount Base reward amount (18 decimals).
      * @param code Affiliate code provided with the transaction (may be bytes32(0)).
      * @param sender The player making the purchase.
      * @param lvl Current game level (for join tracking and leaderboard).
      * @param isFreshEth True if payment is with fresh ETH, false if recycled (claimable).
-     * @param lootboxActivityScore Buyer's activity score for lootbox taper (0 = no taper; 10000+ triggers linear taper to 25% floor at 25500).
+     * @param lootboxActivityScore Buyer's activity score (whole points) for lootbox taper (0 = no taper; 100+ triggers linear taper to 25% floor at 255).
      * @return playerKickback Amount of kickback to credit to the player (caller handles minting and batching).
      */
     function payAffiliate(

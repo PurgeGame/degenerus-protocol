@@ -832,8 +832,8 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
                 );
                 if (cachedScore != 0) {
                     uint256 priceWei = PriceLookupLib.priceForLevel(targetLevel);
-                    uint256 _score = cachedScore > 30_500 ? 30_500 : cachedScore;
-                    uint256 bonusQty = (uint256(adjustedQty) * _score) / 30_500;
+                    uint256 _score = cachedScore > 305 ? 305 : cachedScore;
+                    uint256 bonusQty = (uint256(adjustedQty) * _score) / 305;
                     if (bonusQty != 0 && priceWei != 0) {
                         uint256 maxBonus = (20 ether) / (priceWei >> 2);
                         uint256 used = _centuryUsedFor(player, targetLevel);

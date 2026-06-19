@@ -1709,8 +1709,8 @@ contract DegenerusGameMintModule is
 
         // --- x00 century bonus (uses cached post-action score) ---
         if (ticketCost != 0 && targetLevel % 100 == 0 && cachedScore != 0) {
-            uint256 _score = cachedScore > 30_500 ? 30_500 : cachedScore;
-            uint256 bonusQty = (uint256(adjustedQty) * _score) / 30_500;
+            uint256 _score = cachedScore > 305 ? 305 : cachedScore;
+            uint256 bonusQty = (uint256(adjustedQty) * _score) / 305;
             if (bonusQty != 0) {
                 uint256 maxBonus = (20 ether) / (priceWei >> 2);
                 uint256 used = _centuryUsedFor(buyer, targetLevel);

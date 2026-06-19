@@ -2201,15 +2201,15 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
       |                                                                      |
       +======================================================================+*/
 
-    /// @notice Calculate player's activity score in basis points.
-    /// @dev Activity Score: 50% (streak) + 25% (count) + 100% (quest) + 50% (affiliate) + 40% (whale) = 265% max
-    ///      Deity pass adds +80% in place of whale bundle bonus (305% max base).
-    ///      Consumers apply their own caps (lootbox EV: 255%, degenerette ROI: 305%, decimator: 235%).
+    /// @notice Calculate player's activity score in whole points.
+    /// @dev Activity Score: 50 (streak) + 25 (count) + 100 (quest) + 50 (affiliate) + 40 (whale) = 265 pt max
+    ///      Deity pass adds +80 in place of whale bundle bonus (305 pt max base).
+    ///      Consumers apply their own caps (lootbox EV: 400, degenerette ROI: 305, decimator: 235).
     /// @param player The player address to calculate for.
-    /// @return scoreBps Total activity score in basis points.
+    /// @return scorePoints Total activity score in whole points.
     function playerActivityScore(
         address player
-    ) external view returns (uint256 scoreBps) {
+    ) external view returns (uint256 scorePoints) {
         // Unified effective quest streak: a live afking sub reads the Sub-side compute-on-read
         // (the run's funded days + in-run secondaries); everyone else reads the decay-aware manual
         // streak, which zeroes a lapsed stale-high streak so it can't inflate terminal-decimator

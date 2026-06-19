@@ -15,7 +15,7 @@ interface IDegenerusAffiliate {
     /// @param sender The player making the purchase.
     /// @param lvl Current game level (for leaderboard tracking).
     /// @param isFreshEth True if payment is with fresh ETH, false if recycled (claimable).
-    /// @param lootboxActivityScore Buyer's activity score in BPS for lootbox taper (0 = no taper).
+    /// @param lootboxActivityScore Buyer's activity score in whole points for lootbox taper (0 = no taper).
     /// @return playerKickback Amount of kickback to credit to the player.
     function payAffiliate(
         uint256 amount,

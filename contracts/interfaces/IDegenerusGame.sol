@@ -58,10 +58,10 @@ interface IDegenerusGame {
         view
         returns (uint24 lvl, bool inJackpotPhase, bool lastPurchaseDay_, bool rngLocked_, uint256 priceWei);
 
-    /// @notice Get the player's activity score multiplier.
-    /// @dev Multiplier based on participation and engagement (basis points).
+    /// @notice Get the player's activity score.
+    /// @dev Score based on participation and engagement (whole points; 1 point = 100 bps).
     /// @param player The player to query.
-    /// @return Multiplier in bps (10000 = 1x).
+    /// @return Activity score in whole points.
     function playerActivityScore(address player) external view returns (uint256);
 
     /// @notice Check if an operator is approved to act on behalf of a player.
