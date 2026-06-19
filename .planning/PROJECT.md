@@ -8,7 +8,23 @@ Smart contract audit repository for the Degenerus Protocol — an on-chain ETH g
 
 Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
 
-## Current Milestone: v70.0 Activity-Score Consumer-Curve & Bucket Reshape (Verify + Re-Audit)
+## Current Milestone: v71.0 Foil Pack
+
+**Goal:** Add a purchasable "foil pack" — one per account per raw level, priced at 10× a normal ticket for 4 boosted-rarity tickets — whose value is (a) an activity-scaled trait-rarity boost (×2 at score 0 → ×6 at max, via a new sibling producer; ~2× the gold odds of 10 tickets at high activity, deliberately worse at the bottom) and (b) a pull/claim multi-currency "degenerette spin" match lottery: each of the 4 tickets, over the whole level, is matched (exact per-quadrant) against the two daily jackpot winning sets, paying a **40% FLIP / 40% ETH / 20% WWXRP** spin at 2-of-4 (5 faces) / 3-of-4 (65 faces) and a **half-whale-pass + bonus-spin** moonshot at 4-of-4. Calibrated to ≈2 ticket-faces of expected payout per pack over 30 days (bad in a fast level, a real score in a slow one).
+
+**Why now:** First NEW-FEATURE milestone since the v62–v70 audit/reshape series. A premium gold-chase product that maximally reuses existing, already-audited rails — regular jackpot entry, the capped ETH-degenerette-spin, FLIP/WWXRP mints, the whale-pass deferred grant, the daily-RNG winning-trait derivation — so the new on-chain surface is small: a sibling trait producer, a boost curve, a foil module/entrypoint, a per-level cap, and the match-claim storage + function.
+
+**Scope:** A new contract FEATURE plus the audit it forces. ONE batched contract diff behind the approval gate. Design is fully locked — `.planning/V71-FOILPACK-FINAL-SPEC.md` (eight read-only grounding passes; full history in `.planning/V71-FOILPACK-DESIGN-CONTEXT.md`).
+
+**Security floor (hard):** no exploit beyond the bounded, by-design hero-symbol edge on the 2/3-match tiers; the 4-of-4 whale-pass moonshot is steer-proof (gated on the hero-free pure-VRF traits); no solvency hole (ETH leg ≤10%-pool capped, FLIP/WWXRP mints, whale pass pool-neutral); isolated match table (no EV-flat Degenerette coupling); the v70-frozen shared trait producers untouched (new sibling only); buy-time freeze of score + signatures; pull/claim only (advanceGame stays flat); EIP-170 fits.
+
+**Posture:** Contract FEATURE addition → **RESETS the audit subject** (v70 closure `MILESTONE_V70_AT_HEAD_25ff6aaed0e9209e2003f467a3607056bfac9c03`; `contracts/` tree `99f2e53f`). The diff ships as ONE batched, USER-approved commit (the sole gate); all design / test / tooling / audit work commits autonomously. Phase numbering continues 444 → v71.0 starts at **445**. Design seed: `.planning/V71-FOILPACK-FINAL-SPEC.md`.
+
+## ✅ SHIPPED 2026-06-19 (tag v70.0) — v70.0 Activity-Score Consumer-Curve & Bucket Reshape (Verify + Re-Audit)
+
+**Outcome (SHIPPED + PUSHED + ARCHIVED + TAGGED 2026-06-19; tag `v70.0`; origin/main `0bc8cf72`):** **0 CAT / 0 HIGH / 0 MED / 0 LOW; 0 open findings.** Suite 935/0/108 + 18 invariant suites. Closure `MILESTONE_V70_AT_HEAD_25ff6aaed0e9209e2003f467a3607056bfac9c03`; byte-frozen subject `contracts/` tree `99f2e53f` @ `ffbd7796`. Deliverables `audit/FINDINGS-v70.0.md` (chmod 444) + `AUDIT-V70-REPORT.html` + the `ACTIVITY-SCORE-CONSUMER-CURVES.html` viz; archived `milestones/v70.0-{ROADMAP,REQUIREMENTS}.md`.
+
+_The milestone as planned (historical record):_
 
 **Goal:** Reshape the *consumer mappings* of the player activity score so the high end is reserved for long quest streaks — steep early ramp, near-flat long tail, MAX outputs byte-identical to today (no payout change) — then verify, freeze, prove, and re-audit. The score (whole points since v69) scales the lootbox EV multiplier, the Degenerette ROI / WWXRP curves, the decimator burn multiplier + bucket, and the century mint/afking bonus; all move to a 3-segment piecewise value-curve family (`vA = MIN + 90%·(MAX−MIN)` at the old cap `K`, `vB = MIN + 98%` at score 500, `MAX` at score 30,000 / flat beyond) and the linear bucket reduction becomes an absolute threshold ladder (`12@0 … 2@1000`, floor-clamped per path) with its exact band-floor inverse.
 
