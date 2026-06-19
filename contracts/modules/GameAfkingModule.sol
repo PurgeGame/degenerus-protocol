@@ -1521,11 +1521,20 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
         uint24 cachedDay;
         uint256 cachedWord; // != 0 ⇒ cache holds rngWordByDay[cachedDay]
 
-        while (cursor < len && opened < maxCount) {
+        // Full-ring scan: visit up to `len` subs from the cursor, wrapping mid-scan, so a
+        // 0-open result means the WHOLE set is drained — not just [cursor, len). Without the
+        // mid-scan wrap a cursor left at an index < len (e.g. a `subscribe` grew the set while
+        // the cursor sat at the old length, or any non-openable sub sits at/after the cursor)
+        // strands [0, cursor): the leg returns 0 with boxes still openable and mintFlip reverts
+        // NoWork, never re-reaching them. Per-call opens stay bounded by `maxCount`.
+        uint256 scanned;
+        while (scanned < len && opened < maxCount) {
+            if (cursor >= len) cursor = 0;
             address player = _subscribers[cursor];
             Sub storage sub = _subOf[player];
             unchecked {
                 ++cursor;
+                ++scanned;
             }
             // Skip subs with no pending box (already-opened: lastOpenedDay >= lastAutoBoughtDay).
             uint24 stampDay = sub.lastAutoBoughtDay;
@@ -1548,7 +1557,7 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
             }
         }
 
-        _subOpenCursor = uint16(cursor);
+        _subOpenCursor = uint16(cursor >= len ? 0 : cursor);
     }
 
     /// @notice Unified permissionless afking router: do ONE category of pending work this
