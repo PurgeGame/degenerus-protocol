@@ -650,14 +650,14 @@ contract DegeneretteHeroScoreTest is DeployProtocol {
         coin.mintForGame(who, amount);
     }
 
-    // --- ROI curve mirror (DegeneretteModule._roiBpsFromScore L1071-1100) -------
+    // --- ROI curve mirror (DegeneretteModule._roiBpsFromScore) ------------------
 
-    uint256 private constant ACTIVITY_SCORE_MID_POINTS = 75;
-    uint256 private constant ACTIVITY_SCORE_HIGH_POINTS = 255;
-    uint256 private constant ACTIVITY_SCORE_MAX_POINTS = 305;
+    uint256 private constant ACTIVITY_SCORE_MAX_POINTS = 305; // curve knee K
+    uint256 private constant ACTIVITY_SEG_B_KNEE_POINTS = 500;
+    uint256 private constant ACTIVITY_EFFECTIVE_CAP_POINTS = 30_000;
     uint256 private constant ROI_MIN_BPS = 9_000;
-    uint256 private constant ROI_MID_BPS = 9_500;
-    uint256 private constant ROI_HIGH_BPS = 9_950;
+    uint256 private constant ROI_VA_BPS = 9_891;
+    uint256 private constant ROI_VB_BPS = 9_970;
     uint256 private constant ROI_MAX_BPS = 9_990;
     uint256 private constant FT_ACTIVITY_SHIFT = 220;
     uint256 private constant DEGENERETTE_BETS_SLOT = 38; // post Stage-B game-storage repack: was 40
@@ -673,23 +673,20 @@ contract DegeneretteHeroScoreTest is DeployProtocol {
     }
 
     function _roiBpsFromScore(uint256 score) internal pure returns (uint256 roiBps) {
-        if (score > ACTIVITY_SCORE_MAX_POINTS) score = ACTIVITY_SCORE_MAX_POINTS;
-        if (score <= ACTIVITY_SCORE_MID_POINTS) {
-            uint256 xDen = ACTIVITY_SCORE_MID_POINTS;
-            uint256 term1 = (1000 * score) / xDen;
-            uint256 term2 = (500 * score * score) / (xDen * xDen);
-            roiBps = ROI_MIN_BPS + term1 - term2;
-        } else if (score <= ACTIVITY_SCORE_HIGH_POINTS) {
-            uint256 delta = score - ACTIVITY_SCORE_MID_POINTS;
-            uint256 span = ACTIVITY_SCORE_HIGH_POINTS - ACTIVITY_SCORE_MID_POINTS;
-            uint256 roiDelta = ROI_HIGH_BPS - ROI_MID_BPS;
-            roiBps = ROI_MID_BPS + (delta * roiDelta) / span;
-        } else {
-            uint256 delta = score - ACTIVITY_SCORE_HIGH_POINTS;
-            uint256 span = ACTIVITY_SCORE_MAX_POINTS - ACTIVITY_SCORE_HIGH_POINTS;
-            uint256 roiDelta = ROI_MAX_BPS - ROI_HIGH_BPS;
-            roiBps = ROI_HIGH_BPS + (delta * roiDelta) / span;
+        if (score >= ACTIVITY_EFFECTIVE_CAP_POINTS) return ROI_MAX_BPS;
+        if (score <= ACTIVITY_SCORE_MAX_POINTS) {
+            return ROI_MIN_BPS + (score * (ROI_VA_BPS - ROI_MIN_BPS)) / ACTIVITY_SCORE_MAX_POINTS;
         }
+        if (score <= ACTIVITY_SEG_B_KNEE_POINTS) {
+            return
+                ROI_VA_BPS +
+                ((score - ACTIVITY_SCORE_MAX_POINTS) * (ROI_VB_BPS - ROI_VA_BPS)) /
+                (ACTIVITY_SEG_B_KNEE_POINTS - ACTIVITY_SCORE_MAX_POINTS);
+        }
+        return
+            ROI_VB_BPS +
+            ((score - ACTIVITY_SEG_B_KNEE_POINTS) * (ROI_MAX_BPS - ROI_VB_BPS)) /
+            (ACTIVITY_EFFECTIVE_CAP_POINTS - ACTIVITY_SEG_B_KNEE_POINTS);
     }
 
     /// @dev Place a single-bet ETH degenerette bet, return its betId (nonce).
