@@ -32,9 +32,9 @@ Requirements for this milestone. Each maps to exactly one roadmap phase.
 
 ### REAUDIT — Re-Run the v68/v69 Detection Nets on the Reset Subject
 
-- [ ] **REAUDIT-01**: The storage-layout golden is recaptured for the new subject and the slot-hardcoded harnesses re-pinned, with the MECH-02 layout-diff oracle green on the new layout — the reshape is read-side / logic-only and the new `ActivityCurveLib` is a pure library carrying no storage, so the expectation is **no slot move**; any layout delta is investigated as an unexpected drift, not silently re-goldened.
-- [ ] **REAUDIT-02**: The RNG-freeze proof is re-attested on the new subject — every VRF/RNG consumer that reads the activity score (lootbox EV, Degenerette ROI/WWXRP spins, decimator claim) is re-confirmed frozen-at-commitment under the new curves, with the activity-score snapshot-at-deposit freeze (the anti-gaming knob) explicitly re-confirmed; any freeze-proof ledger anchor whose `file:line` moved with the reshape is updated.
-- [ ] **REAUDIT-03**: The mutation campaign is re-run / triaged on the changed modules + the new `ActivityCurveLib`, and the deep-invariant + Halmos nets are confirmed green on the new subject — the v68/v69 layout/CI/mutation harness is re-pinned to the new subject; survivors are triaged oracle-hole vs. robustness (a documented carry of the still-running mutation tail is an acceptable disposition, consistent with the v68/v69 close).
+- [x] **REAUDIT-01**: The storage-layout golden is recaptured for the new subject and the slot-hardcoded harnesses re-pinned, with the MECH-02 layout-diff oracle green on the new layout — the reshape is read-side / logic-only and the new `ActivityCurveLib` is a pure library carrying no storage, so the expectation is **no slot move**; any layout delta is investigated as an unexpected drift, not silently re-goldened.
+- [x] **REAUDIT-02**: The RNG-freeze proof is re-attested on the new subject — every VRF/RNG consumer that reads the activity score (lootbox EV, Degenerette ROI/WWXRP spins, decimator claim) is re-confirmed frozen-at-commitment under the new curves, with the activity-score snapshot-at-deposit freeze (the anti-gaming knob) explicitly re-confirmed; any freeze-proof ledger anchor whose `file:line` moved with the reshape is updated.
+- [x] **REAUDIT-03**: The mutation campaign is re-run / triaged on the changed modules + the new `ActivityCurveLib`, and the deep-invariant + Halmos nets are confirmed green on the new subject — the v68/v69 layout/CI/mutation harness is re-pinned to the new subject; survivors are triaged oracle-hole vs. robustness (a documented carry of the still-running mutation tail is an acceptable disposition, consistent with the v68/v69 close).
 
 ### TERMINAL — Evidence Pack + Closure
 
@@ -74,9 +74,9 @@ Each requirement maps to exactly one phase. v70.0 phases continue 439 → 440. N
 | TST-01 | 442 TST | Done |
 | TST-02 | 442 TST | Done |
 | TST-03 | 442 TST | Done |
-| REAUDIT-01 | 443 REAUDIT | Pending |
-| REAUDIT-02 | 443 REAUDIT | Pending |
-| REAUDIT-03 | 443 REAUDIT | Pending |
+| REAUDIT-01 | 443 REAUDIT | Done |
+| REAUDIT-02 | 443 REAUDIT | Done |
+| REAUDIT-03 | 443 REAUDIT | Done |
 | TERMINAL-01 | 444 TERMINAL | Pending |
 
 **Coverage:**
