@@ -850,7 +850,7 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
             _queueTicketsScaled(player, targetLevel, adjustedQty, false);
 
             // 10%/20% ticket buyer-bonus → claimable pendingFlip (pulled via
-            // claimAfkingFlip). Uses the pre-bonus `amount`; whole FLIP with the 100M clamp.
+            // claimAfkingFlip). Uses the pre-bonus `amount`; whole FLIP with the ~16.7M (2^24-1) clamp.
             uint256 coinCost = (amount * (PRICE_COIN_UNIT / 4)) / TICKET_SCALE;
             uint256 bonusBase = coinCost / 10; // flat 10%
             if (amount >= 10 * 4 * TICKET_SCALE) {
@@ -859,8 +859,8 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
             uint256 bonusWhole = bonusBase / 1 ether;
             if (bonusWhole != 0) {
                 uint256 newOwed = uint256(sub.pendingFlip) + bonusWhole;
-                if (newOwed > 100_000_000) newOwed = 100_000_000;
-                sub.pendingFlip = uint32(newOwed);
+                if (newOwed > type(uint24).max) newOwed = type(uint24).max;
+                sub.pendingFlip = uint24(newOwed);
             }
 
             // No pending box: keep lastOpenedDay == lastAutoBoughtDay so the no-orphan guard and
@@ -910,7 +910,7 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
         // Mode-agnostic accrue — one warm in-slot write, zero cross-contract calls:
         //   • affiliate base: flat 7% of the full wei spend (ethValue + claimableUse = the cost in
         //     both modes; the dual-unit `amount` is entry-units in ticket mode), whole FLIP, 100M clamp;
-        //   • slot-0 quest reward: QUEST_SLOT0_REWARD (whole FLIP) into the claimable pendingFlip;
+        //   • slot-0 quest reward: QUEST_SLOT0_REWARD (whole FLIP) into the claimable pendingFlip, ~16.7M (2^24-1) clamp;
         //   • compute-on-read streak markers: gap-resume a fresh run from zero if the last funded
         //     day is older than yesterday (matching the decay-on-read), then advance the
         //     funded-day high-water mark afkCoveredThroughDay.
@@ -924,8 +924,8 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
             {
                 uint256 newOwed = uint256(sub.pendingFlip) +
                     (QUEST_SLOT0_REWARD / 1 ether);
-                if (newOwed > 100_000_000) newOwed = 100_000_000;
-                sub.pendingFlip = uint32(newOwed);
+                if (newOwed > type(uint24).max) newOwed = type(uint24).max;
+                sub.pendingFlip = uint24(newOwed);
             }
             if (sub.afkCoveredThroughDay + 1 < processDay) {
                 sub.afkingStartDay = uint24(processDay);
@@ -1723,7 +1723,7 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
     ///         streak base, so the run's compute-on-read activity score reflects the player's own
     ///         quest effort (the primary rides the funded delivered days).
     /// @dev No-op unless `player` has a live afking run (`afkingStartDay != 0`); otherwise a +1
-    ///      bump to the Sub streak base, saturating at 255. Runs in the Game's storage context
+    ///      bump to the Sub streak base, saturating at 65535. Runs in the Game's storage context
     ///      under delegatecall; `msg.sender` is the original caller (DegenerusQuests).
     /// @param player The afking subscriber whose secondary completion is being recorded.
     function recordAfkingSecondary(address player) external {

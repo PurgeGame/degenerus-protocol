@@ -543,11 +543,6 @@ contract DegenerusQuests is IDegenerusQuests {
         uint24 finalStreak = (currentDay == 0 || lastValid + 1 >= currentDay)
             ? earnedStreak
             : 0;
-        // The afking run base is uint8-clamped at 255, so a short run can rebuild a streak below
-        // the pre-run snapshot still held in state.streak (dormant while afking). Floor a surviving
-        // streak at that snapshot so handing control back never lowers it; a genuine decay (0) resets.
-        uint16 preRun = state.streak;
-        if (finalStreak != 0 && finalStreak < preRun) finalStreak = preRun;
         state.streak = finalStreak > type(uint16).max ? type(uint16).max : uint16(finalStreak);
         _grantCenturyShield(player, state);
         uint24 d = lastValid;

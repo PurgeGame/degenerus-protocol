@@ -28,7 +28,7 @@ abstract contract DegenerusGameMintStreakUtils is DegenerusGameStorage {
     ///         resulting absolute value so indexers need no eth_call and never replay cap logic.
     /// @param player The cursed (or cured) player.
     /// @param newCurseCount The curse-counter field AFTER the change: stored curse points (0..20;
-    ///        each smite or cashout-curse adds +2 saturating at 20; mint penalty = value * 100 bps;
+    ///        each smite or cashout-curse adds +2 saturating at 20; activity penalty = value points;
     ///        0 means cured).
     event CurseChanged(address indexed player, uint8 newCurseCount);
 
@@ -263,12 +263,12 @@ abstract contract DegenerusGameMintStreakUtils is DegenerusGameStorage {
     /// @param player The player address to calculate score for.
     /// @param questStreak Quest streak value (pre-fetched from handler return or external view).
     /// @param streakBaseLevel Level used for mint streak calculation (typically _activeTicketLevel() or level + 1).
-    /// @return scoreBps Total activity score in basis points.
+    /// @return scorePoints Total activity score in whole points.
     function _playerActivityScore(
         address player,
         uint32 questStreak,
         uint24 streakBaseLevel
-    ) internal view returns (uint256 scoreBps) {
+    ) internal view returns (uint256 scorePoints) {
         return _playerActivityScoreAt(player, questStreak, streakBaseLevel, level);
     }
 
@@ -278,13 +278,13 @@ abstract contract DegenerusGameMintStreakUtils is DegenerusGameStorage {
     /// @param questStreak Quest streak value (pre-fetched from handler return or external view).
     /// @param streakBaseLevel Level used for mint streak calculation.
     /// @param currLevel The game's current level.
-    /// @return scoreBps Total activity score in basis points.
+    /// @return scorePoints Total activity score in whole points.
     function _playerActivityScoreAt(
         address player,
         uint32 questStreak,
         uint24 streakBaseLevel,
         uint24 currLevel
-    ) internal view returns (uint256 scoreBps) {
+    ) internal view returns (uint256 scorePoints) {
         if (player == address(0)) return 0;
 
         uint256 packed = mintPacked_[player];
@@ -303,16 +303,16 @@ abstract contract DegenerusGameMintStreakUtils is DegenerusGameStorage {
         bool passActive = frozenUntilLevel >= currLevel &&
             (bundleType == 1 || bundleType == 3);
 
-        uint256 bonusBps;
+        uint256 bonusPoints;
 
         unchecked {
             if (hasDeityPass) {
-                bonusBps = 50 * 100;
-                bonusBps += 25 * 100;
+                bonusPoints = 50;
+                bonusPoints += 25;
             } else {
-                // Mint streak: 1% per consecutive level minted, max 50%
+                // Mint streak: 1 point per consecutive level minted, max 50 points
                 uint256 streakPoints = streak > 50 ? 50 : uint256(streak);
-                // Mint count bonus: 1% each
+                // Mint count bonus: 1 point each
                 uint256 mintCountPoints = _mintCountBonusPoints(
                     levelCount,
                     currLevel
@@ -326,13 +326,14 @@ abstract contract DegenerusGameMintStreakUtils is DegenerusGameStorage {
                         mintCountPoints = PASS_MINT_COUNT_FLOOR_POINTS;
                     }
                 }
-                bonusBps = streakPoints * 100;
-                bonusBps += mintCountPoints * 100;
+                bonusPoints = streakPoints;
+                bonusPoints += mintCountPoints;
             }
 
-            // Quest streak: 0.5% per quest completion, uncapped (the hard cap on the
-            // total score below bounds the sum).
-            bonusBps += uint256(questStreak) * 50;
+            // Quest streak: 1 point per 2 quest completions, uncapped (the hard cap on
+            // the total score below bounds the sum). The trailing half-point at odd
+            // streak counts is dropped by the floor.
+            bonusPoints += uint256(questStreak) / 2;
 
             // Affiliate bonus (cached in mintPacked_ on level transitions)
             {
@@ -343,32 +344,31 @@ abstract contract DegenerusGameMintStreakUtils is DegenerusGameStorage {
                 } else {
                     affPoints = affiliate.affiliateBonusPointsBest(currLevel, player);
                 }
-                bonusBps += affPoints * 100;
+                bonusPoints += affPoints;
             }
 
             if (hasDeityPass) {
-                bonusBps += DEITY_PASS_ACTIVITY_BONUS_BPS;
+                bonusPoints += DEITY_PASS_ACTIVITY_BONUS_POINTS;
             } else if (frozenUntilLevel >= currLevel) {
                 // Whale pass bonus: varies by bundle type (only active while frozen)
                 if (bundleType == 1) {
-                    bonusBps += 1000; // +10% for 10-level bundle
+                    bonusPoints += 10; // +10 points for 10-level bundle
                 } else if (bundleType == 3) {
-                    bonusBps += 4000; // +40% for 100-level bundle
+                    bonusPoints += 40; // +40 points for 100-level bundle
                 }
             }
         }
 
-        // Cashout/smite curse penalty: each point lowers the activity score by 100 bps,
+        // Cashout/smite curse penalty: each point lowers the activity score by 1 point,
         // floored at 0. Rides the mintPacked_ word already loaded above (zero new SLOAD).
         uint256 curse = (packed >> BitPackingLib.CURSE_COUNT_SHIFT) & BitPackingLib.MASK_8;
         if (curse != 0) {
-            uint256 penaltyBps = curse * 100;
-            bonusBps = bonusBps > penaltyBps ? bonusBps - penaltyBps : 0;
+            bonusPoints = bonusPoints > curse ? bonusPoints - curse : 0;
         }
 
-        scoreBps = bonusBps > ACTIVITY_SCORE_HARD_CAP_BPS
-            ? ACTIVITY_SCORE_HARD_CAP_BPS
-            : bonusBps;
+        scorePoints = bonusPoints > ACTIVITY_SCORE_HARD_CAP_POINTS
+            ? ACTIVITY_SCORE_HARD_CAP_POINTS
+            : bonusPoints;
     }
 
     /// @dev Convenience wrapper using the active ticket level (current level during
@@ -376,11 +376,11 @@ abstract contract DegenerusGameMintStreakUtils is DegenerusGameStorage {
     ///      single hoisted level read shared with the score body.
     /// @param player The player address to calculate score for.
     /// @param questStreak Quest streak value (pre-fetched from handler return or external view).
-    /// @return scoreBps Total activity score in basis points.
+    /// @return scorePoints Total activity score in whole points.
     function _playerActivityScore(
         address player,
         uint32 questStreak
-    ) internal view returns (uint256 scoreBps) {
+    ) internal view returns (uint256 scorePoints) {
         uint24 currLevel = level;
         return
             _playerActivityScoreAt(
@@ -395,7 +395,7 @@ abstract contract DegenerusGameMintStreakUtils is DegenerusGameStorage {
     // Cashout / smite curse counter (mintPacked_ bits 215-222)
     // =========================================================================
 
-    /// @dev Curse cap = 20 points (-2000 bps max). Doubles as the uint8-wrap guard: a
+    /// @dev Curse cap = 20 points (-20 points max). Doubles as the uint8-wrap guard: a
     ///      saturating +2 can never wrap the 8-bit field 254->0.
     uint8 internal constant CURSE_COUNT_CAP = 20;
 

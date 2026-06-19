@@ -769,7 +769,7 @@ contract DegenerusGameDecimatorModule is DegenerusGamePayoutUtils {
     /// @dev Bucket base and min for terminal decimator (lvl 100 rules).
     uint8 private constant TERMINAL_DEC_BUCKET_BASE = 12;
     uint8 private constant TERMINAL_DEC_MIN_BUCKET = 2;
-    uint16 private constant TERMINAL_DEC_ACTIVITY_CAP_BPS = 23_500;
+    uint16 private constant TERMINAL_DEC_ACTIVITY_CAP_POINTS = 235;
 
     /// @notice Record a terminal decimator burn for GAMEOVER eligibility.
     /// @dev Called by coin contract. Bucket and multiplier computed internally
@@ -790,15 +790,17 @@ contract DegenerusGameDecimatorModule is DegenerusGamePayoutUtils {
         if (daysRemaining <= 7) revert TerminalDecDeadlinePassed();
 
         // Compute bucket and multiplier from activity score (self-call; runs via delegatecall so address(this) == game)
-        uint256 bonusBps = IDegenerusGame(address(this)).playerActivityScore(
+        uint256 bonusPoints = IDegenerusGame(address(this)).playerActivityScore(
             player
         );
-        if (bonusBps > TERMINAL_DEC_ACTIVITY_CAP_BPS)
-            bonusBps = TERMINAL_DEC_ACTIVITY_CAP_BPS;
-        uint8 bucket = _terminalDecBucket(bonusBps);
-        uint256 multBps = bonusBps == 0
+        if (bonusPoints > TERMINAL_DEC_ACTIVITY_CAP_POINTS)
+            bonusPoints = TERMINAL_DEC_ACTIVITY_CAP_POINTS;
+        uint8 bucket = _terminalDecBucket(bonusPoints);
+        // Multiplier divides the bps-equivalent magnitude by 3, so scale the point
+        // score back up by 100 before the /3.
+        uint256 multBps = bonusPoints == 0
             ? BPS_DENOMINATOR
-            : BPS_DENOMINATOR + (bonusBps / 3);
+            : BPS_DENOMINATOR + (bonusPoints * 100) / 3;
 
         TerminalDecEntry storage e = terminalDecEntries[player];
 
@@ -910,13 +912,13 @@ contract DegenerusGameDecimatorModule is DegenerusGamePayoutUtils {
 
         // Recompute the bucket from the LIVE activity score (which now reflects
         // the kept-alive streak). Promote only if strictly better (lower).
-        uint256 bonusBps = IDegenerusGame(address(this)).playerActivityScore(
+        uint256 bonusPoints = IDegenerusGame(address(this)).playerActivityScore(
             player
         );
-        if (bonusBps > TERMINAL_DEC_ACTIVITY_CAP_BPS) {
-            bonusBps = TERMINAL_DEC_ACTIVITY_CAP_BPS;
+        if (bonusPoints > TERMINAL_DEC_ACTIVITY_CAP_POINTS) {
+            bonusPoints = TERMINAL_DEC_ACTIVITY_CAP_POINTS;
         }
-        uint8 liveBucket = _terminalDecBucket(bonusBps);
+        uint8 liveBucket = _terminalDecBucket(bonusPoints);
 
         uint8 newBucket = oldBucket;
         uint8 newSub = oldSub;
@@ -1130,14 +1132,14 @@ contract DegenerusGameDecimatorModule is DegenerusGamePayoutUtils {
     }
 
     /// @dev Compute terminal decimator bucket from activity score (lvl 100 rules).
-    function _terminalDecBucket(uint256 bonusBps) private pure returns (uint8) {
-        if (bonusBps == 0) return TERMINAL_DEC_BUCKET_BASE;
+    function _terminalDecBucket(uint256 bonusPoints) private pure returns (uint8) {
+        if (bonusPoints == 0) return TERMINAL_DEC_BUCKET_BASE;
         uint256 range = uint256(TERMINAL_DEC_BUCKET_BASE) -
             uint256(TERMINAL_DEC_MIN_BUCKET);
         uint256 reduction = (range *
-            bonusBps +
-            (TERMINAL_DEC_ACTIVITY_CAP_BPS / 2)) /
-            TERMINAL_DEC_ACTIVITY_CAP_BPS;
+            bonusPoints +
+            (TERMINAL_DEC_ACTIVITY_CAP_POINTS / 2)) /
+            TERMINAL_DEC_ACTIVITY_CAP_POINTS;
         uint256 b = uint256(TERMINAL_DEC_BUCKET_BASE) - reduction;
         if (b < TERMINAL_DEC_MIN_BUCKET) b = TERMINAL_DEC_MIN_BUCKET;
         return uint8(b);

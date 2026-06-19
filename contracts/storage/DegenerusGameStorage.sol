@@ -131,19 +131,19 @@ abstract contract DegenerusGameStorage {
     IsDGNRS internal constant dgnrs =
         IsDGNRS(ContractAddresses.SDGNRS);
 
-    /// @dev Deity pass activity bonus (+80% in basis points).
-    uint16 internal constant DEITY_PASS_ACTIVITY_BONUS_BPS = 8000;
+    /// @dev Deity pass activity bonus (+80 points).
+    uint16 internal constant DEITY_PASS_ACTIVITY_BONUS_POINTS = 80;
 
-    /// @dev Hard ceiling on the total activity score (bps). Quest completions are
+    /// @dev Hard ceiling on the total activity score (points). Quest completions are
     ///      uncapped, so this bounds the sum. Set one below uint16 max because the
     ///      sDGNRS redemption snapshot stores uint16(score) + 1 (a 0 = unset sentinel),
     ///      which would overflow at 65,535.
-    uint16 internal constant ACTIVITY_SCORE_HARD_CAP_BPS = 65_534;
+    uint16 internal constant ACTIVITY_SCORE_HARD_CAP_POINTS = 65_534;
 
-    /// @dev Floor streak points for active pass holders (50 = 50%).
+    /// @dev Floor streak points for active pass holders (50 points).
     uint16 internal constant PASS_STREAK_FLOOR_POINTS = 50;
 
-    /// @dev Floor mint count points for active pass holders (25 = 25%).
+    /// @dev Floor mint count points for active pass holders (25 points).
     uint16 internal constant PASS_MINT_COUNT_FLOOR_POINTS = 25;
 
     /// @dev Conversion factor for FLIP token amounts.
@@ -1549,15 +1549,15 @@ abstract contract DegenerusGameStorage {
     uint256 internal constant LR_FLIP_SCALE = 1e18;
 
     // Activity score EV multiplier constants (ETH lootbox only)
-    /// @dev 60% activity score = neutral 100% EV
-    uint16 internal constant LOOTBOX_EV_ACTIVITY_NEUTRAL_BPS = 6_000;
-    /// @dev 400%+ activity score = maximum 145% EV
-    uint16 internal constant LOOTBOX_EV_ACTIVITY_MAX_BPS = 40_000;
-    /// @dev Minimum EV at 0% activity (90%)
+    /// @dev 60-point activity score = neutral 100% EV
+    uint16 internal constant LOOTBOX_EV_ACTIVITY_NEUTRAL_POINTS = 60;
+    /// @dev 400+-point activity score = maximum 145% EV
+    uint16 internal constant LOOTBOX_EV_ACTIVITY_MAX_POINTS = 400;
+    /// @dev Minimum EV at 0-point activity (90%)
     uint16 internal constant LOOTBOX_EV_MIN_BPS = 9_000;
-    /// @dev Neutral EV at 60% activity (100%)
+    /// @dev Neutral EV at 60-point activity (100%)
     uint16 internal constant LOOTBOX_EV_NEUTRAL_BPS = 10_000;
-    /// @dev Maximum EV at 400%+ activity (145%)
+    /// @dev Maximum EV at 400+-point activity (145%)
     uint16 internal constant LOOTBOX_EV_MAX_BPS = 14_500;
     /// @dev Maximum EV benefit cap per account per level (10 ETH scaled)
     uint256 internal constant LOOTBOX_EV_BENEFIT_CAP =
@@ -1628,25 +1628,25 @@ abstract contract DegenerusGameStorage {
 
     /// @dev Calculates EV multiplier from a raw activity score.
     ///      Linear interpolation between thresholds.
-    /// @param score The activity score in basis points
+    /// @param score The activity score in whole points
     /// @return The EV multiplier in basis points (9000-14500)
     function _lootboxEvMultiplierFromScore(
         uint256 score
     ) internal pure returns (uint256) {
-        if (score <= LOOTBOX_EV_ACTIVITY_NEUTRAL_BPS) {
-            // Linear: 0% → 90% EV, 60% → 100% EV
+        if (score <= LOOTBOX_EV_ACTIVITY_NEUTRAL_POINTS) {
+            // Linear: 0-point → 90% EV, 60-point → 100% EV
             return LOOTBOX_EV_MIN_BPS +
                 (score * (LOOTBOX_EV_NEUTRAL_BPS - LOOTBOX_EV_MIN_BPS)) /
-                LOOTBOX_EV_ACTIVITY_NEUTRAL_BPS;
+                LOOTBOX_EV_ACTIVITY_NEUTRAL_POINTS;
         }
 
-        if (score >= LOOTBOX_EV_ACTIVITY_MAX_BPS) {
+        if (score >= LOOTBOX_EV_ACTIVITY_MAX_POINTS) {
             return LOOTBOX_EV_MAX_BPS;
         }
 
-        // Linear: 60% → 100% EV, 400% → 145% EV
-        uint256 excess = score - LOOTBOX_EV_ACTIVITY_NEUTRAL_BPS;
-        uint256 maxExcess = LOOTBOX_EV_ACTIVITY_MAX_BPS - LOOTBOX_EV_ACTIVITY_NEUTRAL_BPS;
+        // Linear: 60-point → 100% EV, 400-point → 145% EV
+        uint256 excess = score - LOOTBOX_EV_ACTIVITY_NEUTRAL_POINTS;
+        uint256 maxExcess = LOOTBOX_EV_ACTIVITY_MAX_POINTS - LOOTBOX_EV_ACTIVITY_NEUTRAL_POINTS;
         return
             LOOTBOX_EV_NEUTRAL_BPS +
             (excess * (LOOTBOX_EV_MAX_BPS - LOOTBOX_EV_NEUTRAL_BPS)) /
@@ -2123,10 +2123,10 @@ abstract contract DegenerusGameStorage {
     /// @dev Layout (Solidity packs sequentially) — fits EXACTLY in ONE 32-byte slot (256
     ///      bits, 0 free), so the whole record reads/writes as a single warm slot with no
     ///      extra cold slot:
-    ///        config (40b):  dailyQuantity(8) + validThroughLevel(24) + reinvestPct(8) + flags(8)
+    ///        config (48b):  dailyQuantity(8) + validThroughLevel(24) + reinvestPct(8) + flags(8)
     ///        per-sub stamp (40b): score(16) + amount(24, milli-ETH)
     ///        markers (96b): lastAutoBoughtDay(24) + lastOpenedDay(24) + afkCoveredThroughDay(24) + afkingStartDay(24)
-    ///        accumulator (72b): affiliateBase(32) + pendingFlip(32) + subStreakLatch(8)
+    ///        accumulator (72b): affiliateBase(32) + pendingFlip(24) + subStreakLatch(16)
     ///      There is NO per-day epoch: the box resolves at the LIVE level at open (no
     ///      stored roll floor) and sources its RNG word from
     ///      `rngWordByDay[lastAutoBoughtDay]`, so the only frozen-at-stamp inputs are the
@@ -2142,7 +2142,7 @@ abstract contract DegenerusGameStorage {
     ///      consumes the full wei `ethValue` and is never rounded.
     ///
     ///      Compute-on-read streak: `afkingStartDay` + `subStreakLatch`'s `streakAtAfkingStart`
-    ///      (bits 0-6) frame the run; the effective afking quest streak is derived on read from
+    ///      (full uint16) frame the run; the effective afking quest streak is derived on read from
     ///      `afkCoveredThroughDay` (no DegenerusQuests STATICCALL on the buy path) and handed
     ///      back to the manual quest system on any sub-ending path (finalize).
     ///
@@ -2155,11 +2155,11 @@ abstract contract DegenerusGameStorage {
     ///          accrued per delivered day (the slot-0 quest reward every mode + the
     ///          ticket-mode 10%/20% buyer bonus). Paid out only by the player-pull
     ///          `claimAfkingFlip`, zeroed there.
-    ///        • `subStreakLatch` — the full-byte afking-run streak base (snapshot + in-run secondaries).
-    ///      `affiliateBase` and `pendingFlip` are uint32 with a 100M-whole-FLIP
-    ///      saturating clamp at the accrue write — uint32 holds ~4.29e9 > 100M so the
-    ///      clamp binds first, and it can only ever UNDER-credit a pathological
-    ///      reinvest-whale (off the solvency path). The accumulator fields are written on
+    ///        • `subStreakLatch` — the full uint16 afking-run streak base (snapshot + in-run secondaries).
+    ///      `affiliateBase` is uint32 with a 100M-whole-FLIP saturating clamp and
+    ///      `pendingFlip` is uint24 with a ~16.7M (2^24-1) saturating clamp at the accrue
+    ///      write — each clamp binds before its field's type ceiling, and it can only ever
+    ///      UNDER-credit a pathological reinvest-whale (off the solvency path). The accumulator fields are written on
     ///      the buy-accrue path and the open markers (`lastOpenedDay`/`lastAutoBoughtDay`)
     ///      on the open path — disjoint fields in one warm slot, no collision.
     ///      There are no settle-day markers: the running balances self-mark, the pull has
@@ -2179,7 +2179,7 @@ abstract contract DegenerusGameStorage {
         uint8 reinvestPct;
         /// @dev bit 0 free; bit 1 = drainGameCreditFirst; bit 2 = useTickets.
         uint8 flags;
-        // --- per-sub stamp (48 bits) ---
+        // --- per-sub stamp (40 bits) ---
         /// @dev Stamp: the frozen activity score (the EV multiplier input at open).
         ///      Genuinely per-sub (each subscriber's own activity score).
         uint16 score;
@@ -2191,7 +2191,7 @@ abstract contract DegenerusGameStorage {
         ///      round-down is on this recorded EV/seed input only — the actual ETH debit
         ///      still uses the full wei `ethValue`.
         uint24 amount;
-        // --- markers (72 bits) ---
+        // --- markers (96 bits) ---
         /// @dev Success-marker AND the frozen seed `day` (the same process day):
         ///      day index of the last successful buy, written only after a successful
         ///      afkingFunding debit. The open sources the box word from
@@ -2232,32 +2232,33 @@ abstract contract DegenerusGameStorage {
         ///      (every mode) plus the ticket-mode 10%/20% buyer bonus. Paid out only by the
         ///      player-pull `claimAfkingFlip` (one creditFlip, zeroed there so a re-claim
         ///      finds 0); the sub claims whenever, so there is no settle/claim-timing edge.
-        ///      Same uint32 + 100M saturating clamp + under-credit-only behaviour as
-        ///      `affiliateBase`.
-        uint32 pendingFlip;
-        /// @dev `streakAtAfkingStart` — the afking-run streak base (0..255): the snapshot at run
+        ///      uint24 with a ~16.7M (2^24-1) saturating clamp + under-credit-only
+        ///      behaviour, same in kind as `affiliateBase`.
+        uint24 pendingFlip;
+        /// @dev `streakAtAfkingStart` — the afking-run streak base (0..65535): the snapshot at run
         ///      start plus the secondary/level completions the player makes during the run
         ///      (bumped via recordAfkingSecondary). The compute-on-read effective streak adds the
         ///      funded delivered days `(afkCoveredThroughDay - afkingStartDay)` to this base. Read
         ///      per buy as a mask op, so `affiliateBase`/`pendingFlip` stay unmasked for the hot
         ///      accrue.
-        uint8 subStreakLatch;
+        uint16 subStreakLatch;
     }
 
-    /// @dev `subStreakLatch` is the full byte — `streakAtAfkingStart` (0..255). It carries the
+    /// @dev `subStreakLatch` is the full uint16 — `streakAtAfkingStart` (0..65535). It carries the
     ///      run's pre-run snapshot plus the secondary/level completions the player makes during
     ///      the run (bumped via recordAfkingSecondary); the funded delivered days add on top of
-    ///      this base. Clamped at 255, far past where the activity-score caps make it matter.
-    uint8 internal constant SUB_STREAK_MASK = 0xff;
+    ///      this base. Clamped at uint16 max, far past where the activity-score caps make it matter.
+    uint16 internal constant SUB_STREAK_MASK = 0xffff;
 
-    /// @dev Read the afking-run streak base (the full packed latch byte).
-    function _streakBaseOf(Sub storage sub) internal view returns (uint8) {
+    /// @dev Read the afking-run streak base (the full packed latch uint16).
+    function _streakBaseOf(Sub storage sub) internal view returns (uint16) {
         return sub.subStreakLatch & SUB_STREAK_MASK;
     }
 
-    /// @dev Write the afking-run streak base, clamped to 255.
+    /// @dev Write the afking-run streak base, clamped to uint16 max so the live +1 bump
+    ///      saturates instead of wrapping the field at the ceiling.
     function _setStreakBase(Sub storage sub, uint256 value) internal {
-        sub.subStreakLatch = value > 255 ? 255 : uint8(value);
+        sub.subStreakLatch = value > type(uint16).max ? type(uint16).max : uint16(value);
     }
 
     /// @dev Compute-on-read effective afking quest streak from the Sub slot — no DegenerusQuests

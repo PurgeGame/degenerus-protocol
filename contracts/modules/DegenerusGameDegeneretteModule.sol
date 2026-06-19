@@ -184,14 +184,14 @@ contract DegenerusGameDegeneretteModule is
     // Constants
     // -------------------------------------------------------------------------
 
-    /// @dev Activity score threshold for mid-tier ROI (75% in bps).
-    uint16 private constant ACTIVITY_SCORE_MID_BPS = 7_500;
+    /// @dev Activity score threshold for mid-tier ROI (75 points).
+    uint16 private constant ACTIVITY_SCORE_MID_POINTS = 75;
 
-    /// @dev Activity score threshold for high-tier ROI (255% in bps).
-    uint16 private constant ACTIVITY_SCORE_HIGH_BPS = 25_500;
+    /// @dev Activity score threshold for high-tier ROI (255 points).
+    uint16 private constant ACTIVITY_SCORE_HIGH_POINTS = 255;
 
-    /// @dev Maximum activity score cap (305% in bps, deity pass theoretical max).
-    uint16 private constant ACTIVITY_SCORE_MAX_BPS = 30_500;
+    /// @dev Maximum activity score cap (305 points, deity pass theoretical max).
+    uint16 private constant ACTIVITY_SCORE_MAX_POINTS = 305;
 
     /// @dev Minimum ROI in basis points (90%).
     uint16 private constant ROI_MIN_BPS = 9_000;
@@ -1134,34 +1134,34 @@ contract DegenerusGameDegeneretteModule is
     // -------------------------------------------------------------------------
 
     /// @dev Computes ROI in basis points based on activity score.
-    ///      Curve: quadratic 90%→95% (0-75% activity), linear 95%→99.5% (75-255% activity),
-    ///      linear 99.5%→99.9% (255-305% activity).
-    /// @param score The activity score in basis points.
+    ///      Curve: quadratic 90%→95% (0-75-point activity), linear 95%→99.5% (75-255-point activity),
+    ///      linear 99.5%→99.9% (255-305-point activity).
+    /// @param score The activity score in whole points.
     /// @return roiBps The ROI in basis points.
     function _roiBpsFromScore(
         uint256 score
     ) private pure returns (uint256 roiBps) {
-        if (score > ACTIVITY_SCORE_MAX_BPS) {
-            score = ACTIVITY_SCORE_MAX_BPS;
+        if (score > ACTIVITY_SCORE_MAX_POINTS) {
+            score = ACTIVITY_SCORE_MAX_POINTS;
         }
 
-        if (score <= ACTIVITY_SCORE_MID_BPS) {
-            // Quadratic segment: 0% to 75% activity → 90% to 95% ROI
+        if (score <= ACTIVITY_SCORE_MID_POINTS) {
+            // Quadratic segment: 0 to 75-point activity → 90% to 95% ROI
             uint256 xNum = score;
-            uint256 xDen = ACTIVITY_SCORE_MID_BPS;
+            uint256 xDen = ACTIVITY_SCORE_MID_POINTS;
             uint256 term1 = (1000 * xNum) / xDen;
             uint256 term2 = (500 * xNum * xNum) / (xDen * xDen);
             roiBps = ROI_MIN_BPS + term1 - term2;
-        } else if (score <= ACTIVITY_SCORE_HIGH_BPS) {
-            // Linear segment: 75% to 255% activity → 95% to 99.5% ROI
-            uint256 delta = score - ACTIVITY_SCORE_MID_BPS;
-            uint256 span = ACTIVITY_SCORE_HIGH_BPS - ACTIVITY_SCORE_MID_BPS;
+        } else if (score <= ACTIVITY_SCORE_HIGH_POINTS) {
+            // Linear segment: 75 to 255-point activity → 95% to 99.5% ROI
+            uint256 delta = score - ACTIVITY_SCORE_MID_POINTS;
+            uint256 span = ACTIVITY_SCORE_HIGH_POINTS - ACTIVITY_SCORE_MID_POINTS;
             uint256 roiDelta = ROI_HIGH_BPS - ROI_MID_BPS;
             roiBps = ROI_MID_BPS + (delta * roiDelta) / span;
         } else {
-            // Linear segment: 255% to 305% activity → 99.5% to 99.9% ROI
-            uint256 delta = score - ACTIVITY_SCORE_HIGH_BPS;
-            uint256 span = ACTIVITY_SCORE_MAX_BPS - ACTIVITY_SCORE_HIGH_BPS;
+            // Linear segment: 255 to 305-point activity → 99.5% to 99.9% ROI
+            uint256 delta = score - ACTIVITY_SCORE_HIGH_POINTS;
+            uint256 span = ACTIVITY_SCORE_MAX_POINTS - ACTIVITY_SCORE_HIGH_POINTS;
             uint256 roiDelta = ROI_MAX_BPS - ROI_HIGH_BPS;
             roiBps = ROI_HIGH_BPS + (delta * roiDelta) / span;
         }
@@ -1173,20 +1173,20 @@ contract DegenerusGameDegeneretteModule is
     ///      Used as the target ROI for full-ticket bonus redistribution into
     ///      5+ match buckets.
     ///      Scales from 90.0% base to 109.9% max.
-    /// @param score The activity score in basis points.
+    /// @param score The activity score in whole points.
     /// @return roiBps The WWXRP high-value ROI in basis points.
     function _wwxrpHighValueRoi(
         uint256 score
     ) private pure returns (uint256 roiBps) {
-        if (score > ACTIVITY_SCORE_MAX_BPS) {
-            score = ACTIVITY_SCORE_MAX_BPS;
+        if (score > ACTIVITY_SCORE_MAX_POINTS) {
+            score = ACTIVITY_SCORE_MAX_POINTS;
         }
 
         // Linear scale from 90.0% (9000 bps) to 109.9% (10990 bps)
         roiBps =
             WWXRP_HIGH_ROI_BASE_BPS +
             (score * (WWXRP_HIGH_ROI_MAX_BPS - WWXRP_HIGH_ROI_BASE_BPS)) /
-            ACTIVITY_SCORE_MAX_BPS;
+            ACTIVITY_SCORE_MAX_POINTS;
     }
 
     // -------------------------------------------------------------------------
