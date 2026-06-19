@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Degenerus Protocol — v69.0 Audit Report</title>
+<style>
+  :root { --bg:#0e1117; --card:#161b22; --line:#30363d; --txt:#c9d1d9; --mut:#8b949e;
+          --ok:#3fb950; --info:#58a6ff; --low:#d29922; --med:#db6d28; --hi:#f85149; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--txt); font:15px/1.6 -apple-system,Segoe UI,Roboto,sans-serif; }
+  .wrap { max-width:1000px; margin:0 auto; padding:32px 20px 80px; }
+  h1 { font-size:26px; margin:0 0 4px; }
+  h2 { font-size:19px; margin:34px 0 12px; border-bottom:1px solid var(--line); padding-bottom:6px; }
+  .sub { color:var(--mut); font-size:13px; }
+  code { background:#1f2630; padding:1px 5px; border-radius:4px; font-size:13px; }
+  .verdict { background:var(--card); border:1px solid var(--line); border-left:4px solid var(--ok);
+             border-radius:8px; padding:16px 18px; margin:18px 0; }
+  table { width:100%; border-collapse:collapse; margin:10px 0; font-size:13.5px; }
+  th,td { text-align:left; padding:8px 10px; border-bottom:1px solid var(--line); vertical-align:top; }
+  th { color:var(--mut); font-weight:600; }
+  .tag { display:inline-block; padding:1px 8px; border-radius:10px; font-size:11px; font-weight:700; }
+  .t-ok{background:rgba(63,185,80,.15);color:var(--ok);} .t-info{background:rgba(88,166,255,.15);color:var(--info);}
+  .t-low{background:rgba(210,153,34,.15);color:var(--low);} .t-med{background:rgba(219,109,40,.15);color:var(--med);}
+  .t-hi{background:rgba(248,81,73,.15);color:var(--hi);} .t-part{background:rgba(139,148,158,.18);color:var(--mut);}
+  .card { background:var(--card); border:1px solid var(--line); border-radius:8px; padding:14px 16px; margin:12px 0; }
+  .fix { border-left:4px solid var(--low); }
+  .fixhi { border-left:4px solid var(--hi); }
+  .fixmed { border-left:4px solid var(--med); }
+  .ref { border-left:4px solid var(--info); }
+  .mut { color:var(--mut); }
+  .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:10px; margin:12px 0; }
+  .stat { background:var(--card); border:1px solid var(--line); border-radius:8px; padding:12px 14px; }
+  .stat b { display:block; font-size:21px; color:var(--txt); }
+  .stat span { color:var(--mut); font-size:12px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Degenerus Protocol — v69.0 Audit Report</h1>
+  <div class="sub">Activity-Score Points + Streak/Sub Precision + pendingFlip Right-Size — DESIGN -&gt; IMPL -&gt; TST -&gt; RE-AUDIT · 2026-06-19</div>
+
+  <div class="verdict">
+    <strong>Verdict: 0 CATASTROPHE / 0 HIGH open · 2 HIGH + 2 MED migration findings + 1 CRITICAL afking finding FOUND + FIXED in-milestone · 0 open findings on the final subject.</strong><br>
+    v69 migrates the player activity score from a basis-points internal representation to whole points, replaces the dual-width quest-streak handling with one exact integer path, and right-sizes the per-sub <code>pendingFlip</code> accumulator (net-zero repack). The originally-approved IMPL (<code>c4b09267</code>) was byte-frozen and then <em>adversarially re-audited</em> — the re-audit caught that the migration was <strong>incomplete</strong> (6 bps-domain consumer sites left behind, a ~100x scale mismatch) and a separate afking simulation surfaced a <strong>pre-existing critical</strong> open-leg strand. Both were fixed and re-verified. The points migration now ships <strong>complete across all consumers</strong>.
+    <div class="mut" style="margin-top:8px">
+      Subject (frozen): contracts tree <code>8a633d1d</code> (HEAD <code>dee4ae1f</code>) · baseline v68.0 contracts tree <code>e9a5fc24</code> ·
+      Closure <code>MILESTONE_V69_AT_HEAD_&lt;sha&gt;</code> ·
+      Regression floor: forge <strong>934 / 0 / 108</strong> (pass/fail/skip).
+    </div>
+  </div>
+
+  <div class="grid">
+    <div class="stat"><b>6/6</b><span>missed bps-domain consumer sites migrated (re-audit)</span></div>
+    <div class="stat"><b>72 bits</b><span>Sub accumulator after net-zero repack (1 slot, 0 free)</span></div>
+    <div class="stat"><b>14/14</b><span>TST must-haves verified (gsd-verifier)</span></div>
+    <div class="stat"><b>20,388 B</b><span>DegenerusGame deployed (4,188 B headroom)</span></div>
+    <div class="stat"><b>934/0/108</b><span>final full forge suite (pass/fail/skip)</span></div>
+    <div class="stat"><b>0 divergence</b><span>cross-model council (Codex + Claude + orch)</span></div>
+  </div>
+
+  <h2>Method</h2>
+  <p>This milestone is a <strong>precision + storage change</strong> driven through design-lock -&gt; IMPL -&gt; TST -&gt; re-audit. The 435 design-lock fixed ten USER-locked decisions (D-01..D-10) with a source-anchored consumer-equivalence (scale-invariance) proof. The 436 IMPL landed the change as one atomic, USER-hand-reviewed <code>.sol</code> diff. The 438 re-audit (adversarial 12-agent sweep + a cross-model council: <strong>Codex</strong> + <strong>Claude</strong> + orchestrator source-verification; Gemini CLI auth-expired this milestone) found the migration incomplete and a separate pre-existing critical, both remediated and re-verified. Honest admin/governance assumed (rotation/keeper liveness in scope; admin malice out).</p>
+
+  <h2>Phase results</h2>
+  <table>
+    <tr><th>Phase</th><th>Track</th><th>Result</th></tr>
+    <tr><td>435 DESIGN</td><td>Point-unit · streak-path · packing · equivalence design-lock</td><td><span class="tag t-ok">LOCKED</span> D-01..D-10; scale-invariance proof; no <code>.sol</code> change</td></tr>
+    <tr><td>436 IMPL</td><td>Batched 6-file <code>.sol</code> diff (the approved change)</td><td><span class="tag t-ok">SHIPPED</span> atomic <code>c4b09267</code>; EIP-170 + Sub-slot sanity green; D-436-09 kept cap <code>65_534</code></td></tr>
+    <tr><td>437 TST</td><td>Floor · streak · clamp · equivalence proofs</td><td><span class="tag t-ok">14/14</span> gsd-verifier 14/14; <code>testGas04</code> packing golden updated</td></tr>
+    <tr><td>438 REAUDIT</td><td>Adversarial re-audit + cross-model council</td><td><span class="tag t-hi">4+1 FOUND</span> 2 HIGH + 2 MED migration + 1 CRITICAL afking — ALL fixed + re-verified</td></tr>
+    <tr><td>439 TERMINAL</td><td>Evidence pack + closure</td><td><span class="tag t-ok">DONE</span></td></tr>
+  </table>
+
+  <h2>The headline — the 436 IMPL migration was INCOMPLETE</h2>
+  <p>The 436 IMPL collapsed <code>_playerActivityScoreAt</code> to the point domain (1 pt = 100 bps) and migrated the score <em>producer</em> plus three consumer families, but the 435 design-lock's TABLE-A consumer inventory was not exhaustive: <strong>6 consumer sites in 4 files still read the score as basis points</strong>. Once <code>playerActivityScore</code> returned points (~100x smaller), those sites silently mis-scaled. The council confirmed (three independent confirmations, <strong>0 divergence</strong>) all 4 findings REAL, the 6-site list EXHAUSTIVE, and every fix scale-invariant with no new overflow. All four fixes are the same mechanical /100 constant migration (plus one <code>(points*100)/3</code> re-scale) already approved for the terminal-decimator path in 436.</p>
+
+  <div class="card fixhi">
+    <strong>MIGRATE-01 — HIGH — FLIP regular <code>decimatorBurn</code> bonus ~100x nullified, adverse-to-player (FIXED <code>c297893a</code>)</strong><br>
+    <code>FLIP.sol</code> regular (non-terminal) <code>decimatorBurn</code> kept the bps-domain cap <code>23_500</code>, the <code>bonusBps/3</code> multiplier, and a bucket reduction divided by <code>23_500</code> — all now fed a points-domain score. The bonus collapsed ~100x (235-pt input gave <code>1.008x</code> instead of <code>1.78x</code>), under-paying every regular decimator burner. <span class="mut">Fix: cap -&gt; <code>235</code>, multiplier <code>(bonusPoints*100)/3</code>, bucket denominator <code>/235</code>, param rename. Same re-scale the IMPL applied to the terminal path; the regular path was the missed sibling.</span>
+  </div>
+  <div class="card fixhi">
+    <strong>MIGRATE-02 — HIGH — DegenerusAffiliate lootbox taper never fires, value-leak (FIXED <code>c297893a</code>)</strong><br>
+    <code>DegenerusAffiliate.sol</code> lootbox taper compared a points-domain score against bps thresholds <code>10_000 / 25_500</code>. With the ~100x-smaller score the anti-farming taper never engaged -&gt; 100% affiliate over-payout. <span class="mut">Fix: thresholds -&gt; <code>100 / 255</code> + taper doc-comment to points.</span>
+  </div>
+  <div class="card fixmed">
+    <strong>MIGRATE-03 — MEDIUM — century quantity bonus collapses ~100x at two sites, adverse-to-player (FIXED <code>c297893a</code>)</strong><br>
+    <code>DegenerusGameMintModule.sol</code> and <code>GameAfkingModule.sol</code> both compute <code>qty * min(score, 30_500) / 30_500</code>; the points-domain numerator shrank ~100x so the bonus degenerated to ~<code>qty/100</code>. <span class="mut">Fix: denominator <code>30_500</code> -&gt; <code>305</code> at both sites.</span>
+  </div>
+  <div class="card fixmed">
+    <strong>MIGRATE-04 — MEDIUM — DecimatorModule <code>_minScoreForBucket</code> bimodal EV, favourable-to-actor (FIXED <code>c297893a</code>)</strong><br>
+    <code>_minScoreForBucket</code> kept the bps cap <code>23_500</code> against the points-domain score, producing a bimodal <code>90% / 145%</code> decimator-claim EV on every win (graduated EV ladder collapsed to two outcomes). <span class="mut">Fix: cap -&gt; <code>235</code>.</span>
+  </div>
+  <p class="mut">Remediation <code>c297893a</code> (8 <code>.sol</code> files incl. getter/interface natspec to points) + tests <code>fa21e39e</code> (new <code>V69ConsumerMigrationFixes.t.sol</code>, 5 pure-math fails-without/passes-with proofs + V56/V61/DegeneretteHeroScore re-pins). USER-approved.</p>
+
+  <h2>The separate critical — <code>_autoOpen</code> open-leg cursor strand (pre-existing)</h2>
+  <div class="card fixhi">
+    <strong>AFKING-CRIT-01 — CRITICAL — <code>_autoOpen</code> strands <code>[0, cursor)</code> -&gt; mintFlip bricks with sealed boxes -&gt; mass quest-streak reset (FIXED <code>21df2411</code>)</strong><br>
+    USER-found via the afking simulator and live-proven on-chain (<code>len=81, cursor=80, ~80 sealed boxes unopened, mintFlip -&gt; NoWork</code>). The open cursor <code>_subOpenCursor</code> wrapped only at loop entry (scanned <code>[cursor, len)</code>); a <code>subscribe</code> that grew <code>_subscribers</code> while the cursor sat at the old length left it mid-array -&gt; <code>_autoOpen</code> returned 0 -&gt; <code>mintFlip</code> reverted <code>NoWork</code> (rolling back the cursor advance) -&gt; subscribers in <code>[0, cursor)</code> permanently stranded with boxes sealed -&gt; mass quest-streak reset (the unrewarded <code>drainAfkingBoxes</code> un-stick path draws no keeper). The sibling buy/stamp cursor <code>_subCursor</code> was verified safe (resets per-day).<br>
+    <span class="mut">Fix: full-ring scan — wrap mid-scan, bound by <code>scanned &lt; len</code>, normalized cursor write-back. Worst-case scan unchanged (<code>len &lt;= SUBSCRIBER_CAP = 1000</code>); per-call opens still <code>&lt;= OPEN_BATCH = 80</code>. Commit <code>21df2411</code> (GameAfkingModule only) + tests <code>c019da64</code> (AutoOpenCursorRing 4/4, incl. 0/4-on-pre-fix proof) + <code>fba12966</code> (MintFlipLifecycleCoverage 5/5, N=100 &gt; OPEN_BATCH). USER-approved.</span>
+  </div>
+
+  <h2>What the migration is (design-lock D-01..D-10)</h2>
+  <table>
+    <tr><th>Decision</th><th>Lock</th></tr>
+    <tr><td>D-01 Point unit</td><td>1 point = 100 bps; every additive contributor a multiple of 100 bps except the quest-streak leg.</td></tr>
+    <tr><td>D-02 Quest-streak floor</td><td><code>floor(questStreak / 2)</code> — sole sub-point leg; the natural point representation <code>floor((q*50)/100)</code>.</td></tr>
+    <tr><td>D-03 Point cap &amp; widths</td><td>Natural cap <code>floor(65534/100) = 655</code>; <code>Sub.score</code> stays uint16 (no sDGNRS <code>+1</code> sentinel collision).</td></tr>
+    <tr><td>D-04/05 Single exact streak path</td><td><code>subStreakLatch</code> uint8 -&gt; uint16; drop the silent 255-clamp; delete the <code>finalizeAfking</code> floor-hack. Only behaviour change: removing the prior silent 255-truncation for manual-streak &gt; 255 (byte-identical at &lt;= 255).</td></tr>
+    <tr><td>D-06/07/08 pendingFlip right-size</td><td><code>Sub.pendingFlip</code> uint32 -&gt; uint24 + clamp re-pinned to the uint24 ceiling; the 8 freed bits feed the latch, keeping the accumulator at <code>affiliateBase(32) + pendingFlip(24) + subStreakLatch(16) = 72</code> bits, one 256-bit slot, 0 free. <code>lootboxRngPendingFlip</code> (separate uint40) out of scope.</td></tr>
+    <tr><td>D-09/10 Equivalence</td><td>Score-INPUT thresholds convert /100 with the score (TABLE-A); OUTPUT bps (ROI/EV anchors, <code>BPS_DENOMINATOR</code>) must NOT (TABLE-B). Single accepted divergence: the de-minimis odd-half-point boundary shift.</td></tr>
+  </table>
+  <p class="mut"><strong>D-436-09:</strong> the IMPL kept the hard cap at <code>ACTIVITY_SCORE_HARD_CAP_POINTS = 65_534</code> (rename-only, not floored to 655) — gameplay-inert (every live consumer clamp &lt;= 400/305/235) and keeps the uint16-sentinel rationale true verbatim.</p>
+
+  <h2>TST proofs (phase 437) — 14/14</h2>
+  <table>
+    <tr><th>Suite</th><th>Proves</th></tr>
+    <tr><td><code>ActivityScorePointFloor.t.sol</code> (4)</td><td>floor <code>floor(q/2) == floor((q*50)/100)</code> on an 18-grid; end-to-end leg; afking-XOR-manual exclusivity; exact integer combine.</td></tr>
+    <tr><td><code>StreakSnapshotAndPendingFlipClamp.t.sol</code> (5)</td><td>pre-streak &gt; 255 snapshot exact (no uint8 truncation); &lt;= 255 byte-identical; latch saturates at <code>uint16.max</code>; <code>pendingFlip</code> saturates at <code>uint24.max = 16_777_215</code> (no wrap); settle round-trip preserves <code>affiliateBase</code>.</td></tr>
+    <tr><td><code>ConsumerPointEquivalence.t.sol</code> (5)</td><td>Lootbox EV + Degenerette ROI + WWXRP bit-identical point-vs-bps; Decimator <code>(points*100)/3</code> reproduces <code>bonusBps/3</code> exactly (naive <code>points/3</code> proven wrong); bucket scale-invariant.</td></tr>
+    <tr><td><code>KeeperLeversAndPacking.t.sol</code> (edit)</td><td><code>testGas04</code> packing golden updated to post-PACK widths (<code>uint24 pendingFlip;</code> / <code>uint16 subStreakLatch;</code>); Sub byte-sum still exactly 32.</td></tr>
+  </table>
+
+  <h2>Verification on the final subject (phase 438)</h2>
+  <table>
+    <tr><th>Gate</th><th>Result</th></tr>
+    <tr><td>Storage-layout oracle</td><td><span class="tag t-ok">ALL GOLDENS MATCH</span> the earlier all-removed diff was a forge-1.6-nightly artifact-caching artifact (fixed by <code>forge clean</code>); <code>_autoOpen</code> is logic-only so the layout is unchanged. V56-cluster slot harnesses re-pinned.</td></tr>
+    <tr><td>EIP-170 ceiling</td><td><span class="tag t-ok">OK</span> DegenerusGame <strong>20,388 B / 4,188 B headroom</strong> under 24,576 (natspec-only since IMPL); GameAfkingModule under ceiling.</td></tr>
+    <tr><td>Final full forge suite</td><td><span class="tag t-ok">934 / 0 / 108</span> 134 suites; the 108 skips pre-existing <code>vm.skip</code>.</td></tr>
+    <tr><td>Cross-model council</td><td><span class="tag t-ok">0 DIVERGENCE</span> Codex + Claude + orchestrator; all 4 migration findings REAL, 6-site list EXHAUSTIVE, fixes scale-invariant.</td></tr>
+  </table>
+
+  <h2>Carried (non-blocking)</h2>
+  <ol>
+    <li><strong>Mutation / Halmos / deep-invariant coverage of the v69-changed modules</strong> — zero machine-net coverage of the touched modules; the dual-net manual audit + 14 TST proofs + 5 migration-fix proofs carry the correctness load. Documented carry, acceptable per the v68 close; resume on a detached/CI host.</li>
+    <li>Cosmetic residual (optional): stale "bps" doc-comments on the frozen-snapshot activityScore params in <code>IDegenerusGameModules.sol</code> + <code>DegenerusGameLootboxModule.sol</code> (value consumed correctly; only the unit word is stale).</li>
+    <li>Carried from prior milestones: optional <code>:1843</code>/<code>:1850</code> <code>== 0</code> re-roll guard; optional 423 rotation-timer hardening; the v68 Coinflip/Lootbox mutation tail.</li>
+  </ol>
+
+  <p class="mut" style="margin-top:30px">Milestone verdict: v69 ships the activity-score points migration COMPLETE (all consumers), the single exact integer streak path, the net-zero pendingFlip repack, and a separately-found critical afking open-leg fix. The re-audit caught and closed the incomplete migration before the subject shipped. Nets are green; 0 findings remain open on the final subject <code>8a633d1d</code>. Canonical evidence: <code>audit/FINDINGS-v69.0.md</code>.</p>
+</div>
+</body>
+</html>

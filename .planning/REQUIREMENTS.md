@@ -41,13 +41,13 @@ Requirements for this milestone. Each maps to exactly one roadmap phase.
 
 ### REAUDIT — Re-Run the v68 Detection Nets on the Reset Subject
 
-- [ ] **REAUDIT-01**: The storage-layout golden is recaptured for the new subject and the ~30 slot-hardcoded test harnesses are migrated/re-pinned, with the MECH-02 layout-diff oracle green on the new layout (the expected slot move from the accumulator repack is the new golden, not an unexpected drift).
-- [ ] **REAUDIT-02**: The RNG-freeze proof is re-run on the new subject — every VRF/RNG consumer that reads the activity score (lootbox EV / Degenerette / decimator) is re-attested frozen-at-commitment, with the activity-score snapshot-at-deposit freeze (the anti-gaming knob) explicitly re-confirmed under the point-domain representation; any ledger entry whose anchors moved is updated.
-- [ ] **REAUDIT-03**: The mutation campaign is re-run / triaged on the changed modules and the deep-invariant + Halmos nets are confirmed green on the new subject — the v68 layout/CI/mutation harness is re-pinned to the new subject; survivors are triaged oracle-hole vs. robustness (a documented carry of the still-running mutation tail is an acceptable disposition, consistent with the v68 close).
+- [x] **REAUDIT-01**: The storage-layout golden is recaptured for the new subject and the ~30 slot-hardcoded test harnesses are migrated/re-pinned, with the MECH-02 layout-diff oracle green on the new layout (the expected slot move from the accumulator repack is the new golden, not an unexpected drift).
+- [x] **REAUDIT-02**: The RNG-freeze proof is re-run on the new subject — every VRF/RNG consumer that reads the activity score (lootbox EV / Degenerette / decimator) is re-attested frozen-at-commitment, with the activity-score snapshot-at-deposit freeze (the anti-gaming knob) explicitly re-confirmed under the point-domain representation; any ledger entry whose anchors moved is updated.
+- [x] **REAUDIT-03**: The mutation campaign is re-run / triaged on the changed modules and the deep-invariant + Halmos nets are confirmed green on the new subject — the v68 layout/CI/mutation harness is re-pinned to the new subject; survivors are triaged oracle-hole vs. robustness (a documented carry of the still-running mutation tail is an acceptable disposition, consistent with the v68 close).
 
 ### TERMINAL — Evidence Pack + Closure
 
-- [ ] **TERMINAL-01**: A canonical evidence pack `audit/FINDINGS-v69.0.md` (+ HTML report in the prior house style) records the design-lock decisions, the equivalence analysis verdict, the TST results, and the re-audit outcomes (layout golden, RNG-freeze re-attest, mutation/invariant status); the closure signal `MILESTONE_V69_AT_HEAD_<sha>` is recorded, the activity-score interaction re-audit is confirmed clean, and the subject is confirmed byte-frozen at the IMPL diff (the only `contracts/*.sol` change in the milestone). chmod 444 the canonical findings doc (house convention).
+- [x] **TERMINAL-01**: A canonical evidence pack `audit/FINDINGS-v69.0.md` (+ HTML report in the prior house style) records the design-lock decisions, the equivalence analysis verdict, the TST results, and the re-audit outcomes (layout golden, RNG-freeze re-attest, mutation/invariant status); the closure signal `MILESTONE_V69_AT_HEAD_<sha>` is recorded, the activity-score interaction re-audit is confirmed clean, and the subject is confirmed byte-frozen at the IMPL diff (the only `contracts/*.sol` change in the milestone). chmod 444 the canonical findings doc (house convention).
 
 ## v2 Requirements
 
@@ -86,10 +86,10 @@ Each requirement maps to exactly one phase. v69.0 phases continue 434 → 435. N
 | TST-01 | 437 TST | Done (`ActivityScorePointFloor.t.sol` 4/4) |
 | TST-02 | 437 TST | Done (`StreakSnapshotAndPendingFlipClamp.t.sol` 5/5 + `testGas04` golden) |
 | TST-03 | 437 TST | Done (`ConsumerPointEquivalence.t.sol` 5/5) |
-| REAUDIT-01 | 438 REAUDIT | Pending |
-| REAUDIT-02 | 438 REAUDIT | Pending |
-| REAUDIT-03 | 438 REAUDIT | Pending |
-| TERMINAL-01 | 439 TERMINAL | Pending |
+| REAUDIT-01 | 438 REAUDIT | Done (layout oracle green; harnesses re-pinned) |
+| REAUDIT-02 | 438 REAUDIT | Done (freeze re-attested; consumers point-domain) |
+| REAUDIT-03 | 438 REAUDIT | Done (suite 934/0; mutation carry) |
+| TERMINAL-01 | 439 TERMINAL | Done (FINDINGS-v69.0 + HTML + closure signal) |
 
 **Coverage:**
 - v1 requirements: 16 total
