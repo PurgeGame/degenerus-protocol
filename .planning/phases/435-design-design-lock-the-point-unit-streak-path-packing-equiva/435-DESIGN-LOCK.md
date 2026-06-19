@@ -91,3 +91,84 @@ Per CONTEXT.md, the exact constant naming and the precise source location where 
 | Deity pass bonus | 8000 bps → 80 pt (multiple of 100, no special rule) | `Storage:135` |
 
 ---
+
+## DESIGN-02 — Single Exact Integer Streak Path + Pre-Streak-Cap Rework
+
+Records the USER-locked decisions **D-04** (widen the latch, drop both band-aids) and **D-05** (single exact integer path). Requirements: **DESIGN-02** (this plan locks the design; STREAK-01/02 in 436 implement it).
+
+### D-04 — The grievance: a width mismatch papered over twice
+
+The carried-in pre-streak handling currently spans two widths and patches the mismatch in two places:
+
+1. **Run-start snapshot truncation.** At afking run start, `beginAfking` returns the player's gap-synced manual quest streak (`DegenerusQuests.beginAfking:501-511`, returning `state.streak`, where `PlayerQuestState.streak` is **uint16**, `DegenerusQuests.sol:281`). The Game then snapshots it into `Sub.subStreakLatch` (**uint8**, `DegenerusGameStorage.sol:2244`) via `_setStreakBase`, which **clamps to 255** (`_setStreakBase:2259-2261`: `sub.subStreakLatch = value > 255 ? 255 : uint8(value)`). A high-streak player (manual streak > 255) is therefore **silently truncated** for the afking run's activity score — the run reads a 255-capped base instead of the true carried-in streak.
+
+2. **Finalize floor-hack compensation.** On any sub-ending path, `_finalizeAfking` (`GameAfkingModule.sol:1066-1081`) computes `earned = _streakBaseOf(sub) + (afkCoveredThroughDay - afkingStartDay)` and hands it to `DegenerusQuests.finalizeAfking`. That function contains a **floor-hack** (`DegenerusQuests.sol:546-551`) that reaches back into the dormant uint16 `state.streak` (held untouched while afking) to restore it on exit:
+
+   ```solidity
+   // (DegenerusQuests.sol:546-551, frozen baseline)
+   uint16 preRun = state.streak;
+   if (finalStreak != 0 && finalStreak < preRun) finalStreak = preRun;
+   state.streak = finalStreak > type(uint16).max ? type(uint16).max : uint16(finalStreak);
+   ```
+
+   The comment at `:546-548` states the reason explicitly: *"The afking run base is uint8-clamped at 255, so a short run can rebuild a streak below the pre-run snapshot still held in state.streak (dormant while afking). Floor a surviving streak at that snapshot so handing control back never lowers it."*
+
+**The USER's framing:** the dislike is precisely this **uint8/255 clamp + the compensating finalize floor-hack** — a width mismatch (uint16 manual streak vs uint8 latch) papered over twice. The locked fix removes both by matching the latch width to the manual streak.
+
+**[ANCHOR NOTE — frozen-source corrections vs CONTEXT.md / plan interfaces]:**
+- `beginAfking` return **type** is `uint24 streak` (`DegenerusQuests.sol:504`), sourced from `state.streak` (the underlying **uint16** field at `:281`). The plan interfaces said "returns state.streak (uint16)" — the underlying field is uint16; the return cast is uint24. Either way the value originates from the uint16 manual streak, so the symmetry argument (match the latch to the manual uint16 streak) holds.
+- The finalize floor-hack at `:546-551` guards `finalStreak != 0 && finalStreak < preRun` (the plan's interfaces abbreviated it to `if (finalStreak < preRun)`); the live code also requires `finalStreak != 0` so a genuine decay-to-0 is not floored back up. The block to DELETE is exactly `:549-550` (the `preRun` read + the `if (...) finalStreak = preRun;`); the type-clamp at `:551` is a separate concern (see the actor walk, point 6).
+- `Sub.subStreakLatch` is the **full byte** (8 bits, `SUB_STREAK_MASK = 0xff` at `:2251`, mask op at `_streakBaseOf:2254-2256`). One stale comment at `Storage:2144` describes `streakAtAfkingStart (bits 0-6)` (7 bits) — the live code masks the full byte (8 bits), so 8 bits is the effective width. The widening edit must update that stale comment too.
+
+### D-04 — The locked fix: widen the latch, drop the 255 clamp, delete the floor-hack
+
+**Decision:** widen `Sub.subStreakLatch` **uint8 → uint16**, consuming the **8 bits freed by the DESIGN-03 `pendingFlip` narrowing** (uint32 → uint24; see plan 02 / D-06 / D-07 for the slot arithmetic). The latch then matches the manual `state.streak` width (uint16), the carried-in pre-streak snapshots **exactly** (no truncation), and the compensating floor-hack is no longer needed.
+
+**Freed-bits cross-reference:** the 8 bits are NOT new slot space — they come from narrowing `Sub.pendingFlip` uint32 → uint24 (D-06), keeping the accumulator at exactly `affiliateBase(32) + pendingFlip(24) + subStreakLatch(16) = 72` bits and the `Sub` struct at exactly one 256-bit slot, 0 free (D-07). **Plan 02 owns the slot arithmetic, EIP-170 re-check, and the layout-golden recapture.** This is recorded here only as the source of the latch's extra 8 bits (threat-register item **T-435-03**).
+
+**Exact edit surface for 436 IMPL** (each a per-symbol edit on the frozen baseline):
+
+| # | Edit | Symbol | Anchor | Change |
+|---|------|--------|--------|--------|
+| (a) | Field declaration | `Sub.subStreakLatch` | `DegenerusGameStorage.sol:2244` | `uint8` → `uint16` |
+| (b) | Mask widening | `SUB_STREAK_MASK` | `:2251` | `0xff` → `0xffff` |
+| (c) | Getter return type | `_streakBaseOf` | `:2254-2256` | returns `uint16` (was `uint8`); `& SUB_STREAK_MASK` now masks 16 bits |
+| (d) | Setter clamp DROP | `_setStreakBase` | `:2259-2261` | drop the `value > 255 ? 255 :` clamp; snapshot exactly into the full uint16 (a uint16-range clamp may stay for type safety since `state.streak` is itself uint16 — IMPL discretion, but the **255** clamp is removed) |
+| (e) | Cast holds | `_afkingStreak` | `:2271` | `uint32(_streakBaseOf(sub))` cast from uint16 → uint32 continues to hold (uint16 ⊂ uint32); no change required beyond (c)'s return type |
+| (f) | Floor-hack DELETE | `finalizeAfking` floor-hack | `DegenerusQuests.sol:546-551` | **DELETE** the `uint16 preRun = state.streak; if (finalStreak != 0 && finalStreak < preRun) finalStreak = preRun;` block (`:549-550`) and its explanatory comment (`:546-548`); the latch now carries the pre-run snapshot exactly, so `finalStreak` (= true base + funded days) already reflects the real streak and needs no restore. The decay logic (`:543-545`) and the final uint16 assignment (`:551`, retained as plain `state.streak = uint16(finalStreak)` with its safety clamp) stay. |
+
+Also update the stale `bits 0-6` comment at `Storage:2144` and the `0..255` / `Clamped at 255` comments at `:2238-2250` to the new uint16 width (comment-only, but part of the same edit).
+
+### D-05 — The single exact integer path
+
+With the full-width (uint16) latch, the manual quest streak **and** the afking-run streak base feed `_playerActivityScore` through **one exact integer path** — there is no fractional / bps intermediate anywhere in the streak combine. The quest-streak value that reaches `_playerActivityScoreAt` (`MintStreakUtils:335`) is a clean integer; the floor (D-02) is applied once, at the bps→point conversion of that single leg, not scattered across the streak combine.
+
+Consistency confirmations (per CONTEXT.md D-05):
+- **`DegenerusQuests` streak source** stays the uint16 `PlayerQuestState.streak` (`:281`), now symmetric with the uint16 latch — no width mismatch remains.
+- **The `pendingFlip` accrual note** at `DegenerusQuests.sol:1779` (the per-delivered-day `pendingFlip` accrual; while afking, slot completions are streak-neutral and the slot-0 reward is the per-delivered-day accrual) stays consistent with the new path: the streak-width change does not touch the accrual semantics, and `pendingFlip`'s own narrowing (D-06) is a separate slot field in the same accumulator.
+
+### D-04/D-05 — Actor / game-theory walk (semantics-preserving)
+
+The walk below proves the rework changes **exactly one** observable behaviour — removing the prior silent 255-truncation (and its compensating restore) — and preserves all other streak semantics. This carries threat-register item **T-435-03** to mitigated.
+
+1. **Non-afker.** `_effectiveQuestStreak` returns the manual streak unchanged: `(uint32 manualStreak, bool afking) = quests.effectiveBaseStreakAndAfking(player); if (!afking) return manualStreak;` (`DegenerusGameStorage.sol:2300-2301`). A non-afking player never touches the latch — **unchanged.**
+2. **Live afking sub.** `_effectiveQuestStreak` reads the compute-on-read `_liveAfkingStreak` (`:2302`), which returns `_afkingStreak(sub, currentDay) = uint32(_streakBaseOf(sub)) + uint32(covered - afkingStartDay)` (`:2268-2271`). The base now comes from a uint16 latch instead of a uint8 latch, but the **formula is identical** — only the base can now exceed 255 (the truncation that used to happen no longer does). **Behaviour-preserving except the truncation removal.**
+3. **afking-XOR-manual exclusivity.** `_effectiveQuestStreak` (`:2295-2304`) drives the score from exactly **one** source at a time: a non-afker (or a lapsed run) reads the manual streak; a live afking sub reads the compute-on-read. Only one source ever feeds the score. The XOR exclusivity is **preserved** — the latch widening does not add a second concurrent source.
+4. **Decay-on-read.** `_afkingStreak` returns 0 when `currentDay == 0 || covered + 1 < currentDay` (`:2270`) — miss one full funded day and the afking streak is gone. This guard is **unchanged**; the latch width does not affect the decay condition.
+5. **In-run `+1` secondary bump & run-start writes.** The in-run secondary bump `_setStreakBase(s, _streakBaseOf(s) + 1)` (`GameAfkingModule.sol:1734`, `recordAfkingSecondary`) and the run-start re-base / 0-on-lapse writes (`_setStreakBase(s, snap)` at `:521/523/533/555`, `_setStreakBase(s, 0)` at `:573`, and `_finalizeAfking`'s `_setStreakBase(sub, 0)` at `:1081`) are **unchanged in behaviour** — only the field width changes. The `+1` bump previously saturated at 255 (per its `:1726` comment); with the uint16 latch it saturates at 65535 instead, which is consistent with the wider carried-in base and far past where the activity-score point cap (655) makes any value matter.
+6. **High-streak player (manual streak > 255) — the ONLY behaviour change.** Before: the run-start snapshot truncated the carried-in streak to 255 (`_setStreakBase:2260`), the activity score read a 255-capped base mid-run, and the finalize floor-hack (`DegenerusQuests.sol:549-550`) restored `state.streak` to the pre-run snapshot on exit so the manual streak was not permanently lowered. After: the snapshot carries the **exact** base into the run (no 255 cap), the activity score reads the true base mid-run, and on finalize `finalStreak` (= exact base + funded days) is handed back directly with **no floor-hack** — the restore is unnecessary because nothing was ever truncated. **Net: the only behaviour change is removing the prior silent 255-truncation (mid-run under-scoring) and its compensating exit-restore.** For any player with manual streak ≤ 255, the before/after behaviour is byte-identical (the clamp never bound, the floor-hack's `finalStreak < preRun` either never fired or fired identically). Note the activity-score point cap (655) already bounds the *score* contribution; this rework removes a *streak-base* truncation upstream of that cap, which only matters where the carried-in streak exceeds 255 — a high-engagement edge that the USER wants represented exactly rather than silently capped.
+
+### D-04/D-05 — Locked outputs (for 436 IMPL)
+
+| Lock | Value / rule | Source anchor |
+|------|--------------|---------------|
+| Latch width | `Sub.subStreakLatch` uint8 → uint16 | `Storage:2244` |
+| Mask | `SUB_STREAK_MASK` 0xff → 0xffff | `Storage:2251` |
+| Getter | `_streakBaseOf` returns uint16 | `Storage:2254-2256` |
+| Setter | drop the `> 255 → 255` clamp | `Storage:2259-2261` |
+| Floor-hack | DELETE the `preRun` restore block | `DegenerusQuests.sol:546-551` |
+| Freed bits source | 8 bits from `pendingFlip` uint32 → uint24 (D-06/plan 02) | `Storage:2237` |
+| `_effectiveQuestStreak` | afking-XOR-manual semantics PRESERVED | `Storage:2295-2304` |
+| Behaviour delta | only the silent 255-truncation (+ its exit-restore) removed | walk point 6 |
+
+---
