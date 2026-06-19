@@ -17,8 +17,8 @@ import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 ///             `_removeFromSet`/`_subscribers.pop()`, the subscribe-time consent gate `operatorApprovals`,
 ///             the per-entry day-stamp.
 ///           - the Sub packed-LAYOUT gate -> `DegenerusGameStorage.sol` (`STORAGE_SRC`): the `struct Sub`
-///             field widths (RE-DERIVED — the game-resident Sub is 8 fields summing to 29 bytes, one slot;
-///             the old AfKing-standalone 6-field/31-byte offsets are WRONG).
+///             field widths (RE-DERIVED — the game-resident Sub is 13 fields summing to 32 bytes, one full
+///             slot 0 free; the old AfKing-standalone offsets are WRONG).
 ///           - `afKing.doWork()`        -> `game.mintFlip()` (Δ3) for the driving helpers.
 ///
 ///         D-351-02 REMOVED-SURFACE DROP (BY NAME, for the 351-09 REGRESSION-BASELINE-v55 ledger): the v49
@@ -214,22 +214,22 @@ contract KeeperLeversAndPacking is DeployProtocol {
     /// @notice GAS-04: the game-resident `Sub` struct packs to ONE slot (RE-DERIVED), `boxCursor`/
     ///         `boxCursorIndex` are uint48, and the crank adds storage ONLY via the first-deposit
     ///         `boxPlayers` push (inlined at the module first-deposit sites).
-    /// @dev    v55 (D-351-01 RE-DERIVE): the game-resident `Sub` (DegenerusGameStorage.sol:1867) is EIGHT
-    ///         fields summing to 29 used bytes (<= 32 = one slot) — the box-redesign added the per-sub
-    ///         stamp fields (`score` uint16 + `amount` uint96) + the `lastOpenedDay` uint32 marker,
-    ///         dropped the standalone `fundingSource` (relocated to the sparse `_fundingSourceOf` map):
-    ///           uint8 dailyQuantity(1) + uint32 validThroughLevel(4) + uint8 reinvestPct(1)
-    ///           + uint8 flags(1) + uint16 score(2) + uint96 amount(12) + uint32 lastAutoBoughtDay(4)
-    ///           + uint32 lastOpenedDay(4) = 29 bytes. The INTENT — single-slot packing, no NEW hot-path
-    ///         storage — is unchanged; only the shape it proves against (greps STORAGE_SRC, not AFKING_SRC).
+    /// @dev    The game-resident `Sub` is thirteen fields summing to exactly 32 used bytes (one 256-bit slot,
+    ///         0 free). The in-slot accumulator section is `affiliateBase` uint32 + `pendingFlip` uint24 +
+    ///         `subStreakLatch` uint16 = 72 bits, ending at byte 32:
+    ///           uint8 dailyQuantity(1) + uint24 validThroughLevel(3) + uint8 reinvestPct(1) + uint8 flags(1)
+    ///           + uint16 score(2) + uint24 amount(3) + uint24 lastAutoBoughtDay(3) + uint24 lastOpenedDay(3)
+    ///           + uint24 afkCoveredThroughDay(3) + uint24 afkingStartDay(3) + uint32 affiliateBase(4)
+    ///           + uint24 pendingFlip(3) + uint16 subStreakLatch(2) = 32 bytes. This is a SOURCE-GREP oracle
+    ///         (it greps STORAGE_SRC for the exact field declarations); the `forge inspect storageLayout`
+    ///         snapshot is a separate golden.
     function testGas04PackingAndNoNewHotPathStorageSourcePresence() public view {
         string memory storage_ = _stripComments(vm.readFile(STORAGE_SRC));
         string memory game_ = _strippedGame();
 
         // Sub struct: the thirteen game-resident fields at their exact widths sum to 32 bytes (= one slot).
-        // The v56 re-pack added the markers (afkCoveredThroughDay / afkingStartDay) + the in-slot accumulator
-        // (affiliateBase / pendingFlip / subStreakLatch) and narrowed the v55 uint32 day markers + uint96
-        // amount to uint24, so the record still fits a single 256-bit slot.
+        // The accumulator section is affiliateBase u32 + pendingFlip u24 + subStreakLatch u16 = 72 bits; the
+        // day markers and the per-sub stamp are uint24, so the record fits a single 256-bit slot with 0 free.
         uint256 subBytes =
             _structFieldBytes(storage_, "uint8 dailyQuantity;", 1) +
             _structFieldBytes(storage_, "uint24 validThroughLevel;", 3) +
@@ -242,8 +242,8 @@ contract KeeperLeversAndPacking is DeployProtocol {
             _structFieldBytes(storage_, "uint24 afkCoveredThroughDay;", 3) +
             _structFieldBytes(storage_, "uint24 afkingStartDay;", 3) +
             _structFieldBytes(storage_, "uint32 affiliateBase;", 4) +
-            _structFieldBytes(storage_, "uint32 pendingFlip;", 4) +
-            _structFieldBytes(storage_, "uint8 subStreakLatch;", 1);
+            _structFieldBytes(storage_, "uint24 pendingFlip;", 3) +
+            _structFieldBytes(storage_, "uint16 subStreakLatch;", 2);
         assertLe(subBytes, 32, "GAS-04: Sub struct fields sum to <= 32 bytes (one slot)");
         assertEq(subBytes, 32, "GAS-04 (v56): the game-resident Sub is 32 used bytes (13 fields, one full slot)");
         // The `struct Sub {` declaration is byte-present (the packed sub record exists at all).
