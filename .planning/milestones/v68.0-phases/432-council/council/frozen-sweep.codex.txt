@@ -1,0 +1,37 @@
+**Findings**
+
+No reachable robustness issue found in the frozen `contracts/` tree `4970ba5b`. I did not identify a transaction that can permanently brick `advanceGame` / VRF fulfillment / terminal finalization, corrupt packed storage or accounting, or break ETH/backing solvency.
+
+**Fix Verification**
+
+1. Mid-day lootbox RNG latch release: no regression found.
+
+`LR_MID_DAY` is set only after `_swapTicketSlot` reserves the read queue and before the lootbox index advances: `contracts/modules/DegenerusGameAdvanceModule.sol:1131`, `contracts/modules/DegenerusGameAdvanceModule.sol:1146`. The callback writes the reserved word to `LR_INDEX - 1` and clears only request metadata, not the latch: `contracts/modules/DegenerusGameAdvanceModule.sol:1848`.
+
+Both drain paths require the word before clearing the latch. Same-day drain reverts if the word is missing and clears only after tickets finish: `contracts/modules/DegenerusGameAdvanceModule.sol:224`, `contracts/modules/DegenerusGameAdvanceModule.sol:238`. New-day drain similarly requires either the mid-day word or a daily `rngWordCurrent`, then clears only after the read queue is fully processed: `contracts/modules/DegenerusGameAdvanceModule.sol:273`, `contracts/modules/DegenerusGameAdvanceModule.sol:299`.
+
+Strongest hypothesis tested: day rollover while mid-day VRF is in-flight. The source defeats it because the new-day path hits `RngNotReady` before the clear when no word exists: `contracts/modules/DegenerusGameAdvanceModule.sol:280`. If a daily request supersedes the mid-day request, the old callback is ignored by request id, and the daily word is bound once to `LR_INDEX - 1`; duplicate finalization is blocked by `_finalizeLootboxRng`: `contracts/modules/DegenerusGameAdvanceModule.sol:1287`.
+
+2. Direct-call guards on payable delegatecall-only helpers: no regression found.
+
+The four named helpers all guard `address(this) == GAME`: `contracts/modules/DegenerusGameBoonModule.sol:68`, `contracts/modules/DegenerusGameBoonModule.sol:128`, `contracts/modules/DegenerusGameBoonModule.sol:294`, `contracts/modules/DegenerusGameLootboxModule.sol:874`. Under every legitimate nested delegatecall path, `address(this)` remains the Game address, so those paths are admitted. A direct external call to the module address fails the guard.
+
+I also checked analogous payable nested helpers in the degenerette box-resolution path; they already have the same guard: `contracts/modules/DegenerusGameDegeneretteModule.sol:1292`, `contracts/modules/DegenerusGameDegeneretteModule.sol:1347`, `contracts/modules/DegenerusGameDegeneretteModule.sol:1402`.
+
+Strongest hypothesis tested: a legitimate module-to-module delegatecall where `address(this)` becomes the module address. Solidity `delegatecall` preserves the original storage/address context, and the source uses delegatecall through the Game stubs, so I found no legitimate path where `address(this) != GAME`.
+
+3. Afking subscriber-evict gas retune: no liveness or gas-ceiling regression found.
+
+The relevant constants are `SUB_STAGE_WEIGHT_BUDGET = 2500`, eviction weight `7`, lootbox weight `10`, ticket weight `21`: `contracts/modules/DegenerusGameAdvanceModule.sol:155`, `contracts/modules/GameAfkingModule.sol:203`, `contracts/modules/GameAfkingModule.sol:216`, `contracts/modules/GameAfkingModule.sol:223`. The loop condition is weight-bounded: `contracts/modules/GameAfkingModule.sol:1187`.
+
+The actual all-evict maximum is 358 evictions, not 357, because the last iteration can start at weight `2499`. Using the source comments’ measured weight target, that is still materially below 16.7M gas. Ticket and lootbox branches are lower. Progress is also preserved: every branch either increments the cursor or removes the current subscriber and shrinks `len`: `contracts/modules/GameAfkingModule.sol:1207`, `contracts/modules/GameAfkingModule.sol:1228`, `contracts/modules/GameAfkingModule.sol:1265`, `contracts/modules/GameAfkingModule.sol:1314`, `contracts/modules/GameAfkingModule.sol:1379`.
+
+**Final Sweep**
+
+The mint/purchase chain blocks liveness-stalled purchases, queues lootboxes against the active lootbox index, queues tickets against the active write slot, and keeps claimable accounting paired with pool liabilities: `contracts/modules/DegenerusGameMintModule.sol:1503`, `contracts/modules/DegenerusGameMintModule.sol:1584`, `contracts/modules/DegenerusGameMintModule.sol:1728`, `contracts/modules/DegenerusGameStorage.sol:803`, `contracts/modules/DegenerusGameStorage.sol:824`.
+
+The advance state machine has bounded retry/fallback paths for VRF and terminal game-over handling: `contracts/modules/DegenerusGameAdvanceModule.sol:1272`, `contracts/modules/DegenerusGameAdvanceModule.sol:1299`, `contracts/modules/DegenerusGameAdvanceModule.sol:1803`, `contracts/modules/DegenerusGameGameOverModule.sol:73`.
+
+The synchronous peripherals do not expose a spine-breaking path under the stated honest-admin/governance assumption. FLIP and Coinflip block shortfall-sensitive actions during RNG locks: `contracts/FLIP.sol:384`, `contracts/FLIP.sol:491`, `contracts/Coinflip.sol:588`. sDGNRS blocks live burns during liveness/RNG lock and settles redemptions through Game-owned accounting paths: `contracts/sDGNRS.sol:633`, `contracts/sDGNRS.sol:832`. Game claim payouts debit accounting before external value transfer: `contracts/DegenerusGame.sol:1229`.
+
+No tests were run; this was a source-trace robustness review in the read-only frozen tree.

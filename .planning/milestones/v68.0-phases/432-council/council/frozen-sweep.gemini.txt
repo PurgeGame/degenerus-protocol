@@ -1,0 +1,26 @@
+Based on the robustness review of the frozen `contracts/` tree `4970ba5b`, I have identified one HIGH-severity gas-composition risk, one MEDIUM-severity entropy inconsistency, and a set of missing guards on payable entrypoints.
+
+### [HIGH] Subscriber Eviction Under-weighting (Gas Ceiling Risk)
+**File:** `contracts/modules/GameAfkingModule.sol:214`
+**Preconditions:** A large set of subscribers (e.g., 357) are due for eviction on a normal day-advance (no gap-days).
+**Reasoning:** `SUB_STAGE_EVICT_WEIGHT` is set to `7` (≈23.8k gas), but an eviction (multi-SSTORE swap-pop + cross-contract `finalizeAfking`) was measured/estimated at ≈27k–30k+ gas. A full-budget chunk of 357 evictions (~10M–11M gas) correctly breaks if a backfill is pending, but on a **normal day** (`day == dIdx + 1`), it falls through and composes with the daily jackpot (305 winners, ~10M–15M gas).
+**Impact:** The resulting transaction (~20M–25M gas) exceeds the 16.7M ceiling. Because the game is not in a "gap" state, the `STAGE_SUBS_BACKFILL_DEFERRED` break does not trigger, potentially bricking the `advanceGame` path.
+**Recommendation:** Increase `SUB_STAGE_EVICT_WEIGHT` to `9` and always break `advanceGame` after the subscriber stage completes (`stage = STAGE_SUBS_COMPLETED; break;`).
+
+### [MEDIUM] Mid-Day Lootbox Fallback Inconsistency (Entropy Choice)
+**File:** `contracts/modules/DegenerusGameAdvanceModule.sol:294-303`
+**Preconditions:** A mid-day RNG request is in-flight when a new day starts; `advanceGame` fills the fallback word and performs a partial ticket drain.
+**Reasoning:** The fix to release the `LR_MID_DAY` latch on the new-day path allows a late mid-day word to arrive *after* the fallback (Day N daily word) has been committed to `lootboxRngWordByIndex[preIdx]`. `rawFulfillRandomWords` will overwrite the slot.
+**Impact:** A large ticket batch may resolve half its tickets using the daily word and half using the late mid-day word. Players gain an "entropy choice" window: if the fallback (already public) is unfavorable, they wait for the mid-day word to land before opening boxes.
+**Recommendation:** Guard the mid-day fulfillment: `if (lootboxRngWordByIndex[index] == 0) lootboxRngWordByIndex[index] = word;`.
+
+### [LOW] Missing Delegatecall Guards on Public Payable Entrypoints
+**Files:** `MintModule:1042` (`purchase`), `WhaleModule:171` (`purchaseWhaleBundle`), `DegeneretteModule:390` (`placeDegeneretteBet`), `AfkingModule:315` (`subscribe`).
+**Reasoning:** While the protocol's three recent fixes added `address(this) == GAME` guards to "hidden" internal entrypoints (Boon dispatches, `resolveLootboxDirect`), the primary entrypoints exposed in `DegenerusGame.sol` lack them.
+**Impact:** A direct call to these module contracts can still trap `msg.value` against the module's own empty storage with no recovery path.
+**Recommendation:** Apply the `address(this) == ContractAddresses.GAME` guard to all `external payable` module functions.
+
+### Verification of Recent Fixes
+1. **Lootbox latch release:** Functional, but introduced the R-01 "Entropy Choice" window.
+2. **Direct-call guards:** Correctly implemented on the four targeted functions; missing on analogous primary entrypoints (R-02).
+3. **Afking gas retune:** Weights were adjusted, but the eviction weight remains too low to safely compose with the jackpot (R-03).

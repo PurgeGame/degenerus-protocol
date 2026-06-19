@@ -1,0 +1,7 @@
+{
+  "label": "rngproof-verify",
+  "schema": "",
+  "models": ["gemini", "codex"],
+  "skipped": [],
+  "outputs": {"gemini": ".planning/phases/432-council/council/rngproof-verify.gemini.txt", "codex": ".planning/phases/432-council/council/rngproof-verify.codex.txt"}
+}

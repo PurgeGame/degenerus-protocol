@@ -1,0 +1,7 @@
+{
+  "label": "frozen-sweep",
+  "schema": "",
+  "models": ["gemini", "codex"],
+  "skipped": [],
+  "outputs": {"gemini": ".planning/phases/432-council/council/frozen-sweep.gemini.txt", "codex": ".planning/phases/432-council/council/frozen-sweep.codex.txt"}
+}
