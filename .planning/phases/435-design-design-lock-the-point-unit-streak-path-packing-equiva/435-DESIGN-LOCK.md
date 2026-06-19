@@ -413,3 +413,84 @@ The non-join case (a half-point straddling a *non-continuous* decision such as t
 | Sole divergence | odd-half-point threshold-tip, ≤1 grid cell at one boundary, ACCEPTED + DOCUMENTED (D-09) | D-04.3 |
 
 ---
+
+## 436 Edit Surface (consolidated)
+
+The single per-file / per-symbol change list aggregating every edit locked across DESIGN-01..04, so 436 is a mechanical batched diff (the sole `.sol` change of the v69 milestone, the approval gate). Each line is anchored to the frozen `e9a5fc24` tree. **Comment-only edits are part of the same diff and are called out as `[comment]`.** This list folds in the seven `[ANCHOR NOTE]` corrections surfaced across plans 01-03 and the two new DESIGN-04 corrections.
+
+### `contracts/modules/DegenerusGameMintStreakUtils.sol`
+
+- `_playerActivityScoreAt` (`:282-372`): convert every additive leg to the point domain — the `×100` legs (mint streak `:329`, mint count `:330`, affiliate `:346`, deity base `:310-311`, deity pass `:350`, whale `:354/:356`, curse `:363-366`) collapse to their point form (drop the `×100`); the **quest-streak leg `:335` `questStreak × 50` → `floor(questStreak / 2)`** (D-02, the sole sub-point leg). [IMPL discretion: constant naming/placement of the floor.]
+- The point cap **655** replaces the bps clamp (D-03): wherever `ACTIVITY_SCORE_HARD_CAP_BPS` is applied as the score ceiling, the value becomes the point cap `floor(65534/100) = 655`. `PASS_STREAK_FLOOR_POINTS = 50` / `PASS_MINT_COUNT_FLOOR_POINTS = 25` (`Storage:144/147`) are **already point-domain — NO conversion** (they floor the pre-`×100` point counts).
+- `DEITY_PASS_ACTIVITY_BONUS_BPS = 8000` (`Storage:135`) → **80 pt** (multiple of 100, no special rule). [`Sub.score` semantics now point-domain; see Storage stamp note.]
+
+### `contracts/storage/DegenerusGameStorage.sol`
+
+- `ACTIVITY_SCORE_HARD_CAP_BPS = 65_534` (`:141`) → **point cap 655** (D-03). [`Sub.score` stamp (`:2127`, the `score(16)` field) **stays uint16** — 655 fits with headroom; the value it holds is now point-domain.]
+- `Sub.subStreakLatch` (`:2244`) **uint8 → uint16** (D-04). `SUB_STREAK_MASK` (`:2251`) `0xff → 0xffff` (D-04). `_streakBaseOf` (`:2254-2256`) returns **uint16**, masking 16 bits (D-04). `_setStreakBase` (`:2259-2261`) **drop the `value > 255 ? 255 :` clamp** (D-04; a uint16-range clamp may stay for type safety — IMPL discretion). `_afkingStreak` (`:2271`) `uint32(_streakBaseOf(sub))` cast holds (uint16 ⊂ uint32, no change).
+- `Sub.pendingFlip` (`:2237`) **uint32 → uint24** (D-06); its saturating accrue clamp re-pins `100_000_000 → 16_777_215` (`2^24−1`, ~16.7M whole FLIP) at the accrue sites (see GameAfkingModule). [IMPL discretion: exact constant value ≤ `2^24−1` + its name; recommend the exact type ceiling so the cast is lossless by construction.]
+- Lootbox EV **score-INPUT** anchors (TABLE A): `LOOTBOX_EV_ACTIVITY_NEUTRAL_BPS = 6_000 → 60` (`:1553`); `LOOTBOX_EV_ACTIVITY_MAX_BPS = 40_000 → 400` (`:1555`). **`LOOTBOX_EV_MIN/NEUTRAL/MAX_BPS` (`:1557/:1559/:1561`) UNCHANGED** (output anchors, TABLE B). `_lootboxEvMultiplierFromScore` (`:1633-1654`): the formula is unchanged in shape (scale-invariant); only the two input-anchor constants change; the `@param score ... in basis points` natspec (`:1631`) → point-domain `[comment]`.
+- **Accumulator repack** (D-07, net-zero): the slot now `affiliateBase(32) + pendingFlip(24) + subStreakLatch(16) = 72`; `Sub` stays exactly one 256-bit slot, 0 free. `[comment]` fixes to the slot doc + field-section headers: slot doc-comment `config (40b) → (48b)` (`:2126`); the accumulator field comment `pendingFlip(32) → pendingFlip(24)` + `subStreakLatch(8) → (16)` and the `100M-whole-FLIP → ~16.7M (2^24−1)` notes (`:2129, :2154-2162, :2230-2237`); field-section header `per-sub stamp (48 bits) → (40b)` (`:2182`); field-section header `markers (72 bits) → (96b)` (`:2194`); the stale `streakAtAfkingStart (bits 0-6)` (`:2144`) and the `0..255` / `Clamped at 255` subStreakLatch comments (`:2238-2250`) → uint16 width.
+
+### `contracts/modules/GameAfkingModule.sol`
+
+- pendingFlip accrue casts/clamps (D-06): ticket buyer-bonus block `:861-863` (`newOwed` `:861`, clamp `> 100_000_000 → > 16_777_215` `:862`, cast `uint32(newOwed) → uint24(newOwed)` `:863`); slot-0 quest-reward block `:925-928` (clamp `:927`, cast `uint32 → uint24` `:928`). Settle read `_settlePendingFlip:1097-1100` — `uint256(s.pendingFlip)` widen-back holds, zero-write fits; **no logic change beyond the field type**; the `// Same uint32 + 100M…` comment → new width/ceiling `[comment]`.
+- Streak-latch widening follow-through (D-04/D-05): the latch writes `_setStreakBase`/reads `_streakBaseOf` (run-start `:521/523/533/555`, `0`-on-lapse `:573`, the in-run `+1` secondary bump `recordAfkingSecondary:1734`) follow the uint16 widening — no behaviour change; the `+1` bump now saturates at 65535 instead of 255 (its `:1726` comment updated `[comment]`), far past where the 655-point activity cap matters.
+
+### `contracts/DegenerusQuests.sol`
+
+- **DELETE the finalize floor-hack** (D-04): the `uint16 preRun = state.streak; if (finalStreak != 0 && finalStreak < preRun) finalStreak = preRun;` block (`:549-550`) and its explanatory comment (`:546-548`). The decay logic (`:543-545`) and the final uint16 assignment (`:551`, kept as `state.streak = uint16(finalStreak)` with its safety clamp) **stay**.
+- The streak source stays the uint16 `PlayerQuestState.streak` (`:281`), now symmetric with the uint16 latch; the `pendingFlip` accrual note (`~:1779`) stays consistent (streak-width change does not touch accrual semantics). [comment-only consistency; `beginAfking` return is `uint24 streak` `:504` sourced from the uint16 field — no change.]
+
+### `contracts/modules/DegenerusGameDegeneretteModule.sol`
+
+- Score-INPUT thresholds (TABLE A): `ACTIVITY_SCORE_MID_BPS = 7_500 → 75` (`:188`); `ACTIVITY_SCORE_HIGH_BPS = 25_500 → 255` (`:191`); `ACTIVITY_SCORE_MAX_BPS = 30_500 → 305` (`:194`).
+- **DO NOT convert** (TABLE B): `ROI_MIN/MID/HIGH/MAX_BPS` (`:197-206`), `WWXRP_HIGH_ROI_BASE/MAX_BPS` (`:214/:217`), the low-leg quadratic coefficients `1000`/`500` (`:1152-1153`), `DEGEN_DGNRS_*_BPS`. The `_roiBpsFromScore` (`:1141-1170`), `_wwxrpHighRoiFromScore` (`:1179-1190`) formula shapes are unchanged (scale-invariant); only the three input-anchor constants change; the `@param score ... in basis points` natspecs → point-domain `[comment]`.
+
+### `contracts/modules/DegenerusGameDecimatorModule.sol`
+
+- Score-INPUT anchor (TABLE A): `TERMINAL_DEC_ACTIVITY_CAP_BPS = 23_500 → 235` (`:772`). The clamps `if (bonusBps > CAP) bonusBps = CAP` (`:796-797`, `:916-917`) compare against the converted CAP — formula shape unchanged.
+- **Decimator multiplier re-scale (the one non-trivial migration, D-04.2):** `multBps = BPS_DENOMINATOR + (bonusBps / 3)` (`:799-801` and the keep-alive mirror `:913-919` region) must be re-expressed so the `/3` divisor sees the bps-equivalent magnitude: `BPS_DENOMINATOR + (points · 100) / 3` (multiply the point score back up by 100 before `/3`). A naive `points/3` is ~100× wrong. `BPS_DENOMINATOR = 10_000` (`:104`, TABLE B) **unchanged**.
+- `_terminalDecBucket` (`:1133-1144`): `(range · score + CAP/2) / CAP` is scale-invariant; `range = BUCKET_BASE − MIN_BUCKET = 10` is a **bucket count, NOT a score value — do NOT convert** (`:770-771`). Only the CAP constant in the denominator follows TABLE A; formula shape unchanged.
+- The two self-calls read the point-domain `playerActivityScore` (`:793`, `:913`) — re-confirm they consume points after the external return changes (no edit, attest in 438).
+
+### DO-NOT-TOUCH list (must NOT be converted / narrowed / edited)
+
+- **All TABLE B output bps** (these are NOT score inputs): Degenerette `ROI_MIN/MID/HIGH/MAX_BPS` + `WWXRP_HIGH_ROI_BASE/MAX_BPS`; the quadratic coefficients `1000`/`500`; `DEGEN_DGNRS_*_BPS`; Lootbox `LOOTBOX_EV_MIN/NEUTRAL/MAX_BPS`; `BPS_DENOMINATOR = 10000`.
+- **`lootboxRngPendingFlip`** (uint40, `Storage:1525`, bits [184:223], /1e18) — a SEPARATE field of the global `lootboxRngPacked`; **NOT narrowed** (D-08), distinct from `Sub.pendingFlip`.
+- **The `LootboxModule:304` "40000" comment** — the derived presale-box FLIP-band EV mean, NOT the score anchor; do not convert or touch.
+- **`Sub.score` stamp width** stays uint16 (D-03); **`affiliateBase`** stays uint32 with its own 100M clamp (`GameAfkingModule:920-922`) — only `pendingFlip` narrows (D-06).
+
+---
+
+## 438 RNG-Freeze Re-Audit Checklist (handoff to REAUDIT-02)
+
+The cross-boundary / freeze / golden items 438 must re-attest on the repacked, point-domain subject. Activity score feeds the RNG consumers (lootbox EV, Degenerette, decimator), so the point migration **resets the v68 RNG-freeze proof + layout golden + mutation** — all re-run on the new subject in 438, carrying the v68 methodology forward.
+
+### REAUDIT-02 — external `playerActivityScore` return-semantics change (bps → points)
+
+The external return value changes domain (bps → points), crossing the contract boundary:
+
+- **Boundary chain:** `IDegenerusGame.playerActivityScore` (`interfaces/IDegenerusGame.sol:65`, returns `uint256`; the `@dev ... basis points` / `@return Multiplier in bps (10000 = 1x)` natspec `:62-64` becomes point-domain) → `DegenerusGame.playerActivityScore` (`DegenerusGame.sol:2210-2218`, returns `_playerActivityScore(...)`, now point-domain; the `@return scoreBps ... in basis points` natspec `:2207-2209` becomes point-domain) → consumed by `sDGNRS.sol:47` (decl) + `sDGNRS.sol:1140` (snapshot) and the decimator self-call (`DecimatorModule:793`, `:913`).
+- **sDGNRS point-domain correctness (re-verify + re-attest):** `sDGNRS.sol:1140` stores `claim.activityScore = uint16(game.playerActivityScore(beneficiary)) + 1`, with `0` reserved as the unset sentinel (the `if (claim.activityScore == 0)` guard at `:1139`). Point-domain: max stored = `655 + 1 = 656`, fits uint16 (≪ 65535) with vast headroom; the `+1` `0=unset` sentinel still holds (min point score 0 → stored as 1, never 0). **Confirm point-domain-correct; no edit to sDGNRS required, but the snapshot now holds a point-domain score — re-attest in REAUDIT-02.** Where sDGNRS later *uses* `claim.activityScore − 1` as a score, confirm it feeds the point-domain consumers (no double-conversion).
+- **Indexer / off-chain parity:** flag as a downstream consumer of the changed return semantics — any off-chain reader of `playerActivityScore` (the events emitting it, the indexer) now sees points, not bps. REAUDIT-02 flags the off-chain parity surface for the indexer re-vendor (out-of-contract, recorded for completeness).
+
+### REAUDIT-02 — frozen-at-deposit anti-gaming knob, point-domain re-confirm
+
+- The frozen-at-commitment score crosses module calls as **`uint16 activityScore`** — "the anti-gaming knob, FROZEN at deposit (`score`)" (`LootboxModule:551`). Confirmed it is taken by the four entrypoints: `resolveLootboxDirect` (`:873`), `resolveRedemptionLootbox` (`:928`), `_resolveRedemptionChunk` (`:967`), and the boon dispatch (`:1076`) — all `uint16 activityScore`.
+- **Point-domain freeze re-confirm:** point-domain max 655 fits uint16 (65535) with vast headroom, so the snapshot-at-deposit value still rides as `uint16` unchanged. Re-confirm there is **no in-window score-bump bias** — the EV multiplier stays computed from the deposit-frozen `score` (not a re-read live score), so the point representation preserves the freeze exactly (a holder still cannot steer the box to a preferred level/score; auto-open removes timing). Re-attest the freeze in the point domain in REAUDIT-02.
+
+### REAUDIT-01 — layout-golden recapture (EXPECTED new golden, NOT a drift)
+
+- The accumulator repack (D-07: `pendingFlip` 32→24, `subStreakLatch` 8→16) WILL change the `forge inspect <c> storage-layout` snapshot for `Sub` — the intra-slot field offsets/widths shift. **This recapture is the EXPECTED NEW GOLDEN, handled in 438 REAUDIT-01 — NOT a layout drift.** The slot index of `Sub` is unchanged (still one 256-bit slot, 0 free); only the intra-slot offsets/types update. 438 recaptures the v68 MECH-02 `forge inspect` oracle against the repacked subject and re-attests it matches the locked D-07 layout. The ~30 slot-hardcoded test harnesses re-pin to the new golden there.
+- **EIP-170:** the Game is perpetually near the 24,576-byte ceiling; the repack + threshold migration is register-level (width swaps, constant-value changes, one `×100` re-scale) and is expected net-neutral — but 436/PACK-01 measures it empirically and 438 re-attests.
+
+### REAUDIT — mutation + invariant re-run on the changed modules
+
+- The point migration touches `MintStreakUtils`, `DegenerusGameStorage`, `GameAfkingModule`, `DegenerusQuests`, `DegeneretteModule`, `DecimatorModule`, `LootboxModule` (input anchors). The v68 mutation campaign + invariant suite **re-run on the changed modules** against the new subject (v68 methodology carries forward); 437 TST owns the clamp-saturation property (TST-02) and the new-domain consumer tests, 438 REAUDIT re-runs the mutation/invariant attestation.
+
+### Out-of-scope confirmation (so the re-audit does not chase it)
+
+- `lootboxRngPendingFlip` (uint40, `Storage:1525`) is a **distinct out-of-scope field** (D-08, carried from DESIGN-03) — not narrowed, not part of the repack; the re-audit does not chase it.
+
+---
