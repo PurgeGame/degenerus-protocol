@@ -46,4 +46,13 @@
 - Frontend/UI implementation of the reveal (on-chain provides the deterministic result; the UI lives in a separate repo).
 
 ## Traceability
-_(filled by the roadmap)_
+
+| Phase | Requirements (primary delivery) |
+|---|---|
+| **445 SPEC** (design-lock) | designs all: FOIL-01..05, RARE-01..04, MATCH-01..10, SEC-03 |
+| **446 IMPL** (batched diff) | FOIL-01, FOIL-02, FOIL-03, FOIL-04, FOIL-05, RARE-01, RARE-02, RARE-03, RARE-04, MATCH-01, MATCH-02, MATCH-03, MATCH-04, MATCH-05, MATCH-06, MATCH-07, MATCH-08, MATCH-09, SEC-03 |
+| **447 TST** | MATCH-10 (+ SEC-01 / SEC-02 test-side assertions) |
+| **448 REAUDIT** | SEC-01, SEC-02, SEC-04 |
+| **449 TERMINAL** | SEC-04 (final attest) |
+
+All 23 requirements covered. (FOIL/RARE/MATCH are designed at 445, built at 446; security reqs SEC-01/02/04 are attested at 448–449 per the audit-milestone pattern.)
