@@ -55,56 +55,72 @@
 ### Phase Details (v71.0)
 
 ### Phase 445: SPEC — Design-Lock the Implementation Contract
+
 **Goal**: every implementation decision the FINAL-SPEC leaves to engineering is locked into a build-ready contract — signatures, storage layout, curve/PMF/table coefficients, the match algorithm (live vs hero-free), module placement under EIP-170, and the calibration confirm — so IMPL is mechanical. No `.sol`.
 **Depends on**: Nothing (first v71 phase; baseline = the v70 closure subject `99f2e53f` @ `ffbd7796`)
 **Requirements**: FOIL-01..05, RARE-01..04, MATCH-01..10, SEC-03
 **Success Criteria**:
+
   1. Storage + entrypoints locked — `foilRecord` packing (4×24-bit sigs + level stamp), the sparse claimed marker, and the `buyFoilPack`/`claimFoilMatch(day,ticketIndex)` signatures are fully specified and append cleanly to `DegenerusGameStorage` with no slot collision.
   2. The economics are coefficient-exact — `foilBoostBps(score)` (×2→×6 with the knees), the sibling-producer PMF (the `w`-from-`M` mix-to-rare-tail), and the isolated payout table (5/65 faces + the 40/40/20 lane + ETH 10%-cap reuse + the `whalePassClaims += 1` grant) are pinned, and a Monte-Carlo confirms ≈2 faces/pack/30d.
   3. The match predicate is unambiguous — exact positional quadrant match; 2/3 score against the LIVE winning set, the 4-of-4 against the HERO-FREE pure-VRF set (re-derived from `rngWordByDay[day]` without `_applyHeroResult`); pull/claim re-derivation + double-claim guard specified.
   4. Placement fits — the foil body lands in a new `GAME_FOILPACK_MODULE` (or a roomy existing module) + a thin facade stub, with a pre-IMPL EIP-170 headroom estimate; the v70-frozen shared producers are confirmed untouched.
+
 **Plans**: 4 plans (3 in wave 1 parallel + 1 wave-2 consolidation w/ USER sign-off checkpoint)
 Plans:
+**Wave 1**
+
 - [ ] 445-01-PLAN.md — Economics: the sibling-producer rarity PMF (/15360 ladder, w-from-M taper) + the foilBoostBps(score) ×2→×6 curve
 - [ ] 445-02-PLAN.md — Storage: foilRecord packed layout + folded per-level cap + sparse foilMatchClaimed; PINS the two genuine layout decisions (level-keying, bit-offset)
 - [ ] 445-03-PLAN.md — Entrypoints: buyFoilPack/claimFoilMatch signatures + LIVE-vs-HERO-FREE match + isolated 40/40/20 payout + ≈2-faces/30d calibration confirm + GAME_FOILPACK_MODULE placement
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
 - [ ] 445-04-PLAN.md — Consolidate the canonical 445-SPEC.md (REQ-coverage map + §6 hard-floor + threat model) + USER sign-off checkpoint on the two pins
 
 ### Phase 446: IMPL — Batched Contract Diff [contract-commit gate]
+
 **Goal**: the locked design is implemented as ONE batched, USER-approved `contracts/*.sol` diff and committed, byte-freezing the v71 subject.
 **Depends on**: Phase 445 (the locked spec)
 **Requirements**: FOIL-01..05, RARE-01..04, MATCH-01..09, SEC-03
 **Method**: Apply the full diff autonomously (applying `.sol` is fine); present ONE consolidated diff for USER hand-review; commit only on approval (the sole gate). `git push` left to USER.
 **Success Criteria**:
+
   1. The pack purchase works end-to-end — one-per-raw-level cap, 10×-price/4-ticket, fresh-ETH/claimable payment, 75/25 routing, foil tickets entering the regular jackpot as normal entries.
   2. The rarity boost is live and frozen-at-buy — the sibling producer + `foilBoostBps` deliver ×2→×6 without editing the shared frozen producers.
   3. The match-claim is implemented per spec — exact-quadrant predicate, whole-level eligibility, the live/hero-free split, the 40/40/20 spin (FLIP/WWXRP mint, ETH ≤10%-pool), the whale-pass grant, pull/claim + double-claim guard.
   4. `forge build` clean, EIP-170 satisfied (re-measured), and the diff touches only the foil surface.
 
 ### Phase 447: TST — Prove the Pack, the Rarity, the Match & the Calibration
+
 **Goal**: the foil pack's purchase, rarity, match, payout, and security properties are proven by tests, and the ≈2-faces/30d calibration is Monte-Carlo-confirmed; the full suite stays green.
 **Depends on**: Phase 446
 **Requirements**: MATCH-10 (+ SEC-01/SEC-02 test-side assertions)
 **Success Criteria**:
+
   1. Purchase + rarity proven — the cap, price/quantity, payment kinds, routing, jackpot-entry, and the ×2/×5/×6 PMF + the gold-odds crossover + frozen-at-buy boost are asserted.
   2. Match + payout proven — the 2/3/4 exact-quadrant tiers, whole-level eligibility, double-claim guard, the 40/40/20 split, the ETH 10%-cap, the FLIP/WWXRP mints, and the whale-pass grant.
   3. Security properties proven — the hero-free moonshot is non-steerable, the 2/3 hero edge is bounded, no farm beyond it, and no solvency drift.
   4. The ≈2-faces/30d calibration is Monte-Carlo-confirmed and regressions stay green.
 
 ### Phase 448: REAUDIT — Adversarial Sweep + Re-Run the Detection Nets
+
 **Goal**: the foil feature passes an adversarial/council security sweep and the v68–v70 detection nets re-pass on the reset subject.
 **Depends on**: Phase 446 (frozen subject), Phase 447 (test net)
 **Requirements**: SEC-01, SEC-02, SEC-04
 **Success Criteria**:
+
   1. No exploit — the moonshot steer-proofing holds under adversarial review, the hero edge cannot be pushed past its bound, and no path farms the payouts.
   2. No solvency hole — the ETH leg is provably ≤10% of `futurePrizePool`, FLIP/WWXRP are mints, the whale pass is pool-neutral, and the match table is isolated from the EV-flat Degenerette tables.
   3. The detection nets re-pass — storage-layout golden recaptured, the RNG-freeze proof re-attested on the foil score/signature freeze + daily-RNG re-derivation, mutation/invariants/Halmos run (a documented mutation-tail carry is acceptable per the v68–v70 close).
 
 ### Phase 449: TERMINAL — Evidence Pack + Closure
+
 **Goal**: the milestone evidence is shipped and the subject is closed at the IMPL diff.
 **Depends on**: Phase 448
 **Requirements**: SEC-04 (final attest)
 **Success Criteria**:
+
   1. `audit/FINDINGS-v71.0.md` (chmod 444) + an HTML report record the full milestone (design-lock, IMPL diff, TST, re-audit outcomes).
   2. The closure signal `MILESTONE_V71_AT_HEAD_<sha>` is recorded and the subject is byte-frozen at the IMPL diff (the only `contracts/*.sol` change).
 
@@ -135,60 +151,76 @@ Plans:
 ### Phase Details (v70.0)
 
 ### Phase 440: VERIFY — Review the Working-Tree Reshape Against the Locked Design
+
 **Goal**: the already-written consumer-curve reshape (the new `ActivityCurveLib` + 6 modified contracts) is confirmed correct against the locked design — every value curve, the bucket ladder + exact inverse, the pre-clamp removal, and the full consumer-call-site migration — with `forge build` clean, EIP-170 + read-side gas OK, and any gap fixed in the working tree. No contract commit (the gate is 441).
 **Depends on**: Nothing (first v70 phase; baseline = the v69 closure subject `8a633d1d` @ `3f024cc8`; the reshape is already in the working tree)
 **Requirements**: VERIFY-01, VERIFY-02, VERIFY-03, VERIFY-04
 **Method**: Claude adversarial review of the working-tree `git diff` against the locked design in `.planning/PLAN-ACTIVITY-CURVE-RESHAPE.md` + the USER rulings; run the core equivalence checks; apply any gap-fixes to the working tree (applying `.sol` is autonomous — only the COMMIT, at 441, is gated). The v69 incomplete-migration failure class is the named risk.
 **Success Criteria** (what must be TRUE):
+
   1. Every value curve matches the locked formula + endpoints — the five 3-segment piecewise curves (dec/term multiplier `ActivityCurveLib.decMultBps`, Degenerette ROI, WWXRP high ROI, century `ActivityCurveLib.centuryBps`, lootbox EV inline) carry the locked constants/knees (`K`, seg-B 500, cap 30,000), each is byte-identical to its prior named MAX at the cap, monotonic non-decreasing over `[0,30000]`, continuous at both knees, and the decimator `s==0 → 1.0x` no-op is preserved. (VERIFY-01)
   2. The bucket ladder + inverse + wiring match the locked tables — `decBucket` implements `12@0 … 2@1000` with the correct per-path floor clamp (normal decimator floor 5 / century floor 2, terminal-dec floor 2), `minScoreForBucket` is the exact band-floor inverse (`2→1000 … 12→0`) consistent with the forward ladder and feeds the decimator-claim lootbox EV correctly, and FLIP.sol + DecimatorModule.sol both delegate to the single lib with no drift-prone duplicated body. (VERIFY-02)
   3. Every §1 pre-clamp is removed and every consumer call-site is migrated — the six 235/305 pre-clamp sites are gone so the high end is reachable, no consumer still reads the score through the old saturated arithmetic, and there is no residual stale-constant or un-migrated consumer across all activity-score read-sites. (VERIFY-03)
   4. The reshape builds and stays within bounds — `forge build` clean, the new lib storageless, `DegenerusGame`/`FLIP` under the EIP-170 deployed-bytecode ceiling with the added branches, no read-side gas regression (decimatorBurn / placeBet / lootbox-open / century), and the `advanceGame` 16.7M ceiling confirmed not implicated. (VERIFY-04)
+
 **Plans**: 4 plans
+
 - [ ] 440-01-PLAN.md — Verify the five value curves (mult, ROI, WWXRP, century, lootbox EV) vs locked §2 (VERIFY-01)
 - [ ] 440-02-PLAN.md — Verify the bucket ladder + exact inverse + FLIP↔Decimator no-drift delegation vs locked §3/§4 (VERIFY-02)
 - [ ] 440-03-PLAN.md — Verify pre-clamp removal + full consumer migration (v69-failure-class sweep) + shared centuryBps vs §1/§5 (VERIFY-03)
 - [ ] 440-04-PLAN.md — Verify build clean + storageless lib + EIP-170 + read-side gas + advanceGame not implicated vs §8 (VERIFY-04)
 
 ### Phase 441: FREEZE — Batched Contract Diff Approval + Commit [contract-commit gate]
+
 **Goal**: the complete, VERIFY-confirmed reshape is committed as ONE batched, USER-approved `contracts/*.sol` change — producing the new v70 subject, byte-frozen for all later test + re-audit work.
 **Depends on**: Phase 440
 **Requirements**: FREEZE-01
 **Method**: One consolidated diff (the new `ActivityCurveLib.sol` + the 6 modified contracts + any VERIFY fixes) presented for USER hand-review; the sole approval gate in the milestone (never pre-approved). Commit via the contract-commit hook bypass after explicit USER approval. All non-`.sol` work commits autonomously.
 **Success Criteria** (what must be TRUE):
+
   1. The complete reshape is presented as ONE consolidated diff, USER-approved, and committed as the single `contracts/*.sol` change of the milestone; the new v70 subject is byte-frozen at that commit; and the diff is confirmed to contain no edits outside the activity-score consumer-curve surface. (FREEZE-01)
+
 **Plans**: TBD
 
 ### Phase 442: TST — Prove the Curves, the Ladder, the Inverse & the Reachable Tail
+
 **Goal**: tests that prove each value curve's endpoints + shape, the bucket ladder + exact inverse, the reachable tail (the pre-clamp-removal fix), and Mint↔Afking century parity — across the new anchors the old caps never covered.
 **Depends on**: Phase 441
 **Requirements**: TST-01, TST-02, TST-03
 **Method**: Test-only additions/rewrites (commit autonomously); the equivalence oracle is rewritten from the OLD formulas to the new ones; fail-without / pass-with where a new path is asserted.
 **Success Criteria** (what must be TRUE):
+
   1. Tests prove each value curve's endpoints + shape — value-at-cap byte-identical to the old named MAX, the seg-B (500) + seg-C (30,000) anchors (zero coverage today above the old caps), continuity at both knees, monotonicity, and the decimator `s==0 → 1.0x` no-op; the prior equivalence oracle is rewritten to the new formulas. (TST-01)
   2. Tests prove the bucket ladder + inverse — every threshold crossing (10/30/55/85/120/180/250/300/500/1000), the decimator floor-5 / century floor-2 / terminal-dec floor-2 paths, and `minScoreForBucket` exactness against the forward `decBucket` ladder. (TST-02)
   3. Tests prove the reachable tail + century parity — score 1000 → bucket 2 (century/terminal) and score 30,000 → MAX for each value curve (the bug the investigation caught: the tail was unreachable while the 235/305 clamps were in place), and Mint and Afking produce an identical century bonus for an identical score (single shared `centuryBps` helper). (TST-03)
+
 **Plans**: TBD
 
 ### Phase 443: REAUDIT — Re-Run the v68/v69 Detection Nets on the Reset Subject
+
 **Goal**: the v68/v69 machine-driven detection nets (storage-layout golden, RNG-freeze proof, mutation/invariant/Halmos) re-run on the new v70 subject — the layout confirmed unchanged (read-side reshape, storageless lib), the activity-score consumers re-attested frozen-at-commitment, the changed modules + the new lib mutation-triaged.
 **Depends on**: Phase 441 (re-audit runs against the byte-frozen FREEZE subject; may overlap with 442)
 **Requirements**: REAUDIT-01, REAUDIT-02, REAUDIT-03
 **Method**: The v68/v69 methodology (layout oracle, RNG-freeze proof + independent re-verify, mutation harness, deep invariants, Halmos) re-pinned to the new subject; test/tooling commits autonomously.
 **Success Criteria** (what must be TRUE):
+
   1. The storage-layout golden is recaptured and the slot-hardcoded harnesses re-pinned, with the MECH-02 oracle green — the expectation is NO slot move (the reshape is read-side, the lib is storageless); any layout delta is investigated as an unexpected drift, not silently re-goldened. (REAUDIT-01)
   2. The RNG-freeze proof is re-attested on the new subject — every VRF/RNG consumer that reads the activity score (lootbox EV / Degenerette ROI/WWXRP / decimator) is re-confirmed frozen-at-commitment under the new curves, with the activity-score snapshot-at-deposit freeze explicitly re-confirmed; any moved freeze-proof ledger anchor is updated. (REAUDIT-02)
   3. Mutation is re-run / triaged on the changed modules + the new `ActivityCurveLib`, and the deep-invariant + Halmos nets are confirmed green on the new subject — survivors triaged oracle-hole vs. robustness (a documented carry of the mutation tail is acceptable, consistent with the v68/v69 close). (REAUDIT-03)
+
 **Plans**: TBD
 
 ### Phase 444: TERMINAL — Evidence Pack + Closure
+
 **Goal**: a canonical evidence pack recording the VERIFY findings, the curve/ladder/inverse/reachable-tail equivalence verdict, the TST results, and the re-audit outcomes; the closure signal recorded; the subject confirmed byte-frozen at the FREEZE diff (the only `contracts/*.sol` change in the milestone).
 **Depends on**: Phases 442, 443
 **Requirements**: TERMINAL-01
 **Method**: Claude authors the evidence pack (prior house style); read-only over the frozen subject; commits autonomously.
 **Success Criteria** (what must be TRUE):
+
   1. `audit/FINDINGS-v70.0.md` (+ an HTML report in the prior house style) records the VERIFY findings + dispositions, the curve / ladder / inverse / reachable-tail equivalence verdict, the TST results, and the re-audit outcomes (layout golden, RNG-freeze re-attest, mutation/invariant status); the canonical findings doc is chmod 444 (house convention). (TERMINAL-01)
   2. The closure signal `MILESTONE_V70_AT_HEAD_<sha>` is recorded, the consumer-curve re-audit is confirmed clean, and the subject is confirmed byte-frozen at the FREEZE diff (the only `contracts/*.sol` change in the milestone). (TERMINAL-01)
+
 **Plans**: TBD
 
 ---
@@ -216,67 +248,85 @@ Plans:
 ### Phase Details (v69.0)
 
 ### Phase 435: DESIGN — Design-Lock the Point Unit, Streak Path, Packing & Equivalence
+
 **Goal**: a frozen baseline (v68 closure subject `3cc51d00` / `contracts/` tree `e9a5fc24` + a green baseline) plus a locked design for the whole-point activity score, the exact integer streak path with the reworked pre-streak-cap handling, the `pendingFlip` width + accumulator repack, and a consumer-threshold behaviour-equivalence analysis — the load-bearing input the IMPL diff implements. No `contracts/*.sol` change.
 **Depends on**: Nothing (first v69 phase; baseline = v68 closure `3cc51d00`)
 **Requirements**: DESIGN-01, DESIGN-02, DESIGN-03, DESIGN-04
 **Method**: Claude design-lock against the byte-frozen v68 subject; no contract change. Grounded in `.planning/PLAN-V69-ACTIVITY-SCORE-POINTS.md` (the USER design seed) and the read-only touch-surface scan.
 **Success Criteria** (what must be TRUE):
+
   1. The point unit + the quest-streak floor rule are locked — the activity score is defined in whole points (bps ÷100), the sole sub-point contributor (quest streak at 50 bps/level = 0.5 pt, `MintStreakUtils._playerActivityScore`) is floored by one explicit integer rule, and the point-domain cap + its storage width are chosen and justified (the current `ACTIVITY_SCORE_HARD_CAP_BPS = 65_534` lands exactly at the uint16 ceiling). (DESIGN-01)
   2. The single exact integer streak-base path is designed — the manual quest streak and the afking-run streak base (`Sub.subStreakLatch`, uint8) combine into `_playerActivityScore` via one exact integer path, AND the carried-in pre-streak cap/snapshot into the afking run is reworked (the current cap shape dropped per USER) with its game-theory/actor walk, preserving the afking-XOR-manual `_effectiveQuestStreak` interaction. (DESIGN-02)
   3. The `pendingFlip` width + the accumulator-slot repack are locked — `Sub.pendingFlip` (uint32 today) is narrowed to the realistic bank cap (uint24 ~16.7M or tighter, justified) and the 72-bit accumulator slot (`affiliateBase + pendingFlip + subStreakLatch`, `DegenerusGameStorage`) is repacked; the separate `lootboxRngPendingFlip` uint40 (`~Storage:1527`) is confirmed distinct and out of scope. (DESIGN-03)
   4. Every consumer threshold is re-derived in points with a behaviour-equivalence analysis — Degenerette (MID 7500 / HIGH 25500 / MAX 30500 + ROI anchors), Lootbox EV-multiplier cap (40000), and Decimator (23500) are restated in the point domain, and the EV / ROI / decimator curves are shown behaviour-equivalent on the whole-point grid (any grid point where an outcome would shift is identified and confirmed not to materially change the result). (DESIGN-04)
+
 **Plans**: 3 plans
+
 - [ ] 435-01-PLAN.md — DESIGN-01 (point unit + quest-streak floor(q/2) + 655 point cap) + DESIGN-02 (single exact integer streak path: widen `subStreakLatch` uint8→uint16, drop the 255 clamp + the finalize floor-hack)
 - [ ] 435-02-PLAN.md — DESIGN-03 (narrow `Sub.pendingFlip` uint32→uint24 ~16.7M clamp; repack the 72-bit accumulator `affiliateBase(32)+pendingFlip(24)+subStreakLatch(16)`, `Sub` stays one 256-bit slot; `lootboxRngPendingFlip` confirmed out of scope)
 - [ ] 435-03-PLAN.md — DESIGN-04 (per-consumer scale-invariance equivalence proof + input-vs-output bps inventory + consolidated 436 edit surface + 438 RNG-freeze re-audit checklist)
 
 ### Phase 436: IMPL — Batched Contract Diff (POINTS + STREAK + PACK) [contract-commit gate]
+
 **Goal**: ONE batched, USER-approved `contracts/*.sol` diff that lands the whole-point activity score, the migrated consumer thresholds, the single exact integer streak path with the reworked pre-streak cap, and the narrowed `pendingFlip` + repacked accumulator slot — producing the new v69 subject, byte-frozen for all later re-audit work.
 **Depends on**: Phase 435
 **Requirements**: POINTS-01, POINTS-02, STREAK-01, STREAK-02, PACK-01
 **Method**: One batched diff applied against the frozen v68 subject; the sole approval gate in the milestone (USER hand-review, never pre-approved). All non-`.sol` work commits autonomously.
 **Success Criteria** (what must be TRUE):
+
   1. The activity score is represented and computed in whole points — `_playerActivityScore` (`MintStreakUtils`) returns the point-domain score with the quest-streak contribution floored per DESIGN-01, and the hard cap is enforced in points at the chosen storage width. (POINTS-01)
   2. Every consumer threshold is migrated to the point domain per DESIGN-04 — `DegenerusGameDegeneretteModule` (MID/HIGH/MAX + ROI anchors), `DegenerusGameLootboxModule` (EV-multiplier cap), and `DegenerusGameDecimatorModule` (threshold) read the point-domain score and compare against point-domain constants, behaviour-equivalent to the bps version. (POINTS-02)
   3. The manual + afking `subStreakLatch` streak base feeds `_playerActivityScore` through a single exact integer path (no residual fractional/bps intermediate), preserving the afking-XOR-manual semantics of `_effectiveQuestStreak`. (STREAK-01)
   4. The carried-in pre-streak cap/snapshot into the afking run is reworked per DESIGN-02 (the current cap shape replaced), and the `DegenerusQuests` streak source + its `pendingFlip` accrual (`~:1779`) remain consistent with the new path. (STREAK-02)
   5. `Sub.pendingFlip` is narrowed to the DESIGN-03 width with its saturating clamp re-pinned to the new ceiling, the 72-bit accumulator slot is repacked with no other field's value-range violated, and the Game stays under the EIP-170 deployed-bytecode ceiling (re-checked) with no unexpected storage-slot collision. (PACK-01)
+
 **Plans**: 1 plan
+
 - [x] 436-01-PLAN.md — Batched POINTS+STREAK+PACK `.sol` diff (6 serialized tasks; single atomic USER-gated contract commit `c4b09267`) [POINTS-01, POINTS-02, STREAK-01, STREAK-02, PACK-01] ✅
 
 ### Phase 437: TST — Prove the Floor, the Streak Path, the Clamp & the Equivalence
+
 **Goal**: tests that prove the quest-streak floor rule, the exact integer streak-base path, the reworked pre-streak-cap-into-afking handling, the `pendingFlip` saturating clamp at the new ceiling, and the consumer behaviour-equivalence across the threshold anchors + the whole-point grid.
 **Depends on**: Phase 436
 **Requirements**: TST-01, TST-02, TST-03
 **Method**: Test-only additions (commit autonomously); fail-without / pass-with where a new path is asserted.
 **Success Criteria** (what must be TRUE):
+
   1. Tests prove the quest-streak floor rule and the exact integer streak-base path — the floored point contribution matches DESIGN-01 at representative streak levels (incl. the boundaries where the old 0.5-pt granularity used to round), and the manual/afking combine is exact (fails-without / passes-with the new path). (TST-01)
   2. Tests prove the reworked pre-streak-cap-into-afking handling and the `pendingFlip` clamp — the carried-in pre-streak caps/snapshots per DESIGN-02, and `pendingFlip` saturates at the new ceiling (a value above the narrowed width clamps, not overflows). (TST-02)
   3. Tests prove the consumer behaviour-equivalence — Degenerette ROI, the Lootbox EV multiplier, and the Decimator outcome at point-domain scores match the intended pre-change outcomes across the threshold anchors and the whole-point grid, confirming the coarser grid does not shift results. (TST-03)
+
 **Plans**: 3 plans (wave 1, all parallel — no file overlap)
+
 - [x] 437-01-PLAN.md — TST-01: quest-streak floor rule (floor(questStreak/2)) + the single exact integer streak path (afking-XOR-manual exclusivity) ✅ 4/4
 - [x] 437-02-PLAN.md — TST-02: pre-streak >255 snapshot exactness + pendingFlip uint24 saturating clamp (16_777_215, never wraps) + testGas04 packing-golden update ✅ 5/5 + testGas04 green
 - [x] 437-03-PLAN.md — TST-03: consumer behaviour-equivalence (Lootbox EV · Degenerette ROI/WWXRP · Decimator mult re-scale + bucket) across the TABLE-A anchors + whole-point grid ✅ 5/5
 
 ### Phase 438: REAUDIT — Re-Run the v68 Detection Nets on the Reset Subject
+
 **Goal**: the v68 machine-driven detection nets (storage-layout golden, RNG-freeze proof, mutation/invariant/Halmos) re-run on the new v69 subject — the layout move from the accumulator repack recaptured as the new golden, the activity-score consumers re-attested frozen-at-commitment, the changed modules mutation-triaged.
 **Depends on**: Phase 436 (re-audit runs against the byte-frozen IMPL subject; may overlap with 437)
 **Requirements**: REAUDIT-01, REAUDIT-02, REAUDIT-03
 **Method**: The v68 methodology (layout oracle, RNG-freeze proof + independent re-verify, mutation harness, deep invariants, Halmos) re-pinned to the new subject; test/tooling commits autonomously.
 **Success Criteria** (what must be TRUE):
+
   1. The storage-layout golden is recaptured for the new subject and the ~30 slot-hardcoded harnesses are migrated/re-pinned, with the MECH-02 layout-diff oracle green on the new layout (the expected slot move from the accumulator repack is the new golden, not an unexpected drift). (REAUDIT-01)
   2. The RNG-freeze proof is re-run on the new subject — every VRF/RNG consumer that reads the activity score (lootbox EV / Degenerette / decimator) is re-attested frozen-at-commitment, with the activity-score snapshot-at-deposit freeze explicitly re-confirmed under the point-domain representation; any ledger entry whose anchors moved is updated. (REAUDIT-02)
   3. The mutation campaign is re-run / triaged on the changed modules and the deep-invariant + Halmos nets are confirmed green on the new subject — the v68 layout/CI/mutation harness is re-pinned to the new subject; survivors are triaged oracle-hole vs. robustness (a documented carry of the still-running mutation tail is an acceptable disposition, consistent with the v68 close). (REAUDIT-03)
+
 **Plans**: TBD
 
 ### Phase 439: TERMINAL — Evidence Pack + Closure
+
 **Goal**: a canonical evidence pack recording the design-lock decisions, the equivalence verdict, the TST results, and the re-audit outcomes; the closure signal recorded; the subject confirmed byte-frozen at the IMPL diff (the only `contracts/*.sol` change in the milestone).
 **Depends on**: Phases 437, 438
 **Requirements**: TERMINAL-01
 **Method**: Claude authors the evidence pack (prior house style); read-only over the frozen subject; commits autonomously.
 **Success Criteria** (what must be TRUE):
+
   1. `audit/FINDINGS-v69.0.md` (+ an HTML report in the prior house style) records the design-lock decisions, the equivalence analysis verdict, the TST results, and the re-audit outcomes (layout golden, RNG-freeze re-attest, mutation/invariant status); the canonical findings doc is chmod 444 (house convention). (TERMINAL-01)
   2. The closure signal `MILESTONE_V69_AT_HEAD_<sha>` is recorded, the activity-score interaction re-audit is confirmed clean, and the subject is confirmed byte-frozen at the IMPL diff (the only `contracts/*.sol` change in the milestone). (TERMINAL-01)
+
 **Plans**: TBD
 
 ---
@@ -335,121 +385,151 @@ Plans:
 ### Phase Details (v67.0)
 
 ### Phase 416: FOUND — Subject Freeze & Green Baseline
+
 **Goal**: a byte-frozen audit subject at HEAD `fa7932f6` / `contracts/` tree `0dd445a6` + a documented GREEN baseline oracle that is the audit's regression floor and the oracle every lead is reproduced against.
 **Depends on**: Nothing (first v67 phase)
 **Requirements**: FOUND-01, FOUND-02
 **Method**: Claude builds the foundation; no contract change. The frozen subject anchors every subsequent council sweep.
 **Success Criteria** (what must be TRUE):
+
   1. The audit subject is byte-frozen at HEAD with the commit hash (`fa7932f6`) AND the `contracts/`-tree hash (`0dd445a6`) recorded as the v67 freeze anchor (`git diff <anchor> -- contracts/` empty at every later checkpoint).
   2. A GREEN baseline oracle is captured and documented (forge full-suite pass/skip counts + hardhat parity) as the v67 regression baseline.
   3. Any pre-existing reds are catalogued as carried-not-new, with no undocumented residual masking a regression.
+
 **Plans**: TBD
 
 ### Phase 417: COLMAP — Re-Derive the Spinal-Column Call Graph From HEAD
+
 **Goal**: an authoritative current-HEAD map of the spinal column — every entry point, internal call, delegatecall, and synchronous external call — with every revert site, unbounded loop, and delegatecall storage write enumerated, so the brick / corruption sweeps work from re-derived reality, not an inherited (possibly stale) catalog.
 **Depends on**: Phase 416
 **Requirements**: COLMAP-01, COLMAP-02, COLMAP-03, COLMAP-04
 **Method**: Mechanical enumeration from HEAD (Claude-built), seeded to the council in 425. Re-derivation from source is the structural defense against confirmation convergence (the v66 lesson: the trusted catalog under-counted ~5×).
 **Success Criteria** (what must be TRUE):
+
   1. The complete spinal-column call graph is re-derived from HEAD — every entry point (`mintFlip`, `purchase`, `buyPresaleBox`, `buyLootboxAndPresaleBox`, `purchaseWhaleBundle`, `purchaseLazyPass`, `purchaseDeityPass`, `advanceGame`, `rawFulfillRandomWords`, keeper/permissionless entrypoints) → every internal call → every delegatecall (the 13 modules + nested Boon + the raw `delegatecall(msg.data)` afking dispatch) → every synchronous external call into FLIP / Coinflip / Vault / sDGNRS / Affiliate — captured as an authoritative map.
   2. Every revert site reachable in the column (`revert`, `require`, custom errors, checked-arithmetic overflow points, low-level call-failure bubbles) is enumerated and tabulated with its trigger condition.
   3. Every unbounded or input-sized loop in the column is enumerated with its iteration-count bound and the storage / gas it touches per iteration.
   4. Every storage write performed under delegatecall (module → Game storage) is enumerated against the Game's authoritative storage layout (`forge inspect DegenerusGame storageLayout`), establishing the slot each module touches.
+
 **Plans**: TBD
 
 ### Phase 418: BRICK — Permanent-Brick / Liveness (DOMINANT)
+
 **Goal**: no reachable transaction in the column can revert-wedge the state machine into a permanent brick — every revert is classified, `advanceGame` can always make progress, the terminal transition always finalizes, the worst-case gas composition holds under the ceiling, and stalled RNG is always recoverable.
 **Depends on**: Phase 417
 **Requirements**: BRICK-01, BRICK-02, BRICK-03, BRICK-04, BRICK-05
 **Method**: Cross-model council (Gemini + Codex) primary finder over the brick surface, seeded with the COLMAP revert-site / loop tables; Claude adjudicates each candidate against frozen source; every candidate adversarially verified before recording. The dominant invariant class for the milestone.
 **Success Criteria** (what must be TRUE):
+
   1. Every revert site enumerated in COLMAP is classified transient (caller can retry / another actor can progress) vs. permanent (wedges the state machine forever), with zero permanent-wedge sites surviving — or each surviving one explicitly dispositioned.
   2. `advanceGame()` is proven to always be able to make progress: no reachable (day, level, phase, jackpotPhaseFlag, gameOver) state exists from which every `advanceGame()` call reverts, the per-tick "one unit of work" invariant holds, and `hasPendingWork` cannot diverge from what `advanceGame` will execute.
   3. The terminal transition is proven to always finalize — once `gameOver` is set it can always be driven to full settlement (terminal decimator + terminal jackpot + `handleGameOverDrain`) without a reachable revert that strands the terminal state.
   4. The worst-case gas composition is derived FIRST (not sampled) and shown to hold under the 16.7M ceiling (target < 10M) — at minimum the subscriber-evict chunk + multi-day gap-backfill + terminal-jackpot composition (the V62-02 class) — with per-item marginal-gas-derived batch sizing.
   5. The VRF-word-never-fulfilled and stalled-RNG conditions are proven recoverable: the retry / timeout and honest coordinator-rotation paths can always restore liveness, and no input or external state can make the daily word permanently unobtainable.
+
 **Plans**: TBD
 
 ### Phase 419: DELEGATE — Delegatecall Integrity
+
 **Goal**: every one of the 13 delegatecall modules (plus nested Boon and the raw afking dispatch) executes correctly against the Game's storage — no layout drift writes the wrong slot, nested `msg.value` / `msg.sender` resolve to the intended actor, dispatch routes and bubbles reverts correctly, and no module address is unset or wrong.
 **Depends on**: Phase 417
 **Requirements**: DELEGATE-01, DELEGATE-02, DELEGATE-03, DELEGATE-04, DELEGATE-05
 **Method**: Cross-model council primary finder over the delegatecall surface, seeded with the COLMAP delegatecall-write table and the Game storage layout; Claude adjudicates against frozen source; every candidate adversarially verified.
 **Success Criteria** (what must be TRUE):
+
   1. The storage layout of `DegenerusGame` and every one of the 13 delegatecall modules is proven compatible — each module's declared storage matches the Game slots it writes; no module can write a slot the Game uses for a different variable (silent corruption).
   2. The nested-delegatecall paths (Mint / Lootbox → Boon) preserve `msg.value` and `msg.sender` correctly — the in-flight-`msg.value` behavior neither double-spends nor strands ETH, and `msg.sender`-derived authorization / credit resolves to the intended actor end-to-end.
   3. The raw `delegatecall(msg.data)` afking dispatch is verified — selector routing, calldata forwarding, return-data handling, and revert-reason bubbling are correct; no selector collision or mis-dispatch is reachable.
   4. Every thin Game dispatch stub correctly bubbles module reverts (no swallowed failure that leaves partial state committed) and correctly handles return data; a module revert never silently no-ops a state transition the Game assumes succeeded.
   5. Module addresses / immutables and init wiring are verified — the column cannot delegatecall a zero / unset / wrong module address, and no module is reachable as a direct external call that would execute against its own (empty) storage.
+
 **Plans**: TBD
 
 ### Phase 420: CORRUPT — State-Corruption Invariants
+
 **Goal**: no reachable column path can leave the Game's packed storage or accounting corrupted — packed slots never alias, write-after-write ordering leaves no exploitable intermediate, partial failures are all-or-nothing, mid-advance reentrancy cannot observe a half-updated invariant, and the solvency / pool identities hold everywhere.
 **Depends on**: Phase 417
 **Requirements**: CORRUPT-01, CORRUPT-02, CORRUPT-03, CORRUPT-04, CORRUPT-05
 **Method**: Cross-model council primary finder over the corruption surface (the DEC-ALIAS class, CEI / reentrancy, solvency identities), seeded with the COLMAP storage-write map; Claude adjudicates against frozen source; every candidate adversarially verified.
 **Success Criteria** (what must be TRUE):
+
   1. Packed-slot integrity holds across the column — every packed storage write (the DEC-ALIAS class: terminal / offset-keyed level writes, packed day-result lanes, packed pool / credit slots) is proven not to alias or overflow into a neighbouring field under any reachable (level, day, offset) combination.
   2. Write-after-write ordering across the multi-step advance / mint chain leaves no inconsistent intermediate a reentrant or follow-on call can observe and exploit; the phase / level / day / pool / queue-index counters are mutually consistent at every external-call boundary.
   3. Partial-failure atomicity holds — if any sub-step of a column transaction reverts, no earlier sub-step's state write survives in a way that corrupts the accounting (CEI / checked-math / revert-bubbling enforces all-or-nothing where required).
   4. Reentrancy into the column mid-advance (via the synchronous calls to FLIP / Coinflip / Vault / sDGNRS / Affiliate and any ETH transfer) cannot corrupt state or double-count — every external-call site is checked for a reentrant re-entry that observes a half-updated invariant.
   5. The solvency / pool identities hold across every column path — `claimablePool == Σ(claimable + afking)` and the sDGNRS-backing identity are preserved by every mint / advance / jackpot / redemption / gameover path.
+
 **Plans**: TBD
 
 ### Phase 421: MIDRNG — Mid-Day RNG Edge Cases
+
 **Goal**: every mid-day RNG interaction on the column — lootbox swap / retry, a partially-drained read slot, and mid-day word binding — is proven not to brick, corrupt, or mis-bind a box / ticket / bet to the wrong word across gap-backfill and retry interleavings.
 **Depends on**: Phase 418, Phase 420
 **Requirements**: MIDRNG-01, MIDRNG-02, MIDRNG-03
 **Method**: Cross-model council primary finder over the mid-day RNG surface, exercised on the column; Claude adjudicates against frozen source; every candidate adversarially verified. Scoped to the RNG paths that can BRICK or CORRUPT the column (the broad RNG-freeze surface was closed in v66).
 **Success Criteria** (what must be TRUE):
+
   1. The mid-day lootbox RNG swap / retry path cannot brick or corrupt — a mid-day request that stalls can always be retried / resolved, and the retry cannot bind a box / ticket to the wrong (in-flight) word or strand the index.
   2. The mid-day partial-drain read slot is proven consistent — a mid-day partial advance leaves the queue / index in a state the next advance resumes correctly, with no double-drain or skipped ticket.
   3. Mid-day word binding holds — boxes / tickets / bets placed mid-day after a request bind to the live index / day, not the in-flight word, across gap-backfill and retry interleavings (the `RngIndexDrainBinding` concern).
+
 **Plans**: TBD
 
 ### Phase 422: GAMEOVER — Terminal-Branch Liveness
+
 **Goal**: every GAMEOVER branch is proven to finalize for any reachable pre-gameover state — the terminal decimator and terminal jackpot + drain resolve within the gas ceiling without aliasing a live round, and the gameOver-trigger transition itself cannot wedge any downstream terminal entrypoint.
 **Depends on**: Phase 418, Phase 420
 **Requirements**: GAMEOVER-01, GAMEOVER-02, GAMEOVER-03
 **Method**: Cross-model council primary finder over the terminal surface; Claude adjudicates against frozen source; every candidate adversarially verified. Builds on the BRICK-03 terminal-finalization proof, drilling the specific terminal entrypoints.
 **Success Criteria** (what must be TRUE):
+
   1. The terminal decimator (`runTerminalDecimatorJackpot`, level keyed at `lvl+1` per the DEC-ALIAS fix) is proven to resolve without aliasing a live regular round and without a reachable revert that strands the terminal payout.
   2. The terminal jackpot (`runTerminalJackpot`) and `handleGameOverDrain` are proven to finalize for any reachable pre-gameover state (any pending pool, any winner-set size) within the gas ceiling, including the post-gameover claim path that also pays prepaid afking ETH.
   3. The gameOver-trigger transition itself cannot wedge — the conditions that set `gameOver` (`lastPurchaseDay` etc.) leave every downstream terminal entrypoint callable; no mid-gameover partial state blocks finalization.
+
 **Plans**: TBD
 
 ### Phase 423: VRFSWAP — Honest Coordinator Rotation
+
 **Goal**: an honest-governance coordinator rotation (`updateVrfCoordinatorAndSub`), performed at any point including mid-day / mid-request / stalled / while-locked, cannot brick liveness or corrupt the request↔word binding — every freeze-relevant variable stays consistent and a fulfilled word always remains obtainable on the correct day.
 **Depends on**: Phase 418
 **Requirements**: VRFSWAP-01, VRFSWAP-02, VRFSWAP-03
 **Method**: Cross-model council primary finder over the rotation surface; Claude adjudicates against frozen source; every candidate adversarially verified. Honest admin / governance assumed (admin malice out of scope); rotation liveness IS in scope.
 **Success Criteria** (what must be TRUE):
+
   1. `updateVrfCoordinatorAndSub` under honest governance holds every freeze-relevant variable consistent — no rotation branch strands the lock, de-syncs `vrfRequestId` / `rngWordCurrent`, or leaves the daily word permanently unobtainable; an in-flight request at rotation time is either preserved or cleanly re-requested.
   2. A rotation performed while the game is mid-day / mid-request / stalled cannot brick liveness or corrupt the request↔word binding — the rotation + retry composition always restores a path to a fulfilled word and the correct day binds it.
   3. `rawFulfillRandomWords` requestId / coordinator validation is correct across a rotation — a stale (pre-rotation) coordinator or requestId cannot write a word, and the post-rotation coordinator's fulfillment lands on the intended day / index.
+
 **Plans**: TBD
 
 ### Phase 424: MECH — Close the Mechanical-Net Gaps (test-only)
+
 **Goal**: the brick / corruption invariants proven by hand in BRICK / DELEGATE / CORRUPT / the edge phases are pinned by durable regressions, so any future drift that would re-open a brick or corruption is caught by a failing test rather than another manual audit.
 **Depends on**: Phase 418, Phase 419, Phase 420, Phase 421, Phase 422, Phase 423
 **Requirements**: MECH-01, MECH-02, MECH-03, MECH-04
 **Method**: Test-only — commits autonomously (no contract change). Derived from the worst-case branches and mutants surfaced in the preceding sweeps.
 **Success Criteria** (what must be TRUE):
+
   1. A worst-case gas harness asserts every column transaction (advance composition, terminal finalization, max-batch mint) is < 16.7M, derived from the BRICK-04 worst-case branch (not typical seeds), wired so a regression that crosses the ceiling fails it.
   2. A delegatecall storage-layout regression oracle pins the Game↔module slot alignment (a `forge inspect` layout snapshot + assertion) so any future layout drift that would silently corrupt is caught.
   3. A state-invariant test (fuzz or targeted) asserts the BRICK liveness + CORRUPT solvency invariants across an advance / mint / gameover sequence — at minimum that `advanceGame` always progresses to settlement and `claimablePool == Σ` holds throughout.
   4. Any specific brick / corruption mutant surfaced during COLMAP / BRICK / DELEGATE / CORRUPT (a revert made permanent, a slot mis-aligned) is captured as a regression the current suite is shown blind to, then closed.
+
 **Plans**: TBD
 
 ### Phase 425: COUNCIL — Cross-Model Adjudication + Synthesis + FINDINGS-v67.0 + Closure
+
 **Goal**: the cross-model council finding/verification METHOD is formally attested and synthesized into a canonical FINDINGS deliverable, any contract fix is routed through the approval gate, and the milestone closure signal is recorded.
 **Depends on**: Phase 418, Phase 419, Phase 420, Phase 421, Phase 422, Phase 423, Phase 424
 **Requirements**: COUNCIL-01, COUNCIL-02, COUNCIL-03
 **Method**: Cross-model council (Gemini + Codex) primary finder + Claude synthesis; every candidate adversarially verified (independent refutation; majority-refute kills it) before it is recorded. Any contract fix routes through the contract-commit approval gate.
 **Success Criteria** (what must be TRUE):
+
   1. It is attested on record that the cross-model council (Gemini + Codex) ran as the primary finder over every COLMAP/BRICK/DELEGATE/CORRUPT/MIDRNG/GAMEOVER/VRFSWAP surface, seeded with the column map and the brick / corruption hypotheses.
   2. It is attested on record that every candidate finding was adversarially verified (independent refutation; majority-refute kills it) before being recorded as confirmed.
   3. A canonical `audit/FINDINGS-v67.0.md` (+ HTML report) records confirmed findings, refutations, and by-design dispositions; any contract fix is routed through the contract-commit approval gate; and the milestone closure signal `MILESTONE_V67_AT_HEAD_<sha>` is recorded.
+
 **Plans**: TBD
 
 ### Progress (v67.0)
@@ -493,67 +573,85 @@ Plans:
 ### Phase Details (v66.0)
 
 ### Phase 410: FOUNDATION — Subject Freeze & Green Baseline
+
 **Goal**: a byte-frozen audit subject at post-rename HEAD `42c8e9c6` + a documented GREEN baseline oracle that is the audit's regression floor and the oracle every lead is reproduced against.
 **Depends on**: Nothing (first v66 phase)
 **Requirements**: FOUND-01, FOUND-02
 **Success Criteria** (what must be TRUE):
+
   1. The audit subject is byte-frozen at post-rename HEAD with the commit hash AND the contracts-tree hash recorded as the v66 freeze anchor (`git diff <anchor> -- contracts/` empty).
   2. A GREEN baseline oracle is captured and documented (forge full-suite pass/skip counts + hardhat parity) as the v66 regression baseline.
   3. Any pre-existing reds are catalogued as carried-not-new, with no undocumented residual masking a regression.
+
 **Plans**: TBD
 
 ### Phase 411: RNGNET — Re-Derive the VRF-Consumer Net From HEAD
+
 **Goal**: the COMPLETE VRF-derived-value consumer set is re-derived from current HEAD source (not inherited from the stale catalog), every gap enrolled + freeze-classified, and the stale trusted RNG docs reconciled or superseded.
 **Depends on**: Phase 410
 **Requirements**: RNGNET-01, RNGNET-02, RNGNET-03
 **Success Criteria** (what must be TRUE):
+
   1. The complete consumer set is re-derived by mechanical enumeration over current HEAD source (every VRF-word / `rngWordByDay` / `rngWordForDay` / `rngWordCurrent` / `lootboxRngWordByIndex` / `EntropyLib` read), independently of `RNGLOCK-CATALOG.md`.
   2. The re-derived set is diffed against `RNGLOCK-CATALOG.md` and every consumer absent or mis-classified in the catalog (at minimum BAF winner-select, far-future salvage seed, `coinflipTopByDay` leaderboard, Degenerette survival flip, redemption FLIP-escrow leg) is enrolled + freeze-classified.
   3. Every stale trusted-RNG anchor (deleted `BurnieCoinflip`/`StakedDegenerusStonk` names, the removed rotation clear-site, the removed stored `flipDay`, the removed `currentDayView()` cross-call) is corrected against current code or explicitly marked superseded by a current-HEAD consumer-net document.
+
 **Plans**: TBD
 
 ### Phase 412: RNGSEAM — Cross-Contract Freeze Seams
+
 **Goal**: every cross-contract VRF freeze seam the inherited net never covered is proven frozen — no player-manipulable state exists between VRF request and consumption across any contract boundary.
 **Depends on**: Phase 411
 **Requirements**: RNGSEAM-01, RNGSEAM-02, RNGSEAM-03, RNGSEAM-04, RNGSEAM-05
 **Success Criteria** (what must be TRUE):
+
   1. `claimRedemption(player,day)` argument-selection is proven safe (a non-empty `pendingRedemptions[player][d]` exists only for `d == currentDayIndex()` with `d+1` undrawn) or any selectable-stale-day path is recorded as a confirmed finding.
   2. The redemption FLIP-escrow leg `getCoinflipDayResult(day+1)` is backward-traced for freshness — `day+1`'s result provably unwritten at submit, committed atomically by the resolving advance, packed-lane read non-aliasing — with the disposition recorded.
   3. The BAF winner-select path and the `coinflipTopByDay` leaderboard slice are proven frozen across Game↔Jackpots↔Coinflip (no sampled queue/leaderboard write reachable after the daily word is observable but before the BAF resolves), verified-or-refuted.
   4. The VRF-stall gap-backfill entropy-collapse is analyzed (single post-gap word feeding redemption roll + coinflip win + lootbox seed); any economic invariant assuming independence is identified and the EV deviation quantified, with the disposition recorded.
   5. The reworked `updateVrfCoordinatorAndSub` is proven to hold every freeze-relevant variable consistent across a coordinator swap (no branch strands the lock, accepts an untrusted word, or de-syncs `vrfRequestId`/`rngWordCurrent`), verified-or-refuted.
+
 **Plans**: TBD
 
 ### Phase 413: RNGSEL + RNGFALL — Input-Selection Grinding & Gameover Fallback
+
 **Goal**: every player-controllable RNG input (address-selection, index-keyed seed, elective self-claim) and every consumer in the gameover prevrandao fallback window is proven frozen, or its mutability is quantified and dispositioned.
 **Depends on**: Phase 411
 **Requirements**: RNGSEL-01, RNGSEL-02, RNGSEL-03, RNGFALL-01
 **Success Criteria** (what must be TRUE):
+
   1. The far-future salvage seed `keccak(player, settled prior-day word)` is quantified against address-selection grinding — the realized `jitterMult`/`ticketShareBps`/ETH-FLIP-split swing an actor obtains by choosing which controlled address sells is measured, and whether it erodes the by-design salvage discount is determined.
   2. The Degenerette score-seed `keccak(rngWord, index, spinIdx)` is proven safe by exhaustively showing no `lootboxRngWordByIndex[index]` write coincides with an accepting placement at the same active index (incl. gap-backfill and mid-day-retry interleavings), or a coincidence path is recorded as a finding.
   3. The redemption/lootbox claim path is dispositioned for elective-resolution / first-mover capture (whether a player can precompute a favorable self-claim outcome a passive holder would not receive, given no claim deadline during a live game).
   4. The gameover prevrandao fallback path (which never sets `rngLockedFlag`) is re-derived under the current reworked consumers — every player-controllable input to `processCoinflipPayouts` / `resolveRedemptionPeriod` / `_finalizeLootboxRng` during the fallback window is verified frozen or its mutability dispositioned, accounting for proposer influence on `block.prevrandao`.
+
 **Plans**: TBD
 
 ### Phase 414: RNGNET-MECH — Close the Mechanical-Net Gaps (test-only)
+
 **Goal**: the mechanical-net blind spots are closed with real behavioral coverage (committable test work, no contract change) so the exact mutants the current suite is blind to now fail a test.
 **Depends on**: Phase 411
 **Requirements**: MECH-01, MECH-02, MECH-03, MECH-04
 **Success Criteria** (what must be TRUE):
+
   1. A real (un-mocked) redemption submit→resolve→claim regression test exists, the `rngWordForDay(day+1)→rngWordForDay(day)` mutant (v62 REDEMPTION-ZERO-SEED class) FAILS it, and the pre-existing suite is shown blind to that mutant.
   2. The mid-day cross-day lootbox binding test (`RngIndexDrainBinding.t.sol`) is rewritten from its `vm.skip(true)` + vacuous early-return to read `lootboxRngWordByIndex` from storage and assert post-request boxes/tickets bind to the live index, not the in-flight word.
   3. A focused mutation pass on the Coinflip RNG spine (`processCoinflipPayouts` / `_storeDayResult` / `_dayResult`) augments/replaces the source-string "byte-unmodified" net with behavioral coverage, and every surviving mutant is dispositioned.
   4. The coinflip win-classification floor is asserted by reading current constants (`COINFLIP_EXTRA_MIN_PERCENT >= 50`, no win stores `b ∈ [2,49]`, no `+bonus` byte overflow) plus a boundary test.
+
 **Plans**: TBD
 
 ### Phase 415: TERMINAL — Council Synthesis + FINDINGS-v66.0 + Closure
+
 **Goal**: the cross-model council finding/verification METHOD is formally attested and synthesized into a canonical FINDINGS deliverable, any contract fix is routed through the approval gate, and the milestone closure signal is recorded.
 **Depends on**: Phase 412, Phase 413, Phase 414
 **Requirements**: COUNCIL-01, COUNCIL-02, COUNCIL-03
 **Success Criteria** (what must be TRUE):
+
   1. It is attested on record that the cross-model council (Gemini+Codex) ran as the primary finder over every RNGNET/RNGSEAM/RNGSEL/RNGFALL surface, seeded with the blind-spot-panel hypotheses.
   2. It is attested on record that every candidate finding was adversarially verified (independent refutation; majority-refute kills it) before being recorded as confirmed.
   3. A canonical `audit/FINDINGS-v66.0.md` (+ report) records confirmed findings, refutations, and by-design dispositions; any contract fix is routed through the contract-commit approval gate; and the milestone closure signal is recorded.
+
 **Plans**: TBD
 
 ---
