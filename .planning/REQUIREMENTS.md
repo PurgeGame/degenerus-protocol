@@ -21,17 +21,17 @@ Requirements for this milestone. Each maps to exactly one roadmap phase.
 
 ### POINTS — Activity Score bps → Whole Points (IMPL, batched diff)
 
-- [ ] **POINTS-01**: The activity score is represented and computed in whole points — `_playerActivityScore` (`MintStreakUtils`) returns the point-domain score with the quest-streak contribution floored per DESIGN-01; the hard cap is enforced in points at the chosen storage width.
-- [ ] **POINTS-02**: Every consumer threshold is migrated to the point domain per DESIGN-04 — `DegenerusGameDegeneretteModule` (MID/HIGH/MAX + ROI anchors), `DegenerusGameLootboxModule` (EV-multiplier cap), and `DegenerusGameDecimatorModule` (threshold) read the point-domain score and compare against point-domain constants, with the curves behaviour-equivalent to the bps version.
+- [x] **POINTS-01**: The activity score is represented and computed in whole points — `_playerActivityScore` (`MintStreakUtils`) returns the point-domain score with the quest-streak contribution floored per DESIGN-01; the hard cap is enforced in points at the chosen storage width.
+- [x] **POINTS-02**: Every consumer threshold is migrated to the point domain per DESIGN-04 — `DegenerusGameDegeneretteModule` (MID/HIGH/MAX + ROI anchors), `DegenerusGameLootboxModule` (EV-multiplier cap), and `DegenerusGameDecimatorModule` (threshold) read the point-domain score and compare against point-domain constants, with the curves behaviour-equivalent to the bps version.
 
 ### STREAK — Exact Integer Streak Path + Pre-Streak-Cap Rework (IMPL, batched diff)
 
-- [ ] **STREAK-01**: The manual + afking `subStreakLatch` streak base feeds `_playerActivityScore` through a single exact integer path (no residual fractional/bps intermediate), preserving the afking-XOR-manual semantics of `_effectiveQuestStreak`.
-- [ ] **STREAK-02**: The way the carried-in pre-streak is capped/snapshotted into the afking run is reworked per DESIGN-02 — the current cap shape is replaced with the cleaner handling; the `DegenerusQuests` streak source and its `pendingFlip` accrual (`~:1779`) remain consistent with the new path.
+- [x] **STREAK-01**: The manual + afking `subStreakLatch` streak base feeds `_playerActivityScore` through a single exact integer path (no residual fractional/bps intermediate), preserving the afking-XOR-manual semantics of `_effectiveQuestStreak`.
+- [x] **STREAK-02**: The way the carried-in pre-streak is capped/snapshotted into the afking run is reworked per DESIGN-02 — the current cap shape is replaced with the cleaner handling; the `DegenerusQuests` streak source and its `pendingFlip` accrual (`~:1779`) remain consistent with the new path.
 
 ### PACK — pendingFlip Narrowing + Accumulator Repack (IMPL, batched diff)
 
-- [ ] **PACK-01**: `Sub.pendingFlip` is narrowed to the DESIGN-03 width with its saturating clamp re-pinned to the new ceiling, the 72-bit accumulator slot is repacked, no other field's value-range is violated, and the Game stays under the EIP-170 deployed-bytecode ceiling (re-checked) with no unexpected storage-slot collision.
+- [x] **PACK-01**: `Sub.pendingFlip` is narrowed to the DESIGN-03 width with its saturating clamp re-pinned to the new ceiling, the 72-bit accumulator slot is repacked, no other field's value-range is violated, and the Game stays under the EIP-170 deployed-bytecode ceiling (re-checked) with no unexpected storage-slot collision.
 
 ### TST — Prove the Floor, the Streak Path, the Clamp & the Equivalence
 
@@ -78,11 +78,11 @@ Each requirement maps to exactly one phase. v69.0 phases continue 434 → 435. N
 | DESIGN-02 | 435 DESIGN | Done (design-locked `435-DESIGN-LOCK.md`) |
 | DESIGN-03 | 435 DESIGN | Done (design-locked `435-DESIGN-LOCK.md`) |
 | DESIGN-04 | 435 DESIGN | Done (design-locked `435-DESIGN-LOCK.md`) |
-| POINTS-01 | 436 IMPL | Pending |
-| POINTS-02 | 436 IMPL | Pending |
-| STREAK-01 | 436 IMPL | Pending |
-| STREAK-02 | 436 IMPL | Pending |
-| PACK-01 | 436 IMPL | Pending |
+| POINTS-01 | 436 IMPL | Done (`c4b09267`) |
+| POINTS-02 | 436 IMPL | Done (`c4b09267`) |
+| STREAK-01 | 436 IMPL | Done (`c4b09267`) |
+| STREAK-02 | 436 IMPL | Done (`c4b09267`) |
+| PACK-01 | 436 IMPL | Done (`c4b09267`) |
 | TST-01 | 437 TST | Pending |
 | TST-02 | 437 TST | Pending |
 | TST-03 | 437 TST | Pending |
