@@ -3,7 +3,7 @@
 **Milestone:** v70.0 — Activity-Score Consumer-Curve & Bucket Reshape (Verify + Re-Audit)
 **Date:** 2026-06-19
 **Subject (frozen):** `contracts/` tree **`99f2e53f`** (FREEZE commit **`ffbd7796`**). Baseline was the v69.0 closure subject `contracts/` tree **`8a633d1d`** (HEAD `3f024cc8`). The tree advanced only via the single batched, USER-approved reshape commit recorded below.
-**Closure signal:** MILESTONE_V70_AT_HEAD___CLOSURE_SHA__
+**Closure signal:** MILESTONE_V70_AT_HEAD_25ff6aaed0e9209e2003f467a3607056bfac9c03
 **Method:** The reshape was already written in the working tree at milestone start; the milestone = VERIFY → FREEZE → TST → REAUDIT → TERMINAL (not design→build). VERIFY (440) used a Claude adversarial verification workflow — 8 independent per-dimension verifiers recomputing every curve/ladder/inverse from the locked design with Solidity integer arithmetic, a completeness critic, and per-gap adversarial confirmation — plus empirical build/sizes and the targeted oracle suites. FREEZE (441) is the sole approval gate: one batched `contracts/*.sol` diff, USER hand-reviewed and approved. Honest admin/governance assumed; pre-launch, no live funds.
 **Regression floor:** final full forge suite **935 passed / 0 failed / 108 skipped** (134 suites; the 108 skips are pre-existing `vm.skip`) on the frozen tree.
 
