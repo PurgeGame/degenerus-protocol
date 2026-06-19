@@ -15,10 +15,10 @@ Requirements for this milestone. Each maps to exactly one roadmap phase.
 
 ### VERIFY — Review the Working-Tree Reshape Against the Locked Design (no new design)
 
-- [ ] **VERIFY-01**: Every value curve matches the locked formula and endpoints — the five 3-segment piecewise value curves (decimator + terminal-dec multiplier [shared `ActivityCurveLib.decMultBps`], Degenerette ROI, WWXRP high ROI, century mint/afking bonus [shared `ActivityCurveLib.centuryBps`], lootbox EV [inline `DegenerusGameStorage`]) carry the locked constants/knees (`K`, seg-B knee 500, effective cap 30,000), each curve's value at its cap is byte-identical to the prior named MAX, each is monotonic non-decreasing over `[0, 30000]` and continuous at both knees, and the decimator `s==0 → 1.0x` no-op is preserved.
-- [ ] **VERIFY-02**: The bucket ladder + inverse + no-drift wiring match the locked tables — `ActivityCurveLib.decBucket` implements the absolute threshold ladder (`12@0 … 2@1000`) with the correct per-path floor clamp (normal decimator floor 5 / century floor 2, terminal-dec floor 2), `ActivityCurveLib.minScoreForBucket` is the exact band-floor inverse (`2→1000 … 12→0`) consistent with the forward ladder and feeds the decimator-claim lootbox EV correctly, and both FLIP.sol and DegenerusGameDecimatorModule.sol delegate to the single lib with no duplicated body that could drift.
-- [ ] **VERIFY-03**: Every §1 pre-clamp is removed and every consumer call-site is migrated — the six per-site 235/305 pre-clamp sites (FLIP, Decimator ×2, Degenerette ×2, Mint, Afking) are removed so the high end is reachable, no consumer still reads the score through the old saturated arithmetic, and there is no residual stale-constant or un-migrated consumer (the v69 incomplete-migration failure class is explicitly swept for across all activity-score read-sites).
-- [ ] **VERIFY-04**: The reshape builds and stays within bounds — `forge build` is clean, the new `ActivityCurveLib` carries no storage, the `DegenerusGame` (and `FLIP`) stay under the EIP-170 deployed-bytecode ceiling with the added piecewise branches, there is no gas regression on the read-side consumer paths (decimatorBurn / placeBet / lootbox-open / century), and the `advanceGame` 16.7M ceiling is confirmed not implicated (the reshape is read-side, not in the advance loop).
+- [x] **VERIFY-01**: Every value curve matches the locked formula and endpoints — the five 3-segment piecewise value curves (decimator + terminal-dec multiplier [shared `ActivityCurveLib.decMultBps`], Degenerette ROI, WWXRP high ROI, century mint/afking bonus [shared `ActivityCurveLib.centuryBps`], lootbox EV [inline `DegenerusGameStorage`]) carry the locked constants/knees (`K`, seg-B knee 500, effective cap 30,000), each curve's value at its cap is byte-identical to the prior named MAX, each is monotonic non-decreasing over `[0, 30000]` and continuous at both knees, and the decimator `s==0 → 1.0x` no-op is preserved.
+- [x] **VERIFY-02**: The bucket ladder + inverse + no-drift wiring match the locked tables — `ActivityCurveLib.decBucket` implements the absolute threshold ladder (`12@0 … 2@1000`) with the correct per-path floor clamp (normal decimator floor 5 / century floor 2, terminal-dec floor 2), `ActivityCurveLib.minScoreForBucket` is the exact band-floor inverse (`2→1000 … 12→0`) consistent with the forward ladder and feeds the decimator-claim lootbox EV correctly, and both FLIP.sol and DegenerusGameDecimatorModule.sol delegate to the single lib with no duplicated body that could drift.
+- [x] **VERIFY-03**: Every §1 pre-clamp is removed and every consumer call-site is migrated — the six per-site 235/305 pre-clamp sites (FLIP, Decimator ×2, Degenerette ×2, Mint, Afking) are removed so the high end is reachable, no consumer still reads the score through the old saturated arithmetic, and there is no residual stale-constant or un-migrated consumer (the v69 incomplete-migration failure class is explicitly swept for across all activity-score read-sites).
+- [x] **VERIFY-04**: The reshape builds and stays within bounds — `forge build` is clean, the new `ActivityCurveLib` carries no storage, the `DegenerusGame` (and `FLIP`) stay under the EIP-170 deployed-bytecode ceiling with the added piecewise branches, there is no gas regression on the read-side consumer paths (decimatorBurn / placeBet / lootbox-open / century), and the `advanceGame` 16.7M ceiling is confirmed not implicated (the reshape is read-side, not in the advance loop).
 
 ### FREEZE — Batched Contract Diff Approval + Commit (the sole gate)
 
@@ -66,10 +66,10 @@ Each requirement maps to exactly one phase. v70.0 phases continue 439 → 440. N
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| VERIFY-01 | 440 VERIFY | Pending |
-| VERIFY-02 | 440 VERIFY | Pending |
-| VERIFY-03 | 440 VERIFY | Pending |
-| VERIFY-04 | 440 VERIFY | Pending |
+| VERIFY-01 | 440 VERIFY | Done |
+| VERIFY-02 | 440 VERIFY | Done |
+| VERIFY-03 | 440 VERIFY | Done |
+| VERIFY-04 | 440 VERIFY | Done |
 | FREEZE-01 | 441 FREEZE | Pending |
 | TST-01 | 442 TST | Pending |
 | TST-02 | 442 TST | Pending |
