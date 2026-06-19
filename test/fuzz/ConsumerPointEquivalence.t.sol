@@ -8,16 +8,16 @@ import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 ///        the Degenerette ROI (+ WWXRP high ROI), and the Decimator multiplier + bucket.
 ///
 /// @notice The activity score migrated from a bps representation to whole points (1 point = 100 bps), and every
-///   score-INPUT threshold the consumers compare against / divide by migrated the same way (÷100). The OUTPUT
+///   score-INPUT threshold the consumers compare against / divide by migrated the same way (/100). The OUTPUT
 ///   anchors (the ROI / EV-multiplier result values, the quadratic shape coefficients, BPS_DENOMINATOR) did NOT
 ///   convert -- they stay in their own bps output domain. For a clean whole-point score the point-domain math is
 ///   bit-identical to the pre-change bps-domain math because the factor 100 cancels in every comparison and in
 ///   every interpolation ratio BEFORE the integer division. The one exception is the Decimator multiplier
-///   `bonusBps/3`, which is re-expressed as `(points*100)/3` (a ×100 re-scale, not a ÷100 of a constant) so the
+///   `bonusBps/3`, which is re-expressed as `(points*100)/3` (a x100 re-scale, not a /100 of a constant) so the
 ///   `/3` still divides the bps-equivalent magnitude.
 ///
 /// @dev Each consumer is mirrored TWICE in-test: a point-domain mirror (the shipped formula, point anchors) and
-///   a bps-domain ORACLE (the same shape with every score-INPUT anchor ×100 and the score fed ×100, OUTPUT
+///   a bps-domain ORACLE (the same shape with every score-INPUT anchor x100 and the score fed x100, OUTPUT
 ///   anchors unchanged). The two are compared cell-by-cell on a leg-spanning whole-point grid, plus pinned to
 ///   the design-locked worked numbers so a wrong migration (e.g. a naive Decimator `points/3`, or converting an
 ///   OUTPUT anchor by mistake) fails the test. Equivalence is asserted on the clean whole-point grid only -- the
@@ -27,8 +27,8 @@ import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 ///   mutation.
 contract ConsumerPointEquivalenceTest is DeployProtocol {
     // =========================================================================
-    // Score-INPUT thresholds (TABLE A): convert ÷100 with the score.
-    // Point domain on the left, the ×100 bps-domain oracle form on the right.
+    // Score-INPUT thresholds (TABLE A): convert /100 with the score.
+    // Point domain on the left, the x100 bps-domain oracle form on the right.
     // =========================================================================
 
     // Lootbox EV (DegenerusGameStorage.sol:1553/1555)
@@ -76,7 +76,7 @@ contract ConsumerPointEquivalenceTest is DeployProtocol {
     uint256 private constant BPS_DENOMINATOR = 10_000;
     uint256 private constant BUCKET_BASE = 12;
     uint256 private constant MIN_BUCKET = 2;
-    uint256 private constant BUCKET_RANGE = BUCKET_BASE - MIN_BUCKET; // 10, a bucket count -- NOT a score, never ×100
+    uint256 private constant BUCKET_RANGE = BUCKET_BASE - MIN_BUCKET; // 10, a bucket count -- NOT a score, never x100
 
     function setUp() public {
         // Pure-math mirror tests; the deploy keeps the contract suite-consistent (the consumer formulas under
@@ -104,7 +104,7 @@ contract ConsumerPointEquivalenceTest is DeployProtocol {
         return EV_NEUTRAL_BPS + (excess * (EV_MAX_BPS - EV_NEUTRAL_BPS)) / maxExcess;
     }
 
-    /// @dev The pre-change bps-domain oracle: identical shape, score-INPUT anchors ×100, score fed ×100, OUTPUT
+    /// @dev The pre-change bps-domain oracle: identical shape, score-INPUT anchors x100, score fed x100, OUTPUT
     ///      anchors unchanged. The factor 100 cancels in each ratio so this reproduces the original outcome.
     function _evBps(uint256 scoreBps) internal pure returns (uint256) {
         if (scoreBps <= EV_NEUTRAL_BPS_IN) {
@@ -180,7 +180,7 @@ contract ConsumerPointEquivalenceTest is DeployProtocol {
     /// @notice The Lootbox EV multiplier is bit-identical between the point-domain mirror and the bps-domain
     ///         oracle for every whole-point score spanning the low leg, the neutral join, the high leg, and the
     ///         max clamp -- plus the design-locked worked anchors. A wrong migration (e.g. converting EV_MIN /
-    ///         EV_NEUTRAL / EV_MAX, the OUTPUT anchors, by ÷100, or failing to convert NEUTRAL/MAX) breaks the
+    ///         EV_NEUTRAL / EV_MAX, the OUTPUT anchors, by over 100, or failing to convert NEUTRAL/MAX) breaks the
     ///         worked anchors below.
     function test_LootboxEvEquivalence_Grid() public pure {
         uint256[11] memory grid = [
@@ -208,7 +208,7 @@ contract ConsumerPointEquivalenceTest is DeployProtocol {
     ///         high ROI are bit-identical between the point mirror and the bps oracle across a grid spanning
     ///         every segment and the clamp -- plus the worked anchors. The quadratic term's 100^2 cancellation
     ///         is exercised at score 30 (the worked 9320). Converting any ROI/WWXRP OUTPUT anchor or the
-    ///         quadratic coefficients 1000/500 by ÷100 would break the worked anchor.
+    ///         quadratic coefficients 1000/500 by over 100 would break the worked anchor.
     function test_DegeneretteRoiEquivalence_Grid() public pure {
         uint256[13] memory grid = [
             uint256(0), 30, 74, 75, 76, 150, 254, 255, 256, 304, 305, 306, 1000
@@ -231,5 +231,128 @@ contract ConsumerPointEquivalenceTest is DeployProtocol {
         assertEq(_wwxrpPoint(0), WWXRP_BASE_BPS, "WWXRP anchor: 0pt -> base 9000");
         assertEq(_wwxrpPoint(305), WWXRP_MAX_BPS, "WWXRP anchor: 305pt -> max 10990");
         assertEq(_wwxrpPoint(306), WWXRP_MAX_BPS, "WWXRP clamp: above MAX behaves as 305");
+    }
+
+    // =========================================================================
+    // Decimator mirrors -- the ONE non-scale-invariant migration.
+    //   point: DegenerusGameDecimatorModule.sol:801-803 (multiplier) + :1135-1146 (_terminalDecBucket)
+    //   The multiplier is `10000 + bonusBps/3` in the bps domain. A bare integer over 3 is NOT scale-invariant
+    //   under a naive over 100: (bonusBps/100)/3 != (bonusBps/3)/100. So the point form must re-scale the score back
+    //   up by 100 BEFORE the /3: `10000 + (points*100)/3`. That reproduces the bps result exactly (the /3 sees
+    //   the same magnitude); a naive `10000 + points/3` would be ~100x too small. The bucket, by contrast, is a
+    //   genuine ratio `(range*score + CAP/2)/CAP` and IS scale-invariant -- with `range` a dimensionless bucket
+    //   count that is never x100 in either domain.
+    // =========================================================================
+
+    /// @dev Multiplier, point domain: clamp to CAP, then `10000 + (points*100)/3` (the x100 re-scale).
+    function _decMultPoint(uint256 points) internal pure returns (uint256) {
+        if (points > DEC_CAP_POINTS) points = DEC_CAP_POINTS;
+        return points == 0 ? BPS_DENOMINATOR : BPS_DENOMINATOR + (points * 100) / 3;
+    }
+
+    /// @dev Multiplier, bps oracle: clamp to the x100 CAP, then the pre-change `10000 + bonusBps/3`.
+    function _decMultBps(uint256 bonusBps) internal pure returns (uint256) {
+        if (bonusBps > DEC_CAP_BPS_IN) bonusBps = DEC_CAP_BPS_IN;
+        return bonusBps == 0 ? BPS_DENOMINATOR : BPS_DENOMINATOR + bonusBps / 3;
+    }
+
+    /// @dev Bucket, point domain: range (a bucket count) is NOT converted; reduction = (range*points + CAP/2)/CAP
+    ///      (round-to-nearest), bucket = BUCKET_BASE - reduction, floored at MIN_BUCKET.
+    function _bucketPoint(uint256 points) internal pure returns (uint256) {
+        if (points > DEC_CAP_POINTS) points = DEC_CAP_POINTS;
+        if (points == 0) return BUCKET_BASE;
+        uint256 reduction = (BUCKET_RANGE * points + (DEC_CAP_POINTS / 2)) / DEC_CAP_POINTS;
+        uint256 b = BUCKET_BASE - reduction;
+        return b < MIN_BUCKET ? MIN_BUCKET : b;
+    }
+
+    /// @dev Bucket, bps oracle: same shape, CAP x100, score x100; range still un-converted. The factor 100
+    ///      cancels in numerator (range*scoreBps = range*100*points) and denominator (CAP_BPS = 100*CAP), and in
+    ///      the round-to-nearest term (CAP_BPS/2 = 100*(CAP/2)), so the reduction is identical to the point form.
+    function _bucketBps(uint256 bonusBps) internal pure returns (uint256) {
+        if (bonusBps > DEC_CAP_BPS_IN) bonusBps = DEC_CAP_BPS_IN;
+        if (bonusBps == 0) return BUCKET_BASE;
+        uint256 reduction = (BUCKET_RANGE * bonusBps + (DEC_CAP_BPS_IN / 2)) / DEC_CAP_BPS_IN;
+        uint256 b = BUCKET_BASE - reduction;
+        return b < MIN_BUCKET ? MIN_BUCKET : b;
+    }
+
+    // =========================================================================
+    // Tests -- Decimator
+    // =========================================================================
+
+    /// @notice The Decimator multiplier re-scale `10000 + (points*100)/3` reproduces the pre-change bps
+    ///         `10000 + bonusBps/3` EXACTLY across a grid spanning the small-score region (where the naive error
+    ///         is most visible), the worked anchor 117pt, and the CAP. Crucially, the naive `10000 + points/3`
+    ///         is proven WRONG (117 -> 10039 != 13900, ~100x too small), so a regression that drops the x100
+    ///         re-scale fails here. This is the one consumer leg where the point migration is a x100 re-scale
+    ///         inside the expression, not a over 100 of a constant.
+    function test_DecimatorMultiplierRescaleExact_Grid() public pure {
+        uint256[10] memory grid = [
+            uint256(0), 1, 3, 30, 117, 118, 234, 235, 236, 1000
+        ];
+        for (uint256 i; i < grid.length; i++) {
+            uint256 s = grid[i];
+            assertEq(_decMultPoint(s), _decMultBps(s * 100), "Decimator multiplier point-vs-bps equivalence");
+        }
+
+        // Design-locked worked anchor (435 D-04.2(3)): 117pt -> 10000 + 11700/3 = 13900.
+        assertEq(_decMultPoint(117), 13900, "Decimator multiplier worked: 117pt -> 13900");
+        assertEq(_decMultBps(11700), 13900, "Decimator multiplier bps oracle: 11700bps -> 13900");
+
+        // Naive-divisor guard: a naive `10000 + points/3` (no x100 re-scale) yields 10039 -- ~100x too small.
+        // Pinning this rejects the most likely regression of the one non-scale-invariant migration.
+        uint256 naive = BPS_DENOMINATOR + uint256(117) / 3;
+        assertEq(naive, 10039, "naive points/3 (no x100 re-scale) computes 10039");
+        assertTrue(naive != _decMultPoint(117), "naive 10039 != correct 13900 -- the x100 re-scale is mandatory");
+
+        // Zero special-case identical in both domains.
+        assertEq(_decMultPoint(0), BPS_DENOMINATOR, "Decimator multiplier: 0pt -> 10000 (neutral)");
+    }
+
+    /// @notice The 235-point CAP clamp binds identically in both domains for over-cap scores: 236 and 1000 each
+    ///         behave exactly as 235 for both the multiplier and the bucket. A mis-converted CAP (e.g. left at
+    ///         the bps 23500 in the point domain, or converted in the bps oracle) would let an over-cap score
+    ///         diverge from the 235 result.
+    function test_DecimatorClampEquivalence() public pure {
+        uint256 capMult = _decMultPoint(DEC_CAP_POINTS);
+        uint256 capBucket = _bucketPoint(DEC_CAP_POINTS);
+
+        uint256[2] memory overCap = [uint256(236), 1000];
+        for (uint256 i; i < overCap.length; i++) {
+            uint256 s = overCap[i];
+            assertEq(_decMultPoint(s), capMult, "Decimator multiplier clamp: over-cap score == 235 result");
+            assertEq(_bucketPoint(s), capBucket, "Decimator bucket clamp: over-cap score == 235 result");
+            // The clamp also binds identically against the bps oracle.
+            assertEq(_decMultPoint(s), _decMultBps(s * 100), "Decimator multiplier clamp point-vs-bps");
+            assertEq(_bucketPoint(s), _bucketBps(s * 100), "Decimator bucket clamp point-vs-bps");
+        }
+    }
+
+    /// @notice The Decimator bucket `(range*score + CAP/2)/CAP` is scale-invariant: the point mirror and the bps
+    ///         oracle agree across a grid spanning the reduction range and the clamp, with `range = 10` used
+    ///         un-converted in BOTH domains (it is a bucket count, not a score). The worked reduction at 118pt is
+    ///         5 (bucket 12 - 5 = 7).
+    function test_DecimatorBucketScaleInvariance_Grid() public pure {
+        // range is a dimensionless bucket count -- the same 10 feeds both mirrors, never x100.
+        assertEq(BUCKET_RANGE, 10, "range is the bucket count 12 - 2 = 10 (un-converted in both domains)");
+
+        uint256[10] memory grid = [
+            uint256(0), 1, 3, 30, 117, 118, 234, 235, 236, 1000
+        ];
+        for (uint256 i; i < grid.length; i++) {
+            uint256 s = grid[i];
+            assertEq(_bucketPoint(s), _bucketBps(s * 100), "Decimator bucket point-vs-bps scale-invariance");
+        }
+
+        // Design-locked worked reduction (435 D-04.2(3)): (10*118 + 117)/235 = 1297/235 = 5 -> bucket 12 - 5 = 7.
+        assertEq((BUCKET_RANGE * 118 + (DEC_CAP_POINTS / 2)) / DEC_CAP_POINTS, 5, "bucket worked: 118pt -> reduction 5");
+        assertEq(_bucketPoint(118), 7, "bucket worked: 118pt -> bucket 12 - 5 = 7");
+        // The same reduction in the bps oracle: (10*11800 + 11750)/23500 = 129750/23500 = 5.
+        assertEq((BUCKET_RANGE * 11800 + (DEC_CAP_BPS_IN / 2)) / DEC_CAP_BPS_IN, 5, "bucket bps oracle: 11800bps -> reduction 5");
+
+        // Endpoints: 0pt -> full bucket 12; the cap -> minimum bucket 2.
+        assertEq(_bucketPoint(0), BUCKET_BASE, "bucket: 0pt -> base bucket 12");
+        assertEq(_bucketPoint(DEC_CAP_POINTS), MIN_BUCKET, "bucket: 235pt (cap) -> min bucket 2");
     }
 }
