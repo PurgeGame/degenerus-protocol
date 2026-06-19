@@ -50,6 +50,65 @@
 - [ ] **Phase 438: REAUDIT — Re-Run the v68 Detection Nets on the Reset Subject** - Recapture the storage-layout golden for the new subject + migrate/re-pin the ~30 slot-hardcoded harnesses (MECH-02 oracle green on the new layout — the accumulator repack is the new golden, not a drift); re-run the RNG-freeze proof (re-attest every activity-score-reading consumer frozen-at-commitment, the snapshot-at-deposit freeze re-confirmed in the point domain); re-run / triage mutation on the changed modules + confirm the deep-invariant + Halmos nets green on the new subject (a documented carry of the mutation tail is acceptable, consistent with the v68 close). REAUDIT-01, REAUDIT-02, REAUDIT-03.
 - [ ] **Phase 439: TERMINAL — Evidence Pack + Closure** - Author `audit/FINDINGS-v69.0.md` (chmod 444) + an HTML report (prior house style) recording the design-lock decisions, the equivalence verdict, the TST results, and the re-audit outcomes (layout golden, RNG-freeze re-attest, mutation/invariant status); record the closure signal `MILESTONE_V69_AT_HEAD_<sha>`; confirm the activity-score interaction re-audit is clean and the subject is byte-frozen at the IMPL diff (the only `contracts/*.sol` change in the milestone). TERMINAL-01.
 
+### Phase Details (v69.0)
+
+### Phase 435: DESIGN — Design-Lock the Point Unit, Streak Path, Packing & Equivalence
+**Goal**: a frozen baseline (v68 closure subject `3cc51d00` / `contracts/` tree `e9a5fc24` + a green baseline) plus a locked design for the whole-point activity score, the exact integer streak path with the reworked pre-streak-cap handling, the `pendingFlip` width + accumulator repack, and a consumer-threshold behaviour-equivalence analysis — the load-bearing input the IMPL diff implements. No `contracts/*.sol` change.
+**Depends on**: Nothing (first v69 phase; baseline = v68 closure `3cc51d00`)
+**Requirements**: DESIGN-01, DESIGN-02, DESIGN-03, DESIGN-04
+**Method**: Claude design-lock against the byte-frozen v68 subject; no contract change. Grounded in `.planning/PLAN-V69-ACTIVITY-SCORE-POINTS.md` (the USER design seed) and the read-only touch-surface scan.
+**Success Criteria** (what must be TRUE):
+  1. The point unit + the quest-streak floor rule are locked — the activity score is defined in whole points (bps ÷100), the sole sub-point contributor (quest streak at 50 bps/level = 0.5 pt, `MintStreakUtils._playerActivityScore`) is floored by one explicit integer rule, and the point-domain cap + its storage width are chosen and justified (the current `ACTIVITY_SCORE_HARD_CAP_BPS = 65_534` lands exactly at the uint16 ceiling). (DESIGN-01)
+  2. The single exact integer streak-base path is designed — the manual quest streak and the afking-run streak base (`Sub.subStreakLatch`, uint8) combine into `_playerActivityScore` via one exact integer path, AND the carried-in pre-streak cap/snapshot into the afking run is reworked (the current cap shape dropped per USER) with its game-theory/actor walk, preserving the afking-XOR-manual `_effectiveQuestStreak` interaction. (DESIGN-02)
+  3. The `pendingFlip` width + the accumulator-slot repack are locked — `Sub.pendingFlip` (uint32 today) is narrowed to the realistic bank cap (uint24 ~16.7M or tighter, justified) and the 72-bit accumulator slot (`affiliateBase + pendingFlip + subStreakLatch`, `DegenerusGameStorage`) is repacked; the separate `lootboxRngPendingFlip` uint40 (`~Storage:1527`) is confirmed distinct and out of scope. (DESIGN-03)
+  4. Every consumer threshold is re-derived in points with a behaviour-equivalence analysis — Degenerette (MID 7500 / HIGH 25500 / MAX 30500 + ROI anchors), Lootbox EV-multiplier cap (40000), and Decimator (23500) are restated in the point domain, and the EV / ROI / decimator curves are shown behaviour-equivalent on the whole-point grid (any grid point where an outcome would shift is identified and confirmed not to materially change the result). (DESIGN-04)
+**Plans**: TBD
+
+### Phase 436: IMPL — Batched Contract Diff (POINTS + STREAK + PACK) [contract-commit gate]
+**Goal**: ONE batched, USER-approved `contracts/*.sol` diff that lands the whole-point activity score, the migrated consumer thresholds, the single exact integer streak path with the reworked pre-streak cap, and the narrowed `pendingFlip` + repacked accumulator slot — producing the new v69 subject, byte-frozen for all later re-audit work.
+**Depends on**: Phase 435
+**Requirements**: POINTS-01, POINTS-02, STREAK-01, STREAK-02, PACK-01
+**Method**: One batched diff applied against the frozen v68 subject; the sole approval gate in the milestone (USER hand-review, never pre-approved). All non-`.sol` work commits autonomously.
+**Success Criteria** (what must be TRUE):
+  1. The activity score is represented and computed in whole points — `_playerActivityScore` (`MintStreakUtils`) returns the point-domain score with the quest-streak contribution floored per DESIGN-01, and the hard cap is enforced in points at the chosen storage width. (POINTS-01)
+  2. Every consumer threshold is migrated to the point domain per DESIGN-04 — `DegenerusGameDegeneretteModule` (MID/HIGH/MAX + ROI anchors), `DegenerusGameLootboxModule` (EV-multiplier cap), and `DegenerusGameDecimatorModule` (threshold) read the point-domain score and compare against point-domain constants, behaviour-equivalent to the bps version. (POINTS-02)
+  3. The manual + afking `subStreakLatch` streak base feeds `_playerActivityScore` through a single exact integer path (no residual fractional/bps intermediate), preserving the afking-XOR-manual semantics of `_effectiveQuestStreak`. (STREAK-01)
+  4. The carried-in pre-streak cap/snapshot into the afking run is reworked per DESIGN-02 (the current cap shape replaced), and the `DegenerusQuests` streak source + its `pendingFlip` accrual (`~:1779`) remain consistent with the new path. (STREAK-02)
+  5. `Sub.pendingFlip` is narrowed to the DESIGN-03 width with its saturating clamp re-pinned to the new ceiling, the 72-bit accumulator slot is repacked with no other field's value-range violated, and the Game stays under the EIP-170 deployed-bytecode ceiling (re-checked) with no unexpected storage-slot collision. (PACK-01)
+**Plans**: TBD
+
+### Phase 437: TST — Prove the Floor, the Streak Path, the Clamp & the Equivalence
+**Goal**: tests that prove the quest-streak floor rule, the exact integer streak-base path, the reworked pre-streak-cap-into-afking handling, the `pendingFlip` saturating clamp at the new ceiling, and the consumer behaviour-equivalence across the threshold anchors + the whole-point grid.
+**Depends on**: Phase 436
+**Requirements**: TST-01, TST-02, TST-03
+**Method**: Test-only additions (commit autonomously); fail-without / pass-with where a new path is asserted.
+**Success Criteria** (what must be TRUE):
+  1. Tests prove the quest-streak floor rule and the exact integer streak-base path — the floored point contribution matches DESIGN-01 at representative streak levels (incl. the boundaries where the old 0.5-pt granularity used to round), and the manual/afking combine is exact (fails-without / passes-with the new path). (TST-01)
+  2. Tests prove the reworked pre-streak-cap-into-afking handling and the `pendingFlip` clamp — the carried-in pre-streak caps/snapshots per DESIGN-02, and `pendingFlip` saturates at the new ceiling (a value above the narrowed width clamps, not overflows). (TST-02)
+  3. Tests prove the consumer behaviour-equivalence — Degenerette ROI, the Lootbox EV multiplier, and the Decimator outcome at point-domain scores match the intended pre-change outcomes across the threshold anchors and the whole-point grid, confirming the coarser grid does not shift results. (TST-03)
+**Plans**: TBD
+
+### Phase 438: REAUDIT — Re-Run the v68 Detection Nets on the Reset Subject
+**Goal**: the v68 machine-driven detection nets (storage-layout golden, RNG-freeze proof, mutation/invariant/Halmos) re-run on the new v69 subject — the layout move from the accumulator repack recaptured as the new golden, the activity-score consumers re-attested frozen-at-commitment, the changed modules mutation-triaged.
+**Depends on**: Phase 436 (re-audit runs against the byte-frozen IMPL subject; may overlap with 437)
+**Requirements**: REAUDIT-01, REAUDIT-02, REAUDIT-03
+**Method**: The v68 methodology (layout oracle, RNG-freeze proof + independent re-verify, mutation harness, deep invariants, Halmos) re-pinned to the new subject; test/tooling commits autonomously.
+**Success Criteria** (what must be TRUE):
+  1. The storage-layout golden is recaptured for the new subject and the ~30 slot-hardcoded harnesses are migrated/re-pinned, with the MECH-02 layout-diff oracle green on the new layout (the expected slot move from the accumulator repack is the new golden, not an unexpected drift). (REAUDIT-01)
+  2. The RNG-freeze proof is re-run on the new subject — every VRF/RNG consumer that reads the activity score (lootbox EV / Degenerette / decimator) is re-attested frozen-at-commitment, with the activity-score snapshot-at-deposit freeze explicitly re-confirmed under the point-domain representation; any ledger entry whose anchors moved is updated. (REAUDIT-02)
+  3. The mutation campaign is re-run / triaged on the changed modules and the deep-invariant + Halmos nets are confirmed green on the new subject — the v68 layout/CI/mutation harness is re-pinned to the new subject; survivors are triaged oracle-hole vs. robustness (a documented carry of the still-running mutation tail is an acceptable disposition, consistent with the v68 close). (REAUDIT-03)
+**Plans**: TBD
+
+### Phase 439: TERMINAL — Evidence Pack + Closure
+**Goal**: a canonical evidence pack recording the design-lock decisions, the equivalence verdict, the TST results, and the re-audit outcomes; the closure signal recorded; the subject confirmed byte-frozen at the IMPL diff (the only `contracts/*.sol` change in the milestone).
+**Depends on**: Phases 437, 438
+**Requirements**: TERMINAL-01
+**Method**: Claude authors the evidence pack (prior house style); read-only over the frozen subject; commits autonomously.
+**Success Criteria** (what must be TRUE):
+  1. `audit/FINDINGS-v69.0.md` (+ an HTML report in the prior house style) records the design-lock decisions, the equivalence analysis verdict, the TST results, and the re-audit outcomes (layout golden, RNG-freeze re-attest, mutation/invariant status); the canonical findings doc is chmod 444 (house convention). (TERMINAL-01)
+  2. The closure signal `MILESTONE_V69_AT_HEAD_<sha>` is recorded, the activity-score interaction re-audit is confirmed clean, and the subject is confirmed byte-frozen at the IMPL diff (the only `contracts/*.sol` change in the milestone). (TERMINAL-01)
+**Plans**: TBD
+
 ---
 
 ## ✅ v68.0 Pre-C4A Coverage Completion + AI-Verifiable RNG-Freeze Proof — SHIPPED 2026-06-19
