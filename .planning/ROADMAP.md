@@ -63,6 +63,12 @@
   2. The economics are coefficient-exact — `foilBoostBps(score)` (×2→×6 with the knees), the sibling-producer PMF (the `w`-from-`M` mix-to-rare-tail), and the isolated payout table (5/65 faces + the 40/40/20 lane + ETH 10%-cap reuse + the `whalePassClaims += 1` grant) are pinned, and a Monte-Carlo confirms ≈2 faces/pack/30d.
   3. The match predicate is unambiguous — exact positional quadrant match; 2/3 score against the LIVE winning set, the 4-of-4 against the HERO-FREE pure-VRF set (re-derived from `rngWordByDay[day]` without `_applyHeroResult`); pull/claim re-derivation + double-claim guard specified.
   4. Placement fits — the foil body lands in a new `GAME_FOILPACK_MODULE` (or a roomy existing module) + a thin facade stub, with a pre-IMPL EIP-170 headroom estimate; the v70-frozen shared producers are confirmed untouched.
+**Plans**: 4 plans (3 in wave 1 parallel + 1 wave-2 consolidation w/ USER sign-off checkpoint)
+Plans:
+- [ ] 445-01-PLAN.md — Economics: the sibling-producer rarity PMF (/15360 ladder, w-from-M taper) + the foilBoostBps(score) ×2→×6 curve
+- [ ] 445-02-PLAN.md — Storage: foilRecord packed layout + folded per-level cap + sparse foilMatchClaimed; PINS the two genuine layout decisions (level-keying, bit-offset)
+- [ ] 445-03-PLAN.md — Entrypoints: buyFoilPack/claimFoilMatch signatures + LIVE-vs-HERO-FREE match + isolated 40/40/20 payout + ≈2-faces/30d calibration confirm + GAME_FOILPACK_MODULE placement
+- [ ] 445-04-PLAN.md — Consolidate the canonical 445-SPEC.md (REQ-coverage map + §6 hard-floor + threat model) + USER sign-off checkpoint on the two pins
 
 ### Phase 446: IMPL — Batched Contract Diff [contract-commit gate]
 **Goal**: the locked design is implemented as ONE batched, USER-approved `contracts/*.sol` diff and committed, byte-freezing the v71 subject.
