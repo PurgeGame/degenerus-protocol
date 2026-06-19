@@ -56,13 +56,13 @@ contract V56FreezeSolvency is DeployProtocol {
     //   dailyQuantity u8 @0 · validThroughLevel u24 @1 · reinvestPct u8 @4 · flags u8 @5
     //   scorePlus1 u16 @6 · amount u24 @8 (milli-ETH)
     //   lastAutoBoughtDay u24 @11 · lastOpenedDay u24 @14 · afkCoveredThroughDay u24 @17 · afkingStartDay u24 @20
-    //   affiliateBase u32 @23 · pendingFlip u32 @27 · subStreakLatch u8 @31
+    //   affiliateBase u32 @23 · pendingFlip u24 @27 · subStreakLatch u16 @30
     uint256 private constant OFF_SCOREPLUS1 = 6; // uint16 scorePlus1        (bytes 6..7)
     uint256 private constant OFF_AMOUNT = 8; // uint24 amount (milli-ETH)   (bytes 8..10)
     uint256 private constant OFF_LASTBOUGHT = 11; // uint24 lastAutoBoughtDay (bytes 11..13)
     uint256 private constant OFF_LASTOPENED = 14; // uint24 lastOpenedDay     (bytes 14..16)
     uint256 private constant OFF_AFKCOVERED = 17; // uint24 afkCoveredThroughDay (bytes 17..19)
-    uint256 private constant OFF_PENDINGFLIP = 27; // uint32 pendingFlip (bytes 27..30)
+    uint256 private constant OFF_PENDINGFLIP = 27; // uint24 pendingFlip (bytes 27..29)
 
     uint256 private constant DEITY_SHIFT = 184;
 
@@ -566,7 +566,7 @@ contract V56FreezeSolvency is DeployProtocol {
     }
 
     function _pendingFlipOf(address who) internal view returns (uint32) {
-        return uint32(_subField(who, OFF_PENDINGFLIP, 32));
+        return uint32(_subField(who, OFF_PENDINGFLIP, 24));
     }
 
     function _subscriberIndexOf(address who) internal view returns (uint256) {

@@ -24,8 +24,8 @@ import {PriceLookupLib} from "../../contracts/libraries/PriceLookupLib.sol";
 ///     - CURSE SET (the stale-cashout +2 via the public claimWinnings -> maybeCurse): the resulting
 ///       curseCount and the resulting public activity score.
 ///     - SMITE (a deity adds a stack via smite): the resulting curseCount.
-///     - the curse*100 bps activity-score penalty: a pure function of curseCount (same count -> same penalty
-///       regardless of the block context).
+///     - the curse activity-score penalty (1 point per curse): a pure function of curseCount (same count ->
+///       same penalty regardless of the block context).
 ///
 ///   CRITICAL replay discipline: maybeCurse's staleness basis is _currentMintDay() == dailyIdx (the monotonic
 ///   ADVANCE counter, a storage field — NOT block.timestamp). dailyIdx is held FIXED across the two runs (the
@@ -171,7 +171,7 @@ contract V61RngFreezeIntact is DeployProtocol {
     function testCurseSetByteIdenticalTwoBlocks() public {
         address p = makeAddr("curse_freeze");
         _seedClaimable(p, 10 ether); // lastEthDay stays 0 ⇒ stale at dailyIdx 100
-        _seedAffiliateBase(p, 6); // +600 bps base so the post-curse score is measurable
+        _seedAffiliateBase(p, 6); // +6 point base so the post-curse score is measurable
         uint256 snap = vm.snapshotState();
 
         (uint8 curse1, uint256 score1) = _runStaleCashout(p, 5, 11 minutes, 0xAA11AA11, "cb_c1");
@@ -182,7 +182,7 @@ contract V61RngFreezeIntact is DeployProtocol {
         assertEq(curse1, 2, "non-vacuity: the stale cashout cursed +2");
         assertEq(curse1, curse2, "CURSE freeze: curseCount block-invariant");
         assertEq(score1, score2, "CURSE freeze: post-curse activity score block-invariant");
-        assertEq(score1, 600 - 200, "CURSE freeze: score == base - curse*100 (deterministic penalty)");
+        assertEq(score1, 6 - 2, "CURSE freeze: score == base - curse (deterministic point-domain penalty)");
     }
 
     // =========================================================================
@@ -208,17 +208,17 @@ contract V61RngFreezeIntact is DeployProtocol {
     }
 
     // =========================================================================
-    // Penalty — curse*100 bps is a pure function of curseCount (no block/VRF input)
+    // Penalty — curse points (1 per curse) is a pure function of curseCount (no block/VRF input)
     // =========================================================================
 
-    /// @notice The curse penalty (curse*100 bps, floored 0) is a PURE function of curseCount: for a fixed
+    /// @notice The curse penalty (1 point per curse, floored 0) is a PURE function of curseCount: for a fixed
     ///         curseCount the public activity score is identical across perturbed block contexts, and it tracks
-    ///         curseCount linearly (curse k ⇒ base - k*100). Falsifiable: a block-entropy-dependent penalty
+    ///         curseCount linearly (curse k ⇒ base - k). Falsifiable: a block-entropy-dependent penalty
     ///         would break either the cross-block identity or the exact linear relation.
     function testFuzzPenaltyPureFunctionOfCurseCount(uint8 curseSeed, uint256 pr1, uint256 pr2) public {
-        uint256 curse = bound(uint256(curseSeed), 0, 6); // base is 600 bps ⇒ keep penalty <= base to test the exact relation
+        uint256 curse = bound(uint256(curseSeed), 0, 6); // base is 6 points ⇒ keep penalty <= base to test the exact relation
         address p = makeAddr("pen_freeze");
-        _seedAffiliateBase(p, 6); // +600 bps
+        _seedAffiliateBase(p, 6); // +6 points
         _seedCurse(p, curse);
 
         // Block context A.
@@ -235,7 +235,7 @@ contract V61RngFreezeIntact is DeployProtocol {
         uint256 scoreB = game.playerActivityScore(p);
 
         assertEq(scoreA, scoreB, "penalty freeze: activity score block-invariant for a fixed curseCount");
-        assertEq(scoreA, 600 - (curse * 100), "penalty determinism: score == base - curse*100 (pure function)");
+        assertEq(scoreA, 6 - curse, "penalty determinism: score == base - curse (pure point-domain function)");
     }
 
     // =========================================================================

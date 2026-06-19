@@ -49,7 +49,7 @@ contract V56SecUnmanipulable is DeployProtocol {
     //   dailyQuantity u8 @0 · validThroughLevel u24 @1 · reinvestPct u8 @4 · flags u8 @5
     //   scorePlus1 u16 @6 · amount u24 @8
     //   lastAutoBoughtDay u24 @11 · lastOpenedDay u24 @14 · afkCoveredThroughDay u24 @17 · afkingStartDay u24 @20
-    //   affiliateBase u32 @23 · pendingFlip u32 @27 · subStreakLatch u8 @31
+    //   affiliateBase u32 @23 · pendingFlip u24 @27 · subStreakLatch u16 @30
     uint256 private constant OFF_DAILY = 0;           // uint8  dailyQuantity        (byte 0)
     uint256 private constant OFF_VALIDTHROUGH = 1;     // uint24 validThroughLevel    (bytes 1..3)
     uint256 private constant OFF_LASTBOUGHT = 11;     // uint24 lastAutoBoughtDay    (bytes 11..13)
@@ -57,8 +57,8 @@ contract V56SecUnmanipulable is DeployProtocol {
     uint256 private constant OFF_AFKCOVERED = 17;     // uint24 afkCoveredThroughDay (bytes 17..19)
     uint256 private constant OFF_AFKINGSTART = 20;    // uint24 afkingStartDay       (bytes 20..22)
     uint256 private constant OFF_AFFBASE = 23;        // uint32 affiliateBase        (bytes 23..26)
-    uint256 private constant OFF_PENDINGFLIP = 27;  // uint32 pendingFlip        (bytes 27..30)
-    uint256 private constant OFF_STREAKLATCH = 31;    // uint8  subStreakLatch       (byte 31; bit7 ever-sub, bits0-6 streak)
+    uint256 private constant OFF_PENDINGFLIP = 27;  // uint24 pendingFlip        (bytes 27..29)
+    uint256 private constant OFF_STREAKLATCH = 30;    // uint16 subStreakLatch       (bytes 30..31; full streak counter)
 
     uint256 private constant DEITY_SHIFT = 184;
 
@@ -767,11 +767,11 @@ contract V56SecUnmanipulable is DeployProtocol {
     }
 
     function _pendingFlipOf(address who) internal view returns (uint32) {
-        return uint32(_subField(who, OFF_PENDINGFLIP, 32));
+        return uint32(_subField(who, OFF_PENDINGFLIP, 24));
     }
 
-    function _streakBaseOf(address who) internal view returns (uint8) {
-        return uint8(_subField(who, OFF_STREAKLATCH, 8)) & 0x7f;
+    function _streakBaseOf(address who) internal view returns (uint16) {
+        return uint16(_subField(who, OFF_STREAKLATCH, 16));
     }
 
     function _subscriberIndexOf(address who) internal view returns (uint256) {

@@ -652,9 +652,9 @@ contract DegeneretteHeroScoreTest is DeployProtocol {
 
     // --- ROI curve mirror (DegeneretteModule._roiBpsFromScore L1071-1100) -------
 
-    uint256 private constant ACTIVITY_SCORE_MID_BPS = 7_500;
-    uint256 private constant ACTIVITY_SCORE_HIGH_BPS = 25_500;
-    uint256 private constant ACTIVITY_SCORE_MAX_BPS = 30_500;
+    uint256 private constant ACTIVITY_SCORE_MID_POINTS = 75;
+    uint256 private constant ACTIVITY_SCORE_HIGH_POINTS = 255;
+    uint256 private constant ACTIVITY_SCORE_MAX_POINTS = 305;
     uint256 private constant ROI_MIN_BPS = 9_000;
     uint256 private constant ROI_MID_BPS = 9_500;
     uint256 private constant ROI_HIGH_BPS = 9_950;
@@ -673,20 +673,20 @@ contract DegeneretteHeroScoreTest is DeployProtocol {
     }
 
     function _roiBpsFromScore(uint256 score) internal pure returns (uint256 roiBps) {
-        if (score > ACTIVITY_SCORE_MAX_BPS) score = ACTIVITY_SCORE_MAX_BPS;
-        if (score <= ACTIVITY_SCORE_MID_BPS) {
-            uint256 xDen = ACTIVITY_SCORE_MID_BPS;
+        if (score > ACTIVITY_SCORE_MAX_POINTS) score = ACTIVITY_SCORE_MAX_POINTS;
+        if (score <= ACTIVITY_SCORE_MID_POINTS) {
+            uint256 xDen = ACTIVITY_SCORE_MID_POINTS;
             uint256 term1 = (1000 * score) / xDen;
             uint256 term2 = (500 * score * score) / (xDen * xDen);
             roiBps = ROI_MIN_BPS + term1 - term2;
-        } else if (score <= ACTIVITY_SCORE_HIGH_BPS) {
-            uint256 delta = score - ACTIVITY_SCORE_MID_BPS;
-            uint256 span = ACTIVITY_SCORE_HIGH_BPS - ACTIVITY_SCORE_MID_BPS;
+        } else if (score <= ACTIVITY_SCORE_HIGH_POINTS) {
+            uint256 delta = score - ACTIVITY_SCORE_MID_POINTS;
+            uint256 span = ACTIVITY_SCORE_HIGH_POINTS - ACTIVITY_SCORE_MID_POINTS;
             uint256 roiDelta = ROI_HIGH_BPS - ROI_MID_BPS;
             roiBps = ROI_MID_BPS + (delta * roiDelta) / span;
         } else {
-            uint256 delta = score - ACTIVITY_SCORE_HIGH_BPS;
-            uint256 span = ACTIVITY_SCORE_MAX_BPS - ACTIVITY_SCORE_HIGH_BPS;
+            uint256 delta = score - ACTIVITY_SCORE_HIGH_POINTS;
+            uint256 span = ACTIVITY_SCORE_MAX_POINTS - ACTIVITY_SCORE_HIGH_POINTS;
             uint256 roiDelta = ROI_MAX_BPS - ROI_HIGH_BPS;
             roiBps = ROI_HIGH_BPS + (delta * roiDelta) / span;
         }
