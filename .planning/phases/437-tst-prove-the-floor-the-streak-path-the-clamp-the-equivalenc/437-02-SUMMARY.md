@@ -121,6 +121,14 @@ None - no external service configuration required.
 - Deferred to 438 REAUDIT-01 (NOT done here, by plan): the `forge inspect ... storageLayout` snapshot recapture. This plan updated only the SOURCE-GREP oracle.
 - No `contracts/*.sol`, `.planning/STATE.md`, or `.planning/ROADMAP.md` modified (orchestrator owns the latter two).
 
+## Self-Check: PASSED
+
+- FOUND: test/fuzz/StreakSnapshotAndPendingFlipClamp.t.sol
+- FOUND: 437-02-SUMMARY.md
+- FOUND commits: a0bd9c2a (test), 447bd5aa (test), 08fc7c78 (docs)
+- Both gates green: StreakSnapshotAndPendingFlipClampTest 5/5, testGas04 1/1
+- contracts/ byte-frozen vs c4b09267 (empty diff); my commits touched only the two test files + this SUMMARY (STATE.md / ROADMAP.md untouched by this plan)
+
 ---
 *Phase: 437-tst-prove-the-floor-the-streak-path-the-clamp-the-equivalenc*
 *Completed: 2026-06-19*
