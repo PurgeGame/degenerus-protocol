@@ -78,7 +78,8 @@
   3. The manual + afking `subStreakLatch` streak base feeds `_playerActivityScore` through a single exact integer path (no residual fractional/bps intermediate), preserving the afking-XOR-manual semantics of `_effectiveQuestStreak`. (STREAK-01)
   4. The carried-in pre-streak cap/snapshot into the afking run is reworked per DESIGN-02 (the current cap shape replaced), and the `DegenerusQuests` streak source + its `pendingFlip` accrual (`~:1779`) remain consistent with the new path. (STREAK-02)
   5. `Sub.pendingFlip` is narrowed to the DESIGN-03 width with its saturating clamp re-pinned to the new ceiling, the 72-bit accumulator slot is repacked with no other field's value-range violated, and the Game stays under the EIP-170 deployed-bytecode ceiling (re-checked) with no unexpected storage-slot collision. (PACK-01)
-**Plans**: TBD
+**Plans**: 1 plan
+- [ ] 436-01-PLAN.md — Batched POINTS+STREAK+PACK `.sol` diff (6 serialized tasks; single atomic USER-gated contract commit) [POINTS-01, POINTS-02, STREAK-01, STREAK-02, PACK-01]
 
 ### Phase 437: TST — Prove the Floor, the Streak Path, the Clamp & the Equivalence
 **Goal**: tests that prove the quest-streak floor rule, the exact integer streak-base path, the reworked pre-streak-cap-into-afking handling, the `pendingFlip` saturating clamp at the new ceiling, and the consumer behaviour-equivalence across the threshold anchors + the whole-point grid.
