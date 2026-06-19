@@ -74,10 +74,10 @@ Each requirement maps to exactly one phase. v69.0 phases continue 434 → 435. N
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| DESIGN-01 | 435 DESIGN | Pending |
-| DESIGN-02 | 435 DESIGN | Pending |
-| DESIGN-03 | 435 DESIGN | Pending |
-| DESIGN-04 | 435 DESIGN | Pending |
+| DESIGN-01 | 435 DESIGN | Done (design-locked `435-DESIGN-LOCK.md`) |
+| DESIGN-02 | 435 DESIGN | Done (design-locked `435-DESIGN-LOCK.md`) |
+| DESIGN-03 | 435 DESIGN | Done (design-locked `435-DESIGN-LOCK.md`) |
+| DESIGN-04 | 435 DESIGN | Done (design-locked `435-DESIGN-LOCK.md`) |
 | POINTS-01 | 436 IMPL | Pending |
 | POINTS-02 | 436 IMPL | Pending |
 | STREAK-01 | 436 IMPL | Pending |
