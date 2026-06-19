@@ -38,7 +38,7 @@ Requirements for this milestone. Each maps to exactly one roadmap phase.
 
 ### TERMINAL — Evidence Pack + Closure
 
-- [ ] **TERMINAL-01**: A canonical evidence pack `audit/FINDINGS-v70.0.md` (+ an HTML report in the prior house style) records the VERIFY findings + dispositions, the curve / ladder / inverse / reachable-tail equivalence verdict, the TST results, and the re-audit outcomes (layout golden, RNG-freeze re-attest, mutation/invariant status); the closure signal `MILESTONE_V70_AT_HEAD_<sha>` is recorded, the consumer-curve re-audit is confirmed clean, and the subject is confirmed byte-frozen at the FREEZE diff (the only `contracts/*.sol` change in the milestone). chmod 444 the canonical findings doc (house convention).
+- [x] **TERMINAL-01**: A canonical evidence pack `audit/FINDINGS-v70.0.md` (+ an HTML report in the prior house style) records the VERIFY findings + dispositions, the curve / ladder / inverse / reachable-tail equivalence verdict, the TST results, and the re-audit outcomes (layout golden, RNG-freeze re-attest, mutation/invariant status); the closure signal `MILESTONE_V70_AT_HEAD_<sha>` is recorded, the consumer-curve re-audit is confirmed clean, and the subject is confirmed byte-frozen at the FREEZE diff (the only `contracts/*.sol` change in the milestone). chmod 444 the canonical findings doc (house convention).
 
 ## v2 Requirements
 
@@ -77,7 +77,7 @@ Each requirement maps to exactly one phase. v70.0 phases continue 439 → 440. N
 | REAUDIT-01 | 443 REAUDIT | Done |
 | REAUDIT-02 | 443 REAUDIT | Done |
 | REAUDIT-03 | 443 REAUDIT | Done |
-| TERMINAL-01 | 444 TERMINAL | Pending |
+| TERMINAL-01 | 444 TERMINAL | Done |
 
 **Coverage:**
 - v1 requirements: 12 total

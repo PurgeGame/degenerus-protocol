@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Degenerus Protocol — v70.0 Audit Report</title>
+<style>
+  :root{--bg:#0a0d13;--panel:#11151f;--ink:#e8edf6;--muted:#8b97ab;--faint:#5b6678;
+    --line:#1a2233;--ok:#4ade80;--accent:#22d3ee;--warn:#fbbf24}
+  *{box-sizing:border-box}
+  body{margin:0;background:radial-gradient(1100px 640px at 72% -12%,#131a28,var(--bg) 60%);
+    color:var(--ink);font:14.5px/1.62 ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+    padding:34px clamp(16px,5vw,72px) 90px;max-width:1080px;margin:0 auto}
+  h1{font-size:25px;margin:0 0 2px;letter-spacing:.3px}
+  h1 .v{color:var(--accent)}
+  h2{font-size:17px;margin:34px 0 10px;padding-bottom:6px;border-bottom:1px solid var(--line)}
+  h3{font-size:14.5px;margin:20px 0 6px;color:var(--ink)}
+  .meta{color:var(--muted);font-size:13px;margin:2px 0}
+  .meta b{color:var(--ink)}
+  code{background:#0c1320;border:1px solid #1c2troke;padding:1px 6px;border-radius:5px;color:#cfe3ff;border:1px solid #18202e}
+  .verdict{margin:22px 0;padding:16px 18px;border:1px solid #1e3a2b;border-left:4px solid var(--ok);
+    border-radius:12px;background:linear-gradient(180deg,#0f1a14,#0c1119)}
+  .verdict .big{font-size:16px;color:var(--ok);font-weight:700}
+  table{border-collapse:collapse;width:100%;font-size:13px;margin:12px 0}
+  th,td{padding:8px 11px;text-align:left;border-bottom:1px solid var(--line);vertical-align:top}
+  thead th{color:var(--muted);border-bottom:1px solid #25324a}
+  td.ok{color:var(--ok)}
+  .pill{display:inline-block;padding:1px 8px;border-radius:999px;background:#0c1320;border:1px solid #20293a;color:var(--muted);font-size:12px;margin:2px 3px 2px 0}
+  .pill.ok{color:var(--ok);border-color:#1e3a2b}
+  ul{margin:8px 0 8px 2px;padding-left:18px}
+  li{margin:5px 0}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px 16px;margin:12px 0}
+  .foot{color:var(--faint);font-size:12px;margin-top:34px;border-top:1px solid var(--line);padding-top:14px}
+  a{color:var(--accent)}
+</style>
+</head>
+<body>
+<h1>Degenerus Protocol — v70.0 Audit Report <span class="v">·</span></h1>
+<p class="meta"><b>Milestone:</b> v70.0 — Activity-Score Consumer-Curve &amp; Bucket Reshape (Verify + Re-Audit)</p>
+<p class="meta"><b>Date:</b> 2026-06-19 &nbsp;·&nbsp; <b>Subject (frozen):</b> <code>contracts/</code> tree <b>99f2e53f</b> (FREEZE commit <b>ffbd7796</b>) &nbsp;·&nbsp; baseline v69 closure tree <b>8a633d1d</b></p>
+<p class="meta"><b>Method:</b> the reshape was pre-written in the working tree → VERIFY → FREEZE → TST → REAUDIT → TERMINAL. VERIFY used an 8-dimension adversarial workflow + completeness critic + per-gap confirmation, plus empirical build/sizes and the oracle suites. FREEZE is the sole approval gate (one batched USER-approved <code>contracts/*.sol</code> diff).</p>
+<p class="meta"><b>Regression floor:</b> full forge suite <b>935 passed / 0 failed / 108 skipped</b> (134 suites) on the frozen tree.</p>
+<p class="meta"><b>Closure signal:</b> <code>MILESTONE_V70_AT_HEAD___CLOSURE_SHA__</code></p>
+
+<div class="verdict">
+  <div class="big">Verdict: 0 CATASTROPHE / 0 HIGH / 0 MED / 0 LOW · 0 open findings</div>
+  <p class="meta" style="margin-top:6px">A read-side reward-curve reshape: the consumer mappings of the whole-point activity score now reserve the high end
+  for long quest streaks — steep early ramp, near-flat long tail, the previous MAX reached only at score 30,000.
+  Every curve's MIN and MAX are byte-identical to before; only the ramp shape changed. Shared math centralized in the
+  new pure <code>ActivityCurveLib</code>. Adversarially verified against the locked design; the v69
+  incomplete-migration failure class swept clean; all detection nets green.</p>
+</div>
+
+<h2>Phase results</h2>
+<table>
+<thead><tr><th>Phase</th><th>Category</th><th>Verdict</th></tr></thead>
+<tbody>
+<tr><td>440 VERIFY</td><td>Adversarial review of the working tree vs the locked design</td><td class="ok">8/8 dimensions MATCH · 0 confirmed defects · 1 cosmetic comment fix</td></tr>
+<tr><td>441 FREEZE</td><td>Batched 7-file <code>.sol</code> diff (the sole gate)</td><td class="ok">atomic USER-approved <code>ffbd7796</code> · tree <code>99f2e53f</code> · no out-of-surface edits</td></tr>
+<tr><td>442 TST</td><td>Prove curves / ladder / inverse / tail / century-parity</td><td class="ok">17/17 targeted green</td></tr>
+<tr><td>443 REAUDIT</td><td>Re-run the v68/v69 detection nets</td><td class="ok">layout unmoved · RNG-freeze intact · 935/0/108 + 18 invariant suites</td></tr>
+<tr><td>444 TERMINAL</td><td>Evidence pack + closure</td><td class="ok">this report</td></tr>
+</tbody>
+</table>
+
+<h2>The reshape — curve endpoints (all byte-identical to before)</h2>
+<table>
+<thead><tr><th>Consumer curve</th><th>Site</th><th>K</th><th>MIN → MAX</th></tr></thead>
+<tbody>
+<tr><td>Decimator / terminal multiplier</td><td><code>ActivityCurveLib.decMultBps</code></td><td>235</td><td>1.000× → 1.7833×</td></tr>
+<tr><td>Degenerette ROI</td><td><code>_roiBpsFromScore</code></td><td>305</td><td>90.00% → 99.90% (strictly &lt;100%)</td></tr>
+<tr><td>WWXRP high ROI</td><td><code>_wwxrpHighValueRoi</code></td><td>305</td><td>90.00% → 109.90%</td></tr>
+<tr><td>Century bonus</td><td><code>ActivityCurveLib.centuryBps</code></td><td>305</td><td>0% → 100% of qty</td></tr>
+<tr><td>Lootbox EV</td><td><code>_lootboxEvMultiplierFromScore</code></td><td>400</td><td>90% → 145% (neutral 100% @60 kept)</td></tr>
+</tbody>
+</table>
+<p class="meta">Bucket ladder <code>decBucket</code>: <code>12@0 … 2@1000</code>, clamped to each path's floor (normal 5; century/terminal 2). Exact inverse <code>minScoreForBucket</code>: band-floor <code>2→1000 … 12→0</code>. The six per-site 235/305 pre-clamps were removed so the high end is reachable. Visual: <a href="../ACTIVITY-SCORE-CONSUMER-CURVES.html">ACTIVITY-SCORE-CONSUMER-CURVES.html</a>.</p>
+
+<h2>VERIFY (440) — adversarial verification, 0 defects</h2>
+<div class="card">
+<ul>
+<li><b>Value curves</b> — every waypoint exact under truncating integer math; monotonic over the full domain; continuous at every knee; MAX byte-identical to old; the decimator <code>s==0 → 1.0×</code> no-op preserved. <b>Solvency:</b> ROI strictly &lt;10000 (max 9990); lootbox EV ≤14500 still <code>LOOTBOX_EV_BENEFIT_CAP</code>-gated; century ≤100% still ETH-capped (20-ETH maxBonus both sites); multiplier ≤17833.</li>
+<li><b>Bucket ladder + inverse + wiring</b> — all 11 thresholds; exact inverse round-trip ∀ bucket 2..12; FLIP + Decimator delegate to the single lib, old bodies deleted (no drift).</li>
+<li><b>Pre-clamp removal + full migration</b> — all six pre-clamps gone; zero residual old arithmetic; zero stale/orphaned constants. The critic cleared 4 additional <code>_lootboxEvMultiplierFromScore</code> call sites the first sweep under-counted — all migrated, benefit cap intact. <b>The v69 incomplete-migration class is swept clean.</b></li>
+<li><b>Build + bounds</b> — build clean; <code>ActivityCurveLib</code> storageless (57-byte inlined stub); EIP-170 OK (Game 20,388/4,188 = v69 baseline, FLIP 7,668/16,908); no read-side gas regression; <code>advanceGame</code> 16.7M ceiling not implicated.</li>
+</ul>
+<p class="meta"><b>V70-INFO-01 (cosmetic, fixed in-tree):</b> two stale NatSpec comments in <code>DegenerusGameDecimatorModule.sol</code> named the deleted <code>FLIP._adjustDecimatorBucket</code> → re-pointed to <code>ActivityCurveLib.decBucket</code>. Comment-only; folded into the FREEZE commit. The only edit on top of the original reshape.</p>
+</div>
+
+<h2>TST (442) &amp; REAUDIT (443)</h2>
+<div class="card">
+<p class="meta"><b>TST — 17/17:</b> oracle rewritten OLD→new formulas; golden waypoints for all five curves (mult+century direct vs the lib; ROI/WWXRP/lootbox vs byte-faithful mirrors); all bucket thresholds + floors + exact inverse round-trip; reachable tail (<code>decBucket(1000,2)=2</code>, each curve→MAX@30000); new Mint↔Afking century parity. The V69 suite correctly dropped its 4 now-false old-shape oracles.</p>
+<p class="meta"><b>REAUDIT — green:</b> storage-layout oracle <b>all 24 goldens match</b> (zero slot move — read-side reshape, storageless lib); RNG-freeze re-attested (every activity-score VRF consumer reads the score frozen-at-commitment; the reshape changed only the pure formula, no new live re-read); full suite <b>935/0/108</b> + 18 invariant suites green; EIP-170 re-confirmed. Mutation + Halmos symbolic carried (per prior closes) — the changed surface is pure arithmetic with near-complete concrete oracle coverage, so the expected kill-rate is high; the carry is the formal campaign, not a behavior gap.</p>
+</div>
+
+<h2>Carried (non-blocking)</h2>
+<ul>
+<li>Formal mutation + Halmos symbolic pass on <code>ActivityCurveLib</code> (CI/detached).</li>
+<li>Direct module-body test coverage for ROI/WWXRP (currently byte-faithful mirrors; the bodies are <code>private</code>).</li>
+<li>Indexer / off-chain re-vendor — by design the event VALUES shift (no signature/storage change); reconstruction tables must be re-vendored.</li>
+</ul>
+
+<h2>Closure</h2>
+<p class="meta">The reshape is correct against the locked design, within bounds, proven under the rewritten oracle, and passes every re-run net with zero unexpected drift. Subject byte-frozen at the FREEZE diff <code>ffbd7796</code> (<code>contracts/</code> tree <code>99f2e53f</code>) — the only <code>contracts/*.sol</code> change of the milestone. <b>0 open findings.</b> Unpushed (push is the USER's call).</p>
+
+<p class="foot">Canonical record: <code>audit/FINDINGS-v70.0.md</code> (chmod 444). Self-contained report · no external assets.</p>
+</body>
+</html>

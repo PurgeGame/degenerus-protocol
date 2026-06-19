@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Activity-Score Consumer Curves — v70</title>
+<style>
+  :root{
+    --bg:#0a0d13; --panel:#11151f; --panel2:#0e1219; --grid:#1c2533; --grid2:#141b27;
+    --ink:#e8edf6; --muted:#8b97ab; --faint:#5b6678;
+    --mult:#22d3ee; --roi:#4ade80; --wwxrp:#a78bfa; --century:#fbbf24; --ev:#f472b6;
+    --accent:#22d3ee;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0; background:radial-gradient(1200px 700px at 70% -10%, #131a28 0%, var(--bg) 60%);
+    color:var(--ink); font:14px/1.5 ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+    padding:28px clamp(14px,4vw,56px) 80px;
+  }
+  h1{font-size:23px; letter-spacing:.3px; margin:0 0 4px}
+  h1 .v{color:var(--accent)}
+  .sub{color:var(--muted); max-width:92ch; margin:0 0 6px}
+  .sub code{color:var(--ink); background:#0c1320; padding:1px 5px; border-radius:4px}
+  .controls{display:flex; align-items:center; gap:10px; margin:16px 0 4px; flex-wrap:wrap}
+  .controls .lab{color:var(--faint); font-size:12px}
+  .seg{display:inline-flex; border:1px solid #20293a; border-radius:9px; overflow:hidden; background:#0c1118}
+  .seg button{appearance:none; border:0; background:transparent; color:var(--muted); font:inherit;
+    font-size:12.5px; padding:7px 13px; cursor:pointer}
+  .seg button.on{background:linear-gradient(180deg,#16314a,#102233); color:var(--ink); box-shadow:inset 0 0 0 1px #22425e}
+  .seg button:not(.on):hover{color:var(--ink)}
+  .legendbar{display:flex; flex-wrap:wrap; gap:14px; margin:14px 0 24px; color:var(--muted)}
+  .legendbar .it{display:flex; align-items:center; gap:7px}
+  .sw{width:13px; height:13px; border-radius:3px; box-shadow:0 0 8px -1px currentColor}
+  .grid{display:grid; grid-template-columns:repeat(auto-fit,minmax(420px,1fr)); gap:18px}
+  .card{
+    background:linear-gradient(180deg,var(--panel) 0%,var(--panel2) 100%);
+    border:1px solid #1a2233; border-radius:14px; padding:14px 14px 8px;
+    box-shadow:0 10px 30px -18px #000, inset 0 1px 0 #ffffff08;
+  }
+  .card h3{margin:2px 4px 2px; font-size:14.5px; display:flex; align-items:center; gap:8px}
+  .card h3 .dot{width:9px;height:9px;border-radius:50%;box-shadow:0 0 9px currentColor}
+  .card .meta{margin:0 4px 6px; color:var(--faint); font-size:12px}
+  .full{grid-column:1/-1}
+  svg{display:block; width:100%; height:auto}
+  .axis{stroke:var(--grid); stroke-width:1}
+  .gl{stroke:var(--grid2); stroke-width:1}
+  .knee{stroke:#3a496640; stroke-width:1; stroke-dasharray:3 4}
+  .kneeon{stroke:#46597d; stroke-width:1; stroke-dasharray:3 4}
+  .lbl{fill:var(--muted); font-size:11px}
+  .lbl.x{text-anchor:middle}
+  .lbl.y{text-anchor:end}
+  .klbl{fill:var(--faint); font-size:10px; text-anchor:middle}
+  .wp{font-size:10.5px; fill:var(--ink)}
+  .curve{fill:none; stroke-width:2.4; filter:drop-shadow(0 0 5px currentColor)}
+  .area{opacity:.10}
+  table{border-collapse:collapse; width:100%; font-size:12.5px; margin:4px 0}
+  th,td{padding:6px 9px; text-align:right; border-bottom:1px solid #1a2233}
+  th:first-child,td:first-child{text-align:left}
+  thead th{color:var(--muted); font-weight:600; border-bottom:1px solid #25324a}
+  td.k{color:var(--accent)}
+  .note{color:var(--faint); font-size:11.5px; margin:8px 4px 2px}
+  .pill{display:inline-block; padding:1px 7px; border-radius:999px; background:#0c1320; border:1px solid #20293a; color:var(--muted); font-size:11px}
+  .foot{color:var(--faint); font-size:11.5px; margin-top:26px; border-top:1px solid #18202e; padding-top:12px}
+</style>
+</head>
+<body>
+<h1>Activity-Score Consumer Curves <span class="v">· v70</span></h1>
+<p class="sub">
+  Every reward that reads the player <b>activity score</b> maps it through a <b>3-segment piecewise curve</b>:
+  a steep early ramp to <b>vA at the old cap K</b> (90% of the gain), a shallow leg to <b>vB at score 500</b> (98%),
+  then a near-flat crawl to <b>MAX at score 30,000</b> (100%), flat beyond. <b>MIN and MAX are byte-identical to
+  before the reshape</b> — only the ramp <i>shape</i> changed, reserving the top of each curve for long quest streaks.
+  Curves computed with the exact contract integer math.
+</p>
+
+<div class="controls">
+  <span class="lab">x-axis</span>
+  <span class="seg" id="seg">
+    <button data-v="lin500">Linear · 0–500</button>
+    <button data-v="logfull">Log · full 0–30k</button>
+  </span>
+  <span class="lab" id="viewnote"></span>
+</div>
+
+<div class="legendbar">
+  <span class="it"><span class="sw" style="background:var(--mult);color:var(--mult)"></span>Decimator / terminal multiplier</span>
+  <span class="it"><span class="sw" style="background:var(--roi);color:var(--roi)"></span>Degenerette ROI</span>
+  <span class="it"><span class="sw" style="background:var(--wwxrp);color:var(--wwxrp)"></span>WWXRP high ROI</span>
+  <span class="it"><span class="sw" style="background:var(--century);color:var(--century)"></span>Century bonus</span>
+  <span class="it"><span class="sw" style="background:var(--ev);color:var(--ev)"></span>Lootbox EV</span>
+</div>
+
+<div class="grid" id="grid"></div>
+
+<div class="grid" style="margin-top:18px">
+  <div class="card full">
+    <h3><span class="dot" style="background:var(--accent);color:var(--accent)"></span>Shared shape — % of total gain delivered vs score</h3>
+    <p class="meta">All five curves normalized to (value − MIN)/(MAX − MIN). They overlay almost exactly: 0% at score 0,
+      ~90% at each curve's knee K, ~98% at 500, 100% only at 30,000. In the 0–500 view you can see ~98% of the gain
+      is already delivered by score 500 — the final 2% is the entire 500→30,000 tail.</p>
+    <div id="norm"></div>
+  </div>
+</div>
+
+<div class="grid" style="margin-top:18px">
+  <div class="card full">
+    <h3><span class="dot" style="background:#60a5fa;color:#60a5fa"></span>Decimator bucket ladder (lower = better odds) + floor clamps</h3>
+    <p class="meta">Absolute threshold ladder: bucket 12 at score 0 improving one step at each of
+      10/30/55/85/120/180/250/300/500/1000. The <b>normal</b> path floors at 5; the <b>century / terminal</b> path
+      floors at 2 (the full ladder).</p>
+    <div id="bucket"></div>
+  </div>
+</div>
+
+<div class="grid" style="margin-top:18px">
+  <div class="card">
+    <h3>Value-curve waypoints</h3>
+    <div id="wptable"></div>
+    <p class="note">Multiplier in ×; ROI/WWXRP/century/lootbox in %. K = 235 (mult), 305 (ROI/WWXRP/century),
+      400 (lootbox); seg-B knee = 500; cap = 30,000.</p>
+  </div>
+  <div class="card">
+    <h3>Bucket ↔ score (forward ladder &amp; exact inverse)</h3>
+    <div id="invtable"></div>
+    <p class="note"><code>minScoreForBucket(b)</code> is the exact band-floor inverse of <code>decBucket</code> — it
+      seals the lootbox-EV score at decimator-claim time.</p>
+  </div>
+</div>
+
+<p class="foot">
+  Self-contained · no external assets · generated from the v70 frozen subject
+  (<span class="pill">contracts/ tree 99f2e53f</span> <span class="pill">commit ffbd7796</span>).
+</p>
+
+<script>
+const CAP=30000;
+const fl=Math.floor;
+function decMult(s){ if(s===0)return 10000; if(s>=CAP)return 17833;
+  if(s<=235)return 10000+fl(s*7049/235); if(s<=500)return 17049+fl((s-235)*627/265); return 17676+fl((s-500)*157/29500); }
+function roi(s){ if(s>=CAP)return 9990; if(s<=305)return 9000+fl(s*891/305); if(s<=500)return 9891+fl((s-305)*79/195); return 9970+fl((s-500)*20/29500); }
+function wwxrp(s){ if(s>=CAP)return 10990; if(s<=305)return 9000+fl(s*1791/305); if(s<=500)return 10791+fl((s-305)*159/195); return 10950+fl((s-500)*40/29500); }
+function century(s){ if(s>=CAP)return 10000; if(s<=305)return fl(s*9000/305); if(s<=500)return 9000+fl((s-305)*800/195); return 9800+fl((s-500)*200/29500); }
+function ev(s){ if(s<=60)return 9000+fl(s*1000/60); if(s>=CAP)return 14500; if(s<=400)return 10000+fl((s-60)*3950/340); if(s<=500)return 13950+fl((s-400)*440/100); return 14390+fl((s-500)*110/29500); }
+function bucket(s,floor){ let b; if(s>=1000)b=2;else if(s>=500)b=3;else if(s>=300)b=4;else if(s>=250)b=5;
+  else if(s>=180)b=6;else if(s>=120)b=7;else if(s>=85)b=8;else if(s>=55)b=9;else if(s>=30)b=10;else if(s>=10)b=11;else b=12;
+  return b<floor?floor:b; }
+function minScoreForBucket(b){ const T={12:0,11:10,10:30,9:55,8:85,7:120,6:180,5:250,4:300,3:500,2:1000};
+  return b>=12?0:(b<=2?1000:T[b]); }
+
+const SVGNS="http://www.w3.org/2000/svg";
+function el(n,a){const e=document.createElementNS(SVGNS,n);for(const k in a)e.setAttribute(k,a[k]);return e;}
+
+// ---- view state: 'lin500' (linear 0..500) or 'logfull' (log 0..30000) ----
+const VIEWS={
+  lin500:{smax:500, log:false, ticks:[0,60,120,180,250,300,400,500], note:"linear · most of the action lives here (the K knees at 235/305/400 and the seg-B knee at 500)"},
+  logfull:{smax:30000, log:true, ticks:[0,10,60,300,500,1000,5000,30000], note:"log · the full domain incl. the near-flat 500→30,000 tail"},
+};
+let VIEW = (new URLSearchParams(location.search).get('view')==='logfull')?'logfull':
+           (new URLSearchParams(location.search).get('view')==='lin500')?'lin500':'lin500';
+
+function mapper(x0,x1){
+  const v=VIEWS[VIEW], smax=v.smax;
+  let X;
+  if(v.log){ const a=Math.log10(1), b=Math.log10(smax+1); X=s=>x0+(Math.log10(Math.min(s,smax)+1)-a)/(b-a)*(x1-x0); }
+  else { X=s=>x0+(Math.min(s,smax)/smax)*(x1-x0); }
+  return {X, smax, ticks:v.ticks};
+}
+function fmtX(s){return s>=1000?(s/1000)+"k":s;}
+function samplesUpto(smax){ // dense early, coarse tail
+  const out=[]; const step=smax<=500?1:1;
+  for(let s=0;s<=Math.min(smax,1000);s++)out.push(s);
+  if(smax>1000)for(let s=1000;s<=smax;s+=40)out.push(s);
+  return out;
+}
+
+function curveChart({fn,ymin,ymax,yticks,yfmt,color,knees,dots}){
+  const W=560,H=300,Pl=70,Pr=16,Pt=18,Pb=42, x0=Pl,x1=W-Pr,y0=H-Pb,y1=Pt;
+  const {X,smax,ticks}=mapper(x0,x1);
+  const Y=v=>y0-(v-ymin)/(ymax-ymin)*(y0-y1);
+  const svg=el("svg",{viewBox:`0 0 ${W} ${H}`,preserveAspectRatio:"xMidYMid meet"});
+  yticks.forEach(t=>{const y=Y(t);
+    svg.appendChild(el("line",{class:"gl",x1:x0,y1:y,x2:x1,y2:y}));
+    const tx=el("text",{class:"lbl y",x:x0-8,y:y+3.5});tx.textContent=yfmt(t);svg.appendChild(tx);});
+  ticks.forEach(s=>{const x=X(s);
+    svg.appendChild(el("line",{class:"gl",x1:x,y1:y1,x2:x,y2:y0}));
+    const tx=el("text",{class:"lbl x",x:x,y:y0+16});tx.textContent=fmtX(s);svg.appendChild(tx);});
+  svg.appendChild(el("line",{class:"axis",x1:x0,y1:y0,x2:x1,y2:y0}));
+  svg.appendChild(el("line",{class:"axis",x1:x0,y1:y1,x2:x0,y2:y0}));
+  (knees||[]).forEach(k=>{ if(k.x>smax)return; const x=X(k.x);
+    svg.appendChild(el("line",{class:"kneeon",x1:x,y1:y1,x2:x,y2:y0}));
+    const tx=el("text",{class:"klbl",x:x,y:y1+10});tx.textContent=k.label;svg.appendChild(tx);});
+  let pts=samplesUpto(smax).map(s=>[X(s),Y(fn(s))]);
+  const d=pts.map((p,i)=>(i?"L":"M")+p[0].toFixed(1)+" "+p[1].toFixed(1)).join(" ");
+  svg.appendChild(el("path",{class:"area",fill:color,d:d+` L ${x1} ${y0} L ${x0} ${y0} Z`}));
+  svg.appendChild(el("path",{class:"curve",stroke:color,d}));
+  (dots||[]).forEach(p=>{ if(p.x>smax)return; const x=X(p.x),y=Y(fn(p.x));
+    svg.appendChild(el("circle",{cx:x,cy:y,r:3.4,fill:color,stroke:"#0a0d13","stroke-width":1.2}));
+    if(p.label){const end=p.x>=smax; const tx=el("text",{class:"wp",x:x+(end?-4:6),y:y-6,"text-anchor":end?"end":"start"});tx.textContent=p.label;svg.appendChild(tx);}});
+  return svg;
+}
+
+const PANELS=[
+  {key:"mult",title:"Decimator / terminal multiplier",color:"var(--mult)",fn:decMult,
+   meta:"burn multiplier · 10000 = 1.0×",ymin:10000,ymax:18000,
+   yticks:[10000,12000,14000,16000,17833],yfmt:v=>(v/10000).toFixed(2)+"×",
+   knees:[{x:235,label:"K"},{x:500,label:"500"}],
+   dots:[{x:0,label:"1.000×"},{x:235,label:"1.705×"},{x:500,label:"1.768×"},{x:30000,label:"1.783× MAX"}]},
+  {key:"roi",title:"Degenerette ROI",color:"var(--roi)",fn:roi,
+   meta:"payout ROI · strictly < 100%",ymin:9000,ymax:10000,
+   yticks:[9000,9300,9600,9891,9990],yfmt:v=>(v/100).toFixed(1)+"%",
+   knees:[{x:305,label:"K"},{x:500,label:"500"}],
+   dots:[{x:0,label:"90.0%"},{x:305,label:"98.91%"},{x:500,label:"99.70%"},{x:30000,label:"99.90% MAX"}]},
+  {key:"wwxrp",title:"WWXRP high ROI",color:"var(--wwxrp)",fn:wwxrp,
+   meta:"high-roi bet payout",ymin:9000,ymax:11000,
+   yticks:[9000,9500,10000,10791,10990],yfmt:v=>(v/100).toFixed(1)+"%",
+   knees:[{x:305,label:"K"},{x:500,label:"500"}],
+   dots:[{x:0,label:"90.0%"},{x:305,label:"107.91%"},{x:500,label:"109.50%"},{x:30000,label:"109.90% MAX"}]},
+  {key:"century",title:"Century bonus",color:"var(--century)",fn:century,
+   meta:"bonus as % of base qty (then ETH-capped)",ymin:0,ymax:10000,
+   yticks:[0,2500,5000,9000,9800,10000],yfmt:v=>(v/100).toFixed(0)+"%",
+   knees:[{x:305,label:"K"},{x:500,label:"500"}],
+   dots:[{x:0,label:"0%"},{x:305,label:"90%"},{x:500,label:"98%"},{x:30000,label:"100% MAX"}]},
+  {key:"ev",title:"Lootbox EV",color:"var(--ev)",fn:ev,
+   meta:"EV multiplier · neutral 100% at score 60",ymin:9000,ymax:14800,
+   yticks:[9000,10000,12000,13950,14500],yfmt:v=>(v/100).toFixed(0)+"%",
+   knees:[{x:60,label:"60"},{x:400,label:"K"},{x:500,label:"500"}],
+   dots:[{x:0,label:"90%"},{x:60,label:"100%"},{x:400,label:"139.5%"},{x:30000,label:"145% MAX"}]},
+];
+
+function normChart(){
+  const W=1120,H=360,Pl=64,Pr=18,Pt=18,Pb=44,x0=Pl,x1=W-Pr,y0=H-Pb,y1=Pt;
+  const {X,smax,ticks}=mapper(x0,x1);
+  const Y=v=>y0-v*(y0-y1);
+  const svg=el("svg",{viewBox:`0 0 ${W} ${H}`});
+  [0,.25,.5,.9,.98,1].forEach(t=>{const y=Y(t);svg.appendChild(el("line",{class:"gl",x1:x0,y1:y,x2:x1,y2:y}));
+    const tx=el("text",{class:"lbl y",x:x0-8,y:y+3.5});tx.textContent=(t*100).toFixed(0)+"%";svg.appendChild(tx);});
+  ticks.forEach(s=>{const x=X(s);svg.appendChild(el("line",{class:"gl",x1:x,y1:y1,x2:x,y2:y0}));
+    const tx=el("text",{class:"lbl x",x:x,y:y0+16});tx.textContent=fmtX(s);svg.appendChild(tx);});
+  svg.appendChild(el("line",{class:"axis",x1:x0,y1:y0,x2:x1,y2:y0}));
+  svg.appendChild(el("line",{class:"axis",x1:x0,y1:y1,x2:x0,y2:y0}));
+  const series=[{fn:decMult,min:10000,max:17833,c:"var(--mult)"},{fn:roi,min:9000,max:9990,c:"var(--roi)"},
+    {fn:wwxrp,min:9000,max:10990,c:"var(--wwxrp)"},{fn:century,min:0,max:10000,c:"var(--century)"},{fn:ev,min:9000,max:14500,c:"var(--ev)"}];
+  series.forEach(S=>{const pts=samplesUpto(smax).map(s=>[X(s),Y((S.fn(s)-S.min)/(S.max-S.min))]);
+    const d=pts.map((p,i)=>(i?"L":"M")+p[0].toFixed(1)+" "+p[1].toFixed(1)).join(" ");
+    const path=el("path",{class:"curve",stroke:S.c,d});path.style.opacity=".92";path.style.strokeWidth="2";svg.appendChild(path);});
+  return svg;
+}
+
+function bucketChart(){
+  const W=1120,H=340,Pl=58,Pr=18,Pt=18,Pb=44,x0=Pl,x1=W-Pr,y0=H-Pb,y1=Pt;
+  const {X,smax,ticks}=mapper(x0,x1);
+  const Y=b=>y1+(12-b)/(12-2)*(y0-y1);
+  const svg=el("svg",{viewBox:`0 0 ${W} ${H}`});
+  for(let b=2;b<=12;b++){const y=Y(b);svg.appendChild(el("line",{class:"gl",x1:x0,y1:y,x2:x1,y2:y}));
+    const tx=el("text",{class:"lbl y",x:x0-8,y:y+3.5});tx.textContent="b"+b;svg.appendChild(tx);}
+  const THall=[0,10,30,55,85,120,180,250,300,500,1000];
+  ticks.forEach(s=>{const x=X(s);svg.appendChild(el("line",{class:"gl",x1:x,y1:y1,x2:x,y2:y0}));
+    const tx=el("text",{class:"lbl x",x:x,y:y0+16});tx.textContent=fmtX(s);svg.appendChild(tx);});
+  svg.appendChild(el("line",{class:"axis",x1:x0,y1:y0,x2:x1,y2:y0}));
+  svg.appendChild(el("line",{class:"axis",x1:x0,y1:y1,x2:x0,y2:y0}));
+  function stepPath(floor){let d="",prev=null;
+    const step=smax<=500?1:5;
+    for(let s=0;s<=smax;s+=step){const b=bucket(s,floor);const x=X(s),y=Y(b);
+      if(prev===null){d=`M ${x.toFixed(1)} ${y.toFixed(1)}`;}
+      else if(b!==prev.b){d+=` L ${x.toFixed(1)} ${prev.y.toFixed(1)} L ${x.toFixed(1)} ${y.toFixed(1)}`;}
+      prev={b,y,x};}
+    d+=` L ${X(smax).toFixed(1)} ${prev.y.toFixed(1)}`;return d;}
+  svg.appendChild(el("path",{class:"curve",stroke:"#60a5fa",d:stepPath(2)}));
+  const p5=el("path",{class:"curve",stroke:"#f59e0b",d:stepPath(5)});p5.style.strokeDasharray="6 4";svg.appendChild(p5);
+  THall.forEach(t=>{ if(t>smax)return; const b=bucket(t,2);svg.appendChild(el("circle",{cx:X(t),cy:Y(b),r:3.2,fill:"#60a5fa",stroke:"#0a0d13","stroke-width":1.2}));});
+  const lg=el("text",{x:x1-4,y:y1+12,"text-anchor":"end","font-size":11,fill:"#60a5fa"});lg.textContent="● floor 2 (century / terminal)";svg.appendChild(lg);
+  const lg2=el("text",{x:x1-4,y:y1+27,"text-anchor":"end","font-size":11,fill:"#f59e0b"});lg2.textContent="– – floor 5 (normal)";svg.appendChild(lg2);
+  return svg;
+}
+
+function render(){
+  const grid=document.getElementById("grid"); grid.innerHTML="";
+  PANELS.forEach(p=>{const card=document.createElement("div");card.className="card";
+    card.innerHTML=`<h3><span class="dot" style="background:${p.color};color:${p.color}"></span>${p.title}</h3><p class="meta">${p.meta}</p>`;
+    card.appendChild(curveChart(p)); grid.appendChild(card);});
+  document.getElementById("norm").innerHTML=""; document.getElementById("norm").appendChild(normChart());
+  document.getElementById("bucket").innerHTML=""; document.getElementById("bucket").appendChild(bucketChart());
+  document.getElementById("viewnote").textContent=VIEWS[VIEW].note;
+  document.querySelectorAll("#seg button").forEach(b=>b.classList.toggle("on",b.dataset.v===VIEW));
+}
+document.getElementById("seg").addEventListener("click",e=>{const b=e.target.closest("button");if(!b)return;VIEW=b.dataset.v;render();});
+
+// tables (view-independent)
+(function(){const rows=[0,60,235,305,400,500,1000,2000,10000,30000];
+  let h="<table><thead><tr><th>score</th><th>mult</th><th>ROI</th><th>WWXRP</th><th>century</th><th>lootbox EV</th></tr></thead><tbody>";
+  rows.forEach(s=>{h+=`<tr><td class="k">${fmtX(s)}</td><td>${(decMult(s)/10000).toFixed(3)}×</td><td>${(roi(s)/100).toFixed(2)}%</td><td>${(wwxrp(s)/100).toFixed(2)}%</td><td>${(century(s)/100).toFixed(1)}%</td><td>${(ev(s)/100).toFixed(1)}%</td></tr>`;});
+  h+="</tbody></table>";document.getElementById("wptable").innerHTML=h;})();
+(function(){let h="<table><thead><tr><th>bucket</th><th>reach at score ≥</th><th>minScoreForBucket</th></tr></thead><tbody>";
+  for(let b=12;b>=2;b--){h+=`<tr><td class="k">b${b}</td><td>${minScoreForBucket(b)}</td><td>${minScoreForBucket(b)}</td></tr>`;}
+  h+="</tbody></table>";document.getElementById("invtable").innerHTML=h;})();
+
+render();
+</script>
+</body>
+</html>
