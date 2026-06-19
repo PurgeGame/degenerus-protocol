@@ -22,7 +22,7 @@ Requirements for this milestone. Each maps to exactly one roadmap phase.
 
 ### FREEZE — Batched Contract Diff Approval + Commit (the sole gate)
 
-- [ ] **FREEZE-01**: The complete reshape (the new `ActivityCurveLib.sol` + the six modified contracts + any VERIFY in-tree gap-fixes) is presented as ONE consolidated diff for USER hand-review, approved, and committed as the single `contracts/*.sol` change of the milestone; the new v70 subject is byte-frozen at that commit for all downstream test + re-audit work, and the diff is confirmed to contain no edits outside the activity-score consumer-curve surface.
+- [x] **FREEZE-01**: The complete reshape (the new `ActivityCurveLib.sol` + the six modified contracts + any VERIFY in-tree gap-fixes) is presented as ONE consolidated diff for USER hand-review, approved, and committed as the single `contracts/*.sol` change of the milestone; the new v70 subject is byte-frozen at that commit for all downstream test + re-audit work, and the diff is confirmed to contain no edits outside the activity-score consumer-curve surface.
 
 ### TST — Prove the Curves, the Ladder, the Inverse & the Reachable Tail
 
@@ -70,7 +70,7 @@ Each requirement maps to exactly one phase. v70.0 phases continue 439 → 440. N
 | VERIFY-02 | 440 VERIFY | Done |
 | VERIFY-03 | 440 VERIFY | Done |
 | VERIFY-04 | 440 VERIFY | Done |
-| FREEZE-01 | 441 FREEZE | Pending |
+| FREEZE-01 | 441 FREEZE | Done |
 | TST-01 | 442 TST | Pending |
 | TST-02 | 442 TST | Pending |
 | TST-03 | 442 TST | Pending |
