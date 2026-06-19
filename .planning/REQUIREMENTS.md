@@ -35,9 +35,9 @@ Requirements for this milestone. Each maps to exactly one roadmap phase.
 
 ### TST — Prove the Floor, the Streak Path, the Clamp & the Equivalence
 
-- [ ] **TST-01**: Tests prove the quest-streak floor rule and the exact integer streak-base path — the floored point contribution matches DESIGN-01 at representative streak levels (incl. the boundaries where the old 0.5-pt granularity used to round), and the manual/afking combine is exact (fails-without / passes-with the new path).
-- [ ] **TST-02**: Tests prove the reworked pre-streak-cap-into-afking handling and the `pendingFlip` clamp — the carried-in pre-streak caps/snapshots per DESIGN-02, and `pendingFlip` saturates at the new ceiling (a value above the narrowed width clamps, not overflows).
-- [ ] **TST-03**: Tests prove the consumer behaviour-equivalence — the Degenerette ROI, the Lootbox EV multiplier, and the Decimator outcome at point-domain scores match the intended (pre-change) outcomes across the threshold anchors and the whole-point grid, confirming the coarser grid does not shift results.
+- [x] **TST-01**: Tests prove the quest-streak floor rule and the exact integer streak-base path — the floored point contribution matches DESIGN-01 at representative streak levels (incl. the boundaries where the old 0.5-pt granularity used to round), and the manual/afking combine is exact (fails-without / passes-with the new path).
+- [x] **TST-02**: Tests prove the reworked pre-streak-cap-into-afking handling and the `pendingFlip` clamp — the carried-in pre-streak caps/snapshots per DESIGN-02, and `pendingFlip` saturates at the new ceiling (a value above the narrowed width clamps, not overflows).
+- [x] **TST-03**: Tests prove the consumer behaviour-equivalence — the Degenerette ROI, the Lootbox EV multiplier, and the Decimator outcome at point-domain scores match the intended (pre-change) outcomes across the threshold anchors and the whole-point grid, confirming the coarser grid does not shift results.
 
 ### REAUDIT — Re-Run the v68 Detection Nets on the Reset Subject
 
@@ -83,9 +83,9 @@ Each requirement maps to exactly one phase. v69.0 phases continue 434 → 435. N
 | STREAK-01 | 436 IMPL | Done (`c4b09267`) |
 | STREAK-02 | 436 IMPL | Done (`c4b09267`) |
 | PACK-01 | 436 IMPL | Done (`c4b09267`) |
-| TST-01 | 437 TST | Pending |
-| TST-02 | 437 TST | Pending |
-| TST-03 | 437 TST | Pending |
+| TST-01 | 437 TST | Done (`ActivityScorePointFloor.t.sol` 4/4) |
+| TST-02 | 437 TST | Done (`StreakSnapshotAndPendingFlipClamp.t.sol` 5/5 + `testGas04` golden) |
+| TST-03 | 437 TST | Done (`ConsumerPointEquivalence.t.sol` 5/5) |
 | REAUDIT-01 | 438 REAUDIT | Pending |
 | REAUDIT-02 | 438 REAUDIT | Pending |
 | REAUDIT-03 | 438 REAUDIT | Pending |
