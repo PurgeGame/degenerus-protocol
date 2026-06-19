@@ -65,7 +65,11 @@
   2. The bucket ladder + inverse + wiring match the locked tables — `decBucket` implements `12@0 … 2@1000` with the correct per-path floor clamp (normal decimator floor 5 / century floor 2, terminal-dec floor 2), `minScoreForBucket` is the exact band-floor inverse (`2→1000 … 12→0`) consistent with the forward ladder and feeds the decimator-claim lootbox EV correctly, and FLIP.sol + DecimatorModule.sol both delegate to the single lib with no drift-prone duplicated body. (VERIFY-02)
   3. Every §1 pre-clamp is removed and every consumer call-site is migrated — the six 235/305 pre-clamp sites are gone so the high end is reachable, no consumer still reads the score through the old saturated arithmetic, and there is no residual stale-constant or un-migrated consumer across all activity-score read-sites. (VERIFY-03)
   4. The reshape builds and stays within bounds — `forge build` clean, the new lib storageless, `DegenerusGame`/`FLIP` under the EIP-170 deployed-bytecode ceiling with the added branches, no read-side gas regression (decimatorBurn / placeBet / lootbox-open / century), and the `advanceGame` 16.7M ceiling confirmed not implicated. (VERIFY-04)
-**Plans**: TBD
+**Plans**: 4 plans
+- [ ] 440-01-PLAN.md — Verify the five value curves (mult, ROI, WWXRP, century, lootbox EV) vs locked §2 (VERIFY-01)
+- [ ] 440-02-PLAN.md — Verify the bucket ladder + exact inverse + FLIP↔Decimator no-drift delegation vs locked §3/§4 (VERIFY-02)
+- [ ] 440-03-PLAN.md — Verify pre-clamp removal + full consumer migration (v69-failure-class sweep) + shared centuryBps vs §1/§5 (VERIFY-03)
+- [ ] 440-04-PLAN.md — Verify build clean + storageless lib + EIP-170 + read-side gas + advanceGame not implicated vs §8 (VERIFY-04)
 
 ### Phase 441: FREEZE — Batched Contract Diff Approval + Commit [contract-commit gate]
 **Goal**: the complete, VERIFY-confirmed reshape is committed as ONE batched, USER-approved `contracts/*.sol` change — producing the new v70 subject, byte-frozen for all later test + re-audit work.
