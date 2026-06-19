@@ -295,3 +295,121 @@ They share only the substring `pendingFlip` in their names; they are different t
 | `lootboxRngPendingFlip` | SEPARATE uint40, **out of scope**, not narrowed (D-08) | `Storage:1525` |
 
 ---
+
+## DESIGN-04 — Consumer-Threshold Behaviour-Equivalence
+
+Records the USER-locked decisions **D-09** (accept + document the de-minimis odd-half-point boundary shift; no threshold nudging) and **D-10** (equivalence = scale-invariance of the consumer threshold/interpolation math under ÷100). Requirement: **DESIGN-04** (this section locks the load-bearing correctness argument; POINTS-02 in 436 migrates the thresholds, 438 REAUDIT re-attests).
+
+This is the load-bearing correctness section: it proves that converting the activity score bps→points does not materially shift the Lootbox EV multiplier, the Degenerette ROI, or the Decimator outcome, separates the score-INPUT thresholds that convert from the OUTPUT bps that must NOT, and bounds the single accepted divergence.
+
+### D-04.0 — The two pre-conditions the score guarantees
+
+The proof rests on two facts established in DESIGN-01:
+
+1. **The score is always a multiple of 50 bps** — every additive contributor to `bonusBps` in `_playerActivityScoreAt` is a multiple of 100 *except* the quest-streak leg (`MintStreakUtils:335`, `questStreak × 50`), which is a multiple of 50. So the sum is a multiple of `gcd(100, 50) = 50` bps = **0.5 pt**.
+2. **Every contributor except quest-streak is a multiple of 100 bps** (= a whole point). The quest-streak leg is the sole sub-point (0.5-pt-granular) contributor.
+
+Therefore the bps score that reaches every consumer is, before the floor (D-02), always one of `{whole-point, whole-point + 0.5 pt}` — and after the D-02 floor (`floor(questStreak/2)`) it is **always a clean whole point** (a multiple of 100 bps in the old domain). The point domain is exact for the floored score by construction; the only question DESIGN-04 answers is whether the floor of the odd-half-point can shift a consumer outcome (D-09) and whether the threshold/interpolation math is invariant under ÷100 (D-10).
+
+### D-04.1 — Input-vs-output constant inventory
+
+The single most important classification: a constant that the score is **compared against or fed through as a denominator (an input range/threshold anchor)** must convert ÷100 with the score; a constant in a **different output domain (an ROI / EV-multiplier / reward result value)** must NOT convert. Mis-classifying either way breaks the consumer. Re-derived from the frozen `e9a5fc24` source.
+
+#### TABLE A — score-INPUT thresholds that CONVERT ÷100
+
+| Constant | File:line | Current (bps) | New (points) | Role |
+|----------|-----------|---------------|--------------|------|
+| `ACTIVITY_SCORE_MID_BPS` | `DegenerusGameDegeneretteModule.sol:188` | 7_500 | **75** | Degenerette ROI mid-tier threshold + low-segment denominator |
+| `ACTIVITY_SCORE_HIGH_BPS` | `DegenerusGameDegeneretteModule.sol:191` | 25_500 | **255** | Degenerette ROI high-tier threshold + span endpoint |
+| `ACTIVITY_SCORE_MAX_BPS` | `DegenerusGameDegeneretteModule.sol:194` | 30_500 | **305** | Degenerette ROI clamp + max threshold + WWXRP denominator |
+| `LOOTBOX_EV_ACTIVITY_NEUTRAL_BPS` | `DegenerusGameStorage.sol:1553` | 6_000 | **60** | Lootbox EV neutral threshold + low-leg denominator + high-leg pivot |
+| `LOOTBOX_EV_ACTIVITY_MAX_BPS` | `DegenerusGameStorage.sol:1555` | 40_000 | **400** | Lootbox EV max threshold + high-leg span endpoint |
+| `TERMINAL_DEC_ACTIVITY_CAP_BPS` | `DegenerusGameDecimatorModule.sol:772` | 23_500 | **235** | Decimator score clamp (`:796/:916`) + bucket-reduction denominator (`:1139-1140`) |
+
+All six are the score's own grid — the score is compared to them (`<=`, `>=`, `>` clamps) or divided by them. They convert ÷100 **together with** the score, which is exactly what keeps the comparisons and ratios invariant (D-10).
+
+#### TABLE B — OUTPUT / out-of-domain bps that MUST NOT convert
+
+| Constant | File:line | Value (bps) | Why it is NOT a score input |
+|----------|-----------|-------------|-----------------------------|
+| `ROI_MIN_BPS` | `DegenerusGameDegeneretteModule.sol:197` | 9_000 | ROI *result* anchor (a return value in the ROI/10000 domain), never compared to the score |
+| `ROI_MID_BPS` | `:200` | 9_500 | ROI result anchor |
+| `ROI_HIGH_BPS` | `:203` | 9_950 | ROI result anchor |
+| `ROI_MAX_BPS` | `:206` | 9_990 | ROI result anchor |
+| `WWXRP_HIGH_ROI_BASE_BPS` | `:214` | 9_000 | WWXRP ROI result base anchor |
+| `WWXRP_HIGH_ROI_MAX_BPS` | `:217` | 10_990 | WWXRP ROI result max anchor |
+| `LOOTBOX_EV_MIN_BPS` | `DegenerusGameStorage.sol:1557` | 9_000 | EV-multiplier *output* anchor (a 0.9x..1.45x multiplier in the /10000 domain) |
+| `LOOTBOX_EV_NEUTRAL_BPS` | `:1559` | 10_000 | EV-multiplier output anchor (1.0x) |
+| `LOOTBOX_EV_MAX_BPS` | `:1561` | 14_500 | EV-multiplier output anchor (1.45x) |
+| `DEGEN_DGNRS_7/8/9_BPS` | `DegenerusGameDegeneretteModule.sol` (`_awardDegeneretteDgnrs`) | (reward bps) | sDGNRS reward fraction in the reward/10000 domain; keyed on the score *tier* `s`, not the raw score; not a score input |
+| `BPS_DENOMINATOR` | `DegenerusGameDecimatorModule.sol:104` | 10_000 | the multiplier denominator (`/10000`), an output-domain divisor, not a score range |
+
+None of these is ever compared to the score or used as a *score* denominator; each lives in the ROI / EV-multiplier / reward / multiplier-base output domain. Converting any of them ÷100 would corrupt that output by 100×.
+
+#### The "40000" disambiguation (carries threat-register item T-435-08)
+
+The roadmap's success-criterion phrase **"Lootbox EV-cap 40000"** is the score-INPUT anchor `LOOTBOX_EV_ACTIVITY_MAX_BPS` (`DegenerusGameStorage.sol:1555`, TABLE A) → converts to **400**. A coincidentally-equal **"40000"** appears in a comment at `DegenerusGameLootboxModule.sol:304` (`E[largeFlipBps] = 0.8*lowMean + 0.2*highMean = 40000`) — that is the **derived presale-box FLIP-band EV mean** (a *different* quantity, in the box-payout-bps domain, with no relation to the activity score). **IGNORE it; do not convert it; it is not a score anchor.** Re-confirmed at source: `:304` is a `// E[largeFlipBps] = ... = 40000` band-recentering comment above `PRESALE_BOX_FLIP_LOW_BASE_BPS` — there is no constant named `40000` there and the comment must not be touched by the threshold migration.
+
+### D-04.2 — Per-consumer scale-invariance proof (D-10)
+
+The general argument: every score-driven threshold consumer computes either a **comparison** (`score </<=/>=/> anchor_in`) or a **ratio** of the form `(score − anchor_in_lo) · K / (anchor_in_hi − anchor_in_lo)` (or `score · K / anchor_in` for a single-anchor denominator), where `K` is built only from OUTPUT anchors (TABLE B). Define `s' = score/100`, `a' = anchor_in/100` (both exact integers because the score and TABLE-A anchors are all clean multiples of 100 — the anchors trivially, the floored score by D-02). Then:
+
+- **Comparisons are invariant:** `score ⟂ anchor_in ⟺ s' ⟂ a'` for `⟂ ∈ {<, <=, >=, >}` because dividing both sides of an integer comparison by the same positive constant 100 preserves the order (and both sides are exact multiples of 100, so no rounding intervenes). Every clamp/branch select therefore picks the identical leg.
+- **Ratios are invariant:** `(score − anchor_in_lo)·K / (anchor_in_hi − anchor_in_lo) = (100s' − 100a'_lo)·K / (100a'_hi − 100a'_lo) = (s' − a'_lo)·K / (a'_hi − a'_lo)` — the factor 100 cancels top and bottom *before* the integer division. The OUTPUT anchors `K` are untouched. For a score that is a clean whole point the numerator `(s' − a'_lo)·K` and denominator `(a'_hi − a'_lo)` are the same integers in both domains, so the floored integer quotient is **bit-identical**. (This is the cancellation that makes ÷100 free for clean scores; the sole exception — the half-point input — is D-04.3.)
+
+Applied to each of the three consumers:
+
+#### (1) Lootbox EV multiplier — `_lootboxEvMultiplierFromScore` (`DegenerusGameStorage.sol:1633-1654`)
+
+Three branches, re-confirmed at source:
+
+- **Low leg** (`score <= NEUTRAL`, `:1636-1640`): `EV_MIN + score·(EV_NEUTRAL − EV_MIN) / EV_ACTIVITY_NEUTRAL`. Here `K = EV_NEUTRAL − EV_MIN = 1000` (OUTPUT anchors, unchanged) and the denominator `EV_ACTIVITY_NEUTRAL` is the input anchor `6000→60`. Both `score` and `6000` divide by 100 → `score·1000/6000 = s'·1000/60`. **Invariant.** Worked: score 3000 bps (30 pt) → `9000 + 3000·1000/6000 = 9000 + 500 = 9500`; points → `9000 + 30·1000/60 = 9000 + 500 = 9500`. Identical.
+- **Max clamp** (`score >= MAX`, `:1643-1644`): returns `EV_MAX` (output anchor, unchanged). The comparison `score >= 40000 ⟺ s' >= 400` is invariant. **Invariant.**
+- **High leg** (`NEUTRAL < score < MAX`, `:1648-1653`): `excess = score − EV_ACTIVITY_NEUTRAL`; `maxExcess = EV_ACTIVITY_MAX − EV_ACTIVITY_NEUTRAL`; `EV_NEUTRAL + excess·(EV_MAX − EV_NEUTRAL)/maxExcess`. Both `excess` and `maxExcess` are differences of values that each divide by 100 → both divide by 100 → ratio invariant; `K = EV_MAX − EV_NEUTRAL = 4500` (output, unchanged). **Invariant.** Worked: score 23000 bps (230 pt): `excess = 23000−6000 = 17000`, `maxExcess = 40000−6000 = 34000` → `10000 + 17000·4500/34000 = 10000 + 2250 = 12250`; points: `excess = 230−60 = 170`, `maxExcess = 400−60 = 340` → `10000 + 170·4500/340 = 10000 + 2250 = 12250`. Identical.
+
+#### (2) Degenerette ROI — `_roiBpsFromScore` (`DegenerusGameDegeneretteModule.sol:1141-1170`) + `_wwxrpHighRoiFromScore` (`:1179-1190`)
+
+The clamp `if (score > MAX) score = MAX` (`:1144-1145`) and the branch selects on `<= MID` / `<= HIGH` (`:1148/:1155`) are comparisons against TABLE-A anchors → **invariant** by the comparison rule.
+
+- **Low segment** (`score <= MID`, `:1148-1154`) — **[ANCHOR NOTE] this segment is QUADRATIC, not linear** (the CONTEXT/plan interfaces described all ROI legs as "linear"; the live low segment is a quadratic ease): `xNum = score`, `xDen = MID`; `term1 = 1000·xNum/xDen`; `term2 = 500·xNum²/xDen²`; `roi = ROI_MIN + term1 − term2`. Scale-invariance still holds, and is the stronger claim: `term1 = 1000·score/MID = 1000·s'/m'` (factor 100 cancels once); `term2 = 500·score²/MID² = 500·(100s')²/(100m')² = 500·s'²/m'²` (the 100² cancels in numerator and denominator). The literals `1000`/`500` are the quadratic's output-shape coefficients (the 90→95% curve), in the ROI output domain — they must **NOT** convert, exactly like the ROI anchors. `ROI_MIN` (output) unchanged. **Invariant for clean scores.** Worked: score 3000 bps (30 pt), MID 7500 (75): bps `term1 = 1000·3000/7500 = 400`, `term2 = 500·9_000_000/56_250_000 = 80` → `9000 + 400 − 80 = 9320`; points `term1 = 1000·30/75 = 400`, `term2 = 500·900/5625 = 80` → `9000 + 400 − 80 = 9320`. Identical.
+- **Mid segment** (`MID < score <= HIGH`, `:1155-1160`): `delta = score − MID`; `span = HIGH − MID`; `ROI_MID + delta·(ROI_HIGH − ROI_MID)/span`. `K = ROI_HIGH − ROI_MID = 450` (output). `delta`/`span` both differences of ÷100 values → ratio invariant. **Invariant** by the ratio rule.
+- **High segment** (`HIGH < score <= MAX`, `:1161-1166`): `delta = score − HIGH`; `span = MAX − HIGH`; `ROI_HIGH + delta·(ROI_MAX − ROI_HIGH)/span`. `K = ROI_MAX − ROI_HIGH = 40` (output). **Invariant.**
+- **WWXRP high ROI** (`_wwxrpHighRoiFromScore`, `:1179-1190`): clamp `score > MAX → MAX` then `WWXRP_HIGH_ROI_BASE + score·(WWXRP_HIGH_ROI_MAX − WWXRP_HIGH_ROI_BASE)/MAX`. Single-anchor denominator `MAX` (input, `30500→305`); `K = 10990 − 9000 = 1990` (output). `score·K/MAX = s'·K/m'`. **Invariant.**
+
+#### (3) Decimator — `recordTerminalDecBurn`/`recordTerminalDecKeepAlive` (`:793-801`, `:913-919`) + `_terminalDecBucket` (`:1133-1144`)
+
+- **Clamp** `if (bonusBps > CAP) bonusBps = CAP` (`:796-797` and `:916-917`): comparison against the input anchor CAP `23500→235` → **invariant**. The clamped value flows on as the point-domain score.
+- **Bucket reduction** `_terminalDecBucket` (`:1135-1141`): `range = BUCKET_BASE − MIN_BUCKET = 10` (a bucket count, dimensionless, NOT a score value → does NOT convert); `reduction = (range·bonusBps + CAP/2) / CAP`. This is `range·bonusBps/CAP` with a `+CAP/2` round-to-nearest. Both `bonusBps` and `CAP` (and so `CAP/2`) divide by 100 → `(range·bonusBps + CAP/2)/CAP = (range·s' + cap'/2)/cap'`. The score-ratio AND the rounding term are scale-invariant. **Invariant** (this is the `(CAP/2)/CAP` ratio the plan cited — confirmed for the bucket). Worked: bonusBps 11750 (CAP/2 case, 117.5 pt → floors to 117 pt under D-02 if it came from an odd half-point; here at a clean 11800/118 pt): `reduction = (10·11800 + 11750)/23500 = (118000+11750)/23500 = 129750/23500 = 5`; points `(10·118 + 117)/235 = (1180+117)/235 = 1297/235 = 5`. Identical.
+- **Multiplier — [ANCHOR NOTE] NOT a CAP ratio; it is `bonusBps/3`** (`:799-801`, `:` mirror in keep-alive uses the same `BPS_DENOMINATOR + (bonusBps/3)` shape): `multBps = bonusBps == 0 ? 10000 : 10000 + (bonusBps/3)`. The plan's interface block said the decimator "uses CAP in (CAP/2)/CAP ratio" — that is the *bucket* leg; the **multiplier** leg is the bare integer division `bonusBps/3`, which is NOT scale-invariant under a naive ÷100: `(bonusBps/100)/3 ≠ (bonusBps/3)/100` as integers. To preserve the multiplier exactly, **436 POINTS-02 must re-express the multiplier so the divisor sees the bps-equivalent magnitude** — i.e. compute `10000 + (points·100)/3` (multiply the point score back up by 100 before the `/3`), NOT `10000 + (points/3)`. This is the one consumer leg where the point migration is NOT a literal ÷100 of a constant but a `×100` re-scale inside the expression. **This is recorded as a 436 edit-surface line item (D-04.4 / consolidated 436 surface) and a 438 re-attest item, NOT a behaviour change** — the re-scaled expression reproduces the bps result exactly for every score. (`BPS_DENOMINATOR = 10000` is an output divisor, TABLE B, unchanged.)
+
+**Decimator multiplier worked check (the re-scale is exact):** bps score 11700 → `multBps = 10000 + 11700/3 = 10000 + 3900 = 13900`. Point score 117 with the re-scale `10000 + (117·100)/3 = 10000 + 11700/3 = 10000 + 3900 = 13900`. Identical. A naive `10000 + 117/3 = 10000 + 39 = 10039` would be catastrophically wrong (off by ~100×) — hence the re-scale requirement is mandatory, not optional.
+
+### D-04.3 — The ONLY divergence: the odd-half-point threshold-tip (D-09)
+
+Because the floored score is always a clean whole point (D-04.0), scale-invariance (D-04.2) makes every consumer **bit-identical** for the floored input — *except* where the D-02 floor itself drops a half-point that, in the un-floored bps domain, would have tipped the player across a TABLE-A threshold or shifted a ratio by one grid step. This is the sole, accepted divergence (D-09).
+
+**Where it can occur:** only for a player whose pre-floor score lands on an **odd half-point** (i.e. an odd `questStreak`, contributing `…+50` bps so the score ends in `…+50` bps = `x.5` pt). The floor drops that trailing 0.5 pt. The drop can change a consumer outcome **only** if the half-point straddled a threshold/grid boundary — e.g. a bps score of `7550` (75.5 pt) sits *above* the Degenerette `ACTIVITY_SCORE_MID_BPS = 7500` boundary, so in the old domain it would take the *mid* segment; floored to `75` pt = `7500` bps-equivalent it sits *at* the boundary and takes the *low* (`<= MID`) segment. The magnitude of the resulting outcome shift is **at most one grid step at one boundary**, because the half-point is the smallest representable score increment and it moves the input by exactly one point-grid cell.
+
+**Worked boundary example (bounded magnitude).** Take the Lootbox EV low/high boundary at `NEUTRAL = 6000` (60 pt). A player at bps score `6050` (60.5 pt, from an odd quest streak):
+- Old (bps) domain: `6050 > 6000` → high leg: `excess = 50`, `maxExcess = 34000` → `EV = 10000 + 50·4500/34000 = 10000 + 6750/34000 = 10000 + 0 = 10000` (integer floor of 0.198). So the bps result is **10000** anyway.
+- Point domain after D-02 floor (`60.5 → 60`): `score == 60 <= 60` → low leg: `EV = 9000 + 60·1000/60 = 9000 + 1000 = 10000`.
+- **Both = 10000.** The boundary value happens to be continuous here (the legs meet at NEUTRAL by construction: low leg at NEUTRAL = `EV_MIN + NEUTRAL·(EV_NEUTRAL−EV_MIN)/NEUTRAL = EV_MIN + (EV_NEUTRAL−EV_MIN) = EV_NEUTRAL`, and the high leg at NEUTRAL+ε ≈ EV_NEUTRAL). The piecewise functions are **continuous at their join points**, so a one-grid-cell input shift at a join produces a sub-grid (≤1 ulp) output shift — typically zero.
+
+The non-join case (a half-point straddling a *non-continuous* decision such as the Degenerette segment switch or a decimator bucket edge) is bounded the same way: the input moves by exactly one point cell, so the output moves by at most the consumer's per-cell sensitivity at that point — one ROI ulp / one EV ulp / at most one decimator bucket. Across the whole score range this is a **de-minimis** shift affecting only odd-half-point inputs sitting exactly on a boundary.
+
+**Decision (D-09): ACCEPT + DOCUMENT.** The USER selected accepting this single-tip loss and documenting it here, over (a) nudging the thresholds to absorb the half-point or (b) requiring strict exact-equivalence (which would force keeping a half-point internal unit, contradicting D-02). **No threshold nudging is performed** — TABLE A converts by exact ÷100, the floored score is the input, and the bounded odd-half-point shift is the known, accepted residual. This carries threat-register item **T-435-07** to mitigated: the equivalence is proven scale-invariant for clean scores, and the sole divergence is bounded to one grid cell at one boundary for odd-half-point inputs only.
+
+### DESIGN-04 — Locked outputs (for 436 IMPL / 438 REAUDIT)
+
+| Lock | Value / rule | Source anchor |
+|------|--------------|---------------|
+| Equivalence basis | scale-invariance of comparisons + ratios under ÷100 (D-10) | this section |
+| TABLE A (convert) | Degenerette MID/HIGH/MAX 7500/25500/30500→75/255/305; Lootbox NEUTRAL/MAX 6000/40000→60/400; Decimator CAP 23500→235 | TABLE A |
+| TABLE B (do NOT convert) | ROI 9000-9990 + WWXRP 9000/10990; EV-mult 9000/10000/14500; quad coeffs 1000/500; DGNRS reward bps; BPS_DENOMINATOR 10000 | TABLE B |
+| 40000 disambiguation | EV-cap = `LOOTBOX_EV_ACTIVITY_MAX_BPS` (convert→400); `LootboxModule:304` "40000" = EV mean (IGNORE) | `Storage:1555` / `LootboxModule:304` |
+| Degenerette low leg | QUADRATIC (not linear); `term1/term2` invariant; coeffs 1000/500 stay | `DegeneretteModule:1148-1154` |
+| Decimator multiplier | `bonusBps/3` re-expressed as `(points·100)/3` (×100 re-scale, NOT ÷100 of a constant) | `DecimatorModule:799-801, :913-919` |
+| Decimator bucket | `(range·score + CAP/2)/CAP` scale-invariant; `range` is a bucket count (no convert) | `DecimatorModule:1135-1141` |
+| Sole divergence | odd-half-point threshold-tip, ≤1 grid cell at one boundary, ACCEPTED + DOCUMENTED (D-09) | D-04.3 |
+
+---
