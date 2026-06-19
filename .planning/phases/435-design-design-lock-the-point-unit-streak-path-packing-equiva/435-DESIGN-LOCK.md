@@ -172,3 +172,126 @@ The walk below proves the rework changes **exactly one** observable behaviour �
 | Behaviour delta | only the silent 255-truncation (+ its exit-restore) removed | walk point 6 |
 
 ---
+
+## DESIGN-03 — pendingFlip Narrowing + Accumulator Repack
+
+Records the USER-locked decisions **D-06** (`Sub.pendingFlip` uint32→uint24 + clamp re-pin), **D-07** (72-bit accumulator repack, `Sub` stays exactly one 256-bit slot, 0 free), and **D-08** (`lootboxRngPendingFlip` confirmed distinct/out of scope). Requirement: **DESIGN-03** (this plan locks the design; PACK-01 in 436 implements it, 437/438 verify EIP-170 + layout golden). This section owns the slot arithmetic, EIP-170 re-check flag, and the layout-golden recapture flag that DESIGN-02's latch widening cross-references for its 8 freed bits.
+
+### D-06 — `Sub.pendingFlip` narrows uint32 → uint24, clamp re-pinned to the uint24 ceiling
+
+**Decision:** `Sub.pendingFlip` (`DegenerusGameStorage.sol:2237`) narrows **uint32 → uint24**, and its saturating accrue-clamp is re-pinned from the current `100_000_000` (100M whole FLIP) constant to the **uint24 ceiling `16,777,215` (`2^24 − 1` ≈ 16.7M whole FLIP)**. The narrowing frees **exactly 8 bits** in the accumulator — the bits DESIGN-02 / D-04 consume for the `subStreakLatch` uint8→uint16 widening.
+
+**`pendingFlip` semantics (re-confirmed at source):** it is the per-sub running CLAIMABLE FLIP balance, **whole FLIP** (the accrue divides by `1 ether` before the `+=`, `GameAfkingModule.sol:859, :926`), accrued per delivered day as the slot-0 quest reward (every mode) plus the ticket-mode 10%/20% buyer bonus. Paid out only by the player-pull `claimAfkingFlip` and zeroed at settle (`_settlePendingFlip:1100`). It is **not on the solvency path**: the clamp can only ever UNDER-credit, never mint excess backing.
+
+**Why uint24 (~16.7M whole FLIP) is safe against the realistic per-sub bank.** The accrued value is whole FLIP per delivered day from two contributors:
+- the slot-0 quest reward `QUEST_SLOT0_REWARD / 1 ether` (whole FLIP, every mode, per delivered day, `GameAfkingModule.sol:925-926`); and
+- the ticket-mode buyer bonus `bonusWhole = bonusBase / 1 ether` (10%, doubling to 20% on ≥10-ticket buys, per buy, `:859-863`).
+
+For the clamp to ever bind, a single sub's *unclaimed* `pendingFlip` would have to reach **16.7M whole FLIP** — i.e. the player accrues for years/decades of delivered days without ever calling the `claimAfkingFlip` pull, while running a reinvest-whale-sized daily buy. That is the same pathological reinvest-whale shape the current 100M clamp already exists to catch; the only change is the binding ceiling moves down from 100M to 16.7M, both far above any realistic per-sub claimable bank. The outcome at the (already pathological) clamp is identical in *kind*: a saturating UNDER-credit off the solvency path — **not** an overflow, and not a new failure mode. The 100M→16.7M move only changes *where* the already-benign saturation begins for a player who never claims; it cannot affect any sub whose unclaimed bank stays under 16.7M whole FLIP, which is every realistic sub.
+
+**Saturation, not overflow (asserted; handed to 437 TST-02).** The clamp is a `min(newOwed, ceiling)` *before* the `uint24(...)` cast, so the cast input is provably ≤ `2^24 − 1` and the narrowed write never truncates/wraps. The accrue is `newOwed = uint256(sub.pendingFlip) + delta; if (newOwed > CEIL) newOwed = CEIL; sub.pendingFlip = uint24(newOwed);` — identical structure to today, only the type and the `CEIL` constant change. 437 TST-02 owns the property test that the clamp saturates (never wraps) at the new ceiling.
+
+**Exact accrue/clamp/settle edit surface for 436 IMPL** (each a per-symbol edit on the frozen baseline):
+
+| # | Edit | Symbol / site | Anchor | Change |
+|---|------|---------------|--------|--------|
+| (a) | Field declaration | `Sub.pendingFlip` | `DegenerusGameStorage.sol:2237` | `uint32` → `uint24` |
+| (b) | Ticket buyer-bonus accrue clamp | the `newOwed`/`uint32(newOwed)` block | `GameAfkingModule.sol:861-863` | clamp constant `100_000_000` → uint24 ceiling `16_777_215`; cast `uint32(newOwed)` → `uint24(newOwed)` |
+| (c) | Slot-0 quest-reward accrue clamp | the `newOwed`/`uint32(newOwed)` block | `GameAfkingModule.sol:925-928` | clamp constant `100_000_000` → uint24 ceiling `16_777_215`; cast `uint32(newOwed)` → `uint24(newOwed)` |
+| (d) | Settle read/zero | `_settlePendingFlip` | `GameAfkingModule.sol:1097-1100` | `uint256(s.pendingFlip)` widen-back from uint24 holds unchanged (uint24 ⊂ uint256); the `s.pendingFlip = 0` zero-write still fits — **no logic change required beyond (a)'s type**; only the comment "Same uint32 + 100M…" needs the new width/ceiling |
+| (e) | Slot doc-comment + field-section comments | accumulator doc | `DegenerusGameStorage.sol:2129, :2154-2162, :2230-2237` | update `pendingFlip(32)` → `pendingFlip(24)`, the `uint32 with a 100M-whole-FLIP` notes → `uint24 with a ~16.7M (2^24−1)` notes (comment-only, part of the same edit) |
+
+**[ANCHOR NOTE]** The CONTEXT.md/plan interfaces cited the clamp sites as `sub.pendingFlip = uint32(newOwed)` at `:861-863` and `:925-928`; on the frozen `e9a5fc24` tree the actual blocks span `:861-863` (ticket buyer-bonus: `newOwed` at `:861`, the `> 100_000_000` clamp at `:862`, the `uint32(newOwed)` write at `:863`) and `:925-929` (slot-0 reward: `newOwed` at `:925-926`, the clamp at `:927`, the `uint32(newOwed)` write at `:928`). The settle is `_settlePendingFlip` (`:1097-1100`), reading `uint256(s.pendingFlip)` at `:1098` and zeroing at `:1100`. The cited ranges contain the true anchors; corrected for precision.
+
+**[ANCHOR NOTE]** `affiliateBase` (the sibling uint32 accumulator field, `:2229`) shares the same 100M-whole-FLIP clamp idiom (`GameAfkingModule.sol:920-922`) but is **NOT** in scope for narrowing — D-06 narrows only `pendingFlip`. `affiliateBase` stays uint32 (its 32 bits are unchanged in the repack; see D-07). Its clamp constant is unaffected.
+
+**D-06 — Claude's-discretion (deferred to 436 IMPL):** per CONTEXT.md, the precise uint24 clamp constant value — the exact `2^24 − 1 = 16,777,215` ceiling vs a rounded `16_700_000`/`~16.7M` — is a 436 pick, justified against the realistic bank. This design-lock locks the *width* (uint24) and the *rule* (the clamp re-pins to the uint24 ceiling so the cast never wraps); IMPL picks the exact constant value and its name. The recommended value is the exact `2^24 − 1 = 16,777,215` so the clamp ceiling is the type ceiling (the cast becomes provably lossless by construction), but any value ≤ `2^24 − 1` that is comfortably above the realistic bank satisfies the lock.
+
+### D-07 — The repacked 72-bit accumulator; `Sub` stays exactly one 256-bit slot, 0 free
+
+**Decision (the net-zero repack):**
+
+```
+CURRENT accumulator (72b):  affiliateBase(32) + pendingFlip(32) + subStreakLatch(8)   = 72
+NEW     accumulator (72b):  affiliateBase(32) + pendingFlip(24) + subStreakLatch(16)  = 72
+                                                          -8                  +8        net 0
+```
+
+`pendingFlip` gives up 8 bits (D-06: 32→24); `subStreakLatch` takes them (D-02/D-04: 8→16); `affiliateBase` is untouched (32). The accumulator stays **exactly 72 bits**, so the whole `Sub` record stays **exactly one 256-bit slot, 0 free** — no new cold slot, no field value-range violated (every narrowed/widened field's new width still holds its locked range: `pendingFlip` ≤ 16.7M < `2^24`, `subStreakLatch` ≤ 65,535 = `2^16 − 1`, comfortably above the streak values that matter under the 655-point activity cap), and no slot collision (the disjoint per-buy accrue write into the warm slot is unchanged in *which* fields it touches).
+
+#### D-07 — Full `Sub`-struct field-width table (re-derived from source declarations, BEFORE + AFTER)
+
+Re-derived by **totalling the actual field declarations** at `DegenerusGameStorage.sol:2169-2245` (not trusting the comments — see the reconciliation below). Each group's bit-sum is shown; the four groups total 256 in both states.
+
+**BEFORE (frozen `e9a5fc24`):**
+
+| Group | Fields (declared widths) | Bits |
+|-------|--------------------------|------|
+| config | `dailyQuantity` u8(8) + `validThroughLevel` u24(24) + `reinvestPct` u8(8) + `flags` u8(8) | **48** |
+| per-sub stamp | `score` u16(16) + `amount` u24(24) | **40** |
+| markers | `lastAutoBoughtDay` u24(24) + `lastOpenedDay` u24(24) + `afkCoveredThroughDay` u24(24) + `afkingStartDay` u24(24) | **96** |
+| accumulator | `affiliateBase` u32(32) + `pendingFlip` u32(32) + `subStreakLatch` u8(8) | **72** |
+| **TOTAL** | | **256 (0 free)** |
+
+**AFTER (the 436 repack):**
+
+| Group | Fields (declared widths) | Bits |
+|-------|--------------------------|------|
+| config | `dailyQuantity` u8(8) + `validThroughLevel` u24(24) + `reinvestPct` u8(8) + `flags` u8(8) | **48** |
+| per-sub stamp | `score` u16(16) + `amount` u24(24) | **40** |
+| markers | `lastAutoBoughtDay` u24(24) + `lastOpenedDay` u24(24) + `afkCoveredThroughDay` u24(24) + `afkingStartDay` u24(24) | **96** |
+| accumulator | `affiliateBase` u32(32) + **`pendingFlip` u24(24)** + **`subStreakLatch` u16(16)** | **72** |
+| **TOTAL** | | **256 (0 free)** |
+
+`48 + 40 + 96 + 72 = 256` in **both** states. The only changed cells are the two bolded accumulator fields, whose widths sum unchanged (24 + 16 = 32 + 8 = 40 over the two fields). **The repack is net-zero by construction: no new slot, no shrink below 256, no collision.**
+
+#### D-07 — [ANCHOR NOTE] Comment-vs-field-width reconciliations (source is ground truth)
+
+Re-deriving the widths from the field declarations surfaced **three internal comment discrepancies** in the frozen source. The *field declarations* are ground truth and the *slot arithmetic above is computed from them*; the discrepancies are comment-only and the 436 edit should fix the ones it touches:
+
+1. **Slot doc-comment `config (40b)` is wrong → should be `config (48b)`.** The doc-comment at `:2126` says `config (40b)` but the field section header at `:2170` says `--- config (48 bits) ---` and the declared fields sum `8+24+8+8 = 48`. **48 is correct.** (The CONTEXT.md/plan interfaces echoed the doc-comment's `config (40b)` — likewise imprecise; the declared sum is 48.)
+2. **Field-section header `per-sub stamp (48 bits)` is wrong → should be `(40b)`.** The header at `:2182` says `--- per-sub stamp (48 bits) ---` but the declared fields sum `16+24 = 40`, and the slot doc-comment at `:2127` correctly says `per-sub stamp (40b)`. **40 is correct.**
+3. **Field-section header `markers (72 bits)` is wrong → should be `(96b)`.** The header at `:2194` says `--- markers (72 bits) ---` but the four declared uint24 day markers sum `24×4 = 96`, and the slot doc-comment at `:2128` correctly says `markers (96b)`. **96 is correct.**
+
+These three off-by comments happen to be *internally self-cancelling* in the doc-comment (40+40+96 ≠ 256 in the doc-comment's own group labels would be 248; but the doc-comment's own labels are config(40, wrong)+stamp(40, right)+markers(96, right)+accumulator(72, right) = 248, which is itself inconsistent — the **declared fields**, not either comment, are the only reliable total, and they sum to 256). The accumulator group is labelled correctly in both comment locations (`72b`). **The 256-bit-exact claim holds on the field declarations alone**; 436 should correct the `config (40b)` doc-comment to `(48b)` and the field-section `per-sub stamp (48 bits)`/`markers (72 bits)` headers to `(40b)`/`(96b)` while it is editing the struct (comment-only).
+
+Also (already flagged in DESIGN-02): the `subStreakLatch` field comment (`:2238-2250`, `0..255` / `Clamped at 255` / `bits 0-6`) widens to uint16 in the same 436 edit.
+
+#### D-07 — EIP-170 re-check + layout-golden recapture (flags, handled in 438)
+
+- **EIP-170 deployed-bytecode ceiling.** The repack is a pure width swap inside one already-allocated slot; it does not add storage slots and is not expected to grow `DegenerusGame` deployed bytecode materially (the cast-width and clamp-constant changes are register-level). **EIP-170 is re-checked in 436/PACK-01** (the Game is perpetually near the 24,576-byte ceiling, so any IMPL diff re-measures). This design-lock asserts the *expectation* (net-neutral bytecode); 436 confirms it empirically and 438 re-attests.
+- **Storage-layout golden (the v68 MECH-02 `forge inspect` oracle).** The field-width move WILL change the `forge inspect <c> storage-layout` snapshot for `Sub` (the `pendingFlip`/`subStreakLatch` offsets/widths shift within the slot). **That recapture is the EXPECTED NEW GOLDEN, handled in 438 REAUDIT-01 — NOT a layout drift.** The slot index of `Sub` is unchanged (still one slot); only the intra-slot field offsets/types update. 438 recaptures the golden against the repacked subject and re-attests it matches the locked D-07 layout.
+
+### D-08 — `lootboxRngPendingFlip` (uint40) is a SEPARATE, out-of-scope field
+
+**Confirmed distinct from `Sub.pendingFlip`.** `lootboxRngPendingFlip` is a field of the **global** `lootboxRngPacked` uint256 (`DegenerusGameStorage.sol:1530`), declared in its layout comment at **`:1525`** as `[bits 184:223] lootboxRngPendingFlip uint40 (scaled /1e18, 1 FLIP res, max ~1.1T FLIP)`. It is **NOT narrowed** (D-08).
+
+Distinguishing facts (recorded so 436 cannot narrow the wrong field):
+
+| Facet | `Sub.pendingFlip` (in scope, D-06) | `lootboxRngPendingFlip` (out of scope, D-08) |
+|-------|-----------------------------------|----------------------------------------------|
+| Container | per-sub `Sub` struct accumulator (`:2237`) | the global `lootboxRngPacked` uint256 (`:1530`), bits [184:223] |
+| Type | uint32 → **uint24** (this plan) | **uint40** (unchanged) |
+| Scaling | whole FLIP (divides by `1 ether` at accrue) | scaled **/1e18** (`max ~1.1T FLIP`) |
+| Purpose | per-sub running CLAIMABLE FLIP bank (slot-0 reward + ticket buyer bonus) | the lootbox-RNG pending-FLIP payout state for the fulfill/threshold leg |
+| Anchor | `:2237` (struct field) | `:1525` (layout comment) / `:1530` (packed var) |
+
+They share only the substring `pendingFlip` in their names; they are different types, in different storage containers, with different scaling and different purposes. **D-08 = no change to `lootboxRngPendingFlip`.**
+
+**[ANCHOR NOTE]** CONTEXT.md cited `lootboxRngPendingFlip` at `~Storage:1527`; on the frozen `e9a5fc24` tree the layout-comment line for it is `:1525` (the `lootboxRngPacked` var declaration begins at `:1530`). The `~`-prefixed CONTEXT.md anchor was approximate; corrected to the exact `:1525`.
+
+### D-06/D-07/D-08 — Locked outputs (for 436 IMPL)
+
+| Lock | Value / rule | Source anchor |
+|------|--------------|---------------|
+| `pendingFlip` width | uint32 → uint24 | `Storage:2237` |
+| `pendingFlip` clamp | re-pin `100_000_000` → uint24 ceiling `16_777_215` (`2^24 − 1`, ~16.7M) | `GameAfkingModule.sol:862, :927` |
+| Accrue/settle casts | `uint32(newOwed)` → `uint24(newOwed)` at `:863`/`:928`; settle read holds | `GameAfkingModule.sol:861-863, :925-928, :1097-1100` |
+| New accumulator | `affiliateBase(32) + pendingFlip(24) + subStreakLatch(16) = 72` | `Storage:2229-2244` |
+| Slot total | exactly **256 bits, 0 free** BEFORE + AFTER (48 + 40 + 96 + 72) | `Storage:2169-2245` |
+| Comment fixes | `config (40b)→(48b)`, `per-sub stamp (48 bits)→(40b)`, `markers (72 bits)→(96b)`, `pendingFlip(32)→(24)`, 100M→16.7M notes | `Storage:2126-2128, :2154-2162, :2170/2182/2194, :2230-2237` |
+| EIP-170 | re-checked in 436/PACK-01 (expected net-neutral) | — |
+| Layout golden | recaptured in 438 REAUDIT-01 as the expected new golden (not drift) | — |
+| `lootboxRngPendingFlip` | SEPARATE uint40, **out of scope**, not narrowed (D-08) | `Storage:1525` |
+
+---
