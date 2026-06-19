@@ -90,7 +90,10 @@
   1. Tests prove the quest-streak floor rule and the exact integer streak-base path — the floored point contribution matches DESIGN-01 at representative streak levels (incl. the boundaries where the old 0.5-pt granularity used to round), and the manual/afking combine is exact (fails-without / passes-with the new path). (TST-01)
   2. Tests prove the reworked pre-streak-cap-into-afking handling and the `pendingFlip` clamp — the carried-in pre-streak caps/snapshots per DESIGN-02, and `pendingFlip` saturates at the new ceiling (a value above the narrowed width clamps, not overflows). (TST-02)
   3. Tests prove the consumer behaviour-equivalence — Degenerette ROI, the Lootbox EV multiplier, and the Decimator outcome at point-domain scores match the intended pre-change outcomes across the threshold anchors and the whole-point grid, confirming the coarser grid does not shift results. (TST-03)
-**Plans**: TBD
+**Plans**: 3 plans (wave 1, all parallel — no file overlap)
+- [ ] 437-01-PLAN.md — TST-01: quest-streak floor rule (floor(questStreak/2)) + the single exact integer streak path (afking-XOR-manual exclusivity)
+- [ ] 437-02-PLAN.md — TST-02: pre-streak >255 snapshot exactness + pendingFlip uint24 saturating clamp (16_777_215, never wraps) + testGas04 packing-golden update
+- [ ] 437-03-PLAN.md — TST-03: consumer behaviour-equivalence (Lootbox EV · Degenerette ROI/WWXRP · Decimator mult re-scale + bucket) across the TABLE-A anchors + whole-point grid
 
 ### Phase 438: REAUDIT — Re-Run the v68 Detection Nets on the Reset Subject
 **Goal**: the v68 machine-driven detection nets (storage-layout golden, RNG-freeze proof, mutation/invariant/Halmos) re-run on the new v69 subject — the layout move from the accumulator repack recaptured as the new golden, the activity-score consumers re-attested frozen-at-commitment, the changed modules mutation-triaged.
