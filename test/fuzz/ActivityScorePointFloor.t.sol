@@ -29,9 +29,33 @@ contract ActivityScorePointFloorTest is DeployProtocol {
     uint256 private constant OFF_QS_SYNCDAY = 6;
     uint256 private constant OFF_QS_STREAK = 9;
 
+    /// @dev Game-resident slots + the POST-PACK Sub-slot accumulator offsets (re-derived from the v69
+    ///      storageLayout, NOT the pre-PACK V56 offsets): _subOf mapping root @ slot 54; mintPacked_ deity
+    ///      bit @ bit 184. The accumulator section after the repack is affiliateBase u32 off23,
+    ///      pendingFlip u24 off27, subStreakLatch u16 off30 (the latch widened 8->16, pendingFlip narrowed
+    ///      32->24). The two afking day markers are afkCoveredThroughDay u24 off17, afkingStartDay u24 off20.
+    uint256 private constant SUBOF_SLOT = 54;
+    uint256 private constant MINTPACKED_SLOT = 9;
+    uint256 private constant DEITY_SHIFT = 184;
+    uint256 private constant OFF_AFKCOVERED = 17;
+    uint256 private constant OFF_AFKINGSTART = 20;
+    uint256 private constant OFF_STREAKLATCH = 30;
+
+    /// @dev A deity-passed player with no quest streak scores exactly 50 + 25 + 80 = 155 points (the deity
+    ///      base plus the deity activity bonus), with zero affiliate/whale/curse contribution — so the quest
+    ///      leg of a deity afker's score is precisely `score - 155`.
+    uint256 private constant DEITY_BASELINE_POINTS = 155;
+
+    uint256 private constant DRAIN_MAX_ITERATIONS = 60;
+    uint256 private _lastFulfilledReqId;
+    uint256 private _t; // explicit accumulating timestamp (the Foundry block.timestamp caching workaround)
+    uint256 private _deliverNonce;
+
     function setUp() public {
         _deployProtocol();
-        vm.warp(block.timestamp + 1 days);
+        _t = block.timestamp + 1 days;
+        vm.warp(_t);
+        vm.deal(address(game), 5_000_000 ether);
     }
 
     // =========================================================================
@@ -125,5 +149,203 @@ contract ActivityScorePointFloorTest is DeployProtocol {
     ///      `_effectiveQuestStreak` resolves (manual for a non-afker, live compute-on-read for an afker).
     function _effectiveStreakSeenByScore(address player) internal view returns (uint32 streak) {
         (streak, ) = quests.effectiveBaseStreakAndAfking(player);
+    }
+
+    // =========================================================================
+    // Task 2 — the single exact integer streak path + afking-XOR-manual exclusivity
+    // =========================================================================
+
+    /// @notice Exactly one streak source feeds the score at a time. While an afking run is LIVE, the score's
+    ///         quest leg is the compute-on-read `_streakBaseOf + (covered - afkingStartDay)`; after a missed
+    ///         funded day decays the run, the score falls back to the dormant manual streak. The live value
+    ///         and the manual value are chosen to floor to DIFFERENT points (live 9 -> 4, manual 4 -> 2), so a
+    ///         summed-both-sources implementation (4 + 2 = 6) or a stuck-on-one-source implementation would
+    ///         fail: the live phase must read 4 and the post-decay phase must read 2.
+    function test_LiveAfkingStreakFeedsScore_XOR() public {
+        address p = makeAddr("xor_afker");
+        uint16 manualStreak = 4; // dormant manual: floors to 2, distinct from the live value's floor
+        _setManualQuestStreak(p, manualStreak);
+        _grantDeityPass(p);
+        _fundPool(p, 400 ether);
+        _subscribeLootbox(p, 1);
+
+        // Deliver funded days until the live compute-on-read streak reaches an ODD value >= 9, then read the
+        // score while the run is still live (the delivery covers the current day, so covered + 1 >= today).
+        uint32 liveStreak;
+        uint256 liveScore;
+        bool reachedLive;
+        for (uint256 d; d < 16; d++) {
+            _deliverDay(_singleton(p), uint256(keccak256(abi.encode("xor_dd", d))) | 1);
+            liveStreak = _liveAfkingStreakOf(p);
+            if (liveStreak >= 9 && liveStreak % 2 == 1) {
+                liveScore = game.playerActivityScore(p);
+                reachedLive = true;
+                break;
+            }
+        }
+        assertTrue(reachedLive, "non-vacuity: the run reached a live odd streak >= 9");
+
+        // LIVE: the score reads the live afking value, not the manual snapshot. live=9 -> floor(9/2)=4, which
+        // differs from the manual fallback floor(4/2)=2, so this distinguishes the two sources.
+        assertEq(liveScore - DEITY_BASELINE_POINTS, uint256(liveStreak) / 2, "live: the quest leg is floor(liveAfkingStreak/2)");
+        assertEq(liveScore - DEITY_BASELINE_POINTS, 4, "live: floor(9/2) = 4 (the live source, not the manual floor(4/2)=2)");
+
+        // Induce a decay gap: advance funded days with NO delivery so the last covered day falls more than one
+        // day behind (covered + 1 < currentDay) and `_liveAfkingStreak` decays to 0.
+        _skipDaysNoDelivery(0x0DECA1);
+        _skipDaysNoDelivery(0x0DECA2);
+        _skipDaysNoDelivery(0x0DECA3);
+        assertEq(_liveAfkingStreakOf(p), 0, "the run decayed (live afking streak read is 0 after a missed funded day)");
+
+        // POST-DECAY: the score now reads the dormant manual streak (4 -> floor 2), proving exactly one source
+        // feeds the score — the live value (which floored to 4) is gone, never summed onto the fallback.
+        uint256 postScore = game.playerActivityScore(p);
+        assertEq(postScore - DEITY_BASELINE_POINTS, uint256(manualStreak) / 2, "post-decay: the quest leg falls back to floor(manualStreak/2)");
+        assertEq(postScore - DEITY_BASELINE_POINTS, 2, "post-decay: floor(4/2) = 2 (the manual source, not the lapsed live 4)");
+    }
+
+    /// @notice The live afking streak combines through one exact integer path with no fractional intermediate:
+    ///         an ODD total streak yields a clean whole-point score whose quest leg is `floor(total/2)`, with
+    ///         the trailing half-point dropped. A half-point intermediate anywhere in the base + funded-days
+    ///         combine (the retired `*50` bps path could carry one) would surface a non-floored value here.
+    function test_ExactIntegerCombine_NoFractionalIntermediate() public {
+        address p = makeAddr("combine_afker");
+        _setManualQuestStreak(p, 0); // no manual snapshot: the base starts at 0, so live == covered - start
+        _grantDeityPass(p);
+        _fundPool(p, 400 ether);
+        _subscribeLootbox(p, 1);
+
+        // Drive the live compute-on-read streak to an odd total, reading the score while live.
+        uint32 total;
+        uint256 score;
+        bool reached;
+        for (uint256 d; d < 16; d++) {
+            _deliverDay(_singleton(p), uint256(keccak256(abi.encode("comb_dd", d))) | 1);
+            total = _liveAfkingStreakOf(p);
+            if (total >= 5 && total % 2 == 1) {
+                score = game.playerActivityScore(p);
+                reached = true;
+                break;
+            }
+        }
+        assertTrue(reached, "non-vacuity: the run reached a live odd total >= 5");
+
+        // The whole-point score's quest leg is exactly floor(total/2) — the odd half-point is dropped, and the
+        // score is a clean integer (no 0.5-pt residue is even representable, and a fractional combine would
+        // have surfaced as score - 155 != floor(total/2)).
+        assertEq(score - DEITY_BASELINE_POINTS, uint256(total) / 2, "odd total -> clean whole-point quest leg floor(total/2)");
+        assertEq((score - DEITY_BASELINE_POINTS) * 2 + 1, total, "the dropped trailing half-point: 2*floor(total/2) + 1 == odd total");
+    }
+
+    // =========================================================================
+    // Afking-run drive helpers (ported from V56SecUnmanipulable, re-pointed to the post-PACK Sub offsets)
+    // =========================================================================
+
+    /// @dev The live afking compute-on-read streak the score reads for `player`: `_streakBaseOf + (covered -
+    ///      afkingStartDay)` while the last covered day is no older than yesterday, else 0 (decay-on-read).
+    ///      Mirrors `_afkingStreak` off the post-PACK Sub slot so the test reads the same value the score does.
+    function _liveAfkingStreakOf(address player) internal view returns (uint32) {
+        uint32 covered = _afkCoveredOf(player);
+        uint32 today = game.currentDayView();
+        if (today == 0 || covered + 1 < today) return 0;
+        return _streakBaseOf(player) + covered - _afkingStartOf(player);
+    }
+
+    /// @dev Deliver ONE funded day to `who`: a new-day STAGE buy (stamps the box + accrues + advances the
+    ///      covered high-water), settle clean, then open the pending box so the no-orphan guard does not skip
+    ///      the next day's buy. Each delivered day advances the live afking streak by one.
+    function _deliverDay(address[] memory who, uint256 vrfWord) internal {
+        uint256 w = uint256(keccak256(abi.encode("dlv", vrfWord, _deliverNonce++))) | 1;
+        _runStageNewDay(w);
+        _settleClean(uint256(keccak256(abi.encode("dlvc", w))) | 1);
+        vm.prank(makeAddr("deliver_opener"));
+        game.openBoxes(400);
+        who;
+    }
+
+    /// @dev Warp forward one simulated day WITHOUT delivering a buy — manufactures the decay gap.
+    function _skipDaysNoDelivery(uint256 vrfWord) internal {
+        uint256 w = uint256(keccak256(abi.encode("skip", vrfWord, _deliverNonce++))) | 1;
+        _runStageNewDay(w);
+        _settleClean(uint256(keccak256(abi.encode("skipc", w))) | 1);
+    }
+
+    function _runStageNewDay(uint256 vrfWord) internal {
+        _settleGame(vrfWord ^ 0xF00D);
+        _t += 1 days;
+        vm.warp(_t);
+        _settleGame(vrfWord);
+    }
+
+    function _settleGame(uint256 vrfWord) internal {
+        for (uint256 d; d < DRAIN_MAX_ITERATIONS; d++) {
+            if (!game.advanceDue() && !game.rngLocked()) break;
+            _fulfillPending(vrfWord);
+            if (!game.advanceDue() && !game.rngLocked()) break;
+            game.advanceGame();
+            _fulfillPending(vrfWord);
+        }
+    }
+
+    function _settleClean(uint256 vrfWord) internal {
+        for (uint256 d; d < 240; d++) {
+            if (!game.advanceDue() && !game.rngLocked()) return;
+            _fulfillPending(vrfWord);
+            if (!game.advanceDue() && !game.rngLocked()) return;
+            game.advanceGame();
+            _fulfillPending(vrfWord);
+        }
+    }
+
+    function _fulfillPending(uint256 vrfWord) internal {
+        uint256 reqId = mockVRF.lastRequestId();
+        if (reqId != _lastFulfilledReqId && reqId > 0) {
+            (, , bool fulfilled) = mockVRF.pendingRequests(reqId);
+            if (!fulfilled) {
+                mockVRF.fulfillRandomWords(reqId, vrfWord);
+                _lastFulfilledReqId = reqId;
+            }
+        }
+    }
+
+    function _subscribeLootbox(address who, uint8 q) internal {
+        vm.prank(who);
+        game.subscribe(address(0), false, false, q, 0, address(0)); // self, lootbox mode, no reinvest
+    }
+
+    function _fundPool(address who, uint256 amount) internal {
+        vm.deal(address(this), amount);
+        game.depositAfkingFunding{value: amount}(who);
+    }
+
+    function _grantDeityPass(address who) internal {
+        bytes32 slot = keccak256(abi.encode(who, uint256(MINTPACKED_SLOT)));
+        uint256 packed = uint256(vm.load(address(game), slot));
+        vm.store(address(game), slot, bytes32(packed | (uint256(1) << DEITY_SHIFT)));
+    }
+
+    function _singleton(address a) internal pure returns (address[] memory arr) {
+        arr = new address[](1);
+        arr[0] = a;
+    }
+
+    // ---- Sub-slot reads (the post-PACK offsets) ----
+
+    function _subField(address who, uint256 off, uint256 widthBits) internal view returns (uint256) {
+        uint256 p = uint256(vm.load(address(game), keccak256(abi.encode(who, uint256(SUBOF_SLOT))))) >> (off * 8);
+        return p & ((uint256(1) << widthBits) - 1);
+    }
+
+    function _afkCoveredOf(address who) internal view returns (uint32) {
+        return uint32(_subField(who, OFF_AFKCOVERED, 24));
+    }
+
+    function _afkingStartOf(address who) internal view returns (uint32) {
+        return uint32(_subField(who, OFF_AFKINGSTART, 24));
+    }
+
+    /// @dev The afking-run streak base — the FULL post-PACK uint16 latch (off 30, width 16).
+    function _streakBaseOf(address who) internal view returns (uint32) {
+        return uint32(_subField(who, OFF_STREAKLATCH, 16));
     }
 }
