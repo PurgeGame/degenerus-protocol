@@ -3,7 +3,7 @@
 **Milestone:** v69.0 — Activity-Score Points + Streak/Sub Precision + pendingFlip Right-Size
 **Date:** 2026-06-19
 **Subject (frozen):** `contracts/` tree **`8a633d1d`** (HEAD `dee4ae1f` at authoring; the orchestrator's closure commit becomes final HEAD). Baseline was the v68.0 closure subject `contracts/` tree **`e9a5fc24`** (HEAD `3cc51d00`). The tree advanced only via the changes recorded below: the originally-approved IMPL (`c4b09267`), the re-audit remediation (`c297893a`), and the separately-found `_autoOpen` fix (`21df2411`).
-**Closure signal:** MILESTONE_V69_AT_HEAD_<orchestrator-fills-sha>
+**Closure signal:** MILESTONE_V69_AT_HEAD_7d0fa2c6b16bf4b0291fe5b1edb7560cf7641d45
 **Method:** Phased design -> IMPL -> TST -> re-audit. The 438 re-audit used an adversarial 12-agent sweep + a cross-model council (**Codex** + **Claude** + orchestrator source-verification; Gemini CLI auth-expired this milestone) as the finder, every candidate verified against the frozen source before recording. The separately-found `_autoOpen` critical was surfaced by the USER via the afking simulator and live-proven on-chain before fix. Honest admin/governance assumed (rotation/keeper liveness in scope; admin malice out of scope).
 **Regression floor:** final full forge suite **934 passed / 0 failed / 108 skipped** (134 suites; the 108 skips are pre-existing `vm.skip`) on the frozen tree.
 
