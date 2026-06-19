@@ -26,9 +26,9 @@ Requirements for this milestone. Each maps to exactly one roadmap phase.
 
 ### TST — Prove the Curves, the Ladder, the Inverse & the Reachable Tail
 
-- [ ] **TST-01**: Tests prove each value curve's endpoints + shape — value-at-cap byte-identical to the old named MAX, the previously-uncovered seg-B (500) and seg-C (30,000) anchors, continuity at both knees, monotonic non-decreasing over `[0, 30000]`, and the decimator `s==0 → 1.0x` no-op; the prior equivalence oracle (`ConsumerPointEquivalence`, `V69ConsumerMigrationFixes`, `DegeneretteHeroScore` mirror) is rewritten from the OLD formulas to the new ones.
-- [ ] **TST-02**: Tests prove the bucket ladder + inverse — every threshold crossing (10/30/55/85/120/180/250/300/500/1000), the normal-decimator floor-5 and century floor-2 paths, the terminal-dec floor-2 path, and `minScoreForBucket` exactness checked against the forward `decBucket` ladder across the band boundaries.
-- [ ] **TST-03**: Tests prove the pre-clamp removal made the tail reachable + the shared-helper parity — score 1000 → bucket 2 (century/terminal) and score 30,000 → MAX for each value curve (the bug the read-only investigation caught: the tail was unreachable while the 235/305 clamps were in place), and Mint and Afking produce an identical century bonus for an identical score (single shared `centuryBps` helper, no divergence).
+- [x] **TST-01**: Tests prove each value curve's endpoints + shape — value-at-cap byte-identical to the old named MAX, the previously-uncovered seg-B (500) and seg-C (30,000) anchors, continuity at both knees, monotonic non-decreasing over `[0, 30000]`, and the decimator `s==0 → 1.0x` no-op; the prior equivalence oracle (`ConsumerPointEquivalence`, `V69ConsumerMigrationFixes`, `DegeneretteHeroScore` mirror) is rewritten from the OLD formulas to the new ones.
+- [x] **TST-02**: Tests prove the bucket ladder + inverse — every threshold crossing (10/30/55/85/120/180/250/300/500/1000), the normal-decimator floor-5 and century floor-2 paths, the terminal-dec floor-2 path, and `minScoreForBucket` exactness checked against the forward `decBucket` ladder across the band boundaries.
+- [x] **TST-03**: Tests prove the pre-clamp removal made the tail reachable + the shared-helper parity — score 1000 → bucket 2 (century/terminal) and score 30,000 → MAX for each value curve (the bug the read-only investigation caught: the tail was unreachable while the 235/305 clamps were in place), and Mint and Afking produce an identical century bonus for an identical score (single shared `centuryBps` helper, no divergence).
 
 ### REAUDIT — Re-Run the v68/v69 Detection Nets on the Reset Subject
 
@@ -71,9 +71,9 @@ Each requirement maps to exactly one phase. v70.0 phases continue 439 → 440. N
 | VERIFY-03 | 440 VERIFY | Done |
 | VERIFY-04 | 440 VERIFY | Done |
 | FREEZE-01 | 441 FREEZE | Done |
-| TST-01 | 442 TST | Pending |
-| TST-02 | 442 TST | Pending |
-| TST-03 | 442 TST | Pending |
+| TST-01 | 442 TST | Done |
+| TST-02 | 442 TST | Done |
+| TST-03 | 442 TST | Done |
 | REAUDIT-01 | 443 REAUDIT | Pending |
 | REAUDIT-02 | 443 REAUDIT | Pending |
 | REAUDIT-03 | 443 REAUDIT | Pending |
