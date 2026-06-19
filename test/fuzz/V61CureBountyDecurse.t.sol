@@ -189,24 +189,24 @@ contract V61CureBountyDecurse is DeployProtocol {
     ///         this proves cure-before-score by CONTRAST against a NON-curing (sub-ticket) buy on an identical
     ///         starting curse: the curing buyer ends UN-penalized (cure ran before the score read at :1333),
     ///         while the equal-curse sub-ticket buyer (no cure) ends with the SAME positive base MINUS the
-    ///         curse*100 penalty. The post-buy score gap == the curse penalty, isolating the cure's effect on
-    ///         the curing buy's own score. Falsifiable: the gap is pinned to curse*100, and the cured buyer's
+    ///         curse penalty. The post-buy score gap == the curse penalty, isolating the cure's effect on
+    ///         the curing buy's own score. Falsifiable: the gap is pinned to curse, and the cured buyer's
     ///         score is asserted strictly greater than the non-cured buyer's.
     function testCurePrecedesScoreUnpenalizedOnCuringBuy() public {
         // A real ticket buy re-caches the affiliate cache and a single buy does not build a positive
         // streak/mint base, so a seeded affiliate base is clobbered and the streak base is 0 (the penalty floors
-        // a 0 base at 0, hiding the effect). Use the DEITY-PASS activity bonus (8000 bps) as the base instead:
+        // a 0 base at 0, hiding the effect). Use the DEITY-PASS activity bonus (80 points) as the base instead:
         // it is read from the HAS_DEITY_PASS bit (never re-written by the buy path), so it survives both buys and
         // gives a large positive base. The deity-pass exemption blocks the cashout-curse SET, NOT the cure or
         // the penalty APPLY — so a deity holder's seeded curse is still penalized, and a >=1-ticket buy still
         // clears it. The two buyers differ ONLY in whether the buy cured, isolating the cure's score effect.
         _alignDailyIdxToSimDay();
 
-        uint256 curse = 4; // -400 bps
+        uint256 curse = 4; // -4 points
 
         // Curing buyer: a >=1-ticket buy clears the curse before the post-action score read at :1333.
         address cured = makeAddr("cbs_cured");
-        _grantDeityPass(cured); // base = 8000 bps, survives the buy
+        _grantDeityPass(cured); // base = 80 points, survives the buy
         _seedCurse(cured, curse);
         uint256 fullCost = _oneTicketCost();
         vm.deal(cured, fullCost);
@@ -229,11 +229,11 @@ contract V61CureBountyDecurse is DeployProtocol {
         assertEq(game.curseCountOf(notCured), curse, "sub-ticket buy did NOT cure (still cursed)");
         uint256 notCuredScore = game.playerActivityScore(notCured);
 
-        // Both buyers hold the same 8000-bps deity base; the only difference is the cure. So the cured buyer's
-        // post-buy score is HIGHER by exactly the curse penalty (curse*100) — proving the cure ran BEFORE the
+        // Both buyers hold the same 80-point deity base; the only difference is the cure. So the cured buyer's
+        // post-buy score is HIGHER by exactly the curse penalty (curse points) — proving the cure ran BEFORE the
         // score read (the curing buy itself scored un-penalized).
         assertGt(curedScore, notCuredScore, "non-vacuity: the curing buy scored higher than the cursed sub-ticket buy");
-        assertEq(curedScore - notCuredScore, curse * 100, "cure-before-score: the gap == the cleared curse penalty (curse*100)");
+        assertEq(curedScore - notCuredScore, curse, "cure-before-score: the gap == the cleared curse penalty (curse points)");
     }
 
     /// @notice CONTRAST — the separate purchaseWhaleBundle() pass-host does NOT cure (it is not a

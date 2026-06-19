@@ -195,51 +195,51 @@ contract V61CurseSet is DeployProtocol {
     }
 
     // =========================================================================
-    // Penalty: curse*100 bps, floored 0, across the public view + a frozen snapshot
+    // Penalty: curse points, floored 0, across the public view + a frozen snapshot
     // =========================================================================
 
-    /// @notice The public playerActivityScore view drops by EXACTLY curse*100 bps vs an un-cursed twin with an
-    ///         identical positive base score. Falsifiable: the delta is pinned to curse*100 (not "<= base").
-    function testPenaltyOnPublicViewExactBps() public {
+    /// @notice The public playerActivityScore view drops by EXACTLY curse points vs an un-cursed twin with an
+    ///         identical positive base score. Falsifiable: the delta is pinned to curse (not "<= base").
+    function testPenaltyOnPublicViewExactPoints() public {
         address cursed = makeAddr("pen_cursed");
         address twin = makeAddr("pen_twin");
-        _seedAffiliateBase(cursed, 6); // +600 bps base (6 affiliate points at the current level)
+        _seedAffiliateBase(cursed, 6); // +6 points base (6 affiliate points at the current level)
         _seedAffiliateBase(twin, 6);
-        _seedCurse(cursed, 4); // 4 points ⇒ -400 bps
+        _seedCurse(cursed, 4); // 4 points ⇒ -4 points
 
         uint256 base = game.playerActivityScore(twin);
         uint256 penalized = game.playerActivityScore(cursed);
-        assertEq(base, 600, "twin base score == 600 bps (6 affiliate points)");
-        assertEq(penalized, base - 400, "cursed score == base - curse*100 (4*100)");
+        assertEq(base, 6, "twin base score == 6 points (6 affiliate points)");
+        assertEq(penalized, base - 4, "cursed score == base - curse (4 points)");
     }
 
     /// @notice The penalty floors at 0: a curse whose penalty exceeds the base score zeroes the score (never
-    ///         underflows). curse=20 ⇒ -2000 bps applied to a 600-bps base ⇒ 0.
+    ///         underflows). curse=20 ⇒ -20 points applied to a 6-point base ⇒ 0.
     function testPenaltyFlooredAtZero() public {
         address p = makeAddr("pen_floor");
-        _seedAffiliateBase(p, 6); // +600 bps
-        _seedCurse(p, 20); // -2000 bps > base
+        _seedAffiliateBase(p, 6); // +6 points
+        _seedCurse(p, 20); // -20 points > base
         assertEq(game.playerActivityScore(p), 0, "penalty floors the score at 0 (no underflow)");
     }
 
     /// @notice The penalty is visible in a FROZEN SNAPSHOT consumer: a funded lootbox sub's `scorePlus1`
     ///         (frozen at delivery, GameAfkingModule:863-870) is lower for a cursed sub than an un-cursed twin
-    ///         by exactly the curse*100-bps penalty. Both subs share an identical positive base (affiliate
+    ///         by exactly the curse-point penalty. Both subs share an identical positive base (affiliate
     ///         cache). The curse is seeded directly (the APPLY is independent of the active-afker SET bail).
     function testPenaltyOnFrozenAfkingSnapshot() public {
         address cursed = _setupFundedSub("snap_cursed");
         address twin = _setupFundedSub("snap_twin");
         _seedAffiliateBase(cursed, 6);
         _seedAffiliateBase(twin, 6);
-        _seedCurse(cursed, 2); // -200 bps
+        _seedCurse(cursed, 2); // -2 points
 
         _deliverDay(0x5C0E); // freezes scorePlus1 for both subs at this delivery
 
         uint256 snapCursed = _scorePlus1Of(cursed);
         uint256 snapTwin = _scorePlus1Of(twin);
         assertGt(snapTwin, 1, "non-vacuity: the twin froze a positive score (scorePlus1 > 1)");
-        // scorePlus1 == activityScore + 1; the cursed snapshot is exactly 200 bps lower.
-        assertEq(snapTwin - snapCursed, 200, "frozen snapshot: cursed scorePlus1 lower by curse*100 (2*100)");
+        // scorePlus1 == activityScore + 1; the cursed snapshot is exactly 2 points lower.
+        assertEq(snapTwin - snapCursed, 2, "frozen snapshot: cursed scorePlus1 lower by curse (2 points)");
     }
 
     // =========================================================================
