@@ -31,8 +31,8 @@ PROG="$OUT/PROGRESS-v68.log"
 ORACLE="$OUT/oracle-comprehensive.sh"
 
 # ----- Subject pin (the v68 byte-freeze the campaign must never violate) -----
-SUBJECT_SHA="65b70821"
-SUBJECT_TREE="2494153f206f5aaedd2873e3dcc0d65ad1000336"
+SUBJECT_SHA="3cc51d00"
+SUBJECT_TREE="e9a5fc2464fdee01895b48cf50f54a0566f94863"
 SRC="contracts"
 
 # ----- Kill-safe restore trap -----
