@@ -254,3 +254,158 @@ property is attested downstream at phase 448.
 
 REQ tags locked in this section: **MATCH-09** (the LIVE/HERO-FREE split + steer-proof tier gate),
 **SEC-01** (design basis — the 4-of-4 `heroFreeCount == 4` gate, at-most-3-of-4-via-steer bound).
+
+---
+
+## E.5 Isolated payout lanes (MATCH-04, MATCH-06, MATCH-07, MATCH-08, SEC-02 basis)
+
+### (A) Isolated tier→faces schedule — MUST NOT route through Degenerette `quickPlay`
+
+The foil claim **owns its own tier→faces table**. It **MUST NOT** route through the EV-flat
+Degenerette `quickPlay` tables — those become **+EV under boosted foil gold** and would break the
+calibration. **`1 face = 1,000 FLIP = priceForLevel(recLevel) ETH`** (fixed FLIP peg; ETH-per-face
+floats with level).
+
+| Tier | Faces | Extra |
+| --- | --- | --- |
+| 2-of-4 | **5 faces** | — |
+| 3-of-4 | **65 faces** | — |
+| 4-of-4 | bonus spin (~1,000 faces) | **`whalePassClaims[player] += 1`** (the EXISTING `:1122` slot) |
+
+The 4-of-4 tier grants a half whale pass via `whalePassClaims[msg.sender] += 1;` (`:1122`,
+pool-neutral deferred grant, settled later via `DegenerusGameWhaleModule.sol:991-995`) **PLUS** a
+bonus spin. **No ETH leaves at claim for the pass leg** (MATCH-07). These base values are the locked
+D-05 calibration target (§G confirms ≈2 faces/pack/30d) (MATCH-04).
+
+### (B) Disjoint entropy lanes off `rw` (MATCH-08)
+
+Pin three separate keccak domains, independent of each other AND of the match lane (which consumes
+`getRandomTraits(r)` bit-slices + the `_rollHeroSymbol` keccak in E.3):
+
+```
+magnitudeLane = uint256(keccak256(abi.encode(rw, day, drawKind, ticketIndex, FOIL_MAG_TAG)))
+currencyLane  = uint256(keccak256(abi.encode(rw, day, drawKind, ticketIndex, FOIL_CCY_TAG)))
+```
+
+Per-tuple salting (the `(day, drawKind, ticketIndex)` fields) independently rolls each of the 8 daily
+claim-units. **`FOIL_MAG_TAG ≠ FOIL_CCY_TAG ≠ BONUS_TRAITS_TAG ≠ FLIP_JACKPOT_TAG`** — distinct
+keccak domains ⇒ the lanes are **provably disjoint** (threat T-445-E4). The lanes are derived from
+the retained `rw` at claim, **never live-read**. Magnitude-first / currency-second reveal is
+**UI-only** ordering; both are fixed atomically on-chain.
+
+### (C) Currency split — 40 / 40 / 20 (FLIP / ETH / WWXRP), every spin, all tiers (MATCH-06)
+
+```
+uint256 c = currencyLane % 100;
+if (c < 40)       currency = FLIP;    // [0,40)
+else if (c < 80)  currency = ETH;     // [40,80)
+else              currency = WWXRP;   // [80,100)
+```
+
+Magnitude `faces = baseFacesForTier`; convert FLIP / WWXRP `= faces * 1000e18`; ETH
+`= faces * priceForLevel(recLevel)`.
+
+- **FLIP (40%)** — `coin.mintForGame(msg.sender, flipAmount)` (`IDegenerusCoin.sol:20`). **Free
+  mint, no solvency impact.**
+- **WWXRP (20%)** — `wwxrp.mintPrize(msg.sender, wwxrpAmount)` (`WrappedWrappedXRP.sol:229`). **Free
+  mint, no solvency impact.**
+- **ETH (40%)** — the EXISTING capped-spin path: clamp `ethShare` to **`ETH_WIN_CAP_BPS = 1000`**
+  (10% of `futurePrizePool`); over-cap spills to the lootbox; credit the capped ETH via
+  `_creditClaimable(msg.sender, cappedEth)` (`:933`) and decrement `runningFuture` / `pendingFuture`
+  exactly as `:884-903`. **CLONE SOURCE — STATE THE CORRECTED ANCHOR EXPLICITLY (V3 DEFECT F-β):**
+  **`DegenerusGameDegeneretteModule.sol:877-915`** (`maxEth` at `:889`, lootbox-resolve at `:915`) —
+  **NOT** the previously-stated `:402-446`. Writes: prize-pool decrement +
+  `balancesPacked[msg.sender]` claimable-half + `claimablePool`; external call: a possible
+  lootbox-resolve delegatecall on the cap spill.
+
+### SEC-02 basis (design)
+
+`ethShare ≤ 10% · futurePrizePool` (the `ETH_WIN_CAP_BPS = 1000` clamp + lootbox spill); FLIP and
+WWXRP are **mints** (no pool draw); the whale pass is **pool-neutral**. Structurally solvent
+(threat T-445-E2). This is the **SEC-02 design basis**, attested downstream at phase 448. **All
+payout effects come AFTER `foilMatchClaimed[mk] = true` (CEI).** External calls in `claimFoilMatch`:
+at most one of `{coin.mintForGame, wwxrp.mintPrize}` plus, on the ETH lane, the claimable credit and
+a possible lootbox-resolve delegatecall on the cap spill — all after the marker write.
+
+---
+
+## E.7 Calibration confirm (MATCH-10, D-05)
+
+All figures are **closed-form exact binomials** — a Monte-Carlo is unnecessary because the
+per-quadrant match probability collapses to the constant `q = 1/64` (the uniform winning color
+cancels the foil boost; §E.3). V2 independently reproduced every figure to full precision.
+
+### Closed-form results
+
+- **Per-quadrant match `q = 1/64 ≈ 1.5625%`, M-invariant** (flat across all `multBps`).
+- Per ticket-draw, `k ~ Binomial(4, q = 1/64)`:
+  - `P(2-of-4) = C(4,2)·q²·(1−q)² = 0.00141943`
+  - `P(3-of-4) = C(4,3)·q³·(1−q) = 0.00001502`
+  - `P(4-of-4) = q⁴ = 5.960e-08`
+- `E[faces/draw] = 5·P(2-of-4) + 65·P(3-of-4) = 0.0080736`.
+- **`E[faces/pack/30d] = 240 · 0.0080736 = 1.9376`** over 240 ticket-draws (4 tickets × 2 draws/day
+  × 30 days), **FLAT across all scores** (M-invariant — no "calibrate-at-which-score" decision).
+- **Tier split 87.9% / 12.1%** (2-of-4 / 3-of-4) — the build-time comment should cite **87.9%**, NOT
+  the spec's illustrative ~85%.
+- **Gold-odds crossover at M ≈ 2.4854** (`multBps ≈ 24,854`) — the foil pack ties 10 normal tickets
+  on gold odds at roughly score ~30–50 on the `foilBoostBps` curve.
+- **4-of-4 ≈ 1-in-69,906 per pack** (gated HERO-FREE; EV-negligible ~0.0014%/pack, steer-proof).
+
+### D-05 policy verdict — CONFIRM and REPORT, no recalibration
+
+The realized **1.94 faces/pack/30d** lands on the D-05 ~2-face target (**3.1% low**) → **NOT
+materially off → no recalibration flag**. The payout table stays **LOCKED**. Because the per-quadrant
+match collapses to a constant, the §G figures are **closed-form exact** — a Monte-Carlo is optional
+confirmation, **not** a gating recompute. **Per D-05: if phase 447's empirical run lands materially
+off ≈2, flag it to the USER — never silently retune the locked table.** (Reporting notes, both
+non-blocking: the tier split is 87.9%/12.1% vs the illustrative ~85%/~12%; the 4-of-4 per-pack
+rarity ≈1-in-69,906 is rarer than the spec's illustrative ≈1-in-300k, which folds a narrower
+per-level window — documentation footnotes, no number changed.)
+
+---
+
+## F. Module placement + EIP-170 (SEC-03, D-04)
+
+### F.1 Recommendation — a NEW `GAME_FOILPACK_MODULE`
+
+Pin the placement: **a new `GAME_FOILPACK_MODULE`** (mirrors the existing 12-module delegatecall
+dispatch), **NOT** an existing module. **D-04 is the engineering EIP-170 call** — the measured live
+headroom drives it:
+
+- The estimated foil body is **≈8–11 KB deployed** (buyFoilPack ~2.5–3.5 KB + claimFoilMatch
+  ~2.5–3.5 KB + the isolated spin payout ~3–4 KB; the two library pieces `traitFromWordFoil` /
+  `packedTraitsFoil` and `foilBoostBps` are `internal pure` and inline into callers, ~0.6–1.1 KB).
+- An ~8–11 KB body **does not fit any single roomy live module with comfortable EIP-170 margin** plus
+  the re-audit / slither / layout-golden re-pass cost. **`MintModule` is excluded** — SEC-03 excludes
+  it AND it is physically near-full (**~1,116 B free** of its measured 23,460 B). The very-roomy
+  Bingo / Boon / GameOver modules could absorb it physically but would couple an unrelated payable
+  purchase + lottery feature into unrelated bodies.
+- A fresh `GAME_FOILPACK_MODULE` starts at 0 → ~8–11 KB lands inside the 24,576 B cap with
+  **~13.5–16.5 KB headroom**. No EIP-170 risk.
+
+### F.2 Facade stubs + the constant
+
+- **Two thin facade stubs** on `DegenerusGame`: `payable buyFoilPack()` + `claimFoilMatch(day,
+  ticketIndex, drawKind)`. Each ~250–450 B; two ≈ 0.5–0.9 KB against the facade's measured **4,188 B
+  free** → the facade lands at **~3.3–3.7 KB free**.
+- **One new constant** `address internal constant GAME_FOILPACK_MODULE = …;` in
+  `ContractAddresses.sol` (alongside the existing 12 `GAME_*_MODULE` constants at `:13-35`).
+
+### F.3 Storage placement (SEC-03)
+
+**New storage appends in `DegenerusGameStorage` ONLY** (the delegatecall-shared base), never in the
+foil module or the facade — `foilRecord` + `foilMatchClaimed` tail-appended after `boxPlayers`
+(`:2393`), no slot moves (SEC-04, see Section D).
+
+### F.4 Re-measure-at-IMPL caveat (HARD-REQ §6.7)
+
+All Section F sizes are measured on the **current** artifacts (no foil code yet). The real
+`GAME_FOILPACK_MODULE` body and the facade-after-stubs size **MUST be re-measured on the post-IMPL
+build** (HARD-REQ §6.7). Estimated body 8–11 KB; estimated headroom 13.5–16.5 KB — **to be confirmed
+at 446/449**.
+
+REQ tags locked across E.5 / E.7 / F: **MATCH-04** (isolated tier→faces table, no Degenerette
+routing), **MATCH-06** (40/40/20 split), **MATCH-07** (4-of-4 whale pass + bonus spin), **MATCH-08**
+(disjoint `FOIL_MAG_TAG` / `FOIL_CCY_TAG` lanes), **MATCH-10** (the 1.9376 calibration confirm),
+**SEC-02** (design basis — ETH ≤ 10%-pool cap + lootbox spill cloned from `:877-915`), **SEC-03**
+(new `GAME_FOILPACK_MODULE` + shared storage).
