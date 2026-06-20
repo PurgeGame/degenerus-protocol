@@ -821,6 +821,106 @@ rejected single-slot form. By choosing the level=>player keying (Decision 1) the
 `foilRecord[L][player]` and `foilRecord[L+1][player]` are independent records, so an *L+1* re-buy never touches
 *L*'s unclaimed signatures. This is no longer an open acceptance — it is resolved.
 
+---
+
+## U. IMPL-446 Resolutions & Corrections (USER sign-off 2026-06-19 — supersede the cited body lines)
+
+> Three findings surfaced during 446 planning, each grounded in the live `ffbd7796` code and resolved by USER
+> sign-off. Each records its decision PLUS the specific §A/§D/§E body line it **supersedes** — read §U as FINAL
+> where it conflicts with the body (the 436 D-436-09 reconciliation pattern). U.4 widens the §F edit surface
+> beyond "foil-only" by three surgical, additive spine touches; that widening is **intrinsic to FOIL-05 +
+> MATCH-02**, not a scope choice. An IMPL-446 author reads §U as authoritative over any conflicting body text.
+
+### U.1 — Resolution producer correction (supersedes §E.1 step 7's `packedTraitsFromSeed`)
+
+**VERIFIED on `ffbd7796`:** the lazy ticket-resolution path does **NOT** call `packedTraitsFromSeed` — that
+4-quadrant packer has **zero mainnet call sites** (only its def `DegenerusTraitUtils.sol:169` + a test shim).
+The live per-ticket producer is the **single-8-bit-trait `traitFromWord` at `DegenerusGameMintModule.sol:759`**,
+inside `_raritySymbolBatch` (`:720`), driven by the `uint64` LCG `s` (`:756`; `s` from
+`keccak256(baseKey, entropyWord, groupIdx)` `:745-747`; `baseKey = (lvl<<224)|(idx<<192)|(player<<32)|owed`
+`:592-595`), the produced trait pushed into `traitBurnTicket[lvl][traitId]` (`:795-814`).
+
+- **The foil resolution producer is `traitFromWordFoil(uint64 s, uint16 multBps)`** — the SINGLE-trait sibling
+  (the inner per-lane helper of A.1.1), **NOT** `packedTraitsFoil`. `packedTraitsFoil(rand, multBps)` is the
+  4-quadrant packer used ONLY on the BUY side to roll the 4 frozen `foilRecord` match signatures (§E.1 step 6);
+  it calls `traitFromWordFoil` per lane. Both siblings are additive; the frozen `traitFromWord` /
+  `weightedColorBucket` / `packedTraitsFromSeed` are untouched (RARE-01).
+- **The one and only resolution line a foil ticket diverts is `MintModule.sol:759`** — branched to
+  `multBps == 0 ? traitFromWord(s) : traitFromWordFoil(s, multBps)` (the `(i&3)<<6` quadrant offset retained for
+  foil).
+- **Path fix:** `DegenerusTraitUtils.sol` is at `contracts/` **root** (NOT `contracts/libraries/`; the §A/§D
+  `libraries/` prefix is a typo). `ActivityCurveLib.sol` is at `contracts/libraries/`.
+
+### U.2 — Eligibility-window mechanism (supersedes §E.2 step 1–2 "resolve recLevel" / "window read from the outer level key")
+
+**VERIFIED:** there is **no on-chain day→level map**; `level` advances jackpot-driven (`AdvanceModule:1732`),
+`dailyIdx` daily, a level spans 0–120 days, and `purchaseStartDay` is a single rolling scalar. So `recLevel` is
+**not derivable from `day`**, and "day within recLevel's span" is **not checkable** as the body wrote it.
+RESOLVED:
+
+- **`claimFoilMatch` gains an explicit `recLevel`** — signature
+  `claimFoilMatch(uint256 day, uint256 ticketIndex, uint8 drawKind, uint256 recLevel)` (supersedes the §E.2
+  3-param pin). It keys the `foilRecord[recLevel][player]` SLOAD and the double-claim marker.
+- **Stamp `buyDay` in `foilRecord`:** add `buyDay` `uint24` at bits **`[168-191]`** of the packed record (was
+  reserved `0`; reserved now `[192-255]`, 64 bits). Written at buy = the raw day of purchase.
+- **Maintain `levelStartDay`:** new `mapping(uint24 => uint24) levelStartDay` (append-only), written ONCE at the
+  `level = lvl` transition in `AdvanceModule` (`:1732`) — the new additive spine touch. `levelStartDay[L]` = the
+  day level L began.
+- **Eligibility window:** a claim for `day` is valid iff `day >= buyDay + 1` **AND**
+  (`levelStartDay[recLevel + 1] == 0` (recLevel still live) **OR** `day < levelStartDay[recLevel + 1]`) — i.e.
+  eligible across **`[buyDay + 1, levelStartDay[recLevel + 1])`**: no look-back to draws before the buy, upper
+  bound = the day the level ended (open while live). Preserves MATCH-02 (bounded whole-level window), MATCH-05
+  (past-level claims survive a fast `level++`), and the FINAL-SPEC level-pace bet (`FINAL-SPEC:47`).
+- The `rawLevel` stamp `[144-167]` stays a redundant cross-check; `recLevel` is now the load-bearing key.
+
+### U.3 — Ticket-creation mechanism — D-446-01 RESOLVED (separate foil queue, leftover-budget drain)
+
+The 4 foil tickets enter the REGULAR jackpot (FOIL-05) via a **separate foil queue resolved on the existing
+drain's leftover budget** — chosen over the per-entry tag (avoids a per-player SLOAD on the hot normal drain)
+and over a duplicated batch body (avoids the EIP-170 hit):
+
+- **Buy:** queue the buyer into a new append-only **`foilTicketQueue[wk]`** (mirrors `ticketQueue`, same
+  `wk`/active-level keying) — NOT `ticketQueue`; record the 4 foil-owed in **`foilOwedPacked[level][player]`**
+  (a small append-only counter, OR folded into `foilRecord` reserved bits if the wk/level keying lines up —
+  IMPL choice). This replaces the §E.1 step-7 `_queueTicketsScaled(..., 400, ...)` normal-queue call with a
+  foil-aware queue writer of the same shape (the `400 = 4 × TICKET_SCALE` quantity still governs the foil
+  counter; queued at `_activeTicketLevel()`).
+- **Resolution wired into `processTicketBatch` on LEFTOVER budget:** after the normal `ticketQueue` is exhausted
+  **AND** write-budget remains (the `take`/`maxT`/`baseOv` accounting `:627-634`), the SAME loop continues into
+  `foilTicketQueue[wk]`, resolving each via the **shared** `_raritySymbolBatch` (now taking a `uint16 multBps`
+  param; `multBps` read frozen from `foilRecord` — RARE-03), the `:759` branch selecting `traitFromWordFoil`. A
+  **`FOIL_SEED_TAG`** domain-separates the foil seed so a player holding both normal + foil entries at one level
+  cannot collide. A **`foilCursor`** (paralleling `ticketCursor`) makes a partially-drained foil queue
+  resumable. **ONE budget envelope** ⇒ the combined advance stays gas-bounded (the v62 gas-brick lesson).
+- **Readiness gate:** the jackpot/advance "queue drained?" check MUST require **BOTH**
+  `ticketCursor == ticketQueue.length` AND `foilCursor == foilTicketQueue.length` — a level's jackpot cannot
+  draw until both queues are drained, else foil's boosted `traitBurnTicket` entries silently under-resolve (a
+  non-reverting FOIL-05 violation). Foil is best-effort on budget but **gated** before the draw.
+- Foil entries are current-level ⇒ the wiring lands in the **current** drain (`processTicketBatch`) only, not
+  `processFutureTicketBatch` (IMPL confirms against the `false` routing arg of the original step-7 pin).
+
+### U.4 — Edit-surface widening (amends §F + success-criterion #4; extends §S)
+
+FOIL-05 + MATCH-02 are not implementable on the "foil-surface-only" footprint §F assumed. The 446 diff
+additively touches **three spine sites** — all surgical, all behaviorally normal-preserving (re-attested at 448
+RNG-freeze + layout golden):
+
+1. **`DegenerusGameMintModule.sol`** — `_raritySymbolBatch` gains a `uint16 multBps` param + the `:759` branch;
+   `processTicketBatch` gains the leftover-budget foil-drain + `foilCursor` + the both-queues-drained readiness
+   gate.
+2. **`DegenerusGameAdvanceModule.sol`** — one `levelStartDay[lvl] = day` SSTORE at the `level = lvl` transition
+   (`:1732`).
+3. **`DegenerusGameStorage.sol`** — append `levelStartDay`, `foilTicketQueue`, `foilOwedPacked` (or fold the
+   owed-count into `foilRecord`), `foilCursor`; add `buyDay` to the `foilRecord` payload `[168-191]`; ensure
+   `FOIL_SEED_TAG` — all append-only, **no slot move/retype**.
+
+Success-criterion #4 now reads: the diff touches the foil surface **+ these three additive spine touches**;
+EIP-170 re-measured (no duplicated batch body); layout append-only. **§S extension:** the T-445-D1 "two new
+base mapping slots" count is superseded by the U.4 storage list (still all append-only, no retype); the
+planner's `<threat_model>` blocks carry the new rows (foil-drain budget-desync → mitigated by the single shared
+budget + `foilCursor` resumability + a 447 brick test; readiness-gate omission → mitigated by the both-queues
+gate; `levelStartDay` write on the advance spine → additive, behaviorally inert to existing logic).
+
 **Spot-check (informational):** the §R REQ-Coverage Map lists all 20 REQ-IDs (FOIL-01..05, RARE-01..04,
 MATCH-01..10, SEC-03); the §E.7 calibration reports **≈1.94 faces/pack/30d** (on the D-05 ~2-face target, 3.1%
 low → no recalibration). Both pins are signed off; Phase 446 is unblocked.
