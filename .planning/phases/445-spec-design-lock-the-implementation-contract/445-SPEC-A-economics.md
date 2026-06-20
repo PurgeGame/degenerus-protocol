@@ -159,3 +159,85 @@ illustrative of the ~×2.5 tie point, **not** a pinned breakpoint.
 - **Max (×6):** `53.61%` → ~2× baseline (spec 53.6%).
 
 ---
+
+## A.2 Locked Knobs — `foilBoostBps(score)` activity curve (RARE-02 / RARE-03 / FOIL-05)
+
+A 4-anchor / 3-segment piecewise-linear bps curve
+`foilBoostBps(uint256 score) internal pure returns (uint256)`, to be **added to `ActivityCurveLib`**,
+modeled on the existing `decMultBps` / `centuryBps` idiom (`ActivityCurveLib.sol:42-61`, `:74-90`).
+Returns bps where `10000 = 1.0×`; range locked to **[20000, 60000] = [×2.0, ×6.0]**. It **reuses the
+two existing shared knees** — `ACTIVITY_SEG_B_KNEE_POINTS = 500` (`:26`) and
+`ACTIVITY_EFFECTIVE_CAP_POINTS = 30_000` (`:29`) — so it carries the identical shape signature as the
+two existing curves (RARE-02, D-02).
+
+### A.2.1 The 5 constants to add (mirroring the `MULT_*` / `CENTURY_*` blocks)
+
+| constant         | value      | meaning                                                                 |
+| ---------------- | ---------- | ----------------------------------------------------------------------- |
+| `FOIL_MIN_BPS`   | `20_000`   | ×2.0 @ score 0 (low-activity floor)                                     |
+| `FOIL_K_POINTS`  | `300`      | seg-A knee (inside the established 235/305 K band: `MULT_K=235`, `CENTURY_K=305`) |
+| `FOIL_VA_BPS`    | `50_000`   | ×5.0 @ K (75% of the ×2→×6 gain)                                         |
+| `FOIL_VB_BPS`    | `55_000`   | ×5.5 @ the existing `ACTIVITY_SEG_B_KNEE_POINTS = 500` (87.5% of gain)   |
+| `FOIL_MAX_BPS`   | `60_000`   | ×6.0 @ the existing `ACTIVITY_EFFECTIVE_CAP_POINTS = 30_000` (saturates flat) |
+
+Total gain `= 40_000` bps. Anchors: `MIN→VA` over `[0, K]` (steep early ramp), `VA→VB` over
+`[K, 500]` (shallow middle), `VB→MAX` over `[500, 30000]` (long near-flat crawl), flat at `MAX`
+beyond. `FOIL_K_POINTS = 300` sits inside the established seg-A-knee band; `VA`/`VB` deliver 75% /
+87.5% of the gain at the two lower knees.
+
+### A.2.2 The 4 segment closed forms (integer floor division, matching the existing curves)
+
+With explicit endpoint guard branches so there is **no interpolation rounding at the endpoints**:
+
+- **`score == 0` ⇒ `20000`** (explicit guard branch).
+- **Seg A** `0 < score ≤ 300`: `20000 + 100·score`.
+- **Seg B** `300 < score ≤ 500`: `50000 + 25·(score − 300)`.
+- **Seg C** `500 < score < 30000`: `55000 + (score − 500)·5000/29500`.
+- **`score ≥ 30000` ⇒ `60000`** (saturation, explicit guard branch).
+
+The interpolation form is identical to `decMultBps`: `V_lo + (score − knee_lo)·(V_hi − V_lo)/(knee_hi − knee_lo)`
+per segment, with the two endpoint guards (`score == 0` and `score >= ACTIVITY_EFFECTIVE_CAP_POINTS`)
+short-circuiting before any interpolation.
+
+### A.2.3 Value table (exact, integer-floor; V1: all reproduce)
+
+| score        | bps    | multiplier | segment                                |
+| ------------ | ------ | ---------- | -------------------------------------- |
+| 0            | 20000  | ×2.0000    | floor (guard)                          |
+| 50           | 25000  | ×2.5000    | A — the ~×2.5 tie anchor               |
+| 100          | 30000  | ×3.0000    | A                                      |
+| 300 (K)      | 50000  | ×5.0000    | A→B knee                               |
+| 350          | 51250  | ×5.1250    | B — **ILLUSTRATIVE, NOT pinned** (350 is NOT a breakpoint) |
+| 500          | 55000  | ×5.5000    | B knee                                 |
+| 5000         | 55762  | ×5.5762    | C                                      |
+| 30000 (max)  | 60000  | ×6.0000    | cap (guard)                            |
+
+The `350 → 51250` row honors the spec's "~×5 @ 350" **BY SHAPE only** — `×5.0` actually lands at
+`K = 300`, and the curve's pinned boundaries are `{0, 300, 500, 30000}`. **350 is NOT a pinned
+breakpoint** (D-02, user-confirmed); it is illustrative of the shape near the upper-middle.
+
+### A.2.4 Frozen-at-buy / apply-at-resolve / never-live-read (RARE-03)
+
+The bps multiplier is **frozen at buy** and applied at resolve — **never live-read**. At `buyFoilPack`,
+`score = _playerActivityScore(buyer, …)` is read ONCE from the **same `cachedScore` source the mint
+path freezes** (`DegenerusGameMintModule.sol:1709`; whole-point activity score). `multBps =
+uint16(ActivityCurveLib.foilBoostBps(score))` (range `20000..60000`) is stored into `foilRecord` as
+the frozen 16-bit field. The jackpot resolve path and the match re-derivation both read the frozen
+`multBps` from the record — they do NOT re-read the player's activity score. This is the
+freeze-at-buy / apply-at-resolve link to `frozen multBps stored in foilRecord` (the `/15360` ladder
+of §A.1.4 consumes exactly this frozen value). **RARE-03.**
+
+### A.2.5 Invariant verification (V1: exhaustive over `[0, 30001]` + saturation tail)
+
+- **Bounds** — min 20000 / max 60000; never < ×2, never > ×6.
+- **Monotone non-decreasing** at every adjacent integer; 0 violations over `[0, 30001]`.
+- **Saturation** — returns exactly 60000 for every `score ≥ 30000` (tested 30000, 30001, 50000, 1e9).
+- **Endpoints exact** via the explicit guard branches (no interpolation rounding).
+- **"~×5 @ 350" honored by shape, 350 NOT pinned** — boundaries are `{0, 300, 500, 30000}`; ×5.0
+  lands at `K = 300`.
+- **~×2.5 tie anchor** — `foilBoostBps(50) = 25000` exactly (FOIL-05 / the gold-odds tie context of §A.1.7).
+
+Cited: RARE-02 (the activity-curve shape), RARE-03 (frozen-at-buy semantics), FOIL-05 (the boost
+source that scales `p_gold`).
+
+---
