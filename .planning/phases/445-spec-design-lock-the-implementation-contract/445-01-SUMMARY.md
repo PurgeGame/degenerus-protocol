@@ -109,3 +109,13 @@ None — this plan authors a `.planning/` design-lock SPEC section only; it intr
 network endpoint, no auth path, no file access, and no schema/storage change at a trust boundary. The
 storage-layout and security design basis (`foilRecord` packing, the steer-proof 4-of-4 gate, the ETH
 ≤10% cap) live in other 445 plans / sections and are attested downstream at 448/449.
+
+## Self-Check: PASSED
+
+- `445-SPEC-A-economics.md` — FOUND.
+- `445-01-SUMMARY.md` — FOUND.
+- Commits `def81a48` (Task 1), `9c3b891c` (Task 2), `6ed615a8` (SUMMARY) — all FOUND in `git log`.
+- `git diff HEAD~3 HEAD` touches exactly the two intended files (354 insertions); `STATE.md` /
+  `ROADMAP.md` ABSENT from my commits (orchestrator-owned; the pre-existing `STATE.md` modification
+  remains unstaged).
+- `git diff --quiet -- contracts/` → CLEAN.
