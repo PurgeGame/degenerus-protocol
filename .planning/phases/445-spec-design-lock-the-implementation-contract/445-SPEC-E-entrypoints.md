@@ -160,3 +160,97 @@ out-of-scope nicety.)
 REQ tags locked in this section: **FOIL-02** (10× price), **FOIL-03** (afking-rejection guard),
 **FOIL-04** (`FOIL_TO_FUTURE_BPS = 2500`, the 75/25 fork), **MATCH-03** (full 6-bit positional
 count, color-only excluded).
+
+---
+
+## E.3 The crux — winning-set re-derivation (LIVE vs HERO-FREE) (MATCH-09, SEC-01 basis)
+
+### Producer substrate — `getRandomTraits`, flat uniform 6-bit slice
+
+The daily winning set is produced by **`JackpotBucketLib.getRandomTraits(uint256 rw)`
+(`JackpotBucketLib.sol:281-286`)** — a **flat uniform 6-bit slice per quadrant**: each quadrant is
+`(rw >> 6q) & 0x3F` with the quadrant bits OR'd in, packed `[QQ][CCC][SSS]`. **Both the color
+(`CCC`, high 3 bits) and the symbol (`SSS`, low 3 bits) are uniform `1/8`.** This is materially
+different from the producers the foil **tickets** use: the winning set does **NOT** apply
+`weightedColorBucket` (the heavy-tail color ladder) and does **NOT** apply `_degTrait` (near-uniform
+degenerette). It is a third, pure-uniform model on all 6 bits.
+
+**Consequence — the foil rarity boost CANCELS in the match channel.** Per-quadrant exact
+`[color | symbol]` match probability is `(1/8 color) × (1/8 symbol) ≈ 1/64 ≈ 1.5625%`, **independent
+of `multBps`**: the ticket's boosted color distribution sums to 1 against a flat `1/8` winning-color
+weight, so the boost factors out. The rarity boost changes the tickets' own jackpot-gold
+participation (§1) but **does NOT change match-lottery odds** (key MATCH-10 / §G calibration fact —
+`q = 1/64` for all M).
+
+### Per-`drawKind` base word
+
+Pin the base word per draw, mirroring `_rollWinningTraits` (`:1760-1769`):
+
+```
+r = (drawKind == 1) ? EntropyLib.hash2(rw, uint256(BONUS_TRAITS_TAG)) : rw;
+```
+
+Main (`drawKind == 0`) uses `rw` directly; bonus (`drawKind == 1`) uses the keccak-domain-separated
+`hash2(rw, BONUS_TRAITS_TAG)` → independent base traits and hero colors. (Two i.i.d.-distributed
+winning sets per day, correlated only through the shared hero symbol; see below.)
+
+### The two re-derived sets (mirroring `_rollWinningTraits`, `:1760-1769`)
+
+1. **HERO-FREE pure-VRF set — NO `_applyHeroResult`:**
+   `uint8[4] heroFreeW = JackpotBucketLib.getRandomTraits(r);` then
+   `uint32 heroFreeSet = JackpotBucketLib.packWinningTraits(heroFreeW);`. This is the un-steerable
+   substrate; `heroFreeW[heroQuadrant]` still holds the VRF symbol, **never** the steered one.
+
+2. **LIVE (hero-overridden) set — HERO-FREE with `_applyHeroResult`:**
+   `(bool hasHero, uint8 hQ, uint8 hSym) = _rollHeroSymbol(dailyIdxFor(day), rw);` (hero entropy is
+   the unsalted day word `rw`, `:1768`), then start from a copy `uint8[4] liveW = heroFreeW;` and
+   apply `_applyHeroResult(liveW, r, hasHero, hQ, hSym);` (`DegenerusGameJackpotModule.sol:1316-1341`).
+   The override rewrites **ONLY `liveW[heroQuadrant]`** — color re-sampled from `r`'s low bits,
+   symbol set to the steered `heroSymbol`. **Every non-hero quadrant byte is identical to
+   HERO-FREE.** Pack `uint32 liveSet = JackpotBucketLib.packWinningTraits(liveW);`. When `total == 0`
+   (no wagers), `_applyHeroResult` is a no-op and LIVE collapses to HERO-FREE.
+
+### CRITICAL IMPL anchor — read `dailyHeroWagers[day-1]`
+
+`_rollHeroSymbol` reads `dailyHeroWagers[dailyIdx]` where **`dailyIdx == day - 1`** — the prior-day
+wager pool, because the index is frozen at the previous day's slot when the jackpot is processed
+(verified `DegenerusGameJackpotModule.sol:1290-1291`, set at AdvanceModule). **Therefore
+`claimFoilMatch(D)` MUST read `dailyHeroWagers[D-1]`.** The pool is retained storage
+(`:1841`), so the hero `(quadrant, symbol)` is **fully reconstructible** at claim time. Pin
+`dailyIdxFor(day) == day - 1` as the IMPL anchor.
+
+### Main vs bonus — shared hero symbol
+
+`_rollWinningTraitsPair` (`:1778-1795`) forces the **same hero `(quadrant, symbol)`** onto both main
+and bonus via ONE `_rollHeroSymbol(dailyIdx, randWord)`; only the base word `r` differs (main `rw` /
+bonus `hash2(rw, BONUS_TRAITS_TAG)`) and the hero *color* is re-sampled per roll. The re-derivation
+must reuse the same `(hQ, hSym)` for both `drawKind` values of a given day.
+
+### Tier gate (MATCH-09 — steer-proof)
+
+Pin the tier resolution from `liveCount` / `heroFreeCount`:
+
+| Tier | Condition | Channel |
+| --- | --- | --- |
+| 2-of-4 | `liveCount == 2` | LIVE (bounded hero edge KEPT) |
+| 3-of-4 | `liveCount == 3` | LIVE (bounded hero edge KEPT) |
+| 4-of-4 | **`heroFreeCount == 4` ONLY** | HERO-FREE pure-VRF (steer-proof) |
+| none | else | `tier == 0 ⇒ revert E();` |
+
+- **2-of-4 / 3-of-4 are taken off `liveCount`** — the bounded hero edge is intentionally KEPT (a
+  steered hero symbol can carry one quadrant on LIVE).
+- **4-of-4 is gated ONLY on `heroFreeCount == 4`** — a steered hero shifts at most **one** quadrant's
+  symbol on LIVE, so a steerer reaches at most **3-of-4** on LIVE and **never** `heroFreeCount == 4`.
+- **Edge case:** if `liveCount == 4` arises only via the hero override but `heroFreeCount == 3`, the
+  claim pays the **3-of-4** tier — the 4-of-4 gate is `heroFreeCount`, never `liveCount`.
+
+### SEC-01 consequence (design basis)
+
+A steerer controls only the **`heroSymbol` of `liveW[hQ]`** — one quadrant's symbol on the LIVE set;
+`heroFreeCount` is computed on pure VRF (untouchable). Maximum steered contribution is `+1` to
+`liveCount`. The **4-of-4 whale-pass moonshot (gated on `heroFreeCount == 4`) is un-steerable and
+non-stackable** (threat T-445-E1). This is the **SEC-01 design basis** (steer-proof 4-of-4); the
+property is attested downstream at phase 448.
+
+REQ tags locked in this section: **MATCH-09** (the LIVE/HERO-FREE split + steer-proof tier gate),
+**SEC-01** (design basis — the 4-of-4 `heroFreeCount == 4` gate, at-most-3-of-4-via-steer bound).
