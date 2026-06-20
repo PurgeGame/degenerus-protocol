@@ -83,9 +83,10 @@ failure. All foil logic lives in the module; the facade carries no state and no 
    - For `i in 0..3`:
      `uint32 sig_i = DegenerusTraitUtils.packedTraitsFoil(uint256(keccak256(abi.encode(seed, i))), multBps);`
      (the §A/E.4 sibling of `packedTraitsDegenerette` `:201`; tapered color, symbol uniform 1/8).
-   - **Storage write:** `foilRecord[buyer] = pack(stamp = lvl, multBps, sig0..3);` — a **single
-     SSTORE** in the Section D layout. This one slot is **both** the per-RAW-level cap flag (step 2
-     reads its stamp) **and** the frozen signature/boost record (claim reads its sigs + `multBps`).
+   - **Storage write:** `foilRecord[lvl][buyer] = pack(stamp = lvl, multBps, sig0..3);` — a **single
+     SSTORE** in the Section D layout (level=>player keying). This one slot is **both** the
+     per-RAW-level cap (step 2 reads its presence in the level sub-map) **and** the frozen
+     signature/boost record (claim reads its sigs + `multBps`).
 
 7. **Enter the 4 tickets into the REGULAR jackpot (FOIL-05).** Queue at the active ticket level so
    the foil tickets share `traitBurnTicket[level][traitId]` eligibility (`:442`):
@@ -124,14 +125,15 @@ out-of-scope nicety.)
 
 1. **Bounds + record load.** `require(ticketIndex < 4); require(drawKind < 2);` Resolve the
    record-of-level `recLevel` and load
-   `(bool present, uint16 multBps, uint32[4] sigs) = _foilRecordFor(msg.sender, recLevel);` then
-   `require(present);`. Records persist per-level (MATCH-05): keyed by player and stamped `recLevel`;
-   a fast `level++` cannot grief — the record is not auto-wiped until the SAME player re-buys, itself
-   gated by E.1 step 2.
+   `(bool present, uint16 multBps, uint32[4] sigs) = _foilRecordFor(msg.sender, recLevel);` over
+   `foilRecord[recLevel][msg.sender]`, then `require(present);`. Records persist per-level (MATCH-05):
+   keyed by `(level, player)`; a fast `level++` cannot grief, and even the player's own re-buy at a
+   later level writes a DIFFERENT outer key — so `foilRecord[recLevel][player]` is never clobbered
+   while it stays unclaimed (the single-slot loss edge is eliminated, §D.4).
 
 2. **Eligibility window (MATCH-02).** `require(day` falls within `recLevel`'s draw-day span`)`. A
    foil pack is claimable across the WHOLE level (the day's level-of-record equals `recLevel`); the
-   window is read from the stamp, never a live `level` compare.
+   window is read from the outer level key, never a live `level` compare.
 
 3. **RNG availability.** `uint256 rw = rngWordByDay[uint24(day)]; require(rw != 0);` (`:462`; the
    retained daily VRF — the re-derivation source, **never live-read** elsewhere).

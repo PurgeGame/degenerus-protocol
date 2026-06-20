@@ -33,8 +33,8 @@
 ## 0. Decisions Locked (D-01..D-05) + the Two Pins
 
 > Mirroring the house SPEC-V61 "Locked Knobs" form: each decision restates its LOCKED value and the affected
-> REQ-IDs. The genuine open SPEC decisions are the two layout pins (§D.6) plus the single-slot player-loss
-> edge — all three are pulled forward into the **USER Decisions** callout in §T below.
+> REQ-IDs. The two layout pins (§D.6) were the genuine SPEC decisions surfaced to the USER; both are now
+> **RESOLVED** by the 2026-06-19 USER sign-off recorded in the §T decisions record below.
 
 - **D-01 — Design-lock only (no `.sol`).** Phase 445 produces this SPEC; `V71-FOILPACK-FINAL-SPEC.md` +
   `REQUIREMENTS.md` are authoritative. ZERO `contracts/*.sol` edits in this phase. The contract diff lands
@@ -48,9 +48,10 @@
 - **D-05 — ≈2 faces/pack/30d payout target; CONFIRM-and-REPORT, never silently retune** (§E.7). Realized
   **1.9376** lands 3.1% low → no recalibration flag; the locked table stays LOCKED.
 
-**The two pins (§D.6):** PIN 1 — `foilRecord` level-keying (LOCKED single-slot `mapping(address => uint256)`,
-USER-sign-off on the player-loss edge); PIN 2 — the packed bit-offset (LOCKED stamp `[144-167]` / payload
-`[0-143]`).
+**The two pins (§D.6), both RESOLVED by the 2026-06-19 USER sign-off:** PIN 1 — `foilRecord` level-keying
+(CHOSEN `mapping(uint24 => mapping(address => uint256))`, the level=>player surviving-record form; the
+single-slot self-overwrite loss edge is therefore ELIMINATED); PIN 2 — the packed bit-offset (ACCEPTED stamp
+`[144-167]` / payload `[0-143]`).
 
 ---
 
@@ -216,8 +217,8 @@ monotone non-decreasing at every adjacent integer (0 violations); saturation (ex
 
 > Build-ready storage. Every layout choice is the RESEARCH §D reconciled-and-corrected form (V3 PASS, the E.6
 > 168-bit superset). Three storage items append at the tail of `DegenerusGameStorage`: ONE packed `foilRecord`
-> slot per player, the folded per-raw-level cap (no separate slot), and the sparse `foilMatchClaimed` marker.
-> No existing slot moves (SEC-04).
+> slot per (level, player), the per-raw-level cap (the record's presence in that level's sub-map; no separate
+> slot), and the sparse `foilMatchClaimed` marker. No existing slot moves (SEC-04).
 
 ### D.0 Grounded baseline facts (V3: all PASS)
 
@@ -234,12 +235,17 @@ A foil signature carries 4 quadrants × the full 6-bit `[CCC][SSS]` (color AND s
 does NOT count), packed `uint32` in the **identical `[QQ][CCC][SSS]`-per-byte layout** as
 `packedTraitsFromSeed` / `packedTraitsFoil` (direct byte compare).
 
-### D.1 `foilRecord` — ONE packed slot per player (FOIL-01, MATCH-01, MATCH-02, SEC-03)
+### D.1 `foilRecord` — ONE packed slot per (level, player) (FOIL-01, MATCH-01, MATCH-02, SEC-03)
 
-**LOCKED form:** one packed `uint256` per player — `mapping(address => uint256) internal foilRecord` appended
-after `:2393` (before `:2394`), with an embedded level stamp (the century idiom), NOT a `level => player`
-outer map. The record stores the **full packed `uint32` per ticket PLUS the frozen 16-bit `multBps`** — the
-reconciled E.6 168-bit superset. Buy = ONE SSTORE; claim = ONE SLOAD.
+**CHOSEN form (USER sign-off 2026-06-19):** one packed `uint256` per (level, player) —
+`mapping(uint24 => mapping(address => uint256)) internal foilRecord` appended after `:2393` (before `:2394`),
+the **level=>player surviving-record** form. The outer key is the raw `uint24 level` (`:236`, the same domain
+as `rngWordByDay:462`); the inner key is the player. The record stores the **full packed `uint32` per ticket
+PLUS the frozen 16-bit `multBps`** — the reconciled E.6 168-bit superset. Buy = ONE SSTORE
+(`foilRecord[lvl][buyer]`); claim = ONE SLOAD (`foilRecord[recLevel][player]`). The 24-bit `rawLevel` stamp in
+the payload is RETAINED (written = the buy's raw level) but its role is now a **redundant self-consistency /
+cross-check field** — the outer level key already scopes the record per level, so the stamp is no longer the
+cap mechanism.
 
 **D.1.1 The packed 168-bit superset (the LOCKED bit layout):**
 
@@ -250,10 +256,11 @@ reconciled E.6 168-bit superset. Buy = ONE SSTORE; claim = ONE SLOAD.
 | `sig2` | 32 bits | `[64-95]`   | ticket-2 packed `uint32` signature |
 | `sig3` | 32 bits | `[96-127]`  | ticket-3 packed `uint32` signature |
 | `multBps` | 16 bits | `[128-143]` | the frozen `foilBoostBps` output (`20000..60000`); RARE-03 |
-| `rawLevel` stamp | 24 bits | `[144-167]` | the raw `uint24 level` (`:236`) at buy; doubles as the cap flag |
+| `rawLevel` stamp | 24 bits | `[144-167]` | the raw `uint24 level` (`:236`) at buy; a redundant cross-check (the outer level key is the cap) |
 | reserved | 88 bits | `[168-255]` | unused, always `0` |
 
-**Bit budget:** `4×32 + 16 + 24 = 168 ≤ 256`. One slot.
+**Bit budget:** `4×32 + 16 + 24 = 168 ≤ 256`. One slot. The PIN 2 bit layout is UNCHANGED by the level=>player
+keying; the stamp simply changes role from cap to cross-check.
 
 **D.1.2 E.6 superset adopted OVER the D.1 24-bit variant (V3 DEFECT D-α resolved).** The frozen `multBps` is
 **REQUIRED** in the record by RARE-03 / MATCH-09: the jackpot resolve path consumes the frozen multiplier (the
@@ -272,28 +279,30 @@ signature) is the robust superset and matches the `packedTraitsFoil` output byte
 | `_FOIL_STAMP_SHIFT` | `144`                    | shift to the 24-bit raw-level stamp |
 | `_FOIL_STAMP_MASK`  | `(uint256(1) << 24) - 1` | mask the 24-bit stamp |
 
-**D.1.4 `_foilRecordFor(player, lvl)` accessor (per-level auto-reset).** A `view` accessor
-`_foilRecordFor(address player, uint256 lvl)` returns `(present, multBps, sigs[4])` for `player` at raw `lvl`,
-or `(false, 0, [0,0,0,0])` when the stored stamp ≠ the queried raw level — the century auto-reset, identical
-in spirit to `_centuryUsedFor` (`:1868-1871`): read `packed = foilRecord[player]` (one SLOAD); if
-`((packed >> _FOIL_STAMP_SHIFT) & _FOIL_STAMP_MASK) != lvl` return absent; else unpack
+**D.1.4 `_foilRecordFor(player, lvl)` accessor (one SLOAD).** A `view` accessor
+`_foilRecordFor(address player, uint256 lvl)` returns `(present, multBps, sigs[4])` for `player` at raw `lvl`:
+read `packed = foilRecord[uint24(lvl)][player]` (one SLOAD); `present = (packed != 0)`; unpack
 `sigs[i] = uint32((packed >> (32·i)) & _FOIL_SIG_MASK)`,
-`multBps = uint16((packed >> _FOIL_MULT_SHIFT) & _FOIL_MULT_MASK)`, `present = true`.
+`multBps = uint16((packed >> _FOIL_MULT_SHIFT) & _FOIL_MULT_MASK)`. The nested level key replaces the
+century-style stamp-compare auto-reset — a prior level's record lives at a DIFFERENT outer key, so it neither
+collides with nor masks the queried level. If a stamp-equality assertion is retained it is a redundant
+defensive check (always true, since the buy stamps `lvl` and the outer key is `lvl`).
 
-**MATCH-01 (sigs frozen per `(player, level)`):** the four signatures and `multBps` are written once at buy,
-stamped to the buy level, and never mutated until the player's NEXT foil buy. **MATCH-02 (whole-level
-window):** eligibility is read **from the stamp, not a live `level` compare** — every day within the stamped
-level stays eligible. One cold slot per player who ever bought, not one per player-per-level.
+**MATCH-01 (sigs frozen per `(player, level)`):** the four signatures and `multBps` are written once at buy
+into `foilRecord[lvl][player]`, and never mutated until the player's NEXT foil buy AT THE SAME LEVEL. **MATCH-02
+(whole-level window):** eligibility is read **from the outer level key** — every day within that level stays
+eligible. One cold slot per (level, player) that ever bought.
 
-### D.2 Per-raw-level one-pack cap — folded into the stamp (FOIL-01; no separate slot)
+### D.2 Per-raw-level one-pack cap — the record's presence in the level sub-map (FOIL-01; no separate slot)
 
-Presence in `foilRecord` at the current raw level **is** the cap. `_foilBoughtThisLevel(player, lvl)` is a
-`view` predicate returning **true iff `((foilRecord[player] >> _FOIL_STAMP_SHIFT) & _FOIL_STAMP_MASK) == lvl`**.
-`buyFoilPack` reverts when `_foilBoughtThisLevel(msg.sender, level)` is true, then the record write stamps the
-current `level`. A stale stamp reads "not bought" (a fresh allowance at the new level), exactly the century-flag
-semantics. **Keyed on raw `uint24 level` (`:236`), NEVER `_activeTicketLevel()`.** Because sigs (low bits),
-`multBps` (mid bits), and the cap (stamp, high bits) share **one slot**, there is no "bought-but-no-record"
-or "record-but-no-cap" desync — written and read atomically.
+Presence in `foilRecord[lvl][player]` **is** the cap. `_foilBoughtThisLevel(player, lvl)` is a `view` predicate
+returning **true iff `foilRecord[lvl][player] != 0`** — a real buy writes `multBps ≥ 20000` (and four sigs),
+making the record non-zero. `buyFoilPack` reverts when `_foilBoughtThisLevel(msg.sender, level)` is true, then
+writes `foilRecord[level][msg.sender]`. The nested level key inherently scopes the record per level, so a buy
+at a new level reads "not bought" with no stamp-equality auto-reset needed. **Keyed on raw `uint24 level`
+(`:236`), NEVER `_activeTicketLevel()`.** Because sigs (low bits), `multBps` (mid bits), and the cross-check
+stamp (high bits) share **one slot**, there is no "bought-but-no-record" or "record-but-no-cap" desync —
+written and read atomically.
 
 ### D.3 Sparse double-claim marker — `foilMatchClaimed` (MATCH-05; collision-free)
 
@@ -323,16 +332,20 @@ write a slot; no draw-time scan, so `advanceGame` stays flat.
 
 ### D.4 MATCH-05 persist-per-level griefing-resistance (§5)
 
-A record written at level *L* is **overwritten ONLY by the SAME player's next foil buy** (gated by `level++`).
-It is **never touched by `advanceGame` or by another player**. A fast `level++` does **NOT** strand an
-unclaimed match: the sigs + `multBps` + stamp `L` persist in the slot, and `claimFoilMatch` re-derives
-eligibility from the stamp `L` and the retained `rngWordByDay[day]` (`:462`), so matches for days within *L*
-stay claimable until the player's own NEXT foil buy. The whole-level window (MATCH-02) is read from the stamp,
-not a live `level` compare. This is the §5 "records persist per-level" property.
+A record written at level *L* lives at `foilRecord[L][player]` and is **never overwritten by a buy at any
+OTHER level** — distinct levels are independent records. It is **never touched by `advanceGame` or by another
+player**. A fast `level++` does **NOT** strand an unclaimed match: `foilRecord[L][player]` (sigs + `multBps` +
+cross-check stamp `L`) persists, and `claimFoilMatch` re-derives eligibility from the outer level key *L* and
+the retained `rngWordByDay[day]` (`:462`), so matches for days within *L* stay claimable. The whole-level
+window (MATCH-02) is read from the outer level key, not a live `level` compare. This is the §5 "records persist
+per-level" property.
 
-The single-slot player-loss edge (a player's OWN re-buy at *L+1* overwrites their unclaimed *L* signatures) is
-the one residual surface — **NOT** a griefing vector (no third party can trigger it) — surfaced for explicit
-USER sign-off in **PIN 1** (§D.6).
+**The player-loss edge is ELIMINATED by the chosen level=>player keying.** A re-buy at *L+1* writes
+`foilRecord[L+1][player]` and does **NOT** touch `foilRecord[L][player]`; *L*'s unclaimed signatures survive
+until claimed. Grief-resistance is now **STRUCTURAL** — distinct levels are independent records — not merely
+"self-inflicted only". The single-slot self-overwrite surface (a player's own *L+1* re-buy clobbering their
+unclaimed *L* signatures) was the rejected single-slot form's only loss edge; under the CHOSEN keying it cannot
+occur (USER sign-off, §D.6 / §T).
 
 ### D.5 No-collision / no-reorder attestation (SEC-04, SEC-03)
 
@@ -341,37 +354,44 @@ USER sign-off in **PIN 1** (§D.6).
 - **Constants consume no slots.** The five `_FOIL_*` masks/shifts are `private constant` (inlined, like
   `_CENTURY_USED_MASK:1864`); `_foilRecordFor` / `_foilBoughtThisLevel` are `internal` view helpers, no
   storage footprint.
-- **Two new base mapping slots ONLY** take the next two slots after `boxPlayers`'s. All prior slot indices are
+- **Two new base mapping slots ONLY** take the next two slots after `boxPlayers`'s. A **nested** mapping
+  (`mapping(uint24 => mapping(address => uint256))`) still occupies exactly **ONE declared base mapping slot**
+  — its per-(level, player) entries live at keccak-derived addresses, not at additional declared slots. So the
+  declared count is `foilRecord` + `foilMatchClaimed` = two base mapping slots; all prior slot indices are
   unchanged → the layout goldens are byte-preserved (SEC-04, re-attested by the layout-golden re-pass at 448).
 - **Storage lives ONLY in `DegenerusGameStorage`** (the delegatecall-shared base; SEC-03), never in the foil
   module or the facade.
 - **`whalePassClaims` already exists at `:1122`** — do NOT re-declare; the 4-of-4 tier does
   `whalePassClaims[player] += 1` against the existing slot.
-- **Net storage cost:** 2 new base mapping slots (`foilRecord` = 1 packed slot per player who ever bought,
-  cap + sigs + `multBps` co-resident; `foilMatchClaimed` = 1 slot per realized winning claim, sparse).
+- **Net runtime storage cost:** `foilRecord` = 1 packed slot per (level, player) that ever bought (the
+  surviving-record cost of the chosen level=>player keying; cap + sigs + `multBps` co-resident);
+  `foilMatchClaimed` = 1 slot per realized winning claim, sparse. The DECLARED base-slot count is two (one per
+  nested mapping), unchanged from the rejected single-slot form.
 
-### D.6 Pinned Layout Decisions (LOCKED)
+### D.6 Pinned Layout Decisions (RESOLVED — USER sign-off 2026-06-19)
 
-> Mirroring the house SPEC-V61 "Locked Knobs" form. Two genuine SPEC decisions are pinned; the rest of §D is
-> mechanically determined. PIN 1 carries a **USER-SIGN-OFF FLAG** surfaced in the §T USER-decisions callout.
+> Mirroring the house SPEC-V61 "Locked Knobs" form. Two genuine SPEC decisions were pinned; both are now
+> RESOLVED by the USER sign-off recorded in §T. The rest of §D is mechanically determined.
 
-**PIN 1 — `foilRecord` level-keying (LOCKED: single-slot `mapping(address => uint256)`).** The single-slot
-form (the §5-compliant minimum), level stamp embedded in bits `[144-167]` (the century idiom). One cold slot
-per player, auto-reset per level via the stamp. **Rationale:** one packed slot per player gives the per-level
-auto-reset for free, keeps the cap + sigs + `multBps` co-resident (no desync), and is the minimal storage that
-satisfies §5; a `level++` ALONE never strands a match (§D.4). **The precise edge (the LOCKED form's only loss
-surface):** a player's **OWN re-buy at level *L+1* overwrites their unclaimed level-*L* signatures**. A level
-advance ALONE never strands a match — only the player's own next foil buy does. No third party
-(`advanceGame`, another player) can trigger this; not a griefing vector. The `foilMatchClaimed` key includes
-`level` (§D.3.1), so *L* and *L+1* markers never collide even across the overwrite. **Documented alternative
-(NOT chosen):** `mapping(uint24 level => mapping(address => uint256))` — keys the record by level then player,
-so *L*'s unclaimed signatures **survive** an *L+1* re-buy; an additive widening (still appendable at the tail,
-no existing slot moved) at the cost of **+1 storage slot per (level, player) that ever buys**. The single-slot
-form is the §5-compliant minimum and is chosen. **Affected REQ-IDs:** FOIL-01, MATCH-01, MATCH-05.
+**PIN 1 — `foilRecord` level-keying (CHOSEN: `mapping(uint24 => mapping(address => uint256))`, level=>player).**
+**USER sign-off 2026-06-19 — the level=>player surviving-record variant is CHOSEN.** The outer key is the raw
+`uint24 level` (`:236`), the inner key is the player; one packed slot per (level, player). **Rationale:** *L*'s
+unclaimed signatures **survive** an *L+1* re-buy because distinct levels are independent records, so the
+single-slot self-overwrite loss edge is **ELIMINATED** and grief-resistance is STRUCTURAL (§D.4). The cap + sigs
++ `multBps` stay co-resident in one packed slot per (level, player) (no desync); the additive widening is still
+appendable at the tail with no existing slot moved (one DECLARED base mapping slot, nested), at the documented
+runtime cost of **one slot per (level, player) that ever buys**. The 24-bit stamp is RETAINED as a redundant
+cross-check (the outer level key already scopes the record). **Rejected alternative (single-slot, NOT chosen):**
+`mapping(address => uint256) foilRecord` with the level stamp embedded in bits `[144-167]` as the cap (the
+century idiom) — one cold slot per player, the §5-compliant storage minimum, but with one residual loss
+surface: a player's **OWN re-buy at *L+1* overwrites their unclaimed *L* signatures** (self-inflicted only — no
+third party can trigger it). The USER chose the surviving-record form, so this self-overwrite cannot occur. The
+`foilMatchClaimed` key includes `level` (§D.3.1), so *L* and *L+1* markers never collide. **Affected REQ-IDs:**
+FOIL-01, MATCH-01, MATCH-05.
 
-**PIN 2 — exact packed bit-offset (LOCKED: stamp at `[144-167]`, payload at `[0-143]`).** `sig0..sig3` at
-`[0-127]`, `multBps` at `[128-143]`, `rawLevel` stamp at `[144-167]`, `[168-255]` reserved `0`; with
-`_FOIL_STAMP_SHIFT = 144`, `_FOIL_MULT_SHIFT = 128`. The self-stamp cap read is
+**PIN 2 — exact packed bit-offset (ACCEPTED — USER sign-off 2026-06-19: stamp at `[144-167]`, payload at
+`[0-143]`).** `sig0..sig3` at `[0-127]`, `multBps` at `[128-143]`, `rawLevel` stamp at `[144-167]`, `[168-255]`
+reserved `0`; with `_FOIL_STAMP_SHIFT = 144`, `_FOIL_MULT_SHIFT = 128`. The self-stamp cross-check read is
 `(packed >> _FOIL_STAMP_SHIFT) & _FOIL_STAMP_MASK == lvl`. **Rationale:** the four 32-bit sigs and the 16-bit
 `multBps` stay **contiguous in the low 144 bits** (a clean unpack loop), and the stamp is a high-field
 self-stamp read identical in spirit to `centuryBonusUsed`'s `(packed >> 224) == level`. Total 168 bits ≤ 256,
@@ -382,11 +402,12 @@ payload is contiguous in the low 144 bits. **Affected REQ-IDs:** SEC-03, SEC-04.
 
 ### D.7 Acceptance — IMPL can declare with zero further layout decision
 
-An IMPL-446 author declares `foilRecord` (the packed `mapping(address => uint256)`, the D.1.1 168-bit layout),
-`foilMatchClaimed` (the sparse `mapping(bytes32 => bool)`, the D.3.1 keccak key), the five `_FOIL_*`
-masks/shifts, and the `_foilRecordFor` / `_foilBoughtThisLevel` accessors — appended after `:2393`, no
-existing slot moved — with **ZERO further layout decision**, beyond confirming the two pins of §D.6 (PIN 2 is
-locked outright; PIN 1 carries the one USER sign-off on the single-slot loss edge before the 446 IMPL gate).
+An IMPL-446 author declares `foilRecord` (the packed `mapping(uint24 => mapping(address => uint256))` with the
+D.1.1 168-bit per-entry layout), `foilMatchClaimed` (the sparse `mapping(bytes32 => bool)`, the D.3.1 keccak
+key), the five `_FOIL_*` masks/shifts, and the `_foilRecordFor` / `_foilBoughtThisLevel` accessors — appended
+after `:2393`, no existing slot moved — with **ZERO further layout decision**. Both pins of §D.6 are RESOLVED by
+the 2026-06-19 USER sign-off (PIN 1 = level=>player surviving-record; PIN 2 = the `[144-167]`/`[0-143]` bit
+layout accepted), so 446 reads them as final.
 
 ---
 
@@ -441,9 +462,9 @@ foil logic lives in the module; the facade carries no state and no branching.
    FOIL_SEED_TAG)));` — a **deterministic, frozen seed** (`FOIL_SEED_TAG` a new domain constant). **No live RNG
    at buy.** For `i in 0..3`: `uint32 sig_i = DegenerusTraitUtils.packedTraitsFoil(uint256(keccak256(abi.encode(
    seed, i))), multBps);` (the §A sibling; tapered color, symbol uniform 1/8). **Storage write:**
-   `foilRecord[buyer] = pack(stamp = lvl, multBps, sig0..3);` — a **single SSTORE** in the §D layout. This one
-   slot is **both** the per-RAW-level cap flag (step 2 reads its stamp) **and** the frozen signature/boost
-   record (claim reads its sigs + `multBps`).
+   `foilRecord[lvl][buyer] = pack(stamp = lvl, multBps, sig0..3);` — a **single SSTORE** in the §D layout
+   (level=>player keying). This one slot is **both** the per-RAW-level cap (step 2 reads its presence in the
+   level sub-map) **and** the frozen signature/boost record (claim reads its sigs + `multBps`).
 7. **Enter the 4 tickets into the REGULAR jackpot (FOIL-05).** Queue at the active ticket level so the foil
    tickets share `traitBurnTicket[level][traitId]` eligibility (`:442`):
    **`_queueTicketsScaled(buyer, _activeTicketLevel(), 400, false);`**. **CORRECTION (V3 DEFECT E-α,
@@ -470,11 +491,12 @@ internal loop). 2 draws × 4 tickets ⇒ 8 independent claimables/day; the spars
 **Module body — IN ORDER:**
 
 1. **Bounds + record load.** `require(ticketIndex < 4); require(drawKind < 2);` Resolve `recLevel` and load
-   `(bool present, uint16 multBps, uint32[4] sigs) = _foilRecordFor(msg.sender, recLevel);` then
-   `require(present);`. Records persist per-level (MATCH-05); a fast `level++` cannot grief — the record is not
-   auto-wiped until the SAME player re-buys, itself gated by E.1 step 2.
+   `(bool present, uint16 multBps, uint32[4] sigs) = _foilRecordFor(msg.sender, recLevel);` over
+   `foilRecord[recLevel][msg.sender]`, then `require(present);`. Records persist per-level (MATCH-05); a fast
+   `level++` cannot grief, and even the player's own re-buy at a later level writes a DIFFERENT outer key — so
+   `foilRecord[recLevel][player]` is never clobbered while it stays unclaimed (the loss edge is eliminated, §D.4).
 2. **Eligibility window (MATCH-02).** `require(day` falls within `recLevel`'s draw-day span`)`. Claimable
-   across the WHOLE level; the window is read from the stamp, never a live `level` compare.
+   across the WHOLE level; the window is read from the outer level key, never a live `level` compare.
 3. **RNG availability.** `uint256 rw = rngWordByDay[uint24(day)]; require(rw != 0);` (`:462`; the retained
    daily VRF — the re-derivation source, never live-read elsewhere).
 4. **Double-claim guard (MATCH-05) — set BEFORE payout (CEI).** Compute the unified marker
@@ -677,7 +699,7 @@ REQ tags across E.5 / E.7 / F: **MATCH-04**, **MATCH-06**, **MATCH-07**, **MATCH
 
 | REQ-ID | Requirement (one line) | Locking section | Attested |
 | --- | --- | --- | --- |
-| **FOIL-01** | ≤1 foil pack/account/raw-level (level-stamped cap, auto-reset) | §D.1.4 / §D.2 / §E.1 step 2 | 446 |
+| **FOIL-01** | ≤1 foil pack/account/raw-level (cap = record presence in the level=>player sub-map) | §D.1.4 / §D.2 / §E.1 step 2 | 446 |
 | **FOIL-02** | pack costs `10 × priceForLevel(level)`, delivers 4 tickets | §E.1 step 3 | 446 |
 | **FOIL-03** | payable fresh-ETH or claimable; afking leg REJECTED | §E.1 step 3 (the `revert E()` guard) | 446 |
 | **FOIL-04** | foil spend routes 75% next / 25% future (`FOIL_TO_FUTURE_BPS = 2500`) | §E.1 step 4 | 446 |
@@ -741,7 +763,7 @@ REQ tags across E.5 / E.7 / F: **MATCH-04**, **MATCH-06**, **MATCH-07**, **MATCH
 | TB-1 | client → `buyFoilPack` | fresh ETH / claimable half / the per-level cap | the payable buy entrypoint (§E.1) |
 | TB-2 | top-wagerer → the LIVE hero symbol | one quadrant's symbol of the LIVE winning set | the `dailyHeroWagers` ETH-bet board → `_applyHeroResult` (§E.3) |
 | TB-3 | claimant → the ETH prize pool | up to 10% of `futurePrizePool` per ETH spin | the capped ETH lane (§E.5 C) |
-| TB-4 | player → their own `foilRecord` slot | the player's frozen sigs + `multBps` + stamp | the single-slot record (§D.1) — only the player's own re-buy mutates it |
+| TB-4 | player → their own `foilRecord[level]` slot | the player's frozen sigs + `multBps` + stamp at that level | the level=>player record (§D.1) — only the player's own re-buy AT THE SAME LEVEL mutates it; distinct levels are independent records (loss edge eliminated) |
 | TB-5 | claimant → `foilMatchClaimed` | the per-tuple double-claim marker | the CEI mark-before-payout guard (§D.3.2) |
 
 ### S.2 STRIDE Register (T-445-D* + T-445-E* + T-445-SC)
@@ -750,7 +772,7 @@ REQ tags across E.5 / E.7 / F: **MATCH-04**, **MATCH-06**, **MATCH-07**, **MATCH
 | --- | --- | --- | --- | --- |
 | T-445-D1 | Tampering | `foilRecord` slot collision with an existing slot | **mitigate** | append-only after `boxPlayers` (`:2393`); two new base mapping slots; no existing slot moved/retyped (§D.5; SEC-04 layout-golden re-pass at 448) |
 | T-445-D2 | Repudiation | double-claim of the same `(player, level, day, drawKind, ticketIndex)` | **mitigate** | sparse `foilMatchClaimed[key]` set BEFORE payout (CEI); five distinct positional `abi.encode` fields → collision-free (§D.3) |
-| T-445-D3 | Denial of Service | a fast `level++` strands an unclaimed match (grief) | **accept** (by-design, §5) | record persists per-level via the stamp; overwritten ONLY by the SAME player's next buy; the single-slot loss edge is surfaced for USER sign-off (PIN 1, §D.6 / §T) (§D.4) |
+| T-445-D3 | Denial of Service | a fast `level++` strands an unclaimed match (grief) | **mitigate** | record persists per-level under the level=>player keying — `foilRecord[L][player]` lives at its own outer key and is never touched by another level's buy, by `advanceGame`, or by another player; the single-slot self-overwrite loss edge is ELIMINATED (USER chose level=>player, PIN 1, §D.6 / §T) (§D.4) |
 | T-445-E1 | Elevation of Privilege | 4-of-4 whale-pass moonshot via hero steering | **mitigate** | 4-of-4 gated on `heroFreeCount == 4` (pure VRF); a steered hero reaches at most 3-of-4 (SEC-01) (§E.3); proven at 448 |
 | T-445-E2 | Denial of Service / solvency | ETH lane drains `futurePrizePool` | **mitigate** | `ETH_WIN_CAP_BPS = 1000` (10%) clamp + lootbox spill, cloned from `DegenerusGameDegeneretteModule.sol:877-915`; FLIP/WWXRP are mints; whale pass pool-neutral (SEC-02) (§E.5 C); proven at 448 |
 | T-445-E3 | Tampering | afking principal spent on a foil buy | **mitigate** | the foil payment path REJECTS the afking leg (the `remaining > avail` `revert E()`); only fresh-ETH/claimable accepted (FOIL-03) (§E.1 step 3) |
@@ -771,37 +793,34 @@ REQ tags across E.5 / E.7 / F: **MATCH-04**, **MATCH-06**, **MATCH-07**, **MATCH
 
 ---
 
-## T. USER Decisions to Confirm Before the 446 IMPL Gate
+## T. USER Decisions — RESOLVED (sign-off 2026-06-19, read as final by the 446 IMPL author)
 
-> The single genuine open decision surface for the v71 design-lock — three items the USER signs off in one
-> read before any Phase 446 contract work begins. Everything else in §A / §D / §E is mechanically determined.
-> Reply to confirm the locks (or specify a change); a requested change updates the corresponding SPEC section
-> (and `445-SPEC-D-storage.md`) to the chosen variant and re-presents.
+> The genuine SPEC decision surface for the v71 design-lock — both pins are RESOLVED by the USER sign-off of
+> 2026-06-19. An IMPL-446 author reads this record as FINAL; everything else in §A / §D / §E is mechanically
+> determined. No open decision remains for Phase 446.
 
-**Decision 1 — PIN 1: `foilRecord` level-keying (LOCKED: single-slot `mapping(address => uint256)`).**
-The locked single-slot form means **a player who RE-BUYS a foil pack at level *L+1* BEFORE claiming level-*L*'s
-matches LOSES *L*'s unclaimed signatures.** A level advance ALONE never strands a match — **only the player's
-OWN next foil buy does**; no third party (`advanceGame`, another player) can trigger it, so this is **not a
-griefing vector**. The documented alternative is `mapping(uint24 level => mapping(address => uint256))` — *L*'s
-unclaimed signatures **survive** an *L+1* re-buy, at the cost of **+1 storage slot per (level, player) that
-ever buys** (one slot per level per buyer instead of one slot per buyer). → **Reply "single-slot OK"** to keep
-the lock, or **"switch to level=>player"** to adopt the surviving-record variant.
+**Decision 1 — PIN 1: `foilRecord` level-keying — RESOLVED: `mapping(uint24 => mapping(address => uint256))`
+(level=>player, surviving-record) CHOSEN.** **USER sign-off 2026-06-19 — the level=>player surviving-record
+variant is chosen** over the single-slot form. The outer key is the raw `uint24 level` (`:236`), the inner key
+is the player. *L*'s unclaimed signatures **survive** an *L+1* re-buy (distinct levels are independent
+records), so the **single-slot self-overwrite player-loss edge is ELIMINATED** and grief-resistance is
+STRUCTURAL (§D.4). Documented cost: one runtime slot per (level, player) that ever buys (one DECLARED base
+mapping slot, nested). The rejected single-slot `mapping(address => uint256)` form would have lost *L*'s
+unclaimed signatures on the player's own *L+1* re-buy.
 
-**Decision 2 — PIN 2: packed bit-offset (LOCKED: stamp `[144-167]`, payload `[0-143]`).** `sig0..sig3` at
-`[0-127]`, `multBps` at `[128-143]`, the `rawLevel` stamp at `[144-167]`, `[168-255]` reserved `0`
-(`_FOIL_STAMP_SHIFT = 144`, `_FOIL_MULT_SHIFT = 128`). The payload is contiguous in the low 144 bits (a clean
-unpack loop); the stamp is a high-field self-stamp read in the spirit of `centuryBonusUsed`'s
-`(packed >> 224) == level`. The documented alternative is the `centuryBonusUsed`-mirroring **stamp at bit 224**
-(sigs `[0-127]`, `multBps` `[128-143]`) — also one slot, ≤ 256 bits; the only difference is the stamp offset
-(224 vs 144). This is a pure-engineering pin. → **Reply "bit-offset OK"** to accept the locked layout, or
-request the bit-224 mirror.
+**Decision 2 — PIN 2: packed bit-offset — RESOLVED: stamp `[144-167]`, payload `[0-143]` ACCEPTED.** **USER
+sign-off 2026-06-19 — bit-offset OK.** `sig0..sig3` at `[0-127]`, `multBps` at `[128-143]`, the `rawLevel`
+stamp at `[144-167]`, `[168-255]` reserved `0` (`_FOIL_STAMP_SHIFT = 144`, `_FOIL_MULT_SHIFT = 128`). The
+payload is contiguous in the low 144 bits (a clean unpack loop). Under the level=>player keying the stamp is a
+redundant cross-check rather than the cap, but the bit layout is UNCHANGED and accepted as-is. The documented
+bit-224 mirror alternative was not taken.
 
-**Decision 3 — the single-slot player-loss edge (the residual surface of Decision 1).** This is the one
-residual loss surface of the LOCKED PIN 1 form, called out explicitly so the sign-off is informed: it is
-folded into Decision 1 (confirming "single-slot OK" accepts this edge; "switch to level=>player" eliminates
-it). It is **not** a separate switch — it is the consequence of the PIN 1 choice, surfaced here for clarity.
+**Decision 3 — the player-loss edge — RESOLVED: ELIMINATED.** The single-slot self-overwrite loss surface
+(a player's own *L+1* re-buy clobbering their unclaimed *L* signatures) was the residual surface of the
+rejected single-slot form. By choosing the level=>player keying (Decision 1) the USER **eliminated** this edge:
+`foilRecord[L][player]` and `foilRecord[L+1][player]` are independent records, so an *L+1* re-buy never touches
+*L*'s unclaimed signatures. This is no longer an open acceptance — it is resolved.
 
-**Spot-check before signing:** the §R REQ-Coverage Map lists all 20 REQ-IDs (FOIL-01..05, RARE-01..04,
+**Spot-check (informational):** the §R REQ-Coverage Map lists all 20 REQ-IDs (FOIL-01..05, RARE-01..04,
 MATCH-01..10, SEC-03); the §E.7 calibration reports **≈1.94 faces/pack/30d** (on the D-05 ~2-face target, 3.1%
-low → no recalibration). → **Reply "single-slot OK, bit-offset OK"** (or specify changes) to approve the SPEC
-and unblock Phase 446.
+low → no recalibration). Both pins are signed off; Phase 446 is unblocked.
