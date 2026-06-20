@@ -723,3 +723,85 @@ REQ tags across E.5 / E.7 / F: **MATCH-04**, **MATCH-06**, **MATCH-07**, **MATCH
 | 6.6 | Pull/claim only — no draw-time scan; `advanceGame` gas stays flat | §D.3.2 (sparse) + §E.2 (per-tuple claim) | **447 / 448** |
 | 6.7 | EIP-170 fits after the new module + facade stub (re-measure; via_ir + optimizer_runs=1000) | §F (placement + re-measure caveat) | **446 / 449** |
 | 6.8 | Full forge suite green; layout goldens / RNG-freeze proofs re-pass on the new subject | §D.5 + the test/re-audit phases | **447 / 448 / 449** (SEC-04) |
+
+---
+
+## S. Consolidated Threat Model
+
+> Consolidates the per-plan `<threat_model>` blocks T-445-D1..D3 (storage, Plan 02) and T-445-E1..E4
+> (entrypoint/payout, Plan 03), plus the standing supply-chain row T-445-SC. Every threat carries a
+> disposition (`mitigate` / `accept`) and a specific mitigation referencing the SPEC section. The two headline
+> floor items — SEC-01 (steer-proof 4-of-4) and SEC-02 (no solvency hole) — are stated as
+> **design-locked-here / attested-downstream**.
+
+### S.1 Trust Boundaries
+
+| # | From → To | Boundary asset | Crossing |
+| --- | --- | --- | --- |
+| TB-1 | client → `buyFoilPack` | fresh ETH / claimable half / the per-level cap | the payable buy entrypoint (§E.1) |
+| TB-2 | top-wagerer → the LIVE hero symbol | one quadrant's symbol of the LIVE winning set | the `dailyHeroWagers` ETH-bet board → `_applyHeroResult` (§E.3) |
+| TB-3 | claimant → the ETH prize pool | up to 10% of `futurePrizePool` per ETH spin | the capped ETH lane (§E.5 C) |
+| TB-4 | player → their own `foilRecord` slot | the player's frozen sigs + `multBps` + stamp | the single-slot record (§D.1) — only the player's own re-buy mutates it |
+| TB-5 | claimant → `foilMatchClaimed` | the per-tuple double-claim marker | the CEI mark-before-payout guard (§D.3.2) |
+
+### S.2 STRIDE Register (T-445-D* + T-445-E* + T-445-SC)
+
+| ID | STRIDE | Threat | Disposition | Mitigation (SPEC section) |
+| --- | --- | --- | --- | --- |
+| T-445-D1 | Tampering | `foilRecord` slot collision with an existing slot | **mitigate** | append-only after `boxPlayers` (`:2393`); two new base mapping slots; no existing slot moved/retyped (§D.5; SEC-04 layout-golden re-pass at 448) |
+| T-445-D2 | Repudiation | double-claim of the same `(player, level, day, drawKind, ticketIndex)` | **mitigate** | sparse `foilMatchClaimed[key]` set BEFORE payout (CEI); five distinct positional `abi.encode` fields → collision-free (§D.3) |
+| T-445-D3 | Denial of Service | a fast `level++` strands an unclaimed match (grief) | **accept** (by-design, §5) | record persists per-level via the stamp; overwritten ONLY by the SAME player's next buy; the single-slot loss edge is surfaced for USER sign-off (PIN 1, §D.6 / §T) (§D.4) |
+| T-445-E1 | Elevation of Privilege | 4-of-4 whale-pass moonshot via hero steering | **mitigate** | 4-of-4 gated on `heroFreeCount == 4` (pure VRF); a steered hero reaches at most 3-of-4 (SEC-01) (§E.3); proven at 448 |
+| T-445-E2 | Denial of Service / solvency | ETH lane drains `futurePrizePool` | **mitigate** | `ETH_WIN_CAP_BPS = 1000` (10%) clamp + lootbox spill, cloned from `DegenerusGameDegeneretteModule.sol:877-915`; FLIP/WWXRP are mints; whale pass pool-neutral (SEC-02) (§E.5 C); proven at 448 |
+| T-445-E3 | Tampering | afking principal spent on a foil buy | **mitigate** | the foil payment path REJECTS the afking leg (the `remaining > avail` `revert E()`); only fresh-ETH/claimable accepted (FOIL-03) (§E.1 step 3) |
+| T-445-E4 | Information disclosure / grind | magnitude/currency steered via the match lane | **mitigate** | disjoint keccak domains (`FOIL_MAG_TAG` / `FOIL_CCY_TAG` ≠ the match lane); derived from retained `rw` at claim, never live-read (MATCH-08) (§E.5 B) |
+| T-445-SC | Tampering (supply chain) | a malicious or hallucinated npm / pip / cargo package enters via a new dependency | **accept** | no new package installs in this paper-only phase; the v71 IMPL adds NO new dependency — all reuse is in-repo audited rails (`packedTraitsDegenerette`, `ActivityCurveLib`, the capped-spin path, `whalePassClaims`) |
+
+### S.3 The two headline floor items (design-locked-here / attested-downstream)
+
+- **SEC-01 — 4-of-4 steer-proof (gated HERO-FREE).** A steerer controls only the `heroSymbol` of the LIVE
+  hero quadrant — at most `+1` to `liveCount`; `heroFreeCount` is computed on pure VRF (untouchable). The
+  4-of-4 whale-pass tier is gated **ONLY on `heroFreeCount == 4`**, so a steered hero reaches **at most
+  3-of-4** and **never** the moonshot. The 2-of-4 / 3-of-4 bounded hero edge is intentionally KEPT (LIVE).
+  **Design-locked at §E.3; attested at 448.**
+- **SEC-02 — no solvency hole.** The ETH lane is bounded to **≤ 10% of `futurePrizePool`** via
+  `ETH_WIN_CAP_BPS = 1000` + lootbox spill (cloned from `:877-915`); FLIP and WWXRP are **mints** (no pool
+  draw); the whale pass is a **pool-neutral** deferred grant against the existing `whalePassClaims:1122` slot.
+  Structurally solvent. **Design-locked at §E.5; attested at 448.**
+
+---
+
+## T. USER Decisions to Confirm Before the 446 IMPL Gate
+
+> The single genuine open decision surface for the v71 design-lock — three items the USER signs off in one
+> read before any Phase 446 contract work begins. Everything else in §A / §D / §E is mechanically determined.
+> Reply to confirm the locks (or specify a change); a requested change updates the corresponding SPEC section
+> (and `445-SPEC-D-storage.md`) to the chosen variant and re-presents.
+
+**Decision 1 — PIN 1: `foilRecord` level-keying (LOCKED: single-slot `mapping(address => uint256)`).**
+The locked single-slot form means **a player who RE-BUYS a foil pack at level *L+1* BEFORE claiming level-*L*'s
+matches LOSES *L*'s unclaimed signatures.** A level advance ALONE never strands a match — **only the player's
+OWN next foil buy does**; no third party (`advanceGame`, another player) can trigger it, so this is **not a
+griefing vector**. The documented alternative is `mapping(uint24 level => mapping(address => uint256))` — *L*'s
+unclaimed signatures **survive** an *L+1* re-buy, at the cost of **+1 storage slot per (level, player) that
+ever buys** (one slot per level per buyer instead of one slot per buyer). → **Reply "single-slot OK"** to keep
+the lock, or **"switch to level=>player"** to adopt the surviving-record variant.
+
+**Decision 2 — PIN 2: packed bit-offset (LOCKED: stamp `[144-167]`, payload `[0-143]`).** `sig0..sig3` at
+`[0-127]`, `multBps` at `[128-143]`, the `rawLevel` stamp at `[144-167]`, `[168-255]` reserved `0`
+(`_FOIL_STAMP_SHIFT = 144`, `_FOIL_MULT_SHIFT = 128`). The payload is contiguous in the low 144 bits (a clean
+unpack loop); the stamp is a high-field self-stamp read in the spirit of `centuryBonusUsed`'s
+`(packed >> 224) == level`. The documented alternative is the `centuryBonusUsed`-mirroring **stamp at bit 224**
+(sigs `[0-127]`, `multBps` `[128-143]`) — also one slot, ≤ 256 bits; the only difference is the stamp offset
+(224 vs 144). This is a pure-engineering pin. → **Reply "bit-offset OK"** to accept the locked layout, or
+request the bit-224 mirror.
+
+**Decision 3 — the single-slot player-loss edge (the residual surface of Decision 1).** This is the one
+residual loss surface of the LOCKED PIN 1 form, called out explicitly so the sign-off is informed: it is
+folded into Decision 1 (confirming "single-slot OK" accepts this edge; "switch to level=>player" eliminates
+it). It is **not** a separate switch — it is the consequence of the PIN 1 choice, surfaced here for clarity.
+
+**Spot-check before signing:** the §R REQ-Coverage Map lists all 20 REQ-IDs (FOIL-01..05, RARE-01..04,
+MATCH-01..10, SEC-03); the §E.7 calibration reports **≈1.94 faces/pack/30d** (on the D-05 ~2-face target, 3.1%
+low → no recalibration). → **Reply "single-slot OK, bit-offset OK"** (or specify changes) to approve the SPEC
+and unblock Phase 446.
