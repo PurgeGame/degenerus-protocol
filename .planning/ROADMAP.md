@@ -70,9 +70,9 @@
 Plans:
 **Wave 1**
 
-- [ ] 445-01-PLAN.md — Economics: the sibling-producer rarity PMF (/15360 ladder, w-from-M taper) + the foilBoostBps(score) ×2→×6 curve
-- [ ] 445-02-PLAN.md — Storage: foilRecord packed layout + folded per-level cap + sparse foilMatchClaimed; PINS the two genuine layout decisions (level-keying, bit-offset)
-- [ ] 445-03-PLAN.md — Entrypoints: buyFoilPack/claimFoilMatch signatures + LIVE-vs-HERO-FREE match + isolated 40/40/20 payout + ≈2-faces/30d calibration confirm + GAME_FOILPACK_MODULE placement
+- [x] 445-01-PLAN.md — Economics: the sibling-producer rarity PMF (/15360 ladder, w-from-M taper) + the foilBoostBps(score) ×2→×6 curve ✅ `445-SPEC-A-economics.md` (243 lines)
+- [x] 445-02-PLAN.md — Storage: foilRecord packed layout + folded per-level cap + sparse foilMatchClaimed; PINS the two genuine layout decisions (level-keying, bit-offset) ✅ `445-SPEC-D-storage.md` (268 lines)
+- [x] 445-03-PLAN.md — Entrypoints: buyFoilPack/claimFoilMatch signatures + LIVE-vs-HERO-FREE match + isolated 40/40/20 payout + ≈2-faces/30d calibration confirm + GAME_FOILPACK_MODULE placement ✅ `445-SPEC-E-entrypoints.md` (411 lines)
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
