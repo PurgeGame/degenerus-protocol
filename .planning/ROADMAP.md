@@ -91,6 +91,12 @@ Plans:
   3. The match-claim is implemented per spec — exact-quadrant predicate, whole-level eligibility, the live/hero-free split, the 40/40/20 spin (FLIP/WWXRP mint, ETH ≤10%-pool), the whale-pass grant, pull/claim + double-claim guard.
   4. `forge build` clean, EIP-170 satisfied (re-measured), and the diff touches only the foil surface.
 
+**Plans:** 4 plans (3 waves)
+- [ ] 446-01-PLAN.md — RARE foundation: `traitFromWordFoil`/`packedTraitsFoil` siblings + `foilBoostBps` curve (RARE-01/02/04) [wave 1]
+- [ ] 446-02-PLAN.md — STORAGE foundation: `foilRecord`+`foilMatchClaimed` tail-append, constants/masks/accessors, `GAME_FOILPACK_MODULE` (FOIL-01, MATCH-01/05, RARE-03, SEC-03) [wave 1]
+- [ ] 446-03-PLAN.md — FOIL+MATCH module body + facade + interface + foil-owed trait wiring (FOIL-02..05, RARE-03, MATCH-02..09, SEC-03) [wave 2]
+- [ ] 446-04-PLAN.md — empirical pre-gate (build + EIP-170 re-measure + no-slot-move sanity + parity smoke) + consolidated-diff presentation + the SINGLE atomic contract commit [the sole approval gate, wave 3, autonomous:false]
+
 ### Phase 447: TST — Prove the Pack, the Rarity, the Match & the Calibration
 
 **Goal**: the foil pack's purchase, rarity, match, payout, and security properties are proven by tests, and the ≈2-faces/30d calibration is Monte-Carlo-confirmed; the full suite stays green.
