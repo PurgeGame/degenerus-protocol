@@ -924,3 +924,53 @@ gate; `levelStartDay` write on the advance spine → additive, behaviorally iner
 **Spot-check (informational):** the §R REQ-Coverage Map lists all 20 REQ-IDs (FOIL-01..05, RARE-01..04,
 MATCH-01..10, SEC-03); the §E.7 calibration reports **≈1.94 faces/pack/30d** (on the D-05 ~2-face target, 3.1%
 low → no recalibration). Both pins are signed off; Phase 446 is unblocked.
+
+## §V — IMPL Resolution: Day-Indexed Foil Claim + Two-Distinct-Heroes (authoritative; supersedes §U.2 and the §E.3 HERO-FREE crux)
+
+**Status: AUTHORITATIVE. This section supersedes §U.2 in full and replaces the §E.3 LIVE/HERO-FREE dual-derivation + tier gate. Where §V conflicts with §E.2/§E.3/§U.2, §V governs.** Four locked decisions (USER sign-off 2026-06-19): D1 day-indexed claim, D2 no-look-back, D3 drop heroFreeSet, D4 two distinct heroes.
+
+### V.1 — D1 Day-indexed claim: the foil reads stored per-day sets (supersedes §U.2 + §E.3 re-derivation)
+
+**VERIFIED defect in the as-drafted §U.2/ground design:** the foil record keys on the raw `level` at buy (§E.1 step 2/6), but the daily draw passes `purchaseLevel (= level + 1)` on the purchase-phase leg (`AdvanceModule:486`) and `lvl (= level)` on the jackpot-phase leg (`AdvanceModule:566`). `_activeTicketLevel() = jackpotPhaseFlag ? level : level + 1` (`MintStreakUtils.sol:140`). A purchase-phase buy lands at `foilRecord[level]` while the draws of that same cycle store `level + 1`, so reading the day-record level back into `_foilRecordFor(player, L)` loads an EMPTY record and the claim reverts for the pack's entire window. **RESOLUTION (Option A — align the BUY to the draw): the foil buy keys on `_activeTicketLevel()`, not raw `level`.** A pack now belongs to the cycle N it was bought INTO (the upcoming jackpot it bets on): a purchase-phase buy of cycle N keys `foilRecord[N]` and so do cycle-N's draws; a jackpot-phase buy of cycle N keys `foilRecord[N]` and so do its draws. The one-per-level cap and the record key both move to `_activeTicketLevel()`. (This overrides E.1 step 2/6 and §D.1/§D.2's "raw `level`, NEVER `_activeTicketLevel()`".)
+
+**The stored record.** At each daily seal, persist exactly one `dailyFoilDraw[day]` carrying the two LIVE winning sets the jackpot computed and the cycle level active that day:
+- New mapping `mapping(uint24 => uint256) dailyFoilDraw`, packed one slot LSB→MSB: `[0-31] mainSet (uint32)`, `[32-63] bonusSet (uint32)`, `[64-87] level (uint24)`. Presence = `packed != 0` (a real draw always has a nonzero level).
+- Written at the single day-once seal `_emitDailyWinningTraits` (`JackpotModule:1799-1816`), which already has `questDay`, the canonical `mainTraitsPacked`/`bonusTraitsPacked`, and `lvl` in scope. The stored sets are BYTE-IDENTICAL to the emitted `DailyWinningTraits` and to every downstream consumer. **`level` stored = the `lvl` argument verbatim** (= `_activeTicketLevel()` of that physical day: `purchaseLevel` on the purchase leg, `level` on the jackpot leg). With the buy now keyed on `_activeTicketLevel()`, the stored `lvl` and the buy key are the SAME cycle number, so the round-trip closes.
+- **Day-1 reconciliation (mandatory).** The `purchaseLevel == 1` path (`AdvanceModule:469-484`) bypasses `payDailyJackpot` and uses the external `emitDailyWinningTraits` (`JackpotModule:1568-1574`; main = `_rollWinningTraits(rngWord,true)`, bonus = `_rollWinningTraits(saltedRng,true)` — two bonus-branch rolls, salt-depths 1 and 2). This path must ALSO persist exactly one `dailyFoilDraw[day]` with the two sets those calls return and `level == 1`. The foil is salt-depth-agnostic: it only needs two distinct stored sets, which day-1 provides. Wire the write inside the external `emitDailyWinningTraits` (after both sets are computed) so day-1 packs can claim sets the day-1 coin jackpots actually used.
+
+The foil claim READS these stored sets — it NEVER re-derives. `claimFoilMatch` becomes 3-arg `(uint256 day, uint256 ticketIndex, uint8 drawKind)`; the eligible level `L` is read from `dailyFoilDraw[day].level`, not passed. `recLevel` is REMOVED. `levelStartDay` (map + the planned `AdvanceModule:1732` SSTORE) is REMOVED: the window upper bound is now implicit — `dailyFoilDraw[day].level == L` only for days in cycle L, so a day from another cycle loads a different `L` and cannot match this record.
+
+### V.2 — D2 No look-back (refines §E.2 window)
+
+`buyDay` stays encoded in `foilRecord` bits `[168-191]` (already implemented, written at buy from the global `dailyIdx`-domain day). The claim enforces `require(day > buyDay)` (equivalently `day >= buyDay + 1`), a clean global-day inequality applied pre-payout, kind-independent. A pack cannot match ANY draw at or before its buy day, even within its own level. This is the lower window bound; the upper bound is the implicit level match of V.1.
+
+### V.3 — D3 Drop heroFreeSet (REPLACES the §E.3 LIVE/HERO-FREE crux + tier gate)
+
+There is now ONE LIVE winning set per draw per `drawKind`, hero applied normally for ALL tiers. The §E.3 HERO-FREE pure-VRF set, the `heroFreeCount` variable, the dual derivation, and the `4-of-4 == heroFreeCount == 4` gate are REMOVED. New tier gate, off the single stored set's `liveCount` (matches across all 4 quadrants of the `ticketIndex`-selected pack vs the chosen set):
+
+| Tier | Condition |
+| --- | --- |
+| 2-of-4 | `liveCount == 2` |
+| 3-of-4 | `liveCount == 3` |
+| 4-of-4 | `liveCount == 4` (plain; grants `whalePassClaims[player] += 1` + bonus spin) |
+| none | else ⇒ `revert E()` |
+
+**SEC-01 disposition changes from "mitigated by the heroFree gate" to "accepted by-design."** Foil signatures (frozen at buy via the deterministic `FOIL_SEED_TAG`, no live RNG) and hero wagers (committed to `dailyHeroWagers` before the VRF reveal) are BOTH committed before the word is revealed — neither conditions on a revealed outcome. The hero override rewrites only ONE quadrant; its COLOR is pure VRF (`_applyHeroResult` samples color from the word, `JackpotModule:1326-1334`) and only its SYMBOL is the ETH-wager-weighted pick (`leaderBonus = maxAmount/2`). Manufacturing a 4-of-4 would require steering one quadrant's symbol to a pre-frozen value while its color stays a 1/8 VRF coin-flip the steerer cannot influence — paying real, ETH-wager-scaled cost to nudge a single symbol that may not even land. A 4-of-4 is therefore non-conjurable and EV-negative. **Match odds are UNCHANGED:** `getRandomTraits` (`JackpotBucketLib.sol:281-286`) is a flat-uniform 6-bit slice per quadrant (`1/8` color × `1/8` symbol = `1/64`, M-invariant); the hero touches at most one quadrant per set, so binomial(4, 1/64) and the §E.7 figures (E[faces/pack/30d] = 1.9376, ~2-face target) hold for all tiers including 4-of-4.
+
+### V.4 — D4 Two distinct heroes (jackpot change; foil mirrors via the stored sets)
+
+The bonus draw rolls its OWN hero from the bonus-salted word, forced to a DIFFERENT `(quadrant, symbol)` slot than the main hero (the main hero's exact slot is excluded — zeroed weight — from the bonus wager distribution before the bonus roll). The bonus-hero pick entropy is the **salted** bonus word `rBonus` (a genuinely independent draw, not "the main pick minus its slot"). **DEGENERATE FALLBACK:** if excluding the main slot leaves the bonus wager pool empty, the bonus draw gets NO hero (pure-VRF bonus set). The MAIN draw stays BYTE-IDENTICAL to today (the main hero roll and result are untouched; the bonus second roll is a separate `view` call that cannot perturb the main computation). The change lives ENTIRELY inside the two shared bonus producers (`_rollWinningTraitsPair` bonus leg; `_rollWinningTraits(_, true)`) plus one new `view` helper `_rollHeroSymbolExcluding`; no MAIN producer and no consumer signature changes. `_rollHeroSymbol` is left BYTE-UNTOUCHED (do NOT refactor it into the excluding helper — keep the byte-identical-main guarantee trivially auditable). Foil and jackpot use the SAME data: the foil reads `dailyFoilDraw[day]`, which is the exact `bonusTraitsPacked` the new bonus producer wrote.
+
+**Consumer note (in-spec, not a defect):** the bonus set also drives `_runEarlyBirdLootboxJackpot` (`:633`) and `payDailyFlipJackpot` (`:1525`); the distinct bonus hero shifts which addresses win those non-foil distributions. D4 mandates only the MAIN draw be byte-identical, so this is accepted; any regression oracle comparing pre/post bonus-trait outputs must be updated, not treated as a defect.
+
+`drawKind ∈ {0,1}` stays a required claim param (main vs bonus are genuinely independent stored sets, two independent shots per ticket = 8 claimables/day) and stays in the double-claim marker. The double-claim marker KEEPS `level`: `keccak256(abi.encode(player, level, day, drawKind, ticketIndex))` where `level = dailyFoilDraw[day].level` — a player can hold records at multiple levels with overlapping windows, so the level binding keeps each (player, level)'s independent win separable. The `foilTicketQueue`/`foilOwedPacked`/`foilCursor` jackpot-resolution path (§U.3) is UNCHANGED by D1-D4.
+
+### V.5 — Edit-surface delta (amends §U.4 + §F)
+
+- **`DegenerusGameStorage.sol`:** REMOVE `levelStartDay` + the `rawLevel` stamp field `[144-167]` (`_FOIL_STAMP_*`, redundant under V.1); ADD `dailyFoilDraw` (one packed slot) + `_FOIL_DRAW_*` masks/shifts + `_packFoilDraw`/`_foilDrawFor` accessors; KEEP `foilRecord` (+`buyDay`), `foilMatchClaimed` (level-keyed), `foilTicketQueue`/`foilOwedPacked`/`foilCursor` (§U.3, untouched).
+- **`DegenerusGameFoilPackModule.sol`:** buy rekeys to `_activeTicketLevel()`; claim becomes 3-arg reading `_foilDrawFor(day)` + `require(day > buyDay)`, single-set `liveCount` tiers, no HERO-FREE; the foil module SHRINKS (drops the dual derivation + re-derivation).
+- **`DegenerusGame.sol`:** `claimFoilMatch` facade stub becomes 3-arg.
+- **`DegenerusGameJackpotModule.sol` (NEW in the surface):** add `_rollHeroSymbolExcluding`; edit only the bonus leg of `_rollWinningTraitsPair` + the `isBonus` branch of `_rollWinningTraits`; add the `dailyFoilDraw` write at `_emitDailyWinningTraits` and at the external `emitDailyWinningTraits` (day-1). MAIN producers byte-identical.
+- **`DegenerusGameAdvanceModule.sol`:** the planned `levelStartDay[lvl]=day` SSTORE is DROPPED (never lands).
+- **`DegenerusGameMintModule.sol`:** UNCHANGED by D1-D4 (its §U.4 foil-queue-drain edits are independent).
+- **EIP-170 (Plan 04):** re-measure now ALSO covers `DegenerusGameJackpotModule` (baseline 17,724 B / 6,852 B margin; +~few hundred B from the excluding helper — assert < 24,576 B). The foil module headroom IMPROVES.
