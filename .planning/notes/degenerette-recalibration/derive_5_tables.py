@@ -420,32 +420,93 @@ for N in range(5):
 _HERO_BERN = [Fraction(7, 8), Fraction(1, 8)]  # hero matched 0/1
 
 
-def p_score_distribution_rigged(n_gold):
-    """Variant-B rigged P_N(S). Enumerate (color-count c, non-hero-symbol-count y,
-    hero h); M=c+y+h, base S=c+y+2h. If M<=6, flip one unmatched ORDINARY cell
-    w.p. 3/5 (+1 to S). M>=7 (full / 1-off) untouched -> P(S=9) invariant."""
-    Cdist = [Fraction(1)]
-    for _ in range(n_gold):
-        Cdist = convolve(Cdist, P_COLOR_GOLD)
-    for _ in range(4 - n_gold):
-        Cdist = convolve(Cdist, P_COLOR_COMMON)
-    Ydist = [Fraction(1)]
-    for _ in range(3):
-        Ydist = convolve(Ydist, P_SYM)
+def _quad_states(p_color_match):
+    """The four per-quadrant joint (symbol-matched, color-matched) states with their
+    probabilities, for a quadrant with color match prob `p_color_match` and the
+    uniform 1/8 symbol match prob. Returns [(sm, cm, prob), ...]."""
+    ps = P_SYM[1]  # 1/8
+    states = []
+    for sm in (0, 1):
+        p_sm = ps if sm == 1 else (1 - ps)
+        for cm in (0, 1):
+            p_cm = p_color_match if cm == 1 else (1 - p_color_match)
+            states.append((sm, cm, p_sm * p_cm))
+    return states
 
+
+def p_score_distribution_rigged(n_gold):
+    """DEC-01 R2 rigged P_N(S), consistent with the Variant-2 honest rule (Task 1).
+
+    The WWXRP rig forces ONE *score-bearing* cell to a real match w.p. 3/5 when the
+    roll has M <= 6 matched axes; M >= 7 (full match / single miss) is untouched so
+    the rig can NEVER manufacture (or destroy) S=9 -> P(S=9) is invariant (RIG-02).
+
+    Per-quadrant we enumerate the joint (symbol-matched sm, color-matched cm) state
+    under Variant-2 and compute (a) the base score S (color counts only when that
+    quadrant's symbol matched; hero symbol +2), (b) the total matched-axis count
+    M = sum of all eight per-axis matches, and (c) the SCORE-BEARING eligible-cell
+    count e — the cells whose forced match RAISES S under Variant-2 (DEC-01 R2):
+        (a) an unmatched NON-HERO symbol cell  -> forcing it scores +1;
+        (b) an unmatched COLOR on a quadrant whose symbol ALREADY matched
+            (sm==1, cm==0; the color "unlocks" -> +1; includes the hero quadrant's
+             COLOR, which is an ordinary axis — only the hero SYMBOL is excluded).
+    EXCLUDED from the pool: the hero symbol cell (never rigged) and *no-op* colors
+    (a color on a quadrant whose symbol is still unmatched buys nothing under
+    Variant-2). Whichever eligible cell the rig picks, the modeled lift is exactly +1.
+
+    Explicit EMPTY-ELIGIBLE-POOL case: when M <= 6 but every unmatched cell is an
+    excluded one (the hero symbol and/or no-op colors), the score-bearing pool is
+    empty (e == 0) -> NO lift that round; the mass stays at baseS even though the
+    3/5 gate would otherwise fire.
+
+    DEC-02 Option A (same as the honest dist): the per-N rigged distribution is
+    averaged over hero placement (hero gold w.p. n_gold/4, common w.p. (4-n_gold)/4).
+    """
     pf = Fraction(3, 5)
     out = [Fraction(0)] * 10
-    for c, pc in enumerate(Cdist):
-        for y, py in enumerate(Ydist):
-            for h, ph in enumerate(_HERO_BERN):
-                p = pc * py * ph
-                M = c + y + h
-                baseS = c + y + 2 * h
-                if M >= 7:
-                    out[baseS] += p
-                else:
-                    out[baseS] += p * (1 - pf)
-                    out[baseS + 1] += p * pf
+    for hero_is_gold, weight, ord_gold, ord_common in (
+        (True, Fraction(n_gold, 4), n_gold - 1, 4 - n_gold),
+        (False, Fraction(4 - n_gold, 4), n_gold, 3 - n_gold),
+    ):
+        if weight == 0:
+            continue
+        hero_color = P_COLOR_GOLD[1] if hero_is_gold else P_COLOR_COMMON[1]
+        # quad spec list: (state_list, is_hero) — quad 0 is the hero quadrant.
+        quads = [(_quad_states(hero_color), True)]
+        for _ in range(ord_gold):
+            quads.append((_quad_states(P_COLOR_GOLD[1]), False))
+        for _ in range(ord_common):
+            quads.append((_quad_states(P_COLOR_COMMON[1]), False))
+        # Fold the four quadrants into a joint distribution over (S, M, e).
+        # partials maps (S, M, e) -> probability of reaching that partial state.
+        partials = {(0, 0, 0): weight}
+        for states, is_hero in quads:
+            nxt = {}
+            for (S, M, e), pacc in partials.items():
+                for sm, cm, pp in states:
+                    dS = 0
+                    if sm == 1:
+                        dS += 2 if is_hero else 1
+                        if cm == 1:
+                            dS += 1
+                    dM = sm + cm
+                    de = 0
+                    if (not is_hero) and sm == 0:
+                        de += 1  # (a) unmatched non-hero symbol
+                    if sm == 1 and cm == 0:
+                        de += 1  # (b) unmatched color on a symbol-matched quadrant
+                    key = (S + dS, M + dM, e + de)
+                    nxt[key] = nxt.get(key, Fraction(0)) + pacc * pp
+            partials = nxt
+        # Apply the rig per full-roll outcome.
+        for (S, M, e), p in partials.items():
+            if M >= 7:
+                out[S] += p  # m>=7 cap: untouched -> P(S=9) invariant
+            elif e == 0:
+                out[S] += p  # empty eligible pool: no lift this round
+            else:
+                out[S] += p * (1 - pf)
+                out[S + 1] += p * pf
     assert sum(out) == 1, f"rigged P_N(S) N={n_gold} != 1"
     assert len(out) == 10
     return out
