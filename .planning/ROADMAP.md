@@ -41,6 +41,9 @@
 4. `forge build` clean; EIP-170 fits.
 5. The diff lands as ONE batched commit only after explicit USER hand-review (commit-guard `CONTRACTS_COMMIT_APPROVED=1` + hook move-aside) — produces the byte-frozen v73 subject.
 
+**Plans:** 1 plan (1 wave)
+- [ ] 453-01-PLAN.md — Variant-2 _score + DEC-01 R2 _rigWwxrpResult + Option-B per-(N,heroIsGold) constants + heroIsGold dispatch threading; single-file diff, present for USER approval, DO NOT commit (SCORE-01/02/03, RIG-01/02/03, IMPL-01)
+
 ## Phase 454 — TST
 
 **Goal:** Prove the byte-reproduce gate + the held-fixed invariants + behaviour parity on the new scoring.
