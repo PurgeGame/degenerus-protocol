@@ -731,18 +731,25 @@ for N in range(5):
 
 
 # ===================================================================
-# EVEQ-01 / DEC-02 Option B — hero-placement EV-drift CONFIRMATION.
-# Under Option B each honest sub-case has its OWN table solved against its
-# OWN Variant-2 distribution, so the hero-placement EV drift is closed: this
-# section reports, per N, EV(hero gold | gold's own table) vs EV(hero common
-# | common's own table) and confirms the residual is ~0 (within _solve_table
-# rounding), << the old 2.99 centi-x averaged-table edge. (Detailed verdict +
-# residual line + the WWXRP-by-design note are emitted in Task 2's rewrite.)
-# `_hero_placement_subcase` is defined once at the top of the file.
+# EVEQ-01 / DEC-02 Option B — exact EV-equality CONFIRMATION.
+# Under Option B each honest sub-case has its OWN payout table, solved against
+# its OWN Variant-2 hero-placement distribution. So the EV a player realizes is
+# basePayoutEV of THAT sub-case's own table — and every honest sub-case is
+# calibrated to 100 centi-x (the per-sub-case EV-<=100 + >99 asserts in the
+# FINAL block above). This section CONFIRMS the residual hero-placement edge is
+# now ~0: it reports, per N, EV(hero gold | gold's OWN table) vs EV(hero common
+# | common's OWN table) and the cross-placement |drift|; the max must be within
+# the _solve_table integer-rounding granularity (<< the old 2.99 centi-x
+# averaged-table edge), and it is hard-asserted below. The 2.99 centi-x
+# player-selectable hero-common edge (EV-positive at N=1..3 in 452-02) is CLOSED.
+#
+# The WWXRP _RIG_ lane keeps its averaged-table drift by-design (USER don't-care
+# ruling: "worthless shitcoin") — only the honest ETH/FLIP lane is made exactly
+# EV-equal here.
 # ===================================================================
 
 print("\n" + "=" * 70)
-print("EVEQ-01 / DEC-02 Option B — hero-placement EV-drift (centi-x), each vs OWN table")
+print("EVEQ-01 / DEC-02 Option B — exact EV-equality CONFIRMATION (centi-x), each vs OWN table")
 print("=" * 70)
 print(f"// {'N':>3} | {'EV(hero gold)':>14} | {'EV(hero common)':>16} | {'|drift|':>10}")
 max_drift = Fraction(0)
@@ -750,7 +757,9 @@ max_drift_N = None
 for N in range(5):
     sub_gold = _hero_placement_subcase(N, True)
     sub_common = _hero_placement_subcase(N, False)
-    # Option B: evaluate each sub-case against its OWN solved table.
+    # Option B: evaluate each sub-case against its OWN solved table — that IS the
+    # EV a player on that pick realizes, so the cross-placement drift is the
+    # residual selectable edge after the split.
     ev_gold = total_ev(honest_tables[(N, True)][1], sub_gold) if sub_gold is not None else None
     ev_common = total_ev(honest_tables[(N, False)][1], sub_common) if sub_common is not None else None
     if ev_gold is not None and ev_common is not None:
@@ -769,6 +778,34 @@ print(
     f"// MAX hero-placement EV drift across N = {float(max_drift):.5f} centi-x"
     + (f" (at N={max_drift_N})" if max_drift_N is not None else "")
 )
+# Hard-assert exact EV-equality: the residual must be within the _solve_table
+# integer-rounding granularity (a few centi-x THOUSANDTHS), orders of magnitude
+# below the old 2.99 centi-x averaged-table edge. Bound at 0.01 centi-x (the old
+# edge / ~300) — anything larger means a sub-case was not solved against its own dist.
+EVEQ_RESIDUAL_TOL = Fraction(1, 100)  # 0.01 centi-x
+assert max_drift <= EVEQ_RESIDUAL_TOL, (
+    f"Option B FAIL: residual hero-placement drift {float(max_drift):.5f} centi-x exceeds "
+    f"the {float(EVEQ_RESIDUAL_TOL)} centi-x rounding bound — a sub-case is not EV-exact"
+)
+print(
+    f"// Option B: honest lane exactly EV-equal across hero placement "
+    f"(residual <= {float(max_drift):.5f} centi-x, within _solve_table rounding)."
+)
+print(
+    "//   The 2.99 centi-x player-selectable hero-common edge (EV-positive at N=1..3 in"
+)
+print(
+    "//   452-02) is CLOSED — no heroQuadrant pick is now EV-positive on the honest lane."
+)
+print(
+    "//   NOTE: the WWXRP _RIG_ lane retains its averaged-table hero-placement drift"
+)
+print(
+    "//   BY-DESIGN (USER don't-care ruling: 'worthless shitcoin'); only the honest"
+)
+print(
+    "//   ETH/FLIP lane is split per (N, hero-is-gold) and made exactly EV-equal here."
+)
 
 
 # ===================================================================
@@ -777,28 +814,42 @@ print(
 # the R2 rig, proven BEFORE any contract edit. We show, per N, the honest
 # Variant-2 P_N(S=9), the rigged P_N(S=9), and the HEAD all-8-match
 # probability (the old M=8 event) side by side and assert all three are
-# EQUAL (Fraction-exact). The WWXRP_ROI_* RTP curve (70->115->118->120%)
-# and the S=9 whale-pass bracket are NOT recomputed by this script — they
-# live in the contract ROI machinery (INV-02 / INV-04), held fixed; since
-# the rig leaves P(S=9) and its pinned payout intact (m>=7 cap), the
-# realized WWXRP RTP curve is byte-identical to HEAD.
+# EQUAL (Fraction-exact). Under Option B we ALSO recompute P(S=9) from each
+# new honest sub-case distribution (hero gold AND hero common) and assert it
+# equals the same value — proving S=9 is placement-independent (it depends
+# only on the gold/common COUNT N, not which quadrant is the hero), so the
+# honest split does NOT move P(S=9). The WWXRP_ROI_* RTP curve
+# (70->115->118->120%) and the S=9 whale-pass bracket are NOT recomputed by
+# this script — they live in the contract ROI machinery (INV-02 / INV-04),
+# held fixed; since the rig leaves P(S=9) and its pinned payout intact
+# (m>=7 cap), the realized WWXRP RTP curve is byte-identical to HEAD.
 # ===================================================================
 print("\n" + "=" * 70)
 print("NUMERIC PRE-PROOF — P(S=9) + WWXRP RTP curve unchanged vs HEAD")
 print("=" * 70)
 print(f"// {'N':>3} | {'honest P(S=9)':>26} | {'rigged P(S=9)':>26} | {'HEAD all-8-match P':>26} | eq")
 for N in range(5):
-    honest_ps9 = P_N_TABLE[N][9]              # Variant-2 honest P(S=9)
+    honest_ps9 = P_N_TABLE[N][9]              # Variant-2 honest P(S=9) (averaged; placement-indep at 9)
     rigged_ps9 = P_N_RIG[N][9]                # R2-rigged P(S=9)
     head_m8 = _p_old(N)[8]                    # HEAD all-8-axes (old M=8) probability
     eq = (honest_ps9 == rigged_ps9 == head_m8)
     assert eq, (
         f"PRE-PROOF FAIL N={N}: honest {honest_ps9} / rigged {rigged_ps9} / HEAD {head_m8} differ"
     )
+    # Option B: each new honest sub-case distribution must give the SAME P(S=9)
+    # (S=9 is the all-8-axes event — placement-independent, only the COUNT N matters).
+    for (NN, g), (dist, _payouts) in honest_tables.items():
+        if NN == N:
+            assert dist[9] == honest_ps9, (
+                f"PRE-PROOF FAIL N={N} {_sub_label(NN, g)}: sub-case P(S=9) {dist[9]} "
+                f"!= averaged P(S=9) {honest_ps9} — S=9 must be placement-independent"
+            )
     print(
         f"// {N:>3} | {str(honest_ps9):>26} | {str(rigged_ps9):>26} | "
         f"{str(head_m8):>26} | {'OK' if eq else 'XX'}"
     )
+print("// Option B sub-case check: every honest (N, hero-is-gold) sub-case P(S=9) ==")
+print("//   the per-N value above (Fraction-exact) — the honest split does NOT move P(S=9).")
 # WWXRP RTP curve: held fixed in the contract (not recomputed here). State + confirm.
 print("// WWXRP_ROI_* RTP curve (70->115->118->120%) + the S=9 whale-pass bracket are")
 print("//   NOT recomputed by this script — held fixed in the contract ROI machinery")
@@ -806,3 +857,48 @@ print("//   (INV-02 / INV-04). The R2 rig's m>=7 cap leaves P(S=9) and its pinne
 print("//   QUICK_PLAY_PAYOUT_N{N}_S9 payout intact, so the realized WWXRP RTP curve is")
 print("//   byte-identical to HEAD.")
 print("PRE-PROOF: P(S=9) and WWXRP RTP curve unchanged vs HEAD under Variant-2 + R2 rig")
+
+
+# ===================================================================
+# 453 IMPL DISPATCH SHAPE — _getBasePayoutBps(N, isWwxrp, heroIsGold).
+# Printed (NOT applied) for the 453 contract paste. This is the ONLY dispatch
+# change Option B requires: a heroIsGold selector consulted ONLY when !isWwxrp.
+# No .sol is edited in Phase 452 — 453 IMPL is the sole approval gate.
+# ===================================================================
+print("\n" + "=" * 70)
+print("453 IMPL DISPATCH SHAPE — _getBasePayoutBps(N, isWwxrp, heroIsGold)")
+print("=" * 70)
+print("// PRINTED FOR 453 PASTE — no .sol is edited in Phase 452.")
+print("//")
+print("// heroIsGold is a READ-ONLY fact derived in-contract from whether the player's")
+print("// hero quadrant carries a GOLD color (an existing trait of the ticket; on the")
+print("// quick-play / RNG paths it is fixed by the seed, not player-selectable). The")
+print("// selector is consulted ONLY on the honest lane (!isWwxrp). On the WWXRP lane the")
+print("// _RIG_ table is indexed by N only (heroIsGold ignored) — averaged by-design.")
+print("// N0 (always hero-common) and N4 (always hero-gold) collapse to one table each,")
+print("// so heroIsGold is only consulted for N in {1, 2, 3}.")
+print("//")
+print("// function _getBasePayoutBps(uint256 n, bool isWwxrp, bool heroIsGold)")
+print("//     internal pure returns (uint256 packed, uint256 s8, uint256 s9) {")
+print("//     s9 = QUICK_PLAY_PAYOUT_N{n}_S9;          // pin, by N only (P(S=9) placement-indep)")
+print("//     if (isWwxrp) {                            // WWXRP rigged lane: by N only")
+print("//         packed = QUICK_PLAY_PAYOUTS_RIG_N{n}_PACKED;")
+print("//         s8     = QUICK_PLAY_PAYOUT_RIG_N{n}_S8;")
+print("//         return (packed, s8, s9);             // heroIsGold IGNORED (averaged by-design)")
+print("//     }")
+print("//     // Honest ETH/FLIP lane: index by (n, heroIsGold), Option B exact EV-equality.")
+print("//     if (n == 0) {                            // N0 always hero-common -> one table")
+print("//         packed = QUICK_PLAY_PAYOUTS_N0_PACKED;          s8 = QUICK_PLAY_PAYOUT_N0_S8;")
+print("//     } else if (n == 4) {                     // N4 always hero-gold  -> one table")
+print("//         packed = QUICK_PLAY_PAYOUTS_N4_PACKED;          s8 = QUICK_PLAY_PAYOUT_N4_S8;")
+print("//     } else if (heroIsGold) {                 // N in {1,2,3}, hero gold")
+print("//         packed = QUICK_PLAY_PAYOUTS_N{n}_HEROGOLD_PACKED;   s8 = QUICK_PLAY_PAYOUT_N{n}_HEROGOLD_S8;")
+print("//     } else {                                 // N in {1,2,3}, hero common")
+print("//         packed = QUICK_PLAY_PAYOUTS_N{n}_HEROCOMMON_PACKED; s8 = QUICK_PLAY_PAYOUT_N{n}_HEROCOMMON_S8;")
+print("//     }")
+print("// }")
+print("//")
+print("// The same (n, isWwxrp, heroIsGold) selector applies to the ETH-bonus factor")
+print("// dispatch (WWXRP_FACTORS_*): honest -> WWXRP_FACTORS_N{n}[_HEROGOLD|_HEROCOMMON]_PACKED")
+print("// (N0/N4 collapse to WWXRP_FACTORS_N0/N4_PACKED); WWXRP -> WWXRP_FACTORS_RIG_N{n}_PACKED.")
+print("DISPATCH-SHAPE: _getBasePayoutBps heroIsGold selector (honest lane only) printed for 453 IMPL")
