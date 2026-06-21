@@ -1,16 +1,16 @@
 ---
 gsd_state_version: 1.0
-milestone: v71.0
-milestone_name: Foil Pack
+milestone: v72.0
+milestone_name: As-Built Audit — Foil Pack + Degenerette WWXRP/Rescore
 status: executing
-last_updated: "2026-06-20T02:42:59.657Z"
-last_activity: 2026-06-20 -- Phase 446 execution started
+last_updated: "2026-06-21"
+last_activity: 2026-06-21 -- v72.0 init (by hand); Phase 447 VERIFY+GAS starting (full-auto run)
 progress:
-  total_phases: 10
-  completed_phases: 4
-  total_plans: 19
-  completed_plans: 14
-  percent: 40
+  total_phases: 5
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
 
 # Project State
@@ -34,10 +34,15 @@ See: .planning/PROJECT.md (Current Milestone: v70.0 section) + .planning/MILESTO
 
 ## Current Position
 
-Phase: 446 (impl-batched-contract-diff-contract-commit-gate) — EXECUTING
-Plan: 1 of 4
-Status: Executing Phase 446
-Last activity: 2026-06-20 -- Phase 446 execution started
+Milestone: v72.0 — As-Built Audit: Foil Pack + Degenerette WWXRP/Rescore (+ Gas)
+Phase: 447 (VERIFY + GAS) — STARTING (full-auto run; USER "run this whole thing full auto I gotta go to bed" 2026-06-21)
+Plan: — (audit milestone; phases 447 VERIFY+GAS · 448 FREEZE [SOLE GATE] · 449 TST · 450 REAUDIT · 451 TERMINAL)
+Status: v72.0 init complete (by hand — SDK state mutators avoided per repo process); beginning the as-built audit on the WORKING TREE
+Subject: ffbd7796 (v70 freeze) → HEAD 16225de6 — 18 .sol, +2,186/−355 (foil pack `f255d56c` + WWXRP rig/payout-fork `1dd07c4d` + Variant-2 rescore `16225de6`)
+Pillars (hard floor): Solvency · RNG integrity · Liveness/no-brick. Gas = first-class axis. Cross-model = Codex + Gemini (both CLIs present at ~/.local/bin).
+⚠ HOLD POINT: the FREEZE (448) contract commit is the SOLE approval gate — held for USER hand-review of the consolidated .sol diff; every other phase runs autonomously on the uncommitted working tree.
+Last activity: 2026-06-21 -- v72.0 started; v71.0 build closed by hand (audit folded in); Phase 447 VERIFY+GAS starting
+PRIOR_v71_FOLD: 2026-06-21 — v71.0 Foil Pack BUILD complete (445 SPEC + 446 IMPL committed `f255d56c`; then `1dd07c4d` WWXRP rig + payout fork, `16225de6` Variant-2 foil match rescore). v71's audit phases never ran → USER chose "fold into new audit milestone" → v71 CLOSED BY HAND (no `v71.0` tag — audit completes inside v72.0; planning snapshotted to `.planning/milestones/v71.0-{ROADMAP,REQUIREMENTS}.md`; phase dirs 445/446 KEPT in `.planning/phases/` as the build record v72 audits against). 34 commits ahead of origin, UNPUSHED. REQUIREMENTS.md + ROADMAP.md (v72.0) authored at init BY HAND. NEXT = run 447 VERIFY+GAS → … → hold at 448 FREEZE for USER.
 PRIOR_v68_SHIP: 2026-06-19 — ✅ **v68.0 SHIPPED + ARCHIVED + TAGGED** (USER chose "archive now; defer mutation"). Lifecycle done BY HAND (gsd-sdk mutators avoided — custom STATE + hand-driven phase dirs; per v66/v67 precedent): by-hand milestone audit `.planning/milestones/v68.0-MILESTONE-AUDIT.md` (PASS, 8/9 phases + 427 carried by USER decision, 19/22 reqs done + 3 MUT carried, subject logic-byte-frozen); archived ROADMAP/REQUIREMENTS/phase-dirs → `milestones/v68.0-*`; `git tag v68.0`; live phase dirs cleaned. Verdict **0 CAT / 0 HIGH; 1 LOW found+fixed (COUNCIL-FIND-01 `65b70821`)**; nets widened (RNG-freeze 78/79 cross-model, 87-slot layout oracle, deep invariants green @1000/256, durable CI, Decimator mutation 858/760 banked). Closure `MILESTONE_V68_AT_HEAD_3cc51d00393f18f78be83a3f797777baf969c842`; subject HEAD `3cc51d00` / contracts tree `e9a5fc24`. ⚠ NOT PUSHED (USER pushes). Carried: MUT-02/03/04 Coinflip/Lootbox tail (CI/detached) + `:1843 ==0` re-roll guard + 423 rotation-timer. NEXT = USER push + /gsd-new-milestone (v69).
 PRIOR_434: 2026-06-19 — ✅ **434 TERMINAL DONE** — v68 evidence pack shipped. Canonical `audit/COVERAGE-v68.0.md` (chmod 444) + `audit/AUDIT-V68-REPORT.html` (prior house style) + `.planning/phases/434-terminal/434-TERMINAL.md`. **Closure signal `MILESTONE_V68_AT_HEAD_3cc51d00393f18f78be83a3f797777baf969c842`**; subject confirmed **logic-byte-frozen** (only the comment trim `3cc51d00` [340/340 bytecode-identical] + COUNCIL-FIND-01 LOW fix `65b70821` touched `.sol`). Verdict **0 CAT / 0 HIGH; 1 LOW found+fixed (COUNCIL-FIND-01)**; detection nets widened (RNG-freeze proof 78/79 cross-model, layout 87-slot oracle, deep invariants green @1000/256, CI durable, Decimator mutation 858/760 banked). Honest partial recorded: MUT-02/03/04 tail (Coinflip/Lootbox scoring + triage) open — session-tied measurement, logic already dual-net-audited clean. NEXT = resume mutation (Coinflip→Lootbox) + lifecycle (/gsd-audit-milestone → archive+tag v68.0 BY HAND → /gsd-cleanup). Carried gated-fix decisions for USER: `:1843 ==0` re-roll guard + 423 rotation-timer.
 PRIOR_433: 2026-06-19 — ✅ **433 COMMENTS DONE + COMMITTED `3cc51d00`** (USER-approved contract-commit gate — the milestone's only gate). 14 `contracts/*.sol`, +318/−347, comment-only. **Proven logic-inert**: isolated bytecode-equivalence proof (`audit/verify-trim-bytecode.sh`, `FOUNDRY_BYTECODE_HASH=none`) → **340/340 artifacts deployedBytecode byte-identical** HEAD-vs-trimmed. Strips procedural/history debt tokens (milestone/version refs, plan/req/finding IDs, build-phase nums, history narration, spec-line cites); descriptive prose kept, load-bearing invariant text rephrased not deleted. 2 comment corrections verified vs source: GameAfkingModule active-sub-cap comment 500→1000 (`SUBSCRIBER_CAP=1000` `:200`, constant untouched); `DegenerusGame.depositAfkingFunding` dropped the wrong clause claiming bare `receive()` routes msg.value to the prize pool (`receive()` credits afking via `_creditAfkingValue(msg.sender,…)` `:2476-2479`). New subject HEAD `3cc51d00` / contracts tree `e9a5fc24`; mutation harness `run-campaign-v68.sh` re-pinned `3cc51d00`/`e9a5fc24`. ⚑ Recovered the in-flight proof (original `byaymxs6p` had paused mid-run across the /clear with the trim stashed; it completed + popped the stash; I re-ran clean in isolation). Mutation campaign found DEAD (session-tied; banked Decimator killed=858/uncaught=760/compfail=516 16h, then died ~3h pre-session after starting Coinflip; contracts left clean). NEXT = 434 TERMINAL (COVERAGE-v68.0.md + MILESTONE_V68_AT_HEAD_<sha>) → resume mutation Coinflip→Lootbox + MUT-02/03/04 triage → lifecycle.

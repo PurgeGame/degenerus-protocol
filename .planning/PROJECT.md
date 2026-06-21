@@ -8,7 +8,25 @@ Smart contract audit repository for the Degenerus Protocol — an on-chain ETH g
 
 Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
 
-## Current Milestone: v71.0 Foil Pack
+## Current Milestone: v72.0 As-Built Audit — Foil Pack + Degenerette WWXRP/Rescore (+ Gas)
+
+**Goal:** Bring the entire post-v70 contract surface to the C4A-ready bar — byte-frozen subject, full coverage of the new mechanics, cross-model adversarial reaudit, gas squeezed, findings documented. The subject is the `ffbd7796 (v70 freeze) → HEAD` diff: **18 `.sol`, +2,186/−355**, already committed across `f255d56c` (foil pack), `1dd07c4d` (WWXRP Degenerette reel rig + payout fork), `16225de6` (Variant-2 foil match rescore). This is an audit, not a build — verify → freeze → test → reaudit → terminal.
+
+**Why now:** v71.0 BUILT the foil pack (phases 445 SPEC + 446 IMPL, committed) but its audit phases (TST/REAUDIT/TERMINAL) never ran, and on top of it two more contract changes landed — the WWXRP Degenerette rig + payout fork and the foil match Variant-2 rescore — the latter two touching the *existing* Degenerette game that v71 explicitly held out-of-scope. None of it has been through a milestone audit. Per USER 2026-06-21 ("fold into new audit milestone"), v71's build is closed by hand and its deferred audit folds into v72, which audits the whole as-built surface as one subject.
+
+**The 3 pillars (hard floor — explicit USER ask):** (1) **Solvency** — no path pays unbacked value (foil ETH ≤10% `futurePrizePool`, FLIP/WWXRP mints, whale pass pool-neutral, sDGNRS backing intact, WWXRP-rig surplus accounted); (2) **RNG integrity** — every new VRF consumer frozen-at-commitment, the 4-of-4 moonshot steer-proof (hero-free pure-VRF), the 2/3 hero edge the only edge and bounded by-design; (3) **Liveness / no-brick** — advanceGame + mint/jackpot spine cannot be gas-bricked or state-corrupted by the foil queue / `foilCursor` drain / the rig; pull-claim only; EIP-170 fits.
+
+**Gas:** a first-class axis this milestone — a Scavenger→Skeptic efficiency pass over all 18 changed files, no hot-path regression.
+
+**Method:** cross-model (Codex/ChatGPT + Gemini, both CLIs present) on every load-bearing correctness/security claim in VERIFY (447) and REAUDIT (450); Claude isolated-subagent nets for the rest. Charged analysis stays in disposable isolated subagents (neutral prompts); orchestrator stays neutral.
+
+**Scope:** Audit of the existing as-built diff only — v72 does not add features. ONE batched contract diff (verify fixes + gas edits + any reaudit fixes) behind the sole approval gate (FREEZE, 448).
+
+**Posture:** Contract-touching (gas edits) → **RESETS the audit subject** off the v70 closure (`MILESTONE_V70_AT_HEAD_25ff6aae…`; `contracts/` tree `99f2e53f` @ `ffbd7796`). Phases continue 446 → **447** (VERIFY+GAS · FREEZE · TST · REAUDIT · TERMINAL). The sole gate = the FREEZE commit; all verify/test/tooling/council/findings work commits autonomously. No research (audit of existing source). **Autonomous-run note (USER "run full auto, going to bed" 2026-06-21):** since the contract-commit gate can't be crossed while the USER is away, VERIFY+GAS/TST/REAUDIT run on the working tree (edits applied, uncommitted), FREEZE runs last among the contract-touching phases and **holds** for USER diff review. Design seeds: `.planning/V71-FOILPACK-FINAL-SPEC.md`, `.planning/FOIL-REDESIGN-SPEC.md`, `.planning/FOIL-EV-ANALYSIS.md`, the WWXRP-rig design (memory `wwxrp-rig-recalibration-design`).
+
+## ▶ Build complete — audit folded into v72.0 — v71.0 Foil Pack
+
+> **Status (2026-06-21):** v71.0 BUILD is done (445 SPEC + 446 IMPL committed, `f255d56c`); its deferred audit phases (447–449 as planned under v71) are **folded into v72.0** per USER decision. v71.0 was **closed by hand** — planning docs snapshotted to `.planning/milestones/v71.0-{ROADMAP,REQUIREMENTS}.md`, phase dirs 445/446 left in `.planning/phases/` as the build record v72 audits against. **No `v71.0` tag** (audit not completed standalone; it completes inside v72.0). The original v71 goal/scope follows as the historical design record.
 
 **Goal:** Add a purchasable "foil pack" — one per account per raw level, priced at 10× a normal ticket for 4 boosted-rarity tickets — whose value is (a) an activity-scaled trait-rarity boost (×2 at score 0 → ×6 at max, via a new sibling producer; ~2× the gold odds of 10 tickets at high activity, deliberately worse at the bottom) and (b) a pull/claim multi-currency "degenerette spin" match lottery: each of the 4 tickets, over the whole level, is matched (exact per-quadrant) against the two daily jackpot winning sets, paying a **40% FLIP / 40% ETH / 20% WWXRP** spin at 2-of-4 (5 faces) / 3-of-4 (65 faces) and a **half-whale-pass + bonus-spin** moonshot at 4-of-4. Calibrated to ≈2 ticket-faces of expected payout per pack over 30 days (bad in a fast level, a real score in a slow one).
 
