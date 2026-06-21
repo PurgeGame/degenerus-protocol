@@ -636,7 +636,7 @@ contract V55RevertFreeEvCap is DeployProtocol {
         uint48 index = _liveLootboxIndex();
         vm.deal(buyer, lootboxAmount + 1 ether);
         vm.prank(buyer);
-        game.purchase{value: lootboxAmount + 0.01 ether}(buyer, 400, lootboxAmount, bytes32(0), MintPaymentKind.DirectEth);
+        game.purchase{value: lootboxAmount + 0.01 ether}(buyer, 400, lootboxAmount, bytes32(0), MintPaymentKind.DirectEth, false);
         // The buy-time draw already happened (lbFirstDeposit branch). Open the box to complete the human leg
         // (the open reads the FROZEN adj — no second draw; the draw was buy-time).
         _forceLootboxWord(index, uint256(keccak256("human-shared-word")));

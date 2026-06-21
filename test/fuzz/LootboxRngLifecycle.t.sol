@@ -92,7 +92,7 @@ contract LootboxRngLifecycle is DeployProtocol {
         address buyer = makeAddr("lootboxBuyer");
         vm.deal(buyer, 100 ether);
         vm.prank(buyer);
-        game.purchase{value: 1.01 ether}(buyer, 400, 1 ether, bytes32(0), MintPaymentKind.DirectEth);
+        game.purchase{value: 1.01 ether}(buyer, 400, 1 ether, bytes32(0), MintPaymentKind.DirectEth, false);
 
         // Fund VRF subscription with LINK
         mockVRF.fundSubscription(1, 100e18);
@@ -123,7 +123,7 @@ contract LootboxRngLifecycle is DeployProtocol {
         vm.prank(buyer);
         // numCoins = 400 (minimum for 1 ETH lootbox), total = purchase + lootbox
         game.purchase{value: lootboxAmount + 0.01 ether}(
-            buyer, 400, lootboxAmount, bytes32(0), MintPaymentKind.DirectEth
+            buyer, 400, lootboxAmount, bytes32(0), MintPaymentKind.DirectEth, false
         );
     }
 

@@ -93,7 +93,7 @@ describe("GameOver", function () {
         BigInt(qty) * 100n,
         0n,
         ZERO_BYTES32,
-        MintPaymentKind.DirectEth,
+        MintPaymentKind.DirectEth,false, 
         { value: eth(valueEth) }
       );
   }
@@ -335,7 +335,7 @@ describe("GameOver", function () {
             100n,
             0n,
             ZERO_BYTES32,
-            MintPaymentKind.DirectEth,
+            MintPaymentKind.DirectEth,false, 
             { value: eth(0.01) }
           )
       ).to.be.reverted;

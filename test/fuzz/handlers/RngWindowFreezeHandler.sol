@@ -173,7 +173,7 @@ contract RngWindowFreezeHandler is Test {
         uint256 oneTicket = priceWei; // 400 entries == 1 price (project_ticket_entry_price_units)
         if (oneTicket != 0 && oneTicket <= currentActor.balance) {
             vm.prank(currentActor);
-            try game.purchase{value: oneTicket}(currentActor, 400, 0, bytes32(0), MintPaymentKind.DirectEth) {} catch {}
+            try game.purchase{value: oneTicket}(currentActor, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false) {} catch {}
         }
 
         // Advance until a daily request is in flight (rngLocked latches). The daily request only fires at a
@@ -255,7 +255,7 @@ contract RngWindowFreezeHandler is Test {
             return;
         }
         vm.prank(currentActor);
-        try game.purchase{value: cost}(currentActor, qty, boxAmt, bytes32(0), MintPaymentKind.DirectEth) {} catch {}
+        try game.purchase{value: cost}(currentActor, qty, boxAmt, bytes32(0), MintPaymentKind.DirectEth, false) {} catch {}
         _checkFrozenAfterIsolatedAction();
     }
 

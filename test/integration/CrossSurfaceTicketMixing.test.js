@@ -434,7 +434,7 @@ describe("CrossSurfaceTicketMixing — Phase 278 Wave 2 TST-CLEAN-02/03 + TST-CR
     async function buyLootboxes(game, buyer, n, totalEth) {
       return game
         .connect(buyer)
-        .purchase(hre.ethers.ZeroAddress, 0n, BigInt(n), ZERO_BYTES32, 0, {
+        .purchase(hre.ethers.ZeroAddress, 0n, BigInt(n), ZERO_BYTES32, 0,false,  {
           value: eth(totalEth),
         });
     }

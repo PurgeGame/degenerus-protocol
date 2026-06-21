@@ -471,7 +471,7 @@ contract V55FreezeDeterminism is DeployProtocol {
         uint48 index = _liveLootboxIndex();
         vm.deal(player, amount + 1 ether);
         vm.prank(player);
-        game.purchase{value: amount + 0.01 ether}(player, 400, amount, bytes32(0), MintPaymentKind.DirectEth);
+        game.purchase{value: amount + 0.01 ether}(player, 400, amount, bytes32(0), MintPaymentKind.DirectEth, false);
 
         // Force the human box's per-index word + per-(index,player) day to MATCH the afking seed preimage
         // (the human seed reads `rngWord = lootboxRngWordByIndex[index]` and `day = lootboxDay[index][player]`,

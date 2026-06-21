@@ -601,7 +601,7 @@ contract KeeperRouterOneCategory is DeployProtocol {
     function _buyBox(address buyer, uint256 lootboxAmount) internal {
         vm.prank(buyer);
         game.purchase{value: lootboxAmount + 0.01 ether}(
-            buyer, 400, lootboxAmount, bytes32(0), MintPaymentKind.DirectEth
+            buyer, 400, lootboxAmount, bytes32(0), MintPaymentKind.DirectEth, false
         );
     }
 

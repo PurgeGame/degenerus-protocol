@@ -59,7 +59,7 @@ contract AffiliateDgnrsClaim is DeployProtocol {
         vm.deal(buyer, 5 ether);
         vm.prank(buyer);
         game.purchase{value: 1.01 ether}(
-            buyer, 400, 1 ether, code, MintPaymentKind.DirectEth
+            buyer, 400, 1 ether, code, MintPaymentKind.DirectEth, false
         );
     }
 

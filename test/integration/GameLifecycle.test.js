@@ -154,7 +154,7 @@ describe("GameLifecycle", function () {
           0,         // no tickets
           0,         // no lootbox
           ZERO_BYTES32,
-          0,
+          0,false, 
           { value: 0n }
         )
       ).to.be.reverted;
@@ -169,7 +169,7 @@ describe("GameLifecycle", function () {
         100,
         eth("0.01"), // lootBoxAmount
         ZERO_BYTES32,
-        0,
+        0,false, 
         { value: eth("0.02") }
       );
       const receipt = await tx.wait();
@@ -403,7 +403,7 @@ describe("GameLifecycle", function () {
         100,
         0,
         ZERO_BYTES32,
-        0,
+        0,false, 
         { value: eth("0.01") }
       );
       const receipt = await tx.wait();
@@ -437,7 +437,7 @@ describe("GameLifecycle", function () {
           100,
           0,
           ZERO_BYTES32,
-          0,
+          0,false, 
           { value: eth("0.01") }
         )
       ).to.be.revertedWithCustomError(game, "NotApproved");

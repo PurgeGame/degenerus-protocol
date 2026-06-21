@@ -84,7 +84,7 @@ contract MultiLevelHandler is Test {
             qty,
             0,
             bytes32(0),
-            MintPaymentKind.DirectEth
+            MintPaymentKind.DirectEth, false
         ) {
             ghost_totalDeposited += cost;
 
@@ -127,7 +127,7 @@ contract MultiLevelHandler is Test {
             qty,
             0,
             bytes32(0),
-            MintPaymentKind.DirectEth
+            MintPaymentKind.DirectEth, false
         ) {
             ghost_totalDeposited += cost;
         } catch {}

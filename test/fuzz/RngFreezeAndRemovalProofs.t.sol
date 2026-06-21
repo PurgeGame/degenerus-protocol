@@ -914,7 +914,7 @@ contract RngFreezeAndRemovalProofs is DeployProtocol {
             400,
             lootboxAmount,
             bytes32(0),
-            MintPaymentKind.DirectEth
+            MintPaymentKind.DirectEth, false
         );
     }
 

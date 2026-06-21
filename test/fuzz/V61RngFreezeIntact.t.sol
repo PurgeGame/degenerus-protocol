@@ -304,7 +304,7 @@ contract V61RngFreezeIntact is DeployProtocol {
         vm.deal(buyer, ethSent);
         vm.recordLogs();
         vm.prank(buyer);
-        game.purchase{value: ethSent}(buyer, 400, 0, bytes32(0), MintPaymentKind.Combined);
+        game.purchase{value: ethSent}(buyer, 400, 0, bytes32(0), MintPaymentKind.Combined, false);
 
         o.claimableDelta = claimableBefore - game.claimableWinningsOf(buyer);
         o.afkingDelta = afkingBefore - game.afkingFundingOf(buyer);

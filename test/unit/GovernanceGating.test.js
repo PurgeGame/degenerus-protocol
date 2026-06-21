@@ -499,7 +499,7 @@ describe("Governance & Gating (Phase 43)", function () {
           400,
           0,
           ZERO_BYTES32,
-          MintPaymentKind.DirectEth,
+          MintPaymentKind.DirectEth,false, 
           { value: cost }
         );
 

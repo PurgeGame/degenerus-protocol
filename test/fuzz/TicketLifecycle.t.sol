@@ -637,7 +637,7 @@ contract TicketLifecycleTest is DeployProtocol {
         vm.deal(buyer3, cost + 50 ether);
         vm.prank(buyer3);
         try game.purchase{value: cost}(
-            buyer3, qty, 0, bytes32(0), MintPaymentKind.DirectEth
+            buyer3, qty, 0, bytes32(0), MintPaymentKind.DirectEth, false
         ) {
             // Purchase succeeded -- verify routing via ticketsOwedPacked
             uint32 nxtOwed0 = _ticketsOwed(nxtKey0, buyer3);
@@ -1272,7 +1272,7 @@ contract TicketLifecycleTest is DeployProtocol {
         vm.prank(buyer3);
         // Near-future purchase should not revert
         game.purchase{value: cost}(
-            buyer3, qty, 0, bytes32(0), MintPaymentKind.DirectEth
+            buyer3, qty, 0, bytes32(0), MintPaymentKind.DirectEth, false
         );
 
         // purchaseWhaleBundle spans levels (level+1) to (level+100).
@@ -1443,7 +1443,7 @@ contract TicketLifecycleTest is DeployProtocol {
 
         vm.prank(buyer3);
         game.purchase{value: cost}(
-            buyer3, qty, 0, bytes32(0), MintPaymentKind.DirectEth
+            buyer3, qty, 0, bytes32(0), MintPaymentKind.DirectEth, false
         );
 
         // Check ticketsOwed: buyer3 must have owed at one of the WRITE keys
@@ -1494,7 +1494,7 @@ contract TicketLifecycleTest is DeployProtocol {
             vm.deal(buyer3, cost + 50 ether);
             vm.prank(buyer3);
             game.purchase{value: cost}(
-                buyer3, 400, 0, bytes32(0), MintPaymentKind.DirectEth
+                buyer3, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false
             );
         }
 
@@ -1529,7 +1529,7 @@ contract TicketLifecycleTest is DeployProtocol {
             vm.deal(buyer3, cost + 50 ether);
             vm.prank(buyer3);
             game.purchase{value: cost}(
-                buyer3, 400, 0, bytes32(0), MintPaymentKind.DirectEth
+                buyer3, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false
             );
         }
 
@@ -2121,7 +2121,7 @@ contract TicketLifecycleTest is DeployProtocol {
 
         vm.prank(who);
         try game.purchase{value: totalCost}(
-            who, ticketQty, lootboxEthAmount, bytes32(0), MintPaymentKind.DirectEth
+            who, ticketQty, lootboxEthAmount, bytes32(0), MintPaymentKind.DirectEth, false
         ) {} catch {
             return 0;
         }
@@ -2263,7 +2263,7 @@ contract TicketLifecycleTest is DeployProtocol {
 
         vm.prank(who);
         try game.purchase{value: cost}(
-            who, qty, 0, bytes32(0), MintPaymentKind.DirectEth
+            who, qty, 0, bytes32(0), MintPaymentKind.DirectEth, false
         ) {} catch {}
     }
 

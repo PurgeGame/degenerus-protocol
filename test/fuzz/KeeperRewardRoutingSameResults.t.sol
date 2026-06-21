@@ -656,7 +656,7 @@ contract KeeperRewardRoutingSameResults is DeployProtocol {
         if (cost == 0) return;
         if (who.balance < cost + 1 ether) vm.deal(who, cost + 10 ether);
         vm.prank(who);
-        game.purchase{value: cost}(who, qty, 0, bytes32(0), MintPaymentKind.DirectEth);
+        game.purchase{value: cost}(who, qty, 0, bytes32(0), MintPaymentKind.DirectEth, false);
     }
 
     function _fulfillVrfIfPending(uint256 word) internal {

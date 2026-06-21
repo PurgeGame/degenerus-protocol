@@ -239,7 +239,7 @@ describe("AccessControl", function () {
       const { quests, alice } = await loadFixture(deployFullProtocol);
 
       await expect(
-        quests.connect(alice).rollDailyQuest(1n, 12345n, false)
+        quests.connect(alice).rollDailyQuest(1n, 12345n, false, false)
       ).to.be.revertedWithCustomError(quests, "OnlyGame");
     });
 

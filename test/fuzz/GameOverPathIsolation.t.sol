@@ -106,7 +106,7 @@ contract GameOverBestEffortDrainTest is DeployProtocol {
             400,
             0,
             bytes32(0),
-            MintPaymentKind.DirectEth
+            MintPaymentKind.DirectEth, false
         );
 
         // Step 2: trigger liveness timeout without completing a normal day.

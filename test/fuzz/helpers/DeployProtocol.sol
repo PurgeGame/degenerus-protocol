@@ -17,6 +17,7 @@ import {DegenerusGameBoonModule} from "../../../contracts/modules/DegenerusGameB
 import {DegenerusGameDegeneretteModule} from "../../../contracts/modules/DegenerusGameDegeneretteModule.sol";
 import {DegenerusGameBingoModule} from "../../../contracts/modules/DegenerusGameBingoModule.sol";
 import {GameAfkingModule} from "../../../contracts/modules/GameAfkingModule.sol";
+import {DegenerusGameFoilPackModule} from "../../../contracts/modules/DegenerusGameFoilPackModule.sol";
 import {FLIP} from "../../../contracts/FLIP.sol";
 import {Coinflip} from "../../../contracts/Coinflip.sol";
 import {DegenerusGame} from "../../../contracts/DegenerusGame.sol";
@@ -64,6 +65,7 @@ abstract contract DeployProtocol is Test {
     DegenerusGameDegeneretteModule public degeneretteModule;
     DegenerusGameBingoModule public bingoModule;
     GameAfkingModule public afkingModule;
+    DegenerusGameFoilPackModule public foilModule;
     FLIP public coin;
     Coinflip public coinflip;
     DegenerusGame public game;
@@ -154,6 +156,11 @@ abstract contract DeployProtocol is Test {
 
         // GNRUS: self-mints 1T to address(this), no cross-contract constructor calls
         gnrus = new GNRUS();                            // N+24 = nonce 29
+
+        // v71.0: foil pack game-resident delegatecall module. Deployed LAST (append)
+        // so it adds no nonce shift to any existing contract — only GAME's runtime
+        // delegatecalls reference it, and it has no ctor args / no deploy-time deps.
+        foilModule = new DegenerusGameFoilPackModule(); // N+25 = nonce 30
     }
 
     /// @dev Satisfy the gambling-burn admission gate (rngWordForDay(currentDay) != 0) by landing a

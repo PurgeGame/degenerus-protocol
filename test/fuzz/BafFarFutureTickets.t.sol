@@ -167,7 +167,7 @@ contract BafFarFutureTicketsTest is DeployProtocol {
         if (who.balance < cost) vm.deal(who, cost + 10 ether);
 
         vm.prank(who);
-        try game.purchase{value: cost}(who, qty, 0, bytes32(0), MintPaymentKind.DirectEth) {} catch {}
+        try game.purchase{value: cost}(who, qty, 0, bytes32(0), MintPaymentKind.DirectEth, false) {} catch {}
     }
 
     function _fulfillVrfIfPending(uint256 seed) internal {

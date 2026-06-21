@@ -135,7 +135,7 @@ contract VRFPathHandler is Test {
             qty,
             lootboxAmt,
             bytes32(0),
-            MintPaymentKind.DirectEth
+            MintPaymentKind.DirectEth, false
         ) {} catch {
             return;
         }

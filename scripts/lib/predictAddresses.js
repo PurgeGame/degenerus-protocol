@@ -52,6 +52,11 @@ export const DEPLOY_ORDER = [
   "DGNRS",                 // N+22: DGNRS (reads SDGNRS balance)
   "ADMIN",                 // N+23: DegenerusAdmin (calls VRF + GAME)
   "GNRUS",                 // N+24: GNRUS (self-mint only, no cross-calls)
+  // v71.0: foil pack game-resident delegatecall module. Appended LAST so adding it
+  // does not shift any existing predicted address (the auto-subscribed VAULT/SDGNRS
+  // addresses feed trait derivation; keeping them fixed avoids perturbing RNG). It
+  // has no ctor args and no deploy-time dependents — only GAME's runtime delegatecalls.
+  "GAME_FOILPACK_MODULE",  // N+25: DegenerusGameFoilPackModule
 ];
 
 /**
@@ -83,6 +88,7 @@ export const KEY_TO_CONTRACT = {
   DGNRS: "DGNRS",
   ADMIN: "DegenerusAdmin",
   GNRUS: "GNRUS",
+  GAME_FOILPACK_MODULE: "DegenerusGameFoilPackModule",
 };
 
 /**

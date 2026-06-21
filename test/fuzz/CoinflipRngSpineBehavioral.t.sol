@@ -202,7 +202,7 @@ contract CoinflipRngSpineBehavioral is DeployProtocol {
             400,
             0,
             bytes32(0),
-            MintPaymentKind.DirectEth
+            MintPaymentKind.DirectEth, false
         );
 
         // Post-action resolution: the SAME (bonus, rngWord-derived roll) on a twin epoch

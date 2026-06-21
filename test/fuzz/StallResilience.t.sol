@@ -134,7 +134,7 @@ contract StallResilience is DeployProtocol {
         // Purchase 5 tickets before completing the first post-deploy day
         for (uint256 i = 0; i < 5; i++) {
             vm.prank(buyer);
-            game.purchase{value: 0.01 ether}(buyer, 400, 0, bytes32(0), MintPaymentKind.DirectEth);
+            game.purchase{value: 0.01 ether}(buyer, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false);
         }
 
         // Complete the first post-deploy day (day 2)
@@ -148,14 +148,14 @@ contract StallResilience is DeployProtocol {
         // Purchase during stall at day 3 (stakes go to day 4)
         for (uint256 i = 0; i < 5; i++) {
             vm.prank(buyer);
-            game.purchase{value: 0.01 ether}(buyer, 400, 0, bytes32(0), MintPaymentKind.DirectEth);
+            game.purchase{value: 0.01 ether}(buyer, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false);
         }
 
         // Warp +1 day (still stalled), purchase at day 4 (stakes go to day 5)
         vm.warp(block.timestamp + 1 days);
         for (uint256 i = 0; i < 5; i++) {
             vm.prank(buyer);
-            game.purchase{value: 0.01 ether}(buyer, 400, 0, bytes32(0), MintPaymentKind.DirectEth);
+            game.purchase{value: 0.01 ether}(buyer, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false);
         }
 
         // Warp +2 more days to create the full gap (now at day 6)
@@ -189,7 +189,7 @@ contract StallResilience is DeployProtocol {
         // Day 1: purchase with lootbox amount
         // lootboxRngIndex = 1, so this writes to lootboxEth[1][buyer]
         vm.prank(buyer);
-        game.purchase{value: 1.01 ether}(buyer, 400, 1 ether, bytes32(0), MintPaymentKind.DirectEth);
+        game.purchase{value: 1.01 ether}(buyer, 400, 1 ether, bytes32(0), MintPaymentKind.DirectEth, false);
 
         // Complete day 1 (VRF request reserves lootbox index 1, fulfillment writes word for index 1)
         // After this: lootboxRngIndex = 2
@@ -204,7 +204,7 @@ contract StallResilience is DeployProtocol {
         // Purchase with lootbox amount BEFORE advanceGame so lootboxEth[preStallIndex][buyer] has value
         // lootboxRngIndex is still preStallIndex (2), so this writes to lootboxEth[2][buyer]
         vm.prank(buyer);
-        game.purchase{value: 1.01 ether}(buyer, 400, 1 ether, bytes32(0), MintPaymentKind.DirectEth);
+        game.purchase{value: 1.01 ether}(buyer, 400, 1 ether, bytes32(0), MintPaymentKind.DirectEth, false);
 
         // advanceGame triggers VRF request, which reserves lootbox index preStallIndex (2)
         // and increments lootboxRngIndex to 3

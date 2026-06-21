@@ -169,7 +169,7 @@ contract V61AfkingSpendHandler is Test {
 
         vm.recordLogs();
         vm.prank(currentActor);
-        try game.purchase{value: ethSent}(currentActor, qty, 0, bytes32(0), kind) {
+        try game.purchase{value: ethSent}(currentActor, qty, 0, bytes32(0), kind, false) {
             success_afkingBuy++;
             ghost_afkingDrawn += _afkingSpentAmount(currentActor);
         } catch {}
@@ -243,7 +243,7 @@ contract V61AfkingSpendHandler is Test {
         uint256 small = (priceWei * 400) / 400; // one whole ticket to satisfy the daily gate
         if (small != 0 && small <= currentActor.balance) {
             vm.prank(currentActor);
-            try game.purchase{value: small}(currentActor, 400, 0, bytes32(0), MintPaymentKind.DirectEth) {} catch {}
+            try game.purchase{value: small}(currentActor, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false) {} catch {}
         }
 
         for (uint256 i; i < 3; i++) {

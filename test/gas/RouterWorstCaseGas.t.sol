@@ -335,7 +335,7 @@ contract RouterWorstCaseGas is DeployProtocol {
         vm.deal(buyer, 1_000 ether);
         for (uint256 i; i < 8; ++i) {
             vm.prank(buyer);
-            game.purchase{value: 0.01 ether}(buyer, 400, 0, bytes32(0), MintPaymentKind.DirectEth);
+            game.purchase{value: 0.01 ether}(buyer, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false);
         }
 
         vm.warp(block.timestamp + 1 days);

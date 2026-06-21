@@ -89,7 +89,7 @@ contract RngIndexDrainBindingTest is DeployProtocol {
             qty,
             lootboxWei,
             bytes32(0),
-            MintPaymentKind.DirectEth
+            MintPaymentKind.DirectEth, false
         );
     }
 
@@ -266,7 +266,7 @@ contract RngIndexDrainBindingTest is DeployProtocol {
         uint256 ticketCost = (priceWei * 400) / 400;
         vm.prank(buyerB);
         game.purchase{value: ticketCost + 1 ether}(
-            buyerB, 400, 1 ether, bytes32(0), MintPaymentKind.DirectEth
+            buyerB, 400, 1 ether, bytes32(0), MintPaymentKind.DirectEth, false
         );
         assertEq(_boxPlayerAt0(idxLive), buyerB, "box B not keyed at the LIVE post-request index");
         assertEq(uint96(_presaleBoxEth(idxLive, buyerB)), 1 ether, "box B applied-ETH not at live index");

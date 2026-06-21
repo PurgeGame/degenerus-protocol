@@ -100,7 +100,7 @@ contract V55SetMutationOpenE is DeployProtocol {
         address human = makeAddr("human_player");
         vm.deal(human, 5 ether);
         vm.prank(human);
-        game.purchase{value: 1.01 ether}(human, 400, 1 ether, bytes32(0), MintPaymentKind.DirectEth);
+        game.purchase{value: 1.01 ether}(human, 400, 1 ether, bytes32(0), MintPaymentKind.DirectEth, false);
 
         // Settle so the afking open leg (mintFlip, !advanceDue) and the human autoOpen can run.
         _settleGame(0xC0A2);

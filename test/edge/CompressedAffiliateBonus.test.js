@@ -52,7 +52,7 @@ describe("CompressedAffiliateBonus", function () {
       BigInt(n) * 400n,
       0n,
       affiliateCode || ZERO_BYTES32,
-      MintPaymentKind.DirectEth,
+      MintPaymentKind.DirectEth,false, 
       { value: eth(totalEth) }
     );
   }

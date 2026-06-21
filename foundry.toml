@@ -9,6 +9,11 @@ via_ir = true
 optimizer = true
 optimizer_runs = 1000
 evm_version = "osaka"
+# Emit storageLayout into every artifact so the storage-layout oracle
+# (scripts/layout) inspects deterministically without hitting forge's
+# "storage layout missing from artifact" incremental-cache gap. Metadata
+# only — no effect on bytecode or contract sizes.
+extra_output = ["storageLayout"]
 
 # Gas limit for integration tests (default 2^64 - 1 for unit tests,
 # but block gas limit can restrict execution of multi-level game tests)

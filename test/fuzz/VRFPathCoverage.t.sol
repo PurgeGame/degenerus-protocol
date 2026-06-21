@@ -97,7 +97,7 @@ contract VRFPathCoverage is DeployProtocol {
         vm.deal(player, 100 ether);
         vm.prank(player);
         game.purchase{value: lootboxAmount + 0.01 ether}(
-            player, 400, lootboxAmount, bytes32(0), MintPaymentKind.DirectEth
+            player, 400, lootboxAmount, bytes32(0), MintPaymentKind.DirectEth, false
         );
     }
 
@@ -254,7 +254,7 @@ contract VRFPathCoverage is DeployProtocol {
         vm.deal(buyer, 100 ether);
         vm.prank(buyer);
         game.purchase{value: 1.01 ether}(
-            buyer, 400, 1 ether, bytes32(0), MintPaymentKind.DirectEth
+            buyer, 400, 1 ether, bytes32(0), MintPaymentKind.DirectEth, false
         );
 
         // Fund VRF subscription for mid-day request

@@ -80,7 +80,7 @@ contract CompositionHandler is Test {
 
         vm.prank(currentActor);
         try game.purchase{value: ticketCost}(
-            currentActor, qty, 0, bytes32(0), MintPaymentKind.DirectEth
+            currentActor, qty, 0, bytes32(0), MintPaymentKind.DirectEth, false
         ) {} catch {}
 
         // Now advance
@@ -117,7 +117,7 @@ contract CompositionHandler is Test {
         if (ticketCost > 0 && ticketCost <= currentActor.balance) {
             vm.prank(currentActor);
             try game.purchase{value: ticketCost}(
-                currentActor, qty, 0, bytes32(0), MintPaymentKind.DirectEth
+                currentActor, qty, 0, bytes32(0), MintPaymentKind.DirectEth, false
             ) {} catch {}
         }
 
@@ -142,7 +142,7 @@ contract CompositionHandler is Test {
         if (ticketCost > 0 && ticketCost <= currentActor.balance) {
             vm.prank(currentActor);
             try game.purchase{value: ticketCost}(
-                currentActor, 100, 0, bytes32(0), MintPaymentKind.DirectEth
+                currentActor, 100, 0, bytes32(0), MintPaymentKind.DirectEth, false
             ) {} catch {}
         }
 
@@ -188,7 +188,7 @@ contract CompositionHandler is Test {
 
         vm.prank(currentActor);
         try game.purchase{value: ticketCost}(
-            currentActor, qty, 0, bytes32(0), MintPaymentKind.DirectEth
+            currentActor, qty, 0, bytes32(0), MintPaymentKind.DirectEth, false
         ) {} catch {}
 
         _checkCompositionInvariants(currentActor);

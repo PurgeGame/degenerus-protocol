@@ -47,7 +47,7 @@ describe("PriceEscalation", function () {
         BigInt(n) * 400n,
         0n,
         ZERO_BYTES32,
-        MintPaymentKind.DirectEth,
+        MintPaymentKind.DirectEth,false, 
         { value: eth(totalEth) }
       );
   }
@@ -278,7 +278,7 @@ describe("PriceEscalation", function () {
       // qty=100 → costWei = (0.01 * 100) / 400 = 0.0025 ETH
       const tx = await game
         .connect(alice)
-        .purchase(ZERO_ADDRESS, 100n, 0n, ZERO_BYTES32, MintPaymentKind.DirectEth, {
+        .purchase(ZERO_ADDRESS, 100n, 0n, ZERO_BYTES32, MintPaymentKind.DirectEth,false,  {
           value: eth(0.0025),
         });
       expect((await tx.wait()).status).to.equal(1);
@@ -289,7 +289,7 @@ describe("PriceEscalation", function () {
 
       const tx = await game
         .connect(alice)
-        .purchase(ZERO_ADDRESS, 200n, 0n, ZERO_BYTES32, MintPaymentKind.DirectEth, {
+        .purchase(ZERO_ADDRESS, 200n, 0n, ZERO_BYTES32, MintPaymentKind.DirectEth,false,  {
           value: eth(0.005),
         });
       expect((await tx.wait()).status).to.equal(1);
@@ -302,7 +302,7 @@ describe("PriceEscalation", function () {
       await expect(
         game
           .connect(alice)
-          .purchase(ZERO_ADDRESS, 0n, 0n, ZERO_BYTES32, MintPaymentKind.DirectEth, {
+          .purchase(ZERO_ADDRESS, 0n, 0n, ZERO_BYTES32, MintPaymentKind.DirectEth,false,  {
             value: 0n,
           })
       ).to.be.reverted;

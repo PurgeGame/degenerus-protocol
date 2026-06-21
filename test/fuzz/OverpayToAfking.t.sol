@@ -23,7 +23,7 @@ contract OverpayToAfking is DeployProtocol {
 
         vm.prank(buyer);
         game.purchase{value: cost + over}(
-            buyer, 400, 0, bytes32(0), MintPaymentKind.DirectEth
+            buyer, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false
         );
 
         assertEq(game.afkingFundingOf(buyer), over, "mint overpay -> afking");
@@ -42,7 +42,7 @@ contract OverpayToAfking is DeployProtocol {
         uint256 stray = 0.03 ether;
         vm.prank(buyer);
         game.purchase{value: stray}(
-            buyer, 400, 0, bytes32(0), MintPaymentKind.Claimable
+            buyer, 400, 0, bytes32(0), MintPaymentKind.Claimable, false
         );
 
         // 0.5 deposited, 0.01 spent on the ticket from afking, +0.03 stray credited back.

@@ -150,7 +150,7 @@ async function buyTickets(game, buyer, ticketCount, ethValue) {
     BigInt(ticketCount) * 400n,
     0n,
     ZERO_BYTES32,
-    MintPaymentKind.DirectEth,
+    MintPaymentKind.DirectEth,false, 
     { value: eth(ethValue) }
   );
 }

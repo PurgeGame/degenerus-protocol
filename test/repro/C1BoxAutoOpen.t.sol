@@ -120,7 +120,7 @@ contract C1BoxAutoOpen is DeployProtocol {
         (, , , , uint256 priceWei) = game.purchaseInfo();
         if (priceWei != 0 && priceWei <= actor.balance) {
             vm.prank(actor);
-            try game.purchase{value: priceWei}(actor, 400, 0, bytes32(0), MintPaymentKind.DirectEth) {} catch {}
+            try game.purchase{value: priceWei}(actor, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false) {} catch {}
         }
         for (uint256 i; i < 10 && !game.rngLocked(); i++) {
             vm.warp(block.timestamp + 1 days);
@@ -153,7 +153,7 @@ contract C1BoxAutoOpen is DeployProtocol {
         uint256 lootboxDeposit = 1.2 ether;
         vm.prank(actor);
         game.purchase{value: lootboxDeposit + 1 ether}(
-            actor, 400, lootboxDeposit, bytes32(0), MintPaymentKind.DirectEth
+            actor, 400, lootboxDeposit, bytes32(0), MintPaymentKind.DirectEth, false
         );
         base = _base(N, actor);
         assertGt(base, 0, "fixture: a human lootbox box persisted at index N (base != 0)");

@@ -829,7 +829,7 @@ contract V56AfkingGasMarginal is DeployProtocol {
         address human = makeAddr("v_human");
         vm.deal(human, 5 ether);
         vm.prank(human);
-        game.purchase{value: 1.01 ether}(human, 400, 1 ether, bytes32(0), MintPaymentKind.DirectEth);
+        game.purchase{value: 1.01 ether}(human, 400, 1 ether, bytes32(0), MintPaymentKind.DirectEth, false);
 
         _settleClean(0xA0F2);
         require(_lastOpenedDayOf(afk) < _lastBoughtDayOf(afk), "fixture: afking box pending pre-valve");

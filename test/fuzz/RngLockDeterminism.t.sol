@@ -198,7 +198,7 @@ contract RngLockDeterminism is DeployProtocol {
             uint256 lootboxAmount = 0;
             vm.prank(actor);
             try game.purchase{value: 1 ether}(
-                actor, numCoins, lootboxAmount, bytes32(0), MintPaymentKind.DirectEth
+                actor, numCoins, lootboxAmount, bytes32(0), MintPaymentKind.DirectEth, false
             ) {} catch { return; }
         } else if (cls == 2) {
             vm.prank(actor);
@@ -461,7 +461,7 @@ contract RngLockDeterminism is DeployProtocol {
         vm.deal(seedBuyer, 10 ether);
         vm.prank(seedBuyer);
         game.purchase{value: 1 ether}(
-            seedBuyer, 400, 0, bytes32(0), MintPaymentKind.DirectEth
+            seedBuyer, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false
         );
 
         uint256 preLockSnap = _snapshotPreLock();
@@ -607,7 +607,7 @@ contract RngLockDeterminism is DeployProtocol {
             400,
             1 ether,
             bytes32(0),
-            MintPaymentKind.DirectEth
+            MintPaymentKind.DirectEth, false
         );
 
         _completeDay(0xDEAD0001);
@@ -642,7 +642,7 @@ contract RngLockDeterminism is DeployProtocol {
             400,
             1 ether,
             bytes32(0),
-            MintPaymentKind.DirectEth
+            MintPaymentKind.DirectEth, false
         );
 
         _completeDay(0xDEAD0001);
@@ -794,7 +794,7 @@ contract RngLockDeterminism is DeployProtocol {
         vm.deal(buyer, 100 ether);
         vm.prank(buyer);
         game.purchase{value: 1.01 ether}(
-            buyer, 400, 1 ether, bytes32(0), MintPaymentKind.DirectEth
+            buyer, 400, 1 ether, bytes32(0), MintPaymentKind.DirectEth, false
         );
 
         mockVRF.fundSubscription(1, 100e18);
@@ -884,7 +884,7 @@ contract RngLockDeterminism is DeployProtocol {
         uint48 purchaseIndex = _readLootboxRngIndex();
         vm.prank(buyer);
         game.purchase{value: 1.01 ether}(
-            buyer, 400, 1 ether, bytes32(0), MintPaymentKind.DirectEth
+            buyer, 400, 1 ether, bytes32(0), MintPaymentKind.DirectEth, false
         );
 
         game.advanceGame();
@@ -1214,7 +1214,7 @@ contract RngLockDeterminism is DeployProtocol {
         uint256 unitPriceFloor = 0.01 ether;
         vm.prank(buyer);
         game.purchase{value: numCoins * unitPriceFloor + 0.01 ether}(
-            buyer, uint16(numCoins), 0, bytes32(0), MintPaymentKind.DirectEth
+            buyer, uint16(numCoins), 0, bytes32(0), MintPaymentKind.DirectEth, false
         );
 
         uint256 preLockSnap = _snapshotPreLock();
@@ -1271,7 +1271,7 @@ contract RngLockDeterminism is DeployProtocol {
 
         vm.prank(depositor);
         game.purchase{value: 1.01 ether}(
-            depositor, 400, 0, bytes32(0), MintPaymentKind.DirectEth
+            depositor, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false
         );
 
         uint256 preLockSnap = _snapshotPreLock();
@@ -1337,7 +1337,7 @@ contract RngLockDeterminism is DeployProtocol {
 
         vm.prank(holder);
         try game.purchase{value: 1.01 ether}(
-            holder, 400, 0, bytes32(0), MintPaymentKind.DirectEth
+            holder, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false
         ) {
         } catch {
             vm.assume(false);
@@ -1490,7 +1490,7 @@ contract RngLockDeterminism is DeployProtocol {
         vm.deal(buyer, 100 ether);
         vm.prank(buyer);
         game.purchase{value: 1.01 ether}(
-            buyer, 400, 1 ether, bytes32(0), MintPaymentKind.DirectEth
+            buyer, 400, 1 ether, bytes32(0), MintPaymentKind.DirectEth, false
         );
 
         mockVRF.fundSubscription(1, 100e18);
@@ -1548,7 +1548,7 @@ contract RngLockDeterminism is DeployProtocol {
         vm.deal(buyerB, 100 ether);
         vm.prank(buyerB);
         try game.purchase{value: 1.01 ether}(
-            buyerB, 400, 1 ether, bytes32(0), MintPaymentKind.DirectEth
+            buyerB, 400, 1 ether, bytes32(0), MintPaymentKind.DirectEth, false
         ) {} catch { vm.assume(false); }
         mockVRF.fundSubscription(1, 100e18);
 
@@ -1583,7 +1583,7 @@ contract RngLockDeterminism is DeployProtocol {
         vm.deal(buyerC, 100 ether);
         vm.prank(buyerC);
         try game.purchase{value: 1.01 ether}(
-            buyerC, 400, 1 ether, bytes32(0), MintPaymentKind.DirectEth
+            buyerC, 400, 1 ether, bytes32(0), MintPaymentKind.DirectEth, false
         ) {} catch { vm.assume(false); }
         mockVRF.fundSubscription(1, 100e18);
 
@@ -1917,7 +1917,7 @@ contract RngLockDeterminism is DeployProtocol {
         uint48 purchaseIndex = _readLootboxRngIndex();
         vm.prank(buyer);
         game.purchase{value: 1.01 ether}(
-            buyer, 400, 1 ether, bytes32(0), MintPaymentKind.DirectEth
+            buyer, 400, 1 ether, bytes32(0), MintPaymentKind.DirectEth, false
         );
 
         // Move totalFlipReversals nonzero PRE-lock (reverseFlip is RngLocked-gated). 1-3 nudges.
@@ -2055,7 +2055,7 @@ contract RngLockDeterminism is DeployProtocol {
         uint48 purchaseIndex = _readLootboxRngIndex();
         vm.prank(buyer);
         game.purchase{value: 1.01 ether}(
-            buyer, 400, 1 ether, bytes32(0), MintPaymentKind.DirectEth
+            buyer, 400, 1 ether, bytes32(0), MintPaymentKind.DirectEth, false
         );
 
         // Pre-load whalePassClaims[claimant] > 0 so the perturbation reaches the rngLock-gated
@@ -2193,7 +2193,7 @@ contract RngLockDeterminism is DeployProtocol {
         // Queue a lootbox, then engage rngLock via the daily advance boundary.
         vm.prank(buyer);
         game.purchase{value: 1.01 ether}(
-            buyer, 400, 1 ether, bytes32(0), MintPaymentKind.DirectEth
+            buyer, 400, 1 ether, bytes32(0), MintPaymentKind.DirectEth, false
         );
         game.advanceGame();
         assertTrue(game.rngLocked(), "autoOpen-noop: rngLock must be engaged");
@@ -2253,7 +2253,7 @@ contract RngLockDeterminism is DeployProtocol {
         uint48 boxIndex = _readLootboxRngIndex();
         vm.prank(boxOwner);
         game.purchase{value: 1.01 ether}(
-            boxOwner, 400, 1 ether, bytes32(0), MintPaymentKind.DirectEth
+            boxOwner, 400, 1 ether, bytes32(0), MintPaymentKind.DirectEth, false
         );
         assertGt(
             _lootboxEthBase(boxIndex, boxOwner), 0,
@@ -2295,7 +2295,7 @@ contract RngLockDeterminism is DeployProtocol {
         uint48 queuedIndex = _readLootboxRngIndex();
         vm.prank(boxOwner2);
         game.purchase{value: 1.01 ether}(
-            boxOwner2, 400, 1 ether, bytes32(0), MintPaymentKind.DirectEth
+            boxOwner2, 400, 1 ether, bytes32(0), MintPaymentKind.DirectEth, false
         );
         assertGt(_lootboxEthBase(queuedIndex, boxOwner2), 0, "no-maroon: 2nd box queued at the round's index");
         // The relocated multi-index sweep opens FINALIZED indices (boxCursorIndex .. LR_INDEX-1) —

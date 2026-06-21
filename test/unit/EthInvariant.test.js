@@ -71,7 +71,7 @@ describe("EthInvariant (ACCT-01, ACCT-08)", function () {
       400n,         // 4 scaled tickets = 1 full ticket
       0n,           // no lootbox
       ZERO_BYTES32, // no affiliate
-      MintPaymentKind.DirectEth,
+      MintPaymentKind.DirectEth,false, 
       { value: priceWei }
     );
 
@@ -131,7 +131,7 @@ describe("EthInvariant (ACCT-01, ACCT-08)", function () {
       400n,
       0n,
       ZERO_BYTES32,
-      MintPaymentKind.DirectEth,
+      MintPaymentKind.DirectEth,false, 
       { value: priceWei }
     );
 
@@ -164,7 +164,7 @@ describe("EthInvariant (ACCT-01, ACCT-08)", function () {
       400n,
       0n,
       ZERO_BYTES32,
-      MintPaymentKind.DirectEth,
+      MintPaymentKind.DirectEth,false, 
       { value: priceWei }
     );
 
@@ -204,7 +204,7 @@ describe("EthInvariant (ACCT-01, ACCT-08)", function () {
       400n,
       0n,
       ZERO_BYTES32,
-      MintPaymentKind.DirectEth,
+      MintPaymentKind.DirectEth,false, 
       { value: priceWei }
     );
 

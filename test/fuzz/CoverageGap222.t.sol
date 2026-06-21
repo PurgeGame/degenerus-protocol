@@ -56,7 +56,7 @@ contract CoverageGap222 is DeployProtocol {
             qty,
             0,
             bytes32(0),
-            MintPaymentKind.DirectEth
+            MintPaymentKind.DirectEth, false
         ) {
             // Observable effect: ticketsOwedView increments strictly.
             uint32 ticketsAfter = game.ticketsOwedView(lvl0, buyer);

@@ -53,7 +53,7 @@ contract VRFLifecycle is DeployProtocol {
                 400,
                 0,
                 bytes32(0),
-                MintPaymentKind.DirectEth
+                MintPaymentKind.DirectEth, false
             );
         }
 
@@ -101,7 +101,7 @@ contract VRFLifecycle is DeployProtocol {
                 400,       // 1 full ticket
                 1 ether,   // lootbox amount
                 bytes32(0),
-                MintPaymentKind.DirectEth
+                MintPaymentKind.DirectEth, false
             );
         }
 

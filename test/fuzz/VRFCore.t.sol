@@ -104,7 +104,7 @@ contract VRFCore is DeployProtocol {
         address buyer = makeAddr("lootboxBuyer");
         vm.deal(buyer, 100 ether);
         vm.prank(buyer);
-        game.purchase{value: 1.01 ether}(buyer, 400, 1 ether, bytes32(0), MintPaymentKind.DirectEth);
+        game.purchase{value: 1.01 ether}(buyer, 400, 1 ether, bytes32(0), MintPaymentKind.DirectEth, false);
 
         // Fund VRF subscription with LINK
         // Admin created subscription 1 during deploy; fund it

@@ -169,7 +169,7 @@ contract BoxCreationHandler is Test {
 
         uint48 idx = _lrIndex();
         vm.prank(currentActor);
-        try game.purchase{value: value}(currentActor, 400, lootboxAmt, bytes32(0), kind) {
+        try game.purchase{value: value}(currentActor, 400, lootboxAmt, bytes32(0), kind, false) {
             // A successful lootbox-bearing purchase persists a box at this index; count the path and track the
             // (index, owner) for the invariant. The counter is bumped per successful creating-call (the
             // non-vacuity signal that this PATH fired); the tracked list is deduped so the invariant iterates
@@ -285,7 +285,7 @@ contract BoxCreationHandler is Test {
         (, , , , uint256 priceWei) = game.purchaseInfo();
         if (priceWei != 0 && priceWei <= currentActor.balance) {
             vm.prank(currentActor);
-            try game.purchase{value: priceWei}(currentActor, 400, 0, bytes32(0), MintPaymentKind.DirectEth) {} catch {}
+            try game.purchase{value: priceWei}(currentActor, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false) {} catch {}
         }
 
         for (uint256 i; i < 3; i++) {

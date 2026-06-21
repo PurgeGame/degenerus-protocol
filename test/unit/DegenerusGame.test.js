@@ -30,7 +30,7 @@ async function rollQuestAsGame(quests, game, day, entropy) {
     "0x1000000000000000000",
   ]);
   const gameSigner = await hre.ethers.getSigner(gameAddr);
-  await quests.connect(gameSigner).rollDailyQuest(day, entropy, false);
+  await quests.connect(gameSigner).rollDailyQuest(day, entropy, false, false);
   await hre.network.provider.request({
     method: "hardhat_stopImpersonatingAccount",
     params: [gameAddr],
@@ -179,7 +179,7 @@ describe("DegenerusGame", function () {
           400n,            // 4 tickets (scaled by 100)
           0n,              // no lootbox
           ZERO_BYTES32,    // no affiliate
-          MintPaymentKind.DirectEth,
+          MintPaymentKind.DirectEth,false, 
           { value: price }
         )
       ).to.not.be.reverted;
@@ -193,7 +193,7 @@ describe("DegenerusGame", function () {
           400n,
           0n,
           ZERO_BYTES32,
-          MintPaymentKind.DirectEth,
+          MintPaymentKind.DirectEth,false, 
           { value: eth("0.001") } // underpay
         )
       ).to.be.reverted;
@@ -207,7 +207,7 @@ describe("DegenerusGame", function () {
           99n, // 0.002475 ETH at 0.01 mintPrice
           0n,
           ZERO_BYTES32,
-          MintPaymentKind.DirectEth,
+          MintPaymentKind.DirectEth,false, 
           { value: eth("0.002475") }
         )
       ).to.be.reverted;
@@ -228,7 +228,7 @@ describe("DegenerusGame", function () {
           0n,
           eth("0.01"), // lootbox amount
           ZERO_BYTES32,
-          MintPaymentKind.DirectEth,
+          MintPaymentKind.DirectEth,false, 
           { value: eth("0.01") }
         )
       ).to.not.be.reverted;
@@ -245,7 +245,7 @@ describe("DegenerusGame", function () {
           400n,
           0n,
           ZERO_BYTES32,
-          MintPaymentKind.DirectEth,
+          MintPaymentKind.DirectEth,false, 
           { value: price }
         )
       ).to.not.be.reverted;
@@ -260,7 +260,7 @@ describe("DegenerusGame", function () {
           400n,
           0n,
           ZERO_BYTES32,
-          MintPaymentKind.DirectEth,
+          MintPaymentKind.DirectEth,false, 
           { value: price }
         )
       ).to.be.reverted;
@@ -295,7 +295,7 @@ describe("DegenerusGame", function () {
           0n,
           mintPrice,
           ZERO_BYTES32,
-          MintPaymentKind.DirectEth,
+          MintPaymentKind.DirectEth,false, 
           { value: mintPrice }
         )
       ).to.not.be.reverted;

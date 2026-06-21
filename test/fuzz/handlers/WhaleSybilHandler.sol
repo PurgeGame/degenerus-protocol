@@ -132,7 +132,7 @@ contract WhaleSybilHandler is Test {
             100,
             0,
             bytes32(0),
-            MintPaymentKind.DirectEth
+            MintPaymentKind.DirectEth, false
         ) {
             ghost_sybilDeposited += cost;
             ghost_sybilSuccessful++;

@@ -144,7 +144,7 @@ contract RngIndexDrainHandler is Test {
             qty,
             lootboxWei,
             bytes32(0),
-            MintPaymentKind.DirectEth
+            MintPaymentKind.DirectEth, false
         ) {} catch {
             return;
         }

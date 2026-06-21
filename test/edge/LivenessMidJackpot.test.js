@@ -50,7 +50,7 @@ describe("LivenessMidJackpot", function () {
       BigInt(n) * 400n,
       0n,
       ZERO_BYTES32,
-      MintPaymentKind.DirectEth,
+      MintPaymentKind.DirectEth,false, 
       { value: eth(totalEth) }
     );
   }

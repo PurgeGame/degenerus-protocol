@@ -59,11 +59,10 @@ contract JackpotStageHarness is DegenerusGameJackpotModule {
 ///      sets the lootbox RNG entropy word the batch reads at index 1. A worst-case batch mints up
 ///      to WRITES_BUDGET_SAFE write-units of cold traitBurnTicket SSTOREs in one call.
 contract TicketBatchStageHarness is DegenerusGameMintModule {
-    /// @dev Seed `n` distinct players each owing `owedEach` traits into the current read-slot queue
-    ///      for `lvl`, and set a non-zero lootbox entropy word at index 1 (the word the batch reads).
-    function seedTicketQueue(uint24 lvl, uint256 n, uint32 owedEach, uint160 base) external {
-        // entropy word the batch reads: lootboxRngWordByIndex[ _lrRead(INDEX) - 1 ].
-        // Set the LR index to 1 (so it reads index 0) and put a non-zero word there.
+    /// @dev Shared seeding: `n` distinct players each owing `owedEach` traits into the current
+    ///      read-slot queue for `lvl`, plus a non-zero lootbox entropy word at index 0 (the word
+    ///      the batch reads via lootboxRngWordByIndex[ _lrRead(INDEX) - 1 ]).
+    function _seedQueue(uint24 lvl, uint256 n, uint32 owedEach, uint160 base) internal {
         _lrWrite(LR_INDEX_SHIFT, LR_INDEX_MASK, 1);
         lootboxRngWordByIndex[0] = uint256(keccak256("367_ticketbatch_entropy")) | 1;
 
@@ -76,8 +75,14 @@ contract TicketBatchStageHarness is DegenerusGameMintModule {
             // packed layout: owed in bits [8:], remainder in bits [0:8]. Set owed=owedEach, rem=0.
             owedMap[p] = uint40(uint40(owedEach) << 8);
         }
+    }
+
+    /// @dev Seed the queue and force the (ticketLevel != lvl) reset path -> cursor 0, first-batch
+    ///      cold-scale.
+    function seedTicketQueue(uint24 lvl, uint256 n, uint32 owedEach, uint160 base) external {
+        _seedQueue(lvl, n, owedEach, base);
         ticketCursor = 0;
-        ticketLevel = 0; // force the (ticketLevel != lvl) reset path -> cursor 0, first-batch cold-scale
+        ticketLevel = 0;
     }
 
     /// @dev Seed the queue AND pin (ticketLevel == lvl, ticketCursor == startCursor) so the batch runs at
@@ -86,17 +91,7 @@ contract TicketBatchStageHarness is DegenerusGameMintModule {
     function seedTicketQueueWarmResume(uint24 lvl, uint256 n, uint32 owedEach, uint160 base, uint32 startCursor)
         external
     {
-        _lrWrite(LR_INDEX_SHIFT, LR_INDEX_MASK, 1);
-        lootboxRngWordByIndex[0] = uint256(keccak256("367_ticketbatch_entropy")) | 1;
-
-        uint24 rk = _tqReadKey(lvl);
-        address[] storage queue = ticketQueue[rk];
-        mapping(address => uint40) storage owedMap = ticketsOwedPacked[rk];
-        for (uint256 i; i < n; ++i) {
-            address p = address(base + uint160(i + 1));
-            queue.push(p);
-            owedMap[p] = uint40(uint40(owedEach) << 8);
-        }
+        _seedQueue(lvl, n, owedEach, base);
         // Pin level == lvl so processTicketBatch does NOT reset the cursor, and start at a non-zero cursor
         // so idx != 0 -> the full (non-cold-scaled) 550 write budget is used.
         ticketLevel = lvl;

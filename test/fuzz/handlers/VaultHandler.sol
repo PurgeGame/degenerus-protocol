@@ -117,7 +117,7 @@ contract VaultHandler is Test {
             qty,
             0,
             bytes32(0),
-            MintPaymentKind.DirectEth
+            MintPaymentKind.DirectEth, false
         ) {
             ghost_depositsTriggered++;
         } catch {}

@@ -33,7 +33,7 @@ MODULES=(
   DegenerusGameAdvanceModule DegenerusGameMintModule DegenerusGameLootboxModule
   DegenerusGameJackpotModule DegenerusGameDecimatorModule DegenerusGameDegeneretteModule
   DegenerusGameWhaleModule GameAfkingModule DegenerusGameBoonModule
-  DegenerusGameBingoModule DegenerusGameGameOverModule
+  DegenerusGameBingoModule DegenerusGameGameOverModule DegenerusGameFoilPackModule
 )
 
 inspect_norm() { forge inspect "$1" storageLayout --json 2>/dev/null | "${NORM[@]}"; }

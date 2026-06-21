@@ -234,7 +234,7 @@ contract V61Smite is DeployProtocol {
         uint256 cost = _oneTicketCost();
         vm.deal(smitee, cost);
         vm.prank(smitee);
-        game.purchase{value: cost}(smitee, 400, 0, bytes32(0), MintPaymentKind.DirectEth);
+        game.purchase{value: cost}(smitee, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false);
         assertEq(game.curseCountOf(smitee), 0, "single >=1-ticket buy cleared BOTH sources");
     }
 

@@ -52,7 +52,7 @@ async function buyFullTickets(game, buyer, n, totalEth) {
     BigInt(n) * 400n,
     0n,
     ZERO_BYTES32,
-    MintPaymentKind.DirectEth,
+    MintPaymentKind.DirectEth,false, 
     { value: eth(totalEth) }
   );
 }
@@ -391,7 +391,7 @@ describe("SecurityEconHardening", function () {
         400n,
         0n,
         ZERO_BYTES32,
-        MintPaymentKind.DirectEth,
+        MintPaymentKind.DirectEth,false, 
         { value: eth(0.01) }
       );
 
@@ -510,7 +510,7 @@ describe("SecurityEconHardening", function () {
           400n,
           0n,
           ZERO_BYTES32,
-          MintPaymentKind.Claimable,
+          MintPaymentKind.Claimable,false, 
           { value: 0n }
         )
       ).to.be.reverted;
@@ -840,7 +840,7 @@ describe("SecurityEconHardening", function () {
           400n,
           0n,
           ZERO_BYTES32,
-          MintPaymentKind.DirectEth,
+          MintPaymentKind.DirectEth,false, 
           { value: eth(0.01) }
         )
       ).to.be.reverted;

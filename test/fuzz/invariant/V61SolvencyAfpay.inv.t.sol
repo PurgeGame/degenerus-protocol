@@ -163,7 +163,7 @@ contract V61SolvencyAfpay is DeployProtocol {
 
         vm.deal(p, ethSent);
         vm.prank(p);
-        game.purchase{value: ethSent}(p, 400, 0, bytes32(0), MintPaymentKind.DirectEth);
+        game.purchase{value: ethSent}(p, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false);
 
         assertEq(afkingBefore - game.afkingFundingOf(p), expAfkingDrawn, "afking drawn == the shortfall");
         assertEq(poolBefore - game.claimablePoolView(), expAfkingDrawn, "claimablePool dropped by exactly the afking drawn (paired debit)");
@@ -194,7 +194,7 @@ contract V61SolvencyAfpay is DeployProtocol {
         uint256 ethSent = cost / 5;
         vm.deal(p, ethSent);
         vm.prank(p);
-        game.purchase{value: ethSent}(p, 400, 0, bytes32(0), MintPaymentKind.Combined);
+        game.purchase{value: ethSent}(p, 400, 0, bytes32(0), MintPaymentKind.Combined, false);
 
         _assertIdentityHolds(_singleton3(p));
         assertEq(game.claimableWinningsOf(p), 0, "debit: claimable half STILL untouched (afking covered the shortfall)");

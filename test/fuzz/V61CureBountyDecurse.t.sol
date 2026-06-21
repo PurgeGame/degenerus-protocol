@@ -83,7 +83,7 @@ contract V61CureBountyDecurse is DeployProtocol {
         uint256 cost = _oneTicketCost();
         vm.deal(p, cost);
         vm.prank(p);
-        game.purchase{value: cost}(p, 400, 0, bytes32(0), MintPaymentKind.DirectEth);
+        game.purchase{value: cost}(p, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false);
         assertEq(game.curseCountOf(p), 0, "direct ticket (fresh ETH) cures the curse");
     }
 
@@ -94,7 +94,7 @@ contract V61CureBountyDecurse is DeployProtocol {
         _seedCurse(p, 4);
         _seedClaimable(p, 100 ether); // funds the buy from claimable
         vm.prank(p);
-        game.purchase{value: 0}(p, 400, 0, bytes32(0), MintPaymentKind.Claimable);
+        game.purchase{value: 0}(p, 400, 0, bytes32(0), MintPaymentKind.Claimable, false);
         assertEq(game.curseCountOf(p), 0, "direct ticket (claimable) cures the curse (funding-agnostic)");
     }
 
@@ -106,7 +106,7 @@ contract V61CureBountyDecurse is DeployProtocol {
         uint256 batchCost = _ticketCost(4000); // 10 tickets worth
         vm.deal(pe, batchCost);
         vm.prank(pe);
-        game.purchase{value: batchCost}(pe, 4000, 0, bytes32(0), MintPaymentKind.DirectEth);
+        game.purchase{value: batchCost}(pe, 4000, 0, bytes32(0), MintPaymentKind.DirectEth, false);
         assertEq(game.curseCountOf(pe), 0, "batched buy (fresh ETH) cures");
 
         // Claimable
@@ -114,7 +114,7 @@ contract V61CureBountyDecurse is DeployProtocol {
         _seedCurse(pc, 6);
         _seedClaimable(pc, 1000 ether);
         vm.prank(pc);
-        game.purchase{value: 0}(pc, 4000, 0, bytes32(0), MintPaymentKind.Claimable);
+        game.purchase{value: 0}(pc, 4000, 0, bytes32(0), MintPaymentKind.Claimable, false);
         assertEq(game.curseCountOf(pc), 0, "batched buy (claimable) cures");
     }
 
@@ -128,14 +128,14 @@ contract V61CureBountyDecurse is DeployProtocol {
         uint256 cost = _oneTicketCost();
         vm.deal(pe, cost);
         vm.prank(pe);
-        game.purchase{value: cost}(pe, 400, 0, code, MintPaymentKind.DirectEth);
+        game.purchase{value: cost}(pe, 400, 0, code, MintPaymentKind.DirectEth, false);
         assertEq(game.curseCountOf(pe), 0, "affiliate-coded buy (fresh ETH) cures");
 
         address pc = makeAddr("cure_aff_claim");
         _seedCurse(pc, 8);
         _seedClaimable(pc, 100 ether);
         vm.prank(pc);
-        game.purchase{value: 0}(pc, 400, 0, code, MintPaymentKind.Claimable);
+        game.purchase{value: 0}(pc, 400, 0, code, MintPaymentKind.Claimable, false);
         assertEq(game.curseCountOf(pc), 0, "affiliate-coded buy (claimable) cures");
     }
 
@@ -148,14 +148,14 @@ contract V61CureBountyDecurse is DeployProtocol {
         _seedCurse(pe, 10);
         vm.deal(pe, boxAmount);
         vm.prank(pe);
-        game.purchase{value: boxAmount}(pe, 0, boxAmount, bytes32(0), MintPaymentKind.DirectEth);
+        game.purchase{value: boxAmount}(pe, 0, boxAmount, bytes32(0), MintPaymentKind.DirectEth, false);
         assertEq(game.curseCountOf(pe), 0, "lootbox>=ticket (fresh ETH) cures");
 
         address pc = makeAddr("cure_lb_claim");
         _seedCurse(pc, 10);
         _seedClaimable(pc, 100 ether);
         vm.prank(pc);
-        game.purchase{value: 0}(pc, 0, boxAmount, bytes32(0), MintPaymentKind.Claimable);
+        game.purchase{value: 0}(pc, 0, boxAmount, bytes32(0), MintPaymentKind.Claimable, false);
         assertEq(game.curseCountOf(pc), 0, "lootbox>=ticket (claimable) cures");
     }
 
@@ -172,14 +172,14 @@ contract V61CureBountyDecurse is DeployProtocol {
         uint256 total = ticketCost + boxAmount;
         vm.deal(pe, total);
         vm.prank(pe);
-        game.purchase{value: total}(pe, 400, boxAmount, bytes32(0), MintPaymentKind.DirectEth);
+        game.purchase{value: total}(pe, 400, boxAmount, bytes32(0), MintPaymentKind.DirectEth, false);
         assertEq(game.curseCountOf(pe), 0, "ticket+lootbox bundle (fresh ETH) cures");
 
         address pc = makeAddr("cure_bundle_claim");
         _seedCurse(pc, 12);
         _seedClaimable(pc, 1000 ether);
         vm.prank(pc);
-        game.purchase{value: 0}(pc, 400, boxAmount, bytes32(0), MintPaymentKind.Claimable);
+        game.purchase{value: 0}(pc, 400, boxAmount, bytes32(0), MintPaymentKind.Claimable, false);
         assertEq(game.curseCountOf(pc), 0, "ticket+lootbox bundle (claimable) cures");
     }
 
@@ -211,7 +211,7 @@ contract V61CureBountyDecurse is DeployProtocol {
         uint256 fullCost = _oneTicketCost();
         vm.deal(cured, fullCost);
         vm.prank(cured);
-        game.purchase{value: fullCost}(cured, 400, 0, bytes32(0), MintPaymentKind.DirectEth);
+        game.purchase{value: fullCost}(cured, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false);
         assertEq(game.curseCountOf(cured), 0, "curing buy cleared the curse");
         uint256 curedScore = game.playerActivityScore(cured);
 
@@ -225,7 +225,7 @@ contract V61CureBountyDecurse is DeployProtocol {
         uint256 subCost = _ticketCost(subUnits);
         vm.deal(notCured, subCost);
         vm.prank(notCured);
-        game.purchase{value: subCost}(notCured, subUnits, 0, bytes32(0), MintPaymentKind.DirectEth);
+        game.purchase{value: subCost}(notCured, subUnits, 0, bytes32(0), MintPaymentKind.DirectEth, false);
         assertEq(game.curseCountOf(notCured), curse, "sub-ticket buy did NOT cure (still cursed)");
         uint256 notCuredScore = game.playerActivityScore(notCured);
 
@@ -277,7 +277,7 @@ contract V61CureBountyDecurse is DeployProtocol {
         uint256 subCost = _ticketCost(subUnits);
         vm.deal(p, subCost);
         vm.prank(p);
-        game.purchase{value: subCost}(p, subUnits, 0, bytes32(0), MintPaymentKind.DirectEth);
+        game.purchase{value: subCost}(p, subUnits, 0, bytes32(0), MintPaymentKind.DirectEth, false);
 
         assertTrue(game.bountyEligible(p), "sub-ticket buy STAMPED DAY_SHIFT => now bounty-eligible");
         assertEq(game.curseCountOf(p), 2, "sub-ticket buy does NOT cure (totalCost < priceWei)");
@@ -300,7 +300,7 @@ contract V61CureBountyDecurse is DeployProtocol {
         uint256 boxAmount = _oneTicketCost(); // a plain lootbox (>= LOOTBOX_MIN) stamps DAY_SHIFT
         vm.deal(p, boxAmount);
         vm.prank(p);
-        game.purchase{value: boxAmount}(p, 0, boxAmount, bytes32(0), MintPaymentKind.DirectEth);
+        game.purchase{value: boxAmount}(p, 0, boxAmount, bytes32(0), MintPaymentKind.DirectEth, false);
 
         assertTrue(game.bountyEligible(p), "manual lootbox buyer stamped DAY_SHIFT => bounty-eligible");
     }

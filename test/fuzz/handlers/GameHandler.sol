@@ -73,7 +73,7 @@ contract GameHandler is Test {
             qty,
             lootboxAmt,
             bytes32(0),
-            MintPaymentKind.DirectEth
+            MintPaymentKind.DirectEth, false
         ) {
             ghost_totalDeposited += totalCost;
             ghost_ticketsPurchased += qty;

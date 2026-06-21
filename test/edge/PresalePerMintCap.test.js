@@ -37,7 +37,7 @@ describe("Presale per-mint cap auto-deactivation", function () {
         0n,
         amount,
         ZERO_BYTES32,
-        MintPaymentKind.DirectEth,
+        MintPaymentKind.DirectEth,false, 
         { value: amount }
       );
   }

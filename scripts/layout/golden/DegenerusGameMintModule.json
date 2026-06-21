@@ -694,5 +694,61 @@
     "offset": 0,
     "slot": 59,
     "typeLabel": "mapping(uint48 => address[])"
+  },
+  {
+    "bytes": "32",
+    "encoding": "mapping",
+    "label": "foilRecord",
+    "offset": 0,
+    "slot": 60,
+    "typeLabel": "mapping(uint24 => mapping(address => uint256))"
+  },
+  {
+    "bytes": "32",
+    "encoding": "mapping",
+    "label": "foilMatchClaimed",
+    "offset": 0,
+    "slot": 61,
+    "typeLabel": "mapping(bytes32 => bool)"
+  },
+  {
+    "bytes": "32",
+    "encoding": "mapping",
+    "label": "dailyFoilDraw",
+    "offset": 0,
+    "slot": 62,
+    "typeLabel": "mapping(uint24 => uint256)"
+  },
+  {
+    "bytes": "32",
+    "encoding": "mapping",
+    "label": "foilBuyers",
+    "offset": 0,
+    "slot": 63,
+    "typeLabel": "mapping(uint24 => uint256[])"
+  },
+  {
+    "bytes": "4",
+    "encoding": "inplace",
+    "label": "foilCursor",
+    "offset": 0,
+    "slot": 64,
+    "typeLabel": "uint32"
+  },
+  {
+    "bytes": "3",
+    "encoding": "inplace",
+    "label": "foilDrainDay",
+    "offset": 4,
+    "slot": 64,
+    "typeLabel": "uint24"
+  },
+  {
+    "bytes": "3",
+    "encoding": "inplace",
+    "label": "foilLastResolveDay",
+    "offset": 7,
+    "slot": 64,
+    "typeLabel": "uint24"
   }
 ]

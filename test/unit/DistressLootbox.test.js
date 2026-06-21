@@ -36,7 +36,7 @@ describe("Distress-Mode Lootboxes", function () {
       0n,
       amount,
       ZERO_BYTES32,
-      MintPaymentKind.DirectEth,
+      MintPaymentKind.DirectEth,false, 
       { value: amount }
     );
   }

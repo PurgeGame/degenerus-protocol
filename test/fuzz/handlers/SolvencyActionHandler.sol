@@ -193,7 +193,7 @@ contract SolvencyActionHandler is Test {
         uint256 ethSent = priceWei + lootBoxAmount; // one ticket of fresh ETH + the lootbox spend
         if (ethSent > currentActor.balance) return;
         vm.prank(currentActor);
-        try game.purchase{value: ethSent}(currentActor, 400, lootBoxAmount, bytes32(0), MintPaymentKind.DirectEth) {
+        try game.purchase{value: ethSent}(currentActor, 400, lootBoxAmount, bytes32(0), MintPaymentKind.DirectEth, false) {
             ghost_presaleBuys++;
         } catch {}
     }
@@ -245,7 +245,7 @@ contract SolvencyActionHandler is Test {
         (, , , , uint256 priceWei) = game.purchaseInfo();
         if (priceWei != 0 && priceWei <= currentActor.balance) {
             vm.prank(currentActor);
-            try game.purchase{value: priceWei}(currentActor, 400, 0, bytes32(0), MintPaymentKind.DirectEth) {} catch {}
+            try game.purchase{value: priceWei}(currentActor, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false) {} catch {}
         }
 
         for (uint256 i; i < 3; i++) {

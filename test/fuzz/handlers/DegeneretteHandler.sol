@@ -175,7 +175,7 @@ contract DegeneretteHandler is Test {
             400, // 1 full ticket
             0,
             bytes32(0),
-            MintPaymentKind.DirectEth
+            MintPaymentKind.DirectEth, false
         ) {
             ghost_totalEthWagered += cost;
         } catch {}

@@ -202,7 +202,7 @@ contract BafRebuyReconciliationTest is DeployProtocol {
             qty,
             0,
             bytes32(0),
-            MintPaymentKind.DirectEth
+            MintPaymentKind.DirectEth, false
         ) {} catch {}
     }
 

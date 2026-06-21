@@ -98,7 +98,7 @@ describe("AdvanceGame Gas Benchmarks", function () {
         BigInt(n) * 400n,
         0n,
         ZERO_BYTES32,
-        MintPaymentKind.DirectEth,
+        MintPaymentKind.DirectEth,false, 
         { value: eth(totalEth) }
       );
   }
@@ -938,7 +938,7 @@ describe("AdvanceGame Gas Benchmarks", function () {
               400n,         // 1 full ticket = qty 400; cost = (price * 400) / 400 = price = 0.01 ETH
               0n,
               ZERO_BYTES32,
-              MintPaymentKind.DirectEth,
+              MintPaymentKind.DirectEth,false, 
               { value: eth(0.01) }  // 1 full ticket at level 0: price = 0.01 ETH
             );
           sybilCount++;
@@ -1025,7 +1025,7 @@ describe("AdvanceGame Gas Benchmarks", function () {
             0n,
             20n,
             ZERO_BYTES32,
-            MintPaymentKind.DirectEth,
+            MintPaymentKind.DirectEth,false, 
             { value: hre.ethers.parseEther("0.02") }
           );
       } catch (err) {
@@ -1097,7 +1097,7 @@ describe("AdvanceGame Gas Benchmarks", function () {
           400n,
           0n,
           ZERO_BYTES32,
-          MintPaymentKind.DirectEth,
+          MintPaymentKind.DirectEth,false, 
           { value: eth(0.01) }
         );
     }

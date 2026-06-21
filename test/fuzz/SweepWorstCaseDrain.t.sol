@@ -177,7 +177,7 @@ contract SweepWorstCaseDrain is DeployProtocol {
         (, , , , uint256 priceWei) = game.purchaseInfo();
         if (priceWei != 0 && priceWei <= actor.balance) {
             vm.prank(actor);
-            try game.purchase{value: priceWei}(actor, 400, 0, bytes32(0), MintPaymentKind.DirectEth) {} catch {}
+            try game.purchase{value: priceWei}(actor, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false) {} catch {}
         }
         for (uint256 i; i < 12 && !game.rngLocked(); i++) {
             vm.warp(block.timestamp + 1 days);
@@ -209,7 +209,7 @@ contract SweepWorstCaseDrain is DeployProtocol {
     function _buyLootbox(address who, uint256 lootboxWei) internal {
         vm.deal(who, lootboxWei + 2 ether);
         vm.prank(who);
-        game.purchase{value: lootboxWei + 1 ether}(who, 400, lootboxWei, bytes32(0), MintPaymentKind.DirectEth);
+        game.purchase{value: lootboxWei + 1 ether}(who, 400, lootboxWei, bytes32(0), MintPaymentKind.DirectEth, false);
     }
 
     /// @dev Buy a REAL presale box at the current active index (credit-funded; enqueues for auto-open).
