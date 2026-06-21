@@ -4,7 +4,7 @@ milestone: v73.0
 milestone_name: Degenerette Variant-2 Color-Gated Rescore (+ WWXRP preservation)
 status: planning
 last_updated: "2026-06-21"
-last_activity: 2026-06-21 -- 452 GEN EXECUTED (both waves; generator exit 0, all self-asserts green; pre-proof PASSED: honest==rigged==HEAD P(S=9) exact, WWXRP RTP curve held). ⚠ EVEQ-01 FINDING: hero-placement EV-drift = 2.99 centi-x (N=3); hero-COMMON sub-case EV-POSITIVE (100.7/101.5/102.2 at N=1-3) on the HONEST ETH/FLIP lane -> DEC-02 premise (both <=100) FALSE -> verdict ESCALATE to Option B. PAUSED for USER DEC-02 decision (A-accept / B-per-(N,hero-gold) tables+dispatch) before 453 IMPL. Commits 67d3b3d8/483a5ea4/e3808d05.
+last_activity: 2026-06-21 -- 452 GEN: waves 1-2 done + EVEQ-01 finding (hero-placement drift 2.99 centi-x, hero-common EV-positive on HONEST lane, player-selectable via custom heroQuadrant). USER chose DEC-02 = Option B (exact EV-equality). NOW: 452-03 = regen generator for Option B (split HONEST family per (N,hero-is-gold) -> ~8 tables, each solved on its own sub-case; keep WWXRP _RIG_ averaged at 5 = WWXRP don't-care; _getBasePayoutBps gains heroIsGold selector for !isWwxrp). Honest-only-split flagged for USER confirm at 453 diff. Runs autonomously (no .sol); STOP at 453 IMPL contract-commit gate.
 progress:
   total_phases: 5
   completed_phases: 0

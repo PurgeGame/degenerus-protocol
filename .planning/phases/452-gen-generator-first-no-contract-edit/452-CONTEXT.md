@@ -44,7 +44,26 @@ WWXRP S=9 whale-pass bracket are byte-identical to HEAD. Effect: main slot moves
     honesty and dilutes the lift. No upside.
 
 ### DEC-02 — EV-equality across picks (the Variant-2 wrinkle)
-- **D-02: Option A — 5 per-N tables, averaged over hero placement.** Variant-2 couples color to
+
+> **⚑ RESOLVED 2026-06-21 (post-GEN measurement): Option B — exact EV-equality.** The 452 GEN run
+> MEASURED the hero-placement drift (EVEQ-01) and it came in **grossly outside** the ~0.5 centi-x
+> tolerance: **max 2.99230 centi-x at N=3**, with the hero-**common** sub-case **EV-POSITIVE**
+> (100.72 / 101.47 / 102.24 centi-x at N=1/2/3) on the **honest ETH/FLIP lane**. The CONTEXT's
+> "both sub-cases ≤100" solvency assumption (below) is therefore FALSE under Variant-2. Because
+> `heroQuadrant` is a **player-supplied, validated** parameter in the custom-ticket bet path
+> (`DegenerusGameDegeneretteModule.sol:420/567`) and the player builds their own ticket traits
+> (`:608`), the edge is **player-selectable** (build N=3 hero-common → +2.24% base EV), not mere
+> variance. USER chose **Option B**. The WWXRP "don't-care" ruling targets the WWXRP rigged lane;
+> this drift is on the honest lane, so it does NOT auto-dispose. **Scope (this run's reading,
+> consistent with the "~8–9 tables" sizing + the WWXRP don't-care):** split ONLY the **honest**
+> family per `(N, hero-is-gold)` (exact EV-equality on ETH/FLIP); keep the **WWXRP `_RIG_` family
+> averaged at 5 tables** (WWXRP drift accepted by-design). The `_getBasePayoutBps` dispatch gains a
+> `heroIsGold` selector used only when `!isWwxrp`. (Quick-play/RNG paths at `:1472/1550/1603`
+> derive heroQuadrant from the seed → not player-selectable there; the split still applies because
+> the honest table is shared with the custom lane.) Resolution feeds 453 IMPL. **The honest-only
+> split is flagged for USER confirmation at the 453 contract-diff review.**
+
+- **D-02 (original, SUPERSEDED by the resolution above): Option A — 5 per-N tables, averaged over hero placement.** Variant-2 couples color to
   symbol, so the **hero quadrant's gold-ness** now shifts P_N(S): within a fixed N, a hero-gold
   ticket and a hero-common ticket have slightly different score distributions, so one per-N
   table can no longer be *exactly* EV-equal across both sub-cases.
