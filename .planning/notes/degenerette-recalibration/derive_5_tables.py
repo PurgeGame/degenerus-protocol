@@ -85,23 +85,81 @@ def convolve(a, b):
     return out
 
 
-def p_score_distribution(n_gold):
-    """P(S = k) for a ticket with n_gold gold quadrants, S = A + 2*H, S in {0..9}.
+def _ordinary_quadrant_dist(p_color_match):
+    """Variant-2 per-(ordinary)-quadrant score over {0, +1, +2}.
 
-    A = 4 color axes (n_gold gold + (4-n_gold) common) + 3 non-hero symbol axes.
-    H = hero symbol axis (Bernoulli 1/8) contributing 0 or 2.
+    Color is GATED behind the same quadrant's symbol: the color scores +1 ONLY IF
+    that quadrant's symbol also matched. So with symbol match prob ps = 1/8 and
+    color match prob pc:
+        +0  symbol miss            (pc is a no-op when the symbol misses)
+        +1  symbol match, color miss
+        +2  symbol match, color match  (a full quadrant double)
     """
-    dist = [Fraction(1)]
-    for _ in range(n_gold):
-        dist = convolve(dist, P_COLOR_GOLD)
-    for _ in range(4 - n_gold):
-        dist = convolve(dist, P_COLOR_COMMON)
-    for _ in range(3):  # 3 non-hero symbol axes
-        dist = convolve(dist, P_SYM)
-    dist = convolve(dist, P_HERO)  # hero symbol axis: +2 on match
-    # Pad to length 10 (S in {0..9}); the convolution already tops out at 9.
-    while len(dist) < 10:
-        dist.append(Fraction(0))
+    ps = P_SYM[1]  # 1/8
+    return [1 - ps, ps * (1 - p_color_match), ps * p_color_match]
+
+
+def _hero_quadrant_dist(p_color_match):
+    """Variant-2 hero-quadrant score over {0, _, +2, +3}.
+
+    The hero quadrant's SYMBOL scores +2 (Bernoulli 1/8); its color scores +1 ONLY
+    IF the hero symbol also matched (same color-gated-by-symbol rule). Index 1 is
+    structurally zero (the hero symbol alone is +2, never +1):
+        +0  hero symbol miss
+        +2  hero symbol match, color miss   (hero alone -> S=2 win, pays per DEC-03)
+        +3  hero symbol match, color match  (the hero quadrant maxed)
+    """
+    ps = P_SYM[1]  # 1/8
+    return [1 - ps, Fraction(0), ps * (1 - p_color_match), ps * p_color_match]
+
+
+def p_score_distribution(n_gold):
+    """Variant-2 P(S = k) for a ticket with n_gold gold quadrants, S in {0..9}.
+
+    Variant-2 (color-gated-by-symbol): per quadrant a SYMBOL match scores +1 (the
+    hero quadrant's symbol scores +2), and that quadrant's COLOR scores +1 ONLY IF
+    that quadrant's symbol also matched. The four quadrants are therefore no longer
+    independent axes — each quadrant contributes a joint (symbol, color) score, and
+    the ticket score is the convolution of the four per-quadrant contributions:
+        - 3 ordinary quadrants, each over {0, +1 (symbol only), +2 (symbol+color)},
+        - 1 hero quadrant, over {0, +2 (hero symbol only), +3 (hero symbol+color)}.
+    Max S = 9 = hero quad (3) + three ordinary quads (2 each).
+
+    DEC-03 floor S>=2: a lone ordinary (non-hero) symbol match = S=1 (SHAPE pays 0
+    there); the hero symbol alone = S=2 and a full quadrant double = S=2 (both pay).
+
+    DEC-02 Option A (EV-equality wrinkle): because color is gated behind symbol, the
+    hero quadrant's gold-ness now shifts P_N(S). For a fixed N this returns ONE
+    averaged distribution over hero placement — the hero quadrant is gold with prob
+    n_gold/4 and common with prob (4-n_gold)/4 — matching the HEAD per-N convention
+    consumed by P_N_TABLE / the S9_PIN loop. (Plan 02 reports the hero-gold vs
+    hero-common worst-case drift; the m>=7-cap / S=9 invariant is unaffected because
+    S=9 only depends on the gold/common COUNT, not which quadrant is the hero.)
+
+    CRITICAL: S=9 stays exactly the all-8-axes event (every quadrant a full double),
+    so honest P_N(S=9) = product of all eight per-axis match probabilities, BYTE-
+    IDENTICAL to HEAD — the S9_PIN reproduction loop below must still pass unchanged.
+    """
+    dist = [Fraction(0)] * 10
+    # Average over hero placement (DEC-02 Option A) within a fixed gold count N.
+    #   hero gold  (weight n_gold/4):   ordinary colors = (n_gold-1) gold + (4-n_gold) common
+    #   hero common(weight (4-n_gold)/4): ordinary colors =  n_gold    gold + (3-n_gold) common
+    for hero_is_gold, weight, ord_gold, ord_common in (
+        (True, Fraction(n_gold, 4), n_gold - 1, 4 - n_gold),
+        (False, Fraction(4 - n_gold, 4), n_gold, 3 - n_gold),
+    ):
+        if weight == 0:
+            continue
+        hero_color = P_COLOR_GOLD[1] if hero_is_gold else P_COLOR_COMMON[1]
+        sub = _hero_quadrant_dist(hero_color)
+        for _ in range(ord_gold):
+            sub = convolve(sub, _ordinary_quadrant_dist(P_COLOR_GOLD[1]))
+        for _ in range(ord_common):
+            sub = convolve(sub, _ordinary_quadrant_dist(P_COLOR_COMMON[1]))
+        while len(sub) < 10:
+            sub.append(Fraction(0))
+        for k in range(10):
+            dist[k] += weight * sub[k]
     assert len(dist) == 10, f"S distribution length {len(dist)} != 10"
     return dist
 
