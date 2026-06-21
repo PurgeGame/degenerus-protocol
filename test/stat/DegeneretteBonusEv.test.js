@@ -1,11 +1,17 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-// Phase 327-04 HERO-04 — ETH/WWXRP bonus EV exactness on the 10-bucket S ∈ {0..9}
-// scale (WWXRP factor buckets re-bucketed to B = 6..9; ETH bonus EV = 5.000% per N).
+// Phase 454 TST — v73 Variant-2 ETH/WWXRP bonus-EV exactness on the 10-bucket
+// S ∈ {0..9} scale. The +5% bonus (ETH 500bps) is redistributed into the top
+// score buckets B = 6..9 via the per-N factor tables so the EV uplift == 5.000%.
 //
-// Runs ONLY under `npm run test:stat`. Uses the REGENERATED WWXRP factor + payout
+// v73: the HONEST (ETH/FLIP) factor family is split per (N, heroIsGold) (DEC-02
+// Option B) — each sub-case's bonus EV is 5.000% against its OWN Variant-2 P(S);
+// the WWXRP _RIG_ factors stay averaged at 5 per-N tables, validated against the
+// R2 rigged distribution.
+//
+// Runs ONLY under `npm run test:stat`. Uses the REGENERATED factor + payout
 // constants from the canonical generator (spawnSync python3 derive_5_tables.py),
-// NEVER hand-typed (T-327-04-FC1). The analytical bonus EV is computed against the
-// analytical P_N(S) convolution + the regenerated tables (load-bearing).
+// NEVER hand-typed. The analytical bonus EV is computed against the Variant-2
+// per-quadrant convolution + the regenerated tables (load-bearing).
 
 import { expect } from "chai";
 import { spawnSync } from "node:child_process";
@@ -51,197 +57,212 @@ function parseConstants(text) {
   const block = text.slice(idx);
   const out = {};
   const re =
-    /uint256\s+private\s+constant\s+([A-Z0-9_]+)\s*=\s*(0x[0-9a-fA-F]+|\d+)\s*;/g;
+    /uint256\s+private\s+constant\s+([A-Z0-9_]+)\s*=\s*(0x[0-9a-fA-F_]+|[\d_]+)\s*;/g;
   let m;
-  while ((m = re.exec(block)) !== null) {
-    out[m[1]] = BigInt(m[2]);
-  }
+  while ((m = re.exec(block)) !== null) out[m[1]] = BigInt(m[2].replace(/_/g, ""));
   return out;
 }
 
 // ---------------------------------------------------------------------------
-// 10-bucket S ∈ {0..9} analytical reference + dispatch replica.
+// v73 constant naming (honest split per (N,heroIsGold); rigged by N).
 // ---------------------------------------------------------------------------
 
-function analyticalPScore(N) {
-  function convolve(a, b) {
-    const out = new Array(a.length + b.length - 1).fill(0);
-    for (let i = 0; i < a.length; i++) {
-      for (let j = 0; j < b.length; j++) out[i + j] += a[i] * b[j];
-    }
-    return out;
-  }
-  let dist = [1];
-  for (let q = 0; q < N; q++) dist = convolve(dist, [14 / 15, 1 / 15]);
-  for (let q = 0; q < 4 - N; q++) dist = convolve(dist, [13 / 15, 2 / 15]);
-  for (let q = 0; q < 3; q++) dist = convolve(dist, [7 / 8, 1 / 8]);
-  dist = convolve(dist, [7 / 8, 0, 1 / 8]);
+const HONEST_SUBCASES = [
+  [0, false], [1, true], [1, false], [2, true],
+  [2, false], [3, true], [3, false], [4, true],
+];
+
+function honestSuffix(N, g) {
+  if (N === 0) return "N0";
+  if (N === 4) return "N4";
+  return `N${N}_${g ? "HEROGOLD" : "HEROCOMMON"}`;
+}
+
+// ---------------------------------------------------------------------------
+// Variant-2 per-quadrant float distributions (color gated behind symbol).
+// ---------------------------------------------------------------------------
+
+function convolve(a, b) {
+  const out = new Array(a.length + b.length - 1).fill(0);
+  for (let i = 0; i < a.length; i++)
+    for (let j = 0; j < b.length; j++) out[i + j] += a[i] * b[j];
+  return out;
+}
+
+const PS = 1 / 8;
+function ordinaryQuad(pc) {
+  return [1 - PS, PS * (1 - pc), PS * pc];
+}
+function heroQuad(pc) {
+  return [1 - PS, 0, PS * (1 - pc), PS * pc];
+}
+
+// Honest Variant-2 P(S | N, heroIsGold).
+function honestPScore(N, heroIsGold) {
+  const heroColor = heroIsGold ? 1 / 15 : 2 / 15;
+  const ordGold = heroIsGold ? N - 1 : N;
+  const ordCommon = heroIsGold ? 4 - N : 3 - N;
+  let dist = heroQuad(heroColor);
+  for (let q = 0; q < ordGold; q++) dist = convolve(dist, ordinaryQuad(1 / 15));
+  for (let q = 0; q < ordCommon; q++) dist = convolve(dist, ordinaryQuad(2 / 15));
   while (dist.length < 10) dist.push(0);
   return dist;
 }
 
-function jsGetBasePayoutBps(consts, N, s) {
+// R2 rigged P_N(S) (averaged over hero placement; mirrors p_score_distribution_rigged).
+function quadStates(pc) {
+  const states = [];
+  for (const sm of [0, 1]) {
+    const pSm = sm === 1 ? PS : 1 - PS;
+    for (const cm of [0, 1]) states.push([sm, cm, pSm * (cm === 1 ? pc : 1 - pc)]);
+  }
+  return states;
+}
+function riggedPScore(N) {
+  const pf = 3 / 5;
+  const out = new Array(12).fill(0);
+  for (const [heroIsGold, weight, ordGold, ordCommon] of [
+    [true, N / 4, N - 1, 4 - N],
+    [false, (4 - N) / 4, N, 3 - N],
+  ]) {
+    if (weight === 0) continue;
+    const heroColor = heroIsGold ? 1 / 15 : 2 / 15;
+    const quads = [[quadStates(heroColor), true]];
+    for (let q = 0; q < ordGold; q++) quads.push([quadStates(1 / 15), false]);
+    for (let q = 0; q < ordCommon; q++) quads.push([quadStates(2 / 15), false]);
+    let partials = new Map([["0,0,0,0", weight]]);
+    for (const [states, isHero] of quads) {
+      const nxt = new Map();
+      for (const [key, pacc] of partials) {
+        const [S, M, e1, e2] = key.split(",").map(Number);
+        for (const [sm, cm, pp] of states) {
+          let dS = 0;
+          if (sm === 1) { dS += isHero ? 2 : 1; if (cm === 1) dS += 1; }
+          let de1 = 0, de2 = 0;
+          if (!isHero && sm === 0) { if (cm === 0) de1 += 1; else de2 += 1; }
+          if (sm === 1 && cm === 0) de1 += 1;
+          const nk = `${S + dS},${M + sm + cm},${e1 + de1},${e2 + de2}`;
+          nxt.set(nk, (nxt.get(nk) || 0) + pacc * pp);
+        }
+      }
+      partials = nxt;
+    }
+    for (const [key, p] of partials) {
+      const [S, M, e1, e2] = key.split(",").map(Number);
+      const etot = e1 + e2;
+      if (M >= 7) out[S] += p;
+      else if (etot === 0) out[S] += p;
+      else {
+        out[S] += p * (1 - pf);
+        out[S + 1] += p * pf * (e1 / etot);
+        if (e2) out[S + 2] += p * pf * (e2 / etot);
+      }
+    }
+  }
+  return out.slice(0, 10);
+}
+
+// ---------------------------------------------------------------------------
+// Dispatch replicas.
+// ---------------------------------------------------------------------------
+
+function honestBase(consts, N, g, s) {
   if (s >= 9) return consts[`QUICK_PLAY_PAYOUT_N${N}_S9`];
-  if (s === 8) return consts[`QUICK_PLAY_PAYOUT_N${N}_S8`];
-  const packed = consts[`QUICK_PLAY_PAYOUTS_N${N}_PACKED`];
-  return (packed >> (BigInt(s) * 32n)) & 0xFFFFFFFFn;
+  if (s === 8) return consts[`QUICK_PLAY_PAYOUT_${honestSuffix(N, g)}_S8`];
+  const packed = consts[`QUICK_PLAY_PAYOUTS_${honestSuffix(N, g)}_PACKED`];
+  return (packed >> (BigInt(s) * 32n)) & 0xffffffffn;
 }
-
-function jsWwxrpBonusBucket(s) {
-  if (s < 6) return 0;
-  return s;
-}
-
-function jsWwxrpFactor(consts, N, bucket) {
+function honestFactor(consts, N, g, bucket) {
   if (bucket < 6 || bucket > 9) return 0n;
-  const packed = consts[`WWXRP_FACTORS_N${N}_PACKED`];
-  return (packed >> (BigInt(bucket - 6) * 64n)) & 0xFFFFFFFFFFFFFFFFn;
+  const packed = consts[`WWXRP_FACTORS_${honestSuffix(N, g)}_PACKED`];
+  return (packed >> (BigInt(bucket - 6) * 64n)) & 0xffffffffffffffffn;
+}
+function rigBase(consts, N, s) {
+  if (s >= 9) return consts[`QUICK_PLAY_PAYOUT_N${N}_S9`];
+  if (s === 8) return consts[`QUICK_PLAY_PAYOUT_RIG_N${N}_S8`];
+  const packed = consts[`QUICK_PLAY_PAYOUTS_RIG_N${N}_PACKED`];
+  return (packed >> (BigInt(s) * 32n)) & 0xffffffffn;
+}
+function rigFactor(consts, N, bucket) {
+  if (bucket < 6 || bucket > 9) return 0n;
+  const packed = consts[`WWXRP_FACTORS_RIG_N${N}_PACKED`];
+  return (packed >> (BigInt(bucket - 6) * 64n)) & 0xffffffffffffffffn;
+}
+function wwxrpBonusBucket(s) {
+  return s < 6 ? 0 : s;
+}
+
+function bonusUpliftPct(pS, baseFn, factorFn) {
+  let evWith = 0, evWithout = 0;
+  for (let s = 0; s <= 9; s++) {
+    const basePayout = Number(baseFn(s));
+    evWithout += pS[s] * basePayout;
+    const bucket = wwxrpBonusBucket(s);
+    let effRoi = 10_000;
+    if (bucket !== 0) {
+      const factor = Number(factorFn(bucket));
+      effRoi = 10_000 + (ETH_ROI_BONUS_BPS * factor) / WWXRP_BONUS_FACTOR_SCALE;
+    }
+    evWith += pS[s] * basePayout * (effRoi / 10_000);
+  }
+  return ((evWith - evWithout) / evWithout) * 100;
 }
 
 // ===========================================================================
-// HERO-04 ETH-bonus EV == 5.000% per N (regenerated WWXRP factor tables)
+// Honest per-(N,heroIsGold) ETH bonus EV == 5.000% ± 1%
 // ===========================================================================
 
-describe("HERO-04 — ETH bonus EV == 5.000% ± 1% per N (regenerated B=6..9 factors)", function () {
+describe("v73 — honest ETH bonus EV == 5.000% ± 1% per (N,heroIsGold) sub-case", function () {
   this.timeout(120_000);
-
-  let generated;
-
+  let g;
   before(function () {
-    generated = parseConstants(runGenerator());
+    g = parseConstants(runGenerator());
   });
 
-  for (let N = 0; N < 5; N++) {
-    it(`N=${N}: analytical-P_N(S) bonus EV uplift = 5.000% ± 1% on the regenerated factors`, function () {
-      const pS = analyticalPScore(N);
-
-      // ETH bonus EV: the per-N WWXRP factors redistribute ETH_ROI_BONUS_BPS=500
-      // across buckets B=6..9. effRoi = 10000 + 500*factor/SCALE; the uplift over
-      // the no-bonus baseline (roiBps=10000) is the bonus EV.
-      let evWith = 0;
-      let evWithout = 0;
-      for (let s = 0; s <= 9; s++) {
-        const basePayout = Number(jsGetBasePayoutBps(generated, N, s));
-        evWithout += pS[s] * basePayout * (10_000 / 10_000);
-        const bucket = jsWwxrpBonusBucket(s);
-        let effRoi = 10_000;
-        if (bucket !== 0) {
-          const factor = Number(jsWwxrpFactor(generated, N, bucket));
-          effRoi = 10_000 + (ETH_ROI_BONUS_BPS * factor) / WWXRP_BONUS_FACTOR_SCALE;
-        }
-        evWith += pS[s] * basePayout * (effRoi / 10_000);
-      }
-      const upliftPct = ((evWith - evWithout) / evWithout) * 100;
-      const relErr = (upliftPct - 5.0) / 5.0;
-      console.log(
-        `[HERO-04 bonus N=${N}] ETH bonus EV uplift = ${upliftPct.toFixed(6)}% ` +
-          `(target 5.000%; relative error ${(relErr * 100).toFixed(4)}%)`,
+  for (const [N, hg] of HONEST_SUBCASES) {
+    const label = honestSuffix(N, hg);
+    it(`${label}: Variant-2 P(S) bonus EV uplift = 5.000% ± 1% on the split factors`, function () {
+      const pS = honestPScore(N, hg);
+      const uplift = bonusUpliftPct(
+        pS,
+        (s) => honestBase(g, N, hg, s),
+        (b) => honestFactor(g, N, hg, b),
       );
-      expect(
-        Math.abs(relErr) <= 0.01,
-        `HERO-04 N=${N}: ETH bonus EV ${upliftPct.toFixed(6)}% outside ±1% of 5.000%`,
-      ).to.equal(true);
+      const relErr = (uplift - 5.0) / 5.0;
+      console.log(`[v73 honest bonus ${label}] uplift = ${uplift.toFixed(6)}% (relErr ${(relErr * 100).toFixed(4)}%)`);
+      expect(Math.abs(relErr) <= 0.01, `${label}: ETH bonus EV ${uplift.toFixed(6)}% outside ±1% of 5.000%`).to.equal(true);
     });
   }
 
-  it("WWXRP factor buckets are re-mapped to B=6..9 (shift-by-one from the old 5..8)", function () {
-    // Floor S >= 6 => buckets 6/7/8/9; S < 6 => bucket 0 (no bonus). Anchors the
-    // re-bucketing onto the 10-point scale.
-    expect(jsWwxrpBonusBucket(5)).to.equal(0);
-    expect(jsWwxrpBonusBucket(6)).to.equal(6);
-    expect(jsWwxrpBonusBucket(7)).to.equal(7);
-    expect(jsWwxrpBonusBucket(8)).to.equal(8);
-    expect(jsWwxrpBonusBucket(9)).to.equal(9);
-    // Each bucket's regenerated factor is nonzero per N (the redistribution
-    // actually targets all four top buckets).
-    for (let N = 0; N < 5; N++) {
+  it("WWXRP factor buckets are B=6..9 (S<6 -> no bonus) and every split factor is nonzero", function () {
+    expect(wwxrpBonusBucket(5)).to.equal(0);
+    for (const B of [6, 7, 8, 9]) expect(wwxrpBonusBucket(B)).to.equal(B);
+    for (const [N, hg] of HONEST_SUBCASES) {
       for (const B of [6, 7, 8, 9]) {
-        expect(
-          jsWwxrpFactor(generated, N, B) > 0n,
-          `N=${N} bucket ${B}: regenerated WWXRP factor must be nonzero`,
-        ).to.equal(true);
+        expect(honestFactor(g, N, hg, B) > 0n, `${honestSuffix(N, hg)} bucket ${B}: factor must be nonzero`).to.equal(true);
       }
     }
   });
 });
 
 // ===========================================================================
-// WWXRP RIG bonus EV — the rigged factors redistribute bonusBps into B=6..9 so
-// the uplift == bonusBps/10000 of RTP exactly (5.000% at the ETH 500bps anchor),
-// computed against the RIGGED distribution + rigged tables/factors.
+// WWXRP RIG bonus EV == 5.000% ± 1% per N (rigged factors + R2 rigged dist)
 // ===========================================================================
 
-function riggedAnalyticalPScore(N) {
-  function conv(a, b) {
-    const o = new Array(a.length + b.length - 1).fill(0);
-    for (let i = 0; i < a.length; i++) for (let j = 0; j < b.length; j++) o[i + j] += a[i] * b[j];
-    return o;
-  }
-  let C = [1];
-  for (let q = 0; q < N; q++) C = conv(C, [14 / 15, 1 / 15]);
-  for (let q = 0; q < 4 - N; q++) C = conv(C, [13 / 15, 2 / 15]);
-  let Y = [1];
-  for (let q = 0; q < 3; q++) Y = conv(Y, [7 / 8, 1 / 8]);
-  const H = [7 / 8, 1 / 8];
-  const out = new Array(10).fill(0);
-  const pf = 3 / 5;
-  for (let c = 0; c < C.length; c++)
-    for (let y = 0; y < Y.length; y++)
-      for (let h = 0; h < 2; h++) {
-        const p = C[c] * Y[y] * H[h];
-        const M = c + y + h;
-        const baseS = c + y + 2 * h;
-        if (M >= 7) out[baseS] += p;
-        else {
-          out[baseS] += p * (1 - pf);
-          out[baseS + 1] += p * pf;
-        }
-      }
-  return out;
-}
-
-function jsGetBasePayoutBpsRig(consts, N, s) {
-  if (s >= 9) return consts[`QUICK_PLAY_PAYOUT_N${N}_S9`];
-  if (s === 8) return consts[`QUICK_PLAY_PAYOUT_RIG_N${N}_S8`];
-  const packed = consts[`QUICK_PLAY_PAYOUTS_RIG_N${N}_PACKED`];
-  return (packed >> (BigInt(s) * 32n)) & 0xFFFFFFFFn;
-}
-
-function jsWwxrpFactorRig(consts, N, bucket) {
-  if (bucket < 6 || bucket > 9) return 0n;
-  const packed = consts[`WWXRP_FACTORS_RIG_N${N}_PACKED`];
-  return (packed >> (BigInt(bucket - 6) * 64n)) & 0xFFFFFFFFFFFFFFFFn;
-}
-
-describe("WWXRP RIG — bonus EV uplift == 5.000% ± 1% per N (rigged factors + rigged dist)", function () {
+describe("v73 — WWXRP RIG bonus EV == 5.000% ± 1% per N (rigged factors + R2 dist)", function () {
   this.timeout(120_000);
-
-  let generated;
-
+  let g;
   before(function () {
-    generated = parseConstants(runGenerator());
+    g = parseConstants(runGenerator());
   });
 
   for (let N = 0; N < 5; N++) {
-    it(`N=${N}: rigged-P_N(S) bonus EV uplift = 5.000% ± 1% on the rigged factors`, function () {
-      const pS = riggedAnalyticalPScore(N);
-      let evWith = 0;
-      let evWithout = 0;
-      for (let s = 0; s <= 9; s++) {
-        const basePayout = Number(jsGetBasePayoutBpsRig(generated, N, s));
-        evWithout += pS[s] * basePayout;
-        const bucket = jsWwxrpBonusBucket(s);
-        let effRoi = 10_000;
-        if (bucket !== 0) {
-          const factor = Number(jsWwxrpFactorRig(generated, N, bucket));
-          effRoi = 10_000 + (ETH_ROI_BONUS_BPS * factor) / WWXRP_BONUS_FACTOR_SCALE;
-        }
-        evWith += pS[s] * basePayout * (effRoi / 10_000);
-      }
-      const upliftPct = ((evWith - evWithout) / evWithout) * 100;
-      const relErr = (upliftPct - 5.0) / 5.0;
-      console.log(`[RIG bonus N=${N}] uplift = ${upliftPct.toFixed(6)}% (target 5.000%; relErr ${(relErr * 100).toFixed(4)}%)`);
-      expect(Math.abs(relErr) <= 0.01, `RIG N=${N}: bonus EV ${upliftPct.toFixed(6)}% outside ±1% of 5%`).to.equal(true);
+    it(`N=${N}: R2 rigged P_N(S) bonus EV uplift = 5.000% ± 1% on the rigged factors`, function () {
+      const pS = riggedPScore(N);
+      const uplift = bonusUpliftPct(pS, (s) => rigBase(g, N, s), (b) => rigFactor(g, N, b));
+      const relErr = (uplift - 5.0) / 5.0;
+      console.log(`[v73 RIG bonus N=${N}] uplift = ${uplift.toFixed(6)}% (relErr ${(relErr * 100).toFixed(4)}%)`);
+      expect(Math.abs(relErr) <= 0.01, `RIG N=${N}: bonus EV ${uplift.toFixed(6)}% outside ±1% of 5%`).to.equal(true);
     });
   }
 });
