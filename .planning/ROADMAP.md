@@ -28,7 +28,9 @@
 
 ## Phase 453 — IMPL (the sole approval gate)
 
-**Goal:** Implement Variant-2 in the contract as ONE batched, USER-approved `.sol` diff — the `_score` rewrite, the `_rigWwxrpResult` adaptation, the regenerated constant blocks, and the doc-comment refresh.
+> **⚑ DEC-02 resolved in 452 → Option B (USER, measurement-driven).** GEN measured a 2.99 centi-x hero-placement EV drift on the honest lane (hero-common EV-positive, player-selectable via the custom `heroQuadrant` param) → escalated to exact EV-equality. **453 scope grows accordingly:** the honest family is now **8 per-`(N, hero-is-gold)` base tables** (N0 + N1/2/3 × {gold,common} + N4) + matching honest ETH-bonus factors, and `_getBasePayoutBps` gains a **`heroIsGold` selector consulted only when `!isWwxrp`** (the WWXRP `_RIG_` family stays averaged at 5 by-design). The exact dispatch shape is printed by `derive_5_tables.py` (see 452-03-SUMMARY.md). **USER must confirm the honest-only-split reading at the 453 diff review.**
+
+**Goal:** Implement Variant-2 in the contract as ONE batched, USER-approved `.sol` diff — the `_score` rewrite, the `_rigWwxrpResult` adaptation, the regenerated constant blocks (Option-B honest per-`(N,hero-gold)` tables + averaged `_RIG_`), the `_getBasePayoutBps` `heroIsGold` dispatch tweak, and the doc-comment refresh.
 
 **Requirements:** SCORE-01, SCORE-02, SCORE-03, RIG-01, RIG-02, RIG-03, IMPL-01
 
