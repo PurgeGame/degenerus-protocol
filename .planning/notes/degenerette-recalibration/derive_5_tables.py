@@ -33,17 +33,31 @@ at ~2x multipliers at IDENTICAL EV).
 DEC-03 floor S>=2: a lone ordinary (non-hero) symbol match = S=1 (SHAPE pays 0 there);
 the hero symbol alone = S=2 and a full quadrant double = S=2 (both pay).
 
-Player ticket has N gold quadrants (N in {0, 1, 2, 3, 4}). Use one of 5 separate
-payout tables, each calibrated so basePayoutEV = 100 centi-x against THAT N-value's
-score distribution P_N(S). No runtime normalizer needed.
+Player ticket has N gold quadrants (N in {0, 1, 2, 3, 4}).
 
-DEC-02 Option A (EV-equality wrinkle): because color is gated behind symbol, the hero
-quadrant's gold-ness now shifts P_N(S) — within a fixed N a hero-gold ticket and a
-hero-common ticket have slightly different score distributions. The single per-N table
-averages over hero placement (hero gold w.p. N/4, common w.p. (4-N)/4). The generator
-MEASURES the worst-case hero-gold vs hero-common EV drift (see the EVEQ-01 section
-below) and keeps Option A (5 tables); each per-N table still asserts EV <= 100, so A
-is solvency-safe regardless of the residual drift.
+DEC-02 Option B (EV-equality wrinkle — RESOLVED 2026-06-21): because color is gated
+behind symbol, the hero quadrant's gold-ness now shifts P_N(S) — within a fixed N a
+hero-gold ticket and a hero-common ticket have meaningfully different score
+distributions. The 452-02 GEN run MEASURED the resulting hero-placement EV drift on
+the HONEST (ETH/FLIP) lane at max 2.9923 centi-x (N=3), with the hero-COMMON sub-case
+EV-POSITIVE (>100 centi-x) at N=1..3 — grossly outside the ~0.5 centi-x tolerance, and
+PLAYER-SELECTABLE via the custom-ticket heroQuadrant param. The USER resolved DEC-02 to
+**Option B (exact EV-equality)**:
+  - The HONEST family is split per (N, hero-is-gold). Each structurally-valid sub-case
+    (N0 hero-common; N1/N2/N3 hero-gold|hero-common; N4 hero-gold => ~8 base tables) is
+    calibrated so basePayoutEV = 100 centi-x against THAT sub-case's OWN Variant-2 score
+    distribution. Each pick is then exactly EV-equal (no player-selectable edge) and the
+    honest +5% ETH bonus EV is exactly 5.000% within EACH sub-case.
+  - The WWXRP `_RIG_` family stays AVERAGED at 5 per-N tables — WWXRP hero-placement
+    drift is accepted by-design per the USER don't-care ruling ("worthless shitcoin").
+  - 453 IMPL's `_getBasePayoutBps` gains a `heroIsGold` selector used ONLY when
+    `!isWwxrp` (the honest table is indexed by (N, heroIsGold); the _RIG_ table by N
+    only). N0 (always hero-common) and N4 (always hero-gold) collapse to one table each.
+The generator emits the per-(N,hero-gold) honest constant family, RE-VERIFIES the drift
+is now ~0 (within _solve_table rounding), and PRINTS the exact 453 dispatch shape. The
+averaged honest P_N(S) is retained ONLY for the placement-independent P(S=9) invariant
+checks and the rigged-dist P(S=9) equality (S=9 depends on the gold/common COUNT, not
+which quadrant is the hero).
 
 Per-axis Bernoulli match probabilities (producer: color [16,16,16,16,16,16,16,8]/120,
 symbol uniform 1/8):
@@ -149,13 +163,15 @@ def p_score_distribution(n_gold):
     DEC-03 floor S>=2: a lone ordinary (non-hero) symbol match = S=1 (SHAPE pays 0
     there); the hero symbol alone = S=2 and a full quadrant double = S=2 (both pay).
 
-    DEC-02 Option A (EV-equality wrinkle): because color is gated behind symbol, the
-    hero quadrant's gold-ness now shifts P_N(S). For a fixed N this returns ONE
-    averaged distribution over hero placement — the hero quadrant is gold with prob
-    n_gold/4 and common with prob (4-n_gold)/4 — matching the HEAD per-N convention
-    consumed by P_N_TABLE / the S9_PIN loop. (Plan 02 reports the hero-gold vs
-    hero-common worst-case drift; the m>=7-cap / S=9 invariant is unaffected because
-    S=9 only depends on the gold/common COUNT, not which quadrant is the hero.)
+    DEC-02 Option B (EV-equality wrinkle): under Option B the HONEST PAYOUT family is
+    split per (N, hero-is-gold) (see `_hero_placement_subcase` + the honest sub-case
+    solve below). This averaged per-N distribution is RETAINED ONLY for the
+    placement-independent invariant checks: it feeds P_N_TABLE, whose index 9
+    (P(S=9)) is used for the S9_PIN relabel, the rigged-dist `rig[9] == honest[9]`
+    assert, and the numeric pre-proof. P(S=9) is placement-independent (it depends on
+    the gold/common COUNT N, not which quadrant is the hero), so the averaged P_N(S=9)
+    equals every sub-case's P(S=9) — the honest PAYOUT tables themselves are solved
+    against the per-sub-case distributions, NOT this averaged one.
 
     CRITICAL: S=9 stays exactly the all-8-axes event (every quadrant a full double),
     so honest P_N(S=9) = product of all eight per-axis match probabilities, BYTE-
@@ -249,13 +265,49 @@ def total_ev(payouts, p_S):
     return sum(payouts[k] * p_S[k] for k in range(10))
 
 
-tables = []
-for N in range(5):
-    PN = P_N_TABLE[N]
-    # Fixed contribution of the pinned S = 9 tier.
-    ev_fixed = Fraction(S9_PIN[N]) * PN[9]
-    # Shape EV for the solvable S = 2..8 tiers.
-    shape_ev_N = sum(Fraction(SHAPE[k]) * PN[k] for k in range(2, 9))
+def _hero_placement_subcase(n_gold, hero_is_gold):
+    """Variant-2 P(S) for a fixed N and a FIXED hero placement (no averaging).
+
+    Reuses the exact per-quadrant convolution of `p_score_distribution`, but for a
+    single hero-placement branch:
+      hero gold   : hero color = gold;   ordinary colors = (N-1) gold + (4-N) common
+      hero common : hero color = common; ordinary colors =  N    gold + (3-N) common
+    Returns a length-10 distribution (sums to 1). Returns None when the requested
+    placement is impossible for this N (hero gold needs N>=1; hero common needs N<=3).
+
+    This is the per-sub-case distribution Option B solves each honest table against —
+    fixing the hero quadrant's gold-ness removes the averaging that hid the EV drift."""
+    if hero_is_gold:
+        if n_gold < 1:
+            return None
+        ord_gold, ord_common = n_gold - 1, 4 - n_gold
+        hero_color = P_COLOR_GOLD[1]
+    else:
+        if n_gold > 3:
+            return None
+        ord_gold, ord_common = n_gold, 3 - n_gold
+        hero_color = P_COLOR_COMMON[1]
+    sub = _hero_quadrant_dist(hero_color)
+    for _ in range(ord_gold):
+        sub = convolve(sub, _ordinary_quadrant_dist(P_COLOR_GOLD[1]))
+    for _ in range(ord_common):
+        sub = convolve(sub, _ordinary_quadrant_dist(P_COLOR_COMMON[1]))
+    while len(sub) < 10:
+        sub.append(Fraction(0))
+    assert sum(sub) == 1, f"hero-placement sub-case N={n_gold} gold={hero_is_gold} != 1"
+    return sub
+
+
+def _solve_table(pS, N):
+    """SHAPE + S9-pin solve against an arbitrary score distribution pS.
+
+    Currency-/sub-case-agnostic and reused UNCHANGED by the honest per-(N,heroGold)
+    sub-cases (Option B) and the averaged WWXRP _RIG_ family. Calibrates the S=2..8
+    SHAPE so basePayoutEV = 100 centi-x against pS, with the residual-absorption
+    refine (coarse S=4 / fine S=5 / ultra-fine S=6) and the neutral-or-just-under
+    nudge (never EV-positive)."""
+    ev_fixed = Fraction(S9_PIN[N]) * pS[9]
+    shape_ev_N = sum(Fraction(SHAPE[k]) * pS[k] for k in range(2, 9))
     scale = (Fraction(TARGET_EV) - ev_fixed) / shape_ev_N
     payouts = (
         [0, 0]
@@ -265,49 +317,82 @@ for N in range(5):
     # Residual-absorption refine (coarse S=4, fine S=5, ultra-fine S=6) to drive
     # |drift| well under 0.5 centi-x — same approach as the 9-bucket design.
     for adj in (4, 5, 6):
-        residual = Fraction(TARGET_EV) - total_ev(payouts, PN)
-        payouts[adj] += round(residual / PN[adj])
+        residual = Fraction(TARGET_EV) - total_ev(payouts, pS)
+        payouts[adj] += round(residual / pS[adj])
     # Neutral-or-just-under guarantee: the baseline basePayoutEV (before the
     # activity-score ROI scaling and the ETH/WWXRP bonus) must never exceed
     # TARGET_EV — the house is never EV-negative on the base table. If integer
     # rounding overshot above 100 centi-x, nudge the ultra-fine S=6 tier down by
     # the minimal amount that brings EV back to <= 100 (lands fractionally under).
-    while total_ev(payouts, PN) > Fraction(TARGET_EV):
+    while total_ev(payouts, pS) > Fraction(TARGET_EV):
         payouts[6] -= 1
-    tables.append((scale, payouts))
+    return payouts
 
-# --- Print the solved per-N payout tables ---
-print(f"{'S':>3} | {'shape':>10} | " + " | ".join(f"N={n} payout".rjust(13) for n in range(5)))
-print(f"{'':>3} | {'(relative)':>10} | " + " | ".join(f"  centi-x   ".rjust(13) for _ in range(5)))
-print("-" * 105)
+
+# -------------------------------------------------------------------------
+# DEC-02 Option B — HONEST family split per (N, hero-is-gold).
+# Each structurally-valid sub-case is solved against its OWN Variant-2
+# distribution (not the N/4-averaged one), so each pick is EXACTLY EV-equal
+# (the 2.99 centi-x hero-placement edge measured in 452-02 is closed). Valid
+# sub-cases: N0->{common}; N1/N2/N3->{gold, common}; N4->{gold} = 8 tables.
+# `hero_is_gold` means the hero quadrant's color is gold (1/15) and N-1 of the
+# other 3 quadrants are gold; `hero common` means the hero color is common
+# (2/15) and all N gold quads are among the other 3 (requires N<=3).
+# -------------------------------------------------------------------------
+
+# Enumerate the structurally-valid honest sub-cases as (N, hero_is_gold).
+HONEST_SUBCASES = []
+for N in range(5):
+    for hero_is_gold in (True, False):
+        if _hero_placement_subcase(N, hero_is_gold) is not None:
+            HONEST_SUBCASES.append((N, hero_is_gold))
+
+# Solve each honest sub-case against its OWN distribution.
+# honest_tables[(N, hero_is_gold)] = (dist, payouts)
+honest_tables = {}
+for (N, hero_is_gold) in HONEST_SUBCASES:
+    dist = _hero_placement_subcase(N, hero_is_gold)
+    payouts = _solve_table(dist, N)
+    honest_tables[(N, hero_is_gold)] = (dist, payouts)
+
+
+def _sub_label(N, hero_is_gold):
+    return f"N{N}/" + ("heroGOLD" if hero_is_gold else "heroCOMMON")
+
+
+# --- Print the solved per-(N, hero-gold) honest payout tables ---
+print(f"{'S':>3} | {'shape':>10} | " + " | ".join(_sub_label(N, g).rjust(13) for (N, g) in HONEST_SUBCASES))
+print("-" * (16 + 16 * len(HONEST_SUBCASES)))
 for S in range(10):
     shape_label = "PINNED(S9)" if S == 9 else (str(SHAPE[S]) if SHAPE[S] is not None else "-")
-    cells = " | ".join(f"{tables[n][1][S]:>13,}" for n in range(5))
+    cells = " | ".join(f"{honest_tables[(N, g)][1][S]:>13,}" for (N, g) in HONEST_SUBCASES)
     print(f"{S:>3} | {shape_label:>10} | {cells}")
 print()
 
-print("Scale factors + per-N basePayoutEV:")
-for N in range(5):
-    ev = float(total_ev(tables[N][1], P_N_TABLE[N]))
-    print(f"  N={N}:  ×{float(tables[N][0]):.6f}  → basePayoutEV = {ev:.5f} centi-x")
+print("Per-(N, hero-gold) honest basePayoutEV (each vs its OWN sub-case dist):")
+for (N, g) in HONEST_SUBCASES:
+    dist, payouts = honest_tables[(N, g)]
+    ev = float(total_ev(payouts, dist))
+    print(f"  {_sub_label(N, g):>16}:  basePayoutEV = {ev:.5f} centi-x")
 print()
 
-# --- Top-bucket multipliers per table ---
-print(f"Top-bucket multipliers per table (× the bet amount, at 100% ROI):")
-print(f"{'N':>3} | {'S=5':>11} | {'S=6':>11} | {'S=7':>11} | {'S=8':>13} | {'S=9 jackpot':>15}")
-for N in range(5):
-    p = tables[N][1]
+# --- Top-bucket multipliers per honest sub-case table ---
+print(f"Top-bucket multipliers per honest sub-case (× the bet amount, at 100% ROI):")
+print(f"{'sub-case':>16} | {'S=5':>11} | {'S=6':>11} | {'S=7':>11} | {'S=8':>13} | {'S=9 jackpot':>15}")
+for (N, g) in HONEST_SUBCASES:
+    p = honest_tables[(N, g)][1]
     print(
-        f"{N:>3} | {p[5]/100:>10.2f}x | {p[6]/100:>10.2f}x | {p[7]/100:>10.2f}x | "
+        f"{_sub_label(N, g):>16} | {p[5]/100:>10.2f}x | {p[6]/100:>10.2f}x | {p[7]/100:>10.2f}x | "
         f"{p[8]/100:>11,.2f}x | {p[9]/100:>13,.2f}x"
     )
 print()
 
-# --- Probability of any positive payout (S >= 2) per table ---
-print(f"P(any payout, S >= 2) per table:")
-for N in range(5):
-    p_pay = sum(P_N_TABLE[N][k] for k in range(2, 10))
-    print(f"  N={N}: {float(p_pay)*100:.4f}%   (1 in {1/float(p_pay):.2f} tickets)")
+# --- Probability of any positive payout (S >= 2) per honest sub-case ---
+print(f"P(any payout, S >= 2) per honest sub-case:")
+for (N, g) in HONEST_SUBCASES:
+    dist = honest_tables[(N, g)][0]
+    p_pay = sum(dist[k] for k in range(2, 10))
+    print(f"  {_sub_label(N, g):>16}: {float(p_pay)*100:.4f}%   (1 in {1/float(p_pay):.2f} tickets)")
 print()
 
 # -------------------------------------------------------------------------
@@ -319,24 +404,29 @@ SPLITS = {6: Fraction(10, 100), 7: Fraction(30, 100), 8: Fraction(30, 100), 9: F
 ETH_BONUS_BPS = 500
 
 
-def wwxrp_factors(N):
-    payouts = tables[N][1]
+def wwxrp_factors_honest(N, hero_is_gold):
+    """Honest (ETH/FLIP) ETH-bonus factors for a fixed (N, hero-is-gold) sub-case.
+
+    Option B: split the same way as the base table so the honest +5% ETH bonus EV is
+    exactly 5.000% WITHIN each sub-case (not just on the average). Built off the
+    sub-case's own solved table + its own distribution."""
+    dist, payouts = honest_tables[(N, hero_is_gold)]
     factors = {}
     for B in (6, 7, 8, 9):
-        f = SPLITS[B] * 100 * WWXRP_SCALE / (P_N_TABLE[N][B] * payouts[B])
+        f = SPLITS[B] * 100 * WWXRP_SCALE / (dist[B] * payouts[B])
         factors[B] = round(float(f))
     return factors
 
 
-print(f"WWXRP_BONUS_FACTOR (per-N) at 10/30/30/30 split over B=6..9, ETH_BONUS_BPS=500:")
-print(f"{'N':>3} | " + " | ".join(f"BUCKET{B} factor".rjust(20) for B in (6, 7, 8, 9)))
-print("-" * 100)
-for N in range(5):
-    factors = wwxrp_factors(N)
+print(f"WWXRP_BONUS_FACTOR (honest, per-(N,hero-gold)) at 10/30/30/30 split over B=6..9, ETH_BONUS_BPS=500:")
+print(f"{'sub-case':>16} | " + " | ".join(f"BUCKET{B} factor".rjust(20) for B in (6, 7, 8, 9)))
+print("-" * 110)
+for (N, g) in HONEST_SUBCASES:
+    factors = wwxrp_factors_honest(N, g)
     cells = " | ".join(f"{factors[B]:>20,}" for B in (6, 7, 8, 9))
-    print(f"{N:>3} | {cells}")
+    print(f"{_sub_label(N, g):>16} | {cells}")
     for B in (6, 7, 8, 9):
-        assert factors[B] < (1 << 64), f"WWXRP factor N={N} B={B} exceeds 64 bits"
+        assert factors[B] < (1 << 64), f"honest factor {_sub_label(N, g)} B={B} exceeds 64 bits"
 print()
 
 # ===================================================================
@@ -346,88 +436,117 @@ print()
 # symbol also matched. The hero is scored into S; the standalone hero
 # multiplier is GONE (no HERO_BOOST / HERO_PENALTY / HERO_SCALE). S = 9
 # is still the all-8-axes event = the M = 8 relabel (P(S=9) + pin
-# byte-identical to HEAD). The PASS_ALL byte-reproduce gate parses this
-# section and diffs vs the contract source — constants are NEVER hand-typed.
+# byte-identical to HEAD).
+#
+# DEC-02 Option B: the HONEST payout + ETH-bonus family is split per
+# (N, hero-is-gold) — names carry a _HEROGOLD_ / _HEROCOMMON_ infix, except
+# N0 (always hero-common) and N4 (always hero-gold) which collapse to one
+# table each (named QUICK_PLAY_PAYOUTS_N0_PACKED / _N4_PACKED, no infix). The
+# WWXRP _RIG_ family below stays AVERAGED at 5 per-N tables (WWXRP drift is
+# by-design don't-care). 453's _getBasePayoutBps gains a heroIsGold selector
+# used ONLY when !isWwxrp (see the dispatch-shape print at the very end).
+#
+# The PASS_ALL byte-reproduce gate parses this section and diffs vs the
+# contract source — constants are NEVER hand-typed.
 # ===================================================================
+
+# Per-(N, hero-gold) constant-name suffix. N0/N4 have a single structurally
+# valid placement, so they collapse to one table each (no HEROGOLD/HEROCOMMON
+# infix); N1/N2/N3 emit both. The contract's _getBasePayoutBps reproduces this
+# collapse: it only consults heroIsGold for N in {1,2,3}.
+def _const_suffix(N, hero_is_gold):
+    if N == 0 or N == 4:
+        return f"N{N}"
+    return f"N{N}_" + ("HEROGOLD" if hero_is_gold else "HEROCOMMON")
+
 
 print("=" * 70)
 print("FINAL PASTE-READY CONSTANTS")
 print("=" * 70)
 
-# Payouts (per-N base table S = 0..7 packed; S = 8 + S = 9 separate uint256s).
-print("\n// Payout tables (per-N): basePayoutEV = 100 centi-x ± rounding")
-for N in range(5):
-    p = tables[N][1]
+# Honest payouts split per (N, hero-gold): S = 0..7 packed; S = 8 + S = 9 separate.
+print("\n// HONEST payout tables (per-(N,hero-gold), Option B): basePayoutEV = 100 centi-x ± rounding")
+print("// N0 (always hero-common) and N4 (always hero-gold) collapse to one table each.")
+for (N, g) in HONEST_SUBCASES:
+    dist, p = honest_tables[(N, g)]
     packed = 0
     for S in range(8):
         packed |= (p[S] & 0xFFFFFFFF) << (S * 32)
-    actual_ev = float(total_ev(p, P_N_TABLE[N]))
+    actual_ev = float(total_ev(p, dist))
     print(
-        f"uint256 private constant QUICK_PLAY_PAYOUTS_N{N}_PACKED = 0x{packed:064x};  // EV={actual_ev:.4f}"
+        f"uint256 private constant QUICK_PLAY_PAYOUTS_{_const_suffix(N, g)}_PACKED = "
+        f"0x{packed:064x};  // {_sub_label(N, g)} EV={actual_ev:.4f}"
     )
 print()
-for N in range(5):
-    p_S8 = tables[N][1][8]
+for (N, g) in HONEST_SUBCASES:
+    p_S8 = honest_tables[(N, g)][1][8]
     print(
-        f"uint256 private constant QUICK_PLAY_PAYOUT_N{N}_S8 = {p_S8:>11};  // {p_S8/100:>12,.2f}x bet"
+        f"uint256 private constant QUICK_PLAY_PAYOUT_{_const_suffix(N, g)}_S8 = "
+        f"{p_S8:>11};  // {_sub_label(N, g)} {p_S8/100:>12,.2f}x bet"
     )
 print()
+# S=9 pins are placement-independent (P(S=9) depends only on the gold COUNT N),
+# so the five per-N S9 pins are UNCHANGED vs HEAD and emitted by N only.
 for N in range(5):
-    p_S9 = tables[N][1][9]
+    p_S9 = S9_PIN[N]
     print(
         f"uint256 private constant QUICK_PLAY_PAYOUT_N{N}_S9 = {p_S9:>11};  // {p_S9/100:>12,.2f}x bet"
     )
 
-# WWXRP factors (per-N, B = 6..9 packed; B = 6 in the low 64 bits).
-print("\n// WWXRP factors (per-N) at 10/30/30/30 split over B=6..9, basePayoutEV=100, ETH_BONUS_BPS=500")
-for N in range(5):
-    factors = wwxrp_factors(N)
+# Honest WWXRP/ETH-bonus factors split per (N, hero-gold): B = 6..9 packed; B = 6 low.
+print("\n// HONEST WWXRP factors (per-(N,hero-gold)) at 10/30/30/30 over B=6..9, basePayoutEV=100, ETH_BONUS_BPS=500")
+for (N, g) in HONEST_SUBCASES:
+    factors = wwxrp_factors_honest(N, g)
     packed = 0
     for i, B in enumerate((6, 7, 8, 9)):
         packed |= (factors[B] & ((1 << 64) - 1)) << (i * 64)
-    print(f"uint256 private constant WWXRP_FACTORS_N{N}_PACKED = 0x{packed:064x};")
+    print(f"uint256 private constant WWXRP_FACTORS_{_const_suffix(N, g)}_PACKED = 0x{packed:064x};")
 
-# Per-pick EV verification
-print("\n// Per-pick basePayoutEV verification (centi-x):")
-print(f"// {'N':>3} | basePayoutEV | drift from 100")
-for N in range(5):
-    ev_frac = total_ev(tables[N][1], P_N_TABLE[N])
+# Per-pick EV verification (Option B: each sub-case vs its OWN dist)
+print("\n// Per-(N,hero-gold) honest basePayoutEV verification (centi-x):")
+print(f"// {'sub-case':>16} | basePayoutEV | drift from 100")
+for (N, g) in HONEST_SUBCASES:
+    dist, payouts = honest_tables[(N, g)]
+    ev_frac = total_ev(payouts, dist)
     ev = float(ev_frac)
     drift_bps = (ev - 100) * 100
     # Baseline must be neutral-or-just-under: <= 100 centi-x (never EV-positive)
     # and within 0.5 centi-x of neutral (so it is ~100%, not a slack house edge).
+    # Under Option B this holds PER sub-case (each table is EV-exact for its own
+    # placement), so the hero-common EV>100 edge measured in 452-02 is closed.
     assert ev_frac <= Fraction(TARGET_EV), (
-        f"N={N} basePayoutEV {ev} exceeds 100 centi-x — baseline must be neutral or just under"
+        f"{_sub_label(N, g)} basePayoutEV {ev} exceeds 100 centi-x — baseline must be neutral or just under"
     )
     assert ev_frac > Fraction(TARGET_EV) - 1, (
-        f"N={N} basePayoutEV {ev} drifts more than 0.5 centi-x below neutral"
+        f"{_sub_label(N, g)} basePayoutEV {ev} drifts more than 0.5 centi-x below neutral"
     )
-    print(f"// {N:>3} |  {ev:>9.5f}   |  {drift_bps:+.4f} bps")
+    print(f"// {_sub_label(N, g):>16} |  {ev:>9.5f}   |  {drift_bps:+.4f} bps")
 
-# ETH-bonus EV verification
-print("\n// ETH-bonus EV verification (target = 5.0000%):")
-for N in range(5):
-    payouts = tables[N][1]
-    factors = wwxrp_factors(N)
+# ETH-bonus EV verification (per sub-case)
+print("\n// Per-(N,hero-gold) honest ETH-bonus EV verification (target = 5.0000%):")
+for (N, g) in HONEST_SUBCASES:
+    dist, payouts = honest_tables[(N, g)]
+    factors = wwxrp_factors_honest(N, g)
     total_bonus = sum(
-        P_N_TABLE[N][B] * payouts[B] / 100 *
+        dist[B] * payouts[B] / 100 *
         (ETH_BONUS_BPS * Fraction(factors[B], WWXRP_SCALE)) / 10000
         for B in (6, 7, 8, 9)
     )
     drift_bps = (float(total_bonus) - 0.05) * 10000
     assert abs(float(total_bonus) - 0.05) < 0.05 * 0.01, (
-        f"N={N} ETH bonus EV {float(total_bonus)} outside ±1% of 5%"
+        f"{_sub_label(N, g)} ETH bonus EV {float(total_bonus)} outside ±1% of 5%"
     )
-    print(f"//   N={N}: bonus EV = {float(total_bonus)*100:.6f}%   drift {drift_bps:+.4f} bps")
+    print(f"//   {_sub_label(N, g):>16}: bonus EV = {float(total_bonus)*100:.6f}%   drift {drift_bps:+.4f} bps")
 
-# Total ticket EV at MAX activity for ETH player
-print("\n// Total ETH player RTP @ MAX activity (9990 bps + 5% bonus):")
-for N in range(5):
-    base_ev = float(total_ev(tables[N][1], P_N_TABLE[N])) / 100
+# Total ticket EV at MAX activity for ETH player (per sub-case)
+print("\n// Per-(N,hero-gold) honest total ETH player RTP @ MAX activity (9990 bps + 5% bonus):")
+for (N, g) in HONEST_SUBCASES:
+    dist, payouts = honest_tables[(N, g)]
+    base_ev = float(total_ev(payouts, dist)) / 100
     base_rtp = base_ev * 0.999
     bonus = 0.05
     total = base_rtp + bonus
-    print(f"//   N={N}: total RTP = {total*100:.4f}%")
+    print(f"//   {_sub_label(N, g):>16}: total RTP = {total*100:.4f}%")
 
 
 # ===================================================================
@@ -439,12 +558,14 @@ for N in range(5):
 # is excluded). No-op colors and the hero symbol are excluded; when the
 # eligible pool is empty there is no lift that round. Caps at M=7 so the
 # rig can NEVER manufacture S=9 -> P(S=9) is INVARIANT (RIG-02), and
-# display==score stays honest (RIG-03). WWXRP gets its OWN per-N base
-# tables (EV=100 centi-x under the RIGGED dist, EV-equality across picks
-# preserved) + its OWN factors. S=9 reuses the honest
-# QUICK_PLAY_PAYOUT_N{N}_S9 pin (P(S=9) unchanged by the rig). ETH/FLIP
-# keep the honest tables above. Names carry a _RIG_ infix. The
-# byte-reproduce gate parses these from the SAME FINAL block.
+# display==score stays honest (RIG-03). WWXRP gets its OWN 5 per-N base
+# tables (EV=100 centi-x under the RIGGED dist) + its OWN factors. Per
+# DEC-02 Option B the rigged family stays AVERAGED at 5 per-N tables — it is
+# NOT split per (N, hero-is-gold) like the honest lane, because WWXRP
+# hero-placement drift is accepted by-design (USER don't-care ruling). S=9
+# reuses the honest QUICK_PLAY_PAYOUT_N{N}_S9 pin (P(S=9) unchanged by the
+# rig). ETH/FLIP keep the per-(N,hero-gold) honest tables above. Names carry
+# a _RIG_ infix. The byte-reproduce gate parses these from the SAME FINAL block.
 # ===================================================================
 
 _HERO_BERN = [Fraction(7, 8), Fraction(1, 8)]  # hero matched 0/1
@@ -489,8 +610,12 @@ def p_score_distribution_rigged(n_gold):
     empty (e == 0) -> NO lift that round; the mass stays at baseS even though the
     3/5 gate would otherwise fire.
 
-    DEC-02 Option A (same as the honest dist): the per-N rigged distribution is
-    averaged over hero placement (hero gold w.p. n_gold/4, common w.p. (4-n_gold)/4).
+    DEC-02 Option B (WWXRP stays averaged by-design): the HONEST family is split per
+    (N, hero-is-gold) for exact EV-equality, but the rigged WWXRP family is kept
+    AVERAGED over hero placement (hero gold w.p. n_gold/4, common w.p. (4-n_gold)/4) —
+    WWXRP hero-placement drift is accepted by-design per the USER don't-care ruling
+    ("worthless shitcoin"). So this rigged distribution stays a single averaged per-N
+    table; only the honest lane splits.
     """
     pf = Fraction(3, 5)
     out = [Fraction(0)] * 10
@@ -550,24 +675,8 @@ for N in range(5):
     P_N_RIG.append(rig)
 
 
-def _solve_table(pS, N):
-    """Identical SHAPE+S9-pin solve as the honest tables, against pS."""
-    ev_fixed = Fraction(S9_PIN[N]) * pS[9]
-    shape_ev_N = sum(Fraction(SHAPE[k]) * pS[k] for k in range(2, 9))
-    scale = (Fraction(TARGET_EV) - ev_fixed) / shape_ev_N
-    payouts = (
-        [0, 0]
-        + [round(Fraction(SHAPE[k]) * scale) for k in range(2, 9)]
-        + [S9_PIN[N]]
-    )
-    for adj in (4, 5, 6):
-        residual = Fraction(TARGET_EV) - total_ev(payouts, pS)
-        payouts[adj] += round(residual / pS[adj])
-    while total_ev(payouts, pS) > Fraction(TARGET_EV):
-        payouts[6] -= 1
-    return payouts
-
-
+# `_solve_table` (defined above, shared with the honest Option-B sub-cases) is reused
+# UNCHANGED for the averaged WWXRP _RIG_ family — same SHAPE / S9 pin / residual solve.
 tables_rig = [_solve_table(P_N_RIG[N], N) for N in range(5)]
 
 
@@ -622,64 +731,28 @@ for N in range(5):
 
 
 # ===================================================================
-# EVEQ-01 / DEC-02 Option A — hero-placement EV-drift measurement.
-# Variant-2 gates color behind symbol, so within a FIXED N a hero-gold
-# ticket and a hero-common ticket have slightly different score
-# distributions. The single per-N honest table averages over hero
-# placement at P(hero gold | N) = N/4. This section MEASURES, per N, the
-# worst-case |EV_gold - EV_common| of the SAME solved per-N honest table
-# evaluated against each hero-placement sub-case distribution, reports the
-# max across N, and prints the DEC-02 verdict. DEC-02 Option A is LOCKED
-# (5 per-N tables); no per-(N, hero-is-gold) tables are added. Each per-N
-# table already asserts EV <= 100 (above), so Option A is solvency-safe
-# regardless of the residual drift (USER: WWXRP gold drift is don't-care).
+# EVEQ-01 / DEC-02 Option B — hero-placement EV-drift CONFIRMATION.
+# Under Option B each honest sub-case has its OWN table solved against its
+# OWN Variant-2 distribution, so the hero-placement EV drift is closed: this
+# section reports, per N, EV(hero gold | gold's own table) vs EV(hero common
+# | common's own table) and confirms the residual is ~0 (within _solve_table
+# rounding), << the old 2.99 centi-x averaged-table edge. (Detailed verdict +
+# residual line + the WWXRP-by-design note are emitted in Task 2's rewrite.)
+# `_hero_placement_subcase` is defined once at the top of the file.
 # ===================================================================
 
-
-def _hero_placement_subcase(n_gold, hero_is_gold):
-    """Variant-2 P(S) for a fixed N and a FIXED hero placement (no averaging).
-
-    Reuses the exact per-quadrant convolution of `p_score_distribution`, but for a
-    single hero-placement branch:
-      hero gold   : hero color = gold;   ordinary colors = (N-1) gold + (4-N) common
-      hero common : hero color = common; ordinary colors =  N    gold + (3-N) common
-    Returns a length-10 distribution (sums to 1). Returns None when the requested
-    placement is impossible for this N (hero gold needs N>=1; hero common needs N<=3)."""
-    if hero_is_gold:
-        if n_gold < 1:
-            return None
-        ord_gold, ord_common = n_gold - 1, 4 - n_gold
-        hero_color = P_COLOR_GOLD[1]
-    else:
-        if n_gold > 3:
-            return None
-        ord_gold, ord_common = n_gold, 3 - n_gold
-        hero_color = P_COLOR_COMMON[1]
-    sub = _hero_quadrant_dist(hero_color)
-    for _ in range(ord_gold):
-        sub = convolve(sub, _ordinary_quadrant_dist(P_COLOR_GOLD[1]))
-    for _ in range(ord_common):
-        sub = convolve(sub, _ordinary_quadrant_dist(P_COLOR_COMMON[1]))
-    while len(sub) < 10:
-        sub.append(Fraction(0))
-    assert sum(sub) == 1, f"hero-placement sub-case N={n_gold} gold={hero_is_gold} != 1"
-    return sub
-
-
 print("\n" + "=" * 70)
-print("EVEQ-01 / DEC-02 Option A — hero-placement EV-drift (centi-x)")
+print("EVEQ-01 / DEC-02 Option B — hero-placement EV-drift (centi-x), each vs OWN table")
 print("=" * 70)
 print(f"// {'N':>3} | {'EV(hero gold)':>14} | {'EV(hero common)':>16} | {'|drift|':>10}")
 max_drift = Fraction(0)
 max_drift_N = None
 for N in range(5):
-    table = tables[N][1]  # the SAME solved per-N honest table
     sub_gold = _hero_placement_subcase(N, True)
     sub_common = _hero_placement_subcase(N, False)
-    # Edge N: at N=0 there is no hero-gold sub-case; at N=4 there is no hero-common.
-    # The single existing sub-case is exactly the per-N dist -> zero placement drift.
-    ev_gold = total_ev(table, sub_gold) if sub_gold is not None else None
-    ev_common = total_ev(table, sub_common) if sub_common is not None else None
+    # Option B: evaluate each sub-case against its OWN solved table.
+    ev_gold = total_ev(honest_tables[(N, True)][1], sub_gold) if sub_gold is not None else None
+    ev_common = total_ev(honest_tables[(N, False)][1], sub_common) if sub_common is not None else None
     if ev_gold is not None and ev_common is not None:
         drift = abs(ev_gold - ev_common)
         gold_s = f"{float(ev_gold):>14.5f}"
@@ -692,51 +765,10 @@ for N in range(5):
         max_drift = drift
         max_drift_N = N
     print(f"// {N:>3} | {gold_s} | {common_s} | {float(drift):>10.5f}")
-# Solvency note (per CONTEXT DEC-02): the existing per-N EV-<=100 assert (the
-# "Per-pick basePayoutEV verification" loop above) guarantees every per-N table is
-# neutral-or-just-under against its AVERAGED hero-placement distribution — that is the
-# priced-across-picks house-edge guarantee and it still holds. Within a fixed N the
-# hero-COMMON sub-case can sit slightly above 100 and the hero-GOLD sub-case slightly
-# below (the averaging is exactly neutral), so we report each sub-case EV here rather
-# than hard-asserting per-sub-case <=100 — that per-sub-case split IS the EV drift this
-# section measures. (USER ruling: residual WWXRP gold-payout drift is don't-care; the
-# averaged table is what the contract prices.)
-assert max_drift < Fraction(100), (
-    f"max hero-placement drift {float(max_drift)} centi-x is non-finite/absurd"
-)
 print(
     f"// MAX hero-placement EV drift across N = {float(max_drift):.5f} centi-x"
     + (f" (at N={max_drift_N})" if max_drift_N is not None else "")
 )
-TOL_CENTI_X = Fraction(1, 2)  # ~0.5 centi-x neutral-or-just-under tolerance
-if max_drift <= TOL_CENTI_X:
-    print(
-        f"// DEC-02 verdict: Option A kept (5 per-N tables) — max drift "
-        f"{float(max_drift):.5f} centi-x within ~{float(TOL_CENTI_X)} centi-x tolerance."
-    )
-else:
-    print(
-        f"// DEC-02 verdict: ESCALATE to Option B — max drift {float(max_drift):.5f} "
-        f"centi-x grossly EXCEEDS the ~{float(TOL_CENTI_X)} centi-x tolerance."
-    )
-    print(
-        "//   NOTE: the hero-COMMON sub-case EV exceeds 100 centi-x at N=1..3 (EV-positive"
-    )
-    print(
-        "//   to the player on those picks), so the averaged-table solvency note from the"
-    )
-    print(
-        "//   452 CONTEXT (which assumed BOTH sub-cases stay <=100) does NOT hold under the"
-    )
-    print(
-        "//   measured Variant-2 drift. Per EVEQ-01 / DEC-02, this is exactly the 'grossly"
-    )
-    print(
-        "//   outside tolerance' trigger to revisit Option B (index by (N, hero-is-gold))."
-    )
-    print(
-        "//   USER + 453 IMPL decision required — Option A is NOT silently kept here."
-    )
 
 
 # ===================================================================
