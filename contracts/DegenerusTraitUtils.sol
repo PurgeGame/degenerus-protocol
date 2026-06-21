@@ -304,40 +304,4 @@ library DegenerusTraitUtils {
             return (color << 3) | symbol;
         }
     }
-
-    /// @notice Produces a 6-bit boosted trait ID from a 64-bit random word.
-    /// @dev Thin wrapper that builds the ladder for `multBps` and walks it once.
-    ///      Callers resolving many entries at one multiplier (a pack, a queue drain)
-    ///      should hoist `foilCuts` and call `foilTrait` directly to avoid rebuilding
-    ///      the ladder per entry.
-    /// @param s 64-bit random input value
-    /// @param multBps frozen activity multiplier in bps (10000 = 1x; range 20000..60000)
-    /// @return 6-bit boosted trait ID (0-63, quadrant bits not included)
-    function traitFromWordFoil(uint64 s, uint16 multBps) internal pure returns (uint8) {
-        return foilTrait(s, foilCuts(multBps));
-    }
-
-    /// @notice Packs 4 quadrant traits using the activity-boosted foil color
-    ///         distribution (the /15360 tapered ladder) and uniform 1/8 symbol.
-    /// @dev Splits the 256-bit seed into 4 x 64-bit lanes, derives a boosted 6-bit
-    ///      trait from each via foilTrait, adds the quadrant identifier, and packs
-    ///      four bytes in the IDENTICAL [QQ][CCC][SSS]-per-byte layout as
-    ///      packedTraitsFromSeed / packedTraitsDegenerette. The cutoff ladder depends
-    ///      only on multBps, so it is built once here and shared across the four lanes.
-    ///      Buy-side only — it rolls the four frozen foilRecord match signatures.
-    /// @param rand 256-bit random seed (typically from keccak256)
-    /// @param multBps frozen activity multiplier in bps (10000 = 1x; range 20000..60000)
-    /// @return 32-bit packed traits value with boosted color + uniform symbol
-    function packedTraitsFoil(uint256 rand, uint16 multBps) internal pure returns (uint32) {
-        uint256[7] memory cut = foilCuts(multBps);
-        uint8 traitA = foilTrait(uint64(rand), cut);               // Quadrant 0: bits 7-6 = 00
-        uint8 traitB = foilTrait(uint64(rand >> 64), cut)  | 64;   // Quadrant 1: bits 7-6 = 01
-        uint8 traitC = foilTrait(uint64(rand >> 128), cut) | 128;  // Quadrant 2: bits 7-6 = 10
-        uint8 traitD = foilTrait(uint64(rand >> 192), cut) | 192;  // Quadrant 3: bits 7-6 = 11
-        return uint32(traitA)
-             | (uint32(traitB) << 8)
-             | (uint32(traitC) << 16)
-             | (uint32(traitD) << 24);
-    }
-
 }

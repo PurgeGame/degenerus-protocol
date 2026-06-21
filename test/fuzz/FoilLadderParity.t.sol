@@ -5,13 +5,12 @@ import {Test} from "forge-std/Test.sol";
 import {DegenerusTraitUtils} from "../../contracts/DegenerusTraitUtils.sol";
 
 /// @title FoilLadderParityTest
-/// @notice Pins the v71 foil-producer refactor — `traitFromWordFoil` split into
-///         `foilCuts(multBps)` (the cumulative cutoff ladder) + `foilTrait(s, cut)`
-///         (the walk + symbol) — against a frozen reference copy of the prior
-///         inline producer. The ladder depends only on multBps, so the refactor
-///         hoists it; these fuzz proofs assert the hoist is byte-identical and the
-///         ladder stays well-formed (monotone, sums to exactly 15360) across the
-///         full multBps range [20000, 60000].
+/// @notice Pins the live foil producer — `foilCuts(multBps)` (the cumulative
+///         cutoff ladder) + `foilTrait(s, cut)` (the walk + symbol) — against a
+///         frozen reference copy of the prior inline producer. The ladder depends
+///         only on multBps, so it is hoisted once; these fuzz proofs assert the
+///         hoist is byte-identical and the ladder stays well-formed (monotone,
+///         sums to exactly 15360) across the full multBps range [20000, 60000].
 contract FoilLadderParityTest is Test {
     /// @dev Frozen reference: the pre-refactor inline `traitFromWordFoil` body.
     function _oldTraitFromWordFoil(uint64 s, uint16 multBps) internal pure returns (uint8) {
@@ -48,30 +47,13 @@ contract FoilLadderParityTest is Test {
         return uint16(20000 + (uint256(raw) % 40001)); // [20000, 60000]
     }
 
-    /// @notice The kept wrapper is byte-identical to the old inline producer.
-    function testFuzz_traitFromWordFoilParity(uint64 s, uint16 raw) public {
-        uint16 m = _mult(raw);
-        assertEq(DegenerusTraitUtils.traitFromWordFoil(s, m), _oldTraitFromWordFoil(s, m));
-    }
-
-    /// @notice The hoist path foilTrait(s, foilCuts(m)) — used by the queue drain
-    ///         and packedTraitsFoil — equals the old inline producer.
+    /// @notice The hoist path foilTrait(s, foilCuts(m)) — the live foil producer
+    ///         used by the queue drain and the foil claim — equals the old inline
+    ///         producer.
     function testFuzz_foilTraitHoistParity(uint64 s, uint16 raw) public {
         uint16 m = _mult(raw);
         uint256[7] memory cut = DegenerusTraitUtils.foilCuts(m);
         assertEq(DegenerusTraitUtils.foilTrait(s, cut), _oldTraitFromWordFoil(s, m));
-    }
-
-    /// @notice The 4-lane packed producer equals four old single-lane producers
-    ///         with the quadrant bits applied.
-    function testFuzz_packedTraitsFoilParity(uint256 rand, uint16 raw) public {
-        uint16 m = _mult(raw);
-        uint8 a = _oldTraitFromWordFoil(uint64(rand), m);
-        uint8 b = _oldTraitFromWordFoil(uint64(rand >> 64), m) | 64;
-        uint8 c = _oldTraitFromWordFoil(uint64(rand >> 128), m) | 128;
-        uint8 d = _oldTraitFromWordFoil(uint64(rand >> 192), m) | 192;
-        uint32 want = uint32(a) | (uint32(b) << 8) | (uint32(c) << 16) | (uint32(d) << 24);
-        assertEq(DegenerusTraitUtils.packedTraitsFoil(rand, m), want);
     }
 
     /// @notice The cutoff ladder is monotone non-decreasing and the seven cutoffs
