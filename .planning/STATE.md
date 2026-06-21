@@ -4,12 +4,12 @@ milestone: v73.0
 milestone_name: Degenerette Variant-2 Color-Gated Rescore (+ WWXRP preservation)
 status: planning
 last_updated: "2026-06-21"
-last_activity: 2026-06-21 -- 452 EXECUTING; wave 1 DONE (452-01: Variant-2 honest dist + DEC-01 R2 rigged dist; generator exit 0, S=9 byte-identical to HEAD, rigged EV in (99,100], commits 15457fa0/6a29234d); NEXT = wave 2 (452-02: regen constants + EV-drift + P(S=9)/RTP pre-proof) -- no contract edit, runs autonomously
+last_activity: 2026-06-21 -- 452 GEN EXECUTED (both waves; generator exit 0, all self-asserts green; pre-proof PASSED: honest==rigged==HEAD P(S=9) exact, WWXRP RTP curve held). ⚠ EVEQ-01 FINDING: hero-placement EV-drift = 2.99 centi-x (N=3); hero-COMMON sub-case EV-POSITIVE (100.7/101.5/102.2 at N=1-3) on the HONEST ETH/FLIP lane -> DEC-02 premise (both <=100) FALSE -> verdict ESCALATE to Option B. PAUSED for USER DEC-02 decision (A-accept / B-per-(N,hero-gold) tables+dispatch) before 453 IMPL. Commits 67d3b3d8/483a5ea4/e3808d05.
 progress:
   total_phases: 5
   completed_phases: 0
   total_plans: 2
-  completed_plans: 0
+  completed_plans: 2
   percent: 0
 ---
 
