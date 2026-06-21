@@ -29,6 +29,22 @@ WWXRP S=9 whale-pass bracket are byte-identical to HEAD. Effect: main slot moves
 ## Implementation Decisions
 
 ### DEC-01 — WWXRP rig mechanism (`_rigWwxrpResult`)
+
+> **⚑ REFINED 2026-06-21 (453-prep): the "+1 unlock" → USER chose "allow +2, but not a 9".**
+> While preparing the 453 contract diff, cross-checking the generator's R2 model against the
+> contract revealed DEC-01's "an unmatched non-hero symbol (always +1)" is NOT always +1: under
+> Variant-2, forcing the symbol on a quadrant whose COLOR already matched (a gated no-op color)
+> UNLOCKS the color too → **+2**, not +1. The generator (452-01) modeled a flat +1, which the
+> contract cannot reproduce on such a cell. USER ruling: **allow the +2 unlock** (stronger
+> near-win reel), **but the rig must never produce S=9.** That is structurally guaranteed by the
+> existing **m≥7 cap** (rig fires only at M≤6 → one force → M≤7 → S≤8) and proved by the
+> `rig[9]==honest[9]` self-assert. Generator `p_score_distribution_rigged` updated 2026-06-21
+> (452-04) to model the per-pick +1/+2 lift; rigged WWXRP tables recalibrated (EV still ∈(99,100],
+> P(S=9) invariant). Rig now ~37% win rate (was ~19.5% honest); WWXRP-rigged-lane only — honest
+> lane, P(S=9), S9 pins, and the RTP curve are unaffected. The 453 contract `_rigWwxrpResult`
+> pool = {unmatched non-hero symbols} ∪ {unmatched colors on symbol-matched quads}, uniform pick,
+> m≥7 cap; a 454 behavioral test will prove the contract rig's score-effect == this generator model.
+
 - **D-01: R2 — score-bearing rig.** Narrow the rig's eligible-cell pool to cells that actually
   raise S under Variant-2: an unmatched **non-hero symbol** (always +1), or an unmatched
   **color on a quadrant whose symbol already matched** (color "unlocks" → +1). Exclude no-op

@@ -597,13 +597,18 @@ def p_score_distribution_rigged(n_gold):
     quadrant's symbol matched; hero symbol +2), (b) the total matched-axis count
     M = sum of all eight per-axis matches, and (c) the SCORE-BEARING eligible-cell
     count e — the cells whose forced match RAISES S under Variant-2 (DEC-01 R2):
-        (a) an unmatched NON-HERO symbol cell  -> forcing it scores +1;
+        (a) an unmatched NON-HERO symbol cell -> forcing the symbol scores +1 if that
+            quadrant's color is ALSO unmatched, or +2 if the color already matched (the
+            forced symbol UNLOCKS the gated color — USER ruling: allow the +2 unlock);
         (b) an unmatched COLOR on a quadrant whose symbol ALREADY matched
             (sm==1, cm==0; the color "unlocks" -> +1; includes the hero quadrant's
              COLOR, which is an ordinary axis — only the hero SYMBOL is excluded).
     EXCLUDED from the pool: the hero symbol cell (never rigged) and *no-op* colors
     (a color on a quadrant whose symbol is still unmatched buys nothing under
-    Variant-2). Whichever eligible cell the rig picks, the modeled lift is exactly +1.
+    Variant-2). The rig picks ONE eligible cell uniformly; the lift is +1 (most cells)
+    or +2 (forcing a symbol onto an already-color-matched quad). The m>=7 cap means a
+    fired roll has M<=6 -> post-force M<=7 -> S<=8, so a +2 can NEVER reach S=9
+    ("not if it makes a 9/9"); the rig[9]==honest[9] assert is the hard proof.
 
     Explicit EMPTY-ELIGIBLE-POOL case: when M <= 6 but every unmatched cell is an
     excluded one (the hero symbol and/or no-op colors), the score-bearing pool is
@@ -634,10 +639,14 @@ def p_score_distribution_rigged(n_gold):
             quads.append((_quad_states(P_COLOR_COMMON[1]), False))
         # Fold the four quadrants into a joint distribution over (S, M, e).
         # partials maps (S, M, e) -> probability of reaching that partial state.
-        partials = {(0, 0, 0): weight}
+        # Track score-bearing eligible cells split by the lift they yield when forced:
+        # e1 = cells that lift +1, e2 = cells that lift +2 (the color-unlock). The rig
+        # picks ONE eligible cell uniformly, so the realized lift is +1 w.p. e1/(e1+e2)
+        # and +2 w.p. e2/(e1+e2). partials key = (S, M, e1, e2).
+        partials = {(0, 0, 0, 0): weight}
         for states, is_hero in quads:
             nxt = {}
-            for (S, M, e), pacc in partials.items():
+            for (S, M, e1, e2), pacc in partials.items():
                 for sm, cm, pp in states:
                     dS = 0
                     if sm == 1:
@@ -645,23 +654,37 @@ def p_score_distribution_rigged(n_gold):
                         if cm == 1:
                             dS += 1
                     dM = sm + cm
-                    de = 0
+                    de1 = 0
+                    de2 = 0
                     if (not is_hero) and sm == 0:
-                        de += 1  # (a) unmatched non-hero symbol
+                        # (a) unmatched non-hero symbol -> force the symbol.
+                        #   color also unmatched (cm==0) -> +1; color already matched
+                        #   (cm==1, a gated no-op color) -> the force UNLOCKS it -> +2.
+                        if cm == 0:
+                            de1 += 1
+                        else:
+                            de2 += 1
                     if sm == 1 and cm == 0:
-                        de += 1  # (b) unmatched color on a symbol-matched quadrant
-                    key = (S + dS, M + dM, e + de)
+                        de1 += 1  # (b) unmatched color on a symbol-matched quad -> +1
+                    key = (S + dS, M + dM, e1 + de1, e2 + de2)
                     nxt[key] = nxt.get(key, Fraction(0)) + pacc * pp
             partials = nxt
-        # Apply the rig per full-roll outcome.
-        for (S, M, e), p in partials.items():
+        # Apply the rig per full-roll outcome. When the 3/5 gate fires the rig picks one
+        # score-bearing cell uniformly: lift +1 (e1 cells) or +2 (e2 unlock cells). The
+        # m>=7 cap means a fired roll has M<=6 -> post-force M<=7 -> S<=8, so a +2 can
+        # NEVER reach S=9 (USER: "allow +2 but not if it makes a 9/9"); the
+        # rig[9]==honest[9] assert below is the hard proof of the P(S=9) invariant.
+        for (S, M, e1, e2), p in partials.items():
+            etot = e1 + e2
             if M >= 7:
                 out[S] += p  # m>=7 cap: untouched -> P(S=9) invariant
-            elif e == 0:
+            elif etot == 0:
                 out[S] += p  # empty eligible pool: no lift this round
             else:
-                out[S] += p * (1 - pf)
-                out[S + 1] += p * pf
+                out[S] += p * (1 - pf)                      # 40% gate no-op
+                out[S + 1] += p * pf * Fraction(e1, etot)   # picked a +1 cell
+                if e2:
+                    out[S + 2] += p * pf * Fraction(e2, etot)  # picked a +2 unlock cell
     assert sum(out) == 1, f"rigged P_N(S) N={n_gold} != 1"
     assert len(out) == 10
     return out
