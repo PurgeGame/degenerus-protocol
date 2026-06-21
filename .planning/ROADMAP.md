@@ -41,8 +41,8 @@
 4. `forge build` clean; EIP-170 fits.
 5. The diff lands as ONE batched commit only after explicit USER hand-review (commit-guard `CONTRACTS_COMMIT_APPROVED=1` + hook move-aside) — produces the byte-frozen v73 subject.
 
-**Plans:** 1 plan (1 wave)
-- [ ] 453-01-PLAN.md — Variant-2 _score + DEC-01 R2 _rigWwxrpResult + Option-B per-(N,heroIsGold) constants + heroIsGold dispatch threading; single-file diff, present for USER approval, DO NOT commit (SCORE-01/02/03, RIG-01/02/03, IMPL-01)
+**Plans:** 1 plan (1 wave) — ✅ SHIPPED 2026-06-21 (USER-approved diff; commit `64ec993e`; v73 byte-frozen subject `contracts/` tree `d6615306`)
+- [x] 453-01-PLAN.md — Variant-2 _score + DEC-01 R2 _rigWwxrpResult (+2 unlock, never S=9) + Option-B per-(N,heroIsGold) constants + heroIsGold dispatch threading; single-file diff (SCORE-01/02/03, RIG-01/02/03, IMPL-01)
 
 ## Phase 454 — TST
 

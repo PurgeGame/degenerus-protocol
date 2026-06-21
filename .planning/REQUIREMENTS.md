@@ -15,15 +15,15 @@
 
 ### SCORE — the rule change (`_score`)
 
-- [ ] **SCORE-01**: `_score` implements Variant-2 — per quadrant, a symbol match scores +1 (hero symbol +2); the color scores +1 **only if that quadrant's symbol also matched**. Score S∈{0..9} unchanged.
-- [ ] **SCORE-02**: Pay floor stays **S≥2** — a lone ordinary (non-hero) symbol match pays 0; a hero symbol or a full color+symbol double pays. (Confirms DEC-03.)
-- [ ] **SCORE-03**: S=9 remains the all-8-axes event — the S=9 jackpot odds P(S=9), the jackpot pin values, and the WWXRP S=9 whale-pass bracket award are **byte-identical to HEAD**.
+- [x] **SCORE-01**: `_score` implements Variant-2 — per quadrant, a symbol match scores +1 (hero symbol +2); the color scores +1 **only if that quadrant's symbol also matched**. Score S∈{0..9} unchanged.
+- [x] **SCORE-02**: Pay floor stays **S≥2** — a lone ordinary (non-hero) symbol match pays 0; a hero symbol or a full color+symbol double pays. (Confirms DEC-03.)
+- [x] **SCORE-03**: S=9 remains the all-8-axes event — the S=9 jackpot odds P(S=9), the jackpot pin values, and the WWXRP S=9 whale-pass bracket award are **byte-identical to HEAD**.
 
 ### RIG — WWXRP rig adaptation (`_rigWwxrpResult`)
 
-- [ ] **RIG-01**: `_rigWwxrpResult` is adapted to force **score-bearing** cells under Variant-2 (mechanism per DEC-01: R2 = force an unmatched non-hero symbol, or an unmatched color on a quadrant whose symbol already matches; R1 = leave-rig fallback).
-- [ ] **RIG-02**: P(S=9) is preserved under the rig via the existing **m≥7 cap** — the rig never manufactures an S=9 that honest play would not have produced at the pinned rate.
-- [ ] **RIG-03**: If R2 is chosen, the rig keeps **display==score honest** and preserves the ~60% near-win lift.
+- [x] **RIG-01**: `_rigWwxrpResult` is adapted to force **score-bearing** cells under Variant-2 (mechanism per DEC-01: R2 = force an unmatched non-hero symbol, or an unmatched color on a quadrant whose symbol already matches; R1 = leave-rig fallback).
+- [x] **RIG-02**: P(S=9) is preserved under the rig via the existing **m≥7 cap** — the rig never manufactures an S=9 that honest play would not have produced at the pinned rate.
+- [x] **RIG-03**: If R2 is chosen, the rig keeps **display==score honest** and preserves the ~60% near-win lift.
 
 ### GEN — canonical generator (`derive_5_tables.py`)
 
@@ -49,7 +49,7 @@
 
 ### IMPL — the gated contract diff
 
-- [ ] **IMPL-01**: The `_score` rewrite + `_rigWwxrpResult` adaptation + regenerated constant blocks + doc-comment refresh land as **ONE batched `.sol` diff**, committed only after explicit USER approval (the sole approval gate; commit-guard `CONTRACTS_COMMIT_APPROVED=1` + hook move-aside).
+- [x] **IMPL-01**: The `_score` rewrite + `_rigWwxrpResult` adaptation + regenerated constant blocks + doc-comment refresh land as **ONE batched `.sol` diff**, committed only after explicit USER approval (the sole approval gate; commit-guard `CONTRACTS_COMMIT_APPROVED=1` + hook move-aside).
 
 ### AUD — re-audit the betting engine
 
@@ -87,13 +87,13 @@
 | GEN-02 | 452 GEN | Done |
 | GEN-03 | 452 GEN | Done |
 | EVEQ-01 | 452 GEN | Done |
-| SCORE-01 | 453 IMPL | Pending |
-| SCORE-02 | 453 IMPL | Pending |
-| SCORE-03 | 453 IMPL | Pending |
-| RIG-01 | 453 IMPL | Pending |
-| RIG-02 | 453 IMPL | Pending |
-| RIG-03 | 453 IMPL | Pending |
-| IMPL-01 | 453 IMPL | Pending |
+| SCORE-01 | 453 IMPL | Done |
+| SCORE-02 | 453 IMPL | Done |
+| SCORE-03 | 453 IMPL | Done |
+| RIG-01 | 453 IMPL | Done |
+| RIG-02 | 453 IMPL | Done |
+| RIG-03 | 453 IMPL | Done |
+| IMPL-01 | 453 IMPL | Done |
 | TST-01 | 454 TST | Pending |
 | TST-02 | 454 TST | Pending |
 | INV-01 | 454 TST | Pending |
