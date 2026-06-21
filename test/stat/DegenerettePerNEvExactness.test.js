@@ -106,7 +106,7 @@ function parseContractConstants() {
   const src = readFileSync(CONTRACT_PATH, "utf8");
   const out = {};
   const re =
-    /uint256\s+private\s+constant\s+(QUICK_PLAY_PAYOUTS_N\d_PACKED|QUICK_PLAY_PAYOUT_N\d_S[89]|WWXRP_FACTORS_N\d_PACKED)\s*=\s*(0x[0-9a-fA-F]+|[\d_]+)\s*;/g;
+    /uint256\s+private\s+constant\s+(QUICK_PLAY_PAYOUTS_N\d_PACKED|QUICK_PLAY_PAYOUT_N\d_S[89]|WWXRP_FACTORS_N\d_PACKED|QUICK_PLAY_PAYOUTS_RIG_N\d_PACKED|QUICK_PLAY_PAYOUT_RIG_N\d_S8|WWXRP_FACTORS_RIG_N\d_PACKED)\s*=\s*(0x[0-9a-fA-F]+|[\d_]+)\s*;/g;
   let m;
   while ((m = re.exec(src)) !== null) {
     const name = m[1];
@@ -394,4 +394,118 @@ describe("HERO-04 — baseline basePayoutEV neutral-or-just-under (exact contrac
       ).to.equal(true);
     });
   }
+});
+
+// ===========================================================================
+// WWXRP RIG FAMILY — byte-reproduce + rigged-dist neutral baseline + P(S=9)
+// invariance. The rigged WWXRP base tables/factors are calibrated against the
+// RIGGED score distribution (variant-B rig: M<=6 -> flip one unmatched ORDINARY
+// cell w.p. 3/5; never the hero; caps at M=7). ETH/FLIP keep the honest tables
+// (asserted above); these blocks anchor the WWXRP fork.
+// ===========================================================================
+
+// Rigged analytical P_N(S): enumerate (color-count c, non-hero-symbol-count y,
+// hero h); M=c+y+h, base S=c+y+2h. M<=6 -> +1 to S w.p. 3/5 (ordinary-only).
+function riggedAnalyticalPScore(N) {
+  function conv(a, b) {
+    const o = new Array(a.length + b.length - 1).fill(0);
+    for (let i = 0; i < a.length; i++) for (let j = 0; j < b.length; j++) o[i + j] += a[i] * b[j];
+    return o;
+  }
+  let C = [1];
+  for (let q = 0; q < N; q++) C = conv(C, [14 / 15, 1 / 15]);
+  for (let q = 0; q < 4 - N; q++) C = conv(C, [13 / 15, 2 / 15]);
+  let Y = [1];
+  for (let q = 0; q < 3; q++) Y = conv(Y, [7 / 8, 1 / 8]);
+  const H = [7 / 8, 1 / 8];
+  const out = new Array(10).fill(0);
+  const pf = 3 / 5;
+  for (let c = 0; c < C.length; c++)
+    for (let y = 0; y < Y.length; y++)
+      for (let h = 0; h < 2; h++) {
+        const p = C[c] * Y[y] * H[h];
+        const M = c + y + h;
+        const baseS = c + y + 2 * h;
+        if (M >= 7) out[baseS] += p;
+        else {
+          out[baseS] += p * (1 - pf);
+          out[baseS + 1] += p * pf;
+        }
+      }
+  return out;
+}
+
+// RIG dispatch replica: S=9 reuses the honest pin; S=8 + packed S0..7 are the RIG family.
+function jsGetBasePayoutBpsRig(consts, N, s) {
+  if (s >= 9) return consts[`QUICK_PLAY_PAYOUT_N${N}_S9`];
+  if (s === 8) return consts[`QUICK_PLAY_PAYOUT_RIG_N${N}_S8`];
+  const packed = consts[`QUICK_PLAY_PAYOUTS_RIG_N${N}_PACKED`];
+  return (packed >> (BigInt(s) * 32n)) & 0xFFFFFFFFn;
+}
+
+function riggedConstantNames() {
+  const names = [];
+  for (let N = 0; N < 5; N++) {
+    names.push(`QUICK_PLAY_PAYOUTS_RIG_N${N}_PACKED`);
+    names.push(`QUICK_PLAY_PAYOUT_RIG_N${N}_S8`);
+    names.push(`WWXRP_FACTORS_RIG_N${N}_PACKED`);
+  }
+  return names;
+}
+
+describe("WWXRP RIG — byte-reproduce + rigged-dist neutral baseline + P(S=9) invariance", function () {
+  this.timeout(120_000);
+
+  let generated;
+  let contractConsts;
+
+  before(function () {
+    generated = parseConstants(runGenerator());
+    contractConsts = parseContractConstants();
+  });
+
+  it("generator + contract both declare all 15 rigged WWXRP constants", function () {
+    for (const name of riggedConstantNames()) {
+      expect(generated, `generator missing ${name}`).to.have.property(name);
+      expect(contractConsts, `contract missing ${name}`).to.have.property(name);
+    }
+  });
+
+  it("PASS_ALL: every rigged constant byte-matches the contract (diff == 0)", function () {
+    const mismatches = [];
+    for (const name of riggedConstantNames()) {
+      if (generated[name] !== contractConsts[name]) {
+        mismatches.push(
+          `${name}:\n    contract  = 0x${contractConsts[name].toString(16)}\n    generated = 0x${generated[name].toString(16)}`,
+        );
+      }
+    }
+    expect(
+      mismatches.length,
+      `RIG PASS_ALL: ${mismatches.length}/15 rigged constants diverge from the canonical generator:\n${mismatches.join("\n")}`,
+    ).to.equal(0);
+  });
+
+  for (let N = 0; N < 5; N++) {
+    it(`N=${N}: rigged base table EV over rigged P_N(S) is <= 100 and ~100 (>= 99.5) centi-x`, function () {
+      const pS = riggedAnalyticalPScore(N);
+      const total = pS.reduce((a, b) => a + b, 0);
+      expect(Math.abs(total - 1), `rigged P_N(S) sum ${total} != 1`).to.be.lessThan(1e-9);
+
+      let ev = 0;
+      for (let s = 0; s <= 9; s++) ev += pS[s] * Number(jsGetBasePayoutBpsRig(generated, N, s));
+      console.log(`[RIG EV N=${N}] rigged basePayoutEV = ${ev.toFixed(6)} centi-x (must be <= 100, ~100)`);
+      expect(ev <= 100.0 + 1e-6, `RIG N=${N}: rigged EV ${ev.toFixed(6)} is EV-POSITIVE (>100)`).to.equal(true);
+      expect(ev >= 99.5, `RIG N=${N}: rigged EV ${ev.toFixed(6)} too far below 100 (<99.5)`).to.equal(true);
+    });
+  }
+
+  it("the rig leaves P(S=9) invariant (rigged jackpot odds == honest)", function () {
+    for (let N = 0; N < 5; N++) {
+      const r = riggedAnalyticalPScore(N);
+      const h = analyticalPScore(N);
+      const rel = Math.abs(r[9] - h[9]) / h[9];
+      expect(rel < 1e-9, `N=${N}: rig changed P(S=9) (${r[9]} vs honest ${h[9]})`).to.equal(true);
+    }
+  });
 });

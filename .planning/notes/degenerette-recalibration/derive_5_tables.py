@@ -346,3 +346,127 @@ for N in range(5):
     bonus = 0.05
     total = base_rtp + bonus
     print(f"//   N={N}: total RTP = {total*100:.4f}%")
+
+
+# ===================================================================
+# WWXRP RIG FAMILY — variant-B rig (ordinary-only +1, 60%, M<=6 gate).
+# WWXRP spins force one unmatched ORDINARY cell to a real match w.p.
+# 3/5 when M<=6 (never the hero; caps at M=7 so P(S=9) is INVARIANT).
+# WWXRP gets its OWN per-N base tables (EV=100 centi-x under the RIGGED
+# dist, EV-equality across picks preserved) + its OWN factors. S=9 reuses
+# the honest QUICK_PLAY_PAYOUT_N{N}_S9 pin (P(S=9) unchanged by the rig).
+# ETH/FLIP keep the honest tables above. Names carry a _RIG_ infix.
+# The byte-reproduce gate parses these from the SAME FINAL block.
+# ===================================================================
+
+_HERO_BERN = [Fraction(7, 8), Fraction(1, 8)]  # hero matched 0/1
+
+
+def p_score_distribution_rigged(n_gold):
+    """Variant-B rigged P_N(S). Enumerate (color-count c, non-hero-symbol-count y,
+    hero h); M=c+y+h, base S=c+y+2h. If M<=6, flip one unmatched ORDINARY cell
+    w.p. 3/5 (+1 to S). M>=7 (full / 1-off) untouched -> P(S=9) invariant."""
+    Cdist = [Fraction(1)]
+    for _ in range(n_gold):
+        Cdist = convolve(Cdist, P_COLOR_GOLD)
+    for _ in range(4 - n_gold):
+        Cdist = convolve(Cdist, P_COLOR_COMMON)
+    Ydist = [Fraction(1)]
+    for _ in range(3):
+        Ydist = convolve(Ydist, P_SYM)
+
+    pf = Fraction(3, 5)
+    out = [Fraction(0)] * 10
+    for c, pc in enumerate(Cdist):
+        for y, py in enumerate(Ydist):
+            for h, ph in enumerate(_HERO_BERN):
+                p = pc * py * ph
+                M = c + y + h
+                baseS = c + y + 2 * h
+                if M >= 7:
+                    out[baseS] += p
+                else:
+                    out[baseS] += p * (1 - pf)
+                    out[baseS + 1] += p * pf
+    assert sum(out) == 1, f"rigged P_N(S) N={n_gold} != 1"
+    assert len(out) == 10
+    return out
+
+
+# Rigged distribution per N + S=9 invariance vs honest.
+P_N_RIG = []
+for N in range(5):
+    rig = p_score_distribution_rigged(N)
+    assert rig[9] == P_N_TABLE[N][9], f"rig must not change P(S=9) for N={N}"
+    P_N_RIG.append(rig)
+
+
+def _solve_table(pS, N):
+    """Identical SHAPE+S9-pin solve as the honest tables, against pS."""
+    ev_fixed = Fraction(S9_PIN[N]) * pS[9]
+    shape_ev_N = sum(Fraction(SHAPE[k]) * pS[k] for k in range(2, 9))
+    scale = (Fraction(TARGET_EV) - ev_fixed) / shape_ev_N
+    payouts = (
+        [0, 0]
+        + [round(Fraction(SHAPE[k]) * scale) for k in range(2, 9)]
+        + [S9_PIN[N]]
+    )
+    for adj in (4, 5, 6):
+        residual = Fraction(TARGET_EV) - total_ev(payouts, pS)
+        payouts[adj] += round(residual / pS[adj])
+    while total_ev(payouts, pS) > Fraction(TARGET_EV):
+        payouts[6] -= 1
+    return payouts
+
+
+tables_rig = [_solve_table(P_N_RIG[N], N) for N in range(5)]
+
+
+def wwxrp_factors_rig(N):
+    payouts = tables_rig[N]
+    factors = {}
+    for B in (6, 7, 8, 9):
+        f = SPLITS[B] * 100 * WWXRP_SCALE / (P_N_RIG[N][B] * payouts[B])
+        factors[B] = round(float(f))
+    return factors
+
+
+print("\n" + "=" * 70)
+print("WWXRP RIG FAMILY — FINAL PASTE-READY CONSTANTS (variant B)")
+print("=" * 70)
+print("\n// Rigged WWXRP base tables (per-N): basePayoutEV = 100 centi-x under the rigged dist")
+for N in range(5):
+    p = tables_rig[N]
+    packed = 0
+    for S in range(8):
+        packed |= (p[S] & 0xFFFFFFFF) << (S * 32)
+    ev = float(total_ev(p, P_N_RIG[N]))
+    print(f"uint256 private constant QUICK_PLAY_PAYOUTS_RIG_N{N}_PACKED = 0x{packed:064x};  // EV={ev:.4f}")
+print()
+for N in range(5):
+    p_S8 = tables_rig[N][8]
+    print(f"uint256 private constant QUICK_PLAY_PAYOUT_RIG_N{N}_S8 = {p_S8:>11};  // {p_S8/100:>12,.2f}x bet")
+print("\n// Rigged WWXRP factors (per-N, B=6..9 packed, B=6 low): 10/30/30/30, bonus EV=5%/500bps")
+for N in range(5):
+    factors = wwxrp_factors_rig(N)
+    packed = 0
+    for i, B in enumerate((6, 7, 8, 9)):
+        packed |= (factors[B] & ((1 << 64) - 1)) << (i * 64)
+    print(f"uint256 private constant WWXRP_FACTORS_RIG_N{N}_PACKED = 0x{packed:064x};")
+
+# Verification: rigged base EV neutral-or-just-under; factors fit 64-bit; bonus EV=5%.
+print("\n// Rigged-table verification:")
+for N in range(5):
+    ev_frac = total_ev(tables_rig[N], P_N_RIG[N])
+    assert ev_frac <= Fraction(TARGET_EV), f"rigged N={N} EV-positive"
+    assert ev_frac > Fraction(TARGET_EV) - 1, f"rigged N={N} EV drifts >0.5 under"
+    factors = wwxrp_factors_rig(N)
+    for B in (6, 7, 8, 9):
+        assert factors[B] < (1 << 64), f"rigged factor N={N} B={B} exceeds 64 bits"
+    total_bonus = sum(
+        P_N_RIG[N][B] * tables_rig[N][B] / 100 *
+        (ETH_BONUS_BPS * Fraction(factors[B], WWXRP_SCALE)) / 10000
+        for B in (6, 7, 8, 9)
+    )
+    assert abs(float(total_bonus) - 0.05) < 0.05 * 0.01, f"rigged N={N} bonus EV off"
+    print(f"//   N={N}: rigged EV={float(ev_frac):.5f} centi-x | bonus EV={float(total_bonus)*100:.5f}% | factors<2^64 OK")

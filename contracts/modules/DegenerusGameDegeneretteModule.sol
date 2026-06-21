@@ -203,19 +203,21 @@ contract DegenerusGameDegeneretteModule is
     /// @dev Bonus ROI for ETH bets in basis points (+5%), redistributed to high buckets.
     uint16 private constant ETH_ROI_BONUS_BPS = 500;
 
-    /// @dev WWXRP high-value ROI base in basis points (90%, score 0).
-    ///      Used as the target ROI for full-ticket bonus redistribution
-    ///      (top score tiers S=6-9).
-    uint16 private constant WWXRP_HIGH_ROI_BASE_BPS = 9_000;
+    /// @dev WWXRP rigged floor ROI (flat 70%): the guaranteed multiplier applied to
+    ///      every WWXRP roll's base payout (all score tiers). The surplus
+    ///      `_wwxrpRoi(score) - WWXRP_FLOOR_BPS` is redistributed into the top score
+    ///      buckets (S=6-9). 70% is the score-0 RTP, and `_wwxrpRoi >= 7000` at every
+    ///      score, so the floor is flat and never binds above the curve.
+    uint16 private constant WWXRP_FLOOR_BPS = 7_000;
 
-    /// @dev WWXRP high-value ROI at the knee K (90% of the gain).
-    uint16 private constant WWXRP_HIGH_ROI_VA_BPS = 10_791;
-
-    /// @dev WWXRP high-value ROI at the seg-B knee (98% of the gain).
-    uint16 private constant WWXRP_HIGH_ROI_VB_BPS = 10_950;
-
-    /// @dev WWXRP high-value ROI max in basis points (109.9%, at the effective cap).
-    uint16 private constant WWXRP_HIGH_ROI_MAX_BPS = 10_990;
+    /// @dev WWXRP total-RTP curve (the rigged WWXRP payout RTP equals this / 10000).
+    ///      Steep ramp 70%->115% (score 0 to K=305), shallow leg to 118% (seg-B knee),
+    ///      near-flat crawl to 120% at the effective cap. MIN equals the flat floor, so
+    ///      the bonus redistribution is zero at score 0 and grows with activity.
+    uint16 private constant WWXRP_ROI_MIN_BPS = 7_000;
+    uint16 private constant WWXRP_ROI_VA_BPS = 11_500;
+    uint16 private constant WWXRP_ROI_VB_BPS = 11_800;
+    uint16 private constant WWXRP_ROI_MAX_BPS = 12_000;
 
     /// @dev Maximum ETH payout as percentage of futurePool in basis points (10%).
     uint16 private constant ETH_WIN_CAP_BPS = 1_000;
@@ -306,8 +308,9 @@ contract DegenerusGameDegeneretteModule is
     //
     // Per-N factors derived from each N's basePayout schedule + binomial-
     // convolution P_N(S) + 10/30/30/30 split across the top buckets S=6/7/8/9. Total
-    // ETH bonus EV = exactly 5.000% per N. The same per-N factors apply to ETH bets
-    // (ETH_ROI_BONUS_BPS = 500) and WWXRP high-roi bets (_wwxrpHighValueRoi).
+    // ETH bonus EV = exactly 5.000% per N. These honest factors serve ETH bets
+    // (ETH_ROI_BONUS_BPS = 500); WWXRP uses the separate rigged factors below
+    // (WWXRP_FACTORS_RIG_*) against its rigged distribution.
     //
     // Bit layout (B=6..9 packed): 64 bits per bucket index, [B=6 | B=7 | B=8 | B=9],
     // with B=6 in the low 64 bits. Read via `(packed >> ((bucket - 6) * 64)) & 0xFFFFFFFFFFFFFFFF`.
@@ -320,6 +323,43 @@ contract DegenerusGameDegeneretteModule is
     uint256 private constant WWXRP_FACTORS_N2_PACKED = 0x0000000006442ce7000000000067a3f90000000000c6a960000000000017af89;
     uint256 private constant WWXRP_FACTORS_N3_PACKED = 0x000000000a96251f00000000009dba9b00000000010d8a6d00000000001cbc40;
     uint256 private constant WWXRP_FACTORS_N4_PACKED = 0x0000000011ba25db0000000000f40c44000000000176ef73000000000023de94;
+
+    // -------------------------------------------------------------------------
+    // WWXRP RIG FAMILY — rigged base tables + factors (WWXRP currency only)
+    // -------------------------------------------------------------------------
+    //
+    // WWXRP reels are rigged: when >= 2 cells are unmatched (M <= 6), one unmatched
+    // ORDINARY cell is forced to a real match with probability 3/5 (never the hero
+    // symbol; caps at M=7 so P(S=9) is invariant). The rig shifts the WWXRP score
+    // distribution upward, so WWXRP uses its OWN per-N base tables — calibrated to
+    // basePayoutEV = 100 centi-x against the RIGGED distribution P_N^rig(S) (EV-equality
+    // across picks preserved) — and its OWN per-N redistribution factors. S=8 differs;
+    // S=9 reuses the honest QUICK_PLAY_PAYOUT_N{N}_S9 pin (the jackpot event and odds are
+    // unchanged by the rig). ETH/FLIP keep the honest tables above. The byte-reproduce
+    // gate regenerates these from derive_5_tables.py — never hand-typed.
+    uint256 private constant QUICK_PLAY_PAYOUTS_RIG_N0_PACKED = 0x0000399300000b3800000273000000dd000000460000001c0000000000000000;
+    uint256 private constant QUICK_PLAY_PAYOUTS_RIG_N1_PACKED = 0x0000487100000e1e000003130000011800000058000000230000000000000000;
+    uint256 private constant QUICK_PLAY_PAYOUTS_RIG_N2_PACKED = 0x00005a0d0000118c000003d6000001570000006e0000002c0000000000000000;
+    uint256 private constant QUICK_PLAY_PAYOUTS_RIG_N3_PACKED = 0x00006e7a00001589000004b1000001a800000086000000360000000000000000;
+    uint256 private constant QUICK_PLAY_PAYOUTS_RIG_N4_PACKED = 0x000085cb00001a18000005b100000201000000a3000000410000000000000000;
+
+    /// @dev Per-N rigged S=8 tier (separate uint256; calibrated to EV=100 under the rigged dist).
+    uint256 private constant QUICK_PLAY_PAYOUT_RIG_N0_S8 = 736_931; // 7,369.31x bet
+    uint256 private constant QUICK_PLAY_PAYOUT_RIG_N1_S8 = 927_254; // 9,272.54x bet
+    uint256 private constant QUICK_PLAY_PAYOUT_RIG_N2_S8 = 1_152_657; // 11,526.57x bet
+    uint256 private constant QUICK_PLAY_PAYOUT_RIG_N3_S8 = 1_414_110; // 14,141.10x bet
+    uint256 private constant QUICK_PLAY_PAYOUT_RIG_N4_S8 = 1_712_562; // 17,125.62x bet
+
+    /// @dev Per-N rigged WWXRP factors (B=6..9 packed, B=6 low). 10/30/30/30 split over
+    ///      the rigged dist + rigged tables → bonus uplift = bonusBps/10000 of RTP exactly.
+    uint256 private constant WWXRP_FACTORS_RIG_N0_PACKED = 0x0000000002278add00000000000d179f00000000003a09f700000000000d82c7;
+    uint256 private constant WWXRP_FACTORS_RIG_N1_PACKED = 0x0000000003aef46a00000000000fe71700000000003ef4a900000000000d59ff;
+    uint256 private constant WWXRP_FACTORS_RIG_N2_PACKED = 0x0000000006442ce70000000000140622000000000046b28f00000000000d972d;
+    uint256 private constant WWXRP_FACTORS_RIG_N3_PACKED = 0x000000000a96251f00000000001a1c48000000000052565700000000000e4887;
+    uint256 private constant WWXRP_FACTORS_RIG_N4_PACKED = 0x0000000011ba25db000000000023290f00000000006368db00000000000f8796;
+
+    /// @dev Reel-independent seed tag for the WWXRP rig draw (gate + cell pick).
+    uint256 private constant WWXRP_RIG_SALT = 0x52494721; // "RIG!"
 
     // -------------------------------------------------------------------------
     // Packed Bet Layout
@@ -652,10 +692,13 @@ contract DegenerusGameDegeneretteModule is
 
         delete degeneretteBets[player][betId];
 
-        uint256 roiBps = _roiBpsFromScore(activityScore);
-        // WWXRP high-value ROI target for bonus redistribution (0 if not WWXRP)
+        // WWXRP uses a flat 70% floor (the rigged path); ETH/FLIP use the shared base ROI curve.
+        uint256 roiBps = (currency == CURRENCY_WWXRP)
+            ? WWXRP_FLOOR_BPS
+            : _roiBpsFromScore(activityScore);
+        // WWXRP total-RTP target for bonus redistribution (0 if not WWXRP).
         uint256 wwxrpHighRoi = (currency == CURRENCY_WWXRP)
-            ? _wwxrpHighValueRoi(activityScore)
+            ? _wwxrpRoi(activityScore)
             : 0;
 
         uint32 playerTicket = customTicket;
@@ -688,6 +731,17 @@ contract DegenerusGameDegeneretteModule is
             uint32 resultTicket = DegenerusTraitUtils.packedTraitsDegenerette(
                 resultSeed
             );
+            // WWXRP-only reel rig: lift one unmatched ordinary cell to a real match
+            // (60%) when >= 2 cells miss, so the displayed reel and the scored result
+            // agree. A no-op for ETH/FLIP (and for WWXRP full / 1-off reels).
+            if (currency == CURRENCY_WWXRP) {
+                resultTicket = _rigWwxrpResult(
+                    playerTicket,
+                    resultTicket,
+                    heroQuadrant,
+                    EntropyLib.hash2(resultSeed, WWXRP_RIG_SALT)
+                );
+            }
             if (spinIdx == 0) {
                 firstResultTicket = resultTicket;
             }
@@ -1042,14 +1096,23 @@ contract DegenerusGameDegeneretteModule is
     ///      ETH bonus EV = exactly 5.000% per N.
     /// @param N Gold-quadrant count of the player ticket (0..4).
     /// @param bucket WWXRP bonus bucket from `_wwxrpBonusBucket(s)` (6..9).
+    /// @param isWwxrp True selects the rigged WWXRP factor family; false the honest (ETH) family.
     /// @return factor 64-bit factor; multiply with `bonusRoiBps` and divide by `WWXRP_BONUS_FACTOR_SCALE`.
-    function _wwxrpFactor(uint8 N, uint8 bucket) private pure returns (uint256 factor) {
+    function _wwxrpFactor(uint8 N, uint8 bucket, bool isWwxrp) private pure returns (uint256 factor) {
         uint256 packed;
-        if (N == 0) packed = WWXRP_FACTORS_N0_PACKED;
-        else if (N == 1) packed = WWXRP_FACTORS_N1_PACKED;
-        else if (N == 2) packed = WWXRP_FACTORS_N2_PACKED;
-        else if (N == 3) packed = WWXRP_FACTORS_N3_PACKED;
-        else packed = WWXRP_FACTORS_N4_PACKED;
+        if (isWwxrp) {
+            if (N == 0) packed = WWXRP_FACTORS_RIG_N0_PACKED;
+            else if (N == 1) packed = WWXRP_FACTORS_RIG_N1_PACKED;
+            else if (N == 2) packed = WWXRP_FACTORS_RIG_N2_PACKED;
+            else if (N == 3) packed = WWXRP_FACTORS_RIG_N3_PACKED;
+            else packed = WWXRP_FACTORS_RIG_N4_PACKED;
+        } else {
+            if (N == 0) packed = WWXRP_FACTORS_N0_PACKED;
+            else if (N == 1) packed = WWXRP_FACTORS_N1_PACKED;
+            else if (N == 2) packed = WWXRP_FACTORS_N2_PACKED;
+            else if (N == 3) packed = WWXRP_FACTORS_N3_PACKED;
+            else packed = WWXRP_FACTORS_N4_PACKED;
+        }
         factor = (packed >> (uint256(bucket - 6) * 64)) & 0xFFFFFFFFFFFFFFFF;
     }
 
@@ -1064,7 +1127,7 @@ contract DegenerusGameDegeneretteModule is
     /// @param currency Currency type (0=ETH, 1=FLIP, 3=WWXRP).
     /// @param betAmount The bet amount per ticket.
     /// @param roiBps The ROI in basis points (from activity score).
-    /// @param wwxrpHighRoi The WWXRP high-value ROI (0 if not WWXRP).
+    /// @param wwxrpHighRoi The WWXRP total-RTP target (0 if not WWXRP).
     /// @return payout The payout amount.
     function _fullTicketPayout(
         uint8 N,
@@ -1074,20 +1137,21 @@ contract DegenerusGameDegeneretteModule is
         uint256 roiBps,
         uint256 wwxrpHighRoi
     ) private pure returns (uint256 payout) {
-        uint256 basePayoutBps = _getBasePayoutBps(N, s);
+        bool isWwxrp = currency == CURRENCY_WWXRP;
+        uint256 basePayoutBps = _getBasePayoutBps(N, s, isWwxrp);
 
         // Bonus ROI is redistributed into the top score buckets via per-N factor lookup.
         uint256 effectiveRoi = roiBps;
         uint8 bucket = _wwxrpBonusBucket(s);
         if (bucket != 0) {
             uint256 baseBonus;
-            if (currency == CURRENCY_WWXRP && wwxrpHighRoi > roiBps) {
+            if (isWwxrp && wwxrpHighRoi > roiBps) {
                 baseBonus = wwxrpHighRoi - roiBps;
             } else if (currency == CURRENCY_ETH) {
                 baseBonus = ETH_ROI_BONUS_BPS;
             }
             if (baseBonus != 0) {
-                uint256 factor = _wwxrpFactor(N, bucket);
+                uint256 factor = _wwxrpFactor(N, bucket, isWwxrp);
                 effectiveRoi = roiBps + (baseBonus * factor) / WWXRP_BONUS_FACTOR_SCALE;
             }
         }
@@ -1105,9 +1169,12 @@ contract DegenerusGameDegeneretteModule is
     ///      `QUICK_PLAY_PAYOUT_N{N}_S8` / `_S9` constants (S=9 is the jackpot tier).
     /// @param N Gold-quadrant count of the player ticket (0..4).
     /// @param s Composite score (0..9).
+    /// @param isWwxrp True selects the rigged WWXRP base table (S=0..8); false the honest
+    ///        (ETH/FLIP) table. S=9 is shared — the rig leaves the jackpot pin unchanged.
     /// @return Base payout in centi-x (e.g. 204 = 2.04x at 100% ROI).
-    function _getBasePayoutBps(uint8 N, uint8 s) private pure returns (uint256) {
+    function _getBasePayoutBps(uint8 N, uint8 s, bool isWwxrp) private pure returns (uint256) {
         if (s >= 9) {
+            // S=9 jackpot pin is shared (the rig leaves P(S=9) and its payout unchanged).
             if (N == 0) return QUICK_PLAY_PAYOUT_N0_S9;
             if (N == 1) return QUICK_PLAY_PAYOUT_N1_S9;
             if (N == 2) return QUICK_PLAY_PAYOUT_N2_S9;
@@ -1115,6 +1182,13 @@ contract DegenerusGameDegeneretteModule is
             return QUICK_PLAY_PAYOUT_N4_S9;
         }
         if (s == 8) {
+            if (isWwxrp) {
+                if (N == 0) return QUICK_PLAY_PAYOUT_RIG_N0_S8;
+                if (N == 1) return QUICK_PLAY_PAYOUT_RIG_N1_S8;
+                if (N == 2) return QUICK_PLAY_PAYOUT_RIG_N2_S8;
+                if (N == 3) return QUICK_PLAY_PAYOUT_RIG_N3_S8;
+                return QUICK_PLAY_PAYOUT_RIG_N4_S8;
+            }
             if (N == 0) return QUICK_PLAY_PAYOUT_N0_S8;
             if (N == 1) return QUICK_PLAY_PAYOUT_N1_S8;
             if (N == 2) return QUICK_PLAY_PAYOUT_N2_S8;
@@ -1122,11 +1196,19 @@ contract DegenerusGameDegeneretteModule is
             return QUICK_PLAY_PAYOUT_N4_S8;
         }
         uint256 packed;
-        if (N == 0) packed = QUICK_PLAY_PAYOUTS_N0_PACKED;
-        else if (N == 1) packed = QUICK_PLAY_PAYOUTS_N1_PACKED;
-        else if (N == 2) packed = QUICK_PLAY_PAYOUTS_N2_PACKED;
-        else if (N == 3) packed = QUICK_PLAY_PAYOUTS_N3_PACKED;
-        else packed = QUICK_PLAY_PAYOUTS_N4_PACKED;
+        if (isWwxrp) {
+            if (N == 0) packed = QUICK_PLAY_PAYOUTS_RIG_N0_PACKED;
+            else if (N == 1) packed = QUICK_PLAY_PAYOUTS_RIG_N1_PACKED;
+            else if (N == 2) packed = QUICK_PLAY_PAYOUTS_RIG_N2_PACKED;
+            else if (N == 3) packed = QUICK_PLAY_PAYOUTS_RIG_N3_PACKED;
+            else packed = QUICK_PLAY_PAYOUTS_RIG_N4_PACKED;
+        } else {
+            if (N == 0) packed = QUICK_PLAY_PAYOUTS_N0_PACKED;
+            else if (N == 1) packed = QUICK_PLAY_PAYOUTS_N1_PACKED;
+            else if (N == 2) packed = QUICK_PLAY_PAYOUTS_N2_PACKED;
+            else if (N == 3) packed = QUICK_PLAY_PAYOUTS_N3_PACKED;
+            else packed = QUICK_PLAY_PAYOUTS_N4_PACKED;
+        }
         return (packed >> (uint256(s) * 32)) & 0xFFFFFFFF;
     }
 
@@ -1167,38 +1249,112 @@ contract DegenerusGameDegeneretteModule is
                 ActivityCurveLib.ACTIVITY_SEG_B_KNEE_POINTS);
     }
 
-    /// @dev Calculates WWXRP high-value ROI based on activity score.
-    ///      Used as the target ROI for full-ticket bonus redistribution into
-    ///      5+ match buckets. Steep ramp 90.0%→107.91% (0 to K=305), shallow leg to
-    ///      109.5% (seg-B knee), near-flat crawl to 109.9% at the effective cap.
+    /// @dev WWXRP total-RTP curve E(score): the rigged WWXRP payout RTP equals this
+    ///      value / 10000. Steep ramp 70%→115% (0 to K=305), shallow leg to 118%
+    ///      (seg-B knee), near-flat crawl to 120% at the effective cap, flat beyond.
+    ///      Used as the bonus-redistribution target above the flat WWXRP_FLOOR_BPS;
+    ///      MIN equals the floor, so redistribution is zero at score 0 and grows with activity.
     /// @param score The activity score in whole points.
-    /// @return roiBps The WWXRP high-value ROI in basis points.
-    function _wwxrpHighValueRoi(
+    /// @return roiBps The WWXRP total-RTP target in basis points.
+    function _wwxrpRoi(
         uint256 score
     ) private pure returns (uint256 roiBps) {
         if (score >= ActivityCurveLib.ACTIVITY_EFFECTIVE_CAP_POINTS) {
-            return WWXRP_HIGH_ROI_MAX_BPS;
+            return WWXRP_ROI_MAX_BPS;
         }
         if (score <= ACTIVITY_SCORE_MAX_POINTS) {
             return
-                WWXRP_HIGH_ROI_BASE_BPS +
-                (score * (WWXRP_HIGH_ROI_VA_BPS - WWXRP_HIGH_ROI_BASE_BPS)) /
+                WWXRP_ROI_MIN_BPS +
+                (score * (WWXRP_ROI_VA_BPS - WWXRP_ROI_MIN_BPS)) /
                 ACTIVITY_SCORE_MAX_POINTS;
         }
         if (score <= ActivityCurveLib.ACTIVITY_SEG_B_KNEE_POINTS) {
             return
-                WWXRP_HIGH_ROI_VA_BPS +
+                WWXRP_ROI_VA_BPS +
                 ((score - ACTIVITY_SCORE_MAX_POINTS) *
-                    (WWXRP_HIGH_ROI_VB_BPS - WWXRP_HIGH_ROI_VA_BPS)) /
+                    (WWXRP_ROI_VB_BPS - WWXRP_ROI_VA_BPS)) /
                 (ActivityCurveLib.ACTIVITY_SEG_B_KNEE_POINTS -
                     ACTIVITY_SCORE_MAX_POINTS);
         }
         return
-            WWXRP_HIGH_ROI_VB_BPS +
+            WWXRP_ROI_VB_BPS +
             ((score - ActivityCurveLib.ACTIVITY_SEG_B_KNEE_POINTS) *
-                (WWXRP_HIGH_ROI_MAX_BPS - WWXRP_HIGH_ROI_VB_BPS)) /
+                (WWXRP_ROI_MAX_BPS - WWXRP_ROI_VB_BPS)) /
             (ActivityCurveLib.ACTIVITY_EFFECTIVE_CAP_POINTS -
                 ActivityCurveLib.ACTIVITY_SEG_B_KNEE_POINTS);
+    }
+
+    /// @dev WWXRP-only reel rig. When >= 2 cells are unmatched (M <= 6), force one
+    ///      unmatched ORDINARY cell (a color axis, or a non-hero quadrant's symbol —
+    ///      never the hero symbol) to a real match with probability 3/5. Caps at M=7,
+    ///      so a full match (M=8) / single-cell miss (M=7) is never created or destroyed
+    ///      (P(S=9) invariant). Rewrites `resultTicket` so the displayed reel honestly
+    ///      shows the forced match; `_score` then reads the lifted score. `rigSeed` is a
+    ///      frozen, reel-independent hash of the spin seed.
+    /// @param playerTicket The player's (or box-spin's) ticket.
+    /// @param resultTicket The drawn result reel.
+    /// @param heroQuadrant The hero quadrant (0..3) whose symbol axis is excluded from the rig pool.
+    /// @param rigSeed Reel-independent rig entropy (gate + cell pick).
+    /// @return rigged The (possibly modified) result ticket.
+    function _rigWwxrpResult(
+        uint32 playerTicket,
+        uint32 resultTicket,
+        uint8 heroQuadrant,
+        uint256 rigSeed
+    ) private pure returns (uint32 rigged) {
+        rigged = resultTicket;
+        // Pass 1: count matched cells (M, all 8 axes) and unmatched ordinary cells (u).
+        uint8 m;
+        uint8 u;
+        for (uint8 q; q < 4; ) {
+            uint8 pq = uint8(playerTicket >> (q * 8));
+            uint8 rq = uint8(resultTicket >> (q * 8));
+            bool colorMatch = ((pq >> 3) & 7) == ((rq >> 3) & 7);
+            bool symMatch = (pq & 7) == (rq & 7);
+            if (colorMatch) ++m;
+            if (symMatch) ++m;
+            if (!colorMatch) ++u; // color axis is ordinary for every quadrant
+            if (q != heroQuadrant && !symMatch) ++u; // non-hero symbol is ordinary
+            unchecked {
+                ++q;
+            }
+        }
+        // Only rig when >= 2 cells miss (M <= 6); leave full match / 1-off alone.
+        if (m >= 7) return rigged;
+        // 60% gate (3 of 5); 40% no-op.
+        if (rigSeed % 5 >= 3) return rigged;
+        // Pick one unmatched ordinary cell uniformly (u >= 1 whenever M <= 6).
+        uint8 pick = uint8((rigSeed >> 8) % u);
+        // Pass 2: walk the same fixed order and force the pick-th unmatched ordinary cell.
+        for (uint8 q; q < 4; ) {
+            uint8 pq = uint8(playerTicket >> (q * 8));
+            uint8 rq = uint8(resultTicket >> (q * 8));
+            if (((pq >> 3) & 7) != ((rq >> 3) & 7)) {
+                if (pick == 0) {
+                    // Force the result color to the player's color (bits 5-3 of the byte).
+                    return
+                        (rigged & ~(uint32(0x38) << (q * 8))) |
+                        (uint32((pq >> 3) & 7) << (q * 8 + 3));
+                }
+                unchecked {
+                    --pick;
+                }
+            }
+            if (q != heroQuadrant && (pq & 7) != (rq & 7)) {
+                if (pick == 0) {
+                    // Force the result symbol to the player's symbol (bits 2-0).
+                    return
+                        (rigged & ~(uint32(0x07) << (q * 8))) |
+                        (uint32(pq & 7) << (q * 8));
+                }
+                unchecked {
+                    --pick;
+                }
+            }
+            unchecked {
+                ++q;
+            }
+        }
     }
 
     // -------------------------------------------------------------------------
@@ -1295,9 +1451,10 @@ contract DegenerusGameDegeneretteModule is
     }
 
     /// @notice One WWXRP Degenerette spin staking a lootbox WWXRP roll (replaces the flat mint).
-    /// @dev Mirrors a regular WWXRP bet spin: high-value ROI bonus redistribution and the
-    ///      S==9 bracket whale-halfpass award (deduped one-per-10-level-bracket, shared with
-    ///      ordinary WWXRP jackpots). No pool / ETH touch — WWXRP is minted directly.
+    /// @dev Mirrors a regular WWXRP bet spin: the same reel rig, the rigged tables + total-RTP
+    ///      bonus redistribution, and the S==9 bracket whale-halfpass award (deduped
+    ///      one-per-10-level-bracket, shared with ordinary WWXRP jackpots). No pool / ETH touch —
+    ///      WWXRP is minted directly.
     function resolveWwxrpSpinFromBox(
         address player,
         uint256 stake,
@@ -1309,16 +1466,26 @@ contract DegenerusGameDegeneretteModule is
         if (stake == 0 || stake > type(uint128).max) return;
         uint64 betId = _boxBetId(seed, BOX_SPIN_TYPE_WWXRP);
         uint128 betAmount = uint128(stake);
-        uint256 roiBps = _roiBpsFromScore(activityScore);
-        uint256 wwxrpHighRoi = _wwxrpHighValueRoi(activityScore);
+        uint256 roiBps = WWXRP_FLOOR_BPS;
+        uint256 wwxrpHighRoi = _wwxrpRoi(activityScore);
 
+        uint8 heroQuadrant = uint8(seed & MASK_2);
         uint32 playerTicket = customTicket != 0
             ? customTicket
             : DegenerusTraitUtils.packedTraitsDegenerette(seed);
         uint32 resultTicket = DegenerusTraitUtils.packedTraitsDegenerette(
             EntropyLib.hash2(seed, 1)
         );
-        uint8 s = _score(playerTicket, resultTicket, uint8(seed & MASK_2));
+        // WWXRP reel rig (identical to a regular WWXRP bet spin): lift one unmatched
+        // ordinary cell to a real match (60%) when >= 2 cells miss. The emitted BoxSpin
+        // packs the rigged reel, so the displayed result and the score agree.
+        resultTicket = _rigWwxrpResult(
+            playerTicket,
+            resultTicket,
+            heroQuadrant,
+            EntropyLib.hash2(seed, WWXRP_RIG_SALT)
+        );
+        uint8 s = _score(playerTicket, resultTicket, heroQuadrant);
         uint256 payout = _fullTicketPayout(
             _countGoldQuadrants(playerTicket),
             s,

@@ -6,11 +6,12 @@ import {ActivityCurveLib} from "../../contracts/libraries/ActivityCurveLib.sol";
 
 /// @title ConsumerPointEquivalenceTest -- validates the reshaped activity-score consumer curves.
 ///
-/// @notice The five value curves (decimator/terminal multiplier, Degenerette ROI, WWXRP high ROI, century
+/// @notice The five value curves (decimator/terminal multiplier, Degenerette ROI, WWXRP total-RTP, century
 ///   bonus, lootbox EV) share one shape: a steep early ramp to vA at the old cap K, a shallow middle leg to vB
-///   at the seg-B knee (500), then a near-flat crawl to MAX at the effective cap (30000), flat beyond. MIN (the
-///   score-0 value) and MAX (the cap value) are unchanged from before the reshape. The two decimator bucket
-///   ladders share an absolute threshold table whose inverse seals the decimator-claim EV score.
+///   at the seg-B knee (500), then a near-flat crawl to MAX at the effective cap (30000), flat beyond. Each
+///   curve's MIN (score-0) and MAX (cap) are pinned by its golden waypoints below (the WWXRP curve carries the
+///   rigged 70%->120% endpoints). The two decimator bucket ladders share an absolute threshold table whose
+///   inverse seals the decimator-claim EV score.
 ///
 /// @dev The shared math (multiplier, bucket ladder + inverse, century) lives in ActivityCurveLib and is exercised
 ///   DIRECTLY here. The in-place curves (ROI/WWXRP in DegeneretteModule, lootbox EV in DegenerusGameStorage) are
@@ -38,12 +39,12 @@ contract ConsumerPointEquivalenceTest is DeployProtocol {
         return 9970 + ((s - SEG_B) * (9990 - 9970)) / (CAP - SEG_B);
     }
 
-    // WWXRP high ROI: MIN 9000, K=305 -> vA 10791, SEG_B -> vB 10950, CAP -> MAX 10990.
+    // WWXRP total-RTP curve E: MIN 7000, K=305 -> vA 11500, SEG_B -> vB 11800, CAP -> MAX 12000.
     function _wwxrp(uint256 s) internal pure returns (uint256) {
-        if (s >= CAP) return 10990;
-        if (s <= 305) return 9000 + (s * (10791 - 9000)) / 305;
-        if (s <= SEG_B) return 10791 + ((s - 305) * (10950 - 10791)) / (SEG_B - 305);
-        return 10950 + ((s - SEG_B) * (10990 - 10950)) / (CAP - SEG_B);
+        if (s >= CAP) return 12000;
+        if (s <= 305) return 7000 + (s * (11500 - 7000)) / 305;
+        if (s <= SEG_B) return 11500 + ((s - 305) * (11800 - 11500)) / (SEG_B - 305);
+        return 11800 + ((s - SEG_B) * (12000 - 11800)) / (CAP - SEG_B);
     }
 
     // Lootbox EV: keep 0..60 anchor (9000->10000), K=400 -> vA 13950, SEG_B -> vB 14390, CAP -> MAX 14500.
@@ -82,7 +83,7 @@ contract ConsumerPointEquivalenceTest is DeployProtocol {
     function test_GoldenWaypoints_Wwxrp() public pure {
         uint16[12] memory s = [uint16(0), 60, 75, 155, 235, 305, 400, 500, 1000, 2000, 10000, 30000];
         uint256[12] memory g = [
-            uint256(9000), 9352, 9440, 9910, 10379, 10791, 10868, 10950, 10950, 10952, 10962, 10990
+            uint256(7000), 7885, 8106, 9286, 10467, 11500, 11646, 11800, 11803, 11810, 11864, 12000
         ];
         for (uint256 i; i < s.length; i++) {
             assertEq(_wwxrp(s[i]), g[i], "wwxrp golden waypoint");
@@ -122,8 +123,8 @@ contract ConsumerPointEquivalenceTest is DeployProtocol {
         assertEq(ActivityCurveLib.decMultBps(CAP + 50000), 17833, "mult flat beyond cap");
         assertEq(_roi(0), 9000, "roi MIN");
         assertEq(_roi(CAP), 9990, "roi MAX");
-        assertEq(_wwxrp(0), 9000, "wwxrp MIN");
-        assertEq(_wwxrp(CAP), 10990, "wwxrp MAX");
+        assertEq(_wwxrp(0), 7000, "wwxrp MIN");
+        assertEq(_wwxrp(CAP), 12000, "wwxrp MAX");
         assertEq(ActivityCurveLib.centuryBps(0), 0, "century MIN");
         assertEq(ActivityCurveLib.centuryBps(CAP), 10000, "century MAX");
         assertEq(_ev(0), 9000, "ev MIN");
@@ -168,8 +169,8 @@ contract ConsumerPointEquivalenceTest is DeployProtocol {
         // ROI / WWXRP: K=305.
         assertEq(_roi(305), 9891, "roi @K");
         assertEq(_roi(500), 9970, "roi @SEG_B");
-        assertEq(_wwxrp(305), 10791, "wwxrp @K");
-        assertEq(_wwxrp(500), 10950, "wwxrp @SEG_B");
+        assertEq(_wwxrp(305), 11500, "wwxrp @K");
+        assertEq(_wwxrp(500), 11800, "wwxrp @SEG_B");
         // Century: K=305.
         assertEq(ActivityCurveLib.centuryBps(305), 9000, "century @K");
         assertEq(ActivityCurveLib.centuryBps(500), 9800, "century @SEG_B");

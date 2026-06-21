@@ -448,6 +448,89 @@ contract DegeneretteHeroScoreTest is DeployProtocol {
         assertGt(waLow, 0, "non-vacuity: the hero wager ledger is non-empty");
     }
 
+    // =========================================================================
+    // WWXRP RIG — controlled on-chain behavior of the rigged WWXRP reel path.
+    // =========================================================================
+
+    /// @notice Drives many single-spin WWXRP bets through the live resolve path and
+    ///         checks the rigged score against the pre-rig (honest) reel for EVERY
+    ///         sample: the rigged score lifts by exactly 0 or 1 (never +2 — the hero
+    ///         symbol is never the lifted cell), is never below honest, and never
+    ///         fires when the honest reel is full / 1-off (M >= 7). Over the batch the
+    ///         lift rate among eligible (M <= 6) reels sits at ~60% (the 3/5 gate).
+    ///         This validates the `_rigWwxrpResult` bit-manipulation end-to-end (the
+    ///         analytical stat gate validates the calibration; this validates the code).
+    function test_WWXRP_Rig_ControlledBehavior() public {
+        _seedFuturePrizePool(1_000_000 ether);
+        _fundWwxrp(player, 400 ether);
+        uint48 index = 1;
+        uint8 heroQuadrant = 2;
+        uint32 customTicket = _ticketWithHero(heroQuadrant, 4);
+
+        uint256 eligible; // honest M <= 6 (rig may fire)
+        uint256 lifted; // rigged score == honest + 1
+        uint256 samples = 200;
+
+        for (uint256 i; i < samples; ++i) {
+            uint256 word = uint256(keccak256(abi.encodePacked("wwxrp_rig", i)));
+            vm.prank(player);
+            game.placeDegeneretteBet(address(0), CURRENCY_WWXRP, 1 ether, 1, customTicket, heroQuadrant);
+            uint64 betId = _betNonce(player);
+            _injectLootboxRngWord(index, word);
+            vm.recordLogs();
+            vm.prank(player);
+            game.resolveDegeneretteBets(address(0), _one(betId));
+            (uint8 s, ) = _firstSpinScoreAndPayout();
+            _injectLootboxRngWord(index, 0);
+
+            // Honest (pre-rig) reel + score/M for this spin.
+            uint32 honestResult = _resultTicketForSpin(index, word, 0);
+            (uint8 honestS, uint8 honestM) =
+                _honestScoreAndM(customTicket, honestResult, heroQuadrant);
+
+            // Per-sample correctness: the rigged score lifts by exactly 0 or 1 — never
+            // +2 (the hero symbol is excluded), never below honest.
+            assertTrue(
+                s == honestS || s == honestS + 1,
+                "rig lifts the score by exactly 0 or 1 (never +2, never negative)"
+            );
+            if (honestM >= 7) {
+                assertEq(s, honestS, "rig must NOT fire on a full / 1-off reel (M >= 7)");
+            } else {
+                ++eligible;
+                if (s == honestS + 1) ++lifted;
+            }
+        }
+
+        // Non-vacuity + ~60% gate: among eligible reels the rig fires ~3/5 of the time.
+        assertGt(eligible, 100, "non-vacuity: most reels are rig-eligible (M <= 6)");
+        assertGt(lifted, 0, "non-vacuity: the rig actually lifts some reels");
+        assertLt(lifted, eligible, "non-vacuity: the rig is NOT always-on (40% no-op)");
+        assertGe(lifted * 100, eligible * 45, "lift rate >= 45% (3/5 gate, sample tolerance)");
+        assertLe(lifted * 100, eligible * 75, "lift rate <= 75% (3/5 gate, sample tolerance)");
+    }
+
+    /// @dev Mirror `_score` AND count matched axes (M) for an honest (pre-rig) reel.
+    function _honestScoreAndM(uint32 playerTicket, uint32 resultTicket, uint8 heroQuadrant)
+        internal
+        pure
+        returns (uint8 s, uint8 m)
+    {
+        for (uint8 q; q < 4; ++q) {
+            uint8 pq = uint8(playerTicket >> (q * 8));
+            uint8 rq = uint8(resultTicket >> (q * 8));
+            if (((pq >> 3) & 7) == ((rq >> 3) & 7)) {
+                ++s;
+                ++m;
+            } // color axis
+            if ((pq & 7) == (rq & 7)) {
+                s += (q == heroQuadrant) ? 2 : 1;
+                ++m;
+            } // symbol axis
+        }
+        if (s > 9) s = 9;
+    }
+
     // ---- Task 3 helpers ------------------------------------------------------
 
     /// @dev Place a fixed set of ETH wagers with chosen hero symbols/quadrants.

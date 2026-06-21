@@ -164,3 +164,84 @@ describe("HERO-04 — ETH bonus EV == 5.000% ± 1% per N (regenerated B=6..9 fac
     }
   });
 });
+
+// ===========================================================================
+// WWXRP RIG bonus EV — the rigged factors redistribute bonusBps into B=6..9 so
+// the uplift == bonusBps/10000 of RTP exactly (5.000% at the ETH 500bps anchor),
+// computed against the RIGGED distribution + rigged tables/factors.
+// ===========================================================================
+
+function riggedAnalyticalPScore(N) {
+  function conv(a, b) {
+    const o = new Array(a.length + b.length - 1).fill(0);
+    for (let i = 0; i < a.length; i++) for (let j = 0; j < b.length; j++) o[i + j] += a[i] * b[j];
+    return o;
+  }
+  let C = [1];
+  for (let q = 0; q < N; q++) C = conv(C, [14 / 15, 1 / 15]);
+  for (let q = 0; q < 4 - N; q++) C = conv(C, [13 / 15, 2 / 15]);
+  let Y = [1];
+  for (let q = 0; q < 3; q++) Y = conv(Y, [7 / 8, 1 / 8]);
+  const H = [7 / 8, 1 / 8];
+  const out = new Array(10).fill(0);
+  const pf = 3 / 5;
+  for (let c = 0; c < C.length; c++)
+    for (let y = 0; y < Y.length; y++)
+      for (let h = 0; h < 2; h++) {
+        const p = C[c] * Y[y] * H[h];
+        const M = c + y + h;
+        const baseS = c + y + 2 * h;
+        if (M >= 7) out[baseS] += p;
+        else {
+          out[baseS] += p * (1 - pf);
+          out[baseS + 1] += p * pf;
+        }
+      }
+  return out;
+}
+
+function jsGetBasePayoutBpsRig(consts, N, s) {
+  if (s >= 9) return consts[`QUICK_PLAY_PAYOUT_N${N}_S9`];
+  if (s === 8) return consts[`QUICK_PLAY_PAYOUT_RIG_N${N}_S8`];
+  const packed = consts[`QUICK_PLAY_PAYOUTS_RIG_N${N}_PACKED`];
+  return (packed >> (BigInt(s) * 32n)) & 0xFFFFFFFFn;
+}
+
+function jsWwxrpFactorRig(consts, N, bucket) {
+  if (bucket < 6 || bucket > 9) return 0n;
+  const packed = consts[`WWXRP_FACTORS_RIG_N${N}_PACKED`];
+  return (packed >> (BigInt(bucket - 6) * 64n)) & 0xFFFFFFFFFFFFFFFFn;
+}
+
+describe("WWXRP RIG — bonus EV uplift == 5.000% ± 1% per N (rigged factors + rigged dist)", function () {
+  this.timeout(120_000);
+
+  let generated;
+
+  before(function () {
+    generated = parseConstants(runGenerator());
+  });
+
+  for (let N = 0; N < 5; N++) {
+    it(`N=${N}: rigged-P_N(S) bonus EV uplift = 5.000% ± 1% on the rigged factors`, function () {
+      const pS = riggedAnalyticalPScore(N);
+      let evWith = 0;
+      let evWithout = 0;
+      for (let s = 0; s <= 9; s++) {
+        const basePayout = Number(jsGetBasePayoutBpsRig(generated, N, s));
+        evWithout += pS[s] * basePayout;
+        const bucket = jsWwxrpBonusBucket(s);
+        let effRoi = 10_000;
+        if (bucket !== 0) {
+          const factor = Number(jsWwxrpFactorRig(generated, N, bucket));
+          effRoi = 10_000 + (ETH_ROI_BONUS_BPS * factor) / WWXRP_BONUS_FACTOR_SCALE;
+        }
+        evWith += pS[s] * basePayout * (effRoi / 10_000);
+      }
+      const upliftPct = ((evWith - evWithout) / evWithout) * 100;
+      const relErr = (upliftPct - 5.0) / 5.0;
+      console.log(`[RIG bonus N=${N}] uplift = ${upliftPct.toFixed(6)}% (target 5.000%; relErr ${(relErr * 100).toFixed(4)}%)`);
+      expect(Math.abs(relErr) <= 0.01, `RIG N=${N}: bonus EV ${upliftPct.toFixed(6)}% outside ±1% of 5%`).to.equal(true);
+    });
+  }
+});
