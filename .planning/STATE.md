@@ -4,11 +4,11 @@ milestone: v73.0
 milestone_name: Degenerette Variant-2 Color-Gated Rescore (+ WWXRP preservation)
 status: planning
 last_updated: "2026-06-21"
-last_activity: 2026-06-21 -- 452 discuss-phase DONE; 3 decisions LOCKED (DEC-01 R2 / DEC-02 A / DEC-03 S>=2); 452-CONTEXT.md committed 612530da; NEXT = /gsd-plan-phase 452 (GEN: rewrite derive_5_tables.py)
+last_activity: 2026-06-21 -- 452 EXECUTING; wave 1 DONE (452-01: Variant-2 honest dist + DEC-01 R2 rigged dist; generator exit 0, S=9 byte-identical to HEAD, rigged EV in (99,100], commits 15457fa0/6a29234d); NEXT = wave 2 (452-02: regen constants + EV-drift + P(S=9)/RTP pre-proof) -- no contract edit, runs autonomously
 progress:
   total_phases: 5
   completed_phases: 0
-  total_plans: 0
+  total_plans: 2
   completed_plans: 0
   percent: 0
 ---
