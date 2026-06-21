@@ -27,7 +27,7 @@ completed: 2026-06-21
 - `.planning/phases/455-reaudit/455-CODEX-CROSSCHECK.md` — the Codex verdict record (3 claims CONFIRMED).
 
 ## Closure
-- **Closure signal:** `MILESTONE_V73_AT_HEAD_<SHA>` (stamped at the terminal docs commit; recorded in
+- **Closure signal:** `MILESTONE_V73_AT_HEAD_15650b6a05427517981b14ac62ddf18364c0525b` (stamped at the terminal docs commit; recorded in
   STATE.md, MILESTONES.md, and the FINDINGS/HTML headers).
 - **Subject:** byte-frozen at the IMPL commit `64ec993e` — `contracts/` tree `d6615306`. No
   `contracts/*.sol` changed after 453; 454/455/456 are test/audit/docs-only.

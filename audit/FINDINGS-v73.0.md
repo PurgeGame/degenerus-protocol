@@ -3,7 +3,7 @@
 **Milestone:** v73.0 — Degenerette "Variant-2" Color-Gated Rescore (+ WWXRP Rig Preservation)
 **Date:** 2026-06-21
 **Subject (frozen):** `contracts/` tree **`d6615306`** (IMPL commit **`64ec993e`**). Baseline was the v72.0 closure subject `contracts/` tree **`4407181d`** (HEAD `e94f1719`). The tree advanced only via the single batched, USER-approved IMPL commit recorded below; the test/audit work that followed touched no `contracts/*.sol`.
-**Closure signal:** MILESTONE_V73_AT_HEAD_<SHA>
+**Closure signal:** MILESTONE_V73_AT_HEAD_15650b6a05427517981b14ac62ddf18364c0525b
 **Method:** Design→build→prove→re-audit. Phase 452 GEN rewrote + verified the canonical generator (`derive_5_tables.py`) and presented the regenerated tables + the EV-drift measurement BEFORE any contract edit. Phase 453 IMPL landed the Variant-2 change as ONE batched, USER-approved `.sol` diff (the sole approval gate). Phase 454 TST rewrote the v72-era oracles to v73 and added the held-fixed-invariant proofs (byte-reproduce, EV exactness, exact EV-equality, P(S=9) invariance, the real-rig 3000-spin distribution parity, and curve/pin/bracket byte-equality vs the pre-v73 source). Phase 455 REAUDIT ran three isolated top-model subagents (neutral defensive-engineering prompts, read-only) — one per pillar — plus a cross-model **Codex** corroboration of the three load-bearing claims. Honest admin/governance assumed; pre-launch, no live funds.
 **Regression floor:** final full forge suite **943 passed / 0 failed / 108 skipped** (136 suites) on the frozen tree.
 
