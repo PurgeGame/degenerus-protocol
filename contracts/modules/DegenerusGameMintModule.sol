@@ -651,7 +651,7 @@ contract DegenerusGameMintModule is
             // declaring the level finished — the readiness gate depends on it. Returns
             // false (resume next tx) only if a budget-short foil pack defers. _drainFoil
             // short-circuits on _foilDrainPending, so a no-foil call is a single SLOAD.
-            if (queue.length != 0) {
+            if (total != 0) {
                 delete ticketQueue[rk];
             }
             bool foilDoneEmpty = _drainFoil(writesBudget);
@@ -709,7 +709,7 @@ contract DegenerusGameMintModule is
             // budget-short deferral resumable. Only when BOTH the queue and the foil
             // drain are caught up is the level finished, so the readiness gate cannot
             // let the jackpot draw early.
-            if (queue.length != 0) {
+            if (total != 0) {
                 delete ticketQueue[rk];
             }
             // A final loop iteration can push `used` past writesBudget, so clamp the
