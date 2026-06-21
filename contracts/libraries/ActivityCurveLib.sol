@@ -90,6 +90,43 @@ library ActivityCurveLib {
     }
 
     // -------------------------------------------------------------------------
+    // Foil-pack rarity boost multiplier (bps; 10000 = 1x)
+    // -------------------------------------------------------------------------
+
+    uint256 internal constant FOIL_MIN_BPS = 20_000; // 2.0x at score 0 (floor)
+    uint256 internal constant FOIL_K_POINTS = 300; // seg-A knee
+    uint256 internal constant FOIL_VA_BPS = 50_000; // 5.0x at K (75% of gain)
+    uint256 internal constant FOIL_VB_BPS = 55_000; // 5.5x at the seg-B knee (87.5%)
+    uint256 internal constant FOIL_MAX_BPS = 60_000; // 6.0x at the effective cap
+
+    /// @notice Foil-pack rarity boost multiplier in bps from a whole-point activity
+    ///         score. Frozen at buy and applied at resolve — never live-read.
+    /// @dev Steep early ramp MIN->VA over [0, K], shallow middle VA->VB over
+    ///      [K, ACTIVITY_SEG_B_KNEE_POINTS], long near-flat crawl VB->MAX over
+    ///      [ACTIVITY_SEG_B_KNEE_POINTS, ACTIVITY_EFFECTIVE_CAP_POINTS], flat at MAX
+    ///      beyond. The two endpoint guards make 0 and the cap exact (no interp rounding).
+    function foilBoostBps(uint256 score) internal pure returns (uint256) {
+        if (score == 0) return FOIL_MIN_BPS;
+        if (score >= ACTIVITY_EFFECTIVE_CAP_POINTS) return FOIL_MAX_BPS;
+        if (score <= FOIL_K_POINTS) {
+            return
+                FOIL_MIN_BPS +
+                (score * (FOIL_VA_BPS - FOIL_MIN_BPS)) /
+                FOIL_K_POINTS;
+        }
+        if (score <= ACTIVITY_SEG_B_KNEE_POINTS) {
+            return
+                FOIL_VA_BPS +
+                ((score - FOIL_K_POINTS) * (FOIL_VB_BPS - FOIL_VA_BPS)) /
+                (ACTIVITY_SEG_B_KNEE_POINTS - FOIL_K_POINTS);
+        }
+        return
+            FOIL_VB_BPS +
+            ((score - ACTIVITY_SEG_B_KNEE_POINTS) * (FOIL_MAX_BPS - FOIL_VB_BPS)) /
+            (ACTIVITY_EFFECTIVE_CAP_POINTS - ACTIVITY_SEG_B_KNEE_POINTS);
+    }
+
+    // -------------------------------------------------------------------------
     // Decimator bucket ladder (lower bucket = better odds)
     // -------------------------------------------------------------------------
 

@@ -45,7 +45,12 @@ interface IDegenerusQuests {
     /// @param entropy Random entropy used to determine the slot 1 quest type
     /// @param forceMintFlip Force slot 1 to MINT_FLIP (the first jackpot day, when the FLIP
     ///        redeem window is live); otherwise MINT_FLIP is excluded from the slot 1 roll.
-    function rollDailyQuest(uint24 day, uint256 entropy, bool forceMintFlip) external;
+    function rollDailyQuest(
+        uint24 day,
+        uint256 entropy,
+        bool forceMintFlip,
+        bool forceFoil
+    ) external;
 
     /// @notice Records player minting activity and checks quest completion
     /// @dev Called by the game contract when a player mints tickets
@@ -84,6 +89,22 @@ interface IDegenerusQuests {
     function handleDecimator(address player, uint256 burnAmount)
         external
         returns (uint256 reward, uint8 questType, uint32 streak, bool completed);
+
+    /// @notice Records a foil-pack purchase and checks the foil secondary quest
+    /// @dev Called by the game's foil module when a player buys a foil pack
+    /// @param player The address of the player who bought the foil pack
+    /// @return reward The quest reward amount earned (0 if quest not completed)
+    /// @return questType The type of quest that was completed
+    /// @return streak The player's current quest streak
+    /// @return completed Whether a quest was completed by this action
+    function handleFoilPack(address player)
+        external
+        returns (uint256 reward, uint8 questType, uint32 streak, bool completed);
+
+    /// @notice Raise a player's quest streak to a floor of 12 as a foil-pack benefit.
+    /// @dev Called by the foil leg after its quest completions; unconditional, never lowers.
+    /// @param player The player who bought the foil pack.
+    function foilStreakBoost(address player) external;
 
     /// @notice Records player affiliate activity and checks quest completion
     /// @dev Called by the game contract when a player earns affiliate rewards

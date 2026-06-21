@@ -43,7 +43,8 @@ import {
     IDegenerusGameBoonModule,
     IDegenerusGameDegeneretteModule,
     IDegenerusGameBingoModule,
-    IGameAfkingModule
+    IGameAfkingModule,
+    IDegenerusGameFoilPackModule
 } from "./interfaces/IDegenerusGameModules.sol";
 import {MintPaymentKind} from "./interfaces/IDegenerusGame.sol";
 import {
@@ -439,6 +440,15 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         if (!ok) _revertDelegate(data);
     }
 
+    /// @notice QUESTS-only (enforced in the afking module): floor an afking sub's streak base
+    ///         so a foil-pack purchase's quest-streak guarantee reaches a mid-run afker.
+    function floorAfkingStreakBase(address, uint16) external {
+        (bool ok, bytes memory data) = ContractAddresses
+            .GAME_AFKING_MODULE
+            .delegatecall(msg.data);
+        if (!ok) _revertDelegate(data);
+    }
+
     /// @notice Pay DGNRS bounty for the biggest flip record holder.
     /// @dev Access: COIN or COINFLIP contract only.
     ///      Pays a share of the remaining DGNRS reward pool.
@@ -545,21 +555,36 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     /// @param lootBoxAmount ETH amount for loot boxes, minimum 0.01 ETH (0 to skip).
     /// @param affiliateCode Affiliate/referral code for all purchases.
     /// @param payKind Payment method (DirectEth, Claimable, or Combined).
+    /// @param foil True to additively buy one foil pack (10x the level price) in the same
+    ///        tx. The foil leg is one-per-cycle and adds to — never replaces — the ticket
+    ///        and lootbox legs, sharing the combined spend's affiliate, quest, and streak
+    ///        recording so a foil pack counts exactly like a ticket purchase.
     function purchase(
         address buyer,
         uint256 ticketQuantity,
         uint256 lootBoxAmount,
         bytes32 affiliateCode,
-        MintPaymentKind payKind
+        MintPaymentKind payKind,
+        bool foil
     ) external payable {
         buyer = _resolvePlayer(buyer);
-        _purchaseFor(
-            buyer,
-            ticketQuantity,
-            lootBoxAmount,
-            affiliateCode,
-            payKind
-        );
+        if (foil) {
+            _purchaseWithFoil(
+                buyer,
+                ticketQuantity,
+                lootBoxAmount,
+                affiliateCode,
+                payKind
+            );
+        } else {
+            _purchaseFor(
+                buyer,
+                ticketQuantity,
+                lootBoxAmount,
+                affiliateCode,
+                payKind
+            );
+        }
     }
 
     function _purchaseFor(
@@ -582,6 +607,66 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
                 )
             );
         if (!ok) _revertDelegate(data);
+    }
+
+    /// @dev Foil branch of purchase(): the foil pack is an additive leg on top of the
+    ///      optional ticket/lootbox legs. Fresh ETH is capped at the combined cost (tickets +
+    ///      lootbox + a foil pack at ten level prices), and any overpay is credited to the
+    ///      payer's withdrawable afking so excess never reverts or strands. The ticket/lootbox
+    ///      leg takes fresh ETH first (capped at its own cost) through the mint module's
+    ///      purchaseWith, which uses the explicit ethValue and ignores the carried msg.value;
+    ///      the foil leg gets the remainder, with claimable covering any foil shortfall,
+    ///      through the foil module. Each leg routes its own money/affiliate and completes the
+    ///      daily MINT_ETH primary (idempotent across legs). Orchestrated here, not in the mint
+    ///      module, so the near-full mint module's purchase body stays within the via-IR stack
+    ///      budget and the EIP-170 size limit.
+    function _purchaseWithFoil(
+        address buyer,
+        uint256 ticketQuantity,
+        uint256 lootBoxAmount,
+        bytes32 affiliateCode,
+        MintPaymentKind payKind
+    ) private {
+        uint256 priceWei = PriceLookupLib.priceForLevel(
+            jackpotPhaseFlag ? level : level + 1
+        );
+        uint256 mintCost = (priceWei * ticketQuantity) /
+            (4 * TICKET_SCALE) +
+            lootBoxAmount;
+        uint256 cost = mintCost + FOIL_PACK_TICKETS * priceWei;
+        uint256 fresh = payKind == MintPaymentKind.Claimable
+            ? 0
+            : (msg.value < cost ? msg.value : cost);
+        if (msg.value > fresh) _creditAfkingValue(msg.sender, msg.value - fresh);
+        uint256 mintFresh = fresh < mintCost ? fresh : mintCost;
+        if (mintCost != 0) {
+            (bool ok, bytes memory data) = ContractAddresses
+                .GAME_MINT_MODULE
+                .delegatecall(
+                    abi.encodeWithSelector(
+                        IDegenerusGameMintModule.purchaseWith.selector,
+                        buyer,
+                        ticketQuantity,
+                        lootBoxAmount,
+                        affiliateCode,
+                        payKind,
+                        mintFresh
+                    )
+                );
+            if (!ok) _revertDelegate(data);
+        }
+        (bool okFoil, bytes memory dataFoil) = ContractAddresses
+            .GAME_FOILPACK_MODULE
+            .delegatecall(
+                abi.encodeWithSelector(
+                    IDegenerusGameFoilPackModule.buyFoilPack.selector,
+                    buyer,
+                    fresh - mintFresh,
+                    affiliateCode,
+                    payKind
+                )
+            );
+        if (!okFoil) _revertDelegate(dataFoil);
     }
 
     /// @notice Purchase tickets with FLIP.
@@ -625,6 +710,44 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
                     boxAmount
                 )
             );
+        if (!ok) _revertDelegate(data);
+    }
+
+    /// @notice Permissionlessly resolve `player`'s foil match claim (value credits to player).
+    /// @dev Signature: claimFoilMatch(address player, uint256 day, uint256 ticketIndex,
+    ///      uint8 drawKind). The eligible cycle level is read inside the module from the
+    ///      day's sealed draw. The win credits to `player`, never the caller, and a tuple
+    ///      pays at most once (CEI marker), so anyone may trigger it. Two draws
+    ///      (main/bonus) x four tickets give 8 independent claimables per day. The
+    ///      signature matches the module function exactly (identical selector), so the
+    ///      calldata forwards as-is — re-encoding would cost size headroom for no change.
+    function claimFoilMatch(
+        address,
+        uint256,
+        uint256,
+        uint8
+    ) external {
+        (bool ok, bytes memory data) = ContractAddresses
+            .GAME_FOILPACK_MODULE
+            .delegatecall(msg.data);
+        if (!ok) _revertDelegate(data);
+    }
+
+    /// @notice Permissionlessly resolve a batch of foil match claims (address[] players,
+    ///         uint24[] days, uint8[] ticketIndexes, uint8[] drawKinds).
+    /// @dev Non-claimable tuples are skipped, not reverted; each settled win credits its
+    ///      own player and the caller earns a per-settled-claim FLIP bounty during a live
+    ///      game. The signature matches the module function exactly, so the calldata
+    ///      forwards as-is.
+    function claimFoilMatchMany(
+        address[] calldata,
+        uint24[] calldata,
+        uint8[] calldata,
+        uint8[] calldata
+    ) external {
+        (bool ok, bytes memory data) = ContractAddresses
+            .GAME_FOILPACK_MODULE
+            .delegatecall(msg.data);
         if (!ok) _revertDelegate(data);
     }
 

@@ -1302,7 +1302,8 @@ contract DegenerusGameDegeneretteModule is
         address player,
         uint256 stake,
         uint16 activityScore,
-        uint256 seed
+        uint256 seed,
+        uint32 customTicket
     ) external payable {
         if (address(this) != ContractAddresses.GAME) revert E();
         if (stake == 0 || stake > type(uint128).max) return;
@@ -1311,7 +1312,9 @@ contract DegenerusGameDegeneretteModule is
         uint256 roiBps = _roiBpsFromScore(activityScore);
         uint256 wwxrpHighRoi = _wwxrpHighValueRoi(activityScore);
 
-        uint32 playerTicket = DegenerusTraitUtils.packedTraitsDegenerette(seed);
+        uint32 playerTicket = customTicket != 0
+            ? customTicket
+            : DegenerusTraitUtils.packedTraitsDegenerette(seed);
         uint32 resultTicket = DegenerusTraitUtils.packedTraitsDegenerette(
             EntropyLib.hash2(seed, 1)
         );
@@ -1357,7 +1360,8 @@ contract DegenerusGameDegeneretteModule is
         address player,
         uint256 totalStake,
         uint16 activityScore,
-        uint256 seed
+        uint256 seed,
+        uint32 customTicket
     ) external payable {
         if (address(this) != ContractAddresses.GAME) revert E();
         if (totalStake == 0) return;
@@ -1370,7 +1374,9 @@ contract DegenerusGameDegeneretteModule is
         uint256 packedSpins;
         for (uint256 i; i < BOX_FLIP_SPINS; ) {
             uint256 ss = EntropyLib.hash2(seed, i);
-            uint32 playerTicket = DegenerusTraitUtils.packedTraitsDegenerette(ss);
+            uint32 playerTicket = customTicket != 0
+                ? customTicket
+                : DegenerusTraitUtils.packedTraitsDegenerette(ss);
             uint32 resultTicket = DegenerusTraitUtils.packedTraitsDegenerette(
                 EntropyLib.hash2(ss, 1)
             );
@@ -1412,7 +1418,8 @@ contract DegenerusGameDegeneretteModule is
         address player,
         uint256 stake,
         uint16 activityScore,
-        uint256 seed
+        uint256 seed,
+        uint32 customTicket
     ) external payable {
         if (address(this) != ContractAddresses.GAME) revert E();
         if (stake == 0 || stake > type(uint128).max) return;
@@ -1420,7 +1427,9 @@ contract DegenerusGameDegeneretteModule is
         uint128 betAmount = uint128(stake);
         uint256 roiBps = _roiBpsFromScore(activityScore);
 
-        uint32 playerTicket = DegenerusTraitUtils.packedTraitsDegenerette(seed);
+        uint32 playerTicket = customTicket != 0
+            ? customTicket
+            : DegenerusTraitUtils.packedTraitsDegenerette(seed);
         uint32 resultTicket = DegenerusTraitUtils.packedTraitsDegenerette(
             EntropyLib.hash2(seed, 1)
         );

@@ -222,4 +222,122 @@ library DegenerusTraitUtils {
         return (color << 3) | symbol;
     }
 
+    /*+======================================================================+
+      |                  FOIL TRAIT GENERATION (ACTIVITY-BOOSTED)           |
+      +======================================================================+
+      |  Sibling producers to traitFromWord / packedTraitsFromSeed that      |
+      |  lift the rare color tiers by an activity-frozen multiplier M =       |
+      |  multBps / 10000 (10000 = 1x). The boost is tapered by rare-rank:    |
+      |  gold takes the full M, each less-rare tier tapers toward 1x, and    |
+      |  the three 25% commons (colors 0/1/2) are the sole shrink sink.       |
+      |  Color cutoffs are computed in a /15360 super-ladder (15360 = 256 x   |
+      |  60; x60 clears the /5 taper denominator and the 3-way common split)  |
+      |  so the taper resolves exactly. Symbol stays uniform 1/8 from the     |
+      |  high word and the pack layout is identical to packedTraitsFromSeed.  |
+      +======================================================================+*/
+
+    /// @notice Builds the /15360 tapered color-cutoff ladder for an activity
+    ///         multiplier. The ladder depends ONLY on `multBps`, so a buyer/pack
+    ///         (one frozen multiplier) computes it once and reuses it across every
+    ///         lane and entry via `foilTrait`.
+    /// @dev Per boosted tier c in {4,5,6,7} with rank weight w5 = {4:2,5:3,6:4,7:5}
+    ///      (color 3 is unboosted, w5=0, held at baseline):
+    ///      width15360[c] = base[c]*60 * (50000 + (multBps-10000)*w5[c]) / 50000
+    ///      over baseline widths base = {0:64,1:64,2:64,3:32,4:16,5:8,6:6,7:2}
+    ///      (the weightedColorBucket /256 ladder). The remainder rem = 15360 - sum of
+    ///      the rare widths is split evenly across the three commons, with color 0
+    ///      additionally absorbing rem mod 3 so the ladder always sums to exactly 15360.
+    ///      Gold (color 7) lands on width15360[7] = 120*M. The returned `cut` holds
+    ///      the seven running-sum cutoffs (cut[0] = color-0 bound .. cut[6] = color-6
+    ///      bound); a draw at or above cut[6] is gold (color 7).
+    /// @param multBps frozen activity multiplier in bps (10000 = 1x; range 20000..60000)
+    /// @return cut Seven cumulative /15360 color cutoffs for `foilTrait`
+    function foilCuts(uint16 multBps) internal pure returns (uint256[7] memory cut) {
+        unchecked {
+            // /15360 tapered rare widths: base[c]*60 * (50000 + (M-1)*5*w5[c]) / 50000.
+            uint256 boost = uint256(multBps) - 10000;
+            uint256 w3 = uint256(32) * 60; // color 3 unboosted (w5=0): held at baseline 1920
+            uint256 w4 = (uint256(16) * 60 * (50000 + boost * 2)) / 50000;
+            uint256 w5 = (uint256(8) * 60 * (50000 + boost * 3)) / 50000;
+            uint256 w6 = (uint256(6) * 60 * (50000 + boost * 4)) / 50000;
+            uint256 w7 = (uint256(2) * 60 * (50000 + boost * 5)) / 50000;
+            uint256 rem = 15360 - (w3 + w4 + w5 + w6 + w7);
+            uint256 common = rem / 3;
+            uint256 c0 = common + (rem - common * 3); // color 0 absorbs rem mod 3
+
+            // Seven running-sum cutoffs in fixed color order (commons first), the
+            // /15360 analogue of the weightedColorBucket /256 ladder.
+            cut[0] = c0;
+            cut[1] = c0 + common;
+            cut[2] = cut[1] + common;
+            cut[3] = cut[2] + w3;
+            cut[4] = cut[3] + w4;
+            cut[5] = cut[4] + w5;
+            cut[6] = cut[5] + w6;
+        }
+    }
+
+    /// @notice Produces a 6-bit boosted trait ID from a 64-bit word and a prebuilt
+    ///         cutoff ladder.
+    /// @dev Walks the running-sum cutoff chain in fixed color order (commons first),
+    ///      identical control flow to weightedColorBucket but in /15360 resolution.
+    ///      Symbol comes from the high 32 bits as a uniform 3-bit slice (& 7),
+    ///      byte-identical to traitFromWord. Output format: [CCC][SSS]; quadrant bits
+    ///      (7-6) are added by the caller.
+    /// @param s 64-bit random input value
+    /// @param cut Seven cumulative /15360 color cutoffs from `foilCuts`
+    /// @return 6-bit boosted trait ID (0-63, quadrant bits not included)
+    function foilTrait(uint64 s, uint256[7] memory cut) internal pure returns (uint8) {
+        unchecked {
+            uint256 scaled = (uint64(uint32(s)) * 15360) >> 32; // draw in [0, 15360)
+            uint8 color;
+            if (scaled < cut[0]) color = 0;
+            else if (scaled < cut[1]) color = 1;
+            else if (scaled < cut[2]) color = 2;
+            else if (scaled < cut[3]) color = 3;
+            else if (scaled < cut[4]) color = 4;
+            else if (scaled < cut[5]) color = 5;
+            else if (scaled < cut[6]) color = 6;
+            else color = 7;
+
+            uint8 symbol = uint8(s >> 32) & 7;
+            return (color << 3) | symbol;
+        }
+    }
+
+    /// @notice Produces a 6-bit boosted trait ID from a 64-bit random word.
+    /// @dev Thin wrapper that builds the ladder for `multBps` and walks it once.
+    ///      Callers resolving many entries at one multiplier (a pack, a queue drain)
+    ///      should hoist `foilCuts` and call `foilTrait` directly to avoid rebuilding
+    ///      the ladder per entry.
+    /// @param s 64-bit random input value
+    /// @param multBps frozen activity multiplier in bps (10000 = 1x; range 20000..60000)
+    /// @return 6-bit boosted trait ID (0-63, quadrant bits not included)
+    function traitFromWordFoil(uint64 s, uint16 multBps) internal pure returns (uint8) {
+        return foilTrait(s, foilCuts(multBps));
+    }
+
+    /// @notice Packs 4 quadrant traits using the activity-boosted foil color
+    ///         distribution (the /15360 tapered ladder) and uniform 1/8 symbol.
+    /// @dev Splits the 256-bit seed into 4 x 64-bit lanes, derives a boosted 6-bit
+    ///      trait from each via foilTrait, adds the quadrant identifier, and packs
+    ///      four bytes in the IDENTICAL [QQ][CCC][SSS]-per-byte layout as
+    ///      packedTraitsFromSeed / packedTraitsDegenerette. The cutoff ladder depends
+    ///      only on multBps, so it is built once here and shared across the four lanes.
+    ///      Buy-side only — it rolls the four frozen foilRecord match signatures.
+    /// @param rand 256-bit random seed (typically from keccak256)
+    /// @param multBps frozen activity multiplier in bps (10000 = 1x; range 20000..60000)
+    /// @return 32-bit packed traits value with boosted color + uniform symbol
+    function packedTraitsFoil(uint256 rand, uint16 multBps) internal pure returns (uint32) {
+        uint256[7] memory cut = foilCuts(multBps);
+        uint8 traitA = foilTrait(uint64(rand), cut);               // Quadrant 0: bits 7-6 = 00
+        uint8 traitB = foilTrait(uint64(rand >> 64), cut)  | 64;   // Quadrant 1: bits 7-6 = 01
+        uint8 traitC = foilTrait(uint64(rand >> 128), cut) | 128;  // Quadrant 2: bits 7-6 = 10
+        uint8 traitD = foilTrait(uint64(rand >> 192), cut) | 192;  // Quadrant 3: bits 7-6 = 11
+        return uint32(traitA)
+             | (uint32(traitB) << 8)
+             | (uint32(traitC) << 16)
+             | (uint32(traitD) << 24);
+    }
+
 }

@@ -64,6 +64,9 @@ library ContractAddresses {
         address(0xF62849F9A0B5Bf2913b396098F7c7019b51A820a);
     address internal constant GNRUS =
         address(0x3C4293F66941ECa00f4950C10d4255d5c271bAeF);
+    // v71.0 foil pack module — deployed last (append) so it shifts no other address.
+    address internal constant GAME_FOILPACK_MODULE =
+        address(0x89CA9F4f77B267778EB2eA0Ba1bEAdEe8523af36);
     address internal constant CREATOR =
         address(0x7FA9385bE102ac3EAc297483Dd6233D62b3e1496);
     address internal constant VRF_COORDINATOR =

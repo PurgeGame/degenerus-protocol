@@ -171,6 +171,12 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     /// @dev Domain separator for bonus trait derivation from same VRF word.
     bytes32 private constant BONUS_TRAITS_TAG = keccak256("BONUS_TRAITS");
 
+    /// @dev Sentinel `excludeIdx` for `_rollHeroSymbol` meaning "no slot excluded":
+    ///      any value >= 32 matches no real `(quadrant << 3) | symbol` slot, so the
+    ///      roll runs over the full wager pool. The bonus draw instead passes the
+    ///      main hero's packed slot to force a distinct hero.
+    uint8 private constant _NO_HERO_EXCLUDE = 0xFF;
+
     /// @dev Max forward offset for carryover source selection (lvl+1..lvl+4).
     uint8 private constant DAILY_CARRYOVER_MAX_OFFSET = 4;
 
@@ -1306,7 +1312,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
             bool hasHeroWinner,
             uint8 heroQuadrant,
             uint8 heroSymbol
-        ) = _rollHeroSymbol(dailyIdx, heroEntropy);
+        ) = _rollHeroSymbol(dailyIdx, heroEntropy, _NO_HERO_EXCLUDE);
         _applyHeroResult(w, randomWord, hasHeroWinner, heroQuadrant, heroSymbol);
     }
 
@@ -1349,9 +1355,17 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     ///      and applies a `leaderBonus = maxAmount / 2` add at the largest-amount slot —
     ///      effective ×1.5 weight on the leader, no min-wager floor on any other slot.
     ///      Returns `(false, 0, 0)` when no slot has any wagers.
+    ///
+    ///      `excludeIdx` zeroes one slot's weight before the roll so the result can
+    ///      never land on it and the leader is recomputed over the remaining slots:
+    ///      the bonus draw passes the main hero's packed slot `(quadrant << 3) |
+    ///      symbol` to force a distinct hero. Pass `_NO_HERO_EXCLUDE` (>= 32, matching
+    ///      no real slot) for an unconstrained roll; when zeroing empties the pool the
+    ///      result is `(false, 0, 0)` and the caller applies no hero (a pure-VRF set).
     function _rollHeroSymbol(
         uint24 day,
-        uint256 entropy
+        uint256 entropy,
+        uint8 excludeIdx
     )
         private
         view
@@ -1365,13 +1379,13 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         for (uint8 q; q < 4; ) {
             uint256 packed = dailyHeroWagers[day][q];
             for (uint8 s; s < 8; ) {
-                uint32 amount = uint32(
-                    (packed >> (uint256(s) * 32)) & 0xFFFFFFFF
-                );
                 uint8 idx;
                 unchecked {
                     idx = (q << 3) | s;
                 }
+                uint32 amount = idx == excludeIdx
+                    ? 0
+                    : uint32((packed >> (uint256(s) * 32)) & 0xFFFFFFFF);
                 weights[idx] = amount;
                 total += uint64(amount);
                 if (amount > maxAmount) {
@@ -1571,6 +1585,9 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         uint32 mainTraitsPacked = _rollWinningTraits(randWord, true);
         uint256 saltedRng = EntropyLib.hash2(randWord, uint256(BONUS_TRAITS_TAG));
         uint32 bonusTraitsPacked = _rollWinningTraits(saltedRng, true);
+        // Level-1 path: persist the two day-1 sets (level 1) so day-1 foil packs
+        // can claim against the sets the day-1 coin jackpots actually used.
+        dailyFoilDraw[questDay] = _packFoilDraw(mainTraitsPacked, bonusTraitsPacked, 1);
         emit DailyWinningTraits(questDay, mainTraitsPacked, bonusTraitsPacked, bonusTargetLevel);
     }
 
@@ -1761,19 +1778,33 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         uint256 randWord,
         bool isBonus
     ) private view returns (uint32 packed) {
-        uint256 r = isBonus
-            ? EntropyLib.hash2(randWord, uint256(BONUS_TRAITS_TAG))
-            : randWord;
+        if (!isBonus) {
+            // Main draw — unchanged: base + hero both off the unsalted word.
+            uint8[4] memory mTraits = JackpotBucketLib.getRandomTraits(randWord);
+            _applyHeroOverride(mTraits, randWord, randWord);
+            return JackpotBucketLib.packWinningTraits(mTraits);
+        }
+        // Bonus draw — base off the salted word, with its own hero rolled off the
+        // salted word excluding the main hero's slot (main hero off the unsalted
+        // word, matching _rollWinningTraitsPair so both producers agree).
+        uint256 r = EntropyLib.hash2(randWord, uint256(BONUS_TRAITS_TAG));
         uint8[4] memory traits = JackpotBucketLib.getRandomTraits(r);
-        _applyHeroOverride(traits, r, randWord);
+        (bool mHas, uint8 mQ, uint8 mS) = _rollHeroSymbol(
+            dailyIdx,
+            randWord,
+            _NO_HERO_EXCLUDE
+        );
+        uint8 excl = mHas ? ((mQ << 3) | mS) : _NO_HERO_EXCLUDE;
+        (bool bHas, uint8 bQ, uint8 bS) = _rollHeroSymbol(dailyIdx, r, excl);
+        _applyHeroResult(traits, r, bHas, bQ, bS);
         packed = JackpotBucketLib.packWinningTraits(traits);
     }
 
-    /// @dev Rolls main and bonus winning traits from one VRF word with a single
-    ///      hero pass. Both rolls consume the same `_rollHeroSymbol(dailyIdx,
-    ///      randWord)` result — identical inputs on both rolls, so the shared
-    ///      hero (quadrant, symbol) matches per-roll computation — while base
-    ///      traits and hero colors derive from each roll's own word
+    /// @dev Rolls main and bonus winning traits from one VRF word. The main draw
+    ///      rolls its hero off the unsalted word; the bonus draw rolls its OWN hero
+    ///      off the salted word with the main hero's slot excluded, so the two
+    ///      heroes never coincide (an empty post-exclusion pool yields no bonus
+    ///      hero). Base traits and hero colors derive from each roll's own word
     ///      (main: randWord; bonus: keccak-salted with BONUS_TRAITS_TAG).
     function _rollWinningTraitsPair(
         uint256 randWord
@@ -1782,7 +1813,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
             bool hasHeroWinner,
             uint8 heroQuadrant,
             uint8 heroSymbol
-        ) = _rollHeroSymbol(dailyIdx, randWord);
+        ) = _rollHeroSymbol(dailyIdx, randWord, _NO_HERO_EXCLUDE);
 
         uint8[4] memory traits = JackpotBucketLib.getRandomTraits(randWord);
         _applyHeroResult(traits, randWord, hasHeroWinner, heroQuadrant, heroSymbol);
@@ -1790,7 +1821,14 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
 
         uint256 rBonus = EntropyLib.hash2(randWord, uint256(BONUS_TRAITS_TAG));
         traits = JackpotBucketLib.getRandomTraits(rBonus);
-        _applyHeroResult(traits, rBonus, hasHeroWinner, heroQuadrant, heroSymbol);
+        // The bonus draw rolls its own hero off the salted word, excluding the
+        // main hero's slot so the two heroes can never coincide. An empty pool
+        // (the main had no hero) yields no bonus hero either.
+        uint8 excl = hasHeroWinner
+            ? ((heroQuadrant << 3) | heroSymbol)
+            : _NO_HERO_EXCLUDE;
+        (bool bHas, uint8 bQ, uint8 bS) = _rollHeroSymbol(dailyIdx, rBonus, excl);
+        _applyHeroResult(traits, rBonus, bHas, bQ, bS);
         bonusPacked = JackpotBucketLib.packWinningTraits(traits);
     }
 
@@ -1807,6 +1845,13 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
             keccak256(abi.encode(randWord, lvl, FLIP_JACKPOT_TAG))
         );
         uint24 bonusTargetLevel = lvl + 1 + uint24(coinEntropy % 4);
+        // Persist the day's two winning sets + cycle level for the foil claim to
+        // read (foil == jackpot by construction). One write per day.
+        dailyFoilDraw[questDay] = _packFoilDraw(
+            mainTraitsPacked,
+            bonusTraitsPacked,
+            lvl
+        );
         emit DailyWinningTraits(
             questDay,
             mainTraitsPacked,

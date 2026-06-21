@@ -1745,6 +1745,24 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
         _setStreakBase(s, uint256(_streakBaseOf(s)) + 1);
     }
 
+    /// @notice QUESTS-only: floor a live afking sub's streak base to `floor`, so a foil-pack
+    ///         purchase's quest-streak guarantee reaches a mid-run afker (whose reward streak is
+    ///         the sub base plus funded delivered days, not the manual quest streak that
+    ///         foilStreakBoost floors). The funded days continue to add on top of the floored
+    ///         base.
+    /// @dev No-op unless `player` has a live afking run (`afkingStartDay != 0`); otherwise raises
+    ///      the Sub streak base to `floor` if it is below. Runs in the Game's storage context
+    ///      under delegatecall; `msg.sender` is the original caller (DegenerusQuests).
+    /// @param player The afking subscriber whose streak base is floored.
+    /// @param floor The minimum streak base to set.
+    function floorAfkingStreakBase(address player, uint16 floor) external {
+        if (msg.sender != ContractAddresses.QUESTS) revert NotApproved();
+        if (_subscriberIndex[player] == 0) return;
+        Sub storage s = _subOf[player];
+        if (s.afkingStartDay == 0) return;
+        if (_streakBaseOf(s) < floor) _setStreakBase(s, floor);
+    }
+
     /// @notice Emitted when a curse is cleared via the permissionless paid cure.
     event Decursed(address indexed curer, address indexed target);
 

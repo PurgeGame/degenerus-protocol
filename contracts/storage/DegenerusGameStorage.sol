@@ -2391,4 +2391,184 @@ abstract contract DegenerusGameStorage {
     ///      orphaned mid-day by an emergency coordinator rotation is skipped until the
     ///      detect-preserve-re-issue path lands the re-issued word.
     mapping(uint48 => address[]) internal boxPlayers;
+
+    // =========================================================================
+    // Foil Pack (v71)
+    // =========================================================================
+
+    /// @dev One packed record per (cycle level, player) — the surviving foil buy
+    ///      for the cycle. The outer key is the active ticket level (the cycle the
+    ///      buy bets into), the inner key the player, so distinct cycles are
+    ///      independent records: a re-buy at the next cycle writes a different
+    ///      outer key and never clobbers the prior cycle's record.
+    ///      The buy writes all three fields at once: resolveDay (>= 1), multBps
+    ///      (>= 20000), and the activity score frozen at buy. Presence (slot != 0) IS
+    ///      the one-per-cycle cap. No match signatures are stored — the four match
+    ///      lines are re-derived on claim from rngWordByDay[resolveDay] + multBps (the
+    ///      SAME derivation the drain filed into the jackpot buckets), so the stored
+    ///      record is just the derivation inputs plus the cap/no-look-back day.
+    ///      Packed uint256 layout (LSB→MSB):
+    ///        [0-23]    resolveDay    — the day whose sealed daily word
+    ///                                (rngWordByDay[resolveDay]) both the drain and the
+    ///                                claim derive the four match lines from, and the
+    ///                                no-look-back floor (`day >= resolveDay`). Always
+    ///                                >= 1, so every use site is additive (no underflow).
+    ///        [24-39]   multBps       — the frozen foilBoostBps output (20000..60000)
+    ///        [40-55]   activityScore — the buyer's activity score frozen at buy (the
+    ///                                same value foilBoostBps was computed from), reused
+    ///                                as the claim spin's RTP input. Freezing it makes
+    ///                                the payout fully determined at buy (no claim-timing
+    ///                                lever, consistent with the frozen multBps) and
+    ///                                drops the live activity read from every claim.
+    ///        [56-255]  reserved 0
+    mapping(uint24 => mapping(address => uint256)) internal foilRecord;
+
+    /// @dev Sparse double-claim marker, keyed by
+    ///      keccak256(abi.encode(player, level, day, drawKind, ticketIndex)).
+    ///      Set BEFORE any payout effect (CEI); a realized winning tuple is
+    ///      claimable at most once per draw.
+    mapping(bytes32 => bool) internal foilMatchClaimed;
+
+    /// @dev The two daily winning trait sets the jackpot sealed for a day, plus
+    ///      the cycle level active that day. Written once per day at the daily
+    ///      seal; the foil claim reads these (never re-derives), so the foil
+    ///      winning numbers equal the jackpot's. Presence (slot != 0) gates a
+    ///      claim; the level field is the implicit eligibility upper bound (a day
+    ///      maps to one cycle).
+    ///      Packed uint256 layout (LSB→MSB):
+    ///        [0-31]   mainSet  — the day's main winning set (uint32)
+    ///        [32-63]  bonusSet — the day's bonus winning set (uint32)
+    ///        [64-87]  level    — the active ticket level of that day (uint24)
+    ///        [88-255] reserved 0
+    mapping(uint24 => uint256) internal dailyFoilDraw;
+
+    /// @dev Per-buy-day foil queue, keyed by resolveDay (= buyDay + 1), the
+    ///      coinflip-by-day / degenerette-bucket analog. A foil buy pushes a packed
+    ///      (cycle level << 160 | buyer) entry into the bucket for its resolveDay;
+    ///      the drain processes a bucket only once rngWordByDay[resolveDay] is sealed,
+    ///      so every entry's match lines derive from a word that was provably future
+    ///      at buy. The packed level is the cycle the pack bet into (the foilRecord
+    ///      and jackpot key), carried in the entry because the bucket is day-keyed and
+    ///      one wall day can straddle a cycle transition.
+    mapping(uint24 => uint256[]) internal foilBuyers;
+
+    /// @dev Resumable foil drain cursors. foilDrainDay is the next resolveDay bucket
+    ///      to drain (the low-water mark); foilCursor is the within-bucket index for a
+    ///      budget-short deferral. The drain walks foilDrainDay forward over sealed
+    ///      buckets up to foilLastResolveDay (the high-water mark = the latest
+    ///      resolveDay any pack was bought into). foilLastResolveDay == 0 means no
+    ///      foil was ever bought, so the readiness gate and drain short-circuit with a
+    ///      single SLOAD and the common advance carries no foil cost.
+    uint32 internal foilCursor;
+    uint24 internal foilDrainDay;
+    uint24 internal foilLastResolveDay;
+
+    /// @dev 75/25 next/future split for the foil leg (forked from the 90/10
+    ///      ticket split's PURCHASE_TO_FUTURE_BPS = 1000).
+    uint16 internal constant FOIL_TO_FUTURE_BPS = 2500;
+
+    /// @dev A foil pack resolves a fixed 16 boosted entries (4 tickets x 4
+    ///      quadrants). The drain resolves this many per queued buyer.
+    uint32 internal constant FOIL_PACK_ENTRIES = 16;
+
+    /// @dev The foil SKU is priced at ten ticket prices and records ten mint units
+    ///      (price-equivalent activity, not the four packed tickets). Shared by the
+    ///      mint-path cost computation and the foil delivery module.
+    uint256 internal constant FOIL_PACK_TICKETS = 10;
+
+    uint256 private constant _FOIL_RESOLVEDAY_MASK = (uint256(1) << 24) - 1;
+    uint256 internal constant _FOIL_MULT_SHIFT = 24;
+    uint256 private constant _FOIL_MULT_MASK = (uint256(1) << 16) - 1;
+    uint256 internal constant _FOIL_SCORE_SHIFT = 40;
+    uint256 private constant _FOIL_SCORE_MASK = (uint256(1) << 16) - 1;
+
+    uint256 private constant _FOIL_DRAW_MAIN_MASK = (uint256(1) << 32) - 1;
+    uint256 private constant _FOIL_DRAW_BONUS_SHIFT = 32;
+    uint256 private constant _FOIL_DRAW_LEVEL_SHIFT = 64;
+    uint256 private constant _FOIL_DRAW_LEVEL_MASK = (uint256(1) << 24) - 1;
+
+    /// @dev Domain-separated seed for the drain-side match-line roll, so the foil
+    ///      tuples derive from a keccak lane disjoint from the normal-ticket LCG
+    ///      seeds and the daily winning-set derivation.
+    bytes32 internal constant FOIL_SEED_TAG = keccak256("foil-seed");
+
+    /// @dev Claim-side entropy lanes off the retained daily word — distinct keccak
+    ///      domains from each other and from BONUS_TRAITS_TAG. FOIL_CCY_TAG rolls the
+    ///      40/40/20 currency split; FOIL_SPIN_TAG seeds the Degenerette box-spin the
+    ///      tier magnitude is staked into.
+    bytes32 internal constant FOIL_CCY_TAG = keccak256("foil-currency");
+    bytes32 internal constant FOIL_SPIN_TAG = keccak256("foil-spin");
+
+    /// @dev A player's foil record for a cycle level (one SLOAD): the frozen boost
+    ///      and the resolveDay both the drain and the claim derive the match lines
+    ///      from. present = (slot != 0); resolveDay >= 1 on any bought pack, so the
+    ///      claim feeds it directly as the no-look-back floor (`day >= resolveDay`)
+    ///      and the derivation key (rngWordByDay[resolveDay]).
+    function _foilRecordFor(address player, uint256 lvl)
+        internal
+        view
+        returns (bool present, uint16 multBps, uint24 resolveDay, uint16 activityScore)
+    {
+        uint256 packed = foilRecord[uint24(lvl)][player];
+        present = packed != 0;
+        resolveDay = uint24(packed & _FOIL_RESOLVEDAY_MASK);
+        multBps = uint16((packed >> _FOIL_MULT_SHIFT) & _FOIL_MULT_MASK);
+        activityScore = uint16((packed >> _FOIL_SCORE_SHIFT) & _FOIL_SCORE_MASK);
+    }
+
+    /// @dev The frozen activity multiplier from a player's foil record for a cycle
+    ///      level (one SLOAD); 0 when the player holds no pack for the cycle. The
+    ///      queue drain reads only this field to boost the resolved entries.
+    function _foilMultFor(address player, uint256 lvl) internal view returns (uint16) {
+        return uint16(
+            (foilRecord[uint24(lvl)][player] >> _FOIL_MULT_SHIFT) & _FOIL_MULT_MASK
+        );
+    }
+
+    /// @dev True iff a sealed, un-drained foil bucket is waiting. The jackpot
+    ///      readiness gate blocks on this so a day's boosted foil entries are filed
+    ///      into the trait buckets before that day's jackpot samples winners. Cheap by
+    ///      construction: no foil ever bought (foilLastResolveDay == 0) short-circuits
+    ///      on one SLOAD; otherwise it is pending only while the low-water bucket is
+    ///      at/below the high-water mark AND its daily word has sealed (a future-dated
+    ///      bucket whose word is not yet sealed does not gate the current jackpot).
+    function _foilDrainPending() internal view returns (bool) {
+        uint24 last = foilLastResolveDay;
+        if (last == 0) return false;
+        uint24 dd = foilDrainDay;
+        return dd <= last && rngWordByDay[dd] != 0;
+    }
+
+    /// @dev The per-cycle one-pack cap: true iff the player already bought a foil
+    ///      pack for this cycle. Keyed on the active ticket level — the same cycle
+    ///      key the buy's record write and ticket queue use.
+    function _foilBoughtThisLevel(address player, uint256 lvl) internal view returns (bool) {
+        return foilRecord[uint24(lvl)][player] != 0;
+    }
+
+    /// @dev Pack a daily foil draw record (the two sealed winning sets + the cycle
+    ///      level) for storage in dailyFoilDraw.
+    function _packFoilDraw(uint32 mainSet, uint32 bonusSet, uint24 lvl)
+        internal
+        pure
+        returns (uint256)
+    {
+        return uint256(mainSet)
+            | (uint256(bonusSet) << _FOIL_DRAW_BONUS_SHIFT)
+            | (uint256(lvl) << _FOIL_DRAW_LEVEL_SHIFT);
+    }
+
+    /// @dev Unpack the daily foil draw for a day (one SLOAD). present = (slot !=
+    ///      0); a sealed day always has a nonzero level.
+    function _foilDrawFor(uint256 day)
+        internal
+        view
+        returns (bool present, uint32 mainSet, uint32 bonusSet, uint24 lvl)
+    {
+        uint256 packed = dailyFoilDraw[uint24(day)];
+        present = packed != 0;
+        mainSet = uint32(packed & _FOIL_DRAW_MAIN_MASK);
+        bonusSet = uint32((packed >> _FOIL_DRAW_BONUS_SHIFT) & _FOIL_DRAW_MAIN_MASK);
+        lvl = uint24((packed >> _FOIL_DRAW_LEVEL_SHIFT) & _FOIL_DRAW_LEVEL_MASK);
+    }
 }

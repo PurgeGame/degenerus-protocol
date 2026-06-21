@@ -24,13 +24,15 @@ interface IDegenerusGamePlayerActions {
         uint8 reinvestPct,
         address fundingSource
     ) external payable;
-    /// @notice Purchase tickets and/or lootboxes.
+    /// @notice Purchase tickets and/or lootboxes. The trailing `foil` flag adds a foil pack
+    ///         leg; the vault always passes false (it buys tickets/lootboxes only).
     function purchase(
         address buyer,
         uint256 ticketQuantity,
         uint256 lootBoxAmount,
         bytes32 affiliateCode,
-        MintPaymentKind payKind
+        MintPaymentKind payKind,
+        bool foil
     ) external payable;
     /// @notice Claim accumulated ETH winnings for a player.
     function claimWinnings(address player) external;
@@ -525,7 +527,8 @@ contract DegenerusVault {
             ticketQuantity,
             lootBoxAmount,
             affiliateCode,
-            payKind
+            payKind,
+            false
         );
     }
 

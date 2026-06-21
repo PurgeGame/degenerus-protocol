@@ -6,7 +6,10 @@ import {IDegenerusCoin} from "../interfaces/IDegenerusCoin.sol";
 import {ICoinflip} from "../interfaces/ICoinflip.sol";
 import {MintPaymentKind} from "../interfaces/IDegenerusGame.sol";
 import {IDegenerusQuests} from "../interfaces/IDegenerusQuests.sol";
-import {IDegenerusGameBoonModule} from "../interfaces/IDegenerusGameModules.sol";
+import {
+    IDegenerusGameBoonModule,
+    IDegenerusGameFoilPackModule
+} from "../interfaces/IDegenerusGameModules.sol";
 import {ContractAddresses} from "../ContractAddresses.sol";
 import {DegenerusGameStorage} from "../storage/DegenerusGameStorage.sol";
 import {DegenerusGameMintStreakUtils, IDegenerusVaultOwner} from "./DegenerusGameMintStreakUtils.sol";
@@ -311,224 +314,6 @@ contract DegenerusGameMintModule is
         if (afkingUsed != 0) {
             emit AfkingSpent(player, afkingUsed);
         }
-    }
-
-    /**
-     * @notice Record mint metadata and update Activity Score metrics.
-     * @dev Runs directly after the mint payment on the ETH-purchase path
-     *      (the coin path never records mint data). Pure mintPacked_ accounting — touches
-     *      no claimable or pool state.
-     *
-     * @param player Address of the player making the purchase.
-     * @param lvl Target level for this purchase (level+1 during purchase phase, level during jackpot phase).
-     * @param mintUnits Scaled ticket units purchased.
-     *
-     * ## Activity Score State Updates
-     *
-     * - `mintPacked_[player]` updated with level count, units, frozen-flag clearance, and affiliate bonus cache
-     * - Only writes to storage if data actually changed
-     *
-     * ## Level Transition Logic
-     *
-     * - Same level: Just update units
-     * - New level with <4 units: Only track units, don't count as "minted"
-     * - New level with ≥4 units: Update level count total and refresh affiliate bonus cache
-     */
-    function _recordMintData(
-        address player,
-        uint24 lvl,
-        uint32 mintUnits
-    ) internal {
-        // Load previous packed data
-        uint256 prevData = mintPacked_[player];
-        uint256 data;
-
-        // ---------------------------------------------------------------------
-        // Unpack previous state
-        // ---------------------------------------------------------------------
-
-        uint24 prevLevel = uint24(
-            (prevData >> BitPackingLib.LAST_LEVEL_SHIFT) & BitPackingLib.MASK_24
-        );
-        uint24 total = uint24(
-            (prevData >> BitPackingLib.LEVEL_COUNT_SHIFT) &
-                BitPackingLib.MASK_24
-        );
-        uint24 unitsLevel = uint24(
-            (prevData >> BitPackingLib.LEVEL_UNITS_LEVEL_SHIFT) &
-                BitPackingLib.MASK_24
-        );
-
-        bool sameLevel = prevLevel == lvl;
-        bool sameUnitsLevel = unitsLevel == lvl;
-
-        // ---------------------------------------------------------------------
-        // Handle level units
-        // ---------------------------------------------------------------------
-
-        // Get previous level units (reset on level change)
-        uint256 levelUnitsBefore = sameUnitsLevel
-            ? ((prevData >> BitPackingLib.LEVEL_UNITS_SHIFT) &
-                BitPackingLib.MASK_16)
-            : 0;
-
-        // Calculate new level units (capped at 16-bit max)
-        uint256 levelUnitsAfter = levelUnitsBefore + uint256(mintUnits);
-        if (levelUnitsAfter > BitPackingLib.MASK_16) {
-            levelUnitsAfter = BitPackingLib.MASK_16;
-        }
-
-        // ---------------------------------------------------------------------
-        // Early exit: New level with <4 units (not counted as "minted")
-        // ---------------------------------------------------------------------
-
-        if (!sameLevel && levelUnitsAfter < 4) {
-            // Just update units, don't update level/streak/total
-            data = BitPackingLib.setPacked(
-                prevData,
-                BitPackingLib.LEVEL_UNITS_SHIFT,
-                BitPackingLib.MASK_16,
-                levelUnitsAfter
-            );
-            data = BitPackingLib.setPacked(
-                data,
-                BitPackingLib.LEVEL_UNITS_LEVEL_SHIFT,
-                BitPackingLib.MASK_24,
-                lvl
-            );
-            if (data != prevData) {
-                mintPacked_[player] = data;
-            }
-            return;
-        }
-
-        // ---------------------------------------------------------------------
-        // Update mint day
-        // ---------------------------------------------------------------------
-
-        uint24 day = _currentMintDay();
-        data = _setMintDay(
-            prevData,
-            day,
-            BitPackingLib.DAY_SHIFT,
-            BitPackingLib.MASK_32
-        );
-
-        // ---------------------------------------------------------------------
-        // Same level: Just update units
-        // ---------------------------------------------------------------------
-
-        if (sameLevel) {
-            data = BitPackingLib.setPacked(
-                data,
-                BitPackingLib.LEVEL_UNITS_SHIFT,
-                BitPackingLib.MASK_16,
-                levelUnitsAfter
-            );
-            data = BitPackingLib.setPacked(
-                data,
-                BitPackingLib.LEVEL_UNITS_LEVEL_SHIFT,
-                BitPackingLib.MASK_24,
-                lvl
-            );
-            if (data != prevData) {
-                mintPacked_[player] = data;
-            }
-            return;
-        }
-
-        // ---------------------------------------------------------------------
-        // New level with ≥4 units: Full state update
-        // ---------------------------------------------------------------------
-
-        // Check for whale bundle frozen state
-        uint24 frozenUntilLevel = uint24(
-            (prevData >> BitPackingLib.FROZEN_UNTIL_LEVEL_SHIFT) &
-                BitPackingLib.MASK_24
-        );
-        bool isFrozen = frozenUntilLevel > 0 && lvl <= frozenUntilLevel;
-
-        // If frozen, skip updating total (it's pre-set by whale bundle)
-        // If we've reached the frozen level, clear the flag and resume normal tracking
-        if (frozenUntilLevel > 0 && lvl > frozenUntilLevel) {
-            // Clear frozen flag and whale bundle type - resume normal tracking from here
-            data = BitPackingLib.setPacked(
-                data,
-                BitPackingLib.FROZEN_UNTIL_LEVEL_SHIFT,
-                BitPackingLib.MASK_24,
-                0
-            );
-            data = BitPackingLib.setPacked(
-                data,
-                BitPackingLib.WHALE_BUNDLE_TYPE_SHIFT,
-                3,
-                0
-            ); // Clear bundle type
-            frozenUntilLevel = 0;
-            isFrozen = false;
-        }
-
-        if (!isFrozen) {
-            // Update total (lifetime count)
-            if (total < type(uint24).max) {
-                unchecked {
-                    total = uint24(total + 1);
-                }
-            }
-        }
-
-        // Pack all updated fields
-        data = BitPackingLib.setPacked(
-            data,
-            BitPackingLib.LAST_LEVEL_SHIFT,
-            BitPackingLib.MASK_24,
-            lvl
-        );
-        data = BitPackingLib.setPacked(
-            data,
-            BitPackingLib.LEVEL_COUNT_SHIFT,
-            BitPackingLib.MASK_24,
-            total
-        );
-        data = BitPackingLib.setPacked(
-            data,
-            BitPackingLib.LEVEL_UNITS_SHIFT,
-            BitPackingLib.MASK_16,
-            levelUnitsAfter
-        );
-        data = BitPackingLib.setPacked(
-            data,
-            BitPackingLib.LEVEL_UNITS_LEVEL_SHIFT,
-            BitPackingLib.MASK_24,
-            lvl
-        );
-        // Frozen flag is already set in data if it was modified above
-
-        // Cache affiliate bonus for activity score (piggybacks on existing SSTORE)
-        {
-            uint256 affPoints = affiliate.affiliateBonusPointsBest(lvl, player);
-            data = BitPackingLib.setPacked(
-                data,
-                BitPackingLib.AFFILIATE_BONUS_LEVEL_SHIFT,
-                BitPackingLib.MASK_24,
-                lvl
-            );
-            data = BitPackingLib.setPacked(
-                data,
-                BitPackingLib.AFFILIATE_BONUS_POINTS_SHIFT,
-                BitPackingLib.MASK_6,
-                affPoints
-            );
-        }
-
-        // ---------------------------------------------------------------------
-        // Commit to storage (only if changed)
-        // ---------------------------------------------------------------------
-
-        if (data != prevData) {
-            mintPacked_[player] = data;
-        }
-        return;
     }
 
     // -------------------------------------------------------------------------
@@ -855,24 +640,37 @@ contract DegenerusGameMintModule is
         }
 
         uint256 idx = ticketCursor;
-        if (idx >= total) {
-            delete ticketQueue[rk];
-            ticketCursor = 0;
-            ticketLevel = 0;
-            return true;
-        }
-
         uint32 writesBudget = WRITES_BUDGET_SAFE;
         if (idx == 0) {
             writesBudget -= (writesBudget * 35) / 100; // 65% scaling for cold storage
         }
 
-        uint32 used;
+        if (idx >= total) {
+            // Normal queue already drained (empty this level, or finished on a prior
+            // tx). Still drain the per-buy-day foil buckets on the full budget before
+            // declaring the level finished — the readiness gate depends on it. Returns
+            // false (resume next tx) only if a budget-short foil pack defers. _drainFoil
+            // short-circuits on _foilDrainPending, so a no-foil call is a single SLOAD.
+            if (queue.length != 0) {
+                delete ticketQueue[rk];
+            }
+            bool foilDoneEmpty = _drainFoil(writesBudget);
+            ticketCursor = 0;
+            if (foilDoneEmpty) {
+                ticketLevel = 0;
+                return true;
+            }
+            return false;
+        }
+
         uint256 entropy = lootboxRngWordByIndex[uint48(_lrRead(LR_INDEX_SHIFT, LR_INDEX_MASK)) - 1];
+
+        uint32 used;
         uint32 processed;
 
-        // Trait-batch scratch buffers shared by every entry this call (zeroed between
-        // entries inside _raritySymbolBatch), so memory does not grow per queue entry.
+        // Trait-batch scratch buffers shared by every normal entry this call (zeroed
+        // between entries inside _raritySymbolBatch), so memory does not grow per
+        // queue entry. The foil drain runs in a separate module and owns its scratch.
         uint32[256] memory counts;
         uint8[256] memory touchedTraits;
 
@@ -904,16 +702,70 @@ contract DegenerusGameMintModule is
         }
 
         if (idx >= total) {
-            delete ticketQueue[rk];
-            ticketCursor = 0;
-            ticketLevel = 0;
-            return true;
+            // Normal queue drained. Continue into the per-buy-day foil buckets on the
+            // leftover write budget (one shared envelope, so the combined advance
+            // stays gas-bounded). A foil buyer resolves a fixed FOIL_PACK_ENTRIES
+            // (16) boosted entries atomically; foilDrainDay/foilCursor make a
+            // budget-short deferral resumable. Only when BOTH the queue and the foil
+            // drain are caught up is the level finished, so the readiness gate cannot
+            // let the jackpot draw early.
+            if (queue.length != 0) {
+                delete ticketQueue[rk];
+            }
+            // A final loop iteration can push `used` past writesBudget, so clamp the
+            // leftover to 0 (an over-budget call leaves no room for foil and defers it
+            // to the next tx) rather than underflowing the subtraction.
+            uint32 foilRoom = used >= writesBudget ? 0 : writesBudget - used;
+            bool foilDone = _drainFoil(foilRoom);
+            if (foilDone) {
+                ticketCursor = 0;
+                ticketLevel = 0;
+                return true;
+            }
+            // Foil queue has more entries than the budget could fit: resume next tx.
+            // The normal cursor stays at its terminal position (idx == total).
+            ticketCursor = uint32(idx);
+            return false;
         }
         // Mid-queue stop: persist the resume cursor. The finished path above writes
         // its own terminal cursor/level pair, so the shared packed slot is stored
         // exactly once per path.
         ticketCursor = uint32(idx);
         return false;
+    }
+
+    /// @dev Hand the per-buy-day foil buckets to the foil module on the leftover write
+    ///      budget after the normal queue is exhausted. The drain itself lives in
+    ///      DegenerusGameFoilPackModule (this near-full module would otherwise exceed
+    ///      the EIP-170 runtime limit); the delegatecall runs there in the Game's
+    ///      storage context, so it walks foilDrainDay/foilCursor and writes the same
+    ///      traitBurnTicket buckets this module would have. When no foil drain is
+    ///      pending (none ever bought, or every sealed bucket already drained) the foil
+    ///      module is not invoked at all — the common advance carries no foil-module
+    ///      dependency, gas, or brick surface.
+    /// @return done True iff the foil drain has caught up (no sealed bucket remains).
+    function _drainFoil(uint32 room) private returns (bool done) {
+        if (!_foilDrainPending()) return true;
+        // A foil buyer costs a fixed FOIL_PACK_ENTRIES*2 + 3 budget units; if the
+        // normal queue already consumed the budget there is no room for even one, so
+        // defer to the next tx WITHOUT the delegatecall (pending foil is never "done"
+        // here — the readiness gate keeps the draw blocked until it drains).
+        if (room < (FOIL_PACK_ENTRIES * 2) + 3) return false;
+        (bool ok, bytes memory data) = ContractAddresses
+            .GAME_FOILPACK_MODULE
+            .delegatecall(
+                abi.encodeWithSelector(
+                    IDegenerusGameFoilPackModule.processFoilDrain.selector,
+                    room
+                )
+            );
+        if (!ok) {
+            if (data.length == 0) revert E();
+            assembly ("memory-safe") {
+                revert(add(32, data), mload(data))
+            }
+        }
+        return abi.decode(data, (bool));
     }
 
     /// @dev Resolves the zero-owed remainder case for ticket processing.
@@ -1049,11 +901,12 @@ contract DegenerusGameMintModule is
         );
     }
 
-    /// @notice Afking ticket-buy entry: like `purchase`, but the fresh-ETH portion is an
-    ///         explicit `ethValue` parameter rather than `msg.value`. Lets the afking process
-    ///         STAGE queue a ticket-mode subscriber's whole tickets inline in one frame (the
-    ///         contract holds the prepaid afkingFunding ETH), with no value-bearing self-call.
-    ///         Reached via the GameAfkingModule process STAGE's ticket-mode buy (delegatecall).
+    /// @notice Explicit-ethValue ticket-buy entry: like `purchase`, but the fresh-ETH portion
+    ///         is the `ethValue` parameter rather than `msg.value`. Sole caller: the facade's
+    ///         foil purchase, which funds the ticket/lootbox leg with the fresh ETH it carved
+    ///         while the buyer's msg.value is in flight (that msg.value is ignored here — only
+    ///         ethValue is spent). payable so the carried msg.value does not revert the
+    ///         delegatecall.
     function purchaseWith(
         address buyer,
         uint256 ticketQuantity,
@@ -1061,7 +914,7 @@ contract DegenerusGameMintModule is
         bytes32 affiliateCode,
         MintPaymentKind payKind,
         uint256 ethValue
-    ) external {
+    ) external payable {
         _purchaseForWith(
             buyer,
             ticketQuantity,

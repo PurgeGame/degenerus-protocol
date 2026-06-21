@@ -445,4 +445,222 @@ abstract contract DegenerusGameMintStreakUtils is DegenerusGameStorage {
             clearedDay |
             (uint256(day) << BitPackingLib.DAY_SHIFT);
     }
+
+    /**
+     * @notice Record mint metadata and update Activity Score metrics.
+     * @dev Runs directly after the mint payment on the ETH-purchase path
+     *      (the coin path never records mint data). Pure mintPacked_ accounting — touches
+     *      no claimable or pool state.
+     *
+     * @param player Address of the player making the purchase.
+     * @param lvl Target level for this purchase (level+1 during purchase phase, level during jackpot phase).
+     * @param mintUnits Scaled ticket units purchased.
+     *
+     * ## Activity Score State Updates
+     *
+     * - `mintPacked_[player]` updated with level count, units, frozen-flag clearance, and affiliate bonus cache
+     * - Only writes to storage if data actually changed
+     *
+     * ## Level Transition Logic
+     *
+     * - Same level: Just update units
+     * - New level with <4 units: Only track units, don't count as "minted"
+     * - New level with ≥4 units: Update level count total and refresh affiliate bonus cache
+     */
+    function _recordMintData(
+        address player,
+        uint24 lvl,
+        uint32 mintUnits
+    ) internal {
+        // Load previous packed data
+        uint256 prevData = mintPacked_[player];
+        uint256 data;
+
+        // ---------------------------------------------------------------------
+        // Unpack previous state
+        // ---------------------------------------------------------------------
+
+        uint24 prevLevel = uint24(
+            (prevData >> BitPackingLib.LAST_LEVEL_SHIFT) & BitPackingLib.MASK_24
+        );
+        uint24 total = uint24(
+            (prevData >> BitPackingLib.LEVEL_COUNT_SHIFT) &
+                BitPackingLib.MASK_24
+        );
+        uint24 unitsLevel = uint24(
+            (prevData >> BitPackingLib.LEVEL_UNITS_LEVEL_SHIFT) &
+                BitPackingLib.MASK_24
+        );
+
+        bool sameLevel = prevLevel == lvl;
+        bool sameUnitsLevel = unitsLevel == lvl;
+
+        // ---------------------------------------------------------------------
+        // Handle level units
+        // ---------------------------------------------------------------------
+
+        // Get previous level units (reset on level change)
+        uint256 levelUnitsBefore = sameUnitsLevel
+            ? ((prevData >> BitPackingLib.LEVEL_UNITS_SHIFT) &
+                BitPackingLib.MASK_16)
+            : 0;
+
+        // Calculate new level units (capped at 16-bit max)
+        uint256 levelUnitsAfter = levelUnitsBefore + uint256(mintUnits);
+        if (levelUnitsAfter > BitPackingLib.MASK_16) {
+            levelUnitsAfter = BitPackingLib.MASK_16;
+        }
+
+        // ---------------------------------------------------------------------
+        // Early exit: New level with <4 units (not counted as "minted")
+        // ---------------------------------------------------------------------
+
+        if (!sameLevel && levelUnitsAfter < 4) {
+            // Just update units, don't update level/streak/total
+            data = BitPackingLib.setPacked(
+                prevData,
+                BitPackingLib.LEVEL_UNITS_SHIFT,
+                BitPackingLib.MASK_16,
+                levelUnitsAfter
+            );
+            data = BitPackingLib.setPacked(
+                data,
+                BitPackingLib.LEVEL_UNITS_LEVEL_SHIFT,
+                BitPackingLib.MASK_24,
+                lvl
+            );
+            if (data != prevData) {
+                mintPacked_[player] = data;
+            }
+            return;
+        }
+
+        // ---------------------------------------------------------------------
+        // Update mint day
+        // ---------------------------------------------------------------------
+
+        uint24 day = _currentMintDay();
+        data = _setMintDay(
+            prevData,
+            day,
+            BitPackingLib.DAY_SHIFT,
+            BitPackingLib.MASK_32
+        );
+
+        // ---------------------------------------------------------------------
+        // Same level: Just update units
+        // ---------------------------------------------------------------------
+
+        if (sameLevel) {
+            data = BitPackingLib.setPacked(
+                data,
+                BitPackingLib.LEVEL_UNITS_SHIFT,
+                BitPackingLib.MASK_16,
+                levelUnitsAfter
+            );
+            data = BitPackingLib.setPacked(
+                data,
+                BitPackingLib.LEVEL_UNITS_LEVEL_SHIFT,
+                BitPackingLib.MASK_24,
+                lvl
+            );
+            if (data != prevData) {
+                mintPacked_[player] = data;
+            }
+            return;
+        }
+
+        // ---------------------------------------------------------------------
+        // New level with ≥4 units: Full state update
+        // ---------------------------------------------------------------------
+
+        // Check for whale bundle frozen state
+        uint24 frozenUntilLevel = uint24(
+            (prevData >> BitPackingLib.FROZEN_UNTIL_LEVEL_SHIFT) &
+                BitPackingLib.MASK_24
+        );
+        bool isFrozen = frozenUntilLevel > 0 && lvl <= frozenUntilLevel;
+
+        // If frozen, skip updating total (it's pre-set by whale bundle)
+        // If we've reached the frozen level, clear the flag and resume normal tracking
+        if (frozenUntilLevel > 0 && lvl > frozenUntilLevel) {
+            // Clear frozen flag and whale bundle type - resume normal tracking from here
+            data = BitPackingLib.setPacked(
+                data,
+                BitPackingLib.FROZEN_UNTIL_LEVEL_SHIFT,
+                BitPackingLib.MASK_24,
+                0
+            );
+            data = BitPackingLib.setPacked(
+                data,
+                BitPackingLib.WHALE_BUNDLE_TYPE_SHIFT,
+                3,
+                0
+            ); // Clear bundle type
+            frozenUntilLevel = 0;
+            isFrozen = false;
+        }
+
+        if (!isFrozen) {
+            // Update total (lifetime count)
+            if (total < type(uint24).max) {
+                unchecked {
+                    total = uint24(total + 1);
+                }
+            }
+        }
+
+        // Pack all updated fields
+        data = BitPackingLib.setPacked(
+            data,
+            BitPackingLib.LAST_LEVEL_SHIFT,
+            BitPackingLib.MASK_24,
+            lvl
+        );
+        data = BitPackingLib.setPacked(
+            data,
+            BitPackingLib.LEVEL_COUNT_SHIFT,
+            BitPackingLib.MASK_24,
+            total
+        );
+        data = BitPackingLib.setPacked(
+            data,
+            BitPackingLib.LEVEL_UNITS_SHIFT,
+            BitPackingLib.MASK_16,
+            levelUnitsAfter
+        );
+        data = BitPackingLib.setPacked(
+            data,
+            BitPackingLib.LEVEL_UNITS_LEVEL_SHIFT,
+            BitPackingLib.MASK_24,
+            lvl
+        );
+        // Frozen flag is already set in data if it was modified above
+
+        // Cache affiliate bonus for activity score (piggybacks on existing SSTORE)
+        {
+            uint256 affPoints = affiliate.affiliateBonusPointsBest(lvl, player);
+            data = BitPackingLib.setPacked(
+                data,
+                BitPackingLib.AFFILIATE_BONUS_LEVEL_SHIFT,
+                BitPackingLib.MASK_24,
+                lvl
+            );
+            data = BitPackingLib.setPacked(
+                data,
+                BitPackingLib.AFFILIATE_BONUS_POINTS_SHIFT,
+                BitPackingLib.MASK_6,
+                affPoints
+            );
+        }
+
+        // ---------------------------------------------------------------------
+        // Commit to storage (only if changed)
+        // ---------------------------------------------------------------------
+
+        if (data != prevData) {
+            mintPacked_[player] = data;
+        }
+        return;
+    }
 }

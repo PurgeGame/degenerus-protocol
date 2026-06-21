@@ -362,12 +362,15 @@ interface IDegenerusGame {
     /// @param lootBoxAmount ETH amount for loot boxes, minimum 0.01 ETH (0 to skip).
     /// @param affiliateCode Affiliate/referral code for all purchases.
     /// @param payKind Payment method (DirectEth, Claimable, or Combined).
+    /// @param foil True to additively buy one foil pack (10x price) in the same tx; the
+    ///        foil leg is one-per-cycle and adds to, never replaces, the ticket/lootbox legs.
     function purchase(
         address buyer,
         uint256 ticketQuantity,
         uint256 lootBoxAmount,
         bytes32 affiliateCode,
-        MintPaymentKind payKind
+        MintPaymentKind payKind,
+        bool foil
     ) external payable;
 
     /// @notice Purchase tickets with FLIP.
@@ -452,6 +455,13 @@ interface IDegenerusGame {
     /// @notice QUESTS-only: bump an afking sub's streak base for a secondary/level completion.
     /// @param player The afking subscriber whose secondary completion is recorded.
     function recordAfkingSecondary(address player) external;
+
+    /// @notice QUESTS-only: floor an afking sub's streak base to `floor`, so a foil-pack
+    ///         purchase's quest-streak guarantee reaches a mid-run afker (whose reward streak
+    ///         is the sub base plus funded delivered days, not the manual quest streak).
+    /// @param player The afking subscriber whose streak base is floored.
+    /// @param floor The minimum streak base to set (no-op if the base is already at/above it).
+    function floorAfkingStreakBase(address player, uint16 floor) external;
 
     /// @notice Permissionless paid cure: clear `target`'s cashout/smite curse for 100 FLIP.
     /// @param target The cursed player to cure.

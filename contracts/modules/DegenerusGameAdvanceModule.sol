@@ -230,7 +230,14 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                 }
 
                 uint24 rk = _tqReadKey(purchaseLevel);
-                if (ticketQueue[rk].length > 0) {
+                // The draw is gated on BOTH the normal queue AND the foil drain: keep
+                // draining while the normal queue OR a sealed-but-un-drained foil bucket
+                // (resolved on leftover budget) remains, else foil's boosted entries
+                // silently under-resolve into the jackpot.
+                if (
+                    ticketQueue[rk].length > 0 ||
+                    _foilDrainPending()
+                ) {
                     (
                         bool ticketWorked,
                         bool ticketsFinished
@@ -273,7 +280,13 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
             // --- Daily drain gate: ensure read slot is fully processed before RNG ---
             if (!ticketsFullyProcessed) {
                 uint24 preRk = _tqReadKey(purchaseLevel);
-                if (ticketQueue[preRk].length > 0) {
+                // The draw is gated on BOTH the normal queue AND the foil drain: keep
+                // draining while the normal queue OR a sealed-but-un-drained foil bucket
+                // remains.
+                if (
+                    ticketQueue[preRk].length > 0 ||
+                    _foilDrainPending()
+                ) {
                     uint48 preIdx = uint48(
                         _lrRead(LR_INDEX_SHIFT, LR_INDEX_MASK)
                     ) - 1;
@@ -1241,10 +1254,18 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
             // jackpot not yet entered) so the FLIP-mint quest only lands when the redeem window is
             // live. Turbo (compressedJackpotFlag == 2) is skipped — its jackpot collapses at this
             // request, leaving no full open day for that quest.
+            // Force the buy-a-foil-pack daily on the first purchase day of a level:
+            // phaseTransitionActive is set at level end (_endPhase) and cleared only once
+            // the transition completes (line 440), and this roll runs before that completion
+            // in the same advance — so it is true exactly on the day the new purchase phase
+            // opens. Gated on gapDays == 0 so a VRF-stall backfill (which defers the whole
+            // transition to the next advance, line 412) does not roll the foil quest early.
+            // Mutually exclusive with the first-jackpot-day MINT_FLIP force (opposite cycle ends).
             quests.rollDailyQuest(
                 day,
                 currentWord,
-                lastPurchaseDay && compressedJackpotFlag != 2
+                lastPurchaseDay && compressedJackpotFlag != 2,
+                phaseTransitionActive && gapDays == 0
             );
 
             // Resolve the sentinel-stamped gambling-burn pool if any. Reading the

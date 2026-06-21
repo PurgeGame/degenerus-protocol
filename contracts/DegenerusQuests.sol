@@ -175,8 +175,10 @@ contract DegenerusQuests is IDegenerusQuests {
     /// @dev Quest type: earn affiliate commissions.
     uint8 private constant QUEST_TYPE_AFFILIATE = 3;
 
-    /// @dev Retired quest type id kept reserved for compatibility.
-    uint8 private constant QUEST_TYPE_RESERVED = 4;
+    /// @dev Quest type: buy a foil pack. Forced into slot 1 on the first purchase
+    ///      day of a level (rollDailyQuest forceFoil) and excluded from the random
+    ///      pool everywhere else, so it only ever lands on that day.
+    uint8 private constant QUEST_TYPE_FOIL = 4;
 
     /// @dev Quest type: participate in decimator burns.
     uint8 private constant QUEST_TYPE_DECIMATOR = 5;
@@ -203,6 +205,9 @@ contract DegenerusQuests is IDegenerusQuests {
 
     /// @dev Fixed mint target in whole tickets (1 ticket = 1000 FLIP).
     uint32 private constant QUEST_MINT_TARGET = 1;
+
+    /// @dev Fixed foil-pack target in whole packs (buy one foil pack).
+    uint32 private constant QUEST_FOIL_TARGET = 1;
 
     /// @dev Fixed FLIP target for flip/affiliate/decimator quests (2x price in FLIP).
     uint256 private constant QUEST_FLIP_TARGET = 2 * PRICE_COIN_UNIT;
@@ -371,25 +376,32 @@ contract DegenerusQuests is IDegenerusQuests {
     // =========================================================================
 
     /// @notice Roll the daily quest set. Slot 0 is always MINT_ETH; slot 1 is random, except on the
-    ///         first jackpot day where it is forced to MINT_FLIP.
+    ///         first purchase day (forced FOIL) and the first jackpot day (forced MINT_FLIP).
     /// @dev Idempotent per day. Called by AdvanceModule when RNG word is available.
     /// @param day Quest day identifier.
     /// @param entropy VRF entropy word.
     /// @param forceMintFlip When true, slot 1 is MINT_FLIP (the FLIP redeem window is live this
     ///        day); when false, MINT_FLIP is excluded from the slot 1 roll so a player is never handed
     ///        a daily FLIP-mint quest they cannot complete while the window is shut.
-    function rollDailyQuest(uint24 day, uint256 entropy, bool forceMintFlip) external onlyGame {
+    /// @param forceFoil When true (the first purchase day of a level), slot 1 is the buy-a-foil-pack
+    ///        quest. Takes precedence over forceMintFlip; the two never coincide (opposite cycle ends).
+    function rollDailyQuest(uint24 day, uint256 entropy, bool forceMintFlip, bool forceFoil)
+        external
+        onlyGame
+    {
         DailyQuest[QUEST_SLOT_COUNT] memory quests = _loadActiveQuests();
         if (quests[0].day == day) return;
 
         // Slot 0: always MINT_ETH — just stamp the day
         _seedQuestType(quests[0], day, QUEST_TYPE_MINT_ETH);
 
-        // Slot 1: MINT_FLIP auto-assigned on the first jackpot day (redeem window live), else a
-        // weighted random distinct from slot 0. MINT_FLIP is never in the random pool (it lives
-        // outside the roll system, see _bonusQuestType), so it only ever lands on this day.
+        // Slot 1: FOIL forced on the first purchase day, else MINT_FLIP on the first jackpot day
+        // (redeem window live), else a weighted random distinct from slot 0. Neither FOIL nor
+        // MINT_FLIP is in the random pool (see _bonusQuestType), so each only lands on its forced day.
         uint8 bonusType;
-        if (forceMintFlip) {
+        if (forceFoil) {
+            bonusType = QUEST_TYPE_FOIL;
+        } else if (forceMintFlip) {
             bonusType = QUEST_TYPE_MINT_FLIP;
         } else {
             uint256 bonusEntropy = (entropy >> 128) | (entropy << 128);
@@ -435,6 +447,42 @@ contract DegenerusQuests is IDegenerusQuests {
             state.lastActiveDay = currentDay24;
         }
         emit QuestStreakBonusAwarded(player, amount, newStreak, currentDay);
+    }
+
+    /// @dev A foil purchase guarantees a quest streak of at least this floor.
+    uint16 internal constant FOIL_STREAK_FLOOR = 12;
+
+    /**
+     * @notice Raise a player's quest streak to a floor of 12 as a foil-pack benefit.
+     * @dev Access: GAME contract only (the foil leg routes through GAME). Called by the foil
+     *      leg AFTER the buy's own primary + secondary quest completions, so it applies on
+     *      top of them. Unconditional on quest state (a foil purchase boosts the streak even
+     *      if no daily quest completed); never lowers an already-higher streak. Syncs the
+     *      day-lapse state first (idempotent — the foil leg already synced today), so a
+     *      foil buy restores the streak floor even after a missed-day reset. For a mid-run
+     *      afker, whose reward streak is the afking sub base plus funded delivered days
+     *      (independent of state.streak), the same floor is applied to that base via the
+     *      afking module — before the manual-streak early-return below, so it reaches the
+     *      afker even when their manual streak is already at the floor.
+     * @param player The player who bought the foil pack.
+     * @custom:reverts OnlyGame When caller is not GAME contract.
+     */
+    function foilStreakBoost(address player) external onlyGame {
+        if (player == address(0)) return;
+        uint24 currentDay = _currentQuestDay(_loadActiveQuests());
+        if (currentDay == 0) return;
+        PlayerQuestState storage state = questPlayerState[player];
+        _questSyncState(state, player, currentDay);
+        if (state.afkingActive) {
+            questGame.floorAfkingStreakBase(player, FOIL_STREAK_FLOOR);
+        }
+        uint16 prev = state.streak;
+        if (prev >= FOIL_STREAK_FLOOR) return;
+        state.streak = FOIL_STREAK_FLOOR;
+        if (state.lastActiveDay < currentDay) {
+            state.lastActiveDay = currentDay;
+        }
+        emit QuestStreakBonusAwarded(player, FOIL_STREAK_FLOOR - prev, FOIL_STREAK_FLOOR, currentDay);
     }
 
     /**
@@ -754,6 +802,75 @@ contract DegenerusQuests is IDegenerusQuests {
             return (0, quest.questType, state.streak, false);
         }
         (reward, questType, streak, completed) = _questCompleteWithPair(player, state, quests, slotIndex, quest, currentDay, 0);
+        if (completed && reward != 0) {
+            coinflip.creditFlip(player, reward);
+        }
+    }
+
+    /**
+     * @notice Handle a foil-pack purchase and check the foil secondary quest.
+     * @dev Access: GAME contract only (called by the foil module's buy path). The foil
+     *      quest is a slot-1 secondary forced onto the first purchase day; it has no
+     *      level-quest leg, and one pack meets the target. Mirrors the decimator path:
+     *      completion self-credits the FLIP reward via creditFlip.
+     * @param player The player who bought the foil pack.
+     * @return reward FLIP tokens earned (0 if not completed).
+     * @return questType The processed quest type.
+     * @return streak Player's current streak after this action.
+     * @return completed True if the foil quest completed by this action.
+     */
+    function handleFoilPack(
+        address player
+    )
+        external
+        onlyGame
+        returns (uint256 reward, uint8 questType, uint32 streak, bool completed)
+    {
+        DailyQuest[QUEST_SLOT_COUNT] memory quests = _loadActiveQuests();
+        uint24 currentDay = _currentQuestDay(quests);
+        PlayerQuestState storage state = questPlayerState[player];
+        if (player == address(0) || currentDay == 0) {
+            return (0, quests[0].questType, state.streak, false);
+        }
+        _questSyncState(state, player, currentDay);
+
+        (DailyQuest memory quest, uint8 slotIndex) = _currentDayQuestOfType(
+            quests,
+            currentDay,
+            QUEST_TYPE_FOIL
+        );
+        if (slotIndex == type(uint8).max) {
+            return (0, QUEST_TYPE_FOIL, state.streak, false);
+        }
+        uint16 progressAfter = _clampedAddU16(
+            _questSyncProgress(state, slotIndex, currentDay),
+            uint16(_toStoredProgress(quest.questType, 1))
+        );
+        _setProgressOf(state, slotIndex, progressAfter);
+        uint256 target = _questTargetValue(quest, slotIndex, 0);
+        emit QuestProgressUpdated(
+            player,
+            currentDay,
+            slotIndex,
+            quest.questType,
+            uint128(_toNativeProgress(quest.questType, progressAfter)),
+            _toNativeProgress(quest.questType, target)
+        );
+        if (progressAfter < target) {
+            return (0, quest.questType, state.streak, false);
+        }
+        if (_secondaryLocked(state, slotIndex)) {
+            return (0, quest.questType, state.streak, false);
+        }
+        (reward, questType, streak, completed) = _questCompleteWithPair(
+            player,
+            state,
+            quests,
+            slotIndex,
+            quest,
+            currentDay,
+            0
+        );
         if (completed && reward != 0) {
             coinflip.creditFlip(player, reward);
         }
@@ -1212,7 +1329,7 @@ contract DegenerusQuests is IDegenerusQuests {
     /**
      * @dev Decode quest requirements (fixed targets, no tiers or difficulty variance).
      *      Different quest types use different requirement fields:
-     *      - MINT_FLIP → req.mints (small integer count)
+     *      - MINT_FLIP, FOIL → req.mints (small integer count)
      *      - MINT_ETH, LOOTBOX → req.tokenAmount (ETH wei)
      *      - FLIP, DECIMATOR, AFFILIATE → req.tokenAmount (FLIP base units)
      * @param quest The quest to calculate requirements for.
@@ -1220,7 +1337,7 @@ contract DegenerusQuests is IDegenerusQuests {
      */
     function _questRequirements(DailyQuest memory quest, uint8 slot) private view returns (QuestRequirements memory req) {
         uint8 qType = quest.questType;
-        if (qType == QUEST_TYPE_MINT_FLIP) {
+        if (qType == QUEST_TYPE_MINT_FLIP || qType == QUEST_TYPE_FOIL) {
             req.mints = uint32(_questTargetValue(quest, slot, 0));
         } else {
             uint256 currentPrice = 0;
@@ -1345,8 +1462,8 @@ contract DegenerusQuests is IDegenerusQuests {
         ) {
             return 1e15; // milli-ETH
         }
-        if (questType == QUEST_TYPE_MINT_FLIP) {
-            return 1; // ticket count
+        if (questType == QUEST_TYPE_MINT_FLIP || questType == QUEST_TYPE_FOIL) {
+            return 1; // ticket / foil-pack count
         }
         return 1e18; // whole FLIP: FLIP / DECIMATOR / AFFILIATE / DEGENERETTE_FLIP
     }
@@ -1613,6 +1730,8 @@ contract DegenerusQuests is IDegenerusQuests {
             if (nativeTarget > QUEST_ETH_TARGET_CAP) nativeTarget = QUEST_ETH_TARGET_CAP;
         } else if (qType == QUEST_TYPE_MINT_FLIP) {
             nativeTarget = QUEST_MINT_TARGET;
+        } else if (qType == QUEST_TYPE_FOIL) {
+            nativeTarget = QUEST_FOIL_TARGET;
         } else if (
             qType == QUEST_TYPE_FLIP ||
             qType == QUEST_TYPE_DECIMATOR ||
@@ -1665,8 +1784,9 @@ contract DegenerusQuests is IDegenerusQuests {
                 }
                 continue;
             }
-            // Skip sentinel value 0 (unrolled marker) and retired type 4
-            if (candidate == 0 || candidate == QUEST_TYPE_RESERVED) {
+            // Skip sentinel value 0 (unrolled marker) and FOIL (type 4) — FOIL is
+            // forced onto slot 1 only on the first purchase day, never rolled randomly.
+            if (candidate == 0 || candidate == QUEST_TYPE_FOIL) {
                 unchecked {
                     ++candidate;
                 }

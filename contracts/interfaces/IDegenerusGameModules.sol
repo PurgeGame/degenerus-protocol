@@ -225,9 +225,11 @@ interface IDegenerusGameMintModule {
         MintPaymentKind payKind
     ) external payable;
 
-    /// @notice Afking ticket-buy entry: the fresh-ETH portion is an explicit `ethValue` param
-    ///         debited from the funder's `afkingFunding` bucket inside the Game (not msg.value),
-    ///         so the afking process STAGE queues a ticket-mode sub's tickets inline (non-payable).
+    /// @notice Explicit-ethValue ticket-buy entry: the fresh-ETH portion is the `ethValue`
+    ///         param rather than msg.value. Sole caller: the facade's foil purchase, funding
+    ///         the ticket/lootbox leg with carved fresh ETH while the buyer's msg.value is in
+    ///         flight (ignored — only ethValue is spent). payable so the carried value does
+    ///         not revert the delegatecall.
     function purchaseWith(
         address buyer,
         uint256 ticketQuantity,
@@ -235,7 +237,7 @@ interface IDegenerusGameMintModule {
         bytes32 affiliateCode,
         MintPaymentKind payKind,
         uint256 ethValue
-    ) external;
+    ) external payable;
 
     /// @notice Processes a FLIP purchase of tickets
     /// @param buyer Address of the buyer
@@ -444,11 +446,13 @@ interface IDegenerusGameDegeneretteModule {
     /// @param stake The WWXRP bet amount staked for the one spin.
     /// @param activityScore Frozen activity-score bps from the box's commitment.
     /// @param seed Domain-separated spin seed (hash2-tagged off the box seed).
+    /// @param customTicket Pre-chosen player ticket, or 0 to derive one from seed.
     function resolveWwxrpSpinFromBox(
         address player,
         uint256 stake,
         uint16 activityScore,
-        uint256 seed
+        uint256 seed,
+        uint32 customTicket
     ) external payable;
 
     /// @notice Resolve a lootbox roll as three FLIP Degenerette spins under one survival flip.
@@ -456,11 +460,13 @@ interface IDegenerusGameDegeneretteModule {
     /// @param totalStake The total FLIP budget split across the three spins.
     /// @param activityScore Frozen activity-score bps from the box's commitment.
     /// @param seed Domain-separated spin seed (hash2-tagged off the box seed).
+    /// @param customTicket Pre-chosen player ticket, or 0 to derive one from seed.
     function resolveFlipSpinsFromBox(
         address player,
         uint256 totalStake,
         uint16 activityScore,
-        uint256 seed
+        uint256 seed,
+        uint32 customTicket
     ) external payable;
 
     /// @notice Resolve a lootbox roll as one ETH Degenerette spin (claimable + recirc split).
@@ -468,11 +474,13 @@ interface IDegenerusGameDegeneretteModule {
     /// @param stake The ETH bet amount for the one spin (the ticket budget it replaces).
     /// @param activityScore Frozen activity-score bps from the box's commitment.
     /// @param seed Domain-separated spin seed (hash2-tagged off the box seed).
+    /// @param customTicket Pre-chosen player ticket, or 0 to derive one from seed.
     function resolveEthSpinFromBox(
         address player,
         uint256 stake,
         uint16 activityScore,
-        uint256 seed
+        uint256 seed,
+        uint32 customTicket
     ) external payable;
 }
 
@@ -560,4 +568,67 @@ interface IGameAfkingModule {
         uint24 processDay,
         uint256 weightBudget
     ) external returns (uint256 processed);
+}
+
+/// @title IDegenerusGameFoilPackModule
+/// @notice Interface for the foil pack buy + match claim.
+/// @dev The Game retains thin delegatecall dispatch stubs targeting these selectors;
+///      both bodies run in the Game's storage context (delegatecall), so the resolved
+///      player is passed explicitly and msg.value rides through the call.
+interface IDegenerusGameFoilPackModule {
+    /// @notice Deliver one foil pack (four tickets) for the active cycle. Delegatecall
+    ///         target invoked by the mint module's purchase path (the foil leg of an
+    ///         additive ticket/lootbox/foil buy). Handles the foil leg's own payment
+    ///         (fresh-then-claimable, afking protected), 75/25 pool split, 20/5
+    ///         affiliate, and delivery (boost freeze, queue push). The foil's mint units,
+    ///         streak, and secondary quest are recorded by the purchase path.
+    /// @param buyer Player receiving the pack (already operator-resolved).
+    /// @param ethSent Fresh ETH the purchase path allocated to the foil leg.
+    /// @param affiliateCode Affiliate/referral code for the foil leg.
+    /// @param payKind Payment method for the foil leg (DirectEth blocks claimable).
+    function buyFoilPack(
+        address buyer,
+        uint256 ethSent,
+        bytes32 affiliateCode,
+        MintPaymentKind payKind
+    ) external payable;
+
+    /// @notice Claim a foil ticket's match against a day's draw (permissionless).
+    /// @dev The win credits to `player`, never the caller, and a tuple pays at most
+    ///      once, so anyone may resolve any player's claim. Reverts if the tuple is not
+    ///      a claimable win.
+    /// @param player Pack owner the win credits to.
+    /// @param day The draw day to claim against.
+    /// @param ticketIndex Which of the pack's four tickets to claim (0-3).
+    /// @param drawKind 0 = main set, 1 = bonus set.
+    function claimFoilMatch(
+        address player,
+        uint256 day,
+        uint256 ticketIndex,
+        uint8 drawKind
+    ) external;
+
+    /// @notice Permissionlessly resolve a batch of foil match claims.
+    /// @dev Non-claimable tuples are skipped (not reverted); each settled win credits
+    ///      its own player and the caller earns a small per-settled-claim FLIP bounty
+    ///      during a live game. The four arrays are parallel.
+    /// @param players Pack owners the wins credit to.
+    /// @param drawDays Draw days to claim against.
+    /// @param ticketIndexes Which pack ticket (0-3) per claim.
+    /// @param drawKinds 0 = main, 1 = bonus, per claim.
+    function claimFoilMatchMany(
+        address[] calldata players,
+        uint24[] calldata drawDays,
+        uint8[] calldata ticketIndexes,
+        uint8[] calldata drawKinds
+    ) external;
+
+    /// @notice Drain the per-buy-day foil buckets on the leftover write budget.
+    /// @dev Delegatecall target invoked by the mint module's processTicketBatch once
+    ///      the normal queue is drained (and only when a sealed foil bucket is pending);
+    ///      walks foilDrainDay forward, deriving each buyer's boosted lines from the
+    ///      bucket's daily word and filing them into the jackpot trait buckets.
+    /// @param room The leftover write budget for this batch.
+    /// @return done True iff the foil drain has caught up (no sealed bucket remains).
+    function processFoilDrain(uint32 room) external returns (bool done);
 }
