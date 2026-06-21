@@ -1,0 +1,47 @@
+     │       // forge-lint: disable-next-line(unsafe-typecast)
+     │       
+     │       
+     ╰ help: https://book.getfoundry.sh/reference/forge/forge-lint#unsafe-typecast
+
+=== BUILD DONE rc=0 ===
+[SKIP] test_gapBackfillWithMidDayPending_fuzz(uint256) (runs: 0, μ: 0, ~: 0)
+[PASS] test_indexLifecycleAcrossStall_fuzz(uint256) (runs: 1000, μ: 10066197, ~: 10045752)
+Suite result: ok. 5 passed; 0 failed; 1 skipped; finished in 42.57s (87.28s CPU time)
+
+Ran 23 tests for test/fuzz/RedemptionEdgeCases.t.sol:RedemptionEdgeCases
+[PASS] testFuzz_EDGE_01_PreAdvanceGapBurnLandsInCurrentDayPool(uint256,uint256) (runs: 10000, μ: 293698, ~: 293704)
+[PASS] testFuzz_EDGE_02_TwoPendingDaysSimultaneous(uint256,uint16) (runs: 10000, μ: 190340, ~: 190408)
+[PASS] testFuzz_EDGE_03_SinglePlayerMultiDayClaimsIndependent(uint256) (runs: 10000, μ: 470974, ~: 470979)
+[PASS] testFuzz_EDGE_04_MultiplePlayersSameDay(uint256,uint256,uint16) (runs: 10000, μ: 335043, ~: 335133)
+[PASS] testFuzz_EDGE_05_ClaimBeforeResolveReverts(uint256) (runs: 10000, μ: 180302, ~: 180307)
+[PASS] testFuzz_EDGE_06_SkippedAdvanceLongStallEventualResolution(uint256,uint256,uint16) (runs: 10000, μ: 223408, ~: 223544)
+[PASS] testFuzz_EDGE_07_V184AttackReproductionStructuralClosure(uint256,uint256,uint16,uint16) (runs: 10000, μ: 314975, ~: 314982)
+[PASS] testFuzz_EDGE_08_BurnGameOverClaimBothVariants(uint256) (runs: 10000, μ: 297384, ~: 297389)
+[PASS] testFuzz_EDGE_09_NPlayersConcurrentClaimsSum(uint256,uint256,uint16) (runs: 10000, μ: 446230, ~: 449138)
+[PASS] testFuzz_EDGE_10_ReentrancyOnPayEthBlocked(uint256) (runs: 10000, μ: 492033, ~: 492038)
+[PASS] testFuzz_EDGE_11_BurnDuringRngLockedReverts(uint256) (runs: 10000, μ: 47210, ~: 47215)
+[PASS] testFuzz_EDGE_12_BurnDuringLivenessReverts(uint256) (runs: 10000, μ: 40102, ~: 40107)
+[PASS] testFuzz_EDGE_13_ZeroRoundedEthValueOwedBurnProceeds(uint16) (runs: 10000, μ: 164784, ~: 164850)
+[PASS] testFuzz_EDGE_14_SupplyCapExactOneWeiOverAndLazyInit(uint256) (runs: 10000, μ: 154292, ~: 154292)
+[PASS] testFuzz_EDGE_15_EvCapExactOneWeiOver(uint256) (runs: 10000, μ: 127519, ~: 127519)
+[PASS] testFuzz_EDGE_16_CrossDayCapResetStructural(uint256) (runs: 10000, μ: 285644, ~: 285644)
+[PASS] testFuzz_EDGE_17_LateDayBurnPostResolveLegitimate(uint256,uint256,uint16,uint16) (runs: 10000, μ: 305510, ~: 305517)
+[PASS] testFuzz_EDGE_18_EthOnlyClaimCompletesAndClears(uint256) (runs: 10000, μ: 212112, ~: 212112)
+[PASS] testFuzz_EDGE_19_MultiDayRngStallStaleClaimRecovery(uint256,uint256,uint16) (runs: 10000, μ: 220577, ~: 220697)
+[PASS] testFuzz_EDGE_20_BurnTooSmall(uint256) (runs: 10000, μ: 181698, ~: 181653)
+[PASS] testFuzz_PERM_01_LiveClaimPermissionlessThirdParty(uint256,uint16) (runs: 10000, μ: 235426, ~: 235510)
+[PASS] testFuzz_PERM_02_ClaimRedemptionManyBatchSkipsEmpty(uint256,uint256,uint16) (runs: 10000, μ: 408320, ~: 408411)
+[PASS] test_BOUNTY01_RedemptionKeeperBountyPerSettledBox() (gas: 402196)
+Suite result: ok. 23 passed; 0 failed; 0 skipped; finished in 66.56s (129.21s CPU time)
+
+Ran 6 tests for test/fuzz/BafFarFutureTickets.t.sol:BafFarFutureTicketsTest
+[PASS] testBafFarFutureSeed0xBEEF() (gas: 836112673)
+[PASS] testBafFarFutureSeed0xCAFE() (gas: 894886325)
+[PASS] testBafFarFutureSeed0xDEAD() (gas: 858817947)
+[PASS] testBafFarFutureSeedRegression() (gas: 869919976)
+[PASS] testBafFarFutureSeedRngLocked() (gas: 876394265)
+[PASS] testBafFarFutureTicketsNoRevert(uint256) (runs: 1000, μ: 869098552, ~: 869905884)
+Suite result: ok. 6 passed; 0 failed; 0 skipped; finished in 66.45s (66.44s CPU time)
+
+Ran 136 test suites in 66.63s (1468.63s CPU time): 944 tests passed, 0 failed, 108 skipped (1052 total tests)
+=== FORGE TEST DONE rc=0 ===

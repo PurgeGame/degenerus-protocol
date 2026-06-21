@@ -1,0 +1,13 @@
+CLAIM 1: VIOLATED
+  evidence: `contracts/modules/DegenerusGameFoilPackModule.sol:176`, `:297`, `:478-483`, `:543`, `:583-613`; `contracts/modules/DegenerusGameJackpotModule.sol:1329-1346`; `contracts/modules/DegenerusGameDegeneretteModule.sol:929-947`
+  reasoning / counterexample: steer edge is bounded: buy blocks multi-day known-word grinding, lines derive from future `rngWordByDay[resolveDay]`, hero changes only one symbol and VRF color remains 1/8. But pool-cap subclaim is false during `prizePoolFrozen`: ETH payout takes the frozen branch and debits `pendingFuture` with no `ETH_WIN_CAP_BPS` clamp. Also note as-built moonshot is score `T=8` with `10_000` faces, not the stated `liveCount == 4` / `1,000` table.
+
+CLAIM 2: HOLDS
+  evidence: `contracts/modules/DegenerusGameFoilPackModule.sol:702-738`; `contracts/modules/DegenerusGameMintModule.sol:648-663`, `:704-728`, `:747-768`; `contracts/storage/DegenerusGameStorage.sol:2535-2539`; `contracts/modules/DegenerusGameAdvanceModule.sol:237-245`, `:286-312`
+  reasoning / counterexample: per buyer work is fixed and budget-gated at 35 units; short budget stores `foilDrainDay/foilCursor` and resumes. Future/unsealed buckets do not gate. Sparse empty-day walking is not unbounded in reachable buys: buys are blocked when `day > dailyIdx + 1`, and caught-up buys reset `foilDrainDay` to the new resolve day.
+
+CLAIM 3: HOLDS
+  evidence: `contracts/modules/DegenerusGameJackpotModule.sol:174-178`, `:1365-1422`, `:1777-1800`, `:1809-1832`
+  reasoning / counterexample: main path passes `_NO_HERO_EXCLUDE`, so no slot is zeroed and behavior is equivalent to old `_rollHeroSymbol`. Bonus uses `rBonus = hash2(randWord, BONUS_TRAITS_TAG)`, excludes `(mainQ << 3) | mainSym`, recomputes weights after zeroing, and returns no hero if total becomes zero. No underflow path found.
+
+Overall verdict: one real violation: Claim 1’s frozen-pool ETH cap statement is not true as-built.

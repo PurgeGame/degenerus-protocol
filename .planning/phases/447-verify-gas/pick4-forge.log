@@ -1,0 +1,11 @@
+     │       
+     ╰ help: https://book.getfoundry.sh/reference/forge/forge-lint#unsafe-typecast
+
+=== BUILD rc=0 ===
+
+[PASS] test_freezeWindowIsExercised_nonVacuous() (gas: 9524086)
+[PASS] test_invariantCatchesSeededInWindowMutation() (gas: 684484)
+Suite result: ok. 4 passed; 0 failed; 0 skipped; finished in 54.19s (60.82s CPU time)
+
+Ran 136 test suites in 64.89s (1207.61s CPU time): 944 tests passed, 0 failed, 108 skipped (1052 total tests)
+=== TEST rc=0 ===

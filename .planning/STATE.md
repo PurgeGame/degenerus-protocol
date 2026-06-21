@@ -35,9 +35,11 @@ See: .planning/PROJECT.md (Current Milestone: v70.0 section) + .planning/MILESTO
 ## Current Position
 
 Milestone: v72.0 — As-Built Audit: Foil Pack + Degenerette WWXRP/Rescore (+ Gas)
-Phase: 447 (VERIFY + GAS) — STARTING (full-auto run; USER "run this whole thing full auto I gotta go to bed" 2026-06-21)
-Plan: — (audit milestone; phases 447 VERIFY+GAS · 448 FREEZE [SOLE GATE] · 449 TST · 450 REAUDIT · 451 TERMINAL)
-Status: v72.0 init complete (by hand — SDK state mutators avoided per repo process); beginning the as-built audit on the WORKING TREE
+Phase: 448 FREEZE ✅ DONE — v72 subject FROZEN at HEAD `19dc6390` (contracts tree `2d87625b`); USER-approved gas-Pick-4 commit (sole gate). NEXT = 449 TST (auto).
+Plan: — (audit milestone; phases 447 VERIFY+GAS ✅ · 448 FREEZE ✅ [USER-approved `19dc6390`] · 449 TST ▶ · 450 REAUDIT · 451 TERMINAL)
+Status: 447 complete — **as-built is CLEAN: 0 CAT/0 HIGH/0 MED/0 real LOW.** Only dirty .sol = the optional gas Pick 4 (MintModule, +2/−2), forge 944/0/108 green, EIP-170 OK. Ledger: `.planning/phases/447-verify-gas/FINDINGS-LEDGER.md`.
+  447 RESULT: 6-agent VERIFY fan-out (all MATCH; rig EV=100 all tables + P(S9) byte-identical; rescore EV 2.16/tkt & 2.633/pack; storage all-appended forge-inspect; advance not foil-brickable) + Codex cross-model. F-01 4-of-4 steer = by-design §V.3. F-02 uncalled producer = by-design §V.8. F-03 foil-drain = Codex liveness HOLDS. CG-1 two-distinct-heroes = Codex HOLDS. **F-04 (foil ETH frozen-branch "uncapped") WITHDRAWN by USER 2026-06-21 — NOT a finding: `pendingFuture` is structurally << `futurePrizePool` (freeze-window purchases only), so the frozen ETH payout is already bounded ≲ the unfrozen 10% cap; revert-on-insufficient is the correct backstop; ETH wins SHOULD pay ETH from pending. The Codex-option-3 fix was REVERTED (git checkout 3 files).** Gas Pick 4 applied (hot path); picks 2/3 rejected (cross-external-call), 1/5 deferred.
+  ⏸ HOLD for USER: tiny decision — keep the gas Pick 4 in the freeze (≈200 gas hot-path SLOAD removal) or freeze HEAD as-is (zero contract change). THEN (auto): freeze subject → 449 npm-harness fix (predictAddresses.js, diagnosed) + EV/RIG stat tests → 450 REAUDIT council (Codex; gemini CLI dead) → 451 FINDINGS-v72.0.md + closure. NOTHING committed but planning (`9df2a37d`); NOTHING pushed.
 Subject: ffbd7796 (v70 freeze) → HEAD 16225de6 — 18 .sol, +2,186/−355 (foil pack `f255d56c` + WWXRP rig/payout-fork `1dd07c4d` + Variant-2 rescore `16225de6`)
 Pillars (hard floor): Solvency · RNG integrity · Liveness/no-brick. Gas = first-class axis. Cross-model = Codex + Gemini (both CLIs present at ~/.local/bin).
 ⚠ HOLD POINT: the FREEZE (448) contract commit is the SOLE approval gate — held for USER hand-review of the consolidated .sol diff; every other phase runs autonomously on the uncommitted working tree.

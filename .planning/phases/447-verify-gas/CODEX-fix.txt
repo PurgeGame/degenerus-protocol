@@ -1,0 +1,73 @@
+**Recommendation: pick (3), implemented as a foil-specific Degenerette ETH resolver.**
+
+Do **not** change `_distributePayout`’s frozen branch. Option (1) violates (i): regular frozen ETH Degenerette wins would become observably capped/spilled instead of receiving the current full `ethShare` when `pendingFuture` is sufficient.
+
+Best contained fix: add `resolveFoilEthSpinFromBox(...)`, have foil ETH claims call that selector, and in that resolver only, when `prizePoolFrozen`, compute the normal spin payout but skip `_distributePayout`; emit the spin with `claimableEth = 0` and recirculate the full `payout` as lootbox value.
+
+Why it satisfies the constraints:
+
+- (i) Regular Degenerette behavior unchanged: `_distributePayout` and existing `resolveEthSpinFromBox` stay behavior-identical.
+- (ii) Foil ETH lane cannot drain uncapped `pendingFuture`: frozen foil ETH pays `0` ETH, which is stricter than the 10% cap, and spills all value to lootbox.
+- (iii) No pending-pool liveness dependency: foil claims no longer revert on insufficient `pendingFuture` and do not need a future unfreeze to settle.
+
+Guard location: **Degenerette resolve entry**, not raw `_payFoilTier`. FoilPack does not have the private Degenerette payout math; putting the guard there would either duplicate logic or route `stake` instead of actual `payout`.
+
+**Minimal Diff Sketch**
+
+[contracts/interfaces/IDegenerusGameModules.sol](/home/zak/Dev/PurgeGame/degenerus-audit/contracts/interfaces/IDegenerusGameModules.sol:478)
+
+```solidity
+function resolveFoilEthSpinFromBox(
+    address player,
+    uint256 stake,
+    uint16 activityScore,
+    uint256 seed,
+    uint32 customTicket
+) external payable;
+```
+
+[contracts/modules/DegenerusGameFoilPackModule.sol](/home/zak/Dev/PurgeGame/degenerus-audit/contracts/modules/DegenerusGameFoilPackModule.sol:604)
+
+```diff
+- IDegenerusGameDegeneretteModule.resolveEthSpinFromBox.selector,
++ IDegenerusGameDegeneretteModule.resolveFoilEthSpinFromBox.selector,
+```
+
+[contracts/modules/DegenerusGameDegeneretteModule.sol](/home/zak/Dev/PurgeGame/degenerus-audit/contracts/modules/DegenerusGameDegeneretteModule.sol:1584)
+
+Refactor existing `resolveEthSpinFromBox` into a private helper, then add:
+
+```solidity
+function resolveFoilEthSpinFromBox(
+    address player,
+    uint256 stake,
+    uint16 activityScore,
+    uint256 seed,
+    uint32 customTicket
+) external payable {
+    if (customTicket == 0) revert E();
+    _resolveEthSpinFromBox(player, stake, activityScore, seed, customTicket, true);
+}
+```
+
+Inside the helper, immediately after `payout == 0` handling and before `_distributePayout`:
+
+```solidity
+if (foilFrozenLootboxOnly && prizePoolFrozen) {
+    if (s >= 7) _awardDegeneretteDgnrs(player, betAmount, s);
+
+    emit PayoutCapped(player, 0, payout);
+    emit BoxSpin(player, betId, packed, payout, 0);
+
+    _resolveLootboxDirect(
+        player,
+        payout,
+        EntropyLib.hash2(seed, BOX_RECIRC_TAG),
+        activityScore,
+        true
+    );
+    return;
+}
+```
+
+Leave the existing `_distributePayout(...)` path untouched for all non-foil and unfrozen foil ETH spins.

@@ -1,0 +1,42 @@
+=== BUILD + SIZES ===
+Compiler run successful with warnings:
+   --> test/fuzz/DegeneretteFreezeResolution.t.sol:931:9:
+   --> test/fuzz/DegeneretteFreezeResolution.t.sol:932:9:
+   --> contracts/modules/DegenerusGameMintStreakUtils.sol:167:5:
+   --> test/fuzz/DegeneretteFreezeResolution.t.sol:929:5:
+   --> test/fuzz/DegeneretteFreezeResolution.t.sol:970:5:
+    --> test/fuzz/DegeneretteFreezeResolution.t.sol:1018:5:
+    --> test/fuzz/DegeneretteFreezeResolution.t.sol:1045:5:
+    --> test/fuzz/DegeneretteFreezeResolution.t.sol:1091:5:
+   --> test/fuzz/DegeneretteHeroScore.t.sol:598:5:
+   --> test/fuzz/DegeneretteHeroScore.t.sol:802:5:
+   --> test/fuzz/DegeneretteResolveRepeg.t.sol:570:5:
+   --> test/fuzz/DegeneretteResolveRepeg.t.sol:658:5:
+1170 |     function _tryPlaceDegeneretteBet(address player) internal returns (bool) {
+1175 |     function _tryResolveDegeneretteBets(address player) internal {
+| DegenerusGame                                                 | 21,221           | 21,578            | 3,355              | 27,574              |
+| DegenerusGameDegeneretteModule                                | 15,588           | 15,661            | 8,988              | 33,491              |
+| DegenerusGameFoilPackModule                                   | 10,308           | 10,381            | 14,268             | 38,771              |
+| DegenerusGameMintModule                                       | 23,823           | 23,896            | 753                | 25,256              |
+176 │             handler.mintWithLootbox(a, 0.5 ether, uint8(a));
+    ╭▸ test/fuzz/DegeneretteFreezeResolution.t.sol:871:24
+    ╭▸ test/fuzz/DegeneretteFreezeResolution.t.sol:900:56
+    ╭▸ test/fuzz/DegeneretteFreezeResolution.t.sol:901:56
+     ╭▸ test/fuzz/DegeneretteFreezeResolution.t.sol:1039:24
+     ╭▸ test/fuzz/DegeneretteFreezeResolution.t.sol:1142:24
+     ╭▸ test/fuzz/DegeneretteFreezeResolution.t.sol:1148:24
+     ╭▸ test/fuzz/DegeneretteFreezeResolution.t.sol:1161:31
+     ╭▸ test/fuzz/DegeneretteFreezeResolution.t.sol:1170:31
+    ╭▸ test/fuzz/MintModuleDivergenceAcrossSplit.t.sol:218:51
+     ╭▸ test/fuzz/DegeneretteFreezeResolution.t.sol:1211:78
+=== BUILD rc=0 ===
+=== FULL TEST ===
+| RngWindowFreezeHandler | tryInWindowPurchase  | 6667  | 0       | 0        |
+╰------------------------+----------------------+-------+---------+----------╯
+
+[PASS] test_freezeWindowIsExercised_nonVacuous() (gas: 9524108)
+[PASS] test_invariantCatchesSeededInWindowMutation() (gas: 684484)
+Suite result: ok. 4 passed; 0 failed; 0 skipped; finished in 59.80s (69.15s CPU time)
+
+Ran 136 test suites in 59.84s (1257.12s CPU time): 944 tests passed, 0 failed, 108 skipped (1052 total tests)
+=== TEST rc=0 ===
