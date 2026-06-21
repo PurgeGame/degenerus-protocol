@@ -27,13 +27,13 @@
 
 ### GEN — canonical generator (`derive_5_tables.py`)
 
-- [ ] **GEN-01**: `derive_5_tables.py` is rewritten as the **canonical byte-reproduce source** — Variant-2 honest distribution + rigged distribution + the same calibration + the same self-asserts.
-- [ ] **GEN-02**: The generator's self-asserts pass: per-N `basePayoutEV ∈ (99,100]` centi-x (honest **and** rigged); ETH/WWXRP bonus-EV = 5.000%; all WWXRP factors < 2^64.
-- [ ] **GEN-03**: The full constant family is regenerated from the script — honest `QUICK_PLAY_PAYOUTS_N{0..4}_PACKED/_S8`, `WWXRP_FACTORS_N{0..4}`, the full `_RIG_` family — with the `_S9` pins and `WWXRP_ROI_*` **untouched**. Doc-comments refreshed.
+- [x] **GEN-01**: `derive_5_tables.py` is rewritten as the **canonical byte-reproduce source** — Variant-2 honest distribution + rigged distribution + the same calibration + the same self-asserts.
+- [x] **GEN-02**: The generator's self-asserts pass: per-N `basePayoutEV ∈ (99,100]` centi-x (honest **and** rigged); ETH/WWXRP bonus-EV = 5.000%; all WWXRP factors < 2^64.
+- [x] **GEN-03**: The full constant family is regenerated from the script — honest `QUICK_PLAY_PAYOUTS_N{0..4}_PACKED/_S8`, `WWXRP_FACTORS_N{0..4}`, the full `_RIG_` family — with the `_S9` pins and `WWXRP_ROI_*` **untouched**. Doc-comments refreshed.
 
 ### EVEQ — EV-equality wrinkle (decision #2)
 
-- [ ] **EVEQ-01**: Because Variant-2 couples color+symbol, the hero quadrant's gold-ness now affects P(S) and one per-N table is no longer exactly EV-equal across picks. Measure **Option-A** drift (average over hero placement, 5 tables) and keep it if < ~0.5 centi-x; **escalate to Option-B** (index by `(N, hero-is-gold)`, ~8–9 tables + a small `_getBasePayoutBps` dispatch tweak) only on drift. (Resolves DEC-02 on measurement.)
+- [x] **EVEQ-01**: Because Variant-2 couples color+symbol, the hero quadrant's gold-ness now affects P(S) and one per-N table is no longer exactly EV-equal across picks. Measure **Option-A** drift (average over hero placement, 5 tables) and keep it if < ~0.5 centi-x; **escalate to Option-B** (index by `(N, hero-is-gold)`, ~8–9 tables + a small `_getBasePayoutBps` dispatch tweak) only on drift. (Resolves DEC-02 on measurement.)
 
 ### INV — invariants held fixed (numeric proof)
 
@@ -83,10 +83,10 @@
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| GEN-01 | 452 GEN | Pending |
-| GEN-02 | 452 GEN | Pending |
-| GEN-03 | 452 GEN | Pending |
-| EVEQ-01 | 452 GEN | Pending |
+| GEN-01 | 452 GEN | Done |
+| GEN-02 | 452 GEN | Done |
+| GEN-03 | 452 GEN | Done |
+| EVEQ-01 | 452 GEN | Done |
 | SCORE-01 | 453 IMPL | Pending |
 | SCORE-02 | 453 IMPL | Pending |
 | SCORE-03 | 453 IMPL | Pending |
