@@ -1,0 +1,46 @@
+      ✔ FLIP: vaultMintAllowance is 0 (vault emission arrives as coinflip seed stakes)
+      ✔ Coinflip: days 1-20 each stake 200k for VAULT and sDGNRS
+      ✔ sDGNRS: DGNRS contract holds creator's 20% as sDGNRS
+      ✔ DGNRS: creator holds initial vesting (50B) as DGNRS
+      ✔ DegenerusDeityPass: DGVE majority holder can call admin functions
+      ✔ DegenerusAdmin: VRF subscription created
+      ✔ Icons32Data: not finalized
+
+
+  14 passing (23s)
+
+An unexpected error occurred:
+
+Error: Cannot find module 'test/deploy/DeployScript.test.js'
+Require stack:
+- /home/zak/Dev/PurgeGame/degenerus-audit/node_modules/mocha/lib/nodejs/file-unloader.js
+- /home/zak/Dev/PurgeGame/degenerus-audit/node_modules/mocha/lib/mocha.js
+- /home/zak/Dev/PurgeGame/degenerus-audit/node_modules/mocha/index.js
+- /home/zak/Dev/PurgeGame/degenerus-audit/node_modules/hardhat/builtin-tasks/test.js
+- /home/zak/Dev/PurgeGame/degenerus-audit/node_modules/hardhat/internal/core/tasks/builtin-tasks.js
+- /home/zak/Dev/PurgeGame/degenerus-audit/node_modules/hardhat/internal/core/config/config-loading.js
+- /home/zak/Dev/PurgeGame/degenerus-audit/node_modules/hardhat/internal/cli/cli.js
+- /home/zak/Dev/PurgeGame/degenerus-audit/node_modules/hardhat/internal/cli/bootstrap.js
+    at Function.Module._resolveFilename (node:internal/modules/cjs/loader:1383:15)
+    at Function.resolve (node:internal/modules/helpers:157:19)
+    at Object.exports.unloadFile (/home/zak/Dev/PurgeGame/degenerus-audit/node_modules/mocha/lib/nodejs/file-unloader.js:14:32)
+    at Function.Mocha.unloadFile (/home/zak/Dev/PurgeGame/degenerus-audit/node_modules/mocha/lib/mocha.js:476:44)
+    at /home/zak/Dev/PurgeGame/degenerus-audit/node_modules/mocha/lib/mocha.js:504:11
+    at Array.forEach (<anonymous>)
+    at Mocha.unloadFiles (/home/zak/Dev/PurgeGame/degenerus-audit/node_modules/mocha/lib/mocha.js:503:14)
+    at Mocha.dispose (/home/zak/Dev/PurgeGame/degenerus-audit/node_modules/mocha/lib/mocha.js:632:8)
+    at SimpleTaskDefinition.action (/home/zak/Dev/PurgeGame/degenerus-audit/node_modules/hardhat/src/builtin-tasks/test.ts:139:13)
+    at processTicksAndRejections (node:internal/process/task_queues:105:5) {
+  code: 'MODULE_NOT_FOUND',
+  requireStack: [
+    '/home/zak/Dev/PurgeGame/degenerus-audit/node_modules/mocha/lib/nodejs/file-unloader.js',
+    '/home/zak/Dev/PurgeGame/degenerus-audit/node_modules/mocha/lib/mocha.js',
+    '/home/zak/Dev/PurgeGame/degenerus-audit/node_modules/mocha/index.js',
+    '/home/zak/Dev/PurgeGame/degenerus-audit/node_modules/hardhat/builtin-tasks/test.js',
+    '/home/zak/Dev/PurgeGame/degenerus-audit/node_modules/hardhat/internal/core/tasks/builtin-tasks.js',
+    '/home/zak/Dev/PurgeGame/degenerus-audit/node_modules/hardhat/internal/core/config/config-loading.js',
+    '/home/zak/Dev/PurgeGame/degenerus-audit/node_modules/hardhat/internal/cli/cli.js',
+    '/home/zak/Dev/PurgeGame/degenerus-audit/node_modules/hardhat/internal/cli/bootstrap.js'
+  ]
+}
+=== hardhat deploy-test rc=1 ===

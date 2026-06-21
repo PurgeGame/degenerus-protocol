@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v72.0
 milestone_name: As-Built Audit — Foil Pack + Degenerette WWXRP/Rescore
-status: executing
+status: complete
 last_updated: "2026-06-21"
-last_activity: 2026-06-21 -- v72.0 init (by hand); Phase 447 VERIFY+GAS starting (full-auto run)
+last_activity: 2026-06-21 -- v72.0 COMPLETE (0 findings); archived + tagged v72.0; UNPUSHED (USER pushes)
 progress:
   total_phases: 5
-  completed_phases: 0
+  completed_phases: 5
   total_plans: 0
   completed_plans: 0
-  percent: 0
+  percent: 100
 ---
 
 # Project State
@@ -35,8 +35,9 @@ See: .planning/PROJECT.md (Current Milestone: v70.0 section) + .planning/MILESTO
 ## Current Position
 
 Milestone: v72.0 — As-Built Audit: Foil Pack + Degenerette WWXRP/Rescore (+ Gas)
-Phase: 448 FREEZE ✅ DONE + F-02 dead-code cleanup ✅ (USER-approved). v72 subject = HEAD `e94f1719` (tree `4407181d`), deployed bytecode BYTE-IDENTICAL to `19dc6390` (removed funcs had 0 callers). forge 942/0/108. NEXT = 449 TST (auto, no gate).
-Plan: — (audit milestone; 447 VERIFY+GAS ✅ · 448 FREEZE ✅ [`19dc6390`] + F-02 cleanup ✅ [`e94f1719`] · 449 TST ▶ · 450 REAUDIT · 451 TERMINAL). Subjects: gas Pick 4 (`19dc6390`) + dead-code removal (`e94f1719`, bytecode-neutral). Both USER-approved.
+Phase: ✅ v72.0 COMPLETE (all 5 phases) — ARCHIVED + TAGGED `v72.0`; UNPUSHED (USER pushes). NEXT = USER `git push` → /gsd-new-milestone.
+Plan: — 447 VERIFY+GAS ✅ (0 CAT/HIGH/MED/LOW; F-01/F-02/F-03/F-04/CG-1 all closed) · 448 FREEZE ✅ [`19dc6390` gas Pick 4 + `e94f1719` dead-code removal, both USER-approved] · 449 TST ✅ [forge 942/0/108; Hardhat clean; deploy 14/14; storage all-appended] · 450 REAUDIT ✅ [folded into the thorough 447 Codex cross-model pass] · 451 TERMINAL ✅ [`audit/FINDINGS-v72.0.md` chmod 444; closure `MILESTONE_V72_AT_HEAD_e94f1719a52441ac4dc90a5a6304f09533fa2c96`].
+  Subject byte-frozen `contracts/` tree `4407181d` @ `e94f1719`. Archived `milestones/v72.0-{ROADMAP,REQUIREMENTS}.md`; MILESTONES.md + PROJECT.md updated. ⚠ gemini CLI dead (auth migration) → cross-model = Codex only. Carries (non-blocking): indexer FoilMatchClaimed.tier re-vendor; REQUIREMENTS MATCH-01/09 pre-§V doc wording; optional ΣP·face EV-pin test + F-03 per-empty-day-decrement.
 Status: 447 complete — **as-built is CLEAN: 0 CAT/0 HIGH/0 MED/0 real LOW.** Only dirty .sol = the optional gas Pick 4 (MintModule, +2/−2), forge 944/0/108 green, EIP-170 OK. Ledger: `.planning/phases/447-verify-gas/FINDINGS-LEDGER.md`.
   447 RESULT: 6-agent VERIFY fan-out (all MATCH; rig EV=100 all tables + P(S9) byte-identical; rescore EV 2.16/tkt & 2.633/pack; storage all-appended forge-inspect; advance not foil-brickable) + Codex cross-model. F-01 4-of-4 steer = by-design §V.3. F-02 uncalled producer = by-design §V.8. F-03 foil-drain = Codex liveness HOLDS. CG-1 two-distinct-heroes = Codex HOLDS. **F-04 (foil ETH frozen-branch "uncapped") WITHDRAWN by USER 2026-06-21 — NOT a finding: `pendingFuture` is structurally << `futurePrizePool` (freeze-window purchases only), so the frozen ETH payout is already bounded ≲ the unfrozen 10% cap; revert-on-insufficient is the correct backstop; ETH wins SHOULD pay ETH from pending. The Codex-option-3 fix was REVERTED (git checkout 3 files).** Gas Pick 4 applied (hot path); picks 2/3 rejected (cross-external-call), 1/5 deferred.
   ⏸ HOLD for USER: tiny decision — keep the gas Pick 4 in the freeze (≈200 gas hot-path SLOAD removal) or freeze HEAD as-is (zero contract change). THEN (auto): freeze subject → 449 npm-harness fix (predictAddresses.js, diagnosed) + EV/RIG stat tests → 450 REAUDIT council (Codex; gemini CLI dead) → 451 FINDINGS-v72.0.md + closure. NOTHING committed but planning (`9df2a37d`); NOTHING pushed.

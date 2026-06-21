@@ -8,7 +8,11 @@ Smart contract audit repository for the Degenerus Protocol — an on-chain ETH g
 
 Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
 
-## Current Milestone: v72.0 As-Built Audit — Foil Pack + Degenerette WWXRP/Rescore (+ Gas)
+## ✅ SHIPPED 2026-06-21 (tag v72.0) — v72.0 As-Built Audit — Foil Pack + Degenerette WWXRP/Rescore (+ Gas)
+
+**Outcome (SHIPPED + ARCHIVED + TAGGED 2026-06-21; UNPUSHED — USER pushes):** **0 CAT / 0 HIGH / 0 MED / 0 LOW; 0 open findings.** The post-v70 feature surface (foil pack + WWXRP rig + Variant-2 rescore) was audited clean across all 3 pillars with every load-bearing number independently re-derived and the load-bearing claims cross-model-verified by Codex (ChatGPT). Five candidates raised + closed: F-01 (4-of-4 steer) by-design §V.3; **F-02 dead producers REMOVED** (USER-approved, bytecode-neutral); F-03 (foil-drain) Codex liveness HOLDS; **F-04 (foil ETH frozen cap) WITHDRAWN by USER** (pendingFuture ≪ pool); CG-1 (two-distinct-heroes) Codex HOLDS. Subject byte-frozen `contracts/` tree `4407181d` @ `e94f1719`; closure `MILESTONE_V72_AT_HEAD_e94f1719a52441ac4dc90a5a6304f09533fa2c96`. FREEZE = sole gate (gas Pick 4 `19dc6390` + dead-code `e94f1719`, both USER-approved). forge 942/0/108; Hardhat clean; deploy 14/14. `audit/FINDINGS-v72.0.md`; archived `milestones/v72.0-{ROADMAP,REQUIREMENTS}.md`. NEXT = USER push → /gsd-new-milestone.
+
+_The milestone as planned (historical record):_
 
 **Goal:** Bring the entire post-v70 contract surface to the C4A-ready bar — byte-frozen subject, full coverage of the new mechanics, cross-model adversarial reaudit, gas squeezed, findings documented. The subject is the `ffbd7796 (v70 freeze) → HEAD` diff: **18 `.sol`, +2,186/−355**, already committed across `f255d56c` (foil pack), `1dd07c4d` (WWXRP Degenerette reel rig + payout fork), `16225de6` (Variant-2 foil match rescore). This is an audit, not a build — verify → freeze → test → reaudit → terminal.
 

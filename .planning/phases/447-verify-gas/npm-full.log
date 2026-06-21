@@ -1,0 +1,61 @@
+> hardhat test test/unit/*.test.js test/integration/*.test.js test/deploy/*.test.js test/access/*.test.js test/edge/*.test.js test/gas/AdvanceGameGas.test.js test/gas/Phase264GasRegression.test.js test/gas/LootboxOpenGas.test.js
+
+Warning: This declaration shadows an existing declaration.
+    --> contracts/storage/DegenerusGameStorage.sol:1735:48:
+     |
+1735 |     function _lootboxEvUsedFor(address player, uint24 level)
+     |                                                ^^^^^^^^^^^^
+Note: The shadowed declaration is here:
+   --> contracts/storage/DegenerusGameStorage.sol:236:5:
+    |
+236 |     uint24 public level = 0;
+    |     ^^^^^^^^^^^^^^^^^^^^^^^
+
+
+Warning: This declaration shadows an existing declaration.
+    --> contracts/storage/DegenerusGameStorage.sol:1751:9:
+     |
+1751 |         uint24 level,
+     |         ^^^^^^^^^^^^
+Note: The shadowed declaration is here:
+   --> contracts/storage/DegenerusGameStorage.sol:236:5:
+    |
+236 |     uint24 public level = 0;
+    |     ^^^^^^^^^^^^^^^^^^^^^^^
+
+
+Warning: This declaration shadows an existing declaration.
+    --> contracts/storage/DegenerusGameStorage.sol:1868:46:
+     |
+1868 |     function _centuryUsedFor(address player, uint256 level) internal view returns (uint256) {
+     |                                              ^^^^^^^^^^^^^
+Note: The shadowed declaration is here:
+   --> contracts/storage/DegenerusGameStorage.sol:236:5:
+    |
+236 |     uint24 public level = 0;
+    |     ^^^^^^^^^^^^^^^^^^^^^^^
+
+
+Warning: This declaration shadows an existing declaration.
+    --> contracts/storage/DegenerusGameStorage.sol:1874:49:
+     |
+1874 |     function _setCenturyUsedFor(address player, uint256 level, uint256 used) internal {
+     |                                                 ^^^^^^^^^^^^^
+Note: The shadowed declaration is here:
+   --> contracts/storage/DegenerusGameStorage.sol:236:5:
+    |
+236 |     uint24 public level = 0;
+    |     ^^^^^^^^^^^^^^^^^^^^^^^
+
+
+TypeError: Member "GAME_FOILPACK_MODULE" not found or not visible after argument-dependent lookup in type(library ContractAddresses).
+   --> contracts/DegenerusGame.sol:658:48:
+    |
+658 |         (bool okFoil, bytes memory dataFoil) = ContractAddresses
+    |                                                ^ (Relevant source part starts here and spans across multiple lines).
+
+
+Error HH600: Compilation failed
+
+For more info go to https://v2.hardhat.org/HH600 or run Hardhat with --show-stack-traces
+=== npm test rc=1 ===
