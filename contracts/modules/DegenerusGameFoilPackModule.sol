@@ -54,13 +54,19 @@ contract DegenerusGameFoilPackModule is
     ///      (the lane carries no value); only the ETH and FLIP lanes pay.
     uint256 private constant WWXRP_FACE_AMOUNT = 1e18;
 
-    // Tier face counts. One face stakes 1,000 FLIP or priceForLevel(L) ETH — one
-    // ticket of value either way (WWXRP, the third currency, is worthless). Tuned so
-    // the value-bearing ETH and FLIP lanes (40% each) each deliver ~1 ticket of value
-    // per pack over a 30-day, 60-draw window: total faces EV ~= 2.63, x 0.40/lane.
-    uint256 private constant FACES_TWO_OF_FOUR = 7;
-    uint256 private constant FACES_THREE_OF_FOUR = 65;
-    uint256 private constant FACES_FOUR_OF_FOUR = 1000;
+    // Per-score face counts for the graded "Variant-2" match (see _tryClaimFoilMatch).
+    // One face stakes 1,000 FLIP or priceForLevel(L) ETH — one ticket of value either
+    // way (WWXRP, the third currency, is worthless). Calibrated to
+    // E[faces/comparison] = 0.010972 (E[faces/pack/30d] = 2.633) — byte-identical EV to
+    // the prior liveCount {2->7, 3->65, 4->1000} table, so the value-bearing ETH and
+    // FLIP lanes (40% each) still each deliver ~1 ticket of value per pack over a
+    // 30-day, 60-draw window. Score T (0..8) pays from T=4; T=8 (all four full doubles,
+    // the old 4-of-4 moonshot) also grants a half whale pass.
+    uint256 private constant FOIL_FACES_T4 = 2;
+    uint256 private constant FOIL_FACES_T5 = 6;
+    uint256 private constant FOIL_FACES_T6 = 35;
+    uint256 private constant FOIL_FACES_T7 = 400;
+    uint256 private constant FOIL_FACES_T8 = 10_000;
 
     /// @dev Mirrors the jackpot module's per-level daily-jackpot cap (five logical
     ///      daily jackpots). Used to detect the final jackpot day so a pack bought in
@@ -93,8 +99,9 @@ contract DegenerusGameFoilPackModule is
     /// @param day The draw day claimed against.
     /// @param ticketIndex Which of the pack's four tickets matched (0-3).
     /// @param drawKind 0 = main set, 1 = bonus set.
-    /// @param tier The matched tier (2, 3, or 4 quadrants).
-    /// @param faces The face count paid for the tier.
+    /// @param tier The matched score T (4..8): the graded symbol/color axis match; T=8
+    ///        is the moonshot (all four full doubles). Field name retained for the indexer.
+    /// @param faces The face count paid for the score.
     event FoilMatchClaimed(
         address indexed player,
         uint24 indexed day,
@@ -475,34 +482,39 @@ contract DegenerusGameFoilPackModule is
             multBps
         )[ticketIndex];
 
+        // Graded "Variant-2" score vs the day's winning set: per quadrant a symbol
+        // match scores +1, and if the color of that same quadrant also matches it
+        // scores +2; a symbol miss scores 0 (color only counts once the symbol is hit).
+        // Score T in {0..8}. Color (bits 5-3) is boosted on the foil line but the
+        // winning set is uniform, so P(symbol) = P(color) = 1/8 — both boost-invariant,
+        // so the faces calibration holds at any multBps.
         uint32 winSet = drawKind == 1 ? bonusSet : mainSet;
-        uint256 liveCount;
+        uint256 score;
         for (uint256 q; q < 4; ++q) {
-            // 6-bit [CCC][SSS] positional compare (quadrant bits masked off; both
-            // sides carry the same quadrant in the same byte).
-            if (
-                uint8((sel >> (8 * q)) & 0x3F) ==
-                uint8((winSet >> (8 * q)) & 0x3F)
-            ) {
-                liveCount++;
+            uint8 selByte = uint8(sel >> (8 * q));
+            uint8 winByte = uint8(winSet >> (8 * q));
+            // Symbol = bits 2-0; color = bits 5-3 (quadrant bits 7-6 ignored).
+            if ((selByte & 7) == (winByte & 7)) {
+                score += ((selByte >> 3) & 7) == ((winByte >> 3) & 7) ? 2 : 1;
             }
         }
-        if (liveCount < 2) return false;
+        if (score < 4) return false;
 
         // Mark before any payout (CEI).
         foilMatchClaimed[mk] = true;
 
-        uint8 tier;
+        uint8 tier = uint8(score); // 4..8
         uint256 faces;
-        if (liveCount == 2) {
-            tier = 2;
-            faces = FACES_TWO_OF_FOUR;
-        } else if (liveCount == 3) {
-            tier = 3;
-            faces = FACES_THREE_OF_FOUR;
+        if (score == 4) {
+            faces = FOIL_FACES_T4;
+        } else if (score == 5) {
+            faces = FOIL_FACES_T5;
+        } else if (score == 6) {
+            faces = FOIL_FACES_T6;
+        } else if (score == 7) {
+            faces = FOIL_FACES_T7;
         } else {
-            tier = 4;
-            faces = FACES_FOUR_OF_FOUR;
+            faces = FOIL_FACES_T8; // score == 8 (all four full doubles)
         }
 
         emit FoilMatchClaimed(player, uint24(day), ticketIndex, drawKind, tier, faces);
@@ -553,7 +565,7 @@ contract DegenerusGameFoilPackModule is
     ///      buyer's activity score frozen at buy), so the foil's boosted traits cannot
     ///      tilt EV and the ~2-faces/pack/30d calibration holds. FLIP stakes split into
     ///      thirds across three spins under one survival flip; ETH and WWXRP are single
-    ///      spins. The 4-of-4 tier also grants a half whale pass. All effects run after
+    ///      spins. The T=8 tier (all four full doubles) also grants a half whale pass. All effects run after
     ///      the double-claim marker is set (CEI). The matched signature `sel` is the
     ///      spin's player ticket, so the win plays the exact four-quadrant line that
     ///      matched (its boosted gold count is EV-neutral under the per-N tables).
@@ -568,7 +580,7 @@ contract DegenerusGameFoilPackModule is
         uint256 faces,
         uint16 activityScore
     ) private {
-        if (tier == 4) {
+        if (tier == 8) {
             whalePassClaims[player] += 1;
         }
 
