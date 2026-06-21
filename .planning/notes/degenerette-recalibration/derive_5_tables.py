@@ -619,3 +619,158 @@ for N in range(5):
     )
     assert abs(float(total_bonus) - 0.05) < 0.05 * 0.01, f"rigged N={N} bonus EV off"
     print(f"//   N={N}: rigged EV={float(ev_frac):.5f} centi-x | bonus EV={float(total_bonus)*100:.5f}% | factors<2^64 OK")
+
+
+# ===================================================================
+# EVEQ-01 / DEC-02 Option A — hero-placement EV-drift measurement.
+# Variant-2 gates color behind symbol, so within a FIXED N a hero-gold
+# ticket and a hero-common ticket have slightly different score
+# distributions. The single per-N honest table averages over hero
+# placement at P(hero gold | N) = N/4. This section MEASURES, per N, the
+# worst-case |EV_gold - EV_common| of the SAME solved per-N honest table
+# evaluated against each hero-placement sub-case distribution, reports the
+# max across N, and prints the DEC-02 verdict. DEC-02 Option A is LOCKED
+# (5 per-N tables); no per-(N, hero-is-gold) tables are added. Each per-N
+# table already asserts EV <= 100 (above), so Option A is solvency-safe
+# regardless of the residual drift (USER: WWXRP gold drift is don't-care).
+# ===================================================================
+
+
+def _hero_placement_subcase(n_gold, hero_is_gold):
+    """Variant-2 P(S) for a fixed N and a FIXED hero placement (no averaging).
+
+    Reuses the exact per-quadrant convolution of `p_score_distribution`, but for a
+    single hero-placement branch:
+      hero gold   : hero color = gold;   ordinary colors = (N-1) gold + (4-N) common
+      hero common : hero color = common; ordinary colors =  N    gold + (3-N) common
+    Returns a length-10 distribution (sums to 1). Returns None when the requested
+    placement is impossible for this N (hero gold needs N>=1; hero common needs N<=3)."""
+    if hero_is_gold:
+        if n_gold < 1:
+            return None
+        ord_gold, ord_common = n_gold - 1, 4 - n_gold
+        hero_color = P_COLOR_GOLD[1]
+    else:
+        if n_gold > 3:
+            return None
+        ord_gold, ord_common = n_gold, 3 - n_gold
+        hero_color = P_COLOR_COMMON[1]
+    sub = _hero_quadrant_dist(hero_color)
+    for _ in range(ord_gold):
+        sub = convolve(sub, _ordinary_quadrant_dist(P_COLOR_GOLD[1]))
+    for _ in range(ord_common):
+        sub = convolve(sub, _ordinary_quadrant_dist(P_COLOR_COMMON[1]))
+    while len(sub) < 10:
+        sub.append(Fraction(0))
+    assert sum(sub) == 1, f"hero-placement sub-case N={n_gold} gold={hero_is_gold} != 1"
+    return sub
+
+
+print("\n" + "=" * 70)
+print("EVEQ-01 / DEC-02 Option A — hero-placement EV-drift (centi-x)")
+print("=" * 70)
+print(f"// {'N':>3} | {'EV(hero gold)':>14} | {'EV(hero common)':>16} | {'|drift|':>10}")
+max_drift = Fraction(0)
+max_drift_N = None
+for N in range(5):
+    table = tables[N][1]  # the SAME solved per-N honest table
+    sub_gold = _hero_placement_subcase(N, True)
+    sub_common = _hero_placement_subcase(N, False)
+    # Edge N: at N=0 there is no hero-gold sub-case; at N=4 there is no hero-common.
+    # The single existing sub-case is exactly the per-N dist -> zero placement drift.
+    ev_gold = total_ev(table, sub_gold) if sub_gold is not None else None
+    ev_common = total_ev(table, sub_common) if sub_common is not None else None
+    if ev_gold is not None and ev_common is not None:
+        drift = abs(ev_gold - ev_common)
+        gold_s = f"{float(ev_gold):>14.5f}"
+        common_s = f"{float(ev_common):>16.5f}"
+    else:
+        drift = Fraction(0)  # only one placement exists -> no cross-placement drift
+        gold_s = (f"{float(ev_gold):>14.5f}" if ev_gold is not None else f"{'n/a':>14}")
+        common_s = (f"{float(ev_common):>16.5f}" if ev_common is not None else f"{'n/a':>16}")
+    if drift > max_drift:
+        max_drift = drift
+        max_drift_N = N
+    print(f"// {N:>3} | {gold_s} | {common_s} | {float(drift):>10.5f}")
+# Solvency note (per CONTEXT DEC-02): the existing per-N EV-<=100 assert (the
+# "Per-pick basePayoutEV verification" loop above) guarantees every per-N table is
+# neutral-or-just-under against its AVERAGED hero-placement distribution — that is the
+# priced-across-picks house-edge guarantee and it still holds. Within a fixed N the
+# hero-COMMON sub-case can sit slightly above 100 and the hero-GOLD sub-case slightly
+# below (the averaging is exactly neutral), so we report each sub-case EV here rather
+# than hard-asserting per-sub-case <=100 — that per-sub-case split IS the EV drift this
+# section measures. (USER ruling: residual WWXRP gold-payout drift is don't-care; the
+# averaged table is what the contract prices.)
+assert max_drift < Fraction(100), (
+    f"max hero-placement drift {float(max_drift)} centi-x is non-finite/absurd"
+)
+print(
+    f"// MAX hero-placement EV drift across N = {float(max_drift):.5f} centi-x"
+    + (f" (at N={max_drift_N})" if max_drift_N is not None else "")
+)
+TOL_CENTI_X = Fraction(1, 2)  # ~0.5 centi-x neutral-or-just-under tolerance
+if max_drift <= TOL_CENTI_X:
+    print(
+        f"// DEC-02 verdict: Option A kept (5 per-N tables) — max drift "
+        f"{float(max_drift):.5f} centi-x within ~{float(TOL_CENTI_X)} centi-x tolerance."
+    )
+else:
+    print(
+        f"// DEC-02 verdict: ESCALATE to Option B — max drift {float(max_drift):.5f} "
+        f"centi-x grossly EXCEEDS the ~{float(TOL_CENTI_X)} centi-x tolerance."
+    )
+    print(
+        "//   NOTE: the hero-COMMON sub-case EV exceeds 100 centi-x at N=1..3 (EV-positive"
+    )
+    print(
+        "//   to the player on those picks), so the averaged-table solvency note from the"
+    )
+    print(
+        "//   452 CONTEXT (which assumed BOTH sub-cases stay <=100) does NOT hold under the"
+    )
+    print(
+        "//   measured Variant-2 drift. Per EVEQ-01 / DEC-02, this is exactly the 'grossly"
+    )
+    print(
+        "//   outside tolerance' trigger to revisit Option B (index by (N, hero-is-gold))."
+    )
+    print(
+        "//   USER + 453 IMPL decision required — Option A is NOT silently kept here."
+    )
+
+
+# ===================================================================
+# NUMERIC PRE-PROOF (INV-03 / ROADMAP success criterion 5) —
+# P(S=9) and the WWXRP RTP curve are UNCHANGED vs HEAD under Variant-2 +
+# the R2 rig, proven BEFORE any contract edit. We show, per N, the honest
+# Variant-2 P_N(S=9), the rigged P_N(S=9), and the HEAD all-8-match
+# probability (the old M=8 event) side by side and assert all three are
+# EQUAL (Fraction-exact). The WWXRP_ROI_* RTP curve (70->115->118->120%)
+# and the S=9 whale-pass bracket are NOT recomputed by this script — they
+# live in the contract ROI machinery (INV-02 / INV-04), held fixed; since
+# the rig leaves P(S=9) and its pinned payout intact (m>=7 cap), the
+# realized WWXRP RTP curve is byte-identical to HEAD.
+# ===================================================================
+print("\n" + "=" * 70)
+print("NUMERIC PRE-PROOF — P(S=9) + WWXRP RTP curve unchanged vs HEAD")
+print("=" * 70)
+print(f"// {'N':>3} | {'honest P(S=9)':>26} | {'rigged P(S=9)':>26} | {'HEAD all-8-match P':>26} | eq")
+for N in range(5):
+    honest_ps9 = P_N_TABLE[N][9]              # Variant-2 honest P(S=9)
+    rigged_ps9 = P_N_RIG[N][9]                # R2-rigged P(S=9)
+    head_m8 = _p_old(N)[8]                    # HEAD all-8-axes (old M=8) probability
+    eq = (honest_ps9 == rigged_ps9 == head_m8)
+    assert eq, (
+        f"PRE-PROOF FAIL N={N}: honest {honest_ps9} / rigged {rigged_ps9} / HEAD {head_m8} differ"
+    )
+    print(
+        f"// {N:>3} | {str(honest_ps9):>26} | {str(rigged_ps9):>26} | "
+        f"{str(head_m8):>26} | {'OK' if eq else 'XX'}"
+    )
+# WWXRP RTP curve: held fixed in the contract (not recomputed here). State + confirm.
+print("// WWXRP_ROI_* RTP curve (70->115->118->120%) + the S=9 whale-pass bracket are")
+print("//   NOT recomputed by this script — held fixed in the contract ROI machinery")
+print("//   (INV-02 / INV-04). The R2 rig's m>=7 cap leaves P(S=9) and its pinned")
+print("//   QUICK_PLAY_PAYOUT_N{N}_S9 payout intact, so the realized WWXRP RTP curve is")
+print("//   byte-identical to HEAD.")
+print("PRE-PROOF: P(S=9) and WWXRP RTP curve unchanged vs HEAD under Variant-2 + R2 rig")
