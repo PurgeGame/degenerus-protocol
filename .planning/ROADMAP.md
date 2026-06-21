@@ -15,6 +15,10 @@
 
 **Requirements:** GEN-01, GEN-02, GEN-03, EVEQ-01
 
+**Plans:** 2 plans (2 waves)
+- [ ] 452-01-PLAN.md — Rewrite both distributions: Variant-2 honest `p_score_distribution` + DEC-01 R2 score-bearing `p_score_distribution_rigged` (GEN-01)
+- [ ] 452-02-PLAN.md — Regenerate the full constant family + GEN-02 self-asserts + EVEQ-01 Option-A EV-drift measurement + P(S=9)/WWXRP-RTP numeric pre-proof (GEN-02, GEN-03, EVEQ-01)
+
 **Success criteria:**
 1. The 3 decisions (DEC-01/02/03) are locked in discuss-phase and recorded.
 2. `derive_5_tables.py` rewritten for Variant-2 (honest + rigged dist, same calibration, same self-asserts); self-asserts pass (per-N basePayoutEV ∈ (99,100] centi-x honest + rigged; bonus-EV = 5.000%; all WWXRP factors < 2^64).
@@ -86,3 +90,4 @@
 
 ---
 *Roadmap created: 2026-06-21 (authored BY HAND at milestone v73.0 init)*
+*Phase 452 planned: 2026-06-21 (2 plans / 2 waves)*
