@@ -1,38 +1,59 @@
 """
 5-table EV-equal Degenerette payout derivation — 10-bucket S in {0..9} design.
 
-DESIGN VARIANT (v48 HERO 2-point rescale)
-------------------------------------------
-The Degenerette hero quadrant's SYMBOL match now scores 2 points (was a separate
-EV-neutral multiplier). The composite score is
+DESIGN VARIANT (v73.0 "Variant-2" color-gated-by-symbol rescore)
+---------------------------------------------------------------
+Variant-2 GATES color behind symbol on a per-quadrant basis. Per quadrant a SYMBOL
+match scores +1 (the hero quadrant's symbol scores +2), and that quadrant's COLOR
+scores +1 ONLY IF that quadrant's symbol also matched. The composite score is the
+sum of the four per-quadrant contributions:
 
-    S = A + 2*H        (S in {0..9}, pay floor S >= 2)
+    S = (hero quadrant {0, +2, +3}) + sum of 3 ordinary quadrants {0, +1, +2}
+        (S in {0..9}, pay floor S >= 2)
 
-where
-    A = the ordinary-axis match count over the 7 ordinary axes
-        = 4 color axes (one per quadrant, including the hero quadrant's color)
-        + 3 non-hero symbol axes,
-    H = 1 iff the hero quadrant's SYMBOL matches (Bernoulli 1/8).
+where each per-quadrant contribution is:
+    ordinary quadrant:  +0 symbol miss; +1 symbol match & color miss;
+                        +2 symbol match & color match (a full quadrant double),
+    hero quadrant:      +0 hero-symbol miss; +2 hero-symbol match & color miss;
+                        +3 hero-symbol match & color match (the hero quadrant maxed).
 
-The standalone hero multiplier (HERO_BOOST / HERO_PENALTY / HERO_SCALE) is GONE —
-the hero is folded directly into S. S = 9 is the jackpot and is exactly the
-all-7-ordinary-match + hero-symbol-match event, which is BYTE-FOR-BYTE the same
-physical event (and the same odds) as the old M = 8 all-8-axes-match jackpot — so
-the S = 9 payout is a RELABEL of the old M = 8 value (values unchanged, pinned).
+This REPLACES the old independent-axis model (S = A + 2H, where the 4 colors and 4
+symbols were counted independently). The four quadrants are therefore no longer
+independent axes — each contributes a joint (symbol, color) score. The standalone
+hero multiplier (HERO_BOOST / HERO_PENALTY / HERO_SCALE) is GONE — the hero is
+folded directly into S.
+
+S = 9 is the jackpot and remains EXACTLY the all-8-axes event (every quadrant a full
+symbol+color double), which is BYTE-FOR-BYTE the same physical event (and the same
+odds) as the old M = 8 all-8-axes-match jackpot — so the S = 9 payout is a RELABEL of
+the old M = 8 value (values unchanged, pinned). Variant-2 leaves P(S=9) byte-identical
+to HEAD; only the intermediate S distribution moves (main slot ~1-in-3 / 32% -> ~1-in-5
+at ~2x multipliers at IDENTICAL EV).
+
+DEC-03 floor S>=2: a lone ordinary (non-hero) symbol match = S=1 (SHAPE pays 0 there);
+the hero symbol alone = S=2 and a full quadrant double = S=2 (both pay).
 
 Player ticket has N gold quadrants (N in {0, 1, 2, 3, 4}). Use one of 5 separate
 payout tables, each calibrated so basePayoutEV = 100 centi-x against THAT N-value's
 score distribution P_N(S). No runtime normalizer needed.
+
+DEC-02 Option A (EV-equality wrinkle): because color is gated behind symbol, the hero
+quadrant's gold-ness now shifts P_N(S) — within a fixed N a hero-gold ticket and a
+hero-common ticket have slightly different score distributions. The single per-N table
+averages over hero placement (hero gold w.p. N/4, common w.p. (4-N)/4). The generator
+MEASURES the worst-case hero-gold vs hero-common EV drift (see the EVEQ-01 section
+below) and keeps Option A (5 tables); each per-N table still asserts EV <= 100, so A
+is solvency-safe regardless of the residual drift.
 
 Per-axis Bernoulli match probabilities (producer: color [16,16,16,16,16,16,16,8]/120,
 symbol uniform 1/8):
   color axis:  P(match) = 2/15  (common, w=16)   |  1/15  (gold, w=8)
   symbol axis: P(match) = 1/8   (uniform, all quadrants)
 
-P_N(S) = convolution over:
-  - N gold color axes (Bernoulli 1/15) + (4-N) common color axes (Bernoulli 2/15),
-  - 3 non-hero symbol axes (Bernoulli 1/8, contributing 0 or 1),
-  - 1 hero symbol axis (Bernoulli 1/8, contributing 0 or 2).
+P_N(S) = convolution over the four per-quadrant joint (symbol, color) contributions:
+  - 1 hero quadrant   over {0, +2, +3} (hero symbol 1/8; its color gated behind it),
+  - 3 ordinary quadrants, each over {0, +1, +2} (symbol 1/8; color gated behind it),
+  averaged over hero placement at P(hero gold | N) = N/4 (DEC-02 Option A).
 
 PAYOUT SHAPE (S = 2..9; S = 0, 1 pay 0):
   SHAPE[2..8] = [190, 475, 1500, 4250, 19500, 100000, 5_000_000] (relative ratios,
@@ -319,11 +340,14 @@ for N in range(5):
 print()
 
 # ===================================================================
-# FINAL PASTE-READY CONSTANTS — 10-bucket S in {0..9} design.
-# The hero is scored into S; the standalone hero multiplier is GONE
-# (no HERO_BOOST / HERO_PENALTY / HERO_SCALE). S = 9 is the M = 8 relabel.
-# The PASS_ALL byte-reproduce gate parses this section and diffs vs the
-# contract source — constants are NEVER hand-typed.
+# FINAL PASTE-READY CONSTANTS — 10-bucket S in {0..9} design (Variant-2).
+# Variant-2 color-gated-by-symbol scoring: per quadrant a symbol match
+# scores +1 (hero +2), and the color scores +1 only if that quadrant's
+# symbol also matched. The hero is scored into S; the standalone hero
+# multiplier is GONE (no HERO_BOOST / HERO_PENALTY / HERO_SCALE). S = 9
+# is still the all-8-axes event = the M = 8 relabel (P(S=9) + pin
+# byte-identical to HEAD). The PASS_ALL byte-reproduce gate parses this
+# section and diffs vs the contract source — constants are NEVER hand-typed.
 # ===================================================================
 
 print("=" * 70)
@@ -407,14 +431,20 @@ for N in range(5):
 
 
 # ===================================================================
-# WWXRP RIG FAMILY — variant-B rig (ordinary-only +1, 60%, M<=6 gate).
-# WWXRP spins force one unmatched ORDINARY cell to a real match w.p.
-# 3/5 when M<=6 (never the hero; caps at M=7 so P(S=9) is INVARIANT).
-# WWXRP gets its OWN per-N base tables (EV=100 centi-x under the RIGGED
-# dist, EV-equality across picks preserved) + its OWN factors. S=9 reuses
-# the honest QUICK_PLAY_PAYOUT_N{N}_S9 pin (P(S=9) unchanged by the rig).
-# ETH/FLIP keep the honest tables above. Names carry a _RIG_ infix.
-# The byte-reproduce gate parses these from the SAME FINAL block.
+# WWXRP RIG FAMILY — DEC-01 R2 score-bearing rig (+1, 60%, M<=6 gate).
+# Under Variant-2 the WWXRP rig forces ONE *score-bearing* cell to a real
+# match w.p. 3/5 when M<=6: an unmatched NON-HERO symbol (+1), or an
+# unmatched COLOR on a quadrant whose symbol ALREADY matched (+1, the
+# color "unlocks"; incl. the hero quadrant's color — only the hero SYMBOL
+# is excluded). No-op colors and the hero symbol are excluded; when the
+# eligible pool is empty there is no lift that round. Caps at M=7 so the
+# rig can NEVER manufacture S=9 -> P(S=9) is INVARIANT (RIG-02), and
+# display==score stays honest (RIG-03). WWXRP gets its OWN per-N base
+# tables (EV=100 centi-x under the RIGGED dist, EV-equality across picks
+# preserved) + its OWN factors. S=9 reuses the honest
+# QUICK_PLAY_PAYOUT_N{N}_S9 pin (P(S=9) unchanged by the rig). ETH/FLIP
+# keep the honest tables above. Names carry a _RIG_ infix. The
+# byte-reproduce gate parses these from the SAME FINAL block.
 # ===================================================================
 
 _HERO_BERN = [Fraction(7, 8), Fraction(1, 8)]  # hero matched 0/1
@@ -551,7 +581,7 @@ def wwxrp_factors_rig(N):
 
 
 print("\n" + "=" * 70)
-print("WWXRP RIG FAMILY — FINAL PASTE-READY CONSTANTS (variant B)")
+print("WWXRP RIG FAMILY — FINAL PASTE-READY CONSTANTS (DEC-01 R2 score-bearing rig)")
 print("=" * 70)
 print("\n// Rigged WWXRP base tables (per-N): basePayoutEV = 100 centi-x under the rigged dist")
 for N in range(5):
