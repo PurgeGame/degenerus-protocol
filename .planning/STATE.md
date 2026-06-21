@@ -1,26 +1,26 @@
 ---
 gsd_state_version: 1.0
-milestone: v72.0
-milestone_name: As-Built Audit — Foil Pack + Degenerette WWXRP/Rescore
-status: complete
+milestone: v73.0
+milestone_name: Degenerette Variant-2 Color-Gated Rescore (+ WWXRP preservation)
+status: planning
 last_updated: "2026-06-21"
-last_activity: 2026-06-21 -- v72.0 COMPLETE (0 findings); archived + tagged v72.0; UNPUSHED (USER pushes)
+last_activity: 2026-06-21 -- v73.0 started; REQUIREMENTS + ROADMAP authored BY HAND; NEXT = /gsd-discuss-phase 452 (lock 3 decisions) -> 452 GEN
 progress:
   total_phases: 5
-  completed_phases: 5
+  completed_phases: 0
   total_plans: 0
   completed_plans: 0
-  percent: 100
+  percent: 0
 ---
 
 # Project State
 
 ## Project Reference
 
-See: .planning/PROJECT.md (Current Milestone: v70.0 section) + .planning/MILESTONES.md. **v70.0 ACTIVE 2026-06-19** — Activity-Score Consumer-Curve & Bucket Reshape (Verify + Re-Audit). Baseline = the v69.0 closure subject — `contracts/` tree `8a633d1d` at HEAD `3f024cc8` (closure `MILESTONE_V69_AT_HEAD_7d0fa2c6…`). The reshape (a new shared pure lib `contracts/libraries/ActivityCurveLib.sol` + inline ROI/WWXRP/lootbox-EV reshapes across 6 modified `.sol`) is **already in the working tree, UNCOMMITTED** at milestone start; the FREEZE commit (441) produces the new v70 subject. v69.0 ARCHIVED + TAGGED 2026-06-19 → .planning/milestones/v69.0-{ROADMAP,REQUIREMENTS}.md. REQUIREMENTS.md + ROADMAP.md (v70.0) authored at milestone init BY HAND.
+See: .planning/PROJECT.md (Current Milestone: v73.0 section) + .planning/MILESTONES.md. **v73.0 STARTED 2026-06-21** — Degenerette "Variant-2" Color-Gated Rescore (+ WWXRP preservation). Port the color-gated-by-symbol `_score` rule (shipped on the foil match `16225de6`) into the core Degenerette engine: ~1-in-5 / ~2× at identical EV, with the full WWXRP rig family recalibrated to preserve P(S=9) / the WWXRP RTP curve / the S=9 whale-pass bracket / the ROI curve / per-N EV=100. Contract LOGIC change → **RESETS the audit subject** off the v72.0 closure (`MILESTONE_V72_AT_HEAD_e94f1719…`, `contracts/` tree `4407181d` @ `e94f1719`). v72.0 ARCHIVED + TAGGED 2026-06-21 → .planning/milestones/v72.0-{ROADMAP,REQUIREMENTS}.md. REQUIREMENTS.md + ROADMAP.md (v73.0) authored at milestone init BY HAND. Generator-first (no-contract-risk regen+verify before the gated diff); 3 design decisions deferred to `/gsd-discuss-phase 452`.
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Current focus:** Phase 446 — impl-batched-contract-diff-contract-commit-gate
+**Current focus:** Phase 452 — GEN (generator-first: rewrite + verify derive_5_tables.py, regenerate tables, measure EV-drift; NO contract edit)
 
 ## ⚠ v50.0 + v51.0 AUDIT DEBT → FOLDED INTO v63.0 Phase 394 LEGACY-DEBT (USER 2026-06-14; was a separate v52 track)
 
@@ -34,17 +34,17 @@ See: .planning/PROJECT.md (Current Milestone: v70.0 section) + .planning/MILESTO
 
 ## Current Position
 
-Milestone: v72.0 — As-Built Audit: Foil Pack + Degenerette WWXRP/Rescore (+ Gas)
-Phase: ✅ v72.0 COMPLETE (all 5 phases) — ARCHIVED + TAGGED `v72.0`; UNPUSHED (USER pushes). NEXT = USER `git push` → /gsd-new-milestone.
-Plan: — 447 VERIFY+GAS ✅ (0 CAT/HIGH/MED/LOW; F-01/F-02/F-03/F-04/CG-1 all closed) · 448 FREEZE ✅ [`19dc6390` gas Pick 4 + `e94f1719` dead-code removal, both USER-approved] · 449 TST ✅ [forge 942/0/108; Hardhat clean; deploy 14/14; storage all-appended] · 450 REAUDIT ✅ [folded into the thorough 447 Codex cross-model pass] · 451 TERMINAL ✅ [`audit/FINDINGS-v72.0.md` chmod 444; closure `MILESTONE_V72_AT_HEAD_e94f1719a52441ac4dc90a5a6304f09533fa2c96`].
-  Subject byte-frozen `contracts/` tree `4407181d` @ `e94f1719`. Archived `milestones/v72.0-{ROADMAP,REQUIREMENTS}.md`; MILESTONES.md + PROJECT.md updated. ⚠ gemini CLI dead (auth migration) → cross-model = Codex only. Carries (non-blocking): indexer FoilMatchClaimed.tier re-vendor; REQUIREMENTS MATCH-01/09 pre-§V doc wording; optional ΣP·face EV-pin test + F-03 per-empty-day-decrement.
-Status: 447 complete — **as-built is CLEAN: 0 CAT/0 HIGH/0 MED/0 real LOW.** Only dirty .sol = the optional gas Pick 4 (MintModule, +2/−2), forge 944/0/108 green, EIP-170 OK. Ledger: `.planning/phases/447-verify-gas/FINDINGS-LEDGER.md`.
-  447 RESULT: 6-agent VERIFY fan-out (all MATCH; rig EV=100 all tables + P(S9) byte-identical; rescore EV 2.16/tkt & 2.633/pack; storage all-appended forge-inspect; advance not foil-brickable) + Codex cross-model. F-01 4-of-4 steer = by-design §V.3. F-02 uncalled producer = by-design §V.8. F-03 foil-drain = Codex liveness HOLDS. CG-1 two-distinct-heroes = Codex HOLDS. **F-04 (foil ETH frozen-branch "uncapped") WITHDRAWN by USER 2026-06-21 — NOT a finding: `pendingFuture` is structurally << `futurePrizePool` (freeze-window purchases only), so the frozen ETH payout is already bounded ≲ the unfrozen 10% cap; revert-on-insufficient is the correct backstop; ETH wins SHOULD pay ETH from pending. The Codex-option-3 fix was REVERTED (git checkout 3 files).** Gas Pick 4 applied (hot path); picks 2/3 rejected (cross-external-call), 1/5 deferred.
-  ⏸ HOLD for USER: tiny decision — keep the gas Pick 4 in the freeze (≈200 gas hot-path SLOAD removal) or freeze HEAD as-is (zero contract change). THEN (auto): freeze subject → 449 npm-harness fix (predictAddresses.js, diagnosed) + EV/RIG stat tests → 450 REAUDIT council (Codex; gemini CLI dead) → 451 FINDINGS-v72.0.md + closure. NOTHING committed but planning (`9df2a37d`); NOTHING pushed.
-Subject: ffbd7796 (v70 freeze) → HEAD 16225de6 — 18 .sol, +2,186/−355 (foil pack `f255d56c` + WWXRP rig/payout-fork `1dd07c4d` + Variant-2 rescore `16225de6`)
-Pillars (hard floor): Solvency · RNG integrity · Liveness/no-brick. Gas = first-class axis. Cross-model = Codex + Gemini (both CLIs present at ~/.local/bin).
-⚠ HOLD POINT: the FREEZE (448) contract commit is the SOLE approval gate — held for USER hand-review of the consolidated .sol diff; every other phase runs autonomously on the uncommitted working tree.
-Last activity: 2026-06-21 -- v72.0 started; v71.0 build closed by hand (audit folded in); Phase 447 VERIFY+GAS starting
+Milestone: v73.0 — Degenerette "Variant-2" Color-Gated Rescore (+ WWXRP preservation)
+Phase: ▶ STARTED — REQUIREMENTS + ROADMAP authored BY HAND. NEXT = /gsd-discuss-phase 452 (lock the 3 design decisions: rig R1/R2, EV-equality A/B, floor S≥2) → 452 GEN.
+Plan: — 452 GEN (generator-first; NO contract edit) · 453 IMPL (sole approval gate) · 454 TST · 455 REAUDIT · 456 TERMINAL. Numbering continues from 451.
+  452 GEN: rewrite + verify `derive_5_tables.py` (Variant-2 honest + rigged dist, same calibration + asserts), regenerate the full constant family (QUICK_PLAY_PAYOUTS_N{0..4}, WWXRP_FACTORS_N{0..4}, _RIG_ family; _S9 pins + WWXRP_ROI_* untouched), present regenerated tables + the Option-A EV-drift number. Decision #2 (EV-equality A vs B) resolves on the measured drift.
+Subject baseline (RESET by this milestone): v72.0 closure `MILESTONE_V72_AT_HEAD_e94f1719…`, `contracts/` tree `4407181d` @ `e94f1719`. The IMPL diff (453) produces the new v73 subject.
+Invariants (must hold fixed): ROI curve `_roiBpsFromScore` (90→99.9%); WWXRP RTP `WWXRP_ROI_*` (70→115→118→120%); S=9 jackpot pins + P(S=9) odds + WWXRP whale-pass bracket; floor S≥2; per-N table structure + SHAPE; EV=100 centi-x/N; ETH/WWXRP +5% bonus-EV.
+Process (hard): generator-first (regen+verify BEFORE any .sol edit); ONE batched .sol diff behind the sole approval gate (commit-guard CONTRACTS_COMMIT_APPROVED=1 + hook move-aside); paced; re-audit the betting engine after (touches core scoring).
+⚠ Cross-model = Codex (gemini CLI was dead at v72 close — re-check before 455 REAUDIT). ⚠ v72.0 ARCHIVED + TAGGED but UNPUSHED (USER pushes) — not touched by v73.
+Anchors: DegenerusGameDegeneretteModule.sol _score ~L1053 · _rigWwxrpResult ~L1299 · constants ~L283-360 · _wwxrpRoi ~L1259. Generator: .planning/notes/degenerette-recalibration/derive_5_tables.py. Foil precedent: commit 16225de6.
+Last activity: 2026-06-21 -- v73.0 started; PROJECT.md/STATE.md/REQUIREMENTS.md/ROADMAP.md authored BY HAND; NEXT = /gsd-discuss-phase 452
+PRIOR_v72_SHIP: 2026-06-21 — ✅ v72.0 SHIPPED + ARCHIVED + TAGGED `v72.0` (UNPUSHED). As-Built Audit of the post-v70 surface (foil pack `f255d56c` + WWXRP rig/payout-fork `1dd07c4d` + Variant-2 foil-match rescore `16225de6`; 18 .sol, +2,186/−355). Verdict 0 CAT/0 HIGH/0 MED/0 LOW; 0 open findings. 5 candidates raised+closed (F-01 4-of-4 steer by-design §V.3; F-02 dead producers REMOVED bytecode-neutral; F-03 foil-drain Codex-liveness HOLDS; F-04 foil-ETH-cap WITHDRAWN by USER; CG-1 two-distinct-heroes Codex HOLDS). Subject byte-frozen `contracts/` tree `4407181d` @ `e94f1719`; closure `MILESTONE_V72_AT_HEAD_e94f1719a52441ac4dc90a5a6304f09533fa2c96`. forge 942/0/108; Hardhat clean; deploy 14/14. `audit/FINDINGS-v72.0.md`; archived `milestones/v72.0-{ROADMAP,REQUIREMENTS}.md`. Carries (non-blocking): indexer FoilMatchClaimed.tier re-vendor; optional ΣP·face EV-pin test + F-03 per-empty-day-decrement.
 PRIOR_v71_FOLD: 2026-06-21 — v71.0 Foil Pack BUILD complete (445 SPEC + 446 IMPL committed `f255d56c`; then `1dd07c4d` WWXRP rig + payout fork, `16225de6` Variant-2 foil match rescore). v71's audit phases never ran → USER chose "fold into new audit milestone" → v71 CLOSED BY HAND (no `v71.0` tag — audit completes inside v72.0; planning snapshotted to `.planning/milestones/v71.0-{ROADMAP,REQUIREMENTS}.md`; phase dirs 445/446 KEPT in `.planning/phases/` as the build record v72 audits against). 34 commits ahead of origin, UNPUSHED. REQUIREMENTS.md + ROADMAP.md (v72.0) authored at init BY HAND. NEXT = run 447 VERIFY+GAS → … → hold at 448 FREEZE for USER.
 PRIOR_v68_SHIP: 2026-06-19 — ✅ **v68.0 SHIPPED + ARCHIVED + TAGGED** (USER chose "archive now; defer mutation"). Lifecycle done BY HAND (gsd-sdk mutators avoided — custom STATE + hand-driven phase dirs; per v66/v67 precedent): by-hand milestone audit `.planning/milestones/v68.0-MILESTONE-AUDIT.md` (PASS, 8/9 phases + 427 carried by USER decision, 19/22 reqs done + 3 MUT carried, subject logic-byte-frozen); archived ROADMAP/REQUIREMENTS/phase-dirs → `milestones/v68.0-*`; `git tag v68.0`; live phase dirs cleaned. Verdict **0 CAT / 0 HIGH; 1 LOW found+fixed (COUNCIL-FIND-01 `65b70821`)**; nets widened (RNG-freeze 78/79 cross-model, 87-slot layout oracle, deep invariants green @1000/256, durable CI, Decimator mutation 858/760 banked). Closure `MILESTONE_V68_AT_HEAD_3cc51d00393f18f78be83a3f797777baf969c842`; subject HEAD `3cc51d00` / contracts tree `e9a5fc24`. ⚠ NOT PUSHED (USER pushes). Carried: MUT-02/03/04 Coinflip/Lootbox tail (CI/detached) + `:1843 ==0` re-roll guard + 423 rotation-timer. NEXT = USER push + /gsd-new-milestone (v69).
 PRIOR_434: 2026-06-19 — ✅ **434 TERMINAL DONE** — v68 evidence pack shipped. Canonical `audit/COVERAGE-v68.0.md` (chmod 444) + `audit/AUDIT-V68-REPORT.html` (prior house style) + `.planning/phases/434-terminal/434-TERMINAL.md`. **Closure signal `MILESTONE_V68_AT_HEAD_3cc51d00393f18f78be83a3f797777baf969c842`**; subject confirmed **logic-byte-frozen** (only the comment trim `3cc51d00` [340/340 bytecode-identical] + COUNCIL-FIND-01 LOW fix `65b70821` touched `.sol`). Verdict **0 CAT / 0 HIGH; 1 LOW found+fixed (COUNCIL-FIND-01)**; detection nets widened (RNG-freeze proof 78/79 cross-model, layout 87-slot oracle, deep invariants green @1000/256, CI durable, Decimator mutation 858/760 banked). Honest partial recorded: MUT-02/03/04 tail (Coinflip/Lootbox scoring + triage) open — session-tied measurement, logic already dual-net-audited clean. NEXT = resume mutation (Coinflip→Lootbox) + lifecycle (/gsd-audit-milestone → archive+tag v68.0 BY HAND → /gsd-cleanup). Carried gated-fix decisions for USER: `:1843 ==0` re-roll guard + 423 rotation-timer.
