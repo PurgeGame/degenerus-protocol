@@ -979,4 +979,186 @@ describe("DegenerusQuests", function () {
       }
     });
   });
+
+  // =========================================================================
+  // 14. Level quest streak bonus — completing a per-level quest advances the
+  //     quest streak by LEVEL_QUEST_STREAK_BONUS (5), not the daily +1.
+  // =========================================================================
+  describe("Level quest streak bonus (+5 on completion)", function () {
+    // mintPacked_ lives at storage slot 9 on the Game (forge inspect
+    // DegenerusGame storageLayout). _isLevelQuestEligible reads it:
+    //   unitsLvl  = packed >> 104  must == level + 1   (4+ units this level)
+    //   units     = packed >> 228  must >= 4
+    //   loyalty   = (packed >> 48) >= 5  OR a pass
+    // Poke exactly those bits so the player is eligible without a real mint.
+    async function makeLevelQuestEligible(hreEthers, game, player) {
+      const lvl = await game.level();
+      const packed =
+        (5n << 48n) | ((BigInt(lvl) + 1n) << 104n) | (4n << 228n);
+      const slot = hreEthers.keccak256(
+        hreEthers.AbiCoder.defaultAbiCoder().encode(
+          ["address", "uint256"],
+          [player, 9n]
+        )
+      );
+      await hreEthers.provider.send("hardhat_setStorageAt", [
+        await game.getAddress(),
+        slot,
+        hreEthers.toBeHex(packed, 32),
+      ]);
+    }
+
+    // Roll the level quest as GAME, brute-forcing entropy until the chosen type
+    // lands (rollLevelQuest picks the type from entropy, like the daily bonus).
+    async function rollLevelQuestOfType(hreEthers, game, quests, targetType) {
+      const gameAddr = await game.getAddress();
+      await hreEthers.provider.send("hardhat_impersonateAccount", [gameAddr]);
+      await hreEthers.provider.send("hardhat_setBalance", [
+        gameAddr,
+        "0x1000000000000000000",
+      ]);
+      const gameSigner = await hreEthers.getSigner(gameAddr);
+      let found = false;
+      for (let i = 1n; i <= 300n; i++) {
+        await quests.connect(gameSigner).rollLevelQuest(i);
+        const view = await quests.getPlayerLevelQuestView(ZERO_ADDRESS);
+        if (Number(view.questType) === targetType) {
+          found = true;
+          break;
+        }
+      }
+      await hreEthers.provider.send("hardhat_stopImpersonatingAccount", [
+        gameAddr,
+      ]);
+      return found;
+    }
+
+    // Stand up: a daily quest (currentDay != 0) whose slot 1 is NOT FLIP, plus a
+    // FLIP level quest. handleFlip always credits FLIP *level* progress first and
+    // skips the daily leg when no slot is FLIP — so the streak delta is isolated
+    // to the level-quest completion (no daily +1 to conflate it).
+    // Returns the chosen quest day so callers can sync state on the same day.
+    async function setUpFlipLevelQuest(ctx) {
+      const { game, quests, alice } = ctx;
+      // Roll a daily whose slot 1 is NOT FLIP (slot 0 is always MINT_ETH).
+      // rollDailyQuest has no return and early-returns once a day is stamped, so
+      // we advance the day until getActiveQuests shows a non-FLIP slot 1 and
+      // thread that day through. With no FLIP slot, handleFlip's daily leg is
+      // skipped and only the FLIP level-quest leg fires — isolating the streak delta.
+      const gameAddr = await game.getAddress();
+      await hre.ethers.provider.send("hardhat_impersonateAccount", [gameAddr]);
+      await hre.ethers.provider.send("hardhat_setBalance", [
+        gameAddr,
+        "0x1000000000000000000",
+      ]);
+      const gameSigner = await hre.ethers.getSigner(gameAddr);
+      let chosenDay = 0n;
+      for (let d = 1n; d <= 300n; d++) {
+        await quests.connect(gameSigner).rollDailyQuest(d, d * 7919n, false, false);
+        const active = await quests.getActiveQuests();
+        if (Number(active[1].questType) !== QUEST_TYPE_FLIP) {
+          chosenDay = d;
+          break;
+        }
+      }
+      await hre.ethers.provider.send("hardhat_stopImpersonatingAccount", [
+        gameAddr,
+      ]);
+      expect(chosenDay, "rolled a daily with a non-FLIP slot 1").to.not.equal(0n);
+
+      const ok = await rollLevelQuestOfType(
+        hre.ethers,
+        game,
+        quests,
+        QUEST_TYPE_FLIP
+      );
+      expect(ok, "rolled a FLIP level quest within the entropy budget").to.equal(
+        true
+      );
+      await makeLevelQuestEligible(hre.ethers, game, alice.address);
+      const view = await quests.getPlayerLevelQuestView(alice.address);
+      expect(view.eligible, "alice eligible for the level quest").to.equal(true);
+      expect(view.completed, "level quest not yet completed").to.equal(false);
+      return chosenDay;
+    }
+
+    it("non-afking: completing a level quest advances the streak by 5 (not 1)", async function () {
+      const ctx = await loadFixture(deployFullProtocol);
+      const { quests, coin, alice } = ctx;
+      await setUpFlipLevelQuest(ctx);
+
+      const [streakBefore] = await quests.playerQuestStates(alice.address);
+      expect(streakBefore, "fresh player starts at streak 0").to.equal(0n);
+
+      // 20,000 FLIP clears the FLIP level-quest target in one shot.
+      await callHandlerAsCoin(hre.ethers, coin, quests, "handleFlip", [
+        alice.address,
+        eth(20000),
+      ]);
+
+      const viewAfter = await quests.getPlayerLevelQuestView(alice.address);
+      expect(viewAfter.completed, "level quest is now completed").to.equal(true);
+
+      const [streakAfter] = await quests.playerQuestStates(alice.address);
+      expect(
+        streakAfter,
+        "level-quest completion bumped the streak by LEVEL_QUEST_STREAK_BONUS (5)"
+      ).to.equal(5n);
+    });
+
+    it("non-afking: a level quest from a non-zero streak adds exactly 5", async function () {
+      const ctx = await loadFixture(deployFullProtocol);
+      const { quests, game, coin, alice } = ctx;
+      const chosenDay = await setUpFlipLevelQuest(ctx);
+
+      // Seed the manual streak to 10 via the existing onlyGame bonus path, then
+      // complete the level quest: the result must be exactly 10 + 5 = 15.
+      await callAsGame(hre.ethers, game, quests, "awardQuestStreakBonus", [
+        alice.address,
+        10,
+        chosenDay,
+      ]);
+      const [seeded] = await quests.playerQuestStates(alice.address);
+      expect(seeded).to.equal(10n);
+
+      await callHandlerAsCoin(hre.ethers, coin, quests, "handleFlip", [
+        alice.address,
+        eth(20000),
+      ]);
+
+      const [streakAfter] = await quests.playerQuestStates(alice.address);
+      expect(streakAfter, "10 + 5 = 15").to.equal(15n);
+    });
+
+    it("afking: a level quest routes to the afking sub (manual streak untouched, no +5)", async function () {
+      const ctx = await loadFixture(deployFullProtocol);
+      const { quests, game, coin, alice } = ctx;
+      const chosenDay = await setUpFlipLevelQuest(ctx);
+
+      // Flip alice into an afking run (GAME-only). The completion must take the
+      // afking branch (recordAfkingSecondary) — a no-op here since alice has no
+      // live Game-side sub — leaving the dormant manual streak at 0. The +5 on a
+      // live sub's streak base is proven in the forge clamp test
+      // (test_SetStreakBaseClampSaturatesAtUint16Max, amount = 5).
+      await callAsGame(hre.ethers, game, quests, "beginAfking", [
+        alice.address,
+        chosenDay,
+      ]);
+
+      await callHandlerAsCoin(hre.ethers, coin, quests, "handleFlip", [
+        alice.address,
+        eth(20000),
+      ]);
+
+      const viewAfter = await quests.getPlayerLevelQuestView(alice.address);
+      expect(viewAfter.completed, "level quest still completes while afking").to.equal(
+        true
+      );
+      const [streakAfter] = await quests.playerQuestStates(alice.address);
+      expect(
+        streakAfter,
+        "afking branch leaves the dormant manual streak untouched (no manual +5)"
+      ).to.equal(0n);
+    });
+  });
 });
