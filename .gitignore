@@ -27,3 +27,9 @@ audit/*
 
 # Machine-local bytecode-identity snapshot (scripts/bytecode-manifest.sh)
 .bytecode-manifest
+
+# v74 adversarial agent: runtime state + local-node deployment artifacts + design scratch
+agent/.state/
+deployments/localhost.json
+deployments/localhost-abis/
+.agent-design/

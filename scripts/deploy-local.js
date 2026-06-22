@@ -141,15 +141,21 @@ async function main() {
     const price = await game.mintPrice();
     console.log(`  Mint price: ${hre.ethers.formatEther(price)} ETH`);
 
+    // Frozen purchase is 6-arg: (buyer, ticketQuantity, lootBoxAmount,
+    // affiliateCode, payKind, bool foil). DirectEth requires msg.value == cost,
+    // where cost = price * ticketQuantity / (4 * TICKET_SCALE=100) = price*qty/400.
+    const costFor = (qty) => (price * BigInt(qty)) / 400n;
+
     await game.connect(deployer).purchase(
       deployer.address,
-      400, // 4 full tickets (ticketQuantity at TICKET_SCALE=100)
+      400, // one full ticket-price (qty at TICKET_SCALE=100; 400 == 1 price unit)
       0,
       ZERO_BYTES32,
       0, // MintPaymentKind.DirectEth
-      { value: price }
+      false, // foil
+      { value: costFor(400) }
     );
-    console.log("  Deployer purchased 4 tickets.");
+    console.log("  Deployer purchased tickets.");
 
     // Purchase tickets for alice and bob so there are multiple players
     if (alice) {
@@ -159,9 +165,10 @@ async function main() {
         0,
         ZERO_BYTES32,
         0,
-        { value: price }
+        false,
+        { value: costFor(200) }
       );
-      console.log(`  Alice (${alice.address}) purchased 2 tickets.`);
+      console.log(`  Alice (${alice.address}) purchased tickets.`);
     }
 
     if (bob) {
@@ -171,31 +178,47 @@ async function main() {
         0,
         ZERO_BYTES32,
         0,
-        { value: price }
+        false,
+        { value: costFor(100) }
       );
-      console.log(`  Bob (${bob.address}) purchased 1 ticket.`);
+      console.log(`  Bob (${bob.address}) purchased tickets.`);
     }
 
-    // Advance the game — trigger VRF request
-    await game.connect(deployer).advanceGame();
-    console.log("  VRF request issued (advanceGame).");
+    // Advance one game-day. advanceGame() reverts NotTimeYet() until the wall
+    // clock crosses the JACKPOT_RESET_TIME day boundary, so warp +1 day first
+    // (one on-chain game-day is hard-coded to 86400s). The whole advance/VRF
+    // dance is best-effort: a hiccup here must NOT block the artifact export,
+    // since the agent only needs the deployed addresses + ABIs and its own
+    // dev-driver drives day progression. Failures are warned, not fatal.
+    try {
+      await hre.network.provider.send("evm_increaseTime", [86400]);
+      await hre.network.provider.send("evm_mine", []);
 
-    // Fulfill VRF with mock
-    const requestId = await mockVRF.lastRequestId();
-    await mockVRF.fulfillRandomWords(requestId, 98765432101234567890n);
-    console.log(`  VRF fulfilled (requestId=${requestId}).`);
-
-    // Drain tickets until RNG unlocks
-    let drainCount = 0;
-    for (let i = 0; i < 30; i++) {
-      if (!(await game.rngLocked())) break;
       await game.connect(deployer).advanceGame();
-      drainCount++;
-    }
-    console.log(`  Ticket processing drained (${drainCount} advance calls).`);
+      console.log("  VRF request issued (advanceGame).");
 
-    const currentLevel = await game.level();
-    console.log(`  Current game level: ${currentLevel}`);
+      // Fulfill VRF with the mock (honest seed word).
+      const requestId = await mockVRF.lastRequestId();
+      await mockVRF.fulfillRandomWords(requestId, 98765432101234567890n);
+      console.log(`  VRF fulfilled (requestId=${requestId}).`);
+
+      // Drain tickets until RNG unlocks.
+      let drainCount = 0;
+      for (let i = 0; i < 30; i++) {
+        if (!(await game.rngLocked())) break;
+        await game.connect(deployer).advanceGame();
+        drainCount++;
+      }
+      console.log(`  Ticket processing drained (${drainCount} advance calls).`);
+
+      const currentLevel = await game.level();
+      console.log(`  Current game level: ${currentLevel}`);
+    } catch (seedErr) {
+      console.log(
+        `  WARN: seeding advance/VRF step skipped (${seedErr.shortMessage || seedErr.message}); ` +
+          `exporting artifacts anyway — the dev-driver will drive day progression.`
+      );
+    }
     console.log("");
 
     // =========================================================================
@@ -300,12 +323,11 @@ function getConstructorArgs(
   affiliatePreReferrals
 ) {
   if (key === "COINFLIP") {
-    return [
-      predicted.get("COIN"),
-      predicted.get("GAME"),
-      predicted.get("JACKPOTS"),
-      predicted.get("WWXRP"),
-    ];
+    // Frozen Coinflip has a no-arg constructor (v73 tree d6615306) — it reads its
+    // peers (COIN/GAME/JACKPOTS/WWXRP) from the patched ContractAddresses
+    // constants at compile time, not via constructor args. The old 4-arg list
+    // predates that refactor and reverted "incorrect number of arguments".
+    return [];
   }
   if (key === "AFFILIATE") {
     return [

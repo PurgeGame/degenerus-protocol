@@ -1,0 +1,17 @@
+{
+  "_comment": "Copy to agent/config/live.json and fill in. The sim repo runs the testnet (deploy/clock/VRF/stETH/honest actors); this agent only connects and plays. NEVER set devDriver.enabled on live.",
+  "mode": "live",
+  "rpcUrl": "https://YOUR-TESTNET-RPC",
+  "deploymentsPath": "deployments/testnet.json",
+  "abisDir": "deployments/testnet-abis",
+  "wallets": {
+    "count": 4,
+    "fundingEth": "0.01",
+    "lowWaterEth": "0.0005",
+    "privateKeys": ["0xATTACKER_KEY_1", "0xATTACKER_KEY_2", "0xATTACKER_KEY_3", "0xATTACKER_KEY_4"],
+    "funderPrivateKey": "0xFUNDER_KEY_FOR_DRIP_REFILL"
+  },
+  "gate": { "kSigma": 4, "minSample": 200 },
+  "campaign": { "tickMs": 1500, "maxTicks": 0, "checkpointEverySec": 30 },
+  "devDriver": { "enabled": false }
+}
