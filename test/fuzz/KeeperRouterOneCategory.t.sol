@@ -8,12 +8,13 @@ import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 
 /// @title KeeperRouterOneCategory -- TST-02 (Phase 351, v55.0 game-resident): one-rewarded-category-per-tx
 ///        (no bounty-stacking) on `mintFlip()` + the router->game->creditFlip double-pay disposition + the
-///        standalone UNREWARDED human `autoOpen(count)` escape.
+///        UNREWARDED `openBoxes(count)` escape (the same box drain, credits nothing).
 ///
 /// @notice The v55 router (`game.mintFlip()`, GameAfkingModule.sol:985) is a STRUCTURAL one-category
 ///         early-return: `if (advanceDue) {advance leg} else {open leg}` (GameAfkingModule.sol:993 vs :1000).
 ///         There are exactly TWO router categories — advance (the buy folded into advanceGame's required-path
-///         STAGE, so it rides the advance bounty) and the afking-box open. The else-if XOR is the mitigation
+///         STAGE, so it rides the advance bounty) and the box open (afking boxes first, then human boxes with
+///         the leftover budget — one combined open bounty). The else-if XOR is the mitigation
 ///         for bounty-stacking; the single CEI-last `creditFlip(msg.sender, bountyEarned)`
 ///         (GameAfkingModule.sol:1014-1016) is the mitigation for a composed reentrant double-pay. Security
 ///         is the HARD FLOOR.
@@ -29,7 +30,9 @@ import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 ///
 ///   D-01 (reentrancy is STRUCTURAL, NO attacker harness): `mintFlip` pays only minted FLIP CREDIT, makes
 ///   NO ETH push, and every external call in every leg targets either a self-call
-///   (`IGameRouter(address(this))`) or the pinned `coinflip` immutable. There is no untrusted call to
+///   (`IGameRouter(address(this))`), the pinned `coinflip` immutable, or a pinned
+///   `ContractAddresses.GAME_LOOTBOX_MODULE` delegatecall (the afking + human box-open legs — both
+///   pull-only: no callee on those paths hands control to player code). There is no untrusted call to
 ///   re-enter through, so a synthetic reentrant attacker has no hook. The disposition is satisfied by a
 ///   comment-stripped source grep-attestation: (a) the single `creditFlip(msg.sender, bountyEarned)`
 ///   occurrence (==1, CEI-last), and (b) ZERO low-level ETH-push primitives in the mintFlip legs (the
@@ -37,12 +40,16 @@ import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 ///   exists in this file (User verbatim: "reentrancy is not an issue, nothing here pays eth and this only
 ///   interacts with trusted contracts.").
 ///
-///   D-03 (default-batch / escapes): `mintFlip()` runs the fixed open-leg default batch (OPEN_BATCH=200)
-///   and does NOT OOG; the standalone parametered HUMAN `game.openBoxes(count)` is an emergency escape that
-///   runs the human box leg but credits NOTHING (only `mintFlip` credits). The afking-module standalone
-///   `autoOpen` selector COLLIDES with the human `autoOpen(uint256)` so the afking open is reachable ONLY
-///   through `mintFlip` (DegenerusGame.sol:352-353) — there is no separately-callable unrewarded afking
-///   escape to test here.
+///   D-03 (open-leg drains BOTH box types / escapes): `mintFlip()`'s open leg runs the fixed open batch
+///   (OPEN_BATCH=80) and does NOT OOG; it drains AFKING boxes FIRST then HUMAN boxes with the leftover
+///   budget — a mirror of the unrewarded `openBoxes(count)` valve — and PAYS the keeper the single
+///   knee-pro-rated open bounty on the COMBINED count (a human box and an afking box are bountied
+///   identically). `openBoxes(count)` is the SAME drain run UNREWARDED (an emergency escape that credits
+///   NOTHING; only `mintFlip` credits). The afking cursor walk is exposed as `drainAfkingBoxes` (reached
+///   via `openBoxes`); the human sweep is `openHumanBoxes` (reached via BOTH `openBoxes` and `mintFlip`'s
+///   open leg). Gas: mintFlip's open leg is the `openBoxes(80)`-equivalent drain, covered by the existing
+///   `openBoxes(400)`/`openBoxes(100)` batch tests (V61AfpayWaterfall / V56SubHardening / this file's
+///   faucet suite) — a strictly larger batch on the identical path.
 ///
 /// @dev The five call-site deltas applied (D-351-01):
 ///   Δ3 doWork->mintFlip: `afKing.doWork()` -> `game.mintFlip()` (all sites).
@@ -371,7 +378,47 @@ contract KeeperRouterOneCategory is DeployProtocol {
 
         // ...but the keeper got NO bounty credit (only mintFlip credits). A box open can itself credit
         // FLIP winnings to the BOX OWNER, so isolate the keeper's count: it is 0.
-        assertEq(_countCoinflipStakeUpdatedFor(keeper), 0, "UNREWARDED: standalone autoOpen(count) credits the keeper zero");
+        assertEq(_countCoinflipStakeUpdatedFor(keeper), 0, "UNREWARDED: openBoxes(count) credits the keeper zero");
+    }
+
+    /// @notice REWARDED via mintFlip (the NEW open-leg human drain): with advance NOT due and NO afking
+    ///         box pending, `mintFlip()` falls to the open leg — the afking sweep opens 0, then the human
+    ///         leg drains the queued human box with the leftover budget — and credits the keeper EXACTLY
+    ///         ONCE (the combined-count, knee-pro-rated open bounty). The mirror of the unrewarded escape
+    ///         above: same drain, but mintFlip now PAYS a keeper to clear human boxes (a human box and an
+    ///         afking box are bountied identically).
+    function testMintFlipOpensHumanBoxAndPaysBounty() public {
+        address boxOwner = makeAddr("mf_human_box_owner");
+        vm.deal(boxOwner, 100_000 ether);
+
+        // Settle so advance is NOT due (mintFlip takes the `else` open leg) and not locked.
+        _settleGame(0x000F_1111);
+        uint48 index = _activeLootboxIndex();
+        _buyBox(boxOwner, LOOTBOX_WEI);
+        // Finalize the box's index + land its word (the same setup as the escape test above).
+        _advanceLootboxRngIndexByOne();
+        _parkBoxFrontier(index);
+        _injectLootboxRngWord(index, FIXED_WORD);
+        assertGt(_lootboxEthBase(index, boxOwner), 0, "pre: human box queued + un-opened");
+        assertTrue(game.boxesPending(), "pre: a human box is pending");
+        // No afking subscriber exists, so the afking sweep opens 0 and the human leg runs on the full
+        // OPEN_BATCH budget; advance must be not-due so the router reaches the open `else` arm.
+        assertFalse(game.advanceDue(), "pre: advance not due (mintFlip routes to the open leg)");
+        assertFalse(game.rngLocked(), "pre: not locked (the human open leg runs)");
+
+        vm.recordLogs();
+        vm.prank(keeper);
+        game.mintFlip();
+
+        // The human box opened via mintFlip's open leg (first-deposit signal zeroed).
+        assertEq(_lootboxEthBase(index, boxOwner), 0, "non-vacuity: mintFlip's open leg opened the human box");
+        // ...and the keeper earned EXACTLY ONE open bounty (a box-owner winnings credit cannot inflate the
+        // keeper-isolated count — only mintFlip credits the keeper).
+        assertEq(
+            _countCoinflipStakeUpdatedFor(keeper),
+            1,
+            "REWARDED: mintFlip pays the keeper exactly once for opening a human box"
+        );
     }
 
     // =========================================================================

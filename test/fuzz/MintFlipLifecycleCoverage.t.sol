@@ -18,9 +18,11 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 ///   - OPEN leg (GameAfkingModule `_autoOpen`, cursor `_subOpenCursor`): a FULL-RING scan that visits
 ///     up to `len` subs from the cursor, wrapping mid-scan, opening up to OPEN_BATCH (80) boxes per
 ///     call and resuming mid-ring across calls. A 0-open result means the WHOLE set is drained, never
-///     just the suffix `[cursor, len)`.
+///     just the suffix `[cursor, len)`. The open category then drains HUMAN boxes with the leftover
+///     budget (the `openHumanBoxes` multi-index sweep) — the same afking-then-human order as `openBoxes`.
 ///   - `mintFlip()` reverts `NoWork()` ONLY when the advance category has no work AND `_autoOpen`
-///     returns 0 — i.e. both legs fully drained.
+///     returns 0 AND the human-box sweep (`openHumanBoxes`) returns 0 — i.e. advance, afking, and
+///     human boxes all fully drained.
 ///
 /// @notice A box is openable iff the entry-gate is open (`!rngLockedFlag && !_livenessTriggered`) AND
 ///   `sub.lastOpenedDay < sub.lastAutoBoughtDay` AND `rngWordByDay[sub.lastAutoBoughtDay] != 0`.
@@ -130,8 +132,12 @@ contract MintFlipLifecycleCoverage is DeployProtocol {
             assertFalse(_isOpenable(subs[i]), "OPEN coverage: no openable box left behind for any sub");
         }
 
-        // (d) NoWork ONLY now. With no advance due and the whole afking ring drained, both router
-        // categories are empty -> the genuine clean no-work signal (not a suffix-strand false positive).
+        // (d) NoWork ONLY after BOTH box types are drained. The afking ring is fully open (c); mintFlip's
+        // open leg now ALSO drains HUMAN boxes after the afking ones (the subs' cover-buy / daily-buy
+        // lootboxes), so the afking-keyed loop above can leave a human-box backlog the open leg would
+        // still service. Clear it via the openBoxes valve (the same afking-then-human drain) so every
+        // router category is genuinely empty -> the clean no-work signal (not a suffix-strand false positive).
+        _drainAllOpenable();
         require(!game.advanceDue() && !game.rngLocked(), "fixture: still clean -> NoWork is the genuine drained signal");
         vm.prank(keeper);
         vm.expectRevert(abi.encodeWithSignature("NoWork()"));
@@ -215,11 +221,16 @@ contract MintFlipLifecycleCoverage is DeployProtocol {
             cranks++;
         }
         assertGt(cranks, 1, "open phase spanned multiple cranks (N>OPEN_BATCH)");
-        assertEq(_countOpenable(subs), 0, "open phase fully drained the set");
+        assertEq(_countOpenable(subs), 0, "open phase fully drained the afking set");
 
-        // Only now does NoWork genuinely fire (both legs empty).
+        // mintFlip's open leg now also drains HUMAN boxes after the afking ones (the subs' cover-buy /
+        // daily-buy lootboxes); the afking-keyed crank loop can leave a human-box backlog. Clear it so
+        // the final probe sees every category empty.
+        _drainAllOpenable();
+
+        // Only now does NoWork genuinely fire (advance + afking + human all empty).
         require(!game.advanceDue() && !game.rngLocked(), "fixture: clean -> NoWork is genuine");
-        assertTrue(_mintFlipWouldNoWork(keeper), "NoWork fires once both legs are fully drained");
+        assertTrue(_mintFlipWouldNoWork(keeper), "NoWork fires once afking AND human boxes are fully drained");
     }
 
     // =========================================================================

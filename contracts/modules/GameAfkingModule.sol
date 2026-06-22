@@ -1563,21 +1563,28 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
     }
 
     /// @notice Unified permissionless afking router: do ONE category of pending work this
-    ///         call (priority advance → afking-box open) and pay ONE bounty.
+    ///         call (priority advance → box open) and pay ONE bounty. The OPEN category
+    ///         drains BOTH box types in one call — afking boxes first, then human boxes
+    ///         with the remaining budget — mirroring the unrewarded `openBoxes` valve, so a
+    ///         keeper is paid to clear either backlog.
     /// @dev ROUTER one-category STRUCTURAL early-return: the rngLock-aware O(1) predicates
     ///      pick the first category with work; the advance and open bounties can never
-    ///      stack in one tx. NO `nonReentrant` guard — the module is
-    ///      afking-never-a-payee: every external call is to a pinned `ContractAddresses.*`
-    ///      [GAME self-call / LootboxModule delegatecall / COINFLIP], player value flows
+    ///      stack in one tx (advance — the expensive leg — never co-runs with an open). NO
+    ///      `nonReentrant` guard — the module is afking-never-a-payee: every external call
+    ///      is to a pinned `ContractAddresses.*` [GAME self-call / LootboxModule
+    ///      delegatecall (afking AND human open legs) / COINFLIP], player value flows
     ///      through the game's claimable pull ledger, and the bounty is minted flip-credit
-    ///      — never an ETH push the router receives. The legs return raw counts/mult and
-    ///      NEVER self-credit; only `mintFlip` credits, ONCE, CEI-last after the
+    ///      — never an ETH push the router receives. The human-open leg is likewise
+    ///      pull-only (no callee on that path hands control to player code), so it keeps
+    ///      the no-reentrancy property. The legs return raw counts/mult and NEVER
+    ///      self-credit; only `mintFlip` credits, ONCE, CEI-last after the
     ///      one-category early-return.
     /// @dev Bounty: the buy/process bounty FOLDS INTO the advance bounty — the
     ///      process STAGE runs inside `advanceGame` (the required path), so the
     ///      advance leg's `unit · 2 · mult` IS the process bounty, scaled by the
     ///      AdvanceModule's day-epoch stall `mult` (1/2/4/6). The OPEN leg pays
-    ///      the `OPEN_KNEE` work-scaled pro-rate (pay for work done, farm-by-splitting
+    ///      the `OPEN_KNEE` work-scaled pro-rate on the COMBINED afking+human open
+    ///      count (boxes are bountied identically; pay for work done, farm-by-splitting
     ///      resistant). `mult == 0` (the gameover advance path) pays no bounty.
     function mintFlip() external {
         uint256 bountyEarned;
@@ -1601,13 +1608,32 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
             uint8 mult = IGameRouter(address(this)).advanceGame();
             if (mult > 0 && eligible) bountyEarned = unit * ADVANCE_RATIO_NUM * mult;
         }
-        // (2) afking-box open — FALSE during rngLock; opens mid-day-resolved
-        // stamped boxes via _subOpenCursor. 1x pro-rated below the knee, flat 1x
-        // at/above — kills the small-batch farm-by-splitting corner.
+        // (2) box open — FALSE during rngLock; opens mid-day-resolved stamped boxes.
+        // Afking boxes FIRST via _subOpenCursor, then human boxes with the leftover
+        // budget (a verbatim mirror of the unrewarded openBoxes valve — both legs are
+        // uniform O(1) and the human leg is pull-only, so the tx stays gas-bounded and
+        // reentrancy-free). The combined count is bountied 1x pro-rated below the knee,
+        // flat 1x at/above — kills the small-batch farm-by-splitting corner.
         else {
             uint256 opened = _autoOpen(OPEN_BATCH);
+            // Human-box leg with the remaining budget — the multi-index sweep lives in
+            // the lootbox module (delegatecall runs it in this Game's storage, the same
+            // nested pattern as _openAfkingBox's resolveAfkingBox). Skipped once the
+            // afking leg has already spent the full batch.
+            if (opened < OPEN_BATCH) {
+                (bool ok, bytes memory data) = ContractAddresses
+                    .GAME_LOOTBOX_MODULE
+                    .delegatecall(
+                        abi.encodeWithSelector(
+                            IDegenerusGameLootboxModule.openHumanBoxes.selector,
+                            OPEN_BATCH - opened
+                        )
+                    );
+                if (!ok) _revertDelegate(data);
+                opened += abi.decode(data, (uint256));
+            }
             if (opened > 0) {
-                // Priced after the open leg: box resolution never writes
+                // Priced after the open legs: box resolution never writes
                 // level/jackpotPhaseFlag, so this equals the entry-time price — and the
                 // lookup is skipped entirely on the NoWork probe.
                 uint256 unit = (BOUNTY_ETH_TARGET * PRICE_COIN_UNIT) /
@@ -1631,8 +1657,8 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
     /// @notice Drain up to `count` ready afking boxes (walks `_subOpenCursor`); returns the
     ///         number opened so the caller can budget the remaining per-tx work. Unrewarded —
     ///         only mintFlip() credits. Reached via the Game's openBoxes() liveness valve
-    ///         (a distinct selector from the Game's human-box autoOpen(uint256), so the two
-    ///         do not collide; calling this module contract directly hits empty storage).
+    ///         (which pairs this afking cursor walk with the lootbox module's openHumanBoxes
+    ///         human sweep; calling this module contract directly hits empty storage).
     /// @param count Max afking boxes to open this call (0 = the default OPEN_BATCH).
     /// @return opened The number of afking boxes opened this call.
     function drainAfkingBoxes(uint256 count) external returns (uint256 opened) {

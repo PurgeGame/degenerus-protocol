@@ -339,9 +339,9 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
       |  gates and the mintFlip bounty payee read the real caller. These are the  |
       |  canonical afking entrypoints. `subscribe` is the SINGLE subscription      |
       |  mutator (create / replace / cancel). The afking box-open is reached via  |
-      |  mintFlip's router (the module's autoOpen would collide with this Game's  |
-      |  existing human-box autoOpen(uint256) selector, so it is not re-exposed   |
-      |  as a stub here).                                                         |
+      |  mintFlip's router (which also drains human boxes after the afking ones,  |
+      |  the same as openBoxes) and, unrewarded, via openBoxes; the module's      |
+      |  cursor walk is exposed as drainAfkingBoxes, not re-stubbed here.         |
       +======================================================================+*/
 
     /// @notice Start or extend a daily afking subscription for `player`.
