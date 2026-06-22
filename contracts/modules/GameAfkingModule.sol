@@ -1733,16 +1733,19 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
     /// @notice QUESTS-only: record a secondary/level quest completion against an afking sub's
     ///         streak base, so the run's compute-on-read activity score reflects the player's own
     ///         quest effort (the primary rides the funded delivered days).
-    /// @dev No-op unless `player` has a live afking run (`afkingStartDay != 0`); otherwise a +1
-    ///      bump to the Sub streak base, saturating at 65535. Runs in the Game's storage context
-    ///      under delegatecall; `msg.sender` is the original caller (DegenerusQuests).
+    /// @dev No-op unless `player` has a live afking run (`afkingStartDay != 0`); otherwise an
+    ///      `amount` bump to the Sub streak base, saturating at 65535. `amount` is 1 for a daily
+    ///      secondary completion and LEVEL_QUEST_STREAK_BONUS for a level-quest completion. Runs in
+    ///      the Game's storage context under delegatecall; `msg.sender` is the original caller
+    ///      (DegenerusQuests).
     /// @param player The afking subscriber whose secondary completion is being recorded.
-    function recordAfkingSecondary(address player) external {
+    /// @param amount The streak-base increment to apply.
+    function recordAfkingSecondary(address player, uint16 amount) external {
         if (msg.sender != ContractAddresses.QUESTS) revert NotApproved();
         if (_subscriberIndex[player] == 0) return;
         Sub storage s = _subOf[player];
         if (s.afkingStartDay == 0) return;
-        _setStreakBase(s, uint256(_streakBaseOf(s)) + 1);
+        _setStreakBase(s, uint256(_streakBaseOf(s)) + amount);
     }
 
     /// @notice QUESTS-only: floor a live afking sub's streak base to `floor`, so a foil-pack

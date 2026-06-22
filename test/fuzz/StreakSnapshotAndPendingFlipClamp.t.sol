@@ -112,7 +112,7 @@ contract StreakSnapshotAndPendingFlipClampTest is DeployProtocol {
         _setStreakLatchSlot(p, STREAK_LATCH_CEILING);
         assertEq(_streakLatch16Of(p), STREAK_LATCH_CEILING, "latch pinned at the uint16 ceiling");
         vm.prank(QUESTS_CALLER);
-        game.recordAfkingSecondary(p); // +1 at the ceiling -> clamp saturates
+        game.recordAfkingSecondary(p, 1); // +1 at the ceiling -> clamp saturates
         assertEq(_streakLatch16Of(p), STREAK_LATCH_CEILING, "clamp: +1 at the ceiling stays 65535 (saturates, never wraps to 0)");
         assertTrue(_streakLatch16Of(p) != 0, "clamp: the +1 bump did NOT wrap the latch to 0");
 
@@ -120,15 +120,29 @@ contract StreakSnapshotAndPendingFlipClampTest is DeployProtocol {
         // the top), so the saturation is a true clamp, not a stuck value.
         _setStreakLatchSlot(p, STREAK_LATCH_CEILING - 1);
         vm.prank(QUESTS_CALLER);
-        game.recordAfkingSecondary(p);
+        game.recordAfkingSecondary(p, 1);
         assertEq(_streakLatch16Of(p), STREAK_LATCH_CEILING, "clamp: a +1 from one-below reaches exactly the ceiling");
 
         // A value below 255 (the old uint8 ceiling) bumps cleanly into the >255 range — the widened latch
         // carries it past the old truncation point, so the +1 path is not the only thing wider; the base is too.
         _setStreakLatchSlot(p, 255);
         vm.prank(QUESTS_CALLER);
-        game.recordAfkingSecondary(p);
+        game.recordAfkingSecondary(p, 1);
         assertEq(_streakLatch16Of(p), 256, "clamp/widen: a +1 from 255 reads 256 (the latch carries past the old uint8 ceiling)");
+
+        // amount > 1 (the level-quest path, LEVEL_QUEST_STREAK_BONUS = 5): the full amount is added,
+        // then the same clamp binds at the ceiling. A +5 from a non-ceiling value advances by 5.
+        _setStreakLatchSlot(p, 250);
+        vm.prank(QUESTS_CALLER);
+        game.recordAfkingSecondary(p, 5);
+        assertEq(_streakLatch16Of(p), 255, "amount: a +5 from 250 reaches 255 (full amount applied)");
+
+        // A +5 that would overshoot the ceiling saturates to 65535, never wrapping past it.
+        _setStreakLatchSlot(p, STREAK_LATCH_CEILING - 3);
+        vm.prank(QUESTS_CALLER);
+        game.recordAfkingSecondary(p, 5);
+        assertEq(_streakLatch16Of(p), STREAK_LATCH_CEILING, "amount: a +5 overshooting the ceiling saturates at 65535");
+        assertTrue(_streakLatch16Of(p) != 0, "amount: the +5 overshoot did NOT wrap the latch to 0");
     }
 
     /// @dev Drive `who`'s manual quest streak to `streakValue`, begin an afking run, and assert (1) the

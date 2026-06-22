@@ -432,8 +432,8 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     /// @notice Record a secondary/level quest completion against an afking sub's streak base.
     /// @dev QUESTS-only. Thin delegatecall dispatch stub into GameAfkingModule; the module impl
     ///      enforces the QUESTS-only gate under delegatecall (msg.sender preserved).
-    ///      Signature: recordAfkingSecondary(address player) — matches the module selector.
-    function recordAfkingSecondary(address) external {
+    ///      Signature: recordAfkingSecondary(address player, uint16 amount) — matches the module selector.
+    function recordAfkingSecondary(address, uint16) external {
         (bool ok, bytes memory data) = ContractAddresses
             .GAME_AFKING_MODULE
             .delegatecall(msg.data);

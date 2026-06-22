@@ -454,7 +454,8 @@ interface IDegenerusGame {
 
     /// @notice QUESTS-only: bump an afking sub's streak base for a secondary/level completion.
     /// @param player The afking subscriber whose secondary completion is recorded.
-    function recordAfkingSecondary(address player) external;
+    /// @param amount The streak-base increment (1 for a daily secondary, more for a level quest).
+    function recordAfkingSecondary(address player, uint16 amount) external;
 
     /// @notice QUESTS-only: floor an afking sub's streak base to `floor`, so a foil-pack
     ///         purchase's quest-streak guarantee reaches a mid-run afker (whose reward streak

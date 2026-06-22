@@ -166,6 +166,12 @@ contract DegenerusQuests is IDegenerusQuests {
     ///      unaffected and keep their own uint8-saturating semantics.
     uint8 private constant CENTURY_SHIELD_MAX_HELD = 10;
 
+    /// @dev Streak bump granted on a LEVEL quest completion. A daily quest completion advances the
+    ///      quest streak by 1; finishing the harder per-level quest advances it by this amount.
+    ///      Applied identically off a run (manual `state.streak`, saturating at uint16 max) and
+    ///      while afking (the Sub streak base, via recordAfkingSecondary).
+    uint16 private constant LEVEL_QUEST_STREAK_BONUS = 5;
+
     /// @dev Quest type: mint tickets using ETH.
     uint8 private constant QUEST_TYPE_MINT_ETH = 1;
 
@@ -1930,7 +1936,7 @@ contract DegenerusQuests is IDegenerusQuests {
                 state.lastCompletedDay = questDay24;
             }
         } else if (slot == 1) {
-            questGame.recordAfkingSecondary(player);
+            questGame.recordAfkingSecondary(player, 1);
         }
 
         uint256 rewardShare = slot == 1
@@ -2234,16 +2240,18 @@ contract DegenerusQuests is IDegenerusQuests {
                    | (uint256(1) << 136);
             levelQuestPlayerState[player] = packed;
 
-            // Level-quest completion also advances the quest streak (+1) without touching the
-            // primary reset anchor (lastActiveDay), so the missed-day reset stays keyed to the
-            // daily primary. Off a run it credits the manual streak; while afking it bumps the
-            // Sub streak base so the unified score reflects it. The calling handler synced the
-            // player state for the current day before this runs.
+            // Level-quest completion advances the quest streak by LEVEL_QUEST_STREAK_BONUS (a daily
+            // quest is +1) without touching the primary reset anchor (lastActiveDay), so the
+            // missed-day reset stays keyed to the daily primary. Off a run it credits the manual
+            // streak (saturating at uint16 max, mirroring awardQuestStreakBonus); while afking it
+            // bumps the Sub streak base by the same amount so the unified score reflects it. The
+            // calling handler synced the player state for the current day before this runs.
             PlayerQuestState storage qs = questPlayerState[player];
             if (qs.afkingActive) {
-                questGame.recordAfkingSecondary(player);
-            } else if (qs.streak < type(uint16).max) {
-                qs.streak = qs.streak + 1;
+                questGame.recordAfkingSecondary(player, LEVEL_QUEST_STREAK_BONUS);
+            } else {
+                uint32 bumped = uint32(qs.streak) + LEVEL_QUEST_STREAK_BONUS;
+                qs.streak = bumped > type(uint16).max ? type(uint16).max : uint16(bumped);
                 _grantCenturyShield(player, qs);
             }
 
