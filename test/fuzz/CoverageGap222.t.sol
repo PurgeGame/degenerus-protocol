@@ -278,14 +278,14 @@ contract CoverageGap222 is DeployProtocol {
         assertFalse(ok, "setAfKingMode rejected non-authorized caller");
     }
 
-    /// @notice Exercise claimWhalePass (no-whale path — succeeds as no-op).
+    /// @notice Exercise claimWhalePass (no-whale path — reverts, nothing to claim).
     function test_gap_claimWhalePass_noWhale() public {
         vm.prank(buyer);
         (bool ok, ) = address(game).call(
             abi.encodeWithSignature("claimWhalePass(address)", buyer)
         );
-        // No-whale caller: claim is a no-op (no revert, no mint).
-        assertTrue(ok, "claimWhalePass completed no-op for no-whale caller");
+        // No-whale caller: nothing pending, so the claim reverts (E) rather than no-op'ing.
+        assertFalse(ok, "claimWhalePass reverts for no-whale caller (nothing to claim)");
     }
 
     // ====================================================================
@@ -951,8 +951,8 @@ contract CoverageGap222 is DeployProtocol {
         assertFalse(o4, "sdgnrs.depositSteth rejected non-authorized caller");
         assertFalse(o5, "sdgnrs.gameAdvance rejected non-game caller");
         // gameClaimWhalePass is a proxy for the caller's own whale-pass claim;
-        // no-whale caller succeeds as a no-op (same shape as game.claimWhalePass).
-        assertTrue(o6, "sdgnrs.gameClaimWhalePass completed no-op for no-whale caller");
+        // sDGNRS has nothing pending here, so the claim reverts (same shape as game.claimWhalePass).
+        assertFalse(o6, "sdgnrs.gameClaimWhalePass reverts when nothing pending");
     }
 
     // ====================================================================

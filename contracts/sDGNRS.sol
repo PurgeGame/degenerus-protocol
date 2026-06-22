@@ -388,7 +388,7 @@ contract sDGNRS {
     //                          CONSTRUCTOR
     // =====================================================================
 
-    /// @notice Initializes token supply, distributes to pools, and claims whale pass for sDGNRS
+    /// @notice Initializes token supply and distributes to pools
     /// @dev Mints creator allocation to DGNRS wrapper address and pool allocations to this contract
     constructor() {
         uint256 creatorAmount = (INITIAL_SUPPLY * CREATOR_BPS) / BPS_DENOM;
@@ -417,8 +417,6 @@ contract sDGNRS {
         poolBalances[uint8(Pool.Lootbox)] = uint128(lootboxAmount);
         poolBalances[uint8(Pool.Reward)] = uint128(rewardAmount);
         poolBalances[uint8(Pool.PresaleBox)] = uint128(presaleBoxAmount);
-
-        game.claimWhalePass(address(0));
 
         // Queue this contract's perpetual tickets (levels 1-100). Moved out of the GAME
         // constructor so GAME's deploy stays under the per-tx gas cap.

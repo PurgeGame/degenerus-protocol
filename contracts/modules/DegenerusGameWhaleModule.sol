@@ -986,10 +986,11 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
     /// @dev Awards deterministic tickets based on pre-calculated half-pass count.
     ///      Tickets start at current level + 1 to avoid giving tickets for an already-active level.
     /// @param player Player address to claim for.
+    /// @custom:reverts E If the player has no pending whale-pass claims.
     function claimWhalePass(address player) external {
         if (_livenessTriggered()) revert E();
         uint256 halfPasses = whalePassClaims[player];
-        if (halfPasses == 0) return;
+        if (halfPasses == 0) revert E();
 
         // Clear before awarding to avoid double-claiming
         whalePassClaims[player] = 0;

@@ -496,9 +496,12 @@ describe("DGNRS (DGNRS Liquid Token)", function () {
       await expect(sdgnrs.connect(alice).gameAdvance()).to.not.be.reverted;
     });
 
-    it("gameClaimWhalePass is permissionless", async function () {
-      const { sdgnrs, alice } = await loadFixture(deployFullProtocol);
-      await expect(sdgnrs.connect(alice).gameClaimWhalePass()).to.not.be.reverted;
+    it("gameClaimWhalePass is permissionless (no auth gate; reverts only because nothing is pending)", async function () {
+      const { sdgnrs, alice, game } = await loadFixture(deployFullProtocol);
+      // No caller restriction: alice (a non-owner) reaches the claim logic and reverts with
+      // the game's nothing-to-claim error E — not an authorization error.
+      await expect(sdgnrs.connect(alice).gameClaimWhalePass())
+        .to.be.revertedWithCustomError(game, "E");
     });
 
     // resolveCoinflips removed — sDGNRS flips now resolve daily in processCoinflipPayouts

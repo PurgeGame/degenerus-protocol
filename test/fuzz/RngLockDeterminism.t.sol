@@ -1998,9 +1998,8 @@ contract RngLockDeterminism is DeployProtocol {
     uint256 constant SLOT_WHALE_PASS_CLAIMS = 21;
 
     /// @dev Pre-loads `whalePassClaims[claimant] = halfPasses` via direct storage write so
-    ///      the perturbation has work to do (otherwise `claimWhalePass` short-circuits at
-    ///      `WhaleModule:1021` on `halfPasses == 0` and the perturbation is vacuous —
-    ///      claimWhalePass never reaches the rngLock-gated `_queueTicketRange` body).
+    ///      the perturbation has work to do (otherwise `claimWhalePass` reverts on
+    ///      `halfPasses == 0` and never reaches the rngLock-gated `_queueTicketRange` body).
     function _preloadWhalePassClaims(address claimant, uint256 halfPasses) internal {
         bytes32 slot = keccak256(abi.encode(claimant, uint256(SLOT_WHALE_PASS_CLAIMS)));
         vm.store(address(game), slot, bytes32(halfPasses));
@@ -2059,7 +2058,7 @@ contract RngLockDeterminism is DeployProtocol {
         );
 
         // Pre-load whalePassClaims[claimant] > 0 so the perturbation reaches the rngLock-gated
-        // body of claimWhalePass (vs. the halfPasses==0 short-circuit at WhaleModule:1021).
+        // body of claimWhalePass (vs. the halfPasses==0 revert in WhaleModule).
         // The pre-load is direct storage write because the WHALE-01 O(1) box-open accumulator
         // path requires a deterministic BOON_WHALE_PASS roll on the box open; vm.store is the
         // simpler, deterministic equivalent for the purposes of this freeze proof (per
