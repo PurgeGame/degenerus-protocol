@@ -10,7 +10,7 @@ const JACKPOT_RESET_TIME = 82620n;
  *
  * Constraints:
  *  - COIN (N+12) before VAULT (N+21): vault reads vaultMintAllowance()
- *  - GAME (N+14) + modules (N+1..11) before SDGNRS (N+22): staked calls claimWhalePass; vault/staked
+ *  - GAME (N+14) + modules (N+1..11) before SDGNRS (N+22): staked calls initPerpetualTickets; vault/staked
  *    constructors self-subscribe via the game-resident afking path (game.subscribe, SUB-09)
  *  - GAME_AFKING_MODULE (N+11) before VAULT (N+21) / SDGNRS (N+22): the v55 afking surface is
  *    game-resident (DegenerusGame delegatecalls GameAfkingModule); the vault/staked constructor

@@ -10,7 +10,7 @@ import {
 } from "./lib/predictAddresses.js";
 import {
   patchContractAddresses,
-  restoreContractAddresses,
+  cleanupBackup,
 } from "./lib/patchContractAddresses.js";
 import { deployContract, verifyAddresses } from "./lib/deployHelpers.js";
 
@@ -114,9 +114,9 @@ async function main() {
     writeFileSync(manifestPath, JSON.stringify(manifest, null, 2));
     console.log(`Manifest saved: ${manifestPath}`);
   } finally {
-    // 9. Restore ContractAddresses.sol
-    console.log("Restoring ContractAddresses.sol...");
-    restoreContractAddresses();
+    // ContractAddresses.sol is generated on demand — leave it as-patched and
+    // just purge any stale backup so it can't resurrect a removed constant.
+    cleanupBackup();
   }
 }
 
@@ -277,9 +277,8 @@ function parseAffiliatePreReferrals() {
 
 main().catch((err) => {
   console.error(err);
-  // Always try to restore on error
   try {
-    restoreContractAddresses();
+    cleanupBackup();
   } catch {}
   process.exit(1);
 });

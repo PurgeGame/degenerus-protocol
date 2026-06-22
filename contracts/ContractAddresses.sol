@@ -20,8 +20,6 @@ library ContractAddresses {
         address(0x03A6a84cD762D9707A21605b548aaaB891562aAb);
     address internal constant GAME_DECIMATOR_MODULE =
         address(0xD6BbDE9174b1CdAa358d2Cf4D57D1a9F7178FBfF);
-    address internal constant GAME_ENDGAME_MODULE =
-        address(0x212224D2F2d262cd093eE13240ca4873fcCBbA3C);
     address internal constant GAME_GAMEOVER_MODULE =
         address(0x15cF58144EF33af1e14b5208015d11F9143E27b9);
     address internal constant GAME_LOOTBOX_MODULE =

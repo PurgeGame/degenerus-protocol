@@ -20,6 +20,13 @@ extra_output = ["storageLayout"]
 gas_limit = 30_000_000_000
 block_gas_limit = 30_000_000_000
 
+# Pin block.timestamp so test setUp is DETERMINISTIC. Without this, the Foundry
+# nightly defaults block.timestamp to the real wall clock, and a protocol
+# constructor's day-arithmetic in _deployProtocol intermittently panics (0x11) at
+# certain wall-clock seconds — a harness-wide flaky setUp. 86400 (= day 1) matches
+# the DeployProtocol vm.warp(86400) / patchForFoundry.js fixed timestamp.
+block_timestamp = 86400
+
 # Read-only filesystem access scoped to ./contracts so structural attestation tests can
 # vm.readFile the source (e.g. VrfWireOneShot greps DegenerusAdmin.sol for the single
 # gameAdmin.wireVrf( call site). No write access; no path outside ./contracts.

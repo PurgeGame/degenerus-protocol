@@ -5,10 +5,7 @@ import {
   DEPLOY_ORDER,
   KEY_TO_CONTRACT,
 } from "../../scripts/lib/predictAddresses.js";
-import {
-  patchContractAddresses,
-  restoreContractAddresses,
-} from "../../scripts/lib/patchContractAddresses.js";
+import { patchContractAddresses } from "../../scripts/lib/patchContractAddresses.js";
 
 // Module-level state: patch + compile happens only once per test run
 let _patched = false;
@@ -146,11 +143,12 @@ export async function deployFullProtocol() {
 }
 
 /**
- * Restore ContractAddresses.sol after all tests complete.
- * Call this in an after() hook in your top-level test file.
+ * Reset the fixture patch state after tests complete. ContractAddresses.sol is
+ * generated on demand and re-patched per run, so it is intentionally left
+ * as-patched here; we only reset the flag so the next fixture re-patches with
+ * fresh predicted addresses. Call this in an after() hook in your top-level test file.
  */
 export function restoreAddresses() {
-  restoreContractAddresses();
   _patched = false;
 }
 

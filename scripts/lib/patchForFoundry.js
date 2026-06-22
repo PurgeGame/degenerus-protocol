@@ -3,10 +3,7 @@ import {
   predictAddresses,
   computeDeployDayBoundary,
 } from "./predictAddresses.js";
-import {
-  patchContractAddresses,
-  restoreContractAddresses,
-} from "./patchContractAddresses.js";
+import { patchContractAddresses } from "./patchContractAddresses.js";
 
 // The actual address of `address(this)` inside a forge test's setUp().
 // In Foundry 1.5.x, test contracts are deployed at CREATE(DEFAULT_SENDER, 1)
@@ -85,8 +82,6 @@ export function patchForFoundry() {
     PROTOCOL_START_NONCE,
   };
 }
-
-export { restoreContractAddresses };
 
 // CLI entry point
 const scriptPath = process.argv[1];

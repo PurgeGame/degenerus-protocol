@@ -37,11 +37,12 @@ declare -A REVERSE_NAMING_EXCEPTIONS=( [GAMEOVER]=GameOver )
 
 # Known dead constants — declared in ContractAddresses.sol but not expected to
 # have a matching interface or any call sites. Remove entries here only when
-# the constant itself is removed (Phase 223 consolidation will decide).
+# the constant itself is removed. GAME_ENDGAME_MODULE was deleted in v74 (the
+# EndgameModule contract no longer exists; its job folded into GAME_GAMEOVER_MODULE),
+# so this list is now empty.
 # Appending to this list silences the preflight for a specific constant and is
 # a visible diff in PR review (threat T-220-07 mitigation).
 DEAD_CONSTANTS=(
-  GAME_ENDGAME_MODULE
 )
 
 is_dead_constant() {

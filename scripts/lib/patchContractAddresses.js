@@ -1,4 +1,4 @@
-import { readFileSync, writeFileSync, existsSync, copyFileSync, unlinkSync } from "node:fs";
+import { readFileSync, writeFileSync, existsSync, unlinkSync } from "node:fs";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -26,13 +26,11 @@ export function patchContractAddresses(
   contractFilePath
 ) {
   const CONTRACT_FILE = contractFilePath || DEFAULT_CONTRACT_FILE;
-  const BACKUP_FILE = CONTRACT_FILE + ".bak";
 
-  // Back up original (only if no backup exists yet)
-  if (!existsSync(BACKUP_FILE)) {
-    copyFileSync(CONTRACT_FILE, BACKUP_FILE);
-  }
-
+  // ContractAddresses.sol is regenerated on demand — predicted addresses are
+  // patched in before every build/deploy — so there is no canonical state to
+  // snapshot. We deliberately do NOT back it up: a leftover .bak could only
+  // resurrect a stale/removed constant on restore.
   let src = readFileSync(CONTRACT_FILE, "utf8");
 
   // Patch address constants from predicted map
@@ -66,19 +64,9 @@ export function patchContractAddresses(
 }
 
 /**
- * Restore ContractAddresses.sol to its original (all-zeros) state.
- * @param {string} [contractFilePath] - Optional path (must match the one used in patch)
- */
-export function restoreContractAddresses(contractFilePath) {
-  const CONTRACT_FILE = contractFilePath || DEFAULT_CONTRACT_FILE;
-  const BACKUP_FILE = CONTRACT_FILE + ".bak";
-  if (existsSync(BACKUP_FILE)) {
-    copyFileSync(BACKUP_FILE, CONTRACT_FILE);
-  }
-}
-
-/**
- * Clean up the backup file (call after successful deploy).
+ * Purge any stale ContractAddresses.sol.bak left by older tooling. Backups are
+ * no longer created; this only deletes a leftover so it can't resurrect a
+ * removed constant. Safe to call when no .bak exists.
  * @param {string} [contractFilePath] - Optional path (must match the one used in patch)
  */
 export function cleanupBackup(contractFilePath) {
