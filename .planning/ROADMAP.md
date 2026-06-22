@@ -4,7 +4,7 @@
 > **Posture (default):** **no contract LOGIC change** → subject stays byte-frozen. Two workstreams, one engine: a live adversarial agent whose runtime invariant oracle == the C4A package's Main-Invariants section (single shared manifest, MAN-01).
 > **The ONLY possible approval gate is the conditional 464 SQUASH-GATE** — it fires only if the agent campaign surfaces a real defect, or the owner overrides a carried item to FIX. Under the current disposition (both carried items = DOCUMENT/defended) **464 is expected to be a no-op and v74 ships gate-free.** Everything else (docs, tests, the agent, findings) commits autonomously.
 > **Numbering continues 456 → 457.** No research (readiness + adversarial testing of existing frozen source).
-> **Owner constraints (`.planning/v74-grounding/CONSTRAINTS.md`):** accelerated 15-min game-days + honest actors 24/7 → live multi-actor soak practical; oracle = per-actor net-P&L-vs-EV robust to honest flow, solvency global across all actors. Local-fork = the fast bug-finder.
+> **Owner constraints (`.planning/v74-grounding/CONSTRAINTS.md`):** accelerated 15-min game-days + honest actors 24/7 → live multi-actor soak practical; oracle = per-actor net-P&L-vs-EV robust to honest flow, solvency global across all actors. The agent is a real EXTERNAL attacker on the live, independently-run testnet (no fork / no environment control — it doesn't deploy/clock/VRF/stETH/drive honest actors); the existing Foundry invariant suite stays a separate in-repo white-box net.
 > **Carried-item dispositions (owner-adjudicated 2026-06-21, both downgraded from LOW):** (A) mid-day VRF "re-roll" = single-writer-guarded by `requestId == vrfRequestId`, no reachable double-write → INFO note; (B) VRF rotation-timer notes = governance-malice out-of-scope per trust model + bounded by the non-resettable 120/365-day backstop → trust-model entry. Neither warrants a contract change.
 > **Grounding:** `.planning/v74-grounding/SYNTHESIS.md` (5-report fan-out) + `CONSTRAINTS.md`.
 
@@ -67,20 +67,20 @@
 2. The 6 stale `test:stat` surface/regression anchors (Jackpot/TraitUtils/EntropyLib/lootbox) are re-anchored to tree `d6615306`; the stat suite carries no known-red anchors.
 3. Full `forge` suite green at the v73 floor (943/0/108 or better) after the fixes.
 
-## Phase 462 — AGENT-FORK (new files, autonomous)
+## Phase 462 — AGENT-BUILD (new files, autonomous)
 
-**Goal:** Build the adversarial agent and run it hard against a local fork as the fast bug-finder.
+**Goal:** Build the connect-and-play live adversarial agent — a real EXTERNAL attacker — and validate it against the independently-running testnet.
 
 **Requirements:** AGT-01, AGT-02, AGT-03, AGT-04, AGT-05, AGT-06, AGT-07
 
 **Success criteria:**
-1. The agent boots from `deploy:local` — loads the exported manifest + per-contract ABIs and connects funded wallets (no hand-rolled typing).
-2. The agent drives the full external action surface with correct purchase→advance-day→VRF→multi-level sequencing (mirrors `test/fuzz/handlers/`).
+1. The agent CONNECTS to the running testnet from config (RPC + deployed addresses/ABIs from the sim-repo deployment) and holds its own funded wallet(s) — it does NOT deploy or drive the environment.
+2. The agent drives the full external action surface with valid action sequencing (mirrors the patterns in `test/fuzz/handlers/`), reading prices/payouts on-chain so the /1e6 testnet scaling is automatic.
 3. An off-chain per-actor ledger normalizes every value leg (ETH/sDGNRS/DGNRS/claimable/afking/vault) to one numeraire and tracks each wallet's realized net P&L vs its modeled EV.
-4. After every external-call action the agent asserts the MAN-01 oracle; a violation is captured as a structured, replayable tx sequence (snapshot id + pre/post ledger).
-5. The by-design allowlist + statistical gate are in place: the "win more than you should" alarm fires only on profit beyond the EV bound by k·σ over a counted sample; allowlisted by-design behaviors do not alarm.
-6. Against a local fork the agent compresses 15-min-day game-time, funds instantly, and snapshot/reverts around each hypothesized exploit; a documented multi-day campaign runs and any repros are captured.
-7. The existing Foundry `deep` invariant campaign runs in parallel as a free breadth-adversary; its results are recorded alongside the daemon's.
+4. After each action the agent asserts the MAN-01 oracle by reading chain state; a violation is captured as a structured, replayable tx sequence (pre/post ledger + block); mocks (VRF, stETH) are treated as trusted — their quirks are not findings.
+5. The by-design allowlist + statistical gate are in place: the "win more than you should" alarm fires only on protocol-value profit beyond the EV bound by k·σ over a counted sample (mainnet-gas-viability flagged separately); allowlisted by-design behaviors do not alarm.
+6. The agent runs at live testnet pace as an external attacker (no fork / no time-control), watching the mempool/events to find honest-actor txs to target and to detect violations; a documented attack campaign runs and any repros are captured.
+7. The existing Foundry invariant suite continues as a SEPARATE in-repo white-box net; its results are recorded alongside the agent's (it is not the external agent).
 
 ## Phase 463 — AGENT-SOAK (new files + ops, autonomous)
 
@@ -127,7 +127,7 @@
 | 459 KNOWN-ISSUES | KI-01/02/03/04 | none (docs) |
 | 460 MANIFEST | MAN-01/02 | none (docs/test-config) |
 | 461 HARNESS-FIX | HARN-01/02 | none (test-only) |
-| 462 AGENT-FORK | AGT-01..07 | none (new files) |
+| 462 AGENT-BUILD | AGT-01..07 | none (new files) |
 | 463 AGENT-SOAK | SOAK-01/02/03 | none (new files + ops) |
 | 464 SQUASH-GATE | SQ-01 | **sole contract gate (conditional, expected no-op)** |
 | 465 TERMINAL | TERM-01/02/03 | none (docs) |
