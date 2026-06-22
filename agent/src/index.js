@@ -25,6 +25,18 @@ function parseArgs(argv) {
 }
 
 async function main() {
+  // Soak resilience: a 24/7 run against a hosted RPC WILL hit transient errors
+  // (timeouts, 429 rate limits, expiring filters). Node terminates on an
+  // unhandled rejection by default; log-and-continue keeps the soak alive. Real
+  // findings are still recorded to disk per tick, so survivability never masks a
+  // genuine invariant break.
+  process.on("unhandledRejection", (reason) => {
+    console.error("[agent] unhandledRejection (continuing):", reason?.shortMessage || reason?.message || reason);
+  });
+  process.on("uncaughtException", (err) => {
+    console.error("[agent] uncaughtException (continuing):", err?.shortMessage || err?.message || err);
+  });
+
   const opts = parseArgs(process.argv.slice(2));
   const overrides = {};
   if (opts.mode) overrides.mode = opts.mode;
@@ -57,17 +69,38 @@ async function main() {
   process.on("SIGINT", shutdown);
   process.on("SIGTERM", shutdown);
 
+  // Hard per-tick watchdog: bound a whole tick so any hang the per-tx/per-request
+  // timeouts miss (a stuck oracle read, window probe, mempool contention) can't
+  // wedge the single-threaded soak forever. A tick does <=2 txs, so its worst
+  // case under the action timeouts is well under this ceiling.
+  const TICK_TIMEOUT_MS = 200_000;
+  const withTimeout = (p, ms, label) => {
+    let t; const to = new Promise((_, rej) => { t = setTimeout(() => rej(new Error(`${label} timeout`)), ms); });
+    return Promise.race([p, to]).finally(() => clearTimeout(t));
+  };
+
   let i = 0;
+  let consecErrors = 0;
   while (!stop && (steps === 0 || i < steps)) {
-    const r = await agent.tick();
-    if (envDriver && i % driveEvery === driveEvery - 1) {
-      const d = await envDriver.driveDay();
-      if ((i + 1) % (driveEvery * 4) === 0) console.log(`[env] day driven: level=${d.level} advanced=${d.advanced} vrf=${d.vrf.fulfilled}`);
+    try {
+      await withTimeout(agent.tick(), TICK_TIMEOUT_MS, "tick");
+      consecErrors = 0;
+      if (envDriver && i % driveEvery === driveEvery - 1) {
+        const d = await envDriver.driveDay();
+        if ((i + 1) % (driveEvery * 4) === 0) console.log(`[env] day driven: level=${d.level} advanced=${d.advanced} vrf=${d.vrf.fulfilled}`);
+      }
+    } catch (e) {
+      consecErrors++;
+      console.error(`[agent] tick ${i + 1} error (continuing, streak=${consecErrors}):`, e?.shortMessage || e?.message || e);
+      // A hung/abandoned tick may have left NonceManagers mid-flight — re-sync.
+      try { agent.pool.resetNonces(); } catch { /* */ }
+      // Linear backoff capped at 30s so an RPC outage doesn't hot-loop.
+      await new Promise((res) => setTimeout(res, Math.min(30000, 1000 * consecErrors)));
     }
     if ((i + 1) % 25 === 0) {
       const s = agent.stats;
       console.log(`[agent] step ${i + 1}: actions=${s.actions} reverts=${s.reverts} ` +
-        `stateViol=${s.stateViolations} profitAlarms=${s.profitAlarms} findings=${s.findings}`);
+        `stateViol=${s.stateViolations} windowTransients=${s.windowTransients} profitAlarms=${s.profitAlarms} findings=${s.findings}`);
     }
     i++;
   }

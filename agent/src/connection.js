@@ -12,7 +12,7 @@
 // delegatecall). To guarantee every module selector encodes, the GAME handle is
 // built from a MERGED ABI = DegenerusGame + all GAME_*_MODULE ABIs (deduped).
 
-import { ethers } from "ethers";
+import { ethers, FetchRequest } from "ethers";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { KEY_TO_CONTRACT } from "../../scripts/lib/predictAddresses.js";
@@ -36,7 +36,12 @@ const GAME_MODULE_KEYS = [
 export class Connection {
   constructor(cfg) {
     this.cfg = cfg;
-    this.provider = new ethers.JsonRpcProvider(cfg.rpcUrl, undefined, {
+    // Per-request HTTP timeout (ethers' default is 300s). On a live hosted RPC a
+    // single slow/hung call must fail fast and be handled by the tick watchdog,
+    // not wedge the single-threaded soak loop for minutes.
+    const fr = new FetchRequest(cfg.rpcUrl);
+    fr.timeout = 30_000;
+    this.provider = new ethers.JsonRpcProvider(fr, undefined, {
       // Avoid ethers' batching surprises against a single-threaded dev node.
       batchMaxCount: 1,
     });

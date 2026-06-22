@@ -108,8 +108,13 @@ export class Agent {
     // heal at seal; a persistent breach surfaces as a real violation at rest).
     this.stats.windowTransients += check.transients.length;
     if (windowFinding) {
-      this._recordFinding({ kind: "invariant", ...windowFinding, block, actor: actor.address });
-      this.stats.stateViolations++;
+      if (windowFinding.transient) {
+        // rng-window lifecycle transition straddled the probe — INFO, not a finding.
+        this.stats.windowTransients++;
+      } else {
+        this._recordFinding({ kind: "invariant", ...windowFinding, block, actor: actor.address });
+        this.stats.stateViolations++;
+      }
     }
     for (const v of this.oracle.drainPerSpin()) {
       this._recordFinding({ kind: "invariant", ...v, block, actor: actor.address, disposition: "REVIEW" });

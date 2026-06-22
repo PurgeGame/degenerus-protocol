@@ -16,6 +16,19 @@ import { ethers } from "ethers";
 
 const ZERO32 = ethers.ZeroHash;
 
+// Live-network tx timeouts. The single-threaded loop awaits each tx, so an
+// unbounded broadcast (hung estimateGas/send) or confirmation (a tx left unmined
+// by congestion / underpricing) would wedge the whole soak. Bounding both keeps
+// the loop progressing; a timeout is surfaced as a soft {ok:false}, not a finding.
+const SEND_TIMEOUT_MS = 30_000;
+const CONFIRM_TIMEOUT_MS = 45_000;
+
+function withTimeout(promise, ms, label) {
+  let t;
+  const timeout = new Promise((_, rej) => { t = setTimeout(() => rej(new Error(`${label} timeout`)), ms); });
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(t));
+}
+
 export class ActionSurface {
   constructor({ conn, ledger, pricing, oracle }) {
     this.conn = conn;
@@ -39,8 +52,10 @@ export class ActionSurface {
     };
     try {
       const txArgs = value > 0n ? [...args, { value }] : [...args];
-      const tx = await handle[fn](...txArgs);
-      const receipt = await tx.wait();
+      // Bound the broadcast and the confirmation independently (see top-of-file).
+      const tx = await withTimeout(handle[fn](...txArgs), SEND_TIMEOUT_MS, "send");
+      const receipt = await tx.wait(1, CONFIRM_TIMEOUT_MS);
+      if (!receipt) throw new Error("confirm timeout (no receipt)");
       const gasWei = receipt.gasUsed * (receipt.gasPrice ?? 0n);
       rec.txHash = receipt.hash; rec.block = receipt.blockNumber;
       rec.status = receipt.status; rec.gasWei = gasWei.toString(); rec.ok = true;
@@ -55,6 +70,10 @@ export class ActionSurface {
     } catch (e) {
       rec.ok = false;
       rec.revert = e.revert?.name || e.shortMessage || e.reason || e.message;
+      // A send/confirm timeout may leave the actor's NonceManager holding a stale
+      // (possibly already-broadcast) nonce; reset so it re-syncs from chain on the
+      // next pick rather than wedging that wallet behind a phantom nonce.
+      if (/timeout/i.test(rec.revert || "")) { try { actor.signer.reset(); } catch { /* */ } }
       return rec;
     }
   }

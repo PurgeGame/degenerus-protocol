@@ -177,24 +177,46 @@ export class InvariantOracle {
   // fires an in-window player action then calls verifyFrozen(snap).
   async snapshotFrozen() {
     const game = this.conn.address("GAME");
-    const day = await this.g.currentDayView?.().catch(() => null);
-    const get = (slot) => this.conn.provider.getStorage(game, slot);
+    // Pin every read to one block so the snapshot is internally consistent (a
+    // block mined mid-snapshot would otherwise smear slots across heights).
+    const bt = await this.conn.provider.getBlockNumber();
+    const o = { blockTag: bt };
+    const day = await this.g.currentDayView?.(o).catch(() => null);
+    const get = (slot) => this.conn.provider.getStorage(game, slot, bt);
     const [locked, lootWord, lootCursor, dailyIdxSlot] = await Promise.all([
-      this.g.rngLocked(), get(35n), get(34n), get(0n),
+      this.g.rngLocked(o), get(35n), get(34n), get(0n),
     ]);
     let dayWord = null;
-    try { if (day != null) dayWord = (await this.g.rngWordForDay(day)).toString(); } catch { /* */ }
-    return { locked, lootWord, lootCursorLow: BigInt(lootCursor) & 0xffffffffffffn, dailyIdxByte: (BigInt(dailyIdxSlot) >> 24n) & 0xffn, dayWord, day };
+    try { if (day != null) dayWord = (await this.g.rngWordForDay(day, o)).toString(); } catch { /* */ }
+    return { block: bt, locked, lootWord, lootCursorLow: BigInt(lootCursor) & 0xffffffffffffn, dailyIdxByte: (BigInt(dailyIdxSlot) >> 24n) & 0xffn, dayWord, day };
   }
 
   async verifyFrozen(snap) {
     if (!snap?.locked) return null; // only meaningful inside the window
     const now = await this.snapshotFrozen();
+    // Live-chain window-transition guard. On the real testnet the
+    // snapshot -> in-window action -> verify interval spans real blocks during
+    // which the SEPARATE sim legitimately advances the RNG lifecycle: Chainlink
+    // VRF fulfilment writes rngWordByDay (0 -> word), a seal/new request advances
+    // dailyIdx, and a 15-min-day boundary moves currentDay. NONE of those is
+    // caused by the agent's in-window player action, so a slot change ACROSS such
+    // a transition is a lifecycle transient (INFO), never an RNG-01 finding (the
+    // README's "in-window transients are INFO" rule). RNG-01 is only
+    // player-attributable when the window stayed continuously locked on the SAME
+    // day and index across the probe — the one state in which a residual slot
+    // mutation must be the player action's doing. (The white-box Foundry suite
+    // proves byte-freeze rigorously in isolation; this live net catches only the
+    // unambiguous, transition-free breach.)
+    const transitioned =
+      !now.locked ||                                    // window closed (seal/fulfil)
+      now.day !== snap.day ||                            // day boundary crossed
+      now.dailyIdxByte !== snap.dailyIdxByte ||          // request/seal index advanced
+      (snap.dayWord === "0" && now.dayWord !== "0");     // VRF fulfilment 0 -> word
+    if (transitioned) return { transient: true, reason: "rng-window lifecycle transition (not player-attributable)" };
     const mism = [];
     if (now.lootWord !== snap.lootWord) mism.push("lootboxRngWordByIndex");
     if (now.lootCursorLow !== snap.lootCursorLow) mism.push("lootboxRngPacked cursor");
-    if (now.dailyIdxByte !== snap.dailyIdxByte) mism.push("dailyIdx");
-    if (snap.dayWord != null && now.dayWord !== snap.dayWord) mism.push("rngWordByDay[currentDay]");
+    if (snap.dayWord != null && snap.dayWord !== "0" && now.dayWord !== snap.dayWord) mism.push("rngWordByDay[currentDay]");
     if (mism.length) {
       return { id: "RNG-01-INWINDOW-SLOADS-FROZEN", severity: "high",
         identity: "in-window consumed slots must not mutate from a player action",

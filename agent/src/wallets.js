@@ -54,6 +54,10 @@ export class WalletPool {
   get(i) { return this.wallets[i % this.wallets.length]; }
   random(rngIndex) { return this.wallets[rngIndex % this.wallets.length]; }
 
+  // Re-sync every NonceManager from chain — called by the tick watchdog after a
+  // hung tick so an abandoned in-flight nonce doesn't wedge subsequent sends.
+  resetNonces() { for (const w of this.wallets) { try { w.signer.reset(); } catch { /* */ } } }
+
   async balance(address) { return this.provider.getBalance(address); }
 
   // Drip-refill any wallet below the low-water mark; returns injected wei per addr.

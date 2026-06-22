@@ -28,29 +28,48 @@ export class MempoolWatcher {
     return null;
   }
 
-  // Best-effort pending-tx subscription (requires a node with txpool/pending
-  // filter support; harmless no-op otherwise).
+  // Reliable target detection via BLOCK polling. Over HTTP, ethers implements
+  // provider.on("pending") with an eth_newPendingTransactionFilter that hosted
+  // RPCs (Alchemy/Infura) garbage-collect — its later eth_getFilterChanges then
+  // throws "filter not found" (-32000) from inside ethers' own polling loop,
+  // OUTSIDE any callback try/catch, crashing a 24/7 soak. Block polling
+  // (eth_blockNumber + eth_getBlockByNumber) uses no expiring filters and is
+  // supported everywhere; one block of latency vs mempool-level is adequate for
+  // the shared-window contest probes on a 12s-block testnet (true public-mempool
+  // front-running via a hosted RPC is not reliably available anyway).
   async start(onTarget) {
-    try {
-      this.provider.on("pending", async (txHash) => {
-        try {
-          const tx = await this.provider.getTransaction(txHash);
-          if (!tx || (tx.to || "").toLowerCase() !== this.gameAddr) return;
+    this._busy = false;
+    this._onBlock = async (bn) => {
+      // One heavy full-block fetch at a time: if the previous getBlock is still
+      // in flight (a slow/large Sepolia block via a hosted RPC), drop this block
+      // rather than letting concurrent full-block reads pile up and saturate the
+      // shared single-threaded provider the tick loop also uses.
+      if (this._busy) return;
+      this._busy = true;
+      try {
+        const block = await this.provider.getBlock(bn, true); // prefetch full txs
+        if (!block) return;
+        for (const tx of block.prefetchedTransactions ?? []) {
+          if ((tx.to || "").toLowerCase() !== this.gameAddr) continue;
           const sel = (tx.data || "0x").slice(0, 10);
           const name = this._interesting(sel);
-          if (!name) return;
-          const target = { txHash, from: tx.from, selector: sel, name, value: tx.value, gasPrice: tx.gasPrice };
+          if (!name) continue;
+          const target = { txHash: tx.hash, from: tx.from, selector: sel, name, value: tx.value, gasPrice: tx.gasPrice ?? null };
           this.targets.push(target);
           if (this.targets.length > 256) this.targets.shift();
           onTarget?.(target);
-        } catch { /* tx vanished from pool */ }
-      });
+        }
+      } catch { /* transient RPC hiccup — skip this block, keep watching */ }
+      finally { this._busy = false; }
+    };
+    try {
+      this.provider.on("block", this._onBlock);
       this._sub = true;
     } catch {
-      this._sub = false; // node without pending-subscription support
+      this._sub = false;
     }
     return this._sub;
   }
 
-  stop() { if (this._sub) this.provider.removeAllListeners("pending"); }
+  stop() { if (this._sub && this._onBlock) this.provider.off("block", this._onBlock); }
 }

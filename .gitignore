@@ -30,6 +30,9 @@ audit/*
 
 # v74 adversarial agent: runtime state + local-node deployment artifacts + design scratch
 agent/.state/
+agent/config/live.json
 deployments/localhost.json
 deployments/localhost-abis/
+deployments/testnet.json
+deployments/testnet-abis/
 .agent-design/
