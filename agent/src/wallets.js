@@ -17,6 +17,12 @@ import { ethers } from "ethers";
 const HARDHAT_MNEMONIC = "test test test test test test test test test test test junk";
 const path = (i) => `m/44'/60'/0'/0/${i}`;
 
+function withTimeout(promise, ms, label) {
+  let t;
+  const timeout = new Promise((_, rej) => { t = setTimeout(() => rej(new Error(`${label} timeout`)), ms); });
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(t));
+}
+
 export class WalletPool {
   constructor(conn, cfg) {
     this.conn = conn;
@@ -71,11 +77,14 @@ export class WalletPool {
       if (bal < low) {
         const top = target - bal;
         try {
-          const tx = await this.funder.signer.sendTransaction({ to: wlt.address, value: top });
-          await tx.wait();
+          // Bound both legs: a slow/unmined drip on a congested live network must
+          // not hang init (this runs before the per-tick watchdog is in play).
+          const tx = await withTimeout(this.funder.signer.sendTransaction({ to: wlt.address, value: top }), 30_000, "drip-send");
+          await tx.wait(1, 45_000);
           injected[wlt.address] = top;
         } catch (e) {
-          // funder may be short on a live faucet — record and continue.
+          // funder short / drip stuck / nonce raced the sim — reset and continue.
+          try { this.funder.signer.reset(); } catch { /* */ }
           injected[wlt.address] = 0n;
         }
       }
