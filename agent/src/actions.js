@@ -13,6 +13,7 @@
 // the sim repo + real Chainlink on live).
 
 import { ethers } from "ethers";
+import { buildGasOverrides } from "./config.js";
 
 const ZERO32 = ethers.ZeroHash;
 
@@ -30,11 +31,12 @@ function withTimeout(promise, ms, label) {
 }
 
 export class ActionSurface {
-  constructor({ conn, ledger, pricing, oracle }) {
+  constructor({ conn, ledger, pricing, oracle, gas }) {
     this.conn = conn;
     this.ledger = ledger;
     this.pricing = pricing;
     this.oracle = oracle;
+    this.gasOverrides = buildGasOverrides(gas); // EIP-1559 fee caps (gwei) or {}
     this.openBets = new Map(); // actor -> [{betId, stakeWei, currency, score}]
     this._ftrTopic = null;
   }
@@ -51,7 +53,10 @@ export class ActionSurface {
       selector: fn, args: args.map(stringifyArg), valueWei: value.toString(),
     };
     try {
-      const txArgs = value > 0n ? [...args, { value }] : [...args];
+      // Trailing overrides: value (if any) + the EIP-1559 fee caps (if configured).
+      const overrides = { ...this.gasOverrides };
+      if (value > 0n) overrides.value = value;
+      const txArgs = Object.keys(overrides).length ? [...args, overrides] : [...args];
       // Bound the broadcast and the confirmation independently (see top-of-file).
       const tx = await withTimeout(handle[fn](...txArgs), SEND_TIMEOUT_MS, "send");
       const receipt = await tx.wait(1, CONFIRM_TIMEOUT_MS);

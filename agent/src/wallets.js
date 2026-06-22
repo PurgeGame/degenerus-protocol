@@ -12,6 +12,7 @@
 //               refilled by cfg.wallets.funderPrivateKey.
 
 import { ethers } from "ethers";
+import { buildGasOverrides } from "./config.js";
 
 // The canonical hardhat / anvil dev mnemonic (accounts are public + unlocked).
 const HARDHAT_MNEMONIC = "test test test test test test test test test test test junk";
@@ -30,6 +31,7 @@ export class WalletPool {
     this.provider = conn.provider;
     this.wallets = []; // [{ address, signer (NonceManager), raw (Wallet) }]
     this.funder = null;
+    this.gasOverrides = buildGasOverrides(cfg.gas); // cap drip fees too
   }
 
   async init() {
@@ -79,7 +81,7 @@ export class WalletPool {
         try {
           // Bound both legs: a slow/unmined drip on a congested live network must
           // not hang init (this runs before the per-tick watchdog is in play).
-          const tx = await withTimeout(this.funder.signer.sendTransaction({ to: wlt.address, value: top }), 30_000, "drip-send");
+          const tx = await withTimeout(this.funder.signer.sendTransaction({ to: wlt.address, value: top, ...this.gasOverrides }), 30_000, "drip-send");
           await tx.wait(1, 45_000);
           injected[wlt.address] = top;
         } catch (e) {

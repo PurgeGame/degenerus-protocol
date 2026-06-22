@@ -32,7 +32,7 @@ export class Agent {
     this.gate = new Gate(this.allowlist, cfg.gate);
     this.recorder = new Recorder(cfg.records.dir);
     this.pool = new WalletPool(this.conn, cfg);
-    this.surface = new ActionSurface({ conn: this.conn, ledger: this.ledger, pricing: this.pricing, oracle: this.oracle });
+    this.surface = new ActionSurface({ conn: this.conn, ledger: this.ledger, pricing: this.pricing, oracle: this.oracle, gas: cfg.gas });
     this.strategy = new Strategy();
     this.recentTxs = [];
     this.step = 0;

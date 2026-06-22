@@ -42,6 +42,23 @@ function envOverrides() {
   if (e.AGENT_K_SIGMA) o.gate = { kSigma: Number(e.AGENT_K_SIGMA) };
   if (e.AGENT_MAX_TICKS) o.campaign = { maxTicks: Number(e.AGENT_MAX_TICKS) };
   if (e.AGENT_WALLET_COUNT) o.wallets = { count: Number(e.AGENT_WALLET_COUNT) };
+  if (e.AGENT_MAX_FEE_GWEI) o.gas = { ...(o.gas || {}), maxFeeGwei: Number(e.AGENT_MAX_FEE_GWEI) };
+  if (e.AGENT_MAX_PRIORITY_GWEI) o.gas = { ...(o.gas || {}), maxPriorityGwei: Number(e.AGENT_MAX_PRIORITY_GWEI) };
+  return o;
+}
+
+// EIP-1559 fee overrides from the (gwei) gas config. null fields fall back to
+// the network's own fee estimate; a set maxFeeGwei is a HARD per-tx ceiling so a
+// tx only mines while basefee+tip stays under it (cheap-but-bounded on testnet).
+export function buildGasOverrides(gas) {
+  const o = {};
+  const gwei = (x) => BigInt(Math.round(Number(x) * 1e9));
+  if (gas?.maxFeeGwei != null) o.maxFeePerGas = gwei(gas.maxFeeGwei);
+  if (gas?.maxPriorityGwei != null) o.maxPriorityFeePerGas = gwei(gas.maxPriorityGwei);
+  // Never let the tip exceed the ceiling (ethers rejects priority > maxFee).
+  if (o.maxFeePerGas != null && o.maxPriorityFeePerGas != null && o.maxPriorityFeePerGas > o.maxFeePerGas) {
+    o.maxPriorityFeePerGas = o.maxFeePerGas;
+  }
   return o;
 }
 
@@ -72,6 +89,10 @@ export const DEFAULTS = {
     // immediately regardless of sample (it is a conservation break, not variance).
     solvencyImmediate: true,
   },
+  // EIP-1559 fee caps (gwei). null = use the network estimate. On the testnet a
+  // tight cap keeps the soak from wasting gas; a tx that can't fit under the cap
+  // simply hits the confirm-timeout soft-revert and is retried next tick.
+  gas: { maxFeeGwei: null, maxPriorityGwei: null },
   ledger: { dbPath: "agent/.state/ledger.db" },
   records: { dir: "agent/.state/findings" },
   campaign: {
