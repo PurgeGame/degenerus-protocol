@@ -478,9 +478,9 @@ contract sDGNRS {
         game.mintFlip();
     }
 
-    /// @notice Claim whale pass on behalf of sDGNRS
+    /// @notice Claim whale pass on behalf of sDGNRS (claims for this contract; permissionless)
     function gameClaimWhalePass() external {
-        game.claimWhalePass(address(0));
+        game.claimWhalePass(address(this));
     }
 
     // =====================================================================

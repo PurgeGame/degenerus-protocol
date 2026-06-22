@@ -1619,23 +1619,16 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
       +======================================================================+*/
 
     /// @notice Claim deferred whale pass rewards from large lootbox wins (>5 ETH).
-    /// @dev Unified claim function for all large lootbox rewards.
-    ///      Delegates to whale module for deferred whale pass ticket awards.
-    /// @param player Player address to claim for (address(0) = msg.sender).
-    function claimWhalePass(address player) external {
-        player = _resolvePlayer(player);
-        _claimWhalePassFor(player);
-    }
-
-    function _claimWhalePassFor(address player) private {
+    /// @dev Thin, PERMISSIONLESS delegatecall dispatch stub into the whale module — forwards
+    ///      `msg.data` verbatim (msg.sender preserved). No approval gate and no address(0)
+    ///      self-resolution: the claim only awards the passed player their own deferred
+    ///      tickets (it never moves value to the caller), so cranking it for anyone is safe.
+    ///      Signature: claimWhalePass(address player) — matches the module selector. Callers
+    ///      claiming for themselves pass their own address (sDGNRS / Vault pass address(this)).
+    function claimWhalePass(address) external {
         (bool ok, bytes memory data) = ContractAddresses
             .GAME_WHALE_MODULE
-            .delegatecall(
-                abi.encodeWithSelector(
-                    IDegenerusGameWhaleModule.claimWhalePass.selector,
-                    player
-                )
-            );
+            .delegatecall(msg.data);
         if (!ok) _revertDelegate(data);
     }
 
