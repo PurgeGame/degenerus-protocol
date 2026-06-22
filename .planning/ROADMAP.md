@@ -1,98 +1,139 @@
-# Roadmap — Milestone v73.0 — Degenerette "Variant-2" Color-Gated Rescore (+ WWXRP Preservation)
+# Roadmap — Milestone v74.0 — C4A Readiness: Live Adversarial Agent + Final Finding-Squash + Scope/Known-Issues Package
 
-> **Subject:** RESETS off the v72.0 closure (`MILESTONE_V72_AT_HEAD_e94f1719…`; `contracts/` tree `4407181d` @ `e94f1719`). The IMPL diff (453) produces the new v73 byte-frozen subject.
-> **Posture:** a bounded contract LOGIC change on the core Degenerette `_score` + the re-audit it forces. Port the color-gated-by-symbol rule (shipped on the foil match `16225de6`) into the betting engine: ~1-in-5 / ~2× at IDENTICAL EV, WWXRP rig family recalibrated to preserve P(S=9) / RTP curve / S=9 whale-pass bracket / ROI curve / per-N EV=100.
-> **Numbering continues 451 → 452.** No research (internal recalibration of existing source with a shipped precedent).
-> **The ONLY approval gate is the IMPL contract commit (453).** Everything else (the generator rewrite + table regen, EV-drift measurement, tests, proofs, re-audit, findings) commits autonomously.
-> **Generator-first (hard):** Phase 452 GEN rewrites + verifies `derive_5_tables.py` and presents the regenerated tables + the EV-drift number BEFORE any contract edit — a no-contract-risk front-loaded phase.
-> **3 design decisions** (DEC-01 rig R1/R2 · DEC-02 EV-equality A/B · DEC-03 floor S≥2) are locked in `/gsd-discuss-phase 452`.
+> **Subject:** the v73.0 byte-frozen contract subject — `contracts/` tree `d6615306` @ IMPL `64ec993e`, closure `MILESTONE_V73_AT_HEAD_15650b6a…` (0 CAT/0 HIGH/0 MED/0 LOW). HEAD is 1 commit ahead = `DegenerusGasFaucet.sol` (owner-deprioritized → documented out-of-scope).
+> **Posture (default):** **no contract LOGIC change** → subject stays byte-frozen. Two workstreams, one engine: a live adversarial agent whose runtime invariant oracle == the C4A package's Main-Invariants section (single shared manifest, MAN-01).
+> **The ONLY possible approval gate is the conditional 464 SQUASH-GATE** — it fires only if the agent campaign surfaces a real defect, or the owner overrides a carried item to FIX. Under the current disposition (both carried items = DOCUMENT/defended) **464 is expected to be a no-op and v74 ships gate-free.** Everything else (docs, tests, the agent, findings) commits autonomously.
+> **Numbering continues 456 → 457.** No research (readiness + adversarial testing of existing frozen source).
+> **Owner constraints (`.planning/v74-grounding/CONSTRAINTS.md`):** accelerated 15-min game-days + honest actors 24/7 → live multi-actor soak practical; oracle = per-actor net-P&L-vs-EV robust to honest flow, solvency global across all actors. Local-fork = the fast bug-finder.
+> **Carried-item dispositions (owner-adjudicated 2026-06-21, both downgraded from LOW):** (A) mid-day VRF "re-roll" = single-writer-guarded by `requestId == vrfRequestId`, no reachable double-write → INFO note; (B) VRF rotation-timer notes = governance-malice out-of-scope per trust model + bounded by the non-resettable 120/365-day backstop → trust-model entry. Neither warrants a contract change.
+> **Grounding:** `.planning/v74-grounding/SYNTHESIS.md` (5-report fan-out) + `CONSTRAINTS.md`.
 
 ---
 
-## Phase 452 — GEN (generator-first; NO contract edit)
+## Phase 457 — SCOPE (docs only)
 
-**Goal:** Lock the 3 design decisions, then rewrite + verify `derive_5_tables.py` as the canonical byte-reproduce source, regenerate the full constant family, and present the regenerated tables + the Option-A EV-drift number. Zero contract risk — no `.sol` is touched in this phase.
+**Goal:** Regenerate the contest scope from the frozen tree so it names only contracts that exist, and produce the in-scope-only SLOC table.
 
-**Requirements:** GEN-01, GEN-02, GEN-03, EVEQ-01
-
-**Plans:** 2 plans (2 waves)
-- [x] 452-01-PLAN.md — Rewrite both distributions: Variant-2 honest `p_score_distribution` + DEC-01 R2 score-bearing `p_score_distribution_rigged` (GEN-01)
-- [x] 452-02-PLAN.md — Regenerate the full constant family + GEN-02 self-asserts + EVEQ-01 Option-A EV-drift measurement + P(S=9)/WWXRP-RTP numeric pre-proof (GEN-02, GEN-03, EVEQ-01)
+**Requirements:** SCOPE-01, SCOPE-02, SCOPE-03
 
 **Success criteria:**
-1. The 3 decisions (DEC-01/02/03) are locked in discuss-phase and recorded.
-2. `derive_5_tables.py` rewritten for Variant-2 (honest + rigged dist, same calibration, same self-asserts); self-asserts pass (per-N basePayoutEV ∈ (99,100] centi-x honest + rigged; bonus-EV = 5.000%; all WWXRP factors < 2^64).
-3. The full constant family is regenerated (`QUICK_PLAY_PAYOUTS_N{0..4}_PACKED/_S8`, `WWXRP_FACTORS_N{0..4}`, the `_RIG_` family); `_S9` pins + `WWXRP_ROI_*` confirmed untouched.
-4. Option-A EV-drift across hero placement is measured and reported; DEC-02 resolved (keep A if < ~0.5 centi-x, else escalate to B) — the resolution feeds the IMPL table shape.
-5. Numeric pre-proof that P(S=9) and the WWXRP RTP curve are unchanged vs HEAD (the generator confirms it before any contract edit).
+1. `scope.txt` lists every in-scope contract present at tree `d6615306` (deleted BurnieCoin/Stonk/EndgameModule removed; FoilPackModule/ActivityCurveLib added); `out_of_scope.txt` lists tests/mocks/interfaces/scripts + the gas faucet.
+2. An in-scope-only file + nSLOC table is produced (from `report.md` minus mocks/tests/scripts) and is internally consistent with `scope.txt`.
+3. `report.md` + `ADERYN-TRIAGE.md` reflect current static-analysis triage at HEAD (no stale pre-gas-faucet rows).
 
-## Phase 453 — IMPL (the sole approval gate)
+## Phase 458 — RENAME + SECURITY (docs only)
 
-> **⚑ DEC-02 resolved in 452 → Option B (USER, measurement-driven).** GEN measured a 2.99 centi-x hero-placement EV drift on the honest lane (hero-common EV-positive, player-selectable via the custom `heroQuadrant` param) → escalated to exact EV-equality. **453 scope grows accordingly:** the honest family is now **8 per-`(N, hero-is-gold)` base tables** (N0 + N1/2/3 × {gold,common} + N4) + matching honest ETH-bonus factors, and `_getBasePayoutBps` gains a **`heroIsGold` selector consulted only when `!isWwxrp`** (the WWXRP `_RIG_` family stays averaged at 5 by-design). The exact dispatch shape is printed by `derive_5_tables.py` (see 452-03-SUMMARY.md). **USER must confirm the honest-only-split reading at the 453 diff review.**
+**Goal:** Purge stale names from all contest docs and author the security/trust-model + prior-audits material.
 
-**Goal:** Implement Variant-2 in the contract as ONE batched, USER-approved `.sol` diff — the `_score` rewrite, the `_rigWwxrpResult` adaptation, the regenerated constant blocks (Option-B honest per-`(N,hero-gold)` tables + averaged `_RIG_`), the `_getBasePayoutBps` `heroIsGold` dispatch tweak, and the doc-comment refresh.
-
-**Requirements:** SCORE-01, SCORE-02, SCORE-03, RIG-01, RIG-02, RIG-03, IMPL-01
+**Requirements:** PKG-01, PKG-02, PKG-03, PKG-04
 
 **Success criteria:**
-1. `_score` implements Variant-2 (per-quadrant symbol +1 / hero +2; color +1 only if that quadrant's symbol matched; S∈{0..9}; floor S≥2).
-2. `_rigWwxrpResult` forces score-bearing cells per DEC-01, preserving P(S=9) via the m≥7 cap (and, if R2, display==score honest + the ~60% near-win lift).
-3. The regenerated constant blocks from 452 are pasted in verbatim; `_S9` pins + `WWXRP_ROI_*` untouched.
-4. `forge build` clean; EIP-170 fits.
-5. The diff lands as ONE batched commit only after explicit USER hand-review (commit-guard `CONTRACTS_COMMIT_APPROVED=1` + hook move-aside) — produces the byte-frozen v73 subject.
+1. No contest-facing doc names a renamed-away or deleted symbol (BURNIE/BurnieCoin/BurnieCoinflip/Stonk/DGVB grep-clean across the package docs).
+2. `SECURITY.md` exists describing the security model, trust assumptions, and disclosure posture.
+3. A trusted/restricted-roles table documents every privileged role (owner/keeper/VRF-coordinator-governance/etc.), exactly what each is trusted to do, and what is assumed-honest — including the governance-malice-out-of-scope line that carries carried-item B.
+4. A Prior-Audits summary lists the v62–v73 audits (method · verdict · frozen-subject hash · the v73 forge 943/0/108 floor).
 
-**Plans:** 1 plan (1 wave) — ✅ SHIPPED 2026-06-21 (USER-approved diff; commit `64ec993e`; v73 byte-frozen subject `contracts/` tree `d6615306`)
-- [x] 453-01-PLAN.md — Variant-2 _score + DEC-01 R2 _rigWwxrpResult (+2 unlock, never S=9) + Option-B per-(N,heroIsGold) constants + heroIsGold dispatch threading; single-file diff (SCORE-01/02/03, RIG-01/02/03, IMPL-01)
+## Phase 459 — KNOWN-ISSUES (docs only)
 
-## Phase 454 — TST  — ✅ SHIPPED 2026-06-21 (test-only; forge 943/0/108; 44 byte-reproduce + EV/EVEQ + R2 rig parity + INV-01..04)
+**Goal:** Build the precise known-issues perimeter and assemble the contest README in C4 section order.
 
-**Goal:** Prove the byte-reproduce gate + the held-fixed invariants + behaviour parity on the new scoring.
-
-**Requirements:** TST-01, TST-02, INV-01, INV-02, INV-03, INV-04
+**Requirements:** KI-01, KI-02, KI-03, KI-04
 
 **Success criteria:**
-1. Byte-reproduce gate green — a stat test that regenerates the constants from `derive_5_tables.py` matches the committed constant blocks exactly.
-2. Numeric proof: WWXRP RTP curve (`WWXRP_ROI_*` 70→115→118→120%), the ROI curve (`_roiBpsFromScore` 90→99.9%), P(S=9), and the S=9 whale-pass bracket are unchanged vs HEAD.
-3. Degenerette unit + invariant tests + stat oracles green; full-suite parity (`forge` + Hardhat).
-4. The Option-A EV-drift is within tolerance in-contract (or Option-B was adopted and proven exactly EV-equal).
+1. Every by-design quirk has a known-issue entry naming (a) the specific function/mechanism, (b) the precise conceded behavior, (c) the accepted worst-case impact — covering FoilPack, Degenerette Variant-2, the WWXRP rig (m≥7-cap / +2-color-unlock / never-S=9), Bingo, Afking. No vague blanket disclaimers.
+2. The two carried items are documented per their adjudicated disposition (KI-02): A as an INFO single-writer-guard note, B via the trust-model + bounded-liveness line — framed as defended/out-of-scope, not accepted vulnerabilities.
+3. `DegenerusGasFaucet.sol` is explicitly listed out-of-scope with its reason.
+4. A single contest README is assembled in current C4 section order (audit-details · warden notes · automated-findings-out-of-scope · publicly-known-issues · overview · scope table · out-of-scope · areas-of-concern · main-invariants · trusted-roles · prior-audits · build/test/PoC).
 
-## Phase 455 — REAUDIT  — ✅ SHIPPED 2026-06-21 (3-pillar isolated-subagent sweep + cross-model Codex; 0 CAT/0 HIGH/0 MED/0 LOW)
+## Phase 460 — MANIFEST (docs + test-config only)
 
-**Goal:** Re-audit the betting engine on the new scoring (core scoring touched) across the 3 pillars.
+**Goal:** Emit the single canonical invariant manifest shared by the README and the agent, and fix advertised-but-broken scripts.
 
-**Requirements:** AUD-01
-
-**Success criteria:**
-1. **Solvency** — no path pays unbacked value; per-N EV ≤ 100 holds on the new tables; the rig surplus stays accounted.
-2. **RNG integrity** — every WWXRP/Degenerette VRF consumer remains frozen-at-commitment on the new `_score`/`_rigWwxrpResult`; the rig introduces no new steer.
-3. **Liveness / no-brick** — resolution + advanceGame cannot be gas-bricked or state-corrupted by the rewritten scoring; pull-claim preserved.
-4. Cross-model (Codex; gemini if revived) on every load-bearing correctness/security claim; isolated-subagent nets otherwise.
-
-## Phase 456 — TERMINAL  — ✅ SHIPPED 2026-06-21 (FINDINGS-v73.0.md (444) + AUDIT-V73-REPORT.html + closure)
-
-**Goal:** Ship the evidence pack and flip the closure signal.
-
-**Requirements:** TERM-01
+**Requirements:** MAN-01, MAN-02
 
 **Success criteria:**
-1. `audit/FINDINGS-v73.0.md` (chmod 444) + `AUDIT-V73-REPORT.html` authored.
-2. Closure signal `MILESTONE_V73_AT_HEAD_<sha>`; subject confirmed byte-frozen at the IMPL diff.
-3. Archive `milestones/v73.0-{ROADMAP,REQUIREMENTS}.md`; tag `v73.0` (BY HAND, per repo convention).
+1. A machine-readable invariant manifest exists — each entry: id, identity statement, on-chain read/view, comparator/tolerance, source `file:line` — and is the verbatim source for the README Main-Invariants section.
+2. The manifest covers the runtime oracle set: SOLVENCY conservation, BACKING bound (incl. auto-rebuy carry + redemption legs), redemption segregation, per-(N,heroIsGold) EV ceiling, the held-fixed P(S=9)/RTP/ROI pins, the rig never-S=9 cap, and LIVENESS/no-brick + no-permanent-dead-state.
+3. The stale `package.json` scripts (`test:adversarial`, `test:adversarial:sepolia-actors`, `test:sim` → non-existent dirs) are fixed or removed; no advertised npm script fails.
+
+## Phase 461 — HARNESS-FIX (test-only, autonomous)
+
+**Goal:** De-flake the suite and clear the carried stale stat anchors on the frozen tree.
+
+**Requirements:** HARN-01, HARN-02
+
+**Success criteria:**
+1. `block_timestamp` is pinned in `foundry.toml`; the `_deployProtocol` real-clock setUp flake no longer reproduces across repeated runs.
+2. The 6 stale `test:stat` surface/regression anchors (Jackpot/TraitUtils/EntropyLib/lootbox) are re-anchored to tree `d6615306`; the stat suite carries no known-red anchors.
+3. Full `forge` suite green at the v73 floor (943/0/108 or better) after the fixes.
+
+## Phase 462 — AGENT-FORK (new files, autonomous)
+
+**Goal:** Build the adversarial agent and run it hard against a local fork as the fast bug-finder.
+
+**Requirements:** AGT-01, AGT-02, AGT-03, AGT-04, AGT-05, AGT-06, AGT-07
+
+**Success criteria:**
+1. The agent boots from `deploy:local` — loads the exported manifest + per-contract ABIs and connects funded wallets (no hand-rolled typing).
+2. The agent drives the full external action surface with correct purchase→advance-day→VRF→multi-level sequencing (mirrors `test/fuzz/handlers/`).
+3. An off-chain per-actor ledger normalizes every value leg (ETH/sDGNRS/DGNRS/claimable/afking/vault) to one numeraire and tracks each wallet's realized net P&L vs its modeled EV.
+4. After every external-call action the agent asserts the MAN-01 oracle; a violation is captured as a structured, replayable tx sequence (snapshot id + pre/post ledger).
+5. The by-design allowlist + statistical gate are in place: the "win more than you should" alarm fires only on profit beyond the EV bound by k·σ over a counted sample; allowlisted by-design behaviors do not alarm.
+6. Against a local fork the agent compresses 15-min-day game-time, funds instantly, and snapshot/reverts around each hypothesized exploit; a documented multi-day campaign runs and any repros are captured.
+7. The existing Foundry `deep` invariant campaign runs in parallel as a free breadth-adversary; its results are recorded alongside the daemon's.
+
+## Phase 463 — AGENT-SOAK (new files + ops, autonomous)
+
+**Goal:** Point the same agent at the live 15-min-day testnet for the realistic 24/7 multi-actor soak and triage what it finds.
+
+**Requirements:** SOAK-01, SOAK-02, SOAK-03
+
+**Success criteria:**
+1. The same agent runs against the live testnet via an RPC-mode switch — observes real Chainlink VRF fulfilment, serializes sends through a NonceManager with replace-by-fee, and drip-refills wallets below a low-water mark.
+2. Multi-actor / interaction probes run that only exist with honest 24/7 traffic — front-run / sandwich honest txs, race shared windows (redemption / advanceGame / jackpot), attempt to block or capture honest rewards.
+3. A continuous soak runs with checkpoint/resume (persisted ledger + last block, reconciled on boot); findings are triaged FIX vs DOCUMENT; any brick is logged + reproduced rather than silently wedging the chain.
+
+## Phase 464 — SQUASH-GATE (conditional — SOLE contract approval gate)
+
+> **Expected NO-OP under current dispositions.** Fires only if 462/463 surface a real defect, or the owner overrides a carried item to FIX.
+
+**Goal:** If and only if a contract change is warranted, batch ALL edits into one owner-approved diff; otherwise confirm the subject stays byte-frozen.
+
+**Requirements:** SQ-01
+
+**Success criteria:**
+1. If no real defect surfaced and no carried-item override is taken → this phase records a no-op and confirms `git diff d6615306 -- contracts/` is empty (subject byte-frozen).
+2. If a contract change IS warranted → ALL edits land in ONE batched commit only after explicit owner hand-review (commit-guard `CONTRACTS_COMMIT_APPROVED=1` + hook move-aside); the changed subject is re-verified (forge suite + RNG-freeze/invariant re-attest) before 465.
+
+## Phase 465 — TERMINAL (docs only)
+
+**Goal:** Produce the closure evidence and the assembled C4A package bundle.
+
+**Requirements:** TERM-01, TERM-02, TERM-03
+
+**Success criteria:**
+1. `audit/FINDINGS-v74.0.md` (chmod 444) records the agent-campaign results, the fix/document dispositions (incl. the two carried items), and the final verdict.
+2. The full `forge` suite is re-verified green at the frozen (or, if 464 fired, updated) floor; the C4A bundle (README + scope/out_of_scope + KNOWN-ISSUES + SECURITY + manifest) is assembled and internally consistent (scope ↔ SLOC ↔ manifest ↔ known-issues cross-checked).
+3. The closure signal `MILESTONE_V74_AT_HEAD_<sha>` is stamped against the final subject.
 
 ---
 
 ## Coverage
 
-| Phase | Requirements | Count |
-|-------|--------------|-------|
-| 452 GEN | GEN-01, GEN-02, GEN-03, EVEQ-01 | 4 |
-| 453 IMPL | SCORE-01, SCORE-02, SCORE-03, RIG-01, RIG-02, RIG-03, IMPL-01 | 7 |
-| 454 TST | TST-01, TST-02, INV-01, INV-02, INV-03, INV-04 | 6 |
-| 455 REAUDIT | AUD-01 | 1 |
-| 456 TERMINAL | TERM-01 | 1 |
+| Phase | Requirements | Gate |
+|-------|--------------|------|
+| 457 SCOPE | SCOPE-01/02/03 | none (docs) |
+| 458 RENAME+SECURITY | PKG-01/02/03/04 | none (docs) |
+| 459 KNOWN-ISSUES | KI-01/02/03/04 | none (docs) |
+| 460 MANIFEST | MAN-01/02 | none (docs/test-config) |
+| 461 HARNESS-FIX | HARN-01/02 | none (test-only) |
+| 462 AGENT-FORK | AGT-01..07 | none (new files) |
+| 463 AGENT-SOAK | SOAK-01/02/03 | none (new files + ops) |
+| 464 SQUASH-GATE | SQ-01 | **sole contract gate (conditional, expected no-op)** |
+| 465 TERMINAL | TERM-01/02/03 | none (docs) |
 
-**19 requirements mapped across 5 phases — all covered ✓**
+**28 requirements** mapped across **9 phases**; 0 unmapped ✓. The default path is gate-free; the single possible approval gate (464) is conditional and expected unused.
 
 ---
-*Roadmap created: 2026-06-21 (authored BY HAND at milestone v73.0 init)*
-*Phase 452 planned: 2026-06-21 (2 plans / 2 waves)*
+*Roadmap created: 2026-06-21*
+*Phase numbering continues from v73.0 (456) → 457.*

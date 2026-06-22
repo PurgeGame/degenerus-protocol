@@ -8,9 +8,31 @@ Smart contract audit repository for the Degenerus Protocol — an on-chain ETH g
 
 Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
 
-## ▶ Current Milestone: v73.0 — Degenerette "Variant-2" Color-Gated Rescore (+ WWXRP Preservation)
+## ▶ Current Milestone: v74.0 — C4A Readiness: Live Adversarial Agent + Final Finding-Squash + Scope/Known-Issues Package
 
-**Status (2026-06-21):** STARTED. REQUIREMENTS.md + ROADMAP.md authored at init BY HAND (per repo convention; gsd-sdk state mutators avoided). Phases continue 451 → **452** (GEN · IMPL · TST · REAUDIT · TERMINAL). No research (internal recalibration of existing source with a shipped precedent). NEXT = `/gsd-discuss-phase 452` to lock the 3 design decisions, then 452 GEN.
+**Status (2026-06-21):** STARTED. REQUIREMENTS.md + ROADMAP.md authored at init BY HAND (repo convention; gsd-sdk state mutators avoided). Phases continue 456 → **457** (SCOPE · RENAME+SECURITY · KNOWN-ISSUES · MANIFEST · HARNESS-FIX · AGENT-FORK · AGENT-SOAK · SQUASH-GATE[conditional] · TERMINAL). No research. NEXT = `/gsd-discuss-phase 457` (or `/gsd-plan-phase 457`) to start the scope package.
+
+**Goal:** Bring the protocol to the Code4rena-ready bar on two fronts at once: (1) a **live adversarial agent** that holds funded wallets and continuously plays the testnet trying to brick the game or extract more value than the rules allow (and attempts the exploits it hypothesizes), and (2) a **complete, precise C4A package** — contest README, scope/SLOC, SECURITY/trust-model, and a known-issues perimeter specific enough that every issue a warden could legitimately be paid for is already fixed by us or documented as ineligible.
+
+**Two workstreams, one engine:** the agent's runtime invariant oracle == the README's Main-Invariants section (single shared machine-readable manifest, MAN-01). Agent findings feed the squash + known-issues in one pass.
+
+**Owner constraints:** the testnet runs **accelerated 15-min game-days** with **honest actors playing 24/7** → a live multi-actor soak is practical; the "win more than you should" oracle is **per-actor net-P&L-vs-EV** (robust to honest background flow; solvency/backing invariants hold globally across all actors), and the honest traffic opens a front-run / sandwich / shared-window-grief surface the agent probes. Local-fork (fast time-compression) = the bug-finder; the same agent then soaks the live chain. (`.planning/v74-grounding/CONSTRAINTS.md`.)
+
+**Posture (default = NO contract change):** the v73.0 byte-frozen subject (`contracts/` tree `d6615306` @ `64ec993e`; closure `MILESTONE_V73_AT_HEAD_15650b6a…`) stays frozen. Workstream B is docs/test-only; Workstream A is additive (new files). The ONLY possible approval gate is the **conditional 464 SQUASH-GATE** — fires only if the agent surfaces a real defect or the owner overrides a carried item to FIX; **expected to be a no-op** → v74 ships gate-free. All docs/test/agent/findings work commits autonomously.
+
+**Carried items (owner-adjudicated 2026-06-21, both DOWNGRADED from LOW → DOCUMENT, neither warrants a fix):** (A) the mid-day lootbox VRF "re-roll" `==0` guard — **single-writer-guarded by `requestId == vrfRequestId`; no reachable double-write** (Chainlink fulfils each id once; stale/duplicate ids auto-rejected) → INFO note; (B) the 423 VRF rotation-timer notes — **governance-malice out-of-scope per the trust model** (honest rotation recovers; majority-malice = the out-of-scope governance branch) + **bounded by the non-resettable 120/365-day backstop** → trust-model entry.
+
+**Scope:** readiness + adversarial testing of the existing frozen source — NOT feature work, NOT a re-run of the v62–v73 manual audits (the agent is the NEW machine/live detection net). The gas faucet (`DegenerusGasFaucet.sol`, HEAD+1 unpushed) is documented out-of-scope (owner-deprioritized as third-party).
+
+**Success criteria / gates:** a regenerated in-scope scope.txt/SLOC matching tree `d6615306`; a C4-order README + SECURITY + trust-model + precise known-issues perimeter (every by-design quirk mechanism-+-impact specific); one shared invariant manifest; suite de-flaked + green at the v73 floor (943/0/108); the agent runs a documented local-fork campaign + a live 24/7 soak with reproducible-on-violation logging; `FINDINGS-v74.0.md` + closure `MILESTONE_V74_AT_HEAD_<sha>`.
+
+**Anchors:** scope/package = `report.md`, `ADERYN-TRIAGE.md`, the repo README(s), `scope.txt`/`out_of_scope.txt`. Agent reuse = `scripts/deploy-local.js` (manifest + `deployments/localhost-abis/`), `test/fuzz/helpers/DeployProtocol.sol` + `test/fuzz/handlers/`. Oracle source = the ~18 `test/fuzz/invariant/*` suites + the Degenerette EV/stat oracles. Grounding = `.planning/v74-grounding/SYNTHESIS.md` + `CONSTRAINTS.md`.
+
+## ✅ SHIPPED 2026-06-21 (tag v73.0) — v73.0 Degenerette "Variant-2" Color-Gated Rescore (+ WWXRP Preservation)
+
+**Outcome (SHIPPED + TAGGED + PUSHED 2026-06-21; tag `v73.0`; origin/main `03780030`):** **0 CAT / 0 HIGH / 0 MED / 0 LOW; 0 open findings.** Ported the color-gated-by-symbol `_score` rule into the core Degenerette engine (main slot ~1-in-3 → ~1-in-5 at ~2× multipliers, IDENTICAL EV); DEC-01 R2 WWXRP rig (+2 color-unlock, never S=9 via m≥7 cap); DEC-02 Option B per-(N, hero-is-gold) honest tables (exactly EV-equal, hero-placement edge closed 2.99→0.00007 centi-x); DEC-03 floor S≥2. Held byte-fixed: P(S=9)/jackpot pins, WWXRP RTP (70→115→118→120%), activity ROI (90→99.9%), S=9 whale-pass bracket. Subject byte-frozen `contracts/` tree `d6615306` @ IMPL `64ec993e`; closure `MILESTONE_V73_AT_HEAD_15650b6a05427517981b14ac62ddf18364c0525b`; forge 943/0/108. 455 REAUDIT = 3 isolated subagents + Codex 1024-state rig enumeration (max post-rig S=8) — converged, 0 findings. Deliverables `audit/FINDINGS-v73.0.md` (chmod 444) + `audit/AUDIT-V73-REPORT.html`; archived `milestones/v73.0-{ROADMAP,REQUIREMENTS}.md`. Carries (pre-existing, NOT v73): 6 stale `test:stat` anchors + `_deployProtocol` setUp flake → folded into v74.0 (HARN-01/02).
+
+_The v73.0 milestone as planned (historical record):_
 
 **Goal:** Port the color-gated-by-symbol match rule — already shipped on the *foil* match in commit `16225de6` — into the **core Degenerette betting engine** (`_score`). The main slot moves from ~1-in-3 / 32% hit-rate to **~1-in-5 spins at ~2× multipliers at IDENTICAL EV**: a higher-variance, lottery-leaning feel that unifies one scoring rule across foil + Degenerette. The full WWXRP rig family is recalibrated so everything that matters about WWXRP is preserved.
 
