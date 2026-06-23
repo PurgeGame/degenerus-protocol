@@ -94,12 +94,18 @@ export class InvariantOracle {
       else transients.push({ ...entry, severity: "info", transient: true, observed: `${ctx} [in-window transient; not settled]` });
     };
 
-    // SOLV-01 — game balance covers the canonical obligation set.
+    // SOLV-01 — TOTAL backing (ETH + stETH) covers the canonical obligation set.
+    // stETH is legitimate 1:1 backing: the protocol pays out ETH-first with a
+    // stETH fallback (_payoutWithStethFallback), so obligations are covered by
+    // ETH+stETH, not ETH alone. Measuring gameBal-only false-fires the instant the
+    // yield path moves backing into stETH — observed on Base (yield active) as 384
+    // spurious SOLV-01s where ETH-alone fell short by EXACTLY the stETH balance
+    // while ETH+stETH >= obligations held. SOLV-02/SOLV-05 already use ETH+stETH.
     const obligations = s.gameOver
       ? s.claimable
       : s.current + s.next + s.future + s.claimable + s.yieldAcc + pend.next + pend.future;
-    sink("SOLV-01-ETH-SOLVENCY", s.gameBal >= obligations,
-      `gameBal=${s.gameBal} obligations=${obligations} (gameOver=${s.gameOver})`);
+    sink("SOLV-01-ETH-SOLVENCY", backing >= obligations,
+      `backing(eth+steth)=${backing} obligations=${obligations} (eth=${s.gameBal} steth=${s.steth} gameOver=${s.gameOver})`);
 
     // SOLV-02 — four-pool sum fully backed by ETH+stETH.
     sink("SOLV-02-FULL-BACKING-ETH-STETH", sumPools <= backing,
