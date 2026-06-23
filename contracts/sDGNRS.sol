@@ -31,6 +31,8 @@ interface IDegenerusGamePlayer {
     function claimWinnings(address player) external;
     /// @notice Claim whale pass for a player.
     function claimWhalePass(address player) external;
+    /// @notice Claim a color-completion bingo for a player (sender-or-approved).
+    function claimBingo(address player, uint24 level, uint8 symbol, uint32[8] calldata slots) external;
     /// @notice View claimable ETH winnings for a player.
     function claimableWinningsOf(address player) external view returns (uint256);
     /// @notice Check if VRF request is pending (RNG locked).
@@ -481,6 +483,15 @@ contract sDGNRS {
     /// @notice Claim whale pass on behalf of sDGNRS (claims for this contract; permissionless)
     function gameClaimWhalePass() external {
         game.claimWhalePass(address(this));
+    }
+
+    /// @notice Claim a color-completion bingo sDGNRS occupies (rewards credit this contract;
+    ///         permissionless — the claim settles to sDGNRS, so a trigger only harvests inward).
+    /// @param level The level to claim on.
+    /// @param symbol Symbol 0-31 (quadrant = symbol >> 3, symInQ = symbol & 7).
+    /// @param slots Per-color positions in the holder arrays sDGNRS occupies.
+    function gameClaimBingo(uint24 level, uint8 symbol, uint32[8] calldata slots) external {
+        game.claimBingo(address(this), level, symbol, slots);
     }
 
     // =====================================================================

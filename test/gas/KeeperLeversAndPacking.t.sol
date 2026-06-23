@@ -310,12 +310,13 @@ contract KeeperLeversAndPacking is DeployProtocol {
         // afking per-sub STAGE is revert-free by construction (D-348-04 no valve); asserted ABSENT.
         assertEq(_countOccurrences(game_, "this._batchPurchaseUnit{value: slice}"), 0, "G6 (D-351-02): batchPurchase per-slice try REMOVED (no valve under D-348-04)");
 
-        // G7 — crank per-item isolation. The bet path keeps the onlySelf wrapper + guard; the
+        // G7 — crank per-item isolation. The bet path wraps each item in a catchable external
+        // self-call to the permissionless resolveDegeneretteBets (no dedicated wrapper); the
         // human-box open per-item isolation lives in the lootbox module's sweep, where each entry
         // resolves both legs in isolation from its own pre-loaded values (robust to either leg
         // empty, guaranteed-non-reverting under the entry-gate) — a long queue can never gas-wall
         // the tx.
-        assertGt(_countOccurrences(game_, "function _degeneretteResolveBet("), 0, "G7: _degeneretteResolveBet onlySelf wrapper");
+        assertGt(_countOccurrences(game_, "try this.resolveDegeneretteBets(players[i], ids)"), 0, "G7: per-item bet isolation via this.resolveDegeneretteBets");
         assertGt(_countOccurrences(lootbox, "_openLootBoxLegWith(player, idx, packed, word);"), 0, "G7: per-entry box-open isolation (the sweep opens one entry at a time)");
         assertGt(_countOccurrences(game_, "if (msg.sender != address(this)) revert E();"), 0, "G7: onlySelf (msg.sender == self) guard byte-present");
 

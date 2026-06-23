@@ -433,10 +433,10 @@ interface IDegenerusGameDegeneretteModule {
         uint8 heroQuadrant
     ) external payable;
 
-    /// @notice Resolves one or more pending bets for a player
+    /// @notice Resolves one or more pending bets for a player (permissionless: credits the owner)
     /// @param player The player address (use zero address for msg.sender)
     /// @param betIds Array of bet IDs to resolve
-    function resolveBets(
+    function resolveDegeneretteBets(
         address player,
         uint64[] calldata betIds
     ) external;
@@ -488,10 +488,11 @@ interface IDegenerusGameDegeneretteModule {
 /// @notice Interface for color-completion bingo claims + the affiliate-DGNRS claim.
 interface IDegenerusGameBingoModule {
     /// @notice Claim color-completion bingo: all 8 colors of one symbol on a level.
+    /// @param player Bingo owner to claim for (address(0) = msg.sender, else operator-approved).
     /// @param level The level to claim on (uint24 storage-key width).
     /// @param symbol Symbol 0-31 (quadrant = symbol >> 3, symInQ = symbol & 7).
-    /// @param slots Per-color positions in traitBurnTicket[level][traitId] the caller occupies.
-    function claimBingo(uint24 level, uint8 symbol, uint32[8] calldata slots) external;
+    /// @param slots Per-color positions in traitBurnTicket[level][traitId] the owner occupies.
+    function claimBingo(address player, uint24 level, uint8 symbol, uint32[8] calldata slots) external;
 
     /// @notice Claim DGNRS affiliate rewards for the current level. The Game retains a
     ///         thin delegatecall dispatch stub that targets this selector; the body must

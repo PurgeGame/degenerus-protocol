@@ -40,6 +40,8 @@ interface IDegenerusGamePlayerActions {
     function claimWinningsStethFirst() external;
     /// @notice Claim whale pass for a player.
     function claimWhalePass(address player) external;
+    /// @notice Claim a color-completion bingo for a player (sender-or-approved).
+    function claimBingo(address player, uint24 level, uint8 symbol, uint32[8] calldata slots) external;
     /// @notice Purchase a deity pass with ETH.
     function purchaseDeityPass(address buyer, uint8 symbolId) external payable;
     /// @notice Place full-ticket bets on degenerette.
@@ -491,6 +493,17 @@ contract DegenerusVault {
     ///      is forfeited with claimablePool, claimable-equivalent).
     function recoverAfkingFunding() external {
         gamePlayer.withdrawAfkingFunding(gamePlayer.afkingFundingOf(address(this)));
+    }
+
+    /// @notice Claim a color-completion bingo the vault occupies (rewards credit the vault).
+    /// @dev Permissionless (no owner gate): the claim settles to the vault (game.claimBingo with
+    ///      player = this vault), so an external trigger only ever harvests into the vault — it
+    ///      cannot redirect the reward. Mirrors recoverAfkingFunding's permissionless harvest.
+    /// @param level The level to claim on.
+    /// @param symbol Symbol 0-31 (quadrant = symbol >> 3, symInQ = symbol & 7).
+    /// @param slots Per-color positions in the holder arrays the vault occupies.
+    function gameClaimBingo(uint24 level, uint8 symbol, uint32[8] calldata slots) external {
+        gamePlayer.claimBingo(address(this), level, symbol, slots);
     }
 
     // ---------------------------------------------------------------------

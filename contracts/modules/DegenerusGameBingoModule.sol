@@ -107,11 +107,15 @@ contract DegenerusGameBingoModule is DegenerusGameStorage {
     // -------------------------------------------------------------------------
 
     /// @notice Claim color-completion bingo: all 8 colors of one symbol on a level.
+    /// @dev Sender-or-approved: the bingo settles to `player` (the slot owner), so the caller
+    ///      must be the owner or an operator the owner approved (address(0) = msg.sender).
+    /// @param player The bingo owner to claim for (address(0) = msg.sender, else operator-approved).
     /// @param level The level to claim on (uint24 — the internal storage key width;
     ///        the ABI decoder fail-closes on an oversized value, no truncation).
     /// @param symbol Symbol 0-31 (quadrant = symbol >> 3, symInQ = symbol & 7).
-    /// @param slots Per-color positions in traitBurnTicket[level][traitId] the caller occupies.
-    function claimBingo(uint24 level, uint8 symbol, uint32[8] calldata slots) external {
+    /// @param slots Per-color positions in traitBurnTicket[level][traitId] the owner occupies.
+    function claimBingo(address player, uint24 level, uint8 symbol, uint32[8] calldata slots) external {
+        player = _resolvePlayer(player);
         // ---- Validation (gameOver hard cutoff + range gates) ----
         // No level upper-bound guard: the 8-color ownership check below is
         // self-gating — an unresolved/future-level bucket is empty, so the
@@ -128,7 +132,7 @@ contract DegenerusGameBingoModule is DegenerusGameStorage {
         uint32 sMask = uint32(1) << symbol;
 
         // ---- Ownership read (READ-ONLY; NO write to traitBurnTicket) ----
-        // For each color c the caller must occupy slots[c] in the holder array of
+        // For each color c the owner must occupy slots[c] in the holder array of
         // traitId = (quadrant << 6) | (c << 3) | symInQ. Guard the index against the
         // array length BEFORE the read so a bad index fails closed with one clean
         // custom error (no bare Panic(0x32)).
@@ -137,7 +141,7 @@ contract DegenerusGameBingoModule is DegenerusGameStorage {
         for (uint256 c = 0; c < 8; ) {
             address[] storage holders = levelBuckets[uint8(traitBase | (c << 3))];
             uint256 slot = slots[c];
-            if (slot >= holders.length || holders[slot] != msg.sender) {
+            if (slot >= holders.length || holders[slot] != player) {
                 revert NotSlotOwner();
             }
             unchecked {
@@ -146,9 +150,9 @@ contract DegenerusGameBingoModule is DegenerusGameStorage {
         }
 
         // ---- Per-player (level, quadrant) dedup (EFFECT) ----
-        uint8 claimedBits = bingoClaimed[level][msg.sender];
+        uint8 claimedBits = bingoClaimed[level][player];
         if (claimedBits & qMask != 0) revert AlreadyClaimed();
-        bingoClaimed[level][msg.sender] = claimedBits | qMask;
+        bingoClaimed[level][player] = claimedBits | qMask;
 
         // ---- Tier cascade (EFFECTS — bits set before any external call) ----
         // Quadrant-first is checked BEFORE symbol-first (the binding ordering).
@@ -169,13 +173,13 @@ contract DegenerusGameBingoModule is DegenerusGameStorage {
                 (uint64(uint8(fq | qMask)) << 32);
             dgnrsBps = FIRST_QUADRANT_DGNRS_BPS;
             flip = FIRST_QUADRANT_FLIP;
-            emit FirstQuadrantBingo(msg.sender, level, symbol);
+            emit FirstQuadrantBingo(player, level, symbol);
         } else if (isSymbolFirst) {
             // mark only the symbol bit, preserving the co-resident quadrant mask
             bingoFirsts[level] = (bf & ~uint64(0xFFFFFFFF)) | uint64(fs | sMask);
             dgnrsBps = REGULAR_DGNRS_BPS + FIRST_SYMBOL_BONUS_DGNRS_BPS;
             flip = REGULAR_FLIP + FIRST_SYMBOL_BONUS_FLIP;
-            emit FirstSymbolBingo(msg.sender, level, symbol);
+            emit FirstSymbolBingo(player, level, symbol);
         } else {
             dgnrsBps = REGULAR_DGNRS_BPS;
             flip = REGULAR_FLIP;
@@ -188,14 +192,14 @@ contract DegenerusGameBingoModule is DegenerusGameStorage {
         uint256 poolBal = dgnrs.poolBalance(IsDGNRS.Pool.Reward);
         uint256 dgnrsPaid = dgnrs.transferFromPool(
             IsDGNRS.Pool.Reward,
-            msg.sender,
+            player,
             (poolBal * dgnrsBps) / 10_000
         );
 
         // FLIP flip credit (always paid; tier amount is always non-zero).
-        coinflip.creditFlip(msg.sender, flip);
+        coinflip.creditFlip(player, flip);
 
-        emit BingoClaimed(msg.sender, level, symbol, flip, dgnrsPaid);
+        emit BingoClaimed(player, level, symbol, flip, dgnrsPaid);
     }
 
     // -------------------------------------------------------------------------
@@ -204,8 +208,8 @@ contract DegenerusGameBingoModule is DegenerusGameStorage {
     // delegatecall (so the outbound msg.sender to SDGNRS / coinflip is GAME, which
     // both transferFromPool [onlyGame] and creditFlip [onlyFlipCreditors] require);
     // a direct call to this module address would revert at those gates. The private
-    // caller-resolution helper (_resolvePlayer) travels with it (operatorApprovals
-    // is inherited from DegenerusGameStorage).
+    // caller-resolution helper (_resolvePlayer) lives here too — it gates claimBingo's
+    // sender-or-approved claim (operatorApprovals is inherited from DegenerusGameStorage).
     // -------------------------------------------------------------------------
 
     /// @notice Claim DGNRS affiliate rewards for the current level.
@@ -216,9 +220,12 @@ contract DegenerusGameBingoModule is DegenerusGameStorage {
     ///      denominator for score-proportional distribution.
     ///      Affiliate scores always route to level + 1 during gameplay, so at
     ///      transition time all scores for currLevel are frozen and immutable.
+    /// @dev Permissionless: the reward is deterministic (frozen score / fixed pot, no timing
+    ///      edge) and credits the affiliate, so any caller may settle any affiliate's claim.
     /// @param player Affiliate address to claim for (address(0) = msg.sender).
     function claimAffiliateDgnrs(address player) external {
-        player = _resolvePlayer(player);
+        // Permissionless: a settled claim only ever credits the affiliate, never the caller.
+        if (player == address(0)) player = msg.sender;
 
         uint24 currLevel = level;
         if (currLevel == 0) revert E();

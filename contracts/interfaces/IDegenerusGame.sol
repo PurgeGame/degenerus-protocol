@@ -384,10 +384,12 @@ interface IDegenerusGame {
 
     /// @notice Claim color-completion bingo: all 8 colors of one symbol on a level (v51.0).
     /// @dev Tiered reward (regular / symbol-first / quadrant-first); dispatches to the bingo module.
+    ///      Sender-or-approved: settles to `player` (address(0) = msg.sender, else operator-approved).
+    /// @param player Bingo owner to claim for (address(0) = msg.sender).
     /// @param level The level to claim on (uint24 storage-key width).
     /// @param symbol Symbol 0-31 (quadrant = symbol >> 3, symInQ = symbol & 7).
-    /// @param slots Per-color positions in traitBurnTicket[level][traitId] the caller occupies.
-    function claimBingo(uint24 level, uint8 symbol, uint32[8] calldata slots) external;
+    /// @param slots Per-color positions in traitBurnTicket[level][traitId] the owner occupies.
+    function claimBingo(address player, uint24 level, uint8 symbol, uint32[8] calldata slots) external;
 
     // -------------------------------------------------------------------------
     // Degenerette Tracking Views
@@ -473,9 +475,13 @@ interface IDegenerusGame {
     /// @param smitee The player receiving the curse stack.
     function smite(uint256 deityId, address smitee) external;
 
-    /// @notice Claim DGNRS affiliate rewards for the current level.
+    /// @notice Claim DGNRS affiliate rewards for the current level (single affiliate).
     /// @param player Affiliate address to claim for (address(0) = msg.sender).
     function claimAffiliateDgnrs(address player) external;
+
+    /// @notice Permissionless batch affiliate-DGNRS claim; a blank array claims the caller's own.
+    /// @param affiliates Affiliates to settle; empty = msg.sender only.
+    function claimAffiliateDgnrs(address[] calldata affiliates) external;
 
     /// @notice Quote a far-future salvage swap WITHOUT executing (read-only in effect;
     ///         declared non-view because the Game dispatches it via delegatecall).

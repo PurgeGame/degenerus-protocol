@@ -545,7 +545,7 @@ describe("DegenerusGame", function () {
     it("reverts at level 0 (needs level > 1)", async function () {
       const { game, alice } = await loadFixture(deployFullProtocol);
       await expect(
-        game.connect(alice).claimAffiliateDgnrs(ZERO_ADDRESS)
+        game.connect(alice)["claimAffiliateDgnrs(address)"](ZERO_ADDRESS)
       ).to.be.reverted;
     });
   });

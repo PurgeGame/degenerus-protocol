@@ -602,6 +602,9 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     /// @custom:reverts E When neither leg has a box queued at this index for the player.
     /// @custom:reverts RngNotReady When a queued leg's committed RNG word is not yet set.
     function openBox(address player, uint48 index) external {
+        // Permissionless: box rewards always credit the owner, so any caller may open any
+        // player's ready boxes (zero address = caller).
+        if (player == address(0)) player = msg.sender;
         // Probe the presale leg until the sweep has drained presale (free slot-0 read of the flag).
         if (!_openBoxBoth(player, index, !presaleDrained)) revert E();
     }
@@ -609,9 +612,8 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     /// @dev Both-leg open body for the manual `openBox` entrypoint (the sweep threads
     ///      pre-loaded values into `_openLootBoxLegWith` directly). Resolves the lootbox leg
     ///      (if queued) then, when `checkPresale`, the presale-box leg (if queued); each robust
-    ///      to being empty. The `player` is the ALREADY-resolved owner (callers bypass the
-    ///      game's _resolvePlayer wrapper, which would re-gate on the game contract as
-    ///      msg.sender). Runs in the game's storage context.
+    ///      to being empty. The `player` is the resolved owner — `openBox` maps the zero address
+    ///      to msg.sender, and the sweep passes a concrete owner. Runs in the game's storage context.
     /// @param player Box owner (already resolved).
     /// @param index The shared RNG index.
     /// @param checkPresale Whether to probe the presale-box leg — the caller passes `!presaleDrained`,
@@ -888,7 +890,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         uint256 evMultiplierBps = _lootboxEvMultiplierFromScore(uint256(activityScore));
         uint256 scaledAmount = _applyEvMultiplierWithCap(player, currentLevel, amount, evMultiplierBps);
 
-        // allowEthSpin=false: this is the recirc entry, called inside resolveBets' deferred
+        // allowEthSpin=false: this is the recirc entry, called inside resolveDegeneretteBets' deferred
         // ETH-pool flush window — an ETH-spin RMW here would be clobbered by that flush. Roll
         // 19 awards tickets instead. emitLootboxEvent threads from the caller (true for the box
         // ETH-spin recirc so its contents are itemized; false for the bet-win / decimator recirc).
@@ -1935,7 +1937,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     ///      Degenerette module; their sub-seeds are hash2-tagged off `seed` (no primary-
     ///      chunk bits consumed). The ETH-spin only fires on directly-opened boxes
     ///      (`allowEthSpin`); on recirc boxes roll 19 awards tickets instead, which keeps
-    ///      every box resolved inside `resolveBets` (the only ETH-pool memory-accumulator
+    ///      every box resolved inside `resolveDegeneretteBets` (the only ETH-pool memory-accumulator
     ///      context) free of an ETH-pool read-modify-write.
     /// @param player Player receiving the reward
     /// @param amount Amount for this roll (may be half of total for split lootboxes)
@@ -1947,7 +1949,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     /// @param activityScore Frozen activity-score bps threaded from the box commitment;
     ///        scales the spin ROI / EV exactly as a regular bet's snapshot does.
     /// @param allowEthSpin When false (recirc boxes), roll 19 awards tickets instead of an
-    ///        ETH spin — no ETH-pool RMW can race a deferred `resolveBets` pool flush.
+    ///        ETH spin — no ETH-pool RMW can race a deferred `resolveDegeneretteBets` pool flush.
     /// @return flipOut FLIP tokens to award
     /// @return ticketsOut Tickets to queue for future level
     /// @dev Bit budget (consumed from `seed`):

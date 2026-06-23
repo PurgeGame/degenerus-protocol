@@ -458,9 +458,9 @@ contract DegenerusGameDegeneretteModule is
         );
     }
 
-    /// @dev Cross-bet payout accumulator threaded through resolveBets → _resolveBet
+    /// @dev Cross-bet payout accumulator threaded through resolveDegeneretteBets → _resolveBet
     ///      → _resolveFullTicketBet → _distributePayout. Per-currency payouts are
-    ///      summed across the whole resolveBets call and flushed ONCE (additive, so
+    ///      summed across the whole resolveDegeneretteBets call and flushed ONCE (additive, so
     ///      byte-identical to the per-spin writes). The prize-pool decrement runs
     ///      against a running local that mirrors the live storage value spin-by-spin:
     ///      read once at first ETH win, decremented in memory per spin (so each
@@ -480,20 +480,25 @@ contract DegenerusGameDegeneretteModule is
     }
 
     /// @notice Resolves one or more pending bets for a player.
-    /// @dev Requires RNG word to be available. Processes wins by minting tokens or crediting ETH.
-    ///      ETH/FLIP/WWXRP payouts are accumulated across the whole call and flushed
-    ///      once per currency (one mint per currency, one claimable + claimablePool write,
-    ///      one prize-pool write); lootbox-share is summed per betId and resolved per bet.
-    /// @param player The player address (use zero address for msg.sender).
+    /// @dev Permissionless: payouts always credit the bet owner, so any caller may settle
+    ///      any player's bets. Requires RNG word to be available. Processes wins by minting
+    ///      tokens or crediting ETH. ETH/FLIP/WWXRP payouts are accumulated across the whole
+    ///      call and flushed once per currency (one mint per currency, one claimable +
+    ///      claimablePool write, one prize-pool write); lootbox-share is summed per betId and
+    ///      resolved per bet.
+    /// @param player Bet owner whose bets to settle (use zero address for msg.sender).
     /// @param betIds Array of bet IDs to resolve.
-    function resolveBets(address player, uint64[] calldata betIds) external {
+    function resolveDegeneretteBets(address player, uint64[] calldata betIds) external {
         // Once game-over liveness has drained the balance into claimable, resolving a
         // pending bet would credit ETH claimable out of the already-distributed
         // futurePrizePool residual, pushing claimablePool above the ETH balance
         // (unbacked obligation). Same guard as claimWhalePass: pending bets are settled
         // by the game-over drain, never resolved into claimable after it.
         if (_livenessTriggered()) revert E();
-        player = _resolvePlayer(player);
+        // Permissionless: a resolved bet only ever credits its owner, never the caller,
+        // so anyone may settle any player's pending bets (zero address = caller). Placement
+        // stays gated in _resolvePlayer because it debits the player's funds.
+        if (player == address(0)) player = msg.sender;
         ResolveAcc memory acc;
         uint256 len = betIds.length;
         for (uint256 i; i < len; ) {
@@ -690,7 +695,7 @@ contract DegenerusGameDegeneretteModule is
     }
 
     /// @dev Resolves a Full Ticket bet. Per-currency payouts accumulate into `acc`
-    ///      (flushed once cross-bet by resolveBets); lootbox-share is summed across
+    ///      (flushed once cross-bet by resolveDegeneretteBets); lootbox-share is summed across
     ///      this bet's spins and resolved ONCE here (one box per betId).
     function _resolveFullTicketBet(
         address player,
@@ -908,7 +913,7 @@ contract DegenerusGameDegeneretteModule is
     /// @param betAmount The per-ticket bet amount (uint128) — the tier-threshold reference.
     /// @param payout The total payout amount (uint256).
     /// @param acc Cross-bet accumulator: ETH claimable + the running prize-pool
-    ///        local accumulate here (flushed once by resolveBets); FLIP/WWXRP
+    ///        local accumulate here (flushed once by resolveDegeneretteBets); FLIP/WWXRP
     ///        mint totals accumulate here too.
     /// @return lootboxShare The ETH lootbox-share for this spin (0 for FLIP/WWXRP),
     ///         summed by the caller into the per-bet box.
@@ -941,7 +946,7 @@ contract DegenerusGameDegeneretteModule is
             // read mirrors the live storage value the per-spin path would have
             // read; subsequent spins decrement the running local in memory, so
             // each spin's cap/solvency sees the same shrinking pool storage would
-            // have held — byte-identical to per-spin. Flushed once by resolveBets.
+            // have held — byte-identical to per-spin. Flushed once by resolveDegeneretteBets.
             if (!acc.poolLoaded) {
                 acc.poolLoaded = true;
                 acc.poolFrozen = prizePoolFrozen;

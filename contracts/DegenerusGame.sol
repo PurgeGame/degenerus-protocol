@@ -310,14 +310,17 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     }
 
     /// @notice Claim color-completion bingo: all 8 colors of one symbol on a level.
-    /// @dev Dispatches to GAME_BINGO_MODULE via delegatecall; void return.
-    ///      Signature: claimBingo(uint24 level, uint8 symbol, uint32[8] slots) — the level to
-    ///      claim on (uint24 storage-key width), the symbol 0-31 (quadrant = symbol >> 3,
-    ///      symInQ = symbol & 7), and the per-color positions in traitBurnTicket[level][traitId]
-    ///      the caller occupies. The signature matches the module function exactly (identical
-    ///      selector), so the calldata forwards as-is — re-encoding here would cost contract-size
-    ///      headroom for no behavior change.
+    /// @dev Dispatches to GAME_BINGO_MODULE via delegatecall; void return. Sender-or-approved:
+    ///      the bingo settles to `player`, so the caller must be the owner or an approved
+    ///      operator (address(0) = msg.sender).
+    ///      Signature: claimBingo(address player, uint24 level, uint8 symbol, uint32[8] slots) —
+    ///      the owner to claim for, the level (uint24 storage-key width), the symbol 0-31
+    ///      (quadrant = symbol >> 3, symInQ = symbol & 7), and the per-color positions in
+    ///      traitBurnTicket[level][traitId] the owner occupies. The signature matches the module
+    ///      function exactly (identical selector), so the calldata forwards as-is — re-encoding
+    ///      here would cost contract-size headroom for no behavior change.
     function claimBingo(
+        address,
         uint24,
         uint8,
         uint32[8] calldata
@@ -793,20 +796,15 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
 
     /// @notice Open every box queued at an RNG index — the ETH-lootbox leg, the coin-presale-box
     ///         leg, or both (each robust to being empty). Permissionless: anyone may open another
-    ///         player's ready boxes (the economically-incentivized auto-open bounty path).
-    /// @param player Player that owns the box(es) (address(0) = msg.sender).
-    /// @param index The RNG index the box(es) queued at.
-    function openBox(address player, uint48 index) external {
-        player = _resolvePlayer(player);
+    ///         player's ready boxes (the economically-incentivized auto-open bounty path). Box
+    ///         rewards always credit the owner, so it needs no approval; address(0) = msg.sender.
+    /// @dev Signature: openBox(address player, uint48 index). The signature matches the module
+    ///      function exactly (identical selector), so the calldata forwards as-is — re-encoding
+    ///      here would cost contract-size headroom for no behavior change.
+    function openBox(address, uint48) external {
         (bool ok, bytes memory data) = ContractAddresses
             .GAME_LOOTBOX_MODULE
-            .delegatecall(
-                abi.encodeWithSelector(
-                    IDegenerusGameLootboxModule.openBox.selector,
-                    player,
-                    index
-                )
-            );
+            .delegatecall(msg.data);
         if (!ok) _revertDelegate(data);
     }
 
@@ -921,21 +919,18 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     }
 
     /// @notice Resolve multiple Degenerette bets once RNG is available.
-    /// @param player The betting player (address(0) = msg.sender).
-    /// @param betIds Bet ids for the player.
+    /// @dev Permissionless: settlement only credits the bet owner, so any caller may resolve
+    ///      any player's bets (no approval); address(0) resolves to msg.sender. Signature:
+    ///      resolveDegeneretteBets(address player, uint64[] betIds). The signature matches the
+    ///      module function exactly (identical selector), so the calldata forwards as-is —
+    ///      re-encoding here would cost contract-size headroom for no behavior change.
     function resolveDegeneretteBets(
-        address player,
-        uint64[] calldata betIds
+        address,
+        uint64[] calldata
     ) external {
         (bool ok, bytes memory data) = ContractAddresses
             .GAME_DEGENERETTE_MODULE
-            .delegatecall(
-                abi.encodeWithSelector(
-                    IDegenerusGameDegeneretteModule.resolveBets.selector,
-                    _resolvePlayer(player),
-                    betIds
-                )
-            );
+            .delegatecall(msg.data);
         if (!ok) _revertDelegate(data);
     }
 
@@ -1413,21 +1408,40 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         return _afkingOf(player);
     }
 
-    /// @notice Claim DGNRS affiliate rewards for the current level.
-    /// @dev Thin delegatecall dispatch stub into DegenerusGameBingoModule's
-    ///      claimAffiliateDgnrs body. The delegatecall MUST be preserved (not a direct
-    ///      module call): the body invokes dgnrs.transferFromPool (onlyGame) and
-    ///      coinflip.creditFlip (onlyFlipCreditors), both of which authorize on
-    ///      msg.sender == GAME — so the logic has to execute in the Game's context.
-    ///      Signature: claimAffiliateDgnrs(address player) — the affiliate address to claim for
-    ///      (address(0) = msg.sender). The signature matches the module function exactly
-    ///      (identical selector), so the calldata forwards as-is — re-encoding here would cost
-    ///      contract-size headroom for no behavior change.
+    /// @notice Claim DGNRS affiliate rewards for the current level (single affiliate).
+    /// @dev Permissionless: the reward is deterministic and credits the affiliate, so any
+    ///      caller may settle any affiliate's claim (address(0) = msg.sender). Thin delegatecall
+    ///      dispatch stub into DegenerusGameBingoModule's claimAffiliateDgnrs body. The
+    ///      delegatecall MUST be preserved (not a direct module call): the body invokes
+    ///      dgnrs.transferFromPool (onlyGame) and coinflip.creditFlip (onlyFlipCreditors), both
+    ///      of which authorize on msg.sender == GAME — so the logic has to execute in the Game's
+    ///      context. Signature: claimAffiliateDgnrs(address player). The signature matches the
+    ///      module function exactly (identical selector), so the calldata forwards as-is —
+    ///      re-encoding here would cost contract-size headroom for no behavior change.
     function claimAffiliateDgnrs(address) external {
         (bool ok, bytes memory data) = ContractAddresses
             .GAME_BINGO_MODULE
             .delegatecall(msg.data);
         if (!ok) _revertDelegate(data);
+    }
+
+    /// @notice Permissionless batch affiliate-DGNRS claim; a blank array claims the caller's own.
+    /// @dev Per-item isolated: an ineligible / already-claimed affiliate skips instead of
+    ///      reverting the batch (the single-affiliate entry above is the catchable boundary).
+    /// @param affiliates Affiliates to settle; empty = msg.sender only.
+    function claimAffiliateDgnrs(address[] calldata affiliates) external {
+        uint256 len = affiliates.length;
+        if (len == 0) {
+            // Blank array: settle the caller's own claim (propagates if ineligible).
+            this.claimAffiliateDgnrs(msg.sender);
+            return;
+        }
+        for (uint256 i; i < len; ) {
+            try this.claimAffiliateDgnrs(affiliates[i]) {} catch {}
+            unchecked {
+                ++i;
+            }
+        }
     }
 
     /*+======================================================================+
@@ -1475,12 +1489,17 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         uint256 successCount;
         uint256 totalResolved;
         uint256 i;
+        // Single-bet array reused each iteration: resolveDegeneretteBets is the
+        // catchable external boundary that gives per-item isolation (try/catch needs
+        // an external call), so no dedicated self-call wrapper is required.
+        uint64[] memory ids = new uint64[](1);
         do {
             // currency bits [42..43]: WWXRP is the most +EV currency, so it is excluded
             // from the >=3 reward gate to keep the faucet closed.
             uint8 currency = uint8((betPacked >> 42) & 0x3);
+            ids[0] = betIds[i];
             // Per-item isolation: a stale/reverting/not-ready bet skips, never bricks.
-            try this._degeneretteResolveBet(players[i], betIds[i]) {
+            try this.resolveDegeneretteBets(players[i], ids) {
                 // Any resolution counts toward the no-work gate; only non-WWXRP
                 // resolutions count toward the >=3 flat-reward gate.
                 unchecked {
@@ -1591,27 +1610,6 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
             opened = abi.decode(data, (uint256));
         }
         opened += openedAfking;
-    }
-
-    /// @notice Self-call wrapper resolving a single Degenerette bet (per-item isolation).
-    /// @dev onlySelf. Reuses the degenerette module's resolveBets machinery with the
-    ///      approval gate relaxed for the resolve path only (placement stays gated).
-    /// @param player Bet owner.
-    /// @param betId Bet id to resolve.
-    function _degeneretteResolveBet(address player, uint64 betId) external {
-        if (msg.sender != address(this)) revert E();
-        uint64[] memory ids = new uint64[](1);
-        ids[0] = betId;
-        (bool ok, bytes memory data) = ContractAddresses
-            .GAME_DEGENERETTE_MODULE
-            .delegatecall(
-                abi.encodeWithSelector(
-                    IDegenerusGameDegeneretteModule.resolveBets.selector,
-                    player,
-                    ids
-                )
-            );
-        if (!ok) _revertDelegate(data);
     }
 
     /*+======================================================================+

@@ -14,10 +14,10 @@ import {sDGNRS} from "../../contracts/sDGNRS.sol";
 ///         literal ~1 FLIP (`RESOLVE_FLAT_FLIP = 1e18`) paid ONCE per tx, gated at >= 3
 ///         successfully-resolved NON-WWXRP bets. It is NOT a per-item summed reward (the retired
 ///         v46/v48 premise). The per-item RESOLUTION math is UNCHANGED — it is produced by the
-///         self-call `_degeneretteResolveBet` -> delegatecall `GAME_DEGENERETTE_MODULE.resolveBets`,
-///         which the rename did not touch.
+///         catchable self-call `this.resolveDegeneretteBets` -> delegatecall
+///         `GAME_DEGENERETTE_MODULE.resolveDegeneretteBets`, which the rename did not touch.
 ///
-/// @notice This proof file establishes (DegenerusGame.sol:1595-1631, READ-ONLY anchors):
+/// @notice This proof file establishes (DegenerusGame.degeneretteResolve, READ-ONLY anchors):
 ///         Task 1 (re-peg / gate / WWXRP-exclusion):
 ///           (a) >= 3 non-WWXRP resolved -> exactly ONE creditFlip to the keeper, amount == 1e18
 ///               (the FLAT literal, asserted by COUNT == 1 AND amount == RESOLVE_FLAT_FLIP,
@@ -126,12 +126,8 @@ contract DegeneretteResolveRepeg is DeployProtocol {
         lrPacked = (lrPacked & ~uint256(0xFFFFFFFFFFFF)) | uint256(1);
         vm.store(address(game), bytes32(uint256(LOOTBOX_RNG_PACKED_SLOT)), bytes32(lrPacked));
 
-        // The keeper-router resolve (degeneretteResolve -> _degeneretteResolveBet -> delegatecall
-        // resolveBets) runs with msg.sender == address(game) inside resolveBets, so the bet owner
-        // must approve the game as their operator — the documented crank-resolve relaxation
-        // (placement stays gated; the AfKing subscription flow opts the player in the same way).
-        vm.prank(player);
-        game.setOperatorApproval(address(game), true);
+        // Resolution is permissionless: settlement only credits the bet owner, so the keeper
+        // resolves the player's bets with no operator approval (placement stays gated).
     }
 
     // =========================================================================
@@ -226,8 +222,8 @@ contract DegeneretteResolveRepeg is DeployProtocol {
     }
 
     /// @notice Case (c): 0 resolved -> reverts NoWork(). The single supplied bet's RNG word never
-    ///         lands, so `_degeneretteResolveBet` reverts (caught by the per-item try/catch),
-    ///         totalResolved stays 0, and the call reverts NoWork(). The AUTO-02 probe passes
+    ///         lands, so the `this.resolveDegeneretteBets` item call reverts (caught by the per-item
+    ///         try/catch), totalResolved stays 0, and the call reverts NoWork(). The AUTO-02 probe passes
     ///         (the slot is non-zero — the bet exists but is not yet resolvable).
     function testZeroResolvedRevertsNoWork() public {
         _seedFuturePrizePool(1_000_000 ether);
@@ -357,7 +353,7 @@ contract DegeneretteResolveRepeg is DeployProtocol {
     ///         `degeneretteResolve` (the >= 3 gate fires, so the flat bounty is credited to the
     ///         keeper) and prove the per-item RESOLUTION RESULTS are byte-identical to the
     ///         per-spin-derived expected sums. The resolution math is produced by the UNCHANGED
-    ///         `_degeneretteResolveBet -> delegatecall resolveBets`, so the FLIP/WWXRP mint deltas,
+    ///         `this.resolveDegeneretteBets -> delegatecall resolveDegeneretteBets`, so the FLIP/WWXRP mint deltas,
     ///         the ETH claimable delta, and the claimablePool delta must each equal the additive
     ///         per-spin baseline replayed from the contract's own `FullTicketResult` events — the
     ///         bounty wrapper provably does not touch the resolution payout. Non-vacuity: each
