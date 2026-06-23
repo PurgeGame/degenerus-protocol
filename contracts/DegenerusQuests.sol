@@ -442,6 +442,17 @@ contract DegenerusQuests is IDegenerusQuests {
         PlayerQuestState storage state = questPlayerState[player];
         _questSyncState(state, player, currentDay);
 
+        // While afking the manual streak is dormant and finalizeAfking overwrites it; writing it
+        // here would discard the bonus at finalize and orphan a century shield granted off the
+        // soon-overwritten value (which the high-water re-arm then lets a later re-climb re-grant).
+        // Route the bonus into the afking sub streak base, as the daily (+1) and level-quest
+        // secondary completions already do, so it is reconciled into the earned streak and the
+        // century shield is granted once off the reconciled value at finalize.
+        if (state.afkingActive) {
+            questGame.recordAfkingSecondary(player, amount);
+            return;
+        }
+
         uint16 prevStreak = state.streak;
         uint32 updated = uint32(prevStreak) + uint32(amount);
         uint16 newStreak = updated > type(uint16).max ? type(uint16).max : uint16(updated);
