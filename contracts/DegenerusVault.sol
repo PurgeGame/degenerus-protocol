@@ -500,10 +500,10 @@ contract DegenerusVault {
     ///      player = this vault), so an external trigger only ever harvests into the vault — it
     ///      cannot redirect the reward. Mirrors recoverAfkingFunding's permissionless harvest.
     /// @param level The level to claim on.
-    /// @param symbol Symbol 0-31 (quadrant = symbol >> 3, symInQ = symbol & 7).
+    /// @param bingoSymbol Symbol 0-31 (quadrant = bingoSymbol >> 3, symInQ = bingoSymbol & 7).
     /// @param slots Per-color positions in the holder arrays the vault occupies.
-    function gameClaimBingo(uint24 level, uint8 symbol, uint32[8] calldata slots) external {
-        gamePlayer.claimBingo(address(this), level, symbol, slots);
+    function gameClaimBingo(uint24 level, uint8 bingoSymbol, uint32[8] calldata slots) external {
+        gamePlayer.claimBingo(address(this), level, bingoSymbol, slots);
     }
 
     // ---------------------------------------------------------------------

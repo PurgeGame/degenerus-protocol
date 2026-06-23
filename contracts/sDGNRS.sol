@@ -488,10 +488,10 @@ contract sDGNRS {
     /// @notice Claim a color-completion bingo sDGNRS occupies (rewards credit this contract;
     ///         permissionless — the claim settles to sDGNRS, so a trigger only harvests inward).
     /// @param level The level to claim on.
-    /// @param symbol Symbol 0-31 (quadrant = symbol >> 3, symInQ = symbol & 7).
+    /// @param bingoSymbol Symbol 0-31 (quadrant = bingoSymbol >> 3, symInQ = bingoSymbol & 7).
     /// @param slots Per-color positions in the holder arrays sDGNRS occupies.
-    function gameClaimBingo(uint24 level, uint8 symbol, uint32[8] calldata slots) external {
-        game.claimBingo(address(this), level, symbol, slots);
+    function gameClaimBingo(uint24 level, uint8 bingoSymbol, uint32[8] calldata slots) external {
+        game.claimBingo(address(this), level, bingoSymbol, slots);
     }
 
     // =====================================================================
