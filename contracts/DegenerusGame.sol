@@ -886,35 +886,24 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     }
 
     /// @notice Place Full Ticket Degenerette bets (4 traits, match-based payouts).
-    /// @param player The betting player (address(0) = msg.sender).
-    /// @param currency Currency type (0=ETH, 1=FLIP, 2=unsupported, 3=WWXRP).
-    /// @param amountPerTicket Bet amount per ticket.
-    /// @param ticketCount Number of spins (1-10). Each spin resolves independently.
-    /// @param customTicket Custom packed traits.
-    /// @param heroQuadrant Hero quadrant (0-3) for payout boost, or 0xFF for no hero.
+    /// @dev The bet belongs to `player`; the player or an approved operator spends the player's
+    ///      funds, any other caller funds the bet itself (a permissionless gift — WWXRP excluded).
+    ///      The module resolves the player/funder split, so `player` forwards raw. Signature:
+    ///      placeDegeneretteBet(address player, uint8 currency, uint128 amountPerTicket,
+    ///      uint8 ticketCount, uint32 customTicket, uint8 heroQuadrant). The signature matches the
+    ///      module function exactly (identical selector), so the calldata forwards as-is —
+    ///      re-encoding here would cost contract-size headroom for no behavior change.
     function placeDegeneretteBet(
-        address player,
-        uint8 currency,
-        uint128 amountPerTicket,
-        uint8 ticketCount,
-        uint32 customTicket,
-        uint8 heroQuadrant
+        address,
+        uint8,
+        uint128,
+        uint8,
+        uint32,
+        uint8
     ) external payable {
         (bool ok, bytes memory data) = ContractAddresses
             .GAME_DEGENERETTE_MODULE
-            .delegatecall(
-                abi.encodeWithSelector(
-                    IDegenerusGameDegeneretteModule
-                        .placeDegeneretteBet
-                        .selector,
-                    _resolvePlayer(player),
-                    currency,
-                    amountPerTicket,
-                    ticketCount,
-                    customTicket,
-                    heroQuadrant
-                )
-            );
+            .delegatecall(msg.data);
         if (!ok) _revertDelegate(data);
     }
 

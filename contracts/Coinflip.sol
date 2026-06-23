@@ -249,21 +249,35 @@ contract Coinflip {
       |                    CORE COINFLIP FUNCTIONS                           |
       +======================================================================+*/
 
-    /// @notice Deposit FLIP into daily coinflip system.
-    /// @param player The depositor (address(0) or msg.sender for self-deposit, otherwise operator-approved).
+    /// @notice Deposit FLIP into the daily coinflip system.
+    /// @dev The deposit (stake, quest progress, winnings) belongs to `player`. The player or an
+    ///      approved operator funds it from the player's FLIP; any other caller funds it from their
+    ///      own FLIP — a permissionless gift (the caller pays, the player gets the stake).
+    /// @param player The stake owner — i.e. the player (address(0) or msg.sender for self-deposit).
     /// @param amount Amount of FLIP to deposit (min 100 FLIP, or 0 to settle pending claims).
     function depositCoinflip(address player, uint256 amount) external {
-        address caller = _resolvePlayer(player);
-        _depositCoinflip(caller, amount, caller == msg.sender);
+        if (player == address(0)) player = msg.sender;
+        address funder;
+        if (player == msg.sender || degenerusGame.isOperatorApproved(player, msg.sender)) {
+            // The player or an approved operator funds the deposit from the player's FLIP.
+            funder = player;
+        } else {
+            // Permissionless gift: the caller's FLIP funds the player's coinflip stake.
+            funder = msg.sender;
+        }
+        _depositCoinflip(player, funder, amount, player == msg.sender);
     }
 
-    /// @dev Internal deposit for daily coinflip mode.
+    /// @dev Internal deposit for daily coinflip mode. The stake (quest progress, winnings)
+    ///      belongs to `player`; the FLIP principal is burned from `funder` (== player for a
+    ///      self/approved deposit, == the caller for a permissionless gift).
     function _depositCoinflip(
-        address caller,
+        address player,
+        address funder,
         uint256 amount,
         bool directDeposit
     ) private {
-        PlayerCoinflipState storage state = playerState[caller];
+        PlayerCoinflipState storage state = playerState[player];
         if (amount != 0) {
             if (amount < MIN) revert AmountLTMin();
             // Block deposits during BAF jackpot resolution to prevent
@@ -271,7 +285,7 @@ contract Coinflip {
             if (_coinflipLockedDuringTransition()) revert CoinflipLocked();
         }
 
-        uint256 mintable = _claimCoinflipsInternal(caller, false);
+        uint256 mintable = _claimCoinflipsInternal(player, false);
         // storedAfter mirrors claimableStored through this frame; no call below can
         // mutate it (burnForCoinflip and handleFlip never reach a claimable writer).
         uint128 storedAfter = state.claimableStored;
@@ -281,26 +295,28 @@ contract Coinflip {
         }
         // claimableStored / lastClaim / carry are finalized here — nothing below mutates them
         // (_addDailyFlip writes only per-day stake). One emit covers both exits.
-        _emitClaimState(caller);
+        _emitClaimState(player);
 
         if (amount == 0) {
-            emit CoinflipDeposit(caller, 0);
+            emit CoinflipDeposit(player, 0);
             return;
         }
 
         // CEI PATTERN: Burn first so reentrancy into downstream module calls cannot spend the same balance twice.
-        flip.burnForCoinflip(caller, amount);
+        flip.burnForCoinflip(funder, amount);
 
-        // Quests can layer on bonus flip credit when the quest is active/completed.
+        // Quests can layer on bonus flip credit when the quest is active/completed. Quest
+        // progress is credited to the funder (the spender earns the quest); the resulting
+        // bonus flows into the player's stake below.
         IDegenerusQuests module = questModule;
         (
             uint256 reward,
             uint8 questType,
             uint32 streak,
             bool completed
-        ) = module.handleFlip(caller, amount);
+        ) = module.handleFlip(funder, amount);
         uint256 questReward = _questApplyReward(
-            caller,
+            funder,
             reward,
             questType,
             streak,
@@ -321,13 +337,13 @@ contract Coinflip {
         }
         // Direct deposits can set biggestFlip/bounty; indirect deposits cannot.
         _addDailyFlip(
-            caller,
+            player,
             creditedFlip,
             directDeposit ? amount : 0,
             directDeposit,
             directDeposit
         );
-        emit CoinflipDeposit(caller, amount);
+        emit CoinflipDeposit(player, amount);
     }
 
     /*+======================================================================+

@@ -159,20 +159,6 @@ contract DegenerusGameDegeneretteModule is
         }
     }
 
-    /// @dev Resolves the player address, defaulting to msg.sender if zero address is passed.
-    ///      Validates operator approval if player differs from msg.sender.
-    /// @param player The player address (or zero for msg.sender).
-    /// @return resolved The resolved player address.
-    function _resolvePlayer(
-        address player
-    ) private view returns (address resolved) {
-        if (player == address(0)) return msg.sender;
-        if (player != msg.sender) {
-            if (!operatorApprovals[player][msg.sender]) revert NotApproved();
-        }
-        return player;
-    }
-
     // -------------------------------------------------------------------------
     // External Contract References (compile-time constants)
     // -------------------------------------------------------------------------
@@ -434,7 +420,11 @@ contract DegenerusGameDegeneretteModule is
     /// @dev Single chosen-attribute ticket only (no random).
     ///      ticketCount is treated as "spin count": each spin resolves independently but shares
     ///      the same lootbox RNG index/word (derived per spin).
-    /// @param player The player address (use zero address for msg.sender).
+    ///      The bet always belongs to `player` (zero address = caller). Funding source: the
+    ///      player or an approved operator spends the player's funds; any other caller funds the
+    ///      bet itself — a permissionless gift (the caller pays, the player receives the bet and
+    ///      its winnings). WWXRP is excluded from gifting (player-or-approved only).
+    /// @param player The player the bet belongs to (use zero address for msg.sender).
     /// @param currency Currency type (0=ETH, 1=FLIP, 2=unsupported, 3=WWXRP).
     /// @param amountPerTicket Bet amount per ticket.
     /// @param ticketCount Number of spins (per-currency cap: ETH 25 / FLIP 15 / WWXRP 5).
@@ -448,8 +438,20 @@ contract DegenerusGameDegeneretteModule is
         uint32 customTicket,
         uint8 heroQuadrant
     ) external payable {
+        if (player == address(0)) player = msg.sender;
+        address funder;
+        if (player == msg.sender || operatorApprovals[player][msg.sender]) {
+            // The player or an approved operator spends the player's own funds.
+            funder = player;
+        } else {
+            // Permissionless gift: the caller funds, the player receives the bet. WWXRP is
+            // scarce/whale-pass-grade, so its bets stay player-or-approved only.
+            if (currency == CURRENCY_WWXRP) revert NotApproved();
+            funder = msg.sender;
+        }
         _placeDegeneretteBet(
-            _resolvePlayer(player),
+            player,
+            funder,
             currency,
             amountPerTicket,
             ticketCount,
@@ -495,9 +497,10 @@ contract DegenerusGameDegeneretteModule is
         // (unbacked obligation). Same guard as claimWhalePass: pending bets are settled
         // by the game-over drain, never resolved into claimable after it.
         if (_livenessTriggered()) revert E();
-        // Permissionless: a resolved bet only ever credits its owner, never the caller,
-        // so anyone may settle any player's pending bets (zero address = caller). Placement
-        // stays gated in _resolvePlayer because it debits the player's funds.
+        // Permissionless: a resolved bet only ever credits the player who placed it, never the
+        // caller, so anyone may settle any player's pending bets (zero address = caller).
+        // Placement debits the funder (the player/approved operator, else the caller for a
+        // gift), so it carries its own funding gate.
         if (player == address(0)) player = msg.sender;
         ResolveAcc memory acc;
         uint256 len = betIds.length;
@@ -528,9 +531,12 @@ contract DegenerusGameDegeneretteModule is
     // Internal Bet Logic
     // -------------------------------------------------------------------------
 
-    /// @dev Internal implementation for placing Full Ticket bets.
+    /// @dev Internal implementation for placing Full Ticket bets. The bet (and its quest
+    ///      progress / winnings) belongs to `player`; the funds are debited from `funder`
+    ///      (== player for a self/approved bet, == the caller for a permissionless gift).
     function _placeDegeneretteBet(
         address player,
+        address funder,
         uint8 currency,
         uint128 amountPerTicket,
         uint8 ticketCount,
@@ -548,12 +554,13 @@ contract DegenerusGameDegeneretteModule is
             lvl
         );
 
-        _collectBetFunds(player, currency, totalBet, msg.value);
+        _collectBetFunds(funder, currency, totalBet, msg.value);
 
-        // Quest progress for Degenerette bets (slot 1 only).
+        // Quest progress for Degenerette bets (slot 1 only) — credited to the funder (the
+        // spender earns the quest, e.g. a gifter advancing their own streak).
         if (currency == CURRENCY_ETH || currency == CURRENCY_FLIP) {
             quests.handleDegenerette(
-                player,
+                funder,
                 totalBet,
                 currency == CURRENCY_ETH,
                 currency == CURRENCY_ETH
