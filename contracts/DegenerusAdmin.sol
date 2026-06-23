@@ -482,6 +482,27 @@ contract DegenerusAdmin {
         );
     }
 
+    /// @notice Accept native and best-effort forward it to the vault; never reverts.
+    /// @dev VRFCoordinatorV2_5.cancelSubscription refunds the owner with an unconditional
+    ///      `to.call{value: nativeBalance}("")` even when nativeBalance is 0 — a call a non-payable
+    ///      owner cannot survive, which reverts the cancel and rolls back the LINK refund that
+    ///      precedes it. This hook must therefore NEVER revert: the zero path (a LINK-funded sub
+    ///      refunds 0 native) is a pure no-op that lets the cancel / coordinator-swap migration
+    ///      complete (the LINK leg is the meaningful refund), and any non-zero native — a stray
+    ///      send or a native-funded sub's refund — is forwarded to the vault so it is not stranded.
+    ///      The forward is fire-and-forget: its success flag is discarded so a forward failure can
+    ///      never roll back the cancel refund.
+    receive() external payable {
+        if (msg.value != 0) {
+            address vault = ContractAddresses.VAULT;
+            uint256 amount = msg.value;
+            // pop() discards the call's success flag so this hook can never revert.
+            assembly ("memory-safe") {
+                pop(call(gas(), vault, amount, 0, 0, 0, 0))
+            }
+        }
+    }
+
     // =========================================================================
     // PRICE FEED MANAGEMENT
     // =========================================================================
