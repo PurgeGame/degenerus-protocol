@@ -248,6 +248,9 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
         uint256 freshPaid = msg.value > totalPrice ? totalPrice : msg.value;
         _creditAfkingValue(msg.sender, msg.value - freshPaid);
         _settleShortfall(buyer, totalPrice - freshPaid, true);
+        // Whale-bundle ETH-in (any funding source): the full price routes to the pools; the
+        // bundled lootbox is a pool-funded reward, so its LootBoxBuy must NOT be re-counted.
+        emit EthInRecorded(buyer, totalPrice, ETH_IN_WHALE_BUNDLE);
         // Coin-presale-box credit accrual: 25% of the committed ETH while presale open.
         if (!presaleOver) {
             presaleBoxCredit[buyer] += totalPrice / 4;
@@ -476,6 +479,9 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
         uint256 freshPaid = msg.value > totalPrice ? totalPrice : msg.value;
         _creditAfkingValue(msg.sender, msg.value - freshPaid);
         _settleShortfall(buyer, totalPrice - freshPaid, true);
+        // Lazy-pass ETH-in (any funding source): the full price routes to the pools; the
+        // bundled lootbox is a pool-funded reward, so its LootBoxBuy must NOT be re-counted.
+        emit EthInRecorded(buyer, totalPrice, ETH_IN_LAZY_PASS);
         // Coin-presale-box credit accrual: 25% of the price paid while presale open.
         if (!presaleOver) {
             presaleBoxCredit[buyer] += totalPrice / 4;

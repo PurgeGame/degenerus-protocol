@@ -196,6 +196,9 @@ contract DegenerusGameFoilPackModule is
             claimablePool -= uint128(remaining);
         }
 
+        // Foil-premium ETH-in (any funding source): the whole foil cost routes to the pools.
+        emit EthInRecorded(buyer, cost, ETH_IN_FOIL_PREMIUM);
+
         // Pool fork: 25% future / 75% next (inverse of the 90/10 ticket split), applied to
         // the foil cost specifically (the ticket/lootbox legs keep their own splits). The
         // frozen/unfrozen routing branch is reused verbatim; only the bps differ.

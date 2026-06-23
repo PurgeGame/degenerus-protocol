@@ -1360,6 +1360,10 @@ contract DegenerusGameMintModule is
         uint256 totalCost = ticketCost + lootBoxAmount;
         if (totalCost == 0) revert E();
 
+        // Ticket-leg ETH-in (any funding source). The lootbox leg is carried by LootBoxBuy, so
+        // the two events stay disjoint for off-chain ETH-in totals.
+        if (ticketCost != 0) emit EthInRecorded(buyer, ticketCost, ETH_IN_MINT_TICKET);
+
         uint256 initialClaimable = _claimableOf(buyer);
 
         // ethValue is the per-slice fresh-ETH portion (== msg.value for single-tx callers; the
