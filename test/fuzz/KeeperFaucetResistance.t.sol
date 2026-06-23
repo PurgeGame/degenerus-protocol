@@ -690,7 +690,7 @@ contract KeeperFaucetResistance is DeployProtocol {
         return uint64(uint256(vm.load(address(game), slot)));
     }
 
-    /// @dev The REAL spin-0 result ticket for (index, word), matching _resolveFullTicketBet:
+    /// @dev The REAL spin-0 result ticket for (index, word), matching _resolveBet:
     ///      packedTraitsDegenerette(keccak256(abi.encodePacked(word, uint32(index), 'Q'))).
     function _resultTicketFor(uint48 index, uint256 word) internal pure returns (uint32) {
         uint256 resultSeed = uint256(

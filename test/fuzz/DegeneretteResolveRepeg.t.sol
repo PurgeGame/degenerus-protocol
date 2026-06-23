@@ -233,7 +233,7 @@ contract DegeneretteResolveRepeg is DeployProtocol {
         uint32 ticket = _winningTicketFor(index, word);
 
         // Place a real bet (slot non-zero so the AUTO-02 probe passes) but DO NOT inject the
-        // RNG word — _resolveFullTicketBet reverts with E() (word == 0), caught per-item -> 0 resolved.
+        // RNG word — _resolveBet reverts RngNotReady (word == 0), caught per-item -> 0 resolved.
         uint64 b0 = _placeBet(CURRENCY_ETH, 0.01 ether, 1, ticket);
         assertGt(_betSlot(player, b0), 0, "precondition: bet slot non-zero (probe passes)");
 
@@ -699,7 +699,7 @@ contract DegeneretteResolveRepeg is DeployProtocol {
         }
     }
 
-    /// @dev Reproduce the on-chain per-spin result ticket (_resolveFullTicketBet derivation).
+    /// @dev Reproduce the on-chain per-spin result ticket (_resolveBet derivation).
     function _resultTicketForSpin(uint48 index, uint256 word, uint8 spinIdx)
         internal
         pure

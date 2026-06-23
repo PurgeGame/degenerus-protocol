@@ -226,7 +226,7 @@ contract DegeneretteHandler is Test {
         }
     }
 
-    /// @dev Make a placed bet resolvable: _resolveFullTicketBet reverts (RngNotReady) unless
+    /// @dev Make a placed bet resolvable: _resolveBet reverts (RngNotReady) unless
     ///      lootboxRngWordByIndex[betIndex] is non-zero. Fill the active index's word with a
     ///      deterministic non-zero entropy so resolveDegeneretteBets executes its live payout +
     ///      claimable-credit path (exercising the post-resolve solvency leg too).

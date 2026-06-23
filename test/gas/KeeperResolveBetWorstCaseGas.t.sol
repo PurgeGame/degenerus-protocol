@@ -577,7 +577,7 @@ contract KeeperResolveBetWorstCaseGas is DeployProtocol {
         }
     }
 
-    /// @dev Reproduce the on-chain per-spin result ticket derivation (_resolveFullTicketBet:596-612):
+    /// @dev Reproduce the on-chain per-spin result ticket derivation (_resolveBet):
     ///      spin 0 uses the short preimage (no spinIdx), spins 1+ mix in spinIdx.
     function _resultTicketForSpin(uint48 index, uint256 word, uint8 spinIdx)
         internal

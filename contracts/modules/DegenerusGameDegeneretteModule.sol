@@ -461,7 +461,7 @@ contract DegenerusGameDegeneretteModule is
     }
 
     /// @dev Cross-bet payout accumulator threaded through resolveDegeneretteBets → _resolveBet
-    ///      → _resolveFullTicketBet → _distributePayout. Per-currency payouts are
+    ///      → _distributePayout. Per-currency payouts are
     ///      summed across the whole resolveDegeneretteBets call and flushed ONCE (additive, so
     ///      byte-identical to the per-spin writes). The prize-pool decrement runs
     ///      against a running local that mirrors the live storage value spin-by-spin:
@@ -469,7 +469,7 @@ contract DegenerusGameDegeneretteModule is
     ///      spin's ETH_WIN_CAP_BPS cap sees the same shrinking pool it would have
     ///      read from storage today), written back once at flush. Lootbox-share is
     ///      NOT accumulated here — it is summed PER betId and resolved once per bet
-    ///      inside _resolveFullTicketBet (resolution-batch-invariant).
+    ///      inside _resolveBet (resolution-batch-invariant).
     struct ResolveAcc {
         uint256 ethClaimable; // summed ETH claimable across all bets
         uint256 flipMint; // summed FLIP mint across all bets
@@ -505,7 +505,10 @@ contract DegenerusGameDegeneretteModule is
         ResolveAcc memory acc;
         uint256 len = betIds.length;
         for (uint256 i; i < len; ) {
-            _resolveBet(player, betIds[i], acc);
+            // First bet (i==0) fail-fasts on an already-resolved/not-ready bet so a racing
+            // duplicate settle bails cheaply; later bets skip instead, so an en-masse settle
+            // tolerates stale/not-ready ids mixed into the batch.
+            _resolveBet(player, betIds[i], acc, i == 0);
             unchecked {
                 ++i;
             }
@@ -689,27 +692,25 @@ contract DegenerusGameDegeneretteModule is
         }
     }
 
-    /// @dev Resolves a bet (determines mode from packed data).
+    /// @dev Resolves a single bet: decodes the packed bet and materializes its spins against
+    ///      the lootbox RNG word. Per-currency payouts accumulate into `acc` (flushed once
+    ///      cross-bet by resolveDegeneretteBets); lootbox-share is summed across this bet's
+    ///      spins and resolved ONCE here (one box per betId). `strict` is set for the first bet
+    ///      of a batch: it reverts on any non-resolvable bet (already-resolved or RNG-not-ready)
+    ///      so a racing duplicate settle bails cheaply; a trailing (non-strict) bet skips those
+    ///      cases so one stale/not-ready id can't brick the rest of the batch.
     function _resolveBet(
         address player,
         uint64 betId,
-        ResolveAcc memory acc
+        ResolveAcc memory acc,
+        bool strict
     ) private {
         uint256 packed = degeneretteBets[player][betId];
-        if (packed == 0) revert InvalidBet();
+        if (packed == 0) {
+            if (strict) revert InvalidBet();
+            return;
+        }
 
-        _resolveFullTicketBet(player, betId, packed, acc);
-    }
-
-    /// @dev Resolves a Full Ticket bet. Per-currency payouts accumulate into `acc`
-    ///      (flushed once cross-bet by resolveDegeneretteBets); lootbox-share is summed across
-    ///      this bet's spins and resolved ONCE here (one box per betId).
-    function _resolveFullTicketBet(
-        address player,
-        uint64 betId,
-        uint256 packed,
-        ResolveAcc memory acc
-    ) private {
         // Decode packed bet
         uint32 customTicket = uint32((packed >> FT_TICKET_SHIFT) & MASK_32);
         uint8 ticketCount = uint8((packed >> FT_COUNT_SHIFT) & MASK_8);
@@ -722,7 +723,13 @@ contract DegenerusGameDegeneretteModule is
         uint8 heroQuadrant = uint8((packed >> (FT_HERO_SHIFT + 1)) & MASK_2);
 
         uint256 rngWord = lootboxRngWordByIndex[index];
-        if (rngWord == 0) revert RngNotReady();
+        if (rngWord == 0) {
+            // RNG not yet fulfilled: the first bet reverts RngNotReady; a later bet skips
+            // and stays pending for a future settle (same first-strict tolerance as the
+            // packed==0 gate). Nothing is mutated above this point, so a skip is a clean no-op.
+            if (strict) revert RngNotReady();
+            return;
+        }
 
         delete degeneretteBets[player][betId];
 
@@ -911,7 +918,7 @@ contract DegenerusGameDegeneretteModule is
     ///      (pending future debit with revert-on-insufficient).
     ///
     ///      CURRENCY_FLIP accumulates toward the coin mint (the per-bet survival
-    ///      flip in _resolveFullTicketBet then doubles or zeroes the bet's total
+    ///      flip in _resolveBet then doubles or zeroes the bet's total
     ///      before the flush); CURRENCY_WWXRP pays directly via the wwxrp mint.
     ///      Neither honors the 3-tier split (which applies only to the
     ///      lootbox-convertible ETH path).

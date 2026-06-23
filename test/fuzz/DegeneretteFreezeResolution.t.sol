@@ -890,7 +890,7 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
         return _resultTicketForSpin(index, word, 0);
     }
 
-    /// @dev Reproduce the on-chain per-spin result ticket (_resolveFullTicketBet:654-670).
+    /// @dev Reproduce the on-chain per-spin result ticket (_resolveBet).
     function _resultTicketForSpin(uint48 index, uint256 word, uint8 spinIdx)
         internal
         pure
@@ -1194,19 +1194,19 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
 
     /// @notice Find a (customTicket, rngWord) pair that guarantees >= 2 matches.
     /// @dev Tries RNG words in sequence, computing the result ticket for spin 0
-    ///      (index 1) using the same derivation as _resolveFullTicketBet. Returns
+    ///      (index 1) using the same derivation as _resolveBet. Returns
     ///      when a combination with >= 2 matches is found.
     ///
     ///      v47 repair: the spin-0 result ticket is derived via
     ///      `DegenerusTraitUtils.packedTraitsDegenerette` (the Degenerette-specific
-    ///      derivation _resolveFullTicketBet:668 uses) — NOT `packedTraitsFromSeed`
+    ///      derivation _resolveBet uses) — NOT `packedTraitsFromSeed`
     ///      (the mint derivation). Using the wrong derivation produced a "winning"
     ///      ticket that the on-chain path never actually matched.
     function _findWinningCombo(uint48 index) internal pure returns (uint32 customTicket, uint256 rngWord) {
         for (uint256 attempt; attempt < 100; attempt++) {
             rngWord = uint256(keccak256(abi.encode("freeze_test_rng", attempt)));
 
-            // Replicate the result seed derivation from _resolveFullTicketBet (spin 0)
+            // Replicate the result seed derivation from _resolveBet (spin 0)
             // Contract uses uint32 index in encodePacked (v24.1 change)
             uint256 resultSeed = uint256(keccak256(abi.encodePacked(rngWord, uint32(index), QUICK_PLAY_SALT)));
             uint32 resultTicket = DegenerusTraitUtils.packedTraitsDegenerette(resultSeed);
@@ -1230,5 +1230,117 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
             if (((aQuad >> 3) & 7) == ((bQuad >> 3) & 7)) matches++; // color
             if ((aQuad & 7) == (bQuad & 7)) matches++;                // symbol
         }
+    }
+
+    // =========================================================================
+    // Batch-resolve tolerance: the first bet is strict (any failure aborts the
+    // whole tx, so a racing duplicate-clicker settle bails cheaply); trailing bets
+    // skip an already-resolved or not-ready id so one bad id can't brick an
+    // en-masse settle.
+    // =========================================================================
+
+    /// @dev Probe (first) bet already resolved by a competing tx -> the whole call
+    ///      reverts InvalidBet, so a duplicate clicker wastes only the probe SLOAD.
+    function testResolveBatchFirstBetAlreadyResolvedReverts() public {
+        _seedFuturePrizePool(50 ether);
+        (uint32 ticket, uint256 word) = _findWinningCombo(1);
+        uint64 b1 = _placeBet(CURRENCY_ETH, 0.01 ether, 1, ticket);
+        uint64 b2 = _placeBet(CURRENCY_ETH, 0.01 ether, 1, ticket);
+        _injectLootboxRngWord(1, word);
+
+        uint64[] memory batch = new uint64[](2);
+        batch[0] = b1;
+        batch[1] = b2;
+
+        // First clicker settles the whole batch.
+        vm.prank(player);
+        game.resolveDegeneretteBets(address(0), batch);
+        assertEq(_betPacked(player, b1), 0, "b1 resolved by first clicker");
+        assertEq(_betPacked(player, b2), 0, "b2 resolved by first clicker");
+
+        // Second clicker re-sends the SAME batch: the probe (b1) is already resolved.
+        vm.prank(player);
+        vm.expectRevert(bytes4(0xaa822249)); // InvalidBet()
+        game.resolveDegeneretteBets(address(0), batch);
+    }
+
+    /// @dev A stale (already-resolved) id in the TAIL is skipped, never reverts — the
+    ///      surrounding valid bets still resolve.
+    function testResolveBatchTrailingAlreadyResolvedSkipped() public {
+        _seedFuturePrizePool(50 ether);
+        (uint32 ticket, uint256 word) = _findWinningCombo(1);
+        uint64 b1 = _placeBet(CURRENCY_ETH, 0.01 ether, 1, ticket);
+        uint64 b2 = _placeBet(CURRENCY_ETH, 0.01 ether, 1, ticket);
+        uint64 b3 = _placeBet(CURRENCY_ETH, 0.01 ether, 1, ticket);
+        _injectLootboxRngWord(1, word);
+
+        // Pre-resolve the middle bet so it is stale (packed == 0) when the batch runs.
+        uint64[] memory mid = new uint64[](1);
+        mid[0] = b2;
+        vm.prank(player);
+        game.resolveDegeneretteBets(address(0), mid);
+        assertEq(_betPacked(player, b2), 0, "b2 pre-resolved");
+
+        // Batch [b1(probe), b2(stale), b3]: probe resolves, stale trailing skips, b3 resolves.
+        uint64[] memory batch = new uint64[](3);
+        batch[0] = b1;
+        batch[1] = b2;
+        batch[2] = b3;
+        vm.prank(player);
+        game.resolveDegeneretteBets(address(0), batch); // must not revert
+        assertEq(_betPacked(player, b1), 0, "b1 resolved");
+        assertEq(_betPacked(player, b3), 0, "b3 resolved despite stale trailing b2");
+    }
+
+    /// @dev Probe not-ready (RNG unfulfilled) aborts the tx; a not-ready id in the TAIL
+    ///      is skipped and stays pending for a later settle.
+    function testResolveBatchRngNotReadyFirstRevertsTrailingSkips() public {
+        _seedFuturePrizePool(50 ether);
+        (uint32 ticket, uint256 word) = _findWinningCombo(1);
+
+        // b1 at index 1 (word injected below -> ready); b2 at index 2 (word never
+        // injected -> not ready).
+        uint64 b1 = _placeBet(CURRENCY_ETH, 0.01 ether, 1, ticket);
+        _setLootboxIndex(2);
+        uint64 b2 = _placeBet(CURRENCY_ETH, 0.01 ether, 1, ticket);
+        _injectLootboxRngWord(1, word);
+
+        // Probe not ready: [b2(not ready), b1] -> fast revert (any probe failure aborts).
+        uint64[] memory bad = new uint64[](2);
+        bad[0] = b2;
+        bad[1] = b1;
+        vm.prank(player);
+        vm.expectRevert(bytes4(0xbb3e844f)); // RngNotReady()
+        game.resolveDegeneretteBets(address(0), bad);
+
+        // Probe ready, trailing not ready: [b1, b2] -> b1 resolves, b2 skips and stays pending.
+        uint64[] memory ok = new uint64[](2);
+        ok[0] = b1;
+        ok[1] = b2;
+        vm.prank(player);
+        game.resolveDegeneretteBets(address(0), ok); // must not revert
+        assertEq(_betPacked(player, b1), 0, "b1 resolved");
+        assertGt(_betPacked(player, b2), 0, "b2 still pending (trailing not-ready skipped)");
+    }
+
+    /// @dev Read the raw packed degenerette bet slot (0 == resolved/nonexistent).
+    function _betPacked(address who, uint64 betId) internal view returns (uint256) {
+        bytes32 inner = keccak256(abi.encode(who, uint256(DEGENERETTE_BETS_SLOT)));
+        bytes32 slot = keccak256(abi.encode(uint256(betId), inner));
+        return uint256(vm.load(address(game), slot));
+    }
+
+    /// @dev Set the live lootboxRngIndex (low 48 bits of lootboxRngPacked) so a bet can
+    ///      be placed against a different RNG index than an earlier one.
+    function _setLootboxIndex(uint48 idx) internal {
+        uint256 packed = uint256(
+            vm.load(address(game), bytes32(uint256(LOOTBOX_RNG_PACKED_SLOT)))
+        );
+        packed = (packed & ~uint256(0xFFFFFFFFFFFF)) | uint256(idx);
+        vm.store(
+            address(game),
+            bytes32(uint256(LOOTBOX_RNG_PACKED_SLOT)),
+            bytes32(packed)
+        );
     }
 }
