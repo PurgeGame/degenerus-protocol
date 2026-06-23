@@ -989,17 +989,6 @@ abstract contract DegenerusGameStorage {
         emit AfkingFunded(player, weiAmount);
     }
 
-    /// @notice Emitted when ETH (fresh, or recycled claimable/afking) is converted into a game
-    ///         asset on a path no other ETH-bearing event covers — disjoint from LootBoxBuy,
-    ///         BetPlaced and DeityPassPurchased so an off-chain ETH-in total is their sum.
-    ///         kind: 1 = mint ticket leg, 2 = lazy pass, 3 = whale bundle, 4 = foil premium.
-    event EthInRecorded(address indexed player, uint256 weiAmount, uint8 kind);
-
-    uint8 internal constant ETH_IN_MINT_TICKET = 1;
-    uint8 internal constant ETH_IN_LAZY_PASS = 2;
-    uint8 internal constant ETH_IN_WHALE_BUNDLE = 3;
-    uint8 internal constant ETH_IN_FOIL_PREMIUM = 4;
-
     // =========================================================================
     // Loot Box State & Presale Toggle
     // =========================================================================

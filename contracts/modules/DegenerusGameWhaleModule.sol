@@ -56,6 +56,14 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
         bool presale
     );
 
+    /// @notice weiIn = whale-pass ETH-in (any funding source); the pass's reward LootBoxBuy is
+    ///         excluded from off-chain ETH-in by tx-correlation with this event.
+    event WhalePassPurchased(address indexed buyer, uint256 quantity, uint256 weiIn);
+
+    /// @notice weiIn = lazy-pass ETH-in (any funding source); the pass's reward LootBoxBuy is
+    ///         excluded from off-chain ETH-in by tx-correlation with this event.
+    event LazyPassPurchased(address indexed buyer, uint24 startLevel, uint256 weiIn);
+
     /// @notice Emitted when whale pass rewards are claimed.
     /// @param player Player receiving tickets.
     /// @param caller Address that initiated the claim.
@@ -169,10 +177,6 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
         address buyer,
         uint256 quantity
     ) external payable {
-        _purchaseWhaleBundle(buyer, quantity);
-    }
-
-    function _purchaseWhaleBundle(address buyer, uint256 quantity) private {
         if (_livenessTriggered()) revert E();
         uint24 passLevel = level + 1;
 
@@ -248,9 +252,9 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
         uint256 freshPaid = msg.value > totalPrice ? totalPrice : msg.value;
         _creditAfkingValue(msg.sender, msg.value - freshPaid);
         _settleShortfall(buyer, totalPrice - freshPaid, true);
-        // Whale-bundle ETH-in (any funding source): the full price routes to the pools; the
-        // bundled lootbox is a pool-funded reward, so its LootBoxBuy must NOT be re-counted.
-        emit EthInRecorded(buyer, totalPrice, ETH_IN_WHALE_BUNDLE);
+        // Whale-pass ETH-in (any funding source): the full price routes to the pools; the
+        // pass lootbox is a pool-funded reward, so its LootBoxBuy must NOT be re-counted.
+        emit WhalePassPurchased(buyer, quantity, totalPrice);
         // Coin-presale-box credit accrual: 25% of the committed ETH while presale open.
         if (!presaleOver) {
             presaleBoxCredit[buyer] += totalPrice / 4;
@@ -480,8 +484,8 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
         _creditAfkingValue(msg.sender, msg.value - freshPaid);
         _settleShortfall(buyer, totalPrice - freshPaid, true);
         // Lazy-pass ETH-in (any funding source): the full price routes to the pools; the
-        // bundled lootbox is a pool-funded reward, so its LootBoxBuy must NOT be re-counted.
-        emit EthInRecorded(buyer, totalPrice, ETH_IN_LAZY_PASS);
+        // pass lootbox is a pool-funded reward, so its LootBoxBuy must NOT be re-counted.
+        emit LazyPassPurchased(buyer, startLevel, totalPrice);
         // Coin-presale-box credit accrual: 25% of the price paid while presale open.
         if (!presaleOver) {
             presaleBoxCredit[buyer] += totalPrice / 4;

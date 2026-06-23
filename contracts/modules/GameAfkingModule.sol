@@ -157,7 +157,7 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
     ///         afking-buy delivery signal (covers VAULT / sDGNRS and every real afker).
     /// @param player The subscriber the afking buy was delivered to.
     /// @param day The delivered afking day (the funded-day high-water the delivery covers).
-    event AfkingDelivered(address indexed player, uint24 day);
+    event AfkingDelivered(address indexed player, uint24 day, uint256 weiIn);
 
     /*------------------------------------------------------------------
                               Constants
@@ -946,7 +946,12 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
             if (isTicket) _routeAfkingPoolEth(0, cost);
             else _routeAfkingPoolEth(cost, 0);
         }
-        emit AfkingDelivered(player, processDay);
+        // weiIn = afking auto-buy ETH-in (afking principal + reinvested claimable), folded into
+        // AfkingDelivered so the delivery marker doubles as the ETH-in record with no extra log.
+        // The cover-buy box reports weiIn 0 — its spend is carried by LootBoxBuy — keeping the
+        // off-chain ETH-in total free of double counting.
+        uint256 weiIn = (isTicket || !coverBuy) ? ethValue + claimableUse : 0;
+        emit AfkingDelivered(player, processDay, weiIn);
     }
 
     /// @dev Write a subscribe-time grounding lootbox as a full INDEXED box on the live lootbox
@@ -1776,9 +1781,9 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
 
     /// @notice QUESTS-only: floor a live afking sub's streak base to `floor`, so a foil-pack
     ///         purchase's quest-streak guarantee reaches a mid-run afker (whose reward streak is
-    ///         the sub base plus funded delivered days, not the manual quest streak that
-    ///         foilStreakBoost floors). The funded days continue to add on top of the floored
-    ///         base.
+    ///         the sub base plus funded delivered days, not the manual quest streak that the
+    ///         foil-pack streak floor raises). The funded days continue to add on top of the
+    ///         floored base.
     /// @dev No-op unless `player` has a live afking run (`afkingStartDay != 0`); otherwise raises
     ///      the Sub streak base to `floor` if it is below. Runs in the Game's storage context
     ///      under delegatecall; `msg.sender` is the original caller (DegenerusQuests).

@@ -471,20 +471,18 @@ contract DegenerusQuests is IDegenerusQuests {
 
     /**
      * @notice Raise a player's quest streak to a floor of 12 as a foil-pack benefit.
-     * @dev Access: GAME contract only (the foil leg routes through GAME). Called by the foil
-     *      leg AFTER the buy's own primary + secondary quest completions, so it applies on
-     *      top of them. Unconditional on quest state (a foil purchase boosts the streak even
-     *      if no daily quest completed); never lowers an already-higher streak. Syncs the
-     *      day-lapse state first (idempotent — the foil leg already synced today), so a
-     *      foil buy restores the streak floor even after a missed-day reset. For a mid-run
-     *      afker, whose reward streak is the afking sub base plus funded delivered days
-     *      (independent of state.streak), the same floor is applied to that base via the
-     *      afking module — before the manual-streak early-return below, so it reaches the
-     *      afker even when their manual streak is already at the floor.
+     * @dev Called from handleFoilPack (GAME-gated) AFTER the buy's own primary + secondary quest
+     *      completions, so it applies on top of them. Unconditional on quest state (a foil
+     *      purchase boosts the streak even if no daily quest completed); never lowers an already-
+     *      higher streak. Syncs the day-lapse state first (idempotent — the foil leg already
+     *      synced today), so a foil buy restores the streak floor even after a missed-day reset.
+     *      For a mid-run afker, whose reward streak is the afking sub base plus funded delivered
+     *      days (independent of state.streak), the same floor is applied to that base via the
+     *      afking module — before the manual-streak early-return below, so it reaches the afker
+     *      even when their manual streak is already at the floor.
      * @param player The player who bought the foil pack.
-     * @custom:reverts OnlyGame When caller is not GAME contract.
      */
-    function foilStreakBoost(address player) external onlyGame {
+    function _foilStreakFloor(address player) private {
         if (player == address(0)) return;
         uint24 currentDay = _currentQuestDay(_loadActiveQuests());
         if (currentDay == 0) return;
@@ -841,6 +839,21 @@ contract DegenerusQuests is IDegenerusQuests {
     )
         external
         onlyGame
+        returns (uint256 reward, uint8 questType, uint32 streak, bool completed)
+    {
+        (reward, questType, streak, completed) = _handleFoilPackQuest(player);
+        // Foil-pack streak floor (folded in from the former external foilStreakBoost): guarantee
+        // a streak of at least FOIL_STREAK_FLOOR, applied AFTER the quest completions above so it
+        // never lowers a higher streak. Runs on every path, matching the prior unconditional call.
+        _foilStreakFloor(player);
+    }
+
+    /// @dev Foil secondary-quest progression (see handleFoilPack). Private so the streak floor
+    ///      runs unconditionally after it, across all of its early-return paths.
+    function _handleFoilPackQuest(
+        address player
+    )
+        private
         returns (uint256 reward, uint8 questType, uint32 streak, bool completed)
     {
         DailyQuest[QUEST_SLOT_COUNT] memory quests = _loadActiveQuests();

@@ -88,10 +88,13 @@ contract DegenerusGameFoilPackModule is
     /// @param buyer The player who bought the pack.
     /// @param level The cycle level the pack bets into.
     /// @param multBps The frozen activity-boost multiplier (20000..60000).
+    /// @dev weiIn = the foil-premium ETH-in (any funding source); the off-chain ETH-in ledger
+    ///      reads it here instead of a separate event.
     event FoilPackBought(
         address indexed buyer,
         uint24 indexed level,
-        uint16 multBps
+        uint16 multBps,
+        uint256 weiIn
     );
 
     /// @notice Emitted when a foil match claim resolves to a paid tier.
@@ -195,9 +198,6 @@ contract DegenerusGameFoilPackModule is
             balancesPacked[buyer] = bal - remaining;
             claimablePool -= uint128(remaining);
         }
-
-        // Foil-premium ETH-in (any funding source): the whole foil cost routes to the pools.
-        emit EthInRecorded(buyer, cost, ETH_IN_FOIL_PREMIUM);
 
         // Pool fork: 25% future / 75% next (inverse of the 90/10 ticket split), applied to
         // the foil cost specifically (the ticket/lootbox legs keep their own splits). The
@@ -324,17 +324,14 @@ contract DegenerusGameFoilPackModule is
             foilDrainDay = resolveDay;
         }
 
-        emit FoilPackBought(buyer, lvl, multBps);
+        emit FoilPackBought(buyer, lvl, multBps, cost);
 
         // Buy-a-foil-pack secondary quest (forced onto the first purchase day of a level).
         // Runs after the primary above unlocked it (the secondary is primary-gated). The
         // quest contract self-credits any FLIP reward on completion.
+        // handleFoilPack also applies the foil-pack streak floor (>= 12) after its quest
+        // completions, so the streak benefit no longer needs a second external call.
         quests.handleFoilPack(buyer);
-
-        // Foil-pack streak benefit: guarantee a quest streak of at least 12, applied last —
-        // after the primary + secondary completions above have advanced it. Unconditional
-        // on quest state; never lowers a higher streak.
-        quests.foilStreakBoost(buyer);
     }
 
     // =========================================================================

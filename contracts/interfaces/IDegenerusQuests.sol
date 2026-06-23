@@ -101,11 +101,6 @@ interface IDegenerusQuests {
         external
         returns (uint256 reward, uint8 questType, uint32 streak, bool completed);
 
-    /// @notice Raise a player's quest streak to a floor of 12 as a foil-pack benefit.
-    /// @dev Called by the foil leg after its quest completions; unconditional, never lowers.
-    /// @param player The player who bought the foil pack.
-    function foilStreakBoost(address player) external;
-
     /// @notice Records player affiliate activity and checks quest completion
     /// @dev Called by the game contract when a player earns affiliate rewards
     /// @param player The address of the player
