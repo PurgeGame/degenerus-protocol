@@ -252,20 +252,16 @@ contract DegenerusGameFoilPackModule is
             );
         }
 
-        // Daily MINT_ETH primary + level quest, on the foil cost. The combined ticket leg
-        // (run first by the purchase path) may already have completed the primary today, in
-        // which case handlePurchase is idempotent (returns completed = false, no double
-        // reward/streak) but still credits level-quest progress. When the foil is the buy
-        // that completes the primary, it credits the reward, advances the mint streak (the
-        // streak recorder is per-level idempotent), and unlocks the foil secondary below.
-        (uint256 reward, uint8 qType, , bool questCompleted) = quests.handlePurchase(
-            buyer,
-            cost,
-            0,
-            0,
-            priceWei,
-            priceWei
-        );
+        // Daily MINT_ETH primary + level quest, on the foil cost, together with the foil
+        // secondary quest and streak floor in one GAME call. The combined ticket leg (run
+        // first by the purchase path) may already have completed the primary today, in which
+        // case the primary leg is idempotent (completed = false, no double reward/streak) but
+        // still credits level-quest progress. When the foil is the buy that completes the
+        // primary, it credits the reward, advances the mint streak (the recorder is per-level
+        // idempotent), and unlocks the foil secondary. streakSnapshot is the reward streak
+        // captured post-primary, pre-floor — the foil-EV score basis frozen into the record.
+        (uint256 reward, uint8 qType, bool questCompleted, uint32 streakSnapshot) = quests
+            .handleFoilPurchase(buyer, cost, 0, 0, priceWei, priceWei);
         if (questCompleted) {
             kickback += reward;
             // questType 1 == MINT_ETH (the daily primary), matching the ticket leg's gate.
@@ -284,10 +280,11 @@ contract DegenerusGameFoilPackModule is
         if (kickback != 0) coinflip.creditFlip(buyer, kickback);
 
         // Boost freeze off the buyer's post-action activity score (units + the streak the
-        // primary just advanced are reflected), the same basis the mint path's cachedScore
-        // uses for the lootbox EV. The raw score is also frozen into the record and reused
-        // as the claim spin's RTP input, so the payout is fully determined at buy.
-        uint256 score = _playerActivityScore(buyer, quests.effectiveBaseStreak(buyer));
+        // primary just advanced are reflected via streakSnapshot), the same basis the mint
+        // path's cachedScore uses for the lootbox EV. The raw score is also frozen into the
+        // record and reused as the claim spin's RTP input, so the payout is fully determined
+        // at buy.
+        uint256 score = _playerActivityScore(buyer, streakSnapshot);
         uint16 multBps = uint16(ActivityCurveLib.foilBoostBps(score));
 
         // Resolve day = the next day whose daily word is genuinely future at buy.
@@ -325,13 +322,6 @@ contract DegenerusGameFoilPackModule is
         }
 
         emit FoilPackBought(buyer, lvl, multBps, cost);
-
-        // Buy-a-foil-pack secondary quest (forced onto the first purchase day of a level).
-        // Runs after the primary above unlocked it (the secondary is primary-gated). The
-        // quest contract self-credits any FLIP reward on completion.
-        // handleFoilPack also applies the foil-pack streak floor (>= 12) after its quest
-        // completions, so the streak benefit no longer needs a second external call.
-        quests.handleFoilPack(buyer);
     }
 
     // =========================================================================

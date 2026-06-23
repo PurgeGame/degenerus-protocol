@@ -90,16 +90,29 @@ interface IDegenerusQuests {
         external
         returns (uint256 reward, uint8 questType, uint32 streak, bool completed);
 
-    /// @notice Records a foil-pack purchase and checks the foil secondary quest
-    /// @dev Called by the game's foil module when a player buys a foil pack
+    /// @notice Foil-pack purchase handler: shared primary purchase legs, then the foil
+    ///         secondary quest and streak floor, in one GAME call
+    /// @dev Called by the game's foil module (GAME context) on a foil-pack buy. Runs the
+    ///      shared primary purchase legs, the streak snapshot, then the foil secondary quest
+    ///      and streak floor.
     /// @param player The address of the player who bought the foil pack
-    /// @return reward The quest reward amount earned (0 if quest not completed)
-    /// @return questType The type of quest that was completed
-    /// @return streak The player's current quest streak
-    /// @return completed Whether a quest was completed by this action
-    function handleFoilPack(address player)
-        external
-        returns (uint256 reward, uint8 questType, uint32 streak, bool completed);
+    /// @param ethMintSpendWei Gross ETH-denominated foil spend in wei (credited 1:1 to MINT_ETH)
+    /// @param flipMintQty FLIP-paid ticket-equivalent mint units
+    /// @param lootBoxAmount ETH spent on lootbox in wei
+    /// @param mintPrice Current ticket price in wei (daily targets)
+    /// @param levelQuestPrice Price for level quest targets (level+1 price)
+    /// @return reward Primary-leg FLIP reward (0 if not completed)
+    /// @return questType The primary quest type processed
+    /// @return completed Whether the primary quest completed by this action
+    /// @return streakSnapshot Pre-floor reward streak for the foil-EV activity score
+    function handleFoilPurchase(
+        address player,
+        uint256 ethMintSpendWei,
+        uint32 flipMintQty,
+        uint256 lootBoxAmount,
+        uint256 mintPrice,
+        uint256 levelQuestPrice
+    ) external returns (uint256 reward, uint8 questType, bool completed, uint32 streakSnapshot);
 
     /// @notice Records player affiliate activity and checks quest completion
     /// @dev Called by the game contract when a player earns affiliate rewards

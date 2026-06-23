@@ -471,8 +471,8 @@ contract DegenerusQuests is IDegenerusQuests {
 
     /**
      * @notice Raise a player's quest streak to a floor of 12 as a foil-pack benefit.
-     * @dev Called from handleFoilPack (GAME-gated) AFTER the buy's own primary + secondary quest
-     *      completions, so it applies on top of them. Unconditional on quest state (a foil
+     * @dev Called from handleFoilPurchase (GAME-gated) AFTER the buy's own primary + secondary
+     *      quest completions, so it applies on top of them. Unconditional on quest state (a foil
      *      purchase boosts the streak even if no daily quest completed); never lowers an already-
      *      higher streak. Syncs the day-lapse state first (idempotent — the foil leg already
      *      synced today), so a foil buy restores the streak floor even after a missed-day reset.
@@ -822,34 +822,8 @@ contract DegenerusQuests is IDegenerusQuests {
         }
     }
 
-    /**
-     * @notice Handle a foil-pack purchase and check the foil secondary quest.
-     * @dev Access: GAME contract only (called by the foil module's buy path). The foil
-     *      quest is a slot-1 secondary forced onto the first purchase day; it has no
-     *      level-quest leg, and one pack meets the target. Mirrors the decimator path:
-     *      completion self-credits the FLIP reward via creditFlip.
-     * @param player The player who bought the foil pack.
-     * @return reward FLIP tokens earned (0 if not completed).
-     * @return questType The processed quest type.
-     * @return streak Player's current streak after this action.
-     * @return completed True if the foil quest completed by this action.
-     */
-    function handleFoilPack(
-        address player
-    )
-        external
-        onlyGame
-        returns (uint256 reward, uint8 questType, uint32 streak, bool completed)
-    {
-        (reward, questType, streak, completed) = _handleFoilPackQuest(player);
-        // Foil-pack streak floor (folded in from the former external foilStreakBoost): guarantee
-        // a streak of at least FOIL_STREAK_FLOOR, applied AFTER the quest completions above so it
-        // never lowers a higher streak. Runs on every path, matching the prior unconditional call.
-        _foilStreakFloor(player);
-    }
-
-    /// @dev Foil secondary-quest progression (see handleFoilPack). Private so the streak floor
-    ///      runs unconditionally after it, across all of its early-return paths.
+    /// @dev Foil secondary-quest progression (see handleFoilPurchase). Private so the streak
+    ///      floor runs unconditionally after it, across all of its early-return paths.
     function _handleFoilPackQuest(
         address player
     )
@@ -991,6 +965,72 @@ contract DegenerusQuests is IDegenerusQuests {
     )
         external
         onlyCoin
+        returns (uint256 reward, uint8 questType, uint32 streak, bool completed)
+    {
+        return _handlePurchase(
+            player, ethMintSpendWei, flipMintQty, lootBoxAmount, mintPrice, levelQuestPrice
+        );
+    }
+
+    /**
+     * @notice Foil-pack purchase handler: the shared primary purchase legs, then the foil
+     *         secondary quest and streak floor, in one GAME call.
+     * @dev Access: GAME contract only (the foil module runs in GAME's context). Runs the
+     *      shared primary purchase legs, snapshots the reward streak, then the foil secondary
+     *      quest and streak floor. The returned streakSnapshot is the reward streak AFTER the
+     *      primary legs but BEFORE the secondary quest and streak floor — the basis the
+     *      foil-EV boost freezes against.
+     *      The secondary self-credits its FLIP reward; only the primary leg's reward/type/
+     *      completion are returned (the caller batches the primary reward).
+     * @param player The player who bought the foil pack.
+     * @param ethMintSpendWei Gross ETH-denominated foil spend in wei, credited 1:1 to MINT_ETH.
+     * @param flipMintQty FLIP-paid ticket-equivalent mint units.
+     * @param lootBoxAmount ETH spent on lootbox in wei.
+     * @param mintPrice Current ticket price in wei (daily targets).
+     * @param levelQuestPrice Price for level quest targets (level+1 price).
+     * @return reward Primary-leg FLIP reward (0 if not completed).
+     * @return questType The primary quest type processed.
+     * @return completed True if the primary quest completed by this action.
+     * @return streakSnapshot Pre-floor reward streak for the foil-EV activity score.
+     * @custom:reverts OnlyGame When caller is not GAME contract.
+     */
+    function handleFoilPurchase(
+        address player,
+        uint256 ethMintSpendWei,
+        uint32 flipMintQty,
+        uint256 lootBoxAmount,
+        uint256 mintPrice,
+        uint256 levelQuestPrice
+    )
+        external
+        onlyGame
+        returns (uint256 reward, uint8 questType, bool completed, uint32 streakSnapshot)
+    {
+        (reward, questType, , completed) = _handlePurchase(
+            player, ethMintSpendWei, flipMintQty, lootBoxAmount, mintPrice, levelQuestPrice
+        );
+        // Snapshot the reward streak post-primary, pre-floor: the foil-EV boost freezes
+        // against this streak, captured before the secondary quest and streak floor below
+        // mutate it.
+        streakSnapshot = _effectiveBaseStreak(
+            questPlayerState[player],
+            _currentQuestDay(_loadActiveQuests())
+        );
+        _handleFoilPackQuest(player);
+        _foilStreakFloor(player);
+    }
+
+    /// @dev Shared purchase-path quest legs (mint ETH/FLIP + lootbox). Modifier-less core
+    ///      behind handlePurchase (COIN-gated) and handleFoilPurchase (GAME-gated).
+    function _handlePurchase(
+        address player,
+        uint256 ethMintSpendWei,
+        uint32 flipMintQty,
+        uint256 lootBoxAmount,
+        uint256 mintPrice,
+        uint256 levelQuestPrice
+    )
+        private
         returns (uint256 reward, uint8 questType, uint32 streak, bool completed)
     {
         DailyQuest[QUEST_SLOT_COUNT] memory quests = _loadActiveQuests();
