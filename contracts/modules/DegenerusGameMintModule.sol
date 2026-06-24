@@ -1573,8 +1573,13 @@ contract DegenerusGameMintModule is
             _clearCurse(buyer);
         }
 
-        // --- Compute score ONCE (post-action) ---
-        uint256 cachedScore = _playerActivityScore(buyer, questStreak);
+        // --- Compute score ONCE (post-action). Only the x00 century bonus and the lootbox
+        //     EV/taper consume it, so a ticket-only non-x00 buy skips the score and its
+        //     affiliate staticcall entirely. ---
+        uint256 cachedScore;
+        if (lootBoxAmount != 0 || targetLevel % 100 == 0) {
+            cachedScore = _playerActivityScore(buyer, questStreak);
+        }
 
         // --- x00 century bonus (uses cached post-action score) ---
         if (ticketCost != 0 && targetLevel % 100 == 0 && cachedScore != 0) {
