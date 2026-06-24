@@ -213,7 +213,9 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         bool lastPurchase = (!inJackpot) && lastPurchaseDay;
         // Level already incremented at RNG request when lastPurchase=true
         uint24 purchaseLevel = (lastPurchase && locked) ? lvl : lvl + 1;
-        if (!inJackpot && !lastPurchase) {
+        // The VRF-death deadman also enters here during jackpot / last-purchase, where the
+        // normal !inJackpot && !lastPurchase gate would otherwise skip the game-over path.
+        if ((!inJackpot && !lastPurchase) || _vrfDeadmanFired()) {
             (bool goReturn, uint8 goStage) = _handleGameOverPath(day, lvl);
             if (goReturn) {
                 // Gameover path: advance ran but earns NO router bounty (the flip-credit
@@ -653,10 +655,18 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
             return (true, STAGE_GAMEOVER);
         }
 
+        // _livenessTriggered now folds in the VRF-death deadman, so it returns true here even
+        // during jackpot / last-purchase when the game has been stalled past the deadman.
         if (!_livenessTriggered()) return (false, 0);
 
-        // Safety: don't activate game over if nextPool requirement is already met
-        if (lvl != 0 && _getNextPrizePool() >= levelPrizePool[lvl]) {
+        // Safety: don't activate game over if nextPool requirement is already met — but the
+        // VRF-death deadman overrides it: a permanently-stalled game must drain even if its pool
+        // target reads as met.
+        if (
+            lvl != 0 &&
+            _getNextPrizePool() >= levelPrizePool[lvl] &&
+            !_vrfDeadmanFired()
+        ) {
             return (false, 0);
         }
 
@@ -1358,44 +1368,52 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
             return currentWord;
         }
 
-        if (rngRequestTime != 0) {
-            uint48 elapsed = ts - rngRequestTime;
-            if (elapsed >= GAMEOVER_RNG_FALLBACK_DELAY) {
-                // Use earliest historical VRF word as fallback (more secure than blockhash)
-                uint256 fallbackWord = _getHistoricalRngFallback(day);
-                // Cancel any reverseFlip nudge from the fallback word: the VRF-dead fallback
-                // never set rngLockedFlag, so reverseFlip stayed open and a committer could
-                // otherwise steer the terminal distribution. Pre-subtracting cancels the +=
-                // inside _applyDailyRng (and consumes the nudges), leaving the pure
-                // historical+prevrandao word.
-                unchecked { fallbackWord -= totalFlipReversals; }
-                fallbackWord = _applyDailyRng(day, fallbackWord);
-                if (lvl != 0) {
-                    // Gameover settles the final day's flips but never grants a bonus (0).
-                    coinflip.processCoinflipPayouts(0, fallbackWord, day);
-                }
-                // Resolve the sentinel-stamped gambling-burn pool if any. Fallback path
-                // uses fallbackWord for the roll; sentinel still names the stuck day so resolves
-                // are correct even after a 3-day GAMEOVER_RNG_FALLBACK_DELAY stall.
-                {
-                    IsDGNRS sdgnrs = IsDGNRS(
-                        ContractAddresses.SDGNRS
-                    );
-                    uint24 toResolve = sdgnrs.pendingResolveDay();
-                    if (toResolve != 0) {
-                        uint16 redemptionRoll = uint16(
-                            ((fallbackWord >> 8) % 151) + 25
-                        );
-                        sdgnrs.resolveRedemptionPeriod(redemptionRoll, toResolve);
-                    }
-                }
-                _finalizeLootboxRng(fallbackWord);
-                // Release the stall lock once fallback has committed; liveness now reads
-                // from day math alone instead of short-circuiting on a stale VRF timer.
-                rngRequestTime = 0;
-                return fallbackWord;
+        // VRF-death deadman: in a suppressed phase (jackpot / last-purchase) where no day has
+        // sealed for _VRF_DEADMAN_DAYS, commit the historical fallback immediately — regardless
+        // of whether a request is outstanding or how long it has been pending — so a
+        // permanently-dead VRF there reaches terminal fund release without the
+        // GAMEOVER_RNG_FALLBACK_DELAY wait. Gated to the suppressed phases so the normal
+        // purchase-phase / genesis game-over keeps its two-step real-VRF request path. Outside
+        // the deadman, honor the normal grace: an outstanding request waits the fallback delay,
+        // otherwise a fresh request is issued.
+        bool deadman = (jackpotPhaseFlag || lastPurchaseDay) && _vrfDeadmanFired();
+        if (rngRequestTime != 0 || deadman) {
+            if (!deadman && ts - rngRequestTime < GAMEOVER_RNG_FALLBACK_DELAY) {
+                revert RngNotReady();
             }
-            revert RngNotReady();
+            // Use earliest historical VRF word as fallback (more secure than blockhash)
+            uint256 fallbackWord = _getHistoricalRngFallback(day);
+            // Cancel any reverseFlip nudge from the fallback word: the VRF-dead fallback
+            // never set rngLockedFlag, so reverseFlip stayed open and a committer could
+            // otherwise steer the terminal distribution. Pre-subtracting cancels the +=
+            // inside _applyDailyRng (and consumes the nudges), leaving the pure
+            // historical+prevrandao word.
+            unchecked { fallbackWord -= totalFlipReversals; }
+            fallbackWord = _applyDailyRng(day, fallbackWord);
+            if (lvl != 0) {
+                // Gameover settles the final day's flips but never grants a bonus (0).
+                coinflip.processCoinflipPayouts(0, fallbackWord, day);
+            }
+            // Resolve the sentinel-stamped gambling-burn pool if any. Fallback path
+            // uses fallbackWord for the roll; sentinel still names the stuck day so resolves
+            // are correct even after a 3-day GAMEOVER_RNG_FALLBACK_DELAY stall.
+            {
+                IsDGNRS sdgnrs = IsDGNRS(
+                    ContractAddresses.SDGNRS
+                );
+                uint24 toResolve = sdgnrs.pendingResolveDay();
+                if (toResolve != 0) {
+                    uint16 redemptionRoll = uint16(
+                        ((fallbackWord >> 8) % 151) + 25
+                    );
+                    sdgnrs.resolveRedemptionPeriod(redemptionRoll, toResolve);
+                }
+            }
+            _finalizeLootboxRng(fallbackWord);
+            // Release the stall lock once fallback has committed; liveness now reads
+            // from day math alone instead of short-circuiting on a stale VRF timer.
+            rngRequestTime = 0;
+            return fallbackWord;
         }
 
         if (_tryRequestRng(isTicketJackpotDay, lvl)) {

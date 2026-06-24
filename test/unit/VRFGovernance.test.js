@@ -68,12 +68,12 @@ describe("VRF Governance", function () {
   // 1. Propose
   // =========================================================================
   describe("propose", function () {
-    it("admin path: DGVE holder can propose after 20h stall", async function () {
+    it("admin path: DGVE holder can propose after 44h stall", async function () {
       const { admin, mockVRF, deployer } = await loadFixture(deployFullProtocol);
       const vrfAddr = await mockVRF.getAddress();
       const keyHash = hre.ethers.id("new-key");
 
-      await createStall(21);
+      await createStall(45);
 
       const tx = await admin.connect(deployer).propose(vrfAddr, keyHash);
       const ev = await getEvent(tx, admin, "ProposalCreated");
@@ -86,12 +86,12 @@ describe("VRF Governance", function () {
       expect(await admin.proposalCount()).to.equal(1n);
     });
 
-    it("reverts with NotStalled if VRF stall < 20h for admin", async function () {
+    it("reverts with NotStalled if VRF stall < 44h for admin", async function () {
       const { admin, mockVRF, deployer } = await loadFixture(deployFullProtocol);
       const vrfAddr = await mockVRF.getAddress();
       const keyHash = hre.ethers.id("new-key");
 
-      await createStall(19);
+      await createStall(43);
 
       await expect(
         admin.connect(deployer).propose(vrfAddr, keyHash)
@@ -103,8 +103,8 @@ describe("VRF Governance", function () {
       const vrfAddr = await mockVRF.getAddress();
       const keyHash = hre.ethers.id("new-key");
 
-      // Even after 21h, non-DGVE holder needs 7d stall
-      await createStall(21);
+      // Even after 45h (past the admin threshold), non-DGVE holder needs 7d stall
+      await createStall(45);
 
       await expect(
         admin.connect(alice).propose(vrfAddr, keyHash)
@@ -144,7 +144,7 @@ describe("VRF Governance", function () {
       // Give deployer sDGNRS so reject vote has weight to kill
       await giveSDGNRS(sdgnrs, game, deployer.address, eth("1000"));
 
-      await createStall(21);
+      await createStall(45);
 
       await admin.connect(deployer).propose(vrfAddr, hre.ethers.id("key1"));
       expect(await admin.proposalCount()).to.equal(1n);
@@ -160,7 +160,7 @@ describe("VRF Governance", function () {
       const { admin, mockVRF, deployer, sdgnrs } = await loadFixture(deployFullProtocol);
       const vrfAddr = await mockVRF.getAddress();
 
-      await createStall(21);
+      await createStall(45);
 
       await admin.connect(deployer).propose(vrfAddr, hre.ethers.id("key"));
 
@@ -186,7 +186,7 @@ describe("VRF Governance", function () {
     it("reverts with ProposalNotActive for non-existent proposal", async function () {
       const { admin, deployer } = await loadFixture(deployFullProtocol);
 
-      await createStall(21);
+      await createStall(45);
 
       await expect(
         admin.connect(deployer).vote(999, true)
@@ -197,7 +197,7 @@ describe("VRF Governance", function () {
       const { admin, mockVRF, deployer, alice } = await loadFixture(deployFullProtocol);
       const vrfAddr = await mockVRF.getAddress();
 
-      await createStall(21);
+      await createStall(45);
       await admin.connect(deployer).propose(vrfAddr, hre.ethers.id("key"));
 
       // alice has no sDGNRS — vote succeeds as a poke (checks execute/kill) but no VoteCast
@@ -215,7 +215,7 @@ describe("VRF Governance", function () {
       const { admin, mockVRF, deployer } = await loadFixture(deployFullProtocol);
       const vrfAddr = await mockVRF.getAddress();
 
-      await createStall(21);
+      await createStall(45);
       await admin.connect(deployer).propose(vrfAddr, hre.ethers.id("key"));
 
       expect(await admin.threshold(1)).to.equal(5000);
@@ -225,7 +225,7 @@ describe("VRF Governance", function () {
       const { admin, mockVRF, deployer } = await loadFixture(deployFullProtocol);
       const vrfAddr = await mockVRF.getAddress();
 
-      await createStall(21);
+      await createStall(45);
       await admin.connect(deployer).propose(vrfAddr, hre.ethers.id("key"));
 
       await advanceTime(ONE_DAY);
@@ -236,7 +236,7 @@ describe("VRF Governance", function () {
       const { admin, mockVRF, deployer } = await loadFixture(deployFullProtocol);
       const vrfAddr = await mockVRF.getAddress();
 
-      await createStall(21);
+      await createStall(45);
       await admin.connect(deployer).propose(vrfAddr, hre.ethers.id("key"));
 
       await advanceTime(2 * ONE_DAY);
@@ -247,7 +247,7 @@ describe("VRF Governance", function () {
       const { admin, mockVRF, deployer } = await loadFixture(deployFullProtocol);
       const vrfAddr = await mockVRF.getAddress();
 
-      await createStall(21);
+      await createStall(45);
       await admin.connect(deployer).propose(vrfAddr, hre.ethers.id("key"));
 
       await advanceTime(3 * ONE_DAY);
@@ -258,7 +258,7 @@ describe("VRF Governance", function () {
       const { admin, mockVRF, deployer } = await loadFixture(deployFullProtocol);
       const vrfAddr = await mockVRF.getAddress();
 
-      await createStall(21);
+      await createStall(45);
       await admin.connect(deployer).propose(vrfAddr, hre.ethers.id("key"));
 
       await advanceTime(4 * ONE_DAY);
@@ -269,7 +269,7 @@ describe("VRF Governance", function () {
       const { admin, mockVRF, deployer } = await loadFixture(deployFullProtocol);
       const vrfAddr = await mockVRF.getAddress();
 
-      await createStall(21);
+      await createStall(45);
       await admin.connect(deployer).propose(vrfAddr, hre.ethers.id("key"));
 
       await advanceTime(5 * ONE_DAY);
@@ -280,7 +280,7 @@ describe("VRF Governance", function () {
       const { admin, mockVRF, deployer } = await loadFixture(deployFullProtocol);
       const vrfAddr = await mockVRF.getAddress();
 
-      await createStall(21);
+      await createStall(45);
       await admin.connect(deployer).propose(vrfAddr, hre.ethers.id("key"));
 
       await advanceTime(6 * ONE_DAY);
@@ -291,7 +291,7 @@ describe("VRF Governance", function () {
       const { admin, mockVRF, deployer } = await loadFixture(deployFullProtocol);
       const vrfAddr = await mockVRF.getAddress();
 
-      await createStall(21);
+      await createStall(45);
       await admin.connect(deployer).propose(vrfAddr, hre.ethers.id("key"));
 
       await advanceTime(7 * ONE_DAY);
@@ -307,7 +307,7 @@ describe("VRF Governance", function () {
       const { admin, mockVRF, deployer, sdgnrs } = await loadFixture(deployFullProtocol);
       const vrfAddr = await mockVRF.getAddress();
 
-      await createStall(21);
+      await createStall(45);
       await admin.connect(deployer).propose(vrfAddr, hre.ethers.id("key"));
 
       // Advance past 168h lifetime
@@ -334,7 +334,7 @@ describe("VRF Governance", function () {
       const { admin, mockVRF, deployer } = await loadFixture(deployFullProtocol);
       const vrfAddr = await mockVRF.getAddress();
 
-      await createStall(21);
+      await createStall(45);
       await admin.connect(deployer).propose(vrfAddr, hre.ethers.id("key"));
 
       // canExecute doesn't revert, just returns false when no approve weight
@@ -393,12 +393,12 @@ describe("VRF Governance", function () {
   // 9. VRF Recovery Invalidation
   // =========================================================================
   describe("VRF recovery invalidation", function () {
-    it("vote reverts when VRF recovers (stall < 20h)", async function () {
+    it("vote reverts when VRF recovers (stall < 44h)", async function () {
       const { admin, mockVRF, deployer } = await loadFixture(deployFullProtocol);
       const vrfAddr = await mockVRF.getAddress();
 
       // Create stall and propose
-      await createStall(21);
+      await createStall(45);
       await admin.connect(deployer).propose(vrfAddr, hre.ethers.id("key"));
 
       // Simulate VRF recovery by advancing game (which updates lastVrfProcessedTimestamp)
@@ -435,7 +435,7 @@ describe("VRF Governance", function () {
       const { admin, mockVRF, deployer } = await loadFixture(deployFullProtocol);
       const vrfAddr = await mockVRF.getAddress();
 
-      await createStall(21);
+      await createStall(45);
 
       await admin.connect(deployer).propose(vrfAddr, hre.ethers.id("key1"));
 
@@ -450,7 +450,7 @@ describe("VRF Governance", function () {
 
       expect(await admin.activeProposalId(deployer.address)).to.equal(0n);
 
-      await createStall(21);
+      await createStall(45);
       await admin.connect(deployer).propose(vrfAddr, hre.ethers.id("key1"));
 
       expect(await admin.activeProposalId(deployer.address)).to.equal(1n);
@@ -461,7 +461,7 @@ describe("VRF Governance", function () {
       const vrfAddr = await mockVRF.getAddress();
 
       await giveSDGNRS(sdgnrs, game, deployer.address, eth("1000"));
-      await createStall(21);
+      await createStall(45);
 
       await admin.connect(deployer).propose(vrfAddr, hre.ethers.id("key1"));
 
@@ -481,7 +481,7 @@ describe("VRF Governance", function () {
       const vrfAddr = await mockVRF.getAddress();
 
       await giveSDGNRS(sdgnrs, game, deployer.address, eth("1000"));
-      await createStall(21);
+      await createStall(45);
 
       await admin.connect(deployer).propose(vrfAddr, hre.ethers.id("key1"));
 
@@ -499,7 +499,7 @@ describe("VRF Governance", function () {
       const { admin, mockVRF, deployer } = await loadFixture(deployFullProtocol);
       const vrfAddr = await mockVRF.getAddress();
 
-      await createStall(21);
+      await createStall(45);
 
       await admin.connect(deployer).propose(vrfAddr, hre.ethers.id("key1"));
 
@@ -689,7 +689,7 @@ describe("VRF Governance", function () {
       await giveSDGNRS(sdgnrs, game, deployer.address, eth("1000"));
 
       // Create 21h stall
-      await createStall(21);
+      await createStall(45);
 
       // Create a proposal
       await admin.connect(deployer).propose(vrfAddr, hre.ethers.id("key"));
@@ -716,7 +716,7 @@ describe("VRF Governance", function () {
       await giveSDGNRS(sdgnrs, game, alice.address, eth("1"));
 
       // Create 21h stall
-      await createStall(21);
+      await createStall(45);
 
       // Deployer creates proposal (circ includes both deployer + alice amounts)
       await admin.connect(deployer).propose(vrfAddr, hre.ethers.id("key"));
@@ -743,7 +743,7 @@ describe("VRF Governance", function () {
       await giveSDGNRS(sdgnrs, game, deployer.address, eth("1000"));
 
       // Create 21h stall
-      await createStall(21);
+      await createStall(45);
 
       // Create proposal
       await admin.connect(deployer).propose(vrfAddr, hre.ethers.id("key"));
@@ -776,7 +776,7 @@ describe("VRF Governance", function () {
       await giveSDGNRS(sdgnrs, game, alice.address, eth("1000"));
 
       // Create 21h stall
-      await createStall(21);
+      await createStall(45);
 
       // Deployer creates proposal
       await admin.connect(deployer).propose(vrfAddr, hre.ethers.id("key"));
@@ -814,7 +814,7 @@ describe("VRF Governance", function () {
       const vrfAddr = await mockVRF.getAddress();
       const keyHash = hre.ethers.id("test-key");
 
-      await createStall(21);
+      await createStall(45);
       await admin.connect(deployer).propose(vrfAddr, keyHash);
 
       const [proposer, createdAt, circulatingSnapshot, path, state,

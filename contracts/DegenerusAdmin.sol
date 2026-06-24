@@ -422,8 +422,12 @@ contract DegenerusAdmin {
     // GOVERNANCE CONSTANTS
     // =========================================================================
 
-    /// @dev Minimum VRF stall duration before admin can propose (20 hours).
-    uint256 private constant ADMIN_STALL_THRESHOLD = 20 hours;
+    /// @dev Minimum VRF stall before admin can propose. lastVrfProcessed only advances on the
+    ///      once-per-day RNG, so block.timestamp - lastVrfProcessed sawtooths up to ~24h every
+    ///      healthy cycle; the threshold must clear a full cycle or it trips daily. 44h = one
+    ///      ~24h cycle + 20h genuine-stall grace, so it fires only ~20h after a daily RNG is
+    ///      actually missed, never during normal operation.
+    uint256 private constant ADMIN_STALL_THRESHOLD = 44 hours;
 
     /// @dev Minimum VRF stall duration before community can propose (7 days).
     uint256 private constant COMMUNITY_STALL_THRESHOLD = 7 days;
@@ -747,14 +751,19 @@ contract DegenerusAdmin {
     /// @param proposalId ID of the proposal to vote on.
     /// @param approve True to approve, false to reject.
     function vote(uint256 proposalId, bool approve) external {
-        // Stall re-check: if VRF recovered, all governance is invalid
-        uint48 lastVrf = gameAdmin.lastVrfProcessed();
-        if (block.timestamp - uint256(lastVrf) < ADMIN_STALL_THRESHOLD)
-            revert NotStalled();
-
         Proposal storage p = proposals[proposalId];
         uint40 createdAt = p.createdAt;
         _requireActiveProposal(p.state, createdAt, PROPOSAL_LIFETIME);
+
+        // Stall re-check: if VRF has recovered, the proposal is invalid — KILL it rather than
+        // just reverting, so a stale proposal can't linger and resume voting on a later
+        // lastVrfProcessed dip / re-stall at a further-decayed threshold. Anyone can poke this.
+        uint48 lastVrf = gameAdmin.lastVrfProcessed();
+        if (block.timestamp - uint256(lastVrf) < ADMIN_STALL_THRESHOLD) {
+            p.state = ProposalState.Killed;
+            emit ProposalKilled(proposalId);
+            return;
+        }
 
         // Record vote only if caller has sDGNRS; otherwise skip to threshold checks (poke)
         // Safe: VRF dead = supply frozen (no advances, unwrapTo blocked)
