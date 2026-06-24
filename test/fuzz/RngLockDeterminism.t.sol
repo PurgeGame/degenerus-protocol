@@ -228,8 +228,10 @@ contract RngLockDeterminism is DeployProtocol {
             vm.prank(address(admin));
             try game.rngLocked() returns (bool) {} catch { return; }
         } else if (cls == 8) {
-            vm.warp(block.timestamp + 6 hours + 1);
-            try game.retryLootboxRng() {} catch { return; }
+            // Mid-day stall recovery is now folded into the daily advance: warp past the
+            // stall timeout + a day boundary and crank advanceGame (the takeover path).
+            vm.warp(block.timestamp + 1 days + 4 hours + 1);
+            try game.advanceGame() returns (uint8) {} catch { return; }
         } else if (cls == 9) {
             // v55 game-resident router (Δ3 doWork→mintFlip): fire the one-category router
             // same-tx inside the locked window. mintFlip routes advance → afking-box open by
@@ -1464,166 +1466,16 @@ contract RngLockDeterminism is DeployProtocol {
     }
 
     // ════════════════════════════════════════════════════════════════════
-    // sec9 -- RetryLootboxRng (OPPOSITE-DIRECTION; RNGLOCK-CATALOG sec9)
-    // From 301-04 MIXED-CLUSTER contribution.
-    // NOT SKIPPED per D-301-COVERAGE-01 line 9.
+    // sec9 -- mid-day stall recovery (was: RetryLootboxRng OPPOSITE-DIRECTION)
+    // The standalone retryLootboxRng failsafe was removed: a mid-day lootbox
+    // request that stalls past MIDDAY_RNG_STALL_TIMEOUT is now abandoned at the
+    // next daily advance and resolved by the daily word (AdvanceModule drain-gate
+    // takeover + rngGate). The recovery word IS the daily word, so its determinism
+    // under perturbation is covered by the daily-path determinism tests below; the
+    // opposite-direction property (daily word resolves the bucket, stalled mid-day
+    // word rejected) is covered by the positive takeover tests in
+    // VRFStallEdgeCases / VRFCore / VrfRotationLiveness.
     // ════════════════════════════════════════════════════════════════════
-
-    function testFuzz_RngLockDeterminism_RetryLootboxRng(
-        uint256 vrfWord1,
-        uint256 vrfWord2,
-        uint256 perturbSeed
-    ) public {
-        // OPPOSITE-DIRECTION assertion per D-301-COVERAGE-01 line 9. NOT
-        // skipped. Tests the retry failsafe DOES change VRF-derived outputs
-        // via fresh VRF word, AND that perturbation during the retry path
-        // does not additionally drift outputs beyond the VRF substitution.
-        vm.assume(vrfWord1 != 0);
-        vm.assume(vrfWord2 != 0);
-        vm.assume(vrfWord1 != vrfWord2);
-
-        _completeDay(0xDEAD0091);
-        vm.warp(block.timestamp + 1 days);
-        _completeDay(0xDEAD0092);
-
-        address buyer = makeAddr("retryLootboxBuyer");
-        vm.deal(buyer, 100 ether);
-        vm.prank(buyer);
-        game.purchase{value: 1.01 ether}(
-            buyer, 400, 1 ether, bytes32(0), MintPaymentKind.DirectEth, false
-        );
-
-        mockVRF.fundSubscription(1, 100e18);
-
-        uint256 preLockSnap = _snapshotPreLock();
-
-        // Try to fire the mid-day lootbox-RNG request. The function may revert
-        // if state preconditions aren't met (no pending lootbox ETH, etc.). In
-        // that case, filter the iteration via vm.assume.
-        try game.requestLootboxRng() {} catch {
-            vm.assume(false);
-        }
-        uint256 reqId1 = mockVRF.lastRequestId();
-        if (reqId1 == 0) {
-            vm.assume(false);
-        }
-
-        _perturb(perturbSeed);
-
-        vm.warp(block.timestamp + 6 hours + 1);
-
-        try game.retryLootboxRng() {} catch {
-            vm.assume(false);
-        }
-        uint256 reqId2 = mockVRF.lastRequestId();
-        if (reqId2 == reqId1) {
-            vm.assume(false);
-        }
-
-        (, , bool fulfilled2) = mockVRF.pendingRequests(reqId2);
-        if (!fulfilled2) {
-            mockVRF.fulfillRandomWords(reqId2, vrfWord1);
-        }
-
-        // Drain the post-fulfill resolution loop so `_finalizeLootboxRng`
-        // runs and writes `lootboxRngWordByIndex[idx-1]`. Then capture the
-        // VRF-derived digest. Per D-301-COVERAGE-01 line 9, the retry MUST
-        // change the per-index VRF word.
-        for (uint256 i = 0; i < 50; i++) {
-            if (!game.rngLocked()) break;
-            game.advanceGame();
-        }
-        bytes32 retryOutputs = _captureRetryLootboxOutputs();
-        // If the per-index lootbox word is still 0, the VRF-callback path
-        // did not reach `_finalizeLootboxRng` -- the test setup did not
-        // arrange a true lootbox-RNG cycle. Filter the iteration.
-        if (retryOutputs == keccak256(abi.encode(uint256(0), bytes32(0)))) {
-            vm.assume(false);
-        }
-
-        // Baseline-A: revert; deliver ORIGINAL request with vrfWord2 (no retry).
-        _revertToPreLock(preLockSnap);
-
-        address buyerB = makeAddr("retryLootboxBuyer");
-        vm.deal(buyerB, 100 ether);
-        vm.prank(buyerB);
-        try game.purchase{value: 1.01 ether}(
-            buyerB, 400, 1 ether, bytes32(0), MintPaymentKind.DirectEth, false
-        ) {} catch { vm.assume(false); }
-        mockVRF.fundSubscription(1, 100e18);
-
-        try game.requestLootboxRng() {} catch { vm.assume(false); }
-        uint256 reqIdA = mockVRF.lastRequestId();
-        if (reqIdA == 0) { vm.assume(false); }
-        _perturb(perturbSeed);
-
-        (, , bool fulfilledA) = mockVRF.pendingRequests(reqIdA);
-        if (!fulfilledA) {
-            mockVRF.fulfillRandomWords(reqIdA, vrfWord2);
-        }
-        for (uint256 i = 0; i < 50; i++) {
-            if (!game.rngLocked()) break;
-            game.advanceGame();
-        }
-        bytes32 originalOutputs = _captureRetryLootboxOutputs();
-        if (originalOutputs == keccak256(abi.encode(uint256(0), bytes32(0)))) {
-            vm.assume(false);
-        }
-
-        assertNotEq(
-            retryOutputs,
-            originalOutputs,
-            "RetryLootboxRng: retry MUST change VRF-derived outputs -- failsafe supplies fresh VRF word (D-301-COVERAGE-01)"
-        );
-
-        // Baseline-B: retry path WITHOUT perturbation.
-        _revertToPreLock(preLockSnap);
-
-        address buyerC = makeAddr("retryLootboxBuyer");
-        vm.deal(buyerC, 100 ether);
-        vm.prank(buyerC);
-        try game.purchase{value: 1.01 ether}(
-            buyerC, 400, 1 ether, bytes32(0), MintPaymentKind.DirectEth, false
-        ) {} catch { vm.assume(false); }
-        mockVRF.fundSubscription(1, 100e18);
-
-        try game.requestLootboxRng() {} catch { vm.assume(false); }
-        uint256 reqIdC = mockVRF.lastRequestId();
-        if (reqIdC == 0) { vm.assume(false); }
-        vm.warp(block.timestamp + 6 hours + 1);
-        try game.retryLootboxRng() {} catch { vm.assume(false); }
-        uint256 reqIdC2 = mockVRF.lastRequestId();
-        if (reqIdC2 == reqIdC) { vm.assume(false); }
-        (, , bool fulfilledC) = mockVRF.pendingRequests(reqIdC2);
-        if (!fulfilledC) {
-            mockVRF.fulfillRandomWords(reqIdC2, vrfWord1);
-        }
-        for (uint256 i = 0; i < 50; i++) {
-            if (!game.rngLocked()) break;
-            game.advanceGame();
-        }
-        bytes32 retryNoPerturbOutputs = _captureRetryLootboxOutputs();
-        if (retryNoPerturbOutputs == keccak256(abi.encode(uint256(0), bytes32(0)))) {
-            vm.assume(false);
-        }
-
-        _assertVrfOutputByteIdentity(
-            retryOutputs,
-            retryNoPerturbOutputs,
-            "RetryLootboxRng: VRF outputs must be byte-identical between perturbation and baseline retry paths (D-42N-RETRY-RNG-DOMAIN-SEP-01 Option A invariant 3 -- RNGLOCK-CATALOG.md sec9)"
-        );
-    }
-
-    function _captureRetryLootboxOutputs() internal view returns (bytes32) {
-        uint256 rngWord = _readRngWordCurrent();
-        return keccak256(abi.encode(rngWord, _readLootboxIndexAndWordDigest()));
-    }
-
-    function _readLootboxIndexAndWordDigest() internal view returns (bytes32) {
-        uint48 idx = _readLootboxRngIndex();
-        if (idx == 0) return bytes32(0);
-        return bytes32(_lootboxRngWord(idx - 1));
-    }
 
     // ════════════════════════════════════════════════════════════════════
     // EDGE CASES (D-301-EDGE-CASES-01) -- from 301-05 contribution
@@ -1798,55 +1650,6 @@ contract RngLockDeterminism is DeployProtocol {
             perturbedOutputs,
             baselineOutputs,
             "MultiBlock: VRF outputs must be byte-identical when perturbations span distinct blocks within the lock window"
-        );
-    }
-
-    function testFuzz_EdgeCase_RetryLootboxRngDuringLock(
-        uint256 vrfWord,
-        uint256 perturbSeed
-    ) public {
-        // SKIP: RNGLOCK-FIXREC.md sec43..sec62 (inherited Cluster G) -- retry-during-lock perturbation -- v44.0 D-43N-V44-HANDOFF-43 (inherited) flips this to strict assertion
-        vm.skip(true);
-        vm.assume(vrfWord != 0);
-
-        uint256 preLockSnap = _snapshotPreLock();
-        uint256 reqId1 = _advanceToVrfRequestBoundary();
-
-        assertTrue(game.rngLocked(), "rngLock must engage at lootbox-RNG request boundary");
-        assertTrue(reqId1 != 0, "Original VRF request must be pending");
-
-        _perturb(perturbSeed);
-        assertTrue(game.rngLocked(), "rngLock must still hold during stall window");
-
-        vm.warp(block.timestamp + 6 hours + 1);
-
-        bool retrySucceeded;
-        try game.retryLootboxRng() { retrySucceeded = true; } catch { retrySucceeded = false; }
-
-        if (!retrySucceeded) return;
-
-        vm.recordLogs();
-        uint256 reqId2 = mockVRF.lastRequestId();
-        _deliverMockVrf(reqId2, vrfWord);
-        Vm.Log[] memory perturbedRetryLogs = vm.getRecordedLogs();
-        bytes32 perturbedRetryOutputs = _hashLogs(perturbedRetryLogs);
-
-        _revertToPreLock(preLockSnap);
-        uint256 baseReqId1 = _advanceToVrfRequestBoundary();
-        assertTrue(game.rngLocked(), "rngLock must engage at baseline lootbox-RNG request boundary");
-        assertTrue(baseReqId1 != 0, "Baseline original VRF request must be pending");
-        vm.warp(block.timestamp + 6 hours + 1);
-        try game.retryLootboxRng() {} catch { return; }
-        vm.recordLogs();
-        uint256 baseReqId2 = mockVRF.lastRequestId();
-        _deliverMockVrf(baseReqId2, vrfWord);
-        Vm.Log[] memory baselineRetryLogs = vm.getRecordedLogs();
-        bytes32 baselineRetryOutputs = _hashLogs(baselineRetryLogs);
-
-        _assertVrfOutputByteIdentity(
-            perturbedRetryOutputs,
-            baselineRetryOutputs,
-            "RetryLootboxRngDuringLock: retry + perturbation must produce byte-identical VRF outputs vs retry-only baseline (D-42N-RETRY-RNG-DOMAIN-SEP-01 Option A invariant)"
         );
     }
 

@@ -35,7 +35,16 @@ contract YieldHarness is DegenerusGameJackpotModule {
     }
 
     function callUnfreezePool() external {
-        _unfreezePool();
+        // Mirror AdvanceModule._unfreezePool (fold pending into live, clear freeze). This
+        // JackpotModule-based harness can't reach the moved internal; the real function is
+        // unit-tested in PrizePoolFreeze. Here it models the end-of-day settlement this
+        // solvency test exercises against distributeYieldSurplus.
+        if (!prizePoolFrozen) return;
+        (uint128 pNext, uint128 pFuture) = _getPendingPools();
+        (uint128 next, uint128 future) = _getPrizePools();
+        _setPrizePools(next + pNext, future + pFuture);
+        prizePoolPendingPacked = 0;
+        prizePoolFrozen = false;
     }
 
     // --- Views ---

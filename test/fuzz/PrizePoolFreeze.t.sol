@@ -2,13 +2,13 @@
 pragma solidity 0.8.34;
 
 import {Test} from "forge-std/Test.sol";
-import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage.sol";
+import {DegenerusGameAdvanceModule} from "../../contracts/modules/DegenerusGameAdvanceModule.sol";
 
 /// @title FreezeHarness -- Exposes freeze-related internal helpers for testing.
-contract FreezeHarness is DegenerusGameStorage {
+contract FreezeHarness is DegenerusGameAdvanceModule {
     // --- Freeze / Unfreeze ---
-    function exposed_swapAndFreeze(uint24 purchaseLevel) external {
-        _swapAndFreeze(purchaseLevel);
+    function exposed_swapAndFreeze(uint24 /* purchaseLevel */) external {
+        _swapAndFreeze();
     }
 
     function exposed_unfreezePool() external {

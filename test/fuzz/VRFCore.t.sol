@@ -400,40 +400,37 @@ contract VRFCore is DeployProtocol {
         game.requestLootboxRng();
     }
 
-    /// @notice After requestLootboxRng (rngLockedFlag stays false), daily flow proceeds.
-    ///         Tests that a mid-day request does NOT block the next day's daily RNG.
-    /// @notice ADJUDICATED (v67.0 phase 421 MIDRNG / DEF-380-04-FC1). A mid-day ticket request
-    ///         whose word has NOT arrived DOES gate the next-day advance — by design. A purchase
-    ///         that creates pending lootbox ETH also leaves tickets in the write slot, so
-    ///         requestLootboxRng swaps a non-empty buffer (LR_MID_DAY=1, ticketsFullyProcessed=
-    ///         false). The new-day daily-drain gate then reverts RngNotReady until the bound word
-    ///         lands — the daily 12h timeout sits behind that gate (the buffer freeze is an
-    ///         anti-reroll measure). Recovery is the permissionless retryLootboxRng (or the
-    ///         natural late arrival): the heartbeat slows, never bricks — ruled acceptable. The
-    ///         separate LR_MID_DAY latch leak this interaction exposed (a delivered-but-undrained
-    ///         word crossing the day boundary) is fixed; see test_midDayLatch_clearsOnCrossDayDrain.
-    function test_midDayTicketRequest_gatesNextAdvanceUntilWordLands() public {
+    /// @notice A stalled mid-day ticket request no longer gates the next-day advance: it is
+    ///         abandoned and folded into the daily word. A purchase that creates pending lootbox
+    ///         ETH also leaves tickets in the write slot, so requestLootboxRng swaps a non-empty
+    ///         buffer (LR_MID_DAY=1, ticketsFullyProcessed=false, daily lock clear). When that
+    ///         mid-day VRF stalls past MIDDAY_RNG_STALL_TIMEOUT, the new-day drain gate abandons
+    ///         it and promotes it to this day's daily request: the fresh daily word seals the day,
+    ///         finalizes the reserved bucket, drains the swapped batch, and releases the
+    ///         LR_MID_DAY latch — no retryLootboxRng, no permanent gate.
+    function test_midDayTicketRequest_takenOverByDailyAfterStall() public {
         _setupForMidDayRng();
 
         game.requestLootboxRng();
         assertFalse(game.rngLocked(), "mid-day request must not set the daily lock");
-        uint256 reqId = mockVRF.lastRequestId();
+        uint256 stalledReqId = mockVRF.lastRequestId();
 
-        // Word does NOT arrive; cross the day boundary (past the 6h mid-day retry timeout).
+        // Word does NOT arrive; cross the day boundary, well past MIDDAY_RNG_STALL_TIMEOUT (4h).
         vm.warp(block.timestamp + 1 days + 13 hours);
 
-        // By design, the new-day advance is gated until the bound mid-day word lands.
-        vm.expectRevert(); // RngNotReady — the buffer-freeze drain gate front-runs daily RNG
+        // The new-day advance no longer reverts: it abandons the stalled mid-day request and
+        // promotes it to this day's daily request (drain-gate takeover) in one call.
         game.advanceGame();
+        uint256 dailyReqId = mockVRF.lastRequestId();
+        assertTrue(dailyReqId != stalledReqId, "takeover issued a fresh daily VRF request");
+        assertTrue(game.rngLocked(), "takeover promoted the request to the daily lock");
 
-        // Recovery: permissionless retry re-fires the mid-day request.
-        game.retryLootboxRng();
-        uint256 retryId = mockVRF.lastRequestId();
-        assertTrue(retryId != reqId, "retry re-issued the mid-day request");
-        mockVRF.fulfillRandomWords(retryId, 0xBEEF);
+        // The abandoned mid-day request is rejected on late arrival (requestId mismatch).
+        mockVRF.fulfillRandomWords(stalledReqId, 0x1111);
 
-        // Advance now proceeds (drain + process the day); the latch releases (MIDRNG-02 fix).
-        uint256 lastFulfilled = retryId;
+        // The fresh daily word drains the swapped batch and releases the latch.
+        mockVRF.fulfillRandomWords(dailyReqId, 0xBEEF);
+        uint256 lastFulfilled = dailyReqId;
         for (uint256 i = 0; i < 50; i++) {
             game.advanceGame();
             uint256 rid = mockVRF.lastRequestId();
@@ -443,7 +440,7 @@ contract VRFCore is DeployProtocol {
             }
             if (!game.rngLocked() && _lrMidDay() == 0) break;
         }
-        assertEq(_lrMidDay(), 0, "latch released after the mid-day word lands + drains");
+        assertEq(_lrMidDay(), 0, "latch released after the daily takeover drains");
     }
 
     /// @notice After mid-day VRF fulfills, vrfRequestId and rngRequestTime are cleared,

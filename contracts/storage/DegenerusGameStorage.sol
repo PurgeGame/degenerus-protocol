@@ -832,53 +832,6 @@ abstract contract DegenerusGameStorage {
     }
 
     // =========================================================================
-    // Queue Swap and Prize Pool Freeze
-    // =========================================================================
-
-    /// @dev Toggle the active ticket queue buffer and reset the read-slot drained flag.
-    ///      Fail-open by design: every caller swaps only after the read slot is drained
-    ///      (gated on ticketsFullyProcessed / a finished drain), so a non-empty read slot is
-    ///      unreachable here. This runs inside the advance heartbeat, where a revert would
-    ///      brick the game; in the impossible non-empty case the toggle merely defers those
-    ///      entries one cycle (they stay queued, never lost) rather than reverting.
-    function _swapTicketSlot(uint24 /* purchaseLevel */) internal {
-        ticketWriteSlot = !ticketWriteSlot;
-        ticketsFullyProcessed = false;
-    }
-
-    /// @dev Swap queue buffer AND activate prize pool freeze (daily RNG path only).
-    ///      If not already frozen, pre-seeds the pending future-pool buffer with
-    ///      1% of futurePrizePool so Degenerette ETH wins can resolve during
-    ///      freeze without waiting for bet inflow. Unconsumed remainder rolls
-    ///      back to futurePool via _unfreezePool.
-    ///      If already frozen (jackpot phase), accumulators keep growing.
-    function _swapAndFreeze(uint24 purchaseLevel) internal {
-        _swapTicketSlot(purchaseLevel);
-        if (!prizePoolFrozen) {
-            prizePoolFrozen = true;
-            uint256 futureBal = _getFuturePrizePool();
-            uint256 seed = futureBal / 100;
-            if (seed != 0) {
-                _setFuturePrizePool(futureBal - seed);
-                _setPendingPools(0, uint128(seed));
-            } else {
-                prizePoolPendingPacked = 0;
-            }
-        }
-    }
-
-    /// @dev Apply pending accumulators to live pools and clear freeze.
-    ///      No-op if not currently frozen.
-    function _unfreezePool() internal {
-        if (!prizePoolFrozen) return;
-        (uint128 pNext, uint128 pFuture) = _getPendingPools();
-        (uint128 next, uint128 future) = _getPrizePools();
-        _setPrizePools(next + pNext, future + pFuture);
-        prizePoolPendingPacked = 0;
-        prizePoolFrozen = false;
-    }
-
-    // =========================================================================
     // Single-Component Prize Pool Accessors
     // =========================================================================
 

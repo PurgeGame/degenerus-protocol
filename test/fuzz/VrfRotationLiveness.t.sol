@@ -8,8 +8,8 @@ import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 /// @title VrfRotationLiveness -- VTST-02 liveness-after-rotation (proves VRF-02)
 /// @notice Proves the protocol stays LIVE after an emergency VRF coordinator/subscription
 ///         rotation. The Phase 312 fix re-issues an in-flight request on the new coordinator
-///         (mid-day or daily) so the daily-drain advance gate, requestLootboxRng, and
-///         retryLootboxRng all stay reachable -- no permanent revert / ~120-day freeze /
+///         (mid-day or daily) so the daily-drain advance gate, requestLootboxRng, and the
+///         daily-takeover failsafe all stay reachable -- no permanent revert / ~120-day freeze /
 ///         forced premature game-over.
 ///
 ///         Liveness is proven by a POSITIVE outcome (the drain loop reaches
@@ -19,7 +19,8 @@ import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 ///         these positive-outcome assertions fail naturally because the drain reverts.
 ///
 ///         Three rotation branches of updateVrfCoordinatorAndSub (AdvanceModule:1712) are
-///         exercised, plus the retryLootboxRng failsafe (Task 2):
+///         exercised, plus the daily-takeover failsafe (a stalled mid-day re-issue folded into
+///         the daily word after MIDDAY_RNG_STALL_TIMEOUT):
 ///           1. Mid-day in flight (LR_MID_DAY==1, :1726): re-issue lands in the reserved
 ///              slot N via the mid-day fulfillment branch (:1803-1804).
 ///           2. Daily in flight, rngWordCurrent==0 (:1733): re-issue fills rngWordCurrent
@@ -42,8 +43,8 @@ contract VrfRotationLiveness is DeployProtocol {
     /// @dev LR_MID_DAY occupies byte 28 of lootboxRngPacked (bit offset 224, mask 0xFF).
     uint256 private constant LR_MID_DAY_BIT = 224;
 
-    /// @dev MIDDAY_RNG_RETRY_TIMEOUT (AdvanceModule:141) and MIN_LINK_FOR_LOOTBOX_RNG (:140).
-    uint48 private constant MIDDAY_RNG_RETRY_TIMEOUT = 6 hours;
+    /// @dev MIDDAY_RNG_STALL_TIMEOUT (AdvanceModule) and MIN_LINK_FOR_LOOTBOX_RNG.
+    uint48 private constant MIDDAY_RNG_STALL_TIMEOUT = 4 hours;
     uint96 private constant MIN_LINK_FOR_LOOTBOX_RNG = 40 ether;
 
     /// @dev Last VRF request id fulfilled on the active coordinator; avoids double-fulfil
@@ -167,7 +168,7 @@ contract VrfRotationLiveness is DeployProtocol {
     /// @dev Deploy a freshly-funded 2nd MockVRFCoordinator and ADMIN-prank
     ///      updateVrfCoordinatorAndSub to repoint the game at it. Resets _lastFulfilledReqId
     ///      since the new mock has its own request counter. Funds the new subscription above
-    ///      MIN_LINK_FOR_LOOTBOX_RNG so retryLootboxRng's LINK precheck (:1139) passes.
+    ///      MIN_LINK_FOR_LOOTBOX_RNG so a re-issued mid-day request's LINK precheck passes.
     function _rotateTo() internal returns (MockVRFCoordinator newVRF) {
         newVRF = new MockVRFCoordinator();
         uint256 newSubId = newVRF.createSubscription();
@@ -350,18 +351,17 @@ contract VrfRotationLiveness is DeployProtocol {
     }
 
     // ══════════════════════════════════════════════════════════════════════
-    // Task 2: retryLootboxRng failsafe + requestLootboxRng reachability
+    // Task 2: daily-takeover failsafe + requestLootboxRng reachability
     // ══════════════════════════════════════════════════════════════════════
 
-    /// @notice retryLootboxRng failsafe (RESEARCH §5 Open Risk 1): if the NEW coordinator also
-    ///         stalls the re-issued mid-day request, retryLootboxRng reverts before
-    ///         MIDDAY_RNG_RETRY_TIMEOUT and, at/after the timeout, re-fires a fresh request on
-    ///         the new coordinator WITHOUT advancing lootboxRngIndex (no double-advance).
-    ///         Fulfilling the retry request lands a real word in the reserved index; the daily
-    ///         flow then proceeds -- recoverable, never a permanent freeze.
-    function test_retryRescuesStalledReissueAfterRotation(uint256 vrfWord) public {
+    /// @notice Daily-takeover failsafe (RESEARCH §5 Open Risk 1): if the NEW coordinator also
+    ///         stalls the re-issued mid-day request, the next daily advance abandons it after
+    ///         MIDDAY_RNG_STALL_TIMEOUT and promotes it to the daily request WITHOUT advancing
+    ///         lootboxRngIndex (no double-advance). Fulfilling the daily request lands a real word
+    ///         in the reserved index; the daily flow proceeds -- recoverable, never a freeze.
+    function test_dailyTakeoverRescuesStalledReissueAfterRotation(uint256 vrfWord) public {
         // Exclude {0,1}: 0 is zero-guarded to 1; rngWord==1 is the rngGate sentinel
-        // (AdvanceModule:298) -- the final _completeDay(vrfWord) drain would livelock if 1.
+        // (AdvanceModule) -- the final drain would livelock if 1.
         vm.assume(vrfWord != 0 && vrfWord != 1);
 
         _setupForMidDayRng();
@@ -369,6 +369,7 @@ contract VrfRotationLiveness is DeployProtocol {
         // Fire the mid-day request; capture the reserved slot N = LR_INDEX-1.
         game.requestLootboxRng();
         uint48 reservedIndex = _readLootboxRngIndex() - 1;
+        uint48 indexAfterRequest = _readLootboxRngIndex();
         assertEq(_readMidDayFlag(), 1, "requestLootboxRng must set LR_MID_DAY=1");
 
         // Rotate while in flight -- the mid-day re-issue fires on the new coordinator but the
@@ -376,50 +377,32 @@ contract VrfRotationLiveness is DeployProtocol {
         MockVRFCoordinator newVRF = _rotateTo();
         uint256 reissueReqId = newVRF.lastRequestId();
         assertTrue(reissueReqId != 0, "rotation re-issued the request on the new coordinator");
+        assertFalse(game.rngLocked(), "re-issued mid-day request leaves the daily lock clear");
 
-        // The re-issue refreshed rngRequestTime; capture it for the timeout boundary.
-        uint48 reissueTime = _readRngRequestTime();
-        assertTrue(reissueTime != 0, "rngRequestTime set by the re-issue");
-        uint48 indexBeforeRetry = _readLootboxRngIndex();
+        // The re-issue stalls. Cross the next-day boundary, well past MIDDAY_RNG_STALL_TIMEOUT:
+        // the daily advance abandons the stalled mid-day re-issue and promotes it to the daily
+        // request in a single call.
+        vm.warp(block.timestamp + 1 days + MIDDAY_RNG_STALL_TIMEOUT + 1);
+        game.advanceGame();
 
-        // Retry must REVERT before MIDDAY_RNG_RETRY_TIMEOUT (the new coordinator just re-issued).
-        vm.expectRevert();
-        game.retryLootboxRng();
+        uint256 dailyReqId = newVRF.lastRequestId();
+        assertTrue(dailyReqId != reissueReqId, "takeover issued a fresh (daily) VRF request");
+        assertTrue(game.rngLocked(), "takeover promoted the request to the daily lock");
+        // POSITIVE: takeover preserves lootboxRngIndex (isRetry -- no double-advance).
+        assertEq(_readLootboxRngIndex(), indexAfterRequest, "takeover must NOT advance lootboxRngIndex");
+        assertEq(_readLootboxWord(reservedIndex), 0, "reserved slot empty until the daily word lands");
 
-        // Still reverts one second before the timeout boundary.
-        vm.warp(uint256(reissueTime) + MIDDAY_RNG_RETRY_TIMEOUT - 1);
-        vm.expectRevert();
-        game.retryLootboxRng();
-
-        // At/after the timeout, retry succeeds and re-fires on the new coordinator.
-        vm.warp(uint256(reissueTime) + MIDDAY_RNG_RETRY_TIMEOUT);
-        game.retryLootboxRng();
-
-        uint256 retryReqId = newVRF.lastRequestId();
-        assertTrue(retryReqId != reissueReqId, "retry produced a new VRF request id");
-        // POSITIVE: retry preserves lootboxRngIndex (no double-advance).
-        assertEq(_readLootboxRngIndex(), indexBeforeRetry, "retry must NOT advance lootboxRngIndex");
-        // LR_MID_DAY remains set (buffer swap still committed) and the slot is still empty.
-        assertEq(_readMidDayFlag(), 1, "LR_MID_DAY preserved after retry");
-        assertEq(_readLootboxWord(reservedIndex), 0, "reserved slot empty until retry fulfils");
-
-        // The stalled re-issue (original) request is auto-rejected on late arrival
+        // The stalled re-issue is auto-rejected on late arrival
         // (requestId mismatch -> rawFulfillRandomWords early-returns).
         newVRF.fulfillRandomWords(reissueReqId, 0x1111);
         assertEq(_readLootboxWord(reservedIndex), 0, "late stalled re-issue word rejected on id mismatch");
 
-        // Fulfilling the retry request lands a real word in the reserved index.
-        newVRF.fulfillRandomWords(retryReqId, vrfWord);
-        assertEq(
-            _readLootboxWord(reservedIndex),
-            vrfWord,
-            "retry word fills the reserved mid-day index"
-        );
-
-        // POSITIVE liveness: the daily flow proceeds to rngLocked()==false.
-        vm.warp(block.timestamp + 1 days);
-        _completeDay(vrfWord);
-        assertFalse(game.rngLocked(), "drain reaches rngLocked()==false after retry rescue");
+        // POSITIVE liveness: fulfil the daily request, drain to rngLocked()==false, bucket filled.
+        newVRF.fulfillRandomWords(dailyReqId, vrfWord);
+        _lastFulfilledReqId = dailyReqId;
+        _drainUntilUnlocked(vrfWord);
+        assertFalse(game.rngLocked(), "drain reaches rngLocked()==false after the daily takeover");
+        assertTrue(_readLootboxWord(reservedIndex) != 0, "daily word finalized the reserved mid-day bucket");
     }
 
     /// @notice requestLootboxRng stays reachable after a completed rotation: after a

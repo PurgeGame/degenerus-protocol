@@ -2,10 +2,10 @@
 pragma solidity 0.8.34;
 
 import {Test} from "forge-std/Test.sol";
-import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage.sol";
+import {DegenerusGameAdvanceModule} from "../../contracts/modules/DegenerusGameAdvanceModule.sol";
 
 /// @title StorageHarness -- Exposes internal DegenerusGameStorage helpers for testing.
-contract StorageHarness is DegenerusGameStorage {
+contract StorageHarness is DegenerusGameAdvanceModule {
     // --- Prize Pool helpers ---
     function exposed_setPrizePools(uint128 next, uint128 future) external {
         _setPrizePools(next, future);
@@ -33,12 +33,12 @@ contract StorageHarness is DegenerusGameStorage {
     }
 
     // --- Swap / Freeze / Unfreeze ---
-    function exposed_swapTicketSlot(uint24 purchaseLevel) external {
-        _swapTicketSlot(purchaseLevel);
+    function exposed_swapTicketSlot(uint24 /* purchaseLevel */) external {
+        _swapTicketSlot();
     }
 
-    function exposed_swapAndFreeze(uint24 purchaseLevel) external {
-        _swapAndFreeze(purchaseLevel);
+    function exposed_swapAndFreeze(uint24 /* purchaseLevel */) external {
+        _swapAndFreeze();
     }
 
     function exposed_unfreezePool() external {

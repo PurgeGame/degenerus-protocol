@@ -2,10 +2,10 @@
 pragma solidity 0.8.34;
 
 import {Test} from "forge-std/Test.sol";
-import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage.sol";
+import {DegenerusGameAdvanceModule} from "../../contracts/modules/DegenerusGameAdvanceModule.sol";
 
 /// @title QueueHarness -- Exposes internal queue functions and mappings for double-buffer tests.
-contract QueueHarness is DegenerusGameStorage {
+contract QueueHarness is DegenerusGameAdvanceModule {
     // --- Queue write functions ---
     function exposed_queueTickets(address buyer, uint24 targetLevel, uint32 quantity) external {
         _queueTickets(buyer, targetLevel, quantity, false);
@@ -20,8 +20,8 @@ contract QueueHarness is DegenerusGameStorage {
     }
 
     // --- Swap ---
-    function exposed_swapTicketSlot(uint24 purchaseLevel) external {
-        _swapTicketSlot(purchaseLevel);
+    function exposed_swapTicketSlot(uint24 /* purchaseLevel */) external {
+        _swapTicketSlot();
     }
 
     // --- Key helpers ---

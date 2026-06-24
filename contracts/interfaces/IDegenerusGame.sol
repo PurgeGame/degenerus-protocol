@@ -235,10 +235,6 @@ interface IDegenerusGame {
     ///      Reverts if daily RNG locked, request pending, threshold not met, or VRF fails.
     function requestLootboxRng() external;
 
-    /// @notice Retry a stalled mid-day lootbox RNG request after the timeout window.
-    /// @dev Only callable when mid-day swap is committed and VRF has not delivered.
-    function retryLootboxRng() external;
-
     /// @notice Get lootbox status for a player on a specific lootbox index.
     /// @param player The player to query.
     /// @param lootboxIndex Lootbox RNG index assigned at purchase time.

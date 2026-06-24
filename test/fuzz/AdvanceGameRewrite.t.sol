@@ -2,21 +2,21 @@
 pragma solidity 0.8.34;
 
 import {Test} from "forge-std/Test.sol";
-import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage.sol";
+import {DegenerusGameAdvanceModule} from "../../contracts/modules/DegenerusGameAdvanceModule.sol";
 
 /// @title AdvanceHarness -- Exposes drain-gate logic and freeze/queue helpers for advanceGame rewrite tests.
-contract AdvanceHarness is DegenerusGameStorage {
+contract AdvanceHarness is DegenerusGameAdvanceModule {
     // --- Freeze / Unfreeze ---
-    function exposed_swapAndFreeze(uint24 purchaseLevel) external {
-        _swapAndFreeze(purchaseLevel);
+    function exposed_swapAndFreeze(uint24 /* purchaseLevel */) external {
+        _swapAndFreeze();
     }
 
     function exposed_unfreezePool() external {
         _unfreezePool();
     }
 
-    function exposed_swapTicketSlot(uint24 purchaseLevel) external {
-        _swapTicketSlot(purchaseLevel);
+    function exposed_swapTicketSlot(uint24 /* purchaseLevel */) external {
+        _swapTicketSlot();
     }
 
     // --- Ticket queue helpers ---

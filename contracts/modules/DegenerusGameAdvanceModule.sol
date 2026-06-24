@@ -38,8 +38,6 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
     error InsufficientLink(); // VRF subscription LINK balance is below the minimum required for a lootbox RNG request.
     error NoPendingLootbox(); // No pending lootbox ETH or FLIP value; nothing to trigger a mid-day RNG request for.
     error BelowThreshold(); // Pending lootbox ETH-equivalent value is below the configured threshold required to trigger mid-day RNG.
-    error NoMidDayRequest(); // No mid-day lootbox VRF request is active; there is nothing to retry.
-    error RngNotPending(); // No outstanding VRF request exists (rngRequestTime == 0); retry has nothing to re-issue.
     error RngInFlight(); // A VRF request is already in flight (rngRequestTime != 0); cannot start another.
     error NotTimeYet();
     error RngNotReady();
@@ -146,7 +144,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
     bytes32 private constant FUTURE_KEEP_TAG = keccak256("future-keep");
     bytes32 private constant BONUS_TRAITS_TAG = keccak256("BONUS_TRAITS");
     uint96 private constant MIN_LINK_FOR_LOOTBOX_RNG = 40 ether;
-    uint48 private constant MIDDAY_RNG_RETRY_TIMEOUT = 6 hours;
+    uint48 private constant MIDDAY_RNG_STALL_TIMEOUT = 4 hours;
 
     /// @dev Per-call afking process-STAGE gas-weight budget. Every day is uniform: the streak is
     ///      computed on read from the Sub slot (no per-buy `playerQuestStates` STATICCALL, no
@@ -302,7 +300,35 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                     ) - 1;
                     if (lootboxRngWordByIndex[preIdx] == 0) {
                         uint256 cw = rngWordCurrent;
-                        if (cw == 0) revert RngNotReady();
+                        if (cw == 0) {
+                            // A mid-day lootbox request (rngLockedFlag == false) whose own VRF
+                            // word never arrived has bled past the day boundary. If it has stalled
+                            // past MIDDAY_RNG_STALL_TIMEOUT, abandon it and promote it to this
+                            // day's daily request: _requestRng re-fires VRF under the daily lock,
+                            // and its isRetry path preserves the reserved index so the fresh daily
+                            // word seals the day AND finalizes this bucket (preIdx) — just as the
+                            // mid-day word would have. The stale mid-day requestId stops matching
+                            // in rawFulfillRandomWords. Then handle the ticket buffer like a normal
+                            // daily request: if the read slot is drained, swap the write slot in so
+                            // its tickets also resolve against this word; otherwise the read slot
+                            // still holds the undrained mid-day batch, so freeze only and let it
+                            // drain against the new word next advance.
+                            if (
+                                !rngLockedFlag &&
+                                rngRequestTime != 0 &&
+                                ts - rngRequestTime >= MIDDAY_RNG_STALL_TIMEOUT
+                            ) {
+                                _requestRng(lastPurchase, purchaseLevel);
+                                if (ticketQueue[preRk].length == 0) {
+                                    _swapAndFreeze();
+                                } else {
+                                    _freezePool();
+                                }
+                                stage = STAGE_RNG_REQUESTED;
+                                break;
+                            }
+                            revert RngNotReady();
+                        }
                         unchecked {
                             cw += totalFlipReversals;
                         }
@@ -408,7 +434,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
             );
             psd += uint24(gapDays);
             if (rngWord == 1) {
-                _swapAndFreeze(purchaseLevel);
+                _swapAndFreeze();
                 stage = STAGE_RNG_REQUESTED;
                 break;
             }
@@ -716,7 +742,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                 // drain on the next tx. When the swapped-in slot is already
                 // empty, both slots are drained -- mark fully processed. Either
                 // way break, so the terminal jackpot runs in its own tx.
-                _swapTicketSlot(lvl + 1);
+                _swapTicketSlot();
                 if (ticketQueue[_tqReadKey(lvl + 1)].length == 0) {
                     ticketsFullyProcessed = true;
                 }
@@ -1164,7 +1190,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
             uint24 purchaseLevel_ = level + 1;
             uint24 wk = _tqWriteKey(purchaseLevel_);
             if (ticketQueue[wk].length > 0 && ticketsFullyProcessed) {
-                _swapTicketSlot(purchaseLevel_);
+                _swapTicketSlot();
                 _lrWrite(LR_MID_DAY_SHIFT, LR_MID_DAY_MASK, 1);
             }
         }
@@ -1176,33 +1202,6 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         _lrAdvanceIndexClearPending();
         vrfRequestId = id;
         rngWordCurrent = 0;
-        rngRequestTime = uint48(block.timestamp);
-    }
-
-    /// @notice Retry a stalled mid-day lootbox RNG request after MIDDAY_RNG_RETRY_TIMEOUT.
-    /// @dev Permissionless. Only reachable when the original mid-day request committed
-    ///      a buffer swap (LR_MID_DAY = 1) and the VRF callback has not delivered.
-    ///      Re-fires VRF with the same parameters; the stalled requestId is auto-rejected
-    ///      by the requestId match in rawFulfillRandomWords. Buffer state and the
-    ///      pre-advanced lootboxRngIndex are preserved so the new word lands in the
-    ///      same bucket the original was bound to.
-    function retryLootboxRng() external {
-        // Never touch the shared VRF slots while a daily request holds the lock — otherwise
-        // a retry could overwrite the in-flight daily requestId. Mirrors requestLootboxRng.
-        // Legitimate mid-day retries run with rngLockedFlag == false.
-        if (rngLockedFlag) revert RngLocked();
-        if (_lrRead(LR_MID_DAY_SHIFT, LR_MID_DAY_MASK) == 0) revert NoMidDayRequest();
-        if (rngRequestTime == 0) revert RngNotPending();
-        if (uint48(block.timestamp) < rngRequestTime + MIDDAY_RNG_RETRY_TIMEOUT) revert NotTimeYet();
-
-        (uint96 linkBal, , , , ) = vrfCoordinator.getSubscription(
-            vrfSubscriptionId
-        );
-        if (linkBal < MIN_LINK_FOR_LOOTBOX_RNG) revert InsufficientLink();
-
-        uint256 id = _requestVrfWord(VRF_MIDDAY_CONFIRMATIONS);
-
-        vrfRequestId = id;
         rngRequestTime = uint48(block.timestamp);
     }
 
@@ -1307,10 +1306,15 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
             return (currentWord, gapDays);
         }
 
-        // Waiting for VRF - check for timeout retry
+        // Waiting for VRF - check for timeout retry. A daily request (rngLockedFlag) gets the
+        // 12h VRF retry; a lootbox-only mid-day request (rngLockedFlag == false) that bled past
+        // the day boundary is abandoned after MIDDAY_RNG_STALL_TIMEOUT and promoted to this day's
+        // daily request — _requestRng's isRetry path keeps the reserved index, so the fresh daily
+        // word finalizes that bucket just as the mid-day word would have.
         if (rngRequestTime != 0) {
             uint48 elapsed = ts - rngRequestTime;
-            if (elapsed >= 12 hours) {
+            uint48 timeout = rngLockedFlag ? 12 hours : MIDDAY_RNG_STALL_TIMEOUT;
+            if (elapsed >= timeout) {
                 _requestRng(isTicketJackpotDay, lvl);
                 return (1, 0);
             }
@@ -1720,6 +1724,57 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
             ((nextIndex & LR_INDEX_MASK) << LR_INDEX_SHIFT);
     }
 
+    // =========================================================================
+    // Queue Swap and Prize Pool Freeze
+    // =========================================================================
+
+    /// @dev Toggle the active ticket queue buffer and reset the read-slot drained flag.
+    ///      Fail-open by design: every caller swaps only after the read slot is drained
+    ///      (gated on ticketsFullyProcessed / a finished drain), so a non-empty read slot is
+    ///      unreachable here. This runs inside the advance heartbeat, where a revert would
+    ///      brick the game; in the impossible non-empty case the toggle merely defers those
+    ///      entries one cycle (they stay queued, never lost) rather than reverting.
+    function _swapTicketSlot() internal {
+        ticketWriteSlot = !ticketWriteSlot;
+        ticketsFullyProcessed = false;
+    }
+
+    /// @dev Activate the prize pool freeze. If not already frozen, pre-seeds the pending
+    ///      future-pool buffer with 1% of futurePrizePool so Degenerette ETH wins can resolve
+    ///      during freeze without waiting for bet inflow. Unconsumed remainder rolls back to
+    ///      futurePool via _unfreezePool. If already frozen (jackpot phase), accumulators keep
+    ///      growing.
+    function _freezePool() internal {
+        if (!prizePoolFrozen) {
+            prizePoolFrozen = true;
+            uint256 futureBal = _getFuturePrizePool();
+            uint256 seed = futureBal / 100;
+            if (seed != 0) {
+                _setFuturePrizePool(futureBal - seed);
+                _setPendingPools(0, uint128(seed));
+            } else {
+                prizePoolPendingPacked = 0;
+            }
+        }
+    }
+
+    /// @dev Swap queue buffer AND activate the prize pool freeze (daily RNG path only).
+    function _swapAndFreeze() internal {
+        _swapTicketSlot();
+        _freezePool();
+    }
+
+    /// @dev Apply pending accumulators to live pools and clear freeze.
+    ///      No-op if not currently frozen.
+    function _unfreezePool() internal {
+        if (!prizePoolFrozen) return;
+        (uint128 pNext, uint128 pFuture) = _getPendingPools();
+        (uint128 next, uint128 future) = _getPrizePools();
+        _setPrizePools(next + pNext, future + pFuture);
+        prizePoolPendingPacked = 0;
+        prizePoolFrozen = false;
+    }
+
     function _finalizeRngRequest(
         bool isTicketJackpotDay,
         uint24 lvl,
@@ -1817,7 +1872,8 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         // Detect what is in flight and re-issue on the new coordinator.
         // The request is accepted before the new subscription is LINK-funded; DegenerusAdmin
         // funds it in the same _executeSwap transaction (transferAndCall), and the VRF node
-        // fulfills once funded. retryLootboxRng is the failsafe if the new coordinator stalls.
+        // fulfills once funded. If the new coordinator also stalls, the daily advance abandons a
+        // mid-day request and promotes it to the daily word after MIDDAY_RNG_STALL_TIMEOUT.
         if (_lrRead(LR_MID_DAY_SHIFT, LR_MID_DAY_MASK) != 0) {
             // Mid-day in flight: KEEP LR_MID_DAY=1; LR_INDEX preserved so the new word lands
             // in the same reserved slot [N] via the mid-day fulfillment branch (:1772).

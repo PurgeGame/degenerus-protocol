@@ -517,10 +517,12 @@ contract VRFStallEdgeCases is DeployProtocol {
         game.advanceGame();
     }
 
-    /// @notice Unit: retryLootboxRng reverts before the 6h timeout, succeeds after,
-    ///         re-fires VRF without advancing the lootbox index, and the new word
-    ///         resolves the stalled mid-day request so the daily flow can proceed.
-    function test_retryLootboxRngRescuesStalledMidDay() public {
+    /// @notice Unit: a mid-day lootbox RNG request that stalls past MIDDAY_RNG_STALL_TIMEOUT
+    ///         is abandoned at the next daily advance and promoted to the daily request. The
+    ///         fresh daily word resolves the reserved bucket (index preserved, isRetry — no
+    ///         double-advance) and drains the swapped ticket batch — no retryLootboxRng,
+    ///         no NotTimeYet / RngNotReady deadlock.
+    function test_dailyAdvanceTakesOverStalledMidDay() public {
         // Complete day 2 so a daily word exists for the mid-day request gate
         _completeDay(0xDEAD0001);
         vm.warp(3 * 86400);
@@ -543,10 +545,11 @@ contract VRFStallEdgeCases is DeployProtocol {
 
         uint256 stalledReqId = mockVRF.lastRequestId();
         uint48 postRequestIndex = _lootboxRngIndex();
-        uint48 stalledRequestTime = _readRngRequestTime();
+        uint48 reservedBucket = postRequestIndex - 1;
 
         assertTrue(stalledReqId != 0, "Mid-day VRF request fired");
         assertEq(postRequestIndex, preIndex + 1, "Mid-day request advanced lootboxRngIndex");
+        assertFalse(game.rngLocked(), "Mid-day request leaves the daily lock clear");
 
         // Confirm LR_MID_DAY = 1 (swap committed)
         uint256 lrPacked = uint256(
@@ -554,50 +557,33 @@ contract VRFStallEdgeCases is DeployProtocol {
         );
         assertTrue(((lrPacked >> 224) & 0xFF) != 0, "LR_MID_DAY set after mid-day request");
 
-        // Retry should revert immediately (timeout not elapsed)
-        vm.expectRevert();
-        game.retryLootboxRng();
+        // The mid-day VRF stalls. Cross the next-day boundary (~24h >> 4h stale) and advance:
+        // the daily drain-gate abandons the stalled mid-day request and promotes it to the
+        // daily request in a single call.
+        vm.warp(4 * 86400);
+        game.advanceGame();
 
-        // Retry should still revert just before 6h
-        vm.warp(block.timestamp + 6 hours - 1);
-        vm.expectRevert();
-        game.retryLootboxRng();
-
-        // At exactly 6h after the original request, retry succeeds
-        vm.warp(uint256(stalledRequestTime) + 6 hours);
-        game.retryLootboxRng();
-
-        uint256 retryReqId = mockVRF.lastRequestId();
-        assertTrue(retryReqId != stalledReqId, "Retry produced a new VRF request id");
+        uint256 dailyReqId = mockVRF.lastRequestId();
+        assertTrue(dailyReqId != stalledReqId, "Takeover issued a fresh (daily) VRF request");
+        assertTrue(game.rngLocked(), "Takeover promoted the request to the daily lock");
         assertEq(
             _lootboxRngIndex(),
             postRequestIndex,
-            "Retry preserves lootboxRngIndex (no double-advance)"
+            "Takeover preserves lootboxRngIndex (isRetry - no double-advance)"
         );
-        assertTrue(_readRngRequestTime() > stalledRequestTime, "rngRequestTime refreshed by retry");
 
-        // LR_MID_DAY remains set (buffer swap is still committed)
-        lrPacked = uint256(
-            vm.load(address(game), bytes32(uint256(SLOT_LOOTBOX_RNG_PACKED)))
-        );
-        assertTrue(((lrPacked >> 224) & 0xFF) != 0, "LR_MID_DAY preserved after retry");
-
-        // The stalled (original) requestId is auto-rejected on late arrival
-        uint48 stalledBucket = postRequestIndex - 1;
+        // The abandoned mid-day request is auto-rejected on late arrival (requestId mismatch).
         mockVRF.fulfillRandomWords(stalledReqId, 0x1111);
-        assertEq(_lootboxRngWord(stalledBucket), 0, "Late stalled word rejected on requestId mismatch");
+        assertEq(_lootboxRngWord(reservedBucket), 0, "Stalled mid-day word rejected on id mismatch");
 
-        // The retry word lands in the same bucket the original was bound to
-        mockVRF.fulfillRandomWords(retryReqId, 0xCAFE0BAD);
-        assertEq(
-            _lootboxRngWord(stalledBucket),
-            0xCAFE0BAD,
-            "Retry word fills the original mid-day bucket"
-        );
-
-        // After fulfillment, advanceGame can drain (no NotTimeYet / RngNotReady deadlock)
-        vm.warp(4 * 86400);
-        game.advanceGame();
+        // The fresh daily word fills the reserved bucket and the swapped batch drains to unlock.
+        mockVRF.fulfillRandomWords(dailyReqId, 0xCAFE0BAD);
+        for (uint256 i = 0; i < 50; i++) {
+            if (!game.rngLocked()) break;
+            game.advanceGame();
+        }
+        assertFalse(game.rngLocked(), "Daily flow completes after takeover (no deadlock)");
+        assertTrue(_lootboxRngWord(reservedBucket) != 0, "Daily word finalized the reserved mid-day bucket");
     }
 
     // ══════════════════════════════════════════════════════════════════════
