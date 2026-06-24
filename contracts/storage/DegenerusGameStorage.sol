@@ -879,10 +879,11 @@ abstract contract DegenerusGameStorage {
     /// @dev Canonical shortfall settle: cover `shortfall` wei from the buyer's own balances,
     ///      claimable first (only when `allowClaimable`) then prepaid afking. Tier 1 draws
     ///      claimable down to the STRICT 1-wei sentinel; tier 2 drains afking toward 0 (no
-    ///      sentinel). Each debit pairs an equal `claimablePool` debit so the solvency total
-    ///      stays exact, and an afking draw emits AfkingSpent. Reverts E() when the two tiers
-    ///      together cannot cover the shortfall. Single sink so the sentinel + paired debits
-    ///      cannot drift across the ETH-in paths that accept claimable/afking shortfall.
+    ///      sentinel). The two tiers' draws pair a single aggregate `claimablePool` debit so
+    ///      the solvency total stays exact, and an afking draw emits AfkingSpent. Reverts E()
+    ///      when the two tiers together cannot cover the shortfall. Single sink so the sentinel
+    ///      + the aggregate debit cannot drift across the ETH-in paths that accept claimable/
+    ///      afking shortfall.
     /// @return claimableUsed Wei drawn from claimable. @return afkingUsed Wei drawn from afking.
     function _settleShortfall(address buyer, uint256 shortfall, bool allowClaimable)
         internal
@@ -896,7 +897,6 @@ abstract contract DegenerusGameStorage {
                 claimableUsed = shortfall < available ? shortfall : available;
                 if (claimableUsed != 0) {
                     _debitClaimable(buyer, claimableUsed);
-                    claimablePool -= uint128(claimableUsed);
                 }
             }
         }
@@ -905,9 +905,12 @@ abstract contract DegenerusGameStorage {
             if (_afkingOf(buyer) < remaining) revert E();
             afkingUsed = remaining;
             _debitAfking(buyer, afkingUsed);
-            claimablePool -= uint128(afkingUsed);
             emit AfkingSpent(buyer, afkingUsed);
         }
+        // One claimablePool RMW for both tiers — linear aggregate, same underflow domain as
+        // the sequential per-tier debits; the per-player balance debits above stay per-tier.
+        uint256 poolDraw = claimableUsed + afkingUsed;
+        if (poolDraw != 0) claimablePool -= uint128(poolDraw);
     }
 
     // =========================================================================
