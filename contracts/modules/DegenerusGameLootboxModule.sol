@@ -195,8 +195,8 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     uint256 private constant COINFLIP_BOON_MAX_DEPOSIT = 100_000 ether;
     /// @dev Decimator boon cap for base amount (50k FLIP) used in EV estimation.
     uint256 private constant DECIMATOR_BOON_CAP = 50_000 ether;
-    /// @dev Whale bundle standard price (used for whale discount boon EV estimation).
-    uint256 private constant WHALE_BUNDLE_STANDARD_PRICE =
+    /// @dev Whale pass standard price (used for whale discount boon EV estimation).
+    uint256 private constant WHALE_PASS_STANDARD_PRICE =
         4 ether;
     /// @dev Whale pass standard tickets per level. Reported in the
     ///      LootBoxWhalePassJackpot event for downstream indexers; the
@@ -1572,9 +1572,9 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         }
 
         // Whale discount boons (10/20/35% off standard price)
-        uint256 whaleMax10 = (WHALE_BUNDLE_STANDARD_PRICE * LOOTBOX_WHALE_BOON_DISCOUNT_10_BPS) / 10_000;
-        uint256 whaleMax25 = (WHALE_BUNDLE_STANDARD_PRICE * LOOTBOX_WHALE_BOON_DISCOUNT_25_BPS) / 10_000;
-        uint256 whaleMax50 = (WHALE_BUNDLE_STANDARD_PRICE * LOOTBOX_WHALE_BOON_DISCOUNT_50_BPS) / 10_000;
+        uint256 whaleMax10 = (WHALE_PASS_STANDARD_PRICE * LOOTBOX_WHALE_BOON_DISCOUNT_10_BPS) / 10_000;
+        uint256 whaleMax25 = (WHALE_PASS_STANDARD_PRICE * LOOTBOX_WHALE_BOON_DISCOUNT_25_BPS) / 10_000;
+        uint256 whaleMax50 = (WHALE_PASS_STANDARD_PRICE * LOOTBOX_WHALE_BOON_DISCOUNT_50_BPS) / 10_000;
         totalWeight += BOON_WEIGHT_WHALE_10;
         weightedMax += BOON_WEIGHT_WHALE_10 * whaleMax10;
         totalWeight += BOON_WEIGHT_WHALE_25;

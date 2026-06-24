@@ -18,10 +18,10 @@ import {PriceLookupLib} from "../../contracts/libraries/PriceLookupLib.sol";
 ///   ticket+lootbox-bundle buys — each is proven twice, once funded with FRESH ETH (Combined leg) and once
 ///   funded with CLAIMABLE (Claimable leg), asserting the cure is funding-agnostic.
 ///
-///   The separate `purchaseWhaleBundle()` pass-purchase host (WhaleModule._purchaseWhaleBundle) is NOT a cure
+///   The separate `purchaseWhalePass()` pass-purchase host (WhaleModule._purchaseWhalePass) is NOT a cure
 ///   path — it writes mintPacked_ via field-isolated setPacked calls and never calls `_clearCurse`, so it
 ///   PRESERVES an existing curse. That truthful non-cure behavior is asserted by contrast (a curse survives a
-///   whale-bundle pass-purchase) so the cure-vs-no-cure boundary is falsifiable in both directions.
+///   whale-pass purchase) so the cure-vs-no-cure boundary is falsifiable in both directions.
 ///
 ///   BOUNTY STAMP (CURSE-05): a sub-ticket / small-lootbox buy stamps DAY_SHIFT (the buyer becomes
 ///   _bountyEligible — read via the public game.bountyEligible view) but does NOT clear the curse. A manual
@@ -161,7 +161,7 @@ contract V61CureBountyDecurse is DeployProtocol {
 
     /// @notice A "whale-sized" bundled buy in the SAME transaction (a ticket batch + a lootbox via the
     ///         purchase() host) cures — the combined totalCost is comfortably >= priceWei. Fresh ETH and
-    ///         claimable. (This is the purchase()-host "bundle"; the separate purchaseWhaleBundle pass-host is
+    ///         claimable. (This is the purchase()-host "bundle"; the separate purchaseWhalePass pass-host is
     ///         proven NOT to cure below.)
     function testCureTicketPlusLootboxBundleBothFundings() public {
         uint256 boxAmount = _oneTicketCost();
@@ -236,20 +236,20 @@ contract V61CureBountyDecurse is DeployProtocol {
         assertEq(curedScore - notCuredScore, curse, "cure-before-score: the gap == the cleared curse penalty (curse points)");
     }
 
-    /// @notice CONTRAST — the separate purchaseWhaleBundle() pass-host does NOT cure (it is not a
+    /// @notice CONTRAST — the separate purchaseWhalePass() pass-host does NOT cure (it is not a
     ///         _purchaseForWith path; it writes mintPacked_ field-isolated and never calls _clearCurse). A
-    ///         curse survives a whale-bundle pass-purchase. This pins the cure to the purchase() host only and
+    ///         curse survives a whale-pass purchase. This pins the cure to the purchase() host only and
     ///         keeps the cure-vs-no-cure boundary falsifiable.
-    function testWhaleBundlePassPurchaseDoesNotCure() public {
-        address p = makeAddr("whalebundle_nocure");
+    function testWhalePassPurchaseDoesNotCure() public {
+        address p = makeAddr("whalepass_nocure");
         _seedCurse(p, 6);
-        // A 1-bundle whale pass-purchase at the early price (2.4 ETH at levels 0-4). The bundle host reverts on
+        // A single whale pass purchase at the early price (2.4 ETH at levels 0-4). The pass host reverts on
         // OVER-payment (msg.value > totalPrice), so send EXACTLY the price.
         uint256 price = 2.4 ether;
         vm.deal(p, price);
         vm.prank(p);
-        game.purchaseWhaleBundle{value: price}(p, 1);
-        assertEq(game.curseCountOf(p), 6, "whale-bundle pass-purchase preserves the curse (not a cure path)");
+        game.purchaseWhalePass{value: price}(p, 1);
+        assertEq(game.curseCountOf(p), 6, "whale-pass purchase preserves the curse (not a cure path)");
     }
 
     // =========================================================================

@@ -7,12 +7,12 @@ import {SolvencyObligations} from "../helpers/SolvencyObligations.sol";
 
 /// @title WhaleSybilInvariant -- Proves solvency under concurrent whale + Sybil pressure
 /// @notice NEVER PREVIOUSLY FUZZED in combination. Previous tests exercised whale operations
-///         and standard purchases independently. This harness interleaves whale bundle purchases
+///         and standard purchases independently. This harness interleaves whale pass purchases
 ///         (2.4-4 ETH each, qty 1-5) with Sybil minimum-cost purchases (1/4 ticket each)
 ///         from a large actor pool.
 ///
 ///         Attack vectors targeted:
-///         1. Whale bundle at level boundary + simultaneous Sybil flood = pool corruption?
+///         1. Whale pass at level boundary + simultaneous Sybil flood = pool corruption?
 ///         2. Whale overpayment combined with Sybil exact-price = accounting mismatch?
 ///         3. Large whale claims interleaved with many small Sybil purchases
 ///         4. Pool obligation tracking under mixed purchase types

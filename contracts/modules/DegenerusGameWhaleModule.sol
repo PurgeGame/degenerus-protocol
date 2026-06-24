@@ -13,7 +13,7 @@ import {DegenerusGameMintStreakUtils} from "./DegenerusGameMintStreakUtils.sol";
 /**
  * @title DegenerusGameWhaleModule
  * @author Burnie Degenerus
- * @notice Delegate-called module handling whale bundle, lazy pass, and deity pass purchases.
+ * @notice Delegate-called module handling whale pass, lazy pass, and deity pass purchases.
  * @dev This module is called via delegatecall from DegenerusGame, meaning all storage
  *      reads/writes operate on the game contract's storage.
  */
@@ -93,13 +93,13 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
     /// @dev PPM scale for DGNRS pool calculations (1,000,000 = 100%).
     uint32 private constant DGNRS_WHALE_REWARD_PPM_SCALE = 1_000_000;
 
-    /// @dev Whale bundle minter reward: 1% of whale pool.
+    /// @dev Whale pass minter reward: 1% of whale pool.
     uint32 private constant DGNRS_WHALE_MINTER_PPM = 10_000;
 
-    /// @dev Direct affiliate reward for whale bundle: 0.1% of affiliate pool.
+    /// @dev Direct affiliate reward for whale pass: 0.1% of affiliate pool.
     uint32 private constant DGNRS_AFFILIATE_DIRECT_WHALE_PPM = 1_000;
 
-    /// @dev Upline affiliate reward for whale bundle: 0.02% of affiliate pool.
+    /// @dev Upline affiliate reward for whale pass: 0.02% of affiliate pool.
     uint32 private constant DGNRS_AFFILIATE_UPLINE_WHALE_PPM = 200;
 
     /// @dev Direct affiliate reward for deity pass: 0.5% of affiliate pool.
@@ -123,22 +123,22 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
     /// @dev Lazy pass: split to future pool (matches standard purchase split).
     uint16 private constant LAZY_PASS_TO_FUTURE_BPS = 1000;
 
-    /// @dev Whale bundle early price (levels 0-3).
-    uint256 private constant WHALE_BUNDLE_EARLY_PRICE = 2.4 ether;
+    /// @dev Whale pass early price (levels 0-3).
+    uint256 private constant WHALE_PASS_EARLY_PRICE = 2.4 ether;
 
-    /// @dev Whale bundle standard price (levels 4+).
-    uint256 private constant WHALE_BUNDLE_STANDARD_PRICE = 4 ether;
+    /// @dev Whale pass standard price (levels 4+).
+    uint256 private constant WHALE_PASS_STANDARD_PRICE = 4 ether;
 
-    /// @dev Whale bundle bonus tickets per level for levels up to 10.
+    /// @dev Whale pass bonus tickets per level for levels up to 10.
     uint32 private constant WHALE_BONUS_TICKETS_PER_LEVEL = 40;
 
-    /// @dev Whale bundle standard tickets per level for levels 11+.
+    /// @dev Whale pass standard tickets per level for levels 11+.
     uint32 private constant WHALE_STANDARD_TICKETS_PER_LEVEL = 2;
 
-    /// @dev Last level eligible for whale bundle bonus tickets.
+    /// @dev Last level eligible for whale pass bonus tickets.
     uint24 private constant WHALE_BONUS_END_LEVEL = 10;
 
-    /// @dev Whale bundle lootbox share (10%).
+    /// @dev Whale pass lootbox share (10%).
     uint16 private constant WHALE_LOOTBOX_BPS = 1000;
 
     /// @dev Deity pass lootbox share (10%).
@@ -155,7 +155,7 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
     // -------------------------------------------------------------------------
 
     /**
-     * @notice Purchase a 100-level whale bundle.
+     * @notice Purchase a 100-level whale pass.
      * @dev Available at any level. Tickets always start at x1.
      *      - Boosts levelCount by delta between current freeze and new freeze (max 100, no double dipping).
      *      - Queues 40 × quantity bonus tickets/lvl for levels passLevel-10, 2 × quantity standard tickets/lvl for the rest.
@@ -167,13 +167,13 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
      *      Fund distribution:
      *      - Pre-game (level 0): 30% next pool, 70% future pool
      *      - Post-game (level > 0): 5% next pool, 95% future pool
-     * @param buyer The address receiving the bundle.
-     * @param quantity Number of bundles to purchase (1-100).
+     * @param buyer The address receiving the pass.
+     * @param quantity Number of passes to purchase (1-100).
      * @custom:reverts E When gameOver is true.
      * @custom:reverts E When quantity is 0 or exceeds 100.
      * @custom:reverts E When msg.value does not match required price.
      */
-    function purchaseWhaleBundle(
+    function purchaseWhalePass(
         address buyer,
         uint256 quantity
     ) external payable {
@@ -209,7 +209,7 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
                 BitPackingLib.MASK_24
         );
 
-        // Bundle covers 100 levels starting from current level
+        // Pass covers 100 levels starting from current level
         uint24 ticketStartLevel = passLevel;
 
         // Calculate freeze extension and stat boost (delta-based, no double dipping)
@@ -225,26 +225,26 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
             levelsToAdd = deltaFreeze;
         }
 
-        // Price: boon discount applies to first bundle only,
+        // Price: boon discount applies to first pass only,
         //        otherwise 2.4 ETH at levels 0-3, 4 ETH after
         uint256 totalPrice;
         if (hasValidBoon) {
             uint8 wTier = uint8(s0 >> BP_WHALE_TIER_SHIFT);
             uint16 discountBps = _whaleTierToBps(wTier);
-            uint256 discountedPrice = (WHALE_BUNDLE_STANDARD_PRICE *
+            uint256 discountedPrice = (WHALE_PASS_STANDARD_PRICE *
                 (10_000 - discountBps)) / 10_000;
             // Clear whale fields (consumed)
             bp.slot0 = s0 & BP_WHALE_CLEAR;
             totalPrice =
                 discountedPrice +
-                WHALE_BUNDLE_STANDARD_PRICE *
+                WHALE_PASS_STANDARD_PRICE *
                 (quantity - 1);
         } else {
-            // x99 levels: minimum 2 bundles (8 ETH) to deter fresh-account century bonus farming
+            // x99 levels: minimum 2 passes (8 ETH) to deter fresh-account century bonus farming
             if (passLevel % 100 == 0 && quantity < 2) revert E();
             uint256 unitPrice = passLevel <= 4
-                ? WHALE_BUNDLE_EARLY_PRICE
-                : WHALE_BUNDLE_STANDARD_PRICE;
+                ? WHALE_PASS_EARLY_PRICE
+                : WHALE_PASS_STANDARD_PRICE;
             totalPrice = unitPrice * quantity;
         }
 
@@ -278,10 +278,10 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
         );
         data = BitPackingLib.setPacked(
             data,
-            BitPackingLib.WHALE_BUNDLE_TYPE_SHIFT,
+            BitPackingLib.WHALE_PASS_TYPE_SHIFT,
             3,
             3
-        ); // 3 = 100-level bundle
+        ); // 3 = 100-level pass
         data = BitPackingLib.setPacked(
             data,
             BitPackingLib.LAST_LEVEL_SHIFT,
@@ -344,7 +344,7 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
         }
 
         for (uint256 i = 0; i < quantity; ) {
-            _rewardWhaleBundleDgnrs(buyer, affiliateAddr, upline, upline2);
+            _rewardWhalePassDgnrs(buyer, affiliateAddr, upline, upline2);
             unchecked {
                 ++i;
             }
@@ -708,12 +708,12 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
         }
     }
 
-    /// @dev Distribute DGNRS rewards for whale bundle purchase to buyer and affiliates.
-    /// @param buyer The bundle purchaser receiving minter reward.
+    /// @dev Distribute DGNRS rewards for whale pass purchase to buyer and affiliates.
+    /// @param buyer The pass purchaser receiving minter reward.
     /// @param affiliateAddr Direct referrer (receives 0.1% of affiliate pool).
     /// @param upline Second-level referrer (receives 0.02% of affiliate pool).
     /// @param upline2 Third-level referrer (receives 0.01% of affiliate pool).
-    function _rewardWhaleBundleDgnrs(
+    function _rewardWhalePassDgnrs(
         address buyer,
         address affiliateAddr,
         address upline,

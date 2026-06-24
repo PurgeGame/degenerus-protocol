@@ -1824,10 +1824,10 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
         uint24 frozenUntilLevel = uint24(
             (packed >> BitPackingLib.FROZEN_UNTIL_LEVEL_SHIFT) & BitPackingLib.MASK_24
         );
-        uint8 bundleType = uint8(
-            (packed >> BitPackingLib.WHALE_BUNDLE_TYPE_SHIFT) & 3
+        uint8 passType = uint8(
+            (packed >> BitPackingLib.WHALE_PASS_TYPE_SHIFT) & 3
         );
-        if (frozenUntilLevel >= level && (bundleType == 1 || bundleType == 3)) return;
+        if (frozenUntilLevel >= level && (passType == 1 || passType == 3)) return;
         if ((packed >> BitPackingLib.CURSE_COUNT_SHIFT) & BitPackingLib.MASK_8 >= CURSE_COUNT_CAP) return;
         if (_subOf[player].dailyQuantity != 0) return;
         _applyCurseStack(player);

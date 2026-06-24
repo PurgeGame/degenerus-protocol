@@ -43,7 +43,7 @@ contract BoxQueueViewer is DegenerusGame {
 
 /// @title BoxEnqueue — FUZZ-04 (BOX-ENQUEUE) canonical always-on enqueue invariant.
 ///
-/// @notice Promotes the WHALE-01 one-shot (PassBoxAutoOpenEnqueue.t.sol — one whale bundle, one assertion)
+/// @notice Promotes the WHALE-01 one-shot (PassBoxAutoOpenEnqueue.t.sol — one whale pass, one assertion)
 ///         into a fuzzed invariant over the FULL box-creating action-space: mint-with-lootbox, the
 ///         whale / lazy / deity pass bundles, and the coin-presale box (and, where reachable, afking-cover).
 ///         Case (b) PROMOTE — it REUSES the one-shot's BoxQueueViewer etch overlay + boxPlayersContains read
@@ -177,7 +177,7 @@ contract BoxEnqueue is DeployProtocol {
         }
         // pass bundles: whale + lazy + deity across the actors.
         for (uint256 a; a < handler.actorCount(); a++) {
-            handler.buyWhaleBundle(a, 1);
+            handler.buyWhalePass(a, 1);
             handler.buyLazyPass(a);
             handler.buyDeityPass(a, a);
         }

@@ -60,10 +60,10 @@ contract EthInEventsTest is DeployProtocol {
         vm.deal(buyer, 2.4 ether);
         vm.recordLogs();
         vm.prank(buyer);
-        game.purchaseWhaleBundle{value: 2.4 ether}(buyer, 1);
+        game.purchaseWhalePass{value: 2.4 ether}(buyer, 1);
         (uint256 quantity, uint256 weiIn, bool found) = _evt2(vm.getRecordedLogs(), WHALE_SIG, buyer);
         assertTrue(found, "whale pass emits WhalePassPurchased");
-        assertEq(quantity, 1, "quantity == bundles bought");
+        assertEq(quantity, 1, "quantity == passes bought");
         assertEq(weiIn, 2.4 ether, "weiIn == totalPrice");
     }
 

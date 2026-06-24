@@ -11,7 +11,7 @@ import {MintPaymentKind} from "../../../contracts/interfaces/IDegenerusGame.sol"
 /// @title SolvencyActionHandler — widens the SOLVENCY-01 action space to the pass + presale-box + claim
 ///        surfaces so the packed-balance Σ identity is fuzzed beyond the afking-only V61AfkingSpendHandler.
 /// @notice Drives, in a randomized sequence, the buyer surfaces that mutate claimablePool but were NOT under
-///         the afking-spend identity: the whale bundle, the lazy pass, the deity pass, the coin-presale box
+///         the afking-spend identity: the whale pass, the lazy pass, the deity pass, the coin-presale box
 ///         (and a lootbox-bearing buy that persists a box + paired pool move when the presale index is not yet
 ///         live), prepaid-afking funding, and the claim cashout. Every ETH balance is created ONLY through a
 ///         real paired contract entrypoint:
@@ -36,7 +36,7 @@ contract SolvencyActionHandler is Test {
 
     uint256 private constant MINTPACKED_SLOT = 9;
     uint256 private constant DEITY_SHIFT = 184; // HAS_DEITY_PASS score bit (advance bypass + subscribe gate)
-    uint256 private constant WHALE_BUNDLE_PRICE = 2.4 ether; // levels 0-3 (WhaleHandler bound)
+    uint256 private constant WHALE_PASS_PRICE = 2.4 ether; // levels 0-3 (WhaleHandler bound)
     uint256 private constant LAZY_PASS_PRICE = 0.24 ether; // levels 0-2
     uint256 private constant DEITY_PASS_BASE = 24 ether; // first pass (k = 0)
     uint256 private constant PRESALE_BOX_MIN = 0.01 ether;
@@ -48,7 +48,7 @@ contract SolvencyActionHandler is Test {
     uint256 public ghost_afkingDeposited; // ETH credited via depositAfkingFunding
 
     // --- Call counters (coverage visibility) ---
-    uint256 public calls_whaleBundle;
+    uint256 public calls_whalePass;
     uint256 public calls_lazyPass;
     uint256 public calls_deityPass;
     uint256 public calls_presaleBox;
@@ -106,19 +106,19 @@ contract SolvencyActionHandler is Test {
     }
 
     // =========================================================================
-    // Action 1: whale bundle (a pass buy; routes ETH to the pools)
+    // Action 1: whale pass (a pass buy; routes ETH to the pools)
     // =========================================================================
 
-    /// @notice Buy a whale bundle at the early-level flat price. A price mismatch at a higher level reverts in
+    /// @notice Buy a whale pass at the early-level flat price. A price mismatch at a higher level reverts in
     ///         the contract (caught) — never a balance the handler conjured.
-    function buyWhaleBundle(uint256 actorSeed, uint256 qty) external useActor(actorSeed) {
-        calls_whaleBundle++;
+    function buyWhalePass(uint256 actorSeed, uint256 qty) external useActor(actorSeed) {
+        calls_whalePass++;
         if (game.gameOver()) return;
         qty = bound(qty, 1, 5);
-        uint256 cost = WHALE_BUNDLE_PRICE * qty;
+        uint256 cost = WHALE_PASS_PRICE * qty;
         if (cost > currentActor.balance) return;
         vm.prank(currentActor);
-        try game.purchaseWhaleBundle{value: cost}(currentActor, qty) {
+        try game.purchaseWhalePass{value: cost}(currentActor, qty) {
             ghost_passBuys++;
         } catch {}
     }

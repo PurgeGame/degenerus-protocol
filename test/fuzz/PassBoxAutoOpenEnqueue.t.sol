@@ -32,7 +32,7 @@ contract BoxQueueViewer is DegenerusGame {
 ///         defeats the "permissionless economically-incentivized open" premise of the
 ///         lootbox-resolution-timing by-design ruling for this one box class.
 ///
-///         This drives the REAL whale-bundle purchase and asserts the box is enqueued for
+///         This drives the REAL whale-pass purchase and asserts the box is enqueued for
 ///         auto-open. PRE-FIX the buyer is absent from boxPlayers[index] and this FAILS; POST-FIX it
 ///         is present and this PASSES.
 /// @dev Test-only. No contracts/*.sol is mutated. A read-only viewer is etched (type().runtimeCode,
@@ -48,10 +48,10 @@ contract PassBoxAutoOpenEnqueue is DeployProtocol {
         address buyer = makeAddr("whaleBuyer");
         vm.deal(buyer, 10 ether);
 
-        // Whale bundle at level 0: passLevel = 1 -> early price 2.4 ETH, quantity 1, no century gate.
-        // The bundle deposits a 10%-of-price lootbox via _recordLootboxEntry.
+        // Whale pass at level 0: passLevel = 1 -> early price 2.4 ETH, quantity 1, no century gate.
+        // The pass deposits a 10%-of-price lootbox via _recordLootboxEntry.
         vm.prank(buyer);
-        game.purchaseWhaleBundle{value: 2.4 ether}(buyer, 1);
+        game.purchaseWhalePass{value: 2.4 ether}(buyer, 1);
 
         // Inspect internal box-queue state via an etched read-only viewer (no storage change).
         bytes memory realCode = address(game).code;
@@ -61,7 +61,7 @@ contract PassBoxAutoOpenEnqueue is DeployProtocol {
         bool enqueued = BoxQueueViewer(payable(address(game))).boxPlayersContains(idx, buyer);
         vm.etch(address(game), realCode);
 
-        assertGt(boxAmt, 0, "fixture: whale bundle created a lootbox box at the active index");
+        assertGt(boxAmt, 0, "fixture: whale pass created a lootbox box at the active index");
         assertTrue(
             enqueued,
             "WHALE-01: pass-bundled lootbox must be enqueued for the permissionless auto-open (else the owner can hold + time the open)"

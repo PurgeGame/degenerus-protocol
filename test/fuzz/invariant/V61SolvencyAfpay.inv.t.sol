@@ -31,7 +31,7 @@ import {PriceLookupLib} from "../../../contracts/libraries/PriceLookupLib.sol";
 ///   The V61AfkingSpendHandler drives the four SEC-02 spend paths (afking-funded buy, packed credit/debit,
 ///   stale cashout, smite) plus decurse + advance under the [invariant] profile (runs=256, depth=128). The
 ///   SolvencyActionHandler (FUZZ-01, 381-01) is a SECOND target that WIDENS the same identity to the buyer
-///   surfaces that mutate claimablePool but were NOT under the afking-only handler: the whale bundle, the lazy
+///   surfaces that mutate claimablePool but were NOT under the afking-only handler: the whale pass, the lazy
 ///   pass, the deity pass, the coin-presale box (and a lootbox-bearing fallback buy), prepaid-afking funding,
 ///   and the claim cashout. Both handlers' tracked sets are summed over their UNION (the three protocol
 ///   addresses de-duplicated to a single count), so the Σ identity and the backing bound assert across the

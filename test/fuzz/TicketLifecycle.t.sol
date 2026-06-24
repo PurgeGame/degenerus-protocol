@@ -46,7 +46,7 @@ contract TLKeyComputer is DegenerusGameStorage {
 ///      - SRC-03: testLastDayTicketsRouteToNextLevel (last-day override → level+1)
 ///      - SRC-04: testLootboxNearRollTicketsProcessed (lootbox near roll → write key, processed)
 ///      - SRC-05: testLootboxFarRollTicketsRouteToFF (lootbox far roll → FF key, drained at transition)
-///      - SRC-06: testWhaleBundleTicketsAcrossLevels (whale bundle → 100 levels, near+FF routing)
+///      - SRC-06: testWhalePassTicketsAcrossLevels (whale pass → 100 levels, near+FF routing)
 ///      - EDGE-05: testConstructorFFTicketsDrain (constructor FF accumulate and drain one-per-transition)
 ///      - EDGE-01: testBoundaryRoutingAtNonZeroLevel (level+5 routes to write key at non-zero level)
 ///      - EDGE-02: testBoundaryRoutingAtNonZeroLevel (level+6 routes to FF key at non-zero level)
@@ -853,37 +853,37 @@ contract TicketLifecycleTest is DeployProtocol {
     }
 
     // =========================================================================
-    // Test 15 [SRC-06]: Whale bundle queues tickets at purchaseLevel through
+    // Test 15 [SRC-06]: Whale pass queues tickets at purchaseLevel through
     //         purchaseLevel+99. Near levels to write key, far levels to FF.
     // =========================================================================
 
-    /// @notice Buy 1 whale bundle at level 0 (passLevel=1, levels 1-100). Verify:
-    ///         - Near-future write keys (levels 1-5) receive entries from whale bundle
+    /// @notice Buy 1 whale pass at level 0 (passLevel=1, levels 1-100). Verify:
+    ///         - Near-future write keys (levels 1-5) receive entries from whale pass
     ///         - FF keys (levels 6+) receive entries (whale buyer added to constructor entries)
     ///         - After level transitions, FF queues in the drain range are empty
-    /// @dev SRC-06: Whale bundle queues tickets at purchaseLevel through purchaseLevel+99
-    function testWhaleBundleTicketsAcrossLevels() public {
+    /// @dev SRC-06: Whale pass queues tickets at purchaseLevel through purchaseLevel+99
+    function testWhalePassTicketsAcrossLevels() public {
         assertEq(game.level(), 0, "Should start at level 0");
 
         // Record queue state before whale purchase for levels we'll check
         uint256 writeKey3Before = _queueLength(_writeKeyForLevel(3));
         uint256 ff10Before = _ffQueueLength(10);
 
-        // Buy 1 whale bundle at level 0.
+        // Buy 1 whale pass at level 0.
         // passLevel = level+1 = 1, queues tickets at levels 1-100.
         // Price at level 0: 2.4 ETH
-        _buyWhaleBundle(buyer1, 1);
+        _buyWhalePass(buyer1, 1);
 
         // Verify near-future tickets: levels 1-5 route to write key (all <= 0+5)
         uint256 writeKey3After = _queueLength(_writeKeyForLevel(3));
         assertTrue(writeKey3After > writeKey3Before,
-            "Write-key queue at level 3 should grow from whale bundle");
+            "Write-key queue at level 3 should grow from whale pass");
 
         // Verify far-future tickets: levels 6+ route to FF key (6 > 0+5 = true)
-        // Constructor already placed 2 entries; whale bundle adds the buyer
+        // Constructor already placed 2 entries; whale pass adds the buyer
         uint256 ff10After = _ffQueueLength(10);
         assertGt(ff10After, ff10Before,
-            "FF queue at level 10 should grow from whale bundle (buyer added to constructor entries)");
+            "FF queue at level 10 should grow from whale pass (buyer added to constructor entries)");
         assertGe(ff10After, 3,
             "FF queue at level 10 should have >= 3 entries (2 constructor + 1 whale buyer)");
 
@@ -926,7 +926,7 @@ contract TicketLifecycleTest is DeployProtocol {
 
     /// @notice Drive to level 3+, then verify boundary routing at the new level.
     ///         At game level L: L+5 routes to write key (near-future, <= L+5);
-    ///         L+6 routes to FF key (far-future, > L+5). Uses whale bundle to
+    ///         L+6 routes to FF key (far-future, > L+5). Uses whale pass to
     ///         populate both ranges in a single purchase.
     /// @dev EDGE-01: level+5 routes to write key at non-zero level.
     ///      EDGE-02: level+6 routes to FF key at non-zero level.
@@ -940,12 +940,12 @@ contract TicketLifecycleTest is DeployProtocol {
         uint256 ff5Before = _ffQueueLength(uint24(L + 5));
         uint256 ff6Before = _ffQueueLength(uint24(L + 6));
 
-        // Buy 1 whale bundle: queues tickets at levels (L+1) through (L+100).
+        // Buy 1 whale pass: queues tickets at levels (L+1) through (L+100).
         // Level L+5 is within near range (L+5 <= L+5), so goes to write key.
         // Level L+6 is far-future (L+6 > L+5), so goes to FF key.
-        _buyWhaleBundle(buyer3, 1);
+        _buyWhalePass(buyer3, 1);
 
-        // EDGE-01: FF queue at L+5 should NOT have grown from whale bundle
+        // EDGE-01: FF queue at L+5 should NOT have grown from whale pass
         // (tickets at L+5 route to write key, not FF)
         assertEq(_ffQueueLength(uint24(L + 5)), ff5Before,
             "EDGE-01: FF queue at L+5 should not grow (near-future, routed to write key)");
@@ -955,7 +955,7 @@ contract TicketLifecycleTest is DeployProtocol {
         assertGt(owedAtL5, 0,
             "EDGE-01: buyer3 should have ticketsOwed at write key for L+5");
 
-        // EDGE-02: FF queue at L+6 should have grown from whale bundle
+        // EDGE-02: FF queue at L+6 should have grown from whale pass
         assertGt(_ffQueueLength(uint24(L + 6)), ff6Before,
             "EDGE-02: FF queue at L+6 should grow (far-future, routed to FF key)");
     }
@@ -1175,7 +1175,7 @@ contract TicketLifecycleTest is DeployProtocol {
     // =========================================================================
 
     /// @notice 4 consecutive transitions with continuous multi-source ticket buying
-    ///         (direct purchase, whale bundle, lootbox). After all transitions, verify
+    ///         (direct purchase, whale pass, lootbox). After all transitions, verify
     ///         zero stranding across all key spaces for all processed levels.
     /// @dev ZSA-03: 3+ consecutive transitions with multi-source buying yield zero
     ///      stranding across all key spaces.
@@ -1185,7 +1185,7 @@ contract TicketLifecycleTest is DeployProtocol {
 
         for (uint256 targetLvl = 1; targetLvl <= 4; targetLvl++) {
             // Multi-source ticket buying at current level
-            _buyWhaleBundle(buyer3, 1);
+            _buyWhalePass(buyer3, 1);
 
             // Lootbox purchases (5 per level)
             for (uint256 i = 0; i < 5; i++) {
@@ -1226,7 +1226,7 @@ contract TicketLifecycleTest is DeployProtocol {
                 string.concat("ZSA-02: FF not drained at level ", _uint2str(lvl)));
         }
 
-        // ZSA-03: buyer3 verification -- buyer3 used whale bundles and lootboxes at
+        // ZSA-03: buyer3 verification -- buyer3 used whale passes and lootboxes at
         // every level. Read-key queues being empty (via _assertZeroStranding) proves
         // all sources were processed. Additionally verify no stray FF entries at
         // levels in the combined range of whale + lootbox targets.
@@ -1237,12 +1237,12 @@ contract TicketLifecycleTest is DeployProtocol {
     }
 
     // =========================================================================
-    // Test 21 [RNG-03a]: rngLocked blocks FF key writes from whale bundle
+    // Test 21 [RNG-03a]: rngLocked blocks FF key writes from whale pass
     //         purchase (integration-level, full 23-contract deployment).
     // =========================================================================
 
     /// @notice With rngLockedFlag=true, a normal purchase() targeting near-future
-    ///         (level+1) succeeds, but purchaseWhaleBundle (which spans 100 levels,
+    ///         (level+1) succeeds, but purchaseWhalePass (which spans 100 levels,
     ///         many > level+5) reverts with RngLocked() on the first FF level.
     /// @dev RNG-03: rngLocked blocks FF key writes from permissionless purchase paths.
     function testRngLockedBlocksFFPurchase() public {
@@ -1275,7 +1275,7 @@ contract TicketLifecycleTest is DeployProtocol {
             buyer3, qty, 0, bytes32(0), MintPaymentKind.DirectEth, false
         );
 
-        // purchaseWhaleBundle spans levels (level+1) to (level+100).
+        // purchaseWhalePass spans levels (level+1) to (level+100).
         // Levels > level+5 are FF. With rngLocked=true, the _queueTickets loop
         // will revert RngLocked() when it hits the first FF level.
         uint256 whaleCost = (L + 1) <= 4 ? 2.4 ether : 4 ether;
@@ -1283,7 +1283,7 @@ contract TicketLifecycleTest is DeployProtocol {
 
         vm.prank(buyer3);
         vm.expectRevert(DegenerusGameStorage.RngLocked.selector);
-        game.purchaseWhaleBundle{value: whaleCost}(buyer3, 1);
+        game.purchaseWhalePass{value: whaleCost}(buyer3, 1);
     }
 
     // =========================================================================
@@ -2161,12 +2161,12 @@ contract TicketLifecycleTest is DeployProtocol {
         }
     }
 
-    // ==================== Whale Bundle Helpers ====================
+    // ==================== Whale Pass Helpers ====================
 
-    /// @notice Purchase a whale bundle (100 levels of tickets starting at level+1)
+    /// @notice Purchase a whale pass (100 levels of tickets starting at level+1)
     /// @param who Buyer address
-    /// @param quantity Number of bundles (1-100)
-    function _buyWhaleBundle(address who, uint256 quantity) internal {
+    /// @param quantity Number of passes (1-100)
+    function _buyWhalePass(address who, uint256 quantity) internal {
         if (game.gameOver()) return;
         // Price: 2.4 ETH at levels 0-3, 4 ETH at levels 4+
         uint256 lvl = game.level();
@@ -2175,7 +2175,7 @@ contract TicketLifecycleTest is DeployProtocol {
         if (who.balance < cost) vm.deal(who, cost + 50 ether);
 
         vm.prank(who);
-        try game.purchaseWhaleBundle{value: cost}(who, quantity) {} catch {}
+        try game.purchaseWhalePass{value: cost}(who, quantity) {} catch {}
     }
 
     // ==================== RNG State Helpers ====================

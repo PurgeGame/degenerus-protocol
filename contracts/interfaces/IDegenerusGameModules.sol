@@ -189,10 +189,10 @@ interface IDegenerusGameDecimatorModule {
 /// @title IDegenerusGameWhaleModule
 /// @notice Interface for whale-tier purchases and premium passes
 interface IDegenerusGameWhaleModule {
-    /// @notice Purchases a whale bundle for the buyer
-    /// @param buyer Address receiving the bundle
-    /// @param quantity Number of bundles to purchase
-    function purchaseWhaleBundle(address buyer, uint256 quantity) external payable;
+    /// @notice Purchases a whale pass for the buyer
+    /// @param buyer Address receiving the pass
+    /// @param quantity Number of passes to purchase
+    function purchaseWhalePass(address buyer, uint256 quantity) external payable;
 
     /// @notice Purchases a 10-level lazy pass for the buyer
     /// @param buyer Address receiving the pass

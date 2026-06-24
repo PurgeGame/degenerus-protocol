@@ -297,11 +297,11 @@ abstract contract DegenerusGameMintStreakUtils is DegenerusGameStorage {
             (packed >> BitPackingLib.FROZEN_UNTIL_LEVEL_SHIFT) &
                 BitPackingLib.MASK_24
         );
-        uint8 bundleType = uint8(
-            (packed >> BitPackingLib.WHALE_BUNDLE_TYPE_SHIFT) & 3
+        uint8 passType = uint8(
+            (packed >> BitPackingLib.WHALE_PASS_TYPE_SHIFT) & 3
         );
         bool passActive = frozenUntilLevel >= currLevel &&
-            (bundleType == 1 || bundleType == 3);
+            (passType == 1 || passType == 3);
 
         uint256 bonusPoints;
 
@@ -350,11 +350,11 @@ abstract contract DegenerusGameMintStreakUtils is DegenerusGameStorage {
             if (hasDeityPass) {
                 bonusPoints += DEITY_PASS_ACTIVITY_BONUS_POINTS;
             } else if (frozenUntilLevel >= currLevel) {
-                // Whale pass bonus: varies by bundle type (only active while frozen)
-                if (bundleType == 1) {
-                    bonusPoints += 10; // +10 points for 10-level bundle
-                } else if (bundleType == 3) {
-                    bonusPoints += 40; // +40 points for 100-level bundle
+                // Whale pass bonus: varies by pass type (only active while frozen)
+                if (passType == 1) {
+                    bonusPoints += 10; // +10 points for 10-level pass
+                } else if (passType == 3) {
+                    bonusPoints += 40; // +40 points for 100-level pass
                 }
             }
         }
@@ -574,17 +574,17 @@ abstract contract DegenerusGameMintStreakUtils is DegenerusGameStorage {
         // New level with ≥4 units: Full state update
         // ---------------------------------------------------------------------
 
-        // Check for whale bundle frozen state
+        // Check for whale pass frozen state
         uint24 frozenUntilLevel = uint24(
             (prevData >> BitPackingLib.FROZEN_UNTIL_LEVEL_SHIFT) &
                 BitPackingLib.MASK_24
         );
         bool isFrozen = frozenUntilLevel > 0 && lvl <= frozenUntilLevel;
 
-        // If frozen, skip updating total (it's pre-set by whale bundle)
+        // If frozen, skip updating total (it's pre-set by whale pass)
         // If we've reached the frozen level, clear the flag and resume normal tracking
         if (frozenUntilLevel > 0 && lvl > frozenUntilLevel) {
-            // Clear frozen flag and whale bundle type - resume normal tracking from here
+            // Clear frozen flag and whale pass type - resume normal tracking from here
             data = BitPackingLib.setPacked(
                 data,
                 BitPackingLib.FROZEN_UNTIL_LEVEL_SHIFT,
@@ -593,10 +593,10 @@ abstract contract DegenerusGameMintStreakUtils is DegenerusGameStorage {
             );
             data = BitPackingLib.setPacked(
                 data,
-                BitPackingLib.WHALE_BUNDLE_TYPE_SHIFT,
+                BitPackingLib.WHALE_PASS_TYPE_SHIFT,
                 3,
                 0
-            ); // Clear bundle type
+            ); // Clear pass type
             frozenUntilLevel = 0;
             isFrozen = false;
         }

@@ -17,7 +17,7 @@ import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 /// @dev Drives `game.playerActivityScore` (the public getter reaching `_playerActivityScoreAt`) against a
 ///   fresh fixture where a player's ONLY score contributor is a known quest streak: at deploy `level == 0`,
 ///   so `_mintCountBonusPoints` returns 0 and the affiliate cached leg reads 0, a fresh player carries no
-///   deity pass / whale bundle / curse, and `_mintStreakEffectiveFromPacked` returns 0 — the quest leg is the
+///   deity pass / whale pass / curse, and `_mintStreakEffectiveFromPacked` returns 0 — the quest leg is the
 ///   whole score. The manual streak is reached by writing `questPlayerState[player]` directly (the same
 ///   decay-aware value `effectiveBaseStreakAndAfking` reads), with the day anchors left 0 so the decay branch
 ///   is inert and `state.streak` reads straight through. Test-only: ZERO contracts/*.sol mutation.

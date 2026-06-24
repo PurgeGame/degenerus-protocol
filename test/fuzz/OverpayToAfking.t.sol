@@ -79,15 +79,15 @@ contract OverpayToAfking is DeployProtocol {
         assertEq(buyer.balance, 0, "nothing returned/stranded");
     }
 
-    /// @notice Whale-bundle overpay (fixed price) -> payer afking (was a revert).
+    /// @notice Whale-pass overpay (fixed price) -> payer afking (was a revert).
     function test_PassOverpayCreditsAfking() public {
         address buyer = makeAddr("passOver");
-        uint256 price = 2.4 ether; // early whale-bundle unit price, quantity 1
+        uint256 price = 2.4 ether; // early whale-pass unit price, quantity 1
         uint256 over = 0.1 ether;
         vm.deal(buyer, price + over);
 
         vm.prank(buyer);
-        game.purchaseWhaleBundle{value: price + over}(buyer, 1);
+        game.purchaseWhalePass{value: price + over}(buyer, 1);
 
         assertEq(game.afkingFundingOf(buyer), over, "pass overpay -> afking");
     }

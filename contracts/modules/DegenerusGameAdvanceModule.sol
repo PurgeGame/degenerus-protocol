@@ -739,7 +739,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
       |  Modules:                                                                                                      |
       |  • ContractAddresses.GAME_DECIMATOR_MODULE - Decimator claim credits and lootbox payouts                       |
       |  • ContractAddresses.GAME_MINT_MODULE     - Mint data recording, airdrop multipliers                           |
-      |  • ContractAddresses.GAME_WHALE_MODULE    - Whale bundle purchases and whale pass claims                       |
+      |  • ContractAddresses.GAME_WHALE_MODULE    - Whale pass purchases and whale pass claims                       |
       |  • ContractAddresses.GAME_JACKPOT_MODULE  - Jackpot calculations and payouts                                   |
       |                                                                                                                |
       |  SECURITY: delegatecall executes module code in this contract's                                                |

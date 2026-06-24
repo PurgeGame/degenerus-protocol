@@ -50,7 +50,7 @@ contract EthSolvencyInvariant is DeployProtocol {
     /// @dev Catches cases where more ETH exits the protocol than enters.
     function invariant_ghostAccountingDepositsGeClaims() public view {
         uint256 totalDeposited = gameHandler.ghost_totalDeposited()
-            + whaleHandler.ghost_whaleBundleDeposited()
+            + whaleHandler.ghost_whalePassDeposited()
             + whaleHandler.ghost_lazyPassDeposited()
             + whaleHandler.ghost_deityPassDeposited();
 
@@ -73,7 +73,7 @@ contract EthSolvencyInvariant is DeployProtocol {
     ///      some ETH may flow to other contracts (affiliate, jackpots, etc).
     function invariant_balanceReconciliation() public view {
         uint256 totalDeposited = gameHandler.ghost_totalDeposited()
-            + whaleHandler.ghost_whaleBundleDeposited()
+            + whaleHandler.ghost_whalePassDeposited()
             + whaleHandler.ghost_lazyPassDeposited()
             + whaleHandler.ghost_deityPassDeposited();
         uint256 totalClaimed = gameHandler.ghost_totalClaimed();

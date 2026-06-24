@@ -103,7 +103,7 @@ contract BoxCreationHandler is Test {
             // presale-box path needs, but a deity-pass HOLDER cannot buy a lazy pass NOR a fresh deity pass
             // (both revert), so the un-seeded ODD actors keep the lazy-pass and deity-pass surfaces reachable.
             // A field-isolated mintPacked_ seed (no balance touched) — mirrors the established
-            // V61AfkingSpendHandler / SolvencyActionHandler split. The whale bundle works for either band.
+            // V61AfkingSpendHandler / SolvencyActionHandler split. The whale pass works for either band.
             if (i % 2 == 0) _grantDeityScoreBit(actor);
         }
     }
@@ -183,9 +183,9 @@ contract BoxCreationHandler is Test {
     // Action 2: pass bundles (whale / lazy / deity — each deposits a 10%-of-price lootbox via WhaleModule)
     // =========================================================================
 
-    /// @notice Whale bundle: a 10%-of-price lootbox is recorded via _recordLootboxEntry (WhaleModule:896
+    /// @notice Whale pass: a 10%-of-price lootbox is recorded via _recordLootboxEntry (WhaleModule:896
     ///         first-deposit enqueue). passLevel bounded [1,5]; 2.4 ETH base price covers early levels.
-    function buyWhaleBundle(uint256 actorSeed, uint256 qtySeed) external useActor(actorSeed) {
+    function buyWhalePass(uint256 actorSeed, uint256 qtySeed) external useActor(actorSeed) {
         calls_whale++;
         if (game.gameOver()) return;
 
@@ -195,7 +195,7 @@ contract BoxCreationHandler is Test {
 
         uint48 idx = _lrIndex();
         vm.prank(currentActor);
-        try game.purchaseWhaleBundle{value: cost}(currentActor, qty) {
+        try game.purchaseWhalePass{value: cost}(currentActor, qty) {
             boxesCreated_whale++;
             _track(idx, currentActor);
         } catch {}

@@ -8,13 +8,13 @@ import {MintPaymentKind} from "../../../contracts/interfaces/IDegenerusGame.sol"
 import {SolvencyObligations} from "../helpers/SolvencyObligations.sol";
 
 /// @title WhaleSybilHandler -- Concurrent whale + Sybil pressure handler for invariant tests
-/// @notice Simultaneously exercises whale bundle purchases AND mass Sybil ticket buying.
+/// @notice Simultaneously exercises whale pass purchases AND mass Sybil ticket buying.
 ///         Previous fuzzing only tested these independently. This handler combines them
 ///         to find: state corruption from concurrent large/small transactions, pool
 ///         accounting errors under mixed purchase types, whale price mismatches at
 ///         varying levels.
 /// @dev Uses two actor pools: whales (high ETH, few actors) and sybils (low ETH, many actors).
-///      Whale bundles use dynamic price lookup to match current level pricing.
+///      Whale passes use dynamic price lookup to match current level pricing.
 contract WhaleSybilHandler is Test {
     DegenerusGame public game;
     MockVRFCoordinator public vrf;
@@ -73,10 +73,10 @@ contract WhaleSybilHandler is Test {
         }
     }
 
-    /// @notice Whale bundle purchase with dynamic pricing
+    /// @notice Whale pass purchase with dynamic pricing
     /// @param actorSeed Seed for whale selection
     /// @param qty Raw quantity, bounded to [1, 5]
-    function whaleBundlePurchase(
+    function whalePassPurchase(
         uint256 actorSeed,
         uint256 qty
     ) external useWhale(actorSeed) {
@@ -86,22 +86,22 @@ contract WhaleSybilHandler is Test {
 
         qty = bound(qty, 1, 5);
 
-        // Whale bundle prices vary by level: 2.4 ETH (levels 0-3), 4 ETH (x49/x99)
+        // Whale pass prices vary by level: 2.4 ETH (levels 0-3), 4 ETH (x49/x99)
         // We try with 2.4 ETH first; if that reverts, try 4 ETH
         uint256 cost = 2.4 ether * qty;
         if (cost > currentActor.balance) return;
 
         vm.prank(currentActor);
-        try game.purchaseWhaleBundle{value: cost}(currentActor, qty) {
+        try game.purchaseWhalePass{value: cost}(currentActor, qty) {
             ghost_whaleDeposited += cost;
             ghost_whaleSuccessful++;
             _trackBalance();
         } catch {
-            // Try higher price (4 ETH per bundle)
+            // Try higher price (4 ETH per pass)
             cost = 4 ether * qty;
             if (cost <= currentActor.balance) {
                 vm.prank(currentActor);
-                try game.purchaseWhaleBundle{value: cost}(currentActor, qty) {
+                try game.purchaseWhalePass{value: cost}(currentActor, qty) {
                     ghost_whaleDeposited += cost;
                     ghost_whaleSuccessful++;
                     _trackBalance();

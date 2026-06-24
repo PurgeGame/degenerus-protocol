@@ -4,19 +4,19 @@ pragma solidity ^0.8.26;
 import "forge-std/Test.sol";
 import {DegenerusGame} from "../../../contracts/DegenerusGame.sol";
 
-/// @title WhaleHandler -- Handler for whale bundle, lazy pass, and deity pass operations
+/// @title WhaleHandler -- Handler for whale pass, lazy pass, and deity pass operations
 /// @notice Wraps whale mechanics with bounded inputs, multi-actor support,
 ///         and ghost variable ETH tracking for invariant tests.
 contract WhaleHandler is Test {
     DegenerusGame public game;
 
     // --- Ghost variables ---
-    uint256 public ghost_whaleBundleDeposited;
+    uint256 public ghost_whalePassDeposited;
     uint256 public ghost_lazyPassDeposited;
     uint256 public ghost_deityPassDeposited;
 
     // --- Call counters ---
-    uint256 public calls_whaleBundle;
+    uint256 public calls_whalePass;
     uint256 public calls_lazyPass;
     uint256 public calls_deityPass;
 
@@ -39,28 +39,28 @@ contract WhaleHandler is Test {
         }
     }
 
-    /// @notice Purchase whale bundle with bounded quantity
+    /// @notice Purchase whale pass with bounded quantity
     /// @param actorSeed Seed for actor selection
     /// @param qty Raw quantity, bounded to [1, 5]
-    function purchaseWhaleBundle(
+    function purchaseWhalePass(
         uint256 actorSeed,
         uint256 qty
     ) external useActor(actorSeed) {
-        calls_whaleBundle++;
+        calls_whalePass++;
 
         if (game.gameOver()) return;
 
         qty = bound(qty, 1, 5);
 
-        // Whale bundle price: 2.4 ETH at levels 0-3, 4 ETH at x49/x99
+        // Whale pass price: 2.4 ETH at levels 0-3, 4 ETH at x49/x99
         // Use 2.4 ETH as base -- most runs will be at early levels
         // The contract will revert if the price doesn't match, which is fine
         uint256 cost = 2.4 ether * qty;
         if (cost > currentActor.balance) return;
 
         vm.prank(currentActor);
-        try game.purchaseWhaleBundle{value: cost}(currentActor, qty) {
-            ghost_whaleBundleDeposited += cost;
+        try game.purchaseWhalePass{value: cost}(currentActor, qty) {
+            ghost_whalePassDeposited += cost;
         } catch {}
     }
 

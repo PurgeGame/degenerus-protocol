@@ -12,8 +12,8 @@ pragma solidity 0.8.34;
  *      [48-71]   LEVEL_STREAK_SHIFT          - Consecutive level streak (24 bits, managed by MintStreakUtils)
  *      [72-103]  DAY_SHIFT                   - Day index of last purchase (32 bits)
  *      [104-127] LEVEL_UNITS_LEVEL_SHIFT     - Level for unit tracking (24 bits)
- *      [128-151] FROZEN_UNTIL_LEVEL_SHIFT    - Frozen level for whale bundles (24 bits)
- *      [152-153] WHALE_BUNDLE_TYPE_SHIFT     - Bundle type (2 bits: 0=none, 1=10-lvl, 3=100-lvl)
+ *      [128-151] FROZEN_UNTIL_LEVEL_SHIFT    - Frozen level for whale passes (24 bits)
+ *      [152-153] WHALE_PASS_TYPE_SHIFT     - Pass type (2 bits: 0=none, 1=10-lvl, 3=100-lvl)
  *      [154-159] (unused)
  *      [160-183] MINT_STREAK_LAST_COMPLETED  - Last level credited for mint streak (24 bits, managed by MintStreakUtils)
  *      [184]     HAS_DEITY_PASS_SHIFT        - Deity pass flag (1 bit)
@@ -66,8 +66,8 @@ library BitPackingLib {
     /// @notice Bit position for frozen until level (bits 128-151)
     uint256 internal constant FROZEN_UNTIL_LEVEL_SHIFT = 128;
 
-    /// @notice Bit position for whale bundle type (bits 152-153)
-    uint256 internal constant WHALE_BUNDLE_TYPE_SHIFT = 152;
+    /// @notice Bit position for whale pass type (bits 152-153)
+    uint256 internal constant WHALE_PASS_TYPE_SHIFT = 152;
 
     /// @notice Bit position for last level credited for mint streak (bits 160-183)
     uint256 internal constant MINT_STREAK_LAST_COMPLETED_SHIFT = 160;

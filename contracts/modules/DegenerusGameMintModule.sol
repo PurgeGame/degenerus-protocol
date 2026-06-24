@@ -39,7 +39,7 @@ import {ActivityCurveLib} from "../libraries/ActivityCurveLib.sol";
  * - **Level Streak**: Consecutive level purchases
  * - **Quest Streak**: Daily quest completion streak (tracked in DegenerusQuests)
  * - **Affiliate Points**: Referral program bonus points (tracked in DegenerusAffiliate)
- * - **Whale Bundle**: Active bundle type (10-lvl or 100-lvl)
+ * - **Whale Pass**: Active pass type (10-lvl or 100-lvl)
  *
  * ### Mint Data Bit Packing Layout (mintPacked_):
  *
@@ -49,8 +49,8 @@ import {ActivityCurveLib} from "../libraries/ActivityCurveLib.sol";
  * Bits 48-71:   levelStreak        - Consecutive levels minted [Activity Score]
  * Bits 72-103:  lastMintDay        - Day index of last mint
  * Bits 104-127: unitsLevel         - Level index for levelUnits tracking
- * Bits 128-151: frozenUntilLevel   - Whale bundle: freeze stats until this level (0 = not frozen)
- * Bits 152-153: whaleBundleType    - Active bundle type (0=none, 1=10-lvl, 3=100-lvl) [Activity Score]
+ * Bits 128-151: frozenUntilLevel   - Whale pass: freeze stats until this level (0 = not frozen)
+ * Bits 152-153: whalePassType    - Active pass type (0=none, 1=10-lvl, 3=100-lvl) [Activity Score]
  * Bits 154-159: (unused)
  * Bits 160-183: mintStreakLast      - Last level credited for mint streak
  * Bit  184:     hasDeityPass        - Deity pass flag

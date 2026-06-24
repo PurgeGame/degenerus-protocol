@@ -36,7 +36,7 @@ contract CompositionHandler is Test {
     // mintPacked_ is at storage slot 10 (from forge inspect)
     uint256 private constant MINT_PACKED_SLOT = 10;
     // Gap bits are in TWO ranges (NOT continuous):
-    //   Gap 1: bits 154-159 (6 bits) -- between WHALE_BUNDLE_TYPE(152-153) and MINT_STREAK_LAST_COMPLETED(160-183)
+    //   Gap 1: bits 154-159 (6 bits) -- between WHALE_PASS_TYPE(152-153) and MINT_STREAK_LAST_COMPLETED(160-183)
     //   Gap 2: bits 215-227 (13 bits) -- between AFFILIATE_BONUS_POINTS(209-214) and LEVEL_UNITS(228-243)
     // Real fields between gaps: MINT_STREAK(160-183), DEITY_PASS(184), AFFILIATE_BONUS_LEVEL(185-208), AFFILIATE_BONUS_POINTS(209-214)
     uint256 private constant GAP1_SHIFT = 154;
@@ -91,10 +91,10 @@ contract CompositionHandler is Test {
     }
 
     // =========================================================================
-    // Action: Whale Bundle then Purchase (WHALE then MINT for same player)
+    // Action: Whale Pass then Purchase (WHALE then MINT for same player)
     // =========================================================================
 
-    /// @notice Whale bundle then purchase -- tests mintPacked_ shared writes
+    /// @notice Whale pass then purchase -- tests mintPacked_ shared writes
     function action_whaleThenPurchase(
         uint256 actorSeed,
         uint256 qty
@@ -103,11 +103,11 @@ contract CompositionHandler is Test {
 
         if (game.gameOver()) return;
 
-        // Try whale bundle first
+        // Try whale pass first
         uint256 whaleCost = 2.4 ether;
         if (whaleCost <= currentActor.balance) {
             vm.prank(currentActor);
-            try game.purchaseWhaleBundle{value: whaleCost}(currentActor, 1) {} catch {}
+            try game.purchaseWhalePass{value: whaleCost}(currentActor, 1) {} catch {}
         }
 
         // Then purchase tickets

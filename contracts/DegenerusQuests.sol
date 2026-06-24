@@ -2222,8 +2222,8 @@ contract DegenerusQuests is IDegenerusQuests {
 
         // Whale/lazy pass from mintPacked_
         uint24 frozen = uint24(packed >> 128);
-        uint8 bundle = uint8((packed >> 152) & 0x3);
-        if (frozen > 0 && bundle != 0) return true;
+        uint8 passType = uint8((packed >> 152) & 0x3);
+        if (frozen > 0 && passType != 0) return true;
 
         // Deity pass fallback (separate SLOAD)
         return questGame.hasDeityPass(player);

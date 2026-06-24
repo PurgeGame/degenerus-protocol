@@ -174,8 +174,8 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
       |  [48-71]  ethLevelStreak   - Consecutive levels with ETH mints       |
       |  [72-103] lastEthDay       - Day index of last ETH mint              |
       |  [104-127] unitsLevel      - Level index for unitsAtLevel tracking   |
-      |  [128-151] frozenUntilLevel - Whale bundle freeze level (0 = none)   |
-      |  [152-153] whaleBundleType  - Bundle type (0=none,1=10,3=100)        |
+      |  [128-151] frozenUntilLevel - Whale pass freeze level (0 = none)   |
+      |  [152-153] whalePassType  - Pass type (0=none,1=10,3=100)        |
       |  [154-159] (reserved)       - 6 unused bits                           |
       |  [160-183] mintStreakLast  - Mint streak last completed level (24b)   |
       |  [184]    hasDeityPass     - Deity pass holder flag (1b)             |
@@ -808,7 +808,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         if (!ok) _revertDelegate(data);
     }
 
-    /// @notice Purchase whale bundle: boosts levelCount, queues 400 tickets, includes lootbox.
+    /// @notice Purchase whale pass: boosts levelCount, queues 400 tickets, includes lootbox.
     /// @dev Available at any level. Can be purchased multiple times (1-100 per call).
     ///      Price: 2.4 ETH (levels 0-3), 4 ETH (levels 4+), or discounted with boon.
     ///      Queues 4 tickets for each of 100 levels [ticketStart, ticketStart+99].
@@ -820,22 +820,22 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     ///
     ///      Example at level 1: 4 tickets each for levels 1-100, stats boosted, frozen until 100.
     ///      Example at level 51: 4 tickets each for levels 51-150, stats boosted, frozen until 150.
-    /// @param buyer Player address to receive bundle rewards (address(0) = msg.sender).
-    /// @param quantity Number of bundles to purchase.
-    function purchaseWhaleBundle(
+    /// @param buyer Player address to receive pass rewards (address(0) = msg.sender).
+    /// @param quantity Number of passes to purchase.
+    function purchaseWhalePass(
         address buyer,
         uint256 quantity
     ) external payable {
         buyer = _resolvePlayer(buyer);
-        _purchaseWhaleBundleFor(buyer, quantity);
+        _purchaseWhalePassFor(buyer, quantity);
     }
 
-    function _purchaseWhaleBundleFor(address buyer, uint256 quantity) private {
+    function _purchaseWhalePassFor(address buyer, uint256 quantity) private {
         (bool ok, bytes memory data) = ContractAddresses
             .GAME_WHALE_MODULE
             .delegatecall(
                 abi.encodeWithSelector(
-                    IDegenerusGameWhaleModule.purchaseWhaleBundle.selector,
+                    IDegenerusGameWhaleModule.purchaseWhalePass.selector,
                     buyer,
                     quantity
                 )
@@ -1043,7 +1043,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
       |  • GAME_JACKPOT_MODULE      - Jackpot calculations and payouts                                                  |
       |  • GAME_LOOTBOX_MODULE      - Lootbox open, credit, and payout                                                  |
       |  • GAME_MINT_MODULE         - Mint data recording, airdrop multipliers                                          |
-      |  • GAME_WHALE_MODULE        - Whale bundle purchases and whale pass claims                                      |
+      |  • GAME_WHALE_MODULE        - Whale pass purchases and whale pass claims                                      |
       |                                                                                                                |
       |  SECURITY: delegatecall executes module code in this contract's                                                |
       |  context, with access to all storage. Modules are constant addresses.                                          |
@@ -2302,15 +2302,15 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
       |  • Quest streak: +1% per consecutive quest (cap 100%)                |
       |  • Affiliate points: +1% per affiliate point (cap 50%)               |
       |  • Whale pass bonus (active only while frozen):                      |
-      |    - 10-level bundle: +10%                                           |
-      |    - 100-level bundle: +40%                                          |
+      |    - 10-level pass: +10%                                           |
+      |    - 100-level pass: +40%                                          |
       |  • Deity pass bonus: +80% (always active)                            |
       |                                                                      |
       +======================================================================+*/
 
     /// @notice Calculate player's activity score in whole points.
     /// @dev Activity Score: 50 (streak) + 25 (count) + 100 (quest) + 50 (affiliate) + 40 (whale) = 265 pt max
-    ///      Deity pass adds +80 in place of whale bundle bonus (305 pt max base).
+    ///      Deity pass adds +80 in place of whale pass bonus (305 pt max base).
     ///      Consumers apply their own caps (lootbox EV: 400, degenerette ROI: 305, decimator: 235).
     /// @param player The player address to calculate for.
     /// @return scorePoints Total activity score in whole points.

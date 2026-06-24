@@ -14,7 +14,7 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 ///   claimWinnings, DegenerusGame.sol:1572): after a successful claim it adds a saturating +2 stack UNLESS a
 ///   cheapest-first bail fires — infra (VAULT/SDGNRS/GNRUS), gameOver, a non-stale claim (lastEthDay + 5 >
 ///   _currentMintDay()), a deity-pass holder, a whale/lazy-pass holder (frozenUntilLevel >= level &&
-///   bundleType ∈ {1,3}), an active afker (_subOf[p].dailyQuantity != 0), or an already-capped counter
+///   passType ∈ {1,3}), an active afker (_subOf[p].dailyQuantity != 0), or an already-capped counter
 ///   (CURSE_COUNT_CAP = 20). claimWinningsStethFirst (the vault-only path) NEVER calls maybeCurse.
 ///
 ///   Every exemption is proven BY CONTRAST: the exempt actor's curseCountOf stays 0 while an otherwise-
@@ -43,7 +43,7 @@ contract V61CurseSet is DeployProtocol {
     // mintPacked_ field shifts (BitPackingLib).
     uint256 private constant DAY_SHIFT = 72; // lastEthDay (32 bits)
     uint256 private constant FROZEN_UNTIL_LEVEL_SHIFT = 128; // (24 bits)
-    uint256 private constant WHALE_BUNDLE_TYPE_SHIFT = 152; // (2 bits)
+    uint256 private constant WHALE_PASS_TYPE_SHIFT = 152; // (2 bits)
     uint256 private constant DEITY_SHIFT = 184; // HAS_DEITY_PASS (1 bit)
     uint256 private constant AFFILIATE_BONUS_LEVEL_SHIFT = 185; // (24 bits)
     uint256 private constant AFFILIATE_BONUS_POINTS_SHIFT = 209; // (6 bits)
@@ -128,12 +128,12 @@ contract V61CurseSet is DeployProtocol {
         assertEq(_cashoutCurseOf(makeAddr("deity_contrast")), 2, "contrast: pass-less stale claimant cursed +2");
     }
 
-    /// @notice A whale/lazy-pass holder (frozenUntilLevel >= level && bundleType ∈ {1,3}) is exempt, while an
+    /// @notice A whale/lazy-pass holder (frozenUntilLevel >= level && passType ∈ {1,3}) is exempt, while an
     ///         equivalent pass-less stale claimant is cursed.
     function testWhalePassExemptByContrast() public {
         address whale = makeAddr("whale_exempt");
         _seedClaimable(whale, 10 ether);
-        _grantWhalePass(whale, 1); // bundleType 1 (10-level), frozenUntilLevel high
+        _grantWhalePass(whale, 1); // passType 1 (10-level), frozenUntilLevel high
         vm.prank(whale);
         game.claimWinnings(whale);
         assertEq(game.curseCountOf(whale), 0, "whale-pass exempt: curse stays 0");
@@ -378,10 +378,10 @@ contract V61CurseSet is DeployProtocol {
         _seedField(who, DEITY_SHIFT, 0x1, 0);
     }
 
-    /// @dev Grant a whale/lazy pass: bundleType (1 or 3) + frozenUntilLevel high enough to cover the level.
-    function _grantWhalePass(address who, uint256 bundleType) internal {
+    /// @dev Grant a whale/lazy pass: passType (1 or 3) + frozenUntilLevel high enough to cover the level.
+    function _grantWhalePass(address who, uint256 passType) internal {
         _seedField(who, FROZEN_UNTIL_LEVEL_SHIFT, 0xFFFFFF, uint256(game.level()) + 100);
-        _seedField(who, WHALE_BUNDLE_TYPE_SHIFT, 0x3, bundleType);
+        _seedField(who, WHALE_PASS_TYPE_SHIFT, 0x3, passType);
     }
 
     // =========================================================================

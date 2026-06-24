@@ -1252,7 +1252,7 @@ abstract contract DegenerusGameStorage {
     }
 
     /// @dev Activates a 10-level pass for a player. Shared logic for lazy pass purchases and awards.
-    ///      Updates mintPacked_ (levelCount +10, frozenUntilLevel, bundleType, lastLevel, day)
+    ///      Updates mintPacked_ (levelCount +10, frozenUntilLevel, passType, lastLevel, day)
     ///      and queues tickets for the 10-level range.
     /// @param player Address receiving the pass activation.
     /// @param ticketStartLevel First level of the 10-level range.
@@ -1291,8 +1291,8 @@ abstract contract DegenerusGameStorage {
 
         uint24 newLevelCount = levelCount + levelsToAdd;
 
-        uint8 currentBundleType = uint8(
-            (prevData >> BitPackingLib.WHALE_BUNDLE_TYPE_SHIFT) & 3
+        uint8 currentPassType = uint8(
+            (prevData >> BitPackingLib.WHALE_PASS_TYPE_SHIFT) & 3
         );
         uint24 lastLevelTarget = newFrozenLevel > lastLevel
             ? newFrozenLevel
@@ -1311,10 +1311,10 @@ abstract contract DegenerusGameStorage {
             BitPackingLib.MASK_24,
             newFrozenLevel
         );
-        if (1 >= currentBundleType) {
+        if (1 >= currentPassType) {
             data = BitPackingLib.setPacked(
                 data,
-                BitPackingLib.WHALE_BUNDLE_TYPE_SHIFT,
+                BitPackingLib.WHALE_PASS_TYPE_SHIFT,
                 3,
                 1
             );
@@ -1347,7 +1347,7 @@ abstract contract DegenerusGameStorage {
         _queueTicketRange(player, ticketStartLevel, 10, ticketsPerLevel, false);
     }
 
-    /// @dev Apply whale pass stats (levelCount/freeze/bundleType/lastLevel/day) without queueing tickets.
+    /// @dev Apply whale pass stats (levelCount/freeze/passType/lastLevel/day) without queueing tickets.
     /// @param player Address receiving the whale pass stats.
     /// @param ticketStartLevel First level of the 100-level range for whale pass tickets.
     function _applyWhalePassStats(
@@ -1395,10 +1395,10 @@ abstract contract DegenerusGameStorage {
         );
         data = BitPackingLib.setPacked(
             data,
-            BitPackingLib.WHALE_BUNDLE_TYPE_SHIFT,
+            BitPackingLib.WHALE_PASS_TYPE_SHIFT,
             3,
             3
-        ); // 3 = 100-level bundle
+        ); // 3 = 100-level pass
         data = BitPackingLib.setPacked(
             data,
             BitPackingLib.LAST_LEVEL_SHIFT,

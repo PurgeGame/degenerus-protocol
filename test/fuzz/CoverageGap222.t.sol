@@ -1620,7 +1620,7 @@ contract CoverageGap222 is DeployProtocol {
         vm.prank(buyer);
         (bool o1, ) = address(game).call{value: 1 ether}(
             abi.encodeWithSignature(
-                "purchaseWhaleBundle(address,uint256)",
+                "purchaseWhalePass(address,uint256)",
                 buyer,
                 uint256(1)
             )
@@ -1642,10 +1642,10 @@ contract CoverageGap222 is DeployProtocol {
         );
         // v47: game.purchaseFlipLootbox removed (FLIP-lootbox surface deleted); its
         // negative-auth probe is dropped — the selector no longer exists to be access-controlled.
-        // Whale bundle (2.4 ETH) and deity pass (24 ETH) are underfunded by the 1 ETH
+        // Whale pass (2.4 ETH) and deity pass (24 ETH) are underfunded by the 1 ETH
         // send and still revert. The lazy pass (0.24 ETH benefit) now succeeds: the 0.76
         // ETH overpay is credited to the payer's afking instead of reverting.
-        assertFalse(o1, "purchaseWhaleBundle reverts when underfunded");
+        assertFalse(o1, "purchaseWhalePass reverts when underfunded");
         assertTrue(o2, "purchaseLazyPass accepts overpay (excess -> afking)");
         assertFalse(o3, "purchaseDeityPass reverts when underfunded");
     }

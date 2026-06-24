@@ -520,9 +520,9 @@ contract RngFreezeAndRemovalProofs is DeployProtocol {
     uint256 private constant LAST_LEVEL_SHIFT = 0;
     uint256 private constant LEVEL_COUNT_SHIFT = 24;
     uint256 private constant FROZEN_UNTIL_LEVEL_SHIFT = 128;
-    uint256 private constant WHALE_BUNDLE_TYPE_SHIFT = 152;
+    uint256 private constant WHALE_PASS_TYPE_SHIFT = 152;
     uint256 private constant MASK_24 = (uint256(1) << 24) - 1;
-    uint256 private constant MASK_BUNDLE_TYPE = 0x3; // 2-bit field
+    uint256 private constant MASK_PASS_TYPE = 0x3; // 2-bit field
 
     /// @dev Slot for `mintPacked_[who]` (the same mapping the existing `_grantDeityPass` writes;
     ///      mapping root is slot 9 — confirmed against the existing helper at lines 479-484).
@@ -553,7 +553,7 @@ contract RngFreezeAndRemovalProofs is DeployProtocol {
         );
     }
 
-    /// @dev Decode `frozenUntilLevel`, `levelCount`, `whaleBundleType`, `lastLevel` from a
+    /// @dev Decode `frozenUntilLevel`, `levelCount`, `whalePassType`, `lastLevel` from a
     ///      packed mintPacked_ word for assertion convenience.
     function _decodeMintPacked(uint256 packed)
         internal
@@ -562,13 +562,13 @@ contract RngFreezeAndRemovalProofs is DeployProtocol {
             uint24 lastLevel,
             uint24 levelCount,
             uint24 frozenUntilLevel,
-            uint8 whaleBundleType
+            uint8 whalePassType
         )
     {
         lastLevel = uint24((packed >> LAST_LEVEL_SHIFT) & MASK_24);
         levelCount = uint24((packed >> LEVEL_COUNT_SHIFT) & MASK_24);
         frozenUntilLevel = uint24((packed >> FROZEN_UNTIL_LEVEL_SHIFT) & MASK_24);
-        whaleBundleType = uint8((packed >> WHALE_BUNDLE_TYPE_SHIFT) & MASK_BUNDLE_TYPE);
+        whalePassType = uint8((packed >> WHALE_PASS_TYPE_SHIFT) & MASK_PASS_TYPE);
     }
 
     /// @notice TST-01 D-TST01-03 — the deferred-claim roundtrip equivalence oracle.
@@ -639,12 +639,12 @@ contract RngFreezeAndRemovalProofs is DeployProtocol {
                 uint24 lastLvlPre,
                 uint24 levelCountPre,
                 uint24 frozenUntilPre,
-                uint8 bundleTypePre
+                uint8 passTypePre
             ) = _decodeMintPacked(uint256(mintPackedPreClaim));
             assertEq(lastLvlPre, 0, "D-04 pre-claim: lastLevel unchanged (stats NOT yet applied)");
             assertEq(levelCountPre, 0, "D-04 pre-claim: levelCount unchanged (stats NOT yet applied)");
             assertEq(frozenUntilPre, 0, "D-04 pre-claim: frozenUntilLevel unchanged (stats NOT yet applied)");
-            assertEq(bundleTypePre, 0, "D-04 pre-claim: whaleBundleType unchanged (stats NOT yet applied)");
+            assertEq(passTypePre, 0, "D-04 pre-claim: whalePassType unchanged (stats NOT yet applied)");
         }
 
         // -------------------------------------------------------------------
@@ -696,7 +696,7 @@ contract RngFreezeAndRemovalProofs is DeployProtocol {
                 uint24 lastLvlPost,
                 uint24 levelCountPost,
                 uint24 frozenUntilPost,
-                uint8 bundleTypePost
+                uint8 passTypePost
             ) = _decodeMintPacked(uint256(mintPackedPostClaim));
 
             uint24 expectedFrozenUntil = currentLevel + 100;
@@ -716,9 +716,9 @@ contract RngFreezeAndRemovalProofs is DeployProtocol {
                 "D-03: lastLevel == newFrozenLevel (Storage:1163 mirrors lastLevel onto newFrozenLevel)"
             );
             assertEq(
-                bundleTypePost,
+                passTypePost,
                 3,
-                "D-03: whaleBundleType set to 3 (100-level bundle marker, Storage:1158)"
+                "D-03: whalePassType set to 3 (100-level pass marker, Storage:1158)"
             );
         }
 
