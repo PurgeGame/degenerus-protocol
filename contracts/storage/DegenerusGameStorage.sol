@@ -763,6 +763,21 @@ abstract contract DegenerusGameStorage {
         future = uint128(packed >> 128);
     }
 
+    /// @dev Add a combined prize contribution to the active accumulator in ONE RMW. The purchase
+    ///      path computes each leg's next/future split (ticket and lootbox legs use different
+    ///      ratios), sums the post-split totals, and lands both in a single packed slot — the
+    ///      pending buffer while the pool is frozen, otherwise the live pools.
+    function _addPrizeContribution(uint128 nextAdd, uint128 futureAdd) internal {
+        if (nextAdd == 0 && futureAdd == 0) return;
+        if (prizePoolFrozen) {
+            (uint128 pNext, uint128 pFuture) = _getPendingPools();
+            _setPendingPools(pNext + nextAdd, pFuture + futureAdd);
+        } else {
+            (uint128 next, uint128 future) = _getPrizePools();
+            _setPrizePools(next + nextAdd, future + futureAdd);
+        }
+    }
+
     // =========================================================================
     // Ticket Queue Key Encoding
     // =========================================================================
@@ -889,6 +904,25 @@ abstract contract DegenerusGameStorage {
         internal
         returns (uint256 claimableUsed, uint256 afkingUsed)
     {
+        (claimableUsed, afkingUsed) = _settleShortfallNoPool(
+            buyer,
+            shortfall,
+            allowClaimable
+        );
+        // One claimablePool RMW for both tiers — linear aggregate, same underflow domain as
+        // the sequential per-tier debits; the per-player balance debits stay per-tier.
+        uint256 poolDraw = claimableUsed + afkingUsed;
+        if (poolDraw != 0) claimablePool -= uint128(poolDraw);
+    }
+
+    /// @dev Identical to _settleShortfall but WITHOUT the trailing claimablePool decrement, so a
+    ///      combined ticket+lootbox purchase can fold both legs' pool draws into one RMW. The
+    ///      per-player claimable/afking debits and the AfkingSpent emit still run here; the caller
+    ///      MUST apply `claimablePool -= (claimableUsed + afkingUsed)` for the returned draw.
+    function _settleShortfallNoPool(address buyer, uint256 shortfall, bool allowClaimable)
+        internal
+        returns (uint256 claimableUsed, uint256 afkingUsed)
+    {
         if (shortfall == 0) return (0, 0);
         if (allowClaimable) {
             uint256 claimable = _claimableOf(buyer);
@@ -907,10 +941,6 @@ abstract contract DegenerusGameStorage {
             _debitAfking(buyer, afkingUsed);
             emit AfkingSpent(buyer, afkingUsed);
         }
-        // One claimablePool RMW for both tiers — linear aggregate, same underflow domain as
-        // the sequential per-tier debits; the per-player balance debits above stay per-tier.
-        uint256 poolDraw = claimableUsed + afkingUsed;
-        if (poolDraw != 0) claimablePool -= uint128(poolDraw);
     }
 
     // =========================================================================

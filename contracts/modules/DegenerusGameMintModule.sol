@@ -188,42 +188,33 @@ contract DegenerusGameMintModule is
     ///      Afking covers any remaining shortfall on every mode.
     ///
     ///      SECURITY: Validates minimum payment amounts; overage is ignored for accounting.
-    ///      Prize contribution is split between nextPrizePool and futurePrizePool.
+    ///      Splits the prize contribution into its next/future shares and RETURNS them so the
+    ///      caller can fold the ticket and lootbox legs into one prize-pool RMW.
     ///
     /// @param player The player address to record mint for.
     /// @param costWei Total cost in wei for this mint.
     /// @param payKind Payment method (DirectEth, Claimable, or Combined).
     /// @param ethForLeg Fresh ETH allocated to this leg by the caller.
+    /// @return nextShare Portion of this leg's contribution destined for the next prize pool.
+    /// @return futureShare Portion destined for the future prize pool.
+    /// @return claimableDraw Per-player claimable + afking drawn; caller subtracts it from claimablePool.
     /// @custom:reverts E If payment validation fails or the funding tiers fall short.
     function _recordMintPayment(
         address player,
         uint256 costWei,
         MintPaymentKind payKind,
         uint256 ethForLeg
-    ) internal {
-        uint256 prizeContribution = _processMintPayment(
+    ) internal returns (uint256 nextShare, uint256 futureShare, uint256 claimableDraw) {
+        uint256 prizeContribution;
+        (prizeContribution, claimableDraw) = _processMintPayment(
             player,
             costWei,
             payKind,
             ethForLeg
         );
         if (prizeContribution != 0) {
-            uint256 futureShare = (prizeContribution * PURCHASE_TO_FUTURE_BPS) /
-                10_000;
-            uint256 nextShare = prizeContribution - futureShare;
-            if (prizePoolFrozen) {
-                (uint128 pNext, uint128 pFuture) = _getPendingPools();
-                _setPendingPools(
-                    pNext + uint128(nextShare),
-                    pFuture + uint128(futureShare)
-                );
-            } else {
-                (uint128 next, uint128 future) = _getPrizePools();
-                _setPrizePools(
-                    next + uint128(nextShare),
-                    future + uint128(futureShare)
-                );
-            }
+            futureShare = (prizeContribution * PURCHASE_TO_FUTURE_BPS) / 10_000;
+            nextShare = prizeContribution - futureShare;
         }
     }
 
@@ -235,19 +226,22 @@ contract DegenerusGameMintModule is
     ///      Combined: ETH first (any amount ≤ cost), then claimable for rest
     ///
     ///      SECURITY: Leaves 1 wei sentinel in claimable to prevent zeroing.
-    ///      INVARIANT: claimablePool is decremented by claimableUsed + afkingUsed.
+    ///      The per-player claimable/afking balances are debited here; the matching claimablePool
+    ///      decrement is deferred to the caller (returned as claimableDraw) so a combined buy folds
+    ///      both legs into one pool RMW.
     ///
     /// @param player Player whose claimable balance to check/deduct.
     /// @param amount Total cost in wei to cover.
     /// @param payKind Payment method enum.
     /// @param ethForLeg Fresh ETH allocated to this leg by the caller.
     /// @return prizeContribution Amount contributing to next/future prize pools.
+    /// @return claimableDraw Per-player claimable + afking drawn; caller subtracts it from claimablePool.
     function _processMintPayment(
         address player,
         uint256 amount,
         MintPaymentKind payKind,
         uint256 ethForLeg
-    ) private returns (uint256 prizeContribution) {
+    ) private returns (uint256 prizeContribution, uint256 claimableDraw) {
         uint256 ethUsed;
         uint256 claimableUsed;
         uint256 newClaimableBalance;
@@ -301,10 +295,10 @@ contract DegenerusGameMintModule is
             // reproduce the sequential claimable-then-afking debit reverts exactly (the
             // high-half guard IS the afking-sufficiency check).
             _debitClaimableAndAfking(player, claimableUsed, afkingUsed);
-            // One claimablePool RMW for both tiers. Checked uint128 casts/adds — each addend
-            // is bounded by its uint128 balance half, and underflow reverts exactly when the
-            // sequential debits would.
-            claimablePool -= uint128(claimableUsed) + uint128(afkingUsed);
+            // The claimablePool decrement for this draw is deferred to the caller, which folds
+            // the ticket and lootbox legs into one RMW. claimableDraw is the per-player amount
+            // drawn here (claimable + afking) that the caller must subtract from claimablePool.
+            claimableDraw = claimableUsed + afkingUsed;
         }
         prizeContribution = ethUsed + claimableUsed + afkingUsed;
 
@@ -975,6 +969,9 @@ contract DegenerusGameMintModule is
                 uint24 targetLevel,
                 uint32 flipMintUnits,
                 ,
+                ,
+                ,
+                ,
             ) = _callTicketPurchase(
                     buyer,
                     ticketQuantity,
@@ -1378,6 +1375,9 @@ contract DegenerusGameMintModule is
         uint256 remainingEth = ethValue;
         uint256 lootboxFreshEth = 0;
         uint256 lootboxClaimableUsed = 0;
+        // Lootbox-leg claimable + afking drawn here; folded with the ticket leg's draw into one
+        // claimablePool decrement below.
+        uint256 lootboxPoolDraw = 0;
         if (lootBoxAmount != 0) {
             // Lootbox payment uses msg.value first; afking covers any shortfall, and
             // claimable too unless the buyer insisted on DirectEth.
@@ -1394,13 +1394,14 @@ contract DegenerusGameMintModule is
                 // Draw the shortfall from claimable (live balance == the entry snapshot
                 // here; the mint leg has not run yet) then afking. afking is fresh-ETH-
                 // equivalent for routing; claimable is recycled. DirectEth skips claimable.
-                (uint256 cUsed, uint256 aUsed) = _settleShortfall(
+                (uint256 cUsed, uint256 aUsed) = _settleShortfallNoPool(
                     buyer,
                     shortfall,
                     payKind != MintPaymentKind.DirectEth
                 );
                 lootboxFreshEth += aUsed;
                 lootboxClaimableUsed = cUsed;
+                lootboxPoolDraw = cUsed + aUsed;
             }
         }
 
@@ -1410,6 +1411,12 @@ contract DegenerusGameMintModule is
         uint24 targetLevel;
         uint256 ticketFreshFlip;
         uint256 ticketRecycledFlip;
+        // Prize-pool shares per leg (ticket here, lootbox below). Each leg keeps its own
+        // next/future split; the two sums fold into a single _addPrizeContribution below.
+        uint256 ticketNextShare;
+        uint256 ticketFutureShare;
+        // Ticket-leg claimable + afking drawn; folded with the lootbox draw into one pool RMW.
+        uint256 ticketClaimableDraw;
         if (ticketCost != 0) {
             (
                 lootboxFlipCredit,
@@ -1417,7 +1424,10 @@ contract DegenerusGameMintModule is
                 targetLevel,
                 flipMintUnits,
                 ticketFreshFlip,
-                ticketRecycledFlip
+                ticketRecycledFlip,
+                ticketNextShare,
+                ticketFutureShare,
+                ticketClaimableDraw
             ) = _callTicketPurchase(
                     buyer,
                     ticketQuantity,
@@ -1441,6 +1451,8 @@ contract DegenerusGameMintModule is
         uint256 lbDistressUnits;
         uint64 lbPriorAdj;
         uint16 lbPriorScore;
+        uint256 lbNextShare;
+        uint256 lbFutureShare;
         if (lootBoxAmount != 0) {
             // Manual lootbox buyers stamp the mint day too (bounty eligibility); a no-op when
             // the ticket leg already stamped it today, closing the plain-vs-bundled gap.
@@ -1510,24 +1522,35 @@ contract DegenerusGameMintModule is
                 nextBps = LOOTBOX_SPLIT_NEXT_BPS;
             }
 
-            uint256 futureShare = (lootBoxAmount * futureBps) / 10_000;
-            uint256 nextShare = (lootBoxAmount * nextBps) / 10_000;
-
-            if (prizePoolFrozen) {
-                (uint128 pNext, uint128 pFuture) = _getPendingPools();
-                _setPendingPools(
-                    pNext + uint128(nextShare),
-                    pFuture + uint128(futureShare)
-                );
-            } else {
-                (uint128 next, uint128 future) = _getPrizePools();
-                _setPrizePools(
-                    next + uint128(nextShare),
-                    future + uint128(futureShare)
-                );
-            }
+            // Each leg's split is held in locals; the combined pool RMW runs once below.
+            lbFutureShare = (lootBoxAmount * futureBps) / 10_000;
+            lbNextShare = (lootBoxAmount * nextBps) / 10_000;
 
             emit LootBoxBuy(buyer, lbIndex, lootBoxAmount, presale);
+        }
+
+        // --- One combined prize-pool RMW for both legs ---
+        // Each leg's next/future split was computed above (ticket inside _callTicketPurchase,
+        // lootbox in the block above); summing the post-split totals lands both in a single
+        // packed write. This runs before any external call (quest handler / affiliate) so no
+        // observer ever sees a half-applied contribution, and prizePoolFrozen never flips
+        // mid-purchase, so both legs route to the same accumulator.
+        _addPrizeContribution(
+            uint128(ticketNextShare + lbNextShare),
+            uint128(ticketFutureShare + lbFutureShare)
+        );
+
+        // --- One combined claimablePool decrement for both legs ---
+        // Each leg already debited the buyer's per-player claimable/afking balance (the lootbox
+        // shortfall settle above and _processMintPayment inside _callTicketPurchase); their pool
+        // draws fold into a single decrement here, before the quest handler / affiliate calls. The
+        // only external interactions in this deferral window are the boon-consume delegatecall
+        // (reads no claimablePool, makes no reentrant call) and a read-only affiliate staticcall,
+        // so no observer ever sees a half-applied pool, and the solvency identity holds at every
+        // tx boundary.
+        uint256 totalClaimableDraw = ticketClaimableDraw + lootboxPoolDraw;
+        if (totalClaimableDraw != 0) {
+            claimablePool -= uint128(totalClaimableDraw);
         }
 
         // --- Single quest handler call (post-action: handlers execute before score) ---
@@ -1908,7 +1931,10 @@ contract DegenerusGameMintModule is
             uint24 targetLevel,
             uint32 flipMintUnits,
             uint256 ticketFreshFlip,
-            uint256 ticketRecycledFlip
+            uint256 ticketRecycledFlip,
+            uint256 ticketNextShare,
+            uint256 ticketFutureShare,
+            uint256 ticketClaimableDraw
         )
     {
         if (quantity == 0) revert E();
@@ -1987,8 +2013,14 @@ contract DegenerusGameMintModule is
 
             uint256 claimableBefore = _claimableOf(buyer);
             // Direct internal payment processing — `value` is the exact ETH this leg carries
-            // (what the former value-bearing self-call re-scoped into its msg.value).
-            _recordMintPayment(buyer, costWei, payKind, value);
+            // (what the former value-bearing self-call re-scoped into its msg.value). The
+            // prize-pool shares are returned, not written, so the caller folds the ticket and
+            // lootbox legs into one pool RMW.
+            (
+                ticketNextShare,
+                ticketFutureShare,
+                ticketClaimableDraw
+            ) = _recordMintPayment(buyer, costWei, payKind, value);
             // Mint-data recording runs after the payment processing, before the freshEth
             // read (it touches neither claimable nor pool state either way).
             _recordMintData(buyer, targetLevel, mintUnits);
