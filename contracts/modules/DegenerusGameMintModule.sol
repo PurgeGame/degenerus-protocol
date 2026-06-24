@@ -973,7 +973,8 @@ contract DegenerusGameMintModule is
                 ,
                 uint32 adjustedQty32,
                 uint24 targetLevel,
-                uint32 flipMintUnits
+                uint32 flipMintUnits,
+                ,
             ) = _callTicketPurchase(
                     buyer,
                     ticketQuantity,
@@ -1407,12 +1408,16 @@ contract DegenerusGameMintModule is
         uint32 flipMintUnits;
         uint32 adjustedQty;
         uint24 targetLevel;
+        uint256 ticketFreshFlip;
+        uint256 ticketRecycledFlip;
         if (ticketCost != 0) {
             (
                 lootboxFlipCredit,
                 adjustedQty,
                 targetLevel,
-                flipMintUnits
+                flipMintUnits,
+                ticketFreshFlip,
+                ticketRecycledFlip
             ) = _callTicketPurchase(
                     buyer,
                     ticketQuantity,
@@ -1593,28 +1598,9 @@ contract DegenerusGameMintModule is
             _queueTicketsScaled(buyer, targetLevel, adjustedQty, false);
         }
 
-        // --- Lootbox affiliate calls + EV score write (uses cached score) ---
+        // --- Lootbox EV score write (uses cached score). Affiliate legs are settled below by the
+        //     single combined call, alongside the ticket legs. ---
         if (lootBoxAmount != 0) {
-            if (lootboxFreshEth != 0) {
-                lootboxFlipCredit += affiliate.payAffiliate(
-                    _ethToFlipValue(lootboxFreshEth, priceWei),
-                    affiliateCode,
-                    buyer,
-                    cachedLevel + 1,
-                    true,
-                    uint16(cachedScore)
-                );
-            }
-            if (lootboxClaimableUsed != 0) {
-                lootboxFlipCredit += affiliate.payAffiliate(
-                    _ethToFlipValue(lootboxClaimableUsed, priceWei),
-                    affiliateCode,
-                    buyer,
-                    cachedLevel + 1,
-                    false,
-                    0
-                );
-            }
             // Purchase-time EV-cap tally. The box's multiplier is frozen from the
             // first-deposit score snapshot; the cap key is cachedLevel + 1 (the lootbox
             // open level == the resolver's currentLevel = level + 1). Bonus boxes
@@ -1665,6 +1651,32 @@ contract DegenerusGameMintModule is
                 _packLootbox(lbNewAmount, lbAdj, lbScore, lbDistressUnits);
         }
 
+        // Settle all affiliate legs (ticket + lootbox, fresh + recycled) in ONE call. The kickback
+        // joins the buyer's flip credit; the rolled winner credit is returned and batched below.
+        // Runs on any ETH spend; affiliate scores freeze at level + 1.
+        address affWinner;
+        uint256 affWinnerCredit;
+        if (ticketCost != 0 || lootBoxAmount != 0) {
+            uint256 lbFreshFlip = lootboxFreshEth != 0
+                ? _ethToFlipValue(lootboxFreshEth, priceWei)
+                : 0;
+            uint256 lbRecycledFlip = lootboxClaimableUsed != 0
+                ? _ethToFlipValue(lootboxClaimableUsed, priceWei)
+                : 0;
+            uint256 affKickback;
+            (affWinner, affWinnerCredit, affKickback) = affiliate.payAffiliateCombined(
+                affiliateCode,
+                buyer,
+                cachedLevel + 1,
+                ticketFreshFlip,
+                ticketRecycledFlip,
+                lbFreshFlip,
+                lbRecycledFlip,
+                uint16(cachedScore)
+            );
+            lootboxFlipCredit += affKickback;
+        }
+
         // Coin-presale-box credit accrual: while the box presale is open, every ETH
         // ticket + lootbox spend (fresh + recycled) earns 25% spendable box credit.
         // Covers the afking ticket buy, which routes through this path.
@@ -1689,8 +1701,16 @@ contract DegenerusGameMintModule is
                 (priceWei * 100);
         }
 
-        if (lootboxFlipCredit != 0) {
-            coinflip.creditFlip(buyer, lootboxFlipCredit);
+        // One Coinflip write for the buyer credit + the rolled affiliate winner. winner != buyer
+        // (winner == sender credits nothing), so no slot collision; the batch skips zero entries.
+        if (lootboxFlipCredit != 0 || affWinnerCredit != 0) {
+            address[] memory flipRecips = new address[](2);
+            uint256[] memory flipAmounts = new uint256[](2);
+            flipRecips[0] = buyer;
+            flipRecips[1] = affWinner;
+            flipAmounts[0] = lootboxFlipCredit;
+            flipAmounts[1] = affWinnerCredit;
+            coinflip.creditFlipBatch(flipRecips, flipAmounts);
         }
     }
 
@@ -1860,10 +1880,12 @@ contract DegenerusGameMintModule is
 
     /// @dev Execute ticket purchase: payment, boost, affiliate routing, quest unit accumulation.
     ///      x00 century bonus and ticket queuing are handled by _purchaseFor after score computation.
-    /// @return bonusCredit Affiliate kickback + bulk bonus flip credit
+    /// @return bonusCredit Bulk/recycle bonus flip credit (affiliate kickback is added by the caller)
     /// @return adjustedQty32 Adjusted ticket quantity (with boost, without x00 bonus)
     /// @return targetLevel The level tickets are queued to
     /// @return flipMintUnits FLIP-paid mint quest units
+    /// @return ticketFreshFlip Ticket fresh-rate FLIP basis for the caller's combined affiliate call
+    /// @return ticketRecycledFlip Ticket recycled-rate FLIP basis for the caller's combined affiliate call
     function _callTicketPurchase(
         address buyer,
         uint256 quantity,
@@ -1879,7 +1901,9 @@ contract DegenerusGameMintModule is
             uint256 bonusCredit,
             uint32 adjustedQty32,
             uint24 targetLevel,
-            uint32 flipMintUnits
+            uint32 flipMintUnits,
+            uint256 ticketFreshFlip,
+            uint256 ticketRecycledFlip
         )
     {
         if (quantity == 0) revert E();
@@ -1911,10 +1935,6 @@ contract DegenerusGameMintModule is
             if (cachedCnt + step >= JACKPOT_LEVEL_CAP)
                 targetLevel = cachedLevel + 1;
         }
-        // Affiliate scores always route to level + 1 so they freeze at
-        // level transition and can be claimed against a fixed snapshot.
-        uint24 affiliateLevel = cachedLevel + 1;
-
         uint256 priceWei = PriceLookupLib.priceForLevel(targetLevel);
         uint256 costWei = (priceWei * quantity) / (4 * TICKET_SCALE);
         if (costWei == 0) revert E();
@@ -1987,66 +2007,21 @@ contract DegenerusGameMintModule is
                 }
             }
 
-            uint256 kickback;
-            if (payKind == MintPaymentKind.Combined && freshEth != 0) {
-                kickback += affiliate.payAffiliate(
-                    freshFlip,
-                    affiliateCode,
-                    buyer,
-                    affiliateLevel,
-                    true,
-                    0
-                );
-                uint256 recycled = costWei - freshEth;
-                if (recycled != 0) {
-                    kickback += affiliate.payAffiliate(
-                        _ethToFlipValue(recycled, priceWei),
-                        affiliateCode,
-                        buyer,
-                        affiliateLevel,
-                        false,
-                        0
-                    );
-                }
-            } else if (payKind == MintPaymentKind.DirectEth) {
-                kickback += affiliate.payAffiliate(
-                    freshFlip,
-                    affiliateCode,
-                    buyer,
-                    affiliateLevel,
-                    true,
-                    0
-                );
-            } else {
-                // Claimable (and pure-claimable Combined): the claimable portion is recycled;
-                // any afking-drawn portion (freshEth) earns the fresh rate.
-                if (freshEth != 0) {
-                    kickback += affiliate.payAffiliate(
-                        freshFlip,
-                        affiliateCode,
-                        buyer,
-                        affiliateLevel,
-                        true,
-                        0
-                    );
-                }
-                uint256 recycled = costWei - freshEth;
-                if (recycled != 0) {
-                    kickback += affiliate.payAffiliate(
-                        _ethToFlipValue(recycled, priceWei),
-                        affiliateCode,
-                        buyer,
-                        affiliateLevel,
-                        false,
-                        0
-                    );
-                }
-            }
+            // Affiliate is settled ONCE for the whole buy by the caller (payAffiliateCombined),
+            // which needs this leg's fresh + recycled FLIP components. Fresh = the fresh-rate
+            // basis (afking-drawn principal counts as fresh, already folded into freshFlip);
+            // recycled = the claimable portion (costWei - freshEth) at the recycled rate. The
+            // per-payKind split collapses to (freshFlip, recycledEth): DirectEth has no recycled
+            // (recycledEth == 0); Combined/Claimable carry the claimable draw.
+            uint256 recycledEth = costWei - freshEth;
+            ticketFreshFlip = freshFlip;
+            ticketRecycledFlip = recycledEth != 0
+                ? _ethToFlipValue(recycledEth, priceWei)
+                : 0;
 
-            bonusCredit = kickback;
             uint256 coinCost = (quantity * (PRICE_COIN_UNIT / 4)) /
                 TICKET_SCALE;
-            bonusCredit += coinCost / 10;
+            bonusCredit = coinCost / 10;
             if (quantity >= 10 * 4 * TICKET_SCALE) {
                 bonusCredit +=
                     (quantity * PRICE_COIN_UNIT) /

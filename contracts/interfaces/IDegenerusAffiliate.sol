@@ -26,6 +26,33 @@ interface IDegenerusAffiliate {
         uint16 lootboxActivityScore
     ) external returns (uint256 playerKickback);
 
+    /// @notice Settle all of a buy's affiliate legs (ticket + lootbox, fresh + recycled) in ONE call.
+    /// @dev GAME-only. Resolves the referral once, accrues each leg at its own scale (fresh/recycled
+    ///      bps, taper on the lootbox-fresh leg), rolls ONE winner on the shared (day, sender, code)
+    ///      entropy, and RETURNS the winner credit instead of paying it so the caller batches the
+    ///      winner + buyer credits into one Coinflip write.
+    /// @param code Referral code supplied with the buy (resolved + locked once).
+    /// @param sender The buyer.
+    /// @param lvl Leaderboard level for all legs (ticket and lootbox both freeze at level + 1).
+    /// @param tktFreshFlip Ticket-leg fresh spend in FLIP base units.
+    /// @param tktRecycledFlip Ticket-leg recycled spend in FLIP base units.
+    /// @param lbFreshFlip Lootbox-leg fresh spend in FLIP base units (tapered).
+    /// @param lbRecycledFlip Lootbox-leg recycled spend in FLIP base units.
+    /// @param lbFreshScore Activity score tapering the lootbox-fresh leg (0 = no taper).
+    /// @return winner Single rolled recipient of the pooled affiliate share.
+    /// @return winnerCredit FLIP owed the winner (share + quest reward); 0 if none or winner==sender.
+    /// @return playerKickback FLIP kickback owed the buyer (summed across legs).
+    function payAffiliateCombined(
+        bytes32 code,
+        address sender,
+        uint24 lvl,
+        uint256 tktFreshFlip,
+        uint256 tktRecycledFlip,
+        uint256 lbFreshFlip,
+        uint256 lbRecycledFlip,
+        uint16 lbFreshScore
+    ) external returns (address winner, uint256 winnerCredit, uint256 playerKickback);
+
     /// @notice Settle a batch of afking subs' accrued affiliate base to the upline chain.
     /// @dev Permissionless. All `subs` must resolve to the same direct affiliate `A` (else revert).
     ///      Drains each sub's `affiliateBase` atomically at the Game storage owner, splits the total

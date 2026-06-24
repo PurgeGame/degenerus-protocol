@@ -578,6 +578,185 @@ contract DegenerusAffiliate {
         return playerKickback;
     }
 
+    /**
+     * @notice Purchase-path affiliate settlement for all of a buy's legs in ONE call.
+     * @dev GAME-only. Folds the up-to-four per-leg payAffiliate calls (ticket fresh/recycled +
+     *      lootbox fresh/recycled) into a single frame: resolves the referral once, scales each leg
+     *      at its own rate (fresh/recycled bps, taper on the lootbox-fresh leg) so per-component
+     *      rounding matches the separate calls, pools the scaled total into ONE leaderboard write
+     *      (all legs credit the same affiliate at the same level), then rolls ONE winner on the
+     *      shared (day, sender, code) entropy and credits the winner via ONE quest hop. The winner
+     *      credit is RETURNED, not paid here, so the caller batches it with the buyer's credit into
+     *      one Coinflip write. payAffiliate (foil path) is left unchanged.
+     * @param code Referral code supplied with the buy (resolved + locked once).
+     * @param sender The buyer.
+     * @param lvl Leaderboard level for all legs (ticket and lootbox both freeze at level + 1).
+     * @param tktFreshFlip Ticket-leg fresh spend in FLIP base units (fresh bps).
+     * @param tktRecycledFlip Ticket-leg recycled spend in FLIP base units (recycled bps).
+     * @param lbFreshFlip Lootbox-leg fresh spend in FLIP base units (fresh bps, tapered).
+     * @param lbRecycledFlip Lootbox-leg recycled spend in FLIP base units (recycled bps).
+     * @param lbFreshScore Activity score tapering the lootbox-fresh leg (0 = no taper).
+     * @return winner Single rolled recipient of the pooled affiliate share.
+     * @return winnerCredit FLIP owed the winner (share + quest reward); 0 if none or winner==sender.
+     * @return playerKickback FLIP kickback owed the buyer (summed across legs).
+     * @custom:reverts OnlyAuthorized When caller is not the GAME contract.
+     */
+    function payAffiliateCombined(
+        bytes32 code,
+        address sender,
+        uint24 lvl,
+        uint256 tktFreshFlip,
+        uint256 tktRecycledFlip,
+        uint256 lbFreshFlip,
+        uint256 lbRecycledFlip,
+        uint16 lbFreshScore
+    )
+        external
+        returns (address winner, uint256 winnerCredit, uint256 playerKickback)
+    {
+        if (msg.sender != ContractAddresses.GAME) revert OnlyAuthorized();
+        (
+            address affiliateAddr,
+            uint8 kickbackPct,
+            bytes32 storedCode,
+            bool noReferrer
+        ) = _resolveReferral(sender, code);
+
+        // Scale each leg at its OWN rate (fresh/recycled bps, taper on the lootbox-fresh leg) so
+        // per-component rounding matches four separate calls; then pool. All four legs credit the
+        // same affiliate at the same level, so the leaderboard takes ONE read-modify-write.
+        uint256 sumScaled;
+        {
+            (uint256 sc, uint256 kb) = _scaleLeg(tktFreshFlip, true, lvl, 0, kickbackPct);
+            sumScaled += sc;
+            playerKickback += kb;
+            (sc, kb) = _scaleLeg(tktRecycledFlip, false, lvl, 0, kickbackPct);
+            sumScaled += sc;
+            playerKickback += kb;
+            (sc, kb) = _scaleLeg(lbFreshFlip, true, lvl, lbFreshScore, kickbackPct);
+            sumScaled += sc;
+            playerKickback += kb;
+            (sc, kb) = _scaleLeg(lbRecycledFlip, false, lvl, 0, kickbackPct);
+            sumScaled += sc;
+            playerKickback += kb;
+        }
+        if (sumScaled == 0) return (address(0), 0, playerKickback);
+
+        uint256 newTotal = affiliateCoinEarned[lvl][affiliateAddr] + sumScaled;
+        affiliateCoinEarned[lvl][affiliateAddr] = newTotal;
+        _totalAffiliateScore[lvl] += sumScaled;
+        emit AffiliateEarningsRecorded(lvl, affiliateAddr, sumScaled, newTotal, sender, storedCode, true);
+        _updateTopAffiliate(affiliateAddr, newTotal, lvl);
+
+        uint256 sumShareBase = sumScaled - playerKickback;
+        if (sumShareBase != 0) {
+            uint256 entropy = uint256(
+                keccak256(
+                    abi.encodePacked(
+                        AFFILIATE_ROLL_TAG,
+                        GameTimeLib.currentDayIndex(),
+                        sender,
+                        storedCode
+                    )
+                )
+            );
+            if (noReferrer) {
+                winner = (entropy % 2 == 0)
+                    ? ContractAddresses.VAULT
+                    : ContractAddresses.DGNRS;
+                winnerCredit = sumShareBase;
+            } else {
+                uint256 roll = entropy % 20;
+                if (roll < 15) {
+                    winner = affiliateAddr;
+                } else {
+                    address upline1 = _referrerAddress(affiliateAddr);
+                    winner = roll < 19 ? upline1 : _referrerAddress(upline1);
+                }
+                // winner == sender credits nothing (mirrors payAffiliate); winnerCredit stays 0.
+                if (winner != sender) {
+                    winnerCredit = sumShareBase + quests.handleAffiliate(winner, sumShareBase);
+                }
+            }
+        }
+    }
+
+    /// @dev Pure per-leg affiliate scaling: scale at the leg's bps (fresh L1-3 25% / L4+ 20%,
+    ///      recycled 5%), apply the lootbox taper, and split off the buyer kickback. The caller
+    ///      pools the scaled amounts into one leaderboard write, so this touches no state.
+    function _scaleLeg(
+        uint256 flipAmount,
+        bool isFresh,
+        uint24 lvl,
+        uint16 score,
+        uint8 kickbackPct
+    ) private pure returns (uint256 scaled, uint256 kickback) {
+        if (flipAmount == 0) return (0, 0);
+        uint256 rewardScaleBps = isFresh
+            ? (lvl <= 3 ? REWARD_SCALE_FRESH_L1_3_BPS : REWARD_SCALE_FRESH_L4P_BPS)
+            : REWARD_SCALE_RECYCLED_BPS;
+        scaled = (flipAmount * rewardScaleBps) / BPS_DENOMINATOR;
+        if (scaled == 0) return (0, 0);
+        if (score >= LOOTBOX_TAPER_START_SCORE) {
+            scaled = _applyLootboxTaper(scaled, score);
+        }
+        if (kickbackPct != 0) {
+            kickback = (scaled * uint256(kickbackPct)) / 100;
+        }
+    }
+
+    /// @dev Resolve + lock the buyer's referral once (exact extraction of payAffiliate's resolution
+    ///      block). Returns the affiliate address, kickback %, normalized stored code, and whether
+    ///      the buyer has no real referrer (VAULT default).
+    function _resolveReferral(address sender, bytes32 code)
+        private
+        returns (address affiliateAddr, uint8 kickbackPct, bytes32 storedCode, bool noReferrer)
+    {
+        storedCode = playerReferralCode[sender];
+        if (storedCode == bytes32(0)) {
+            if (code == bytes32(0)) {
+                _setReferralCode(sender, REF_CODE_LOCKED);
+                storedCode = AFFILIATE_CODE_VAULT;
+                affiliateAddr = ContractAddresses.VAULT;
+                noReferrer = true;
+            } else {
+                (address resolved, uint8 resolvedKickback) = _resolveCodeInfo(code);
+                if (resolved == address(0) || resolved == sender) {
+                    _setReferralCode(sender, REF_CODE_LOCKED);
+                    storedCode = AFFILIATE_CODE_VAULT;
+                    affiliateAddr = ContractAddresses.VAULT;
+                    noReferrer = true;
+                } else {
+                    _setReferralCode(sender, code);
+                    affiliateAddr = resolved;
+                    kickbackPct = resolvedKickback;
+                    storedCode = code;
+                }
+            }
+        } else {
+            bool infoSet;
+            if (code != bytes32(0) && code != storedCode && _vaultReferralMutable(storedCode)) {
+                (address resolved, uint8 resolvedKickback) = _resolveCodeInfo(code);
+                if (resolved != address(0) && resolved != sender) {
+                    _setReferralCode(sender, code);
+                    affiliateAddr = resolved;
+                    kickbackPct = resolvedKickback;
+                    storedCode = code;
+                    infoSet = true;
+                }
+            }
+            if (!infoSet) {
+                if (storedCode == REF_CODE_LOCKED) {
+                    storedCode = AFFILIATE_CODE_VAULT;
+                    affiliateAddr = ContractAddresses.VAULT;
+                    noReferrer = true;
+                } else {
+                    (affiliateAddr, kickbackPct) = _resolveCodeInfo(storedCode);
+                }
+            }
+        }
+    }
+
     // =====================================================================
     //              AFKING AFFILIATE — FLAT-7% DETERMINISTIC-SPLIT PULL (v56)
     // =====================================================================
