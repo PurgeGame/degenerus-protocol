@@ -311,14 +311,16 @@ contract StorageFoundationTest is Test {
         assertFalse(harness.getTicketsFullyProcessed(), "ticketsFullyProcessed should reset");
     }
 
-    /// @dev Read queue has entries -> revert E().
-    function testSwapTicketSlotRevertsNonEmpty() public {
+    /// @dev Read queue has entries -> swap is fail-open (no revert; toggles anyway).
+    ///      The swap runs in the advance heartbeat, where a revert would brick the game;
+    ///      the read slot is drained before every real swap by construction.
+    function testSwapTicketSlotFailOpenNonEmpty() public {
         // ticketWriteSlot=0, readKey(0) = 0|TICKET_SLOT_BIT
         uint24 rk = 0 | TICKET_SLOT_BIT;
         harness.pushToTicketQueue(rk, address(0xBEEF));
 
-        vm.expectRevert(DegenerusGameStorage.E.selector);
         harness.exposed_swapTicketSlot(0);
+        assertTrue(harness.getTicketWriteSlot(), "swap toggles write slot even with a non-empty read slot");
     }
 
     /// @dev Two swaps return ticketWriteSlot to 0.

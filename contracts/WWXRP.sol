@@ -2,7 +2,7 @@
 pragma solidity 0.8.34;
 
 /**
- * @title WrappedWrappedXRP (WWXRP)
+ * @title WWXRP (Wacky Wrapped XRP)
  * @author Burnie Degenerus
  * @notice An ERC20 joke prize token.
  *
@@ -22,7 +22,7 @@ pragma solidity 0.8.34;
 
 import {ContractAddresses} from "./ContractAddresses.sol";
 
-contract WrappedWrappedXRP {
+contract WWXRP {
     /*+======================================================================+
       |                              EVENTS                                  |
       +======================================================================+
@@ -80,8 +80,8 @@ contract WrappedWrappedXRP {
       |  Standard ERC20 metadata and balances                               |
       +======================================================================+*/
 
-    /// @notice Token name - makes it VERY clear this is a joke
-    string public constant name = "Wrapped Wrapped WWXRP (PARODY)";
+    /// @notice Token name (a parody; not affiliated with or backed by XRP)
+    string public constant name = "Wacky Wrapped XRP";
 
     /// @notice Token symbol
     string public constant symbol = "WWXRP";

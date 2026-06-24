@@ -69,7 +69,7 @@ contract DegenerusGameGameOverModule is DegenerusGameStorage {
     ///      Reads rngWordByDay[day] for entropy; reverts if funds exist but word is not yet available.
     ///      VRF fallback logic (historical word, stall timeout) is in AdvanceModule._gameOverEntropy.
     /// @param day Day index for RNG word lookup from rngWordByDay mapping.
-    /// @custom:reverts E When funds exist but RNG word unavailable (defense-in-depth), or stETH transfer fails
+    /// @custom:reverts ZeroValue When funds exist but RNG word unavailable (defense-in-depth), or stETH transfer fails
     function handleGameOverDrain(uint24 day) external {
         if (_goRead(GO_JACKPOT_PAID_SHIFT, GO_JACKPOT_PAID_MASK) != 0) return; // Already processed
 
@@ -91,7 +91,7 @@ contract DegenerusGameGameOverModule is DegenerusGameStorage {
         uint256 rngWord;
         if (preRefundAvailable != 0) {
             rngWord = rngWordByDay[day];
-            if (rngWord == 0) revert E();
+            if (rngWord == 0) revert Invariant();
         }
 
         // === All side effects below this line (RNG confirmed or no funds to distribute) ===
@@ -199,7 +199,7 @@ contract DegenerusGameGameOverModule is DegenerusGameStorage {
     ///      After GO_SWEPT=1, claimWinnings() reverts, so this is the last
     ///      chance for the three sinks to receive what they earned in-game.
     ///      Also shuts down the VRF subscription and sweeps LINK to vault.
-    /// @custom:reverts E When ETH or stETH transfer fails
+    /// @custom:reverts TransferFailed When ETH or stETH transfer fails
     function handleFinalSweep() external {
         uint256 goTime = _goRead(GO_TIME_SHIFT, GO_TIME_MASK);
         if (goTime == 0) return; // Game not over yet
@@ -250,16 +250,16 @@ contract DegenerusGameGameOverModule is DegenerusGameStorage {
     function _sendStethFirst(address to, uint256 amount, uint256 stethBal) private returns (uint256) {
         if (amount == 0) return stethBal;
         if (amount <= stethBal) {
-            if (!steth.transfer(to, amount)) revert E();
+            if (!steth.transfer(to, amount)) revert TransferFailed();
             return stethBal - amount;
         }
         if (stethBal != 0) {
-            if (!steth.transfer(to, stethBal)) revert E();
+            if (!steth.transfer(to, stethBal)) revert TransferFailed();
         }
         uint256 ethAmount = amount - stethBal;
         if (ethAmount != 0) {
             (bool ok, ) = payable(to).call{value: ethAmount}("");
-            if (!ok) revert E();
+            if (!ok) revert TransferFailed();
         }
         return 0;
     }

@@ -33,6 +33,14 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
       +======================================================================+*/
 
     // error E() — inherited from DegenerusGameStorage
+    error MidDayActive(); // A mid-day ticket-swap VRF request is already in flight; cannot start another lootbox RNG request.
+    error PreResetWindow(); // Request blocked: within the 15-minute pre-reset window before the daily boundary to avoid competing with daily jackpot RNG.
+    error InsufficientLink(); // VRF subscription LINK balance is below the minimum required for a lootbox RNG request.
+    error NoPendingLootbox(); // No pending lootbox ETH or FLIP value; nothing to trigger a mid-day RNG request for.
+    error BelowThreshold(); // Pending lootbox ETH-equivalent value is below the configured threshold required to trigger mid-day RNG.
+    error NoMidDayRequest(); // No mid-day lootbox VRF request is active; there is nothing to retry.
+    error RngNotPending(); // No outstanding VRF request exists (rngRequestTime == 0); retry has nothing to re-issue.
+    error RngInFlight(); // A VRF request is already in flight (rngRequestTime != 0); cannot start another.
     error NotTimeYet();
     error RngNotReady();
     // error RngLocked() — inherited from DegenerusGameStorage
@@ -603,7 +611,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         uint256 subId,
         bytes32 keyHash_
     ) external {
-        if (msg.sender != ContractAddresses.ADMIN) revert E();
+        if (msg.sender != ContractAddresses.ADMIN) revert OnlyAdmin();
 
         address current = address(vrfCoordinator);
         _setVrfConfig(coordinator_, subId, keyHash_);
@@ -828,7 +836,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
     ///      Uses assembly to preserve original error data.
     /// @param reason The error bytes from failed delegatecall.
     function _revertDelegate(bytes memory reason) private pure {
-        if (reason.length == 0) revert E();
+        if (reason.length == 0) revert EmptyRevert();
         assembly ("memory-safe") {
             revert(add(32, reason), mload(reason))
         }
@@ -1098,22 +1106,22 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         if (rngLockedFlag) revert RngLocked();
         // Block while mid-day ticket processing is active — prevents entropy reroll
         // by requesting a new VRF word after inspecting the current one.
-        if (_lrRead(LR_MID_DAY_SHIFT, LR_MID_DAY_MASK) != 0) revert E();
+        if (_lrRead(LR_MID_DAY_SHIFT, LR_MID_DAY_MASK) != 0) revert MidDayActive();
         uint48 nowTs = uint48(block.timestamp);
         uint24 currentDay = _simulatedDayIndexAt(nowTs);
 
         // Block in the 15-minute pre-reset window to avoid competing with daily jackpot RNG flow.
-        if ((nowTs - 82620) % 1 days >= 1 days - 15 minutes) revert E();
+        if ((nowTs - 82620) % 1 days >= 1 days - 15 minutes) revert PreResetWindow();
         // Block until today's daily RNG has been consumed and recorded.
-        if (rngWordByDay[currentDay] == 0) revert E();
+        if (rngWordByDay[currentDay] == 0) revert RngNotReady();
 
-        if (rngRequestTime != 0) revert E();
+        if (rngRequestTime != 0) revert RngInFlight();
 
         // LINK balance check
         (uint96 linkBal, , , , ) = vrfCoordinator.getSubscription(
             vrfSubscriptionId
         );
-        if (linkBal < MIN_LINK_FOR_LOOTBOX_RNG) revert E();
+        if (linkBal < MIN_LINK_FOR_LOOTBOX_RNG) revert InsufficientLink();
 
         // Threshold check: pending ETH plus the FLIP ETH-equivalent (valued at the
         // current ticket price) must clear the owner-tunable threshold. This gates
@@ -1125,7 +1133,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         uint256 pendingFlip = _unpackWholeFlipToWei(
             uint40(_lrRead(LR_PENDING_FLIP_SHIFT, LR_PENDING_FLIP_MASK))
         );
-        if (pendingEth == 0 && pendingFlip == 0) revert E();
+        if (pendingEth == 0 && pendingFlip == 0) revert NoPendingLootbox();
         uint256 totalEthEquivalent = pendingEth;
         if (pendingFlip != 0) {
             uint256 priceWei = PriceLookupLib.priceForLevel(level);
@@ -1138,7 +1146,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         uint256 threshold = _unpackMilliEthToWei(
             uint64(_lrRead(LR_THRESHOLD_SHIFT, LR_THRESHOLD_MASK))
         );
-        if (threshold != 0 && totalEthEquivalent < threshold) revert E();
+        if (threshold != 0 && totalEthEquivalent < threshold) revert BelowThreshold();
 
         // Freeze ticket buffer: swap write→read so tickets purchased after
         // VRF delivery can't be resolved by this word.
@@ -1173,14 +1181,14 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         // a retry could overwrite the in-flight daily requestId. Mirrors requestLootboxRng.
         // Legitimate mid-day retries run with rngLockedFlag == false.
         if (rngLockedFlag) revert RngLocked();
-        if (_lrRead(LR_MID_DAY_SHIFT, LR_MID_DAY_MASK) == 0) revert E();
-        if (rngRequestTime == 0) revert E();
-        if (uint48(block.timestamp) < rngRequestTime + MIDDAY_RNG_RETRY_TIMEOUT) revert E();
+        if (_lrRead(LR_MID_DAY_SHIFT, LR_MID_DAY_MASK) == 0) revert NoMidDayRequest();
+        if (rngRequestTime == 0) revert RngNotPending();
+        if (uint48(block.timestamp) < rngRequestTime + MIDDAY_RNG_RETRY_TIMEOUT) revert NotTimeYet();
 
         (uint96 linkBal, , , , ) = vrfCoordinator.getSubscription(
             vrfSubscriptionId
         );
-        if (linkBal < MIN_LINK_FOR_LOOTBOX_RNG) revert E();
+        if (linkBal < MIN_LINK_FOR_LOOTBOX_RNG) revert InsufficientLink();
 
         uint256 id = _requestVrfWord(VRF_MIDDAY_CONFIRMATIONS);
 
@@ -1507,7 +1515,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                 )
             );
         if (!ok) _revertDelegate(data);
-        if (data.length == 0) revert E();
+        if (data.length == 0) revert EmptyReturn();
         return abi.decode(data, (bool, bool, uint32));
     }
 
@@ -1576,7 +1584,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                 )
             );
         if (!ok) _revertDelegate(data);
-        if (data.length == 0) revert E();
+        if (data.length == 0) revert EmptyReturn();
         finished = abi.decode(data, (bool));
         worked = (ticketCursor != prevCursor) || (ticketLevel != prevLevel);
     }
@@ -1783,7 +1791,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         uint256 newSubId,
         bytes32 newKeyHash
     ) external {
-        if (msg.sender != ContractAddresses.ADMIN) revert E();
+        if (msg.sender != ContractAddresses.ADMIN) revert OnlyAdmin();
 
         address current = address(vrfCoordinator);
         _setVrfConfig(newCoordinator, newSubId, newKeyHash);
@@ -1855,7 +1863,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         uint256 requestId,
         uint256[] calldata randomWords
     ) external {
-        if (msg.sender != address(vrfCoordinator)) revert E();
+        if (msg.sender != address(vrfCoordinator)) revert OnlyCoordinator();
         if (requestId != vrfRequestId || rngWordCurrent != 0) return;
 
         uint256 word = randomWords[0];

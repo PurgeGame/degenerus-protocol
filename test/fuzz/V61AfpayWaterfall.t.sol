@@ -150,7 +150,7 @@ contract V61AfpayWaterfall is DeployProtocol {
         // usable = (claimable - 1) + afking < shortfall ⇒ revert. Pick shortfall above the usable sum.
         uint256 usable = (claimable - 1) + afking;
         uint256 shortfall = usable + 1;
-        vm.expectRevert(t.sentinelError());
+        vm.expectRevert(bytes4(0xfc220038)); // Insolvent()
         t.settle(buyer, shortfall, true);
     }
 

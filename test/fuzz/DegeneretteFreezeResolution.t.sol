@@ -68,7 +68,7 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
     uint256 private constant DEGENERETTE_BET_NONCE_SLOT = 39;
     /// @dev FLIP.balanceOf mapping root slot.
     uint256 private constant FLIP_BALANCEOF_SLOT = 1;
-    /// @dev WrappedWrappedXRP.balanceOf / totalSupply slots.
+    /// @dev WWXRP.balanceOf / totalSupply slots.
     uint256 private constant WWXRP_BALANCEOF_SLOT = 2;
     uint256 private constant WWXRP_TOTAL_SUPPLY_SLOT = 0;
 
@@ -259,7 +259,7 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
         uint64[] memory betIds = new uint64[](1);
         betIds[0] = 1;
         vm.prank(player);
-        vm.expectRevert(bytes4(0x92bbf6e8)); // E()
+        vm.expectRevert(bytes4(0xfc220038)); // Insolvent()
         game.resolveDegeneretteBets(address(0), betIds);
 
         // Live future untouched
@@ -602,12 +602,12 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
         require(firstEthShare > 0, "first spin must pay ETH");
 
         // Trim pending future BELOW the first spin's ethShare -> the very first ETH
-        // win's per-spin solvency check (pendingFuture < ethShare) must revert E()
+        // win's per-spin solvency check (pendingFuture < ethShare) must revert Insolvent()
         // on the IDENTICAL (first) spin the replay predicts.
         _seedPendingFuture(firstEthShare - 1);
 
         vm.prank(player);
-        vm.expectRevert(bytes4(0x92bbf6e8)); // E()
+        vm.expectRevert(bytes4(0xfc220038)); // Insolvent()
         game.resolveDegeneretteBets(address(0), betIds);
 
         // Live future must stay untouched throughout the (reverted) frozen resolve.
@@ -845,7 +845,7 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
         // claimableWinnings (RNG is committed, the bet is otherwise resolvable per Phase 2),
         // pushing claimablePool above the ETH balance. The guard reverts first.
         vm.prank(player);
-        vm.expectRevert(bytes4(0x92bbf6e8)); // E()
+        vm.expectRevert(bytes4(0xdf469ccb)); // GameOver()
         game.resolveDegeneretteBets(address(0), betIds);
 
         // Belt-and-suspenders: the resolve credited nothing post-game-over.

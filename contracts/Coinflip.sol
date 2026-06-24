@@ -38,7 +38,7 @@ interface IFLIP {
 }
 
 /// @notice Interface for WWXRP contract methods used by Coinflip.
-interface IWrappedWrappedXRP {
+interface IWWXRP {
     /// @notice Mint WWXRP consolation prize to a player on coinflip loss.
     function mintPrize(address to, uint256 amount) external;
 }
@@ -137,7 +137,7 @@ contract Coinflip {
     IFLIP public constant flip = IFLIP(ContractAddresses.COIN);
     IDegenerusGame public constant degenerusGame = IDegenerusGame(ContractAddresses.GAME);
     IDegenerusJackpots public constant jackpots = IDegenerusJackpots(ContractAddresses.JACKPOTS);
-    IWrappedWrappedXRP public constant wwxrp = IWrappedWrappedXRP(ContractAddresses.WWXRP);
+    IWWXRP public constant wwxrp = IWWXRP(ContractAddresses.WWXRP);
 
     // Constants
     uint256 private constant MIN = 100 ether;

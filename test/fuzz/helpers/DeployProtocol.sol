@@ -21,7 +21,7 @@ import {DegenerusGameFoilPackModule} from "../../../contracts/modules/DegenerusG
 import {FLIP} from "../../../contracts/FLIP.sol";
 import {Coinflip} from "../../../contracts/Coinflip.sol";
 import {DegenerusGame} from "../../../contracts/DegenerusGame.sol";
-import {WrappedWrappedXRP} from "../../../contracts/WrappedWrappedXRP.sol";
+import {WWXRP} from "../../../contracts/WWXRP.sol";
 import {DegenerusAffiliate} from "../../../contracts/DegenerusAffiliate.sol";
 import {DegenerusJackpots} from "../../../contracts/DegenerusJackpots.sol";
 import {DegenerusQuests} from "../../../contracts/DegenerusQuests.sol";
@@ -69,7 +69,7 @@ abstract contract DeployProtocol is Test {
     FLIP public coin;
     Coinflip public coinflip;
     DegenerusGame public game;
-    WrappedWrappedXRP public wwxrp;
+    WWXRP public wwxrp;
     DegenerusAffiliate public affiliate;
     DegenerusJackpots public jackpots;
     DegenerusQuests public quests;
@@ -119,7 +119,7 @@ abstract contract DeployProtocol is Test {
         coinflip = new Coinflip();                // N+13 = nonce 18
 
         game = new DegenerusGame();                    // N+14 = nonce 19
-        wwxrp = new WrappedWrappedXRP();               // N+15 = nonce 20
+        wwxrp = new WWXRP();               // N+15 = nonce 20
 
         // DegenerusAffiliate needs empty arrays
         affiliate = new DegenerusAffiliate(

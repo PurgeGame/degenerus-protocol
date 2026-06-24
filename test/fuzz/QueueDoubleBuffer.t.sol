@@ -339,10 +339,13 @@ contract MidDaySwapTest is Test {
     }
 
     // =========================================================================
-    // Test 11: Read slot must be drained before swap attempt
-    //          (proves _swapTicketSlot reverts E() if read queue non-empty)
+    // Test 11: Swap is fail-open on a non-empty read slot
+    //          (the swap runs in the advance heartbeat, where a revert would brick
+    //          the game; the read slot is drained before every real swap by
+    //          construction, so a non-empty read slot is unreachable -- but if it
+    //          ever happened the toggle just defers those entries, never reverts)
     // =========================================================================
-    function testMidDayProcessesReadSlotFirst() public {
+    function testSwapFailOpenOnNonEmptyReadSlot() public {
         // Setup: populate write queue, swap once to move entries to read slot
         _fillWriteQueue(10);
         harness.setTicketsFullyProcessed(true);
@@ -359,9 +362,20 @@ contract MidDaySwapTest is Test {
         uint24 wk = harness.exposed_tqWriteKey(LEVEL);
         assertEq(harness.getQueueLength(wk), 440, "write queue should have 440 entries");
 
-        // Attempting swap should revert because read slot is non-empty
-        // This proves the mid-day path MUST drain the read slot before swapping
-        vm.expectRevert(abi.encodeWithSignature("E()"));
+        // Swapping with a non-empty read slot must NOT revert (fail-open). It simply
+        // toggles the buffer: the formerly-read 10 entries become the write slot and the
+        // formerly-write 440 become the read slot -- nothing is lost, the game never bricks.
         harness.exposed_swapTicketSlot(LEVEL);
+        assertEq(
+            harness.getQueueLength(harness.exposed_tqReadKey(LEVEL)),
+            440,
+            "after fail-open swap the 440-entry slot is now the read slot"
+        );
+        assertEq(
+            harness.getQueueLength(harness.exposed_tqWriteKey(LEVEL)),
+            10,
+            "after fail-open swap the 10-entry slot is now the write slot (not lost)"
+        );
+        assertFalse(harness.getTicketsFullyProcessed(), "drained flag reset by the swap");
     }
 }

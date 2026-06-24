@@ -18,7 +18,7 @@ import {DegenerusGameMintStreakUtils} from "./DegenerusGameMintStreakUtils.sol";
 import {PriceLookupLib} from "../libraries/PriceLookupLib.sol";
 
 /// @notice Minimal interface for WWXRP game burn/mint operations.
-interface IWrappedWrappedXRP {
+interface IWWXRP {
     /// @notice Mints WWXRP tokens as a prize to the recipient.
     /// @param to The address to receive the minted tokens.
     /// @param amount The amount of tokens to mint.
@@ -153,7 +153,7 @@ contract DegenerusGameDegeneretteModule is
     /// @dev Reverts with the provided reason bytes from a delegatecall failure.
     /// @param reason The revert reason bytes from the failed call.
     function _revertDelegate(bytes memory reason) private pure {
-        if (reason.length == 0) revert E();
+        if (reason.length == 0) revert EmptyRevert();
         assembly ("memory-safe") {
             revert(add(32, reason), mload(reason))
         }
@@ -164,8 +164,8 @@ contract DegenerusGameDegeneretteModule is
     // -------------------------------------------------------------------------
 
     /// @dev Reference to the WWXRP token contract for burn/mint operations.
-    IWrappedWrappedXRP internal constant wwxrp =
-        IWrappedWrappedXRP(ContractAddresses.WWXRP);
+    IWWXRP internal constant wwxrp =
+        IWWXRP(ContractAddresses.WWXRP);
 
     // -------------------------------------------------------------------------
     // Constants
@@ -496,7 +496,7 @@ contract DegenerusGameDegeneretteModule is
         // futurePrizePool residual, pushing claimablePool above the ETH balance
         // (unbacked obligation). Same guard as claimWhalePass: pending bets are settled
         // by the game-over drain, never resolved into claimable after it.
-        if (_livenessTriggered()) revert E();
+        if (_livenessTriggered()) revert GameOver();
         // Permissionless: a resolved bet only ever credits the player who placed it, never the
         // caller, so anyone may settle any player's pending bets (zero address = caller).
         // Placement debits the funder (the player/approved operator, else the caller for a
@@ -604,7 +604,7 @@ contract DegenerusGameDegeneretteModule is
         if (heroQuadrant >= 4) revert InvalidBet();
 
         uint48 index = uint48(_lrRead(LR_INDEX_SHIFT, LR_INDEX_MASK));
-        if (index == 0) revert E();
+        if (index == 0) revert NotStarted();
         if (lootboxRngWordByIndex[index] != 0) revert RngNotReady();
 
         totalBet = uint256(amountPerTicket) * uint256(ticketCount);
@@ -978,7 +978,7 @@ contract DegenerusGameDegeneretteModule is
                 // intact; the pending future accumulator (credited by purchases
                 // during freeze) is debited here with a revert-on-insufficient
                 // solvency check, against the running local.
-                if (uint256(acc.pendingFuture) < ethShare) revert E();
+                if (uint256(acc.pendingFuture) < ethShare) revert Insolvent();
                 acc.pendingFuture -= uint128(ethShare);
             } else {
                 // Unfrozen path: pool cap (ETH_WIN_CAP_BPS) takes PRECEDENCE over
@@ -1582,7 +1582,7 @@ contract DegenerusGameDegeneretteModule is
         uint256 seed,
         uint32 customTicket
     ) external payable {
-        if (address(this) != ContractAddresses.GAME) revert E();
+        if (address(this) != ContractAddresses.GAME) revert OnlyDelegatecall();
         if (stake == 0 || stake > type(uint128).max) return;
         uint64 betId = _boxBetId(seed, BOX_SPIN_TYPE_WWXRP);
         uint128 betAmount = uint128(stake);
@@ -1651,7 +1651,7 @@ contract DegenerusGameDegeneretteModule is
         uint256 seed,
         uint32 customTicket
     ) external payable {
-        if (address(this) != ContractAddresses.GAME) revert E();
+        if (address(this) != ContractAddresses.GAME) revert OnlyDelegatecall();
         if (totalStake == 0) return;
         uint128 perSpin = uint128(totalStake / BOX_FLIP_SPINS);
         if (perSpin == 0) return;
@@ -1713,7 +1713,7 @@ contract DegenerusGameDegeneretteModule is
         uint256 seed,
         uint32 customTicket
     ) external payable {
-        if (address(this) != ContractAddresses.GAME) revert E();
+        if (address(this) != ContractAddresses.GAME) revert OnlyDelegatecall();
         if (stake == 0 || stake > type(uint128).max) return;
         uint64 betId = _boxBetId(seed, BOX_SPIN_TYPE_ETH);
         uint128 betAmount = uint128(stake);

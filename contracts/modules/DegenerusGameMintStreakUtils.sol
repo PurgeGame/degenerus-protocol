@@ -18,6 +18,9 @@ interface IDegenerusVaultOwner {
 ///      (5-component scoring: mint streak, mint count, quest streak, affiliate bonus, deity/whale pass)
 ///      and mint streak helpers (credits on completed 1x price ETH quest).
 abstract contract DegenerusGameMintStreakUtils is DegenerusGameStorage {
+    error InvalidDistance(); // mint-streak distance argument out of range
+    error InvalidQuantity(); // quantity argument is zero or out of range (mint units, or whale-pass count)
+
     /// @notice Emitted when a player's mint streak advances a step.
     /// @param player The player whose mint streak advanced.
     /// @param mintLevel The level whose mint advanced the streak step.
@@ -187,9 +190,9 @@ abstract contract DegenerusGameMintStreakUtils is DegenerusGameStorage {
         for (uint256 i; i < len; ) {
             uint24 L = uint24(levels[i]);
             uint256 d = uint256(L) - uint256(cl); // reverts if L < cl
-            if (d < 6 || d > 100) revert E();
+            if (d < 6 || d > 100) revert InvalidDistance();
             uint256 n = quantities[i];
-            if (n == 0 || n > type(uint32).max) revert E();
+            if (n == 0 || n > type(uint32).max) revert InvalidQuantity();
             uint256 faceWei = PriceLookupLib.priceForLevel(L) * n;
             totalFaceWei += faceWei;
             totalBudget +=

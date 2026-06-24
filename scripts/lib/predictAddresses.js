@@ -42,7 +42,7 @@ export const DEPLOY_ORDER = [
   "COIN",                  // N+12: FLIP
   "COINFLIP",              // N+13: Coinflip (no constructor args)
   "GAME",                  // N+14: DegenerusGame (internal storage only)
-  "WWXRP",                 // N+15: WrappedWrappedXRP
+  "WWXRP",                 // N+15: WWXRP
   "AFFILIATE",             // N+16: DegenerusAffiliate
   "JACKPOTS",              // N+17: DegenerusJackpots
   "QUESTS",                // N+18: DegenerusQuests
@@ -78,7 +78,7 @@ export const KEY_TO_CONTRACT = {
   COIN: "FLIP",
   COINFLIP: "Coinflip",
   GAME: "DegenerusGame",
-  WWXRP: "WrappedWrappedXRP",
+  WWXRP: "WWXRP",
   AFFILIATE: "DegenerusAffiliate",
   JACKPOTS: "DegenerusJackpots",
   QUESTS: "DegenerusQuests",

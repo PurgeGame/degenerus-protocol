@@ -23,6 +23,14 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
     // -------------------------------------------------------------------------
 
     // error E() — inherited from DegenerusGameStorage
+    // error InvalidQuantity() — inherited from DegenerusGameMintStreakUtils
+    error MinQuantityRequired(); // At a century milestone level (passLevel % 100 == 0) at least two whale passes must be purchased.
+    error InvalidLevelForPass(); // Current game level is not eligible for a lazy pass purchase (not level 0-2, x9, x0, or an unlocked century) and the caller has no valid lazy pass boon.
+    error DeityPassConflict(); // Buyer already holds a deity pass, which is incompatible with purchasing a lazy pass.
+    error PassNotExpired(); // The player's existing frozen pass has more than 7 levels remaining and is not yet eligible for early renewal.
+    error InvalidSymbol(); // Symbol ID is out of the valid range (must be 0-31).
+    error SymbolTaken(); // The requested deity symbol has already been claimed by another buyer.
+    error AlreadyOwnsDeityPass(); // The buyer already holds a deity pass; only one per address is permitted.
     // error RngLocked() — inherited from DegenerusGameStorage
 
     // -------------------------------------------------------------------------
@@ -169,18 +177,18 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
      *      - Post-game (level > 0): 5% next pool, 95% future pool
      * @param buyer The address receiving the pass.
      * @param quantity Number of passes to purchase (1-100).
-     * @custom:reverts E When gameOver is true.
-     * @custom:reverts E When quantity is 0 or exceeds 100.
-     * @custom:reverts E When msg.value does not match required price.
+     * @custom:reverts GameOver When gameOver is true.
+     * @custom:reverts InvalidQuantity When quantity is 0 or exceeds 100.
+     * @custom:reverts MinQuantityRequired When msg.value does not match required price.
      */
     function purchaseWhalePass(
         address buyer,
         uint256 quantity
     ) external payable {
-        if (_livenessTriggered()) revert E();
+        if (_livenessTriggered()) revert GameOver();
         uint24 passLevel = level + 1;
 
-        if (quantity == 0 || quantity > 100) revert E();
+        if (quantity == 0 || quantity > 100) revert InvalidQuantity();
 
         // Check for valid whale boon (10/25/50% off standard price)
         bool hasValidBoon = false;
@@ -241,7 +249,7 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
                 (quantity - 1);
         } else {
             // x99 levels: minimum 2 passes (8 ETH) to deter fresh-account century bonus farming
-            if (passLevel % 100 == 0 && quantity < 2) revert E();
+            if (passLevel % 100 == 0 && quantity < 2) revert MinQuantityRequired();
             uint256 unitPrice = passLevel <= 4
                 ? WHALE_PASS_EARLY_PRICE
                 : WHALE_PASS_STANDARD_PRICE;
@@ -390,13 +398,13 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
      *      - Awards a lootbox equal to 10% of pass value.
      *      - Boon purchases apply the boon's tier discount (10/25/50%) to the payment amount.
      * @param buyer The address receiving the pass.
-     * @custom:reverts E When level is not 0-2, x9 (excl. x99), x0, or a century x00 in its purchase phase (and no boon), pass has 8+ levels remaining, or msg.value is incorrect.
+     * @custom:reverts OnlyDelegatecall When level is not 0-2, x9 (excl. x99), x0, or a century x00 in its purchase phase (and no boon), pass has 8+ levels remaining, or msg.value is incorrect.
      */
     function purchaseLazyPass(address buyer) external payable {
         // Delegatecall-only: address(this) == GAME under the nested dispatch. A direct call on the
         // deployed module would trap the in-flight msg.value against empty local state.
-        if (address(this) != ContractAddresses.GAME) revert E();
-        if (_livenessTriggered()) revert E();
+        if (address(this) != ContractAddresses.GAME) revert OnlyDelegatecall();
+        if (_livenessTriggered()) revert GameOver();
         uint24 currentLevel = level;
         bool hasValidBoon = false;
         BoonPacked storage bpLazy = boonPacked[buyer];
@@ -428,19 +436,19 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
             (currentLevel % 10 != 0 ||
                 (currentLevel % 100 == 0 && jackpotPhaseFlag)) &&
             !hasValidBoon
-        ) revert E();
+        ) revert InvalidLevelForPass();
 
         // Cap 1: disallow if player has deity pass or active frozen pass
         uint256 prevData = mintPacked_[buyer];
         if (
             prevData >> BitPackingLib.HAS_DEITY_PASS_SHIFT & 1 != 0
-        ) revert E();
+        ) revert DeityPassConflict();
         uint24 frozenUntilLevel = uint24(
             (prevData >> BitPackingLib.FROZEN_UNTIL_LEVEL_SHIFT) &
                 BitPackingLib.MASK_24
         );
         // Allow if <7 levels remain on freeze (early renewal window)
-        if (frozenUntilLevel > currentLevel + 7) revert E();
+        if (frozenUntilLevel > currentLevel + 7) revert PassNotExpired();
 
         uint24 startLevel = currentLevel == 0 ? 1 : currentLevel + 1;
         uint256 baseCost = _lazyPassCost(startLevel);
@@ -541,22 +549,22 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
      *      - Post-game (level > 0): 5% next pool, 95% future pool
      * @param buyer The address receiving the pass.
      * @param symbolId Symbol to claim (0-31: Q0 Crypto 0-7, Q1 Zodiac 8-15, Q2 Cards 16-23, Q3 Dice 24-31).
-     * @custom:reverts E When buyer already owns a deity pass.
-     * @custom:reverts E When symbolId is out of range or already taken.
-     * @custom:reverts E When msg.value does not match current deity pass price.
+     * @custom:reverts AlreadyOwnsDeityPass When buyer already owns a deity pass.
+     * @custom:reverts InvalidSymbol When symbolId is out of range or already taken.
+     * @custom:reverts GameOver When msg.value does not match current deity pass price.
      */
     function purchaseDeityPass(address buyer, uint8 symbolId) external payable {
         // Delegatecall-only: address(this) == GAME under the nested dispatch. A direct call on the
         // deployed module would trap the in-flight msg.value against empty local state.
-        if (address(this) != ContractAddresses.GAME) revert E();
+        if (address(this) != ContractAddresses.GAME) revert OnlyDelegatecall();
         if (rngLockedFlag) revert RngLocked();
-        if (_livenessTriggered()) revert E();
-        if (symbolId >= 32) revert E();
-        if (deityBySymbol[symbolId] != address(0)) revert E();
+        if (_livenessTriggered()) revert GameOver();
+        if (symbolId >= 32) revert InvalidSymbol();
+        if (deityBySymbol[symbolId] != address(0)) revert SymbolTaken();
         // mintPacked_[buyer] is read once and reused for the deity-bit set below — nothing
         // between here and that write touches mintPacked_ or makes an external call.
         uint256 mp = mintPacked_[buyer];
-        if (mp >> BitPackingLib.HAS_DEITY_PASS_SHIFT & 1 != 0) revert E();
+        if (mp >> BitPackingLib.HAS_DEITY_PASS_SHIFT & 1 != 0) revert AlreadyOwnsDeityPass();
 
         uint256 k = deityPassOwners.length;
         uint256 basePrice = DEITY_PASS_BASE + (k * (k + 1) * 1 ether) / 2;
@@ -996,11 +1004,11 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
     /// @dev Awards deterministic tickets based on pre-calculated half-pass count.
     ///      Tickets start at current level + 1 to avoid giving tickets for an already-active level.
     /// @param player Player address to claim for.
-    /// @custom:reverts E If the player has no pending whale-pass claims.
+    /// @custom:reverts NothingToClaim If the player has no pending whale-pass claims.
     function claimWhalePass(address player) external {
-        if (_livenessTriggered()) revert E();
+        if (_livenessTriggered()) revert GameOver();
         uint256 halfPasses = whalePassClaims[player];
-        if (halfPasses == 0) revert E();
+        if (halfPasses == 0) revert NothingToClaim();
 
         // Clear before awarding to avoid double-claiming
         whalePassClaims[player] = 0;

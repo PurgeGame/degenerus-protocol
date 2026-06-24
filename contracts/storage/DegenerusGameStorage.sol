@@ -198,6 +198,29 @@ abstract contract DegenerusGameStorage {
     /// @dev Reverts when a permissionless far-future ticket write is attempted during VRF commitment window.
     error RngLocked();
 
+    // Shared named reverts (inherited by every Game module). Each carries no data — the name
+    // alone identifies the failing guard for off-chain decoding. Domain-specific reverts stay
+    // declared locally in the module that owns them.
+    error OnlyDelegatecall();   // nested-dispatch guard: address(this) != GAME
+    error OnlySelf();           // caller must be the contract itself
+    error OnlyAdmin();          // admin-only entrypoint
+    error OnlyVault();          // vault / vault-owner entrypoint
+    error OnlySDGNRS();         // sDGNRS-contract-only entrypoint
+    error OnlyCoordinator();    // VRF-coordinator-only callback
+    error Unauthorized();       // generic access-control failure
+    error GameOver();           // the game has ended (or the liveness-timeout game-over trigger is active)
+    error NotStarted();         // the game / phase has not started
+    error EmptyRevert();        // a delegatecall reverted with empty returndata
+    error EmptyReturn();        // a delegatecall returned empty data where a value was required
+    error TransferFailed();     // a native / token transfer failed
+    error Insolvent();          // a balance / pool draw would underflow the backing
+    error Invariant();          // an internal invariant was violated
+    error ZeroAddress();        // a required address argument was the zero address
+    error ZeroValue();          // a required value argument was zero
+    error NothingToClaim();     // no balance available to claim
+    error AlreadySwept();       // the target was already swept / finalized
+    error LengthMismatch();     // array-length arguments disagree
+
     // =========================================================================
     // SLOT 0: Timing, FSM, Counters, Flags, Buffer, Freeze
     // =========================================================================
@@ -611,10 +634,12 @@ abstract contract DegenerusGameStorage {
         bool rngBypass
     ) internal {
         if (quantity == 0) return;
-        // Block new tickets once the liveness-timeout game-over trigger is
-        // active -- terminal jackpot must not be manipulable by adding tickets
-        // after the VRF word that resolves it becomes known.
-        if (_livenessTriggered()) revert E();
+        // No liveness gate here: tickets queued during the liveness-timeout window are harmless.
+        // They are never processed (the game-over drain ends the game without a further daily
+        // draw) or the resolving daily word has not been requested yet, so no terminal jackpot
+        // can be manipulated by them. Player purchase paths gate liveness at their own entry; the
+        // advance-chain daily-jackpot distribution also queues through this sink and must NOT be
+        // reverted here, so the gate stays off the shared sink.
         emit TicketsQueued(buyer, targetLevel, quantity);
         bool isFarFuture = targetLevel > level + 5;
         if (isFarFuture && rngLockedFlag && !rngBypass) revert RngLocked();
@@ -645,8 +670,7 @@ abstract contract DegenerusGameStorage {
         bool rngBypass
     ) internal {
         if (quantityScaled == 0) return;
-        // Block new tickets once liveness-timeout is active (see _queueTickets).
-        if (_livenessTriggered()) revert E();
+        // No liveness gate (see _queueTickets): post-liveness queued tickets are harmless.
         emit TicketsQueuedScaled(buyer, targetLevel, quantityScaled);
         bool isFarFuture = targetLevel > level + 5;
         if (isFarFuture && rngLockedFlag && !rngBypass) revert RngLocked();
@@ -698,8 +722,7 @@ abstract contract DegenerusGameStorage {
         uint32 ticketsPerLevel,
         bool rngBypass
     ) internal {
-        // Block new tickets once liveness-timeout is active (see _queueTickets).
-        if (_livenessTriggered()) revert E();
+        // No liveness gate (see _queueTickets): post-liveness queued tickets are harmless.
         emit TicketsQueuedRange(buyer, startLevel, numLevels, ticketsPerLevel);
         // Loop-invariant slot-0 reads cached outside the loop (the body's mapping
         // SSTOREs block the optimizer from hoisting them; neither value has a
@@ -805,11 +828,13 @@ abstract contract DegenerusGameStorage {
     // Queue Swap and Prize Pool Freeze
     // =========================================================================
 
-    /// @dev Swap the active ticket queue buffer. Reverts if read slot is not drained.
-    ///      Resets ticketsFullyProcessed to false for the new read slot.
-    function _swapTicketSlot(uint24 purchaseLevel) internal {
-        uint24 rk = _tqReadKey(purchaseLevel);
-        if (ticketQueue[rk].length != 0) revert E();
+    /// @dev Toggle the active ticket queue buffer and reset the read-slot drained flag.
+    ///      Fail-open by design: every caller swaps only after the read slot is drained
+    ///      (gated on ticketsFullyProcessed / a finished drain), so a non-empty read slot is
+    ///      unreachable here. This runs inside the advance heartbeat, where a revert would
+    ///      brick the game; in the impossible non-empty case the toggle merely defers those
+    ///      entries one cycle (they stay queued, never lost) rather than reverting.
+    function _swapTicketSlot(uint24 /* purchaseLevel */) internal {
         ticketWriteSlot = !ticketWriteSlot;
         ticketsFullyProcessed = false;
     }
@@ -936,7 +961,7 @@ abstract contract DegenerusGameStorage {
         }
         uint256 remaining = shortfall - claimableUsed;
         if (remaining != 0) {
-            if (_afkingOf(buyer) < remaining) revert E();
+            if (_afkingOf(buyer) < remaining) revert Insolvent();
             afkingUsed = remaining;
             _debitAfking(buyer, afkingUsed);
             emit AfkingSpent(buyer, afkingUsed);
@@ -973,7 +998,7 @@ abstract contract DegenerusGameStorage {
     ///      from the afking half — a low-half borrow would be invisible to 0.8's full-word check.
     function _debitClaimable(address player, uint256 weiAmount) internal {
         if (weiAmount == 0) return;
-        if (uint128(balancesPacked[player]) < weiAmount) revert E();
+        if (uint128(balancesPacked[player]) < weiAmount) revert Insolvent();
         balancesPacked[player] -= weiAmount;
     }
 
@@ -1002,8 +1027,8 @@ abstract contract DegenerusGameStorage {
         uint256 afkingAmount
     ) internal {
         uint256 packed = balancesPacked[player];
-        if (uint128(packed) < claimableAmount) revert E();
-        if ((packed >> 128) < afkingAmount) revert E();
+        if (uint128(packed) < claimableAmount) revert Insolvent();
+        if ((packed >> 128) < afkingAmount) revert Insolvent();
         balancesPacked[player] = packed - claimableAmount - (afkingAmount << 128);
     }
 

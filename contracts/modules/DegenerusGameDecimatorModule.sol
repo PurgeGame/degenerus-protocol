@@ -68,6 +68,7 @@ contract DegenerusGameDecimatorModule is DegenerusGamePayoutUtils {
     // -------------------------------------------------------------------------
 
     // error E() — inherited from DegenerusGameStorage
+    error PrizePoolFrozen(); // Claim attempted while the prize pool is frozen (advanceGame in progress).
 
     /// @notice Caller is not the authorized coin contract.
     error OnlyCoin();
@@ -91,7 +92,7 @@ contract DegenerusGameDecimatorModule is DegenerusGamePayoutUtils {
     /// @dev Bubbles up revert reason from delegatecall failure.
     /// @param reason The revert data from the failed delegatecall.
     function _revertDelegate(bytes memory reason) private pure {
-        if (reason.length == 0) revert E();
+        if (reason.length == 0) revert EmptyRevert();
         assembly ("memory-safe") {
             revert(add(32, reason), mload(reason))
         }
@@ -296,7 +297,7 @@ contract DegenerusGameDecimatorModule is DegenerusGamePayoutUtils {
         // winner), never the caller. Taking the winner's exclusive claim timing away removes the
         // lootbox round-up from any single party's control. Resolution-into-claimable only (no ETH
         // leaves here); the player withdraws via the access-gated claimWinnings.
-        if (prizePoolFrozen) revert E();
+        if (prizePoolFrozen) revert PrizePoolFrozen();
 
         DecClaimRound storage round = decClaimRounds[lvl];
         uint256 poolWei = round.poolWei;
@@ -327,7 +328,7 @@ contract DegenerusGameDecimatorModule is DegenerusGamePayoutUtils {
         address[] calldata players,
         uint24 lvl
     ) external {
-        if (prizePoolFrozen) revert E();
+        if (prizePoolFrozen) revert PrizePoolFrozen();
 
         DecClaimRound storage round = decClaimRounds[lvl];
         uint256 poolWei = round.poolWei;
@@ -616,7 +617,7 @@ contract DegenerusGameDecimatorModule is DegenerusGamePayoutUtils {
     ) internal {
         if (delta == 0) return;
         uint256 slotTotal = decBucketBurnTotal[lvl][denom][sub];
-        if (slotTotal < uint256(delta)) revert E();
+        if (slotTotal < uint256(delta)) revert Invariant();
         decBucketBurnTotal[lvl][denom][sub] = slotTotal - uint256(delta);
     }
 

@@ -16,7 +16,7 @@ import {EntropyLib} from "../libraries/EntropyLib.sol";
 import {PriceLookupLib} from "../libraries/PriceLookupLib.sol";
 
 /// @notice Interface for minting WWXRP prize tokens
-interface IWrappedWrappedXRP {
+interface IWWXRP {
     /// @notice Mint prize tokens to a recipient
     /// @param to The address to receive the prize
     /// @param amount The amount of tokens to mint
@@ -42,6 +42,11 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     // =========================================================================
 
     // error E() — inherited from DegenerusGameStorage
+    error MsgValueExceedsAmount(); // msg.value exceeds the declared lootbox or credit amount
+    error SelfBoon(); // deity attempted to issue a boon to themselves
+    error InvalidSlot(); // deity boon slot index is >= DEITY_DAILY_BOON_COUNT
+    error RecipientAlreadyBoonedToday(); // recipient already received a deity boon on the current day
+    error SlotAlreadyUsed(); // deity boon slot has already been used on the current day
 
     /// @notice RNG word has not been set for the requested lootbox index
     error RngNotReady();
@@ -150,7 +155,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     // =========================================================================
 
     /// @notice Reference to the WWXRP token contract
-    IWrappedWrappedXRP internal constant wwxrp = IWrappedWrappedXRP(ContractAddresses.WWXRP);
+    IWWXRP internal constant wwxrp = IWWXRP(ContractAddresses.WWXRP);
 
     /// @notice Reference to the stETH token (redemption-direct stETH-remainder pull)
     IStETH internal constant steth = IStETH(ContractAddresses.STETH_TOKEN);
@@ -599,14 +604,14 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     ///         each leg robust to being empty). The unified manual open entrypoint.
     /// @param player Player that owns the box(es) (resolved by the entrypoint).
     /// @param index The shared RNG index the box(es) queued at.
-    /// @custom:reverts E When neither leg has a box queued at this index for the player.
+    /// @custom:reverts NothingToClaim When neither leg has a box queued at this index for the player.
     /// @custom:reverts RngNotReady When a queued leg's committed RNG word is not yet set.
     function openBox(address player, uint48 index) external {
         // Permissionless: box rewards always credit the owner, so any caller may open any
         // player's ready boxes (zero address = caller).
         if (player == address(0)) player = msg.sender;
         // Probe the presale leg until the sweep has drained presale (free slot-0 read of the flag).
-        if (!_openBoxBoth(player, index, !presaleDrained)) revert E();
+        if (!_openBoxBoth(player, index, !presaleDrained)) revert NothingToClaim();
     }
 
     /// @dev Both-leg open body for the manual `openBox` entrypoint (the sweep threads
@@ -875,7 +880,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     function resolveLootboxDirect(address player, uint256 amount, uint256 rngWord, uint16 activityScore, bool emitLootboxEvent) external payable {
         // Delegatecall-only: address(this) == GAME under the nested dispatch. A direct call on the
         // deployed module would trap the in-flight msg.value (the amount==0 early-return path).
-        if (address(this) != ContractAddresses.GAME) revert E();
+        if (address(this) != ContractAddresses.GAME) revert OnlyDelegatecall();
         if (amount == 0) return;
 
         uint24 currentLevel = level + 1;
@@ -928,15 +933,15 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     /// @param rngWord RNG entropy for lootbox resolution
     /// @param activityScore Snapshotted activity score (bps) from burn submission
     function resolveRedemptionLootbox(address player, uint256 amount, uint256 rngWord, uint16 activityScore) external payable {
-        if (msg.sender != ContractAddresses.SDGNRS) revert E();
+        if (msg.sender != ContractAddresses.SDGNRS) revert OnlySDGNRS();
         if (amount == 0) return;
         // Forwarded ETH (msg.value) funds the leg; any remainder is pulled as stETH so a
         // partial-ETH sDGNRS can still settle. msg.value must not exceed the leg amount.
-        if (msg.value > amount) revert E();
+        if (msg.value > amount) revert MsgValueExceedsAmount();
         uint256 stethPortion;
         unchecked { stethPortion = amount - msg.value; }
         if (stethPortion != 0) {
-            if (!steth.transferFrom(msg.sender, address(this), stethPortion)) revert E();
+            if (!steth.transferFrom(msg.sender, address(this), stethPortion)) revert TransferFailed();
         }
 
         // Credit the just-arrived value to the future prize pool (respects freeze state). The
@@ -1006,13 +1011,13 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     /// @param player Claimant credited.
     /// @param amount Total direct-half value (msg.value ETH + the stETH remainder pulled here).
     function creditRedemptionDirect(address player, uint256 amount) external payable {
-        if (msg.sender != ContractAddresses.SDGNRS) revert E();
-        if (msg.value > amount) revert E();
+        if (msg.sender != ContractAddresses.SDGNRS) revert OnlySDGNRS();
+        if (msg.value > amount) revert MsgValueExceedsAmount();
         if (amount == 0) return;
         uint256 stethPortion;
         unchecked { stethPortion = amount - msg.value; }
         if (stethPortion != 0) {
-            if (!steth.transferFrom(msg.sender, address(this), stethPortion)) revert E();
+            if (!steth.transferFrom(msg.sender, address(this), stethPortion)) revert TransferFailed();
         }
         _creditClaimable(player, amount);
         claimablePool += uint128(amount);
@@ -1123,32 +1128,32 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     /// @param deity The deity pass holder issuing the boon
     /// @param recipient The player receiving the boon
     /// @param slot The slot index (0-2) to use
-    /// @custom:reverts E When deity or recipient is zero address
-    /// @custom:reverts E When deity tries to issue boon to themselves
-    /// @custom:reverts E When slot is >= 3
-    /// @custom:reverts E When deity does not own a deity pass
-    /// @custom:reverts E When no RNG is available for the day
-    /// @custom:reverts E When recipient already received a boon today
-    /// @custom:reverts E When slot was already used today
+    /// @custom:reverts ZeroAddress When deity or recipient is zero address
+    /// @custom:reverts SelfBoon When deity tries to issue boon to themselves
+    /// @custom:reverts InvalidSlot When slot is >= 3
+    /// @custom:reverts Unauthorized When deity does not own a deity pass
+    /// @custom:reverts RngNotReady When no RNG is available for the day
+    /// @custom:reverts RecipientAlreadyBoonedToday When recipient already received a boon today
+    /// @custom:reverts SlotAlreadyUsed When slot was already used today
     function issueDeityBoon(address deity, address recipient, uint8 slot) external {
-        if (deity == address(0) || recipient == address(0)) revert E();
-        if (deity == recipient) revert E();
-        if (slot >= DEITY_DAILY_BOON_COUNT) revert E();
-        if (mintPacked_[deity] >> BitPackingLib.HAS_DEITY_PASS_SHIFT & 1 == 0) revert E();
+        if (deity == address(0) || recipient == address(0)) revert ZeroAddress();
+        if (deity == recipient) revert SelfBoon();
+        if (slot >= DEITY_DAILY_BOON_COUNT) revert InvalidSlot();
+        if (mintPacked_[deity] >> BitPackingLib.HAS_DEITY_PASS_SHIFT & 1 == 0) revert Unauthorized();
 
         uint24 day = _simulatedDayIndex();
         uint256 rngWord = rngWordByDay[day];
-        if (rngWord == 0) revert E();
+        if (rngWord == 0) revert RngNotReady();
         // Day + used-mask share one slot (deityBoonPacked). On a day rollover the mask
         // starts empty: a stale day's mask is never read (every reader gates on the day
         // matching), and the single packed write below re-stamps the day with the fresh
         // mask in one store.
         uint32 boonPacked = deityBoonPacked[deity];
         uint8 mask = uint24(boonPacked) == day ? uint8(boonPacked >> 24) : 0;
-        if (deityBoonRecipientDay[recipient] == day) revert E();
+        if (deityBoonRecipientDay[recipient] == day) revert RecipientAlreadyBoonedToday();
 
         uint8 slotMask = uint8(1) << slot;
-        if ((mask & slotMask) != 0) revert E();
+        if ((mask & slotMask) != 0) revert SlotAlreadyUsed();
         deityBoonPacked[deity] =
             uint32(day) |
             (uint32(mask | slotMask) << 24);
@@ -1282,7 +1287,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
             (bool okAct, ) = ContractAddresses.GAME_BOON_MODULE.delegatecall(
                 abi.encodeWithSelector(IDegenerusGameBoonModule.consumeActivityBoon.selector, player)
             );
-            if (!okAct) revert E();
+            if (!okAct) revert EmptyRevert();
         }
 
         // Roll 1 settles at the caller-rolled `targetLevel` (from the primary seed).
@@ -1419,7 +1424,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
             (bool okClr, ) = ContractAddresses.GAME_BOON_MODULE.delegatecall(
                 abi.encodeWithSelector(IDegenerusGameBoonModule.checkAndClearExpiredBoon.selector, player)
             );
-            if (!okClr) revert E();
+            if (!okClr) revert EmptyRevert();
         }
 
         uint24 currentDay = _simulatedDayIndex();
@@ -2101,7 +2106,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
                 uint32(0)
             )
         );
-        if (!ok) revert E();
+        if (!ok) revert EmptyRevert();
     }
 
     /// @dev Delegatecall the Degenerette module's triple-FLIP box-spin resolver.
@@ -2121,7 +2126,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
                 uint32(0)
             )
         );
-        if (!ok) revert E();
+        if (!ok) revert EmptyRevert();
     }
 
     /// @dev Delegatecall the Degenerette module's ETH box-spin resolver.
@@ -2141,7 +2146,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
                 uint32(0)
             )
         );
-        if (!ok) revert E();
+        if (!ok) revert EmptyRevert();
     }
 
     /// @dev Calculate scaled ticket count from budget with ranged variance tiers.

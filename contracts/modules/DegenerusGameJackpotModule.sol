@@ -1958,7 +1958,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         uint24 lvl,
         uint256 rngWord
     ) external returns (uint256 claimableDelta) {
-        if (msg.sender != address(this)) revert E();
+        if (msg.sender != address(this)) revert OnlySelf();
         // Get winners and payout info from jackpots contract
         (address[] memory winnersArr, uint256[] memory amountsArr, ) = jackpots
             .runBafJackpot(poolWei, lvl, rngWord);

@@ -1273,7 +1273,7 @@ contract CoverageGap222 is DeployProtocol {
     }
 
     // ====================================================================
-    //  SECTION L: WrappedWrappedXRP.sol — wwxrp token paths.
+    //  SECTION L: WWXRP.sol — wwxrp token paths.
     // ====================================================================
 
     function test_gap_wwxrp_erc20_guards() public {

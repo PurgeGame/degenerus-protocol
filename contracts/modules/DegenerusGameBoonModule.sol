@@ -68,7 +68,7 @@ contract DegenerusGameBoonModule is DegenerusGameStorage {
     function consumePurchaseBoost(address player) external payable returns (uint16 boostBps) {
         // Delegatecall-only: address(this) == GAME under the nested dispatch. A direct call on the
         // deployed module would trap the in-flight msg.value (empty local state returns silently).
-        if (address(this) != ContractAddresses.GAME) revert E();
+        if (address(this) != ContractAddresses.GAME) revert OnlyDelegatecall();
         if (player == address(0)) return 0;
         BoonPacked storage bp = boonPacked[player];
         uint256 s0 = bp.slot0;
@@ -128,7 +128,7 @@ contract DegenerusGameBoonModule is DegenerusGameStorage {
     function checkAndClearExpiredBoon(address player) external payable returns (bool hasAnyBoon) {
         // Delegatecall-only: address(this) == GAME under the nested dispatch. A direct call on the
         // deployed module would trap the in-flight msg.value (empty local state returns silently).
-        if (address(this) != ContractAddresses.GAME) revert E();
+        if (address(this) != ContractAddresses.GAME) revert OnlyDelegatecall();
         uint24 currentDay = uint24(_simulatedDayIndex());
         BoonPacked storage bp = boonPacked[player];
         uint256 s0 = bp.slot0;
@@ -294,7 +294,7 @@ contract DegenerusGameBoonModule is DegenerusGameStorage {
     function consumeActivityBoon(address player) external payable {
         // Delegatecall-only: address(this) == GAME under the nested dispatch. A direct call on the
         // deployed module would trap the in-flight msg.value (empty local state returns silently).
-        if (address(this) != ContractAddresses.GAME) revert E();
+        if (address(this) != ContractAddresses.GAME) revert OnlyDelegatecall();
         if (player == address(0)) return;
         BoonPacked storage bp = boonPacked[player];
         uint256 s1 = bp.slot1;

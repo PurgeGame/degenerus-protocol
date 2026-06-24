@@ -115,8 +115,8 @@ contract V61Pack is Test {
         t.setAfking(p, 0); // empty high half: no afking to fall through to
         t.setClaimablePool(claimable);
 
-        // shortfall above usable claimable (claimable - 1) with zero afking ⇒ revert E().
-        vm.expectRevert(t.sentinelError());
+        // shortfall above usable claimable (claimable - 1) with zero afking ⇒ revert Insolvent().
+        vm.expectRevert(bytes4(0xfc220038)); // Insolvent()
         t.settle(p, claimable, false); // DirectEth leg skips claimable entirely → afking (0) short → revert
     }
 

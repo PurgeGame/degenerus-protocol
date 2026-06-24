@@ -1371,11 +1371,11 @@ contract StakedStonkRedemption is DeployProtocol {
 
         // Strict 1-wei sentinel: settling a shortfall == basis (would zero claimable, violating the
         // strict-positive sentinel) reverts E() — `if (basis <= shortfall) revert E();`. The
-        // production error E() is inherited from DegenerusGameStorage; assert the revert selector
-        // matches its 4-byte id (the tester re-exposes it as `sentinelError()` for a tight check).
+        // The shortfall settle now reverts Insolvent() (inherited from DegenerusGameStorage);
+        // assert the revert selector matches its 4-byte id.
         uint256 cur = tester.getClaimable(buyer);
-        vm.expectRevert(tester.sentinelError());
-        tester.settle(buyer, cur, true); // shortfall == claimable: claimable to sentinel, then afking (0) short → revert E()
+        vm.expectRevert(bytes4(0xfc220038)); // Insolvent()
+        tester.settle(buyer, cur, true); // shortfall == claimable: claimable to sentinel, then afking (0) short → revert Insolvent()
     }
 
     // =====================================================================

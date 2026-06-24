@@ -36,6 +36,10 @@ contract DegenerusGameFoilPackModule is
     // -------------------------------------------------------------------------
 
     // error E() — inherited from DegenerusGameStorage
+    error FoilAlreadyBought(); // Buyer already holds a foil pack for this cycle level.
+    error StaleAdvance(); // Simulated day is more than one day ahead of the processed daily index; multi-day stall detected.
+    error DirectEthInsufficient(); // DirectEth payment kind cannot cover the foil cost shortfall from claimable balance.
+    error NoClaimableMatch(); // The given (player, day, ticketIndex, drawKind) tuple does not resolve to a claimable foil match.
 
     // -------------------------------------------------------------------------
     // External Contract References (compile-time constants)
@@ -139,14 +143,14 @@ contract DegenerusGameFoilPackModule is
         bytes32 affiliateCode,
         MintPaymentKind payKind
     ) external payable {
-        if (address(this) != ContractAddresses.GAME) revert E();
+        if (address(this) != ContractAddresses.GAME) revert OnlyDelegatecall();
 
         // Block once the liveness-timeout game-over trigger is active, or the game has
         // ended: a foil pack must not be added to a terminal jackpot whose resolving word
         // is becoming known (mirrors the ticket queue's guard), and a post-gameover buy
         // could never resolve a match.
-        if (gameOver) revert E();
-        if (_livenessTriggered()) revert E();
+        if (gameOver) revert GameOver();
+        if (_livenessTriggered()) revert GameOver();
 
         // The pack bets on its resolveDay daily draw, so it keys on the level that draw
         // seals at — the same level a ticket bought now resolves into, which the claim
@@ -165,7 +169,7 @@ contract DegenerusGameFoilPackModule is
                 : (comp == 1 && cnt != 0 && cnt < JACKPOT_LEVEL_CAP - 1 ? 2 : 1);
             if (cnt + step >= JACKPOT_LEVEL_CAP) lvl = level + 1;
         }
-        if (_foilBoughtThisLevel(buyer, lvl)) revert E();
+        if (_foilBoughtThisLevel(buyer, lvl)) revert FoilAlreadyBought();
 
         // Forward-commit guard (multi-day stall only): the resolving daily word must be
         // unknowable at buy. In normal operation — caught up, or the brief pre-request
@@ -177,7 +181,7 @@ contract DegenerusGameFoilPackModule is
         // (anyone can call it; it is keeper-incentivized). _simulatedDayIndex() is
         // timestamp-only, so this `day` is reused for resolveDay below.
         uint24 day = _simulatedDayIndex();
-        if (day > dailyIdx + 1) revert E();
+        if (day > dailyIdx + 1) revert StaleAdvance();
 
         // Price: ten ticket prices for the level. The fresh ETH the purchase path carved
         // for the foil leg covers it first (overpay ignored); any shortfall is taken from
@@ -189,12 +193,12 @@ contract DegenerusGameFoilPackModule is
         uint256 ethUsed = ethSent < cost ? ethSent : cost;
         uint256 remaining = cost - ethUsed;
         if (remaining != 0) {
-            if (payKind == MintPaymentKind.DirectEth) revert E();
+            if (payKind == MintPaymentKind.DirectEth) revert DirectEthInsufficient();
             // One slot read covers the check and the debit. remaining must stay at or
             // below claimable - 1 (the 1-wei sentinel), so remaining < claimable and
             // the low-half subtraction cannot borrow into the afking principal above.
             uint256 bal = balancesPacked[buyer];
-            if (remaining + 1 > uint128(bal)) revert E();
+            if (remaining + 1 > uint128(bal)) revert Insolvent();
             balancesPacked[buyer] = bal - remaining;
             claimablePool -= uint128(remaining);
         }
@@ -345,8 +349,8 @@ contract DegenerusGameFoilPackModule is
         uint256 ticketIndex,
         uint8 drawKind
     ) external {
-        if (address(this) != ContractAddresses.GAME) revert E();
-        if (!_tryClaimFoilMatch(player, day, ticketIndex, drawKind)) revert E();
+        if (address(this) != ContractAddresses.GAME) revert OnlyDelegatecall();
+        if (!_tryClaimFoilMatch(player, day, ticketIndex, drawKind)) revert NoClaimableMatch();
     }
 
     /// @notice Permissionlessly resolve a batch of foil match claims.
@@ -369,13 +373,13 @@ contract DegenerusGameFoilPackModule is
         uint8[] calldata ticketIndexes,
         uint8[] calldata drawKinds
     ) external {
-        if (address(this) != ContractAddresses.GAME) revert E();
+        if (address(this) != ContractAddresses.GAME) revert OnlyDelegatecall();
         uint256 n = players.length;
         if (
             drawDays.length != n ||
             ticketIndexes.length != n ||
             drawKinds.length != n
-        ) revert E();
+        ) revert LengthMismatch();
 
         uint256 settled;
         for (uint256 i; i < n; ) {
@@ -578,7 +582,7 @@ contract DegenerusGameFoilPackModule is
         // and the spin entropy. A sealed draw always retained a non-zero word; the
         // guard fails closed if that invariant is ever violated.
         uint256 rw = rngWordByDay[uint24(day)];
-        if (rw == 0) revert E();
+        if (rw == 0) revert Invariant();
         uint256 c = uint256(
             keccak256(abi.encode(rw, day, drawKind, ticketIndex, FOIL_CCY_TAG))
         ) % 100;
@@ -648,7 +652,7 @@ contract DegenerusGameFoilPackModule is
                 customTicket
             )
         );
-        if (!ok) revert E();
+        if (!ok) revert EmptyRevert();
     }
 
     // =========================================================================
@@ -665,7 +669,7 @@ contract DegenerusGameFoilPackModule is
     /// @param room The leftover write budget for this batch.
     /// @return done True iff the foil drain has caught up (no sealed bucket remains).
     function processFoilDrain(uint32 room) external returns (bool done) {
-        if (address(this) != ContractAddresses.GAME) revert E();
+        if (address(this) != ContractAddresses.GAME) revert OnlyDelegatecall();
         return _processFoilDrain(room);
     }
 

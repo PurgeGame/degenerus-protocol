@@ -27,6 +27,7 @@ contract DegenerusGameBingoModule is DegenerusGameStorage {
     // -------------------------------------------------------------------------
 
     // error E() — inherited from DegenerusGameStorage
+    error ScoreTooLow(); // Thrown when the caller is not a deity holder and their affiliate score is below AFFILIATE_DGNRS_MIN_SCORE.
 
     /// @notice Thrown when caller does not own the slot at the cited trait/index,
     ///         or the slot index is out of bounds for that trait's holder array.
@@ -123,7 +124,7 @@ contract DegenerusGameBingoModule is DegenerusGameStorage {
         // (never writes it) and writes only its own 3 bitfields, so a read
         // against an in-flight/future bucket simply reverts; it cannot corrupt
         // VRF state (freeze-safe; no level gate is needed).
-        if (gameOver) revert E();
+        if (gameOver) revert GameOver();
         if (symbol >= 32) revert InvalidSymbol();
 
         uint8 quadrant = symbol >> 3; // bits 7-6 of the trait byte
@@ -228,28 +229,28 @@ contract DegenerusGameBingoModule is DegenerusGameStorage {
         if (player == address(0)) player = msg.sender;
 
         uint24 currLevel = level;
-        if (currLevel == 0) revert E();
+        if (currLevel == 0) revert NotStarted();
 
-        if (affiliateDgnrsClaimedBy[currLevel][player]) revert E();
+        if (affiliateDgnrsClaimedBy[currLevel][player]) revert AlreadyClaimed();
 
         uint256 score = affiliate.affiliateScore(currLevel, player);
         bool isDeityHolder = mintPacked_[player] >> BitPackingLib.HAS_DEITY_PASS_SHIFT & 1 != 0;
-        if (!isDeityHolder && score < AFFILIATE_DGNRS_MIN_SCORE) revert E();
+        if (!isDeityHolder && score < AFFILIATE_DGNRS_MIN_SCORE) revert ScoreTooLow();
 
         uint256 denominator = affiliate.totalAffiliateScore(currLevel);
-        if (denominator == 0) revert E();
+        if (denominator == 0) revert ZeroValue();
 
         (uint256 allocation, ) = _getLevelDgnrs(currLevel);
-        if (allocation == 0) revert E();
+        if (allocation == 0) revert ZeroValue();
         uint256 reward = (allocation * score) / denominator;
-        if (reward == 0) revert E();
+        if (reward == 0) revert ZeroValue();
 
         uint256 paid = dgnrs.transferFromPool(
             IsDGNRS.Pool.Affiliate,
             player,
             reward
         );
-        if (paid == 0) revert E();
+        if (paid == 0) revert NothingToClaim();
 
         _addLevelDgnrsClaimed(currLevel, paid);
 

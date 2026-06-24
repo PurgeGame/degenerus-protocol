@@ -93,6 +93,8 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
       +======================================================================+*/
 
     // error E() — inherited from DegenerusGameStorage
+    error SelfBoon(); // Deity attempted to issue a boon to themselves.
+    error ValueMismatch(); // Amount is zero or msg.value does not match the required amount.
 
     // error RngLocked() — inherited from DegenerusGameStorage
 
@@ -218,7 +220,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     ///      recipients of perpetual tickets — and queues for the caller only.
     function initPerpetualTickets() external {
         address who = msg.sender;
-        if (who != ContractAddresses.SDGNRS && who != ContractAddresses.VAULT) revert E();
+        if (who != ContractAddresses.SDGNRS && who != ContractAddresses.VAULT) revert Unauthorized();
         for (uint24 i = 1; i <= 100; ) {
             _queueTickets(who, i, 16, false);
             unchecked {
@@ -296,7 +298,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     /// @notice Wire VRF config from the VRF ADMIN contract.
     /// @dev Access: ADMIN only. Overwrites any existing config on each call.
     ///      SECURITY: Config can be changed via emergency rotation (updateVrfCoordinatorAndSub).
-    /// @custom:reverts E If caller is not ADMIN.
+    /// @custom:reverts OnlyAdmin If caller is not ADMIN.
     /// @dev Signature: wireVrf(address coordinator_, uint256 subId, bytes32 keyHash_) —
     ///      Chainlink VRF V2.5 coordinator address, VRF subscription ID for LINK billing,
     ///      and the VRF key hash identifying the oracle and gas lane. The signature matches
@@ -408,7 +410,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
             .GAME_AFKING_MODULE
             .delegatecall(msg.data);
         if (!ok) _revertDelegate(data);
-        if (data.length == 0) revert E();
+        if (data.length == 0) revert EmptyReturn();
         return abi.decode(data, (uint256));
     }
 
@@ -462,7 +464,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     /// @param player Recipient of the DGNRS bounty.
     /// @param winningBet The winning bet amount (must exceed COINFLIP_BOUNTY_DGNRS_MIN_BET).
     /// @param bountyPool The bounty pool size (must exceed COINFLIP_BOUNTY_DGNRS_MIN_POOL).
-    /// @custom:reverts E If caller is not COIN or COINFLIP contract.
+    /// @custom:reverts Unauthorized If caller is not COIN or COINFLIP contract.
     function payCoinflipBountyDgnrs(
         address player,
         uint256 winningBet,
@@ -471,7 +473,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         if (
             msg.sender != ContractAddresses.COIN &&
             msg.sender != ContractAddresses.COINFLIP
-        ) revert E();
+        ) revert Unauthorized();
         if (player == address(0)) return;
         if (winningBet < COINFLIP_BOUNTY_DGNRS_MIN_BET) return;
         if (bountyPool < COINFLIP_BOUNTY_DGNRS_MIN_POOL) return;
@@ -495,9 +497,9 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     /// @notice Approve or revoke an operator to act on your behalf.
     /// @param operator Address to approve or revoke.
     /// @param approved True to approve, false to revoke.
-    /// @custom:reverts E If operator is the zero address.
+    /// @custom:reverts ZeroAddress If operator is the zero address.
     function setOperatorApproval(address operator, bool approved) external {
-        if (operator == address(0)) revert E();
+        if (operator == address(0)) revert ZeroAddress();
         operatorApprovals[msg.sender][operator] = approved;
         emit OperatorApproval(msg.sender, operator, approved);
     }
@@ -539,10 +541,10 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     /// @notice Update lootbox RNG request threshold (wei).
     /// @dev Access: vault owner only (DGVE majority holder).
     /// @param newThreshold New threshold in wei (must be non-zero).
-    /// @custom:reverts E If caller is not vault owner or newThreshold is zero.
+    /// @custom:reverts OnlyVault If caller is not vault owner or newThreshold is zero.
     function setLootboxRngThreshold(uint256 newThreshold) external {
-        if (!vault.isVaultOwner(msg.sender)) revert E();
-        if (newThreshold == 0) revert E();
+        if (!vault.isVaultOwner(msg.sender)) revert OnlyVault();
+        if (newThreshold == 0) revert ZeroValue();
         uint256 prev = _unpackMilliEthToWei(uint64(_lrRead(LR_THRESHOLD_SHIFT, LR_THRESHOLD_MASK)));
         if (newThreshold == prev) {
             emit LootboxRngThresholdUpdated(prev, newThreshold);
@@ -930,14 +932,14 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     ///      calldata forwards as-is — re-encoding here would cost contract-size headroom for
     ///      no behavior change.
     /// @return boostBps The boost in basis points to apply.
-    /// @custom:reverts E If caller is not COIN or COINFLIP contract.
+    /// @custom:reverts Unauthorized If caller is not COIN or COINFLIP contract.
     function consumeCoinflipBoon(
         address
     ) external returns (uint16 boostBps) {
         if (
             msg.sender != ContractAddresses.COIN &&
             msg.sender != ContractAddresses.COINFLIP
-        ) revert E();
+        ) revert Unauthorized();
         (bool ok, bytes memory data) = ContractAddresses
             .GAME_BOON_MODULE
             .delegatecall(msg.data);
@@ -949,11 +951,11 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     /// @dev Access: COIN contract only.
     /// @param player The player whose boon to consume.
     /// @return boostBps The boost in basis points to apply.
-    /// @custom:reverts E If caller is not COIN contract.
+    /// @custom:reverts Unauthorized If caller is not COIN contract.
     function consumeDecimatorBoon(
         address player
     ) external returns (uint16 boostBps) {
-        if (msg.sender != ContractAddresses.COIN) revert E();
+        if (msg.sender != ContractAddresses.COIN) revert Unauthorized();
         (bool ok, bytes memory data) = ContractAddresses
             .GAME_BOON_MODULE
             .delegatecall(
@@ -1001,14 +1003,14 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     /// @param deity Deity issuing the boon (address(0) = msg.sender).
     /// @param recipient Recipient of the boon.
     /// @param slot Slot index (0-2).
-    /// @custom:reverts E If deity attempts to issue boon to themselves.
+    /// @custom:reverts SelfBoon If deity attempts to issue boon to themselves.
     function issueDeityBoon(
         address deity,
         address recipient,
         uint8 slot
     ) external {
         deity = _resolvePlayer(deity);
-        if (recipient == deity) revert E();
+        if (recipient == deity) revert SelfBoon();
         (bool ok, bytes memory data) = ContractAddresses
             .GAME_LOOTBOX_MODULE
             .delegatecall(
@@ -1053,7 +1055,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     ///      Uses assembly to preserve original error data.
     /// @param reason The error bytes from failed delegatecall.
     function _revertDelegate(bytes memory reason) private pure {
-        if (reason.length == 0) revert E();
+        if (reason.length == 0) revert EmptyRevert();
         assembly ("memory-safe") {
             revert(add(32, reason), mload(reason))
         }
@@ -1083,7 +1085,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
             .GAME_DECIMATOR_MODULE
             .delegatecall(msg.data);
         if (!ok) _revertDelegate(data);
-        if (data.length == 0) revert E();
+        if (data.length == 0) revert EmptyReturn();
         return abi.decode(data, (uint8));
     }
 
@@ -1100,12 +1102,12 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         uint24,
         uint256
     ) external returns (uint256 returnAmountWei) {
-        if (msg.sender != address(this)) revert E();
+        if (msg.sender != address(this)) revert OnlySelf();
         (bool ok, bytes memory data) = ContractAddresses
             .GAME_DECIMATOR_MODULE
             .delegatecall(msg.data);
         if (!ok) _revertDelegate(data);
-        if (data.length == 0) revert E();
+        if (data.length == 0) revert EmptyReturn();
         return abi.decode(data, (uint256));
     }
 
@@ -1122,12 +1124,12 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         uint24,
         uint256
     ) external returns (uint256 claimableDelta) {
-        if (msg.sender != address(this)) revert E();
+        if (msg.sender != address(this)) revert OnlySelf();
         (bool ok, bytes memory data) = ContractAddresses
             .GAME_JACKPOT_MODULE
             .delegatecall(msg.data);
         if (!ok) _revertDelegate(data);
-        if (data.length == 0) revert E();
+        if (data.length == 0) revert EmptyReturn();
         return abi.decode(data, (uint256));
     }
 
@@ -1177,12 +1179,12 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         uint24,
         uint256
     ) external returns (uint256 returnAmountWei) {
-        if (msg.sender != address(this)) revert E();
+        if (msg.sender != address(this)) revert OnlySelf();
         (bool ok, bytes memory data) = ContractAddresses
             .GAME_DECIMATOR_MODULE
             .delegatecall(msg.data);
         if (!ok) _revertDelegate(data);
-        if (data.length == 0) revert E();
+        if (data.length == 0) revert EmptyReturn();
         return abi.decode(data, (uint256));
     }
 
@@ -1208,12 +1210,12 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         uint24,
         uint256
     ) external returns (uint256 paidWei) {
-        if (msg.sender != address(this)) revert E();
+        if (msg.sender != address(this)) revert OnlySelf();
         (bool ok, bytes memory data) = ContractAddresses
             .GAME_JACKPOT_MODULE
             .delegatecall(msg.data);
         if (!ok) _revertDelegate(data);
-        if (data.length == 0) revert E();
+        if (data.length == 0) revert EmptyReturn();
         return abi.decode(data, (uint256));
     }
 
@@ -1230,7 +1232,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         uint256,
         uint24
     ) external {
-        if (msg.sender != address(this)) revert E();
+        if (msg.sender != address(this)) revert OnlySelf();
         (bool ok, bytes memory data) = ContractAddresses
             .GAME_JACKPOT_MODULE
             .delegatecall(msg.data);
@@ -1314,10 +1316,25 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     ///      SECURITY: Reverts if balance ≤ 1 wei (nothing to claim).
     /// @param player Player address to claim for (address(0) = msg.sender).
     function claimWinnings(address player) external {
-        player = _resolvePlayer(player);
-        _claimWinningsInternal(player, false);
-        // Cashout-curse SET runs in the Game's context via delegatecall (hosted in
-        // GameAfkingModule to keep the Game under the EIP-170 ceiling).
+        _claimWinningsWithCurse(_resolvePlayer(player), type(uint256).max);
+    }
+
+    /// @notice Claim a fixed amount of accrued ETH winnings (partial cashout).
+    /// @dev Pre-gameOver: draws up to `amount` wei from claimable winnings (capped to leave the
+    ///      1-wei sentinel). Post-gameOver: the game is settled, so the claim takes ALL claimable
+    ///      + the caller's prepaid afking and the cap is ignored. Runs the cashout curse like the
+    ///      full claim — a partial cashout is still a cashout (the curse is activity-gated).
+    /// @param player Player to claim for (address(0) = msg.sender; a non-self claim requires approval).
+    /// @param amount Maximum wei of claimable winnings to take (pre-gameOver; ignored post-gameOver).
+    function claimWinnings(address player, uint256 amount) external {
+        _claimWinningsWithCurse(_resolvePlayer(player), amount);
+    }
+
+    /// @dev Shared claim body: pull winnings (capped pre-gameOver by `maxClaim`) then set the
+    ///      cashout curse. The curse SET runs in the Game's context via delegatecall (hosted in
+    ///      GameAfkingModule to keep the Game under the EIP-170 ceiling).
+    function _claimWinningsWithCurse(address player, uint256 maxClaim) private {
+        _claimWinningsInternal(player, false, maxClaim);
         (bool ok, bytes memory data) = ContractAddresses
             .GAME_AFKING_MODULE
             .delegatecall(
@@ -1329,27 +1346,36 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     /// @notice Claim accrued ETH winnings with stETH-first payout.
     /// @dev Restricted to self-claims by the vault contract.
     function claimWinningsStethFirst() external {
-        if (msg.sender != ContractAddresses.VAULT) revert E();
-        _claimWinningsInternal(msg.sender, true);
+        if (msg.sender != ContractAddresses.VAULT) revert OnlyVault();
+        _claimWinningsInternal(msg.sender, true, type(uint256).max);
     }
 
-    function _claimWinningsInternal(address player, bool stethFirst) private {
-        if (_goRead(GO_SWEPT_SHIFT, GO_SWEPT_MASK) != 0) revert E();
+    /// @param maxClaim Maximum claimable winnings (wei) to draw pre-gameOver (partial cashout);
+    ///        ignored post-gameOver, when the claim settles ALL claimable + afking.
+    function _claimWinningsInternal(address player, bool stethFirst, uint256 maxClaim) private {
+        if (_goRead(GO_SWEPT_SHIFT, GO_SWEPT_MASK) != 0) revert AlreadySwept();
         uint256 amount = _claimableOf(player);
         // Post-gameOver the claim ALSO pays the caller's prepaid
         // afking ETH (lazy per-player merge — no unbounded loop). Pre-gameOver afkingFunding
         // stays its own bucket (spent by afking auto-buys / reclaimed via withdrawAfkingFunding).
         // Both this merge and withdrawAfkingFunding zero the SAME bucket → no double-spend.
         uint256 afking = gameOver ? _afkingOf(player) : 0;
-        if (amount <= 1 && afking == 0) revert E();
-        uint256 payout;
         uint256 claimDebit;
         unchecked {
             if (amount > 1) {
-                claimDebit = amount - 1; // Leave sentinel
+                claimDebit = amount - 1; // available, leaving the 1-wei sentinel
             }
+        }
+        // Pre-gameOver: cap the claimable draw to maxClaim (partial cashout). Post-gameOver the
+        // game is settled, so take everything (all claimable + afking) regardless of the cap.
+        if (!gameOver && claimDebit > maxClaim) {
+            claimDebit = maxClaim;
+        }
+        uint256 payout;
+        unchecked {
             payout = claimDebit + afking;
         }
+        if (payout == 0) revert NothingToClaim();
         // Both halves of the packed per-player slot debited in one load + store.
         _debitClaimableAndAfking(player, claimDebit, afking);
         claimablePool -= uint128(payout); // CEI: update state before external call (checked math)
@@ -1367,7 +1393,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     ///      rides inside claimablePool (no separate aggregate) — credited in tandem.
     /// @param player The beneficiary whose afkingFunding bucket is credited.
     function depositAfkingFunding(address player) external payable {
-        if (player == address(0)) revert E();
+        if (player == address(0)) revert ZeroAddress();
         _creditAfkingValue(player, msg.value);
     }
 
@@ -1379,14 +1405,14 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     ///      (mid-game, after cancel, post-gameOver). The claimablePool debit stays checked math.
     /// @param amount ETH amount (wei) to withdraw from the caller's afkingFunding bucket.
     function withdrawAfkingFunding(uint256 amount) external {
-        if (_goRead(GO_SWEPT_SHIFT, GO_SWEPT_MASK) != 0) revert E();
+        if (_goRead(GO_SWEPT_SHIFT, GO_SWEPT_MASK) != 0) revert AlreadySwept();
         if (amount == 0) return;
         uint256 bal = _afkingOf(msg.sender);
-        if (amount > bal) revert E();
+        if (amount > bal) revert Insolvent();
         _debitAfking(msg.sender, amount);
         claimablePool -= uint128(amount); // tandem release (checked math)
         (bool ok, ) = msg.sender.call{value: amount}("");
-        if (!ok) revert E();
+        if (!ok) revert TransferFailed();
         emit AfkingWithdrew(msg.sender, amount);
     }
 
@@ -1466,7 +1492,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         uint64[] calldata betIds
     ) external {
         uint256 len = players.length;
-        if (len == 0 || betIds.length != len) revert E();
+        if (len == 0 || betIds.length != len) revert LengthMismatch();
 
         // Short-circuit: probe item 0 (the caller's own choice). A resolved
         // bet is deleted (slot == 0), so a zero slot means a competitor got ahead.
@@ -1670,9 +1696,9 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     ///        records it and the claim pays stETH. Coverage is checked against sDGNRS's stETH balance.
     ///      - Neither pure leg covers => revert (fail-closed; not a realistic state).
     /// @param amount The MAX 175% reservation for this burn.
-    /// @custom:reverts E If caller is not sDGNRS, neither pure leg covers `amount`, or the ETH transfer fails.
+    /// @custom:reverts OnlySDGNRS If caller is not sDGNRS, neither pure leg covers `amount`, or the ETH transfer fails.
     function pullRedemptionReserve(uint256 amount) external {
-        if (msg.sender != ContractAddresses.SDGNRS) revert E();
+        if (msg.sender != ContractAddresses.SDGNRS) revert OnlySDGNRS();
         if (amount == 0) return;
 
         // ETH leg (as today): the claimable[SDGNRS] ledger AND the game's liquid ETH both cover
@@ -1684,7 +1710,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
             _debitClaimable(ContractAddresses.SDGNRS, amount);
             claimablePool -= uint128(amount);
             (bool ok, ) = payable(ContractAddresses.SDGNRS).call{value: amount}("");
-            if (!ok) revert E();
+            if (!ok) revert TransferFailed();
             return;
         }
 
@@ -1698,7 +1724,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         }
 
         // Neither pure leg covers => fail-closed.
-        revert E();
+        revert Insolvent();
     }
 
     /// @notice Sell far-future ticket entries to sDGNRS for current-level tickets + cash (-EV exit).
@@ -1802,19 +1828,19 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     ///      SECURITY: Value-neutral swap, ADMIN cannot extract funds.
     /// @param recipient Address to receive stETH.
     /// @param amount ETH amount to swap (must match msg.value).
-    /// @custom:reverts E If caller is not ADMIN, recipient is zero, amount is zero,
+    /// @custom:reverts OnlyAdmin If caller is not ADMIN, recipient is zero, amount is zero,
     ///                   msg.value doesn't match amount, or insufficient stETH balance.
     function adminSwapEthForStEth(
         address recipient,
         uint256 amount
     ) external payable {
-        if (msg.sender != ContractAddresses.ADMIN) revert E();
-        if (recipient == address(0)) revert E();
-        if (amount == 0 || msg.value != amount) revert E();
+        if (msg.sender != ContractAddresses.ADMIN) revert OnlyAdmin();
+        if (recipient == address(0)) revert ZeroAddress();
+        if (amount == 0 || msg.value != amount) revert ValueMismatch();
 
         uint256 stBal = steth.balanceOf(address(this));
-        if (stBal < amount) revert E();
-        if (!steth.transfer(recipient, amount)) revert E();
+        if (stBal < amount) revert Insolvent();
+        if (!steth.transfer(recipient, amount)) revert TransferFailed();
         emit AdminSwapEthForStEth(recipient, amount);
     }
 
@@ -1823,27 +1849,27 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     ///      SECURITY: Must retain ETH to cover player claims, excluding vault/DGNRS
     ///      claimable (those addresses accept stETH payouts natively).
     /// @param amount ETH amount to stake.
-    /// @custom:reverts E If caller is not vault owner, amount is zero, insufficient ETH,
+    /// @custom:reverts OnlyVault If caller is not vault owner, amount is zero, insufficient ETH,
     ///                   or staking would dip into player-claim ETH reserve.
     function adminStakeEthForStEth(uint256 amount) external {
-        if (!vault.isVaultOwner(msg.sender)) revert E();
-        if (amount == 0) revert E();
+        if (!vault.isVaultOwner(msg.sender)) revert OnlyVault();
+        if (amount == 0) revert ZeroValue();
 
         uint256 ethBal = address(this).balance;
-        if (ethBal < amount) revert E();
+        if (ethBal < amount) revert Insolvent();
         // Vault and DGNRS claimable can be settled in stETH, so exclude from ETH reserve
         uint256 stethSettleable = _claimableOf(ContractAddresses.VAULT) +
             _claimableOf(ContractAddresses.SDGNRS);
         uint256 reserve = claimablePool > stethSettleable
             ? claimablePool - stethSettleable
             : 0;
-        if (ethBal <= reserve) revert E();
+        if (ethBal <= reserve) revert Insolvent();
         uint256 stakeable = ethBal - reserve;
-        if (amount > stakeable) revert E();
+        if (amount > stakeable) revert Insolvent();
 
         // stETH return value intentionally ignored: Lido mints 1:1 for ETH, validated by input checks
         try steth.submit{value: amount}(address(0)) returns (uint256) {} catch {
-            revert E();
+            revert TransferFailed();
         }
         emit AdminStakeEthForStEth(amount);
     }
@@ -1874,7 +1900,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     ///      the new key hash for the gas lane. The signature matches the module function exactly
     ///      (identical selector), so the calldata forwards as-is — re-encoding here would cost
     ///      contract-size headroom for no behavior change.
-    /// @custom:reverts E If caller is not ADMIN.
+    /// @custom:reverts OnlyAdmin If caller is not ADMIN.
     function updateVrfCoordinatorAndSub(
         address,
         uint256,
@@ -1975,11 +2001,11 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     function _transferSteth(address to, uint256 amount) private {
         if (amount == 0) return;
         if (to == ContractAddresses.SDGNRS) {
-            if (!steth.approve(ContractAddresses.SDGNRS, amount)) revert E();
+            if (!steth.approve(ContractAddresses.SDGNRS, amount)) revert TransferFailed();
             dgnrs.depositSteth(amount);
             return;
         }
-        if (!steth.transfer(to, amount)) revert E();
+        if (!steth.transfer(to, amount)) revert TransferFailed();
     }
 
     /// @dev Send ETH first, then stETH for remainder.
@@ -2013,7 +2039,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         // so the !ok revert below covers the shortfall case.
         if (ethSend != 0) {
             (bool ok, ) = payable(to).call{value: ethSend}("");
-            if (!ok) revert E();
+            if (!ok) revert TransferFailed();
         }
     }
 
@@ -2032,9 +2058,9 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         if (remaining == 0) return;
 
         uint256 ethBal = address(this).balance;
-        if (ethBal < remaining) revert E();
+        if (ethBal < remaining) revert Insolvent();
         (bool ok, ) = payable(to).call{value: remaining}("");
-        if (!ok) revert E();
+        if (!ok) revert TransferFailed();
     }
 
     /*+======================================================================+
@@ -2581,7 +2607,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     /// @dev Bare transfers become the sender's own withdrawable afking funds (not a prize-pool
     ///      donation). Blocked once the game is over, since post-sweep afking is unwithdrawable.
     receive() external payable {
-        if (gameOver) revert E();
+        if (gameOver) revert GameOver();
         _creditAfkingValue(msg.sender, msg.value);
     }
 }

@@ -85,6 +85,8 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
                               Custom errors
     ------------------------------------------------------------------*/
     // error RngLocked() — inherited from DegenerusGameStorage. Reverts a
+    error SmiteeAfkingImmune(); // smite() target is an active afking subscriber and is immune to smite stacks.
+    error SmiteCeilingReached(); // smite() target already holds 10 or more curse points (5-stack ceiling); cannot add more smite stacks.
     // subscribe (create / replace / cancel) attempted during the RNG freeze
     // window: the subscriber set must be frozen across [request -> unlock].
     /// @dev subscribe with reinvestPct > 100 (a percentage).
@@ -1443,7 +1445,7 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
     ///      (cf. DegenerusGameDegeneretteModule / DecimatorModule) for the
     ///      nested delegatecall into the LootboxModule's `resolveAfkingBox`.
     function _revertDelegate(bytes memory reason) private pure {
-        if (reason.length == 0) revert E();
+        if (reason.length == 0) revert EmptyRevert();
         assembly ("memory-safe") {
             revert(add(32, reason), mload(reason))
         }
@@ -1839,7 +1841,7 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
     function decurse(address target) external {
         uint256 curse = (mintPacked_[target] >> BitPackingLib.CURSE_COUNT_SHIFT) &
             BitPackingLib.MASK_8;
-        if (curse == 0) revert E();
+        if (curse == 0) revert NothingToClaim();
         coin.burnCoin(msg.sender, PRICE_COIN_UNIT / 10);
         _clearCurse(target);
         emit Decursed(msg.sender, target);
@@ -1854,16 +1856,16 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
         if (
             IDegenerusDeityPassOwner(ContractAddresses.DEITY_PASS).ownerOf(deityId) !=
             msg.sender
-        ) revert E();
-        if (_subOf[smitee].dailyQuantity != 0) revert E(); // active-afker immunity
+        ) revert Unauthorized();
+        if (_subOf[smitee].dailyQuantity != 0) revert SmiteeAfkingImmune(); // active-afker immunity
         uint256 curse = (mintPacked_[smitee] >> BitPackingLib.CURSE_COUNT_SHIFT) &
             BitPackingLib.MASK_8;
-        if (curse >= 10) revert E(); // 5-stack smite ceiling (1 stack = 2 points)
+        if (curse >= 10) revert SmiteCeilingReached(); // 5-stack smite ceiling (1 stack = 2 points)
         if (
             smitee == ContractAddresses.VAULT ||
             smitee == ContractAddresses.SDGNRS ||
             smitee == ContractAddresses.GNRUS
-        ) revert E(); // protocol-addr skip
+        ) revert Unauthorized(); // protocol-addr skip
         coin.burnCoin(msg.sender, PRICE_COIN_UNIT / 5);
         _applyCurseStack(smitee);
         emit Smited(deityId, smitee);
