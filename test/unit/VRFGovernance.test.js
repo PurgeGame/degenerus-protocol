@@ -40,6 +40,24 @@ describe("VRF Governance", function () {
   }
 
   // =========================================================================
+  // Helper: drive the game through a full VRF day so lastVrfProcessed catches
+  // up to ~now (VRF "recovery"), dropping the measured stall below threshold.
+  // Mirrors GovernanceGating's advanceGameOneDay; deployer holds DGVE majority
+  // so it clears the mint gate.
+  // =========================================================================
+  async function recoverVrf(game, caller, mockVRF) {
+    await game.connect(caller).advanceGame();
+    const reqId = await getLastVRFRequestId(mockVRF);
+    if (reqId > 0n) {
+      await fulfillVRF(mockVRF, reqId, 123456789n);
+    }
+    for (let i = 0; i < 30; i++) {
+      if (!(await game.rngLocked())) break;
+      await game.connect(caller).advanceGame();
+    }
+  }
+
+  // =========================================================================
   // Helper: give sDGNRS from Reward pool via impersonated game contract
   // =========================================================================
   const Pool = { Whale: 0, Affiliate: 1, Lootbox: 2, Reward: 3, Earlybird: 4 };
@@ -175,12 +193,25 @@ describe("VRF Governance", function () {
   // 2. Vote
   // =========================================================================
   describe("vote", function () {
-    it("reverts with NotStalled if VRF has recovered", async function () {
-      const { admin, deployer } = await loadFixture(deployFullProtocol);
-      // No stall — vote should revert
-      await expect(
-        admin.connect(deployer).vote(1, true)
-      ).to.be.revertedWithCustomError(admin, "NotStalled");
+    it("kills a recovered proposal instead of reverting (auto-cancellation)", async function () {
+      const { admin, mockVRF, game, deployer } = await loadFixture(deployFullProtocol);
+      const vrfAddr = await mockVRF.getAddress();
+
+      // Open a proposal during a genuine stall.
+      await createStall(45);
+      await admin.connect(deployer).propose(vrfAddr, hre.ethers.id("key"));
+      const [, , , , stateBefore] = await admin.proposals(1);
+      expect(stateBefore).to.equal(0, "proposal 1 should be Active before recovery");
+
+      // VRF recovers — lastVrfProcessed catches up, so the stall drops below 44h.
+      await recoverVrf(game, deployer, mockVRF);
+
+      // Voting now auto-cancels the stale proposal by killing it (no NotStalled revert).
+      const tx = await admin.connect(deployer).vote(1, true);
+      const ev = await getEvent(tx, admin, "ProposalKilled");
+      expect(ev.args.proposalId).to.equal(1n);
+      const [, , , , stateAfter] = await admin.proposals(1);
+      expect(stateAfter).to.equal(2, "proposal 1 should be Killed after recovery");
     });
 
     it("reverts with ProposalNotActive for non-existent proposal", async function () {
@@ -393,18 +424,23 @@ describe("VRF Governance", function () {
   // 9. VRF Recovery Invalidation
   // =========================================================================
   describe("VRF recovery invalidation", function () {
-    it("vote reverts when VRF recovers (stall < 44h)", async function () {
-      const { admin, mockVRF, deployer } = await loadFixture(deployFullProtocol);
+    it("anyone can poke a recovered proposal into Killed", async function () {
+      const { admin, mockVRF, game, deployer, alice } = await loadFixture(deployFullProtocol);
       const vrfAddr = await mockVRF.getAddress();
 
-      // Create stall and propose
       await createStall(45);
       await admin.connect(deployer).propose(vrfAddr, hre.ethers.id("key"));
 
-      // Simulate VRF recovery by advancing game (which updates lastVrfProcessedTimestamp)
-      // Since we can't easily fulfill VRF in this test, we just test that
-      // a fresh fixture (no stall) correctly blocks voting
-      // The stall re-check is already tested in vote() tests above
+      // VRF recovers.
+      await recoverVrf(game, deployer, mockVRF);
+
+      // The stall re-check precedes vote recording, so any caller (here alice, not
+      // the proposer) auto-cancels the now-invalid proposal by killing it.
+      const tx = await admin.connect(alice).vote(1, true);
+      const ev = await getEvent(tx, admin, "ProposalKilled");
+      expect(ev.args.proposalId).to.equal(1n);
+      const [, , , , state] = await admin.proposals(1);
+      expect(state).to.equal(2, "proposal 1 should be Killed");
     });
   });
 
