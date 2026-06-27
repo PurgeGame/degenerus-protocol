@@ -54,7 +54,7 @@ only the protocol's *handling* of randomness / stETH backing is in scope.
 ```
 agent/
   manifest/
-    invariants.json     MAN-01 — the canonical 28-invariant runtime oracle (shared with the README)
+    invariants.json     MAN-01 — the canonical 34-invariant runtime oracle (shared with the README)
     allowlist.json      13 by-design false-positive suppressors for the profit gate
     MAIN-INVARIANTS.md  human-readable rendering of the manifest (for the C4A README)
   src/

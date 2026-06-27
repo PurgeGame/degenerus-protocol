@@ -96,10 +96,10 @@ test("pricing: honest ROI strictly <100%, WWXRP RTP floor 70%, rises with activi
   assert.ok(ev.evNetWei <= 0n, "honest Degenerette EV is non-positive (house edge ≥ 0)");
 });
 
-test("manifest: MAN-01 has the full 28-invariant oracle set, each well-formed", () => {
+test("manifest: MAN-01 has the full 34-invariant oracle set, each well-formed", () => {
   const man = JSON.parse(readFileSync(resolve(AGENT_ROOT, "manifest/invariants.json"), "utf8"));
   assert.equal(man.manifestId, "MAN-01");
-  assert.equal(man.invariants.length, 28);
+  assert.equal(man.invariants.length, 34);
   for (const i of man.invariants) {
     for (const k of ["id", "category", "identity", "onchainRead", "comparator", "source"]) {
       assert.ok(i[k] && String(i[k]).length > 0, `${i.id} missing ${k}`);
