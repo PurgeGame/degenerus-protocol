@@ -5,7 +5,7 @@
     "milestone": "v74.0",
     "frozenTree": "f06b1ef6",
     "impl": "93d17288",
-    "closure": "MILESTONE_V74_AT_HEAD_PENDING_478",
+    "closure": "MILESTONE_V74_AT_HEAD_93d17288ba6719e0a77723d6167c0ba4796b8467",
     "verdict": "0 open findings — 8-cluster as-built audit clean; cross-model (Codex) found 1 MEDIUM (recovery-spanning VRF-swap proposal), fixed at 93d17288"
   },
   "numeraire": "ETH wei (18 decimals); stETH valued 1:1 with ETH (protocol sums at parity)",

@@ -1,0 +1,89 @@
+<!doctype html><meta charset=utf-8><title>Degenerus v74.0 Findings</title><style>body{font:15px/1.6 -apple-system,Segoe UI,Roboto,sans-serif;max-width:980px;margin:2rem auto;padding:0 1rem;color:#1b1f23}h1{border-bottom:3px solid #2d7;padding-bottom:.3rem}h2{border-bottom:1px solid #ddd;margin-top:2rem}table{border-collapse:collapse;width:100%;margin:1rem 0}td{border:1px solid #ccc;padding:6px 10px;font-size:13px;vertical-align:top}tr:first-child td{background:#f4f6f8;font-weight:600}code{background:#f0f2f4;padding:1px 5px;border-radius:3px;font-size:12px}li{margin:.2rem 0}hr{border:0;border-top:1px solid #e1e4e8;margin:1.5rem 0}</style>
+<h1>FINDINGS — Milestone v74.0 (As-Built Audit + C4A Package)</h1>
+<br>
+<p><strong>Subject (frozen):</strong> <code>contracts/</code> tree <strong><code>f06b1ef6</code></strong> @ impl <strong><code>93d17288</code></strong> = the <code>v73.0 → HEAD</code> batch</p>
+<p>(<code>3986926c</code>, 29 .sol, +1861/−1030) <strong>plus one milestone fix</strong> (the sole contract delta vs <code>3986926c</code>:</p>
+<p><code>DegenerusAdmin.sol</code>, +16/−6, logic-only).</p>
+<p><strong>Method:</strong> verify → freeze-confirm → harness-green → 6-cluster as-built code audit → manifest re-point →</p>
+<p>cross-model adversarial re-audit (Codex) → live-agent/soak re-attest → C4A package → terminal.</p>
+<p><strong>Verdict:</strong> <strong>0 open findings.</strong> The 8-cluster as-built audit returned 0 findings; the cross-model pass</p>
+<p>surfaced <strong>1 MEDIUM</strong>, fixed under the conditional contract gate with owner approval. All other raised</p>
+<p>candidates refuted or dispositioned by-design (recorded below).</p>
+<br>
+<hr>
+<br>
+<h2>1. Cluster dispositions (as-built code audit)</h2>
+<br>
+<table>
+<tr><td>Cluster (phase)</td><td>Reqs</td><td>Result</td></tr>
+<tr><td>SUBJ — subject freeze + storage golden (466)</td><td>SUBJ-01..04</td><td>✅ frozen; no top-level slot move vs v73; only <code>Sub</code> repack + additive <code>_sdgnrsBonusLevel</code></td></tr>
+<tr><td>HARN — harness green (467)</td><td>HARN-01..03</td><td>✅ forge 0-fail; Hardhat 1359/0/18 (3 genesis-stall guards documented-skipped)</td></tr>
+<tr><td>SOLV — solvency / backing (468)</td><td>SOLV-01..08</td><td>✅ 8/8 HOLD</td></tr>
+<tr><td>RNG — RNG-freeze / VRF (469)</td><td>RNG-01..05</td><td>✅ HOLD</td></tr>
+<tr><td>LIVE — liveness / advance-gas (469)</td><td>LIVE-01..04</td><td>✅ HOLD</td></tr>
+<tr><td>ACCESS — access / permissionless / governance (470)</td><td>ACCESS-01..07</td><td>✅ 7/7 HOLD</td></tr>
+<tr><td>EV — EV/RTP economy (471)</td><td>EV-01..07</td><td>✅ 7/7 HOLD</td></tr>
+<tr><td>WIRE — rename/wiring/storage inert (472)</td><td>WIRE-01..04</td><td>✅ 4/4 HOLD (157 named-error swaps condition-preserving; 0 stale refs)</td></tr>
+<tr><td>GAS — gas-faucet (473)</td><td>GAS-01..04</td><td>✅ 4/4 HOLD (dormant, CEI-safe, donated-only)</td></tr>
+<tr><td>MAN — manifest re-point (474)</td><td>MAN-01..03</td><td>✅ re-pinned to fixed tree; 28→34 invariants</td></tr>
+</table>
+<br>
+<p>Method per cluster: isolated neutral-prompt reviewers (Workflow <code>wf_00bd2866</code>) with an adversarial-verify</p>
+<p>pipeline + skeptic filter; contracts git-verified unmodified after the read-only fan-out. Per-requirement</p>
+<p>file:line evidence in <code>.planning/phases/46{8,9}-*, 470-*, 471-*, 472-*, 473-*/</code>.</p>
+<br>
+<h2>2. Cross-model adversarial re-audit (Phase 475) — the conditional gate</h2>
+<br>
+<p>Codex (primary; Gemini tier-ineligible) over 6 ranked surfaces. <strong>The gate fired once.</strong></p>
+<br>
+<table>
+<tr><td>#</td><td>Surface</td><td>Disposition</td></tr>
+<tr><td>01</td><td>Purchase hot-path solvency fold</td><td>NONE (clean)</td></tr>
+<tr><td>02</td><td>VRF-death deadman + mid-day RNG</td><td>CAT raised → <strong>by-design</strong> (the &gt;120d VRF-death prevrandao fallback is the accepted super-fallback: fund-recovery vs permanent brick; only after catastrophic unrecoverable VRF death; genesis/no-victim). KNOWN-ISSUES §3a.</td></tr>
+<tr><td>03</td><td>Queue-gate / swap / composition</td><td>CAT raised → <strong>refuted</strong> (lootboxes can&#x27;t open post-gameover; tickets only enter via the freeze-isolated queue).</td></tr>
+<tr><td>04</td><td>sDGNRS level-start box</td><td>MED raised → <strong>refuted</strong> (box sized strictly pre-rng-request; word unknowable at sizing).</td></tr>
+<tr><td>05</td><td>payAffiliateCombined EV/distribution</td><td>NONE (only the immaterial ≤3-FLIP quest rounding).</td></tr>
+<tr><td>06</td><td>Access / admin governance timing</td><td><strong>REAL MEDIUM → FIXED <code>93d17288</code>.</strong></td></tr>
+</table>
+<br>
+<p><strong>The MEDIUM (06), fixed:</strong> <code>DegenerusAdmin.vote()</code>/<code>canExecute()</code> kill-on-recovery was *lazy* (only</p>
+<p>killed a VRF-coordinator-swap proposal when poked while currently recovered), so a proposal created in</p>
+<p>stall-1 could survive an un-poked VRF recovery and execute in a later ≥44h re-stall at the age-decayed</p>
+<p>(down to 5%) threshold with stale votes — installing an arbitrary VRF coordinator below the intended</p>
+<p>governance bar. Fix: also invalidate when <code>lastVrfProcessed &gt; createdAt</code> (any fulfillment after creation</p>
+<p>⇒ a recovery occurred ⇒ proposal dead), recovery-proof without a poke. Logic-only; regression test</p>
+<p>added (<code>83a5ce43</code>). Build clean; VRFGovernance/GovernanceGating green.</p>
+<br>
+<h2>3. Known-issues perimeter</h2>
+<p>Full precise perimeter in <code>KNOWN-ISSUES.md</code> (6 design decisions, 10 by-design rulings, the 475</p>
+<p>dispositions, 3 carried-defended items incl. the mid-day <code>==0</code> guard re-checked against the as-built</p>
+<p>fold, the genesis dead-VRF gap-backfill latent edge [non-mainnet-reachable, tracked], 9 stale-natspec</p>
+<p>doc notes, the <code>AffiliateEarningsRecorded</code> indexer-parity delta). Trust model + roles in <code>SECURITY.md</code>.</p>
+<br>
+<h2>4. Live agent + soak re-attest (Phase 476)</h2>
+<p>Agent re-pointed at a local-fork deployment of the <strong>fixed tree</strong> (<code>f06b1ef6</code>/<code>93d17288</code>) with the</p>
+<p>474-re-pinned MAN-01 manifest. Fresh local soak (80 actions): **0 final on-chain MAN-01 STATE</p>
+<p>violations, 0 profit-vs-EV alarms** (4 window-transients = mempool-race artifacts). Coverage shallow</p>
+<p>(in-repo dev-driver is a limited stand-in — stayed at level 0; full-lifecycle 15-min-day driving is the</p>
+<p>sim repo&#x27;s job). The prior deep 0-viol soak (1000+ steps) carries: the sole contract delta (the 475</p>
+<p>governance-path fix) is orthogonal to every soaked invariant. See <code>.planning/phases/476-agent-soak/</code>.</p>
+<br>
+<h2>5. C4A package (Phase 477)</h2>
+<p><code>scope.txt</code> (50 in-scope sources, 20,070 nSLOC) + <code>out_of_scope.txt</code> + <code>SECURITY.md</code> + trust-model +</p>
+<p><code>KNOWN-ISSUES.md</code> + <code>audit/C4A-CONTEST-README.md</code> (Main-Invariants verbatim from MAN-01) +</p>
+<p><code>audit/ACCESS-CONTROL-MATRIX.md</code> + <code>audit/ETH-FLOW-MAP.md</code>, all against the fixed tree.</p>
+<br>
+<h2>6. Closure</h2>
+<p><strong>Closure signal:</strong> <code>MILESTONE_V74_AT_HEAD_93d17288ba6719e0a77723d6167c0ba4796b8467</code></p>
+<p><strong>Subject byte-frozen:</strong> <code>contracts/</code> tree <strong><code>f06b1ef6</code></strong> @ impl <strong><code>93d17288</code></strong> (the byte-frozen subject</p>
+<p>HEAD; subsequent <code>.planning/</code>/<code>audit/</code>/<code>test/</code> commits do not alter the contracts tree). Distinct from</p>
+<p>the v73 closure <code>MILESTONE_V73_AT_HEAD_15650b6a…</code> (tree <code>d6615306</code>).</p>
+<p><strong>Conditional contract gate:</strong> fired once (475-06) and resolved — the owner-approved fix <code>93d17288</code> is</p>
+<p>committed; the subject is re-frozen at the fixed tree.</p>
+<p><strong>Internal consistency (TERM-03):</strong> scope.txt / nSLOC / <code>agent/manifest/invariants.json</code> /</p>
+<p><code>MAIN-INVARIANTS.md</code> / <code>audit/C4A-CONTEST-README.md</code> / <code>KNOWN-ISSUES.md</code> all reference the same frozen</p>
+<p>subject <code>f06b1ef6</code>/<code>93d17288</code>; the README Main-Invariants section is verbatim-synced to MAN-01 (34</p>
+<p>invariants). Tag: <code>v74.0</code> (local; not pushed).</p>
+<br>
+<hr>
+<p>*As-built audit: 8 clusters clean; cross-model 1 MEDIUM found + fixed; 0 open findings.*</p>
