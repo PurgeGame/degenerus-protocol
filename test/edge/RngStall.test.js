@@ -17,7 +17,7 @@ import {
 /**
  * RngStall edge-case tests.
  *
- * Covers the 18-hour VRF timeout retry mechanism, multi-timeout chains,
+ * Covers the 12-hour VRF timeout retry mechanism, multi-timeout chains,
  * stale request fulfillment, RNG-locked operation blocking, 3-day stall
  * detection, emergency recovery, and state consistency after a full retry
  * cycle.
@@ -65,30 +65,51 @@ async function issueFirstRequest(game, caller) {
   await game.connect(caller).advanceGame();
 }
 
+/**
+ * Seal the genesis day: advance one day, request + fulfill + drain so dailyIdx
+ * catches up. In the test env DEPLOY_DAY_BOUNDARY=0 makes the very first
+ * advanceGame backfill ~20k gap days; sealing once lands subsequent request/
+ * timeout/retry cycles on a normal (non-backfill) day. The daily VRF retry
+ * timeout is 12h (rngLockedFlag path); stalls are driven same-day so the retry
+ * fires inside rngGate.
+ */
+async function sealGenesisDay(game, caller, mockVRF) {
+  await advanceToNextDay();
+  await game.connect(caller).advanceGame();
+  const id = await getLastVRFRequestId(mockVRF);
+  if (id > 0n) {
+    try {
+      await mockVRF.fulfillRandomWords(id, 5n);
+    } catch {}
+  }
+  await drainTickets(game, caller);
+}
+
 // ---------------------------------------------------------------------------
 
 describe("RngStall", function () {
   after(() => restoreAddresses());
 
   // =========================================================================
-  // 1. 18-Hour Timeout and Retry
+  // 1. 12-Hour Timeout and Retry
   // =========================================================================
 
-  describe("18-hour timeout and retry", function () {
-    it("advanceGame after exactly 18h+1s issues a new higher requestId", async function () {
+  describe("12-hour timeout and retry", function () {
+    it("advanceGame after the 12h timeout issues a new higher requestId", async function () {
       const { game, deployer, mockVRF } = await loadFixture(deployFullProtocol);
 
-      // Trigger day change so advanceGame succeeds, then issue first request.
+      // Seal the genesis day so the request/retry runs on a normal day.
+      await sealGenesisDay(game, deployer, mockVRF);
+
+      // New day, issue first request.
       await advanceToNextDay();
       await issueFirstRequest(game, deployer);
 
       const firstRequestId = await getLastVRFRequestId(mockVRF);
       expect(await game.rngLocked()).to.equal(true);
 
-      // Advance to next day so the day gate clears, then wait past the 18h
-      // timeout window (elapsed >= 18 hours triggers a retry inside rngGate).
-      await advanceToNextDay();
-      await advanceTime(18 * 3600 + 1);
+      // Stall past the 12h daily VRF retry timeout (same day) to trigger a retry.
+      await advanceTime(12 * 3600 + 60);
 
       // Retry call — should succeed and emit a new VRF request.
       const tx = await game.connect(deployer).advanceGame();
@@ -105,11 +126,12 @@ describe("RngStall", function () {
     it("rngLocked remains true immediately after the retry request", async function () {
       const { game, deployer, mockVRF } = await loadFixture(deployFullProtocol);
 
+      await sealGenesisDay(game, deployer, mockVRF);
+
       await advanceToNextDay();
       await issueFirstRequest(game, deployer);
 
-      await advanceToNextDay();
-      await advanceTime(18 * 3600 + 1);
+      await advanceTime(12 * 3600 + 60);
       await game.connect(deployer).advanceGame();
 
       // A new VRF request was issued, so the lock must still be held.
@@ -119,12 +141,13 @@ describe("RngStall", function () {
     it("fulfilling the retry requestId and processing unlocks RNG", async function () {
       const { game, deployer, mockVRF } = await loadFixture(deployFullProtocol);
 
+      await sealGenesisDay(game, deployer, mockVRF);
+
       await advanceToNextDay();
       await issueFirstRequest(game, deployer);
 
-      // Trigger timeout.
-      await advanceToNextDay();
-      await advanceTime(18 * 3600 + 1);
+      // Trigger timeout (same-day stall past the 12h daily retry threshold).
+      await advanceTime(12 * 3600 + 60);
       await game.connect(deployer).advanceGame();
 
       const retryId = await getLastVRFRequestId(mockVRF);
@@ -140,11 +163,12 @@ describe("RngStall", function () {
     it("isRngFulfilled becomes true after the retry fulfillment", async function () {
       const { game, deployer, mockVRF } = await loadFixture(deployFullProtocol);
 
+      await sealGenesisDay(game, deployer, mockVRF);
+
       await advanceToNextDay();
       await issueFirstRequest(game, deployer);
 
-      await advanceToNextDay();
-      await advanceTime(18 * 3600 + 1);
+      await advanceTime(12 * 3600 + 60);
       await game.connect(deployer).advanceGame();
 
       const retryId = await getLastVRFRequestId(mockVRF);
@@ -156,10 +180,10 @@ describe("RngStall", function () {
   });
 
   // =========================================================================
-  // 2. Before 18-Hour Timeout Reverts
+  // 2. Before 12-Hour Timeout Reverts
   // =========================================================================
 
-  describe("advanceGame before 18-hour timeout reverts", function () {
+  describe("advanceGame before 12-hour timeout reverts", function () {
     it("calling advanceGame at 1h elapsed reverts with RngNotReady", async function () {
       const { game, deployer, advanceModule } = await loadFixture(
         deployFullProtocol
@@ -168,7 +192,7 @@ describe("RngStall", function () {
       await advanceToNextDay();
       await issueFirstRequest(game, deployer);
 
-      await advanceTime(3600); // 1 hour — well under the 18h threshold.
+      await advanceTime(3600); // 1 hour — well under the 12h threshold.
 
       await expect(
         game.connect(deployer).advanceGame()
@@ -207,9 +231,11 @@ describe("RngStall", function () {
     });
 
     it("calling advanceGame at 12h+ triggers retry (no revert)", async function () {
-      const { game, deployer } = await loadFixture(
+      const { game, deployer, mockVRF } = await loadFixture(
         deployFullProtocol
       );
+
+      await sealGenesisDay(game, deployer, mockVRF);
 
       await advanceToNextDay();
       await issueFirstRequest(game, deployer);
@@ -232,18 +258,19 @@ describe("RngStall", function () {
     it("each successive timeout produces a strictly increasing requestId", async function () {
       const { game, deployer, mockVRF } = await loadFixture(deployFullProtocol);
 
+      await sealGenesisDay(game, deployer, mockVRF);
+
       await advanceToNextDay();
       await issueFirstRequest(game, deployer);
       const id1 = await getLastVRFRequestId(mockVRF);
 
-      // First timeout retry.
-      await advanceToNextDay();
-      await advanceTime(18 * 3600 + 1);
+      // First timeout retry (same-day stall past 12h).
+      await advanceTime(12 * 3600 + 60);
       await game.connect(deployer).advanceGame();
       const id2 = await getLastVRFRequestId(mockVRF);
 
       // Second timeout retry (no new day needed — rngRequestTime was just reset).
-      await advanceTime(18 * 3600 + 1);
+      await advanceTime(12 * 3600 + 60);
       await game.connect(deployer).advanceGame();
       const id3 = await getLastVRFRequestId(mockVRF);
 
@@ -254,16 +281,17 @@ describe("RngStall", function () {
     it("fulfilling the final retry after two timeouts works correctly", async function () {
       const { game, deployer, mockVRF } = await loadFixture(deployFullProtocol);
 
+      await sealGenesisDay(game, deployer, mockVRF);
+
       await advanceToNextDay();
       await issueFirstRequest(game, deployer);
 
-      // Timeout 1.
-      await advanceToNextDay();
-      await advanceTime(18 * 3600 + 1);
+      // Timeout 1 (same-day stall past 12h).
+      await advanceTime(12 * 3600 + 60);
       await game.connect(deployer).advanceGame();
 
       // Timeout 2.
-      await advanceTime(18 * 3600 + 1);
+      await advanceTime(12 * 3600 + 60);
       await game.connect(deployer).advanceGame();
 
       const finalId = await getLastVRFRequestId(mockVRF);
@@ -280,13 +308,14 @@ describe("RngStall", function () {
     it("game state remains sane after three consecutive timeout retries", async function () {
       const { game, deployer, mockVRF } = await loadFixture(deployFullProtocol);
 
+      await sealGenesisDay(game, deployer, mockVRF);
+
       await advanceToNextDay();
       await issueFirstRequest(game, deployer);
 
-      // Three successive timeouts.
+      // Three successive same-day timeout retries.
       for (let i = 0; i < 3; i++) {
-        if (i === 0) await advanceToNextDay();
-        await advanceTime(18 * 3600 + 1);
+        await advanceTime(12 * 3600 + 60);
         await game.connect(deployer).advanceGame();
       }
 
@@ -309,13 +338,14 @@ describe("RngStall", function () {
     it("fulfilling the old requestId is silently ignored by the game", async function () {
       const { game, deployer, mockVRF } = await loadFixture(deployFullProtocol);
 
+      await sealGenesisDay(game, deployer, mockVRF);
+
       await advanceToNextDay();
       await issueFirstRequest(game, deployer);
       const oldRequestId = await getLastVRFRequestId(mockVRF);
 
-      // Trigger timeout and get a new requestId.
-      await advanceToNextDay();
-      await advanceTime(18 * 3600 + 1);
+      // Trigger timeout and get a new requestId (same-day stall past 12h).
+      await advanceTime(12 * 3600 + 60);
       await game.connect(deployer).advanceGame();
       const newRequestId = await getLastVRFRequestId(mockVRF);
 
@@ -335,12 +365,13 @@ describe("RngStall", function () {
     it("fulfilling the new requestId after ignoring the stale one works", async function () {
       const { game, deployer, mockVRF } = await loadFixture(deployFullProtocol);
 
+      await sealGenesisDay(game, deployer, mockVRF);
+
       await advanceToNextDay();
       await issueFirstRequest(game, deployer);
       const oldRequestId = await getLastVRFRequestId(mockVRF);
 
-      await advanceToNextDay();
-      await advanceTime(18 * 3600 + 1);
+      await advanceTime(12 * 3600 + 60);
       await game.connect(deployer).advanceGame();
       const newRequestId = await getLastVRFRequestId(mockVRF);
 
@@ -362,12 +393,13 @@ describe("RngStall", function () {
     it("stale fulfillment does not affect rngLocked state", async function () {
       const { game, deployer, mockVRF } = await loadFixture(deployFullProtocol);
 
+      await sealGenesisDay(game, deployer, mockVRF);
+
       await advanceToNextDay();
       await issueFirstRequest(game, deployer);
       const staleId = await getLastVRFRequestId(mockVRF);
 
-      await advanceToNextDay();
-      await advanceTime(18 * 3600 + 1);
+      await advanceTime(12 * 3600 + 60);
       await game.connect(deployer).advanceGame();
 
       const gameAddr = await game.getAddress();
@@ -452,8 +484,8 @@ describe("RngStall", function () {
   // 7. Normal Fulfillment Within Timeout Window
   // =========================================================================
 
-  describe("normal fulfillment within the 18-hour window", function () {
-    it("fulfilling VRF within the window succeeds without retry", async function () {
+  describe("normal fulfillment within the 12-hour window", function () {
+    it("fulfilling VRF within the 12h window succeeds without retry", async function () {
       const { game, deployer, mockVRF } = await loadFixture(deployFullProtocol);
 
       await advanceToNextDay();
@@ -523,7 +555,7 @@ describe("RngStall", function () {
       await advanceToNextDay();
       await game.connect(deployer).advanceGame(); // new request.
       await advanceToNextDay();
-      await advanceTime(18 * 3600 + 1);
+      await advanceTime(12 * 3600 + 60);
       await game.connect(deployer).advanceGame(); // retry.
 
       const retryId = await getLastVRFRequestId(mockVRF);
@@ -537,11 +569,12 @@ describe("RngStall", function () {
     it("game is not in gameover and not in jackpot phase after retry cycle", async function () {
       const { game, deployer, mockVRF } = await loadFixture(deployFullProtocol);
 
+      await sealGenesisDay(game, deployer, mockVRF);
+
       await advanceToNextDay();
       await issueFirstRequest(game, deployer);
 
-      await advanceToNextDay();
-      await advanceTime(18 * 3600 + 1);
+      await advanceTime(12 * 3600 + 60);
       await game.connect(deployer).advanceGame();
 
       const retryId = await getLastVRFRequestId(mockVRF);
@@ -555,11 +588,11 @@ describe("RngStall", function () {
     it("can proceed to the next day's advance after a retry cycle completes", async function () {
       const { game, deployer, mockVRF } = await loadFixture(deployFullProtocol);
 
-      // Day 1: first request, timeout, retry, fulfill, drain.
+      // Day 1: seal genesis, then first request, timeout, retry, fulfill, drain.
+      await sealGenesisDay(game, deployer, mockVRF);
       await advanceToNextDay();
       await issueFirstRequest(game, deployer);
-      await advanceToNextDay();
-      await advanceTime(18 * 3600 + 1);
+      await advanceTime(12 * 3600 + 60);
       await game.connect(deployer).advanceGame();
       const retryId = await getLastVRFRequestId(mockVRF);
       await mockVRF.fulfillRandomWords(retryId, 444n);
