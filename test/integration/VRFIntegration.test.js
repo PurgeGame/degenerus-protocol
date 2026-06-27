@@ -307,18 +307,25 @@ describe("VRFIntegration", function () {
   // ---------------------------------------------------------------------------
 
   describe("VRF timeout / retry", function () {
-    it("advanceGame after 18-hour timeout issues a new (higher) requestId", async function () {
+    it("advanceGame after the 12h timeout issues a new (higher) requestId", async function () {
       const { game, deployer, mockVRF } = await loadFixture(deployFullProtocol);
 
+      // Seal the genesis day first (DEPLOY_DAY_BOUNDARY=0 backfill artifact).
       await advanceToNextDay();
-      await game.connect(deployer).advanceGame(); // first VRF request
+      await game.connect(deployer).advanceGame();
+      const sealId = await getLastVRFRequestId(mockVRF);
+      await mockVRF.fulfillRandomWords(sealId, 5n);
+      await drainTickets(game, deployer);
+
+      // New day: first VRF request.
+      await advanceToNextDay();
+      await game.connect(deployer).advanceGame();
 
       const firstRequestId = await getLastVRFRequestId(mockVRF);
       expect(await game.rngLocked()).to.equal(true);
 
-      // Advance 18 hours + 1 second and then to the next calendar day.
-      await advanceTime(18 * 60 * 60 + 1);
-      await advanceToNextDay();
+      // Stall past the 12h daily VRF retry timeout (same day).
+      await advanceTime(12 * 60 * 60 + 60);
 
       // advanceGame should retry, issuing a new VRF request.
       const tx = await game.connect(deployer).advanceGame();
@@ -332,12 +339,18 @@ describe("VRFIntegration", function () {
     it("fulfilling the retry request and processing succeeds", async function () {
       const { game, deployer, mockVRF } = await loadFixture(deployFullProtocol);
 
+      // Seal the genesis day first.
+      await advanceToNextDay();
+      await game.connect(deployer).advanceGame();
+      const sealId = await getLastVRFRequestId(mockVRF);
+      await mockVRF.fulfillRandomWords(sealId, 5n);
+      await drainTickets(game, deployer);
+
       await advanceToNextDay();
       await game.connect(deployer).advanceGame();
 
-      // Trigger timeout.
-      await advanceTime(18 * 60 * 60 + 1);
-      await advanceToNextDay();
+      // Trigger timeout (same-day stall past the 12h daily retry threshold).
+      await advanceTime(12 * 60 * 60 + 60);
 
       // Issue retry request.
       await game.connect(deployer).advanceGame();
