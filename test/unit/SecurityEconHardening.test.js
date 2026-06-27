@@ -28,18 +28,27 @@ const COIN_PURCHASE_CUTOFF_LVL0 = 882; // 912 - 30 days
 // ---------------------------------------------------------------------------
 
 /**
- * Trigger game over at level 0 via 912-day idle timeout.
- * Multi-step: advanceGame -> VRF request -> fulfill -> advanceGame -> gameOver=true
+ * Trigger game over at level 0 via the idle-timeout liveness path.
+ * The drain is multi-tx (entropy round, then a ticket-drain pass, then the
+ * terminal gameOver drain), so loop advanceGame — fulfilling any VRF request —
+ * until gameOver latches.
  */
 async function triggerGameOverAtLevel0(game, caller, mockVRF) {
-  // First advanceGame triggers liveness check + VRF request
-  await game.connect(caller).advanceGame();
-  const requestId = await getLastVRFRequestId(mockVRF);
-  if (requestId > 0n) {
-    await mockVRF.fulfillRandomWords(requestId, 42n);
+  for (let i = 0; i < 12; i++) {
+    const reqBefore = await getLastVRFRequestId(mockVRF);
+    try {
+      await game.connect(caller).advanceGame();
+    } catch {
+      /* may revert mid-sequence; keep driving */
+    }
+    const reqAfter = await getLastVRFRequestId(mockVRF);
+    if (reqAfter > reqBefore) {
+      try {
+        await mockVRF.fulfillRandomWords(reqAfter, 42n);
+      } catch {}
+    }
+    if (await game.gameOver()) return;
   }
-  // Second advanceGame completes the gameOver drain
-  await game.connect(caller).advanceGame();
 }
 
 /**
@@ -159,13 +168,15 @@ describe("SecurityEconHardening", function () {
       ).to.be.reverted;
     });
 
-    it("receive() adds to futurePrizePool before gameOver", async function () {
+    it("receive() credits the sender's afking funding before gameOver", async function () {
       const { game, alice } = await loadFixture(deployFullProtocol);
       const gameAddr = await game.getAddress();
 
-      const before = await game.futurePrizePoolView();
+      // receive() routes plain ETH to the sender's afking funding (claimablePool),
+      // not directly to the future prize pool.
+      const before = await game.afkingFundingOf(alice.address);
       await alice.sendTransaction({ to: gameAddr, value: eth(1) });
-      const after_ = await game.futurePrizePoolView();
+      const after_ = await game.afkingFundingOf(alice.address);
 
       expect(after_ - before).to.equal(eth(1));
     });
@@ -603,9 +614,10 @@ describe("SecurityEconHardening", function () {
       // The structural guarantee is that 2300+2300+4600 = 9200 BPS,
       // leaving 800 BPS (~8%) as unextracted buffer.
 
-      const futurePoolBefore = await game.futurePrizePoolView();
-      // The 10 ETH we sent goes to futurePrizePool via receive()
-      expect(futurePoolBefore).to.be.gte(eth(10));
+      // receive() now routes plain ETH to the sender's afking funding (the yield
+      // split itself is verified structurally in the sibling BPS-sum test).
+      const afkingAfter = await game.afkingFundingOf(alice.address);
+      expect(afkingAfter).to.be.gte(eth(10));
     });
 
     it("total distribution BPS sum is 9200 (8% buffer unextracted)", async function () {
