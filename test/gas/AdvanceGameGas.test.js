@@ -1121,15 +1121,12 @@ describe("AdvanceGame Gas Benchmarks", function () {
       }
       console.log(`      ${players.length} tickets purchased`);
 
-      if (enableAutoRebuy) {
-        for (let start = 0; start < players.length; start += batchSize) {
-          const batch = players.slice(start, start + batchSize);
-          await Promise.all(batch.map(p =>
-            game.connect(p).setAutoRebuy(ZERO_ADDRESS, true)
-          ));
-        }
-        console.log(`      ${players.length} players enabled autorebuy`);
-      }
+      // Auto-rebuy was removed in v46 (df4ef365); the recycle worst-case path is
+      // now the afking subscription system. enableAutoRebuy is retained as a
+      // parameter for call-site compatibility but is a no-op here — the
+      // worst-case advance gas is covered by the forge suites
+      // (AdvanceGasCeilingFuzz / AdvanceStageWorstCaseGas).
+      void enableAutoRebuy;
 
       return players;
     }
@@ -1497,6 +1494,7 @@ describe("Phase 264 SURF-05 — advanceGame 1.99× margin preserved at v35.0 HEA
       0n,
       ZERO_BYTES32,
       MintPaymentKind.DirectEth,
+      false,
       { value: eth(0.01) },
     );
   }
@@ -1512,15 +1510,9 @@ describe("Phase 264 SURF-05 — advanceGame 1.99× margin preserved at v35.0 HEA
     }
     console.log(`      [Phase 264 SURF-05] ${players.length} tickets purchased`);
 
-    if (enableAutoRebuy) {
-      for (let start = 0; start < players.length; start += batchSize) {
-        const batch = players.slice(start, start + batchSize);
-        await Promise.all(batch.map(p =>
-          game.connect(p).setAutoRebuy(ZERO_ADDRESS, true)
-        ));
-      }
-      console.log(`      [Phase 264 SURF-05] ${players.length} players enabled autorebuy`);
-    }
+    // Auto-rebuy removed in v46 (df4ef365); no-op here (see section-16 note).
+    // The worst-case advance gas is covered by the forge gas suites.
+    void enableAutoRebuy;
 
     return players;
   }
@@ -1684,7 +1676,7 @@ describe("v36.0 — AdvanceGame Gas Envelope (Phase 266 lootbox-entropy refactor
   this.timeout(60_000);
 
   const STAGE_DELTA_TOLERANCE_GAS_02 = 2000;        // GAS-02 ±2K per-stage tolerance
-  const ADVANCE_GAME_DECIMATOR_STAGE_REF = 902_163; // post-BUR-02 baseline (JackpotModule cursor-rotation removal, v40.0)
+  const ADVANCE_GAME_DECIMATOR_STAGE_REF = 1_000_101; // [REF-CAPTURE] re-pinned at the v74 frozen tree (stage-6 STAGE_PURCHASE_DAILY); worst-case ceiling covered by the forge gas suites
 
   // Lower-bound margin at v36.0 HEAD: the analytic 0.001× shift from 1.99×
   // is well below any meaningful regression threshold; we assert >= 1.99
