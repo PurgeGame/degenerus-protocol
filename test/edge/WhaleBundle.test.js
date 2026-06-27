@@ -155,14 +155,20 @@ describe("WhaleBundle", function () {
       expect(receipt.status).to.equal(1);
     });
 
-    it("wrong ETH amount reverts (overpay)", async function () {
+    it("overpay is accepted and the excess is credited to the payer's afking", async function () {
       const { game, alice } = await loadFixture(deployFullProtocol);
 
+      // Overpay no longer reverts: msg.value above the price routes the excess to
+      // the payer's afking funding (whale module: _creditAfkingValue(msg.sender,
+      // msg.value - freshPaid)). Pass costs 2.4 ETH at level 0; pay 3 ETH.
+      const before = await game.afkingFundingOf(alice.address);
       await expect(
         game
           .connect(alice)
           .purchaseWhalePass(alice.address, 1, { value: eth(3) })
-      ).to.be.reverted;
+      ).to.not.be.reverted;
+      const after_ = await game.afkingFundingOf(alice.address);
+      expect(after_ - before).to.equal(eth(0.6));
     });
 
     it("purchase at level 0 with exact ETH emits LootBoxBuy", async function () {
@@ -228,11 +234,16 @@ describe("WhaleBundle", function () {
       // Move past the 4-day boon window while dailyIdx remains stale.
       await advanceTime(5 * 86400);
 
-      const discountedPrice = (eth(4) * (10_000n - discountBps)) / 10_000n;
+      // The boon is expired (validity keys off _simulatedDayIndex, the wall-clock
+      // day — not the stale dailyIdx), so the FULL early price (2.4 ETH) is
+      // required and no discount applies. Paying the would-be discounted early
+      // price underpays; bob holds no claimable to settle the shortfall, so the
+      // purchase reverts — proving the expired boon grants no discount.
+      const discountedEarly = (eth(2.4) * (10_000n - discountBps)) / 10_000n;
       await expect(
         game
           .connect(bob)
-          .purchaseWhalePass(bob.address, 1, { value: discountedPrice })
+          .purchaseWhalePass(bob.address, 1, { value: discountedEarly })
       ).to.be.reverted;
     });
   });
@@ -623,12 +634,18 @@ describe("WhaleBundle", function () {
         mockVRF
       );
 
-      // Full price should revert because msg.value != discounted price
+      // With a discount boon active the price is below 0.24 ETH; paying the full
+      // 0.24 overpays. Overpay no longer reverts — the excess is credited to the
+      // payer's afking funding. (The boon is still consumed at the discounted
+      // price; the surplus is the buyer's own afking balance, not an exploit.)
+      const before = await game.afkingFundingOf(bob.address);
       await expect(
         game
           .connect(bob)
           .purchaseLazyPass(bob.address, { value: eth(0.24) })
-      ).to.be.reverted;
+      ).to.not.be.reverted;
+      const after_ = await game.afkingFundingOf(bob.address);
+      expect(after_).to.be.gt(before, "lazy-pass overpay excess must credit afking");
     });
 
     it("boon consumed after use — second purchase needs full price", async function () {
