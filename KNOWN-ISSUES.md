@@ -163,6 +163,21 @@ threshold). The rotation backstop is non-resettable on the 120/365-day horizon. 
 floor-of-sum instead of a sum-of-floors, but the divergence is at most ~3 FLIP of quest-rounding per
 transaction (a coin credit, not ETH-backed value). Immaterial; documented, not eligible.
 
+**Genesis + dead-VRF gap-backfill state-corruption — latent, not mainnet-reachable, tracked.** Under a
+*genesis-only* scenario where the very first VRF request never fulfills for multiple wall-clock days
+(`dailyIdx` stuck at 0 while `day` advances — a dead-VRF-at-genesis stall), the new gap-backfill stages
+(`STAGE_GAP_BACKFILLED`/`STAGE_SUBS_BACKFILL_DEFERRED`) can drive the level/`purchaseStartDay` coupling
+into a corrupt state and revert Panic 0x11. It is **not reachable on mainnet**: async Chainlink VRF
+fulfils the genesis request within minutes, sealing day 1 before any multi-day gap can form, so the
+real-flow invariants hold (`day >= purchaseStartDay`; the 0→1 level increment precedes consolidation;
+BAF only runs in the jackpot phase at `lvl >= 1`). It is exposed only by synchronous-mock-VRF /
+real-15-min-day-testnet timing, and only at genesis where `votingSupply() == 0` (no victim — see §2
+genesis-admin-self-break). The Sepolia exposure was fixed in the *sim repo's* VRF fulfiller (not the
+contract); the proper contract-side fix (decouple the transition-commit from `_requestRng`) is
+tracked-deferred, and the `lvl != 0` BAF guard was rejected (it would mask the corrupt state). forge
+fuzz (async-ordered) is green; the 3 genesis-stall Hardhat guards that reproduce it under mock-VRF are
+`it.skip`'d with this reason (`test/edge/BackfillIdempotency.test.js`, `test/edge/LastPurchaseDayRace.test.js`).
+
 ---
 
 ## 5. Documentation-correction notes (stale NatSpec / comments — code is correct)
