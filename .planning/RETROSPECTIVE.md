@@ -754,6 +754,45 @@ A foundation-first cross-model audit of the v61+forgiving-funding subject `c4d48
 
 ---
 
+## Milestone: v74.0 — As-Built Milestone Audit + C4A Package
+
+**Shipped:** 2026-06-27
+**Phases:** 13 (466-478) | **Plans:** 0 (hand-orchestrated; the hand-authored ROADMAP returns 0 phases to `roadmap.analyze`, so the stock autonomous loop couldn't drive it)
+
+### What Was Built
+- A full milestone audit of the entire `v73.0 → HEAD` contract batch (29 .sol, +1873/−1032) that had never been milestone-audited — 8 as-built clusters (SUBJ/HARN/SOLV/RNG/LIVE/ACCESS/EV/WIRE/GAS), all HOLD.
+- The complete Code4rena package against the fixed tree: `scope.txt` (50 sources / 20,070 nSLOC) + `out_of_scope.txt` + `SECURITY.md` + trust-model + `KNOWN-ISSUES.md` + C4-order contest README (Main-Invariants verbatim from MAN-01) + access-control matrix + ETH-flow map.
+- MAN-01 manifest re-pointed v73→fixed-tree (28→34 invariants), `MAIN-INVARIANTS.md` byte-synced to `invariants.json`; live agent + soak re-attested 0-viol/0-alarm on the fixed tree.
+- `audit/FINDINGS-v74.0.md` (chmod 444) + `AUDIT-V74-REPORT.html`; closure signal `MILESTONE_V74_AT_HEAD_93d17288…`.
+
+### What Worked
+- The cross-model gate (475) earned its keep: Codex surfaced the one real defect of the milestone — the `DegenerusAdmin` recovery-spanning VRF-swap proposal MEDIUM — that the 8 in-house clusters had all marked clean. Consistent with the standing premise that the council is the primary finder, Claude the orchestrator/adjudicator.
+- Isolated neutral-prompt reviewers + an adversarial-verify pipeline + skeptic filter (Workflow `wf_00bd2866`), with contracts git-verified frozen after every read-only fan-out, kept the audit honest and self-inflicted-finding-free.
+- The skeptic filter held the line on cross-model over-alarms: 3 of the 6 ranked surfaces raised CAT/MED candidates that were correctly refuted or ruled by-design before any HIGH/CAT label stuck.
+- Re-attest-don't-rediscover: the carried MAN-01 oracle + agent + prior 1000+-step soak meant the soak leg was a re-point, not a rebuild.
+
+### What Was Inefficient
+- The milestone closed substantively in phase 478 via a consolidated FINDINGS deliverable + a hand-made tag, but left the GSD tracker stale — no MILESTONES.md entry, REQUIREMENTS.md not removed, ROADMAP.md not collapsed, PROJECT.md/STATE.md not evolved. The reconcile became a separate follow-up `/gsd-complete-milestone` pass (this one). This is the *exact* failure mode already flagged in v62's lessons.
+- Hardhat carried ~181 stale failures mid-run (pre-v74 + ABI/behaviour drift on a frozen+audited contract); the fixer had to align test-only, and one alarming "affiliate 0.5 ETH cap removed" turned out to be a pre-v73-stale test (no such cap ever existed) — burned cycles proving it wasn't greenwash.
+- Phases 477/478 never got their own phase directories — the package + terminal work landed directly in `audit/`, which is fine for output but leaves the per-phase execution record thinner than 466-476.
+
+### Patterns Established
+- For a hand-authored (non-`roadmap.analyze`-visible) milestone, schedule the bookkeeping reconcile (MILESTONES/PROJECT/ROADMAP/REQUIREMENTS/STATE) as an explicit close step — do NOT assume the terminal phase did it.
+- "As-built audit" shape (verify a batch that's already committed) generalizes: freeze-confirm → harness-green → cluster code audit → manifest re-point → cross-model → agent/soak re-attest → package → terminal, with a single conditional contract gate that only fires on a real defect.
+- Storage-layout golden built in a detached baseline worktree (`forge inspect storageLayout`, by-name diff) is the authoritative repack-safety check; pairs with the standing "a plain `hardhat test` regenerates ContractAddresses.sol → restore it" gotcha.
+
+### Key Lessons
+- The lone contract delta of an audit milestone (here the 475 governance fix `93d17288`) can be orthogonal to every soaked invariant — so a prior deep soak carries, and a shallow re-attest on the fixed tree is sufficient *when you can argue orthogonality explicitly* (don't claim coverage you didn't run).
+- A consolidated-deliverable close needs a bookkeeping checklist appended, or the planning tracker silently drifts out of sync with git/tags for days.
+- Cross-model finding + in-house refute/adjudicate + skeptic-gate-before-label is the durable loop; the council finds, Claude proves or kills.
+
+### Cost Observations
+- Model mix: opus throughout (orchestration / adjudication / cluster reviewers / synthesis); the cross-model leg (Codex) ran off-cap; Gemini CLI was tier-ineligible this round (single-model council).
+- Sessions: a multi-session autonomous run (IDE-crash-interrupted, resumed) + a USER-gated remediation pass for the 475 fix + this separate bookkeeping reconcile.
+- Notable: the single off-cap Codex leg was again the sole source of the one actionable finding — the cheap, high-yield part of the loop.
+
+---
+
 ## Cross-Milestone Trends
 
 ### Process Evolution
@@ -783,6 +822,7 @@ A foundation-first cross-model audit of the v61+forgiving-funding subject `c4d48
 | v60.0 (incl. v59 IMPL) | 5 folded + off-phase audit | 2 (v59 SPEC) + audit rounds | First SINGLE-COMBINED milestone close (v59 IMPL + the v60 maximal audit as one unit, v59-titled artifacts archived under the v60 label); external-led audit operating model (rationed Gemini/Codex fresh-eyes hunters aimed at the "safe/by-design" spine + abundant Claude deep-verify/PoC — LIFECYCLE vindication: Claude-refuted, both externals confirmed); 3-lens recall-preserving verdict (confirm=triggering-trace / refute=named-guard / ≥1 confirm kept); every-surface round-2 rotation run to completion; end-to-end worst-case composition PoC as the gas-ceiling gate (17.54M→6.37M); baseline-diff (not "0 failures") as the regression gate vs the unrefreshed forge harness; off-phase audit reconciled into GSD state retroactively; rogue Write-capable subagent edited mainnet .sol mid-hunt (reverted) → git-status-verify discipline |
 | v61.0 | 5 (375-379) | 378=6 test-only (376=3 contract, hand-reviewed) | Fingerprint-guarded autonomous overnight run (contract fingerprint `fcdd999c` re-verified before every commit + after every spawned agent → 28 commits, zero .sol); strictly-sequential no-worktree waves for Foundry-artifact safety + resumability; falsifiability spot-checks (invert→confirm-fail→restore) catch ceremonial tests; BY-NAME non-widening diff as the only valid "no new regression" cert on a storage-layout change; `MILESTONE_V<N>_AT_HEAD_<subject-sha>` signal as the de-facto tag (git tags unused since v43); region-dependent (not uniform −1) PACK slot-shift recalibration via `forge inspect` |
 | v62.0 | 8 (380-387) | 10 (380:4 + 381:6) + 382-386 council sweeps | First CROSS-MODEL-LED audit — the convergent council (Gemini + Codex) is the PRIMARY finder per sweep area, Claude orchestrates/adjudicates/reproduces, and a no-finding verdict needs the council pass on record; premise validated (all 3 actionable findings council-surfaced + missed by prior Claude-only passes — V62-02 convergent, V62-01 fell out of the 381-06 council review of Claude's own invariant set); foundation-first (green baseline + always-on invariant net FUZZ-01..06 before the sweeps, the gas-ceiling component reused by COMPO); reproduction-first findings (each `test/repro/*.t.sol` flips to its fix's regression test); first audit→remediation-in-cycle since v60 (vs document-only v58 / 0-change v61); autonomous overnight run resumed after an IDE crash with zero audit-time source mutation; sweep areas closed via the consolidated FINDINGS doc (not per-phase artifacts) → stale GSD phase-dir + STATE tracking reconciled by hand at close |
+| v74.0 | 13 (466-478) | 0 (hand-orchestrated) | First as-built milestone audit shipped as a standalone close — *verify* a batch already committed (the `v73.0 → HEAD` 29 .sol, +1873/−1032); the cross-model (Codex) gate fired once → 1 MEDIUM owner-fixed `93d17288` that the in-house 8-cluster pass had all marked clean (council-as-primary-finder confirmed again); consolidated-FINDINGS close left the GSD tracker stale → a separate `/gsd-complete-milestone` bookkeeping reconcile (the *exact* v62 lesson recurring); storage-layout golden via detached-baseline `forge inspect` by-name diff; MAN-01 manifest re-pointed 28→34 invariants + agent/soak re-attest (not rebuild) on the fixed tree; single-model council (Gemini CLI tier-ineligible) |
 
 ### Top Lessons (Verified Across Milestones)
 
