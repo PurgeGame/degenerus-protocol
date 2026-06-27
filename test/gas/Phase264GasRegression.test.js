@@ -104,9 +104,9 @@ const LITERAL_DELTA_HARD_BOUND        = 8_000_000; // Outer envelope on `measure
 // Stage-9 surface remains 0 (soft-skip path — see test body for the
 // non-turbo-fixture documentation): re-pin once a non-turbo split-mode
 // fixture is added AND stage 9 is reachable in the simulator lifecycle.
-const PAY_DAILY_COIN_JACKPOT_GAS_REF             = 2_858_030; // post-BUR-02 baseline (JackpotModule cursor-rotation removal, v40.0)
+const PAY_DAILY_COIN_JACKPOT_GAS_REF             = 2_702_642; // [REF-CAPTURE] re-pinned at the v74 frozen tree (worst-case covered by forge gas suites)
 const PAY_DAILY_JACKPOT_COIN_AND_TICKETS_GAS_REF = 0;
-const BASELINE_NO_COIN_JACKPOT_GAS               = 285_604;
+const BASELINE_NO_COIN_JACKPOT_GAS               = 279_348;   // [REF-CAPTURE] re-pinned at the v74 frozen tree
 
 import { loadFixture } from "@nomicfoundation/hardhat-toolbox/network-helpers.js";
 import { expect } from "chai";
@@ -189,10 +189,8 @@ async function setupSplitTriggeringFixture(fixture, count) {
     const batch = players.slice(start, start + batchSize);
     await Promise.all(batch.map(p => buyOneTicket(game, p)));
   }
-  for (let start = 0; start < players.length; start += batchSize) {
-    const batch = players.slice(start, start + batchSize);
-    await Promise.all(batch.map(p => game.connect(p).setAutoRebuy(ZERO_ADDRESS, true)));
-  }
+  // Auto-rebuy enrollment removed in v46 (df4ef365); the recycle worst-case path
+  // is now afking. The worst-case advance gas is covered by the forge gas suites.
 
   // Section-16 SC-1 funding: 5 buyers × 20 bundles × 2.4 ETH = 240 ETH total.
   const pricePerBundle = eth(2.4);
