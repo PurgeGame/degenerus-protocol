@@ -22,9 +22,9 @@ const Pool = { Whale: 0, Affiliate: 1, Lootbox: 2, Reward: 3, PresaleBox: 4 };
 const INITIAL_SUPPLY = 1_000_000_000_000n * eth("1"); // 1 trillion
 const CREATOR_BPS = 2000n; // 20%
 const WHALE_POOL_BPS = 1000n;
-const AFFILIATE_POOL_BPS = 3500n;
+const AFFILIATE_POOL_BPS = 3000n;
 const LOOTBOX_POOL_BPS = 2000n;
-const REWARD_POOL_BPS = 500n;
+const REWARD_POOL_BPS = 1000n;
 const PRESALE_BOX_POOL_BPS = 1000n; // v47: was EARLYBIRD_POOL_BPS; pool renamed, BPS unchanged
 const BPS_DENOM = 10_000n;
 
@@ -148,7 +148,7 @@ describe("DGNRS", function () {
       expect(whalePool).to.be.closeTo(expected, eth("100"));
     });
 
-    it("Affiliate pool balance is correct (~34.28% of total)", async function () {
+    it("Affiliate pool balance is correct (30% of total)", async function () {
       const { sdgnrs } = await loadFixture(deployFullProtocol);
       const affiliatePool = await sdgnrs.poolBalance(Pool.Affiliate);
       const expected = (INITIAL_SUPPLY * AFFILIATE_POOL_BPS) / BPS_DENOM;
@@ -162,7 +162,7 @@ describe("DGNRS", function () {
       expect(lootboxPool).to.be.closeTo(expected, eth("100"));
     });
 
-    it("Reward pool balance is correct (~11.43%)", async function () {
+    it("Reward pool balance is correct (10% of total)", async function () {
       const { sdgnrs } = await loadFixture(deployFullProtocol);
       const rewardPool = await sdgnrs.poolBalance(Pool.Reward);
       const expected = (INITIAL_SUPPLY * REWARD_POOL_BPS) / BPS_DENOM;
