@@ -1,68 +1,96 @@
 # Degenerus Protocol — Audit Scope
-# Solidity 0.8.34 | Hardhat + viaIR | Optimizer runs=200
-# Re-attested against the v55.0 closure — frozen subject 453f8073, 2026-06-01 (AfKing.sol dissolved into modules/GameAfkingModule.sol; closure MILESTONE_V55_AT_HEAD_ca3bbd3220de763298ef2e742111f6e6ef90d583).
-# The separate v52 cross-model audit track stays pinned to its own FROZEN_SHA c3e9d907 (v51-closure HEAD).
+# Solidity 0.8.34 | Hardhat + Foundry | viaIR=true | Optimizer runs=1000 | evmVersion=osaka
+#
+# Frozen subject: contracts/ tree f06b1ef6 @ impl 93d17288 (v74.0 As-Built Milestone Audit).
+# Closure baseline: MILESTONE_V74_AT_HEAD (emitted at Phase 478).
+# This list supersedes the v55-era scope.txt (which named BurnieCoin/BurnieCoinflip/
+# WrappedWrappedXRP/EndgameModule — all renamed or removed in this subject).
+#
+# Renames vs the v55-era list: BurnieCoin -> FLIP, BurnieCoinflip -> Coinflip,
+# WrappedWrappedXRP -> WWXRP, StakedDegenerusStonk -> sDGNRS, DegenerusStonk -> DGNRS.
+# Removed: DegenerusGameEndgameModule (its logic folded into Advance/GameOver/Jackpot).
+# Added: DegenerusGameFoilPackModule, DegenerusGameBingoModule, GameAfkingModule,
+#        ActivityCurveLib, DegenerusGasFaucet (dormant, in-scope this milestone).
+#
+# Authoritative deploy set = the 26 entries in scripts/lib/predictAddresses.js DEPLOY_ORDER
+# that scripts/deploy.js actually deploys. DegenerusVault additionally deploys two inner
+# ERC-20 share-class tokens (DGVE/DGVF) from its constructor (counted inside DegenerusVault.sol).
+# DegenerusGasFaucet + DeityBoonViewer are in-scope production contracts NOT wired into deploy.js.
 
-## In Scope — Core Contracts (17)
-contracts/BurnieCoin.sol
-contracts/BurnieCoinflip.sol
-contracts/ContractAddresses.sol
-contracts/DegenerusAdmin.sol
-contracts/DegenerusAffiliate.sol
-contracts/DegenerusDeityPass.sol
-contracts/DegenerusGame.sol
-contracts/DegenerusJackpots.sol
-contracts/DegenerusQuests.sol
-contracts/DegenerusStonk.sol
-contracts/StakedDegenerusStonk.sol
-contracts/DegenerusTraitUtils.sol
-contracts/DegenerusVault.sol
-contracts/DeityBoonViewer.sol
-contracts/GNRUS.sol
-contracts/Icons32Data.sol
-contracts/WrappedWrappedXRP.sol
+## In Scope — Core deployed contracts (14)                                  nSLOC
+contracts/DegenerusGame.sol                  # router / delegatecall dispatcher  1316
+contracts/DegenerusAdmin.sol                 # VRF + feed governance (sDGNRS)     724
+contracts/DegenerusAffiliate.sol             # referral codes + bonus points      576
+contracts/FLIP.sol                           # FLIP ERC-20 (coinflip + vault)     335
+contracts/Coinflip.sol                       # coinflip resolution + bounty       870
+contracts/sDGNRS.sol                         # soulbound; reserves/pools/redeem    527
+contracts/DGNRS.sol                          # transferable wrapper over sDGNRS    167
+contracts/DegenerusVault.sol                 # stETH vault; DGVE/DGVF share ERC20s 445
+contracts/DegenerusJackpots.sol              # jackpot state + BAF helpers         342
+contracts/DegenerusQuests.sol                # quest streaks + activity score     1334
+contracts/DegenerusDeityPass.sol             # ERC-721 deity passes (triangular)   284
+contracts/Icons32Data.sol                    # on-chain SVG icon data               57
+contracts/GNRUS.sol                          # soulbound charity token             272
+contracts/WWXRP.sol                          # wXRP utility token (whale pass)      93
 
-## In Scope — Delegatecall Game Modules (13)
-contracts/modules/DegenerusGameAdvanceModule.sol
-contracts/modules/DegenerusGameBingoModule.sol
-contracts/modules/DegenerusGameBoonModule.sol
-contracts/modules/DegenerusGameDecimatorModule.sol
-contracts/modules/DegenerusGameDegeneretteModule.sol
-contracts/modules/DegenerusGameGameOverModule.sol
-contracts/modules/DegenerusGameJackpotModule.sol
-contracts/modules/DegenerusGameLootboxModule.sol
-contracts/modules/DegenerusGameMintModule.sol
-contracts/modules/DegenerusGameMintStreakUtils.sol
-contracts/modules/DegenerusGamePayoutUtils.sol
-contracts/modules/DegenerusGameWhaleModule.sol
-contracts/modules/GameAfkingModule.sol
+## In Scope — Deployed delegatecall game modules (12)                       nSLOC
+# All share DegenerusGameStorage; execute in DegenerusGame's context.
+contracts/modules/DegenerusGameMintModule.sol         #                          1390
+contracts/modules/DegenerusGameAdvanceModule.sol      # VRF + advance + deadman   1259
+contracts/modules/DegenerusGameWhaleModule.sol        # whale/lazy/deity passes    675
+contracts/modules/DegenerusGameJackpotModule.sol      # daily jackpots + BAF      1454
+contracts/modules/DegenerusGameDecimatorModule.sol    #                            633
+contracts/modules/DegenerusGameGameOverModule.sol     #                            151
+contracts/modules/DegenerusGameLootboxModule.sol      #                           1363
+contracts/modules/DegenerusGameBoonModule.sol         #                            249
+contracts/modules/DegenerusGameDegeneretteModule.sol  #                           1031
+contracts/modules/DegenerusGameBingoModule.sol        #                            136
+contracts/modules/GameAfkingModule.sol                # afking + sDGNRS box        903
+contracts/modules/DegenerusGameFoilPackModule.sol     # foil pack                  445
 
-## In Scope — Shared Storage
-contracts/storage/DegenerusGameStorage.sol
+## In Scope — Linked abstract module bases (2)                              nSLOC
+# Inherited by deployed modules; part of their compiled bytecode (not separately deployed).
+contracts/modules/DegenerusGameMintStreakUtils.sol    #                            426
+contracts/modules/DegenerusGamePayoutUtils.sol        #                             29
 
-## In Scope — Libraries (5)
-contracts/libraries/BitPackingLib.sol
-contracts/libraries/EntropyLib.sol
-contracts/libraries/GameTimeLib.sol
-contracts/libraries/JackpotBucketLib.sol
-contracts/libraries/PriceLookupLib.sol
+## In Scope — Shared storage (1)                                            nSLOC
+contracts/storage/DegenerusGameStorage.sol            #                           1101
 
-## In Scope — Interfaces (11)
-contracts/interfaces/IBurnieCoinflip.sol
-contracts/interfaces/IDegenerusAffiliate.sol
-contracts/interfaces/IDegenerusCoin.sol
-contracts/interfaces/IDegenerusGame.sol
-contracts/interfaces/IDegenerusGameModules.sol
-contracts/interfaces/IDegenerusJackpots.sol
-contracts/interfaces/IDegenerusQuests.sol
-contracts/interfaces/IStakedDegenerusStonk.sol
-contracts/interfaces/IStETH.sol
-contracts/interfaces/IVaultCoin.sol
-contracts/interfaces/IVRFCoordinator.sol
+## In Scope — Libraries (8)                                                 nSLOC
+contracts/DegenerusTraitUtils.sol            # trait generation library            80
+contracts/libraries/ActivityCurveLib.sol     #                                    117
+contracts/libraries/BitPackingLib.sol        #                                     29
+contracts/libraries/EntropyLib.sol           #                                     16
+contracts/libraries/GameTimeLib.sol          #                                     12
+contracts/libraries/JackpotBucketLib.sol     #                                    227
+contracts/libraries/PriceLookupLib.sol       #                                     14
+contracts/ContractAddresses.sol              # nonce-predicted address constants    66
 
-## Out of Scope
-contracts/mocks/             # Test mock contracts
-contracts/test/              # In-tree Solidity test harnesses
-test/                        # Test suite
-scripts/                     # Deployment and simulation scripts
-node_modules/                # Third-party dependencies
+## In Scope — Interfaces (11)                                               nSLOC
+contracts/interfaces/ICoinflip.sol                    #                             55
+contracts/interfaces/IDegenerusAffiliate.sol          #                             27
+contracts/interfaces/IDegenerusCoin.sol               #                             13
+contracts/interfaces/IDegenerusGameModules.sol        #                            253
+contracts/interfaces/IDegenerusGame.sol               #                            165
+contracts/interfaces/IDegenerusJackpots.sol           #                             13
+contracts/interfaces/IDegenerusQuests.sol             #                             81
+contracts/interfaces/IsDGNRS.sol                      #                             25
+contracts/interfaces/IStETH.sol                       #                              8
+contracts/interfaces/IVaultCoin.sol                   #                              7
+contracts/interfaces/IVRFCoordinator.sol              #                             20
+
+## In Scope — Standalone production contracts NOT wired into deploy.js (2)  nSLOC
+# Frozen production code, custody-free; audited this milestone.
+contracts/DegenerusGasFaucet.sol   # dormant donation-funded gas faucet (unwired)  101
+contracts/DeityBoonViewer.sol      # read-only deity-boon lens (no value custody)  154
+
+## nSLOC totals
+#   Core deployed (14)              7342
+#   Deployed modules (12)           9689
+#   Abstract module bases (2)        455
+#   Shared storage (1)              1101
+#   Libraries (8)                    561
+#   Interfaces (11)                  667
+#   Standalone in-scope (2)          255
+#   --------------------------------------
+#   TOTAL  50 files                20070 nSLOC

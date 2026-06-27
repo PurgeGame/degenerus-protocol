@@ -1,129 +1,277 @@
 # Known Issues
 
-Pre-disclosure for audit wardens. If you find something listed here, it's already known.
+Pre-disclosure for audit wardens. **If a finding's mechanism + impact is described below, it is
+already known and is not eligible.** This is a precise perimeter — each entry names the exact
+mechanism and why it is by-design, defended, or out-of-scope. There are no vague blanket disclaimers.
 
-Pre-audited with Slither v0.11.5 + 4naly3er. 110 detector categories triaged (2 Slither DOCUMENT, 20 4naly3er DOCUMENT, 84 FP + 4 overlapping). DOCUMENT findings below.
-
----
-
-## Design Decisions
-
-These are architectural decisions, not vulnerabilities.
-
-**All rounding favors solvency.** Every BPS calculation rounds down on payouts and up on burns. stETH transfers retain 1-2 wei per operation. The solvency invariant `balance >= claimablePool` is strengthened by rounding, never weakened. (Detectors: `[L-13]`, `[L-14]`)
-
-**Daily advance assumption.** The protocol assumes `advanceGame` is called to completion every day when available. The advance bounty (escalating from 0.005 to 0.03 ETH-equivalent over 2 hours), and the fact that this function delivers jackpot payments, incentivizes this but does not guarantee it. If `advanceGame` is not called for multiple days, the next call backfills gap days (capped at 120 iterations for gas safety). Gap days beyond 120 are skipped — coinflip payouts for those days are forfeited. In practice, the incentives make daily calling economically rational.
-
-**Non-VRF entropy for affiliate winner roll.** Deterministic seed (gas optimization). Worst case: player times purchases to direct affiliate credit to a different affiliate. No protocol value extraction.
-
-**VRF swap governance.** Emergency VRF coordinator rotation requires a 20h+ stall and sDGNRS community approval with time-decaying threshold. Execution requires approve weight > reject weight and meeting the threshold -- reject voters holding more sDGNRS than approvers block the proposal. This is the intended trust model.
-
-**Price feed swap governance.** LINK/ETH price feed rotation requires feed unhealthy for 2d+ (admin) or 7d+ (community), then sDGNRS governance vote with defence-weighted threshold (50% → 15% floor over 4 days). If 15% approval with approve > reject cannot be reached, the proposal expires. Prevents attacker-controlled feed from enabling BURNIE hyperinflation via fake LINK valuations. If the feed is down, LINK donations still work -- donors just don't receive BURNIE credit.
-
-**Chainlink VRF V2.5 dependency.** Sole randomness source. If VRF goes down, the game stalls but no funds are lost. Upon governance-gated coordinator swap, gap day RNG words are backfilled via keccak256(vrfWord, gapDay) and orphaned lootbox indices receive fallback words. Coinflips and lootboxes resolve naturally after backfill. Independent recovery paths: governance-based coordinator rotation (20h+ stall threshold) and 120-day inactivity timeout.
-
-**Backfill cap at 120 gap days.** `_backfillGapDays` caps iteration at 120 days to stay within block gas limit (~9M gas). If a VRF stall exceeds 120 days, gap days beyond the cap are skipped -- coinflip stakes for those days are frozen (not lost or burned). The `skip-unresolved` handling in BurnieCoinflip (rewardPercent=0 && !win) silently advances past unresolved days. This scenario requires a sustained 4-month Chainlink VRF outage with no coordinator migration -- an unprecedented infrastructure failure affecting the entire ecosystem.
-
-**Lido stETH dependency.** Prize pool growth depends on staking yield. If yield goes to zero, positive-sum margin disappears. Protocol remains solvent -- the solvency invariant does not depend on yield.
-
-**Gameover prevrandao fallback.** `_getHistoricalRngFallback` (`DegenerusGameAdvanceModule.sol:1301`) hashes `block.prevrandao` together with up to 5 historical VRF words as supplementary entropy when VRF is unavailable at game over. A block proposer can bias prevrandao (1-bit manipulation on binary outcomes). Trigger gating: only reachable inside `_gameOverEntropy` (`AdvanceModule:1252`) and only when an in-flight VRF request has been outstanding for at least `GAMEOVER_RNG_FALLBACK_DELAY = 14 days` (`AdvanceModule:109`). The 14-day window is ~17× the 20-hour VRF coordinator-swap governance threshold (see "VRF swap governance" entry above), so this path activates only after both VRF itself AND the governance recovery mechanism have failed to land a fresh coordinator within 14 days. The 5 committed historical VRF words provide bulk entropy; prevrandao only adds unpredictability.
-
-**Lootbox RNG uses index advance isolation instead of rngLockedFlag.** The rngLockedFlag is set for daily VRF requests but NOT for mid-day lootbox RNG requests. Lootbox RNG isolation relies on a separate mechanism: the lootbox VRF request index advances past the current fulfillment index, preventing any overlap between daily and lootbox VRF words. This asymmetry is intentional -- index advance isolation is proven equivalent to flag-based isolation for the lootbox path.
-
-
-**Decimator settlement temporarily over-reserves claimablePool.** During decimator settlement, the full decimator pool is reserved in `claimablePool` before individual winner claims are credited to `claimableWinnings`. This temporarily breaks the invariant `claimablePool == SUM(claimableWinnings[*])`, but the inequality is always in the safe direction: `claimablePool >= SUM(claimableWinnings[*])` (over-reserved, never under-reserved). The invariant is restored when all decimator claims are credited. Documented in DegenerusGameStorage NatSpec at L344-L345.
-
-**Gameover RNG substitution for mid-cycle write-buffer tickets.** Degenerus enforces an "RNG-consumer determinism" invariant: every RNG consumer's entropy must be fully committed at input time — the VRF word that a consumer will ultimately read must be unknown-but-bound at the moment that consumer's input parameters are committed to storage. One terminal-state case technically violates it: if a mid-cycle ticket-buffer swap has occurred (daily RNG request via `_swapAndFreeze(purchaseLevel)` at `DegenerusGameAdvanceModule.sol:292`, OR mid-day lootbox RNG request via `_swapTicketSlot(purchaseLevel_)` at `DegenerusGameAdvanceModule.sol:1082`) and the new write buffer is populated with tickets queued at the current level awaiting the expected-next VRF fulfillment, a game-over event intervening before that fulfillment causes those tickets to drain under the final gameover entropy (`_gameOverEntropy` at `DegenerusGameAdvanceModule.sol:1222-1246` — the gameover VRF word under normal conditions, or the VRF-plus-`block.prevrandao` admixture described in the "Gameover prevrandao fallback" entry above when an in-flight VRF request stays unfulfilled for 14+ days) rather than the originally-anticipated mid-day VRF word. The substitution applies in both gameover variants — it is NOT contingent on the prevrandao fallback activating. Acceptance rationale: (a) only reachable at gameover — a terminal state with no further gameplay after the 30-day post-gameover window; (b) no player-reachable exploit — gameover is triggered by a 120-day liveness stall or a pool deficit, neither of which an attacker can time against a specific mid-cycle write-buffer state; (c) at gameover the protocol must drain within bounded transactions and cannot wait for a deferred fulfillment that may never arrive if the VRF coordinator itself is the reason for the liveness stall; (d) all substitute entropy is VRF-derived or VRF-plus-prevrandao.
+Frozen subject: `contracts/` tree `f06b1ef6` @ impl `93d17288` (v74.0 As-Built Milestone Audit).
+Pre-audited with Slither v0.11.5 + 4naly3er (triaged DOCUMENT findings in the last section), eight
+isolated as-built cluster audits (Phases 468–473, 0 findings), and a Codex cross-model adversarial
+re-audit (Phase 475: 5 surfaces clean/by-design/refuted, 1 MEDIUM found → fixed in `93d17288`).
 
 ---
 
-## Automated Tool Findings (Pre-disclosed)
+## 1. Design decisions (architectural, not vulnerabilities)
 
-Slither 0.11.5 (1,959 raw findings, 29 detectors after triage) and 4naly3er (4,453 instances, 78 categories after triage).
+**All rounding favors solvency.** Every BPS calculation rounds down on payouts and up on burns;
+stETH transfers retain 1–2 wei per operation. The solvency invariant `balance >= claimablePool` is
+strengthened by rounding, never weakened. Wei-scale dust is not a finding. (Slither `[L-13]`,`[L-14]`)
 
-### ETH Transfer Safety
+**Daily-advance assumption.** The protocol assumes `advanceGame` is driven to completion each day.
+An escalating bounty (≈0.005→0.03 ETH-equiv over ~2h) plus the fact that the advance delivers jackpot
+payments makes daily calling economically rational. If skipped for multiple days the next call
+backfills gap days, **capped at 120 iterations** for gas safety; gap days beyond 120 are skipped
+(those coinflip stakes are frozen, not lost or burned). This requires a sustained 4-month outage.
 
-**Payout functions send ETH to user-supplied addresses.** `_payoutWithStethFallback`, `_payoutWithEthFallback`, `_payEth` (4 instances) send ETH via `.call{value:}`. Destinations are `msg.sender` or player addresses from game state -- all paths have access control. (Detector: `arbitrary-send-eth`)
+**Non-VRF entropy for the affiliate winner roll.** Deterministic seed (gas optimization). Worst case:
+a player times purchases to direct affiliate credit to a different affiliate. No protocol value is
+extracted. (Slither `arbitrary-send` family / event-only.)
 
-### Missing Event for claimablePool Decrement
+**VRF-coordinator + price-feed swap governance.** Emergency rotation is sDGNRS-governed behind a
+death-clock: a VRF-swap proposal cannot be created until VRF has stalled `ADMIN_STALL_THRESHOLD =
+44 hours` (vault-owner path) / longer (0.5%-sDGNRS community path); the vote threshold decays 50%→5%
+over a 168h lifetime and requires approve-weight > reject-weight. A proposal is auto-killed the
+moment VRF recovers or a word is fulfilled after creation (see §3 "kill-on-recovery"). Feed swap
+requires the feed unhealthy 2d (admin) / 7d (community); a down feed only suspends LINK→FLIP donation
+credit (LINK donations still process). This is the intended trust model (see SECURITY.md).
 
-**resolveRedemptionLootbox decrements claimablePool without dedicated event.** Higher-level redemption events capture the full context. The variable is a running tally, not a user-facing balance. (Detector: `events-maths`)
+**Decimator settlement temporarily over-reserves claimablePool.** During settlement the full
+decimator pool is reserved in `claimablePool` before individual winner claims are credited, so
+`claimablePool == Σ claimableWinnings` is momentarily replaced by `claimablePool >= Σ claimableWinnings`
+(over-reserved, never under). Restored when all decimator claims credit. The as-built fold uses a
+single aggregate decrement; the invariant doc is the `>=` (over-reserve) form by design.
 
-### Centralization Risk
-
-**Admin functions gated by onlyOwner (7 instances).** DegenerusAdmin critical functions (VRF coordinator swap, price feed swap) require sDGNRS governance vote. Remaining onlyOwner functions are operational (staking) and deity pass metadata. Admin cannot drain game funds -- ETH flows are contract-controlled. (Detector: `[M-2]`)
-
-### Chainlink Price Feed
-
-**LINK/ETH feed used for LINK donation valuation only.** Feed swap is governance-gated (2d+ admin / 7d+ community stall + sDGNRS vote). If the feed is stale or down, LINK donations still process but no BURNIE credit is issued. A compromised feed cannot cause damage without passing governance. (Detector: `[M-3]`)
-
-### No SafeERC20 Wrappers
-
-**Protocol uses `.transfer()`/`.transferFrom()` with return value checks instead of SafeERC20.** Only interacts with known tokens (stETH, BURNIE, LINK, wXRP) that return bool per standard. SafeERC20 would add ~2,600 gas/call for no benefit with these specific tokens. (Detectors: `[M-5]`, `[M-6]`, `[L-19]`)
-
-### abi.encodePacked Hash Collision
-
-**abi.encodePacked used for entropy derivation and SVG strings (35 instances).** Entropy inputs are fixed-width (uint256, address) -- no collision possible. SVG string results are not used as keys. No exploitable collision path. (Detector: `[L-4]`)
-
-### Division by Zero
-
-**All divisors have implicit guards (27 instances).** BPS constants are non-zero, supply checks revert on zero, level-derived values guarantee non-zero during active game. (Detector: `[L-7]`)
-
-### External Call Gas Consumption
-
-**`.call{value:}("")` forwards all gas (11 instances).** Recipients are player addresses (self-grief only) or known protocol contracts with minimal receive() logic. CEI pattern followed. Gas-limited calls would risk breaking legitimate receives. (Detector: `[L-9]`)
-
-### Burn/Zero-Address Handling
-
-**Protocol burn functions are intentional operations (67 instances).** BURNIE burn mechanics, sDGNRS gambling burn, GNRUS burn redemption are all by design. Internal functions use msg.sender/contract-to-contract paths ensuring valid addresses. (Detector: `[L-12]`)
-
-### Unchecked Downcasting
-
-**Intentional for storage packing (50 instances).** All downcasts preceded by range validation or mathematically guaranteed to fit (e.g., BPS < 10,000 fits uint16, timestamps < 2^48 fits uint48). SafeCast would add redundant gas overhead. (Detector: `[L-18]`)
-
-### Missing address(0) Checks
-
-**BurnieCoinflip bountyOwedTo from game logic (always valid player), DeityPass renderer setter is admin-only (2 instances).** Neither can result in fund loss if zero. (Detector: `[NC-2]`)
-
-### Magic Numbers
-
-**Bit positions/masks in assembly, small obvious arithmetic, BPS values documented in NatSpec.** Named constants used where readability matters. Remaining literals are documented via NatSpec comments. (Detectors: `[NC-6]`, `[NC-34]`)
-
-### Event Indexed Fields
-
-**Some events omit indexed on fields not useful as filter keys.** Key indexer-critical events (player actions, game state transitions) are properly indexed. Bookkeeping events intentionally omit indexes. (Detectors: `[NC-10]`, `[NC-33]`)
-
-### Event Missing Old+New Values
-
-**Parameter-change events emit new value only (6 instances).** Admin operations are infrequent. Adding old value would increase gas for minimal debugging benefit. (Detector: `[NC-11]`)
-
-### Long Functions
-
-**Complex game logic necessarily exceeds 50 lines (377 instances).** Splitting increases gas via call overhead. Organized with NatSpec section banners for readability. (Detector: `[NC-13]`)
-
-### Setter Validation
-
-**Admin-only setters trust admin (23 instances).** Critical setters (VRF swap, price feed swap) have governance checks. Non-critical setters (renderer) trust the admin. (Detector: `[NC-16]`)
-
-### Missing Parameter Change Events
-
-**27 instances covered by Phase 132 event audit.** 24 INFO findings (all DOCUMENT). (Detector: `[NC-17]`)
-
-### Unchecked Arithmetic
-
-**Protocol uses unchecked blocks strategically (1,054 flagged instances).** Remaining checked arithmetic is intentional safety margin. Gas ceiling analysis (v3.5 Phase 57) confirmed all critical paths within block gas limit. (Detector: `[GAS-7]`)
+**Lido stETH dependency.** Prize-pool growth depends on staking yield; if yield→0 the positive-sum
+margin disappears but the protocol stays solvent (the solvency invariant does not depend on yield).
+Negative rebases are absorbed by an 8% buffer.
 
 ---
 
-## ERC-20 Deviations
+## 2. By-design rulings (KI-01) — locked, mechanism-and-impact specific
 
-DGNRS and BURNIE are ERC-20 tokens with 4 intentional deviations. sDGNRS and GNRUS are soulbound (not ERC-20) -- filing ERC-20 compliance issues against them is invalid.
+**RTP > 100% is intended.** Several games are calibrated above break-even by design (the protocol's
+positive-sum stETH yield funds it). Specifically: the Degenerette activity-ROI curve runs 90%→99.9%;
+the WWXRP-currency Degenerette RTP curve runs 70%→115%→118%→120% (70% floor). A finding that "EV/RTP
+exceeds 100%" or "the house can lose on a spin" is not a bug — the pins are byte-fixed and were
+re-derived at v73 close. Net protocol drain still respects solvency (curse/pay-floor S≥2 bounded).
 
-**DGNRS blocks transfer to its own contract address.** `_transfer` reverts with `Unauthorized()` when `to == address(this)`. EIP-20 does not restrict recipients. This prevents accidental token lockup since DGNRS held by the contract is indistinguishable from the sDGNRS-backed reserve. Intentional design.
+**Positive-EV lootbox and coinflip are intended.** Lootbox open EV and coinflip payout schedules are
+deliberately player-favorable (same yield-funded rationale). Do not file "player can profit in
+expectation from opening boxes / flipping."
 
-**BURNIE game contract bypasses transferFrom allowance.** The DegenerusGame contract can call `transferFrom` without prior approval. This is the trusted contract pattern -- the game address is a compile-time immutable constant, not upgradeable. Enables seamless gameplay transactions without pre-approval UX. All other callers require standard allowance.
+**WWXRP is intentionally worthless as a token.** `mintPrize` creates unbacked WWXRP; `unwrap` is
+first-come-first-served against real `wXRPReserves`. WWXRP's value is *not* its redeemability — it is
+that holding it confers a near-unfarmable whale-pass position in Degenerette. Undercollateralization,
+mint-without-backing, and unwrap starvation are all documented design, not findings.
 
-**BURNIE transfer/transferFrom may auto-claim pending coinflip winnings.** Before executing a transfer, `_claimCoinflipShortfall` checks if the sender has insufficient balance and auto-claims pending coinflip BURNIE from the trusted BurnieCoinflip contract (compile-time constant). This mints tokens before the transfer, which is non-standard ERC-20 behavior. Intentional UX design -- players can spend winnings without a separate claim step. The coinflip contract is immutable and trusted.
+**capBucketCounts cap imprecision is by-design-fine.** The jackpot bucket-count cap can be imprecise
+at the margin but **never overfills a solo bucket by more than 1** — the imprecision cannot create an
+extra full payout slot. CLOSED; do not re-flag bucket-count exactness.
 
-**BURNIE sent to VAULT is burned, not transferred.** `_transfer` special-cases `to == ContractAddresses.VAULT` -- tokens are burned (totalSupply reduced) and added to vault's virtual mint allowance. The VAULT uses a virtual reserve model where `balanceOf[VAULT]` is always 0 and the actual reserve is tracked in `_supply.vaultAllowance`. Emits `Transfer(from, address(0))` (burn event). Intentional architecture.
+**Lootbox live-open-level is not manipulable.** A box's EV is frozen at *deposit* (level/boon/deity
+parameters are fixed then); the permissionless auto-opener removes any open-timing edge. Waiting to
+open, or steering the open day/level, changes nothing. Do not re-flag day/level/wait-to-open steering.
 
+**Presale over-credit is WONTFIX (bounded).** PRESALE-01 can over-credit, but the amount is bounded,
+presale-only, and the presale itself is 50-ETH-capped. Accepted.
+
+**Redemption-dust lootbox drop is anti-farm, not a bug.** On sDGNRS redemption a lootbox half below
+0.01 ETH is dropped into `claimable[SDGNRS]` rather than spawning a dust box. This is deliberate
+anti-dust-farming; the value accrues to sDGNRS, not lost.
+
+**Afking pass-eviction inclusive boundary is intended.** A pass is kept while
+`currentLevel <= validThroughLevel` and evicted at `+1` — one level more lenient than a strict
+boundary, by design. Not an off-by-one.
+
+**claimBingo has no level guard.** `claimBingo(address, uint24 level, …)` has no level gate because
+bingo traits pre-resolve to `currentLevel+5` and 8-color ownership self-gates the claim; the
+`uint24 level` argument is informational. The as-built version is sender-or-approved with
+player-keyed dedup (see §3 permissionless boundary). Not a missing-guard finding.
+
+**Genesis admin self-break is a NON-finding.** An admin (or anyone) breaking their *own* game at
+genesis, when `sDGNRS.votingSupply() == 0` (no engaged community yet), is not a vulnerability — there
+is no victim. An admin-power finding must exhibit an **engaged-community victim**: a snapshot with
+`votingSupply > 0`. Genesis-only griefs are out of scope.
+
+---
+
+## 3. v74 cross-model (Phase 475) dispositions — defended / by-design
+
+### (a) The > 120-day VRF-DEATH deadman fallback (accepted super-fallback — do NOT submit)
+
+**Mechanism.** When the game has not sealed a day for more than 120 days
+(`_vrfDeadmanFired ≡ _simulatedDayIndex() − dailyIdx > 120`, `DegenerusGameStorage.sol:1502-1504`;
+`dailyIdx` is uint24 and always `<= _simulatedDayIndex()` so no underflow), the terminal release no
+longer waits for Chainlink. `_getHistoricalRngFallback` (`DegenerusGameAdvanceModule.sol:1444-1468`)
+commits a fallback word from sealed historical `rngWordByDay` admixed with `block.prevrandao`; the
+`reverseFlip` nudge is cancelled-and-consumed (`unchecked fallbackWord -= totalFlipReversals`,
+`:1395`, against the `+=` in `_applyDailyRng :2023-2030`).
+
+**Why a block proposer's 1-bit `prevrandao` grind over the terminal distribution is accepted:** this
+path is reachable **only** after a catastrophic, unrecovered Chainlink VRF death — VRF itself dead
+**and** the 44h-gated governance coordinator-swap having failed to land a replacement for **> 120
+days**. At that point the only alternatives are (1) brick the contract forever with funds trapped, or
+(2) release funds under a slightly-grindable-but-VRF-derived terminal word. The owner ruling (v68
+precedent) is that fund-recovery beats a permanent brick. The deadman only removes a delay that would
+otherwise have elapsed anyway; it adds no new advance-chain composition and steers nothing on a live
+chain. RNG steering on a *live* Chainlink coordinator remains fully in scope — this exclusion is the
+dead-coordinator terminal fallback only.
+
+### (b) Post-gameover ticket insertion & sDGNRS-box sizing — structurally prevented (invariants)
+
+These two vectors were examined by the cross-model pass and are *prevented by construction*, framed
+here as invariants so a warden does not re-derive them as issues:
+
+- **No queue-window / post-reveal ticket ever resolves a manipulable jackpot.** The per-sink liveness
+  gate was removed from `_queueTickets` / `_queueTicketsScaled` / `_queueTicketRange` (the advance
+  chain itself queues through them), but those sinks keep the far-future `rngLocked` revert
+  (`DegenerusGameStorage.sol:652,683,744`) and the *purchase entry points* still revert under
+  liveness/game-over (`DegenerusGameMintModule.sol:956,1116,1370,1834`). The write→read ticket-slot
+  swap freezes at RNG-request time (`_swapAndFreeze`, `:437,1762-1765`), so any ticket queued during
+  an open RNG window lands in the *write* slot and cannot resolve against the current word.
+  Lootboxes cannot be opened after game-over. Result: no player ticket can enter the
+  liveness/game-over window, and none queued during an RNG window resolves against a known word.
+- **The sDGNRS level-start box is sized strictly before its word is requested.** The once-per-level
+  box (`GameAfkingModule.sol:1170-1198`) reads a LIVE `cl = _claimableOf(SDGNRS)`, sizes
+  `box = min(cl/20, 6 ether)` floored at `mp`, and runs inside `_runSubscriberStage`
+  (`DegenerusGameAdvanceModule.sol:385`) which executes **before** `rngGate` (`:428`) — so
+  `rngWordByDay[processDay]` is not even requested when `box` is fixed. The `currentLevel >
+  _sdgnrsBonusLevel` latch (`:1170`) prevents re-sizing after the word becomes knowable. Inflating
+  sDGNRS's own claimable before the read only enlarges sDGNRS's own self-funded box (positive-EV
+  lootbox is by-design) and cannot steer an unknown word; the `cl > mp` guard keeps the 1-wei sentinel.
+
+---
+
+## 4. Carried items — defended / out-of-scope (NOT accepted vulnerabilities)
+
+**Mid-day re-roll single-writer `requestId` guard — RE-CHECKED against the as-built fold.** This batch
+removed `retryLootboxRng` and folded mid-day stalled-RNG recovery into the daily advance
+(`MIDDAY_RNG_STALL_TIMEOUT = 4h`). Re-check result: the carried `== 0` single-writer guard still
+holds. Mid-day abandon-and-promote (`DegenerusGameAdvanceModule.sol:316-329`) fires only when the
+reserved bucket is empty and `rngWordCurrent == 0`; `_finalizeRngRequest`'s `isRetry` path preserves
+the reserved bucket index (`lootboxRngIndex − 1`, skipping `_lrAdvanceIndexClearPending`); and a stale
+mid-day `requestId` can never be honored later because `rawFulfillRandomWords` drops it via
+`requestId != vrfRequestId || rngWordCurrent != 0` (`:1941`). No entropy reroll, no double-resolution.
+Defended — not a finding.
+
+**423 VRF rotation-timer governance-malice — out of scope.** A malicious sDGNRS-governance majority
+abusing the coordinator-swap path is out of scope per the trust model (governance malice requires the
+engaged community to vote against its own interest, and is bounded by the 44h death-clock + decaying
+threshold). The rotation backstop is non-resettable on the 120/365-day horizon. See SECURITY.md role 1.
+
+**Affiliate floor-of-sum rounding — immaterial.** The combined `payAffiliateCombined` roll uses a
+floor-of-sum instead of a sum-of-floors, but the divergence is at most ~3 FLIP of quest-rounding per
+transaction (a coin credit, not ETH-backed value). Immaterial; documented, not eligible.
+
+---
+
+## 5. Documentation-correction notes (stale NatSpec / comments — code is correct)
+
+The frozen tree's comments are **not** being re-touched this milestone, so these stale-NatSpec items
+are disclosed rather than edited. In each, the code reverts/behaves correctly; only the `@custom:reverts`
+annotation or a comment names the wrong error. **None is a vulnerability.** (Catalogued in Phase 472 §4.)
+
+1. `DegenerusGameGameOverModule.sol:72` — annotated `@custom:reverts ZeroValue`; code reverts
+   `Invariant` (rngWord==0, `:94`) / `TransferFailed` (`:258,262,267`).
+2. `DegenerusGameWhaleModule.sol:182` — `MinQuantityRequired` annotated as value-mismatch; it actually
+   fires on `passLevel % 100 == 0 && quantity < 2` (`:252`).
+3. `DegenerusGameWhaleModule.sol:401` — names only `OnlyDelegatecall`; also reverts
+   `InvalidLevelForPass` / `DeityPassConflict` / `PassNotExpired` (`:439,445,451`).
+4. `DegenerusGameWhaleModule.sol:553-554` — conflates `InvalidSymbol` (`:562`) with `SymbolTaken`
+   (`:563`); `GameOver` (`:561`) mislabeled as value-mismatch.
+5. `DegenerusGame.sol:543` — `newThreshold == 0` reverts `ZeroValue` (`:546`), not `OnlyVault`.
+6. `DegenerusGame.sol:1698` — also reverts `Insolvent` / `TransferFailed` (`:1712`), not only `OnlySDGNRS`.
+7. `DegenerusGame.sol:1830/1851` — bundle conditions revert `ZeroAddress`/`ValueMismatch` (`:1837,1838`)
+   and `ZeroValue`/`Insolvent`/`TransferFailed` (`:1855`), not as annotated.
+8. `DegenerusGameStorage.sol:2225` — the `Sub` comment `// --- config (48 bits) ---` is stale; after
+   the `reinvestPct` removal the config group is 40 bits.
+9. `DegenerusAdmin.sol:748` — the `vote()` NatSpec still says "Reverts if VRF has recovered
+   (stall < 20h)"; as-built it **kills** (not reverts) on recovery and the threshold is **44h**
+   (post-475 fix). Code is correct; the comment is stale.
+
+---
+
+## 6. Observability / indexer-parity delta (not a contract finding)
+
+**Standard buys now emit `AffiliateEarningsRecorded`, not the legacy `Affiliate(...)`.** The
+purchase-path affiliate roll was folded into `payAffiliateCombined`, which emits exactly one
+`AffiliateEarningsRecorded(…, combined=true)` (`DegenerusAffiliate.sol:648`) and early-returns before
+any emit when `sumScaled == 0` (`:643`). Standard ticket/lootbox buys no longer emit
+`Affiliate(amount, code, sender)`. An indexer deriving buy-path affiliate volume from `Affiliate(...)`
+must switch to `AffiliateEarningsRecorded`. The foil-pack path still co-emits both legacy `Affiliate`
+and the new event. `claimBingo` retargets `FirstQuadrantBingo`/`FirstSymbolBingo`/`BingoClaimed` to
+the resolved `player` (not `msg.sender`). Observability-only; no value flow changed.
+
+---
+
+## 7. Automated tool findings (pre-disclosed)
+
+Slither 0.11.5 (1,959 raw, 29 detectors after triage) + 4naly3er (4,453 instances, 78 categories).
+Token names below reflect the current tree (FLIP = the coin formerly "BURNIE"; Coinflip = formerly
+"BurnieCoinflip"; WWXRP; sDGNRS; DGNRS).
+
+**Arbitrary-send-eth.** `_payoutWithStethFallback` / `_payoutWithEthFallback` / `_payEth` send ETH via
+`.call{value:}` to `msg.sender` or player addresses read from game state — all access-controlled.
+
+**events-maths.** `resolveRedemptionLootbox` decrements `claimablePool` without a dedicated event;
+higher-level redemption events capture the context (the variable is a running tally, not a balance).
+
+**Centralization `[M-2]`.** Critical admin functions (VRF/feed swap) require sDGNRS governance; the
+remaining `onlyOwner` functions are operational (staking) or deity-pass metadata. Admin cannot drain
+game funds — ETH flows are contract-controlled.
+
+**Chainlink feed `[M-3]`.** LINK/ETH feed values LINK donations only; swap is governance-gated; a
+stale/down feed suspends FLIP donation credit but processes the donation.
+
+**No SafeERC20 `[M-5]/[M-6]/[L-19]`.** `.transfer()`/`.transferFrom()` with return-value checks; only
+known tokens (stETH, FLIP, LINK, wXRP) that return bool per standard are touched. SafeERC20 adds
+~2,600 gas/call for no benefit here.
+
+**abi.encodePacked `[L-4]`.** 35 instances; entropy inputs are fixed-width (uint256/address) — no
+collision; SVG string results are not used as keys.
+
+**Division-by-zero `[L-7]`.** 27 instances; all divisors have implicit guards (non-zero BPS, supply
+checks revert on zero, level-derived non-zero during active game).
+
+**External-call gas `[L-9]`.** 11 `.call{value:}("")` forward all gas; recipients are player addresses
+(self-grief only) or known protocol contracts with minimal `receive()`. CEI followed.
+
+**Burn / zero-address `[L-12]`.** 67 instances; FLIP/sDGNRS/GNRUS burn mechanics are intentional;
+internal paths use `msg.sender` / contract-to-contract addresses.
+
+**Unchecked downcasting `[L-18]`.** 50 instances; each preceded by range validation or mathematically
+guaranteed to fit (BPS < 10,000 → uint16, timestamps < 2^48 → uint48).
+
+**Missing address(0) `[NC-2]`.** Coinflip `bountyOwedTo` comes from game logic (always valid player);
+the DeityPass renderer setter is admin-only. Neither loses funds if zero.
+
+**Magic numbers / event indexing / old+new values / long functions / setter validation / unchecked
+arithmetic** (`[NC-6]`,`[NC-10]`,`[NC-11]`,`[NC-13]`,`[NC-16]`,`[NC-17]`,`[GAS-7]`): documented
+conventions — named constants where readability matters, indexes on filter-key fields only, new-value
+events for infrequent admin ops, NatSpec-bannered long game functions, governance-checked critical
+setters, strategic unchecked blocks within the proven < 16.7M ceiling.
+
+---
+
+## 8. ERC-20 deviations
+
+FLIP and DGNRS are ERC-20 with intentional deviations. **sDGNRS and GNRUS are soulbound (not ERC-20)
+— filing ERC-20-compliance issues against them is invalid.**
+
+**DGNRS blocks transfer to its own contract address.** `_transfer` reverts `Unauthorized()` when
+`to == address(this)` — DGNRS held by the contract is indistinguishable from the sDGNRS-backed
+reserve. Prevents accidental lockup. EIP-20 does not restrict recipients; intentional.
+
+**The game bypasses FLIP `transferFrom` allowance.** `DegenerusGame` (a compile-time immutable
+constant) can `transferFrom` without prior approval — the trusted-contract pattern enabling
+no-pre-approval gameplay. All other callers require standard allowance.
+
+**FLIP transfer/transferFrom may auto-claim pending coinflip winnings.** Before a transfer with
+insufficient balance, the sender's pending coinflip FLIP is auto-claimed from the trusted (immutable)
+Coinflip contract, minting before the transfer. Non-standard but intentional UX; the Coinflip contract
+is immutable and trusted.
+
+**FLIP sent to VAULT is burned, not transferred.** `_transfer` special-cases `to == VAULT`: tokens are
+burned (totalSupply reduced) and added to the vault's virtual mint allowance (`balanceOf[VAULT]` is
+always 0; the reserve lives in `_supply.vaultAllowance`). Emits `Transfer(from, address(0))`.
+Intentional virtual-reserve architecture.
