@@ -77,8 +77,8 @@ import {
   ZERO_BYTES32,
 } from "../helpers/testUtils.js";
 import {
-  computeBaseKey,
-  raritySymbolBatchRef,
+  raritySymbolBatchRefV42,
+  decodeOwedFromBaseKey,
 } from "../helpers/raritySymbolBatchRef.mjs";
 
 const ZERO_ADDRESS = hre.ethers.ZeroAddress;
@@ -100,17 +100,18 @@ function parseTraitsGeneratedEvents(receipt, storage) {
       parsed = null;
     }
     if (parsed && parsed.name === "TraitsGenerated") {
+      // Post-MINTCLN the event compresses to (player, baseKey, take): baseKey
+      // packs lvl(255:232) | queueIdx(231:192) | player(191:32) | owed(31:0);
+      // take is the per-call count. Entropy is no longer in the event — it is
+      // the pinned daily VRF word (DAILY_ENTROPY) sourced at the call site.
+      const baseKey = BigInt(parsed.args.baseKey);
       events.push({
         player: parsed.args.player,
-        level: Number(parsed.args.level),
-        queueIdx: Number(parsed.args.queueIdx),
-        // 4th positional field carries owed_at_call_entry post-Phase-281
-        // (D-281-STARTINDEX-SEMANTICS-01). The ABI field is still named
-        // `startIndex` for byte-equivalence (FIX-03) but its semantic meaning
-        // is the owed count read at outer-loop iteration entry.
-        owedAtCallEntry: Number(parsed.args.startIndex),
-        count: Number(parsed.args.count),
-        entropy: BigInt(parsed.args.entropy),
+        level: Number(baseKey >> 224n),
+        queueIdx: Number((baseKey >> 192n) & 0xFFFFFFFFn),
+        owedAtCallEntry: decodeOwedFromBaseKey(baseKey),
+        count: Number(parsed.args.take),
+        baseKey,
         txHash: log.transactionHash,
       });
     }
@@ -194,11 +195,11 @@ function reconstructMultisetWithAccumulator(events, pathAccumulator) {
   annotateStartIndices(events, pathAccumulator);
   const multiset = new Map();
   for (const e of events) {
-    const baseKey = computeBaseKey(e.level, e.queueIdx, e.player);
-    const traits = raritySymbolBatchRef({
-      baseKey,
-      entropyWord: e.entropy,
-      ownedSalt: e.owedAtCallEntry,
+    // owed is carried in the emitted baseKey low 32 bits (V42 encoding); the
+    // daily VRF word is the pinned DAILY_ENTROPY.
+    const traits = raritySymbolBatchRefV42({
+      baseKey: e.baseKey,
+      entropyWord: DAILY_ENTROPY,
       startIndex: e.startIndexForReplay,
       count: e.count,
     });
@@ -734,12 +735,11 @@ describe("MintBatchDeterminism — Phase 282 v41.0 multi-call drain regression",
           `slot ${slot}: single-call drain must have owed_at_call_entry == count`
         );
 
-        // JS reference replay against the emit-time inputs.
-        const baseKey = computeBaseKey(e.level, e.queueIdx, e.player);
-        const refTraits = raritySymbolBatchRef({
-          baseKey,
-          entropyWord: e.entropy,
-          ownedSalt: e.owedAtCallEntry,
+        // JS reference replay against the emit-time inputs (owed folded into the
+        // emitted baseKey; entropy is the pinned DAILY_ENTROPY).
+        const refTraits = raritySymbolBatchRefV42({
+          baseKey: e.baseKey,
+          entropyWord: DAILY_ENTROPY,
           startIndex: 0,
           count: e.count,
         });
