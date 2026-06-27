@@ -1,120 +1,159 @@
-# Roadmap — Milestone v74.0 — C4A Readiness: Live Adversarial Agent + Final Finding-Squash + Scope/Known-Issues Package
+# Roadmap — Milestone v74.0 — As-Built Milestone Audit + C4A Package (supersedes the v74 "C4A Readiness" plan)
 
-> **Subject:** the v73.0 byte-frozen contract subject — `contracts/` tree `d6615306` @ IMPL `64ec993e`, closure `MILESTONE_V73_AT_HEAD_15650b6a…` (0 CAT/0 HIGH/0 MED/0 LOW). HEAD is 1 commit ahead = `DegenerusGasFaucet.sol` (owner-deprioritized → documented out-of-scope).
-> **Posture (default):** **no contract LOGIC change** → subject stays byte-frozen. Two workstreams, one engine: a live adversarial agent whose runtime invariant oracle == the C4A package's Main-Invariants section (single shared manifest, MAN-01).
-> **The ONLY possible approval gate is the conditional 464 SQUASH-GATE** — it fires only if the agent campaign surfaces a real defect, or the owner overrides a carried item to FIX. Under the current disposition (both carried items = DOCUMENT/defended) **464 is expected to be a no-op and v74 ships gate-free.** Everything else (docs, tests, the agent, findings) commits autonomously.
-> **Numbering continues 456 → 457.** No research (readiness + adversarial testing of existing frozen source).
-> **Owner constraints (`.planning/v74-grounding/CONSTRAINTS.md`):** accelerated 15-min game-days + honest actors 24/7 → live multi-actor soak practical; oracle = per-actor net-P&L-vs-EV robust to honest flow, solvency global across all actors. The agent is a real EXTERNAL attacker on the live, independently-run testnet (no fork / no environment control — it doesn't deploy/clock/VRF/stETH/drive honest actors); the existing Foundry invariant suite stays a separate in-repo white-box net.
-> **Carried-item dispositions (owner-adjudicated 2026-06-21, both downgraded from LOW):** (A) mid-day VRF "re-roll" = single-writer-guarded by `requestId == vrfRequestId`, no reachable double-write → INFO note; (B) VRF rotation-timer notes = governance-malice out-of-scope per trust model + bounded by the non-resettable 120/365-day backstop → trust-model entry. Neither warrants a contract change.
-> **Grounding:** `.planning/v74-grounding/SYNTHESIS.md` (5-report fan-out) + `CONSTRAINTS.md`.
+> **Subject (BYTE-FROZEN at HEAD):** the `v73.0 → HEAD` diff — `3986926c` ("sDGNRS level lootbox + pre-deploy hardening batch"), **29 contract files, +1861/−1030**, never milestone-audited. Frozen baseline = local HEAD `3986926c` (on `main`, not pushed). Resets off v73.0 closure `MILESTONE_V73_AT_HEAD_15650b6a…` (`contracts/` tree `d6615306` @ `64ec993e`).
+> **Supersedes:** the prior "v74.0 — C4A Readiness" plan (457–465, never tagged) whose no-contract-change premise was overtaken by this batch. Old plan archived → `milestones/v74.0-superseded-plan-{ROADMAP,REQUIREMENTS}.md`. The already-built live agent + 24/7 soak + partial package carry forward in place. **Numbering continues 465 → 466.**
+> **Posture:** the subject is already committed; the milestone *verifies* it. The **SOLE possible contract-commit gate** is the conditional squash at 475/478 — fires only if the re-audit surfaces a real defect. Verify/harness/audit/manifest/agent/package/findings work commits autonomously.
+> **Method:** verify → freeze-confirm → harness-green → 6-cluster code audit → manifest re-point → cross-model re-audit → live agent/soak re-attest → C4A package → terminal. Cross-model finder = **Codex** (primary); the Gemini CLI is currently unavailable — re-check before leaning on a council.
+> **Threat weighting (locked):** DOMINANT RNG/freeze · HIGH gas-DoS in advanceGame (>16.7M = game-over) · SPINE solvency/backing · LOWER access/reentrancy/MEV.
+> **Grounding:** `.planning/v74-grounding/v74.0-asbuilt-audit-map.md` (8-cluster change-map + 8 ranked attack surfaces) + `v74.0-asbuilt-map-RAW.json`.
 
 ---
 
-## Phase 457 — SCOPE (docs only)
+## Phase 466 — SUBJECT-FREEZE-CONFIRM
 
-**Goal:** Regenerate the contest scope from the frozen tree so it names only contracts that exist, and produce the in-scope-only SLOC table.
+**Goal:** Byte-freeze the audit subject at HEAD `3986926c`, resolve the 2 dirty test files, and capture the storage-layout golden so the whole milestone pins to one immutable tree.
 
-**Requirements:** SCOPE-01, SCOPE-02, SCOPE-03
-
-**Success criteria:**
-1. `scope.txt` lists every in-scope contract present at tree `d6615306` (deleted BurnieCoin/Stonk/EndgameModule removed; FoilPackModule/ActivityCurveLib added); `out_of_scope.txt` lists tests/mocks/interfaces/scripts + the gas faucet.
-2. An in-scope-only file + nSLOC table is produced (from `report.md` minus mocks/tests/scripts) and is internally consistent with `scope.txt`.
-3. `report.md` + `ADERYN-TRIAGE.md` reflect current static-analysis triage at HEAD (no stale pre-gas-faucet rows).
-
-## Phase 458 — RENAME + SECURITY (docs only)
-
-**Goal:** Purge stale names from all contest docs and author the security/trust-model + prior-audits material.
-
-**Requirements:** PKG-01, PKG-02, PKG-03, PKG-04
+**Requirements:** SUBJ-01, SUBJ-02, SUBJ-03, SUBJ-04
 
 **Success criteria:**
-1. No contest-facing doc names a renamed-away or deleted symbol (BURNIE/BurnieCoin/BurnieCoinflip/Stonk/DGVB grep-clean across the package docs).
-2. `SECURITY.md` exists describing the security model, trust assumptions, and disclosure posture.
-3. A trusted/restricted-roles table documents every privileged role (owner/keeper/VRF-coordinator-governance/etc.), exactly what each is trusted to do, and what is assumed-honest — including the governance-malice-out-of-scope line that carries carried-item B.
-4. A Prior-Audits summary lists the v62–v73 audits (method · verdict · frozen-subject hash · the v73 forge 943/0/108 floor).
+1. `git diff HEAD -- contracts/` is empty; the frozen `contracts/` tree hash + impl commit `3986926c` are recorded as the subject.
+2. The 2 dirty liveness `.test.js` files are committed or explicitly quarantined out of the frozen subject.
+3. A by-name `forge inspect storageLayout` golden exists and shows no top-level slot move vs v73 — only the within-slot `Sub` repack + the additive `_sdgnrsBonusLevel` (slot 58 offset 25; `boxPlayers` slot 59 unchanged; `WHALE_PASS_TYPE_SHIFT` bit 152).
+4. A closure baseline `MILESTONE_V74_AT_HEAD_<sha>` is defined distinct from the stale v73 `d6615306` pin; push posture recorded (local HEAD = subject; push not required).
 
-## Phase 459 — KNOWN-ISSUES (docs only)
+## Phase 467 — HARNESS-GREEN-GATE (test-only)
 
-**Goal:** Build the precise known-issues perimeter and assemble the contest README in C4 section order.
+**Goal:** Bring the full forge + Hardhat suite to green at frozen HEAD, re-deriving every slot-hardcoded harness broken by the `Sub` repack and de-flaking the deferred liveness tests.
 
-**Requirements:** KI-01, KI-02, KI-03, KI-04
-
-**Success criteria:**
-1. Every by-design quirk has a known-issue entry naming (a) the specific function/mechanism, (b) the precise conceded behavior, (c) the accepted worst-case impact — covering FoilPack, Degenerette Variant-2, the WWXRP rig (m≥7-cap / +2-color-unlock / never-S=9), Bingo, Afking. No vague blanket disclaimers.
-2. The two carried items are documented per their adjudicated disposition (KI-02): A as an INFO single-writer-guard note, B via the trust-model + bounded-liveness line — framed as defended/out-of-scope, not accepted vulnerabilities.
-3. `DegenerusGasFaucet.sol` is explicitly listed out-of-scope with its reason.
-4. A single contest README is assembled in current C4 section order (audit-details · warden notes · automated-findings-out-of-scope · publicly-known-issues · overview · scope table · out-of-scope · areas-of-concern · main-invariants · trusted-roles · prior-audits · build/test/PoC).
-
-## Phase 460 — MANIFEST (docs + test-config only)
-
-**Goal:** Emit the single canonical invariant manifest shared by the README and the agent, and fix advertised-but-broken scripts.
-
-**Requirements:** MAN-01, MAN-02
+**Requirements:** HARN-01, HARN-02, HARN-03
 
 **Success criteria:**
-1. A machine-readable invariant manifest exists — each entry: id, identity statement, on-chain read/view, comparator/tolerance, source `file:line` — and is the verbatim source for the README Main-Invariants section.
-2. The manifest covers the runtime oracle set: SOLVENCY conservation, BACKING bound (incl. auto-rebuy carry + redemption legs), redemption segregation, per-(N,heroIsGold) EV ceiling, the held-fixed P(S=9)/RTP/ROI pins, the rig never-S=9 cap, and LIVENESS/no-brick + no-permanent-dead-state.
-3. The stale `package.json` scripts (`test:adversarial`, `test:adversarial:sepolia-actors`, `test:sim` → non-existent dirs) are fixed or removed; no advertised npm script fails.
+1. No slot-hardcoded `vm.store`/`vm.load` harness reads a stale `Sub` offset (all re-derived from the 466 golden).
+2. Every ABI-breaking selector/signature change is reflected in all JS + Foundry callers/tests; build green.
+3. Full `forge` suite green at HEAD (target ≥893/0); Hardhat green incl VRFGovernance 42/42 and the new `DegenerusGasFaucet`/`DegenerusQuests` suites; the 2 deferred liveness edge tests fold back to green.
 
-## Phase 461 — HARNESS-FIX (test-only, autonomous)
+## Phase 468 — AUDIT-SOLV-FOLD (SPINE)
 
-**Goal:** De-flake the suite and clear the carried stale stat anchors on the frozen tree.
+**Goal:** Prove backing/solvency conservation across the deferred/folded purchase-path writes, the combined affiliate credit return, the partial claim, and the new sDGNRS claimable→prize-pool routing.
 
-**Requirements:** HARN-01, HARN-02
-
-**Success criteria:**
-1. `block_timestamp` is pinned in `foundry.toml`; the `_deployProtocol` real-clock setUp flake no longer reproduces across repeated runs.
-2. The 6 stale `test:stat` surface/regression anchors (Jackpot/TraitUtils/EntropyLib/lootbox) are re-anchored to tree `d6615306`; the stat suite carries no known-red anchors.
-3. Full `forge` suite green at the v73 floor (943/0/108 or better) after the fixes.
-
-## Phase 462 — AGENT-BUILD (new files, autonomous)
-
-**Goal:** Build the connect-and-play live adversarial agent — a real EXTERNAL attacker — and validate it against the independently-running testnet.
-
-**Requirements:** AGT-01, AGT-02, AGT-03, AGT-04, AGT-05, AGT-06, AGT-07
+**Requirements:** SOLV-01, SOLV-02, SOLV-03, SOLV-04, SOLV-05, SOLV-06, SOLV-07, SOLV-08
 
 **Success criteria:**
-1. The agent CONNECTS to the running testnet from config (RPC + deployed addresses/ABIs from the sim-repo deployment) and holds its own funded wallet(s) — it does NOT deploy or drive the environment.
-2. The agent drives the full external action surface with valid action sequencing (mirrors the patterns in `test/fuzz/handlers/`), reading prices/payouts on-chain so the /1e6 testnet scaling is automatic.
-3. An off-chain per-actor ledger normalizes every value leg (ETH/sDGNRS/DGNRS/claimable/afking/vault) to one numeraire and tracks each wallet's realized net P&L vs its modeled EV.
-4. After each action the agent asserts the MAN-01 oracle by reading chain state; a violation is captured as a structured, replayable tx sequence (pre/post ledger + block); mocks (VRF, stETH) are treated as trusted — their quirks are not findings.
-5. The by-design allowlist + statistical gate are in place: the "win more than you should" alarm fires only on protocol-value profit beyond the EV bound by k·σ over a counted sample (mainnet-gas-viability flagged separately); allowlisted by-design behaviors do not alarm.
-6. The agent runs at live testnet pace as an external attacker (no fork / no time-control), watching the mempool/events to find honest-actor txs to target and to detect violations; a documented attack campaign runs and any repros are captured.
-7. The existing Foundry invariant suite continues as a SEPARATE in-repo white-box net; its results are recorded alongside the agent's (it is not the external agent).
+1. A written conservation proof (or invariant test) that the aggregate `claimablePool` and prize-pool folds equal the prior per-tier sums on all `payKind` branches (±lootbox), and no caller skips the pool decrement; the boon-consume reentrancy window exposes no inconsistent pool.
+2. `payAffiliateCombined` `winnerCredit` + buyer credit are fully accounted at the MintModule call site for referrer and noReferrer paths with `winner!=buyer` collision-safety; no unbacked credit minted.
+3. The sDGNRS-box backing path is shown solvency-safe (`claimablePool >= Σ claimable`, 1-wei sentinel preserved); partial `claimWinnings` caps exactly and leaves the sentinel pre-gameOver; the GameOver freeze-clear runs before any post-gameOver resolution / `_unfreezePool` on every path.
 
-## Phase 463 — AGENT-SOAK (new files + ops, autonomous)
+## Phase 469 — AUDIT-RNG-LIVENESS (DOMINANT + HIGH)
 
-**Goal:** Point the same agent at the live 15-min-day testnet for the realistic 24/7 multi-actor soak and triage what it finds.
+**Goal:** Re-audit the dominant RNG-freeze and high gas-liveness surfaces: VRF-death deadman, mid-day RNG recovery fold, queue-gate removal, fail-open swap, advance same-tx-composition guards, and the foil/mid-day timeout liveness.
+
+**Requirements:** RNG-01, RNG-02, RNG-03, RNG-04, RNG-05, LIVE-01, LIVE-02, LIVE-03, LIVE-04
+
+**Success criteria:**
+1. The deadman is shown non-premature, latched, gas-bounded, and driven by a non-steerable historical fallback word; its game-over drain stays under the per-tx ceiling in a worst-case test.
+2. Mid-day abandon-and-promote is shown single-resolution with the reserved bucket preserved and the stale `requestId` permanently unmatchable (no entropy-reroll); queue-window tickets are shown never to feed a terminal jackpot; the fail-open swap deferred branch is shown unreachable.
+3. The sDGNRS-box pre-RNG live-claimable sizing is shown non-steerable and the once-per-level latch non-re-firing; `didWork`/`drained` never falsely false on a finishing batch; the advance heartbeat cannot be bricked by the decode guards.
+
+## Phase 470 — AUDIT-ACCESS-PERMISSIONLESS
+
+**Goal:** Confirm every newly-permissionless / relaxed-stub / caller-funded-gift path settles value only to the owner and sources spend only from a consenting party, per the locked permissionless-settlement ruling, and that the admin governance timing is safe.
+
+**Requirements:** ACCESS-01, ACCESS-02, ACCESS-03, ACCESS-04, ACCESS-05, ACCESS-06, ACCESS-07
+
+**Success criteria:**
+1. An access-control matrix maps each relaxed/permissionless entrypoint to its resolution point and proves value settles only to the owner; no caller acts for an unconsenting player on a spend/gift path.
+2. Every gift path sources spend from `msg.sender` (or an approved operator's own player), never a non-consenting party; WWXRP gift-excluded; `claimBingo` operator-approval is non-bypassable and dedup player-keyed; `claimAffiliateDgnrs` moves no value from a non-consenting party.
+3. The 44h gate is shown sawtooth-safe; `vote()` kill-on-recovery terminal with no recovered-state vote window; `receive()` unable to revert/strand value; no live selector routes to the removed `GAME_ENDGAME_MODULE`.
+
+## Phase 471 — AUDIT-EV-RTP
+
+**Goal:** Re-verify the economy — foil and Degenerette payouts remain byte-equivalent at frozen-at-buy basis, the affiliate winner-distribution + quests streak changes are intended, and the activity-score skip and reinvest removal are behaviour-preserving.
+
+**Requirements:** EV-01, EV-02, EV-03, EV-04, EV-05, EV-06, EV-07
+
+**Success criteria:**
+1. A numeric proof that the foil score basis and the Degenerette `ResolveAcc` fold are byte-equivalent to v73 (EV / RTP / P(match-tier) pins held).
+2. The affiliate combined path is shown rounding/leaderboard/score-freeze equivalent to four calls; the single `handleAffiliate` hop confirmed reward-linear (or the divergence documented).
+3. The activity-score skip is shown behaviour-preserving (no consumer depends on a real score in the skipped case); `reinvestPct` shown fully removed; the century shield granted exactly once per threshold under the 1→5 jump and the afking-routed path.
+
+## Phase 472 — AUDIT-RENAME-WIRING-STORAGE
+
+**Goal:** Confirm the mechanical surface is truly inert — the named-error migration preserves every revert condition, the whaleBundle/WWXRP renames are value- and layout-neutral, the new events are observability-only, and interface↔module wiring is in lockstep.
+
+**Requirements:** WIRE-01, WIRE-02, WIRE-03, WIRE-04
+
+**Success criteria:**
+1. A per-swap table shows each named error replaces an identical condition; all stale-natspec mismatches are catalogued for correction.
+2. `grep` confirms 0 stale `WHALE_BUNDLE_TYPE_SHIFT` / `WrappedWrappedXRP` / `purchaseWhaleBundle` / `resolveBets(` / `retryLootboxRng` / `handleFoilPack` / `foilStreakBoost` references in `contracts/`.
+3. The `Sub` repack + `_sdgnrsBonusLevel` layout safety is re-confirmed against the 466 golden; every renamed selector + new return tuple is matched to its implementation and all callers/tests; the new events are confirmed value-flow-neutral with the affiliate single-emit indexer-parity documented.
+
+## Phase 473 — AUDIT-GAS-FAUCET (newly in-scope, dormant)
+
+**Goal:** Re-attest the standalone `DegenerusGasFaucet` as structurally clean — it custodies only donated ETH, reads protocol state view-only, and its value-movement + access surfaces are bounded.
+
+**Requirements:** GAS-01, GAS-02, GAS-03, GAS-04
+
+**Success criteria:**
+1. The faucet is confirmed unwired/dormant in both deploy scripts; its dormant-in-scope posture is recorded.
+2. `distribute()`/`withdraw()` are shown CEI-safe, gating-correct, and bounded to donated funds only.
+3. The 26/26-era unit suite is green; structural confirmation it has no mint/burn/ledger path and cannot move protocol value.
+
+## Phase 474 — MANIFEST-REPOINT
+
+**Goal:** Re-point the single machine-readable invariant manifest (MAN-01) from the stale v73 tree to frozen HEAD and add invariants covering the batch's new conservation/freeze surfaces.
+
+**Requirements:** MAN-01, MAN-02, MAN-03
+
+**Success criteria:**
+1. `invariants.json` subject is re-pinned to HEAD `3986926c` with all 28 existing entries re-validated against the frozen getters/slots.
+2. New invariant entries are added for the SOLV-fold, sDGNRS-box, affiliate-credit, deadman, gift-sourcing, and queue-window surfaces — each on-chain or statistically evaluable.
+3. `MAIN-INVARIANTS.md` is regenerated from `invariants.json` and byte-matches the oracle's asserted set (the single MAN-01 source shared by `agent/src/oracle.js` and the README).
+
+## Phase 475 — CROSS-MODEL-REAUDIT (conditional contract gate)
+
+> **The SOLE possible contract-commit gate.** Fires only if a real defect surfaces. An all-refuted result ships gate-free.
+
+**Goal:** Run the established cross-model adversarial re-audit (Codex primary; Gemini if its CLI revives) over the ranked top attack surfaces in isolated neutral-prompt subagents, and adjudicate every candidate.
+
+**Requirements:** CMRA-01, CMRA-02
+
+**Success criteria:**
+1. Codex (and Gemini if alive) ran a documented adversarial pass over each ranked surface with neutral prompts in isolated subagents; contracts are git-verified unmodified after each Write-capable subagent.
+2. Every raised candidate has a written disposition (fix / refute / known-issue); the skeptic filter was applied before any CATASTROPHE/HIGH label.
+3. Any real defect routes to the conditional, owner-approved squash commit (`CONTRACTS_COMMIT_APPROVED=1` + hook move-aside, re-verified after); an all-refuted result records the subject byte-frozen and ships gate-free.
+
+## Phase 476 — AGENT-SOAK-REATTEST
+
+**Goal:** Re-point the already-built live adversarial agent and 24/7 testnet soak at the frozen-HEAD subject and re-attest 0 invariant violations and 0 profit-vs-EV alarms.
 
 **Requirements:** SOAK-01, SOAK-02, SOAK-03
 
 **Success criteria:**
-1. The same agent runs against the live testnet via an RPC-mode switch — observes real Chainlink VRF fulfilment, serializes sends through a NonceManager with replace-by-fee, and drip-refills wallets below a low-water mark.
-2. Multi-actor / interaction probes run that only exist with honest 24/7 traffic — front-run / sandwich honest txs, race shared windows (redemption / advanceGame / jackpot), attempt to block or capture honest rewards.
-3. A continuous soak runs with checkpoint/resume (persisted ledger + last block, reconciled on boot); findings are triaged FIX vs DOCUMENT; any brick is logged + reproduced rather than silently wedging the chain.
+1. The agent + soak are re-pointed at an independently-run testnet of the HEAD subject with the 474-re-pinned MAN-01 manifest (the agent never deploys/forks).
+2. A documented campaign + soak run with 0 final on-chain MAN-01 violations and 0 per-actor profit-vs-EV alarms (window-transients explained).
+3. Any violation is reproducible from logged state; the attestation cites the soak ledger.
 
-## Phase 464 — SQUASH-GATE (conditional — SOLE contract approval gate)
+## Phase 477 — C4A-PACKAGE
 
-> **Expected NO-OP under current dispositions.** Fires only if 462/463 surface a real defect, or the owner overrides a carried item to FIX.
+**Goal:** Assemble the full Code4rena contest package against the as-built tree — scope/out_of_scope + nSLOC, SECURITY + trusted-roles/trust-model, a precise known-issues perimeter, and a C4-section-order contest README.
 
-**Goal:** If and only if a contract change is warranted, batch ALL edits into one owner-approved diff; otherwise confirm the subject stays byte-frozen.
-
-**Requirements:** SQ-01
+**Requirements:** PKG-01, PKG-02, PKG-03, KI-01, KI-02
 
 **Success criteria:**
-1. If no real defect surfaced and no carried-item override is taken → this phase records a no-op and confirms `git diff d6615306 -- contracts/` is empty (subject byte-frozen).
-2. If a contract change IS warranted → ALL edits land in ONE batched commit only after explicit owner hand-review (commit-guard `CONTRACTS_COMMIT_APPROVED=1` + hook move-aside); the changed subject is re-verified (forge suite + RNG-freeze/invariant re-attest) before 465.
+1. `scope.txt` + `out_of_scope.txt` + the in-scope nSLOC table are regenerated against and match the frozen HEAD tree (FLIP/WWXRP renames + EndgameModule removal reflected; faucet placed per its dormant-in-scope posture).
+2. `SECURITY.md` + the trust-model enumerates every trusted role + the permissionless-settlement boundary; the known-issues perimeter is mechanism-+-impact specific for every by-design quirk and carried item (the mid-day `==0` guard re-checked against the as-built mid-day-recovery fold).
+3. A C4-order contest README is assembled with the Main-Invariants section sharing MAN-01 verbatim; the access-control matrix + ETH-flow map cover the new permissionless/gift/sDGNRS-box/faucet surfaces.
 
-## Phase 465 — TERMINAL (docs only)
+## Phase 478 — TERMINAL
 
-**Goal:** Produce the closure evidence and the assembled C4A package bundle.
+**Goal:** Produce the evidence pack and closure signal, confirming the as-built subject is clean (or all findings dispositioned) and byte-frozen at the freeze tree.
 
 **Requirements:** TERM-01, TERM-02, TERM-03
 
 **Success criteria:**
-1. `audit/FINDINGS-v74.0.md` (chmod 444) records the agent-campaign results, the fix/document dispositions (incl. the two carried items), and the final verdict.
-2. The full `forge` suite is re-verified green at the frozen (or, if 464 fired, updated) floor; the C4A bundle (README + scope/out_of_scope + KNOWN-ISSUES + SECURITY + manifest) is assembled and internally consistent (scope ↔ SLOC ↔ manifest ↔ known-issues cross-checked).
-3. The closure signal `MILESTONE_V74_AT_HEAD_<sha>` is stamped against the final subject.
+1. `audit/FINDINGS-v74.0.md` (chmod 444) exists with a complete disposition table across all 8 clusters + the cross-model + soak attestations and the verdict; an HTML report is generated.
+2. The closure signal `MILESTONE_V74_AT_HEAD_<sha>` is emitted and the subject confirmed byte-frozen at HEAD (or the updated subject if 475 fired).
+3. The package, manifest, and soak attestation all reference the same frozen subject; ROADMAP/REQUIREMENTS archived to `milestones/`; the only commit gate (a conditional contract-fix if 475 surfaced a real defect) is resolved.
 
 ---
 
@@ -122,18 +161,22 @@
 
 | Phase | Requirements | Gate |
 |-------|--------------|------|
-| 457 SCOPE | SCOPE-01/02/03 | none (docs) |
-| 458 RENAME+SECURITY | PKG-01/02/03/04 | none (docs) |
-| 459 KNOWN-ISSUES | KI-01/02/03/04 | none (docs) |
-| 460 MANIFEST | MAN-01/02 | none (docs/test-config) |
-| 461 HARNESS-FIX | HARN-01/02 | none (test-only) |
-| 462 AGENT-BUILD | AGT-01..07 | none (new files) |
-| 463 AGENT-SOAK | SOAK-01/02/03 | none (new files + ops) |
-| 464 SQUASH-GATE | SQ-01 | **sole contract gate (conditional, expected no-op)** |
-| 465 TERMINAL | TERM-01/02/03 | none (docs) |
+| 466 SUBJECT-FREEZE-CONFIRM | SUBJ-01/02/03/04 | none |
+| 467 HARNESS-GREEN-GATE | HARN-01/02/03 | none (test-only) |
+| 468 AUDIT-SOLV-FOLD | SOLV-01..08 | none |
+| 469 AUDIT-RNG-LIVENESS | RNG-01..05, LIVE-01..04 | none |
+| 470 AUDIT-ACCESS-PERMISSIONLESS | ACCESS-01..07 | none |
+| 471 AUDIT-EV-RTP | EV-01..07 | none |
+| 472 AUDIT-RENAME-WIRING-STORAGE | WIRE-01..04 | none |
+| 473 AUDIT-GAS-FAUCET | GAS-01..04 | none |
+| 474 MANIFEST-REPOINT | MAN-01/02/03 | none (docs/test-config) |
+| 475 CROSS-MODEL-REAUDIT | CMRA-01/02 | **sole contract gate (conditional)** |
+| 476 AGENT-SOAK-REATTEST | SOAK-01/02/03 | none |
+| 477 C4A-PACKAGE | PKG-01/02/03, KI-01/02 | none (docs) |
+| 478 TERMINAL | TERM-01/02/03 | none (docs; conditional fix resolved) |
 
-**28 requirements** mapped across **9 phases**; 0 unmapped ✓. The default path is gate-free; the single possible approval gate (464) is conditional and expected unused.
+**62 requirements** mapped across **13 phases**; 0 unmapped ✓. The default path is gate-free; the single possible approval gate (475) is conditional on a real defect surfacing.
 
 ---
-*Roadmap created: 2026-06-21*
-*Phase numbering continues from v73.0 (456) → 457.*
+*Roadmap created: 2026-06-26 (supersedes the v74 "C4A Readiness" plan).*
+*Phase numbering continues from the prior v74 allocation (457–465) → 466.*
