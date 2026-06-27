@@ -9,10 +9,10 @@ prev_activity: 2026-06-26 -- ▶ v74.0 RE-SCOPED via /gsd-new-milestone — SUPE
 prev_activity: 2026-06-26 -- the prior "v74.0 C4A Readiness" plan (457-465) was overtaken: a contract hardening+feature batch landed (aa74de08 named-errors/WWXRP-rename/partial-claim · fffbd878 VRF-deadman+swap-timer 20h→44h · e2198e14 mid-day-RNG fold · 3986926c sDGNRS level lootbox + pre-deploy hardening; pushed 498d4aaf, HEAD 3986926c local-only). The built live agent (f2432ae5) + 24/7 soak ran 0-viol against an earlier state of this tree. v74's byte-frozen premise broke → superseded by the as-built audit (see PRIOR_v73_SHIP below for the v73.0 closure).
 progress:
   total_phases: 13
-  completed_phases: 1
+  completed_phases: 8
   total_plans: 0
   completed_plans: 0
-  percent: 8
+  percent: 62
 ---
 
 # Project State
@@ -22,7 +22,7 @@ progress:
 See: .planning/PROJECT.md (Current Milestone: v74.0 section) + .planning/MILESTONES.md. **v74.0 RE-SCOPED 2026-06-26** — **As-Built Milestone Audit + C4A Package** (supersedes the prior "v74.0 C4A Readiness" plan, never tagged). Put the entire `v73.0 → HEAD` contract batch (29 .sol, +1861/-1030; subject BYTE-FROZEN at local HEAD `3986926c`) through a full milestone audit AND assemble the complete C4A package — 100% C4A-ready, no payouts. Method = verify → freeze-confirm → harness-green → 6-cluster code audit (SOLV/RNG+LIVENESS/ACCESS/EV/WIRE/GAS-FAUCET) → manifest re-point → cross-model re-audit (Codex; Gemini CLI unavailable) → live agent/soak re-attest → C4A package → terminal. The built agent + 24/7 soak + MAN-01 manifest carry forward (re-point at frozen HEAD, 0-viol already). Sole possible gate = the conditional contract-fix squash at 475/478 if the re-audit surfaces a real defect. 13 phases (466-478), numbering continues 465 → 466. Grounding: `.planning/v74-grounding/v74.0-asbuilt-audit-map.md`.
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Current focus:** Phase 467 — HARNESS-GREEN-GATE (test-only) — full forge + Hardhat suite green at frozen HEAD; re-derive any slot-hardcoded `vm.store`/`vm.load` harness off the 466 golden after the `Sub` repack; reflect ABI-breaking selector/signature changes in all JS+Foundry callers; the new GasFaucet/Quests suites + VRFGovernance 42/42 green. (466 ✅ `07a356da`.)
+**Current focus:** Phases 467 (Hardhat-green fixer agent running) + 475 (Codex cross-model pass running). DONE: 466 freeze; 468-473 six as-built audit clusters (ALL reqs HOLD, 0 findings, isolated neutral-prompt reviewers + adversarial-verify, contracts git-verified frozen); 472 WIRE re-run (first agent stubbed, re-run clean); 474 manifest re-point (v73→HEAD, 28→34 invariants, REDEEM-05 sDGNRS-storage-restructure fix, agent:test 8/8). forge suite green (exit 0). Hardhat: 181 stale failures = pre-v74 + v74 ABI/behaviour drift on a frozen+audited contract; fixer aligning test-only. INTEGRITY-VERIFIED: no 0.5 ETH affiliate cap ever existed (v73 MintModule/affiliate + HEAD all lack it; only AFFILIATE_BONUS_MAX 25-ether leaderboard cap) → the affiliate "cap" tests were pre-v73-stale; fixer's cap-removal alignment is legitimate, not greenwash; affiliate commission is FLIP-coin (SOLV-04, no solvency impact). NEXT after 467/475: 476 soak (needs testnet from sim repo — likely documented partial), 477 C4A package, 478 terminal.
 
 ## ⚠ v50.0 + v51.0 AUDIT DEBT → FOLDED INTO v63.0 Phase 394 LEGACY-DEBT (USER 2026-06-14; was a separate v52 track)
 
