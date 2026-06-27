@@ -61,15 +61,14 @@ const MIN_BET_ETH_VALUE = hre.ethers.parseEther("0.005");
 // are `lootboxRngIndex` (LR_INDEX_SHIFT=0, LR_INDEX_MASK=0xFFFFFFFFFFFF).
 const LOOTBOX_RNG_PACKED_SLOT = "0x" + (35).toString(16).padStart(64, "0");
 
-// Storage slot 0 holds the packed timing/FSM struct per
-// DegenerusGameStorage.sol:44-66. `dailyIdx` (uint32) occupies bytes [4:8],
-// little-endian within the 32-byte slot (EVM stores low bytes at low offset
-// in the byte stream, which is the high bits of the big-endian word read).
-// The slot is read as a 256-bit big-endian word; dailyIdx is at bit-shift 32
-// (byte offset 4) so `(word >> 32) & 0xFFFFFFFF` extracts it.
+// Storage slot 0 holds the packed timing/FSM struct. Authoritative layout
+// (forge inspect storageLayout): purchaseStartDay uint24 @offset 0,
+// dailyIdx uint24 @offset 3, rngRequestTime uint48 @offset 6, level uint24
+// @offset 12. dailyIdx is therefore at bit-shift 24 (byte offset 3) and is a
+// uint24, so `(word >> 24) & 0xFFFFFF` extracts it.
 const SLOT0_TIMING_FSM = "0x" + (0).toString(16).padStart(64, "0");
-const DAILY_IDX_BIT_SHIFT = 32n;
-const UINT32_MASK = 0xffffffffn;
+const DAILY_IDX_BIT_SHIFT = 24n;
+const UINT32_MASK = 0xffffffn;
 
 // Currency tag for ETH bets per DegenerusGameDegeneretteModule constants.
 const CURRENCY_ETH = 0;
@@ -210,8 +209,8 @@ describe("HeroOverrideDayIndex (TST-HOFIX) — Phase 288 D-288-FIX-SHAPE-01 regr
         await game.getDailyHeroWager(wallDayNow, 2, 5)
       );
       expect(wagerAtWallDay).to.equal(
-        MIN_BET_ETH_VALUE / 1_000_000_000_000n,
-        `getDailyHeroWager(wallDayNow=${wallDayNow}, q=2, s=5) must equal MIN_BET_ETH/1e12 (canonical slot[D] = bets placed on day D)`
+        MIN_BET_ETH_VALUE / 100_000_000_000_000n,
+        `getDailyHeroWager(wallDayNow=${wallDayNow}, q=2, s=5) must equal MIN_BET_ETH/1e14 (canonical slot[D] = bets placed on day D)`
       );
 
       // slot[dailyIdx] is unchanged — the operational read for the in-flight
@@ -255,8 +254,8 @@ describe("HeroOverrideDayIndex (TST-HOFIX) — Phase 288 D-288-FIX-SHAPE-01 regr
         `getDailyHeroWinner(D=${D}) winSymbol must equal placed-bet symbol ${S}`
       );
       expect(winnerOnD.winAmount).to.equal(
-        MIN_BET_ETH_VALUE / 1_000_000_000_000n,
-        `getDailyHeroWinner(D=${D}) winAmount must equal MIN_BET_ETH/1e12 wager units`
+        MIN_BET_ETH_VALUE / 100_000_000_000_000n,
+        `getDailyHeroWinner(D=${D}) winAmount must equal MIN_BET_ETH/1e14 wager units`
       );
 
       // Advance to day D+1. In production, day D's `_unlockRng` would set
@@ -347,7 +346,7 @@ describe("HeroOverrideDayIndex (TST-HOFIX) — Phase 288 D-288-FIX-SHAPE-01 regr
       );
       expect(wallDayWinner.winSymbol).to.equal(7);
       expect(wallDayWinner.winAmount).to.equal(
-        MIN_BET_ETH_VALUE / 1_000_000_000_000n
+        MIN_BET_ETH_VALUE / 100_000_000_000_000n
       );
     });
   });
@@ -386,7 +385,7 @@ describe("HeroOverrideDayIndex (TST-HOFIX) — Phase 288 D-288-FIX-SHAPE-01 regr
       expect(capture1.winQuadrant).to.equal(Q1);
       expect(capture1.winSymbol).to.equal(S1);
       expect(capture1.winAmount).to.equal(
-        MIN_BET_ETH_VALUE / 1_000_000_000_000n
+        MIN_BET_ETH_VALUE / 100_000_000_000_000n
       );
 
       // Interleave: carol places bet on the current wall-clock day (D+1)
@@ -413,7 +412,7 @@ describe("HeroOverrideDayIndex (TST-HOFIX) — Phase 288 D-288-FIX-SHAPE-01 regr
       );
       expect(wallDayWinner.winSymbol).to.equal(S2);
       expect(wallDayWinner.winAmount).to.equal(
-        MIN_BET_ETH_VALUE / 1_000_000_000_000n
+        MIN_BET_ETH_VALUE / 100_000_000_000_000n
       );
     });
   });
@@ -470,7 +469,7 @@ describe("TST-JPSURF — F-41-03 cross-day CALL 1/CALL 2 regression (Phase 288)"
       expect(call1Read.winQuadrant).to.equal(2);
       expect(call1Read.winSymbol).to.equal(6);
       expect(call1Read.winAmount).to.equal(
-        MIN_BET_ETH_VALUE / 1_000_000_000_000n
+        MIN_BET_ETH_VALUE / 100_000_000_000_000n
       );
     });
   });
@@ -617,7 +616,7 @@ describe("TST-JPSURF — F-41-03 cross-day CALL 1/CALL 2 regression (Phase 288)"
       expect(call1HeroInput.winQuadrant).to.equal(2);
       expect(call1HeroInput.winSymbol).to.equal(7);
       expect(call1HeroInput.winAmount).to.equal(
-        MIN_BET_ETH_VALUE / 1_000_000_000_000n
+        MIN_BET_ETH_VALUE / 100_000_000_000_000n
       );
 
       // Catastrophy event: `advanceGame` is silent for 24h. The physical
@@ -668,7 +667,7 @@ describe("TST-JPSURF — F-41-03 cross-day CALL 1/CALL 2 regression (Phase 288)"
       );
       expect(interWindowSlotWinner.winSymbol).to.equal(5);
       expect(interWindowSlotWinner.winAmount).to.equal(
-        MIN_BET_ETH_VALUE / 1_000_000_000_000n
+        MIN_BET_ETH_VALUE / 100_000_000_000_000n
       );
     });
   });
