@@ -26,20 +26,27 @@ const VEST_PER_LEVEL = 5_000_000_000n * eth("1");
 const SECONDS_912_DAYS = 912 * 86400;
 
 /**
- * Drive the two-step game-over flow:
- *   1. advance time past the 912-day level-0 timeout
- *   2. advanceGame → liveness guard fires, VRF request issued
- *   3. fulfill VRF
- *   4. advanceGame → processes word → handleGameOverDrain → gameOver = true
+ * Drive the level-0 idle-timeout game-over flow. The terminal drain is multi-tx
+ * (entropy round, ticket drain, then handleGameOverDrain), so loop advanceGame —
+ * fulfilling any VRF request — until gameOver latches.
  */
 async function triggerGameOver(game, caller, mockVRF) {
   await advanceTime(SECONDS_912_DAYS + 1);
-  await game.connect(caller).advanceGame();
-  const requestId = await getLastVRFRequestId(mockVRF);
-  if (requestId > 0n) {
-    await mockVRF.fulfillRandomWords(requestId, 42n);
+  for (let i = 0; i < 12; i++) {
+    const reqBefore = await getLastVRFRequestId(mockVRF);
+    try {
+      await game.connect(caller).advanceGame();
+    } catch {
+      /* may revert mid-sequence; keep driving */
+    }
+    const reqAfter = await getLastVRFRequestId(mockVRF);
+    if (reqAfter > reqBefore) {
+      try {
+        await mockVRF.fulfillRandomWords(reqAfter, 42n);
+      } catch {}
+    }
+    if (await game.gameOver()) return;
   }
-  await game.connect(caller).advanceGame();
 }
 
 /**
@@ -499,9 +506,9 @@ describe("DGNRS (DGNRS Liquid Token)", function () {
     it("gameClaimWhalePass is permissionless (no auth gate; reverts only because nothing is pending)", async function () {
       const { sdgnrs, alice, game } = await loadFixture(deployFullProtocol);
       // No caller restriction: alice (a non-owner) reaches the claim logic and reverts with
-      // the game's nothing-to-claim error E — not an authorization error.
+      // the game's NothingToClaim error (empty claim) — not an authorization error.
       await expect(sdgnrs.connect(alice).gameClaimWhalePass())
-        .to.be.revertedWithCustomError(game, "E");
+        .to.be.revertedWithCustomError(game, "NothingToClaim");
     });
 
     // resolveCoinflips removed — sDGNRS flips now resolve daily in processCoinflipPayouts
