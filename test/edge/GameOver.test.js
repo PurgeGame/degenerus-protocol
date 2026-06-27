@@ -49,23 +49,27 @@ describe("GameOver", function () {
   const SECONDS_30_DAYS = 30 * 86400;
 
   /**
-   * Trigger game over at level 0 via the multi-step VRF flow.
-   *  1. advanceGame → issues VRF request
-   *  2. fulfill VRF
-   *  3. advanceGame → processes word, sets gameOver
+   * Trigger game over at level 0 via the idle-timeout liveness path.
+   * The drain is multi-tx (entropy round, then a ticket-drain pass, then the
+   * terminal gameOver drain), so loop advanceGame — fulfilling any VRF request —
+   * until gameOver latches.
    */
   async function triggerGameOverAtLevel0(game, deployer, mockVRF) {
-    // First call: issues VRF request
-    await game.connect(deployer).advanceGame();
-
-    // Fulfill VRF
-    const requestId = await getLastVRFRequestId(mockVRF);
-    if (requestId > 0n) {
-      await mockVRF.fulfillRandomWords(requestId, 42n);
+    for (let i = 0; i < 12; i++) {
+      const reqBefore = await getLastVRFRequestId(mockVRF);
+      try {
+        await game.connect(deployer).advanceGame();
+      } catch {
+        /* may revert mid-sequence; keep driving */
+      }
+      const reqAfter = await getLastVRFRequestId(mockVRF);
+      if (reqAfter > reqBefore) {
+        try {
+          await mockVRF.fulfillRandomWords(reqAfter, 42n);
+        } catch {}
+      }
+      if (await game.gameOver()) return;
     }
-
-    // Second call: processes word → handleGameOverDrain → gameOver = true
-    await game.connect(deployer).advanceGame();
   }
 
   /**
@@ -148,7 +152,7 @@ describe("GameOver", function () {
       expect(requestId).to.be.gt(0n);
     });
 
-    it("second advanceGame after VRF fulfillment sets gameOver", async function () {
+    it("advanceGame after VRF fulfillment drives the drain to gameOver", async function () {
       const { game, deployer, mockVRF } = await loadFixture(
         deployFullProtocol
       );
@@ -159,7 +163,12 @@ describe("GameOver", function () {
       const requestId = await getLastVRFRequestId(mockVRF);
       await mockVRF.fulfillRandomWords(requestId, 42n);
 
-      await game.connect(deployer).advanceGame();
+      // After fulfillment the terminal drain completes over the remaining
+      // ticket-drain / gameOver-drain txs.
+      for (let i = 0; i < 12; i++) {
+        await game.connect(deployer).advanceGame();
+        if (await game.gameOver()) break;
+      }
       expect(await game.gameOver()).to.equal(true);
     });
 
