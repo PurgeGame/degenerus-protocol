@@ -175,12 +175,19 @@ describe("Coinflip", function () {
       expect(evs.length).to.equal(1);
     });
 
-    it("reverts NotApproved when non-approved operator deposits on behalf of player", async function () {
-      const { coinflip, bob, alice } = await loadFixture(deployFullProtocol);
-      // bob tries to deposit on behalf of alice without approval
-      await expect(
-        coinflip.connect(bob).depositCoinflip(alice.address, eth(200))
-      ).to.be.revertedWithCustomError(coinflip, "NotApproved");
+    it("non-approved caller funds a permissionless gift to the player", async function () {
+      const { coinflip, coin, bob, alice, vault } = await loadFixture(deployFullProtocol);
+      const vaultAddr = await vault.getAddress();
+      // bob is NOT an approved operator for alice and funds the deposit himself:
+      // depositCoinflip is a permissionless gift (caller pays, the stake is the
+      // player's). Fund bob, then gift to alice.
+      await giveFlip(coin, bob, eth(500), vaultAddr);
+      const tx = await coinflip.connect(bob).depositCoinflip(alice.address, eth(200));
+      const ev = await getEvent(tx, coinflip, "CoinflipDeposit");
+      expect(ev.args.player).to.equal(alice.address);
+      expect(ev.args.creditedFlip).to.equal(eth(200));
+      // The stake belongs to alice, not the funder.
+      expect(await coinflip.coinflipAmount(alice.address)).to.be.gte(eth(200));
     });
 
     it("zero amount deposit emits CoinflipDeposit with amount 0", async function () {
@@ -229,7 +236,7 @@ describe("Coinflip", function () {
       let found = false;
       for (let i = 0n; i < 10000n; i++) {
         const seed = hre.ethers.solidityPackedKeccak256(
-          ["uint256", "uint32"],
+          ["uint256", "uint24"],
           [i, epoch]
         );
         const seedBig = BigInt(seed);
@@ -250,7 +257,7 @@ describe("Coinflip", function () {
       let found = false;
       for (let i = 0n; i < 10000n; i++) {
         const seed = hre.ethers.solidityPackedKeccak256(
-          ["uint256", "uint32"],
+          ["uint256", "uint24"],
           [i, epoch]
         );
         const seedBig = BigInt(seed);
@@ -645,31 +652,9 @@ describe("Coinflip", function () {
   });
 
   // =========================================================================
-  // 9. settleFlipModeChange (onlyGame)
+  // 9. settleFlipModeChange — REMOVED (v46 legacy removal, df4ef365): the
+  // flip-mode settlement entry point no longer exists on Coinflip.
   // =========================================================================
-  describe("settleFlipModeChange", function () {
-    it("reverts when called by non-game address", async function () {
-      const { coinflip, alice } = await loadFixture(deployFullProtocol);
-      await expect(
-        coinflip.connect(alice).settleFlipModeChange(alice.address)
-      ).to.be.revertedWithCustomError(coinflip, "OnlyDegenerusGame");
-    });
-
-    it("game can call settleFlipModeChange without revert", async function () {
-      const { coinflip, game, alice } = await loadFixture(deployFullProtocol);
-      const gameAddr = await game.getAddress();
-      await hre.ethers.provider.send("hardhat_impersonateAccount", [gameAddr]);
-      await hre.ethers.provider.send("hardhat_setBalance", [
-        gameAddr,
-        "0x1000000000000000000",
-      ]);
-      const gameSigner = await hre.ethers.getSigner(gameAddr);
-      await expect(
-        coinflip.connect(gameSigner).settleFlipModeChange(alice.address)
-      ).to.not.be.reverted;
-      await hre.ethers.provider.send("hardhat_stopImpersonatingAccount", [gameAddr]);
-    });
-  });
 
   // =========================================================================
   // 10. View Functions

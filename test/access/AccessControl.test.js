@@ -21,7 +21,7 @@ import {
  * Error name mapping (from source files):
  *  FLIP       : OnlyFlipCreditors, OnlyGame, OnlyVault
  *  Coinflip   : OnlyFlipCreditors, OnlyDegenerusGame, OnlyFLIP
- *  DegenerusGame    : E (generic guard)
+ *  DegenerusGame    : OnlyAdmin (admin-gated), OnlyVault (vault-owner-gated)
  *  DGNRS   : Unauthorized
  *  DegenerusVault   : Unauthorized
  *  DegenerusJackpots: OnlyCoin, OnlyGame
@@ -108,13 +108,8 @@ describe("AccessControl", function () {
       ).to.be.revertedWithCustomError(coinflip, "OnlyFlipCreditors");
     });
 
-    it("settleFlipModeChange: reverts when called by alice (OnlyDegenerusGame)", async function () {
-      const { coinflip, alice } = await loadFixture(deployFullProtocol);
-
-      await expect(
-        coinflip.connect(alice).settleFlipModeChange(alice.address)
-      ).to.be.revertedWithCustomError(coinflip, "OnlyDegenerusGame");
-    });
+    // settleFlipModeChange REMOVED (v46 legacy removal, df4ef365): the flip-mode
+    // settlement entry point no longer exists on Coinflip.
   });
 
   // ---------------------------------------------------------------------------
@@ -131,7 +126,7 @@ describe("AccessControl", function () {
           1n,            // subId
           ZERO_BYTES32   // keyHash
         )
-      ).to.be.revertedWithCustomError(game, "E");
+      ).to.be.revertedWithCustomError(game, "OnlyAdmin");
     });
 
     it("rawFulfillRandomWords: reverts when called by alice (only VRF coordinator)", async function () {
@@ -390,7 +385,7 @@ describe("AccessControl", function () {
           1n,
           ZERO_BYTES32
         )
-      ).to.be.revertedWithCustomError(game, "E");
+      ).to.be.revertedWithCustomError(game, "OnlyAdmin");
     });
 
     it("alice cannot call game.adminSwapEthForStEth (only ADMIN)", async function () {
@@ -402,7 +397,7 @@ describe("AccessControl", function () {
           eth("1"),
           { value: eth("1") }
         )
-      ).to.be.revertedWithCustomError(game, "E");
+      ).to.be.revertedWithCustomError(game, "OnlyAdmin");
     });
 
     it("alice cannot call game.consumeCoinflipBoon (only trusted contracts)", async function () {
