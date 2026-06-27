@@ -27,9 +27,8 @@ const MintPaymentKind = { DirectEth: 0, Claimable: 1, Combined: 2 };
  *   Compressed (flag=1): counter=4, nextStep=1, 4+1≥5 → bonus
  *   Turbo (flag=2):      excluded by outer guard → no bonus
  *
- * Per-referrer commission cap (0.5 ETH FLIP) means each test buyer
- * can only be used ONCE — a single ticket purchase in FLIP units
- * exceeds the cap. Tests use separate buyers for baseline vs bonus day.
+ * Tests use separate buyers for baseline vs bonus day so each measurement is
+ * an independent single-purchase basis.
  */
 describe("CompressedAffiliateBonus", function () {
   this.timeout(300_000);
@@ -108,21 +107,19 @@ describe("CompressedAffiliateBonus", function () {
   }
 
   /**
-   * Get the raw freshFlip value passed to payAffiliate from a purchase tx.
-   * Uses the Affiliate(amount, code, sender) event emitted at the end of
-   * payAffiliate's normal path (line 622). This captures the pre-scaling,
-   * pre-cap value — exactly what MintModule passes after potential inflation.
-   *
-   * For DirectEth purchases with isFreshEth, there's one payAffiliate call
-   * and one Affiliate event. We match by the buyer's address (3rd arg).
+   * Get the scaled affiliate FLIP recorded for a purchase tx.
+   * The combined purchase path emits AffiliateEarningsRecorded (the legacy
+   * Affiliate event is only emitted on the foil path). The `amount` field is the
+   * scaled FLIP for this call; since scaling is linear (×bps), the baseline/bonus
+   * ratio equals the ratio of the underlying freshFlip — so the 7/5 inflation
+   * check is preserved. We match by the buyer's address (sender field).
    */
   async function getRawAffiliateBasis(tx, affiliate, buyerAddr) {
-    const events = await getEvents(tx, affiliate, "Affiliate");
-    // Filter for events from this buyer (args[2] = sender address)
+    const events = await getEvents(tx, affiliate, "AffiliateEarningsRecorded");
     const fromBuyer = events.filter(
-      (e) => e.args[2].toLowerCase() === buyerAddr.toLowerCase()
+      (e) => e.args.sender.toLowerCase() === buyerAddr.toLowerCase()
     );
-    return fromBuyer.length > 0 ? fromBuyer[0].args[0] : null;
+    return fromBuyer.length > 0 ? fromBuyer[0].args.amount : null;
   }
 
   // ---------------------------------------------------------------------------
