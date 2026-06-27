@@ -57,12 +57,12 @@ contract V56FreezeSolvency is DeployProtocol {
     //   scorePlus1 u16 @6 · amount u24 @8 (milli-ETH)
     //   lastAutoBoughtDay u24 @11 · lastOpenedDay u24 @14 · afkCoveredThroughDay u24 @17 · afkingStartDay u24 @20
     //   affiliateBase u32 @23 · pendingFlip u24 @27 · subStreakLatch u16 @30
-    uint256 private constant OFF_SCOREPLUS1 = 6; // uint16 scorePlus1        (bytes 6..7)
-    uint256 private constant OFF_AMOUNT = 8; // uint24 amount (milli-ETH)   (bytes 8..10)
-    uint256 private constant OFF_LASTBOUGHT = 11; // uint24 lastAutoBoughtDay (bytes 11..13)
-    uint256 private constant OFF_LASTOPENED = 14; // uint24 lastOpenedDay     (bytes 14..16)
-    uint256 private constant OFF_AFKCOVERED = 17; // uint24 afkCoveredThroughDay (bytes 17..19)
-    uint256 private constant OFF_PENDINGFLIP = 27; // uint24 pendingFlip (bytes 27..29)
+    uint256 private constant OFF_SCOREPLUS1 = 5; // uint16 scorePlus1        (bytes 6..7)
+    uint256 private constant OFF_AMOUNT = 7; // uint24 amount (milli-ETH)   (bytes 8..10)
+    uint256 private constant OFF_LASTBOUGHT = 10; // uint24 lastAutoBoughtDay (bytes 11..13)
+    uint256 private constant OFF_LASTOPENED = 13; // uint24 lastOpenedDay     (bytes 14..16)
+    uint256 private constant OFF_AFKCOVERED = 16; // uint24 afkCoveredThroughDay (bytes 17..19)
+    uint256 private constant OFF_PENDINGFLIP = 26; // uint24 pendingFlip (bytes 27..29)
 
     uint256 private constant DEITY_SHIFT = 184;
 
@@ -143,7 +143,7 @@ contract V56FreezeSolvency is DeployProtocol {
                 // pool stays reserved against the residual funding.
                 if (_subscriberIndexOf(a) != 0 && _dailyQtyOf(a) != 0) {
                     vm.prank(a);
-                    game.subscribe(address(0), false, false, 0, 0, address(0));
+                    game.subscribe(address(0), false, false, 0, address(0));
                 }
             } else if (action == 6) {
                 // re-sub a (re-uses the in-place slot) if it is not currently active. Top up its funding
@@ -520,7 +520,7 @@ contract V56FreezeSolvency is DeployProtocol {
 
     function _subscribeLootbox(address who, uint8 q) internal {
         vm.prank(who);
-        game.subscribe(address(0), false, false, q, 0, address(0)); // self, lootbox mode, no reinvest
+        game.subscribe(address(0), false, false, q, address(0)); // self, lootbox mode, no reinvest
     }
 
     function _fundPool(address who, uint256 amount) internal {

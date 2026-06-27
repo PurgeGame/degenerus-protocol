@@ -74,10 +74,10 @@ contract KeeperNonBrick is DeployProtocol {
     // Sub packed-field byte offsets (DegenerusGameStorage.sol:1895; the v56 compute-on-read re-pack
     // narrowed `amount` to uint24 and the day markers to uint24).
     uint256 private constant OFF_DAILY = 0; // uint8  dailyQuantity     (byte 0)
-    uint256 private constant OFF_SCOREPLUS1 = 6; // uint16 scorePlus1     (bytes 6..7)
-    uint256 private constant OFF_AMOUNT = 8; // uint24 amount            (bytes 8..10)
-    uint256 private constant OFF_LASTBOUGHT = 11; // uint24 lastAutoBoughtDay (bytes 11..13)
-    uint256 private constant OFF_LASTOPENED = 14; // uint24 lastOpenedDay     (bytes 14..16)
+    uint256 private constant OFF_SCOREPLUS1 = 5; // uint16 scorePlus1     (bytes 6..7)
+    uint256 private constant OFF_AMOUNT = 7; // uint24 amount            (bytes 8..10)
+    uint256 private constant OFF_LASTBOUGHT = 10; // uint24 lastAutoBoughtDay (bytes 11..13)
+    uint256 private constant OFF_LASTOPENED = 13; // uint24 lastOpenedDay     (bytes 14..16)
 
     uint256 private constant DEITY_SHIFT = 184;
 
@@ -166,7 +166,7 @@ contract KeeperNonBrick is DeployProtocol {
             _grantDeityPass(who);
             // Subscribe lootbox-mode with the fuzzed claimable-first toggle; fund the pool.
             vm.prank(who);
-            game.subscribe(address(0), drainFirst, false, 1, 0, address(0));
+            game.subscribe(address(0), drainFirst, false, 1, address(0));
             _fundPool(who, pool);
             // A claimable-mix: credit some claimableWinnings (with the tandem claimablePool bump so
             // SOLVENCY-01 stays balanced — the 351-02 test-infra reality) so the slice exercises the
@@ -227,7 +227,7 @@ contract KeeperNonBrick is DeployProtocol {
         // afkingFunding AND claimablePool in tandem — SOLVENCY-01 balanced).
         _grantDeityPass(player);
         vm.prank(player);
-        game.subscribe{value: funded}(address(0), false, true, 1, 0, address(0));
+        game.subscribe{value: funded}(address(0), false, true, 1, address(0));
         assertEq(game.afkingFundingOf(player), funded, "funding credited by subscribe msg.value");
 
         // Manufacture the SOLVENCY-01 violation: force claimablePool BELOW the player's funding so the
@@ -261,7 +261,7 @@ contract KeeperNonBrick is DeployProtocol {
 
         _grantDeityPass(player);
         vm.prank(player);
-        game.subscribe{value: funded}(address(0), false, true, 1, 0, address(0));
+        game.subscribe{value: funded}(address(0), false, true, 1, address(0));
 
         // Pool forced to (funded - shortfall) < funded => the full-funded withdraw's tandem release underflows.
         _setClaimablePool(funded - shortfall);
@@ -368,14 +368,14 @@ contract KeeperNonBrick is DeployProtocol {
         uint256 poolEth = 3 ether;
         _grantDeityPass(player);
         vm.prank(player);
-        game.subscribe{value: poolEth}(address(0), false, true, 1, 0, address(0));
+        game.subscribe{value: poolEth}(address(0), false, true, 1, address(0));
         assertEq(game.afkingFundingOf(player), poolEth, "funding credited by subscribe msg.value");
         assertGt(_subscriberIndexOf(player), 0, "sub is in the iterable set");
 
         // Cancel: subscribe(_, 0) tombstones the sub in-place (un-brickable — the cancel branch has no
         // downstream call; it just writes the dailyQuantity = 0 sentinel).
         vm.prank(player);
-        game.subscribe(address(0), false, true, 0, 0, address(0));
+        game.subscribe(address(0), false, true, 0, address(0));
         assertEq(_dailyQtyOf(player), 0, "sub tombstoned (dailyQuantity 0)");
 
         // The full funding ETH is withdrawable post-cancel (CEI withdraw, no block).
@@ -400,11 +400,11 @@ contract KeeperNonBrick is DeployProtocol {
 
         _grantDeityPass(player);
         vm.prank(player);
-        game.subscribe{value: poolEth}(address(0), false, true, 1, 0, address(0));
+        game.subscribe{value: poolEth}(address(0), false, true, 1, address(0));
 
         // Cancel — un-brickable in-place tombstone.
         vm.prank(player);
-        game.subscribe(address(0), false, true, 0, 0, address(0));
+        game.subscribe(address(0), false, true, 0, address(0));
 
         // First (partial) withdraw, then the remainder; together they drain the whole funding.
         vm.prank(player);
@@ -435,7 +435,7 @@ contract KeeperNonBrick is DeployProtocol {
         address active = subs[1];
 
         vm.prank(tomb);
-        game.subscribe(address(0), false, false, 0, 0, address(0)); // cancel -> in-place tombstone
+        game.subscribe(address(0), false, false, 0, address(0)); // cancel -> in-place tombstone
         assertEq(_dailyQtyOf(tomb), 0, "tombstone wrote the in-place sentinel");
         assertGt(_subscriberIndexOf(tomb), 0, "tombstone still in set after cancel (in-place)");
 
@@ -491,7 +491,7 @@ contract KeeperNonBrick is DeployProtocol {
         // Spam-cancel HALF of them in rapid succession (all in-place tombstones, still in the set).
         for (uint256 i; i < N; i += 2) {
             vm.prank(subs[i]);
-            game.subscribe(address(0), false, false, 0, 0, address(0));
+            game.subscribe(address(0), false, false, 0, address(0));
             assertEq(_dailyQtyOf(subs[i]), 0, "spam cancel wrote the in-place sentinel");
             assertGt(_subscriberIndexOf(subs[i]), 0, "tombstone still in set after cancel (in-place)");
         }
@@ -534,7 +534,7 @@ contract KeeperNonBrick is DeployProtocol {
             address who = makeAddr(string(abi.encodePacked("evict_brick_", _u(i))));
             subs[i] = who;
             vm.prank(who);
-            game.subscribe(address(0), false, false, 1, 0, address(0));
+            game.subscribe(address(0), false, false, 1, address(0));
             _fundPool(who, 3 ether);
             _setValidThroughLevel(who, 0); // force the crossing-evict branch
         }
@@ -650,14 +650,14 @@ contract KeeperNonBrick is DeployProtocol {
             subs[i] = who;
             _grantDeityPass(who);
             vm.prank(who);
-            game.subscribe(address(0), false, false, 1, 0, address(0)); // self, lootbox mode, qty 1
+            game.subscribe(address(0), false, false, 1, address(0)); // self, lootbox mode, qty 1
             _fundPool(who, poolEach);
         }
     }
 
     function _subscribeLootbox(address who, uint8 q) internal {
         vm.prank(who);
-        game.subscribe(address(0), false, false, q, 0, address(0)); // self, lootbox mode, no reinvest
+        game.subscribe(address(0), false, false, q, address(0)); // self, lootbox mode, no reinvest
     }
 
     function _fundPool(address who, uint256 amount) internal {

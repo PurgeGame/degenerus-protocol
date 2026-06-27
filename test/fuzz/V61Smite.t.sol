@@ -356,7 +356,7 @@ contract V61Smite is DeployProtocol {
 
     function _subscribeLootbox(address who, uint8 q) internal {
         vm.prank(who);
-        game.subscribe(address(0), false, false, q, 0, address(0));
+        game.subscribe(address(0), false, false, q, address(0));
     }
 
     function _fundPool(address who, uint256 amount) internal {

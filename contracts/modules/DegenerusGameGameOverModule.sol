@@ -146,6 +146,11 @@ contract DegenerusGameGameOverModule is DegenerusGameStorage {
         _setFuturePrizePool(0);
         _setCurrentPrizePool(0);
         yieldAccumulator = 0;
+        // Terminal state also clears the freeze: with the live pools drained, _unlockRng's
+        // _unfreezePool must not resurrect the pending pool back into them, and no
+        // post-gameOver box/Degenerette resolution may draw ETH from a phantom pending pool.
+        prizePoolPendingPacked = 0;
+        prizePoolFrozen = false;
         // All three pools are drained to zero at game over. Emit the terminal snapshot here —
         // before the available==0 early return below — so every game-over path logs it once. The
         // daily snapshot in _unlockRng skips game-over (gameOver is set above) to avoid a duplicate.

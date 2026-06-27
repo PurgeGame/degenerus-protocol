@@ -357,14 +357,13 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     ///      subscriber (claimablePool in tandem) — so the deposit funds the bucket the
     ///      draws debit.
     ///      Signature: subscribe(address player, bool drainGameCreditFirst, bool useTickets,
-    ///      uint8 dailyQuantity, uint8 reinvestPct, address fundingSource). The signature matches
+    ///      uint8 dailyQuantity, address fundingSource). The signature matches
     ///      the module function exactly (identical selector), so the calldata forwards as-is —
     ///      re-encoding here would cost contract-size headroom for no behavior change.
     function subscribe(
         address,
         bool,
         bool,
-        uint8,
         uint8,
         address
     ) external payable {

@@ -79,8 +79,8 @@ contract KeeperRouterOneCategory is DeployProtocol {
     // -------------------------------------------------------------------------
 
     uint256 private constant SUBOF_SLOT = 54; // _subOf mapping root (address => Sub, one packed slot)
-    uint256 private constant OFF_LASTBOUGHT = 11; // uint24 lastAutoBoughtDay (bytes 11..13)
-    uint256 private constant OFF_LASTOPENED = 14; // uint24 lastOpenedDay     (bytes 14..16)
+    uint256 private constant OFF_LASTBOUGHT = 10; // uint24 lastAutoBoughtDay (bytes 11..13)
+    uint256 private constant OFF_LASTOPENED = 13; // uint24 lastOpenedDay     (bytes 14..16)
     uint256 private constant SUBSCRIBERS_SLOT = 56; // _subscribers address[] (length here)
     uint256 private constant MINTPACKED_SLOT = 9; // mintPacked_ mapping root (deity bit)
     uint256 private constant DEITY_SHIFT = 184; // HAS_DEITY_PASS_SHIFT in mintPacked_
@@ -597,7 +597,7 @@ contract KeeperRouterOneCategory is DeployProtocol {
     /// @dev Subscribe `who` as a self-funded LOOTBOX-mode sub (the afking box stamp path).
     function _subscribeLootbox(address who, uint8 q) internal {
         vm.prank(who);
-        game.subscribe(address(0), false, false, q, 0, address(0)); // self, lootbox mode, no reinvest
+        game.subscribe(address(0), false, false, q, address(0)); // self, lootbox mode, no reinvest
     }
 
     /// @dev Credit `who`'s afkingFunding bucket (Δ5: depositAfkingFunding replaces AfKing.depositFor).

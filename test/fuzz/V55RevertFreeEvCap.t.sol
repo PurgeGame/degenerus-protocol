@@ -60,10 +60,10 @@ contract V55RevertFreeEvCap is DeployProtocol {
 
     // Sub packed-field byte offsets — the v56 compute-on-read re-pack (single 256-bit slot):
     //   scorePlus1 u16 @6 · amount u24 @8 · lastAutoBoughtDay u24 @11 · lastOpenedDay u24 @14.
-    uint256 private constant OFF_SCOREPLUS1 = 6; // uint16 scorePlus1        (bytes 6..7)
-    uint256 private constant OFF_AMOUNT = 8; // uint24 amount            (bytes 8..10)
-    uint256 private constant OFF_LASTBOUGHT = 11; // uint24 lastAutoBoughtDay (bytes 11..13)
-    uint256 private constant OFF_LASTOPENED = 14; // uint24 lastOpenedDay     (bytes 14..16)
+    uint256 private constant OFF_SCOREPLUS1 = 5; // uint16 scorePlus1        (bytes 6..7)
+    uint256 private constant OFF_AMOUNT = 7; // uint24 amount            (bytes 8..10)
+    uint256 private constant OFF_LASTBOUGHT = 10; // uint24 lastAutoBoughtDay (bytes 11..13)
+    uint256 private constant OFF_LASTOPENED = 13; // uint24 lastOpenedDay     (bytes 14..16)
 
     uint256 private constant DEITY_SHIFT = 184;
 
@@ -122,7 +122,7 @@ contract V55RevertFreeEvCap is DeployProtocol {
             subs[i] = who;
             _grantDeityPass(who);
             vm.prank(who);
-            game.subscribe(address(0), drainFirst, false, qty, 0, address(0)); // lootbox mode
+            game.subscribe(address(0), drainFirst, false, qty, address(0)); // lootbox mode
             _fundPool(who, pool);
             if (claimable > 0) _setClaimable(who, claimable); // tandem claimablePool bump (SOLVENCY-01 balanced)
             // Non-vacuity: the sub is funded before the STAGE.
@@ -147,7 +147,7 @@ contract V55RevertFreeEvCap is DeployProtocol {
         address who = makeAddr("clA_sentinel");
         _grantDeityPass(who);
         vm.prank(who);
-        game.subscribe(address(0), true, false, 1, 0, address(0)); // claimable-first, lootbox mode
+        game.subscribe(address(0), true, false, 1, address(0)); // claimable-first, lootbox mode
         _fundPool(who, 5 ether);
         _setClaimable(who, 1 wei); // the 1-wei claimable sentinel corner
 
@@ -208,7 +208,7 @@ contract V55RevertFreeEvCap is DeployProtocol {
         vm.deal(afk, funded);
         _grantDeityPass(afk);
         vm.prank(afk);
-        game.subscribe{value: funded}(address(0), false, false, 1, 0, address(0)); // self, lootbox mode
+        game.subscribe{value: funded}(address(0), false, false, 1, address(0)); // self, lootbox mode
         assertEq(game.afkingFundingOf(afk), funded, "funding credited by subscribe msg.value");
 
         // Manufacture the SOLVENCY-01 violation: force claimablePool to ZERO while afkingFunding[afk] stays
@@ -244,7 +244,7 @@ contract V55RevertFreeEvCap is DeployProtocol {
         vm.deal(player(), funded);
         _grantDeityPass(player());
         vm.prank(player());
-        game.subscribe{value: funded}(address(0), false, true, 1, 0, address(0)); // ticket mode (no box)
+        game.subscribe{value: funded}(address(0), false, true, 1, address(0)); // ticket mode (no box)
         assertEq(game.afkingFundingOf(player()), funded, "funding credited");
 
         // Pool forced below the funding -> the full-funded withdraw's tandem release underflows.
@@ -273,7 +273,7 @@ contract V55RevertFreeEvCap is DeployProtocol {
         vm.deal(player(), funded);
         _grantDeityPass(player());
         vm.prank(player());
-        game.subscribe{value: funded}(address(0), false, true, 1, 0, address(0));
+        game.subscribe{value: funded}(address(0), false, true, 1, address(0));
 
         _setClaimablePool(funded - shortfall);
 
@@ -558,14 +558,14 @@ contract V55RevertFreeEvCap is DeployProtocol {
             subs[i] = who;
             _grantDeityPass(who);
             vm.prank(who);
-            game.subscribe(address(0), false, false, 1, 0, address(0)); // self, lootbox mode, qty 1
+            game.subscribe(address(0), false, false, 1, address(0)); // self, lootbox mode, qty 1
             _fundPool(who, poolEach);
         }
     }
 
     function _subscribeLootbox(address who, uint8 q) internal {
         vm.prank(who);
-        game.subscribe(address(0), false, false, q, 0, address(0)); // self, lootbox mode, no reinvest
+        game.subscribe(address(0), false, false, q, address(0)); // self, lootbox mode, no reinvest
     }
 
     function _fundPool(address who, uint256 amount) internal {

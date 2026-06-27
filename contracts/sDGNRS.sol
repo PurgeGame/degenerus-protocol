@@ -24,7 +24,6 @@ interface IDegenerusGamePlayer {
         bool drainGameCreditFirst,
         bool useTickets,
         uint8 dailyQuantity,
-        uint8 reinvestPct,
         address fundingSource
     ) external payable;
     /// @notice Claim accumulated ETH winnings for a player.
@@ -424,8 +423,8 @@ contract sDGNRS {
         // constructor so GAME's deploy stays under the per-tx gas cap.
         game.initPerpetualTickets();
 
-        // Protocol-owned self-subscription: claimable-only daily lootbox
-        // buy of flat quantity 1 with a 2% claimable reinvest. Self-consent —
+        // Protocol-owned self-subscription: claimable-first daily lootbox
+        // buy of flat quantity 1. Self-consent —
         // sDGNRS IS the player (player == msg.sender). sDGNRS holds the permanent
         // deity pass (granted in the DegenerusGame constructor), so the afking's
         // pass-OR-pay gate takes the free 30-day extend at zero cost.
@@ -436,7 +435,7 @@ contract sDGNRS {
         // sDGNRS's daily flip wins mint to its wallet balance (redemption backing);
         // Coinflip arms perpetual auto-rebuy (0 take-profit) once the final
         // seeded day settles.
-        game.subscribe(address(this), true, false, 1, 2, address(0));
+        game.subscribe(address(this), true, false, 1, address(0));
 
         // Pre-approve GAME to pull stETH for both redemption claim legs. claimRedemption funds
         // each leg (resolveRedemptionLootbox / creditRedemptionDirect) with msg.value ETH and the

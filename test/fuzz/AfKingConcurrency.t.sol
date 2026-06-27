@@ -63,11 +63,11 @@ contract AfKingConcurrency is DeployProtocol {
     uint256 private constant OFF_DAILY = 0; // uint8  dailyQuantity      (byte 0)
     uint256 private constant OFF_VALIDTHROUGH = 1; // uint24 validThroughLevel  (bytes 1..3)
     uint256 private constant OFF_REINVEST = 4; // uint8  reinvestPct        (byte 4)
-    uint256 private constant OFF_FLAGS = 5; // uint8  flags              (byte 5; bit1=drainFirst, bit2=useTickets)
-    uint256 private constant OFF_SCOREPLUS1 = 6; // uint16 scorePlus1         (bytes 6..7)
-    uint256 private constant OFF_AMOUNT = 8; // uint24 amount             (bytes 8..10)
-    uint256 private constant OFF_LASTBOUGHT = 11; // uint24 lastAutoBoughtDay  (bytes 11..13)
-    uint256 private constant OFF_LASTOPENED = 14; // uint24 lastOpenedDay      (bytes 14..16)
+    uint256 private constant OFF_FLAGS = 4; // uint8  flags              (byte 5; bit1=drainFirst, bit2=useTickets)
+    uint256 private constant OFF_SCOREPLUS1 = 5; // uint16 scorePlus1         (bytes 6..7)
+    uint256 private constant OFF_AMOUNT = 7; // uint24 amount             (bytes 8..10)
+    uint256 private constant OFF_LASTBOUGHT = 10; // uint24 lastAutoBoughtDay  (bytes 11..13)
+    uint256 private constant OFF_LASTOPENED = 13; // uint24 lastOpenedDay      (bytes 14..16)
 
     uint256 private constant DEITY_SHIFT = 184; // HAS_DEITY_PASS_SHIFT in mintPacked_
 
@@ -189,7 +189,7 @@ contract AfKingConcurrency is DeployProtocol {
         address cancelled = subs[0];
         address tail = subs[N - 1];
         vm.prank(cancelled);
-        game.subscribe(address(0), false, false, 0, 0, address(0)); // in-place tombstone
+        game.subscribe(address(0), false, false, 0, address(0)); // in-place tombstone
         assertEq(_dailyQtyOf(cancelled), 0, "cancel wrote the in-place sentinel");
         assertGt(_subscriberIndexOf(cancelled), 0, "v55: cancel relocates no one -- still in set");
 
@@ -224,7 +224,7 @@ contract AfKingConcurrency is DeployProtocol {
         address mover = subs[N - 1];
 
         vm.prank(subs[0]);
-        game.subscribe(address(0), false, false, 0, 0, address(0)); // in-place tombstone
+        game.subscribe(address(0), false, false, 0, address(0)); // in-place tombstone
         assertGt(_subscriberIndexOf(subs[0]), 0, "v55: cancel is an in-place tombstone -- still in the set");
         assertEq(_dailyQtyOf(subs[0]), 0, "cancel wrote the in-place sentinel");
 
@@ -252,7 +252,7 @@ contract AfKingConcurrency is DeployProtocol {
         assertEq(_validThroughLevelOf(sub), 999, "pre-cancel: validThroughLevel = 999");
 
         vm.prank(sub);
-        game.subscribe(address(0), false, false, 0, 0, address(0)); // tombstone
+        game.subscribe(address(0), false, false, 0, address(0)); // tombstone
         assertGt(_subscriberIndexOf(sub), 0, "tombstone in set after cancel (deferred reclaim)");
         assertEq(_validThroughLevelOf(sub), 999, "pre-reclaim: validThroughLevel readable");
 
@@ -278,12 +278,12 @@ contract AfKingConcurrency is DeployProtocol {
         uint256 lenBefore = _subscribersLen();
 
         vm.prank(sub);
-        game.subscribe(address(0), false, false, 0, 0, address(0)); // tombstone, still in set
+        game.subscribe(address(0), false, false, 0, address(0)); // tombstone, still in set
         assertEq(_subscriberIndexOf(sub), idx, "tombstone in set, same index");
 
         // Re-subscribe the still-in-set tombstoned address.
         vm.prank(sub);
-        game.subscribe(address(0), false, false, 3, 0, address(0));
+        game.subscribe(address(0), false, false, 3, address(0));
         assertEq(_subscriberIndexOf(sub), idx, "re-subscribe kept the same set slot (idempotent _addToSet)");
         assertEq(_subscribersLen(), lenBefore, "re-subscribe of an in-set tombstone never double-adds");
         assertEq(_dailyQtyOf(sub), 3, "re-subscribe reactivated the sub (dailyQuantity restored)");
@@ -307,11 +307,11 @@ contract AfKingConcurrency is DeployProtocol {
         assertEq(_subscribersLen(), baseline + N, "all N added to the set");
 
         vm.prank(subs[0]);
-        game.subscribe(address(0), false, false, 0, 0, address(0));
+        game.subscribe(address(0), false, false, 0, address(0));
         vm.prank(subs[1]);
-        game.subscribe(address(0), false, false, 0, 0, address(0));
+        game.subscribe(address(0), false, false, 0, address(0));
         vm.prank(subs[2]);
-        game.subscribe(address(0), false, false, 0, 0, address(0));
+        game.subscribe(address(0), false, false, 0, address(0));
         assertEq(
             _subscribersLen(),
             baseline + N,
@@ -351,7 +351,7 @@ contract AfKingConcurrency is DeployProtocol {
         assertGt(fundedBefore, 0, "sub has stranded afking ETH");
 
         vm.prank(sub);
-        game.subscribe(address(0), false, false, 0, 0, address(0)); // tombstone
+        game.subscribe(address(0), false, false, 0, address(0)); // tombstone
         assertGt(_subscriberIndexOf(sub), 0, "v55: cancel is an in-place tombstone -- still in set");
         assertEq(_dailyQtyOf(sub), 0, "cancel wrote the in-place sentinel");
         assertEq(game.afkingFundingOf(sub), fundedBefore, "cancel did not confiscate the afking ETH");
@@ -447,7 +447,7 @@ contract AfKingConcurrency is DeployProtocol {
                 cancelled[i] = true;
                 cancelCount++;
                 vm.prank(subs[i]);
-                game.subscribe(address(0), false, false, 0, 0, address(0)); // in-place tombstone
+                game.subscribe(address(0), false, false, 0, address(0)); // in-place tombstone
             }
         }
 
@@ -531,7 +531,7 @@ contract AfKingConcurrency is DeployProtocol {
             _approveKeeper(who);
             _fundPool(who, 1 ether); // fund BEFORE subscribe to ground the NEW-run cover-buy (D-12)
             vm.prank(who);
-            game.subscribe(address(0), false, false, 1, 0, address(0)); // self, lootbox mode, qty 1
+            game.subscribe(address(0), false, false, 1, address(0)); // self, lootbox mode, qty 1
         }
     }
 
@@ -545,7 +545,7 @@ contract AfKingConcurrency is DeployProtocol {
             _approveKeeper(who);
             _fundPool(who, 1 ether); // fund BEFORE subscribe to ground the NEW-run cover-buy (D-12); still NO deity
             vm.prank(who);
-            game.subscribe(address(0), false, false, 1, 0, address(0)); // self, lootbox mode, qty 1, NO deity
+            game.subscribe(address(0), false, false, 1, address(0)); // self, lootbox mode, qty 1, NO deity
         }
     }
 

@@ -55,7 +55,7 @@ contract SweepPerPlayerWorstCaseGas is DeployProtocol {
 
     // Sub packed-field byte offsets (DegenerusGameStorage.sol; the v56 re-packed single 256-bit slot —
     // the markers are uint24 each, not the old uint32 232-bit layout).
-    uint256 private constant OFF_LASTBOUGHT = 11; // uint24 lastAutoBoughtDay (bytes 11..13)
+    uint256 private constant OFF_LASTBOUGHT = 10; // uint24 lastAutoBoughtDay (bytes 11..13)
 
     uint256 private constant MINTPACKED_SLOT = 9;
     uint256 private constant DEITY_SHIFT = 184;
@@ -238,7 +238,7 @@ contract SweepPerPlayerWorstCaseGas is DeployProtocol {
             _grantDeityPass(who);
             vm.prank(who);
             // self, drainGameCreditFirst = false (DirectEth-funded), ticket mode, qty 1, reinvestPct.
-            game.subscribe(address(0), false, true, 1, reinvestPct, address(0));
+            game.subscribe(address(0), false, true, 1, address(0));
             _fundPool(who, 5 ether);
             if (claimable > 0) _setClaimable(who, claimable);
         }

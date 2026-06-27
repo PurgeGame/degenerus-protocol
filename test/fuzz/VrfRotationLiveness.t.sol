@@ -235,6 +235,11 @@ contract VrfRotationLiveness is DeployProtocol {
 
         // Fulfil the re-issued request on the NEW coordinator (mid-day branch writes the slot).
         newVRF.fulfillRandomWords(newVRF.lastRequestId(), vrfWord);
+        // Record this manual fulfilment so the `_completeDay` drain below does not re-fulfil the
+        // same request id. The daily drain now breaks after the ticket batch and requests its RNG
+        // on the NEXT advance (the gas-compose split), so `_completeDay`'s first advance leaves
+        // `lastRequestId()` at this already-fulfilled mid-day id until the fresh daily request fires.
+        _lastFulfilledReqId = newVRF.lastRequestId();
 
         // POSITIVE: the real VRF word landed in the SAME preserved slot N -- the :269 drain
         // gate input is now non-zero, so the gate no longer reverts RngNotReady().

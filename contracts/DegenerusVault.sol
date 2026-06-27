@@ -21,7 +21,6 @@ interface IDegenerusGamePlayerActions {
         bool drainGameCreditFirst,
         bool useTickets,
         uint8 dailyQuantity,
-        uint8 reinvestPct,
         address fundingSource
     ) external payable;
     /// @notice Purchase tickets and/or lootboxes. The trailing `foil` flag adds a foil pack
@@ -461,15 +460,15 @@ contract DegenerusVault {
         flipShare = new DegenerusVaultShare("Degenerus Vault Flip", "DGVF");
         ethShare = new DegenerusVaultShare("Degenerus Vault Eth", "DGVE");
 
-        // Protocol-owned self-subscription: claimable-only daily lootbox
-        // buy of flat quantity 1, no reinvest, no FLIP rebuy. Self-consent —
+        // Protocol-owned self-subscription: claimable-first daily lootbox
+        // buy of flat quantity 1, no FLIP rebuy. Self-consent —
         // the vault IS the player (player == msg.sender). The vault holds the
         // permanent deity pass (granted in the DegenerusGame constructor), so the
         // afking's pass-OR-pay gate takes the free 30-day extend at zero cost.
         // The afking surface is GAME-resident; self-subscribe directly against
         // the GAME (subscriber == msg.sender ⇒ the GAME's self-consent path, no
         // operator approval needed).
-        gamePlayer.subscribe(address(this), true, false, 1, 0, address(0));
+        gamePlayer.subscribe(address(this), true, false, 1, address(0));
 
         // Queue this vault's perpetual tickets (levels 1-100). Moved out of the GAME
         // constructor so GAME's deploy stays under the per-tx gas cap.

@@ -731,8 +731,8 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                         lvl + 1
                     )
                 );
-            if (dOk && dData.length >= 32) {
-                bool finished = abi.decode(dData, (bool));
+            if (dOk && dData.length >= 64) {
+                (bool finished, ) = abi.decode(dData, (bool, bool));
                 if (!finished) {
                     // Read slot has more entries -- retry next tx.
                     return (true, STAGE_TICKETS_WORKING);
@@ -1590,13 +1590,14 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
 
     /// @dev Process a batch of current level tickets via mint module delegatecall.
     /// @param lvl Current level.
-    /// @return worked True if any tickets were processed.
+    /// @return worked True if the batch materialized at least one ticket or foil entry.
+    ///         Reported directly by the mint module rather than inferred from a cursor
+    ///         delta, so a batch that both starts and finishes in one call (cursor returns
+    ///         to 0) still reports its work and the chain breaks before BAF/jackpot.
     /// @return finished True if all tickets for this level have been fully processed.
     function _runProcessTicketBatch(
         uint24 lvl
     ) private returns (bool worked, bool finished) {
-        uint32 prevCursor = ticketCursor;
-        uint24 prevLevel = ticketLevel;
         (bool ok, bytes memory data) = ContractAddresses
             .GAME_MINT_MODULE
             .delegatecall(
@@ -1606,9 +1607,8 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                 )
             );
         if (!ok) _revertDelegate(data);
-        if (data.length == 0) revert EmptyReturn();
-        finished = abi.decode(data, (bool));
-        worked = (ticketCursor != prevCursor) || (ticketLevel != prevLevel);
+        if (data.length < 64) revert EmptyReturn();
+        (finished, worked) = abi.decode(data, (bool, bool));
     }
 
     /// @dev Process jackpot→purchase transition housekeeping (vault perpetual tickets + auto-stake).

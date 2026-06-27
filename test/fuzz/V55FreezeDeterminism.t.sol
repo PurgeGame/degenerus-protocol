@@ -59,10 +59,10 @@ contract V55FreezeDeterminism is DeployProtocol {
 
     // Sub packed-field byte offsets — the v56 compute-on-read re-pack (single 256-bit slot):
     //   scorePlus1 u16 @6 · amount u24 @8 · lastAutoBoughtDay u24 @11 · lastOpenedDay u24 @14.
-    uint256 private constant OFF_SCOREPLUS1 = 6; // uint16 scorePlus1        (bytes 6..7)
-    uint256 private constant OFF_AMOUNT = 8; // uint24 amount            (bytes 8..10)
-    uint256 private constant OFF_LASTBOUGHT = 11; // uint24 lastAutoBoughtDay (bytes 11..13)
-    uint256 private constant OFF_LASTOPENED = 14; // uint24 lastOpenedDay     (bytes 14..16)
+    uint256 private constant OFF_SCOREPLUS1 = 5; // uint16 scorePlus1        (bytes 6..7)
+    uint256 private constant OFF_AMOUNT = 7; // uint24 amount            (bytes 8..10)
+    uint256 private constant OFF_LASTBOUGHT = 10; // uint24 lastAutoBoughtDay (bytes 11..13)
+    uint256 private constant OFF_LASTOPENED = 13; // uint24 lastOpenedDay     (bytes 14..16)
 
     uint256 private constant DEITY_SHIFT = 184;
 
@@ -573,7 +573,7 @@ contract V55FreezeDeterminism is DeployProtocol {
 
     function _subscribeLootbox(address who, uint8 q) internal {
         vm.prank(who);
-        game.subscribe(address(0), false, false, q, 0, address(0)); // self, lootbox mode, no reinvest
+        game.subscribe(address(0), false, false, q, address(0)); // self, lootbox mode, no reinvest
     }
 
     function _fundPool(address who, uint256 amount) internal {

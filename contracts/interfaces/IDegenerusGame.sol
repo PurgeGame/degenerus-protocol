@@ -429,14 +429,12 @@ interface IDegenerusGame {
     /// @param drainGameCreditFirst Spend game credit before fresh ETH.
     /// @param useTickets Deliver tickets (true) or lootbox deposits (false).
     /// @param dailyQuantity Daily delivery quantity; 0 cancels the subscription.
-    /// @param reinvestPct Claimable reinvest percentage (0..100); 0 = no reinvest.
     /// @param fundingSource Account funding the subscription (operator-approval gated).
     function subscribe(
         address player,
         bool drainGameCreditFirst,
         bool useTickets,
         uint8 dailyQuantity,
-        uint8 reinvestPct,
         address fundingSource
     ) external payable;
 

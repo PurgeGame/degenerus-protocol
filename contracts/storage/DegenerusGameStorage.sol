@@ -2175,10 +2175,10 @@ abstract contract DegenerusGameStorage {
 
     /// @notice Per-player AfKing subscription record: the per-buy box stamp plus the
     ///         in-slot per-sub accumulator.
-    /// @dev Layout (Solidity packs sequentially) — fits EXACTLY in ONE 32-byte slot (256
-    ///      bits, 0 free), so the whole record reads/writes as a single warm slot with no
+    /// @dev Layout (Solidity packs sequentially) — fits in ONE 32-byte slot (248 bits used,
+    ///      8 free at the top), so the whole record reads/writes as a single warm slot with no
     ///      extra cold slot:
-    ///        config (48b):  dailyQuantity(8) + validThroughLevel(24) + reinvestPct(8) + flags(8)
+    ///        config (40b):  dailyQuantity(8) + validThroughLevel(24) + flags(8)
     ///        per-sub stamp (40b): score(16) + amount(24, milli-ETH)
     ///        markers (96b): lastAutoBoughtDay(24) + lastOpenedDay(24) + afkCoveredThroughDay(24) + afkingStartDay(24)
     ///        accumulator (72b): affiliateBase(32) + pendingFlip(24) + subStreakLatch(16)
@@ -2214,7 +2214,7 @@ abstract contract DegenerusGameStorage {
     ///      `affiliateBase` is uint32 with a 100M-whole-FLIP saturating clamp and
     ///      `pendingFlip` is uint24 with a ~16.7M (2^24-1) saturating clamp at the accrue
     ///      write — each clamp binds before its field's type ceiling, and it can only ever
-    ///      UNDER-credit a pathological reinvest-whale (off the solvency path). The accumulator fields are written on
+    ///      UNDER-credit a pathological high-volume whale (off the solvency path). The accumulator fields are written on
     ///      the buy-accrue path and the open markers (`lastOpenedDay`/`lastAutoBoughtDay`)
     ///      on the open path — disjoint fields in one warm slot, no collision.
     ///      There are no settle-day markers: the running balances self-mark, the pull has
@@ -2230,8 +2230,6 @@ abstract contract DegenerusGameStorage {
         ///      deity sentinel = type(uint24).max; non-pass = 0). uint24 gives ~16.7M
         ///      levels of headroom and the deity sentinel type(uint24).max fits exactly.
         uint24 validThroughLevel;
-        /// @dev Claimable reinvest percentage (0..100); 0 = no reinvest.
-        uint8 reinvestPct;
         /// @dev bit 0 free; bit 1 = drainGameCreditFirst; bit 2 = useTickets.
         uint8 flags;
         // --- per-sub stamp (40 bits) ---
@@ -2415,6 +2413,14 @@ abstract contract DegenerusGameStorage {
     ///      slot (free read in the sweep, which already loads boxCursorIndex); the sweep flips
     ///      presaleDrained once boxCursorIndex advances past it. Zero while presale never closes.
     uint48 internal presaleCloseIndex;
+
+    /// @dev Once-per-level latch for the sDGNRS lootbox top-up: the level whose first
+    ///      sDGNRS afking buy already took the 5%-of-claimable bonus. The process STAGE applies
+    ///      the bonus once at its start (before the per-sub loop) while `level > _sdgnrsBonusLevel`,
+    ///      then stamps the level here — so it fires once per level and never on a later chunk/tx.
+    ///      Packs into the cursor slot (loaded for `_subCursor` every STAGE), so its read/write is
+    ///      warm; a uint24 holds the full level range (matches `level`).
+    uint24 internal _sdgnrsBonusLevel;
 
     /// @dev Players with an open box queued per lootbox RNG index, enqueued once at
     ///      first deposit (the lootboxEth amount == 0 signal). Keyed on the lootbox index,

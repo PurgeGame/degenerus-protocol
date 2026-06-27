@@ -291,7 +291,7 @@ contract AdvanceStageWorstCaseGas is Test {
         assertEq(tb.queueLen(TARGET_LVL), 1, "fixture: one deep-owed player queued");
 
         uint256 g0 = gasleft();
-        bool finished = tb.processTicketBatch(TARGET_LVL);
+        (bool finished, ) = tb.processTicketBatch(TARGET_LVL);
         uint256 gasUsed = g0 - gasleft();
 
         emit log_named_uint("STAGE_0_1_5_6_7_ticket_batch_full_chunk_gas", gasUsed);
@@ -323,7 +323,7 @@ contract AdvanceStageWorstCaseGas is Test {
         assertEq(tb.cursor(), 1, "fixture: cursor starts at index 1 (warm, no cold-scale)");
 
         uint256 g0 = gasleft();
-        bool finished = tb.processTicketBatch(TARGET_LVL);
+        (bool finished, ) = tb.processTicketBatch(TARGET_LVL);
         uint256 gasUsed = g0 - gasleft();
 
         emit log_named_uint("STAGE_7_ticket_batch_WARM_full_budget_chunk_gas", gasUsed);

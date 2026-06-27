@@ -53,8 +53,8 @@ contract QuestBoonAfkingStreakLossTest is DeployProtocol {
     uint256 private constant SUBOF_SLOT = 54;
     uint256 private constant MINTPACKED_SLOT = 9;
     uint256 private constant DEITY_SHIFT = 184;
-    uint256 private constant OFF_AFKINGSTART = 20; // uint24 afkingStartDay
-    uint256 private constant OFF_STREAKLATCH = 30; // uint16 subStreakLatch (the afking sub streak base)
+    uint256 private constant OFF_AFKINGSTART = 19; // uint24 afkingStartDay
+    uint256 private constant OFF_STREAKLATCH = 29; // uint16 subStreakLatch (the afking sub streak base)
 
     uint256 private constant DRAIN_MAX_ITERATIONS = 60;
     uint256 private _lastFulfilledReqId;
@@ -139,7 +139,7 @@ contract QuestBoonAfkingStreakLossTest is DeployProtocol {
         uint256 earnedExpected = _liveAfkingStreakOf(p);
         assertGe(earnedExpected, subBaseAfter, "non-vacuity: the earned streak rides the (bonus-inclusive) sub base");
         vm.prank(p);
-        game.subscribe(address(0), false, false, 0, 0, address(0)); // explicit cancel -> finalizeAfking
+        game.subscribe(address(0), false, false, 0, address(0)); // explicit cancel -> finalizeAfking
 
         // finalizeAfking writes the earned streak into the manual `state.streak` (slot off9). Read it DIRECTLY
         // (not via effectiveBaseStreakAndAfking, which would return the stale start-of-day baseStreak snapshot
@@ -187,7 +187,7 @@ contract QuestBoonAfkingStreakLossTest is DeployProtocol {
     ///      no older than yesterday -- mirrors GameAfkingModule._afkingStreak so the finalize hand-back is checked
     ///      against the same value the contract earns.
     function _liveAfkingStreakOf(address who) internal view returns (uint256) {
-        uint256 covered = _subField(who, 17, 24); // afkCoveredThroughDay u24 off17
+        uint256 covered = _subField(who, 16, 24); // afkCoveredThroughDay u24 off16
         uint256 today = game.currentDayView();
         if (today == 0 || covered + 1 < today) return 0;
         return _streakLatch16Of(who) + covered - _afkingStartOf(who);
@@ -285,7 +285,7 @@ contract QuestBoonAfkingStreakLossTest is DeployProtocol {
 
     function _subscribeLootbox(address who, uint8 q) internal {
         vm.prank(who);
-        game.subscribe(address(0), false, false, q, 0, address(0)); // self, lootbox mode, no reinvest
+        game.subscribe(address(0), false, false, q, address(0)); // self, lootbox mode, no reinvest
     }
 
     function _fundPool(address who, uint256 amount) internal {

@@ -53,10 +53,10 @@ contract V55SetMutationOpenE is DeployProtocol {
     // OFF_DAILY/OFF_VALIDTHROUGH did not move; scorePlus1/amount/day-markers shifted down.
     uint256 private constant OFF_DAILY = 0; // uint8  dailyQuantity     (byte 0)
     uint256 private constant OFF_VALIDTHROUGH = 1; // uint24 validThroughLevel (bytes 1..3)
-    uint256 private constant OFF_SCOREPLUS1 = 6; // uint16 scorePlus1        (bytes 6..7)
-    uint256 private constant OFF_AMOUNT = 8; // uint24 amount            (bytes 8..10)
-    uint256 private constant OFF_LASTBOUGHT = 11; // uint24 lastAutoBoughtDay (bytes 11..13)
-    uint256 private constant OFF_LASTOPENED = 14; // uint24 lastOpenedDay     (bytes 14..16)
+    uint256 private constant OFF_SCOREPLUS1 = 5; // uint16 scorePlus1        (bytes 6..7)
+    uint256 private constant OFF_AMOUNT = 7; // uint24 amount            (bytes 8..10)
+    uint256 private constant OFF_LASTBOUGHT = 10; // uint24 lastAutoBoughtDay (bytes 11..13)
+    uint256 private constant OFF_LASTOPENED = 13; // uint24 lastOpenedDay     (bytes 14..16)
 
     uint256 private constant DEITY_SHIFT = 184;
 
@@ -197,7 +197,7 @@ contract V55SetMutationOpenE is DeployProtocol {
         // Cancel the sub (tombstone). A normal tombstone is reclaimed by the next STAGE — but the
         // NO-ORPHAN guard leaves a PENDING-box sub untouched (no reclaim while a box is unopened).
         vm.prank(p);
-        game.subscribe(address(0), false, false, 0, 0, address(0)); // tombstone
+        game.subscribe(address(0), false, false, 0, address(0)); // tombstone
         assertEq(_dailyQtyOf(p), 0, "tombstoned");
 
         vm.recordLogs();
@@ -250,7 +250,7 @@ contract V55SetMutationOpenE is DeployProtocol {
         // Tombstone the FIRST displaced sub so the tail `mover` swap-pops into its slot during the
         // STAGE reclaim (no prior buy -> no pending box -> the reclaim fires).
         vm.prank(subs[0]);
-        game.subscribe(address(0), false, false, 0, 0, address(0));
+        game.subscribe(address(0), false, false, 0, address(0));
         assertEq(_dailyQtyOf(subs[0]), 0, "first displaced sub tombstoned");
 
         vm.recordLogs();
@@ -289,7 +289,7 @@ contract V55SetMutationOpenE is DeployProtocol {
         address m = makeAddr("openE_m");
         vm.prank(m);
         vm.expectRevert(abi.encodeWithSignature("NotApproved()"));
-        game.subscribe(address(0), false, true, 1, 0, s); // S has not approved M -> REVERT
+        game.subscribe(address(0), false, true, 1, s); // S has not approved M -> REVERT
     }
 
     /// @notice OPEN-E (2) default-self byte-identical: subscribe with fundingSource = address(0) stores
@@ -300,7 +300,7 @@ contract V55SetMutationOpenE is DeployProtocol {
         vm.skip(true, "357-00b D-12 supersession: the v55 set-mutation/OPEN-E harness subscribes an ungrounded sub then exercises the no-orphan/swap-pop/OPEN-E STAGE; the grounded subscribe stamps a no-orphan-protected box at subscribe; re-proven by V56SecUnmanipulable (no-orphan + finalize hooks) + V56SubHardening (D-13 exemption + crossing eviction)");
         address m = makeAddr("self_m");
         vm.prank(m);
-        game.subscribe(address(0), false, true, 1, 0, address(0)); // self-funded
+        game.subscribe(address(0), false, true, 1, address(0)); // self-funded
         assertEq(_fundingSourceOf(m), address(0), "default-self: _fundingSourceOf == address(0)");
 
         // A deposit to self credits the subscriber's own bucket (the draw debits the same bucket).
@@ -320,14 +320,14 @@ contract V55SetMutationOpenE is DeployProtocol {
         vm.prank(s);
         game.setOperatorApproval(m, true);
         vm.prank(m);
-        game.subscribe(address(0), false, true, 1, 0, s); // honored: source = S
+        game.subscribe(address(0), false, true, 1, s); // honored: source = S
         assertEq(_fundingSourceOf(m), s, "initial source = S");
 
         // Attempt to RE-POINT the source to S2 (which never approved M) — the re-subscribe RE-RUNS the
         // consent gate and REVERTS (no escalation to an unapproved source).
         vm.prank(m);
         vm.expectRevert(abi.encodeWithSignature("NotApproved()"));
-        game.subscribe(address(0), false, true, 1, 0, s2);
+        game.subscribe(address(0), false, true, 1, s2);
         // The source is unchanged (the failed re-point did not escalate).
         assertEq(_fundingSourceOf(m), s, "no-escalation: source unchanged after the rejected re-point");
     }
@@ -343,7 +343,7 @@ contract V55SetMutationOpenE is DeployProtocol {
         vm.prank(s);
         game.setOperatorApproval(m, true);
         vm.prank(m);
-        game.subscribe(address(0), false, true, 1, 0, s);
+        game.subscribe(address(0), false, true, 1, s);
         assertGt(_subscriberIndexOf(m), 0, "M's sub active");
 
         // S REVOKES after the sub is active.
@@ -368,14 +368,14 @@ contract V55SetMutationOpenE is DeployProtocol {
             subs[i] = w;
             _grantDeityPass(w);
             vm.prank(w);
-            game.subscribe(address(0), false, true, 1, 0, address(0)); // self-funded
+            game.subscribe(address(0), false, true, 1, address(0)); // self-funded
             _fundPool(w, 1 ether);
         }
         // Random cancel subset (the swap-pop orderings).
         for (uint256 i; i < N; i++) {
             if ((ordering >> i) & 1 == 1) {
                 vm.prank(subs[i]);
-                game.subscribe(address(0), false, true, 0, 0, address(0)); // tombstone
+                game.subscribe(address(0), false, true, 0, address(0)); // tombstone
             }
         }
         vm.recordLogs();
@@ -424,7 +424,7 @@ contract V55SetMutationOpenE is DeployProtocol {
 
     function _subscribeLootbox(address who, uint8 q) internal {
         vm.prank(who);
-        game.subscribe(address(0), false, false, q, 0, address(0)); // self, lootbox mode, no reinvest
+        game.subscribe(address(0), false, false, q, address(0)); // self, lootbox mode, no reinvest
     }
 
     function _fundPool(address who, uint256 amount) internal {

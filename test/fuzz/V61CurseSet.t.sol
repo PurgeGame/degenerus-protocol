@@ -49,7 +49,7 @@ contract V61CurseSet is DeployProtocol {
     uint256 private constant AFFILIATE_BONUS_POINTS_SHIFT = 209; // (6 bits)
     uint256 private constant CURSE_COUNT_SHIFT = 215; // (8 bits)
 
-    uint256 private constant OFF_SCOREPLUS1 = 6; // uint16 scorePlus1 in the Sub slot (V56 offset)
+    uint256 private constant OFF_SCOREPLUS1 = 5; // uint16 scorePlus1 in the Sub slot (V56 offset)
     uint256 private constant CURSE_COUNT_CAP = 20;
 
     uint256 private constant DRAIN_MAX_ITERATIONS = 60;
@@ -493,7 +493,7 @@ contract V61CurseSet is DeployProtocol {
 
     function _subscribeLootbox(address who, uint8 q) internal {
         vm.prank(who);
-        game.subscribe(address(0), false, false, q, 0, address(0));
+        game.subscribe(address(0), false, false, q, address(0));
     }
 
     function _fundPool(address who, uint256 amount) internal {

@@ -66,8 +66,8 @@ contract RouterWorstCaseGas is DeployProtocol {
 
     // Sub packed-field byte offsets (DegenerusGameStorage.sol; the v56 re-packed single 256-bit slot,
     // 241/256 bits used — the markers are uint24 each, not the old uint32 232-bit layout).
-    uint256 private constant OFF_LASTBOUGHT = 11; // uint24 lastAutoBoughtDay (bytes 11..13)
-    uint256 private constant OFF_LASTOPENED = 14; // uint24 lastOpenedDay     (bytes 14..16)
+    uint256 private constant OFF_LASTBOUGHT = 10; // uint24 lastAutoBoughtDay (bytes 11..13)
+    uint256 private constant OFF_LASTOPENED = 13; // uint24 lastOpenedDay     (bytes 14..16)
 
     // -------------------------------------------------------------------------
     // Worst-case / measurement constants
@@ -433,7 +433,7 @@ contract RouterWorstCaseGas is DeployProtocol {
             subs[i] = who;
             _grantDeityPass(who);
             vm.prank(who);
-            game.subscribe(address(0), false, false, 1, 0, address(0)); // self, lootbox mode, qty 1
+            game.subscribe(address(0), false, false, 1, address(0)); // self, lootbox mode, qty 1
             _fundPool(who, poolEach);
         }
     }

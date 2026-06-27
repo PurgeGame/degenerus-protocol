@@ -307,7 +307,10 @@ interface IDegenerusGameMintModule {
     /// @notice Processes a batch of current-level ticket entries
     /// @param lvl The level to process tickets for
     /// @return finished True if all tickets have been processed
-    function processTicketBatch(uint24 lvl) external returns (bool finished);
+    /// @return didWork True if this call materialized at least one ticket or foil entry
+    function processTicketBatch(uint24 lvl)
+        external
+        returns (bool finished, bool didWork);
 
 }
 
@@ -520,7 +523,6 @@ interface IGameAfkingModule {
         bool drainGameCreditFirst,
         bool useTickets,
         uint8 dailyQuantity,
-        uint8 reinvestPct,
         address fundingSource
     ) external payable;
 
@@ -628,5 +630,8 @@ interface IDegenerusGameFoilPackModule {
     ///      bucket's daily word and filing them into the jackpot trait buckets.
     /// @param room The leftover write budget for this batch.
     /// @return done True iff the foil drain has caught up (no sealed bucket remains).
-    function processFoilDrain(uint32 room) external returns (bool done);
+    /// @return drained True if this call resolved at least one foil buyer.
+    function processFoilDrain(uint32 room)
+        external
+        returns (bool done, bool drained);
 }

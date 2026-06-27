@@ -628,7 +628,14 @@ contract DegenerusGameMintModule is
     ///      scaled down by 35% to account for cold storage access costs.
     /// @param lvl Level whose tickets should be processed.
     /// @return finished True if all tickets for this level have been fully processed.
-    function processTicketBatch(uint24 lvl) external returns (bool finished) {
+    /// @return didWork True if this call materialized at least one ticket entry or foil
+    ///         buyer. Lets the advance chain break out before composing a finishing batch
+    ///         with a same-tx BAF/jackpot, even when the batch both starts and finishes in
+    ///         one call (cursor returns to 0, so a cursor-delta probe would read no work).
+    function processTicketBatch(uint24 lvl)
+        external
+        returns (bool finished, bool didWork)
+    {
         uint24 rk = _tqReadKey(lvl);
         mapping(address => uint40) storage owedMap = ticketsOwedPacked[rk];
         address[] storage queue = ticketQueue[rk];
@@ -654,13 +661,13 @@ contract DegenerusGameMintModule is
             if (total != 0) {
                 delete ticketQueue[rk];
             }
-            bool foilDoneEmpty = _drainFoil(writesBudget);
+            (bool foilDoneEmpty, bool foilDrainedEmpty) = _drainFoil(writesBudget);
             ticketCursor = 0;
             if (foilDoneEmpty) {
                 ticketLevel = 0;
-                return true;
+                return (true, foilDrainedEmpty);
             }
-            return false;
+            return (false, foilDrainedEmpty);
         }
 
         uint256 entropy = lootboxRngWordByIndex[uint48(_lrRead(LR_INDEX_SHIFT, LR_INDEX_MASK)) - 1];
@@ -716,22 +723,25 @@ contract DegenerusGameMintModule is
             // leftover to 0 (an over-budget call leaves no room for foil and defers it
             // to the next tx) rather than underflowing the subtraction.
             uint32 foilRoom = used >= writesBudget ? 0 : writesBudget - used;
-            bool foilDone = _drainFoil(foilRoom);
+            (bool foilDone, bool foilDrained) = _drainFoil(foilRoom);
+            // Real work this call iff the normal loop consumed budget OR a foil buyer
+            // resolved — the signal the advance chain reads to refuse same-tx composition.
+            bool didWorkThisCall = used > 0 || foilDrained;
             if (foilDone) {
                 ticketCursor = 0;
                 ticketLevel = 0;
-                return true;
+                return (true, didWorkThisCall);
             }
             // Foil queue has more entries than the budget could fit: resume next tx.
             // The normal cursor stays at its terminal position (idx == total).
             ticketCursor = uint32(idx);
-            return false;
+            return (false, didWorkThisCall);
         }
         // Mid-queue stop: persist the resume cursor. The finished path above writes
         // its own terminal cursor/level pair, so the shared packed slot is stored
         // exactly once per path.
         ticketCursor = uint32(idx);
-        return false;
+        return (false, used > 0);
     }
 
     /// @dev Hand the per-buy-day foil buckets to the foil module on the leftover write
@@ -744,13 +754,14 @@ contract DegenerusGameMintModule is
     ///      module is not invoked at all — the common advance carries no foil-module
     ///      dependency, gas, or brick surface.
     /// @return done True iff the foil drain has caught up (no sealed bucket remains).
-    function _drainFoil(uint32 room) private returns (bool done) {
-        if (!_foilDrainPending()) return true;
+    /// @return drained True if this call resolved at least one foil buyer.
+    function _drainFoil(uint32 room) private returns (bool done, bool drained) {
+        if (!_foilDrainPending()) return (true, false);
         // A foil buyer costs a fixed FOIL_PACK_ENTRIES*2 + 3 budget units; if the
         // normal queue already consumed the budget there is no room for even one, so
         // defer to the next tx WITHOUT the delegatecall (pending foil is never "done"
         // here — the readiness gate keeps the draw blocked until it drains).
-        if (room < (FOIL_PACK_ENTRIES * 2) + 3) return false;
+        if (room < (FOIL_PACK_ENTRIES * 2) + 3) return (false, false);
         (bool ok, bytes memory data) = ContractAddresses
             .GAME_FOILPACK_MODULE
             .delegatecall(
@@ -765,7 +776,7 @@ contract DegenerusGameMintModule is
                 revert(add(32, data), mload(data))
             }
         }
-        return abi.decode(data, (bool));
+        return abi.decode(data, (bool, bool));
     }
 
     /// @dev Resolves the zero-owed remainder case for ticket processing.

@@ -83,26 +83,28 @@ contract V56AfkingGasMarginal is DeployProtocol {
     //   lastAutoBoughtDay u24 @11 · lastOpenedDay u24 @14 · afkCoveredThroughDay u24 @17 · afkingStartDay u24 @20
     //   affiliateBase u32 @23 · pendingFlip u24 @27 · subStreakLatch u16 @30
     uint256 private constant OFF_VALIDTHROUGH = 1; // uint24 validThroughLevel   (bytes 1..3)
-    uint256 private constant OFF_AMOUNT = 8;      // uint24 amount (milli-ETH)   (bytes 8..10)
-    uint256 private constant OFF_LASTBOUGHT = 11; // uint24 lastAutoBoughtDay    (bytes 11..13)
-    uint256 private constant OFF_LASTOPENED = 14; // uint24 lastOpenedDay        (bytes 14..16)
+    uint256 private constant OFF_AMOUNT = 7;      // uint24 amount (milli-ETH)   (bytes 8..10)
+    uint256 private constant OFF_LASTBOUGHT = 10; // uint24 lastAutoBoughtDay    (bytes 11..13)
+    uint256 private constant OFF_LASTOPENED = 13; // uint24 lastOpenedDay        (bytes 14..16)
     /// @dev milli-ETH packing scale (DegenerusGameStorage.LR_ETH_SCALE) — sub.amount * this = box wei.
     uint256 private constant MILLI_ETH_SCALE = 1e15;
-    uint256 private constant OFF_AFKCOVERED = 17; // uint24 afkCoveredThroughDay (bytes 17..19)
-    uint256 private constant OFF_AFKINGSTART = 20; // uint24 afkingStartDay      (bytes 20..22)
-    uint256 private constant OFF_AFFBASE = 23;    // uint32 affiliateBase        (bytes 23..26)
-    uint256 private constant OFF_PENDINGFLIP = 27; // uint24 pendingFlip     (bytes 27..29)
-    uint256 private constant OFF_STREAKLATCH = 30; // uint16 subStreakLatch      (bytes 30..31; full streak counter)
+    uint256 private constant OFF_AFKCOVERED = 16; // uint24 afkCoveredThroughDay (bytes 17..19)
+    uint256 private constant OFF_AFKINGSTART = 19; // uint24 afkingStartDay      (bytes 20..22)
+    uint256 private constant OFF_AFFBASE = 22;    // uint32 affiliateBase        (bytes 23..26)
+    uint256 private constant OFF_PENDINGFLIP = 26; // uint24 pendingFlip     (bytes 27..29)
+    uint256 private constant OFF_STREAKLATCH = 29; // uint16 subStreakLatch      (bytes 30..31; full streak counter)
 
     uint256 private constant MINTPACKED_SLOT = 9;
     uint256 private constant DEITY_SHIFT = 184;
 
-    /// @dev The packed header slot 0 holds `purchaseStartDay` (uint32 @ byte 0) + `dailyIdx` (uint32 @ byte 4)
-    ///      + `rngRequestTime` (uint48 @ byte 8) (RE-DERIVED via `forge inspect DegenerusGame storageLayout`).
+    /// @dev The packed header slot 0 holds `purchaseStartDay` (uint24 @ byte 0) + `dailyIdx` (uint24 @ byte 3)
+    ///      + `rngRequestTime` (uint48 @ byte 6) + `level` (uint24 @ byte 12) (RE-DERIVED via
+    ///      `forge inspect DegenerusGame storageLayout` after the slot-0 width re-pack — purchaseStartDay and
+    ///      dailyIdx narrowed uint32→uint24, shifting every later field down).
     ///      Neither has a public getter, so the decouple invariants read them via vm.load on slot 0.
     uint256 private constant HEADER_SLOT = 0;
-    uint256 private constant OFF_PURCHASE_START_DAY = 0; // uint32 @ byte 0
-    uint256 private constant OFF_DAILY_IDX = 4;          // uint32 @ byte 4
+    uint256 private constant OFF_PURCHASE_START_DAY = 0; // uint24 @ byte 0
+    uint256 private constant OFF_DAILY_IDX = 3;          // uint24 @ byte 3
     uint256 private constant OFF_SUBS_FULLY_PROCESSED = 28; // bool @ byte 28 (afking STAGE drain-complete flag)
 
     // -------------------------------------------------------------------------
@@ -479,7 +481,7 @@ contract V56AfkingGasMarginal is DeployProtocol {
         // it organically would either trip the VRF-grace liveness gate or the lvl-0 idle gameover path first).
         _settleClean(uint256(keccak256("gr_clean")) | 1);
         // level >= 1 so the alive-guard is the 120-day inactivity clock (not the lvl-0 365-day idle path).
-        _setHeaderField(14, 3, 1); // level = 1
+        _setHeaderField(12, 3, 1); // level = 1
         // A fresh resumed-day VRF word is ready (rngWordCurrent slot 3) — the gap-backfill trigger.
         vm.store(address(game), bytes32(uint256(3)), bytes32(uint256(keccak256("gr_freshword")) | 1));
 
@@ -491,9 +493,9 @@ contract V56AfkingGasMarginal is DeployProtocol {
         vm.warp(block.timestamp + STALL_DAYS * 1 days);
         uint32 resumeDay = game.currentDayView();
         // Death-clock excludes gap days -> purchaseStartDay kept recent (game alive: resumeDay - psd = 1 < 120).
-        _setHeaderField(0, 4, resumeDay - 1); // purchaseStartDay = resumeDay - 1
+        _setHeaderField(0, 3, resumeDay - 1); // purchaseStartDay = resumeDay - 1
         // The resume word arrives via a recent VRF retry -> rngRequestTime within the 14-day VRF grace window.
-        _setHeaderField(8, 6, uint48(block.timestamp));
+        _setHeaderField(6, 6, uint48(block.timestamp));
         psdBeforeResume = _purchaseStartDay();
 
         require(resumeDay > idxBeforeStall + 1, "fixture: a multi-day gap opened (day >> dailyIdx)");
@@ -822,7 +824,7 @@ contract V56AfkingGasMarginal is DeployProtocol {
         _grantDeityPass(afk);
         _fundPool(afk, 5 ether); // fund BEFORE subscribe to ground the NEW-run cover-buy (D-12)
         vm.prank(afk);
-        game.subscribe(address(0), false, false, 1, 0, address(0));
+        game.subscribe(address(0), false, false, 1, address(0));
         _runStageNewDay(0xA0F1);
 
         // HUMAN backlog: a real lootbox buyer queues a box on the human path (boxPlayers).
@@ -914,7 +916,7 @@ contract V56AfkingGasMarginal is DeployProtocol {
         _grantDeityPass(afk);
         _fundPool(afk, 5 ether); // fund BEFORE subscribe to ground the NEW-run cover-buy (D-12)
         vm.prank(afk);
-        game.subscribe(address(0), false, false, 1, 0, address(0));
+        game.subscribe(address(0), false, false, 1, address(0));
         _runStageNewDay(0xE0F1);
         _settleClean(0xE0F2);
         require(_lastOpenedDayOf(afk) < _lastBoughtDayOf(afk), "fixture: afking box pending");
@@ -948,9 +950,9 @@ contract V56AfkingGasMarginal is DeployProtocol {
         _fundPool(viaValve, 5 ether);
         _fundPool(viaBounty, 5 ether);
         vm.prank(viaValve);
-        game.subscribe(address(0), false, false, 1, 0, address(0));
+        game.subscribe(address(0), false, false, 1, address(0));
         vm.prank(viaBounty);
-        game.subscribe(address(0), false, false, 1, 0, address(0));
+        game.subscribe(address(0), false, false, 1, address(0));
         _runStageNewDay(0xF0F1);
 
         uint32 stampValve = _lastBoughtDayOf(viaValve);
@@ -1123,13 +1125,13 @@ contract V56AfkingGasMarginal is DeployProtocol {
         vm.store(address(game), slot, bytes32(packed));
     }
 
-    /// @dev Poke the game `level` (slot 0, uint24 @ byte 14) so the pass-evict crossing
+    /// @dev Poke the game `level` (slot 0, uint24 @ byte 12) so the pass-evict crossing
     ///      (currentLevel > validThroughLevel) is reachable in the gas harness (the fixture level does not
     ///      advance organically over the bracketed STAGE measure).
     function _setLevel(uint24 lvl) internal {
         uint256 s0 = uint256(vm.load(address(game), bytes32(uint256(0))));
-        s0 &= ~(uint256(0xFFFFFF) << (14 * 8));
-        s0 |= (uint256(lvl) & 0xFFFFFF) << (14 * 8);
+        s0 &= ~(uint256(0xFFFFFF) << (12 * 8));
+        s0 |= (uint256(lvl) & 0xFFFFFF) << (12 * 8);
         vm.store(address(game), bytes32(uint256(0)), bytes32(s0));
     }
 
@@ -1147,7 +1149,7 @@ contract V56AfkingGasMarginal is DeployProtocol {
             _grantDeityPass(who);
             _fundPool(who, 5 ether);
             vm.prank(who);
-            game.subscribe(address(0), false, false, 1, 0, address(0));
+            game.subscribe(address(0), false, false, 1, address(0));
         }
         // OPEN the grounded subscribe's pending boxes first — the no-orphan guard dominates the evict branch,
         // so a pending-box sub would be skipped, not evicted. After the open, clear the deity bit + poke
@@ -1286,7 +1288,7 @@ contract V56AfkingGasMarginal is DeployProtocol {
             _fundPool(who, poolEach);
             vm.prank(who);
             // self, mode = isTicket, qty 1, reinvest 0, self-funded
-            game.subscribe(address(0), false, isTicket, 1, 0, address(0));
+            game.subscribe(address(0), false, isTicket, 1, address(0));
         }
     }
 
@@ -1408,22 +1410,22 @@ contract V56AfkingGasMarginal is DeployProtocol {
         return uint256(vm.load(address(game), bytes32(uint256(SUBSCRIBERS_SLOT))));
     }
 
-    /// @dev Read `purchaseStartDay` (slot 0 byte 0, uint32) — the death-clock anchor bumped by the gap
+    /// @dev Read `purchaseStartDay` (slot 0 byte 0, uint24) — the death-clock anchor bumped by the gap
     ///      backfill (`purchaseStartDay += gapCount`); the decouple proves it bumps EXACTLY ONCE across resume.
     function _purchaseStartDay() internal view returns (uint32) {
         uint256 p = uint256(vm.load(address(game), bytes32(uint256(HEADER_SLOT)))) >> (OFF_PURCHASE_START_DAY * 8);
-        return uint32(p & 0xFFFFFFFF);
+        return uint32(p & 0xFFFFFF);
     }
 
-    /// @dev Read `dailyIdx` (slot 0 byte 4, uint32) — the monotonic day counter advanced ONLY by `_unlockRng`.
+    /// @dev Read `dailyIdx` (slot 0 byte 3, uint24) — the monotonic day counter advanced ONLY by `_unlockRng`.
     ///      The decouple proves advance N (the gap-backfill break) does NOT advance it, so `advanceDue()` stays
     ///      true and advance N+1 pays the deferred jackpot with the same frozen word.
     function _dailyIdx() internal view returns (uint32) {
         uint256 p = uint256(vm.load(address(game), bytes32(uint256(HEADER_SLOT)))) >> (OFF_DAILY_IDX * 8);
-        return uint32(p & 0xFFFFFFFF);
+        return uint32(p & 0xFFFFFF);
     }
 
-    /// @dev Read `subsFullyProcessed` (slot 0 byte 29, bool) — set true once the afking STAGE drains the funded
+    /// @dev Read `subsFullyProcessed` (slot 0 byte 28, bool) — set true once the afking STAGE drains the funded
     ///      set for the cycle. After advance N it proves the STAGE actually ran and completed (the
     ///      STAGE_SUBS_BACKFILL_DEFERRED break is only reachable past a completed STAGE), so the defer leg is
     ///      non-vacuous.
@@ -1617,7 +1619,7 @@ contract V56AfkingGasMarginal is DeployProtocol {
             _grantDeityPass(who);
             _fundPool(who, 5 ether);
             vm.prank(who);
-            game.subscribe(address(0), false, false, 1, 0, address(0));
+            game.subscribe(address(0), false, false, 1, address(0));
         }
         vm.prank(makeAddr(string(abi.encodePacked(prefix, "ev_open"))));
         game.openBoxes(400);

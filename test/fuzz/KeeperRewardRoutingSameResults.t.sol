@@ -81,7 +81,7 @@ contract KeeperRewardRoutingSameResults is DeployProtocol {
     // -------------------------------------------------------------------------
 
     uint256 private constant SUBOF_SLOT = 54; // _subOf mapping root (address => Sub, one packed slot)
-    uint256 private constant OFF_LASTBOUGHT = 11; // uint24 lastAutoBoughtDay (bytes 11..13 of the Sub slot)
+    uint256 private constant OFF_LASTBOUGHT = 10; // uint24 lastAutoBoughtDay (bytes 11..13 of the Sub slot)
     uint256 private constant SUBSCRIBERS_SLOT = 56; // _subscribers address[] (length here)
     uint256 private constant MINTPACKED_SLOT = 9; // mintPacked_ mapping root (deity bit)
     uint256 private constant DEITY_SHIFT = 184; // HAS_DEITY_PASS_SHIFT in mintPacked_
@@ -398,7 +398,7 @@ contract KeeperRewardRoutingSameResults is DeployProtocol {
         _grantDeityPass(sub);
         vm.prank(sub);
         // (player=self, drainCredit=false, lootbox mode, dailyQty=1, reinvestPct=0, fundingSource=self)
-        game.subscribe(address(0), false, false, 1, 0, address(0));
+        game.subscribe(address(0), false, false, 1, address(0));
         vm.prank(sub);
         game.setOperatorApproval(address(game), true);
         _fundAfking(sub, 5 ether);

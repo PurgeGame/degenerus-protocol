@@ -668,7 +668,11 @@ contract DegenerusGameFoilPackModule is
     ///      buckets the jackpot samples.
     /// @param room The leftover write budget for this batch.
     /// @return done True iff the foil drain has caught up (no sealed bucket remains).
-    function processFoilDrain(uint32 room) external returns (bool done) {
+    /// @return drained True if this call resolved at least one foil buyer.
+    function processFoilDrain(uint32 room)
+        external
+        returns (bool done, bool drained)
+    {
         if (address(this) != ContractAddresses.GAME) revert OnlyDelegatecall();
         return _processFoilDrain(room);
     }
@@ -683,7 +687,10 @@ contract DegenerusGameFoilPackModule is
     ///      when the leftover budget can't cover the fixed 35-unit charge. A bucket
     ///      whose word is not yet sealed (a future day) stops the walk — it does not
     ///      gate the current jackpot.
-    function _processFoilDrain(uint32 room) private returns (bool done) {
+    function _processFoilDrain(uint32 room)
+        private
+        returns (bool done, bool drained)
+    {
         uint24 dd = foilDrainDay;
         uint24 last = foilLastResolveDay;
         uint256 cursor = foilCursor;
@@ -709,9 +716,10 @@ contract DegenerusGameFoilPackModule is
                 if (room < (FOIL_PACK_ENTRIES * 2) + 3) {
                     foilDrainDay = dd;
                     foilCursor = uint32(cursor);
-                    return false;
+                    return (false, drained);
                 }
                 _resolveFoilBuyer(bucket[cursor], entropy, counts, touchedTraits);
+                drained = true;
                 unchecked {
                     room -= (FOIL_PACK_ENTRIES * 2) + 3; // 16*2 + baseOv(2) + 1 = 35
                     ++cursor;
@@ -729,7 +737,7 @@ contract DegenerusGameFoilPackModule is
         // Caught up: dd is past the high-water mark or at a not-yet-sealed bucket.
         foilDrainDay = dd;
         foilCursor = 0;
-        return true;
+        return (true, drained);
     }
 
     /// @dev Resolve one queued buyer (the packed level<<160|buyer entry): re-derive

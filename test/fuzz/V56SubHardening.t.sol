@@ -47,19 +47,19 @@ contract V56SubHardening is DeployProtocol {
     uint256 private constant SUBSCRIBER_INDEX_SLOT = 57; // mapping(address => uint256) _subscriberIndex (1-indexed)
     uint256 private constant MINTPACKED_SLOT = 9;        // mintPacked_ mapping root (deity bit @ 184, frozenUntil @ 128)
 
-    //   dailyQuantity u8 @0 · validThroughLevel u24 @1 · reinvestPct u8 @4 · flags u8 @5
-    //   scorePlus1 u16 @6 · amount u24 @8
-    //   lastAutoBoughtDay u24 @11 · lastOpenedDay u24 @14 · afkCoveredThroughDay u24 @17 · afkingStartDay u24 @20
-    //   affiliateBase u32 @23 · pendingFlip u24 @27 · subStreakLatch u16 @30
+    //   dailyQuantity u8 @0 · validThroughLevel u24 @1 · flags u8 @4
+    //   scorePlus1 u16 @5 · amount u24 @7
+    //   lastAutoBoughtDay u24 @10 · lastOpenedDay u24 @13 · afkCoveredThroughDay u24 @16 · afkingStartDay u24 @19
+    //   affiliateBase u32 @22 · pendingFlip u24 @26 · subStreakLatch u16 @29
     uint256 private constant OFF_DAILY = 0;           // uint8  dailyQuantity        (byte 0)
     uint256 private constant OFF_VALIDTHROUGH = 1;     // uint24 validThroughLevel    (bytes 1..3)
-    uint256 private constant OFF_LASTBOUGHT = 11;     // uint24 lastAutoBoughtDay    (bytes 11..13)
-    uint256 private constant OFF_LASTOPENED = 14;     // uint24 lastOpenedDay        (bytes 14..16)
-    uint256 private constant OFF_AFKCOVERED = 17;     // uint24 afkCoveredThroughDay (bytes 17..19)
-    uint256 private constant OFF_AFKINGSTART = 20;    // uint24 afkingStartDay       (bytes 20..22)
-    uint256 private constant OFF_AFFBASE = 23;        // uint32 affiliateBase        (bytes 23..26)
-    uint256 private constant OFF_PENDINGFLIP = 27;  // uint24 pendingFlip        (bytes 27..29)
-    uint256 private constant OFF_STREAKLATCH = 30;    // uint16 subStreakLatch       (bytes 30..31)
+    uint256 private constant OFF_LASTBOUGHT = 10;     // uint24 lastAutoBoughtDay    (bytes 10..12)
+    uint256 private constant OFF_LASTOPENED = 13;     // uint24 lastOpenedDay        (bytes 13..15)
+    uint256 private constant OFF_AFKCOVERED = 16;     // uint24 afkCoveredThroughDay (bytes 16..18)
+    uint256 private constant OFF_AFKINGSTART = 19;    // uint24 afkingStartDay       (bytes 19..21)
+    uint256 private constant OFF_AFFBASE = 22;        // uint32 affiliateBase        (bytes 22..25)
+    uint256 private constant OFF_PENDINGFLIP = 26;  // uint24 pendingFlip        (bytes 26..28)
+    uint256 private constant OFF_STREAKLATCH = 29;    // uint16 subStreakLatch       (bytes 29..30)
 
     uint256 private constant DEITY_SHIFT = 184;       // HAS_DEITY_PASS_SHIFT in mintPacked_
     uint256 private constant FROZEN_UNTIL_SHIFT = 128; // FROZEN_UNTIL_LEVEL_SHIFT (uint24) in mintPacked_
@@ -97,7 +97,7 @@ contract V56SubHardening is DeployProtocol {
         _fundPool(p, 50 ether);       // funded, so the revert can ONLY be NoPass (not MustPurchase)
         vm.prank(p);
         vm.expectRevert(abi.encodeWithSignature("NoPass()"));
-        game.subscribe(address(0), false, false, 1, 0, address(0));
+        game.subscribe(address(0), false, false, 1, address(0));
         assertEq(_subscriberIndexOf(p), 0, "D-11: the passless sub was never created");
     }
 
@@ -110,7 +110,7 @@ contract V56SubHardening is DeployProtocol {
         _grantFinitePass(p, 9);       // frozenUntilLevel = 9 >= level(5) -> horizon covers
         _fundPool(p, 50 ether);
         vm.prank(p);
-        game.subscribe(address(0), false, false, 1, 0, address(0)); // MUST NOT revert
+        game.subscribe(address(0), false, false, 1, address(0)); // MUST NOT revert
         assertGt(_subscriberIndexOf(p), 0, "D-11: finite-pass sub created");
         assertEq(_validThroughLevelOf(p), 9, "D-11: validThroughLevel stamped to the finite horizon");
     }
@@ -123,7 +123,7 @@ contract V56SubHardening is DeployProtocol {
         _grantDeityPass(p);           // _passHorizonOf == type(uint24).max
         _fundPool(p, 50 ether);
         vm.prank(p);
-        game.subscribe(address(0), false, false, 1, 0, address(0)); // MUST NOT revert
+        game.subscribe(address(0), false, false, 1, address(0)); // MUST NOT revert
         assertGt(_subscriberIndexOf(p), 0, "D-11: deity sub created (sentinel covers)");
         assertEq(_validThroughLevelOf(p), uint32(type(uint24).max), "D-11: deity validThroughLevel == sentinel");
     }
@@ -143,7 +143,7 @@ contract V56SubHardening is DeployProtocol {
         // NO _fundPool: afkingFunding[p] == 0 -> the cover-buy is unfunded -> the NEW-run start reverts.
         vm.prank(p);
         vm.expectRevert(abi.encodeWithSignature("MustPurchaseToBeginAfking()"));
-        game.subscribe(address(0), false, false, 1, 0, address(0));
+        game.subscribe(address(0), false, false, 1, address(0));
         assertEq(_subscriberIndexOf(p), 0, "D-12: the unfunded sub was never created");
     }
 
@@ -155,7 +155,7 @@ contract V56SubHardening is DeployProtocol {
         _grantDeityPass(p);
         _fundPool(p, 50 ether);       // funds the cover-buy -> grounded NEW run
         vm.prank(p);
-        game.subscribe(address(0), false, false, 1, 0, address(0)); // MUST NOT revert
+        game.subscribe(address(0), false, false, 1, address(0)); // MUST NOT revert
         assertGt(_subscriberIndexOf(p), 0, "D-12: funded sub created");
         assertEq(_lastBoughtDayOf(p), uint32(game.currentDayView()), "D-12: the funded cover-buy delivered today");
     }
@@ -173,7 +173,7 @@ contract V56SubHardening is DeployProtocol {
         assertGt(_subscriberIndexOf(p), 0, "non-vacuity: the sub is active");
         // Re-subscribe the active sub (wasActive == true) — the NEW-run D-12 gate is not on this path.
         vm.prank(p);
-        game.subscribe(address(0), false, false, 1, 0, address(0)); // MUST NOT revert (grounded re-sub)
+        game.subscribe(address(0), false, false, 1, address(0)); // MUST NOT revert (grounded re-sub)
         assertGt(_subscriberIndexOf(p), 0, "D-12: grounded re-sub stays active (no MustPurchase revert)");
     }
 
@@ -189,7 +189,7 @@ contract V56SubHardening is DeployProtocol {
     function testD13VaultExemptSubscribesNoPassUnfunded() public {
         _setLevel(5);                 // a non-exempt no-pass sub at this level would revert NoPass
         vm.prank(ContractAddresses.VAULT);
-        game.subscribe(ContractAddresses.VAULT, true, false, 1, 0, address(0)); // no pass, unfunded
+        game.subscribe(ContractAddresses.VAULT, true, false, 1, address(0)); // no pass, unfunded
         assertGt(_subscriberIndexOf(ContractAddresses.VAULT), 0, "D-13: VAULT exempt subscribe succeeded (no NoPass / no MustPurchase)");
     }
 
@@ -199,7 +199,7 @@ contract V56SubHardening is DeployProtocol {
     function testD13SdgnrsExemptSubscribesNoPassUnfunded() public {
         _setLevel(5);
         vm.prank(ContractAddresses.SDGNRS);
-        game.subscribe(ContractAddresses.SDGNRS, true, false, 1, 0, address(0)); // no pass, unfunded
+        game.subscribe(ContractAddresses.SDGNRS, true, false, 1, address(0)); // no pass, unfunded
         assertGt(_subscriberIndexOf(ContractAddresses.SDGNRS), 0, "D-13: sDGNRS exempt subscribe succeeded (no NoPass / no MustPurchase)");
     }
 
@@ -340,7 +340,7 @@ contract V56SubHardening is DeployProtocol {
         _fundPool(p, 50 ether);       // funded -> the revert can ONLY be NoPass (the level-0 zero-horizon arm)
         vm.prank(p);
         vm.expectRevert(abi.encodeWithSignature("NoPass()"));
-        game.subscribe(address(0), false, false, 1, 0, address(0));
+        game.subscribe(address(0), false, false, 1, address(0));
         assertEq(_subscriberIndexOf(p), 0, "LEVEL-0: the passless sub was rejected at level 0 (no NoPass-vacuity slip)");
     }
 
@@ -353,7 +353,7 @@ contract V56SubHardening is DeployProtocol {
         _grantFinitePass(p, 99);      // a real pass horizon (>= passLevel+99 in production; never 0)
         _fundPool(p, 50 ether);
         vm.prank(p);
-        game.subscribe(address(0), false, false, 1, 0, address(0)); // MUST NOT revert (horizon 99 != 0)
+        game.subscribe(address(0), false, false, 1, address(0)); // MUST NOT revert (horizon 99 != 0)
         assertGt(_subscriberIndexOf(p), 0, "LEVEL-0: a real finite-pass holder subscribes at level 0");
         assertEq(_validThroughLevelOf(p), 99, "LEVEL-0: the real horizon was stamped (not zeroed by the gate)");
     }
@@ -366,7 +366,7 @@ contract V56SubHardening is DeployProtocol {
         _grantDeityPass(p);           // _passHorizonOf == type(uint24).max (never 0)
         _fundPool(p, 50 ether);
         vm.prank(p);
-        game.subscribe(address(0), false, false, 1, 0, address(0)); // MUST NOT revert
+        game.subscribe(address(0), false, false, 1, address(0)); // MUST NOT revert
         assertGt(_subscriberIndexOf(p), 0, "LEVEL-0: a deity holder subscribes at level 0 (sentinel covers)");
         assertEq(_validThroughLevelOf(p), uint32(type(uint24).max), "LEVEL-0: deity sentinel stamped at level 0");
     }
@@ -380,11 +380,11 @@ contract V56SubHardening is DeployProtocol {
         _setLevel(0);
         // VAULT — no pass (horizon 0), unfunded; the new `== 0` arm would reject a non-exempt sub here.
         vm.prank(ContractAddresses.VAULT);
-        game.subscribe(ContractAddresses.VAULT, true, false, 1, 0, address(0));
+        game.subscribe(ContractAddresses.VAULT, true, false, 1, address(0));
         assertGt(_subscriberIndexOf(ContractAddresses.VAULT), 0, "LEVEL-0: VAULT exempt subscribe at level 0 (zero horizon carve-out)");
         // sDGNRS — same pinned-identity exemption at level 0.
         vm.prank(ContractAddresses.SDGNRS);
-        game.subscribe(ContractAddresses.SDGNRS, true, false, 1, 0, address(0));
+        game.subscribe(ContractAddresses.SDGNRS, true, false, 1, address(0));
         assertGt(_subscriberIndexOf(ContractAddresses.SDGNRS), 0, "LEVEL-0: sDGNRS exempt subscribe at level 0 (zero horizon carve-out)");
     }
 
@@ -660,7 +660,7 @@ contract V56SubHardening is DeployProtocol {
 
     function _subscribeLootbox(address who, uint8 q) internal {
         vm.prank(who);
-        game.subscribe(address(0), false, false, q, 0, address(0)); // self, lootbox mode, no reinvest
+        game.subscribe(address(0), false, false, q, address(0)); // self, lootbox mode, no reinvest
     }
 
     function _fundPool(address who, uint256 amount) internal {

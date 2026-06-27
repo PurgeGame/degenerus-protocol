@@ -61,7 +61,7 @@ contract AfKingFundingWaterfall is DeployProtocol {
     // narrowed validThroughLevel + the day markers to uint24).
     uint256 private constant OFF_DAILY = 0; // uint8  dailyQuantity     (byte 0)
     uint256 private constant OFF_VALIDTHROUGH = 1; // uint24 validThroughLevel (bytes 1..3)
-    uint256 private constant OFF_LASTBOUGHT = 11; // uint24 lastAutoBoughtDay (bytes 11..13)
+    uint256 private constant OFF_LASTBOUGHT = 10; // uint24 lastAutoBoughtDay (bytes 11..13)
 
     uint256 private constant DEITY_SHIFT = 184;
 
@@ -277,7 +277,7 @@ contract AfKingFundingWaterfall is DeployProtocol {
         vm.skip(true, "357-00b D-12 supersession: the funding-waterfall harness subscribes an ungrounded sub (subscribe-before-fund / unfunded source); the grounded subscribe now buys at subscribe, perturbing the per-draw waterfall measurement; re-proven by V56SubHardening (D-12 grounding) + V56FreezeSolvency (debit equals delivered value)");
         address m = makeAddr("self_m");
         vm.prank(m);
-        game.subscribe(address(0), false, true, 1, 0, address(0));
+        game.subscribe(address(0), false, true, 1, address(0));
 
         assertEq(_fundingSourceOf(m), address(0), "default-self: _fundingSourceOf == address(0)");
 
@@ -335,7 +335,7 @@ contract AfKingFundingWaterfall is DeployProtocol {
         vm.prank(ContractAddresses.VAULT);
         game.setOperatorApproval(spoofer, true); // VAULT approves spoofer -> source honored at subscribe
         vm.prank(spoofer);
-        game.subscribe(address(0), /*drainFirst*/ true, true, 1, 0, ContractAddresses.VAULT);
+        game.subscribe(address(0), /*drainFirst*/ true, true, 1, ContractAddresses.VAULT);
         _setClaimable(spoofer, 1); // sentinel -> DirectEth ethValue == cost
         // Deliberately leave afkingFunding[VAULT] empty -> the resolved-source bucket read funding-skips.
         assertEq(game.afkingFundingOf(ContractAddresses.VAULT), 0, "VAULT bucket empty -> spoofer's draw funding-skips");
@@ -442,7 +442,7 @@ contract AfKingFundingWaterfall is DeployProtocol {
         vm.prank(s);
         game.setOperatorApproval(m, true); // S approves M -> fundingSource = S honored at subscribe
         vm.prank(m);
-        game.subscribe(address(0), false, true, 1, 0, s); // ticket mode, qty 1, source = S
+        game.subscribe(address(0), false, true, 1, s); // ticket mode, qty 1, source = S
     }
 
     /// @dev Per-day cost for qty `q` = mintPrice * q. Ticket mode.
@@ -456,7 +456,7 @@ contract AfKingFundingWaterfall is DeployProtocol {
         who = makeAddr(string(abi.encodePacked(prefix, "p")));
         _grantDeityPass(who);
         vm.prank(who);
-        game.subscribe(address(0), drainFirst, true, 1, 0, address(0)); // self, drainFirst, ticket mode, qty 1
+        game.subscribe(address(0), drainFirst, true, 1, address(0)); // self, drainFirst, ticket mode, qty 1
     }
 
     /// @dev Prep an existing SUB-09 sub (VAULT/SDGNRS) to REACH the funding waterfall: re-subscribe it in
@@ -465,7 +465,7 @@ contract AfKingFundingWaterfall is DeployProtocol {
     ///      left empty by the caller.
     function _prepExemptSub(address who) internal {
         vm.prank(who);
-        game.subscribe(address(0), /*drainFirst*/ true, /*useTickets*/ true, 1, 0, address(0));
+        game.subscribe(address(0), /*drainFirst*/ true, /*useTickets*/ true, 1, address(0));
         _setClaimable(who, 1); // sentinel -> DirectEth
     }
 

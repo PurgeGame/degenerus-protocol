@@ -53,8 +53,8 @@ contract MintFlipLifecycleCoverage is DeployProtocol {
     //   scorePlus1 u16 @6 · amount u24 @8
     //   lastAutoBoughtDay u24 @11 · lastOpenedDay u24 @14 · afkCoveredThroughDay u24 @17 · afkingStartDay u24 @20
     //   affiliateBase u32 @23 · pendingFlip u24 @27 · subStreakLatch u16 @30
-    uint256 private constant OFF_LASTBOUGHT = 11;     // uint24 lastAutoBoughtDay (bytes 11..13)
-    uint256 private constant OFF_LASTOPENED = 14;     // uint24 lastOpenedDay     (bytes 14..16)
+    uint256 private constant OFF_LASTBOUGHT = 10;     // uint24 lastAutoBoughtDay (bytes 11..13)
+    uint256 private constant OFF_LASTOPENED = 13;     // uint24 lastOpenedDay     (bytes 14..16)
 
     uint256 private constant DEITY_SHIFT = 184;
 
@@ -427,7 +427,7 @@ contract MintFlipLifecycleCoverage is DeployProtocol {
 
     function _subscribeLootbox(address who, uint8 q) internal {
         vm.prank(who);
-        game.subscribe(address(0), false, false, q, 0, address(0)); // self, lootbox mode, no reinvest
+        game.subscribe(address(0), false, false, q, address(0)); // self, lootbox mode, no reinvest
     }
 
     function _fundPool(address who, uint256 amount) internal {

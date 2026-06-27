@@ -89,8 +89,6 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
     error SmiteCeilingReached(); // smite() target already holds 10 or more curse points (5-stack ceiling); cannot add more smite stacks.
     // subscribe (create / replace / cancel) attempted during the RNG freeze
     // window: the subscriber set must be frozen across [request -> unlock].
-    /// @dev subscribe with reinvestPct > 100 (a percentage).
-    error InvalidReinvestPct();
     /// @dev Third-party subscribe(player, ...) where the caller is neither the
     ///      player nor a game operator the player approved; OR a non-zero,
     ///      non-self fundingSource that has not operator-approved the subscriber.
@@ -125,7 +123,6 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
         uint8 dailyQuantity,
         bool drainGameCreditFirst,
         bool useTickets,
-        uint8 reinvestPct,
         address indexed fundingSource
     );
     /// @dev Per-player pre-check skip inside the process pass. `reason`:
@@ -303,7 +300,6 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
     /// @param drainGameCreditFirst When true, the buy spends claimable credit first.
     /// @param useTickets Mint mode — true = tickets, false = lootboxes.
     /// @param dailyQuantity Daily buy units, 1..255 (upsert); 0 cancels (tombstone).
-    /// @param reinvestPct Claimable reinvest percentage, 0..100.
     /// @param fundingSource Wallet whose `afkingFunding` funds this sub; address(0) = self.
     ///        A non-zero, non-self source is honored ONLY when it has
     ///        operator-approved the subscriber (checked at subscribe ONLY).
@@ -312,14 +308,12 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
         bool drainGameCreditFirst,
         bool useTickets,
         uint8 dailyQuantity,
-        uint8 reinvestPct,
         address fundingSource
     ) external payable {
         // Block ALL subscribe (create / replace / cancel) during the
         // RNG freeze window: the subscriber set the stamp pass + open consume must
         // stay frozen across [request -> unlock]. Callers wait for the unlock.
         if (rngLockedFlag) revert RngLocked();
-        if (reinvestPct > 100) revert InvalidReinvestPct();
 
         // Self-consent (player == 0 or msg.sender) or operator-approval.
         address subscriber = player == address(0) ? msg.sender : player;
@@ -389,7 +383,6 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
                 0,
                 (c.flags & FLAG_DRAIN_FIRST) != 0,
                 (c.flags & FLAG_USE_TICKETS) != 0,
-                c.reinvestPct,
                 (c.flags & FLAG_EXTERNAL_FUNDING) != 0
                     ? _fundingSourceOf[subscriber]
                     : address(0)
@@ -416,7 +409,6 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
         else s.flags &= ~FLAG_DRAIN_FIRST;
         if (useTickets) s.flags |= FLAG_USE_TICKETS;
         else s.flags &= ~FLAG_USE_TICKETS;
-        s.reinvestPct = reinvestPct;
         // The two protocol self-subscribers (VAULT / sDGNRS) self-subscribe at
         // construction with no pass and no funds; they are exempt from the pass-required
         // and purchase-grounded gates below, keyed on the un-spoofable resolved subscriber
@@ -465,25 +457,23 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
                     s.lastOpenedDay >= s.lastAutoBoughtDay
                 ) {
                     uint256 mp = _mintPriceInContext();
+                    address src = (s.flags & FLAG_EXTERNAL_FUNDING) != 0
+                        ? _fundingSourceOf[subscriber]
+                        : subscriber;
+                    uint256 srcFunding = _afkingOf(src);
                     (
                         uint256 ethValue,
                         uint256 buyAmount,
                         bool isTicket,
-                        uint256 playerFunding,
                         uint256 claimableUse
                     ) = _resolveBuy(
                             s,
                             subscriber,
                             mp,
-                            _goRead(GO_SWEPT_SHIFT, GO_SWEPT_MASK) != 0
+                            _goRead(GO_SWEPT_SHIFT, GO_SWEPT_MASK) != 0,
+                            srcFunding
                         );
-                    address src = (s.flags & FLAG_EXTERNAL_FUNDING) != 0
-                        ? _fundingSourceOf[subscriber]
-                        : subscriber;
-                    if (
-                        (src == subscriber ? playerFunding : _afkingOf(src)) >=
-                        ethValue
-                    ) {
+                    if (srcFunding >= ethValue) {
                         _deliverAfkingBuy(
                             subscriber,
                             s,
@@ -536,25 +526,23 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
                     _setStreakBase(s, snap);
                 } else {
                     uint256 mp = _mintPriceInContext();
+                    address src = (s.flags & FLAG_EXTERNAL_FUNDING) != 0
+                        ? _fundingSourceOf[subscriber]
+                        : subscriber;
+                    uint256 srcFunding = _afkingOf(src);
                     (
                         uint256 ethValue,
                         uint256 buyAmount,
                         bool isTicket,
-                        uint256 playerFunding,
                         uint256 claimableUse
                     ) = _resolveBuy(
                             s,
                             subscriber,
                             mp,
-                            _goRead(GO_SWEPT_SHIFT, GO_SWEPT_MASK) != 0
+                            _goRead(GO_SWEPT_SHIFT, GO_SWEPT_MASK) != 0,
+                            srcFunding
                         );
-                    address src = (s.flags & FLAG_EXTERNAL_FUNDING) != 0
-                        ? _fundingSourceOf[subscriber]
-                        : subscriber;
-                    if (
-                        (src == subscriber ? playerFunding : _afkingOf(src)) >=
-                        ethValue
-                    ) {
+                    if (srcFunding >= ethValue) {
                         _setStreakBase(s, snap); // funded day-0 — keep the snapshot
                         _deliverAfkingBuy(
                             subscriber,
@@ -590,7 +578,6 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
             dailyQuantity,
             drainGameCreditFirst,
             useTickets,
-            reinvestPct,
             fundingSource
         );
     }
@@ -663,9 +650,8 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
     ///      validation invariants that make a funded buy revert-free BY CONSTRUCTION (the
     ///      SOLE no-brick guarantor under the no-valve model). The five
     ///      obligation-1 invariants:
-    ///        (1) effectiveQty = max(dailyQuantity, reinvestQty) ≥ 1 (dailyQuantity ≥ 1
-    ///            is the subscribe-time floor) → never the Game's totalCost==0 / dust /
-    ///            TICKET_MIN reverts;
+    ///        (1) effectiveQty = dailyQuantity ≥ 1 (the subscribe-time floor) → never the
+    ///            Game's totalCost==0 / dust / TICKET_MIN reverts;
     ///        (2) cost = mintPrice * effectiveQty → the exact cost the Game recomputes;
     ///        (3) cost ≥ mintPrice ≥ 0.01 ETH (the priceForLevel floor) → a lootbox amount
     ///            always meets any min-spend floor; no skip/decline needed;
@@ -681,22 +667,22 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
     ///      by construction, with no pre-emptive decline and no reactive error-trap; there
     ///      is no per-cycle eviction cap.
     ///      In-context: `claimable` is the swept-gated raw `claimableWinnings[player]`
-    ///      (== afkingSnapshot's claimable / claimableWinningsOf, incl. the 1-wei sentinel)
-    ///      and `playerFunding` is the raw `afkingFunding[player]` (== afkingFundingOf),
-    ///      read as in-context SLOADs. The GO_SWEPT gate arrives as the
-    ///      caller-read `swept` flag (written only by the one-time game-over sweep, so it
-    ///      is invariant within a tx — the STAGE reads it once per chunk, the subscribe
-    ///      cover-buys inline at the call). View — no state writes.
+    ///      (== afkingSnapshot's claimable / claimableWinningsOf, incl. the 1-wei sentinel),
+    ///      read as an in-context SLOAD; `srcFunding` is the caller-resolved
+    ///      afkingFunding[src] (the funder — self or operator-approved source). The GO_SWEPT
+    ///      gate arrives as the caller-read `swept` flag (written only by the one-time
+    ///      game-over sweep, so it is invariant within a tx — the STAGE reads it once per
+    ///      chunk, the subscribe cover-buys inline at the call). View — no state writes.
     /// @return ethValue Fresh-ETH portion debited from the funder's afkingFunding (0 = pure claimable).
     /// @return amount Ticket entry-units (isTicket) or lootbox spend in wei (!isTicket).
     /// @return isTicket True = buy `amount` ticket entry-units; false = buy an `amount`-wei lootbox.
-    /// @return playerFunding The player's afkingFunding (the common-path funding-skip source).
-    /// @return claimableUse Claimable portion of `cost` (reinvest / drainFirst); cost == ethValue + claimableUse.
+    /// @return claimableUse Claimable portion of `cost` (drainFirst / funding-shortfall); cost == ethValue + claimableUse.
     function _resolveBuy(
         Sub storage sub,
         address player,
         uint256 mp,
-        bool swept
+        bool swept,
+        uint256 srcFunding
     )
         internal
         view
@@ -704,33 +690,19 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
             uint256 ethValue,
             uint256 amount,
             bool isTicket,
-            uint256 playerFunding,
             uint256 claimableUse
         )
     {
         bool drainFirst = (sub.flags & FLAG_DRAIN_FIRST) != 0;
-        // ONE in-context read pair: the player's
-        // claimable (reinvest / drainFirst funding split) AND afkingFunding (the
-        // common-path funding-skip source; the src != player operator-funded slice
-        // reads afkingFunding[src] separately at the call site). Swept-gated to mirror
-        // afkingSnapshot / claimableWinningsOf exactly.
+        // The player's claimable — the claimable leg of the funding split. Swept-gated to
+        // mirror afkingSnapshot / claimableWinningsOf exactly. The fresh-ETH leg draws from
+        // the caller-resolved `srcFunding` (afkingFunding[src], self or operator).
         uint256 claimable = swept ? 0 : _claimableOf(player);
-        playerFunding = _afkingOf(player);
 
-        // The uncapped reinvest leg — reinvestPct% of claimable, in wei. Computed ONCE:
-        // the quantity max below derives its ticket-count from it (`/ 100` before `/ mp`,
-        // the truncation order both consumers share) and the funding split caps it to
-        // cost further down.
-        uint256 reinvestSpend = sub.reinvestPct > 0
-            ? (claimable * sub.reinvestPct) / 100
-            : 0;
-
-        // Total quantity = max(dailyQuantity, reinvestPct% of claimable / price).
+        // Box size is the FROZEN dailyQuantity (set at subscribe, which reverts under
+        // rngLockedFlag). It is never scaled by live claimable, so the box amount — and the
+        // seed derived from it — cannot be steered after the day's word is knowable.
         uint256 effectiveQty = sub.dailyQuantity;
-        if (reinvestSpend != 0) {
-            uint256 reinvestQty = reinvestSpend / mp;
-            if (reinvestQty > effectiveQty) effectiveQty = reinvestQty;
-        }
         uint256 cost = mp * effectiveQty;
 
         // Mode routing. Ticket mode buys `effectiveQty` whole tickets (entry-units =
@@ -738,16 +710,20 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
         isTicket = (sub.flags & FLAG_USE_TICKETS) != 0;
         amount = isTicket ? effectiveQty * AFKING_TICKET_SCALE : cost;
 
-        // Funding split (USER model): reinvestPct always spends that % of claimable;
-        // drainFirst is a superset (claimable-first up to cost). The afkingFunding pool
-        // funds the remainder. Never spend the entire claimable balance — leave >= 1 wei
-        // (the GAME's Claimable branch needs claimable strictly > cost, and the claimable
-        // shortfall settle needs basis > shortfall).
-        if (reinvestSpend > cost) reinvestSpend = cost;
-        claimableUse = drainFirst
-            ? (claimable < cost ? claimable : cost)
-            : reinvestSpend;
-        if (claimable > 0 && claimableUse >= claimable) claimableUse = claimable - 1;
+        // Funding split (USER model). Never spend the entire claimable balance — leave >= 1
+        // wei (the Game's Claimable branch needs claimable strictly > cost, and the claimable
+        // shortfall settle needs basis > shortfall), so the claimable leg caps at
+        // `spendableClaimable`. drainGameCreditFirst spends claimable first (up to cost);
+        // otherwise afkingFunding funds first and claimable covers only the remainder. Both
+        // legs are tapped when one alone is short.
+        uint256 spendableClaimable = claimable > 0 ? claimable - 1 : 0;
+        if (drainFirst) {
+            claimableUse = spendableClaimable < cost ? spendableClaimable : cost;
+        } else {
+            uint256 fundingUse = srcFunding < cost ? srcFunding : cost;
+            uint256 need = cost - fundingUse;
+            claimableUse = need < spendableClaimable ? need : spendableClaimable;
+        }
         ethValue = cost - claimableUse;
     }
 
@@ -758,7 +734,7 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
     ///      pre-buy gates, `coverBuy == false`) and the subscribe-time grounding cover-buy
     ///      (`coverBuy == true`). The slice is already confirmed funded by the caller
     ///      (`afkingFunding[src] >= ethValue`), so this is revert-free by construction (no
-    ///      try/catch). Debits the fresh-ETH leg + the reinvest claimable leg (claimablePool in
+    ///      try/catch). Debits the fresh-ETH leg + the claimable leg (claimablePool in
     ///      tandem, fail-loud on underflow — a debit can never exceed afkingFunding[src] ≤ the
     ///      claimablePool reservation, so a revert here means solvency is already violated and
     ///      must propagate), materializes the buy per mode, accrues the day's affiliate base + the
@@ -785,7 +761,7 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
     ///        jackpotPhaseFlag is fixed across a pre-RNG stage chunk. Ticket mode only.
     /// @param src The funding bucket the fresh-ETH leg debits.
     /// @param ethValue The fresh-ETH portion (0 = pure claimable).
-    /// @param claimableUse The reinvest/drainFirst claimable portion of the cost.
+    /// @param claimableUse The drainFirst/funding-shortfall claimable portion of the cost.
     /// @param amount Ticket entry-units (ticket mode) or lootbox spend in wei (lootbox mode).
     /// @param isTicket Mode — true = queue tickets, false = a lootbox box.
     /// @param coverBuy True = subscribe-time grounding buy (indexed box + inline pool routing);
@@ -948,7 +924,7 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
             if (isTicket) _routeAfkingPoolEth(0, cost);
             else _routeAfkingPoolEth(cost, 0);
         }
-        // weiIn = afking auto-buy ETH-in (afking principal + reinvested claimable), folded into
+        // weiIn = afking auto-buy ETH-in (the fresh-ETH leg + the claimable leg), folded into
         // AfkingDelivered so the delivery marker doubles as the ETH-in record with no extra log.
         // The cover-buy box reports weiIn 0 — its spend is carried by LootBoxBuy — keeping the
         // off-chain ETH-in total free of double counting.
@@ -1176,6 +1152,51 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
             ? currentLevel
             : currentLevel + 1;
 
+        // sDGNRS level-start lootbox top-up, done ONCE here at the start of afking processing
+        // (out of the per-sub loop, so it adds NO per-sub cost). On the first STAGE pass of each
+        // new level (the `_sdgnrsBonusLevel` latch), stamp sDGNRS's daily box at 5% of its
+        // claimable (capped 6 ETH, floored at the normal box) rather than the flat daily box.
+        // sDGNRS is the pinned `_subscribers[1]`; stamping its Sub box HERE makes the loop's
+        // no-orphan guard skip its own iteration, so it gets exactly ONE box (a normal day-keyed
+        // Sub-stamp box, just larger), resolved off `rngWordByDay[processDay]`. Sized off the live
+        // claimable read in this pre-RNG STAGE, so the box `amount` (and the seed it feeds) stays
+        // frozen vs the day's word — the RNG-freeze invariant. Funded purely from claimable
+        // (ethValue 0); 5% of claimable is inherently <= claimable-1 and the `cl > mp` guard keeps
+        // the floor fundable, so the buy is revert-free by construction. The guards mirror the
+        // loop preamble: skip if sDGNRS already bought today (no double box), a pending box would
+        // be orphaned, the game is swept, or claimable can't fund the floor — and the latch is
+        // stamped only when the buy actually fires (so a too-poor day retries the next day). The
+        // coverBuy=false delivery batches no pool credit, so route this box's spend inline.
+        if (currentLevel > _sdgnrsBonusLevel) {
+            Sub storage sd = _subOf[ContractAddresses.SDGNRS];
+            uint256 cl = swept ? 0 : _claimableOf(ContractAddresses.SDGNRS);
+            if (
+                sd.lastAutoBoughtDay != processDay &&
+                sd.lastOpenedDay >= sd.lastAutoBoughtDay &&
+                cl > mp
+            ) {
+                _sdgnrsBonusLevel = currentLevel;
+                uint256 box = cl / 20;
+                if (box > 6 ether) box = 6 ether;
+                if (box < mp) box = mp;
+                _deliverAfkingBuy(
+                    ContractAddresses.SDGNRS,
+                    sd,
+                    processDay,
+                    mp,
+                    currentLevel,
+                    ticketTargetLevel,
+                    ContractAddresses.SDGNRS,
+                    0,
+                    box,
+                    box,
+                    false,
+                    false
+                );
+                _routeAfkingPoolEth(box, 0);
+            }
+        }
+
         uint256 cursor = _subCursor;
         uint256 weight; // accumulated gas-weight; the chunk ends at weightBudget
         // Batched prize-pool routing: each funded buy debits its full cost from the funding
@@ -1291,16 +1312,6 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
                 }
             }
 
-            // Funding resolution (cost + ethValue slice). The slice builder
-            // computes everything revert-free by construction.
-            (
-                uint256 ethValue,
-                uint256 amount,
-                bool isTicket,
-                uint256 playerFunding,
-                uint256 claimableUse
-            ) = _resolveBuy(sub, player, mp, swept);
-
             // Resolve the once-per-iteration funding source. The common self-funded path
             // is detected from the already-loaded `sub.flags` (FLAG_EXTERNAL_FUNDING clear
             // ⇒ src = player) and skips the `_fundingSourceOf` SLOAD entirely; only the rare
@@ -1310,18 +1321,25 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
             address src = (sub.flags & FLAG_EXTERNAL_FUNDING) != 0
                 ? _fundingSourceOf[player]
                 : player;
+            uint256 srcFunding = _afkingOf(src);
 
-            // Funding skip → two-tier skip-kill. Read afkingFunding[src]: the common path
-            // (src == player) reuses `playerFunding` from _resolveBuy (no extra SLOAD); the
-            // rare operator-funded slice (src != player) reads afkingFunding[src]. A normal
-            // underfunded sub is cancelled via swap-pop (auto-pause WITHOUT advancing the
-            // cursor — the mover into this slot is processed this pass). VAULT and sDGNRS are
-            // exempt by the un-spoofable pinned ContractAddresses identity (kept on `player`,
-            // never `src`) — a funding skip is transient for them (no-op-and-retry, stays in
-            // the set). The exemption is the pinned-address branch only; there is no flag.
-            if (
-                (src == player ? playerFunding : _afkingOf(src)) < ethValue
-            ) {
+            // Funding resolution (cost + ethValue slice). The slice builder computes
+            // everything revert-free by construction off this same `srcFunding` (the
+            // fresh-ETH leg) and the player's claimable (the claimable leg).
+            (
+                uint256 ethValue,
+                uint256 amount,
+                bool isTicket,
+                uint256 claimableUse
+            ) = _resolveBuy(sub, player, mp, swept, srcFunding);
+
+            // Funding skip → two-tier skip-kill. A normal underfunded sub is cancelled via
+            // swap-pop (auto-pause WITHOUT advancing the cursor — the mover into this slot is
+            // processed this pass). VAULT and sDGNRS are exempt by the un-spoofable pinned
+            // ContractAddresses identity (kept on `player`, never `src`) — a funding skip is
+            // transient for them (no-op-and-retry, stays in the set). The exemption is the
+            // pinned-address branch only; there is no flag.
+            if (srcFunding < ethValue) {
                 if (
                     player == ContractAddresses.VAULT ||
                     player == ContractAddresses.SDGNRS
@@ -1376,7 +1394,7 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
                 false
             );
 
-            // Accrue the full buy cost (afking ethValue + reinvest claimableUse) for the
+            // Accrue the full buy cost (afking ethValue + claimableUse) for the
             // batched pool credit below — a box buy funds the box pool, a ticket buy the ticket
             // pool. The afking entry-unit `amount` is the box's wei spend only in lootbox mode,
             // so the routing keys on `cost`, never `amount`.

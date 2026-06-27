@@ -54,7 +54,7 @@ contract V62GasBrickCompose is DeployProtocol {
     uint256 private constant DEITY_SHIFT = 184;
 
     uint256 private constant HEADER_SLOT = 0;
-    uint256 private constant OFF_DAILY_IDX = 4;          // uint32 @ byte 4
+    uint256 private constant OFF_DAILY_IDX = 3;          // uint24 @ byte 3
 
     // -------------------------------------------------------------------------
     // Bounds + composition geometry
@@ -79,9 +79,12 @@ contract V62GasBrickCompose is DeployProtocol {
     ///      weight is the heaviest set that still fully drains in ONE chunk and falls through to the backfill.
     uint256 internal constant EVICTING_SUBS = 356;
 
-    /// @dev The VRF/keeper stall length (days). _backfillGapDays caps the backfill loop at 120 days;
-    ///      120 is the binding worst case. Stalling > 120 days still backfills exactly 120 (the cap).
-    uint256 internal constant STALL_DAYS = 130; // > 120 so the cap (120) is the binding backfilled count
+    /// @dev The VRF/keeper stall length (days). The VRF-death deadman (_VRF_DEADMAN_DAYS = 120) sends any
+    ///      advance with currentDay - dailyIdx > 120 to terminal game-over, so the LARGEST stall that still
+    ///      resumes into the stage + gap-backfill path (rather than game-over) is exactly 120 — which yields
+    ///      a 119-day backfill (gap = currentDay - dailyIdx - 1). The deadman, not the 120-day backfill-loop
+    ///      cap, is now the binding bound on the backfilled count.
+    uint256 internal constant STALL_DAYS = 120; // == _VRF_DEADMAN_DAYS: max stall that resumes (not game-over)
 
     uint256 private constant DRAIN_MAX_ITERATIONS = 240;
     uint256 private _lastFulfilledReqId;
@@ -185,7 +188,7 @@ contract V62GasBrickCompose is DeployProtocol {
             _grantDeityPass(who);
             _fundPool(who, 5 ether);
             vm.prank(who);
-            game.subscribe(address(0), false, false, 1, 0, address(0));
+            game.subscribe(address(0), false, false, 1, address(0));
         }
 
         // Open the grounded subscribe's pending boxes first — the no-orphan guard (AfkingModule:1164)
@@ -209,7 +212,7 @@ contract V62GasBrickCompose is DeployProtocol {
 
         // ---- (B) Inject the 120-day gap-backfill precondition ----
         // (same technique as V56AfkingGasMarginal::testGapResumePerAdvanceCeilingAndDecouple)
-        _setHeaderField(14, 3, 10); // level = 10 (the 120-day inactivity clock guards liveness, not lvl-0 idle)
+        _setHeaderField(12, 3, 10); // level = 10 (the 120-day inactivity clock guards liveness, not lvl-0 idle)
         // A fresh resumed-day VRF word ready (rngWordCurrent slot 3) — the gap-backfill trigger.
         vm.store(address(game), bytes32(uint256(3)), bytes32(uint256(keccak256("v62_freshword")) | 1));
 
@@ -219,8 +222,8 @@ contract V62GasBrickCompose is DeployProtocol {
         // dailyIdx -> `day > idx + 1 && rngWordByDay[idx + 1] == 0` (the backfill precondition).
         vm.warp(block.timestamp + STALL_DAYS * 1 days);
         uint32 resumeDay = game.currentDayView();
-        _setHeaderField(0, 4, resumeDay - 1);            // psd kept recent (game alive: resumeDay-psd=1)
-        _setHeaderField(8, 6, uint48(block.timestamp));  // rngRequestTime within the 14-day VRF grace
+        _setHeaderField(0, 3, resumeDay - 1);            // psd kept recent (game alive: resumeDay-psd=1)
+        _setHeaderField(6, 6, uint48(block.timestamp));  // rngRequestTime within the 14-day VRF grace
 
         require(resumeDay > idxBeforeStall + 1, "fixture: a multi-day gap opened (day >> dailyIdx)");
         require(rngWordByDay(idxBeforeStall + 1) == 0, "fixture: the gap range is unbackfilled pre-resume");
@@ -327,8 +330,8 @@ contract V62GasBrickCompose is DeployProtocol {
 
     function _setLevel(uint24 lvl) internal {
         uint256 s0 = uint256(vm.load(address(game), bytes32(uint256(0))));
-        s0 &= ~(uint256(0xFFFFFF) << (14 * 8));
-        s0 |= (uint256(lvl) & 0xFFFFFF) << (14 * 8);
+        s0 &= ~(uint256(0xFFFFFF) << (12 * 8));
+        s0 |= (uint256(lvl) & 0xFFFFFF) << (12 * 8);
         vm.store(address(game), bytes32(uint256(0)), bytes32(s0));
     }
 
@@ -345,7 +348,7 @@ contract V62GasBrickCompose is DeployProtocol {
 
     function _dailyIdx() internal view returns (uint32) {
         uint256 p = uint256(vm.load(address(game), bytes32(uint256(HEADER_SLOT)))) >> (OFF_DAILY_IDX * 8);
-        return uint32(p & 0xFFFFFFFF);
+        return uint32(p & 0xFFFFFF);
     }
 
     /// @dev Read `subsFullyProcessed` (storage slot for the bool, packed in the slot-0 region per the

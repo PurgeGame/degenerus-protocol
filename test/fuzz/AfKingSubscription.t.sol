@@ -59,7 +59,7 @@ contract AfKingSubscription is DeployProtocol {
     // narrowed validThroughLevel + the day markers to uint24).
     uint256 private constant OFF_DAILY = 0; // uint8  dailyQuantity      (byte 0)
     uint256 private constant OFF_VALIDTHROUGH = 1; // uint24 validThroughLevel  (bytes 1..3)
-    uint256 private constant OFF_LASTBOUGHT = 11; // uint24 lastAutoBoughtDay  (bytes 11..13)
+    uint256 private constant OFF_LASTBOUGHT = 10; // uint24 lastAutoBoughtDay  (bytes 11..13)
 
     uint256 private constant DEITY_SHIFT = 184; // HAS_DEITY_PASS_SHIFT in mintPacked_
 
@@ -172,7 +172,7 @@ contract AfKingSubscription is DeployProtocol {
         _fundPool(nopass, 1 ether); // grounds the NEW-run cover-buy (D-12); the deposit is ETH, not FLIP
         uint256 nopassBefore = coin.balanceOf(nopass); // == 0
         vm.prank(nopass);
-        game.subscribe(address(0), false, true, 1, 0, address(0)); // MUST NOT revert; charges no FLIP
+        game.subscribe(address(0), false, true, 1, address(0)); // MUST NOT revert; charges no FLIP
         assertEq(coin.balanceOf(nopass), nopassBefore, "AFSUB-01: no FLIP burned at subscribe (no-pass)");
         assertEq(_validThroughLevelOf(nopass), 0, "no-pass subscriber: validThroughLevel = 0");
 
@@ -182,7 +182,7 @@ contract AfKingSubscription is DeployProtocol {
         _fundPool(pass, 1 ether); // grounds the NEW-run cover-buy (D-12)
         uint256 passBefore = coin.balanceOf(pass);
         vm.prank(pass);
-        game.subscribe(address(0), false, true, 1, 0, address(0));
+        game.subscribe(address(0), false, true, 1, address(0));
         assertEq(coin.balanceOf(pass), passBefore, "AFSUB-01: no FLIP burned at subscribe (pass-holder)");
         assertEq(
             _validThroughLevelOf(pass),
@@ -270,7 +270,7 @@ contract AfKingSubscription is DeployProtocol {
         // REFUSED: M has NOT been approved by S -> the non-zero non-self source reverts NotApproved.
         vm.prank(m);
         vm.expectRevert(abi.encodeWithSignature("NotApproved()"));
-        game.subscribe(address(0), false, true, 1, 0, s);
+        game.subscribe(address(0), false, true, 1, s);
 
         // S approves M on the game; now the SAME subscribe is honored (source stored).
         vm.prank(s);
@@ -279,7 +279,7 @@ contract AfKingSubscription is DeployProtocol {
         // source S) is grounded (D-12); the OPEN-E approval gate is the property under test.
         _fundPool(s, 1 ether);
         vm.prank(m);
-        game.subscribe(address(0), false, true, 1, 0, s);
+        game.subscribe(address(0), false, true, 1, s);
 
         assertEq(_fundingSourceOf(m), s, "approved source honored (stored as S)");
     }
@@ -304,7 +304,7 @@ contract AfKingSubscription is DeployProtocol {
         // grounded (D-12); the trust-the-sub revoke semantics are the property under test.
         _fundPool(s, 1 ether); // S funds the per-day ETH draw + grounds the subscribe cover-buy
         vm.prank(m);
-        game.subscribe(address(0), false, true, 1, 0, s); // source = S, no FLIP charge (AFSUB-01)
+        game.subscribe(address(0), false, true, 1, s); // source = S, no FLIP charge (AFSUB-01)
 
         assertEq(_fundingSourceOf(m), s, "M's sub funded by S");
         assertGt(_subscriberIndexOf(m), 0, "M's sub in the set");
@@ -358,7 +358,7 @@ contract AfKingSubscription is DeployProtocol {
     /// @dev Subscribe `who` in LOOTBOX mode (so the box STAGE materializes a stamp), dailyQuantity q.
     function _subscribeLootboxMode(address who, uint8 q) internal {
         vm.prank(who);
-        game.subscribe(address(0), false, false, q, 0, address(0)); // self, lootbox mode, no reinvest, self-funded
+        game.subscribe(address(0), false, false, q, address(0)); // self, lootbox mode, no reinvest, self-funded
     }
 
     /// @dev A fully-healthy buying sub (lootbox mode, granted deity so it survives any crossing, funded).

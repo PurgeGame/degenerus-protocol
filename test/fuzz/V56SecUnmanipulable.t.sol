@@ -52,13 +52,13 @@ contract V56SecUnmanipulable is DeployProtocol {
     //   affiliateBase u32 @23 · pendingFlip u24 @27 · subStreakLatch u16 @30
     uint256 private constant OFF_DAILY = 0;           // uint8  dailyQuantity        (byte 0)
     uint256 private constant OFF_VALIDTHROUGH = 1;     // uint24 validThroughLevel    (bytes 1..3)
-    uint256 private constant OFF_LASTBOUGHT = 11;     // uint24 lastAutoBoughtDay    (bytes 11..13)
-    uint256 private constant OFF_LASTOPENED = 14;     // uint24 lastOpenedDay        (bytes 14..16)
-    uint256 private constant OFF_AFKCOVERED = 17;     // uint24 afkCoveredThroughDay (bytes 17..19)
-    uint256 private constant OFF_AFKINGSTART = 20;    // uint24 afkingStartDay       (bytes 20..22)
-    uint256 private constant OFF_AFFBASE = 23;        // uint32 affiliateBase        (bytes 23..26)
-    uint256 private constant OFF_PENDINGFLIP = 27;  // uint24 pendingFlip        (bytes 27..29)
-    uint256 private constant OFF_STREAKLATCH = 30;    // uint16 subStreakLatch       (bytes 30..31; full streak counter)
+    uint256 private constant OFF_LASTBOUGHT = 10;     // uint24 lastAutoBoughtDay    (bytes 11..13)
+    uint256 private constant OFF_LASTOPENED = 13;     // uint24 lastOpenedDay        (bytes 14..16)
+    uint256 private constant OFF_AFKCOVERED = 16;     // uint24 afkCoveredThroughDay (bytes 17..19)
+    uint256 private constant OFF_AFKINGSTART = 19;    // uint24 afkingStartDay       (bytes 20..22)
+    uint256 private constant OFF_AFFBASE = 22;        // uint32 affiliateBase        (bytes 23..26)
+    uint256 private constant OFF_PENDINGFLIP = 26;  // uint24 pendingFlip        (bytes 27..29)
+    uint256 private constant OFF_STREAKLATCH = 29;    // uint16 subStreakLatch       (bytes 30..31; full streak counter)
 
     uint256 private constant DEITY_SHIFT = 184;
 
@@ -135,7 +135,7 @@ contract V56SecUnmanipulable is DeployProtocol {
 
             // Unsub (tombstone) AFTER the buy — the base must survive the tombstone byte-identically.
             vm.prank(churner);
-            game.subscribe(address(0), false, false, 0, 0, address(0));
+            game.subscribe(address(0), false, false, 0, address(0));
             assertEq(_affiliateBaseOf(churner), baseBeforeUnsub, "unsub did NOT flush affiliateBase (persists across unsub)");
 
             // Re-subscribe (re-uses the in-place slot, base preserved) for the next day's delivery.
@@ -211,7 +211,7 @@ contract V56SecUnmanipulable is DeployProtocol {
         }
         vm.recordLogs();
         vm.prank(p);
-        game.subscribe(address(0), false, false, 0, 0, address(0));
+        game.subscribe(address(0), false, false, 0, address(0));
         uint24 finalStreak = _lastFinalizeStreakFor(p);
         assertEq(finalStreak, 0, "decay: one missed funded day -> finalize wrote streak 0 (no non-delivered-day credit)");
     }
@@ -296,7 +296,7 @@ contract V56SecUnmanipulable is DeployProtocol {
             }
             if ((act & 0x2) != 0 && _subscriberIndexOf(churner) != 0) {
                 vm.prank(churner); // unsub (tombstone) — base + pendingFlip persist
-                game.subscribe(address(0), false, false, 0, 0, address(0));
+                game.subscribe(address(0), false, false, 0, address(0));
             }
             if ((act & 0x4) != 0 && _subscriberIndexOf(churner) == 0) {
                 _fundPool(churner, 80 ether);
@@ -372,7 +372,7 @@ contract V56SecUnmanipulable is DeployProtocol {
         uint256 stakeAfterClaim2 = coinflip.coinflipAmount(p);
         assertEq(stakeAfterClaim2 - stakeBefore2, SLOT0_FLIP_PER_BUY * 1 ether, "claim credited the re-accrued FLIP once");
         vm.prank(p);
-        game.subscribe(address(0), false, false, 0, 0, address(0)); // unsub (pendingFlip persists at 0)
+        game.subscribe(address(0), false, false, 0, address(0)); // unsub (pendingFlip persists at 0)
         game.claimAfkingFlip(_singleton(p)); // re-claim after unsub
         assertEq(coinflip.coinflipAmount(p), stakeAfterClaim2, "claim->unsub->claim: the post-unsub re-claim credited 0 (idempotent)");
     }
@@ -394,7 +394,7 @@ contract V56SecUnmanipulable is DeployProtocol {
 
         vm.recordLogs();
         vm.prank(p);
-        game.subscribe(address(0), false, false, 0, 0, address(0)); // explicit cancel
+        game.subscribe(address(0), false, false, 0, address(0)); // explicit cancel
         // The finalize ran (event present) and the slot is tombstoned in place.
         _lastFinalizeStreakFor(p); // reverts if no finalize event fired before the tombstone
         assertEq(_dailyQtyOf(p), 0, "hook A: the slot is tombstoned (dailyQuantity == 0) AFTER the finalize handed the streak back");
@@ -421,7 +421,7 @@ contract V56SecUnmanipulable is DeployProtocol {
         _subscribeLootbox(p, 1);
         _subscribeLootbox(keep, 1);
         vm.prank(p);
-        game.subscribe(address(0), false, false, 0, 0, address(0));
+        game.subscribe(address(0), false, false, 0, address(0));
         assertGt(_subscriberIndexOf(p), 0, "p still in-set as a tombstone pre-reclaim");
 
         vm.recordLogs();
@@ -513,7 +513,7 @@ contract V56SecUnmanipulable is DeployProtocol {
         if (_subscriberIndexOf(zeroed) == 0) _subscribeLootbox(zeroed, 1);
         vm.recordLogs();
         vm.prank(zeroed);
-        game.subscribe(address(0), false, false, 0, 0, address(0)); // explicit cancel finalize on a post-gap day
+        game.subscribe(address(0), false, false, 0, address(0)); // explicit cancel finalize on a post-gap day
         uint24 zeroedStreak = _lastFinalizeStreakFor(zeroed);
         assertEq(zeroedStreak, 0, "hook D ZEROED: lastValid <= currentDay - 2 -> finalize zeroed the streak (decay)");
     }
@@ -625,7 +625,7 @@ contract V56SecUnmanipulable is DeployProtocol {
 
     function _subscribeLootbox(address who, uint8 q) internal {
         vm.prank(who);
-        game.subscribe(address(0), false, false, q, 0, address(0)); // self, lootbox mode, no reinvest
+        game.subscribe(address(0), false, false, q, address(0)); // self, lootbox mode, no reinvest
     }
 
     function _fundPool(address who, uint256 amount) internal {

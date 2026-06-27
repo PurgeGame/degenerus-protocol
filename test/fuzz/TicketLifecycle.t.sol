@@ -80,6 +80,10 @@ contract TicketLifecycleTest is DeployProtocol {
     // Bit offsets within packed slots (byte offset * 8)
     // =========================================================================
 
+    /// @dev dailyIdx is uint24 at slot 0 offset 3 bytes = bits 24-47
+    uint256 private constant DAILY_IDX_SHIFT = 24;
+    uint256 private constant DAILY_IDX_MASK = 0xFFFFFF;
+
     /// @dev level is uint24 at slot 0 offset 12 bytes = bits 96-119
     uint256 private constant LEVEL_SHIFT = 96;
     uint256 private constant LEVEL_MASK = 0xFFFFFF;
@@ -1486,6 +1490,9 @@ contract TicketLifecycleTest is DeployProtocol {
 
         _setRngLocked(true);
         vm.warp(block.timestamp + 1 days + 1);
+        // Re-anchor dailyIdx to the warped wall-clock day so the jackpot-phase VRF-death deadman
+        // (currentDay - dailyIdx) cannot underflow on the forced-state purchase below.
+        _syncDailyIdxToCurrentDay();
 
         // Buy tickets at level L1 (near-future)
         {
@@ -1521,6 +1528,9 @@ contract TicketLifecycleTest is DeployProtocol {
 
         _setRngLocked(true);
         vm.warp(block.timestamp + 1 days + 1);
+        // Re-anchor dailyIdx to the warped wall-clock day so the jackpot-phase VRF-death deadman
+        // (currentDay - dailyIdx) cannot underflow on the forced-state purchase below.
+        _syncDailyIdxToCurrentDay();
 
         // Buy tickets at level L2 (near-future)
         {
@@ -2190,6 +2200,20 @@ contract TicketLifecycleTest is DeployProtocol {
         } else {
             slot0 = slot0 & ~(uint256(1) << RNG_LOCKED_SHIFT);
         }
+        vm.store(address(game), bytes32(uint256(SLOT_0)), bytes32(slot0));
+    }
+
+    /// @dev Set dailyIdx (slot 0, uint24 @ byte 3) to the current simulated day. The aggressive
+    ///      pool-seeded _driveToLevel advances dailyIdx (the per-day sealed-RNG counter) faster than
+    ///      the wall clock, leaving the impossible-on-chain state dailyIdx > currentDayView(). On a
+    ///      jackpot-phase purchase the VRF-death deadman (`currentDay - dailyIdx`) then underflows.
+    ///      Restoring dailyIdx == currentDayView() reproduces a reachable caught-up game (deadman
+    ///      not fired) without disturbing the ticket-routing keys under test.
+    function _syncDailyIdxToCurrentDay() internal {
+        uint256 slot0 = uint256(vm.load(address(game), bytes32(uint256(SLOT_0))));
+        uint256 day = uint256(game.currentDayView());
+        slot0 = (slot0 & ~(DAILY_IDX_MASK << DAILY_IDX_SHIFT))
+              | ((day & DAILY_IDX_MASK) << DAILY_IDX_SHIFT);
         vm.store(address(game), bytes32(uint256(SLOT_0)), bytes32(slot0));
     }
 

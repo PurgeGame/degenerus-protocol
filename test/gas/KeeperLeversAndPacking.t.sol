@@ -214,26 +214,25 @@ contract KeeperLeversAndPacking is DeployProtocol {
     /// @notice GAS-04: the game-resident `Sub` struct packs to ONE slot (RE-DERIVED), `boxCursor`/
     ///         `boxCursorIndex` are uint48, and the crank adds storage ONLY via the first-deposit
     ///         `boxPlayers` push (inlined at the module first-deposit sites).
-    /// @dev    The game-resident `Sub` is thirteen fields summing to exactly 32 used bytes (one 256-bit slot,
-    ///         0 free). The in-slot accumulator section is `affiliateBase` uint32 + `pendingFlip` uint24 +
-    ///         `subStreakLatch` uint16 = 72 bits, ending at byte 32:
-    ///           uint8 dailyQuantity(1) + uint24 validThroughLevel(3) + uint8 reinvestPct(1) + uint8 flags(1)
+    /// @dev    The game-resident `Sub` is twelve fields summing to 31 used bytes (one 256-bit slot,
+    ///         1 free byte). The in-slot accumulator section is `affiliateBase` uint32 + `pendingFlip` uint24 +
+    ///         `subStreakLatch` uint16 = 72 bits, ending at byte 31:
+    ///           uint8 dailyQuantity(1) + uint24 validThroughLevel(3) + uint8 flags(1)
     ///           + uint16 score(2) + uint24 amount(3) + uint24 lastAutoBoughtDay(3) + uint24 lastOpenedDay(3)
     ///           + uint24 afkCoveredThroughDay(3) + uint24 afkingStartDay(3) + uint32 affiliateBase(4)
-    ///           + uint24 pendingFlip(3) + uint16 subStreakLatch(2) = 32 bytes. This is a SOURCE-GREP oracle
+    ///           + uint24 pendingFlip(3) + uint16 subStreakLatch(2) = 31 bytes. This is a SOURCE-GREP oracle
     ///         (it greps STORAGE_SRC for the exact field declarations); the `forge inspect storageLayout`
     ///         snapshot is a separate golden.
     function testGas04PackingAndNoNewHotPathStorageSourcePresence() public view {
         string memory storage_ = _stripComments(vm.readFile(STORAGE_SRC));
         string memory game_ = _strippedGame();
 
-        // Sub struct: the thirteen game-resident fields at their exact widths sum to 32 bytes (= one slot).
-        // The accumulator section is affiliateBase u32 + pendingFlip u24 + subStreakLatch u16 = 72 bits; the
-        // day markers and the per-sub stamp are uint24, so the record fits a single 256-bit slot with 0 free.
+        // Sub struct: the twelve game-resident fields at their exact widths sum to 31 bytes (one slot, 1
+        // free byte after the reinvestPct removal). The accumulator section is affiliateBase u32 + pendingFlip
+        // u24 + subStreakLatch u16 = 72 bits; the day markers and the per-sub stamp are uint24.
         uint256 subBytes =
             _structFieldBytes(storage_, "uint8 dailyQuantity;", 1) +
             _structFieldBytes(storage_, "uint24 validThroughLevel;", 3) +
-            _structFieldBytes(storage_, "uint8 reinvestPct;", 1) +
             _structFieldBytes(storage_, "uint8 flags;", 1) +
             _structFieldBytes(storage_, "uint16 score;", 2) +
             _structFieldBytes(storage_, "uint24 amount;", 3) +
@@ -245,7 +244,7 @@ contract KeeperLeversAndPacking is DeployProtocol {
             _structFieldBytes(storage_, "uint24 pendingFlip;", 3) +
             _structFieldBytes(storage_, "uint16 subStreakLatch;", 2);
         assertLe(subBytes, 32, "GAS-04: Sub struct fields sum to <= 32 bytes (one slot)");
-        assertEq(subBytes, 32, "GAS-04 (v56): the game-resident Sub is 32 used bytes (13 fields, one full slot)");
+        assertEq(subBytes, 31, "GAS-04: the game-resident Sub is 31 used bytes (12 fields, 1 free byte after reinvestPct removal)");
         // The `struct Sub {` declaration is byte-present (the packed sub record exists at all).
         assertGt(_countOccurrences(storage_, "struct Sub {"), 0, "GAS-04: Sub struct present (the packed sub record)");
         // The two prior standalone bools must be GONE (folded into `flags`) — re-introducing one would push
@@ -280,9 +279,10 @@ contract KeeperLeversAndPacking is DeployProtocol {
         string memory lootbox = _stripComments(vm.readFile(LOOTBOX_SRC));
         string memory afking = _stripComments(vm.readFile(AFKING_SRC));
 
-        // G1 — RngNotReady resolve guard (bet) + placement mirror.
-        assertGt(_countOccurrences(degenerette, "revert RngNotReady()"), 0, "G1: RngNotReady resolve/placement guard byte-present");
-        assertGt(_countOccurrences(degenerette, "if (rngWord == 0) revert RngNotReady();"), 0, "G1: bet resolve RngNotReady freeze guard");
+        // G1 — RngNotReady freeze guard: placement (reject a bet at an already-worded index) + strict resolve.
+        assertGt(_countOccurrences(degenerette, "revert RngNotReady()"), 0, "G1: RngNotReady guard byte-present");
+        assertGt(_countOccurrences(degenerette, "if (lootboxRngWordByIndex[index] != 0) revert RngNotReady();"), 0, "G1: placement freeze guard (reject bet at an already-worded index)");
+        assertGt(_countOccurrences(degenerette, "if (strict) revert RngNotReady();"), 0, "G1: strict bet-resolve freeze guard (cannot resolve before the index word lands)");
 
         // G2 — RngNotReady open-box guard / orphan-index skip. The relocated multi-index sweep
         // (DegenerusGameLootboxModule.openHumanBoxes) never advances past an un-worded index: it
@@ -318,7 +318,7 @@ contract KeeperLeversAndPacking is DeployProtocol {
         // the tx.
         assertGt(_countOccurrences(game_, "try this.resolveDegeneretteBets(players[i], ids)"), 0, "G7: per-item bet isolation via this.resolveDegeneretteBets");
         assertGt(_countOccurrences(lootbox, "_openLootBoxLegWith(player, idx, packed, word);"), 0, "G7: per-entry box-open isolation (the sweep opens one entry at a time)");
-        assertGt(_countOccurrences(game_, "if (msg.sender != address(this)) revert E();"), 0, "G7: onlySelf (msg.sender == self) guard byte-present");
+        assertGt(_countOccurrences(game_, "if (msg.sender != address(this)) revert OnlySelf();"), 0, "G7: onlySelf (msg.sender == self) guard byte-present");
 
         // G9 — (v49 batchPurchase AF_KING keeper gate) DROPPED, D-351-02. v55: the afking auth is the
         // subscribe-time `operatorApprovals` consent gate (CONSENT-01 / OPENE-04) in GameAfkingModule.
@@ -339,7 +339,7 @@ contract KeeperLeversAndPacking is DeployProtocol {
 
         // G13 — rngLocked / gameOver freeze guards. The open path no-ops during the freeze (RD-3).
         assertGt(_countOccurrences(game_, "if (rngLockedFlag) revert RngLocked();"), 0, "G13: rngLocked pre-check byte-present");
-        assertGt(_countOccurrences(game_, "if (gameOver) revert E();"), 0, "G13: gameOver pre-check byte-present");
+        assertGt(_countOccurrences(game_, "if (gameOver) revert GameOver();"), 0, "G13: gameOver pre-check byte-present");
         // The human-box sweep's rngLock/liveness freeze no-op moved into the lootbox module's
         // openHumanBoxes entry-gate (the sweep is delegatecall'd from openBoxes).
         assertGt(_countOccurrences(lootbox, "if (rngLockedFlag || _livenessTriggered()) return 0;"), 0, "G13 (RD-3): sweep rngLock/liveness freeze no-op (relocated to openHumanBoxes)");

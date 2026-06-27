@@ -42,10 +42,10 @@ contract StreakSnapshotAndPendingFlipClampTest is DeployProtocol {
     uint256 private constant SUBOF_SLOT = 54;
     uint256 private constant MINTPACKED_SLOT = 9;
     uint256 private constant DEITY_SHIFT = 184;
-    uint256 private constant OFF_AFKCOVERED = 17;
-    uint256 private constant OFF_AFKINGSTART = 20;
-    uint256 private constant OFF_PENDINGFLIP = 27; // uint24 pendingFlip (bytes 27..29)
-    uint256 private constant OFF_STREAKLATCH = 30; // uint16 subStreakLatch (bytes 30..31)
+    uint256 private constant OFF_AFKCOVERED = 16;
+    uint256 private constant OFF_AFKINGSTART = 19;
+    uint256 private constant OFF_PENDINGFLIP = 26; // uint24 pendingFlip (bytes 27..29)
+    uint256 private constant OFF_STREAKLATCH = 29; // uint16 subStreakLatch (bytes 30..31)
 
     /// @dev recordAfkingSecondary is QUESTS-gated; the live +1 bump is driven by pranking as this caller.
     address private constant QUESTS_CALLER = address(0x3Cff5E7eBecb676c3Cb602D0ef2d46710b88854E);
@@ -179,7 +179,7 @@ contract StreakSnapshotAndPendingFlipClampTest is DeployProtocol {
         // decay guard keeps the earned streak, and the earned streak rides the carried-in snapshot. The manual
         // state.streak is handed back EXACTLY the earned value — no floor-hack restore, no uint8 truncation.
         vm.prank(who);
-        game.subscribe(address(0), false, false, 0, 0, address(0)); // explicit cancel -> finalizeAfking
+        game.subscribe(address(0), false, false, 0, address(0)); // explicit cancel -> finalizeAfking
         assertEq(
             _manualStreakOf(who),
             earned,
@@ -307,7 +307,7 @@ contract StreakSnapshotAndPendingFlipClampTest is DeployProtocol {
     }
 
     function _affiliateBase32Of(address who) internal view returns (uint256) {
-        return _subField(who, 23, 32);
+        return _subField(who, 22, 32);
     }
 
     function _afkingStartOf(address who) internal view returns (uint32) {
@@ -385,7 +385,7 @@ contract StreakSnapshotAndPendingFlipClampTest is DeployProtocol {
 
     function _subscribeLootbox(address who, uint8 q) internal {
         vm.prank(who);
-        game.subscribe(address(0), false, false, q, 0, address(0)); // self, lootbox mode, no reinvest
+        game.subscribe(address(0), false, false, q, address(0)); // self, lootbox mode, no reinvest
     }
 
     function _fundPool(address who, uint256 amount) internal {
