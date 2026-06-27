@@ -755,11 +755,17 @@ contract DegenerusAdmin {
         uint40 createdAt = p.createdAt;
         _requireActiveProposal(p.state, createdAt, PROPOSAL_LIFETIME);
 
-        // Stall re-check: if VRF has recovered, the proposal is invalid — KILL it rather than
-        // just reverting, so a stale proposal can't linger and resume voting on a later
-        // lastVrfProcessed dip / re-stall at a further-decayed threshold. Anyone can poke this.
+        // Invalidate (KILL) the proposal if VRF is healthy NOW, or if any VRF word was fulfilled
+        // AFTER this proposal was created (lastVrf > createdAt). A proposal exists only to swap a
+        // DEAD coordinator; a fulfillment past creation means a recovery occurred, so the proposal
+        // must not linger and resume voting on a later re-stall at a further-decayed (age-keyed)
+        // threshold. The recovery check is recovery-proof even if no one poked during the recovery
+        // window, since it compares against the persistent lastVrfProcessed. Anyone can poke this.
         uint48 lastVrf = gameAdmin.lastVrfProcessed();
-        if (block.timestamp - uint256(lastVrf) < ADMIN_STALL_THRESHOLD) {
+        if (
+            block.timestamp - uint256(lastVrf) < ADMIN_STALL_THRESHOLD ||
+            uint256(lastVrf) > uint256(createdAt)
+        ) {
             p.state = ProposalState.Killed;
             emit ProposalKilled(proposalId);
             return;
@@ -818,9 +824,13 @@ contract DegenerusAdmin {
         uint40 createdAt = p.createdAt;
         if (!_isActiveProposal(p.state, createdAt, PROPOSAL_LIFETIME)) return false;
 
-        // Stall check
+        // Stall check + recovery-spanning invalidation (mirrors vote(): a fulfillment after
+        // creation means a recovery occurred, so the proposal is dead).
         uint48 lastVrf = gameAdmin.lastVrfProcessed();
-        if (block.timestamp - uint256(lastVrf) < ADMIN_STALL_THRESHOLD) return false;
+        if (
+            block.timestamp - uint256(lastVrf) < ADMIN_STALL_THRESHOLD ||
+            uint256(lastVrf) > uint256(createdAt)
+        ) return false;
 
         return _resolveThreshold(
             p.approveWeight, p.rejectWeight, p.votingSnapshot, _thresholdFrom(createdAt)
