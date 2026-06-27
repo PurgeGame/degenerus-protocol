@@ -1,0 +1,434 @@
+{
+  "summary": "v74.0 as-built audit clusters 468-473: per-requirement verification of the frozen v73->HEAD diff with adversarial verify of any raised candidate",
+  "agentCount": 6,
+  "logs": [
+    "Auditing 6 clusters (468-473) against frozen subject 3986926c",
+    "Clusters done. Confirmed (non-refuted) candidates: 0"
+  ],
+  "result": {
+    "results": [
+      {
+        "phase": "468-SOLV",
+        "audit": {
+          "phase": "468-SOLV — AUDIT-SOLV-FOLD (SPINE: solvency / backing conservation)",
+          "summary": "As-built audit of the v73.0->HEAD (3986926c, tree 280bdb19 — verified frozen, only the exempt ContractAddresses.sol is dirty) purchase/mint/afking solvency fold. Every per-player claimable/afking debit in the folded purchase path is captured into a single combined claimablePool decrement; the per-leg prize-pool splits sum into one _addPrizeContribution; the boon-consume delegatecall in the deferral window makes no external call and the window is over-reserved (solvency-safe) at every boundary; payAffiliateCombined credits only leaderboard SCORE and returns FLIP winnerCredit (coin, not ETH-backed) for collision-safe accumulating creditFlipBatch; the sDGNRS bonus box debits claimable and routes it 1:1 into the box prize pool with the 1-wei sentinel provably preserved by the cl>mp guard + mp floor; partial claimWinnings caps the debit exactly and keeps the sentinel; the single game-over freeze-clear runs before _unfreezePool (which then no-ops); and the _resolveBuy/_settleShortfallNoPool rewrite is revert-free by construction across the 2 cover-buys + the STAGE loop. All 8 requirements HOLD; candidates[] is empty — the expected clean result.",
+          "requirements": [
+            {
+              "id": "SOLV-01",
+              "verdict": "HOLDS",
+              "evidence": "contracts/modules/DegenerusGameMintModule.sol:293-301; :1408-1415; :1562-1565; :2030-2034; contracts/storage/DegenerusGameStorage.sol:907-929,984-993",
+              "note": "On every payKind branch (DirectEth claimableUsed=0/afking-only; Claimable ethForLeg==0; Combined) and with/without a lootbox leg, the single decrement claimablePool-=totalClaimableDraw equals the exact sum of per-player claimable+afking debits (ticketClaimableDraw from _recordMintPayment + lootboxPoolDraw from _settleShortfallNoPool). Sequential _claimableOf re-reads (after the lootbox debit) prevent double-draw; claimablePool>=buyer balance so no underflow. Coin path (_redeemFlipFor payInCoin=true at :990) skips _recordMintPayment so ticketClaimableDraw=0 — no leak."
+            },
+            {
+              "id": "SOLV-02",
+              "verdict": "HOLDS",
+              "evidence": "contracts/modules/DegenerusGameMintModule.sol:215-218; :1537-1538; :1543-1552; contracts/storage/DegenerusGameStorage.sol:800-808",
+              "note": "Both legs' next/future splits are computed into locals then summed into ONE _addPrizeContribution, which reads prizePoolFrozen atomically and routes both to the same accumulator — the freeze cannot split them, and the only in-window external call (boon delegatecall) cannot flip it. LOOTBOX_SPLIT 9000+1000=10000 (rake-free); the lootbox leg's two floor divisions can leave <=1 wei in contract balance vs pool — pre-existing v73 behavior, solvency-SAFE over-backing, not unbacked credit."
+            },
+            {
+              "id": "SOLV-03",
+              "verdict": "HOLDS",
+              "evidence": "contracts/modules/DegenerusGameBoonModule.sol:68-92; window bounded by contracts/modules/DegenerusGameMintModule.sol:1408..1564",
+              "note": "consumePurchaseBoost only reads/writes boonPacked + a view + an event — NO external call, no claimablePool access, so the deferral window is non-reentrant. Even a hypothetical mid-window read sees an OVER-reservation (pool not yet decremented while per-player claimable already reduced); the decrement is always strictly after the debits, so no drainable under-reservation is ever exposed."
+            },
+            {
+              "id": "SOLV-04",
+              "verdict": "HOLDS",
+              "evidence": "contracts/DegenerusAffiliate.sol:604-682 (returns winner/winnerCredit; leaderboard SCORE writes only; winner==sender->winnerCredit=0 at :676-679; sumScaled==0 early-return :643); contracts/modules/DegenerusGameMintModule.sol:1706-1716,1745-1753; contracts/Coinflip.sol:997-1012 + :690-694",
+              "note": "winnerCredit is RETURNED not paid; the MintModule does one batched creditFlipBatch([buyer,affWinner]). Collision-safe: referrer-branch winner==buyer => credit 0 (skipped); _addDailyFlip accumulates (prevStake+deposit) so duplicate addresses sum with no overwrite. All credited value is FLIP coin (DegenerusAffiliate.sol:774 'no ETH/claimablePool touch') — no ETH-backed unbacked credit. Doc-only nit (not a finding): Coinflip.sol:995 comment says 'Array of 3' but loop is players.length-driven and caller passes length 2."
+            },
+            {
+              "id": "SOLV-05",
+              "verdict": "HOLDS",
+              "evidence": "contracts/modules/GameAfkingModule.sol:1170-1197 (cl>mp guard; box=cl/20 cap 6 ether floor mp; _deliverAfkingBuy ethValue=0/claimableUse=box; _routeAfkingPoolEth(box,0); latch stamped only on fire); :790-793 (_debitClaimable(SDGNRS,box)+claimablePool-=box tandem); :1425-1456 (full box routed, complement split); :917 (lastAutoBoughtDay stamp -> loop skips SDGNRS)",
+              "note": "Conservation exact (claimable down box == pool up box). Sentinel box<=cl-1 for every cl: cl/20<=cl-1 (cl>=2); mp floor with cl>mp gives mp<=cl-1; 6 ether cap with cl>120 ether. claimablePool>=Σ claimable preserved. Once-per-level latch + pinned-sub loop-skip => exactly one larger day-keyed box at level start, no double debit across chunks/txs; swept => cl=0 => no box."
+            },
+            {
+              "id": "SOLV-06",
+              "verdict": "HOLDS",
+              "evidence": "contracts/DegenerusGame.sol:1317-1336; :1354-1387 (claimDebit=amount-1 capped to maxClaim pre-gameOver; afking=gameOver?_afkingOf:0; payout=claimDebit+afking; NothingToClaim if 0; _debitClaimableAndAfking(player,claimDebit,afking); claimablePool-=payout)",
+              "note": "claimDebit<=amount-1 always preserves the 1-wei sentinel (pre and post gameOver); pre-gameOver the maxClaim cap binds, post-gameOver it is ignored and afking fully drained. Pool decrement equals the per-player debit exactly and cannot underflow. Zero/under-min partial claim reverts NothingToClaim. Payout always pays the resolved player (CEI), so an operator cannot redirect value (curse-grief is ACCESS-cluster, not solvency)."
+            },
+            {
+              "id": "SOLV-07",
+              "verdict": "HOLDS",
+              "evidence": "contracts/modules/DegenerusGameGameOverModule.sol:135 (sole gameOver=true site), :145-147, :152-153 (prizePoolPendingPacked=0; prizePoolFrozen=false), :182/:196 (terminal resolution AFTER the clear); contracts/modules/DegenerusGameAdvanceModule.sol:754-761 (handleGameOverDrain before _unlockRng), :1769-1776 (_unfreezePool no-op when !prizePoolFrozen)",
+              "note": "Single game-over path. The freeze-clear runs before the terminal jackpot/decimator resolution AND before _unlockRng/_unfreezePool; with prizePoolFrozen false and pending zeroed, _unfreezePool cannot resurrect the drained pools and no post-gameOver resolution can draw from a phantom pending pool."
+            },
+            {
+              "id": "SOLV-08",
+              "verdict": "HOLDS",
+              "evidence": "contracts/modules/GameAfkingModule.sol:680-728 (_resolveBuy: frozen dailyQuantity; need=cost-fundingUse>=0; claimableUse<=cost; ethValue=cost-claimableUse>=0; spendableClaimable=claimable-1 only when claimable>0); gates srcFunding>=ethValue at :476,:545,:1342; :783-793; contracts/storage/DegenerusGameStorage.sol:907-929; contracts/DegenerusGame.sol:18-23 (>= invariant doc)",
+              "note": "All arithmetic underflow-free by construction; the funding-skip predicate srcFunding<ethValue dominates every revert-prone afking debit (skip/kill not revert) and the claimable leg always leaves the 1-wei sentinel — no-brick/no-underflow across the 2 cover-buys, the STAGE loop, and the sDGNRS box (ethValue=0). Code only ever over-reserves, matching the >= doc. Minor doc inconsistency (not a code defect): DegenerusGameStorage.sol:390 still phrases the invariant as == with a temporary-break NOTE while DegenerusGame.sol:18-23 uses >=."
+            }
+          ],
+          "candidates": []
+        },
+        "verifs": []
+      },
+      {
+        "phase": "469-RNG-LIVENESS",
+        "audit": {
+          "phase": "469-RNG-LIVENESS (AUDIT-RNG-LIVENESS — DOMINANT RNG-freeze + HIGH gas/liveness)",
+          "summary": "As-built re-audit of the v73.0→HEAD (3986926c) VRF-deadman, mid-day abandon-and-promote, queue-gate removal, sDGNRS level-start box, foil/Degenerette/jackpot word consumption, and the (finished,didWork)/(done,drained) advance-chain composition guards. Every DOMINANT RNG-freeze and HIGH gas-liveness requirement HOLDS against the frozen source. The deadman is a pure monotonic latch (no uint24 underflow possible since dailyIdx<=_simulatedDayIndex always; stays frozen through the multi-tx drain until the terminal _unlockRng) and commits only a sealed-historical + prevrandao fallback with the reverseFlip nudge cancelled-and-consumed (totalFlipReversals subtract); the prevrandao bias is the documented, security-equivalent-to-v73, gameover-only-when-VRF-dead tradeoff (RNG steering on live Chainlink is out of scope). Mid-day promotion preserves the reserved bucket via isRetry (skips _lrAdvanceIndexClearPending) and the stale requestId can never re-match in rawFulfillRandomWords; promotion only fires when the bucket is empty, so no delivered-word reroll. The 3 queue sinks keep the far-future rngLocked revert and rely on the purchase-entry liveness gate (mint module reverts on _livenessTriggered) so no post-word player ticket can reach a terminal jackpot. The sDGNRS box is sized off a LIVE claimable read strictly pre-rngGate and frozen by a once-per-level latch. Foil consumes only sealed rngWordByDay (StaleAdvance day>dailyIdx+1 + rw==0 Invariant guards intact); Degenerette consumes only lootboxRngWordByIndex[index] with zero storage mutation before the packed==0/rngWord==0 gates; BAF is byte-unchanged but the OnlySelf rename. The (finished,didWork) and (done,drained) signals never report a heavy-work batch as no-work (substantial work => SSTOREs => used>0 => didWork=true), so no false negative re-enables same-tx batch+jackpot composition; the decode guards are either fail-open (game-over) or unreachable-on-the-constant-module (normal path); openHumanBoxes is budget-bounded and the combined OPEN_KNEE pro-rate caps per-box extraction at the calibrated rate (no splitting premium); claimWhalePass's empty-claim NothingToClaim revert affects only the two standalone harvest wrappers, no advance-chain crank. candidates[] is empty — clean as-built.",
+          "requirements": [
+            {
+              "id": "RNG-01",
+              "verdict": "HOLDS",
+              "evidence": "contracts/storage/DegenerusGameStorage.sol:1502-1504 (_vrfDeadmanFired = _simulatedDayIndex()-dailyIdx>120); :252 dailyIdx uint24; AdvanceModule.sol:1906 dailyIdx=day set only in _unlockRng; :176,191 day<=_simulatedDayIndexAt(ts) so dailyIdx<=current day → no uint24 underflow; latch stays frozen through drain since _unlockRng runs only at terminal step (DegenerusGameAdvanceModule.sol:761); fallback word non-steerable: _getHistoricalRngFallback uses sealed rngWordByDay + block.prevrandao (:1444-1468) and the reverseFlip nudge is cancelled+consumed via unchecked fallbackWord-=totalFlipReversals (:1395) against the += in _applyDailyRng (:2023-2030)",
+              "note": "No false-fire on a healthy game: dailyIdx advances every sealed day (purchase, jackpot, last-purchase all reach _unlockRng), so the 120-day gap only opens when no day seals for 120d = VRF-dead/abandoned. prevrandao 1-bit/propose-or-skip bias is the documented gameover-only-when-VRF-dead tradeoff (security-equivalent to the v73 14-day-grace fallback; deadman only removes a delay that would have elapsed anyway); RNG steering on live Chainlink is out of scope per the locked rulings."
+            },
+            {
+              "id": "RNG-02",
+              "verdict": "HOLDS",
+              "evidence": "AdvanceModule.sol:316-329 (mid-day stall promotion gated on !rngLockedFlag && rngRequestTime!=0 && elapsed>=MIDDAY_RNG_STALL_TIMEOUT(:147=4h) && bucket empty :301 && rngWordCurrent==0 :303); _finalizeRngRequest isRetry=vrfRequestId!=0 && rngRequestTime!=0 && rngWordCurrent==0 (:1785-1787) skips _lrAdvanceIndexClearPending (:1793-1796) so lootboxRngIndex-1 is preserved; isDailyRetry distinguishes mid-day vs daily (:1792); rawFulfillRandomWords drops the stale id via requestId!=vrfRequestId || rngWordCurrent!=0 (:1941); _finalizeLootboxRng writes the same reserved index-1 once (:1330-1334)",
+              "note": "No reroll: promotion requires the reserved bucket empty (word never delivered); a delivered mid-day word sets the bucket and zeroes rngRequestTime (rawFulfillRandomWords :1949-1956) so the promotion branch can't fire. The fresh daily word is a new VRF request → unknown at promotion, not steerable. requestLootboxRng MidDayActive/RngInFlight guards (:1145,1154) block re-request."
+            },
+            {
+              "id": "RNG-03",
+              "verdict": "HOLDS",
+              "evidence": "_queueTickets/_queueTicketsScaled/_queueTicketRange keep the far-future rngLocked revert (DegenerusGameStorage.sol:652,683,744) — only the liveness-timeout gate was removed; the write→read ticketWriteSlot swap freezes at RNG-request time (_swapAndFreeze :437,1762-1765) so tickets queued during the rngLocked window land in the write slot and cannot resolve against the current word; purchase entry points gate liveness and revert (DegenerusGameMintModule.sol:956,1116,1370,1834) so no player ticket can be queued during the game-over/liveness window; the advance-chain's own queueing uses rngBypass (AdvanceModule.sol:1620-1631)",
+              "note": "v45 freeze invariant preserved: the queue sink must not revert because the advance-chain daily-jackpot distribution flows through it (comment :644-649); protection is at the purchase entry, not the shared sink. In game-over the read slot drains one batch then _swapTicketSlot promotes write→read only after finished (:734-749), and no new player tickets can enter (liveness-gated)."
+            },
+            {
+              "id": "RNG-04",
+              "verdict": "HOLDS",
+              "evidence": "GameAfkingModule.sol:1170-1198 — box block reads LIVE cl=_claimableOf(SDGNRS) (:1172), box=min(cl/20,6 ether) floored at mp (:1179-1181); runs inside processSubscriberStage which is _runSubscriberStage (AdvanceModule.sol:385) executed strictly BEFORE rngGate (:428), so rngWordByDay[processDay] is uncommitted at stamp; once-per-level latch currentLevel>_sdgnrsBonusLevel (:1170) stamped only when the buy fires (:1178); box resolves at open off rngWordByDay[lastAutoBoughtDay] (DegenerusGameStorage.sol:2187,2251) which seals after the stamp day",
+              "note": "Box amount frozen at the pre-RNG stamp; the latch blocks any re-size within the level after the word becomes knowable. Inflating sDGNRS claimable before the read only enlarges sDGNRS's own self-funded box (positive-EV lootbox is by-design) and cannot steer an unknown word. cl>mp guard + cl/20<cl keeps the 1-wei sentinel."
+            },
+            {
+              "id": "RNG-05",
+              "verdict": "HOLDS",
+              "evidence": "BAF: DegenerusGameJackpotModule.sol:1956-1964 runBafJackpot gate msg.sender!=address(this) revert OnlySelf() then delegates to jackpots.runBafJackpot(poolWei,lvl,rngWord) unchanged; Foil: DegenerusGameFoilPackModule.sol:184 StaleAdvance day>dailyIdx+1 forward-commit guard, :584-585 rw=rngWordByDay[day] / rw==0 revert Invariant, claim re-derives from rngWordByDay[resolveDay] (:475) with resolveDay bounded (:297-301), drain only sealed buckets (:704-705); Degenerette: DegenerusGameDegeneretteModule.sol:725 rngWord=lootboxRngWordByIndex[index] is the sole word, packed==0 (:709-712) and rngWord==0 (:726-732) gates precede the only mutation delete (:734); placement requires the index word unset (:608)",
+              "note": "BAF/jackpot winner fan-out is byte-unchanged (only the E()→OnlySelf selector). Degenerette strict/non-strict trailing-skip is a clean no-op (comment :729 'Nothing is mutated above this point'); ResolveAcc flushed once (:517-530), additive/byte-identical."
+            },
+            {
+              "id": "LIVE-01",
+              "verdict": "HOLDS",
+              "evidence": "processTicketBatch returns (finished,didWork): didWorkThisCall=used>0||foilDrained (DegenerusGameMintModule.sol:729), top-empty path returns foil drained flag (:668-670), mid-queue returns used>0 (:744); _runProcessTicketBatch decodes (finished,worked) and returns (worked,finished) (AdvanceModule.sol:1611); daily gate breaks on preWorked||!preFinished (:343-346) and mid-day on ticketWorked||!ticketsFinished (:253-261); processFoilDrain drained=true iff ≥1 buyer resolved (DegenerusGameFoilPackModule.sol:722,740); decode guards: game-over fail-open dData.length>=64 swallow→drain (AdvanceModule.sol:734-751), normal-path data.length<64 revert (:1610) only on the constant module that always returns 64 bytes",
+              "note": "No false negative with heavy work: substantial work => SSTOREs => used>0 => didWork=true => break (no composition). didWork=false only when used==0 and no foil buyer resolved (negligible gas, safe to compose). The normal-path 64-byte revert cannot trip on a healthy game (constant module, fixed (bool,bool) return)."
+            },
+            {
+              "id": "LIVE-02",
+              "verdict": "HOLDS",
+              "evidence": "_swapTicketSlot fail-open toggle (AdvanceModule.sol:1737-1740); all callers swap only after the read slot is drained: game-over after finished (:734-745), requestLootboxRng under ticketsFullyProcessed (:1192-1193), mid-day promotion _swapAndFreeze only when ticketQueue[preRk].length==0 else _freezePool (:322-326), daily _swapAndFreeze after ticketsFullyProcessed set (:348→437); _freezePool single-seed guarded by if(!prizePoolFrozen) (:1748) and the 1% futurePool seed is rolled back by _unfreezePool at every _unlockRng (:1769-1776,1911)",
+              "note": "The non-empty read-slot branch is unreachable; even if hit it defers entries one cycle (no loss, no revert) so the heartbeat cannot brick. No double-seed: the freeze flag gates the seed; _unfreezePool folds pending back so no backing leaks or strands."
+            },
+            {
+              "id": "LIVE-03",
+              "verdict": "HOLDS",
+              "evidence": "Game-over drains ONE ticket batch per tx then breaks STAGE_TICKETS_WORKING (AdvanceModule.sol:725-749), handleGameOverDrain runs in its own tx entered with ticketsFullyProcessed set (:754-761); deadman routes to this same one-batch discipline (:216-224 returns at :222, no do-while composition); mintFlip advance/open legs are mutually exclusive (GameAfkingModule.sol:1620 else 1642), openHumanBoxes budget-bounded by steps<budget=OPEN_BATCH-opened≤80 (DegenerusGameLootboxModule.sol:680-726) with entry-gate return 0 under rngLock/liveness (:665); combined open count one bounty via OPEN_KNEE pro-rate k=min(opened,5), bountyEarned=(unit*k)/OPEN_KNEE (GameAfkingModule.sol:1660-1667)",
+              "note": "Per-tx work capped at ~80 O(1) box-opens; pro-rate caps per-box extraction at the calibrated unit/5 rate (5 singles == 1 batch-of-5, no splitting premium; a big batch is capped at unit = a discount to the protocol). FLIP-credit illiquidity + real-gas cost per box means no profitable farm (bounty-vs-real-gas ruling). Deadman adds no new advance-chain composition vs v73."
+            },
+            {
+              "id": "LIVE-04",
+              "verdict": "HOLDS",
+              "evidence": "_foilDrainPending gates the daily draw (AdvanceModule.sol:246-248,294-297) and is true while foilDrainDay<=foilLastResolveDay && rngWordByDay[dd]!=0 (DegenerusGameStorage.sol:2573-2577); _processFoilDrain charges a whole buyer at FOIL_PACK_ENTRIES*2+3=35 units, defers when room<35 (DegenerusGameFoilPackModule.sol:716-720); mid-day 4h fold returns STAGE_RNG_REQUESTED and breaks (AdvanceModule.sol:327-328); claimWhalePass empty-claim halfPasses==0 revert NothingToClaim (DegenerusGameWhaleModule.sol:1010-1011); callers are only the two standalone harvest wrappers DegenerusVault.gameClaimWhalePass (DegenerusVault.sol:582-583) and sDGNRS.gameClaimWhalePass (sDGNRS.sol:483-484), both crediting address(this), never composed into an atomic crank/sweep",
+              "note": "Readiness gate still blocks the draw until every sealed foil bucket drains; worst-case per-call bounded by the write budget. The NothingToClaim revert only fails a single standalone manual/permissionless harvest call; no on-chain advance-chain crank, Vault sweep, or sDGNRS harvest sequence relied on the prior silent return."
+            }
+          ],
+          "candidates": []
+        },
+        "verifs": []
+      },
+      {
+        "phase": "470-ACCESS",
+        "audit": {
+          "phase": "470-ACCESS — AUDIT-ACCESS-PERMISSIONLESS",
+          "summary": "Clean as-built result for the access-control / permissionless-settlement / governance cluster. Every newly-permissionless or relaxed-stub path settles value only to the resolved owner and sources spend only from a consenting party, matching the locked permissionless-settlement ruling. The dispatch-stub conversions (openBox/placeDegeneretteBet/resolveDegeneretteBets/claimWhalePass/claimBingo) forward msg.data verbatim and resolve the player/funder inside the module: claimBingo is sender-or-approved via the relocated module _resolvePlayer; claimAffiliateDgnrs is fully permissionless yet credits only the affiliate from a frozen per-level score with per-item try/catch isolation; openBox/resolveDegeneretteBets/claimWhalePass are harvest-inward-only. Coinflip + Degenerette caller-funded gifts set funder=msg.sender on the gift branch (funder=player only on self/operator-approved), burn only the funder's FLIP, exclude WWXRP from gifting, route quest progress to the funder while value/stake accrues to the player (net-negative to farm, ungriefable), and suppress biggestFlip/bounty/boon via directDeposit=false on non-self deposits. Admin governance timing is safe: the payable receive() force-forwards native to VAULT under a pop(call) that cannot bubble an inner-frame revert; ADMIN_STALL_THRESHOLD 44h clears the ~24h daily-RNG sawtooth (monotonic lastVrfProcessed, multi-day catch-up resets the clock, jackpot suppression is covered by the phase-independent deadman + 120/365-day backstop and governance-malice is out-of-scope per trust model); vote() checks _requireActiveProposal before the kill-on-recovery re-check, kills (terminal Killed) before recording any vote so no record-while-recovered window exists, and a dead VRF's strictly-increasing stall measure means griefers cannot transient-dip a legitimately-stalled proposal. GAME_ENDGAME_MODULE is absent from the frozen subject and referenced nowhere in contracts/. candidates[] empty.",
+          "requirements": [
+            {
+              "id": "ACCESS-01",
+              "verdict": "HOLDS",
+              "evidence": "contracts/DegenerusGame.sol:805-810 (openBox stub fwd msg.data), 897-909 (placeDegeneretteBet stub), 917-924 (resolveDegeneretteBets stub), 324-334 (claimBingo stub), 1640-1645 (claimWhalePass stub); module-side resolution: contracts/modules/DegenerusGameBingoModule.sol:118-119 + _resolvePlayer 278-286 (sender-or-approved); contracts/modules/DegenerusGameLootboxModule.sol:609-614 (openBox player=msg.sender, inward); contracts/modules/DegenerusGameDegeneretteModule.sol:441-451,493-504 (funder split / settle-to-player); contracts/modules/DegenerusGameWhaleModule.sol:1008-1024 (credits player only); Game retains its own _resolvePlayer at DegenerusGame.sol:523-529 for purchase paths (578,830). No caller acts for an unconsenting player on a spend/gift path.",
+              "note": "Stubs forward raw calldata; the module performs the consent/funder resolution. _resolvePlayer relocated into BingoModule for claimBingo while Game keeps its copy for purchase/whale-pass/claimWinnings — both byte-identical (addr0->sender, else require approval)."
+            },
+            {
+              "id": "ACCESS-02",
+              "verdict": "HOLDS",
+              "evidence": "contracts/Coinflip.sol:258-268 (funder=msg.sender gift @266, funder=player self/operator @261-263, directDeposit=(player==msg.sender) @268), 306 (flip.burnForCoinflip(funder)), 317-319 (quest to funder), 327/339-345 (questReward->player stake; biggestFlip/bounty params gated on directDeposit), _addDailyFlip:673(boon gated recordAmount!=0),700-722(bounty gated canArmBounty&&bountyEligible&&recordAmount!=0); contracts/modules/DegenerusGameDegeneretteModule.sol:441-451 (funder split, WWXRP gift-excluded @449), _collectBetFunds 662-692 (ETH shortfall draws funder @673, FLIP burns funder @688, WWXRP burns funder @691 but gift-blocked), quest to funder 565-566.",
+              "note": "No branch burns a non-consenting party's FLIP: gift branch funds from msg.sender; self/operator branch funds from player (the FLIP owner). Gift funder forfeits the entire stake (winnings go to player) so quest-streak farming is strictly net-negative; player only ever receives value (ungriefable). directDeposit=false on operator/gift deposits suppresses biggestFlip, bounty, and coinflip-boon consume."
+            },
+            {
+              "id": "ACCESS-03",
+              "verdict": "HOLDS",
+              "evidence": "contracts/modules/DegenerusGameBingoModule.sol:118-204 — player=_resolvePlayer(player) @119 (sender-or-approved, 278-286); per-color ownership require holders[slot]!=player @145; dedup bingoClaimed[level][player] @154-156; reward poolBal*dgnrsBps/10000 transferFromPool to player @193-198 and creditFlip(player) @201; events to player @177,183,203.",
+              "note": "The sender-or-approved gate (vs claimAffiliateDgnrs full permissionlessness) is the deliberate guard preventing a third party from force-settling a slot owner's timing-sensitive (live Reward-pool) bingo. Dedup keyed on resolved player blocks operator double-credit. claimBingo is read-only on traitBurnTicket (no VRF/freeze write)."
+            },
+            {
+              "id": "ACCESS-04",
+              "verdict": "HOLDS",
+              "evidence": "contracts/modules/DegenerusGameBingoModule.sol:227-273 — fully permissionless (player=msg.sender if zero @229, NO approval gate); frozen per-level score affiliate.affiliateScore(currLevel,player) @236 (scores route to level+1 so currLevel is frozen); fixed pot _getLevelDgnrs @243; reward credits player(affiliate) only @248-252,267; dedup affiliateDgnrsClaimedBy[currLevel][player] @234,271. Batch: contracts/DegenerusGame.sol:1446-1459 — try this.claimAffiliateDgnrs(affiliates[i]){}catch{} @1454 (external-call boundary -> per-item atomic rollback), empty array claims caller @1448-1451.",
+              "note": "A reverting item is an isolated external delegatecall frame, so it corrupts no shared state. Settlement only ever credits the named affiliate from a frozen score; no value moves from a non-consenting party. Per locked permissionless-settlement ruling."
+            },
+            {
+              "id": "ACCESS-05",
+              "verdict": "HOLDS",
+              "evidence": "contracts/modules/DegenerusGameLootboxModule.sol:609-614 (openBox permissionless, player=msg.sender if zero) + _openBoxBoth 627-643 (rewards keyed to resolved owner, presaleBoxEth[index][player]); contracts/modules/DegenerusGameWhaleModule.sol:1008-1024 (claimWhalePass credits player via _applyWhalePassStats/_queueTicketRange, msg.sender only in event); wrappers contracts/DegenerusVault.sol:504-505,582-583 and contracts/sDGNRS.sol:483-484,492-493 call claimBingo(address(this))/claimWhalePass(address(this)) so player==msg.sender (settles to the contract).",
+              "note": "Reward always credits the resolved owner/contract; the caller cannot redirect value. claimWhalePass with address(0) reverts NothingToClaim (whalePassClaims[0]==0) — harmless."
+            },
+            {
+              "id": "ACCESS-06",
+              "verdict": "HOLDS",
+              "evidence": "contracts/DegenerusAdmin.sol:499-508 receive() — pop(call(gas(),vault,amount,0,0,0,0)) discards success so an inner-frame revert/OOG cannot bubble; msg.value==0 is a no-op. ADMIN_STALL_THRESHOLD 44h @430; propose gate @716-728; vote() @753-791 — _requireActiveProposal first @756, stall re-check kills (terminal Killed) @761-766 BEFORE vote recording @770-780; Killed terminal via _requireActiveProposal state==Active gate @876 and propose() always ++proposalCount @731. lastVrfProcessed monotonic: set =block.timestamp in _applyDailyRng (modules/DegenerusGameAdvanceModule.sol:646,2033), exposed DegenerusGame.sol:2223-2224; day cadence ~24h (GameTimeLib 1-day boundaries, AdvanceModule:274,1150).",
+              "note": "44h = ~24h daily sawtooth + 20h grace, no false-fire on healthy cadence; multi-day catch-up resets the clock forward; jackpot suppression handled by the phase-independent deadman + 120/365-day backstop; governance-malice (trusted sDGNRS majority) is out-of-scope per trust model. While VRF is dead, block.timestamp-lastVrf strictly increases, so no transient sub-44h dip lets a griefer kill a legitimately-stalled proposal — a sub-44h read only occurs on genuine RNG recovery. receive() stranding only on a stray send if VAULT rejects (treasury has payable receive); never affects the cancelSubscription LINK refund or protocol solvency."
+            },
+            {
+              "id": "ACCESS-07",
+              "verdict": "HOLDS",
+              "evidence": "git show 3986626c:contracts/ContractAddresses.sol has no endgame/GAME_ENDGAME entry; grep -rn 'GAME_ENDGAME|ENDGAME' contracts/ returns nothing; no delegatecall targets a removed/zero module constant. Working-tree ContractAddresses.sol is dirty but address-only (exempt) and likewise carries no GAME_ENDGAME_MODULE.",
+              "note": "EndgameModule fully excised; every live dispatcher delegatecalls a present module constant (GAME_BINGO/LOOTBOX/WHALE/DEGENERETTE/AFKING/ADVANCE)."
+            }
+          ],
+          "candidates": []
+        },
+        "verifs": []
+      },
+      {
+        "phase": "471-EV",
+        "audit": {
+          "phase": "471-EV — AUDIT-EV-RTP (economy preservation / behaviour-equivalence)",
+          "summary": "All seven EV requirements HOLD against the frozen tree (3986926c). The v73→HEAD economy changes are behaviour-preserving: (EV-01) the foil score basis moved from `effectiveBaseStreak(buyer)` to a `streakSnapshot` captured inside `handleFoilPurchase` at the identical logical point (post-primary `_handlePurchase`, pre-`_handleFoilPackQuest`/`_foilStreakFloor`); since `_effectiveBaseStreak` returns the synced `baseStreak` and the secondary/floor mutate only quest-streak state (not units/mintPacked_ read by `_playerActivityScore`), `foilBoostBps`, the frozen `foilRecord`, and the claim-spin RTP are byte-equivalent. (EV-02) the Degenerette `_resolveBet` merge performs only SLOADs + memory decode before the `packed==0`/`rngWord==0` gates — the first storage write (`delete`) and the `acc` accumulation occur strictly after both, so a non-strict trailing skip is a clean no-op; the `ResolveAcc` flush is unchanged (only `E()`→`Insolvent`), only `lootboxRngWordByIndex[index]` is consumed, the placement freeze-gate is intact, and the WWXRP rig is a pure rename. (EV-03) `payAffiliateCombined` reproduces four `payAffiliate` calls exactly: `_resolveReferral` is a verbatim extraction, per-leg `_scaleLeg` floors scale+taper+kickback identically and sums (floor-of-sum-of-floors), all legs share lvl=cachedLevel+1 and the same (day,sender,storedCode) entropy that the four-call model also converged on (one winner), and the single `handleAffiliate(sumShareBase)` hop is exactly reward-equal because quest rewards are fixed-per-completion and idempotent within scope (100-ether daily via completionMask, 800-ether level via the bit-136 latch) with associative progress accumulation. (EV-04) the `cachedScore=0` skip on ticket-only non-century buys is behaviour-preserving: every consumer is gated by `lootBoxAmount!=0` or `targetLevel%100==0` (the exact compute condition), and the `lbFreshScore` leg is a no-op when `lbFreshFlip==0`; v73 already passed score 0 to ticket-leg affiliate calls so the skip is a pure gas optimization. (EV-05) the streak-bonus 1→5 + boon-while-afking route through `recordAfkingSecondary` (no shield grant), the century shield is granted once per threshold via the `shieldCenturyHighWater` re-arm, and `finalizeAfking` reconciles once (`state.streak=finalStreak` then one `_grantCenturyShield`). (EV-06) `reinvestPct` has zero references anywhere in contracts/ (no orphaned read). (EV-07) `_handlePurchase` and `_resolveReferral` are verbatim extractions behind their access-tiered wrappers. No candidate survives the skeptic filter.",
+          "requirements": [
+            {
+              "id": "EV-01",
+              "verdict": "HOLDS",
+              "evidence": "contracts/DegenerusQuests.sol:1009-1021 (handleFoilPurchase: _handlePurchase → streakSnapshot=_effectiveBaseStreak → _handleFoilPackQuest → _foilStreakFloor, same order as v73 handlePurchase→effectiveBaseStreak read→handleFoilPack→foilStreakBoost); :1352-1365 (_effectiveBaseStreak returns synced baseStreak when lastSyncDay==currentDay); contracts/modules/DegenerusGameFoilPackModule.sol:267-292 (score=_playerActivityScore(buyer,streakSnapshot); multBps=foilBoostBps(score) — same 2-arg overload as v73); :584-589 (claim-spin keccak(rw,day,drawKind,ticketIndex,FOIL_CCY_TAG)%100 unchanged, only E()→Invariant); contracts/modules/DegenerusGameMintStreakUtils.sol:383-407 (_playerActivityScore 2-arg overload, streak passed as arg, units/mintPacked_ read separately and unaffected by secondary/floor)",
+              "note": "streakSnapshot is captured at the byte-identical timing v73 read effectiveBaseStreak; secondary/floor running before the module's score call does not change the result because the streak is passed as a frozen arg and the other score inputs are untouched."
+            },
+            {
+              "id": "EV-02",
+              "verdict": "HOLDS",
+              "evidence": "contracts/modules/DegenerusGameDegeneretteModule.sol:696-730 (_resolveBet: SLOAD packed → packed==0 gate (strict revert / non-strict return) → memory decode → SLOAD rngWord → rngWord==0 gate → only then delete + resolve; first mutation strictly after both gates, acc untouched on skip); :604-606 (placement freeze gate index!=0 + lootboxRngWordByIndex[index]!=0 intact, only E()→NotStarted); :960-981 (ResolveAcc poolLoaded/poolFrozen/runningPool/pendingFuture flush unchanged, only E()→Insolvent); :978 (single word lootboxRngWordByIndex[index] consumed); :32-37,1582,1651,1713 (IWrappedWrappedXRP→IWWXRP pure rename + box-spin E()→OnlyDelegatecall only; _wwxrpRoi/WWXRP_FLOOR_BPS/_roiBpsFromScore untouched)",
+              "note": "Strict/non-strict only changes batch failure semantics (liveness/UX), not per-bet payout EV. quests.handleDegenerette(funder,...) quest-credit reassignment is intended and only diverges on the new gift branch; non-gift bets are byte-identical (funder==player) — that reassignment is an ACCESS-02 concern, not an EV regression."
+            },
+            {
+              "id": "EV-03",
+              "verdict": "HOLDS",
+              "evidence": "contracts/DegenerusAffiliate.sol:592-664 (payAffiliateCombined): _resolveReferral verbatim vs payAffiliate :423-475; _scaleLeg :688-702 floors scale+taper+kickback per leg identical to :486-532; sumShareBase=sumScaled-playerKickback=Σ(scaled_i-kickback_i); one leaderboard RMW (newTotal=earned+sumScaled, _totalAffiliateScore+=sumScaled) == four sequential adds; entropy keccak(AFFILIATE_ROLL_TAG,currentDayIndex,sender,storedCode) :631-639 identical and code-invariant across legs so all four calls converged on one winner; roll%2 / roll%20 distribution identical to :549-567. Linearity of handleAffiliate: contracts/DegenerusQuests.sol:2006-2017 (fixed QUEST_RANDOM_REWARD/QUEST_SLOT0_REWARD=100 ether, completionMask-dedup per day), :2287,2302-2323 (level quest bit-136 latch, fixed creditFlip 800 ether once per level), :915-919 (_clampedAddU16 associative accumulation). MintModule call site contracts/modules/DegenerusGameMintModule.sol:1698-1714 passes lvl=cachedLevel+1, ticketFreshFlip/ticketRecycledFlip from :2046-2052, lbFreshFlip/lbRecycledFlip; ticket basis equivalence :2034-2052 (freshFlip 0 when freshEth 0, recycledEth=costWei-freshEth)",
+              "note": "Pooled hop is exactly reward-equal (not merely conservative): both quest rewards are fixed per completion and idempotent within day/level, so distributing the same total amount across one vs four calls yields one completion either way. Floor-of-sum kickback matches because each leg is floored independently then summed."
+            },
+            {
+              "id": "EV-04",
+              "verdict": "HOLDS",
+              "evidence": "contracts/modules/DegenerusGameMintModule.sol:1613-1615 (cachedScore computed iff lootBoxAmount!=0 || targetLevel%100==0); consumers: :1619-1621 century bonus gated targetLevel%100==0; :1642-1690 lootbox EV write (lbScore/_lootboxEvMultiplierFromScore) gated lootBoxAmount!=0; :1714 payAffiliateCombined lbFreshScore only feeds _scaleLeg(lbFreshFlip,...) which no-ops when lbFreshFlip==0 (requires lootboxFreshEth!=0 ⊂ lootBoxAmount!=0). grep confirms exactly 7 cachedScore references (2 decl/compute, 2 century, 2 lootbox, 1 affiliate) — no fourth/ungated consumer",
+              "note": "v73 computed cachedScore unconditionally but ticket-leg affiliate calls passed score 0 and the century/lootbox consumers were already gated, so on a ticket-only non-century buy the score was computed-but-unused; the skip is a pure gas optimization, behaviour-identical."
+            },
+            {
+              "id": "EV-05",
+              "verdict": "HOLDS",
+              "evidence": "contracts/DegenerusQuests.sol:451-454 (awardQuestStreakBonus afking early-route to recordAfkingSecondary(player,amount), no shield); :456-460 (off-run saturating add + _grantCenturyShield); :2314-2320 (level-quest completion: afking→recordAfkingSecondary(player,LEVEL_QUEST_STREAK_BONUS=5), off-run→saturating +5 then _grantCenturyShield); :2002-2003 (slot-1 secondary recordAfkingSecondary(player,1)); :529-547 (_grantCenturyShield highWater re-arm = once per threshold); :595-616 (finalizeAfking sets state.streak=finalStreak then one _grantCenturyShield); contracts/modules/GameAfkingModule.sol:1794-1800 (recordAfkingSecondary bumps streak base only, no shield)",
+              "note": "While afking, every bonus path routes into the Sub streak base (no shield); the shield is granted once off the reconciled earned streak at finalizeAfking. The 8c28a55d fix eliminates the orphan/re-grant the dormant-state.streak write would have caused. 1→5 is an intended economy change."
+            },
+            {
+              "id": "EV-06",
+              "verdict": "HOLDS",
+              "evidence": "grep -rn 'reinvestPct|reinvest' contracts/ returns NONE (zero references / no orphaned read across subscribe/afking/quest paths); contracts/modules/DegenerusGameMintStreakUtils.sol diff = named-error + bundle→pass rename only (no reinvest residue)",
+              "note": "reinvestPct funding leg fully excised; the sDGNRS self-sub 2%-reinvest removal and vault signature-only change are intended. The Sub 48→40 within-slot repack and _resolveBuy funding-split correctness are WIRE-01/SOLV-08 concerns, not EV."
+            },
+            {
+              "id": "EV-07",
+              "verdict": "HOLDS",
+              "evidence": "contracts/DegenerusQuests.sol:958-960 (handlePurchase now delegates: return _handlePurchase(...)); :1025+ (_handlePurchase private body = the original handlePurchase body, unchanged in the diff context); :1009-1011 (handleFoilPurchase calls the same _handlePurchase with identical args buyer,cost,0,0,priceWei,priceWei); contracts/DegenerusAffiliate.sol:604-661 (_resolveReferral) byte-matches payAffiliate :423-475",
+              "note": "_handlePurchase and _resolveReferral are verbatim extractions; only difference is named-return declarations vs inline locals (behaviour-identical). The COIN-gated handlePurchase and GAME-gated handleFoilPurchase share the same modifier-less core."
+            }
+          ],
+          "candidates": []
+        },
+        "verifs": []
+      },
+      {
+        "phase": "472-WIRE",
+        "audit": {
+          "phase": "472-WIRE",
+          "summary": "test",
+          "requirements": [
+            {
+              "id": "WIRE-01",
+              "verdict": "HOLDS",
+              "evidence": "test"
+            }
+          ],
+          "candidates": []
+        },
+        "verifs": []
+      },
+      {
+        "phase": "473-GAS-FAUCET",
+        "audit": {
+          "phase": "473-GAS-FAUCET — AUDIT-GAS-FAUCET",
+          "summary": "DegenerusGasFaucet re-attests structurally clean. It is byte-frozen at 3986926c (empty diff vs working tree) and dormant: grep of scripts/deploy.js and scripts/deploy-local.js returns no matches; the only references in the repo are the contract itself and test/unit/DegenerusGasFaucet.t.sol. distribute() is onlyDistributor-gated, reverts NothingToDispense on amount==0, evaluates !hasReceived / balance==0 / affiliateScore>=minAffiliateScore, early-breaks when balance<amount, sets hasReceived BEFORE a 2300-gas-capped low-level call (textbook CEI; reentrancy-safe with no guard), and forfeits-on-SendFailed without aborting the batch. Authority is bound to live VAULT.isVaultOwner plus the approvedDistributor set; setParams/setApprovedDistributor/withdraw are onlyVaultOwner with ZeroAddress guards, and withdraw()'s full-gas send to a vault-owner-chosen sink is documented as a trust boundary. The contract has no mint/burn/ledger path, writes no protocol state (reads GAME.level / AFFILIATE.affiliateScore / VAULT.isVaultOwner view-only), and custodies only externally-donated ETH (sole inflow receive()), so it cannot touch protocol backing or solvency. The 26/26 unit suite passes. No candidates survive the skeptic filter — clean as-built.",
+          "requirements": [
+            {
+              "id": "GAS-01",
+              "verdict": "HOLDS",
+              "evidence": "contracts/DegenerusGasFaucet.sol:42 (sole contract def); test/unit/DegenerusGasFaucet.t.sol:7,11,45 (only other referencer); scripts/deploy.js + scripts/deploy-local.js grep for faucet/GasFaucet returns NONE (exit 1) — both files exist (8162B/16067B) so the absence is meaningful; git diff 3986926c -- contracts/DegenerusGasFaucet.sol is empty (byte-frozen).",
+              "note": "Dormant-in-scope posture confirmed: deployed nowhere in the pipeline; if later wired, GAME/AFFILIATE/VAULT come from ContractAddresses.sol compile-time constants (DegenerusGasFaucet.sol:46-48)."
+            },
+            {
+              "id": "GAS-02",
+              "verdict": "HOLDS",
+              "evidence": "DegenerusGasFaucet.sol:145-147 onlyDistributor; :150-151 amount==0 -> NothingToDispense; :155 early-break when address(this).balance<amount; :157 skip hasReceived; :158 skip r.balance!=0; :159 skip affiliateScore<minAffiliateScore; :163 hasReceived[r]=true BEFORE :167 r.call{value:amount,gas:2300}(\"\") (CEI); :168-175 Funded on ok / SendFailed (allowance forfeit) on fail, batch continues. Tests: t.sol:212-226 (forfeit-on-revert), :248-267 (reentrancy cannot double-pay), :188-206 (dry-break), :278-284 (NothingToDispense).",
+              "note": "2300-gas stipend is below the ~2600 cold-CALL floor, so no reentrant call is even constructible; CEI is a second independent guarantee. An EOA always accepts a 2300-gas transfer, so legitimate EOAs are never wrongly forfeited; only a contract recipient can land in SendFailed."
+            },
+            {
+              "id": "GAS-03",
+              "verdict": "HOLDS",
+              "evidence": "onlyVaultOwner -> IVaultOwnership(VAULT).isVaultOwner DegenerusGasFaucet.sol:90-93; onlyDistributor -> approvedDistributor || isVaultOwner :96-101; setApprovedDistributor onlyVaultOwner + ZeroAddress :183-187; setParams onlyVaultOwner :190-199; withdraw onlyVaultOwner + ZeroAddress + full-gas call + TransferFailed :203-208; full-gas sink trust boundary documented :40-41,:201-202. Tests t.sol:286-320,334-360.",
+              "note": "withdraw() can sweep all donated ETH to a vault-owner-chosen sink — by design (custodies only donated funds; documented trust boundary). Authority is the live >50.1% DGVE majority via VAULT, not a static owner."
+            },
+            {
+              "id": "GAS-04",
+              "verdict": "HOLDS",
+              "evidence": "No mint/burn/ledger anywhere; only writes are to its own hasReceived/approvedDistributor mappings and parameter storage (DegenerusGasFaucet.sol:163,185,195-197) — no external protocol-state writes; protocol surfaces read view-only via IGameLevel/IAffiliateScore/IVaultOwnership :7-19,116-117,152,159. Sole ETH inflow is receive() :124-126; outflows are distribute (gas-dust) and withdraw (donated ETH). forge DegenerusGasFaucetTest = 26 passed / 0 failed.",
+              "note": "Fully isolated from protocol accounting; cannot reach protocol backing/solvency. Standalone storage, no shared/delegatecall layout, no RNG/freeze interaction."
+            }
+          ],
+          "candidates": []
+        },
+        "verifs": []
+      }
+    ],
+    "confirmed": []
+  },
+  "workflowProgress": [
+    {
+      "type": "workflow_phase",
+      "index": 1,
+      "title": "Audit"
+    },
+    {
+      "type": "workflow_phase",
+      "index": 2,
+      "title": "Verify"
+    },
+    {
+      "type": "workflow_agent",
+      "index": 1,
+      "label": "audit:468-SOLV",
+      "phaseIndex": 1,
+      "phaseTitle": "Audit",
+      "agentId": "a24c89c37e2e593fd",
+      "model": "claude-opus-4-8[1m]",
+      "state": "done",
+      "startedAt": 1782536185494,
+      "queuedAt": 1782536185485,
+      "attempt": 1,
+      "lastToolName": "StructuredOutput",
+      "lastToolSummary": "468-SOLV — AUDIT-SOLV-FOLD (SPINE: solvency / backing conse…",
+      "promptPreview": "You are an isolated, independent smart-contract reviewer on a defensive security\nengagement for the Degenerus Protocol. Use neutral defensive-engineering vocabulary\nthroughout. Your final message IS structured data (a tool call), not prose for a human.\n\nSUBJECT (byte-frozen, READ-ONLY): the contracts/ tree at impl commit 3986926c\n(tree 280bdb19) — the v73.0 -> HEAD diff (29 .sol, +1861/-1030). DO …",
+      "lastProgressAt": 1782536779390,
+      "tokens": 152835,
+      "toolCalls": 40,
+      "durationMs": 593896,
+      "resultPreview": "{\"phase\":\"468-SOLV — AUDIT-SOLV-FOLD (SPINE: solvency / backing conservation)\",\"summary\":\"As-built audit of the v73.0->HEAD (3986926c, tree 280bdb19 — verified frozen, only the exempt ContractAddresses.sol is dirty) purchase/mint/afking solvency fold. Every per-player claimable/afking debit in the folded purchase path is captured into a single combined claimablePool decrement; the per-leg prize-po…"
+    },
+    {
+      "type": "workflow_agent",
+      "index": 2,
+      "label": "audit:469-RNG-LIVENESS",
+      "phaseIndex": 1,
+      "phaseTitle": "Audit",
+      "agentId": "afab71d2004f4da3e",
+      "model": "claude-opus-4-8[1m]",
+      "state": "done",
+      "startedAt": 1782536185494,
+      "queuedAt": 1782536185485,
+      "attempt": 1,
+      "lastToolName": "StructuredOutput",
+      "lastToolSummary": "469-RNG-LIVENESS (AUDIT-RNG-LIVENESS — DOMINANT RNG-freeze …",
+      "promptPreview": "You are an isolated, independent smart-contract reviewer on a defensive security\nengagement for the Degenerus Protocol. Use neutral defensive-engineering vocabulary\nthroughout. Your final message IS structured data (a tool call), not prose for a human.\n\nSUBJECT (byte-frozen, READ-ONLY): the contracts/ tree at impl commit 3986926c\n(tree 280bdb19) — the v73.0 -> HEAD diff (29 .sol, +1861/-1030). DO …",
+      "lastProgressAt": 1782536946398,
+      "tokens": 173041,
+      "toolCalls": 41,
+      "durationMs": 760904,
+      "resultPreview": "{\"phase\":\"469-RNG-LIVENESS (AUDIT-RNG-LIVENESS — DOMINANT RNG-freeze + HIGH gas/liveness)\",\"summary\":\"As-built re-audit of the v73.0→HEAD (3986926c) VRF-deadman, mid-day abandon-and-promote, queue-gate removal, sDGNRS level-start box, foil/Degenerette/jackpot word consumption, and the (finished,didWork)/(done,drained) advance-chain composition guards. Every DOMINANT RNG-freeze and HIGH gas-livenes…"
+    },
+    {
+      "type": "workflow_agent",
+      "index": 3,
+      "label": "audit:470-ACCESS",
+      "phaseIndex": 1,
+      "phaseTitle": "Audit",
+      "agentId": "a59a376e40b693103",
+      "model": "claude-opus-4-8[1m]",
+      "state": "done",
+      "startedAt": 1782536185494,
+      "queuedAt": 1782536185485,
+      "attempt": 1,
+      "lastToolName": "StructuredOutput",
+      "lastToolSummary": "470-ACCESS — AUDIT-ACCESS-PERMISSIONLESS",
+      "promptPreview": "You are an isolated, independent smart-contract reviewer on a defensive security\nengagement for the Degenerus Protocol. Use neutral defensive-engineering vocabulary\nthroughout. Your final message IS structured data (a tool call), not prose for a human.\n\nSUBJECT (byte-frozen, READ-ONLY): the contracts/ tree at impl commit 3986926c\n(tree 280bdb19) — the v73.0 -> HEAD diff (29 .sol, +1861/-1030). DO …",
+      "lastProgressAt": 1782536577156,
+      "tokens": 115860,
+      "toolCalls": 34,
+      "durationMs": 391662,
+      "resultPreview": "{\"phase\":\"470-ACCESS — AUDIT-ACCESS-PERMISSIONLESS\",\"summary\":\"Clean as-built result for the access-control / permissionless-settlement / governance cluster. Every newly-permissionless or relaxed-stub path settles value only to the resolved owner and sources spend only from a consenting party, matching the locked permissionless-settlement ruling. The dispatch-stub conversions (openBox/placeDegener…"
+    },
+    {
+      "type": "workflow_agent",
+      "index": 4,
+      "label": "audit:471-EV",
+      "phaseIndex": 1,
+      "phaseTitle": "Audit",
+      "agentId": "adb3126fdfe0181bb",
+      "model": "claude-opus-4-8[1m]",
+      "state": "done",
+      "startedAt": 1782536185495,
+      "queuedAt": 1782536185485,
+      "attempt": 1,
+      "lastToolName": "StructuredOutput",
+      "lastToolSummary": "471-EV — AUDIT-EV-RTP (economy preservation / behaviour-equ…",
+      "promptPreview": "You are an isolated, independent smart-contract reviewer on a defensive security\nengagement for the Degenerus Protocol. Use neutral defensive-engineering vocabulary\nthroughout. Your final message IS structured data (a tool call), not prose for a human.\n\nSUBJECT (byte-frozen, READ-ONLY): the contracts/ tree at impl commit 3986926c\n(tree 280bdb19) — the v73.0 -> HEAD diff (29 .sol, +1861/-1030). DO …",
+      "lastProgressAt": 1782536844382,
+      "tokens": 157550,
+      "toolCalls": 30,
+      "durationMs": 658887,
+      "resultPreview": "{\"phase\":\"471-EV — AUDIT-EV-RTP (economy preservation / behaviour-equivalence)\",\"summary\":\"All seven EV requirements HOLD against the frozen tree (3986926c). The v73→HEAD economy changes are behaviour-preserving: (EV-01) the foil score basis moved from `effectiveBaseStreak(buyer)` to a `streakSnapshot` captured inside `handleFoilPurchase` at the identical logical point (post-primary `_handlePurcha…"
+    },
+    {
+      "type": "workflow_agent",
+      "index": 5,
+      "label": "audit:472-WIRE",
+      "phaseIndex": 1,
+      "phaseTitle": "Audit",
+      "agentId": "a7eac6a265d1ee71d",
+      "model": "claude-opus-4-8[1m]",
+      "state": "done",
+      "startedAt": 1782536185495,
+      "queuedAt": 1782536185485,
+      "attempt": 1,
+      "lastToolName": "StructuredOutput",
+      "lastToolSummary": "472-WIRE",
+      "promptPreview": "You are an isolated, independent smart-contract reviewer on a defensive security\nengagement for the Degenerus Protocol. Use neutral defensive-engineering vocabulary\nthroughout. Your final message IS structured data (a tool call), not prose for a human.\n\nSUBJECT (byte-frozen, READ-ONLY): the contracts/ tree at impl commit 3986926c\n(tree 280bdb19) — the v73.0 -> HEAD diff (29 .sol, +1861/-1030). DO …",
+      "lastProgressAt": 1782536719513,
+      "tokens": 113932,
+      "toolCalls": 30,
+      "durationMs": 534018,
+      "resultPreview": "{\"phase\":\"472-WIRE\",\"summary\":\"test\",\"requirements\":[{\"id\":\"WIRE-01\",\"verdict\":\"HOLDS\",\"evidence\":\"test\"}],\"candidates\":[]}"
+    },
+    {
+      "type": "workflow_agent",
+      "index": 6,
+      "label": "audit:473-GAS-FAUCET",
+      "phaseIndex": 1,
+      "phaseTitle": "Audit",
+      "agentId": "adccfefd2cf2f29f1",
+      "model": "claude-opus-4-8[1m]",
+      "state": "done",
+      "startedAt": 1782536185495,
+      "queuedAt": 1782536185485,
+      "attempt": 1,
+      "lastToolName": "StructuredOutput",
+      "lastToolSummary": "473-GAS-FAUCET — AUDIT-GAS-FAUCET",
+      "promptPreview": "You are an isolated, independent smart-contract reviewer on a defensive security\nengagement for the Degenerus Protocol. Use neutral defensive-engineering vocabulary\nthroughout. Your final message IS structured data (a tool call), not prose for a human.\n\nSUBJECT (byte-frozen, READ-ONLY): the contracts/ tree at impl commit 3986926c\n(tree 280bdb19) — the v73.0 -> HEAD diff (29 .sol, +1861/-1030). DO …",
+      "lastProgressAt": 1782536286590,
+      "tokens": 44262,
+      "toolCalls": 8,
+      "durationMs": 101095,
+      "resultPreview": "{\"phase\":\"473-GAS-FAUCET — AUDIT-GAS-FAUCET\",\"summary\":\"DegenerusGasFaucet re-attests structurally clean. It is byte-frozen at 3986926c (empty diff vs working tree) and dormant: grep of scripts/deploy.js and scripts/deploy-local.js returns no matches; the only references in the repo are the contract itself and test/unit/DegenerusGasFaucet.t.sol. distribute() is onlyDistributor-gated, reverts Nothi…"
+    }
+  ],
+  "totalTokens": 757480,
+  "totalToolCalls": 183
+}
