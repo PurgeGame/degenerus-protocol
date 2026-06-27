@@ -2,16 +2,17 @@
 gsd_state_version: 1.0
 milestone: v74.0
 milestone_name: "As-Built Milestone Audit + C4A Package"
-status: planning
+status: executing
 last_updated: "2026-06-26"
-last_activity: 2026-06-26 -- ▶ v74.0 RE-SCOPED via /gsd-new-milestone — SUPERSEDES the prior "v74.0 C4A Readiness" plan (457-465, never tagged; its no-contract-change premise overtaken by the v73.0→HEAD batch). New milestone = As-Built Milestone Audit + C4A Package of the v73.0→HEAD diff (29 .sol, +1861/-1030; subject BYTE-FROZEN at local HEAD 3986926c). REQUIREMENTS.md (62 reqs / 15 categories: SUBJ/HARN/SOLV/RNG/LIVE/ACCESS/EV/WIRE/GAS/MAN/CMRA/SOAK/PKG/KI/TERM) + ROADMAP.md (13 phases 466-478) authored BY HAND. Grounding = 8-cluster read-only Workflow fan-out (wf_ac48ac17-b4d, 9 agents) → .planning/v74-grounding/v74.0-asbuilt-audit-map.md (+ raw JSON). Decisions LOCKED: v74.0 reuse · subject=local HEAD 3986926c · gas faucet in-scope-dormant · WWXRP in-scope-documented · audit+full C4A package · cross-model=Codex only (Gemini CLI unavailable). Old plan archived → milestones/v74.0-superseded-plan-{ROADMAP,REQUIREMENTS}.md; built agent/soak/partial-package carry forward in place. NEXT = /gsd-plan-phase 466 (or /gsd-discuss-phase 466).
+last_activity: 2026-06-26 -- ✅ Phase 466 SUBJECT-FREEZE-CONFIRM done (commit 07a356da). Autonomous BY-HAND run of v74.0: `gsd-sdk query roadmap.analyze` returns 0 phases on the hand-authored ROADMAP, so the stock gsd-autonomous loop cannot drive it — orchestrating by hand per the v68/v72/v73 precedent, committing per phase. Subject byte-frozen: `contracts/` tree 280bdb19 @ impl 3986926c (HEAD docs commit 5b7b5503 touches no .sol), distinct from v73 tree d6615306. 2 liveness edge tests rewritten to the `_vrfDeadmanFired` model → 11 passing → committed (test-only). forge storageLayout golden HEAD-vs-v73 (built in a detached v73.0 worktree): NO top-level slot move; only additive `_sdgnrsBonusLevel` (slot 58 off 25) + the `Sub` reinvestPct within-slot 8-bit repack; `_subOf`@54 / `boxPlayers`@59 / WHALE_PASS_TYPE_SHIFT bit152 unchanged. ⚠ a plain `hardhat test` regenerates `ContractAddresses.sol` → restore to hash cb70d99e after every Hardhat run. NEXT = 467 HARNESS-GREEN-GATE. (Sole approval gate remains 475 conditional contract-fix.)
+prev_activity: 2026-06-26 -- ▶ v74.0 RE-SCOPED via /gsd-new-milestone — SUPERSEDES the prior "v74.0 C4A Readiness" plan (457-465, never tagged; its no-contract-change premise overtaken by the v73.0→HEAD batch). New milestone = As-Built Milestone Audit + C4A Package of the v73.0→HEAD diff (29 .sol, +1861/-1030; subject BYTE-FROZEN at local HEAD 3986926c). REQUIREMENTS.md (62 reqs / 15 categories: SUBJ/HARN/SOLV/RNG/LIVE/ACCESS/EV/WIRE/GAS/MAN/CMRA/SOAK/PKG/KI/TERM) + ROADMAP.md (13 phases 466-478) authored BY HAND. Grounding = 8-cluster read-only Workflow fan-out (wf_ac48ac17-b4d, 9 agents) → .planning/v74-grounding/v74.0-asbuilt-audit-map.md (+ raw JSON). Decisions LOCKED: v74.0 reuse · subject=local HEAD 3986926c · gas faucet in-scope-dormant · WWXRP in-scope-documented · audit+full C4A package · cross-model=Codex only (Gemini CLI unavailable). Old plan archived → milestones/v74.0-superseded-plan-{ROADMAP,REQUIREMENTS}.md; built agent/soak/partial-package carry forward in place. NEXT = /gsd-plan-phase 466 (or /gsd-discuss-phase 466).
 prev_activity: 2026-06-26 -- the prior "v74.0 C4A Readiness" plan (457-465) was overtaken: a contract hardening+feature batch landed (aa74de08 named-errors/WWXRP-rename/partial-claim · fffbd878 VRF-deadman+swap-timer 20h→44h · e2198e14 mid-day-RNG fold · 3986926c sDGNRS level lootbox + pre-deploy hardening; pushed 498d4aaf, HEAD 3986926c local-only). The built live agent (f2432ae5) + 24/7 soak ran 0-viol against an earlier state of this tree. v74's byte-frozen premise broke → superseded by the as-built audit (see PRIOR_v73_SHIP below for the v73.0 closure).
 progress:
   total_phases: 13
-  completed_phases: 0
+  completed_phases: 1
   total_plans: 0
   completed_plans: 0
-  percent: 0
+  percent: 8
 ---
 
 # Project State
@@ -21,7 +22,7 @@ progress:
 See: .planning/PROJECT.md (Current Milestone: v74.0 section) + .planning/MILESTONES.md. **v74.0 RE-SCOPED 2026-06-26** — **As-Built Milestone Audit + C4A Package** (supersedes the prior "v74.0 C4A Readiness" plan, never tagged). Put the entire `v73.0 → HEAD` contract batch (29 .sol, +1861/-1030; subject BYTE-FROZEN at local HEAD `3986926c`) through a full milestone audit AND assemble the complete C4A package — 100% C4A-ready, no payouts. Method = verify → freeze-confirm → harness-green → 6-cluster code audit (SOLV/RNG+LIVENESS/ACCESS/EV/WIRE/GAS-FAUCET) → manifest re-point → cross-model re-audit (Codex; Gemini CLI unavailable) → live agent/soak re-attest → C4A package → terminal. The built agent + 24/7 soak + MAN-01 manifest carry forward (re-point at frozen HEAD, 0-viol already). Sole possible gate = the conditional contract-fix squash at 475/478 if the re-audit surfaces a real defect. 13 phases (466-478), numbering continues 465 → 466. Grounding: `.planning/v74-grounding/v74.0-asbuilt-audit-map.md`.
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Current focus:** Phase 466 — SUBJECT-FREEZE-CONFIRM (byte-freeze the subject at HEAD 3986926c, resolve the 2 dirty liveness test files, capture the storage-layout golden vs v73; no gate)
+**Current focus:** Phase 467 — HARNESS-GREEN-GATE (test-only) — full forge + Hardhat suite green at frozen HEAD; re-derive any slot-hardcoded `vm.store`/`vm.load` harness off the 466 golden after the `Sub` repack; reflect ABI-breaking selector/signature changes in all JS+Foundry callers; the new GasFaucet/Quests suites + VRFGovernance 42/42 green. (466 ✅ `07a356da`.)
 
 ## ⚠ v50.0 + v51.0 AUDIT DEBT → FOLDED INTO v63.0 Phase 394 LEGACY-DEBT (USER 2026-06-14; was a separate v52 track)
 
