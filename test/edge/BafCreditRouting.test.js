@@ -39,25 +39,23 @@ import {
  *   covered by separate `describe` blocks that seed lastBafResolvedDay directly.
  *
  * STORAGE LAYOUT REMINDERS (per DegenerusGameStorage.sol header):
- *   Slot 0 packing (bytes, LSB-first):
- *     [0:4]   purchaseStartDay   uint32
- *     [4:8]   dailyIdx           uint32
- *     [8:14]  rngRequestTime     uint48
- *     [14:17] level              uint24   <-- we overwrite this
- *     [17]    jackpotPhaseFlag   bool
- *     [18]    jackpotCounter     uint8
- *     [19]    lastPurchaseDay    bool
- *     [20]    decWindowOpen      bool
- *     [21]    rngLockedFlag      bool
+ *   Slot 0 packing (bytes, LSB-first; authoritative forge inspect storageLayout):
+ *     [0:3]   purchaseStartDay   uint24
+ *     [3:6]   dailyIdx           uint24
+ *     [6:12]  rngRequestTime     uint48
+ *     [12:15] level              uint24   <-- we overwrite this
+ *     [15]    jackpotPhaseFlag   bool
+ *     [16]    jackpotCounter     uint8
+ *     [17]    lastPurchaseDay    bool
+ *     [18]    decWindowOpen      bool
+ *     [19]    rngLockedFlag      bool
  *     ...
  *
- *   DegenerusJackpots layout (no inheritance, plain slots 0..):
- *     slot 0: bafTotals mapping
+ *   DegenerusJackpots layout (authoritative forge inspect storageLayout):
+ *     slot 0: bafPlayer mapping
  *     slot 1: bafTop mapping
- *     slot 2: bafTopLen mapping
- *     slot 3: bafEpoch mapping
- *     slot 4: bafPlayerEpoch mapping
- *     slot 5: lastBafResolvedDay (uint32, low 4 bytes)
+ *     slot 2: bafLevel mapping
+ *     slot 3: lastBafResolvedDay (uint24, offset 0)
  */
 describe("BafCreditRouting", function () {
   this.timeout(180_000);
@@ -68,7 +66,7 @@ describe("BafCreditRouting", function () {
 
   const SLOT0 = "0x" + "0".repeat(64);
   const LAST_BAF_RESOLVED_DAY_SLOT =
-    "0x" + (5).toString(16).padStart(64, "0");
+    "0x" + (3).toString(16).padStart(64, "0");
 
   // ---------------------------------------------------------------------------
   // Helpers
@@ -80,12 +78,12 @@ describe("BafCreditRouting", function () {
     return BigInt(raw);
   }
 
-  /** Pack the level uint24 into bytes [14:17] of slot 0 and write it back. */
+  /** Pack the level uint24 into bytes [12:15] of slot 0 and write it back. */
   async function setLevel(gameAddr, newLevel) {
     const current = await readSlot0(gameAddr);
-    const LEVEL_MASK = ((1n << 24n) - 1n) << 112n;
+    const LEVEL_MASK = ((1n << 24n) - 1n) << 96n;
     const cleared = current & ~LEVEL_MASK;
-    const updated = cleared | ((BigInt(newLevel) & ((1n << 24n) - 1n)) << 112n);
+    const updated = cleared | ((BigInt(newLevel) & ((1n << 24n) - 1n)) << 96n);
     await hre.network.provider.send("hardhat_setStorageAt", [
       gameAddr,
       SLOT0,
@@ -204,9 +202,9 @@ describe("BafCreditRouting", function () {
       // _finalizeRngRequest atomically with rngLockedFlag and lastPurchaseDay.
       // jackpotPhaseFlag stays false during this window.
       await setLevel(gameAddr, 10);
-      await setSlot0Bool(gameAddr, 19, true); // lastPurchaseDay
-      await setSlot0Bool(gameAddr, 21, true); // rngLockedFlag
-      await setSlot0Bool(gameAddr, 17, false); // jackpotPhaseFlag = false
+      await setSlot0Bool(gameAddr, 17, true); // lastPurchaseDay
+      await setSlot0Bool(gameAddr, 19, true); // rngLockedFlag
+      await setSlot0Bool(gameAddr, 15, false); // jackpotPhaseFlag = false
 
       // Confirm the external view returns the window state. With the OLD predicate
       // (purchaseLevel_ % 10 == 0) this would mis-fire: purchaseLevel_ = level + 1 = 11.
@@ -231,9 +229,9 @@ describe("BafCreditRouting", function () {
       const gameAddr = await game.getAddress();
 
       await setLevel(gameAddr, 10);
+      await setSlot0Bool(gameAddr, 17, true);
       await setSlot0Bool(gameAddr, 19, true);
-      await setSlot0Bool(gameAddr, 21, true);
-      await setSlot0Bool(gameAddr, 17, false);
+      await setSlot0Bool(gameAddr, 15, false);
 
       await expect(
         coinflip
@@ -253,9 +251,9 @@ describe("BafCreditRouting", function () {
       // four conditions to be true together — this proves the predicate is a
       // conjunction, not just a level check.
       await setLevel(gameAddr, 10);
-      await setSlot0Bool(gameAddr, 19, false); // lastPurchaseDay
-      await setSlot0Bool(gameAddr, 21, false); // rngLockedFlag
-      await setSlot0Bool(gameAddr, 17, false); // jackpotPhaseFlag
+      await setSlot0Bool(gameAddr, 17, false); // lastPurchaseDay
+      await setSlot0Bool(gameAddr, 19, false); // rngLockedFlag
+      await setSlot0Bool(gameAddr, 15, false); // jackpotPhaseFlag
 
       await expect(
         coinflip.connect(alice).claimCoinflips(alice.address, eth(10000))
@@ -275,9 +273,9 @@ describe("BafCreditRouting", function () {
       const gameAddr = await game.getAddress();
 
       await setLevel(gameAddr, 5);
+      await setSlot0Bool(gameAddr, 17, true);
       await setSlot0Bool(gameAddr, 19, true);
-      await setSlot0Bool(gameAddr, 21, true);
-      await setSlot0Bool(gameAddr, 17, false);
+      await setSlot0Bool(gameAddr, 15, false);
 
       // The predicate (level % 10 == 0) is false at level 5 — claim proceeds.
       await expect(
@@ -293,9 +291,9 @@ describe("BafCreditRouting", function () {
       const gameAddr = await game.getAddress();
 
       await setLevel(gameAddr, 5);
+      await setSlot0Bool(gameAddr, 17, true);
       await setSlot0Bool(gameAddr, 19, true);
-      await setSlot0Bool(gameAddr, 21, true);
-      await setSlot0Bool(gameAddr, 17, false);
+      await setSlot0Bool(gameAddr, 15, false);
 
       await expect(
         coinflip
@@ -312,9 +310,9 @@ describe("BafCreditRouting", function () {
       const gameAddr = await game.getAddress();
 
       await setLevel(gameAddr, 10);
-      await setSlot0Bool(gameAddr, 19, true);
-      await setSlot0Bool(gameAddr, 21, false); // rngLocked = false → lock skipped
-      await setSlot0Bool(gameAddr, 17, false);
+      await setSlot0Bool(gameAddr, 17, true);
+      await setSlot0Bool(gameAddr, 19, false); // rngLocked = false → lock skipped
+      await setSlot0Bool(gameAddr, 15, false);
 
       await expect(
         coinflip.connect(alice).claimCoinflips(alice.address, eth(10000))
@@ -367,9 +365,9 @@ describe("BafCreditRouting", function () {
       const bafResolvedDay = Number(winningDay) - 1;
       await setLastBafResolvedDay(jackpotsAddr, bafResolvedDay >= 0 ? bafResolvedDay : 0);
       await setLevel(gameAddr, 10);
-      await setSlot0Bool(gameAddr, 17, true); // jackpotPhaseFlag = true
-      await setSlot0Bool(gameAddr, 19, false); // lastPurchaseDay reset by phase transition
-      await setSlot0Bool(gameAddr, 21, false); // rngLocked reset
+      await setSlot0Bool(gameAddr, 15, true); // jackpotPhaseFlag = true
+      await setSlot0Bool(gameAddr, 17, false); // lastPurchaseDay reset by phase transition
+      await setSlot0Bool(gameAddr, 19, false); // rngLocked reset
 
       const tx = await coinflip
         .connect(alice)
@@ -394,9 +392,9 @@ describe("BafCreditRouting", function () {
       // Override only fires at cachedLevel % 10 == 0. At level 15 inside a (synthetic)
       // jackpot phase, bafLevel = cachedLevel = 15, bafLvl = _bafBracketLevel(15) = 20.
       await setLevel(gameAddr, 15);
-      await setSlot0Bool(gameAddr, 17, true);
+      await setSlot0Bool(gameAddr, 15, true);
+      await setSlot0Bool(gameAddr, 17, false);
       await setSlot0Bool(gameAddr, 19, false);
-      await setSlot0Bool(gameAddr, 21, false);
 
       const tx = await coinflip
         .connect(alice)
@@ -482,9 +480,9 @@ describe("BafCreditRouting", function () {
       // This proves the !inJackpotPhase branch routes the same day-D credit to bracket 20
       // as the jackpot-phase override does in BAF-ROUTE-05a — the two paths converge.
       await setLevel(gameAddr, 10);
-      await setSlot0Bool(gameAddr, 17, false); // jackpotPhaseFlag
-      await setSlot0Bool(gameAddr, 19, false); // lastPurchaseDay
-      await setSlot0Bool(gameAddr, 21, false); // rngLockedFlag
+      await setSlot0Bool(gameAddr, 15, false); // jackpotPhaseFlag
+      await setSlot0Bool(gameAddr, 17, false); // lastPurchaseDay
+      await setSlot0Bool(gameAddr, 19, false); // rngLockedFlag
 
       const tx = await coinflip
         .connect(alice)
@@ -513,9 +511,9 @@ describe("BafCreditRouting", function () {
       // cachedLevel = 7, cachedLevel % 10 != 0 → override does NOT fire.
       // bafLevel = cachedLevel = 7 → _bafBracketLevel(7) = 10 (the still-open bracket).
       await setLevel(gameAddr, 7);
-      await setSlot0Bool(gameAddr, 17, true);
+      await setSlot0Bool(gameAddr, 15, true);
+      await setSlot0Bool(gameAddr, 17, false);
       await setSlot0Bool(gameAddr, 19, false);
-      await setSlot0Bool(gameAddr, 21, false);
 
       const tx = await coinflip
         .connect(alice)
@@ -574,9 +572,9 @@ describe("BafCreditRouting", function () {
       // passes the >= filter.
       await setLastBafResolvedDay(jackpotsAddr, Number(winningDay));
       await setLevel(gameAddr, 10);
-      await setSlot0Bool(gameAddr, 17, true); // jackpotPhaseFlag = true (post-skip phase)
+      await setSlot0Bool(gameAddr, 15, true); // jackpotPhaseFlag = true (post-skip phase)
+      await setSlot0Bool(gameAddr, 17, false);
       await setSlot0Bool(gameAddr, 19, false);
-      await setSlot0Bool(gameAddr, 21, false);
 
       const tx = await coinflip
         .connect(alice)
