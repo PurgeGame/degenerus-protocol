@@ -1088,6 +1088,7 @@ describe("HeroOverrideWeightedRoll — Phase 293 v42.0 HRROLL regression fixture
               0n,
               ZERO_BYTES32,
               0, // MintPaymentKind.DirectEth
+              false, // foil
               { value: hre.ethers.parseEther("2") }
             );
 
@@ -1320,6 +1321,7 @@ describe("HeroOverrideWeightedRoll — Phase 293 v42.0 HRROLL regression fixture
               0n,
               ZERO_BYTES32,
               0, // MintPaymentKind.DirectEth
+              false, // foil
               { value: hre.ethers.parseEther("2") }
             );
 

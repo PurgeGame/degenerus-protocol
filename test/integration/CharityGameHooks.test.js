@@ -65,6 +65,7 @@ describe("CharityGameHooks", function () {
         0n,
         ZERO_BYTES32,
         0, // DirectEth
+        false, // foil
         { value: valuePerBuy }
       );
     }

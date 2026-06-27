@@ -34,6 +34,7 @@ describe("DgnrsSoloBucketReward", function () {
       0n,
       ZERO_BYTES32,
       MintPaymentKind.DirectEth,
+      false,
       { value: eth(totalEth) },
     );
   }

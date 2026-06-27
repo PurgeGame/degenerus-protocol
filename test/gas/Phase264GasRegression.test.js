@@ -142,6 +142,7 @@ async function buyFullTickets(game, buyer, n, totalEth) {
     0n,
     ZERO_BYTES32,
     MintPaymentKind.DirectEth,
+    false,
     { value: eth(totalEth) },
   );
 }
@@ -165,6 +166,7 @@ async function buyOneTicket(game, buyer) {
     0n,
     ZERO_BYTES32,
     MintPaymentKind.DirectEth,
+    false,
     { value: eth(0.01) },
   );
 }
