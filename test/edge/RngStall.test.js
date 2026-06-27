@@ -598,14 +598,22 @@ describe("RngStall", function () {
       await mockVRF.fulfillRandomWords(retryId, 444n);
       await drainTickets(game, deployer);
 
-      // Day 2: fresh normal advance must succeed without errors.
+      // Day 2: fresh normal advance must succeed without errors (no brick).
       await advanceToNextDay();
       const tx = await game.connect(deployer).advanceGame();
       const receipt = await tx.wait();
       expect(receipt.status).to.equal(1);
 
-      // A new VRF request should have been issued.
-      const newId = await getLastVRFRequestId(mockVRF);
+      // A new VRF request is issued for the new day's cycle. The first new-day
+      // advance clears the daily ticket-drain gate (perpetual vault/DGNRS tickets
+      // queued at construction), so the fresh request lands on a subsequent
+      // advance; drive until it appears (proving the game resumes a normal cycle).
+      let newId = await getLastVRFRequestId(mockVRF);
+      for (let i = 0; i < 10 && newId <= retryId; i++) {
+        if (await game.jackpotPhase()) break;
+        await game.connect(deployer).advanceGame();
+        newId = await getLastVRFRequestId(mockVRF);
+      }
       expect(newId).to.be.gt(retryId);
     });
 
