@@ -80,6 +80,7 @@ describe("GameLifecycle", function () {
       0,               // lootBoxAmount (0 = skip)
       ZERO_BYTES32,    // affiliateCode
       0,               // MintPaymentKind.DirectEth
+      false,           // foil
       { value }
     );
   }
