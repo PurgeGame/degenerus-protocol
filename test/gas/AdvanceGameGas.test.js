@@ -173,7 +173,7 @@ describe("AdvanceGame Gas Benchmarks", function () {
       try {
         await game
           .connect(buyer)
-          .purchaseWhaleBundle(buyer.address, 1, { value: eth(2.4) });
+          .purchaseWhalePass(buyer.address, 1, { value: eth(2.4) });
       } catch {
         // May fail for some buyers
       }
@@ -1146,7 +1146,7 @@ describe("AdvanceGame Gas Benchmarks", function () {
         try {
           await game
             .connect(buyer)
-            .purchaseWhaleBundle(buyer.address, bundlesPerBuyer, {
+            .purchaseWhalePass(buyer.address, bundlesPerBuyer, {
               value: BigInt(bundlesPerBuyer) * pricePerBundle,
             });
         } catch {
@@ -1154,7 +1154,7 @@ describe("AdvanceGame Gas Benchmarks", function () {
           try {
             await game
               .connect(buyer)
-              .purchaseWhaleBundle(buyer.address, bundlesPerBuyer, {
+              .purchaseWhalePass(buyer.address, bundlesPerBuyer, {
                 value: BigInt(bundlesPerBuyer) * eth(4),
               });
           } catch {
@@ -1531,14 +1531,14 @@ describe("Phase 264 SURF-05 — advanceGame 1.99× margin preserved at v35.0 HEA
       try {
         await game
           .connect(buyer)
-          .purchaseWhaleBundle(buyer.address, bundlesPerBuyer, {
+          .purchaseWhalePass(buyer.address, bundlesPerBuyer, {
             value: BigInt(bundlesPerBuyer) * pricePerBundle,
           });
       } catch {
         try {
           await game
             .connect(buyer)
-            .purchaseWhaleBundle(buyer.address, bundlesPerBuyer, {
+            .purchaseWhalePass(buyer.address, bundlesPerBuyer, {
               value: BigInt(bundlesPerBuyer) * eth(4),
             });
         } catch {

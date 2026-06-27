@@ -351,7 +351,7 @@ describe("MintCleanupRegression — Phase 291 v42.0 MINTCLN regression fixture",
       await buyTickets(game, alice, 2000, 30);
       await game
         .connect(alice)
-        .purchaseWhaleBundle(alice.address, 10, { value: eth(24) });
+        .purchaseWhalePass(alice.address, 10, { value: eth(24) });
       await pinDailyEntropy(game, deployer, mockVRF, DAILY_ENTROPY);
 
       const storage = await hre.ethers.getContractAt(
@@ -534,7 +534,7 @@ describe("MintCleanupRegression — Phase 291 v42.0 MINTCLN regression fixture",
       await buyTickets(game, alice, 2000, 30);
       await game
         .connect(alice)
-        .purchaseWhaleBundle(alice.address, 10, { value: eth(24) });
+        .purchaseWhalePass(alice.address, 10, { value: eth(24) });
       const gameAddr = await game.getAddress();
       const ticketWriteSlot = await readTicketWriteSlot(gameAddr);
       return { fixture, gameAddr, ticketWriteSlot };
@@ -576,7 +576,7 @@ describe("MintCleanupRegression — Phase 291 v42.0 MINTCLN regression fixture",
       const { game, alice } = fixture;
 
       // The whale-bundle scenario queues alice at lvl=1 (Path B) via the
-      // 2000-ticket purchase + at lvl=2..5 (Path A) via purchaseWhaleBundle.
+      // 2000-ticket purchase + at lvl=2..5 (Path A) via purchaseWhalePass.
       const pairs = [
         { lvl: 1, path: "B" },
         { lvl: 2, path: "A" },

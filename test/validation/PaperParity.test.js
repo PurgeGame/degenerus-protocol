@@ -431,7 +431,7 @@ describe("Paper Parity (Phase 46)", function () {
       //   whale pass bonus (bundleType == 3, 100-level bundle) -> 4000 BPS
       //   Total: 5000 + 2500 + 0 + 0 + 4000 = 11500 BPS
       //
-      // Note: purchaseWhaleBundle always sets bundleType=3 (100-level bundle type)
+      // Note: purchaseWhalePass always sets bundleType=3 (100-level bundle type)
       // because the whale bundle covers 100 levels. The 10-level type (bundleType=1)
       // is set by lazy pass / activate10LevelPass, not whale bundles.
       const { game, alice } = await loadFixture(deployWithTester);
@@ -443,7 +443,7 @@ describe("Paper Parity (Phase 46)", function () {
       // Purchase whale bundle (100-level, bundleType=3)
       await game
         .connect(alice)
-        .purchaseWhaleBundle(alice.address, 1, {
+        .purchaseWhalePass(alice.address, 1, {
           value: ethers.parseEther("2.4"),
         });
 
@@ -573,7 +573,7 @@ describe("Paper Parity (Phase 46)", function () {
       // Verify by purchasing -- will revert if price is wrong
       await game
         .connect(alice)
-        .purchaseWhaleBundle(alice.address, 1, {
+        .purchaseWhalePass(alice.address, 1, {
           value: expectedPrice,
         });
     });
@@ -960,7 +960,7 @@ describe("Paper Parity (Phase 46)", function () {
       const price = ethers.parseEther("2.4");
       await game
         .connect(alice)
-        .purchaseWhaleBundle(alice.address, 1, { value: price });
+        .purchaseWhalePass(alice.address, 1, { value: price });
 
       const nextDelta = (await game.nextPrizePoolView()) - nextBefore;
       const futureDelta =
@@ -1083,7 +1083,7 @@ describe("Paper Parity (Phase 46)", function () {
 //   PAR-02: game.purchase() with exact costWei amounts
 //   PAR-03: Pool delta verification after ticket/lootbox purchases
 //   PAR-06: game.playerActivityScore() after whale bundle purchase
-//   PAR-10: game.purchaseWhaleBundle() at 2.4 ETH
+//   PAR-10: game.purchaseWhalePass() at 2.4 ETH
 //   PAR-11: game.purchaseLazyPass() at 0.24 ETH + PriceLookupTester
 //   PAR-12: game.purchaseDeityPass() for k=0,1,2 with exact prices
 //   PAR-17: Pool delta verification after whale bundle purchase

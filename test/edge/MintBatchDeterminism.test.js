@@ -540,7 +540,7 @@ describe("MintBatchDeterminism — Phase 282 v41.0 multi-call drain regression",
       // The 2000-ticket purchase in the prior tests exercises Path B
       // (current-level) only. To attest B2 symmetric coverage per
       // D-282-B2-COVERAGE-01, queue alice tickets at FUTURE levels via
-      // purchaseWhaleBundle (which queues 400 tickets/bundle distributed
+      // purchaseWhalePass (which queues 400 tickets/bundle distributed
       // across 100 future levels: 40 tickets/level at levels 1-10, 2
       // tickets/level at levels 11-100 per WHALE_BONUS_TICKETS_PER_LEVEL +
       // WHALE_STANDARD_TICKETS_PER_LEVEL). The advanceGame() chain drains
@@ -558,7 +558,7 @@ describe("MintBatchDeterminism — Phase 282 v41.0 multi-call drain regression",
       // — verify owed math against ticketsOwedView post-purchase).
       await game
         .connect(alice)
-        .purchaseWhaleBundle(alice.address, 10, { value: eth(24) });
+        .purchaseWhalePass(alice.address, 10, { value: eth(24) });
 
       // Confirm tickets are queued at future levels (levels 2..5 cover Path A
       // since _prepareFutureTickets covers purchaseLevel+1..+4 = 2..5).

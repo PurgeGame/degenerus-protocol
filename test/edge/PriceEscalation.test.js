@@ -198,7 +198,7 @@ describe("PriceEscalation", function () {
 
       const tx = await game
         .connect(alice)
-        .purchaseWhaleBundle(alice.address, 1, { value: eth(2.4) });
+        .purchaseWhalePass(alice.address, 1, { value: eth(2.4) });
       expect((await tx.wait()).status).to.equal(1);
     });
 
@@ -207,7 +207,7 @@ describe("PriceEscalation", function () {
 
       const tx = await game
         .connect(alice)
-        .purchaseWhaleBundle(alice.address, 2, { value: eth(4.8) });
+        .purchaseWhalePass(alice.address, 2, { value: eth(4.8) });
       expect((await tx.wait()).status).to.equal(1);
     });
 
@@ -216,7 +216,7 @@ describe("PriceEscalation", function () {
 
       const tx = await game
         .connect(alice)
-        .purchaseWhaleBundle(alice.address, 10, { value: eth(24) });
+        .purchaseWhalePass(alice.address, 10, { value: eth(24) });
       expect((await tx.wait()).status).to.equal(1);
     });
   });

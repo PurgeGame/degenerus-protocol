@@ -149,7 +149,7 @@ async function buyFullTickets(game, buyer, n, totalEth) {
 async function heavyPurchases(game, buyers) {
   for (const buyer of buyers) {
     try {
-      await game.connect(buyer).purchaseWhaleBundle(buyer.address, 1, { value: eth(2.4) });
+      await game.connect(buyer).purchaseWhalePass(buyer.address, 1, { value: eth(2.4) });
     } catch (_) {
       // Whale-bundle intro-price slot may be exhausted for some buyers; fall through to ticket purchases.
     }
@@ -196,9 +196,9 @@ async function setupSplitTriggeringFixture(fixture, count) {
   const pricePerBundle = eth(2.4);
   for (const buyer of players.slice(0, 5)) {
     try {
-      await game.connect(buyer).purchaseWhaleBundle(buyer.address, 20, { value: 20n * pricePerBundle });
+      await game.connect(buyer).purchaseWhalePass(buyer.address, 20, { value: 20n * pricePerBundle });
     } catch (_) {
-      try { await game.connect(buyer).purchaseWhaleBundle(buyer.address, 20, { value: 20n * eth(4) }); } catch (_) { /* fallthrough */ }
+      try { await game.connect(buyer).purchaseWhalePass(buyer.address, 20, { value: 20n * eth(4) }); } catch (_) { /* fallthrough */ }
     }
   }
 

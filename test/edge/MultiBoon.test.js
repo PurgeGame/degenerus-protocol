@@ -309,7 +309,7 @@ describe("Multi-category boon coexistence", function () {
     for (let i = 0; i < 5; i++) {
       const tx = await game
         .connect(bob)
-        .purchaseWhaleBundle(bob.address, 1, { value: eth(2.4) });
+        .purchaseWhalePass(bob.address, 1, { value: eth(2.4) });
       // Whale bundle succeeds -- _rollLootboxBoons runs without exclusivity gate
       const receipt = await tx.wait();
       expect(receipt.status).to.equal(1);

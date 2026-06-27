@@ -135,7 +135,7 @@ describe("DgnrsSoloBucketReward", function () {
       try {
         await game
           .connect(buyer)
-          .purchaseWhaleBundle(buyer.address, 1, { value: eth(2.4) });
+          .purchaseWhalePass(buyer.address, 1, { value: eth(2.4) });
       } catch {
         // May fail for some buyers
       }

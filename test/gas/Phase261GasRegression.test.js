@@ -162,7 +162,7 @@ async function buyFullTickets(game, buyer, n, totalEth) {
 
 async function heavyPurchases(game, buyers) {
   for (const buyer of buyers) {
-    try { await game.connect(buyer).purchaseWhaleBundle(buyer.address, 1, { value: eth(2.4) }); } catch (_) {}
+    try { await game.connect(buyer).purchaseWhalePass(buyer.address, 1, { value: eth(2.4) }); } catch (_) {}
     await buyFullTickets(game, buyer, 500, 5);
   }
 }

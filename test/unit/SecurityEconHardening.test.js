@@ -75,7 +75,7 @@ describe("SecurityEconHardening", function () {
   // FIX-01: Whale bundle purchase reverts after gameOver
   // =========================================================================
   describe("FIX-01: Whale bundle blocked after gameOver", function () {
-    it("purchaseWhaleBundle reverts after gameOver at level 0", async function () {
+    it("purchaseWhalePass reverts after gameOver at level 0", async function () {
       const { game, deployer, alice, mockVRF } =
         await loadFixture(deployFullProtocol);
 
@@ -88,7 +88,7 @@ describe("SecurityEconHardening", function () {
       await expect(
         game
           .connect(alice)
-          .purchaseWhaleBundle(alice.address, 1, { value: eth(2.4) })
+          .purchaseWhalePass(alice.address, 1, { value: eth(2.4) })
       ).to.be.reverted;
     });
   });
@@ -807,7 +807,7 @@ describe("SecurityEconHardening", function () {
       const reverts = await Promise.all([
         game
           .connect(alice)
-          .purchaseWhaleBundle(alice.address, 1, { value: eth(2.4) })
+          .purchaseWhalePass(alice.address, 1, { value: eth(2.4) })
           .then(() => false)
           .catch(() => true),
         game
@@ -870,7 +870,7 @@ describe("SecurityEconHardening", function () {
       await expect(
         game
           .connect(alice)
-          .purchaseWhaleBundle(alice.address, 1, { value: eth(2.4) })
+          .purchaseWhalePass(alice.address, 1, { value: eth(2.4) })
       ).to.not.be.reverted;
     });
 

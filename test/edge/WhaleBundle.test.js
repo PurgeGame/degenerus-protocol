@@ -100,7 +100,7 @@ describe("WhaleBundle", function () {
 
       const tx = await game
         .connect(alice)
-        .purchaseWhaleBundle(alice.address, 1, { value: eth(2.4) });
+        .purchaseWhalePass(alice.address, 1, { value: eth(2.4) });
       const receipt = await tx.wait();
       expect(receipt.status).to.equal(1);
     });
@@ -111,7 +111,7 @@ describe("WhaleBundle", function () {
       await expect(
         game
           .connect(alice)
-          .purchaseWhaleBundle(alice.address, 1, { value: eth(2.3) })
+          .purchaseWhalePass(alice.address, 1, { value: eth(2.3) })
       ).to.be.reverted;
     });
 
@@ -120,7 +120,7 @@ describe("WhaleBundle", function () {
 
       const tx = await game
         .connect(alice)
-        .purchaseWhaleBundle(alice.address, 3, { value: eth(7.2) });
+        .purchaseWhalePass(alice.address, 3, { value: eth(7.2) });
       const receipt = await tx.wait();
       expect(receipt.status).to.equal(1);
     });
@@ -131,7 +131,7 @@ describe("WhaleBundle", function () {
       await expect(
         game
           .connect(alice)
-          .purchaseWhaleBundle(alice.address, 0, { value: eth(0) })
+          .purchaseWhalePass(alice.address, 0, { value: eth(0) })
       ).to.be.reverted;
     });
 
@@ -141,7 +141,7 @@ describe("WhaleBundle", function () {
       await expect(
         game
           .connect(alice)
-          .purchaseWhaleBundle(alice.address, 101, { value: eth(242.4) })
+          .purchaseWhalePass(alice.address, 101, { value: eth(242.4) })
       ).to.be.reverted;
     });
 
@@ -150,7 +150,7 @@ describe("WhaleBundle", function () {
 
       const tx = await game
         .connect(alice)
-        .purchaseWhaleBundle(alice.address, 100, { value: eth(240) });
+        .purchaseWhalePass(alice.address, 100, { value: eth(240) });
       const receipt = await tx.wait();
       expect(receipt.status).to.equal(1);
     });
@@ -161,7 +161,7 @@ describe("WhaleBundle", function () {
       await expect(
         game
           .connect(alice)
-          .purchaseWhaleBundle(alice.address, 1, { value: eth(3) })
+          .purchaseWhalePass(alice.address, 1, { value: eth(3) })
       ).to.be.reverted;
     });
 
@@ -172,7 +172,7 @@ describe("WhaleBundle", function () {
 
       const tx = await game
         .connect(alice)
-        .purchaseWhaleBundle(alice.address, 1, { value: eth(2.4) });
+        .purchaseWhalePass(alice.address, 1, { value: eth(2.4) });
       const events = await getEvents(tx, whaleModule, "LootBoxBuy");
       expect(events.length).to.be.gte(1);
       expect(events[0].args.buyer).to.equal(alice.address);
@@ -189,7 +189,7 @@ describe("WhaleBundle", function () {
 
       const tx = await game
         .connect(alice)
-        .purchaseWhaleBundle(alice.address, 1, { value: eth(2.4) });
+        .purchaseWhalePass(alice.address, 1, { value: eth(2.4) });
       expect((await tx.wait()).status).to.equal(1);
     });
 
@@ -200,10 +200,10 @@ describe("WhaleBundle", function () {
 
       await game
         .connect(alice)
-        .purchaseWhaleBundle(alice.address, 1, { value: eth(2.4) });
+        .purchaseWhalePass(alice.address, 1, { value: eth(2.4) });
       await game
         .connect(bob)
-        .purchaseWhaleBundle(bob.address, 1, { value: eth(2.4) });
+        .purchaseWhalePass(bob.address, 1, { value: eth(2.4) });
     });
 
     it("expired whale boon cannot use stale dailyIdx to get discounted pricing", async function () {
@@ -232,7 +232,7 @@ describe("WhaleBundle", function () {
       await expect(
         game
           .connect(bob)
-          .purchaseWhaleBundle(bob.address, 1, { value: discountedPrice })
+          .purchaseWhalePass(bob.address, 1, { value: discountedPrice })
       ).to.be.reverted;
     });
   });
@@ -284,7 +284,7 @@ describe("WhaleBundle", function () {
       // Buy whale bundle first (extends freeze by 100 levels)
       await game
         .connect(alice)
-        .purchaseWhaleBundle(alice.address, 1, { value: eth(2.4) });
+        .purchaseWhalePass(alice.address, 1, { value: eth(2.4) });
 
       // Now lazy pass should revert (frozenUntilLevel > level + 7)
       await expect(
@@ -436,7 +436,7 @@ describe("WhaleBundle", function () {
       // Before purchase, check mint data
       await game
         .connect(alice)
-        .purchaseWhaleBundle(alice.address, 1, { value: eth(2.4) });
+        .purchaseWhalePass(alice.address, 1, { value: eth(2.4) });
 
       // The player's frozenUntilLevel should be set (100 levels from ticketStartLevel=1)
       // We can verify indirectly: lazy pass should be blocked (freeze > level + 7)
@@ -452,13 +452,13 @@ describe("WhaleBundle", function () {
 
       await game
         .connect(alice)
-        .purchaseWhaleBundle(alice.address, 1, { value: eth(2.4) });
+        .purchaseWhalePass(alice.address, 1, { value: eth(2.4) });
 
       // Second whale bundle at same level should still work
       // (frozenUntilLevel = max(existing, new target))
       const tx = await game
         .connect(alice)
-        .purchaseWhaleBundle(alice.address, 1, { value: eth(2.4) });
+        .purchaseWhalePass(alice.address, 1, { value: eth(2.4) });
       expect((await tx.wait()).status).to.equal(1);
     });
 
@@ -469,13 +469,13 @@ describe("WhaleBundle", function () {
 
       await game
         .connect(alice)
-        .purchaseWhaleBundle(alice.address, 1, { value: eth(2.4) });
+        .purchaseWhalePass(alice.address, 1, { value: eth(2.4) });
       await game
         .connect(bob)
-        .purchaseWhaleBundle(bob.address, 2, { value: eth(4.8) });
+        .purchaseWhalePass(bob.address, 2, { value: eth(4.8) });
       await game
         .connect(carol)
-        .purchaseWhaleBundle(carol.address, 1, { value: eth(2.4) });
+        .purchaseWhalePass(carol.address, 1, { value: eth(2.4) });
     });
   });
 
@@ -503,7 +503,7 @@ describe("WhaleBundle", function () {
       // Whale bundle should still work
       const tx = await game
         .connect(alice)
-        .purchaseWhaleBundle(alice.address, 1, { value: eth(2.4) });
+        .purchaseWhalePass(alice.address, 1, { value: eth(2.4) });
       expect((await tx.wait()).status).to.equal(1);
     });
 
@@ -512,7 +512,7 @@ describe("WhaleBundle", function () {
 
       await game
         .connect(alice)
-        .purchaseWhaleBundle(alice.address, 1, { value: eth(2.4) });
+        .purchaseWhalePass(alice.address, 1, { value: eth(2.4) });
 
       await expect(
         game
