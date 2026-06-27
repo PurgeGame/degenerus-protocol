@@ -870,4 +870,82 @@ describe("VRF Governance", function () {
       expect(storedKeyHash).to.equal(keyHash);
     });
   });
+
+  // =========================================================================
+  // 17. Recovery-spanning kill (475 finding)
+  //
+  // A proposal exists only to swap a DEAD coordinator. If a VRF word is
+  // fulfilled AFTER the proposal was created (lastVrfProcessed > createdAt),
+  // a recovery occurred — the proposal must die even if the protocol LATER
+  // re-stalls past the 44h threshold. Otherwise a stale proposal could resume
+  // voting on a re-stall at a further-decayed (age-keyed) threshold and execute
+  // a swap of a coordinator that is no longer dead. vote()/poke + canExecute()
+  // both check lastVrfProcessed > createdAt, independent of the live-stall check.
+  // =========================================================================
+  describe("recovery-spanning kill (475 finding)", function () {
+    it("a proposal that spans a VRF recovery cannot execute on a later re-stall", async function () {
+      const { admin, mockVRF, game, deployer, alice, sdgnrs } =
+        await loadFixture(deployFullProtocol);
+      const vrfAddr = await mockVRF.getAddress();
+
+      // Voting weight: deployer below the initial 50% threshold (stays Active on
+      // approve) but enough to clear the DECAYED threshold later — the exact
+      // stale-proposal-at-decayed-threshold vector the fix closes.
+      await giveSDGNRS(sdgnrs, game, deployer.address, eth("4000"));
+      await giveSDGNRS(sdgnrs, game, alice.address, eth("4500"));
+
+      // 1) Open a proposal during a genuine >=44h stall and record approval weight.
+      await createStall(45);
+      await admin.connect(deployer).propose(vrfAddr, hre.ethers.id("recovery-span"));
+      await admin.connect(deployer).vote(1, true); // sub-threshold approve -> stays Active
+      let p = await admin.proposals(1);
+      const createdAt = p[1];
+      expect(p[4]).to.equal(0, "Active after sub-threshold approve");
+      expect(p[6]).to.be.gt(0n, "approval weight recorded");
+
+      // 2) Drive a VRF recovery WITHOUT poking the proposal: lastVrfProcessed
+      //    advances PAST the proposal's createdAt.
+      await recoverVrf(game, deployer, mockVRF);
+      const lastVrf = await game.lastVrfProcessed();
+      expect(lastVrf).to.be.gt(
+        createdAt,
+        "recovery must advance lastVrfProcessed past createdAt"
+      );
+
+      // 3) Re-stall well past 44h AND past the 72h decay step. The live-stall
+      //    kill branch (stall < 44h) therefore does NOT apply — only the
+      //    recovery-spanning branch (lastVrf > createdAt) can kill here.
+      await createStall(73);
+      const blk = await hre.ethers.provider.getBlock("latest");
+      expect(Number(blk.timestamp) - Number(lastVrf)).to.be.gte(
+        44 * 3600,
+        "re-stall must exceed the 44h admin threshold (isolates the recovery branch)"
+      );
+
+      // 4) Demonstrate the vector is live: the recorded approval weight WOULD
+      //    clear the now-decayed threshold, so without the fix canExecute would
+      //    be true. (approve*BPS >= threshold*snapshot && approve > reject)
+      p = await admin.proposals(1);
+      const snapshot = p[2];
+      const approveWeight = p[6];
+      const rejectWeight = p[7];
+      const t = await admin.threshold(1);
+      expect(t).to.be.lt(5000, "threshold has decayed below the initial 50%");
+      expect(approveWeight * 10000n).to.be.gte(
+        BigInt(t) * snapshot,
+        "recorded approval would clear the decayed threshold (vector is live)"
+      );
+      expect(approveWeight).to.be.gt(rejectWeight);
+
+      // 5) The fix: canExecute returns false purely due to the recovery span.
+      expect(await admin.canExecute(1)).to.equal(false);
+
+      // 6) A poke kills the now-invalid proposal (Killed), not executes it.
+      const tx = await admin.connect(deployer).vote(1, true);
+      const ev = await getEvent(tx, admin, "ProposalKilled");
+      expect(ev.args.proposalId).to.equal(1n);
+      p = await admin.proposals(1);
+      expect(p[4]).to.equal(2, "Killed after recovery-spanning re-stall");
+    });
+  });
 });
