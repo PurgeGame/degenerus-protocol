@@ -121,12 +121,24 @@ describe("CharityGameHooks", function () {
    */
   async function triggerGameOver(game, deployer, mockVRF) {
     await advanceTime(SECONDS_912_DAYS + 86400);
-    await game.connect(deployer).advanceGame();
-    const requestId = await getLastVRFRequestId(mockVRF);
-    if (requestId > 0n) {
-      await mockVRF.fulfillRandomWords(requestId, 42n);
+    // The terminal drain is multi-tx (entropy round, ticket drain, then
+    // handleGameOverDrain), so loop advanceGame — fulfilling any VRF request —
+    // until gameOver latches.
+    for (let i = 0; i < 12; i++) {
+      const reqBefore = await getLastVRFRequestId(mockVRF);
+      try {
+        await game.connect(deployer).advanceGame();
+      } catch {
+        /* may revert mid-sequence; keep driving */
+      }
+      const reqAfter = await getLastVRFRequestId(mockVRF);
+      if (reqAfter > reqBefore) {
+        try {
+          await mockVRF.fulfillRandomWords(reqAfter, 42n);
+        } catch {}
+      }
+      if (await game.gameOver()) return;
     }
-    await game.connect(deployer).advanceGame();
   }
 
   // =========================================================================
@@ -378,14 +390,30 @@ describe("CharityGameHooks", function () {
 
       await advanceTime(SECONDS_912_DAYS + 86400);
 
-      // First call: VRF request
-      await game.connect(deployer).advanceGame();
-      const requestId = await getLastVRFRequestId(mockVRF);
-      await mockVRF.fulfillRandomWords(requestId, 42n);
-
-      // Second call: processes word, calls handleGameOverDrain -> burnAtGameOver
-      const tx = await game.connect(deployer).advanceGame();
-      const events = await getEvents(tx, charity, "GameOverFinalized");
+      // Drive the multi-tx terminal drain until gameOver latches, capturing the
+      // GameOverFinalized event from whichever advanceGame tx emits it
+      // (handleGameOverDrain -> burnAtGameOver runs in its own tx now).
+      let events = [];
+      for (let i = 0; i < 12; i++) {
+        const reqBefore = await getLastVRFRequestId(mockVRF);
+        let tx = null;
+        try {
+          tx = await game.connect(deployer).advanceGame();
+        } catch {
+          /* may revert mid-sequence */
+        }
+        if (tx) {
+          const evs = await getEvents(tx, charity, "GameOverFinalized");
+          if (evs.length > 0) events = evs;
+        }
+        const reqAfter = await getLastVRFRequestId(mockVRF);
+        if (reqAfter > reqBefore) {
+          try {
+            await mockVRF.fulfillRandomWords(reqAfter, 42n);
+          } catch {}
+        }
+        if (await game.gameOver()) break;
+      }
 
       expect(events.length).to.equal(1, "GameOverFinalized event should be emitted");
       expect(events[0].args.gnrusBurned).to.be.gt(0,
