@@ -208,21 +208,27 @@ describe("EthInvariant (ACCT-01, ACCT-08)", function () {
       { value: priceWei }
     );
 
-    // Trigger game-over via 912-day liveness timeout (level 0)
-    // This is the established pattern from GameOver.test.js
+    // Trigger game-over via 912-day liveness timeout (level 0).
+    // The terminal drain is multi-tx (entropy round → ticket-drain pass →
+    // gameOver drain), so loop advanceGame — fulfilling any VRF request it
+    // issues — until gameOver latches (established pattern from GameOver.test.js).
     await advanceTime(SECONDS_912_DAYS + 86400);
 
-    // Step 1: advanceGame issues VRF request (but does NOT set gameOver yet)
-    await game.connect(deployer).advanceGame();
-
-    // Step 2: Fulfill VRF
-    const requestId = await getLastVRFRequestId(mockVRF);
-    if (requestId > 0n) {
-      await mockVRF.fulfillRandomWords(requestId, 42n);
+    for (let i = 0; i < 12; i++) {
+      const reqBefore = await getLastVRFRequestId(mockVRF);
+      try {
+        await game.connect(deployer).advanceGame();
+      } catch {
+        /* may revert mid-sequence; keep driving */
+      }
+      const reqAfter = await getLastVRFRequestId(mockVRF);
+      if (reqAfter > reqBefore) {
+        try {
+          await mockVRF.fulfillRandomWords(reqAfter, 42n);
+        } catch {}
+      }
+      if (await game.gameOver()) break;
     }
-
-    // Step 3: advanceGame processes word → handleGameOverDrain → gameOver = true
-    await game.connect(deployer).advanceGame();
 
     // Verify game is over
     expect(await game.gameOver()).to.equal(

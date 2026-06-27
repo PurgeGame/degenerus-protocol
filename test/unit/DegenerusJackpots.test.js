@@ -166,9 +166,15 @@ describe("DegenerusJackpots", function () {
       expect(ev.args.newTotal).to.equal(eth(500));
     });
 
-    it("silently ignores vault address", async function () {
+    it("vault accrues a BAF score and emits BafFlipRecorded", async function () {
       const { jackpots, coinflip, vault } = await loadFixture(deployFullProtocol);
       const vaultAddr = await vault.getAddress();
+      // recordBafFlip now records the vault's running total and emits
+      // BafFlipRecorded for it (the prior "silently ignore vault" behavior is
+      // gone). The vault is only kept off the top-bettor leaderboard — the
+      // `if (player != VAULT) _updateBafTop(...)` guard in recordBafFlip — which
+      // is contract-internal (no public leaderboard view); the observable change
+      // here is that the vault now accrues a score and emits the event.
       const tx = await recordBafFlipAsCoinflip(
         hre.ethers,
         coinflip,
@@ -177,9 +183,10 @@ describe("DegenerusJackpots", function () {
         10,
         eth(1000)
       );
-      // No BafFlipRecorded event emitted for vault
       const evs = await getEvents(tx, jackpots, "BafFlipRecorded");
-      expect(evs.length).to.equal(0);
+      expect(evs.length).to.equal(1);
+      expect(evs[0].args.player).to.equal(vaultAddr);
+      expect(evs[0].args.newTotal).to.equal(eth(1000));
     });
 
     it("different levels are tracked independently", async function () {

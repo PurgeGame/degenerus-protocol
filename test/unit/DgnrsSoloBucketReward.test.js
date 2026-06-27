@@ -104,7 +104,13 @@ describe("DgnrsSoloBucketReward", function () {
   // Test
   // -------------------------------------------------------------------------
 
-  it("DGNRS reward is emitted to the same winner as the solo bucket ETH on the final day", async function () {
+  // OBSOLETE (v51.0, c3e9d907 — USER-APPROVED): the JackpotModule final-day solo-bucket
+  // DGNRS reward was removed entirely — the `Pool.Reward` branch, the FINAL_DAY_DGNRS_BPS
+  // constant, and the `JackpotDgnrsWin` event were all deleted. The solo bucket on the
+  // final day now pays ETH + whale pass only (_processSoloBucketWinner), with NO DGNRS
+  // leg. `JackpotDgnrsWin` exists nowhere in the contracts, so the event lookup below
+  // always returns null. Skipped because the feature under test no longer exists.
+  it.skip("DGNRS reward is emitted to the same winner as the solo bucket ETH on the final day (feature removed in v51.0)", async function () {
     const {
       game,
       deployer,

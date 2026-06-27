@@ -17,12 +17,11 @@ import {
 const PRESALE_CAP = eth("200");
 const MintPaymentKind = { DirectEth: 0 };
 
-// Presale split BPS (must match LOOTBOX_PRESALE_SPLIT_* in DegenerusGameMintModule).
-const PRESALE_FUTURE_BPS = 5000n;
-const PRESALE_NEXT_BPS = 3000n;
-const PRESALE_VAULT_BPS = 2000n;
-
-// Post-presale split BPS.
+// Lootbox ETH split BPS — rake-free 90/10 future/next for BOTH presale and
+// post-presale mint-only lootbox buys (must match LOOTBOX_SPLIT_FUTURE_BPS /
+// LOOTBOX_SPLIT_NEXT_BPS in DegenerusGameMintModule). The presale flag no longer
+// carries a special vault rake: the vault gets 0 on every mint-only lootbox buy
+// regardless of presale state.
 const POST_FUTURE_BPS = 9000n;
 const POST_NEXT_BPS = 1000n;
 
@@ -107,7 +106,7 @@ describe("Presale per-mint cap auto-deactivation", function () {
     expect(await game.lootboxPresaleActiveFlag()).to.equal(false);
   });
 
-  it("triggering mint receives the 50/30/20 presale split (vault gets 20%)", async () => {
+  it("triggering mint routes the rake-free 90/10 future/next split (vault gets 0, like every lootbox buy)", async () => {
     const { game, alice, vault } = await loadFixture(deployFullProtocol);
     const vaultAddr = await vault.getAddress();
 
@@ -122,9 +121,12 @@ describe("Presale per-mint cap auto-deactivation", function () {
     const futureAfter = await game.futurePrizePoolView();
     const nextAfter = await game.nextPrizePoolView();
 
-    expect(vaultAfter - vaultBefore).to.equal((amount * PRESALE_VAULT_BPS) / 10_000n);
-    expect(futureAfter - futureBefore).to.equal((amount * PRESALE_FUTURE_BPS) / 10_000n);
-    expect(nextAfter - nextBefore).to.equal((amount * PRESALE_NEXT_BPS) / 10_000n);
+    // Presale is rake-free: the cap-triggering mint still carries presale=true on its
+    // event, but its ETH routes 90% future / 10% next with no vault cut — identical to
+    // the post-presale split.
+    expect(vaultAfter - vaultBefore).to.equal(0n);
+    expect(futureAfter - futureBefore).to.equal((amount * POST_FUTURE_BPS) / 10_000n);
+    expect(nextAfter - nextBefore).to.equal((amount * POST_NEXT_BPS) / 10_000n);
   });
 
   // -------------------------------------------------------------------------

@@ -393,7 +393,7 @@ describe("DegenerusAdmin", function () {
   // 5. VRF Governance (propose / vote / execute)
   // ---------------------------------------------------------------------------
   describe("VRF Governance", function () {
-    it("propose reverts when VRF is not stalled (< 20h)", async function () {
+    it("propose reverts when VRF is not stalled (< 44h)", async function () {
       const { admin, mockVRF, deployer } = await loadFixture(deployFullProtocol);
       const vrfAddr = await mockVRF.getAddress();
       const newKeyHash = hre.ethers.id("test-key-hash");
@@ -431,12 +431,15 @@ describe("DegenerusAdmin", function () {
       ).to.be.revertedWithCustomError(admin, "InsufficientStake");
     });
 
-    it("vote reverts when VRF is not stalled", async function () {
+    it("vote reverts ProposalNotActive when the proposal does not exist (active-proposal precondition runs before any stall logic)", async function () {
       const { admin, deployer } = await loadFixture(deployFullProtocol);
-      // No proposals exist but the stall check should revert first
+      // vote() validates the proposal is active FIRST; the stall is no longer a
+      // revert source (a recovered/healthy VRF now KILLS the proposal in-place
+      // rather than reverting). A non-existent proposal (createdAt == 0) trips
+      // the active-proposal guard regardless of stall state.
       await expect(
         admin.connect(deployer).vote(1, true)
-      ).to.be.revertedWithCustomError(admin, "NotStalled");
+      ).to.be.revertedWithCustomError(admin, "ProposalNotActive");
     });
 
     it("vote reverts with ProposalNotActive for non-existent proposal", async function () {

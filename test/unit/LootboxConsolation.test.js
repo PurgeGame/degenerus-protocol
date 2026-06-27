@@ -215,14 +215,19 @@ describe("LootboxConsolation — Phase 274 Wave 2 TST-WX-01..03", function () {
       expect(mintPrize).to.be.greaterThan(outerGuard);
     });
 
-    it("[02d] the 10%-path WWXRP win at `_resolveLootboxRoll` does NOT use LOOTBOX_WWXRP_CONSOLATION (separate concern)", function () {
+    it("[02d] the standard WWXRP win at `_resolveLootboxRoll` stakes LOOTBOX_WWXRP_PRIZE, NOT LOOTBOX_WWXRP_CONSOLATION (separate concern)", function () {
       const source = fs.readFileSync(MODULE_SOURCE_PATH, "utf8");
-      // The 10%-path WWXRP win uses LOOTBOX_WWXRP_PRIZE.
-      const tenPercentWin = source.indexOf("uint256 wwxrpAmount = LOOTBOX_WWXRP_PRIZE");
-      expect(tenPercentWin).to.be.greaterThan(-1);
-      // It does NOT reference LOOTBOX_WWXRP_CONSOLATION nearby (250-char window).
-      const window = source.slice(tenPercentWin, tenPercentWin + 250);
-      expect(window.includes("LOOTBOX_WWXRP_CONSOLATION")).to.equal(false);
+      // The standard WWXRP win is now a Degenerette spin staking the standard WWXRP
+      // prize: `_callWwxrpSpin(player, LOOTBOX_WWXRP_PRIZE, ...)`. It stakes the PRIZE
+      // constant, never the cold-bust consolation constant — they remain separate concerns.
+      expect(
+        /_callWwxrpSpin\(\s*player,\s*LOOTBOX_WWXRP_PRIZE\b/.test(source),
+        "the standard WWXRP win must stake LOOTBOX_WWXRP_PRIZE via `_callWwxrpSpin(player, LOOTBOX_WWXRP_PRIZE, ...)`"
+      ).to.equal(true);
+      expect(
+        /_callWwxrpSpin\(\s*player,\s*LOOTBOX_WWXRP_CONSOLATION\b/.test(source),
+        "the standard WWXRP win must NOT stake LOOTBOX_WWXRP_CONSOLATION"
+      ).to.equal(false);
     });
   });
 

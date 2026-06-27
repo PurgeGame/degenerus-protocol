@@ -233,7 +233,7 @@ describe("LootboxAutoResolveRegression — Phase 274 Wave 2 TST-REG-01..04", fun
   });
 
   describe("TST-REG-03 — auto-resolve paths silent + sentinel retired (Phase 277)", function () {
-    it("[03a] resolveLootboxDirect passes `index = 0` and `emitLootboxEvent = false` to _resolveLootboxCommon", function () {
+    it("[03a] resolveLootboxDirect passes `index = 0` and threads the caller's `emitLootboxEvent` flag to _resolveLootboxCommon", function () {
       const source = fs.readFileSync(MODULE_SOURCE_PATH, "utf8");
       const fnIdx = source.indexOf("function resolveLootboxDirect(");
       expect(fnIdx).to.be.greaterThan(-1);
@@ -245,13 +245,17 @@ describe("LootboxAutoResolveRegression — Phase 274 Wave 2 TST-REG-01..04", fun
       expect(body.includes("type(uint48).max")).to.equal(false);
       const args = extractResolveCommonArgs(body);
       expect(args, "_resolveLootboxCommon call args not parsed").to.not.equal(null);
-      // Positional (day dropped from the helper in 4cb9ccbf "lootbox event day
-      // cleanup" → 11 args): 2nd arg = index, 7th arg = emitLootboxEvent.
+      // Positional layout: the helper takes 13 args (the `day` arg was dropped in
+      // 4cb9ccbf "lootbox event day cleanup"; `activityScore` + `allowEthSpin` were
+      // appended). 2nd arg = index, 7th arg = emitLootboxEvent. resolveLootboxDirect
+      // now takes `emitLootboxEvent` as a parameter and THREADS it (true for the box
+      // ETH-spin recirc so its contents are itemized, false for the bet-win / decimator
+      // recirc), so the 7th positional is the variable name, not a literal `false`.
       expect(args[1], "resolveLootboxDirect must pass index = 0").to.equal("0");
       expect(
         args[6],
-        "resolveLootboxDirect must pass emitLootboxEvent = false"
-      ).to.equal("false");
+        "resolveLootboxDirect must thread the caller's emitLootboxEvent flag"
+      ).to.equal("emitLootboxEvent");
     });
 
     it("[03b] resolveRedemptionLootbox passes `index = 0` and `emitLootboxEvent = false` to _resolveLootboxCommon", function () {
@@ -290,7 +294,7 @@ describe("LootboxAutoResolveRegression — Phase 274 Wave 2 TST-REG-01..04", fun
       ).to.equal(false);
     });
 
-    it("[03d] auto-resolve is silent: LootboxTicketRoll is gone, the cold-bust consolation is `payColdBustConsolation`-gated, and both auto-resolve callers pass `emitLootboxEvent = false` + `payColdBustConsolation = false`", function () {
+    it("[03d] auto-resolve cold-bust is silent: LootboxTicketRoll is gone, the cold-bust consolation is `payColdBustConsolation`-gated, and both auto-resolve callers pass `payColdBustConsolation = false` (resolveLootboxDirect threads the caller's `emitLootboxEvent`; the redemption chunk passes `false`)", function () {
       const source = fs.readFileSync(MODULE_SOURCE_PATH, "utf8");
       // (1) LootboxTicketRoll is fully retired from the module.
       expect(
@@ -304,15 +308,20 @@ describe("LootboxAutoResolveRegression — Phase 274 Wave 2 TST-REG-01..04", fun
         /if \(payColdBustConsolation && whole == 0\)/.test(source),
         "the manual cold-bust consolation must be gated on `payColdBustConsolation && whole == 0`"
       ).to.equal(true);
-      // (3) Both auto-resolve callers pass emitLootboxEvent = false (7th
-      //     positional) AND payColdBustConsolation = false (8th positional) — the
-      //     `day` arg was dropped from the helper in 4cb9ccbf (11-arg shape).
+      // (3) _resolveLootboxCommon takes 13 positional args (`day` dropped in 4cb9ccbf;
+      //     `activityScore` + `allowEthSpin` appended): 7th = emitLootboxEvent,
+      //     8th = payColdBustConsolation. The silence-on-cold-bust invariant is
+      //     payColdBustConsolation = false for BOTH auto-resolve callers. The
+      //     LootBoxOpened emit differs: resolveLootboxDirect THREADS the caller's
+      //     `emitLootboxEvent` (true for the box ETH-spin recirc so its contents are
+      //     itemized), while the redemption chunk passes a literal `false`.
       // The redemption auto-resolve path holds its `_resolveLootboxCommon` call in the
       // private `_resolveRedemptionChunk` helper (one per 5-ETH chunk).
-      for (const fnSig of [
-        "function resolveLootboxDirect(",
-        "function _resolveRedemptionChunk(",
-      ]) {
+      const expectedEmit = {
+        "function resolveLootboxDirect(": "emitLootboxEvent",
+        "function _resolveRedemptionChunk(": "false",
+      };
+      for (const fnSig of Object.keys(expectedEmit)) {
         const fnIdx = source.indexOf(fnSig);
         const body = source.slice(fnIdx, fnIdx + 2500);
         const args = extractResolveCommonArgs(body);
@@ -321,8 +330,8 @@ describe("LootboxAutoResolveRegression — Phase 274 Wave 2 TST-REG-01..04", fun
         );
         expect(
           args[6],
-          `${fnSig} must pass emitLootboxEvent = false`
-        ).to.equal("false");
+          `${fnSig} must pass emitLootboxEvent = ${expectedEmit[fnSig]}`
+        ).to.equal(expectedEmit[fnSig]);
         expect(
           args[7],
           `${fnSig} must pass payColdBustConsolation = false`
@@ -445,11 +454,12 @@ describe("LootboxAutoResolveRegression — Phase 274 Wave 2 TST-REG-01..04", fun
         callMatches,
         "the per-roll ticket-queue path must call `_queueTickets(player, rollLevel, whole, false)` at one source site"
       ).to.equal(1);
-      // The `LootBoxOpened` emit is gated by `emitLootboxEvent`; the manual
-      // cold-bust consolation is gated by the dedicated `payColdBustConsolation`.
+      // The `LootBoxOpened` emit is gated by `emitLootboxEvent` AND suppressed for
+      // Degenerette-spin rolls (`!wasSpin`), which carry their own settlement event;
+      // the manual cold-bust consolation is gated by the dedicated `payColdBustConsolation`.
       expect(
-        /if \(emitLootboxEvent\)/.test(source),
-        "the `LootBoxOpened` emit must be gated by `emitLootboxEvent`"
+        /if \(emitLootboxEvent && !wasSpin\)/.test(source),
+        "the `LootBoxOpened` emit must be gated by `emitLootboxEvent && !wasSpin`"
       ).to.equal(true);
       expect(
         /if \(payColdBustConsolation && whole == 0\)/.test(source),
