@@ -147,19 +147,27 @@ describe("DegenerusGame", function () {
 
     it("operator can act on behalf of owner after approval", async function () {
       const { game, alice, bob } = await loadFixture(deployFullProtocol);
-      // Alice approves Bob to set her auto-rebuy
+      // Alice approves Bob to act for her
       await game.connect(alice).setOperatorApproval(bob.address, true);
-      // Bob sets auto-rebuy for Alice (this is a valid operator action)
+      // Bob purchases tickets for Alice (a valid operator action via _resolvePlayer)
+      const price = await game.mintPrice();
       await expect(
-        game.connect(bob).setAutoRebuy(alice.address, true)
+        game.connect(bob).purchase(
+          alice.address, 400n, 0n, ZERO_BYTES32, MintPaymentKind.DirectEth, false,
+          { value: price }
+        )
       ).to.not.be.reverted;
     });
 
     it("unapproved caller cannot act for another player", async function () {
       const { game, alice, bob } = await loadFixture(deployFullProtocol);
-      // Bob is NOT approved for Alice
+      // Bob is NOT approved for Alice — _resolvePlayer reverts NotApproved
+      const price = await game.mintPrice();
       await expect(
-        game.connect(bob).setAutoRebuy(alice.address, true)
+        game.connect(bob).purchase(
+          alice.address, 400n, 0n, ZERO_BYTES32, MintPaymentKind.DirectEth, false,
+          { value: price }
+        )
       ).to.be.reverted;
     });
   });
@@ -340,47 +348,10 @@ describe("DegenerusGame", function () {
   });
 
   // ---------------------------------------------------------------------------
-  // 6. Auto-rebuy toggle
+  // 6/7. Auto-rebuy toggle + take-profit — REMOVED (v46 batched legacy removal,
+  // df4ef365): setAutoRebuy / setAutoRebuyTakeProfit no longer exist; the
+  // afking subscription system (subscribe / beginAfking) replaced auto-rebuy.
   // ---------------------------------------------------------------------------
-  describe("setAutoRebuy", function () {
-    it("enables auto-rebuy and emits AutoRebuyToggled", async function () {
-      const { game, alice } = await loadFixture(deployFullProtocol);
-      const tx = await game.connect(alice).setAutoRebuy(ZERO_ADDRESS, true);
-      const ev = await getEvent(tx, game, "AutoRebuyToggled");
-      expect(ev.args.player).to.equal(alice.address);
-      expect(ev.args.enabled).to.be.true;
-    });
-
-    it("disables auto-rebuy", async function () {
-      const { game, alice } = await loadFixture(deployFullProtocol);
-      await game.connect(alice).setAutoRebuy(ZERO_ADDRESS, true);
-      const tx = await game.connect(alice).setAutoRebuy(ZERO_ADDRESS, false);
-      const ev = await getEvent(tx, game, "AutoRebuyToggled");
-      expect(ev.args.enabled).to.be.false;
-    });
-  });
-
-  // ---------------------------------------------------------------------------
-  // 7. setAutoRebuyTakeProfit
-  // ---------------------------------------------------------------------------
-  describe("setAutoRebuyTakeProfit", function () {
-    it("sets take profit and emits AutoRebuyTakeProfitSet", async function () {
-      const { game, alice } = await loadFixture(deployFullProtocol);
-      const amount = eth("10");
-      const tx = await game.connect(alice).setAutoRebuyTakeProfit(ZERO_ADDRESS, amount);
-      const ev = await getEvent(tx, game, "AutoRebuyTakeProfitSet");
-      expect(ev.args.player).to.equal(alice.address);
-      expect(ev.args.takeProfit).to.equal(amount);
-      expect(await game.autoRebuyTakeProfitFor(alice.address)).to.equal(amount);
-    });
-
-    it("can set take profit to zero (rebuy all)", async function () {
-      const { game, alice } = await loadFixture(deployFullProtocol);
-      await game.connect(alice).setAutoRebuyTakeProfit(ZERO_ADDRESS, eth("10"));
-      await game.connect(alice).setAutoRebuyTakeProfit(ZERO_ADDRESS, 0n);
-      expect(await game.autoRebuyTakeProfitFor(alice.address)).to.equal(0n);
-    });
-  });
 
   // ---------------------------------------------------------------------------
   // 9. claimWinnings
@@ -517,10 +488,7 @@ describe("DegenerusGame", function () {
       expect(await game.futurePrizePoolView()).to.equal(0n);
     });
 
-    it("afKingModeFor returns false for new player", async function () {
-      const { game, alice } = await loadFixture(deployFullProtocol);
-      expect(await game.afKingModeFor(alice.address)).to.be.false;
-    });
+    // afKingModeFor view REMOVED (v46 legacy removal, df4ef365).
 
     it("playerActivityScore returns 0 for new player", async function () {
       const { game, alice } = await loadFixture(deployFullProtocol);
@@ -576,26 +544,8 @@ describe("DegenerusGame", function () {
   });
 
   // ---------------------------------------------------------------------------
-  // 24. deactivateAfKingFromCoin access control
+  // 24/25. deactivateAfKingFromCoin / syncAfKingLazyPassFromCoin — REMOVED
+  // (v46 batched legacy removal, df4ef365). The coin-driven afking sync entry
+  // points no longer exist on the game contract.
   // ---------------------------------------------------------------------------
-  describe("deactivateAfKingFromCoin", function () {
-    it("reverts when called by non-coin/non-coinflip address", async function () {
-      const { game, alice } = await loadFixture(deployFullProtocol);
-      await expect(
-        game.connect(alice).deactivateAfKingFromCoin(alice.address)
-      ).to.be.reverted;
-    });
-  });
-
-  // ---------------------------------------------------------------------------
-  // 25. syncAfKingLazyPassFromCoin access control
-  // ---------------------------------------------------------------------------
-  describe("syncAfKingLazyPassFromCoin", function () {
-    it("reverts when called by non-coinflip address", async function () {
-      const { game, alice } = await loadFixture(deployFullProtocol);
-      await expect(
-        game.connect(alice).syncAfKingLazyPassFromCoin(alice.address)
-      ).to.be.reverted;
-    });
-  });
 });
