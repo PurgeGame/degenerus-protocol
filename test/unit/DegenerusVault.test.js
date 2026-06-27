@@ -386,12 +386,8 @@ describe("DegenerusVault", function () {
       ).to.be.revertedWithCustomError(vault, "NotVaultOwner");
     });
 
-    it("gameSetAutoRebuy reverts when caller is not vault owner", async function () {
-      const { vault, alice } = await loadFixture(deployFullProtocol);
-      await expect(
-        vault.connect(alice).gameSetAutoRebuy(true)
-      ).to.be.revertedWithCustomError(vault, "NotVaultOwner");
-    });
+    // gameSetAutoRebuy wrapper — REMOVED (v46 legacy removal, df4ef365):
+    // auto-rebuy no longer exists, so the vault wrapper is gone too.
 
     it("gameSetOperatorApproval reverts when caller is not vault owner", async function () {
       const { vault, alice, bob } = await loadFixture(deployFullProtocol);
@@ -457,12 +453,8 @@ describe("DegenerusVault", function () {
     // FLIP->tickets wrapper (gamePurchaseTicketsFlip) is KEPT and still tested
     // above. Removed-by-design, not skipped.
 
-    it("gameSetAutoRebuyTakeProfit accessible by vault owner", async function () {
-      const { vault, deployer } = await loadFixture(deployFullProtocol);
-      await expect(
-        vault.connect(deployer).gameSetAutoRebuyTakeProfit(eth("5"))
-      ).to.not.be.reverted;
-    });
+    // gameSetAutoRebuyTakeProfit wrapper — REMOVED (v46 legacy removal,
+    // df4ef365): auto-rebuy take-profit no longer exists.
 
   });
 

@@ -127,11 +127,11 @@ describe("Governance & Gating (Phase 43)", function () {
       ).to.not.be.reverted;
     });
 
-    it("alice (0% DGVE) fails onlyOwner with E", async function () {
+    it("alice (0% DGVE) fails onlyOwner with OnlyVault", async function () {
       const { game, alice } = await loadFixture(deployFullProtocol);
       await expect(
         game.connect(alice).setLootboxRngThreshold(eth("1"))
-      ).to.be.revertedWithCustomError(game, "E");
+      ).to.be.revertedWithCustomError(game, "OnlyVault");
     });
 
     it("deployer fails onlyOwner after transferring >49.9% DGVE away", async function () {
@@ -145,7 +145,7 @@ describe("Governance & Gating (Phase 43)", function () {
       // Deployer now has 50% -- should NOT pass (needs >50.1%)
       await expect(
         game.connect(deployer).setLootboxRngThreshold(eth("1"))
-      ).to.be.revertedWithCustomError(game, "E");
+      ).to.be.revertedWithCustomError(game, "OnlyVault");
     });
 
     it("alice passes onlyOwner after receiving >50.1% DGVE", async function () {
@@ -172,7 +172,7 @@ describe("Governance & Gating (Phase 43)", function () {
       // CREATOR (deployer) now holds 0% -- no special privilege
       await expect(
         game.connect(deployer).setLootboxRngThreshold(eth("1"))
-      ).to.be.revertedWithCustomError(game, "E");
+      ).to.be.revertedWithCustomError(game, "OnlyVault");
     });
 
     it("multiple owner-gated functions all check DGVE majority", async function () {
@@ -181,7 +181,7 @@ describe("Governance & Gating (Phase 43)", function () {
       // setLootboxRngThreshold now on Game
       await expect(
         game.connect(alice).setLootboxRngThreshold(eth("2"))
-      ).to.be.revertedWithCustomError(game, "E");
+      ).to.be.revertedWithCustomError(game, "OnlyVault");
 
       // swapGameEthForStEth remains on Admin
       await expect(
@@ -243,9 +243,7 @@ describe("Governance & Gating (Phase 43)", function () {
     it("multiple vault-owner-gated functions all check DGVE majority", async function () {
       const { vault, alice } = await loadFixture(deployFullProtocol);
 
-      await expect(
-        vault.connect(alice).gameSetAutoRebuy(true)
-      ).to.be.revertedWithCustomError(vault, "NotVaultOwner");
+      // gameSetAutoRebuy wrapper REMOVED (v46 legacy removal, df4ef365).
 
       await expect(
         vault.connect(alice).gameClaimWinnings()
@@ -670,7 +668,7 @@ describe("Governance & Gating (Phase 43)", function () {
 
       await expect(
         game.connect(deployer).setLootboxRngThreshold(eth("1"))
-      ).to.be.revertedWithCustomError(game, "E");
+      ).to.be.revertedWithCustomError(game, "OnlyVault");
     });
 
     it("no two accounts can simultaneously be vault owner (pigeonhole >50.1%)", async function () {
