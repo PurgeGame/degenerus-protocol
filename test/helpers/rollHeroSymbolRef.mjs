@@ -80,7 +80,12 @@ const abiCoder = AbiCoder.defaultAbiCoder();
 /// @return { hasWinner: boolean, winQuadrant: 0..3, winSymbol: 0..7 } — when
 ///                hasWinner is false, winQuadrant and winSymbol are 0 to mirror
 ///                the Solidity named-return tuple (false, 0, 0).
-export function rollHeroSymbolRef({ day, entropy, dailyHeroWagers }) {
+export function rollHeroSymbolRef({ day, entropy, dailyHeroWagers, excludeIdx = 0xff }) {
+  // `excludeIdx` mirrors _rollHeroSymbol's third arg (0xFF = _NO_HERO_EXCLUDE =
+  // no slot excluded). The excluded slot's amount is forced to 0 before the
+  // total/leader accumulation, so the leader is recomputed over the remaining
+  // slots — used by the bonus-draw hero, which excludes the main hero's slot.
+  const exclude = Number(excludeIdx) & 0xff;
   const dayU32 = Number(day) >>> 0;
   const dayBn = BigInt(dayU32);
   // Mask entropy to uint256 to mirror the Solidity `uint256 entropy` parameter:
@@ -104,8 +109,9 @@ export function rollHeroSymbolRef({ day, entropy, dailyHeroWagers }) {
   for (let q = 0; q < 4; ++q) {
     const packed = BigInt(dailyHeroWagers[q]);
     for (let s = 0; s < 8; ++s) {
-      const amount = Number((packed >> BigInt(s * 32)) & U32_MASK);
       const idx = (q << 3) | s;
+      const amount =
+        idx === exclude ? 0 : Number((packed >> BigInt(s * 32)) & U32_MASK);
       weights[idx] = amount;
       total = (total + BigInt(amount)) & U64_MASK;
       if (amount > maxAmount) {

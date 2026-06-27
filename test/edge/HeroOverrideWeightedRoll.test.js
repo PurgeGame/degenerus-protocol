@@ -191,13 +191,13 @@ const CURRENCY_ETH = 0;
 // path that writes to dailyHeroWagers[dailyIdx][q].
 const MIN_BET_ETH_VALUE = hre.ethers.parseEther("0.005");
 
-// Slot 0 packs purchaseStartDay (bytes 0..3), dailyIdx (bytes 4..7),
-// rngRequestTime (bytes 8..13), etc. — see DegenerusGameStorage.sol storage
-// layout. dailyIdx is read as (word >> 32) & 0xFFFFFFFF where `word` is the
-// big-endian uint256 storage word.
+// Slot 0 packs purchaseStartDay uint24 (bytes 0..2), dailyIdx uint24
+// (bytes 3..5), rngRequestTime uint48 (bytes 6..11), level uint24 (bytes
+// 12..14), etc. — authoritative forge inspect storageLayout. dailyIdx is read
+// as (word >> 24) & 0xFFFFFF where `word` is the big-endian uint256 storage word.
 const SLOT0_TIMING_FSM = "0x" + (0).toString(16).padStart(64, "0");
-const DAILY_IDX_BIT_SHIFT = 32n;
-const UINT32_MASK = 0xffffffffn;
+const DAILY_IDX_BIT_SHIFT = 24n;
+const UINT32_MASK = 0xffffffn;
 
 // Storage slot for lootboxRngPacked — gates placeDegeneretteBet at
 // DegenerusGameDegeneretteModule.sol:451 (`if (index == 0) revert E()`).
@@ -1410,26 +1410,43 @@ describe("HeroOverrideWeightedRoll — Phase 293 v42.0 HRROLL regression fixture
               );
             }
 
-            // Drive the JS oracle on the captured state. The on-chain
-            // call chain for the natural advanceGame() drain path is:
-            //   AdvanceModule._emitDailyWinningTraits(1, rngWord, 1)
-            //     → JackpotModule.emitDailyWinningTraits (L1798)
-            //     → mainTraitsPacked = _rollWinningTraits(randWord, true)
-            //     → r = keccak256(abi.encodePacked(randWord, BONUS_TRAITS_TAG))
-            //     → _applyHeroOverride(traits, r, randWord)
-            //     → _rollHeroSymbol(dailyIdx, heroEntropy = randWord)
-            // The heroEntropy passed to _rollHeroSymbol is the RAW
-            // `randWord` (the third arg of _applyHeroOverride per L1600,
-            // wired through to the second arg of _rollHeroSymbol at
-            // L1609), NOT the bonus-salted `r`. The oracle's internal
-            // keccak chain `pick = keccak256(abi.encode(entropy, day)) %
-            // effectiveTotal` then mirrors the contract exactly because
-            // the contract does the same keccak at L1683-1685 on the
-            // same raw `entropy = randWord` and the same `day = dailyIdx`.
+            // Drive the JS oracle on the captured state. emitDailyWinningTraits
+            // emits the BONUS-draw traits as mainTraitsPacked:
+            //   mainTraitsPacked = _rollWinningTraits(randWord, isBonus=true)
+            //     → r = hash2(randWord, BONUS_TRAITS_TAG)         (salted word)
+            //     → mainHero = _rollHeroSymbol(dailyIdx, randWord, NO_EXCLUDE)
+            //     → excl = mainHero idx
+            //     → bonusHero = _rollHeroSymbol(dailyIdx, r, excl) (off salted
+            //                   word, main hero's slot excluded)
+            //     → _applyHeroResult(traits, r, bonusHero)
+            // So the hero in mainTraitsPacked is the BONUS hero, rolled off the
+            // salted word with the main hero excluded. The keccak `day` is the
+            // storage `dailyIdx` (= finalDailyIdx), NOT the event's questDay
+            // (_simulatedDayIndex). Model both rolls.
+            const U256_MASK_LOCAL = (1n << 256n) - 1n;
+            const randWord = entropy & U256_MASK_LOCAL;
+            const mainHero = rollHeroSymbolRef({
+              day: Number(finalDailyIdx),
+              entropy: randWord,
+              dailyHeroWagers: capturedSlots,
+            });
+            const excl = mainHero.hasWinner
+              ? (mainHero.winQuadrant << 3) | mainHero.winSymbol
+              : 0xff; // _NO_HERO_EXCLUDE
+            const BONUS_TRAITS_TAG = BigInt(
+              hre.ethers.keccak256(hre.ethers.toUtf8Bytes("BONUS_TRAITS"))
+            );
+            const saltedRng = BigInt(
+              hre.ethers.solidityPackedKeccak256(
+                ["uint256", "uint256"],
+                [randWord, BONUS_TRAITS_TAG]
+              )
+            );
             const oracleOut = rollHeroSymbolRef({
               day: Number(finalDailyIdx),
-              entropy,
+              entropy: saltedRng,
               dailyHeroWagers: capturedSlots,
+              excludeIdx: excl,
             });
 
             // Assert hasWinner=true (seed has 3 non-zero amounts, so total
