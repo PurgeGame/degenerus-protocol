@@ -547,10 +547,10 @@ contract DegenerusAffiliate {
                 )
             );
             if (noReferrer) {
-                // No real referrer — 50/50 flip between VAULT and DGNRS.
+                // No real referrer — 50/50 flip between VAULT and sDGNRS.
                 address winner = (entropy % 2 == 0)
                     ? ContractAddresses.VAULT
-                    : ContractAddresses.DGNRS;
+                    : ContractAddresses.SDGNRS;
                 coinflip.creditFlip(winner, affiliateShareBase);
             } else {
                 // 75/20/5 weighted roll: affiliate, upline1, upline2.
@@ -663,7 +663,7 @@ contract DegenerusAffiliate {
             if (noReferrer) {
                 winner = (entropy % 2 == 0)
                     ? ContractAddresses.VAULT
-                    : ContractAddresses.DGNRS;
+                    : ContractAddresses.SDGNRS;
                 winnerCredit = sumShareBase;
             } else {
                 uint256 roll = entropy % 20;
@@ -769,7 +769,7 @@ contract DegenerusAffiliate {
      *      the second time, so it can't be double-counted. The batch total `sumB` is split 75/20/5
      *      (A 75% / U1 20% / U2 5%), floored with the remainder to A so the parts never exceed `sumB`.
      *      `skipU1`/`skipU2` drop the share for the rare case where an upline is itself the sub (A is
-     *      never the sub — self-referral resolves to VAULT). No-referrer subs split 50/50 VAULT/DGNRS.
+     *      never the sub — self-referral resolves to VAULT). No-referrer subs split 50/50 VAULT/sDGNRS.
      *      The split is fixed (no roll, no seed), so claiming on any day yields the same result.
      *      Recipients are paid directly via `creditFlip` (FLIP; no ETH/`claimablePool` touch).
      * @param subs Afking subscribers to settle; all must share the same direct affiliate `A` (from subs[0]).
@@ -816,11 +816,11 @@ contract DegenerusAffiliate {
         if (sumB == 0) return; // nothing accrued / already drained — no-op (idempotent re-claim)
 
         if (noReferrer) {
-            // No referrer: 50/50 VAULT/DGNRS, remainder to VAULT (×1e18: whole FLIP → base units).
-            uint256 dgnrsShare = sumB / 2;
-            uint256 vaultShare = sumB - dgnrsShare;
+            // No referrer: 50/50 VAULT/sDGNRS, remainder to VAULT (×1e18: whole FLIP → base units).
+            uint256 sdgnrsShare = sumB / 2;
+            uint256 vaultShare = sumB - sdgnrsShare;
             coinflip.creditFlip(ContractAddresses.VAULT, vaultShare * 1 ether);
-            coinflip.creditFlip(ContractAddresses.DGNRS, dgnrsShare * 1 ether);
+            coinflip.creditFlip(ContractAddresses.SDGNRS, sdgnrsShare * 1 ether);
             return;
         }
 
