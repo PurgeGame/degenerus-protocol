@@ -506,32 +506,50 @@ contract FarFutureVaultFallbackTest is DeployProtocol {
         assertGe(_afkOf(ContractAddresses.VAULT), 1 ether, "floor preserved in the afking half");
     }
 
-    /// @notice The FLIP burn waterfall destroys the held wallet balance BEFORE the carry.
-    function test_SalvageFlipLeg_HeldBurnedBeforeCarry() public {
-        uint256 held = 50 ether;
+    /// @notice The FLIP burn waterfall consumes settled claimable BEFORE the carry; sDGNRS has no
+    ///         wallet leg (incoming FLIP de-circulates into its claimable backing).
+    function test_SalvageFlipLeg_ClaimableBeforeCarry() public {
+        // Steady-state sDGNRS: rebuy-armed + settled with a large carry, plus a settled claimable
+        // slice funded via the de-circulating transfer path (FLIP redirect -> claimableStored).
+        _seedRebuyCarry(ContractAddresses.SDGNRS, 5_000_000 ether);
+        uint256 claimable = 50 ether;
+        address holder = address(0xF11D);
         vm.prank(ContractAddresses.GAME);
-        coin.mintForGame(ContractAddresses.SDGNRS, held); // wallet FLIP
-        _seedRebuyCarry(ContractAddresses.SDGNRS, 5_000_000 ether); // plus a large carry
+        coin.mintForGame(holder, claimable);
+        vm.prank(holder);
+        coin.transfer(ContractAddresses.SDGNRS, claimable);
+
+        assertEq(coin.balanceOf(ContractAddresses.SDGNRS), 0, "sDGNRS holds no wallet FLIP");
+        assertEq(
+            coinflip.previewClaimCoinflips(ContractAddresses.SDGNRS),
+            claimable,
+            "fixture: claimable slice seeded"
+        );
 
         uint24 cl = game.level() + 1;
         uint24 L = uint24(cl + 6);
         uint256 idx = _seedFarTickets(seller, L, 100);
         (uint32[] memory levels, uint256[] memory qtys, uint256[] memory idxs) = _single(L, 100, idx);
 
-        // Find a word whose FLIP leg exceeds the wallet balance so the burn must spill into the carry.
-        (uint256 word, uint256 budget) = _findFlipWord(levels, qtys, held);
+        // Find a word whose FLIP leg exceeds the claimable slice so the burn must spill into the carry.
+        (uint256 word, uint256 budget) = _findFlipWord(levels, qtys, claimable);
         _setPriorDayRngWord(word);
         _seedClaimable(ContractAddresses.SDGNRS, budget + 1 ether);
         (, , , , uint256 flipExec) = game.previewSellFarFutureTickets(seller, levels, qtys);
-        assertGt(flipExec, held, "fixture: FLIP leg must exceed the wallet balance");
+        assertGt(flipExec, claimable, "fixture: FLIP leg must exceed the claimable slice");
 
         (, , uint256 carryBefore, ) = coinflip.coinflipAutoRebuyInfo(ContractAddresses.SDGNRS);
         vm.prank(seller);
         game.sellFarFutureTickets(seller, levels, qtys, idxs);
 
-        assertEq(coin.balanceOf(ContractAddresses.SDGNRS), 0, "held wallet FLIP burned first");
+        assertEq(
+            coinflip.previewClaimCoinflips(ContractAddresses.SDGNRS),
+            0,
+            "claimable consumed first"
+        );
         (, , uint256 carryAfter, ) = coinflip.coinflipAutoRebuyInfo(ContractAddresses.SDGNRS);
-        assertEq(carryBefore - carryAfter, flipExec - held, "carry drained by exactly the remainder after held");
+        assertEq(carryBefore - carryAfter, flipExec - claimable, "carry drained by exactly the remainder after claimable");
+        assertEq(coin.balanceOf(ContractAddresses.SDGNRS), 0, "no wallet leg involved");
     }
 
     /// @notice The vault path inherits the carry-inclusive spendable read (so it does not re-introduce the

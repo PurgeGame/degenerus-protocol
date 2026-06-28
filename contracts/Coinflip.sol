@@ -33,8 +33,6 @@ interface IFLIP {
     function burnForCoinflip(address from, uint256 amount) external;
     /// @notice Mint FLIP to a player (coinflip claims, degenerette wins).
     function mintForGame(address to, uint256 amount) external;
-    /// @notice Get the FLIP balance of an address.
-    function balanceOf(address account) external view returns (uint256);
 }
 
 /// @notice Interface for WWXRP contract methods used by Coinflip.
@@ -400,10 +398,10 @@ contract Coinflip {
     /// @notice Consume `amount` of `player`'s coinflip-resident FLIP backing for a salvage swap (FLIP only).
     /// @dev Settle-then-drain waterfall matching the redemption desk's withdrawRedeemedFlip: settled
     ///      claimable FIRST (no mint — removes a future mint of the consumed slice), then the rolling
-    ///      auto-rebuy carry. The held wallet leg is burned by FLIP before this call; this covers
-    ///      only the coinflip-resident backing (claimable + carry), which is where sDGNRS (and a
-    ///      rebuy-armed vault) concentrate their FLIP in steady state. Reaching the carry is freeze-safe
-    ///      because the salvage entrypoint reverts under the RNG lock, so this never runs mid-window.
+    ///      auto-rebuy carry. For the vault FLIP first drains the virtual allowance (its held leg);
+    ///      sDGNRS has no wallet leg, so this covers its entire backing (claimable + carry). Reaching
+    ///      the carry is freeze-safe because the salvage entrypoint reverts under the RNG lock, so
+    ///      this never runs mid-window.
     /// @param player The backing owner (sDGNRS or the vault).
     /// @param amount Maximum FLIP (wei) to consume from claimable + carry.
     /// @return consumed Actual amount removed (claimable consumed + carry decremented).
@@ -424,6 +422,19 @@ contract Coinflip {
             consumed += fromCarry;
             _emitClaimState(player);
         }
+    }
+
+    /// @notice Credit de-circulated FLIP to sDGNRS's redemption backing (FLIP only).
+    /// @dev Called by FLIP when a transfer lands on ContractAddresses.SDGNRS: FLIP removes the
+    ///      amount from circulating supply and routes it here as sDGNRS claimable backing, so
+    ///      sDGNRS never holds a wallet balance and its FLIP stays uncirculated. Storage-only
+    ///      (no callback into FLIP). Folds into claimableStored, where redemptions/salvage read it.
+    /// @param amount FLIP (wei) to add to sDGNRS's claimable backing.
+    function creditSdgnrsBacking(uint256 amount) external onlyFLIP {
+        if (amount == 0) return;
+        PlayerCoinflipState storage state = playerState[ContractAddresses.SDGNRS];
+        state.claimableStored = uint128(uint256(state.claimableStored) + amount);
+        _emitClaimState(ContractAddresses.SDGNRS);
     }
 
     /// @dev Emit the player's committed coinflip claim-state (claimable + carry + cursor) for
@@ -948,24 +959,30 @@ contract Coinflip {
         );
 
         // Keep sDGNRS's flip cursor current (BAF is skipped for sDGNRS, so both paths
-        // stay off the rngLocked guard). During the seed window each settled win is
-        // claimed straight to its wallet balance, where it backs redemptions. Once
-        // auto-rebuy is armed, winnings are NEVER claimed: they settle into the
-        // rolling carry (the return is structurally zero under 0-take-profit rebuy)
-        // and FLIP leaves sDGNRS's flip position solely through a redemption's
-        // burn+consume leg.
+        // stay off the rngLocked guard). sDGNRS never mints FLIP to a wallet balance:
+        // its FLIP stays uncirculated as coinflip backing and is read by redemptions /
+        // salvage as claimableStored + carry. During the seed window each settled win
+        // folds into claimableStored (no mint); once auto-rebuy is armed, winnings
+        // settle into the rolling carry (structurally zero return under 0-take-profit
+        // rebuy). FLIP leaves sDGNRS's position solely through a redemption/salvage
+        // consume leg.
         if (sdgnrsAutoRebuyArmed) {
             _claimCoinflipsInternal(ContractAddresses.SDGNRS, false);
         } else {
-            _claimCoinflipsAmount(ContractAddresses.SDGNRS, type(uint256).max, true);
+            uint256 mintable = _claimCoinflipsInternal(ContractAddresses.SDGNRS, false);
+            PlayerCoinflipState storage sdgnrsState = playerState[
+                ContractAddresses.SDGNRS
+            ];
+            if (mintable != 0) {
+                sdgnrsState.claimableStored = uint128(
+                    uint256(sdgnrsState.claimableStored) + mintable
+                );
+            }
 
             // Once the final seeded day settles, sDGNRS goes on perpetual auto-rebuy
             // (0 take-profit): every later flip credit rolls win-after-win until a loss.
             if (epoch >= SEED_FLIP_DAYS) {
                 sdgnrsAutoRebuyArmed = true;
-                PlayerCoinflipState storage sdgnrsState = playerState[
-                    ContractAddresses.SDGNRS
-                ];
                 sdgnrsState.autoRebuyEnabled = true;
                 sdgnrsState.autoRebuyStartDay = sdgnrsState.lastClaim;
                 emit CoinflipAutoRebuyToggled(ContractAddresses.SDGNRS, true);
@@ -1016,8 +1033,8 @@ contract Coinflip {
     ///      components are disjoint and current even after a multi-day advance stall (otherwise a
     ///      resolved-but-unsettled win day could be counted in both claimable and the carry). In
     ///      steady state sDGNRS is already settled each advance, so the walk is a no-op.
-    /// @return backing sDGNRS's claimableStored + autoRebuyCarry. The held wallet balance is read
-    ///         separately by sDGNRS as the first waterfall source.
+    /// @return backing sDGNRS's claimableStored + autoRebuyCarry — its entire FLIP backing
+    ///         (sDGNRS never holds a wallet balance; incoming FLIP de-circulates into claimable).
     function redeemableFlipBacking() external returns (uint256 backing) {
         if (msg.sender != ContractAddresses.SDGNRS) revert OnlysDGNRS();
         address s = ContractAddresses.SDGNRS;
@@ -1031,32 +1048,22 @@ contract Coinflip {
     }
 
     /// @notice Remove `base` (wei) of sDGNRS's own FLIP backing at redemption submit (sDGNRS only).
-    /// @dev Waterfall: held wallet balance (burned) → settled claimable (consumed, no mint) →
-    ///      auto-rebuy carry (decremented). Credits NOTHING — the redeemer's escrowed slice is paid
-    ///      later, only on the resolving day's coinflip win, via creditFlip, so the win path is a pure
-    ///      deferred mint of an amount already removed from sDGNRS's backing here. Fail-closed if the
-    ///      backing falls short (cannot happen: sDGNRS sizes base from the same settled backing read
-    ///      via redeemableFlipBacking earlier in the same submit).
+    /// @dev Waterfall: settled claimable (consumed, no mint) → auto-rebuy carry (decremented) —
+    ///      sDGNRS holds no wallet balance, so its backing lives entirely in these two. Credits
+    ///      NOTHING — the redeemer's escrowed slice is paid later, only on the resolving day's
+    ///      coinflip win, via creditFlip, so the win path is a pure deferred mint of an amount
+    ///      already removed from sDGNRS's backing here. Fail-closed if the backing falls short
+    ///      (cannot happen: sDGNRS sizes base from the same settled backing read via
+    ///      redeemableFlipBacking earlier in the same submit).
     /// @param base The whole-token-aligned FLIP backing (wei) to remove from sDGNRS.
     function withdrawRedeemedFlip(uint256 base) external {
         if (msg.sender != ContractAddresses.SDGNRS) revert OnlysDGNRS();
         if (base == 0) return;
         address s = ContractAddresses.SDGNRS;
 
-        // Burn from the held wallet balance first (this contract IS COINFLIP; burnForCoinflip is
-        // FLIP's generic _burn entry).
-        uint256 held = flip.balanceOf(s);
-        uint256 burnFromHeld = base <= held ? base : held;
-        if (burnFromHeld != 0) {
-            flip.burnForCoinflip(s, burnFromHeld);
-        }
-
-        uint256 remainder = base - burnFromHeld;
-        if (remainder == 0) return;
-
-        // Consume settled claimable next (no token mint — removes a future mint of `consumed`).
-        uint256 consumed = _claimCoinflipsAmount(s, remainder, false);
-        remainder -= consumed;
+        // Consume settled claimable first (no token mint — removes a future mint of `consumed`).
+        uint256 consumed = _claimCoinflipsAmount(s, base, false);
+        uint256 remainder = base - consumed;
         if (remainder == 0) return;
 
         // Decrement the rolling auto-rebuy carry for the rest (post-day-20 steady state, where

@@ -9,10 +9,10 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 ///         1. SEEDS    — Coinflip's constructor stakes 200k for days 1-20, each
 ///                       to VAULT and sDGNRS; nothing is minted up front (totalSupply
 ///                       and vaultMintAllowance both start at 0).
-///         2. SURVIVAL — a seeded day's FLIP only ever mints if it wins that day's
-///                       flip; sDGNRS wins are claimed-and-minted straight to its
-///                       wallet balance by the daily resolution (redemption backing),
-///                       with no claimable residue left behind.
+///         2. SURVIVAL — a seeded day's FLIP only survives if it wins that day's flip;
+///                       sDGNRS wins fold into its claimable coinflip backing by the
+///                       daily resolution (uncirculated — no mint, no wallet balance),
+///                       where redemptions read them.
 ///         3. LATCH    — sDGNRS auto-rebuy (0 take-profit) stays OFF through the whole
 ///                       seed window and arms exactly when the final seeded day (20)
 ///                       settles; the latch is one-shot.
@@ -72,30 +72,33 @@ contract FlipEmissionSeeds is DeployProtocol {
     //          2 + 3. SURVIVAL mint-to-wallet + auto-rebuy LATCH
     // =====================================================================
 
-    function test_SdgnrsSeedWinsMintToWalletDaily_LatchArmsAtDay20() public {
-        uint256 expectedWallet;
+    function test_SdgnrsSeedWinsFoldIntoClaimable_LatchArmsAtDay20() public {
+        uint256 expectedClaimable;
 
         for (uint24 d = 1; d <= SEED_DAYS; ++d) {
             // Alternate win/loss so both settle branches run inside the window.
             bool win = (d % 2 == 1);
-            uint256 balBefore = coin.balanceOf(SDGNRS);
+            uint256 claimableBefore = coinflip.previewClaimCoinflips(SDGNRS);
             _resolveDay(d, win);
+
+            // sDGNRS never mints to a wallet balance — its FLIP stays uncirculated.
+            assertEq(coin.balanceOf(SDGNRS), 0, "sDGNRS holds no wallet balance");
 
             if (win) {
                 (uint16 r, bool won) = coinflip.getCoinflipDayResult(d);
                 assertTrue(won, "win word must resolve as a win");
                 uint256 payout = SEED + (SEED * uint256(r)) / 100;
-                expectedWallet += payout;
+                expectedClaimable += payout;
                 assertEq(
-                    coin.balanceOf(SDGNRS) - balBefore,
+                    coinflip.previewClaimCoinflips(SDGNRS) - claimableBefore,
                     payout,
-                    "win day claims-and-mints the survived seed to sDGNRS's wallet"
+                    "win day folds the survived seed into sDGNRS's claimable backing (no mint)"
                 );
             } else {
                 assertEq(
-                    coin.balanceOf(SDGNRS),
-                    balBefore,
-                    "loss day mints nothing (the seed died on its flip)"
+                    coinflip.previewClaimCoinflips(SDGNRS),
+                    claimableBefore,
+                    "loss day adds nothing (the seed died on its flip)"
                 );
             }
 
@@ -110,20 +113,17 @@ contract FlipEmissionSeeds is DeployProtocol {
             coinflip.coinflipAutoRebuyInfo(SDGNRS);
         assertTrue(enabledAfter, "auto-rebuy arms when the final seeded day settles");
         assertEq(stop, 0, "0 take-profit (roll everything)");
-        assertEq(carry, 0, "no carry from the seed window (wins were minted, not rolled)");
+        assertEq(carry, 0, "seed wins folded into claimable, not the carry");
 
-        // Wallet holds exactly the survived seed payouts; no claimable residue.
-        assertEq(
-            coin.balanceOf(SDGNRS),
-            expectedWallet,
-            "sDGNRS wallet == sum of survived seed payouts"
-        );
+        // Backing holds exactly the survived seed payouts as uncirculated claimable;
+        // nothing entered circulating supply and sDGNRS holds no wallet balance.
+        assertEq(coin.balanceOf(SDGNRS), 0, "sDGNRS holds no wallet balance");
         assertEq(
             coinflip.previewClaimCoinflips(SDGNRS),
-            0,
-            "no claimable residue - every settle claimed-and-minted"
+            expectedClaimable,
+            "sDGNRS claimable == sum of survived seed payouts"
         );
-        assertEq(coin.totalSupply(), expectedWallet, "supply == survived sDGNRS emission");
+        assertEq(coin.totalSupply(), 0, "survived sDGNRS emission stays uncirculated (no mint)");
     }
 
     function test_PostArmingWinsStayInFlips_NeverClaimed() public {

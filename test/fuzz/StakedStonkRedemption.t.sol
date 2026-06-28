@@ -1064,11 +1064,16 @@ contract StakedStonkRedemption is DeployProtocol {
     //   REDEEM-08: FLIP-can't-block-ETH + R1/R3/R4 refinement coverage
     // =====================================================================
 
-    /// @dev Fund sDGNRS's held FLIP balance via the GAME-gated mint (the post-seed-window
-    ///      state: daily-claimed flip wins sit on its wallet as redemption backing).
+    /// @dev Fund sDGNRS's FLIP backing. sDGNRS holds no wallet balance; its FLIP lives as
+    ///      uncirculated coinflip claimable. Mint to a scratch holder, then transfer to sDGNRS —
+    ///      FLIP's redirect de-circulates the transfer into sDGNRS's claimable backing (the real
+    ///      funding path), where redemptions read it via redeemableFlipBacking.
     function _fundSdgnrsFlip(uint256 amount) internal {
+        address holder = address(0xF11D);
         vm.prank(address(game));
-        coin.mintForGame(ContractAddresses.SDGNRS, amount);
+        coin.mintForGame(holder, amount);
+        vm.prank(holder);
+        coin.transfer(ContractAddresses.SDGNRS, amount);
     }
 
     /// @dev Seed a generous claimable[SDGNRS] + claimablePool + game ETH so submit-time
@@ -1103,10 +1108,9 @@ contract StakedStonkRedemption is DeployProtocol {
         uint256 burnAmount = 1000 ether;
         uint16 roll = 100;
 
-        // Fund sDGNRS with a large held FLIP balance (the post-seed-window state: claimed
-        // flip wins sit on its wallet), so the redeemer's proportional FLIP share is
-        // non-trivial — exactly the case a pre-fix FLIP-reserve leg could have stalled.
-        // Submit settles it all at submit.
+        // Fund sDGNRS with a large FLIP backing (uncirculated coinflip claimable), so the
+        // redeemer's proportional FLIP share is non-trivial — exactly the case a pre-fix
+        // FLIP-reserve leg could have stalled. Submit settles it all at submit.
         _fundSdgnrsFlip(2_000_000 ether);
         _primeCurrentDayRng();
         vm.prank(playerA);
@@ -1144,27 +1148,28 @@ contract StakedStonkRedemption is DeployProtocol {
     uint256 internal constant SDGNRS_FLIP_FUND = 1_000_000_000_000 ether;
 
     /// @notice FLIP-04 (submit-time backing removal): the redeemed FLIP share is REMOVED from
-    ///         sDGNRS's backing at submit (held burned → claimable consumed → carry decremented) and
+    ///         sDGNRS's backing at submit (claimable consumed → carry decremented) and
     ///         escrowed WHOLE-token against (redeemer, day) — NOT credited to the redeemer. The
     ///         redeemer is paid only later, on a winning resolving-day (day+1) coinflip. So the
     ///         "spendable FLIP universe" DROPS by exactly the escrowed amount at submit: the slice
     ///         leaves sDGNRS now and re-enters as the redeemer's flip credit only on a win (else it
     ///         is forfeited, symmetric with the auto-rebuy carry zeroing for every holder on a loss).
-    /// @dev Universe scalar = coin.totalSupply() + coinflipAmount(SDGNRS) + coinflipAmount(redeemer).
-    ///      Pre-day-20 sDGNRS holds its backing as wallet FLIP, so withdrawRedeemedFlip burns the
-    ///      whole escrow out of held → totalSupply drops by escrowWei; the redeemer's stake is
-    ///      untouched at submit; the escrow is recorded in pendingRedemptions[redeemer][day].
+    /// @dev Universe scalar = coin.totalSupply() + sdgnrs.flipReserve() + coinflipAmount(redeemer).
+    ///      sDGNRS holds no wallet balance; its FLIP backing is uncirculated coinflip claimable
+    ///      (flipReserve = claimable + carry), so withdrawRedeemedFlip consumes the escrow out of
+    ///      claimable → flipReserve drops by escrowWei (totalSupply untouched, nothing was minted);
+    ///      the redeemer's stake is untouched at submit; the escrow is recorded in
+    ///      pendingRedemptions[redeemer][day].
     function testRedeemFlipRemovedFromBackingAtSubmit() public {
         _seedRedemptionBacking(100 ether);
 
         uint32 dayBurn = game.currentDayView();
         uint256 burnAmount = 1000 ether;
-        address SDGNRS = ContractAddresses.SDGNRS;
 
         _fundSdgnrsFlip(SDGNRS_FLIP_FUND);
 
         uint256 universeBefore = coin.totalSupply()
-            + coinflip.coinflipAmount(SDGNRS)
+            + sdgnrs.flipReserve()
             + coinflip.coinflipAmount(playerA);
         uint256 redeemerStakeBefore = coinflip.coinflipAmount(playerA);
 
@@ -1178,7 +1183,7 @@ contract StakedStonkRedemption is DeployProtocol {
         uint256 escrowWei = uint256(escrowWhole) * 1e18;
 
         uint256 universeAfter = coin.totalSupply()
-            + coinflip.coinflipAmount(SDGNRS)
+            + sdgnrs.flipReserve()
             + coinflip.coinflipAmount(playerA);
 
         // The universe DROPS by exactly the escrowed amount at submit — the slice is removed from

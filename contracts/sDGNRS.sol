@@ -54,14 +54,6 @@ interface IDegenerusGamePlayer {
     function pullRedemptionReserve(uint256 amount) external;
 }
 
-/// @notice Interface for FLIP coin contract player-facing functions used by sDGNRS.
-interface IDegenerusCoinPlayer {
-    /// @notice Get token balance for an address.
-    function balanceOf(address account) external view returns (uint256);
-    /// @notice Transfer tokens to a recipient.
-    function transfer(address to, uint256 amount) external returns (bool);
-}
-
 /// @notice Interface for Coinflip contract methods used by sDGNRS.
 interface ICoinflipPlayer {
     /// @notice Claim coinflip winnings for a player.
@@ -361,8 +353,6 @@ contract sDGNRS {
     /// @dev Game contract reference for player actions and claimable queries
     IDegenerusGamePlayer private constant game = IDegenerusGamePlayer(ContractAddresses.GAME);
 
-    /// @dev FLIP token reference for payout accounting
-    IDegenerusCoinPlayer private constant coin = IDegenerusCoinPlayer(ContractAddresses.COIN);
     /// @dev Coinflip contract for claimable FLIP withdrawals during burns
     ICoinflipPlayer private constant coinflip =
         ICoinflipPlayer(ContractAddresses.COINFLIP);
@@ -982,31 +972,29 @@ contract sDGNRS {
             stethOut = totalValueOwed - ethOut;
         }
 
-        // GameOver burns pay no FLIP. The full sDGNRS FLIP backing is held wallet balance +
-        // claimable coinflip winnings + the auto-rebuy carry (where sDGNRS's FLIP lives post-day-20).
+        // GameOver burns pay no FLIP. sDGNRS's full FLIP backing is its claimable coinflip winnings +
+        // the auto-rebuy carry (where its FLIP lives post-day-20); it holds no wallet balance.
         // No reserve term: a submit removes its escrowed slice from this backing immediately, so these
         // live reads are already net of outstanding redemptions. Best-effort (the carry/claimable can
         // momentarily lag a stalled advance); truncated to whole FLIP to match the settled submit path.
         if (!game.gameOver()) {
-            uint256 flipBal = coin.balanceOf(address(this));
             uint256 claimableFlip = coinflip.previewClaimCoinflips(address(this));
             (, , uint256 carry, ) = coinflip.coinflipAutoRebuyInfo(address(this));
-            uint256 totalFlip = flipBal + claimableFlip + carry;
+            uint256 totalFlip = claimableFlip + carry;
             flipOut = ((totalFlip * amount) / supply / 1e18) * 1e18;
         }
     }
 
 
-    /// @notice Get FLIP backing available for new burns (balance + claimable coinflips + carry).
+    /// @notice Get FLIP backing available for new burns (claimable coinflips + auto-rebuy carry).
     /// @dev No reserve subtraction: a submit removes its escrowed slice from this backing immediately,
-    ///      so these live reads are already net of outstanding redemptions. Includes the auto-rebuy
-    ///      carry, where sDGNRS's FLIP lives once perpetual auto-rebuy arms post-day-20.
-    /// @return FLIP backing value (balance + claimable coinflips + auto-rebuy carry).
+    ///      so these live reads are already net of outstanding redemptions. sDGNRS holds no wallet
+    ///      balance; its FLIP lives in claimable + the auto-rebuy carry (post-day-20 steady state).
+    /// @return FLIP backing value (claimable coinflips + auto-rebuy carry).
     function flipReserve() external view returns (uint256) {
-        uint256 flipBal = coin.balanceOf(address(this));
         uint256 claimableFlip = coinflip.previewClaimCoinflips(address(this));
         (, , uint256 carry, ) = coinflip.coinflipAutoRebuyInfo(address(this));
-        return flipBal + claimableFlip + carry;
+        return claimableFlip + carry;
     }
 
     // =====================================================================
@@ -1075,14 +1063,13 @@ contract sDGNRS {
         uint256 totalMoney = ethBal + stethBal + claimableEth - _pendingRedemptionEthValue;
         uint256 ethValueOwed = (totalMoney * amount) / supplyBefore;
 
-        // Compute the proportional FLIP share of sDGNRS's full FLIP backing: held wallet balance
-        // + settled coinflip backing (claimableStored + auto-rebuy carry, where sDGNRS's FLIP lives
-        // post-day-20). redeemableFlipBacking settles sDGNRS to current so its two components are
-        // disjoint. The share is truncated to whole FLIP; the sub-token dust stays as backing for
-        // remaining holders. No reserve subtraction: the slice is removed from the backing just below.
-        uint256 flipHeld = coin.balanceOf(address(this));
+        // Compute the proportional FLIP share of sDGNRS's full FLIP backing: its settled coinflip
+        // backing (claimableStored + auto-rebuy carry, where sDGNRS's FLIP lives — it holds no wallet
+        // balance). redeemableFlipBacking settles sDGNRS to current so its two components are disjoint.
+        // The share is truncated to whole FLIP; the sub-token dust stays as backing for remaining
+        // holders. No reserve subtraction: the slice is removed from the backing just below.
         uint256 coinBacking = coinflip.redeemableFlipBacking();
-        uint256 flipEscrowWhole = ((flipHeld + coinBacking) * amount) / supplyBefore / 1e18;
+        uint256 flipEscrowWhole = (coinBacking * amount) / supplyBefore / 1e18;
 
         // Snap ETH base to gwei at the source. Eliminates pool↔cumulative-scalar drift by ensuring
         // pool.ethBase × 1e9 reconstructs the exact sum-of-claims at resolve.
