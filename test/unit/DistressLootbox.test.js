@@ -9,6 +9,7 @@ import {
   eth,
   advanceTime,
   advanceToNextDay,
+  getBlockTimestamp,
   getEvents,
   getEvent,
   getLastVRFRequestId,
@@ -20,8 +21,8 @@ const MintPaymentKind = { DirectEth: 0, Claimable: 1, Combined: 2 };
 
 // 365 days in seconds (deploy idle timeout for level 0, per _DEPLOY_IDLE_TIMEOUT_DAYS)
 const DEPLOY_TIMEOUT_SECONDS = 365 * 86400;
-// 6 hours in seconds (distress mode window)
-const DISTRESS_HOURS_SECONDS = 6 * 3600;
+// Daily boundary: days roll over at 22:57 UTC (GameTimeLib.JACKPOT_RESET_TIME), not midnight.
+const DAY_RESET_SECONDS = 82620;
 
 describe("Distress-Mode Lootboxes", function () {
   after(() => restoreAddresses());
@@ -65,11 +66,18 @@ describe("Distress-Mode Lootboxes", function () {
   }
 
   /**
-   * Advance time into distress mode (3 hours before timeout).
+   * Advance deterministically into distress mode.
+   * Distress is DAY-granular: _isDistressMode() is true once currentDay >= purchaseStartDay + 365,
+   * where days roll over at 22:57 UTC (GameTimeLib). A fixed second-offset before the "timeout"
+   * lands on day psd+364 or psd+365 depending on the wall-clock time the fixture deploys at, which
+   * made this suite flaky by time-of-day. Instead advance a whole 365 days and re-center to mid-day:
+   * this lands squarely on the single distress day (psd+365) — 12h from either daily boundary, and
+   * short of the day-366 (> 365) liveness/game-over trigger — regardless of deploy time.
    */
   async function advanceToDistress() {
-    // Advance to 3 hours before timeout (well inside distress window)
-    await advanceTime(DEPLOY_TIMEOUT_SECONDS - 3 * 3600);
+    const ts = await getBlockTimestamp();
+    const intoDay = (ts - DAY_RESET_SECONDS) % 86400;
+    await advanceTime(365 * 86400 - intoDay + 43200);
   }
 
   // ---------------------------------------------------------------------------
@@ -152,10 +160,10 @@ describe("Distress-Mode Lootboxes", function () {
   // 3. Distress Mode Boundary — Just Outside vs Just Inside
   // ---------------------------------------------------------------------------
   describe("Distress mode boundary", function () {
-    it("purchase just outside 6-hour window uses normal split", async function () {
+    it("purchase the day before distress uses normal split", async function () {
       const { game, alice, mintModule } = await loadFixture(deployFullProtocol);
 
-      // 7 hours before timeout = 1 hour before distress starts
+      // Day psd+363 — comfortably before the psd+365 distress threshold.
       await advanceToPreDistress();
 
       const futureBefore = await game.futurePrizePoolView();
@@ -171,11 +179,11 @@ describe("Distress-Mode Lootboxes", function () {
       expect(futureAfter).to.be.gt(futureBefore);
     });
 
-    it("purchase just inside 6-hour window uses distress split", async function () {
+    it("purchase on the first distress day uses distress split", async function () {
       const { game, alice, mintModule } = await loadFixture(deployFullProtocol);
 
-      // 5 hours before timeout = 1 hour into distress window
-      await advanceTime(DEPLOY_TIMEOUT_SECONDS - 5 * 3600);
+      // Day psd+365 — the first (and only) distress day before the liveness trigger.
+      await advanceToDistress();
 
       const futureBefore = await game.futurePrizePoolView();
       const nextBefore = await game.nextPrizePoolView();
