@@ -9,7 +9,7 @@
 
 ---
 
-## Phase 479 — CONV + VALUE-FIX (GATED contract diff #1 — behavior change)
+## Phase 479: CONV + VALUE-FIX (GATED contract diff #1 — behavior change)
 
 **Goal:** Fix the ¼ under-delivery in both prize legs by routing them through one canonical whole-ticket→entries conversion, and document the ticket/entry convention so the bug class can't recur — without disturbing the Bernoulli round-up's EV-neutrality.
 
@@ -22,7 +22,11 @@
 4. Convention NatSpec lands at `_queueTickets`, `ticketsOwedPacked`, and the canonical helper.
 5. ONE batched `.sol` diff presented and approved before commit.
 
-## Phase 480 — RENAME-SWEEP (GATED contract diff #2 — no behavior change)
+**Plans:** 2 plans
+- [ ] 479-01-PLAN.md — `wholeTicketsToEntries` helper + both queue-site value fixes + Jackpot emit==queue + convention NatSpec (ONE batched `.sol` diff, gated)
+- [ ] 479-02-PLAN.md — deterministic forge regression (FIX-04) + `CrossSurfaceTicketMixing` reconciliation + emit==queue (FIX-05)
+
+## Phase 480: RENAME-SWEEP (GATED contract diff #2 — no behavior change)
 
 **Goal:** Make the ticket/entry distinction unmistakable in identifiers: rename the entries-denominated storage, sink functions, constants, and locals; resolve the Decimator "entry"=record collision; keep storage layout byte-stable.
 
@@ -35,7 +39,7 @@
 4. By-name test harnesses updated in lockstep (`DeityPassGoldNerfRegression` name string + `.t.sol` inheritors); full build green.
 5. ONE batched `.sol` diff presented and approved before commit.
 
-## Phase 481 — EVENT-SURFACE + DOCS (GATED contract diff #3 — ABI field names)
+## Phase 481: EVENT-SURFACE + DOCS (GATED contract diff #3 — ABI field names)
 
 **Goal:** Align the event surface with the entries convention — rename misleading event fields, normalize emitted units to entries — and update the tests, generated ABIs, and docs; keep external view selectors stable.
 
@@ -47,7 +51,7 @@
 3. `EventSurfaceUnification` test updated and green; deployment ABIs regenerated; `docs/JACKPOT-EVENT-CATALOG.md` + `docs/JACKPOT-PAYOUT-REFERENCE.md` updated to the entries basis.
 4. ONE batched `.sol` diff presented and approved before commit.
 
-## Phase 482 — VERIFY + CLOSE
+## Phase 482: VERIFY + CLOSE
 
 **Goal:** Prove the fix lands the intended economy, the refactor is behavior-preserving, and close the milestone.
 
