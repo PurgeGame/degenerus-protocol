@@ -1722,7 +1722,8 @@ abstract contract DegenerusGameStorage {
     ///      write re-stamps the day with a fresh (zero) mask in one store.
     mapping(address => uint32) internal deityBoonPacked;
 
-    /// @dev Day when recipient last received a deity boon (prevents double-receipt).
+    /// @dev Day when recipient last received a deity boon (prevents double-receipt
+    ///      on the same day, regardless of which deity issues it).
     mapping(address => uint24) internal deityBoonRecipientDay;
 
     // =========================================================================
@@ -2500,6 +2501,12 @@ abstract contract DegenerusGameStorage {
     uint32 internal foilCursor;
     uint24 internal foilDrainDay;
     uint24 internal foilLastResolveDay;
+
+    /// @dev Lifetime count of deity boons issued from a given deity to a given
+    ///      recipient, keyed [deity][recipient]. Capped at DEITY_RECIPIENT_BOON_CAP
+    ///      in issueDeityBoon. Appended here (after the last existing state slot) so
+    ///      no prior storage slot shifts.
+    mapping(address => mapping(address => uint8)) internal deityRecipientBoonCount;
 
     /// @dev 75/25 next/future split for the foil leg (forked from the 90/10
     ///      ticket split's PURCHASE_TO_FUTURE_BPS = 1000).

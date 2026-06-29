@@ -46,6 +46,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     error SelfBoon(); // deity attempted to issue a boon to themselves
     error InvalidSlot(); // deity boon slot index is >= DEITY_DAILY_BOON_COUNT
     error RecipientAlreadyBoonedToday(); // recipient already received a deity boon on the current day
+    error RecipientBoonCapReached(); // recipient hit the lifetime cap on boons from this deity
     error SlotAlreadyUsed(); // deity boon slot has already been used on the current day
 
     /// @notice RNG word has not been set for the requested lootbox index
@@ -349,6 +350,9 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     // Deity boon constants
     /// @dev Number of boon slots available per deity per day
     uint8 private constant DEITY_DAILY_BOON_COUNT = 3;
+
+    /// @dev Lifetime cap on deity boons a single deity may issue to a single recipient
+    uint8 private constant DEITY_RECIPIENT_BOON_CAP = 10;
 
     /// @dev Boon type: 5% coinflip bonus
     uint8 private constant BOON_COINFLIP_5 = 1;
@@ -1126,6 +1130,8 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
 
     /// @notice Issue a deity boon to a recipient
     /// @dev Deity can issue up to 3 boons per day, one per recipient per day.
+    ///      A deity can issue at most DEITY_RECIPIENT_BOON_CAP boons to any one
+    ///      recipient over the game's lifetime.
     /// @param deity The deity pass holder issuing the boon
     /// @param recipient The player receiving the boon
     /// @param slot The slot index (0-2) to use
@@ -1135,6 +1141,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     /// @custom:reverts Unauthorized When deity does not own a deity pass
     /// @custom:reverts RngNotReady When no RNG is available for the day
     /// @custom:reverts RecipientAlreadyBoonedToday When recipient already received a boon today
+    /// @custom:reverts RecipientBoonCapReached When this deity has hit the lifetime boon cap for the recipient
     /// @custom:reverts SlotAlreadyUsed When slot was already used today
     function issueDeityBoon(address deity, address recipient, uint8 slot) external {
         if (deity == address(0) || recipient == address(0)) revert ZeroAddress();
@@ -1151,7 +1158,11 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         // mask in one store.
         uint32 boonPacked = deityBoonPacked[deity];
         uint8 mask = uint24(boonPacked) == day ? uint8(boonPacked >> 24) : 0;
+        // One boon per recipient per day, across all deities.
         if (deityBoonRecipientDay[recipient] == day) revert RecipientAlreadyBoonedToday();
+        // Lifetime cap is per (deity, recipient) pair.
+        uint8 pairBoonCount = deityRecipientBoonCount[deity][recipient];
+        if (pairBoonCount >= DEITY_RECIPIENT_BOON_CAP) revert RecipientBoonCapReached();
 
         uint8 slotMask = uint8(1) << slot;
         if ((mask & slotMask) != 0) revert SlotAlreadyUsed();
@@ -1159,6 +1170,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
             uint32(day) |
             (uint32(mask | slotMask) << 24);
         deityBoonRecipientDay[recipient] = day;
+        deityRecipientBoonCount[deity][recipient] = pairBoonCount + 1;
 
         bool decimatorAllowed = _isDecimatorWindow();
         bool deityPassAvailable = deityPassOwners.length < DEITY_PASS_MAX_TOTAL;
