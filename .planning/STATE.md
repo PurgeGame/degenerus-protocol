@@ -1,22 +1,34 @@
 ---
 gsd_state_version: 1.0
-milestone: v74.0
-milestone_name: "As-Built Milestone Audit + C4A Package"
-status: complete
-last_updated: "2026-06-27"
-last_activity: 2026-06-27 -- ✅ v74.0 MILESTONE CLOSED (As-Built Audit + C4A Package); tag `v74.0` (local/not pushed); 0 open findings. GSD bookkeeping reconciled via /gsd-complete-milestone: MILESTONES.md v74.0 entry added, PROJECT.md evolved to SHIPPED, ROADMAP.md collapsed (full → milestones/v74.0-ROADMAP.md), REQUIREMENTS.md git-rm'd (archive milestones/v74.0-REQUIREMENTS.md), RETROSPECTIVE.md v74.0 section + trends row added, phase dirs 466-476 → milestones/v74.0-phases/. Subject byte-frozen `contracts/` tree f06b1ef6 @ 93d17288; closure MILESTONE_V74_AT_HEAD_93d17288… (the sole milestone .sol delta = the 475 DegenerusAdmin governance fix). The substantive close — tag, FINDINGS-v74.0.md (chmod 444), closure signal, archive copies — landed earlier in phase 478; this pass finished the tracker reconcile. NEXT = /gsd-new-milestone.
+milestone: v75.0
+milestone_name: "Ticket/Entry Correctness + Disambiguation"
+status: planning
+last_updated: "2026-06-29"
+last_activity: 2026-06-29 -- ▶ v75.0 STARTED via /gsd-new-milestone (Ticket/Entry Correctness + Disambiguation), authored BY HAND per repo convention. Subject RESETS off v74.0 closure MILESTONE_V74_AT_HEAD_93d17288… ; baseline local HEAD cdd32fe9 (clean, not pushed). Fixes a USER-confirmed ¼ ticket under-delivery (matched live RTP sim): ticketsOwedPacked.owed is in ENTRIES (4/ticket, price/4 each), but JackpotModule._jackpotTicketRoll (~2143) + LootboxModule._lootboxTicketCount (~2188)→queue (~1383, also via DecimatorModule:673 resolveLootboxDirect) queue a whole-ticket count (amount/price, no <<2) into the entries sink → ¼ delivery (conservation-safe; winners under-paid). REQUIREMENTS.md (CONV/FIX/RN/EVT/VER, ~23 reqs) + ROADMAP.md (4 phases 479-482) authored. LOCKED: ABI=events-too (rename event fields + normalize emitted units to entries; KEEP view selectors); whale/perpetual constants = rename-only (intentionally entries, no ×4); Decimator "entry"→record collision fix. Contract diffs at 479/480/481 each behind the sole approval gate. Grounding = council wf_1a689688 + discovery wf_701237c0 → .planning/v75-grounding/ + memory prize-ticket-legs-whole-vs-entries-2026-06-29. NEXT = /gsd-plan-phase 479 (or /gsd-discuss-phase 479).
+prev_activity: 2026-06-27 -- ✅ v74.0 MILESTONE CLOSED (As-Built Audit + C4A Package); tag `v74.0` (local/not pushed); 0 open findings. GSD bookkeeping reconciled via /gsd-complete-milestone: MILESTONES.md v74.0 entry added, PROJECT.md evolved to SHIPPED, ROADMAP.md collapsed (full → milestones/v74.0-ROADMAP.md), REQUIREMENTS.md git-rm'd (archive milestones/v74.0-REQUIREMENTS.md), RETROSPECTIVE.md v74.0 section + trends row added, phase dirs 466-476 → milestones/v74.0-phases/. Subject byte-frozen `contracts/` tree f06b1ef6 @ 93d17288; closure MILESTONE_V74_AT_HEAD_93d17288… (the sole milestone .sol delta = the 475 DegenerusAdmin governance fix). NEXT = /gsd-new-milestone.
 prev_activity: 2026-06-26 -- ✅ Phase 466 SUBJECT-FREEZE-CONFIRM done (commit 07a356da). Autonomous BY-HAND run of v74.0: `gsd-sdk query roadmap.analyze` returns 0 phases on the hand-authored ROADMAP, so the stock gsd-autonomous loop cannot drive it — orchestrating by hand per the v68/v72/v73 precedent, committing per phase. Subject byte-frozen: `contracts/` tree 280bdb19 @ impl 3986926c (HEAD docs commit 5b7b5503 touches no .sol), distinct from v73 tree d6615306. 2 liveness edge tests rewritten to the `_vrfDeadmanFired` model → 11 passing → committed (test-only). forge storageLayout golden HEAD-vs-v73 (built in a detached v73.0 worktree): NO top-level slot move; only additive `_sdgnrsBonusLevel` (slot 58 off 25) + the `Sub` reinvestPct within-slot 8-bit repack; `_subOf`@54 / `boxPlayers`@59 / WHALE_PASS_TYPE_SHIFT bit152 unchanged. ⚠ a plain `hardhat test` regenerates `ContractAddresses.sol` → restore to hash cb70d99e after every Hardhat run. NEXT = 467 HARNESS-GREEN-GATE. (Sole approval gate remains 475 conditional contract-fix.)
 prev_activity: 2026-06-26 -- ▶ v74.0 RE-SCOPED via /gsd-new-milestone — SUPERSEDES the prior "v74.0 C4A Readiness" plan (457-465, never tagged; its no-contract-change premise overtaken by the v73.0→HEAD batch). New milestone = As-Built Milestone Audit + C4A Package of the v73.0→HEAD diff (29 .sol, +1861/-1030; subject BYTE-FROZEN at local HEAD 3986926c). REQUIREMENTS.md (62 reqs / 15 categories: SUBJ/HARN/SOLV/RNG/LIVE/ACCESS/EV/WIRE/GAS/MAN/CMRA/SOAK/PKG/KI/TERM) + ROADMAP.md (13 phases 466-478) authored BY HAND. Grounding = 8-cluster read-only Workflow fan-out (wf_ac48ac17-b4d, 9 agents) → .planning/v74-grounding/v74.0-asbuilt-audit-map.md (+ raw JSON). Decisions LOCKED: v74.0 reuse · subject=local HEAD 3986926c · gas faucet in-scope-dormant · WWXRP in-scope-documented · audit+full C4A package · cross-model=Codex only (Gemini CLI unavailable). Old plan archived → milestones/v74.0-superseded-plan-{ROADMAP,REQUIREMENTS}.md; built agent/soak/partial-package carry forward in place. NEXT = /gsd-plan-phase 466 (or /gsd-discuss-phase 466).
 prev_activity: 2026-06-26 -- the prior "v74.0 C4A Readiness" plan (457-465) was overtaken: a contract hardening+feature batch landed (aa74de08 named-errors/WWXRP-rename/partial-claim · fffbd878 VRF-deadman+swap-timer 20h→44h · e2198e14 mid-day-RNG fold · 3986926c sDGNRS level lootbox + pre-deploy hardening; pushed 498d4aaf, HEAD 3986926c local-only). The built live agent (f2432ae5) + 24/7 soak ran 0-viol against an earlier state of this tree. v74's byte-frozen premise broke → superseded by the as-built audit (see PRIOR_v73_SHIP below for the v73.0 closure).
 progress:
-  total_phases: 13
-  completed_phases: 13
+  total_phases: 4
+  completed_phases: 0
   total_plans: 0
   completed_plans: 0
-  percent: 100
+  percent: 0
 ---
 
 # Project State
+
+## Current Position — v75.0 (ACTIVE)
+
+**Milestone:** v75.0 — Ticket/Entry Correctness + Disambiguation. **Status:** Planning (REQUIREMENTS.md + ROADMAP.md authored BY HAND).
+**Phase:** 479 ready to plan (`/gsd-plan-phase 479` or `/gsd-discuss-phase 479`). 4 phases: 479 CONV+VALUE-FIX (gated diff #1, behavior) · 480 RENAME-SWEEP (gated diff #2, no behavior) · 481 EVENT-SURFACE+DOCS (gated diff #3, ABI field names) · 482 VERIFY+CLOSE.
+**Goal:** fix a USER-confirmed ¼ ticket under-delivery (`owed` is ENTRIES = 4/ticket, price/4 each; `_jackpotTicketRoll`~2143 + `_lootboxTicketCount`~2188→queue~1383, also via `DecimatorModule:673`, queue a whole-ticket count `amount/price` with no `<<2` → ¼ delivery; conservation-safe, winners under-paid) and make ticket-vs-entry unmistakable in code.
+**Subject:** RESETS off v74.0 closure `MILESTONE_V74_AT_HEAD_93d17288…`; baseline local HEAD `cdd32fe9` (clean, not pushed). Contract diffs at 479/480/481 each behind the sole approval gate.
+**Locked:** ABI = events-too (rename event fields + normalize emitted units to entries; KEEP view selectors); whale/perpetual constants rename-only (intentionally entries, no `×4`); Decimator "entry"→record collision fix.
+**Grounding:** `.planning/v75-grounding/v75.0-ticket-entry-map.md` + memory `prize-ticket-legs-whole-vs-entries-2026-06-29` (council `wf_1a689688`, discovery `wf_701237c0`).
+
+---
 
 ## Project Reference
 
