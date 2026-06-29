@@ -14,12 +14,13 @@
 //     sibling queue helpers that STAY (`_queueTickets`, `_queueTicketsScaled`,
 //     `_queueTicketRange`) are still present.
 //
-//   TST-CLEAN-03 — whole-ticket `JackpotTicketWin` emit regression:
-//     All 3 `JackpotTicketWin` emit sites converge on emitting the WHOLE ticket
-//     count (D-278-EVT-UNIFY-01) — none multiply the 4th arg by `TICKET_SCALE`.
-//     This block asserts that, plus that the `JackpotTicketWin` event
-//     definition (field types + `indexed` markers) is unchanged across the
-//     Phase 278 wave — Phase 278 shifts emitted VALUES only, not the signature.
+//   TST-CLEAN-03 — `JackpotTicketWin` entries-basis emit regression:
+//     The 2 `JackpotTicketWin` emit sites emit the ENTRIES count queued into
+//     `ticketsOwedPacked` — the already-correct `uint32(units)` leg and the BAF
+//     roll's `wholeTicketsToEntries(whole)` — neither multiplies the 4th arg by
+//     `TICKET_SCALE`. This block asserts that, plus that the `JackpotTicketWin`
+//     event definition (field types + `indexed` markers) is unchanged: the value
+//     fix shifts emitted VALUES onto the entries basis, not the signature.
 //
 //   TST-CROSS-01 — cross-surface `rem`-byte regression:
 //     The 3 RNG-driven ticket-award surfaces (manual lootbox open, auto-resolve
@@ -79,7 +80,7 @@ const MINT_MODULE_SOURCE_PATH = path.resolve(
 // Here k1 is the `uint24` write-key `wk` (abi-encoded to a full 32-byte word)
 // and k2 is the `address` buyer. The packed `uint40` value occupies the low
 // 40 bits of the slot word; `rem = uint8(value)` is its low 8 bits and the
-// whole-ticket count is `value >> 8`.
+// owed-entries count is `value >> 8`.
 //
 // This slot math is cross-checked at runtime against the public
 // `ticketsOwedView(lvl, player)` accessor (which returns `packed >> 8` for the
@@ -110,7 +111,7 @@ async function readTicketsOwedSlot(gameAddress, wk, buyer) {
   // The uint40 value lives in the low 40 bits of the slot.
   const packed = word & ((1n << 40n) - 1n);
   const rem = Number(packed & 0xffn); // low 8 bits
-  const owed = packed >> 8n; // whole-ticket count
+  const owed = packed >> 8n; // owed-entries count
   return { slot, packed, owed, rem };
 }
 
@@ -239,14 +240,14 @@ describe("CrossSurfaceTicketMixing — Phase 278 Wave 2 TST-CLEAN-02/03 + TST-CR
     });
   });
 
-  describe("TST-CLEAN-03 — whole-ticket `JackpotTicketWin` emit regression (D-278-EVT-UNIFY-01)", function () {
-    it("[03a] there are exactly 3 `emit JackpotTicketWin` sites and none multiply the 4th (ticketCount) arg by TICKET_SCALE", function () {
+  describe("TST-CLEAN-03 — `JackpotTicketWin` entries-basis emit regression", function () {
+    it("[03a] there are exactly 2 `emit JackpotTicketWin` sites and none multiply the 4th (ticketCount) arg by TICKET_SCALE", function () {
       const src = fs.readFileSync(JACKPOT_SOURCE_PATH, "utf8");
       const emitMatches = [...src.matchAll(/emit JackpotTicketWin\(/g)];
       expect(
         emitMatches.length,
-        "there must be exactly 3 JackpotTicketWin emit sites"
-      ).to.equal(3);
+        "there must be exactly 2 JackpotTicketWin emit sites"
+      ).to.equal(2);
       for (const m of emitMatches) {
         const emitArgList = extractCallArgs(
           src.slice(m.index),
@@ -260,16 +261,17 @@ describe("CrossSurfaceTicketMixing — Phase 278 Wave 2 TST-CLEAN-02/03 + TST-CR
           args.length,
           "every JackpotTicketWin emit must supply 7 args"
         ).to.equal(7);
-        // The 4th positional arg (index 3) is `ticketCount`. It must be a
-        // whole-ticket count — never a `* TICKET_SCALE` scaled value.
+        // The 4th positional arg (index 3) is `ticketCount`. It carries the
+        // entries count queued (`uint32(units)` / `wholeTicketsToEntries(whole)`)
+        // — never a `* TICKET_SCALE` scaled value.
         expect(
           /TICKET_SCALE/.test(args[3]),
-          `JackpotTicketWin 4th arg \`${args[3]}\` must not reference TICKET_SCALE — emit the whole ticket count (D-278-EVT-UNIFY-01)`
+          `JackpotTicketWin 4th arg \`${args[3]}\` must not reference TICKET_SCALE — emit the queued entries count`
         ).to.equal(false);
       }
     });
 
-    it("[03b] the 3 emit sites emit, in source order, the whole counts `ticketCount`, `uint32(units)`, `whole`", function () {
+    it("[03b] the 2 emit sites emit, in source order, the entries counts `uint32(units)`, `wholeTicketsToEntries(whole)`", function () {
       const src = fs.readFileSync(JACKPOT_SOURCE_PATH, "utf8");
       const emitMatches = [...src.matchAll(/emit JackpotTicketWin\(/g)];
       const fourthArgs = emitMatches.map((m) => {
@@ -279,16 +281,21 @@ describe("CrossSurfaceTicketMixing — Phase 278 Wave 2 TST-CLEAN-02/03 + TST-CR
         );
         return splitTopLevelArgs(argList)[3];
       });
-      // Site 1 trait-burn loop: `ticketCount`. Site 2 near/far coin path:
-      // `uint32(units)`. Site 3 BAF _jackpotTicketRoll: `whole`. Each matches
-      // the whole count passed to the adjacent `_queueTickets` call.
-      expect(fourthArgs).to.deep.equal(["ticketCount", "uint32(units)", "whole"]);
+      // Site 1 (the already-correct coin/units leg): `uint32(units)` —
+      // `_budgetToTicketUnits` already returns entries. Site 2 (the BAF
+      // `_jackpotTicketRoll`): the post-Bernoulli whole count routed through the
+      // canonical `wholeTicketsToEntries`. Each matches the entries value passed
+      // to the adjacent `_queueTickets` call.
+      expect(fourthArgs).to.deep.equal([
+        "uint32(units)",
+        "wholeTicketsToEntries(whole)",
+      ]);
     });
 
-    it("[03c] each emit site's 4th arg matches the whole count passed to its adjacent `_queueTickets` call (emit value == storage-write value)", function () {
+    it("[03c] each emit site's 4th arg matches the entries value passed to its adjacent `_queueTickets` call (emit value == storage-write value)", function () {
       const src = fs.readFileSync(JACKPOT_SOURCE_PATH, "utf8");
       // For each emit site, the nearest preceding `_queueTickets(` call must
-      // pass the SAME whole-count expression as the emit's 4th arg.
+      // pass the SAME entries expression as the emit's 4th arg.
       const emitMatches = [...src.matchAll(/emit JackpotTicketWin\(/g)];
       for (const m of emitMatches) {
         const emitArgs = splitTopLevelArgs(
@@ -303,11 +310,12 @@ describe("CrossSurfaceTicketMixing — Phase 278 Wave 2 TST-CLEAN-02/03 + TST-CR
         const queueArgs = splitTopLevelArgs(
           extractCallArgs(src.slice(queueIdx), "_queueTickets(")
         );
-        // _queueTickets(winner, level, <wholeCount>, rngBypass) — 3rd arg is the
-        // whole count; JackpotTicketWin's 4th arg is `ticketCount`.
+        // _queueTickets(winner, level, <entries>, rngBypass) — 3rd arg is the
+        // entries count; JackpotTicketWin's 4th arg (`ticketCount`) carries the
+        // same entries value (emit == queue on the entries basis).
         expect(
           emitArgs[3],
-          `JackpotTicketWin 4th arg \`${emitArgs[3]}\` must equal the whole count \`${queueArgs[2]}\` passed to the adjacent _queueTickets call`
+          `JackpotTicketWin 4th arg \`${emitArgs[3]}\` must equal the entries value \`${queueArgs[2]}\` passed to the adjacent _queueTickets call`
         ).to.equal(queueArgs[2]);
       }
     });
@@ -386,10 +394,11 @@ describe("CrossSurfaceTicketMixing — Phase 278 Wave 2 TST-CLEAN-02/03 + TST-CR
     // `provider.getStorage` read of the genuinely-shared
     // `ticketsOwedPacked[wk][buyer]` slot, driven through the REAL
     // `openBox` entry point full-stack (purchase -> requestLootboxRng ->
-    // VRF fulfill -> openBox). The whole-ticket lootbox path routes through
-    // `_queueTickets`, which carries the `rem` byte of the packed slot
-    // UNTOUCHED — so `rem` must stay 0 across every whole-ticket open. Only
-    // `_queueTicketsScaled` (the mint-boost path) ever writes a non-zero `rem`.
+    // VRF fulfill -> openBox). The lootbox ticket path routes through
+    // `_queueTickets` (entries, via `wholeTicketsToEntries(whole)`), which carries
+    // the `rem` byte of the packed slot UNTOUCHED — so `rem` must stay 0 across
+    // every open. Only `_queueTicketsScaled` (the mint-boost path) ever writes a
+    // non-zero `rem`.
     //
     // FIXTURE_COVERAGE_GAP (carried-forward harness limitation, NOT a Phase 278
     // regression): the 278-02 plan's `<action>` calls for ALL THREE RNG-driven
@@ -714,26 +723,33 @@ describe("CrossSurfaceTicketMixing — Phase 278 Wave 2 TST-CLEAN-02/03 + TST-CR
       ).to.equal(true);
 
       // (3) Manual + auto-resolve lootbox surfaces: LootboxModule routes its
-      //     per-roll ticket award through `_queueTickets` (whole, at this roll's
-      //     `rollLevel`) and contains ZERO `_queueTicketsScaled` invocations.
+      //     per-roll ticket award through `_queueTickets` at this roll's
+      //     `rollLevel`, converting the post-Bernoulli whole count to entries via
+      //     the canonical `wholeTicketsToEntries`, and contains ZERO
+      //     `_queueTicketsScaled` invocations.
       expect(
-        lootboxSrc.includes("_queueTickets(player, rollLevel, whole, false)"),
-        "LootboxModule must route the ticket award through `_queueTickets` (whole)"
+        lootboxSrc.includes(
+          "_queueTickets(player, rollLevel, wholeTicketsToEntries(whole), false)"
+        ),
+        "LootboxModule must route the ticket award through `_queueTickets` on the entries basis (`wholeTicketsToEntries(whole)`)"
       ).to.equal(true);
       expect(
         lootboxSrc.includes("_queueTicketsScaled"),
         "LootboxModule must NOT invoke `_queueTicketsScaled` — it never writes the rem byte"
       ).to.equal(false);
 
-      // (4) Jackpot ticket-roll surface: `_jackpotTicketRoll` routes its
-      //     post-Bernoulli whole count through `_queueTickets` and does NOT
-      //     call `_queueTicketsScaled` (Phase 278 Wave 1 retired the
-      //     `_queueLootboxTickets` -> `_queueTicketsScaled` wrapper path).
+      // (4) Jackpot ticket-roll surface: `_jackpotTicketRoll` converts its
+      //     post-Bernoulli whole count to entries via the canonical
+      //     `wholeTicketsToEntries` and queues it through `_queueTickets`; it does
+      //     NOT call `_queueTicketsScaled` and never invokes the (absent)
+      //     `_queueLootboxTickets` wrapper.
       const rollBody = extractBody(jackpotSrc, "function _jackpotTicketRoll(");
       expect(rollBody, "_jackpotTicketRoll body not found").to.not.equal(null);
       expect(
-        rollBody.includes("_queueTickets(winner, targetLevel, whole, true)"),
-        "_jackpotTicketRoll must route the post-Bernoulli whole count through `_queueTickets`"
+        rollBody.includes(
+          "_queueTickets(winner, targetLevel, wholeTicketsToEntries(whole), true)"
+        ),
+        "_jackpotTicketRoll must route the post-Bernoulli whole count through `_queueTickets` on the entries basis (`wholeTicketsToEntries(whole)`)"
       ).to.equal(true);
       expect(
         rollBody.includes("_queueTicketsScaled"),
@@ -751,6 +767,141 @@ describe("CrossSurfaceTicketMixing — Phase 278 Wave 2 TST-CLEAN-02/03 + TST-CR
         (mintSrc.match(/_queueTicketsScaled\(/g) || []).length,
         "MintModule must invoke `_queueTicketsScaled` for boost-derived fractional awards — the surface that flips the rem byte non-zero"
       ).to.be.gte(1);
+    });
+
+    it("[CROSS-01e] live-state: driving the REAL `openBox` full-stack delivers owed-entries == the entries basis (~4x the pre-fix whole count) at the roll level", async function () {
+      // emit == queue + ~4x behavioral proof for the lootbox leg: the post-Bernoulli
+      // whole count routes through `wholeTicketsToEntries(whole)` into the entries-
+      // denominated `ticketsOwedPacked` sink, so the owed-entries delta at the roll
+      // level is exactly `whole << 2` (4 entries per whole ticket) — four times the
+      // pre-fix `scaledTickets/100` whole count. `_jackpotTicketRoll` (PRIVATE,
+      // VRF-rigging-gated) is NOT driven full-stack here (carried-forward
+      // FIXTURE_COVERAGE_GAP); its identical converter + basis path is proven
+      // deterministically by the PrizeLegEntriesDelivery forge regression.
+      const fixture = await loadFixture(deployFullProtocol);
+      const { game, alice } = fixture;
+      const gameAddress = await game.getAddress();
+
+      const probe = await reachOpenableLootbox(fixture);
+      if (probe.reason !== null) {
+        // Soft-skip — the simulator denied lootbox-RNG reachability (matches the
+        // [CROSS-01b] / LootboxOpenGas.test.js reachOpenableLootbox precedent). The
+        // deterministic entries-basis coverage is carried by the
+        // PrizeLegEntriesDelivery forge proof + the structural [CROSS-01d].
+        console.warn(
+          `[TST-CROSS-01e] soft-skip — ${probe.reason} (deterministic entries-basis ` +
+            `coverage carried by the PrizeLegEntriesDelivery forge proof + [CROSS-01d])`
+        );
+        this.skip();
+        return;
+      }
+
+      const index = await findOpenableEthIndex(game, alice);
+      if (index === null) {
+        console.warn(
+          "[TST-CROSS-01e] soft-skip — no openable ETH lootbox index found for alice in probe range"
+        );
+        this.skip();
+        return;
+      }
+
+      // Fresh fixture: alice has 0 owed-entries everywhere (proven by [CROSS-01a]).
+      // Pin before == 0 across the plausible target-level band so the post-open owed
+      // at whichever level the roll lands on IS the full delta.
+      const baseLevel = BigInt(await game.level()) + 1n;
+      for (let l = baseLevel; l <= baseLevel + 55n; l++) {
+        const before = await resolveLiveTicketsOwed(game, gameAddress, l, alice);
+        expect(
+          before.owed,
+          `pre-open: alice's owed-entries at level ${l} must be 0 on a fresh fixture`
+        ).to.equal(0n);
+      }
+
+      // Drive the REAL openBox entry point full-stack and capture LootBoxOpened.
+      const tx = await game.connect(alice).openBox(alice.address, index);
+      const receipt = await tx.wait();
+
+      const lbArtifact = await hre.artifacts.readArtifact(
+        "DegenerusGameLootboxModule"
+      );
+      const lbIface = new hre.ethers.Interface(lbArtifact.abi);
+      let opened = null;
+      for (const log of receipt.logs) {
+        try {
+          const parsed = lbIface.parseLog(log);
+          if (parsed && parsed.name === "LootBoxOpened") {
+            opened = parsed;
+            break;
+          }
+        } catch (_) {
+          // not a LootBoxOpened log — skip
+        }
+      }
+      if (opened === null) {
+        // wasSpin roll (WWXRP / FLIP-spin / ETH-spin) suppresses LootBoxOpened — a
+        // valid deterministic outcome with no ticket-queue delta to assert here.
+        console.warn(
+          "[TST-CROSS-01e] note — openBox emitted no LootBoxOpened (spin roll); no " +
+            "ticket-entry delta to measure on this deterministic seed"
+        );
+        return;
+      }
+
+      const rollLevel = BigInt(opened.args.futureLevel);
+      const scaledTickets = BigInt(opened.args.futureTickets);
+      const roundedUp = Boolean(opened.args.roundedUp);
+
+      // Owed-entries delta at the roll level == the queued entries. before == 0 on a
+      // fresh fixture (asserted across the band above), so the post-open owed IS the
+      // delta. resolveLiveTicketsOwed cross-validates the slot against ticketsOwedView.
+      const after = await resolveLiveTicketsOwed(
+        game,
+        gameAddress,
+        rollLevel,
+        alice
+      );
+      expect(
+        after.matched,
+        "the derived owed slot must resolve against ticketsOwedView at the roll level"
+      ).to.equal(true);
+      const delta = after.owed;
+
+      // The lootbox leg queues `wholeTicketsToEntries(whole)` where
+      // whole = scaledTickets/100 (+1 iff the Bernoulli sub-roll fired), so the
+      // delivered entries are exactly the entries basis: `whole << 2`.
+      const wholeFloor = scaledTickets / 100n;
+      const lo = wholeFloor << 2n; // no round-up branch
+      const hi = (wholeFloor + 1n) << 2n; // Bernoulli round-up branch
+      const expectedEntries = roundedUp ? hi : lo;
+
+      expect(
+        delta === lo || delta === hi,
+        `lootbox owed-entries delta ${delta} must equal the entries basis ` +
+          `(lo=${lo} or round-up hi=${hi}) for scaledTickets=${scaledTickets}`
+      ).to.equal(true);
+      expect(
+        delta,
+        `lootbox owed-entries delta must equal wholeTicketsToEntries(whole) = ` +
+          `${expectedEntries} (roundedUp=${roundedUp})`
+      ).to.equal(expectedEntries);
+
+      if (scaledTickets === 0n) {
+        // The deterministic roll awarded no scaled tickets; the delta == 0 invariant
+        // held but the ~4x delivery is vacuous on this seed — the non-zero converter
+        // + basis coverage is carried by the PrizeLegEntriesDelivery forge proof.
+        console.warn(
+          "[TST-CROSS-01e] note — deterministic roll awarded 0 scaled tickets; " +
+            "owed-entries delta correctly 0 (non-zero 4x delivery proven in the " +
+            "PrizeLegEntriesDelivery forge regression)"
+        );
+      } else {
+        const wholeAwarded = roundedUp ? wholeFloor + 1n : wholeFloor;
+        console.warn(
+          `[TST-CROSS-01e] openBox delivered ${delta} owed-entries at level ` +
+            `${rollLevel} (scaledTickets=${scaledTickets}, whole=${wholeAwarded}, ` +
+            `roundedUp=${roundedUp}) — 4x the pre-fix whole count ${wholeAwarded}`
+        );
+      }
     });
   });
 });
