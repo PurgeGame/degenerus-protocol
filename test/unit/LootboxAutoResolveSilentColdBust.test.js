@@ -82,10 +82,10 @@ describe("LootboxAutoResolveSilentColdBust — Phase 275 Wave 2 TST-LBX-AR-03", 
   describe("Cold-bust math: when whole == 0, the auto-resolve else-arm calls _queueTickets(0) → silent early-return", function () {
     it("[01a] tester confirms cold-bust math: scaledPre ∈ (0, 100) AND Bernoulli loses ⇒ whole=0, roundedUp=false", async function () {
       const tester = await deployTester();
-      // Bernoulli loses when uint16(seed >> 152) % 100 >= frac.
+      // Bernoulli loses when uint32(seed >> 224) % 100 >= frac.
       // Force slice == 99 (>= every possible frac < 100) by setting seed
-      // such that uint16(seed >> 152) == 99.
-      const seedSliceHigh = BigInt(99) << 152n;
+      // such that uint32(seed >> 224) == 99.
+      const seedSliceHigh = BigInt(99) << 224n;
       for (const scaledPre of [1, 47, 50, 99]) {
         const [whole, roundedUp] = await tester.bernoulliWhole(scaledPre, seedSliceHigh);
         expect(
@@ -245,7 +245,7 @@ describe("LootboxAutoResolveSilentColdBust — Phase 275 Wave 2 TST-LBX-AR-03", 
       //     removed — terminal-paradox closure.)
       //   - Auto-resolve callers (payColdBustConsolation = false): the gate
       //     stays shut; `_queueTickets(0)` early-returns → fully silent.
-      const seedSliceHigh = BigInt(99) << 152n;
+      const seedSliceHigh = BigInt(99) << 224n;
       const [whole, roundedUp] = await tester.bernoulliWhole(1, seedSliceHigh);
       expect(whole).to.equal(0n);
       expect(roundedUp).to.equal(false);

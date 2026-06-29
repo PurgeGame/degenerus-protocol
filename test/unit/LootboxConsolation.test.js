@@ -83,8 +83,8 @@ describe("LootboxConsolation — Phase 274 Wave 2 TST-WX-01..03", function () {
     it("[01a] tester confirms cold-bust math: scaledPre ∈ (0, 100) AND Bernoulli loses ⇒ whole=0, roundedUp=false", async function () {
       const tester = await deployTester();
       // Cold-bust scenarios: scaledPre in {1, 47, 50, 99}, seed forces
-      // uint16(seed >> 152) % 100 = 99 (slice >= every possible frac < 100).
-      const seed = BigInt(99) << 152n;
+      // uint32(seed >> 224) % 100 = 99 (slice >= every possible frac < 100).
+      const seed = BigInt(99) << 224n;
       for (const scaledPre of [1, 47, 50, 99]) {
         const [whole, roundedUp] = await tester.bernoulliWhole(scaledPre, seed);
         expect(whole, `cold-bust must produce whole=0 at scaledPre=${scaledPre}`).to.equal(0n);
@@ -97,7 +97,7 @@ describe("LootboxConsolation — Phase 274 Wave 2 TST-WX-01..03", function () {
 
     it("[01b] tester confirms warm scenarios: scaledPre ∈ (0, 100) AND Bernoulli wins ⇒ whole=1, roundedUp=true (NO consolation)", async function () {
       const tester = await deployTester();
-      // Warm scenarios: seed forces uint16(seed >> 152) % 100 = 0 (slice < every
+      // Warm scenarios: seed forces uint32(seed >> 224) % 100 = 0 (slice < every
       // possible frac >= 1).
       const seed = 0n;
       for (const scaledPre of [1, 47, 50, 99]) {
@@ -156,7 +156,7 @@ describe("LootboxConsolation — Phase 274 Wave 2 TST-WX-01..03", function () {
       const tester = await deployTester();
       // Whole multiples never trigger consolation regardless of seed.
       for (const scaledPre of [100, 200, 247, 300, 9999]) {
-        for (const seed of [0n, BigInt(99) << 152n, BigInt(50) << 152n]) {
+        for (const seed of [0n, BigInt(99) << 224n, BigInt(50) << 224n]) {
           const [whole, _roundedUp] = await tester.bernoulliWhole(scaledPre, seed);
           expect(
             whole,
@@ -277,7 +277,7 @@ describe("LootboxConsolation — Phase 274 Wave 2 TST-WX-01..03", function () {
     // FIXTURE-COVERAGE NOTE: a pure end-to-end fixture driving the real
     // `openFlipLootBox` entry point to a deterministic `whole == 0` ticket-path
     // cold-bust is infeasible with the current harness — it requires VRF rigging
-    // to force the per-resolution seed's bits[152..167] slice, which the
+    // to force the per-resolution seed's bits[224..255] slice, which the
     // `reachOpenableLootbox` lifecycle helper (test/gas/LootboxOpenGas.test.js)
     // does not support (the documented LBX-02 fixture-coverage gap). The closest
     // behavioral coverage the harness supports is this deployed-contract mirror
@@ -285,10 +285,10 @@ describe("LootboxConsolation — Phase 274 Wave 2 TST-WX-01..03", function () {
     // it exercises the exact `payColdBustConsolation && whole == 0` branch that
     // CR-01 mis-gated onto `emitLootboxEvent`.
     //
-    // The cold-bust seed forces `uint16(seed >> 152) % 100 == 99`, a losing slice
+    // The cold-bust seed forces `uint32(seed >> 224) % 100 == 99`, a losing slice
     // for every `frac < 100` — so `scaledPre ∈ (0, 100)` Bernoulli-collapses to
     // `whole == 0`.
-    const COLD_BUST_SEED = BigInt(99) << 152n;
+    const COLD_BUST_SEED = BigInt(99) << 224n;
     const WARM_SEED = 0n; // slice == 0 — wins for every frac >= 1
 
     // [04a] openFlipLootBox cold-bust — REMOVED (v47): the FLIP-lootbox manual

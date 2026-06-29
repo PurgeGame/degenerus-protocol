@@ -56,7 +56,7 @@ function jsBernoulliWhole(scaledPre, seed) {
   const frac = scaled % TICKET_SCALE;
   let roundedUp = false;
   if (frac !== 0n) {
-    const sliceRaw = (BigInt(seed) >> 152n) & 0xffffn;
+    const sliceRaw = (BigInt(seed) >> 224n) & 0xffffffffn;
     const slice = sliceRaw % TICKET_SCALE;
     if (slice < frac) {
       whole += 1n;
@@ -113,7 +113,7 @@ describe("LootboxBernoulliEv (stat-suite, heavy-MC) — TST-WT-01 + TST-WT-03 ex
     });
   });
 
-  describe("TST-WT-03 extended — uint16(seed >> 152) % 100 uniformity chi² at N=50K, df=99", function () {
+  describe("TST-WT-03 extended — uint32(seed >> 224) % 100 uniformity chi² at N=50K, df=99", function () {
     it("mod-100 distribution matches theoretical p_b at chi²(df=99) Wilson-Hilferty Z < 1.645", async function () {
       const N = 50_000;
       const tester = await deployTester();
@@ -123,7 +123,7 @@ describe("LootboxBernoulliEv (stat-suite, heavy-MC) — TST-WT-01 + TST-WT-03 ex
 
       for (let i = 0; i < N; i++) {
         const seed = rng();
-        const jsSlice = Number(((seed >> 152n) & 0xffffn) % 100n);
+        const jsSlice = Number(((seed >> 224n) & 0xffffffffn) % 100n);
         buckets[jsSlice] += 1;
         if (i % 1000 === 0) {
           const chainSlice = await tester.bernoulliSlice(seed);
@@ -133,15 +133,12 @@ describe("LootboxBernoulliEv (stat-suite, heavy-MC) — TST-WT-01 + TST-WT-03 ex
       }
       expect(chainVerifyCount).to.be.gte(50);
 
-      // uint16 % 100 has 36 over-represented residues (with 656 of 65536
-      // source values) and 64 under-represented (655 of 65536); residues
-      // 0..35 have p=656/65536, residues 36..99 have p=655/65536.
-      const lowBucketProb = 656 / 65536;
-      const highBucketProb = 655 / 65536;
+      // A uint32 window (2^32 source values) % 100 has a residue bias of
+      // ~2e-8 — negligible at N=50K — so every residue is uniform at p=1/100.
+      const uniformProb = 1 / 100;
       let chi2 = 0;
       for (let b = 0; b < 100; b++) {
-        const p = b < 36 ? lowBucketProb : highBucketProb;
-        const expected = N * p;
+        const expected = N * uniformProb;
         const diff = buckets[b] - expected;
         chi2 += (diff * diff) / expected;
       }

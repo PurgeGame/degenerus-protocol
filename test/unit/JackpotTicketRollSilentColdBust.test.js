@@ -34,7 +34,7 @@
 // TEST STRATEGY:
 //   No state fixture exists for `_jackpotTicketRoll` at the FOG-of-state
 //   required (jackpot winner selection, level + day simulation, VRF-derived
-//   rngWord with controlled bits[200..215] slice, BAF accumulation, etc.) —
+//   rngWord with controlled bits[96..127] slice, BAF accumulation, etc.) —
 //   same fixture-coverage-gap precedent as LBX-02 in v39 Phase 274 and the
 //   Phase 275 auto-resolve analog. Per `feedback_gas_worst_case.md` discipline
 //   ("derive theoretical worst case FIRST; if no fixture, source-level /
@@ -130,8 +130,8 @@ describe("JackpotTicketRollSilentColdBust — Phase 276 Wave 2 TST-JPT-BR-02", f
         // Search a small seed range for a LOSING slice (slice >= frac).
         let lossSeed = null;
         for (let s = 0; s < 4096; s++) {
-          // Place the candidate value into bits[200..215].
-          const seed = BigInt(s) << 200n;
+          // Place the candidate value into bits[96..127].
+          const seed = BigInt(s) << 96n;
           const slice = await tester.bernoulliSlice(seed);
           if (BigInt(slice) >= frac) {
             lossSeed = seed;
@@ -317,7 +317,7 @@ describe("JackpotTicketRollSilentColdBust — Phase 276 Wave 2 TST-JPT-BR-02", f
       // Re-confirm the part-(a) cold-bust outcome inline for scaledTickets=1.
       let lossSeed = null;
       for (let s = 0; s < 4096; s++) {
-        const seed = BigInt(s) << 200n;
+        const seed = BigInt(s) << 96n;
         const slice = await tester.bernoulliSlice(seed);
         if (BigInt(slice) >= 1n) {
           lossSeed = seed;

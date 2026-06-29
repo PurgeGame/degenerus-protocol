@@ -1229,8 +1229,8 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     ///        bits[80..95]   varianceRoll % 20       (_resolveLootboxRoll large-FLIP)
     ///        bits[96..119]  ticketVariance % 10000  (_lootboxTicketCount)
     ///        bits[120..151] boon roll % BOON_PPM_SCALE (_rollLootboxBoons)
-    ///        bits[152..167] fracRoundUp % 100      (_settleLootboxRoll ticket whole-collapse, per roll; bias 0.10%)
-    ///      Total primary-chunk consumption: 168 bits / 256 available.
+    ///        bits[224..255] fracRoundUp % 100      (_settleLootboxRoll ticket whole-collapse, per roll; uint32 window, bias ~2e-8)
+    ///      Primary-chunk consumption: bits[0..151] (draws) + bits[224..255] (round-up); bits[152..223] free.
     ///      The split second roll uses seed2 = EntropyLib.hash2(seed, 1) (counter-tagged chunk 1,
     ///      collision-free vs primary chunk 0) for BOTH its reward draw AND its own re-rolled
     ///      target level (seed2 bits[0..39], unused by chunk 1's reward draw).
@@ -1357,11 +1357,12 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
                     scaledTickets = uint32(uint256(scaledTickets) + bonus);
                 }
             }
-            // Collapse scaled tickets to whole via a single Bernoulli round-up on bits[152..167]
-            // of THIS roll's seed; `scaledTickets` stays at the scaled value for the event emit.
+            // Collapse scaled tickets to whole via a single Bernoulli round-up on bits[224..255]
+            // of THIS roll's seed — a uint32 window, negligible % TICKET_SCALE modulo bias (~2e-8);
+            // `scaledTickets` stays at the scaled value for the event emit.
             uint32 whole = scaledTickets / uint32(TICKET_SCALE);
             uint32 frac = scaledTickets % uint32(TICKET_SCALE);
-            if (frac != 0 && (uint16(rollSeed >> 152) % uint16(TICKET_SCALE)) < uint16(frac)) {
+            if (frac != 0 && (uint32(rollSeed >> 224) % uint32(TICKET_SCALE)) < frac) {
                 unchecked { whole += 1; }
                 roundedUp = true;
             }

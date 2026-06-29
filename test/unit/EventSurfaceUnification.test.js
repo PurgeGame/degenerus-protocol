@@ -579,13 +579,13 @@ describe("EventSurfaceUnification — Phase 277 Wave 2 TST-EVT-UNI-01..06", func
         declIdx,
         "_jackpotTicketRoll must declare `bool roundedUp = false;`"
       ).to.be.greaterThan(-1);
-      // The Bernoulli predicate uses bits[200..215] of the per-roll entropy word.
+      // The Bernoulli predicate uses bits[96..127] of the per-roll entropy word.
       const predIdx = body.indexOf(
-        "(uint16(entropy >> 200) % uint16(TICKET_SCALE)) < uint16(frac)"
+        "(uint32(entropy >> 96) % uint32(TICKET_SCALE)) < frac"
       );
       expect(
         predIdx,
-        "_jackpotTicketRoll Bernoulli predicate `(uint16(entropy >> 200) % uint16(TICKET_SCALE)) < uint16(frac)` missing"
+        "_jackpotTicketRoll Bernoulli predicate `(uint32(entropy >> 96) % uint32(TICKET_SCALE)) < frac` missing"
       ).to.be.greaterThan(declIdx);
       const setIdx = body.indexOf("roundedUp = true;");
       expect(
@@ -612,13 +612,13 @@ describe("EventSurfaceUnification — Phase 277 Wave 2 TST-EVT-UNI-01..06", func
       expect(emitArgs[6]).to.equal("roundedUp");
     });
 
-    it("[06d] all 3 JackpotTicketWin emit sites supply the 7th `roundedUp` arg; the two trait-matched sites pass literal `false`", function () {
+    it("[06d] all JackpotTicketWin emit sites supply the 7th `roundedUp` arg; the trait-matched site passes literal `false`", function () {
       const src = fs.readFileSync(JACKPOT_SOURCE_PATH, "utf8");
       const emitMatches = [...src.matchAll(/emit JackpotTicketWin\(/g)];
       expect(
         emitMatches.length,
-        "there must be exactly 3 JackpotTicketWin emit sites"
-      ).to.equal(3);
+        "there must be exactly 2 JackpotTicketWin emit sites"
+      ).to.equal(2);
       let literalFalseCount = 0;
       let threadedCount = 0;
       for (const m of emitMatches) {
@@ -637,10 +637,12 @@ describe("EventSurfaceUnification — Phase 277 Wave 2 TST-EVT-UNI-01..06", func
         if (args[6] === "false") literalFalseCount++;
         else if (args[6] === "roundedUp") threadedCount++;
       }
-      // Two trait-matched paths pass literal `false` (zero fractional part by
-      // construction); the BAF _jackpotTicketRoll path threads the real flag.
-      expect(literalFalseCount, "two trait-matched sites must pass `false`").to.equal(
-        2
+      // One trait-matched path (the shared distributor emit) passes literal `false`
+      // (zero fractional part by construction); the BAF _jackpotTicketRoll path threads
+      // the real flag. The early-bird path now routes through the shared distributor
+      // emit instead of its own JackpotTicketWin site.
+      expect(literalFalseCount, "one trait-matched site must pass `false`").to.equal(
+        1
       );
       expect(
         threadedCount,
@@ -651,16 +653,16 @@ describe("EventSurfaceUnification — Phase 277 Wave 2 TST-EVT-UNI-01..06", func
     it("[06e] the _jackpotTicketRoll Bernoulli predicate mirrors the LootboxModule capture pattern (byte-identical math, different entropy slice)", function () {
       const jackpot = fs.readFileSync(JACKPOT_SOURCE_PATH, "utf8");
       const lootbox = fs.readFileSync(LOOTBOX_SOURCE_PATH, "utf8");
-      // Lootbox path: bits[152..167]; Jackpot path: bits[200..215]. Both use the
-      // same `frac != 0 && (uint16(...) % uint16(TICKET_SCALE)) < uint16(frac)` shape.
+      // Lootbox path: bits[224..255]; Jackpot path: bits[96..127]. Both use the
+      // same `frac != 0 && (uint32(...) % uint32(TICKET_SCALE)) < frac` shape.
       expect(
-        /frac != 0 && \(uint16\(rollSeed >> 152\) % uint16\(TICKET_SCALE\)\) < uint16\(frac\)/.test(
+        /frac != 0 && \(uint32\(rollSeed >> 224\) % uint32\(TICKET_SCALE\)\) < frac/.test(
           lootbox
         ),
         "LootboxModule Bernoulli predicate shape drifted"
       ).to.equal(true);
       expect(
-        /frac != 0 && \(uint16\(entropy >> 200\) % uint16\(TICKET_SCALE\)\) < uint16\(frac\)/.test(
+        /frac != 0 && \(uint32\(entropy >> 96\) % uint32\(TICKET_SCALE\)\) < frac/.test(
           jackpot
         ),
         "JackpotModule Bernoulli predicate shape drifted from the LootboxModule pattern"

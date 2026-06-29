@@ -622,54 +622,30 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     }
 
     /// @dev Execute the early-bird lootbox jackpot from the unified future pool.
-    ///      100 winners (25 per bonus trait from the same 4-trait roll used by the
-    ///      coin jackpot). All tickets queued at `lvl` (= outer level + 1).
+    ///      Routes through the shared ticket distributor so the budget→ticket
+    ///      conversion (`_budgetToTicketUnits`, the same 4-entries-per-ticket basis
+    ///      every other jackpot path uses) and the winner cap match the daily and
+    ///      purchase-phase jackpots: `cap = min(ticketUnits, 100)` gives every drawn
+    ///      winner >=1 unit (replacing the fixed-100 split that floored sub-100-ticket
+    ///      budgets to zero), with the exact base+remainder rotation keeping the award
+    ///      fully backed. Winners drawn from `traitBurnTicket[lvl]`, tickets queued at
+    ///      `lvl` (= outer level + 1). The full 3% budget always moves future→next.
     function _runEarlyBirdLootboxJackpot(uint24 lvl, uint256 rngWord) private {
         (uint128 nextBal, uint128 futureBal) = _getPrizePools();
         uint256 totalBudget = (uint256(futureBal) * 300) / 10_000; // 3%
         if (totalBudget == 0) return;
 
-        uint256 ticketPrice = PriceLookupLib.priceForLevel(lvl);
-        uint32 ticketCount = ticketPrice != 0
-            ? uint32((totalBudget / 100) / ticketPrice)
-            : 0;
-
-        if (ticketCount != 0) {
-            uint8[4] memory bonusTraits = JackpotBucketLib.unpackWinningTraits(
-                _rollWinningTraits(rngWord, true)
+        uint256 ticketUnits = _budgetToTicketUnits(totalBudget, lvl);
+        if (ticketUnits != 0) {
+            _distributeTicketJackpot(
+                lvl,
+                lvl,
+                _rollWinningTraits(rngWord, true),
+                ticketUnits,
+                EntropyLib.hash2(rngWord, lvl),
+                LOOTBOX_MAX_WINNERS,
+                239
             );
-            address[][256] storage bucket = traitBurnTicket[lvl];
-
-            for (uint8 t; t < 4; ) {
-                uint8 traitId = bonusTraits[t];
-                (
-                    address[] memory winners,
-                    uint256[] memory ticketIndexes
-                ) = _randTraitTicket(bucket, rngWord, traitId, 25, t);
-                uint256 len = winners.length;
-                for (uint256 i; i < len; ) {
-                    address winner = winners[i];
-                    if (winner != address(0)) {
-                        _queueTickets(winner, lvl, ticketCount, true);
-                        // ticketCount carries the whole ticket count awarded.
-                        emit JackpotTicketWin(
-                            winner,
-                            lvl,
-                            traitId,
-                            ticketCount,
-                            lvl,
-                            ticketIndexes[i],
-                            false
-                        );
-                    }
-                    unchecked {
-                        ++i;
-                    }
-                }
-                unchecked {
-                    ++t;
-                }
-            }
         }
 
         // Single net move on the packed slot: future funds the budget,
@@ -2108,9 +2084,9 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
      *        bits[0..12]     path/level selection — `entropy % 100` range roll,
      *                        `(entropy / 100) % 4` near offset,
      *                        `(entropy / 100) % 46` far offset
-     *        bits[200..215]  jackpotTicketRoundUp % 100 — Bernoulli whole-ticket
-     *                        collapse sub-roll (relative bias < 0.10%)
-     *      The two consumption windows are separated by 180+ bits of the same
+     *        bits[96..127]   jackpotTicketRoundUp % 100 — Bernoulli whole-ticket
+     *                        collapse sub-roll (uint32 window, modulo bias ~2e-8)
+     *      The two consumption windows are separated by 80+ bits of the same
      *      256-bit keccak word, so the round-up sub-roll is statistically
      *      independent of the path/level selection.
      * @param winner Address to receive tickets.
@@ -2152,12 +2128,13 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
 
         // Bernoulli-collapse the scaled count to a whole-ticket count: the
         // fractional part rounds up with probability frac/TICKET_SCALE using
-        // bits[200..215] of the per-roll entropy word.
+        // bits[96..127] of the per-roll entropy word — a uint32 window, wide enough
+        // that the % TICKET_SCALE modulo bias is negligible (~2e-8).
         uint32 scaledTickets = uint32(quantityScaled);
         uint32 whole = scaledTickets / uint32(TICKET_SCALE);
         uint32 frac = scaledTickets % uint32(TICKET_SCALE);
         bool roundedUp = false;
-        if (frac != 0 && (uint16(entropy >> 200) % uint16(TICKET_SCALE)) < uint16(frac)) {
+        if (frac != 0 && (uint32(entropy >> 96) % uint32(TICKET_SCALE)) < frac) {
             unchecked {
                 whole += 1;
             }
@@ -2166,7 +2143,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         _queueTickets(winner, targetLevel, whole, true);
 
         // ticketCount is the whole ticket count queued above; roundedUp is true
-        // iff the bits[200..215] Bernoulli sub-roll incremented that count.
+        // iff the bits[96..127] Bernoulli sub-roll incremented that count.
         emit JackpotTicketWin(
             winner,
             targetLevel,

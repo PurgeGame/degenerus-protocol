@@ -3,11 +3,11 @@
 // JackpotTicketRollSeedUniqueness.test.js — Phase 276 Wave 2 TST-JPT-BR-03 + TST-JPT-BR-04
 //
 // Two independence properties of the jackpot ticket-roll Bernoulli slice
-// `bits[200..215]` consumed by `DegenerusGameJackpotModule._jackpotTicketRoll`
+// `bits[96..127]` consumed by `DegenerusGameJackpotModule._jackpotTicketRoll`
 // (Plan A, c473867e):
 //
 //   TST-JPT-BR-03 — bit-slice independence chi-square:
-//     The Bernoulli round-up reads `bits[200..215]` of the per-roll `entropy`
+//     The Bernoulli round-up reads `bits[96..127]` of the per-roll `entropy`
 //     word. The path/level selection in the SAME word reads `bits[0..12]`:
 //       - `entropy % 100`        — the 0..99 path roll (30%/65%/5% branch)
 //       - `(entropy / 100) % 4`  — the 65%-branch near level offset
@@ -16,7 +16,7 @@
 //     256-bit keccak-derived word. Per audit/FINDINGS-v39.0.md §4 (b),
 //     disjoint bit-slices of a keccak output word are pairwise independent —
 //     the 180+ bit gap makes correlation structurally impossible. This test
-//     empirically confirms: pairwise chi-square between the `bits[200..215]`
+//     empirically confirms: pairwise chi-square between the `bits[96..127]`
 //     slice and EACH of the three `bits[0..12]` consumers, ≥10K seeds, chi²
 //     below the critical value at α=0.05.
 //
@@ -24,8 +24,8 @@
 //     The medium-amount branch of `_awardJackpotTickets` (0.5-5 ETH) splits
 //     the amount in half and calls `_jackpotTicketRoll` TWICE (L2157 + L2166).
 //     `_jackpotTicketRoll` evolves `entropy` via `EntropyLib.hash2(entropy,
-//     entropy)` on entry. So roll 1 consumes `bits[200..215]` of
-//     `rollEvolve(E)` and roll 2 consumes `bits[200..215]` of
+//     entropy)` on entry. So roll 1 consumes `bits[96..127]` of
+//     `rollEvolve(E)` and roll 2 consumes `bits[96..127]` of
 //     `rollEvolve(rollEvolve(E))`. This test reproduces the
 //     `EntropyLib.hash2(entropy, entropy)` keccak self-mix in JS, spot-checks
 //     it against the on-chain `JackpotBernoulliTester` slice helper (drift
@@ -38,7 +38,7 @@
 // `_jackpotTicketRoll` entry self-mix `hash2(entropy, entropy)` is equivalent
 // to `solidityPackedKeccak256(["uint256","uint256"], [state, state])`. This
 // test replicates that keccak evolution in JS and drift-guards it against the
-// chain (the on-chain JackpotBernoulliTester.bernoulliRaw16 of the JS-evolved
+// chain (the on-chain JackpotBernoulliTester.bernoulliRaw32 of the JS-evolved
 // word must equal the JS-computed slice).
 //
 // Per CONTEXT.md `<deferred>` this uses the direct-call approach (the
@@ -50,7 +50,7 @@
 // tier; wired into the `test:stat` npm script). No test/jackpot/ directory.
 //
 // CROSS-CITES:
-//   - D-276-INLINE-01 (Bernoulli inlined in _jackpotTicketRoll; bits[200..215] slice)
+//   - D-276-INLINE-01 (Bernoulli inlined in _jackpotTicketRoll; bits[96..127] slice)
 //   - audit/FINDINGS-v39.0.md §4 (b) (disjoint keccak bit-slices are pairwise independent)
 //   - EntropyLib.hash2 (per-roll keccak self-mix evolution between the L2157/L2166 rolls)
 //   - test/stat/LootboxAutoResolveSeedUniqueness.test.js (Phase 275 chi-square precedent)
@@ -106,12 +106,12 @@ function rollEvolve(state) {
   );
 }
 
-// bits[200..215] slice == raw 16-bit window; %100 == the Bernoulli compare value.
-function rawSlice16(seed) {
-  return (BigInt(seed) >> 200n) & 0xffffn;
+// bits[96..127] slice == raw 32-bit window; %100 == the Bernoulli compare value.
+function rawSlice32(seed) {
+  return (BigInt(seed) >> 96n) & 0xffffffffn;
 }
 function modSlice(seed) {
-  return rawSlice16(seed) % TICKET_SCALE;
+  return rawSlice32(seed) % TICKET_SCALE;
 }
 
 // bits[0..12] consumers reproduced in JS — the path/level selection that
@@ -164,7 +164,7 @@ function contingencyChi2(aSamples, bSamples, aCard, bCard) {
 describe("JackpotTicketRollSeedUniqueness (stat-suite, heavy-MC) — TST-JPT-BR-03 bit-slice independence + TST-JPT-BR-04 2-roll uniqueness", function () {
   this.timeout(600_000);
 
-  describe("TST-JPT-BR-03 — bits[200..215] Bernoulli slice is independent of the bits[0..12] path/level consumers (FINDINGS-v39.0.md §4 (b))", function () {
+  describe("TST-JPT-BR-03 — bits[96..127] Bernoulli slice is independent of the bits[0..12] path/level consumers (FINDINGS-v39.0.md §4 (b))", function () {
     const N = 10_000;
 
     // The Bernoulli slice domain is %100 (0..99). The three bits[0..12]
@@ -176,7 +176,7 @@ describe("JackpotTicketRollSeedUniqueness (stat-suite, heavy-MC) — TST-JPT-BR-
     ];
 
     CONSUMERS.forEach(({ id, fn, card }) => {
-      it(`pairwise chi-square: bits[200..215] %100 vs ${id} — Wilson-Hilferty Z < 3.5 at N=${N}`, async function () {
+      it(`pairwise chi-square: bits[96..127] %100 vs ${id} — Wilson-Hilferty Z < 3.5 at N=${N}`, async function () {
         const tester = await deployTester();
         const rng = makeRng(
           "0x" +
@@ -217,7 +217,7 @@ describe("JackpotTicketRollSeedUniqueness (stat-suite, heavy-MC) — TST-JPT-BR-
         // dependence.
         expect(
           z < 3.5,
-          `bits[200..215] vs ${id}: chi²=${chi2.toFixed(
+          `bits[96..127] vs ${id}: chi²=${chi2.toFixed(
             3
           )} df=${df} → Z=${z.toFixed(3)} >= 3.5`
         ).to.equal(true);
@@ -225,7 +225,7 @@ describe("JackpotTicketRollSeedUniqueness (stat-suite, heavy-MC) — TST-JPT-BR-
     });
   });
 
-  describe("TST-JPT-BR-04 — 2-roll uniqueness: the two _jackpotTicketRoll calls in the medium-amount branch consume bits[200..215] of DISTINCT hash2-evolved words", function () {
+  describe("TST-JPT-BR-04 — 2-roll uniqueness: the two _jackpotTicketRoll calls in the medium-amount branch consume bits[96..127] of DISTINCT hash2-evolved words", function () {
     const N = 10_000;
 
     it(`EntropyLib.hash2(entropy, entropy) JS replica is byte-identical to the chain (drift guard, spot-checked)`, async function () {
@@ -237,18 +237,18 @@ describe("JackpotTicketRollSeedUniqueness (stat-suite, heavy-MC) — TST-JPT-BR-
             .padStart(64, "0")
       );
       // The chain has no hash2 passthrough; the drift guard instead confirms
-      // that the JS keccak self-mix's bits[200..215] slice, fed through the
-      // on-chain bernoulliRaw16, round-trips identically — i.e. the JS
+      // that the JS keccak self-mix's bits[96..127] slice, fed through the
+      // on-chain bernoulliRaw32, round-trips identically — i.e. the JS
       // rollEvolve + JS slice extraction agree with the on-chain slice
       // extraction on the JS-evolved word.
       for (let i = 0; i < 32; i++) {
         const base = rng();
         const e1 = rollEvolve(base);
-        const chainRaw = await tester.bernoulliRaw16(e1);
+        const chainRaw = await tester.bernoulliRaw32(e1);
         expect(
           BigInt(chainRaw),
           `js/chain slice drift on hash2-evolved word at i=${i}`
-        ).to.equal(rawSlice16(e1));
+        ).to.equal(rawSlice32(e1));
       }
     });
 
@@ -280,7 +280,7 @@ describe("JackpotTicketRollSeedUniqueness (stat-suite, heavy-MC) — TST-JPT-BR-
       const z = wilsonHilfertyZ(chi2, df);
       expect(
         z < 3.5,
-        `2-roll (roll1, roll2) bits[200..215] slices: chi²=${chi2.toFixed(
+        `2-roll (roll1, roll2) bits[96..127] slices: chi²=${chi2.toFixed(
           3
         )} df=${df} → Z=${z.toFixed(3)} >= 3.5`
       ).to.equal(true);

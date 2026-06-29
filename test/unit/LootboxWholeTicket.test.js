@@ -6,8 +6,8 @@
 // `DegenerusGameLootboxModule._resolveLootboxCommon` ticket-queue path inside the
 // `if (futureTickets != 0)` guard which:
 //   1. computes `whole = futureTickets / 100`, `frac = futureTickets % 100`
-//   2. consumes `bits[152..167]` of the per-resolution seed via
-//      `uint16(seed >> 152) % uint16(TICKET_SCALE) < uint16(frac)`
+//   2. consumes `bits[224..255]` of the per-resolution seed via
+//      `uint32(seed >> 224) % uint32(TICKET_SCALE) < frac`
 //   3. if the Bernoulli wins → `whole += 1`, `roundedUp = true`
 //   4. queues `whole` tickets via the unified `_queueTickets(player,
 //      targetLevel, whole, false)` call (which early-returns on `whole == 0`)
@@ -39,14 +39,14 @@
 //     precedent).
 //
 // CROSS-CITES:
-//   - D-274-BIT-SLICE-01 (post-c21f833a supersession: uint16 / bits[152..167])
+//   - D-274-BIT-SLICE-01 (post-c21f833a supersession: uint32 / bits[224..255])
 //   - D-274-NO-EVT-BREAK-01 (LootBoxOpened.futureTickets + TicketsQueuedScaled
 //     semantics UNCHANGED; FlipLootOpen removed in v47 — FLIP-lootbox surface
 //     deleted, terminal-paradox closure)
 //   - feedback_rng_backward_trace.md (slice consumed only on manual paths;
-//     auto-resolve never reads bits[152..167])
+//     auto-resolve never reads bits[224..255])
 //   - feedback_rng_commitment_window.md (no player-controllable input mutates
-//     between VRF commit and lootbox open that affects bits[152..167]
+//     between VRF commit and lootbox open that affects bits[224..255]
 //     independently)
 
 import { expect } from "chai";
@@ -109,8 +109,8 @@ function jsBernoulliWhole(scaledPre, seed) {
   const frac = scaled % TICKET_SCALE;
   let roundedUp = false;
   if (frac !== 0n) {
-    // uint16(seed >> 152) — keep low 16 bits after the shift
-    const sliceRaw = (BigInt(seed) >> 152n) & 0xffffn;
+    // uint32(seed >> 224) — keep low 32 bits after the shift
+    const sliceRaw = (BigInt(seed) >> 224n) & 0xffffffffn;
     const slice = sliceRaw % TICKET_SCALE;
     if (slice < frac) {
       whole = whole + 1n;
@@ -157,14 +157,14 @@ describe("LootboxWholeTicket — Phase 274 Wave 2 TST-WT-01..07", function () {
   this.timeout(180_000);
 
   describe("TST-WT-DRIFT — production source contains the canonical Bernoulli instruction sequence", function () {
-    it("contracts/modules/DegenerusGameLootboxModule.sol contains the exact uint16(seed >> 152) % uint16(TICKET_SCALE) Bernoulli pattern", function () {
+    it("contracts/modules/DegenerusGameLootboxModule.sol contains the exact uint32(rollSeed >> 224) % uint32(TICKET_SCALE) Bernoulli pattern", function () {
       const source = fs.readFileSync(MODULE_SOURCE_PATH, "utf8");
 
       // Ticket-queue-path Bernoulli gate. The pattern below is the load-bearing
       // drift detector — if production reformats this expression, the tester
       // contract above MUST be updated in lock-step.
       const bernoulliPattern =
-        /\(uint16\(rollSeed >> 152\)\s*%\s*uint16\(TICKET_SCALE\)\)\s*<\s*uint16\(frac\)/;
+        /\(uint32\(rollSeed >> 224\)\s*%\s*uint32\(TICKET_SCALE\)\)\s*<\s*frac/;
       expect(
         source.match(bernoulliPattern),
         "production Bernoulli pattern drifted from tester — update LootboxBernoulliTester.sol to match"
@@ -186,13 +186,13 @@ describe("LootboxWholeTicket — Phase 274 Wave 2 TST-WT-01..07", function () {
       // inside the `if (scaledTickets != 0)` guard — the
       // `index != type(uint48).max` sentinel gate is fully retired.
       // Structural invariants verified here:
-      //   (a) `rollSeed >> 152` appears exactly once (one source site; fires
+      //   (a) `rollSeed >> 224` appears exactly once (one source site; fires
       //       per-roll at runtime — a split box runs `_settleLootboxRoll` twice).
       //   (b) The Bernoulli slice sits INSIDE the outer
       //       `if (scaledTickets != 0)` guard (no slice consumption when
       //       `scaledTickets == 0`).
       //   (c) No `index != type(uint48).max` sentinel gate exists anywhere.
-      const sliceMatches = [...source.matchAll(/uint16\(rollSeed >> 152\)/g)];
+      const sliceMatches = [...source.matchAll(/uint32\(rollSeed >> 224\)/g)];
       expect(
         sliceMatches.length,
         "Bernoulli slice must appear exactly once (single source site, no duplication)"
@@ -301,7 +301,7 @@ describe("LootboxWholeTicket — Phase 274 Wave 2 TST-WT-01..07", function () {
       // code is GUARDED by `if (futureTickets != 0)` so it never executes when
       // scaledPre=0 — see TST-WT-04 / TST-WT-06(f) for the source-level proof.
       // Here we exercise the math primitive directly.
-      for (const seed of [0n, 1n, 1n << 152n, (1n << 160n) - 1n, 0xdeadbeefn]) {
+      for (const seed of [0n, 1n, 1n << 224n, (1n << 232n) - 1n, 0xdeadbeefn]) {
         const [whole, roundedUp] = await tester.bernoulliWhole(0, seed);
         expect(whole).to.equal(0n);
         expect(roundedUp).to.equal(false);
@@ -310,7 +310,7 @@ describe("LootboxWholeTicket — Phase 274 Wave 2 TST-WT-01..07", function () {
 
     it("scaledPre=100 deterministically yields whole=1, roundedUp=false (frac==0 short-circuits)", async function () {
       const tester = await deployTester();
-      for (const seed of [0n, 1n, (1n << 152n) | 99n, (1n << 200n) - 1n]) {
+      for (const seed of [0n, 1n, (1n << 224n) | 99n, (1n << 256n) - 1n]) {
         const [whole, roundedUp] = await tester.bernoulliWhole(100, seed);
         expect(whole).to.equal(1n);
         expect(roundedUp).to.equal(false);
@@ -319,7 +319,7 @@ describe("LootboxWholeTicket — Phase 274 Wave 2 TST-WT-01..07", function () {
 
     it("scaledPre=200 deterministically yields whole=2, roundedUp=false (frac==0 short-circuits)", async function () {
       const tester = await deployTester();
-      for (const seed of [0n, 1n, (1n << 153n), (1n << 167n) - 1n]) {
+      for (const seed of [0n, 1n, (1n << 225n), (1n << 239n) - 1n]) {
         const [whole, roundedUp] = await tester.bernoulliWhole(200, seed);
         expect(whole).to.equal(2n);
         expect(roundedUp).to.equal(false);
@@ -328,7 +328,7 @@ describe("LootboxWholeTicket — Phase 274 Wave 2 TST-WT-01..07", function () {
 
     it("scaledPre=1 with slice<1 (i.e. slice=0) yields whole=1, roundedUp=true", async function () {
       const tester = await deployTester();
-      // We need uint16(seed >> 152) % 100 < 1, i.e. == 0. Easiest seed: 0.
+      // We need uint32(seed >> 224) % 100 < 1, i.e. == 0. Easiest seed: 0.
       const seed = 0n;
       const slice = await tester.bernoulliSlice(seed);
       expect(slice).to.equal(0);
@@ -339,8 +339,8 @@ describe("LootboxWholeTicket — Phase 274 Wave 2 TST-WT-01..07", function () {
 
     it("scaledPre=1 with slice>=1 yields whole=0, roundedUp=false (consolation trigger)", async function () {
       const tester = await deployTester();
-      // Build seed so that uint16(seed >> 152) % 100 == 50 (well above frac=1).
-      const seed = BigInt(50) << 152n;
+      // Build seed so that uint32(seed >> 224) % 100 == 50 (well above frac=1).
+      const seed = BigInt(50) << 224n;
       const slice = await tester.bernoulliSlice(seed);
       expect(slice).to.equal(50);
       const [whole, roundedUp] = await tester.bernoulliWhole(1, seed);
@@ -350,8 +350,8 @@ describe("LootboxWholeTicket — Phase 274 Wave 2 TST-WT-01..07", function () {
 
     it("scaledPre=99 with slice<99 yields whole=1, roundedUp=true", async function () {
       const tester = await deployTester();
-      // Build seed so uint16(seed >> 152) % 100 == 50.
-      const seed = BigInt(50) << 152n;
+      // Build seed so uint32(seed >> 224) % 100 == 50.
+      const seed = BigInt(50) << 224n;
       const [whole, roundedUp] = await tester.bernoulliWhole(99, seed);
       expect(whole).to.equal(1n);
       expect(roundedUp).to.equal(true);
@@ -359,8 +359,8 @@ describe("LootboxWholeTicket — Phase 274 Wave 2 TST-WT-01..07", function () {
 
     it("scaledPre=99 with slice=99 yields whole=0, roundedUp=false (consolation trigger, edge case)", async function () {
       const tester = await deployTester();
-      // Build seed so uint16(seed >> 152) % 100 == 99.
-      const seed = BigInt(99) << 152n;
+      // Build seed so uint32(seed >> 224) % 100 == 99.
+      const seed = BigInt(99) << 224n;
       const slice = await tester.bernoulliSlice(seed);
       expect(slice).to.equal(99);
       const [whole, roundedUp] = await tester.bernoulliWhole(99, seed);
@@ -379,7 +379,7 @@ describe("LootboxWholeTicket — Phase 274 Wave 2 TST-WT-01..07", function () {
 
     it("scaledPre=101 with slice>=1 yields whole=1, roundedUp=false", async function () {
       const tester = await deployTester();
-      const seed = BigInt(50) << 152n;
+      const seed = BigInt(50) << 224n;
       const [whole, roundedUp] = await tester.bernoulliWhole(101, seed);
       expect(whole).to.equal(1n);
       expect(roundedUp).to.equal(false);
@@ -387,7 +387,7 @@ describe("LootboxWholeTicket — Phase 274 Wave 2 TST-WT-01..07", function () {
 
     it("scaledPre=199 with slice<99 yields whole=2, roundedUp=true", async function () {
       const tester = await deployTester();
-      const seed = BigInt(50) << 152n;
+      const seed = BigInt(50) << 224n;
       const [whole, roundedUp] = await tester.bernoulliWhole(199, seed);
       expect(whole).to.equal(2n);
       expect(roundedUp).to.equal(true);
@@ -395,22 +395,22 @@ describe("LootboxWholeTicket — Phase 274 Wave 2 TST-WT-01..07", function () {
 
     it("scaledPre=199 with slice=99 yields whole=1, roundedUp=false", async function () {
       const tester = await deployTester();
-      const seed = BigInt(99) << 152n;
+      const seed = BigInt(99) << 224n;
       const [whole, roundedUp] = await tester.bernoulliWhole(199, seed);
       expect(whole).to.equal(1n);
       expect(roundedUp).to.equal(false);
     });
   });
 
-  describe("TST-WT-03 — bits[152..167] independence + unified-path gating", function () {
-    it("[03-static] bits[152..167] is consumed exactly once inside the outer `if (scaledTickets != 0)` guard (per-roll settle path)", function () {
+  describe("TST-WT-03 — bits[224..255] independence + unified-path gating", function () {
+    it("[03-static] bits[224..255] is consumed exactly once inside the outer `if (scaledTickets != 0)` guard (per-roll settle path)", function () {
       const source = fs.readFileSync(MODULE_SOURCE_PATH, "utf8");
-      // Locate the unique reference to `rollSeed >> 152` and assert: (a) it appears
+      // Locate the unique reference to `rollSeed >> 224` and assert: (a) it appears
       // exactly once (one source site; fires per-roll at runtime), (b) it sits
       // inside the outer `if (scaledTickets != 0)` guard, (c) no
       // `index != type(uint48).max` sentinel gate exists (sentinel retirement).
-      const matches = [...source.matchAll(/rollSeed >> 152/g)];
-      expect(matches.length, "bits[152..167] should appear at exactly one source site").to.equal(1);
+      const matches = [...source.matchAll(/rollSeed >> 224/g)];
+      expect(matches.length, "bits[224..255] should appear at exactly one source site").to.equal(1);
       const idx = matches[0].index;
       const preamble = source.slice(0, idx);
       // Outer guard `if (scaledTickets != 0)` must precede the slice.
@@ -425,7 +425,7 @@ describe("LootboxWholeTicket — Phase 274 Wave 2 TST-WT-01..07", function () {
       ).to.equal(false);
     });
 
-    it("[03-static] the per-roll ticket-queue path consumes `rollSeed >> 152` exactly once — single source site", function () {
+    it("[03-static] the per-roll ticket-queue path consumes `rollSeed >> 224` exactly once — single source site", function () {
       const source = fs.readFileSync(MODULE_SOURCE_PATH, "utf8");
       // The `_queueTickets(player, rollLevel, whole, false)` call is a single
       // source site inside `_settleLootboxRoll` (invoked once per roll), so the
@@ -439,14 +439,14 @@ describe("LootboxWholeTicket — Phase 274 Wave 2 TST-WT-01..07", function () {
         "the per-roll ticket-queue path must call `_queueTickets(player, rollLevel, whole, false)` at exactly one source site"
       ).to.equal(1);
       // The slice itself appears at exactly one source site.
-      const sliceMatches = (source.match(/rollSeed >> 152/g) || []).length;
+      const sliceMatches = (source.match(/rollSeed >> 224/g) || []).length;
       expect(
         sliceMatches,
-        "bits[152..167] must appear at exactly one source site"
+        "bits[224..255] must appear at exactly one source site"
       ).to.equal(1);
       // And the queue call sits after the slice (collapse precedes the queue).
       const callIdx = source.indexOf(callLine);
-      const sliceIdx = source.indexOf("rollSeed >> 152");
+      const sliceIdx = source.indexOf("rollSeed >> 224");
       expect(callIdx, "_queueTickets callsite not found").to.be.greaterThan(-1);
       expect(
         callIdx,
@@ -454,7 +454,7 @@ describe("LootboxWholeTicket — Phase 274 Wave 2 TST-WT-01..07", function () {
       ).to.be.greaterThan(sliceIdx);
     });
 
-    it("[03-chi2] uint16(seed >> 152) % 100 chi² across 10K seeds: uniform mod-100 distribution (df=99)", async function () {
+    it("[03-chi2] uint32(seed >> 224) % 100 chi² across 10K seeds: uniform mod-100 distribution (df=99)", async function () {
       const N = 10_000;
       const tester = await deployTester();
       const rng = makeRng("0x" + "c0274003".padStart(64, "0"));
@@ -463,7 +463,7 @@ describe("LootboxWholeTicket — Phase 274 Wave 2 TST-WT-01..07", function () {
       // Replica-vs-chain spot check at every 200th sample.
       for (let i = 0; i < N; i++) {
         const seed = rng();
-        const jsSlice = Number(((seed >> 152n) & 0xffffn) % 100n);
+        const jsSlice = Number(((seed >> 224n) & 0xffffffffn) % 100n);
         buckets[jsSlice] += 1;
         if (i % 200 === 0) {
           const chainSlice = await tester.bernoulliSlice(seed);
@@ -474,19 +474,14 @@ describe("LootboxWholeTicket — Phase 274 Wave 2 TST-WT-01..07", function () {
       expect(chainVerifyCount, "chain spot-check coverage").to.be.gte(50);
 
       // Expected per-bucket count under H0 (uniform-mod-100): N/100 = 100.
-      // BUT — note that uint16 % 100 is slightly non-uniform: uint16 range
-      // is 0..65535, 65536 / 100 = 655.36, so the first 36 residues have
-      // ceil(655.36) = 656 source values and the rest have 655. Relative
-      // bias is (656-655)/655.36 ≈ 0.10% per bucket — within the
-      // 0.10% bias budget per D-274-BIT-SLICE-01.
-      // For the chi² test we use the exact theoretical probabilities, not
-      // uniform 1/100, so this is a clean fit check.
-      const lowBucketProb = 656 / 65536; // residues 0..35
-      const highBucketProb = 655 / 65536; // residues 36..99
+      // A uint32 window (0..2^32-1) carries 2^32 / 100 = 42,949,672.96 source
+      // values per residue; the first 96 residues hold one extra source value,
+      // so the relative bias is ~1/4.29e7 ≈ 2e-8 per bucket — negligible. The
+      // chi² fit therefore uses a flat uniform 1/100 expectation for every
+      // residue.
+      const expected = N / 100;
       let chi2 = 0;
       for (let b = 0; b < 100; b++) {
-        const p = b < 36 ? lowBucketProb : highBucketProb;
-        const expected = N * p;
         const diff = buckets[b] - expected;
         chi2 += (diff * diff) / expected;
       }
@@ -498,7 +493,7 @@ describe("LootboxWholeTicket — Phase 274 Wave 2 TST-WT-01..07", function () {
       ).to.equal(true);
     });
 
-    it("[03-indep] bits[152..167] pairwise-independent from bits[0..15] (rangeRoll slice) at chi² df=99", async function () {
+    it("[03-indep] bits[224..255] pairwise-independent from bits[0..15] (rangeRoll slice) at chi² df=99", async function () {
       const N = 10_000;
       const tester = await deployTester();
       const rng = makeRng("0x" + "c0274004".padStart(64, "0"));
@@ -512,7 +507,7 @@ describe("LootboxWholeTicket — Phase 274 Wave 2 TST-WT-01..07", function () {
       let sumR = 0n;
       for (let i = 0; i < N; i++) {
         const seed = rng();
-        const sliceB = (seed >> 152n) & 0xffffn;
+        const sliceB = (seed >> 224n) & 0xffffffffn;
         const sliceR = seed & 0xffffn;
         const valB = sliceB % 100n;
         const valR = sliceR % 100n;

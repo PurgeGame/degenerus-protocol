@@ -8,7 +8,7 @@
 // `DegenerusGameJackpotModule._jackpotTicketRoll`: the scaled ticket count
 // `quantityScaled` is collapsed to a whole-ticket count `whole`, with the
 // fractional part `frac` rounding up with probability `frac/TICKET_SCALE`
-// using bits[200..215] of the per-roll `entropy` word. EV-neutrality is the
+// using bits[96..127] of the per-roll `entropy` word. EV-neutrality is the
 // identity `E[whole] * TICKET_SCALE == scaledTickets` — carried verbatim from
 // FINDINGS-v39.0.md §4 (a) (the lootbox whole-ticket EV-neutrality identity);
 // the jackpot inline Bernoulli is the same Bernoulli(frac/100) round-up, so
@@ -17,7 +17,7 @@
 // EV-neutrality via `JackpotBernoulliTester.bernoulliWhole` direct-call is
 // justified by D-276-INLINE-01: the inline Bernoulli math in `_jackpotTicketRoll`
 // is byte-arithmetically identical to the tester (the tester substitutes `seed`
-// for the production `entropy` local; the predicate and the `>> 200` slice
+// for the production `entropy` local; the predicate and the `>> 96` slice
 // offset are otherwise identical). That byte-identity is enforced by the
 // tester-vs-source drift gate in this same file (T-276B-01 mitigation):
 // if production drifts from the tester, the drift gate fails BEFORE the stat
@@ -44,7 +44,7 @@
 //     EntropyLib.hash2(entropy, entropy) on _jackpotTicketRoll entry — unknown
 //     to the winner at jackpot-resolution VRF-commitment time)
 //   - feedback_rng_commitment_window.md (the winner cannot mutate the per-roll
-//     entropy once _jackpotTicketRoll is entered — bits[200..215] is derived
+//     entropy once _jackpotTicketRoll is entered — bits[96..127] is derived
 //     from the already-evolved word)
 
 import { expect } from "chai";
@@ -82,7 +82,7 @@ function makeRng(seedHex) {
 }
 
 // JS replica of the jackpot inline Bernoulli math (mirrors the v40 _jackpotTicketRoll
-// instruction sequence — slice offset >> 200). Drift caught by the source-vs-tester
+// instruction sequence — slice offset >> 96). Drift caught by the source-vs-tester
 // gate below + the per-loop js/chain spot-check.
 function jsBernoulliWhole(scaledTickets, seed) {
   const scaled = BigInt(scaledTickets);
@@ -90,7 +90,7 @@ function jsBernoulliWhole(scaledTickets, seed) {
   const frac = scaled % TICKET_SCALE;
   let roundedUp = false;
   if (frac !== 0n) {
-    const sliceRaw = (BigInt(seed) >> 200n) & 0xffffn;
+    const sliceRaw = (BigInt(seed) >> 96n) & 0xffffffffn;
     const slice = sliceRaw % TICKET_SCALE;
     if (slice < frac) {
       whole += 1n;
@@ -107,14 +107,14 @@ describe("JackpotTicketRollBernoulliEv (stat-suite, heavy-MC) — TST-JPT-BR-01 
   // production inline predicate drifts from the JackpotBernoulliTester
   // passthrough, this fails BEFORE any stat test runs.
   describe("Tester-vs-source drift gate — JackpotBernoulliTester.bernoulliWhole is byte-arithmetically identical to the _jackpotTicketRoll inline Bernoulli (T-276B-01)", function () {
-    it("[00a] production `_jackpotTicketRoll` contains the canonical inline Bernoulli predicate `(uint16(entropy >> 200) % uint16(TICKET_SCALE)) < uint16(frac)` verbatim", function () {
+    it("[00a] production `_jackpotTicketRoll` contains the canonical inline Bernoulli predicate `(uint32(entropy >> 96) % uint32(TICKET_SCALE)) < frac` verbatim", function () {
       // Drift gate reads production source: fs.readFileSync DegenerusGameJackpotModule.sol
       const source = fs.readFileSync(MODULE_SOURCE_PATH, "utf8");
       expect(
-        /\(uint16\(entropy\s*>>\s*200\)\s*%\s*uint16\(TICKET_SCALE\)\)\s*<\s*uint16\(frac\)/.test(
+        /\(uint32\(entropy\s*>>\s*96\)\s*%\s*uint32\(TICKET_SCALE\)\)\s*<\s*frac/.test(
           source
         ),
-        "production _jackpotTicketRoll must contain `(uint16(entropy >> 200) % uint16(TICKET_SCALE)) < uint16(frac)` — the canonical bits[200..215] Bernoulli predicate"
+        "production _jackpotTicketRoll must contain `(uint32(entropy >> 96) % uint32(TICKET_SCALE)) < frac` — the canonical bits[96..127] Bernoulli predicate"
       ).to.equal(true);
       // The scaled→whole→frac decomposition must also be present verbatim.
       expect(
@@ -131,18 +131,18 @@ describe("JackpotTicketRollBernoulliEv (stat-suite, heavy-MC) — TST-JPT-BR-01 
       ).to.equal(true);
     });
 
-    it("[00b] `JackpotBernoulliTester` uses the SAME predicate with `seed` substituted for `entropy` (slice offset >> 200, NOT >> 152)", function () {
+    it("[00b] `JackpotBernoulliTester` uses the SAME predicate with `seed` substituted for `entropy` (slice offset >> 96, NOT >> 224)", function () {
       const tester = fs.readFileSync(TESTER_SOURCE_PATH, "utf8");
       expect(
-        /\(uint16\(seed\s*>>\s*200\)\s*%\s*uint16\(TICKET_SCALE\)\)\s*<\s*uint16\(frac\)/.test(
+        /\(uint32\(seed\s*>>\s*96\)\s*%\s*uint32\(TICKET_SCALE\)\)\s*<\s*frac/.test(
           tester
         ),
-        "JackpotBernoulliTester must use `(uint16(seed >> 200) % uint16(TICKET_SCALE)) < uint16(frac)` — the inline predicate with `seed` substituted for `entropy`"
+        "JackpotBernoulliTester must use `(uint32(seed >> 96) % uint32(TICKET_SCALE)) < frac` — the inline predicate with `seed` substituted for `entropy`"
       ).to.equal(true);
-      // It must NOT carry the lootbox >> 152 slice copied from the analog.
+      // It must NOT carry the lootbox >> 224 slice copied from the analog.
       expect(
-        tester.includes("seed >> 152"),
-        "JackpotBernoulliTester must NOT use the lootbox bits[152..167] slice (>> 152) — the jackpot surface reads bits[200..215] (>> 200)"
+        tester.includes("seed >> 224"),
+        "JackpotBernoulliTester must NOT use the lootbox bits[224..255] slice (>> 224) — the jackpot surface reads bits[96..127] (>> 96)"
       ).to.equal(false);
       // Same scaled→whole→frac decomposition.
       expect(

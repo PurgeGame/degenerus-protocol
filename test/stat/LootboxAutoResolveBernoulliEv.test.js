@@ -58,7 +58,7 @@ function jsBernoulliWhole(scaledPre, seed) {
   const frac = scaled % TICKET_SCALE;
   let roundedUp = false;
   if (frac !== 0n) {
-    const sliceRaw = (BigInt(seed) >> 152n) & 0xffffn;
+    const sliceRaw = (BigInt(seed) >> 224n) & 0xffffffffn;
     const slice = sliceRaw % TICKET_SCALE;
     if (slice < frac) {
       whole += 1n;
