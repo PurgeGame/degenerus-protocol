@@ -23,7 +23,7 @@
 5. ONE batched `.sol` diff presented and approved before commit.
 
 **Plans:** 2 plans
-- [ ] 479-01-PLAN.md — `wholeTicketsToEntries` helper + both queue-site value fixes + Jackpot emit==queue + convention NatSpec (ONE batched `.sol` diff, gated)
+- [x] 479-01-PLAN.md — `wholeTicketsToEntries` helper + both queue-site value fixes + Jackpot emit==queue + convention NatSpec (ONE batched `.sol` diff, gated) — committed `b2ab3e9f`
 - [ ] 479-02-PLAN.md — deterministic forge regression (FIX-04) + `CrossSurfaceTicketMixing` reconciliation + emit==queue (FIX-05)
 
 ## Phase 480: RENAME-SWEEP (GATED contract diff #2 — no behavior change)
