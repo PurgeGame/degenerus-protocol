@@ -517,8 +517,10 @@ abstract contract DegenerusGameStorage {
     ///      This allows lootbox tickets to participate in early-bird jackpots at jackpot phase start.
     mapping(uint24 => address[]) internal ticketQueue;
 
-    /// @dev Packed owed tickets per level per player.
+    /// @dev Packed owed entries per level per player.
     ///      Layout: [32 bits owed][8 bits remainder].
+    ///      `owed` is denominated in ENTRIES (price/4 units; 1 entry = 1 minted NFT),
+    ///      NOT whole tickets — 4 entries make one whole ticket (priceForLevel(level)).
     mapping(uint24 => mapping(address => uint40)) internal ticketsOwedPacked;
 
     /// @dev Cursor for ticket queue processing (dual-purpose).
@@ -628,12 +630,14 @@ abstract contract DegenerusGameStorage {
         return currentDay >= psd + 120;
     }
 
-    /// @dev Queues whole tickets for a buyer at a target level.
-    ///      If buyer has no existing tickets at that level, adds them to the queue.
+    /// @dev Queues entries for a buyer at a target level. `quantity` is in entries
+    ///      (price/4 units; 1 entry = 1 minted NFT), NOT whole tickets — 4 entries per
+    ///      whole ticket. `owed` accumulates entries.
+    ///      If buyer has no existing entries at that level, adds them to the queue.
     ///      Caps at uint32 max to prevent overflow.
-    /// @param buyer Address to receive tickets.
-    /// @param targetLevel Level for which tickets are queued.
-    /// @param quantity Number of tickets to queue.
+    /// @param buyer Address to receive entries.
+    /// @param targetLevel Level for which entries are queued.
+    /// @param quantity Number of entries to queue (price/4 units).
     function _queueTickets(
         address buyer,
         uint24 targetLevel,
@@ -665,11 +669,24 @@ abstract contract DegenerusGameStorage {
         ticketsOwedPacked[wk][buyer] = (uint40(owed) << 8) | uint40(rem);
     }
 
-    /// @dev Queues scaled tickets (with 2 decimal places) for fractional ticket purchases.
-    ///      Handles remainder accumulation and promotes to whole tickets when remainder >= TICKET_SCALE.
-    /// @param buyer Address to receive tickets.
-    /// @param targetLevel Level for which tickets are queued.
-    /// @param quantityScaled Scaled ticket amount (multiply by 100 for whole tickets).
+    /// @dev Converts a post-Bernoulli whole-ticket count into the entries unit the
+    ///      ticketsOwedPacked sink accumulates. One whole ticket (priceForLevel(level))
+    ///      is 4 entries (each price/4 = 1 minted NFT), so entries = wholeTickets << 2.
+    ///      The sole canonical whole->entries conversion both prize legs route through.
+    ///      `wholeTickets` is provably <= ~42.9M (scaledTickets/100, uint32-capped), so
+    ///      `<< 2` <= ~171.8M fits uint32 (4.29e9) with a 25x margin — no overflow guard.
+    /// @param wholeTickets Whole-ticket count (each = priceForLevel(level)).
+    /// @return Entries count (each = price/4 = 1 minted NFT); 4 per whole ticket.
+    function wholeTicketsToEntries(uint32 wholeTickets) internal pure returns (uint32) {
+        return wholeTickets << 2;
+    }
+
+    /// @dev Queues scaled entries (2 decimal places) for fractional purchases.
+    ///      Handles remainder accumulation and promotes to a whole owed entry when
+    ///      remainder >= TICKET_SCALE.
+    /// @param buyer Address to receive entries.
+    /// @param targetLevel Level for which entries are queued.
+    /// @param quantityScaled Scaled entries (entries x 100); owed gains quantityScaled / TICKET_SCALE entries.
     function _queueTicketsScaled(
         address buyer,
         uint24 targetLevel,

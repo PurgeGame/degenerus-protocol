@@ -886,7 +886,8 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
             }
             if (winner != address(0) && units != 0) {
                 _queueTickets(winner, queueLvl, uint32(units), true);
-                // ticketCount carries the whole ticket count awarded.
+                // ticketCount carries the entries count awarded (price/4 units;
+                // _budgetToTicketUnits already returns entries).
                 emit JackpotTicketWin(
                     winner,
                     queueLvl,
@@ -2140,15 +2141,16 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
             }
             roundedUp = true;
         }
-        _queueTickets(winner, targetLevel, whole, true);
+        _queueTickets(winner, targetLevel, wholeTicketsToEntries(whole), true);
 
-        // ticketCount is the whole ticket count queued above; roundedUp is true
-        // iff the bits[96..127] Bernoulli sub-roll incremented that count.
+        // ticketCount is the entries count (whole<<2, 4 per whole ticket) queued above;
+        // roundedUp is true iff the bits[96..127] Bernoulli sub-roll incremented the
+        // underlying whole-ticket count.
         emit JackpotTicketWin(
             winner,
             targetLevel,
             BAF_TRAIT_SENTINEL,
-            whole,
+            wholeTicketsToEntries(whole),
             minTargetLevel,
             0,
             roundedUp
