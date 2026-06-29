@@ -589,7 +589,6 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
             currentLevel,
             seed,
             true,
-            true,
             distressEth,
             amount,
             true,
@@ -866,8 +865,9 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
 
     /// @notice Resolve a lootbox directly for decimator/degenerette wins (no RNG wait needed)
     /// @dev Rolls full boons + passes via the common resolver (passes still gated by real
-    ///      game-state: lazyPassValue != 0 / deity eligibility). No event emit and no
-    ///      cold-bust consolation on this auto-resolve path.
+    ///      game-state: lazyPassValue != 0 / deity eligibility). Emits the per-box
+    ///      `LootBoxOpened` summary like every box path; no cold-bust consolation on this
+    ///      auto-resolve path.
     /// @param player Player address to resolve for
     /// @param amount ETH amount for the lootbox resolution
     /// @param rngWord RNG word to use for resolution
@@ -877,7 +877,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     // payable: reachable from the payable redemption path via an ETH-spin's recirc
     // (`resolveEthSpinFromBox` -> `_resolveLootboxDirect`); delegatecall preserves the
     // in-flight msg.value, so a non-payable callvalue guard here would revert the claim.
-    function resolveLootboxDirect(address player, uint256 amount, uint256 rngWord, uint16 activityScore, bool emitLootboxEvent) external payable {
+    function resolveLootboxDirect(address player, uint256 amount, uint256 rngWord, uint16 activityScore) external payable {
         // Delegatecall-only: address(this) == GAME under the nested dispatch. A direct call on the
         // deployed module would trap the in-flight msg.value (the amount==0 early-return path).
         if (address(this) != ContractAddresses.GAME) revert OnlyDelegatecall();
@@ -897,8 +897,8 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
 
         // allowEthSpin=false: this is the recirc entry, called inside resolveDegeneretteBets' deferred
         // ETH-pool flush window — an ETH-spin RMW here would be clobbered by that flush. Roll
-        // 19 awards tickets instead. emitLootboxEvent threads from the caller (true for the box
-        // ETH-spin recirc so its contents are itemized; false for the bet-win / decimator recirc).
+        // 19 awards tickets instead. Every box itemizes its contents, so this path emits the
+        // `LootBoxOpened` summary unconditionally (gated only by the spin suppression downstream).
         _resolveLootboxCommon(
             player,
             0,
@@ -906,7 +906,6 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
             targetLevel,
             currentLevel,
             seed,
-            emitLootboxEvent,
             false,
             0,
             0,
@@ -982,6 +981,10 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         uint256 evMultiplierBps = _lootboxEvMultiplierFromScore(uint256(activityScore));
         uint256 scaledAmount = _applyEvMultiplierWithCap(player, currentLevel, amount, evMultiplierBps);
 
+        // Each chunk emits its own itemized LootBoxOpened so the per-chunk FLIP datum (otherwise
+        // lost in the commingled creditFlip) is recoverable — every box, including a redemption
+        // chunk, leaves exactly one settlement event. payColdBustConsolation stays false (no WWXRP
+        // on a redemption cold-bust).
         // allowEthSpin=true: redemption credits the pool to storage before this loop, so each
         // chunk's ETH-spin reads/writes fresh storage — no deferred memory-accumulator to race.
         _resolveLootboxCommon(
@@ -991,7 +994,6 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
             targetLevel,
             currentLevel,
             seed,
-            false,
             false,
             0,
             0,
@@ -1057,8 +1059,8 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     ///      boons-off rule governs the AMOUNT field, not the roll.
     ///
     ///      Tail flags match the HUMAN box open (`_openLootBoxLeg`) for outcome parity (an afking box must be
-    ///      identical to a normal box in every way that matters): `emitLootboxEvent = true`
-    ///      (emits `LootBoxOpened` like any box open) and `payColdBustConsolation = true` (a
+    ///      identical to a normal box in every way that matters): it emits the `LootBoxOpened`
+    ///      summary like any box open, and `payColdBustConsolation = true` (a
     ///      bust pays the same WWXRP consolation a human box does). The ONE intentional
     ///      exception is the distress bonus — `distressEth = 0` / `totalPackedEth = 0`: the
     ///      human value is frozen at buy in the packed lootboxEth distress field, which the
@@ -1109,7 +1111,6 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
             targetLevel,
             currentLevel,
             seed,
-            true,
             true,
             0,
             0,
@@ -1235,11 +1236,9 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     ///      target level (seed2 bits[0..39], unused by chunk 1's reward draw).
     ///      The Degenerette-spin rolls (WWXRP / FLIP-spins / ETH-spin) derive their sub-seeds
     ///      via hash2(seed, BOX_*_SPIN_TAG) — fresh tagged chunks that consume no primary bits.
-    /// @param emitLootboxEvent Whether to emit the `LootBoxOpened` event; `true` for
-    ///        `_openLootBoxLeg`, `false` for both auto-resolve callers
     /// @param payColdBustConsolation Whether a ticket-path cold-bust (`whole == 0`) pays
-    ///        the `LOOTBOX_WWXRP_CONSOLATION`; `true` for the manual caller `_openLootBoxLeg`,
-    ///        `false` for the auto-resolve callers (`resolveLootboxDirect`,
+    ///        the `LOOTBOX_WWXRP_CONSOLATION`; `true` for the manual caller `_openLootBoxLeg`
+    ///        and `resolveAfkingBox`, `false` for the auto-resolve callers (`resolveLootboxDirect`,
     ///        `resolveRedemptionLootbox`), which stay silent on cold-bust
     /// @param distressEth Portion of lootbox ETH bought during distress mode (pre-EV-scaling basis)
     /// @param totalPackedEth Total packed lootbox ETH (pre-EV-scaling basis, denominator for distress fraction)
@@ -1257,7 +1256,6 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         uint24 targetLevel,
         uint24 currentLevel,
         uint256 seed,
-        bool emitLootboxEvent,
         bool payColdBustConsolation,
         uint256 distressEth,
         uint256 totalPackedEth,
@@ -1295,7 +1293,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         // the ticket budget up.
         _settleLootboxRoll(
             player, index, amountFirst, amount, targetLevel, seed,
-            emitLootboxEvent, payColdBustConsolation, distressEth, totalPackedEth,
+            payColdBustConsolation, distressEth, totalPackedEth,
             targetLevel >= currentLevel + 5, activityScore, allowEthSpin
         );
 
@@ -1307,7 +1305,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
             uint24 level2 = _rollTargetLevel(currentLevel, seed2);
             _settleLootboxRoll(
                 player, index, amountSecond, amount, level2, seed2,
-                emitLootboxEvent, payColdBustConsolation, distressEth, totalPackedEth,
+                payColdBustConsolation, distressEth, totalPackedEth,
                 level2 >= currentLevel + 5, activityScore, allowEthSpin
             );
         }
@@ -1331,7 +1329,6 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         uint256 fullAmount,
         uint24 rollLevel,
         uint256 rollSeed,
-        bool emitLootboxEvent,
         bool payColdBustConsolation,
         uint256 distressEth,
         uint256 totalPackedEth,
@@ -1380,10 +1377,10 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
             coinflip.creditFlip(player, flipAmount);
         }
 
-        // Spin rolls (WWXRP / FLIP-spins / ETH-spin) are recorded by their own single BoxSpin
-        // event from the Degenerette module, so the (all-zero) LootBoxOpened is suppressed for them
-        // — every box roll emits exactly one settlement event.
-        if (emitLootboxEvent && !wasSpin) {
+        // Every box roll emits exactly one settlement event. Spin rolls (WWXRP / FLIP-spins /
+        // ETH-spin) are recorded by their own single BoxSpin event from the Degenerette module, so
+        // the (all-zero) LootBoxOpened is suppressed for them; every other roll emits LootBoxOpened.
+        if (!wasSpin) {
             emit LootBoxOpened(
                 player,
                 index,

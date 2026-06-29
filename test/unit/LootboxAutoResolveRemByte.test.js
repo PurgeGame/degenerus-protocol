@@ -145,8 +145,8 @@ describe("LootboxAutoResolveRemByte — Phase 275 Wave 2 TST-LBX-AR-05", functio
       // The pre-refactor manual-first / auto-second branch-ordering invariant is
       // retired: there are no longer two arms. The equivalent structural anchor
       // is that the sole whole-ticket queue call sits inside `_settleLootboxRoll`,
-      // which both the manual (emitLootboxEvent/payColdBustConsolation = true) and
-      // auto-resolve (both false) paths invoke via `_resolveLootboxCommon`.
+      // which both the manual (payColdBustConsolation = true) and auto-resolve
+      // (payColdBustConsolation = false) paths invoke via `_resolveLootboxCommon`.
       const settleBody = extractBody(source, "function _settleLootboxRoll(");
       expect(settleBody, "`_settleLootboxRoll` body not found").to.not.equal(null);
       expect(

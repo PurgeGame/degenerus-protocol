@@ -667,7 +667,9 @@ contract DegenerusGameDecimatorModule is DegenerusGamePayoutUtils {
             if (remainder < 0.01 ether) return;
             amount = remainder;
         }
-        // Resolve lootbox via delegatecall to open module
+        // Resolve lootbox via delegatecall to open module. The decimator recirc box itemizes its
+        // contents via LootBoxOpened (per-box FLIP otherwise lost in creditFlip) so every box
+        // leaves exactly one settlement event.
         (bool ok, bytes memory data) = ContractAddresses
             .GAME_LOOTBOX_MODULE
             .delegatecall(
@@ -676,8 +678,7 @@ contract DegenerusGameDecimatorModule is DegenerusGamePayoutUtils {
                     winner,
                     amount,
                     rngWord,
-                    evScore,
-                    false
+                    evScore
                 )
             );
         if (!ok) _revertDelegate(data);

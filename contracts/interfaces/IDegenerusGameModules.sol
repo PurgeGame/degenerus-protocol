@@ -337,8 +337,7 @@ interface IDegenerusGameLootboxModule {
         address player,
         uint256 amount,
         uint256 rngWord,
-        uint16 activityScore,
-        bool emitLootboxEvent
+        uint16 activityScore
     ) external payable;
 
     /// @notice Resolves an sDGNRS redemption's full lootbox leg (auth, funding-mix pull, pool

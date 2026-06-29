@@ -10,12 +10,14 @@
 //     4cb9ccbf "lootbox event day cleanup" — now 7 args, 2 indexed). FlipLootOpen
 //     is REMOVED in v47 (FLIP-lootbox surface deleted — terminal-paradox closure).
 //   - The `index != type(uint48).max` behavior-gating sentinel in
-//     _resolveLootboxCommon is retired; auto-resolve callers pass index=0,
-//     emitLootboxEvent=false, and payColdBustConsolation=false; the unified
-//     ticket-queue path is unconditional.
+//     _resolveLootboxCommon is retired; auto-resolve callers pass index=0 and
+//     payColdBustConsolation=false; the unified ticket-queue path is unconditional.
+//   - The `emitLootboxEvent` silencing flag is removed: every box path now emits
+//     the per-box LootBoxOpened summary, gated only by !wasSpin (spin rolls emit a
+//     single BoxSpin instead). _resolveLootboxCommon takes 12 positional args.
 //   - The manual cold-bust WWXRP consolation sits under the dedicated
-//     `payColdBustConsolation` gate (true for both manual callers, false for
-//     the auto-resolve callers); auto-resolve emits no LootBoxOpened.
+//     `payColdBustConsolation` gate (true for the manual + afking opens, false for
+//     the auto-resolve callers — they never pay the cold-bust consolation).
 //   - JackpotTicketWin.roundedUp mirrors the _jackpotTicketRoll Bernoulli outcome.
 //
 // TEST STRATEGY:
@@ -30,7 +32,8 @@
 //   - D-277-NO-PREROLL-01 (no preRollTickets field; consumers derive whole from
 //     the already-emitted scaled futureTickets/tickets + roundedUp)
 //   - D-277-ROUNDEDUP-01 (roundedUp is the only new field on all 3 events)
-//   - D-277-AR-SILENT-01 (auto-resolve emits nothing)
+//   - D-277-AR-SILENT-01 (auto-resolve never pays the cold-bust consolation; the
+//     emitLootboxEvent silencing flag is retired — every box now emits LootBoxOpened)
 //   - D-277-CONSOLATION-GATE-01 (manual cold-bust consolation gated by payColdBustConsolation)
 //   - D-277-AR-INDEX-01 (auto-resolve callers pass index=0)
 //   - D-40N-EVT-BREAK-01 (breaking event topic-hashes accepted)
@@ -286,14 +289,14 @@ describe("EventSurfaceUnification — Phase 277 Wave 2 TST-EVT-UNI-01..06", func
       ).to.equal(0);
     });
 
-    it("[03c] auto-resolve callers pass index=0 (2nd positional), emitLootboxEvent=false (7th positional), and payColdBustConsolation=false (8th positional) to _resolveLootboxCommon", function () {
+    it("[03c] auto-resolve callers pass index=0 (2nd positional) and payColdBustConsolation=false (7th positional) to _resolveLootboxCommon", function () {
       const src = fs.readFileSync(LOOTBOX_SOURCE_PATH, "utf8");
-      // _resolveLootboxCommon positional arg order (11 args — `day` was threaded
-      // out of the resolve helpers in 4cb9ccbf "lootbox event day cleanup"; the
-      // trailing `bool allowSplit` param remains):
+      // _resolveLootboxCommon positional arg order (12 args — `day` was threaded
+      // out of the resolve helpers in 4cb9ccbf "lootbox event day cleanup", and the
+      // always-true `emitLootboxEvent` flag was removed once every box path emits):
       //   1 player, 2 index, 3 amount, 4 targetLevel, 5 currentLevel,
-      //   6 seed, 7 emitLootboxEvent, 8 payColdBustConsolation,
-      //   9 distressEth, 10 totalPackedEth, 11 allowSplit
+      //   6 seed, 7 payColdBustConsolation, 8 distressEth, 9 totalPackedEth,
+      //   10 allowSplit, 11 activityScore, 12 allowEthSpin
       // The redemption auto-resolve path holds its `_resolveLootboxCommon` call in the
       // private `_resolveRedemptionChunk` helper (one per 5-ETH chunk).
       for (const fnSig of [
@@ -315,22 +318,18 @@ describe("EventSurfaceUnification — Phase 277 Wave 2 TST-EVT-UNI-01..06", func
         const args = splitTopLevelArgs(callArgs);
         expect(
           args.length,
-          `${fnSig} _resolveLootboxCommon must receive 13 positional args (allowSplit + activityScore + allowEthSpin)`
-        ).to.equal(13);
+          `${fnSig} _resolveLootboxCommon must receive 12 positional args (emitLootboxEvent removed; allowSplit + activityScore + allowEthSpin)`
+        ).to.equal(12);
         expect(
           args[1],
           `${fnSig} must pass index=0 as the 2nd positional arg (D-277-AR-INDEX-01)`
         ).to.equal("0");
-        // emitLootboxEvent (7th positional): resolveLootboxDirect now THREADS the param (so the
-        // box ETH-spin recirc can itemize its contents); the redemption chunk stays hardcoded false.
-        const expectedEmit = fnSig.includes("resolveLootboxDirect") ? "emitLootboxEvent" : "false";
+        // payColdBustConsolation (7th positional) stays false on both auto-resolve callers —
+        // they never pay the cold-bust WWXRP consolation (D-277-AR-SILENT-01). The
+        // emitLootboxEvent flag is gone: every box path emits LootBoxOpened (gated only by !wasSpin).
         expect(
           args[6],
-          `${fnSig} must pass ${expectedEmit} as the 7th positional emitLootboxEvent arg`
-        ).to.equal(expectedEmit);
-        expect(
-          args[7],
-          `${fnSig} must pass payColdBustConsolation=false as the 8th positional arg (D-277-AR-SILENT-01)`
+          `${fnSig} must pass payColdBustConsolation=false as the 7th positional arg (D-277-AR-SILENT-01)`
         ).to.equal("false");
         // The retired sentinel value must not appear in the caller body.
         expect(
@@ -470,8 +469,8 @@ describe("EventSurfaceUnification — Phase 277 Wave 2 TST-EVT-UNI-01..06", func
     });
   });
 
-  describe("TST-EVT-UNI-05 — auto-resolve field-consistency, EVT-UNI-06 resolved form (auto-resolve is SILENT; consolation is payColdBustConsolation-gated)", function () {
-    it("[05a] the only `emit LootBoxOpened` site in _settleLootboxRoll is inside the `if (emitLootboxEvent && !wasSpin)` gate", function () {
+  describe("TST-EVT-UNI-05 — every-box-emits field-consistency (LootBoxOpened gated only by !wasSpin; consolation is payColdBustConsolation-gated)", function () {
+    it("[05a] the only `emit LootBoxOpened` site in _settleLootboxRoll is inside the `if (!wasSpin)` gate", function () {
       const src = fs.readFileSync(LOOTBOX_SOURCE_PATH, "utf8");
       const body = extractBody(src, "function _settleLootboxRoll(");
       expect(body, "_settleLootboxRoll body not found").to.not.equal(null);
@@ -481,31 +480,26 @@ describe("EventSurfaceUnification — Phase 277 Wave 2 TST-EVT-UNI-01..06", func
         "_settleLootboxRoll must contain exactly one `emit LootBoxOpened` site"
       ).to.equal(1);
       const emitIdx = emitMatches[0].index;
-      // Walk back: the nearest preceding `if (emitLootboxEvent` gate must enclose it. The gate is
-      // now `if (emitLootboxEvent && !wasSpin)` — spin rolls emit a single BoxSpin instead.
+      // Walk back: the nearest preceding gate must enclose it. After the emitLootboxEvent flag
+      // was removed (every box path emits), the gate is now `if (!wasSpin)` — spin rolls emit a
+      // single BoxSpin instead, so they remain the only suppressed case.
       const preamble = body.slice(0, emitIdx);
-      const gateIdx = preamble.lastIndexOf("if (emitLootboxEvent");
+      const gateIdx = preamble.lastIndexOf("if (!wasSpin)");
       expect(
         gateIdx,
-        "the LootBoxOpened emit must sit inside an `if (emitLootboxEvent && !wasSpin)` gate"
+        "the LootBoxOpened emit must sit inside an `if (!wasSpin)` gate"
       ).to.be.greaterThan(-1);
     });
 
-    it("[05b] auto-resolve callers emit no LootBoxOpened — resolveLootboxDirect / resolveRedemptionLootbox pass emitLootboxEvent=false (D-277-AR-SILENT-01)", function () {
+    it("[05b] the emitLootboxEvent silencing flag is fully removed — every box path emits (the gate is !wasSpin only)", function () {
       const src = fs.readFileSync(LOOTBOX_SOURCE_PATH, "utf8");
-      // No `emit LootBoxOpened` appears directly in the auto-resolve caller bodies,
-      // and they pass emitLootboxEvent=false (proven structurally in [03c]).
-      for (const fnSig of [
-        "function resolveLootboxDirect(",
-        "function resolveRedemptionLootbox(",
-      ]) {
-        const body = extractBody(src, fnSig);
-        expect(body, `${fnSig} body not found`).to.not.equal(null);
-        expect(
-          body.includes("emit LootBoxOpened("),
-          `${fnSig} must not emit LootBoxOpened directly`
-        ).to.equal(false);
-      }
+      // The always-true `emitLootboxEvent` flag was deleted module-wide, so no box-resolution
+      // path can be silenced: every caller of _resolveLootboxCommon/resolveLootboxDirect now
+      // produces a LootBoxOpened (or a BoxSpin for spin rolls). Proven by the token's absence.
+      expect(
+        src.includes("emitLootboxEvent"),
+        "no `emitLootboxEvent` token may remain in the lootbox module (flag retired — every box emits)"
+      ).to.equal(false);
     });
 
     it("[05c] the manual cold-bust consolation (wwxrp.mintPrize with LOOTBOX_WWXRP_CONSOLATION) appears exactly once and is inside the `if (payColdBustConsolation && whole == 0)` gate (manual-only)", function () {

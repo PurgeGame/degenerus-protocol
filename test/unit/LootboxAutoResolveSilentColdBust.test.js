@@ -19,8 +19,8 @@
 // The `LootboxTicketRoll` event is deleted entirely. The silent cold-bust
 // contract is enforced purely by:
 //   (i)  auto-resolve callers passing `payColdBustConsolation = false`, which
-//        skips the consolation gate (they also pass `emitLootboxEvent = false`,
-//        skipping the `LootBoxOpened` emit), and
+//        skips the consolation gate (they still emit `LootBoxOpened` like every box
+//        path — the emitLootboxEvent flag was removed), and
 //   (ii) the `if (quantity == 0) return;` early-return inside `_queueTickets`
 //        at DegenerusGameStorage.sol, which absorbs the `whole == 0` case.
 //
@@ -147,18 +147,18 @@ describe("LootboxAutoResolveSilentColdBust — Phase 275 Wave 2 TST-LBX-AR-03", 
       ).to.equal(false);
     });
 
-    it("[02b] both auto-resolve callers (resolveLootboxDirect + resolveRedemptionLootbox) pass `index = 0`, `emitLootboxEvent = false`, and `payColdBustConsolation = false`", function () {
+    it("[02b] both auto-resolve callers (resolveLootboxDirect + resolveRedemptionLootbox) pass `index = 0` and `payColdBustConsolation = false`", function () {
       const source = fs.readFileSync(MODULE_SOURCE_PATH, "utf8");
-      // `_resolveLootboxCommon` positional args (13): player(1), index(2), amount(3),
-      // targetLevel(4), currentLevel(5), seed(6), emitLootboxEvent(7),
-      // payColdBustConsolation(8), distressEth(9), totalPackedEth(10),
-      // allowSplit(11), activityScore(12), allowEthSpin(13) — the last two thread the
-      // frozen score + the ETH-spin gate down to the Degenerette-spin rolls. The
-      // auto-resolve callers pass `index = 0`, `emitLootboxEvent = false`, and
-      // `payColdBustConsolation = false` (silent on cold-bust); allowEthSpin(13) differs
-      // by caller (false on the resolveLootboxDirect recirc, true on the redemption chunk).
-      // The redemption auto-resolve path holds its `_resolveLootboxCommon` call in the
-      // private `_resolveRedemptionChunk` helper (one per 5-ETH chunk).
+      // `_resolveLootboxCommon` positional args (12): player(1), index(2), amount(3),
+      // targetLevel(4), currentLevel(5), seed(6), payColdBustConsolation(7),
+      // distressEth(8), totalPackedEth(9), allowSplit(10), activityScore(11),
+      // allowEthSpin(12) — the last two thread the frozen score + the ETH-spin gate down
+      // to the Degenerette-spin rolls. The always-true `emitLootboxEvent` flag was removed
+      // (every box path emits LootBoxOpened, gated only by !wasSpin). The auto-resolve
+      // callers pass `index = 0` and `payColdBustConsolation = false` (silent on cold-bust);
+      // allowEthSpin(12) differs by caller (false on the resolveLootboxDirect recirc, true on
+      // the redemption chunk). The redemption auto-resolve path holds its
+      // `_resolveLootboxCommon` call in the private `_resolveRedemptionChunk` helper (per 5-ETH chunk).
       for (const fnName of ["function resolveLootboxDirect(", "function _resolveRedemptionChunk("]) {
         const fnIdx = source.indexOf(fnName);
         expect(fnIdx, `${fnName} not found`).to.be.greaterThan(-1);
@@ -187,14 +187,12 @@ describe("LootboxAutoResolveSilentColdBust — Phase 275 Wave 2 TST-LBX-AR-03", 
           .split(",")
           .map((a) => a.replace(/\/\/.*$/gm, "").trim())
           .filter((a) => a.length > 0);
-        expect(args.length, `${fnName}: _resolveLootboxCommon must receive 13 positional args (allowSplit + activityScore + allowEthSpin)`).to.equal(13);
+        expect(args.length, `${fnName}: _resolveLootboxCommon must receive 12 positional args (emitLootboxEvent removed; allowSplit + activityScore + allowEthSpin)`).to.equal(12);
         expect(args[1], `${fnName} must pass index = 0 (2nd positional)`).to.equal("0");
-        // emitLootboxEvent (7th positional): resolveLootboxDirect now THREADS the param (so the
-        // box ETH-spin recirc can itemize its contents); the redemption chunk stays hardcoded false.
-        const expectedEmit = fnName.includes("resolveLootboxDirect") ? "emitLootboxEvent" : "false";
-        expect(args[6], `${fnName} must pass ${expectedEmit} (7th positional emitLootboxEvent)`).to.equal(expectedEmit);
-        expect(args[7], `${fnName} must pass payColdBustConsolation = false (8th positional)`).to.equal("false");
-        expect(args[11], `${fnName} must pass activityScore (12th positional)`).to.equal("activityScore");
+        // payColdBustConsolation (7th positional) stays false on both auto-resolve callers —
+        // silent on cold-bust. The emitLootboxEvent flag is gone (every box path emits).
+        expect(args[6], `${fnName} must pass payColdBustConsolation = false (7th positional)`).to.equal("false");
+        expect(args[10], `${fnName} must pass activityScore (11th positional)`).to.equal("activityScore");
         expect(
           body.includes("type(uint48).max"),
           `${fnName} must NOT reference the retired type(uint48).max sentinel`

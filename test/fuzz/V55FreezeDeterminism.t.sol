@@ -31,8 +31,8 @@ import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 ///     `!advanceDue`) — the afking standalone `autoOpen` selector collides with the human `autoOpen(uint256)`
 ///     so it is NOT re-exposed on the Game; the open is reached through `mintFlip`.
 ///   - the `LootBoxOpened(player, lootboxIndex, amount, futureLevel, futureTickets, flip, roundedUp)`
-///     event (LootboxModule.sol:63) is the materialized-traits observable: both `resolveAfkingBox` and
-///     `openLootBox` pass `emitLootboxEvent = true`, so a byte-by-byte field compare IS the box-identity
+///     event is the materialized-traits observable: every box path (including `resolveAfkingBox` and
+///     `openLootBox`) emits it, gated only by !wasSpin, so a byte-by-byte field compare IS the box-identity
 ///     oracle (robust to any future resolution refactor — NOT golden snapshots).
 ///   RE-DERIVED every pinned slot via `forge inspect storage DegenerusGame` (the v55 afking append shifted
 ///   lootboxEthBase 22→23, lootboxRngWordByIndex 38→39, lootboxRngPacked 37→38; rngWordByDay=11; _subOf=66).

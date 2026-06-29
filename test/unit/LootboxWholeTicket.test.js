@@ -12,7 +12,7 @@
 //   4. queues `whole` tickets via the unified `_queueTickets(player,
 //      targetLevel, whole, false)` call (which early-returns on `whole == 0`)
 //   5. under the `payColdBustConsolation` gate, on `whole == 0` pays the manual
-//      cold-bust WWXRP consolation; under the separate `emitLootboxEvent` gate,
+//      cold-bust WWXRP consolation; and (on every box path, gated only by !wasSpin)
 //      emits `LootBoxOpened`
 //
 // Phase 277 retired the `index != type(uint48).max` sentinel: the ticket-queue
@@ -731,12 +731,17 @@ describe("LootboxWholeTicket — Phase 274 Wave 2 TST-WT-01..07", function () {
       ).to.equal(false);
     });
 
-    it("[06f] auto-resolve paths (resolveLootboxDirect / resolveRedemptionLootbox) pass `index = 0` and `emitLootboxEvent = false` — they emit nothing", function () {
+    it("[06f] auto-resolve paths (resolveLootboxDirect / resolveRedemptionLootbox) pass `index = 0` and carry no emitLootboxEvent flag — the LootBoxOpened emit lives in the shared `_settleLootboxRoll`", function () {
       const source = fs.readFileSync(MODULE_SOURCE_PATH, "utf8");
       // The retired sentinel value must not appear anywhere.
       expect(
         source.includes("type(uint48).max"),
         "no `type(uint48).max` sentinel value should remain in the module"
+      ).to.equal(false);
+      // The always-true emitLootboxEvent flag is fully removed — every box path emits.
+      expect(
+        source.includes("emitLootboxEvent"),
+        "no `emitLootboxEvent` token may remain (flag retired — every box emits)"
       ).to.equal(false);
       // The redemption auto-resolve path holds its `_resolveLootboxCommon` call in the
       // private `_resolveRedemptionChunk` helper (one per 5-ETH chunk).
@@ -748,10 +753,11 @@ describe("LootboxWholeTicket — Phase 274 Wave 2 TST-WT-01..07", function () {
         expect(fnIdx, `${fnSig} not found`).to.be.greaterThan(-1);
         const body = source.slice(fnIdx, fnIdx + 2000);
         expect(body.includes("_resolveLootboxCommon(")).to.equal(true);
-        // These callers emit no LootBoxOpened directly.
+        // The LootBoxOpened emit lives in the shared `_settleLootboxRoll` helper (not inline in
+        // these caller bodies) — but it now fires for these paths too, gated only by !wasSpin.
         expect(
           body.includes("emit LootBoxOpened("),
-          `${fnSig} must not emit LootBoxOpened`
+          `${fnSig} routes the emit through _settleLootboxRoll, not inline`
         ).to.equal(false);
       }
     });

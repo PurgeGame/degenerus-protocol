@@ -880,14 +880,13 @@ contract DegenerusGameDegeneretteModule is
         // betId (keccak'd with the index word) so each of a player's bets at the same index rolls
         // independently; the live lootbox-share is NOT a seed input. Never summed across betIds.
         if (betLootboxShare > 0) {
-            // Regular bet-win recirc stays silent (emitLootboxEvent=false) — the box-spin path
-            // passes true; this bet path keeps its prior behavior.
+            // The bet-win recirc box itemizes its contents via LootBoxOpened (like every box path)
+            // so the per-box FLIP datum is recoverable.
             _resolveLootboxDirect(
                 player,
                 betLootboxShare,
                 EntropyLib.hash2(rngWord, betId),
-                activityScore,
-                false
+                activityScore
             );
         }
 
@@ -1009,14 +1008,12 @@ contract DegenerusGameDegeneretteModule is
 
     /// @dev Delegates to the lootbox open module to resolve lootbox rewards directly.
     ///      Applies activity-score EV multiplier (80-135%) to match regular lootbox opens.
-    ///      `emitLootboxEvent` is true for the box ETH-spin recirc (so the recirculated box's
-    ///      contents are itemized for the UI) and false for the regular bet-win recirc.
+    ///      The resolved box itemizes its contents via `LootBoxOpened` like every box path.
     function _resolveLootboxDirect(
         address player,
         uint256 amount,
         uint256 rngWord,
-        uint16 activityScore,
-        bool emitLootboxEvent
+        uint16 activityScore
     ) private {
         (bool ok, bytes memory data) = ContractAddresses
             .GAME_LOOTBOX_MODULE
@@ -1026,8 +1023,7 @@ contract DegenerusGameDegeneretteModule is
                     player,
                     amount,
                     rngWord,
-                    activityScore,
-                    emitLootboxEvent
+                    activityScore
                 )
             );
         if (!ok) _revertDelegate(data);
@@ -1765,14 +1761,13 @@ contract DegenerusGameDegeneretteModule is
         emit BoxSpin(player, betId, packed, payout, acc.ethClaimable);
 
         // Recirc into a fresh re-hashed box; allowEthSpin=false there -> no ETH-spin cascade.
-        // emitLootboxEvent=true so the recirculated box's contents are itemized for the UI.
+        // The recirculated box's contents are itemized for the UI via its own LootBoxOpened.
         if (lootboxShare != 0) {
             _resolveLootboxDirect(
                 player,
                 lootboxShare,
                 EntropyLib.hash2(seed, BOX_RECIRC_TAG),
-                activityScore,
-                true
+                activityScore
             );
         }
     }

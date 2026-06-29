@@ -16,15 +16,16 @@
 //   - TST-REG-03: auto-resolve paths (`resolveLootboxDirect` +
 //                 `resolveRedemptionLootbox`) call `_queueTickets(player,
 //                 targetLevel, whole, false)` (the whole-helper) on the unified
-//                 ticket-queue path, emit `TicketsQueued`, and stay silent.
+//                 ticket-queue path and emit `TicketsQueued`.
 //                 Post-Phase-277 the `index != type(uint48).max` sentinel is
 //                 retired: there is no `LootboxTicketRoll` event anywhere in
 //                 the module, the manual cold-bust WWXRP consolation is gated
-//                 by the dedicated `payColdBustConsolation` flag (true for both
-//                 manual callers, false for the auto-resolve callers), and both
-//                 auto-resolve callers pass `index = 0`,
-//                 `emitLootboxEvent = false`, and `payColdBustConsolation = false`.
-//                 Bernoulli math is shared-scope per D-275-HOIST-01.
+//                 by the dedicated `payColdBustConsolation` flag (true for the
+//                 manual + afking opens, false for the auto-resolve callers), and both
+//                 auto-resolve callers pass `index = 0` and
+//                 `payColdBustConsolation = false`. The `emitLootboxEvent` flag is
+//                 removed — every box path now emits `LootBoxOpened` (gated only by
+//                 !wasSpin). Bernoulli math is shared-scope per D-275-HOIST-01.
 //   - TST-REG-04: cross-mixing variance — manual + auto-resolve opens for
 //                 the same player + level coexist without corruption.
 //                 Manual contributions are per-lootbox-Bernoulli (higher
@@ -42,9 +43,9 @@
 //       _rollRemainder semantics (TST-REG-03 / TST-REG-04)
 //   TST-REG-03 is updated for the Phase 277 sentinel retirement: the
 //   `index != type(uint48).max` gate is gone, auto-resolve callers pass
-//   `index = 0` + `emitLootboxEvent = false` + `payColdBustConsolation = false`,
-//   the cold-bust consolation is `payColdBustConsolation`-gated, and
-//   `LootboxTicketRoll` is fully removed.
+//   `index = 0` + `payColdBustConsolation = false`, the cold-bust consolation is
+//   `payColdBustConsolation`-gated, the `emitLootboxEvent` flag is removed (every box
+//   emits LootBoxOpened, gated only by !wasSpin), and `LootboxTicketRoll` is fully removed.
 //
 // CROSS-CITES:
 //   - D-274-MANUAL-ONLY-01, D-274-AUTORESOLVE-OUT-01, D-274-MINTBOOST-OUT-01
@@ -232,8 +233,8 @@ describe("LootboxAutoResolveRegression — Phase 274 Wave 2 TST-REG-01..04", fun
     });
   });
 
-  describe("TST-REG-03 — auto-resolve paths silent + sentinel retired (Phase 277)", function () {
-    it("[03a] resolveLootboxDirect passes `index = 0` and threads the caller's `emitLootboxEvent` flag to _resolveLootboxCommon", function () {
+  describe("TST-REG-03 — auto-resolve cold-bust silent + sentinel retired + emitLootboxEvent removed (Phase 277)", function () {
+    it("[03a] resolveLootboxDirect passes `index = 0` to _resolveLootboxCommon and carries no emitLootboxEvent flag (every box emits)", function () {
       const source = fs.readFileSync(MODULE_SOURCE_PATH, "utf8");
       const fnIdx = source.indexOf("function resolveLootboxDirect(");
       expect(fnIdx).to.be.greaterThan(-1);
@@ -245,20 +246,19 @@ describe("LootboxAutoResolveRegression — Phase 274 Wave 2 TST-REG-01..04", fun
       expect(body.includes("type(uint48).max")).to.equal(false);
       const args = extractResolveCommonArgs(body);
       expect(args, "_resolveLootboxCommon call args not parsed").to.not.equal(null);
-      // Positional layout: the helper takes 13 args (the `day` arg was dropped in
-      // 4cb9ccbf "lootbox event day cleanup"; `activityScore` + `allowEthSpin` were
-      // appended). 2nd arg = index, 7th arg = emitLootboxEvent. resolveLootboxDirect
-      // now takes `emitLootboxEvent` as a parameter and THREADS it (true for the box
-      // ETH-spin recirc so its contents are itemized, false for the bet-win / decimator
-      // recirc), so the 7th positional is the variable name, not a literal `false`.
+      // Positional layout: the helper takes 12 args (the `day` arg was dropped in
+      // 4cb9ccbf "lootbox event day cleanup"; the always-true `emitLootboxEvent` flag was
+      // removed once every box path emits; `activityScore` + `allowEthSpin` are appended).
+      // 2nd arg = index, 7th arg = payColdBustConsolation.
       expect(args[1], "resolveLootboxDirect must pass index = 0").to.equal("0");
+      // resolveLootboxDirect no longer declares an emitLootboxEvent parameter.
       expect(
-        args[6],
-        "resolveLootboxDirect must thread the caller's emitLootboxEvent flag"
-      ).to.equal("emitLootboxEvent");
+        /function resolveLootboxDirect\([^)]*\bemitLootboxEvent\b/.test(source),
+        "resolveLootboxDirect must not declare an emitLootboxEvent parameter"
+      ).to.equal(false);
     });
 
-    it("[03b] resolveRedemptionLootbox passes `index = 0` and `emitLootboxEvent = false` to _resolveLootboxCommon", function () {
+    it("[03b] resolveRedemptionLootbox passes `index = 0` and `payColdBustConsolation = false` to _resolveLootboxCommon", function () {
       const source = fs.readFileSync(MODULE_SOURCE_PATH, "utf8");
       // The redemption path resolves each 5-ETH chunk through the private
       // `_resolveRedemptionChunk` helper, which holds the `_resolveLootboxCommon` call.
@@ -272,7 +272,7 @@ describe("LootboxAutoResolveRegression — Phase 274 Wave 2 TST-REG-01..04", fun
       expect(args[1], "resolveRedemptionLootbox must pass index = 0").to.equal("0");
       expect(
         args[6],
-        "resolveRedemptionLootbox must pass emitLootboxEvent = false"
+        "resolveRedemptionLootbox must pass payColdBustConsolation = false (7th positional)"
       ).to.equal("false");
     });
 
@@ -294,7 +294,7 @@ describe("LootboxAutoResolveRegression — Phase 274 Wave 2 TST-REG-01..04", fun
       ).to.equal(false);
     });
 
-    it("[03d] auto-resolve cold-bust is silent: LootboxTicketRoll is gone, the cold-bust consolation is `payColdBustConsolation`-gated, and both auto-resolve callers pass `payColdBustConsolation = false` (resolveLootboxDirect threads the caller's `emitLootboxEvent`; the redemption chunk passes `false`)", function () {
+    it("[03d] auto-resolve cold-bust is silent: LootboxTicketRoll is gone, the cold-bust consolation is `payColdBustConsolation`-gated, and both auto-resolve callers pass `payColdBustConsolation = false`", function () {
       const source = fs.readFileSync(MODULE_SOURCE_PATH, "utf8");
       // (1) LootboxTicketRoll is fully retired from the module.
       expect(
@@ -308,20 +308,17 @@ describe("LootboxAutoResolveRegression — Phase 274 Wave 2 TST-REG-01..04", fun
         /if \(payColdBustConsolation && whole == 0\)/.test(source),
         "the manual cold-bust consolation must be gated on `payColdBustConsolation && whole == 0`"
       ).to.equal(true);
-      // (3) _resolveLootboxCommon takes 13 positional args (`day` dropped in 4cb9ccbf;
-      //     `activityScore` + `allowEthSpin` appended): 7th = emitLootboxEvent,
-      //     8th = payColdBustConsolation. The silence-on-cold-bust invariant is
-      //     payColdBustConsolation = false for BOTH auto-resolve callers. The
-      //     LootBoxOpened emit differs: resolveLootboxDirect THREADS the caller's
-      //     `emitLootboxEvent` (true for the box ETH-spin recirc so its contents are
-      //     itemized), while the redemption chunk passes a literal `false`.
+      // (3) _resolveLootboxCommon takes 12 positional args (`day` dropped in 4cb9ccbf;
+      //     the always-true emitLootboxEvent flag removed; `activityScore` + `allowEthSpin`
+      //     appended): 7th = payColdBustConsolation. The silence-on-cold-bust invariant is
+      //     payColdBustConsolation = false for BOTH auto-resolve callers. (LootBoxOpened now
+      //     emits on every box path, gated only by !wasSpin — there is no per-caller emit flag.)
       // The redemption auto-resolve path holds its `_resolveLootboxCommon` call in the
       // private `_resolveRedemptionChunk` helper (one per 5-ETH chunk).
-      const expectedEmit = {
-        "function resolveLootboxDirect(": "emitLootboxEvent",
-        "function _resolveRedemptionChunk(": "false",
-      };
-      for (const fnSig of Object.keys(expectedEmit)) {
+      for (const fnSig of [
+        "function resolveLootboxDirect(",
+        "function _resolveRedemptionChunk(",
+      ]) {
         const fnIdx = source.indexOf(fnSig);
         const body = source.slice(fnIdx, fnIdx + 2500);
         const args = extractResolveCommonArgs(body);
@@ -330,11 +327,7 @@ describe("LootboxAutoResolveRegression — Phase 274 Wave 2 TST-REG-01..04", fun
         );
         expect(
           args[6],
-          `${fnSig} must pass emitLootboxEvent = ${expectedEmit[fnSig]}`
-        ).to.equal(expectedEmit[fnSig]);
-        expect(
-          args[7],
-          `${fnSig} must pass payColdBustConsolation = false`
+          `${fnSig} must pass payColdBustConsolation = false (7th positional)`
         ).to.equal("false");
       }
     });
@@ -434,13 +427,13 @@ describe("LootboxAutoResolveRegression — Phase 274 Wave 2 TST-REG-01..04", fun
       ).to.equal(true);
     });
 
-    it("[04d] manual vs auto-resolve are discriminated by dedicated flags, not by the `index` value — the unified ticket-queue path has zero per-branch crossover", function () {
+    it("[04d] manual vs auto-resolve differ only by the cold-bust consolation flag, not by the `index` value — the unified ticket-queue path has zero per-branch crossover", function () {
       const source = fs.readFileSync(MODULE_SOURCE_PATH, "utf8");
-      // The `index != type(uint48).max` sentinel gate is retired. Routing is now
-      // two dedicated bools: `emitLootboxEvent` gates the `LootBoxOpened` emit,
-      // and `payColdBustConsolation` gates the manual cold-bust WWXRP
-      // consolation. The `_queueTickets(player, rollLevel, whole, false)` call
-      // is unconditional and shared by both paths.
+      // The `index != type(uint48).max` sentinel gate is retired, as is the
+      // `emitLootboxEvent` emit flag (every box path now emits LootBoxOpened, gated only
+      // by !wasSpin). The sole remaining per-path bool is `payColdBustConsolation`, which
+      // gates the manual cold-bust WWXRP consolation. The
+      // `_queueTickets(player, rollLevel, whole, false)` call is unconditional and shared.
       expect(
         source.includes("if (index != type(uint48).max)"),
         "the `index != type(uint48).max` sentinel gate must be fully retired"
@@ -454,12 +447,12 @@ describe("LootboxAutoResolveRegression — Phase 274 Wave 2 TST-REG-01..04", fun
         callMatches,
         "the per-roll ticket-queue path must call `_queueTickets(player, rollLevel, whole, false)` at one source site"
       ).to.equal(1);
-      // The `LootBoxOpened` emit is gated by `emitLootboxEvent` AND suppressed for
+      // The `LootBoxOpened` emit fires on every box path, suppressed only for
       // Degenerette-spin rolls (`!wasSpin`), which carry their own settlement event;
       // the manual cold-bust consolation is gated by the dedicated `payColdBustConsolation`.
       expect(
-        /if \(emitLootboxEvent && !wasSpin\)/.test(source),
-        "the `LootBoxOpened` emit must be gated by `emitLootboxEvent && !wasSpin`"
+        /if \(!wasSpin\)/.test(source),
+        "the `LootBoxOpened` emit must be gated by `!wasSpin` (emitLootboxEvent flag removed)"
       ).to.equal(true);
       expect(
         /if \(payColdBustConsolation && whole == 0\)/.test(source),
@@ -469,9 +462,9 @@ describe("LootboxAutoResolveRegression — Phase 274 Wave 2 TST-REG-01..04", fun
 
     it("[04e] auto-resolve callers pass `index = 0` — the value gates nothing and is emitted nowhere after sentinel retirement", function () {
       const source = fs.readFileSync(MODULE_SOURCE_PATH, "utf8");
-      // The `uint48 index` parameter is purely the event identifier on the manual
-      // `LootBoxOpened` emit. Auto-resolve callers, which emit nothing, pass the
-      // clean `0` default (D-277-AR-INDEX-01). It is the 2nd positional arg of
+      // The `uint48 index` parameter is purely the event identifier on the
+      // `LootBoxOpened` emit. Auto-resolve callers, which have no per-player box index,
+      // pass the clean `0` default (D-277-AR-INDEX-01). It is the 2nd positional arg of
       // `_resolveLootboxCommon` (the `day` arg was dropped from the helper in
       // 4cb9ccbf "lootbox event day cleanup").
       // The redemption auto-resolve path holds its `_resolveLootboxCommon` call in the

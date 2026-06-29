@@ -19,10 +19,11 @@
 // `_queueTickets` is called unconditionally; its `if (quantity == 0) return;`
 // early-return absorbs the `whole == 0` cold-bust case silently. The WWXRP
 // consolation is paid on the surviving manual lootbox path — `openBox` —
-// which passes `payColdBustConsolation = true`. It is gated by a dedicated
-// `payColdBustConsolation` flag, NOT by `emitLootboxEvent`. The two
-// auto-resolve callers (`resolveLootboxDirect`, `resolveRedemptionLootbox`)
-// pass `payColdBustConsolation = false`, so cold-bust is silent for them.
+// which passes `payColdBustConsolation = true`. It is gated by the dedicated
+// `payColdBustConsolation` flag (the only per-path box flag — `emitLootboxEvent`
+// was retired once every box emits LootBoxOpened). The two auto-resolve callers
+// (`resolveLootboxDirect`, `resolveRedemptionLootbox`) pass
+// `payColdBustConsolation = false`, so cold-bust is silent for them.
 // (v47: the FLIP-lootbox manual caller `openFlipLootBox` — which also passed
 // `payColdBustConsolation = true` while emitting `FlipLootOpen` — was removed,
 // terminal-paradox closure.)
