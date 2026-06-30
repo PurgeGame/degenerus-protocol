@@ -1,79 +1,109 @@
 # Requirements — Milestone v75.0 — Ticket/Entry Correctness + Disambiguation
 
-**Defined:** 2026-06-29
-**Core Value:** Prize legs deliver the intended ticket value, and the "ticket (whole unit = `priceForLevel`) vs entry (= price/4, 1 NFT, 4 entries per ticket)" distinction is unmistakable in code so this bug class cannot recur.
+**Defined:** 2026-06-29 · **Re-scoped:** 2026-06-29 (480–484 structure from the disambiguation ledger §10 binding scope)
+**Core Value:** Prize legs deliver the intended ticket value, and the "ticket (whole unit = `priceForLevel`) vs entry (= price/4, 4 entries per whole ticket)" distinction is unmistakable in code so this bug class cannot recur.
 
 > **Subject (RESETS the audit subject — contract LOGIC change):** baseline = local HEAD `cdd32fe9` (clean `contracts/` tree; `main`, not pushed; push stays separately gated). Resets off the v74.0 closure `MILESTONE_V74_AT_HEAD_93d17288…` (`contracts/` tree `f06b1ef6`). **Numbering continues 478 → 479.**
 > **Origin:** cross-contract council finding (Workflow `wf_1a689688`, re-verified end-to-end against source + discovery `wf_701237c0`). The under-delivery matched the live RTP sim — USER-confirmed real.
-> **The defect (verified two ways):** `ticketsOwedPacked.owed` is denominated in ENTRIES (1 NFT = 1 entry = price/4; 4 entries = 1 whole ticket). EXACTLY TWO prize legs queue a WHOLE-TICKET count (`amount/price`, no `<<2`) into the entries sink → ¼ of the ETH-warranted value: `JackpotModule._jackpotTicketRoll` (~2143) and `LootboxModule._lootboxTicketCount` (~2188)→queue (~1383). The lootbox site is also reached via `DecimatorModule:673 resolveLootboxDirect` — one fix covers both. Conservation-safe (the undelivered ¾ stays in the pool, over-collateralized, RTP-suppressing); no attacker gain — winners under-paid.
-> **By-design (do NOT change values — USER-confirmed intentionally entries; rename-only):** `WHALE_BONUS_TICKETS_PER_LEVEL`(40), `WHALE_STANDARD_TICKETS_PER_LEVEL`(2), `LAZY_PASS_TICKETS_PER_LEVEL`(4), `VAULT_PERPETUAL_TICKETS`/genesis `16`. Correct entries legs (leave logic): `_budgetToTicketUnits` paths, normal purchase, far-future swap, `WhaleModule:469`.
+> **The defect (verified two ways):** `ticketsOwedPacked.owed` is denominated in ENTRIES (1 whole ticket = 4 entries; 1 entry = price/4). EXACTLY TWO prize legs queued a WHOLE-TICKET count (`amount/price`, no `<<2`) into the entries sink → ¼ of the ETH-warranted value: `JackpotModule._jackpotTicketRoll` (~2143) and `LootboxModule._lootboxTicketCount` (~2188)→queue (~1383). The lootbox site is also reached via `DecimatorModule:673 resolveLootboxDirect` — one fix covered both. Conservation-safe (the undelivered ¾ stayed in the pool, over-collateralized, RTP-suppressing); no attacker gain — winners under-paid. **Fixed in Phase 479** (`b2ab3e9f`, canonical `wholeTicketsToEntries(w)=w<<2`).
+> **By-design (do NOT change values — USER-confirmed intentionally entries; rename-only):** `WHALE_BONUS_TICKETS_PER_LEVEL`(40), `WHALE_STANDARD_TICKETS_PER_LEVEL`(2), `LAZY_PASS_TICKETS_PER_LEVEL`(4), `VAULT_PERPETUAL_TICKETS`/genesis `16`. Correct entries legs (leave logic): `_budgetToTicketUnits` paths, normal purchase, `WhaleModule:469`.
 > **Threat weighting (locked):** DOMINANT RNG/freeze · HIGH gas-DoS in advanceGame (>16.7M = game-over) · SPINE solvency/backing · LOWER access/reentrancy/MEV. This finding is a **value-correctness** item (winners under-paid; conservation holds).
-> **Posture:** contract LOGIC change. Three contract-touching phases (479 fix, 480 rename, 481 events) each ship as ONE batched `.sol` diff behind the standard contract-commit approval gate (the sole gates). All test / golden / ABI-regen / docs / verify / re-audit work commits autonomously.
-> **ABI decision (LOCKED, USER):** "events too" — rename misleading event fields + normalize emitted units to entries; KEEP external view selectors (natspec/return-var fixes only, no selector churn). No live indexer/subgraph decodes these events (the in-repo agent uses `ticketCount` only as a Degenerette bet-input param).
-> **Grounding:** finding memory `prize-ticket-legs-whole-vs-entries-2026-06-29`; discovery maps in `.planning/v75-grounding/` (correctness sites + naming map + blast radius).
+> **Posture:** contract LOGIC change. FOUR remaining contract-touching phases — 480 (internal renames, no behavior), 481 (events/ABI + view selectors), 482 (Degenerette dead-mode repack, behavior), 483 (FF-salvage entry-granularity, behavior) — each ship as ONE batched `.sol` diff behind the standard contract-commit approval gate (the sole gates). All test / golden / ABI-regen / docs / verify / re-audit work commits autonomously. (479 already shipped, `b2ab3e9f`.)
+> **ABI decision (LOCKED, USER):** "events too" — rename misleading event NAMES/fields + normalize emitted units to entries (481); RENAME the three entries-RETURNING view selectors (`ticketsOwedView`→`entriesOwedView`, `sampleTraitTicketsAtLevel`→`sampleTraitEntriesAtLevel`, `getTickets`→`getEntries`); KEEP mechanism selectors (`processTicketBatch`, `payDailyJackpotCoinAndTickets`, `initPerpetualTickets`). No live indexer/subgraph decodes these events (the in-repo agent uses `ticketCount` only as a Degenerette bet-input param).
+> **Binding scope source:** `.planning/v75-grounding/v75.0-ticket-entry-disambiguation-ledger.md` **§10** (owner decisions applied 2026-06-29; supersedes §2/§6/§8). Governing principle (§10.1): rename only identifiers that **HOLD / RETURN / DENOMINATE an entry COUNT or VALUE** (where "ticket" is the dangerous 4× unit lie); KEEP mechanism/subsystem/function names, indices, ETH-budgets, flags, modes, winner-caps, scale factors, and whole-ticket-leg labels even when they contain "ticket".
+> **Grounding:** finding memory `prize-ticket-legs-whole-vs-entries-2026-06-29`; the disambiguation ledger (above) + `.planning/v75-grounding/` (naming map + HTML view + correctness map).
 
 ---
 
 ## v1 Requirements
 
-Requirements for v75.0. Each maps to exactly one roadmap phase (479–482).
+Requirements for v75.0. Each maps to exactly one roadmap phase (479–484).
 
-### CONV — convention lock + canonical conversion (Phase 479)
+### CONV — convention lock + canonical conversion (Phase 479 — ✅ DONE `b2ab3e9f`)
 
-- [ ] **CONV-01**: A single canonical whole-ticket→entries conversion is the only way an award leg produces entries from a budget. Both prize legs route their queued count through the established `(budget<<2)/price` entries basis (`_budgetToTicketUnits`) or an explicit `wholeTicketsToEntries(x) = x << 2` helper — no award leg open-codes `amount/price` into the entries sink.
-- [ ] **CONV-02**: The convention is documented in NatSpec at the entries sink (`_queueTickets`), the ledger (`ticketsOwedPacked`), and the canonical helper: **ticket** = whole unit (`priceForLevel(level)`); **entry** = price/4 (1 owed unit, 1 minted NFT, 4 entries per ticket). The two unit domains are unmistakable at every call site.
+- [x] **CONV-01**: A single canonical whole-ticket→entries conversion is the only way an award leg produces entries from a budget. Both prize legs route their queued count through the established `(budget<<2)/price` entries basis (`_budgetToTicketUnits`) or the explicit `wholeTicketsToEntries(x) = x << 2` helper — no award leg open-codes `amount/price` into the entries sink.
+- [x] **CONV-02**: The convention is documented in NatSpec at the entries sink (`_queueTickets`), the ledger (`ticketsOwedPacked`), and the canonical helper: **ticket** = whole unit (`priceForLevel(level)`); **entry** = price/4 (1 owed unit, 4 entries per ticket). The two unit domains are unmistakable at every call site.
 
-### FIX — prize-leg under-delivery (Phase 479)
+### FIX — prize-leg under-delivery (Phase 479 — ✅ DONE `b2ab3e9f` / `33239b1d` / `d0718702` / `a8629448` / `7844ee7f`)
 
-- [ ] **FIX-01**: `_jackpotTicketRoll` queues the entries basis (`(amount<<2)/price`), restoring full-value BAF / per-winner ticket prizes (≈4× the pre-fix entries for a given `amount`).
-- [ ] **FIX-02**: `_lootboxTicketCount` / `_resolveLootboxRoll` queue the entries basis — fixing the normal lootbox AND the decimator-recirc (`resolveLootboxDirect`) path in the one shared site.
-- [ ] **FIX-03**: The Bernoulli round-up stays on whole-ticket granularity — the `×4` is applied to the queued entries, NOT inside the Bernoulli expression — so the EV-neutrality identity `E[whole]·100 == scaled` and the grep-pinned Bernoulli line stay byte-identical (the existing Bernoulli EV testers stay green unchanged).
-- [ ] **FIX-04**: A regression test pins, per award leg, that the owed-entries delivered for a budget `B` equals `(B<<2)/price` (≈4× the pre-fix value, minus at most one sub-ticket from the round-up) and that entries-per-ETH is uniform across the purchase / daily / prize legs.
-- [ ] **FIX-05**: `emit == queue` holds post-fix; the pre-existing failing `CrossSurfaceTicketMixing` assertions [03a]/[03b] (stale since `58556895` merged 3 emit sites → 2) and the [03c] emit==queue equality are reconciled to the entries semantics.
+- [x] **FIX-01**: `_jackpotTicketRoll` queues the entries basis (`(amount<<2)/price`), restoring full-value BAF / per-winner ticket prizes (≈4× the pre-fix entries for a given `amount`).
+- [x] **FIX-02**: `_lootboxTicketCount` / `_resolveLootboxRoll` queue the entries basis — fixing the normal lootbox AND the decimator-recirc (`resolveLootboxDirect`) path in the one shared site.
+- [x] **FIX-03**: The Bernoulli round-up stays on whole-ticket granularity — the `×4` is applied to the queued entries, NOT inside the Bernoulli expression — so the EV-neutrality identity `E[whole]·100 == scaled` and the grep-pinned Bernoulli line stay byte-identical (the existing Bernoulli EV testers stay green unchanged).
+- [x] **FIX-04**: A regression test pins, per award leg, that the owed-entries delivered for a budget `B` equals `(B<<2)/price` (≈4× the pre-fix value, minus at most one sub-ticket from the round-up) and that entries-per-ETH is uniform across the purchase / daily / prize legs.
+- [x] **FIX-05**: `emit == queue` holds post-fix; the pre-existing failing `CrossSurfaceTicketMixing` assertions [03a]/[03b] and the [03c] emit==queue equality are reconciled to the entries semantics (incl. the 7 missed hardhat structural-assertion suites — the forge-invisible source-string class).
 
-### RN — internal rename sweep, no behavior change (Phase 480)
+### RN — internal rename sweep, no behavior change (Phase 480) — ledger §10.5 + §10.2/§10.4/§10.6/§10.7
 
-- [ ] **RN-01**: `traitBurnTicket` → `lvlTraitEntry` across all referencing contract files including the 2 inline-asm `.slot` reads (`FoilPackModule:782`, `MintModule:569`) and NatSpec; storage layout proven unchanged (slot order/type identical) and all ~13 layout goldens recaptured via `storage_layout_oracle.sh --capture` (label-only change), `--check` green.
-- [ ] **RN-02**: `ticketsOwedPacked` → `entriesOwedPacked` (all refs); NatSpec states the field is denominated in entries.
-- [ ] **RN-03**: `_queueTickets` / `_queueTicketsScaled` / `_queueTicketRange` → `_queueEntries` / `_queueEntriesScaled` / `_queueEntryRange`, with params (`quantity`→`entries`, `quantityScaled`→`entriesScaled`, `ticketsPerLevel`→`entriesPerLevel`) and the misleading "Queues whole tickets" NatSpec corrected.
-- [ ] **RN-04**: `WHALE_BONUS_TICKETS_PER_LEVEL` / `WHALE_STANDARD_TICKETS_PER_LEVEL` / `LAZY_PASS_TICKETS_PER_LEVEL` / `VAULT_PERPETUAL_TICKETS` → `*_ENTRIES_*` (values UNCHANGED — confirmed intentionally entries); the genesis literal `16` comment corrected to "16 entries (= 4 whole tickets) per level".
-- [ ] **RN-05**: Misleading local `whole`-into-entries variables and the `*TicketUnits` locals renamed to reflect entries; `_budgetToTicketUnits` → `_budgetToEntries` (the canonical helper from CONV-01).
-- [ ] **RN-06**: Decimator terminology collision resolved — its "entry" (a player burn RECORD, not the price/4 unit) renamed to `record`/`burnRecord` so "entry" is reserved protocol-wide for the ticket sub-unit. Values/logic unchanged.
-- [ ] **RN-07**: By-name test harnesses updated in lockstep: `DeityPassGoldNerfRegression` `deriveStorageSlot("traitBurnTicket")` name string; the `.t.sol` inheritors `JackpotSingleCallCorrectness.t.sol` + `AdvanceGasCeiling.sol` (compile-break on rename); slot-8 hardcoders' comments refreshed (no runtime change).
+Selector-safe, layout label/typeLabel-only. Rename only entry-count/value holders; KEEP mechanism/subsystem names (§10.1).
 
-### EVT — event / view surface + docs (Phase 481)
+- [x] **RN-01**: `traitBurnTicket` → `lvlTraitEntry` across the complete §10.4 ref set including the 2 inline-asm `.slot` reads (`FoilPackModule:782`, `MintModule:569`) and NatSpec (`Game:321,2434,2517`; `Bingo:140,19/117/123/135`; `Jackpot:867,931,1130,1432,1442,1454,1467,1479,1626` + param `traitBurnTicket_`→`lvlTraitEntry_`; interface NatSpec); storage layout proven unchanged (slot order/type identical).
+- [x] **RN-02**: `ticketsOwedPacked` → `entriesOwedPacked` (the complete §10.4 code set: `Storage:524`,660,669,704,732,763,772; `Mint:336,640,1252,1263,1265`; `Game:2092,2539` — Advance has ZERO refs); NatSpec states the field is denominated in entries.
+- [x] **RN-03**: `_queueTickets` / `_queueTicketsScaled` / `_queueTicketRange` → `_queueEntries` / `_queueEntriesScaled` / `_queueEntryRange`, with params (`quantity`→`entries`, `quantityScaled`→`entriesScaled` [**F1 guard** — scaled-ENTRIES, NEVER `wholeTicketsScaled`], `ticketsPerLevel`→`entriesPerLevel`) — including the second `ticketsPerLevel` param on `_activate10LevelPass` (`Storage:1298`) — and the misleading "Queues whole tickets" NatSpec corrected. Callers per §10.4 (`Game:225`; `Whale:328,336,506,652,660,1024`; `Advance:1620,1626`; `Jackpot:887,2143`; `Lootbox:1383`; `Mint:1021,1164,1637`; `Afking:830`; `Decimator:660`; `Storage:1382`).
+- [x] **RN-04**: the four `*_TICKETS_PER_LEVEL` entry constants `WHALE_BONUS_TICKETS_PER_LEVEL`(40) / `WHALE_STANDARD_TICKETS_PER_LEVEL`(2) / `WHALE_PASS_TICKETS_PER_LEVEL`(2, the lootbox mirror of WHALE_STANDARD, `Lootbox:210`/`:1919`) / `LAZY_PASS_TICKETS_PER_LEVEL`(4) plus `VAULT_PERPETUAL_TICKETS`(16) → `*_ENTRIES_*` (values UNCHANGED — confirmed intentionally entries; all private constants, layout/selector-safe; ledger §4 places the constant in 480 with its twin). The genesis literal `16` comment corrected to "16 entries (= 4 whole tickets) per level". (The `LootBoxWhalePassJackpot.tickets` event FIELD that emits WHALE_PASS is a separate 481 rename — EVT-02.) Also rename the dual-use scale factor `TICKET_SCALE`(=100)→`QTY_SCALE` (owner-chosen unit-neutral 2026-06-29 — NOT `ENTRY_SCALE`; the constant is used for BOTH whole-ticket and entry math so "ticket" is a misnomer; 73 refs = ~47 production + 26 in the two `contracts/test/*BernoulliTester.sol` mirrors which follow with the Bernoulli collapse math byte-identical). KEEP `AFKING_TICKET_SCALE`(=400; the 400 literally = one whole ticket in afking units) — only its dual-scale comment reference to the inherited scale updates to `QTY_SCALE = 100`.
+- [x] **RN-05**: `_budgetToTicketUnits` → `_budgetToEntries` (the canonical helper); the entries-holding locals renamed to carry `Entries` (`ticketUnits`→`entries`, `dailyTicketUnits`→`dailyEntries`, `carryoverTicketUnits`→`carryoverEntries`, `baseUnits`→`baseEntries`; the WhaleModule `bonusTickets`→`bonusEntries`, `standardTickets`→`standardEntries` from §10.7) + the packed-bitfield COMMENT LABELS (`Storage:437-438`, `Jackpot:403-404`); and the **F1-scoped** bug-site scaled-WHOLE locals (`quantityScaled`/`scaledTickets`/`countScaled` at `Jackpot:2127,2133` + `Lootbox:1356,2177` ONLY) → `wholeTicketsScaled`/`scaledWholeTickets`. The `whole` local stays `whole` (post-479 it genuinely holds whole tickets).
+- [x] **RN-06**: Decimator "entry" (= a player burn BET record, NOT the price/4 unit) → BET, with a `dec` prefix (§10.7 owner): struct types `DecEntry`→`DecBet`, `TerminalDecEntry`→`TerminalDecBet`; mapping `terminalDecEntries`→`terminalDecBets`; fn `_decClaimableFromEntry`→`_decClaimableFromBet`; locals `levelEntries`→`decLevelBets`, `entryBurn`→`decBetBurn`, `entryBucket`→`decBetBucket`, `entrySub`→`decBetSubBucket` (= `e.subBucket`). KEEP `decBurn` (mapping already "burn") and the "External Entry Points" / "entry points" delegatecall-dispatch comments (`:122,:382` — function entry points, not the unit). "entry" now means only the price/4 ticket sub-unit protocol-wide.
+- [x] **RN-07**: Degenerette ticket-relic identifiers → spin/traits (§2A LOCKED + §10.2): `amountPerTicket`→`amountPerSpin`, `ticketCount`→`spinCount`, `customTicket`→`customTraits`, `_fullTicketPayout`→`_degenerettePayout`, and the `*Traits` set (`playerTicket`→`playerTraits`, `resultTicket`→`resultTraits`, `firstResultTicket`→`firstResultTraits`, `_countGoldQuadrants` param `ticket`→`traits`). The Vault inline `IGamePlayer` params (`:50-52`) + forwarder (`:597-599`) + interface decls (`IDegenerusGameModules:422`) rename in lockstep (param names are selector-safe). OUT of 480: the Degenerette EVENTS (→481), the `FT_*_SHIFT` constants + `_packFullTicketBet` body (→482 repack).
+- [x] **RN-08**: `ticketQuantity` → `entryQuantityScaled` (§10.6 owner correction — it is scaled ENTRIES ×100, not whole tickets: `ticketCost = priceWei·ticketQuantity/(4·TICKET_SCALE)`, so `ticketQuantity=100` buys 1 entry, `400` = 1 whole ticket): all 67 param/local refs (`Mint`:29 incl. the 3 `@param` NatSpec + the emit arg `:1380`, `Game`:15, `Vault`:10 incl. `gamePurchaseTicketsFlip` + inline `IGamePlayer`, `IDegenerusGameModules`:7, `IDegenerusGame`:6). Selector-safe (param names not in selectors — the off-chain agent's positional call needs no edit, and its event-arg read is 481). **Exactly ONE `ticketQuantity` survives 480: the `TicketsBought` event FIELD decl at `MintModule:165` — that field rename is OUT of 480 (→481, EVT-04).** KEEP `ticketCost`/`ticketWei`/`oneTicketWei` (wei), `ticketFreshFlip`/`ticketRecycledFlip`/`ticketNextShare`/`ticketFutureShare` (wei funding-splits), `_activeTicketLevel` (level), `_callTicketPurchase` (mechanism fn).
+- [x] **RN-09**: Comment-only doc/NatSpec fixes (no behavior, land in 480): **F2** stale `JackpotTicketWin` NatSpec `Jackpot:72-77` "whole-ticket count" → "entries count"; **F3** `ticketsOwedView`/`getPlayerPurchases`/`getTickets` @return mislabel (`Game:2087,2533,2510`) → "entries"; **F5** `whalePassClaims` doc `Storage:1155` (unit + 100 levels × 1 entry/half-pass); and the **NFT scrub** (§10.7) — the 4 CONV-02 NatSpec refs (`Storage:522,634,674,679` "1 entry = 1 minted NFT") reworded to "price/4 = ¼ of a whole ticket (4 entries per whole ticket)", and "NFT" scrubbed from the ledger/research/validation/HTML grounding docs. `TICKET_SCALE` disposition RESOLVED (owner 2026-06-29): RENAME → `QTY_SCALE` (unit-neutral; NEVER `ENTRY_SCALE`), in RN-04; `AFKING_TICKET_SCALE` KEPT.
+- [x] **RN-10**: The full rename is proven behavior-preserving: storage layout label/typeLabel-only (`forge inspect storageLayout` no slot/offset/type move; all ~25 goldens recaptured `--capture` — the ~13 Storage-touching change label/typeLabel name strings only, the 12 standalone byte-identical; `--check` green); the compile-break Solidity harnesses renamed in lockstep (`forge build` green); the runtime by-name `.test.js` string-assertion class swept (`deriveStorageSlot`/`.includes`/`===` literals updated) and the FULL Hardhat + forge + stat suites green at/above the 479-close floor (1003/0/107), Bernoulli/EV testers green UNCHANGED. (The §10.4 test-lockstep / FIX-05 forge-invisible class.)
 
-- [ ] **EVT-01**: Event fields renamed to entries semantics — `JackpotTicketWin.ticketCount` → `entryCount`, `LootBoxOpened.futureTickets` → `futureEntries`, `TicketsQueued.quantity` → `entries` — and emitted values normalized so every path emits entries consistently (the BAF path previously emitted whole tickets on a field whose trait paths emitted entries).
-- [ ] **EVT-02**: `test/unit/EventSurfaceUnification.test.js` updated to the new field names / units; the event-shape pins pass.
-- [ ] **EVT-03**: Deployment ABIs regenerated (`deployments/testnet-abis/*.json`, `deployments/localhost-abis/*.json`) for the modules whose events changed.
-- [ ] **EVT-04**: External view selectors KEPT (no churn) — `ticketsOwedView`, `sampleTraitTicketsAtLevel`, `getTickets`, `getPlayerPurchases` get NatSpec / return-variable corrections only (return values documented as entries).
-- [ ] **EVT-05**: Docs updated to the entries basis + current event shape — `docs/JACKPOT-EVENT-CATALOG.md`, `docs/JACKPOT-PAYOUT-REFERENCE.md`; the agent's `ticketCount` Degenerette bet-input param noted as unrelated (no change).
+### EVT — event / ABI surface + view selectors + docs (Phase 481) — ledger §2B + §10.2/§10.5
 
-### VER — verification + closure (Phase 482)
+ABI/topic0 changes; own gated diff + ABI regen + test-literal sweep.
 
-- [ ] **VER-01**: Full `forge` + Hardhat suite green (target the established ≥893/0 floor); the layout golden `--check` green after recapture; the Bernoulli EV testers green (unchanged).
-- [ ] **VER-02**: An RTP re-sim confirms the prize-leg ticket EV now lands at the intended ~0.786× of the ticket budget (the under-delivery that matched the prior live sim is resolved); a before/after entries-per-roll comparison is recorded.
-- [ ] **VER-03**: Cross-model adversarial re-audit of the v75.0 diff (Codex primary; Gemini if available — re-check liveness) — every candidate dispositioned; contracts git-verified after any read-capable fan-out.
-- [ ] **VER-04**: `audit/FINDINGS-v75.0.md` (chmod 444) + closure baseline `MILESTONE_V75_AT_HEAD_<sha>`; tag `v75.0`; archive `milestones/v75.0-{ROADMAP,REQUIREMENTS}.md`; PROJECT.md evolved to SHIPPED; ROADMAP.md collapsed to the index.
+- [x] **EVT-01**: The three queue events renamed to entries semantics — `TicketsQueued`→`EntriesQueued` (field `quantity`→`entries`), `TicketsQueuedScaled`→`EntriesQueuedScaled` (field `quantityScaled`→`entriesScaled`), `TicketsQueuedRange`→`EntriesQueuedRange` (field `ticketsPerLevel`→`entriesPerLevel`); topic0 changes (decls/emits `Storage:550/654`, `557/698`, `564/750`).
+- [x] **EVT-02**: `JackpotTicketWin`→`JackpotEntryWin` (`ticketCount`→`entryCount`, `ticketLevel`→`entryLevel`, `ticketIndex`→`entryIndex`; all 3 paths emit entries post-479); `JackpotEthWin.ticketIndex`/`JackpotFlipWin.ticketIndex`→`entryIndex`; `LootBoxWhalePassJackpot.tickets`→`entriesPerLevel` (the `WHALE_PASS_ENTRIES_PER_LEVEL` constant it emits was already renamed in RN-04/480 — only the event field is the 481 ABI change); `FoilMatchClaimed.ticketIndex`→`foilSlotIndex` (a 0-3 draw-slot index — **NOT** `entryIndex`).
+- [x] **EVT-03**: Degenerette events — `FullTicketResolved`→`DegeneretteResolved` (`ticketCount`→`spinCount`, `resultTicket`→`resultTraits`), `FullTicketResult`→`DegeneretteResult` (`ticketIndex`→`spinIndex`, `playerTicket`→`playerTraits`); topic0 changes.
+- [x] **EVT-04**: `TicketsBought.ticketQuantity` field → `entryQuantityScaled` (field-name only; pairs with the RN-08 param rename). Event **NAME** `TicketsBought` → owner decision (recommend `EntriesBought` for consistency with `EntriesQueued`, or KEEP).
+- [x] **EVT-05**: Entries-RETURNING view selectors RENAMED (interface+impl+caller lockstep): `ticketsOwedView`→`entriesOwedView`, `sampleTraitTicketsAtLevel`→`sampleTraitEntriesAtLevel` (return `tickets`→`entries`), `getTickets`→`getEntries`. KEEP (mechanism, §10.2): `processTicketBatch`/`processFutureTicketBatch`, `payDailyJackpotCoinAndTickets`, `initPerpetualTickets`. KEEP `LootBoxOpened.futureTickets` (emits scaled-WHOLE — unit-correct; §10/R2) — doc-clarify "scaled" only, no migration.
+- [x] **EVT-06**: Deployment ABIs regenerated (`deployments/testnet-abis/*.json`, `deployments/localhost-abis/*.json`) for the modules whose events/selectors changed; the FIX-05 forge-invisible `test/**/*.js` source-literal sweep + full Hardhat run; `test/unit/EventSurfaceUnification.test.js` updated to the new names/units; docs updated to the entries basis + current event shape (`docs/JACKPOT-EVENT-CATALOG.md` — incl. the §B type/field errors, `docs/JACKPOT-PAYOUT-REFERENCE.md`).
+
+### DGN — Degenerette dead-mode repack, behavior-adjacent (Phase 482) — ledger §2C + §10.5
+
+The fractional-bet "Full Ticket" mode is removed; this is NOT a pure rename — it shifts the stored packed-bet layout. Sequenced AFTER 480/481 (consumes the renamed degenerette identifiers).
+
+- [x] **DGN-01**: Strip the dead bits `MODE_FULL_TICKET` (`:396,1053`), `isRandom` (`:379,621`), `FT_HAS_CUSTOM_SHIFT`/`hasCustom` (`:405,1060`); re-pack `degeneretteBets`; rename the shift constants `FT_*_SHIFT`→`DEGEN_*_SHIFT` (values shift post-strip: `FT_TICKET_SHIFT`→`DEGEN_TRAITS_SHIFT`, `FT_COUNT_SHIFT`→`DEGEN_COUNT_SHIFT`, `FT_CURRENCY_SHIFT`→`DEGEN_CURRENCY_SHIFT`, `FT_AMOUNT_SHIFT`→`DEGEN_AMOUNT_SHIFT`, `FT_INDEX_SHIFT`→`DEGEN_INDEX_SHIFT`, `FT_ACTIVITY_SHIFT`→`DEGEN_ACTIVITY_SHIFT`, `FT_HERO_SHIFT`→`DEGEN_HERO_SHIFT`); `_packFullTicketBet`→`_packDegeneretteBet` (+ body re-pack); rewrite the `Storage:1750-1760` `degeneretteBets` layout comment with the new offsets. Mapping NAME `degeneretteBets` stays.
+- [x] **DGN-02**: Regenerated packed-bet goldens + a Degenerette EV/resolution re-test (one bet path now); any test decoding bets by hardcoded shift breaks intentionally and is updated.
+- [x] **DGN-03**: ONE batched `.sol` diff presented and approved before commit.
+
+### FF — far-future-salvage entry-granularity, behavior (Phase 483) — ledger §10.3
+
+FF salvage is the SOLE entry-granularity gap (purchase/redeem already entry-granular; passes/foil/lootbox not gaps). Making it entry-granular is a 5-site COUPLED change (changing only the `×4` would pay 4× / under-debit).
+
+- [x] **FF-01**: The 5 coupled sites: (1) `MintModule:1162` `entries = quantities[i] * 4` → `= quantities[i]` (input now entries); (2) `MintStreakUtils:196` `faceWei = priceForLevel(L) * n` → `* n / 4`; (3) `MintStreakUtils:207` ticket-leg floor `if (ticketWei < oneTicketWei)` → floor at one ENTRY (`oneTicketWei/4`); (4) `MintModule:1134` `if (totalBudget < oneTicketWei) revert` → relax to one entry price; (5) NatSpec/comments `StreakUtils:159-168`, `Game:1766` + the F3 view-doc misnomers.
+- [x] **FF-02**: `sellFarFutureTickets`→`sellFarFutureEntries`, `previewSellFarFutureTickets`→`previewSellFarFutureEntries`, `_removeFarFutureTickets`→`_removeFarFutureEntries`, and the Vault/`IGamePlayer`/`Game` wrappers in lockstep.
+- [x] **FF-03**: Tests — `FarFutureSalvageSwap.t.sol`, `FarFutureIntegration.t.sol`, `BafFarFutureTickets.t.sol` updated + a NEW sub-whole-ticket (whale-pass 2-entry) sell case proving entry-granular debit/credit.
+- [x] **FF-04**: ONE batched `.sol` diff presented and approved before commit.
+
+### VER — verification + closure (Phase 484)
+
+- [x] **VER-01**: Full `forge` + Hardhat suite green (target the established ≥893/0 floor; ≥1003/0/107 forge); the layout golden `--check` green after recapture; the Bernoulli EV testers green (unchanged).
+- [x] **VER-02**: An RTP re-sim confirms the prize-leg ticket EV now lands at the intended ~0.786× of the ticket budget (the 479 under-delivery that matched the prior live sim is resolved); a before/after entries-per-roll comparison is recorded.
+- [x] **VER-03**: Cross-model adversarial re-audit of the full v75.0 diff (Codex primary; Gemini if available — re-check liveness) — every candidate dispositioned; contracts git-verified after any read-capable fan-out.
+- [x] **VER-04**: `audit/FINDINGS-v75.0.md` (chmod 444) + closure baseline `MILESTONE_V75_AT_HEAD_<sha>`; tag `v75.0`; archive `milestones/v75.0-{ROADMAP,REQUIREMENTS}.md`; PROJECT.md evolved to SHIPPED; ROADMAP.md collapsed to the index.
 
 ## Future Requirements (deferred)
 
-- None identified. (External view-selector renames `ticketsOwedView`→`entriesOwedView` etc. were explicitly deferred — selector churn not worth it; natspec-only fix in EVT-04.)
+- **Unpromoted ledger §2A GAP rows (NOT adopted in the binding §10 scope) — KEEP/deferred:** `ticketsOut`→`wholeTicketsScaledOut` (a scaled-WHOLE return aliasing `countScaled`; out of the F1 two-bug-site scope) and `_processOneTicketEntry`→`_processOnePlayerEntries` (a queue-slot mechanism fn — §10.1 keeps mechanism fn names). Re-open only if a future naming pass wants full alias consistency.
 
 ## Out of Scope (explicit exclusions)
 
-- **Re-calibrating the ~0.786× ticket variance EV** — the variance tiers are intended; v75.0 only restores the entries basis so the realized EV matches the documented one. NOT a re-tune.
+- **Re-calibrating the ~0.786× ticket variance EV** — the variance tiers are intended; v75.0 only restored the entries basis (479) so the realized EV matches the documented one. NOT a re-tune.
 - **Whale/perpetual entry VALUES** — confirmed intentionally entries; rename-only, no `×4`.
-- **External view selector changes** — kept for off-chain compatibility (natspec/return-var only).
-- **The `_queueTicketsScaled` purchase basis / `_budgetToTicketUnits` legs / far-future swap** — already correct; not touched beyond the rename.
+- **The activation-queue mechanism cluster** — `ticketQueue`/`ticketCursor`/`ticketLevel`/`ticketsFullyProcessed`/`ticketWriteSlot`/`ticketRedemptionOpen`/`_tq*Key`/`processTicketBatch`/`processFutureTicketBatch` + Advance wrappers: KEEP (holds addresses/index/level, selector-coupled; ledger §3/R1).
+- **The Jackpot "Ticket Jackpot" subsystem names** — `_distributeTicketJackpot`/`_awardJackpotTickets`/`_jackpotTicketRoll`/`_randTraitTicket`/`dailyTicketBudgetsPacked` (ETH budgets) / `PURCHASE_PHASE_TICKET_MAX_WINNERS` (winner cap) / `ticketIndex`/`ticketBasis`/`ticketConversionBps` (indices/bps): KEEP (mechanism; §10.2). Only the entry-VALUE locals (`ticketUnits`/`dailyTicketUnits`/`carryoverTicketUnits`) rename (RN-05).
+- **`LootBoxOpened.futureTickets`** — emits scaled-WHOLE tickets; name is unit-correct (KEEP; doc-clarify only).
+- **Whole-ticket-leg wei/level/mechanism labels** — `ticketCost`/`ticketWei`/`oneTicketWei`/`_activeTicketLevel`/`_callTicketPurchase`/`useTickets`/`FLAG_USE_TICKETS`: KEEP.
 - **Any new game feature** — this is a correctness + disambiguation milestone only.
 
 ## Traceability
 
-| REQ | Phase | Status |
-|-----|-------|--------|
-| CONV-01, CONV-02 | 479 | pending |
-| FIX-01 … FIX-05 | 479 | pending |
-| RN-01 … RN-07 | 480 | pending |
-| EVT-01 … EVT-05 | 481 | pending |
-| VER-01 … VER-04 | 482 | pending |
+| REQ | Phase | Posture | Status |
+|-----|-------|---------|--------|
+| CONV-01, CONV-02 | 479 | gated, behavior | ✅ done `b2ab3e9f` |
+| FIX-01 … FIX-05 | 479 | gated, behavior | ✅ done `b2ab3e9f`+ |
+| RN-01 … RN-10 | 480 | gated, no behavior | ✅ done `bcc47ccc` |
+| EVT-01 … EVT-06 | 481 | gated, ABI | ✅ done `94322027` |
+| DGN-01 … DGN-03 | 482 | gated, behavior | ✅ done `310bccfc` |
+| FF-01 … FF-04 | 483 | gated, behavior | ✅ done `61e40429` |
+| VER-01 … VER-04 | 484 | autonomous | ✅ done `87a6dd76` |
