@@ -65,7 +65,7 @@ contract DegenerusGameDegeneretteModule is
     // Events
     // -------------------------------------------------------------------------
 
-    /// @notice Emitted when a bet is placed (either mode).
+    /// @notice Emitted when a Degenerette bet is placed.
     /// @param player The address that placed the bet.
     /// @param index The lootbox RNG index this bet is tied to.
     /// @param betId The unique bet identifier for this player.
@@ -373,18 +373,14 @@ contract DegenerusGameDegeneretteModule is
     // Packed Bet Layout
     // -------------------------------------------------------------------------
     //
-    // MODE 1: Full Ticket (4 traits, match-based payouts)
-    // packed (uint256):
-    // [0]        mode (1 bit): 1=full ticket
-    // [1]        isRandom (1 bit): must be 0 (no random tickets)
-    // [2..33]    customTraits (32 bits): packed traits (required)
-    // [34..41]   ticketCount (8 bits): spin count (per-currency cap: ETH 25 / FLIP 15 / WWXRP 5)
-    // [42..43]   currency (2 bits)
-    // [44..171]  amountPerSpin (128 bits)
-    // [172..219] index (48 bits)
-    // [220..235] activityScore (16 bits)
-    // [236]      hasCustom (1 bit): must be 1
-    // [237..239] hero (3 bits): [0]=reserved (always set), [1..2]=quadrant (always-on hero, 0..3)
+    // A bet packs into one uint256 (4 traits, match-based payouts):
+    // [0..31]    customTraits (32 bits): packed 4×8-bit quadrants
+    // [32..39]   spinCount (8 bits): per-currency cap (ETH 25 / FLIP 15 / WWXRP 5)
+    // [40..41]   currency (2 bits)
+    // [42..169]  amountPerSpin (128 bits)
+    // [170..201] index (32 bits): lootbox RNG index
+    // [202..217] activityScore (16 bits)
+    // [218..219] heroQuadrant (2 bits): always-on hero quadrant (0..3)
     //
     /// EV-equality across picks: each pick maps to exactly one of 5 per-N tables;
     /// basePayoutEV is calibrated to 100 centi-x per table; runtime payout =
@@ -392,18 +388,14 @@ contract DegenerusGameDegeneretteModule is
     //
     // -------------------------------------------------------------------------
 
-    /// @dev Bet mode: full ticket (4 traits, match payouts).
-    uint8 private constant MODE_FULL_TICKET = 1;
-
-    // Full Ticket bit positions
-    uint256 private constant FT_TICKET_SHIFT = 2;
-    uint256 private constant FT_COUNT_SHIFT = 34;
-    uint256 private constant FT_CURRENCY_SHIFT = 42;
-    uint256 private constant FT_AMOUNT_SHIFT = 44;
-    uint256 private constant FT_INDEX_SHIFT = 172;
-    uint256 private constant FT_ACTIVITY_SHIFT = 220;
-    uint256 private constant FT_HAS_CUSTOM_SHIFT = 236;
-    uint256 private constant FT_HERO_SHIFT = 237; // 3 bits: [0]=reserved, [1..2]=quadrant (always-on hero)
+    // Degenerette packed-bet bit positions
+    uint256 private constant DEGEN_TRAITS_SHIFT = 0;
+    uint256 private constant DEGEN_COUNT_SHIFT = 32;
+    uint256 private constant DEGEN_CURRENCY_SHIFT = 40;
+    uint256 private constant DEGEN_AMOUNT_SHIFT = 42;
+    uint256 private constant DEGEN_INDEX_SHIFT = 170;
+    uint256 private constant DEGEN_ACTIVITY_SHIFT = 202;
+    uint256 private constant DEGEN_HERO_SHIFT = 218; // 2 bits: hero quadrant (0..3)
 
     // Common masks
     uint256 private constant MASK_2 = 0x3;
@@ -416,8 +408,8 @@ contract DegenerusGameDegeneretteModule is
     // Public API
     // -------------------------------------------------------------------------
 
-    /// @notice Places Full Ticket bets (4 traits, match-based payouts).
-    /// @dev Single chosen-attribute ticket only (no random).
+    /// @notice Places a Degenerette bet (4 traits, match-based payouts).
+    /// @dev Single chosen-attribute pick.
     ///      spinCount is treated as "spin count": each spin resolves independently but shares
     ///      the same lootbox RNG index/word (derived per spin).
     ///      The bet always belongs to `player` (zero address = caller). Funding source: the
@@ -534,7 +526,7 @@ contract DegenerusGameDegeneretteModule is
     // Internal Bet Logic
     // -------------------------------------------------------------------------
 
-    /// @dev Internal implementation for placing Full Ticket bets. The bet (and its quest
+    /// @dev Internal implementation for placing a Degenerette bet. The bet (and its quest
     ///      progress / winnings) belongs to `player`; the funds are debited from `funder`
     ///      (== player for a self/approved bet, == the caller for a permissionless gift).
     function _placeDegeneretteBet(
@@ -618,8 +610,8 @@ contract DegenerusGameDegeneretteModule is
             _playerActivityScore(player, questStreak, lvl + 1)
         );
 
-        // Pack the bet (isRandom=false, hasCustom=true always)
-        uint256 packed = _packFullTicketBet(
+        // Pack the bet
+        uint256 packed = _packDegeneretteBet(
             customTraits,
             spinCount,
             currency,
@@ -712,15 +704,15 @@ contract DegenerusGameDegeneretteModule is
         }
 
         // Decode packed bet
-        uint32 customTraits = uint32((packed >> FT_TICKET_SHIFT) & MASK_32);
-        uint8 spinCount = uint8((packed >> FT_COUNT_SHIFT) & MASK_8);
-        uint8 currency = uint8((packed >> FT_CURRENCY_SHIFT) & MASK_2);
+        uint32 customTraits = uint32((packed >> DEGEN_TRAITS_SHIFT) & MASK_32);
+        uint8 spinCount = uint8((packed >> DEGEN_COUNT_SHIFT) & MASK_8);
+        uint8 currency = uint8((packed >> DEGEN_CURRENCY_SHIFT) & MASK_2);
         uint128 amountPerSpin = uint128(
-            (packed >> FT_AMOUNT_SHIFT) & MASK_128
+            (packed >> DEGEN_AMOUNT_SHIFT) & MASK_128
         );
-        uint32 index = uint32((packed >> FT_INDEX_SHIFT) & MASK_32);
-        uint16 activityScore = uint16((packed >> FT_ACTIVITY_SHIFT) & MASK_16);
-        uint8 heroQuadrant = uint8((packed >> (FT_HERO_SHIFT + 1)) & MASK_2);
+        uint32 index = uint32((packed >> DEGEN_INDEX_SHIFT) & MASK_32);
+        uint16 activityScore = uint16((packed >> DEGEN_ACTIVITY_SHIFT) & MASK_16);
+        uint8 heroQuadrant = uint8((packed >> DEGEN_HERO_SHIFT) & MASK_2);
 
         uint256 rngWord = lootboxRngWordByIndex[index];
         if (rngWord == 0) {
@@ -1033,14 +1025,13 @@ contract DegenerusGameDegeneretteModule is
     // Packed Bet Helpers
     // -------------------------------------------------------------------------
 
-    /// @dev Packs a Full Ticket bet for storage. Hero quadrant is always-on.
+    /// @dev Packs a Degenerette bet for storage. Hero quadrant is always-on.
     ///      Expects `heroQuadrant` in {0..3}; entry-point validation in
     ///      `_placeDegeneretteBetCore` reverts on `>= 4` with `InvalidBet`,
     ///      so the packed bet and the dailyHeroWagers ledger share the same
-    ///      validated input. The reserved bit at FT_HERO_SHIFT is always
-    ///      set; the 2-bit quadrant field at FT_HERO_SHIFT + 1 encodes the
-    ///      quadrant.
-    function _packFullTicketBet(
+    ///      validated input. `spinCount` is validated `>= 1`, so a live bet
+    ///      is always non-zero (the `packed == 0` resolved-sentinel holds).
+    function _packDegeneretteBet(
         uint32 customTraits,
         uint8 spinCount,
         uint8 currency,
@@ -1050,18 +1041,13 @@ contract DegenerusGameDegeneretteModule is
         uint8 heroQuadrant
     ) private pure returns (uint256 packed) {
         packed =
-            uint256(MODE_FULL_TICKET) |
-            (uint256(customTraits) << FT_TICKET_SHIFT) |
-            (uint256(spinCount) << FT_COUNT_SHIFT) |
-            (uint256(currency) << FT_CURRENCY_SHIFT) |
-            (uint256(amountPerSpin) << FT_AMOUNT_SHIFT) |
-            (uint256(index) << FT_INDEX_SHIFT) |
-            (uint256(activityScore) << FT_ACTIVITY_SHIFT) |
-            (uint256(1) << FT_HAS_CUSTOM_SHIFT);
-        // Hero quadrant: 3 bits at FT_HERO_SHIFT — [0]=reserved, [1..2]=quadrant (always-on)
-        packed |=
-            (uint256(1) | (uint256(heroQuadrant) << 1)) <<
-            FT_HERO_SHIFT;
+            (uint256(customTraits) << DEGEN_TRAITS_SHIFT) |
+            (uint256(spinCount) << DEGEN_COUNT_SHIFT) |
+            (uint256(currency) << DEGEN_CURRENCY_SHIFT) |
+            (uint256(amountPerSpin) << DEGEN_AMOUNT_SHIFT) |
+            (uint256(index) << DEGEN_INDEX_SHIFT) |
+            (uint256(activityScore) << DEGEN_ACTIVITY_SHIFT) |
+            (uint256(heroQuadrant) << DEGEN_HERO_SHIFT);
     }
 
     // -------------------------------------------------------------------------

@@ -1749,15 +1749,13 @@ abstract contract DegenerusGameStorage {
 
     /// @dev Bets keyed by player and bet id.
     /// Packed layout (LSB → MSB):
-    /// - [0]        mode (1=full ticket)
-    /// - [1]        isRandom
-    /// - [2..33]    customTraits (packed 4×8-bit quadrants)
-    /// - [34..41]   ticketCount (uint8, used as "spin count" for Degenerette)
-    /// - [42..43]   currency (0=ETH,1=FLIP,2=unsupported,3=WWXRP)
-    /// - [44..171]  amountPerSpin (uint128)
-    /// - [172..219] RNG index (uint48)
-    /// - [220..235] activity score bps (uint16)
-    /// - [236]      hasCustom
+    /// - [0..31]    customTraits (packed 4×8-bit quadrants)
+    /// - [32..39]   spinCount (uint8)
+    /// - [40..41]   currency (0=ETH,1=FLIP,2=unsupported,3=WWXRP)
+    /// - [42..169]  amountPerSpin (uint128)
+    /// - [170..201] RNG index (uint32)
+    /// - [202..217] activity score bps (uint16)
+    /// - [218..219] heroQuadrant (always-on hero quadrant, 0..3)
     mapping(address => mapping(uint64 => uint256)) internal degeneretteBets;
 
     /// @dev Per-player bet counters for Degenerette.

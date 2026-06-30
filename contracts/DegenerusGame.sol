@@ -1508,9 +1508,9 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         // an external call), so no dedicated self-call wrapper is required.
         uint64[] memory ids = new uint64[](1);
         do {
-            // currency bits [42..43]: WWXRP is the most +EV currency, so it is excluded
+            // currency bits [40..41]: WWXRP is the most +EV currency, so it is excluded
             // from the >=3 reward gate to keep the faucet closed.
-            uint8 currency = uint8((betPacked >> 42) & 0x3);
+            uint8 currency = uint8((betPacked >> 40) & 0x3);
             ids[0] = betIds[i];
             // Per-item isolation: a stale/reverting/not-ready bet skips, never bricks.
             try this.resolveDegeneretteBets(players[i], ids) {
