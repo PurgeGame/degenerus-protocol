@@ -632,10 +632,10 @@ contract KeeperResolveBetWorstCaseGas is DeployProtocol {
         return uint256(vm.load(address(game), leaf));
     }
 
-    /// @dev Decode the ticketCount (FT_COUNT_SHIFT == 34, 8 bits) from the packed bet.
+    /// @dev Decode the spinCount (DEGEN_COUNT_SHIFT == 32, 8 bits) from the packed bet.
     function _betTicketCount(address owner, uint64 id) internal view returns (uint8) {
         uint256 packed = _readBetPacked(owner, id);
-        return uint8((packed >> 34) & 0xFF);
+        return uint8((packed >> 32) & 0xFF);
     }
 
     /// @dev Read the current degeneretteBetNonce for a player (slot 39).

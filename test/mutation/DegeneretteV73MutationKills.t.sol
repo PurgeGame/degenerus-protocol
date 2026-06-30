@@ -35,7 +35,7 @@ contract DegeneretteV73MutationKills is DeployProtocol {
     uint256 private constant ACTIVITY_SCORE_MAX_POINTS = 305;
     uint256 private constant ROI_MIN_BPS = 9_000;
     uint256 private constant ROI_VA_BPS = 9_891;
-    uint256 private constant FT_ACTIVITY_SHIFT = 220;
+    uint256 private constant DEGEN_ACTIVITY_SHIFT = 202;
     uint256 private constant DEGENERETTE_BETS_SLOT = 38;
 
     address private player;
@@ -378,7 +378,7 @@ contract DegeneretteV73MutationKills is DeployProtocol {
         bytes32 inner = keccak256(abi.encode(player, uint256(DEGENERETTE_BETS_SLOT)));
         bytes32 slot = keccak256(abi.encode(uint256(betId), inner));
         uint256 packed = uint256(vm.load(address(game), slot));
-        uint256 score = (packed >> FT_ACTIVITY_SHIFT) & 0xFFFF;
+        uint256 score = (packed >> DEGEN_ACTIVITY_SHIFT) & 0xFFFF;
         // mirror the seg-A leg of _roiBpsFromScore (engineered scores stay under the knee).
         if (score >= ACTIVITY_SCORE_MAX_POINTS) return ROI_VA_BPS;
         return ROI_MIN_BPS + (score * (ROI_VA_BPS - ROI_MIN_BPS)) / ACTIVITY_SCORE_MAX_POINTS;

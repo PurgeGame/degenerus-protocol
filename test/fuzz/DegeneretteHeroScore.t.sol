@@ -852,16 +852,16 @@ contract DegeneretteHeroScoreTest is DeployProtocol {
     uint256 private constant ROI_VA_BPS = 9_891;
     uint256 private constant ROI_VB_BPS = 9_970;
     uint256 private constant ROI_MAX_BPS = 9_990;
-    uint256 private constant FT_ACTIVITY_SHIFT = 220;
+    uint256 private constant DEGEN_ACTIVITY_SHIFT = 202;
     uint256 private constant DEGENERETTE_BETS_SLOT = 38; // post Stage-B game-storage repack: was 40
 
     /// @dev Read the activityScore the contract stored in the packed bet (bits
-    ///      [220..235]) and mirror _roiBpsFromScore to recover the exact roiBps used.
+    ///      [202..217]) and mirror _roiBpsFromScore to recover the exact roiBps used.
     function _roiBpsOfBet(address who, uint64 betId) internal view returns (uint256 roiBps) {
         bytes32 inner = keccak256(abi.encode(who, uint256(DEGENERETTE_BETS_SLOT)));
         bytes32 slot = keccak256(abi.encode(uint256(betId), inner));
         uint256 packed = uint256(vm.load(address(game), slot));
-        uint256 score = (packed >> FT_ACTIVITY_SHIFT) & 0xFFFF;
+        uint256 score = (packed >> DEGEN_ACTIVITY_SHIFT) & 0xFFFF;
         roiBps = _roiBpsFromScore(score);
     }
 

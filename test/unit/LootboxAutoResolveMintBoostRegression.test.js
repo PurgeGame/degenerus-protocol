@@ -173,10 +173,33 @@ describe("LootboxAutoResolveMintBoostRegression — Phase 275 Wave 2 TST-LBX-AR-
         .replace(
           "Emitted when tickets are queued across a contiguous range of levels.",
           "Emitted when entries are queued across a contiguous range of levels."
+        )
+        // Normalize the audited Phase-482 Degenerette dead-mode repack: the
+        // degeneretteBets packed-layout doc block is rewritten (the dead
+        // mode/isRandom/hasCustom bits stripped, the live fields repacked into
+        // the freed space — encoding-only, no slot move). Any OTHER drift still
+        // fails this byte-identity guard.
+        .replace(
+          `    /// - [0]        mode (1=full ticket)
+    /// - [1]        isRandom
+    /// - [2..33]    customTraits (packed 4×8-bit quadrants)
+    /// - [34..41]   ticketCount (uint8, used as "spin count" for Degenerette)
+    /// - [42..43]   currency (0=ETH,1=FLIP,2=unsupported,3=WWXRP)
+    /// - [44..171]  amountPerSpin (uint128)
+    /// - [172..219] RNG index (uint48)
+    /// - [220..235] activity score bps (uint16)
+    /// - [236]      hasCustom`,
+          `    /// - [0..31]    customTraits (packed 4×8-bit quadrants)
+    /// - [32..39]   spinCount (uint8)
+    /// - [40..41]   currency (0=ETH,1=FLIP,2=unsupported,3=WWXRP)
+    /// - [42..169]  amountPerSpin (uint128)
+    /// - [170..201] RNG index (uint32)
+    /// - [202..217] activity score bps (uint16)
+    /// - [218..219] heroQuadrant (always-on hero quadrant, 0..3)`
         );
       expect(
         normBaseline,
-        "Storage.sol drifted from committed HEAD beyond the audited Phase-481 ABI rename"
+        "Storage.sol drifted from committed HEAD beyond the audited Phase-481+482 changes"
       ).to.equal(current);
     });
 

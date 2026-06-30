@@ -24,7 +24,7 @@ contract DegeneretteV73SolvencyFuzz is DeployProtocol {
     uint256 private constant LOOTBOX_RNG_PACKED_SLOT = 34;
     uint256 private constant DEGENERETTE_BET_NONCE_SLOT = 39;
     uint256 private constant DEGENERETTE_BETS_SLOT = 38;
-    uint256 private constant FT_ACTIVITY_SHIFT = 220;
+    uint256 private constant DEGEN_ACTIVITY_SHIFT = 202;
 
     bytes1 private constant QUICK_PLAY_SALT = 0x51;
     uint8 private constant CURRENCY_FLIP = 1;
@@ -145,7 +145,7 @@ contract DegeneretteV73SolvencyFuzz is DeployProtocol {
         bytes32 inner = keccak256(abi.encode(player, uint256(DEGENERETTE_BETS_SLOT)));
         bytes32 slot = keccak256(abi.encode(uint256(betId), inner));
         uint256 packed = uint256(vm.load(address(game), slot));
-        uint256 score = (packed >> FT_ACTIVITY_SHIFT) & 0xFFFF;
+        uint256 score = (packed >> DEGEN_ACTIVITY_SHIFT) & 0xFFFF;
         if (score >= ACTIVITY_EFFECTIVE_CAP_POINTS) return ROI_MAX_BPS;
         if (score <= ACTIVITY_SCORE_MAX_POINTS) {
             return ROI_MIN_BPS + (score * (ROI_VA_BPS - ROI_MIN_BPS)) / ACTIVITY_SCORE_MAX_POINTS;
