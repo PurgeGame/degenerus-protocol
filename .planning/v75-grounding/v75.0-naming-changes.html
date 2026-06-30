@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>v75.0 — Ticket/Entry Naming Changes</title>
+<style>
+  :root{
+    --bg:#0e1116; --panel:#161b22; --panel2:#1c2430; --line:#2b3441;
+    --txt:#e6edf3; --dim:#9aa7b4; --mono:'SF Mono',ui-monospace,'Cascadia Code',Menlo,Consolas,monospace;
+    --old:#ff7b72; --new:#7ee787; --keep:#a5d6ff; --arrow:#6e7681;
+    --t480:#d2a8ff; --t481:#79c0ff; --t482:#ffa657; --t483:#f0883e; --tkeep:#56d364;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--txt);font:15px/1.5 -apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;padding:0 0 80px}
+  header{position:sticky;top:0;z-index:10;background:linear-gradient(180deg,#0e1116,#0e1116ee);border-bottom:1px solid var(--line);padding:18px 28px;backdrop-filter:blur(6px)}
+  h1{margin:0 0 4px;font-size:20px;letter-spacing:.3px}
+  .sub{color:var(--dim);font-size:13px}
+  .wrap{max-width:1180px;margin:0 auto;padding:0 28px}
+  .legend{display:flex;flex-wrap:wrap;gap:10px 22px;margin-top:12px;font-size:13px;color:var(--dim)}
+  .legend b{color:var(--txt)}
+  .legend code{font-family:var(--mono);color:var(--new)}
+  section{margin-top:34px}
+  .phase{display:flex;align-items:center;gap:10px;margin:0 0 6px;font-size:16px;font-weight:700}
+  .dot{width:11px;height:11px;border-radius:3px;display:inline-block}
+  .phase .meta{font-weight:400;color:var(--dim);font-size:13px}
+  .note{color:var(--dim);font-size:13px;margin:2px 0 12px}
+  table{width:100%;border-collapse:collapse;background:var(--panel);border:1px solid var(--line);border-radius:10px;overflow:hidden}
+  th,td{text-align:left;padding:9px 12px;border-bottom:1px solid var(--line);vertical-align:top;font-size:13.5px}
+  th{background:var(--panel2);color:var(--dim);font-weight:600;font-size:12px;text-transform:uppercase;letter-spacing:.5px;position:sticky;top:84px}
+  tr:last-child td{border-bottom:none}
+  tr:hover td{background:#1a2230}
+  .mono{font-family:var(--mono);font-size:13px;white-space:nowrap}
+  .old{color:var(--old)}
+  .new{color:var(--new)}
+  .keepname{color:var(--keep)}
+  .arrow{color:var(--arrow);padding:0 6px}
+  .pill{display:inline-block;font-size:11px;padding:1px 8px;border-radius:20px;border:1px solid var(--line);color:var(--dim);white-space:nowrap}
+  .why{color:var(--dim);font-size:13px}
+  .val{color:#ffd479}
+  .flag{color:#ffa657;font-weight:600}
+  .summary{display:flex;flex-wrap:wrap;gap:14px;margin-top:14px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px 16px;min-width:120px}
+  .card .n{font-size:22px;font-weight:700}
+  .card .l{color:var(--dim);font-size:12px;text-transform:uppercase;letter-spacing:.5px}
+  code{font-family:var(--mono)}
+  .kgroup{margin-top:14px;font-weight:700;color:var(--keep);font-size:14px}
+</style>
+</head>
+<body>
+<header>
+  <div class="wrap">
+    <h1>v75.0 — Ticket / Entry Naming Changes</h1>
+    <div class="sub">Disambiguation sweep · derived from <code>v75.0-ticket-entry-disambiguation-ledger.md</code> · baseline <code>cdd32fe9</code></div>
+    <div class="legend">
+      <span><b>ticket</b> = whole unit = <code>priceForLevel(level)</code> = <b>4 entries</b></span>
+      <span><b>entry</b> = <code>price/4</code> = ¼ of a whole ticket (a "jackpot entry" — <b>not</b> an NFT)</span>
+      <span><span class="dot" style="background:var(--t480)"></span> 480 internal</span>
+      <span><span class="dot" style="background:var(--t481)"></span> 481 events/ABI</span>
+      <span><span class="dot" style="background:var(--t482)"></span> 482 repack</span>
+      <span><span class="dot" style="background:var(--t483)"></span> 483 FF salvage</span>
+      <span><span class="dot" style="background:var(--tkeep)"></span> KEEP</span>
+    </div>
+  </div>
+</header>
+<div class="wrap">
+
+  <div class="summary">
+    <div class="card"><div class="n">~80</div><div class="l">renames</div></div>
+    <div class="card"><div class="n" style="color:var(--t480)">54</div><div class="l">480 internal</div></div>
+    <div class="card"><div class="n" style="color:var(--t481)">15</div><div class="l">481 events/views</div></div>
+    <div class="card"><div class="n" style="color:var(--t482)">12</div><div class="l">482 repack</div></div>
+    <div class="card"><div class="n" style="color:var(--t483)">3</div><div class="l">483 FF salvage</div></div>
+    <div class="card"><div class="n" style="color:var(--tkeep)">~60</div><div class="l">KEEP</div></div>
+  </div>
+
+  <!-- ============ PHASE 480 ============ -->
+  <section>
+    <div class="phase"><span class="dot" style="background:var(--t480)"></span>Phase 480 — Internal renames <span class="meta">selector-safe · storage layout label-only · one gated diff</span></div>
+    <div class="note">Identifiers that <b>hold / return / denominate an entry count or value</b>. Function/mechanism names are kept (see KEEP).</div>
+    <table>
+      <thead><tr><th>Old</th><th></th><th>New</th><th>Kind</th><th>Why</th></tr></thead>
+      <tbody>
+        <tr><td class="mono old">traitBurnTicket</td><td class="arrow">→</td><td class="mono new">lvlTraitEntry</td><td><span class="pill">storage</span></td><td class="why">per-(level,trait) burned-NFT positions; 1 element = 1 NFT = 1 entry. Incl. 2 inline-asm <code>.slot</code> reads.</td></tr>
+        <tr><td class="mono old">ticketsOwedPacked</td><td class="arrow">→</td><td class="mono new">entriesOwedPacked</td><td><span class="pill">storage</span></td><td class="why">THE entry accumulator: <code>[uint32 owed (entries)][uint8 rem]</code>. Canonical anchor.</td></tr>
+        <tr><td class="mono old">_queueTickets</td><td class="arrow">→</td><td class="mono new">_queueEntries</td><td><span class="pill">fn + param</span></td><td class="why">queues entries (<code>owed += quantity</code>); param <span class="old">quantity</span>→<span class="new">entries</span>.</td></tr>
+        <tr><td class="mono old">_queueTicketsScaled</td><td class="arrow">→</td><td class="mono new">_queueEntriesScaled</td><td><span class="pill">fn + param</span></td><td class="why">scaled-entries (×100); param <span class="old">quantityScaled</span>→<span class="new">entriesScaled</span> <span class="flag">(NOT wholeTicketsScaled — F1)</span>.</td></tr>
+        <tr><td class="mono old">_queueTicketRange</td><td class="arrow">→</td><td class="mono new">_queueEntryRange</td><td><span class="pill">fn + param</span></td><td class="why">per-level entries; param <span class="old">ticketsPerLevel</span>→<span class="new">entriesPerLevel</span>.</td></tr>
+        <tr><td class="mono old">_budgetToTicketUnits</td><td class="arrow">→</td><td class="mono new">_budgetToEntries</td><td><span class="pill">fn</span></td><td class="why">returns <code>(budget&lt;&lt;2)/price</code> = entries.</td></tr>
+        <tr><td class="mono old">ticketUnits</td><td class="arrow">→</td><td class="mono new">entries</td><td><span class="pill">local</span></td><td class="why">holds entries (Jackpot).</td></tr>
+        <tr><td class="mono old">dailyTicketUnits</td><td class="arrow">→</td><td class="mono new">dailyEntries</td><td><span class="pill">local/field</span></td><td class="why">holds entries.</td></tr>
+        <tr><td class="mono old">carryoverTicketUnits</td><td class="arrow">→</td><td class="mono new">carryoverEntries</td><td><span class="pill">local/field</span></td><td class="why">holds entries.</td></tr>
+        <tr><td class="mono old">ticketQuantity</td><td class="arrow">→</td><td class="mono new">entryQuantityScaled</td><td><span class="pill">param</span></td><td class="why">scaled entries (×100): <span class="val">100 = 1 entry</span>, 400 = 1 whole ticket. ~67 refs across purchase/redeem/Vault/sDGNRS/interfaces. <span class="flag">(was wrongly KEEP)</span></td></tr>
+        <tr><td class="mono old">_processOneTicketEntry</td><td class="arrow">→</td><td class="mono new">_processOnePlayerEntries</td><td><span class="pill">fn</span></td><td class="why">drains one player's owed entries ("entry" here was a queue slot — overload removed).</td></tr>
+        <tr><td class="mono old">WHALE_BONUS_TICKETS_PER_LEVEL</td><td class="arrow">→</td><td class="mono new">WHALE_BONUS_ENTRIES_PER_LEVEL</td><td><span class="pill">const = 40</span></td><td class="why">value unchanged; fed raw into entries sink.</td></tr>
+        <tr><td class="mono old">WHALE_STANDARD_TICKETS_PER_LEVEL</td><td class="arrow">→</td><td class="mono new">WHALE_STANDARD_ENTRIES_PER_LEVEL</td><td><span class="pill">const = 2</span></td><td class="why">value unchanged; 2 entries/lvl = ½ whole ticket/lvl.</td></tr>
+        <tr><td class="mono old">LAZY_PASS_TICKETS_PER_LEVEL</td><td class="arrow">→</td><td class="mono new">LAZY_PASS_ENTRIES_PER_LEVEL</td><td><span class="pill">const = 4</span></td><td class="why">value unchanged.</td></tr>
+        <tr><td class="mono old">VAULT_PERPETUAL_TICKETS</td><td class="arrow">→</td><td class="mono new">VAULT_PERPETUAL_ENTRIES</td><td><span class="pill">const = 16</span></td><td class="why">value unchanged; 3rd arg to <code>_queueEntries</code> = entries.</td></tr>
+        <tr><td class="mono old">WHALE_PASS_TICKETS_PER_LEVEL</td><td class="arrow">→</td><td class="mono new">WHALE_PASS_ENTRIES_PER_LEVEL</td><td><span class="pill">const = 2</span></td><td class="why">value unchanged; lootbox mirror of WHALE_STANDARD.</td></tr>
+        <tr><td class="mono old">bonusTickets / standardTickets</td><td class="arrow">→</td><td class="mono new">bonusEntries / standardEntries</td><td><span class="pill">locals</span></td><td class="why">= <code>WHALE_*_ENTRIES × qty</code> = entries (Whale). <span style="color:var(--dim)">(found by KEEP-verification)</span></td></tr>
+        <tr><td class="mono old">_activate10LevelPass(… ticketsPerLevel)</td><td class="arrow">→</td><td class="mono new">entriesPerLevel</td><td><span class="pill">param</span></td><td class="why">feeds <code>_queueEntryRange</code> (Storage:1298).</td></tr>
+        <tr><td colspan="5" style="color:var(--dim);font-style:italic;background:var(--panel2)">whole-ticket bug-site locals (the 479 fix sites) — these genuinely hold WHOLE tickets</td></tr>
+        <tr><td class="mono old">scaledTickets / quantityScaled / countScaled</td><td class="arrow">→</td><td class="mono new">wholeTicketsScaled</td><td><span class="pill">bug-site local</span></td><td class="why">scaled WHOLE tickets (Jackpot:2127/2133, Lootbox:1356/2177) — only at the two bug-sites.</td></tr>
+        <tr><td class="mono old">ticketsOut</td><td class="arrow">→</td><td class="mono new">wholeTicketsScaledOut</td><td><span class="pill">return</span></td><td class="why">aliases the scaled-whole family (Lootbox).</td></tr>
+        <tr><td colspan="5" style="color:var(--dim);font-style:italic;background:var(--panel2)">Decimator side-game → "bet" (no decimator tickets/entries)</td></tr>
+        <tr><td class="mono old">DecEntry</td><td class="arrow">→</td><td class="mono new">DecBet</td><td><span class="pill">struct</span></td><td class="why">per-level decimator burn BET, not a prize unit.</td></tr>
+        <tr><td class="mono old">TerminalDecEntry</td><td class="arrow">→</td><td class="mono new">TerminalDecBet</td><td><span class="pill">struct</span></td><td class="why">terminal "death-bet".</td></tr>
+        <tr><td class="mono old">terminalDecEntries</td><td class="arrow">→</td><td class="mono new">terminalDecBets</td><td><span class="pill">mapping</span></td><td class="why">mapping of terminal bets.</td></tr>
+        <tr><td class="mono old">levelEntries / entryBurn / entryBucket / entrySub</td><td class="arrow">→</td><td class="mono new">decLevelBets / decBetBurn / decBetBucket / decBetSubBucket</td><td><span class="pill">locals</span></td><td class="why"><code>dec</code> prefix disambiguates from the degenerette bet; <code>subBucket</code> spelled out.</td></tr>
+        <tr><td class="mono old">_decClaimableFromEntry</td><td class="arrow">→</td><td class="mono new">_decClaimableFromBet</td><td><span class="pill">fn</span></td><td class="why">pro-rata claimable from a bet.</td></tr>
+        <tr><td colspan="5" style="color:var(--dim);font-style:italic;background:var(--panel2)">Degenerette side-game → "spin / traits" (relic of a removed fractional-bet mode)</td></tr>
+        <tr><td class="mono old">amountPerTicket</td><td class="arrow">→</td><td class="mono new">amountPerSpin</td><td><span class="pill">param</span></td><td class="why">per-spin wager (external param).</td></tr>
+        <tr><td class="mono old">ticketCount <span style="color:var(--dim)">(degenerette)</span></td><td class="arrow">→</td><td class="mono new">spinCount</td><td><span class="pill">param</span></td><td class="why">documented "Number of spins".</td></tr>
+        <tr><td class="mono old">customTicket</td><td class="arrow">→</td><td class="mono new">customTraits</td><td><span class="pill">param</span></td><td class="why">the player's chosen 4-trait card.</td></tr>
+        <tr><td class="mono old">playerTicket / resultTicket / firstResultTicket</td><td class="arrow">→</td><td class="mono new">playerTraits / resultTraits / firstResultTraits</td><td><span class="pill">locals</span></td><td class="why">packed traits, not a unit.</td></tr>
+        <tr><td class="mono old">_fullTicketPayout</td><td class="arrow">→</td><td class="mono new">_degenerettePayout</td><td><span class="pill">fn</span></td><td class="why">score→payout (not touched by the repack).</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- ============ PHASE 481 ============ -->
+  <section>
+    <div class="phase"><span class="dot" style="background:var(--t481)"></span>Phase 481 — Events / ABI + entries-returning views <span class="meta">ABI regen + test-literal sweep · one gated diff</span></div>
+    <div class="note">Event names change topic0; event fields change ABI-JSON names; view-selector renames break the 4-byte selector (interface + impl + callers lockstep).</div>
+    <table>
+      <thead><tr><th>Old</th><th></th><th>New</th><th>Kind</th><th>Why</th></tr></thead>
+      <tbody>
+        <tr><td class="mono old">TicketsQueued</td><td class="arrow">→</td><td class="mono new">EntriesQueued</td><td><span class="pill">event</span></td><td class="why">field <span class="old">quantity</span>→<span class="new">entries</span>. topic0 changes.</td></tr>
+        <tr><td class="mono old">TicketsQueuedScaled</td><td class="arrow">→</td><td class="mono new">EntriesQueuedScaled</td><td><span class="pill">event</span></td><td class="why">field <span class="old">quantityScaled</span>→<span class="new">entriesScaled</span>.</td></tr>
+        <tr><td class="mono old">TicketsQueuedRange</td><td class="arrow">→</td><td class="mono new">EntriesQueuedRange</td><td><span class="pill">event</span></td><td class="why">field <span class="old">ticketsPerLevel</span>→<span class="new">entriesPerLevel</span>.</td></tr>
+        <tr><td class="mono old">JackpotTicketWin</td><td class="arrow">→</td><td class="mono new">JackpotEntryWin</td><td><span class="pill">event</span></td><td class="why">all 3 paths emit entries post-479. Fields <span class="old">ticketCount/ticketLevel/ticketIndex</span>→<span class="new">entryCount/entryLevel/entryIndex</span>.</td></tr>
+        <tr><td class="mono old">JackpotEthWin.ticketIndex / JackpotFlipWin.ticketIndex</td><td class="arrow">→</td><td class="mono new">entryIndex</td><td><span class="pill">event field</span></td><td class="why">index into entry bucket.</td></tr>
+        <tr><td class="mono old">FullTicketResolved</td><td class="arrow">→</td><td class="mono new">DegeneretteResolved</td><td><span class="pill">event</span></td><td class="why">relic prefix; fields <span class="old">ticketCount/resultTicket</span>→<span class="new">spinCount/resultTraits</span>.</td></tr>
+        <tr><td class="mono old">FullTicketResult</td><td class="arrow">→</td><td class="mono new">DegeneretteResult</td><td><span class="pill">event</span></td><td class="why">fields <span class="old">ticketIndex/playerTicket</span>→<span class="new">spinIndex/playerTraits</span>.</td></tr>
+        <tr><td class="mono old">LootBoxWhalePassJackpot.tickets</td><td class="arrow">→</td><td class="mono new">entriesPerLevel</td><td><span class="pill">event field</span></td><td class="why">carries 2 entries/lvl (a per-level rate). topic0 unaffected.</td></tr>
+        <tr><td class="mono old">FoilMatchClaimed.ticketIndex</td><td class="arrow">→</td><td class="mono new">foilSlotIndex</td><td><span class="pill">event field</span></td><td class="why">a 0-3 draw slot (1 slot = 1 whole ticket). <span class="flag">NOT entryIndex.</span></td></tr>
+        <tr><td class="mono old">TicketsBought.ticketQuantity</td><td class="arrow">→</td><td class="mono new">entryQuantityScaled</td><td><span class="pill">event field</span></td><td class="why">scaled-entry purchase qty. Event NAME <code>TicketsBought</code> → <span class="flag">your call</span> (EntriesBought, or keep).</td></tr>
+        <tr><td class="mono old">ticketsOwedView</td><td class="arrow">→</td><td class="mono new">entriesOwedView</td><td><span class="pill">view selector</span></td><td class="why">returns the entry accumulator. Selector changes.</td></tr>
+        <tr><td class="mono old">sampleTraitTicketsAtLevel</td><td class="arrow">→</td><td class="mono new">sampleTraitEntriesAtLevel</td><td><span class="pill">view selector</span></td><td class="why">returns trait-entry holders. Selector changes.</td></tr>
+        <tr><td class="mono old">getTickets</td><td class="arrow">→</td><td class="mono new">getEntries</td><td><span class="pill">view selector</span></td><td class="why">returns entry counts. Selector changes.</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- ============ PHASE 482 ============ -->
+  <section>
+    <div class="phase"><span class="dot" style="background:var(--t482)"></span>Phase 482 — Degenerette dead-mode repack <span class="meta">behavior-adjacent · new packed-bet goldens + EV re-test · gated</span></div>
+    <div class="note">The fractional "Full Ticket" mode is removed; the dead bits are stripped and the bet re-packed → every field offset shifts (not a pure rename).</div>
+    <table>
+      <thead><tr><th>Old</th><th></th><th>New / action</th><th>Kind</th><th>Why</th></tr></thead>
+      <tbody>
+        <tr><td class="mono old">MODE_FULL_TICKET / isRandom / hasCustom bits</td><td class="arrow">→</td><td class="mono new">strip</td><td><span class="pill">bit-flags</span></td><td class="why">dead (one bet path now: mode≡1, isRandom≡0, hasCustom≡1).</td></tr>
+        <tr><td class="mono old">FT_TICKET_SHIFT</td><td class="arrow">→</td><td class="mono new">DEGEN_TRAITS_SHIFT</td><td><span class="pill">const</span></td><td class="why">offset shifts post-strip.</td></tr>
+        <tr><td class="mono old">FT_COUNT/CURRENCY/AMOUNT/INDEX/ACTIVITY/HERO_SHIFT</td><td class="arrow">→</td><td class="mono new">DEGEN_*_SHIFT</td><td><span class="pill">const</span></td><td class="why">offsets shift.</td></tr>
+        <tr><td class="mono old">_packFullTicketBet</td><td class="arrow">→</td><td class="mono new">_packDegeneretteBet</td><td><span class="pill">fn + body</span></td><td class="why">rename + the re-pack site (goldens + re-test).</td></tr>
+        <tr><td class="mono old">degeneretteBets layout comment</td><td class="arrow">→</td><td class="mono new">rewrite</td><td><span class="pill">storage doc</span></td><td class="why">new offsets (Storage:1750-1760).</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- ============ PHASE 483 ============ -->
+  <section>
+    <div class="phase"><span class="dot" style="background:var(--t483)"></span>Phase 483 — Far-future salvage entry-granularity <span class="meta">behavior change · FarFuture test suite + sub-whole-ticket case · gated</span></div>
+    <div class="note">Today the salvage desk only sells <b>whole tickets</b> (<code>×4</code>), so whale-pass 2-entry/level positions can't be early-sold. Make it entry-granular — a 5-site coupled change, then the name becomes <code>*Entries</code>.</div>
+    <table>
+      <thead><tr><th>Old</th><th></th><th>New</th><th>Kind</th><th>Why</th></tr></thead>
+      <tbody>
+        <tr><td class="mono old">sellFarFutureTickets</td><td class="arrow">→</td><td class="mono new">sellFarFutureEntries</td><td><span class="pill">fn + behavior</span></td><td class="why">drop the <code>×4</code> (input now entries); value each entry at <code>price/4</code>; floor at 1 entry.</td></tr>
+        <tr><td class="mono old">previewSellFarFutureTickets</td><td class="arrow">→</td><td class="mono new">previewSellFarFutureEntries</td><td><span class="pill">fn</span></td><td class="why">read-only twin (shares the quote).</td></tr>
+        <tr><td class="mono old">_removeFarFutureTickets</td><td class="arrow">→</td><td class="mono new">_removeFarFutureEntries</td><td><span class="pill">fn</span></td><td class="why">internal debit.</td></tr>
+        <tr><td colspan="5" class="why" style="background:var(--panel2)">+ 5 coupled valuation/floor sites (behavior, not renames): MintModule:1162 (drop ×4), MintStreakUtils:196 (<code>/4</code> per-entry value), :207 (floor at 1 entry), MintModule:1134 (relax the revert), + natspec.</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- ============ KEEP ============ -->
+  <section>
+    <div class="phase"><span class="dot" style="background:var(--tkeep)"></span>NOT changing — KEEP <span class="meta">"ticket" here is correct or is a non-unit name</span></div>
+
+    <div class="kgroup">Scale factors / bit-flags / min</div>
+    <table><tbody>
+      <tr><td class="mono keepname">TICKET_SCALE (100), AFKING_TICKET_SCALE (400)</td><td class="why">scale factors, not unit names.</td></tr>
+      <tr><td class="mono keepname">TICKET_SLOT_BIT, TICKET_FAR_FUTURE_BIT</td><td class="why">queue key-encoding bit-flags.</td></tr>
+      <tr><td class="mono keepname">TICKET_LCG_MULT, TICKET_MIN_BUYIN_WEI</td><td class="why">an LCG multiplier; a wei min-buy-in.</td></tr>
+      <tr><td class="mono keepname">SUB_STAGE_TICKET_WEIGHT, AFKING_TICKET_FUTURE_BPS</td><td class="why">a gas weight; a bps.</td></tr>
+    </tbody></table>
+
+    <div class="kgroup">Genuine whole-ticket counts / prices (wei)</div>
+    <table><tbody>
+      <tr><td class="mono keepname">FOIL_PACK_TICKETS (10)</td><td class="why">"ten ticket prices" — a real whole-ticket count (SKU). <span style="color:var(--dim)">(FOIL_PACK_ENTRIES=16 already correct.)</span></td></tr>
+      <tr><td class="mono keepname">ticketCost, ticketWei, oneTicketWei</td><td class="why">wei values; <code>oneTicketWei</code> = one whole-ticket price.</td></tr>
+      <tr><td class="mono keepname">ticketFreshFlip, ticketRecycledFlip, ticketNextShare, ticketFutureShare</td><td class="why">wei/flip funding-source splits of the cost.</td></tr>
+      <tr><td class="mono keepname">ticketPrice</td><td class="why"><code>priceForLevel</code> = one whole-ticket price.</td></tr>
+      <tr><td class="mono keepname">whole, frac, roundedUp</td><td class="why">the Bernoulli whole-ticket count + remainder + round-up flag.</td></tr>
+      <tr><td class="mono keepname">LOOTBOX_TICKET_*_BPS, DISTRESS_TICKET_BONUS_BPS</td><td class="why">bps parameters of the reward path.</td></tr>
+      <tr><td class="mono keepname">_ticketBudget, _ticketVarianceBps, _ticketRangeBps, _lootboxTicketCount</td><td class="why">ETH budgets / bps / whole-ticket count for the lootbox reward path.</td></tr>
+      <tr><td class="mono keepname">LootBoxOpened.futureTickets</td><td class="why">emits scaled-WHOLE tickets (×100) — the name is unit-correct.</td></tr>
+    </tbody></table>
+
+    <div class="kgroup">Mechanism / subsystem / function names ("hands out prizes", not a value)</div>
+    <table><tbody>
+      <tr><td class="mono keepname">_distributeTicketJackpot, _distributeTicketsToBucket(s), _distributeLootboxAndTickets</td><td class="why">the Ticket-Jackpot distribution mechanism.</td></tr>
+      <tr><td class="mono keepname">_awardJackpotTickets, _jackpotTicketRoll, _randTraitTicket</td><td class="why">jackpot mechanism functions.</td></tr>
+      <tr><td class="mono keepname">_packDailyTicketBudgets, _unpackDailyTicketBudgets, dailyTicketBudgetsPacked</td><td class="why">ETH-budget packing for the jackpot.</td></tr>
+      <tr><td class="mono keepname">isTicketJackpotDay, PURCHASE_PHASE_TICKET_MAX_WINNERS, dailyJackpotCoinTicketsPending</td><td class="why">a day-type, a winner-cap, a phase flag.</td></tr>
+      <tr><td class="mono keepname">payDailyJackpotCoinAndTickets, initPerpetualTickets</td><td class="why">mechanism action-selectors (hand out prizes / seed the perpetual grant).</td></tr>
+      <tr><td class="mono keepname">_callTicketPurchase, _activeTicketLevel</td><td class="why">a purchase fn; a level getter.</td></tr>
+    </tbody></table>
+
+    <div class="kgroup">Activation-queue mechanism (holds addresses / index / level, not entry counts)</div>
+    <table><tbody>
+      <tr><td class="mono keepname">ticketQueue, ticketCursor, ticketLevel, ticketsFullyProcessed, ticketWriteSlot, ticketRedemptionOpen</td><td class="why">the processing queue (addresses/index/level); selector-coupled.</td></tr>
+      <tr><td class="mono keepname">processTicketBatch, processFutureTicketBatch, _tqWriteKey/_tqReadKey/_tqFarFutureKey</td><td class="why">external selectors + key helpers — kept stable.</td></tr>
+      <tr><td class="mono keepname">STAGE_FUTURE_TICKETS_WORKING, STAGE_TICKETS_WORKING, STAGE_JACKPOT_COIN_TICKETS</td><td class="why">stage-enum constants.</td></tr>
+      <tr><td class="mono keepname">sampleFarFutureTickets</td><td class="why">returns holder addresses (membership), not entry counts.</td></tr>
+    </tbody></table>
+
+    <div class="kgroup">Modes / whole-ticket purchase leg / other</div>
+    <table><tbody>
+      <tr><td class="mono keepname">useTickets, FLAG_USE_TICKETS, isTicket</td><td class="why">buy-MODE flag (whole-ticket mode vs lootbox).</td></tr>
+      <tr><td class="mono keepname">ticketQuantity <span style="color:var(--dim)">(value)</span> — the var itself for whole-ticket legs</td><td class="why">superseded — the purchase param IS being renamed (see 480: <code>entryQuantityScaled</code>).</td></tr>
+      <tr><td class="mono keepname">decBurn, degeneretteBets</td><td class="why">mapping names (already correct; only value-types / layout follow).</td></tr>
+      <tr><td class="mono keepname">TicketsBought (event name)</td><td class="why">purchase-action event — <span class="flag">name is your call</span> (field renames either way).</td></tr>
+      <tr><td class="mono keepname">"External Entry Points" / "entry point" comments</td><td class="why">"entry" = function/loop entry point, unrelated to the unit.</td></tr>
+    </tbody></table>
+  </section>
+
+  <p class="note" style="margin-top:30px"><b>Locked naming plan</b> — owner-approved 2026-06-29. KEEP-set adversarial verification complete (clean; only the 3 highlighted locals added). <code>TICKET_SCALE</code> kept (a dual-use 2-decimal scale factor, not a unit — <code>ENTRY_SCALE</code> would mislabel its whole-ticket uses). Next: rebuild REQUIREMENTS/ROADMAP + re-plan phase 480 against this scope.</p>
+</div>
+</body>
+</html>
