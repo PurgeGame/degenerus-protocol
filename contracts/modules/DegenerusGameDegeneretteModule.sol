@@ -77,34 +77,34 @@ contract DegenerusGameDegeneretteModule is
         uint256 packed
     );
 
-    /// @notice Emitted when Full Ticket bets are resolved.
+    /// @notice Emitted when Degenerette bets are resolved.
     /// @param player The player address.
     /// @param betId The bet ID.
-    /// @param ticketCount Number of spins resolved.
-    /// @param totalPayout Total payout across all tickets (for FLIP bets: after the
-    ///        survival flip — doubled or zeroed vs the per-spin FullTicketResult sums).
-    /// @param resultTicket The spin-0 result ticket (additional spin results are derived per spinIndex).
-    event FullTicketResolved(
+    /// @param spinCount Number of spins resolved.
+    /// @param totalPayout Total payout across all spins (for FLIP bets: after the
+    ///        survival flip — doubled or zeroed vs the per-spin DegeneretteResult sums).
+    /// @param resultTraits The spin-0 result traits (additional spin results are derived per spinIndex).
+    event DegeneretteResolved(
         address indexed player,
         uint64 indexed betId,
-        uint8 ticketCount,
+        uint8 spinCount,
         uint256 totalPayout,
-        uint32 resultTicket
+        uint32 resultTraits
     );
 
-    /// @notice Emitted for each individual Full Ticket result.
+    /// @notice Emitted for each individual Degenerette spin result.
     /// @param player The player address.
     /// @param betId The bet ID.
-    /// @param ticketIndex Index of this ticket (0 to count-1).
-    /// @param playerTicket The player's ticket traits.
+    /// @param spinIndex Index of this spin (0 to count-1).
+    /// @param playerTraits The player's spin traits.
     /// @param matches Composite Variant-2 score S (0-9; color gated behind symbol,
     ///        hero symbol +2). Field name retained for the off-chain indexer.
-    /// @param payout Payout for this ticket.
-    event FullTicketResult(
+    /// @param payout Payout for this spin.
+    event DegeneretteResult(
         address indexed player,
         uint64 indexed betId,
-        uint8 ticketIndex,
-        uint32 playerTicket,
+        uint8 spinIndex,
+        uint32 playerTraits,
         uint8 matches,
         uint256 payout
     );
@@ -125,8 +125,8 @@ contract DegenerusGameDegeneretteModule is
     event WwxrpJackpotWhalePass(address indexed player, uint256 indexed bracket);
 
     /// @notice A lootbox roll resolved as a Degenerette spin (WWXRP / FLIP×3 / ETH) — the single
-    ///         self-contained record of a box-spin outcome (replaces the per-spin FullTicketResult /
-    ///         FullTicketResolved for box rolls). Every reel + every output reward is here or, for
+    ///         self-contained record of a box-spin outcome (replaces the per-spin DegeneretteResult /
+    ///         DegeneretteResolved for box rolls). Every reel + every output reward is here or, for
     ///         the ETH recirc, in the fresh box's own (now-emitted) events.
     /// @param player The reward recipient.
     /// @param betId Self-classifying id: bit 63 = box-origin sentinel, bits 62-60 = spin type
@@ -804,7 +804,7 @@ contract DegenerusGameDegeneretteModule is
                 heroIsGold
             );
 
-            emit FullTicketResult(
+            emit DegeneretteResult(
                 player,
                 betId,
                 spinIdx,
@@ -865,7 +865,7 @@ contract DegenerusGameDegeneretteModule is
         // a losing bet pays zero whether resolved or abandoned, so selective resolution
         // earns nothing. The accumulator holds exactly this bet's payout once (added per
         // spin), so doubling adds it again and zeroing subtracts it back out. The outcome
-        // reads off FullTicketResolved: totalPayout vs the per-spin FullTicketResult sums.
+        // reads off DegeneretteResolved: totalPayout vs the per-spin DegeneretteResult sums.
         if (currency == CURRENCY_FLIP && totalPayout != 0) {
             if (EntropyLib.hash2(rngWord, betId) & 1 == 1) {
                 acc.flipMint += totalPayout;
@@ -890,7 +890,7 @@ contract DegenerusGameDegeneretteModule is
             );
         }
 
-        emit FullTicketResolved(
+        emit DegeneretteResolved(
             player,
             betId,
             spinCount,
@@ -1522,7 +1522,7 @@ contract DegenerusGameDegeneretteModule is
     // `address(this) != GAME` guard rejects any direct call on the deployed module
     // instance. Spin draws derive purely from the passed (hash2-tagged, freeze-safe)
     // seed — no live state enters the seed, so the outcome is fixed at fulfillment.
-    // Each spin emits the same FullTicketResult / FullTicketResolved pair a regular bet
+    // Each spin emits the same DegeneretteResult / DegeneretteResolved pair a regular bet
     // does (synthetic betId = low 64 bits of the seed) so the off-chain indexer renders
     // box spins exactly like ordinary spins, plus one Box* marker carrying the box-origin
     // stake / split.

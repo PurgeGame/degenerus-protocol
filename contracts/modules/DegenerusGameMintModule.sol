@@ -159,10 +159,10 @@ contract DegenerusGameMintModule is
         bool closing
     );
 
-    /// @notice ticketQuantity in purchase units (4 * QTY_SCALE = 400 = one whole ticket);
+    /// @notice entryQuantityScaled in purchase units (4 * QTY_SCALE = 400 = one whole ticket);
     ///         weiIn = ETH-in for the manual-mint ticket leg (any funding source). The box leg
     ///         rides LootBoxBuy, so the two stay disjoint for off-chain ETH-in totals.
-    event TicketsBought(address indexed buyer, uint256 ticketQuantity, uint256 weiIn);
+    event EntriesBought(address indexed buyer, uint256 entryQuantityScaled, uint256 weiIn);
 
     event BoostUsed(
         address indexed player,
@@ -1377,7 +1377,7 @@ contract DegenerusGameMintModule is
 
         // Ticket-leg ETH-in (any funding source). The lootbox leg is carried by LootBoxBuy, so
         // the two events stay disjoint for off-chain ETH-in totals.
-        if (ticketCost != 0) emit TicketsBought(buyer, entryQuantityScaled, ticketCost);
+        if (ticketCost != 0) emit EntriesBought(buyer, entryQuantityScaled, ticketCost);
 
         uint256 initialClaimable = _claimableOf(buyer);
 

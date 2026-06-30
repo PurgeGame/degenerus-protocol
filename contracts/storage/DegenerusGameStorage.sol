@@ -546,26 +546,26 @@ abstract contract DegenerusGameStorage {
         uint32 take
     );
 
-    /// @notice Emitted when whole tickets are queued for a buyer at a specific level.
-    event TicketsQueued(
+    /// @notice Emitted when entries are queued for a buyer at a specific level.
+    event EntriesQueued(
         address indexed buyer,
         uint24 targetLevel,
-        uint32 quantity
+        uint32 entries
     );
 
-    /// @notice Emitted when scaled (fractional) tickets are queued for a buyer.
-    event TicketsQueuedScaled(
+    /// @notice Emitted when scaled entries (entries × QTY_SCALE) are queued for a buyer.
+    event EntriesQueuedScaled(
         address indexed buyer,
         uint24 targetLevel,
-        uint32 quantityScaled
+        uint32 entriesScaled
     );
 
-    /// @notice Emitted when tickets are queued across a contiguous range of levels.
-    event TicketsQueuedRange(
+    /// @notice Emitted when entries are queued across a contiguous range of levels.
+    event EntriesQueuedRange(
         address indexed buyer,
         uint24 startLevel,
         uint24 numLevels,
-        uint32 ticketsPerLevel
+        uint32 entriesPerLevel
     );
 
     /// @notice Emitted when a deity pass is purchased.
@@ -651,7 +651,7 @@ abstract contract DegenerusGameStorage {
         // can be manipulated by them. Player purchase paths gate liveness at their own entry; the
         // advance-chain daily-jackpot distribution also queues through this sink and must NOT be
         // reverted here, so the gate stays off the shared sink.
-        emit TicketsQueued(buyer, targetLevel, entries);
+        emit EntriesQueued(buyer, targetLevel, entries);
         bool isFarFuture = targetLevel > level + 5;
         if (isFarFuture && rngLockedFlag && !rngBypass) revert RngLocked();
         uint24 wk = isFarFuture
@@ -695,7 +695,7 @@ abstract contract DegenerusGameStorage {
     ) internal {
         if (entriesScaled == 0) return;
         // No liveness gate (see _queueEntries): post-liveness queued tickets are harmless.
-        emit TicketsQueuedScaled(buyer, targetLevel, entriesScaled);
+        emit EntriesQueuedScaled(buyer, targetLevel, entriesScaled);
         bool isFarFuture = targetLevel > level + 5;
         if (isFarFuture && rngLockedFlag && !rngBypass) revert RngLocked();
         uint24 wk = isFarFuture
@@ -747,7 +747,7 @@ abstract contract DegenerusGameStorage {
         bool rngBypass
     ) internal {
         // No liveness gate (see _queueEntries): post-liveness queued tickets are harmless.
-        emit TicketsQueuedRange(buyer, startLevel, numLevels, entriesPerLevel);
+        emit EntriesQueuedRange(buyer, startLevel, numLevels, entriesPerLevel);
         // Loop-invariant slot-0 reads cached outside the loop (the body's mapping
         // SSTOREs block the optimizer from hoisting them; neither value has a
         // writer reachable from the body). The per-level lock check observes the

@@ -85,14 +85,14 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     ///        `claimWhalePass` endpoint; tickets actually get queued at the level
     ///        when the beneficiary calls `claimWhalePass`, which may be greater
     ///        than this value (the player can delay the claim).
-    /// @param tickets Tickets per level the materialized whale pass grants
+    /// @param entriesPerLevel Entries per level the materialized whale pass grants
     /// @param statsBoost Reserved for future use (always 0)
     /// @param frozenUntilLevel Reserved for future use (always 0)
     event LootBoxWhalePassJackpot(
         address indexed player,
         uint256 lootboxAmount,
         uint24 targetLevel,
-        uint32 tickets,
+        uint32 entriesPerLevel,
         uint24 statsBoost,
         uint24 frozenUntilLevel
     );

@@ -108,11 +108,11 @@ interface IDegenerusGame {
     /// @return The yield accumulator balance (ETH wei).
     function yieldAccumulatorView() external view returns (uint256);
 
-    /// @notice Get the number of tickets owed to a player for a specific level.
+    /// @notice Get the number of entries owed to a player for a specific level.
     /// @param lvl The level to query.
     /// @param player The player to query.
-    /// @return Number of whole tickets owed (fractional remainder resolves at batch time).
-    function ticketsOwedView(uint24 lvl, address player) external view returns (uint32);
+    /// @return Number of entries owed (fractional remainder resolves at batch time).
+    function entriesOwedView(uint24 lvl, address player) external view returns (uint32);
 
     /// @notice Record a Decimator burn for jackpot eligibility.
     /// @param player Address of the player.
@@ -323,8 +323,8 @@ interface IDegenerusGame {
     /// @param targetLvl The level to sample from.
     /// @param entropy Random entropy for sampling (typically from VRF).
     /// @return trait The sampled trait ID.
-    /// @return tickets Array of player addresses holding sampled tickets.
-    function sampleTraitTicketsAtLevel(uint24 targetLvl, uint256 entropy) external view returns (uint8 trait, address[] memory tickets);
+    /// @return entries Array of player addresses holding sampled entries.
+    function sampleTraitEntriesAtLevel(uint24 targetLvl, uint256 entropy) external view returns (uint8 trait, address[] memory entries);
 
     /// @notice Sample up to 4 far-future ticket holders from ticketQueue.
     /// @dev View function for BAF far-future selection; samples ticketQueue at levels [current+5, current+99].

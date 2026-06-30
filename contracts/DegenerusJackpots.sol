@@ -386,7 +386,7 @@ contract DegenerusJackpots is IDegenerusJackpots {
                     else targetLvl = lvl + 1 + uint24(entropy % 4);
                 }
 
-                (, address[] memory tickets) = degenerusGame.sampleTraitTicketsAtLevel(targetLvl, entropy);
+                (, address[] memory tickets) = degenerusGame.sampleTraitEntriesAtLevel(targetLvl, entropy);
 
                 // Pick up to 4 tickets from the sampled set.
                 uint256 limit = tickets.length;

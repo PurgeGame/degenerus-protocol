@@ -104,7 +104,7 @@ contract DegenerusGameFoilPackModule is
     /// @notice Emitted when a foil match claim resolves to a paid tier.
     /// @param player The claimant.
     /// @param day The draw day claimed against.
-    /// @param ticketIndex Which of the pack's four tickets matched (0-3).
+    /// @param ticketIndex Which of the pack's four tickets matched the board (0-3).
     /// @param drawKind 0 = main set, 1 = bonus set.
     /// @param tier The matched score T (4..8): the graded symbol/color axis match; T=8
     ///        is the moonshot (all four full doubles). Field name retained for the indexer.

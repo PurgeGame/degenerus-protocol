@@ -65,23 +65,23 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         uint24 indexed level,
         uint16 indexed traitId,
         uint256 amount,
-        uint256 ticketIndex
+        uint256 entryIndex
     );
 
     /// @dev Ticket jackpot win. See JackpotEthWin for traitId sentinel semantics.
-    ///      ticketCount is an entries count on all 3 paths and matches the
-    ///      quantity queued by the adjacent _queueEntries call. roundedUp is
+    ///      entryCount is an entries count on all 3 paths and matches the
+    ///      entries queued by the adjacent _queueEntries call. roundedUp is
     ///      true iff the BAF _jackpotTicketRoll (traitId = BAF_TRAIT_SENTINEL)
     ///      Bernoulli sub-roll incremented the whole-ticket count; it is false
     ///      on the two trait-matched paths, which have a zero fractional part
     ///      by construction.
     event JackpotTicketWin(
         address indexed winner,
-        uint24 indexed ticketLevel,
+        uint24 indexed entryLevel,
         uint16 indexed traitId,
-        uint32 ticketCount,
+        uint32 entryCount,
         uint24 sourceLevel,
-        uint256 ticketIndex,
+        uint256 entryIndex,
         bool roundedUp
     );
 
@@ -91,7 +91,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         uint24 indexed level,
         uint8 indexed traitId,
         uint256 amount,
-        uint256 ticketIndex
+        uint256 entryIndex
     );
 
     /// @dev Emitted once per daily drawing with both main and bonus winning traits.

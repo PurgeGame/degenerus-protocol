@@ -2081,11 +2081,11 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         return _getFuturePrizePool();
     }
 
-    /// @notice Get queued future ticket rewards owed for a level.
-    /// @param lvl Target level for the queued tickets.
+    /// @notice Get queued future entry rewards owed for a level.
+    /// @param lvl Target level for the queued entries.
     /// @param player Player address to query.
     /// @return The number of entries owed (fractional remainder resolves at batch time).
-    function ticketsOwedView(
+    function entriesOwedView(
         uint24 lvl,
         address player
     ) external view returns (uint32) {
@@ -2420,16 +2420,16 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
       |  Used for scatter draws and promotional mechanics.                   |
       +======================================================================+*/
 
-    /// @notice Sample up to 4 trait burn tickets from a specific level.
-    /// @dev Used by BAF scatter to sample the next level's ticket holders.
+    /// @notice Sample up to 4 trait burn entries from a specific level.
+    /// @dev Used by BAF scatter to sample the next level's entry holders.
     /// @param targetLvl The level to sample from.
     /// @param entropy Random seed (typically VRF word) for trait and offset selection.
     /// @return traitSel Selected trait ID.
-    /// @return tickets Array of up to 4 ticket holder addresses.
-    function sampleTraitTicketsAtLevel(
+    /// @return entries Array of up to 4 entry holder addresses.
+    function sampleTraitEntriesAtLevel(
         uint24 targetLvl,
         uint256 entropy
-    ) external view returns (uint8 traitSel, address[] memory tickets) {
+    ) external view returns (uint8 traitSel, address[] memory entries) {
         traitSel = uint8(entropy >> 24);
         address[] storage arr = lvlTraitEntry[targetLvl][traitSel];
         uint256 len = arr.length;
@@ -2438,10 +2438,10 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         }
 
         uint256 take = len > 4 ? 4 : len;
-        tickets = new address[](take);
+        entries = new address[](take);
         uint256 start = (entropy >> 40) % len;
         for (uint256 i; i < take; ) {
-            tickets[i] = arr[(start + i) % len];
+            entries[i] = arr[(start + i) % len];
             unchecked {
                 ++i;
             }
@@ -2497,8 +2497,8 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
       |  Read-only functions for querying trait state and game history.      |
       +======================================================================+*/
 
-    /// @notice Count a player's tickets for a specific trait and level.
-    /// @dev Paginated for large ticket arrays.
+    /// @notice Count a player's entries for a specific trait and level.
+    /// @dev Paginated for large entry arrays.
     /// @param trait The trait ID.
     /// @param lvl The level to query.
     /// @param offset Starting index for pagination.
@@ -2506,8 +2506,8 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     /// @param player The player address to count.
     /// @return count Number of entries found in this page.
     /// @return nextOffset Next offset for pagination.
-    /// @return total Total tickets in the array.
-    function getTickets(
+    /// @return total Total entries in the array.
+    function getEntries(
         uint8 trait,
         uint24 lvl,
         uint32 offset,
