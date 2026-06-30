@@ -64,7 +64,7 @@ interface IDegenerusGamePlayerActions {
         uint256 entryQuantityScaled
     ) external;
     /// @notice Sell far-future ticket entries to sDGNRS for current-level tickets + cash.
-    function sellFarFutureTickets(
+    function sellFarFutureEntries(
         address player,
         uint32[] calldata levels,
         uint256[] calldata quantities,
@@ -623,14 +623,15 @@ contract DegenerusVault {
         gamePlayer.resolveDegeneretteBets(address(this), betIds);
     }
 
-    /// @notice Salvage the vault's far-future tickets to sDGNRS (current tickets + cash) — vault owner.
-    /// @dev The >50.1% DGVE holder can trim VAULT's far inventory. VAULT self-calls (no operator).
-    function gameSellFarFutureTickets(
+    /// @notice Salvage the vault's far-future ticket entries to sDGNRS (current tickets + cash) — vault owner.
+    /// @dev The >50.1% DGVE holder can trim VAULT's far inventory (4 entries = 1 whole ticket). VAULT
+    ///      self-calls (no operator).
+    function gameSellFarFutureEntries(
         uint32[] calldata levels,
         uint256[] calldata quantities,
         uint256[] calldata queueIndices
     ) external onlyVaultOwner {
-        gamePlayer.sellFarFutureTickets(address(this), levels, quantities, queueIndices);
+        gamePlayer.sellFarFutureEntries(address(this), levels, quantities, queueIndices);
     }
 
     /// @notice Enable/disable the salvage-buyer fallback and set the protected ETH reserve floor.

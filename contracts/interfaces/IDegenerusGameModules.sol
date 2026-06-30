@@ -247,9 +247,9 @@ interface IDegenerusGameMintModule {
     /// @notice Sells far-future ticket entries to sDGNRS for current-level tickets + cash (-EV).
     /// @param player Resolved seller / recipient
     /// @param levels Target levels to sell from
-    /// @param quantities Whole far tickets to sell at each level
+    /// @param quantities Entries to sell at each level (4 entries = 1 whole ticket)
     /// @param queueIndices Caller-supplied ticketQueue positions (verified; for swap-pop on sell-out)
-    function sellFarFutureTickets(
+    function sellFarFutureEntries(
         address player,
         uint32[] calldata levels,
         uint256[] calldata quantities,
@@ -257,7 +257,7 @@ interface IDegenerusGameMintModule {
     ) external;
 
     /// @notice Quote a far-future salvage swap WITHOUT executing (read-only -EV offer).
-    function previewSellFarFutureTickets(
+    function previewSellFarFutureEntries(
         address player,
         uint32[] calldata levels,
         uint256[] calldata quantities

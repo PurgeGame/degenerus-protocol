@@ -1023,7 +1023,7 @@ contract DegenerusGameMintModule is
         }
     }
 
-    /// @notice Emitted on a far-future salvage swap (sellFarFutureTickets).
+    /// @notice Emitted on a far-future salvage swap (sellFarFutureEntries).
     /// @dev `buyer` is the counterparty that funded the swap and received the far-future tickets:
     ///      sDGNRS normally, or the vault on the owner-enabled fallback when sDGNRS cannot fund it.
     ///      cashWei subdivides into ethCashWei (relabeled claimable) + flipTokens (buyer-owned FLIP
@@ -1039,7 +1039,7 @@ contract DegenerusGameMintModule is
     );
 
     /// @notice Quote a far-future salvage swap WITHOUT executing (the UI offer; -EV by design).
-    /// @dev Read-only twin of sellFarFutureTickets: shares the exact valuation (curve + daily
+    /// @dev Read-only twin of sellFarFutureEntries: shares the exact valuation (curve + daily
     ///      per-player jitter + ETH/FLIP split) the executing path uses, so the displayed offer
     ///      matches what would be paid. Resolves the same buyer the executing path would (sDGNRS, or
     ///      the vault on the owner-enabled fallback) so the ETH/FLIP breakdown reflects the actual
@@ -1047,12 +1047,12 @@ contract DegenerusGameMintModule is
     ///      NOT check ownership (a quote for the given bundle). When the resolved buyer holds no FLIP
     ///      (or the seed targets zero) the whole cash leg is paid in ETH; conserved as ethCashWei +
     ///      value(flipTokens).
-    /// @return totalFaceWei Sum of priceForLevel(L) * n over all lines (the bundle's face value).
+    /// @return totalFaceWei Sum of priceForLevel(L) * n / 4 over all lines (per-entry face; bundle face).
     /// @return totalBudget Total ETH the buyer would pay (the -EV offer).
     /// @return ticketWei Portion delivered as current-level tickets.
     /// @return ethCashWei Cash portion delivered as withdrawable ETH claimable.
     /// @return flipTokens Cash portion delivered as FLIP (burned from the buyer, paid as flip credit).
-    function previewSellFarFutureTickets(
+    function previewSellFarFutureEntries(
         address player,
         uint32[] calldata levels,
         uint256[] calldata quantities
@@ -1092,9 +1092,10 @@ contract DegenerusGameMintModule is
 
     /// @notice Sell far-future ticket entries (current-level tickets + cash; -EV exit) to sDGNRS, or to
     ///         the vault on the owner-enabled fallback when sDGNRS cannot fund the swap.
-    /// @dev Delegatecalled from DegenerusGame.sellFarFutureTickets with an already-resolved `player`
-    ///      (so no _resolvePlayer here). Mass-sells WHOLE far-future tickets (6 <= d = L - currentLevel
-    ///      <= 100) for ONE aggregated current-level mint (a normal recycled Claimable mint) + a cash
+    /// @dev Delegatecalled from DegenerusGame.sellFarFutureEntries with an already-resolved `player`
+    ///      (so no _resolvePlayer here). Mass-sells far-future ticket ENTRIES (4 entries = 1 whole ticket;
+    ///      6 <= d = L - currentLevel <= 100) for ONE aggregated current-level mint (a normal recycled
+    ///      Claimable mint) + a cash
     ///      residual. The counterparty is resolved by _resolveSalvageBuyer: sDGNRS first (funded from
     ///      claimableWinnings[SDGNRS] above a >=1 ETH floor), else the vault if its owner enabled the
     ///      fallback and it can fund above its owner-set reserve floor; the offer price is identical
@@ -1105,7 +1106,7 @@ contract DegenerusGameMintModule is
     ///                   below its >=1 ETH floor and no vault fallback), gameOver/liveness, or a stale
     ///                   queue index.
     /// @custom:reverts RngLocked While the RNG window is locked (freeze invariant).
-    function sellFarFutureTickets(
+    function sellFarFutureEntries(
         address player,
         uint32[] calldata levels,
         uint256[] calldata quantities,
@@ -1131,7 +1132,7 @@ contract DegenerusGameMintModule is
             uint256 ticketWei,
             uint256 cashWei
         ) = _quoteFarFutureSwap(levels, quantities, cl, oneTicketWei, seed);
-        if (totalBudget < oneTicketWei) revert E(); // too small to deliver even 1 whole ticket
+        if (totalBudget < oneTicketWei / 4) revert E(); // too small to deliver even 1 entry
 
         // Resolve the counterparty fail-closed: sDGNRS funds from its OWN claimable above a >=1 ETH
         // floor; if it cannot and the vault owner enabled the fallback, the vault buys above its
@@ -1153,14 +1154,14 @@ contract DegenerusGameMintModule is
             buyer
         );
 
-        // Debit the seller's far entries (owed is in entries, 4 per whole ticket; swap-pop on full
-        // sell-out) and credit the buyer the same entries. Distances were validated by _quoteFarFutureSwap;
-        // sequential processing handles duplicate levels (a later same-level line reads the decremented
-        // balance and reverts if it over-sells; only the line that zeroes the packed slot pops).
+        // Debit the seller's far entries (quantities[i] IS the entry count, 4 per whole ticket; swap-pop on
+        // full sell-out) and credit the buyer the same entries. Distances were validated by
+        // _quoteFarFutureSwap; sequential processing handles duplicate levels (a later same-level line reads
+        // the decremented balance and reverts if it over-sells; only the line that zeroes the packed slot pops).
         for (uint256 i; i < len; ) {
             uint24 L = uint24(levels[i]);
-            uint32 entries = uint32(quantities[i]) * 4;
-            _removeFarFutureTickets(player, L, entries, queueIndices[i]);
+            uint32 entries = uint32(quantities[i]);
+            _removeFarFutureEntries(player, L, entries, queueIndices[i]);
             _queueEntries(buyer, L, entries, false);
             unchecked {
                 ++i;
@@ -1242,7 +1243,7 @@ contract DegenerusGameMintModule is
     ///      swap-pop the seller out of ticketQueue[ffk], MAINTAINING `membership <=> packed != 0`
     ///      (so the far-future jackpot samplers need no change and gain no hot-path read). Partial sells
     ///      and sells that leave `rem` do not pop.
-    function _removeFarFutureTickets(
+    function _removeFarFutureEntries(
         address player,
         uint24 L,
         uint32 entries,

@@ -151,21 +151,21 @@ abstract contract DegenerusGameMintStreakUtils is DegenerusGameStorage {
     }
 
     /// @dev Shared far-future salvage QUOTE (read-only valuation) used by BOTH the executing
-    ///      entrypoint (MintModule.sellFarFutureTickets) and the preview view
-    ///      (DegenerusGame.previewSellFarFutureTickets), so the offer shown can never drift from the
-    ///      offer executed. Values each line at priceForLevel(L) with the two-line fractionBps(d)
-    ///      curve + the daily per-player jitter seeded from the SETTLED prior-day VRF word
-    ///      (freeze-safe). Reverts on an ineligible distance or zero quantity; does NOT check
-    ///      ownership (the executing path checks holdings at debit). The split clamps the ticket leg
-    ///      to <= totalBudget so the preview is safe for a too-small bundle (the executing path
-    ///      separately requires totalBudget >= one whole current ticket).
+    ///      entrypoint (MintModule.sellFarFutureEntries) and the preview view
+    ///      (DegenerusGame.previewSellFarFutureEntries), so the offer shown can never drift from the
+    ///      offer executed. quantities[i] is an ENTRY count (4 entries = 1 whole ticket); each line's
+    ///      face is priceForLevel(L) * n / 4 (per-entry price) with the two-line fractionBps(d) curve +
+    ///      the daily per-player jitter seeded from the SETTLED prior-day VRF word (freeze-safe). Reverts
+    ///      on an ineligible distance or zero quantity; does NOT check ownership (the executing path checks
+    ///      holdings at debit). The split clamps the ticket leg to <= totalBudget so the preview is safe for
+    ///      a too-small bundle (the executing path separately requires totalBudget >= one current entry).
     /// @param cl The active ticket level (caller-computed, shared with the split).
-    /// @param oneTicketWei priceForLevel(cl) (caller-computed, shared with the split).
+    /// @param oneTicketWei priceForLevel(cl), the whole-ticket price (caller-computed; one entry = /4).
     /// @param seed The per-player daily salvage seed (_farFutureSeed — one computation
     ///        site keeps preview/exec parity by construction).
-    /// @return totalFaceWei Sum of priceForLevel(L) * n over all lines.
+    /// @return totalFaceWei Sum of priceForLevel(L) * n / 4 over all lines (per-entry face).
     /// @return totalBudget Sum of jittered, distance-scaled budgets (ETH sDGNRS would pay).
-    /// @return ticketWei Current-level ticket leg (jittered share, floored at 1 whole ticket).
+    /// @return ticketWei Current-level ticket leg (jittered share, floored at 1 entry).
     /// @return cashWei Withdrawable cash residual (totalBudget - ticketWei).
     function _quoteFarFutureSwap(
         uint32[] calldata levels,
@@ -193,7 +193,9 @@ abstract contract DegenerusGameMintStreakUtils is DegenerusGameStorage {
             if (d < 6 || d > 100) revert InvalidDistance();
             uint256 n = quantities[i];
             if (n == 0 || n > type(uint32).max) revert InvalidQuantity();
-            uint256 faceWei = PriceLookupLib.priceForLevel(L) * n;
+            // n is an ENTRY count; per-entry face = whole-ticket price / 4 (coupled with the entry-granular
+            // debit in MintModule.sellFarFutureEntries — changing only the debit would mis-value 4x).
+            uint256 faceWei = (PriceLookupLib.priceForLevel(L) * n) / 4;
             totalFaceWei += faceWei;
             totalBudget +=
                 (faceWei * _farFutureFractionBps(d) * jitterMult) /
@@ -204,7 +206,8 @@ abstract contract DegenerusGameMintStreakUtils is DegenerusGameStorage {
         }
 
         ticketWei = (totalBudget * ticketShareBps) / 10_000;
-        if (ticketWei < oneTicketWei) ticketWei = oneTicketWei;
+        uint256 oneEntryWei = oneTicketWei / 4; // ticket leg floors at one entry (4 entries = 1 whole ticket)
+        if (ticketWei < oneEntryWei) ticketWei = oneEntryWei;
         if (ticketWei > totalBudget) ticketWei = totalBudget; // preview-safety clamp (too-small bundle)
         cashWei = totalBudget - ticketWei;
     }

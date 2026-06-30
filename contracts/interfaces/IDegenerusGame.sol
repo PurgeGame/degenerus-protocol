@@ -481,13 +481,13 @@ interface IDegenerusGame {
     ///         declared non-view because the Game dispatches it via delegatecall).
     /// @param player Ticket holder being quoted.
     /// @param levels Far-future levels to quote.
-    /// @param quantities Ticket quantities per level (parallel to `levels`).
-    /// @return totalFaceWei Total face value of the quoted tickets.
+    /// @param quantities Entry quantities per level (4 entries = 1 whole ticket; parallel to `levels`).
+    /// @return totalFaceWei Total face value of the quoted entries.
     /// @return totalBudget Salvage budget available against the quote.
-    /// @return ticketWei Per-ticket face value used for the quote.
+    /// @return ticketWei Current-level ticket leg of the offer.
     /// @return ethCashWei ETH leg of the offer.
     /// @return flipTokens FLIP leg of the offer.
-    function previewSellFarFutureTickets(
+    function previewSellFarFutureEntries(
         address player,
         uint32[] calldata levels,
         uint256[] calldata quantities

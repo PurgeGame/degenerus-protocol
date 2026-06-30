@@ -1729,12 +1729,12 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     /// @notice Sell far-future ticket entries to sDGNRS for current-level tickets + cash (-EV exit).
     /// @dev Resolves the seller (operator-honor) then delegatecalls the mint module, which holds the
     ///      far-future salvage logic (kept off this contract for EIP-170 headroom). Quote without
-    ///      executing via previewSellFarFutureTickets.
+    ///      executing via previewSellFarFutureEntries.
     /// @param player Owner of the far entries / recipient (resolved via _resolvePlayer).
     /// @param levels Target levels to sell from (each 6 <= level - currentLevel <= 100).
-    /// @param quantities Whole far tickets to sell at each level.
+    /// @param quantities Entries to sell at each level (4 entries = 1 whole ticket).
     /// @param queueIndices Caller-supplied ticketQueue position of the resolved player at each level.
-    function sellFarFutureTickets(
+    function sellFarFutureEntries(
         address player,
         uint32[] calldata levels,
         uint256[] calldata quantities,
@@ -1745,7 +1745,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
             .GAME_MINT_MODULE
             .delegatecall(
                 abi.encodeWithSelector(
-                    IDegenerusGameMintModule.sellFarFutureTickets.selector,
+                    IDegenerusGameMintModule.sellFarFutureEntries.selector,
                     player,
                     levels,
                     quantities,
@@ -1759,20 +1759,20 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     /// @dev Read-only; shares the exact valuation (curve + daily per-player jitter + ETH/FLIP
     ///      split) the executing path uses, so the displayed offer matches what would be paid.
     ///      Reverts on an ineligible distance / zero quantity; does NOT check ownership (a quote
-    ///      for the given bundle). For a bundle too small to fund one whole current ticket,
+    ///      for the given bundle). For a bundle too small to fund one current entry,
     ///      ticketWei == totalBudget and the cash legs are 0 (the executing path reverts on that).
     ///      The cash leg splits into ETH + FLIP: when sDGNRS holds no FLIP (or the seed targets
     ///      zero) the whole cash leg is paid in ETH; conserved as ethCashWei + value(flipTokens).
-    /// @return totalFaceWei Sum of priceForLevel(L) * n over all lines (the bundle's face value).
+    /// @return totalFaceWei Sum of priceForLevel(L) * n / 4 over all lines (per-entry face; bundle face).
     /// @return totalBudget Total ETH sDGNRS would pay (the -EV offer).
     /// @return ticketWei Portion delivered as current-level tickets.
     /// @return ethCashWei Cash portion delivered as withdrawable ETH claimable.
     /// @return flipTokens Cash portion delivered as FLIP (transferred from sDGNRS).
-    /// @dev Signature: previewSellFarFutureTickets(address player, uint32[] levels,
+    /// @dev Signature: previewSellFarFutureEntries(address player, uint32[] levels,
     ///      uint256[] quantities). The signature matches the module function exactly (identical
     ///      selector), so the calldata forwards as-is — re-encoding the arrays here would cost
     ///      contract-size headroom for no behavior change.
-    function previewSellFarFutureTickets(
+    function previewSellFarFutureEntries(
         address,
         uint32[] calldata,
         uint256[] calldata
