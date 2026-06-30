@@ -120,7 +120,7 @@ export class ActionSurface {
   }
 
   // Resolve: books ONE complete sample per resolved bet (stake vs payout vs EV)
-  // and feeds the oracle's Degenerette EV stream from FullTicketResult logs.
+  // and feeds the oracle's Degenerette EV stream from DegeneretteResult logs.
   async resolveDegeneretteBets(actor, betIds) {
     const claimableBefore = await this.conn.game.claimableWinningsOf(actor.address).catch(() => 0n);
     const rec = await this.call(actor, "GAME", "resolveDegeneretteBets", [actor.address, betIds],
@@ -129,8 +129,8 @@ export class ActionSurface {
     const claimableAfter = await this.conn.game.claimableWinningsOf(actor.address).catch(() => 0n);
     const ethPayout = claimableAfter > claimableBefore ? claimableAfter - claimableBefore : 0n;
 
-    // Feed the Degenerette EV oracle from FullTicketResult events.
-    const spins = this._decodeFullTicketResults(rec.logs || []);
+    // Feed the Degenerette EV oracle from DegeneretteResult events.
+    const spins = this._decodeDegeneretteResults(rec.logs || []);
     for (const s of spins) this.oracle.ingestSpin(s);
 
     // Book the resolved bets as samples (aggregate ETH payout across this call).
@@ -212,25 +212,25 @@ export class ActionSurface {
   }
 
   // -- event decoding --------------------------------------------------------
-  _decodeFullTicketResults(logs) {
+  _decodeDegeneretteResults(logs) {
     const iface = new ethers.Interface(this.conn.abi("GAME"));
-    if (!this._ftrTopic) {
-      try { this._ftrTopic = iface.getEvent("FullTicketResult").topicHash; } catch { this._ftrTopic = null; }
+    if (!this._drTopic) {
+      try { this._drTopic = iface.getEvent("DegeneretteResult").topicHash; } catch { this._drTopic = null; }
     }
     const out = [];
     for (const log of logs) {
       try {
         const parsed = iface.parseLog(log);
-        if (!parsed || parsed.name !== "FullTicketResult") continue;
+        if (!parsed || parsed.name !== "DegeneretteResult") continue;
         const a = parsed.args;
         out.push({
-          player: a.player, betId: Number(a.betId ?? 0), ticketIndex: Number(a.ticketIndex ?? 0),
-          playerTicket: Number(a.playerTicket ?? 0), matches: Number(a.matches ?? 0),
-          payout: a.payout ?? 0n, goldCount: countGold(Number(a.playerTicket ?? 0)),
+          player: a.player, betId: Number(a.betId ?? 0), spinIndex: Number(a.spinIndex ?? 0),
+          playerTraits: Number(a.playerTraits ?? 0), matches: Number(a.matches ?? 0),
+          payout: a.payout ?? 0n, goldCount: countGold(Number(a.playerTraits ?? 0)),
           currency: a.currency != null ? Number(a.currency) : undefined,
           wager: a.wager ?? a.payout ?? 0n,
         });
-      } catch { /* non-FTR log */ }
+      } catch { /* non-DegeneretteResult log */ }
     }
     return out;
   }

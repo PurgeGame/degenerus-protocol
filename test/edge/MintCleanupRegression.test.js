@@ -158,7 +158,7 @@ async function buyTickets(game, buyer, ticketCount, ethValue) {
 async function readPlayerTraitMultiset(game, lvl, player) {
   const multiset = new Map();
   for (let trait = 0; trait < 256; trait++) {
-    const [count, , total] = await game.getTickets(trait, lvl, 0, 10_000, player);
+    const [count, , total] = await game.getEntries(trait, lvl, 0, 10_000, player);
     const c = Number(count);
     if (c > 0) multiset.set(trait, c);
     if (Number(total) > 10_000) {
@@ -618,10 +618,10 @@ describe("MintCleanupRegression — Phase 291 v42.0 MINTCLN regression fixture",
         );
 
         if (path === "B" && lvl === 1) {
-          const viewOwed = Number(await game.ticketsOwedView(1, alice.address));
+          const viewOwed = Number(await game.entriesOwedView(1, alice.address));
           expect(owed).to.equal(
             viewOwed,
-            `lvl=1 Path B: direct slot owed=${owed} must equal ticketsOwedView(1, alice)=${viewOwed} — independent on-chain cross-check`
+            `lvl=1 Path B: direct slot owed=${owed} must equal entriesOwedView(1, alice)=${viewOwed} — independent on-chain cross-check`
           );
         }
       }

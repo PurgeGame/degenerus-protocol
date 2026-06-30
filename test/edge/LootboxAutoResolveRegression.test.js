@@ -16,7 +16,7 @@
 //   - TST-REG-03: auto-resolve paths (`resolveLootboxDirect` +
 //                 `resolveRedemptionLootbox`) call `_queueEntries(player,
 //                 targetLevel, whole, false)` (the whole-helper) on the unified
-//                 ticket-queue path and emit `TicketsQueued`.
+//                 ticket-queue path and emit `EntriesQueued`.
 //                 Post-Phase-277 the `index != type(uint48).max` sentinel is
 //                 retired: there is no `LootboxTicketRoll` event anywhere in
 //                 the module, the manual cold-bust WWXRP consolation is gated
@@ -162,15 +162,15 @@ describe("LootboxAutoResolveRegression — Phase 274 Wave 2 TST-REG-01..04", fun
         body.includes("_rollRemainder"),
         "_queueEntries must NOT invoke _rollRemainder (whole-only helper)"
       ).to.equal(false);
-      // Emission contract: emits TicketsQueued (whole count), not
-      // TicketsQueuedScaled.
+      // Emission contract: emits EntriesQueued (whole count), not
+      // EntriesQueuedScaled.
       expect(
-        body.includes("emit TicketsQueued("),
-        "_queueEntries must emit TicketsQueued"
+        body.includes("emit EntriesQueued("),
+        "_queueEntries must emit EntriesQueued"
       ).to.equal(true);
       expect(
-        body.includes("emit TicketsQueuedScaled("),
-        "_queueEntries must NOT emit TicketsQueuedScaled"
+        body.includes("emit EntriesQueuedScaled("),
+        "_queueEntries must NOT emit EntriesQueuedScaled"
       ).to.equal(false);
     });
 
@@ -194,8 +194,8 @@ describe("LootboxAutoResolveRegression — Phase 274 Wave 2 TST-REG-01..04", fun
         }
       }
       const body = storage.slice(bodyStart, bodyEnd);
-      // The scaled-helper emits TicketsQueuedScaled (not TicketsQueued).
-      expect(body.includes("emit TicketsQueuedScaled(")).to.equal(true);
+      // The scaled-helper emits EntriesQueuedScaled (not EntriesQueued).
+      expect(body.includes("emit EntriesQueuedScaled(")).to.equal(true);
       // And it computes a frac via TICKET_SCALE modulo.
       expect(body.includes("% QTY_SCALE")).to.equal(true);
     });
@@ -418,12 +418,12 @@ describe("LootboxAutoResolveRegression — Phase 274 Wave 2 TST-REG-01..04", fun
       expect(storage.includes("Handles remainder accumulation")).to.equal(true);
     });
 
-    it("[04c] manual + auto-resolve emit DIFFERENT event signatures (`TicketsQueued` vs `TicketsQueuedScaled`) — indexers can distinguish", function () {
+    it("[04c] manual + auto-resolve emit DIFFERENT event signatures (`EntriesQueued` vs `EntriesQueuedScaled`) — indexers can distinguish", function () {
       const storage = fs.readFileSync(STORAGE_PATH, "utf8");
       // Both events declared at storage layer.
-      expect(storage.includes("event TicketsQueued(") || /event TicketsQueued\b/.test(storage)).to.equal(true);
+      expect(storage.includes("event EntriesQueued(") || /event EntriesQueued\b/.test(storage)).to.equal(true);
       expect(
-        storage.includes("event TicketsQueuedScaled(") || /event TicketsQueuedScaled\b/.test(storage)
+        storage.includes("event EntriesQueuedScaled(") || /event EntriesQueuedScaled\b/.test(storage)
       ).to.equal(true);
     });
 

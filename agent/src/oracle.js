@@ -12,7 +12,7 @@
 //  - WINDOW : RNG-freeze byte-equality — snapshot the enumerated in-window slots
 //             while rngLocked(), re-check after an in-window player action.
 //  - EVENT  : accumulated from emitted logs (redemption roll/split, box enqueue).
-//  - STAT   : Degenerette EV/RTP/ROI estimated from the FullTicketResult stream
+//  - STAT   : Degenerette EV/RTP/ROI estimated from the DegeneretteResult stream
 //             plus per-spin hard bounds; flagged by the statistical gate.
 //
 // Mocks (VRF, stETH) are TRUSTED — their quirks are never findings; the oracle
@@ -163,7 +163,7 @@ export class InvariantOracle {
     await this._guard(v, "TICKET-01-OWED-CONSISTENT", async () => {
       const lvl = Number(s.level);
       const [o0, o1] = await Promise.all([
-        this.g.ticketsOwedView(lvl, DEAD, o), this.g.ticketsOwedView(lvl + 1, DEAD, o),
+        this.g.entriesOwedView(lvl, DEAD, o), this.g.entriesOwedView(lvl + 1, DEAD, o),
       ]);
       if (o0 !== 0n || o1 !== 0n) {
         this._fail(v, "TICKET-01-OWED-CONSISTENT", `non-participant 0xDEAD owed ${o0}/${o1} at lvl ${lvl}/${lvl + 1}`);
@@ -231,8 +231,8 @@ export class InvariantOracle {
     return null;
   }
 
-  // -- STAT: ingest a FullTicketResult for the Degenerette EV oracle ----------
-  // payload: {player, betId, ticketIndex, playerTicket, matches, payout, currency, wager}
+  // -- STAT: ingest a DegeneretteResult for the Degenerette EV oracle ----------
+  // payload: {player, betId, spinIndex, playerTraits, matches, payout, currency, wager}
   ingestSpin(p) {
     const heroIsGold = p.heroIsGold ? 1 : 0;
     const N = p.goldCount ?? 0;

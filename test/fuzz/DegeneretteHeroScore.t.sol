@@ -21,7 +21,7 @@ import {GameTimeLib} from "../../contracts/libraries/GameTimeLib.sol";
 ///
 /// @dev Reaches the FROZEN Variant-2 `_score` / `_rigWwxrpResult` (private) through
 ///      the public resolve path and reads the contract's score off the
-///      `FullTicketResult.matches` field (S ∈ {0..9}). The result ticket is derived
+///      `DegeneretteResult.matches` field (S ∈ {0..9}). The result ticket is derived
 ///      on-chain via DegenerusTraitUtils.packedTraitsDegenerette(resultSeed); a chosen
 ///      player ticket is constructed via `_ticketV2` (per-quadrant symbol/color match
 ///      masks) to land an exact Variant-2 S against it.
@@ -48,7 +48,7 @@ contract DegeneretteHeroScoreTest is DeployProtocol {
     uint256 private constant DEGEN_DGNRS_8_BPS = 800;
     uint256 private constant DEGEN_DGNRS_9_BPS = 1500;
 
-    /// @dev FullTicketResult topic0 (matches carries S now).
+    /// @dev DegeneretteResult topic0 (matches carries S now).
     bytes32 private constant FULL_TICKET_RESULT_SIG =
         0xed1cde932a37b486ad1cc829c4ce89bf3bff943b68625e57cad59bc1bc18d8de;
     bytes32 private constant PAYOUT_CAPPED_SIG =
@@ -85,7 +85,7 @@ contract DegeneretteHeroScoreTest is DeployProtocol {
 
     /// @notice Drive single-spin resolves with engineered per-quadrant (symbol,
     ///         color) match states and assert the contract's Variant-2 score (read
-    ///         from FullTicketResult.matches): per quadrant a symbol match scores +1
+    ///         from DegeneretteResult.matches): per quadrant a symbol match scores +1
     ///         (hero +2) and that quadrant's color scores +1 ONLY IF its symbol also
     ///         matched (color gated behind symbol). Floor S>=2: a lone ordinary symbol
     ///         (S=1) and a lone color (S=0) both pay 0.
@@ -327,7 +327,7 @@ contract DegeneretteHeroScoreTest is DeployProtocol {
     /// @notice Resolve a set of N bets in ONE resolveBets call, then resolve the
     ///         SAME N bets one-at-a-time (fresh state via snapshot, identical VRF
     ///         words + tickets), and assert the cumulative claimable, claimablePool,
-    ///         FLIP/WWXRP mint deltas, and the per-bet FullTicketResult events are
+    ///         FLIP/WWXRP mint deltas, and the per-bet DegeneretteResult events are
     ///         byte-identical between the batched and per-bet paths. The cross-bet
     ///         `acc` flush must be same-results (the HERO-06 DGAS constraint — the
     ///         rescale changed payout SHAPE only, never the aggregation).
@@ -400,7 +400,7 @@ contract DegeneretteHeroScoreTest is DeployProtocol {
         assertEq(claimablePoolDeltaA, claimablePoolDeltaB, "DGAS: batched claimablePool == per-bet");
         assertEq(flipDeltaA, flipDeltaB, "DGAS: batched FLIP mint == per-bet");
         assertEq(wwxrpDeltaA, wwxrpDeltaB, "DGAS: batched WWXRP mint == per-bet");
-        assertEq(eventsDigestA, eventsDigestB, "DGAS: per-spin FullTicketResult stream byte-identical");
+        assertEq(eventsDigestA, eventsDigestB, "DGAS: per-spin DegeneretteResult stream byte-identical");
 
         // Non-vacuity: the rescaled payouts actually exercised each currency.
         assertGt(claimableDeltaA, 0, "non-vacuity: ETH payout exercised");
@@ -703,7 +703,7 @@ contract DegeneretteHeroScoreTest is DeployProtocol {
     }
 
     /// @dev keccak digest of the ordered (spinIdx, playerTicket, matches, payout)
-    ///      FullTicketResult stream — a byte-identity fingerprint for the per-spin
+    ///      DegeneretteResult stream — a byte-identity fingerprint for the per-spin
     ///      result events (DGAS same-results).
     function _fullTicketResultDigest() internal returns (bytes32 digest) {
         Vm.Log[] memory logs = vm.getRecordedLogs();
@@ -741,7 +741,7 @@ contract DegeneretteHeroScoreTest is DeployProtocol {
     // =========================================================================
 
     /// @dev Resolve a single-spin ETH bet and return the contract's score S (read
-    ///      off FullTicketResult.matches). Uses a large pool so no cap binds.
+    ///      off DegeneretteResult.matches). Uses a large pool so no cap binds.
     function _resolveOneAndReadScore(
         uint48 index,
         uint256 word,
@@ -908,7 +908,7 @@ contract DegeneretteHeroScoreTest is DeployProtocol {
         return uint64(uint256(vm.load(address(game), slot)));
     }
 
-    /// @dev Read the first spin's (score, payout) from the recorded FullTicketResult.
+    /// @dev Read the first spin's (score, payout) from the recorded DegeneretteResult.
     function _firstSpinScoreAndPayout() internal returns (uint8 s, uint256 payout) {
         Vm.Log[] memory logs = vm.getRecordedLogs();
         for (uint256 i; i < logs.length; ++i) {
@@ -918,7 +918,7 @@ contract DegeneretteHeroScoreTest is DeployProtocol {
                 if (spinIdx == 0) return (matches, p);
             }
         }
-        revert("no FullTicketResult for spin 0");
+        revert("no DegeneretteResult for spin 0");
     }
 
     // ---- ticket construction -------------------------------------------------

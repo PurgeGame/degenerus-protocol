@@ -101,9 +101,9 @@ describe("LootboxAutoResolveRemByte — Phase 275 Wave 2 TST-LBX-AR-05", functio
       // _rollRemainder is NOT invoked from _queueEntries (whole-only helper).
       expect(body.includes("_rollRemainder"), "_queueEntries must NOT invoke _rollRemainder").to.equal(false);
 
-      // Emission: TicketsQueued (whole-helper), not TicketsQueuedScaled.
-      expect(body.includes("emit TicketsQueued("), "_queueEntries must emit TicketsQueued").to.equal(true);
-      expect(body.includes("emit TicketsQueuedScaled("), "_queueEntries must NOT emit TicketsQueuedScaled").to.equal(false);
+      // Emission: EntriesQueued (whole-helper), not EntriesQueuedScaled.
+      expect(body.includes("emit EntriesQueued("), "_queueEntries must emit EntriesQueued").to.equal(true);
+      expect(body.includes("emit EntriesQueuedScaled("), "_queueEntries must NOT emit EntriesQueuedScaled").to.equal(false);
     });
 
     it("[01b] positive control: `_queueEntriesScaled` body DOES write a non-zero rem byte when frac != 0", function () {
@@ -116,8 +116,8 @@ describe("LootboxAutoResolveRemByte — Phase 275 Wave 2 TST-LBX-AR-05", functio
       expect(body.includes("% QTY_SCALE"), "_queueEntriesScaled must compute frac via % QTY_SCALE").to.equal(true);
       expect(/\bfrac\b/.test(body), "_queueEntriesScaled must have a `frac` local").to.equal(true);
       expect(/\bnewRem\b/.test(body), "_queueEntriesScaled must have a `newRem` local").to.equal(true);
-      // Emission contract: TicketsQueuedScaled (scaled helper).
-      expect(body.includes("emit TicketsQueuedScaled("), "_queueEntriesScaled must emit TicketsQueuedScaled").to.equal(true);
+      // Emission contract: EntriesQueuedScaled (scaled helper).
+      expect(body.includes("emit EntriesQueuedScaled("), "_queueEntriesScaled must emit EntriesQueuedScaled").to.equal(true);
     });
   });
 

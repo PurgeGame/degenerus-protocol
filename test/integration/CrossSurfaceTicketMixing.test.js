@@ -83,7 +83,7 @@ const MINT_MODULE_SOURCE_PATH = path.resolve(
 // owed-entries count is `value >> 8`.
 //
 // This slot math is cross-checked at runtime against the public
-// `ticketsOwedView(lvl, player)` accessor (which returns `packed >> 8` for the
+// `entriesOwedView(lvl, player)` accessor (which returns `packed >> 8` for the
 // `_tqWriteKey(lvl)` key) — if the derivation drifts, the cross-check fails.
 // ---------------------------------------------------------------------------
 const TICKETS_OWED_PACKED_BASE_SLOT = 13n;
@@ -355,11 +355,19 @@ describe("CrossSurfaceTicketMixing — Phase 278 Wave 2 TST-CLEAN-02/03 + TST-CR
           .replace(/\s+/g, " ")
           .trim();
       }
-      const preDecl = extractEventDecl(pre278Source);
+      // Normalize the audited Phase-481 ABI rename (JackpotTicketWin field
+      // labels ticketLevel/ticketCount/ticketIndex -> entryLevel/entryCount/
+      // entryIndex) into the pre-278 baseline. The guard still enforces that
+      // the field TYPES, indexed markers, order, and count are byte-identical
+      // (topic0-stable) — Phase 481 renames labels only, not the signature.
+      const preDecl = extractEventDecl(pre278Source)
+        .replace(/\bticketLevel\b/g, "entryLevel")
+        .replace(/\bticketCount\b/g, "entryCount")
+        .replace(/\bticketIndex\b/g, "entryIndex");
       const curDecl = extractEventDecl(currentSource);
       expect(
         curDecl,
-        "JackpotTicketWin event definition (types + indexed markers) must be byte-identical to the pre-278 baseline — Phase 278 changes emitted values only, not the signature"
+        "JackpotTicketWin event definition (types + indexed markers) must be byte-identical to the pre-278 baseline (modulo the audited Phase-481 field-label rename) — Phase 278 changes emitted values only, not the signature"
       ).to.equal(preDecl);
     });
 
@@ -429,7 +437,7 @@ describe("CrossSurfaceTicketMixing — Phase 278 Wave 2 TST-CLEAN-02/03 + TST-CR
     //     soft-skip if the simulator denies lootbox-RNG reachability (matching
     //     the LootboxOpenGas.test.js `reachOpenableLootbox` soft-skip precedent).
     //   [CROSS-01c] a slot-math self-validation: the derived slot's `owed`
-    //     cross-checks against the public `ticketsOwedView` accessor.
+    //     cross-checks against the public `entriesOwedView` accessor.
     //   [CROSS-01d] the source-structural `extractBody` proof (DEMOTED to a
     //     secondary cross-check per D-278-TST-CROSS-DEPTH-01) that the 3
     //     RNG-driven surfaces all route through `_queueEntries` (whole, no rem
@@ -502,13 +510,13 @@ describe("CrossSurfaceTicketMixing — Phase 278 Wave 2 TST-CLEAN-02/03 + TST-CR
     // probing the three candidate write-keys (`lvl`, `lvl | TICKET_SLOT_BIT`
     // — the double-buffer toggle — and the far-future key `lvl | 1<<22`) and
     // selecting the key whose slot read's `owed` matches the public
-    // `ticketsOwedView(lvl, player)` accessor. This makes the slot math
+    // `entriesOwedView(lvl, player)` accessor. This makes the slot math
     // self-validating without needing the internal `ticketWriteSlot` bool.
     async function resolveLiveTicketsOwed(game, gameAddress, lvl, player) {
       const TICKET_SLOT_BIT = 1n << 23n;
       const FAR_FUTURE_BIT = 1n << 22n;
       const viewWhole = BigInt(
-        await game.ticketsOwedView(lvl, player.address)
+        await game.entriesOwedView(lvl, player.address)
       );
       const candidateKeys = [
         BigInt(lvl),
@@ -557,7 +565,7 @@ describe("CrossSurfaceTicketMixing — Phase 278 Wave 2 TST-CLEAN-02/03 + TST-CR
       ).to.equal(0n);
       expect(
         snap.viewWhole,
-        "ticketsOwedView must agree the player has 0 whole tickets at baseline"
+        "entriesOwedView must agree the player has 0 whole tickets at baseline"
       ).to.equal(0n);
     });
 
@@ -644,13 +652,13 @@ describe("CrossSurfaceTicketMixing — Phase 278 Wave 2 TST-CLEAN-02/03 + TST-CR
       }
     });
 
-    it("[CROSS-01c] slot-math self-validation: the derived `entriesOwedPacked` slot's `owed` field round-trips against the public `ticketsOwedView` accessor", async function () {
+    it("[CROSS-01c] slot-math self-validation: the derived `entriesOwedPacked` slot's `owed` field round-trips against the public `entriesOwedView` accessor", async function () {
       const fixture = await loadFixture(deployFullProtocol);
       const { game, alice } = fixture;
       const gameAddress = await game.getAddress();
       const currentLevel = BigInt(await game.level()) + 1n;
 
-      // At baseline both the raw-slot `owed` and `ticketsOwedView` are 0 — a
+      // At baseline both the raw-slot `owed` and `entriesOwedView` are 0 — a
       // trivial-but-real round-trip that pins the keccak nesting math. If a
       // post-open whole-ticket award is reachable, [CROSS-01b]'s
       // resolveLiveTicketsOwed `matched` flag exercises the non-zero round-trip.
@@ -663,7 +671,7 @@ describe("CrossSurfaceTicketMixing — Phase 278 Wave 2 TST-CLEAN-02/03 + TST-CR
       expect(
         snap.matched,
         "slot-math self-validation: the derived slot's owed field must match " +
-          "ticketsOwedView (keccak nesting: keccak256(abi.encode(buyer, " +
+          "entriesOwedView (keccak nesting: keccak256(abi.encode(buyer, " +
           "keccak256(abi.encode(wk, 13)))))"
       ).to.equal(true);
       expect(snap.owed).to.equal(snap.viewWhole);
@@ -853,7 +861,7 @@ describe("CrossSurfaceTicketMixing — Phase 278 Wave 2 TST-CLEAN-02/03 + TST-CR
 
       // Owed-entries delta at the roll level == the queued entries. before == 0 on a
       // fresh fixture (asserted across the band above), so the post-open owed IS the
-      // delta. resolveLiveTicketsOwed cross-validates the slot against ticketsOwedView.
+      // delta. resolveLiveTicketsOwed cross-validates the slot against entriesOwedView.
       const after = await resolveLiveTicketsOwed(
         game,
         gameAddress,
@@ -862,7 +870,7 @@ describe("CrossSurfaceTicketMixing — Phase 278 Wave 2 TST-CLEAN-02/03 + TST-CR
       );
       expect(
         after.matched,
-        "the derived owed slot must resolve against ticketsOwedView at the roll level"
+        "the derived owed slot must resolve against entriesOwedView at the roll level"
       ).to.equal(true);
       const delta = after.owed;
 

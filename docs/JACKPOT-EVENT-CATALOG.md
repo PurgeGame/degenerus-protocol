@@ -60,11 +60,12 @@ event JackpotEthWin(
 ```solidity
 event JackpotTicketWin(
     address indexed winner,
-    uint24 indexed ticketLevel,
-    uint8 indexed traitId,
-    uint32 ticketCount,
+    uint24 indexed entryLevel,
+    uint16 indexed traitId,
+    uint32 entryCount,
     uint24 sourceLevel,
-    uint256 ticketIndex
+    uint256 entryIndex,
+    bool roundedUp
 );
 ```
 
@@ -74,12 +75,13 @@ event JackpotTicketWin(
 
 | Field | Type | Indexed | Description |
 |-------|------|---------|-------------|
-| `winner` | `address` | Yes | Address of the ticket winner |
-| `ticketLevel` | `uint24` | Yes | Level the awarded tickets are for (typically sourceLevel+1) |
-| `traitId` | `uint8` | Yes | Winning trait ID for the bucket (0 for BAF jackpot) |
-| `ticketCount` | `uint32` | No | Number of tickets credited to the winner |
-| `sourceLevel` | `uint24` | No | Jackpot level that generated this ticket award |
-| `ticketIndex` | `uint256` | No | Index in the burn ticket pool used for winner selection (0 for BAF) |
+| `winner` | `address` | Yes | Address of the entry winner |
+| `entryLevel` | `uint24` | Yes | Level the awarded entries are for (typically sourceLevel+1) |
+| `traitId` | `uint16` | Yes | Winning trait ID for the bucket (sentinel ≥256 for non-trait sources, e.g. BAF) |
+| `entryCount` | `uint32` | No | Number of entries credited to the winner |
+| `sourceLevel` | `uint24` | No | Jackpot level that generated this entry award |
+| `entryIndex` | `uint256` | No | Index in the burn entry pool used for winner selection (0 for BAF) |
+| `roundedUp` | `bool` | No | True iff the BAF Bernoulli sub-roll incremented the whole-ticket count |
 
 **Emitting paths:**
 

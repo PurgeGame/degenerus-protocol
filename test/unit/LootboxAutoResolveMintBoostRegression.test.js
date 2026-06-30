@@ -130,25 +130,54 @@ describe("LootboxAutoResolveMintBoostRegression — Phase 275 Wave 2 TST-LBX-AR-
 
   describe("Byte-identity assertions: MintModule + Storage UNCHANGED by the lootbox refactor (D-275-NOOP-01 + D-40N-MINTBOOST-OUT-01)", function () {
     it("[03a] DegenerusGameMintModule.sol byte-identical to committed HEAD (untouched by the lootbox refactor)", function () {
-      const result = execSync(
-        `cmp <(git show ${BASELINE}:contracts/modules/DegenerusGameMintModule.sol) contracts/modules/DegenerusGameMintModule.sol; echo "exit=$?"`,
-        { encoding: "utf8", shell: "/bin/bash" }
+      const baseline = execSync(
+        `git show ${BASELINE}:contracts/modules/DegenerusGameMintModule.sol`,
+        { encoding: "utf8", maxBuffer: 16 * 1024 * 1024 }
       );
+      const current = fs.readFileSync(MINT_MODULE_PATH, "utf8");
+      // Normalize the audited Phase-481 ABI rename (event TicketsBought ->
+      // EntriesBought + field ticketQuantity -> entryQuantityScaled) into the
+      // committed-HEAD baseline. Any OTHER drift (e.g. the lootbox refactor
+      // touching MintModule) still fails this byte-identity guard.
+      const normBaseline = baseline
+        .replace(/TicketsBought/g, "EntriesBought")
+        .replace(/ticketQuantity/g, "entryQuantityScaled");
       expect(
-        result.includes("exit=0"),
-        `MintModule.sol drifted from committed ${BASELINE} (result: ${result.trim()})`
-      ).to.equal(true);
+        normBaseline,
+        "MintModule.sol drifted from committed HEAD beyond the audited Phase-481 ABI rename"
+      ).to.equal(current);
     });
 
     it("[03b] DegenerusGameStorage.sol byte-identical to committed HEAD (untouched by the lootbox refactor)", function () {
-      const result = execSync(
-        `cmp <(git show ${BASELINE}:contracts/storage/DegenerusGameStorage.sol) contracts/storage/DegenerusGameStorage.sol; echo "exit=$?"`,
-        { encoding: "utf8", shell: "/bin/bash" }
+      const baseline = execSync(
+        `git show ${BASELINE}:contracts/storage/DegenerusGameStorage.sol`,
+        { encoding: "utf8", maxBuffer: 16 * 1024 * 1024 }
       );
+      const current = fs.readFileSync(STORAGE_PATH, "utf8");
+      // Normalize the audited Phase-481 ABI rename (the three queue events
+      // Tickets*Queued* -> Entries*Queued* + their fields + NatSpec) into the
+      // committed-HEAD baseline. Any OTHER drift still fails this guard.
+      const normBaseline = baseline
+        .replace(/TicketsQueued/g, "EntriesQueued")
+        .replace(/uint32 quantityScaled/g, "uint32 entriesScaled")
+        .replace(/uint32 quantity(?=\r?\n)/g, "uint32 entries")
+        .replace(/uint32 ticketsPerLevel/g, "uint32 entriesPerLevel")
+        .replace(
+          "Emitted when whole tickets are queued for a buyer at a specific level.",
+          "Emitted when entries are queued for a buyer at a specific level."
+        )
+        .replace(
+          "Emitted when scaled (fractional) tickets are queued for a buyer.",
+          "Emitted when scaled entries (entries × QTY_SCALE) are queued for a buyer."
+        )
+        .replace(
+          "Emitted when tickets are queued across a contiguous range of levels.",
+          "Emitted when entries are queued across a contiguous range of levels."
+        );
       expect(
-        result.includes("exit=0"),
-        `Storage.sol drifted from committed ${BASELINE} (result: ${result.trim()})`
-      ).to.equal(true);
+        normBaseline,
+        "Storage.sol drifted from committed HEAD beyond the audited Phase-481 ABI rename"
+      ).to.equal(current);
     });
 
     it("[03c] LootboxModule auto-resolve branch swap keeps `_queueEntriesScaled` absent from LootboxModule + present in MintModule", function () {

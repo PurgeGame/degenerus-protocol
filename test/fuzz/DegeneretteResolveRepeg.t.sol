@@ -40,7 +40,7 @@ import {sDGNRS} from "../../contracts/sDGNRS.sol";
 /// @dev Deploys the full protocol via DeployProtocol. The bet placement / RNG-injection / winning-
 ///      combo helpers are byte-faithful copies of the DegeneretteFreezeResolution scaffold; the
 ///      creditFlip-count oracle is ported from CrankLeversAndPacking (recipient-isolated). The
-///      RESULTS-equality reuses the same `FullTicketResult`-event per-spin replay idiom.
+///      RESULTS-equality reuses the same `DegeneretteResult`-event per-spin replay idiom.
 contract DegeneretteResolveRepeg is DeployProtocol {
     // =========================================================================
     // Storage slot constants (confirmed via `forge inspect ... storage`)
@@ -85,13 +85,13 @@ contract DegeneretteResolveRepeg is DeployProtocol {
     bytes32 private constant COINFLIP_STAKE_UPDATED_SIG =
         keccak256("CoinflipStakeUpdated(address,uint24,uint256,uint256)");
 
-    /// @dev FullTicketResult topic0 — one per resolved spin (the raw per-spin payout source).
+    /// @dev DegeneretteResult topic0 — one per resolved spin (the raw per-spin payout source).
     bytes32 private constant FULL_TICKET_RESULT_SIG =
         0xed1cde932a37b486ad1cc829c4ce89bf3bff943b68625e57cad59bc1bc18d8de;
     /// @dev PayoutCapped topic0 — one per ETH spin that flipped into the lootbox.
     bytes32 private constant PAYOUT_CAPPED_SIG =
         0xf8a9468f6767206f82ef0f809e2c4fb396a1495ad99e9f116652fe99a91f20c5;
-    /// @dev FullTicketResolved topic0 — one per resolved betId.
+    /// @dev DegeneretteResolved topic0 — one per resolved betId.
     bytes32 private constant FULL_TICKET_RESOLVED_SIG =
         0xb740e09ba01c583a945713a2656978f631723409d1db2dce5df96a8b3ce27e15;
 
@@ -355,7 +355,7 @@ contract DegeneretteResolveRepeg is DeployProtocol {
     ///         per-spin-derived expected sums. The resolution math is produced by the UNCHANGED
     ///         `this.resolveDegeneretteBets -> delegatecall resolveDegeneretteBets`, so the FLIP/WWXRP mint deltas,
     ///         the ETH claimable delta, and the claimablePool delta must each equal the additive
-    ///         per-spin baseline replayed from the contract's own `FullTicketResult` events — the
+    ///         per-spin baseline replayed from the contract's own `DegeneretteResult` events — the
     ///         bounty wrapper provably does not touch the resolution payout. Non-vacuity: each
     ///         expected sum is asserted > 0 so the equality cannot pass against an empty baseline.
     ///
@@ -365,7 +365,7 @@ contract DegeneretteResolveRepeg is DeployProtocol {
     ///      SKIPPED against the frozen subject c4d48008: the keeper-gate event-schema fix turned the
     ///      `keeperCreditCount == 1` and the ETH/FLIP value-invariants green, but the WWXRP arm now
     ///      diverges by a small additive amount (observed 226495666e18 actual vs 226494666e18 replayed,
-    ///      a +1000e18 / +0.0004% gap). Root cause: the WWXRP mint is the per-spin `FullTicketResult`
+    ///      a +1000e18 / +0.0004% gap). Root cause: the WWXRP mint is the per-spin `DegeneretteResult`
     ///      base payout PLUS the calibrated `_wwxrpBonusBucket` per-N redistribution bonus folded into
     ///      `acc.wwxrpMint` (DegeneretteModule:432, :995-1009) — the by-design Degenerette WWXRP RTP
     ///      uplift (see [[degenerette-wwxrp-rtp-by-design]]). This replay sums only the base event
@@ -430,7 +430,7 @@ contract DegeneretteResolveRepeg is DeployProtocol {
         vm.prank(keeper);
         game.degeneretteResolve(players, betIds);
 
-        // Replay the per-spin baseline from the contract's own per-spin FullTicketResult events.
+        // Replay the per-spin baseline from the contract's own per-spin DegeneretteResult events.
         // Phases: 0 = first ETH bet, 1 = FLIP, 2 = WWXRP, 3 = trailing ETH bet (folded into ETH).
         (
             uint256 expectedEthShare,
@@ -646,7 +646,7 @@ contract DegeneretteResolveRepeg is DeployProtocol {
 
     /// @dev Replay the per-spin baseline AND count the keeper's creditFlip in a SINGLE log pass.
     ///      Walks the recorded logs in emission order. The batch resolves bets front-to-back; each
-    ///      bet's spins emit FullTicketResult, terminated by one FullTicketResolved. betPhase
+    ///      bet's spins emit DegeneretteResult, terminated by one DegeneretteResolved. betPhase
     ///      0 = first ETH bet, 1 = FLIP, 2 = WWXRP, 3 = trailing ETH bet (folded into the ETH sum,
     ///      since it shares ethPerTicket). Returns the additive ETH ethShare sum, the FLIP/WWXRP
     ///      mint sums, the PayoutCapped count (asserted 0 in the cap-free large-pool test), and the

@@ -177,7 +177,7 @@ contract DegeneretteV73SolvencyFuzz is DeployProtocol {
                 if (spinIdx == 0) return (matches, p);
             }
         }
-        revert("no FullTicketResult for spin 0");
+        revert("no DegeneretteResult for spin 0");
     }
 
     function _resultTicketForSpin(uint48 index, uint256 word, uint8 spinIdx) internal pure returns (uint32) {

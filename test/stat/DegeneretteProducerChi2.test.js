@@ -57,7 +57,7 @@
 // {0, 1, 13, 14, 27, 28, 29, ...}, JS replica drift fails the boundary
 // harness FIRST. The on-chain producer is `internal pure`, so direct invocation
 // requires either a tester contract or routing through a public entry. We
-// route through `placeDegeneretteBet` + capture `FullTicketResult` event
+// route through `placeDegeneretteBet` + capture `DegeneretteResult` event
 // (option (b) per Phase 268 plan File 2 — does NOT mutate source tree).
 // If the round-trip lifecycle setup exceeds the per-test budget, the
 // boundary cross-validation soft-skips with a console note; the JS replica
@@ -311,7 +311,7 @@ describe("STAT-02 — D-IMPL-01 boundary cross-validation against deployed packe
     // `internal pure`. To exercise it on-chain without a tester wrapper would
     // require routing through `placeDegeneretteBet` + advancing the lifecycle
     // past STAGE_RNG_REQUESTED + seeding lootboxRngIndex via storage injection
-    // + capturing FullTicketResult.firstResultTicket. This exceeds the per-
+    // + capturing DegeneretteResult.firstResultTicket. This exceeds the per-
     // test budget; the JS-replica boundary harness above is sufficient for
     // D-IMPL-01 drift guard.
     console.warn(`[STAT-02 D-IMPL-01 round-trip] Soft-skip — JS-replica boundary harness above is the load-bearing drift guard. On-chain round-trip would require multi-stage lifecycle setup beyond per-test budget.`);

@@ -391,7 +391,7 @@ async function harvestJackpotFlipWinByCall(receipts, jackpotInterface) {
   //       uint24  indexed level,   // <- positional arg: lvlPrime sampled per pull
   //       uint8   indexed traitId,
   //       uint256 amount,
-  //       uint256 ticketIndex
+  //       uint256 entryIndex
   //   );
   // Three indexed fields means exactly one un-indexed field pair lives in `data`.
   const callGroups = [];
@@ -411,7 +411,7 @@ async function harvestJackpotFlipWinByCall(receipts, jackpotInterface) {
               lvl: Number(parsed.args.level),
               traitId: Number(parsed.args.traitId),
               amount: BigInt(parsed.args.amount),
-              ticketIndex: BigInt(parsed.args.ticketIndex),
+              entryIndex: BigInt(parsed.args.entryIndex),
             },
           });
         }

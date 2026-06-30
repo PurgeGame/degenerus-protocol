@@ -49,7 +49,7 @@ contract CoverageGap222 is DeployProtocol {
         // D-13 natural caller chain: caller is buyer, entry is game.purchase.
         uint256 qty = 400;
         uint256 cost = (price0 * qty) / 400;
-        uint32 ticketsBefore = game.ticketsOwedView(lvl0, buyer);
+        uint32 ticketsBefore = game.entriesOwedView(lvl0, buyer);
         vm.prank(buyer);
         try game.purchase{value: cost}(
             buyer,
@@ -58,8 +58,8 @@ contract CoverageGap222 is DeployProtocol {
             bytes32(0),
             MintPaymentKind.DirectEth, false
         ) {
-            // Observable effect: ticketsOwedView increments strictly.
-            uint32 ticketsAfter = game.ticketsOwedView(lvl0, buyer);
+            // Observable effect: entriesOwedView increments strictly.
+            uint32 ticketsAfter = game.entriesOwedView(lvl0, buyer);
             assertGt(ticketsAfter, ticketsBefore, "tickets incremented by purchase");
         } catch {
             // Purchase may revert during setup window — acceptable.

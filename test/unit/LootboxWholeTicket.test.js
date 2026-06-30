@@ -40,7 +40,7 @@
 //
 // CROSS-CITES:
 //   - D-274-BIT-SLICE-01 (post-c21f833a supersession: uint32 / bits[224..255])
-//   - D-274-NO-EVT-BREAK-01 (LootBoxOpened.futureTickets + TicketsQueuedScaled
+//   - D-274-NO-EVT-BREAK-01 (LootBoxOpened.futureTickets + EntriesQueuedScaled
 //     semantics UNCHANGED; FlipLootOpen removed in v47 — FLIP-lootbox surface
 //     deleted, terminal-paradox closure)
 //   - feedback_rng_backward_trace.md (slice consumed only on manual paths;
@@ -530,7 +530,7 @@ describe("LootboxWholeTicket — Phase 274 Wave 2 TST-WT-01..07", function () {
     });
   });
 
-  describe("TST-WT-04 — `TicketsQueued` (not `TicketsQueuedScaled`) on the unified ticket-queue path (Phase 277)", function () {
+  describe("TST-WT-04 — `EntriesQueued` (not `EntriesQueuedScaled`) on the unified ticket-queue path (Phase 277)", function () {
     it("the per-roll ticket-queue path calls `_queueEntries(player, rollLevel, wholeTicketsToEntries(whole), false)` at one source site — `_queueEntriesScaled` no longer appears in LootboxModule", function () {
       const source = fs.readFileSync(MODULE_SOURCE_PATH, "utf8");
       // The `_queueEntries(player, rollLevel, wholeTicketsToEntries(whole), false)` call is a single
@@ -564,19 +564,19 @@ describe("LootboxWholeTicket — Phase 274 Wave 2 TST-WT-01..07", function () {
       ).to.equal(false);
     });
 
-    it("DegenerusGameStorage._queueEntries emits `TicketsQueued` (manual-path event)", function () {
+    it("DegenerusGameStorage._queueEntries emits `EntriesQueued` (manual-path event)", function () {
       const storage = fs.readFileSync(
         path.resolve(process.cwd(), "contracts/storage/DegenerusGameStorage.sol"),
         "utf8"
       );
-      // _queueEntries emits TicketsQueued.
-      expect(/emit TicketsQueued\(/.test(storage)).to.equal(true);
-      // _queueEntriesScaled emits TicketsQueuedScaled.
-      expect(/emit TicketsQueuedScaled\(/.test(storage)).to.equal(true);
+      // _queueEntries emits EntriesQueued.
+      expect(/emit EntriesQueued\(/.test(storage)).to.equal(true);
+      // _queueEntriesScaled emits EntriesQueuedScaled.
+      expect(/emit EntriesQueuedScaled\(/.test(storage)).to.equal(true);
       // The two emissions are in different functions — manual path lands on
-      // TicketsQueued, auto-resolve on TicketsQueuedScaled.
-      const queuedIdx = storage.indexOf("emit TicketsQueued(");
-      const queuedScaledIdx = storage.indexOf("emit TicketsQueuedScaled(");
+      // EntriesQueued, auto-resolve on EntriesQueuedScaled.
+      const queuedIdx = storage.indexOf("emit EntriesQueued(");
+      const queuedScaledIdx = storage.indexOf("emit EntriesQueuedScaled(");
       expect(queuedIdx).to.not.equal(queuedScaledIdx);
     });
   });

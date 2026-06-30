@@ -7,14 +7,14 @@ import {Vm} from "forge-std/Vm.sol";
 
 /// @title EthInEventsTest
 /// @notice The ETH-in slices that lack a natural 1:1 event get a dedicated per-product event
-///         carrying the spend (TicketsBought / WhalePassPurchased / LazyPassPurchased); the foil
+///         carrying the spend (EntriesBought / WhalePassPurchased / LazyPassPurchased); the foil
 ///         premium rides FoilPackBought.weiIn. Each carries weiIn as its LAST data word, disjoint
 ///         from LootBoxBuy / BetPlaced / DeityPassPurchased so an off-chain ledger sums them for
 ///         the ETH-in total. Level-0 prices: 1 whole ticket (qty 400) = 0.01 ETH, whale pass =
 ///         2.4 ETH, lazy pass = 0.24 ETH, foil premium = 10 prices = 0.1 ETH.
 contract EthInEventsTest is DeployProtocol {
     bytes32 private constant TICKETS_SIG =
-        keccak256("TicketsBought(address,uint256,uint256)");
+        keccak256("EntriesBought(address,uint256,uint256)");
     bytes32 private constant WHALE_SIG =
         keccak256("WhalePassPurchased(address,uint256,uint256)");
     bytes32 private constant LAZY_SIG =
@@ -36,12 +36,12 @@ contract EthInEventsTest is DeployProtocol {
             buyer, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false
         );
         (uint256 qty, uint256 weiIn, bool found) = _evt2(vm.getRecordedLogs(), TICKETS_SIG, buyer);
-        assertTrue(found, "mint emits TicketsBought");
+        assertTrue(found, "mint emits EntriesBought");
         assertEq(qty, 400, "entryQuantityScaled == purchase units");
         assertEq(weiIn, 0.01 ether, "weiIn == ticket cost");
     }
 
-    /// @dev A lootbox-only buy (no tickets) must NOT emit TicketsBought — the box leg rides
+    /// @dev A lootbox-only buy (no tickets) must NOT emit EntriesBought — the box leg rides
     ///      LootBoxBuy, so the `ticketCost != 0` guard keeps them disjoint.
     function test_LootboxOnlyEmitsNoTicketsBought() public {
         address buyer = makeAddr("ethin_boxonly");
@@ -52,7 +52,7 @@ contract EthInEventsTest is DeployProtocol {
             buyer, 0, 0.05 ether, bytes32(0), MintPaymentKind.DirectEth, false
         );
         (, , bool found) = _evt2(vm.getRecordedLogs(), TICKETS_SIG, buyer);
-        assertFalse(found, "ticketCost==0 -> no TicketsBought");
+        assertFalse(found, "ticketCost==0 -> no EntriesBought");
     }
 
     function test_WhalePassEmitsWhalePassPurchased() public {
@@ -78,7 +78,7 @@ contract EthInEventsTest is DeployProtocol {
         assertEq(weiIn, 0.24 ether, "weiIn == totalPrice");
     }
 
-    /// @dev A foil purchase = a mint leg (TicketsBought) + the foil premium (FoilPackBought.weiIn),
+    /// @dev A foil purchase = a mint leg (EntriesBought) + the foil premium (FoilPackBought.weiIn),
     ///      disjoint, summing to the full 0.11 ETH spend.
     function test_FoilMintLegAndPremium() public {
         address buyer = makeAddr("ethin_foil");
@@ -91,7 +91,7 @@ contract EthInEventsTest is DeployProtocol {
         Vm.Log[] memory logs = vm.getRecordedLogs();
         (, uint256 mintWei, bool mintFound) = _evt2(logs, TICKETS_SIG, buyer);
         (, uint256 foilWei, bool foilFound) = _evt2(logs, FOIL_SIG, buyer);
-        assertTrue(mintFound, "foil purchase emits the mint-leg TicketsBought");
+        assertTrue(mintFound, "foil purchase emits the mint-leg EntriesBought");
         assertEq(mintWei, 0.01 ether, "mint leg == ticket cost");
         assertTrue(foilFound, "foil purchase emits FoilPackBought");
         assertEq(foilWei, 0.1 ether, "foil premium == 10 ticket prices");

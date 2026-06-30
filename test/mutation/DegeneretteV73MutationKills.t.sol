@@ -11,7 +11,7 @@ import {Vm} from "forge-std/Vm.sol";
 /// @notice Each test PASSES on the clean (byte-frozen) v73 subject and FAILS when the named mutation
 ///         is re-applied in place — the "do the tests actually catch a bug" bar the rest of the spine
 ///         meets (see test/mutation/MutationKills.t.sol). Reaches the FROZEN private functions through
-///         the public resolve path and reads the score/payout off the FullTicketResult event. Grouped
+///         the public resolve path and reads the score/payout off the DegeneretteResult event. Grouped
 ///         by the three audited pillars (Solvency · RNG integrity · Liveness/no-brick).
 ///
 /// @dev Run: forge test --match-path test/mutation/DegeneretteV73MutationKills.t.sol
@@ -403,7 +403,7 @@ contract DegeneretteV73MutationKills is DeployProtocol {
                 if (spinIdx == 0) return (matches, p);
             }
         }
-        revert("no FullTicketResult for spin 0");
+        revert("no DegeneretteResult for spin 0");
     }
 
     function _resultTicketForSpin(uint48 index, uint256 word, uint8 spinIdx) internal pure returns (uint32) {

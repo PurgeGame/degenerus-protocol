@@ -42,7 +42,7 @@ import {DegenerusTraitUtils} from "../../contracts/DegenerusTraitUtils.sol";
 ///      regardless, and every winning spin drives the expensive cap-flip branch). A small
 ///      `futurePrizePool` injection sizes the 10%-of-pool ETH win cap (ETH_WIN_CAP_BPS,
 ///      DegeneretteModule:196) so each winning spin's excess flips into the lootbox branch -> a
-///      `PayoutCapped` emit. The on-chain `FullTicketResult` (one per spin) and `PayoutCapped` (one
+///      `PayoutCapped` emit. The on-chain `DegeneretteResult` (one per spin) and `PayoutCapped` (one
 ///      per cap-flip) counts VERIFY the loop ran fully and the winning spins flipped (non-vacuity).
 ///      Test-only: no contracts/*.sol mutated.
 contract KeeperResolveBetWorstCaseGas is DeployProtocol {
@@ -95,7 +95,7 @@ contract KeeperResolveBetWorstCaseGas is DeployProtocol {
     ///      under the EVM memory limit (Solidity never frees per-iteration loop memory).
     uint256 private constant WORD_SEARCH_BUDGET = 2000;
 
-    /// @dev FullTicketResult topic0 — one per spin (DegeneretteModule:632).
+    /// @dev DegeneretteResult topic0 — one per spin (DegeneretteModule:632).
     bytes32 private constant FULL_TICKET_RESULT_SIG =
         0xed1cde932a37b486ad1cc829c4ce89bf3bff943b68625e57cad59bc1bc18d8de;
     /// @dev PayoutCapped topic0 — emitted once per spin whose ETH share exceeds the 10% pool cap and
@@ -182,7 +182,7 @@ contract KeeperResolveBetWorstCaseGas is DeployProtocol {
         // result reels, so the harness maximizes the winning-spin count; we assert the loop ran fully
         // (10) and that the achieved cap-flip count equals the achieved winning-spin count (every
         // winning spin flips — the per-spin max branch) and is materially non-vacuous.
-        assertEq(spinResults, LEGACY_WORST_SPINS, "all 10 spins resolved (one FullTicketResult each)");
+        assertEq(spinResults, LEGACY_WORST_SPINS, "all 10 spins resolved (one DegeneretteResult each)");
         uint8 winningSpins10 = _countWinningSpins(INDEX, worstCaseWord, worstCaseTicket, LEGACY_WORST_SPINS);
         assertEq(
             lootboxFlips,
@@ -320,7 +320,7 @@ contract KeeperResolveBetWorstCaseGas is DeployProtocol {
         // result tickets, so the worst case maximizes the winning+cap-flip count; we assert the loop
         // ran fully (25) and that the achieved cap-flip count equals the achieved winning-spin count
         // (every winning spin flips, the per-spin max branch) and is materially non-vacuous.
-        assertEq(spinResults, MAX_SPINS_ETH, "DSPIN-02: all 25 spins resolved (full loop; one FullTicketResult each)");
+        assertEq(spinResults, MAX_SPINS_ETH, "DSPIN-02: all 25 spins resolved (full loop; one DegeneretteResult each)");
         uint8 winningSpins = _countWinningSpins(INDEX, worstCaseWord25, worstCaseTicket25, MAX_SPINS_ETH);
         assertEq(
             lootboxFlips,
@@ -372,7 +372,7 @@ contract KeeperResolveBetWorstCaseGas is DeployProtocol {
         // spins 0..14 and WWXRP spins are spins 0..4 — both SUBSETS of the 25 ETH spins that
         // worstCaseTicket25 already wins (matches >= 2) on, so all 45 spins win on this one word.
         // Even a losing spin still runs the full spin-loop iteration (the gas driver), and the
-        // per-spin FullTicketResult fires regardless — the 45-spin count is asserted below.
+        // per-spin DegeneretteResult fires regardless — the 45-spin count is asserted below.
 
         // Fund FLIP + WWXRP for the player (game-gated mints; ETH comes from msg.value).
         uint128 flipPerTicket = 200 ether;  // >= MIN_BET_FLIP (100 ether)
@@ -644,7 +644,7 @@ contract KeeperResolveBetWorstCaseGas is DeployProtocol {
         return uint64(uint256(vm.load(address(game), slot)));
     }
 
-    /// @dev Count the on-chain resolve effects from the recorded logs: FullTicketResult emissions
+    /// @dev Count the on-chain resolve effects from the recorded logs: DegeneretteResult emissions
     ///      (one per spin) and PayoutCapped emissions (one per spin that flipped into the lootbox).
     function _countResolveEffects(uint64[] memory realBetIds)
         internal
@@ -657,7 +657,7 @@ contract KeeperResolveBetWorstCaseGas is DeployProtocol {
             if (t0 == FULL_TICKET_RESULT_SIG) {
                 // Count only the bets under test. A resolved bet's lootbox-share recircs into
                 // a box that can itself roll a WWXRP/FLIP Degenerette spin, which emits
-                // FullTicketResult too — under a synthetic seed-derived betId (the 2nd topic).
+                // DegeneretteResult too — under a synthetic seed-derived betId (the 2nd topic).
                 if (logs[i].topics.length > 2) {
                     uint64 bid = uint64(uint256(logs[i].topics[2]));
                     for (uint256 j; j < realBetIds.length; ++j) {

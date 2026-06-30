@@ -5,7 +5,7 @@
 // Silent cold-bust regression on the auto-resolve path:
 //   When the Bernoulli round-up fails (`whole == 0` after the Bernoulli math
 //   runs on `scaledPre > 0`), an auto-resolve caller produces:
-//     - ZERO `TicketsQueued` emit (the `_queueEntries` helper at
+//     - ZERO `EntriesQueued` emit (the `_queueEntries` helper at
 //       `DegenerusGameStorage.sol` early-returns on `entries == 0`).
 //     - ZERO `wwxrp.mintPrize` invocation (no consolation on auto-resolve) —
 //       the consolation is `payColdBustConsolation`-gated and auto-resolve

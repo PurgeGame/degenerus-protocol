@@ -7,7 +7,7 @@ import {MintPaymentKind} from "../../../contracts/interfaces/IDegenerusGame.sol"
 
 /// @title TicketTrackingHandler -- Handler tracking ticket queue entries for invariant testing
 /// @notice Wraps purchase operations and tracks which (level, player) pairs have been queued.
-///         Uses ticketsOwedView to verify consistency: if a player purchased at a level,
+///         Uses entriesOwedView to verify consistency: if a player purchased at a level,
 ///         their ticketsOwed should be non-zero.
 contract TicketTrackingHandler is Test {
     DegenerusGame public game;
@@ -70,7 +70,7 @@ contract TicketTrackingHandler is Test {
         ) {
             // After successful purchase, verify ticketsOwed consistency
             // purchaseInfo().lvl returns the active ticket level
-            uint32 owed = game.ticketsOwedView(lvl, currentActor);
+            uint32 owed = game.entriesOwedView(lvl, currentActor);
             if (owed > 0) {
                 ghost_hasTicketsAtLevel[lvl][currentActor] = true;
                 ghost_totalEntries++;
@@ -79,7 +79,7 @@ contract TicketTrackingHandler is Test {
     }
 
     /// @notice Verify ticket owed consistency for all actors at a given level
-    /// @dev Checks that if ghost says a player has tickets, ticketsOwedView confirms it
+    /// @dev Checks that if ghost says a player has tickets, entriesOwedView confirms it
     ///      (or they were already processed by advanceGame).
     function verifyConsistency(uint256 levelSeed) external view {
         uint24 currentLevel = game.level();
@@ -95,7 +95,7 @@ contract TicketTrackingHandler is Test {
                 // consumed by advanceGame (owed drops to 0 after processing).
                 // So we only check that the system doesn't have negative owed
                 // (which is impossible with uint32 but is a sanity check).
-                uint32 owed = game.ticketsOwedView(checkLevel, actor);
+                uint32 owed = game.entriesOwedView(checkLevel, actor);
                 // owed is uint32, always >= 0. This is a structural sanity check.
                 assertTrue(owed >= 0, "ticketsOwed underflow");
             }

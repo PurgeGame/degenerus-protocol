@@ -529,7 +529,7 @@ describe("EventSurfaceUnification — Phase 277 Wave 2 TST-EVT-UNI-01..06", func
       ).to.equal(true);
     });
 
-    it("[05d] auto-resolve ticket awards stay observable via the unified `_queueEntries` path → `TicketsQueued`", function () {
+    it("[05d] auto-resolve ticket awards stay observable via the unified `_queueEntries` path → `EntriesQueued`", function () {
       const lootbox = fs.readFileSync(LOOTBOX_SOURCE_PATH, "utf8");
       const body = extractBody(lootbox, "function _settleLootboxRoll(");
       // The per-roll path calls _queueEntries unconditionally (proven single-site
@@ -537,9 +537,9 @@ describe("EventSurfaceUnification — Phase 277 Wave 2 TST-EVT-UNI-01..06", func
       // without a LootBoxOpened emit.
       expect(
         body.includes("_queueEntries(player, rollLevel, wholeTicketsToEntries(whole), false)"),
-        "the per-roll path must call _queueEntries so auto-resolve awards remain observable via TicketsQueued"
+        "the per-roll path must call _queueEntries so auto-resolve awards remain observable via EntriesQueued"
       ).to.equal(true);
-      // _queueEntries emits TicketsQueued (verified at the storage layer).
+      // _queueEntries emits EntriesQueued (verified at the storage layer).
       const storage = fs.readFileSync(
         path.resolve(process.cwd(), "contracts/storage/DegenerusGameStorage.sol"),
         "utf8"
@@ -549,8 +549,8 @@ describe("EventSurfaceUnification — Phase 277 Wave 2 TST-EVT-UNI-01..06", func
         null
       );
       expect(
-        queueBody.includes("emit TicketsQueued("),
-        "_queueEntries must emit TicketsQueued"
+        queueBody.includes("emit EntriesQueued("),
+        "_queueEntries must emit EntriesQueued"
       ).to.equal(true);
     });
   });

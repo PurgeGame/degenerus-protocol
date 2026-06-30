@@ -6,9 +6,9 @@
 //   When the Bernoulli round-up fails (`whole == 0` after the inline Bernoulli
 //   math runs on `scaledTickets > 0` with `scaledTickets < TICKET_SCALE`), the
 //   jackpot ticket-roll path produces:
-//     - ZERO `TicketsQueued` emit (the `_queueEntries` helper at
+//     - ZERO `EntriesQueued` emit (the `_queueEntries` helper at
 //       `DegenerusGameStorage.sol:568` early-returns on `entries == 0`,
-//       BEFORE the `emit TicketsQueued` and any SSTORE).
+//       BEFORE the `emit EntriesQueued` and any SSTORE).
 //     - ZERO consolation: `_jackpotTicketRoll` has NO `wwxrp.mintPrize` call and
 //       NO consolation branch — D-40N-SILENT-01 (jackpot cold-bust is SILENT).
 //       (The lootbox module carries no dedicated WWXRP event; the manual
@@ -30,7 +30,7 @@
 //   path — it ALWAYS emits `JackpotTicketWin` with the entries count
 //   `wholeTicketsToEntries(whole)` regardless of the Bernoulli outcome.
 //   So there is NO manual-path positive control to copy: the silent-cold-bust
-//   assertion is specifically `whole == 0` ⇒ zero `TicketsQueued`, while
+//   assertion is specifically `whole == 0` ⇒ zero `EntriesQueued`, while
 //   `JackpotTicketWin` still fires the entries count (0 when whole == 0).
 //
 // TEST STRATEGY:
@@ -50,7 +50,7 @@
 //         `if (entries == 0) return;` early-return inside `_queueEntries` at
 //         `DegenerusGameStorage.sol:568`.
 //     (c) Emit-absence assertion: on `whole == 0` the part-(b) structural
-//         proof establishes zero `TicketsQueued` emit; AND the source
+//         proof establishes zero `EntriesQueued` emit; AND the source
 //         structure shows `JackpotTicketWin` STILL fires unconditionally with
 //         the entries count `wholeTicketsToEntries(whole)` (emit == queue).
 //
@@ -228,23 +228,23 @@ describe("JackpotTicketRollSilentColdBust — Phase 276 Wave 2 TST-JPT-BR-02", f
         /if\s*\(\s*entries\s*==\s*0\s*\)\s*return;/.test(body),
         "_queueEntries must contain `if (entries == 0) return;` early-return (D-40N-SILENT-01 silent-cold-bust gate)"
       ).to.equal(true);
-      // The early-return must come BEFORE the `emit TicketsQueued` — proving
-      // whole==0 produces ZERO TicketsQueued emit and ZERO SSTORE.
+      // The early-return must come BEFORE the `emit EntriesQueued` — proving
+      // whole==0 produces ZERO EntriesQueued emit and ZERO SSTORE.
       const returnIdx = body.search(
         /if\s*\(\s*entries\s*==\s*0\s*\)\s*return;/
       );
-      const emitIdx = body.indexOf("emit TicketsQueued(");
-      expect(emitIdx, "_queueEntries must emit TicketsQueued").to.be.greaterThan(
+      const emitIdx = body.indexOf("emit EntriesQueued(");
+      expect(emitIdx, "_queueEntries must emit EntriesQueued").to.be.greaterThan(
         -1
       );
       expect(
         returnIdx,
-        "the `if (entries == 0) return;` early-return must precede `emit TicketsQueued` (silent on whole==0)"
+        "the `if (entries == 0) return;` early-return must precede `emit EntriesQueued` (silent on whole==0)"
       ).to.be.lessThan(emitIdx);
     });
   });
 
-  describe("Part (c) — emit-absence: whole == 0 ⇒ zero TicketsQueued; JackpotTicketWin STILL fires the entries ticketCount wholeTicketsToEntries(whole) + the Phase 277 `roundedUp` field (EVT-UNI-04)", function () {
+  describe("Part (c) — emit-absence: whole == 0 ⇒ zero EntriesQueued; JackpotTicketWin STILL fires the entries ticketCount wholeTicketsToEntries(whole) + the Phase 277 `roundedUp` field (EVT-UNI-04)", function () {
     it("[03a] `_jackpotTicketRoll` emits `JackpotTicketWin` unconditionally with the entries count `wholeTicketsToEntries(whole)` (4th arg == the adjacent queued entries) and the trailing `roundedUp` field (EVT-UNI-04)", function () {
       const source = fs.readFileSync(MODULE_SOURCE_PATH, "utf8");
       const body = stripLineComments(
@@ -306,7 +306,7 @@ describe("JackpotTicketRollSilentColdBust — Phase 276 Wave 2 TST-JPT-BR-02", f
       ).to.be.greaterThan(queueIdx);
     });
 
-    it("[03b] structural cold-bust conclusion: on `whole == 0` (part (a)), the part-(b) early-return at DegenerusGameStorage.sol:568 produces ZERO TicketsQueued — silent cold-bust scope is the QUEUE surface only; there is NO manual-path positive control (single jackpot path, divergence from the Phase 275 analog)", async function () {
+    it("[03b] structural cold-bust conclusion: on `whole == 0` (part (a)), the part-(b) early-return at DegenerusGameStorage.sol:568 produces ZERO EntriesQueued — silent cold-bust scope is the QUEUE surface only; there is NO manual-path positive control (single jackpot path, divergence from the Phase 275 analog)", async function () {
       // Synthesis assertion — ties parts (a) + (b) together. No fixture can
       // drive the full _jackpotTicketRoll caller stack (fixture-coverage gap,
       // LBX-02 precedent), so the cold-bust conclusion is established by
@@ -314,8 +314,8 @@ describe("JackpotTicketRollSilentColdBust — Phase 276 Wave 2 TST-JPT-BR-02", f
       // losing slice for scaledTickets ∈ (0, 100); part (b) proves the only
       // post-Bernoulli statement consuming `whole` is
       // `_queueEntries(winner, targetLevel, wholeTicketsToEntries(whole), true)`, which early-returns
-      // at `if (entries == 0) return;` BEFORE `emit TicketsQueued`. Therefore
-      // whole==0 ⇒ zero TicketsQueued, zero SSTORE — silent.
+      // at `if (entries == 0) return;` BEFORE `emit EntriesQueued`. Therefore
+      // whole==0 ⇒ zero EntriesQueued, zero SSTORE — silent.
       const tester = await deployTester();
       // Re-confirm the part-(a) cold-bust outcome inline for scaledTickets=1.
       let lossSeed = null;

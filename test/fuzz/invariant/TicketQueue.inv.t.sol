@@ -26,7 +26,7 @@ contract TicketQueueInvariant is DeployProtocol {
     }
 
     /// @notice No consistency violations in ticket tracking
-    /// @dev The TicketTrackingHandler verifies that ticketsOwedView returns
+    /// @dev The TicketTrackingHandler verifies that entriesOwedView returns
     ///      sensible values for every tracked (level, player) pair.
     function invariant_noConsistencyViolations() public view {
         assertEq(
@@ -46,12 +46,12 @@ contract TicketQueueInvariant is DeployProtocol {
 
         // Check current level and next level
         assertEq(
-            game.ticketsOwedView(currentLevel, nonParticipant),
+            game.entriesOwedView(currentLevel, nonParticipant),
             0,
             "TicketQueue: non-participant has tickets at current level"
         );
         assertEq(
-            game.ticketsOwedView(currentLevel + 1, nonParticipant),
+            game.entriesOwedView(currentLevel + 1, nonParticipant),
             0,
             "TicketQueue: non-participant has tickets at next level"
         );

@@ -103,7 +103,7 @@ The Foundry tree was re-grepped for placeholder-sensitive Degenerette payout-MAG
 (`QUICK_PLAY` / `10_756` / `basePayout` under `test/fuzz` + `test/invariant`). The only Foundry
 file asserting the contract's payout-magnitude constants is `test/fuzz/DegeneretteHeroScore.t.sol`
 (327-04), and it is **GREEN (6/6)** — it asserts scoring SHAPE / dispatch / behavior and reads the
-score off `FullTicketResult.matches`, so it passes regardless of the placeholder VALUES. The other
+score off `DegeneretteResult.matches`, so it passes regardless of the placeholder VALUES. The other
 QUICK_PLAY / `_countMatches` / `_applyHeroMultiplier` hits are local test-helper constants
 (`QUICK_PLAY_SALT`, `_countMatchesLocal` mirror fns), NOT assertions against the contract's
 placeholder constants.

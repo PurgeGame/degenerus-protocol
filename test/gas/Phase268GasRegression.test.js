@@ -49,7 +49,7 @@
 //   -                    _wwxrpFactor N=3 bucket=8 dispatch (4 if/else + SLOAD) ~ 2200 (cold) / 200 (warm)
 //   -                    payout multiplication                                  ~  30 gas
 //   - _applyHeroMultiplier SKIPPED at M=8 (hero inherent in M=8 SLOAD)         0 gas
-//   - emit FullTicketResult (4 fields + indexed)                                ~ 1500 gas
+//   - emit DegeneretteResult (4 fields + indexed)                                ~ 1500 gas
 //   - _distributePayout ETH tier 3 branch:
 //   -   pool.SLOAD                                                              ~ 2100 (cold) / 100 (warm)
 //   -   max(2.5*bet, payout/4) + lootboxShare = payout - ethShare              ~  50 gas
@@ -58,7 +58,7 @@
 //   -   _resolveLootboxDirect delegatecall                                       ~ 50000 gas (lootbox open)
 //
 // Per-spin total (warm): ~65K gas. Cold-dominated first spin: ~75K gas.
-// 10 spins: ~660K gas. Plus emit FullTicketResolved + cleanup: ~10K gas.
+// 10 spins: ~660K gas. Plus emit DegeneretteResolved + cleanup: ~10K gas.
 // Plus placeDegeneretteBet entry overhead: ~50K gas.
 // TOTAL worst-case quickPlay gas (place + resolve, 10 spins, M=8 N=3 ETH tier 3): ~720K gas.
 //

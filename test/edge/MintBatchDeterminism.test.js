@@ -13,7 +13,7 @@
 //     test/helpers/raritySymbolBatchRef.mjs, re-run against the emitted
 //     (baseKey, entropyWord, owed_at_call_entry, count) tuples per call,
 //     reconstructs a trait multiset that equals the on-chain credited
-//     multiset trait-by-trait (read via DegenerusGame.getTickets(trait, lvl,
+//     multiset trait-by-trait (read via DegenerusGame.getEntries(trait, lvl,
 //     0, total, player) for every trait id 0..255).
 //
 //   TST-FIX-02 (non-increasing 4th field) — Within a single player's drain
@@ -136,10 +136,10 @@ async function buyTickets(game, buyer, ticketCount, ethValue) {
 }
 
 async function readPlayerTraitMultiset(game, lvl, player) {
-  // Iterate all 256 trait ids; getTickets returns per-trait-per-player count.
+  // Iterate all 256 trait ids; getEntries returns per-trait-per-player count.
   const multiset = new Map();
   for (let trait = 0; trait < 256; trait++) {
-    const [count, , total] = await game.getTickets(trait, lvl, 0, 10_000, player);
+    const [count, , total] = await game.getEntries(trait, lvl, 0, 10_000, player);
     const c = Number(count);
     if (c > 0) {
       multiset.set(trait, c);
@@ -323,9 +323,9 @@ describe("MintBatchDeterminism — Phase 282 v41.0 multi-call drain regression",
       await buyTickets(game, alice, 2000, 30);
 
       // Confirm tickets are queued (owed > 0 somewhere). At this point Alice
-      // is queued at purchaseLevel=1; ticketsOwedView reads entriesOwedPacked
+      // is queued at purchaseLevel=1; entriesOwedView reads entriesOwedPacked
       // at _tqWriteKey(level=1).
-      const owedAtL1 = await game.ticketsOwedView(1, alice.address);
+      const owedAtL1 = await game.entriesOwedView(1, alice.address);
       expect(Number(owedAtL1)).to.be.gte(
         1,
         "alice must have tickets queued after 2000-ticket purchase"
@@ -556,15 +556,15 @@ describe("MintBatchDeterminism — Phase 282 v41.0 multi-call drain regression",
       //   - standard levels (11..100): 2 × 10 = 20 tickets each level → owed=20 entries
       // (each ticket = 4 entries per project memory project_ticket_entry_price_units.md;
       // but _queueEntries enqueues the WHOLE TICKET count, not the entry count
-      // — verify owed math against ticketsOwedView post-purchase).
+      // — verify owed math against entriesOwedView post-purchase).
       await game
         .connect(alice)
         .purchaseWhalePass(alice.address, 10, { value: eth(24) });
 
       // Confirm tickets are queued at future levels (levels 2..5 cover Path A
       // since _prepareFutureTickets covers purchaseLevel+1..+4 = 2..5).
-      const owedAtL2 = Number(await game.ticketsOwedView(2, alice.address));
-      const owedAtL3 = Number(await game.ticketsOwedView(3, alice.address));
+      const owedAtL2 = Number(await game.entriesOwedView(2, alice.address));
+      const owedAtL3 = Number(await game.entriesOwedView(3, alice.address));
       console.log(`[B2 path-A] alice owed at lvl=2: ${owedAtL2}, lvl=3: ${owedAtL3}`);
       expect(owedAtL2 + owedAtL3).to.be.gte(
         1,

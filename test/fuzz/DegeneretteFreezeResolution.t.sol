@@ -20,7 +20,7 @@ import {sDGNRS} from "../../contracts/sDGNRS.sol";
 ///         one pool write, one box per betId). The HARD floor is "same results" —
 ///         byte-identical to-the-wei vs a per-spin baseline. Because the contract
 ///         is frozen and the per-spin code no longer exists, the per-spin baseline
-///         is computed IN THE TEST from the contract's own per-spin `FullTicketResult`
+///         is computed IN THE TEST from the contract's own per-spin `DegeneretteResult`
 ///         events (the raw per-spin payout the contract computed) by replaying the
 ///         exact arithmetic the batching touched — the 3-tier ETH split + the
 ///         running-pool-local cap (the per-N payout TABLES are unchanged by the
@@ -84,13 +84,13 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
     uint256 private constant MIN_BET_FLIP = 100 ether;
     uint256 private constant MIN_BET_WWXRP = 1 ether;
 
-    /// @dev FullTicketResult topic0 — one per spin (the raw per-spin payout source).
+    /// @dev DegeneretteResult topic0 — one per spin (the raw per-spin payout source).
     bytes32 private constant FULL_TICKET_RESULT_SIG =
         0xed1cde932a37b486ad1cc829c4ce89bf3bff943b68625e57cad59bc1bc18d8de;
     /// @dev PayoutCapped topic0 — one per ETH spin that flipped into the lootbox.
     bytes32 private constant PAYOUT_CAPPED_SIG =
         0xf8a9468f6767206f82ef0f809e2c4fb396a1495ad99e9f116652fe99a91f20c5;
-    /// @dev FullTicketResolved topic0 — one per resolved betId.
+    /// @dev DegeneretteResolved topic0 — one per resolved betId.
     bytes32 private constant FULL_TICKET_RESOLVED_SIG =
         0xb740e09ba01c583a945713a2656978f631723409d1db2dce5df96a8b3ce27e15;
 
@@ -345,7 +345,7 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
     ///           - claimableWinnings ETH delta == Σ (every ETH spin's ethShare)
     ///           - claimablePool moved by exactly the same ETH sum (additive)
     ///         The per-spin payouts are read from the contract's own
-    ///         `FullTicketResult` events; the ETH ethShare is the 3-tier split of
+    ///         `DegeneretteResult` events; the ETH ethShare is the 3-tier split of
     ///         each spin's raw payout (a LARGE pool is seeded so the 10% cap never
     ///         binds in this Tier-1 test — Tier-2 owns the cap). Byte-identical (==).
     function testBatchedPayoutEqualsPerSpinExpectation_Tier1() public {
@@ -445,7 +445,7 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
 
     /// @notice FLIP survival-flip LOSS path: a bet whose bet-keyed flip
     ///         (keccak(word, betId) & 1 == 0) loses mints NOTHING, even though its
-    ///         raw spins paid (per-spin FullTicketResult events sum > 0).
+    ///         raw spins paid (per-spin DegeneretteResult events sum > 0).
     function testFlipSurvivalFlipLossZeroesMint() public {
         _seedFuturePrizePool(1_000_000 ether);
 
@@ -473,7 +473,7 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
         vm.prank(player);
         game.resolveDegeneretteBets(address(0), betIds);
 
-        // Raw spins paid: Σ FullTicketResult payouts > 0 (the flip zeroed the mint,
+        // Raw spins paid: Σ DegeneretteResult payouts > 0 (the flip zeroed the mint,
         // not the spins).
         Vm.Log[] memory logs = vm.getRecordedLogs();
         uint256 rawSum;
@@ -535,7 +535,7 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
 
         // Single pass over the recorded logs: read the per-spin RAW payouts AND the
         // ACTUAL capped-spin set (a PayoutCapped immediately follows the spin's
-        // FullTicketResult it caps — see DegeneretteModule:690-712).
+        // DegeneretteResult it caps — see DegeneretteModule:690-712).
         (uint256[] memory rawPayouts, bool[] memory actualCapped) = _ethSpinPayoutsAndCaps();
 
         // Replay the running-pool-local cap exactly as _distributePayout does.
@@ -653,9 +653,9 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
         game.resolveDegeneretteBets(address(0), both);
 
         uint256 ethCreditedOneCall = game.claimableWinningsOf(player) - preA;
-        // Two betIds resolved -> two FullTicketResolved, two PayoutCapped (one spin each).
+        // Two betIds resolved -> two DegeneretteResolved, two PayoutCapped (one spin each).
         (uint256 resolvedCount, uint256 cappedCount) = _countResolvedAndCapped(bet1, bet2);
-        assertEq(resolvedCount, 2, "two betIds resolved -> two FullTicketResolved (per-bet unit)");
+        assertEq(resolvedCount, 2, "two betIds resolved -> two DegeneretteResolved (per-bet unit)");
         assertEq(cappedCount, 2,
             "per-betId: each bet's single spin capped independently -> two PayoutCapped");
 
@@ -915,17 +915,17 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
     }
 
     /// @dev Replay the per-spin baseline for the Tier-1 mixed batch from the recorded
-    ///      FullTicketResult events. Groups raw per-spin payouts by currency (decoded
+    ///      DegeneretteResult events. Groups raw per-spin payouts by currency (decoded
     ///      from the bet amount each spin used) and applies the additive rule:
     ///        - ETH: Σ _ethShareOf(payout) (cap-free; PayoutCapped count returned for
     ///          the caller to assert zero in Tier-1).
     ///        - FLIP/WWXRP: Σ payout (pure additive mint).
     ///      Currency is inferred from the per-spin betAmount (the three bets used
     ///      distinct, disjoint per-ticket amounts: ethPerTicket / flipPerTicket /
-    ///      wwxrpPerTicket), which the FullTicketResult does NOT carry — so we read
+    ///      wwxrpPerTicket), which the DegeneretteResult does NOT carry — so we read
     ///      the playerTicket field is identical; instead we attribute by the contract's
     ///      emission order (ETH bet first, FLIP second, WWXRP third) using the
-    ///      per-bet FullTicketResolved boundaries.
+    ///      per-bet DegeneretteResolved boundaries.
     function _replayPerSpinBaseline(
         uint128 ethPerTicket,
         uint128 flipPerTicket,
@@ -941,7 +941,7 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
     {
         Vm.Log[] memory logs = vm.getRecordedLogs();
         // Walk logs in order. The batch resolves ETH bet, then FLIP, then WWXRP.
-        // Each bet's spins emit FullTicketResult, terminated by one FullTicketResolved.
+        // Each bet's spins emit DegeneretteResult, terminated by one DegeneretteResolved.
         // betPhase: 0 = ETH, 1 = FLIP, 2 = WWXRP.
         uint256 betPhase;
         for (uint256 i; i < logs.length; ++i) {
@@ -966,7 +966,7 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
     }
 
     /// @dev Read the per-spin RAW payouts for a SINGLE ETH bet from the recorded
-    ///      FullTicketResult events (in spin order).
+    ///      DegeneretteResult events (in spin order).
     function _ethSpinPayouts() internal returns (uint256[] memory payouts) {
         Vm.Log[] memory logs = vm.getRecordedLogs();
         uint256 count;
@@ -1012,8 +1012,8 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
     /// @dev Single pass over the recorded logs for a SINGLE ETH bet: returns BOTH the
     ///      per-spin raw payouts (in spin order) AND the ACTUAL capped-spin set. A
     ///      PayoutCapped is emitted inside _distributePayout, immediately after the
-    ///      spin's FullTicketResult (DegeneretteModule:690-712), so a PayoutCapped that
-    ///      follows the FullTicketResult for spin k (before the next FullTicketResult)
+    ///      spin's DegeneretteResult (DegeneretteModule:690-712), so a PayoutCapped that
+    ///      follows the DegeneretteResult for spin k (before the next DegeneretteResult)
     ///      caps spin k. This reads the ON-CHAIN behavior directly (not a prediction).
     function _ethSpinPayoutsAndCaps()
         internal
@@ -1041,7 +1041,7 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
         }
     }
 
-    /// @dev Count FullTicketResolved + PayoutCapped from the recorded logs.
+    /// @dev Count DegeneretteResolved + PayoutCapped from the recorded logs.
     function _countResolvedAndCapped(uint64 betA, uint64 betB)
         internal
         returns (uint256 resolved, uint256 capped)
@@ -1052,7 +1052,7 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
             bytes32 t0 = logs[i].topics[0];
             if (t0 == FULL_TICKET_RESOLVED_SIG) {
                 // betId is the 2nd indexed topic. Lootbox-triggered box spins (a recirc
-                // box's WWXRP/FLIP spin) emit FullTicketResolved too, under a synthetic
+                // box's WWXRP/FLIP spin) emit DegeneretteResolved too, under a synthetic
                 // seed-derived betId; count only the two real player bets under test.
                 uint64 bid = uint64(uint256(logs[i].topics[2]));
                 if (bid == betA || bid == betB) ++resolved;
@@ -1084,7 +1084,7 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
         }
     }
 
-    /// @dev Replay the per-spin DGNRS award from the recorded FullTicketResult events.
+    /// @dev Replay the per-spin DGNRS award from the recorded DegeneretteResult events.
     ///      Per-spin (draining): award_k = pool_k * bps(match) / 10_000 (cappedBet = 1e18
     ///      cancels the 1e18 divisor since perTicket >= 1 ether); pool_{k+1} = pool_k - award_k.
     ///      Batched (hypothetical single read): every award off the SAME initial pool.

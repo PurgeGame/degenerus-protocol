@@ -95,8 +95,8 @@ describe("DegenerusGame", function () {
       const vaultAddr = await vault.getAddress();
       const sdgnrsAddr = await sdgnrs.getAddress();
       // Tickets owed at level 1 should be 16 for vault and sdgnrs
-      expect(await game.ticketsOwedView(1, vaultAddr)).to.equal(16n);
-      expect(await game.ticketsOwedView(1, sdgnrsAddr)).to.equal(16n);
+      expect(await game.entriesOwedView(1, vaultAddr)).to.equal(16n);
+      expect(await game.entriesOwedView(1, sdgnrsAddr)).to.equal(16n);
     });
 
     it("purchaseInfo returns consistent initial state", async function () {
@@ -495,9 +495,9 @@ describe("DegenerusGame", function () {
       expect(await game.playerActivityScore(alice.address)).to.equal(0n);
     });
 
-    it("ticketsOwedView returns 0 for player with no tickets", async function () {
+    it("entriesOwedView returns 0 for player with no tickets", async function () {
       const { game, alice } = await loadFixture(deployFullProtocol);
-      expect(await game.ticketsOwedView(1, alice.address)).to.equal(0n);
+      expect(await game.entriesOwedView(1, alice.address)).to.equal(0n);
     });
 
     it("hasDeityPass returns false for new player", async function () {
