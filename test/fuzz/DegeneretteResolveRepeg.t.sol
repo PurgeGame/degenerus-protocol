@@ -87,13 +87,13 @@ contract DegeneretteResolveRepeg is DeployProtocol {
 
     /// @dev DegeneretteResult topic0 — one per resolved spin (the raw per-spin payout source).
     bytes32 private constant FULL_TICKET_RESULT_SIG =
-        0xed1cde932a37b486ad1cc829c4ce89bf3bff943b68625e57cad59bc1bc18d8de;
+        keccak256("DegeneretteResult(address,uint64,uint8,uint32,uint8,uint256)");
     /// @dev PayoutCapped topic0 — one per ETH spin that flipped into the lootbox.
     bytes32 private constant PAYOUT_CAPPED_SIG =
         0xf8a9468f6767206f82ef0f809e2c4fb396a1495ad99e9f116652fe99a91f20c5;
     /// @dev DegeneretteResolved topic0 — one per resolved betId.
     bytes32 private constant FULL_TICKET_RESOLVED_SIG =
-        0xb740e09ba01c583a945713a2656978f631723409d1db2dce5df96a8b3ce27e15;
+        keccak256("DegeneretteResolved(address,uint64,uint8,uint256,uint32)");
 
     // =========================================================================
     // Actors / scratch

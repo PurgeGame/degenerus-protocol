@@ -97,7 +97,7 @@ contract KeeperResolveBetWorstCaseGas is DeployProtocol {
 
     /// @dev DegeneretteResult topic0 — one per spin (DegeneretteModule:632).
     bytes32 private constant FULL_TICKET_RESULT_SIG =
-        0xed1cde932a37b486ad1cc829c4ce89bf3bff943b68625e57cad59bc1bc18d8de;
+        keccak256("DegeneretteResult(address,uint64,uint8,uint32,uint8,uint256)");
     /// @dev PayoutCapped topic0 — emitted once per spin whose ETH share exceeds the 10% pool cap and
     ///      flips into the lootbox branch (DegeneretteModule:759). A count of 10 proves all 10 spins
     ///      drove a real lootbox materialization (the per-spin maximum branch).

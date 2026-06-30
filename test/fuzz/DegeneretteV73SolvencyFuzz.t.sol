@@ -31,7 +31,7 @@ contract DegeneretteV73SolvencyFuzz is DeployProtocol {
     uint8 private constant CURRENCY_WWXRP = 3;
 
     bytes32 private constant FULL_TICKET_RESULT_SIG =
-        0xed1cde932a37b486ad1cc829c4ce89bf3bff943b68625e57cad59bc1bc18d8de;
+        keccak256("DegeneretteResult(address,uint64,uint8,uint32,uint8,uint256)");
 
     // ROI curve mirror (DegeneretteModule._roiBpsFromScore).
     uint256 private constant ACTIVITY_SCORE_MAX_POINTS = 305;
