@@ -39,6 +39,10 @@
 4. By-name test harnesses updated in lockstep (`DeityPassGoldNerfRegression` name string + `.t.sol` inheritors); full build green.
 5. ONE batched `.sol` diff presented and approved before commit.
 
+**Plans:** 2 plans
+- [ ] 480-01-PLAN.md — Gated contract rename sweep (RN-01…RN-06) across all `contracts/*.sol` + lockstep compile-break harness (`forge build` green) + layout golden recapture (label/typeLabel-only, `--check` green) — ONE batched gated diff (Wave 1, autonomous:false)
+- [ ] 480-02-PLAN.md — Runtime by-name `test/` literal sweep (the 479-FIX-05 forge-invisible trap) + full Hardhat/forge/stat green floor proving no behavior change (Wave 2, autonomous)
+
 ## Phase 481: EVENT-SURFACE + DOCS (GATED contract diff #3 — ABI field names)
 
 **Goal:** Align the event surface with the entries convention — rename misleading event fields, normalize emitted units to entries — and update the tests, generated ABIs, and docs; keep external view selectors stable.
