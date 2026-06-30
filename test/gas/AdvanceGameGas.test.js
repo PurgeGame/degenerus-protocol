@@ -1064,7 +1064,7 @@ describe("AdvanceGame Gas Benchmarks", function () {
   //   Pool >= 200 ETH -> max scale 6.36x -> bucket counts 159/95/50/1 = 305
   //   All 305 winners are unique addresses with autorebuy enabled.
   //   Each winner: _randTraitTicket (SSTORE) + _payNormalBucket/_handleSoloBucketWinner
-  //   + _processAutoRebuy (_calcAutoRebuy + _queueTickets + pool writes) + event.
+  //   + _processAutoRebuy (_calcAutoRebuy + _queueEntries + pool writes) + event.
   //   Call 1 processes largest(159) + solo(1) = 160 winners.
   //   Call 2 processes mid(95) + small(50) = 145 winners.
   //   Each call must stay under 16M gas.

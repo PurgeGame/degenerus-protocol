@@ -30,7 +30,7 @@ contract FFKeyHarness is DegenerusGameStorage {
 ///          - Solvency: claimablePool <= balance + stETH holds across the swap (ticket leg routes ETH into
 ///            pools = slack; cash leg is a claimant-to-claimant relabel = neutral).
 ///
-/// @dev Far-future entries for the seller are seeded via vm.store into ticketsOwedPacked + ticketQueue at
+/// @dev Far-future entries for the seller are seeded via vm.store into entriesOwedPacked + ticketQueue at
 ///      the far-future key (the constructor already pre-queues sDGNRS + VAULT). The daily jitter seed is
 ///      keccak256(player, rngWordByDay[currentDayView()-1]); the test sets rngWordByDay[day-1] via vm.store
 ///      and searches for the word that drives the jitter multiplier to its 110% ceiling. ZERO contracts/*.sol

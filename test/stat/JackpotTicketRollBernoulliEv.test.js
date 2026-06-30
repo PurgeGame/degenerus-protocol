@@ -107,37 +107,37 @@ describe("JackpotTicketRollBernoulliEv (stat-suite, heavy-MC) — TST-JPT-BR-01 
   // production inline predicate drifts from the JackpotBernoulliTester
   // passthrough, this fails BEFORE any stat test runs.
   describe("Tester-vs-source drift gate — JackpotBernoulliTester.bernoulliWhole is byte-arithmetically identical to the _jackpotTicketRoll inline Bernoulli (T-276B-01)", function () {
-    it("[00a] production `_jackpotTicketRoll` contains the canonical inline Bernoulli predicate `(uint32(entropy >> 96) % uint32(TICKET_SCALE)) < frac` verbatim", function () {
+    it("[00a] production `_jackpotTicketRoll` contains the canonical inline Bernoulli predicate `(uint32(entropy >> 96) % uint32(QTY_SCALE)) < frac` verbatim", function () {
       // Drift gate reads production source: fs.readFileSync DegenerusGameJackpotModule.sol
       const source = fs.readFileSync(MODULE_SOURCE_PATH, "utf8");
       expect(
-        /\(uint32\(entropy\s*>>\s*96\)\s*%\s*uint32\(TICKET_SCALE\)\)\s*<\s*frac/.test(
+        /\(uint32\(entropy\s*>>\s*96\)\s*%\s*uint32\(QTY_SCALE\)\)\s*<\s*frac/.test(
           source
         ),
-        "production _jackpotTicketRoll must contain `(uint32(entropy >> 96) % uint32(TICKET_SCALE)) < frac` — the canonical bits[96..127] Bernoulli predicate"
+        "production _jackpotTicketRoll must contain `(uint32(entropy >> 96) % uint32(QTY_SCALE)) < frac` — the canonical bits[96..127] Bernoulli predicate"
       ).to.equal(true);
       // The scaled→whole→frac decomposition must also be present verbatim.
       expect(
-        /uint32\s+whole\s*=\s*scaledTickets\s*\/\s*uint32\(TICKET_SCALE\)/.test(
+        /uint32\s+whole\s*=\s*scaledWholeTickets\s*\/\s*uint32\(QTY_SCALE\)/.test(
           source
         ),
-        "production must decompose `whole = scaledTickets / uint32(TICKET_SCALE)`"
+        "production must decompose `whole = scaledWholeTickets / uint32(QTY_SCALE)`"
       ).to.equal(true);
       expect(
-        /uint32\s+frac\s*=\s*scaledTickets\s*%\s*uint32\(TICKET_SCALE\)/.test(
+        /uint32\s+frac\s*=\s*scaledWholeTickets\s*%\s*uint32\(QTY_SCALE\)/.test(
           source
         ),
-        "production must decompose `frac = scaledTickets % uint32(TICKET_SCALE)`"
+        "production must decompose `frac = scaledWholeTickets % uint32(QTY_SCALE)`"
       ).to.equal(true);
     });
 
     it("[00b] `JackpotBernoulliTester` uses the SAME predicate with `seed` substituted for `entropy` (slice offset >> 96, NOT >> 224)", function () {
       const tester = fs.readFileSync(TESTER_SOURCE_PATH, "utf8");
       expect(
-        /\(uint32\(seed\s*>>\s*96\)\s*%\s*uint32\(TICKET_SCALE\)\)\s*<\s*frac/.test(
+        /\(uint32\(seed\s*>>\s*96\)\s*%\s*uint32\(QTY_SCALE\)\)\s*<\s*frac/.test(
           tester
         ),
-        "JackpotBernoulliTester must use `(uint32(seed >> 96) % uint32(TICKET_SCALE)) < frac` — the inline predicate with `seed` substituted for `entropy`"
+        "JackpotBernoulliTester must use `(uint32(seed >> 96) % uint32(QTY_SCALE)) < frac` — the inline predicate with `seed` substituted for `entropy`"
       ).to.equal(true);
       // It must NOT carry the lootbox >> 224 slice copied from the analog.
       expect(
@@ -146,14 +146,14 @@ describe("JackpotTicketRollBernoulliEv (stat-suite, heavy-MC) — TST-JPT-BR-01 
       ).to.equal(false);
       // Same scaled→whole→frac decomposition.
       expect(
-        /whole\s*=\s*scaledTickets\s*\/\s*uint32\(TICKET_SCALE\)/.test(tester),
-        "JackpotBernoulliTester must decompose `whole = scaledTickets / uint32(TICKET_SCALE)`"
+        /whole\s*=\s*scaledTickets\s*\/\s*uint32\(QTY_SCALE\)/.test(tester),
+        "JackpotBernoulliTester must decompose `whole = scaledTickets / uint32(QTY_SCALE)`"
       ).to.equal(true);
       expect(
-        /uint32\s+frac\s*=\s*scaledTickets\s*%\s*uint32\(TICKET_SCALE\)/.test(
+        /uint32\s+frac\s*=\s*scaledTickets\s*%\s*uint32\(QTY_SCALE\)/.test(
           tester
         ),
-        "JackpotBernoulliTester must decompose `frac = scaledTickets % uint32(TICKET_SCALE)`"
+        "JackpotBernoulliTester must decompose `frac = scaledTickets % uint32(QTY_SCALE)`"
       ).to.equal(true);
     });
   });

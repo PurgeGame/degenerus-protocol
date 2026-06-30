@@ -6,15 +6,15 @@
 // Bernoulli + consolation) does NOT widen any of:
 //
 //   - TST-REG-01: manual-only player+level queues skip `_rollRemainder` at
-//                 activation time (manual path calls `_queueTickets`, the
+//                 activation time (manual path calls `_queueEntries`, the
 //                 whole-helper, which never writes the `rem` byte).
 //   - TST-REG-02: mint-boost fractional path (DegenerusGameMintModule L1142
-//                 `_queueTicketsScaled` callsite) still produces `rem`
+//                 `_queueEntriesScaled` callsite) still produces `rem`
 //                 byte and still resolves via `_rollRemainder` at
 //                 activation time — v39 narrowly retires the MANUAL LOOTBOX
 //                 producer of fractional residues, NOT mint-boost.
 //   - TST-REG-03: auto-resolve paths (`resolveLootboxDirect` +
-//                 `resolveRedemptionLootbox`) call `_queueTickets(player,
+//                 `resolveRedemptionLootbox`) call `_queueEntries(player,
 //                 targetLevel, whole, false)` (the whole-helper) on the unified
 //                 ticket-queue path and emit `TicketsQueued`.
 //                 Post-Phase-277 the `index != type(uint48).max` sentinel is
@@ -39,7 +39,7 @@
 //   and the Foundry suite under `test/fuzz/` (pre-v39, status-quo). The
 //   following remain unchanged and are asserted as such:
 //     - DegenerusGameMintModule.sol (TST-REG-02) — byte-identical to baseline
-//     - DegenerusGameStorage.sol _queueTickets / _queueTicketsScaled /
+//     - DegenerusGameStorage.sol _queueEntries / _queueEntriesScaled /
 //       _rollRemainder semantics (TST-REG-03 / TST-REG-04)
 //   TST-REG-03 is updated for the Phase 277 sentinel retirement: the
 //   `index != type(uint48).max` gate is gone, auto-resolve callers pass
@@ -118,19 +118,19 @@ describe("LootboxAutoResolveRegression — Phase 274 Wave 2 TST-REG-01..04", fun
   this.timeout(60_000);
 
   describe("TST-REG-01 — manual-only queues skip _rollRemainder", function () {
-    it("[01a] the per-roll settle path invokes `_queueTickets` (the whole-helper, no rem write)", function () {
+    it("[01a] the per-roll settle path invokes `_queueEntries` (the whole-helper, no rem write)", function () {
       const source = fs.readFileSync(MODULE_SOURCE_PATH, "utf8");
-      const manualPattern = /_queueTickets\(player, rollLevel, wholeTicketsToEntries\(whole\), false\)/;
+      const manualPattern = /_queueEntries\(player, rollLevel, wholeTicketsToEntries\(whole\), false\)/;
       expect(
         source.match(manualPattern),
-        "per-roll `_queueTickets(player, rollLevel, wholeTicketsToEntries(whole), false)` missing"
+        "per-roll `_queueEntries(player, rollLevel, wholeTicketsToEntries(whole), false)` missing"
       ).to.not.be.null;
     });
 
-    it("[01b] storage `_queueTickets` does NOT write to the `rem` byte (whole-only helper)", function () {
+    it("[01b] storage `_queueEntries` does NOT write to the `rem` byte (whole-only helper)", function () {
       const storage = fs.readFileSync(STORAGE_PATH, "utf8");
-      // Locate _queueTickets body.
-      const fnIdx = storage.indexOf("function _queueTickets(");
+      // Locate _queueEntries body.
+      const fnIdx = storage.indexOf("function _queueEntries(");
       expect(fnIdx).to.be.greaterThan(-1);
       // Find matching close brace by tracking depth.
       let depth = 0;
@@ -160,23 +160,23 @@ describe("LootboxAutoResolveRegression — Phase 274 Wave 2 TST-REG-01..04", fun
       // time, not at queue time).
       expect(
         body.includes("_rollRemainder"),
-        "_queueTickets must NOT invoke _rollRemainder (whole-only helper)"
+        "_queueEntries must NOT invoke _rollRemainder (whole-only helper)"
       ).to.equal(false);
       // Emission contract: emits TicketsQueued (whole count), not
       // TicketsQueuedScaled.
       expect(
         body.includes("emit TicketsQueued("),
-        "_queueTickets must emit TicketsQueued"
+        "_queueEntries must emit TicketsQueued"
       ).to.equal(true);
       expect(
         body.includes("emit TicketsQueuedScaled("),
-        "_queueTickets must NOT emit TicketsQueuedScaled"
+        "_queueEntries must NOT emit TicketsQueuedScaled"
       ).to.equal(false);
     });
 
-    it("[01c] storage `_queueTicketsScaled` IS where `rem` byte residues are produced (auto-resolve helper)", function () {
+    it("[01c] storage `_queueEntriesScaled` IS where `rem` byte residues are produced (auto-resolve helper)", function () {
       const storage = fs.readFileSync(STORAGE_PATH, "utf8");
-      const fnIdx = storage.indexOf("function _queueTicketsScaled(");
+      const fnIdx = storage.indexOf("function _queueEntriesScaled(");
       expect(fnIdx).to.be.greaterThan(-1);
       let depth = 0;
       let bodyStart = -1;
@@ -197,7 +197,7 @@ describe("LootboxAutoResolveRegression — Phase 274 Wave 2 TST-REG-01..04", fun
       // The scaled-helper emits TicketsQueuedScaled (not TicketsQueued).
       expect(body.includes("emit TicketsQueuedScaled(")).to.equal(true);
       // And it computes a frac via TICKET_SCALE modulo.
-      expect(body.includes("% TICKET_SCALE")).to.equal(true);
+      expect(body.includes("% QTY_SCALE")).to.equal(true);
     });
   });
 
@@ -221,14 +221,14 @@ describe("LootboxAutoResolveRegression — Phase 274 Wave 2 TST-REG-01..04", fun
       ).to.equal(true);
     });
 
-    it("[02b] MintModule still calls `_queueTicketsScaled` for boost-derived fractional ticket awards", function () {
+    it("[02b] MintModule still calls `_queueEntriesScaled` for boost-derived fractional ticket awards", function () {
       const mint = fs.readFileSync(MINT_MODULE_PATH, "utf8");
-      // The mint-boost callsite uses _queueTicketsScaled with rngBypass=true
+      // The mint-boost callsite uses _queueEntriesScaled with rngBypass=true
       // (per LBX-WT-05 + mint-boost pre-v39 status quo).
-      const calls = (mint.match(/_queueTicketsScaled\(/g) || []).length;
+      const calls = (mint.match(/_queueEntriesScaled\(/g) || []).length;
       expect(
         calls,
-        "MintModule must still contain at least one _queueTicketsScaled invocation"
+        "MintModule must still contain at least one _queueEntriesScaled invocation"
       ).to.be.gte(1);
     });
   });
@@ -276,21 +276,21 @@ describe("LootboxAutoResolveRegression — Phase 274 Wave 2 TST-REG-01..04", fun
       ).to.equal("false");
     });
 
-    it("[03c] the per-roll ticket-queue path in `_settleLootboxRoll` calls `_queueTickets(player, rollLevel, wholeTicketsToEntries(whole), false)` at one source site (sentinel retired — no per-branch duplication)", function () {
+    it("[03c] the per-roll ticket-queue path in `_settleLootboxRoll` calls `_queueEntries(player, rollLevel, wholeTicketsToEntries(whole), false)` at one source site (sentinel retired — no per-branch duplication)", function () {
       const source = fs.readFileSync(MODULE_SOURCE_PATH, "utf8");
       // The `index != type(uint48).max` sentinel branch is retired. The manual
-      // and auto-resolve paths share one `_queueTickets(player, rollLevel, whole,
+      // and auto-resolve paths share one `_queueEntries(player, rollLevel, whole,
       // false)` source site inside the per-roll `_settleLootboxRoll` helper.
-      const callPattern = /_queueTickets\(player, rollLevel, wholeTicketsToEntries\(whole\), false\)/g;
+      const callPattern = /_queueEntries\(player, rollLevel, wholeTicketsToEntries\(whole\), false\)/g;
       const calls = (source.match(callPattern) || []).length;
       expect(
         calls,
-        "expected exactly one `_queueTickets(player, rollLevel, wholeTicketsToEntries(whole), false)` source site (per-roll settle path)"
+        "expected exactly one `_queueEntries(player, rollLevel, wholeTicketsToEntries(whole), false)` source site (per-roll settle path)"
       ).to.equal(1);
-      // `_queueTicketsScaled` MUST no longer appear in `DegenerusGameLootboxModule.sol`
+      // `_queueEntriesScaled` MUST no longer appear in `DegenerusGameLootboxModule.sol`
       expect(
-        source.includes("_queueTicketsScaled"),
-        "`_queueTicketsScaled` must not appear in LootboxModule LBX-AR-02"
+        source.includes("_queueEntriesScaled"),
+        "`_queueEntriesScaled` must not appear in LootboxModule LBX-AR-02"
       ).to.equal(false);
     });
 
@@ -369,16 +369,16 @@ describe("LootboxAutoResolveRegression — Phase 274 Wave 2 TST-REG-01..04", fun
   });
 
   describe("TST-REG-04 — cross-mixing variance posture", function () {
-    it("[04a] manual + auto-resolve paths write to the same `ticketsOwedPacked[wk][player]` storage slot via different helpers", function () {
+    it("[04a] manual + auto-resolve paths write to the same `entriesOwedPacked[wk][player]` storage slot via different helpers", function () {
       const storage = fs.readFileSync(STORAGE_PATH, "utf8");
-      // Both _queueTickets and _queueTicketsScaled update the same packed
-      // mapping `ticketsOwedPacked`. Confirm both touch it.
-      const queueIdx = storage.indexOf("function _queueTickets(");
-      const queueScaledIdx = storage.indexOf("function _queueTicketsScaled(");
+      // Both _queueEntries and _queueEntriesScaled update the same packed
+      // mapping `entriesOwedPacked`. Confirm both touch it.
+      const queueIdx = storage.indexOf("function _queueEntries(");
+      const queueScaledIdx = storage.indexOf("function _queueEntriesScaled(");
       expect(queueIdx).to.be.greaterThan(-1);
       expect(queueScaledIdx).to.be.greaterThan(-1);
 
-      // Extract both bodies and check that both reference ticketsOwedPacked.
+      // Extract both bodies and check that both reference entriesOwedPacked.
       function extractBody(start) {
         let depth = 0;
         let bs = -1;
@@ -399,22 +399,22 @@ describe("LootboxAutoResolveRegression — Phase 274 Wave 2 TST-REG-01..04", fun
       }
       const queueBody = extractBody(queueIdx);
       const queueScaledBody = extractBody(queueScaledIdx);
-      expect(queueBody.includes("ticketsOwedPacked")).to.equal(true);
-      expect(queueScaledBody.includes("ticketsOwedPacked")).to.equal(true);
+      expect(queueBody.includes("entriesOwedPacked")).to.equal(true);
+      expect(queueScaledBody.includes("entriesOwedPacked")).to.equal(true);
     });
 
     it("[04b] documented tradeoff: manual is per-lootbox-Bernoulli (higher variance); auto-resolve pools via rem-byte (deterministic accumulation)", function () {
       // This is a documentation-of-intent assertion that the CONTEXT.md
       // <specifics> tradeoff is what ships. The Bernoulli math is documented
       // in the source NatSpec at L1030-1037; the rem-byte accumulation is
-      // documented in `_queueTicketsScaled` body.
+      // documented in `_queueEntriesScaled` body.
       const source = fs.readFileSync(MODULE_SOURCE_PATH, "utf8");
       // NatSpec mentions "Bernoulli" near the manual branch.
       const bernoulliMention = source.indexOf("Bernoulli");
       expect(bernoulliMention).to.be.greaterThan(-1);
 
       const storage = fs.readFileSync(STORAGE_PATH, "utf8");
-      // Storage _queueTicketsScaled NatSpec / body mentions remainder.
+      // Storage _queueEntriesScaled NatSpec / body mentions remainder.
       expect(storage.includes("Handles remainder accumulation")).to.equal(true);
     });
 
@@ -433,19 +433,19 @@ describe("LootboxAutoResolveRegression — Phase 274 Wave 2 TST-REG-01..04", fun
       // `emitLootboxEvent` emit flag (every box path now emits LootBoxOpened, gated only
       // by !wasSpin). The sole remaining per-path bool is `payColdBustConsolation`, which
       // gates the manual cold-bust WWXRP consolation. The
-      // `_queueTickets(player, rollLevel, wholeTicketsToEntries(whole), false)` call is unconditional and shared.
+      // `_queueEntries(player, rollLevel, wholeTicketsToEntries(whole), false)` call is unconditional and shared.
       expect(
         source.includes("if (index != type(uint48).max)"),
         "the `index != type(uint48).max` sentinel gate must be fully retired"
       ).to.equal(false);
-      // The `_queueTickets` call appears at exactly one source site — no
+      // The `_queueEntries` call appears at exactly one source site — no
       // per-branch duplication, so manual and auto-resolve cannot cross over.
       const callMatches = (
-        source.match(/_queueTickets\(player, rollLevel, wholeTicketsToEntries\(whole\), false\)/g) || []
+        source.match(/_queueEntries\(player, rollLevel, wholeTicketsToEntries\(whole\), false\)/g) || []
       ).length;
       expect(
         callMatches,
-        "the per-roll ticket-queue path must call `_queueTickets(player, rollLevel, wholeTicketsToEntries(whole), false)` at one source site"
+        "the per-roll ticket-queue path must call `_queueEntries(player, rollLevel, wholeTicketsToEntries(whole), false)` at one source site"
       ).to.equal(1);
       // The `LootBoxOpened` emit fires on every box path, suppressed only for
       // Degenerette-spin rolls (`!wasSpin`), which carry their own settlement event;

@@ -49,10 +49,10 @@ contract FFKeyHarness is DegenerusGameStorage {
 ///     `afkingFunding[*]` in-context.)
 ///   - GASOPT-01 (DegenerusGameMintModule `owedMap` pointer hoist): the `processFutureTicketBatch`
 ///     ticket-processing RESULTS (per-player owed drain) are byte-identical to the expected per-player
-///     accounting. The hoist (`mapping(...) storage owedMap = ticketsOwedPacked[rk]`) is `rk`-loop-invariant,
+///     accounting. The hoist (`mapping(...) storage owedMap = entriesOwedPacked[rk]`) is `rk`-loop-invariant,
 ///     so a multi-player backlog drains every player's owed to zero — a broken pointer hoist would
 ///     skip / double-process a player, stranding non-zero owed or mis-decrementing it. Observed via the
-///     contract's own `ticketsOwedPacked` storage (the per-player owed truth) after a real advance drain.
+///     contract's own `entriesOwedPacked` storage (the per-player owed truth) after a real advance drain.
 ///
 /// @dev The five call-site deltas applied (D-351-01, PATTERNS §"five call-site deltas"):
 ///   Δ3 doWork→mintFlip: `afKing.doWork()` -> `game.mintFlip()` (the rewarded router).
@@ -415,7 +415,7 @@ contract KeeperRewardRoutingSameResults is DeployProtocol {
 
     /// @notice GASOPT-01 (owedMap pointer hoist) same-results: a MULTI-PLAYER far-future ticket backlog
     ///         drains every player's owed to ZERO through the advance-driven processFutureTicketBatch loop
-    ///         (the hoisted `owedMap = ticketsOwedPacked[rk]` is rk-loop-invariant). A broken pointer hoist
+    ///         (the hoisted `owedMap = entriesOwedPacked[rk]` is rk-loop-invariant). A broken pointer hoist
     ///         would skip / double-process a player, leaving non-zero owed or mis-decrementing it; the
     ///         per-player owed RESULTS are byte-identical to the expected per-player accounting (full drain).
     function testGasopt01OwedMapHoistSameResults() public {
@@ -554,7 +554,7 @@ contract KeeperRewardRoutingSameResults is DeployProtocol {
         vm.store(address(game), bytes32(CLAIMABLE_POOL_SLOT), bytes32(newPacked));
     }
 
-    // ---- far-future ticket seeding (ticketQueue slot 12 / ticketsOwedPacked slot 13) ----
+    // ---- far-future ticket seeding (ticketQueue slot 12 / entriesOwedPacked slot 13) ----
 
     function _ownedPackedSlot(uint24 key, address who) internal pure returns (bytes32) {
         bytes32 inner = keccak256(abi.encode(uint256(key), TICKETS_OWED_PACKED_SLOT));

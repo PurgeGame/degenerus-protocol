@@ -37,7 +37,7 @@ contract TLKeyComputer is DegenerusGameStorage {
 ///                [28:29]subsFullyProcessed [29:30]presaleDrained [30:31]ticketRedemptionOpen
 ///      - Slot 1: [0:16]currentPrizePool(uint128) [16:32]claimablePool(uint128)
 ///      - ticketQueue: slot 12 (mapping(uint24 => address[]))
-///      - ticketsOwedPacked: slot 13 (mapping(uint24 => mapping(address => uint40)))
+///      - entriesOwedPacked: slot 13 (mapping(uint24 => mapping(address => uint40)))
 ///      - prizePoolsPacked: slot 2 ([future:128][next:128])
 ///
 /// @dev Requirement coverage:
@@ -615,7 +615,7 @@ contract TicketLifecycleTest is DeployProtocol {
         assertTrue(inJackpot, "Should be in jackpot phase after vm.store");
         assertTrue(rngLocked_, "Should have rngLocked after vm.store");
 
-        // Use buyer3 (fresh, never bought before) for a clean ticketsOwedPacked check.
+        // Use buyer3 (fresh, never bought before) for a clean entriesOwedPacked check.
         // Check all 4 possible write keys for both currentLevel and currentLevel+1.
         // Before purchase, buyer3 should have zero tickets owed everywhere.
         uint24 curKey0 = uint24(currentLevel);
@@ -643,7 +643,7 @@ contract TicketLifecycleTest is DeployProtocol {
         try game.purchase{value: cost}(
             buyer3, qty, 0, bytes32(0), MintPaymentKind.DirectEth, false
         ) {
-            // Purchase succeeded -- verify routing via ticketsOwedPacked
+            // Purchase succeeded -- verify routing via entriesOwedPacked
             uint32 nxtOwed0 = _ticketsOwed(nxtKey0, buyer3);
             uint32 nxtOwed1 = _ticketsOwed(nxtKey1, buyer3);
             uint32 curOwed0 = _ticketsOwed(curKey0, buyer3);
@@ -722,7 +722,7 @@ contract TicketLifecycleTest is DeployProtocol {
                 anyTicketQueued = true;
                 break;
             }
-            // Check ticketsOwedPacked for buyer3 at both key variants
+            // Check entriesOwedPacked for buyer3 at both key variants
             if (_ticketsOwed(lvl, buyer3) > 0 || _ticketsOwed(lvl | TICKET_SLOT_BIT, buyer3) > 0) {
                 anyTicketQueued = true;
                 break;
@@ -1280,7 +1280,7 @@ contract TicketLifecycleTest is DeployProtocol {
         );
 
         // purchaseWhalePass spans levels (level+1) to (level+100).
-        // Levels > level+5 are FF. With rngLocked=true, the _queueTickets loop
+        // Levels > level+5 are FF. With rngLocked=true, the _queueEntries loop
         // will revert RngLocked() when it hits the first FF level.
         uint256 whaleCost = (L + 1) <= 4 ? 2.4 ether : 4 ether;
         vm.deal(buyer3, whaleCost + 50 ether);
@@ -1300,7 +1300,7 @@ contract TicketLifecycleTest is DeployProtocol {
     ///         that resolves to a far-future target level will revert RngLocked().
     ///         This proves the guard fires through the full openLootBox call chain.
     /// @dev RNG-03: rngLocked blocks FF key writes from lootbox open paths.
-    ///      Integration-level verification that the guard in _queueTicketsScaled is
+    ///      Integration-level verification that the guard in _queueEntriesScaled is
     ///      reached through the full openLootBox -> _resolveLootboxCommon chain.
     function testRngLockedBlocksFFLootbox() public {
         assertEq(game.level(), 0, "Should start at level 0");
@@ -1350,8 +1350,8 @@ contract TicketLifecycleTest is DeployProtocol {
         assertTrue(rngLocked_, "rngLockedFlag should be true");
 
         // Try to open all lootboxes. Track outcomes:
-        // - Near-future roll: _queueTicketsScaled succeeds (writes to write key)
-        // - Far-future roll: _queueTicketsScaled reverts RngLocked()
+        // - Near-future roll: _queueEntriesScaled succeeds (writes to write key)
+        // - Far-future roll: _queueEntriesScaled reverts RngLocked()
         // Either outcome is safe. We verify at least one revert occurs (proving
         // the guard fires on the integration path), or all succeed (all near rolls).
         uint256 reverts = 0;
@@ -1383,7 +1383,7 @@ contract TicketLifecycleTest is DeployProtocol {
         // The structural property: with rngLocked=true, any lootbox open that produces
         // a far-future target reverts. The TicketRouting.t.sol unit tests prove the guard
         // fires at the function level; this integration test proves the guard is reached
-        // through the full openLootBox -> _resolveLootboxCommon -> _queueTicketsScaled chain.
+        // through the full openLootBox -> _resolveLootboxCommon -> _queueEntriesScaled chain.
     }
 
     // =========================================================================
@@ -2219,10 +2219,10 @@ contract TicketLifecycleTest is DeployProtocol {
 
     // ==================== Storage Inspection Helpers ====================
 
-    /// @notice Read ticketsOwedPacked[key][who] from game contract storage.
+    /// @notice Read entriesOwedPacked[key][who] from game contract storage.
     ///         Returns the raw uint40 packed value: upper 32 bits = tickets owed, lower 8 = remainder.
     function _ticketsOwed(uint24 key, address who) internal view returns (uint32 owed) {
-        // ticketsOwedPacked is mapping(uint24 => mapping(address => uint40)) at SLOT 14.
+        // entriesOwedPacked is mapping(uint24 => mapping(address => uint40)) at SLOT 14.
         // First level: keccak256(abi.encode(key, 14))
         // Second level: keccak256(abi.encode(who, firstLevelSlot))
         bytes32 firstLevel = keccak256(abi.encode(uint256(key), uint256(TICKETS_OWED_PACKED_SLOT)));

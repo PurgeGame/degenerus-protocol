@@ -6,8 +6,8 @@
 //   When the Bernoulli round-up fails (`whole == 0` after the inline Bernoulli
 //   math runs on `scaledTickets > 0` with `scaledTickets < TICKET_SCALE`), the
 //   jackpot ticket-roll path produces:
-//     - ZERO `TicketsQueued` emit (the `_queueTickets` helper at
-//       `DegenerusGameStorage.sol:568` early-returns on `quantity == 0`,
+//     - ZERO `TicketsQueued` emit (the `_queueEntries` helper at
+//       `DegenerusGameStorage.sol:568` early-returns on `entries == 0`,
 //       BEFORE the `emit TicketsQueued` and any SSTORE).
 //     - ZERO consolation: `_jackpotTicketRoll` has NO `wwxrp.mintPrize` call and
 //       NO consolation branch — D-40N-SILENT-01 (jackpot cold-bust is SILENT).
@@ -16,7 +16,7 @@
 //       event. The jackpot path emits neither — it is fully silent.)
 //   BUT `JackpotTicketWin` STILL fires unconditionally; its `ticketCount` 4th
 //   arg is the entries count `wholeTicketsToEntries(whole)` (= whole<<2, 4 per
-//   whole ticket; 0 on cold-bust), matching the adjacent `_queueTickets` queued
+//   whole ticket; 0 on cold-bust), matching the adjacent `_queueEntries` queued
 //   entries (emit == queue).
 //   The silent-cold-bust scope is the QUEUE surface only, NOT the
 //   `JackpotTicketWin` event. Phase 277 EVT-UNI-04 added a trailing non-indexed
@@ -45,9 +45,9 @@
 //         inline Bernoulli (JackpotBernoulliTester).
 //     (b) Source-level structural proof that `_jackpotTicketRoll`'s
 //         post-Bernoulli path contains ONLY the single
-//         `_queueTickets(winner, targetLevel, wholeTicketsToEntries(whole), true)` call (no emit, no
+//         `_queueEntries(winner, targetLevel, wholeTicketsToEntries(whole), true)` call (no emit, no
 //         mintPrize, no consolation branch) + that the cold-bust gate is the
-//         `if (quantity == 0) return;` early-return inside `_queueTickets` at
+//         `if (entries == 0) return;` early-return inside `_queueEntries` at
 //         `DegenerusGameStorage.sol:568`.
 //     (c) Emit-absence assertion: on `whole == 0` the part-(b) structural
 //         proof establishes zero `TicketsQueued` emit; AND the source
@@ -180,8 +180,8 @@ describe("JackpotTicketRollSilentColdBust — Phase 276 Wave 2 TST-JPT-BR-02", f
     });
   });
 
-  describe("Part (b) — source-level structural proof: _jackpotTicketRoll's post-Bernoulli path is the single _queueTickets(winner, targetLevel, wholeTicketsToEntries(whole), true) call — no emit, no mintPrize, no consolation", function () {
-    it("[02a] `_jackpotTicketRoll` body contains exactly one `_queueTickets(winner, targetLevel, wholeTicketsToEntries(whole), true)` call (rngBypass = true)", function () {
+  describe("Part (b) — source-level structural proof: _jackpotTicketRoll's post-Bernoulli path is the single _queueEntries(winner, targetLevel, wholeTicketsToEntries(whole), true) call — no emit, no mintPrize, no consolation", function () {
+    it("[02a] `_jackpotTicketRoll` body contains exactly one `_queueEntries(winner, targetLevel, wholeTicketsToEntries(whole), true)` call (rngBypass = true)", function () {
       // Source-structural proof reads: fs.readFileSync DegenerusGameJackpotModule.sol
       const source = fs.readFileSync(MODULE_SOURCE_PATH, "utf8");
       const body = stripLineComments(
@@ -189,15 +189,15 @@ describe("JackpotTicketRollSilentColdBust — Phase 276 Wave 2 TST-JPT-BR-02", f
       );
       expect(body, "`_jackpotTicketRoll` body not found").to.not.equal(null);
       const calls = (
-        body.match(/_queueTickets\(winner, targetLevel, wholeTicketsToEntries\(whole\), true\)/g) || []
+        body.match(/_queueEntries\(winner, targetLevel, wholeTicketsToEntries\(whole\), true\)/g) || []
       ).length;
       expect(
         calls,
-        "`_jackpotTicketRoll` must contain exactly one `_queueTickets(winner, targetLevel, wholeTicketsToEntries(whole), true)` call (the single post-Bernoulli queue call, rngBypass = true)"
+        "`_jackpotTicketRoll` must contain exactly one `_queueEntries(winner, targetLevel, wholeTicketsToEntries(whole), true)` call (the single post-Bernoulli queue call, rngBypass = true)"
       ).to.equal(1);
     });
 
-    it("[02b] `_jackpotTicketRoll` body has NO consolation surface — no `wwxrp.mintPrize`, no `LootboxTicketRoll` emit, no `_queueTicketsScaled` (D-40N-SILENT-01)", function () {
+    it("[02b] `_jackpotTicketRoll` body has NO consolation surface — no `wwxrp.mintPrize`, no `LootboxTicketRoll` emit, no `_queueEntriesScaled` (D-40N-SILENT-01)", function () {
       const source = fs.readFileSync(MODULE_SOURCE_PATH, "utf8");
       const body = stripLineComments(
         extractBody(source, "function _jackpotTicketRoll(")
@@ -212,34 +212,34 @@ describe("JackpotTicketRollSilentColdBust — Phase 276 Wave 2 TST-JPT-BR-02", f
         "_jackpotTicketRoll must not emit LootboxTicketRoll (no LootboxTicketRoll analog on the jackpot path)"
       ).to.equal(false);
       expect(
-        body.includes("_queueTicketsScaled"),
-        "_jackpotTicketRoll must not call _queueTicketsScaled (Plan A swapped to the whole-ticket _queueTickets)"
+        body.includes("_queueEntriesScaled"),
+        "_jackpotTicketRoll must not call _queueEntriesScaled (Plan A swapped to the whole-ticket _queueEntries)"
       ).to.equal(false);
     });
 
-    it("[02c] cold-bust gate is the `_queueTickets` early-return at DegenerusGameStorage.sol — body contains `if (quantity == 0) return;` before any emit or SSTORE (D-40N-SILENT-01)", function () {
+    it("[02c] cold-bust gate is the `_queueEntries` early-return at DegenerusGameStorage.sol — body contains `if (entries == 0) return;` before any emit or SSTORE (D-40N-SILENT-01)", function () {
       // Source-structural proof reads: fs.readFileSync DegenerusGameStorage.sol
       const storage = fs.readFileSync(STORAGE_PATH, "utf8");
-      const body = extractBody(storage, "function _queueTickets(");
-      expect(body, "`_queueTickets` function not found in storage").to.not.equal(
+      const body = extractBody(storage, "function _queueEntries(");
+      expect(body, "`_queueEntries` function not found in storage").to.not.equal(
         null
       );
       expect(
-        /if\s*\(\s*quantity\s*==\s*0\s*\)\s*return;/.test(body),
-        "_queueTickets must contain `if (quantity == 0) return;` early-return (D-40N-SILENT-01 silent-cold-bust gate)"
+        /if\s*\(\s*entries\s*==\s*0\s*\)\s*return;/.test(body),
+        "_queueEntries must contain `if (entries == 0) return;` early-return (D-40N-SILENT-01 silent-cold-bust gate)"
       ).to.equal(true);
       // The early-return must come BEFORE the `emit TicketsQueued` — proving
       // whole==0 produces ZERO TicketsQueued emit and ZERO SSTORE.
       const returnIdx = body.search(
-        /if\s*\(\s*quantity\s*==\s*0\s*\)\s*return;/
+        /if\s*\(\s*entries\s*==\s*0\s*\)\s*return;/
       );
       const emitIdx = body.indexOf("emit TicketsQueued(");
-      expect(emitIdx, "_queueTickets must emit TicketsQueued").to.be.greaterThan(
+      expect(emitIdx, "_queueEntries must emit TicketsQueued").to.be.greaterThan(
         -1
       );
       expect(
         returnIdx,
-        "the `if (quantity == 0) return;` early-return must precede `emit TicketsQueued` (silent on whole==0)"
+        "the `if (entries == 0) return;` early-return must precede `emit TicketsQueued` (silent on whole==0)"
       ).to.be.lessThan(emitIdx);
     });
   });
@@ -293,16 +293,16 @@ describe("JackpotTicketRollSilentColdBust — Phase 276 Wave 2 TST-JPT-BR-02", f
       ).to.equal("roundedUp");
       // The emit is NOT gated behind a `whole != 0` / `whole > 0` predicate —
       // it sits at the function tail, unconditional. Assert no `if (whole`
-      // branch wraps it: the emit must appear AFTER the _queueTickets call and
+      // branch wraps it: the emit must appear AFTER the _queueEntries call and
       // at brace-depth 1 (function body), not nested in a conditional.
       const queueIdx = body.indexOf(
-        "_queueTickets(winner, targetLevel, wholeTicketsToEntries(whole), true)"
+        "_queueEntries(winner, targetLevel, wholeTicketsToEntries(whole), true)"
       );
       const emitIdx = body.indexOf("emit JackpotTicketWin(");
-      expect(queueIdx, "_queueTickets call not found").to.be.greaterThan(-1);
+      expect(queueIdx, "_queueEntries call not found").to.be.greaterThan(-1);
       expect(
         emitIdx,
-        "the JackpotTicketWin emit must come AFTER the _queueTickets call (unconditional function-tail emit)"
+        "the JackpotTicketWin emit must come AFTER the _queueEntries call (unconditional function-tail emit)"
       ).to.be.greaterThan(queueIdx);
     });
 
@@ -313,8 +313,8 @@ describe("JackpotTicketRollSilentColdBust — Phase 276 Wave 2 TST-JPT-BR-02", f
       // composition: part (a) proves the inline Bernoulli yields whole==0 on a
       // losing slice for scaledTickets ∈ (0, 100); part (b) proves the only
       // post-Bernoulli statement consuming `whole` is
-      // `_queueTickets(winner, targetLevel, wholeTicketsToEntries(whole), true)`, which early-returns
-      // at `if (quantity == 0) return;` BEFORE `emit TicketsQueued`. Therefore
+      // `_queueEntries(winner, targetLevel, wholeTicketsToEntries(whole), true)`, which early-returns
+      // at `if (entries == 0) return;` BEFORE `emit TicketsQueued`. Therefore
       // whole==0 ⇒ zero TicketsQueued, zero SSTORE — silent.
       const tester = await deployTester();
       // Re-confirm the part-(a) cold-bust outcome inline for scaledTickets=1.
@@ -334,7 +334,7 @@ describe("JackpotTicketRollSilentColdBust — Phase 276 Wave 2 TST-JPT-BR-02", f
       const [whole] = await tester.bernoulliWhole(1, lossSeed);
       expect(
         whole,
-        "scaledTickets=1 on a losing slice must Bernoulli-collapse to whole=0 — the cold-bust input to the silent _queueTickets early-return"
+        "scaledTickets=1 on a losing slice must Bernoulli-collapse to whole=0 — the cold-bust input to the silent _queueEntries early-return"
       ).to.equal(0n);
       // The QUEUE-surface silence is structurally proven in [02c]; the
       // JackpotTicketWin unconditional emit in [03a]. There is NO

@@ -94,7 +94,7 @@ contract KeeperRouterOneCategory is DeployProtocol {
     uint256 private constant LOOTBOX_ETH_SLOT = 15;
     uint256 private constant LB_AMOUNT_MASK = (uint256(1) << 128) - 1;
 
-    /// @dev ticketQueue mapping root (uint24 => address[]) + ticketsOwedPacked
+    /// @dev ticketQueue mapping root (uint24 => address[]) + entriesOwedPacked
     ///      (uint24 => address => uint40) — for forcing advanceDue via a read-slot backlog.
     uint256 private constant TICKET_QUEUE_SLOT = 12;
     uint256 private constant TICKETS_OWED_PACKED_SLOT = 13;

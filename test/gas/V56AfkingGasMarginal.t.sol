@@ -20,7 +20,7 @@ import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 ///
 ///         (1) The per-buy hot path (GameAfkingModule, _deliverAfkingBuy) is call-free: the SOLVENCY-01 debit
 ///             (`afkingFunding[src] -= ethValue; claimablePool -= uint128(ethValue)`, byte-frozen from v55) ->
-///             the per-mode primitive (lootbox box-stamp OR the ticket minimal-write `_queueTicketsScaled`,
+///             the per-mode primitive (lootbox box-stamp OR the ticket minimal-write `_queueEntriesScaled`,
 ///             replacing the ~262k purchaseWith heavyweight) -> the MODE-AGNOSTIC in-slot accrue (affiliateBase
 ///             flat-7% += and the slot-0 reward into pendingFlip) + the compute-on-read streak markers
 ///             (gap-resume + afkCoveredThroughDay) -> the lastAutoBoughtDay marker. There is NO per-buy
@@ -260,7 +260,7 @@ contract V56AfkingGasMarginal is DeployProtocol {
     // =========================================================================
 
     /// @notice The per-buy TICKET marginal = (gas for N funded ticket subs − gas for N−1) / 1, NON-settle-day
-    ///         STAGE, snapshot/revert. The ticket leg is the NEW minimal-write `_queueTicketsScaled` primitive
+    ///         STAGE, snapshot/revert. The ticket leg is the NEW minimal-write `_queueEntriesScaled` primitive
     ///         + the buyerOwedFlip in-slot accrue (off the old ~262k purchaseWith heavyweight that dragged
     ///         in recordMint + the whole quests/affiliate/coinflip work). Asserts under the ceiling; emits the
     ///         structural-win comparison vs the ~262k purchaseWith reference.
@@ -645,7 +645,7 @@ contract V56AfkingGasMarginal is DeployProtocol {
     // =========================================================================
 
     /// @notice Residual R2: the per-entry cap (writesBudget - used) stops one entry overrunning the budget, but
-    ///         the heaviest single TICKET buy (the minimal-write _queueTicketsScaled primitive — the in-stage
+    ///         the heaviest single TICKET buy (the minimal-write _queueEntriesScaled primitive — the in-stage
     ///         per-sub ticket leg, the cold ticketQueue push that dominates the STAGE weight at
     ///         SUB_STAGE_TICKET_WEIGHT) is asserted bounded at the cap. The deferred trait-resolution
     ///         processTicketBatch is write-budgeted (WRITES_BUDGET_SAFE=550) and O(1)-queued, so the heaviest
@@ -1300,7 +1300,7 @@ contract V56AfkingGasMarginal is DeployProtocol {
         return _setupFundedSubs(n, prefix, poolEach, false);
     }
 
-    /// @dev Ticket-mode funded subs (useTickets == true) — the new minimal-write `_queueTicketsScaled`
+    /// @dev Ticket-mode funded subs (useTickets == true) — the new minimal-write `_queueEntriesScaled`
     ///      primitive (off the old ~262k purchaseWith). The ticket leg sets lastOpenedDay ==
     ///      lastAutoBoughtDay so a ticket sub never produces an afking box (open-leg never touches it).
     function _setupFundedTicketSubs(uint256 n, string memory prefix, uint256 poolEach)

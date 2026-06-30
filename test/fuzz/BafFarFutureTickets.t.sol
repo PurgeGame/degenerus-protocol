@@ -10,7 +10,7 @@ import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 /// @notice The bug: during the purchase→jackpot transition at level 10 (BAF fires),
 ///         _runRewardJackpots → _runBafJackpot → _awardJackpotTickets → _jackpotTicketRoll
 ///         has a 5% chance per roll of targeting +5 to +50 levels ahead (far-future).
-///         This calls _queueTicketsScaled which checks:
+///         This calls _queueEntriesScaled which checks:
 ///
 ///           if (isFarFuture && rngLockedFlag && !phaseTransitionActive) revert RngLocked();
 ///

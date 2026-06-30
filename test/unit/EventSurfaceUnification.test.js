@@ -339,18 +339,18 @@ describe("EventSurfaceUnification — Phase 277 Wave 2 TST-EVT-UNI-01..06", func
       }
     });
 
-    it("[03d] the per-roll ticket-queue path calls `_queueTickets(player, rollLevel, wholeTicketsToEntries(whole), false)` at one source site inside _settleLootboxRoll — not inside any index-conditional branch", function () {
+    it("[03d] the per-roll ticket-queue path calls `_queueEntries(player, rollLevel, wholeTicketsToEntries(whole), false)` at one source site inside _settleLootboxRoll — not inside any index-conditional branch", function () {
       const src = fs.readFileSync(LOOTBOX_SOURCE_PATH, "utf8");
       // The ticket/emit/consolation logic moved to `_settleLootboxRoll` (the
       // void `_resolveLootboxCommon` dispatcher calls it once per roll).
       const body = extractBody(src, "function _settleLootboxRoll(");
       expect(body, "_settleLootboxRoll body not found").to.not.equal(null);
       const calls = (
-        body.match(/_queueTickets\(player, rollLevel, wholeTicketsToEntries\(whole\), false\)/g) || []
+        body.match(/_queueEntries\(player, rollLevel, wholeTicketsToEntries\(whole\), false\)/g) || []
       ).length;
       expect(
         calls,
-        "_settleLootboxRoll must contain exactly one `_queueTickets(player, rollLevel, wholeTicketsToEntries(whole), false)` call (unconditional)"
+        "_settleLootboxRoll must contain exactly one `_queueEntries(player, rollLevel, wholeTicketsToEntries(whole), false)` call (unconditional)"
       ).to.equal(1);
       // No `if (index` conditional should wrap any logic in this function body.
       expect(
@@ -373,7 +373,7 @@ describe("EventSurfaceUnification — Phase 277 Wave 2 TST-EVT-UNI-01..06", func
 
     it("[04b] the off-chain whole-ticket derivation `whole = (futureTickets / TICKET_SCALE) + (roundedUp ? 1 : 0)` is consistent with the on-chain Bernoulli collapse", function () {
       // The contract emits the un-mutated scaled `futureTickets` on LootBoxOpened
-      // and feeds the local `whole` (post-Bernoulli collapse) into _queueTickets.
+      // and feeds the local `whole` (post-Bernoulli collapse) into _queueEntries.
       // A consumer reconstructs `whole` from the already-emitted scaled field +
       // the roundedUp flag. This proves that derivation is arithmetically exact:
       //   whole_floor = scaled / TICKET_SCALE
@@ -398,30 +398,30 @@ describe("EventSurfaceUnification — Phase 277 Wave 2 TST-EVT-UNI-01..06", func
       }
     });
 
-    it("[04c] _settleLootboxRoll keeps this roll's `scaledTickets` at the scaled value and the LootBoxOpened emit consumes it (whole is a separate local)", function () {
+    it("[04c] _settleLootboxRoll keeps this roll's `scaledWholeTickets` at the scaled value and the LootBoxOpened emit consumes it (whole is a separate local)", function () {
       const src = fs.readFileSync(LOOTBOX_SOURCE_PATH, "utf8");
       const body = extractBody(src, "function _settleLootboxRoll(");
       expect(body, "_settleLootboxRoll body not found").to.not.equal(null);
       // The Bernoulli collapse writes to a SEPARATE local `whole`, never to
-      // this roll's `scaledTickets`.
+      // this roll's `scaledWholeTickets`.
       expect(
-        /uint32 whole = scaledTickets \/ uint32\(TICKET_SCALE\);/.test(body),
-        "`whole` must be derived from scaled `scaledTickets` as a separate local"
+        /uint32 whole = scaledWholeTickets \/ uint32\(QTY_SCALE\);/.test(body),
+        "`whole` must be derived from scaled `scaledWholeTickets` as a separate local"
       ).to.equal(true);
-      // The LootBoxOpened emit references `scaledTickets` (scaled), not `whole`.
+      // The LootBoxOpened emit references `scaledWholeTickets` (scaled), not `whole`.
       const emitArgList = extractCallArgs(body, "emit LootBoxOpened(");
       expect(emitArgList, "LootBoxOpened emit not found").to.not.equal(null);
       const emitArgs = splitTopLevelArgs(emitArgList);
       // Positional order matches the current 7-arg event def (the `day` arg was
       // dropped in 4cb9ccbf "lootbox event day cleanup"):
       //   player, lootboxIndex(index), amount(fullAmount), futureLevel(rollLevel),
-      //   futureTickets(scaledTickets), flip(flipAmount), roundedUp
+      //   futureTickets(scaledWholeTickets), flip(flipAmount), roundedUp
       expect(emitArgs.length).to.equal(7);
       expect(emitArgs[0]).to.equal("player");
       expect(emitArgs[1]).to.equal("index"); // lootboxIndex slot fed the `index` param
       expect(emitArgs[2]).to.equal("fullAmount"); // box pre-split amount
       expect(emitArgs[3]).to.equal("rollLevel"); // this roll's queue level
-      expect(emitArgs[4]).to.equal("scaledTickets"); // scaled, un-mutated by the collapse
+      expect(emitArgs[4]).to.equal("scaledWholeTickets"); // scaled, un-mutated by the collapse
       expect(emitArgs[6]).to.equal("roundedUp");
     });
 
@@ -442,12 +442,12 @@ describe("EventSurfaceUnification — Phase 277 Wave 2 TST-EVT-UNI-01..06", func
       ).to.equal(false);
     });
 
-    it("[04e] the WWXRP-consolation case is inferable as `whole == 0 && scaledTickets > 0` corroborated by a same-tx WWXRP ERC-20 Transfer from mintPrize", function () {
+    it("[04e] the WWXRP-consolation case is inferable as `whole == 0 && scaledWholeTickets > 0` corroborated by a same-tx WWXRP ERC-20 Transfer from mintPrize", function () {
       const src = fs.readFileSync(LOOTBOX_SOURCE_PATH, "utf8");
       const body = extractBody(src, "function _settleLootboxRoll(");
       expect(body, "_settleLootboxRoll body not found").to.not.equal(null);
       // The consolation predicate is `payColdBustConsolation && whole == 0` and
-      // sits inside the `if (scaledTickets != 0)` guard — i.e. it only fires when
+      // sits inside the `if (scaledWholeTickets != 0)` guard — i.e. it only fires when
       // the scaled count was non-zero but the Bernoulli collapse produced whole==0.
       expect(
         /if \(payColdBustConsolation && whole == 0\)/.test(body),
@@ -529,28 +529,28 @@ describe("EventSurfaceUnification — Phase 277 Wave 2 TST-EVT-UNI-01..06", func
       ).to.equal(true);
     });
 
-    it("[05d] auto-resolve ticket awards stay observable via the unified `_queueTickets` path → `TicketsQueued`", function () {
+    it("[05d] auto-resolve ticket awards stay observable via the unified `_queueEntries` path → `TicketsQueued`", function () {
       const lootbox = fs.readFileSync(LOOTBOX_SOURCE_PATH, "utf8");
       const body = extractBody(lootbox, "function _settleLootboxRoll(");
-      // The per-roll path calls _queueTickets unconditionally (proven single-site
-      // in [03d]); _queueTickets is what makes auto-resolve awards observable
+      // The per-roll path calls _queueEntries unconditionally (proven single-site
+      // in [03d]); _queueEntries is what makes auto-resolve awards observable
       // without a LootBoxOpened emit.
       expect(
-        body.includes("_queueTickets(player, rollLevel, wholeTicketsToEntries(whole), false)"),
-        "the per-roll path must call _queueTickets so auto-resolve awards remain observable via TicketsQueued"
+        body.includes("_queueEntries(player, rollLevel, wholeTicketsToEntries(whole), false)"),
+        "the per-roll path must call _queueEntries so auto-resolve awards remain observable via TicketsQueued"
       ).to.equal(true);
-      // _queueTickets emits TicketsQueued (verified at the storage layer).
+      // _queueEntries emits TicketsQueued (verified at the storage layer).
       const storage = fs.readFileSync(
         path.resolve(process.cwd(), "contracts/storage/DegenerusGameStorage.sol"),
         "utf8"
       );
-      const queueBody = extractBody(storage, "function _queueTickets(");
-      expect(queueBody, "_queueTickets body not found in storage").to.not.equal(
+      const queueBody = extractBody(storage, "function _queueEntries(");
+      expect(queueBody, "_queueEntries body not found in storage").to.not.equal(
         null
       );
       expect(
         queueBody.includes("emit TicketsQueued("),
-        "_queueTickets must emit TicketsQueued"
+        "_queueEntries must emit TicketsQueued"
       ).to.equal(true);
     });
   });
@@ -581,11 +581,11 @@ describe("EventSurfaceUnification — Phase 277 Wave 2 TST-EVT-UNI-01..06", func
       ).to.be.greaterThan(-1);
       // The Bernoulli predicate uses bits[96..127] of the per-roll entropy word.
       const predIdx = body.indexOf(
-        "(uint32(entropy >> 96) % uint32(TICKET_SCALE)) < frac"
+        "(uint32(entropy >> 96) % uint32(QTY_SCALE)) < frac"
       );
       expect(
         predIdx,
-        "_jackpotTicketRoll Bernoulli predicate `(uint32(entropy >> 96) % uint32(TICKET_SCALE)) < frac` missing"
+        "_jackpotTicketRoll Bernoulli predicate `(uint32(entropy >> 96) % uint32(QTY_SCALE)) < frac` missing"
       ).to.be.greaterThan(declIdx);
       const setIdx = body.indexOf("roundedUp = true;");
       expect(
@@ -606,7 +606,7 @@ describe("EventSurfaceUnification — Phase 277 Wave 2 TST-EVT-UNI-01..06", func
       const emitArgs = splitTopLevelArgs(emitArgList);
       // winner, targetLevel, BAF_TRAIT_SENTINEL, wholeTicketsToEntries(whole),
       // minTargetLevel, 0, roundedUp — the 4th arg is the entries count (whole<<2,
-      // 4 per whole ticket) queued by the adjacent _queueTickets call: emit == queue.
+      // 4 per whole ticket) queued by the adjacent _queueEntries call: emit == queue.
       expect(emitArgs.length).to.equal(7);
       expect(emitArgs[3]).to.equal("wholeTicketsToEntries(whole)");
       expect(emitArgs[6]).to.equal("roundedUp");
@@ -654,15 +654,15 @@ describe("EventSurfaceUnification — Phase 277 Wave 2 TST-EVT-UNI-01..06", func
       const jackpot = fs.readFileSync(JACKPOT_SOURCE_PATH, "utf8");
       const lootbox = fs.readFileSync(LOOTBOX_SOURCE_PATH, "utf8");
       // Lootbox path: bits[224..255]; Jackpot path: bits[96..127]. Both use the
-      // same `frac != 0 && (uint32(...) % uint32(TICKET_SCALE)) < frac` shape.
+      // same `frac != 0 && (uint32(...) % uint32(QTY_SCALE)) < frac` shape.
       expect(
-        /frac != 0 && \(uint32\(rollSeed >> 224\) % uint32\(TICKET_SCALE\)\) < frac/.test(
+        /frac != 0 && \(uint32\(rollSeed >> 224\) % uint32\(QTY_SCALE\)\) < frac/.test(
           lootbox
         ),
         "LootboxModule Bernoulli predicate shape drifted"
       ).to.equal(true);
       expect(
-        /frac != 0 && \(uint32\(entropy >> 96\) % uint32\(TICKET_SCALE\)\) < frac/.test(
+        /frac != 0 && \(uint32\(entropy >> 96\) % uint32\(QTY_SCALE\)\) < frac/.test(
           jackpot
         ),
         "JackpotModule Bernoulli predicate shape drifted from the LootboxModule pattern"

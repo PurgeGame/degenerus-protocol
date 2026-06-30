@@ -4,7 +4,7 @@
 //
 // Mint-boost path UNTOUCHED regression per D-40N-MINTBOOST-OUT-01:
 //   - `DegenerusGameMintModule.sol:1142` continues to call
-//     `_queueTicketsScaled(buyer, targetLevel, adjustedQty, false)` for
+//     `_queueEntriesScaled(buyer, targetLevel, adjustedQty, false)` for
 //     boost-derived fractional ticket awards (D-275-NOOP-01).
 //   - The lootbox `_settleLootboxRoll` refactor touches ONLY
 //     `DegenerusGameLootboxModule.sol`: MintModule + Storage stay byte-identical
@@ -21,7 +21,7 @@
 //   precedent, this test uses source-level structural proofs PLUS byte-
 //   identity assertions against the v39 baseline to anchor the
 //   D-40N-MINTBOOST-OUT-01 invariant. The structural proofs guarantee:
-//     (a) Mint-boost callsite at MintModule:1142 still uses _queueTicketsScaled.
+//     (a) Mint-boost callsite at MintModule:1142 still uses _queueEntriesScaled.
 //     (b) _rollRemainder is still defined + invoked in MintModule.
 //     (c) MintModule + Storage are byte-identical to the committed HEAD tree
 //         (the lootbox refactor lives only in the working tree's
@@ -61,25 +61,25 @@ const BASELINE = "HEAD";
 describe("LootboxAutoResolveMintBoostRegression — Phase 275 Wave 2 TST-LBX-AR-06", function () {
   this.timeout(30_000);
 
-  describe("Mint-boost callsite at MintModule:1142 still calls `_queueTicketsScaled` (D-40N-MINTBOOST-OUT-01)", function () {
-    it("[01a] `_queueTicketsScaled` appears at least once in DegenerusGameMintModule.sol (mint-boost path retained per D-40N-MINTBOOST-OUT-01)", function () {
+  describe("Mint-boost callsite at MintModule:1142 still calls `_queueEntriesScaled` (D-40N-MINTBOOST-OUT-01)", function () {
+    it("[01a] `_queueEntriesScaled` appears at least once in DegenerusGameMintModule.sol (mint-boost path retained per D-40N-MINTBOOST-OUT-01)", function () {
       const mint = fs.readFileSync(MINT_MODULE_PATH, "utf8");
-      const calls = (mint.match(/_queueTicketsScaled\(/g) || []).length;
+      const calls = (mint.match(/_queueEntriesScaled\(/g) || []).length;
       expect(
         calls,
-        "MintModule must still contain at least one _queueTicketsScaled invocation per D-40N-MINTBOOST-OUT-01"
+        "MintModule must still contain at least one _queueEntriesScaled invocation per D-40N-MINTBOOST-OUT-01"
       ).to.be.gte(1);
     });
 
     it("[01b] mint-boost callsite uses the boost-derived `adjustedQty` argument (boostBps drives the scaled fractional quantity)", function () {
       const mint = fs.readFileSync(MINT_MODULE_PATH, "utf8");
       // The pre-Phase-275 callsite at L1142 is:
-      //   _queueTicketsScaled(buyer, targetLevel, adjustedQty, false);
+      //   _queueEntriesScaled(buyer, targetLevel, adjustedQty, false);
       // Match by argument shape (boost-derived fractional adjustedQty).
-      const callPattern = /_queueTicketsScaled\(buyer,\s*targetLevel,\s*adjustedQty,\s*false\)/;
+      const callPattern = /_queueEntriesScaled\(buyer,\s*targetLevel,\s*adjustedQty,\s*false\)/;
       expect(
         mint.match(callPattern),
-        "MintModule mint-boost callsite `_queueTicketsScaled(buyer, targetLevel, adjustedQty, false)` missing"
+        "MintModule mint-boost callsite `_queueEntriesScaled(buyer, targetLevel, adjustedQty, false)` missing"
       ).to.not.be.null;
     });
 
@@ -151,15 +151,15 @@ describe("LootboxAutoResolveMintBoostRegression — Phase 275 Wave 2 TST-LBX-AR-
       ).to.equal(true);
     });
 
-    it("[03c] LootboxModule auto-resolve branch swap keeps `_queueTicketsScaled` absent from LootboxModule + present in MintModule", function () {
+    it("[03c] LootboxModule auto-resolve branch swap keeps `_queueEntriesScaled` absent from LootboxModule + present in MintModule", function () {
       const lootbox = fs.readFileSync(LOOTBOX_MODULE_PATH, "utf8");
       const mint = fs.readFileSync(MINT_MODULE_PATH, "utf8");
       expect(
-        lootbox.includes("_queueTicketsScaled"),
-        "_queueTicketsScaled must not appear in LootboxModule post-Phase-275 LBX-AR-02"
+        lootbox.includes("_queueEntriesScaled"),
+        "_queueEntriesScaled must not appear in LootboxModule post-Phase-275 LBX-AR-02"
       ).to.equal(false);
-      const mintCalls = (mint.match(/_queueTicketsScaled\(/g) || []).length;
-      expect(mintCalls, "mint-boost path must retain ≥1 _queueTicketsScaled callsite").to.be.gte(1);
+      const mintCalls = (mint.match(/_queueEntriesScaled\(/g) || []).length;
+      expect(mintCalls, "mint-boost path must retain ≥1 _queueEntriesScaled callsite").to.be.gte(1);
     });
   });
 });

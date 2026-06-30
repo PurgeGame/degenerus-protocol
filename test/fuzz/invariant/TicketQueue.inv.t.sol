@@ -6,8 +6,8 @@ import {VRFHandler} from "../helpers/VRFHandler.sol";
 import {TicketTrackingHandler} from "../handlers/TicketTrackingHandler.sol";
 
 /// @title TicketQueueInvariant -- Proves ticket queue ordering holds (FUZZ-05)
-/// @notice The _queueTickets function only pushes a player to ticketQueue[level]
-///         when their ticketsOwedPacked is zero (no prior entry). This invariant
+/// @notice The _queueEntries function only pushes a player to ticketQueue[level]
+///         when their entriesOwedPacked is zero (no prior entry). This invariant
 ///         verifies that the tracking is consistent and no player has negative
 ///         or corrupted ticket owed state.
 contract TicketQueueInvariant is DeployProtocol {

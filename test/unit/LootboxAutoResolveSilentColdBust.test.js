@@ -5,15 +5,15 @@
 // Silent cold-bust regression on the auto-resolve path:
 //   When the Bernoulli round-up fails (`whole == 0` after the Bernoulli math
 //   runs on `scaledPre > 0`), an auto-resolve caller produces:
-//     - ZERO `TicketsQueued` emit (the `_queueTickets` helper at
-//       `DegenerusGameStorage.sol` early-returns on `quantity == 0`).
+//     - ZERO `TicketsQueued` emit (the `_queueEntries` helper at
+//       `DegenerusGameStorage.sol` early-returns on `entries == 0`).
 //     - ZERO `wwxrp.mintPrize` invocation (no consolation on auto-resolve) —
 //       the consolation is `payColdBustConsolation`-gated and auto-resolve
 //       callers pass `payColdBustConsolation = false`. Since the consolation
 //       payout is `wwxrp.mintPrize`, zero invocation also means zero WWXRP
 //       ERC-20 `Transfer` events for the auto-resolve cold-bust.
 //
-// Phase 277 retired the `index != type(uint48).max` sentinel: `_queueTickets`
+// Phase 277 retired the `index != type(uint48).max` sentinel: `_queueEntries`
 // is now a single unconditional callsite shared by every path, and the WWXRP
 // cold-bust consolation sits under `if (payColdBustConsolation && whole == 0)`.
 // The `LootboxTicketRoll` event is deleted entirely. The silent cold-bust
@@ -21,7 +21,7 @@
 //   (i)  auto-resolve callers passing `payColdBustConsolation = false`, which
 //        skips the consolation gate (they still emit `LootBoxOpened` like every box
 //        path — the emitLootboxEvent flag was removed), and
-//   (ii) the `if (quantity == 0) return;` early-return inside `_queueTickets`
+//   (ii) the `if (entries == 0) return;` early-return inside `_queueEntries`
 //        at DegenerusGameStorage.sol, which absorbs the `whole == 0` case.
 //
 // TEST STRATEGY:
@@ -35,9 +35,9 @@
 //     (a) Direct-call cold-bust math verification on the byte-identical
 //         Bernoulli (LootboxBernoulliTester).
 //     (b) Source-level structural proofs that the ticket award is a single
-//         unconditional `_queueTickets` call, that auto-resolve callers pass
+//         unconditional `_queueEntries` call, that auto-resolve callers pass
 //         `payColdBustConsolation = false`, and that the cold-bust gate is the
-//         shared `_queueTickets` early-return at DegenerusGameStorage.sol.
+//         shared `_queueEntries` early-return at DegenerusGameStorage.sol.
 //     (c) Manual-path positive control: same cold-bust seed reaches the
 //         `payColdBustConsolation && whole == 0` consolation gate, producing
 //         the `wwxrp.mintPrize` payout (observable off-chain via the WWXRP
@@ -79,7 +79,7 @@ async function deployTester() {
 describe("LootboxAutoResolveSilentColdBust — Phase 275 Wave 2 TST-LBX-AR-03", function () {
   this.timeout(60_000);
 
-  describe("Cold-bust math: when whole == 0, the auto-resolve else-arm calls _queueTickets(0) → silent early-return", function () {
+  describe("Cold-bust math: when whole == 0, the auto-resolve else-arm calls _queueEntries(0) → silent early-return", function () {
     it("[01a] tester confirms cold-bust math: scaledPre ∈ (0, 100) AND Bernoulli loses ⇒ whole=0, roundedUp=false", async function () {
       const tester = await deployTester();
       // Bernoulli loses when uint32(seed >> 224) % 100 >= frac.
@@ -111,20 +111,20 @@ describe("LootboxAutoResolveSilentColdBust — Phase 275 Wave 2 TST-LBX-AR-03", 
     });
   });
 
-  describe("Source-level proof: ticket award is a single unconditional _queueTickets call; auto-resolve callers pass payColdBustConsolation = false", function () {
-    it("[02a] `_queueTickets(player, rollLevel, wholeTicketsToEntries(whole), false)` appears at one source site; the consolation that follows it is `payColdBustConsolation`-gated", function () {
+  describe("Source-level proof: ticket award is a single unconditional _queueEntries call; auto-resolve callers pass payColdBustConsolation = false", function () {
+    it("[02a] `_queueEntries(player, rollLevel, wholeTicketsToEntries(whole), false)` appears at one source site; the consolation that follows it is `payColdBustConsolation`-gated", function () {
       const source = fs.readFileSync(MODULE_SOURCE_PATH, "utf8");
       // The sentinel branch is retired: the ticket award is a single
-      // `_queueTickets(player, rollLevel, wholeTicketsToEntries(whole), false)` source site inside the
+      // `_queueEntries(player, rollLevel, wholeTicketsToEntries(whole), false)` source site inside the
       // per-roll `_settleLootboxRoll` helper. The cold-bust case is absorbed by
-      // the helper's `if (quantity == 0) return;` early-return.
-      const callLine = "_queueTickets(player, rollLevel, wholeTicketsToEntries(whole), false)";
+      // the helper's `if (entries == 0) return;` early-return.
+      const callLine = "_queueEntries(player, rollLevel, wholeTicketsToEntries(whole), false)";
       const firstIdx = source.indexOf(callLine);
       const secondIdx = source.indexOf(callLine, firstIdx + 1);
-      expect(firstIdx, "`_queueTickets(player, rollLevel, wholeTicketsToEntries(whole), false)` callsite not found").to.be.greaterThan(-1);
+      expect(firstIdx, "`_queueEntries(player, rollLevel, wholeTicketsToEntries(whole), false)` callsite not found").to.be.greaterThan(-1);
       expect(
         secondIdx,
-        "`_queueTickets(player, rollLevel, wholeTicketsToEntries(whole), false)` must appear at exactly one source site (sentinel-branch duplication retired)"
+        "`_queueEntries(player, rollLevel, wholeTicketsToEntries(whole), false)` must appear at exactly one source site (sentinel-branch duplication retired)"
       ).to.equal(-1);
       // The consolation `mintPrize` payout that follows the queue call sits
       // inside `if (payColdBustConsolation && whole == 0)` — so an auto-resolve
@@ -200,10 +200,10 @@ describe("LootboxAutoResolveSilentColdBust — Phase 275 Wave 2 TST-LBX-AR-03", 
       }
     });
 
-    it("[02c] cold-bust gate is the shared `_queueTickets` early-return at DegenerusGameStorage.sol — body contains `if (quantity == 0) return;` (D-40N-SILENT-01)", function () {
+    it("[02c] cold-bust gate is the shared `_queueEntries` early-return at DegenerusGameStorage.sol — body contains `if (entries == 0) return;` (D-40N-SILENT-01)", function () {
       const storage = fs.readFileSync(STORAGE_PATH, "utf8");
-      const fnIdx = storage.indexOf("function _queueTickets(");
-      expect(fnIdx, "_queueTickets function not found in storage").to.be.greaterThan(-1);
+      const fnIdx = storage.indexOf("function _queueEntries(");
+      expect(fnIdx, "_queueEntries function not found in storage").to.be.greaterThan(-1);
       // Find function body end by brace-matching.
       let depth = 0;
       let bodyStart = -1;
@@ -223,10 +223,10 @@ describe("LootboxAutoResolveSilentColdBust — Phase 275 Wave 2 TST-LBX-AR-03", 
       const body = storage.slice(bodyStart, bodyEnd);
       // The early-return MUST be present; this is the silent-cold-bust gate
       // shared by the auto-resolve path (and the manual path's `whole == 0`
-      // branch which calls consolation instead, never reaching _queueTickets).
+      // branch which calls consolation instead, never reaching _queueEntries).
       expect(
-        /if\s*\(\s*quantity\s*==\s*0\s*\)\s*return;/.test(body),
-        "_queueTickets must contain `if (quantity == 0) return;` early-return (D-40N-SILENT-01 silent-cold-bust gate)"
+        /if\s*\(\s*entries\s*==\s*0\s*\)\s*return;/.test(body),
+        "_queueEntries must contain `if (entries == 0) return;` early-return (D-40N-SILENT-01 silent-cold-bust gate)"
       ).to.equal(true);
     });
   });
@@ -244,7 +244,7 @@ describe("LootboxAutoResolveSilentColdBust — Phase 275 Wave 2 TST-LBX-AR-03", 
       //     openFlipLootBox, which also passed payColdBustConsolation=true, was
       //     removed — terminal-paradox closure.)
       //   - Auto-resolve callers (payColdBustConsolation = false): the gate
-      //     stays shut; `_queueTickets(0)` early-returns → fully silent.
+      //     stays shut; `_queueEntries(0)` early-returns → fully silent.
       const seedSliceHigh = BigInt(99) << 224n;
       const [whole, roundedUp] = await tester.bernoulliWhole(1, seedSliceHigh);
       expect(whole).to.equal(0n);

@@ -661,20 +661,20 @@ describe("DegenerusJackpots", function () {
   // =========================================================================
   describe("runBafJackpot - full slate with trait tickets + FF tickets", function () {
     /**
-     * Compute the storage slot for traitBurnTicket[level][trait].length
-     * traitBurnTicket is at slot 9. It's mapping(uint24 => address[][256]).
+     * Compute the storage slot for lvlTraitEntry[level][trait].length
+     * lvlTraitEntry is at slot 9. It's mapping(uint24 => address[][256]).
      * Slot for level's fixed array: keccak256(abi.encode(level, 9))
      * Slot for trait index within that array: baseSlot + trait
      * The .length lives at that slot. Array data starts at keccak256(slot).
      */
-    function traitBurnTicketSlot(level, trait) {
+    function lvlTraitEntrySlot(level, trait) {
       const baseSlot = hre.ethers.keccak256(
         hre.ethers.AbiCoder.defaultAbiCoder().encode(["uint24", "uint256"], [level, 8])
       );
       return hre.ethers.toBeHex(BigInt(baseSlot) + BigInt(trait), 32);
     }
 
-    function traitBurnTicketDataSlot(lengthSlot, index) {
+    function lvlTraitEntryDataSlot(lengthSlot, index) {
       const dataStart = BigInt(hre.ethers.keccak256(lengthSlot));
       return hre.ethers.toBeHex(dataStart + BigInt(index), 32);
     }
@@ -694,9 +694,9 @@ describe("DegenerusJackpots", function () {
       return hre.ethers.toBeHex(dataStart + BigInt(index), 32);
     }
 
-    /** Write an address array into traitBurnTicket[level][trait] */
+    /** Write an address array into lvlTraitEntry[level][trait] */
     async function setTraitBurnTicket(gameAddr, level, trait, addresses) {
-      const lenSlot = traitBurnTicketSlot(level, trait);
+      const lenSlot = lvlTraitEntrySlot(level, trait);
       // Set length
       await hre.ethers.provider.send("hardhat_setStorageAt", [
         gameAddr,
@@ -705,7 +705,7 @@ describe("DegenerusJackpots", function () {
       ]);
       // Set each element
       for (let i = 0; i < addresses.length; i++) {
-        const dataSlot = traitBurnTicketDataSlot(lenSlot, i);
+        const dataSlot = lvlTraitEntryDataSlot(lenSlot, i);
         await hre.ethers.provider.send("hardhat_setStorageAt", [
           gameAddr,
           dataSlot,
@@ -763,7 +763,7 @@ describe("DegenerusJackpots", function () {
       // Set game level to 10
       await setLevel(gameAddr, 10);
 
-      // Populate traitBurnTicket for levels 10-16 (scatter targets)
+      // Populate lvlTraitEntry for levels 10-16 (scatter targets)
       // Fill ALL 256 traits per level so random trait selection always hits
       for (let lvl = 10; lvl <= 16; lvl++) {
         for (let trait = 0; trait < 256; trait++) {
@@ -818,7 +818,7 @@ describe("DegenerusJackpots", function () {
 
       console.log("\n    === BAF Payout: 100 ETH, lvl 10, FULL SLATE ===");
       console.log("    Leaderboard: Alice=500, Bob=300, Carol=100 ETH flips");
-      console.log("    traitBurnTicket: lvl 10-16, 8 traits each, 3 holders/trait");
+      console.log("    lvlTraitEntry: lvl 10-16, 8 traits each, 3 holders/trait");
       console.log("    FF ticketQueue: lvl 17-25, 4 holders each");
       console.log("");
 

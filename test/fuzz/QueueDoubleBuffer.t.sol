@@ -7,15 +7,15 @@ import {DegenerusGameAdvanceModule} from "../../contracts/modules/DegenerusGameA
 /// @title QueueHarness -- Exposes internal queue functions and mappings for double-buffer tests.
 contract QueueHarness is DegenerusGameAdvanceModule {
     // --- Queue write functions ---
-    function exposed_queueTickets(address buyer, uint24 targetLevel, uint32 quantity) external {
+    function exposed_queueEntries(address buyer, uint24 targetLevel, uint32 quantity) external {
         _queueEntries(buyer, targetLevel, quantity, false);
     }
 
-    function exposed_queueTicketsScaled(address buyer, uint24 targetLevel, uint32 quantityScaled) external {
+    function exposed_queueEntriesScaled(address buyer, uint24 targetLevel, uint32 quantityScaled) external {
         _queueEntriesScaled(buyer, targetLevel, quantityScaled, false);
     }
 
-    function exposed_queueTicketRange(address buyer, uint24 startLevel, uint24 numLevels, uint32 ticketsPerLevel) external {
+    function exposed_queueEntryRange(address buyer, uint24 startLevel, uint24 numLevels, uint32 ticketsPerLevel) external {
         _queueEntryRange(buyer, startLevel, numLevels, ticketsPerLevel, false);
     }
 
@@ -107,7 +107,7 @@ contract QueueDoubleBufferTest is Test {
         assertEq(wk, LEVEL, "write key should be raw level when slot=0");
         assertEq(rk, LEVEL | TICKET_SLOT_BIT, "read key should have bit set when slot=0");
 
-        harness.exposed_queueTickets(ALICE, LEVEL, 10);
+        harness.exposed_queueEntries(ALICE, LEVEL, 10);
 
         // Write buffer has the entry
         assertEq(harness.getQueueLength(wk), 1, "write queue should have 1 entry");
@@ -127,7 +127,7 @@ contract QueueDoubleBufferTest is Test {
         uint24 rk = harness.exposed_tqReadKey(LEVEL);
 
         // Queue 500 scaled = 5 whole tickets (QTY_SCALE = 100)
-        harness.exposed_queueTicketsScaled(ALICE, LEVEL, 500);
+        harness.exposed_queueEntriesScaled(ALICE, LEVEL, 500);
 
         // Write buffer populated
         assertEq(harness.getQueueLength(wk), 1, "write queue should have 1 entry");
@@ -144,7 +144,7 @@ contract QueueDoubleBufferTest is Test {
     function testQueueTicketRangeUsesWriteKey() public {
         uint24 startLvl = 3;
         uint24 numLevels = 3;
-        harness.exposed_queueTicketRange(ALICE, startLvl, numLevels, 7);
+        harness.exposed_queueEntryRange(ALICE, startLvl, numLevels, 7);
 
         for (uint24 i = 0; i < numLevels; i++) {
             uint24 lvl = startLvl + i;
@@ -163,7 +163,7 @@ contract QueueDoubleBufferTest is Test {
     // =========================================================================
     function testWriteReadIsolation() public {
         // Phase A: Queue in slot 0 (writeKey = level)
-        harness.exposed_queueTickets(ALICE, LEVEL, 10);
+        harness.exposed_queueEntries(ALICE, LEVEL, 10);
 
         uint24 wkBefore = harness.exposed_tqWriteKey(LEVEL);
         assertEq(wkBefore, LEVEL, "before swap: write key = raw level");
@@ -177,7 +177,7 @@ contract QueueDoubleBufferTest is Test {
         assertEq(wkAfter, LEVEL | TICKET_SLOT_BIT, "after swap: write key = level | BIT");
 
         // Phase B: Queue in slot 1 (writeKey = level | BIT)
-        harness.exposed_queueTickets(BOB, LEVEL, 20);
+        harness.exposed_queueEntries(BOB, LEVEL, 20);
 
         // Old buffer (raw level) has ALICE's entry
         assertEq(harness.getQueueLength(LEVEL), 1, "slot 0 queue should have ALICE");
@@ -223,7 +223,7 @@ contract QueueDoubleBufferTest is Test {
         assertEq(newWk, LEVEL | TICKET_SLOT_BIT, "write key should include bit after swap");
 
         // Queue tickets -- they should land in the new buffer
-        harness.exposed_queueTickets(ALICE, LEVEL, 5);
+        harness.exposed_queueEntries(ALICE, LEVEL, 5);
         assertEq(harness.getQueueLength(LEVEL | TICKET_SLOT_BIT), 1, "new write buffer should have entry");
         assertEq(harness.getQueueLength(LEVEL), 0, "old buffer should remain empty");
         assertEq(harness.getTicketsOwed(LEVEL | TICKET_SLOT_BIT, ALICE), 5, "new buffer has 5 tickets");
@@ -250,7 +250,7 @@ contract MidDaySwapTest is Test {
     function _fillWriteQueue(uint256 count) internal {
         for (uint256 i = 0; i < count; i++) {
             address buyer = address(uint160(0x1000 + i));
-            harness.exposed_queueTickets(buyer, LEVEL, 1);
+            harness.exposed_queueEntries(buyer, LEVEL, 1);
         }
     }
 

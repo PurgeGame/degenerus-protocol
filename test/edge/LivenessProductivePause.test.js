@@ -21,7 +21,7 @@ import { advanceTime } from "../helpers/testUtils.js";
  * returns _vrfDeadmanFired() — the phase-independent VRF-death deadman,
  * (simulatedDayIndex - dailyIdx > 120). So during jackpot / last-purchase
  * the in-phase clock is suppressed (it would false-fire in the productive
- * window and deadlock _queueTickets), but a permanently-stalled game still
+ * window and deadlock _queueEntries), but a permanently-stalled game still
  * reaches terminal fund release once no day has sealed for 120 days.
  *
  *   _livenessTriggered():

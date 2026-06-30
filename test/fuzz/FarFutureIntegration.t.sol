@@ -27,7 +27,7 @@ contract FFKeyComputer is DegenerusGameStorage {
 ///         Key assertions:
 ///         1. Constructor pre-queues 2 unique addresses in FF key at levels 6+ (sDGNRS + VAULT)
 ///            (ticketQueue stores unique addresses, not ticket counts; each address gets 16 tickets
-///            tracked separately in ticketsOwedPacked)
+///            tracked separately in entriesOwedPacked)
 ///         2. Game advances past level 5 without reverting (proves FF processing works)
 ///         3. FF queues for processed levels drain to zero (addresses removed after processing)
 ///
@@ -69,7 +69,7 @@ contract FarFutureIntegrationTest is DeployProtocol {
         // Verify constructor pre-queued FF entries at levels 6, 7, 8.
         // ticketQueue[key] is an address[] of unique buyers. The constructor queues tickets
         // for 2 addresses (sDGNRS and VAULT) at each level, so the array length is 2.
-        // Each address has 16 tickets tracked in ticketsOwedPacked (not in the array length).
+        // Each address has 16 tickets tracked in entriesOwedPacked (not in the array length).
         uint256 ffLen6 = _ffQueueLength(6);
         assertEq(ffLen6, 2, "Constructor should pre-queue 2 FF addresses at level 6 (sDGNRS + VAULT)");
 

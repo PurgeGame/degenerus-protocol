@@ -36,7 +36,7 @@
 //
 // The Phase 263 helper _awardDailyCoinToTraitWinners (HEAD cf564816) skips a
 // pull silently when (sampled lvl', trait_i) has effectiveLen == 0:
-//   traitBurnTicket[lvl'][trait_i].length == 0 AND deityCache[traitIdx] == address(0).
+//   lvlTraitEntry[lvl'][trait_i].length == 0 AND deityCache[traitIdx] == address(0).
 // PPL-05 specifies no fallback / no re-roll / no redistribution. Cursor still
 // advances; the corresponding +1 extra slot is structurally lost (accepted
 // underspend per the PPL-05 disclosure paragraph).

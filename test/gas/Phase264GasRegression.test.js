@@ -20,7 +20,7 @@
 //   - keccak256(abi.encode(randomWord, FLIP_LEVEL_TAG, i))     ~  60 gas
 //     (per-pull lvlPrime sample; MSTORE × 3 + KECCAK256(96 bytes))
 //   - % range modulo                                           ~   8 gas
-//   - traitBurnTicket[lvlPrime][trait_i].length SLOAD          : cold 2100 / warm 100 (EIP-2929)
+//   - lvlTraitEntry[lvlPrime][trait_i].length SLOAD          : cold 2100 / warm 100 (EIP-2929)
 //   - deityCache[traitIdx] memory read                         ~  12 gas
 //   - virtual-count branch + effectiveLen add                  ~  30 gas
 //   - keccak256(abi.encode(randomWord, trait_i, lvlPrime, i))  ~  80 gas

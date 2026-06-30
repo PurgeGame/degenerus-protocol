@@ -323,7 +323,7 @@ describe("MintBatchDeterminism — Phase 282 v41.0 multi-call drain regression",
       await buyTickets(game, alice, 2000, 30);
 
       // Confirm tickets are queued (owed > 0 somewhere). At this point Alice
-      // is queued at purchaseLevel=1; ticketsOwedView reads ticketsOwedPacked
+      // is queued at purchaseLevel=1; ticketsOwedView reads entriesOwedPacked
       // at _tqWriteKey(level=1).
       const owedAtL1 = await game.ticketsOwedView(1, alice.address);
       expect(Number(owedAtL1)).to.be.gte(
@@ -484,7 +484,7 @@ describe("MintBatchDeterminism — Phase 282 v41.0 multi-call drain regression",
       expect(aliceEvents.length).to.be.gte(2);
 
       // Group by level (the on-chain trait state is per-level via
-      // traitBurnTicket[lvl][trait]).
+      // lvlTraitEntry[lvl][trait]).
       const eventsByLevel = new Map();
       for (const e of aliceEvents) {
         if (!eventsByLevel.has(e.level)) eventsByLevel.set(e.level, []);
@@ -543,8 +543,8 @@ describe("MintBatchDeterminism — Phase 282 v41.0 multi-call drain regression",
       // D-282-B2-COVERAGE-01, queue alice tickets at FUTURE levels via
       // purchaseWhalePass (which queues 400 tickets/bundle distributed
       // across 100 future levels: 40 tickets/level at levels 1-10, 2
-      // tickets/level at levels 11-100 per WHALE_BONUS_TICKETS_PER_LEVEL +
-      // WHALE_STANDARD_TICKETS_PER_LEVEL). The advanceGame() chain drains
+      // tickets/level at levels 11-100 per WHALE_BONUS_ENTRIES_PER_LEVEL +
+      // WHALE_STANDARD_ENTRIES_PER_LEVEL). The advanceGame() chain drains
       // those tickets via _prepareFutureTickets → _processFutureTicketBatch
       // (Path A: future-pool path; patched callsite at L469-L477).
       const fixture = await loadFixture(deployFullProtocol);
@@ -555,7 +555,7 @@ describe("MintBatchDeterminism — Phase 282 v41.0 multi-call drain regression",
       //   - bonus levels (1..10): 40 × 10 = 400 tickets each level → owed=400 entries
       //   - standard levels (11..100): 2 × 10 = 20 tickets each level → owed=20 entries
       // (each ticket = 4 entries per project memory project_ticket_entry_price_units.md;
-      // but _queueTickets enqueues the WHOLE TICKET count, not the entry count
+      // but _queueEntries enqueues the WHOLE TICKET count, not the entry count
       // — verify owed math against ticketsOwedView post-purchase).
       await game
         .connect(alice)

@@ -28,11 +28,17 @@ const CONTRACT_PATH = resolve(REPO_ROOT, CONTRACT_REL);
 const PRE_V73_REF = "64ec993e^";
 
 function preV73Source() {
-  return execFileSync("git", ["show", `${PRE_V73_REF}:${CONTRACT_REL}`], {
+  const raw = execFileSync("git", ["show", `${PRE_V73_REF}:${CONTRACT_REL}`], {
     cwd: REPO_ROOT,
     encoding: "utf8",
     maxBuffer: 16 * 1024 * 1024,
   });
+  // Phase 480 (RN-07) renames the degenerette bet-amount local `amountPerTicket`
+  // to `amountPerSpin` — a pure, audited identifier change with no behavior, value,
+  // or event-field impact. These held-fixed invariants prove the v73 diff did not
+  // move LOGIC; normalize that rename into the v72 baseline so the byte-compare
+  // ignores the identifier rename while still catching any real logic drift.
+  return raw.replace(/\bamountPerTicket\b/g, "amountPerSpin");
 }
 
 function currentSource() {

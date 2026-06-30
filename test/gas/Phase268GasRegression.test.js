@@ -43,7 +43,7 @@
 //   - keccak256(abi.encodePacked(rngWord, index, [spinIdx,] QUICK_PLAY_SALT)) ~ 100 gas
 //   - DegenerusTraitUtils.packedTraitsDegenerette(resultSeed) inlined         ~ 200 gas (4 × _degTrait)
 //   - _countMatches 4-iter loop                                                ~  80 gas
-//   - _fullTicketPayout: _countGoldQuadrants 4-iter loop                       ~  60 gas
+//   - _degenerettePayout: _countGoldQuadrants 4-iter loop                       ~  60 gas
 //   -                    _getBasePayoutBps N=3 M=8 path (4 if/else + SLOAD)    ~ 2200 gas (cold) / 200 (warm)
 //   -                    _wwxrpBonusBucket no-op (matches==8 → bucket==8)      ~  20 gas
 //   -                    _wwxrpFactor N=3 bucket=8 dispatch (4 if/else + SLOAD) ~ 2200 (cold) / 200 (warm)

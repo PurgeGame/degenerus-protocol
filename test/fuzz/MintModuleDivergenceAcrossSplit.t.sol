@@ -15,7 +15,7 @@ pragma solidity ^0.8.26;
 // (`processed += take;`), the within-call advance that aligns
 // processTicketBatch's per-iter startIndex with processFutureTicketBatch:502's
 // reference-correct contiguous advance. This test asserts that the per-ticket
-// trait derivation captured in `traitBurnTicket[lvl][traitId]` is byte-identical
+// trait derivation captured in `lvlTraitEntry[lvl][traitId]` is byte-identical
 // across two distinct budget-slice trajectories of the SAME (player, lvl, owed,
 // queueIdx, entropy) scenario, satisfying D-TST03-02's cross-path equality
 // oracle (NOT a reference-loop equality against processFutureTicketBatch:502,
@@ -28,7 +28,7 @@ pragma solidity ^0.8.26;
 //   below for the audit-lineage attestation. This file DOES NOT use the v48-era
 //   6-arg TraitsGenerated form (address + four small-uint args + a uint256) that
 //   still hardcodes into Bucket-B carried-forward red `RngIndexDrainBinding`
-//   et al. The cross-path digest is taken DIRECTLY from `traitBurnTicket` storage
+//   et al. The cross-path digest is taken DIRECTLY from `lvlTraitEntry` storage
 //   (per-player, per-traitId) via vm.load, NOT from event capture — so the topic
 //   constant below is documentary, asserting we know the live shape (the actual
 //   oracle is storage-diff, which is immune to event-signature drift).
@@ -47,8 +47,8 @@ pragma solidity ^0.8.26;
 //   invokes `mintModule.processTicketBatch(lvl)` DIRECTLY on the deployed
 //   MintModule contract. Because every module (incl. MintModule) inherits the
 //   IDENTICAL storage layout from DegenerusGameStorage, mintModule's own
-//   storage is a valid HOST for `ticketQueue`, `ticketsOwedPacked`,
-//   `traitBurnTicket`, `ticketCursor`, `ticketLevel`, `ticketWriteSlot`,
+//   storage is a valid HOST for `ticketQueue`, `entriesOwedPacked`,
+//   `lvlTraitEntry`, `ticketCursor`, `ticketLevel`, `ticketWriteSlot`,
 //   `lootboxRngPacked`, and `lootboxRngWordByIndex` — all the slots the
 //   function reads/writes. The cross-path equality oracle is therefore
 //   self-contained on `address(mintModule)`; `game`'s production storage is
@@ -73,13 +73,13 @@ contract MintModuleDivergenceAcrossSplitTest is DeployProtocol {
     ///      test (default false is fine; _tqReadKey returns `lvl | TICKET_SLOT_BIT`).
     uint256 private constant SLOT_PACKED_0 = 0;
 
-    /// @dev traitBurnTicket (mapping(uint24 => address[][256])) — slot 8.
+    /// @dev lvlTraitEntry (mapping(uint24 => address[][256])) — slot 8.
     uint256 private constant SLOT_TRAIT_BURN_TICKET = 8;
 
     /// @dev ticketQueue (mapping(uint24 => address[])) — slot 12.
     uint256 private constant SLOT_TICKET_QUEUE = 12;
 
-    /// @dev ticketsOwedPacked (mapping(uint24 => mapping(address => uint40))) — slot 13.
+    /// @dev entriesOwedPacked (mapping(uint24 => mapping(address => uint40))) — slot 13.
     uint256 private constant SLOT_TICKETS_OWED_PACKED = 13;
 
     /// @dev packed slot 14: ticketCursor (uint32) offset 0; ticketLevel (uint24) offset 4.
@@ -162,13 +162,13 @@ contract MintModuleDivergenceAcrossSplitTest is DeployProtocol {
         return keccak256(abi.encode(_slotTicketQueueLen(rk)));
     }
 
-    /// @dev Compute the storage slot of `ticketsOwedPacked[rk][player]` (the uint40 packed slot).
+    /// @dev Compute the storage slot of `entriesOwedPacked[rk][player]` (the uint40 packed slot).
     function _slotOwed(uint24 rk, address player) private pure returns (bytes32) {
         bytes32 inner = keccak256(abi.encode(uint256(rk), SLOT_TICKETS_OWED_PACKED));
         return keccak256(abi.encode(player, inner));
     }
 
-    /// @dev Compute the storage slot of `traitBurnTicket[lvl][traitId]` (the array length slot).
+    /// @dev Compute the storage slot of `lvlTraitEntry[lvl][traitId]` (the array length slot).
     ///      Layout: mapping(uint24 => address[][256]). The keccak256(lvl . slot) yields the
     ///      256-element fixed array base; traitId offsets into it. The address[] inner array's
     ///      length lives at that offset slot; data at keccak256(elem).
@@ -177,7 +177,7 @@ contract MintModuleDivergenceAcrossSplitTest is DeployProtocol {
         return bytes32(uint256(base) + uint256(traitId));
     }
 
-    /// @dev Compute the data root slot for the address[] elements at `traitBurnTicket[lvl][traitId]`.
+    /// @dev Compute the data root slot for the address[] elements at `lvlTraitEntry[lvl][traitId]`.
     function _slotTraitBurnData(uint24 lvl, uint8 traitId) private pure returns (bytes32) {
         return keccak256(abi.encode(_slotTraitBurnLen(lvl, traitId)));
     }
@@ -199,7 +199,7 @@ contract MintModuleDivergenceAcrossSplitTest is DeployProtocol {
         vm.store(host, _slotTicketQueueLen(rk), bytes32(uint256(1)));
         vm.store(host, _slotTicketQueueData(rk), bytes32(uint256(uint160(player))));
 
-        // ticketsOwedPacked[rk][player] = (owed << 8) | 0
+        // entriesOwedPacked[rk][player] = (owed << 8) | 0
         vm.store(host, _slotOwed(rk, player), bytes32(uint256(owed) << 8));
 
         // ticketLevel = lvl (offset 4 within slot 14); ticketCursor = 0 (offset 0). Default 0.
@@ -210,8 +210,8 @@ contract MintModuleDivergenceAcrossSplitTest is DeployProtocol {
         );
     }
 
-    /// @dev Clear the address[] under `traitBurnTicket[lvl][traitId]` lengths for all 256 trait
-    ///      ids on the host. This restores Path B to a pristine traitBurnTicket pre-state without
+    /// @dev Clear the address[] under `lvlTraitEntry[lvl][traitId]` lengths for all 256 trait
+    ///      ids on the host. This restores Path B to a pristine lvlTraitEntry pre-state without
     ///      reverting the LCG-relevant world. Mirrors the Pitfall-5 "always re-stage clean" guard.
     function _clearTraitBurnTicket(address host, uint24 lvl) private {
         for (uint16 traitId = 0; traitId < 256; ++traitId) {
@@ -254,7 +254,7 @@ contract MintModuleDivergenceAcrossSplitTest is DeployProtocol {
     }
 
     /// @dev keccak digest of the player's per-traitId occurrence counts across all 256 trait
-    ///      buckets at `traitBurnTicket[lvl][0..255]`. Counts ONLY the target player's address
+    ///      buckets at `lvlTraitEntry[lvl][0..255]`. Counts ONLY the target player's address
     ///      so it is invariant to insertion order within each bucket array (the address[]
     ///      data slots store one address per occurrence). The digest is the cross-path equality
     ///      oracle: same player + same input scenario => same per-traitId count multiset, even
@@ -316,7 +316,7 @@ contract MintModuleDivergenceAcrossSplitTest is DeployProtocol {
         address player
     ) private {
         uint24 rk = lvl | TICKET_SLOT_BIT;
-        // Wipe owedMap, queue, cursor/level, traitBurnTicket for this scenario.
+        // Wipe owedMap, queue, cursor/level, lvlTraitEntry for this scenario.
         vm.store(host, _slotOwed(rk, player), bytes32(0));
         vm.store(host, _slotTicketQueueLen(rk), bytes32(0));
         // Data slot (single entry) — zero out for cleanliness; not strictly required since
@@ -376,7 +376,7 @@ contract MintModuleDivergenceAcrossSplitTest is DeployProtocol {
     ///      slice trajectories produces byte-identical per-player trait derivations.
     ///
     ///      Pitfall 5 mitigation: clear `host`'s scenario state (owedMap, queue, cursor,
-    ///      traitBurnTicket) BEFORE re-seeding to guarantee Path B's pre-state matches
+    ///      lvlTraitEntry) BEFORE re-seeding to guarantee Path B's pre-state matches
     ///      Path A's pre-state byte-identically.
     function _runPathB_NaturalSlice(
         address host,
@@ -385,7 +385,7 @@ contract MintModuleDivergenceAcrossSplitTest is DeployProtocol {
         uint32 owed,
         uint256 entropy
     ) private returns (bytes32 digest, uint256 totalTraits) {
-        // Pitfall 5: clear traitBurnTicket + queue + owed + cursor first (NOT vm.revertTo,
+        // Pitfall 5: clear lvlTraitEntry + queue + owed + cursor first (NOT vm.revertTo,
         // which would also clobber test-local bookkeeping). The LCG inputs (baseKey from
         // owed + queueIdx + player + lvl; entropy from lootboxRngWordByIndex[0]) are
         // re-seeded byte-identically below.
@@ -414,13 +414,13 @@ contract MintModuleDivergenceAcrossSplitTest is DeployProtocol {
     ///      `processTicketBatch` to completion under the natural multi-call budget-slice
     ///      trajectory; Path B re-stages from a cleared host (Pitfall 5) and drives the
     ///      same scenario again. The per-player trait-id occurrence-count digest captured
-    ///      from `traitBurnTicket[lvl][0..255]` storage MUST be byte-identical across the
+    ///      from `lvlTraitEntry[lvl][0..255]` storage MUST be byte-identical across the
     ///      two paths. This is the empirical attestation of the MINTDIV-02 invariant
     ///      (`processed += take` correctness): regardless of HOW the budget-slice splits
     ///      across calls and inner iterations, the cumulative trait derivation for the
     ///      target player is invariant under same-input re-staging.
     ///
-    ///      The oracle is storage-diff (`vm.load` over `traitBurnTicket[lvl][0..255]`),
+    ///      The oracle is storage-diff (`vm.load` over `lvlTraitEntry[lvl][0..255]`),
     ///      NOT event capture — immune to the v48-era 6-arg TraitsGenerated topic-hash
     ///      drift that still hardcodes into Bucket-B carried-forward red fuzz tests
     ///      (Pitfall 3). The LIVE 3-arg topic hash is asserted documentary above

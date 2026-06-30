@@ -20,7 +20,7 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 ///           5. FAUCET    — the bounty is far below the FLIP a winner had to burn to exist, so a
 ///                          keeper cannot manufacture boxes to farm it.
 ///
-/// @dev A winning DecEntry + claim round + winning-subbucket offset are installed directly via
+/// @dev A winning DecBet + claim round + winning-subbucket offset are installed directly via
 ///      vm.store (bypassing the expensive VRF-winning-subbucket resolution), then a keeper batch
 ///      claims. Share size is kept dust-small (< 0.01 ETH) so the settle takes the no-box dust path
 ///      and the test isolates the bounty rather than the lootbox payout machinery.
@@ -28,7 +28,7 @@ contract DecimatorBountyRegression is DeployProtocol {
     // forge inspect DegenerusGame storageLayout (Stage B POST layout):
     uint256 internal constant SLOT_HEADER = 0; // packed flags incl. gameOver @ byte 21
     uint256 internal constant SLOT_POOLS_1 = 1; // currentPrizePool[0:128] | claimablePool[128:256]
-    uint256 internal constant SLOT_DEC_BURN = 41; // mapping(uint24 => mapping(address => DecEntry))
+    uint256 internal constant SLOT_DEC_BURN = 41; // mapping(uint24 => mapping(address => DecBet))
     uint256 internal constant SLOT_DEC_CLAIM_ROUNDS = 43; // mapping(uint24 => DecClaimRound) (one slot)
     uint256 internal constant SLOT_DEC_OFFSET_PACKED = 44; // mapping(uint24 => uint64)
 

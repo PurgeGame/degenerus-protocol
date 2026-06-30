@@ -43,7 +43,7 @@
 //       per-iteration deity-win-count chi² goodness-of-fit at p > 0.05
 //       against the analytical 1/(len+1) per-draw expectation; df=1
 //       critical value 3.841 at α=0.05). Cross-attestation seeds
-//       `traitBurnTicket[lvl][trait]` + `deityBySymbol[fullSymId]` via
+//       `lvlTraitEntry[lvl][trait]` + `deityBySymbol[fullSymId]` via
 //       `hardhat_setStorageAt` at storage slots derived through
 //       `forge inspect storageLayout` at test runtime (mirrors HRROLL
 //       fixture's `seedDailyHeroWagersDirect` pattern); the JS oracle's
@@ -176,7 +176,7 @@ const COMMON_TRAIT = 0; // common color (0), fullSymId 0
 const DEITY_SENTINEL_TICKET_IDX =
   RAND_TRAIT_TICKET_CONSTANTS.DEITY_SENTINEL_TICKET_IDX;
 
-// Storage slot indices for `traitBurnTicket` + `deityBySymbol`, validated at
+// Storage slot indices for `lvlTraitEntry` + `deityBySymbol`, validated at
 // test runtime via `forge inspect storageLayout`. These match Phase 294 §2
 // EMPTY-diff attestation against the v41 close pin.
 const FALLBACK_TRAIT_BURN_TICKET_SLOT = 8n;
@@ -238,7 +238,7 @@ function computeDeityBySymbolSlot(fullSymId, baseSlot) {
   );
 }
 
-// Compute the storage slot for `traitBurnTicket[lvl][trait]` length word.
+// Compute the storage slot for `lvlTraitEntry[lvl][trait]` length word.
 // Solidity layout for `mapping(uint24 => address[][256])`:
 //   outerSlot = keccak256(abi.encode(uint256(lvl), uint256(baseSlot)))
 //   For the `address[][256]` fixed-array at outerSlot, element `trait`
@@ -281,7 +281,7 @@ async function seedDeityBySymbol(gameAddr, fullSymId, deity, baseSlot) {
   ]);
 }
 
-// Write a synthetic `traitBurnTicket[lvl][trait] = holders[]` bucket via
+// Write a synthetic `lvlTraitEntry[lvl][trait] = holders[]` bucket via
 // `hardhat_setStorageAt`. Sets the length-word at the length-slot and the
 // holder addresses contiguously at the keccak-derived element-base. Mirrors
 // the HRROLL fixture's `seedDailyHeroWagersDirect` pattern at L407-L419.
@@ -385,7 +385,7 @@ function computeChi2Multinomial(observed, expected) {
 
 // Generate `n` deterministic, distinct addresses derived from a seed prefix
 // + a sequential index. Used to populate holder buckets for the
-// `traitBurnTicket` seed.
+// `lvlTraitEntry` seed.
 function generateHolderAddresses(n, seedPrefix = "0xABCDE") {
   const out = new Array(n);
   for (let i = 0; i < n; ++i) {
@@ -437,13 +437,13 @@ describe("DeityPassGoldNerfRegression — Phase 295 v42.0 DPNERF regression fixt
         );
       });
 
-      it("derives traitBurnTicket base slot from forge inspect storageLayout and matches the v41 close pin (slot 8)", function () {
-        const slot = deriveStorageSlot("traitBurnTicket");
+      it("derives lvlTraitEntry base slot from forge inspect storageLayout and matches the v41 close pin (slot 8)", function () {
+        const slot = deriveStorageSlot("lvlTraitEntry");
         expect(typeof slot).to.equal("bigint");
         expect(slot >= 0n).to.equal(true);
         expect(slot).to.equal(FALLBACK_TRAIT_BURN_TICKET_SLOT);
         console.log(
-          `      [TST-DPNERF setup] traitBurnTicket BASE_SLOT = ${slot.toString()}`
+          `      [TST-DPNERF setup] lvlTraitEntry BASE_SLOT = ${slot.toString()}`
         );
       });
 
@@ -525,7 +525,7 @@ describe("DeityPassGoldNerfRegression — Phase 295 v42.0 DPNERF regression fixt
   //
   // Scenario: deity-pass-holder + gold-tier trait win (color == 7 via
   // ((trait >> 3) & 7) == 7) via the ETH-path 25-winner draw at
-  // `_randTraitTicket` L1707-L1763. Seeds `traitBurnTicket[lvl][GOLD_TRAIT]`
+  // `_randTraitTicket` L1707-L1763. Seeds `lvlTraitEntry[lvl][GOLD_TRAIT]`
   // with BUCKET_SIZE=50 distinct non-deity holders + seeds
   // `deityBySymbol[fullSymId=0]` with a deterministic deity address. Drives
   // `randTraitTicketRef` against the round-tripped storage state (read back
@@ -549,7 +549,7 @@ describe("DeityPassGoldNerfRegression — Phase 295 v42.0 DPNERF regression fixt
           const gameAddr = await game.getAddress();
 
           const deityBaseSlot = deriveStorageSlot("deityBySymbol");
-          const bucketBaseSlot = deriveStorageSlot("traitBurnTicket");
+          const bucketBaseSlot = deriveStorageSlot("lvlTraitEntry");
 
           // Seed deity for fullSymId 0 (the symbol-id of GOLD_TRAIT).
           const deity = hre.ethers.getAddress(
@@ -560,7 +560,7 @@ describe("DeityPassGoldNerfRegression — Phase 295 v42.0 DPNERF regression fixt
             await readDeityBySymbol(gameAddr, 0, deityBaseSlot)
           ).to.equal(deity);
 
-          // Seed traitBurnTicket[1][GOLD_TRAIT] with BUCKET_SIZE distinct
+          // Seed lvlTraitEntry[1][GOLD_TRAIT] with BUCKET_SIZE distinct
           // non-deity holders.
           const lvl = 1;
           const holders = generateHolderAddresses(BUCKET_SIZE, "0xA5510000");
@@ -663,7 +663,7 @@ describe("DeityPassGoldNerfRegression — Phase 295 v42.0 DPNERF regression fixt
           const gameAddr = await game.getAddress();
 
           const deityBaseSlot = deriveStorageSlot("deityBySymbol");
-          const bucketBaseSlot = deriveStorageSlot("traitBurnTicket");
+          const bucketBaseSlot = deriveStorageSlot("lvlTraitEntry");
 
           // Seed deity for fullSymId 0 (the symbol-id of COMMON_TRAIT, which
           // has color 0, symIdx 0 → fullSymId 0).
@@ -787,14 +787,14 @@ describe("DeityPassGoldNerfRegression — Phase 295 v42.0 DPNERF regression fixt
           const gameAddr = await game.getAddress();
 
           const deityBaseSlot = deriveStorageSlot("deityBySymbol");
-          const bucketBaseSlot = deriveStorageSlot("traitBurnTicket");
+          const bucketBaseSlot = deriveStorageSlot("lvlTraitEntry");
 
           const deity = hre.ethers.getAddress(
             "0x00000000000000000000000000000000000B0E11" // FLIP deity
           );
           await seedDeityBySymbol(gameAddr, 0, deity, deityBaseSlot);
 
-          // Seed traitBurnTicket[lvlPrime][GOLD_TRAIT] across lvlPrime ∈
+          // Seed lvlTraitEntry[lvlPrime][GOLD_TRAIT] across lvlPrime ∈
           // [1..10] to cover the per-pull keccak-derived level range that
           // `_awardDailyCoinToTraitWinners` samples from at L1856-L1858.
           const holderBuckets = {};
@@ -893,7 +893,7 @@ describe("DeityPassGoldNerfRegression — Phase 295 v42.0 DPNERF regression fixt
   //   v41 baseline would have been N × max(50/50, 2) = N × 2 = 2000 (information-only)
   //
   // Cross-attestation (N=16): for each iteration seed fresh
-  // `(traitBurnTicket[lvl][GOLD_TRAIT], deityBySymbol[0])` state with a
+  // `(lvlTraitEntry[lvl][GOLD_TRAIT], deityBySymbol[0])` state with a
   // per-iteration entropy, drive the JS oracle, then read the bucket back
   // from storage and assert the JS-oracle output is deterministic against
   // the round-tripped state. The chi² goodness-of-fit at p > 0.05 against
@@ -1106,7 +1106,7 @@ describe("DeityPassGoldNerfRegression — Phase 295 v42.0 DPNERF regression fixt
           const gameAddr = await game.getAddress();
 
           const deityBaseSlot = deriveStorageSlot("deityBySymbol");
-          const bucketBaseSlot = deriveStorageSlot("traitBurnTicket");
+          const bucketBaseSlot = deriveStorageSlot("lvlTraitEntry");
 
           const deity = hre.ethers.getAddress(
             "0x0000000000000000000000000000000000C7055D"
@@ -1117,7 +1117,7 @@ describe("DeityPassGoldNerfRegression — Phase 295 v42.0 DPNERF regression fixt
           const perIterationSentinels = [];
           for (let i = 0; i < N_CROSS; ++i) {
             // Per-iteration distinct lvl key (avoids cross-iteration storage
-            // collision on the same `traitBurnTicket[lvl][trait]` slot).
+            // collision on the same `lvlTraitEntry[lvl][trait]` slot).
             const lvl = 100 + i;
             const holders = generateHolderAddresses(
               BUCKET_SIZE,
@@ -1241,7 +1241,7 @@ describe("DeityPassGoldNerfRegression — Phase 295 v42.0 DPNERF regression fixt
           const { game } = fixture;
           const gameAddr = await game.getAddress();
 
-          const bucketBaseSlot = deriveStorageSlot("traitBurnTicket");
+          const bucketBaseSlot = deriveStorageSlot("lvlTraitEntry");
           const deityBaseSlot = deriveStorageSlot("deityBySymbol");
 
           // CONFIRM deityBySymbol[0] is zero (fixture default; no seeding).

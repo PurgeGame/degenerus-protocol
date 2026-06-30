@@ -623,7 +623,7 @@ describe("Paper Parity (Phase 46)", function () {
     });
 
     it("lazy pass: 4 tickets per level", async function () {
-      // LAZY_PASS_TICKETS_PER_LEVEL = 4
+      // LAZY_PASS_ENTRIES_PER_LEVEL = 4
       expect(4).to.equal(4, "Lazy pass tickets/level = 4");
     });
 

@@ -1001,8 +1001,8 @@ describe("v38.0 SURF-01..02 — protected surfaces vs v37.0 baseline 2654fcc2", 
 //            coin-jackpot functions — is byte-identical and IS protected here.
 //   SURF-02  contracts/storage/DegenerusGameStorage.sol — the _queueLootboxTickets
 //            wrapper function is deleted (L683-701 at the v39 baseline). Every
-//            other storage helper — _queueTickets, _queueTicketsScaled,
-//            _queueTicketRange, the packed-pool helpers — is byte-identical
+//            other storage helper — _queueEntries, _queueEntriesScaled,
+//            _queueEntryRange, the packed-pool helpers — is byte-identical
 //            and IS protected here.
 //   SURF-03  contracts/modules/DegenerusGameMintModule.sol — the _rollRemainder
 //            NatSpec comment is reworded (L649-651 at the v39 baseline). The
@@ -1084,10 +1084,10 @@ describe("v40.0 SURF-01..05 — protected surfaces vs v39.0 baseline 6a7455d1", 
   // SURF-02 — DegenerusGameStorage.sol surviving surface byte-identical.
   // The v39.0-baseline file is 1789 lines. The only Wave 1 delta is the
   // deletion of the _queueLootboxTickets wrapper (OLD-side lines L683-701).
-  // Everything before and after that block — _queueTickets, _queueTicketsScaled,
-  // _queueTicketRange, the packed prize-pool helpers — is byte-identical.
+  // Everything before and after that block — _queueEntries, _queueEntriesScaled,
+  // _queueEntryRange, the packed prize-pool helpers — is byte-identical.
   const SURF_02_PROTECTED_RANGES_V40 = [
-    { name: "Storage L1-682 (incl. _queueTickets + _queueTicketsScaled + _queueTicketRange)", lo: 1, hi: 682 },
+    { name: "Storage L1-682 (incl. _queueEntries + _queueEntriesScaled + _queueEntryRange)", lo: 1, hi: 682 },
     { name: "Storage L702-1789 (packed prize-pool helpers + remainder of file)", lo: 702, hi: 1789 },
   ];
 

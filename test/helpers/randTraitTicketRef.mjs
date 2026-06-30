@@ -121,11 +121,11 @@ export function goldTierVirtualCount(trait, len, deityPresent) {
 
 /// @notice JS bit-mirror of `_randTraitTicket` (contracts/modules/DegenerusGameJackpotModule.sol
 ///         L1707-L1763). ETH-path 25-winner draw against a single
-///         `traitBurnTicket[lvl][trait]` bucket with the gold-tier flat-1
+///         `lvlTraitEntry[lvl][trait]` bucket with the gold-tier flat-1
 ///         virtual-count branch + common-tier `max(len/50, 2)` preserved.
 ///
 /// Body trace vs the live contract:
-///   L1718     address[] storage holders = traitBurnTicket_[trait]
+///   L1718     address[] storage holders = lvlTraitEntry_[trait]
 ///                                            → caller passes the bucket
 ///                                              array directly as `holders`
 ///   L1719     uint256 len = holders.length          → BigInt(holders.length)
@@ -138,7 +138,7 @@ export function goldTierVirtualCount(trait, len, deityPresent) {
 ///     L1752-L1754 if (idx < len) winners[i] = holders[idx]; ticketIndexes[i] = idx
 ///     L1755-L1758 else            winners[i] = deity;       ticketIndexes[i] = type(uint256).max
 ///
-/// @param holders string[] — the `traitBurnTicket[lvl][trait]` bucket (the
+/// @param holders string[] — the `lvlTraitEntry[lvl][trait]` bucket (the
 ///                           storage-mapping reference parameter is replaced
 ///                           by a direct array of holder addresses)
 /// @param randomWord BigInt uint256 — VRF entropy plumbed through `_processDailyEth`
@@ -218,7 +218,7 @@ export function randTraitTicketRef({
 ///   L1854     uint8 trait_i = traitIds[traitIdx]        → caller supplies trait_i directly
 ///   L1856-L1858 uint24 lvlPrime = minLevel + uint24(keccak256(abi.encode(randomWord, COIN_LEVEL_TAG, i)) % range)
 ///                                            → caller supplies lvlPrime directly (computed upstream)
-///   L1860     address[] storage holders = traitBurnTicket[lvlPrime][trait_i]
+///   L1860     address[] storage holders = lvlTraitEntry[lvlPrime][trait_i]
 ///                                            → caller passes `holders` directly
 ///   L1861     uint256 len = holders.length             → BigInt(holders.length)
 ///   L1862     address deity = deityCache[traitIdx]     → caller supplies `deity` directly
@@ -228,7 +228,7 @@ export function randTraitTicketRef({
 ///   L1883-L1885 idx = uint256(keccak256(abi.encode(randomWord, trait_i, lvlPrime, i))) % effectiveLen
 ///   L1888-L1893 winner / ticketIdx assignment (sentinel iff idx >= len)
 ///
-/// @param holders string[] — the `traitBurnTicket[lvlPrime][trait_i]` bucket
+/// @param holders string[] — the `lvlTraitEntry[lvlPrime][trait_i]` bucket
 /// @param randomWord BigInt uint256 — VRF entropy plumbed through `payDailyCoinJackpot`
 /// @param trait_i Number uint8 — the per-iteration trait byte
 /// @param lvlPrime Number uint24 — the sampled level for this pull

@@ -12,11 +12,11 @@ import {PriceLookupLib} from "../../contracts/libraries/PriceLookupLib.sol";
 ///         helper is reachable through an external pass-through shim. The subclass
 ///         OVERRIDES NO production logic -- it only adds external shims (mirrors the
 ///         JackpotSingleCallHarness precedent; test-only, no contracts/*.sol mutated).
-/// @dev The reference entries basis `_budgetToTicketUnits` is declared `private` in the
+/// @dev The reference entries basis `_budgetToEntries` is declared `private` in the
 ///      JackpotModule, so a subclass cannot reach it. `exposedBudgetToEntries` mirrors
 ///      its EXACT body -- `(budget << 2) / priceForLevel(lvl)` -- against the SAME
 ///      production `PriceLookupLib.priceForLevel` oracle, so the basis value is identical
-///      to the purchase/daily legs that call `_budgetToTicketUnits` directly.
+///      to the purchase/daily legs that call `_budgetToEntries` directly.
 contract PrizeLegHarness is DegenerusGameJackpotModule {
     /// @dev External pass-through to the production internal converter (no logic added):
     ///      the load-bearing symbol under test, not a re-implementation.
@@ -27,7 +27,7 @@ contract PrizeLegHarness is DegenerusGameJackpotModule {
     /// @dev The reference entries basis `(budget << 2) / priceForLevel(lvl)` that the
     ///      already-correct purchase/daily legs deliver (uniform entries-per-ETH), against
     ///      the same production price oracle. A faithful mirror of production
-    ///      `_budgetToTicketUnits`: priceForLevel is never 0 (min 0.01 ether) and budget==0
+    ///      `_budgetToEntries`: priceForLevel is never 0 (min 0.01 ether) and budget==0
     ///      yields 0 cleanly, so neither needs a guard.
     function exposedBudgetToEntries(uint256 budget, uint24 lvl) external pure returns (uint256) {
         return (budget << 2) / PriceLookupLib.priceForLevel(lvl);
@@ -38,7 +38,7 @@ contract PrizeLegHarness is DegenerusGameJackpotModule {
 /// @notice Both under-issue prize legs (Jackpot BAF roll, Lootbox roll) route their
 ///         post-Bernoulli whole-ticket count through the single canonical converter
 ///         `wholeTicketsToEntries(w) = w << 2` before queueing into the entries-
-///         denominated `ticketsOwedPacked` sink. This suite proves, with no VRF and no
+///         denominated `entriesOwedPacked` sink. This suite proves, with no VRF and no
 ///         full-stack drive:
 ///           1. the converter is exactly w*4 for representative and max-realistic w,
 ///              with no uint32 truncation at the upper edge;

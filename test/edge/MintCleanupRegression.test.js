@@ -39,7 +39,7 @@
 //     `_processOneTicketEntry`) AND Path A at lvl>=2 (future-pool via
 //     `_processFutureTicketBatch`) both emit in one drain run, with
 //     `path-accumulator=A|B` log discrimination per Phase 282 precedent.
-//   TST-MINTCLN-04 — `ticketsOwedPacked[rk][player]` slot read decodes to
+//   TST-MINTCLN-04 — `entriesOwedPacked[rk][player]` slot read decodes to
 //     the expected 40-bit packed form `(uint40(owed) << 8) | uint40(rem)`
 //     at storage:465; outer-mapping key `rk` is derived per-path via
 //     `_tqWriteKey(lvl)` (Path B) and `_tqFarFutureKey(lvl)` (Path A) —
@@ -184,7 +184,7 @@ async function readDailyIdx(addr) {
 function computeRk(lvl, path, ticketWriteSlot) {
   const v = BigInt(lvl);
   // Both drain paths (B: current-level, A: future-pool for lvl ≤ level+5) read
-  // and write `ticketsOwedPacked` via `_tqWriteKey(lvl)` in the queued state.
+  // and write `entriesOwedPacked` via `_tqWriteKey(lvl)` in the queued state.
   // `_tqFarFutureKey(lvl)` (TICKET_FAR_FUTURE_BIT-marked) only applies when
   // `isFarFuture = targetLevel > level + 5` is true at queue time — i.e. when
   // tickets are bought far enough ahead that the current double-buffer slot
@@ -540,17 +540,17 @@ describe("MintCleanupRegression — Phase 291 v42.0 MINTCLN regression fixture",
       return { fixture, gameAddr, ticketWriteSlot };
     }
 
-    it("ticketsOwedPacked[rk][player] slot reads decode to the expected (rem | (owed<<8)) 40-bit packed form on the queued state — Path A (lvl=2..5 far-future) AND Path B (lvl=1 current-level) outer-mapping keys both resolve to non-zero packed values with owed > 0", async function () {
+    it("entriesOwedPacked[rk][player] slot reads decode to the expected (rem | (owed<<8)) 40-bit packed form on the queued state — Path A (lvl=2..5 far-future) AND Path B (lvl=1 current-level) outer-mapping keys both resolve to non-zero packed values with owed > 0", async function () {
       try {
         const forgeOut = execSync(
           "forge inspect contracts/storage/DegenerusGameStorage.sol:DegenerusGameStorage storage-layout 2>/dev/null"
         ).toString();
         let slotIdx = null;
         for (const line of forgeOut.split("\n")) {
-          if (!line.includes("ticketsOwedPacked")) continue;
+          if (!line.includes("entriesOwedPacked")) continue;
           const cells = line.split("|").map((c) => c.trim());
           for (let k = 0; k < cells.length; k++) {
-            if (cells[k] === "ticketsOwedPacked") {
+            if (cells[k] === "entriesOwedPacked") {
               if (k + 2 < cells.length) {
                 const candidate = cells[k + 2];
                 if (/^[0-9]+$/.test(candidate)) {
@@ -564,7 +564,7 @@ describe("MintCleanupRegression — Phase 291 v42.0 MINTCLN regression fixture",
         }
         expect(slotIdx).to.equal(
           "13",
-          "forge inspect must report ticketsOwedPacked at slot 13 (BLK-2 lock)"
+          "forge inspect must report entriesOwedPacked at slot 13 (BLK-2 lock)"
         );
       } catch (err) {
         console.log(
