@@ -1,8 +1,26 @@
-# Phase 480 — Deferred / out-of-scope items (480-01 Tasks 1+2)
+# Phase 480 — Deferred / out-of-scope items (480-01 Tasks 1+2 · 480-02 Task 2)
 
 Pre-existing conditions surfaced during the rename-sweep execution. None are caused by the
 ticket→entry rename; all are logged here per the scope boundary (do NOT fix pre-existing
 failures in unrelated surfaces inside this rename phase).
+
+## 0. `forge test` full-run blocked by foundry-1.6.0-nightly (480-02) — environmental, NOT the rename
+
+- Full `forge test` on this machine reports `223 passed / 116 failed / 339 total` in ~1.2s; every
+  failure is `panic: arithmetic underflow or overflow (0x11)` in `setUp()` for full-game-deploy
+  suites. The `-vvvvv` trace shows `setUp` runs `vm.warp(86400)`, deploys all 17 modules, then the
+  final genesis CREATE (the `DegenerusGame` facade constructor) underflows — `vm.warp` does not
+  propagate to that nested CREATE under `forge 1.6.0-nightly`. This is the issue `foundry.toml:23-28`
+  documents ("protocol constructor's day-arithmetic ... panics (0x11)") + the `AutoOpenCursorRing.t.sol`
+  "Foundry block.timestamp caching workaround".
+- Proof it is NOT the contract / rename: `npm test` (Hardhat) deploys the SAME post-480 contracts at
+  the SAME fixed timestamp 86400 and plays the full game — 1362 passing, 0 failing. The forge-failing
+  test files are byte-identical to the 479-close (where `forge test` was 1003/0/107), and the rename is
+  byte-neutral. Every forge suite passes in isolation / small batches; only full-game-deploy suites
+  hit the nightly flake.
+- Recommended fix (owner/tooling call, out of this rename's scope): run `forge test` on the repo's
+  expected stable foundry (CI installs it via `foundry-toolchain@v1`); `foundryup` to the stable line,
+  then `forge test` reproduces the 1003/0/107 floor. No code change required.
 
 ## 1. Stale layout-oracle entry: `WrappedWrappedXRP` (pre-existing)
 
