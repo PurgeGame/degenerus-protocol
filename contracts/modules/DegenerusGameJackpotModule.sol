@@ -706,9 +706,8 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         uint256 budget,
         uint24 lvl
     ) private pure returns (uint256) {
-        if (budget == 0) return 0;
         uint256 ticketPrice = PriceLookupLib.priceForLevel(lvl);
-        return ticketPrice == 0 ? 0 : (budget << 2) / ticketPrice;
+        return (budget << 2) / ticketPrice;
     }
 
     // =========================================================================

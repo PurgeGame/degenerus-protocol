@@ -26,10 +26,10 @@ contract PrizeLegHarness is DegenerusGameJackpotModule {
 
     /// @dev The reference entries basis `(budget << 2) / priceForLevel(lvl)` that the
     ///      already-correct purchase/daily legs deliver (uniform entries-per-ETH), against
-    ///      the same production price oracle. priceForLevel is never 0 across the uint24
-    ///      domain (min 0.01 ether), so no zero-price guard.
+    ///      the same production price oracle. A faithful mirror of production
+    ///      `_budgetToTicketUnits`: priceForLevel is never 0 (min 0.01 ether) and budget==0
+    ///      yields 0 cleanly, so neither needs a guard.
     function exposedBudgetToEntries(uint256 budget, uint24 lvl) external pure returns (uint256) {
-        if (budget == 0) return 0;
         return (budget << 2) / PriceLookupLib.priceForLevel(lvl);
     }
 }
