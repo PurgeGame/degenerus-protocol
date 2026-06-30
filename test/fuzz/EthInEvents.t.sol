@@ -37,7 +37,7 @@ contract EthInEventsTest is DeployProtocol {
         );
         (uint256 qty, uint256 weiIn, bool found) = _evt2(vm.getRecordedLogs(), TICKETS_SIG, buyer);
         assertTrue(found, "mint emits TicketsBought");
-        assertEq(qty, 400, "ticketQuantity == purchase units");
+        assertEq(qty, 400, "entryQuantityScaled == purchase units");
         assertEq(weiIn, 0.01 ether, "weiIn == ticket cost");
     }
 

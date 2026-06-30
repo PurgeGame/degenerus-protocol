@@ -186,11 +186,11 @@ contract RngLockDeterminism is DeployProtocol {
             uint8 currency = 0;
             uint128 amount = uint128(0.001 ether);
             uint8 ticketCount = uint8(1 + (seed >> 8) % 10);
-            uint32 customTicket = 0;
+            uint32 customTraits = 0;
             uint8 heroQuadrant = uint8((seed >> 16) % 4);
             vm.prank(actor);
             try game.placeDegeneretteBet{value: uint256(amount) * ticketCount}(
-                actor, currency, amount, ticketCount, customTicket, heroQuadrant
+                actor, currency, amount, ticketCount, customTraits, heroQuadrant
             ) {} catch { return; }
         } else if (cls == 1) {
             vm.deal(actor, 100 ether);
@@ -366,13 +366,13 @@ contract RngLockDeterminism is DeployProtocol {
         if (action == 11) {
             uint128 amtPer = uint128(bound(nonce, 1e15, 1e16));
             uint8 ticketCount = uint8(bound(nonce >> 8, 1, 3));
-            uint32 customTicket = uint32(nonce >> 16);
+            uint32 customTraits = uint32(nonce >> 16);
             uint8 hero = uint8(bound(nonce >> 24, 0, 3));
             uint256 total = uint256(amtPer) * ticketCount;
             vm.deal(address(vault), total);
             vm.prank(vaultOwner);
             try vault.gameDegeneretteBet{value: 0}(
-                0, amtPer, ticketCount, customTicket, hero, total
+                0, amtPer, ticketCount, customTraits, hero, total
             ) {} catch { return; }
             return;
         }
@@ -1802,7 +1802,7 @@ contract RngLockDeterminism is DeployProtocol {
 
     /// @dev Pre-loads `whalePassClaims[claimant] = halfPasses` via direct storage write so
     ///      the perturbation has work to do (otherwise `claimWhalePass` reverts on
-    ///      `halfPasses == 0` and never reaches the rngLock-gated `_queueTicketRange` body).
+    ///      `halfPasses == 0` and never reaches the rngLock-gated `_queueEntryRange` body).
     function _preloadWhalePassClaims(address claimant, uint256 halfPasses) internal {
         bytes32 slot = keccak256(abi.encode(claimant, uint256(SLOT_WHALE_PASS_CLAIMS)));
         vm.store(address(game), slot, bytes32(halfPasses));
@@ -1909,7 +1909,7 @@ contract RngLockDeterminism is DeployProtocol {
         uint256 claimsBeforePerturb = _readWhalePassClaims(claimant);
 
         // The claimWhalePass perturbation. Per WHALE-04 §2:
-        //   * far-future band (currentLevel+6..+100): _queueTicketRange:661 REVERTS RngLocked()
+        //   * far-future band (currentLevel+6..+100): _queueEntryRange:661 REVERTS RngLocked()
         //     before any write — the entire claim is rolled back atomically.
         //   * liveness backstop (covers the entire 100-level range): claimWhalePass:1019
         //     reverts E() under _livenessTriggered() at the function entry.

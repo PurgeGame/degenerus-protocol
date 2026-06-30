@@ -22,7 +22,7 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 ///           (B) write/weight-budgeted chunked loops (stages 0/1/5/6/7 ticket batch; stage 2 subs).
 ///
 ///         This file measures (A) the 305-winner ETH jackpot and the 50-winner coin leg directly by
-///         extending the production module (seeding traitBurnTicket, then driving the live external
+///         extending the production module (seeding lvlTraitEntry, then driving the live external
 ///         entry with the msg.sender==GAME prank), and (B) the worst-case full processTicketBatch
 ///         write-budget chunk. The subscriber STAGE (2), the gap-backfill (4) and the OPEN_BATCH
 ///         router are measured by the sibling harness V56AfkingGasMarginal (referenced, not re-run).
@@ -42,7 +42,7 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 ///      All three feed `_processDailyEth` the same DAILY_ETH_MAX_WINNERS=305 ceiling at max scale.
 contract JackpotStageHarness is DegenerusGameJackpotModule {
     function seedBucket(uint24 lvl, uint8 traitId, uint256 count, uint160 base) external {
-        address[] storage holders = traitBurnTicket[lvl][traitId];
+        address[] storage holders = lvlTraitEntry[lvl][traitId];
         for (uint256 i; i < count; ++i) {
             holders.push(address(base + uint160(i + 1)));
         }
@@ -57,7 +57,7 @@ contract JackpotStageHarness is DegenerusGameJackpotModule {
 ///      executes the live write-budgeted per-entry trait-mint loop in THIS contract's storage.
 ///      The seeder pushes N players into the read-slot ticketQueue with `owed` traits each and
 ///      sets the lootbox RNG entropy word the batch reads at index 1. A worst-case batch mints up
-///      to WRITES_BUDGET_SAFE write-units of cold traitBurnTicket SSTOREs in one call.
+///      to WRITES_BUDGET_SAFE write-units of cold lvlTraitEntry SSTOREs in one call.
 contract TicketBatchStageHarness is DegenerusGameMintModule {
     /// @dev Shared seeding: `n` distinct players each owing `owedEach` traits into the current
     ///      read-slot queue for `lvl`, plus a non-zero lootbox entropy word at index 0 (the word
@@ -68,7 +68,7 @@ contract TicketBatchStageHarness is DegenerusGameMintModule {
 
         uint24 rk = _tqReadKey(lvl);
         address[] storage queue = ticketQueue[rk];
-        mapping(address => uint40) storage owedMap = ticketsOwedPacked[rk];
+        mapping(address => uint40) storage owedMap = entriesOwedPacked[rk];
         for (uint256 i; i < n; ++i) {
             address p = address(base + uint160(i + 1));
             queue.push(p);
@@ -280,7 +280,7 @@ contract AdvanceStageWorstCaseGas is Test {
     /// @notice MEASURED worst-case for ONE full processTicketBatch write-budget chunk — the loop shared by
     ///         every chunked ticket stage (0 mid-day drain, 1 daily drain gate, 5 FF drain, 6 prepare
     ///         future tickets, 7 current-level batch). Each chunk mints up to WRITES_BUDGET_SAFE=550 write
-    ///         units of cold traitBurnTicket SSTOREs (the first batch is cold-scaled to ~357). We seed a
+    ///         units of cold lvlTraitEntry SSTOREs (the first batch is cold-scaled to ~357). We seed a
     ///         deep queue (1 player owing a large trait count) so one batch saturates the budget, and
     ///         measure the live external processTicketBatch.
     function test_Stage0_1_5_6_7_TicketBatch_WriteBudget_Measured() public {
@@ -344,7 +344,7 @@ contract AdvanceStageWorstCaseGas is Test {
     ///         drive a first cheap batch to advance off cursor 0, then measure the second batch's marginal.
     function test_PerTraitMarginal_TicketBatch_Measured() public {
         // Two runs from one baseline: a player owing M traits vs M-K, both within one warm batch.
-        // The marginal = (gas(M) - gas(M-K)) / K, the cold traitBurnTicket push per trait.
+        // The marginal = (gas(M) - gas(M-K)) / K, the cold lvlTraitEntry push per trait.
         uint32 mHi = 200;
         uint32 mLo = 100;
 

@@ -621,11 +621,11 @@ contract KeeperFaucetResistance is DeployProtocol {
     ///      result, so resolution runs (slot deleted) but pays no winnings — isolating the crank reward as
     ///      the only creditFlip. Returns the betId (per-player nonce).
     function _placeLosingBet(address better) internal returns (uint64 betId) {
-        uint32 customTicket = _losingTicketFor(INDEX, FIXED_WORD);
+        uint32 customTraits = _losingTicketFor(INDEX, FIXED_WORD);
         uint128 betAmount = 0.01 ether; // >= MIN_BET_ETH (0.005 ether)
         vm.prank(better);
         game.placeDegeneretteBet{value: betAmount}(
-            address(0), 0, betAmount, 1, customTicket, 0
+            address(0), 0, betAmount, 1, customTraits, 0
         );
         betId = _betNonce(better);
     }
@@ -650,10 +650,10 @@ contract KeeperFaucetResistance is DeployProtocol {
         uint128 betAmount = 1 ether; // >= MIN_BET_WWXRP (1 ether)
         _seedWwxrpBalance(better, uint256(betAmount) + 1 ether);
 
-        uint32 customTicket = _losingTicketFor(INDEX, FIXED_WORD);
+        uint32 customTraits = _losingTicketFor(INDEX, FIXED_WORD);
         vm.prank(better);
         game.placeDegeneretteBet(
-            address(0), 3, betAmount, 1, customTicket, 0
+            address(0), 3, betAmount, 1, customTraits, 0
         );
         betId = _betNonce(better);
     }
@@ -699,7 +699,7 @@ contract KeeperFaucetResistance is DeployProtocol {
         return DegenerusTraitUtils.packedTraitsDegenerette(resultSeed);
     }
 
-    /// @dev A customTicket that matches the result in ZERO quadrants (color AND symbol both differ in
+    /// @dev A customTraits that matches the result in ZERO quadrants (color AND symbol both differ in
     ///      every quadrant) -> matches == 0 -> payout == 0 (a clean loss).
     function _losingTicketFor(uint48 index, uint256 word) internal pure returns (uint32 ticket) {
         uint32 result = _resultTicketFor(index, word);

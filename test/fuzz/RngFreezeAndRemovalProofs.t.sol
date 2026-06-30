@@ -206,7 +206,7 @@ contract RngFreezeAndRemovalProofs is DeployProtocol {
         _injectLootboxRngWord(INDEX, FIXED_WORD);
         assertGt(_injectedWord(INDEX), 0, "active index has a word");
 
-        uint32 customTicket = _losingTicketFor(INDEX, FIXED_WORD);
+        uint32 customTraits = _losingTicketFor(INDEX, FIXED_WORD);
         uint128 betAmount = 0.01 ether;
         // RngNotReady() is the placement guard revert (DegeneretteModule:49 / :452).
         vm.prank(player);
@@ -216,7 +216,7 @@ contract RngFreezeAndRemovalProofs is DeployProtocol {
             0,
             betAmount,
             1,
-            customTicket,
+            customTraits,
             0
         );
     }
@@ -894,7 +894,7 @@ contract RngFreezeAndRemovalProofs is DeployProtocol {
     }
 
     function _placeLosingBet(address better) internal returns (uint64 betId) {
-        uint32 customTicket = _losingTicketFor(INDEX, FIXED_WORD);
+        uint32 customTraits = _losingTicketFor(INDEX, FIXED_WORD);
         uint128 betAmount = 0.01 ether;
         vm.prank(better);
         game.placeDegeneretteBet{value: betAmount}(
@@ -902,7 +902,7 @@ contract RngFreezeAndRemovalProofs is DeployProtocol {
             0,
             betAmount,
             1,
-            customTicket,
+            customTraits,
             0
         );
         betId = _betNonce(better);
@@ -1064,7 +1064,7 @@ contract RngFreezeAndRemovalProofs is DeployProtocol {
         return DegenerusTraitUtils.packedTraitsDegenerette(resultSeed);
     }
 
-    /// @dev customTicket matching the result in ZERO quadrants → matches == 0 → clean loss.
+    /// @dev customTraits matching the result in ZERO quadrants → matches == 0 → clean loss.
     function _losingTicketFor(
         uint48 index,
         uint256 word

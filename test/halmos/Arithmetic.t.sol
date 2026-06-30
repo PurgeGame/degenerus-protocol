@@ -101,12 +101,12 @@ contract ArithmeticSymbolicTest is Test {
     // Property 4: Cost calculation conservation
     // =========================================================================
 
-    /// @notice Cost = (priceWei * ticketQuantity) / 400 is bounded and non-zero
-    function check_cost_bounded(uint24 level, uint32 ticketQuantity) public pure {
-        if (ticketQuantity == 0 || ticketQuantity > 40000) return;
+    /// @notice Cost = (priceWei * entryQuantityScaled) / 400 is bounded and non-zero
+    function check_cost_bounded(uint24 level, uint32 entryQuantityScaled) public pure {
+        if (entryQuantityScaled == 0 || entryQuantityScaled > 40000) return;
 
         uint256 priceWei = PriceLookupLib.priceForLevel(level);
-        uint256 cost = (priceWei * uint256(ticketQuantity)) / 400;
+        uint256 cost = (priceWei * uint256(entryQuantityScaled)) / 400;
 
         // Cost should never exceed 100 full tickets (qty 40000 / 400 = 100)
         assert(cost <= priceWei * 100);
@@ -119,15 +119,15 @@ contract ArithmeticSymbolicTest is Test {
     }
 
     /// @notice Cost calculation does not overflow for max inputs
-    function check_cost_no_overflow(uint24 level, uint256 ticketQuantity) public pure {
-        if (ticketQuantity > 40000) return;
+    function check_cost_no_overflow(uint24 level, uint256 entryQuantityScaled) public pure {
+        if (entryQuantityScaled > 40000) return;
 
         uint256 priceWei = PriceLookupLib.priceForLevel(level);
         // priceWei max = 0.24 ether = 2.4e17
-        // ticketQuantity max = 40000
+        // entryQuantityScaled max = 40000
         // product max = 2.4e17 * 40000 = 9.6e21, well under uint256 max
-        uint256 product = priceWei * ticketQuantity;
-        assert(product / ticketQuantity == priceWei || ticketQuantity == 0);
+        uint256 product = priceWei * entryQuantityScaled;
+        assert(product / entryQuantityScaled == priceWei || entryQuantityScaled == 0);
         uint256 cost = product / 400;
         assert(cost <= product);
     }

@@ -13,18 +13,18 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 /// @notice Extends the production DegenerusGameJackpotModule so the inherited (external)
 ///         `runTerminalJackpot` executes the live `_processDailyEth -> _processBucket ->
 ///         _addClaimableEth` path in THIS contract's storage. The harness only adds a
-///         `traitBurnTicket` seeder + read-only accounting views; it overrides NO production
+///         `lvlTraitEntry` seeder + read-only accounting views; it overrides NO production
 ///         logic. `runTerminalJackpot` already feeds `_processDailyEth` the full
 ///         DAILY_ETH_MAX_WINNERS=305 ceiling at the DAILY_JACKPOT_SCALE_MAX_BPS=63_600 max
 ///         scale (bucket counts 159/95/50/1), in ONE call -- exactly the JGAS-03 surface.
 /// @dev Test-only. NO contracts/*.sol is mutated; this harness lives entirely under test/.
 contract JackpotSingleCallHarness is DegenerusGameJackpotModule {
-    /// @dev Push `count` distinct, non-zero holder addresses into traitBurnTicket[lvl][traitId].
+    /// @dev Push `count` distinct, non-zero holder addresses into lvlTraitEntry[lvl][traitId].
     ///      Distinct addresses make per-winner claimable accounting unambiguous; the seeded
     ///      pool is larger than any bucket's winner count so winner selection (which allows
     ///      duplicates via `% effectiveLen`) never resolves to address(0).
     function seedBucket(uint24 lvl, uint8 traitId, uint256 count, uint160 base) external {
-        address[] storage holders = traitBurnTicket[lvl][traitId];
+        address[] storage holders = lvlTraitEntry[lvl][traitId];
         for (uint256 i; i < count; ++i) {
             holders.push(address(base + uint160(i + 1)));
         }
@@ -49,7 +49,7 @@ contract JackpotSingleCallHarness is DegenerusGameJackpotModule {
     }
 
     function bucketLen(uint24 lvl, uint8 traitId) external view returns (uint256) {
-        return traitBurnTicket[lvl][traitId].length;
+        return lvlTraitEntry[lvl][traitId].length;
     }
 }
 

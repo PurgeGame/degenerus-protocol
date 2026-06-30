@@ -8,15 +8,15 @@ import {DegenerusGameAdvanceModule} from "../../contracts/modules/DegenerusGameA
 contract QueueHarness is DegenerusGameAdvanceModule {
     // --- Queue write functions ---
     function exposed_queueTickets(address buyer, uint24 targetLevel, uint32 quantity) external {
-        _queueTickets(buyer, targetLevel, quantity, false);
+        _queueEntries(buyer, targetLevel, quantity, false);
     }
 
     function exposed_queueTicketsScaled(address buyer, uint24 targetLevel, uint32 quantityScaled) external {
-        _queueTicketsScaled(buyer, targetLevel, quantityScaled, false);
+        _queueEntriesScaled(buyer, targetLevel, quantityScaled, false);
     }
 
     function exposed_queueTicketRange(address buyer, uint24 startLevel, uint24 numLevels, uint32 ticketsPerLevel) external {
-        _queueTicketRange(buyer, startLevel, numLevels, ticketsPerLevel, false);
+        _queueEntryRange(buyer, startLevel, numLevels, ticketsPerLevel, false);
     }
 
     // --- Swap ---
@@ -43,11 +43,11 @@ contract QueueHarness is DegenerusGameAdvanceModule {
     }
 
     function getTicketsOwedPacked(uint24 key, address buyer) external view returns (uint40) {
-        return ticketsOwedPacked[key][buyer];
+        return entriesOwedPacked[key][buyer];
     }
 
     function getTicketsOwed(uint24 key, address buyer) external view returns (uint32) {
-        return uint32(ticketsOwedPacked[key][buyer] >> 8);
+        return uint32(entriesOwedPacked[key][buyer] >> 8);
     }
 
     // --- State helpers ---
@@ -98,7 +98,7 @@ contract QueueDoubleBufferTest is Test {
     }
 
     // =========================================================================
-    // Test 1: _queueTickets routes to write buffer
+    // Test 1: _queueEntries routes to write buffer
     // =========================================================================
     function testQueueTicketsUsesWriteKey() public {
         // Default ticketWriteSlot = 0, so writeKey = level (no bit), readKey = level | BIT
@@ -120,13 +120,13 @@ contract QueueDoubleBufferTest is Test {
     }
 
     // =========================================================================
-    // Test 2: _queueTicketsScaled routes to write buffer
+    // Test 2: _queueEntriesScaled routes to write buffer
     // =========================================================================
     function testQueueTicketsScaledUsesWriteKey() public {
         uint24 wk = harness.exposed_tqWriteKey(LEVEL);
         uint24 rk = harness.exposed_tqReadKey(LEVEL);
 
-        // Queue 500 scaled = 5 whole tickets (TICKET_SCALE = 100)
+        // Queue 500 scaled = 5 whole tickets (QTY_SCALE = 100)
         harness.exposed_queueTicketsScaled(ALICE, LEVEL, 500);
 
         // Write buffer populated
@@ -139,7 +139,7 @@ contract QueueDoubleBufferTest is Test {
     }
 
     // =========================================================================
-    // Test 3: _queueTicketRange routes to write buffer for all levels
+    // Test 3: _queueEntryRange routes to write buffer for all levels
     // =========================================================================
     function testQueueTicketRangeUsesWriteKey() public {
         uint24 startLvl = 3;
@@ -246,7 +246,7 @@ contract MidDaySwapTest is Test {
     }
 
     /// @dev Helper: queue `count` individual ticket entries into the write buffer at LEVEL.
-    ///      Each call to _queueTickets adds one address entry to the queue array.
+    ///      Each call to _queueEntries adds one address entry to the queue array.
     function _fillWriteQueue(uint256 count) internal {
         for (uint256 i = 0; i < count; i++) {
             address buyer = address(uint160(0x1000 + i));

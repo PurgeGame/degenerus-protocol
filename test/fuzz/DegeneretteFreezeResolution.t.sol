@@ -153,9 +153,9 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
         // Pre-compute an RNG word that produces a result ticket with >= 2 matches
         // against our custom ticket. This guarantees _distributePayout is called.
         uint48 index = 1; // default lootboxRngIndex
-        uint32 customTicket;
+        uint32 customTraits;
         uint256 winningRngWord;
-        (customTicket, winningRngWord) = _findWinningCombo(index);
+        (customTraits, winningRngWord) = _findWinningCombo(index);
 
         // --- Phase 3: Place a degenerette ETH bet during freeze ---
         // The bet goes to pending pools per L558-561 (prizePoolFrozen branch).
@@ -165,9 +165,9 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
         game.placeDegeneretteBet{value: betAmount}(
             address(0),     // player = msg.sender
             0,              // currency = ETH
-            betAmount,      // amountPerTicket
+            betAmount,      // amountPerSpin
             1,              // ticketCount = 1
-            customTicket,   // custom traits (matched to RNG word)
+            customTraits,   // custom traits (matched to RNG word)
             0               // v47 always-on hero: heroQuadrant must be {0..3} (0xFF reverts InvalidBet)
         );
 
@@ -239,14 +239,14 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
 
         // Find a winning combo to ensure _distributePayout is actually called
         uint48 index = 1;
-        uint32 customTicket;
+        uint32 customTraits;
         uint256 winningRngWord;
-        (customTicket, winningRngWord) = _findWinningCombo(index);
+        (customTraits, winningRngWord) = _findWinningCombo(index);
 
         uint128 betAmount = 0.01 ether;
         vm.prank(player);
         game.placeDegeneretteBet{value: betAmount}(
-            address(0), 0, betAmount, 1, customTicket, 0 // v47 always-on hero: {0..3}
+            address(0), 0, betAmount, 1, customTraits, 0 // v47 always-on hero: {0..3}
         );
 
         // Zero pending future before resolution
@@ -285,15 +285,15 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
 
         // Find a winning combo for a winning resolve
         uint48 index = 1;
-        uint32 customTicket;
+        uint32 customTraits;
         uint256 winningRngWord;
-        (customTicket, winningRngWord) = _findWinningCombo(index);
+        (customTraits, winningRngWord) = _findWinningCombo(index);
 
         // Place bet (goes to live pools since not frozen)
         uint128 betAmount = 0.01 ether;
         vm.prank(player);
         game.placeDegeneretteBet{value: betAmount}(
-            address(0), 0, betAmount, 1, customTicket, 0 // v47 always-on hero: {0..3}
+            address(0), 0, betAmount, 1, customTraits, 0 // v47 always-on hero: {0..3}
         );
 
         // Live pools should have increased (unfrozen path uses _setPrizePools)
@@ -1192,7 +1192,7 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
         vm.store(address(game), slot, bytes32(rngWord));
     }
 
-    /// @notice Find a (customTicket, rngWord) pair that guarantees >= 2 matches.
+    /// @notice Find a (customTraits, rngWord) pair that guarantees >= 2 matches.
     /// @dev Tries RNG words in sequence, computing the result ticket for spin 0
     ///      (index 1) using the same derivation as _resolveBet. Returns
     ///      when a combination with >= 2 matches is found.
@@ -1202,7 +1202,7 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
     ///      derivation _resolveBet uses) — NOT `packedTraitsFromSeed`
     ///      (the mint derivation). Using the wrong derivation produced a "winning"
     ///      ticket that the on-chain path never actually matched.
-    function _findWinningCombo(uint48 index) internal pure returns (uint32 customTicket, uint256 rngWord) {
+    function _findWinningCombo(uint48 index) internal pure returns (uint32 customTraits, uint256 rngWord) {
         for (uint256 attempt; attempt < 100; attempt++) {
             rngWord = uint256(keccak256(abi.encode("freeze_test_rng", attempt)));
 
@@ -1213,11 +1213,11 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
 
             // Use the result ticket AS the custom ticket -- guarantees 8/8 matches (jackpot).
             // This is valid because custom ticket format matches result ticket format.
-            customTicket = resultTicket;
+            customTraits = resultTicket;
 
             // Verify matches (should be 8 since they're identical)
-            uint8 matches = _countMatchesLocal(customTicket, resultTicket);
-            if (matches >= 2) return (customTicket, rngWord);
+            uint8 matches = _countMatchesLocal(customTraits, resultTicket);
+            if (matches >= 2) return (customTraits, rngWord);
         }
         revert("Could not find winning combo in 100 attempts");
     }

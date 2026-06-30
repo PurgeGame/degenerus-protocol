@@ -9,19 +9,19 @@ contract TicketRoutingHarness is DegenerusGameStorage {
     // error RngLocked() — inherited from DegenerusGameStorage
 
     function queueTickets(address buyer, uint24 targetLevel, uint32 quantity) external {
-        _queueTickets(buyer, targetLevel, quantity, false);
+        _queueEntries(buyer, targetLevel, quantity, false);
     }
 
     function queueTicketsWithBypass(address buyer, uint24 targetLevel, uint32 quantity) external {
-        _queueTickets(buyer, targetLevel, quantity, true);
+        _queueEntries(buyer, targetLevel, quantity, true);
     }
 
     function queueTicketsScaled(address buyer, uint24 targetLevel, uint32 quantityScaled) external {
-        _queueTicketsScaled(buyer, targetLevel, quantityScaled, false);
+        _queueEntriesScaled(buyer, targetLevel, quantityScaled, false);
     }
 
     function queueTicketRange(address buyer, uint24 startLevel, uint24 numLevels, uint32 ticketsPerLevel) external {
-        _queueTicketRange(buyer, startLevel, numLevels, ticketsPerLevel, false);
+        _queueEntryRange(buyer, startLevel, numLevels, ticketsPerLevel, false);
     }
 
     function setLevel(uint24 lvl) external {
@@ -59,7 +59,7 @@ contract TicketRoutingTest is Test {
     address buyer = address(0xBEEF);
 
     function setUp() public {
-        // Warp past JACKPOT_RESET_TIME (82620s) so the inherited _queueTickets ->
+        // Warp past JACKPOT_RESET_TIME (82620s) so the inherited _queueEntries ->
         // _livenessTriggered -> GameTimeLib.currentDayIndexAt(block.timestamp) day math
         // does not underflow (ts - JACKPOT_RESET_TIME) at the default ts=1.
         vm.warp(block.timestamp + 1 days);
@@ -114,7 +114,7 @@ contract TicketRoutingTest is Test {
     }
 
     // =========================================================================
-    // ROUTE-01 Scaled: _queueTicketsScaled routes far-future to FF key
+    // ROUTE-01 Scaled: _queueEntriesScaled routes far-future to FF key
     // =========================================================================
 
     function testScaledFarFutureRoutesToFFKey() public {
@@ -134,7 +134,7 @@ contract TicketRoutingTest is Test {
     }
 
     // =========================================================================
-    // ROUTE-01/02 Range: _queueTicketRange splits correctly
+    // ROUTE-01/02 Range: _queueEntryRange splits correctly
     // =========================================================================
 
     function testRangeRoutingSplitsCorrectly() public {

@@ -72,7 +72,7 @@ contract GameSeeder is DegenerusGame {
         // Terminal jackpot buckets: seed the 4 winning-trait buckets so runTerminalJackpot resolves
         // the full 305-winner geometry (every selected winner is a real, non-zero holder).
         for (uint8 q; q < 4; ++q) {
-            address[] storage holders = traitBurnTicket[pl][winTraits[q]];
+            address[] storage holders = lvlTraitEntry[pl][winTraits[q]];
             uint256 n = uint256(bucketCounts[q]) + 8; // a few extra so selection never hits address(0)
             uint160 b = base + uint160(0x100000) + uint160(q) * 0x40000;
             for (uint256 i; i < n; ++i) holders.push(address(b + uint160(i + 1)));
@@ -83,7 +83,7 @@ contract GameSeeder is DegenerusGame {
         address p = address(base + 1);
         ticketQueue[key].push(p);
         // packed layout: owed in bits [8:], remainder in bits [0:8].
-        ticketsOwedPacked[key][p] = uint40(uint40(owed) << 8);
+        entriesOwedPacked[key][p] = uint40(uint40(owed) << 8);
     }
 }
 

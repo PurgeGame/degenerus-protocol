@@ -87,13 +87,13 @@ contract PriceLookupInvariantsTest is Test {
         }
     }
 
-    /// @notice cost calculation: (priceWei * ticketQuantity) / 400 never overflows for reasonable inputs
-    function testFuzz_costCalculation(uint24 level, uint256 ticketQuantity) public pure {
-        vm.assume(ticketQuantity > 0 && ticketQuantity <= 400 * 100); // max 100 full tickets
+    /// @notice cost calculation: (priceWei * entryQuantityScaled) / 400 never overflows for reasonable inputs
+    function testFuzz_costCalculation(uint24 level, uint256 entryQuantityScaled) public pure {
+        vm.assume(entryQuantityScaled > 0 && entryQuantityScaled <= 400 * 100); // max 100 full tickets
         uint256 priceWei = PriceLookupLib.priceForLevel(level);
 
         // This must not overflow
-        uint256 cost = (priceWei * ticketQuantity) / 400;
+        uint256 cost = (priceWei * entryQuantityScaled) / 400;
         assertLe(cost, priceWei * 100, "cost should never exceed 100 full ticket prices");
         assertGt(cost, 0, "cost should be non-zero for non-zero quantity");
     }

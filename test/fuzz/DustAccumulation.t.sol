@@ -15,7 +15,7 @@ contract DustAccumulationTest is Test {
 
     uint256 constant BPS_DENOMINATOR = 10_000;
     uint256 constant PRICE_COIN_UNIT = 1000 ether;
-    uint256 constant TICKET_SCALE = 100;
+    uint256 constant QTY_SCALE = 100;
 
     // =========================================================================
     // 1. Vault Dust Accumulation (PREC-03)
@@ -208,9 +208,9 @@ contract DustAccumulationTest is Test {
         else if (tierIndex == 5) priceWei = 0.16 ether;
         else priceWei = 0.24 ether;
 
-        uint256 costWei = (priceWei * uint256(quantity)) / (4 * TICKET_SCALE);
+        uint256 costWei = (priceWei * uint256(quantity)) / (4 * QTY_SCALE);
         uint256 exactProduct = priceWei * uint256(quantity);
-        uint256 precisionLoss = exactProduct - costWei * (4 * TICKET_SCALE);
+        uint256 precisionLoss = exactProduct - costWei * (4 * QTY_SCALE);
 
         // Precision loss bounded by divisor - 1 = 399
         assertLt(precisionLoss, 400, "precision loss must be < 400 wei");

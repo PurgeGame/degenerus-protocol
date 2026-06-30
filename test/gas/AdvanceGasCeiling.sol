@@ -31,8 +31,8 @@ import {EntropyLib} from "../../contracts/libraries/EntropyLib.sol";
 ///      subclass — etch-safe because type().runtimeCode carries no constructor side effects, so
 ///      vm.etch'ing it onto the live game then restoring the real code leaves the measured tx running
 ///      production bytecode against storage the overlay seeded. Storage symbol names (level,
-///      purchaseStartDay, dailyIdx, levelPrizePool, rngWordByDay, ticketQueue, ticketsOwedPacked,
-///      ticketCursor, ticketLevel, traitBurnTicket, lootboxRngWordByIndex, _lrWrite/LR_INDEX_*) are
+///      purchaseStartDay, dailyIdx, levelPrizePool, rngWordByDay, ticketQueue, entriesOwedPacked,
+///      ticketCursor, ticketLevel, lvlTraitEntry, lootboxRngWordByIndex, _lrWrite/LR_INDEX_*) are
 ///      the live c4d48008 names (confirmed against 380-01-LAYOUT-KEY.md / forge inspect storageLayout).
 
 /// @dev Seeder overlay: writes a worst-case advanceGame pre-state directly into the live game storage.
@@ -98,7 +98,7 @@ contract GameSeeder is DegenerusGame {
         // Terminal jackpot buckets: seed the winning-trait buckets so runTerminalJackpot resolves the
         // full geometry (every selected winner is a real, non-zero holder).
         for (uint8 q; q < 4; ++q) {
-            address[] storage holders = traitBurnTicket[pl][winTraits[q]];
+            address[] storage holders = lvlTraitEntry[pl][winTraits[q]];
             uint256 n = uint256(bucketCounts[q]) + 8; // a few extra so selection never hits address(0)
             uint160 b = base + uint160(0x100000) + uint160(q) * 0x40000;
             for (uint256 i; i < n; ++i) holders.push(address(b + uint160(i + 1)));
@@ -123,7 +123,7 @@ contract GameSeeder is DegenerusGame {
         address p = address(base + 1);
         ticketQueue[key].push(p);
         // packed layout: owed in bits [8:], remainder in bits [0:8].
-        ticketsOwedPacked[key][p] = uint40(uint40(owed) << 8);
+        entriesOwedPacked[key][p] = uint40(uint40(owed) << 8);
     }
 }
 

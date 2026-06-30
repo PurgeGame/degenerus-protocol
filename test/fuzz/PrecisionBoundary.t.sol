@@ -14,7 +14,7 @@ contract PrecisionBoundaryTest is Test {
     // Constants (mirrored from protocol)
     // =========================================================================
 
-    uint256 constant TICKET_SCALE = 100;
+    uint256 constant QTY_SCALE = 100;
     uint256 constant PRICE_COIN_UNIT = 1000 ether;
     uint256 constant TICKET_MIN_BUYIN_WEI = 0.0025 ether;
     uint256 constant BPS_DENOMINATOR = 10_000;
@@ -45,14 +45,14 @@ contract PrecisionBoundaryTest is Test {
             uint256 priceWei = _priceTier(i);
 
             // costWei at qty=1 is always > 0 (priceWei >= 0.01 ETH >> 400)
-            uint256 costWei = (priceWei * 1) / (4 * TICKET_SCALE);
+            uint256 costWei = (priceWei * 1) / (4 * QTY_SCALE);
             assertTrue(costWei > 0, "costWei must be > 0 at qty=1");
 
             // Find minimum quantity that passes TICKET_MIN_BUYIN_WEI guard
             // Formula: costWei = (priceWei * qty) / 400 >= TICKET_MIN_BUYIN_WEI
             // => qty >= (TICKET_MIN_BUYIN_WEI * 400) / priceWei
             uint256 minQty = (TICKET_MIN_BUYIN_WEI * 400 + priceWei - 1) / priceWei; // ceil
-            uint256 minCost = (priceWei * minQty) / (4 * TICKET_SCALE);
+            uint256 minCost = (priceWei * minQty) / (4 * QTY_SCALE);
             assertTrue(minCost >= TICKET_MIN_BUYIN_WEI, "minimum viable qty must pass TICKET_MIN_BUYIN_WEI");
             assertTrue(minCost > 0, "minimum viable cost must be > 0");
         }
@@ -65,7 +65,7 @@ contract PrecisionBoundaryTest is Test {
 
         for (uint256 i = 0; i < 7; i++) {
             uint256 priceWei = _priceTier(i);
-            uint256 costWei = (priceWei * uint256(qty)) / (4 * TICKET_SCALE);
+            uint256 costWei = (priceWei * uint256(qty)) / (4 * QTY_SCALE);
             assertTrue(costWei > 0, "costWei must never be 0 for qty >= 1");
         }
     }

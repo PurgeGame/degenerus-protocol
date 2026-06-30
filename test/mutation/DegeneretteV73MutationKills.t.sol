@@ -151,14 +151,14 @@ contract DegeneretteV73MutationKills is DeployProtocol {
         _seedFuturePrizePool(1_000_000 ether);
         _fundWwxrp(player, 400 ether);
         uint8 hero = 2;
-        uint32 customTicket = _ticketWithHeroSym(hero, 4); // all-common, N=0
+        uint32 customTraits = _ticketWithHeroSym(hero, 4); // all-common, N=0
         uint256 eligible;
         uint256 lifted;
         for (uint256 i; i < 300; ++i) {
             uint256 word = uint256(keccak256(abi.encodePacked("gatedir", i)));
-            uint8 riggedS = _resolveWwxrpScore(word, customTicket, hero);
+            uint8 riggedS = _resolveWwxrpScore(word, customTraits, hero);
             uint32 reel = _resultTicketForSpin(1, word, 0);
-            (uint8 honestS, uint8 honestM) = _scoreAndM(customTicket, reel, hero);
+            (uint8 honestS, uint8 honestM) = _scoreAndM(customTraits, reel, hero);
             if (honestM <= 6) {
                 ++eligible;
                 if (riggedS > honestS) ++lifted;

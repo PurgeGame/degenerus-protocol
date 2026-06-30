@@ -65,15 +65,15 @@ contract DegeneretteHandler is Test {
 
     /// @notice Place an ETH Degenerette bet with bounded inputs
     /// @param actorSeed Seed for actor selection
-    /// @param amountPerTicket Raw bet amount, bounded to [0.005 ether, 1 ether]
+    /// @param amountPerSpin Raw bet amount, bounded to [0.005 ether, 1 ether]
     /// @param ticketCount Raw ticket count, bounded to [1, 10]
-    /// @param customTicket Raw custom ticket packed traits
+    /// @param customTraits Raw custom ticket packed traits
     /// @param heroQuadrant Raw hero quadrant, bounded to [0, 3] (always-on hero; valid input required)
     function placeEthBet(
         uint256 actorSeed,
-        uint128 amountPerTicket,
+        uint128 amountPerSpin,
         uint8 ticketCount,
-        uint32 customTicket,
+        uint32 customTraits,
         uint8 heroQuadrant
     ) external useActor(actorSeed) {
         calls_placeBet++;
@@ -81,14 +81,14 @@ contract DegeneretteHandler is Test {
         if (game.gameOver()) return;
 
         // Bound inputs
-        amountPerTicket = uint128(bound(uint256(amountPerTicket), 0.005 ether, 1 ether));
+        amountPerSpin = uint128(bound(uint256(amountPerSpin), 0.005 ether, 1 ether));
         ticketCount = uint8(bound(uint256(ticketCount), 1, 10));
         // Ensure each quadrant byte has valid color (0-7) and symbol (0-7)
-        customTicket = _sanitizeTicket(customTicket);
+        customTraits = _sanitizeTicket(customTraits);
         // heroQuadrant: always-on hero — must be 0-3; the contract reverts on >= 4
         heroQuadrant = uint8(bound(uint256(heroQuadrant), 0, 3));
 
-        uint256 totalBet = uint256(amountPerTicket) * uint256(ticketCount);
+        uint256 totalBet = uint256(amountPerSpin) * uint256(ticketCount);
         if (totalBet > currentActor.balance) return;
 
         // Open the lootbox RNG window so placeDegeneretteBet's index-gate is satisfiable.
@@ -98,9 +98,9 @@ contract DegeneretteHandler is Test {
         try game.placeDegeneretteBet{value: totalBet}(
             currentActor,
             0, // currency = ETH
-            amountPerTicket,
+            amountPerSpin,
             ticketCount,
-            customTicket,
+            customTraits,
             heroQuadrant
         ) {
             ghost_totalEthWagered += totalBet;

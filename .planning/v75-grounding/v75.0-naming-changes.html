@@ -81,7 +81,7 @@
     <table>
       <thead><tr><th>Old</th><th></th><th>New</th><th>Kind</th><th>Why</th></tr></thead>
       <tbody>
-        <tr><td class="mono old">traitBurnTicket</td><td class="arrow">→</td><td class="mono new">lvlTraitEntry</td><td><span class="pill">storage</span></td><td class="why">per-(level,trait) burned-NFT positions; 1 element = 1 NFT = 1 entry. Incl. 2 inline-asm <code>.slot</code> reads.</td></tr>
+        <tr><td class="mono old">traitBurnTicket</td><td class="arrow">→</td><td class="mono new">lvlTraitEntry</td><td><span class="pill">storage</span></td><td class="why">per-(level,trait) burned-entry positions; 1 element = 1 entry. Incl. 2 inline-asm <code>.slot</code> reads.</td></tr>
         <tr><td class="mono old">ticketsOwedPacked</td><td class="arrow">→</td><td class="mono new">entriesOwedPacked</td><td><span class="pill">storage</span></td><td class="why">THE entry accumulator: <code>[uint32 owed (entries)][uint8 rem]</code>. Canonical anchor.</td></tr>
         <tr><td class="mono old">_queueTickets</td><td class="arrow">→</td><td class="mono new">_queueEntries</td><td><span class="pill">fn + param</span></td><td class="why">queues entries (<code>owed += quantity</code>); param <span class="old">quantity</span>→<span class="new">entries</span>.</td></tr>
         <tr><td class="mono old">_queueTicketsScaled</td><td class="arrow">→</td><td class="mono new">_queueEntriesScaled</td><td><span class="pill">fn + param</span></td><td class="why">scaled-entries (×100); param <span class="old">quantityScaled</span>→<span class="new">entriesScaled</span> <span class="flag">(NOT wholeTicketsScaled — F1)</span>.</td></tr>

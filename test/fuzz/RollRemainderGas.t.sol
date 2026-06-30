@@ -7,7 +7,7 @@ import {EntropyLib} from "../../contracts/libraries/EntropyLib.sol";
 /// @notice Measures per-call gas of the keccak entropy-mixing formulations.
 /// Simulates the exact operation each formulation performs in _rollRemainder.
 contract RollRemainderGas is Test {
-    uint256 internal constant TICKET_SCALE = 100;
+    uint256 internal constant QTY_SCALE = 100;
     uint256 internal constant ITERATIONS = 1000;
 
     function _oldRoll(uint256 entropy, uint256 rollSalt, uint8 rem)
@@ -16,7 +16,7 @@ contract RollRemainderGas is Test {
         returns (bool)
     {
         uint256 rollEntropy = EntropyLib.hash2(entropy, rollSalt);
-        return (rollEntropy % TICKET_SCALE) < rem;
+        return (rollEntropy % QTY_SCALE) < rem;
     }
 
     function _newRoll(uint256 entropy, uint256 rollSalt, uint8 rem)
@@ -25,7 +25,7 @@ contract RollRemainderGas is Test {
         returns (bool)
     {
         uint256 rollEntropy = uint256(keccak256(abi.encode(entropy, rollSalt)));
-        return (rollEntropy % TICKET_SCALE) < rem;
+        return (rollEntropy % QTY_SCALE) < rem;
     }
 
     function _newRollAsm(uint256 entropy, uint256 rollSalt, uint8 rem)
@@ -39,7 +39,7 @@ contract RollRemainderGas is Test {
             mstore(0x20, rollSalt)
             rollEntropy := keccak256(0x00, 0x40)
         }
-        return (rollEntropy % TICKET_SCALE) < rem;
+        return (rollEntropy % QTY_SCALE) < rem;
     }
 
     function test_gasOld() public {

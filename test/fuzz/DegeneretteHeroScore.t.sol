@@ -429,7 +429,7 @@ contract DegeneretteHeroScoreTest is DeployProtocol {
         uint256 wordHigh = uint256(keccak256("noleak_high_score"));
 
         // Build a small wager set: 3 ETH bets with chosen hero symbols/quadrants.
-        // The chosen heroSymbol is decoded from customTicket >> (heroQuadrant*8) & 7.
+        // The chosen heroSymbol is decoded from customTraits >> (heroQuadrant*8) & 7.
         uint128 perTicket = 0.01 ether;
 
         uint256 snap = vm.snapshotState();
@@ -494,7 +494,7 @@ contract DegeneretteHeroScoreTest is DeployProtocol {
         _fundWwxrp(player, 400 ether);
         uint48 index = 1;
         uint8 heroQuadrant = 2;
-        uint32 customTicket = _ticketWithHero(heroQuadrant, 4);
+        uint32 customTraits = _ticketWithHero(heroQuadrant, 4);
 
         uint256 eligible; // honest M <= 6 (rig may fire)
         uint256 lifted; // rigged score > honest (rig fired and a cell was forced)
@@ -504,7 +504,7 @@ contract DegeneretteHeroScoreTest is DeployProtocol {
         for (uint256 i; i < samples; ++i) {
             uint256 word = uint256(keccak256(abi.encodePacked("wwxrp_rig", i)));
             vm.prank(player);
-            game.placeDegeneretteBet(address(0), CURRENCY_WWXRP, 1 ether, 1, customTicket, heroQuadrant);
+            game.placeDegeneretteBet(address(0), CURRENCY_WWXRP, 1 ether, 1, customTraits, heroQuadrant);
             uint64 betId = _betNonce(player);
             _injectLootboxRngWord(index, word);
             vm.recordLogs();
@@ -516,7 +516,7 @@ contract DegeneretteHeroScoreTest is DeployProtocol {
             // Honest (pre-rig) reel + score/M for this spin.
             uint32 honestResult = _resultTicketForSpin(index, word, 0);
             (uint8 honestS, uint8 honestM) =
-                _honestScoreAndM(customTicket, honestResult, heroQuadrant);
+                _honestScoreAndM(customTraits, honestResult, heroQuadrant);
 
             // Per-sample correctness: lift is 0, +1, or +2 (+2 = color-unlock), never
             // negative.
@@ -562,7 +562,7 @@ contract DegeneretteHeroScoreTest is DeployProtocol {
         uint8 heroQuadrant = 2;
         // All-common colors (N=0) + hero-common => the conditional distribution is
         // exactly riggedPScore(N=0) (no hero-placement averaging needed at N=0).
-        uint32 customTicket = _ticketWithHero(heroQuadrant, 4);
+        uint32 customTraits = _ticketWithHero(heroQuadrant, 4);
 
         uint256 K = 3000;
         uint256[10] memory counts;
@@ -571,7 +571,7 @@ contract DegeneretteHeroScoreTest is DeployProtocol {
         for (uint256 i; i < K; ++i) {
             uint256 word = uint256(keccak256(abi.encodePacked("wwxrp_rig_dist", i)));
             vm.prank(player);
-            game.placeDegeneretteBet(address(0), CURRENCY_WWXRP, 1 ether, 1, customTicket, heroQuadrant);
+            game.placeDegeneretteBet(address(0), CURRENCY_WWXRP, 1 ether, 1, customTraits, heroQuadrant);
             uint64 betId = _betNonce(player);
             _injectLootboxRngWord(index, word);
             vm.recordLogs();
@@ -644,7 +644,7 @@ contract DegeneretteHeroScoreTest is DeployProtocol {
     // ---- Task 3 helpers ------------------------------------------------------
 
     /// @dev Place a fixed set of ETH wagers with chosen hero symbols/quadrants.
-    ///      heroSymbol = customTicket >> (heroQuadrant*8) & 7. We choose distinct
+    ///      heroSymbol = customTraits >> (heroQuadrant*8) & 7. We choose distinct
     ///      (quadrant, symbol) wagers so the ledger has a clear leader.
     function _placeNoLeakWagers(uint128 perTicket) internal {
         // Wager 1: heroQuadrant 0, symbol 5, multiple spins -> larger wager.
@@ -745,20 +745,20 @@ contract DegeneretteHeroScoreTest is DeployProtocol {
     function _resolveOneAndReadScore(
         uint48 index,
         uint256 word,
-        uint32 customTicket,
+        uint32 customTraits,
         uint8 heroQuadrant
     ) internal returns (uint8 s) {
-        (s, ) = _resolveOneAndReadScoreAndPayout(index, word, customTicket, heroQuadrant);
+        (s, ) = _resolveOneAndReadScoreAndPayout(index, word, customTraits, heroQuadrant);
     }
 
     function _resolveOneAndReadScoreAndPayout(
         uint48 index,
         uint256 word,
-        uint32 customTicket,
+        uint32 customTraits,
         uint8 heroQuadrant
     ) internal returns (uint8 s, uint256 payout) {
         uint128 perTicket = 0.01 ether;
-        uint64 betId = _placeEthBet(perTicket, 1, customTicket, heroQuadrant);
+        uint64 betId = _placeEthBet(perTicket, 1, customTraits, heroQuadrant);
         _injectLootboxRngWord(index, word);
 
         vm.recordLogs();
@@ -779,7 +779,7 @@ contract DegeneretteHeroScoreTest is DeployProtocol {
     function _resolveFlipAndReadScore(
         uint48 index,
         uint256 word,
-        uint32 customTicket,
+        uint32 customTraits,
         uint8 heroQuadrant,
         uint128 perTicket
     ) internal returns (uint8 s, uint256 payout, uint256 roiBps) {
@@ -790,7 +790,7 @@ contract DegeneretteHeroScoreTest is DeployProtocol {
             CURRENCY_FLIP,
             perTicket,
             1,
-            customTicket,
+            customTraits,
             heroQuadrant
         );
         uint64 betId = _betNonce(player);
@@ -812,11 +812,11 @@ contract DegeneretteHeroScoreTest is DeployProtocol {
     function _resolveEthAndDgnrs(
         uint48 index,
         uint256 word,
-        uint32 customTicket,
+        uint32 customTraits,
         uint8 heroQuadrant,
         uint128 perTicket
     ) internal returns (uint8 s, uint256 award, uint256 poolBefore) {
-        uint64 betId = _placeEthBet(perTicket, 1, customTicket, heroQuadrant);
+        uint64 betId = _placeEthBet(perTicket, 1, customTraits, heroQuadrant);
         _injectLootboxRngWord(index, word);
 
         poolBefore = sdgnrs.poolBalance(sDGNRS.Pool.Reward);
@@ -886,7 +886,7 @@ contract DegeneretteHeroScoreTest is DeployProtocol {
     function _placeEthBet(
         uint128 perTicket,
         uint8 spins,
-        uint32 customTicket,
+        uint32 customTraits,
         uint8 heroQuadrant
     ) internal returns (uint64 betId) {
         uint256 ethValue = uint256(perTicket) * spins;
@@ -896,7 +896,7 @@ contract DegeneretteHeroScoreTest is DeployProtocol {
             CURRENCY_ETH,
             perTicket,
             spins,
-            customTicket,
+            customTraits,
             heroQuadrant
         );
         betId = _betNonce(player);

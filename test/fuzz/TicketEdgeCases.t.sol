@@ -6,7 +6,7 @@ import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage
 
 /// @title TicketEdgeCasesHarness -- Combines routing (Phase 75) and simplified processing (Phase 76)
 ///        to exercise cross-cutting edge cases around EDGE-01 and EDGE-02.
-/// @dev Routing via _queueTickets (uses isFarFuture check at deposit time) and
+/// @dev Routing via _queueEntries (uses isFarFuture check at deposit time) and
 ///      simplified processBatch (dual-queue drain with FF bit) from TicketProcessingFFHarness.
 contract TicketEdgeCasesHarness is DegenerusGameStorage {
     uint32 public constant BUDGET = 10;
@@ -14,7 +14,7 @@ contract TicketEdgeCasesHarness is DegenerusGameStorage {
     // -- Routing wrapper (from TicketRoutingHarness pattern) --
 
     function queueTickets(address buyer, uint24 targetLevel, uint32 quantity) external {
-        _queueTickets(buyer, targetLevel, quantity, false);
+        _queueEntries(buyer, targetLevel, quantity, false);
     }
 
     // -- State setters --
@@ -60,7 +60,7 @@ contract TicketEdgeCasesHarness is DegenerusGameStorage {
     }
 
     function getTicketsOwedPacked(uint24 key, address player) external view returns (uint40) {
-        return ticketsOwedPacked[key][player];
+        return entriesOwedPacked[key][player];
     }
 
     // -- Key helpers (exposed) --
@@ -169,7 +169,7 @@ contract TicketEdgeCasesTest is Test {
     address constant BUYER = address(0xBEEF);
 
     function setUp() public {
-        // Warp past JACKPOT_RESET_TIME (82620s) so the inherited _queueTickets ->
+        // Warp past JACKPOT_RESET_TIME (82620s) so the inherited _queueEntries ->
         // _livenessTriggered -> GameTimeLib.currentDayIndexAt(block.timestamp) day math
         // does not underflow (ts - JACKPOT_RESET_TIME) at the default ts=1.
         vm.warp(block.timestamp + 1 days);
@@ -182,7 +182,7 @@ contract TicketEdgeCasesTest is Test {
     // Test 1 (EDGE-01): FF key and write key deposits for same level are
     // tracked independently -- no double-counting.
     // Scenario: player deposits to FF key at low level, same player deposits
-    // to write key at higher level. ticketsOwedPacked entries are separate.
+    // to write key at higher level. entriesOwedPacked entries are separate.
     // =========================================================================
 
     function testEdge01NoDoubleCount_FFThenWriteKey() public {
@@ -196,7 +196,7 @@ contract TicketEdgeCasesTest is Test {
         assertEq(harness.getQueueLength(ffKey), 1, "FF key should have 1 entry");
         assertEq(harness.getQueueLength(writeKey), 0, "write key should be empty");
 
-        // ticketsOwedPacked at FF key has owed=3
+        // entriesOwedPacked at FF key has owed=3
         uint40 ffPacked = harness.getTicketsOwedPacked(ffKey, BUYER);
         assertEq(uint32(ffPacked >> 8), 3, "FF key owed should be 3");
 
@@ -321,9 +321,9 @@ contract TicketEdgeCasesTest is Test {
         assertEq(harness.getTicketLevel(), 0, "ticketLevel should be 0 after drain");
         assertEq(harness.getTicketCursor(), 0, "cursor should be 0 after drain");
 
-        // Note: the simplified processBatch does not write ticketsOwedPacked
+        // Note: the simplified processBatch does not write entriesOwedPacked
         // (it only simulates structural behavior). The full processing loop's
-        // per-player zeroing of ticketsOwedPacked is verified by the RESEARCH.md
+        // per-player zeroing of entriesOwedPacked is verified by the RESEARCH.md
         // code trace (MintModule lines 418-420: newPacked = 0 when remainingOwed == 0).
     }
 

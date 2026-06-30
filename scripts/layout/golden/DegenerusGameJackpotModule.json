@@ -234,7 +234,7 @@
   {
     "bytes": "32",
     "encoding": "mapping",
-    "label": "traitBurnTicket",
+    "label": "lvlTraitEntry",
     "offset": 0,
     "slot": 8,
     "typeLabel": "mapping(uint24 => address[][256])"
@@ -274,7 +274,7 @@
   {
     "bytes": "32",
     "encoding": "mapping",
-    "label": "ticketsOwedPacked",
+    "label": "entriesOwedPacked",
     "offset": 0,
     "slot": 13,
     "typeLabel": "mapping(uint24 => mapping(address => uint40))"
@@ -509,7 +509,7 @@
     "label": "decBurn",
     "offset": 0,
     "slot": 41,
-    "typeLabel": "mapping(uint24 => mapping(address => struct DegenerusGameStorage.DecEntry))"
+    "typeLabel": "mapping(uint24 => mapping(address => struct DegenerusGameStorage.DecBet))"
   },
   {
     "bytes": "32",
@@ -562,10 +562,10 @@
   {
     "bytes": "32",
     "encoding": "mapping",
-    "label": "terminalDecEntries",
+    "label": "terminalDecBets",
     "offset": 0,
     "slot": 48,
-    "typeLabel": "mapping(address => struct DegenerusGameStorage.TerminalDecEntry)"
+    "typeLabel": "mapping(address => struct DegenerusGameStorage.TerminalDecBet)"
   },
   {
     "bytes": "32",
@@ -688,6 +688,14 @@
     "typeLabel": "uint48"
   },
   {
+    "bytes": "3",
+    "encoding": "inplace",
+    "label": "_sdgnrsBonusLevel",
+    "offset": 25,
+    "slot": 58,
+    "typeLabel": "uint24"
+  },
+  {
     "bytes": "32",
     "encoding": "mapping",
     "label": "boxPlayers",
@@ -750,5 +758,13 @@
     "offset": 7,
     "slot": 64,
     "typeLabel": "uint24"
+  },
+  {
+    "bytes": "32",
+    "encoding": "mapping",
+    "label": "deityRecipientBoonCount",
+    "offset": 0,
+    "slot": 65,
+    "typeLabel": "mapping(address => mapping(address => uint8))"
   }
 ]
