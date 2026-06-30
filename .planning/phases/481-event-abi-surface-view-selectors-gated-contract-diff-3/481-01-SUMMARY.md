@@ -129,3 +129,10 @@ None.
 - **contracts/ left UNCOMMITTED** (9 files). Patch: `…/scratchpad/overnight-481-483/patches/481-CONTRACT-DIFF.patch` (399 lines, 67/67 symmetric).
 - `ContractAddresses.sol` restored to HEAD (compile-regen artifact, not part of the rename).
 - Commit-guard + `.git/hooks/pre-commit` untouched; STATE.md / ROADMAP.md untouched.
+- test/+docs+agent+plan/summary committed `046dd24b` (33 files, 0 contracts, 0 deletions). Contracts/ left dirty/uncommitted (9 files); patch round-trips cleanly (`git apply --check --reverse` OK).
+
+## Self-Check: PASSED
+- Commit `046dd24b` — FOUND in `git log`; 33 files, ZERO `contracts/`, ZERO deletions.
+- `481-01-PLAN.md`, `481-01-SUMMARY.md`, `deferred-items.md` — FOUND in commit `046dd24b`.
+- contracts/ (9 files) UNCOMMITTED/dirty with the 481 edits; `481-CONTRACT-DIFF.patch` (399 lines, 67/67 symmetric) round-trips cleanly.
+- `npm test` 1362/0/19; no stale renamed event-name/selector under contracts/ + test/ + agent/; KEEP-set intact.
