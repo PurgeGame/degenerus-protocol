@@ -178,4 +178,11 @@ re-encode, which are expected new goldens, not new surface).
   files). The orchestrator captures the incremental 482 patch from snapshots.
 - `ContractAddresses.sol` restored to HEAD. Commit-guard + `.git/hooks/pre-commit` untouched; STATE.md /
   ROADMAP.md untouched.
-- test/ + plan/summary committed (5 test files, 0 contracts, 0 deletions).
+- test/ + plan/summary committed `27c113c4` (8 files = 5 test + 3 docs, 0 contracts, 0 deletions).
+
+## Self-Check: PASSED
+- Commit `27c113c4` — FOUND in `git log`; 8 files, ZERO `contracts/`, ZERO deletions.
+- `482-01-PLAN.md`, `482-01-SUMMARY.md`, `deferred-items.md` — FOUND in commit `27c113c4`.
+- contracts/ (DegenerusGame.sol, DegenerusGameStorage.sol, DegenerusGameDegeneretteModule.sol) UNCOMMITTED/dirty with the 482 edits on top of the carried 481 diff.
+- `npm test` 1362/0/19 (481 floor restored); degenerette EV/resolution byte-identical (65/65 lines); Degenerette storage-layout golden byte-identical (slot 38, no move).
+- `.git/hooks/pre-commit` present + never moved (no `.bak`); STATE.md / ROADMAP.md untouched.
