@@ -8,7 +8,7 @@ Last verified against: `fa2b9c39` (2026-04-08)
 
 ## 1. Overview
 
-The Degenerus jackpot system distributes ETH, BURNIE coin, DGNRS tokens, whale passes, and tickets across seven distinct jackpot types. All jackpots use trait-based 4-bucket distribution: four winning traits are rolled from VRF entropy, and winners are drawn from burn-ticket pools for each trait.
+The Degenerus jackpot system distributes ETH, FLIP, whale passes, and entries across seven distinct jackpot types. All jackpots use trait-based 4-bucket distribution: four winning traits are rolled from VRF entropy, and winners are drawn from burn-entry pools (`lvlTraitEntry`) for each trait.
 
 Key architectural patterns:
 
@@ -33,13 +33,12 @@ Key architectural patterns:
 | `DAILY_JACKPOT_SCALE_MAX_BPS` | 63,600 (6.36x) | Max scaling at 200+ ETH pool |
 | `JACKPOT_SCALE_MAX_BPS` | 40,000 (4x) | Max scaling for purchase phase path |
 | `MAX_BUCKET_WINNERS` | 250 | Per-bucket hard cap (safety net) |
-| `DAILY_COIN_MAX_WINNERS` | 50 | Max winners per BURNIE coin jackpot |
-| `FAR_FUTURE_COIN_BPS` | 2500 (25%) | Far-future share of coin budget |
-| `FAR_FUTURE_COIN_SAMPLES` | 10 | Max far-future levels sampled |
+| `DAILY_COIN_MAX_WINNERS` | 50 | Max winners per FLIP jackpot |
+| `FAR_FUTURE_FLIP_BPS` | 2500 (25%) | Far-future share of FLIP budget |
+| `FAR_FUTURE_FLIP_SAMPLES` | 10 | Max far-future levels sampled |
 | `DAILY_CURRENT_BPS_MIN` | 600 (6%) | Min daily pool slice |
 | `DAILY_CURRENT_BPS_MAX` | 1400 (14%) | Max daily pool slice |
 | `PURCHASE_REWARD_JACKPOT_LOOTBOX_BPS` | 7500 (75%) | Early-burn ETH to lootbox tickets |
-| `FINAL_DAY_DGNRS_BPS` | 100 (1%) | DGNRS reward pool to solo winner on day 5 |
 | `HALF_WHALE_PASS_PRICE` | 2.25 ether | Unit price per half-whale-pass |
 | `LOOTBOX_CLAIM_THRESHOLD` | 5 ether | Above this: deferred whale pass claim |
 | `LOOTBOX_MAX_WINNERS` | 100 | Max winners per lootbox/ticket distribution |
@@ -61,7 +60,7 @@ Key architectural patterns:
 
 ### Winner Selection
 
-4 winning traits rolled via `_rollWinningTraits` (burn-weighted). Winners drawn from `traitBurnTicket` pools at the current level. Bucket counts scaled by pool size:
+4 winning traits rolled via `_rollWinningTraits` (burn-weighted). Winners drawn from `lvlTraitEntry` pools at the current level. Bucket counts scaled by pool size:
 
 - Base: [25, 15, 8, 1] (rotated by entropy)
 - Scaling: 1x under 10 ETH, linearly to 2x at 50 ETH, linearly to 6.36x at 200+ ETH
@@ -91,7 +90,7 @@ Call 1 stores `ethPool` as `uint128` in `resumeEthPool`. Call 2 reads `resumeEth
 
 ### Solo Bucket Payout
 
-75% ETH + 25% whale passes (if the 25% covers at least one half-pass at 2.25 ETH; otherwise 100% ETH). No DGNRS on non-final days.
+75% ETH + 25% whale passes (if the 25% covers at least one half-pass at 2.25 ETH; otherwise 100% ETH).
 
 ### Normal Bucket Payout
 
@@ -130,7 +129,7 @@ The payout mechanics are identical to daily normal -- only the BPS multiplier an
 
 ### Solo Bucket Bonus
 
-Same 75/25 ETH/whale-pass split as normal days, plus 1% of the DGNRS reward pool (`FINAL_DAY_DGNRS_BPS` = 100) paid via `dgnrs.transferFromPool(Pool.Reward, ...)`.
+Same 75/25 ETH/whale-pass split as normal days.
 
 ### Pool Accounting
 
@@ -144,7 +143,6 @@ Same conditional split as days 1-4 (SPLIT_NONE when `totalWinners <= 160`, two-c
 
 - `JackpotEthWin` -- every winner
 - `JackpotWhalePassWin` -- solo winner (if whale passes awarded)
-- `JackpotDgnrsWin` -- solo winner (DGNRS reward, final day only)
 
 ---
 
@@ -164,7 +162,7 @@ Non-burn-weighted trait roll (`_rollWinningTraits(randWord, false)` uses `Jackpo
 
 ### Payout
 
-`_runJackpotEthFlow` -> `_processDailyEth(splitMode=SPLIT_NONE, isJackpotPhase=false)`. All 4 buckets processed in a single call. Winner counts capped at `JACKPOT_MAX_WINNERS` = 160 via `scaleTraitBucketCountsWithCap`. No whale pass, no DGNRS.
+`_runJackpotEthFlow` -> `_processDailyEth(splitMode=SPLIT_NONE, isJackpotPhase=false)`. All 4 buckets processed in a single call. Winner counts capped at `JACKPOT_MAX_WINNERS` = 160 via `scaleTraitBucketCountsWithCap`. No whale pass.
 
 ### Events Emitted
 
@@ -184,7 +182,7 @@ Non-burn-weighted trait roll (`_rollWinningTraits(randWord, false)` uses `Jackpo
 
 ### Winners
 
-100 winners, 25 per bonus trait. The 4 bonus traits are rolled via `_rollWinningTraits(rngWord, true)` — identical to the bonus traits the coin jackpot uses that day (same `keccak256(randWord, BONUS_TRAITS_TAG)` derivation). Each winner is sampled with replacement from `traitBurnTicket[lvl+1]` under the assigned bonus trait. Each gets `ticketCount = (totalBudget / 100) / priceForLevel(lvl+1)` tickets queued at `lvl+1` (fixed — no per-winner level offset).
+100 winners, 25 per bonus trait. The 4 bonus traits are rolled via `_rollWinningTraits(rngWord, true)` — identical to the bonus traits the FLIP jackpot uses that day (same `keccak256(randWord, BONUS_TRAITS_TAG)` derivation). Each winner is sampled with replacement from `lvlTraitEntry[lvl+1]` under the assigned bonus trait. Each gets `entryCount = (totalBudget / 100) / priceForLevel(lvl+1)` entries queued at `lvl+1` (fixed — no per-winner level offset).
 
 ### Events Emitted
 
@@ -212,7 +210,7 @@ Burn-weighted traits (`_rollWinningTraits(rngWord, true)`). Bucket counts scaled
 
 ### Payout
 
-`runTerminalJackpot` -> `_processDailyEth(splitMode=SPLIT_NONE, isJackpotPhase=false)`. All 4 buckets processed in a single call. Uses `DAILY_ETH_MAX_WINNERS` = 305 cap and `bucketCountsForPoolCap`. No whale pass, no DGNRS. No autorebuy (`gameOver=true` prevents it).
+`runTerminalJackpot` -> `_processDailyEth(splitMode=SPLIT_NONE, isJackpotPhase=false)`. All 4 buckets processed in a single call. Uses `DAILY_ETH_MAX_WINNERS` = 305 cap and `bucketCountsForPoolCap`. No whale pass. No autorebuy (`gameOver=true` prevents it).
 
 ### Events Emitted
 
@@ -239,7 +237,6 @@ Deferred claim model. The pool (`poolWei`) is locked at resolution time. Players
 - `DecimatorResolved` -- resolution (winning subbuckets snapshotted)
 - `DecBurnRecorded` -- burn recording (every decimator burn)
 - `TerminalDecBurnRecorded` -- terminal burns (time-weighted at game over)
-- `AutoRebuyProcessed` -- when a claimer's ETH is auto-converted to tickets
 
 ---
 
@@ -273,19 +270,19 @@ BAF pool from external `DegenerusJackpots` contract. Up to 107 winners (1 top BA
 
 ---
 
-## 11. Daily BURNIE Coin Jackpot
+## 11. Daily FLIP Jackpot
 
 ### Trigger
 
-`payDailyCoinJackpot` called during `STAGE_JACKPOT_COIN_TICKETS` (9), or inline from `payDailyJackpotCoinAndTickets` during the daily flow.
+`payDailyFlipJackpot` called during `STAGE_JACKPOT_COIN_TICKETS` (9), or inline from `payDailyJackpotCoinAndTickets` during the daily flow.
 
 ### Pool Source
 
-`_calcDailyCoinBudget(lvl)` -- BURNIE coin budget for this level (0.5% of prize pool target in BURNIE).
+`_calcDailyCoinBudget(lvl)` -- FLIP budget for this level (0.5% of prize pool target in FLIP).
 
 ### Split
 
-25% to far-future (`FAR_FUTURE_COIN_BPS` = 2500), 75% to near-future.
+25% to far-future (`FAR_FUTURE_FLIP_BPS` = 2500), 75% to near-future.
 
 ### Near-Future Distribution
 
@@ -293,12 +290,12 @@ Up to `DAILY_COIN_MAX_WINNERS` = 50 trait-matched winners at a random level in [
 
 ### Far-Future Distribution
 
-Up to `FAR_FUTURE_COIN_SAMPLES` = 10 winners drawn from `ticketQueue` for levels 5-99 ahead of current. One winner per sampled level. Payout split evenly via `coinflip.creditFlipBatch`.
+Up to `FAR_FUTURE_FLIP_SAMPLES` = 10 winners drawn from `ticketQueue` for levels 5-99 ahead of current. One winner per sampled level. Payout split evenly via `coinflip.creditFlipBatch`.
 
 ### Events Emitted
 
-- `JackpotBurnieWin` -- near-future winners
-- `FarFutureCoinJackpotWinner` -- far-future winners
+- `JackpotFlipWin` -- near-future winners
+- `FarFutureFlipJackpotWinner` -- far-future winners
 
 ---
 
@@ -307,13 +304,13 @@ Up to `FAR_FUTURE_COIN_SAMPLES` = 10 winners drawn from `ticketQueue` for levels
 | Jackpot Type | Source Pool | Payout Path | Unpaid Remainder | Pool Variables Changed |
 |--------------|------------|-------------|------------------|----------------------|
 | Daily Normal (1-4) | `currentPrizePool` | `claimableWinnings` (ETH), `whalePassClaims` (solo) | stays in `currentPrizePool` | `currentPrizePool` -=, `claimablePool` +=, `nextPrizePool` += (lootbox), `futurePrizePool` += (whale pass cost) |
-| Daily Final (5) | `currentPrizePool` (100%) | same as above + DGNRS transfer | -> `futurePrizePool` | `currentPrizePool` -=, `futurePrizePool` += (unpaid + whale pass) |
+| Daily Final (5) | `currentPrizePool` (100%) | same as above | -> `futurePrizePool` | `currentPrizePool` -=, `futurePrizePool` += (unpaid + whale pass) |
 | Trait / Early-Burn | `futurePrizePool` (1%) | `claimableWinnings` | stays in `futurePrizePool` (deferred deduction) | `futurePrizePool` -= (paidEth + lootbox) |
 | Early-Bird Lootbox | `futurePrizePool` (3%) | tickets via `_queueTickets` | stays in `nextPrizePool` | `futurePrizePool` -=, `nextPrizePool` += |
 | Terminal | caller-provided `poolWei` | `claimableWinnings` | returned to caller | `claimablePool` += |
 | Decimator | decimator pool | deferred claim (`claimDecJackpot`) | held in `decClaimRounds` | `claimablePool` += (at claim time) |
 | BAF | `futurePrizePool` (via DegenerusJackpots) | `claimableWinnings` + tickets/whale pass | stays in `futurePrizePool` | `futurePrizePool` -= claimableDelta only |
-| BURNIE Coin | BURNIE budget | `coinflip.creditFlip` | not applicable (coin, not ETH) | none (external BURNIE contract) |
+| FLIP Jackpot | FLIP budget | `coinflip.creditFlip` | not applicable (FLIP, not ETH) | none (external FLIP contract) |
 
 ---
 
@@ -357,7 +354,7 @@ advanceGame call 2 (STAGE_JACKPOT_ETH_RESUME = 8)
 
 advanceGame call 3 (STAGE_JACKPOT_COIN_TICKETS = 9)
   -> payDailyJackpotCoinAndTickets
-     -> coin jackpot (BURNIE)
+     -> FLIP jackpot
      -> ticket distribution
      -> increments jackpotCounter
      -> clears dailyJackpotCoinTicketsPending
@@ -390,10 +387,10 @@ Each call uses a fresh VRF word (new `advanceGame` call = new `rngWordCurrent`).
 
 ### isJackpotPhase Gating
 
-The `isJackpotPhase` parameter controls whale pass and DGNRS awards:
+The `isJackpotPhase` parameter controls whale pass awards:
 
-- `isJackpotPhase=true` (daily jackpot path): Solo bucket winner receives 75% ETH + 25% whale passes. On final day, also receives 1% DGNRS reward pool.
-- `isJackpotPhase=false` (purchase phase, terminal): Solo bucket winner receives 100% ETH via `_payNormalBucket`. No whale pass, no DGNRS.
+- `isJackpotPhase=true` (daily jackpot path): Solo bucket winner receives 75% ETH + 25% whale passes.
+- `isJackpotPhase=false` (purchase phase, terminal): Solo bucket winner receives 100% ETH via `_payNormalBucket`. No whale pass.
 
 The parameter is a compile-time literal at every call site: `true` in `payDailyJackpot` and `_resumeDailyEth`, `false` in `_runJackpotEthFlow` and `runTerminalJackpot`.
 

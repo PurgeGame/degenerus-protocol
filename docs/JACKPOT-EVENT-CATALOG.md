@@ -16,15 +16,13 @@ This document catalogs every event emitted during jackpot operations in the Dege
 event JackpotEthWin(
     address indexed winner,
     uint24 indexed level,
-    uint8 indexed traitId,
+    uint16 indexed traitId,
     uint256 amount,
-    uint256 ticketIndex,
-    uint24 rebuyLevel,
-    uint32 rebuyTickets
+    uint256 entryIndex
 );
 ```
 
-**Declared:** `DegenerusGameJackpotModule.sol` line 67
+**Declared:** `DegenerusGameJackpotModule.sol` line 63
 
 **Field descriptions:**
 
@@ -32,11 +30,9 @@ event JackpotEthWin(
 |-------|------|---------|-------------|
 | `winner` | `address` | Yes | Address of the jackpot winner receiving ETH credit |
 | `level` | `uint24` | Yes | Game level when the jackpot was triggered |
-| `traitId` | `uint8` | Yes | Winning trait ID for the bucket (0 for BAF jackpot where traits are not used) |
+| `traitId` | `uint16` | Yes | Winning trait ID for the bucket; sentinel values ≥256 indicate non-trait sources (e.g. `BAF_TRAIT_SENTINEL` = 420) |
 | `amount` | `uint256` | No | ETH (wei) credited to the winner |
-| `ticketIndex` | `uint256` | No | Index in `traitBurnTicket[level][traitId]` used for winner selection (0 for BAF) |
-| `rebuyLevel` | `uint24` | No | Level tickets were auto-purchased for (0 if auto-rebuy did not fire) |
-| `rebuyTickets` | `uint32` | No | Number of auto-rebuy tickets credited (0 if auto-rebuy did not fire) |
+| `entryIndex` | `uint256` | No | Index in `lvlTraitEntry[level][traitId]` used for winner selection (0 for BAF) |
 
 **Emitting paths:**
 
@@ -48,8 +44,6 @@ event JackpotEthWin(
 | 4 | `runBafJackpot` | JackpotModule | 2060 | BAF small winner (even index): 100% ETH payout |
 
 **Cross-reference:** Payout Reference Sections 3 (Daily Normal), 5 (Daily Final), 6 (Early-Burn), 8 (Terminal), 10 (BAF Jackpot)
-
-**Note:** Auto-rebuy information is embedded directly in this event via `rebuyLevel` and `rebuyTickets` fields. When auto-rebuy fires, these fields are non-zero; otherwise both are 0. This replaces the former separate `AutoRebuyProcessed` event in JackpotModule.
 
 ---
 
@@ -96,66 +90,39 @@ event JackpotTicketWin(
 
 ---
 
-### C. JackpotBurnieWin
+### C. JackpotFlipWin
 
 **Solidity signature:**
 
 ```solidity
-event JackpotBurnieWin(
+event JackpotFlipWin(
     address indexed winner,
     uint24 indexed level,
     uint8 indexed traitId,
     uint256 amount,
-    uint256 ticketIndex
+    uint256 entryIndex
 );
 ```
 
-**Declared:** `DegenerusGameJackpotModule.sol` line 88
+**Declared:** `DegenerusGameJackpotModule.sol` line 89
 
 **Field descriptions:**
 
 | Field | Type | Indexed | Description |
 |-------|------|---------|-------------|
-| `winner` | `address` | Yes | Address of the BURNIE coin recipient |
-| `level` | `uint24` | Yes | Game level when the coin jackpot ran |
+| `winner` | `address` | Yes | Address of the FLIP recipient |
+| `level` | `uint24` | Yes | Game level when the FLIP jackpot ran |
 | `traitId` | `uint8` | Yes | Winning trait ID for the bucket |
-| `amount` | `uint256` | No | BURNIE units credited via `coinflip.creditFlip` |
-| `ticketIndex` | `uint256` | No | Index in the burn ticket pool used for winner selection |
+| `amount` | `uint256` | No | FLIP units credited via `coinflip.creditFlip` |
+| `entryIndex` | `uint256` | No | Index in the burn entry pool used for winner selection |
 
 **Emitting paths:**
 
 | # | Function | File | Line | Condition |
 |---|----------|------|------|-----------|
-| 1 | `_awardDailyCoinToTraitWinners` | JackpotModule | 1771 | Near-future BURNIE coin winners (daily coin jackpot, trait-matched) |
+| 1 | `_awardDailyCoinToTraitWinners` | JackpotModule | 1653 | Near-future FLIP winners (daily FLIP jackpot, trait-matched) |
 
-**Cross-reference:** Payout Reference Section 11 (BURNIE Coin near-future)
-
----
-
-### D. JackpotDgnrsWin
-
-**Solidity signature:**
-
-```solidity
-event JackpotDgnrsWin(address indexed winner, uint256 amount);
-```
-
-**Declared:** `DegenerusGameJackpotModule.sol` line 97
-
-**Field descriptions:**
-
-| Field | Type | Indexed | Description |
-|-------|------|---------|-------------|
-| `winner` | `address` | Yes | Address of the DGNRS token recipient |
-| `amount` | `uint256` | No | DGNRS tokens transferred from the Reward pool |
-
-**Emitting paths:**
-
-| # | Function | File | Line | Condition |
-|---|----------|------|------|-----------|
-| 1 | `_handleSoloBucketWinner` | JackpotModule | 1450 | Solo bucket winner on the final jackpot day (`isFinalDay=true`), only if DGNRS reward pool has balance |
-
-**Cross-reference:** Payout Reference Section 5 (Daily Final -- solo bucket DGNRS bonus)
+**Cross-reference:** Payout Reference Section 11 (FLIP Jackpot near-future)
 
 ---
 
@@ -192,12 +159,12 @@ event JackpotWhalePassWin(
 
 ---
 
-### F. FarFutureCoinJackpotWinner
+### F. FarFutureFlipJackpotWinner
 
 **Solidity signature:**
 
 ```solidity
-event FarFutureCoinJackpotWinner(
+event FarFutureFlipJackpotWinner(
     address indexed winner,
     uint24 indexed currentLevel,
     uint24 indexed winnerLevel,
@@ -205,24 +172,24 @@ event FarFutureCoinJackpotWinner(
 );
 ```
 
-**Declared:** `DegenerusGameJackpotModule.sol` line 59
+**Declared:** `DegenerusGameJackpotModule.sol` line 53
 
 **Field descriptions:**
 
 | Field | Type | Indexed | Description |
 |-------|------|---------|-------------|
-| `winner` | `address` | Yes | Address of the BURNIE recipient (drawn from `ticketQueue`) |
+| `winner` | `address` | Yes | Address of the FLIP recipient (drawn from `ticketQueue`) |
 | `currentLevel` | `uint24` | Yes | Game level when the jackpot ran |
 | `winnerLevel` | `uint24` | Yes | Far-future level the winner's ticket was queued for (5-99 levels ahead of current) |
-| `amount` | `uint256` | No | BURNIE credited via `coinflip.creditFlipBatch` |
+| `amount` | `uint256` | No | FLIP credited via `coinflip.creditFlipBatch` |
 
 **Emitting paths:**
 
 | # | Function | File | Line | Condition |
 |---|----------|------|------|-----------|
-| 1 | `_awardFarFutureCoinJackpot` | JackpotModule | 1849 | Each far-future coin winner found (up to `FAR_FUTURE_COIN_SAMPLES`=10 samples, one winner per sampled level) |
+| 1 | `_awardFarFutureCoinJackpot` | JackpotModule | 1730 | Each far-future FLIP winner found (up to `FAR_FUTURE_FLIP_SAMPLES`=10 samples, one winner per sampled level) |
 
-**Cross-reference:** Payout Reference Section 11 (BURNIE Coin far-future)
+**Cross-reference:** Payout Reference Section 11 (FLIP Jackpot far-future)
 
 ---
 
@@ -384,55 +351,15 @@ event TerminalDecBurnRecorded(
 
 ---
 
-### K. AutoRebuyProcessed (DecimatorModule)
-
-**Solidity signature:**
-
-```solidity
-event AutoRebuyProcessed(
-    address indexed player,
-    uint24 targetLevel,
-    uint32 ticketsAwarded,
-    uint256 ethSpent,
-    uint256 remainder
-);
-```
-
-**Declared:** `DegenerusGameDecimatorModule.sol` line 29
-
-**Field descriptions:**
-
-| Field | Type | Indexed | Description |
-|-------|------|---------|-------------|
-| `player` | `address` | Yes | Address of the auto-rebuy recipient |
-| `targetLevel` | `uint24` | No | Level tickets were purchased for |
-| `ticketsAwarded` | `uint32` | No | Number of tickets credited (includes bonus when afKing active) |
-| `ethSpent` | `uint256` | No | ETH spent on ticket purchases (moved to next/future pool) |
-| `remainder` | `uint256` | No | ETH returned to `claimableWinnings` (reserved amount + dust from fractional tickets) |
-
-**Emitting paths:**
-
-| # | Function | File | Line | Condition |
-|---|----------|------|------|-----------|
-| 1 | `_processAutoRebuy` | DecimatorModule | 411 | When a decimator claim triggers auto-rebuy (player has enabled auto-rebuy and claim has ticket conversion) |
-
-**Cross-reference:** Payout Reference Section 9 (Decimator Jackpot)
-
-**Note:** `AutoRebuyProcessed` is only emitted from DecimatorModule. JackpotModule no longer emits a separate auto-rebuy event; auto-rebuy information is embedded in `JackpotEthWin` via the `rebuyLevel` and `rebuyTickets` fields.
-
----
-
 ## Event-to-Path Matrix
 
-| Event | Daily (1-4) | Daily (5) | Early-Burn | Terminal | Decimator | BAF | BURNIE Coin |
-|-------|:-----------:|:---------:|:----------:|:--------:|:---------:|:---:|:-----------:|
+| Event | Daily (1-4) | Daily (5) | Early-Burn | Terminal | Decimator | BAF | FLIP Jackpot |
+|-------|:-----------:|:---------:|:----------:|:--------:|:---------:|:---:|:------------:|
 | `JackpotEthWin` | X | X | X | X | -- | X | -- |
 | `JackpotTicketWin` | X | X | X | -- | -- | X | -- |
-| `JackpotBurnieWin` | -- | -- | -- | -- | -- | -- | X (near) |
-| `JackpotDgnrsWin` | -- | X | -- | -- | -- | -- | -- |
+| `JackpotFlipWin` | -- | -- | -- | -- | -- | -- | X (near) |
 | `JackpotWhalePassWin` | X | X | X | X | -- | X | -- |
-| `FarFutureCoinJackpotWinner` | -- | -- | -- | -- | -- | -- | X (far) |
-| `AutoRebuyProcessed` (DecMod) | -- | -- | -- | -- | X | -- | -- |
+| `FarFutureFlipJackpotWinner` | -- | -- | -- | -- | -- | -- | X (far) |
 | `Advance` | X | X | -- | -- | -- | -- | -- |
 | `RewardJackpotsSettled` | -- | -- | -- | -- | -- | X | -- |
 | `DecBurnRecorded` | -- | -- | -- | -- | X | -- | -- |
@@ -452,11 +379,9 @@ Events referenced in `JACKPOT-PAYOUT-REFERENCE.md` and their catalog entries:
 |---------------------------|---------------|--------|
 | `JackpotEthWin` (Sections 3, 5, 6, 8, 10) | A | Matched |
 | `JackpotTicketWin` (Sections 3, 5, 6, 10) | B | Matched |
-| `JackpotBurnieWin` (Section 11) | C | Matched |
-| `JackpotDgnrsWin` (Section 5) | D | Matched |
+| `JackpotFlipWin` (Section 11) | C | Matched |
 | `JackpotWhalePassWin` (Sections 3, 5, 10) | E | Matched |
-| `FarFutureCoinJackpotWinner` (Section 11) | F | Matched |
-| `AutoRebuyProcessed` (Section 9) | K | Matched |
+| `FarFutureFlipJackpotWinner` (Section 11) | F | Matched |
 | `RewardJackpotsSettled` (Section 10) | H | Matched |
 | `DecBurnRecorded` (Section 9) | I | Matched |
 | `TerminalDecBurnRecorded` (Section 9) | J | Matched |
