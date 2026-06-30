@@ -8,7 +8,7 @@ Smart contract audit repository for the Degenerus Protocol — an on-chain ETH g
 
 Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
 
-## ▶ ACTIVE — v75.0 Ticket/Entry Correctness + Disambiguation
+## ✅ SHIPPED 2026-06-30 (tag v75.0) — v75.0 Ticket/Entry Correctness + Disambiguation
 
 **Goal:** Fix a confirmed ¼ ticket under-delivery in the two prize legs and make the "ticket (whole = `priceForLevel`) vs entry (= price/4, 1 NFT, 4 per ticket)" distinction unmistakable in code so this bug class can't recur.
 

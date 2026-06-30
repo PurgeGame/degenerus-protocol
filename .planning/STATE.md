@@ -2,20 +2,20 @@
 gsd_state_version: 1.0
 milestone: v75.0
 milestone_name: Ticket/Entry Correctness + Disambiguation
-status: executing
-last_updated: "2026-06-30"
-last_activity: 2026-06-29 -- Phase 479 COMPLETE (CONV + value-fix). Contract value fix `b2ab3e9f` (USER-approved): both prize legs route post-Bernoulli whole→entries via canonical `wholeTicketsToEntries(w)=w<<2`; Jackpot emit==queue; Bernoulli byte-identical (37 EV-tester assertions green unchanged); CONV-02 NatSpec. Tests: forge `PrizeLegEntriesDelivery` proof `33239b1d`+`a8629448`, `CrossSurfaceTicketMixing` reconcile `d0718702`. Adversarial verify (wf_a62938f5-73f) caught FIX-05 under-scope → 7 missed hardhat structural-assertion suites reconciled `7844ee7f` (116/0; +fixed a pre-existing [03a] false-green). Full `forge test` 1003/0/107. DEFERRED: `_budgetToTicketUnits:711` dead price-guard trim → 480; `LootboxBernoulliTester.sol:71` stale comment → 481; `SurfaceRegression.test.js` 5 failures = pre-existing (untouched trait files). Phase 480-01 ✅ COMPLETE 2026-06-30: rename-sweep gated diff `bcc47ccc` (17 files, 502/502 rename-only, USER-approved) + harness/goldens/scrub `6e181d37`; hardhat+forge green, layout label/typeLabel-only (slot 8 unchanged), no value/event/selector/.slot/FT_*/Bernoulli change. Cross-model council (Codex+GLM-5.2+Claude-lens wf; Gemini DEAD — Google deprecated free-tier CLI) reviewed plans during exec → `480-COUNCIL-REVIEW.md`: rename byte-neutral, but 1 BLOCKING (B-1 EV-tripwire collision in stat tests) + 2 HIGH + ~8 MED gate/doc defects carry to 480-02. NEXT = apply council amendments to Plan 480-02 (B-1 re-scope + gate fixes) → run 480-02 (by-name test/ sweep + full Hardhat/forge/stat floor).
+status: "✅ SHIPPED 2026-06-30 — v75.0 archived. tag v75.0 local/PUSHED. Next: /gsd-new-milestone."
+last_updated: "2026-06-30T20:12:53.537Z"
+last_activity: 2026-06-29 -- Phase 479 execution started
 progress:
-  total_phases: 4
-  completed_phases: 1
-  total_plans: 2
-  completed_plans: 2
-  percent: 25
+  total_phases: 6
+  completed_phases: 5
+  total_plans: 7
+  completed_plans: 7
+  percent: 83
 ---
 
 # Project State
 
-## Current Position — v75.0 (ACTIVE)
+## Current Position — v75.0 (SHIPPED 2026-06-30)
 
 **Milestone:** v75.0 — Ticket/Entry Correctness + Disambiguation. **Status:** ALL 5 GATED CONTRACT DIFFS COMMITTED — 479 `b2ab3e9f` · 480 `bcc47ccc` · **481 `94322027`** (events/ABI/selectors; owner kept JackpotTicketWin name + FoilMatchClaimed.ticketIndex) · **482 `310bccfc`** (degenerette repack, EV byte-identical) · **483 `61e40429`** (FF-salvage entry-granular). Floor: full `forge test` **1005/0/107**, `npm test` **1362/0**. ⚠ executors' "foundry flake" was FICTIONAL (stale degenerette topic sigs, fixed `6510a4b7`). **✅ v75.0 SHIPPED 2026-06-30** (tag `v75.0`, local/UNPUSHED): Phase 484 closed — full forge 1005/0/107 + Hardhat 1362/0 + layout `--check` green + 37 Bernoulli EV green; RTP re-sim (`PrizeLegEntriesDelivery` 3/0, ×4 corrected, EV-neutral); cross-model re-audit (Codex + GLM-5.2 + Claude-lens 5-dim) **CLEAN — 0 critical/high/medium**, only 4 cosmetic nits (`audit/FINDINGS-v75.0.md`). 4 remaining nits + jackpot-doc reconciliation (D-481-DOCS-01) = optional future cleanup. Loose ends: WWXRP layout-oracle 1-liner, jackpot docs (D-481-DOCS-01), correct the stale flake note in 480/deferred-items. Milestone UNPUSHED (local main). See [[v75-overnight-481-483-uncommitted-run]].
 **Phase:** 479 ✅ COMPLETE — plan 01 (contract value fix `b2ab3e9f`, USER-approved) + plan 02 (test proof + 7-file FIX-05 gap-closure `7844ee7f`). **Re-scoped 2026-06-29 to 6 phases (480–484 structure, from disambiguation ledger §10):** 479 CONV+VALUE-FIX ✅ (gated #1, behavior) · 480 RENAME-SWEEP (gated #2, no behavior; RN-01..10) · 481 EVENT/ABI+VIEW-SELECTORS (gated #3, ABI) · 482 DEGENERETTE-REPACK (gated #4, behavior) · 483 FF-SALVAGE entry-granularity (gated #5, behavior) · 484 VERIFY+CLOSE.
@@ -31,7 +31,7 @@ progress:
 See: .planning/MILESTONES.md (v74.0 entry) + .planning/PROJECT.md. **v74.0 SHIPPED + TAGGED 2026-06-27 (tag `v74.0`, local/not pushed; 0 open findings)** — **As-Built Milestone Audit + C4A Package** (supersedes the prior "v74.0 C4A Readiness" plan, never tagged). Put the entire `v73.0 → HEAD` contract batch (29 .sol, +1861/-1030; subject BYTE-FROZEN at local HEAD `3986926c`) through a full milestone audit AND assemble the complete C4A package — 100% C4A-ready, no payouts. Method = verify → freeze-confirm → harness-green → 6-cluster code audit (SOLV/RNG+LIVENESS/ACCESS/EV/WIRE/GAS-FAUCET) → manifest re-point → cross-model re-audit (Codex; Gemini CLI unavailable) → live agent/soak re-attest → C4A package → terminal. The built agent + 24/7 soak + MAN-01 manifest carry forward (re-point at frozen HEAD, 0-viol already). Sole possible gate = the conditional contract-fix squash at 475/478 if the re-audit surfaces a real defect. 13 phases (466-478), numbering continues 465 → 466. Grounding: `.planning/v74-grounding/v74.0-asbuilt-audit-map.md`.
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Current focus:** Phase 479 — conv-value-fix-gated-contract-diff-1-behavior-change
+**Current focus:** Milestone v75.0 COMPLETE — next milestone planning
 
 ## ⚠ v50.0 + v51.0 AUDIT DEBT → FOLDED INTO v63.0 Phase 394 LEGACY-DEBT (USER 2026-06-14; was a separate v52 track)
 
