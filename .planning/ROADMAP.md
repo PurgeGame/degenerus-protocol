@@ -24,7 +24,7 @@
 
 **Plans:** 2 plans
 - [x] 479-01-PLAN.md — `wholeTicketsToEntries` helper + both queue-site value fixes + Jackpot emit==queue + convention NatSpec (ONE batched `.sol` diff, gated) — committed `b2ab3e9f`
-- [ ] 479-02-PLAN.md — deterministic forge regression (FIX-04) + `CrossSurfaceTicketMixing` reconciliation + emit==queue (FIX-05)
+- [x] 479-02-PLAN.md — deterministic forge regression (FIX-04) + `CrossSurfaceTicketMixing` reconciliation + emit==queue (FIX-05) — `33239b1d`/`d0718702`; +FIX-05 gap-closure of 7 missed structural-assertion suites `7844ee7f`
 
 ## Phase 480: RENAME-SWEEP (GATED contract diff #2 — no behavior change)
 

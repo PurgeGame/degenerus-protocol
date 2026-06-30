@@ -101,3 +101,15 @@ The Bernoulli EV testers re-ran 37 green (16+8+13) with no edits — the `<<2` l
 - Commit `33239b1d` (Task 1) — FOUND; `d0718702` (Task 2) — FOUND.
 - `git diff --name-only b2ab3e9f -- contracts/` EMPTY; `git diff --name-only b2ab3e9f -- test/stat/` EMPTY.
 - Three Bernoulli EV testers re-ran green UNCHANGED (37 total).
+
+## Gap-closure (FIX-05 under-scope) — `a8629448`, `7844ee7f`
+Adversarial verification (workflow `wf_a62938f5-73f`) found this plan reconciled ONLY `CrossSurfaceTicketMixing`. Seven more hardhat suites pinned the pre-fix call form `_queueTickets(..., whole, ...)` / the bare `whole` `JackpotTicketWin` emit arg as source-structural assertions and hard-failed under default `npm test` (none covered by the green forge floor). `479-RESEARCH.md:130` mis-triaged `EventSurfaceUnification` as a "481 concern" — wrong, it pins the emit **value** 479 changed.
+- Reconciled to the `wholeTicketsToEntries(whole)` helper form (`7844ee7f`), preserving every assertion's strength: `JackpotTicketRollSilentColdBust`, `LootboxAutoResolveRegression`, `LootboxConsolation`, `LootboxAutoResolveSilentColdBust`, `LootboxAutoResolveRemByte`, `EventSurfaceUnification`, `LootboxWholeTicket` — **116 passing / 0 failing**.
+- Fixed a pre-existing false-green in `JackpotTicketRollSilentColdBust [03a]`: it asserted the emit carried `uint32(quantityScaled)` via a substring that matched only the `scaledTickets` local (never the emit) and narrated a stale D-276 "pre-Bernoulli scaled" intent that never matched the contract → replaced with a positional `emitArgs[3] == "wholeTicketsToEntries(whole)"` check (emit == queue); stale narratives corrected to the entries basis.
+- Also dropped a dead zero-price guard in the forge harness mirror (`a8629448`; `priceForLevel` is provably never 0).
+- Regression-floor evidence: full `forge test` **1003 passed / 0 failed / 107 skipped**.
+
+### Deferred / out-of-scope (confirmed)
+- `test/stat/SurfaceRegression.test.js` (5 failures) — PRE-EXISTING, guards `DegenerusTraitUtils.sol`/`EntropyLib.sol` byte-ranges (byte-identical to baseline `cdd32fe9`; 479 never touched them). Not a 479 regression.
+- `contracts/test/LootboxBernoulliTester.sol:71` — stale NatSpec **comment** (no assertion greps it); gated (`contracts/`). Plan blessed leaving it; fold a comment-only refresh into 481.
+- Production `_budgetToTicketUnits` (`DegenerusGameJackpotModule.sol:711`) carries the same dead zero-price guard — candidate trim to fold into the gated phase 480 (already renames that fn).

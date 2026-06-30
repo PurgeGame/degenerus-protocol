@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v75.0
 milestone_name: Ticket/Entry Correctness + Disambiguation
 status: executing
-last_updated: "2026-06-29T22:52:21.201Z"
-last_activity: 2026-06-29 -- Phase 479 execution started
+last_updated: "2026-06-29"
+last_activity: 2026-06-29 -- Phase 479 COMPLETE (CONV + value-fix). Contract value fix `b2ab3e9f` (USER-approved): both prize legs route post-Bernoulli whole→entries via canonical `wholeTicketsToEntries(w)=w<<2`; Jackpot emit==queue; Bernoulli byte-identical (37 EV-tester assertions green unchanged); CONV-02 NatSpec. Tests: forge `PrizeLegEntriesDelivery` proof `33239b1d`+`a8629448`, `CrossSurfaceTicketMixing` reconcile `d0718702`. Adversarial verify (wf_a62938f5-73f) caught FIX-05 under-scope → 7 missed hardhat structural-assertion suites reconciled `7844ee7f` (116/0; +fixed a pre-existing [03a] false-green). Full `forge test` 1003/0/107. DEFERRED: `_budgetToTicketUnits:711` dead price-guard trim → 480; `LootboxBernoulliTester.sol:71` stale comment → 481; `SurfaceRegression.test.js` 5 failures = pre-existing (untouched trait files). NEXT = /gsd-plan-phase 480 (RENAME-SWEEP, gated diff #2).
 progress:
   total_phases: 4
-  completed_phases: 0
+  completed_phases: 1
   total_plans: 2
-  completed_plans: 0
-  percent: 0
+  completed_plans: 2
+  percent: 25
 ---
 
 # Project State
@@ -18,7 +18,7 @@ progress:
 ## Current Position — v75.0 (ACTIVE)
 
 **Milestone:** v75.0 — Ticket/Entry Correctness + Disambiguation. **Status:** Executing Phase 479
-**Phase:** 479 EXECUTING — plan 01 ✅ (contract value fix committed `b2ab3e9f`, USER-approved), plan 02 (test proof) NEXT. 4 phases: 479 CONV+VALUE-FIX (gated diff #1, behavior) · 480 RENAME-SWEEP (gated diff #2, no behavior) · 481 EVENT-SURFACE+DOCS (gated diff #3, ABI field names) · 482 VERIFY+CLOSE.
+**Phase:** 479 ✅ COMPLETE — plan 01 (contract value fix `b2ab3e9f`, USER-approved) + plan 02 (test proof + 7-file FIX-05 gap-closure `7844ee7f`). NEXT = 480 RENAME-SWEEP. 4 phases: 479 CONV+VALUE-FIX (gated diff #1, behavior) · 480 RENAME-SWEEP (gated diff #2, no behavior) · 481 EVENT-SURFACE+DOCS (gated diff #3, ABI field names) · 482 VERIFY+CLOSE.
 **Goal:** fix a USER-confirmed ¼ ticket under-delivery (`owed` is ENTRIES = 4/ticket, price/4 each; `_jackpotTicketRoll`~2143 + `_lootboxTicketCount`~2188→queue~1383, also via `DecimatorModule:673`, queue a whole-ticket count `amount/price` with no `<<2` → ¼ delivery; conservation-safe, winners under-paid) and make ticket-vs-entry unmistakable in code.
 **Subject:** RESETS off v74.0 closure `MILESTONE_V74_AT_HEAD_93d17288…`; baseline local HEAD `cdd32fe9` (clean, not pushed). Contract diffs at 479/480/481 each behind the sole approval gate.
 **Locked:** ABI = events-too (rename event fields + normalize emitted units to entries; KEEP view selectors); whale/perpetual constants rename-only (intentionally entries, no `×4`); Decimator "entry"→record collision fix.
@@ -47,7 +47,7 @@ See: .planning/MILESTONES.md (v74.0 entry) + .planning/PROJECT.md. **v74.0 SHIPP
 
 Milestone: v74.0 — As-Built Milestone Audit + C4A Package (supersedes the prior "v74.0 C4A Readiness" plan, 457-465, never tagged)
 Phase: 479 (conv-value-fix-gated-contract-diff-1-behavior-change) — EXECUTING
-Plan: 01 ✅ done (`b2ab3e9f`) · 02 NEXT (test proof, ungated)
+Plan: 01 ✅ (`b2ab3e9f`) · 02 ✅ (`33239b1d`/`d0718702`/`a8629448` + gap-closure `7844ee7f`) — Phase 479 COMPLETE
 Subject (BYTE-FROZEN at HEAD): the v73.0→HEAD diff = 3986926c (29 .sol, +1861/-1030), never milestone-audited; local HEAD (not pushed). Resets off v73.0 closure MILESTONE_V73_AT_HEAD_15650b6a… (contracts/ tree d6615306 @ 64ec993e).
 Five change clusters: (1) purchase hot-path gas folds (solvency-sensitive) · (2) VRF-death deadman + mid-day RNG fold + fail-open swap + advance gas guards + 44h admin gate + payable receive · (3) NEW sDGNRS level lootbox (5%/6 ETH cap/once-per-level) + reinvestPct removal (Sub repack) · (4) permissionless-settlement relaxation + caller-funded gifts + partial claim · (5) named-errors + whaleBundle→whalePass + WWXRP rename + in-scope dormant gas faucet.
 Top surfaces (ranked): purchase solvency fold · VRF deadman+mid-day fold · queue-gate removal+fail-open swap+didWork guard · sDGNRS-box pre-RNG sizing · payAffiliateCombined credit-across-boundary · permissionless/gift sourcing · admin 44h+receive · foil/Degenerette EV byte-equivalence.
