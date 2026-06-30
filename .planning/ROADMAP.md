@@ -41,7 +41,7 @@
 
 **Plans:** 2 plans
 - [x] 480-01-PLAN.md — Gated contract rename sweep (RN-01…RN-09) + RN-10 compile-break/golden half across all `contracts/*.sol` + lockstep compile-break Solidity harness (`forge build` green) + layout golden recapture (label/typeLabel-only, `--check` green) — ONE batched gated diff (Wave 1, autonomous:false) ✅ `bcc47ccc` (contract diff, USER-approved) + `6e181d37` (harness/goldens/scrub); 502/502 rename-only; cross-model council reviewed (`480-COUNCIL-REVIEW.md`)
-- [ ] 480-02-PLAN.md — Runtime by-name `test/` literal sweep (the FIX-05 forge-invisible trap, RN-10) + full Hardhat/forge/stat green floor proving no behavior change (Wave 2, autonomous)
+- [x] 480-02-PLAN.md — Runtime by-name `test/` literal sweep (the FIX-05 forge-invisible trap, RN-10) + full Hardhat/forge/stat green floor proving no behavior change (Wave 2, autonomous) ✅ `848a56fe`+`53716830`; `npm test` 1362/0, EV testers UNCHANGED; 35 test/ files swept. NOTE: full `forge test` blocked by a foundry-1.6.0-nightly `vm.warp` setUp flake (environmental, NOT the rename — suites pass in isolation; reproduce 1003/0/107 on stable foundry/CI). **Phase 480 ✅ COMPLETE.**
 
 ## Phase 481: EVENT/ABI SURFACE + VIEW SELECTORS + DOCS (GATED contract diff #3 — ABI)
 

@@ -17,7 +17,7 @@ progress:
 
 ## Current Position — v75.0 (ACTIVE)
 
-**Milestone:** v75.0 — Ticket/Entry Correctness + Disambiguation. **Status:** Phase 479 ✅ + 480-01 ✅ COMPLETE — NEXT = Plan 480-02 (by-name test/ sweep + full-suite floor; apply council gate amendments first)
+**Milestone:** v75.0 — Ticket/Entry Correctness + Disambiguation. **Status:** Phases 479 ✅ + 480 ✅ COMPLETE — OVERNIGHT 2026-06-30 (USER asleep): executing 481→482→483 IN SEQUENCE, UNCOMMITTED (per-phase patches for AM review; NO contract commit). 480-02: `npm test` 1362/0, EV unchanged; full `forge test` blocked by foundry-nightly `vm.warp` flake (environmental). See [[v75-overnight-481-483-uncommitted-run]].
 **Phase:** 479 ✅ COMPLETE — plan 01 (contract value fix `b2ab3e9f`, USER-approved) + plan 02 (test proof + 7-file FIX-05 gap-closure `7844ee7f`). **Re-scoped 2026-06-29 to 6 phases (480–484 structure, from disambiguation ledger §10):** 479 CONV+VALUE-FIX ✅ (gated #1, behavior) · 480 RENAME-SWEEP (gated #2, no behavior; RN-01..10) · 481 EVENT/ABI+VIEW-SELECTORS (gated #3, ABI) · 482 DEGENERETTE-REPACK (gated #4, behavior) · 483 FF-SALVAGE entry-granularity (gated #5, behavior) · 484 VERIFY+CLOSE.
 **Goal:** fix a USER-confirmed ¼ ticket under-delivery (`owed` is ENTRIES = 4/ticket, price/4 each; `_jackpotTicketRoll`~2143 + `_lootboxTicketCount`~2188→queue~1383, also via `DecimatorModule:673`, queue a whole-ticket count `amount/price` with no `<<2` → ¼ delivery; conservation-safe, winners under-paid — FIXED in 479) and make ticket-vs-entry unmistakable in code.
 **Subject:** RESETS off v74.0 closure `MILESTONE_V74_AT_HEAD_93d17288…`; baseline local HEAD `cdd32fe9` (clean, not pushed). Contract diffs at 479/480/481/482/483 each behind the sole approval gate.
