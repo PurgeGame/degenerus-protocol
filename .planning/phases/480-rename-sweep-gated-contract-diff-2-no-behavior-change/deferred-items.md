@@ -4,7 +4,17 @@ Pre-existing conditions surfaced during the rename-sweep execution. None are cau
 ticket→entry rename; all are logged here per the scope boundary (do NOT fix pre-existing
 failures in unrelated surfaces inside this rename phase).
 
-## 0. `forge test` full-run blocked by foundry-1.6.0-nightly (480-02) — environmental, NOT the rename
+## 0. ~~`forge test` full-run blocked by foundry-1.6.0-nightly~~ — RESOLVED / SUPERSEDED (2026-06-30)
+
+> **CORRECTION (2026-06-30):** This "environmental flake blocks the full forge run" framing did NOT
+> hold up. On investigation the degenerette-suite failures the 481 + 482 executors later attributed to
+> the same "flake" were actually **real test-staleness** — 6 forge `.t.sol` files held hardcoded
+> `FULL_TICKET_RESULT_SIG`/`FULL_TICKET_RESOLVED_SIG` event-topic constants that the 481 event rename
+> (`FullTicket*`→`Degenerette*`) made stale; a name-grep could not catch them (the old name is not a
+> string in the file). Fixed in `6510a4b7` (self-documenting `keccak256("Degenerette*(...)")`). After
+> that, multiple independent **full `forge test` runs are GREEN at 1003/0/107** (1005/0/107 with 483's
+> two new FF tests) — there is NO full-run blocker. **Do NOT use this item to wave away forge failures;
+> read the trace and fix the real cause.** The original note below is retained as history only.
 
 - Full `forge test` on this machine reports `223 passed / 116 failed / 339 total` in ~1.2s; every
   failure is `panic: arithmetic underflow or overflow (0x11)` in `setUp()` for full-game-deploy

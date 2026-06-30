@@ -26,7 +26,7 @@ mkdir -p "$GOLD"
 CONTRACTS=(
   DegenerusGame
   Coinflip sDGNRS DGNRS DegenerusVaultShare DegenerusAffiliate DegenerusQuests
-  FLIP GNRUS WrappedWrappedXRP DegenerusDeityPass DegenerusJackpots DegenerusAdmin
+  FLIP GNRUS WWXRP DegenerusDeityPass DegenerusJackpots DegenerusAdmin
 )
 # Delegatecall modules — must share DegenerusGame's storage layout exactly (run in its context).
 MODULES=(
