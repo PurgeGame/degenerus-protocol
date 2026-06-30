@@ -16,7 +16,7 @@ import {PriceLookupLib} from "../libraries/PriceLookupLib.sol";
  *        - symbol-first     (additive: 0.1% + 2_000e18 FLIP),
  *        - quadrant-first   (replacement: 0.5% + 5_000e18 FLIP, suppresses symbol bonus).
  *      All storage reads/writes operate on the inherited DegenerusGameStorage layout.
- *      claimBingo is a strict READ-ONLY consumer of traitBurnTicket — it adds NO write
+ *      claimBingo is a strict READ-ONLY consumer of lvlTraitEntry — it adds NO write
  *      to it (RNG-freeze-safe). The only state it writes is
  *      its own bitfields (bingoClaimed / bingoFirsts). CEI:
  *      effects (the bit sets) precede interactions (transferFromPool / creditFlip).
@@ -114,13 +114,13 @@ contract DegenerusGameBingoModule is DegenerusGameStorage {
     /// @param level The level to claim on (uint24 — the internal storage key width;
     ///        the ABI decoder fail-closes on an oversized value, no truncation).
     /// @param symbol Symbol 0-31 (quadrant = symbol >> 3, symInQ = symbol & 7).
-    /// @param slots Per-color positions in traitBurnTicket[level][traitId] the owner occupies.
+    /// @param slots Per-color positions in lvlTraitEntry[level][traitId] the owner occupies.
     function claimBingo(address player, uint24 level, uint8 symbol, uint32[8] calldata slots) external {
         player = _resolvePlayer(player);
         // ---- Validation (gameOver hard cutoff + range gates) ----
         // No level upper-bound guard: the 8-color ownership check below is
         // self-gating — an unresolved/future-level bucket is empty, so the
-        // require fails closed on its own. claimBingo only READS traitBurnTicket
+        // require fails closed on its own. claimBingo only READS lvlTraitEntry
         // (never writes it) and writes only its own 3 bitfields, so a read
         // against an in-flight/future bucket simply reverts; it cannot corrupt
         // VRF state (freeze-safe; no level gate is needed).
@@ -132,12 +132,12 @@ contract DegenerusGameBingoModule is DegenerusGameStorage {
         uint8 qMask = uint8(1 << quadrant);
         uint32 sMask = uint32(1) << symbol;
 
-        // ---- Ownership read (READ-ONLY; NO write to traitBurnTicket) ----
+        // ---- Ownership read (READ-ONLY; NO write to lvlTraitEntry) ----
         // For each color c the owner must occupy slots[c] in the holder array of
         // traitId = (quadrant << 6) | (c << 3) | symInQ. Guard the index against the
         // array length BEFORE the read so a bad index fails closed with one clean
         // custom error (no bare Panic(0x32)).
-        address[][256] storage levelBuckets = traitBurnTicket[level];
+        address[][256] storage levelBuckets = lvlTraitEntry[level];
         uint256 traitBase = (uint256(quadrant) << 6) | uint256(symInQ);
         for (uint256 c = 0; c < 8; ) {
             address[] storage holders = levelBuckets[uint8(traitBase | (c << 3))];

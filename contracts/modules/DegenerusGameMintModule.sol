@@ -159,7 +159,7 @@ contract DegenerusGameMintModule is
         bool closing
     );
 
-    /// @notice ticketQuantity in purchase units (4 * TICKET_SCALE = 400 = one whole ticket);
+    /// @notice ticketQuantity in purchase units (4 * QTY_SCALE = 400 = one whole ticket);
     ///         weiIn = ETH-in for the manual-mint ticket leg (any funding source). The box leg
     ///         rides LootBoxBuy, so the two stay disjoint for off-chain ETH-in totals.
     event TicketsBought(address indexed buyer, uint256 ticketQuantity, uint256 weiIn);
@@ -333,7 +333,7 @@ contract DegenerusGameMintModule is
     ) external returns (bool worked, bool finished, uint32 writesUsed) {
         bool inFarFuture = (ticketLevel == (lvl | TICKET_FAR_FUTURE_BIT));
         uint24 rk = inFarFuture ? _tqFarFutureKey(lvl) : _tqReadKey(lvl);
-        mapping(address => uint40) storage owedMap = ticketsOwedPacked[rk];
+        mapping(address => uint40) storage owedMap = entriesOwedPacked[rk];
         address[] storage queue = ticketQueue[rk];
         uint256 total = queue.length;
         if (total == 0) {
@@ -558,7 +558,7 @@ contract DegenerusGameMintModule is
         uint24 lvl = uint24(baseKey >> 224);
 
         // Calculate the storage slot for this level's trait arrays.
-        // Layout assumption: traitBurnTicket is mapping(uint24 => address[256]).
+        // Layout assumption: lvlTraitEntry is mapping(uint24 => address[256]).
         // Solidity stores mapping(key => fixedArray) as keccak256(key . slot) + index,
         // with dynamic array elements at keccak256(keccak256(key . slot) + index).
         // This relies on the standard Solidity storage layout (stable since 0.4.x).
@@ -566,7 +566,7 @@ contract DegenerusGameMintModule is
         uint256 levelSlot;
         assembly ("memory-safe") {
             mstore(0x00, lvl)
-            mstore(0x20, traitBurnTicket.slot)
+            mstore(0x20, lvlTraitEntry.slot)
             levelSlot := keccak256(0x00, 0x40)
         }
 
@@ -611,11 +611,11 @@ contract DegenerusGameMintModule is
     ) private pure returns (bool win) {
         // Hash via scratch-slot keccak so player address (stored in rollSalt
         // bits 191-32) reaches the low 7 bits of rollEntropy consumed by
-        // `% TICKET_SCALE`. A plain XOR mix only diffuses bits a fixed span
+        // `% QTY_SCALE`. A plain XOR mix only diffuses bits a fixed span
         // outward, leaving upper player-address bits invisible to the roll
         // outcome; keccak gives full low-bit diffusion of the high-bit input.
         uint256 rollEntropy = EntropyLib.hash2(entropy, rollSalt);
-        return (rollEntropy % TICKET_SCALE) < rem;
+        return (rollEntropy % QTY_SCALE) < rem;
     }
 
     // -------------------------------------------------------------------------
@@ -637,7 +637,7 @@ contract DegenerusGameMintModule is
         returns (bool finished, bool didWork)
     {
         uint24 rk = _tqReadKey(lvl);
-        mapping(address => uint40) storage owedMap = ticketsOwedPacked[rk];
+        mapping(address => uint40) storage owedMap = entriesOwedPacked[rk];
         address[] storage queue = ticketQueue[rk];
         uint256 total = queue.length;
 
@@ -749,7 +749,7 @@ contract DegenerusGameMintModule is
     ///      DegenerusGameFoilPackModule (this near-full module would otherwise exceed
     ///      the EIP-170 runtime limit); the delegatecall runs there in the Game's
     ///      storage context, so it walks foilDrainDay/foilCursor and writes the same
-    ///      traitBurnTicket buckets this module would have. When no foil drain is
+    ///      lvlTraitEntry buckets this module would have. When no foil drain is
     ///      pending (none ever bought, or every sealed bucket already drained) the foil
     ///      module is not invoked at all — the common advance carries no foil-module
     ///      dependency, gas, or brick surface.
@@ -892,20 +892,20 @@ contract DegenerusGameMintModule is
     /// @notice Purchase tickets and loot boxes for a buyer.
     /// @dev Delegatecalled by DegenerusGame. Handles payment routing, affiliates, and queues.
     /// @param buyer Recipient of the purchased items.
-    /// @param ticketQuantity Number of tickets to purchase (2 decimals, scaled by 100).
+    /// @param entryQuantityScaled Number of tickets to purchase (2 decimals, scaled by 100).
     /// @param lootBoxAmount ETH amount for loot boxes.
     /// @param affiliateCode Referral code for affiliate attribution.
     /// @param payKind Payment kind selector (ETH/claimable/combined).
     function purchase(
         address buyer,
-        uint256 ticketQuantity,
+        uint256 entryQuantityScaled,
         uint256 lootBoxAmount,
         bytes32 affiliateCode,
         MintPaymentKind payKind
     ) external payable {
         _purchaseFor(
             buyer,
-            ticketQuantity,
+            entryQuantityScaled,
             lootBoxAmount,
             affiliateCode,
             payKind
@@ -920,7 +920,7 @@ contract DegenerusGameMintModule is
     ///         delegatecall.
     function purchaseWith(
         address buyer,
-        uint256 ticketQuantity,
+        uint256 entryQuantityScaled,
         uint256 lootBoxAmount,
         bytes32 affiliateCode,
         MintPaymentKind payKind,
@@ -928,7 +928,7 @@ contract DegenerusGameMintModule is
     ) external payable {
         _purchaseForWith(
             buyer,
-            ticketQuantity,
+            entryQuantityScaled,
             lootBoxAmount,
             affiliateCode,
             payKind,
@@ -941,21 +941,21 @@ contract DegenerusGameMintModule is
     ///      phase, or the jackpot phase is live, with no RNG in flight. Outside that window FLIP ticket
     ///      purchases revert so bonus tickets and prize ETH accrue to real-ETH buyers.
     /// @param buyer Recipient of the purchased tickets.
-    /// @param ticketQuantity Number of tickets to purchase (2 decimals, scaled by 100).
+    /// @param entryQuantityScaled Number of tickets to purchase (2 decimals, scaled by 100).
     function redeemFlip(
         address buyer,
-        uint256 ticketQuantity
+        uint256 entryQuantityScaled
     ) external {
-        _redeemFlipFor(buyer, ticketQuantity);
+        _redeemFlipFor(buyer, entryQuantityScaled);
     }
 
     function _redeemFlipFor(
         address buyer,
-        uint256 ticketQuantity
+        uint256 entryQuantityScaled
     ) private {
         if (_livenessTriggered()) revert E();
 
-        if (ticketQuantity != 0) {
+        if (entryQuantityScaled != 0) {
             // FLIP purchase window: opens the first time a redeem lands once the prize target is met
             // in the purchase phase with no RNG in flight, latching a single warm slot-0 bit. It stays
             // open through the jackpot days and is cleared in the advance at the final jackpot day's RNG
@@ -985,7 +985,7 @@ contract DegenerusGameMintModule is
                 ,
             ) = _callTicketPurchase(
                     buyer,
-                    ticketQuantity,
+                    entryQuantityScaled,
                     MintPaymentKind.DirectEth,
                     true,
                     bytes32(0),
@@ -1018,7 +1018,7 @@ contract DegenerusGameMintModule is
 
             // Queue tickets on the captured adjusted quantity.
             if (adjustedQty32 != 0) {
-                _queueTicketsScaled(buyer, targetLevel, adjustedQty32, false);
+                _queueEntriesScaled(buyer, targetLevel, adjustedQty32, false);
             }
         }
     }
@@ -1161,7 +1161,7 @@ contract DegenerusGameMintModule is
             uint24 L = uint24(levels[i]);
             uint32 entries = uint32(quantities[i]) * 4;
             _removeFarFutureTickets(player, L, entries, queueIndices[i]);
-            _queueTickets(buyer, L, entries, false);
+            _queueEntries(buyer, L, entries, false);
             unchecked {
                 ++i;
             }
@@ -1185,8 +1185,8 @@ contract DegenerusGameMintModule is
 
         // Ticket leg = NORMAL recycled mint of `ticketWei` of current-level tickets from the player's
         // claimable (routes 90% next / 10% future + queues current tickets). Leftover (~ethCashWei) is
-        // the player's withdrawable cash. qty in purchase units (4 * TICKET_SCALE = 400 = one whole ticket).
-        uint256 qty = (ticketWei * 4 * TICKET_SCALE) / oneTicketWei;
+        // the player's withdrawable cash. qty in purchase units (4 * QTY_SCALE = 400 = one whole ticket).
+        uint256 qty = (ticketWei * 4 * QTY_SCALE) / oneTicketWei;
         _purchaseFor(player, qty, 0, bytes32(0), MintPaymentKind.Claimable);
 
         emit FarFutureSwap(player, buyer, len, totalBudget, ticketWei, ethCashWei, flipTokens);
@@ -1249,7 +1249,7 @@ contract DegenerusGameMintModule is
         uint256 idx
     ) internal {
         uint24 ffk = _tqFarFutureKey(L);
-        uint40 packed = ticketsOwedPacked[ffk][player];
+        uint40 packed = entriesOwedPacked[ffk][player];
         uint32 owed = uint32(packed >> 8);
         if (owed < entries) revert E(); // ownership / over-sell guard
         uint8 rem = uint8(packed);
@@ -1260,9 +1260,9 @@ contract DegenerusGameMintModule is
             uint256 lastPos = q.length - 1;
             if (idx != lastPos) q[idx] = q[lastPos];
             q.pop();
-            ticketsOwedPacked[ffk][player] = 0;
+            entriesOwedPacked[ffk][player] = 0;
         } else {
-            ticketsOwedPacked[ffk][player] = (uint40(newOwed) << 8) | uint40(rem);
+            entriesOwedPacked[ffk][player] = (uint40(newOwed) << 8) | uint40(rem);
         }
     }
 
@@ -1270,7 +1270,7 @@ contract DegenerusGameMintModule is
     ///      so external non-payable callers (e.g. claimable-only paths) never reference msg.value.
     function _purchaseFor(
         address buyer,
-        uint256 ticketQuantity,
+        uint256 entryQuantityScaled,
         uint256 lootBoxAmount,
         bytes32 affiliateCode,
         MintPaymentKind payKind
@@ -1280,7 +1280,7 @@ contract DegenerusGameMintModule is
             uint24 cachedLevel,
             uint256 priceWei,
             uint256 ticketCost
-        ) = _purchaseCostInputs(ticketQuantity);
+        ) = _purchaseCostInputs(entryQuantityScaled);
         // Single-tx path: cap fresh ETH at the mint cost and credit any overpay to the
         // payer's withdrawable afking, so excess never reverts or strands. The afking
         // ticket-buy path (purchaseWith) bypasses this, so it is unaffected.
@@ -1291,7 +1291,7 @@ contract DegenerusGameMintModule is
         if (msg.value > fresh) _creditAfkingValue(msg.sender, msg.value - fresh);
         _purchaseForWithCached(
             buyer,
-            ticketQuantity,
+            entryQuantityScaled,
             lootBoxAmount,
             affiliateCode,
             payKind,
@@ -1304,9 +1304,9 @@ contract DegenerusGameMintModule is
     }
 
     /// @dev Phase flag, level, whole-ticket price at the active purchase level, and the
-    ///      ticket cost of `ticketQuantity` — read and computed once per purchase, then
+    ///      ticket cost of `entryQuantityScaled` — read and computed once per purchase, then
     ///      threaded into _purchaseForWithCached so no caller recomputes them.
-    function _purchaseCostInputs(uint256 ticketQuantity)
+    function _purchaseCostInputs(uint256 entryQuantityScaled)
         private
         view
         returns (
@@ -1321,12 +1321,12 @@ contract DegenerusGameMintModule is
         priceWei = PriceLookupLib.priceForLevel(
             cachedJpFlag ? cachedLevel : cachedLevel + 1
         );
-        ticketCost = (priceWei * ticketQuantity) / (4 * TICKET_SCALE);
+        ticketCost = (priceWei * entryQuantityScaled) / (4 * QTY_SCALE);
     }
 
     function _purchaseForWith(
         address buyer,
-        uint256 ticketQuantity,
+        uint256 entryQuantityScaled,
         uint256 lootBoxAmount,
         bytes32 affiliateCode,
         MintPaymentKind payKind,
@@ -1337,10 +1337,10 @@ contract DegenerusGameMintModule is
             uint24 cachedLevel,
             uint256 priceWei,
             uint256 ticketCost
-        ) = _purchaseCostInputs(ticketQuantity);
+        ) = _purchaseCostInputs(entryQuantityScaled);
         _purchaseForWithCached(
             buyer,
-            ticketQuantity,
+            entryQuantityScaled,
             lootBoxAmount,
             affiliateCode,
             payKind,
@@ -1357,7 +1357,7 @@ contract DegenerusGameMintModule is
     ///      that read and this frame, so the values cannot have changed).
     function _purchaseForWithCached(
         address buyer,
-        uint256 ticketQuantity,
+        uint256 entryQuantityScaled,
         uint256 lootBoxAmount,
         bytes32 affiliateCode,
         MintPaymentKind payKind,
@@ -1377,7 +1377,7 @@ contract DegenerusGameMintModule is
 
         // Ticket-leg ETH-in (any funding source). The lootbox leg is carried by LootBoxBuy, so
         // the two events stay disjoint for off-chain ETH-in totals.
-        if (ticketCost != 0) emit TicketsBought(buyer, ticketQuantity, ticketCost);
+        if (ticketCost != 0) emit TicketsBought(buyer, entryQuantityScaled, ticketCost);
 
         uint256 initialClaimable = _claimableOf(buyer);
 
@@ -1441,7 +1441,7 @@ contract DegenerusGameMintModule is
                 ticketClaimableDraw
             ) = _callTicketPurchase(
                     buyer,
-                    ticketQuantity,
+                    entryQuantityScaled,
                     payKind,
                     false,
                     affiliateCode,
@@ -1634,7 +1634,7 @@ contract DegenerusGameMintModule is
 
         // --- Queue tickets ---
         if (adjustedQty != 0) {
-            _queueTicketsScaled(buyer, targetLevel, adjustedQty, false);
+            _queueEntriesScaled(buyer, targetLevel, adjustedQty, false);
         }
 
         // --- Lootbox EV score write (uses cached score). Affiliate legs are settled below by the
@@ -1771,14 +1771,14 @@ contract DegenerusGameMintModule is
     ///         the box leg is funded from the caller's claimable (a ledger move,
     ///         covered by the just-earned + banked credit gate).
     /// @param buyer Player receiving both legs (already operator-resolved by the entrypoint).
-    /// @param ticketQuantity Tickets to buy (0 to skip).
+    /// @param entryQuantityScaled Tickets to buy (0 to skip).
     /// @param lootBoxAmount ETH lootbox spend (0 to skip).
     /// @param affiliateCode Affiliate/referral code for the mint leg.
     /// @param payKind Payment method for the mint leg.
     /// @param boxAmount Requested presale-box ETH (>= PRESALE_BOX_MIN, claimable-funded).
     function buyLootboxAndPresaleBox(
         address buyer,
-        uint256 ticketQuantity,
+        uint256 entryQuantityScaled,
         uint256 lootBoxAmount,
         bytes32 affiliateCode,
         MintPaymentKind payKind,
@@ -1795,7 +1795,7 @@ contract DegenerusGameMintModule is
             uint24 cachedLevel,
             uint256 priceWei,
             uint256 ticketCost
-        ) = _purchaseCostInputs(ticketQuantity);
+        ) = _purchaseCostInputs(entryQuantityScaled);
         uint256 mintCost = ticketCost + lootBoxAmount;
         uint256 mintFresh = payKind == MintPaymentKind.Claimable
             ? 0
@@ -1803,7 +1803,7 @@ contract DegenerusGameMintModule is
         // Mint leg first: accrues the 25% presale-box credit that gates the box below.
         _purchaseForWithCached(
             buyer,
-            ticketQuantity,
+            entryQuantityScaled,
             lootBoxAmount,
             affiliateCode,
             payKind,
@@ -1978,7 +1978,7 @@ contract DegenerusGameMintModule is
                 targetLevel = cachedLevel + 1;
         }
         uint256 priceWei = PriceLookupLib.priceForLevel(targetLevel);
-        uint256 costWei = (priceWei * quantity) / (4 * TICKET_SCALE);
+        uint256 costWei = (priceWei * quantity) / (4 * QTY_SCALE);
         if (costWei == 0) revert E();
         if (costWei < TICKET_MIN_BUYIN_WEI) revert E();
 
@@ -2003,7 +2003,7 @@ contract DegenerusGameMintModule is
                     : costWei;
                 uint256 cappedQty = priceWei == 0
                     ? 0
-                    : ((cappedValue * 4 * TICKET_SCALE) / priceWei);
+                    : ((cappedValue * 4 * QTY_SCALE) / priceWei);
                 adjustedQuantity += (cappedQty * boostBps) / 10_000;
             }
         }
@@ -2011,11 +2011,11 @@ contract DegenerusGameMintModule is
 
         if (payInCoin) {
             uint256 coinCost = (quantity * (PRICE_COIN_UNIT / 4)) /
-                TICKET_SCALE;
+                QTY_SCALE;
             _coinReceive(buyer, coinCost);
 
             // MINT_FLIP quest units (the reward is credited by the caller).
-            uint32 questQty = uint32(quantity / (4 * TICKET_SCALE));
+            uint32 questQty = uint32(quantity / (4 * QTY_SCALE));
             if (questQty != 0) {
                 flipMintUnits += questQty;
             }
@@ -2068,12 +2068,12 @@ contract DegenerusGameMintModule is
                 : 0;
 
             uint256 coinCost = (quantity * (PRICE_COIN_UNIT / 4)) /
-                TICKET_SCALE;
+                QTY_SCALE;
             bonusCredit = coinCost / 10;
-            if (quantity >= 10 * 4 * TICKET_SCALE) {
+            if (quantity >= 10 * 4 * QTY_SCALE) {
                 bonusCredit +=
                     (quantity * PRICE_COIN_UNIT) /
-                    (40 * TICKET_SCALE);
+                    (40 * QTY_SCALE);
             }
         }
     }

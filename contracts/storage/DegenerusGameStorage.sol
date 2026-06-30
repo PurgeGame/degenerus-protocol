@@ -104,7 +104,7 @@ import {ActivityCurveLib} from "../libraries/ActivityCurveLib.sol";
  *    `unchecked` blocks in modules are intentional optimizations for safe ops.
  *
  * 6. MAPPING COLLISION: Mappings use keccak256(key . slot), making collisions
- *    computationally infeasible. The traitBurnTicket nested mapping uses
+ *    computationally infeasible. The lvlTraitEntry nested mapping uses
  *    keccak256(traitId . keccak256(level . slot)) for data location.
  *
  * UPGRADE NOTES
@@ -154,7 +154,7 @@ abstract contract DegenerusGameStorage {
 
     /// @dev Scale factor for fractional ticket calculations (2 decimal places).
     ///      100 means 1 ticket = 100 scaled units.
-    uint256 internal constant TICKET_SCALE = 100;
+    uint256 internal constant QTY_SCALE = 100;
 
     /// @dev ETH threshold for whale pass claim eligibility from lootbox wins.
     uint256 internal constant LOOTBOX_CLAIM_THRESHOLD = 5 ether;
@@ -434,8 +434,8 @@ abstract contract DegenerusGameStorage {
     uint48 internal lastVrfProcessedTimestamp;
 
     /// @dev Packed daily jackpot ticket data for two-phase execution.
-    ///      Layout: [counterStep (8 bits @ 0)] [dailyTicketUnits (64 bits @ 8)]
-    ///              [carryoverTicketUnits (64 bits @ 72)] [carryoverSourceOffset (8 bits @ 136)]
+    ///      Layout: [counterStep (8 bits @ 0)] [dailyEntries (64 bits @ 8)]
+    ///              [carryoverEntries (64 bits @ 72)] [carryoverSourceOffset (8 bits @ 136)]
     ///      Set during ETH phase, consumed during coin+ticket phase.
     ///      Gas optimization: allows splitting daily jackpot across multiple advanceGame calls.
     uint256 internal dailyTicketBudgetsPacked;
@@ -460,7 +460,7 @@ abstract contract DegenerusGameStorage {
     /// @dev Nested mapping: level -> trait ID (0-255) -> array of ticket holders.
     ///      Used for jackpot winner selection: random index into trait's array.
     ///
-    ///      STRUCTURE: traitBurnTicket[level][traitId] = address[]
+    ///      STRUCTURE: lvlTraitEntry[level][traitId] = address[]
     ///      Each burn adds the burner's address, allowing duplicate entries
     ///      (more burns = more tickets = higher win probability).
     ///
@@ -469,7 +469,7 @@ abstract contract DegenerusGameStorage {
     ///        - Each inner array has length at its slot, data at keccak256(slot)
     ///
     ///      SECURITY: Array growth bounded by total ticket supply per level.
-    mapping(uint24 => address[][256]) internal traitBurnTicket;
+    mapping(uint24 => address[][256]) internal lvlTraitEntry;
 
     /// @dev Bit-packed mint history per player.
     ///      Layout defined by constants in BitPackingLib and MintStreakUtils.
@@ -519,9 +519,9 @@ abstract contract DegenerusGameStorage {
 
     /// @dev Packed owed entries per level per player.
     ///      Layout: [32 bits owed][8 bits remainder].
-    ///      `owed` is denominated in ENTRIES (price/4 units; 1 entry = 1 minted NFT),
+    ///      `owed` is denominated in ENTRIES (each entry = price/4),
     ///      NOT whole tickets — 4 entries make one whole ticket (priceForLevel(level)).
-    mapping(uint24 => mapping(address => uint40)) internal ticketsOwedPacked;
+    mapping(uint24 => mapping(address => uint40)) internal entriesOwedPacked;
 
     /// @dev Cursor for ticket queue processing (dual-purpose).
     ///      - SETUP phase: tracks near-future level progress (1-4), reset to 0 when done.
@@ -630,86 +630,86 @@ abstract contract DegenerusGameStorage {
         return currentDay >= psd + 120;
     }
 
-    /// @dev Queues entries for a buyer at a target level. `quantity` is in entries
-    ///      (price/4 units; 1 entry = 1 minted NFT), NOT whole tickets — 4 entries per
+    /// @dev Queues entries for a buyer at a target level. The `entries` arg is in
+    ///      entry units (price/4 each), NOT whole tickets — 4 entries per
     ///      whole ticket. `owed` accumulates entries.
     ///      If buyer has no existing entries at that level, adds them to the queue.
     ///      Caps at uint32 max to prevent overflow.
     /// @param buyer Address to receive entries.
     /// @param targetLevel Level for which entries are queued.
-    /// @param quantity Number of entries to queue (price/4 units).
-    function _queueTickets(
+    /// @param entries Number of entries to queue (price/4 units).
+    function _queueEntries(
         address buyer,
         uint24 targetLevel,
-        uint32 quantity,
+        uint32 entries,
         bool rngBypass
     ) internal {
-        if (quantity == 0) return;
+        if (entries == 0) return;
         // No liveness gate here: tickets queued during the liveness-timeout window are harmless.
         // They are never processed (the game-over drain ends the game without a further daily
         // draw) or the resolving daily word has not been requested yet, so no terminal jackpot
         // can be manipulated by them. Player purchase paths gate liveness at their own entry; the
         // advance-chain daily-jackpot distribution also queues through this sink and must NOT be
         // reverted here, so the gate stays off the shared sink.
-        emit TicketsQueued(buyer, targetLevel, quantity);
+        emit TicketsQueued(buyer, targetLevel, entries);
         bool isFarFuture = targetLevel > level + 5;
         if (isFarFuture && rngLockedFlag && !rngBypass) revert RngLocked();
         uint24 wk = isFarFuture
             ? _tqFarFutureKey(targetLevel)
             : _tqWriteKey(targetLevel);
-        uint40 packed = ticketsOwedPacked[wk][buyer];
+        uint40 packed = entriesOwedPacked[wk][buyer];
         uint32 owed = uint32(packed >> 8);
         uint8 rem = uint8(packed);
         if (packed == 0) {
             ticketQueue[wk].push(buyer);
         }
         unchecked {
-            owed += quantity;
+            owed += entries;
         }
-        ticketsOwedPacked[wk][buyer] = (uint40(owed) << 8) | uint40(rem);
+        entriesOwedPacked[wk][buyer] = (uint40(owed) << 8) | uint40(rem);
     }
 
     /// @dev Converts a post-Bernoulli whole-ticket count into the entries unit the
-    ///      ticketsOwedPacked sink accumulates. One whole ticket (priceForLevel(level))
-    ///      is 4 entries (each price/4 = 1 minted NFT), so entries = wholeTickets << 2.
+    ///      entriesOwedPacked sink accumulates. One whole ticket (priceForLevel(level))
+    ///      is 4 entries (each = price/4), so entries = wholeTickets << 2.
     ///      The sole canonical whole->entries conversion both prize legs route through.
-    ///      `wholeTickets` is provably <= ~42.9M (scaledTickets/100, uint32-capped), so
+    ///      `wholeTickets` is provably <= ~42.9M (scaledWholeTickets/100, uint32-capped), so
     ///      `<< 2` <= ~171.8M fits uint32 (4.29e9) with a 25x margin — no overflow guard.
     /// @param wholeTickets Whole-ticket count (each = priceForLevel(level)).
-    /// @return Entries count (each = price/4 = 1 minted NFT); 4 per whole ticket.
+    /// @return Entries count (each = price/4); 4 per whole ticket.
     function wholeTicketsToEntries(uint32 wholeTickets) internal pure returns (uint32) {
         return wholeTickets << 2;
     }
 
     /// @dev Queues scaled entries (2 decimal places) for fractional purchases.
     ///      Handles remainder accumulation and promotes to a whole owed entry when
-    ///      remainder >= TICKET_SCALE.
+    ///      remainder >= QTY_SCALE.
     /// @param buyer Address to receive entries.
     /// @param targetLevel Level for which entries are queued.
-    /// @param quantityScaled Scaled entries (entries x 100); owed gains quantityScaled / TICKET_SCALE entries.
-    function _queueTicketsScaled(
+    /// @param entriesScaled Scaled entries (entries x 100); owed gains entriesScaled / QTY_SCALE entries.
+    function _queueEntriesScaled(
         address buyer,
         uint24 targetLevel,
-        uint32 quantityScaled,
+        uint32 entriesScaled,
         bool rngBypass
     ) internal {
-        if (quantityScaled == 0) return;
-        // No liveness gate (see _queueTickets): post-liveness queued tickets are harmless.
-        emit TicketsQueuedScaled(buyer, targetLevel, quantityScaled);
+        if (entriesScaled == 0) return;
+        // No liveness gate (see _queueEntries): post-liveness queued tickets are harmless.
+        emit TicketsQueuedScaled(buyer, targetLevel, entriesScaled);
         bool isFarFuture = targetLevel > level + 5;
         if (isFarFuture && rngLockedFlag && !rngBypass) revert RngLocked();
         uint24 wk = isFarFuture
             ? _tqFarFutureKey(targetLevel)
             : _tqWriteKey(targetLevel);
-        uint40 packed = ticketsOwedPacked[wk][buyer];
+        uint40 packed = entriesOwedPacked[wk][buyer];
         uint32 owed = uint32(packed >> 8);
         uint8 rem = uint8(packed);
         if (packed == 0) {
             ticketQueue[wk].push(buyer);
         }
 
-        uint32 whole = uint32(uint256(quantityScaled) / TICKET_SCALE);
-        uint8 frac = uint8(uint256(quantityScaled) % TICKET_SCALE);
+        uint32 whole = uint32(uint256(entriesScaled) / QTY_SCALE);
+        uint8 frac = uint8(uint256(entriesScaled) % QTY_SCALE);
         unchecked {
             owed += whole;
         }
@@ -719,17 +719,17 @@ abstract contract DegenerusGameStorage {
             unchecked {
                 newRem = uint16(rem) + uint16(frac);
             }
-            if (newRem >= TICKET_SCALE) {
+            if (newRem >= QTY_SCALE) {
                 unchecked {
                     owed += 1;
                 }
-                newRem -= uint16(TICKET_SCALE);
+                newRem -= uint16(QTY_SCALE);
             }
             rem = uint8(newRem);
         }
         uint40 newPacked = (uint40(owed) << 8) | uint40(rem);
         if (newPacked != packed) {
-            ticketsOwedPacked[wk][buyer] = newPacked;
+            entriesOwedPacked[wk][buyer] = newPacked;
         }
     }
 
@@ -738,16 +738,16 @@ abstract contract DegenerusGameStorage {
     /// @param buyer Address to receive tickets.
     /// @param startLevel First level in range (inclusive).
     /// @param numLevels Number of consecutive levels.
-    /// @param ticketsPerLevel Tickets to award per level.
-    function _queueTicketRange(
+    /// @param entriesPerLevel Tickets to award per level.
+    function _queueEntryRange(
         address buyer,
         uint24 startLevel,
         uint24 numLevels,
-        uint32 ticketsPerLevel,
+        uint32 entriesPerLevel,
         bool rngBypass
     ) internal {
-        // No liveness gate (see _queueTickets): post-liveness queued tickets are harmless.
-        emit TicketsQueuedRange(buyer, startLevel, numLevels, ticketsPerLevel);
+        // No liveness gate (see _queueEntries): post-liveness queued tickets are harmless.
+        emit TicketsQueuedRange(buyer, startLevel, numLevels, entriesPerLevel);
         // Loop-invariant slot-0 reads cached outside the loop (the body's mapping
         // SSTOREs block the optimizer from hoisting them; neither value has a
         // writer reachable from the body). The per-level lock check observes the
@@ -760,16 +760,16 @@ abstract contract DegenerusGameStorage {
             bool isFarFuture = lvl > currentLevel + 5;
             if (isFarFuture && rngLockedCached && !rngBypass) revert RngLocked();
             uint24 wk = isFarFuture ? _tqFarFutureKey(lvl) : (lvl | writeSlotBit);
-            uint40 packed = ticketsOwedPacked[wk][buyer];
+            uint40 packed = entriesOwedPacked[wk][buyer];
             uint32 owed = uint32(packed >> 8);
             uint8 rem = uint8(packed);
             if (packed == 0) {
                 ticketQueue[wk].push(buyer);
             }
             unchecked {
-                owed += ticketsPerLevel;
+                owed += entriesPerLevel;
             }
-            ticketsOwedPacked[wk][buyer] = (uint40(owed) << 8) | uint40(rem);
+            entriesOwedPacked[wk][buyer] = (uint40(owed) << 8) | uint40(rem);
 
             unchecked {
                 ++lvl;
@@ -1152,7 +1152,7 @@ abstract contract DegenerusGameStorage {
     // =========================================================================
 
     /// @dev Pending whale pass claims from large lootbox wins (>5 ETH).
-    ///      Stores number of half whale passes (100 tickets each = 50 levels × 2 tickets).
+    ///      Stores number of half whale passes (100 entries each = 100 levels × 1 entry per half-pass).
     ///      Unified storage for all deferred lootbox rewards (BAF, jackpot, decimator).
     mapping(address => uint256) internal whalePassClaims;
 
@@ -1291,11 +1291,11 @@ abstract contract DegenerusGameStorage {
     ///      and queues tickets for the 10-level range.
     /// @param player Address receiving the pass activation.
     /// @param ticketStartLevel First level of the 10-level range.
-    /// @param ticketsPerLevel Number of tickets to queue per level.
+    /// @param entriesPerLevel Number of tickets to queue per level.
     function _activate10LevelPass(
         address player,
         uint24 ticketStartLevel,
-        uint32 ticketsPerLevel
+        uint32 entriesPerLevel
     ) internal {
         uint256 prevData = mintPacked_[player];
 
@@ -1379,7 +1379,7 @@ abstract contract DegenerusGameStorage {
 
         mintPacked_[player] = data;
 
-        _queueTicketRange(player, ticketStartLevel, 10, ticketsPerLevel, false);
+        _queueEntryRange(player, ticketStartLevel, 10, entriesPerLevel, false);
     }
 
     /// @dev Apply whale pass stats (levelCount/freeze/passType/lastLevel/day) without queueing tickets.
@@ -1474,7 +1474,7 @@ abstract contract DegenerusGameStorage {
     ///      transition close (when purchaseStartDay is finally updated to
     ///      the new level's start), but _handleGameOverPath is unreachable
     ///      in that window (gated by !inJackpot && !lastPurchase at
-    ///      AdvanceModule:182), so a fire would deadlock _queueTickets calls
+    ///      AdvanceModule:182), so a fire would deadlock _queueEntries calls
     ///      with no path to clear rngLockedFlag. phaseTransitionActive is
     ///      implied by jackpotPhaseFlag throughout — they clear together at
     ///      AdvanceModule:328-331.
@@ -1751,10 +1751,10 @@ abstract contract DegenerusGameStorage {
     /// Packed layout (LSB → MSB):
     /// - [0]        mode (1=full ticket)
     /// - [1]        isRandom
-    /// - [2..33]    customTicket (packed 4×8-bit quadrants)
+    /// - [2..33]    customTraits (packed 4×8-bit quadrants)
     /// - [34..41]   ticketCount (uint8, used as "spin count" for Degenerette)
     /// - [42..43]   currency (0=ETH,1=FLIP,2=unsupported,3=WWXRP)
-    /// - [44..171]  amountPerTicket (uint128)
+    /// - [44..171]  amountPerSpin (uint128)
     /// - [172..219] RNG index (uint48)
     /// - [220..235] activity score bps (uint16)
     /// - [236]      hasCustom
@@ -1830,7 +1830,7 @@ abstract contract DegenerusGameStorage {
     // All decimator logic is consolidated into the DecimatorModule.
 
     /// @dev Player's decimator burn entry per level.
-    struct DecEntry {
+    struct DecBet {
         /// @notice Total FLIP burned by player this level (capped at uint192.max).
         uint192 burn;
         /// @notice Player's denominator choice (2-12), may improve to lower denom during level.
@@ -1862,8 +1862,8 @@ abstract contract DegenerusGameStorage {
     }
 
     /// @dev Player decimator entries per level.
-    ///      decBurn[lvl][player] = DecEntry
-    mapping(uint24 => mapping(address => DecEntry)) internal decBurn;
+    ///      decBurn[lvl][player] = DecBet
+    mapping(uint24 => mapping(address => DecBet)) internal decBurn;
 
     /// @dev Aggregated burn totals per level/denom/subbucket.
     ///      decBucketBurnTotal[lvl][denom][sub] = total burn in that subbucket.
@@ -1936,7 +1936,7 @@ abstract contract DegenerusGameStorage {
     ///      subBucket: deterministic from keccak256(player, level, bucket).
     ///      burnLevel: which level this entry belongs to (stale detection for lazy reset).
     ///      boosted: set once a final-day streak boost has been applied this level (one-time).
-    struct TerminalDecEntry {
+    struct TerminalDecBet {
         uint80 totalBurn;
         uint88 weightedBurn;
         uint8 bucket;
@@ -1944,7 +1944,7 @@ abstract contract DegenerusGameStorage {
         uint48 burnLevel;
         bool boosted;
     }
-    mapping(address => TerminalDecEntry) internal terminalDecEntries;
+    mapping(address => TerminalDecBet) internal terminalDecBets;
 
     /// @dev Per-bucket aggregates for terminal decimator.
     ///      Key: keccak256(abi.encode(level, denom, subBucket)) -> total weighted burn.

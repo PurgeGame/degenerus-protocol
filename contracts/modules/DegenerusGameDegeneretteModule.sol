@@ -131,8 +131,8 @@ contract DegenerusGameDegeneretteModule is
     /// @param player The reward recipient.
     /// @param betId Self-classifying id: bit 63 = box-origin sentinel, bits 62-60 = spin type
     ///        (0=WWXRP, 1=FLIP, 2=ETH), bits 59-0 = seed entropy (unique per box-spin).
-    /// @param packedSpins Per-spin reels packed low→high, each spin = [playerTicket:32 |
-    ///        resultTicket:32 | score:8] (72 bits, spin 0 lowest); bits 216-223 = spin count;
+    /// @param packedSpins Per-spin reels packed low→high, each spin = [playerTraits:32 |
+    ///        resultTraits:32 | score:8] (72 bits, spin 0 lowest); bits 216-223 = spin count;
     ///        bit 224 = FLIP survival flag (1 = the survival flip won; unused for WWXRP/ETH).
     /// @param payout Total reward: FLIP/WWXRP minted, or the ETH gross (= ethShare + the recirc).
     /// @param ethShare ETH credited to the player's claimable winnings (0 for WWXRP/FLIP). The
@@ -252,7 +252,7 @@ contract DegenerusGameDegeneretteModule is
     // Per-(N, hero-is-gold) Base Payout Tables (Full Ticket — honest lane, Option B)
     // -------------------------------------------------------------------------
     //
-    // Indexed by N = _countGoldQuadrants(playerTicket) ∈ {0..4} AND, on the honest
+    // Indexed by N = _countGoldQuadrants(playerTraits) ∈ {0..4} AND, on the honest
     // lane, by whether the hero quadrant is gold (Variant-2 couples color to symbol,
     // so hero-goldness shifts P(S)). Each table is calibrated against THAT sub-case's
     // Variant-2 score distribution P_(N,heroGold)(S) (color gated behind symbol,
@@ -377,10 +377,10 @@ contract DegenerusGameDegeneretteModule is
     // packed (uint256):
     // [0]        mode (1 bit): 1=full ticket
     // [1]        isRandom (1 bit): must be 0 (no random tickets)
-    // [2..33]    customTicket (32 bits): packed traits (required)
+    // [2..33]    customTraits (32 bits): packed traits (required)
     // [34..41]   ticketCount (8 bits): spin count (per-currency cap: ETH 25 / FLIP 15 / WWXRP 5)
     // [42..43]   currency (2 bits)
-    // [44..171]  amountPerTicket (128 bits)
+    // [44..171]  amountPerSpin (128 bits)
     // [172..219] index (48 bits)
     // [220..235] activityScore (16 bits)
     // [236]      hasCustom (1 bit): must be 1
@@ -418,7 +418,7 @@ contract DegenerusGameDegeneretteModule is
 
     /// @notice Places Full Ticket bets (4 traits, match-based payouts).
     /// @dev Single chosen-attribute ticket only (no random).
-    ///      ticketCount is treated as "spin count": each spin resolves independently but shares
+    ///      spinCount is treated as "spin count": each spin resolves independently but shares
     ///      the same lootbox RNG index/word (derived per spin).
     ///      The bet always belongs to `player` (zero address = caller). Funding source: the
     ///      player or an approved operator spends the player's funds; any other caller funds the
@@ -426,16 +426,16 @@ contract DegenerusGameDegeneretteModule is
     ///      its winnings). WWXRP is excluded from gifting (player-or-approved only).
     /// @param player The player the bet belongs to (use zero address for msg.sender).
     /// @param currency Currency type (0=ETH, 1=FLIP, 2=unsupported, 3=WWXRP).
-    /// @param amountPerTicket Bet amount per ticket.
-    /// @param ticketCount Number of spins (per-currency cap: ETH 25 / FLIP 15 / WWXRP 5).
-    /// @param customTicket Custom packed traits. Format: [D:24-31][C:16-23][B:8-15][A:0-7].
+    /// @param amountPerSpin Bet amount per ticket.
+    /// @param spinCount Number of spins (per-currency cap: ETH 25 / FLIP 15 / WWXRP 5).
+    /// @param customTraits Custom packed traits. Format: [D:24-31][C:16-23][B:8-15][A:0-7].
     /// @param heroQuadrant Hero quadrant (0-3) for payout boost. Required; inputs >= 4 (including 0xFF) revert with `InvalidBet`.
     function placeDegeneretteBet(
         address player,
         uint8 currency,
-        uint128 amountPerTicket,
-        uint8 ticketCount,
-        uint32 customTicket,
+        uint128 amountPerSpin,
+        uint8 spinCount,
+        uint32 customTraits,
         uint8 heroQuadrant
     ) external payable {
         if (player == address(0)) player = msg.sender;
@@ -453,9 +453,9 @@ contract DegenerusGameDegeneretteModule is
             player,
             funder,
             currency,
-            amountPerTicket,
-            ticketCount,
-            customTicket,
+            amountPerSpin,
+            spinCount,
+            customTraits,
             heroQuadrant
         );
     }
@@ -541,18 +541,18 @@ contract DegenerusGameDegeneretteModule is
         address player,
         address funder,
         uint8 currency,
-        uint128 amountPerTicket,
-        uint8 ticketCount,
-        uint32 customTicket,
+        uint128 amountPerSpin,
+        uint8 spinCount,
+        uint32 customTraits,
         uint8 heroQuadrant
     ) private {
         uint24 lvl = level;
         uint256 totalBet = _placeDegeneretteBetCore(
             player,
             currency,
-            amountPerTicket,
-            ticketCount,
-            customTicket,
+            amountPerSpin,
+            spinCount,
+            customTraits,
             heroQuadrant,
             lvl
         );
@@ -576,9 +576,9 @@ contract DegenerusGameDegeneretteModule is
     function _placeDegeneretteBetCore(
         address player,
         uint8 currency,
-        uint128 amountPerTicket,
-        uint8 ticketCount,
-        uint32 customTicket,
+        uint128 amountPerSpin,
+        uint8 spinCount,
+        uint32 customTraits,
         uint8 heroQuadrant,
         uint24 lvl
     ) private returns (uint256 totalBet) {
@@ -599,15 +599,15 @@ contract DegenerusGameDegeneretteModule is
         } else {
             revert UnsupportedCurrency();
         }
-        if (ticketCount == 0 || ticketCount > maxSpins) revert InvalidBet();
-        if (uint256(amountPerTicket) < minBet) revert InvalidBet();
+        if (spinCount == 0 || spinCount > maxSpins) revert InvalidBet();
+        if (uint256(amountPerSpin) < minBet) revert InvalidBet();
         if (heroQuadrant >= 4) revert InvalidBet();
 
         uint48 index = uint48(_lrRead(LR_INDEX_SHIFT, LR_INDEX_MASK));
         if (index == 0) revert NotStarted();
         if (lootboxRngWordByIndex[index] != 0) revert RngNotReady();
 
-        totalBet = uint256(amountPerTicket) * uint256(ticketCount);
+        totalBet = uint256(amountPerSpin) * uint256(spinCount);
         // Decay-aware effective quest streak (mirrors the DECSTREAK chokepoint fix): a streak
         // lapsed past its shields reads 0, so a returning-inactive player can't snapshot a
         // stale-high streak into the bet's activityScore (which scales the ETH ROI and the
@@ -620,10 +620,10 @@ contract DegenerusGameDegeneretteModule is
 
         // Pack the bet (isRandom=false, hasCustom=true always)
         uint256 packed = _packFullTicketBet(
-            customTicket,
-            ticketCount,
+            customTraits,
+            spinCount,
             currency,
-            amountPerTicket,
+            amountPerSpin,
             uint32(index),
             activityScore,
             heroQuadrant
@@ -642,7 +642,7 @@ contract DegenerusGameDegeneretteModule is
         if (currency == CURRENCY_ETH) {
             // Daily hero symbol tracking (heroQuadrant validated to {0..3} above)
             uint24 day = _simulatedDayIndex();
-            uint8 heroSymbol = uint8(customTicket >> (heroQuadrant * 8)) & 7;
+            uint8 heroSymbol = uint8(customTraits >> (heroQuadrant * 8)) & 7;
             uint256 wagerUnit = totalBet / 1e14;
             if (wagerUnit > 0) {
                 uint256 wPacked = dailyHeroWagers[day][heroQuadrant];
@@ -712,10 +712,10 @@ contract DegenerusGameDegeneretteModule is
         }
 
         // Decode packed bet
-        uint32 customTicket = uint32((packed >> FT_TICKET_SHIFT) & MASK_32);
-        uint8 ticketCount = uint8((packed >> FT_COUNT_SHIFT) & MASK_8);
+        uint32 customTraits = uint32((packed >> FT_TICKET_SHIFT) & MASK_32);
+        uint8 spinCount = uint8((packed >> FT_COUNT_SHIFT) & MASK_8);
         uint8 currency = uint8((packed >> FT_CURRENCY_SHIFT) & MASK_2);
-        uint128 amountPerTicket = uint128(
+        uint128 amountPerSpin = uint128(
             (packed >> FT_AMOUNT_SHIFT) & MASK_128
         );
         uint32 index = uint32((packed >> FT_INDEX_SHIFT) & MASK_32);
@@ -742,20 +742,20 @@ contract DegenerusGameDegeneretteModule is
             ? _wwxrpRoi(activityScore)
             : 0;
 
-        uint32 playerTicket = customTicket;
+        uint32 playerTraits = customTraits;
         // Gold-quadrant count is a pure function of the player's pick — identical
         // for every spin of this bet, so it is computed once here.
-        uint8 goldCount = _countGoldQuadrants(playerTicket);
+        uint8 goldCount = _countGoldQuadrants(playerTraits);
         // Honest-lane payout selector: is the hero quadrant's color gold (bits 5-3 == 7)?
         // Constant for the bet (same pick + hero), so computed once with goldCount.
-        bool heroIsGold = ((playerTicket >> (heroQuadrant * 8 + 3)) & 7) == 7;
+        bool heroIsGold = ((playerTraits >> (heroQuadrant * 8 + 3)) & 7) == 7;
 
         uint256 totalPayout;
-        uint32 firstResultTicket;
+        uint32 firstResultTraits;
         // Lootbox-share summed across THIS bet's spins → one box per betId.
         uint256 betLootboxShare;
 
-        for (uint8 spinIdx; spinIdx < ticketCount; ) {
+        for (uint8 spinIdx; spinIdx < spinCount; ) {
             // Spin results are derived deterministically from the lootbox RNG word + index.
             // Spin 0 uses a shorter preimage (no spinIdx mixed in) to produce a distinct seed.
             uint256 resultSeed = spinIdx == 0
@@ -772,33 +772,33 @@ contract DegenerusGameDegeneretteModule is
                         )
                     )
                 );
-            uint32 resultTicket = DegenerusTraitUtils.packedTraitsDegenerette(
+            uint32 resultTraits = DegenerusTraitUtils.packedTraitsDegenerette(
                 resultSeed
             );
             // WWXRP-only reel rig (R2): lift one unmatched score-bearing cell to a real
             // match (60%) when >= 2 cells miss, so the displayed reel and the scored
             // result agree. A no-op for ETH/FLIP (and for WWXRP full / 1-off reels).
             if (currency == CURRENCY_WWXRP) {
-                resultTicket = _rigWwxrpResult(
-                    playerTicket,
-                    resultTicket,
+                resultTraits = _rigWwxrpResult(
+                    playerTraits,
+                    resultTraits,
                     heroQuadrant,
                     EntropyLib.hash2(resultSeed, WWXRP_RIG_SALT)
                 );
             }
             if (spinIdx == 0) {
-                firstResultTicket = resultTicket;
+                firstResultTraits = resultTraits;
             }
 
             // Score this spin: Variant-2 (color gated behind symbol, hero +2), S ∈ {0..9}
-            uint8 s = _score(playerTicket, resultTicket, heroQuadrant);
+            uint8 s = _score(playerTraits, resultTraits, heroQuadrant);
 
             // Calculate payout (dispatches on the per-N score table)
-            uint256 payout = _fullTicketPayout(
+            uint256 payout = _degenerettePayout(
                 goldCount,
                 s,
                 currency,
-                amountPerTicket,
+                amountPerSpin,
                 roiBps,
                 wwxrpHighRoi,
                 heroIsGold
@@ -808,7 +808,7 @@ contract DegenerusGameDegeneretteModule is
                 player,
                 betId,
                 spinIdx,
-                playerTicket,
+                playerTraits,
                 s,
                 payout
             );
@@ -822,7 +822,7 @@ contract DegenerusGameDegeneretteModule is
                 betLootboxShare += _distributePayout(
                     player,
                     currency,
-                    amountPerTicket,
+                    amountPerSpin,
                     payout,
                     acc
                 );
@@ -832,7 +832,7 @@ contract DegenerusGameDegeneretteModule is
             // _awardDegeneretteDgnrs reads poolBalance fresh per call, so summing
             // off a stale balance would change the payout.
             if (currency == CURRENCY_ETH && s >= 7) {
-                _awardDegeneretteDgnrs(player, amountPerTicket, s);
+                _awardDegeneretteDgnrs(player, amountPerSpin, s);
             }
 
             // First WWXRP jackpot in this level/10 bracket grants the bettor one
@@ -842,7 +842,7 @@ contract DegenerusGameDegeneretteModule is
             if (
                 s == 9 &&
                 currency == CURRENCY_WWXRP &&
-                amountPerTicket >= MIN_BET_WWXRP
+                amountPerSpin >= MIN_BET_WWXRP
             ) {
                 uint256 bracket = uint256(level) / 10;
                 if (!wwxrpJackpotWhalePassBracketAwarded[bracket]) {
@@ -893,9 +893,9 @@ contract DegenerusGameDegeneretteModule is
         emit FullTicketResolved(
             player,
             betId,
-            ticketCount,
+            spinCount,
             totalPayout,
-            firstResultTicket
+            firstResultTraits
         );
     }
 
@@ -1041,20 +1041,20 @@ contract DegenerusGameDegeneretteModule is
     ///      set; the 2-bit quadrant field at FT_HERO_SHIFT + 1 encodes the
     ///      quadrant.
     function _packFullTicketBet(
-        uint32 customTicket,
-        uint8 ticketCount,
+        uint32 customTraits,
+        uint8 spinCount,
         uint8 currency,
-        uint128 amountPerTicket,
+        uint128 amountPerSpin,
         uint32 index,
         uint16 activityScore,
         uint8 heroQuadrant
     ) private pure returns (uint256 packed) {
         packed =
             uint256(MODE_FULL_TICKET) |
-            (uint256(customTicket) << FT_TICKET_SHIFT) |
-            (uint256(ticketCount) << FT_COUNT_SHIFT) |
+            (uint256(customTraits) << FT_TICKET_SHIFT) |
+            (uint256(spinCount) << FT_COUNT_SHIFT) |
             (uint256(currency) << FT_CURRENCY_SHIFT) |
-            (uint256(amountPerTicket) << FT_AMOUNT_SHIFT) |
+            (uint256(amountPerSpin) << FT_AMOUNT_SHIFT) |
             (uint256(index) << FT_INDEX_SHIFT) |
             (uint256(activityScore) << FT_ACTIVITY_SHIFT) |
             (uint256(1) << FT_HAS_CUSTOM_SHIFT);
@@ -1072,12 +1072,12 @@ contract DegenerusGameDegeneretteModule is
     ///      Color tier occupies bits 5-3 of each per-quadrant byte; gold is the
     ///      strict equality `color == 7` (not `>= 7`). Returns N ∈ {0..4} —
     ///      the index for per-N payout / hero / WWXRP factor table dispatch.
-    /// @param ticket The packed player ticket (uint32, [QQ][CCC][SSS] per byte).
+    /// @param traits The packed player traits (uint32, [QQ][CCC][SSS] per byte).
     /// @return count Number of gold quadrants (0..4).
-    function _countGoldQuadrants(uint32 ticket) private pure returns (uint8 count) {
+    function _countGoldQuadrants(uint32 traits) private pure returns (uint8 count) {
         unchecked {
             for (uint8 q = 0; q < 4; ++q) {
-                uint8 color = uint8((ticket >> (q * 8 + 3)) & 7);
+                uint8 color = uint8((traits >> (q * 8 + 3)) & 7);
                 if (color == 7) ++count;
             }
         }
@@ -1094,18 +1094,18 @@ contract DegenerusGameDegeneretteModule is
     ///      all-8-axes event — byte-identical odds/pin to the old M=8 jackpot. The pay
     ///      floor S≥2 is NOT enforced here; it lives in the payout SHAPE (S=0,1 pay 0
     ///      in the constants, DEC-03) — `_score` returns the raw 0..9 score.
-    /// @param playerTicket The player's ticket (packed traits).
-    /// @param resultTicket The result ticket (packed traits).
+    /// @param playerTraits The player's ticket (packed traits).
+    /// @param resultTraits The result ticket (packed traits).
     /// @param heroQuadrant The always-on hero quadrant (0..3) whose symbol scores +2.
     /// @return s Composite score (0-9).
     function _score(
-        uint32 playerTicket,
-        uint32 resultTicket,
+        uint32 playerTraits,
+        uint32 resultTraits,
         uint8 heroQuadrant
     ) private pure returns (uint8 s) {
         for (uint8 q = 0; q < 4; ) {
-            uint8 pQuad = uint8(playerTicket >> (q * 8));
-            uint8 rQuad = uint8(resultTicket >> (q * 8));
+            uint8 pQuad = uint8(playerTraits >> (q * 8));
+            uint8 rQuad = uint8(resultTraits >> (q * 8));
 
             // Symbol = bits 2-0. A symbol match scores +1 (hero quadrant +2). The
             // quadrant's COLOR (bits 5-3) scores +1 ONLY IF the symbol also matched
@@ -1193,7 +1193,7 @@ contract DegenerusGameDegeneretteModule is
     /// @param wwxrpHighRoi The WWXRP total-RTP target (0 if not WWXRP).
     /// @param heroIsGold Whether the player's hero quadrant is gold (honest-lane selector).
     /// @return payout The payout amount.
-    function _fullTicketPayout(
+    function _degenerettePayout(
         uint8 N,
         uint8 s,
         uint8 currency,
@@ -1389,28 +1389,28 @@ contract DegenerusGameDegeneretteModule is
     ///      hero symbol and/or no-op colors), the eligible count u == 0 — no lift this
     ///      round (and the `% u` pick is guarded against div-by-zero). Caps at M=7, so a
     ///      fired roll has M <= 6 -> post-force M <= 7 -> S <= 8: the rig can NEVER make
-    ///      S=9 (P(S=9) invariant). Rewrites `resultTicket` so the displayed reel honestly
+    ///      S=9 (P(S=9) invariant). Rewrites `resultTraits` so the displayed reel honestly
     ///      shows the forced match; `_score` then reads the lifted score. `rigSeed` is a
     ///      frozen, reel-independent hash of the spin seed. Matches the generator's
     ///      `p_score_distribution_rigged` per-pick +1/+2 model.
-    /// @param playerTicket The player's (or box-spin's) ticket.
-    /// @param resultTicket The drawn result reel.
+    /// @param playerTraits The player's (or box-spin's) ticket.
+    /// @param resultTraits The drawn result reel.
     /// @param heroQuadrant The hero quadrant (0..3) whose SYMBOL is excluded from the rig pool.
     /// @param rigSeed Reel-independent rig entropy (gate + cell pick).
     /// @return rigged The (possibly modified) result ticket.
     function _rigWwxrpResult(
-        uint32 playerTicket,
-        uint32 resultTicket,
+        uint32 playerTraits,
+        uint32 resultTraits,
         uint8 heroQuadrant,
         uint256 rigSeed
     ) private pure returns (uint32 rigged) {
-        rigged = resultTicket;
+        rigged = resultTraits;
         // Pass 1: count matched axes (M, all 8) and SCORE-BEARING eligible cells (u).
         uint8 m;
         uint8 u;
         for (uint8 q; q < 4; ) {
-            uint8 pq = uint8(playerTicket >> (q * 8));
-            uint8 rq = uint8(resultTicket >> (q * 8));
+            uint8 pq = uint8(playerTraits >> (q * 8));
+            uint8 rq = uint8(resultTraits >> (q * 8));
             bool colorMatch = ((pq >> 3) & 7) == ((rq >> 3) & 7);
             bool symMatch = (pq & 7) == (rq & 7);
             if (colorMatch) ++m;
@@ -1438,8 +1438,8 @@ contract DegenerusGameDegeneretteModule is
         // Pass 2: walk the SAME fixed order with the SAME pass-1 eligibility predicates so
         // the pick index lines up; force the pick-th score-bearing cell.
         for (uint8 q; q < 4; ) {
-            uint8 pq = uint8(playerTicket >> (q * 8));
-            uint8 rq = uint8(resultTicket >> (q * 8));
+            uint8 pq = uint8(playerTraits >> (q * 8));
+            uint8 rq = uint8(resultTraits >> (q * 8));
             bool colorMatch = ((pq >> 3) & 7) == ((rq >> 3) & 7);
             bool symMatch = (pq & 7) == (rq & 7);
             // (b) eligible color: symbol already matched, color unmatched (incl. hero color).
@@ -1540,7 +1540,7 @@ contract DegenerusGameDegeneretteModule is
     uint8 private constant BOX_SPIN_TYPE_FLIP = 1;
     uint8 private constant BOX_SPIN_TYPE_ETH = 2;
     // BoxSpin.packedSpins layout: spin i occupies bits [i*72 .. i*72+71] as
-    // [playerTicket:32 | resultTicket:32 | score:8]; bits 216-223 = spin count; bit 224 = survived.
+    // [playerTraits:32 | resultTraits:32 | score:8]; bits 216-223 = spin count; bit 224 = survived.
     uint256 private constant BOX_SPIN_COUNT_SHIFT = 216;
     uint256 private constant BOX_SPIN_SURVIVED_SHIFT = 224;
 
@@ -1556,13 +1556,13 @@ contract DegenerusGameDegeneretteModule is
     ///      result ticket, score. OR the returned word into the accumulator.
     function _packSpin(
         uint256 i,
-        uint32 playerTicket,
-        uint32 resultTicket,
+        uint32 playerTraits,
+        uint32 resultTraits,
         uint8 score
     ) private pure returns (uint256) {
         return
-            (uint256(playerTicket) |
-                (uint256(resultTicket) << 32) |
+            (uint256(playerTraits) |
+                (uint256(resultTraits) << 32) |
                 (uint256(score) << 64)) << (i * 72);
     }
 
@@ -1576,7 +1576,7 @@ contract DegenerusGameDegeneretteModule is
         uint256 stake,
         uint16 activityScore,
         uint256 seed,
-        uint32 customTicket
+        uint32 customTraits
     ) external payable {
         if (address(this) != ContractAddresses.GAME) revert OnlyDelegatecall();
         if (stake == 0 || stake > type(uint128).max) return;
@@ -1586,30 +1586,30 @@ contract DegenerusGameDegeneretteModule is
         uint256 wwxrpHighRoi = _wwxrpRoi(activityScore);
 
         uint8 heroQuadrant = uint8(seed & MASK_2);
-        uint32 playerTicket = customTicket != 0
-            ? customTicket
+        uint32 playerTraits = customTraits != 0
+            ? customTraits
             : DegenerusTraitUtils.packedTraitsDegenerette(seed);
-        uint32 resultTicket = DegenerusTraitUtils.packedTraitsDegenerette(
+        uint32 resultTraits = DegenerusTraitUtils.packedTraitsDegenerette(
             EntropyLib.hash2(seed, 1)
         );
         // WWXRP reel rig (identical to a regular WWXRP bet spin, R2): lift one unmatched
         // score-bearing cell to a real match (60%) when >= 2 cells miss. The emitted
         // BoxSpin packs the rigged reel, so the displayed result and the score agree.
-        resultTicket = _rigWwxrpResult(
-            playerTicket,
-            resultTicket,
+        resultTraits = _rigWwxrpResult(
+            playerTraits,
+            resultTraits,
             heroQuadrant,
             EntropyLib.hash2(seed, WWXRP_RIG_SALT)
         );
-        uint8 s = _score(playerTicket, resultTicket, heroQuadrant);
-        uint256 payout = _fullTicketPayout(
-            _countGoldQuadrants(playerTicket),
+        uint8 s = _score(playerTraits, resultTraits, heroQuadrant);
+        uint256 payout = _degenerettePayout(
+            _countGoldQuadrants(playerTraits),
             s,
             CURRENCY_WWXRP,
             betAmount,
             roiBps,
             wwxrpHighRoi,
-            ((playerTicket >> (heroQuadrant * 8 + 3)) & 7) == 7
+            ((playerTraits >> (heroQuadrant * 8 + 3)) & 7) == 7
         );
 
         if (payout != 0) wwxrp.mintPrize(player, payout);
@@ -1629,7 +1629,7 @@ contract DegenerusGameDegeneretteModule is
         emit BoxSpin(
             player,
             betId,
-            _packSpin(0, playerTicket, resultTicket, s) |
+            _packSpin(0, playerTraits, resultTraits, s) |
                 (uint256(1) << BOX_SPIN_COUNT_SHIFT),
             payout,
             0
@@ -1645,7 +1645,7 @@ contract DegenerusGameDegeneretteModule is
         uint256 totalStake,
         uint16 activityScore,
         uint256 seed,
-        uint32 customTicket
+        uint32 customTraits
     ) external payable {
         if (address(this) != ContractAddresses.GAME) revert OnlyDelegatecall();
         if (totalStake == 0) return;
@@ -1658,26 +1658,26 @@ contract DegenerusGameDegeneretteModule is
         uint256 packedSpins;
         for (uint256 i; i < BOX_FLIP_SPINS; ) {
             uint256 ss = EntropyLib.hash2(seed, i);
-            uint32 playerTicket = customTicket != 0
-                ? customTicket
+            uint32 playerTraits = customTraits != 0
+                ? customTraits
                 : DegenerusTraitUtils.packedTraitsDegenerette(ss);
-            uint32 resultTicket = DegenerusTraitUtils.packedTraitsDegenerette(
+            uint32 resultTraits = DegenerusTraitUtils.packedTraitsDegenerette(
                 EntropyLib.hash2(ss, 1)
             );
             // Hoist the hero quadrant to a named local so _score and the heroIsGold
             // derivation read the same value.
             uint8 heroQuadrant = uint8(ss & MASK_2);
-            uint8 s = _score(playerTicket, resultTicket, heroQuadrant);
-            total += _fullTicketPayout(
-                _countGoldQuadrants(playerTicket),
+            uint8 s = _score(playerTraits, resultTraits, heroQuadrant);
+            total += _degenerettePayout(
+                _countGoldQuadrants(playerTraits),
                 s,
                 CURRENCY_FLIP,
                 perSpin,
                 roiBps,
                 0,
-                ((playerTicket >> (heroQuadrant * 8 + 3)) & 7) == 7
+                ((playerTraits >> (heroQuadrant * 8 + 3)) & 7) == 7
             );
-            packedSpins |= _packSpin(i, playerTicket, resultTicket, s);
+            packedSpins |= _packSpin(i, playerTraits, resultTraits, s);
             unchecked {
                 ++i;
             }
@@ -1707,7 +1707,7 @@ contract DegenerusGameDegeneretteModule is
         uint256 stake,
         uint16 activityScore,
         uint256 seed,
-        uint32 customTicket
+        uint32 customTraits
     ) external payable {
         if (address(this) != ContractAddresses.GAME) revert OnlyDelegatecall();
         if (stake == 0 || stake > type(uint128).max) return;
@@ -1715,27 +1715,27 @@ contract DegenerusGameDegeneretteModule is
         uint128 betAmount = uint128(stake);
         uint256 roiBps = _roiBpsFromScore(activityScore);
 
-        uint32 playerTicket = customTicket != 0
-            ? customTicket
+        uint32 playerTraits = customTraits != 0
+            ? customTraits
             : DegenerusTraitUtils.packedTraitsDegenerette(seed);
-        uint32 resultTicket = DegenerusTraitUtils.packedTraitsDegenerette(
+        uint32 resultTraits = DegenerusTraitUtils.packedTraitsDegenerette(
             EntropyLib.hash2(seed, 1)
         );
         // Hoist the hero quadrant to a named local so _score and the heroIsGold
         // derivation read the same value.
         uint8 heroQuadrant = uint8(seed & MASK_2);
-        uint8 s = _score(playerTicket, resultTicket, heroQuadrant);
-        uint256 payout = _fullTicketPayout(
-            _countGoldQuadrants(playerTicket),
+        uint8 s = _score(playerTraits, resultTraits, heroQuadrant);
+        uint256 payout = _degenerettePayout(
+            _countGoldQuadrants(playerTraits),
             s,
             CURRENCY_ETH,
             betAmount,
             roiBps,
             0,
-            ((playerTicket >> (heroQuadrant * 8 + 3)) & 7) == 7
+            ((playerTraits >> (heroQuadrant * 8 + 3)) & 7) == 7
         );
 
-        uint256 packed = _packSpin(0, playerTicket, resultTicket, s) |
+        uint256 packed = _packSpin(0, playerTraits, resultTraits, s) |
             (uint256(1) << BOX_SPIN_COUNT_SHIFT);
         if (payout == 0) {
             emit BoxSpin(player, betId, packed, 0, 0);

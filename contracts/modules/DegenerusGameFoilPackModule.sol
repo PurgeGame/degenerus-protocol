@@ -224,10 +224,10 @@ contract DegenerusGameFoilPackModule is
 
         // Ten whole tickets' worth of mint units — the pack costs ten ticket prices, so it
         // records the same units a ten-whole-ticket purchase would, in the ticket leg's
-        // quantity scale (one whole ticket = 4 * TICKET_SCALE units). Via the shared
+        // quantity scale (one whole ticket = 4 * QTY_SCALE units). Via the shared
         // _recordMintData. Runs before the quest + boost so the units feed the activity
         // score exactly like a ten-ticket purchase.
-        _recordMintData(buyer, lvl, uint32(FOIL_PACK_TICKETS * 4 * TICKET_SCALE));
+        _recordMintData(buyer, lvl, uint32(FOIL_PACK_TICKETS * 4 * QTY_SCALE));
 
         // Affiliate, 20% fresh / 5% recycle exactly like a normal ticket mint: the fresh
         // portion (ethUsed) at the fresh rate, the claimable portion (remaining) at the
@@ -631,8 +631,8 @@ contract DegenerusGameFoilPackModule is
 
     /// @dev Delegatecall one of the Degenerette box-spin resolvers in the Game's
     ///      storage context. The three resolvers share a single (player, stake,
-    ///      activityScore, seed, customTicket) shape, so one helper covers every
-    ///      currency. `customTicket` is the matched foil line, so the spin plays the
+    ///      activityScore, seed, customTraits) shape, so one helper covers every
+    ///      currency. `customTraits` is the matched foil line, so the spin plays the
     ///      exact ticket that won (a non-zero value bypasses seed-derived generation).
     function _foilSpin(
         bytes4 selector,
@@ -640,7 +640,7 @@ contract DegenerusGameFoilPackModule is
         uint256 stake,
         uint16 activityScore,
         uint256 seed,
-        uint32 customTicket
+        uint32 customTraits
     ) private {
         (bool ok, ) = ContractAddresses.GAME_DEGENERETTE_MODULE.delegatecall(
             abi.encodeWithSelector(
@@ -649,7 +649,7 @@ contract DegenerusGameFoilPackModule is
                 stake,
                 activityScore,
                 seed,
-                customTicket
+                customTraits
             )
         );
         if (!ok) revert EmptyRevert();
@@ -664,7 +664,7 @@ contract DegenerusGameFoilPackModule is
     /// @dev Delegatecall-only entry, invoked by the mint module's processTicketBatch
     ///      once the normal queue is drained (and only when _foilDrainPending). Runs in
     ///      the Game's storage context, so it reads/writes the same
-    ///      foilBuyers/foilDrainDay/foilCursor/foilRecord and the traitBurnTicket
+    ///      foilBuyers/foilDrainDay/foilCursor/foilRecord and the lvlTraitEntry
     ///      buckets the jackpot samples.
     /// @param room The leftover write budget for this batch.
     /// @return done True iff the foil drain has caught up (no sealed bucket remains).
@@ -773,13 +773,13 @@ contract DegenerusGameFoilPackModule is
             if (counts[tD]++ == 0) touchedTraits[touchedLen++] = tD;
         }
 
-        // Batch-write the sixteen entries into traitBurnTicket[lvl][traitId], one
+        // Batch-write the sixteen entries into lvlTraitEntry[lvl][traitId], one
         // length update per distinct trait. Mirrors the mint module's batch writer;
         // re-zeroes the shared scratch so the next buyer starts clean.
         uint256 levelSlot;
         assembly ("memory-safe") {
             mstore(0x00, lvl)
-            mstore(0x20, traitBurnTicket.slot)
+            mstore(0x20, lvlTraitEntry.slot)
             levelSlot := keccak256(0x00, 0x40)
         }
         for (uint16 u; u < touchedLen; ) {

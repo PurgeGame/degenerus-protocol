@@ -210,13 +210,13 @@ interface IDegenerusGameWhaleModule {
 interface IDegenerusGameMintModule {
     /// @notice Processes a ticket and lootbox purchase
     /// @param buyer Address of the buyer
-    /// @param ticketQuantity Number of tickets to purchase
+    /// @param entryQuantityScaled Number of tickets to purchase
     /// @param lootBoxAmount Amount of lootboxes to purchase
     /// @param affiliateCode Affiliate code for referral tracking
     /// @param payKind Payment method used for the purchase
     function purchase(
         address buyer,
-        uint256 ticketQuantity,
+        uint256 entryQuantityScaled,
         uint256 lootBoxAmount,
         bytes32 affiliateCode,
         MintPaymentKind payKind
@@ -229,7 +229,7 @@ interface IDegenerusGameMintModule {
     ///         not revert the delegatecall.
     function purchaseWith(
         address buyer,
-        uint256 ticketQuantity,
+        uint256 entryQuantityScaled,
         uint256 lootBoxAmount,
         bytes32 affiliateCode,
         MintPaymentKind payKind,
@@ -238,10 +238,10 @@ interface IDegenerusGameMintModule {
 
     /// @notice Processes a FLIP purchase of tickets
     /// @param buyer Address of the buyer
-    /// @param ticketQuantity Number of tickets to purchase
+    /// @param entryQuantityScaled Number of tickets to purchase
     function redeemFlip(
         address buyer,
-        uint256 ticketQuantity
+        uint256 entryQuantityScaled
     ) external;
 
     /// @notice Sells far-future ticket entries to sDGNRS for current-level tickets + cash (-EV).
@@ -279,14 +279,14 @@ interface IDegenerusGameMintModule {
 
     /// @notice Buys a mint leg AND a presale box in one tx sharing one RNG index
     /// @param buyer Player receiving both legs
-    /// @param ticketQuantity Tickets to buy
+    /// @param entryQuantityScaled Tickets to buy
     /// @param lootBoxAmount ETH lootbox spend
     /// @param affiliateCode Affiliate code for the mint leg
     /// @param payKind Payment method for the mint leg
     /// @param boxAmount Requested presale-box ETH (claimable-funded)
     function buyLootboxAndPresaleBox(
         address buyer,
-        uint256 ticketQuantity,
+        uint256 entryQuantityScaled,
         uint256 lootBoxAmount,
         bytes32 affiliateCode,
         MintPaymentKind payKind,
@@ -419,16 +419,16 @@ interface IDegenerusGameDegeneretteModule {
     /// @notice Places Full Ticket bets (4 traits, match-based payouts)
     /// @param player The player address (use zero address for msg.sender)
     /// @param currency Currency type (0=ETH, 1=FLIP, 2=unsupported, 3=WWXRP)
-    /// @param amountPerTicket Bet amount per ticket
-    /// @param ticketCount Number of spins (1..10). Each spin resolves independently.
-    /// @param customTicket Custom packed traits
+    /// @param amountPerSpin Bet amount per ticket
+    /// @param spinCount Number of spins (1..10). Each spin resolves independently.
+    /// @param customTraits Custom packed traits
     /// @param heroQuadrant Hero quadrant (0-3) for payout boost, or 0xFF for no hero
     function placeDegeneretteBet(
         address player,
         uint8 currency,
-        uint128 amountPerTicket,
-        uint8 ticketCount,
-        uint32 customTicket,
+        uint128 amountPerSpin,
+        uint8 spinCount,
+        uint32 customTraits,
         uint8 heroQuadrant
     ) external payable;
 
@@ -445,13 +445,13 @@ interface IDegenerusGameDegeneretteModule {
     /// @param stake The WWXRP bet amount staked for the one spin.
     /// @param activityScore Frozen activity-score bps from the box's commitment.
     /// @param seed Domain-separated spin seed (hash2-tagged off the box seed).
-    /// @param customTicket Pre-chosen player ticket, or 0 to derive one from seed.
+    /// @param customTraits Pre-chosen player ticket, or 0 to derive one from seed.
     function resolveWwxrpSpinFromBox(
         address player,
         uint256 stake,
         uint16 activityScore,
         uint256 seed,
-        uint32 customTicket
+        uint32 customTraits
     ) external payable;
 
     /// @notice Resolve a lootbox roll as three FLIP Degenerette spins under one survival flip.
@@ -459,13 +459,13 @@ interface IDegenerusGameDegeneretteModule {
     /// @param totalStake The total FLIP budget split across the three spins.
     /// @param activityScore Frozen activity-score bps from the box's commitment.
     /// @param seed Domain-separated spin seed (hash2-tagged off the box seed).
-    /// @param customTicket Pre-chosen player ticket, or 0 to derive one from seed.
+    /// @param customTraits Pre-chosen player ticket, or 0 to derive one from seed.
     function resolveFlipSpinsFromBox(
         address player,
         uint256 totalStake,
         uint16 activityScore,
         uint256 seed,
-        uint32 customTicket
+        uint32 customTraits
     ) external payable;
 
     /// @notice Resolve a lootbox roll as one ETH Degenerette spin (claimable + recirc split).
@@ -473,13 +473,13 @@ interface IDegenerusGameDegeneretteModule {
     /// @param stake The ETH bet amount for the one spin (the ticket budget it replaces).
     /// @param activityScore Frozen activity-score bps from the box's commitment.
     /// @param seed Domain-separated spin seed (hash2-tagged off the box seed).
-    /// @param customTicket Pre-chosen player ticket, or 0 to derive one from seed.
+    /// @param customTraits Pre-chosen player ticket, or 0 to derive one from seed.
     function resolveEthSpinFromBox(
         address player,
         uint256 stake,
         uint16 activityScore,
         uint256 seed,
-        uint32 customTicket
+        uint32 customTraits
     ) external payable;
 }
 
@@ -490,7 +490,7 @@ interface IDegenerusGameBingoModule {
     /// @param player Bingo owner to claim for (address(0) = msg.sender, else operator-approved).
     /// @param level The level to claim on (uint24 storage-key width).
     /// @param symbol Symbol 0-31 (quadrant = symbol >> 3, symInQ = symbol & 7).
-    /// @param slots Per-color positions in traitBurnTicket[level][traitId] the owner occupies.
+    /// @param slots Per-color positions in lvlTraitEntry[level][traitId] the owner occupies.
     function claimBingo(address player, uint24 level, uint8 symbol, uint32[8] calldata slots) external;
 
     /// @notice Claim DGNRS affiliate rewards for the current level. The Game retains a

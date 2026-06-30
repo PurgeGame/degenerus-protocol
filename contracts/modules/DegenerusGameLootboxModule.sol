@@ -63,7 +63,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     /// @param lootboxIndex The per-player storage index of the opened lootbox
     /// @param amount The ETH amount of the lootbox (in wei)
     /// @param futureLevel The target level for future tickets
-    /// @param futureTickets The pre-Bernoulli scaled (× TICKET_SCALE) future ticket count
+    /// @param futureTickets The pre-Bernoulli scaled (× QTY_SCALE) future ticket count
     /// @param flip The total FLIP tokens awarded (in wei)
     /// @param roundedUp True iff the Bernoulli round-up incremented the awarded
     ///        whole-ticket count by 1
@@ -207,7 +207,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     /// @dev Whale pass standard tickets per level. Reported in the
     ///      LootBoxWhalePassJackpot event for downstream indexers; the
     ///      actual ticket materialization happens in claimWhalePass.
-    uint32 private constant WHALE_PASS_TICKETS_PER_LEVEL = 2;
+    uint32 private constant WHALE_PASS_ENTRIES_PER_LEVEL = 2;
     /// @dev Deity pass base price (used for deity discount boon EV estimation).
     uint256 private constant DEITY_PASS_BASE = 24 ether;
     /// @dev 10% bonus in basis points for coinflip boon
@@ -1353,34 +1353,34 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         // always a safe divisor downstream.
         uint256 targetPrice = PriceLookupLib.priceForLevel(rollLevel);
 
-        (uint256 flipOut, uint32 scaledTickets, bool wasSpin) =
+        (uint256 flipOut, uint32 scaledWholeTickets, bool wasSpin) =
             _resolveLootboxRoll(player, rollAmount, fullAmount, targetPrice, rollSeed, isFarFuture, activityScore, allowEthSpin);
 
         // Floored to whole-FLIP (1 FLIP = 1 ether); sub-1-FLIP residue evaporates.
         uint256 flipAmount = (flipOut / 1 ether) * 1 ether;
 
         bool roundedUp;
-        if (scaledTickets != 0) {
+        if (scaledWholeTickets != 0) {
             // Distress-mode ticket bonus: 25% extra on the distress-bought fraction.
             if (distressEth != 0 && totalPackedEth != 0) {
-                uint256 bonus = (uint256(scaledTickets) * distressEth * DISTRESS_TICKET_BONUS_BPS)
+                uint256 bonus = (uint256(scaledWholeTickets) * distressEth * DISTRESS_TICKET_BONUS_BPS)
                     / (totalPackedEth * 10_000);
                 if (bonus != 0) {
-                    scaledTickets = uint32(uint256(scaledTickets) + bonus);
+                    scaledWholeTickets = uint32(uint256(scaledWholeTickets) + bonus);
                 }
             }
             // Collapse scaled tickets to whole via a single Bernoulli round-up on bits[224..255]
-            // of THIS roll's seed — a uint32 window, negligible % TICKET_SCALE modulo bias (~2e-8);
-            // `scaledTickets` stays at the scaled value for the event emit.
-            uint32 whole = scaledTickets / uint32(TICKET_SCALE);
-            uint32 frac = scaledTickets % uint32(TICKET_SCALE);
-            if (frac != 0 && (uint32(rollSeed >> 224) % uint32(TICKET_SCALE)) < frac) {
+            // of THIS roll's seed — a uint32 window, negligible % QTY_SCALE modulo bias (~2e-8);
+            // `scaledWholeTickets` stays at the scaled value for the event emit.
+            uint32 whole = scaledWholeTickets / uint32(QTY_SCALE);
+            uint32 frac = scaledWholeTickets % uint32(QTY_SCALE);
+            if (frac != 0 && (uint32(rollSeed >> 224) % uint32(QTY_SCALE)) < frac) {
                 unchecked { whole += 1; }
                 roundedUp = true;
             }
-            // `_queueTickets` early-returns on `whole == 0`. The manual caller (`_openLootBoxLeg`)
+            // `_queueEntries` early-returns on `whole == 0`. The manual caller (`_openLootBoxLeg`)
             // pays the WWXRP cold-bust consolation here; auto-resolve callers stay silent.
-            _queueTickets(player, rollLevel, wholeTicketsToEntries(whole), false);
+            _queueEntries(player, rollLevel, wholeTicketsToEntries(whole), false);
             if (payColdBustConsolation && whole == 0) {
                 wwxrp.mintPrize(player, LOOTBOX_WWXRP_CONSOLATION);
             }
@@ -1399,7 +1399,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
                 index,
                 fullAmount,
                 rollLevel,
-                scaledTickets,
+                scaledWholeTickets,
                 flipAmount,
                 roundedUp
             );
@@ -1916,7 +1916,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
                 // actual ticket queuing is deferred to claim-time, so the queued
                 // tickets start at the level when the player calls claimWhalePass —
                 // not necessarily `level + 1` here.
-                emit LootBoxWhalePassJackpot(player, originalAmount, level + 1, WHALE_PASS_TICKETS_PER_LEVEL, 0, 0);
+                emit LootBoxWhalePassJackpot(player, originalAmount, level + 1, WHALE_PASS_ENTRIES_PER_LEVEL, 0, 0);
             }
             return;
         }
@@ -1990,7 +1990,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
 
         uint256 roll = uint16(seed >> 40) % 20;
         if (roll < 8) {
-            // 40% chance: tickets (returned as scaled × TICKET_SCALE).
+            // 40% chance: tickets (returned as scaled × QTY_SCALE).
             ticketsOut = _lootboxTicketCount(
                 _ticketBudget(amount, isFarFuture),
                 targetPrice,
@@ -2160,7 +2160,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     }
 
     /// @dev Calculate scaled ticket count from budget with ranged variance tiers.
-    ///      Returns count × TICKET_SCALE (100) for fractional ticket support. The tier
+    ///      Returns count × QTY_SCALE (100) for fractional ticket support. The tier
     ///      chances are unchanged (1% / 4% / 20% / 45% / 30%), but each tier draws a
     ///      multiplier uniformly across a symmetric BPS band whose mean is the tier's
     ///      prior static value, so the overall variance EV (~0.786x) is unchanged:
@@ -2173,17 +2173,17 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     /// @param budgetWei ETH budget for tickets
     /// @param priceWei Price per ticket at target level (a non-zero price-table constant)
     /// @param seed Per-resolution 256-bit keccak seed (sliced inline; no advance)
-    /// @return countScaled Number of tickets × TICKET_SCALE
+    /// @return scaledWholeTickets Scaled whole-ticket count (whole x QTY_SCALE), collapsed to entries at queue via wholeTicketsToEntries
     function _lootboxTicketCount(
         uint256 budgetWei,
         uint256 priceWei,
         uint256 seed
-    ) private pure returns (uint32 countScaled) {
+    ) private pure returns (uint32 scaledWholeTickets) {
         if (budgetWei == 0) {
             return 0;
         }
         uint256 adjustedBudget = (budgetWei * _ticketVarianceBps(seed)) / 10_000;
-        countScaled = uint32((adjustedBudget * TICKET_SCALE) / priceWei);
+        scaledWholeTickets = uint32((adjustedBudget * QTY_SCALE) / priceWei);
     }
 
     /// @dev Draw the within-budget ticket multiplier (BPS) from the variance tiers. Extracted

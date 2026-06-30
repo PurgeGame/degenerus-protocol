@@ -69,8 +69,8 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     );
 
     /// @dev Ticket jackpot win. See JackpotEthWin for traitId sentinel semantics.
-    ///      ticketCount is a whole-ticket count on all 3 paths and matches the
-    ///      quantity queued by the adjacent _queueTickets call. roundedUp is
+    ///      ticketCount is an entries count on all 3 paths and matches the
+    ///      quantity queued by the adjacent _queueEntries call. roundedUp is
     ///      true iff the BAF _jackpotTicketRoll (traitId = BAF_TRAIT_SENTINEL)
     ///      Bernoulli sub-roll incremented the whole-ticket count; it is false
     ///      on the two trait-matched paths, which have a zero fractional part
@@ -355,11 +355,11 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
                 }
 
                 // Calculate daily ticket units (distributed in Phase 2 via payDailyJackpotCoinAndTickets)
-                uint256 dailyTicketUnits = _budgetToTicketUnits(
+                uint256 dailyEntries = _budgetToEntries(
                     dailyLootboxBudget,
                     lvl + 1
                 );
-                if (dailyTicketUnits != 0) {
+                if (dailyEntries != 0) {
                     // Deduct from current pool and add to next pool to back tickets.
                     // curPool is still exact: nothing above writes currentPrizePool.
                     curPool -= dailyLootboxBudget;
@@ -370,7 +370,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
                 uint8 sourceLevelOffset;
                 uint24 sourceLevel;
                 uint256 reserveSlice;
-                uint256 carryoverTicketUnits;
+                uint256 carryoverEntries;
                 if (!isEarlyBirdDay) {
                     sourceLevelOffset = uint8(
                         (uint256(
@@ -393,19 +393,19 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
                         nextBal + uint128(reserveSlice),
                         futPool - uint128(reserveSlice)
                     );
-                    carryoverTicketUnits = _budgetToTicketUnits(
+                    carryoverEntries = _budgetToEntries(
                         reserveSlice,
                         lvl
                     );
                 }
 
                 // Store ticket units for Phase 2 distribution
-                // Packing: [counterStep (8 bits)] [dailyTicketUnits (64 bits @ 8)]
-                // [carryoverTicketUnits (64 bits @ 72)] [carryoverSourceOffset (8 bits @ 136)]
+                // Packing: [counterStep (8 bits)] [dailyEntries (64 bits @ 8)]
+                // [carryoverEntries (64 bits @ 72)] [carryoverSourceOffset (8 bits @ 136)]
                 dailyTicketBudgetsPacked = _packDailyTicketBudgets(
                     counterStep,
-                    dailyTicketUnits,
-                    carryoverTicketUnits,
+                    dailyEntries,
+                    carryoverEntries,
                     sourceLevelOffset
                 );
 
@@ -564,8 +564,8 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         // Unpack stored values
         (
             uint8 counterStep,
-            uint256 dailyTicketUnits,
-            uint256 carryoverTicketUnits,
+            uint256 dailyEntries,
+            uint256 carryoverEntries,
             uint8 carryoverSourceOffset
         ) = _unpackDailyTicketBudgets(dailyTicketBudgetsPacked);
 
@@ -581,12 +581,12 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
 
         // --- Ticket Distribution ---
         // Distribute daily tickets to current level trait winners (main traits)
-        if (dailyTicketUnits != 0) {
+        if (dailyEntries != 0) {
             _distributeTicketJackpot(
                 lvl,
                 lvl + 1,
                 mainTraitsPacked,
-                dailyTicketUnits,
+                dailyEntries,
                 EntropyLib.hash2(randWord, lvl),
                 LOOTBOX_MAX_WINNERS,
                 241
@@ -597,14 +597,14 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
 
         // Distribute carryover tickets: winners from source level, tickets at current level
         // (or lvl+1 on final day since current level is about to end). Uses bonus traits.
-        if (carryoverTicketUnits != 0) {
+        if (carryoverEntries != 0) {
             uint24 sourceLevel = lvl + uint24(carryoverSourceOffset);
             bool isFinalDay = counterCached + counterStep >= JACKPOT_LEVEL_CAP;
             _distributeTicketJackpot(
                 sourceLevel,
                 isFinalDay ? lvl + 1 : lvl,
                 bonusTraitsPacked,
-                carryoverTicketUnits,
+                carryoverEntries,
                 EntropyLib.hash2(randWord, sourceLevel),
                 LOOTBOX_MAX_WINNERS,
                 240
@@ -623,25 +623,25 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
 
     /// @dev Execute the early-bird lootbox jackpot from the unified future pool.
     ///      Routes through the shared ticket distributor so the budget→ticket
-    ///      conversion (`_budgetToTicketUnits`, the same 4-entries-per-ticket basis
+    ///      conversion (`_budgetToEntries`, the same 4-entries-per-ticket basis
     ///      every other jackpot path uses) and the winner cap match the daily and
-    ///      purchase-phase jackpots: `cap = min(ticketUnits, 100)` gives every drawn
+    ///      purchase-phase jackpots: `cap = min(entries, 100)` gives every drawn
     ///      winner >=1 unit (replacing the fixed-100 split that floored sub-100-ticket
     ///      budgets to zero), with the exact base+remainder rotation keeping the award
-    ///      fully backed. Winners drawn from `traitBurnTicket[lvl]`, tickets queued at
+    ///      fully backed. Winners drawn from `lvlTraitEntry[lvl]`, tickets queued at
     ///      `lvl` (= outer level + 1). The full 3% budget always moves future→next.
     function _runEarlyBirdLootboxJackpot(uint24 lvl, uint256 rngWord) private {
         (uint128 nextBal, uint128 futureBal) = _getPrizePools();
         uint256 totalBudget = (uint256(futureBal) * 300) / 10_000; // 3%
         if (totalBudget == 0) return;
 
-        uint256 ticketUnits = _budgetToTicketUnits(totalBudget, lvl);
-        if (ticketUnits != 0) {
+        uint256 entries = _budgetToEntries(totalBudget, lvl);
+        if (entries != 0) {
             _distributeTicketJackpot(
                 lvl,
                 lvl,
                 _rollWinningTraits(rngWord, true),
-                ticketUnits,
+                entries,
                 EntropyLib.hash2(rngWord, lvl),
                 LOOTBOX_MAX_WINNERS,
                 239
@@ -702,7 +702,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     // =========================================================================
 
     /// @dev Converts an ETH budget to ticket units. Tickets cost ticketPrice/4.
-    function _budgetToTicketUnits(
+    function _budgetToEntries(
         uint256 budget,
         uint24 lvl
     ) private pure returns (uint256) {
@@ -745,13 +745,13 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
 
         // Distribute tickets to winners (may use reduced basis for backing ratio)
         uint256 ticketBasis = (lootboxBudget * ticketConversionBps) / 10_000;
-        uint256 ticketUnits = _budgetToTicketUnits(ticketBasis, lvl + 1);
-        if (ticketUnits != 0) {
+        uint256 entries = _budgetToEntries(ticketBasis, lvl + 1);
+        if (entries != 0) {
             _distributeTicketJackpot(
                 lvl,
                 lvl + 1,
                 winningTraitsPacked,
-                ticketUnits,
+                entries,
                 EntropyLib.hash2(randWord, lvl),
                 PURCHASE_PHASE_TICKET_MAX_WINNERS,
                 242
@@ -764,18 +764,18 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         uint24 sourceLvl,
         uint24 queueLvl,
         uint32 winningTraitsPacked,
-        uint256 ticketUnits,
+        uint256 entries,
         uint256 entropy,
         uint16 maxWinners,
         uint8 saltBase
     ) private {
-        if (ticketUnits == 0) return;
+        if (entries == 0) return;
 
         uint8[4] memory traitIds = JackpotBucketLib.unpackWinningTraits(
             winningTraitsPacked
         );
         uint16 cap = maxWinners;
-        if (ticketUnits < cap) cap = uint16(ticketUnits);
+        if (entries < cap) cap = uint16(entries);
 
         (
             uint16[4] memory counts,
@@ -792,7 +792,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
             counts,
             lens,
             deities,
-            ticketUnits,
+            entries,
             entropy,
             cap,
             saltBase
@@ -802,7 +802,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     /// @dev Distributes tickets across all buckets. `lens`/`deities` carry the
     ///      per-trait bucket lengths and deity addresses read once by
     ///      _computeBucketCounts (stable for the whole distribution: nothing on
-    ///      this path writes traitBurnTicket or deityBySymbol).
+    ///      this path writes lvlTraitEntry or deityBySymbol).
     function _distributeTicketsToBuckets(
         uint24 sourceLvl,
         uint24 queueLvl,
@@ -810,19 +810,19 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         uint16[4] memory counts,
         uint256[4] memory lens,
         address[4] memory deities,
-        uint256 ticketUnits,
+        uint256 entries,
         uint256 entropy,
         uint16 cap,
         uint8 saltBase
     ) private {
-        uint256 baseUnits = ticketUnits / cap;
-        uint256 distParams = (ticketUnits % cap) | ((entropy % cap) << 128);
+        uint256 baseEntries = entries / cap;
+        uint256 distParams = (entries % cap) | ((entropy % cap) << 128);
         uint256 globalIdx;
 
         for (uint8 traitIdx; traitIdx < 4; ) {
             if (counts[traitIdx] != 0) {
                 entropy = uint256(
-                    keccak256(abi.encode(entropy, traitIdx, ticketUnits))
+                    keccak256(abi.encode(entropy, traitIdx, entries))
                 );
                 globalIdx = _distributeTicketsToBucket(
                     sourceLvl,
@@ -831,7 +831,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
                     counts[traitIdx],
                     entropy,
                     uint8(saltBase + traitIdx),
-                    baseUnits,
+                    baseEntries,
                     distParams,
                     cap,
                     globalIdx,
@@ -853,7 +853,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         uint16 count,
         uint256 entropy,
         uint8 salt,
-        uint256 baseUnits,
+        uint256 baseEntries,
         uint256 distParams,
         uint16 cap,
         uint256 startIdx,
@@ -864,7 +864,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
             address[] memory winners,
             uint256[] memory ticketIndexes
         ) = _randTraitTicket(
-                traitBurnTicket[sourceLvl],
+                lvlTraitEntry[sourceLvl],
                 entropy,
                 traitId,
                 uint8(count),
@@ -879,14 +879,14 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         uint256 cursor = (startIdx + offset) % cap;
         for (uint256 i; i < len; ) {
             address winner = winners[i];
-            uint256 units = baseUnits;
+            uint256 units = baseEntries;
             if (extra != 0 && cursor < extra) {
                 units += 1;
             }
             if (winner != address(0) && units != 0) {
-                _queueTickets(winner, queueLvl, uint32(units), true);
+                _queueEntries(winner, queueLvl, uint32(units), true);
                 // ticketCount carries the entries count awarded (price/4 units;
-                // _budgetToTicketUnits already returns entries).
+                // _budgetToEntries already returns entries).
                 emit JackpotTicketWin(
                     winner,
                     queueLvl,
@@ -928,7 +928,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         uint8 activeMask;
         for (uint8 i; i < 4; ) {
             uint8 trait = traitIds[i];
-            uint256 len = traitBurnTicket[lvl][trait].length;
+            uint256 len = lvlTraitEntry[lvl][trait].length;
             lens[i] = len;
             uint8 fullSymId = (trait >> 6) * 8 + (trait & 0x07);
             address deity;
@@ -1127,7 +1127,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
             address[] memory winners,
             uint256[] memory ticketIndexes
         ) = _randTraitTicket(
-                traitBurnTicket[lvl],
+                lvlTraitEntry[lvl],
                 newEntropy,
                 traitId,
                 uint8(totalCount),
@@ -1429,7 +1429,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     ///      Reads the bucket length and deity itself; distribution paths that
     ///      already hold them use the precomputed overload directly.
     function _randTraitTicket(
-        address[][256] storage traitBurnTicket_,
+        address[][256] storage lvlTraitEntry_,
         uint256 randomWord,
         uint8 trait,
         uint8 numWinners,
@@ -1439,7 +1439,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         view
         returns (address[] memory winners, uint256[] memory ticketIndexes)
     {
-        uint256 len = traitBurnTicket_[trait].length;
+        uint256 len = lvlTraitEntry_[trait].length;
 
         // traitId layout: (quadrant << 6) | (color << 3) | symIdx
         // fullSymId = quadrant * 8 + symIdx
@@ -1451,7 +1451,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
 
         return
             _randTraitTicket(
-                traitBurnTicket_,
+                lvlTraitEntry_,
                 randomWord,
                 trait,
                 numWinners,
@@ -1464,7 +1464,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     /// @dev Winner-selection core with caller-supplied bucket length and deity.
     ///      Winners beyond the real bucket land on the deity's virtual entries.
     function _randTraitTicket(
-        address[][256] storage traitBurnTicket_,
+        address[][256] storage lvlTraitEntry_,
         uint256 randomWord,
         uint8 trait,
         uint8 numWinners,
@@ -1476,7 +1476,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         view
         returns (address[] memory winners, uint256[] memory ticketIndexes)
     {
-        address[] storage holders = traitBurnTicket_[trait];
+        address[] storage holders = lvlTraitEntry_[trait];
         uint256 virtualCount = _deityVirtualCount(trait, len, deity);
 
         uint256 effectiveLen = len + virtualCount;
@@ -1623,7 +1623,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
                 abi.encode(randomWord, FLIP_LEVEL_TAG, i)
             )) % range);
 
-            address[] storage holders = traitBurnTicket[lvlPrime][trait_i];
+            address[] storage holders = lvlTraitEntry[lvlPrime][trait_i];
             uint256 len = holders.length;
             address deity = deityCache[traitIdx];
             uint256 effectiveLen = len + _deityVirtualCount(trait_i, len, deity);
@@ -1867,14 +1867,14 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
 
     function _packDailyTicketBudgets(
         uint8 counterStep,
-        uint256 dailyTicketUnits,
-        uint256 carryoverTicketUnits,
+        uint256 dailyEntries,
+        uint256 carryoverEntries,
         uint8 carryoverSourceOffset
     ) private pure returns (uint256) {
         return
             uint256(counterStep) |
-            (dailyTicketUnits << 8) |
-            (carryoverTicketUnits << 72) |
+            (dailyEntries << 8) |
+            (carryoverEntries << 72) |
             (uint256(carryoverSourceOffset) << 136);
     }
 
@@ -1885,14 +1885,14 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         pure
         returns (
             uint8 counterStep,
-            uint256 dailyTicketUnits,
-            uint256 carryoverTicketUnits,
+            uint256 dailyEntries,
+            uint256 carryoverEntries,
             uint8 carryoverSourceOffset
         )
     {
         counterStep = uint8(packed);
-        dailyTicketUnits = uint64(packed >> 8);
-        carryoverTicketUnits = uint64(packed >> 72);
+        dailyEntries = uint64(packed >> 8);
+        carryoverEntries = uint64(packed >> 72);
         carryoverSourceOffset = uint8(packed >> 136);
     }
 
@@ -2124,23 +2124,23 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         // Calculate tickets for target level
         uint256 targetPrice = PriceLookupLib.priceForLevel(targetLevel);
 
-        uint256 quantityScaled = (amount * TICKET_SCALE) / targetPrice;
+        uint256 wholeTicketsScaled = (amount * QTY_SCALE) / targetPrice;
 
         // Bernoulli-collapse the scaled count to a whole-ticket count: the
-        // fractional part rounds up with probability frac/TICKET_SCALE using
+        // fractional part rounds up with probability frac/QTY_SCALE using
         // bits[96..127] of the per-roll entropy word — a uint32 window, wide enough
-        // that the % TICKET_SCALE modulo bias is negligible (~2e-8).
-        uint32 scaledTickets = uint32(quantityScaled);
-        uint32 whole = scaledTickets / uint32(TICKET_SCALE);
-        uint32 frac = scaledTickets % uint32(TICKET_SCALE);
+        // that the % QTY_SCALE modulo bias is negligible (~2e-8).
+        uint32 scaledWholeTickets = uint32(wholeTicketsScaled);
+        uint32 whole = scaledWholeTickets / uint32(QTY_SCALE);
+        uint32 frac = scaledWholeTickets % uint32(QTY_SCALE);
         bool roundedUp = false;
-        if (frac != 0 && (uint32(entropy >> 96) % uint32(TICKET_SCALE)) < frac) {
+        if (frac != 0 && (uint32(entropy >> 96) % uint32(QTY_SCALE)) < frac) {
             unchecked {
                 whole += 1;
             }
             roundedUp = true;
         }
-        _queueTickets(winner, targetLevel, wholeTicketsToEntries(whole), true);
+        _queueEntries(winner, targetLevel, wholeTicketsToEntries(whole), true);
 
         // ticketCount is the entries count (whole<<2, 4 per whole ticket) queued above;
         // roundedUp is true iff the bits[96..127] Bernoulli sub-roll incremented the

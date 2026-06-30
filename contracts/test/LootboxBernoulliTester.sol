@@ -14,11 +14,11 @@ pragma solidity 0.8.34;
 ///         byte-identical reproduction by grepping the production source for the
 ///         canonical pattern; if either drifts, the drift-detection test fails first
 ///         and the math test becomes informative only after that drift is reconciled.
-///         The round-up reads a uint32 window so the `% TICKET_SCALE` modulo bias is
+///         The round-up reads a uint32 window so the `% QTY_SCALE` modulo bias is
 ///         negligible (~2e-8).
 contract LootboxBernoulliTester {
-    /// @notice TICKET_SCALE mirror from `DegenerusGameStorage.sol`.
-    uint256 public constant TICKET_SCALE = 100;
+    /// @notice QTY_SCALE mirror from `DegenerusGameStorage.sol`.
+    uint256 public constant QTY_SCALE = 100;
 
     /// @notice Magnitudes from `DegenerusGameLootboxModule.sol`.
     uint256 public constant LOOTBOX_WWXRP_PRIZE = 1 ether;
@@ -28,10 +28,10 @@ contract LootboxBernoulliTester {
     /// @dev Exact instruction-sequence parity with the manual branch of
     ///      `_settleLootboxRoll`:
     ///        uint32 scaledPre = futureTickets;
-    ///        uint32 whole = futureTickets / uint32(TICKET_SCALE);
-    ///        uint32 frac  = futureTickets % uint32(TICKET_SCALE);
+    ///        uint32 whole = futureTickets / uint32(QTY_SCALE);
+    ///        uint32 frac  = futureTickets % uint32(QTY_SCALE);
     ///        bool roundedUp = false;
-    ///        if (frac != 0 && (uint32(seed >> 224) % uint32(TICKET_SCALE)) < frac) {
+    ///        if (frac != 0 && (uint32(seed >> 224) % uint32(QTY_SCALE)) < frac) {
     ///            unchecked { whole += 1; }
     ///            roundedUp = true;
     ///        }
@@ -45,10 +45,10 @@ contract LootboxBernoulliTester {
         pure
         returns (uint32 whole, bool roundedUp)
     {
-        whole = scaledPre / uint32(TICKET_SCALE);
-        uint32 frac = scaledPre % uint32(TICKET_SCALE);
+        whole = scaledPre / uint32(QTY_SCALE);
+        uint32 frac = scaledPre % uint32(QTY_SCALE);
         roundedUp = false;
-        if (frac != 0 && (uint32(seed >> 224) % uint32(TICKET_SCALE)) < frac) {
+        if (frac != 0 && (uint32(seed >> 224) % uint32(QTY_SCALE)) < frac) {
             unchecked {
                 whole += 1;
             }
@@ -57,10 +57,10 @@ contract LootboxBernoulliTester {
     }
 
     /// @notice Expose the [0..99] compare value consumed by the Bernoulli math.
-    /// @return slice `uint32(seed >> 224) % uint32(TICKET_SCALE)` — the [0..99] value
+    /// @return slice `uint32(seed >> 224) % uint32(QTY_SCALE)` — the [0..99] value
     ///               compared against `frac` in the round-up gate.
     function bernoulliSlice(uint256 seed) external pure returns (uint32 slice) {
-        slice = uint32(seed >> 224) % uint32(TICKET_SCALE);
+        slice = uint32(seed >> 224) % uint32(QTY_SCALE);
     }
 
     /// @notice Mirror of the ticket-path cold-bust consolation gate in
@@ -68,7 +68,7 @@ contract LootboxBernoulliTester {
     ///         collapse, then applies the `payColdBustConsolation && whole == 0` gate
     ///         that decides whether the `LOOTBOX_WWXRP_CONSOLATION` payout fires.
     /// @dev    Instruction-sequence parity with the production gate:
-    ///           _queueTickets(player, rollLevel, whole, false);
+    ///           _queueEntries(player, rollLevel, whole, false);
     ///           if (payColdBustConsolation && whole == 0) {
     ///               wwxrp.mintPrize(player, LOOTBOX_WWXRP_CONSOLATION);
     ///           }
@@ -83,9 +83,9 @@ contract LootboxBernoulliTester {
         uint32 scaledPre,
         uint256 seed
     ) external pure returns (bool consolationFires) {
-        uint32 whole = scaledPre / uint32(TICKET_SCALE);
-        uint32 frac = scaledPre % uint32(TICKET_SCALE);
-        if (frac != 0 && (uint32(seed >> 224) % uint32(TICKET_SCALE)) < frac) {
+        uint32 whole = scaledPre / uint32(QTY_SCALE);
+        uint32 frac = scaledPre % uint32(QTY_SCALE);
+        if (frac != 0 && (uint32(seed >> 224) % uint32(QTY_SCALE)) < frac) {
             unchecked {
                 whole += 1;
             }

@@ -222,7 +222,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         address who = msg.sender;
         if (who != ContractAddresses.SDGNRS && who != ContractAddresses.VAULT) revert Unauthorized();
         for (uint24 i = 1; i <= 100; ) {
-            _queueTickets(who, i, 16, false);
+            _queueEntries(who, i, 16, false); // 16 entries (= 4 whole tickets) per level
             unchecked {
                 ++i;
             }
@@ -318,7 +318,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     ///      Signature: claimBingo(address player, uint24 level, uint8 symbol, uint32[8] slots) —
     ///      the owner to claim for, the level (uint24 storage-key width), the symbol 0-31
     ///      (quadrant = symbol >> 3, symInQ = symbol & 7), and the per-color positions in
-    ///      traitBurnTicket[level][traitId] the owner occupies. The signature matches the module
+    ///      lvlTraitEntry[level][traitId] the owner occupies. The signature matches the module
     ///      function exactly (identical selector), so the calldata forwards as-is — re-encoding
     ///      here would cost contract-size headroom for no behavior change.
     function claimBingo(
@@ -559,7 +559,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     ///      Adds affiliate support for loot box purchases.
     ///      SECURITY: Blocked when RNG is locked.
     /// @param buyer Player address to receive purchases (address(0) = msg.sender).
-    /// @param ticketQuantity Number of tickets to purchase (2 decimals, scaled by 100; 0 to skip).
+    /// @param entryQuantityScaled Number of tickets to purchase (2 decimals, scaled by 100; 0 to skip).
     /// @param lootBoxAmount ETH amount for loot boxes, minimum 0.01 ETH (0 to skip).
     /// @param affiliateCode Affiliate/referral code for all purchases.
     /// @param payKind Payment method (DirectEth, Claimable, or Combined).
@@ -569,7 +569,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     ///        recording so a foil pack counts exactly like a ticket purchase.
     function purchase(
         address buyer,
-        uint256 ticketQuantity,
+        uint256 entryQuantityScaled,
         uint256 lootBoxAmount,
         bytes32 affiliateCode,
         MintPaymentKind payKind,
@@ -579,7 +579,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         if (foil) {
             _purchaseWithFoil(
                 buyer,
-                ticketQuantity,
+                entryQuantityScaled,
                 lootBoxAmount,
                 affiliateCode,
                 payKind
@@ -587,7 +587,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         } else {
             _purchaseFor(
                 buyer,
-                ticketQuantity,
+                entryQuantityScaled,
                 lootBoxAmount,
                 affiliateCode,
                 payKind
@@ -597,7 +597,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
 
     function _purchaseFor(
         address buyer,
-        uint256 ticketQuantity,
+        uint256 entryQuantityScaled,
         uint256 lootBoxAmount,
         bytes32 affiliateCode,
         MintPaymentKind payKind
@@ -608,7 +608,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
                 abi.encodeWithSelector(
                     IDegenerusGameMintModule.purchase.selector,
                     buyer,
-                    ticketQuantity,
+                    entryQuantityScaled,
                     lootBoxAmount,
                     affiliateCode,
                     payKind
@@ -630,7 +630,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     ///      budget and the EIP-170 size limit.
     function _purchaseWithFoil(
         address buyer,
-        uint256 ticketQuantity,
+        uint256 entryQuantityScaled,
         uint256 lootBoxAmount,
         bytes32 affiliateCode,
         MintPaymentKind payKind
@@ -638,8 +638,8 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         uint256 priceWei = PriceLookupLib.priceForLevel(
             jackpotPhaseFlag ? level : level + 1
         );
-        uint256 mintCost = (priceWei * ticketQuantity) /
-            (4 * TICKET_SCALE) +
+        uint256 mintCost = (priceWei * entryQuantityScaled) /
+            (4 * QTY_SCALE) +
             lootBoxAmount;
         uint256 cost = mintCost + FOIL_PACK_TICKETS * priceWei;
         uint256 fresh = payKind == MintPaymentKind.Claimable
@@ -654,7 +654,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
                     abi.encodeWithSelector(
                         IDegenerusGameMintModule.purchaseWith.selector,
                         buyer,
-                        ticketQuantity,
+                        entryQuantityScaled,
                         lootBoxAmount,
                         affiliateCode,
                         payKind,
@@ -681,10 +681,10 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     /// @dev Main entry point for FLIP ticket purchases. Mirrors purchase() but for FLIP payments.
     ///      SECURITY: Blocked when RNG is locked.
     /// @param buyer Player address to receive purchases (address(0) = msg.sender).
-    /// @param ticketQuantity Number of tickets to purchase (2 decimals, scaled by 100; 0 to skip).
+    /// @param entryQuantityScaled Number of tickets to purchase (2 decimals, scaled by 100; 0 to skip).
     function redeemFlip(
         address buyer,
-        uint256 ticketQuantity
+        uint256 entryQuantityScaled
     ) external {
         buyer = _resolvePlayer(buyer);
         (bool ok, bytes memory data) = ContractAddresses
@@ -693,7 +693,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
                 abi.encodeWithSelector(
                     IDegenerusGameMintModule.redeemFlip.selector,
                     buyer,
-                    ticketQuantity
+                    entryQuantityScaled
                 )
             );
         if (!ok) _revertDelegate(data);
@@ -765,14 +765,14 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     ///      funded by the same mix as any other purchase — fresh ETH, claimable, or afking
     ///      per payKind. Both queue at one index for co-resolution.
     /// @param buyer Player to receive both legs (address(0) = msg.sender).
-    /// @param ticketQuantity Tickets to buy (0 to skip).
+    /// @param entryQuantityScaled Tickets to buy (0 to skip).
     /// @param lootBoxAmount ETH lootbox spend (0 to skip).
     /// @param affiliateCode Affiliate/referral code for the mint leg.
     /// @param payKind Payment method for the mint leg.
     /// @param boxAmount Requested presale-box ETH (claimable-funded).
     function buyLootboxAndPresaleBox(
         address buyer,
-        uint256 ticketQuantity,
+        uint256 entryQuantityScaled,
         uint256 lootBoxAmount,
         bytes32 affiliateCode,
         MintPaymentKind payKind,
@@ -785,7 +785,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
                 abi.encodeWithSelector(
                     IDegenerusGameMintModule.buyLootboxAndPresaleBox.selector,
                     buyer,
-                    ticketQuantity,
+                    entryQuantityScaled,
                     lootBoxAmount,
                     affiliateCode,
                     payKind,
@@ -890,8 +890,8 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     /// @dev The bet belongs to `player`; the player or an approved operator spends the player's
     ///      funds, any other caller funds the bet itself (a permissionless gift — WWXRP excluded).
     ///      The module resolves the player/funder split, so `player` forwards raw. Signature:
-    ///      placeDegeneretteBet(address player, uint8 currency, uint128 amountPerTicket,
-    ///      uint8 ticketCount, uint32 customTicket, uint8 heroQuadrant). The signature matches the
+    ///      placeDegeneretteBet(address player, uint8 currency, uint128 amountPerSpin,
+    ///      uint8 spinCount, uint32 customTraits, uint8 heroQuadrant). The signature matches the
     ///      module function exactly (identical selector), so the calldata forwards as-is —
     ///      re-encoding here would cost contract-size headroom for no behavior change.
     function placeDegeneretteBet(
@@ -2084,12 +2084,12 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     /// @notice Get queued future ticket rewards owed for a level.
     /// @param lvl Target level for the queued tickets.
     /// @param player Player address to query.
-    /// @return The number of whole ticket rewards owed (fractional remainder resolves at batch time).
+    /// @return The number of entries owed (fractional remainder resolves at batch time).
     function ticketsOwedView(
         uint24 lvl,
         address player
     ) external view returns (uint32) {
-        return uint32(ticketsOwedPacked[_tqWriteKey(lvl)][player] >> 8);
+        return uint32(entriesOwedPacked[_tqWriteKey(lvl)][player] >> 8);
     }
 
     /// @notice Get loot box status for a player/index.
@@ -2431,7 +2431,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         uint256 entropy
     ) external view returns (uint8 traitSel, address[] memory tickets) {
         traitSel = uint8(entropy >> 24);
-        address[] storage arr = traitBurnTicket[targetLvl][traitSel];
+        address[] storage arr = lvlTraitEntry[targetLvl][traitSel];
         uint256 len = arr.length;
         if (len == 0) {
             return (traitSel, new address[](0));
@@ -2504,7 +2504,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     /// @param offset Starting index for pagination.
     /// @param limit Maximum entries to scan.
     /// @param player The player address to count.
-    /// @return count Number of tickets found in this page.
+    /// @return count Number of entries found in this page.
     /// @return nextOffset Next offset for pagination.
     /// @return total Total tickets in the array.
     function getTickets(
@@ -2514,7 +2514,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         uint32 limit,
         address player
     ) external view returns (uint24 count, uint32 nextOffset, uint32 total) {
-        address[] storage a = traitBurnTicket[lvl][trait];
+        address[] storage a = lvlTraitEntry[lvl][trait];
         total = uint32(a.length);
         if (offset >= total) return (0, total, total);
 
@@ -2530,13 +2530,13 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         nextOffset = uint32(end);
     }
 
-    /// @notice Get tickets owed to a player for the current level.
+    /// @notice Get entries owed to a player for the current level.
     /// @param player The player address.
-    /// @return tickets Number of tickets owed for current level.
+    /// @return tickets Number of entries owed for current level.
     function getPlayerPurchases(
         address player
     ) external view returns (uint32 tickets) {
-        tickets = uint32(ticketsOwedPacked[_tqWriteKey(level)][player] >> 8);
+        tickets = uint32(entriesOwedPacked[_tqWriteKey(level)][player] >> 8);
     }
 
     /*+======================================================================+

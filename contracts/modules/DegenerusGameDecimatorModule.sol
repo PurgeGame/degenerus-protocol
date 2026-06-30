@@ -113,7 +113,7 @@ contract DegenerusGameDecimatorModule is DegenerusGamePayoutUtils {
 
     /// @dev Keeper box-bounty target (ETH wei) per settled decimator claim. Sized so the FLIP
     ///      bounty's ETH-value reimburses the ~30k-gas per-box settle at the ~0.5-gwei reference.
-    ///      The reward is an illiquid coinflip credit, and every claimable entry costs a real
+    ///      The reward is an illiquid coinflip credit, and every claimable bet costs a real
     ///      decimator burn to create, so permissionlessly cranking others' claims is liveness work
     ///      rather than a clean farm even when it roughly breaks even.
     uint256 private constant BOX_BOUNTY_ETH_TARGET = 15_000_000_000_000;
@@ -132,7 +132,7 @@ contract DegenerusGameDecimatorModule is DegenerusGamePayoutUtils {
     ///      Subbucket is deterministically assigned from hash(player, lvl, bucket).
     ///      Subsequent burns accumulate in that bucket unless a strictly better
     ///      bucket (lower denominator) is provided. On improvement, previous burn
-    ///      is removed from old aggregate, carried over to the new bucket, and entry migrates.
+    ///      is removed from old aggregate, carried over to the new bucket, and bet migrates.
     ///      Burn amount capped at uint192.max with saturation.
     /// @param player Address of the player.
     /// @param lvl Current game level.
@@ -150,8 +150,8 @@ contract DegenerusGameDecimatorModule is DegenerusGamePayoutUtils {
     ) external returns (uint8 bucketUsed) {
         if (msg.sender != ContractAddresses.COIN) revert OnlyCoin();
 
-        DecEntry storage e = decBurn[lvl][player];
-        DecEntry memory m = e;
+        DecBet storage e = decBurn[lvl][player];
+        DecBet memory m = e;
         uint192 prevBurn = m.burn;
 
         // First burn this level: set bucket and deterministic subbucket.
@@ -303,11 +303,11 @@ contract DegenerusGameDecimatorModule is DegenerusGamePayoutUtils {
         uint256 poolWei = round.poolWei;
         if (poolWei == 0) revert DecClaimInactive();
 
-        DecEntry storage e = decBurn[lvl][player];
+        DecBet storage e = decBurn[lvl][player];
         if (e.claimed != 0) revert DecAlreadyClaimed();
 
         // Calculate pro-rata share if player's subbucket won
-        uint256 amountWei = _decClaimableFromEntry(
+        uint256 amountWei = _decClaimableFromBet(
             poolWei,
             uint256(round.totalBurn),
             e,
@@ -339,13 +339,13 @@ contract DegenerusGameDecimatorModule is DegenerusGamePayoutUtils {
         // game-over resolution — none of the claim effects below can change them.
         uint64 packedOffsets = decBucketOffsetPacked[lvl];
         uint256 totalBurn = uint256(round.totalBurn);
-        mapping(address => DecEntry) storage levelEntries = decBurn[lvl];
+        mapping(address => DecBet) storage decLevelBets = decBurn[lvl];
         bool over = gameOver;
         uint256 settled;
         for (uint256 i; i < players.length; ++i) {
-            DecEntry storage e = levelEntries[players[i]];
+            DecBet storage e = decLevelBets[players[i]];
             if (e.claimed != 0) continue;
-            uint256 amountWei = _decClaimableFromEntry(
+            uint256 amountWei = _decClaimableFromBet(
                 poolWei,
                 totalBurn,
                 e,
@@ -382,12 +382,12 @@ contract DegenerusGameDecimatorModule is DegenerusGamePayoutUtils {
     /// @dev Shared claim core for the single and batch entry points. Callers must check
     ///      prizePoolFrozen first — this path writes to futurePrizePool (lootbox portion);
     ///      allowing it during freeze would corrupt the live pool that advanceGame operates on.
-    ///      Callers validate eligibility and compute `amountWei` (nonzero, unclaimed entry);
-    ///      this core marks the entry claimed before any credit is applied.
+    ///      Callers validate eligibility and compute `amountWei` (nonzero, unclaimed bet);
+    ///      this core marks the bet claimed before any credit is applied.
     function _claimDecimatorJackpotFor(
         address player,
         uint24 lvl,
-        DecEntry storage e,
+        DecBet storage e,
         DecClaimRound storage round,
         uint256 amountWei,
         bool over
@@ -532,33 +532,33 @@ contract DegenerusGameDecimatorModule is DegenerusGamePayoutUtils {
         return uint8((packed >> shift) & 0xF);
     }
 
-    /// @dev Calculate pro-rata claimable amount for a player's DecEntry.
+    /// @dev Calculate pro-rata claimable amount for a player's DecBet.
     /// @param poolWei Total pool available for claims.
     /// @param totalBurn Total qualifying burn (denominator for pro-rata). Callers
     ///        guarantee nonzero: the round snapshot is only written with a nonzero
     ///        totalBurn, and the view path checks it explicitly.
-    /// @param e Player's DecEntry storage reference.
+    /// @param e Player's DecBet storage reference.
     /// @param packedOffsets Packed winning subbuckets.
     /// @return amountWei Player's pro-rata share (0 if not winner).
-    function _decClaimableFromEntry(
+    function _decClaimableFromBet(
         uint256 poolWei,
         uint256 totalBurn,
-        DecEntry storage e,
+        DecBet storage e,
         uint64 packedOffsets
     ) private view returns (uint256 amountWei) {
         uint8 denom = e.bucket;
         uint8 sub = e.subBucket;
-        uint192 entryBurn = e.burn;
+        uint192 decBetBurn = e.burn;
 
         // No participation or zero burn
-        if (denom == 0 || entryBurn == 0) return 0;
+        if (denom == 0 || decBetBurn == 0) return 0;
 
         // Check if player's subbucket matches winning subbucket
         uint8 winningSub = _unpackDecWinningSubbucket(packedOffsets, denom);
         if (sub != winningSub) return 0;
 
         // Pro-rata share: (pool × playerBurn) / totalBurn
-        amountWei = (poolWei * uint256(entryBurn)) / totalBurn;
+        amountWei = (poolWei * uint256(decBetBurn)) / totalBurn;
     }
 
     /// @dev Internal view helper for decClaimable.
@@ -575,11 +575,11 @@ contract DegenerusGameDecimatorModule is DegenerusGamePayoutUtils {
         uint256 totalBurn = uint256(round.totalBurn);
         if (totalBurn == 0) return (0, false);
 
-        DecEntry storage e = decBurn[lvl][player];
+        DecBet storage e = decBurn[lvl][player];
         if (e.claimed != 0) return (0, false);
 
         uint64 packedOffsets = decBucketOffsetPacked[lvl];
-        amountWei = _decClaimableFromEntry(
+        amountWei = _decClaimableFromBet(
             round.poolWei,
             totalBurn,
             e,
@@ -657,7 +657,7 @@ contract DegenerusGameDecimatorModule is DegenerusGamePayoutUtils {
             uint256 remainder = amount % HALF_WHALE_PASS_PRICE;
             uint24 startLevel = level + 1;
             _applyWhalePassStats(winner, startLevel);
-            _queueTicketRange(winner, startLevel, 100, uint32(fullHalfPasses), false);
+            _queueEntryRange(winner, startLevel, 100, uint32(fullHalfPasses), false);
             // Sub-half-pass remainder (< 2.25 ether, so always below the threshold):
             // falls through to direct-resolve as a futurePool-backed lootbox (like any
             // small decimator claim), staying in futurePrizePool where the caller put it
@@ -787,12 +787,12 @@ contract DegenerusGameDecimatorModule is DegenerusGamePayoutUtils {
         uint8 bucket = _terminalDecBucket(bonusPoints);
         uint256 multBps = ActivityCurveLib.decMultBps(bonusPoints);
 
-        TerminalDecEntry storage e = terminalDecEntries[player];
+        TerminalDecBet storage e = terminalDecBets[player];
 
         // Lazy reset: if entry is from a previous level, zero it out in a single
         // packed-slot write (boost is one-time PER LEVEL; cleared with the rest).
         if (e.burnLevel != uint48(lvl)) {
-            terminalDecEntries[player] = TerminalDecEntry({
+            terminalDecBets[player] = TerminalDecBet({
                 totalBurn: 0,
                 weightedBurn: 0,
                 bucket: 0,
@@ -803,15 +803,15 @@ contract DegenerusGameDecimatorModule is DegenerusGamePayoutUtils {
         }
 
         // First burn this level: set bucket and subbucket
-        uint8 entryBucket = e.bucket;
-        uint8 entrySub;
-        if (entryBucket == 0) {
-            entryBucket = bucket;
-            entrySub = _decSubbucketFor(player, lvl, bucket);
-            e.bucket = entryBucket;
-            e.subBucket = entrySub;
+        uint8 decBetBucket = e.bucket;
+        uint8 decBetSubBucket;
+        if (decBetBucket == 0) {
+            decBetBucket = bucket;
+            decBetSubBucket = _decSubbucketFor(player, lvl, bucket);
+            e.bucket = decBetBucket;
+            e.subBucket = decBetSubBucket;
         } else {
-            entrySub = e.subBucket;
+            decBetSubBucket = e.subBucket;
         }
 
         // Apply activity multiplier and cap; nonzero since the coin enforces a
@@ -838,14 +838,14 @@ contract DegenerusGameDecimatorModule is DegenerusGamePayoutUtils {
         e.weightedBurn = uint88(newWeighted);
 
         // Update bucket aggregate (key includes lvl, so old-level entries are naturally stale)
-        bytes32 bucketKey = keccak256(abi.encode(lvl, entryBucket, entrySub));
+        bytes32 bucketKey = keccak256(abi.encode(lvl, decBetBucket, decBetSubBucket));
         terminalDecBucketBurnTotal[bucketKey] += weightedAmount;
 
         emit TerminalDecBurnRecorded(
             player,
             lvl,
-            entryBucket,
-            entrySub,
+            decBetBucket,
+            decBetSubBucket,
             effectiveAmount,
             weightedAmount,
             timeMultBps
@@ -873,7 +873,7 @@ contract DegenerusGameDecimatorModule is DegenerusGamePayoutUtils {
         address player = msg.sender;
         uint24 lvl = level;
 
-        TerminalDecEntry storage e = terminalDecEntries[player];
+        TerminalDecBet storage e = terminalDecBets[player];
         // Scale committed weight — never buy an entry. A stale (prior-level) or
         // empty entry has no weight to boost.
         if (e.burnLevel != uint48(lvl) || e.bucket == 0) {
@@ -1040,7 +1040,7 @@ contract DegenerusGameDecimatorModule is DegenerusGamePayoutUtils {
         uint24 lvl = lastTerminalDecClaimRound.lvl;
         if (lvl == 0) return (0, false);
 
-        TerminalDecEntry storage e = terminalDecEntries[player];
+        TerminalDecBet storage e = terminalDecBets[player];
         if (
             e.burnLevel != uint48(lvl) || e.weightedBurn == 0 || e.bucket == 0
         ) {
@@ -1072,7 +1072,7 @@ contract DegenerusGameDecimatorModule is DegenerusGamePayoutUtils {
         lvl = lastTerminalDecClaimRound.lvl;
         if (lvl == 0) revert TerminalDecNotActive();
 
-        TerminalDecEntry storage e = terminalDecEntries[player];
+        TerminalDecBet storage e = terminalDecBets[player];
         if (e.burnLevel != uint48(lvl) || e.weightedBurn == 0)
             revert TerminalDecNotWinner();
 

@@ -161,15 +161,15 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
     /*------------------------------------------------------------------
                               Constants
     ------------------------------------------------------------------*/
-    /// @dev Afking-local ticket scaling multiplier. TICKET_SCALE = 400 makes the
+    /// @dev Afking-local ticket scaling multiplier. AFKING_TICKET_SCALE = 400 makes the
     ///      cost formula unit-consistent: a ticket `amount = effectiveQty * 400`
     ///      entry-units, which the Game's mint recompute divides by `4 * 100`
-    ///      (the inherited Storage `TICKET_SCALE = 100`), so `cost` stays
+    ///      (the inherited Storage `QTY_SCALE = 100`), so `cost` stays
     ///      `mintPrice * effectiveQty` in both ticket and lootbox mode.
     ///      ⚠ LOAD-BEARING dual constant: this 400 is
-    ///      NUMERICALLY EQUAL to the Game's `4 * TICKET_SCALE` (= 4 × 100) but is a
+    ///      NUMERICALLY EQUAL to the Game's `4 * QTY_SCALE` (= 4 × 100) but is a
     ///      DISTINCT named constant — it must NOT be collapsed with the inherited
-    ///      `TICKET_SCALE` (100). They play different roles (entry-unit multiplier
+    ///      `QTY_SCALE` (100). They play different roles (entry-unit multiplier
     ///      vs the Game divisor base) that happen to compose to the same 400.
     uint256 internal constant AFKING_TICKET_SCALE = 400;
 
@@ -659,9 +659,9 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
     ///            never the Game's Claimable (claimable<=amount) nor the settle revert;
     ///        (5) ethValue = cost - claimableUse with claimableUse ∈ [0, cost] → never the
     ///            Game's downstream cost reverts.
-    ///      ⚠ Dual TICKET_SCALE (LOAD-BEARING): the ticket entry-unit `amount`
+    ///      ⚠ Dual scale (LOAD-BEARING): the ticket entry-unit `amount`
     ///      uses `AFKING_TICKET_SCALE = 400`; the Game's `/ (4 * 100)` recompute uses the
-    ///      inherited Storage `TICKET_SCALE = 100` — the two constants are NOT collapsed,
+    ///      inherited Storage `QTY_SCALE = 100` — the two constants are NOT collapsed,
     ///      so `cost` stays `mintPrice * effectiveQty`.
     ///      ⚠ NO error-swallowing valve: a funded slice is revert-free
     ///      by construction, with no pre-emptive decline and no reactive error-trap; there
@@ -827,14 +827,14 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
                 }
             }
 
-            _queueTicketsScaled(player, targetLevel, adjustedQty, false);
+            _queueEntriesScaled(player, targetLevel, adjustedQty, false);
 
             // 10%/20% ticket buyer-bonus → claimable pendingFlip (pulled via
             // claimAfkingFlip). Uses the pre-bonus `amount`; whole FLIP with the ~16.7M (2^24-1) clamp.
-            uint256 coinCost = (amount * (PRICE_COIN_UNIT / 4)) / TICKET_SCALE;
+            uint256 coinCost = (amount * (PRICE_COIN_UNIT / 4)) / QTY_SCALE;
             uint256 bonusBase = coinCost / 10; // flat 10%
-            if (amount >= 10 * 4 * TICKET_SCALE) {
-                bonusBase += (amount * PRICE_COIN_UNIT) / (40 * TICKET_SCALE); // +10% → 20% on ≥10 tickets
+            if (amount >= 10 * 4 * QTY_SCALE) {
+                bonusBase += (amount * PRICE_COIN_UNIT) / (40 * QTY_SCALE); // +10% → 20% on ≥10 tickets
             }
             uint256 bonusWhole = bonusBase / 1 ether;
             if (bonusWhole != 0) {

@@ -123,7 +123,7 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
     uint24 private constant LAZY_PASS_LEVELS = 10;
 
     /// @dev Lazy pass: tickets per level (4 tickets = 1 level).
-    uint32 private constant LAZY_PASS_TICKETS_PER_LEVEL = 4;
+    uint32 private constant LAZY_PASS_ENTRIES_PER_LEVEL = 4;
 
     /// @dev Lazy pass: share of purchase value awarded as lootbox (10%).
     uint16 private constant LAZY_PASS_LOOTBOX_BPS = 1000;
@@ -138,10 +138,10 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
     uint256 private constant WHALE_PASS_STANDARD_PRICE = 4 ether;
 
     /// @dev Whale pass bonus tickets per level for levels up to 10.
-    uint32 private constant WHALE_BONUS_TICKETS_PER_LEVEL = 40;
+    uint32 private constant WHALE_BONUS_ENTRIES_PER_LEVEL = 40;
 
     /// @dev Whale pass standard tickets per level for levels 11+.
-    uint32 private constant WHALE_STANDARD_TICKETS_PER_LEVEL = 2;
+    uint32 private constant WHALE_STANDARD_ENTRIES_PER_LEVEL = 2;
 
     /// @dev Last level eligible for whale pass bonus tickets.
     uint24 private constant WHALE_BONUS_END_LEVEL = 10;
@@ -317,27 +317,27 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
         mintPacked_[buyer] = data;
 
         // Queue tickets: 40*quantity/lvl for bonus levels (passLevel to 10), 2*quantity/lvl for the rest
-        uint32 bonusTickets = uint32(WHALE_BONUS_TICKETS_PER_LEVEL * quantity);
-        uint32 standardTickets = uint32(
-            WHALE_STANDARD_TICKETS_PER_LEVEL * quantity
+        uint32 bonusEntries = uint32(WHALE_BONUS_ENTRIES_PER_LEVEL * quantity);
+        uint32 standardEntries = uint32(
+            WHALE_STANDARD_ENTRIES_PER_LEVEL * quantity
         );
         uint24 bonusCount = passLevel <= WHALE_BONUS_END_LEVEL
             ? (WHALE_BONUS_END_LEVEL - passLevel + 1)
             : 0;
         if (bonusCount != 0) {
-            _queueTicketRange(
+            _queueEntryRange(
                 buyer,
                 ticketStartLevel,
                 bonusCount,
-                bonusTickets,
+                bonusEntries,
                 false
             );
         }
-        _queueTicketRange(
+        _queueEntryRange(
             buyer,
             ticketStartLevel + bonusCount,
             100 - bonusCount,
-            standardTickets,
+            standardEntries,
             false
         );
 
@@ -460,13 +460,13 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
         // tickets. Presale-box credit, lootbox, and pool splits all scale on totalPrice (paid).
         uint256 totalPrice;
         uint256 benefitValue;
-        uint32 bonusTickets;
+        uint32 bonusEntries;
         if (currentLevel <= 2) {
             benefitValue = 0.24 ether;
             uint256 balance = benefitValue - baseCost;
             if (balance != 0) {
                 uint256 ticketPrice = PriceLookupLib.priceForLevel(startLevel);
-                bonusTickets = uint32((balance * 4) / ticketPrice);
+                bonusEntries = uint32((balance * 4) / ticketPrice);
             }
             if (hasValidBoon) {
                 totalPrice =
@@ -499,11 +499,11 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
             presaleBoxCredit[buyer] += totalPrice / 4;
         }
 
-        _activate10LevelPass(buyer, startLevel, LAZY_PASS_TICKETS_PER_LEVEL);
+        _activate10LevelPass(buyer, startLevel, LAZY_PASS_ENTRIES_PER_LEVEL);
 
         // Queue bonus tickets from flat-price overpayment at early levels
-        if (bonusTickets != 0) {
-            _queueTickets(buyer, startLevel, bonusTickets, false);
+        if (bonusEntries != 0) {
+            _queueEntries(buyer, startLevel, bonusEntries, false);
         }
 
         // Split actual payment into pools (future + next)
@@ -649,19 +649,19 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
             ? (WHALE_BONUS_END_LEVEL - passLevel + 1)
             : 0;
         if (bonusCount != 0) {
-            _queueTicketRange(
+            _queueEntryRange(
                 affiliateAddr,
                 ticketStartLevel,
                 bonusCount,
-                WHALE_BONUS_TICKETS_PER_LEVEL,
+                WHALE_BONUS_ENTRIES_PER_LEVEL,
                 false
             );
         }
-        _queueTicketRange(
+        _queueEntryRange(
             affiliateAddr,
             ticketStartLevel + bonusCount,
             100 - bonusCount,
-            WHALE_STANDARD_TICKETS_PER_LEVEL,
+            WHALE_STANDARD_ENTRIES_PER_LEVEL,
             false
         );
         _applyWhalePassStats(affiliateAddr, ticketStartLevel);
@@ -1021,7 +1021,7 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
 
         _applyWhalePassStats(player, startLevel);
         emit WhalePassClaimed(player, msg.sender, halfPasses, startLevel);
-        _queueTicketRange(player, startLevel, 100, uint32(halfPasses), false);
+        _queueEntryRange(player, startLevel, 100, uint32(halfPasses), false);
     }
 }
 

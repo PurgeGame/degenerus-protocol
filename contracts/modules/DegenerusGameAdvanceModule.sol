@@ -128,7 +128,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
     uint16 private constant VRF_REQUEST_CONFIRMATIONS = 10;
     uint16 private constant VRF_MIDDAY_CONFIRMATIONS = 4;
 
-    uint32 private constant VAULT_PERPETUAL_TICKETS = 16;
+    uint32 private constant VAULT_PERPETUAL_ENTRIES = 16;
     uint16 private constant NEXT_TO_FUTURE_BPS_FAST = 3000;
     uint16 private constant NEXT_TO_FUTURE_BPS_MIN = 1300;
     uint16 private constant NEXT_TO_FUTURE_BPS_DAY_STEP = 14;
@@ -1617,16 +1617,16 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
     function _processPhaseTransition(uint24 purchaseLevel) private {
         // Vault perpetual tickets: 16 generic tickets per level for DGNRS and VAULT
         uint24 targetLevel = purchaseLevel + 99;
-        _queueTickets(
+        _queueEntries(
             ContractAddresses.SDGNRS,
             targetLevel,
-            VAULT_PERPETUAL_TICKETS,
+            VAULT_PERPETUAL_ENTRIES,
             true
         );
-        _queueTickets(
+        _queueEntries(
             ContractAddresses.VAULT,
             targetLevel,
-            VAULT_PERPETUAL_TICKETS,
+            VAULT_PERPETUAL_ENTRIES,
             true
         );
 

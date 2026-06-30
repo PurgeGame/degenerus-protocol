@@ -27,7 +27,7 @@ interface IDegenerusGamePlayerActions {
     ///         leg; the vault always passes false (it buys tickets/lootboxes only).
     function purchase(
         address buyer,
-        uint256 ticketQuantity,
+        uint256 entryQuantityScaled,
         uint256 lootBoxAmount,
         bytes32 affiliateCode,
         MintPaymentKind payKind,
@@ -47,9 +47,9 @@ interface IDegenerusGamePlayerActions {
     function placeDegeneretteBet(
         address player,
         uint8 currency,
-        uint128 amountPerTicket,
-        uint8 ticketCount,
-        uint32 customTicket,
+        uint128 amountPerSpin,
+        uint8 spinCount,
+        uint32 customTraits,
         uint8 heroQuadrant
     ) external payable;
     /// @notice Resolve degenerette bets for a player.
@@ -61,7 +61,7 @@ interface IDegenerusGamePlayerActions {
     /// @notice Purchase tickets using FLIP.
     function redeemFlip(
         address buyer,
-        uint256 ticketQuantity
+        uint256 entryQuantityScaled
     ) external;
     /// @notice Sell far-future ticket entries to sDGNRS for current-level tickets + cash.
     function sellFarFutureTickets(
@@ -519,7 +519,7 @@ contract DegenerusVault {
 
     /// @notice Purchase tickets and lootboxes for the vault
     /// @dev Combines msg.value with vault ETH balance if ethValue > 0
-    /// @param ticketQuantity Number of tickets to purchase
+    /// @param entryQuantityScaled Number of tickets to purchase
     /// @param lootBoxAmount Number of lootboxes to purchase
     /// @param affiliateCode Affiliate code for referral tracking
     /// @param payKind Payment method for minting
@@ -527,7 +527,7 @@ contract DegenerusVault {
     /// @custom:reverts NotVaultOwner If caller does not hold >50.1% of DGVE
     /// @custom:reverts Insufficient If total value exceeds vault balance
     function gamePurchase(
-        uint256 ticketQuantity,
+        uint256 entryQuantityScaled,
         uint256 lootBoxAmount,
         bytes32 affiliateCode,
         MintPaymentKind payKind,
@@ -536,7 +536,7 @@ contract DegenerusVault {
         uint256 totalValue = _combinedValue(ethValue);
         gamePlayer.purchase{value: totalValue}(
             address(this),
-            ticketQuantity,
+            entryQuantityScaled,
             lootBoxAmount,
             affiliateCode,
             payKind,
@@ -545,12 +545,12 @@ contract DegenerusVault {
     }
 
     /// @notice Purchase FLIP tickets through the game contract
-    /// @param ticketQuantity Number of tickets to purchase
+    /// @param entryQuantityScaled Number of tickets to purchase
     /// @custom:reverts NotVaultOwner If caller does not hold >50.1% of DGVE
-    /// @custom:reverts Insufficient If ticketQuantity is zero
-    function gamePurchaseTicketsFlip(uint256 ticketQuantity) external onlyVaultOwner {
-        if (ticketQuantity == 0) revert Insufficient();
-        gamePlayer.redeemFlip(address(this), ticketQuantity);
+    /// @custom:reverts Insufficient If entryQuantityScaled is zero
+    function gamePurchaseTicketsFlip(uint256 entryQuantityScaled) external onlyVaultOwner {
+        if (entryQuantityScaled == 0) revert Insufficient();
+        gamePlayer.redeemFlip(address(this), entryQuantityScaled);
     }
 
     /// @notice Purchase a deity pass using an active boon for the vault
@@ -585,33 +585,33 @@ contract DegenerusVault {
 
     /// @notice Place a Degenerette bet using ETH (and/or claimable winnings)
     /// @dev Uses msg.value + ethValue from vault balance. If underfunded, claimable winnings are used.
-    /// @param amountPerTicket Bet amount per ticket
-    /// @param ticketCount Number of tickets (must satisfy game rules)
-    /// @param customTicket Custom packed traits
+    /// @param amountPerSpin Bet amount per ticket
+    /// @param spinCount Number of tickets (must satisfy game rules)
+    /// @param customTraits Custom packed traits
     /// @param heroQuadrant Hero quadrant (0-3) for payout boost, or 0xFF for no hero
     /// @param ethValue Additional ETH from vault balance to use (on top of msg.value)
     /// @custom:reverts NotVaultOwner If caller does not hold >50.1% of DGVE
     /// @custom:reverts Insufficient If msg.value + ethValue exceeds vault balance
     function gameDegeneretteBet(
         uint8 currency,
-        uint128 amountPerTicket,
-        uint8 ticketCount,
-        uint32 customTicket,
+        uint128 amountPerSpin,
+        uint8 spinCount,
+        uint32 customTraits,
         uint8 heroQuadrant,
         uint256 ethValue
     ) external payable onlyVaultOwner {
         uint256 value;
         if (currency == 0) {
-            // Overpay (value > amountPerTicket * ticketCount) reverts game-side: the module's
+            // Overpay (value > amountPerSpin * spinCount) reverts game-side: the module's
             // _collectBetFunds rejects ethPaid > totalBet with the identical formula.
             value = _combinedValue(ethValue);
         }
         gamePlayer.placeDegeneretteBet{value: value}(
             address(this),
             currency,
-            amountPerTicket,
-            ticketCount,
-            customTicket,
+            amountPerSpin,
+            spinCount,
+            customTraits,
             heroQuadrant
         );
     }

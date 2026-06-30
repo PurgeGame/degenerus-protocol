@@ -259,14 +259,14 @@ interface IDegenerusGame {
 
     /// @notice Buy tickets/lootbox AND a presale box in one tx, sharing one RNG index.
     /// @param buyer Player to receive both legs (address(0) = msg.sender).
-    /// @param ticketQuantity Tickets to buy (0 to skip).
+    /// @param entryQuantityScaled Tickets to buy (0 to skip).
     /// @param lootBoxAmount ETH lootbox spend (0 to skip).
     /// @param affiliateCode Affiliate/referral code for the mint leg.
     /// @param payKind Payment method for the mint leg.
     /// @param boxAmount Requested presale-box ETH (claimable-funded).
     function buyLootboxAndPresaleBox(
         address buyer,
-        uint256 ticketQuantity,
+        uint256 entryQuantityScaled,
         uint256 lootBoxAmount,
         bytes32 affiliateCode,
         MintPaymentKind payKind,
@@ -285,16 +285,16 @@ interface IDegenerusGame {
     /// @notice Place Full Ticket Degenerette bets (4 traits, match-based payouts).
     /// @param player The betting player (address(0) = msg.sender).
     /// @param currency Currency type (0=ETH, 1=FLIP, 2=unsupported, 3=WWXRP).
-    /// @param amountPerTicket Bet amount per ticket.
-    /// @param ticketCount Number of spins (1-10). Each spin resolves independently.
-    /// @param customTicket Custom packed traits (use 0 for random).
+    /// @param amountPerSpin Bet amount per ticket.
+    /// @param spinCount Number of spins (1-10). Each spin resolves independently.
+    /// @param customTraits Custom packed traits (use 0 for random).
     /// @param heroQuadrant Hero quadrant (0-3) for payout boost, or 0xFF for no hero.
     function placeDegeneretteBet(
         address player,
         uint8 currency,
-        uint128 amountPerTicket,
-        uint8 ticketCount,
-        uint32 customTicket,
+        uint128 amountPerSpin,
+        uint8 spinCount,
+        uint32 customTraits,
         uint8 heroQuadrant
     ) external payable;
 
@@ -354,7 +354,7 @@ interface IDegenerusGame {
     /// @dev Main entry point for all ETH/claimable purchases.
     ///      Recycling at least 3 tickets' worth of claimable winnings earns a 10% FLIP flip-credit bonus.
     /// @param buyer Player address to receive purchases (address(0) = msg.sender).
-    /// @param ticketQuantity Number of tickets to purchase (0 to skip).
+    /// @param entryQuantityScaled Number of tickets to purchase (0 to skip).
     /// @param lootBoxAmount ETH amount for loot boxes, minimum 0.01 ETH (0 to skip).
     /// @param affiliateCode Affiliate/referral code for all purchases.
     /// @param payKind Payment method (DirectEth, Claimable, or Combined).
@@ -362,7 +362,7 @@ interface IDegenerusGame {
     ///        foil leg is one-per-cycle and adds to, never replaces, the ticket/lootbox legs.
     function purchase(
         address buyer,
-        uint256 ticketQuantity,
+        uint256 entryQuantityScaled,
         uint256 lootBoxAmount,
         bytes32 affiliateCode,
         MintPaymentKind payKind,
@@ -372,10 +372,10 @@ interface IDegenerusGame {
     /// @notice Purchase tickets with FLIP.
     /// @dev Entry point for FLIP ticket purchases.
     /// @param buyer Player address to receive purchases (address(0) = msg.sender).
-    /// @param ticketQuantity Number of tickets to purchase (0 to skip).
+    /// @param entryQuantityScaled Number of tickets to purchase (0 to skip).
     function redeemFlip(
         address buyer,
-        uint256 ticketQuantity
+        uint256 entryQuantityScaled
     ) external;
 
     /// @notice Claim color-completion bingo: all 8 colors of one symbol on a level (v51.0).
@@ -384,7 +384,7 @@ interface IDegenerusGame {
     /// @param player Bingo owner to claim for (address(0) = msg.sender).
     /// @param level The level to claim on (uint24 storage-key width).
     /// @param symbol Symbol 0-31 (quadrant = symbol >> 3, symInQ = symbol & 7).
-    /// @param slots Per-color positions in traitBurnTicket[level][traitId] the owner occupies.
+    /// @param slots Per-color positions in lvlTraitEntry[level][traitId] the owner occupies.
     function claimBingo(address player, uint24 level, uint8 symbol, uint32[8] calldata slots) external;
 
     // -------------------------------------------------------------------------
