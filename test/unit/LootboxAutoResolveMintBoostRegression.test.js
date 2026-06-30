@@ -136,15 +136,41 @@ describe("LootboxAutoResolveMintBoostRegression — Phase 275 Wave 2 TST-LBX-AR-
       );
       const current = fs.readFileSync(MINT_MODULE_PATH, "utf8");
       // Normalize the audited Phase-481 ABI rename (event TicketsBought ->
-      // EntriesBought + field ticketQuantity -> entryQuantityScaled) into the
-      // committed-HEAD baseline. Any OTHER drift (e.g. the lootbox refactor
-      // touching MintModule) still fails this byte-identity guard.
+      // EntriesBought + field ticketQuantity -> entryQuantityScaled) AND the
+      // audited Phase-483 FF-salvage entry-granularity diff (the
+      // sellFarFutureTickets / previewSellFarFutureTickets / _removeFarFutureTickets
+      // -> *Entries renames plus the 5-site coupled entry-granular value change:
+      // input now ENTRIES not whole tickets, faceWei = price * n / 4, and the
+      // budget/ticket floors at one entry = oneTicketWei / 4) into the committed-
+      // HEAD baseline. Any OTHER drift (e.g. the lootbox refactor touching
+      // MintModule) still fails this byte-identity guard.
       const normBaseline = baseline
         .replace(/TicketsBought/g, "EntriesBought")
-        .replace(/ticketQuantity/g, "entryQuantityScaled");
+        .replace(/ticketQuantity/g, "entryQuantityScaled")
+        // Phase-483 FF-salvage renames (selector + internal helper)
+        .replace(/sellFarFutureTickets/g, "sellFarFutureEntries")
+        .replace(/previewSellFarFutureTickets/g, "previewSellFarFutureEntries")
+        .replace(/_removeFarFutureTickets/g, "_removeFarFutureEntries")
+        // Phase-483 FF-salvage entry-granularity value + doc changes (5-site coupled)
+        .replace(
+          "/// @return totalFaceWei Sum of priceForLevel(L) * n over all lines (the bundle's face value).",
+          "/// @return totalFaceWei Sum of priceForLevel(L) * n / 4 over all lines (per-entry face; bundle face)."
+        )
+        .replace(
+          "///      (so no _resolvePlayer here). Mass-sells WHOLE far-future tickets (6 <= d = L - currentLevel\n    ///      <= 100) for ONE aggregated current-level mint (a normal recycled Claimable mint) + a cash",
+          "///      (so no _resolvePlayer here). Mass-sells far-future ticket ENTRIES (4 entries = 1 whole ticket;\n    ///      6 <= d = L - currentLevel <= 100) for ONE aggregated current-level mint (a normal recycled\n    ///      Claimable mint) + a cash"
+        )
+        .replace(
+          "if (totalBudget < oneTicketWei) revert E(); // too small to deliver even 1 whole ticket",
+          "if (totalBudget < oneTicketWei / 4) revert E(); // too small to deliver even 1 entry"
+        )
+        .replace(
+          "        // Debit the seller's far entries (owed is in entries, 4 per whole ticket; swap-pop on full\n        // sell-out) and credit the buyer the same entries. Distances were validated by _quoteFarFutureSwap;\n        // sequential processing handles duplicate levels (a later same-level line reads the decremented\n        // balance and reverts if it over-sells; only the line that zeroes the packed slot pops).\n        for (uint256 i; i < len; ) {\n            uint24 L = uint24(levels[i]);\n            uint32 entries = uint32(quantities[i]) * 4;",
+          "        // Debit the seller's far entries (quantities[i] IS the entry count, 4 per whole ticket; swap-pop on\n        // full sell-out) and credit the buyer the same entries. Distances were validated by\n        // _quoteFarFutureSwap; sequential processing handles duplicate levels (a later same-level line reads\n        // the decremented balance and reverts if it over-sells; only the line that zeroes the packed slot pops).\n        for (uint256 i; i < len; ) {\n            uint24 L = uint24(levels[i]);\n            uint32 entries = uint32(quantities[i]);"
+        );
       expect(
         normBaseline,
-        "MintModule.sol drifted from committed HEAD beyond the audited Phase-481 ABI rename"
+        "MintModule.sol drifted from committed HEAD beyond the audited Phase-481 ABI rename + Phase-483 FF-salvage entry-granularity diff"
       ).to.equal(current);
     });
 
