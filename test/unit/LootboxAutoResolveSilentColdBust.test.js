@@ -112,19 +112,19 @@ describe("LootboxAutoResolveSilentColdBust — Phase 275 Wave 2 TST-LBX-AR-03", 
   });
 
   describe("Source-level proof: ticket award is a single unconditional _queueTickets call; auto-resolve callers pass payColdBustConsolation = false", function () {
-    it("[02a] `_queueTickets(player, rollLevel, whole, false)` appears at one source site; the consolation that follows it is `payColdBustConsolation`-gated", function () {
+    it("[02a] `_queueTickets(player, rollLevel, wholeTicketsToEntries(whole), false)` appears at one source site; the consolation that follows it is `payColdBustConsolation`-gated", function () {
       const source = fs.readFileSync(MODULE_SOURCE_PATH, "utf8");
       // The sentinel branch is retired: the ticket award is a single
-      // `_queueTickets(player, rollLevel, whole, false)` source site inside the
+      // `_queueTickets(player, rollLevel, wholeTicketsToEntries(whole), false)` source site inside the
       // per-roll `_settleLootboxRoll` helper. The cold-bust case is absorbed by
       // the helper's `if (quantity == 0) return;` early-return.
-      const callLine = "_queueTickets(player, rollLevel, whole, false)";
+      const callLine = "_queueTickets(player, rollLevel, wholeTicketsToEntries(whole), false)";
       const firstIdx = source.indexOf(callLine);
       const secondIdx = source.indexOf(callLine, firstIdx + 1);
-      expect(firstIdx, "`_queueTickets(player, rollLevel, whole, false)` callsite not found").to.be.greaterThan(-1);
+      expect(firstIdx, "`_queueTickets(player, rollLevel, wholeTicketsToEntries(whole), false)` callsite not found").to.be.greaterThan(-1);
       expect(
         secondIdx,
-        "`_queueTickets(player, rollLevel, whole, false)` must appear at exactly one source site (sentinel-branch duplication retired)"
+        "`_queueTickets(player, rollLevel, wholeTicketsToEntries(whole), false)` must appear at exactly one source site (sentinel-branch duplication retired)"
       ).to.equal(-1);
       // The consolation `mintPrize` payout that follows the queue call sits
       // inside `if (payColdBustConsolation && whole == 0)` — so an auto-resolve

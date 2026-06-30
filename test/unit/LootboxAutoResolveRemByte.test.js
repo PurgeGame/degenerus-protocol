@@ -11,7 +11,7 @@
 // a whole ticket via a Bernoulli round-up.
 //
 // Phase 275 LBX-AR-02 swaps the auto-resolve callsite to
-// `_queueTickets(player, targetLevel, whole, false)` at
+// `_queueTickets(player, targetLevel, wholeTicketsToEntries(whole), false)` at
 // `DegenerusGameStorage.sol:562` — the whole-helper. Per D-275-TST-05-01, the
 // invariant is: the `_queueTickets` body writes ONLY the whole-ticket count
 // into `ticketsOwedPacked` and NEVER touches the rem byte. After Plan A:
@@ -122,18 +122,18 @@ describe("LootboxAutoResolveRemByte — Phase 275 Wave 2 TST-LBX-AR-05", functio
   });
 
   describe("LootboxModule auto-resolve branch calls `_queueTickets` (whole) — not `_queueTicketsScaled` (LBX-AR-02)", function () {
-    it("[02a] LootboxModule contains `_queueTickets(player, rollLevel, whole, false)` at one source site and ZERO occurrences of `_queueTicketsScaled`", function () {
+    it("[02a] LootboxModule contains `_queueTickets(player, rollLevel, wholeTicketsToEntries(whole), false)` at one source site and ZERO occurrences of `_queueTicketsScaled`", function () {
       const source = fs.readFileSync(MODULE_SOURCE_PATH, "utf8");
       // Pre-refactor the manual true-branch and auto-resolve else-arm each had
-      // their own `_queueTickets(player, targetLevel, whole, false)` call (the
+      // their own `_queueTickets(player, targetLevel, wholeTicketsToEntries(whole), false)` call (the
       // "exactly twice" structure). The refactor unifies both paths into a
       // single per-roll `_settleLootboxRoll` helper, so the whole-ticket queue
       // is now ONE source site (invoked once per roll at runtime — a split box
       // runs the helper twice). The load-bearing invariant survives: the lootbox
       // path queues WHOLE tickets via `_queueTickets`, never `_queueTicketsScaled`.
-      const callPattern = /_queueTickets\(player, rollLevel, whole, false\)/g;
+      const callPattern = /_queueTickets\(player, rollLevel, wholeTicketsToEntries\(whole\), false\)/g;
       const calls = (source.match(callPattern) || []).length;
-      expect(calls, "expected exactly one `_queueTickets(player, rollLevel, whole, false)` source site (unified per-roll settle path)").to.equal(1);
+      expect(calls, "expected exactly one `_queueTickets(player, rollLevel, wholeTicketsToEntries(whole), false)` source site (unified per-roll settle path)").to.equal(1);
       expect(
         source.includes("_queueTicketsScaled"),
         "`_queueTicketsScaled` must not appear in DegenerusGameLootboxModule.sol"
@@ -150,11 +150,11 @@ describe("LootboxAutoResolveRemByte — Phase 275 Wave 2 TST-LBX-AR-05", functio
       const settleBody = extractBody(source, "function _settleLootboxRoll(");
       expect(settleBody, "`_settleLootboxRoll` body not found").to.not.equal(null);
       expect(
-        settleBody.includes("_queueTickets(player, rollLevel, whole, false)"),
+        settleBody.includes("_queueTickets(player, rollLevel, wholeTicketsToEntries(whole), false)"),
         "the whole-ticket queue call must live inside `_settleLootboxRoll`"
       ).to.equal(true);
       // The queue site appears nowhere else in the module.
-      const totalCalls = (source.match(/_queueTickets\(player, rollLevel, whole, false\)/g) || []).length;
+      const totalCalls = (source.match(/_queueTickets\(player, rollLevel, wholeTicketsToEntries\(whole\), false\)/g) || []).length;
       expect(totalCalls, "the whole-ticket queue call must be single-site").to.equal(1);
     });
   });

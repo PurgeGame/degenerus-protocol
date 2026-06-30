@@ -14,8 +14,10 @@
 //       (The lootbox module carries no dedicated WWXRP event; the manual
 //       lootbox consolation is observable only via the WWXRP ERC-20 `Transfer`
 //       event. The jackpot path emits neither — it is fully silent.)
-//   BUT `JackpotTicketWin` STILL fires unconditionally with the pre-Bernoulli
-//   scaled `ticketCount` (`uint32(quantityScaled)`) — D-276-EVT-STATUSQUO-01.
+//   BUT `JackpotTicketWin` STILL fires unconditionally; its `ticketCount` 4th
+//   arg is the entries count `wholeTicketsToEntries(whole)` (= whole<<2, 4 per
+//   whole ticket; 0 on cold-bust), matching the adjacent `_queueTickets` queued
+//   entries (emit == queue).
 //   The silent-cold-bust scope is the QUEUE surface only, NOT the
 //   `JackpotTicketWin` event. Phase 277 EVT-UNI-04 added a trailing non-indexed
 //   `bool roundedUp` field to `JackpotTicketWin`; `_jackpotTicketRoll` threads
@@ -25,11 +27,11 @@
 // DIVERGENCE FROM THE PHASE 275 ANALOG (test/unit/LootboxAutoResolveSilentColdBust.test.js):
 //   The jackpot ticket-roll path has NO `LootboxTicketRoll` analog and NO
 //   manual-path consolation positive-control. `_jackpotTicketRoll` is a SINGLE
-//   path — it ALWAYS emits `JackpotTicketWin` with the pre-Bernoulli scaled
-//   `ticketCount` regardless of the Bernoulli outcome (D-276-EVT-STATUSQUO-01).
+//   path — it ALWAYS emits `JackpotTicketWin` with the entries count
+//   `wholeTicketsToEntries(whole)` regardless of the Bernoulli outcome.
 //   So there is NO manual-path positive control to copy: the silent-cold-bust
 //   assertion is specifically `whole == 0` ⇒ zero `TicketsQueued`, while
-//   `JackpotTicketWin` still fires scaled.
+//   `JackpotTicketWin` still fires the entries count (0 when whole == 0).
 //
 // TEST STRATEGY:
 //   No state fixture exists for `_jackpotTicketRoll` at the FOG-of-state
@@ -43,14 +45,14 @@
 //         inline Bernoulli (JackpotBernoulliTester).
 //     (b) Source-level structural proof that `_jackpotTicketRoll`'s
 //         post-Bernoulli path contains ONLY the single
-//         `_queueTickets(winner, targetLevel, whole, true)` call (no emit, no
+//         `_queueTickets(winner, targetLevel, wholeTicketsToEntries(whole), true)` call (no emit, no
 //         mintPrize, no consolation branch) + that the cold-bust gate is the
 //         `if (quantity == 0) return;` early-return inside `_queueTickets` at
 //         `DegenerusGameStorage.sol:568`.
 //     (c) Emit-absence assertion: on `whole == 0` the part-(b) structural
 //         proof establishes zero `TicketsQueued` emit; AND the source
 //         structure shows `JackpotTicketWin` STILL fires unconditionally with
-//         `uint32(quantityScaled)` (D-276-EVT-STATUSQUO-01).
+//         the entries count `wholeTicketsToEntries(whole)` (emit == queue).
 //
 // CROSS-CITES:
 //   - D-276-INLINE-01 (Bernoulli math inlined in _jackpotTicketRoll)
@@ -178,8 +180,8 @@ describe("JackpotTicketRollSilentColdBust — Phase 276 Wave 2 TST-JPT-BR-02", f
     });
   });
 
-  describe("Part (b) — source-level structural proof: _jackpotTicketRoll's post-Bernoulli path is the single _queueTickets(winner, targetLevel, whole, true) call — no emit, no mintPrize, no consolation", function () {
-    it("[02a] `_jackpotTicketRoll` body contains exactly one `_queueTickets(winner, targetLevel, whole, true)` call (rngBypass = true)", function () {
+  describe("Part (b) — source-level structural proof: _jackpotTicketRoll's post-Bernoulli path is the single _queueTickets(winner, targetLevel, wholeTicketsToEntries(whole), true) call — no emit, no mintPrize, no consolation", function () {
+    it("[02a] `_jackpotTicketRoll` body contains exactly one `_queueTickets(winner, targetLevel, wholeTicketsToEntries(whole), true)` call (rngBypass = true)", function () {
       // Source-structural proof reads: fs.readFileSync DegenerusGameJackpotModule.sol
       const source = fs.readFileSync(MODULE_SOURCE_PATH, "utf8");
       const body = stripLineComments(
@@ -187,11 +189,11 @@ describe("JackpotTicketRollSilentColdBust — Phase 276 Wave 2 TST-JPT-BR-02", f
       );
       expect(body, "`_jackpotTicketRoll` body not found").to.not.equal(null);
       const calls = (
-        body.match(/_queueTickets\(winner, targetLevel, whole, true\)/g) || []
+        body.match(/_queueTickets\(winner, targetLevel, wholeTicketsToEntries\(whole\), true\)/g) || []
       ).length;
       expect(
         calls,
-        "`_jackpotTicketRoll` must contain exactly one `_queueTickets(winner, targetLevel, whole, true)` call (the single post-Bernoulli queue call, rngBypass = true)"
+        "`_jackpotTicketRoll` must contain exactly one `_queueTickets(winner, targetLevel, wholeTicketsToEntries(whole), true)` call (the single post-Bernoulli queue call, rngBypass = true)"
       ).to.equal(1);
     });
 
@@ -242,23 +244,20 @@ describe("JackpotTicketRollSilentColdBust — Phase 276 Wave 2 TST-JPT-BR-02", f
     });
   });
 
-  describe("Part (c) — emit-absence: whole == 0 ⇒ zero TicketsQueued; JackpotTicketWin STILL fires the pre-Bernoulli scaled ticketCount + the Phase 277 `roundedUp` field (D-276-EVT-STATUSQUO-01, EVT-UNI-04)", function () {
-    it("[03a] `_jackpotTicketRoll` emits `JackpotTicketWin` unconditionally with `uint32(quantityScaled)` and the trailing `roundedUp` field — the pre-Bernoulli scaled count, NOT `whole` (D-276-EVT-STATUSQUO-01, EVT-UNI-04)", function () {
+  describe("Part (c) — emit-absence: whole == 0 ⇒ zero TicketsQueued; JackpotTicketWin STILL fires the entries ticketCount wholeTicketsToEntries(whole) + the Phase 277 `roundedUp` field (EVT-UNI-04)", function () {
+    it("[03a] `_jackpotTicketRoll` emits `JackpotTicketWin` unconditionally with the entries count `wholeTicketsToEntries(whole)` (4th arg == the adjacent queued entries) and the trailing `roundedUp` field (EVT-UNI-04)", function () {
       const source = fs.readFileSync(MODULE_SOURCE_PATH, "utf8");
       const body = stripLineComments(
         extractBody(source, "function _jackpotTicketRoll(")
       );
       expect(body, "`_jackpotTicketRoll` body not found").to.not.equal(null);
-      // Exactly one JackpotTicketWin emit, and it carries uint32(quantityScaled).
+      // Exactly one JackpotTicketWin emit; its 4th arg is the entries count
+      // wholeTicketsToEntries(whole) (asserted positionally below) — emit == queue.
       const emitCount = (body.match(/emit JackpotTicketWin\(/g) || []).length;
       expect(
         emitCount,
         "_jackpotTicketRoll must emit JackpotTicketWin exactly once"
       ).to.equal(1);
-      expect(
-        body.includes("uint32(quantityScaled)"),
-        "JackpotTicketWin must carry `uint32(quantityScaled)` — the pre-Bernoulli scaled ticketCount per D-276-EVT-STATUSQUO-01"
-      ).to.equal(true);
       // Phase 277 EVT-UNI-04: the emit threads the captured `roundedUp` local as
       // its trailing (7th) non-indexed field. _jackpotTicketRoll declares
       // `bool roundedUp = false;` before the Bernoulli predicate and sets it
@@ -285,6 +284,10 @@ describe("JackpotTicketRollSilentColdBust — Phase 276 Wave 2 TST-JPT-BR-02", f
         "JackpotTicketWin emit must supply 7 args including the trailing roundedUp"
       ).to.equal(7);
       expect(
+        emitArgs[3],
+        "the 4th JackpotTicketWin arg must be the entries count `wholeTicketsToEntries(whole)` (emit == the adjacent queued entries)"
+      ).to.equal("wholeTicketsToEntries(whole)");
+      expect(
         emitArgs[6],
         "the 7th JackpotTicketWin arg must be the captured `roundedUp` local"
       ).to.equal("roundedUp");
@@ -293,7 +296,7 @@ describe("JackpotTicketRollSilentColdBust — Phase 276 Wave 2 TST-JPT-BR-02", f
       // branch wraps it: the emit must appear AFTER the _queueTickets call and
       // at brace-depth 1 (function body), not nested in a conditional.
       const queueIdx = body.indexOf(
-        "_queueTickets(winner, targetLevel, whole, true)"
+        "_queueTickets(winner, targetLevel, wholeTicketsToEntries(whole), true)"
       );
       const emitIdx = body.indexOf("emit JackpotTicketWin(");
       expect(queueIdx, "_queueTickets call not found").to.be.greaterThan(-1);
@@ -310,7 +313,7 @@ describe("JackpotTicketRollSilentColdBust — Phase 276 Wave 2 TST-JPT-BR-02", f
       // composition: part (a) proves the inline Bernoulli yields whole==0 on a
       // losing slice for scaledTickets ∈ (0, 100); part (b) proves the only
       // post-Bernoulli statement consuming `whole` is
-      // `_queueTickets(winner, targetLevel, whole, true)`, which early-returns
+      // `_queueTickets(winner, targetLevel, wholeTicketsToEntries(whole), true)`, which early-returns
       // at `if (quantity == 0) return;` BEFORE `emit TicketsQueued`. Therefore
       // whole==0 ⇒ zero TicketsQueued, zero SSTORE — silent.
       const tester = await deployTester();

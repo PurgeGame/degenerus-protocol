@@ -427,16 +427,16 @@ describe("LootboxWholeTicket — Phase 274 Wave 2 TST-WT-01..07", function () {
 
     it("[03-static] the per-roll ticket-queue path consumes `rollSeed >> 224` exactly once — single source site", function () {
       const source = fs.readFileSync(MODULE_SOURCE_PATH, "utf8");
-      // The `_queueTickets(player, rollLevel, whole, false)` call is a single
+      // The `_queueTickets(player, rollLevel, wholeTicketsToEntries(whole), false)` call is a single
       // source site inside `_settleLootboxRoll` (invoked once per roll), so the
       // Bernoulli slice is consumed exactly once per roll from one source site.
-      const callLine = "_queueTickets(player, rollLevel, whole, false)";
+      const callLine = "_queueTickets(player, rollLevel, wholeTicketsToEntries(whole), false)";
       const callMatches = (
-        source.match(/_queueTickets\(player, rollLevel, whole, false\)/g) || []
+        source.match(/_queueTickets\(player, rollLevel, wholeTicketsToEntries\(whole\), false\)/g) || []
       ).length;
       expect(
         callMatches,
-        "the per-roll ticket-queue path must call `_queueTickets(player, rollLevel, whole, false)` at exactly one source site"
+        "the per-roll ticket-queue path must call `_queueTickets(player, rollLevel, wholeTicketsToEntries(whole), false)` at exactly one source site"
       ).to.equal(1);
       // The slice itself appears at exactly one source site.
       const sliceMatches = (source.match(/rollSeed >> 224/g) || []).length;
@@ -531,15 +531,15 @@ describe("LootboxWholeTicket — Phase 274 Wave 2 TST-WT-01..07", function () {
   });
 
   describe("TST-WT-04 — `TicketsQueued` (not `TicketsQueuedScaled`) on the unified ticket-queue path (Phase 277)", function () {
-    it("the per-roll ticket-queue path calls `_queueTickets(player, rollLevel, whole, false)` at one source site — `_queueTicketsScaled` no longer appears in LootboxModule", function () {
+    it("the per-roll ticket-queue path calls `_queueTickets(player, rollLevel, wholeTicketsToEntries(whole), false)` at one source site — `_queueTicketsScaled` no longer appears in LootboxModule", function () {
       const source = fs.readFileSync(MODULE_SOURCE_PATH, "utf8");
-      // The `_queueTickets(player, rollLevel, whole, false)` call is a single
+      // The `_queueTickets(player, rollLevel, wholeTicketsToEntries(whole), false)` call is a single
       // source site inside `_settleLootboxRoll` (invoked per roll).
-      const callPattern = /_queueTickets\(player, rollLevel, whole, false\)/g;
+      const callPattern = /_queueTickets\(player, rollLevel, wholeTicketsToEntries\(whole\), false\)/g;
       const calls = (source.match(callPattern) || []).length;
       expect(
         calls,
-        "expected exactly one `_queueTickets(player, rollLevel, whole, false)` source site (per-roll settle path)"
+        "expected exactly one `_queueTickets(player, rollLevel, wholeTicketsToEntries(whole), false)` source site (per-roll settle path)"
       ).to.equal(1);
 
       // `_queueTicketsScaled` must no longer appear in this module.
@@ -550,7 +550,7 @@ describe("LootboxWholeTicket — Phase 274 Wave 2 TST-WT-01..07", function () {
 
       // The call sits inside the outer `if (scaledTickets != 0)` guard
       // and is NOT wrapped in any `index`-conditional branch.
-      const callLine = "_queueTickets(player, rollLevel, whole, false)";
+      const callLine = "_queueTickets(player, rollLevel, wholeTicketsToEntries(whole), false)";
       const callIdx = source.indexOf(callLine);
       expect(callIdx).to.be.greaterThan(-1);
       const preamble = source.slice(0, callIdx);
@@ -676,7 +676,7 @@ describe("LootboxWholeTicket — Phase 274 Wave 2 TST-WT-01..07", function () {
         "the `index != type(uint48).max` sentinel gate must be fully retired"
       ).to.equal(false);
       const callIdx = source.indexOf(
-        "_queueTickets(player, rollLevel, whole, false)"
+        "_queueTickets(player, rollLevel, wholeTicketsToEntries(whole), false)"
       );
       expect(callIdx, "the `_queueTickets` callsite not found").to.be.greaterThan(
         -1
@@ -695,7 +695,7 @@ describe("LootboxWholeTicket — Phase 274 Wave 2 TST-WT-01..07", function () {
         -1
       );
       const callIdx = source.indexOf(
-        "_queueTickets(player, rollLevel, whole, false)"
+        "_queueTickets(player, rollLevel, wholeTicketsToEntries(whole), false)"
       );
       const consolationGateIdx = source.indexOf(
         "if (payColdBustConsolation && whole == 0)"

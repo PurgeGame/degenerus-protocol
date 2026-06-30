@@ -120,10 +120,10 @@ describe("LootboxAutoResolveRegression — Phase 274 Wave 2 TST-REG-01..04", fun
   describe("TST-REG-01 — manual-only queues skip _rollRemainder", function () {
     it("[01a] the per-roll settle path invokes `_queueTickets` (the whole-helper, no rem write)", function () {
       const source = fs.readFileSync(MODULE_SOURCE_PATH, "utf8");
-      const manualPattern = /_queueTickets\(player, rollLevel, whole, false\)/;
+      const manualPattern = /_queueTickets\(player, rollLevel, wholeTicketsToEntries\(whole\), false\)/;
       expect(
         source.match(manualPattern),
-        "per-roll `_queueTickets(player, rollLevel, whole, false)` missing"
+        "per-roll `_queueTickets(player, rollLevel, wholeTicketsToEntries(whole), false)` missing"
       ).to.not.be.null;
     });
 
@@ -276,16 +276,16 @@ describe("LootboxAutoResolveRegression — Phase 274 Wave 2 TST-REG-01..04", fun
       ).to.equal("false");
     });
 
-    it("[03c] the per-roll ticket-queue path in `_settleLootboxRoll` calls `_queueTickets(player, rollLevel, whole, false)` at one source site (sentinel retired — no per-branch duplication)", function () {
+    it("[03c] the per-roll ticket-queue path in `_settleLootboxRoll` calls `_queueTickets(player, rollLevel, wholeTicketsToEntries(whole), false)` at one source site (sentinel retired — no per-branch duplication)", function () {
       const source = fs.readFileSync(MODULE_SOURCE_PATH, "utf8");
       // The `index != type(uint48).max` sentinel branch is retired. The manual
       // and auto-resolve paths share one `_queueTickets(player, rollLevel, whole,
       // false)` source site inside the per-roll `_settleLootboxRoll` helper.
-      const callPattern = /_queueTickets\(player, rollLevel, whole, false\)/g;
+      const callPattern = /_queueTickets\(player, rollLevel, wholeTicketsToEntries\(whole\), false\)/g;
       const calls = (source.match(callPattern) || []).length;
       expect(
         calls,
-        "expected exactly one `_queueTickets(player, rollLevel, whole, false)` source site (per-roll settle path)"
+        "expected exactly one `_queueTickets(player, rollLevel, wholeTicketsToEntries(whole), false)` source site (per-roll settle path)"
       ).to.equal(1);
       // `_queueTicketsScaled` MUST no longer appear in `DegenerusGameLootboxModule.sol`
       expect(
@@ -433,7 +433,7 @@ describe("LootboxAutoResolveRegression — Phase 274 Wave 2 TST-REG-01..04", fun
       // `emitLootboxEvent` emit flag (every box path now emits LootBoxOpened, gated only
       // by !wasSpin). The sole remaining per-path bool is `payColdBustConsolation`, which
       // gates the manual cold-bust WWXRP consolation. The
-      // `_queueTickets(player, rollLevel, whole, false)` call is unconditional and shared.
+      // `_queueTickets(player, rollLevel, wholeTicketsToEntries(whole), false)` call is unconditional and shared.
       expect(
         source.includes("if (index != type(uint48).max)"),
         "the `index != type(uint48).max` sentinel gate must be fully retired"
@@ -441,11 +441,11 @@ describe("LootboxAutoResolveRegression — Phase 274 Wave 2 TST-REG-01..04", fun
       // The `_queueTickets` call appears at exactly one source site — no
       // per-branch duplication, so manual and auto-resolve cannot cross over.
       const callMatches = (
-        source.match(/_queueTickets\(player, rollLevel, whole, false\)/g) || []
+        source.match(/_queueTickets\(player, rollLevel, wholeTicketsToEntries\(whole\), false\)/g) || []
       ).length;
       expect(
         callMatches,
-        "the per-roll ticket-queue path must call `_queueTickets(player, rollLevel, whole, false)` at one source site"
+        "the per-roll ticket-queue path must call `_queueTickets(player, rollLevel, wholeTicketsToEntries(whole), false)` at one source site"
       ).to.equal(1);
       // The `LootBoxOpened` emit fires on every box path, suppressed only for
       // Degenerette-spin rolls (`!wasSpin`), which carry their own settlement event;

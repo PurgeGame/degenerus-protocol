@@ -339,18 +339,18 @@ describe("EventSurfaceUnification — Phase 277 Wave 2 TST-EVT-UNI-01..06", func
       }
     });
 
-    it("[03d] the per-roll ticket-queue path calls `_queueTickets(player, rollLevel, whole, false)` at one source site inside _settleLootboxRoll — not inside any index-conditional branch", function () {
+    it("[03d] the per-roll ticket-queue path calls `_queueTickets(player, rollLevel, wholeTicketsToEntries(whole), false)` at one source site inside _settleLootboxRoll — not inside any index-conditional branch", function () {
       const src = fs.readFileSync(LOOTBOX_SOURCE_PATH, "utf8");
       // The ticket/emit/consolation logic moved to `_settleLootboxRoll` (the
       // void `_resolveLootboxCommon` dispatcher calls it once per roll).
       const body = extractBody(src, "function _settleLootboxRoll(");
       expect(body, "_settleLootboxRoll body not found").to.not.equal(null);
       const calls = (
-        body.match(/_queueTickets\(player, rollLevel, whole, false\)/g) || []
+        body.match(/_queueTickets\(player, rollLevel, wholeTicketsToEntries\(whole\), false\)/g) || []
       ).length;
       expect(
         calls,
-        "_settleLootboxRoll must contain exactly one `_queueTickets(player, rollLevel, whole, false)` call (unconditional)"
+        "_settleLootboxRoll must contain exactly one `_queueTickets(player, rollLevel, wholeTicketsToEntries(whole), false)` call (unconditional)"
       ).to.equal(1);
       // No `if (index` conditional should wrap any logic in this function body.
       expect(
@@ -536,7 +536,7 @@ describe("EventSurfaceUnification — Phase 277 Wave 2 TST-EVT-UNI-01..06", func
       // in [03d]); _queueTickets is what makes auto-resolve awards observable
       // without a LootBoxOpened emit.
       expect(
-        body.includes("_queueTickets(player, rollLevel, whole, false)"),
+        body.includes("_queueTickets(player, rollLevel, wholeTicketsToEntries(whole), false)"),
         "the per-roll path must call _queueTickets so auto-resolve awards remain observable via TicketsQueued"
       ).to.equal(true);
       // _queueTickets emits TicketsQueued (verified at the storage layer).
@@ -604,11 +604,11 @@ describe("EventSurfaceUnification — Phase 277 Wave 2 TST-EVT-UNI-01..06", func
         "JackpotTicketWin emit not found in _jackpotTicketRoll"
       ).to.not.equal(null);
       const emitArgs = splitTopLevelArgs(emitArgList);
-      // winner, targetLevel, BAF_TRAIT_SENTINEL, whole, minTargetLevel, 0, roundedUp
-      // — the 4th arg `whole` is the whole-ticket count queued by the adjacent
-      // _queueTickets call (D-278-EVT-UNIFY-01).
+      // winner, targetLevel, BAF_TRAIT_SENTINEL, wholeTicketsToEntries(whole),
+      // minTargetLevel, 0, roundedUp — the 4th arg is the entries count (whole<<2,
+      // 4 per whole ticket) queued by the adjacent _queueTickets call: emit == queue.
       expect(emitArgs.length).to.equal(7);
-      expect(emitArgs[3]).to.equal("whole");
+      expect(emitArgs[3]).to.equal("wholeTicketsToEntries(whole)");
       expect(emitArgs[6]).to.equal("roundedUp");
     });
 
