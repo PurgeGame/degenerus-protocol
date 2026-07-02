@@ -11,6 +11,7 @@ import {IDegenerusQuests} from "../interfaces/IDegenerusQuests.sol";
 import {BitPackingLib} from "../libraries/BitPackingLib.sol";
 import {GameTimeLib} from "../libraries/GameTimeLib.sol";
 import {ActivityCurveLib} from "../libraries/ActivityCurveLib.sol";
+import {MintPaymentKind} from "../interfaces/IDegenerusGame.sol";
 
 /**
  * @title DegenerusGameStorage
@@ -607,6 +608,19 @@ abstract contract DegenerusGameStorage {
     ///      waterfall's third tier) — full observability of where afking principal goes.
     event AfkingSpent(address indexed player, uint256 amount);
 
+    /// @dev Emitted whenever a player's claimable balance is debited by the protocol. Covers
+    ///      mint payments (MintPaymentKind.Claimable / Combined), lootbox/ticket shortfall
+    ///      (Internal), foil pack shortfall (Internal), salvage debits (Internal), sDGNRS
+    ///      redemption reserve (Internal), and game-over sweep (Internal). `amount` is the
+    ///      exact claimable wei removed; `newBalance` is the post-debit claimable balance.
+    event ClaimableSpent(
+        address indexed player,
+        uint256 amount,
+        uint256 newBalance,
+        MintPaymentKind payKind,
+        uint256 costWei
+    );
+
     /// @notice Emitted when a boon is consumed by a player.
     event BoonConsumed(address indexed player, uint8 boonType, uint16 boostBps);
 
@@ -933,6 +947,7 @@ abstract contract DegenerusGameStorage {
                 claimableUsed = shortfall < available ? shortfall : available;
                 if (claimableUsed != 0) {
                     _debitClaimable(buyer, claimableUsed);
+                    emit ClaimableSpent(buyer, claimableUsed, claimable - claimableUsed, MintPaymentKind.Internal, claimableUsed);
                 }
             }
         }

@@ -201,6 +201,7 @@ contract DegenerusGameFoilPackModule is
             if (remaining + 1 > uint128(bal)) revert Insolvent();
             balancesPacked[buyer] = bal - remaining;
             claimablePool -= uint128(remaining);
+            emit ClaimableSpent(buyer, remaining, uint128(bal - remaining), MintPaymentKind.Internal, remaining);
         }
 
         // Pool fork: 25% future / 75% next (inverse of the 90/10 ticket split), applied to

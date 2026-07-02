@@ -1708,6 +1708,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         ) {
             _debitClaimable(ContractAddresses.SDGNRS, amount);
             claimablePool -= uint128(amount);
+            emit ClaimableSpent(ContractAddresses.SDGNRS, amount, _claimableOf(ContractAddresses.SDGNRS), MintPaymentKind.Internal, amount);
             (bool ok, ) = payable(ContractAddresses.SDGNRS).call{value: amount}("");
             if (!ok) revert TransferFailed();
             return;

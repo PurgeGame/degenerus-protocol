@@ -790,6 +790,10 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
         if (claimableUse != 0) {
             _debitClaimable(player, claimableUse);
             claimablePool -= uint128(claimableUse);
+            // ClaimableSpent is NOT emitted here. claimableUse is already folded into
+            // AfkingDelivered.weiIn (= ethValue + claimableUse), so the off-chain indexer
+            // nets the full draw at that event. Emitting ClaimableSpent here too would
+            // double-count the debit.
         }
 
         if (isTicket) {

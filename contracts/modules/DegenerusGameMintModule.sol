@@ -126,20 +126,6 @@ contract DegenerusGameMintModule is
     // Events
     // -------------------------------------------------------------------------
 
-    /// @notice Emitted when claimable winnings are spent during a mint payment.
-    /// @param player The player whose claimable balance was used.
-    /// @param amount Amount of claimable ETH spent.
-    /// @param newBalance Player's new claimable balance after spending.
-    /// @param payKind Payment method used for the mint.
-    /// @param costWei Total mint cost in wei.
-    event ClaimableSpent(
-        address indexed player,
-        uint256 amount,
-        uint256 newBalance,
-        MintPaymentKind payKind,
-        uint256 costWei
-    );
-
     event LootBoxBuy(
         address indexed buyer,
         uint48 indexed index,
@@ -1230,11 +1216,16 @@ contract DegenerusGameMintModule is
             uint256 fromClaimable = _claimableOf(buyer);
             if (fromClaimable >= amount) {
                 _debitClaimable(buyer, amount);
+                if (amount != 0) emit ClaimableSpent(buyer, amount, fromClaimable - amount, MintPaymentKind.Internal, amount);
             } else {
                 _debitClaimableAndAfking(buyer, fromClaimable, amount - fromClaimable);
+                if (fromClaimable != 0) emit ClaimableSpent(buyer, fromClaimable, 0, MintPaymentKind.Internal, fromClaimable);
+                uint256 afkingPart = amount - fromClaimable;
+                if (afkingPart != 0) emit AfkingSpent(buyer, afkingPart);
             }
         } else {
             _debitClaimable(buyer, amount);
+            if (amount != 0) emit ClaimableSpent(buyer, amount, _claimableOf(buyer), MintPaymentKind.Internal, amount);
         }
     }
 

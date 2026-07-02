@@ -6,7 +6,8 @@ pragma solidity 0.8.34;
 enum MintPaymentKind {
     DirectEth,   // Pay with fresh ETH only
     Claimable,   // Pay with claimable winnings only
-    Combined     // Pay with both ETH and claimable (combined purchase bonus)
+    Combined,    // Pay with both ETH and claimable (combined purchase bonus)
+    Internal     // Protocol-internal debit (shortfall, salvage, redemption, game-over sweep)
 }
 
 /// @title IDegenerusGame

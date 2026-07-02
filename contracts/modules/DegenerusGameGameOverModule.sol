@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.34;
 
-import {IDegenerusGame} from "../interfaces/IDegenerusGame.sol";
+import {IDegenerusGame, MintPaymentKind} from "../interfaces/IDegenerusGame.sol";
 import {DegenerusGameStorage} from "../storage/DegenerusGameStorage.sol";
 import {ContractAddresses} from "../ContractAddresses.sol";
 
@@ -219,6 +219,9 @@ contract DegenerusGameGameOverModule is DegenerusGameStorage {
         _debitClaimable(ContractAddresses.VAULT, owedV);
         _debitClaimable(ContractAddresses.SDGNRS, owedSD);
         _debitClaimable(ContractAddresses.GNRUS, owedG);
+        if (owedV  != 0) emit ClaimableSpent(ContractAddresses.VAULT,  owedV,  0, MintPaymentKind.Internal, owedV);
+        if (owedSD != 0) emit ClaimableSpent(ContractAddresses.SDGNRS, owedSD, 0, MintPaymentKind.Internal, owedSD);
+        if (owedG  != 0) emit ClaimableSpent(ContractAddresses.GNRUS,  owedG,  0, MintPaymentKind.Internal, owedG);
         claimablePool = 0;
 
         // Shutdown VRF subscription (fire-and-forget; failure must not block sweep)
