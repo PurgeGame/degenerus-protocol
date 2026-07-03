@@ -1047,14 +1047,21 @@ contract RedemptionEdgeCases is DeployProtocol {
         assertEq(uint256(ePool), 0, "EDGE-13: pool ethBase remains zero under sub-gwei rounding");
         assertGt(uint256(bnPool), 0, "EDGE-13: pool burned increments (ceiling-divide on amount)");
 
-        // Resolve, then claim. resolveRedemptionPeriod early-returns on a zero-ethBase
-        // day (nothing to reconcile), so redemptionPeriods[dayD] stays 0 and the claim
-        // fails at the resolution gate — NotResolved (the gate ordering checks the
-        // period before the per-player slot; the slot's emptiness is asserted below).
+        // The zero-base day IS the sentinel-stamped day, so resolveRedemptionPeriod marks it resolved
+        // and clears the single-pool sentinel (rather than early-returning, which left the sentinel set
+        // and permanently blocked every later gambling burn — the wedge this test previously codified
+        // as "NotResolved").
         _advanceWallDay();
         _resolveDay(dayD, roll);
+
+        // Day resolved to the non-zero roll and the sentinel released, so later gambling burns unblock.
+        assertEq(uint256(sdgnrs.redemptionPeriods(uint24(dayD))), uint256(roll), "EDGE-13: zero-base day resolves to the roll");
+        assertEq(uint256(sdgnrs.pendingResolveDay()), 0, "EDGE-13: sentinel cleared after resolving a zero-base day");
+
+        // The claim has zero ethValueOwed and no FLIP escrow, so it is empty: NoClaim (not the pre-fix
+        // NotResolved, which was the symptom of the day never resolving).
         vm.prank(playerA);
-        vm.expectRevert(sDGNRS.NotResolved.selector);
+        vm.expectRevert(sDGNRS.NoClaim.selector);
         sdgnrs.claimRedemption(playerA, uint24(dayD));
 
         // Slot remains zero-ethValueOwed (nothing was claimable; the reverting claim mutates nothing).

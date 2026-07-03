@@ -688,7 +688,10 @@ contract sDGNRS {
         }
         emit Transfer(burnFrom, address(0), amount);
 
-        if (totalValueOwed > ethBal && claimableEth != 0) {
+        // Pull game-side claimable when the ETH leg alone is short OR when paying totalValueOwed from
+        // in-contract ETH+stETH would drop the balance below the segregated redemption reserve, so
+        // in-contract ETH+stETH stays >= _pendingRedemptionEthValue for a later _payEth claim.
+        if ((totalValueOwed > ethBal || totalValueOwed + _pendingRedemptionEthValue > ethBal + stethBal) && claimableEth != 0) {
             game.claimWinnings(address(0));
             ethBal = address(this).balance;
             stethBal = steth.balanceOf(address(this));
@@ -743,14 +746,22 @@ contract sDGNRS {
         // Convert ethBase from gwei back to wei for the cumulative-scalar reconciliation.
         // Drift vs claim-side sums bounded ≤ N gwei per day (within dust tolerance).
         uint256 ethBase = uint256(pool.ethBase) * 1e9;
-        if (ethBase == 0) return;
 
-        // Lower the cumulative segregation from the MAX (175%) pulled at submit down to the rolled
-        // amount. The MAX − rolled difference is over-pulled ETH that stays as free backing.
-        uint256 segregatedMax = (ethBase * MAX_ROLL) / 100;
-        uint256 rolledEth = (ethBase * roll) / 100;
-        // Checked arithmetic preserved (reverts on underflow as before); narrowing cast is safe.
-        _pendingRedemptionEthValue = uint96(_pendingRedemptionEthValue - segregatedMax + rolledEth);
+        // Only the single sentinel-stamped day carries pending gambling-burn claims; a call for any
+        // other day (already resolved, empty, or not yet stamped) is a no-op, which also makes resolve
+        // idempotent. A zero-base day (every claim gwei-floored to a FLIP-only escrow) segregated no
+        // ETH, so the reconciliation is skipped as a no-op, but control still falls through to mark the
+        // day resolved and clear the sentinel — its FLIP-only claims settle and later gambling burns
+        // unblock.
+        if (_pendingResolveDay != dayToResolve) return;
+        if (ethBase != 0) {
+            // Lower the cumulative segregation from the MAX (175%) pulled at submit down to the rolled
+            // amount. The MAX − rolled difference is over-pulled ETH that stays as free backing.
+            uint256 segregatedMax = (ethBase * MAX_ROLL) / 100;
+            uint256 rolledEth = (ethBase * roll) / 100;
+            // Checked arithmetic preserved (reverts on underflow as before); narrowing cast is safe.
+            _pendingRedemptionEthValue = uint96(_pendingRedemptionEthValue - segregatedMax + rolledEth);
+        }
 
         // Store per-day result (write before emit before delete)
         redemptionPeriods[dayToResolve] = roll;
