@@ -1,8 +1,10 @@
 # Reward-structure changes — integration brief for the paper
 
-Captures the committed reward-structure changes for whitepaper parity. Source commits (local, unpushed):
-lootbox rebalance `dae8e775`, recycle bonus `a85c61b3`, **lootbox→Degenerette spins `a8b702a7`** (now
-SHIPPED — see §2b; design in `.planning/LOOTBOX-DEGENERETTE-SPINS-PLAN.md`).
+Captures the committed reward-structure changes for whitepaper parity. Source commits (pushed):
+lootbox rebalance `dae8e775`, recycle bonus `a85c61b3`, **lootbox→Degenerette spins `a8b702a7`**
+(see §2b; design in `.planning/LOOTBOX-DEGENERETTE-SPINS-PLAN.md`), **lootbox FLIP→ticket EV shift
+`7aed2b73`** (§6). Naming: the flip-credit token BURNIE was renamed **FLIP** in v75; §2/§2b below
+retain the legacy BURNIE label but describe the same FLIP mechanics.
 
 **Framing rule for the paper:** most of these are **EV-neutral redistributions** (same expected value,
 different shape). Only two change EV: the lootbox EV-multiplier lift, and the recycle-bonus relaxation
@@ -54,16 +56,32 @@ Far-future share 10%→**20%** (near 90%→80%). More tickets seeded into future
 Far rolls get **1.5×** budget, near **0.875×** → 30% of aggregate ticket budget goes to the 20% far rolls.
 EV-neutral (0.8×0.875 + 0.2×1.5 = 1.0). (We trialed 40%/2.0×/0.75× first, settled on 30%.)
 
-## 6. Lootbox variance tiers — ranges instead of fixed steps
-Same tier probabilities (1/4/20/45/30%), but each draws a multiplier from a symmetric range centered on
-the old value (overall variance EV unchanged at 0.786×):
-| Tier | Chance | Old | New range |
+## 6. Lootbox FLIP→ticket value shift (EV-neutral)
+About a third of the box's FLIP expected value is moved into tickets, preserving total box EV
+(aggregate drift −0.003%). The ticket:FLIP value split moves **62.8:37.2 → 75.2:24.8**. Roll chances
+(§2), the ticket-roll budget (§3), and the DGNRS/WWXRP rolls are all unchanged — only the value
+*inside* the FLIP and ticket rolls moves. Two levers:
+
+**6a. Ticket variance tiers raised** (the ticket half). Same tier probabilities (1/4/20/45/30%), each
+drawing a multiplier uniformly from a symmetric range; the ranges are lifted so overall variance EV
+rises **0.786× → 0.941×**:
+| Tier | Chance | Range | Mean |
 |---|---|---|---|
-| 1 | 1% | 4.6× | 3.20×–6.00× |
-| 2 | 4% | 2.3× | 1.60×–3.00× |
-| 3 | 20% | 1.1× | 0.80×–1.40× |
-| 4 | 45% | 0.651× | 0.451×–0.851× |
-| 5 | 30% | 0.45× | 0.300×–0.600× |
+| 1 | 1% | 4.00×–6.50× | 5.25× |
+| 2 | 4% | 2.00×–3.50× | 2.75× |
+| 3 | 20% | 1.00×–1.60× | 1.30× |
+| 4 | 45% | 0.5923×–0.9923× | 0.792× |
+| 5 | 30% | 0.36×–0.72× | 0.54× |
+Tier-1 top is uint16-capped at 6.50×. This ladder also sets the roll-19 ETH-spin stake, which scales
++19.7% with it (EV-equal-to-tickets invariant preserved).
+
+**6b. Large-FLIP ladder reduced** (the FLIP half). The large-FLIP branch mean drops **1.648× → 1.245×**
+of box value (low branch 43.88%–97.88%, high 231.99%–445.74%; = ×34/45 of the old ladder). The
+FLIP-spins branch (10% roll) takes an added **×70.6%** stake haircut, so within FLIP the flat:spins
+value split moves 60:40 → 68:32.
+
+Net observable knock-ons (intentional, EV-neutral in aggregate): box FLIP faucet (creditFlip) **−33%**
+on every box path; box-sourced ticket issuance **+19.7%**.
 
 ## 7. Mint recycle bonus (relaxed)
 Spending claimable winnings ("recycled ETH") earns a 10% BURNIE flip-credit bonus on the recycled value.
@@ -75,6 +93,8 @@ Spending claimable winnings ("recycled ETH") earns a 10% BURNIE flip-credit bonu
 - Lootboxes more rewarding & more engagement-gated: higher floor (90%) and ceiling (145%), top reserved
   for relentless questers (uncapped quest streak → score up to 40,000).
 - Smoother payouts: continuous multiplier ranges; more DGNRS variety; fewer-but-bigger ticket hits.
+- Ticket-tilted value (§6): ~⅓ of FLIP EV moved into tickets (value split 63:37 → 75:25), same total
+  box EV — more of the box lands as tickets, less as illiquid flip-credit.
 - Spin-reel outcomes (§2b): WWXRP, BURNIE, and a slice of ETH/ticket value now play out as Degenerette
   spins from the box — same EV per category, more variance and engagement (survival flips, recirc bonus
   boxes, the WWXRP jackpot half-pass). Pure reshaping of value already in those rolls.
@@ -83,6 +103,7 @@ Spending claimable winnings ("recycled ETH") earns a 10% BURNIE flip-credit bonu
 - Everything except the EV-multiplier lift and the recycle-bonus relaxation is pure reshaping — same money, better feel.
 
 ## Reference data (from this session, verified)
-- BURNIE:tickets ETH-value ratio from lootboxes ≈ **0.59 : 1** (tickets ≈ 1.69× BURNIE); tickets ≈ 63% /
-  BURNIE ≈ 37% of combined ticket+BURNIE value. Level/size/activity-invariant. BURNIE valued at the
-  protocol peg (1000 BURNIE = 1 whole-ticket price); realizable value lower (illiquid flip-credit).
+- FLIP:tickets ETH-value ratio from lootboxes ≈ **0.33 : 1** (tickets ≈ 3.03× FLIP); tickets ≈ 75% /
+  FLIP ≈ 25% of combined ticket+FLIP value (post-§6 shift; was 0.59:1 / 63:37). Level/size/activity-
+  invariant. FLIP valued at the protocol peg (1000 FLIP = 1 whole-ticket price); realizable value
+  lower (illiquid flip-credit).
