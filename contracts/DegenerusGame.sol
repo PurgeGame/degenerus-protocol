@@ -813,7 +813,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     /// @dev Available at any level. Can be purchased multiple times (1-100 per call).
     ///      Price: 2.4 ETH (levels 0-3), 4 ETH (levels 4+), or discounted with boon.
     ///      Queues 4 tickets for each of 100 levels [ticketStart, ticketStart+99].
-    ///      Includes lootbox (20% of price during presale, 10% after).
+    ///      Includes lootbox (10% of price).
     ///      Frozen stats don't increment until game reaches the frozen level.
     ///
     ///      Fund distribution - Level 0: 30% next / 70% future.

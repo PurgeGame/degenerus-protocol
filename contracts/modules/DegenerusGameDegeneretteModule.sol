@@ -999,7 +999,7 @@ contract DegenerusGameDegeneretteModule is
     }
 
     /// @dev Delegates to the lootbox open module to resolve lootbox rewards directly.
-    ///      Applies activity-score EV multiplier (80-135%) to match regular lootbox opens.
+    ///      Applies activity-score EV multiplier (90-145%) to match regular lootbox opens.
     ///      The resolved box itemizes its contents via `LootBoxOpened` like every box path.
     function _resolveLootboxDirect(
         address player,
