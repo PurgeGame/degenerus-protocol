@@ -252,29 +252,29 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     ///      far/near split (0.8*0.875 + 0.2*1.5 = 1.0), so total ticket value is unchanged.
     uint16 private constant LOOTBOX_TICKET_FAR_BUDGET_BPS = 15_000;
     uint16 private constant LOOTBOX_TICKET_NEAR_BUDGET_BPS = 8_750;
-    /// @dev 1% chance for tier 1 ticket variance (4.6x mean)
+    /// @dev 1% chance for tier 1 ticket variance (5.25x mean)
     uint16 private constant LOOTBOX_TICKET_VARIANCE_TIER1_CHANCE_BPS = 100;
-    /// @dev 4% chance for tier 2 ticket variance (2.3x mean)
+    /// @dev 4% chance for tier 2 ticket variance (2.75x mean)
     uint16 private constant LOOTBOX_TICKET_VARIANCE_TIER2_CHANCE_BPS = 400;
-    /// @dev 20% chance for tier 3 ticket variance (1.1x mean)
+    /// @dev 20% chance for tier 3 ticket variance (1.30x mean)
     uint16 private constant LOOTBOX_TICKET_VARIANCE_TIER3_CHANCE_BPS = 2000;
-    /// @dev 45% chance for tier 4 ticket variance (0.651x mean)
+    /// @dev 45% chance for tier 4 ticket variance (0.792x mean)
     uint16 private constant LOOTBOX_TICKET_VARIANCE_TIER4_CHANCE_BPS = 4500;
-    /// @dev Per-tier multiplier ranges (BPS). Each [LOW, HIGH] band is symmetric about the
-    ///      prior static value, so the per-tier mean — and the overall variance EV (~0.786x)
-    ///      — is unchanged. The position within a tier reuses the same varianceRoll that
-    ///      selected the tier (uniform within the tier's chance window), so no extra entropy
-    ///      is drawn. Tier 5 (default, ~30%) covers the remaining window.
-    uint16 private constant LOOTBOX_TICKET_VARIANCE_TIER1_LOW_BPS = 32_000; // 3.20x
-    uint16 private constant LOOTBOX_TICKET_VARIANCE_TIER1_HIGH_BPS = 60_000; // 6.00x
-    uint16 private constant LOOTBOX_TICKET_VARIANCE_TIER2_LOW_BPS = 16_000; // 1.60x
-    uint16 private constant LOOTBOX_TICKET_VARIANCE_TIER2_HIGH_BPS = 30_000; // 3.00x
-    uint16 private constant LOOTBOX_TICKET_VARIANCE_TIER3_LOW_BPS = 8_000; // 0.80x
-    uint16 private constant LOOTBOX_TICKET_VARIANCE_TIER3_HIGH_BPS = 14_000; // 1.40x
-    uint16 private constant LOOTBOX_TICKET_VARIANCE_TIER4_LOW_BPS = 4_510; // 0.451x
-    uint16 private constant LOOTBOX_TICKET_VARIANCE_TIER4_HIGH_BPS = 8_510; // 0.851x
-    uint16 private constant LOOTBOX_TICKET_VARIANCE_TIER5_LOW_BPS = 3_000; // 0.30x
-    uint16 private constant LOOTBOX_TICKET_VARIANCE_TIER5_HIGH_BPS = 6_000; // 0.60x
+    /// @dev Per-tier multiplier ranges (BPS). Each [LOW, HIGH] band is symmetric about its
+    ///      per-tier mean; across the tier chances the overall variance EV is ~0.941x. The
+    ///      position within a tier reuses the same varianceRoll that selected the tier
+    ///      (uniform within the tier's chance window), so no extra entropy is drawn. Tier 5
+    ///      (default, ~30%) covers the remaining window.
+    uint16 private constant LOOTBOX_TICKET_VARIANCE_TIER1_LOW_BPS = 40_000; // 4.00x
+    uint16 private constant LOOTBOX_TICKET_VARIANCE_TIER1_HIGH_BPS = 65_000; // 6.50x
+    uint16 private constant LOOTBOX_TICKET_VARIANCE_TIER2_LOW_BPS = 20_000; // 2.00x
+    uint16 private constant LOOTBOX_TICKET_VARIANCE_TIER2_HIGH_BPS = 35_000; // 3.50x
+    uint16 private constant LOOTBOX_TICKET_VARIANCE_TIER3_LOW_BPS = 10_000; // 1.00x
+    uint16 private constant LOOTBOX_TICKET_VARIANCE_TIER3_HIGH_BPS = 16_000; // 1.60x
+    uint16 private constant LOOTBOX_TICKET_VARIANCE_TIER4_LOW_BPS = 5_923; // 0.5923x
+    uint16 private constant LOOTBOX_TICKET_VARIANCE_TIER4_HIGH_BPS = 9_923; // 0.9923x
+    uint16 private constant LOOTBOX_TICKET_VARIANCE_TIER5_LOW_BPS = 3_600; // 0.36x
+    uint16 private constant LOOTBOX_TICKET_VARIANCE_TIER5_HIGH_BPS = 7_200; // 0.72x
     /// @dev 0.001% of DGNRS pool per ETH for small tier
     uint16 private constant LOOTBOX_DGNRS_POOL_SMALL_PPM = 10;
     /// @dev 0.039% of DGNRS pool per ETH for medium tier
@@ -297,14 +297,18 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     uint256 private constant BOX_WWXRP_SPIN_TAG = 0x57777872705370696e; // "WwxrpSpin"
     uint256 private constant BOX_FLIP_SPIN_TAG = 0x4275726e69655370696e; // "FlipSpin"
     uint256 private constant BOX_ETH_SPIN_TAG = 0x4574685370696e; // "EthSpin"
-    /// @dev Base BPS for low FLIP path (58.1%)
-    uint16 private constant LOOTBOX_LARGE_FLIP_LOW_BASE_BPS = 5_808;
-    /// @dev Step increase in BPS for low FLIP path (4.77% per step)
-    uint16 private constant LOOTBOX_LARGE_FLIP_LOW_STEP_BPS = 477;
-    /// @dev Base BPS for high FLIP path (307%)
-    uint16 private constant LOOTBOX_LARGE_FLIP_HIGH_BASE_BPS = 30_705;
-    /// @dev Step increase in BPS for high FLIP path (94.3% per step)
-    uint16 private constant LOOTBOX_LARGE_FLIP_HIGH_STEP_BPS = 9_430;
+    /// @dev Base BPS for low FLIP path (43.88%)
+    uint16 private constant LOOTBOX_LARGE_FLIP_LOW_BASE_BPS = 4_388;
+    /// @dev Step increase in BPS for low FLIP path (3.60% per step)
+    uint16 private constant LOOTBOX_LARGE_FLIP_LOW_STEP_BPS = 360;
+    /// @dev Base BPS for high FLIP path (231.99%)
+    uint16 private constant LOOTBOX_LARGE_FLIP_HIGH_BASE_BPS = 23_199;
+    /// @dev Step increase in BPS for high FLIP path (71.25% per step)
+    uint16 private constant LOOTBOX_LARGE_FLIP_HIGH_STEP_BPS = 7_125;
+    /// @dev Stake haircut (70.60%) applied to the FLIP-spins branch (roll 17-18) on top of
+    ///      the reduced large-FLIP ladder, so the flat FLIP branch carries more of the FLIP
+    ///      EV (flat:spins split 68:32 within FLIP). The flat FLIP roll (14-16) is not haircut.
+    uint16 private constant LOOTBOX_FLIP_SPINS_STAKE_BPS = 7_060;
 
     // ---- Coin-presale-box FLIP band (lootbox band recentered on a 400% branch mean) ----
     // E[largeFlipBps] = 0.8*lowMean + 0.2*highMean = 40000 (400% of box ETH on the
@@ -477,7 +481,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     /// @param player Player address
     /// @param lvl Current game level
     /// @param amount Lootbox ETH amount
-    /// @param evMultiplierBps EV multiplier in basis points (8000-13500)
+    /// @param evMultiplierBps EV multiplier in basis points (9000-14500)
     /// @return scaledAmount Amount after EV adjustment
     function _applyEvMultiplierWithCap(
         address player,
@@ -568,7 +572,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         uint256 seed = uint256(keccak256(abi.encode(rngWord, player, amount)));
         uint24 targetLevel = _rollTargetLevel(currentLevel, seed);
 
-        // Apply the activity score EV multiplier to the reward amount (80% to 135%).
+        // Apply the activity score EV multiplier to the reward amount (90% to 145%).
         // score is the raw activity-score snapshot written at first deposit on every
         // ETH-lootbox allocation path and frozen thereafter; the multiplier uses the
         // committed score.
@@ -2023,8 +2027,10 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
             flipOut = _largeFlipOut(amount, targetPrice, seed);
         } else if (roll < 19) {
             // 10% chance: three FLIP Degenerette spins under one survival flip. Stake = the
-            // would-be large FLIP. Mint-only (no pool / recirc) → safe on every box path.
-            uint256 stake = _largeFlipOut(amount, targetPrice, seed);
+            // would-be large FLIP haircut to 70.60% (LOOTBOX_FLIP_SPINS_STAKE_BPS). Mint-only
+            // (no pool / recirc) → safe on every box path.
+            uint256 stake = (_largeFlipOut(amount, targetPrice, seed) *
+                LOOTBOX_FLIP_SPINS_STAKE_BPS) / 10_000;
             if (stake != 0) {
                 _callFlipSpins(
                     player,
@@ -2087,11 +2093,11 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         uint256 varianceRoll = uint16(seed >> 80) % 20;
         uint256 largeFlipBps;
         if (varianceRoll < 16) {
-            // Low path (80%): rolls 0-15, 58%-130% of value
+            // Low path (80%): rolls 0-15, 43.88%-97.88% of value
             largeFlipBps = LOOTBOX_LARGE_FLIP_LOW_BASE_BPS +
                 varianceRoll * LOOTBOX_LARGE_FLIP_LOW_STEP_BPS;
         } else {
-            // High path (20%): rolls 16-19, 307%-590% of value
+            // High path (20%): rolls 16-19, 231.99%-445.74% of value
             largeFlipBps = LOOTBOX_LARGE_FLIP_HIGH_BASE_BPS +
                 (varianceRoll - 16) * LOOTBOX_LARGE_FLIP_HIGH_STEP_BPS;
         }
@@ -2161,11 +2167,11 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
 
     /// @dev Calculate scaled ticket count from budget with ranged variance tiers.
     ///      Returns count × QTY_SCALE (100) for fractional ticket support. The tier
-    ///      chances are unchanged (1% / 4% / 20% / 45% / 30%), but each tier draws a
-    ///      multiplier uniformly across a symmetric BPS band whose mean is the tier's
-    ///      prior static value, so the overall variance EV (~0.786x) is unchanged:
-    ///        1% -> 3.20x-6.00x, 4% -> 1.60x-3.00x, 20% -> 0.80x-1.40x,
-    ///        45% -> 0.451x-0.851x, 30% -> 0.300x-0.600x.
+    ///      chances are 1% / 4% / 20% / 45% / 30%, and each tier draws a multiplier
+    ///      uniformly across a symmetric BPS band about its per-tier mean; the overall
+    ///      variance EV is ~0.941x:
+    ///        1% -> 4.00x-6.50x, 4% -> 2.00x-3.50x, 20% -> 1.00x-1.60x,
+    ///        45% -> 0.5923x-0.9923x, 30% -> 0.360x-0.720x.
     ///      The within-tier position reuses the SAME varianceRoll that selects the tier
     ///      (uniform within the tier's chance window), so no extra entropy is drawn.
     ///      Bit budget (consumed from `seed`):
@@ -2232,7 +2238,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     /// @dev Linearly map a uniform `roll` within [windowLow, windowHigh) onto the inclusive
     ///      BPS range [bpsLow, bpsHigh]: the window's first index maps to bpsLow, its last to
     ///      bpsHigh. A roll uniform over the window yields a uniform multiplier whose mean is
-    ///      the range midpoint (the tier's prior static value), so per-tier EV is preserved.
+    ///      the range midpoint, i.e. the tier's per-tier mean.
     function _ticketRangeBps(
         uint256 roll,
         uint256 windowLow,
