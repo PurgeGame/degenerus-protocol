@@ -97,6 +97,49 @@ contract RedemptionInvariants is DeployProtocol {
     }
 
     // =========================================================================
+    //         INV-WRAP: DGNRS WRAPPER NEVER UNDER-BACKED (pre-yearSweep)
+    // =========================================================================
+
+    /// @notice The DGNRS wrapper holds at least one sDGNRS unit of backing per liquid
+    ///         DGNRS unit: `sDGNRS.balanceOf(DGNRS) >= DGNRS.totalSupply()`.
+    /// @dev Safety direction of the wrapper-backing property (audit/DGNRS-WRAPPER-BACKING-PROOF.md).
+    ///      Every wrapper burn (unwrapTo, burn, burnWrapped) decrements both sides equally; the only
+    ///      sub-equality path is yearSweep (terminal charity forfeiture), unreachable in this handler,
+    ///      so the pre-sweep scope holds without extra guarding.
+    function invariant_wrapperBackingSufficient() public view {
+        assertGe(
+            sdgnrs.balanceOf(address(dgnrs)),
+            dgnrs.totalSupply(),
+            "INV-WRAP: DGNRS wrapper under-backed (sDGNRS.balanceOf(DGNRS) < DGNRS.totalSupply)"
+        );
+    }
+
+    // =========================================================================
+    //   INV-POOL: sDGNRS undistributed-pool accounting matches its own balance
+    // =========================================================================
+
+    /// @notice The five reward-pool sub-ledgers sum to exactly the sDGNRS contract's own
+    ///         token balance: `Σ poolBalances == balanceOf(sDGNRS)`.
+    /// @dev Every pool debit pairs a contract-balance debit (`transferFromPool` decrements both
+    ///      poolBalances[idx] and balanceOf[address(this)] by the same amount; `transferBetweenPools`
+    ///      moves within the array with the sum invariant; `burnAtGameOver` zeroes both). A mutation
+    ///      that desyncs the pool ledger from the held balance (the sDGNRS:566/567 survivor cluster
+    ///      in mutation/FINDINGS-v75.md) breaks this equality. Non-vacuous: the redemption handler
+    ///      funds actors via `transferFromPool(Pool.Reward, ...)`, exercising the paired debit.
+    function invariant_poolBalanceConservation() public view {
+        uint256 pools = sdgnrs.poolBalance(sDGNRS.Pool.Whale)
+            + sdgnrs.poolBalance(sDGNRS.Pool.Affiliate)
+            + sdgnrs.poolBalance(sDGNRS.Pool.Lootbox)
+            + sdgnrs.poolBalance(sDGNRS.Pool.Reward)
+            + sdgnrs.poolBalance(sDGNRS.Pool.PresaleBox);
+        assertEq(
+            pools,
+            sdgnrs.balanceOf(address(sdgnrs)),
+            "INV-POOL: sum(poolBalances) != sDGNRS.balanceOf(sDGNRS)"
+        );
+    }
+
+    // =========================================================================
     //                      INV-05: 50% CAP ENFORCEMENT
     // =========================================================================
 
