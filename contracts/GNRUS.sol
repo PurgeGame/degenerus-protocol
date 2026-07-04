@@ -63,6 +63,12 @@ contract GNRUS {
     /// @notice Thrown when burnAtGameOver has already been called
     error AlreadyFinalized();
 
+    /// @notice Thrown when a time-locked recovery action is called before its delay elapses
+    error TooEarly();
+
+    /// @notice Thrown when a post-sweep recovery action is called before the final sweep has run
+    error NotSwept();
+
     /// @notice Thrown when slot index is >= MAX_ACTIVE_SLOTS
     error InvalidSlot();
 
@@ -107,6 +113,9 @@ contract GNRUS {
 
     /// @notice Emitted when gameover finalization burns unallocated GNRUS and claims winnings
     event GameOverFinalized(uint256 gnrusBurned, uint256 ethClaimed, uint256 stethClaimed);
+
+    /// @notice Emitted when the vault owner sweeps unredeemed GNRUS residual to the vault after the recovery delay
+    event ResidualSweptToVault(uint256 ethSwept, uint256 stethSwept);
 
     /// @notice Emitted when setCharity writes directly to current slate (instant-apply branch)
     event CharityApplied(uint8 indexed slot, address indexed recipient);
@@ -156,7 +165,10 @@ contract GNRUS {
     /// @notice Bitmap of slots with a pending edit; bit `i` set ⇔ a pending edit exists for slot `i`
     uint32 public pendingEditSet;
 
-    // ^ currentLevel (3) + finalized (1) + currentActiveBitmap (4) + pendingEditSet (4) = 12 bytes, one slot, 20 free
+    /// @notice Timestamp of the final sweep (set once by onFinalSweep); anchors the residual-recovery delay
+    uint40 public sweptAt;
+
+    // ^ currentLevel (3) + finalized (1) + currentActiveBitmap (4) + pendingEditSet (4) + sweptAt (5) = 17 bytes, one slot, 15 free
 
     /// @notice Whether a voter has already voted for a given (level, voter, slot) tuple
     mapping(uint24 => mapping(address => mapping(uint8 => bool))) public hasVoted;
@@ -191,6 +203,10 @@ contract GNRUS {
 
     /// @notice Minimum burn amount: 1 GNRUS
     uint256 private constant MIN_BURN = 1e18;
+
+    /// @notice Delay after the final sweep before the vault owner may recover unredeemed GNRUS
+    ///         residual: a 3-year holder grace period measured from the sweep.
+    uint256 private constant RESIDUAL_RECOVERY_DELAY = 3 * 365 days;
 
     /// @notice Distribution per level: 2% of remaining unallocated GNRUS
     uint16 private constant DISTRIBUTION_BPS = 200;
@@ -290,7 +306,17 @@ contract GNRUS {
             amount = burnerBal; // sweep
         }
 
-        // Calculate owed from total backing (on-hand + claimable)
+        _redeemTo(burner, amount, burnerBal, supply, burner);
+    }
+
+    /// @dev Shared proportional-redemption core. Burns `amount` GNRUS from `account` and pays the
+    ///      proportional ETH + stETH share to `recipient`. Backing = on-hand ETH + stETH plus the
+    ///      game-side claimable (less the 1-wei sentinel); the game is drawn from only when on-hand
+    ///      is short. CEI: supply/balance are updated and events emitted before any external value
+    ///      transfer; the only pre-burn external call is game.claimWinnings, which cannot write GNRUS
+    ///      balances, so `acctBal` (read by the caller) is still fresh at the burn. Checked
+    ///      subtraction — the underflow revert is the over-burn guard.
+    function _redeemTo(address account, uint256 amount, uint256 acctBal, uint256 supply, address recipient) private {
         uint256 ethBal = address(this).balance;
         uint256 stethBal = steth.balanceOf(address(this));
         uint256 claimable = game.claimableWinningsOf(address(this));
@@ -299,8 +325,7 @@ contract GNRUS {
         uint256 owed = ((ethBal + stethBal + claimable) * amount) / supply;
 
         // Pay from on-hand first (ETH-preferred), pull remainder from game
-        uint256 onHand = ethBal + stethBal;
-        if (owed > onHand) {
+        if (owed > ethBal + stethBal) {
             game.claimWinnings(address(this));
             ethBal = address(this).balance;
             stethBal = steth.balanceOf(address(this));
@@ -309,21 +334,18 @@ contract GNRUS {
         uint256 ethOut = owed <= ethBal ? owed : ethBal;
         uint256 stethOut = owed - ethOut;
 
-        // CEI: burn tokens before external transfers. burnerBal (read above) is still fresh here:
-        // the intervening calls are STATICCALLs plus game.claimWinnings, none of which can write
-        // GNRUS balances. Checked subtraction — the underflow revert is the over-burn guard.
-        balanceOf[burner] = burnerBal - amount;
+        balanceOf[account] = acctBal - amount;
         unchecked { totalSupply = supply - amount; }
 
-        emit Transfer(burner, address(0), amount);
-        emit Burn(burner, amount, ethOut, stethOut);
+        emit Transfer(account, address(0), amount);
+        emit Burn(account, amount, ethOut, stethOut);
 
         // stETH transfer first (ERC20), ETH transfer last (raw call — CEI)
         if (stethOut != 0) {
-            if (!steth.transfer(burner, stethOut)) revert TransferFailed();
+            if (!steth.transfer(recipient, stethOut)) revert TransferFailed();
         }
         if (ethOut != 0) {
-            (bool ok,) = burner.call{value: ethOut}("");
+            (bool ok,) = recipient.call{value: ethOut}("");
             if (!ok) revert TransferFailed();
         }
     }
@@ -349,6 +371,62 @@ contract GNRUS {
         }
 
         emit GameOverFinalized(unallocated, 0, 0);
+    }
+
+    /// @notice Record the final-sweep timestamp; the game calls this once from handleFinalSweep when
+    ///         the terminal ETH/stETH has been distributed to sDGNRS, GNRUS, and the vault.
+    /// @dev onlyGame. Anchors the post-sweep recovery gates (vaultRedeemFor availability and the
+    ///      3-year sweepResidualToVault delay). The game's final sweep is one-shot (GO_SWEPT latch).
+    function onFinalSweep() external onlyGame {
+        sweptAt = uint40(block.timestamp);
+    }
+
+    // =====================================================================
+    //                     POST-GAMEOVER RECOVERY
+    // =====================================================================
+
+    /// @notice Redeem a holder's entire GNRUS on their behalf, paying the holder its full
+    ///         proportional ETH + stETH share.
+    /// @dev Vault-owner-only, post-gameOver. Lets a holder that never calls burn() itself (a lost or
+    ///      contract address, or a charity that has wound down) be made whole so its share is not left
+    ///      stranded. Value-preserving — the holder receives exactly what burn() would pay it; the
+    ///      vault owner cannot extract the holder's value. Reverts if the holder's ETH sink rejects.
+    /// @param holder Address whose full GNRUS balance is redeemed to itself
+    function vaultRedeemFor(address holder) external {
+        if (!vault.isVaultOwner(msg.sender)) revert Unauthorized();
+        if (sweptAt == 0) revert NotSwept();
+
+        uint256 supply = totalSupply;
+        uint256 bal = balanceOf[holder];
+        if (bal == 0) revert InsufficientBurn();
+
+        _redeemTo(holder, bal, bal, supply, holder);
+    }
+
+    /// @notice Sweep any ETH and stETH still held by GNRUS to the vault, after a long recovery delay.
+    /// @dev Vault-owner-only. Recovers charity backing left unredeemed once the game is long over —
+    ///      the final-sweep residual pushed when no holders remained, or the share of a holder that
+    ///      never redeemed. Gated on gameOver plus RESIDUAL_RECOVERY_DELAY (the 30-day final-sweep
+    ///      window plus a 3-year holder grace period), so holders have a multi-year window to redeem
+    ///      (directly or via vaultRedeemFor) before the residual is reclaimed.
+    function sweepResidualToVault() external {
+        if (!vault.isVaultOwner(msg.sender)) revert Unauthorized();
+        if (sweptAt == 0) revert NotSwept();
+        if (block.timestamp < uint256(sweptAt) + RESIDUAL_RECOVERY_DELAY) revert TooEarly();
+
+        uint256 ethBal = address(this).balance;
+        uint256 stethBal = steth.balanceOf(address(this));
+
+        // stETH transfer first (ERC20), ETH transfer last (raw call — CEI)
+        if (stethBal != 0) {
+            if (!steth.transfer(ContractAddresses.VAULT, stethBal)) revert TransferFailed();
+        }
+        if (ethBal != 0) {
+            (bool ok,) = ContractAddresses.VAULT.call{value: ethBal}("");
+            if (!ok) revert TransferFailed();
+        }
+
+        emit ResidualSweptToVault(ethBal, stethBal);
     }
 
     // =====================================================================

@@ -22,6 +22,7 @@ interface IDegenerusAdminShutdown {
 /// @dev GNRUS interface for gameover GNRUS cleanup.
 interface IGNRUSGameOver {
     function burnAtGameOver() external;
+    function onFinalSweep() external;
 }
 
 interface IFlipTombstone {
@@ -212,6 +213,7 @@ contract DegenerusGameGameOverModule is DegenerusGameStorage {
         if (_goRead(GO_SWEPT_SHIFT, GO_SWEPT_MASK) != 0) return; // Already swept
 
         _goWrite(GO_SWEPT_SHIFT, GO_SWEPT_MASK, 1);
+        charityGameOver.onFinalSweep(); // stamp GNRUS with the sweep time (anchors its recovery gates)
 
         uint256 owedV  = _claimableOf(ContractAddresses.VAULT);
         uint256 owedSD = _claimableOf(ContractAddresses.SDGNRS);
