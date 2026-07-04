@@ -2065,7 +2065,7 @@ contract DegenerusGameMintModule is
             if (quantity >= 10 * 4 * QTY_SCALE) {
                 bonusCredit +=
                     (quantity * PRICE_COIN_UNIT) /
-                    (40 * QTY_SCALE);
+                    (80 * QTY_SCALE);
             }
         }
     }
