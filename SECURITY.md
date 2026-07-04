@@ -4,9 +4,10 @@ Frozen subject: `contracts/` tree `f06b1ef6` @ impl `93d17288` (v74.0 As-Built M
 
 ## Reporting a vulnerability
 
-Report suspected vulnerabilities privately to **purgegamenft@gmail.com**. Do not open a
-public issue for an unfixed vulnerability. Include: affected contract + line, the invariant
-broken, a concrete exploit path (actor, preconditions, sequence), and the value impact.
+This code is **not yet deployed** — there are no live funds at risk and no disclosure embargo.
+Report vulnerabilities however is easiest: open a public issue or send them to **burnie@degener.us**.
+Include: affected contract + line, the invariant broken, a concrete exploit path (actor,
+preconditions, sequence), and the value impact.
 
 Before reporting, check `KNOWN-ISSUES.md` — every pre-triaged finding, by-design ruling, and
 cross-model disposition is documented there and is not eligible.
@@ -45,7 +46,7 @@ soulbound; voting weight = `votingSupply()`.
 **Bounds:**
 - **Death-clock prerequisite.** A VRF-swap proposal cannot even be *created* until the VRF has
   stalled. `ADMIN_STALL_THRESHOLD = 44 hours` (raised from 20h this batch) for the vault-owner path;
-  `COMMUNITY_STALL_THRESHOLD` for the 0.5%-sDGNRS community path. 44h clears a full healthy ~24h
+  `COMMUNITY_STALL_THRESHOLD = 7 days` for the 0.5%-sDGNRS community path. 44h clears a full healthy ~24h
   RNG cycle plus margin so the sawtooth `block.timestamp − lastVrfProcessed` cannot trip governance
   on a healthy game. Feed swaps require the feed unhealthy 2d (admin) / 7d (community).
 - **Decaying-threshold vote.** Approval threshold decays 50% → 5% over the 168h (7-day) proposal
@@ -74,31 +75,41 @@ soulbound; voting weight = `votingSupply()`.
 ETH/stETH share-class token (DGVE and DGVF are the two ERC-20 share classes the vault deploys from
 its own constructor). CREATOR holds the initial 1T supply of each; the role transfers with the token.
 
-**Powers (`onlyVaultOwner`):** set/swap the LINK price feed, swap/stake ETH↔stETH, set the lootbox
-RNG threshold, the owner-gated salvage-buy fallback, and a family of `game*` / `coin*` /
-`wwxrp*` / `sdgnrs*` proxy actions the vault performs *as itself* (it custodies perpetual tickets
-and reserves). Also gates the gas faucet (see role 3).
+**Powers (`onlyVaultOwner`, unilateral):** swap/stake ETH↔stETH (the vault's own custodied position),
+set the lootbox mid-day-RNG threshold (the pending-lootbox ETH-equivalent value that must accumulate
+before an extra *intra-day* lootbox VRF request may be triggered — a LINK-cost-limiting operational
+knob, not a security parameter), the owner-gated salvage-buy fallback, and a family of `game*` /
+`coin*` / `wwxrp*` / `sdgnrs*` proxy actions the vault performs *as itself* (it custodies perpetual
+tickets and reserves). **Post-gameOver GNRUS charity recovery** (`VAULT.isVaultOwner`-gated, on the
+GNRUS contract): once the game's final sweep has run, `GNRUS.vaultRedeemFor(holder)` redeems a
+holder's entire GNRUS on its behalf, paying the holder its full proportional ETH+stETH share; 3 years
+after that sweep, `GNRUS.sweepResidualToVault()` reclaims any ETH/stETH GNRUS still holds to the vault.
+
+**Governance-gated (NOT unilateral vault-owner powers):** the LINK price-feed swap and the VRF-
+coordinator swap. The vault owner may only *propose* one (the vault-owner proposal path — feed
+unhealthy 2d / VRF stalled 44h); neither executes without sDGNRS-majority governance behind the
+death-clock (decaying vote threshold + kill-on-recovery — see role 1). `proposeFeedSwap` /
+`voteFeedSwap`; the 0.5%-sDGNRS community path (7d) is the other proposal entry.
 
 **Bounds:** every vault-owner action operates only on the vault's *own* custodied position
 (its shares, its tickets, its escrow). It cannot reach into player balances or the game's
 claimablePool. The vault's reserve is a virtual-allowance model (`balanceOf[VAULT] == 0`). The
 price-feed swap only affects LINK→FLIP donation valuation and is itself death-clock-gated in Admin.
+The two GNRUS recovery actions are the sole vault-owner powers that reach beyond the vault's own
+position, and only narrowly: they act on *charity residual* on a contract already post-gameOver and
+past its final sweep — never live player balances or the game claimablePool. `vaultRedeemFor` is
+value-preserving (the holder receives exactly what `burn()` would pay it; the owner cannot extract
+holder value), and `sweepResidualToVault` is time-locked to 3 years past the final sweep — a grace
+window in which any holder can redeem (itself, or via `vaultRedeemFor`) before the residual is
+reclaimed.
 
-### 3. approvedDistributor — DegenerusGasFaucet operator (dormant, unwired)
+### 3. DegenerusGasFaucet — relocated, out of scope
 
-**Who:** addresses in `DegenerusGasFaucet.approvedDistributor`, plus the live vault owner
-(`VAULT.isVaultOwner`). The vault owner alone manages the set via `setApprovedDistributor`.
-
-**Powers:** call `distribute(recipients[])` to send externally-donated ETH gas-dust to players whose
-`affiliateScore(currentLevel, recipient) >= minAffiliateScore` (default 1,000 FLIP this level), and
-`setParams`. `withdraw(to, amount)` is `onlyVaultOwner`.
-
-**Bounds:** the faucet is **dormant** — not deployed by `deploy.js` (sole references: the contract +
-its unit test). It has no mint/burn/ledger path and no protocol-state writes; its only inflow is
-`receive()` (third-party donations). `distribute` is CEI-safe (`hasReceived` set before a 2300-gas
-capped send) and reentrancy-safe without a guard. `withdraw` forwards full gas to a vault-owner-chosen
-sink — a documented trust boundary, but the faucet custodies only donated ETH and cannot touch
-protocol backing or solvency.
+The donation-funded gas-dust faucet has been **moved to the separate `degenerus-utilities` repo** and
+is **not part of this audit**. It was a standalone, dormant utility — not deployed by `deploy.js`, no
+protocol-state writes, no access to protocol backing or solvency; its only privileged surface was the
+vault owner managing its `approvedDistributor` set over externally-donated ETH. Findings against it
+are not eligible here.
 
 ### 4. Chainlink VRF coordinator — trusted external black box
 

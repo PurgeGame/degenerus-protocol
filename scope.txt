@@ -79,9 +79,9 @@ contracts/interfaces/IStETH.sol                       #                         
 contracts/interfaces/IVaultCoin.sol                   #                              7
 contracts/interfaces/IVRFCoordinator.sol              #                             20
 
-## In Scope — Standalone production contracts NOT wired into deploy.js (2)  nSLOC
+## In Scope — Standalone production contract NOT wired into deploy.js (1)  nSLOC
 # Frozen production code, custody-free; audited this milestone.
-contracts/DegenerusGasFaucet.sol   # dormant donation-funded gas faucet (unwired)  101
+# (DegenerusGasFaucet relocated to the degenerus-utilities repo — no longer in this tree.)
 contracts/DeityBoonViewer.sol      # read-only deity-boon lens (no value custody)  154
 
 ## nSLOC totals
@@ -91,6 +91,6 @@ contracts/DeityBoonViewer.sol      # read-only deity-boon lens (no value custody
 #   Shared storage (1)              1101
 #   Libraries (8)                    561
 #   Interfaces (11)                  667
-#   Standalone in-scope (2)          255
+#   Standalone in-scope (1)          154
 #   --------------------------------------
-#   TOTAL  50 files                20070 nSLOC
+#   TOTAL  49 files   (nSLOC recomputed at freeze: GNRUS/GameOverModule changed + GasFaucet de-scoped)
