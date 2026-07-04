@@ -57,9 +57,9 @@
       "category": "solvency",
       "kind": "state",
       "severity": "critical",
-      "identity": "Master SOLVENCY-01 identity: claimablePool equals the sum over all addresses of (claimable low-half + afking high-half) of their packed balance slot. The afking reservation rides INSIDE claimablePool; every afking/claimable mutation pairs a claimablePool move, so a dropped paired += or a double-counted half breaks this exactly.",
+      "identity": "Master SOLVENCY identity: claimablePool >= the sum over all addresses of (claimable low-half + afking high-half) of their packed balance slot; equality holds outside decimator settlement, which transiently over-reserves the pool (claimablePool strictly greater) until per-winner claims credit. The afking reservation rides INSIDE claimablePool; every afking/claimable mutation pairs a claimablePool move, so a dropped paired += or a double-counted half breaks the equality.",
       "onchainRead": "For each tracked address a: packed = eth_getStorageAt(game, keccak256(abi.encode(a, 7))); sum += uint128(packed) + (packed>>128). Per-address public surrogates: game.claimableWinningsOf(a) (DegenerusGame.sol:2362, returns 0 once swept) and game.afkingFundingOf(a) (DegenerusGame.sol:1421). Aggregate read: game.claimablePoolView() (DegenerusGame.sol:2149). balancesPacked is slot 7 [afking:hi128 | claimable:lo128].",
-      "comparator": "assertEq(game.claimablePoolView(), sum-over-addresses(halves)); tolerance = exact (==)",
+      "comparator": "assertGe(game.claimablePoolView(), sum-over-addresses(halves)); equality outside decimator settlement, over-reserve during it",
       "source": "test/fuzz/invariant/V61SolvencyAfpay.inv.t.sol:84-96"
     },
     {
@@ -357,7 +357,7 @@
       "category": "rng-freeze",
       "kind": "behavioral",
       "severity": "high",
-      "identity": "Tickets queued during the liveness-timeout / RNG-locked window (the per-sink liveness queue-gate was removed from _queueTickets / _queueTicketsScaled / _queueTicketRange) are provably never processed into, and never resolve against, a manipulable terminal jackpot (the v45 freeze invariant). Protection sits at the purchase entry (the mint module reverts on _livenessTriggered), not the shared sink (which the advance-chain's own daily-jackpot distribution must flow through). The _swapAndFreeze write/read slot fork freezes the read slot at RNG-request time, so any window-queued ticket lands in the write slot and cannot resolve against the current word.",
+      "identity": "Tickets queued during the liveness-timeout / RNG-locked window are provably never processed into, and never resolve against, a manipulable terminal jackpot (the v45 freeze invariant). Protection sits at the purchase entry (the mint module reverts on _livenessTriggered), not the shared sinks _queueTickets / _queueTicketsScaled / _queueTicketRange (which carry no per-sink liveness gate, since the advance-chain's own daily-jackpot distribution must flow through them). The _swapAndFreeze write/read slot fork freezes the read slot at RNG-request time, so any window-queued ticket lands in the write slot and cannot resolve against the current word.",
       "onchainRead": "Behavioral: client attempts a purchase/queue during the liveness/game-over window and asserts the purchase entry reverts (no player ticket can enter the window); the far-future rngLocked revert is retained on all three sinks. After game-over the read slot drains one batch, then _swapTicketSlot promotes write->read only after finished. Sinks DegenerusGameStorage.sol:652,683,744; purchase liveness gates DegenerusGameMintModule.sol:956,1116,1370,1834; _swapAndFreeze DegenerusGameAdvanceModule.sol:437,1762-1765.",
       "comparator": "an in-window purchase reverts (liveness-gated); no window-queued player ticket resolves against the current/terminal word; tolerance = exact (no unexpected resolution)",
       "source": ".planning/phases/469-audit-rng-liveness/469-FINDINGS.md (RNG-03); the v45 VRF-freeze invariant"

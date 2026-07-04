@@ -388,10 +388,10 @@ abstract contract DegenerusGameStorage {
     /// @dev Aggregate ETH liability across all packed balances (claimable + afking halves).
     ///      Used for solvency checks: game must hold >= claimablePool ETH.
     ///
-    ///      INVARIANT: claimablePool == Σ (claimable + afking halves of balancesPacked[*])
-    ///      Maintained by crediting/debiting every component in tandem.
-    ///      NOTE: During decimator settlement, the full pool is reserved in claimablePool
-    ///      before individual claims are credited, temporarily breaking equality.
+    ///      INVARIANT: claimablePool >= Σ (claimable + afking halves of balancesPacked[*]).
+    ///      Equality holds in steady state; decimator settlement reserves the full pool up front,
+    ///      so claimablePool is transiently over-reserved (strictly greater) until per-winner
+    ///      claims credit. Every component is credited/debited in tandem to maintain it.
     ///
     ///      uint128 max ~3.4e20 ETH — far exceeds total ETH supply.
     ///      Packed into slot 1 alongside currentPrizePool.
@@ -2253,7 +2253,7 @@ abstract contract DegenerusGameStorage {
     ///      `afkCoveredThroughDay` is a delivered-day high-water mark, not a settle
     ///      marker.
     struct Sub {
-        // --- config (48 bits) ---
+        // --- config (40 bits) ---
         /// @dev 0 = paused / never-subscribed; minimum 1 when active.
         uint8 dailyQuantity;
         /// @dev Game-level horizon through which the sub's pass coverage extends

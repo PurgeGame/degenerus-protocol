@@ -12,7 +12,8 @@ abstract contract DegenerusGamePayoutUtils is DegenerusGameStorage {
 
     /// @dev Route coin-presale-box ETH proceeds: 80% to the vault, 20% to sDGNRS,
     ///      both as claimable credits, while bumping claimablePool by the full
-    ///      boxEth so the claimablePool == Σ claimableWinnings invariant holds.
+    ///      boxEth so the claimablePool >= Σ (claimableWinnings + afkingFunding) solvency
+    ///      invariant holds.
     ///      The integer-division remainder lands on the VAULT (80%) side, so the
     ///      two credits sum to exactly boxEth.
     /// @param boxEth Box proceeds in wei to route.

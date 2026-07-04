@@ -540,7 +540,8 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     /// @notice Update lootbox RNG request threshold (wei).
     /// @dev Access: vault owner only (DGVE majority holder).
     /// @param newThreshold New threshold in wei (must be non-zero).
-    /// @custom:reverts OnlyVault If caller is not vault owner or newThreshold is zero.
+    /// @custom:reverts OnlyVault If caller is not the vault owner.
+    /// @custom:reverts ZeroValue If newThreshold is zero.
     function setLootboxRngThreshold(uint256 newThreshold) external {
         if (!vault.isVaultOwner(msg.sender)) revert OnlyVault();
         if (newThreshold == 0) revert ZeroValue();
@@ -1695,7 +1696,9 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     ///        records it and the claim pays stETH. Coverage is checked against sDGNRS's stETH balance.
     ///      - Neither pure leg covers => revert (fail-closed; not a realistic state).
     /// @param amount The MAX 175% reservation for this burn.
-    /// @custom:reverts OnlySDGNRS If caller is not sDGNRS, neither pure leg covers `amount`, or the ETH transfer fails.
+    /// @custom:reverts OnlySDGNRS If caller is not sDGNRS.
+    /// @custom:reverts TransferFailed If the ETH transfer fails.
+    /// @custom:reverts Insolvent If neither the ETH nor the stETH leg covers `amount`.
     function pullRedemptionReserve(uint256 amount) external {
         if (msg.sender != ContractAddresses.SDGNRS) revert OnlySDGNRS();
         if (amount == 0) return;
@@ -1828,8 +1831,11 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     ///      SECURITY: Value-neutral swap, ADMIN cannot extract funds.
     /// @param recipient Address to receive stETH.
     /// @param amount ETH amount to swap (must match msg.value).
-    /// @custom:reverts OnlyAdmin If caller is not ADMIN, recipient is zero, amount is zero,
-    ///                   msg.value doesn't match amount, or insufficient stETH balance.
+    /// @custom:reverts OnlyAdmin If caller is not ADMIN.
+    /// @custom:reverts ZeroAddress If recipient is zero.
+    /// @custom:reverts ValueMismatch If amount is zero or msg.value does not match amount.
+    /// @custom:reverts Insolvent If the stETH balance is insufficient.
+    /// @custom:reverts TransferFailed If the stETH transfer fails.
     function adminSwapEthForStEth(
         address recipient,
         uint256 amount
@@ -1849,8 +1855,10 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     ///      SECURITY: Must retain ETH to cover player claims, excluding vault/DGNRS
     ///      claimable (those addresses accept stETH payouts natively).
     /// @param amount ETH amount to stake.
-    /// @custom:reverts OnlyVault If caller is not vault owner, amount is zero, insufficient ETH,
-    ///                   or staking would dip into player-claim ETH reserve.
+    /// @custom:reverts OnlyVault If caller is not the vault owner.
+    /// @custom:reverts ZeroValue If amount is zero.
+    /// @custom:reverts Insolvent If ETH is insufficient or staking would dip into the player-claim ETH reserve.
+    /// @custom:reverts TransferFailed If the Lido submit fails.
     function adminStakeEthForStEth(uint256 amount) external {
         if (!vault.isVaultOwner(msg.sender)) revert OnlyVault();
         if (amount == 0) revert ZeroValue();

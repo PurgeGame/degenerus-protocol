@@ -745,7 +745,8 @@ contract DegenerusAdmin {
 
     /// @notice Vote on an active VRF swap proposal.
     /// @dev Votes are changeable. After recording, checks execute/kill conditions.
-    ///      Reverts if VRF has recovered (stall < 20h) — this IS the auto-cancellation.
+    ///      On VRF recovery after creation (a word fulfilled since createdAt), the proposal is
+    ///      auto-killed rather than executed — this IS the auto-cancellation.
     ///      Zero-weight calls (no sDGNRS) skip vote recording and just check
     ///      execute/kill conditions — allows anyone to poke a proposal past threshold.
     /// @param proposalId ID of the proposal to vote on.

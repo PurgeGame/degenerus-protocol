@@ -70,7 +70,8 @@ contract DegenerusGameGameOverModule is DegenerusGameStorage {
     ///      Reads rngWordByDay[day] for entropy; reverts if funds exist but word is not yet available.
     ///      VRF fallback logic (historical word, stall timeout) is in AdvanceModule._gameOverEntropy.
     /// @param day Day index for RNG word lookup from rngWordByDay mapping.
-    /// @custom:reverts ZeroValue When funds exist but RNG word unavailable (defense-in-depth), or stETH transfer fails
+    /// @custom:reverts Invariant When distributable funds exist but the RNG word is unavailable (defense-in-depth).
+    /// @custom:reverts TransferFailed When an stETH or ETH transfer fails.
     function handleGameOverDrain(uint24 day) external {
         if (_goRead(GO_JACKPOT_PAID_SHIFT, GO_JACKPOT_PAID_MASK) != 0) return; // Already processed
 

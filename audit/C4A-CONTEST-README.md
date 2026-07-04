@@ -1,7 +1,37 @@
-# Degenerus Protocol — C4A Contest README
+# Degenerus Protocol — audit details
 
-Frozen subject: `contracts/` tree `19272c1f` @ tag `degenerus-c4a` (post-v75.0 hardening freeze).
-Checkout: `git checkout degenerus-c4a`.
+- Total Prize Pool: `$TBD` <!-- fill at contest setup: HM / QA / Judge / Validator / Scout / Mitigation split -->
+- Read our [guidelines](https://docs.code4rena.com) for more details
+- Starts `TBD`
+- Ends `TBD`
+
+**Frozen subject:** `contracts/` tree `19272c1f` @ tag `degenerus-c4a`.
+Checkout: `git checkout degenerus-c4a`. Everything a warden audits is that tree; nothing else in the
+repo history is in scope.
+
+**Note re: risk level upgrades/downgrades**
+
+Two important notes about judging-phase risk adjustments:
+- High- or Medium-risk submissions downgraded to Low-risk (QA) will be ineligible for awards.
+- Upgrading a Low-risk finding from a QA report to a Medium- or High-risk finding is not supported.
+
+As such, wardens are encouraged to select the appropriate risk level carefully during submission.
+
+---
+
+## Automated Findings / Publicly Known Issues
+
+Automated tool output (Slither 0.11.5 + Aderyn 0.6.8) for the frozen subject is committed in
+[`audit/automated/`](./automated/), and the pre-triaged categories are catalogued in
+[`KNOWN-ISSUES.md`](../KNOWN-ISSUES.md) §7.
+
+The full pre-disclosure perimeter — design decisions, by-design rulings, cross-model dispositions,
+defended carried items, stale-NatSpec notes, the indexer-parity delta, automated-tool findings, and
+ERC-20 deviations — is in [`KNOWN-ISSUES.md`](../KNOWN-ISSUES.md). It is a *precise* perimeter: every
+entry names the exact mechanism and impact.
+
+_Anything in this section (including everything in `KNOWN-ISSUES.md`) is a publicly known issue and is
+ineligible for awards._
 
 ---
 
@@ -20,6 +50,13 @@ stETH staking yield makes the system positive-sum, which is why several sub-game
 
 **No upgradeability. No proxies. No configurable privileged addresses.** Every cross-contract
 authority is a compile-time constant in `ContractAddresses.sol`, fixed by nonce prediction at deploy.
+
+## Links
+
+- **Previous audits:** none — no prior third-party audit.
+- **Documentation:** `audit/C4A-CONTEST-README.md` (this file), `SECURITY.md`, `audit/ACCESS-CONTROL-MATRIX.md`, `audit/ETH-FLOW-MAP.md`, `docs/JACKPOT-PAYOUT-REFERENCE.md`
+- **Website:** `TBD`
+- **X/Twitter:** `TBD`
 
 ---
 
@@ -44,6 +81,49 @@ storage, libraries, and interfaces + one standalone in-scope production contract
 
 nSLOC = non-blank, non-comment source lines (comment-and-string-aware count). Per-file breakdown is in
 `scope.txt`.
+
+---
+
+## Scoping Q & A
+
+### General questions
+
+| Question | Answer |
+|----------|--------|
+| ERC20 used by the protocol | External: **stETH** (Lido, rebasing), **LINK**, **wXRP**. Native: **FLIP**, **DGNRS**, vault shares **DGVE/DGVF**. (`sDGNRS`, `GNRUS` are soulbound — not ERC-20.) |
+| ERC721 used by the protocol | **DegenerusDeityPass** (deity passes, triangular pricing). |
+| ERC777 used by the protocol | None. |
+| ERC1155 used by the protocol | None. |
+| Chains the protocol will be deployed on | **Ethereum mainnet** only. |
+| Test coverage | 993 Foundry tests (153 `.t.sol`; incl. 18 invariant suites + 6 halmos symbolic) and ~1,545 Hardhat specs (89 `.test.js`), green at the frozen subject (107 Foundry / 22 Hardhat documented skips). A line/branch % is **not** reported: `forge coverage` is infeasible on this codebase — its instrumentation disables/minimizes `viaIR`, and the largest modules then hit solc "stack too deep" (both plain and `--ir-minimum`). Assurance rests on suite breadth + the Main-Invariants properties below, not a percentage. |
+
+### ERC20 token behaviors in scope
+
+The protocol touches only known tokens (stETH, LINK, wXRP, and its own FLIP/DGNRS). What materially matters:
+
+| Behavior | In scope? | Note |
+|----------|-----------|------|
+| Balance changes outside of transfers (rebasing) | **Yes** | stETH rebases (±); prize growth depends on it, solvency does not. Negative rebases absorbed by an 8% buffer. |
+| Missing return values / doesn't revert on failure | Yes | `.transfer`/`.transferFrom` return-checked; only bool-returning known tokens touched. |
+| Fee on transfer | No | None of the touched tokens charge fees. |
+| Low (<6) / high (>18) decimals | No | All touched tokens are 18-decimal. |
+| Upgradeability / Pausability / Blocklists / Flash-mint / Approval-race | No | Not applicable to the touched token set. |
+
+### External integrations in scope
+
+| Integration | In scope | Note |
+|-------------|----------|------|
+| Lido stETH | Yes | Rebase (incl. negative) and yield-to-zero handled; solvency invariant independent of yield. |
+| Chainlink VRF V2.5 | Yes | Sole randomness source. Coordinator swap is sDGNRS-governance-gated behind a death-clock. |
+| Chainlink LINK/ETH price feed | Yes | Values LINK donations only; a stale/down feed suspends FLIP donation credit (the donation still processes). |
+
+### EIP compliance
+
+| Contract | EIP | Note |
+|----------|-----|------|
+| FLIP, DGNRS, DGVE, DGVF | ERC-20 | Intentional documented deviations (`KNOWN-ISSUES.md` §8). |
+| DegenerusDeityPass | ERC-721 | — |
+| sDGNRS, GNRUS | (none) | Soulbound / non-transferable by design; ERC-20-compliance findings invalid. |
 
 ---
 
@@ -77,9 +157,9 @@ we're most eager to receive.
 
 # Main Invariants (MAN-01)
 
-> Canonical runtime oracle shared verbatim by the adversarial agent (`agent/src/oracle.js`, which asserts a subset at runtime) and this section of the C4A README. Subject (re-pinned Phase 474): v74 frozen `contracts/` tree `f06b1ef6` @ impl `93d17288`; closure `MILESTONE_V74_AT_HEAD_93d17288ba6719e0a77723d6167c0ba4796b8467` (the concrete terminal sha is emitted Phase 478). Verdict: 0 open findings — 8-cluster as-built audit clean; cross-model (Codex, Phase 475) found 1 MEDIUM (recovery-spanning VRF-swap proposal), fixed at 93d17288. Numeraire: ETH wei (18 decimals); stETH valued 1:1 with ETH (protocol sums at parity).
+> Canonical runtime oracle shared by the adversarial agent (`agent/src/oracle.js`, which asserts a subset at runtime) and this section of the C4A README. Subject: the frozen `contracts/` tree `19272c1f` @ tag `degenerus-c4a`. Numeraire: ETH wei (18 decimals); stETH valued 1:1 with ETH (protocol sums at parity).
 
-> Generated from `agent/manifest/invariants.json` (34 invariants: 28 re-validated against the frozen subject + 6 new-surface MAN-02 additions). Each non-DEG getter entry is evaluable purely from public chain state (a getter plus, for SOLV-01, one mandated `eth_getStorageAt` slot-11 read; SOLV-04 a slot-7 read; REDEEM-05 a per-day `pendingByDay` slot-7 mapping read); DEG entries are statistical over the `FullTicketResult` stream. The six MAN-02 additions (SOLV-06/07/08, VRF-03, ACCESS-01, RNG-03) are manifest/doc-only until the Phase 476 soak re-attest decides whether to wire them into the runtime asserter.
+> Generated from `agent/manifest/invariants.json` (34 invariants). Each non-DEG getter entry is evaluable purely from public chain state (a getter plus, for SOLV-01, one mandated `eth_getStorageAt` slot-11 read; SOLV-04 a slot-7 read; REDEEM-05 a per-day `pendingByDay` slot-7 mapping read); DEG entries are statistical over the `FullTicketResult` stream.
 
 
 ## Solvency & backing
@@ -89,7 +169,7 @@ we're most eager to receive.
 | `SOLV-01-ETH-SOLVENCY` | critical | The game contract's live ETH balance always covers its canonical ETH-obligation set. LIVE (not gameOver): obligations = currentPrizePool + nextPrizePool + futurePrizePool + claimablePool + yieldAcc... | If game.gameOver()==true: obligations = game.claimablePoolView(). Else: game.currentPrizePoolView() + game.nextPrizePoolView() + game.futurePrizePoolView() + game.claimablePoolV... | assertGe(eth_getBalance(game), obligations); tolerance = exact (>=, 0 wei slack) | `test/fuzz/invariant/EthSolvency.inv.t.sol:36-47; helper test/fuzz/helpers/SolvencyObligations.sol:52-68` |
 | `SOLV-02-FULL-BACKING-ETH-STETH` | critical | The summed four-pool obligation (current+next+future+claimable) is always fully backed by the ETH+stETH the game holds — no pool transfer (future->next->current consolidation, the time-based future... | sumPools = game.currentPrizePoolView() + game.nextPrizePoolView() + game.futurePrizePoolView() + game.claimablePoolView(); backing = eth_getBalance(game) + IERC20(STETH_TOKEN).b... | assertLe(sumPools, backing); tolerance = exact (<=, 0 wei slack) | `test/fuzz/invariant/PoolConservation.inv.t.sol:91-102` |
 | `SOLV-03-NO-UNBACKED-CREDIT` | critical | Conservation: the summed four-pool obligation can never exceed the real ETH that entered the contract (starting backing captured at session start + cumulative real ETH inflow from buys). An interna... | sumPools (as SOLV-02) compared to startingBacking + ghost_realInflow, where startingBacking = eth_getBalance(game)+stETH balance sampled at session connect and ghost_realInflow ... | assertLe(sumPools, startingBacking + realInflow); tolerance = exact (<=) | `test/fuzz/invariant/PoolConservation.inv.t.sol:115-125` |
-| `SOLV-04-CLAIMABLE-EQUALS-HALVES` | critical | Master SOLVENCY-01 identity: claimablePool equals the sum over all addresses of (claimable low-half + afking high-half) of their packed balance slot. The afking reservation rides INSIDE claimablePo... | For each tracked address a: packed = eth_getStorageAt(game, keccak256(abi.encode(a, 7))); sum += uint128(packed) + (packed>>128). Per-address public surrogates: game.claimableWi... | assertEq(game.claimablePoolView(), sum-over-addresses(halves)); tolerance = exact (==) | `test/fuzz/invariant/V61SolvencyAfpay.inv.t.sol:84-96` |
+| `SOLV-04-CLAIMABLE-EQUALS-HALVES` | critical | Master SOLVENCY identity: claimablePool >= the sum over all addresses of (claimable low-half + afking high-half) of their packed balance slot (equal outside decimator settlement, over-reserved during it). The afking reservation rides INSIDE claimablePo... | For each tracked address a: packed = eth_getStorageAt(game, keccak256(abi.encode(a, 7))); sum += uint128(packed) + (packed>>128). Per-address public surrogates: game.claimableWi... | assertGe(game.claimablePoolView(), sum-over-addresses(halves)); == outside decimator settlement | `test/fuzz/invariant/V61SolvencyAfpay.inv.t.sol:84-96` |
 | `SOLV-05-CLAIMABLE-BACKED` | critical | claimablePool never exceeds the game's liquid backing (ETH + stETH) — the claim liability is always covered after any afking-funded buy, packed credit/debit, stale cashout, or smite. | game.claimablePoolView() compared to eth_getBalance(game) + IERC20(STETH_TOKEN).balanceOf(game). | assertLe(game.claimablePoolView(), eth_getBalance(game)+stETH); tolerance = exact (<=) | `test/fuzz/invariant/V61SolvencyAfpay.inv.t.sol:103-110` |
 | `SOLV-06-FOLD-CONSERVATION` | critical | Purchase/mint fold conservation: the single combined claimablePool -= totalClaimableDraw exactly equals the per-tier sum of every per-player claimable + afking debit across all payKind branches (Di... | Per-transaction conservation: snapshot game.claimablePoolView() and the per-actor packed halves (slot 7, keccak256(abi.encode(a, 7)); claimable=lo128, afking=hi128) before and a... | assertEq(delta claimablePoolView, sum delta per-actor halves) across a buy; at-rest sur... | `.planning/phases/468-audit-solv/468-FINDINGS.md (SOLV-01/SOLV-02); at-rest surrogate test/fuzz/invariant/V61SolvencyAfpay.inv.t.sol:84-96` |
 | `SOLV-07-SDGNRS-BOX-ROUTING` | critical | sDGNRS level-start bonus box conservation: the claimablePool debit equals the box prize-pool credit (claimable down `box` == pool up `box`, box = min(cl/20, 6 ether) floored at mp), and the 1-wei s... | Across the level-start STAGE box buy: game.claimablePoolView() decreases by exactly the amount the sDGNRS box prize pool increases by, and game.claimableWinningsOf(SDGNRS) drops... | assertEq(delta box-prize-pool, -delta claimablePoolView) for the box buy; assertLe(box,... | `.planning/phases/468-audit-solv/468-FINDINGS.md (SOLV-05); contracts/modules/GameAfkingModule.sol:1170-1198` |
@@ -139,7 +219,7 @@ we're most eager to receive.
 | `VRF-01-INDEX-LIFECYCLE` | medium | lootboxRngIndex never skips a value and never double-increments on a single request, and every unlocked index has a nonzero VRF-derived word (no orphaned index). | Client tracks the lootbox index cursor across VRF fulfillments (eth_getStorageAt slot 34 low 48 bits, the index field) and reads the word per index (slot 35 keyed by index, or v... | assertEq(ghost_indexSkipViolations,0); assertEq(ghost_doubleIncrementCount,0); assertEq... | `test/fuzz/invariant/VRFPathInvariants.inv.t.sol:28-52` |
 | `VRF-02-SWAP-PRESERVES-LOCK` | medium | A VRF coordinator swap never flips rngLocked in either direction: a daily request in flight keeps the lock until the re-issued word lands; an idle/mid-day-only state stays unlocked. Gap days are ba... | game.rngLocked() (DegenerusGame.sol:2211) sampled before/after a coordinator swap must be unchanged; for each gap day d after recovery assert game.rngWordForDay(d) != 0 (Degener... | rngLocked unchanged across swap (ghost_stateViolations==0); assertNe(game.rngWordForDay... | `test/fuzz/invariant/VRFPathInvariants.inv.t.sol:60-90` |
 | `VRF-03-DEADMAN-MONOTONIC-LATCH` | high | _vrfDeadmanFired (_simulatedDayIndex() - dailyIdx > 120) is a pure monotonic latch: it cannot false-fire on a healthy game (dailyIdx advances on every sealed day, so a 120-sealed-day gap only opens... | Derived (not a single getter). Client tracks dailyIdx (slot 0 byte 3, mask 0xFFFFFF) and the simulated day index; asserts _simulatedDayIndex() - dailyIdx never exceeds 120 on a ... | deadman gap (_simulatedDayIndex - dailyIdx) <= 120 on a live game; once fired the latch... | `.planning/phases/469-audit-rng-liveness/469-FINDINGS.md (RNG-01); contracts/storage/DegenerusGameStorage.sol:1502-1504; gameOver-latch surrogate test/fuzz/invariant/GameFSM.inv.t.sol:33-39` |
-| `RNG-03-QUEUE-WINDOW-NO-TERMINAL-JACKPOT` | high | Tickets queued during the liveness-timeout / RNG-locked window (the per-sink liveness queue-gate was removed from _queueTickets / _queueTicketsScaled / _queueTicketRange) are provably never process... | Behavioral: client attempts a purchase/queue during the liveness/game-over window and asserts the purchase entry reverts (no player ticket can enter the window); the far-future ... | an in-window purchase reverts (liveness-gated); no window-queued player ticket resolves... | `.planning/phases/469-audit-rng-liveness/469-FINDINGS.md (RNG-03); the v45 VRF-freeze invariant` |
+| `RNG-03-QUEUE-WINDOW-NO-TERMINAL-JACKPOT` | high | Tickets queued during the liveness-timeout / RNG-locked window are provably never process... | Behavioral: client attempts a purchase/queue during the liveness/game-over window and asserts the purchase entry reverts (no player ticket can enter the window); the far-future ... | an in-window purchase reverts (liveness-gated); no window-queued player ticket resolves... | `.planning/phases/469-audit-rng-liveness/469-FINDINGS.md (RNG-03); the v45 VRF-freeze invariant` |
 
 ## Access control & gift sourcing
 
@@ -171,7 +251,6 @@ Full enumeration with powers and bounds is in **`SECURITY.md`**. Summary:
 |------|-----|-------|-------|
 | sDGNRS majority governance | voting-sDGNRS holders via `DegenerusAdmin` | swap VRF coordinator / price feed | 44h VRF death-clock; 50%→5% decaying vote; auto-killed on VRF recovery (`lastVrfProcessed > createdAt`, 475 fix); payable `receive()` never reverts |
 | Vault owner | holder of >50.1% DGVE supply | vault ETH↔stETH, feed, lootbox-RNG threshold, vault's own `game*`/`coin*` proxy actions | acts only on the vault's own custodied position; cannot reach player balances or claimablePool |
-| approvedDistributor | gas-faucet operators + vault owner | `distribute` donated gas-dust to high-affiliate-score players | faucet is dormant/unwired, custody-free, CEI-safe, no protocol-state writes |
 | VRF coordinator | Chainlink (+ any governance-installed coordinator) | deliver VRF words | request-id + `rngWordCurrent==0` drop stale fulfillments; > 120d death → non-steerable historical fallback |
 
 **Permissionless-settlement boundary (locked ruling):** a permissionless action is allowed iff value
@@ -189,26 +268,55 @@ a permissionless path that settles to a non-owner or spends from a non-consentin
 |----------|--------|
 | Gas-optimization suggestions | Optimized over multiple dedicated phases; worst-case ceiling proven < 16.7M. |
 | Code style / naming / formatting | Intentional, consistently applied across ~20k nSLOC. |
-| NatSpec / comment wording | Swept; the frozen tree's stale-comment doc-corrections are listed in `KNOWN-ISSUES.md` §5 and are not being re-touched this milestone. |
-| Known automated-tool findings | Slither v0.11.5 + 4naly3er pre-triaged in `KNOWN-ISSUES.md` §7. |
+| NatSpec / comment wording | Descriptive only; not a source of eligible findings. |
+| Known automated-tool findings | Slither v0.11.5 + Aderyn 0.6.8 pre-triaged in `KNOWN-ISSUES.md` §5. |
 | Deployment scripts / off-chain infra | Nonce-predicted addresses baked at compile time; wrong addresses = nothing works (self-auditing). |
 | Frontend / indexer / website / papers | Not deployed on-chain in this repo. |
 | ERC-20 deviations in FLIP / DGNRS | Intentional; documented in `KNOWN-ISSUES.md` §8. |
 | "ERC-20 compliance" vs sDGNRS / GNRUS | Soulbound, not ERC-20 — invalid. |
-| Wiring `DegenerusGasFaucet` into deploy | In scope to audit; stays dormant/unwired by decision. |
 
 ---
 
 ## Known issues
 
-See **`KNOWN-ISSUES.md`** (repo root). It is a precise perimeter — design decisions, by-design rulings
-(EV>100% RTP, positive-EV lootbox/coinflip, WWXRP worthless, capBucketCounts imprecision, lootbox
-open-level non-manipulability, presale over-credit, redemption-dust drop, afking eviction boundary,
-claimBingo no-level-guard, genesis admin self-break), the v74 cross-model dispositions (the >120-day
-VRF-death deadman fallback; post-gameover ticket-insertion and sDGNRS-box-sizing invariants), carried
-defended items (mid-day requestId guard re-check, VRF rotation-timer governance-malice, affiliate
-floor-of-sum), stale-NatSpec doc-corrections, the indexer-parity delta, automated-tool findings, and
-ERC-20 deviations. **If a finding's mechanism + impact appears there, it is not eligible.**
+See **`KNOWN-ISSUES.md`** (repo root). It is a precise perimeter — design decisions/assumptions;
+accepted issues and scope boundaries (presale over-credit, genesis admin self-break); the >120-day
+VRF-death deadman fallback; out-of-scope and immaterial items (VRF rotation-timer governance-malice,
+affiliate floor-of-sum rounding); automated-tool findings; and ERC-20 deviations. **If a finding's
+mechanism + impact appears there, it is not eligible.**
+
+---
+
+## Running tests
+
+```bash
+git clone <repo> && cd degenerus-audit
+npm install
+git checkout degenerus-c4a          # the frozen subject (contracts/ tree 19272c1f)
+
+# Foundry (REQUIRED preprocessing — bare `forge test` panics in setUp without it):
+make test-foundry                   # runs the 5 source gates + patchForFoundry + forge test
+
+# Hardhat:
+make test-hardhat
+
+# Both + all source gates:
+make test
+```
+
+`forge coverage` is not runnable here (see the Test-coverage Q&A above — `viaIR` "stack too deep").
+The five source gates (`check-rng-window`, `check-pool-writes`, `check-delegatecall`,
+`check-interfaces`, `check-raw-selectors`) are machine-checkable invariants over the source and run as
+prerequisites of `make test`.
+
+---
+
+## Miscellaneous
+
+Employees of Degenerus and their family members are ineligible to participate in this audit.
+
+Code4rena's rules cannot be overridden by the contents of this README. In case of doubt, check with
+C4 staff.
 
 ---
 
@@ -217,8 +325,7 @@ ERC-20 deviations. **If a finding's mechanism + impact appears there, it is not 
 `DegenerusGame` is a router that dispatches to **12 delegatecall modules**, all sharing
 `DegenerusGameStorage` and executing in the router's context. Chainlink VRF V2.5 for randomness; Lido
 stETH for yield. All addresses are immutable compile-time constants. No proxy patterns, no
-upgradeability. (The former `EndgameModule` was removed this batch — its logic folded into the
-Advance / GameOver / Jackpot modules.)
+upgradeability.
 
 ### Core deployed contracts (14)
 
@@ -227,17 +334,17 @@ Advance / GameOver / Jackpot modules.)
 | DegenerusGame | Router / delegatecall dispatcher |
 | DegenerusAdmin | VRF + price-feed governance (sDGNRS vote, death-clock gated), payable `receive()` |
 | DegenerusAffiliate | Affiliate codes, referral tracking, bonus points, combined affiliate roll |
-| FLIP | ERC-20 (coinflip auto-claim + vault virtual-reserve burn) — formerly "BURNIE" |
-| Coinflip | Coinflip resolution, bounty, caller-funded gift deposits — formerly "BurnieCoinflip" |
-| sDGNRS | Soulbound; holds reserves/pools, redemption desk, gambling burn — formerly "StakedDegenerusStonk" |
-| DGNRS | Transferable ERC-20 wrapper over sDGNRS — formerly "DegenerusStonk" |
+| FLIP | ERC-20 (coinflip auto-claim + vault virtual-reserve burn) |
+| Coinflip | Coinflip resolution, bounty, caller-funded gift deposits |
+| sDGNRS | Soulbound; holds reserves/pools, redemption desk, gambling burn |
+| DGNRS | Transferable ERC-20 wrapper over sDGNRS |
 | DegenerusVault | stETH yield vault; deploys DGVE/DGVF share-class ERC-20s |
 | DegenerusJackpots | Jackpot state + BAF helper logic |
 | DegenerusQuests | Quest streaks + activity score |
 | DegenerusDeityPass | ERC-721 deity passes, triangular pricing |
 | Icons32Data | On-chain SVG icon data |
 | GNRUS | Soulbound charity token, sDGNRS-governed level donations |
-| WWXRP | wXRP utility token (value = whale-pass position) — formerly "WrappedWrappedXRP" |
+| WWXRP | wXRP utility token (value = whale-pass position) |
 
 ### Delegatecall game modules (12)
 
@@ -258,10 +365,10 @@ JackpotBucketLib, PriceLookupLib.
 ## Additional context
 
 - **Compiler:** Solidity 0.8.34, `viaIR = true`, optimizer `runs = 1000`, `evmVersion = osaka`.
-- **Build/test:** Hardhat + Foundry. Full suite green at the frozen subject (≥ 893/0 floor;
-  VRFGovernance 74/74 kill-on-recovery era). The invariant manifest (`agent/manifest/invariants.json`
-  / `MAIN-INVARIANTS.md`) is the single source the Main-Invariants section above mirrors verbatim and
-  the live adversarial agent asserts a subset of.
+- **Build/test:** Hardhat + Foundry. Full suite green at the frozen subject — 993 Foundry (0 failed,
+  107 skipped) + ~1,545 Hardhat (0 failed, 22 pending); see the Test-coverage Q&A. The invariant
+  manifest (`agent/manifest/invariants.json` / `MAIN-INVARIANTS.md`) is the source the Main-Invariants
+  section above mirrors, and the live adversarial agent asserts a subset of it.
 - **Companion docs:** `audit/ACCESS-CONTROL-MATRIX.md` (every external state-changing function + guard)
   and `audit/ETH-FLOW-MAP.md` (every ETH entry/exit + conservation proof), both refreshed for this
-  subject's permissionless/gift, sDGNRS level-lootbox, and gas-faucet surfaces.
+  subject's permissionless/gift and sDGNRS level-lootbox surfaces.

@@ -179,7 +179,7 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
      * @param quantity Number of passes to purchase (1-100).
      * @custom:reverts GameOver When gameOver is true.
      * @custom:reverts InvalidQuantity When quantity is 0 or exceeds 100.
-     * @custom:reverts MinQuantityRequired When msg.value does not match required price.
+     * @custom:reverts MinQuantityRequired When a century (x00) pass level is purchased with quantity < 2.
      */
     function purchaseWhalePass(
         address buyer,
@@ -398,7 +398,10 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
      *      - Awards a lootbox equal to 10% of pass value.
      *      - Boon purchases apply the boon's tier discount (10/25/50%) to the payment amount.
      * @param buyer The address receiving the pass.
-     * @custom:reverts OnlyDelegatecall When level is not 0-2, x9 (excl. x99), x0, or a century x00 in its purchase phase (and no boon), pass has 8+ levels remaining, or msg.value is incorrect.
+     * @custom:reverts OnlyDelegatecall When invoked outside the Game delegatecall context.
+     * @custom:reverts InvalidLevelForPass When the level is not 0-2, x9 (excl. x99), or a century x00 in its purchase phase, and no boon applies.
+     * @custom:reverts DeityPassConflict When the buyer already holds a deity pass.
+     * @custom:reverts PassNotExpired When an active frozen pass still has 8+ levels remaining.
      */
     function purchaseLazyPass(address buyer) external payable {
         // Delegatecall-only: address(this) == GAME under the nested dispatch. A direct call on the
@@ -549,9 +552,12 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
      *      - Post-game (level > 0): 5% next pool, 95% future pool
      * @param buyer The address receiving the pass.
      * @param symbolId Symbol to claim (0-31: Q0 Crypto 0-7, Q1 Zodiac 8-15, Q2 Cards 16-23, Q3 Dice 24-31).
-     * @custom:reverts AlreadyOwnsDeityPass When buyer already owns a deity pass.
-     * @custom:reverts InvalidSymbol When symbolId is out of range or already taken.
-     * @custom:reverts GameOver When msg.value does not match current deity pass price.
+     * @custom:reverts OnlyDelegatecall When invoked outside the Game delegatecall context.
+     * @custom:reverts RngLocked When an RNG word is locked.
+     * @custom:reverts GameOver When the liveness/game-over state is triggered.
+     * @custom:reverts InvalidSymbol When symbolId is out of range (>= 32).
+     * @custom:reverts SymbolTaken When the symbol is already claimed.
+     * @custom:reverts AlreadyOwnsDeityPass When the buyer already owns a deity pass.
      */
     function purchaseDeityPass(address buyer, uint8 symbolId) external payable {
         // Delegatecall-only: address(this) == GAME under the nested dispatch. A direct call on the
