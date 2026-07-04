@@ -1370,7 +1370,9 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
                 uint256 bonus = (uint256(scaledWholeTickets) * distressEth * DISTRESS_TICKET_BONUS_BPS)
                     / (totalPackedEth * 10_000);
                 if (bonus != 0) {
-                    scaledWholeTickets = uint32(uint256(scaledWholeTickets) + bonus);
+                    // Saturate at the uint32 ceiling instead of wrapping (see _lootboxTicketCount).
+                    uint256 boosted = uint256(scaledWholeTickets) + bonus;
+                    scaledWholeTickets = boosted > type(uint32).max ? type(uint32).max : uint32(boosted);
                 }
             }
             // Collapse scaled tickets to whole via a single Bernoulli round-up on bits[224..255]
@@ -2189,7 +2191,11 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
             return 0;
         }
         uint256 adjustedBudget = (budgetWei * _ticketVarianceBps(seed)) / 10_000;
-        scaledWholeTickets = uint32((adjustedBudget * QTY_SCALE) / priceWei);
+        uint256 scaled = (adjustedBudget * QTY_SCALE) / priceWei;
+        // Saturate at the uint32 ceiling instead of wrapping. The ceiling (~42.9M scaled
+        // whole-tickets in a single roll) is only reachable at economically-impossible box
+        // sizes; a graceful cap avoids a silent modular wrap to a tiny count.
+        scaledWholeTickets = scaled > type(uint32).max ? type(uint32).max : uint32(scaled);
     }
 
     /// @dev Draw the within-budget ticket multiplier (BPS) from the variance tiers. Extracted

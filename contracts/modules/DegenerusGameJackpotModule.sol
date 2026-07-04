@@ -2130,7 +2130,12 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         // fractional part rounds up with probability frac/QTY_SCALE using
         // bits[96..127] of the per-roll entropy word — a uint32 window, wide enough
         // that the % QTY_SCALE modulo bias is negligible (~2e-8).
-        uint32 scaledWholeTickets = uint32(wholeTicketsScaled);
+        // Saturate at the uint32 ceiling instead of wrapping: an award above ~42.9M scaled
+        // whole-tickets in a single roll is only reachable at economically-impossible prize
+        // sizes; a graceful cap avoids a silent modular wrap to a tiny count.
+        uint32 scaledWholeTickets = wholeTicketsScaled > type(uint32).max
+            ? type(uint32).max
+            : uint32(wholeTicketsScaled);
         uint32 whole = scaledWholeTickets / uint32(QTY_SCALE);
         uint32 frac = scaledWholeTickets % uint32(QTY_SCALE);
         bool roundedUp = false;

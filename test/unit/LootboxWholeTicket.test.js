@@ -605,11 +605,10 @@ describe("LootboxWholeTicket — Phase 274 Wave 2 TST-WT-01..07", function () {
       expect(body, "_settleLootboxRoll body not found").to.not.equal(null);
       // Within `_settleLootboxRoll`, `scaledWholeTickets` is sourced by the
       // `_resolveLootboxRoll` destructure (`uint32 scaledWholeTickets`) and then
-      // reassigned at most once by the distress-mode bonus
-      // (`scaledWholeTickets = uint32(uint256(scaledWholeTickets) + bonus);`), still a
-      // scaled value, applied BEFORE the Bernoulli collapse. The collapse
-      // derives the separate `whole` local and must NEVER write back to
-      // `scaledWholeTickets`.
+      // reassigned at most once by the distress-mode bonus (a saturating cap of
+      // `scaledWholeTickets + bonus` at the uint32 ceiling), still a scaled value,
+      // applied BEFORE the Bernoulli collapse. The collapse derives the separate
+      // `whole` local and must NEVER write back to `scaledWholeTickets`.
       const assignMatches = [...body.matchAll(/scaledWholeTickets\s*=[^=]/g)];
       expect(
         assignMatches.length,
@@ -620,10 +619,14 @@ describe("LootboxWholeTicket — Phase 274 Wave 2 TST-WT-01..07", function () {
         /\(\s*uint256 flipOut\s*,\s*uint32 scaledWholeTickets\s*,/.test(body),
         "scaledWholeTickets must be the scaled roll result from the `_resolveLootboxRoll` destructure"
       ).to.equal(true);
-      // The distress-bonus reassignment stays a scaled value.
+      // The distress-bonus reassignment stays a scaled value — a saturating cap of
+      // `scaledWholeTickets + bonus` at the uint32 ceiling (not a modular wrap).
       expect(
-        body.includes("scaledWholeTickets = uint32(uint256(scaledWholeTickets) + bonus);"),
-        "the scaledWholeTickets distress-bonus reassignment must stay a scaled value"
+        body.includes("uint256 boosted = uint256(scaledWholeTickets) + bonus;") &&
+          body.includes(
+            "scaledWholeTickets = boosted > type(uint32).max ? type(uint32).max : uint32(boosted);"
+          ),
+        "the scaledWholeTickets distress-bonus reassignment must stay a scaled value (saturating cap of scaledWholeTickets + bonus)"
       ).to.equal(true);
       // The collapse writes only `whole` — never `scaledWholeTickets`.
       const collapseIdx = body.indexOf(
