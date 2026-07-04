@@ -1,4 +1,4 @@
-.PHONY: test test-foundry test-hardhat check-interfaces check-delegatecall check-raw-selectors coverage-check invariant-test invariant-build invariant-clean
+.PHONY: test test-foundry test-hardhat check-interfaces check-delegatecall check-raw-selectors check-rng-window check-pool-writes coverage-check invariant-test invariant-build invariant-clean
 
 # ── Interface coverage gate ─────────────────────────────────────────────
 # Verifies every function declared in contracts/interfaces/ has a matching
@@ -30,6 +30,25 @@ check-delegatecall:
 check-raw-selectors:
 	@scripts/check-raw-selectors.sh
 
+# ── RNG-window consumer drift gate ──────────────────────────────────────
+# Mechanizes the v45 freeze north-star: every read/write of a VRF-word storage
+# variable (rngWordCurrent / rngWordByDay / lootboxRngWordByIndex / the
+# lootboxRngPacked cursor) must be registered + classified in
+# scripts/rng-window-manifest.tsv, and the runtime freeze net
+# (RngWindowFreezeHandler) must enumerate the manifest's FROZEN_SET. A new/moved
+# consumer that is not classified fails the build, forcing the backward-trace
+# review the hand-enumerated runtime net would otherwise silently miss. Operates
+# on source text — no forge build prerequisite.
+check-rng-window:
+	@scripts/check-rng-window.sh
+
+# ── SOLV pool-write drift gate ──────────────────────────────────────────
+# Every mutation of a counted ETH-obligation term (and every canonical
+# mutator call) must be classified in scripts/pool-write-manifest.tsv.
+# Keeps audit/ETH-SUBPOOL-PROVENANCE-PROOF.md true against source drift.
+check-pool-writes:
+	@scripts/check-pool-writes.sh
+
 # ── External-function coverage classification gate (standalone) ─────────
 # Enforces 222-01-COVERAGE-MATRIX.md: every external/public function on
 # every deployable source artifact is classified (no universe drift),
@@ -50,7 +69,7 @@ coverage-check:
 
 # Run all Foundry fuzz tests (patch → test → restore)
 # forge test handles its own compilation with the patched addresses in place.
-test-foundry: check-interfaces check-delegatecall check-raw-selectors
+test-foundry: check-interfaces check-delegatecall check-raw-selectors check-rng-window check-pool-writes
 	@echo "Patching ContractAddresses.sol for Foundry..."
 	@node scripts/lib/patchForFoundry.js
 	@echo "Running Foundry tests..."
@@ -60,7 +79,7 @@ test-foundry: check-interfaces check-delegatecall check-raw-selectors
 		exit $$TEST_EXIT
 
 # Run Hardhat tests (no patching needed — Hardhat deploys fresh)
-test-hardhat: check-interfaces check-delegatecall check-raw-selectors
+test-hardhat: check-interfaces check-delegatecall check-raw-selectors check-rng-window check-pool-writes
 	@npx hardhat test $(ARGS)
 
 # Run both suites

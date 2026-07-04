@@ -1,0 +1,129 @@
+# RNG-WINDOW CONSUMER MANIFEST — the source-of-truth registry the freeze gate enforces.
+# =====================================================================================
+#
+# WHY THIS FILE EXISTS
+# --------------------
+# The v45 north-star: every storage slot a pending randomness consumption READS must be
+# frozen against player action for the whole [VRF request -> unlock] window. The runtime
+# net (test/fuzz/invariant/RngWindowFreeze.inv.t.sol) asserts that freeze over a
+# HAND-ENUMERATED set of slots inside RngWindowFreezeHandler. Nothing, until this gate,
+# guarded that hand-enumeration against source drift: a new consumer of a VRF word could
+# be added and the runtime net would keep passing because it only checks the slots a human
+# listed. This manifest + scripts/check-rng-window.sh close that gap. The gate re-derives,
+# from source, every read/write of a VRF-word storage variable and fails the build when a
+# live access is not registered here (a new/moved consumer to classify) or a registered row
+# no longer matches source (a stale entry to remove). When the gate trips on a new access,
+# the reviewer MUST classify it below AND confirm RngWindowFreezeHandler's enumerated slot
+# set covers the slot it reads.
+#
+# This is text-level analysis (scripts/lib/rng_window_extract.py), not a compiler dataflow
+# proof. It is deliberately conservative: it surfaces EVERY syntactic access so a human
+# re-runs the backward-trace judgement per changed site. It does not by itself prove a site
+# is safe — the CLASS column records the reviewed judgement of why each site is safe.
+#
+# TRACKED VARIABLES (the VRF-word storage set). Keep in lockstep with VRF_WORD_IDENTIFIERS
+# in rng_window_extract.py and with the enumerated slots in RngWindowFreezeHandler:
+#   rngWordCurrent          the fulfilled-but-not-yet-sealed daily buffer (own slot)
+#   rngWordByDay[day]       the sealed, write-once per-day word            (slot 10)
+#   lootboxRngWordByIndex[] the sealed, write-once per-index lootbox word  (slot 35)
+#   lootboxRngPacked        the packed lootbox cursor; low 48 bits = index (slot 34)
+#
+# FROZEN_SET declares the identifiers the runtime net must enumerate; the gate cross-checks
+# that RngWindowFreezeHandler references each. (dailyIdx — the non-VRF day cursor, slot 0
+# byte 3 — is a 4th enumerated slot in the handler but is read in hundreds of unrelated
+# places, so it is NOT tracked as a word variable here; the handler covers it directly.)
+# FROZEN_SET: rngWordByDay lootboxRngWordByIndex lootboxRngPacked
+#
+# WINDOW ASYMMETRY (a reviewer note the CLASS judgements rest on): a DAILY request sets both
+# rngLockedFlag and prizePoolFrozen; a MID-DAY requestLootboxRng sets NEITHER — it relies on
+# the LR_MID_DAY bit + rngRequestTime != 0. So "a VRF request is outstanding" is NOT the same
+# as rngLocked() == true. Any future CONSUMER-SEALED/GATE/CURSOR row must be re-checked
+# against BOTH windows, not just the daily lock.
+#
+# CLASS meanings:
+#   DECL            storage declaration of a tracked variable.
+#   PRODUCER        writes a word/cursor. Every writer today runs in the exempt advance /
+#                   VRF-callback / mint-queue path (a cursor-index allocation). A writer that
+#                   appears in a NEW function is the highest-signal drift: re-verify it cannot
+#                   rewrite a sealed word a pending consumption will read.
+#   EXEMPT-ADVANCE  read inside advanceGame / the VRF request-response / seal / gap-backfill /
+#                   game-over terminal flow — the v45-exempt heartbeat (no player interleave
+#                   between the read and the word it depends on).
+#   CONSUMER-SEALED player-reachable read that consumes a SEALED, write-once word for a value
+#                   decision. Safe because the word is written once by the exempt producer and
+#                   read only after unlock — a player cannot change what it reads mid-window.
+#   GATE            player-reachable readiness/existence check (e.g. `word != 0` -> RngNotReady),
+#                   not consumed for a value decision.
+#   CURSOR          player-reachable read of the lootboxRngPacked cursor — the non-VRF slot read
+#                   ALONGSIDE the lootbox word (its own bug class; the freeze net enumerates it).
+#   ACCESSOR        pure view getter / packed-field helper (no decision, no window sensitivity).
+#
+# COLUMNS (tab-separated): CLASS  IDENTIFIER  FUNCTION  FILE  MODE
+# Regenerate the body after a large refactor with:
+#   python3 scripts/lib/rng_window_extract.py | python3 scripts/lib/rng_window_classify.py
+# then hand-review every row before committing.
+#
+CLASS	IDENTIFIER	FUNCTION	FILE	MODE
+DECL	lootboxRngPacked	<file-scope>	storage/DegenerusGameStorage.sol	DECL
+DECL	lootboxRngWordByIndex	<file-scope>	storage/DegenerusGameStorage.sol	DECL
+DECL	rngWordByDay	<file-scope>	storage/DegenerusGameStorage.sol	DECL
+DECL	rngWordCurrent	<file-scope>	storage/DegenerusGameStorage.sol	DECL
+PRODUCER	lootboxRngPacked	_lrAdvanceIndexClearPending	modules/DegenerusGameAdvanceModule.sol	WRITE
+PRODUCER	lootboxRngPacked	_purchaseForWithCached	modules/DegenerusGameMintModule.sol	WRITE
+PRODUCER	lootboxRngPacked	_recordLootboxEntry	modules/DegenerusGameWhaleModule.sol	WRITE
+PRODUCER	lootboxRngPacked	_recordAfkingCoverBox	modules/GameAfkingModule.sol	WRITE
+PRODUCER	lootboxRngWordByIndex	_backfillOrphanedLootboxIndices	modules/DegenerusGameAdvanceModule.sol	WRITE
+PRODUCER	lootboxRngWordByIndex	_finalizeLootboxRng	modules/DegenerusGameAdvanceModule.sol	WRITE
+PRODUCER	lootboxRngWordByIndex	advanceGame	modules/DegenerusGameAdvanceModule.sol	WRITE
+PRODUCER	lootboxRngWordByIndex	rawFulfillRandomWords	modules/DegenerusGameAdvanceModule.sol	WRITE
+PRODUCER	rngWordByDay	_applyDailyRng	modules/DegenerusGameAdvanceModule.sol	WRITE
+PRODUCER	rngWordByDay	_backfillGapDays	modules/DegenerusGameAdvanceModule.sol	WRITE
+PRODUCER	rngWordCurrent	_applyDailyRng	modules/DegenerusGameAdvanceModule.sol	WRITE
+PRODUCER	rngWordCurrent	_finalizeRngRequest	modules/DegenerusGameAdvanceModule.sol	WRITE
+PRODUCER	rngWordCurrent	_gameOverEntropy	modules/DegenerusGameAdvanceModule.sol	WRITE
+PRODUCER	rngWordCurrent	_unlockRng	modules/DegenerusGameAdvanceModule.sol	WRITE
+PRODUCER	rngWordCurrent	rawFulfillRandomWords	modules/DegenerusGameAdvanceModule.sol	WRITE
+PRODUCER	rngWordCurrent	requestLootboxRng	modules/DegenerusGameAdvanceModule.sol	WRITE
+EXEMPT-ADVANCE	lootboxRngPacked	_lrAdvanceIndexClearPending	modules/DegenerusGameAdvanceModule.sol	READ
+EXEMPT-ADVANCE	lootboxRngPacked	advanceGame	modules/DegenerusGameAdvanceModule.sol	READ
+EXEMPT-ADVANCE	lootboxRngWordByIndex	_backfillOrphanedLootboxIndices	modules/DegenerusGameAdvanceModule.sol	READ
+EXEMPT-ADVANCE	lootboxRngWordByIndex	_finalizeLootboxRng	modules/DegenerusGameAdvanceModule.sol	READ
+EXEMPT-ADVANCE	lootboxRngWordByIndex	advanceGame	modules/DegenerusGameAdvanceModule.sol	READ
+EXEMPT-ADVANCE	rngWordByDay	_gameOverEntropy	modules/DegenerusGameAdvanceModule.sol	READ
+EXEMPT-ADVANCE	rngWordByDay	_getHistoricalRngFallback	modules/DegenerusGameAdvanceModule.sol	READ
+EXEMPT-ADVANCE	rngWordByDay	_handleGameOverPath	modules/DegenerusGameAdvanceModule.sol	READ
+EXEMPT-ADVANCE	rngWordByDay	advanceGame	modules/DegenerusGameAdvanceModule.sol	READ
+EXEMPT-ADVANCE	rngWordByDay	requestLootboxRng	modules/DegenerusGameAdvanceModule.sol	READ
+EXEMPT-ADVANCE	rngWordByDay	rngGate	modules/DegenerusGameAdvanceModule.sol	READ
+EXEMPT-ADVANCE	rngWordByDay	handleGameOverDrain	modules/DegenerusGameGameOverModule.sol	READ
+EXEMPT-ADVANCE	rngWordCurrent	_finalizeRngRequest	modules/DegenerusGameAdvanceModule.sol	READ
+EXEMPT-ADVANCE	rngWordCurrent	_gameOverEntropy	modules/DegenerusGameAdvanceModule.sol	READ
+EXEMPT-ADVANCE	rngWordCurrent	advanceGame	modules/DegenerusGameAdvanceModule.sol	READ
+EXEMPT-ADVANCE	rngWordCurrent	rawFulfillRandomWords	modules/DegenerusGameAdvanceModule.sol	READ
+EXEMPT-ADVANCE	rngWordCurrent	rngGate	modules/DegenerusGameAdvanceModule.sol	READ
+EXEMPT-ADVANCE	rngWordCurrent	updateVrfCoordinatorAndSub	modules/DegenerusGameAdvanceModule.sol	READ
+CONSUMER-SEALED	lootboxRngWordByIndex	_resolveBet	modules/DegenerusGameDegeneretteModule.sol	READ
+CONSUMER-SEALED	lootboxRngWordByIndex	_openBoxBoth	modules/DegenerusGameLootboxModule.sol	READ
+CONSUMER-SEALED	lootboxRngWordByIndex	_openLootBoxLeg	modules/DegenerusGameLootboxModule.sol	READ
+CONSUMER-SEALED	lootboxRngWordByIndex	openHumanBoxes	modules/DegenerusGameLootboxModule.sol	READ
+CONSUMER-SEALED	lootboxRngWordByIndex	processTicketBatch	modules/DegenerusGameMintModule.sol	READ
+CONSUMER-SEALED	rngWordByDay	deityBoonData	DegenerusGame.sol	READ
+CONSUMER-SEALED	rngWordByDay	_payFoilTier	modules/DegenerusGameFoilPackModule.sol	READ
+CONSUMER-SEALED	rngWordByDay	_processFoilDrain	modules/DegenerusGameFoilPackModule.sol	READ
+CONSUMER-SEALED	rngWordByDay	_tryClaimFoilMatch	modules/DegenerusGameFoilPackModule.sol	READ
+CONSUMER-SEALED	rngWordByDay	issueDeityBoon	modules/DegenerusGameLootboxModule.sol	READ
+CONSUMER-SEALED	rngWordByDay	_farFutureSeed	modules/DegenerusGameMintStreakUtils.sol	READ
+CONSUMER-SEALED	rngWordByDay	_autoOpen	modules/GameAfkingModule.sol	READ
+GATE	lootboxRngWordByIndex	boxesPending	DegenerusGame.sol	READ
+GATE	lootboxRngWordByIndex	_placeDegeneretteBetCore	modules/DegenerusGameDegeneretteModule.sol	READ
+GATE	lootboxRngWordByIndex	_buyPresaleBoxFor	modules/DegenerusGameMintModule.sol	READ
+GATE	rngWordByDay	_foilDrainPending	storage/DegenerusGameStorage.sol	READ
+CURSOR	lootboxRngPacked	_purchaseForWithCached	modules/DegenerusGameMintModule.sol	READ
+CURSOR	lootboxRngPacked	_recordLootboxEntry	modules/DegenerusGameWhaleModule.sol	READ
+CURSOR	lootboxRngPacked	_recordAfkingCoverBox	modules/GameAfkingModule.sol	READ
+ACCESSOR	lootboxRngPacked	_lrAdd	storage/DegenerusGameStorage.sol	READ
+ACCESSOR	lootboxRngPacked	_lrAdd	storage/DegenerusGameStorage.sol	WRITE
+ACCESSOR	lootboxRngPacked	_lrRead	storage/DegenerusGameStorage.sol	READ
+ACCESSOR	lootboxRngPacked	_lrWrite	storage/DegenerusGameStorage.sol	WRITE
+ACCESSOR	rngWordByDay	rngWordForDay	DegenerusGame.sol	READ
+ACCESSOR	rngWordCurrent	isRngFulfilled	DegenerusGame.sol	READ

@@ -23,17 +23,27 @@ RED=$'\033[0;31m'; GREEN=$'\033[0;32m'; YELLOW=$'\033[1;33m'; NC=$'\033[0m'
 
 # Known naming exceptions where the ContractAddresses constant does NOT follow
 # pure CamelCase -> UPPER_SNAKE of the interface suffix. Keyed by the stripped
-# suffix (post-`I` and post-`DegenerusGame`), value is the post-`GAME_` portion.
-declare -A NAMING_EXCEPTIONS=( [GameOverModule]=GAMEOVER_MODULE )
+# suffix (post-`I` and post-`DegenerusGame`; an `IGame*Module` interface keeps
+# its `Game` prefix in the key), value is the post-`GAME_` portion.
+#   GameOverModule    — compound word: constant is GAMEOVER, not GAME_OVER
+#   GameAfkingModule  — interface is IGameAfkingModule (no `DegenerusGame` prefix)
+#   FoilPackModule    — compound word: constant is FOILPACK, not FOIL_PACK
+declare -A NAMING_EXCEPTIONS=(
+  [GameOverModule]=GAMEOVER_MODULE
+  [GameAfkingModule]=AFKING_MODULE
+  [FoilPackModule]=FOILPACK_MODULE
+)
 
 # Reverse of NAMING_EXCEPTIONS for constant_to_iface(). Keyed by the post-`GAME_`
-# pre-`_MODULE` fragment, value is the CamelCase fragment that sits between
-# `IDegenerusGame` and `Module`. Mirrors NAMING_EXCEPTIONS on the opposite end
-# so both directions stay in sync. Only needed for CamelCase anomalies the
-# default UPPER_SNAKE -> CamelCase transform can't derive (compound English
-# words where the internal capital differs from the first letter of a
-# `_`-delimited segment).
-declare -A REVERSE_NAMING_EXCEPTIONS=( [GAMEOVER]=GameOver )
+# pre-`_MODULE` fragment, value is the FULL interface name (not just the middle
+# fragment — IGameAfkingModule does not fit the IDegenerusGame<X>Module template,
+# so the full-name convention covers both shapes). Mirrors NAMING_EXCEPTIONS on
+# the opposite end so both directions stay in sync.
+declare -A REVERSE_NAMING_EXCEPTIONS=(
+  [GAMEOVER]=IDegenerusGameGameOverModule
+  [AFKING]=IGameAfkingModule
+  [FOILPACK]=IDegenerusGameFoilPackModule
+)
 
 # Known dead constants — declared in ContractAddresses.sol but not expected to
 # have a matching interface or any call sites. Remove entries here only when
@@ -51,6 +61,21 @@ is_dead_constant() {
     [[ "$c" == "$dead" ]] && return 0
   done
   return 1
+}
+
+# Reviewed orphan-selector sites: the selector is dispatched through a private
+# helper that owns the delegatecall + target constant, so no `.delegatecall(`
+# appears in the site's 10-line window. Keyed "<file-basename>:<interface>";
+# the value documents the helper and its verified target. Kept here (not as
+# in-source comment markers) so the deployed contracts stay byte-identical;
+# appending an entry is a visible diff in PR review, mirroring DEAD_CONSTANTS.
+declare -A ORPHAN_JUSTIFIED=(
+  [DegenerusGameFoilPackModule.sol:IDegenerusGameDegeneretteModule]="_foilSpin owns the delegatecall -> GAME_DEGENERETTE_MODULE"
+)
+
+is_orphan_justified() {
+  local file="$1" iface="$2"
+  [[ -n "${ORPHAN_JUSTIFIED[$(basename "$file"):$iface]:-}" ]]
 }
 
 # Translate IDegenerusGameXxxModule -> GAME_XXX_MODULE.
@@ -71,7 +96,7 @@ constant_to_iface() {
   local c="$1" stripped="${1#GAME_}" camel
   stripped="${stripped%_MODULE}"
   if [[ -n "${REVERSE_NAMING_EXCEPTIONS[$stripped]:-}" ]]; then
-    printf 'IDegenerusGame%sModule\n' "${REVERSE_NAMING_EXCEPTIONS[$stripped]}"
+    printf '%s\n' "${REVERSE_NAMING_EXCEPTIONS[$stripped]}"
     return
   fi
   # Default: UPPER_SNAKE -> CamelCase (lowercase all, uppercase first letter
@@ -93,7 +118,7 @@ validate_mapping() {
   [[ -f "$addr" ]] || { printf "%bFAIL%b %s missing\n" "$RED" "$NC" "$addr"; return 1; }
   [[ -f "$ifaces" ]] || { printf "%bFAIL%b %s missing\n" "$RED" "$NC" "$ifaces"; return 1; }
   constants=$(grep -oE 'GAME_[A-Z_]+_MODULE' "$addr" | sort -u)
-  interfaces=$(grep -oE 'interface IDegenerusGame[A-Za-z]+Module' "$ifaces" \
+  interfaces=$(grep -oE 'interface I(DegenerusGame|Game)[A-Za-z]+Module' "$ifaces" \
     | awk '{print $2}' | sort -u)
 
   # Every LIVE constant must resolve to a declared interface.
@@ -146,7 +171,8 @@ self_test_transform() {
                IDegenerusGameJackpotModule IDegenerusGameDecimatorModule \
                IDegenerusGameWhaleModule IDegenerusGameMintModule \
                IDegenerusGameLootboxModule IDegenerusGameBoonModule \
-               IDegenerusGameDegeneretteModule; do
+               IDegenerusGameDegeneretteModule IGameAfkingModule \
+               IDegenerusGameFoilPackModule; do
     expected=$(iface_to_constant "$iface")
     grep -qx "$expected" <<< "$known" || {
       printf "%bFAIL%b self-test: %s -> %s (not in ContractAddresses.sol)\n" \
@@ -160,10 +186,10 @@ self_test_transform() {
 # the interface alone on a line and `.selector` within 5 lines.
 collect_sites() {
   local dir="$1" file lineno sel_line
-  grep -rn --include='*.sol' -E 'IDegenerusGame[A-Za-z]+Module\.[a-zA-Z_]+\.selector' "$dir" 2>/dev/null \
+  grep -rn --include='*.sol' -E 'I(DegenerusGame|Game)[A-Za-z]+Module\.[a-zA-Z_]+\.selector' "$dir" 2>/dev/null \
     | grep -v "^${dir}/interfaces/" | grep -v "^${dir}/mocks/" \
     | awk -F: '{ print $1 "\t" $2 }'
-  grep -rn --include='*.sol' -E '^[[:space:]]*IDegenerusGame[A-Za-z]+Module[[:space:]]*$' "$dir" 2>/dev/null \
+  grep -rn --include='*.sol' -E '^[[:space:]]*I(DegenerusGame|Game)[A-Za-z]+Module[[:space:]]*$' "$dir" 2>/dev/null \
     | grep -v "^${dir}/interfaces/" | grep -v "^${dir}/mocks/" \
     | while IFS=: read -r file lineno _; do
         sel_line=$(awk -v n="$lineno" 'NR > n && NR <= n + 5 && /\.selector/ { print NR; exit }' "$file")
@@ -178,12 +204,12 @@ collect_sites() {
 # walk back up to 5 lines for a lone `IDegenerusGameXxxModule` token.
 extract_interface() {
   local file="$1" line="$2" iface
-  iface=$(awk -v n="$line" 'NR == n' "$file" | grep -oE 'IDegenerusGame[A-Za-z]+Module' | head -1)
+  iface=$(awk -v n="$line" 'NR == n' "$file" | grep -oE 'I(DegenerusGame|Game)[A-Za-z]+Module' | head -1)
   [[ -n "$iface" ]] && { printf '%s\n' "$iface"; return; }
-  awk -v n="$line" 'NR < n && NR >= n - 5' "$file" | grep -oE 'IDegenerusGame[A-Za-z]+Module' | tail -1
+  awk -v n="$line" 'NR < n && NR >= n - 5' "$file" | grep -oE 'I(DegenerusGame|Game)[A-Za-z]+Module' | tail -1
 }
 
-fail_total=0; warn_total=0; pass_total=0
+fail_total=0; warn_total=0; warn_justified=0; pass_total=0
 
 printf "Delegatecall target alignment check\n"
 printf "===================================\n"
@@ -228,7 +254,7 @@ while IFS=$'\t' read -r file lineno; do
     printf "%bWARN%b %s:%s  could not extract interface name\n" "$YELLOW" "$NC" "$file" "$lineno"
     warn_total=$((warn_total + 1)); continue
   fi
-  if [[ ! "$iface" =~ ^IDegenerusGame[A-Za-z]+Module$ ]]; then
+  if [[ ! "$iface" =~ ^I(DegenerusGame|Game)[A-Za-z]+Module$ ]]; then
     printf "%bWARN%b %s:%s  non-conventional interface name %s\n" "$YELLOW" "$NC" "$file" "$lineno" "$iface"
     warn_total=$((warn_total + 1)); continue
   fi
@@ -242,15 +268,21 @@ while IFS=$'\t' read -r file lineno; do
 
   justified=0
   printf '%s\n' "$window" | grep -q 'delegatecall-alignment: justified' && justified=1
+  is_orphan_justified "$file" "$iface" && justified=1
 
   if [[ -z "$target" ]]; then
     if [[ $justified -eq 1 ]]; then
+      # A reviewed indirection (the selector is dispatched through a helper that
+      # owns the delegatecall + target constant). Informational — does not fail
+      # the gate; removing the in-source marker re-arms it.
       printf "%bWARN%b %s:%s  orphan selector (justified): %s\n" "$YELLOW" "$NC" "$file" "$lineno" "$iface"
+      warn_justified=$((warn_justified + 1))
     else
       printf "%bWARN%b %s:%s  orphan selector (no delegatecall target in 10-line window): %s\n" \
         "$YELLOW" "$NC" "$file" "$lineno" "$iface"
+      warn_total=$((warn_total + 1))
     fi
-    warn_total=$((warn_total + 1)); continue
+    continue
   fi
 
   if [[ "$target" == "$expected" ]]; then
@@ -259,7 +291,7 @@ while IFS=$'\t' read -r file lineno; do
   elif [[ $justified -eq 1 ]]; then
     printf "%bWARN%b %s:%s  JUSTIFIED mismatch: %s expects %s but targets %s\n" \
       "$YELLOW" "$NC" "$file" "$lineno" "$iface" "$expected" "$target"
-    warn_total=$((warn_total + 1))
+    warn_justified=$((warn_justified + 1))
   else
     printf "%bFAIL%b %s:%s  %s expects %s but targets %s\n" \
       "$RED" "$NC" "$file" "$lineno" "$iface" "$expected" "$target"
@@ -269,10 +301,11 @@ done <<< "$sites"
 
 echo
 if [[ $fail_total -eq 0 && $warn_total -eq 0 ]]; then
-  printf "%bPASS%b %d/%d delegatecall sites aligned\n" "$GREEN" "$NC" "$pass_total" "$site_count"
+  printf "%bPASS%b %d/%d delegatecall sites aligned (%d justified indirection(s))\n" \
+    "$GREEN" "$NC" "$pass_total" "$site_count" "${warn_justified:-0}"
   exit 0
 fi
 (( fail_total > 0 )) && printf "%bFAIL%b %d site(s) misaligned\n" "$RED" "$NC" "$fail_total"
-(( warn_total > 0 )) && printf "%bWARN%b %d site(s) flagged (orphan / non-conventional / justified)\n" \
+(( warn_total > 0 )) && printf "%bWARN%b %d unjustified site(s) flagged (orphan / non-conventional)\n" \
   "$YELLOW" "$NC" "$warn_total"
 exit 1
