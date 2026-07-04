@@ -4,7 +4,7 @@ Pre-disclosure for audit wardens. **If a finding's mechanism + impact is describ
 already known and is not eligible.** This is a precise perimeter — each entry names the exact
 mechanism and why it is by-design, defended, or out-of-scope. There are no vague blanket disclaimers.
 
-Frozen subject: `contracts/` tree `f06b1ef6` @ impl `93d17288` (v74.0 As-Built Milestone Audit).
+Frozen subject: `contracts/` tree `19272c1f` @ tag `degenerus-c4a` (post-v75.0 hardening freeze).
 Pre-audited with Slither v0.11.5 + 4naly3er (triaged DOCUMENT findings in the last section), eight
 isolated as-built cluster audits (Phases 468–473, 0 findings), and a Codex cross-model adversarial
 re-audit (Phase 475: 5 surfaces clean/by-design/refuted, 1 MEDIUM found → fixed in `93d17288`).
@@ -29,7 +29,7 @@ extracted. (Slither `arbitrary-send` family / event-only.)
 
 **VRF-coordinator + price-feed swap governance.** Emergency rotation is sDGNRS-governed behind a
 death-clock: a VRF-swap proposal cannot be created until VRF has stalled `ADMIN_STALL_THRESHOLD =
-44 hours` (vault-owner path) / longer (0.5%-sDGNRS community path); the vote threshold decays 50%→5%
+44 hours` (vault-owner path) / `COMMUNITY_STALL_THRESHOLD = 7 days` (0.5%-sDGNRS community path); the vote threshold decays 50%→5%
 over a 168h lifetime and requires approve-weight > reject-weight. A proposal is auto-killed the
 moment VRF recovers or a word is fulfilled after creation (see §3 "kill-on-recovery"). Feed swap
 requires the feed unhealthy 2d (admin) / 7d (community); a down feed only suspends LINK→FLIP donation
@@ -59,10 +59,11 @@ re-derived at v73 close. Net protocol drain still respects solvency (curse/pay-f
 deliberately player-favorable (same yield-funded rationale). Do not file "player can profit in
 expectation from opening boxes / flipping."
 
-**WWXRP is intentionally worthless as a token.** `mintPrize` creates unbacked WWXRP; `unwrap` is
-first-come-first-served against real `wXRPReserves`. WWXRP's value is *not* its redeemability — it is
-that holding it confers a near-unfarmable whale-pass position in Degenerette. Undercollateralization,
-mint-without-backing, and unwrap starvation are all documented design, not findings.
+**WWXRP is intentionally worthless as a token.** `WWXRP` is a pure mint/burn game-reward ERC-20 with
+no backing asset and no redemption path: `mintPrize` creates unbacked WWXRP, `burnForGame` destroys
+it, and `vaultMintTo` mints from a fixed uncirculating reserve. WWXRP's value is *not* any
+redeemability — it is that holding it confers a near-unfarmable whale-pass position in Degenerette.
+Mint-without-backing / uncollateralized supply is documented design, not a finding.
 
 **capBucketCounts cap imprecision is by-design-fine.** The jackpot bucket-count cap can be imprecise
 at the margin but **never overfills a solo bucket by more than 1** — the imprecision cannot create an
@@ -100,7 +101,7 @@ is no victim. An admin-power finding must exhibit an **engaged-community victim*
 ### (a) The > 120-day VRF-DEATH deadman fallback (accepted super-fallback — do NOT submit)
 
 **Mechanism.** When the game has not sealed a day for more than 120 days
-(`_vrfDeadmanFired ≡ _simulatedDayIndex() − dailyIdx > 120`, `DegenerusGameStorage.sol:1502-1504`;
+(`_vrfDeadmanFired ≡ _simulatedDayIndex() − dailyIdx > 120`, `DegenerusGameStorage.sol:1534-1536`;
 `dailyIdx` is uint24 and always `<= _simulatedDayIndex()` so no underflow), the terminal release no
 longer waits for Chainlink. `_getHistoricalRngFallback` (`DegenerusGameAdvanceModule.sol:1444-1468`)
 commits a fallback word from sealed historical `rngWordByDay` admixed with `block.prevrandao`; the
@@ -123,20 +124,20 @@ These two vectors were examined by the cross-model pass and are *prevented by co
 here as invariants so a warden does not re-derive them as issues:
 
 - **No queue-window / post-reveal ticket ever resolves a manipulable jackpot.** The per-sink liveness
-  gate was removed from `_queueTickets` / `_queueTicketsScaled` / `_queueTicketRange` (the advance
+  gate was removed from `_queueEntries` / `_queueEntriesScaled` / `_queueEntryRange` (the advance
   chain itself queues through them), but those sinks keep the far-future `rngLocked` revert
-  (`DegenerusGameStorage.sol:652,683,744`) and the *purchase entry points* still revert under
-  liveness/game-over (`DegenerusGameMintModule.sol:956,1116,1370,1834`). The write→read ticket-slot
+  (`DegenerusGameStorage.sol:670,714,775`) and the *purchase entry points* still revert under
+  liveness/game-over (`DegenerusGameMintModule.sol:942,1102,1362,1826`). The write→read ticket-slot
   swap freezes at RNG-request time (`_swapAndFreeze`, `:437,1762-1765`), so any ticket queued during
   an open RNG window lands in the *write* slot and cannot resolve against the current word.
   Lootboxes cannot be opened after game-over. Result: no player ticket can enter the
   liveness/game-over window, and none queued during an RNG window resolves against a known word.
 - **The sDGNRS level-start box is sized strictly before its word is requested.** The once-per-level
-  box (`GameAfkingModule.sol:1170-1198`) reads a LIVE `cl = _claimableOf(SDGNRS)`, sizes
+  box (`GameAfkingModule.sol:1174-1202`) reads a LIVE `cl = _claimableOf(SDGNRS)`, sizes
   `box = min(cl/20, 6 ether)` floored at `mp`, and runs inside `_runSubscriberStage`
   (`DegenerusGameAdvanceModule.sol:385`) which executes **before** `rngGate` (`:428`) — so
   `rngWordByDay[processDay]` is not even requested when `box` is fixed. The `currentLevel >
-  _sdgnrsBonusLevel` latch (`:1170`) prevents re-sizing after the word becomes knowable. Inflating
+  _sdgnrsBonusLevel` latch (`:1174`) prevents re-sizing after the word becomes knowable. Inflating
   sDGNRS's own claimable before the read only enlarges sDGNRS's own self-funded box (positive-EV
   lootbox is by-design) and cannot steer an unknown word; the `cl > mp` guard keeps the 1-wei sentinel.
 
@@ -186,8 +187,8 @@ The frozen tree's comments are **not** being re-touched this milestone, so these
 are disclosed rather than edited. In each, the code reverts/behaves correctly; only the `@custom:reverts`
 annotation or a comment names the wrong error. **None is a vulnerability.** (Catalogued in Phase 472 §4.)
 
-1. `DegenerusGameGameOverModule.sol:72` — annotated `@custom:reverts ZeroValue`; code reverts
-   `Invariant` (rngWord==0, `:94`) / `TransferFailed` (`:258,262,267`).
+1. `DegenerusGameGameOverModule.sol:73` — annotated `@custom:reverts ZeroValue`; code reverts
+   `Invariant` (rngWord==0, `:95`) / `TransferFailed` (`:263,267,272`).
 2. `DegenerusGameWhaleModule.sol:182` — `MinQuantityRequired` annotated as value-mismatch; it actually
    fires on `passLevel % 100 == 0 && quantity < 2` (`:252`).
 3. `DegenerusGameWhaleModule.sol:401` — names only `OnlyDelegatecall`; also reverts
@@ -221,9 +222,10 @@ the resolved `player` (not `msg.sender`). Observability-only; no value flow chan
 
 ## 7. Automated tool findings (pre-disclosed)
 
-Slither 0.11.5 (1,959 raw, 29 detectors after triage) + 4naly3er (4,453 instances, 78 categories).
-Token names below reflect the current tree (FLIP = the coin formerly "BURNIE"; Coinflip = formerly
-"BurnieCoinflip"; WWXRP; sDGNRS; DGNRS).
+The full machine-readable baseline for the frozen tree is committed in `audit/automated/` — Slither
+0.11.5 (2,555 results / 101 detectors; the 130 "High" are dominated by `uninitialized-state` false
+positives from the shared-storage delegatecall architecture) + Aderyn 0.6.8 (9 High / 21 Low), each
+category mapped to its disposition there. The notes below are the standing per-category triage.
 
 **Arbitrary-send-eth.** `_payoutWithStethFallback` / `_payoutWithEthFallback` / `_payEth` send ETH via
 `.call{value:}` to `msg.sender` or player addresses read from game state — all access-controlled.

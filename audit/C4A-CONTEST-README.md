@@ -1,7 +1,7 @@
 # Degenerus Protocol — C4A Contest README
 
-Frozen subject: `contracts/` tree `f06b1ef6` @ impl `93d17288` (v74.0 As-Built Milestone Audit).
-Closure baseline: `MILESTONE_V74_AT_HEAD` (Phase 478).
+Frozen subject: `contracts/` tree `19272c1f` @ tag `degenerus-c4a` (post-v75.0 hardening freeze).
+Checkout: `git checkout degenerus-c4a`.
 
 ---
 
@@ -28,26 +28,29 @@ authority is a compile-time constant in `ContractAddresses.sol`, fixed by nonce 
 Authoritative file lists: **`scope.txt`** (in-scope) and **`out_of_scope.txt`** (excluded), both in
 the repository root. The in-scope set = the 26 contracts `scripts/deploy.js` deploys (DegenerusVault
 additionally deploys two inner DGVE/DGVF share-class ERC-20s) + their linked module bases, shared
-storage, libraries, and interfaces + two standalone in-scope production contracts
-(`DegenerusGasFaucet`, dormant/unwired; `DeityBoonViewer`, read-only).
+storage, libraries, and interfaces + one standalone in-scope production contract
+(`DeityBoonViewer`, read-only). (`DegenerusGasFaucet` was relocated to the `degenerus-utilities` repo.)
 
 | Group | Files | nSLOC |
 |-------|------:|------:|
-| Core deployed contracts | 14 | 7,342 |
-| Deployed delegatecall game modules | 12 | 9,689 |
-| Linked abstract module bases | 2 | 455 |
-| Shared storage | 1 | 1,101 |
+| Core deployed contracts | 14 | 7,385 |
+| Deployed delegatecall game modules | 12 | 9,659 |
+| Linked abstract module bases | 2 | 456 |
+| Shared storage | 1 | 1,114 |
 | Libraries (incl. ContractAddresses) | 8 | 561 |
 | Interfaces | 11 | 667 |
-| Standalone in-scope (faucet dormant, boon viewer read-only) | 2 | 255 |
-| **Total** | **50** | **20,070** |
+| Standalone in-scope (boon viewer, read-only) | 1 | 154 |
+| **Total** | **49** | **19,996** |
 
 nSLOC = non-blank, non-comment source lines (comment-and-string-aware count). Per-file breakdown is in
 `scope.txt`.
 
 ---
 
-## I care about three things
+## Areas of concern (where to focus for bugs)
+
+We have audited this heavily. In priority order, these three are where we believe the real risk lives
+and where we most want warden attention:
 
 1. **RNG integrity (DOMINANT).** VRF is the sole randomness source. Every input to an RNG-dependent
    calculation must be committed before the VRF request. Any path where a player alters state between
@@ -66,7 +69,9 @@ nSLOC = non-blank, non-comment source lines (comment-and-string-aware count). Pe
    power is bounded by an sDGNRS-governance death-clock (44h VRF-stall gate, decaying vote threshold,
    kill-on-recovery); governance-malice scenarios are pre-documented in `KNOWN-ISSUES.md`.
 
-Everything else is noise.
+These three are our priority, not the boundary of the contest. All in-scope findings are judged on
+standard C4 severity regardless of area — but a report that breaks one of the three above is the one
+we're most eager to receive.
 
 ---
 

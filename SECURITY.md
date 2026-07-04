@@ -1,6 +1,6 @@
 # Security Policy
 
-Frozen subject: `contracts/` tree `f06b1ef6` @ impl `93d17288` (v74.0 As-Built Milestone Audit).
+Frozen subject: `contracts/` tree `19272c1f` @ tag `degenerus-c4a` (post-v75.0 hardening freeze).
 
 ## Reporting a vulnerability
 
