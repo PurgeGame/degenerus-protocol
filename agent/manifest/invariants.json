@@ -107,9 +107,9 @@
       "category": "redemption",
       "kind": "ledger",
       "severity": "critical",
-      "identity": "sDGNRS totalSupply equals initialSupply + cumulative mints - cumulative burns (no unbacked share mint or lost burn).",
-      "onchainRead": "sdgnrs.totalSupply() (sDGNRS.sol:532) compared to client-tracked initialSupply + totalMinted - totalBurned (client samples totalSupply at connect as initial, accumulates observed Transfer mints/burns).",
-      "comparator": "assertEq(sdgnrs.totalSupply(), initialSupply + minted - burned); tolerance = exact (==)",
+      "identity": "sDGNRS never mints post-deploy: totalSupply is fixed at initialSupply at construction and only ever decreases via burns (monotonically non-increasing). No unbacked share is minted and no burn is lost.",
+      "onchainRead": "sdgnrs.totalSupply() (sDGNRS.sol:532) compared to client-tracked initialSupply - totalBurned (client samples totalSupply at connect as initial, then accumulates observed Transfer burns; no post-deploy mint Transfers ever occur).",
+      "comparator": "assertEq(sdgnrs.totalSupply(), initialSupply - burned) and assertLe(sdgnrs.totalSupply(), initialSupply); monotonically non-increasing",
       "source": "test/fuzz/invariant/RedemptionInvariants.inv.t.sol:90-97"
     },
     {

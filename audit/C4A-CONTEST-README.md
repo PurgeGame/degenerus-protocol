@@ -5,7 +5,7 @@
 - Starts `TBD`
 - Ends `TBD`
 
-**Frozen subject:** `contracts/` tree `19272c1f` @ tag `degenerus-c4a`.
+**Frozen subject:** `contracts/` tree `16e51875` @ tag `degenerus-c4a`.
 Checkout: `git checkout degenerus-c4a`. Everything a warden audits is that tree; nothing else in the
 repo history is in scope.
 
@@ -23,12 +23,12 @@ As such, wardens are encouraged to select the appropriate risk level carefully d
 
 Automated tool output (Slither 0.11.5 + Aderyn 0.6.8) for the frozen subject is committed in
 [`audit/automated/`](./automated/), and the pre-triaged categories are catalogued in
-[`KNOWN-ISSUES.md`](../KNOWN-ISSUES.md) §7.
+[`KNOWN-ISSUES.md`](../KNOWN-ISSUES.md) §5.
 
-The full pre-disclosure perimeter — design decisions, by-design rulings, cross-model dispositions,
-defended carried items, stale-NatSpec notes, the indexer-parity delta, automated-tool findings, and
-ERC-20 deviations — is in [`KNOWN-ISSUES.md`](../KNOWN-ISSUES.md). It is a *precise* perimeter: every
-entry names the exact mechanism and impact.
+The full pre-disclosure perimeter — design decisions/assumptions, accepted issues and scope
+boundaries, the >120-day deadman fallback, out-of-scope and immaterial items, automated-tool findings,
+and ERC-20 deviations — is in [`KNOWN-ISSUES.md`](../KNOWN-ISSUES.md). It is a *precise* perimeter:
+every entry names the exact mechanism and impact.
 
 _Anything in this section (including everything in `KNOWN-ISSUES.md`) is a publicly known issue and is
 ineligible for awards._
@@ -71,13 +71,13 @@ storage, libraries, and interfaces + one standalone in-scope production contract
 | Group | Files | nSLOC |
 |-------|------:|------:|
 | Core deployed contracts | 14 | 7,385 |
-| Deployed delegatecall game modules | 12 | 9,659 |
+| Deployed delegatecall game modules | 12 | 9,667 |
 | Linked abstract module bases | 2 | 456 |
 | Shared storage | 1 | 1,114 |
 | Libraries (incl. ContractAddresses) | 8 | 561 |
 | Interfaces | 11 | 667 |
 | Standalone in-scope (boon viewer, read-only) | 1 | 154 |
-| **Total** | **49** | **19,996** |
+| **Total** | **49** | **20,004** |
 
 nSLOC = non-blank, non-comment source lines (comment-and-string-aware count). Per-file breakdown is in
 `scope.txt`.
@@ -121,7 +121,7 @@ The protocol touches only known tokens (stETH, LINK, wXRP, and its own FLIP/DGNR
 
 | Contract | EIP | Note |
 |----------|-----|------|
-| FLIP, DGNRS, DGVE, DGVF | ERC-20 | Intentional documented deviations (`KNOWN-ISSUES.md` §8). |
+| FLIP, DGNRS, DGVE, DGVF | ERC-20 | Intentional documented deviations (`KNOWN-ISSUES.md` §6). |
 | DegenerusDeityPass | ERC-721 | — |
 | sDGNRS, GNRUS | (none) | Soulbound / non-transferable by design; ERC-20-compliance findings invalid. |
 
@@ -155,91 +155,88 @@ we're most eager to receive.
 
 ---
 
-# Main Invariants (MAN-01)
+# Main Invariants
 
-> Canonical runtime oracle shared by the adversarial agent (`agent/src/oracle.js`, which asserts a subset at runtime) and this section of the C4A README. Subject: the frozen `contracts/` tree `19272c1f` @ tag `degenerus-c4a`. Numeraire: ETH wei (18 decimals); stETH valued 1:1 with ETH (protocol sums at parity).
-
-> Generated from `agent/manifest/invariants.json` (34 invariants). Each non-DEG getter entry is evaluable purely from public chain state (a getter plus, for SOLV-01, one mandated `eth_getStorageAt` slot-11 read; SOLV-04 a slot-7 read; REDEEM-05 a per-day `pendingByDay` slot-7 mapping read); DEG entries are statistical over the `FullTicketResult` stream.
-
+> The properties below are what the protocol guarantees; each is backed by the referenced test or source site. Numeraire: ETH wei (stETH valued 1:1 with ETH). Subject: the frozen `contracts/` tree `16e51875` @ tag `degenerus-c4a`. `DEG-*` entries are statistical (realized EV/RTP/ROI over the resolved-spin stream); the rest are exact.
 
 ## Solvency & backing
 
-| ID | Severity | Invariant | On-chain check | Comparator | Source |
-|----|----------|-----------|----------------|------------|--------|
-| `SOLV-01-ETH-SOLVENCY` | critical | The game contract's live ETH balance always covers its canonical ETH-obligation set. LIVE (not gameOver): obligations = currentPrizePool + nextPrizePool + futurePrizePool + claimablePool + yieldAcc... | If game.gameOver()==true: obligations = game.claimablePoolView(). Else: game.currentPrizePoolView() + game.nextPrizePoolView() + game.futurePrizePoolView() + game.claimablePoolV... | assertGe(eth_getBalance(game), obligations); tolerance = exact (>=, 0 wei slack) | `test/fuzz/invariant/EthSolvency.inv.t.sol:36-47; helper test/fuzz/helpers/SolvencyObligations.sol:52-68` |
-| `SOLV-02-FULL-BACKING-ETH-STETH` | critical | The summed four-pool obligation (current+next+future+claimable) is always fully backed by the ETH+stETH the game holds — no pool transfer (future->next->current consolidation, the time-based future... | sumPools = game.currentPrizePoolView() + game.nextPrizePoolView() + game.futurePrizePoolView() + game.claimablePoolView(); backing = eth_getBalance(game) + IERC20(STETH_TOKEN).b... | assertLe(sumPools, backing); tolerance = exact (<=, 0 wei slack) | `test/fuzz/invariant/PoolConservation.inv.t.sol:91-102` |
-| `SOLV-03-NO-UNBACKED-CREDIT` | critical | Conservation: the summed four-pool obligation can never exceed the real ETH that entered the contract (starting backing captured at session start + cumulative real ETH inflow from buys). An interna... | sumPools (as SOLV-02) compared to startingBacking + ghost_realInflow, where startingBacking = eth_getBalance(game)+stETH balance sampled at session connect and ghost_realInflow ... | assertLe(sumPools, startingBacking + realInflow); tolerance = exact (<=) | `test/fuzz/invariant/PoolConservation.inv.t.sol:115-125` |
-| `SOLV-04-CLAIMABLE-EQUALS-HALVES` | critical | Master SOLVENCY identity: claimablePool >= the sum over all addresses of (claimable low-half + afking high-half) of their packed balance slot (equal outside decimator settlement, over-reserved during it). The afking reservation rides INSIDE claimablePo... | For each tracked address a: packed = eth_getStorageAt(game, keccak256(abi.encode(a, 7))); sum += uint128(packed) + (packed>>128). Per-address public surrogates: game.claimableWi... | assertGe(game.claimablePoolView(), sum-over-addresses(halves)); == outside decimator settlement | `test/fuzz/invariant/V61SolvencyAfpay.inv.t.sol:84-96` |
-| `SOLV-05-CLAIMABLE-BACKED` | critical | claimablePool never exceeds the game's liquid backing (ETH + stETH) — the claim liability is always covered after any afking-funded buy, packed credit/debit, stale cashout, or smite. | game.claimablePoolView() compared to eth_getBalance(game) + IERC20(STETH_TOKEN).balanceOf(game). | assertLe(game.claimablePoolView(), eth_getBalance(game)+stETH); tolerance = exact (<=) | `test/fuzz/invariant/V61SolvencyAfpay.inv.t.sol:103-110` |
-| `SOLV-06-FOLD-CONSERVATION` | critical | Purchase/mint fold conservation: the single combined claimablePool -= totalClaimableDraw exactly equals the per-tier sum of every per-player claimable + afking debit across all payKind branches (Di... | Per-transaction conservation: snapshot game.claimablePoolView() and the per-actor packed halves (slot 7, keccak256(abi.encode(a, 7)); claimable=lo128, afking=hi128) before and a... | assertEq(delta claimablePoolView, sum delta per-actor halves) across a buy; at-rest sur... | `.planning/phases/468-audit-solv/468-FINDINGS.md (SOLV-01/SOLV-02); at-rest surrogate test/fuzz/invariant/V61SolvencyAfpay.inv.t.sol:84-96` |
-| `SOLV-07-SDGNRS-BOX-ROUTING` | critical | sDGNRS level-start bonus box conservation: the claimablePool debit equals the box prize-pool credit (claimable down `box` == pool up `box`, box = min(cl/20, 6 ether) floored at mp), and the 1-wei s... | Across the level-start STAGE box buy: game.claimablePoolView() decreases by exactly the amount the sDGNRS box prize pool increases by, and game.claimableWinningsOf(SDGNRS) drops... | assertEq(delta box-prize-pool, -delta claimablePoolView) for the box buy; assertLe(box,... | `.planning/phases/468-audit-solv/468-FINDINGS.md (SOLV-05); contracts/modules/GameAfkingModule.sol:1170-1198` |
-| `SOLV-08-AFFILIATE-WINNERCREDIT-FLIP-ONLY` | critical | payAffiliateCombined credit conservation: the returned winnerCredit is FLIP coin only (never ETH-backed) and is conserved at the single batched MintModule creditFlipBatch([buyer, affWinner]) call s... | The FLIP supply identity COIN-01 (coin.totalSupply() + coin.vaultMintAllowance() == coin.supplyIncUncirculated()) holds across an affiliate-credited buy — the winnerCredit mint ... | COIN-01 identity holds across the affiliate credit; the affiliate leg moves 0 ETH and 0... | `.planning/phases/468-audit-solv/468-FINDINGS.md (SOLV-04); FLIP-supply surrogate test/fuzz/invariant/CoinSupply.inv.t.sol:36-46` |
+| ID | Severity | Invariant | Source |
+|----|----------|-----------|--------|
+| `SOLV-01-ETH-SOLVENCY` | critical | The game contract's live ETH balance always covers its canonical ETH-obligation set. LIVE (not gameOver): obligations = currentPrizePool + nextPrizePool + futurePrizePool + claimablePool + yieldAccumulator + (freeze-window pending buffer: pendingNext + pendingFuture). POST-game-over: the live pools are dead/zeroed and the only withdrawable obligation is claimablePool, so obligations collapses to claimablePool alone. | `test/fuzz/invariant/EthSolvency.inv.t.sol:36-47; test/fuzz/helpers/SolvencyObligations.sol:52-68` |
+| `SOLV-02-FULL-BACKING-ETH-STETH` | critical | The summed four-pool obligation (current+next+future+claimable) is always fully backed by the ETH+stETH the game holds — no pool transfer (future->next->current consolidation, the time-based future skim, or a jackpot settlement crediting claimable) can inflate the total above real liquid backing. | `test/fuzz/invariant/PoolConservation.inv.t.sol:91-102` |
+| `SOLV-03-NO-UNBACKED-CREDIT` | critical | Conservation: the summed four-pool obligation can never exceed the real ETH that entered the contract (starting backing captured at session start + cumulative real ETH inflow from buys). An internal transfer only reshapes the split across the four pools; it adds nothing to real inflow, so it can never mint unbacked credit. (Off-chain client tracks startingBacking once at connect and accumulates msg.value of its own successful buys as the realInflow lower bound; SOLV-02 is the always-evaluable on-chain-only form of the same property.) | `test/fuzz/invariant/PoolConservation.inv.t.sol:115-125` |
+| `SOLV-04-CLAIMABLE-EQUALS-HALVES` | critical | Master SOLVENCY identity: claimablePool >= the sum over all addresses of (claimable low-half + afking high-half) of their packed balance slot; equality holds outside decimator settlement, which transiently over-reserves the pool (claimablePool strictly greater) until per-winner claims credit. The afking reservation rides INSIDE claimablePool; every afking/claimable mutation pairs a claimablePool move, so a dropped paired += or a double-counted half breaks the equality. | `test/fuzz/invariant/V61SolvencyAfpay.inv.t.sol:84-96` |
+| `SOLV-05-CLAIMABLE-BACKED` | critical | claimablePool never exceeds the game's liquid backing (ETH + stETH) — the claim liability is always covered after any afking-funded buy, packed credit/debit, stale cashout, or smite. | `test/fuzz/invariant/V61SolvencyAfpay.inv.t.sol:103-110` |
+| `SOLV-06-FOLD-CONSERVATION` | critical | Purchase/mint fold conservation: the single combined claimablePool -= totalClaimableDraw exactly equals the per-tier sum of every per-player claimable + afking debit across all payKind branches (DirectEth / Claimable / Combined), with or without a lootbox leg — no branch drops a paired debit or double-counts a half. The fold sums ticketClaimableDraw (from _recordMintPayment) + lootboxPoolDraw (from _settleShortfallNoPool) into one decrement; sequential _claimableOf re-reads after the lootbox debit prevent double-draw, and claimablePool >= buyer balance prevents underflow. | `test/fuzz/invariant/V61SolvencyAfpay.inv.t.sol:84-96` |
+| `SOLV-07-SDGNRS-BOX-ROUTING` | critical | sDGNRS level-start bonus box conservation: the claimablePool debit equals the box prize-pool credit (claimable down `box` == pool up `box`, box = min(cl/20, 6 ether) floored at mp), and the 1-wei sentinel (box <= cl-1) is preserved for every claimable cl given the cl>mp guard + mp floor (cl/20 <= cl-1 for cl>=2; mp <= cl-1 under cl>mp; 6 ether cap when cl>120 ether). The once-per-level latch (currentLevel > _sdgnrsBonusLevel) plus the pinned-sub loop-skip guarantee exactly one box per level — no double debit across stage chunks/txs. | `contracts/modules/GameAfkingModule.sol:1170-1198` |
+| `SOLV-08-AFFILIATE-WINNERCREDIT-FLIP-ONLY` | critical | payAffiliateCombined credit conservation: the returned winnerCredit is FLIP coin only (never ETH-backed) and is conserved at the single batched MintModule creditFlipBatch([buyer, affWinner]) call site — collision-safe when winner==buyer (referrer branch returns winnerCredit 0) and accumulating (_addDailyFlip sums duplicate addresses, never overwrites). The affiliate path touches only leaderboard SCORE and FLIP; it never moves ETH or claimablePool, so no unbacked ETH credit can be minted. | `test/fuzz/invariant/CoinSupply.inv.t.sol:36-46` |
 
 ## Redemption desk
 
-| ID | Severity | Invariant | On-chain check | Comparator | Source |
-|----|----------|-----------|----------------|------------|--------|
-| `REDEEM-01-ETH-SEGREGATION` | critical | Segregated redemption ETH on sDGNRS never exceeds what the sDGNRS contract can cover in ETH+stETH — redemption obligations stay solvent and segregated from game pools. | sdgnrs.pendingRedemptionEthValue() (sDGNRS.sol:538) compared to eth_getBalance(sdgnrs) + IERC20(STETH_TOKEN).balanceOf(sdgnrs). | assertGe(ethBal+stethBal, sdgnrs.pendingRedemptionEthValue()); tolerance = exact (>=) | `test/fuzz/invariant/RedemptionInvariants.inv.t.sol:42-51` |
-| `REDEEM-02-NO-DOUBLE-CLAIM` | critical | A redemption claim is deleted before payout; a second claim for the same (beneficiary, period) reverts. No double-claim ever succeeds. | Behavioral: off-chain client issues claimRedemption for a resolved (beneficiary, period), then re-issues the same claim and asserts the second reverts. Public state probe: the p... | second-claim must revert; ghost_doubleClaim == 0; tolerance = exact (count == 0) | `test/fuzz/invariant/RedemptionInvariants.inv.t.sol:60-66` |
-| `REDEEM-03-PERIOD-MONOTONIC` | critical | The redemption period index is monotonically non-decreasing across observations (it is day-keyed: currentPeriod = GameTimeLib.currentDayIndex()), so it never regresses. | Client samples the resolving/pending day index over time. Day progression is observable via game.level() (public, DegenerusGameStorage.sol:266) and block.timestamp-derived day; ... | assertEq(ghost_periodIndexDecreased, 0) i.e. successive samples non-decreasing; toleran... | `test/fuzz/invariant/RedemptionInvariants.inv.t.sol:75-81` |
-| `REDEEM-04-SUPPLY-CONSISTENCY` | critical | sDGNRS totalSupply equals initialSupply + cumulative mints - cumulative burns (no unbacked share mint or lost burn). | sdgnrs.totalSupply() (sDGNRS.sol:532) compared to client-tracked initialSupply + totalMinted - totalBurned (client samples totalSupply at connect as initial, accumulates observe... | assertEq(sdgnrs.totalSupply(), initialSupply + minted - burned); tolerance = exact (==) | `test/fuzz/invariant/RedemptionInvariants.inv.t.sol:90-97` |
-| `REDEEM-05-FIFTY-PCT-CAP` | critical | Within a redemption period, cumulative burned never exceeds half the period's supply snapshot (50% cap enforced). | Per-day cap. supplySnapshot and burned are packed into the per-day DayPending struct (internal mapping pendingByDay at slot 7, keyed by uint24 day: word = eth_getStorageAt(sdgnr... | assertLe(periodBurned, supplySnapshot/2); tolerance = exact (<=) | `test/fuzz/invariant/RedemptionInvariants.inv.t.sol:105-115` |
-| `REDEEM-06-ROLL-BOUNDS` | critical | Every resolved redemption period's roll lies in [25, 175]. | Parse RedemptionResolved(uint24 periodIndex, uint16 roll) events (sDGNRS.sol:198) and assert 25 <= roll <= 175 for each. | assertEq(ghost_rollOutOfBounds, 0) i.e. every observed roll in [25,175]; tolerance = ex... | `test/fuzz/invariant/RedemptionInvariants.inv.t.sol:124-130` |
-| `REDEEM-07-LOOTBOX-SPLIT-CONSERVE` | critical | For every redemption claim, ethDirect + lootboxEth == totalRolledEth (the rolled ETH is conserved across the direct/lootbox split). | Parse RedemptionClaimed(player, roll, ethPayout, lootboxEth, flipPaid) events emitted by sDGNRS on claim (declared sDGNRS.sol:203, emitted :904; ethPayout = the direct half); as... | assertEq(totalEthDirect+totalLootboxEth, totalRolledEth); tolerance = exact (==) | `test/fuzz/invariant/RedemptionInvariants.inv.t.sol:198-204` |
+| ID | Severity | Invariant | Source |
+|----|----------|-----------|--------|
+| `REDEEM-01-ETH-SEGREGATION` | critical | Segregated redemption ETH on sDGNRS never exceeds what the sDGNRS contract can cover in ETH+stETH — redemption obligations stay solvent and segregated from game pools. | `test/fuzz/invariant/RedemptionInvariants.inv.t.sol:42-51` |
+| `REDEEM-02-NO-DOUBLE-CLAIM` | critical | A redemption claim is deleted before payout; a second claim for the same (beneficiary, period) reverts. No double-claim ever succeeds. | `test/fuzz/invariant/RedemptionInvariants.inv.t.sol:60-66` |
+| `REDEEM-03-PERIOD-MONOTONIC` | critical | The redemption period index is monotonically non-decreasing across observations (it is day-keyed: currentPeriod = GameTimeLib.currentDayIndex()), so it never regresses. | `test/fuzz/invariant/RedemptionInvariants.inv.t.sol:75-81` |
+| `REDEEM-04-SUPPLY-CONSISTENCY` | critical | sDGNRS never mints post-deploy: totalSupply is fixed at initialSupply at construction and only ever decreases via burns (monotonically non-increasing) — no unbacked share mint, no lost burn. | `test/fuzz/invariant/RedemptionInvariants.inv.t.sol:90-97` |
+| `REDEEM-05-FIFTY-PCT-CAP` | critical | Within a redemption period, cumulative burned never exceeds half the period's supply snapshot (50% cap enforced). | `test/fuzz/invariant/RedemptionInvariants.inv.t.sol:105-115` |
+| `REDEEM-06-ROLL-BOUNDS` | critical | Every resolved redemption period's roll lies in [25, 175]. | `test/fuzz/invariant/RedemptionInvariants.inv.t.sol:124-130` |
+| `REDEEM-07-LOOTBOX-SPLIT-CONSERVE` | critical | For every redemption claim, ethDirect + lootboxEth == totalRolledEth (the rolled ETH is conserved across the direct/lootbox split). | `test/fuzz/invariant/RedemptionInvariants.inv.t.sol:198-204` |
 
 ## Token supply
 
-| ID | Severity | Invariant | On-chain check | Comparator | Source |
-|----|----------|-----------|----------------|------------|--------|
-| `COIN-01-FLIP-SUPPLY` | critical | FLIP accounting identity: totalSupply + vaultMintAllowance == supplyIncUncirculated at all times (no token minted outside the tracked supply struct). | coin.totalSupply() (FLIP.sol:274) + coin.vaultMintAllowance() (FLIP.sol:288) compared to coin.supplyIncUncirculated() (FLIP.sol:281). | assertEq(totalSupply+vaultMintAllowance, supplyIncUncirculated); tolerance = exact (==) | `test/fuzz/invariant/CoinSupply.inv.t.sol:36-46` |
-| `VAULT-01-ALLOWANCE-BOUNDED` | critical | The vault's FLIP mint allowance never exceeds supplyIncUncirculated (the allowance is a subset of the uncirculated total; it cannot mint beyond the bookkept ceiling). | coin.vaultMintAllowance() (FLIP.sol:288) compared to coin.supplyIncUncirculated() (FLIP.sol:281). | assertLe(coin.vaultMintAllowance(), coin.supplyIncUncirculated()); tolerance = exact (<... | `test/fuzz/invariant/VaultShare.inv.t.sol:42-67` |
-| `VAULT-02-SUPPLY-AFTER-VAULT-OPS` | critical | The FLIP supply identity (COIN-01) still holds after vault burn/escrow operations (burnCoin/burnEth/vaultEscrow do not corrupt totalSupply + vaultMintAllowance == supplyIncUncirculated). | Same reads as COIN-01 (coin.totalSupply() + coin.vaultMintAllowance() vs coin.supplyIncUncirculated()), re-evaluated after any vault-touching action. | assertEq(totalSupply+vaultMintAllowance, supplyIncUncirculated); tolerance = exact (==) | `test/fuzz/invariant/VaultShareMath.inv.t.sol:61-71` |
+| ID | Severity | Invariant | Source |
+|----|----------|-----------|--------|
+| `COIN-01-FLIP-SUPPLY` | critical | FLIP accounting identity: totalSupply + vaultMintAllowance == supplyIncUncirculated at all times (no token minted outside the tracked supply struct). | `test/fuzz/invariant/CoinSupply.inv.t.sol:36-46` |
+| `VAULT-01-ALLOWANCE-BOUNDED` | critical | The vault's FLIP mint allowance never exceeds supplyIncUncirculated (the allowance is a subset of the uncirculated total; it cannot mint beyond the bookkept ceiling). | `test/fuzz/invariant/VaultShare.inv.t.sol:42-67` |
+| `VAULT-02-SUPPLY-AFTER-VAULT-OPS` | critical | The FLIP supply identity (COIN-01) still holds after vault burn/escrow operations (burnCoin/burnEth/vaultEscrow do not corrupt totalSupply + vaultMintAllowance == supplyIncUncirculated). | `test/fuzz/invariant/VaultShareMath.inv.t.sol:61-71` |
 
 ## Liveness / no-brick (FSM)
 
-| ID | Severity | Invariant | On-chain check | Comparator | Source |
-|----|----------|-----------|----------------|------------|--------|
-| `FSM-01-LEVEL-MONOTONIC` | high | The game level is monotonically non-decreasing — it only ever increases (advanceGame increments; no path decrements). | game.level() (public state var, DegenerusGameStorage.sol:266). Client samples successive level() reads and asserts each >= the previous max. | successive game.level() samples non-decreasing (ghost_levelDecreaseCount==0); tolerance... | `test/fuzz/invariant/GameFSM.inv.t.sol:23-29; test/fuzz/invariant/Composition.inv.t.sol:55-61; test/fuzz/invariant/MultiLevel.inv.t.sol:46-61` |
-| `FSM-02-GAMEOVER-TERMINAL` | high | gameOver is a one-way latch: once it reads true it never reverts to false (terminality of the end state). | game.gameOver() (public bool, DegenerusGameStorage.sol:306). Client samples over time; once observed true, every later read must remain true. | no true->false transition (ghost_gameOverRevival==0); tolerance = exact | `test/fuzz/invariant/GameFSM.inv.t.sol:33-39; test/fuzz/invariant/Composition.inv.t.sol:65-71` |
-| `FSM-03-NO-BRICK-LIVENESS` | high | Liveness / no-brick: while the game is live (not gameOver) the core external surface (purchase, advanceGame, placeDegeneretteBet/resolve, claimWinnings) must not revert for a well-formed call due t... | Behavioral: client drives the external action surface and observes success/expected-revert; reads game.gameOver(), game.jackpotPhase() (DegenerusGame.sol:2244), game.level() to ... | every well-formed live action succeeds or reverts only on an allowlisted guard; resolve... | `test/fuzz/invariant/GameFSM.inv.t.sol:46-60; test/fuzz/DegeneretteV73SolvencyFuzz.t.sol:18-19,91` |
+| ID | Severity | Invariant | Source |
+|----|----------|-----------|--------|
+| `FSM-01-LEVEL-MONOTONIC` | high | The game level is monotonically non-decreasing — it only ever increases (advanceGame increments; no path decrements). | `test/fuzz/invariant/GameFSM.inv.t.sol:23-29; test/fuzz/invariant/Composition.inv.t.sol:55-61; test/fuzz/invariant/MultiLevel.inv.t.sol:46-61` |
+| `FSM-02-GAMEOVER-TERMINAL` | high | gameOver is a one-way latch: once it reads true it never reverts to false (terminality of the end state). | `test/fuzz/invariant/GameFSM.inv.t.sol:33-39; test/fuzz/invariant/Composition.inv.t.sol:65-71` |
+| `FSM-03-NO-BRICK-LIVENESS` | high | Liveness / no-brick: while the game is live (not gameOver) the core external surface (purchase, advanceGame, placeDegeneretteBet/resolve, claimWinnings) must not revert for a well-formed call due to an internal state corruption — every reachable action either succeeds or reverts only on a documented guard, never on a permanent dead-state. Every Degenerette resolve in particular must succeed (no revert/brick) for any ticket/hero/seed. | `test/fuzz/invariant/GameFSM.inv.t.sol:46-60; test/fuzz/DegeneretteV73SolvencyFuzz.t.sol:18-19,91` |
 
 ## Ticket & box accounting
 
-| ID | Severity | Invariant | On-chain check | Comparator | Source |
-|----|----------|-----------|----------------|------------|--------|
-| `TICKET-01-OWED-CONSISTENT` | medium | Ticket-owed tracking is consistent: an address that never purchased has zero ticketsOwed at every level, and no player carries corrupted/negative owed state. | game.ticketsOwedView(level, player) (DegenerusGame.sol:2088). For a never-participating address (e.g. 0xDEAD) assert ticketsOwedView(currentLevel, a)==0 and ticketsOwedView(curr... | assertEq(game.ticketsOwedView(lvl, nonParticipant), 0); tolerance = exact (==0) | `test/fuzz/invariant/TicketQueue.inv.t.sol:31-58` |
-| `BOX-01-EVERY-PERSISTED-BOX-ENQUEUED` | medium | Every persisted (not-yet-opened) lootbox/presale box record (base != 0) for an active index is present in the permissionless openBoxes() auto-open queue (boxPlayers[index]) until opened — a box own... | Internal maps lootboxEth[index][who], presaleBoxEth[index][who], boxPlayers[index] have no production external view; off-chain the client tracks box-creating actions and the aut... | for every (index,owner) with base != 0: enqueued == true; tolerance = exact (boolean) | `test/fuzz/invariant/BoxEnqueue.inv.t.sol:112-141` |
+| ID | Severity | Invariant | Source |
+|----|----------|-----------|--------|
+| `BOX-01-EVERY-PERSISTED-BOX-ENQUEUED` | medium | Every persisted (not-yet-opened) lootbox/presale box record (base != 0) for an active index is present in the permissionless openBoxes() auto-open queue (boxPlayers[index]) until opened — a box owner cannot hold a persisted box un-enqueued and time its open to a favorable level/boon (the WHALE-01 property). | `test/fuzz/invariant/BoxEnqueue.inv.t.sol:112-141` |
+| `TICKET-01-OWED-CONSISTENT` | medium | Ticket-owed tracking is consistent: an address that never purchased has zero ticketsOwed at every level, and no player carries corrupted/negative owed state. | `test/fuzz/invariant/TicketQueue.inv.t.sol:31-58` |
 
 ## RNG-freeze & VRF lifecycle
 
-| ID | Severity | Invariant | On-chain check | Comparator | Source |
-|----|----------|-----------|----------------|------------|--------|
-| `RNG-01-INWINDOW-SLOADS-FROZEN` | medium | While the VRF window is open (rngLocked()==true), no player-controllable action mutates, in isolation, any storage slot the pending RNG consumption reads — the enumerated in-window read set is froz... | Client polls game.rngLocked() (DegenerusGame.sol:2211); when true it snapshots the enumerated slots — game.rngWordForDay(currentDay) (DegenerusGame.sol:2204) for (1), and eth_ge... | assertEq(slot_after, slot_before) for every enumerated in-window slot (ghost_frozenSlot... | `test/fuzz/invariant/RngWindowFreeze.inv.t.sol:73-79` |
-| `RNG-02-DRAIN-BEFORE-SWAP` | medium | Ordering: _swapAndFreeze cannot advance the lootbox read index while any read-slot ticket remains undrained — captured entropy always equals the populated lootboxRngWordByIndex[X] and is never zero... | Parse TraitsGenerated emissions and the lootbox word at the consumed index; assert each emit's captured entropy == game.rngWordForDay/lootboxRngWordByIndex at that index (eth_ge... | assertEq(capturedEntropy, lootboxRngWordByIndex[X]) and capturedEntropy != 0 (ghost_bin... | `test/fuzz/invariant/RngIndexDrainOrdering.inv.t.sol:32-52` |
-| `VRF-01-INDEX-LIFECYCLE` | medium | lootboxRngIndex never skips a value and never double-increments on a single request, and every unlocked index has a nonzero VRF-derived word (no orphaned index). | Client tracks the lootbox index cursor across VRF fulfillments (eth_getStorageAt slot 34 low 48 bits, the index field) and reads the word per index (slot 35 keyed by index, or v... | assertEq(ghost_indexSkipViolations,0); assertEq(ghost_doubleIncrementCount,0); assertEq... | `test/fuzz/invariant/VRFPathInvariants.inv.t.sol:28-52` |
-| `VRF-02-SWAP-PRESERVES-LOCK` | medium | A VRF coordinator swap never flips rngLocked in either direction: a daily request in flight keeps the lock until the re-issued word lands; an idle/mid-day-only state stays unlocked. Gap days are ba... | game.rngLocked() (DegenerusGame.sol:2211) sampled before/after a coordinator swap must be unchanged; for each gap day d after recovery assert game.rngWordForDay(d) != 0 (Degener... | rngLocked unchanged across swap (ghost_stateViolations==0); assertNe(game.rngWordForDay... | `test/fuzz/invariant/VRFPathInvariants.inv.t.sol:60-90` |
-| `VRF-03-DEADMAN-MONOTONIC-LATCH` | high | _vrfDeadmanFired (_simulatedDayIndex() - dailyIdx > 120) is a pure monotonic latch: it cannot false-fire on a healthy game (dailyIdx advances on every sealed day, so a 120-sealed-day gap only opens... | Derived (not a single getter). Client tracks dailyIdx (slot 0 byte 3, mask 0xFFFFFF) and the simulated day index; asserts _simulatedDayIndex() - dailyIdx never exceeds 120 on a ... | deadman gap (_simulatedDayIndex - dailyIdx) <= 120 on a live game; once fired the latch... | `.planning/phases/469-audit-rng-liveness/469-FINDINGS.md (RNG-01); contracts/storage/DegenerusGameStorage.sol:1502-1504; gameOver-latch surrogate test/fuzz/invariant/GameFSM.inv.t.sol:33-39` |
-| `RNG-03-QUEUE-WINDOW-NO-TERMINAL-JACKPOT` | high | Tickets queued during the liveness-timeout / RNG-locked window are provably never process... | Behavioral: client attempts a purchase/queue during the liveness/game-over window and asserts the purchase entry reverts (no player ticket can enter the window); the far-future ... | an in-window purchase reverts (liveness-gated); no window-queued player ticket resolves... | `.planning/phases/469-audit-rng-liveness/469-FINDINGS.md (RNG-03); the v45 VRF-freeze invariant` |
+| ID | Severity | Invariant | Source |
+|----|----------|-----------|--------|
+| `RNG-01-INWINDOW-SLOADS-FROZEN` | medium | While the VRF window is open (rngLocked()==true), no player-controllable action mutates, in isolation, any storage slot the pending RNG consumption reads — the enumerated in-window read set is frozen: (1) rngWordByDay[currentDay], (2) lootboxRngWordByIndex[index], (3) the lootboxRngPacked cursor (low 48 bits), (4) dailyIdx. advanceGame (the exempt heartbeat) is never measured against the property. | `test/fuzz/invariant/RngWindowFreeze.inv.t.sol:73-79` |
+| `RNG-02-DRAIN-BEFORE-SWAP` | medium | Ordering: _swapAndFreeze cannot advance the lootbox read index while any read-slot ticket remains undrained — captured entropy always equals the populated lootboxRngWordByIndex[X] and is never zero (no drain runs against an unpopulated slot). | `test/fuzz/invariant/RngIndexDrainOrdering.inv.t.sol:32-52` |
+| `RNG-03-QUEUE-WINDOW-NO-TERMINAL-JACKPOT` | high | Tickets queued during the liveness-timeout / RNG-locked window are provably never processed into, and never resolve against, a manipulable terminal jackpot (the v45 freeze invariant). Protection sits at the purchase entry (the mint module reverts on _livenessTriggered), not the shared sinks _queueTickets / _queueTicketsScaled / _queueTicketRange (which carry no per-sink liveness gate, since the advance-chain's own daily-jackpot distribution must flow through them). The _swapAndFreeze write/read slot fork freezes the read slot at RNG-request time, so any window-queued ticket lands in the write slot and cannot resolve against the current word. | `the v45 VRF-freeze invariant` |
+| `VRF-01-INDEX-LIFECYCLE` | medium | lootboxRngIndex never skips a value and never double-increments on a single request, and every unlocked index has a nonzero VRF-derived word (no orphaned index). | `test/fuzz/invariant/VRFPathInvariants.inv.t.sol:28-52` |
+| `VRF-02-SWAP-PRESERVES-LOCK` | medium | A VRF coordinator swap never flips rngLocked in either direction: a daily request in flight keeps the lock until the re-issued word lands; an idle/mid-day-only state stays unlocked. Gap days are backfilled with nonzero rngWordForDay after recovery. | `test/fuzz/invariant/VRFPathInvariants.inv.t.sol:60-90` |
+| `VRF-03-DEADMAN-MONOTONIC-LATCH` | high | _vrfDeadmanFired (_simulatedDayIndex() - dailyIdx > 120) is a pure monotonic latch: it cannot false-fire on a healthy game (dailyIdx advances on every sealed day, so a 120-sealed-day gap only opens when VRF is genuinely dead/abandoned), there is no uint24 underflow (dailyIdx <= current day always), it stays latched true through the multi-tx game-over drain until the terminal _unlockRng, and a fired deadman commits only a non-steerable historical fallback word (sealed rngWordByDay + block.prevrandao, with the reverseFlip nudge cancelled-and-consumed via totalFlipReversals) — never a player-steerable word. | `contracts/storage/DegenerusGameStorage.sol:1502-1504; test/fuzz/invariant/GameFSM.inv.t.sol:33-39` |
 
 ## Access control & gift sourcing
 
-| ID | Severity | Invariant | On-chain check | Comparator | Source |
-|----|----------|-----------|----------------|------------|--------|
-| `ACCESS-01-GIFT-FUNDER-SOURCING` | high | A caller-funded gift never burns a non-consenting party's FLIP: on the gift branch the spend sources from msg.sender (funder = msg.sender), while the self/operator-approved branch funds from the pl... | Behavioral: client drives a coinflip/Degenerette gift placement from a funder distinct from the player and asserts (a) the funder's FLIP balance decreases and the player's does ... | gift spend sources from msg.sender only; no non-consenting party's FLIP is burned; WWXR... | `.planning/phases/470-audit-access/470-FINDINGS.md (ACCESS-02); contracts/Coinflip.sol:258-268` |
+| ID | Severity | Invariant | Source |
+|----|----------|-----------|--------|
+| `ACCESS-01-GIFT-FUNDER-SOURCING` | high | A caller-funded gift never burns a non-consenting party's FLIP: on the gift branch the spend sources from msg.sender (funder = msg.sender), while the self/operator-approved branch funds from the player (the FLIP owner). The gift funder forfeits the entire stake (winnings go to the player), so a funder cannot farm a quest streak and cannot grief a player (the player only ever receives value). WWXRP is gift-excluded, and directDeposit=false on operator/gift deposits suppresses biggestFlip / bounty / coinflip-boon consume. | `contracts/Coinflip.sol:258-268` |
 
 ## Degenerette economics
 
-| ID | Severity | Invariant | On-chain check | Comparator | Source |
-|----|----------|-----------|----------------|------------|--------|
-| `DEG-01-PER-N-EV-CEILING` | high | For every (N goldQuadrants, heroIsGold) sub-case, the honest Degenerette base payout EV over that sub-case's own Variant-2 score distribution is never EV-positive: EV <= 100 centi-x (and ~neutral, ... | Per resolved honest (FLIP) spin the client reads FullTicketResult(player, betId, ticketIndex, playerTicket, matches, payout) (declared DegenerusGameDegeneretteModule.sol:103, em... | realized honest EV <= 100 centi-x (and per-spin decoded base <= S9_PIN[N]); statistical... | `test/stat/DegenerettePerNEvExactness.test.js:382-401; on-chain check test/fuzz/DegeneretteV73SolvencyFuzz.t.sol:100-106` |
-| `DEG-02-PS9-RTP-ROI-PINS` | high | The held-fixed economic pins are unchanged by the Variant-2 diff: the activity ROI curve is 90%->99.9% (ROI_MIN 9000 -> 9990 bps), the WWXRP RTP curve is 70%->115%->118%->120% with a 70% floor, and... | Statistical/source pins. Realized ROI is observable from honest spin payout vs wager (FullTicketResult payout/wager trends to 90-99.9%); realized WWXRP RTP from WWXRP-currency F... | realized ROI within [90%,99.9%]; realized WWXRP RTP tracks 70/115/118/120% floor-70%; S... | `test/stat/DegeneretteV73Invariants.test.js:108-167; pins also asserted at test/fuzz/DegeneretteV73SolvencyFuzz.t.sol:46-48` |
-| `DEG-03-WWXRP-RIG-NEVER-S9` | high | The WWXRP rig only ever LIFTS the score (rigged S in [honestS, honestS+2]) and can NEVER fabricate the S=9 jackpot: a rigged S==9 requires the honest pre-rig reel to already be a full 8-axis match ... | For a WWXRP-currency spin the client reads FullTicketResult.matches (the rigged score s) (DegenerusGameDegeneretteModule.sol:807). To evaluate the never-fabricate bound it indep... | assertGe(s, honestS) && assertLe(s, honestS+2); if s==9 then assertEq(honestM, 8); P(S=... | `test/fuzz/DegeneretteV73SolvencyFuzz.t.sol:107-118; P(S=9) invariance test/stat/DegenerettePerNEvExactness.test.js:450-459` |
+| ID | Severity | Invariant | Source |
+|----|----------|-----------|--------|
+| `DEG-01-PER-N-EV-CEILING` | high | For every (N goldQuadrants, heroIsGold) sub-case, the honest Degenerette base payout EV over that sub-case's own Variant-2 score distribution is never EV-positive: EV <= 100 centi-x (and ~neutral, >= 99.95). No (N, heroIsGold) configuration yields a positive-expectation honest bet. | `test/stat/DegenerettePerNEvExactness.test.js:382-401; test/fuzz/DegeneretteV73SolvencyFuzz.t.sol:100-106` |
+| `DEG-02-PS9-RTP-ROI-PINS` | high | The held-fixed economic pins are unchanged by the Variant-2 diff: the activity ROI curve is 90%->99.9% (ROI_MIN 9000 -> 9990 bps), the WWXRP RTP curve is 70%->115%->118%->120% with a 70% floor, and the per-N S=9 jackpot payout pins are exactly [10756411, 12583037, 14792939, 17512324, 20916435]. P(S=9) is placement-independent and equals the all-8-axes match event. Together these fix the realized WWXRP RTP at the jackpot tier. | `test/stat/DegeneretteV73Invariants.test.js:108-167; test/fuzz/DegeneretteV73SolvencyFuzz.t.sol:46-48` |
+| `DEG-03-WWXRP-RIG-NEVER-S9` | high | The WWXRP rig only ever LIFTS the score (rigged S in [honestS, honestS+2]) and can NEVER fabricate the S=9 jackpot: a rigged S==9 requires the honest pre-rig reel to already be a full 8-axis match (M==8). The rig forces at most one score-bearing cell when M<=6 (a +1 cell or a +2 color-unlock cell), is a no-op when M>=7, and so a fired roll stays S<=8 — leaving P(S=9) exactly invariant vs the honest reel. | `test/fuzz/DegeneretteV73SolvencyFuzz.t.sol:107-118; test/stat/DegenerettePerNEvExactness.test.js:450-459` |
 
 ## Curse neutrality
 
-| ID | Severity | Invariant | On-chain check | Comparator | Source |
-|----|----------|-----------|----------------|------------|--------|
-| `CURSE-01-CURSE-NONNEGATIVE-NEUTRAL` | medium | The per-player curse counter is well-formed (a uint8 stack count) and curse-only operations (smite / decurse / stale-cashout curse-set) are pool-neutral — they move claimablePool by exactly zero an... | game.curseCountOf(player) (DegenerusGame.sol:2303) read before/after a smite/decurse/stale-cashout; assert the curse count changes as expected (e.g. +2 on smite, 0 after decurse... | assertEq(claimablePoolView_after, claimablePoolView_before) for curse-only ops (pool-ne... | `test/fuzz/invariant/V61SolvencyAfpay.inv.t.sol:240-267` |
+| ID | Severity | Invariant | Source |
+|----|----------|-----------|--------|
+| `CURSE-01-CURSE-NONNEGATIVE-NEUTRAL` | medium | The per-player curse counter is well-formed (a uint8 stack count) and curse-only operations (smite / decurse / stale-cashout curse-set) are pool-neutral — they move claimablePool by exactly zero and leave the SOLV-04 half-sum identity byte-unchanged. | `test/fuzz/invariant/V61SolvencyAfpay.inv.t.sol:240-267` |
 
 ---
 
@@ -272,7 +269,7 @@ a permissionless path that settles to a non-owner or spends from a non-consentin
 | Known automated-tool findings | Slither v0.11.5 + Aderyn 0.6.8 pre-triaged in `KNOWN-ISSUES.md` §5. |
 | Deployment scripts / off-chain infra | Nonce-predicted addresses baked at compile time; wrong addresses = nothing works (self-auditing). |
 | Frontend / indexer / website / papers | Not deployed on-chain in this repo. |
-| ERC-20 deviations in FLIP / DGNRS | Intentional; documented in `KNOWN-ISSUES.md` §8. |
+| ERC-20 deviations in FLIP / DGNRS | Intentional; documented in `KNOWN-ISSUES.md` §6. |
 | "ERC-20 compliance" vs sDGNRS / GNRUS | Soulbound, not ERC-20 — invalid. |
 
 ---
@@ -292,7 +289,7 @@ mechanism + impact appears there, it is not eligible.**
 ```bash
 git clone <repo> && cd degenerus-audit
 npm install
-git checkout degenerus-c4a          # the frozen subject (contracts/ tree 19272c1f)
+git checkout degenerus-c4a          # the frozen subject (contracts/ tree 16e51875)
 
 # Foundry (REQUIRED preprocessing — bare `forge test` panics in setUp without it):
 make test-foundry                   # runs the 5 source gates + patchForFoundry + forge test
@@ -366,9 +363,7 @@ JackpotBucketLib, PriceLookupLib.
 
 - **Compiler:** Solidity 0.8.34, `viaIR = true`, optimizer `runs = 1000`, `evmVersion = osaka`.
 - **Build/test:** Hardhat + Foundry. Full suite green at the frozen subject — 993 Foundry (0 failed,
-  107 skipped) + ~1,545 Hardhat (0 failed, 22 pending); see the Test-coverage Q&A. The invariant
-  manifest (`agent/manifest/invariants.json` / `MAIN-INVARIANTS.md`) is the source the Main-Invariants
-  section above mirrors, and the live adversarial agent asserts a subset of it.
+  107 skipped) + ~1,545 Hardhat (0 failed, 22 pending); see the Test-coverage Q&A.
 - **Companion docs:** `audit/ACCESS-CONTROL-MATRIX.md` (every external state-changing function + guard)
   and `audit/ETH-FLOW-MAP.md` (every ETH entry/exit + conservation proof), both refreshed for this
   subject's permissionless/gift and sDGNRS level-lootbox surfaces.
