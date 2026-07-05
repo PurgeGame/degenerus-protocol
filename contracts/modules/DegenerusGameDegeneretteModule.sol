@@ -746,6 +746,8 @@ contract DegenerusGameDegeneretteModule is
         uint32 firstResultTraits;
         // Lootbox-share summed across THIS bet's spins → one box per betId.
         uint256 betLootboxShare;
+        // Box value from high-match (s>=5) ETH spins only → affiliate reward basis.
+        uint256 affiliateBoxShare;
 
         for (uint8 spinIdx; spinIdx < spinCount; ) {
             // Spin results are derived deterministically from the lootbox RNG word + index.
@@ -811,13 +813,17 @@ contract DegenerusGameDegeneretteModule is
                 // Accumulate this spin's payout. ETH credits + the running-pool
                 // decrement / cap land in `acc` (flushed cross-bet); the spin's
                 // lootbox-share is returned and summed into this bet's box.
-                betLootboxShare += _distributePayout(
+                uint256 spinLootboxShare = _distributePayout(
                     player,
                     currency,
                     amountPerSpin,
                     payout,
                     acc
                 );
+                betLootboxShare += spinLootboxShare;
+                // Only a high-match (s>=5) spin's box value earns the affiliate reward;
+                // the share is 0 for FLIP/WWXRP, so this stays ETH-only implicitly.
+                if (s >= 5) affiliateBoxShare += spinLootboxShare;
             }
 
             // Award sDGNRS from Reward pool on S>=7 ETH bets. Stays per-spin:
@@ -880,6 +886,14 @@ contract DegenerusGameDegeneretteModule is
                 EntropyLib.hash2(rngWord, betId),
                 activityScore
             );
+        }
+
+        // Affiliate reward: 7% of the box value from high-match (s>=5) ETH spins, as FLIP
+        // to the player's referrer (getReferrer returns VAULT when unreferred).
+        if (affiliateBoxShare > 0) {
+            uint256 refFlip = (affiliateBoxShare * PRICE_COIN_UNIT) /
+                PriceLookupLib.priceForLevel(level + 1);
+            coinflip.creditFlip(affiliate.getReferrer(player), (refFlip * 7) / 100);
         }
 
         emit DegeneretteResolved(
