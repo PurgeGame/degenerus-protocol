@@ -18,8 +18,12 @@ const TEST_DIR_ORDER = [
 ];
 
 subtask(TASK_TEST_GET_TEST_FILES).setAction(async (args, hre) => {
+  // Return ABSOLUTE paths: mocha's post-run dispose (unloadFiles) calls
+  // require.resolve() on each spec, which throws MODULE_NOT_FOUND on a bare
+  // relative path ("test/…") and fails the whole run at teardown even when
+  // every test passed. path.resolve() is a no-op on already-absolute paths.
   if (args.testFiles && args.testFiles.length > 0) {
-    return args.testFiles; // explicit files passed on CLI — honour as-is
+    return args.testFiles.map((f) => path.resolve(f)); // explicit CLI files
   }
   const testDir = hre.config.paths.tests;
   const ordered = [];
@@ -27,7 +31,7 @@ subtask(TASK_TEST_GET_TEST_FILES).setAction(async (args, hre) => {
     const files = await glob(path.join(testDir, dir, "**", "*.test.js"));
     ordered.push(...files.sort());
   }
-  return ordered;
+  return ordered.map((f) => path.resolve(f));
 });
 
 /** @type import("hardhat/config").HardhatUserConfig */

@@ -218,10 +218,10 @@ describe("Paper Parity (Phase 46)", function () {
       expect(nextDelta).to.equal(expectedNext, "Next share should be 90%");
     });
 
-    it("lootbox: 90% future, 10% next (post-presale)", async function () {
-      // The MintModule constants: LOOTBOX_SPLIT_FUTURE_BPS = 9000, LOOTBOX_SPLIT_NEXT_BPS = 1000
-      // We verify through pool deltas after a lootbox purchase.
-      // At level 0 with presale active, the split is 50/30/20 (future/next/vault).
+    it("lootbox: 90% future, 10% next (presale and after)", async function () {
+      // MintModule constants: LOOTBOX_SPLIT_FUTURE_BPS = 9000, LOOTBOX_SPLIT_NEXT_BPS = 1000.
+      // Rake-free: ALL lootbox ETH (presale and after) routes 100% to the pools at 90/10
+      // future/next. There is no presale-specific split and no vault diversion.
       const { game, alice } = await loadFixture(deployWithTester);
 
       const nextBefore = await game.nextPrizePoolView();
@@ -239,31 +239,18 @@ describe("Paper Parity (Phase 46)", function () {
       const nextDelta = (await game.nextPrizePoolView()) - nextBefore;
       const futureDelta =
         (await game.futurePrizePoolView()) - futureBefore;
-      const total = nextDelta + futureDelta;
 
-      if (total > 0n) {
-        // Presale active at level 0: LOOTBOX_PRESALE_SPLIT_FUTURE_BPS=5000,
-        // LOOTBOX_PRESALE_SPLIT_NEXT_BPS=3000, LOOTBOX_PRESALE_SPLIT_VAULT_BPS=2000
-        const expectedNext = (lootboxAmount * 3000n) / 10000n;
-        const expectedFuture = (lootboxAmount * 5000n) / 10000n;
-        // Vault gets 20% during presale; pools get rest
-        expect(nextDelta).to.equal(
-          expectedNext,
-          "Presale lootbox next should be 30%"
-        );
-        expect(futureDelta).to.equal(
-          expectedFuture,
-          "Presale lootbox future should be 50%"
-        );
-      }
+      const expectedFuture = (lootboxAmount * 9000n) / 10000n;
+      const expectedNext = (lootboxAmount * 1000n) / 10000n;
+      expect(futureDelta).to.equal(expectedFuture, "Lootbox future share should be 90%");
+      expect(nextDelta).to.equal(expectedNext, "Lootbox next share should be 10%");
+      expect(nextDelta + futureDelta).to.equal(lootboxAmount, "100% to pools, rake-free");
     });
 
-    it("lootbox presale split: 50% future, 30% next, 20% vault", async function () {
-      // LOOTBOX_PRESALE_SPLIT_FUTURE_BPS = 5000
-      // LOOTBOX_PRESALE_SPLIT_NEXT_BPS = 3000
-      // LOOTBOX_PRESALE_SPLIT_VAULT_BPS = 2000
-      // These sum to 10000 = 100%
-      expect(5000 + 3000 + 2000).to.equal(10000);
+    it("lootbox split is 90/10 future/next with no vault diversion", async function () {
+      // The as-built lootbox split has no presale-specific variant:
+      // LOOTBOX_SPLIT_FUTURE_BPS (9000) + LOOTBOX_SPLIT_NEXT_BPS (1000) = 10000, 100% to pools.
+      expect(9000 + 1000).to.equal(10000);
     });
   });
 
@@ -423,13 +410,13 @@ describe("Paper Parity (Phase 46)", function () {
     });
 
     it("on-chain: whale bundle holder gets floor bonuses via playerActivityScore()", async function () {
-      // After purchasing a whale bundle, alice gets:
-      //   streakPoints floored to 50 (PASS_STREAK_FLOOR_POINTS) -> 5000 BPS
-      //   mintCountPoints floored to 25 (PASS_MINT_COUNT_FLOOR_POINTS) -> 2500 BPS
-      //   questStreak = 0 -> 0 BPS
-      //   affiliateBonus = 0 (currLevel == 0) -> 0 BPS
-      //   whale pass bonus (bundleType == 3, 100-level bundle) -> 4000 BPS
-      //   Total: 5000 + 2500 + 0 + 0 + 4000 = 11500 BPS
+      // After purchasing a whale bundle, alice gets (playerActivityScore returns whole POINTS):
+      //   streakPoints floored to 50 (PASS_STREAK_FLOOR_POINTS)
+      //   mintCountPoints floored to 25 (PASS_MINT_COUNT_FLOOR_POINTS)
+      //   questStreak = 0
+      //   affiliateBonus = 0 (currLevel == 0)
+      //   whale pass bonus (bundleType == 3, 100-level bundle) -> +40 points
+      //   Total: 50 + 25 + 0 + 0 + 40 = 115 points
       //
       // Note: purchaseWhalePass always sets bundleType=3 (100-level bundle type)
       // because the whale bundle covers 100 levels. The 10-level type (bundleType=1)
@@ -450,8 +437,8 @@ describe("Paper Parity (Phase 46)", function () {
       // After purchase: score should reflect pass floor bonuses + whale bonus
       const scoreAfter = await game.playerActivityScore(alice.address);
       expect(scoreAfter).to.equal(
-        11500,
-        "Whale bundle holder: 50*100 streak floor + 25*100 count floor + 4000 whale(100-lvl) bonus = 11500 BPS"
+        115,
+        "Whale bundle holder: 50 streak floor + 25 count floor + 40 whale(100-lvl) bonus = 115 points"
       );
     });
   });

@@ -75,7 +75,7 @@ test-foundry: check-interfaces check-delegatecall check-raw-selectors check-rng-
 	@echo "Running Foundry tests..."
 	@FOUNDRY_DISABLE_NIGHTLY_WARNING=1 forge test $(ARGS) 2>&1; TEST_EXIT=$$?; \
 		echo "Restoring ContractAddresses.sol..."; \
-		node -e "import('./scripts/lib/patchContractAddresses.js').then(m => m.restoreContractAddresses())"; \
+		git checkout -- contracts/ContractAddresses.sol; \
 		exit $$TEST_EXIT
 
 # Run Hardhat tests (no patching needed — Hardhat deploys fresh)
@@ -92,7 +92,7 @@ invariant-test: test-foundry
 invariant-build:
 	@node scripts/lib/patchForFoundry.js
 	@FOUNDRY_DISABLE_NIGHTLY_WARNING=1 forge build --force
-	@node -e "import('./scripts/lib/patchContractAddresses.js').then(m => m.restoreContractAddresses())"
+	@git checkout -- contracts/ContractAddresses.sol
 
 invariant-clean:
 	@rm -rf forge-out cache
