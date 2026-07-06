@@ -752,7 +752,7 @@ abstract contract DegenerusGameStorage {
     /// @param buyer Address to receive tickets.
     /// @param startLevel First level in range (inclusive).
     /// @param numLevels Number of consecutive levels.
-    /// @param entriesPerLevel Tickets to award per level.
+    /// @param entriesPerLevel Entries to award per level (4 entries = 1 whole ticket).
     function _queueEntryRange(
         address buyer,
         uint24 startLevel,
@@ -1769,7 +1769,7 @@ abstract contract DegenerusGameStorage {
     /// - [40..41]   currency (0=ETH,1=FLIP,2=unsupported,3=WWXRP)
     /// - [42..169]  amountPerSpin (uint128)
     /// - [170..201] RNG index (uint32)
-    /// - [202..217] activity score bps (uint16)
+    /// - [202..217] activity score in whole points (uint16)
     /// - [218..219] heroQuadrant (always-on hero quadrant, 0..3)
     mapping(address => mapping(uint64 => uint256)) internal degeneretteBets;
 

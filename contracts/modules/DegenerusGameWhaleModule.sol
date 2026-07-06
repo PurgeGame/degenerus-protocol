@@ -1019,9 +1019,10 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
         // Clear before awarding to avoid double-claiming
         whalePassClaims[player] = 0;
 
-        // Award tickets for 100 levels, with N tickets per level (where N = half-passes)
-        // Tickets start at level+1 to avoid giving tickets for an already-active level
-        // Example: 3 half-passes = 3 tickets/level x 100 levels = 300 tickets
+        // Award entries for 100 levels, with N entries per level (N = half-passes;
+        // 4 entries = 1 whole ticket). Entries start at level+1 to avoid awarding
+        // for an already-active level.
+        // Example: 3 half-passes = 3 entries/level x 100 levels = 300 entries (75 tickets)
         // Safe: halfPasses fits in uint32 (ETH supply limits prevent overflow)
         uint24 startLevel = level + 1;
 

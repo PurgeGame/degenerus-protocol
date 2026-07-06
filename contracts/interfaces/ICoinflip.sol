@@ -193,7 +193,7 @@ interface ICoinflip {
     /// @notice Get the top bettor from the most recently resolved flip day.
     /// @dev Returns the player with the highest stake on the last completed day.
     /// @return player The address of the top bettor (address(0) if no flips resolved yet).
-    /// @return score The top stake amount in whole tokens (capped to uint128).
+    /// @return score The top stake amount in whole tokens (saturates at uint96 max).
     function coinflipTopLastDay()
         external
         view

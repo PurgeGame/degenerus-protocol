@@ -1334,8 +1334,9 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
     }
 
     /// @dev Game-over RNG gate with fallback for stalled VRF.
-    ///      After 3-day timeout, uses earliest historical VRF word as fallback (more secure
-    ///      than blockhash since it's already verified on-chain and cannot be manipulated).
+    ///      After the 14-day GAMEOVER_RNG_FALLBACK_DELAY, uses earliest historical VRF word as
+    ///      fallback (more secure than blockhash since it's already verified on-chain and
+    ///      cannot be manipulated).
     ///      Also resolves any pending gambling burn redemptions (mirrors rngGate behavior, CP-06 fix).
     /// @return word RNG word, 1 if request sent, or 0 if waiting on fallback.
     function _gameOverEntropy(
@@ -1400,7 +1401,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
             }
             // Resolve the sentinel-stamped gambling-burn pool if any. Fallback path
             // uses fallbackWord for the roll; sentinel still names the stuck day so resolves
-            // are correct even after a 3-day GAMEOVER_RNG_FALLBACK_DELAY stall.
+            // are correct even after a GAMEOVER_RNG_FALLBACK_DELAY (14-day) stall.
             {
                 IsDGNRS sdgnrs = IsDGNRS(
                     ContractAddresses.SDGNRS

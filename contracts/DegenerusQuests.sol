@@ -1933,7 +1933,7 @@ contract DegenerusQuests is IDegenerusQuests {
      *
      *      Reward Calculation:
      *      - Slot 0 (deposit ETH) pays a fixed 100 FLIP
-     *      - Slot 1 (random quest) pays a fixed 200 FLIP
+     *      - Slot 1 (random quest) pays a fixed 100 FLIP
      * @param state Storage reference to player's quest state.
      * @param slot The slot index being completed.
      * @param quest The quest being completed.

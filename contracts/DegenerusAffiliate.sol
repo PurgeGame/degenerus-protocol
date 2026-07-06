@@ -778,8 +778,9 @@ contract DegenerusAffiliate {
      *      is drained atomically at the storage owner via `drainAffiliateBase` — a duplicate sub drains 0
      *      the second time, so it can't be double-counted. The batch total `sumB` is split 75/20/5
      *      (A 75% / U1 20% / U2 5%), floored with the remainder to A so the parts never exceed `sumB`.
-     *      `skipU1`/`skipU2` drop the share for the rare case where an upline is itself the sub (A is
-     *      never the sub — self-referral resolves to VAULT). No-referrer subs split 50/50 VAULT/sDGNRS.
+     *      `skipU1`/`skipU2` reduce that upline's share for the rare case where the upline is itself
+     *      the sub; the freed portion folds into A's remainder (A is never the sub — self-referral
+     *      resolves to VAULT). No-referrer subs split 50/50 VAULT/sDGNRS.
      *      The split is fixed (no roll, no seed), so claiming on any day yields the same result.
      *      Recipients are paid directly via `creditFlip` (FLIP; no ETH/`claimablePool` touch).
      * @param subs Afking subscribers to settle; all must share the same direct affiliate `A` (from subs[0]).
@@ -813,7 +814,8 @@ contract DegenerusAffiliate {
             uint256 b = afkingDrain.drainAffiliateBase(sub);
             if (b != 0) {
                 sumB += b;
-                // The rare mutual-referral cycle (an upline IS the sub): drop that leg, not redirect.
+                // The rare mutual-referral cycle (an upline IS the sub): that upline's cut for
+                // this base folds into A's remainder — it is never paid back to the sub.
                 if (!noReferrer) {
                     if (sub == u1) skipU1 += b;
                     if (sub == u2) skipU2 += b;
@@ -1073,7 +1075,7 @@ contract DegenerusAffiliate {
     }
 
     /// @dev Reduce affiliate payout for high-activity lootbox buyers.
-    ///      Linear taper: 100% at score 10000 → 25% at score 25500+.
+    ///      Linear taper on the whole-point activity score: 100% at score 100 → 25% at 255+.
     function _applyLootboxTaper(uint256 amt, uint16 score) private pure returns (uint256) {
         if (score >= LOOTBOX_TAPER_END_SCORE) {
             return (amt * LOOTBOX_TAPER_MIN_BPS) / BPS_DENOMINATOR;

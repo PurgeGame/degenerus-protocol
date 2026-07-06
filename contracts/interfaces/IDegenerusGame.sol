@@ -60,7 +60,7 @@ interface IDegenerusGame {
         returns (uint24 lvl, bool inJackpotPhase, bool lastPurchaseDay_, bool rngLocked_, uint256 priceWei);
 
     /// @notice Get the player's activity score.
-    /// @dev Score based on participation and engagement (whole points; 1 point = 100 bps).
+    /// @dev Score based on participation and engagement, in whole points.
     /// @param player The player to query.
     /// @return Activity score in whole points.
     function playerActivityScore(address player) external view returns (uint256);

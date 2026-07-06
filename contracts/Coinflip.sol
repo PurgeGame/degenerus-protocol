@@ -1257,7 +1257,7 @@ contract Coinflip {
     }
 
     /// @dev Calculate recycling bonus for daily flip deposits (0.75% bonus, capped at 1000 FLIP).
-    ///      Base is total claimableStored (all accumulated unclaimed winnings).
+    ///      Base is the recycled amount (the re-bet or auto-rebuy carry being deposited).
     ///      Bonus feeds into creditedFlip, not back into claimableStored (no feedback loop).
     function _recyclingBonus(
         uint256 amount

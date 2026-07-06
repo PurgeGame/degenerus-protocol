@@ -29,7 +29,7 @@ pragma solidity 0.8.34;
  *      - RNG lock prevents state manipulation during VRF callback window
  *      - Access control via msg.sender checks
  *      - Delegatecall modules use constant addresses from ContractAddresses
- *      - 12h VRF timeout, 3-day stall detection, 120-day inactivity guard
+ *      - 12h VRF timeout, 14-day gameover-RNG fallback, 120-day inactivity guard
  */
 
 import {IDegenerusCoin} from "./interfaces/IDegenerusCoin.sol";
@@ -183,7 +183,8 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
       |  [184]    hasDeityPass     - Deity pass holder flag (1b)             |
       |  [185-208] affBonusLevel   - Cached affiliate bonus level (24b)     |
       |  [209-214] affBonusPoints  - Cached affiliate bonus points (6b)     |
-      |  [215-227] (reserved)      - 13 unused bits                          |
+      |  [215-222] curseCount      - Cashout/smite curse counter (8b)        |
+      |  [223-227] (reserved)      - 5 unused bits                           |
       |  [228-243] unitsAtLevel    - Mints at current level                  |
       +======================================================================+*/
 
@@ -457,16 +458,20 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         if (!ok) _revertDelegate(data);
     }
 
-    /// @notice Pay DGNRS bounty for the biggest flip record holder.
+    /// @notice Pay the DGNRS kicker to a coinflip bounty collector on a mature pool.
     /// @dev Access: COIN or COINFLIP contract only.
-    ///      Pays a share of the remaining DGNRS reward pool.
+    ///      Pays a share of the DGNRS reward pool when a long-accrued coinflip bounty
+    ///      is collected: the collected half-pool slice must reach
+    ///      COINFLIP_BOUNTY_DGNRS_MIN_BET (50k FLIP — the pool accrues 1,000 FLIP/day,
+    ///      so this means ~100 uncollected days) and the post-collection remainder
+    ///      must reach COINFLIP_BOUNTY_DGNRS_MIN_POOL.
     /// @param player Recipient of the DGNRS bounty.
-    /// @param winningBet The winning bet amount (must exceed COINFLIP_BOUNTY_DGNRS_MIN_BET).
-    /// @param bountyPool The bounty pool size (must exceed COINFLIP_BOUNTY_DGNRS_MIN_POOL).
+    /// @param bountySlice The collected half-pool bounty slice (FLIP base units).
+    /// @param bountyPool The post-collection remaining bounty pool (FLIP base units).
     /// @custom:reverts Unauthorized If caller is not COIN or COINFLIP contract.
     function payCoinflipBountyDgnrs(
         address player,
-        uint256 winningBet,
+        uint256 bountySlice,
         uint256 bountyPool
     ) external {
         if (
@@ -474,7 +479,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
             msg.sender != ContractAddresses.COINFLIP
         ) revert Unauthorized();
         if (player == address(0)) return;
-        if (winningBet < COINFLIP_BOUNTY_DGNRS_MIN_BET) return;
+        if (bountySlice < COINFLIP_BOUNTY_DGNRS_MIN_BET) return;
         if (bountyPool < COINFLIP_BOUNTY_DGNRS_MIN_POOL) return;
         uint256 poolBalance = dgnrs.poolBalance(
             IsDGNRS.Pool.Reward

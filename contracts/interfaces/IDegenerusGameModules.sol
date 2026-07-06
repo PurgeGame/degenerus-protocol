@@ -332,7 +332,7 @@ interface IDegenerusGameLootboxModule {
     /// @param player Address of the lootbox owner
     /// @param amount Amount associated with the lootbox
     /// @param rngWord Random word for lootbox resolution
-    /// @param activityScore Frozen activity-score bps for the EV multiplier (caller-snapshotted)
+    /// @param activityScore Frozen activity score in whole points for the EV multiplier (caller-snapshotted)
     function resolveLootboxDirect(
         address player,
         uint256 amount,
@@ -345,7 +345,7 @@ interface IDegenerusGameLootboxModule {
     /// @param player Player receiving lootbox rewards
     /// @param amount Total lootbox value (msg.value ETH + the stETH remainder pulled inside)
     /// @param rngWord RNG word for entropy
-    /// @param activityScore Raw activity score (bps) snapshotted at burn submission
+    /// @param activityScore Raw activity score (whole points) snapshotted at burn submission
     function resolveRedemptionLootbox(
         address player,
         uint256 amount,
@@ -369,7 +369,7 @@ interface IDegenerusGameLootboxModule {
     /// @param amount The stamped spend in wei (boons OFF ⇒ amount == spend)
     /// @param day The boundary-pinned process day stamped at process (frozen seed input)
     /// @param rngWord The frozen stamp day's word rngWordByDay[day], passed by the caller
-    /// @param activityScore The stamped activity-score bps (the frozen EV input)
+    /// @param activityScore The stamped activity score in whole points (the frozen EV input)
     function resolveAfkingBox(
         address player,
         uint256 amount,
@@ -443,7 +443,7 @@ interface IDegenerusGameDegeneretteModule {
     /// @notice Resolve a lootbox WWXRP roll as a single WWXRP Degenerette spin.
     /// @param player The reward recipient.
     /// @param stake The WWXRP bet amount staked for the one spin.
-    /// @param activityScore Frozen activity-score bps from the box's commitment.
+    /// @param activityScore Frozen activity score in whole points from the box's commitment.
     /// @param seed Domain-separated spin seed (hash2-tagged off the box seed).
     /// @param customTraits Pre-chosen player ticket, or 0 to derive one from seed.
     function resolveWwxrpSpinFromBox(
@@ -457,7 +457,7 @@ interface IDegenerusGameDegeneretteModule {
     /// @notice Resolve a lootbox roll as three FLIP Degenerette spins under one survival flip.
     /// @param player The reward recipient.
     /// @param totalStake The total FLIP budget split across the three spins.
-    /// @param activityScore Frozen activity-score bps from the box's commitment.
+    /// @param activityScore Frozen activity score in whole points from the box's commitment.
     /// @param seed Domain-separated spin seed (hash2-tagged off the box seed).
     /// @param customTraits Pre-chosen player ticket, or 0 to derive one from seed.
     function resolveFlipSpinsFromBox(
@@ -471,7 +471,7 @@ interface IDegenerusGameDegeneretteModule {
     /// @notice Resolve a lootbox roll as one ETH Degenerette spin (claimable + recirc split).
     /// @param player The reward recipient.
     /// @param stake The ETH bet amount for the one spin (the ticket budget it replaces).
-    /// @param activityScore Frozen activity-score bps from the box's commitment.
+    /// @param activityScore Frozen activity score in whole points from the box's commitment.
     /// @param seed Domain-separated spin seed (hash2-tagged off the box seed).
     /// @param customTraits Pre-chosen player ticket, or 0 to derive one from seed.
     function resolveEthSpinFromBox(

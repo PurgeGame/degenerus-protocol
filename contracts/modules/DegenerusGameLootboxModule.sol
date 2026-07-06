@@ -879,7 +879,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     /// @param player Player address to resolve for
     /// @param amount ETH amount for the lootbox resolution
     /// @param rngWord RNG word to use for resolution
-    /// @param activityScore Activity-score bps frozen at commitment by the caller — decimator
+    /// @param activityScore Whole-point activity score frozen at commitment by the caller — decimator
     ///        claims pass the min score of the winning decimator bucket (sealed at burn);
     ///        degenerette passes the score snapshotted at bet time. Never a live read.
     // payable: reachable from the payable redemption path via an ETH-spin's recirc
@@ -938,7 +938,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     /// @param player Player receiving lootbox rewards
     /// @param amount Total lootbox value to resolve (msg.value ETH + the stETH remainder pulled here)
     /// @param rngWord RNG entropy for lootbox resolution
-    /// @param activityScore Snapshotted activity score (bps) from burn submission
+    /// @param activityScore Snapshotted activity score (whole points) from burn submission
     function resolveRedemptionLootbox(address player, uint256 amount, uint256 rngWord, uint16 activityScore) external payable {
         if (msg.sender != ContractAddresses.SDGNRS) revert OnlySDGNRS();
         if (amount == 0) return;
@@ -977,7 +977,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     /// @param player Player address to resolve for
     /// @param amount ETH amount for this chunk's resolution
     /// @param rngWord RNG word to use for resolution
-    /// @param activityScore Raw activity score (bps) snapshotted at burn submission
+    /// @param activityScore Raw activity score (whole points) snapshotted at burn submission
     function _resolveRedemptionChunk(address player, uint256 amount, uint256 rngWord, uint16 activityScore) private {
         uint24 currentLevel = level + 1;
         // Freeze-safe seed with NO live day: claim timing must not re-roll the outcome (rngWord,
@@ -1084,7 +1084,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     /// @param amount The stamped spend in wei (boons OFF ⇒ amount == spend).
     /// @param day The boundary-pinned PROCESS day stamped at process (frozen in the seed).
     /// @param rngWord The frozen stamp day's word `rngWordByDay[day]`, passed by the caller.
-    /// @param activityScore The stamped activity-score bps (the FROZEN EV input).
+    /// @param activityScore The stamped activity score in whole points (the FROZEN EV input).
     function resolveAfkingBox(
         address player,
         uint256 amount,
@@ -1261,7 +1261,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     /// @param allowSplit When true, a box over LOOTBOX_SPLIT_THRESHOLD resolves as two
     ///        independent rolls (the 2nd re-rolling its own target level); afking passes false
     ///        so afking boxes always resolve as a single roll (a bounded per-open cost).
-    /// @param activityScore Frozen activity-score bps threaded to the Degenerette spin rolls
+    /// @param activityScore Frozen whole-point activity score threaded to the Degenerette spin rolls
     ///        (WWXRP / FLIP-spins / ETH-spin); identical to the score the box committed.
     /// @param allowEthSpin When false (recirc entry), the 5% ETH-spin roll awards tickets
     ///        instead — see `_resolveLootboxRoll`. Directly-opened boxes pass true.
@@ -1967,7 +1967,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     /// @param seed Per-resolution 256-bit keccak seed (sliced inline; first invocation uses primary chunk, ETH-amount-second branch uses seed2 = EntropyLib.hash2(seed, 1))
     /// @param isFarFuture True when this roll's target level is far-future (>= base + 5),
     ///        weighting the ticket budget up (1.5x) vs near (0.875x).
-    /// @param activityScore Frozen activity-score bps threaded from the box commitment;
+    /// @param activityScore Frozen whole-point activity score threaded from the box commitment;
     ///        scales the spin ROI / EV exactly as a regular bet's snapshot does.
     /// @param allowEthSpin When false (recirc boxes), roll 19 awards tickets instead of an
     ///        ETH spin — no ETH-pool RMW can race a deferred `resolveDegeneretteBets` pool flush.
