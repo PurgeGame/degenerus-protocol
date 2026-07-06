@@ -994,7 +994,7 @@ describe("DegenerusQuests", function () {
     async function makeLevelQuestEligible(hreEthers, game, player) {
       const lvl = await game.level();
       const packed =
-        (5n << 48n) | ((BigInt(lvl) + 1n) << 104n) | (4n << 228n);
+        (5n << 48n) | ((BigInt(lvl) + 1n) << 104n) | (400n << 228n);
       const slot = hreEthers.keccak256(
         hreEthers.AbiCoder.defaultAbiCoder().encode(
           ["address", "uint256"],

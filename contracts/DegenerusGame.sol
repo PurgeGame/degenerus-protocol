@@ -1193,12 +1193,15 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         return abi.decode(data, (uint256));
     }
 
-    /// @notice Terminal decimator window. Always open except lastPurchaseDay and gameOver.
+    /// @notice Terminal decimator window. Open except lastPurchaseDay, gameOver, and
+    ///         level 0: the terminal claim round's zero-initialized sentinel reads a
+    ///         level-0 gameover as already resolved, so a level-0 round can never pay
+    ///         its burners — burns are rejected instead of accepted unwinnable.
     /// @return open True if terminal decimator burns are allowed.
     /// @return lvl Current game level.
     function terminalDecWindow() external view returns (bool open, uint24 lvl) {
         lvl = level;
-        open = !gameOver && !lastPurchaseDay;
+        open = !gameOver && !lastPurchaseDay && lvl != 0;
     }
 
     /// @notice Terminal jackpot for x00 levels: Day-5-style bucket distribution.

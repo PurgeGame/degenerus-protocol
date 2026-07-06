@@ -2203,18 +2203,22 @@ contract DegenerusQuests is IDegenerusQuests {
     }
 
     /// @dev Checks if a player is eligible for the level quest.
-    ///      Requires (levelStreak >= 5 OR any active pass) AND (levelUnits >= 4 this level).
+    ///      Requires (levelStreak >= 5 OR any active pass) AND a whole ticket's worth
+    ///      of units (400 = 4 entries x the 100x quantity scale) minted at the current
+    ///      or next ticket level.
     /// @param player The player address to check.
     /// @param lvl The current game level (fetched once by the caller).
     /// @return True if the player meets both gates.
     function _isLevelQuestEligible(address player, uint24 lvl) internal view returns (bool) {
         uint256 packed = questGame.mintPackedFor(player);
 
-        // Activity gate: 4+ units minted this level
+        // Activity gate: one whole ticket minted for this level's window. Jackpot-phase
+        // buys tag units with `lvl` (tickets target the current level), purchase-phase
+        // buys tag `lvl + 1` — either satisfies the quest.
         uint24 unitsLvl = uint24(packed >> 104);
-        if (unitsLvl != lvl + 1) return false;
+        if (unitsLvl != lvl + 1 && unitsLvl != lvl) return false;
         uint16 units = uint16(packed >> 228);
-        if (units < 4) return false;
+        if (units < 400) return false;
 
         // Loyalty gate: levelStreak >= 5 OR any active pass
         uint24 streak = uint24(packed >> 48);

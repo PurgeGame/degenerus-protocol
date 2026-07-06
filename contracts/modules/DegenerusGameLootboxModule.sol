@@ -1354,7 +1354,9 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     ) private {
         if (rollAmount == 0) return;
         // priceForLevel returns a non-zero constant for every level, so targetPrice is
-        // always a safe divisor downstream.
+        // always a safe divisor downstream. It prices the TICKET legs (the level the
+        // tickets queue at); the FLIP legs derive their own next-level price inside
+        // _largeFlipOut.
         uint256 targetPrice = PriceLookupLib.priceForLevel(rollLevel);
 
         (uint256 flipOut, uint32 scaledWholeTickets, bool wasSpin) =
@@ -1963,7 +1965,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     /// @param player Player receiving the reward
     /// @param amount Amount for this roll (may be half of total for split lootboxes)
     /// @param lootboxAmount Total lootbox amount (for events)
-    /// @param targetPrice Price at target level
+    /// @param targetPrice Price at the rolled target level (ticket legs only)
     /// @param seed Per-resolution 256-bit keccak seed (sliced inline; first invocation uses primary chunk, ETH-amount-second branch uses seed2 = EntropyLib.hash2(seed, 1))
     /// @param isFarFuture True when this roll's target level is far-future (>= base + 5),
     ///        weighting the ticket budget up (1.5x) vs near (0.875x).
@@ -2026,12 +2028,12 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
             wasSpin = true;
         } else if (roll < 17) {
             // 15% chance: large FLIP reward with variance (flat → creditFlip).
-            flipOut = _largeFlipOut(amount, targetPrice, seed);
+            flipOut = _largeFlipOut(amount, seed);
         } else if (roll < 19) {
             // 10% chance: three FLIP Degenerette spins under one survival flip. Stake = the
             // would-be large FLIP haircut to 70.60% (LOOTBOX_FLIP_SPINS_STAKE_BPS). Mint-only
             // (no pool / recirc) → safe on every box path.
-            uint256 stake = (_largeFlipOut(amount, targetPrice, seed) *
+            uint256 stake = (_largeFlipOut(amount, seed) *
                 LOOTBOX_FLIP_SPINS_STAKE_BPS) / 10_000;
             if (stake != 0) {
                 _callFlipSpins(
@@ -2086,12 +2088,13 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     }
 
     /// @dev The large-FLIP output for a roll: variance-tiered BPS of `amount`, converted to
-    ///      FLIP at the target price. Shared by the flat FLIP roll and the FLIP-spins stake.
+    ///      FLIP at the next-level ticket price (the box's own denomination) — FLIP is
+    ///      level-less and spends at the live peg, so the rolled ticket level plays no part.
+    ///      Shared by the flat FLIP roll and the FLIP-spins stake.
     function _largeFlipOut(
         uint256 amount,
-        uint256 targetPrice,
         uint256 seed
-    ) private pure returns (uint256) {
+    ) private view returns (uint256) {
         uint256 varianceRoll = uint16(seed >> 80) % 20;
         uint256 largeFlipBps;
         if (varianceRoll < 16) {
@@ -2104,7 +2107,9 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
                 (varianceRoll - 16) * LOOTBOX_LARGE_FLIP_HIGH_STEP_BPS;
         }
         uint256 flipBudget = (amount * largeFlipBps) / 10_000;
-        return (flipBudget * PRICE_COIN_UNIT) / targetPrice;
+        return
+            (flipBudget * PRICE_COIN_UNIT) /
+            PriceLookupLib.priceForLevel(level + 1);
     }
 
     /// @dev Delegatecall the Degenerette module's WWXRP box-spin resolver (Game storage context).

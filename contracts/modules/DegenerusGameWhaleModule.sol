@@ -383,7 +383,7 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
 
         // Lootbox: 10% of price
         uint256 lootboxAmount = (totalPrice * WHALE_LOOTBOX_BPS) / 10_000;
-        _recordLootboxEntry(buyer, lootboxAmount, data);
+        _recordLootboxEntry(buyer, lootboxAmount);
     }
 
     /**
@@ -531,11 +531,7 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
 
         // Award lootbox as 10% of the price paid
         uint256 lootboxAmount = (totalPrice * LAZY_PASS_LOOTBOX_BPS) / 10_000;
-        _recordLootboxEntry(
-            buyer,
-            lootboxAmount,
-            mintPacked_[buyer]
-        );
+        _recordLootboxEntry(buyer, lootboxAmount);
     }
 
     /**
@@ -696,11 +692,7 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
 
         // Lootbox: 10% of price
         uint256 lootboxAmount = (totalPrice * DEITY_LOOTBOX_BPS) / 10_000;
-        _recordLootboxEntry(
-            buyer,
-            lootboxAmount,
-            mintPacked_[buyer]
-        );
+        _recordLootboxEntry(buyer, lootboxAmount);
 
         emit DeityPassPurchased(buyer, symbolId, totalPrice, passLevel);
     }
@@ -862,18 +854,19 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
 
     function _recordLootboxEntry(
         address buyer,
-        uint256 lootboxAmount,
-        uint256 cachedPacked
+        uint256 lootboxAmount
     ) private {
-        // Single read of lootboxRngPacked: nothing below writes the slot (the mint-day stamp
-        // writes mintPacked_, the boost writes boonPacked, the box enqueue writes boxPlayers,
-        // the score read only staticcalls quests), so the pending-eth update at the end is
-        // rebuilt from this cached word.
+        // Single read of lootboxRngPacked: nothing below writes the slot (the units
+        // recorder writes mintPacked_, the boost writes boonPacked, the box enqueue
+        // writes boxPlayers, the score read only staticcalls quests), so the pending-eth
+        // update at the end is rebuilt from this cached word.
         uint256 lr = lootboxRngPacked;
         uint48 index = uint48((lr >> LR_INDEX_SHIFT) & LR_INDEX_MASK);
         uint24 capKey = level + 1; // resolver open level == the per-(player, level) cap key
 
-        _recordLootboxMintDay(buyer, cachedPacked);
+        // Pass-bundled lootbox spend joins the minted-units tally (400 units = one
+        // ticket-price), combining with ticket spend for the participation floor.
+        _recordLootboxUnits(buyer, lootboxAmount);
 
         uint256 packed = lootboxEth[index][buyer];
         uint256 existingAmount = packed & LB_AMOUNT_MASK;

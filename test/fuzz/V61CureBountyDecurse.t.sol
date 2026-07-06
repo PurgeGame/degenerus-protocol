@@ -253,16 +253,17 @@ contract V61CureBountyDecurse is DeployProtocol {
     }
 
     // =========================================================================
-    // BOUNTY STAMP — a sub-ticket buy stamps DAY_SHIFT (bounty-eligible) but does NOT cure
+    // BOUNTY STAMP — sub-ticket buys do NOT stamp DAY_SHIFT; crossing one whole
+    // ticket cumulatively does (and still does not cure)
     // =========================================================================
 
-    /// @notice A genuine SUB-ticket buy (totalCost < priceWei) stamps DAY_SHIFT so the buyer becomes
-    ///         _bountyEligible (read via the public bountyEligible view) AND leaves the curse UNCHANGED (no
-    ///         cure). The sub-ticket leg uses FRACTIONAL ticket units (40 = 0.1 ticket; no LOOTBOX_MIN floor),
-    ///         and the ticket leg stamps lastEthDay = _currentMintDay() == dailyIdx — so dailyIdx is kept at the
-    ///         setUp value (100) and the gate (gateIdx == dailyIdx) is satisfied by the stamp. Falsifiable: the
-    ///         units are a real sub-priceWei amount, the buyer is NOT eligible before the buy, and curse stays 2.
-    function testSubTicketBuyStampsBountyButDoesNotCure() public {
+    /// @notice A genuine SUB-ticket buy (totalCost < priceWei) at a new level does NOT stamp
+    ///         DAY_SHIFT — the mint-day stamp rides the whole-ticket "minted" floor (400 units
+    ///         = 4 entries x QTY_SCALE), so the buyer stays NOT _bountyEligible and the curse is
+    ///         UNCHANGED. A second sub-ticket buy that crosses the cumulative 400-unit floor
+    ///         runs the full record path: DAY_SHIFT stamps (bounty-eligible) while the curse
+    ///         still does NOT cure (each buy's totalCost < priceWei cure threshold).
+    function testSubTicketBuyStampsBountyOnlyAtWholeTicketFloor() public {
         address p = makeAddr("subticket_stamp");
         _seedCurse(p, 2);
         // Land < 15 min into the day so the time-based bounty tiers are NOT open, and seed lastEthDay far in the
@@ -272,21 +273,31 @@ contract V61CureBountyDecurse is DeployProtocol {
         assertTrue(!game.bountyEligible(p), "pre-buy: not bounty-eligible (stale, early in the day)");
 
         // 200 units == 0.5 ticket: costWei = 0.005 ETH ∈ [TICKET_MIN_BUYIN_WEI 0.0025, priceWei 0.01) ⇒ a valid
-        // sub-ticket buy that stamps DAY_SHIFT but is below the cure threshold (totalCost < priceWei).
+        // sub-ticket buy below both the whole-ticket minted floor and the cure threshold.
         uint256 subUnits = 200;
         uint256 subCost = _ticketCost(subUnits);
         vm.deal(p, subCost);
         vm.prank(p);
         game.purchase{value: subCost}(p, subUnits, 0, bytes32(0), MintPaymentKind.DirectEth, false);
 
-        assertTrue(game.bountyEligible(p), "sub-ticket buy STAMPED DAY_SHIFT => now bounty-eligible");
+        assertTrue(!game.bountyEligible(p), "sub-ticket buy below the minted floor does NOT stamp DAY_SHIFT");
         assertEq(game.curseCountOf(p), 2, "sub-ticket buy does NOT cure (totalCost < priceWei)");
+
+        // Second 200-unit buy crosses the cumulative 400-unit floor: full record path runs,
+        // DAY_SHIFT stamps, buyer becomes bounty-eligible; the sub-priceWei buy still cannot cure.
+        vm.deal(p, subCost);
+        vm.prank(p);
+        game.purchase{value: subCost}(p, subUnits, 0, bytes32(0), MintPaymentKind.DirectEth, false);
+
+        assertTrue(game.bountyEligible(p), "crossing the whole-ticket floor stamps DAY_SHIFT => bounty-eligible");
+        assertEq(game.curseCountOf(p), 2, "crossing buy still does NOT cure (totalCost < priceWei)");
     }
 
-    /// @notice A manual plain-lootbox buyer is now _bountyEligible: the plain lootbox leg wires through
-    ///         _recordLootboxMintDay (MintModule:1215) which stamps DAY_SHIFT, closing the plain-vs-bundled gap.
-    ///         The lootbox leg stamps lastEthDay = _simulatedDayIndex() (the WALL-CLOCK day, distinct from the
-    ///         ticket leg's dailyIdx basis), so dailyIdx is aligned to the sim day here so the gate
+    /// @notice A manual plain-lootbox buyer is _bountyEligible: the plain lootbox leg wires through
+    ///         _recordLootboxMintDay which stamps DAY_SHIFT for a box worth at least one whole ticket
+    ///         (priceForLevel(level + 1)), closing the plain-vs-bundled gap. The lootbox leg stamps
+    ///         lastEthDay = _simulatedDayIndex() (the WALL-CLOCK day, distinct from the ticket leg's
+    ///         dailyIdx basis), so dailyIdx is aligned to the sim day here so the gate
     ///         (gateIdx == dailyIdx) accepts the sim-day stamp. Falsifiable: not eligible before, eligible after.
     function testManualLootboxBuyerBecomesBountyEligible() public {
         address p = makeAddr("manual_lb_bounty");

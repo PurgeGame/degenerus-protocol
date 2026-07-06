@@ -434,22 +434,19 @@ abstract contract DegenerusGameMintStreakUtils is DegenerusGameStorage {
         emit CurseChanged(target, 0);
     }
 
-    /// @dev Stamp the current simulated day into `player`'s DAY_SHIFT field for lootbox
-    ///      activity / bounty eligibility (no-op when already stamped today). Shared by the
-    ///      pass-bundled lootbox leg and the plain standalone lootbox buy.
-    function _recordLootboxMintDay(address player, uint256 cachedPacked) internal {
-        uint24 day = _simulatedDayIndex();
-        uint24 prevDay = uint24(
-            (cachedPacked >> BitPackingLib.DAY_SHIFT) & BitPackingLib.MASK_32
-        );
-        if (prevDay == day) {
-            return;
-        }
-        uint256 clearedDay = cachedPacked &
-            ~(BitPackingLib.MASK_32 << BitPackingLib.DAY_SHIFT);
-        mintPacked_[player] =
-            clearedDay |
-            (uint256(day) << BitPackingLib.DAY_SHIFT);
+    /// @dev Fold lootbox ETH spend into the minted-units tally at the active ticket
+    ///      level's price (4 * QTY_SCALE units = one ticket-price), so ticket and lootbox
+    ///      spend accumulate into ONE participation measure: crossing the whole-ticket
+    ///      floor counts the level as minted (mint day, streak, level count, quest
+    ///      activity gate). Shared by the pass-bundled lootbox leg and the plain
+    ///      standalone lootbox buy.
+    function _recordLootboxUnits(address player, uint256 lootboxWei) internal {
+        uint24 lvl = _activeTicketLevel();
+        uint256 units = (lootboxWei * 4 * QTY_SCALE) /
+            PriceLookupLib.priceForLevel(lvl);
+        if (units == 0) return;
+        if (units > type(uint32).max) units = type(uint32).max;
+        _recordMintData(player, lvl, uint32(units));
     }
 
     /**
@@ -518,11 +515,13 @@ abstract contract DegenerusGameMintStreakUtils is DegenerusGameStorage {
         }
 
         // ---------------------------------------------------------------------
-        // Early exit: New level with <4 units (not counted as "minted")
+        // Early exit: new level below one whole ticket's worth of units
+        // (4 * QTY_SCALE = 1 ticket) — not counted as "minted": no mint-day
+        // stamp, no level/streak/total. Units still accumulate, so cumulative
+        // buys can cross the floor on a later buy.
         // ---------------------------------------------------------------------
 
-        if (!sameLevel && levelUnitsAfter < 4) {
-            // Just update units, don't update level/streak/total
+        if (!sameLevel && levelUnitsAfter < 4 * QTY_SCALE) {
             data = BitPackingLib.setPacked(
                 prevData,
                 BitPackingLib.LEVEL_UNITS_SHIFT,

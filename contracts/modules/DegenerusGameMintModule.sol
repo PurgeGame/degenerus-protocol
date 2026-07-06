@@ -1457,9 +1457,10 @@ contract DegenerusGameMintModule is
         uint256 lbNextShare;
         uint256 lbFutureShare;
         if (lootBoxAmount != 0) {
-            // Manual lootbox buyers stamp the mint day too (bounty eligibility); a no-op when
-            // the ticket leg already stamped it today, closing the plain-vs-bundled gap.
-            _recordLootboxMintDay(buyer, mintPacked_[buyer]);
+            // Lootbox spend joins the minted-units tally (400 units = one ticket-price),
+            // combining with the ticket leg so cumulative spend of either kind crosses
+            // the whole-ticket participation floor (mint day / streak / quest gate).
+            _recordLootboxUnits(buyer, lootBoxAmount);
             // Single SLOAD of each packed slot, written back once below. Nothing in
             // between touches lootboxRngPacked or presaleStatePacked (the queue push
             // writes boxPlayers; the boost consume writes boonPacked only).
@@ -1613,7 +1614,9 @@ contract DegenerusGameMintModule is
                 ActivityCurveLib.centuryBps(cachedScore)) /
                 ActivityCurveLib.CENTURY_MAX_BPS;
             if (bonusQty != 0) {
-                uint256 maxBonus = (20 ether) / (priceWei >> 2);
+                // 20-ETH allowance in the bonus lane's scaled-entry units
+                // (4 * QTY_SCALE units = 1 whole ticket = priceWei).
+                uint256 maxBonus = (20 ether * 4 * QTY_SCALE) / priceWei;
                 uint256 used = _centuryUsedFor(buyer, targetLevel);
                 uint256 remaining = maxBonus > used ? maxBonus - used : 0;
                 if (bonusQty > remaining) bonusQty = remaining;

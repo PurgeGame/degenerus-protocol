@@ -5,7 +5,6 @@ import {ContractAddresses} from "../ContractAddresses.sol";
 import {DegenerusGameMintStreakUtils} from "./DegenerusGameMintStreakUtils.sol";
 import {BitPackingLib} from "../libraries/BitPackingLib.sol";
 import {PriceLookupLib} from "../libraries/PriceLookupLib.sol";
-import {ActivityCurveLib} from "../libraries/ActivityCurveLib.sol";
 import {IDegenerusGameLootboxModule} from "../interfaces/IDegenerusGameModules.sol";
 import {IDegenerusAffiliate} from "../interfaces/IDegenerusAffiliate.sol";
 
@@ -802,43 +801,16 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
             // slot-0 reward are added by the mode-agnostic accrue below (not re-accrued here).
             uint24 targetLevel = ticketTargetLevel;
 
-            // Century (x00-level) quantity bonus at parity with the manual mint, reusing the
-            // per-player centuryBonusUsed storage and the per-buy activity score
-            // off the COMPUTE-ON-READ streak (no STATICCALL). The purchase-boost quantity
-            // multiplier is omitted, matching the boons-off lootbox leg.
-            uint32 adjustedQty = uint32(amount);
-            if (targetLevel % 100 == 0) {
-                uint256 cachedScore = _playerActivityScore(
-                    player,
-                    _afkingStreak(sub, processDay),
-                    targetLevel
-                );
-                if (cachedScore != 0) {
-                    uint256 priceWei = PriceLookupLib.priceForLevel(targetLevel);
-                    uint256 bonusQty = (uint256(adjustedQty) *
-                        ActivityCurveLib.centuryBps(cachedScore)) /
-                        ActivityCurveLib.CENTURY_MAX_BPS;
-                    if (bonusQty != 0 && priceWei != 0) {
-                        uint256 maxBonus = (20 ether) / (priceWei >> 2);
-                        uint256 used = _centuryUsedFor(player, targetLevel);
-                        uint256 remaining = maxBonus > used ? maxBonus - used : 0;
-                        if (bonusQty > remaining) bonusQty = remaining;
-                        if (bonusQty != 0) {
-                            _setCenturyUsedFor(player, targetLevel, used + bonusQty);
-                            adjustedQty += uint32(bonusQty);
-                        }
-                    }
-                }
-            }
+            // The x00 century quantity bonus is a manual-mint mechanic; afking
+            // deliveries queue the paid quantity as-is.
+            _queueEntriesScaled(player, targetLevel, uint32(amount), false);
 
-            _queueEntriesScaled(player, targetLevel, adjustedQty, false);
-
-            // 10%/20% ticket buyer-bonus → claimable pendingFlip (pulled via
+            // 10%/15% ticket buyer-bonus → claimable pendingFlip (pulled via
             // claimAfkingFlip). Uses the pre-bonus `amount`; whole FLIP with the ~16.7M (2^24-1) clamp.
             uint256 coinCost = (amount * (PRICE_COIN_UNIT / 4)) / QTY_SCALE;
             uint256 bonusBase = coinCost / 10; // flat 10%
             if (amount >= 10 * 4 * QTY_SCALE) {
-                bonusBase += (amount * PRICE_COIN_UNIT) / (40 * QTY_SCALE); // +10% → 20% on ≥10 tickets
+                bonusBase += (amount * PRICE_COIN_UNIT) / (80 * QTY_SCALE); // +5% → 15% on ≥10 tickets
             }
             uint256 bonusWhole = bonusBase / 1 ether;
             if (bonusWhole != 0) {
