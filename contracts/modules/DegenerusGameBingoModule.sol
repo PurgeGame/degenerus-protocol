@@ -70,7 +70,8 @@ contract DegenerusGameBingoModule is DegenerusGameStorage {
     /// @dev Max deity bonus per level, denominated in ETH (converted to FLIP at current price).
     uint256 private constant AFFILIATE_DGNRS_DEITY_BONUS_CAP_ETH = 5 ether;
 
-    /// @dev Minimum affiliate score (approx 10 ETH of referral volume).
+    /// @dev Minimum FLIP-basis affiliate score to claim without a deity pass — a dust
+    ///      filter; the payout itself is score-proportional, so units cancel there.
     uint256 private constant AFFILIATE_DGNRS_MIN_SCORE = 10 ether;
 
     // -------------------------------------------------------------------------

@@ -4,6 +4,7 @@ pragma solidity 0.8.34;
 import {ContractAddresses} from "./ContractAddresses.sol";
 import {IDegenerusGame} from "./interfaces/IDegenerusGame.sol";
 import {GameTimeLib} from "./libraries/GameTimeLib.sol";
+import {PriceLookupLib} from "./libraries/PriceLookupLib.sol";
 
 /**
  * @title DegenerusAffiliate
@@ -187,6 +188,15 @@ contract DegenerusAffiliate {
     uint16 private constant LOOTBOX_TAPER_START_SCORE = 100;
     uint16 private constant LOOTBOX_TAPER_END_SCORE = 255;
     uint16 private constant LOOTBOX_TAPER_MIN_BPS = 2_500;
+    /// @dev FLIP base units per whole ticket (mirrors the Game's PRICE_COIN_UNIT).
+    ///      Converts a level's FLIP-basis affiliate score back to ETH via that
+    ///      level's ticket price: ethValue = score * priceForLevel(lvl) / PRICE_COIN_UNIT.
+    uint256 private constant PRICE_COIN_UNIT = 1000 ether;
+    /// @dev Early-exit bound for the bonus-points window scan: the score-price product
+    ///      at which weighted referred volume reaches the 25 ETH points cap.
+    uint256 private constant BONUS_CAP_VOLUME_PRODUCT =
+        (25 ether * uint256(REWARD_SCALE_FRESH_L4P_BPS) * PRICE_COIN_UNIT) /
+            BPS_DENOMINATOR;
     bytes32 private constant AFFILIATE_ROLL_TAG = keccak256("affiliate-payout-roll-v1");
 
     /// @notice Sentinel value indicating a player's referral slot is permanently locked.
@@ -889,9 +899,13 @@ contract DegenerusAffiliate {
 
     /**
      * @notice Calculate the affiliate bonus points for a player.
-     * @dev Sums the player's affiliate scores for the previous 5 levels.
-     *      Tiered rate: 4 points per ETH for the first 5 ETH (20 pts),
-     *      then 1.5 points per ETH for the next 20 ETH (30 pts). Cap: 50 at 25 ETH.
+     * @dev Sums the player's affiliate scores for the previous 5 levels, converting
+     *      each level's FLIP-basis score to weighted referred ETH volume: score ×
+     *      that level's ticket price / PRICE_COIN_UNIT, normalized by the 20% L4+
+     *      fresh reward rate — so fresh referred ETH counts ~1:1 (recycled 0.25×,
+     *      levels 0-3 fresh 1.25×). Tiered rate on that volume: 4 points per ETH
+     *      for the first 5 ETH (20 pts), then 1.5 points per ETH for the next
+     *      20 ETH (30 pts). Cap: 50 at 25 ETH.
      *
      * @param currLevel The current game level.
      * @param player The player to calculate bonus for.
@@ -899,23 +913,32 @@ contract DegenerusAffiliate {
      */
     function affiliateBonusPointsBest(uint24 currLevel, address player) external view returns (uint256 points) {
         if (player == address(0) || currLevel == 0) return 0;
-        uint256 sum;
+        // Σ score[lvl] × priceForLevel(lvl): ETH-volume product still carrying the
+        // PRICE_COIN_UNIT and fresh-rate scale factors (normalized out below). Bounded
+        // far below overflow: score is capped by real FLIP accrual, price ≤ 0.24 ether.
+        uint256 sumProduct;
         unchecked {
             for (uint8 offset = 1; offset <= 5; ) {
                 if (currLevel <= offset) break;
                 uint24 lvl = currLevel - offset;
-                sum += affiliateCoinEarned[lvl][player];
-                // Points hit the AFFILIATE_BONUS_MAX cap at 25 ether; further reads cannot change the result.
-                if (sum >= 25 ether) break;
+                sumProduct +=
+                    affiliateCoinEarned[lvl][player] *
+                    PriceLookupLib.priceForLevel(lvl);
+                // Points hit the AFFILIATE_BONUS_MAX cap at 25 ETH of weighted
+                // volume; further reads cannot change the result.
+                if (sumProduct >= BONUS_CAP_VOLUME_PRODUCT) break;
                 ++offset;
             }
         }
 
-        if (sum == 0) return 0;
-        if (sum <= 5 ether) {
-            points = (sum * 4) / 1 ether;
+        // Weighted referred ETH volume in wei.
+        uint256 volEth = (sumProduct * BPS_DENOMINATOR) /
+            (uint256(REWARD_SCALE_FRESH_L4P_BPS) * PRICE_COIN_UNIT);
+        if (volEth == 0) return 0;
+        if (volEth <= 5 ether) {
+            points = (volEth * 4) / 1 ether;
         } else {
-            points = 20 + ((sum - 5 ether) * 3) / 2 ether;
+            points = 20 + ((volEth - 5 ether) * 3) / 2 ether;
         }
         return points > AFFILIATE_BONUS_MAX ? AFFILIATE_BONUS_MAX : points;
     }

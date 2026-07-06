@@ -751,19 +751,21 @@ describe("DegenerusAffiliate", function () {
         await loadFixture(deployFullProtocol);
       const code = toBytes32("BONUS5");
       await affiliate.connect(alice).createAffiliateCode(code, 0);
-      // Refer multiple senders so each can contribute up to 0.5 cap
       const senders = [bob, carol, dan, eve];
       for (const s of senders) {
         await affiliate.connect(s).referPlayer(code);
       }
 
-      // Earn at levels 1-5 using all senders (each capped at 0.5 ETH/level).
-      // Per sender: 2 ETH fresh L1-3 => 25% = 0.5 ETH (hits cap).
-      // 4 senders * 0.5 ETH = 2 ETH per level.
-      // Levels 1-3: 2 ETH each = 6 ETH; Levels 4-5: 20% so 2.5 ETH input => 0.5 cap.
-      // 4 senders * 0.5 = 2 ETH per level. Total = 2*5 = 10 ETH => 10 points.
+      // Production passes FLIP-basis amounts (ethSpend * PRICE_COIN_UNIT / price),
+      // so the harness converts the same way. 0.5 ETH fresh per sender per level,
+      // 4 senders = 2 ETH/level across levels 1-5 (price 0.01 at 1-4, 0.02 at 5).
+      // Weighted referred volume: levels 1-3 fresh 25% => 2 * 1.25 = 2.5 ETH each;
+      // levels 4-5 fresh 20% => 2.0 ETH each. Total 11.5 ETH =>
+      // 20 + floor((11.5 - 5) * 1.5) = 29 points.
+      const PCU = eth(1000);
       for (let lvl = 1; lvl <= 5; lvl++) {
-        const inputAmt = lvl <= 3 ? eth(2) : eth("2.5");
+        const price = lvl <= 4 ? eth("0.01") : eth("0.02");
+        const inputAmt = (eth("0.5") * PCU) / price;
         for (const s of senders) {
           await payAffiliateAsGame(
             hre.ethers,
@@ -778,10 +780,48 @@ describe("DegenerusAffiliate", function () {
         }
       }
 
-      // At level 6, sum previous 5 levels. v24.1 packing changes shift how
-      // per-level earnings accumulate into bonus points (27 with current layout).
       const points = await affiliate.affiliateBonusPointsBest(6, alice.address);
-      expect(points).to.equal(27n);
+      expect(points).to.equal(29n);
+    });
+
+    it("affiliateBonusPointsBest calibrates to referred ETH volume (dust ~ 0, 25 ETH fresh = cap)", async function () {
+      const { affiliate, game, alice, bob } =
+        await loadFixture(deployFullProtocol);
+      const code = toBytes32("VOLCAL");
+      await affiliate.connect(alice).createAffiliateCode(code, 0);
+      await affiliate.connect(bob).referPlayer(code);
+
+      const PCU = eth(1000);
+
+      // One minimum ticket entry (0.0025 ETH at level-1 price 0.01) in FLIP basis:
+      // weighted volume ~0.003 ETH -> 0 points (not the 50-point cap).
+      const dustAmt = (eth("0.0025") * PCU) / eth("0.01");
+      await payAffiliateAsGame(
+        hre.ethers,
+        game,
+        affiliate,
+        dustAmt,
+        code,
+        bob.address,
+        1,
+        true
+      );
+      expect(await affiliate.affiliateBonusPointsBest(2, alice.address)).to.equal(0n);
+
+      // 25 ETH fresh referred spend at a 0.04-price level (20% rate) is the exact
+      // 50-point cap. Level 10 sits outside the level-2 window used above.
+      const capAmt = (eth(25) * PCU) / eth("0.04");
+      await payAffiliateAsGame(
+        hre.ethers,
+        game,
+        affiliate,
+        capAmt,
+        code,
+        bob.address,
+        10,
+        true
+      );
+      expect(await affiliate.affiliateBonusPointsBest(11, alice.address)).to.equal(50n);
     });
   });
 
