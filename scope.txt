@@ -1,7 +1,7 @@
 # Degenerus Protocol — Audit Scope
 # Solidity 0.8.34 | Hardhat + Foundry | viaIR=true | Optimizer runs=1000 | evmVersion=osaka
 #
-# Frozen subject: contracts/ tree 16e51875 @ tag degenerus-c4a (post-v75.0 hardening freeze).
+# Frozen subject: contracts/ tree 5ba80659 @ tag degenerus-c4a (post-v75.0 hardening freeze).
 # Checkout: git checkout degenerus-c4a
 # This list supersedes the v55-era scope.txt (which named BurnieCoin/BurnieCoinflip/
 # WrappedWrappedXRP/EndgameModule — all renamed or removed in this subject).
@@ -86,14 +86,15 @@ contracts/interfaces/IVRFCoordinator.sol              #                         
 contracts/DeityBoonViewer.sol      # read-only deity-boon lens (no value custody)  154
 
 ## nSLOC totals
-#   Core deployed (14)              7385
-#   Deployed modules (12)           9667
-#   Abstract module bases (2)        456
+#   Core deployed (14)              7395
+#   Deployed modules (12)           9634
+#   Abstract module bases (2)        450
 #   Shared storage (1)              1114
 #   Libraries (8)                    561
 #   Interfaces (11)                  667
 #   Standalone in-scope (1)          154
 #   --------------------------------------
-#   TOTAL  49 files                20004 nSLOC
-#   (Group/grand totals freshly counted at tree 16e51875; the per-file annotations above are
+#   TOTAL  49 files                19975 nSLOC
+#   (Group/grand totals delta-tracked from the 20004 tree-16e51875 baseline across the
+#    calibration re-freeze; the per-file annotations above are
 #    v74-approximate and lag the v75 rename pass — the totals here are authoritative.)

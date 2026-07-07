@@ -4,7 +4,7 @@ Pre-disclosure for audit wardens. **If a finding's mechanism + impact is describ
 already known and is not eligible.** This is a precise perimeter — each entry names the exact
 mechanism and why it is by-design, defended, or out-of-scope. There are no vague blanket disclaimers.
 
-Frozen subject: `contracts/` tree `16e51875` @ tag `degenerus-c4a`. Pre-scanned with Slither v0.11.5
+Frozen subject: `contracts/` tree `5ba80659` @ tag `degenerus-c4a`. Pre-scanned with Slither v0.11.5
 + Aderyn 0.6.8; those findings are triaged in the automated-tools section below.
 
 ---
