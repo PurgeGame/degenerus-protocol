@@ -869,12 +869,9 @@ contract DegenerusAdmin {
         return (approveWeight, rejectWeight);
     }
 
-    /// @dev Get voter's sDGNRS weight as whole tokens (0 if none, floor 1 if dust).
+    /// @dev Get voter's sDGNRS weight as whole tokens. Sub-token balances have no vote weight.
     function _voterWeight() private view returns (uint40) {
-        uint256 raw = sDGNRS.balanceOf(msg.sender);
-        if (raw == 0) return 0;
-        uint40 w = uint40(raw / 1 ether);
-        return w == 0 ? 1 : w;
+        return uint40(sDGNRS.balanceOf(msg.sender) / 1 ether);
     }
 
     /// @dev Validate a proposal is active and not expired.

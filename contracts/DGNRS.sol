@@ -50,6 +50,8 @@ contract DGNRS {
     error TransferFailed();
     /// @notice Thrown when burn() is called during active game (use burnWrapped() instead)
     error GameNotOver();
+    /// @notice Thrown when an unwrap amount is below one whole DGNRS token
+    error UnwrapTooSmall();
 
     // =====================================================================
     //                              EVENTS
@@ -93,6 +95,7 @@ contract DGNRS {
     uint256 private constant CREATOR_INITIAL = 50_000_000_000 * 1e18;   // 50B at deploy
     uint256 private constant VEST_PER_LEVEL  = 5_000_000_000 * 1e18;    // 5B per level
     uint256 private constant CREATOR_TOTAL   = 200_000_000_000 * 1e18;  // 200B total
+    uint256 private constant MIN_UNWRAP_AMOUNT = 1 ether;
 
     IsDGNRS private constant staked = IsDGNRS(ContractAddresses.SDGNRS);
     IStETH private constant steth = IStETH(ContractAddresses.STETH_TOKEN);
@@ -174,11 +177,13 @@ contract DGNRS {
 
     /// @notice Burn DGNRS and send the underlying sDGNRS to a recipient as soulbound.
     /// @dev Blocked while RNG is locked to prevent vote-stacking via DGNRS→sDGNRS conversion.
+    ///      Unwraps are whole-token minimums so one account cannot be seeded with vote-ineligible dust.
     /// @param recipient Address to receive the soulbound sDGNRS.
     /// @param amount Amount of DGNRS to burn and unwrap (18 decimals).
     function unwrapTo(address recipient, uint256 amount) external {
         if (!vault.isVaultOwner(msg.sender)) revert Unauthorized();
         if (recipient == address(0)) revert ZeroAddress();
+        if (amount < MIN_UNWRAP_AMOUNT) revert UnwrapTooSmall();
         if (game.rngLocked()) revert Unauthorized();
         _burn(msg.sender, amount);
         staked.wrapperTransferTo(recipient, amount);

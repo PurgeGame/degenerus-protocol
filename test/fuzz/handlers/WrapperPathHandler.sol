@@ -114,8 +114,8 @@ contract WrapperPathHandler is Test {
         calls_unwrapTo++;
         address owner_ = actors[0];
         uint256 bal = dgnrs.balanceOf(owner_);
-        if (bal == 0) return;
-        uint256 amt = bound(amtSeed, 1, bal);
+        if (bal < 1 ether) return;
+        uint256 amt = bound(amtSeed, 1 ether, bal);
         address recipient = actors[bound(recipSeed, 0, actors.length - 1)];
         vm.prank(owner_);
         try dgnrs.unwrapTo(recipient, amt) {

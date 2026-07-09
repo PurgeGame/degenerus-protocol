@@ -269,6 +269,23 @@ describe("Feed Governance", function () {
       expect(events.length).to.equal(0);
     });
 
+    it("sub-token sDGNRS has zero feed-governance voting weight", async function () {
+      const { admin, sdgnrs, game, deployer, alice, bob } =
+        await loadFixture(deployFullProtocol);
+      const newFeed = await deployNewFeed();
+
+      // Keep a nonzero whole-token snapshot so a dust vote cannot resolve by
+      // virtue of a zero denominator.
+      await grantSdgnrs(sdgnrs, game, bob.address, eth("1"));
+      await grantSdgnrs(sdgnrs, game, alice.address, 1n);
+      await admin.connect(deployer).proposeFeedSwap(await newFeed.getAddress());
+
+      const tx = await admin.connect(alice).voteFeedSwap(1, true);
+      expect((await getEvents(tx, admin, "FeedVoteCast")).length).to.equal(0);
+      expect(await admin.feedVoteWeight(1, alice.address)).to.equal(0n);
+      expect((await admin.feedProposals(1))[6]).to.equal(0n);
+    });
+
     it("zero-weight poke can trigger execution after threshold decay", async function () {
       const { admin, sdgnrs, game, deployer, alice } = await loadFixture(deployFullProtocol);
       const newFeed = await deployNewFeed();

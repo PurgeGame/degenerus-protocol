@@ -236,6 +236,25 @@ describe("VRF Governance", function () {
       const events = await getEvents(tx, admin, "VoteCast");
       expect(events.length).to.equal(0, "No VoteCast event for zero-weight poke");
     });
+
+    it("sub-token sDGNRS has zero VRF governance voting weight", async function () {
+      const { admin, mockVRF, sdgnrs, game, deployer, alice, bob } =
+        await loadFixture(deployFullProtocol);
+      const vrfAddr = await mockVRF.getAddress();
+
+      // Keep a nonzero whole-token snapshot so a dust vote cannot resolve by
+      // virtue of a zero denominator.
+      await giveSDGNRS(sdgnrs, game, bob.address, eth("1"));
+      await giveSDGNRS(sdgnrs, game, alice.address, 1n);
+
+      await createStall(45);
+      await admin.connect(deployer).propose(vrfAddr, hre.ethers.id("key"));
+
+      const tx = await admin.connect(alice).vote(1, true);
+      expect((await getEvents(tx, admin, "VoteCast")).length).to.equal(0);
+      expect(await admin.voteWeight(1, alice.address)).to.equal(0n);
+      expect((await admin.proposals(1))[6]).to.equal(0n);
+    });
   });
 
   // =========================================================================

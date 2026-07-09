@@ -312,7 +312,20 @@ describe("DGNRS (DGNRS Liquid Token)", function () {
       const { dgnrs, deployer, alice } = await loadFixture(deployFullProtocol);
       await expect(
         dgnrs.connect(deployer).unwrapTo(alice.address, 0n)
-      ).to.be.revertedWithCustomError(dgnrs, "Insufficient");
+      ).to.be.revertedWithCustomError(dgnrs, "UnwrapTooSmall");
+    });
+
+    it("reverts when unwrap amount is below one whole token", async function () {
+      const { dgnrs, deployer, alice } = await loadFixture(deployFullProtocol);
+      await expect(
+        dgnrs.connect(deployer).unwrapTo(alice.address, eth("1") - 1n)
+      ).to.be.revertedWithCustomError(dgnrs, "UnwrapTooSmall");
+    });
+
+    it("allows exactly one whole token to be unwrapped", async function () {
+      const { dgnrs, sdgnrs, deployer, alice } = await loadFixture(deployFullProtocol);
+      await dgnrs.connect(deployer).unwrapTo(alice.address, eth("1"));
+      expect(await sdgnrs.balanceOf(alice.address)).to.equal(eth("1"));
     });
   });
 
