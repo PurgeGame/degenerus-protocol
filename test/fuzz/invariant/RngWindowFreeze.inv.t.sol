@@ -28,10 +28,23 @@ import {RngWindowFreezeHandler} from "../handlers/RngWindowFreezeHandler.sol";
 ///                                                       not a seed — a non-VRF in-window read is its own
 ///                                                       bug class).
 ///
+///         THE MID-DAY LOOTBOX WINDOW (second window shape). requestLootboxRng opens a lootbox-only
+///         VRF window that sets NEITHER rngLockedFlag NOR prizePoolFrozen — the in-flight marker is
+///         rngRequestTime != 0 with rngLocked() == false. Its pending consumption (the mid-day
+///         rawFulfillRandomWords branch + the next advance's frozen ticket batch) reads its own
+///         enumerated set, checked by the tryMidDay* actions under the same isolation discipline:
+///           (5)  LR_INDEX cursor            — slot 34 low 48   : the landing index (-1) of the pending word.
+///           (6)  lootboxRngWordByIndex[N-1] — slot 35 leaf     : the reserved landing leaf.
+///           (7)  LR_MID_DAY flag            — slot 34 bits 224 : routes the frozen ticket batch.
+///           (8)  ticketWriteSlot            — slot 0 byte 26   : the buffer selector frozen at request.
+///           (9)  vrfRequestId               — slot 4           : the fulfillment request-match gate.
+///           (10) rngRequestTime             — slot 0 bytes 6-11: the in-flight marker (reroll guard).
+///           (11) rngLockedFlag              — slot 0 byte 19   : the fulfillment branch selector.
+///
 ///         NON-VACUITY. The freeze assertion is meaningful only if the campaign actually opens the window
-///         and fires in-window actions. afterInvariant + a focused non-vacuity test gate acceptance on
-///         ghost_windowsOpened > 0 AND ghost_inWindowActions > 0 (a "passes because nothing happened"
-///         green is impossible).
+///         and fires in-window actions. afterInvariant + focused non-vacuity tests gate acceptance on
+///         ghost_windowsOpened / ghost_inWindowActions AND their mid-day counterparts all > 0 (a "passes
+///         because nothing happened" green is impossible for either window shape).
 ///
 /// @dev Test-only: ZERO contracts/*.sol mutation. The only vm.store is the standard slot-34 lootbox-index
 ///      seed inside the handler (mirroring RngFreezeAndRemovalProofs.setUp) so an active index exists to
@@ -53,12 +66,18 @@ contract RngWindowFreeze is DeployProtocol {
         handler = new RngWindowFreezeHandler(game, mockVRF, 5);
         targetContract(address(handler));
 
-        // The falsifiability seam (debugSeedInWindowMutationAndCheck) is a TEST-ONLY hook for the focused
-        // falsifiability test — it deliberately seeds a freeze violation. Exclude it from the fuzz campaign
-        // so the always-on invariant only ever sees the real player-action surface (the seam is also
-        // counter-neutral as defence-in-depth, but excluding it keeps the campaign's action mix honest).
-        bytes4[] memory excluded = new bytes4[](1);
+        // requestLootboxRng gates on the VRF subscription holding >= 40 LINK; DeployProtocol does
+        // not fund the mock subscription (subId 1 — the Admin constructor's createSubscription).
+        // Fund it here so the mid-day window driver can actually open the lootbox window.
+        mockVRF.fundSubscription(1, 100e18);
+
+        // The falsifiability seams (debugSeed*MutationAndCheck) are TEST-ONLY hooks for the focused
+        // falsifiability tests — they deliberately seed freeze violations. Exclude them from the fuzz
+        // campaign so the always-on invariant only ever sees the real player-action surface (the seams are
+        // also counter-neutral as defence-in-depth, but excluding them keeps the campaign's action mix honest).
+        bytes4[] memory excluded = new bytes4[](2);
         excluded[0] = RngWindowFreezeHandler.debugSeedInWindowMutationAndCheck.selector;
+        excluded[1] = RngWindowFreezeHandler.debugSeedMidDayMutationAndCheck.selector;
         excludeSelector(StdInvariant.FuzzSelector({addr: address(handler), selectors: excluded}));
     }
 
@@ -94,6 +113,13 @@ contract RngWindowFreeze is DeployProtocol {
         handler.calls_inWindowPurchase();
         handler.calls_inWindowOpenBoxes();
         handler.calls_closeWindow();
+        handler.ghost_midDayWindowsOpened();
+        handler.ghost_midDayInWindowActions();
+        handler.calls_openMidDayWindow();
+        handler.calls_midDayPlacement();
+        handler.calls_midDayPurchase();
+        handler.calls_midDayOpenBoxes();
+        handler.calls_closeMidDayWindow();
     }
 
     // =========================================================================
@@ -116,6 +142,16 @@ contract RngWindowFreeze is DeployProtocol {
             handler.ghost_inWindowActions(),
             0,
             "NON-VACUITY: the campaign must attempt an in-window player action > 0 times (else the freeze property is vacuous)"
+        );
+        assertGt(
+            handler.ghost_midDayWindowsOpened(),
+            0,
+            "NON-VACUITY: the campaign must open the MID-DAY lootbox window > 0 times (else the mid-day freeze property is vacuous)"
+        );
+        assertGt(
+            handler.ghost_midDayInWindowActions(),
+            0,
+            "NON-VACUITY: the campaign must attempt a mid-day in-window player action > 0 times (else the mid-day freeze property is vacuous)"
         );
     }
 
@@ -188,6 +224,66 @@ contract RngWindowFreeze is DeployProtocol {
             handler.ghost_frozenSlotMutations(),
             propBefore,
             "the seeded falsification is counter-neutral: it never pollutes the live property counter"
+        );
+    }
+
+    // =========================================================================
+    // MID-DAY LOOTBOX WINDOW: focused non-vacuity + falsifiability
+    // =========================================================================
+
+    /// @notice Directly drives the handler through one MID-DAY cycle — open (requestLootboxRng in
+    ///         flight, daily lock NOT held) → the three in-window player actions → close (the
+    ///         mid-day fulfillment lands the word directly) — and asserts the mid-day non-vacuity
+    ///         counters move while the freeze property holds. Proves the mid-day window machinery
+    ///         works deterministically, so the always-on invariant's mid-day coverage is not
+    ///         fuzzer-luck-dependent.
+    function test_midDayWindowIsExercised_nonVacuous() public {
+        handler.openMidDayWindow(0);
+        assertGt(
+            handler.ghost_midDayWindowsOpened(),
+            0,
+            "non-vacuity: the mid-day driver actually opened the lootbox VRF window"
+        );
+        assertFalse(game.rngLocked(), "the mid-day window holds NO daily lock (that is its defining shape)");
+
+        handler.tryMidDayPlacement(0, 1 ether, 54321);
+        handler.tryMidDayPurchase(0, 800, 0.1 ether);
+        handler.tryMidDayOpenBoxes(0, 50);
+
+        assertGt(
+            handler.ghost_midDayInWindowActions(),
+            0,
+            "non-vacuity: ghost_midDayInWindowActions > 0 after firing mid-day in-window actions"
+        );
+        assertEq(
+            handler.ghost_frozenSlotMutations(),
+            0,
+            "real mid-day in-window actions froze every enumerated mid-day slot"
+        );
+
+        // Close: the mid-day fulfillment finalizes directly (no advanceGame needed).
+        handler.closeMidDayWindow(7);
+    }
+
+    /// @notice FALSIFIABILITY (mid-day). Opens the mid-day window, seeds a mutation of the RESERVED
+    ///         lootbox landing leaf — the pre-fulfillment word-steering the property forbids — and
+    ///         asserts the detector observes it, counter-neutrally.
+    function test_invariantCatchesSeededMidDayMutation() public {
+        handler.openMidDayWindow(0);
+        require(handler.ghost_midDayWindowsOpened() > 0, "precondition: mid-day window opened");
+
+        uint256 propBefore = handler.ghost_frozenSlotMutations();
+
+        bool detected = handler.debugSeedMidDayMutationAndCheck();
+
+        assertTrue(
+            detected,
+            "FALSIFIABILITY: the mid-day freeze detector must catch a seeded mutation of the reserved lootbox leaf"
+        );
+        assertEq(
+            handler.ghost_frozenSlotMutations(),
+            propBefore,
+            "the seeded mid-day falsification is counter-neutral: it never pollutes the live property counter"
         );
     }
 }

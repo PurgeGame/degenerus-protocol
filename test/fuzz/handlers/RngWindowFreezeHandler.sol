@@ -70,6 +70,19 @@ contract RngWindowFreezeHandler is Test {
     uint256 private constant DAILY_IDX_BYTE_OFF = 3; // dailyIdx uint24 @ slot 0 byte 3
     uint256 private constant DAILY_IDX_MASK = 0xFFFFFF; // uint24
 
+    // Mid-day lootbox window fields (same 388-01-LAYOUT-KEY layout; slot-0 roots are the
+    // StorageFoundation-canaried offsets).
+    uint256 private constant VRF_REQUEST_ID_SLOT = 4; // uint256 vrfRequestId
+    uint256 private constant RNG_REQUEST_TIME_BYTE_OFF = 6; // rngRequestTime uint48 @ slot 0 bytes 6-11
+    uint256 private constant RNG_REQUEST_TIME_MASK = 0xFFFFFFFFFFFF; // uint48
+    uint256 private constant RNG_LOCKED_FLAG_BYTE_OFF = 19; // bool rngLockedFlag @ slot 0 byte 19
+    uint256 private constant TICKET_WRITE_SLOT_BYTE_OFF = 26; // bool ticketWriteSlot @ slot 0 byte 26
+    uint256 private constant LR_MID_DAY_SHIFT = 224; // LR_MID_DAY flag bits of slot 34
+    uint256 private constant LR_MID_DAY_MASK = 0xFF;
+    uint256 private constant LR_THRESHOLD_SHIFT = 112; // lootboxRngThreshold (milli-ETH) bits of slot 34
+    uint256 private constant LR_THRESHOLD_MASK = 0xFFFFFFFFFFFFFFFF;
+    uint256 private constant LR_ETH_SCALE = 1e15; // milli-ETH packing scale
+
     bytes1 private constant QUICK_PLAY_SALT = 0x51; // 'Q' — degenerette first-spin salt
 
     // -------------------------------------------------------------------------
@@ -91,8 +104,19 @@ contract RngWindowFreezeHandler is Test {
     uint256 public ghost_frozenSlotMutations;
 
     /// @notice Which enumerated slot last flipped (diagnostic): 1=rngWordByDay, 2=lootboxWord,
-    ///         3=lootboxRngPacked(cursor), 4=dailyIdx. 0 = none observed.
+    ///         3=lootboxRngPacked(cursor), 4=dailyIdx; mid-day set: 5=lootbox index cursor,
+    ///         6=reserved lootbox leaf, 7=LR_MID_DAY flag, 8=ticketWriteSlot, 9=vrfRequestId,
+    ///         10=rngRequestTime, 11=rngLockedFlag. 0 = none observed.
     uint256 public ghost_lastMutatedSlotTag;
+
+    /// @notice Count of distinct MID-DAY lootbox VRF windows the handler drove open
+    ///         (rngRequestTime != 0 with rngLocked() == false observed). Must be > 0 for the
+    ///         mid-day freeze property to be non-vacuous.
+    uint256 public ghost_midDayWindowsOpened;
+
+    /// @notice Count of player-controllable actions ATTEMPTED while a MID-DAY window was open.
+    ///         Must be > 0 for the mid-day freeze property to be non-vacuous.
+    uint256 public ghost_midDayInWindowActions;
 
     // --- Per-action coverage counters (surveillance) ---
     uint256 public calls_openWindow;
@@ -100,6 +124,11 @@ contract RngWindowFreezeHandler is Test {
     uint256 public calls_inWindowPurchase;
     uint256 public calls_inWindowOpenBoxes;
     uint256 public calls_closeWindow;
+    uint256 public calls_openMidDayWindow;
+    uint256 public calls_midDayPlacement;
+    uint256 public calls_midDayPurchase;
+    uint256 public calls_midDayOpenBoxes;
+    uint256 public calls_closeMidDayWindow;
 
     // -------------------------------------------------------------------------
     // Actors — disjoint base 0x60000 (unoccupied by every existing handler)
@@ -291,6 +320,13 @@ contract RngWindowFreezeHandler is Test {
     ///         player-attributable freeze check already ran in isolation at each in-window action above.
     function closeWindow(uint256 wordSeed) external {
         calls_closeWindow++;
+        _closeDailyWindow(wordSeed);
+    }
+
+    /// @dev Internal body of closeWindow, factored out so the mid-day driver can clear a daily
+    ///      window that stands in the way of opening a mid-day one (requestLootboxRng reverts
+    ///      RngLocked while the daily window is open).
+    function _closeDailyWindow(uint256 wordSeed) internal {
         if (!game.rngLocked()) return;
         uint256 reqId = vrf.lastRequestId();
         if (reqId == 0) return;
@@ -303,6 +339,164 @@ contract RngWindowFreezeHandler is Test {
         // the day (the EXEMPT heartbeat). Drive it until rngLocked() falls (capped).
         for (uint256 i; i < 8 && game.rngLocked(); i++) {
             try game.advanceGame() {} catch {}
+        }
+    }
+
+    // =========================================================================
+    // MID-DAY LOOTBOX WINDOW — the second freeze window shape.
+    //
+    // requestLootboxRng (AdvanceModule) opens a lootbox-only VRF window that sets NEITHER
+    // rngLockedFlag NOR prizePoolFrozen: the in-flight marker is rngRequestTime != 0 with
+    // rngLocked() == false. The pending consumption is the mid-day rawFulfillRandomWords branch —
+    // it reads the LR_INDEX cursor (landing index = LR_INDEX - 1), writes the reserved
+    // lootboxRngWordByIndex leaf, and the NEXT advance processes the ticket batch frozen (buffer
+    // swap + LR_MID_DAY=1) at request time. The backward trace of that consumption gives the
+    // enumerated mid-day SLOAD set:
+    //   (5)  LR_INDEX cursor            — slot 34 low 48 : where the pending word will land (-1).
+    //   (6)  lootboxRngWordByIndex[N-1] — slot 35 leaf   : the reserved landing leaf (0 until the
+    //                                                      exempt fulfillment writes it).
+    //   (7)  LR_MID_DAY flag            — slot 34 bits 224.. : routes the frozen ticket batch.
+    //   (8)  ticketWriteSlot            — slot 0 byte 26 : the read/write buffer selector frozen
+    //                                                      by the request-time swap.
+    //   (9)  vrfRequestId               — slot 4         : the fulfillment's request-match gate.
+    //   (10) rngRequestTime             — slot 0 bytes 6-11 : the in-flight marker (a player
+    //                                                      clear would permit an entropy reroll).
+    //   (11) rngLockedFlag              — slot 0 byte 19 : the fulfillment branch selector (flip
+    //                                                      would reroute the word to the daily buffer).
+    // Same isolation discipline as the daily set: snapshot immediately before the player action,
+    // re-read immediately after it alone; advanceGame / requestLootboxRng / the VRF callback are
+    // the exempt machinery and are never measured.
+    // =========================================================================
+
+    /// @dev The mid-day window predicate: a VRF request is in flight (rngRequestTime stamped) but
+    ///      the daily lock is NOT held — exactly the requestLootboxRng in-flight state.
+    function _midDayWindowOpen() internal view returns (bool) {
+        return _rngRequestTime() != 0 && !game.rngLocked();
+    }
+
+    /// @notice Drive a mid-day lootbox VRF window open so the fuzzer can act inside it.
+    function openMidDayWindow(uint256 actorSeed) external useActor(actorSeed) {
+        calls_openMidDayWindow++;
+        _driveMidDayOpen(actorSeed);
+    }
+
+    /// @dev Drive the MID-DAY window open with the current actor; returns whether it latched.
+    ///      Preconditions of requestLootboxRng, satisfied in order: no daily lock (close it),
+    ///      today's daily word recorded (drive a full daily cycle), pending lootbox ETH above the
+    ///      packed threshold (a box purchase), then the request itself. Capped ladder — every
+    ///      sub-step is the exempt machinery, never measured against the property.
+    function _driveMidDayOpen(uint256 actorSeed) internal returns (bool open) {
+        for (uint256 i; i < 3; i++) {
+            if (game.gameOver()) return false;
+
+            if (_midDayWindowOpen()) {
+                ghost_midDayWindowsOpened++;
+                _snapshotMidDaySet();
+                return true;
+            }
+
+            // A daily window blocks requestLootboxRng (RngLocked) — complete it first.
+            if (game.rngLocked()) {
+                _closeDailyWindow(actorSeed + i);
+                if (game.rngLocked()) return false; // could not complete the heartbeat
+            }
+
+            // requestLootboxRng needs TODAY's daily word consumed and recorded.
+            if (_rngWordByDay(game.currentDayView()) == 0) {
+                if (!_driveWindowOpen(actorSeed + i)) return false;
+                _closeDailyWindow(actorSeed + i);
+                if (game.rngLocked() || game.gameOver()) return false;
+            }
+
+            // Pending lootbox ETH must clear the packed milli-ETH threshold (default 1 ether).
+            uint256 thresholdWei =
+                ((uint256(vm.load(address(game), bytes32(LOOTBOX_RNG_PACKED_SLOT))) >> LR_THRESHOLD_SHIFT) &
+                    LR_THRESHOLD_MASK) * LR_ETH_SCALE;
+            uint256 boxAmt = thresholdWei + 0.1 ether;
+            (, , , , uint256 priceWei) = game.purchaseInfo();
+            uint256 cost = priceWei + boxAmt; // 1 whole ticket (400 entries) + the box leg
+            if (cost > currentActor.balance) return false;
+            vm.prank(currentActor);
+            try game.purchase{value: cost}(currentActor, 400, boxAmt, bytes32(0), MintPaymentKind.DirectEth, false) {} catch {}
+
+            vm.prank(currentActor);
+            try game.requestLootboxRng() {} catch {}
+
+            if (_midDayWindowOpen()) {
+                ghost_midDayWindowsOpened++;
+                _snapshotMidDaySet();
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /// @notice Attempt a degenerette placement WHILE the mid-day window is open. Isolation-checked
+    ///         against the enumerated mid-day set.
+    function tryMidDayPlacement(uint256 actorSeed, uint128 amtSeed, uint32 ticketSeed) external useActor(actorSeed) {
+        calls_midDayPlacement++;
+        if (!_driveMidDayOpen(actorSeed)) return;
+        ghost_midDayInWindowActions++;
+
+        _snapshotMidDaySet();
+        uint128 amt = uint128(bound(uint256(amtSeed), 0.001 ether, 0.05 ether));
+        if (amt > currentActor.balance) {
+            _checkMidDayFrozenAfterIsolatedAction();
+            return;
+        }
+        vm.prank(currentActor);
+        try game.placeDegeneretteBet{value: amt}(address(0), 0, amt, 1, ticketSeed, 0) {} catch {}
+        _checkMidDayFrozenAfterIsolatedAction();
+    }
+
+    /// @notice Attempt a ticket/lootbox purchase WHILE the mid-day window is open. New purchases
+    ///         must accrue to the NEXT lootbox index / the WRITE ticket buffer — never move the
+    ///         reserved leaf, the landing cursor, or the frozen buffer selector. Isolation-checked.
+    function tryMidDayPurchase(uint256 actorSeed, uint256 qtySeed, uint256 boxSeed) external useActor(actorSeed) {
+        calls_midDayPurchase++;
+        if (!_driveMidDayOpen(actorSeed)) return;
+        ghost_midDayInWindowActions++;
+
+        _snapshotMidDaySet();
+        uint256 qty = bound(qtySeed, 400, 2000); // whole-ticket multiples
+        uint256 boxAmt = bound(boxSeed, 0, 1 ether);
+        (, , , , uint256 priceWei) = game.purchaseInfo();
+        uint256 cost = (priceWei * qty) / 400 + boxAmt + 0.01 ether;
+        if (cost > currentActor.balance) {
+            _checkMidDayFrozenAfterIsolatedAction();
+            return;
+        }
+        vm.prank(currentActor);
+        try game.purchase{value: cost}(currentActor, qty, boxAmt, bytes32(0), MintPaymentKind.DirectEth, false) {} catch {}
+        _checkMidDayFrozenAfterIsolatedAction();
+    }
+
+    /// @notice Attempt openBoxes WHILE the mid-day window is open. Boxes at the reserved (word-less)
+    ///         index are skipped by the contract's RngNotReady guard; either way the call must not
+    ///         move the enumerated mid-day set. Isolation-checked.
+    function tryMidDayOpenBoxes(uint256 actorSeed, uint256 maxSeed) external useActor(actorSeed) {
+        calls_midDayOpenBoxes++;
+        if (!_driveMidDayOpen(actorSeed)) return;
+        ghost_midDayInWindowActions++;
+
+        _snapshotMidDaySet();
+        uint256 maxCount = bound(maxSeed, 1, 200);
+        vm.prank(currentActor);
+        try game.openBoxes(maxCount) {} catch {}
+        _checkMidDayFrozenAfterIsolatedAction();
+    }
+
+    /// @notice Close the mid-day window: fulfill the in-flight lootbox request. The mid-day
+    ///         rawFulfillRandomWords branch finalizes directly — lands the word at LR_INDEX - 1 and
+    ///         clears vrfRequestId / rngRequestTime (no advanceGame needed). Exempt machinery.
+    function closeMidDayWindow(uint256 wordSeed) external {
+        calls_closeMidDayWindow++;
+        if (!_midDayWindowOpen()) return;
+        uint256 reqId = vrf.lastRequestId();
+        if (reqId == 0) return;
+        (, , bool fulfilled) = vrf.pendingRequests(reqId);
+        if (!fulfilled) {
+            try vrf.fulfillRandomWords(reqId, uint256(keccak256(abi.encode("closemid", wordSeed))) | 1) {} catch {}
         }
     }
 
@@ -355,6 +549,67 @@ contract RngWindowFreezeHandler is Test {
     }
 
     // =========================================================================
+    // The enumerated MID-DAY snapshot + isolation freeze check
+    // =========================================================================
+
+    uint256 private _snapMidCursor; // LR_INDEX (slot 34 low 48)
+    uint256 private _snapMidLeafWord; // lootboxRngWordByIndex[LR_INDEX - 1]
+    uint256 private _snapMidMidDayFlag; // LR_MID_DAY bits
+    uint256 private _snapMidTicketWriteSlot; // ticketWriteSlot byte
+    uint256 private _snapMidVrfRequestId; // vrfRequestId
+    uint256 private _snapMidRngRequestTime; // rngRequestTime (uint48)
+    uint256 private _snapMidRngLockedFlag; // rngLockedFlag byte
+    uint48 private _snapMidLeafIndex; // the reserved landing index the leaf snapshot keyed
+
+    /// @dev Snapshot every enumerated mid-day SLOAD. The leaf is keyed at the CURRENT reserved
+    ///      landing index (LR_INDEX - 1) so the post-action re-read compares the SAME mapping leaf
+    ///      the pending fulfillment will write.
+    function _snapshotMidDaySet() internal {
+        _snapMidCursor = _lootboxRngIndexCursor();
+        _snapMidLeafIndex = _snapMidCursor == 0 ? 0 : uint48(_snapMidCursor - 1);
+        _snapMidLeafWord = _lootboxRngWord(_snapMidLeafIndex);
+        _snapMidMidDayFlag = _lrMidDayFlag();
+        _snapMidTicketWriteSlot = _ticketWriteSlotRaw();
+        _snapMidVrfRequestId = _vrfRequestId();
+        _snapMidRngRequestTime = _rngRequestTime();
+        _snapMidRngLockedFlag = _rngLockedFlagRaw();
+    }
+
+    /// @dev Re-read the enumerated mid-day set after an ISOLATED in-window player action (no
+    ///      advance / request / fulfillment ran in between) and flag any change — identical
+    ///      discipline to _checkFrozenAfterIsolatedAction, over the mid-day consumption's set.
+    function _checkMidDayFrozenAfterIsolatedAction() internal {
+        if (_lootboxRngIndexCursor() != _snapMidCursor) {
+            ghost_frozenSlotMutations++;
+            ghost_lastMutatedSlotTag = 5;
+        }
+        if (_lootboxRngWord(_snapMidLeafIndex) != _snapMidLeafWord) {
+            ghost_frozenSlotMutations++;
+            ghost_lastMutatedSlotTag = 6;
+        }
+        if (_lrMidDayFlag() != _snapMidMidDayFlag) {
+            ghost_frozenSlotMutations++;
+            ghost_lastMutatedSlotTag = 7;
+        }
+        if (_ticketWriteSlotRaw() != _snapMidTicketWriteSlot) {
+            ghost_frozenSlotMutations++;
+            ghost_lastMutatedSlotTag = 8;
+        }
+        if (_vrfRequestId() != _snapMidVrfRequestId) {
+            ghost_frozenSlotMutations++;
+            ghost_lastMutatedSlotTag = 9;
+        }
+        if (_rngRequestTime() != _snapMidRngRequestTime) {
+            ghost_frozenSlotMutations++;
+            ghost_lastMutatedSlotTag = 10;
+        }
+        if (_rngLockedFlagRaw() != _snapMidRngLockedFlag) {
+            ghost_frozenSlotMutations++;
+            ghost_lastMutatedSlotTag = 11;
+        }
+    }
+
+    // =========================================================================
     // Authoritative slot reads (vm.load against the 380-01-LAYOUT-KEY layout)
     // =========================================================================
 
@@ -377,6 +632,30 @@ contract RngWindowFreezeHandler is Test {
     function _dailyIdx() internal view returns (uint256) {
         uint256 raw = uint256(vm.load(address(game), bytes32(uint256(0))));
         return (raw >> (DAILY_IDX_BYTE_OFF * 8)) & DAILY_IDX_MASK;
+    }
+
+    function _rngRequestTime() internal view returns (uint256) {
+        uint256 raw = uint256(vm.load(address(game), bytes32(uint256(0))));
+        return (raw >> (RNG_REQUEST_TIME_BYTE_OFF * 8)) & RNG_REQUEST_TIME_MASK;
+    }
+
+    function _rngLockedFlagRaw() internal view returns (uint256) {
+        uint256 raw = uint256(vm.load(address(game), bytes32(uint256(0))));
+        return (raw >> (RNG_LOCKED_FLAG_BYTE_OFF * 8)) & 0xFF;
+    }
+
+    function _ticketWriteSlotRaw() internal view returns (uint256) {
+        uint256 raw = uint256(vm.load(address(game), bytes32(uint256(0))));
+        return (raw >> (TICKET_WRITE_SLOT_BYTE_OFF * 8)) & 0xFF;
+    }
+
+    function _vrfRequestId() internal view returns (uint256) {
+        return uint256(vm.load(address(game), bytes32(VRF_REQUEST_ID_SLOT)));
+    }
+
+    function _lrMidDayFlag() internal view returns (uint256) {
+        return
+            (uint256(vm.load(address(game), bytes32(LOOTBOX_RNG_PACKED_SLOT))) >> LR_MID_DAY_SHIFT) & LR_MID_DAY_MASK;
     }
 
     // =========================================================================
@@ -410,5 +689,23 @@ contract RngWindowFreezeHandler is Test {
 
         // Restore — the seeded break exists only for the duration of the detection.
         vm.store(address(game), dayWordSlot, bytes32(original));
+    }
+
+    /// @notice FALSIFIABILITY HOOK (mid-day counterpart of debugSeedInWindowMutationAndCheck).
+    ///         Seeds a mutation of the RESERVED lootbox landing leaf against the last mid-day
+    ///         snapshot — exactly the pre-fulfillment word-steering the mid-day freeze property
+    ///         forbids — runs the same isolation comparison the live tryMidDay* actions use, then
+    ///         RESTORES the slot. Counter-neutral for the same defence-in-depth reason: the
+    ///         campaign's live property counter is never moved by a deliberately-seeded break, and
+    ///         the selector is excluded from the fuzz campaign in the invariant setUp.
+    function debugSeedMidDayMutationAndCheck() external returns (bool detected) {
+        bytes32 leafSlot = keccak256(abi.encode(uint256(_snapMidLeafIndex), LOOTBOX_RNG_WORD_SLOT));
+        uint256 original = uint256(vm.load(address(game), leafSlot));
+
+        vm.store(address(game), leafSlot, bytes32(original ^ uint256(keccak256("midday_falsify"))));
+
+        detected = (_lootboxRngWord(_snapMidLeafIndex) != _snapMidLeafWord);
+
+        vm.store(address(game), leafSlot, bytes32(original));
     }
 }
