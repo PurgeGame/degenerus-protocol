@@ -5,6 +5,7 @@ import "forge-std/Test.sol";
 import {DeployProtocol} from "../helpers/DeployProtocol.sol";
 import {VRFHandler} from "../helpers/VRFHandler.sol";
 import {RedemptionHandler} from "../handlers/RedemptionHandler.sol";
+import {WrapperPathHandler} from "../handlers/WrapperPathHandler.sol";
 import {sDGNRS} from "../../../contracts/sDGNRS.sol";
 
 /// @title RedemptionInvariants -- Proves gambling burn redemption system invariants
@@ -15,6 +16,7 @@ import {sDGNRS} from "../../../contracts/sDGNRS.sol";
 contract RedemptionInvariants is DeployProtocol {
     RedemptionHandler public handler;
     VRFHandler public vrfHandler;
+    WrapperPathHandler public wrapperHandler;
 
     // Storage slot constants for internal sDGNRS state
     uint256 private constant SLOT_PENDING_FLIP = 10;
@@ -27,8 +29,10 @@ contract RedemptionInvariants is DeployProtocol {
         vm.warp(block.timestamp + 1 days);
         handler = new RedemptionHandler(sdgnrs, game, mockVRF, coin, 5);
         vrfHandler = new VRFHandler(mockVRF, game);
+        wrapperHandler = new WrapperPathHandler(sdgnrs, dgnrs, game, mockVRF, 3);
         targetContract(address(handler));
         targetContract(address(vrfHandler));
+        targetContract(address(wrapperHandler));
     }
 
     // =========================================================================
@@ -86,13 +90,16 @@ contract RedemptionInvariants is DeployProtocol {
 
     /// @notice totalSupply equals initialSupply plus mints minus burns.
     /// @dev Supply changes from all sources (handler burns, game operations,
-    ///      pool transfers) are tracked via before/after delta in the handler.
+    ///      pool transfers) are tracked via before/after delta in the handler; wrapper-path
+    ///      burns (burnWrapped / post-gameOver burn / yearSweep) live in the wrapper handler's
+    ///      own ledger and reconcile via its ghost term.
     function invariant_supplyConsistency() public view {
-        uint256 expected = handler.ghost_initialSupply() + handler.ghost_totalMinted() - handler.ghost_totalBurned();
+        uint256 expected = handler.ghost_initialSupply() + handler.ghost_totalMinted() - handler.ghost_totalBurned()
+            - wrapperHandler.ghost_sdgnrsBurnedViaWrapper();
         assertEq(
             sdgnrs.totalSupply(),
             expected,
-            "INV-04: totalSupply != initialSupply + totalMinted - totalBurned"
+            "INV-04: totalSupply != initialSupply + totalMinted - totalBurned (incl. wrapper-path burns)"
         );
     }
 
@@ -103,14 +110,53 @@ contract RedemptionInvariants is DeployProtocol {
     /// @notice The DGNRS wrapper holds at least one sDGNRS unit of backing per liquid
     ///         DGNRS unit: `sDGNRS.balanceOf(DGNRS) >= DGNRS.totalSupply()`.
     /// @dev Safety direction of the wrapper-backing property (audit/DGNRS-WRAPPER-BACKING-PROOF.md).
-    ///      Every wrapper burn (unwrapTo, burn, burnWrapped) decrements both sides equally; the only
-    ///      sub-equality path is yearSweep (terminal charity forfeiture), unreachable in this handler,
-    ///      so the pre-sweep scope holds without extra guarding.
+    ///      Every wrapper burn (unwrapTo, burn, burnWrapped) decrements both sides equally — the
+    ///      WrapperPathHandler drives all three as fuzz actions, so this holds non-vacuously over a
+    ///      MOVING pair. The only sub-equality path is yearSweep (terminal charity forfeiture), also
+    ///      a fuzz action: once its ghost flag latches, the property is out of its stated pre-sweep
+    ///      scope and the check rescopes to the swept regime (backing fully forfeited).
     function invariant_wrapperBackingSufficient() public view {
+        if (wrapperHandler.ghost_yearSweepRan()) {
+            // Post-sweep regime: the sweep burned ALL backing; the wrapper side is untouched.
+            assertEq(
+                sdgnrs.balanceOf(address(dgnrs)),
+                0,
+                "INV-WRAP(post-sweep): yearSweep must forfeit the ENTIRE backing"
+            );
+            return;
+        }
         assertGe(
             sdgnrs.balanceOf(address(dgnrs)),
             dgnrs.totalSupply(),
             "INV-WRAP: DGNRS wrapper under-backed (sDGNRS.balanceOf(DGNRS) < DGNRS.totalSupply)"
+        );
+    }
+
+    /// @notice STRICT equality direction: pre-yearSweep, backing tracks wrapper supply EXACTLY —
+    ///         `sDGNRS.balanceOf(DGNRS) == DGNRS.totalSupply()`.
+    /// @dev The proof's `==` needs ¬P1 (game never transferFromPool→wrapper) ∧ ¬P2 (no unwrap
+    ///      recipient == wrapper); this campaign's handlers satisfy both by construction (actors
+    ///      are the only recipients), so any drift the fuzzer finds is a REAL paired-decrement
+    ///      break, not benign over-backing. This is the non-vacuous equality coverage the
+    ///      DGNRS-WRAPPER-BACKING-PROOF follow-up called for.
+    function invariant_wrapperBackingExact_preSweep() public view {
+        if (wrapperHandler.ghost_yearSweepRan()) return; // yearSweep is the sole intentional break
+        assertEq(
+            sdgnrs.balanceOf(address(dgnrs)),
+            dgnrs.totalSupply(),
+            "INV-WRAP-EQ: wrapper backing diverged from wrapper supply pre-sweep (paired decrement broken)"
+        );
+    }
+
+    /// @notice Non-vacuity: the campaign must at least ATTEMPT wrapper-path actions (four
+    ///         selectors over depth 128 makes zero attempts statistically impossible); successful
+    ///         path traversal is proven deterministically by the focused wrapper tests below.
+    function afterInvariant() public view {
+        assertGt(
+            wrapperHandler.calls_unwrapTo() + wrapperHandler.calls_burnWrapped()
+                + wrapperHandler.calls_postGameOverBurn() + wrapperHandler.calls_yearSweep(),
+            0,
+            "NON-VACUITY: the campaign never attempted a wrapper-path action"
         );
     }
 
@@ -283,5 +329,60 @@ contract RedemptionInvariants is DeployProtocol {
         console.log("  ghost_totalRolledEth: ", handler.ghost_totalRolledEth());
         console.log("--- VRFHandler ---");
         console.log("  ghost_vrfFulfillments:", vrfHandler.ghost_vrfFulfillments());
+        console.log("--- WrapperPathHandler ---");
+        console.log("  ghost_unwraps:        ", wrapperHandler.ghost_unwraps());
+        console.log("  ghost_wrappedBurns:   ", wrapperHandler.ghost_wrappedBurns());
+        console.log("  ghost_postGoBurns:    ", wrapperHandler.ghost_postGameOverBurns());
+        console.log("  yearSweepRan:         ", wrapperHandler.ghost_yearSweepRan());
+    }
+
+    // =========================================================================
+    //        FOCUSED: wrapper paths traverse deterministically (non-vacuity)
+    // =========================================================================
+
+    /// @notice Proves the unwrapTo paired decrement deterministically: one unwrap moves BOTH
+    ///         sides down by exactly the unwrapped amount and preserves strict equality — so the
+    ///         always-on equality invariant is exercised by a real traversal, not fuzzer luck.
+    function test_wrapperUnwrapPairedDecrement() public {
+        uint256 backingBefore = sdgnrs.balanceOf(address(dgnrs));
+        uint256 supplyBefore = dgnrs.totalSupply();
+        assertEq(backingBefore, supplyBefore, "wrapper starts exactly backed (deploy identity)");
+
+        wrapperHandler.tryUnwrapTo(1_000 ether, 1); // actor0 (mocked vault owner) -> actor1
+        assertEq(wrapperHandler.ghost_unwraps(), 1, "non-vacuity: the unwrap path actually traversed");
+
+        uint256 backingAfter = sdgnrs.balanceOf(address(dgnrs));
+        uint256 supplyAfter = dgnrs.totalSupply();
+        assertLt(supplyAfter, supplyBefore, "unwrap burned wrapper supply");
+        assertEq(
+            backingBefore - backingAfter,
+            supplyBefore - supplyAfter,
+            "paired decrement: backing and wrapper supply fell by the SAME amount"
+        );
+        assertEq(backingAfter, supplyAfter, "strict equality preserved across the unwrap");
+    }
+
+    /// @notice Proves yearSweep is reachable under warp and is the SOLE intentional equality
+    ///         break: after the terminal charity forfeiture, backing is fully burned while the
+    ///         wrapper supply is untouched — exactly the regime the scoped invariants exempt.
+    function test_yearSweepIsSoleEqualityBreak() public {
+        // Drive a REAL game-over via the liveness timeout (the redemption handler's machinery).
+        for (uint256 i; i < 8 && !game.gameOver(); i++) {
+            handler.action_triggerGameOver();
+        }
+        assertTrue(game.gameOver(), "precondition: liveness game-over latched");
+
+        uint256 supplyBefore = dgnrs.totalSupply();
+        assertGt(sdgnrs.balanceOf(address(dgnrs)), 0, "precondition: backing present pre-sweep");
+
+        wrapperHandler.tryYearSweep(); // warps to gameOverTimestamp + 365d and sweeps
+        assertTrue(wrapperHandler.ghost_yearSweepRan(), "non-vacuity: yearSweep actually executed");
+
+        assertEq(
+            sdgnrs.balanceOf(address(dgnrs)),
+            0,
+            "yearSweep forfeits the ENTIRE backing (the sole intentional equality break)"
+        );
+        assertEq(dgnrs.totalSupply(), supplyBefore, "the wrapper supply side is untouched by the sweep");
     }
 }
