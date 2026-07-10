@@ -1607,6 +1607,13 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         uint24 endLevel = lvl + 4;
         uint24 resumeLevel = ticketLevel;
 
+        // The current-level ticket drain shares this resume cursor and runs after prepare on
+        // every advance call. While that drain is mid-flight across transactions (marker == lvl),
+        // defer: probing future levels here lets an empty-queue probe reset the shared cursor,
+        // restarting the current drain from index 0 on each call and wedging a large queue
+        // permanently. Future levels are processed once the current drain clears the marker.
+        if (resumeLevel == lvl) return true;
+
         // Continue an in-flight future level first to preserve progress.
         if (resumeLevel >= startLevel && resumeLevel <= endLevel) {
             (bool worked, bool levelFinished, ) = _processFutureTicketBatch(
