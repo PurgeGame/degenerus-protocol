@@ -91,7 +91,7 @@ transaction (a coin credit, not ETH-backed value). Immaterial; documented, not e
 ## 5. Automated tool findings (pre-disclosed)
 
 The full machine-readable baseline for the frozen tree is committed in `audit/automated/` — Slither
-0.11.5 (2,555 results / 101 detectors; the 130 "High" are dominated by `uninitialized-state` false
+0.11.5 (2,830 results / 101 detectors; the 130 "High" are dominated by `uninitialized-state` false
 positives from the shared-storage delegatecall architecture) + Aderyn 0.6.8 (9 High / 21 Low), each
 category mapped to its disposition there. The notes below are the standing per-category triage.
 
