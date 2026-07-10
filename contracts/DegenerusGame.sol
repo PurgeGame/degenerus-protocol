@@ -641,9 +641,10 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         bytes32 affiliateCode,
         MintPaymentKind payKind
     ) private {
-        uint256 priceWei = PriceLookupLib.priceForLevel(
-            jackpotPhaseFlag ? level : level + 1
-        );
+        // Quote both legs at the routed level (the level the ticket queue and the foil module
+        // both deliver to), so the final-jackpot-day reroute to level+1 cannot strand the
+        // buyer's overpay or under-quote the foil cost.
+        uint256 priceWei = PriceLookupLib.priceForLevel(_activeTicketLevel());
         uint256 mintCost = (priceWei * entryQuantityScaled) /
             (4 * QTY_SCALE) +
             lootBoxAmount;
@@ -2211,6 +2212,8 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     /// @dev Price tiers: intro 0.01/0.02, then cycle 0.04/0.08/0.12/0.16/0.24 ETH.
     /// @return Current price in wei.
     function mintPrice() external view returns (uint256) {
+        // Routed level so the advertised price matches what a buy-now is charged, including
+        // the final-jackpot-day reroute to level+1.
         return PriceLookupLib.priceForLevel(_activeTicketLevel());
     }
 
@@ -2263,13 +2266,17 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     }
 
     /// @notice Comprehensive purchase info for UI consumption.
-    /// @dev Bundles level, state, flags, and price into single call.
-    ///      NOTE: lvl is the active direct-ticket level.
-    /// @return lvl Active direct-ticket level.
+    /// @dev Bundles level, state, flags, and price into a single call. lvl is the ACTUAL game
+    ///      level (Coinflip keys BAF bracketing / the transition lock on it from this one
+    ///      snapshot, avoiding a second level() read); priceWei is the buy-now price at the
+    ///      ROUTED level, so a caller following the quote pays what execution charges — the two
+    ///      differ during the purchase phase and the final jackpot RNG window (buys route to
+    ///      level+1), which is intentional.
+    /// @return lvl Actual current game level.
     /// @return inJackpotPhase True if jackpot phase is active.
     /// @return lastPurchaseDay_ True if prize pool target is met.
     /// @return rngLocked_ True if VRF request is pending.
-    /// @return priceWei Current mint price in wei.
+    /// @return priceWei Current buy-now mint price in wei (at the routed ticket level).
     function purchaseInfo()
         external
         view
@@ -2283,9 +2290,9 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     {
         inJackpotPhase = jackpotPhaseFlag;
         lastPurchaseDay_ = (!inJackpotPhase) && lastPurchaseDay;
-        lvl = _activeTicketLevel();
+        lvl = level;
         rngLocked_ = rngLockedFlag;
-        priceWei = PriceLookupLib.priceForLevel(lvl);
+        priceWei = PriceLookupLib.priceForLevel(_activeTicketLevel());
     }
 
     /*+======================================================================+

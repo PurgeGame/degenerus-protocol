@@ -152,23 +152,14 @@ contract DegenerusGameFoilPackModule is
         if (gameOver) revert GameOver();
         if (_livenessTriggered()) revert GameOver();
 
-        // The pack bets on its resolveDay daily draw, so it keys on the level that draw
-        // seals at — the same level a ticket bought now resolves into, which the claim
-        // reads back from dailyFoilDraw[day].level. That is _activeTicketLevel() in every
-        // state except the final jackpot day once the daily RNG is requested: there
-        // _endPhase breaks before _unlockRng, so no further draw seals at this level and
-        // resolveDay (= day + 1) is the next cycle's first day (level + 1). Mirror the mint
-        // module's stranded-ticket reroute (_callTicketPurchase) so the pack stays
-        // claimable. The cap, the record, and the queue then all key on this same level.
+        // The pack bets on its resolveDay daily draw, so it keys on the level that draw seals
+        // at — the same level a ticket bought now resolves into, which the claim reads back
+        // from dailyFoilDraw[day].level. _activeTicketLevel() is that level: the active ticket
+        // level, except on the final jackpot day once the daily RNG is requested (where
+        // _endPhase breaks before _unlockRng, so no further draw seals here and resolveDay =
+        // day + 1 is the next cycle's first day, level + 1). Shared with the ticket queue and
+        // the purchase quote so the cap, the record, the queue, and the charge all key alike.
         uint24 lvl = _activeTicketLevel();
-        if (jackpotPhaseFlag && rngLockedFlag) {
-            uint8 cnt = jackpotCounter;
-            uint8 comp = compressedJackpotFlag;
-            uint8 step = comp == 2
-                ? JACKPOT_LEVEL_CAP
-                : (comp == 1 && cnt != 0 && cnt < JACKPOT_LEVEL_CAP - 1 ? 2 : 1);
-            if (cnt + step >= JACKPOT_LEVEL_CAP) lvl = level + 1;
-        }
         if (_foilBoughtThisLevel(buyer, lvl)) revert FoilAlreadyBought();
 
         // Forward-commit guard (multi-day stall only): the resolving daily word must be

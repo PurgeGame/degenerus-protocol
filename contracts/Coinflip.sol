@@ -617,18 +617,15 @@ contract Coinflip {
         // and skipping the BAF section keeps that path off the rngLocked guard below.
         if (winningBafCredit != 0 && player != ContractAddresses.SDGNRS) {
             (
-                uint24 purchaseLevel_,
-                bool inJackpotPhase,
+                uint24 cachedLevel,
+                ,
                 bool lastPurchaseDay_,
                 bool rngLocked_,
 
             ) = game.purchaseInfo();
-            // The active ticket level is level+1 during the purchase phase and level
-            // during the jackpot phase, so the game level derives from the same
-            // atomic purchaseInfo snapshot (purchaseLevel_ >= 1 outside jackpot phase).
-            uint24 cachedLevel = inJackpotPhase
-                ? purchaseLevel_
-                : purchaseLevel_ - 1;
+            // purchaseInfo.lvl is the ACTUAL game level (one snapshot covers level + flags, no
+            // separate level() read). The BAF guard and bracket key on the real level, not the
+            // routed buy level (which diverges on the final jackpot day).
             // lastPurchaseDay_ is true only outside the jackpot phase, so it alone
             // restricts this guard to purchase-phase states. No game-over state can
             // reach it: every gameOver latch leaves jackpotPhaseFlag set or
@@ -641,13 +638,11 @@ contract Coinflip {
             ) {
                 revert RngLocked();
             }
-            uint24 bafLevel = cachedLevel;
-            if (!inJackpotPhase) {
-                bafLevel = purchaseLevel_;
-            } else if (cachedLevel != 0 && cachedLevel % 10 == 0) {
-                bafLevel = cachedLevel + 1;
-            }
-            uint24 bafLvl = _bafBracketLevel(bafLevel);
+            // BAF bracket = the level's decade ceiling: a level in [10k, 10k+9] records to
+            // bracket 10*(k+1). _bafBracketLevel rounds up to the next multiple of 10, so
+            // (level + 1) maps every decade — including the x10 boundary — to its closing
+            // bracket (equivalent to the former phase-branched bafLevel, minus its dead cases).
+            uint24 bafLvl = _bafBracketLevel(cachedLevel + 1);
             jackpots.recordBafFlip(player, bafLvl, winningBafCredit);
         }
 
@@ -1239,20 +1234,18 @@ contract Coinflip {
         returns (bool locked)
     {
         (
-            ,
+            uint24 lvl,
             ,
             bool lastPurchaseDay_,
             bool rngLocked_,
 
         ) = degenerusGame.purchaseInfo();
-        // Early-return on the purchaseInfo flags so normal days cost a single
-        // external read; level is only consulted once those pass.
         // lastPurchaseDay_ is true only outside the jackpot phase, so it alone
         // restricts the lock to purchase-phase states. No game-over state can
         // reach here: every gameOver latch leaves jackpotPhaseFlag set or
-        // lastPurchaseDay false, and neither is ever written again post-latch.
+        // lastPurchaseDay false, and neither is ever written again post-latch. lvl is the
+        // ACTUAL game level from the same snapshot — no separate level() read needed.
         if (!lastPurchaseDay_ || !rngLocked_) return false;
-        uint24 lvl = degenerusGame.level();
         locked = lvl != 0 && lvl % 10 == 0;
     }
 

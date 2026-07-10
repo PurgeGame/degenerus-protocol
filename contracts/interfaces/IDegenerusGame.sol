@@ -48,12 +48,15 @@ interface IDegenerusGame {
     function jackpotCompressionTier() external view returns (uint8);
 
     /// @notice Get comprehensive purchase information in a single call.
-    /// @dev Gas-optimized batch query for UI display.
-    /// @return lvl Active direct-ticket level (lootbox purchases still route to next level during jackpot phase).
+    /// @dev Gas-optimized batch query: lvl is the ACTUAL game level (on-chain consumers key on
+    ///      it from this one snapshot, avoiding a second level() read), while priceWei is the
+    ///      buy-now price at the ROUTED ticket level. The two diverge during the purchase phase
+    ///      and the final jackpot RNG window (buys route to level+1) — this is intentional.
+    /// @return lvl Actual current game level.
     /// @return inJackpotPhase True if jackpot phase is active.
     /// @return lastPurchaseDay_ True if this is the last day to purchase.
     /// @return rngLocked_ True if RNG is locked (VRF pending).
-    /// @return priceWei Current mint price in wei.
+    /// @return priceWei Current buy-now mint price in wei (at the routed ticket level).
     function purchaseInfo()
         external
         view

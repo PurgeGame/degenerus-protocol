@@ -1310,9 +1310,10 @@ contract DegenerusGameMintModule is
     {
         cachedJpFlag = jackpotPhaseFlag;
         cachedLevel = level;
-        priceWei = PriceLookupLib.priceForLevel(
-            cachedJpFlag ? cachedLevel : cachedLevel + 1
-        );
+        // Quote at the SAME level the queue delivers to (_activeTicketLevel), so the
+        // final-jackpot-day reroute to level+1 cannot leave the charge / EntriesBought event /
+        // affiliate / quest basis mispriced against the tickets actually queued.
+        priceWei = PriceLookupLib.priceForLevel(_activeTicketLevel());
         ticketCost = (priceWei * entryQuantityScaled) / (4 * QTY_SCALE);
     }
 
@@ -1964,14 +1965,10 @@ contract DegenerusGameMintModule is
                 nextStep = 2;
             }
         }
-        targetLevel = cachedJpFlag ? cachedLevel : cachedLevel + 1;
-        // Last jackpot day fix: route to level+1 to prevent stranded tickets
-        // (_endPhase breaks before _unlockRng, so no future daily draw at this level)
-        if (cachedJpFlag && rngLockedFlag) {
-            uint8 step = cachedComp == 2 ? JACKPOT_LEVEL_CAP : nextStep;
-            if (cachedCnt + step >= JACKPOT_LEVEL_CAP)
-                targetLevel = cachedLevel + 1;
-        }
+        // Single source of truth shared with the purchase quote (so charge == award) and the
+        // foil delivery. Routes to level+1 on the final jackpot day's RNG request to prevent
+        // tickets stranded in a level whose draws have ended (_endPhase breaks before _unlockRng).
+        targetLevel = _activeTicketLevel();
         uint256 priceWei = PriceLookupLib.priceForLevel(targetLevel);
         uint256 costWei = (priceWei * quantity) / (4 * QTY_SCALE);
         if (costWei == 0) revert E();

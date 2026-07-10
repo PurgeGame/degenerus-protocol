@@ -44,12 +44,15 @@ contract CoverageGap222 is DeployProtocol {
     ///      of MintPaymentKind dispatch inside _purchaseFor.
     function test_gap_lifecycle_purchase_then_advanceGame() public {
         // Record initial level.
-        (uint24 lvl0, , , , uint256 price0) = game.purchaseInfo();
+        (uint24 lvl0, bool inJackpot, , , uint256 price0) = game.purchaseInfo();
+        // purchaseInfo.lvl is the ACTUAL level; a buy-now queues to the routed ticket level
+        // (the next level during the purchase phase), which is where entriesOwedView increments.
+        uint24 targetLvl = inJackpot ? lvl0 : lvl0 + 1;
 
         // D-13 natural caller chain: caller is buyer, entry is game.purchase.
         uint256 qty = 400;
         uint256 cost = (price0 * qty) / 400;
-        uint32 ticketsBefore = game.entriesOwedView(lvl0, buyer);
+        uint32 ticketsBefore = game.entriesOwedView(targetLvl, buyer);
         vm.prank(buyer);
         try game.purchase{value: cost}(
             buyer,
@@ -59,7 +62,7 @@ contract CoverageGap222 is DeployProtocol {
             MintPaymentKind.DirectEth, false
         ) {
             // Observable effect: entriesOwedView increments strictly.
-            uint32 ticketsAfter = game.entriesOwedView(lvl0, buyer);
+            uint32 ticketsAfter = game.entriesOwedView(targetLvl, buyer);
             assertGt(ticketsAfter, ticketsBefore, "tickets incremented by purchase");
         } catch {
             // Purchase may revert during setup window — acceptable.

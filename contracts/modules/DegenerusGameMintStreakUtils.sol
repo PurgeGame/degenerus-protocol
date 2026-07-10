@@ -21,6 +21,10 @@ abstract contract DegenerusGameMintStreakUtils is DegenerusGameStorage {
     error InvalidDistance(); // mint-streak distance argument out of range
     error InvalidQuantity(); // quantity argument is zero or out of range (mint units, or whale-pass count)
 
+    /// @dev Jackpots processed per level before the phase ends. Mirrors the per-module copies;
+    ///      declared here for _activeTicketLevel's final-jackpot-day reroute.
+    uint8 private constant JACKPOT_LEVEL_CAP = 5;
+
     /// @notice Emitted when a player's mint streak advances a step.
     /// @param player The player whose mint streak advanced.
     /// @param mintLevel The level whose mint advanced the streak step.
@@ -136,11 +140,25 @@ abstract contract DegenerusGameMintStreakUtils is DegenerusGameStorage {
     // Activity Score (shared across DegenerusGame and DegeneretteModule)
     // =========================================================================
 
-    /// @dev Returns the active ticket level for direct ticket purchases.
-    ///      During jackpot phase, direct tickets target the current level.
-    ///      During purchase phase, direct tickets target the next level.
+    /// @dev The level a ticket bought RIGHT NOW routes to — the single source of truth for the
+    ///      purchase quote/charge, the ticket + foil delivery, participation/streak recording, and
+    ///      every buy-now price view, so they can never diverge. Jackpot phase → current level;
+    ///      purchase phase → next. On the final jackpot day once the daily RNG is requested
+    ///      (rngLocked, jackpot counter about to reach the cap) this level seals no further daily
+    ///      draw, so buys route to level + 1 — quoting the old level would strand the buyer's
+    ///      overpay or misprice tickets in a level that has ended. (Salvage/settlement callers are
+    ///      rngLock-gated, so the terminal branch is a no-op for them.)
     function _activeTicketLevel() internal view returns (uint24) {
-        return jackpotPhaseFlag ? level : level + 1;
+        if (!jackpotPhaseFlag) return level + 1;
+        if (rngLockedFlag) {
+            uint8 cnt = jackpotCounter;
+            uint8 comp = compressedJackpotFlag;
+            uint8 step = comp == 2
+                ? JACKPOT_LEVEL_CAP
+                : (comp == 1 && cnt > 0 && cnt < JACKPOT_LEVEL_CAP - 1 ? 2 : 1);
+            if (cnt + step >= JACKPOT_LEVEL_CAP) return level + 1;
+        }
+        return level;
     }
 
     /// @dev Far-future salvage discount curve (bps of face): two lines, 15% @ d6 -> 10% @ d20 ->
@@ -377,9 +395,9 @@ abstract contract DegenerusGameMintStreakUtils is DegenerusGameStorage {
             : bonusPoints;
     }
 
-    /// @dev Convenience wrapper using the active ticket level (current level during
-    ///      jackpot phase, next level otherwise) as streakBaseLevel, derived from a
-    ///      single hoisted level read shared with the score body.
+    /// @dev Convenience wrapper using _activeTicketLevel() (the routed buy-now level) as
+    ///      streakBaseLevel — so a terminal-jackpot deposit scores against the level its
+    ///      participation records to — with currLevel (the actual level) for the score body.
     /// @param player The player address to calculate score for.
     /// @param questStreak Quest streak value (pre-fetched from handler return or external view).
     /// @return scorePoints Total activity score in whole points.
@@ -392,7 +410,7 @@ abstract contract DegenerusGameMintStreakUtils is DegenerusGameStorage {
             _playerActivityScoreAt(
                 player,
                 questStreak,
-                jackpotPhaseFlag ? currLevel : currLevel + 1,
+                _activeTicketLevel(),
                 currLevel
             );
     }
@@ -441,6 +459,7 @@ abstract contract DegenerusGameMintStreakUtils is DegenerusGameStorage {
     ///      activity gate). Shared by the pass-bundled lootbox leg and the plain
     ///      standalone lootbox buy.
     function _recordLootboxUnits(address player, uint256 lootboxWei) internal {
+        // Routed level: lootbox participation counts toward the level the tickets route to.
         uint24 lvl = _activeTicketLevel();
         uint256 units = (lootboxWei * 4 * QTY_SCALE) /
             PriceLookupLib.priceForLevel(lvl);
