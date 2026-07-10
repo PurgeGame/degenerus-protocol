@@ -48,6 +48,14 @@
     "typeLabel": "uint32"
   },
   {
+    "bytes": "5",
+    "encoding": "inplace",
+    "label": "sweptAt",
+    "offset": 12,
+    "slot": 2,
+    "typeLabel": "uint40"
+  },
+  {
     "bytes": "32",
     "encoding": "mapping",
     "label": "hasVoted",
