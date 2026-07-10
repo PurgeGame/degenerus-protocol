@@ -21,3 +21,18 @@ step = compressedJackpotFlag==2 ? JACKPOT_LEVEL_CAP : (compressedJackpotFlag==1 
 
 ## Fix direction (USER: "shift to lvl+1 price AND ticket award after RNG request on last jackpot day")
 Centralize the routed level into ONE helper (`_activeTicketLevel()` folds in the terminal reroute, or a new `_routedTicketLevel()`), used by BOTH quote and delivery so they can never diverge. Blast radius: decimator price, afking finalize price, mint-price views, mint-streak base also shift to level+1 in that window (correct — all are "ticket bought now" bases). VERIFY afking finalize (484/555) and decimator (379) don't need the un-rerouted level for a settlement/historical basis. Then quote==award==delivery; overpay-stranding and unexpected-draw both vanish. Regression: terminal-jackpot century-boundary buy asserts charged==delivered==level+1, no stranded ETH.
+
+---
+
+## SHIPPED (commit 4df23844, 2026-07-10) — full foundry suite green (1029/0 pre-test-fix + CoverageGap222 updated)
+
+Single source of truth: `_activeTicketLevel()` now folds in the final-jackpot-day reroute (rngLocked + jackpotCounter+step >= CAP -> level+1). `_routedTicketLevel` helper was merged away (one function). Consumers routed: quote (`_purchaseCostInputs` MintModule, `_purchaseWithFoil` Game), ticket delivery (`_callTicketPurchase`), foil delivery (`buyFoilPack`), mint-price views (`mintPrice`/`purchaseInfo`/`afkingSnapshot`), participation/streak recording (MintModule:1592, `_recordLootboxUnits`), foil/activity score (`_playerActivityScore` streakBaseLevel), ethMintStats streak. Removed 2 duplicate inline reroute blocks. JACKPOT_LEVEL_CAP added to MintStreakUtils.
+
+Downstream regressions found by reviewer + fixed IN THIS COMMIT:
+- **purchaseInfo().lvl now = ACTUAL level** (was active-ticket-level). Both Coinflip consumers (BAF `_claimCoinflipsInternal` + `_coinflipLockedDuringTransition`) read it from the one snapshot, DROPPING a redundant `game.level()` call (gas win, USER's design). priceWei stays routed (buy quote). Interface + NatSpec updated.
+- **Coinflip BAF bracket** simplified to `_bafBracketLevel(cachedLevel + 1)` on the actual game level — fixes the level-9-terminal "skip a BAF bracket" regression (routed lvl=10 was treated as game level, 10%10==0 pushed bracket 10->20) AND deletes the phase-branched bafLevel logic (proven equivalent to ceil10(level+1) in all cases = USER's decade rule 0-9->10, 10-19->20).
+- CoverageGap222.t.sol: checks entriesOwedView at the ROUTED target level (where a buy queues) not purchaseInfo.lvl (now actual).
+
+Left AS-IS (out of scope / immune): keeper-bounty ETH->FLIP divisors (Decimator:379, FoilPack foil-claim bounty — inline, negligible), afking auto-buys (Afking:484/555, pre-RNG immune).
+
+**FREEZE:** contracts tree now 249d69b0 (HEAD 4df23844), past tag 9777a3f7. Re-pin PENDING (accumulate-then-refreeze at campaign end). Commits this session: f85aa9b8 (F3 PoC) -> 6f9b8de6 (F3+F6) -> 4df23844 (price-basis).
