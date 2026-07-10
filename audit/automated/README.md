@@ -1,6 +1,6 @@
 # Automated analysis — bot-race baseline
 
-**Subject:** `contracts/` tree `19272c1f` (HEAD `9a2fde94`). Run 2026-07-04.
+**Subject:** `contracts/` tree `49b36da3` @ tag `degenerus-c4a`. Run 2026-07-10.
 
 These are the pre-run static-analysis findings. Per [`KNOWN-ISSUES.md`](../../KNOWN-ISSUES.md) §7,
 any finding whose category + mechanism is captured here is a publicly-known issue and is **not
@@ -16,32 +16,32 @@ category-level dispositions (why each is by-design / defended / not-applicable) 
 
 (4naly3er was not run; Aderyn serves as the second independent static analyzer.)
 
-## Slither — 2,555 results, 101 detectors, 125 contracts
+## Slither — 2,551 results, 101 detectors, 125 contracts
 
-By impact: **Informational 1,674 · Medium 373 · Low 333 · High 130 · Optimization 45**.
+By impact: **Informational 1,661 · Medium 376 · Low 333 · High 136 · Optimization 45**.
 
 | Detector | Count | Detector | Count |
 |----------|------:|----------|------:|
-| unused-state | 1358 | reentrancy-benign | 50 |
-| uninitialized-local | 154 | constable-states | 43 |
+| unused-state | 1343 | reentrancy-benign | 49 |
+| uninitialized-local | 156 | constable-states | 43 |
 | reentrancy-events | 138 | timestamp | 39 |
-| uninitialized-state | 105 | unused-return | 38 |
-| calls-loop | 90 | missing-inheritance | 36 |
-| reentrancy-no-eth | 82 | incorrect-equality | 35 |
-| low-level-calls | 81 | cyclomatic-complexity | 31 |
-| costly-loop | 66 | too-many-digits | 28 |
-| divide-before-multiply | 61 | assembly | 14 |
+| uninitialized-state | 109 | unused-return | 38 |
+| calls-loop | 91 | missing-inheritance | 36 |
+| reentrancy-no-eth | 81 | incorrect-equality | 35 |
+| low-level-calls | 81 | cyclomatic-complexity | 32 |
+| costly-loop | 67 | too-many-digits | 28 |
+| divide-before-multiply | 63 | assembly | 14 |
 | naming-convention | 60 | weak-prng | 9 |
 | shadowing-local | 9 | reentrancy-balance | 6 |
 | missing-zero-check | 6 | delegatecall-loop | 5 |
-| reentrancy-eth | 2 | locked-ether | 2 |
-| immutable-states | 2 | arbitrary-send-eth | 2 |
-| incorrect-exp | 1 | events-maths | 1 |
-| boolean-cst | 1 | | |
+| arbitrary-send-eth | 2 | reentrancy-eth | 2 |
+| shadowing-state | 2 | locked-ether | 2 |
+| immutable-states | 2 | incorrect-exp | 1 |
+| boolean-cst | 1 | events-maths | 1 |
 
-### On the 130 "High"-impact results
+### On the 136 "High"-impact results
 
-Dominated by **`uninitialized-state` (105)** — a false-positive class for this architecture: the 12
+Dominated by **`uninitialized-state` (109)** — a false-positive class for this architecture: the 12
 game modules share `DegenerusGameStorage` via `delegatecall`, so Slither reads the router's storage
 as "uninitialized" in each module's isolated compilation context. The genuinely-notable High
 detectors — all pre-triaged in KNOWN-ISSUES §7:
@@ -51,12 +51,15 @@ detectors — all pre-triaged in KNOWN-ISSUES §7:
   invariants). Not player/proposer-manipulable on a live coordinator.
 - **arbitrary-send-eth (2)** — `_payoutWith*Fallback` / `_payEth` send to access-controlled
   recipients (`msg.sender` or player addresses read from game state).
-- **reentrancy-eth (2)** — CEI is followed; recipients are player addresses (self-grief only) or
-  known protocol contracts with minimal `receive()`.
+- **reentrancy-eth (2) / reentrancy-balance (6)** — CEI is followed; recipients are player addresses
+  (self-grief only) or known protocol contracts with minimal `receive()` (`steth.transfer`,
+  `dgnrs.transferFromPool`).
+- **shadowing-state (2)** — the per-module `JACKPOT_LEVEL_CAP` constants intentionally mirror the same
+  literal declared on the shared `DegenerusGameMintStreakUtils` base; identical value, no divergence.
 - **incorrect-exp (1) / delegatecall-loop (5)** — the `^`-vs-`**` scan and the module-dispatch loop
   pattern; reviewed, no exponentiation bug and delegatecall targets are compile-time constants.
 
-## Aderyn — 9 High, 21 Low
+## Aderyn — 9 High, 22 Low
 
 | # | Title | Disposition |
 |---|-------|-------------|
@@ -70,5 +73,5 @@ detectors — all pre-triaged in KNOWN-ISSUES §7:
 | H-8 | Unsafe casting of integers | KNOWN-ISSUES §7 unchecked-downcasting: each cast is range-guarded or width-proven (ticket counts now saturate). |
 | H-9 | Weak randomness | Same as Slither weak-prng — VRF committed-before-request (by-design). |
 
-Low issues (21) are the conventional NC/QA set (naming, magic numbers, zero-checks, etc.) — see the
+Low issues (22) are the conventional NC/QA set (naming, magic numbers, zero-checks, etc.) — see the
 report and KNOWN-ISSUES §7.
