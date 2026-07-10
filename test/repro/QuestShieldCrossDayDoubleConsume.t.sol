@@ -5,21 +5,23 @@ import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 
 /// @title QuestShieldCrossDayDoubleConsume
-/// @notice Candidate F3 reproduction: a partial (non-completing) quest action on a rolled
-///         missed day leaves the player STRICTLY WORSE OFF than doing nothing.
+/// @notice Candidate F3 regression: a partial (non-completing) quest action on a rolled missed
+///         day must leave the player NO WORSE OFF than doing nothing.
 ///
 ///         `_questSyncState` measures the missed-day gap from `anchorDay`
 ///         (= lastActiveDay, else lastCompletedDay). The anchor only advances on a completion,
 ///         streak-bonus, foil-floor, or afking-finalize — NOT when a sync merely consumes a
 ///         shield. `_missedQuestDays` is stateless: every call re-derives the whole gap from the
-///         (unmoved) anchor, and `missLimit = streakShield + 1`. So a partial action that
-///         consumes a shield on day N leaves the anchor pinned; the next day's sync re-scans the
-///         SAME earlier missed day(s) from that stale anchor against a now-smaller shield budget,
-///         double-counting the miss the shield already absorbed and resetting the streak the
-///         shields were sized to protect.
+///         anchor, and `missLimit = streakShield + 1`. Before the fix, a partial action that
+///         consumed a shield on day N left the anchor pinned; the next day's sync re-scanned the
+///         SAME earlier missed day(s) against a now-smaller shield budget, double-counting the
+///         miss the shield already absorbed and resetting the streak the shields were sized to
+///         protect.
 ///
-///         ASSERTS BUG EXISTS — invert to regression when fix lands (both variants should
-///         preserve the streak: PARTIAL streak should equal IDLE streak, both > 0).
+///         FIX: the gap floor advances to `lastSyncDay - 1`, so days a prior sync already
+///         adjudicated are not re-billed. This test asserts the FIXED behavior — both variants
+///         preserve the streak: PARTIAL streak equals IDLE streak, both > 0. (It fails against
+///         the pre-fix code, where PARTIAL reset to 0.)
 ///
 ///         Test-only storage reads use compiler-derived packed offsets (mirrors
 ///         QuestStreakStallForgiveness.t.sol).
@@ -37,8 +39,8 @@ contract QuestShieldCrossDayDoubleConsume is DeployProtocol {
 
     /// @notice Two players, one shared timeline, identical starting state. The ONLY difference is
     ///         whether the player performs an accounting-neutral partial action on rolled day 12.
-    ///         The partial actor loses the streak; the idle control keeps it.
-    function test_PartialActionOnRolledMissDayIsStrictlyWorseThanIdling() public {
+    ///         After the fix, both keep the streak: acting is no longer worse than idling.
+    function test_PartialActionOnRolledMissDayMatchesIdling() public {
         address actor = makeAddr("partial-actor");
         address control = makeAddr("idle-control");
 
@@ -61,7 +63,7 @@ contract QuestShieldCrossDayDoubleConsume is DeployProtocol {
         // --- Day 12: PARTIAL performs a below-target FLIP action; IDLE does nothing. ---
         // A 1-wei flip credit is far below any FLIP target (2000 FLIP), so it never completes.
         // `_questSyncState(...,12)` runs first: anchor=10, gap={11}, missed=1, shield 2->1,
-        // streak preserved (1 <= 2). The early return then leaves the anchor pinned at 10.
+        // streak preserved (1 <= 2), and lastSyncDay is stamped to 12.
         _partialFlip(actor);
 
         assertEq(_streak(actor), 10, "actor: day-12 sync preserves streak (1 miss <= 2 shields)");
@@ -74,19 +76,22 @@ contract QuestShieldCrossDayDoubleConsume is DeployProtocol {
         _partialFlip(actor);
         _partialFlip(control);
 
-        // PARTIAL day-13 sync: anchor still 10, gap={11,12}=2, missLimit=shield(1)+1=2 ->
-        //   missed=2 > shield(1) => streak RESET to 0. Day 11 was already paid for on day 12.
-        // IDLE day-13 sync: anchor 10, gap={11,12}=2, shield 2, 2 > 2 is false => streak PRESERVED.
+        // PARTIAL day-13 sync (fixed): the floor advances to lastSyncDay-1 = 11, so gap={12}=1,
+        //   missed=1 <= shield(1) => streak PRESERVED (day 11 was already billed on day 12).
+        // IDLE day-13 sync: anchor 10, gap={11,12}=2, shield 2, 2 > 2 is false => PRESERVED.
         uint256 partialStreak = _streak(actor);
         uint256 idleStreak = _streak(control);
 
         emit log_named_uint("PARTIAL streak after day 13", partialStreak);
         emit log_named_uint("IDLE   streak after day 13", idleStreak);
 
-        // The defect: an accounting-neutral partial action destroyed the streak that idling kept.
-        assertEq(partialStreak, 0, "BUG: partial action on a rolled miss-day reset the streak");
-        assertGt(idleStreak, 0, "control: idling preserved the streak the shields protect");
-        assertLt(partialStreak, idleStreak, "BUG: acting is strictly worse than idling");
+        // Fixed: a partial action bills each missed day once, so it is no worse than idling.
+        assertEq(partialStreak, idleStreak, "acting is no longer worse than idling");
+        assertGt(partialStreak, 0, "partial action preserves the shielded streak");
+        assertEq(partialStreak, 10, "streak preserved at its seeded value");
+        // Both players spent one shield per distinct missed day (days 11 and 12): 2 -> 0.
+        assertEq(_shield(actor), 0, "actor: two distinct misses billed once each");
+        assertEq(_shield(control), 0, "control: two distinct misses billed once each");
     }
 
     // --------------------------------------------------------------------- helpers

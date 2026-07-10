@@ -285,11 +285,14 @@ contract DegenerusGameFoilPackModule is
         if (kickback != 0) coinflip.creditFlip(buyer, kickback);
 
         // Boost freeze off the buyer's post-action activity score (units + the streak the
-        // primary just advanced are reflected via streakSnapshot), the same basis the mint
-        // path's cachedScore uses for the lootbox EV. The raw score is also frozen into the
-        // record and reused as the claim spin's RTP input, so the payout is fully determined
-        // at buy.
-        uint256 score = _playerActivityScore(buyer, streakSnapshot);
+        // primary just advanced are reflected via streakSnapshot). Mirror the mint path's
+        // unified-streak swap: a live afking sub's reward streak lives on the Sub side (funded
+        // days + in-run secondaries), not the decayed manual snapshot, so use the afking-live
+        // value when a run is active — the same basis the mint path's cachedScore uses for the
+        // lootbox EV. The raw score is also frozen into the record and reused as the claim
+        // spin's RTP input, so the payout is fully determined at buy.
+        (bool afkLive, uint32 afkStreak) = _liveAfkingStreak(buyer);
+        uint256 score = _playerActivityScore(buyer, afkLive ? afkStreak : streakSnapshot);
         uint16 multBps = uint16(ActivityCurveLib.foilBoostBps(score));
 
         // Resolve day = the next day whose daily word is genuinely future at buy.

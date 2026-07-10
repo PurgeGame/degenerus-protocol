@@ -1429,6 +1429,11 @@ contract DegenerusQuests is IDegenerusQuests {
         uint32 effectiveStreak = state.streak;
         uint24 anchorDay = state.lastActiveDay != 0 ? state.lastActiveDay : state.lastCompletedDay;
         if (anchorDay != 0) {
+            // Mirror _questSyncState: only count days not already adjudicated by a prior sync,
+            // so the view agrees with the synced state instead of re-billing settled days.
+            if (state.lastSyncDay != 0 && state.lastSyncDay - 1 > anchorDay) {
+                anchorDay = state.lastSyncDay - 1;
+            }
             (uint32 missedDays, ) = _missedQuestDays(
                 anchorDay,
                 currentDay,
@@ -1749,6 +1754,13 @@ contract DegenerusQuests is IDegenerusQuests {
         uint16 prevStreak = state.streak;
         uint24 anchorDay = state.lastActiveDay != 0 ? state.lastActiveDay : state.lastCompletedDay;
         if (anchorDay != 0) {
+            // A prior sync on day L scanned (anchor, L) and billed its misses, so days <= L-1
+            // are already adjudicated. Advance the floor past them; re-scanning from the raw
+            // anchor re-charges already-billed days (double-consumes shields, resets early).
+            // lastSyncDay-1 is the top of the previous scan window.
+            if (state.lastSyncDay != 0 && state.lastSyncDay - 1 > anchorDay) {
+                anchorDay = state.lastSyncDay - 1;
+            }
             (uint32 missedDays, uint32 forgivenDays) = _missedQuestDays(
                 anchorDay,
                 currentDay,
