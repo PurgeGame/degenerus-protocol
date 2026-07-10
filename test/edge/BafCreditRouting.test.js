@@ -213,7 +213,7 @@ describe("BafCreditRouting", function () {
       expect(info.inJackpotPhase).to.equal(false);
       expect(info.lastPurchaseDay_).to.equal(true);
       expect(info.rngLocked_).to.equal(true);
-      expect(info.lvl).to.equal(11n); // = level + 1 (this is what the old check used)
+      expect(info.lvl).to.equal(10n); // purchaseInfo.lvl now returns the actual game level (not level+1)
       expect(await game.level()).to.equal(10n);
 
       await expect(
