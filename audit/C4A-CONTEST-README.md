@@ -5,7 +5,7 @@
 - Starts `TBD`
 - Ends `TBD`
 
-**Frozen subject:** `contracts/` tree `644267a8` @ tag `degenerus-c4a`.
+**Frozen subject:** `contracts/` tree `9777a3f7` @ tag `degenerus-c4a`.
 Checkout: `git checkout degenerus-c4a`. Everything a warden audits is that tree; nothing else in the
 repo history is in scope.
 
@@ -71,13 +71,13 @@ storage, libraries, and interfaces + one standalone in-scope production contract
 | Group | Files | nSLOC |
 |-------|------:|------:|
 | Core deployed contracts | 14 | 7,459 |
-| Deployed delegatecall game modules | 12 | 9,710 |
+| Deployed delegatecall game modules | 12 | 9,718 |
 | Linked abstract module bases | 2 | 450 |
 | Shared storage | 1 | 1,125 |
 | Libraries (incl. ContractAddresses) | 8 | 561 |
 | Interfaces | 11 | 667 |
 | Standalone in-scope (boon viewer, read-only) | 1 | 154 |
-| **Total** | **49** | **20,126** |
+| **Total** | **49** | **20,134** |
 
 nSLOC = non-blank, non-comment source lines (comment-and-string-aware count). Per-file breakdown is in
 `scope.txt`.
@@ -157,7 +157,7 @@ we're most eager to receive.
 
 # Main Invariants
 
-> The properties below are what the protocol guarantees; each is backed by the referenced test or source site. Numeraire: ETH wei (stETH valued 1:1 with ETH). Subject: the frozen `contracts/` tree `644267a8` @ tag `degenerus-c4a`. `DEG-*` entries are statistical (realized EV/RTP/ROI over the resolved-spin stream); the rest are exact.
+> The properties below are what the protocol guarantees; each is backed by the referenced test or source site. Numeraire: ETH wei (stETH valued 1:1 with ETH). Subject: the frozen `contracts/` tree `9777a3f7` @ tag `degenerus-c4a`. `DEG-*` entries are statistical (realized EV/RTP/ROI over the resolved-spin stream); the rest are exact.
 
 ## Solvency & backing
 
@@ -289,7 +289,7 @@ mechanism + impact appears there, it is not eligible.**
 ```bash
 git clone <repo> && cd degenerus-audit
 npm install
-git checkout degenerus-c4a          # the frozen subject (contracts/ tree 644267a8)
+git checkout degenerus-c4a          # the frozen subject (contracts/ tree 9777a3f7)
 
 # Foundry (REQUIRED preprocessing — bare `forge test` panics in setUp without it):
 make test-foundry                   # runs the 5 source gates + patchForFoundry + forge test
