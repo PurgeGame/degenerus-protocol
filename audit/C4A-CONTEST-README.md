@@ -5,7 +5,7 @@
 - Starts `TBD`
 - Ends `TBD`
 
-**Frozen subject:** `contracts/` tree `5ba80659` @ tag `degenerus-c4a`.
+**Frozen subject:** `contracts/` tree `d5e9f58a` @ tag `degenerus-c4a`.
 Checkout: `git checkout degenerus-c4a`. Everything a warden audits is that tree; nothing else in the
 repo history is in scope.
 
@@ -70,14 +70,14 @@ storage, libraries, and interfaces + one standalone in-scope production contract
 
 | Group | Files | nSLOC |
 |-------|------:|------:|
-| Core deployed contracts | 14 | 7,395 |
-| Deployed delegatecall game modules | 12 | 9,634 |
+| Core deployed contracts | 14 | 7,459 |
+| Deployed delegatecall game modules | 12 | 9,709 |
 | Linked abstract module bases | 2 | 450 |
-| Shared storage | 1 | 1,114 |
+| Shared storage | 1 | 1,125 |
 | Libraries (incl. ContractAddresses) | 8 | 561 |
 | Interfaces | 11 | 667 |
 | Standalone in-scope (boon viewer, read-only) | 1 | 154 |
-| **Total** | **49** | **19,975** |
+| **Total** | **49** | **20,125** |
 
 nSLOC = non-blank, non-comment source lines (comment-and-string-aware count). Per-file breakdown is in
 `scope.txt`.
@@ -157,7 +157,7 @@ we're most eager to receive.
 
 # Main Invariants
 
-> The properties below are what the protocol guarantees; each is backed by the referenced test or source site. Numeraire: ETH wei (stETH valued 1:1 with ETH). Subject: the frozen `contracts/` tree `5ba80659` @ tag `degenerus-c4a`. `DEG-*` entries are statistical (realized EV/RTP/ROI over the resolved-spin stream); the rest are exact.
+> The properties below are what the protocol guarantees; each is backed by the referenced test or source site. Numeraire: ETH wei (stETH valued 1:1 with ETH). Subject: the frozen `contracts/` tree `d5e9f58a` @ tag `degenerus-c4a`. `DEG-*` entries are statistical (realized EV/RTP/ROI over the resolved-spin stream); the rest are exact.
 
 ## Solvency & backing
 
@@ -213,7 +213,7 @@ we're most eager to receive.
 |----|----------|-----------|--------|
 | `RNG-01-INWINDOW-SLOADS-FROZEN` | medium | While the VRF window is open (rngLocked()==true), no player-controllable action mutates, in isolation, any storage slot the pending RNG consumption reads — the enumerated in-window read set is frozen: (1) rngWordByDay[currentDay], (2) lootboxRngWordByIndex[index], (3) the lootboxRngPacked cursor (low 48 bits), (4) dailyIdx. advanceGame (the exempt heartbeat) is never measured against the property. | `test/fuzz/invariant/RngWindowFreeze.inv.t.sol:73-79` |
 | `RNG-02-DRAIN-BEFORE-SWAP` | medium | Ordering: _swapAndFreeze cannot advance the lootbox read index while any read-slot ticket remains undrained — captured entropy always equals the populated lootboxRngWordByIndex[X] and is never zero (no drain runs against an unpopulated slot). | `test/fuzz/invariant/RngIndexDrainOrdering.inv.t.sol:32-52` |
-| `RNG-03-QUEUE-WINDOW-NO-TERMINAL-JACKPOT` | high | Tickets queued during the liveness-timeout / RNG-locked window are provably never processed into, and never resolve against, a manipulable terminal jackpot (the v45 freeze invariant). Protection sits at the purchase entry (the mint module reverts on _livenessTriggered), not the shared sinks _queueTickets / _queueTicketsScaled / _queueTicketRange (which carry no per-sink liveness gate, since the advance-chain's own daily-jackpot distribution must flow through them). The _swapAndFreeze write/read slot fork freezes the read slot at RNG-request time, so any window-queued ticket lands in the write slot and cannot resolve against the current word. | `the v45 VRF-freeze invariant` |
+| `RNG-03-QUEUE-WINDOW-NO-TERMINAL-JACKPOT` | high | The terminal payout uses one phase-correct, entropy-committed ticket snapshot: next-level during ordinary purchase phase, current-level during jackpot phase, and the already-promoted current level during a locked final-purchase transition. If no entropy boundary exists, the terminal path freezes the selected write cohort before requesting entropy. Once any boundary exists, it drains only the selected read snapshot and never promotes the later write buffer. The mint entry rejects purchases once `_livenessTriggered` is active, and an expired VRF-grace timer remains latched after fallback entropy commits until the separate terminal-drain transaction completes. | `contracts/storage/DegenerusGameStorage.sol:_gameOverTicketLevel; contracts/modules/DegenerusGameAdvanceModule.sol:_handleGameOverPath; test/repro/TerminalJackpotCohortIsolation.t.sol` |
 | `VRF-01-INDEX-LIFECYCLE` | medium | lootboxRngIndex never skips a value and never double-increments on a single request, and every unlocked index has a nonzero VRF-derived word (no orphaned index). | `test/fuzz/invariant/VRFPathInvariants.inv.t.sol:28-52` |
 | `VRF-02-SWAP-PRESERVES-LOCK` | medium | A VRF coordinator swap never flips rngLocked in either direction: a daily request in flight keeps the lock until the re-issued word lands; an idle/mid-day-only state stays unlocked. Gap days are backfilled with nonzero rngWordForDay after recovery. | `test/fuzz/invariant/VRFPathInvariants.inv.t.sol:60-90` |
 | `VRF-03-DEADMAN-MONOTONIC-LATCH` | high | _vrfDeadmanFired (_simulatedDayIndex() - dailyIdx > 120) is a pure monotonic latch: it cannot false-fire on a healthy game (dailyIdx advances on every sealed day, so a 120-sealed-day gap only opens when VRF is genuinely dead/abandoned), there is no uint24 underflow (dailyIdx <= current day always), it stays latched true through the multi-tx game-over drain until the terminal _unlockRng, and a fired deadman commits only a non-steerable historical fallback word (sealed rngWordByDay + block.prevrandao, with the reverseFlip nudge cancelled-and-consumed via totalFlipReversals) — never a player-steerable word. | `contracts/storage/DegenerusGameStorage.sol:1502-1504; test/fuzz/invariant/GameFSM.inv.t.sol:33-39` |
@@ -289,7 +289,7 @@ mechanism + impact appears there, it is not eligible.**
 ```bash
 git clone <repo> && cd degenerus-audit
 npm install
-git checkout degenerus-c4a          # the frozen subject (contracts/ tree 5ba80659)
+git checkout degenerus-c4a          # the frozen subject (contracts/ tree d5e9f58a)
 
 # Foundry (REQUIRED preprocessing — bare `forge test` panics in setUp without it):
 make test-foundry                   # runs the 5 source gates + patchForFoundry + forge test

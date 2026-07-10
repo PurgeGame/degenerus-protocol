@@ -16,7 +16,7 @@ The protocol extracts zero rake after presale. Every wei of ETH that enters goes
 
 Ownership is vault-based: the DGVE holder (>50.1% of vault governance token) acts as admin. Powers are narrowly scoped — VRF coordinator swaps (via sDGNRS-holder governance with decaying approval threshold), ETH→stETH liquidity conversion, lootbox RNG threshold, and LINK price feed configuration. The admin cannot access player funds or modify core game rules. A community governance path allows 0.5%+ sDGNRS holders to propose VRF coordinator swaps after a 7-day VRF stall.
 
-Two liveness guards prevent permanent fund lockup. At level 0, a 365-day deploy timeout fires if no level ever completes. Once past level 0, a 120-day inactivity guard fires if no level completes for 120 consecutive days (VRF stall durations are excluded from this count). When either guard triggers, remaining funds are distributed: deity pass holders receive 20 ETH refunds each (if game ends before level 10), then 10% goes to Decimator death-bet holders, 90% to next-level ticketholders, and any uncredited remainder is split between the vault and DGNRS backing. A 30-day final sweep forfeits unclaimed winnings and sends all remaining balances to vault (50%) and DGNRS (50%). The terminal payout math makes buying during a stall individually rational, which is what prevents the stall from lasting 120 days. Full analysis in the [game theory paper](https://degener.us/theory/).
+Two liveness guards prevent permanent fund lockup. At level 0, a 365-day deploy timeout fires if no level ever completes. Once past level 0, a 120-day inactivity guard fires if no level completes for 120 consecutive days (VRF stall durations are excluded from this count). When either guard triggers, remaining funds are distributed: deity pass holders receive 20 ETH refunds each (if game ends before level 10), then 10% goes to Decimator death-bet holders and 90% to the phase-correct terminal ticket cohort (next-level tickets during the ordinary purchase phase; current-level tickets during jackpot phase or a locked final-purchase transition). Any uncredited remainder is split between the vault and DGNRS backing. A 30-day final sweep forfeits unclaimed winnings and sends all remaining balances to vault (50%) and DGNRS (50%). The terminal payout math makes buying during a stall individually rational, which is what prevents the stall from lasting 120 days. Full analysis in the [game theory paper](https://degener.us/theory/).
 
 ## Quick Start
 
@@ -106,10 +106,10 @@ See [`scope.txt`](scope.txt) for the complete in-scope file list.
 
 ## Key Mechanics
 
-- **VRF State Machine:** `rngLockedFlag` prevents concurrent VRF requests. Request -> fulfill -> unlock cycle. 12-hour retry timeout, 3-day emergency fallback.
+- **VRF State Machine:** `rngLockedFlag` prevents concurrent daily VRF requests. Request -> fulfill -> unlock cycle. 12-hour retry timeout, 14-day emergency game-over fallback.
 - **Prize Pool Split:** 90% current level / 10% future levels on ticket purchase.
 - **Whale Pricing:** Bundles 2.4-4 ETH, lazy passes 0.24 ETH+, deity passes 24 + T(n) ETH triangular.
-- **Game Over:** Liveness guard fires inside `advanceGame` (120-day inactivity or 365-day deploy timeout). `handleGameOverDrain` distributes funds using historical RNG (3-day VRF fallback if Chainlink is stalled). 30-day final sweep sends unclaimed remainder to vault and DGNRS.
+- **Game Over:** Liveness guard fires inside `advanceGame` (120-day inactivity or 365-day deploy timeout). `handleGameOverDrain` distributes funds using historical RNG (14-day fallback if Chainlink is stalled, or immediate fallback once the >120-day suppressed-phase deadman fires). A 30-day final sweep sends unclaimed remainder to vault and DGNRS.
 - **Pull Payments:** All ETH/stETH withdrawals use pull pattern via `claimWinnings()`.
 
 ## Audit
