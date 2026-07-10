@@ -103,6 +103,13 @@ contract DegenerusQuests is IDegenerusQuests {
         uint24 currentDay
     );
 
+    /// @notice Emitted when days with no rolled quest are excluded from streak decay.
+    event QuestStreakStallForgiven(
+        address indexed player,
+        uint32 forgivenDays,
+        uint24 currentDay
+    );
+
     /// @notice Emitted when quest streak shields are granted (e.g. by a lootbox boon).
     event QuestStreakShieldGranted(
         address indexed player,
@@ -281,7 +288,7 @@ contract DegenerusQuests is IDegenerusQuests {
      * | slot 1  | slot 0  |
      * +---------+---------+
      */
-    // All fields pack into a single 32-byte slot (25 bytes used). The per-slot day and
+    // All fields pack into a single 32-byte slot (27 bytes used). The per-slot day and
     // progress markers are flattened from fixed arrays — Solidity reserves a fresh slot
     // per fixed array, so the arrays are what forced the old 5-slot layout. Daily progress
     // is held in a compact per-family unit (see `_progressUnit`) so it fits uint16.
@@ -326,6 +333,12 @@ contract DegenerusQuests is IDegenerusQuests {
     /// @notice Per-player level quest state.
     ///         Packed: version (8b) | progress (128b) | completed (1b at bit 136).
     mapping(address => uint256) private levelQuestPlayerState;
+
+    /// @notice Bitmap of calendar days on which a daily quest was actually published.
+    /// @dev Keyed by day / 256; bit day % 256. Decay scans only the words spanning the
+    ///      player's calendar gap and caps at shields + 1 actual misses, so skipped VRF
+    ///      days cost no per-day iteration and can never be mistaken for playable days.
+    mapping(uint16 => uint256) private questRolledDayBitmap;
 
     // =========================================================================
     //                       ACTIVE-QUEST PACK / UNPACK
@@ -418,6 +431,7 @@ contract DegenerusQuests is IDegenerusQuests {
             );
         }
         _seedQuestType(quests[1], day, bonusType);
+        questRolledDayBitmap[uint16(day >> 8)] |= uint256(1) << uint8(day);
         _storeActiveQuests(quests);
 
         // The version position carries the day tag — the freshness marker for the roll.
@@ -433,14 +447,17 @@ contract DegenerusQuests is IDegenerusQuests {
      *      Clamps at uint24 max on overflow.
      * @param player The player to receive the streak bonus.
      * @param amount Number of streak days to add.
-     * @param currentDay The current quest day for state synchronization.
+     * @param currentDay The caller's current calendar day; synchronization is pinned to the
+     *        newest rolled quest day when one exists.
      * @custom:reverts OnlyGame When caller is not GAME contract.
      */
     function awardQuestStreakBonus(address player, uint16 amount, uint24 currentDay) external onlyGame {
         if (player == address(0) || amount == 0 || currentDay == 0) return;
 
         PlayerQuestState storage state = questPlayerState[player];
-        _questSyncState(state, player, currentDay);
+        uint24 questDay = _currentQuestDay(_loadActiveQuests());
+        uint24 syncDay = questDay == 0 ? currentDay : questDay;
+        _questSyncState(state, player, syncDay);
 
         // While afking the manual streak is dormant and finalizeAfking overwrites it; writing it
         // here would discard the bonus at finalize and orphan a century shield granted off the
@@ -459,11 +476,10 @@ contract DegenerusQuests is IDegenerusQuests {
         state.streak = newStreak;
         _grantCenturyShield(player, state);
 
-        uint24 currentDay24 = uint24(currentDay);
-        if (state.lastActiveDay < currentDay24) {
-            state.lastActiveDay = currentDay24;
+        if (state.lastActiveDay < syncDay) {
+            state.lastActiveDay = syncDay;
         }
-        emit QuestStreakBonusAwarded(player, amount, newStreak, currentDay);
+        emit QuestStreakBonusAwarded(player, amount, newStreak, syncDay);
     }
 
     /// @dev A foil purchase guarantees a quest streak of at least this floor.
@@ -557,7 +573,8 @@ contract DegenerusQuests is IDegenerusQuests {
      *      Syncs day-reset state first (applying any pending gap-decay) so the snapshot is
      *      honest, then sets `afkingActive`. Does not touch the slot-1 quest.
      * @param player The subscriber starting an afking run.
-     * @param currentDay The current quest day for state synchronization.
+     * @param currentDay The caller's current calendar day; synchronization is pinned to the
+     *        newest rolled quest day when one exists.
      * @return streak The player's gap-synced streak at the start of the run.
      * @custom:reverts OnlyGame When caller is not GAME contract.
      */
@@ -568,7 +585,9 @@ contract DegenerusQuests is IDegenerusQuests {
     {
         if (player == address(0)) return 0;
         PlayerQuestState storage state = questPlayerState[player];
-        if (currentDay != 0) _questSyncState(state, player, currentDay);
+        uint24 questDay = _currentQuestDay(_loadActiveQuests());
+        uint24 syncDay = questDay == 0 ? currentDay : questDay;
+        if (syncDay != 0) _questSyncState(state, player, syncDay);
         streak = state.streak;
         state.afkingActive = true;
     }
@@ -580,16 +599,17 @@ contract DegenerusQuests is IDegenerusQuests {
      *      / funding-kill) BEFORE the Sub slot is deleted. The last valid mint day is the later of
      *      the afking funded high-water (`afkingCoveredDay`, Game-side) and `lastActiveDay` (which
      *      captures manual completions during the run — slot completions still bump it even though
-     *      they are streak-neutral while afking). Keeps the Game-computed `earnedStreak` if a valid
-     *      mint landed no earlier than yesterday; else a full prior day was missed with NO valid
-     *      mint (afking or manual) → zero (decay). Anchors `lastActiveDay`/`lastCompletedDay` at
-     *      that day so the manual gap-reset is honest from there, and clears `afkingActive`. A
+     *      they are streak-neutral while afking). The rolled-day bitmap then answers whether any
+     *      playable quest existed strictly after that anchor and before `currentDay`; skipped stall
+     *      days have no bit, and a delivered anchor remains valid even when its quest rolls later.
+     *      Anchors the manual system at the actual delivered/completed high-water and clears
+     *      `afkingActive`. A
      *      double-call (cancel then in-stage reclaim) is safe: the second finds `afkingActive`
      *      already false and returns.
      * @param player The subscriber whose run is ending.
      * @param earnedStreak The run's earned streak (snapshot + funded delivered days), Game-computed.
      * @param afkingCoveredDay The afking funded high-water day (Game-side).
-     * @param currentDay The current quest day (the decay reference).
+     * @param currentDay The current calendar day (the decay reference).
      * @custom:reverts OnlyGame When caller is not GAME contract.
      */
     function finalizeAfking(
@@ -603,15 +623,21 @@ contract DegenerusQuests is IDegenerusQuests {
         if (!state.afkingActive) return; // idempotent: already finalized / never afking
         uint24 lastValid = afkingCoveredDay;
         if (state.lastActiveDay > lastValid) lastValid = state.lastActiveDay;
-        uint24 finalStreak = (currentDay == 0 || lastValid + 1 >= currentDay)
-            ? earnedStreak
-            : 0;
+        (uint32 missedDays, uint32 forgivenDays) = _missedQuestDays(
+            lastValid,
+            currentDay,
+            1
+        );
+        uint24 finalStreak = missedDays == 0 ? earnedStreak : 0;
         state.streak = finalStreak > type(uint16).max ? type(uint16).max : uint16(finalStreak);
         _grantCenturyShield(player, state);
-        uint24 d = lastValid;
-        state.lastActiveDay = d;
-        state.lastCompletedDay = d;
+
+        state.lastActiveDay = lastValid;
+        state.lastCompletedDay = lastValid;
         state.afkingActive = false;
+        if (forgivenDays != 0) {
+            emit QuestStreakStallForgiven(player, forgivenDays, currentDay);
+        }
         emit QuestStreakBonusAwarded(player, 0, finalStreak, lastValid);
     }
 
@@ -1346,17 +1372,68 @@ contract DegenerusQuests is IDegenerusQuests {
     //                           INTERNAL HELPERS
     // =========================================================================
 
+    /// @dev Counts rolled quest days strictly inside `(anchorDay, currentDay)`. The bitmap
+    ///      answers the positional question directly: an anchor day is covered even if its
+    ///      quest rolled after the anchor was written, the current day remains playable, and
+    ///      unrolled VRF-stall days have no bit. Scanning stops at `missLimit`, which callers
+    ///      set to shields + 1 (or one for AFKing finalization); once that many real misses
+    ///      exist, the streak outcome cannot change. Forgiveness is evented only when the
+    ///      scan completed exactly.
+    function _missedQuestDays(
+        uint24 anchorDay,
+        uint24 currentDay,
+        uint32 missLimit
+    ) private view returns (uint32 missed, uint32 forgiven) {
+        if (anchorDay == 0) return (0, 0);
+        uint32 calendarMisses = uint32(currentDay) > uint32(anchorDay) + 1
+            ? uint32(currentDay) - uint32(anchorDay) - 1
+            : 0;
+        if (calendarMisses == 0) return (0, 0);
+
+        uint24 firstDay = anchorDay + 1;
+        uint24 lastDay = currentDay - 1;
+        uint32 bucket = uint32(firstDay) >> 8;
+        uint32 lastBucket = uint32(lastDay) >> 8;
+        uint256 word = questRolledDayBitmap[uint16(bucket)] &
+            (type(uint256).max << uint8(firstDay));
+        while (true) {
+            if (bucket == lastBucket) {
+                uint8 highBit = uint8(lastDay);
+                if (highBit != type(uint8).max) {
+                    word &= (uint256(1) << (uint16(highBit) + 1)) - 1;
+                }
+            }
+            while (word != 0) {
+                unchecked {
+                    word &= word - 1;
+                    ++missed;
+                }
+                if (missed == missLimit) return (missed, 0);
+            }
+            if (bucket == lastBucket) break;
+            unchecked {
+                ++bucket;
+            }
+            word = questRolledDayBitmap[uint16(bucket)];
+        }
+        forgiven = calendarMisses - missed;
+    }
+
     /// @dev Single source of truth for the effective reward streak (getPlayerQuestView.baseStreak
     ///      and effectiveBaseStreak). A streak lapsed past its shields reads 0; once active today
     ///      the synced start-of-day baseStreak snapshot is used.
     function _effectiveBaseStreak(
         PlayerQuestState memory state,
         uint24 currentDay
-    ) private pure returns (uint32) {
+    ) private view returns (uint32) {
         uint32 effectiveStreak = state.streak;
         uint24 anchorDay = state.lastActiveDay != 0 ? state.lastActiveDay : state.lastCompletedDay;
-        if (anchorDay != 0 && currentDay > anchorDay + 1) {
-            uint32 missedDays = currentDay - anchorDay - 1;
+        if (anchorDay != 0) {
+            (uint32 missedDays, ) = _missedQuestDays(
+                anchorDay,
+                currentDay,
+                uint32(state.streakShield) + 1
+            );
             if (missedDays > uint32(state.streakShield)) {
                 effectiveStreak = 0;
             }
@@ -1649,11 +1726,16 @@ contract DegenerusQuests is IDegenerusQuests {
     // -------------------------------------------------------------------------
 
     /**
-     * @dev Resets per-day bookkeeping and streak if a day was missed.
+     * @dev Resets per-day bookkeeping and streak if a day was missed. Runs its body at most
+     *      once per quest day (`lastSyncDay` gate): the gap decision cannot change within a
+     *      day (rolls are once-per-day and the anchor only moves forward), so repeat actions
+     *      skip the bitmap scan and — critically — cannot re-consume shields for the same
+     *      missed day.
      *
      *      Streak Reset Logic:
      *      - Uses lastActiveDay if set (any slot completion), else lastCompletedDay
-     *      - If gap > 1 day, streak resets unless shields cover every missed day
+     *      - If a rolled quest day sits strictly inside the gap, the streak resets unless
+     *        shields cover every such missed day
      *      - On new day, resets completionMask and snapshots baseStreak
      *
      *      baseStreak Snapshot:
@@ -1663,39 +1745,46 @@ contract DegenerusQuests is IDegenerusQuests {
      * @param currentDay The current quest day.
      */
     function _questSyncState(PlayerQuestState storage state, address player, uint24 currentDay) private {
+        if (state.lastSyncDay >= currentDay) return; // already synced this quest day
         uint16 prevStreak = state.streak;
         uint24 anchorDay = state.lastActiveDay != 0 ? state.lastActiveDay : state.lastCompletedDay;
-        if (anchorDay != 0 && currentDay > anchorDay + 1) {
-            uint32 missedDays = currentDay - anchorDay - 1;
-            uint16 shields = state.streakShield;
-            if (shields != 0) {
-                uint32 used = missedDays > uint32(shields) ? uint32(shields) : missedDays;
-                state.streakShield = uint8(shields - uint16(used));
-                if (used != 0) {
-                    emit QuestStreakShieldUsed(
-                        player,
-                        uint16(used),
-                        state.streakShield,
-                        currentDay
-                    );
+        if (anchorDay != 0) {
+            (uint32 missedDays, uint32 forgivenDays) = _missedQuestDays(
+                anchorDay,
+                currentDay,
+                uint32(state.streakShield) + 1
+            );
+            if (forgivenDays != 0) {
+                emit QuestStreakStallForgiven(player, forgivenDays, currentDay);
+            }
+            if (missedDays != 0) {
+                uint16 shields = state.streakShield;
+                if (shields != 0) {
+                    uint32 used = missedDays > uint32(shields) ? uint32(shields) : missedDays;
+                    state.streakShield = uint8(shields - uint16(used));
+                    if (used != 0) {
+                        emit QuestStreakShieldUsed(
+                            player,
+                            uint16(used),
+                            state.streakShield,
+                            currentDay
+                        );
+                    }
+                    if (missedDays > uint32(shields)) {
+                        state.streak = 0; // Missed more days than shields available
+                    }
+                } else {
+                    state.streak = 0; // Full miss (no quest completion) for at least one day
                 }
-                if (missedDays > uint32(shields)) {
-                    state.streak = 0; // Missed more days than shields available
-                }
-            } else {
-                state.streak = 0; // Full miss (no quest completion) for at least one day
             }
         }
         if (prevStreak != 0 && state.streak == 0) {
             state.shieldCenturyHighWater = 0; // streak broke — re-arm so a genuine re-climb re-earns each century shield
             emit QuestStreakReset(player, prevStreak, currentDay);
         }
-        uint24 currentDay24 = uint24(currentDay);
-        if (state.lastSyncDay != currentDay24) {
-            state.lastSyncDay = currentDay24;
-            state.completionMask = 0;
-            state.baseStreak = state.streak; // Snapshot for consistent rewards
-        }
+        state.lastSyncDay = currentDay;
+        state.completionMask = 0;
+        state.baseStreak = state.streak; // Snapshot for consistent rewards
     }
 
     /**

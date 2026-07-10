@@ -63,7 +63,7 @@ contract DegenerusGameGameOverModule is DegenerusGameStorage {
     ///      Distribution logic:
     ///      - If game ended early (levels 0-9): Fixed 20 ETH refund per deity pass purchased,
     ///        FIFO by purchase order, budget-capped to available funds minus claimablePool
-    ///      - Remaining funds: 10% to Decimator, 90% to next-level ticketholders
+    ///      - Remaining funds: 10% to Decimator, 90% to the phase-correct terminal ticket cohort
     ///      - Decimator refunds flow to terminal jackpot pool
     ///      - Any uncredited remainder swept to vault and sDGNRS
     ///
@@ -190,12 +190,19 @@ contract DegenerusGameGameOverModule is DegenerusGameStorage {
             remaining += decRefund;
         }
 
-        // 90% (+ decimator refund) to next-level ticketholders (Day-5-style bucket distribution).
+        // 90% (+ decimator refund) to the final ticket cohort (Day-5-style bucket distribution).
         // gameOver=true prevents auto-rebuy inside _addClaimableEth (tickets worthless post-game).
-        // Any leftover from empty trait buckets stays in the contract until handleFinalSweep
-        // (30 days later) folds it into the three-way split to vault / sDGNRS / GNRUS.
+        // Pay from the SAME phase-correct level the AdvanceModule terminal drain materialized:
+        // current `lvl` in jackpot phase and in the locked last-purchase transition (where level was
+        // already promoted), otherwise purchase-phase `lvl + 1`. Any leftover from empty trait
+        // buckets stays in the contract until handleFinalSweep (30 days later) folds it into the
+        // three-way split to vault / sDGNRS / GNRUS.
         if (remaining != 0) {
-            IDegenerusGame(address(this)).runTerminalJackpot(remaining, lvl + 1, rngWord);
+            IDegenerusGame(address(this)).runTerminalJackpot(
+                remaining,
+                _gameOverTicketLevel(lvl),
+                rngWord
+            );
         }
     }
 

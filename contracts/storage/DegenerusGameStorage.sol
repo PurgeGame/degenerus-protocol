@@ -630,6 +630,17 @@ abstract contract DegenerusGameStorage {
     /// @notice Emitted when admin stakes game ETH into Lido stETH.
     event AdminStakeEthForStEth(uint256 amount);
 
+    /// @dev The logical ticket level the terminal game-over jackpot pays from. Purchase-phase
+    ///      tickets normally target `lvl + 1`; jackpot-phase tickets target the current `lvl`.
+    ///      The locked last-purchase transition is the one semantic exception: the RNG request has
+    ///      already promoted `level`, so the purchase cohort committed before that request now sits
+    ///      at `lvl`, while later write-buffer purchases target `lvl + 1`. Shared by the game-over
+    ///      ticket DRAIN (AdvanceModule) and terminal-jackpot READ (GameOverModule), keeping the
+    ///      materialized trait bucket and payout bucket identical in every terminal state.
+    function _gameOverTicketLevel(uint24 lvl) internal view returns (uint24) {
+        return (jackpotPhaseFlag || (lastPurchaseDay && rngLockedFlag)) ? lvl : lvl + 1;
+    }
+
     /// @dev True when gameover liveness guard would fire within ~1 day (day-granularity).
     ///      Used to activate distress-mode lootbox behaviour: 100% nextpool allocation
     ///      and 25% ticket bonus on the distress-bought portion.
@@ -2347,17 +2358,25 @@ abstract contract DegenerusGameStorage {
 
     /// @dev Compute-on-read effective afking quest streak from the Sub slot — no DegenerusQuests
     ///      STATICCALL. The run's streak base (`streakAtAfkingStart`: snapshot + in-run
-    ///      secondaries) plus the funded delivered days since the run's base day, while the last
-    ///      funded day is no older than yesterday; otherwise 0 (decay-on-read: miss one full day
-    ///      and the streak is gone).
+    ///      secondaries) plus the funded delivered days since the run's base day. A playable full
+    ///      day without a funded delivery decays to 0; calendar days inside a pending unadvanced
+    ///      gap are excluded because no subscriber could receive the daily delivery.
     function _afkingStreak(Sub storage sub, uint24 currentDay) internal view returns (uint32) {
         uint24 covered = sub.afkCoveredThroughDay;
-        if (currentDay == 0 || covered + 1 < currentDay) return 0;
+        if (currentDay == 0) return 0;
+        if (uint32(covered) + 1 < uint32(currentDay)) {
+            uint24 sealedDay = dailyIdx;
+            if (
+                uint32(currentDay) <= uint32(sealedDay) + 1 ||
+                covered < sealedDay ||
+                rngWordByDay[sealedDay + 1] != 0
+            ) return 0;
+        }
         return uint32(_streakBaseOf(sub)) + uint32(covered - sub.afkingStartDay);
     }
 
     /// @dev The live (non-lapsed) afking streak for `player` if they are mid-run; otherwise
-    ///      (false, 0). A lapsed run, a sub with no active run, and a non-subscriber all return
+    ///      (false, 0). A genuinely lapsed run, a sub with no active run, and a non-subscriber all return
     ///      (false, 0) so callers fall back to the manual streak — a lapsed-but-still-minting sub
     ///      is never zeroed. No DegenerusQuests STATICCALL on the live-run path.
     function _liveAfkingStreak(address player) internal view returns (bool live, uint32 streak) {

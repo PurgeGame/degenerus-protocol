@@ -207,11 +207,11 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
     /// @dev Per-sub gas-weight of an in-stage sub-ending finalize (cancel-reclaim / pass-evict
     ///      / funding-kill) relative to the lootbox-buy unit (weight 10). The pass-evict finalize
     ///      does a cross-contract quest streak write + a swap-pop the call-free buy does not;
-    ///      measured ≈27k (on par with a ticket) → weight 7.
+    ///      measured ≈29k after the decay-aware finalize path → weight 8.
     ///      Weighting it on the TRUE marginal (not the cheaper call-free reclaim) keeps a saturated
     ///      all-evict chunk on the same <10M target as any other mix, so the budget binds on real
     ///      gas, not sub count.
-    uint256 internal constant SUB_STAGE_EVICT_WEIGHT = 7;
+    uint256 internal constant SUB_STAGE_EVICT_WEIGHT = 8;
 
     /// @dev Per-sub gas-weight of a TICKET buy relative to the lootbox-buy unit (weight 10). A
     ///      ticket queues a cold ticketQueue push + an owed-mapping SSTORE the lootbox stamp does
@@ -473,10 +473,12 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
                             srcFunding
                         );
                     if (srcFunding >= ethValue) {
+                        uint24 gapStartDay = _pendingAfkingGapStart(today);
                         _deliverAfkingBuy(
                             subscriber,
                             s,
                             today,
+                            gapStartDay,
                             mp,
                             level,
                             jackpotPhaseFlag ? level : level + 1,
@@ -547,6 +549,7 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
                             subscriber,
                             s,
                             today,
+                            0,
                             mp,
                             level,
                             jackpotPhaseFlag ? level : level + 1,
@@ -737,8 +740,8 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
     ///      tandem, fail-loud on underflow — a debit can never exceed afkingFunding[src] ≤ the
     ///      claimablePool reservation, so a revert here means solvency is already violated and
     ///      must propagate), materializes the buy per mode, accrues the day's affiliate base + the
-    ///      slot-0 pendingFlip reward, advances the compute-on-read streak markers (gap-resuming
-    ///      a fresh run from zero if the last funded day is older than yesterday), and sets the
+    ///      slot-0 pendingFlip reward, advances the compute-on-read streak markers (forgiving
+    ///      unadvanced gap days and re-basing only across real misses), and sets the
     ///      success marker. The frozen activity score reads the COMPUTE-ON-READ streak off the Sub
     ///      slot — no DegenerusQuests STATICCALL on the hot path. boons OFF ⇒ amount == spend.
     ///
@@ -753,6 +756,7 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
     /// @param player The subscriber being delivered to (the credit recipient).
     /// @param sub The subscriber's record (storage ref — stamped/accrued here).
     /// @param processDay The delivered day (the stamp's frozen seed day + the streak marker).
+    /// @param gapStartDay First unadvanced day in a pending gap, or zero when none exists.
     /// @param mp The in-context mint price.
     /// @param currentLevel The hoisted level (the buy's target-level base).
     /// @param ticketTargetLevel The resolved ticket mint target (jackpot phase ⇒
@@ -769,6 +773,7 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
         address player,
         Sub storage sub,
         uint24 processDay,
+        uint24 gapStartDay,
         uint256 mp,
         uint24 currentLevel,
         uint24 ticketTargetLevel,
@@ -794,6 +799,15 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
             // nets the full draw at that event. Emitting ClaimableSpent here too would
             // double-count the debit.
         }
+
+        // Reframe the run before freezing any lootbox activity score. The returned value is the
+        // streak earned strictly before this delivery: skipped advance days neither erase it nor
+        // inflate the funded-day span.
+        uint32 preBuyStreak = _advanceAfkingStreak(
+            sub,
+            processDay,
+            gapStartDay
+        );
 
         if (isTicket) {
             // Ticket minimal-write primitive: queue resolution-equivalent ticket entries and
@@ -830,7 +844,7 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
             // once for either box shape.
             uint256 activityScore = _playerActivityScore(
                 player,
-                _afkingStreak(sub, processDay),
+                preBuyStreak,
                 // Streak basis is the phase-correct active ticket level (== the level the manual mint
                 // streak is recorded against), NOT the EV-cap/resolver open level (currentLevel + 1):
                 // in jackpot phase those differ, and currentLevel + 1 would silently zero a streak
@@ -867,9 +881,8 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
         //   • affiliate base: flat 7% of the full wei spend (ethValue + claimableUse = the cost in
         //     both modes; the dual-unit `amount` is entry-units in ticket mode), whole FLIP, 100M clamp;
         //   • slot-0 quest reward: QUEST_SLOT0_REWARD (whole FLIP) into the claimable pendingFlip, ~16.7M (2^24-1) clamp;
-        //   • compute-on-read streak markers: gap-resume a fresh run from zero if the last funded
-        //     day is older than yesterday (matching the decay-on-read), then advance the
-        //     funded-day high-water mark afkCoveredThroughDay.
+        // The compute-on-read streak markers were advanced before materialization so the frozen
+        // lootbox score observes the same real-miss decision as the persisted run framing.
         {
             uint256 base = ((_ethToFlip(ethValue + claimableUse, mp) * 7) / 100) / 1 ether;
             if (base != 0) {
@@ -883,11 +896,6 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
                 if (newOwed > type(uint24).max) newOwed = type(uint24).max;
                 sub.pendingFlip = uint24(newOwed);
             }
-            if (sub.afkCoveredThroughDay + 1 < processDay) {
-                sub.afkingStartDay = uint24(processDay);
-                _setStreakBase(sub, 0);
-            }
-            sub.afkCoveredThroughDay = uint24(processDay);
         }
 
         sub.lastAutoBoughtDay = uint24(processDay);
@@ -906,6 +914,51 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
         // off-chain ETH-in total free of double counting.
         uint256 weiIn = (isTicket || !coverBuy) ? ethValue + claimableUse : 0;
         emit AfkingDelivered(player, processDay, weiIn);
+    }
+
+    /// @dev First calendar day in the current unadvanced gap, or zero when no such gap exists.
+    function _pendingAfkingGapStart(uint24 currentDay) private view returns (uint24) {
+        uint24 sealedDay = dailyIdx;
+        if (uint32(currentDay) <= uint32(sealedDay) + 1) return 0;
+        uint24 nextDay = sealedDay + 1;
+        return rngWordByDay[nextDay] == 0 ? nextDay : 0;
+    }
+
+    /// @dev Number of unadvanced days in `(coveredDay, currentDay)` for a known pending gap.
+    function _afkingGapForgiveness(
+        uint24 coveredDay,
+        uint24 currentDay,
+        uint24 gapStartDay
+    ) private pure returns (uint24) {
+        if (gapStartDay == 0 || uint32(currentDay) <= uint32(coveredDay) + 1) return 0;
+        uint24 gapFloor = gapStartDay - 1;
+        uint24 fromDay = coveredDay > gapFloor ? coveredDay : gapFloor;
+        if (uint32(currentDay) <= uint32(fromDay) + 1) return 0;
+        return currentDay - fromDay - 1;
+    }
+
+    /// @dev Returns the pre-delivery streak and advances the run through `processDay`.
+    ///      Pending unadvanced days shift the base day forward so they add no earned span;
+    ///      any remaining gap is a real missed delivery and starts a fresh run from zero.
+    function _advanceAfkingStreak(
+        Sub storage sub,
+        uint24 processDay,
+        uint24 gapStartDay
+    ) private returns (uint32 preBuyStreak) {
+        uint24 covered = sub.afkCoveredThroughDay;
+        uint24 forgiven = _afkingGapForgiveness(covered, processDay, gapStartDay);
+
+        if (uint32(covered) + 1 + uint32(forgiven) < uint32(processDay)) {
+            sub.afkingStartDay = processDay;
+            _setStreakBase(sub, 0);
+        } else {
+            preBuyStreak = uint32(_streakBaseOf(sub)) +
+                uint32(covered - sub.afkingStartDay);
+            if (forgiven != 0) {
+                sub.afkingStartDay += forgiven;
+            }
+        }
+        sub.afkCoveredThroughDay = processDay;
     }
 
     /// @dev Write a subscribe-time grounding lootbox as a full INDEXED box on the live lootbox
@@ -1015,8 +1068,8 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
 
     /// @dev Hand the afking-computed streak back to the manual quest system on a sub-ending path,
     ///      BEFORE the Sub slot is deleted. Computes the run's earned streak (snapshot + funded
-    ///      delivered days) and the afking funded high-water day, then defers the decay decision
-    ///      and the anchor to `quests.finalizeAfking`, which also folds in any manual completion
+    ///      delivered days) and the afking funded high-water day. `quests.finalizeAfking` uses
+    ///      the rolled-quest-day history and also folds in any manual completion
     ///      day (so a sub who let afking funding lapse but kept minting manually is not wrongly
     ///      zeroed) and is idempotent (a no-op if the player is not currently afking). Clears the
     ///      Sub's afking framing. The cross-contract read+write is the heavier (EVICT_WEIGHT)
@@ -1127,6 +1180,7 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
         uint24 ticketTargetLevel = jackpotPhaseFlag
             ? currentLevel
             : currentLevel + 1;
+        uint24 gapStartDay = _pendingAfkingGapStart(processDay);
 
         // sDGNRS level-start lootbox top-up, done ONCE here at the start of afking processing
         // (out of the per-sub loop, so it adds NO per-sub cost). On the first STAGE pass of each
@@ -1159,6 +1213,7 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
                     ContractAddresses.SDGNRS,
                     sd,
                     processDay,
+                    gapStartDay,
                     mp,
                     currentLevel,
                     ticketTargetLevel,
@@ -1351,14 +1406,15 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
             // revert-free by construction (no try/catch) by the shared `_deliverAfkingBuy`:
             // debit `afkingFunding[src]` (claimablePool in tandem, fail-loud on underflow),
             // stamp the lootbox box / queue the tickets, accrue the day's affiliate + the
-            // pendingFlip reward, advance the compute-on-read streak markers (gap-resuming a
-            // fresh run if a day was missed), and set the success marker. A lootbox buy is weight
+            // pendingFlip reward, advance the compute-on-read streak markers (forgiving
+            // unadvanced days and re-basing only across real misses), and set the success marker. A lootbox buy is weight
             // SUB_STAGE_LOOTBOX_WEIGHT; a ticket buy SUB_STAGE_TICKET_WEIGHT (the cold ticketQueue
             // push makes it ~2x a lootbox), so the budget binds on the true per-buy cost.
             _deliverAfkingBuy(
                 player,
                 sub,
                 processDay,
+                gapStartDay,
                 mp,
                 currentLevel,
                 ticketTargetLevel,

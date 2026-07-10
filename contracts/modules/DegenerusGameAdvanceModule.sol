@@ -151,12 +151,12 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
     ///      settle day), so there is a SINGLE budget. The STAGE consumes a gas-weight per
     ///      iteration — buys and finalizes are weighted by true marginal cost (a lootbox buy
     ///      ≈34k = `SUB_STAGE_LOOTBOX_WEIGHT` (10), a ticket buy ≈73k = `SUB_STAGE_TICKET_WEIGHT`
-    ///      (21), a cross-contract sub-ending finalize / pass-evict / funding-kill ≈27k =
-    ///      `SUB_STAGE_EVICT_WEIGHT` (7)) — and ends the chunk on accumulated weight, not raw
+    ///      (21), a cross-contract sub-ending finalize / pass-evict / funding-kill ≈29k =
+    ///      `SUB_STAGE_EVICT_WEIGHT` (8)) — and ends the chunk on accumulated weight, not raw
     ///      count, so EVERY composition (including a saturated all-evict swap-pop chunk) stays on
     ///      the <10M target with deep headroom to the 16.7M advance-chain ceiling. The lootbox and
     ///      ticket per-chunk counts are unchanged from the prior calibration; only the evict chunk
-    ///      shrinks (≈500 → ≈357 finalizes) so a saturated all-evict crank lands ≈9.5M, not ≈13.6M.
+    ///      shrinks (≈500 → ≈312 finalizes) so a saturated all-evict crank stays below 10M.
     ///      A large set drains across several advanceGame calls.
     uint256 private constant SUB_STAGE_WEIGHT_BUDGET = 2500;
 
@@ -173,7 +173,8 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
     function advanceGame() external returns (uint8 mult) {
         mult = 1;
         uint48 ts = uint48(block.timestamp);
-        uint24 day = _simulatedDayIndexAt(ts);
+        uint24 wallDay = _simulatedDayIndexAt(ts);
+        uint24 day = wallDay;
         // dailyIdx and rngLockedFlag are stable across every read below: their
         // only writers (_unlockRng, _finalizeRngRequest) execute after the last
         // use of these locals, or on paths that return before reaching it.
@@ -199,7 +200,19 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         // rngGate will take the fresh-word path instead of _requestRng, so
         // the level pre-increment would be missed and the (lastPurchase &&
         // rngLockedFlag) ternary below would compute purchaseLevel = 0.
-        if (!inJackpot && !lastPurchaseDay && !locked) {
+        // A VRF-stall backfill credits the gap to purchaseStartDay while the RNGREUSE clamp
+        // re-walks already-recorded historical days. Such a replay may have `day < psd` (making
+        // the subtraction unsafe) and, even after it reaches psd, must not arm turbo: its word is
+        // already cached, so rngGate would skip the request that performs the level promotion.
+        // Turbo is therefore restricted to the real wall day with an unrequested word.
+        if (
+            !inJackpot &&
+            !lastPurchaseDay &&
+            !locked &&
+            day == wallDay &&
+            day >= psd &&
+            rngWordByDay[day] == 0
+        ) {
             uint32 purchaseDays = day - psd;
             if (
                 purchaseDays <= 1 && _getNextPrizePool() >= levelPrizePool[lvl]
@@ -472,6 +485,16 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                     rngWord
                 );
                 if (ffWorked || !ffFinished) {
+                    // A batch that both WORKED and FINISHED clears ticketLevel (the resume marker)
+                    // inside processFutureTicketBatch, yet we still break here for the per-tx
+                    // one-batch gas discipline. Re-assert the marker so the next advance's
+                    // resumingFF check skips the (already-completed) transition housekeeping —
+                    // otherwise _processPhaseTransition re-runs and double-credits the SDGNRS/VAULT
+                    // perpetual jackpot entries. On that next advance the FF queue is empty, so the
+                    // batch returns finished with no work and the transition completes cleanly.
+                    if (ffFinished) {
+                        ticketLevel = ffLevel | TICKET_FAR_FUTURE_BIT;
+                    }
                     stage = STAGE_TRANSITION_WORKING;
                     break;
                 }
@@ -542,7 +565,13 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                     }
                     bool targetMet = _getNextPrizePool() >=
                         levelPrizePool[purchaseLevel - 1];
-                    if (targetMet) {
+                    // Do not latch on an RNGREUSE replay day. Its NEXT day may also have a cached
+                    // backfill word, which would let rngGate bypass the sole `level = lvl` writer in
+                    // _finalizeRngRequest and enter jackpot one level behind. Latch only after the
+                    // walk reaches the real wall day; the following calendar day then necessarily
+                    // takes the normal request path and promotes the level. `day >= psd` also makes
+                    // the compressed-phase subtraction safe after the death-clock adjustment.
+                    if (targetMet && day == wallDay && day >= psd) {
                         lastPurchaseDay = true;
                         if (day - psd <= 3) {
                             compressedJackpotFlag = 1;
@@ -696,8 +725,39 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
             return (false, 0);
         }
 
-        // Pre-gameover: acquire RNG, drain, then unlock
-        if (rngWordByDay[day] == 0) {
+        // Drain and payout must use the same phase-correct level. Snapshot it before entropy
+        // acquisition: _gameOverEntropy leaves the phase flags intact, and a terminal fallback
+        // must never choose a bucket dynamically from attacker-populated queue state.
+        uint24 drainLevel = _gameOverTicketLevel(lvl);
+
+        // Freeze an otherwise-unsnapped terminal cohort BEFORE its entropy is requested/chosen.
+        // When an RNG boundary already exists, the read buffer is the committed cohort and the
+        // write buffer contains later tickets; never promote that write buffer into this terminal
+        // draw. The liveness gate is already active, so after a safe initial swap no player buy can
+        // enter the new write buffer during the multi-tx drain. Foil buckets carry their own sealed
+        // resolve-day entropy and may be drained without promoting the normal-ticket write buffer.
+        uint256 dayWord = rngWordByDay[day];
+        bool entropyCommitted = dayWord != 0 ||
+            rngWordCurrent != 0 ||
+            vrfRequestId != 0 ||
+            rngLockedFlag ||
+            prizePoolFrozen ||
+            _lrRead(LR_MID_DAY_SHIFT, LR_MID_DAY_MASK) != 0;
+        bool readPending = ticketQueue[_tqReadKey(drainLevel)].length != 0;
+        bool writePending = ticketQueue[_tqWriteKey(drainLevel)].length != 0;
+        if (readPending) {
+            // The selected read queue is already the oldest committed snapshot. Trust the queue
+            // itself over a stale-true completion flag and resume it without touching write state.
+            ticketsFullyProcessed = false;
+        } else if (writePending && !entropyCommitted) {
+            // No selected read cohort and no entropy boundary: freeze the abandonment cohort now.
+            _swapTicketSlot();
+        } else if (_foilDrainPending()) {
+            ticketsFullyProcessed = false;
+        }
+
+        // Pre-gameover: acquire RNG, drain the committed cohort, then unlock.
+        if (dayWord == 0) {
             uint256 rngWord = _gameOverEntropy(
                 uint48(block.timestamp),
                 day,
@@ -707,28 +767,22 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
             if (rngWord == 1 || rngWord == 0) return (true, STAGE_GAMEOVER);
         }
 
-        // Best-effort drain of queued tickets so every purchased ticket is
-        // eligible for the terminal jackpot trait-bucket share. Both ticket
-        // slots drain ONE batch per tx (mirroring the normal daily ticket
-        // drain): after any batch does work the path breaks with
-        // STAGE_TICKETS_WORKING, so a finishing batch never composes with a
-        // second ticket batch -- or with handleGameOverDrain's terminal
-        // jackpot -- inside one transaction. That composition would push a
-        // single advanceGame tx past the EIP-7825 per-tx gas ceiling and
-        // permanently brick the game-over heartbeat. handleGameOverDrain runs
-        // only in its OWN tx, entered with ticketsFullyProcessed already set.
+        // Best-effort drain of the single RNG-committed ticket snapshot. One batch runs per tx
+        // (mirroring the normal daily drain), and a finishing batch still breaks so the terminal
+        // jackpot executes in its OWN transaction below the EIP-7825 per-tx gas ceiling.
         //
         // FUND-RELEASE FALLBACK: a catastrophic delegatecall revert (e.g., an
         // unforeseen error in ticket processing) is swallowed so game-over
         // continues straight to handleGameOverDrain -- undrained tickets forfeit
         // trait-bucket eligibility, but terminal fund release is never blocked.
+        //
         if (!ticketsFullyProcessed) {
             (bool dOk, bytes memory dData) = ContractAddresses
                 .GAME_MINT_MODULE
                 .delegatecall(
                     abi.encodeWithSelector(
                         IDegenerusGameMintModule.processTicketBatch.selector,
-                        lvl + 1
+                        drainLevel
                     )
                 );
             if (dOk && dData.length >= 64) {
@@ -737,15 +791,9 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                     // Read slot has more entries -- retry next tx.
                     return (true, STAGE_TICKETS_WORKING);
                 }
-                // Read slot drained: swap the write slot into the read position
-                // (safe because the read queue is now empty) so its tickets
-                // drain on the next tx. When the swapped-in slot is already
-                // empty, both slots are drained -- mark fully processed. Either
-                // way break, so the terminal jackpot runs in its own tx.
-                _swapTicketSlot();
-                if (ticketQueue[_tqReadKey(lvl + 1)].length == 0) {
-                    ticketsFullyProcessed = true;
-                }
+                // The committed read snapshot is complete. Do NOT swap in the later write buffer:
+                // those tickets may have been purchased after the terminal word was committed.
+                ticketsFullyProcessed = true;
                 return (true, STAGE_TICKETS_WORKING);
             }
             // dOk=false -> swallow, fall through to handleGameOverDrain.
@@ -1415,9 +1463,11 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                 }
             }
             _finalizeLootboxRng(fallbackWord);
-            // Release the stall lock once fallback has committed; liveness now reads
-            // from day math alone instead of short-circuiting on a stale VRF timer.
-            rngRequestTime = 0;
+            // Keep the already-expired timer as a terminal-intent latch until _unlockRng. Ticket
+            // processing and handleGameOverDrain intentionally run in separate transactions; if
+            // this grace timer were cleared here before day-based liveness had independently fired,
+            // the next advance would leave _handleGameOverPath and the terminal payout would never
+            // run. The final terminal transaction clears the timer together with the RNG lock.
             return fallbackWord;
         }
 
@@ -1730,11 +1780,10 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
     // =========================================================================
 
     /// @dev Toggle the active ticket queue buffer and reset the read-slot drained flag.
-    ///      Fail-open by design: every caller swaps only after the read slot is drained
-    ///      (gated on ticketsFullyProcessed / a finished drain), so a non-empty read slot is
-    ///      unreachable here. This runs inside the advance heartbeat, where a revert would
-    ///      brick the game; in the impossible non-empty case the toggle merely defers those
-    ///      entries one cycle (they stay queued, never lost) rather than reverting.
+    ///      Normal-cycle callers swap only after the read slot is drained. The terminal caller may
+    ///      instead snapshot the selected abandonment cohort while unrelated levels still have
+    ///      queued entries; the global toggle only defers those irrelevant post-game queues, never
+    ///      loses them. This runs inside the advance heartbeat, where reverting would brick release.
     function _swapTicketSlot() internal {
         ticketWriteSlot = !ticketWriteSlot;
         ticketsFullyProcessed = false;
@@ -1875,9 +1924,23 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         // funds it in the same _executeSwap transaction (transferAndCall), and the VRF node
         // fulfills once funded. If the new coordinator also stalls, the daily advance abandons a
         // mid-day request and promotes it to the daily word after MIDDAY_RNG_STALL_TIMEOUT.
-        if (_lrRead(LR_MID_DAY_SHIFT, LR_MID_DAY_MASK) != 0) {
-            // Mid-day in flight: KEEP LR_MID_DAY=1; LR_INDEX preserved so the new word lands
-            // in the same reserved slot [N] via the mid-day fulfillment branch (:1772).
+        if (
+            _lrRead(LR_MID_DAY_SHIFT, LR_MID_DAY_MASK) != 0 &&
+            vrfRequestId != 0 &&
+            !rngLockedFlag
+        ) {
+            // Mid-day request actually in flight: KEEP LR_MID_DAY=1; LR_INDEX preserved so the
+            // new word lands in the same reserved slot [N] via the mid-day fulfillment branch.
+            // `vrfRequestId != 0` is the mid-day counterpart of the daily branch's
+            // `rngWordCurrent == 0` guard: an outstanding request is cleared to 0 only on
+            // fulfillment (rawFulfillRandomWords mid-day branch), whereas LR_MID_DAY stays set
+            // after the word lands until the ticket batch drains. Keying on rngRequestTime alone
+            // is unsafe -- _gameOverEntropy's failed-request fallback re-sets rngRequestTime with
+            // no request in flight (vrfRequestId already 0), so a rotation in that window would
+            // re-issue a spurious request whose fulfillment overwrites the already-delivered
+            // write-once lootbox word. `!rngLockedFlag` routes a promoted mid-day->daily request
+            // (LR_MID_DAY set alongside the daily lock) to the daily branch for correct
+            // confirmation depth. When no genuine mid-day request is pending, fall through.
             vrfRequestId = _requestVrfWord(VRF_MIDDAY_CONFIRMATIONS);
             rngRequestTime = uint48(block.timestamp);
         } else if (rngLockedFlag) {

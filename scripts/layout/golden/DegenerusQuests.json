@@ -38,5 +38,13 @@
     "offset": 0,
     "slot": 3,
     "typeLabel": "mapping(address => uint256)"
+  },
+  {
+    "bytes": "32",
+    "encoding": "mapping",
+    "label": "questRolledDayBitmap",
+    "offset": 0,
+    "slot": 4,
+    "typeLabel": "mapping(uint16 => uint256)"
   }
 ]

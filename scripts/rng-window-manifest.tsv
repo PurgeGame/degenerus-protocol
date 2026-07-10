@@ -98,6 +98,7 @@ EXEMPT-ADVANCE	rngWordByDay	rngGate	modules/DegenerusGameAdvanceModule.sol	READ
 EXEMPT-ADVANCE	rngWordByDay	handleGameOverDrain	modules/DegenerusGameGameOverModule.sol	READ
 EXEMPT-ADVANCE	rngWordCurrent	_finalizeRngRequest	modules/DegenerusGameAdvanceModule.sol	READ
 EXEMPT-ADVANCE	rngWordCurrent	_gameOverEntropy	modules/DegenerusGameAdvanceModule.sol	READ
+EXEMPT-ADVANCE	rngWordCurrent	_handleGameOverPath	modules/DegenerusGameAdvanceModule.sol	READ
 EXEMPT-ADVANCE	rngWordCurrent	advanceGame	modules/DegenerusGameAdvanceModule.sol	READ
 EXEMPT-ADVANCE	rngWordCurrent	rawFulfillRandomWords	modules/DegenerusGameAdvanceModule.sol	READ
 EXEMPT-ADVANCE	rngWordCurrent	rngGate	modules/DegenerusGameAdvanceModule.sol	READ
@@ -117,7 +118,9 @@ CONSUMER-SEALED	rngWordByDay	_autoOpen	modules/GameAfkingModule.sol	READ
 GATE	lootboxRngWordByIndex	boxesPending	DegenerusGame.sol	READ
 GATE	lootboxRngWordByIndex	_placeDegeneretteBetCore	modules/DegenerusGameDegeneretteModule.sol	READ
 GATE	lootboxRngWordByIndex	_buyPresaleBoxFor	modules/DegenerusGameMintModule.sol	READ
+GATE	rngWordByDay	_afkingStreak	storage/DegenerusGameStorage.sol	READ
 GATE	rngWordByDay	_foilDrainPending	storage/DegenerusGameStorage.sol	READ
+GATE	rngWordByDay	_pendingAfkingGapStart	modules/GameAfkingModule.sol	READ
 CURSOR	lootboxRngPacked	_purchaseForWithCached	modules/DegenerusGameMintModule.sol	READ
 CURSOR	lootboxRngPacked	_recordLootboxEntry	modules/DegenerusGameWhaleModule.sol	READ
 CURSOR	lootboxRngPacked	_recordAfkingCoverBox	modules/GameAfkingModule.sol	READ

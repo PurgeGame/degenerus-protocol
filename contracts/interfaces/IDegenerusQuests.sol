@@ -168,7 +168,7 @@ interface IDegenerusQuests {
     /// @dev Directly increases the player's streak count
     /// @param player The address of the player to award bonus to
     /// @param amount The number of bonus streak days to award
-    /// @param currentDay The current unix day for tracking purposes
+    /// @param currentDay The caller's current calendar day; quest state pins to the newest rolled day
     function awardQuestStreakBonus(address player, uint16 amount, uint24 currentDay) external;
 
     /// @notice Grant quest streak shields to a player (each absorbs one missed day)
@@ -182,19 +182,19 @@ interface IDegenerusQuests {
     ///      slot-0 completions are streak-neutral / reward-deferred; returns the synced streak
     ///      so the caller bases the run's snapshot on it.
     /// @param player The subscriber starting an afking run
-    /// @param currentDay The current quest day for state synchronization
+    /// @param currentDay The caller's current calendar day; quest state pins to the newest rolled day
     /// @return streak The player's gap-synced streak at the start of the run
     function beginAfking(address player, uint24 currentDay) external returns (uint24 streak);
 
     /// @notice Ends an afking run: hands the afking-computed streak back to the manual system
     /// @dev GAME-only, called on every sub-ending path before the Sub slot is deleted.
     ///      Idempotent (a no-op unless the player is currently afking). Keeps the Game-computed
-    ///      earned streak if a valid mint (afking high-water or manual completion) landed no
-    ///      earlier than yesterday, else zeroes it (decay); anchors the gap-reset at that day.
+    ///      earned streak when no rolled quest day lies strictly between the newest valid mint
+    ///      anchor and the current day; skipped stall days are never treated as playable misses.
     /// @param player The subscriber whose run is ending
     /// @param earnedStreak The run's earned streak (snapshot + funded delivered days), Game-computed
     /// @param afkingCoveredDay The afking funded high-water day (Game-side)
-    /// @param currentDay The current quest day (the decay reference)
+    /// @param currentDay The current calendar day (the decay reference)
     function finalizeAfking(address player, uint24 earnedStreak, uint24 afkingCoveredDay, uint24 currentDay) external;
 
     /// @notice Returns the quest state for a specific player
