@@ -130,14 +130,14 @@ contract V56AfkingGasMarginal is DeployProtocol {
     uint256 internal constant SUB_STAGE_WEIGHT_BUDGET = 2500;
 
     /// @dev SUB_STAGE_LOOTBOX_WEIGHT (GameAfkingModule.sol): the lootbox-buy gas-weight unit (≈34k cold marginal)
-    ///      → weight 10, giving the granularity for ticket (≈73k → 21) and evict (≈27k → 7) to ratio on real
+    ///      → weight 10, giving the granularity for ticket (≈73k → 21) and evict (≈29k → 8) to ratio on real
     ///      marginal cost. Mirror of the contract constant — keep in sync.
     uint256 internal constant SUB_STAGE_LOOTBOX_WEIGHT = 10;
 
     /// @dev SUB_STAGE_EVICT_WEIGHT (GameAfkingModule.sol): the gas-weight of an in-stage sub-ending finalize
     ///      (pass-evict / funding-kill / cancel-reclaim) — a cross-contract quest streak write + swap-pop,
-    ///      measured ≈27k cold (on par with a ticket) → weight 7. Mirror of the contract constant — keep in sync.
-    uint256 internal constant SUB_STAGE_EVICT_WEIGHT = 7;
+    ///      measured ≈29k cold → weight 8. Mirror of the contract constant — keep in sync.
+    uint256 internal constant SUB_STAGE_EVICT_WEIGHT = 8;
 
     /// @dev SUB_STAGE_TICKET_WEIGHT (GameAfkingModule.sol): a ticket buy's gas-weight vs the lootbox unit — the
     ///      cold ticketQueue push + owed-mapping SSTORE make it ≈73k → weight 21. A budget-B chunk holds
@@ -592,9 +592,9 @@ contract V56AfkingGasMarginal is DeployProtocol {
     /// @notice Residual R1 (the proof's residual list): the all-evict SATURATED STAGE chunk, projected from the
     ///         live cold per-evict marginal as a cross-check on the direct LIVE measurement
     ///         (test_AllEvictSaturatedChunk_LIVE_Measured). The in-stage finalize (a DegenerusQuests read +
-    ///         finalizeAfking write + _removeFromSet swap-pop) is weighted SUB_STAGE_EVICT_WEIGHT=7, so the budget
-    ///         admits BUDGET/EVICT_WEIGHT = 357 evicts/chunk. This measures the per-evict marginal COLD (vm.cool
-    ///         first-touch — the realistic regime, ~27k) and asserts the saturated all-evict chunk (~9.8M) stays
+    ///         finalizeAfking write + _removeFromSet swap-pop) is weighted SUB_STAGE_EVICT_WEIGHT=8, so the budget
+    ///         admits BUDGET/EVICT_WEIGHT = 312 evicts/chunk. This measures the per-evict marginal COLD (vm.cool
+    ///         first-touch — the realistic regime, ~29k) and asserts the saturated all-evict chunk stays
     ///         on the <10M soft target. Measuring cold (not the warm same-tx ~5M) proves the REAL binding chunk.
     function testResidualR1StageWeightModelFidelity() public {
         uint256 snap = vm.snapshotState();
@@ -622,12 +622,12 @@ contract V56AfkingGasMarginal is DeployProtocol {
         emit log_named_uint("r1_evict_weight_budget_units", SUB_STAGE_EVICT_WEIGHT);
 
         // R1: the all-evict SATURATED STAGE chunk, analytically projected from the live cold per-evict marginal.
-        // With evict weight 7 the budget admits BUDGET/EVICT_WEIGHT = 357 evicts; at the realistic COLD per-evict
-        // (~27k, the cross-contract finalize + _removeFromSet swap-pop) the chunk is ~9.8M — on the <10M soft
+        // With evict weight 8 the budget admits BUDGET/EVICT_WEIGHT = 312 evicts; at the realistic COLD per-evict
+        // (~29k, the cross-contract finalize + _removeFromSet swap-pop) the chunk stays on the <10M soft
         // target with deep headroom to the 16.7M ceiling. Asserting the COLD projection cross-checks the
         // direct LIVE measurement in test_AllEvictSaturatedChunk_LIVE_Measured (~9.7M; the two agree). Chunk =
         // cold advance overhead + (BUDGET/EVICT_WEIGHT)×coldPerEvict.
-        uint256 evictsPerChunk = SUB_STAGE_WEIGHT_BUDGET / SUB_STAGE_EVICT_WEIGHT; // 357 evicts fill the budget
+        uint256 evictsPerChunk = SUB_STAGE_WEIGHT_BUDGET / SUB_STAGE_EVICT_WEIGHT; // 312 evicts fill the budget
         uint256 fixedEvictOverhead = coldEvN > coldPerEvict * N_HI ? coldEvN - coldPerEvict * N_HI : 0;
         uint256 allEvictChunk = fixedEvictOverhead + evictsPerChunk * coldPerEvict;
         emit log_named_uint("r1_evicts_per_budget_chunk", evictsPerChunk);

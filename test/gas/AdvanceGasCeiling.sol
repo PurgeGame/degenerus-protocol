@@ -43,8 +43,8 @@ contract GameSeeder is DegenerusGame {
     /// @param lvl          current game level (>=10 so the bounded deity-refund loop is skipped; a
     ///                     deeper level also means deeper trait buckets)
     /// @param rngWord      the (pre-seeded) day word; non-zero so `_gameOverEntropy` is bypassed
-    /// @param readOwed     traits owed by the single read-slot player (sized to finish round 1 in one cold batch)
-    /// @param writeOwed    traits owed by the single write-slot player (sized to finish round 2 in one cold batch)
+    /// @param readOwed     traits owed by the committed read-slot player (one cold finishing batch)
+    /// @param writeOwed    traits owed by the later write-slot player (excluded from terminal draw)
     /// @param winTraits    the 4 winning trait ids `runTerminalJackpot` rolls for `rngWord`
     /// @param bucketCounts the bucket geometry for the seeded pool (305-winner geometry for the cap)
     /// @param base         disjoint address-space base for synthetic holders
@@ -87,9 +87,8 @@ contract GameSeeder is DegenerusGame {
 
         uint24 pl = lvl + 1; // purchaseLevel the drain processes (drain calls processTicketBatch(lvl+1))
 
-        // Read slot (round 1) + write slot (round 2): one deep-owed player each, sized to drain
-        // within the cold write budget so BOTH rounds FINISH in the same tx and fall through to the
-        // terminal jackpot (the composition under test).
+        // Historical two-slot fixture: the read slot is the committed heavy batch. The populated
+        // write slot is later work that the terminal path must not promote into this entropy outcome.
         _seedSlot(_tqReadKey(pl), base, readOwed);
         _seedSlot(_tqWriteKey(pl), base + 0x1000, writeOwed);
         ticketCursor = 0;
@@ -165,8 +164,8 @@ abstract contract AdvanceGasCeilingBase is DeployProtocol {
     ///         advanceGame bytecode), fund the pool, and warp past the 120-day liveness threshold.
     /// @param lvl       game level for the seeded pre-state (>=10)
     /// @param rngWord   the pre-seeded day word (forced non-zero so the VRF/entropy block is skipped)
-    /// @param readOwed  round-1 (read-slot) owed size — bound near the cold write budget by the caller
-    /// @param writeOwed round-2 (write-slot) owed size — bound near the cold write budget by the caller
+    /// @param readOwed  committed read-slot owed size — bound near the cold write budget by the caller
+    /// @param writeOwed excluded later write-slot owed size — retained from the historical fixture
     /// @param base      disjoint synthetic-holder address base
     function _etchSeedRestore(
         uint24 lvl,
@@ -197,10 +196,9 @@ abstract contract AdvanceGasCeilingBase is DeployProtocol {
     ///         spent.
     /// @param maxTxIters cap on advanceGame txs to drive (bound so a long run never lands mid-tx).
     /// @return maxTxGas     the largest single-tx gas observed (surface for the < GAS_TARGET soft check)
-    /// @return reachedHeavy whether the heavy branch was exercised — true once game-over latches, which
-    ///                      is exactly when _handleGameOverPath ran the ticket double-drain + terminal
-    ///                      jackpot. If this is false the measurement is vacuous (the heavy work never
-    ///                      ran) and the caller MUST fail acceptance.
+    /// @return reachedHeavy whether the heavy branch was exercised — true once game-over latches after
+    ///                      the committed ticket batch and isolated terminal jackpot. If false, the
+    ///                      measurement is vacuous and the caller MUST fail acceptance.
     function _driveAndAssertUnderCap(uint256 maxTxIters)
         internal
         returns (uint256 maxTxGas, bool reachedHeavy)

@@ -6,11 +6,10 @@ import {DegenerusGame} from "../../contracts/DegenerusGame.sol";
 import {JackpotBucketLib} from "../../contracts/libraries/JackpotBucketLib.sol";
 import {EntropyLib} from "../../contracts/libraries/EntropyLib.sol";
 
-/// @title GameOverCompositionAdvanceGas — v60 GASCEIL: the game-over fall-through composition
-/// @notice END-TO-END PoC driving the REAL `advanceGame()` into a liveness-triggered game-over
-///         whose `_handleGameOverPath` ticket double-drain (round 1 + round 2) and terminal-jackpot
-///         drain COMPOSE in a single transaction. The repo's per-stage gas harness measures each
-///         stage in ISOLATION and is blind to this composition by construction.
+/// @title GameOverCompositionAdvanceGas — v60 GASCEIL: the historical game-over composition
+/// @notice END-TO-END regression driving the REAL `advanceGame()` from the historical two-slot
+///         liveness-game-over pre-state. Before the fix, `_handleGameOverPath` composed both ticket
+///         slots and the terminal jackpot in one transaction; the per-stage harness was blind to it.
 ///
 ///         The breach (pre-fix): one liveness game-over `advanceGame()` tx runs
 ///           round-1 ticket batch (read slot, ~6.5M, finishes) +
@@ -19,9 +18,9 @@ import {EntropyLib} from "../../contracts/libraries/EntropyLib.sol";
 ///         => ~20M > 16,777,216 (EIP-7825). advanceGame is the mandatory heartbeat; a single tx
 ///         over the cap = a permanent, unrecoverable game-over (the tx can never complete).
 ///
-///         The fix makes `_handleGameOverPath` break after ANY ticket work (one batch per tx, like
-///         the normal daily drain), so the terminal jackpot runs in its OWN tx. Post-fix, the SAME
-///         seeded worst case drains across several txs, each strictly under the cap.
+///         The fix drains only the entropy-committed read snapshot, returns after its finishing
+///         batch, and leaves the later write buffer outside the terminal outcome. The terminal
+///         jackpot therefore runs in its OWN tx and every measured transaction stays under the cap.
 /// @dev Test-only. NO contracts/*.sol is mutated. A GameSeeder (DegenerusGame subclass with seeders)
 ///      is etched onto the live game via type().runtimeCode (no constructor side effects), used to
 ///      write the worst-case pre-state into the real game storage, then the real code is restored so
@@ -31,8 +30,8 @@ import {EntropyLib} from "../../contracts/libraries/EntropyLib.sol";
 contract GameSeeder is DegenerusGame {
     /// @param lvl          current game level (>=10 so the bounded deity-refund loop is skipped)
     /// @param rngWord      the (pre-seeded) day word; non-zero so `_gameOverEntropy` is bypassed
-    /// @param readOwed     traits owed by the single read-slot player (sized to finish round 1 in one cold batch)
-    /// @param writeOwed    traits owed by the single write-slot player (sized to finish round 2 in one cold batch)
+    /// @param readOwed     traits owed by the committed read-slot player (one cold finishing batch)
+    /// @param writeOwed    traits owed by the later write-slot player (excluded from terminal draw)
     /// @param winTraits    the 4 winning trait ids `runTerminalJackpot` rolls for `rngWord`
     /// @param bucketCounts the 305-winner bucket geometry for the seeded pool
     /// @param base         disjoint address-space base for synthetic holders
@@ -61,9 +60,9 @@ contract GameSeeder is DegenerusGame {
 
         uint24 pl = lvl + 1; // purchaseLevel the drain processes (drain calls processTicketBatch(lvl+1))
 
-        // Read slot (round 1) + write slot (round 2): one deep-owed player each, sized to drain
-        // within the cold write budget so BOTH rounds FINISH in the same tx and fall through to the
-        // terminal jackpot (the composition under test).
+        // Preserve the historical two-slot fixture: the committed read slot is a heavy finishing
+        // batch, while the populated write slot proves that later work is not promoted into this
+        // entropy outcome. Before the fix both finished and composed with the terminal jackpot.
         _seedSlot(_tqReadKey(pl), base, readOwed);
         _seedSlot(_tqWriteKey(pl), base + 0x1000, writeOwed);
         ticketCursor = 0;
@@ -151,15 +150,15 @@ contract GameOverCompositionAdvanceGas is DeployProtocol {
     ///         PRE-FIX  : the first advanceGame() runs round1+round2+terminal-jackpot in ONE tx
     ///                    (~20M). The per-tx assertion below FAILS — that failure (with the logged
     ///                    ~20M) is the demonstration of the composition DoS.
-    ///         POST-FIX : the drain splits across several txs (one ticket batch each, terminal
-    ///                    jackpot isolated), every tx < 16.7M, game-over still completes -> PASSES.
+    ///         POST-FIX : the committed read batch and terminal jackpot run in separate txs; the
+    ///                    later write buffer stays excluded, every tx < 16.7M -> PASSES.
     function test_GameOverDrain_EveryAdvanceTxUnderEipCap() public {
-        // Size both rounds near (but under) the cold write budget so each round is heavy (~6.5M) yet
-        // FINISHES in one batch -> pre-fix they compose with the terminal jackpot in one tx.
+        // Keep both historical slots near the cold write budget. Only the committed read slot is
+        // processed post-fix; pre-fix both finishing batches composed with the terminal jackpot.
         _seedWorstCase(170, 170);
 
         uint256 maxTxGas;
-        uint256 composedTxGas; // gas of the first tx (the composed one, pre-fix)
+        uint256 firstTxGas;
         bool over;
 
         for (uint256 i = 0; i < 12; i++) {
@@ -167,13 +166,13 @@ contract GameOverCompositionAdvanceGas is DeployProtocol {
             game.advanceGame();
             uint256 used = g0 - gasleft();
             emit log_named_uint("advance_tx_gas[i]", used);
-            if (i == 0) composedTxGas = used;
+            if (i == 0) firstTxGas = used;
             if (used > maxTxGas) maxTxGas = used;
             if (used > EIP7825_TX_GAS_CAP) over = true;
             if (game.gameOver()) break;
         }
 
-        emit log_named_uint("first_advance_tx_gas (composed pre-fix)", composedTxGas);
+        emit log_named_uint("first_advance_tx_gas", firstTxGas);
         emit log_named_uint("max_advance_tx_gas", maxTxGas);
         emit log_named_uint("eip7825_tx_gas_cap", EIP7825_TX_GAS_CAP);
 

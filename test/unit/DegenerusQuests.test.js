@@ -746,7 +746,9 @@ describe("DegenerusQuests", function () {
         0,
       ]);
 
-      // Skip day 2: roll day 3 directly (missed day 2)
+      // Day 2 rolls a quest alice never completes (a real rolled miss — an
+      // unrolled day would be stall-forgiven instead), then day 3 rolls.
+      await rollQuestAsGame(hre.ethers, game, quests, 2n, 555n);
       await rollQuestAsGame(hre.ethers, game, quests, 3n, 999n);
 
       // Trigger sync on day 3 with an action
@@ -777,8 +779,12 @@ describe("DegenerusQuests", function () {
       let [streak] = await quests.playerQuestStates(alice.address);
       expect(streak).to.equal(1n);
 
-      // Skip to day 5 (missed days 2-4); do NOT roll a new quest so nothing can complete
-      // Verify QuestStreakReset fires during the next sync action (handleMint triggers syncState)
+      // Days 2-4 each roll a quest alice never completes (real rolled misses — unrolled
+      // days would be stall-forgiven instead), then day 5 rolls.
+      // QuestStreakReset fires during the next sync action (handleMint triggers syncState).
+      await rollQuestAsGame(hre.ethers, game, quests, 2n, 22n);
+      await rollQuestAsGame(hre.ethers, game, quests, 3n, 33n);
+      await rollQuestAsGame(hre.ethers, game, quests, 4n, 44n);
       await rollQuestAsGame(hre.ethers, game, quests, 5n, 88n);
       // Call handleMint on day 5 - this triggers _questSyncState which fires QuestStreakReset
       // Note: slot 0 target is 1 * mintPrice, so 1 ticket completes it, resetting then re-incrementing streak
