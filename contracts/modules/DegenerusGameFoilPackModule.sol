@@ -256,8 +256,15 @@ contract DegenerusGameFoilPackModule is
         // primary, it credits the reward, advances the mint streak (the recorder is per-level
         // idempotent), and unlocks the foil secondary. streakSnapshot is the reward streak
         // captured post-primary, pre-floor — the foil-EV score basis frozen into the record.
+        // levelQuestPrice keys the level quest at the routed-next level: the level quest a jackpot-
+        // phase foil feeds is level + 1's, so its MINT_ETH target must price at level + 1 — pricing it
+        // at the current level under-targets and over-grants the reward. Mirrors the mint path; in the
+        // purchase phase priceWei already equals priceForLevel(level + 1) so it stays the basis.
+        uint256 levelQuestPrice = jackpotPhaseFlag
+            ? PriceLookupLib.priceForLevel(level + 1)
+            : priceWei;
         (uint256 reward, uint8 qType, bool questCompleted, uint32 streakSnapshot) = quests
-            .handleFoilPurchase(buyer, cost, 0, 0, priceWei, priceWei);
+            .handleFoilPurchase(buyer, cost, 0, 0, priceWei, levelQuestPrice);
         if (questCompleted) {
             kickback += reward;
             // questType 1 == MINT_ETH (the daily primary), matching the ticket leg's gate.

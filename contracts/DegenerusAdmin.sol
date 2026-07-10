@@ -444,6 +444,11 @@ contract DegenerusAdmin {
     /// @dev Minimum sDGNRS stake to propose via community path (0.5% = 50 bps).
     uint256 private constant COMMUNITY_PROPOSE_BPS = 50;
 
+    /// @dev Max feed proposals voided per execution. Expired proposals keep state == Active until
+    ///      voided, so an accumulated history could otherwise make the void loop exceed the block gas
+    ///      limit and strand the feed swap; batching bounds the loop and voids the rest on later calls.
+    uint256 private constant FEED_VOID_BATCH = 256;
+
     /// @dev Proposal lifetime before expiry (168 hours = 7 days).
     uint256 private constant PROPOSAL_LIFETIME = 168 hours;
 
@@ -538,15 +543,6 @@ contract DegenerusAdmin {
             revert InvalidFeedDecimals();
         }
 
-        // 1-per-address active proposal limit
-        uint256 existing = activeFeedProposalId[msg.sender];
-        if (existing != 0) {
-            FeedProposal storage ep = feedProposals[existing];
-            if (_isActiveProposal(ep.state, ep.createdAt, FEED_PROPOSAL_LIFETIME)) {
-                revert AlreadyHasActiveProposal();
-            }
-        }
-
         uint256 circ = sDGNRS.votingSupply();
         ProposalPath path;
         if (vault.isVaultOwner(msg.sender)) {
@@ -559,6 +555,20 @@ contract DegenerusAdmin {
             path = ProposalPath.Community;
         }
 
+        // Active-proposal limit. The Admin path is capped to ONE active proposal GLOBALLY, keyed on a
+        // fixed sentinel (the vault address, which never proposes for itself): vault ownership is a
+        // single >50.1% DGVE position, so shuttling that majority stake through fresh addresses cannot
+        // mint multiple simultaneous admin proposals for the void loop to iterate. The Community path
+        // keeps its own per-address slot.
+        address limitKey = path == ProposalPath.Admin ? address(vault) : msg.sender;
+        uint256 existing = activeFeedProposalId[limitKey];
+        if (existing != 0) {
+            FeedProposal storage ep = feedProposals[existing];
+            if (_isActiveProposal(ep.state, ep.createdAt, FEED_PROPOSAL_LIFETIME)) {
+                revert AlreadyHasActiveProposal();
+            }
+        }
+
         proposalId = ++feedProposalCount;
         FeedProposal storage p = feedProposals[proposalId];
         p.proposer = msg.sender;
@@ -569,7 +579,7 @@ contract DegenerusAdmin {
         // approveWeight and rejectWeight start at 0
         p.votingSnapshot = uint40(circ / 1 ether);
 
-        activeFeedProposalId[msg.sender] = proposalId;
+        activeFeedProposalId[limitKey] = proposalId;
 
         emit FeedProposalCreated(proposalId, msg.sender, newFeed, path);
     }
@@ -648,23 +658,34 @@ contract DegenerusAdmin {
         ) == Resolution.Execute;
     }
 
-    /// @dev Execute feed swap and void all other active feed proposals.
+    /// @dev Execute feed swap and void other active feed proposals (bounded per call).
     function _executeFeedSwap(uint256 proposalId) internal {
         FeedProposal storage p = feedProposals[proposalId];
         p.state = ProposalState.Executed;
 
-        // Void all other active feed proposals
+        // Void other active feed proposals in bounded batches so a feed swap can never be
+        // gas-stranded by a large accumulated proposal history (expired proposals keep
+        // state == Active until voided). Each execution voids up to FEED_VOID_BATCH and advances
+        // the watermark by that many; the rest are voided by later executions. Un-voided competing
+        // proposals cannot execute meanwhile — vote/canExecute gate on feed health (healthy after
+        // this swap) and the 7-day lifetime — so partial voiding is safe. The bound never reads
+        // past feedProposalCount, whose uncreated slots default to state == Active.
         uint256 start = feedVoidedUpTo + 1;
         uint256 count = feedProposalCount;
-        for (uint256 i = start; i <= count; i++) {
-            if (i == proposalId) continue;
-            FeedProposal storage q = feedProposals[i];
-            if (q.state == ProposalState.Active) {
-                q.state = ProposalState.Killed;
-                emit FeedProposalKilled(i);
+        if (start <= count) {
+            uint256 end = count - start >= FEED_VOID_BATCH
+                ? start + FEED_VOID_BATCH - 1
+                : count;
+            for (uint256 i = start; i <= end; i++) {
+                if (i == proposalId) continue;
+                FeedProposal storage q = feedProposals[i];
+                if (q.state == ProposalState.Active) {
+                    q.state = ProposalState.Killed;
+                    emit FeedProposalKilled(i);
+                }
             }
+            feedVoidedUpTo = end;
         }
-        feedVoidedUpTo = count;
 
         address oldFeed = linkEthPriceFeed;
         linkEthPriceFeed = p.feed;

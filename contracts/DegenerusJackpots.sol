@@ -329,12 +329,16 @@ contract DegenerusJackpots is IDegenerusJackpots {
             for (uint256 i; i < fLen; ) {
                 address cand = farTickets[i];
                 uint256 score = _bafScore(cand, lvl, currentEpoch);
-                if (score > bestScore || best == address(0)) {
+                // Select strictly by positive BAF score (same rule as the scatter slice): a
+                // zero-score candidate never populates best/second, so a far-future set with no
+                // BAF activity leaves best/second address(0) and the share returns to the pool
+                // unpaid rather than paying an unearned holder.
+                if (score > bestScore) {
                     second = best;
                     secondScore = bestScore;
                     best = cand;
                     bestScore = score;
-                } else if ((score > secondScore || second == address(0)) && cand != best) {
+                } else if (score > secondScore && cand != best) {
                     second = cand;
                     secondScore = score;
                 }

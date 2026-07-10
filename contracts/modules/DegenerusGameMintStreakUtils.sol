@@ -143,13 +143,19 @@ abstract contract DegenerusGameMintStreakUtils is DegenerusGameStorage {
     /// @dev The level a ticket bought RIGHT NOW routes to — the single source of truth for the
     ///      purchase quote/charge, the ticket + foil delivery, participation/streak recording, and
     ///      every buy-now price view, so they can never diverge. Jackpot phase → current level;
-    ///      purchase phase → next. On the final jackpot day once the daily RNG is requested
-    ///      (rngLocked, jackpot counter about to reach the cap) this level seals no further daily
-    ///      draw, so buys route to level + 1 — quoting the old level would strand the buyer's
-    ///      overpay or misprice tickets in a level that has ended. (Salvage/settlement callers are
-    ///      rngLock-gated, so the terminal branch is a no-op for them.)
+    ///      purchase phase → next. Once the level's jackpots end this level seals no further daily
+    ///      draw, so buys route to level + 1 — quoting the old level would strand the buyer's overpay
+    ///      or misprice tickets in a level that has ended. Two states mark that sealed window: the
+    ///      final jackpot day's RNG request (rngLocked, jackpot counter about to reach the cap), and
+    ///      the span after _endPhase runs (phaseTransitionActive, jackpotCounter already zeroed, level
+    ///      not yet incremented) while the transition drains. (Salvage/settlement callers are
+    ///      rngLock-gated, so this branch is a no-op for them.)
     function _activeTicketLevel() internal view returns (uint24) {
         if (!jackpotPhaseFlag) return level + 1;
+        // Transition underway: _endPhase set phaseTransitionActive and zeroed jackpotCounter, so the
+        // counter test below can no longer key off the sealed level. phaseTransitionActive is the
+        // standalone signal that this level's draws have ended, so buys route to the next level.
+        if (phaseTransitionActive) return level + 1;
         if (rngLockedFlag) {
             uint8 cnt = jackpotCounter;
             uint8 comp = compressedJackpotFlag;
