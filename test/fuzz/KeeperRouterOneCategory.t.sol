@@ -243,6 +243,10 @@ contract KeeperRouterOneCategory is DeployProtocol {
         _settleGame(uint256(keccak256("nowork-settle")));
         assertFalse(game.advanceDue(), "pre: settled (advance not due)");
         assertFalse(game.rngLocked(), "pre: settled (not locked)");
+        // Catch the human-box frontier up across any finalized empty indices. Traversing those
+        // indices is bounded housekeeping progress and intentionally commits without a bounty;
+        // after the unrewarded valve does it, the next router call is genuinely stationary.
+        game.openBoxes(1_000);
         // No afking subscriber stamped a box (no STAGE buy was driven), so the open leg has nothing.
 
         vm.recordLogs();

@@ -1677,7 +1677,18 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
             // the lootbox module (delegatecall runs it in this Game's storage, the same
             // nested pattern as _openAfkingBox's resolveAfkingBox). Skipped once the
             // afking leg has already spent the full batch.
+            bool sweptFrontier;
             if (opened < OPEN_BATCH) {
+                // Snapshot the monotonic human-box frontier: the sweep advances it over
+                // already-opened / dead entries (skips) even when it opens nothing, and that
+                // advance is real forward progress (later sweeps start past the skips). Commit
+                // it rather than reverting NoWork and rolling it back — so the rewarded crank
+                // grinds through a long skip run itself, cumulatively across calls, instead of
+                // rescanning the same prefix forever. Bounty is still paid only for actual opens.
+                // The index snapshot mirrors openHumanBoxes' genesis 0->1 clamp, so the first-ever
+                // no-work probe (unworded index 1) still reads as unchanged and reverts NoWork.
+                uint48 frontierIdx = boxCursorIndex == 0 ? 1 : boxCursorIndex;
+                uint48 frontierCur = boxCursor;
                 (bool ok, bytes memory data) = ContractAddresses
                     .GAME_LOOTBOX_MODULE
                     .delegatecall(
@@ -1688,6 +1699,11 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
                     );
                 if (!ok) _revertDelegate(data);
                 opened += abi.decode(data, (uint256));
+                uint48 finalFrontierIdx = boxCursorIndex == 0
+                    ? 1
+                    : boxCursorIndex;
+                sweptFrontier =
+                    finalFrontierIdx != frontierIdx || boxCursor != frontierCur;
             }
             if (opened > 0) {
                 // Priced after the open legs: box resolution never writes
@@ -1697,10 +1713,12 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
                     _mintPriceInContext();
                 uint256 k = opened < OPEN_KNEE ? opened : OPEN_KNEE;
                 bountyEarned = (unit * k) / OPEN_KNEE;
-            } else {
-                // (3) both categories empty: the clean no-work signal.
+            } else if (!sweptFrontier) {
+                // Nothing opened AND the frontier did not move (no afking box, no human box,
+                // no skips swept) — the clean no-work signal.
                 revert NoWork();
             }
+            // else: the human sweep advanced the frontier past a skip run — commit it, no bounty.
         }
 
         // The single unified bounty: ONE creditFlip, CEI-LAST, after the one-category

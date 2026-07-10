@@ -554,6 +554,9 @@ contract V56SubHardening is DeployProtocol {
     function testVaultGameAdvanceRoutesThroughMintFlip() public {
         // Idle arm first: settle clean, do NOT roll the day -> nothing due -> NoWork().
         _settleClean(uint256(keccak256("vault_idle")) | 1);
+        // Commit bounded human-frontier housekeeping across finalized empty indices first;
+        // the wrapper's idle assertion is about a genuinely stationary router.
+        game.openBoxes(1_000);
         require(!game.advanceDue(), "fixture: clean so the idle arm is genuine");
         vm.prank(ContractAddresses.CREATOR);
         vm.expectRevert(abi.encodeWithSignature("NoWork()"));
@@ -575,6 +578,9 @@ contract V56SubHardening is DeployProtocol {
     function testSdgnrsGameAdvanceRoutesThroughMintFlip() public {
         // Idle arm: clean, no day-roll -> NoWork().
         _settleClean(uint256(keccak256("sdgnrs_idle")) | 1);
+        // Commit bounded human-frontier housekeeping across finalized empty indices first;
+        // the wrapper's idle assertion is about a genuinely stationary router.
+        game.openBoxes(1_000);
         require(!game.advanceDue(), "fixture: clean so the idle arm is genuine");
         vm.prank(makeAddr("anyone_sdgnrs")); // permissionless — any caller
         vm.expectRevert(abi.encodeWithSignature("NoWork()"));

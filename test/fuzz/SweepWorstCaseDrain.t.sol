@@ -334,4 +334,141 @@ contract SweepWorstCaseDrain is DeployProtocol {
         (uint48 finalIdx, ) = _frontier();
         assertGt(finalIdx, liveIndex, "FRONTIER: the open frontier advanced past every finalized index (none marooned)");
     }
+
+    /// @dev Regression: when the human sweep scans only stale entries (opens nothing) but advances
+    ///      the monotonic open frontier, mintFlip COMMITS that progress with no bounty instead of
+    ///      reverting NoWork and rolling it back. So the keeper route advances through a skip wall
+    ///      cumulatively across calls and reaches the live box behind it. Pre-fix this
+    ///      reverted NoWork every call, rolling cursor=79 back to 0 and stranding the tail box on
+    ///      the rewarded route (recoverable only via the unrewarded openBoxes valve).
+    function testRegression_MintFlipCommitsSkipProgressAndReachesLiveTail() public {
+        _driveDailyCycleOnce();
+        require(!game.rngLocked(), "fixture: game unlocked");
+
+        // Settle any pending advance WITHOUT warping the clock: advanceGame catches dailyIdx up to
+        // the fixed sim day (fulfilling each VRF request), after which advance is not due and the
+        // game is unlocked — the state where mintFlip takes the box-open arm.
+        for (uint256 i = 0; i < 40 && (game.advanceDue() || game.rngLocked()); i++) {
+            try game.advanceGame() {} catch {}
+            uint256 reqId = mockVRF.lastRequestId();
+            if (reqId != 0) {
+                (, , bool fulfilled) = mockVRF.pendingRequests(reqId);
+                if (!fulfilled) {
+                    try mockVRF.fulfillRandomWords(reqId, uint256(keccak256(abi.encode("settle", i))) | 1) {} catch {}
+                }
+            }
+        }
+
+        // Clear any incidental afking boxes so mintFlip's only possible work is the human queue.
+        vm.prank(actor);
+        game.openBoxes(1_000);
+        require(!game.advanceDue() && !game.rngLocked(), "fixture: no advance work, unlocked");
+
+        uint48 index = _lrIndex();
+        _appendSkipPrefix(index, 80, 0xBAD5EED);
+
+        address liveOwner = makeAddr("audit-live-owner");
+        _buyLootbox(liveOwner, 1 ether);
+        assertEq(_queueLen(index), 81, "fixture: eighty stale entries precede one live box");
+        assertGt(_lootAmt(index, liveOwner), 0, "fixture: tail box is live");
+
+        _advanceLrIndexBy(1);
+        _landWord(index, uint256(keccak256("audit-word")) | 1);
+        _parkFrontier(index);
+        assertTrue(game.boxesPending(), "fixture: router advertises human-box work");
+        require(!game.advanceDue(), "fixture: mintFlip takes open arm");
+
+        (uint48 beforeIdx, uint48 beforeCur) = _frontier();
+        assertEq(beforeIdx, index, "fixture: frontier index");
+        assertEq(beforeCur, 0, "fixture: zero cursor");
+
+        // Call 1: budget 80 spends one step on the index header and 79 on stale entries, opening
+        // nothing — but the frontier advanced to cur=79. Post-fix mintFlip does NOT revert; it
+        // COMMITS that skip-only progress (no bounty).
+        uint256 keeperFlipBefore = coinflip.coinflipAmount(actor);
+        uint256 gasBefore = gasleft();
+        vm.prank(actor);
+        game.mintFlip();
+        uint256 skipOnlyGas = gasBefore - gasleft();
+
+        (uint48 afterIdx, uint48 afterCur) = _frontier();
+        assertEq(afterIdx, beforeIdx, "regression: still sweeping the same index");
+        assertEq(afterCur, 79, "regression: skip-only progress is COMMITTED, not rolled back");
+        assertGt(_lootAmt(index, liveOwner), 0, "regression: budget hit the wall - tail box not yet reached");
+        assertEq(
+            coinflip.coinflipAmount(actor),
+            keeperFlipBefore,
+            "regression: skip-only housekeeping earns no bounty"
+        );
+        assertLt(skipOnlyGas, EFFECTIVE_GAS_CEILING, "regression: skip-only keeper call fits the tx ceiling");
+
+        // Call 2: the keeper route resumes past the committed frontier and opens the live box. This
+        // call performs an actual open, so it receives the normal work-scaled bounty.
+        vm.prank(actor);
+        game.mintFlip();
+        assertEq(_lootAmt(index, liveOwner), 0, "regression: keeper route reaches and opens the live tail box");
+        assertGt(
+            coinflip.coinflipAmount(actor),
+            keeperFlipBefore,
+            "regression: an actual box open earns the normal keeper bounty"
+        );
+        (uint48 finalIdx, ) = _frontier();
+        assertGt(finalIdx, index, "regression: frontier swept past the finalized index");
+
+        // Genuine no-work still reverts cleanly: nothing opened AND the frontier cannot move.
+        require(!game.boxesPending(), "fixture: no human-box work remains");
+        require(!game.advanceDue(), "fixture: no advance work remains");
+        vm.prank(actor);
+        vm.expectRevert(abi.encodeWithSignature("NoWork()"));
+        game.mintFlip();
+    }
+
+    /// @dev The logical frontier clamps the uninitialized storage value 0 to genesis index 1 on
+    ///      BOTH sides of the progress comparison. A true genesis no-work probe therefore cannot
+    ///      report phantom progress merely because openHumanBoxes returns before storing the clamp;
+    ///      nor can parking raw storage at 1 in front of an unworded index count as progress.
+    function testRegression_MintFlipLogicalFrontierRejectsPhantomProgress() public {
+        // Undo setUp's one-day warp: immediately after deployment the game is settled, the active
+        // lootbox index is genesis index 1, and the human-box frontier is still raw storage zero.
+        vm.warp(block.timestamp - 1 days);
+        require(!game.advanceDue() && !game.rngLocked(), "fixture: genesis is idle and unlocked");
+        assertEq(_lrIndex(), 1, "fixture: genesis active index is one");
+        (uint48 beforeIdx, uint48 beforeCur) = _frontier();
+        assertEq(beforeIdx, 0, "fixture: raw frontier is still uninitialized");
+        assertEq(beforeCur, 0, "fixture: raw cursor is zero");
+
+        // active <= 1 makes openHumanBoxes return before writing. Logical 1 -> logical 1 is not
+        // progress, even though comparing a normalized pre-value against raw post-storage would
+        // incorrectly see 1 != 0.
+        vm.prank(actor);
+        vm.expectRevert(abi.encodeWithSignature("NoWork()"));
+        game.mintFlip();
+        (uint48 afterIdx, uint48 afterCur) = _frontier();
+        assertEq(afterIdx, beforeIdx, "genesis no-work leaves the raw frontier unchanged");
+        assertEq(afterCur, beforeCur, "genesis no-work leaves the raw cursor unchanged");
+
+        // Finalize index 1 without landing its word. openHumanBoxes temporarily stores the raw
+        // 0 -> 1 clamp before stopping at the orphan guard, but logical 1 -> logical 1 is still no
+        // progress; the outer NoWork revert rolls that housekeeping-only store back.
+        _advanceLrIndexBy(1);
+        vm.prank(actor);
+        vm.expectRevert(abi.encodeWithSignature("NoWork()"));
+        game.mintFlip();
+        (afterIdx, afterCur) = _frontier();
+        assertEq(afterIdx, 0, "unworded-index probe cannot commit the raw clamp as work");
+        assertEq(afterCur, 0, "unworded-index probe leaves the entry cursor unchanged");
+
+        // Once the index is worded, traversing its empty queue really advances logical 1 -> 2.
+        // That bounded housekeeping progress commits once, then a stationary follow-up is NoWork.
+        _landWord(1, uint256(keccak256("genesis-frontier-word")) | 1);
+        vm.prank(actor);
+        game.mintFlip();
+        (afterIdx, afterCur) = _frontier();
+        assertEq(afterIdx, 2, "worded empty index advances and commits the logical frontier");
+        assertEq(afterCur, 0, "empty index leaves the entry cursor zero");
+
+        vm.prank(actor);
+        vm.expectRevert(abi.encodeWithSignature("NoWork()"));
+        game.mintFlip();
+    }
 }
