@@ -679,8 +679,13 @@ contract DegenerusGameDegeneretteModule is
         } else if (currency == CURRENCY_FLIP) {
             coin.burnCoin(player, totalBet);
             _lrAdd(LR_PENDING_FLIP_SHIFT, LR_PENDING_FLIP_MASK, _packFlipToWhole(totalBet));
+            // A token bet consumes no ETH; any ETH sent alongside it is absorbed to the funder's
+            // withdrawable afking balance (solvency-preserving) rather than stranded in the pool.
+            // Zero-value is a no-op, so a normal token bet pays no extra gas.
+            _creditAfkingValue(player, ethPaid);
         } else if (currency == CURRENCY_WWXRP) {
             wwxrp.burnForGame(player, totalBet);
+            _creditAfkingValue(player, ethPaid);
         }
     }
 
