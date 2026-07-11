@@ -1,6 +1,6 @@
 # Degenerus Protocol — Out of Scope
 #
-# Frozen subject: contracts/ tree f79fda85 @ tag degenerus-c4a (post-v75.0 hardening freeze).
+# Frozen subject: contracts/ tree d6abb363 @ tag degenerus-c4a (post-v75.0 hardening freeze).
 # Anything not listed in scope.txt is out of scope. The items below are the in-tree
 # Solidity and tooling that exist alongside the audited sources but are NOT part of the
 # deployed/production system. Findings against these are not eligible.

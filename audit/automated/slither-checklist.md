@@ -19,8 +19,8 @@ Summary
  - [events-maths](#events-maths) (1 results) (Low)
  - [missing-zero-check](#missing-zero-check) (10 results) (Low)
  - [calls-loop](#calls-loop) (91 results) (Low)
- - [reentrancy-benign](#reentrancy-benign) (49 results) (Low)
- - [reentrancy-events](#reentrancy-events) (138 results) (Low)
+ - [reentrancy-benign](#reentrancy-benign) (50 results) (Low)
+ - [reentrancy-events](#reentrancy-events) (140 results) (Low)
  - [timestamp](#timestamp) (39 results) (Low)
  - [assembly](#assembly) (30 results) (Informational)
  - [pragma](#pragma) (1 results) (Informational)
@@ -589,8 +589,8 @@ contracts/storage/DegenerusGameStorage.sol#L2465
  - [ ] ID-39
 [DegenerusGameStorage.prizePoolFrozen](contracts/storage/DegenerusGameStorage.sol#L342) is never initialized. It is used in:
 	- [DegenerusGameStorage._addPrizeContribution(uint128,uint128)](contracts/storage/DegenerusGameStorage.sol#L842-L851)
-	- [DegenerusGameDegeneretteModule._collectBetFunds(address,uint8,uint256,uint256)](contracts/modules/DegenerusGameDegeneretteModule.sol#L654-L685)
-	- [DegenerusGameDegeneretteModule._distributePayout(address,uint8,uint128,uint256,DegenerusGameDegeneretteModule.ResolveAcc)](contracts/modules/DegenerusGameDegeneretteModule.sol#L939-L1013)
+	- [DegenerusGameDegeneretteModule._collectBetFunds(address,uint8,uint256,uint256)](contracts/modules/DegenerusGameDegeneretteModule.sol#L654-L690)
+	- [DegenerusGameDegeneretteModule._distributePayout(address,uint8,uint128,uint256,DegenerusGameDegeneretteModule.ResolveAcc)](contracts/modules/DegenerusGameDegeneretteModule.sol#L944-L1018)
 
 contracts/storage/DegenerusGameStorage.sol#L342
 
@@ -743,7 +743,7 @@ contracts/storage/DegenerusGameStorage.sol#L319
  - [ ] ID-57
 [DegenerusGameStorage.lootboxRngWordByIndex](contracts/storage/DegenerusGameStorage.sol#L1755) is never initialized. It is used in:
 	- [DegenerusGameDegeneretteModule._placeDegeneretteBetCore(address,uint8,uint128,uint8,uint32,uint8,uint24)](contracts/modules/DegenerusGameDegeneretteModule.sol#L568-L651)
-	- [DegenerusGameDegeneretteModule._resolveBet(address,uint64,DegenerusGameDegeneretteModule.ResolveAcc,bool)](contracts/modules/DegenerusGameDegeneretteModule.sol#L694-L906)
+	- [DegenerusGameDegeneretteModule._resolveBet(address,uint64,DegenerusGameDegeneretteModule.ResolveAcc,bool)](contracts/modules/DegenerusGameDegeneretteModule.sol#L699-L911)
 
 contracts/storage/DegenerusGameStorage.sol#L1755
 
@@ -1488,6 +1488,14 @@ contracts/DegenerusTraitUtils.sol#L255-L278
 
 
  - [ ] ID-145
+[DegenerusGameDegeneretteModule._resolveBet(address,uint64,DegenerusGameDegeneretteModule.ResolveAcc,bool)](contracts/modules/DegenerusGameDegeneretteModule.sol#L699-L911) performs a multiplication on the result of a division:
+	- [refFlip = (affiliateBoxShare * PRICE_COIN_UNIT) / PriceLookupLib.priceForLevel(level + 1)](contracts/modules/DegenerusGameDegeneretteModule.sol#L899-L900)
+	- [coinflip.creditFlip(affiliate.getReferrer(player),(refFlip * 7) / 100)](contracts/modules/DegenerusGameDegeneretteModule.sol#L901)
+
+contracts/modules/DegenerusGameDegeneretteModule.sol#L699-L911
+
+
+ - [ ] ID-146
 [DegenerusGameMintStreakUtils._quoteFarFutureSwap(uint32[],uint256[],uint24,uint256,uint256)](contracts/modules/DegenerusGameMintStreakUtils.sol#L194-L237) performs a multiplication on the result of a division:
 	- [faceWei = (PriceLookupLib.priceForLevel(L) * n) / 4](contracts/modules/DegenerusGameMintStreakUtils.sol#L222)
 	- [totalBudget += (faceWei * _farFutureFractionBps(d) * jitterMult) / (10_000 * 10_000)](contracts/modules/DegenerusGameMintStreakUtils.sol#L224-L226)
@@ -1495,7 +1503,7 @@ contracts/DegenerusTraitUtils.sol#L255-L278
 contracts/modules/DegenerusGameMintStreakUtils.sol#L194-L237
 
 
- - [ ] ID-146
+ - [ ] ID-147
 [DegenerusGameAdvanceModule._consolidatePoolsAndRewardJackpots(uint24,uint24,uint24,uint256,uint24)](contracts/modules/DegenerusGameAdvanceModule.sol#L932-L1115) performs a multiplication on the result of a division:
 	- [minWidth = (memNext * NEXT_SKIM_VARIANCE_MIN_BPS) / 10_000](contracts/modules/DegenerusGameAdvanceModule.sol#L987-L988)
 	- [reserved = (memFuture * 15) / 100](contracts/modules/DegenerusGameAdvanceModule.sol#L1102)
@@ -1504,7 +1512,7 @@ contracts/modules/DegenerusGameMintStreakUtils.sol#L194-L237
 contracts/modules/DegenerusGameAdvanceModule.sol#L932-L1115
 
 
- - [ ] ID-147
+ - [ ] ID-148
 [DegenerusAffiliate.claim(address[])](contracts/DegenerusAffiliate.sol#L788-L861) performs a multiplication on the result of a division:
 	- [u2Share = ((sumB - skipU2) * 5) / 100](contracts/DegenerusAffiliate.sol#L841)
 	- [coinflip.creditFlip(u2,u2Share * 1000000000000000000)](contracts/DegenerusAffiliate.sol#L860)
@@ -1512,7 +1520,7 @@ contracts/modules/DegenerusGameAdvanceModule.sol#L932-L1115
 contracts/DegenerusAffiliate.sol#L788-L861
 
 
- - [ ] ID-148
+ - [ ] ID-149
 [Math.mulDiv(uint256,uint256,uint256)](node_modules/@openzeppelin/contracts/utils/math/Math.sol#L204-L275) performs a multiplication on the result of a division:
 	- [denominator = denominator / twos](node_modules/@openzeppelin/contracts/utils/math/Math.sol#L242)
 	- [inverse *= 2 - denominator * inverse](node_modules/@openzeppelin/contracts/utils/math/Math.sol#L265)
@@ -1520,7 +1528,7 @@ contracts/DegenerusAffiliate.sol#L788-L861
 node_modules/@openzeppelin/contracts/utils/math/Math.sol#L204-L275
 
 
- - [ ] ID-149
+ - [ ] ID-150
 [DegenerusGameLootboxModule._largeFlipOut(uint256,uint256)](contracts/modules/DegenerusGameLootboxModule.sol#L2094-L2113) performs a multiplication on the result of a division:
 	- [flipBudget = (amount * largeFlipBps) / 10_000](contracts/modules/DegenerusGameLootboxModule.sol#L2109)
 	- [(flipBudget * PRICE_COIN_UNIT) / PriceLookupLib.priceForLevel(level + 1)](contracts/modules/DegenerusGameLootboxModule.sol#L2110-L2112)
@@ -1528,7 +1536,7 @@ node_modules/@openzeppelin/contracts/utils/math/Math.sol#L204-L275
 contracts/modules/DegenerusGameLootboxModule.sol#L2094-L2113
 
 
- - [ ] ID-150
+ - [ ] ID-151
 [DegenerusGameLootboxModule._boonPoolStats(bool,bool,uint256,uint24,uint256)](contracts/modules/DegenerusGameLootboxModule.sol#L1519-L1648) performs a multiplication on the result of a division:
 	- [lpMax25 = (lazyPassValue * LOOTBOX_LAZY_PASS_DISCOUNT_25_BPS) / 10_000](contracts/modules/DegenerusGameLootboxModule.sol#L1636)
 	- [weightedMax += BOON_WEIGHT_LAZY_PASS_25 * lpMax25](contracts/modules/DegenerusGameLootboxModule.sol#L1641)
@@ -1536,7 +1544,7 @@ contracts/modules/DegenerusGameLootboxModule.sol#L2094-L2113
 contracts/modules/DegenerusGameLootboxModule.sol#L1519-L1648
 
 
- - [ ] ID-151
+ - [ ] ID-152
 [Math.mulDiv(uint256,uint256,uint256)](node_modules/@openzeppelin/contracts/utils/math/Math.sol#L204-L275) performs a multiplication on the result of a division:
 	- [denominator = denominator / twos](node_modules/@openzeppelin/contracts/utils/math/Math.sol#L242)
 	- [inverse *= 2 - denominator * inverse](node_modules/@openzeppelin/contracts/utils/math/Math.sol#L261)
@@ -1544,7 +1552,7 @@ contracts/modules/DegenerusGameLootboxModule.sol#L1519-L1648
 node_modules/@openzeppelin/contracts/utils/math/Math.sol#L204-L275
 
 
- - [ ] ID-152
+ - [ ] ID-153
 [Math.mulDiv(uint256,uint256,uint256)](node_modules/@openzeppelin/contracts/utils/math/Math.sol#L204-L275) performs a multiplication on the result of a division:
 	- [denominator = denominator / twos](node_modules/@openzeppelin/contracts/utils/math/Math.sol#L242)
 	- [inverse *= 2 - denominator * inverse](node_modules/@openzeppelin/contracts/utils/math/Math.sol#L264)
@@ -1552,7 +1560,7 @@ node_modules/@openzeppelin/contracts/utils/math/Math.sol#L204-L275
 node_modules/@openzeppelin/contracts/utils/math/Math.sol#L204-L275
 
 
- - [ ] ID-153
+ - [ ] ID-154
 [DegenerusGameAdvanceModule._consolidatePoolsAndRewardJackpots(uint24,uint24,uint24,uint256,uint24)](contracts/modules/DegenerusGameAdvanceModule.sol#L932-L1115) performs a multiplication on the result of a division:
 	- [halfWidth = (take * NEXT_SKIM_VARIANCE_BPS) / 10_000](contracts/modules/DegenerusGameAdvanceModule.sol#L986)
 	- [maxTake = (memNext * NEXT_TO_FUTURE_BPS_MAX) / 10_000](contracts/modules/DegenerusGameAdvanceModule.sol#L1005)
@@ -1561,7 +1569,7 @@ node_modules/@openzeppelin/contracts/utils/math/Math.sol#L204-L275
 contracts/modules/DegenerusGameAdvanceModule.sol#L932-L1115
 
 
- - [ ] ID-154
+ - [ ] ID-155
 [DegenerusGameLootboxModule._boonPoolStats(bool,bool,uint256,uint24,uint256)](contracts/modules/DegenerusGameLootboxModule.sol#L1519-L1648) performs a multiplication on the result of a division:
 	- [lpMax50 = (lazyPassValue * LOOTBOX_LAZY_PASS_DISCOUNT_50_BPS) / 10_000](contracts/modules/DegenerusGameLootboxModule.sol#L1637)
 	- [weightedMax += BOON_WEIGHT_LAZY_PASS_50 * lpMax50](contracts/modules/DegenerusGameLootboxModule.sol#L1643)
@@ -1569,7 +1577,7 @@ contracts/modules/DegenerusGameAdvanceModule.sol#L932-L1115
 contracts/modules/DegenerusGameLootboxModule.sol#L1519-L1648
 
 
- - [ ] ID-155
+ - [ ] ID-156
 [DegenerusGameLootboxModule._boonPoolStats(bool,bool,uint256,uint24,uint256)](contracts/modules/DegenerusGameLootboxModule.sol#L1519-L1648) performs a multiplication on the result of a division:
 	- [lootboxMax15 = (boostCap * LOOTBOX_BOOST_15_BONUS_BPS) / 10_000](contracts/modules/DegenerusGameLootboxModule.sol#L1554)
 	- [weightedMax += BOON_WEIGHT_LOOTBOX_15 * lootboxMax15](contracts/modules/DegenerusGameLootboxModule.sol#L1560)
@@ -1577,7 +1585,7 @@ contracts/modules/DegenerusGameLootboxModule.sol#L1519-L1648
 contracts/modules/DegenerusGameLootboxModule.sol#L1519-L1648
 
 
- - [ ] ID-156
+ - [ ] ID-157
 [DegenerusGameLootboxModule._boonPoolStats(bool,bool,uint256,uint24,uint256)](contracts/modules/DegenerusGameLootboxModule.sol#L1519-L1648) performs a multiplication on the result of a division:
 	- [lootboxMax25 = (boostCap * LOOTBOX_BOOST_25_BONUS_BPS) / 10_000](contracts/modules/DegenerusGameLootboxModule.sol#L1555)
 	- [weightedMax += BOON_WEIGHT_LOOTBOX_25 * lootboxMax25](contracts/modules/DegenerusGameLootboxModule.sol#L1562)
@@ -1585,7 +1593,7 @@ contracts/modules/DegenerusGameLootboxModule.sol#L1519-L1648
 contracts/modules/DegenerusGameLootboxModule.sol#L1519-L1648
 
 
- - [ ] ID-157
+ - [ ] ID-158
 [Math.mulDiv(uint256,uint256,uint256)](node_modules/@openzeppelin/contracts/utils/math/Math.sol#L204-L275) performs a multiplication on the result of a division:
 	- [denominator = denominator / twos](node_modules/@openzeppelin/contracts/utils/math/Math.sol#L242)
 	- [inverse *= 2 - denominator * inverse](node_modules/@openzeppelin/contracts/utils/math/Math.sol#L266)
@@ -1593,7 +1601,7 @@ contracts/modules/DegenerusGameLootboxModule.sol#L1519-L1648
 node_modules/@openzeppelin/contracts/utils/math/Math.sol#L204-L275
 
 
- - [ ] ID-158
+ - [ ] ID-159
 [DegenerusAdmin.onTokenTransfer(address,uint256,bytes)](contracts/DegenerusAdmin.sol#L1048-L1094) performs a multiplication on the result of a division:
 	- [baseCredit = (ethEquivalent * PRICE_COIN_UNIT) / priceWei](contracts/DegenerusAdmin.sol#L1088)
 	- [credit = (baseCredit * mult) / 1e18](contracts/DegenerusAdmin.sol#L1089)
@@ -1601,7 +1609,7 @@ node_modules/@openzeppelin/contracts/utils/math/Math.sol#L204-L275
 contracts/DegenerusAdmin.sol#L1048-L1094
 
 
- - [ ] ID-159
+ - [ ] ID-160
 [DegenerusGameLootboxModule._boonPoolStats(bool,bool,uint256,uint24,uint256)](contracts/modules/DegenerusGameLootboxModule.sol#L1519-L1648) performs a multiplication on the result of a division:
 	- [deityMax10 = (deityPrice * 1000) / 10_000](contracts/modules/DegenerusGameLootboxModule.sol#L1612)
 	- [weightedMax += BOON_WEIGHT_DEITY_PASS_10 * deityMax10](contracts/modules/DegenerusGameLootboxModule.sol#L1616)
@@ -1609,7 +1617,7 @@ contracts/DegenerusAdmin.sol#L1048-L1094
 contracts/modules/DegenerusGameLootboxModule.sol#L1519-L1648
 
 
- - [ ] ID-160
+ - [ ] ID-161
 [DegenerusVault.previewBurnForEthOut(uint256)](contracts/DegenerusVault.sol#L861-L877) performs a multiplication on the result of a division:
 	- [burnAmount = (targetValue * supply + reserve - 1) / reserve](contracts/DegenerusVault.sol#L868)
 	- [claimValue = (reserve * burnAmount) / supply](contracts/DegenerusVault.sol#L870)
@@ -1617,7 +1625,7 @@ contracts/modules/DegenerusGameLootboxModule.sol#L1519-L1648
 contracts/DegenerusVault.sol#L861-L877
 
 
- - [ ] ID-161
+ - [ ] ID-162
 [DegenerusGameLootboxModule._ticketBudget(uint256,bool)](contracts/modules/DegenerusGameLootboxModule.sol#L2077-L2088) performs a multiplication on the result of a division:
 	- [ticketBudget = (amount * LOOTBOX_TICKET_ROLL_BPS) / 10_000](contracts/modules/DegenerusGameLootboxModule.sol#L2082)
 	- [(ticketBudget * LOOTBOX_TICKET_FAR_BUDGET_BPS) / 10_000](contracts/modules/DegenerusGameLootboxModule.sol#L2083-L2087)
@@ -1625,21 +1633,21 @@ contracts/DegenerusVault.sol#L861-L877
 contracts/modules/DegenerusGameLootboxModule.sol#L2077-L2088
 
 
- - [ ] ID-162
+ - [ ] ID-163
 [Coinflip._bafBracketLevel(uint24)](contracts/Coinflip.sol#L1314-L1318) performs a multiplication on the result of a division:
 	- [bracket = ((uint256(lvl) + 9) / 10) * 10](contracts/Coinflip.sol#L1315)
 
 contracts/Coinflip.sol#L1314-L1318
 
 
- - [ ] ID-163
+ - [ ] ID-164
 [DegenerusGameLootboxModule._resolvePresaleBox(address,uint48,uint256,uint256)](contracts/modules/DegenerusGameLootboxModule.sol#L750-L821) performs a multiplication on the result of a division:
 	- [flipOut = (flipOut / 1000000000000000000) * 1000000000000000000](contracts/modules/DegenerusGameLootboxModule.sol#L790)
 
 contracts/modules/DegenerusGameLootboxModule.sol#L750-L821
 
 
- - [ ] ID-164
+ - [ ] ID-165
 [DegenerusAffiliate.payAffiliate(uint256,bytes32,address,uint24,bool,uint16)](contracts/DegenerusAffiliate.sol#L416-L589) performs a multiplication on the result of a division:
 	- [scaledAmount = (amount * rewardScaleBps) / BPS_DENOMINATOR](contracts/DegenerusAffiliate.sol#L506)
 	- [kickbackShare = (scaledAmount * uint256(kickbackPct)) / 100](contracts/DegenerusAffiliate.sol#L538)
@@ -1647,7 +1655,7 @@ contracts/modules/DegenerusGameLootboxModule.sol#L750-L821
 contracts/DegenerusAffiliate.sol#L416-L589
 
 
- - [ ] ID-165
+ - [ ] ID-166
 [DegenerusGameJackpotModule.payDailyJackpot(bool,uint24,uint256)](contracts/modules/DegenerusGameJackpotModule.sol#L297-L548) performs a multiplication on the result of a division:
 	- [ethDaySlice = futureBal / 100](contracts/modules/DegenerusGameJackpotModule.sol#L490)
 	- [ethPool = ethDaySlice](contracts/modules/DegenerusGameJackpotModule.sol#L492)
@@ -1656,7 +1664,7 @@ contracts/DegenerusAffiliate.sol#L416-L589
 contracts/modules/DegenerusGameJackpotModule.sol#L297-L548
 
 
- - [ ] ID-166
+ - [ ] ID-167
 [GameAfkingModule.mintFlip()](contracts/modules/GameAfkingModule.sol#L1646-L1730) performs a multiplication on the result of a division:
 	- [unit_scope_0 = (BOUNTY_ETH_TARGET * PRICE_COIN_UNIT) / _mintPriceInContext()](contracts/modules/GameAfkingModule.sol#L1712-L1713)
 	- [bountyEarned = (unit_scope_0 * k) / OPEN_KNEE](contracts/modules/GameAfkingModule.sol#L1715)
@@ -1664,20 +1672,12 @@ contracts/modules/DegenerusGameJackpotModule.sol#L297-L548
 contracts/modules/GameAfkingModule.sol#L1646-L1730
 
 
- - [ ] ID-167
+ - [ ] ID-168
 [DegenerusAffiliate.affiliateBonusPointsBest(uint24,address)](contracts/DegenerusAffiliate.sol#L916-L946) performs a multiplication on the result of a division:
 	- [volEth = (sumProduct * BPS_DENOMINATOR) / (uint256(REWARD_SCALE_FRESH_L4P_BPS) * PRICE_COIN_UNIT)](contracts/DegenerusAffiliate.sol#L937-L938)
 	- [points = (volEth * 4) / 1000000000000000000](contracts/DegenerusAffiliate.sol#L941)
 
 contracts/DegenerusAffiliate.sol#L916-L946
-
-
- - [ ] ID-168
-[DegenerusGameDegeneretteModule._resolveBet(address,uint64,DegenerusGameDegeneretteModule.ResolveAcc,bool)](contracts/modules/DegenerusGameDegeneretteModule.sol#L694-L906) performs a multiplication on the result of a division:
-	- [refFlip = (affiliateBoxShare * PRICE_COIN_UNIT) / PriceLookupLib.priceForLevel(level + 1)](contracts/modules/DegenerusGameDegeneretteModule.sol#L894-L895)
-	- [coinflip.creditFlip(affiliate.getReferrer(player),(refFlip * 7) / 100)](contracts/modules/DegenerusGameDegeneretteModule.sol#L896)
-
-contracts/modules/DegenerusGameDegeneretteModule.sol#L694-L906
 
 
  - [ ] ID-169
@@ -3772,30 +3772,6 @@ contracts/modules/DegenerusGameFoilPackModule.sol#L140-L331
 
 
  - [ ] ID-277
-Reentrancy in [DegenerusGameDegeneretteModule.resolveDegeneretteBets(address,uint64[])](contracts/modules/DegenerusGameDegeneretteModule.sol#L485-L523):
-	External calls:
-	- [_resolveBet(player,betIds[i],acc,i == 0)](contracts/modules/DegenerusGameDegeneretteModule.sol#L503)
-		- [(ok,data) = ContractAddresses.GAME_LOOTBOX_MODULE.delegatecall(abi.encodeWithSelector(IDegenerusGameLootboxModule.resolveLootboxDirect.selector,player,amount,rngWord,activityScore))](contracts/modules/DegenerusGameDegeneretteModule.sol#L1024-L1034)
-		- [sdgnrs.transferFromPool(IsDGNRS.Pool.Reward,player,reward)](contracts/modules/DegenerusGameDegeneretteModule.sol#L1510-L1514)
-		- [coinflip.creditFlip(affiliate.getReferrer(player),(refFlip * 7) / 100)](contracts/modules/DegenerusGameDegeneretteModule.sol#L896)
-	- [coin.mintForGame(player,acc.flipMint)](contracts/modules/DegenerusGameDegeneretteModule.sol#L510)
-	- [wwxrp.mintPrize(player,acc.wwxrpMint)](contracts/modules/DegenerusGameDegeneretteModule.sol#L511)
-	State variables written after the call(s):
-	- [_setPendingPools(acc.pendingNext,acc.pendingFuture)](contracts/modules/DegenerusGameDegeneretteModule.sol#L518)
-		- [prizePoolPendingPacked = (uint256(future) << 128) | uint256(next)](contracts/storage/DegenerusGameStorage.sol#L825)
-	[DegenerusGameStorage.prizePoolPendingPacked](contracts/storage/DegenerusGameStorage.sol#L505) can be used in cross function reentrancies:
-	- [DegenerusGameStorage._getPendingPools()](contracts/storage/DegenerusGameStorage.sol#L828-L836)
-	- [DegenerusGameStorage._setPendingPools(uint128,uint128)](contracts/storage/DegenerusGameStorage.sol#L824-L826)
-	- [_setFuturePrizePool(acc.runningFuture)](contracts/modules/DegenerusGameDegeneretteModule.sol#L520)
-		- [prizePoolsPacked = (uint256(future) << 128) | uint256(next)](contracts/storage/DegenerusGameStorage.sol#L811)
-	[DegenerusGameStorage.prizePoolsPacked](contracts/storage/DegenerusGameStorage.sol#L411) can be used in cross function reentrancies:
-	- [DegenerusGameStorage._getPrizePools()](contracts/storage/DegenerusGameStorage.sol#L814-L822)
-	- [DegenerusGameStorage._setPrizePools(uint128,uint128)](contracts/storage/DegenerusGameStorage.sol#L810-L812)
-
-contracts/modules/DegenerusGameDegeneretteModule.sol#L485-L523
-
-
- - [ ] ID-278
 Reentrancy in [Coinflip.processCoinflipPayouts(uint8,uint256,uint24)](contracts/Coinflip.sol#L875-L989):
 	External calls:
 	- [_addDailyFlip(to,slice,0,false,false)](contracts/Coinflip.sol#L927)
@@ -3871,7 +3847,7 @@ Reentrancy in [Coinflip.processCoinflipPayouts(uint8,uint256,uint24)](contracts/
 contracts/Coinflip.sol#L875-L989
 
 
- - [ ] ID-279
+ - [ ] ID-278
 Reentrancy in [DegenerusGameAdvanceModule.advanceGame()](contracts/modules/DegenerusGameAdvanceModule.sol#L173-L651):
 	External calls:
 	- [(goReturn,goStage) = _handleGameOverPath(day,lvl)](contracts/modules/DegenerusGameAdvanceModule.sol#L230)
@@ -3922,7 +3898,7 @@ Reentrancy in [DegenerusGameAdvanceModule.advanceGame()](contracts/modules/Degen
 contracts/modules/DegenerusGameAdvanceModule.sol#L173-L651
 
 
- - [ ] ID-280
+ - [ ] ID-279
 Reentrancy in [Coinflip._depositCoinflip(address,address,uint256,bool)](contracts/Coinflip.sol#L272-L345):
 	External calls:
 	- [mintable = _claimCoinflipsInternal(player,false)](contracts/Coinflip.sol#L286)
@@ -3942,7 +3918,7 @@ Reentrancy in [Coinflip._depositCoinflip(address,address,uint256,bool)](contract
 contracts/Coinflip.sol#L272-L345
 
 
- - [ ] ID-281
+ - [ ] ID-280
 Reentrancy in [sDGNRS._submitGamblingClaimFrom(address,address,uint256)](contracts/sDGNRS.sol#L1027-L1150):
 	External calls:
 	- [coinBacking = coinflip.redeemableFlipBacking()](contracts/sDGNRS.sol#L1082)
@@ -3976,7 +3952,7 @@ Reentrancy in [sDGNRS._submitGamblingClaimFrom(address,address,uint256)](contrac
 contracts/sDGNRS.sol#L1027-L1150
 
 
- - [ ] ID-282
+ - [ ] ID-281
 Reentrancy in [DegenerusQuests._handlePurchase(address,uint256,uint32,uint256,uint256,uint256)](contracts/DegenerusQuests.sol#L1051-L1176):
 	External calls:
 	- [(r,qt,s,c) = _questHandleProgressSlot(player,state,quests,quest,0,ethMintSpendWei,target,currentDay,mintPrice,QUEST_TYPE_MINT_ETH,ethMintSpendWei,levelQuestPrice)](contracts/DegenerusQuests.sol#L1090-L1095)
@@ -4027,7 +4003,7 @@ Reentrancy in [DegenerusQuests._handlePurchase(address,uint256,uint32,uint256,ui
 contracts/DegenerusQuests.sol#L1051-L1176
 
 
- - [ ] ID-283
+ - [ ] ID-282
 Reentrancy in [DegenerusQuests._questCompleteWithPair(address,DegenerusQuests.PlayerQuestState,DegenerusQuests.DailyQuest[2],uint8,DegenerusQuests.DailyQuest,uint24,uint256)](contracts/DegenerusQuests.sol#L2137-L2183):
 	External calls:
 	- [(reward,questType,streak,completed) = _questComplete(player,state,slot,quest)](contracts/DegenerusQuests.sol#L2149-L2154)
@@ -4063,7 +4039,7 @@ Reentrancy in [DegenerusQuests._questCompleteWithPair(address,DegenerusQuests.Pl
 contracts/DegenerusQuests.sol#L2137-L2183
 
 
- - [ ] ID-284
+ - [ ] ID-283
 Reentrancy in [Coinflip.processCoinflipPayouts(uint8,uint256,uint24)](contracts/Coinflip.sol#L875-L989):
 	External calls:
 	- [_addDailyFlip(to,slice,0,false,false)](contracts/Coinflip.sol#L927)
@@ -4083,7 +4059,7 @@ Reentrancy in [Coinflip.processCoinflipPayouts(uint8,uint256,uint24)](contracts/
 contracts/Coinflip.sol#L875-L989
 
 
- - [ ] ID-285
+ - [ ] ID-284
 Reentrancy in [DegenerusGameAdvanceModule.rngGate(uint48,uint24,uint24,bool,uint8)](contracts/modules/DegenerusGameAdvanceModule.sol#L1278-L1375):
 	External calls:
 	- [_backfillGapDays(currentWord,idx + 1,day)](contracts/modules/DegenerusGameAdvanceModule.sol#L1303)
@@ -4118,27 +4094,7 @@ Reentrancy in [DegenerusGameAdvanceModule.rngGate(uint48,uint24,uint24,bool,uint
 contracts/modules/DegenerusGameAdvanceModule.sol#L1278-L1375
 
 
- - [ ] ID-286
-Reentrancy in [DegenerusGameDegeneretteModule.resolveEthSpinFromBox(address,uint256,uint16,uint256,uint32)](contracts/modules/DegenerusGameDegeneretteModule.sol#L1705-L1773):
-	External calls:
-	- [_awardDegeneretteDgnrs(player,betAmount,s)](contracts/modules/DegenerusGameDegeneretteModule.sol#L1747)
-		- [sdgnrs.transferFromPool(IsDGNRS.Pool.Reward,player,reward)](contracts/modules/DegenerusGameDegeneretteModule.sol#L1510-L1514)
-	State variables written after the call(s):
-	- [_setPendingPools(acc.pendingNext,acc.pendingFuture)](contracts/modules/DegenerusGameDegeneretteModule.sol#L1753)
-		- [prizePoolPendingPacked = (uint256(future) << 128) | uint256(next)](contracts/storage/DegenerusGameStorage.sol#L825)
-	[DegenerusGameStorage.prizePoolPendingPacked](contracts/storage/DegenerusGameStorage.sol#L505) can be used in cross function reentrancies:
-	- [DegenerusGameStorage._getPendingPools()](contracts/storage/DegenerusGameStorage.sol#L828-L836)
-	- [DegenerusGameStorage._setPendingPools(uint128,uint128)](contracts/storage/DegenerusGameStorage.sol#L824-L826)
-	- [_setFuturePrizePool(acc.runningFuture)](contracts/modules/DegenerusGameDegeneretteModule.sol#L1755)
-		- [prizePoolsPacked = (uint256(future) << 128) | uint256(next)](contracts/storage/DegenerusGameStorage.sol#L811)
-	[DegenerusGameStorage.prizePoolsPacked](contracts/storage/DegenerusGameStorage.sol#L411) can be used in cross function reentrancies:
-	- [DegenerusGameStorage._getPrizePools()](contracts/storage/DegenerusGameStorage.sol#L814-L822)
-	- [DegenerusGameStorage._setPrizePools(uint128,uint128)](contracts/storage/DegenerusGameStorage.sol#L810-L812)
-
-contracts/modules/DegenerusGameDegeneretteModule.sol#L1705-L1773
-
-
- - [ ] ID-287
+ - [ ] ID-285
 Reentrancy in [DegenerusQuests.handleAffiliate(address,uint256)](contracts/DegenerusQuests.sol#L920-L962):
 	External calls:
 	- [_handleLevelQuestProgress(player,QUEST_TYPE_AFFILIATE,amount,0)](contracts/DegenerusQuests.sol#L935)
@@ -4175,7 +4131,7 @@ Reentrancy in [DegenerusQuests.handleAffiliate(address,uint256)](contracts/Degen
 contracts/DegenerusQuests.sol#L920-L962
 
 
- - [ ] ID-288
+ - [ ] ID-286
 Reentrancy in [GameAfkingModule.subscribe(address,bool,bool,uint8,address)](contracts/modules/GameAfkingModule.sol#L305-L585):
 	External calls:
 	- [_settlePendingFlip(subscriber,s)](contracts/modules/GameAfkingModule.sol#L404)
@@ -4361,7 +4317,7 @@ Reentrancy in [GameAfkingModule.subscribe(address,bool,bool,uint8,address)](cont
 contracts/modules/GameAfkingModule.sol#L305-L585
 
 
- - [ ] ID-289
+ - [ ] ID-287
 Reentrancy in [DegenerusGameLootboxModule._resolveLootboxCommon(address,uint48,uint256,uint24,uint24,uint256,bool,uint256,uint256,bool,uint16,bool)](contracts/modules/DegenerusGameLootboxModule.sol#L1268-L1328):
 	External calls:
 	- [_rollLootboxBoons(player,amount,boonBudget,currentLevel,seed)](contracts/modules/DegenerusGameLootboxModule.sol#L1296)
@@ -4395,7 +4351,7 @@ Reentrancy in [DegenerusGameLootboxModule._resolveLootboxCommon(address,uint48,u
 contracts/modules/DegenerusGameLootboxModule.sol#L1268-L1328
 
 
- - [ ] ID-290
+ - [ ] ID-288
 Reentrancy in [DegenerusGameAdvanceModule.advanceGame()](contracts/modules/DegenerusGameAdvanceModule.sol#L173-L651):
 	External calls:
 	- [(goReturn,goStage) = _handleGameOverPath(day,lvl)](contracts/modules/DegenerusGameAdvanceModule.sol#L230)
@@ -4429,7 +4385,7 @@ Reentrancy in [DegenerusGameAdvanceModule.advanceGame()](contracts/modules/Degen
 contracts/modules/DegenerusGameAdvanceModule.sol#L173-L651
 
 
- - [ ] ID-291
+ - [ ] ID-289
 Reentrancy in [Coinflip._setCoinflipAutoRebuy(address,bool,uint256,bool)](contracts/Coinflip.sol#L766-L805):
 	External calls:
 	- [mintable = _claimCoinflipsInternal(player,true)](contracts/Coinflip.sol#L790)
@@ -4494,7 +4450,7 @@ Reentrancy in [Coinflip._setCoinflipAutoRebuy(address,bool,uint256,bool)](contra
 contracts/Coinflip.sol#L766-L805
 
 
- - [ ] ID-292
+ - [ ] ID-290
 Reentrancy in [DegenerusGameGameOverModule.handleGameOverDrain(uint24)](contracts/modules/DegenerusGameGameOverModule.sol#L75-L207):
 	External calls:
 	- [charityGameOver.burnAtGameOver()](contracts/modules/DegenerusGameGameOverModule.sol#L141)
@@ -4510,7 +4466,7 @@ Reentrancy in [DegenerusGameGameOverModule.handleGameOverDrain(uint24)](contract
 contracts/modules/DegenerusGameGameOverModule.sol#L75-L207
 
 
- - [ ] ID-293
+ - [ ] ID-291
 Reentrancy in [sDGNRS._submitGamblingClaimFrom(address,address,uint256)](contracts/sDGNRS.sol#L1027-L1150):
 	External calls:
 	- [coinBacking = coinflip.redeemableFlipBacking()](contracts/sDGNRS.sol#L1082)
@@ -4528,7 +4484,7 @@ Reentrancy in [sDGNRS._submitGamblingClaimFrom(address,address,uint256)](contrac
 contracts/sDGNRS.sol#L1027-L1150
 
 
- - [ ] ID-294
+ - [ ] ID-292
 Reentrancy in [DegenerusQuests._handlePurchase(address,uint256,uint32,uint256,uint256,uint256)](contracts/DegenerusQuests.sol#L1051-L1176):
 	External calls:
 	- [(r,qt,s,c) = _questHandleProgressSlot(player,state,quests,quest,0,ethMintSpendWei,target,currentDay,mintPrice,QUEST_TYPE_MINT_ETH,ethMintSpendWei,levelQuestPrice)](contracts/DegenerusQuests.sol#L1090-L1095)
@@ -4582,7 +4538,7 @@ Reentrancy in [DegenerusQuests._handlePurchase(address,uint256,uint32,uint256,ui
 contracts/DegenerusQuests.sol#L1051-L1176
 
 
- - [ ] ID-295
+ - [ ] ID-293
 Reentrancy in [DegenerusQuests._questHandleProgressSlot(address,DegenerusQuests.PlayerQuestState,DegenerusQuests.DailyQuest[2],DegenerusQuests.DailyQuest,uint8,uint256,uint256,uint24,uint256,uint8,uint256,uint256)](contracts/DegenerusQuests.sol#L1692-L1727):
 	External calls:
 	- [_handleLevelQuestProgress(player,handlerQuestType,levelDelta,levelQuestPrice)](contracts/DegenerusQuests.sol#L1719)
@@ -4619,7 +4575,7 @@ Reentrancy in [DegenerusQuests._questHandleProgressSlot(address,DegenerusQuests.
 contracts/DegenerusQuests.sol#L1692-L1727
 
 
- - [ ] ID-296
+ - [ ] ID-294
 Reentrancy in [DegenerusGameLootboxModule.openHumanBoxes(uint256)](contracts/modules/DegenerusGameLootboxModule.sol#L669-L742):
 	External calls:
 	- [_openLootBoxLegWith(player,idx,packed,word)](contracts/modules/DegenerusGameLootboxModule.sol#L718)
@@ -4692,7 +4648,7 @@ Reentrancy in [DegenerusGameLootboxModule.openHumanBoxes(uint256)](contracts/mod
 contracts/modules/DegenerusGameLootboxModule.sol#L669-L742
 
 
- - [ ] ID-297
+ - [ ] ID-295
 Reentrancy in [DegenerusGameBingoModule.claimAffiliateDgnrs(address)](contracts/modules/DegenerusGameBingoModule.sol#L228-L274):
 	External calls:
 	- [paid = dgnrs.transferFromPool(IsDGNRS.Pool.Affiliate,player,reward)](contracts/modules/DegenerusGameBingoModule.sol#L249-L253)
@@ -4706,7 +4662,7 @@ Reentrancy in [DegenerusGameBingoModule.claimAffiliateDgnrs(address)](contracts/
 contracts/modules/DegenerusGameBingoModule.sol#L228-L274
 
 
- - [ ] ID-298
+ - [ ] ID-296
 Reentrancy in [Coinflip._depositCoinflip(address,address,uint256,bool)](contracts/Coinflip.sol#L272-L345):
 	External calls:
 	- [mintable = _claimCoinflipsInternal(player,false)](contracts/Coinflip.sol#L286)
@@ -4726,7 +4682,7 @@ Reentrancy in [Coinflip._depositCoinflip(address,address,uint256,bool)](contract
 contracts/Coinflip.sol#L272-L345
 
 
- - [ ] ID-299
+ - [ ] ID-297
 Reentrancy in [DegenerusQuests._foilStreakFloor(address)](contracts/DegenerusQuests.sol#L501-L517):
 	External calls:
 	- [questGame.floorAfkingStreakBase(player,FOIL_STREAK_FLOOR)](contracts/DegenerusQuests.sol#L508)
@@ -4777,25 +4733,7 @@ Reentrancy in [DegenerusQuests._foilStreakFloor(address)](contracts/DegenerusQue
 contracts/DegenerusQuests.sol#L501-L517
 
 
- - [ ] ID-300
-Reentrancy in [DegenerusGameDegeneretteModule._resolveBet(address,uint64,DegenerusGameDegeneretteModule.ResolveAcc,bool)](contracts/modules/DegenerusGameDegeneretteModule.sol#L694-L906):
-	External calls:
-	- [_awardDegeneretteDgnrs(player,amountPerSpin,s)](contracts/modules/DegenerusGameDegeneretteModule.sol#L833)
-		- [sdgnrs.transferFromPool(IsDGNRS.Pool.Reward,player,reward)](contracts/modules/DegenerusGameDegeneretteModule.sol#L1510-L1514)
-	State variables written after the call(s):
-	- [whalePassClaims[player] += 1](contracts/modules/DegenerusGameDegeneretteModule.sol#L847)
-	[DegenerusGameStorage.whalePassClaims](contracts/storage/DegenerusGameStorage.sol#L1183) can be used in cross function reentrancies:
-	- [DegenerusGameDegeneretteModule._resolveBet(address,uint64,DegenerusGameDegeneretteModule.ResolveAcc,bool)](contracts/modules/DegenerusGameDegeneretteModule.sol#L694-L906)
-	- [DegenerusGameDegeneretteModule.resolveWwxrpSpinFromBox(address,uint256,uint16,uint256,uint32)](contracts/modules/DegenerusGameDegeneretteModule.sol#L1574-L1637)
-	- [wwxrpJackpotWhalePassBracketAwarded[bracket] = true](contracts/modules/DegenerusGameDegeneretteModule.sol#L848)
-	[DegenerusGameStorage.wwxrpJackpotWhalePassBracketAwarded](contracts/storage/DegenerusGameStorage.sol#L1188) can be used in cross function reentrancies:
-	- [DegenerusGameDegeneretteModule._resolveBet(address,uint64,DegenerusGameDegeneretteModule.ResolveAcc,bool)](contracts/modules/DegenerusGameDegeneretteModule.sol#L694-L906)
-	- [DegenerusGameDegeneretteModule.resolveWwxrpSpinFromBox(address,uint256,uint16,uint256,uint32)](contracts/modules/DegenerusGameDegeneretteModule.sol#L1574-L1637)
-
-contracts/modules/DegenerusGameDegeneretteModule.sol#L694-L906
-
-
- - [ ] ID-301
+ - [ ] ID-298
 Reentrancy in [FLIP.burnCoin(address,uint256)](contracts/FLIP.sol#L601-L604):
 	External calls:
 	- [consumed = _consumeCoinflipShortfall(target,amount)](contracts/FLIP.sol#L602)
@@ -4815,7 +4753,7 @@ Reentrancy in [FLIP.burnCoin(address,uint256)](contracts/FLIP.sol#L601-L604):
 contracts/FLIP.sol#L601-L604
 
 
- - [ ] ID-302
+ - [ ] ID-299
 Reentrancy in [DegenerusQuests.handleFlip(address,uint256)](contracts/DegenerusQuests.sol#L746-L790):
 	External calls:
 	- [_handleLevelQuestProgress(player,QUEST_TYPE_FLIP,flipCredit,0)](contracts/DegenerusQuests.sol#L761)
@@ -4852,7 +4790,7 @@ Reentrancy in [DegenerusQuests.handleFlip(address,uint256)](contracts/DegenerusQ
 contracts/DegenerusQuests.sol#L746-L790
 
 
- - [ ] ID-303
+ - [ ] ID-300
 Reentrancy in [Coinflip.processCoinflipPayouts(uint8,uint256,uint24)](contracts/Coinflip.sol#L875-L989):
 	External calls:
 	- [_addDailyFlip(to,slice,0,false,false)](contracts/Coinflip.sol#L927)
@@ -4871,7 +4809,7 @@ Reentrancy in [Coinflip.processCoinflipPayouts(uint8,uint256,uint24)](contracts/
 contracts/Coinflip.sol#L875-L989
 
 
- - [ ] ID-304
+ - [ ] ID-301
 Reentrancy in [DegenerusQuests.handleFoilPurchase(address,uint256,uint32,uint256,uint256,uint256)](contracts/DegenerusQuests.sol#L1023-L1047):
 	External calls:
 	- [(reward,questType,None,completed) = _handlePurchase(player,ethMintSpendWei,flipMintQty,lootBoxAmount,mintPrice,levelQuestPrice)](contracts/DegenerusQuests.sol#L1035-L1037)
@@ -4918,7 +4856,7 @@ Reentrancy in [DegenerusQuests.handleFoilPurchase(address,uint256,uint32,uint256
 contracts/DegenerusQuests.sol#L1023-L1047
 
 
- - [ ] ID-305
+ - [ ] ID-302
 Reentrancy in [DegenerusGameMintModule.processTicketBatch(uint24)](contracts/modules/DegenerusGameMintModule.sol#L621-L731):
 	External calls:
 	- [(foilDoneEmpty,foilDrainedEmpty) = _drainFoil(writesBudget)](contracts/modules/DegenerusGameMintModule.sol#L650)
@@ -4936,7 +4874,7 @@ Reentrancy in [DegenerusGameMintModule.processTicketBatch(uint24)](contracts/mod
 contracts/modules/DegenerusGameMintModule.sol#L621-L731
 
 
- - [ ] ID-306
+ - [ ] ID-303
 Reentrancy in [GameAfkingModule._autoOpen(uint256)](contracts/modules/GameAfkingModule.sol#L1562-L1620):
 	External calls:
 	- [_openAfkingBox(player,sub,word)](contracts/modules/GameAfkingModule.sol#L1613)
@@ -4952,7 +4890,7 @@ Reentrancy in [GameAfkingModule._autoOpen(uint256)](contracts/modules/GameAfking
 contracts/modules/GameAfkingModule.sol#L1562-L1620
 
 
- - [ ] ID-307
+ - [ ] ID-304
 Reentrancy in [GameAfkingModule._finalizeAfking(address,DegenerusGameStorage.Sub,uint24)](contracts/modules/GameAfkingModule.sol#L1080-L1096):
 	External calls:
 	- [quests.finalizeAfking(player,type()(uint24).max,covered,currentDay)](contracts/modules/GameAfkingModule.sol#L1088-L1093)
@@ -4988,7 +4926,7 @@ Reentrancy in [GameAfkingModule._finalizeAfking(address,DegenerusGameStorage.Sub
 contracts/modules/GameAfkingModule.sol#L1080-L1096
 
 
- - [ ] ID-308
+ - [ ] ID-305
 Reentrancy in [GameAfkingModule.processSubscriberStage(uint24,uint256)](contracts/modules/GameAfkingModule.sol#L1167-L1449):
 	External calls:
 	- [_finalizeAfking(player,sub,processDay)](contracts/modules/GameAfkingModule.sol#L1331)
@@ -5223,7 +5161,25 @@ Reentrancy in [GameAfkingModule.processSubscriberStage(uint24,uint256)](contract
 contracts/modules/GameAfkingModule.sol#L1167-L1449
 
 
- - [ ] ID-309
+ - [ ] ID-306
+Reentrancy in [DegenerusGameDegeneretteModule._resolveBet(address,uint64,DegenerusGameDegeneretteModule.ResolveAcc,bool)](contracts/modules/DegenerusGameDegeneretteModule.sol#L699-L911):
+	External calls:
+	- [_awardDegeneretteDgnrs(player,amountPerSpin,s)](contracts/modules/DegenerusGameDegeneretteModule.sol#L838)
+		- [sdgnrs.transferFromPool(IsDGNRS.Pool.Reward,player,reward)](contracts/modules/DegenerusGameDegeneretteModule.sol#L1515-L1519)
+	State variables written after the call(s):
+	- [whalePassClaims[player] += 1](contracts/modules/DegenerusGameDegeneretteModule.sol#L852)
+	[DegenerusGameStorage.whalePassClaims](contracts/storage/DegenerusGameStorage.sol#L1183) can be used in cross function reentrancies:
+	- [DegenerusGameDegeneretteModule._resolveBet(address,uint64,DegenerusGameDegeneretteModule.ResolveAcc,bool)](contracts/modules/DegenerusGameDegeneretteModule.sol#L699-L911)
+	- [DegenerusGameDegeneretteModule.resolveWwxrpSpinFromBox(address,uint256,uint16,uint256,uint32)](contracts/modules/DegenerusGameDegeneretteModule.sol#L1579-L1642)
+	- [wwxrpJackpotWhalePassBracketAwarded[bracket] = true](contracts/modules/DegenerusGameDegeneretteModule.sol#L853)
+	[DegenerusGameStorage.wwxrpJackpotWhalePassBracketAwarded](contracts/storage/DegenerusGameStorage.sol#L1188) can be used in cross function reentrancies:
+	- [DegenerusGameDegeneretteModule._resolveBet(address,uint64,DegenerusGameDegeneretteModule.ResolveAcc,bool)](contracts/modules/DegenerusGameDegeneretteModule.sol#L699-L911)
+	- [DegenerusGameDegeneretteModule.resolveWwxrpSpinFromBox(address,uint256,uint16,uint256,uint32)](contracts/modules/DegenerusGameDegeneretteModule.sol#L1579-L1642)
+
+contracts/modules/DegenerusGameDegeneretteModule.sol#L699-L911
+
+
+ - [ ] ID-307
 Reentrancy in [DegenerusQuests.handleDecimator(address,uint256)](contracts/DegenerusQuests.sol#L804-L849):
 	External calls:
 	- [_handleLevelQuestProgress(player,QUEST_TYPE_DECIMATOR,burnAmount,0)](contracts/DegenerusQuests.sol#L819)
@@ -5257,7 +5213,7 @@ Reentrancy in [DegenerusQuests.handleDecimator(address,uint256)](contracts/Degen
 contracts/DegenerusQuests.sol#L804-L849
 
 
- - [ ] ID-310
+ - [ ] ID-308
 Reentrancy in [DegenerusGameAdvanceModule.advanceGame()](contracts/modules/DegenerusGameAdvanceModule.sol#L173-L651):
 	External calls:
 	- [(goReturn,goStage) = _handleGameOverPath(day,lvl)](contracts/modules/DegenerusGameAdvanceModule.sol#L230)
@@ -5345,7 +5301,7 @@ Reentrancy in [DegenerusGameAdvanceModule.advanceGame()](contracts/modules/Degen
 contracts/modules/DegenerusGameAdvanceModule.sol#L173-L651
 
 
- - [ ] ID-311
+ - [ ] ID-309
 Reentrancy in [Coinflip.withdrawRedeemedFlip(uint256)](contracts/Coinflip.sol#L1054-L1073):
 	External calls:
 	- [consumed = _claimCoinflipsAmount(s,base,false)](contracts/Coinflip.sol#L1060)
@@ -5375,7 +5331,7 @@ Reentrancy in [Coinflip.withdrawRedeemedFlip(uint256)](contracts/Coinflip.sol#L1
 contracts/Coinflip.sol#L1054-L1073
 
 
- - [ ] ID-312
+ - [ ] ID-310
 Reentrancy in [DegenerusGameWhaleModule.purchaseWhalePass(address,uint256)](contracts/modules/DegenerusGameWhaleModule.sol#L184-L387):
 	External calls:
 	- [_rewardWhalePassDgnrs(buyer,affiliateAddr,upline,upline2)](contracts/modules/DegenerusGameWhaleModule.sol#L355)
@@ -5410,7 +5366,7 @@ Reentrancy in [DegenerusGameWhaleModule.purchaseWhalePass(address,uint256)](cont
 contracts/modules/DegenerusGameWhaleModule.sol#L184-L387
 
 
- - [ ] ID-313
+ - [ ] ID-311
 Reentrancy in [DegenerusQuests._handlePurchase(address,uint256,uint32,uint256,uint256,uint256)](contracts/DegenerusQuests.sol#L1051-L1176):
 	External calls:
 	- [(r,qt,s,c) = _questHandleProgressSlot(player,state,quests,quest,0,ethMintSpendWei,target,currentDay,mintPrice,QUEST_TYPE_MINT_ETH,ethMintSpendWei,levelQuestPrice)](contracts/DegenerusQuests.sol#L1090-L1095)
@@ -5461,7 +5417,7 @@ Reentrancy in [DegenerusQuests._handlePurchase(address,uint256,uint32,uint256,ui
 contracts/DegenerusQuests.sol#L1051-L1176
 
 
- - [ ] ID-314
+ - [ ] ID-312
 Reentrancy in [FLIP._transfer(address,address,uint256)](contracts/FLIP.sol#L381-L419):
 	External calls:
 	- [coinflip.claimCoinflipsFromFlip(from,amount - balance)](contracts/FLIP.sol#L386)
@@ -5488,7 +5444,7 @@ Reentrancy in [FLIP._transfer(address,address,uint256)](contracts/FLIP.sol#L381-
 contracts/FLIP.sol#L381-L419
 
 
- - [ ] ID-315
+ - [ ] ID-313
 Reentrancy in [FLIP.terminalDecimatorBurn(address,uint256)](contracts/FLIP.sol#L719-L741):
 	External calls:
 	- [consumed = _consumeCoinflipShortfall(caller,amount)](contracts/FLIP.sol#L735)
@@ -5508,7 +5464,7 @@ Reentrancy in [FLIP.terminalDecimatorBurn(address,uint256)](contracts/FLIP.sol#L
 contracts/FLIP.sol#L719-L741
 
 
- - [ ] ID-316
+ - [ ] ID-314
 Reentrancy in [DegenerusGameAdvanceModule.rngGate(uint48,uint24,uint24,bool,uint8)](contracts/modules/DegenerusGameAdvanceModule.sol#L1278-L1375):
 	External calls:
 	- [_backfillGapDays(currentWord,idx + 1,day)](contracts/modules/DegenerusGameAdvanceModule.sol#L1303)
@@ -5528,7 +5484,7 @@ Reentrancy in [DegenerusGameAdvanceModule.rngGate(uint48,uint24,uint24,bool,uint
 contracts/modules/DegenerusGameAdvanceModule.sol#L1278-L1375
 
 
- - [ ] ID-317
+ - [ ] ID-315
 Reentrancy in [DegenerusQuests.handleAffiliate(address,uint256)](contracts/DegenerusQuests.sol#L920-L962):
 	External calls:
 	- [_handleLevelQuestProgress(player,QUEST_TYPE_AFFILIATE,amount,0)](contracts/DegenerusQuests.sol#L935)
@@ -5562,7 +5518,7 @@ Reentrancy in [DegenerusQuests.handleAffiliate(address,uint256)](contracts/Degen
 contracts/DegenerusQuests.sol#L920-L962
 
 
- - [ ] ID-318
+ - [ ] ID-316
 Reentrancy in [DegenerusGameAdvanceModule.requestLootboxRng()](contracts/modules/DegenerusGameAdvanceModule.sol#L1189-L1254):
 	External calls:
 	- [id = _requestVrfWord(VRF_MIDDAY_CONFIRMATIONS)](contracts/modules/DegenerusGameAdvanceModule.sol#L1247)
@@ -5590,7 +5546,31 @@ Reentrancy in [DegenerusGameAdvanceModule.requestLootboxRng()](contracts/modules
 contracts/modules/DegenerusGameAdvanceModule.sol#L1189-L1254
 
 
- - [ ] ID-319
+ - [ ] ID-317
+Reentrancy in [DegenerusGameDegeneretteModule.resolveDegeneretteBets(address,uint64[])](contracts/modules/DegenerusGameDegeneretteModule.sol#L485-L523):
+	External calls:
+	- [_resolveBet(player,betIds[i],acc,i == 0)](contracts/modules/DegenerusGameDegeneretteModule.sol#L503)
+		- [(ok,data) = ContractAddresses.GAME_LOOTBOX_MODULE.delegatecall(abi.encodeWithSelector(IDegenerusGameLootboxModule.resolveLootboxDirect.selector,player,amount,rngWord,activityScore))](contracts/modules/DegenerusGameDegeneretteModule.sol#L1029-L1039)
+		- [sdgnrs.transferFromPool(IsDGNRS.Pool.Reward,player,reward)](contracts/modules/DegenerusGameDegeneretteModule.sol#L1515-L1519)
+		- [coinflip.creditFlip(affiliate.getReferrer(player),(refFlip * 7) / 100)](contracts/modules/DegenerusGameDegeneretteModule.sol#L901)
+	- [coin.mintForGame(player,acc.flipMint)](contracts/modules/DegenerusGameDegeneretteModule.sol#L510)
+	- [wwxrp.mintPrize(player,acc.wwxrpMint)](contracts/modules/DegenerusGameDegeneretteModule.sol#L511)
+	State variables written after the call(s):
+	- [_setPendingPools(acc.pendingNext,acc.pendingFuture)](contracts/modules/DegenerusGameDegeneretteModule.sol#L518)
+		- [prizePoolPendingPacked = (uint256(future) << 128) | uint256(next)](contracts/storage/DegenerusGameStorage.sol#L825)
+	[DegenerusGameStorage.prizePoolPendingPacked](contracts/storage/DegenerusGameStorage.sol#L505) can be used in cross function reentrancies:
+	- [DegenerusGameStorage._getPendingPools()](contracts/storage/DegenerusGameStorage.sol#L828-L836)
+	- [DegenerusGameStorage._setPendingPools(uint128,uint128)](contracts/storage/DegenerusGameStorage.sol#L824-L826)
+	- [_setFuturePrizePool(acc.runningFuture)](contracts/modules/DegenerusGameDegeneretteModule.sol#L520)
+		- [prizePoolsPacked = (uint256(future) << 128) | uint256(next)](contracts/storage/DegenerusGameStorage.sol#L811)
+	[DegenerusGameStorage.prizePoolsPacked](contracts/storage/DegenerusGameStorage.sol#L411) can be used in cross function reentrancies:
+	- [DegenerusGameStorage._getPrizePools()](contracts/storage/DegenerusGameStorage.sol#L814-L822)
+	- [DegenerusGameStorage._setPrizePools(uint128,uint128)](contracts/storage/DegenerusGameStorage.sol#L810-L812)
+
+contracts/modules/DegenerusGameDegeneretteModule.sol#L485-L523
+
+
+ - [ ] ID-318
 Reentrancy in [GameAfkingModule.subscribe(address,bool,bool,uint8,address)](contracts/modules/GameAfkingModule.sol#L305-L585):
 	External calls:
 	- [_settlePendingFlip(subscriber,c)](contracts/modules/GameAfkingModule.sol#L366)
@@ -5631,7 +5611,7 @@ Reentrancy in [GameAfkingModule.subscribe(address,bool,bool,uint8,address)](cont
 contracts/modules/GameAfkingModule.sol#L305-L585
 
 
- - [ ] ID-320
+ - [ ] ID-319
 Reentrancy in [DegenerusGameAdvanceModule.advanceGame()](contracts/modules/DegenerusGameAdvanceModule.sol#L173-L651):
 	External calls:
 	- [(goReturn,goStage) = _handleGameOverPath(day,lvl)](contracts/modules/DegenerusGameAdvanceModule.sol#L230)
@@ -5771,7 +5751,7 @@ Reentrancy in [DegenerusGameAdvanceModule.advanceGame()](contracts/modules/Degen
 contracts/modules/DegenerusGameAdvanceModule.sol#L173-L651
 
 
- - [ ] ID-321
+ - [ ] ID-320
 Reentrancy in [Coinflip.consumeFlipForSalvage(address,uint256)](contracts/Coinflip.sol#L408-L425):
 	External calls:
 	- [consumed = _claimCoinflipsAmount(player,amount,false)](contracts/Coinflip.sol#L412)
@@ -5801,7 +5781,7 @@ Reentrancy in [Coinflip.consumeFlipForSalvage(address,uint256)](contracts/Coinfl
 contracts/Coinflip.sol#L408-L425
 
 
- - [ ] ID-322
+ - [ ] ID-321
 Reentrancy in [DegenerusGameMintModule._purchaseForWithCached(address,uint256,uint256,bytes32,MintPaymentKind,uint256,bool,uint24,uint256,uint256)](contracts/modules/DegenerusGameMintModule.sol#L1351-L1750):
 	External calls:
 	- [(lootboxFlipCredit,adjustedQty,targetLevel,flipMintUnits,ticketFreshFlip,ticketRecycledFlip,ticketNextShare,ticketFutureShare,ticketClaimableDraw) = _callTicketPurchase(buyer,entryQuantityScaled,payKind,false,affiliateCode,remainingEth,cachedLevel,cachedJpFlag)](contracts/modules/DegenerusGameMintModule.sol#L1425-L1444)
@@ -5831,7 +5811,7 @@ Reentrancy in [DegenerusGameMintModule._purchaseForWithCached(address,uint256,ui
 contracts/modules/DegenerusGameMintModule.sol#L1351-L1750
 
 
- - [ ] ID-323
+ - [ ] ID-322
 Reentrancy in [DegenerusQuests.handleDecimator(address,uint256)](contracts/DegenerusQuests.sol#L804-L849):
 	External calls:
 	- [_handleLevelQuestProgress(player,QUEST_TYPE_DECIMATOR,burnAmount,0)](contracts/DegenerusQuests.sol#L819)
@@ -5868,7 +5848,7 @@ Reentrancy in [DegenerusQuests.handleDecimator(address,uint256)](contracts/Degen
 contracts/DegenerusQuests.sol#L804-L849
 
 
- - [ ] ID-324
+ - [ ] ID-323
 Reentrancy in [Coinflip._claimCoinflipsAmount(address,uint256,bool)](contracts/Coinflip.sol#L450-L479):
 	External calls:
 	- [mintable = _claimCoinflipsInternal(player,false)](contracts/Coinflip.sol#L456)
@@ -5897,7 +5877,7 @@ Reentrancy in [Coinflip._claimCoinflipsAmount(address,uint256,bool)](contracts/C
 contracts/Coinflip.sol#L450-L479
 
 
- - [ ] ID-325
+ - [ ] ID-324
 Reentrancy in [DegenerusGameMintModule.buyLootboxAndPresaleBox(address,uint256,uint256,bytes32,MintPaymentKind,uint256)](contracts/modules/DegenerusGameMintModule.sol#L1775-L1816):
 	External calls:
 	- [_purchaseForWithCached(buyer,entryQuantityScaled,lootBoxAmount,affiliateCode,payKind,mintFresh,cachedJpFlag,cachedLevel,priceWei,ticketCost)](contracts/modules/DegenerusGameMintModule.sol#L1800-L1811)
@@ -5949,7 +5929,7 @@ Reentrancy in [DegenerusGameMintModule.buyLootboxAndPresaleBox(address,uint256,u
 contracts/modules/DegenerusGameMintModule.sol#L1775-L1816
 
 
- - [ ] ID-326
+ - [ ] ID-325
 Reentrancy in [FLIP.decimatorBurn(address,uint256)](contracts/FLIP.sol#L647-L704):
 	External calls:
 	- [consumed = _consumeCoinflipShortfall(caller,amount)](contracts/FLIP.sol#L665)
@@ -5969,7 +5949,7 @@ Reentrancy in [FLIP.decimatorBurn(address,uint256)](contracts/FLIP.sol#L647-L704
 contracts/FLIP.sol#L647-L704
 
 
- - [ ] ID-327
+ - [ ] ID-326
 Reentrancy in [GameAfkingModule.smite(uint256,address)](contracts/modules/GameAfkingModule.sol#L1923-L1940):
 	External calls:
 	- [coin.burnCoin(msg.sender,PRICE_COIN_UNIT / 5)](contracts/modules/GameAfkingModule.sol#L1937)
@@ -5989,7 +5969,7 @@ Reentrancy in [GameAfkingModule.smite(uint256,address)](contracts/modules/GameAf
 contracts/modules/GameAfkingModule.sol#L1923-L1940
 
 
- - [ ] ID-328
+ - [ ] ID-327
 Reentrancy in [DegenerusGameFoilPackModule.buyFoilPack(address,uint256,bytes32,MintPaymentKind)](contracts/modules/DegenerusGameFoilPackModule.sol#L140-L331):
 	External calls:
 	- [kickback += affiliate.payAffiliate((ethUsed * PRICE_COIN_UNIT) / priceWei,affiliateCode,buyer,affLevel,true,0)](contracts/modules/DegenerusGameFoilPackModule.sol#L231-L238)
@@ -6006,7 +5986,7 @@ Reentrancy in [DegenerusGameFoilPackModule.buyFoilPack(address,uint256,bytes32,M
 contracts/modules/DegenerusGameFoilPackModule.sol#L140-L331
 
 
- - [ ] ID-329
+ - [ ] ID-328
 Reentrancy in [DegenerusQuests._handlePurchase(address,uint256,uint32,uint256,uint256,uint256)](contracts/DegenerusQuests.sol#L1051-L1176):
 	External calls:
 	- [(r,qt,s,c) = _questHandleProgressSlot(player,state,quests,quest,0,ethMintSpendWei,target,currentDay,mintPrice,QUEST_TYPE_MINT_ETH,ethMintSpendWei,levelQuestPrice)](contracts/DegenerusQuests.sol#L1090-L1095)
@@ -6085,6 +6065,26 @@ Reentrancy in [DegenerusQuests._handlePurchase(address,uint256,uint32,uint256,ui
 	- [DegenerusQuests.questCompletionToday(address)](contracts/DegenerusQuests.sol#L1309-L1314)
 
 contracts/DegenerusQuests.sol#L1051-L1176
+
+
+ - [ ] ID-329
+Reentrancy in [DegenerusGameDegeneretteModule.resolveEthSpinFromBox(address,uint256,uint16,uint256,uint32)](contracts/modules/DegenerusGameDegeneretteModule.sol#L1710-L1778):
+	External calls:
+	- [_awardDegeneretteDgnrs(player,betAmount,s)](contracts/modules/DegenerusGameDegeneretteModule.sol#L1752)
+		- [sdgnrs.transferFromPool(IsDGNRS.Pool.Reward,player,reward)](contracts/modules/DegenerusGameDegeneretteModule.sol#L1515-L1519)
+	State variables written after the call(s):
+	- [_setPendingPools(acc.pendingNext,acc.pendingFuture)](contracts/modules/DegenerusGameDegeneretteModule.sol#L1758)
+		- [prizePoolPendingPacked = (uint256(future) << 128) | uint256(next)](contracts/storage/DegenerusGameStorage.sol#L825)
+	[DegenerusGameStorage.prizePoolPendingPacked](contracts/storage/DegenerusGameStorage.sol#L505) can be used in cross function reentrancies:
+	- [DegenerusGameStorage._getPendingPools()](contracts/storage/DegenerusGameStorage.sol#L828-L836)
+	- [DegenerusGameStorage._setPendingPools(uint128,uint128)](contracts/storage/DegenerusGameStorage.sol#L824-L826)
+	- [_setFuturePrizePool(acc.runningFuture)](contracts/modules/DegenerusGameDegeneretteModule.sol#L1760)
+		- [prizePoolsPacked = (uint256(future) << 128) | uint256(next)](contracts/storage/DegenerusGameStorage.sol#L811)
+	[DegenerusGameStorage.prizePoolsPacked](contracts/storage/DegenerusGameStorage.sol#L411) can be used in cross function reentrancies:
+	- [DegenerusGameStorage._getPrizePools()](contracts/storage/DegenerusGameStorage.sol#L814-L822)
+	- [DegenerusGameStorage._setPrizePools(uint128,uint128)](contracts/storage/DegenerusGameStorage.sol#L810-L812)
+
+contracts/modules/DegenerusGameDegeneretteModule.sol#L1710-L1778
 
 
  - [ ] ID-330
@@ -6342,9 +6342,9 @@ contracts/modules/DegenerusGameDegeneretteModule.sol#L581
 
 
  - [ ] ID-361
-[DegenerusGameDegeneretteModule._resolveBet(address,uint64,DegenerusGameDegeneretteModule.ResolveAcc,bool).betLootboxShare](contracts/modules/DegenerusGameDegeneretteModule.sol#L748) is a local variable never initialized
+[DegenerusGameDegeneretteModule._resolveBet(address,uint64,DegenerusGameDegeneretteModule.ResolveAcc,bool).betLootboxShare](contracts/modules/DegenerusGameDegeneretteModule.sol#L753) is a local variable never initialized
 
-contracts/modules/DegenerusGameDegeneretteModule.sol#L748
+contracts/modules/DegenerusGameDegeneretteModule.sol#L753
 
 
  - [ ] ID-362
@@ -6366,9 +6366,9 @@ contracts/modules/GameAfkingModule.sol#L1580
 
 
  - [ ] ID-365
-[DegenerusGameDegeneretteModule._rigWwxrpResult(uint32,uint32,uint8,uint256).m](contracts/modules/DegenerusGameDegeneretteModule.sol#L1409) is a local variable never initialized
+[DegenerusGameDegeneretteModule._rigWwxrpResult(uint32,uint32,uint8,uint256).m](contracts/modules/DegenerusGameDegeneretteModule.sol#L1414) is a local variable never initialized
 
-contracts/modules/DegenerusGameDegeneretteModule.sol#L1409
+contracts/modules/DegenerusGameDegeneretteModule.sol#L1414
 
 
  - [ ] ID-366
@@ -6582,9 +6582,9 @@ contracts/modules/DegenerusGameAdvanceModule.sol#L1499
 
 
  - [ ] ID-401
-[DegenerusGameDegeneretteModule.resolveFlipSpinsFromBox(address,uint256,uint16,uint256,uint32).packedSpins](contracts/modules/DegenerusGameDegeneretteModule.sol#L1658) is a local variable never initialized
+[DegenerusGameDegeneretteModule.resolveFlipSpinsFromBox(address,uint256,uint16,uint256,uint32).packedSpins](contracts/modules/DegenerusGameDegeneretteModule.sol#L1663) is a local variable never initialized
 
-contracts/modules/DegenerusGameDegeneretteModule.sol#L1658
+contracts/modules/DegenerusGameDegeneretteModule.sol#L1663
 
 
  - [ ] ID-402
@@ -6642,9 +6642,9 @@ contracts/modules/DegenerusGameDecimatorModule.sol#L974
 
 
  - [ ] ID-411
-[DegenerusGameDegeneretteModule._rigWwxrpResult(uint32,uint32,uint8,uint256).u](contracts/modules/DegenerusGameDegeneretteModule.sol#L1410) is a local variable never initialized
+[DegenerusGameDegeneretteModule._rigWwxrpResult(uint32,uint32,uint8,uint256).u](contracts/modules/DegenerusGameDegeneretteModule.sol#L1415) is a local variable never initialized
 
-contracts/modules/DegenerusGameDegeneretteModule.sol#L1410
+contracts/modules/DegenerusGameDegeneretteModule.sol#L1415
 
 
  - [ ] ID-412
@@ -6666,9 +6666,9 @@ contracts/modules/DegenerusGameAdvanceModule.sol#L1498
 
 
  - [ ] ID-415
-[DegenerusGameDegeneretteModule._resolveBet(address,uint64,DegenerusGameDegeneretteModule.ResolveAcc,bool).firstResultTraits](contracts/modules/DegenerusGameDegeneretteModule.sol#L746) is a local variable never initialized
+[DegenerusGameDegeneretteModule._resolveBet(address,uint64,DegenerusGameDegeneretteModule.ResolveAcc,bool).firstResultTraits](contracts/modules/DegenerusGameDegeneretteModule.sol#L751) is a local variable never initialized
 
-contracts/modules/DegenerusGameDegeneretteModule.sol#L746
+contracts/modules/DegenerusGameDegeneretteModule.sol#L751
 
 
  - [ ] ID-416
@@ -6690,9 +6690,9 @@ contracts/Coinflip.sol#L498
 
 
  - [ ] ID-419
-[DegenerusGameDegeneretteModule._resolveBet(address,uint64,DegenerusGameDegeneretteModule.ResolveAcc,bool).totalPayout](contracts/modules/DegenerusGameDegeneretteModule.sol#L745) is a local variable never initialized
+[DegenerusGameDegeneretteModule._resolveBet(address,uint64,DegenerusGameDegeneretteModule.ResolveAcc,bool).totalPayout](contracts/modules/DegenerusGameDegeneretteModule.sol#L750) is a local variable never initialized
 
-contracts/modules/DegenerusGameDegeneretteModule.sol#L745
+contracts/modules/DegenerusGameDegeneretteModule.sol#L750
 
 
  - [ ] ID-420
@@ -6876,9 +6876,9 @@ contracts/modules/DegenerusGameWhaleModule.sol#L345
 
 
  - [ ] ID-450
-[DegenerusGameDegeneretteModule.resolveFlipSpinsFromBox(address,uint256,uint16,uint256,uint32).total](contracts/modules/DegenerusGameDegeneretteModule.sol#L1657) is a local variable never initialized
+[DegenerusGameDegeneretteModule.resolveFlipSpinsFromBox(address,uint256,uint16,uint256,uint32).total](contracts/modules/DegenerusGameDegeneretteModule.sol#L1662) is a local variable never initialized
 
-contracts/modules/DegenerusGameDegeneretteModule.sol#L1657
+contracts/modules/DegenerusGameDegeneretteModule.sol#L1662
 
 
  - [ ] ID-451
@@ -6894,9 +6894,9 @@ contracts/modules/DegenerusGameMintModule.sol#L1454
 
 
  - [ ] ID-453
-[DegenerusGameDegeneretteModule._degenerettePayout(uint8,uint8,uint8,uint128,uint256,uint256,bool).baseBonus](contracts/modules/DegenerusGameDegeneretteModule.sol#L1212) is a local variable never initialized
+[DegenerusGameDegeneretteModule._degenerettePayout(uint8,uint8,uint8,uint128,uint256,uint256,bool).baseBonus](contracts/modules/DegenerusGameDegeneretteModule.sol#L1217) is a local variable never initialized
 
-contracts/modules/DegenerusGameDegeneretteModule.sol#L1212
+contracts/modules/DegenerusGameDegeneretteModule.sol#L1217
 
 
  - [ ] ID-454
@@ -6942,9 +6942,9 @@ contracts/modules/DegenerusGameWhaleModule.sol#L875
 
 
  - [ ] ID-461
-[DegenerusGameDegeneretteModule.resolveEthSpinFromBox(address,uint256,uint16,uint256,uint32).acc](contracts/modules/DegenerusGameDegeneretteModule.sol#L1745) is a local variable never initialized
+[DegenerusGameDegeneretteModule.resolveEthSpinFromBox(address,uint256,uint16,uint256,uint32).acc](contracts/modules/DegenerusGameDegeneretteModule.sol#L1750) is a local variable never initialized
 
-contracts/modules/DegenerusGameDegeneretteModule.sol#L1745
+contracts/modules/DegenerusGameDegeneretteModule.sol#L1750
 
 
  - [ ] ID-462
@@ -7074,9 +7074,9 @@ contracts/modules/DegenerusGameJackpotModule.sol#L500
 
 
  - [ ] ID-483
-[DegenerusGameDegeneretteModule._resolveBet(address,uint64,DegenerusGameDegeneretteModule.ResolveAcc,bool).affiliateBoxShare](contracts/modules/DegenerusGameDegeneretteModule.sol#L750) is a local variable never initialized
+[DegenerusGameDegeneretteModule._resolveBet(address,uint64,DegenerusGameDegeneretteModule.ResolveAcc,bool).affiliateBoxShare](contracts/modules/DegenerusGameDegeneretteModule.sol#L755) is a local variable never initialized
 
-contracts/modules/DegenerusGameDegeneretteModule.sol#L750
+contracts/modules/DegenerusGameDegeneretteModule.sol#L755
 
 
  - [ ] ID-484
@@ -7113,51 +7113,51 @@ contracts/DGNRS.sol#L300-L335
 
 
  - [ ] ID-489
+[DegenerusGameDegeneretteModule._awardDegeneretteDgnrs(address,uint256,uint8)](contracts/modules/DegenerusGameDegeneretteModule.sol#L1496-L1520) ignores return value by [sdgnrs.transferFromPool(IsDGNRS.Pool.Reward,player,reward)](contracts/modules/DegenerusGameDegeneretteModule.sol#L1515-L1519)
+
+contracts/modules/DegenerusGameDegeneretteModule.sol#L1496-L1520
+
+
+ - [ ] ID-490
 [DegenerusGameAdvanceModule._rewardTopAffiliate(uint24)](contracts/modules/DegenerusGameAdvanceModule.sol#L849-L876) ignores return value by [(top,None) = affiliate.affiliateTop(lvl)](contracts/modules/DegenerusGameAdvanceModule.sol#L850)
 
 contracts/modules/DegenerusGameAdvanceModule.sol#L849-L876
 
 
- - [ ] ID-490
+ - [ ] ID-491
 [DegenerusGameWhaleModule._rewardDeityPassDgnrs(address,address,address,address)](contracts/modules/DegenerusGameWhaleModule.sol#L791-L853) ignores return value by [dgnrs.transferFromPool(IsDGNRS.Pool.Affiliate,upline,uplineShare)](contracts/modules/DegenerusGameWhaleModule.sol#L839-L843)
 
 contracts/modules/DegenerusGameWhaleModule.sol#L791-L853
 
 
- - [ ] ID-491
+ - [ ] ID-492
 [DegenerusAdmin._feedStallDuration(address)](contracts/DegenerusAdmin.sol#L1163-L1181) ignores return value by [(roundId,answer,updatedAt,answeredInRound) = IAggregatorV3(feed).latestRoundData()](contracts/DegenerusAdmin.sol#L1165-L1180)
 
 contracts/DegenerusAdmin.sol#L1163-L1181
 
 
- - [ ] ID-492
+ - [ ] ID-493
 [FLIP._transfer(address,address,uint256)](contracts/FLIP.sol#L381-L419) ignores return value by [coinflip.claimCoinflipsFromFlip(from,amount - balance)](contracts/FLIP.sol#L386)
 
 contracts/FLIP.sol#L381-L419
 
 
- - [ ] ID-493
+ - [ ] ID-494
 [DegenerusAdmin.onTokenTransfer(address,uint256,bytes)](contracts/DegenerusAdmin.sol#L1048-L1094) ignores return value by [(bal,None,None,None,None) = IVRFCoordinatorV2_5Owner(coord).getSubscription(subId)](contracts/DegenerusAdmin.sol#L1068-L1070)
 
 contracts/DegenerusAdmin.sol#L1048-L1094
 
 
- - [ ] ID-494
+ - [ ] ID-495
 [GameAfkingModule.subscribe(address,bool,bool,uint8,address)](contracts/modules/GameAfkingModule.sol#L305-L585) ignores return value by [(done0,None) = IQuestCompletionView(address(quests)).questCompletionToday(subscriber)](contracts/modules/GameAfkingModule.sol#L510)
 
 contracts/modules/GameAfkingModule.sol#L305-L585
 
 
- - [ ] ID-495
+ - [ ] ID-496
 [sDGNRS.previewBurn(uint256)](contracts/sDGNRS.sol#L963-L997) ignores return value by [(None,None,carry,None) = coinflip.coinflipAutoRebuyInfo(address(this))](contracts/sDGNRS.sol#L993)
 
 contracts/sDGNRS.sol#L963-L997
-
-
- - [ ] ID-496
-[DegenerusGameDegeneretteModule._awardDegeneretteDgnrs(address,uint256,uint8)](contracts/modules/DegenerusGameDegeneretteModule.sol#L1491-L1515) ignores return value by [sdgnrs.transferFromPool(IsDGNRS.Pool.Reward,player,reward)](contracts/modules/DegenerusGameDegeneretteModule.sol#L1510-L1514)
-
-contracts/modules/DegenerusGameDegeneretteModule.sol#L1491-L1515
 
 
  - [ ] ID-497
@@ -7527,6 +7527,15 @@ contracts/modules/DegenerusGameLootboxModule.sol#L2302-L2309
 
 
  - [ ] ID-550
+[DegenerusGameDegeneretteModule._resolveLootboxDirect(address,uint256,uint256,uint16)](contracts/modules/DegenerusGameDegeneretteModule.sol#L1023-L1041) has external calls inside a loop: [(ok,data) = ContractAddresses.GAME_LOOTBOX_MODULE.delegatecall(abi.encodeWithSelector(IDegenerusGameLootboxModule.resolveLootboxDirect.selector,player,amount,rngWord,activityScore))](contracts/modules/DegenerusGameDegeneretteModule.sol#L1029-L1039)
+	Calls stack containing the loop:
+		DegenerusGameDegeneretteModule.resolveDegeneretteBets(address,uint64[])
+		DegenerusGameDegeneretteModule._resolveBet(address,uint64,DegenerusGameDegeneretteModule.ResolveAcc,bool)
+
+contracts/modules/DegenerusGameDegeneretteModule.sol#L1023-L1041
+
+
+ - [ ] ID-551
 [GameAfkingModule._openAfkingBox(address,DegenerusGameStorage.Sub,uint256)](contracts/modules/GameAfkingModule.sol#L1523-L1547) has external calls inside a loop: [(ok,data) = ContractAddresses.GAME_LOOTBOX_MODULE.delegatecall(abi.encodeWithSelector(IDegenerusGameLootboxModule.resolveAfkingBox.selector,player,_unpackMilliEthToWei(uint64(sub.amount)),day,word,uint16(sub.score)))](contracts/modules/GameAfkingModule.sol#L1534-L1545)
 	Calls stack containing the loop:
 		GameAfkingModule.drainAfkingBoxes(uint256)
@@ -7535,7 +7544,7 @@ contracts/modules/DegenerusGameLootboxModule.sol#L2302-L2309
 contracts/modules/GameAfkingModule.sol#L1523-L1547
 
 
- - [ ] ID-551
+ - [ ] ID-552
 [sDGNRS._claimRedemptionFor(address,uint24,uint16,bool)](contracts/sDGNRS.sol#L840-L949) has external calls inside a loop: [game.creditRedemptionDirect{value: ethForForfeit}(address(this),forfeitEth)](contracts/sDGNRS.sol#L946)
 	Calls stack containing the loop:
 		sDGNRS.claimRedemptionMany(address[],uint24)
@@ -7543,7 +7552,7 @@ contracts/modules/GameAfkingModule.sol#L1523-L1547
 contracts/sDGNRS.sol#L840-L949
 
 
- - [ ] ID-552
+ - [ ] ID-553
 [DegenerusGameAdvanceModule._distributeYieldSurplus(uint256)](contracts/modules/DegenerusGameAdvanceModule.sol#L882-L892) has external calls inside a loop: [(ok,data) = ContractAddresses.GAME_JACKPOT_MODULE.delegatecall(abi.encodeWithSelector(IDegenerusGameJackpotModule.distributeYieldSurplus.selector,rngWord))](contracts/modules/DegenerusGameAdvanceModule.sol#L883-L890)
 	Calls stack containing the loop:
 		DegenerusGameAdvanceModule.advanceGame()
@@ -7551,15 +7560,16 @@ contracts/sDGNRS.sol#L840-L949
 contracts/modules/DegenerusGameAdvanceModule.sol#L882-L892
 
 
- - [ ] ID-553
-[DegenerusGameDegeneretteModule._resolveBet(address,uint64,DegenerusGameDegeneretteModule.ResolveAcc,bool)](contracts/modules/DegenerusGameDegeneretteModule.sol#L694-L906) has external calls inside a loop: [coinflip.creditFlip(affiliate.getReferrer(player),(refFlip * 7) / 100)](contracts/modules/DegenerusGameDegeneretteModule.sol#L896)
+ - [ ] ID-554
+[DegenerusGameDegeneretteModule._awardDegeneretteDgnrs(address,uint256,uint8)](contracts/modules/DegenerusGameDegeneretteModule.sol#L1496-L1520) has external calls inside a loop: [sdgnrs.transferFromPool(IsDGNRS.Pool.Reward,player,reward)](contracts/modules/DegenerusGameDegeneretteModule.sol#L1515-L1519)
 	Calls stack containing the loop:
 		DegenerusGameDegeneretteModule.resolveDegeneretteBets(address,uint64[])
+		DegenerusGameDegeneretteModule._resolveBet(address,uint64,DegenerusGameDegeneretteModule.ResolveAcc,bool)
 
-contracts/modules/DegenerusGameDegeneretteModule.sol#L694-L906
+contracts/modules/DegenerusGameDegeneretteModule.sol#L1496-L1520
 
 
- - [ ] ID-554
+ - [ ] ID-555
 [DegenerusGameLootboxModule._settleLootboxRoll(address,uint48,uint256,uint256,uint24,uint256,bool,uint256,uint256,bool,uint16,bool)](contracts/modules/DegenerusGameLootboxModule.sol#L1341-L1415) has external calls inside a loop: [wwxrp.mintPrize(player,LOOTBOX_WWXRP_CONSOLATION)](contracts/modules/DegenerusGameLootboxModule.sol#L1393)
 	Calls stack containing the loop:
 		DegenerusGameLootboxModule.openHumanBoxes(uint256)
@@ -7569,7 +7579,7 @@ contracts/modules/DegenerusGameDegeneretteModule.sol#L694-L906
 contracts/modules/DegenerusGameLootboxModule.sol#L1341-L1415
 
 
- - [ ] ID-555
+ - [ ] ID-556
 [DegenerusQuests._questRequirements(DegenerusQuests.DailyQuest,uint8)](contracts/DegenerusQuests.sol#L1490-L1505) has external calls inside a loop: [currentPrice = questGame.mintPrice()](contracts/DegenerusQuests.sol#L1501)
 	Calls stack containing the loop:
 		DegenerusQuests.getActiveQuests()
@@ -7578,7 +7588,7 @@ contracts/modules/DegenerusGameLootboxModule.sol#L1341-L1415
 contracts/DegenerusQuests.sol#L1490-L1505
 
 
- - [ ] ID-556
+ - [ ] ID-557
 [DegenerusGameAdvanceModule._consolidatePoolsAndRewardJackpots(uint24,uint24,uint24,uint256,uint24)](contracts/modules/DegenerusGameAdvanceModule.sol#L932-L1115) has external calls inside a loop: [jackpots.markBafSkipped(lvl)](contracts/modules/DegenerusGameAdvanceModule.sol#L1044)
 	Calls stack containing the loop:
 		DegenerusGameAdvanceModule.advanceGame()
@@ -7586,7 +7596,7 @@ contracts/DegenerusQuests.sol#L1490-L1505
 contracts/modules/DegenerusGameAdvanceModule.sol#L932-L1115
 
 
- - [ ] ID-557
+ - [ ] ID-558
 [sDGNRS._claimRedemptionFor(address,uint24,uint16,bool)](contracts/sDGNRS.sol#L840-L949) has external calls inside a loop: [(rewardPercent,flipWon) = coinflip.getCoinflipDayResult(day + 1)](contracts/sDGNRS.sol#L896)
 	Calls stack containing the loop:
 		sDGNRS.claimRedemptionMany(address[],uint24)
@@ -7594,7 +7604,7 @@ contracts/modules/DegenerusGameAdvanceModule.sol#L932-L1115
 contracts/sDGNRS.sol#L840-L949
 
 
- - [ ] ID-558
+ - [ ] ID-559
 [Coinflip._claimCoinflipsInternal(address,bool)](contracts/Coinflip.sol#L482-L664) has external calls inside a loop: [bafResolvedDay = jackpots.getLastBafResolvedDay()](contracts/Coinflip.sol#L575)
 	Calls stack containing the loop:
 		Coinflip.claimCoinflips(address,uint256)
@@ -7603,7 +7613,7 @@ contracts/sDGNRS.sol#L840-L949
 contracts/Coinflip.sol#L482-L664
 
 
- - [ ] ID-559
+ - [ ] ID-560
 [sDGNRS._claimRedemptionFor(address,uint24,uint16,bool)](contracts/sDGNRS.sol#L840-L949) has external calls inside a loop: [rngWord = game.rngWordForDay(day + 1)](contracts/sDGNRS.sol#L924)
 	Calls stack containing the loop:
 		sDGNRS.claimRedemptionMany(address[],uint24)
@@ -7611,7 +7621,7 @@ contracts/Coinflip.sol#L482-L664
 contracts/sDGNRS.sol#L840-L949
 
 
- - [ ] ID-560
+ - [ ] ID-561
 [DegenerusGameLootboxModule._callWwxrpSpin(address,uint256,uint16,uint256)](contracts/modules/DegenerusGameLootboxModule.sol#L2116-L2133) has external calls inside a loop: [(ok,None) = ContractAddresses.GAME_DEGENERETTE_MODULE.delegatecall(abi.encodeWithSelector(IDegenerusGameDegeneretteModule.resolveWwxrpSpinFromBox.selector,player,stake,activityScore,seed,uint32(0)))](contracts/modules/DegenerusGameLootboxModule.sol#L2122-L2131)
 	Calls stack containing the loop:
 		DegenerusGameLootboxModule.openHumanBoxes(uint256)
@@ -7623,7 +7633,7 @@ contracts/sDGNRS.sol#L840-L949
 contracts/modules/DegenerusGameLootboxModule.sol#L2116-L2133
 
 
- - [ ] ID-561
+ - [ ] ID-562
 [DegenerusGameLootboxModule._creditDgnrsReward(address,uint256)](contracts/modules/DegenerusGameLootboxModule.sol#L2302-L2309) has external calls inside a loop: [paid = dgnrs.transferFromPool(IsDGNRS.Pool.Lootbox,player,amount)](contracts/modules/DegenerusGameLootboxModule.sol#L2304-L2308)
 	Calls stack containing the loop:
 		DegenerusGameLootboxModule.resolveRedemptionLootbox(address,uint256,uint256,uint16)
@@ -7635,7 +7645,7 @@ contracts/modules/DegenerusGameLootboxModule.sol#L2116-L2133
 contracts/modules/DegenerusGameLootboxModule.sol#L2302-L2309
 
 
- - [ ] ID-562
+ - [ ] ID-563
 [DegenerusGameLootboxModule._resolvePresaleBox(address,uint48,uint256,uint256)](contracts/modules/DegenerusGameLootboxModule.sol#L750-L821) has external calls inside a loop: [remaining = dgnrs.poolBalance(IsDGNRS.Pool.PresaleBox)](contracts/modules/DegenerusGameLootboxModule.sol#L807-L809)
 	Calls stack containing the loop:
 		DegenerusGameLootboxModule.openHumanBoxes(uint256)
@@ -7643,7 +7653,7 @@ contracts/modules/DegenerusGameLootboxModule.sol#L2302-L2309
 contracts/modules/DegenerusGameLootboxModule.sol#L750-L821
 
 
- - [ ] ID-563
+ - [ ] ID-564
 [DegenerusGameLootboxModule._resolvePresaleBox(address,uint48,uint256,uint256)](contracts/modules/DegenerusGameLootboxModule.sol#L750-L821) has external calls inside a loop: [swept = dgnrs.transferFromPool(IsDGNRS.Pool.PresaleBox,player,remaining)](contracts/modules/DegenerusGameLootboxModule.sol#L811-L815)
 	Calls stack containing the loop:
 		DegenerusGameLootboxModule.openHumanBoxes(uint256)
@@ -7651,7 +7661,7 @@ contracts/modules/DegenerusGameLootboxModule.sol#L750-L821
 contracts/modules/DegenerusGameLootboxModule.sol#L750-L821
 
 
- - [ ] ID-564
+ - [ ] ID-565
 [DegenerusQuests._questRequirements(DegenerusQuests.DailyQuest,uint8)](contracts/DegenerusQuests.sol#L1490-L1505) has external calls inside a loop: [currentPrice = questGame.mintPrice()](contracts/DegenerusQuests.sol#L1501)
 	Calls stack containing the loop:
 		DegenerusQuests.getPlayerQuestView(address)
@@ -7660,7 +7670,7 @@ contracts/modules/DegenerusGameLootboxModule.sol#L750-L821
 contracts/DegenerusQuests.sol#L1490-L1505
 
 
- - [ ] ID-565
+ - [ ] ID-566
 [sDGNRS._payEth(address,uint256)](contracts/sDGNRS.sol#L1157-L1176) has external calls inside a loop: [! steth.transfer(player,stethOut)](contracts/sDGNRS.sol#L1170)
 	Calls stack containing the loop:
 		sDGNRS.claimRedemptionMany(address[],uint24)
@@ -7669,7 +7679,7 @@ contracts/DegenerusQuests.sol#L1490-L1505
 contracts/sDGNRS.sol#L1157-L1176
 
 
- - [ ] ID-566
+ - [ ] ID-567
 [DegenerusGameWhaleModule._rewardWhalePassDgnrs(address,address,address,address)](contracts/modules/DegenerusGameWhaleModule.sol#L722-L784) has external calls inside a loop: [dgnrs.transferFromPool(IsDGNRS.Pool.Affiliate,affiliateAddr,affiliateShare)](contracts/modules/DegenerusGameWhaleModule.sol#L759-L763)
 	Calls stack containing the loop:
 		DegenerusGameWhaleModule.purchaseWhalePass(address,uint256)
@@ -7677,7 +7687,7 @@ contracts/sDGNRS.sol#L1157-L1176
 contracts/modules/DegenerusGameWhaleModule.sol#L722-L784
 
 
- - [ ] ID-567
+ - [ ] ID-568
 [DegenerusGameAdvanceModule.payDailyJackpotCoinAndTickets(uint256)](contracts/modules/DegenerusGameAdvanceModule.sol#L1144-L1156) has external calls inside a loop: [(ok,data) = ContractAddresses.GAME_JACKPOT_MODULE.delegatecall(abi.encodeWithSelector(IDegenerusGameJackpotModule.payDailyJackpotCoinAndTickets.selector,randWord))](contracts/modules/DegenerusGameAdvanceModule.sol#L1145-L1154)
 	Calls stack containing the loop:
 		DegenerusGameAdvanceModule.advanceGame()
@@ -7685,7 +7695,7 @@ contracts/modules/DegenerusGameWhaleModule.sol#L722-L784
 contracts/modules/DegenerusGameAdvanceModule.sol#L1144-L1156
 
 
- - [ ] ID-568
+ - [ ] ID-569
 [Coinflip._claimCoinflipsInternal(address,bool)](contracts/Coinflip.sol#L482-L664) has external calls inside a loop: [bafResolvedDay = jackpots.getLastBafResolvedDay()](contracts/Coinflip.sol#L575)
 	Calls stack containing the loop:
 		Coinflip.consumeCoinflipsForBurn(address,uint256)
@@ -7694,7 +7704,7 @@ contracts/modules/DegenerusGameAdvanceModule.sol#L1144-L1156
 contracts/Coinflip.sol#L482-L664
 
 
- - [ ] ID-569
+ - [ ] ID-570
 [DegenerusGameLootboxModule._presaleBoxDgnrsReward(address,uint256,uint256)](contracts/modules/DegenerusGameLootboxModule.sol#L830-L852) has external calls inside a loop: [paid = dgnrs.transferFromPool(IsDGNRS.Pool.PresaleBox,player,dgnrsAmount)](contracts/modules/DegenerusGameLootboxModule.sol#L847-L851)
 	Calls stack containing the loop:
 		DegenerusGameLootboxModule.openHumanBoxes(uint256)
@@ -7703,7 +7713,7 @@ contracts/Coinflip.sol#L482-L664
 contracts/modules/DegenerusGameLootboxModule.sol#L830-L852
 
 
- - [ ] ID-570
+ - [ ] ID-571
 [DegenerusGameAdvanceModule._consolidatePoolsAndRewardJackpots(uint24,uint24,uint24,uint256,uint24)](contracts/modules/DegenerusGameAdvanceModule.sol#L932-L1115) has external calls inside a loop: [returnWei = IDegenerusGame(address(this)).runDecimatorJackpot(decPoolWei,lvl,rngWord)](contracts/modules/DegenerusGameAdvanceModule.sol#L1058-L1059)
 	Calls stack containing the loop:
 		DegenerusGameAdvanceModule.advanceGame()
@@ -7711,7 +7721,7 @@ contracts/modules/DegenerusGameLootboxModule.sol#L830-L852
 contracts/modules/DegenerusGameAdvanceModule.sol#L932-L1115
 
 
- - [ ] ID-571
+ - [ ] ID-572
 [DegenerusGameLootboxModule._resolvePresaleBox(address,uint48,uint256,uint256)](contracts/modules/DegenerusGameLootboxModule.sol#L750-L821) has external calls inside a loop: [wwxrp.mintPrize(player,wwxrpOut)](contracts/modules/DegenerusGameLootboxModule.sol#L800)
 	Calls stack containing the loop:
 		DegenerusGameLootboxModule.openHumanBoxes(uint256)
@@ -7719,7 +7729,16 @@ contracts/modules/DegenerusGameAdvanceModule.sol#L932-L1115
 contracts/modules/DegenerusGameLootboxModule.sol#L750-L821
 
 
- - [ ] ID-572
+ - [ ] ID-573
+[DegenerusGameDegeneretteModule._awardDegeneretteDgnrs(address,uint256,uint8)](contracts/modules/DegenerusGameDegeneretteModule.sol#L1496-L1520) has external calls inside a loop: [poolBalance = sdgnrs.poolBalance(IsDGNRS.Pool.Reward)](contracts/modules/DegenerusGameDegeneretteModule.sol#L1506-L1508)
+	Calls stack containing the loop:
+		DegenerusGameDegeneretteModule.resolveDegeneretteBets(address,uint64[])
+		DegenerusGameDegeneretteModule._resolveBet(address,uint64,DegenerusGameDegeneretteModule.ResolveAcc,bool)
+
+contracts/modules/DegenerusGameDegeneretteModule.sol#L1496-L1520
+
+
+ - [ ] ID-574
 [DegenerusGameLootboxModule._lootboxDgnrsReward(uint256,uint256)](contracts/modules/DegenerusGameLootboxModule.sol#L2272-L2296) has external calls inside a loop: [poolBalance = dgnrs.poolBalance(IsDGNRS.Pool.Lootbox)](contracts/modules/DegenerusGameLootboxModule.sol#L2288)
 	Calls stack containing the loop:
 		DegenerusGameLootboxModule.resolveRedemptionLootbox(address,uint256,uint256,uint16)
@@ -7731,7 +7750,7 @@ contracts/modules/DegenerusGameLootboxModule.sol#L750-L821
 contracts/modules/DegenerusGameLootboxModule.sol#L2272-L2296
 
 
- - [ ] ID-573
+ - [ ] ID-575
 [DegenerusGameLootboxModule._lootboxDgnrsReward(uint256,uint256)](contracts/modules/DegenerusGameLootboxModule.sol#L2272-L2296) has external calls inside a loop: [poolBalance = dgnrs.poolBalance(IsDGNRS.Pool.Lootbox)](contracts/modules/DegenerusGameLootboxModule.sol#L2288)
 	Calls stack containing the loop:
 		DegenerusGameLootboxModule.openHumanBoxes(uint256)
@@ -7743,7 +7762,7 @@ contracts/modules/DegenerusGameLootboxModule.sol#L2272-L2296
 contracts/modules/DegenerusGameLootboxModule.sol#L2272-L2296
 
 
- - [ ] ID-574
+ - [ ] ID-576
 [DegenerusGameLootboxModule._callFlipSpins(address,uint256,uint16,uint256)](contracts/modules/DegenerusGameLootboxModule.sol#L2136-L2153) has external calls inside a loop: [(ok,None) = ContractAddresses.GAME_DEGENERETTE_MODULE.delegatecall(abi.encodeWithSelector(IDegenerusGameDegeneretteModule.resolveFlipSpinsFromBox.selector,player,stake,activityScore,seed,uint32(0)))](contracts/modules/DegenerusGameLootboxModule.sol#L2142-L2151)
 	Calls stack containing the loop:
 		DegenerusGameLootboxModule.openHumanBoxes(uint256)
@@ -7755,16 +7774,7 @@ contracts/modules/DegenerusGameLootboxModule.sol#L2272-L2296
 contracts/modules/DegenerusGameLootboxModule.sol#L2136-L2153
 
 
- - [ ] ID-575
-[DegenerusGameDegeneretteModule._resolveLootboxDirect(address,uint256,uint256,uint16)](contracts/modules/DegenerusGameDegeneretteModule.sol#L1018-L1036) has external calls inside a loop: [(ok,data) = ContractAddresses.GAME_LOOTBOX_MODULE.delegatecall(abi.encodeWithSelector(IDegenerusGameLootboxModule.resolveLootboxDirect.selector,player,amount,rngWord,activityScore))](contracts/modules/DegenerusGameDegeneretteModule.sol#L1024-L1034)
-	Calls stack containing the loop:
-		DegenerusGameDegeneretteModule.resolveDegeneretteBets(address,uint64[])
-		DegenerusGameDegeneretteModule._resolveBet(address,uint64,DegenerusGameDegeneretteModule.ResolveAcc,bool)
-
-contracts/modules/DegenerusGameDegeneretteModule.sol#L1018-L1036
-
-
- - [ ] ID-576
+ - [ ] ID-577
 [DegenerusGameWhaleModule._rewardWhalePassDgnrs(address,address,address,address)](contracts/modules/DegenerusGameWhaleModule.sol#L722-L784) has external calls inside a loop: [dgnrs.transferFromPool(IsDGNRS.Pool.Affiliate,upline,uplineShare)](contracts/modules/DegenerusGameWhaleModule.sol#L770-L774)
 	Calls stack containing the loop:
 		DegenerusGameWhaleModule.purchaseWhalePass(address,uint256)
@@ -7772,7 +7782,7 @@ contracts/modules/DegenerusGameDegeneretteModule.sol#L1018-L1036
 contracts/modules/DegenerusGameWhaleModule.sol#L722-L784
 
 
- - [ ] ID-577
+ - [ ] ID-578
 [DegenerusGameWhaleModule._rewardWhalePassDgnrs(address,address,address,address)](contracts/modules/DegenerusGameWhaleModule.sol#L722-L784) has external calls inside a loop: [affiliateReserve = dgnrs.poolBalance(IsDGNRS.Pool.Affiliate)](contracts/modules/DegenerusGameWhaleModule.sol#L743-L745)
 	Calls stack containing the loop:
 		DegenerusGameWhaleModule.purchaseWhalePass(address,uint256)
@@ -7780,7 +7790,7 @@ contracts/modules/DegenerusGameWhaleModule.sol#L722-L784
 contracts/modules/DegenerusGameWhaleModule.sol#L722-L784
 
 
- - [ ] ID-578
+ - [ ] ID-579
 [Coinflip._claimCoinflipsInternal(address,bool)](contracts/Coinflip.sol#L482-L664) has external calls inside a loop: [bafResolvedDay = jackpots.getLastBafResolvedDay()](contracts/Coinflip.sol#L575)
 	Calls stack containing the loop:
 		Coinflip.setCoinflipAutoRebuyTakeProfit(address,uint256)
@@ -7789,7 +7799,7 @@ contracts/modules/DegenerusGameWhaleModule.sol#L722-L784
 contracts/Coinflip.sol#L482-L664
 
 
- - [ ] ID-579
+ - [ ] ID-580
 [DegenerusGameAdvanceModule._consolidatePoolsAndRewardJackpots(uint24,uint24,uint24,uint256,uint24)](contracts/modules/DegenerusGameAdvanceModule.sol#L932-L1115) has external calls inside a loop: [claimed = IDegenerusGame(address(this)).runBafJackpot(bafPoolWei,lvl,rngWord)](contracts/modules/DegenerusGameAdvanceModule.sol#L1036-L1040)
 	Calls stack containing the loop:
 		DegenerusGameAdvanceModule.advanceGame()
@@ -7797,7 +7807,7 @@ contracts/Coinflip.sol#L482-L664
 contracts/modules/DegenerusGameAdvanceModule.sol#L932-L1115
 
 
- - [ ] ID-580
+ - [ ] ID-581
 [DegenerusGameLootboxModule._resolveLootboxCommon(address,uint48,uint256,uint24,uint24,uint256,bool,uint256,uint256,bool,uint16,bool)](contracts/modules/DegenerusGameLootboxModule.sol#L1268-L1328) has external calls inside a loop: [(okAct,None) = ContractAddresses.GAME_BOON_MODULE.delegatecall(abi.encodeWithSelector(IDegenerusGameBoonModule.consumeActivityBoon.selector,player))](contracts/modules/DegenerusGameLootboxModule.sol#L1301-L1303)
 	Calls stack containing the loop:
 		DegenerusGameLootboxModule.resolveRedemptionLootbox(address,uint256,uint256,uint16)
@@ -7806,7 +7816,7 @@ contracts/modules/DegenerusGameAdvanceModule.sol#L932-L1115
 contracts/modules/DegenerusGameLootboxModule.sol#L1268-L1328
 
 
- - [ ] ID-581
+ - [ ] ID-582
 [DegenerusGameAdvanceModule.rngGate(uint48,uint24,uint24,bool,uint8)](contracts/modules/DegenerusGameAdvanceModule.sol#L1278-L1375) has external calls inside a loop: [quests.rollDailyQuest(day,currentWord,lastPurchaseDay && compressedJackpotFlag != 2,phaseTransitionActive && gapDays == 0)](contracts/modules/DegenerusGameAdvanceModule.sol#L1329-L1334)
 	Calls stack containing the loop:
 		DegenerusGameAdvanceModule.advanceGame()
@@ -7814,7 +7824,7 @@ contracts/modules/DegenerusGameLootboxModule.sol#L1268-L1328
 contracts/modules/DegenerusGameAdvanceModule.sol#L1278-L1375
 
 
- - [ ] ID-582
+ - [ ] ID-583
 [DegenerusGameAdvanceModule.payDailyJackpot(bool,uint24,uint256)](contracts/modules/DegenerusGameAdvanceModule.sol#L1122-L1138) has external calls inside a loop: [(ok,data) = ContractAddresses.GAME_JACKPOT_MODULE.delegatecall(abi.encodeWithSelector(IDegenerusGameJackpotModule.payDailyJackpot.selector,isJackpotPhase,lvl,randWord))](contracts/modules/DegenerusGameAdvanceModule.sol#L1127-L1136)
 	Calls stack containing the loop:
 		DegenerusGameAdvanceModule.advanceGame()
@@ -7822,7 +7832,7 @@ contracts/modules/DegenerusGameAdvanceModule.sol#L1278-L1375
 contracts/modules/DegenerusGameAdvanceModule.sol#L1122-L1138
 
 
- - [ ] ID-583
+ - [ ] ID-584
 [DegenerusGameLootboxModule._settleLootboxRoll(address,uint48,uint256,uint256,uint24,uint256,bool,uint256,uint256,bool,uint16,bool)](contracts/modules/DegenerusGameLootboxModule.sol#L1341-L1415) has external calls inside a loop: [coinflip.creditFlip(player,flipAmount)](contracts/modules/DegenerusGameLootboxModule.sol#L1398)
 	Calls stack containing the loop:
 		DegenerusGameLootboxModule.openHumanBoxes(uint256)
@@ -7832,7 +7842,7 @@ contracts/modules/DegenerusGameAdvanceModule.sol#L1122-L1138
 contracts/modules/DegenerusGameLootboxModule.sol#L1341-L1415
 
 
- - [ ] ID-584
+ - [ ] ID-585
 [GameAfkingModule._finalizeAfking(address,DegenerusGameStorage.Sub,uint24)](contracts/modules/GameAfkingModule.sol#L1080-L1096) has external calls inside a loop: [quests.finalizeAfking(player,uint24(earned),covered,currentDay)](contracts/modules/GameAfkingModule.sol#L1088-L1093)
 	Calls stack containing the loop:
 		GameAfkingModule.processSubscriberStage(uint24,uint256)
@@ -7840,7 +7850,7 @@ contracts/modules/DegenerusGameLootboxModule.sol#L1341-L1415
 contracts/modules/GameAfkingModule.sol#L1080-L1096
 
 
- - [ ] ID-585
+ - [ ] ID-586
 [DegenerusGameLootboxModule._applyBoon(address,uint8,uint24,uint24,uint256,bool)](contracts/modules/DegenerusGameLootboxModule.sol#L1725-L1955) has external calls inside a loop: [IDegenerusQuests(ContractAddresses.QUESTS).awardQuestStreakShield(player,LOOTBOX_QUEST_SHIELD_GRANT)](contracts/modules/DegenerusGameLootboxModule.sol#L1865)
 	Calls stack containing the loop:
 		DegenerusGameLootboxModule.resolveRedemptionLootbox(address,uint256,uint256,uint16)
@@ -7851,7 +7861,7 @@ contracts/modules/GameAfkingModule.sol#L1080-L1096
 contracts/modules/DegenerusGameLootboxModule.sol#L1725-L1955
 
 
- - [ ] ID-586
+ - [ ] ID-587
 [Coinflip._claimCoinflipsInternal(address,bool)](contracts/Coinflip.sol#L482-L664) has external calls inside a loop: [bafResolvedDay = jackpots.getLastBafResolvedDay()](contracts/Coinflip.sol#L575)
 	Calls stack containing the loop:
 		Coinflip.redeemableFlipBacking()
@@ -7859,7 +7869,7 @@ contracts/modules/DegenerusGameLootboxModule.sol#L1725-L1955
 contracts/Coinflip.sol#L482-L664
 
 
- - [ ] ID-587
+ - [ ] ID-588
 [DegenerusGameLootboxModule._rollLootboxBoons(address,uint256,uint256,uint24,uint256)](contracts/modules/DegenerusGameLootboxModule.sol#L1427-L1490) has external calls inside a loop: [(okClr,None) = ContractAddresses.GAME_BOON_MODULE.delegatecall(abi.encodeWithSelector(IDegenerusGameBoonModule.checkAndClearExpiredBoon.selector,player))](contracts/modules/DegenerusGameLootboxModule.sol#L1442-L1444)
 	Calls stack containing the loop:
 		DegenerusGameLootboxModule.resolveRedemptionLootbox(address,uint256,uint256,uint16)
@@ -7869,7 +7879,7 @@ contracts/Coinflip.sol#L482-L664
 contracts/modules/DegenerusGameLootboxModule.sol#L1427-L1490
 
 
- - [ ] ID-588
+ - [ ] ID-589
 [DegenerusGameAdvanceModule.rngGate(uint48,uint24,uint24,bool,uint8)](contracts/modules/DegenerusGameAdvanceModule.sol#L1278-L1375) has external calls inside a loop: [sdgnrs.resolveRedemptionPeriod(redemptionRoll,toResolve)](contracts/modules/DegenerusGameAdvanceModule.sol#L1349)
 	Calls stack containing the loop:
 		DegenerusGameAdvanceModule.advanceGame()
@@ -7877,7 +7887,7 @@ contracts/modules/DegenerusGameLootboxModule.sol#L1427-L1490
 contracts/modules/DegenerusGameAdvanceModule.sol#L1278-L1375
 
 
- - [ ] ID-589
+ - [ ] ID-590
 [DegenerusGameAdvanceModule._payDailyCoinJackpot(uint24,uint256,uint24,uint24)](contracts/modules/DegenerusGameAdvanceModule.sol#L1165-L1183) has external calls inside a loop: [(ok,data) = ContractAddresses.GAME_JACKPOT_MODULE.delegatecall(abi.encodeWithSelector(IDegenerusGameJackpotModule.payDailyFlipJackpot.selector,lvl,randWord,minLevel,maxLevel))](contracts/modules/DegenerusGameAdvanceModule.sol#L1171-L1181)
 	Calls stack containing the loop:
 		DegenerusGameAdvanceModule.advanceGame()
@@ -7885,13 +7895,13 @@ contracts/modules/DegenerusGameAdvanceModule.sol#L1278-L1375
 contracts/modules/DegenerusGameAdvanceModule.sol#L1165-L1183
 
 
- - [ ] ID-590
+ - [ ] ID-591
 [DegenerusGame.degeneretteResolve(address[],uint64[])](contracts/DegenerusGame.sol#L1499-L1545) has external calls inside a loop: [this.resolveDegeneretteBets(players[i],ids)](contracts/DegenerusGame.sol#L1526-L1533)
 
 contracts/DegenerusGame.sol#L1499-L1545
 
 
- - [ ] ID-591
+ - [ ] ID-592
 [GameAfkingModule._finalizeAfking(address,DegenerusGameStorage.Sub,uint24)](contracts/modules/GameAfkingModule.sol#L1080-L1096) has external calls inside a loop: [quests.finalizeAfking(player,type()(uint24).max,covered,currentDay)](contracts/modules/GameAfkingModule.sol#L1088-L1093)
 	Calls stack containing the loop:
 		GameAfkingModule.processSubscriberStage(uint24,uint256)
@@ -7899,7 +7909,7 @@ contracts/DegenerusGame.sol#L1499-L1545
 contracts/modules/GameAfkingModule.sol#L1080-L1096
 
 
- - [ ] ID-592
+ - [ ] ID-593
 [DegenerusGameLootboxModule._settleLootboxRoll(address,uint48,uint256,uint256,uint24,uint256,bool,uint256,uint256,bool,uint16,bool)](contracts/modules/DegenerusGameLootboxModule.sol#L1341-L1415) has external calls inside a loop: [coinflip.creditFlip(player,flipAmount)](contracts/modules/DegenerusGameLootboxModule.sol#L1398)
 	Calls stack containing the loop:
 		DegenerusGameLootboxModule.resolveRedemptionLootbox(address,uint256,uint256,uint16)
@@ -7909,13 +7919,13 @@ contracts/modules/GameAfkingModule.sol#L1080-L1096
 contracts/modules/DegenerusGameLootboxModule.sol#L1341-L1415
 
 
- - [ ] ID-593
+ - [ ] ID-594
 [DegenerusJackpots.runBafJackpot(uint256,uint24,uint256)](contracts/DegenerusJackpots.sol#L245-L491) has external calls inside a loop: [(None,tickets) = degenerusGame.sampleTraitEntriesAtLevel(targetLvl,entropy)](contracts/DegenerusJackpots.sol#L393)
 
 contracts/DegenerusJackpots.sol#L245-L491
 
 
- - [ ] ID-594
+ - [ ] ID-595
 [DegenerusGameDecimatorModule._awardDecimatorLootbox(address,uint256,uint256,uint16)](contracts/modules/DegenerusGameDecimatorModule.sol#L647-L685) has external calls inside a loop: [(ok,data) = ContractAddresses.GAME_LOOTBOX_MODULE.delegatecall(abi.encodeWithSelector(IDegenerusGameLootboxModule.resolveLootboxDirect.selector,winner,amount,rngWord,evScore))](contracts/modules/DegenerusGameDecimatorModule.sol#L673-L683)
 	Calls stack containing the loop:
 		DegenerusGameDecimatorModule.claimDecimatorJackpotMany(address[],uint24)
@@ -7925,7 +7935,7 @@ contracts/DegenerusJackpots.sol#L245-L491
 contracts/modules/DegenerusGameDecimatorModule.sol#L647-L685
 
 
- - [ ] ID-595
+ - [ ] ID-596
 [DegenerusGameLootboxModule._presaleBoxDgnrsReward(address,uint256,uint256)](contracts/modules/DegenerusGameLootboxModule.sol#L830-L852) has external calls inside a loop: [poolStart = dgnrs.poolBalance(IsDGNRS.Pool.PresaleBox)](contracts/modules/DegenerusGameLootboxModule.sol#L837)
 	Calls stack containing the loop:
 		DegenerusGameLootboxModule.openHumanBoxes(uint256)
@@ -7934,7 +7944,7 @@ contracts/modules/DegenerusGameDecimatorModule.sol#L647-L685
 contracts/modules/DegenerusGameLootboxModule.sol#L830-L852
 
 
- - [ ] ID-596
+ - [ ] ID-597
 [DegenerusGameAdvanceModule._requestVrfWord(uint16)](contracts/modules/DegenerusGameAdvanceModule.sol#L1748-L1759) has external calls inside a loop: [id = vrfCoordinator.requestRandomWords(VRFRandomWordsRequest({keyHash:vrfKeyHash,subId:vrfSubscriptionId,requestConfirmations:confirmations,callbackGasLimit:VRF_CALLBACK_GAS_LIMIT,numWords:1,extraArgs:}))](contracts/modules/DegenerusGameAdvanceModule.sol#L1749-L1758)
 	Calls stack containing the loop:
 		DegenerusGameAdvanceModule.advanceGame()
@@ -7943,13 +7953,13 @@ contracts/modules/DegenerusGameLootboxModule.sol#L830-L852
 contracts/modules/DegenerusGameAdvanceModule.sol#L1748-L1759
 
 
- - [ ] ID-597
+ - [ ] ID-598
 [DegenerusJackpots.runBafJackpot(uint256,uint24,uint256)](contracts/DegenerusJackpots.sol#L245-L491) has external calls inside a loop: [farTickets = degenerusGame.sampleFarFutureTickets(entropy)](contracts/DegenerusJackpots.sol#L318)
 
 contracts/DegenerusJackpots.sol#L245-L491
 
 
- - [ ] ID-598
+ - [ ] ID-599
 [DegenerusGameLootboxModule._settleLootboxRoll(address,uint48,uint256,uint256,uint24,uint256,bool,uint256,uint256,bool,uint16,bool)](contracts/modules/DegenerusGameLootboxModule.sol#L1341-L1415) has external calls inside a loop: [wwxrp.mintPrize(player,LOOTBOX_WWXRP_CONSOLATION)](contracts/modules/DegenerusGameLootboxModule.sol#L1393)
 	Calls stack containing the loop:
 		DegenerusGameLootboxModule.resolveRedemptionLootbox(address,uint256,uint256,uint16)
@@ -7959,7 +7969,7 @@ contracts/DegenerusJackpots.sol#L245-L491
 contracts/modules/DegenerusGameLootboxModule.sol#L1341-L1415
 
 
- - [ ] ID-599
+ - [ ] ID-600
 [DegenerusGameAdvanceModule._autoStakeExcessEth()](contracts/modules/DegenerusGameAdvanceModule.sol#L1699-L1709) has external calls inside a loop: [steth.submit{value: stakeable}(address(0))](contracts/modules/DegenerusGameAdvanceModule.sol#L1704-L1708)
 	Calls stack containing the loop:
 		DegenerusGameAdvanceModule.advanceGame()
@@ -7968,22 +7978,13 @@ contracts/modules/DegenerusGameLootboxModule.sol#L1341-L1415
 contracts/modules/DegenerusGameAdvanceModule.sol#L1699-L1709
 
 
- - [ ] ID-600
+ - [ ] ID-601
 [Coinflip._claimCoinflipsInternal(address,bool)](contracts/Coinflip.sol#L482-L664) has external calls inside a loop: [bafResolvedDay = jackpots.getLastBafResolvedDay()](contracts/Coinflip.sol#L575)
 	Calls stack containing the loop:
 		Coinflip.consumeFlipForSalvage(address,uint256)
 		Coinflip._claimCoinflipsAmount(address,uint256,bool)
 
 contracts/Coinflip.sol#L482-L664
-
-
- - [ ] ID-601
-[DegenerusGameDegeneretteModule._awardDegeneretteDgnrs(address,uint256,uint8)](contracts/modules/DegenerusGameDegeneretteModule.sol#L1491-L1515) has external calls inside a loop: [sdgnrs.transferFromPool(IsDGNRS.Pool.Reward,player,reward)](contracts/modules/DegenerusGameDegeneretteModule.sol#L1510-L1514)
-	Calls stack containing the loop:
-		DegenerusGameDegeneretteModule.resolveDegeneretteBets(address,uint64[])
-		DegenerusGameDegeneretteModule._resolveBet(address,uint64,DegenerusGameDegeneretteModule.ResolveAcc,bool)
-
-contracts/modules/DegenerusGameDegeneretteModule.sol#L1491-L1515
 
 
  - [ ] ID-602
@@ -8012,6 +8013,14 @@ contracts/sDGNRS.sol#L1157-L1176
 
 
  - [ ] ID-605
+[DegenerusGameDegeneretteModule._resolveBet(address,uint64,DegenerusGameDegeneretteModule.ResolveAcc,bool)](contracts/modules/DegenerusGameDegeneretteModule.sol#L699-L911) has external calls inside a loop: [coinflip.creditFlip(affiliate.getReferrer(player),(refFlip * 7) / 100)](contracts/modules/DegenerusGameDegeneretteModule.sol#L901)
+	Calls stack containing the loop:
+		DegenerusGameDegeneretteModule.resolveDegeneretteBets(address,uint64[])
+
+contracts/modules/DegenerusGameDegeneretteModule.sol#L699-L911
+
+
+ - [ ] ID-606
 [DegenerusGameLootboxModule._callFlipSpins(address,uint256,uint16,uint256)](contracts/modules/DegenerusGameLootboxModule.sol#L2136-L2153) has external calls inside a loop: [(ok,None) = ContractAddresses.GAME_DEGENERETTE_MODULE.delegatecall(abi.encodeWithSelector(IDegenerusGameDegeneretteModule.resolveFlipSpinsFromBox.selector,player,stake,activityScore,seed,uint32(0)))](contracts/modules/DegenerusGameLootboxModule.sol#L2142-L2151)
 	Calls stack containing the loop:
 		DegenerusGameLootboxModule.resolveRedemptionLootbox(address,uint256,uint256,uint16)
@@ -8023,7 +8032,7 @@ contracts/sDGNRS.sol#L1157-L1176
 contracts/modules/DegenerusGameLootboxModule.sol#L2136-L2153
 
 
- - [ ] ID-606
+ - [ ] ID-607
 [GameAfkingModule._settlePendingFlip(address,DegenerusGameStorage.Sub)](contracts/modules/GameAfkingModule.sol#L1111-L1122) has external calls inside a loop: [coinflip.creditFlip(player,owed * 1000000000000000000)](contracts/modules/GameAfkingModule.sol#L1121)
 	Calls stack containing the loop:
 		GameAfkingModule.claimAfkingFlip(address[])
@@ -8031,7 +8040,7 @@ contracts/modules/DegenerusGameLootboxModule.sol#L2136-L2153
 contracts/modules/GameAfkingModule.sol#L1111-L1122
 
 
- - [ ] ID-607
+ - [ ] ID-608
 [DegenerusGameAdvanceModule._runSubscriberStage(uint24)](contracts/modules/DegenerusGameAdvanceModule.sol#L906-L917) has external calls inside a loop: [(ok,data) = ContractAddresses.GAME_AFKING_MODULE.delegatecall(abi.encodeWithSelector(IGameAfkingModule.processSubscriberStage.selector,processDay,SUB_STAGE_WEIGHT_BUDGET))](contracts/modules/DegenerusGameAdvanceModule.sol#L907-L915)
 	Calls stack containing the loop:
 		DegenerusGameAdvanceModule.advanceGame()
@@ -8039,7 +8048,7 @@ contracts/modules/GameAfkingModule.sol#L1111-L1122
 contracts/modules/DegenerusGameAdvanceModule.sol#L906-L917
 
 
- - [ ] ID-608
+ - [ ] ID-609
 [DegenerusGameWhaleModule._rewardWhalePassDgnrs(address,address,address,address)](contracts/modules/DegenerusGameWhaleModule.sol#L722-L784) has external calls inside a loop: [whaleReserve = dgnrs.poolBalance(IsDGNRS.Pool.Whale)](contracts/modules/DegenerusGameWhaleModule.sol#L728-L730)
 	Calls stack containing the loop:
 		DegenerusGameWhaleModule.purchaseWhalePass(address,uint256)
@@ -8047,7 +8056,7 @@ contracts/modules/DegenerusGameAdvanceModule.sol#L906-L917
 contracts/modules/DegenerusGameWhaleModule.sol#L722-L784
 
 
- - [ ] ID-609
+ - [ ] ID-610
 [DegenerusGameAdvanceModule._backfillGapDays(uint256,uint24,uint24)](contracts/modules/DegenerusGameAdvanceModule.sol#L2040-L2062) has external calls inside a loop: [coinflip.processCoinflipPayouts(0,derivedWord,gapDay)](contracts/modules/DegenerusGameAdvanceModule.sol#L2056)
 	Calls stack containing the loop:
 		DegenerusGameAdvanceModule.advanceGame()
@@ -8056,13 +8065,13 @@ contracts/modules/DegenerusGameWhaleModule.sol#L722-L784
 contracts/modules/DegenerusGameAdvanceModule.sol#L2040-L2062
 
 
- - [ ] ID-610
+ - [ ] ID-611
 [DegenerusGameFoilPackModule.claimFoilMatchMany(address[],uint24[],uint8[],uint8[])](contracts/modules/DegenerusGameFoilPackModule.sol#L372-L427) has external calls inside a loop: [this.claimFoilMatch(players[i],drawDays[i],ticketIndexes[i],drawKinds[i])](contracts/modules/DegenerusGameFoilPackModule.sol#L393-L406)
 
 contracts/modules/DegenerusGameFoilPackModule.sol#L372-L427
 
 
- - [ ] ID-611
+ - [ ] ID-612
 [Coinflip._claimCoinflipsInternal(address,bool)](contracts/Coinflip.sol#L482-L664) has external calls inside a loop: [bafResolvedDay = jackpots.getLastBafResolvedDay()](contracts/Coinflip.sol#L575)
 	Calls stack containing the loop:
 		Coinflip.claimCoinflipsFromFlip(address,uint256)
@@ -8071,7 +8080,7 @@ contracts/modules/DegenerusGameFoilPackModule.sol#L372-L427
 contracts/Coinflip.sol#L482-L664
 
 
- - [ ] ID-612
+ - [ ] ID-613
 [Coinflip._addDailyFlip(address,uint256,uint256,bool,bool)](contracts/Coinflip.sol#L671-L730) has external calls inside a loop: [boonBps = game.consumeCoinflipBoon(player)](contracts/Coinflip.sol#L682)
 	Calls stack containing the loop:
 		Coinflip.creditFlipBatch(address[],uint256[])
@@ -8079,7 +8088,7 @@ contracts/Coinflip.sol#L482-L664
 contracts/Coinflip.sol#L671-L730
 
 
- - [ ] ID-613
+ - [ ] ID-614
 [DegenerusGameAdvanceModule.rngGate(uint48,uint24,uint24,bool,uint8)](contracts/modules/DegenerusGameAdvanceModule.sol#L1278-L1375) has external calls inside a loop: [toResolve = sdgnrs.pendingResolveDay()](contracts/modules/DegenerusGameAdvanceModule.sol#L1344)
 	Calls stack containing the loop:
 		DegenerusGameAdvanceModule.advanceGame()
@@ -8087,7 +8096,7 @@ contracts/Coinflip.sol#L671-L730
 contracts/modules/DegenerusGameAdvanceModule.sol#L1278-L1375
 
 
- - [ ] ID-614
+ - [ ] ID-615
 [GameAfkingModule._openAfkingBox(address,DegenerusGameStorage.Sub,uint256)](contracts/modules/GameAfkingModule.sol#L1523-L1547) has external calls inside a loop: [(ok,data) = ContractAddresses.GAME_LOOTBOX_MODULE.delegatecall(abi.encodeWithSelector(IDegenerusGameLootboxModule.resolveAfkingBox.selector,player,_unpackMilliEthToWei(uint64(sub.amount)),day,word,uint16(sub.score)))](contracts/modules/GameAfkingModule.sol#L1534-L1545)
 	Calls stack containing the loop:
 		GameAfkingModule.mintFlip()
@@ -8096,7 +8105,7 @@ contracts/modules/DegenerusGameAdvanceModule.sol#L1278-L1375
 contracts/modules/GameAfkingModule.sol#L1523-L1547
 
 
- - [ ] ID-615
+ - [ ] ID-616
 [Coinflip._claimCoinflipsInternal(address,bool)](contracts/Coinflip.sol#L482-L664) has external calls inside a loop: [bafResolvedDay = jackpots.getLastBafResolvedDay()](contracts/Coinflip.sol#L575)
 	Calls stack containing the loop:
 		Coinflip.setCoinflipAutoRebuy(address,bool,uint256)
@@ -8105,7 +8114,7 @@ contracts/modules/GameAfkingModule.sol#L1523-L1547
 contracts/Coinflip.sol#L482-L664
 
 
- - [ ] ID-616
+ - [ ] ID-617
 [DegenerusGameLootboxModule._applyBoon(address,uint8,uint24,uint24,uint256,bool)](contracts/modules/DegenerusGameLootboxModule.sol#L1725-L1955) has external calls inside a loop: [IDegenerusQuests(ContractAddresses.QUESTS).awardQuestStreakShield(player,LOOTBOX_QUEST_SHIELD_GRANT)](contracts/modules/DegenerusGameLootboxModule.sol#L1865)
 	Calls stack containing the loop:
 		DegenerusGameLootboxModule.openHumanBoxes(uint256)
@@ -8116,7 +8125,7 @@ contracts/Coinflip.sol#L482-L664
 contracts/modules/DegenerusGameLootboxModule.sol#L1725-L1955
 
 
- - [ ] ID-617
+ - [ ] ID-618
 [DegenerusGameLootboxModule._rollLootboxBoons(address,uint256,uint256,uint24,uint256)](contracts/modules/DegenerusGameLootboxModule.sol#L1427-L1490) has external calls inside a loop: [(okClr,None) = ContractAddresses.GAME_BOON_MODULE.delegatecall(abi.encodeWithSelector(IDegenerusGameBoonModule.checkAndClearExpiredBoon.selector,player))](contracts/modules/DegenerusGameLootboxModule.sol#L1442-L1444)
 	Calls stack containing the loop:
 		DegenerusGameLootboxModule.openHumanBoxes(uint256)
@@ -8126,7 +8135,7 @@ contracts/modules/DegenerusGameLootboxModule.sol#L1725-L1955
 contracts/modules/DegenerusGameLootboxModule.sol#L1427-L1490
 
 
- - [ ] ID-618
+ - [ ] ID-619
 [Coinflip._claimCoinflipsInternal(address,bool)](contracts/Coinflip.sol#L482-L664) has external calls inside a loop: [bafResolvedDay = jackpots.getLastBafResolvedDay()](contracts/Coinflip.sol#L575)
 	Calls stack containing the loop:
 		Coinflip.withdrawRedeemedFlip(uint256)
@@ -8135,7 +8144,7 @@ contracts/modules/DegenerusGameLootboxModule.sol#L1427-L1490
 contracts/Coinflip.sol#L482-L664
 
 
- - [ ] ID-619
+ - [ ] ID-620
 [sDGNRS._claimRedemptionFor(address,uint24,uint16,bool)](contracts/sDGNRS.sol#L840-L949) has external calls inside a loop: [game.creditRedemptionDirect{value: ethForDirect}(player,ethDirect)](contracts/sDGNRS.sol#L936)
 	Calls stack containing the loop:
 		sDGNRS.claimRedemptionMany(address[],uint24)
@@ -8143,7 +8152,7 @@ contracts/Coinflip.sol#L482-L664
 contracts/sDGNRS.sol#L840-L949
 
 
- - [ ] ID-620
+ - [ ] ID-621
 [DegenerusGameWhaleModule._rewardWhalePassDgnrs(address,address,address,address)](contracts/modules/DegenerusGameWhaleModule.sol#L722-L784) has external calls inside a loop: [dgnrs.transferFromPool(IsDGNRS.Pool.Whale,buyer,minterShare)](contracts/modules/DegenerusGameWhaleModule.sol#L735-L739)
 	Calls stack containing the loop:
 		DegenerusGameWhaleModule.purchaseWhalePass(address,uint256)
@@ -8151,7 +8160,7 @@ contracts/sDGNRS.sol#L840-L949
 contracts/modules/DegenerusGameWhaleModule.sol#L722-L784
 
 
- - [ ] ID-621
+ - [ ] ID-622
 [sDGNRS._claimRedemptionFor(address,uint24,uint16,bool)](contracts/sDGNRS.sol#L840-L949) has external calls inside a loop: [game.resolveRedemptionLootbox{value: ethForLootbox}(player,lootboxEth,entropy,actScore)](contracts/sDGNRS.sol#L928)
 	Calls stack containing the loop:
 		sDGNRS.claimRedemptionMany(address[],uint24)
@@ -8159,25 +8168,25 @@ contracts/modules/DegenerusGameWhaleModule.sol#L722-L784
 contracts/sDGNRS.sol#L840-L949
 
 
- - [ ] ID-622
+ - [ ] ID-623
 [DegenerusGameAdvanceModule.advanceGame()](contracts/modules/DegenerusGameAdvanceModule.sol#L173-L651) has external calls inside a loop: [IDegenerusGame(address(this)).emitDailyWinningTraits(1,rngWord,1)](contracts/modules/DegenerusGameAdvanceModule.sol#L545-L549)
 
 contracts/modules/DegenerusGameAdvanceModule.sol#L173-L651
 
 
- - [ ] ID-623
+ - [ ] ID-624
 [DegenerusGame.claimAffiliateDgnrs(address[])](contracts/DegenerusGame.sol#L1456-L1469) has external calls inside a loop: [this.claimAffiliateDgnrs(affiliates[i])](contracts/DegenerusGame.sol#L1464)
 
 contracts/DegenerusGame.sol#L1456-L1469
 
 
- - [ ] ID-624
+ - [ ] ID-625
 [DegenerusGameAdvanceModule.advanceGame()](contracts/modules/DegenerusGameAdvanceModule.sol#L173-L651) has external calls inside a loop: [quests.rollLevelQuest(rngWord)](contracts/modules/DegenerusGameAdvanceModule.sol#L620)
 
 contracts/modules/DegenerusGameAdvanceModule.sol#L173-L651
 
 
- - [ ] ID-625
+ - [ ] ID-626
 [sDGNRS._claimRedemptionFor(address,uint24,uint16,bool)](contracts/sDGNRS.sol#L840-L949) has external calls inside a loop: [coinflip.creditFlip(player,flipPaid)](contracts/sDGNRS.sol#L901)
 	Calls stack containing the loop:
 		sDGNRS.claimRedemptionMany(address[],uint24)
@@ -8185,7 +8194,7 @@ contracts/modules/DegenerusGameAdvanceModule.sol#L173-L651
 contracts/sDGNRS.sol#L840-L949
 
 
- - [ ] ID-626
+ - [ ] ID-627
 [DegenerusGameLootboxModule._resolveLootboxCommon(address,uint48,uint256,uint24,uint24,uint256,bool,uint256,uint256,bool,uint16,bool)](contracts/modules/DegenerusGameLootboxModule.sol#L1268-L1328) has external calls inside a loop: [(okAct,None) = ContractAddresses.GAME_BOON_MODULE.delegatecall(abi.encodeWithSelector(IDegenerusGameBoonModule.consumeActivityBoon.selector,player))](contracts/modules/DegenerusGameLootboxModule.sol#L1301-L1303)
 	Calls stack containing the loop:
 		DegenerusGameLootboxModule.openHumanBoxes(uint256)
@@ -8194,7 +8203,7 @@ contracts/sDGNRS.sol#L840-L949
 contracts/modules/DegenerusGameLootboxModule.sol#L1268-L1328
 
 
- - [ ] ID-627
+ - [ ] ID-628
 [Coinflip._claimCoinflipsInternal(address,bool)](contracts/Coinflip.sol#L482-L664) has external calls inside a loop: [bafResolvedDay = jackpots.getLastBafResolvedDay()](contracts/Coinflip.sol#L575)
 	Calls stack containing the loop:
 		Coinflip.depositCoinflip(address,uint256)
@@ -8203,13 +8212,13 @@ contracts/modules/DegenerusGameLootboxModule.sol#L1268-L1328
 contracts/Coinflip.sol#L482-L664
 
 
- - [ ] ID-628
+ - [ ] ID-629
 [DegenerusAffiliate.claim(address[])](contracts/DegenerusAffiliate.sol#L788-L861) has external calls inside a loop: [b = afkingDrain.drainAffiliateBase(sub)](contracts/DegenerusAffiliate.sol#L814)
 
 contracts/DegenerusAffiliate.sol#L788-L861
 
 
- - [ ] ID-629
+ - [ ] ID-630
 [sDGNRS._payEth(address,uint256)](contracts/sDGNRS.sol#L1157-L1176) has external calls inside a loop: [(success,None) = player.call{value: amount}()](contracts/sDGNRS.sol#L1162)
 	Calls stack containing the loop:
 		sDGNRS.claimRedemptionMany(address[],uint24)
@@ -8218,7 +8227,7 @@ contracts/DegenerusAffiliate.sol#L788-L861
 contracts/sDGNRS.sol#L1157-L1176
 
 
- - [ ] ID-630
+ - [ ] ID-631
 [DegenerusGameLootboxModule._callWwxrpSpin(address,uint256,uint16,uint256)](contracts/modules/DegenerusGameLootboxModule.sol#L2116-L2133) has external calls inside a loop: [(ok,None) = ContractAddresses.GAME_DEGENERETTE_MODULE.delegatecall(abi.encodeWithSelector(IDegenerusGameDegeneretteModule.resolveWwxrpSpinFromBox.selector,player,stake,activityScore,seed,uint32(0)))](contracts/modules/DegenerusGameLootboxModule.sol#L2122-L2131)
 	Calls stack containing the loop:
 		DegenerusGameLootboxModule.resolveRedemptionLootbox(address,uint256,uint256,uint16)
@@ -8230,21 +8239,12 @@ contracts/sDGNRS.sol#L1157-L1176
 contracts/modules/DegenerusGameLootboxModule.sol#L2116-L2133
 
 
- - [ ] ID-631
+ - [ ] ID-632
 [DegenerusGameAdvanceModule._consolidatePoolsAndRewardJackpots(uint24,uint24,uint24,uint256,uint24)](contracts/modules/DegenerusGameAdvanceModule.sol#L932-L1115) has external calls inside a loop: [coinflip.creditFlip(ContractAddresses.SDGNRS,(memCurrent * PRICE_COIN_UNIT) / (PriceLookupLib.priceForLevel(purchaseLevel) * 20))](contracts/modules/DegenerusGameAdvanceModule.sol#L1094-L1098)
 	Calls stack containing the loop:
 		DegenerusGameAdvanceModule.advanceGame()
 
 contracts/modules/DegenerusGameAdvanceModule.sol#L932-L1115
-
-
- - [ ] ID-632
-[DegenerusGameDegeneretteModule._awardDegeneretteDgnrs(address,uint256,uint8)](contracts/modules/DegenerusGameDegeneretteModule.sol#L1491-L1515) has external calls inside a loop: [poolBalance = sdgnrs.poolBalance(IsDGNRS.Pool.Reward)](contracts/modules/DegenerusGameDegeneretteModule.sol#L1501-L1503)
-	Calls stack containing the loop:
-		DegenerusGameDegeneretteModule.resolveDegeneretteBets(address,uint64[])
-		DegenerusGameDegeneretteModule._resolveBet(address,uint64,DegenerusGameDegeneretteModule.ResolveAcc,bool)
-
-contracts/modules/DegenerusGameDegeneretteModule.sol#L1491-L1515
 
 
  - [ ] ID-633
@@ -8450,24 +8450,6 @@ contracts/modules/DegenerusGameMintModule.sol#L1924-L2071
 
 
  - [ ] ID-644
-Reentrancy in [DegenerusGameDegeneretteModule.resolveDegeneretteBets(address,uint64[])](contracts/modules/DegenerusGameDegeneretteModule.sol#L485-L523):
-	External calls:
-	- [_resolveBet(player,betIds[i],acc,i == 0)](contracts/modules/DegenerusGameDegeneretteModule.sol#L503)
-		- [(ok,data) = ContractAddresses.GAME_LOOTBOX_MODULE.delegatecall(abi.encodeWithSelector(IDegenerusGameLootboxModule.resolveLootboxDirect.selector,player,amount,rngWord,activityScore))](contracts/modules/DegenerusGameDegeneretteModule.sol#L1024-L1034)
-		- [sdgnrs.transferFromPool(IsDGNRS.Pool.Reward,player,reward)](contracts/modules/DegenerusGameDegeneretteModule.sol#L1510-L1514)
-		- [coinflip.creditFlip(affiliate.getReferrer(player),(refFlip * 7) / 100)](contracts/modules/DegenerusGameDegeneretteModule.sol#L896)
-	- [coin.mintForGame(player,acc.flipMint)](contracts/modules/DegenerusGameDegeneretteModule.sol#L510)
-	- [wwxrp.mintPrize(player,acc.wwxrpMint)](contracts/modules/DegenerusGameDegeneretteModule.sol#L511)
-	State variables written after the call(s):
-	- [_addClaimableEth(player,acc.ethClaimable)](contracts/modules/DegenerusGameDegeneretteModule.sol#L512)
-		- [balancesPacked[beneficiary] += weiAmount](contracts/storage/DegenerusGameStorage.sol#L996)
-	- [_addClaimableEth(player,acc.ethClaimable)](contracts/modules/DegenerusGameDegeneretteModule.sol#L512)
-		- [claimablePool += uint128(weiAmount)](contracts/modules/DegenerusGameDegeneretteModule.sol#L1485)
-
-contracts/modules/DegenerusGameDegeneretteModule.sol#L485-L523
-
-
- - [ ] ID-645
 Reentrancy in [DegenerusGameAdvanceModule._gameOverEntropy(uint48,uint24,uint24,bool)](contracts/modules/DegenerusGameAdvanceModule.sol#L1390-L1482):
 	External calls:
 	- [coinflip.processCoinflipPayouts(0,fallbackWord,day)](contracts/modules/DegenerusGameAdvanceModule.sol#L1448)
@@ -8477,6 +8459,20 @@ Reentrancy in [DegenerusGameAdvanceModule._gameOverEntropy(uint48,uint24,uint24,
 		- [lootboxRngWordByIndex[index] = rngWord](contracts/modules/DegenerusGameAdvanceModule.sol#L1380)
 
 contracts/modules/DegenerusGameAdvanceModule.sol#L1390-L1482
+
+
+ - [ ] ID-645
+Reentrancy in [DegenerusGameDegeneretteModule.resolveEthSpinFromBox(address,uint256,uint16,uint256,uint32)](contracts/modules/DegenerusGameDegeneretteModule.sol#L1710-L1778):
+	External calls:
+	- [_awardDegeneretteDgnrs(player,betAmount,s)](contracts/modules/DegenerusGameDegeneretteModule.sol#L1752)
+		- [sdgnrs.transferFromPool(IsDGNRS.Pool.Reward,player,reward)](contracts/modules/DegenerusGameDegeneretteModule.sol#L1515-L1519)
+	State variables written after the call(s):
+	- [_addClaimableEth(player,acc.ethClaimable)](contracts/modules/DegenerusGameDegeneretteModule.sol#L1755)
+		- [balancesPacked[beneficiary] += weiAmount](contracts/storage/DegenerusGameStorage.sol#L996)
+	- [_addClaimableEth(player,acc.ethClaimable)](contracts/modules/DegenerusGameDegeneretteModule.sol#L1755)
+		- [claimablePool += uint128(weiAmount)](contracts/modules/DegenerusGameDegeneretteModule.sol#L1490)
+
+contracts/modules/DegenerusGameDegeneretteModule.sol#L1710-L1778
 
 
  - [ ] ID-646
@@ -8600,6 +8596,24 @@ contracts/modules/DegenerusGameMintModule.sol#L1351-L1750
 
 
  - [ ] ID-654
+Reentrancy in [DegenerusGameDegeneretteModule.resolveDegeneretteBets(address,uint64[])](contracts/modules/DegenerusGameDegeneretteModule.sol#L485-L523):
+	External calls:
+	- [_resolveBet(player,betIds[i],acc,i == 0)](contracts/modules/DegenerusGameDegeneretteModule.sol#L503)
+		- [(ok,data) = ContractAddresses.GAME_LOOTBOX_MODULE.delegatecall(abi.encodeWithSelector(IDegenerusGameLootboxModule.resolveLootboxDirect.selector,player,amount,rngWord,activityScore))](contracts/modules/DegenerusGameDegeneretteModule.sol#L1029-L1039)
+		- [sdgnrs.transferFromPool(IsDGNRS.Pool.Reward,player,reward)](contracts/modules/DegenerusGameDegeneretteModule.sol#L1515-L1519)
+		- [coinflip.creditFlip(affiliate.getReferrer(player),(refFlip * 7) / 100)](contracts/modules/DegenerusGameDegeneretteModule.sol#L901)
+	- [coin.mintForGame(player,acc.flipMint)](contracts/modules/DegenerusGameDegeneretteModule.sol#L510)
+	- [wwxrp.mintPrize(player,acc.wwxrpMint)](contracts/modules/DegenerusGameDegeneretteModule.sol#L511)
+	State variables written after the call(s):
+	- [_addClaimableEth(player,acc.ethClaimable)](contracts/modules/DegenerusGameDegeneretteModule.sol#L512)
+		- [balancesPacked[beneficiary] += weiAmount](contracts/storage/DegenerusGameStorage.sol#L996)
+	- [_addClaimableEth(player,acc.ethClaimable)](contracts/modules/DegenerusGameDegeneretteModule.sol#L512)
+		- [claimablePool += uint128(weiAmount)](contracts/modules/DegenerusGameDegeneretteModule.sol#L1490)
+
+contracts/modules/DegenerusGameDegeneretteModule.sol#L485-L523
+
+
+ - [ ] ID-655
 Reentrancy in [DegenerusGameAdvanceModule.advanceGame()](contracts/modules/DegenerusGameAdvanceModule.sol#L173-L651):
 	External calls:
 	- [(goReturn,goStage) = _handleGameOverPath(day,lvl)](contracts/modules/DegenerusGameAdvanceModule.sol#L230)
@@ -8653,7 +8667,7 @@ Reentrancy in [DegenerusGameAdvanceModule.advanceGame()](contracts/modules/Degen
 contracts/modules/DegenerusGameAdvanceModule.sol#L173-L651
 
 
- - [ ] ID-655
+ - [ ] ID-656
 Reentrancy in [GNRUS._redeemTo(address,uint256,uint256,uint256,address)](contracts/GNRUS.sol#L319-L351):
 	External calls:
 	- [game.claimWinnings(address(this))](contracts/GNRUS.sol#L329)
@@ -8664,7 +8678,18 @@ Reentrancy in [GNRUS._redeemTo(address,uint256,uint256,uint256,address)](contrac
 contracts/GNRUS.sol#L319-L351
 
 
- - [ ] ID-656
+ - [ ] ID-657
+Reentrancy in [DegenerusGameDegeneretteModule.resolveWwxrpSpinFromBox(address,uint256,uint16,uint256,uint32)](contracts/modules/DegenerusGameDegeneretteModule.sol#L1579-L1642):
+	External calls:
+	- [wwxrp.mintPrize(player,payout)](contracts/modules/DegenerusGameDegeneretteModule.sol#L1620)
+	State variables written after the call(s):
+	- [whalePassClaims[player] += 1](contracts/modules/DegenerusGameDegeneretteModule.sol#L1627)
+	- [wwxrpJackpotWhalePassBracketAwarded[bracket] = true](contracts/modules/DegenerusGameDegeneretteModule.sol#L1628)
+
+contracts/modules/DegenerusGameDegeneretteModule.sol#L1579-L1642
+
+
+ - [ ] ID-658
 Reentrancy in [Coinflip._addDailyFlip(address,uint256,uint256,bool,bool)](contracts/Coinflip.sol#L671-L730):
 	External calls:
 	- [boonBps = game.consumeCoinflipBoon(player)](contracts/Coinflip.sol#L682)
@@ -8679,7 +8704,7 @@ Reentrancy in [Coinflip._addDailyFlip(address,uint256,uint256,bool,bool)](contra
 contracts/Coinflip.sol#L671-L730
 
 
- - [ ] ID-657
+ - [ ] ID-659
 Reentrancy in [DegenerusGameJackpotModule.runBafJackpot(uint256,uint24,uint256)](contracts/modules/DegenerusGameJackpotModule.sol#L1932-L2014):
 	External calls:
 	- [(winnersArr,amountsArr,None) = jackpots.runBafJackpot(poolWei,lvl,rngWord)](contracts/modules/DegenerusGameJackpotModule.sol#L1939-L1940)
@@ -8712,7 +8737,22 @@ Reentrancy in [DegenerusGameJackpotModule.runBafJackpot(uint256,uint24,uint256)]
 contracts/modules/DegenerusGameJackpotModule.sol#L1932-L2014
 
 
- - [ ] ID-658
+ - [ ] ID-660
+Reentrancy in [DegenerusGameDegeneretteModule._collectBetFunds(address,uint8,uint256,uint256)](contracts/modules/DegenerusGameDegeneretteModule.sol#L654-L690):
+	External calls:
+	- [coin.burnCoin(player,totalBet)](contracts/modules/DegenerusGameDegeneretteModule.sol#L680)
+	State variables written after the call(s):
+	- [_creditAfkingValue(player,ethPaid)](contracts/modules/DegenerusGameDegeneretteModule.sol#L685)
+		- [balancesPacked[player] += weiAmount << 128](contracts/storage/DegenerusGameStorage.sol#L1012)
+	- [_creditAfkingValue(player,ethPaid)](contracts/modules/DegenerusGameDegeneretteModule.sol#L685)
+		- [claimablePool += uint128(weiAmount)](contracts/storage/DegenerusGameStorage.sol#L1049)
+	- [_lrAdd(LR_PENDING_FLIP_SHIFT,LR_PENDING_FLIP_MASK,_packFlipToWhole(totalBet))](contracts/modules/DegenerusGameDegeneretteModule.sol#L681)
+		- [lootboxRngPacked = (packed & ~ (mask << shift)) | (((((packed >> shift) & mask) + delta) & mask) << shift)](contracts/storage/DegenerusGameStorage.sol#L1661-L1663)
+
+contracts/modules/DegenerusGameDegeneretteModule.sol#L654-L690
+
+
+ - [ ] ID-661
 Reentrancy in [DegenerusGameLootboxModule._openBoxBoth(address,uint48,bool)](contracts/modules/DegenerusGameLootboxModule.sol#L634-L650):
 	External calls:
 	- [_openLootBoxLeg(player,index)](contracts/modules/DegenerusGameLootboxModule.sol#L636)
@@ -8731,7 +8771,7 @@ Reentrancy in [DegenerusGameLootboxModule._openBoxBoth(address,uint48,bool)](con
 contracts/modules/DegenerusGameLootboxModule.sol#L634-L650
 
 
- - [ ] ID-659
+ - [ ] ID-662
 Reentrancy in [DegenerusGameMintModule._redeemFlipFor(address,uint256)](contracts/modules/DegenerusGameMintModule.sol#L938-L1010):
 	External calls:
 	- [(None,adjustedQty32,targetLevel,flipMintUnits,None,None,None,None,None) = _callTicketPurchase(buyer,entryQuantityScaled,MintPaymentKind.DirectEth,true,bytes32(0),0,cachedLevel,jackpotPhaseFlag)](contracts/modules/DegenerusGameMintModule.sol#L963-L981)
@@ -8748,7 +8788,7 @@ Reentrancy in [DegenerusGameMintModule._redeemFlipFor(address,uint256)](contract
 contracts/modules/DegenerusGameMintModule.sol#L938-L1010
 
 
- - [ ] ID-660
+ - [ ] ID-663
 Reentrancy in [DegenerusGameAdvanceModule.advanceGame()](contracts/modules/DegenerusGameAdvanceModule.sol#L173-L651):
 	External calls:
 	- [(goReturn,goStage) = _handleGameOverPath(day,lvl)](contracts/modules/DegenerusGameAdvanceModule.sol#L230)
@@ -8797,18 +8837,7 @@ Reentrancy in [DegenerusGameAdvanceModule.advanceGame()](contracts/modules/Degen
 contracts/modules/DegenerusGameAdvanceModule.sol#L173-L651
 
 
- - [ ] ID-661
-Reentrancy in [DegenerusGameDegeneretteModule.resolveWwxrpSpinFromBox(address,uint256,uint16,uint256,uint32)](contracts/modules/DegenerusGameDegeneretteModule.sol#L1574-L1637):
-	External calls:
-	- [wwxrp.mintPrize(player,payout)](contracts/modules/DegenerusGameDegeneretteModule.sol#L1615)
-	State variables written after the call(s):
-	- [whalePassClaims[player] += 1](contracts/modules/DegenerusGameDegeneretteModule.sol#L1622)
-	- [wwxrpJackpotWhalePassBracketAwarded[bracket] = true](contracts/modules/DegenerusGameDegeneretteModule.sol#L1623)
-
-contracts/modules/DegenerusGameDegeneretteModule.sol#L1574-L1637
-
-
- - [ ] ID-662
+ - [ ] ID-664
 Reentrancy in [GameAfkingModule.subscribe(address,bool,bool,uint8,address)](contracts/modules/GameAfkingModule.sol#L305-L585):
 	External calls:
 	- [_settlePendingFlip(subscriber,s)](contracts/modules/GameAfkingModule.sol#L404)
@@ -8858,7 +8887,7 @@ Reentrancy in [GameAfkingModule.subscribe(address,bool,bool,uint8,address)](cont
 contracts/modules/GameAfkingModule.sol#L305-L585
 
 
- - [ ] ID-663
+ - [ ] ID-665
 Reentrancy in [Coinflip.processCoinflipPayouts(uint8,uint256,uint24)](contracts/Coinflip.sol#L875-L989):
 	External calls:
 	- [_addDailyFlip(to,slice,0,false,false)](contracts/Coinflip.sol#L927)
@@ -8870,7 +8899,7 @@ Reentrancy in [Coinflip.processCoinflipPayouts(uint8,uint256,uint24)](contracts/
 contracts/Coinflip.sol#L875-L989
 
 
- - [ ] ID-664
+ - [ ] ID-666
 Reentrancy in [DegenerusGameLootboxModule._settleLootboxRoll(address,uint48,uint256,uint256,uint24,uint256,bool,uint256,uint256,bool,uint16,bool)](contracts/modules/DegenerusGameLootboxModule.sol#L1341-L1415):
 	External calls:
 	- [(flipOut,scaledWholeTickets,wasSpin) = _resolveLootboxRoll(player,rollAmount,fullAmount,targetPrice,rollSeed,isFarFuture,activityScore,allowEthSpin)](contracts/modules/DegenerusGameLootboxModule.sol#L1362-L1363)
@@ -8887,7 +8916,7 @@ Reentrancy in [DegenerusGameLootboxModule._settleLootboxRoll(address,uint48,uint
 contracts/modules/DegenerusGameLootboxModule.sol#L1341-L1415
 
 
- - [ ] ID-665
+ - [ ] ID-667
 Reentrancy in [DegenerusGameAdvanceModule._handleGameOverPath(uint24,uint24)](contracts/modules/DegenerusGameAdvanceModule.sol#L688-L811):
 	External calls:
 	- [rngWord = _gameOverEntropy(uint48(block.timestamp),day,lvl,lastPurchaseDay)](contracts/modules/DegenerusGameAdvanceModule.sol#L761-L766)
@@ -8907,7 +8936,7 @@ Reentrancy in [DegenerusGameAdvanceModule._handleGameOverPath(uint24,uint24)](co
 contracts/modules/DegenerusGameAdvanceModule.sol#L688-L811
 
 
- - [ ] ID-666
+ - [ ] ID-668
 Reentrancy in [DegenerusGameMintModule.buyLootboxAndPresaleBox(address,uint256,uint256,bytes32,MintPaymentKind,uint256)](contracts/modules/DegenerusGameMintModule.sol#L1775-L1816):
 	External calls:
 	- [_purchaseForWithCached(buyer,entryQuantityScaled,lootBoxAmount,affiliateCode,payKind,mintFresh,cachedJpFlag,cachedLevel,priceWei,ticketCost)](contracts/modules/DegenerusGameMintModule.sol#L1800-L1811)
@@ -8929,7 +8958,7 @@ Reentrancy in [DegenerusGameMintModule.buyLootboxAndPresaleBox(address,uint256,u
 contracts/modules/DegenerusGameMintModule.sol#L1775-L1816
 
 
- - [ ] ID-667
+ - [ ] ID-669
 Reentrancy in [DegenerusGameAdvanceModule.requestLootboxRng()](contracts/modules/DegenerusGameAdvanceModule.sol#L1189-L1254):
 	External calls:
 	- [id = _requestVrfWord(VRF_MIDDAY_CONFIRMATIONS)](contracts/modules/DegenerusGameAdvanceModule.sol#L1247)
@@ -8941,7 +8970,7 @@ Reentrancy in [DegenerusGameAdvanceModule.requestLootboxRng()](contracts/modules
 contracts/modules/DegenerusGameAdvanceModule.sol#L1189-L1254
 
 
- - [ ] ID-668
+ - [ ] ID-670
 Reentrancy in [sDGNRS._submitGamblingClaimFrom(address,address,uint256)](contracts/sDGNRS.sol#L1027-L1150):
 	External calls:
 	- [coinBacking = coinflip.redeemableFlipBacking()](contracts/sDGNRS.sol#L1082)
@@ -8955,7 +8984,20 @@ Reentrancy in [sDGNRS._submitGamblingClaimFrom(address,address,uint256)](contrac
 contracts/sDGNRS.sol#L1027-L1150
 
 
- - [ ] ID-669
+ - [ ] ID-671
+Reentrancy in [DegenerusGameDegeneretteModule._collectBetFunds(address,uint8,uint256,uint256)](contracts/modules/DegenerusGameDegeneretteModule.sol#L654-L690):
+	External calls:
+	- [wwxrp.burnForGame(player,totalBet)](contracts/modules/DegenerusGameDegeneretteModule.sol#L687)
+	State variables written after the call(s):
+	- [_creditAfkingValue(player,ethPaid)](contracts/modules/DegenerusGameDegeneretteModule.sol#L688)
+		- [balancesPacked[player] += weiAmount << 128](contracts/storage/DegenerusGameStorage.sol#L1012)
+	- [_creditAfkingValue(player,ethPaid)](contracts/modules/DegenerusGameDegeneretteModule.sol#L688)
+		- [claimablePool += uint128(weiAmount)](contracts/storage/DegenerusGameStorage.sol#L1049)
+
+contracts/modules/DegenerusGameDegeneretteModule.sol#L654-L690
+
+
+ - [ ] ID-672
 Reentrancy in [DegenerusAffiliate.claim(address[])](contracts/DegenerusAffiliate.sol#L788-L861):
 	External calls:
 	- [b = afkingDrain.drainAffiliateBase(sub)](contracts/DegenerusAffiliate.sol#L814)
@@ -8968,18 +9010,7 @@ Reentrancy in [DegenerusAffiliate.claim(address[])](contracts/DegenerusAffiliate
 contracts/DegenerusAffiliate.sol#L788-L861
 
 
- - [ ] ID-670
-Reentrancy in [DegenerusGameDegeneretteModule._collectBetFunds(address,uint8,uint256,uint256)](contracts/modules/DegenerusGameDegeneretteModule.sol#L654-L685):
-	External calls:
-	- [coin.burnCoin(player,totalBet)](contracts/modules/DegenerusGameDegeneretteModule.sol#L680)
-	State variables written after the call(s):
-	- [_lrAdd(LR_PENDING_FLIP_SHIFT,LR_PENDING_FLIP_MASK,_packFlipToWhole(totalBet))](contracts/modules/DegenerusGameDegeneretteModule.sol#L681)
-		- [lootboxRngPacked = (packed & ~ (mask << shift)) | (((((packed >> shift) & mask) + delta) & mask) << shift)](contracts/storage/DegenerusGameStorage.sol#L1661-L1663)
-
-contracts/modules/DegenerusGameDegeneretteModule.sol#L654-L685
-
-
- - [ ] ID-671
+ - [ ] ID-673
 Reentrancy in [DegenerusGameMintModule._purchaseForWithCached(address,uint256,uint256,bytes32,MintPaymentKind,uint256,bool,uint24,uint256,uint256)](contracts/modules/DegenerusGameMintModule.sol#L1351-L1750):
 	External calls:
 	- [(lootboxFlipCredit,adjustedQty,targetLevel,flipMintUnits,ticketFreshFlip,ticketRecycledFlip,ticketNextShare,ticketFutureShare,ticketClaimableDraw) = _callTicketPurchase(buyer,entryQuantityScaled,payKind,false,affiliateCode,remainingEth,cachedLevel,cachedJpFlag)](contracts/modules/DegenerusGameMintModule.sol#L1425-L1444)
@@ -9008,7 +9039,7 @@ Reentrancy in [DegenerusGameMintModule._purchaseForWithCached(address,uint256,ui
 contracts/modules/DegenerusGameMintModule.sol#L1351-L1750
 
 
- - [ ] ID-672
+ - [ ] ID-674
 Reentrancy in [DegenerusGameWhaleModule.purchaseWhalePass(address,uint256)](contracts/modules/DegenerusGameWhaleModule.sol#L184-L387):
 	External calls:
 	- [_rewardWhalePassDgnrs(buyer,affiliateAddr,upline,upline2)](contracts/modules/DegenerusGameWhaleModule.sol#L355)
@@ -9036,7 +9067,7 @@ Reentrancy in [DegenerusGameWhaleModule.purchaseWhalePass(address,uint256)](cont
 contracts/modules/DegenerusGameWhaleModule.sol#L184-L387
 
 
- - [ ] ID-673
+ - [ ] ID-675
 Reentrancy in [DegenerusGameAdvanceModule._backfillGapDays(uint256,uint24,uint24)](contracts/modules/DegenerusGameAdvanceModule.sol#L2040-L2062):
 	External calls:
 	- [coinflip.processCoinflipPayouts(0,derivedWord,gapDay)](contracts/modules/DegenerusGameAdvanceModule.sol#L2056)
@@ -9046,7 +9077,7 @@ Reentrancy in [DegenerusGameAdvanceModule._backfillGapDays(uint256,uint24,uint24
 contracts/modules/DegenerusGameAdvanceModule.sol#L2040-L2062
 
 
- - [ ] ID-674
+ - [ ] ID-676
 Reentrancy in [DegenerusGameLootboxModule.creditRedemptionDirect(address,uint256)](contracts/modules/DegenerusGameLootboxModule.sol#L1023-L1034):
 	External calls:
 	- [! steth.transferFrom(msg.sender,address(this),stethPortion)](contracts/modules/DegenerusGameLootboxModule.sol#L1030)
@@ -9058,7 +9089,7 @@ Reentrancy in [DegenerusGameLootboxModule.creditRedemptionDirect(address,uint256
 contracts/modules/DegenerusGameLootboxModule.sol#L1023-L1034
 
 
- - [ ] ID-675
+ - [ ] ID-677
 Reentrancy in [DegenerusGameAdvanceModule.updateVrfCoordinatorAndSub(address,uint256,bytes32)](contracts/modules/DegenerusGameAdvanceModule.sol#L1919-L1971):
 	External calls:
 	- [vrfRequestId = _requestVrfWord(VRF_MIDDAY_CONFIRMATIONS)](contracts/modules/DegenerusGameAdvanceModule.sol#L1951)
@@ -9069,7 +9100,7 @@ Reentrancy in [DegenerusGameAdvanceModule.updateVrfCoordinatorAndSub(address,uin
 contracts/modules/DegenerusGameAdvanceModule.sol#L1919-L1971
 
 
- - [ ] ID-676
+ - [ ] ID-678
 Reentrancy in [DegenerusGameAdvanceModule._gameOverEntropy(uint48,uint24,uint24,bool)](contracts/modules/DegenerusGameAdvanceModule.sol#L1390-L1482):
 	External calls:
 	- [coinflip.processCoinflipPayouts(0,currentWord,day)](contracts/modules/DegenerusGameAdvanceModule.sol#L1403)
@@ -9081,7 +9112,7 @@ Reentrancy in [DegenerusGameAdvanceModule._gameOverEntropy(uint48,uint24,uint24,
 contracts/modules/DegenerusGameAdvanceModule.sol#L1390-L1482
 
 
- - [ ] ID-677
+ - [ ] ID-679
 Reentrancy in [FLIP.decimatorBurn(address,uint256)](contracts/FLIP.sol#L647-L704):
 	External calls:
 	- [consumed = _consumeCoinflipShortfall(caller,amount)](contracts/FLIP.sol#L665)
@@ -9094,7 +9125,7 @@ Reentrancy in [FLIP.decimatorBurn(address,uint256)](contracts/FLIP.sol#L647-L704
 contracts/FLIP.sol#L647-L704
 
 
- - [ ] ID-678
+ - [ ] ID-680
 Reentrancy in [DegenerusGameAdvanceModule._tryRequestRng(bool,uint24)](contracts/modules/DegenerusGameAdvanceModule.sol#L1724-L1743):
 	External calls:
 	- [id = vrfCoordinator.requestRandomWords(VRFRandomWordsRequest({keyHash:vrfKeyHash,subId:vrfSubscriptionId,requestConfirmations:VRF_REQUEST_CONFIRMATIONS,callbackGasLimit:VRF_CALLBACK_GAS_LIMIT,numWords:1,extraArgs:}))](contracts/modules/DegenerusGameAdvanceModule.sol#L1728-L1742)
@@ -9108,7 +9139,7 @@ Reentrancy in [DegenerusGameAdvanceModule._tryRequestRng(bool,uint24)](contracts
 contracts/modules/DegenerusGameAdvanceModule.sol#L1724-L1743
 
 
- - [ ] ID-679
+ - [ ] ID-681
 Reentrancy in [GameAfkingModule.subscribe(address,bool,bool,uint8,address)](contracts/modules/GameAfkingModule.sol#L305-L585):
 	External calls:
 	- [_settlePendingFlip(subscriber,s)](contracts/modules/GameAfkingModule.sol#L404)
@@ -9161,21 +9192,7 @@ Reentrancy in [GameAfkingModule.subscribe(address,bool,bool,uint8,address)](cont
 contracts/modules/GameAfkingModule.sol#L305-L585
 
 
- - [ ] ID-680
-Reentrancy in [DegenerusGameDegeneretteModule.resolveEthSpinFromBox(address,uint256,uint16,uint256,uint32)](contracts/modules/DegenerusGameDegeneretteModule.sol#L1705-L1773):
-	External calls:
-	- [_awardDegeneretteDgnrs(player,betAmount,s)](contracts/modules/DegenerusGameDegeneretteModule.sol#L1747)
-		- [sdgnrs.transferFromPool(IsDGNRS.Pool.Reward,player,reward)](contracts/modules/DegenerusGameDegeneretteModule.sol#L1510-L1514)
-	State variables written after the call(s):
-	- [_addClaimableEth(player,acc.ethClaimable)](contracts/modules/DegenerusGameDegeneretteModule.sol#L1750)
-		- [balancesPacked[beneficiary] += weiAmount](contracts/storage/DegenerusGameStorage.sol#L996)
-	- [_addClaimableEth(player,acc.ethClaimable)](contracts/modules/DegenerusGameDegeneretteModule.sol#L1750)
-		- [claimablePool += uint128(weiAmount)](contracts/modules/DegenerusGameDegeneretteModule.sol#L1485)
-
-contracts/modules/DegenerusGameDegeneretteModule.sol#L1705-L1773
-
-
- - [ ] ID-681
+ - [ ] ID-682
 Reentrancy in [DegenerusGameDecimatorModule._claimDecimatorJackpotFor(address,uint24,DegenerusGameStorage.DecBet,DegenerusGameStorage.DecClaimRound,uint256,bool)](contracts/modules/DegenerusGameDecimatorModule.sol#L387-L425):
 	External calls:
 	- [lootboxPortion = _creditDecJackpotClaimCore(player,amountWei,round.rngWord,_minScoreForBucket(winBucket))](contracts/modules/DegenerusGameDecimatorModule.sol#L409-L414)
@@ -9187,7 +9204,7 @@ Reentrancy in [DegenerusGameDecimatorModule._claimDecimatorJackpotFor(address,ui
 contracts/modules/DegenerusGameDecimatorModule.sol#L387-L425
 
 
- - [ ] ID-682
+ - [ ] ID-683
 Reentrancy in [DegenerusGameLootboxModule.resolveRedemptionLootbox(address,uint256,uint256,uint16)](contracts/modules/DegenerusGameLootboxModule.sol#L942-L973):
 	External calls:
 	- [! steth.transferFrom(msg.sender,address(this),stethPortion)](contracts/modules/DegenerusGameLootboxModule.sol#L951)
@@ -9200,7 +9217,7 @@ Reentrancy in [DegenerusGameLootboxModule.resolveRedemptionLootbox(address,uint2
 contracts/modules/DegenerusGameLootboxModule.sol#L942-L973
 
 
- - [ ] ID-683
+ - [ ] ID-684
 Reentrancy in [DegenerusGameAdvanceModule._rewardTopAffiliate(uint24)](contracts/modules/DegenerusGameAdvanceModule.sol#L849-L876):
 	External calls:
 	- [paid = dgnrs.transferFromPool(IsDGNRS.Pool.Affiliate,top,dgnrsReward)](contracts/modules/DegenerusGameAdvanceModule.sol#L858-L862)
@@ -9211,7 +9228,7 @@ Reentrancy in [DegenerusGameAdvanceModule._rewardTopAffiliate(uint24)](contracts
 contracts/modules/DegenerusGameAdvanceModule.sol#L849-L876
 
 
- - [ ] ID-684
+ - [ ] ID-685
 Reentrancy in [DegenerusGameAdvanceModule._consolidatePoolsAndRewardJackpots(uint24,uint24,uint24,uint256,uint24)](contracts/modules/DegenerusGameAdvanceModule.sol#L932-L1115):
 	External calls:
 	- [claimed = IDegenerusGame(address(this)).runBafJackpot(bafPoolWei,lvl,rngWord)](contracts/modules/DegenerusGameAdvanceModule.sol#L1036-L1040)
@@ -9224,7 +9241,7 @@ Reentrancy in [DegenerusGameAdvanceModule._consolidatePoolsAndRewardJackpots(uin
 contracts/modules/DegenerusGameAdvanceModule.sol#L932-L1115
 
 
- - [ ] ID-685
+ - [ ] ID-686
 Reentrancy in [DegenerusGameAdvanceModule.updateVrfCoordinatorAndSub(address,uint256,bytes32)](contracts/modules/DegenerusGameAdvanceModule.sol#L1919-L1971):
 	External calls:
 	- [vrfRequestId = _requestVrfWord(VRF_REQUEST_CONFIRMATIONS)](contracts/modules/DegenerusGameAdvanceModule.sol#L1957)
@@ -9238,7 +9255,7 @@ contracts/modules/DegenerusGameAdvanceModule.sol#L1919-L1971
 ## reentrancy-events
 Impact: Low
 Confidence: Medium
- - [ ] ID-686
+ - [ ] ID-687
 Reentrancy in [DegenerusAdmin._executeSwap(uint256)](contracts/DegenerusAdmin.sol#L943-L1007):
 	External calls:
 	- [IVRFCoordinatorV2_5Owner(oldCoord).cancelSubscription(oldSub,address(this))](contracts/DegenerusAdmin.sol#L961-L968)
@@ -9250,7 +9267,7 @@ Reentrancy in [DegenerusAdmin._executeSwap(uint256)](contracts/DegenerusAdmin.so
 contracts/DegenerusAdmin.sol#L943-L1007
 
 
- - [ ] ID-687
+ - [ ] ID-688
 Reentrancy in [DegenerusGameLootboxModule.openHumanBoxes(uint256)](contracts/modules/DegenerusGameLootboxModule.sol#L669-L742):
 	External calls:
 	- [_openLootBoxLegWith(player,idx,packed,word)](contracts/modules/DegenerusGameLootboxModule.sol#L718)
@@ -9301,7 +9318,7 @@ Reentrancy in [DegenerusGameLootboxModule.openHumanBoxes(uint256)](contracts/mod
 contracts/modules/DegenerusGameLootboxModule.sol#L669-L742
 
 
- - [ ] ID-688
+ - [ ] ID-689
 Reentrancy in [DegenerusGameAdvanceModule.advanceGame()](contracts/modules/DegenerusGameAdvanceModule.sol#L173-L651):
 	External calls:
 	- [(goReturn,goStage) = _handleGameOverPath(day,lvl)](contracts/modules/DegenerusGameAdvanceModule.sol#L230)
@@ -9321,7 +9338,7 @@ Reentrancy in [DegenerusGameAdvanceModule.advanceGame()](contracts/modules/Degen
 contracts/modules/DegenerusGameAdvanceModule.sol#L173-L651
 
 
- - [ ] ID-689
+ - [ ] ID-690
 Reentrancy in [DegenerusGameAdvanceModule._consolidatePoolsAndRewardJackpots(uint24,uint24,uint24,uint256,uint24)](contracts/modules/DegenerusGameAdvanceModule.sol#L932-L1115):
 	External calls:
 	- [claimed = IDegenerusGame(address(this)).runBafJackpot(bafPoolWei,lvl,rngWord)](contracts/modules/DegenerusGameAdvanceModule.sol#L1036-L1040)
@@ -9334,7 +9351,29 @@ Reentrancy in [DegenerusGameAdvanceModule._consolidatePoolsAndRewardJackpots(uin
 contracts/modules/DegenerusGameAdvanceModule.sol#L932-L1115
 
 
- - [ ] ID-690
+ - [ ] ID-691
+Reentrancy in [GameAfkingModule.subscribe(address,bool,bool,uint8,address)](contracts/modules/GameAfkingModule.sol#L305-L585):
+	External calls:
+	- [_settlePendingFlip(subscriber,s)](contracts/modules/GameAfkingModule.sol#L404)
+		- [coinflip.creditFlip(player,owed * 1000000000000000000)](contracts/modules/GameAfkingModule.sol#L1121)
+	Event emitted after the call(s):
+	- [AfkingDelivered(player,processDay,weiIn)](contracts/modules/GameAfkingModule.sol#L916)
+		- [_deliverAfkingBuy(subscriber,s,today,gapStartDay,mp,level,level + 1,src,ethValue,claimableUse,buyAmount,isTicket,true)](contracts/modules/GameAfkingModule.sol#L477-L491)
+	- [AfkingDelivered(player,processDay,weiIn)](contracts/modules/GameAfkingModule.sol#L916)
+		- [_deliverAfkingBuy(subscriber,s,today,gapStartDay,mp,level,level,src,ethValue,claimableUse,buyAmount,isTicket,true)](contracts/modules/GameAfkingModule.sol#L477-L491)
+	- [EntriesQueuedScaled(buyer,targetLevel,entriesScaled)](contracts/storage/DegenerusGameStorage.sol#L723)
+		- [_deliverAfkingBuy(subscriber,s,today,gapStartDay,mp,level,level + 1,src,ethValue,claimableUse,buyAmount,isTicket,true)](contracts/modules/GameAfkingModule.sol#L477-L491)
+	- [EntriesQueuedScaled(buyer,targetLevel,entriesScaled)](contracts/storage/DegenerusGameStorage.sol#L723)
+		- [_deliverAfkingBuy(subscriber,s,today,gapStartDay,mp,level,level,src,ethValue,claimableUse,buyAmount,isTicket,true)](contracts/modules/GameAfkingModule.sol#L477-L491)
+	- [LootBoxBuy(player,index,amount,_psRead(PS_ACTIVE_SHIFT,PS_ACTIVE_MASK) != 0)](contracts/modules/GameAfkingModule.sol#L1061-L1066)
+		- [_deliverAfkingBuy(subscriber,s,today,gapStartDay,mp,level,level + 1,src,ethValue,claimableUse,buyAmount,isTicket,true)](contracts/modules/GameAfkingModule.sol#L477-L491)
+	- [LootBoxBuy(player,index,amount,_psRead(PS_ACTIVE_SHIFT,PS_ACTIVE_MASK) != 0)](contracts/modules/GameAfkingModule.sol#L1061-L1066)
+		- [_deliverAfkingBuy(subscriber,s,today,gapStartDay,mp,level,level,src,ethValue,claimableUse,buyAmount,isTicket,true)](contracts/modules/GameAfkingModule.sol#L477-L491)
+
+contracts/modules/GameAfkingModule.sol#L305-L585
+
+
+ - [ ] ID-692
 Reentrancy in [DegenerusQuests._handleLevelQuestProgress(address,uint8,uint256,uint256)](contracts/DegenerusQuests.sol#L2371-L2433):
 	External calls:
 	- [questGame.recordAfkingSecondary(player,LEVEL_QUEST_STREAK_BONUS)](contracts/DegenerusQuests.sol#L2420)
@@ -9345,7 +9384,7 @@ Reentrancy in [DegenerusQuests._handleLevelQuestProgress(address,uint8,uint256,u
 contracts/DegenerusQuests.sol#L2371-L2433
 
 
- - [ ] ID-691
+ - [ ] ID-693
 Reentrancy in [DegenerusAffiliate.payAffiliate(uint256,bytes32,address,uint24,bool,uint16)](contracts/DegenerusAffiliate.sol#L416-L589):
 	External calls:
 	- [coinflip.creditFlip(winner,affiliateShareBase)](contracts/DegenerusAffiliate.sol#L564)
@@ -9357,7 +9396,7 @@ Reentrancy in [DegenerusAffiliate.payAffiliate(uint256,bytes32,address,uint24,bo
 contracts/DegenerusAffiliate.sol#L416-L589
 
 
- - [ ] ID-692
+ - [ ] ID-694
 Reentrancy in [sDGNRS.depositSteth(uint256)](contracts/sDGNRS.sol#L505-L508):
 	External calls:
 	- [! steth.transferFrom(msg.sender,address(this),amount)](contracts/sDGNRS.sol#L506)
@@ -9367,7 +9406,7 @@ Reentrancy in [sDGNRS.depositSteth(uint256)](contracts/sDGNRS.sol#L505-L508):
 contracts/sDGNRS.sol#L505-L508
 
 
- - [ ] ID-693
+ - [ ] ID-695
 Reentrancy in [Coinflip.claimCoinflipCarry(address,uint256)](contracts/Coinflip.sol#L839-L864):
 	External calls:
 	- [mintable = _claimCoinflipsInternal(player,false)](contracts/Coinflip.sol#L848)
@@ -9381,7 +9420,7 @@ Reentrancy in [Coinflip.claimCoinflipCarry(address,uint256)](contracts/Coinflip.
 contracts/Coinflip.sol#L839-L864
 
 
- - [ ] ID-694
+ - [ ] ID-696
 Reentrancy in [DegenerusGameBingoModule.claimBingo(address,uint24,uint8,uint32[8])](contracts/modules/DegenerusGameBingoModule.sol#L119-L205):
 	External calls:
 	- [dgnrsPaid = dgnrs.transferFromPool(IsDGNRS.Pool.Reward,player,(poolBal * dgnrsBps) / 10_000)](contracts/modules/DegenerusGameBingoModule.sol#L195-L199)
@@ -9392,7 +9431,7 @@ Reentrancy in [DegenerusGameBingoModule.claimBingo(address,uint24,uint8,uint32[8
 contracts/modules/DegenerusGameBingoModule.sol#L119-L205
 
 
- - [ ] ID-695
+ - [ ] ID-697
 Reentrancy in [FLIP._transfer(address,address,uint256)](contracts/FLIP.sol#L381-L419):
 	External calls:
 	- [coinflip.claimCoinflipsFromFlip(from,amount - balance)](contracts/FLIP.sol#L386)
@@ -9403,7 +9442,30 @@ Reentrancy in [FLIP._transfer(address,address,uint256)](contracts/FLIP.sol#L381-
 contracts/FLIP.sol#L381-L419
 
 
- - [ ] ID-696
+ - [ ] ID-698
+Reentrancy in [DegenerusGameJackpotModule.payDailyJackpotCoinAndTickets(uint256)](contracts/modules/DegenerusGameJackpotModule.sol#L561-L622):
+	External calls:
+	- [_runFlipJackpot(lvl,lvl,lvl + 1,lvl + 4,bonusTraitsPacked,randWord)](contracts/modules/DegenerusGameJackpotModule.sol#L580)
+		- [coinflip.creditFlipBatch(batchPlayers,batchAmounts)](contracts/modules/DegenerusGameJackpotModule.sol#L1745)
+		- [coinflip.creditFlipBatch(batchPlayers,batchAmounts)](contracts/modules/DegenerusGameJackpotModule.sol#L1671)
+	Event emitted after the call(s):
+	- [EntriesQueued(buyer,targetLevel,entries)](contracts/storage/DegenerusGameStorage.sol#L679)
+		- [_distributeTicketJackpot(lvl,lvl + 1,mainTraitsPacked,dailyEntries,EntropyLib.hash2(randWord,lvl),LOOTBOX_MAX_WINNERS,241)](contracts/modules/DegenerusGameJackpotModule.sol#L585-L593)
+	- [EntriesQueued(buyer,targetLevel,entries)](contracts/storage/DegenerusGameStorage.sol#L679)
+		- [_distributeTicketJackpot(sourceLevel,lvl,bonusTraitsPacked,carryoverEntries,EntropyLib.hash2(randWord,sourceLevel),LOOTBOX_MAX_WINNERS,240)](contracts/modules/DegenerusGameJackpotModule.sol#L603-L611)
+	- [EntriesQueued(buyer,targetLevel,entries)](contracts/storage/DegenerusGameStorage.sol#L679)
+		- [_distributeTicketJackpot(sourceLevel,lvl + 1,bonusTraitsPacked,carryoverEntries,EntropyLib.hash2(randWord,sourceLevel),LOOTBOX_MAX_WINNERS,240)](contracts/modules/DegenerusGameJackpotModule.sol#L603-L611)
+	- [JackpotTicketWin(winner,queueLvl,traitId,uint32(units),sourceLvl,ticketIndexes[i],false)](contracts/modules/DegenerusGameJackpotModule.sol#L890-L898)
+		- [_distributeTicketJackpot(sourceLevel,lvl,bonusTraitsPacked,carryoverEntries,EntropyLib.hash2(randWord,sourceLevel),LOOTBOX_MAX_WINNERS,240)](contracts/modules/DegenerusGameJackpotModule.sol#L603-L611)
+	- [JackpotTicketWin(winner,queueLvl,traitId,uint32(units),sourceLvl,ticketIndexes[i],false)](contracts/modules/DegenerusGameJackpotModule.sol#L890-L898)
+		- [_distributeTicketJackpot(lvl,lvl + 1,mainTraitsPacked,dailyEntries,EntropyLib.hash2(randWord,lvl),LOOTBOX_MAX_WINNERS,241)](contracts/modules/DegenerusGameJackpotModule.sol#L585-L593)
+	- [JackpotTicketWin(winner,queueLvl,traitId,uint32(units),sourceLvl,ticketIndexes[i],false)](contracts/modules/DegenerusGameJackpotModule.sol#L890-L898)
+		- [_distributeTicketJackpot(sourceLevel,lvl + 1,bonusTraitsPacked,carryoverEntries,EntropyLib.hash2(randWord,sourceLevel),LOOTBOX_MAX_WINNERS,240)](contracts/modules/DegenerusGameJackpotModule.sol#L603-L611)
+
+contracts/modules/DegenerusGameJackpotModule.sol#L561-L622
+
+
+ - [ ] ID-699
 Reentrancy in [DegenerusGameLootboxModule._resolveLootboxCommon(address,uint48,uint256,uint24,uint24,uint256,bool,uint256,uint256,bool,uint16,bool)](contracts/modules/DegenerusGameLootboxModule.sol#L1268-L1328):
 	External calls:
 	- [_rollLootboxBoons(player,amount,boonBudget,currentLevel,seed)](contracts/modules/DegenerusGameLootboxModule.sol#L1296)
@@ -9435,7 +9497,7 @@ Reentrancy in [DegenerusGameLootboxModule._resolveLootboxCommon(address,uint48,u
 contracts/modules/DegenerusGameLootboxModule.sol#L1268-L1328
 
 
- - [ ] ID-697
+ - [ ] ID-700
 Reentrancy in [DegenerusGameAdvanceModule._autoStakeExcessEth()](contracts/modules/DegenerusGameAdvanceModule.sol#L1699-L1709):
 	External calls:
 	- [steth.submit{value: stakeable}(address(0))](contracts/modules/DegenerusGameAdvanceModule.sol#L1704-L1708)
@@ -9445,7 +9507,7 @@ Reentrancy in [DegenerusGameAdvanceModule._autoStakeExcessEth()](contracts/modul
 contracts/modules/DegenerusGameAdvanceModule.sol#L1699-L1709
 
 
- - [ ] ID-698
+ - [ ] ID-701
 Reentrancy in [DegenerusQuests._questHandleProgressSlot(address,DegenerusQuests.PlayerQuestState,DegenerusQuests.DailyQuest[2],DegenerusQuests.DailyQuest,uint8,uint256,uint256,uint24,uint256,uint8,uint256,uint256)](contracts/DegenerusQuests.sol#L1692-L1727):
 	External calls:
 	- [_handleLevelQuestProgress(player,handlerQuestType,levelDelta,levelQuestPrice)](contracts/DegenerusQuests.sol#L1719)
@@ -9462,7 +9524,7 @@ Reentrancy in [DegenerusQuests._questHandleProgressSlot(address,DegenerusQuests.
 contracts/DegenerusQuests.sol#L1692-L1727
 
 
- - [ ] ID-699
+ - [ ] ID-702
 Reentrancy in [Coinflip._setCoinflipAutoRebuyTakeProfit(address,uint256)](contracts/Coinflip.sol#L809-L825):
 	External calls:
 	- [mintable = _claimCoinflipsInternal(player,false)](contracts/Coinflip.sol#L817)
@@ -9474,7 +9536,7 @@ Reentrancy in [Coinflip._setCoinflipAutoRebuyTakeProfit(address,uint256)](contra
 contracts/Coinflip.sol#L809-L825
 
 
- - [ ] ID-700
+ - [ ] ID-703
 Reentrancy in [DegenerusGameAdvanceModule._backfillGapDays(uint256,uint24,uint24)](contracts/modules/DegenerusGameAdvanceModule.sol#L2040-L2062):
 	External calls:
 	- [coinflip.processCoinflipPayouts(0,derivedWord,gapDay)](contracts/modules/DegenerusGameAdvanceModule.sol#L2056)
@@ -9484,7 +9546,7 @@ Reentrancy in [DegenerusGameAdvanceModule._backfillGapDays(uint256,uint24,uint24
 contracts/modules/DegenerusGameAdvanceModule.sol#L2040-L2062
 
 
- - [ ] ID-701
+ - [ ] ID-704
 Reentrancy in [DegenerusVault.burnEth(uint256)](contracts/DegenerusVault.sol#L800-L836):
 	External calls:
 	- [gamePlayer.claimWinnings(address(this))](contracts/DegenerusVault.sol#L814)
@@ -9496,7 +9558,7 @@ Reentrancy in [DegenerusVault.burnEth(uint256)](contracts/DegenerusVault.sol#L80
 contracts/DegenerusVault.sol#L800-L836
 
 
- - [ ] ID-702
+ - [ ] ID-705
 Reentrancy in [DegenerusGameJackpotModule._runFlipJackpot(uint24,uint24,uint24,uint24,uint32,uint256)](contracts/modules/DegenerusGameJackpotModule.sol#L1525-L1550):
 	External calls:
 	- [_awardFarFutureCoinJackpot(lvl,farBudget,randWord)](contracts/modules/DegenerusGameJackpotModule.sol#L1538)
@@ -9510,7 +9572,7 @@ Reentrancy in [DegenerusGameJackpotModule._runFlipJackpot(uint24,uint24,uint24,u
 contracts/modules/DegenerusGameJackpotModule.sol#L1525-L1550
 
 
- - [ ] ID-703
+ - [ ] ID-706
 Reentrancy in [DegenerusGameBingoModule.claimAffiliateDgnrs(address)](contracts/modules/DegenerusGameBingoModule.sol#L228-L274):
 	External calls:
 	- [paid = dgnrs.transferFromPool(IsDGNRS.Pool.Affiliate,player,reward)](contracts/modules/DegenerusGameBingoModule.sol#L249-L253)
@@ -9521,7 +9583,7 @@ Reentrancy in [DegenerusGameBingoModule.claimAffiliateDgnrs(address)](contracts/
 contracts/modules/DegenerusGameBingoModule.sol#L228-L274
 
 
- - [ ] ID-704
+ - [ ] ID-707
 Reentrancy in [DegenerusGameAdvanceModule.advanceGame()](contracts/modules/DegenerusGameAdvanceModule.sol#L173-L651):
 	External calls:
 	- [(goReturn,goStage) = _handleGameOverPath(day,lvl)](contracts/modules/DegenerusGameAdvanceModule.sol#L230)
@@ -9575,7 +9637,7 @@ Reentrancy in [DegenerusGameAdvanceModule.advanceGame()](contracts/modules/Degen
 contracts/modules/DegenerusGameAdvanceModule.sol#L173-L651
 
 
- - [ ] ID-705
+ - [ ] ID-708
 Reentrancy in [DegenerusQuests._questCompleteWithPair(address,DegenerusQuests.PlayerQuestState,DegenerusQuests.DailyQuest[2],uint8,DegenerusQuests.DailyQuest,uint24,uint256)](contracts/DegenerusQuests.sol#L2137-L2183):
 	External calls:
 	- [(reward,questType,streak,completed) = _questComplete(player,state,slot,quest)](contracts/DegenerusQuests.sol#L2149-L2154)
@@ -9591,7 +9653,7 @@ Reentrancy in [DegenerusQuests._questCompleteWithPair(address,DegenerusQuests.Pl
 contracts/DegenerusQuests.sol#L2137-L2183
 
 
- - [ ] ID-706
+ - [ ] ID-709
 Reentrancy in [Coinflip._claimCoinflipsAmount(address,uint256,bool)](contracts/Coinflip.sol#L450-L479):
 	External calls:
 	- [mintable = _claimCoinflipsInternal(player,false)](contracts/Coinflip.sol#L456)
@@ -9604,7 +9666,7 @@ Reentrancy in [Coinflip._claimCoinflipsAmount(address,uint256,bool)](contracts/C
 contracts/Coinflip.sol#L450-L479
 
 
- - [ ] ID-707
+ - [ ] ID-710
 Reentrancy in [DegenerusGameLootboxModule._openBoxBoth(address,uint48,bool)](contracts/modules/DegenerusGameLootboxModule.sol#L634-L650):
 	External calls:
 	- [_openLootBoxLeg(player,index)](contracts/modules/DegenerusGameLootboxModule.sol#L636)
@@ -9629,7 +9691,7 @@ Reentrancy in [DegenerusGameLootboxModule._openBoxBoth(address,uint48,bool)](con
 contracts/modules/DegenerusGameLootboxModule.sol#L634-L650
 
 
- - [ ] ID-708
+ - [ ] ID-711
 Reentrancy in [DegenerusGameLootboxModule.issueDeityBoon(address,address,uint8)](contracts/modules/DegenerusGameLootboxModule.sol#L1150-L1185):
 	External calls:
 	- [_applyBoon(recipient,boonType,day,day,0,true)](contracts/modules/DegenerusGameLootboxModule.sol#L1182)
@@ -9640,7 +9702,7 @@ Reentrancy in [DegenerusGameLootboxModule.issueDeityBoon(address,address,uint8)]
 contracts/modules/DegenerusGameLootboxModule.sol#L1150-L1185
 
 
- - [ ] ID-709
+ - [ ] ID-712
 Reentrancy in [DegenerusGame.withdrawAfkingFunding(uint256)](contracts/DegenerusGame.sol#L1416-L1426):
 	External calls:
 	- [(ok,None) = msg.sender.call{value: amount}()](contracts/DegenerusGame.sol#L1423)
@@ -9650,7 +9712,7 @@ Reentrancy in [DegenerusGame.withdrawAfkingFunding(uint256)](contracts/Degenerus
 contracts/DegenerusGame.sol#L1416-L1426
 
 
- - [ ] ID-710
+ - [ ] ID-713
 Reentrancy in [DegenerusAdmin.shutdownVrf()](contracts/DegenerusAdmin.sol#L1015-L1038):
 	External calls:
 	- [IVRFCoordinatorV2_5Owner(coordinator).cancelSubscription(subId,target)](contracts/DegenerusAdmin.sol#L1023-L1025)
@@ -9662,7 +9724,7 @@ Reentrancy in [DegenerusAdmin.shutdownVrf()](contracts/DegenerusAdmin.sol#L1015-
 contracts/DegenerusAdmin.sol#L1015-L1038
 
 
- - [ ] ID-711
+ - [ ] ID-714
 Reentrancy in [DegenerusAffiliate.claim(address[])](contracts/DegenerusAffiliate.sol#L788-L861):
 	External calls:
 	- [b = afkingDrain.drainAffiliateBase(sub)](contracts/DegenerusAffiliate.sol#L814)
@@ -9674,7 +9736,7 @@ Reentrancy in [DegenerusAffiliate.claim(address[])](contracts/DegenerusAffiliate
 contracts/DegenerusAffiliate.sol#L788-L861
 
 
- - [ ] ID-712
+ - [ ] ID-715
 Reentrancy in [DegenerusGameFoilPackModule.buyFoilPack(address,uint256,bytes32,MintPaymentKind)](contracts/modules/DegenerusGameFoilPackModule.sol#L140-L331):
 	External calls:
 	- [kickback += affiliate.payAffiliate((ethUsed * PRICE_COIN_UNIT) / priceWei,affiliateCode,buyer,affLevel,true,0)](contracts/modules/DegenerusGameFoilPackModule.sol#L231-L238)
@@ -9687,7 +9749,7 @@ Reentrancy in [DegenerusGameFoilPackModule.buyFoilPack(address,uint256,bytes32,M
 contracts/modules/DegenerusGameFoilPackModule.sol#L140-L331
 
 
- - [ ] ID-713
+ - [ ] ID-716
 Reentrancy in [DegenerusGameGameOverModule.handleFinalSweep()](contracts/modules/DegenerusGameGameOverModule.sol#L217-L258):
 	External calls:
 	- [charityGameOver.onFinalSweep()](contracts/modules/DegenerusGameGameOverModule.sol#L224)
@@ -9698,7 +9760,7 @@ Reentrancy in [DegenerusGameGameOverModule.handleFinalSweep()](contracts/modules
 contracts/modules/DegenerusGameGameOverModule.sol#L217-L258
 
 
- - [ ] ID-714
+ - [ ] ID-717
 Reentrancy in [DegenerusQuests.handleAffiliate(address,uint256)](contracts/DegenerusQuests.sol#L920-L962):
 	External calls:
 	- [_handleLevelQuestProgress(player,QUEST_TYPE_AFFILIATE,amount,0)](contracts/DegenerusQuests.sol#L935)
@@ -9715,7 +9777,7 @@ Reentrancy in [DegenerusQuests.handleAffiliate(address,uint256)](contracts/Degen
 contracts/DegenerusQuests.sol#L920-L962
 
 
- - [ ] ID-715
+ - [ ] ID-718
 Reentrancy in [GameAfkingModule.smite(uint256,address)](contracts/modules/GameAfkingModule.sol#L1923-L1940):
 	External calls:
 	- [coin.burnCoin(msg.sender,PRICE_COIN_UNIT / 5)](contracts/modules/GameAfkingModule.sol#L1937)
@@ -9727,17 +9789,41 @@ Reentrancy in [GameAfkingModule.smite(uint256,address)](contracts/modules/GameAf
 contracts/modules/GameAfkingModule.sol#L1923-L1940
 
 
- - [ ] ID-716
-Reentrancy in [DegenerusGameDegeneretteModule.resolveFlipSpinsFromBox(address,uint256,uint16,uint256,uint32)](contracts/modules/DegenerusGameDegeneretteModule.sol#L1643-L1697):
+ - [ ] ID-719
+Reentrancy in [DegenerusGameWhaleModule.purchaseDeityPass(address,uint8)](contracts/modules/DegenerusGameWhaleModule.sol#L558-L698):
 	External calls:
-	- [coin.mintForGame(player,total)](contracts/modules/DegenerusGameDegeneretteModule.sol#L1690)
+	- [IDegenerusDeityPassMint(ContractAddresses.DEITY_PASS).mint(buyer,symbolId)](contracts/modules/DegenerusGameWhaleModule.sol#L626-L629)
+	- [_rewardDeityPassDgnrs(buyer,affiliateAddr,upline,upline2)](contracts/modules/DegenerusGameWhaleModule.sol#L641)
+		- [dgnrs.transferFromPool(IsDGNRS.Pool.Whale,buyer,totalReward)](contracts/modules/DegenerusGameWhaleModule.sol#L804-L808)
+		- [dgnrs.transferFromPool(IsDGNRS.Pool.Affiliate,affiliateAddr,affiliateShare)](contracts/modules/DegenerusGameWhaleModule.sol#L828-L832)
+		- [dgnrs.transferFromPool(IsDGNRS.Pool.Affiliate,upline,uplineShare)](contracts/modules/DegenerusGameWhaleModule.sol#L839-L843)
+		- [dgnrs.transferFromPool(IsDGNRS.Pool.Affiliate,upline2,upline2Share)](contracts/modules/DegenerusGameWhaleModule.sol#L847-L851)
 	Event emitted after the call(s):
-	- [BoxSpin(player,betId,packedSpins,total,0)](contracts/modules/DegenerusGameDegeneretteModule.sol#L1696)
+	- [DeityPassPurchased(buyer,symbolId,totalPrice,passLevel)](contracts/modules/DegenerusGameWhaleModule.sol#L697)
+	- [EntriesQueuedRange(buyer,startLevel,numLevels,entriesPerLevel)](contracts/storage/DegenerusGameStorage.sol#L775)
+		- [_queueEntryRange(affiliateAddr,ticketStartLevel,bonusCount,WHALE_BONUS_ENTRIES_PER_LEVEL,false)](contracts/modules/DegenerusGameWhaleModule.sol#L654-L660)
+	- [EntriesQueuedRange(buyer,startLevel,numLevels,entriesPerLevel)](contracts/storage/DegenerusGameStorage.sol#L775)
+		- [_queueEntryRange(affiliateAddr,ticketStartLevel + bonusCount,100 - bonusCount,WHALE_STANDARD_ENTRIES_PER_LEVEL,false)](contracts/modules/DegenerusGameWhaleModule.sol#L662-L668)
+	- [LootBoxBoostConsumed(player,day,amount,boostedAmount,boostBps)](contracts/modules/DegenerusGameWhaleModule.sol#L995)
+		- [_recordLootboxEntry(buyer,lootboxAmount)](contracts/modules/DegenerusGameWhaleModule.sol#L695)
+	- [LootBoxBuy(buyer,index,lootboxAmount,false)](contracts/modules/DegenerusGameWhaleModule.sol#L946)
+		- [_recordLootboxEntry(buyer,lootboxAmount)](contracts/modules/DegenerusGameWhaleModule.sol#L695)
 
-contracts/modules/DegenerusGameDegeneretteModule.sol#L1643-L1697
+contracts/modules/DegenerusGameWhaleModule.sol#L558-L698
 
 
- - [ ] ID-717
+ - [ ] ID-720
+Reentrancy in [DegenerusGameDegeneretteModule.resolveWwxrpSpinFromBox(address,uint256,uint16,uint256,uint32)](contracts/modules/DegenerusGameDegeneretteModule.sol#L1579-L1642):
+	External calls:
+	- [wwxrp.mintPrize(player,payout)](contracts/modules/DegenerusGameDegeneretteModule.sol#L1620)
+	Event emitted after the call(s):
+	- [BoxSpin(player,betId,_packSpin(0,playerTraits,resultTraits,s) | (uint256(1) << BOX_SPIN_COUNT_SHIFT),payout,0)](contracts/modules/DegenerusGameDegeneretteModule.sol#L1634-L1641)
+	- [WwxrpJackpotWhalePass(player,bracket)](contracts/modules/DegenerusGameDegeneretteModule.sol#L1629)
+
+contracts/modules/DegenerusGameDegeneretteModule.sol#L1579-L1642
+
+
+ - [ ] ID-721
 Reentrancy in [DegenerusQuests._handlePurchase(address,uint256,uint32,uint256,uint256,uint256)](contracts/DegenerusQuests.sol#L1051-L1176):
 	External calls:
 	- [(r,qt,s,c) = _questHandleProgressSlot(player,state,quests,quest,0,ethMintSpendWei,target,currentDay,mintPrice,QUEST_TYPE_MINT_ETH,ethMintSpendWei,levelQuestPrice)](contracts/DegenerusQuests.sol#L1090-L1095)
@@ -9759,7 +9845,7 @@ Reentrancy in [DegenerusQuests._handlePurchase(address,uint256,uint32,uint256,ui
 contracts/DegenerusQuests.sol#L1051-L1176
 
 
- - [ ] ID-718
+ - [ ] ID-722
 Reentrancy in [sDGNRS._submitGamblingClaimFrom(address,address,uint256)](contracts/sDGNRS.sol#L1027-L1150):
 	External calls:
 	- [coinBacking = coinflip.redeemableFlipBacking()](contracts/sDGNRS.sol#L1082)
@@ -9771,7 +9857,7 @@ Reentrancy in [sDGNRS._submitGamblingClaimFrom(address,address,uint256)](contrac
 contracts/sDGNRS.sol#L1027-L1150
 
 
- - [ ] ID-719
+ - [ ] ID-723
 Reentrancy in [DegenerusGameGameOverModule.handleFinalSweep()](contracts/modules/DegenerusGameGameOverModule.sol#L217-L258):
 	External calls:
 	- [charityGameOver.onFinalSweep()](contracts/modules/DegenerusGameGameOverModule.sol#L224)
@@ -9783,7 +9869,7 @@ Reentrancy in [DegenerusGameGameOverModule.handleFinalSweep()](contracts/modules
 contracts/modules/DegenerusGameGameOverModule.sol#L217-L258
 
 
- - [ ] ID-720
+ - [ ] ID-724
 Reentrancy in [DegenerusGameBoonModule.consumeActivityBoon(address)](contracts/modules/DegenerusGameBoonModule.sol#L294-L342):
 	External calls:
 	- [quests.awardQuestStreakBonus(player,bonus,currentDay)](contracts/modules/DegenerusGameBoonModule.sol#L340)
@@ -9793,7 +9879,7 @@ Reentrancy in [DegenerusGameBoonModule.consumeActivityBoon(address)](contracts/m
 contracts/modules/DegenerusGameBoonModule.sol#L294-L342
 
 
- - [ ] ID-721
+ - [ ] ID-725
 Reentrancy in [DegenerusQuests._handlePurchase(address,uint256,uint32,uint256,uint256,uint256)](contracts/DegenerusQuests.sol#L1051-L1176):
 	External calls:
 	- [(r,qt,s,c) = _questHandleProgressSlot(player,state,quests,quest,0,ethMintSpendWei,target,currentDay,mintPrice,QUEST_TYPE_MINT_ETH,ethMintSpendWei,levelQuestPrice)](contracts/DegenerusQuests.sol#L1090-L1095)
@@ -9823,7 +9909,7 @@ Reentrancy in [DegenerusQuests._handlePurchase(address,uint256,uint32,uint256,ui
 contracts/DegenerusQuests.sol#L1051-L1176
 
 
- - [ ] ID-722
+ - [ ] ID-726
 Reentrancy in [DegenerusQuests.handleFlip(address,uint256)](contracts/DegenerusQuests.sol#L746-L790):
 	External calls:
 	- [_handleLevelQuestProgress(player,QUEST_TYPE_FLIP,flipCredit,0)](contracts/DegenerusQuests.sol#L761)
@@ -9835,7 +9921,31 @@ Reentrancy in [DegenerusQuests.handleFlip(address,uint256)](contracts/DegenerusQ
 contracts/DegenerusQuests.sol#L746-L790
 
 
- - [ ] ID-723
+ - [ ] ID-727
+Reentrancy in [GameAfkingModule.subscribe(address,bool,bool,uint8,address)](contracts/modules/GameAfkingModule.sol#L305-L585):
+	External calls:
+	- [_settlePendingFlip(subscriber,s)](contracts/modules/GameAfkingModule.sol#L404)
+		- [coinflip.creditFlip(player,owed * 1000000000000000000)](contracts/modules/GameAfkingModule.sol#L1121)
+	- [snap = quests.beginAfking(subscriber,today)](contracts/modules/GameAfkingModule.sol#L503)
+	Event emitted after the call(s):
+	- [AfkingDelivered(player,processDay,weiIn)](contracts/modules/GameAfkingModule.sol#L916)
+		- [_deliverAfkingBuy(subscriber,s,today,0,mp_scope_0,level,level,src_scope_1,ethValue_scope_3,claimableUse_scope_6,buyAmount_scope_4,isTicket_scope_5,true)](contracts/modules/GameAfkingModule.sol#L548-L562)
+	- [AfkingDelivered(player,processDay,weiIn)](contracts/modules/GameAfkingModule.sol#L916)
+		- [_deliverAfkingBuy(subscriber,s,today,0,mp_scope_0,level,level + 1,src_scope_1,ethValue_scope_3,claimableUse_scope_6,buyAmount_scope_4,isTicket_scope_5,true)](contracts/modules/GameAfkingModule.sol#L548-L562)
+	- [EntriesQueuedScaled(buyer,targetLevel,entriesScaled)](contracts/storage/DegenerusGameStorage.sol#L723)
+		- [_deliverAfkingBuy(subscriber,s,today,0,mp_scope_0,level,level + 1,src_scope_1,ethValue_scope_3,claimableUse_scope_6,buyAmount_scope_4,isTicket_scope_5,true)](contracts/modules/GameAfkingModule.sol#L548-L562)
+	- [EntriesQueuedScaled(buyer,targetLevel,entriesScaled)](contracts/storage/DegenerusGameStorage.sol#L723)
+		- [_deliverAfkingBuy(subscriber,s,today,0,mp_scope_0,level,level,src_scope_1,ethValue_scope_3,claimableUse_scope_6,buyAmount_scope_4,isTicket_scope_5,true)](contracts/modules/GameAfkingModule.sol#L548-L562)
+	- [LootBoxBuy(player,index,amount,_psRead(PS_ACTIVE_SHIFT,PS_ACTIVE_MASK) != 0)](contracts/modules/GameAfkingModule.sol#L1061-L1066)
+		- [_deliverAfkingBuy(subscriber,s,today,0,mp_scope_0,level,level,src_scope_1,ethValue_scope_3,claimableUse_scope_6,buyAmount_scope_4,isTicket_scope_5,true)](contracts/modules/GameAfkingModule.sol#L548-L562)
+	- [LootBoxBuy(player,index,amount,_psRead(PS_ACTIVE_SHIFT,PS_ACTIVE_MASK) != 0)](contracts/modules/GameAfkingModule.sol#L1061-L1066)
+		- [_deliverAfkingBuy(subscriber,s,today,0,mp_scope_0,level,level + 1,src_scope_1,ethValue_scope_3,claimableUse_scope_6,buyAmount_scope_4,isTicket_scope_5,true)](contracts/modules/GameAfkingModule.sol#L548-L562)
+	- [SubscriptionUpdated(subscriber,dailyQuantity,drainGameCreditFirst,useTickets,fundingSource)](contracts/modules/GameAfkingModule.sol#L578-L584)
+
+contracts/modules/GameAfkingModule.sol#L305-L585
+
+
+ - [ ] ID-728
 Reentrancy in [DegenerusGameLootboxModule._resolvePresaleBox(address,uint48,uint256,uint256)](contracts/modules/DegenerusGameLootboxModule.sol#L750-L821):
 	External calls:
 	- [coinflip.creditFlip(player,flipOut)](contracts/modules/DegenerusGameLootboxModule.sol#L792)
@@ -9849,7 +9959,7 @@ Reentrancy in [DegenerusGameLootboxModule._resolvePresaleBox(address,uint48,uint
 contracts/modules/DegenerusGameLootboxModule.sol#L750-L821
 
 
- - [ ] ID-724
+ - [ ] ID-729
 Reentrancy in [DegenerusGameFoilPackModule.buyFoilPack(address,uint256,bytes32,MintPaymentKind)](contracts/modules/DegenerusGameFoilPackModule.sol#L140-L331):
 	External calls:
 	- [kickback += affiliate.payAffiliate((ethUsed * PRICE_COIN_UNIT) / priceWei,affiliateCode,buyer,affLevel,true,0)](contracts/modules/DegenerusGameFoilPackModule.sol#L231-L238)
@@ -9862,7 +9972,7 @@ Reentrancy in [DegenerusGameFoilPackModule.buyFoilPack(address,uint256,bytes32,M
 contracts/modules/DegenerusGameFoilPackModule.sol#L140-L331
 
 
- - [ ] ID-725
+ - [ ] ID-730
 Reentrancy in [DegenerusGameAdvanceModule._rewardTopAffiliate(uint24)](contracts/modules/DegenerusGameAdvanceModule.sol#L849-L876):
 	External calls:
 	- [paid = dgnrs.transferFromPool(IsDGNRS.Pool.Affiliate,top,dgnrsReward)](contracts/modules/DegenerusGameAdvanceModule.sol#L858-L862)
@@ -9872,7 +9982,7 @@ Reentrancy in [DegenerusGameAdvanceModule._rewardTopAffiliate(uint24)](contracts
 contracts/modules/DegenerusGameAdvanceModule.sol#L849-L876
 
 
- - [ ] ID-726
+ - [ ] ID-731
 Reentrancy in [DegenerusGameLootboxModule._resolveLootboxCommon(address,uint48,uint256,uint24,uint24,uint256,bool,uint256,uint256,bool,uint16,bool)](contracts/modules/DegenerusGameLootboxModule.sol#L1268-L1328):
 	External calls:
 	- [_rollLootboxBoons(player,amount,boonBudget,currentLevel,seed)](contracts/modules/DegenerusGameLootboxModule.sol#L1296)
@@ -9897,7 +10007,7 @@ Reentrancy in [DegenerusGameLootboxModule._resolveLootboxCommon(address,uint48,u
 contracts/modules/DegenerusGameLootboxModule.sol#L1268-L1328
 
 
- - [ ] ID-727
+ - [ ] ID-732
 Reentrancy in [DegenerusGameAdvanceModule.advanceGame()](contracts/modules/DegenerusGameAdvanceModule.sol#L173-L651):
 	External calls:
 	- [(goReturn,goStage) = _handleGameOverPath(day,lvl)](contracts/modules/DegenerusGameAdvanceModule.sol#L230)
@@ -9946,7 +10056,7 @@ Reentrancy in [DegenerusGameAdvanceModule.advanceGame()](contracts/modules/Degen
 contracts/modules/DegenerusGameAdvanceModule.sol#L173-L651
 
 
- - [ ] ID-728
+ - [ ] ID-733
 Reentrancy in [DegenerusQuests.handleFoilPurchase(address,uint256,uint32,uint256,uint256,uint256)](contracts/DegenerusQuests.sol#L1023-L1047):
 	External calls:
 	- [(reward,questType,None,completed) = _handlePurchase(player,ethMintSpendWei,flipMintQty,lootBoxAmount,mintPrice,levelQuestPrice)](contracts/DegenerusQuests.sol#L1035-L1037)
@@ -9971,7 +10081,7 @@ Reentrancy in [DegenerusQuests.handleFoilPurchase(address,uint256,uint32,uint256
 contracts/DegenerusQuests.sol#L1023-L1047
 
 
- - [ ] ID-729
+ - [ ] ID-734
 Reentrancy in [Coinflip._depositCoinflip(address,address,uint256,bool)](contracts/Coinflip.sol#L272-L345):
 	External calls:
 	- [mintable = _claimCoinflipsInternal(player,false)](contracts/Coinflip.sol#L286)
@@ -9985,7 +10095,7 @@ Reentrancy in [Coinflip._depositCoinflip(address,address,uint256,bool)](contract
 contracts/Coinflip.sol#L272-L345
 
 
- - [ ] ID-730
+ - [ ] ID-735
 Reentrancy in [DegenerusQuests._foilStreakFloor(address)](contracts/DegenerusQuests.sol#L501-L517):
 	External calls:
 	- [questGame.floorAfkingStreakBase(player,FOIL_STREAK_FLOOR)](contracts/DegenerusQuests.sol#L508)
@@ -9995,7 +10105,7 @@ Reentrancy in [DegenerusQuests._foilStreakFloor(address)](contracts/DegenerusQue
 contracts/DegenerusQuests.sol#L501-L517
 
 
- - [ ] ID-731
+ - [ ] ID-736
 Reentrancy in [DegenerusGameAdvanceModule.advanceGame()](contracts/modules/DegenerusGameAdvanceModule.sol#L173-L651):
 	External calls:
 	- [(goReturn,goStage) = _handleGameOverPath(day,lvl)](contracts/modules/DegenerusGameAdvanceModule.sol#L230)
@@ -10047,7 +10157,7 @@ Reentrancy in [DegenerusGameAdvanceModule.advanceGame()](contracts/modules/Degen
 contracts/modules/DegenerusGameAdvanceModule.sol#L173-L651
 
 
- - [ ] ID-732
+ - [ ] ID-737
 Reentrancy in [DegenerusGameLootboxModule._rollLootboxBoons(address,uint256,uint256,uint24,uint256)](contracts/modules/DegenerusGameLootboxModule.sol#L1427-L1490):
 	External calls:
 	- [(okClr,None) = ContractAddresses.GAME_BOON_MODULE.delegatecall(abi.encodeWithSelector(IDegenerusGameBoonModule.checkAndClearExpiredBoon.selector,player))](contracts/modules/DegenerusGameLootboxModule.sol#L1442-L1444)
@@ -10078,7 +10188,7 @@ Reentrancy in [DegenerusGameLootboxModule._rollLootboxBoons(address,uint256,uint
 contracts/modules/DegenerusGameLootboxModule.sol#L1427-L1490
 
 
- - [ ] ID-733
+ - [ ] ID-738
 Reentrancy in [Coinflip.withdrawRedeemedFlip(uint256)](contracts/Coinflip.sol#L1054-L1073):
 	External calls:
 	- [consumed = _claimCoinflipsAmount(s,base,false)](contracts/Coinflip.sol#L1060)
@@ -10092,7 +10202,7 @@ Reentrancy in [Coinflip.withdrawRedeemedFlip(uint256)](contracts/Coinflip.sol#L1
 contracts/Coinflip.sol#L1054-L1073
 
 
- - [ ] ID-734
+ - [ ] ID-739
 Reentrancy in [DegenerusGameMintModule._redeemFlipFor(address,uint256)](contracts/modules/DegenerusGameMintModule.sol#L938-L1010):
 	External calls:
 	- [(None,adjustedQty32,targetLevel,flipMintUnits,None,None,None,None,None) = _callTicketPurchase(buyer,entryQuantityScaled,MintPaymentKind.DirectEth,true,bytes32(0),0,cachedLevel,jackpotPhaseFlag)](contracts/modules/DegenerusGameMintModule.sol#L963-L981)
@@ -10107,7 +10217,7 @@ Reentrancy in [DegenerusGameMintModule._redeemFlipFor(address,uint256)](contract
 contracts/modules/DegenerusGameMintModule.sol#L938-L1010
 
 
- - [ ] ID-735
+ - [ ] ID-740
 Reentrancy in [DegenerusAdmin.onTokenTransfer(address,uint256,bytes)](contracts/DegenerusAdmin.sol#L1048-L1094):
 	External calls:
 	- [ok = linkToken.transferAndCall(coord,amount,abi.encode(subId))](contracts/DegenerusAdmin.sol#L1074-L1080)
@@ -10118,7 +10228,7 @@ Reentrancy in [DegenerusAdmin.onTokenTransfer(address,uint256,bytes)](contracts/
 contracts/DegenerusAdmin.sol#L1048-L1094
 
 
- - [ ] ID-736
+ - [ ] ID-741
 Reentrancy in [DegenerusGameAdvanceModule.updateVrfCoordinatorAndSub(address,uint256,bytes32)](contracts/modules/DegenerusGameAdvanceModule.sol#L1919-L1971):
 	External calls:
 	- [vrfRequestId = _requestVrfWord(VRF_MIDDAY_CONFIRMATIONS)](contracts/modules/DegenerusGameAdvanceModule.sol#L1951)
@@ -10131,7 +10241,7 @@ Reentrancy in [DegenerusGameAdvanceModule.updateVrfCoordinatorAndSub(address,uin
 contracts/modules/DegenerusGameAdvanceModule.sol#L1919-L1971
 
 
- - [ ] ID-737
+ - [ ] ID-742
 Reentrancy in [Coinflip._addDailyFlip(address,uint256,uint256,bool,bool)](contracts/Coinflip.sol#L671-L730):
 	External calls:
 	- [boonBps = game.consumeCoinflipBoon(player)](contracts/Coinflip.sol#L682)
@@ -10145,7 +10255,7 @@ Reentrancy in [Coinflip._addDailyFlip(address,uint256,uint256,bool,bool)](contra
 contracts/Coinflip.sol#L671-L730
 
 
- - [ ] ID-738
+ - [ ] ID-743
 Reentrancy in [Coinflip.consumeFlipForSalvage(address,uint256)](contracts/Coinflip.sol#L408-L425):
 	External calls:
 	- [consumed = _claimCoinflipsAmount(player,amount,false)](contracts/Coinflip.sol#L412)
@@ -10159,7 +10269,7 @@ Reentrancy in [Coinflip.consumeFlipForSalvage(address,uint256)](contracts/Coinfl
 contracts/Coinflip.sol#L408-L425
 
 
- - [ ] ID-739
+ - [ ] ID-744
 Reentrancy in [Coinflip.processCoinflipPayouts(uint8,uint256,uint24)](contracts/Coinflip.sol#L875-L989):
 	External calls:
 	- [_addDailyFlip(to,slice,0,false,false)](contracts/Coinflip.sol#L927)
@@ -10170,7 +10280,7 @@ Reentrancy in [Coinflip.processCoinflipPayouts(uint8,uint256,uint24)](contracts/
 contracts/Coinflip.sol#L875-L989
 
 
- - [ ] ID-740
+ - [ ] ID-745
 Reentrancy in [FLIP.decimatorBurn(address,uint256)](contracts/FLIP.sol#L647-L704):
 	External calls:
 	- [consumed = _consumeCoinflipShortfall(caller,amount)](contracts/FLIP.sol#L665)
@@ -10184,7 +10294,7 @@ Reentrancy in [FLIP.decimatorBurn(address,uint256)](contracts/FLIP.sol#L647-L704
 contracts/FLIP.sol#L647-L704
 
 
- - [ ] ID-741
+ - [ ] ID-746
 Reentrancy in [Coinflip._claimCoinflipsAmount(address,uint256,bool)](contracts/Coinflip.sol#L450-L479):
 	External calls:
 	- [mintable = _claimCoinflipsInternal(player,false)](contracts/Coinflip.sol#L456)
@@ -10198,7 +10308,7 @@ Reentrancy in [Coinflip._claimCoinflipsAmount(address,uint256,bool)](contracts/C
 contracts/Coinflip.sol#L450-L479
 
 
- - [ ] ID-742
+ - [ ] ID-747
 Reentrancy in [Coinflip.processCoinflipPayouts(uint8,uint256,uint24)](contracts/Coinflip.sol#L875-L989):
 	External calls:
 	- [_addDailyFlip(to,slice,0,false,false)](contracts/Coinflip.sol#L927)
@@ -10210,7 +10320,7 @@ Reentrancy in [Coinflip.processCoinflipPayouts(uint8,uint256,uint24)](contracts/
 contracts/Coinflip.sol#L875-L989
 
 
- - [ ] ID-743
+ - [ ] ID-748
 Reentrancy in [FLIP._transfer(address,address,uint256)](contracts/FLIP.sol#L381-L419):
 	External calls:
 	- [coinflip.claimCoinflipsFromFlip(from,amount - balance)](contracts/FLIP.sol#L386)
@@ -10222,7 +10332,17 @@ Reentrancy in [FLIP._transfer(address,address,uint256)](contracts/FLIP.sol#L381-
 contracts/FLIP.sol#L381-L419
 
 
- - [ ] ID-744
+ - [ ] ID-749
+Reentrancy in [DegenerusGameDegeneretteModule.resolveFlipSpinsFromBox(address,uint256,uint16,uint256,uint32)](contracts/modules/DegenerusGameDegeneretteModule.sol#L1648-L1702):
+	External calls:
+	- [coin.mintForGame(player,total)](contracts/modules/DegenerusGameDegeneretteModule.sol#L1695)
+	Event emitted after the call(s):
+	- [BoxSpin(player,betId,packedSpins,total,0)](contracts/modules/DegenerusGameDegeneretteModule.sol#L1701)
+
+contracts/modules/DegenerusGameDegeneretteModule.sol#L1648-L1702
+
+
+ - [ ] ID-750
 Reentrancy in [DegenerusGameLootboxModule._applyBoon(address,uint8,uint24,uint24,uint256,bool)](contracts/modules/DegenerusGameLootboxModule.sol#L1725-L1955):
 	External calls:
 	- [IDegenerusQuests(ContractAddresses.QUESTS).awardQuestStreakShield(player,LOOTBOX_QUEST_SHIELD_GRANT)](contracts/modules/DegenerusGameLootboxModule.sol#L1865)
@@ -10232,7 +10352,7 @@ Reentrancy in [DegenerusGameLootboxModule._applyBoon(address,uint8,uint24,uint24
 contracts/modules/DegenerusGameLootboxModule.sol#L1725-L1955
 
 
- - [ ] ID-745
+ - [ ] ID-751
 Reentrancy in [DegenerusGameAdvanceModule.rngGate(uint48,uint24,uint24,bool,uint8)](contracts/modules/DegenerusGameAdvanceModule.sol#L1278-L1375):
 	External calls:
 	- [_backfillGapDays(currentWord,idx + 1,day)](contracts/modules/DegenerusGameAdvanceModule.sol#L1303)
@@ -10247,7 +10367,7 @@ Reentrancy in [DegenerusGameAdvanceModule.rngGate(uint48,uint24,uint24,bool,uint
 contracts/modules/DegenerusGameAdvanceModule.sol#L1278-L1375
 
 
- - [ ] ID-746
+ - [ ] ID-752
 Reentrancy in [Coinflip._setCoinflipAutoRebuy(address,bool,uint256,bool)](contracts/Coinflip.sol#L766-L805):
 	External calls:
 	- [mintable = _claimCoinflipsInternal(player,false)](contracts/Coinflip.sol#L777)
@@ -10261,7 +10381,7 @@ Reentrancy in [Coinflip._setCoinflipAutoRebuy(address,bool,uint256,bool)](contra
 contracts/Coinflip.sol#L766-L805
 
 
- - [ ] ID-747
+ - [ ] ID-753
 Reentrancy in [Coinflip.redeemableFlipBacking()](contracts/Coinflip.sol#L1033-L1043):
 	External calls:
 	- [mintable = _claimCoinflipsInternal(s,false)](contracts/Coinflip.sol#L1036)
@@ -10274,7 +10394,7 @@ Reentrancy in [Coinflip.redeemableFlipBacking()](contracts/Coinflip.sol#L1033-L1
 contracts/Coinflip.sol#L1033-L1043
 
 
- - [ ] ID-748
+ - [ ] ID-754
 Reentrancy in [GameAfkingModule.decurse(address)](contracts/modules/GameAfkingModule.sol#L1909-L1916):
 	External calls:
 	- [coin.burnCoin(msg.sender,PRICE_COIN_UNIT / 10)](contracts/modules/GameAfkingModule.sol#L1913)
@@ -10286,7 +10406,7 @@ Reentrancy in [GameAfkingModule.decurse(address)](contracts/modules/GameAfkingMo
 contracts/modules/GameAfkingModule.sol#L1909-L1916
 
 
- - [ ] ID-749
+ - [ ] ID-755
 Reentrancy in [Coinflip._depositCoinflip(address,address,uint256,bool)](contracts/Coinflip.sol#L272-L345):
 	External calls:
 	- [mintable = _claimCoinflipsInternal(player,false)](contracts/Coinflip.sol#L286)
@@ -10309,7 +10429,7 @@ Reentrancy in [Coinflip._depositCoinflip(address,address,uint256,bool)](contract
 contracts/Coinflip.sol#L272-L345
 
 
- - [ ] ID-750
+ - [ ] ID-756
 Reentrancy in [DegenerusGameMintModule._callTicketPurchase(address,uint256,MintPaymentKind,bool,bytes32,uint256,uint24,bool)](contracts/modules/DegenerusGameMintModule.sol#L1924-L2071):
 	External calls:
 	- [(boostOk,boostData) = ContractAddresses.GAME_BOON_MODULE.delegatecall(abi.encodeWithSelector(IDegenerusGameBoonModule.consumePurchaseBoost.selector,buyer))](contracts/modules/DegenerusGameMintModule.sol#L1982-L1989)
@@ -10322,30 +10442,7 @@ Reentrancy in [DegenerusGameMintModule._callTicketPurchase(address,uint256,MintP
 contracts/modules/DegenerusGameMintModule.sol#L1924-L2071
 
 
- - [ ] ID-751
-Reentrancy in [DegenerusGameJackpotModule.payDailyJackpotCoinAndTickets(uint256)](contracts/modules/DegenerusGameJackpotModule.sol#L561-L622):
-	External calls:
-	- [_runFlipJackpot(lvl,lvl,lvl + 1,lvl + 4,bonusTraitsPacked,randWord)](contracts/modules/DegenerusGameJackpotModule.sol#L580)
-		- [coinflip.creditFlipBatch(batchPlayers,batchAmounts)](contracts/modules/DegenerusGameJackpotModule.sol#L1745)
-		- [coinflip.creditFlipBatch(batchPlayers,batchAmounts)](contracts/modules/DegenerusGameJackpotModule.sol#L1671)
-	Event emitted after the call(s):
-	- [EntriesQueued(buyer,targetLevel,entries)](contracts/storage/DegenerusGameStorage.sol#L679)
-		- [_distributeTicketJackpot(sourceLevel,lvl,bonusTraitsPacked,carryoverEntries,EntropyLib.hash2(randWord,sourceLevel),LOOTBOX_MAX_WINNERS,240)](contracts/modules/DegenerusGameJackpotModule.sol#L603-L611)
-	- [EntriesQueued(buyer,targetLevel,entries)](contracts/storage/DegenerusGameStorage.sol#L679)
-		- [_distributeTicketJackpot(sourceLevel,lvl + 1,bonusTraitsPacked,carryoverEntries,EntropyLib.hash2(randWord,sourceLevel),LOOTBOX_MAX_WINNERS,240)](contracts/modules/DegenerusGameJackpotModule.sol#L603-L611)
-	- [EntriesQueued(buyer,targetLevel,entries)](contracts/storage/DegenerusGameStorage.sol#L679)
-		- [_distributeTicketJackpot(lvl,lvl + 1,mainTraitsPacked,dailyEntries,EntropyLib.hash2(randWord,lvl),LOOTBOX_MAX_WINNERS,241)](contracts/modules/DegenerusGameJackpotModule.sol#L585-L593)
-	- [JackpotTicketWin(winner,queueLvl,traitId,uint32(units),sourceLvl,ticketIndexes[i],false)](contracts/modules/DegenerusGameJackpotModule.sol#L890-L898)
-		- [_distributeTicketJackpot(lvl,lvl + 1,mainTraitsPacked,dailyEntries,EntropyLib.hash2(randWord,lvl),LOOTBOX_MAX_WINNERS,241)](contracts/modules/DegenerusGameJackpotModule.sol#L585-L593)
-	- [JackpotTicketWin(winner,queueLvl,traitId,uint32(units),sourceLvl,ticketIndexes[i],false)](contracts/modules/DegenerusGameJackpotModule.sol#L890-L898)
-		- [_distributeTicketJackpot(sourceLevel,lvl,bonusTraitsPacked,carryoverEntries,EntropyLib.hash2(randWord,sourceLevel),LOOTBOX_MAX_WINNERS,240)](contracts/modules/DegenerusGameJackpotModule.sol#L603-L611)
-	- [JackpotTicketWin(winner,queueLvl,traitId,uint32(units),sourceLvl,ticketIndexes[i],false)](contracts/modules/DegenerusGameJackpotModule.sol#L890-L898)
-		- [_distributeTicketJackpot(sourceLevel,lvl + 1,bonusTraitsPacked,carryoverEntries,EntropyLib.hash2(randWord,sourceLevel),LOOTBOX_MAX_WINNERS,240)](contracts/modules/DegenerusGameJackpotModule.sol#L603-L611)
-
-contracts/modules/DegenerusGameJackpotModule.sol#L561-L622
-
-
- - [ ] ID-752
+ - [ ] ID-757
 Reentrancy in [Coinflip._setCoinflipAutoRebuyTakeProfit(address,uint256)](contracts/Coinflip.sol#L809-L825):
 	External calls:
 	- [mintable = _claimCoinflipsInternal(player,false)](contracts/Coinflip.sol#L817)
@@ -10359,18 +10456,7 @@ Reentrancy in [Coinflip._setCoinflipAutoRebuyTakeProfit(address,uint256)](contra
 contracts/Coinflip.sol#L809-L825
 
 
- - [ ] ID-753
-Reentrancy in [DegenerusGameDegeneretteModule.resolveWwxrpSpinFromBox(address,uint256,uint16,uint256,uint32)](contracts/modules/DegenerusGameDegeneretteModule.sol#L1574-L1637):
-	External calls:
-	- [wwxrp.mintPrize(player,payout)](contracts/modules/DegenerusGameDegeneretteModule.sol#L1615)
-	Event emitted after the call(s):
-	- [BoxSpin(player,betId,_packSpin(0,playerTraits,resultTraits,s) | (uint256(1) << BOX_SPIN_COUNT_SHIFT),payout,0)](contracts/modules/DegenerusGameDegeneretteModule.sol#L1629-L1636)
-	- [WwxrpJackpotWhalePass(player,bracket)](contracts/modules/DegenerusGameDegeneretteModule.sol#L1624)
-
-contracts/modules/DegenerusGameDegeneretteModule.sol#L1574-L1637
-
-
- - [ ] ID-754
+ - [ ] ID-758
 Reentrancy in [DegenerusQuests._questComplete(address,DegenerusQuests.PlayerQuestState,uint8,DegenerusQuests.DailyQuest)](contracts/DegenerusQuests.sol#L2046-L2119):
 	External calls:
 	- [questGame.recordAfkingSecondary(player,1)](contracts/DegenerusQuests.sol#L2104)
@@ -10380,21 +10466,7 @@ Reentrancy in [DegenerusQuests._questComplete(address,DegenerusQuests.PlayerQues
 contracts/DegenerusQuests.sol#L2046-L2119
 
 
- - [ ] ID-755
-Reentrancy in [DegenerusGameDegeneretteModule._resolveBet(address,uint64,DegenerusGameDegeneretteModule.ResolveAcc,bool)](contracts/modules/DegenerusGameDegeneretteModule.sol#L694-L906):
-	External calls:
-	- [_awardDegeneretteDgnrs(player,amountPerSpin,s)](contracts/modules/DegenerusGameDegeneretteModule.sol#L833)
-		- [sdgnrs.transferFromPool(IsDGNRS.Pool.Reward,player,reward)](contracts/modules/DegenerusGameDegeneretteModule.sol#L1510-L1514)
-	- [_resolveLootboxDirect(player,betLootboxShare,EntropyLib.hash2(rngWord,betId),activityScore)](contracts/modules/DegenerusGameDegeneretteModule.sol#L883-L888)
-		- [(ok,data) = ContractAddresses.GAME_LOOTBOX_MODULE.delegatecall(abi.encodeWithSelector(IDegenerusGameLootboxModule.resolveLootboxDirect.selector,player,amount,rngWord,activityScore))](contracts/modules/DegenerusGameDegeneretteModule.sol#L1024-L1034)
-	- [coinflip.creditFlip(affiliate.getReferrer(player),(refFlip * 7) / 100)](contracts/modules/DegenerusGameDegeneretteModule.sol#L896)
-	Event emitted after the call(s):
-	- [DegeneretteResolved(player,betId,spinCount,totalPayout,firstResultTraits)](contracts/modules/DegenerusGameDegeneretteModule.sol#L899-L905)
-
-contracts/modules/DegenerusGameDegeneretteModule.sol#L694-L906
-
-
- - [ ] ID-756
+ - [ ] ID-759
 Reentrancy in [sDGNRS.burnWrapped(uint256)](contracts/sDGNRS.sol#L650-L663):
 	External calls:
 	- [dgnrsWrapper.burnForSdgnrs(msg.sender,amount)](contracts/sDGNRS.sol#L655)
@@ -10414,7 +10486,7 @@ Reentrancy in [sDGNRS.burnWrapped(uint256)](contracts/sDGNRS.sol#L650-L663):
 contracts/sDGNRS.sol#L650-L663
 
 
- - [ ] ID-757
+ - [ ] ID-760
 Reentrancy in [DegenerusGameAdvanceModule.advanceGame()](contracts/modules/DegenerusGameAdvanceModule.sol#L173-L651):
 	External calls:
 	- [(goReturn,goStage) = _handleGameOverPath(day,lvl)](contracts/modules/DegenerusGameAdvanceModule.sol#L230)
@@ -10436,7 +10508,7 @@ Reentrancy in [DegenerusGameAdvanceModule.advanceGame()](contracts/modules/Degen
 contracts/modules/DegenerusGameAdvanceModule.sol#L173-L651
 
 
- - [ ] ID-758
+ - [ ] ID-761
 Reentrancy in [DegenerusGameDecimatorModule._claimDecimatorJackpotFor(address,uint24,DegenerusGameStorage.DecBet,DegenerusGameStorage.DecClaimRound,uint256,bool)](contracts/modules/DegenerusGameDecimatorModule.sol#L387-L425):
 	External calls:
 	- [lootboxPortion = _creditDecJackpotClaimCore(player,amountWei,round.rngWord,_minScoreForBucket(winBucket))](contracts/modules/DegenerusGameDecimatorModule.sol#L409-L414)
@@ -10447,7 +10519,7 @@ Reentrancy in [DegenerusGameDecimatorModule._claimDecimatorJackpotFor(address,ui
 contracts/modules/DegenerusGameDecimatorModule.sol#L387-L425
 
 
- - [ ] ID-759
+ - [ ] ID-762
 Reentrancy in [DegenerusGameAdvanceModule.rngGate(uint48,uint24,uint24,bool,uint8)](contracts/modules/DegenerusGameAdvanceModule.sol#L1278-L1375):
 	External calls:
 	- [_backfillGapDays(currentWord,idx + 1,day)](contracts/modules/DegenerusGameAdvanceModule.sol#L1303)
@@ -10461,7 +10533,7 @@ Reentrancy in [DegenerusGameAdvanceModule.rngGate(uint48,uint24,uint24,bool,uint
 contracts/modules/DegenerusGameAdvanceModule.sol#L1278-L1375
 
 
- - [ ] ID-760
+ - [ ] ID-763
 Reentrancy in [DegenerusGame.adminStakeEthForStEth(uint256)](contracts/DegenerusGame.sol#L1871-L1892):
 	External calls:
 	- [steth.submit{value: amount}(address(0))](contracts/DegenerusGame.sol#L1888-L1890)
@@ -10471,7 +10543,7 @@ Reentrancy in [DegenerusGame.adminStakeEthForStEth(uint256)](contracts/Degenerus
 contracts/DegenerusGame.sol#L1871-L1892
 
 
- - [ ] ID-761
+ - [ ] ID-764
 Reentrancy in [DegenerusAdmin._executeSwap(uint256)](contracts/DegenerusAdmin.sol#L943-L1007):
 	External calls:
 	- [IVRFCoordinatorV2_5Owner(oldCoord).cancelSubscription(oldSub,address(this))](contracts/DegenerusAdmin.sol#L961-L968)
@@ -10485,7 +10557,7 @@ Reentrancy in [DegenerusAdmin._executeSwap(uint256)](contracts/DegenerusAdmin.so
 contracts/DegenerusAdmin.sol#L943-L1007
 
 
- - [ ] ID-762
+ - [ ] ID-765
 Reentrancy in [DegenerusQuests.handleDecimator(address,uint256)](contracts/DegenerusQuests.sol#L804-L849):
 	External calls:
 	- [_handleLevelQuestProgress(player,QUEST_TYPE_DECIMATOR,burnAmount,0)](contracts/DegenerusQuests.sol#L819)
@@ -10497,31 +10569,7 @@ Reentrancy in [DegenerusQuests.handleDecimator(address,uint256)](contracts/Degen
 contracts/DegenerusQuests.sol#L804-L849
 
 
- - [ ] ID-763
-Reentrancy in [GameAfkingModule.subscribe(address,bool,bool,uint8,address)](contracts/modules/GameAfkingModule.sol#L305-L585):
-	External calls:
-	- [_settlePendingFlip(subscriber,s)](contracts/modules/GameAfkingModule.sol#L404)
-		- [coinflip.creditFlip(player,owed * 1000000000000000000)](contracts/modules/GameAfkingModule.sol#L1121)
-	- [snap = quests.beginAfking(subscriber,today)](contracts/modules/GameAfkingModule.sol#L503)
-	Event emitted after the call(s):
-	- [AfkingDelivered(player,processDay,weiIn)](contracts/modules/GameAfkingModule.sol#L916)
-		- [_deliverAfkingBuy(subscriber,s,today,0,mp_scope_0,level,level,src_scope_1,ethValue_scope_3,claimableUse_scope_6,buyAmount_scope_4,isTicket_scope_5,true)](contracts/modules/GameAfkingModule.sol#L548-L562)
-	- [AfkingDelivered(player,processDay,weiIn)](contracts/modules/GameAfkingModule.sol#L916)
-		- [_deliverAfkingBuy(subscriber,s,today,0,mp_scope_0,level,level + 1,src_scope_1,ethValue_scope_3,claimableUse_scope_6,buyAmount_scope_4,isTicket_scope_5,true)](contracts/modules/GameAfkingModule.sol#L548-L562)
-	- [EntriesQueuedScaled(buyer,targetLevel,entriesScaled)](contracts/storage/DegenerusGameStorage.sol#L723)
-		- [_deliverAfkingBuy(subscriber,s,today,0,mp_scope_0,level,level,src_scope_1,ethValue_scope_3,claimableUse_scope_6,buyAmount_scope_4,isTicket_scope_5,true)](contracts/modules/GameAfkingModule.sol#L548-L562)
-	- [EntriesQueuedScaled(buyer,targetLevel,entriesScaled)](contracts/storage/DegenerusGameStorage.sol#L723)
-		- [_deliverAfkingBuy(subscriber,s,today,0,mp_scope_0,level,level + 1,src_scope_1,ethValue_scope_3,claimableUse_scope_6,buyAmount_scope_4,isTicket_scope_5,true)](contracts/modules/GameAfkingModule.sol#L548-L562)
-	- [LootBoxBuy(player,index,amount,_psRead(PS_ACTIVE_SHIFT,PS_ACTIVE_MASK) != 0)](contracts/modules/GameAfkingModule.sol#L1061-L1066)
-		- [_deliverAfkingBuy(subscriber,s,today,0,mp_scope_0,level,level,src_scope_1,ethValue_scope_3,claimableUse_scope_6,buyAmount_scope_4,isTicket_scope_5,true)](contracts/modules/GameAfkingModule.sol#L548-L562)
-	- [LootBoxBuy(player,index,amount,_psRead(PS_ACTIVE_SHIFT,PS_ACTIVE_MASK) != 0)](contracts/modules/GameAfkingModule.sol#L1061-L1066)
-		- [_deliverAfkingBuy(subscriber,s,today,0,mp_scope_0,level,level + 1,src_scope_1,ethValue_scope_3,claimableUse_scope_6,buyAmount_scope_4,isTicket_scope_5,true)](contracts/modules/GameAfkingModule.sol#L548-L562)
-	- [SubscriptionUpdated(subscriber,dailyQuantity,drainGameCreditFirst,useTickets,fundingSource)](contracts/modules/GameAfkingModule.sol#L578-L584)
-
-contracts/modules/GameAfkingModule.sol#L305-L585
-
-
- - [ ] ID-764
+ - [ ] ID-766
 Reentrancy in [DegenerusGameAdvanceModule._tryRequestRng(bool,uint24)](contracts/modules/DegenerusGameAdvanceModule.sol#L1724-L1743):
 	External calls:
 	- [id = vrfCoordinator.requestRandomWords(VRFRandomWordsRequest({keyHash:vrfKeyHash,subId:vrfSubscriptionId,requestConfirmations:VRF_REQUEST_CONFIRMATIONS,callbackGasLimit:VRF_CALLBACK_GAS_LIMIT,numWords:1,extraArgs:}))](contracts/modules/DegenerusGameAdvanceModule.sol#L1728-L1742)
@@ -10535,7 +10583,7 @@ Reentrancy in [DegenerusGameAdvanceModule._tryRequestRng(bool,uint24)](contracts
 contracts/modules/DegenerusGameAdvanceModule.sol#L1724-L1743
 
 
- - [ ] ID-765
+ - [ ] ID-767
 Reentrancy in [GameAfkingModule.subscribe(address,bool,bool,uint8,address)](contracts/modules/GameAfkingModule.sol#L305-L585):
 	External calls:
 	- [_settlePendingFlip(subscriber,c)](contracts/modules/GameAfkingModule.sol#L366)
@@ -10551,7 +10599,7 @@ Reentrancy in [GameAfkingModule.subscribe(address,bool,bool,uint8,address)](cont
 contracts/modules/GameAfkingModule.sol#L305-L585
 
 
- - [ ] ID-766
+ - [ ] ID-768
 Reentrancy in [sDGNRS._claimRedemptionFor(address,uint24,uint16,bool)](contracts/sDGNRS.sol#L840-L949):
 	External calls:
 	- [coinflip.creditFlip(player,flipPaid)](contracts/sDGNRS.sol#L901)
@@ -10561,7 +10609,21 @@ Reentrancy in [sDGNRS._claimRedemptionFor(address,uint24,uint16,bool)](contracts
 contracts/sDGNRS.sol#L840-L949
 
 
- - [ ] ID-767
+ - [ ] ID-769
+Reentrancy in [DegenerusGameDegeneretteModule._resolveBet(address,uint64,DegenerusGameDegeneretteModule.ResolveAcc,bool)](contracts/modules/DegenerusGameDegeneretteModule.sol#L699-L911):
+	External calls:
+	- [_awardDegeneretteDgnrs(player,amountPerSpin,s)](contracts/modules/DegenerusGameDegeneretteModule.sol#L838)
+		- [sdgnrs.transferFromPool(IsDGNRS.Pool.Reward,player,reward)](contracts/modules/DegenerusGameDegeneretteModule.sol#L1515-L1519)
+	- [_resolveLootboxDirect(player,betLootboxShare,EntropyLib.hash2(rngWord,betId),activityScore)](contracts/modules/DegenerusGameDegeneretteModule.sol#L888-L893)
+		- [(ok,data) = ContractAddresses.GAME_LOOTBOX_MODULE.delegatecall(abi.encodeWithSelector(IDegenerusGameLootboxModule.resolveLootboxDirect.selector,player,amount,rngWord,activityScore))](contracts/modules/DegenerusGameDegeneretteModule.sol#L1029-L1039)
+	- [coinflip.creditFlip(affiliate.getReferrer(player),(refFlip * 7) / 100)](contracts/modules/DegenerusGameDegeneretteModule.sol#L901)
+	Event emitted after the call(s):
+	- [DegeneretteResolved(player,betId,spinCount,totalPayout,firstResultTraits)](contracts/modules/DegenerusGameDegeneretteModule.sol#L904-L910)
+
+contracts/modules/DegenerusGameDegeneretteModule.sol#L699-L911
+
+
+ - [ ] ID-770
 Reentrancy in [sDGNRS.burnWrapped(uint256)](contracts/sDGNRS.sol#L650-L663):
 	External calls:
 	- [dgnrsWrapper.burnForSdgnrs(msg.sender,amount)](contracts/sDGNRS.sol#L655)
@@ -10578,7 +10640,7 @@ Reentrancy in [sDGNRS.burnWrapped(uint256)](contracts/sDGNRS.sol#L650-L663):
 contracts/sDGNRS.sol#L650-L663
 
 
- - [ ] ID-768
+ - [ ] ID-771
 Reentrancy in [DGNRS.yearSweep()](contracts/DGNRS.sol#L300-L335):
 	External calls:
 	- [(ethOut,stethOut,None) = staked.burn(remaining)](contracts/DGNRS.sol#L309)
@@ -10595,7 +10657,7 @@ Reentrancy in [DGNRS.yearSweep()](contracts/DGNRS.sol#L300-L335):
 contracts/DGNRS.sol#L300-L335
 
 
- - [ ] ID-769
+ - [ ] ID-772
 Reentrancy in [DegenerusGameAdvanceModule._gameOverEntropy(uint48,uint24,uint24,bool)](contracts/modules/DegenerusGameAdvanceModule.sol#L1390-L1482):
 	External calls:
 	- [coinflip.processCoinflipPayouts(0,fallbackWord,day)](contracts/modules/DegenerusGameAdvanceModule.sol#L1448)
@@ -10607,7 +10669,7 @@ Reentrancy in [DegenerusGameAdvanceModule._gameOverEntropy(uint48,uint24,uint24,
 contracts/modules/DegenerusGameAdvanceModule.sol#L1390-L1482
 
 
- - [ ] ID-770
+ - [ ] ID-773
 Reentrancy in [DegenerusGameAdvanceModule._gameOverEntropy(uint48,uint24,uint24,bool)](contracts/modules/DegenerusGameAdvanceModule.sol#L1390-L1482):
 	External calls:
 	- [coinflip.processCoinflipPayouts(0,currentWord,day)](contracts/modules/DegenerusGameAdvanceModule.sol#L1403)
@@ -10619,7 +10681,7 @@ Reentrancy in [DegenerusGameAdvanceModule._gameOverEntropy(uint48,uint24,uint24,
 contracts/modules/DegenerusGameAdvanceModule.sol#L1390-L1482
 
 
- - [ ] ID-771
+ - [ ] ID-774
 Reentrancy in [DegenerusGameAdvanceModule.advanceGame()](contracts/modules/DegenerusGameAdvanceModule.sol#L173-L651):
 	External calls:
 	- [(goReturn,goStage) = _handleGameOverPath(day,lvl)](contracts/modules/DegenerusGameAdvanceModule.sol#L230)
@@ -10671,7 +10733,7 @@ Reentrancy in [DegenerusGameAdvanceModule.advanceGame()](contracts/modules/Degen
 contracts/modules/DegenerusGameAdvanceModule.sol#L173-L651
 
 
- - [ ] ID-772
+ - [ ] ID-775
 Reentrancy in [Coinflip._setCoinflipAutoRebuy(address,bool,uint256,bool)](contracts/Coinflip.sol#L766-L805):
 	External calls:
 	- [mintable = _claimCoinflipsInternal(player,false)](contracts/Coinflip.sol#L777)
@@ -10688,7 +10750,7 @@ Reentrancy in [Coinflip._setCoinflipAutoRebuy(address,bool,uint256,bool)](contra
 contracts/Coinflip.sol#L766-L805
 
 
- - [ ] ID-773
+ - [ ] ID-776
 Reentrancy in [DegenerusAdmin._executeSwap(uint256)](contracts/DegenerusAdmin.sol#L943-L1007):
 	External calls:
 	- [IVRFCoordinatorV2_5Owner(oldCoord).cancelSubscription(oldSub,address(this))](contracts/DegenerusAdmin.sol#L961-L968)
@@ -10698,7 +10760,7 @@ Reentrancy in [DegenerusAdmin._executeSwap(uint256)](contracts/DegenerusAdmin.so
 contracts/DegenerusAdmin.sol#L943-L1007
 
 
- - [ ] ID-774
+ - [ ] ID-777
 Reentrancy in [DegenerusQuests.handleAffiliate(address,uint256)](contracts/DegenerusQuests.sol#L920-L962):
 	External calls:
 	- [_handleLevelQuestProgress(player,QUEST_TYPE_AFFILIATE,amount,0)](contracts/DegenerusQuests.sol#L935)
@@ -10710,7 +10772,7 @@ Reentrancy in [DegenerusQuests.handleAffiliate(address,uint256)](contracts/Degen
 contracts/DegenerusQuests.sol#L920-L962
 
 
- - [ ] ID-775
+ - [ ] ID-778
 Reentrancy in [DegenerusQuests.handleFoilPurchase(address,uint256,uint32,uint256,uint256,uint256)](contracts/DegenerusQuests.sol#L1023-L1047):
 	External calls:
 	- [(reward,questType,None,completed) = _handlePurchase(player,ethMintSpendWei,flipMintQty,lootBoxAmount,mintPrice,levelQuestPrice)](contracts/DegenerusQuests.sol#L1035-L1037)
@@ -10737,7 +10799,7 @@ Reentrancy in [DegenerusQuests.handleFoilPurchase(address,uint256,uint32,uint256
 contracts/DegenerusQuests.sol#L1023-L1047
 
 
- - [ ] ID-776
+ - [ ] ID-779
 Reentrancy in [DegenerusGameMintModule.buyLootboxAndPresaleBox(address,uint256,uint256,bytes32,MintPaymentKind,uint256)](contracts/modules/DegenerusGameMintModule.sol#L1775-L1816):
 	External calls:
 	- [_purchaseForWithCached(buyer,entryQuantityScaled,lootBoxAmount,affiliateCode,payKind,mintFresh,cachedJpFlag,cachedLevel,priceWei,ticketCost)](contracts/modules/DegenerusGameMintModule.sol#L1800-L1811)
@@ -10762,7 +10824,41 @@ Reentrancy in [DegenerusGameMintModule.buyLootboxAndPresaleBox(address,uint256,u
 contracts/modules/DegenerusGameMintModule.sol#L1775-L1816
 
 
- - [ ] ID-777
+ - [ ] ID-780
+Reentrancy in [DegenerusGameJackpotModule.runBafJackpot(uint256,uint24,uint256)](contracts/modules/DegenerusGameJackpotModule.sol#L1932-L2014):
+	External calls:
+	- [(winnersArr,amountsArr,None) = jackpots.runBafJackpot(poolWei,lvl,rngWord)](contracts/modules/DegenerusGameJackpotModule.sol#L1939-L1940)
+	Event emitted after the call(s):
+	- [EntriesQueued(buyer,targetLevel,entries)](contracts/storage/DegenerusGameStorage.sol#L679)
+		- [(rngWord,cd_scope_0) = _awardJackpotTickets(winner,amount,lvl,rngWord)](contracts/modules/DegenerusGameJackpotModule.sol#L2002)
+	- [EntriesQueued(buyer,targetLevel,entries)](contracts/storage/DegenerusGameStorage.sol#L679)
+		- [(rngWord,cd) = _awardJackpotTickets(winner,lootboxPortion,lvl,rngWord)](contracts/modules/DegenerusGameJackpotModule.sol#L1971-L1976)
+	- [JackpotEthWin(winner,lvl,BAF_TRAIT_SENTINEL,ethPortion,0)](contracts/modules/DegenerusGameJackpotModule.sol#L1963)
+	- [JackpotEthWin(winner,lvl,BAF_TRAIT_SENTINEL,amount,0)](contracts/modules/DegenerusGameJackpotModule.sol#L1995)
+	- [JackpotTicketWin(winner,targetLevel,BAF_TRAIT_SENTINEL,wholeTicketsToEntries(whole),minTargetLevel,0,roundedUp)](contracts/modules/DegenerusGameJackpotModule.sol#L2153-L2161)
+		- [(rngWord,cd) = _awardJackpotTickets(winner,lootboxPortion,lvl,rngWord)](contracts/modules/DegenerusGameJackpotModule.sol#L1971-L1976)
+	- [JackpotTicketWin(winner,targetLevel,BAF_TRAIT_SENTINEL,wholeTicketsToEntries(whole),minTargetLevel,0,roundedUp)](contracts/modules/DegenerusGameJackpotModule.sol#L2153-L2161)
+		- [(rngWord,cd_scope_0) = _awardJackpotTickets(winner,amount,lvl,rngWord)](contracts/modules/DegenerusGameJackpotModule.sol#L2002)
+	- [JackpotWhalePassWin(winner,minTargetLevel,amount / HALF_WHALE_PASS_PRICE)](contracts/modules/DegenerusGameJackpotModule.sol#L2040-L2044)
+		- [(rngWord,cd) = _awardJackpotTickets(winner,lootboxPortion,lvl,rngWord)](contracts/modules/DegenerusGameJackpotModule.sol#L1971-L1976)
+	- [JackpotWhalePassWin(winner,minTargetLevel,amount / HALF_WHALE_PASS_PRICE)](contracts/modules/DegenerusGameJackpotModule.sol#L2040-L2044)
+		- [(rngWord,cd_scope_0) = _awardJackpotTickets(winner,amount,lvl,rngWord)](contracts/modules/DegenerusGameJackpotModule.sol#L2002)
+	- [JackpotWhalePassWin(winner,lvl,lootboxPortion / HALF_WHALE_PASS_PRICE)](contracts/modules/DegenerusGameJackpotModule.sol#L1983-L1987)
+	- [PlayerCredited(beneficiary,weiAmount)](contracts/storage/DegenerusGameStorage.sol#L997)
+		- [_creditClaimable(winner,amount)](contracts/modules/DegenerusGameJackpotModule.sol#L1993)
+	- [PlayerCredited(beneficiary,weiAmount)](contracts/storage/DegenerusGameStorage.sol#L997)
+		- [(rngWord,cd_scope_0) = _awardJackpotTickets(winner,amount,lvl,rngWord)](contracts/modules/DegenerusGameJackpotModule.sol#L2002)
+	- [PlayerCredited(beneficiary,weiAmount)](contracts/storage/DegenerusGameStorage.sol#L997)
+		- [(rngWord,cd) = _awardJackpotTickets(winner,lootboxPortion,lvl,rngWord)](contracts/modules/DegenerusGameJackpotModule.sol#L1971-L1976)
+	- [PlayerCredited(beneficiary,weiAmount)](contracts/storage/DegenerusGameStorage.sol#L997)
+		- [claimableDelta += _queueWhalePassClaimCore(winner,lootboxPortion)](contracts/modules/DegenerusGameJackpotModule.sol#L1982)
+	- [PlayerCredited(beneficiary,weiAmount)](contracts/storage/DegenerusGameStorage.sol#L997)
+		- [_creditClaimable(winner,ethPortion)](contracts/modules/DegenerusGameJackpotModule.sol#L1961)
+
+contracts/modules/DegenerusGameJackpotModule.sol#L1932-L2014
+
+
+ - [ ] ID-781
 Reentrancy in [DegenerusQuests._handlePurchase(address,uint256,uint32,uint256,uint256,uint256)](contracts/DegenerusQuests.sol#L1051-L1176):
 	External calls:
 	- [(r,qt,s,c) = _questHandleProgressSlot(player,state,quests,quest,0,ethMintSpendWei,target,currentDay,mintPrice,QUEST_TYPE_MINT_ETH,ethMintSpendWei,levelQuestPrice)](contracts/DegenerusQuests.sol#L1090-L1095)
@@ -10789,7 +10885,7 @@ Reentrancy in [DegenerusQuests._handlePurchase(address,uint256,uint32,uint256,ui
 contracts/DegenerusQuests.sol#L1051-L1176
 
 
- - [ ] ID-778
+ - [ ] ID-782
 Reentrancy in [FLIP.terminalDecimatorBurn(address,uint256)](contracts/FLIP.sol#L719-L741):
 	External calls:
 	- [consumed = _consumeCoinflipShortfall(caller,amount)](contracts/FLIP.sol#L735)
@@ -10801,20 +10897,7 @@ Reentrancy in [FLIP.terminalDecimatorBurn(address,uint256)](contracts/FLIP.sol#L
 contracts/FLIP.sol#L719-L741
 
 
- - [ ] ID-779
-Reentrancy in [DegenerusGameDegeneretteModule.resolveEthSpinFromBox(address,uint256,uint16,uint256,uint32)](contracts/modules/DegenerusGameDegeneretteModule.sol#L1705-L1773):
-	External calls:
-	- [_awardDegeneretteDgnrs(player,betAmount,s)](contracts/modules/DegenerusGameDegeneretteModule.sol#L1747)
-		- [sdgnrs.transferFromPool(IsDGNRS.Pool.Reward,player,reward)](contracts/modules/DegenerusGameDegeneretteModule.sol#L1510-L1514)
-	Event emitted after the call(s):
-	- [BoxSpin(player,betId,packed,payout,acc.ethClaimable)](contracts/modules/DegenerusGameDegeneretteModule.sol#L1761)
-	- [PlayerCredited(beneficiary,weiAmount)](contracts/storage/DegenerusGameStorage.sol#L997)
-		- [_addClaimableEth(player,acc.ethClaimable)](contracts/modules/DegenerusGameDegeneretteModule.sol#L1750)
-
-contracts/modules/DegenerusGameDegeneretteModule.sol#L1705-L1773
-
-
- - [ ] ID-780
+ - [ ] ID-783
 Reentrancy in [DegenerusGameWhaleModule.purchaseWhalePass(address,uint256)](contracts/modules/DegenerusGameWhaleModule.sol#L184-L387):
 	External calls:
 	- [_rewardWhalePassDgnrs(buyer,affiliateAddr,upline,upline2)](contracts/modules/DegenerusGameWhaleModule.sol#L355)
@@ -10831,7 +10914,7 @@ Reentrancy in [DegenerusGameWhaleModule.purchaseWhalePass(address,uint256)](cont
 contracts/modules/DegenerusGameWhaleModule.sol#L184-L387
 
 
- - [ ] ID-781
+ - [ ] ID-784
 Reentrancy in [GNRUS.sweepResidualToVault()](contracts/GNRUS.sol#L412-L430):
 	External calls:
 	- [! steth.transfer(ContractAddresses.VAULT,stethBal)](contracts/GNRUS.sol#L422)
@@ -10844,41 +10927,7 @@ Reentrancy in [GNRUS.sweepResidualToVault()](contracts/GNRUS.sol#L412-L430):
 contracts/GNRUS.sol#L412-L430
 
 
- - [ ] ID-782
-Reentrancy in [DegenerusGameJackpotModule.runBafJackpot(uint256,uint24,uint256)](contracts/modules/DegenerusGameJackpotModule.sol#L1932-L2014):
-	External calls:
-	- [(winnersArr,amountsArr,None) = jackpots.runBafJackpot(poolWei,lvl,rngWord)](contracts/modules/DegenerusGameJackpotModule.sol#L1939-L1940)
-	Event emitted after the call(s):
-	- [EntriesQueued(buyer,targetLevel,entries)](contracts/storage/DegenerusGameStorage.sol#L679)
-		- [(rngWord,cd_scope_0) = _awardJackpotTickets(winner,amount,lvl,rngWord)](contracts/modules/DegenerusGameJackpotModule.sol#L2002)
-	- [EntriesQueued(buyer,targetLevel,entries)](contracts/storage/DegenerusGameStorage.sol#L679)
-		- [(rngWord,cd) = _awardJackpotTickets(winner,lootboxPortion,lvl,rngWord)](contracts/modules/DegenerusGameJackpotModule.sol#L1971-L1976)
-	- [JackpotEthWin(winner,lvl,BAF_TRAIT_SENTINEL,ethPortion,0)](contracts/modules/DegenerusGameJackpotModule.sol#L1963)
-	- [JackpotEthWin(winner,lvl,BAF_TRAIT_SENTINEL,amount,0)](contracts/modules/DegenerusGameJackpotModule.sol#L1995)
-	- [JackpotTicketWin(winner,targetLevel,BAF_TRAIT_SENTINEL,wholeTicketsToEntries(whole),minTargetLevel,0,roundedUp)](contracts/modules/DegenerusGameJackpotModule.sol#L2153-L2161)
-		- [(rngWord,cd_scope_0) = _awardJackpotTickets(winner,amount,lvl,rngWord)](contracts/modules/DegenerusGameJackpotModule.sol#L2002)
-	- [JackpotTicketWin(winner,targetLevel,BAF_TRAIT_SENTINEL,wholeTicketsToEntries(whole),minTargetLevel,0,roundedUp)](contracts/modules/DegenerusGameJackpotModule.sol#L2153-L2161)
-		- [(rngWord,cd) = _awardJackpotTickets(winner,lootboxPortion,lvl,rngWord)](contracts/modules/DegenerusGameJackpotModule.sol#L1971-L1976)
-	- [JackpotWhalePassWin(winner,minTargetLevel,amount / HALF_WHALE_PASS_PRICE)](contracts/modules/DegenerusGameJackpotModule.sol#L2040-L2044)
-		- [(rngWord,cd_scope_0) = _awardJackpotTickets(winner,amount,lvl,rngWord)](contracts/modules/DegenerusGameJackpotModule.sol#L2002)
-	- [JackpotWhalePassWin(winner,minTargetLevel,amount / HALF_WHALE_PASS_PRICE)](contracts/modules/DegenerusGameJackpotModule.sol#L2040-L2044)
-		- [(rngWord,cd) = _awardJackpotTickets(winner,lootboxPortion,lvl,rngWord)](contracts/modules/DegenerusGameJackpotModule.sol#L1971-L1976)
-	- [JackpotWhalePassWin(winner,lvl,lootboxPortion / HALF_WHALE_PASS_PRICE)](contracts/modules/DegenerusGameJackpotModule.sol#L1983-L1987)
-	- [PlayerCredited(beneficiary,weiAmount)](contracts/storage/DegenerusGameStorage.sol#L997)
-		- [(rngWord,cd_scope_0) = _awardJackpotTickets(winner,amount,lvl,rngWord)](contracts/modules/DegenerusGameJackpotModule.sol#L2002)
-	- [PlayerCredited(beneficiary,weiAmount)](contracts/storage/DegenerusGameStorage.sol#L997)
-		- [(rngWord,cd) = _awardJackpotTickets(winner,lootboxPortion,lvl,rngWord)](contracts/modules/DegenerusGameJackpotModule.sol#L1971-L1976)
-	- [PlayerCredited(beneficiary,weiAmount)](contracts/storage/DegenerusGameStorage.sol#L997)
-		- [claimableDelta += _queueWhalePassClaimCore(winner,lootboxPortion)](contracts/modules/DegenerusGameJackpotModule.sol#L1982)
-	- [PlayerCredited(beneficiary,weiAmount)](contracts/storage/DegenerusGameStorage.sol#L997)
-		- [_creditClaimable(winner,ethPortion)](contracts/modules/DegenerusGameJackpotModule.sol#L1961)
-	- [PlayerCredited(beneficiary,weiAmount)](contracts/storage/DegenerusGameStorage.sol#L997)
-		- [_creditClaimable(winner,amount)](contracts/modules/DegenerusGameJackpotModule.sol#L1993)
-
-contracts/modules/DegenerusGameJackpotModule.sol#L1932-L2014
-
-
- - [ ] ID-783
+ - [ ] ID-785
 Reentrancy in [Coinflip._depositCoinflip(address,address,uint256,bool)](contracts/Coinflip.sol#L272-L345):
 	External calls:
 	- [mintable = _claimCoinflipsInternal(player,false)](contracts/Coinflip.sol#L286)
@@ -10893,7 +10942,7 @@ Reentrancy in [Coinflip._depositCoinflip(address,address,uint256,bool)](contract
 contracts/Coinflip.sol#L272-L345
 
 
- - [ ] ID-784
+ - [ ] ID-786
 Reentrancy in [Coinflip._depositCoinflip(address,address,uint256,bool)](contracts/Coinflip.sol#L272-L345):
 	External calls:
 	- [mintable = _claimCoinflipsInternal(player,false)](contracts/Coinflip.sol#L286)
@@ -10911,7 +10960,7 @@ Reentrancy in [Coinflip._depositCoinflip(address,address,uint256,bool)](contract
 contracts/Coinflip.sol#L272-L345
 
 
- - [ ] ID-785
+ - [ ] ID-787
 Reentrancy in [Coinflip._depositCoinflip(address,address,uint256,bool)](contracts/Coinflip.sol#L272-L345):
 	External calls:
 	- [mintable = _claimCoinflipsInternal(player,false)](contracts/Coinflip.sol#L286)
@@ -10934,7 +10983,7 @@ Reentrancy in [Coinflip._depositCoinflip(address,address,uint256,bool)](contract
 contracts/Coinflip.sol#L272-L345
 
 
- - [ ] ID-786
+ - [ ] ID-788
 Reentrancy in [DegenerusGame.adminSwapEthForStEth(address,uint256)](contracts/DegenerusGame.sol#L1848-L1860):
 	External calls:
 	- [! steth.transfer(recipient,amount)](contracts/DegenerusGame.sol#L1858)
@@ -10944,7 +10993,7 @@ Reentrancy in [DegenerusGame.adminSwapEthForStEth(address,uint256)](contracts/De
 contracts/DegenerusGame.sol#L1848-L1860
 
 
- - [ ] ID-787
+ - [ ] ID-789
 Reentrancy in [DegenerusGameAdvanceModule.advanceGame()](contracts/modules/DegenerusGameAdvanceModule.sol#L173-L651):
 	External calls:
 	- [(goReturn,goStage) = _handleGameOverPath(day,lvl)](contracts/modules/DegenerusGameAdvanceModule.sol#L230)
@@ -10991,7 +11040,7 @@ Reentrancy in [DegenerusGameAdvanceModule.advanceGame()](contracts/modules/Degen
 contracts/modules/DegenerusGameAdvanceModule.sol#L173-L651
 
 
- - [ ] ID-788
+ - [ ] ID-790
 Reentrancy in [DegenerusQuests._handlePurchase(address,uint256,uint32,uint256,uint256,uint256)](contracts/DegenerusQuests.sol#L1051-L1176):
 	External calls:
 	- [(r,qt,s,c) = _questHandleProgressSlot(player,state,quests,quest,0,ethMintSpendWei,target,currentDay,mintPrice,QUEST_TYPE_MINT_ETH,ethMintSpendWei,levelQuestPrice)](contracts/DegenerusQuests.sol#L1090-L1095)
@@ -11022,7 +11071,23 @@ Reentrancy in [DegenerusQuests._handlePurchase(address,uint256,uint32,uint256,ui
 contracts/DegenerusQuests.sol#L1051-L1176
 
 
- - [ ] ID-789
+ - [ ] ID-791
+Reentrancy in [DegenerusGameDegeneretteModule.resolveDegeneretteBets(address,uint64[])](contracts/modules/DegenerusGameDegeneretteModule.sol#L485-L523):
+	External calls:
+	- [_resolveBet(player,betIds[i],acc,i == 0)](contracts/modules/DegenerusGameDegeneretteModule.sol#L503)
+		- [(ok,data) = ContractAddresses.GAME_LOOTBOX_MODULE.delegatecall(abi.encodeWithSelector(IDegenerusGameLootboxModule.resolveLootboxDirect.selector,player,amount,rngWord,activityScore))](contracts/modules/DegenerusGameDegeneretteModule.sol#L1029-L1039)
+		- [sdgnrs.transferFromPool(IsDGNRS.Pool.Reward,player,reward)](contracts/modules/DegenerusGameDegeneretteModule.sol#L1515-L1519)
+		- [coinflip.creditFlip(affiliate.getReferrer(player),(refFlip * 7) / 100)](contracts/modules/DegenerusGameDegeneretteModule.sol#L901)
+	- [coin.mintForGame(player,acc.flipMint)](contracts/modules/DegenerusGameDegeneretteModule.sol#L510)
+	- [wwxrp.mintPrize(player,acc.wwxrpMint)](contracts/modules/DegenerusGameDegeneretteModule.sol#L511)
+	Event emitted after the call(s):
+	- [PlayerCredited(beneficiary,weiAmount)](contracts/storage/DegenerusGameStorage.sol#L997)
+		- [_addClaimableEth(player,acc.ethClaimable)](contracts/modules/DegenerusGameDegeneretteModule.sol#L512)
+
+contracts/modules/DegenerusGameDegeneretteModule.sol#L485-L523
+
+
+ - [ ] ID-792
 Reentrancy in [DegenerusGameLootboxModule._resolveLootboxRoll(address,uint256,uint256,uint256,uint256,bool,uint16,bool)](contracts/modules/DegenerusGameLootboxModule.sol#L1984-L2072):
 	External calls:
 	- [paid = _creditDgnrsReward(player,dgnrsAmount)](contracts/modules/DegenerusGameLootboxModule.sol#L2011)
@@ -11033,7 +11098,7 @@ Reentrancy in [DegenerusGameLootboxModule._resolveLootboxRoll(address,uint256,ui
 contracts/modules/DegenerusGameLootboxModule.sol#L1984-L2072
 
 
- - [ ] ID-790
+ - [ ] ID-793
 Reentrancy in [DegenerusGameLootboxModule._settleLootboxRoll(address,uint48,uint256,uint256,uint24,uint256,bool,uint256,uint256,bool,uint16,bool)](contracts/modules/DegenerusGameLootboxModule.sol#L1341-L1415):
 	External calls:
 	- [(flipOut,scaledWholeTickets,wasSpin) = _resolveLootboxRoll(player,rollAmount,fullAmount,targetPrice,rollSeed,isFarFuture,activityScore,allowEthSpin)](contracts/modules/DegenerusGameLootboxModule.sol#L1362-L1363)
@@ -11049,7 +11114,7 @@ Reentrancy in [DegenerusGameLootboxModule._settleLootboxRoll(address,uint48,uint
 contracts/modules/DegenerusGameLootboxModule.sol#L1341-L1415
 
 
- - [ ] ID-791
+ - [ ] ID-794
 Reentrancy in [DegenerusGameMintModule._purchaseForWithCached(address,uint256,uint256,bytes32,MintPaymentKind,uint256,bool,uint24,uint256,uint256)](contracts/modules/DegenerusGameMintModule.sol#L1351-L1750):
 	External calls:
 	- [(lootboxFlipCredit,adjustedQty,targetLevel,flipMintUnits,ticketFreshFlip,ticketRecycledFlip,ticketNextShare,ticketFutureShare,ticketClaimableDraw) = _callTicketPurchase(buyer,entryQuantityScaled,payKind,false,affiliateCode,remainingEth,cachedLevel,cachedJpFlag)](contracts/modules/DegenerusGameMintModule.sol#L1425-L1444)
@@ -11068,7 +11133,7 @@ Reentrancy in [DegenerusGameMintModule._purchaseForWithCached(address,uint256,ui
 contracts/modules/DegenerusGameMintModule.sol#L1351-L1750
 
 
- - [ ] ID-792
+ - [ ] ID-795
 Reentrancy in [sDGNRS._submitGamblingClaimFrom(address,address,uint256)](contracts/sDGNRS.sol#L1027-L1150):
 	External calls:
 	- [coinBacking = coinflip.redeemableFlipBacking()](contracts/sDGNRS.sol#L1082)
@@ -11078,7 +11143,7 @@ Reentrancy in [sDGNRS._submitGamblingClaimFrom(address,address,uint256)](contrac
 contracts/sDGNRS.sol#L1027-L1150
 
 
- - [ ] ID-793
+ - [ ] ID-796
 Reentrancy in [DegenerusQuests.handleDecimator(address,uint256)](contracts/DegenerusQuests.sol#L804-L849):
 	External calls:
 	- [_handleLevelQuestProgress(player,QUEST_TYPE_DECIMATOR,burnAmount,0)](contracts/DegenerusQuests.sol#L819)
@@ -11095,7 +11160,34 @@ Reentrancy in [DegenerusQuests.handleDecimator(address,uint256)](contracts/Degen
 contracts/DegenerusQuests.sol#L804-L849
 
 
- - [ ] ID-794
+ - [ ] ID-797
+Reentrancy in [DegenerusGameDegeneretteModule.resolveEthSpinFromBox(address,uint256,uint16,uint256,uint32)](contracts/modules/DegenerusGameDegeneretteModule.sol#L1710-L1778):
+	External calls:
+	- [_awardDegeneretteDgnrs(player,betAmount,s)](contracts/modules/DegenerusGameDegeneretteModule.sol#L1752)
+		- [sdgnrs.transferFromPool(IsDGNRS.Pool.Reward,player,reward)](contracts/modules/DegenerusGameDegeneretteModule.sol#L1515-L1519)
+	Event emitted after the call(s):
+	- [BoxSpin(player,betId,packed,payout,acc.ethClaimable)](contracts/modules/DegenerusGameDegeneretteModule.sol#L1766)
+	- [PlayerCredited(beneficiary,weiAmount)](contracts/storage/DegenerusGameStorage.sol#L997)
+		- [_addClaimableEth(player,acc.ethClaimable)](contracts/modules/DegenerusGameDegeneretteModule.sol#L1755)
+
+contracts/modules/DegenerusGameDegeneretteModule.sol#L1710-L1778
+
+
+ - [ ] ID-798
+Reentrancy in [DegenerusGameDegeneretteModule._resolveBet(address,uint64,DegenerusGameDegeneretteModule.ResolveAcc,bool)](contracts/modules/DegenerusGameDegeneretteModule.sol#L699-L911):
+	External calls:
+	- [_awardDegeneretteDgnrs(player,amountPerSpin,s)](contracts/modules/DegenerusGameDegeneretteModule.sol#L838)
+		- [sdgnrs.transferFromPool(IsDGNRS.Pool.Reward,player,reward)](contracts/modules/DegenerusGameDegeneretteModule.sol#L1515-L1519)
+	Event emitted after the call(s):
+	- [DegeneretteResult(player,betId,spinIdx,playerTraits,s,payout)](contracts/modules/DegenerusGameDegeneretteModule.sol#L806-L813)
+	- [PayoutCapped(player,ethShare,lootboxShare)](contracts/modules/DegenerusGameDegeneretteModule.sol#L1002)
+		- [spinLootboxShare = _distributePayout(player,currency,amountPerSpin,payout,acc)](contracts/modules/DegenerusGameDegeneretteModule.sol#L821-L827)
+	- [WwxrpJackpotWhalePass(player,bracket)](contracts/modules/DegenerusGameDegeneretteModule.sol#L854)
+
+contracts/modules/DegenerusGameDegeneretteModule.sol#L699-L911
+
+
+ - [ ] ID-799
 Reentrancy in [sDGNRS._deterministicBurnFrom(address,address,uint256)](contracts/sDGNRS.sol#L674-L719):
 	External calls:
 	- [game.claimWinnings(address(0))](contracts/sDGNRS.sol#L695)
@@ -11109,7 +11201,18 @@ Reentrancy in [sDGNRS._deterministicBurnFrom(address,address,uint256)](contracts
 contracts/sDGNRS.sol#L674-L719
 
 
- - [ ] ID-795
+ - [ ] ID-800
+Reentrancy in [DegenerusGameDegeneretteModule._collectBetFunds(address,uint8,uint256,uint256)](contracts/modules/DegenerusGameDegeneretteModule.sol#L654-L690):
+	External calls:
+	- [wwxrp.burnForGame(player,totalBet)](contracts/modules/DegenerusGameDegeneretteModule.sol#L687)
+	Event emitted after the call(s):
+	- [AfkingFunded(player,weiAmount)](contracts/storage/DegenerusGameStorage.sol#L1050)
+		- [_creditAfkingValue(player,ethPaid)](contracts/modules/DegenerusGameDegeneretteModule.sol#L688)
+
+contracts/modules/DegenerusGameDegeneretteModule.sol#L654-L690
+
+
+ - [ ] ID-801
 Reentrancy in [Coinflip._setCoinflipAutoRebuy(address,bool,uint256,bool)](contracts/Coinflip.sol#L766-L805):
 	External calls:
 	- [mintable = _claimCoinflipsInternal(player,true)](contracts/Coinflip.sol#L790)
@@ -11121,7 +11224,18 @@ Reentrancy in [Coinflip._setCoinflipAutoRebuy(address,bool,uint256,bool)](contra
 contracts/Coinflip.sol#L766-L805
 
 
- - [ ] ID-796
+ - [ ] ID-802
+Reentrancy in [DegenerusGameDegeneretteModule._collectBetFunds(address,uint8,uint256,uint256)](contracts/modules/DegenerusGameDegeneretteModule.sol#L654-L690):
+	External calls:
+	- [coin.burnCoin(player,totalBet)](contracts/modules/DegenerusGameDegeneretteModule.sol#L680)
+	Event emitted after the call(s):
+	- [AfkingFunded(player,weiAmount)](contracts/storage/DegenerusGameStorage.sol#L1050)
+		- [_creditAfkingValue(player,ethPaid)](contracts/modules/DegenerusGameDegeneretteModule.sol#L685)
+
+contracts/modules/DegenerusGameDegeneretteModule.sol#L654-L690
+
+
+ - [ ] ID-803
 Reentrancy in [GNRUS._redeemTo(address,uint256,uint256,uint256,address)](contracts/GNRUS.sol#L319-L351):
 	External calls:
 	- [game.claimWinnings(address(this))](contracts/GNRUS.sol#L329)
@@ -11132,7 +11246,7 @@ Reentrancy in [GNRUS._redeemTo(address,uint256,uint256,uint256,address)](contrac
 contracts/GNRUS.sol#L319-L351
 
 
- - [ ] ID-797
+ - [ ] ID-804
 Reentrancy in [DegenerusAdmin.shutdownVrf()](contracts/DegenerusAdmin.sol#L1015-L1038):
 	External calls:
 	- [IVRFCoordinatorV2_5Owner(coordinator).cancelSubscription(subId,target)](contracts/DegenerusAdmin.sol#L1023-L1025)
@@ -11142,7 +11256,7 @@ Reentrancy in [DegenerusAdmin.shutdownVrf()](contracts/DegenerusAdmin.sol#L1015-
 contracts/DegenerusAdmin.sol#L1015-L1038
 
 
- - [ ] ID-798
+ - [ ] ID-805
 Reentrancy in [DGNRS.unwrapTo(address,uint256)](contracts/DGNRS.sol#L183-L191):
 	External calls:
 	- [staked.wrapperTransferTo(recipient,amount)](contracts/DGNRS.sol#L189)
@@ -11152,7 +11266,7 @@ Reentrancy in [DGNRS.unwrapTo(address,uint256)](contracts/DGNRS.sol#L183-L191):
 contracts/DGNRS.sol#L183-L191
 
 
- - [ ] ID-799
+ - [ ] ID-806
 Reentrancy in [DegenerusGameLootboxModule.creditRedemptionDirect(address,uint256)](contracts/modules/DegenerusGameLootboxModule.sol#L1023-L1034):
 	External calls:
 	- [! steth.transferFrom(msg.sender,address(this),stethPortion)](contracts/modules/DegenerusGameLootboxModule.sol#L1030)
@@ -11163,7 +11277,7 @@ Reentrancy in [DegenerusGameLootboxModule.creditRedemptionDirect(address,uint256
 contracts/modules/DegenerusGameLootboxModule.sol#L1023-L1034
 
 
- - [ ] ID-800
+ - [ ] ID-807
 Reentrancy in [DegenerusGameAdvanceModule.advanceGame()](contracts/modules/DegenerusGameAdvanceModule.sol#L173-L651):
 	External calls:
 	- [(goReturn,goStage) = _handleGameOverPath(day,lvl)](contracts/modules/DegenerusGameAdvanceModule.sol#L230)
@@ -11239,7 +11353,7 @@ Reentrancy in [DegenerusGameAdvanceModule.advanceGame()](contracts/modules/Degen
 contracts/modules/DegenerusGameAdvanceModule.sol#L173-L651
 
 
- - [ ] ID-801
+ - [ ] ID-808
 Reentrancy in [DegenerusGameLootboxModule.resolveRedemptionLootbox(address,uint256,uint256,uint16)](contracts/modules/DegenerusGameLootboxModule.sol#L942-L973):
 	External calls:
 	- [! steth.transferFrom(msg.sender,address(this),stethPortion)](contracts/modules/DegenerusGameLootboxModule.sol#L951)
@@ -11284,7 +11398,7 @@ Reentrancy in [DegenerusGameLootboxModule.resolveRedemptionLootbox(address,uint2
 contracts/modules/DegenerusGameLootboxModule.sol#L942-L973
 
 
- - [ ] ID-802
+ - [ ] ID-809
 Reentrancy in [Coinflip.processCoinflipPayouts(uint8,uint256,uint24)](contracts/Coinflip.sol#L875-L989):
 	External calls:
 	- [_addDailyFlip(to,slice,0,false,false)](contracts/Coinflip.sol#L927)
@@ -11303,37 +11417,7 @@ Reentrancy in [Coinflip.processCoinflipPayouts(uint8,uint256,uint24)](contracts/
 contracts/Coinflip.sol#L875-L989
 
 
- - [ ] ID-803
-Reentrancy in [DegenerusGameDegeneretteModule._resolveBet(address,uint64,DegenerusGameDegeneretteModule.ResolveAcc,bool)](contracts/modules/DegenerusGameDegeneretteModule.sol#L694-L906):
-	External calls:
-	- [_awardDegeneretteDgnrs(player,amountPerSpin,s)](contracts/modules/DegenerusGameDegeneretteModule.sol#L833)
-		- [sdgnrs.transferFromPool(IsDGNRS.Pool.Reward,player,reward)](contracts/modules/DegenerusGameDegeneretteModule.sol#L1510-L1514)
-	Event emitted after the call(s):
-	- [DegeneretteResult(player,betId,spinIdx,playerTraits,s,payout)](contracts/modules/DegenerusGameDegeneretteModule.sol#L801-L808)
-	- [PayoutCapped(player,ethShare,lootboxShare)](contracts/modules/DegenerusGameDegeneretteModule.sol#L997)
-		- [spinLootboxShare = _distributePayout(player,currency,amountPerSpin,payout,acc)](contracts/modules/DegenerusGameDegeneretteModule.sol#L816-L822)
-	- [WwxrpJackpotWhalePass(player,bracket)](contracts/modules/DegenerusGameDegeneretteModule.sol#L849)
-
-contracts/modules/DegenerusGameDegeneretteModule.sol#L694-L906
-
-
- - [ ] ID-804
-Reentrancy in [DegenerusGameDegeneretteModule.resolveDegeneretteBets(address,uint64[])](contracts/modules/DegenerusGameDegeneretteModule.sol#L485-L523):
-	External calls:
-	- [_resolveBet(player,betIds[i],acc,i == 0)](contracts/modules/DegenerusGameDegeneretteModule.sol#L503)
-		- [(ok,data) = ContractAddresses.GAME_LOOTBOX_MODULE.delegatecall(abi.encodeWithSelector(IDegenerusGameLootboxModule.resolveLootboxDirect.selector,player,amount,rngWord,activityScore))](contracts/modules/DegenerusGameDegeneretteModule.sol#L1024-L1034)
-		- [sdgnrs.transferFromPool(IsDGNRS.Pool.Reward,player,reward)](contracts/modules/DegenerusGameDegeneretteModule.sol#L1510-L1514)
-		- [coinflip.creditFlip(affiliate.getReferrer(player),(refFlip * 7) / 100)](contracts/modules/DegenerusGameDegeneretteModule.sol#L896)
-	- [coin.mintForGame(player,acc.flipMint)](contracts/modules/DegenerusGameDegeneretteModule.sol#L510)
-	- [wwxrp.mintPrize(player,acc.wwxrpMint)](contracts/modules/DegenerusGameDegeneretteModule.sol#L511)
-	Event emitted after the call(s):
-	- [PlayerCredited(beneficiary,weiAmount)](contracts/storage/DegenerusGameStorage.sol#L997)
-		- [_addClaimableEth(player,acc.ethClaimable)](contracts/modules/DegenerusGameDegeneretteModule.sol#L512)
-
-contracts/modules/DegenerusGameDegeneretteModule.sol#L485-L523
-
-
- - [ ] ID-805
+ - [ ] ID-810
 Reentrancy in [DegenerusGameAdvanceModule.advanceGame()](contracts/modules/DegenerusGameAdvanceModule.sol#L173-L651):
 	External calls:
 	- [(goReturn,goStage) = _handleGameOverPath(day,lvl)](contracts/modules/DegenerusGameAdvanceModule.sol#L230)
@@ -11387,7 +11471,7 @@ Reentrancy in [DegenerusGameAdvanceModule.advanceGame()](contracts/modules/Degen
 contracts/modules/DegenerusGameAdvanceModule.sol#L173-L651
 
 
- - [ ] ID-806
+ - [ ] ID-811
 Reentrancy in [DegenerusGameAdvanceModule.advanceGame()](contracts/modules/DegenerusGameAdvanceModule.sol#L173-L651):
 	External calls:
 	- [(goReturn,goStage) = _handleGameOverPath(day,lvl)](contracts/modules/DegenerusGameAdvanceModule.sol#L230)
@@ -11441,7 +11525,7 @@ Reentrancy in [DegenerusGameAdvanceModule.advanceGame()](contracts/modules/Degen
 contracts/modules/DegenerusGameAdvanceModule.sol#L173-L651
 
 
- - [ ] ID-807
+ - [ ] ID-812
 Reentrancy in [DegenerusGame.reverseFlip()](contracts/DegenerusGame.sol#L1950-L1961):
 	External calls:
 	- [coin.burnCoin(msg.sender,cost)](contracts/DegenerusGame.sol#L1954)
@@ -11451,7 +11535,7 @@ Reentrancy in [DegenerusGame.reverseFlip()](contracts/DegenerusGame.sol#L1950-L1
 contracts/DegenerusGame.sol#L1950-L1961
 
 
- - [ ] ID-808
+ - [ ] ID-813
 Reentrancy in [DegenerusGameAdvanceModule._handleGameOverPath(uint24,uint24)](contracts/modules/DegenerusGameAdvanceModule.sol#L688-L811):
 	External calls:
 	- [rngWord = _gameOverEntropy(uint48(block.timestamp),day,lvl,lastPurchaseDay)](contracts/modules/DegenerusGameAdvanceModule.sol#L761-L766)
@@ -11471,7 +11555,7 @@ Reentrancy in [DegenerusGameAdvanceModule._handleGameOverPath(uint24,uint24)](co
 contracts/modules/DegenerusGameAdvanceModule.sol#L688-L811
 
 
- - [ ] ID-809
+ - [ ] ID-814
 Reentrancy in [DegenerusAdmin._executeSwap(uint256)](contracts/DegenerusAdmin.sol#L943-L1007):
 	External calls:
 	- [IVRFCoordinatorV2_5Owner(oldCoord).cancelSubscription(oldSub,address(this))](contracts/DegenerusAdmin.sol#L961-L968)
@@ -11483,29 +11567,7 @@ Reentrancy in [DegenerusAdmin._executeSwap(uint256)](contracts/DegenerusAdmin.so
 contracts/DegenerusAdmin.sol#L943-L1007
 
 
- - [ ] ID-810
-Reentrancy in [GameAfkingModule.subscribe(address,bool,bool,uint8,address)](contracts/modules/GameAfkingModule.sol#L305-L585):
-	External calls:
-	- [_settlePendingFlip(subscriber,s)](contracts/modules/GameAfkingModule.sol#L404)
-		- [coinflip.creditFlip(player,owed * 1000000000000000000)](contracts/modules/GameAfkingModule.sol#L1121)
-	Event emitted after the call(s):
-	- [AfkingDelivered(player,processDay,weiIn)](contracts/modules/GameAfkingModule.sol#L916)
-		- [_deliverAfkingBuy(subscriber,s,today,gapStartDay,mp,level,level,src,ethValue,claimableUse,buyAmount,isTicket,true)](contracts/modules/GameAfkingModule.sol#L477-L491)
-	- [AfkingDelivered(player,processDay,weiIn)](contracts/modules/GameAfkingModule.sol#L916)
-		- [_deliverAfkingBuy(subscriber,s,today,gapStartDay,mp,level,level + 1,src,ethValue,claimableUse,buyAmount,isTicket,true)](contracts/modules/GameAfkingModule.sol#L477-L491)
-	- [EntriesQueuedScaled(buyer,targetLevel,entriesScaled)](contracts/storage/DegenerusGameStorage.sol#L723)
-		- [_deliverAfkingBuy(subscriber,s,today,gapStartDay,mp,level,level,src,ethValue,claimableUse,buyAmount,isTicket,true)](contracts/modules/GameAfkingModule.sol#L477-L491)
-	- [EntriesQueuedScaled(buyer,targetLevel,entriesScaled)](contracts/storage/DegenerusGameStorage.sol#L723)
-		- [_deliverAfkingBuy(subscriber,s,today,gapStartDay,mp,level,level + 1,src,ethValue,claimableUse,buyAmount,isTicket,true)](contracts/modules/GameAfkingModule.sol#L477-L491)
-	- [LootBoxBuy(player,index,amount,_psRead(PS_ACTIVE_SHIFT,PS_ACTIVE_MASK) != 0)](contracts/modules/GameAfkingModule.sol#L1061-L1066)
-		- [_deliverAfkingBuy(subscriber,s,today,gapStartDay,mp,level,level + 1,src,ethValue,claimableUse,buyAmount,isTicket,true)](contracts/modules/GameAfkingModule.sol#L477-L491)
-	- [LootBoxBuy(player,index,amount,_psRead(PS_ACTIVE_SHIFT,PS_ACTIVE_MASK) != 0)](contracts/modules/GameAfkingModule.sol#L1061-L1066)
-		- [_deliverAfkingBuy(subscriber,s,today,gapStartDay,mp,level,level,src,ethValue,claimableUse,buyAmount,isTicket,true)](contracts/modules/GameAfkingModule.sol#L477-L491)
-
-contracts/modules/GameAfkingModule.sol#L305-L585
-
-
- - [ ] ID-811
+ - [ ] ID-815
 Reentrancy in [DegenerusGameMintModule._purchaseForWithCached(address,uint256,uint256,bytes32,MintPaymentKind,uint256,bool,uint24,uint256,uint256)](contracts/modules/DegenerusGameMintModule.sol#L1351-L1750):
 	External calls:
 	- [(lootboxFlipCredit,adjustedQty,targetLevel,flipMintUnits,ticketFreshFlip,ticketRecycledFlip,ticketNextShare,ticketFutureShare,ticketClaimableDraw) = _callTicketPurchase(buyer,entryQuantityScaled,payKind,false,affiliateCode,remainingEth,cachedLevel,cachedJpFlag)](contracts/modules/DegenerusGameMintModule.sol#L1425-L1444)
@@ -11519,7 +11581,7 @@ Reentrancy in [DegenerusGameMintModule._purchaseForWithCached(address,uint256,ui
 contracts/modules/DegenerusGameMintModule.sol#L1351-L1750
 
 
- - [ ] ID-812
+ - [ ] ID-816
 Reentrancy in [DegenerusGameLootboxModule._settleLootboxRoll(address,uint48,uint256,uint256,uint24,uint256,bool,uint256,uint256,bool,uint16,bool)](contracts/modules/DegenerusGameLootboxModule.sol#L1341-L1415):
 	External calls:
 	- [(flipOut,scaledWholeTickets,wasSpin) = _resolveLootboxRoll(player,rollAmount,fullAmount,targetPrice,rollSeed,isFarFuture,activityScore,allowEthSpin)](contracts/modules/DegenerusGameLootboxModule.sol#L1362-L1363)
@@ -11534,7 +11596,7 @@ Reentrancy in [DegenerusGameLootboxModule._settleLootboxRoll(address,uint48,uint
 contracts/modules/DegenerusGameLootboxModule.sol#L1341-L1415
 
 
- - [ ] ID-813
+ - [ ] ID-817
 Reentrancy in [FLIP.decimatorBurn(address,uint256)](contracts/FLIP.sol#L647-L704):
 	External calls:
 	- [consumed = _consumeCoinflipShortfall(caller,amount)](contracts/FLIP.sol#L665)
@@ -11548,7 +11610,7 @@ Reentrancy in [FLIP.decimatorBurn(address,uint256)](contracts/FLIP.sol#L647-L704
 contracts/FLIP.sol#L647-L704
 
 
- - [ ] ID-814
+ - [ ] ID-818
 Reentrancy in [DegenerusGameGameOverModule.handleGameOverDrain(uint24)](contracts/modules/DegenerusGameGameOverModule.sol#L75-L207):
 	External calls:
 	- [charityGameOver.burnAtGameOver()](contracts/modules/DegenerusGameGameOverModule.sol#L141)
@@ -11561,7 +11623,7 @@ Reentrancy in [DegenerusGameGameOverModule.handleGameOverDrain(uint24)](contract
 contracts/modules/DegenerusGameGameOverModule.sol#L75-L207
 
 
- - [ ] ID-815
+ - [ ] ID-819
 Reentrancy in [GameAfkingModule.processSubscriberStage(uint24,uint256)](contracts/modules/GameAfkingModule.sol#L1167-L1449):
 	External calls:
 	- [_finalizeAfking(player,sub,processDay)](contracts/modules/GameAfkingModule.sol#L1331)
@@ -11587,7 +11649,7 @@ Reentrancy in [GameAfkingModule.processSubscriberStage(uint24,uint256)](contract
 contracts/modules/GameAfkingModule.sol#L1167-L1449
 
 
- - [ ] ID-816
+ - [ ] ID-820
 Reentrancy in [DegenerusQuests.handleFlip(address,uint256)](contracts/DegenerusQuests.sol#L746-L790):
 	External calls:
 	- [_handleLevelQuestProgress(player,QUEST_TYPE_FLIP,flipCredit,0)](contracts/DegenerusQuests.sol#L761)
@@ -11604,7 +11666,7 @@ Reentrancy in [DegenerusQuests.handleFlip(address,uint256)](contracts/DegenerusQ
 contracts/DegenerusQuests.sol#L746-L790
 
 
- - [ ] ID-817
+ - [ ] ID-821
 Reentrancy in [FLIP.terminalDecimatorBurn(address,uint256)](contracts/FLIP.sol#L719-L741):
 	External calls:
 	- [consumed = _consumeCoinflipShortfall(caller,amount)](contracts/FLIP.sol#L735)
@@ -11618,7 +11680,7 @@ Reentrancy in [FLIP.terminalDecimatorBurn(address,uint256)](contracts/FLIP.sol#L
 contracts/FLIP.sol#L719-L741
 
 
- - [ ] ID-818
+ - [ ] ID-822
 Reentrancy in [Coinflip.processCoinflipPayouts(uint8,uint256,uint24)](contracts/Coinflip.sol#L875-L989):
 	External calls:
 	- [_addDailyFlip(to,slice,0,false,false)](contracts/Coinflip.sol#L927)
@@ -11633,7 +11695,7 @@ Reentrancy in [Coinflip.processCoinflipPayouts(uint8,uint256,uint24)](contracts/
 contracts/Coinflip.sol#L875-L989
 
 
- - [ ] ID-819
+ - [ ] ID-823
 Reentrancy in [FLIP.burnCoin(address,uint256)](contracts/FLIP.sol#L601-L604):
 	External calls:
 	- [consumed = _consumeCoinflipShortfall(target,amount)](contracts/FLIP.sol#L602)
@@ -11647,30 +11709,7 @@ Reentrancy in [FLIP.burnCoin(address,uint256)](contracts/FLIP.sol#L601-L604):
 contracts/FLIP.sol#L601-L604
 
 
- - [ ] ID-820
-Reentrancy in [DegenerusGameWhaleModule.purchaseDeityPass(address,uint8)](contracts/modules/DegenerusGameWhaleModule.sol#L558-L698):
-	External calls:
-	- [IDegenerusDeityPassMint(ContractAddresses.DEITY_PASS).mint(buyer,symbolId)](contracts/modules/DegenerusGameWhaleModule.sol#L626-L629)
-	- [_rewardDeityPassDgnrs(buyer,affiliateAddr,upline,upline2)](contracts/modules/DegenerusGameWhaleModule.sol#L641)
-		- [dgnrs.transferFromPool(IsDGNRS.Pool.Whale,buyer,totalReward)](contracts/modules/DegenerusGameWhaleModule.sol#L804-L808)
-		- [dgnrs.transferFromPool(IsDGNRS.Pool.Affiliate,affiliateAddr,affiliateShare)](contracts/modules/DegenerusGameWhaleModule.sol#L828-L832)
-		- [dgnrs.transferFromPool(IsDGNRS.Pool.Affiliate,upline,uplineShare)](contracts/modules/DegenerusGameWhaleModule.sol#L839-L843)
-		- [dgnrs.transferFromPool(IsDGNRS.Pool.Affiliate,upline2,upline2Share)](contracts/modules/DegenerusGameWhaleModule.sol#L847-L851)
-	Event emitted after the call(s):
-	- [DeityPassPurchased(buyer,symbolId,totalPrice,passLevel)](contracts/modules/DegenerusGameWhaleModule.sol#L697)
-	- [EntriesQueuedRange(buyer,startLevel,numLevels,entriesPerLevel)](contracts/storage/DegenerusGameStorage.sol#L775)
-		- [_queueEntryRange(affiliateAddr,ticketStartLevel + bonusCount,100 - bonusCount,WHALE_STANDARD_ENTRIES_PER_LEVEL,false)](contracts/modules/DegenerusGameWhaleModule.sol#L662-L668)
-	- [EntriesQueuedRange(buyer,startLevel,numLevels,entriesPerLevel)](contracts/storage/DegenerusGameStorage.sol#L775)
-		- [_queueEntryRange(affiliateAddr,ticketStartLevel,bonusCount,WHALE_BONUS_ENTRIES_PER_LEVEL,false)](contracts/modules/DegenerusGameWhaleModule.sol#L654-L660)
-	- [LootBoxBoostConsumed(player,day,amount,boostedAmount,boostBps)](contracts/modules/DegenerusGameWhaleModule.sol#L995)
-		- [_recordLootboxEntry(buyer,lootboxAmount)](contracts/modules/DegenerusGameWhaleModule.sol#L695)
-	- [LootBoxBuy(buyer,index,lootboxAmount,false)](contracts/modules/DegenerusGameWhaleModule.sol#L946)
-		- [_recordLootboxEntry(buyer,lootboxAmount)](contracts/modules/DegenerusGameWhaleModule.sol#L695)
-
-contracts/modules/DegenerusGameWhaleModule.sol#L558-L698
-
-
- - [ ] ID-821
+ - [ ] ID-824
 Reentrancy in [DGNRS.burn(uint256)](contracts/DGNRS.sol#L226-L241):
 	External calls:
 	- [(ethOut,stethOut,flipOut) = staked.burn(amount)](contracts/DGNRS.sol#L230)
@@ -11684,7 +11723,7 @@ Reentrancy in [DGNRS.burn(uint256)](contracts/DGNRS.sol#L226-L241):
 contracts/DGNRS.sol#L226-L241
 
 
- - [ ] ID-822
+ - [ ] ID-825
 Reentrancy in [DegenerusVault.burnCoin(uint256)](contracts/DegenerusVault.sol#L749-L788):
 	External calls:
 	- [supplyBefore = share.vaultBurn(msg.sender,amount)](contracts/DegenerusVault.sol#L760)
@@ -11695,7 +11734,7 @@ Reentrancy in [DegenerusVault.burnCoin(uint256)](contracts/DegenerusVault.sol#L7
 contracts/DegenerusVault.sol#L749-L788
 
 
- - [ ] ID-823
+ - [ ] ID-826
 Reentrancy in [DegenerusGameMintModule.sellFarFutureEntries(address,uint32[],uint256[],uint256[])](contracts/modules/DegenerusGameMintModule.sol#L1095-L1180):
 	External calls:
 	- [coin.burnCoinForSalvage(buyer,flipTokens)](contracts/modules/DegenerusGameMintModule.sol#L1169)
@@ -11738,7 +11777,7 @@ contracts/modules/DegenerusGameMintModule.sol#L1095-L1180
 ## timestamp
 Impact: Low
 Confidence: Medium
- - [ ] ID-824
+ - [ ] ID-827
 [DegenerusGameAdvanceModule.updateVrfCoordinatorAndSub(address,uint256,bytes32)](contracts/modules/DegenerusGameAdvanceModule.sol#L1919-L1971) uses timestamp for comparisons
 	Dangerous comparisons:
 	- [rngWordCurrent == 0](contracts/modules/DegenerusGameAdvanceModule.sol#L1955)
@@ -11746,7 +11785,7 @@ Confidence: Medium
 contracts/modules/DegenerusGameAdvanceModule.sol#L1919-L1971
 
 
- - [ ] ID-825
+ - [ ] ID-828
 [GNRUS.vaultRedeemFor(address)](contracts/GNRUS.sol#L395-L404) uses timestamp for comparisons
 	Dangerous comparisons:
 	- [sweptAt == 0](contracts/GNRUS.sol#L397)
@@ -11754,7 +11793,7 @@ contracts/modules/DegenerusGameAdvanceModule.sol#L1919-L1971
 contracts/GNRUS.sol#L395-L404
 
 
- - [ ] ID-826
+ - [ ] ID-829
 [DegenerusGameAdvanceModule.rawFulfillRandomWords(uint256,uint256[])](contracts/modules/DegenerusGameAdvanceModule.sol#L2007-L2028) uses timestamp for comparisons
 	Dangerous comparisons:
 	- [requestId != vrfRequestId || rngWordCurrent != 0](contracts/modules/DegenerusGameAdvanceModule.sol#L2012)
@@ -11762,7 +11801,7 @@ contracts/GNRUS.sol#L395-L404
 contracts/modules/DegenerusGameAdvanceModule.sol#L2007-L2028
 
 
- - [ ] ID-827
+ - [ ] ID-830
 [DegenerusAdmin._feedThresholdFrom(uint40)](contracts/DegenerusAdmin.sol#L640-L647) uses timestamp for comparisons
 	Dangerous comparisons:
 	- [elapsed >= FEED_PROPOSAL_LIFETIME](contracts/DegenerusAdmin.sol#L642)
@@ -11773,7 +11812,7 @@ contracts/modules/DegenerusGameAdvanceModule.sol#L2007-L2028
 contracts/DegenerusAdmin.sol#L640-L647
 
 
- - [ ] ID-828
+ - [ ] ID-831
 [DegenerusGameAdvanceModule._getHistoricalRngFallback(uint24)](contracts/modules/DegenerusGameAdvanceModule.sol#L1495-L1519) uses timestamp for comparisons
 	Dangerous comparisons:
 	- [searchDay < searchLimit](contracts/modules/DegenerusGameAdvanceModule.sol#L1501)
@@ -11784,7 +11823,7 @@ contracts/DegenerusAdmin.sol#L640-L647
 contracts/modules/DegenerusGameAdvanceModule.sol#L1495-L1519
 
 
- - [ ] ID-829
+ - [ ] ID-832
 [DegenerusGameMintStreakUtils._bountyEligible(address)](contracts/modules/DegenerusGameMintStreakUtils.sol#L54-L87) uses timestamp for comparisons
 	Dangerous comparisons:
 	- [elapsed >= 1800](contracts/modules/DegenerusGameMintStreakUtils.sol#L71)
@@ -11793,7 +11832,7 @@ contracts/modules/DegenerusGameAdvanceModule.sol#L1495-L1519
 contracts/modules/DegenerusGameMintStreakUtils.sol#L54-L87
 
 
- - [ ] ID-830
+ - [ ] ID-833
 [DegenerusGameAdvanceModule.requestLootboxRng()](contracts/modules/DegenerusGameAdvanceModule.sol#L1189-L1254) uses timestamp for comparisons
 	Dangerous comparisons:
 	- [(nowTs - 82620) % 86400 >= 86400 - 900](contracts/modules/DegenerusGameAdvanceModule.sol#L1198)
@@ -11802,7 +11841,7 @@ contracts/modules/DegenerusGameMintStreakUtils.sol#L54-L87
 contracts/modules/DegenerusGameAdvanceModule.sol#L1189-L1254
 
 
- - [ ] ID-831
+ - [ ] ID-834
 [DegenerusGameAdvanceModule._freezePool()](contracts/modules/DegenerusGameAdvanceModule.sol#L1804-L1816) uses timestamp for comparisons
 	Dangerous comparisons:
 	- [seed != 0](contracts/modules/DegenerusGameAdvanceModule.sol#L1809)
@@ -11810,7 +11849,7 @@ contracts/modules/DegenerusGameAdvanceModule.sol#L1189-L1254
 contracts/modules/DegenerusGameAdvanceModule.sol#L1804-L1816
 
 
- - [ ] ID-832
+ - [ ] ID-835
 [DegenerusGameAdvanceModule._handleGameOverPath(uint24,uint24)](contracts/modules/DegenerusGameAdvanceModule.sol#L688-L811) uses timestamp for comparisons
 	Dangerous comparisons:
 	- [lvl != 0 && _getNextPrizePool() >= levelPrizePool[lvl] && ! _vrfDeadmanFired()](contracts/modules/DegenerusGameAdvanceModule.sol#L721-L723)
@@ -11820,7 +11859,7 @@ contracts/modules/DegenerusGameAdvanceModule.sol#L1804-L1816
 contracts/modules/DegenerusGameAdvanceModule.sol#L688-L811
 
 
- - [ ] ID-833
+ - [ ] ID-836
 [DegenerusAdmin.proposeFeedSwap(address)](contracts/DegenerusAdmin.sol#L527-L584) uses timestamp for comparisons
 	Dangerous comparisons:
 	- [stall == 0](contracts/DegenerusAdmin.sol#L534)
@@ -11830,7 +11869,7 @@ contracts/modules/DegenerusGameAdvanceModule.sol#L688-L811
 contracts/DegenerusAdmin.sol#L527-L584
 
 
- - [ ] ID-834
+ - [ ] ID-837
 [DegenerusGameGameOverModule.handleFinalSweep()](contracts/modules/DegenerusGameGameOverModule.sol#L217-L258) uses timestamp for comparisons
 	Dangerous comparisons:
 	- [goTime == 0](contracts/modules/DegenerusGameGameOverModule.sol#L219)
@@ -11840,7 +11879,7 @@ contracts/DegenerusAdmin.sol#L527-L584
 contracts/modules/DegenerusGameGameOverModule.sol#L217-L258
 
 
- - [ ] ID-835
+ - [ ] ID-838
 [DegenerusGameAdvanceModule.advanceGame()](contracts/modules/DegenerusGameAdvanceModule.sol#L173-L651) uses timestamp for comparisons
 	Dangerous comparisons:
 	- [day > dIdx + 1 && rngWordByDay[dIdx + 1] != 0](contracts/modules/DegenerusGameAdvanceModule.sol#L191)
@@ -11866,7 +11905,7 @@ contracts/modules/DegenerusGameGameOverModule.sol#L217-L258
 contracts/modules/DegenerusGameAdvanceModule.sol#L173-L651
 
 
- - [ ] ID-836
+ - [ ] ID-839
 [DegenerusGameAdvanceModule._backfillOrphanedLootboxIndices(uint256)](contracts/modules/DegenerusGameAdvanceModule.sol#L2068-L2087) uses timestamp for comparisons
 	Dangerous comparisons:
 	- [fallbackWord == 0](contracts/modules/DegenerusGameAdvanceModule.sol#L2079)
@@ -11874,7 +11913,7 @@ contracts/modules/DegenerusGameAdvanceModule.sol#L173-L651
 contracts/modules/DegenerusGameAdvanceModule.sol#L2068-L2087
 
 
- - [ ] ID-837
+ - [ ] ID-840
 [DegenerusGameAdvanceModule._consolidatePoolsAndRewardJackpots(uint24,uint24,uint24,uint256,uint24)](contracts/modules/DegenerusGameAdvanceModule.sol#L932-L1115) uses timestamp for comparisons
 	Dangerous comparisons:
 	- [ratioPct < 200](contracts/modules/DegenerusGameAdvanceModule.sol#L957)
@@ -11896,7 +11935,7 @@ contracts/modules/DegenerusGameAdvanceModule.sol#L2068-L2087
 contracts/modules/DegenerusGameAdvanceModule.sol#L932-L1115
 
 
- - [ ] ID-838
+ - [ ] ID-841
 [DegenerusAdmin._thresholdFrom(uint40)](contracts/DegenerusAdmin.sol#L823-L832) uses timestamp for comparisons
 	Dangerous comparisons:
 	- [elapsed >= 604800](contracts/DegenerusAdmin.sol#L825)
@@ -11909,7 +11948,7 @@ contracts/modules/DegenerusGameAdvanceModule.sol#L932-L1115
 contracts/DegenerusAdmin.sol#L823-L832
 
 
- - [ ] ID-839
+ - [ ] ID-842
 [DegenerusAdmin.vote(uint256,bool)](contracts/DegenerusAdmin.sol#L765-L812) uses timestamp for comparisons
 	Dangerous comparisons:
 	- [block.timestamp - uint256(lastVrf) < ADMIN_STALL_THRESHOLD || uint256(lastVrf) > uint256(createdAt)](contracts/DegenerusAdmin.sol#L781-L782)
@@ -11917,7 +11956,7 @@ contracts/DegenerusAdmin.sol#L823-L832
 contracts/DegenerusAdmin.sol#L765-L812
 
 
- - [ ] ID-840
+ - [ ] ID-843
 [DegenerusGameAdvanceModule._processFutureTicketBatch(uint24,uint256)](contracts/modules/DegenerusGameAdvanceModule.sol#L1577-L1593) uses timestamp for comparisons
 	Dangerous comparisons:
 	- [data.length == 0](contracts/modules/DegenerusGameAdvanceModule.sol#L1591)
@@ -11925,7 +11964,7 @@ contracts/DegenerusAdmin.sol#L765-L812
 contracts/modules/DegenerusGameAdvanceModule.sol#L1577-L1593
 
 
- - [ ] ID-841
+ - [ ] ID-844
 [DegenerusGameAdvanceModule.rngGate(uint48,uint24,uint24,bool,uint8)](contracts/modules/DegenerusGameAdvanceModule.sol#L1278-L1375) uses timestamp for comparisons
 	Dangerous comparisons:
 	- [recordedWord != 0](contracts/modules/DegenerusGameAdvanceModule.sol#L1287)
@@ -11938,7 +11977,7 @@ contracts/modules/DegenerusGameAdvanceModule.sol#L1577-L1593
 contracts/modules/DegenerusGameAdvanceModule.sol#L1278-L1375
 
 
- - [ ] ID-842
+ - [ ] ID-845
 [DegenerusGameGameOverModule.handleGameOverDrain(uint24)](contracts/modules/DegenerusGameGameOverModule.sol#L75-L207) uses timestamp for comparisons
 	Dangerous comparisons:
 	- [_goRead(GO_JACKPOT_PAID_SHIFT,GO_JACKPOT_PAID_MASK) != 0](contracts/modules/DegenerusGameGameOverModule.sol#L76)
@@ -11946,7 +11985,7 @@ contracts/modules/DegenerusGameAdvanceModule.sol#L1278-L1375
 contracts/modules/DegenerusGameGameOverModule.sol#L75-L207
 
 
- - [ ] ID-843
+ - [ ] ID-846
 [GNRUS.sweepResidualToVault()](contracts/GNRUS.sol#L412-L430) uses timestamp for comparisons
 	Dangerous comparisons:
 	- [sweptAt == 0](contracts/GNRUS.sol#L414)
@@ -11955,7 +11994,7 @@ contracts/modules/DegenerusGameGameOverModule.sol#L75-L207
 contracts/GNRUS.sol#L412-L430
 
 
- - [ ] ID-844
+ - [ ] ID-847
 [DegenerusAdmin.propose(address,bytes32)](contracts/DegenerusAdmin.sol#L708-L755) uses timestamp for comparisons
 	Dangerous comparisons:
 	- [stall < ADMIN_STALL_THRESHOLD](contracts/DegenerusAdmin.sol#L733)
@@ -11964,7 +12003,7 @@ contracts/GNRUS.sol#L412-L430
 contracts/DegenerusAdmin.sol#L708-L755
 
 
- - [ ] ID-845
+ - [ ] ID-848
 [DegenerusGameStorage._livenessTriggered()](contracts/storage/DegenerusGameStorage.sol#L1524-L1537) uses timestamp for comparisons
 	Dangerous comparisons:
 	- [rngStart != 0 && block.timestamp - rngStart >= _VRF_GRACE_PERIOD](contracts/storage/DegenerusGameStorage.sol#L1536)
@@ -11972,7 +12011,7 @@ contracts/DegenerusAdmin.sol#L708-L755
 contracts/storage/DegenerusGameStorage.sol#L1524-L1537
 
 
- - [ ] ID-846
+ - [ ] ID-849
 [DegenerusAdmin._requireActiveProposal(DegenerusAdmin.ProposalState,uint40,uint256)](contracts/DegenerusAdmin.sol#L894-L903) uses timestamp for comparisons
 	Dangerous comparisons:
 	- [block.timestamp - uint256(createdAt) >= lifetime](contracts/DegenerusAdmin.sol#L901)
@@ -11980,7 +12019,7 @@ contracts/storage/DegenerusGameStorage.sol#L1524-L1537
 contracts/DegenerusAdmin.sol#L894-L903
 
 
- - [ ] ID-847
+ - [ ] ID-850
 [DegenerusGameAdvanceModule._prepareFutureTickets(uint24,uint256)](contracts/modules/DegenerusGameAdvanceModule.sol#L1602-L1640) uses timestamp for comparisons
 	Dangerous comparisons:
 	- [worked || ! levelFinished](contracts/modules/DegenerusGameAdvanceModule.sol#L1623)
@@ -11989,7 +12028,7 @@ contracts/DegenerusAdmin.sol#L894-L903
 contracts/modules/DegenerusGameAdvanceModule.sol#L1602-L1640
 
 
- - [ ] ID-848
+ - [ ] ID-851
 [DegenerusGameAdvanceModule._finalizeRngRequest(bool,uint24,uint256)](contracts/modules/DegenerusGameAdvanceModule.sol#L1835-L1911) uses timestamp for comparisons
 	Dangerous comparisons:
 	- [isRetry = vrfRequestId != 0 && rngRequestTime != 0 && rngWordCurrent == 0](contracts/modules/DegenerusGameAdvanceModule.sol#L1842-L1844)
@@ -11999,7 +12038,7 @@ contracts/modules/DegenerusGameAdvanceModule.sol#L1602-L1640
 contracts/modules/DegenerusGameAdvanceModule.sol#L1835-L1911
 
 
- - [ ] ID-849
+ - [ ] ID-852
 [DegenerusGameAdvanceModule._revertDelegate(bytes)](contracts/modules/DegenerusGameAdvanceModule.sol#L922-L927) uses timestamp for comparisons
 	Dangerous comparisons:
 	- [reason.length == 0](contracts/modules/DegenerusGameAdvanceModule.sol#L923)
@@ -12007,7 +12046,7 @@ contracts/modules/DegenerusGameAdvanceModule.sol#L1835-L1911
 contracts/modules/DegenerusGameAdvanceModule.sol#L922-L927
 
 
- - [ ] ID-850
+ - [ ] ID-853
 [DegenerusGame.boxesPending()](contracts/DegenerusGame.sol#L1577-L1587) uses timestamp for comparisons
 	Dangerous comparisons:
 	- [rngLockedFlag || _livenessTriggered()](contracts/DegenerusGame.sol#L1578)
@@ -12015,7 +12054,7 @@ contracts/modules/DegenerusGameAdvanceModule.sol#L922-L927
 contracts/DegenerusGame.sol#L1577-L1587
 
 
- - [ ] ID-851
+ - [ ] ID-854
 [DegenerusGameLootboxModule.openHumanBoxes(uint256)](contracts/modules/DegenerusGameLootboxModule.sol#L669-L742) uses timestamp for comparisons
 	Dangerous comparisons:
 	- [rngLockedFlag || _livenessTriggered()](contracts/modules/DegenerusGameLootboxModule.sol#L672)
@@ -12023,7 +12062,7 @@ contracts/DegenerusGame.sol#L1577-L1587
 contracts/modules/DegenerusGameLootboxModule.sol#L669-L742
 
 
- - [ ] ID-852
+ - [ ] ID-855
 [DegenerusGameAdvanceModule._backfillGapDays(uint256,uint24,uint24)](contracts/modules/DegenerusGameAdvanceModule.sol#L2040-L2062) uses timestamp for comparisons
 	Dangerous comparisons:
 	- [endDay - startDay > 120](contracts/modules/DegenerusGameAdvanceModule.sol#L2047)
@@ -12033,7 +12072,7 @@ contracts/modules/DegenerusGameLootboxModule.sol#L669-L742
 contracts/modules/DegenerusGameAdvanceModule.sol#L2040-L2062
 
 
- - [ ] ID-853
+ - [ ] ID-856
 [DegenerusAdmin._linkAmountToEth(uint256,address)](contracts/DegenerusAdmin.sol#L1111-L1139) uses timestamp for comparisons
 	Dangerous comparisons:
 	- [updatedAt > block.timestamp](contracts/DegenerusAdmin.sol#L1126)
@@ -12042,7 +12081,7 @@ contracts/modules/DegenerusGameAdvanceModule.sol#L2040-L2062
 contracts/DegenerusAdmin.sol#L1111-L1139
 
 
- - [ ] ID-854
+ - [ ] ID-857
 [DegenerusGameAdvanceModule._nextToFutureBps(uint32,uint24)](contracts/modules/DegenerusGameAdvanceModule.sol#L1528-L1560) uses timestamp for comparisons
 	Dangerous comparisons:
 	- [elapsed <= 1](contracts/modules/DegenerusGameAdvanceModule.sol#L1534)
@@ -12053,7 +12092,7 @@ contracts/DegenerusAdmin.sol#L1111-L1139
 contracts/modules/DegenerusGameAdvanceModule.sol#L1528-L1560
 
 
- - [ ] ID-855
+ - [ ] ID-858
 [DegenerusAdmin._feedStallDuration(address)](contracts/DegenerusAdmin.sol#L1163-L1181) uses timestamp for comparisons
 	Dangerous comparisons:
 	- [updatedAt > block.timestamp](contracts/DegenerusAdmin.sol#L1174)
@@ -12062,7 +12101,7 @@ contracts/modules/DegenerusGameAdvanceModule.sol#L1528-L1560
 contracts/DegenerusAdmin.sol#L1163-L1181
 
 
- - [ ] ID-856
+ - [ ] ID-859
 [DGNRS.yearSweep()](contracts/DGNRS.sol#L300-L335) uses timestamp for comparisons
 	Dangerous comparisons:
 	- [goTime == 0 || block.timestamp < uint256(goTime) + 31536000](contracts/DGNRS.sol#L304)
@@ -12070,7 +12109,7 @@ contracts/DegenerusAdmin.sol#L1163-L1181
 contracts/DGNRS.sol#L300-L335
 
 
- - [ ] ID-857
+ - [ ] ID-860
 [DegenerusAdmin._isActiveProposal(DegenerusAdmin.ProposalState,uint40,uint256)](contracts/DegenerusAdmin.sol#L906-L914) uses timestamp for comparisons
 	Dangerous comparisons:
 	- [block.timestamp - uint256(createdAt) >= lifetime](contracts/DegenerusAdmin.sol#L912)
@@ -12078,7 +12117,7 @@ contracts/DGNRS.sol#L300-L335
 contracts/DegenerusAdmin.sol#L906-L914
 
 
- - [ ] ID-858
+ - [ ] ID-861
 [DegenerusGameAdvanceModule._gameOverEntropy(uint48,uint24,uint24,bool)](contracts/modules/DegenerusGameAdvanceModule.sol#L1390-L1482) uses timestamp for comparisons
 	Dangerous comparisons:
 	- [rngWordByDay[day] != 0](contracts/modules/DegenerusGameAdvanceModule.sol#L1396)
@@ -12089,7 +12128,7 @@ contracts/DegenerusAdmin.sol#L906-L914
 contracts/modules/DegenerusGameAdvanceModule.sol#L1390-L1482
 
 
- - [ ] ID-859
+ - [ ] ID-862
 [GameAfkingModule._autoOpen(uint256)](contracts/modules/GameAfkingModule.sol#L1562-L1620) uses timestamp for comparisons
 	Dangerous comparisons:
 	- [rngLockedFlag || _livenessTriggered()](contracts/modules/GameAfkingModule.sol#L1565)
@@ -12097,7 +12136,7 @@ contracts/modules/DegenerusGameAdvanceModule.sol#L1390-L1482
 contracts/modules/GameAfkingModule.sol#L1562-L1620
 
 
- - [ ] ID-860
+ - [ ] ID-863
 [DegenerusAdmin.canExecute(uint256)](contracts/DegenerusAdmin.sol#L837-L854) uses timestamp for comparisons
 	Dangerous comparisons:
 	- [block.timestamp - uint256(lastVrf) < ADMIN_STALL_THRESHOLD || uint256(lastVrf) > uint256(createdAt)](contracts/DegenerusAdmin.sol#L847-L848)
@@ -12105,7 +12144,7 @@ contracts/modules/GameAfkingModule.sol#L1562-L1620
 contracts/DegenerusAdmin.sol#L837-L854
 
 
- - [ ] ID-861
+ - [ ] ID-864
 [DegenerusGameAdvanceModule._autoStakeExcessEth()](contracts/modules/DegenerusGameAdvanceModule.sol#L1699-L1709) uses timestamp for comparisons
 	Dangerous comparisons:
 	- [ethBal <= reserve](contracts/modules/DegenerusGameAdvanceModule.sol#L1702)
@@ -12113,7 +12152,7 @@ contracts/DegenerusAdmin.sol#L837-L854
 contracts/modules/DegenerusGameAdvanceModule.sol#L1699-L1709
 
 
- - [ ] ID-862
+ - [ ] ID-865
 [DegenerusAdmin._feedHealthy(address)](contracts/DegenerusAdmin.sol#L1184-L1209) uses timestamp for comparisons
 	Dangerous comparisons:
 	- [updatedAt > block.timestamp](contracts/DegenerusAdmin.sol#L1195)
@@ -12125,63 +12164,63 @@ contracts/DegenerusAdmin.sol#L1184-L1209
 ## assembly
 Impact: Informational
 Confidence: High
- - [ ] ID-863
+ - [ ] ID-866
 [DegenerusGame._revertDelegate(bytes)](contracts/DegenerusGame.sol#L1063-L1068) uses assembly
 	- [INLINE ASM](contracts/DegenerusGame.sol#L1065-L1067)
 
 contracts/DegenerusGame.sol#L1063-L1068
 
 
- - [ ] ID-864
+ - [ ] ID-867
 [SafeCast.toUint(bool)](node_modules/@openzeppelin/contracts/utils/math/SafeCast.sol#L1157-L1161) uses assembly
 	- [INLINE ASM](node_modules/@openzeppelin/contracts/utils/math/SafeCast.sol#L1158-L1160)
 
 node_modules/@openzeppelin/contracts/utils/math/SafeCast.sol#L1157-L1161
 
 
- - [ ] ID-865
+ - [ ] ID-868
 [DegenerusGameMintModule._drainFoil(uint32)](contracts/modules/DegenerusGameMintModule.sol#L744-L766) uses assembly
 	- [INLINE ASM](contracts/modules/DegenerusGameMintModule.sol#L761-L763)
 
 contracts/modules/DegenerusGameMintModule.sol#L744-L766
 
 
- - [ ] ID-866
+ - [ ] ID-869
 [GameAfkingModule._revertDelegate(bytes)](contracts/modules/GameAfkingModule.sol#L1497-L1502) uses assembly
 	- [INLINE ASM](contracts/modules/GameAfkingModule.sol#L1499-L1501)
 
 contracts/modules/GameAfkingModule.sol#L1497-L1502
 
 
- - [ ] ID-867
+ - [ ] ID-870
 [EntropyLib.hash1(uint256)](contracts/libraries/EntropyLib.sol#L38-L43) uses assembly
 	- [INLINE ASM](contracts/libraries/EntropyLib.sol#L39-L42)
 
 contracts/libraries/EntropyLib.sol#L38-L43
 
 
- - [ ] ID-868
+ - [ ] ID-871
 [Strings.escapeJSON(string)](node_modules/@openzeppelin/contracts/utils/Strings.sol#L446-L476) uses assembly
 	- [INLINE ASM](node_modules/@openzeppelin/contracts/utils/Strings.sol#L470-L473)
 
 node_modules/@openzeppelin/contracts/utils/Strings.sol#L446-L476
 
 
- - [ ] ID-869
+ - [ ] ID-872
 [Math.tryModExp(bytes,bytes,bytes)](node_modules/@openzeppelin/contracts/utils/math/Math.sol#L449-L471) uses assembly
 	- [INLINE ASM](node_modules/@openzeppelin/contracts/utils/math/Math.sol#L461-L470)
 
 node_modules/@openzeppelin/contracts/utils/math/Math.sol#L449-L471
 
 
- - [ ] ID-870
+ - [ ] ID-873
 [DegenerusGameDecimatorModule._revertDelegate(bytes)](contracts/modules/DegenerusGameDecimatorModule.sol#L94-L99) uses assembly
 	- [INLINE ASM](contracts/modules/DegenerusGameDecimatorModule.sol#L96-L98)
 
 contracts/modules/DegenerusGameDecimatorModule.sol#L94-L99
 
 
- - [ ] ID-871
+ - [ ] ID-874
 [DegenerusGameFoilPackModule._resolveFoilBuyer(uint256,uint256,uint32[256],uint8[256])](contracts/modules/DegenerusGameFoilPackModule.sol#L750-L814) uses assembly
 	- [INLINE ASM](contracts/modules/DegenerusGameFoilPackModule.sol#L782-L786)
 	- [INLINE ASM](contracts/modules/DegenerusGameFoilPackModule.sol#L791-L805)
@@ -12189,14 +12228,14 @@ contracts/modules/DegenerusGameDecimatorModule.sol#L94-L99
 contracts/modules/DegenerusGameFoilPackModule.sol#L750-L814
 
 
- - [ ] ID-872
+ - [ ] ID-875
 [DegenerusJackpots.runBafJackpot(uint256,uint24,uint256)](contracts/DegenerusJackpots.sol#L245-L491) uses assembly
 	- [INLINE ASM](contracts/DegenerusJackpots.sol#L470-L473)
 
 contracts/DegenerusJackpots.sol#L245-L491
 
 
- - [ ] ID-873
+ - [ ] ID-876
 [Math.mulDiv(uint256,uint256,uint256)](node_modules/@openzeppelin/contracts/utils/math/Math.sol#L204-L275) uses assembly
 	- [INLINE ASM](node_modules/@openzeppelin/contracts/utils/math/Math.sol#L227-L234)
 	- [INLINE ASM](node_modules/@openzeppelin/contracts/utils/math/Math.sol#L240-L249)
@@ -12204,49 +12243,49 @@ contracts/DegenerusJackpots.sol#L245-L491
 node_modules/@openzeppelin/contracts/utils/math/Math.sol#L204-L275
 
 
- - [ ] ID-874
+ - [ ] ID-877
 [Panic.panic(uint256)](node_modules/@openzeppelin/contracts/utils/Panic.sol#L50-L56) uses assembly
 	- [INLINE ASM](node_modules/@openzeppelin/contracts/utils/Panic.sol#L51-L55)
 
 node_modules/@openzeppelin/contracts/utils/Panic.sol#L50-L56
 
 
- - [ ] ID-875
+ - [ ] ID-878
 [Strings.toChecksumHexString(address)](node_modules/@openzeppelin/contracts/utils/Strings.sol#L111-L129) uses assembly
 	- [INLINE ASM](node_modules/@openzeppelin/contracts/utils/Strings.sol#L116-L118)
 
 node_modules/@openzeppelin/contracts/utils/Strings.sol#L111-L129
 
 
- - [ ] ID-876
+ - [ ] ID-879
 [DegenerusAdmin.receive()](contracts/DegenerusAdmin.sol#L502-L511) uses assembly
 	- [INLINE ASM](contracts/DegenerusAdmin.sol#L507-L509)
 
 contracts/DegenerusAdmin.sol#L502-L511
 
 
- - [ ] ID-877
+ - [ ] ID-880
 [DegenerusGameDegeneretteModule._revertDelegate(bytes)](contracts/modules/DegenerusGameDegeneretteModule.sol#L155-L160) uses assembly
 	- [INLINE ASM](contracts/modules/DegenerusGameDegeneretteModule.sol#L157-L159)
 
 contracts/modules/DegenerusGameDegeneretteModule.sol#L155-L160
 
 
- - [ ] ID-878
+ - [ ] ID-881
 [DegenerusGameMintModule._revertDelegate(bytes)](contracts/modules/DegenerusGameMintModule.sol#L1909-L1914) uses assembly
 	- [INLINE ASM](contracts/modules/DegenerusGameMintModule.sol#L1911-L1913)
 
 contracts/modules/DegenerusGameMintModule.sol#L1909-L1914
 
 
- - [ ] ID-879
+ - [ ] ID-882
 [Base64._encode(bytes,string,bool)](node_modules/@openzeppelin/contracts/utils/Base64.sol#L35-L118) uses assembly
 	- [INLINE ASM](node_modules/@openzeppelin/contracts/utils/Base64.sol#L59-L115)
 
 node_modules/@openzeppelin/contracts/utils/Base64.sol#L35-L118
 
 
- - [ ] ID-880
+ - [ ] ID-883
 [Strings.toString(uint256)](node_modules/@openzeppelin/contracts/utils/Strings.sol#L45-L63) uses assembly
 	- [INLINE ASM](node_modules/@openzeppelin/contracts/utils/Strings.sol#L50-L52)
 	- [INLINE ASM](node_modules/@openzeppelin/contracts/utils/Strings.sol#L55-L57)
@@ -12254,21 +12293,21 @@ node_modules/@openzeppelin/contracts/utils/Base64.sol#L35-L118
 node_modules/@openzeppelin/contracts/utils/Strings.sol#L45-L63
 
 
- - [ ] ID-881
+ - [ ] ID-884
 [Math.mul512(uint256,uint256)](node_modules/@openzeppelin/contracts/utils/math/Math.sol#L37-L46) uses assembly
 	- [INLINE ASM](node_modules/@openzeppelin/contracts/utils/math/Math.sol#L41-L45)
 
 node_modules/@openzeppelin/contracts/utils/math/Math.sol#L37-L46
 
 
- - [ ] ID-882
+ - [ ] ID-885
 [DegenerusGameAdvanceModule._revertDelegate(bytes)](contracts/modules/DegenerusGameAdvanceModule.sol#L922-L927) uses assembly
 	- [INLINE ASM](contracts/modules/DegenerusGameAdvanceModule.sol#L924-L926)
 
 contracts/modules/DegenerusGameAdvanceModule.sol#L922-L927
 
 
- - [ ] ID-883
+ - [ ] ID-886
 [DegenerusGameMintModule._raritySymbolBatch(address,uint256,uint32,uint32,uint256,uint32[256],uint8[256])](contracts/modules/DegenerusGameMintModule.sol#L491-L590) uses assembly
 	- [INLINE ASM](contracts/modules/DegenerusGameMintModule.sol#L553-L557)
 	- [INLINE ASM](contracts/modules/DegenerusGameMintModule.sol#L566-L585)
@@ -12276,63 +12315,63 @@ contracts/modules/DegenerusGameAdvanceModule.sol#L922-L927
 contracts/modules/DegenerusGameMintModule.sol#L491-L590
 
 
- - [ ] ID-884
+ - [ ] ID-887
 [Strings._unsafeReadBytesOffset(bytes,uint256)](node_modules/@openzeppelin/contracts/utils/Strings.sol#L484-L489) uses assembly
 	- [INLINE ASM](node_modules/@openzeppelin/contracts/utils/Strings.sol#L486-L488)
 
 node_modules/@openzeppelin/contracts/utils/Strings.sol#L484-L489
 
 
- - [ ] ID-885
+ - [ ] ID-888
 [Math.log2(uint256)](node_modules/@openzeppelin/contracts/utils/math/Math.sol#L612-L651) uses assembly
 	- [INLINE ASM](node_modules/@openzeppelin/contracts/utils/math/Math.sol#L648-L650)
 
 node_modules/@openzeppelin/contracts/utils/math/Math.sol#L612-L651
 
 
- - [ ] ID-886
+ - [ ] ID-889
 [Math.tryMul(uint256,uint256)](node_modules/@openzeppelin/contracts/utils/math/Math.sol#L73-L84) uses assembly
 	- [INLINE ASM](node_modules/@openzeppelin/contracts/utils/math/Math.sol#L76-L80)
 
 node_modules/@openzeppelin/contracts/utils/math/Math.sol#L73-L84
 
 
- - [ ] ID-887
+ - [ ] ID-890
 [Math.tryMod(uint256,uint256)](node_modules/@openzeppelin/contracts/utils/math/Math.sol#L102-L110) uses assembly
 	- [INLINE ASM](node_modules/@openzeppelin/contracts/utils/math/Math.sol#L105-L108)
 
 node_modules/@openzeppelin/contracts/utils/math/Math.sol#L102-L110
 
 
- - [ ] ID-888
+ - [ ] ID-891
 [GNRUS._popcount32(uint32)](contracts/GNRUS.sol#L507-L518) uses assembly
 	- [INLINE ASM](contracts/GNRUS.sol#L510-L517)
 
 contracts/GNRUS.sol#L507-L518
 
 
- - [ ] ID-889
+ - [ ] ID-892
 [Math.tryModExp(uint256,uint256,uint256)](node_modules/@openzeppelin/contracts/utils/math/Math.sol#L409-L433) uses assembly
 	- [INLINE ASM](node_modules/@openzeppelin/contracts/utils/math/Math.sol#L411-L432)
 
 node_modules/@openzeppelin/contracts/utils/math/Math.sol#L409-L433
 
 
- - [ ] ID-890
+ - [ ] ID-893
 [Math.tryDiv(uint256,uint256)](node_modules/@openzeppelin/contracts/utils/math/Math.sol#L89-L97) uses assembly
 	- [INLINE ASM](node_modules/@openzeppelin/contracts/utils/math/Math.sol#L92-L95)
 
 node_modules/@openzeppelin/contracts/utils/math/Math.sol#L89-L97
 
 
- - [ ] ID-891
+ - [ ] ID-894
 [EntropyLib.hash2(uint256,uint256)](contracts/libraries/EntropyLib.sol#L23-L29) uses assembly
 	- [INLINE ASM](contracts/libraries/EntropyLib.sol#L24-L28)
 
 contracts/libraries/EntropyLib.sol#L23-L29
 
 
- - [ ] ID-892
+ - [ ] ID-895
 [Math.add512(uint256,uint256)](node_modules/@openzeppelin/contracts/utils/math/Math.sol#L25-L30) uses assembly
 	- [INLINE ASM](node_modules/@openzeppelin/contracts/utils/math/Math.sol#L26-L29)
 
@@ -12342,7 +12381,7 @@ node_modules/@openzeppelin/contracts/utils/math/Math.sol#L25-L30
 ## pragma
 Impact: Informational
 Confidence: High
- - [ ] ID-893
+ - [ ] ID-896
 2 different versions of Solidity are used:
 	- Version constraint ^0.8.20 is used by:
 		-[^0.8.20](node_modules/@openzeppelin/contracts/utils/Base64.sol#L4)
@@ -12421,21 +12460,21 @@ node_modules/@openzeppelin/contracts/utils/Base64.sol#L4
 ## costly-loop
 Impact: Informational
 Confidence: Medium
- - [ ] ID-894
+ - [ ] ID-897
 [DegenerusGameAdvanceModule.advanceGame()](contracts/modules/DegenerusGameAdvanceModule.sol#L173-L651) has costly operations inside a loop:
 	- [ticketLevel = ffLevel | TICKET_FAR_FUTURE_BIT](contracts/modules/DegenerusGameAdvanceModule.sol#L496)
 
 contracts/modules/DegenerusGameAdvanceModule.sol#L173-L651
 
 
- - [ ] ID-895
+ - [ ] ID-898
 [DegenerusGameAdvanceModule.advanceGame()](contracts/modules/DegenerusGameAdvanceModule.sol#L173-L651) has costly operations inside a loop:
 	- [ticketCursor = 0](contracts/modules/DegenerusGameAdvanceModule.sol#L481)
 
 contracts/modules/DegenerusGameAdvanceModule.sol#L173-L651
 
 
- - [ ] ID-896
+ - [ ] ID-899
 [DegenerusGameAdvanceModule._unlockRng(uint24)](contracts/modules/DegenerusGameAdvanceModule.sol#L1976-L1998) has costly operations inside a loop:
 	- [rngLockedFlag = false](contracts/modules/DegenerusGameAdvanceModule.sol#L1978)
 	Calls stack containing the loop:
@@ -12444,7 +12483,7 @@ contracts/modules/DegenerusGameAdvanceModule.sol#L173-L651
 contracts/modules/DegenerusGameAdvanceModule.sol#L1976-L1998
 
 
- - [ ] ID-897
+ - [ ] ID-900
 [DegenerusGameAdvanceModule._finalizeRngRequest(bool,uint24,uint256)](contracts/modules/DegenerusGameAdvanceModule.sol#L1835-L1911) has costly operations inside a loop:
 	- [rngRequestTime = uint48(block.timestamp)](contracts/modules/DegenerusGameAdvanceModule.sol#L1859)
 	Calls stack containing the loop:
@@ -12454,7 +12493,7 @@ contracts/modules/DegenerusGameAdvanceModule.sol#L1976-L1998
 contracts/modules/DegenerusGameAdvanceModule.sol#L1835-L1911
 
 
- - [ ] ID-898
+ - [ ] ID-901
 [DegenerusGameDecimatorModule._creditDecJackpotClaimCore(address,uint256,uint256,uint16)](contracts/modules/DegenerusGameDecimatorModule.sol#L451-L466) has costly operations inside a loop:
 	- [claimablePool -= uint128(lootboxPortion)](contracts/modules/DegenerusGameDecimatorModule.sol#L464)
 	Calls stack containing the loop:
@@ -12464,7 +12503,7 @@ contracts/modules/DegenerusGameAdvanceModule.sol#L1835-L1911
 contracts/modules/DegenerusGameDecimatorModule.sol#L451-L466
 
 
- - [ ] ID-899
+ - [ ] ID-902
 [DegenerusGameStorage._setPendingPools(uint128,uint128)](contracts/storage/DegenerusGameStorage.sol#L824-L826) has costly operations inside a loop:
 	- [prizePoolPendingPacked = (uint256(future) << 128) | uint256(next)](contracts/storage/DegenerusGameStorage.sol#L825)
 	Calls stack containing the loop:
@@ -12475,7 +12514,7 @@ contracts/modules/DegenerusGameDecimatorModule.sol#L451-L466
 contracts/storage/DegenerusGameStorage.sol#L824-L826
 
 
- - [ ] ID-900
+ - [ ] ID-903
 [DegenerusGameAdvanceModule.rngGate(uint48,uint24,uint24,bool,uint8)](contracts/modules/DegenerusGameAdvanceModule.sol#L1278-L1375) has costly operations inside a loop:
 	- [purchaseStartDay += gapCount](contracts/modules/DegenerusGameAdvanceModule.sol#L1311)
 	Calls stack containing the loop:
@@ -12484,14 +12523,14 @@ contracts/storage/DegenerusGameStorage.sol#L824-L826
 contracts/modules/DegenerusGameAdvanceModule.sol#L1278-L1375
 
 
- - [ ] ID-901
+ - [ ] ID-904
 [DegenerusGameAdvanceModule.advanceGame()](contracts/modules/DegenerusGameAdvanceModule.sol#L173-L651) has costly operations inside a loop:
 	- [subsFullyProcessed = true](contracts/modules/DegenerusGameAdvanceModule.sol#L428)
 
 contracts/modules/DegenerusGameAdvanceModule.sol#L173-L651
 
 
- - [ ] ID-902
+ - [ ] ID-905
 [GameAfkingModule._recordAfkingCoverBox(address,uint24,uint256,uint16,uint256)](contracts/modules/GameAfkingModule.sol#L983-L1067) has costly operations inside a loop:
 	- [lootboxRngPacked = (lr & ~ (LR_PENDING_ETH_MASK << LR_PENDING_ETH_SHIFT)) | ((pendingEth & LR_PENDING_ETH_MASK) << LR_PENDING_ETH_SHIFT)](contracts/modules/GameAfkingModule.sol#L1056-L1058)
 	Calls stack containing the loop:
@@ -12501,14 +12540,14 @@ contracts/modules/DegenerusGameAdvanceModule.sol#L173-L651
 contracts/modules/GameAfkingModule.sol#L983-L1067
 
 
- - [ ] ID-903
+ - [ ] ID-906
 [DegenerusGameAdvanceModule.advanceGame()](contracts/modules/DegenerusGameAdvanceModule.sol#L173-L651) has costly operations inside a loop:
 	- [lastPurchaseDay = false](contracts/modules/DegenerusGameAdvanceModule.sol#L617)
 
 contracts/modules/DegenerusGameAdvanceModule.sol#L173-L651
 
 
- - [ ] ID-904
+ - [ ] ID-907
 [GameAfkingModule._deliverAfkingBuy(address,DegenerusGameStorage.Sub,uint24,uint24,uint256,uint24,uint24,address,uint256,uint256,uint256,bool,bool)](contracts/modules/GameAfkingModule.sol#L772-L917) has costly operations inside a loop:
 	- [claimablePool -= uint128(ethValue)](contracts/modules/GameAfkingModule.sol#L789)
 	Calls stack containing the loop:
@@ -12517,7 +12556,7 @@ contracts/modules/DegenerusGameAdvanceModule.sol#L173-L651
 contracts/modules/GameAfkingModule.sol#L772-L917
 
 
- - [ ] ID-905
+ - [ ] ID-908
 [DegenerusGameStorage._lrWrite(uint256,uint256,uint256)](contracts/storage/DegenerusGameStorage.sol#L1652-L1654) has costly operations inside a loop:
 	- [lootboxRngPacked = (lootboxRngPacked & ~ (mask << shift)) | ((value & mask) << shift)](contracts/storage/DegenerusGameStorage.sol#L1653)
 	Calls stack containing the loop:
@@ -12526,7 +12565,7 @@ contracts/modules/GameAfkingModule.sol#L772-L917
 contracts/storage/DegenerusGameStorage.sol#L1652-L1654
 
 
- - [ ] ID-906
+ - [ ] ID-909
 [DegenerusGameStorage._psWrite(uint256,uint256,uint256)](contracts/storage/DegenerusGameStorage.sol#L1142-L1144) has costly operations inside a loop:
 	- [presaleStatePacked = (presaleStatePacked & ~ (mask << shift)) | ((value & mask) << shift)](contracts/storage/DegenerusGameStorage.sol#L1143)
 	Calls stack containing the loop:
@@ -12535,7 +12574,7 @@ contracts/storage/DegenerusGameStorage.sol#L1652-L1654
 contracts/storage/DegenerusGameStorage.sol#L1142-L1144
 
 
- - [ ] ID-907
+ - [ ] ID-910
 [DegenerusGameAdvanceModule._finalizeRngRequest(bool,uint24,uint256)](contracts/modules/DegenerusGameAdvanceModule.sol#L1835-L1911) has costly operations inside a loop:
 	- [rngLockedFlag = true](contracts/modules/DegenerusGameAdvanceModule.sol#L1860)
 	Calls stack containing the loop:
@@ -12545,14 +12584,14 @@ contracts/storage/DegenerusGameStorage.sol#L1142-L1144
 contracts/modules/DegenerusGameAdvanceModule.sol#L1835-L1911
 
 
- - [ ] ID-908
+ - [ ] ID-911
 [DegenerusGameAdvanceModule.advanceGame()](contracts/modules/DegenerusGameAdvanceModule.sol#L173-L651) has costly operations inside a loop:
 	- [phaseTransitionActive = false](contracts/modules/DegenerusGameAdvanceModule.sol#L501)
 
 contracts/modules/DegenerusGameAdvanceModule.sol#L173-L651
 
 
- - [ ] ID-909
+ - [ ] ID-912
 [DegenerusGameAdvanceModule._finalizeRngRequest(bool,uint24,uint256)](contracts/modules/DegenerusGameAdvanceModule.sol#L1835-L1911) has costly operations inside a loop:
 	- [rngWordCurrent = 0](contracts/modules/DegenerusGameAdvanceModule.sol#L1858)
 	Calls stack containing the loop:
@@ -12562,7 +12601,7 @@ contracts/modules/DegenerusGameAdvanceModule.sol#L173-L651
 contracts/modules/DegenerusGameAdvanceModule.sol#L1835-L1911
 
 
- - [ ] ID-910
+ - [ ] ID-913
 [DegenerusGameAdvanceModule._unlockRng(uint24)](contracts/modules/DegenerusGameAdvanceModule.sol#L1976-L1998) has costly operations inside a loop:
 	- [rngWordCurrent = 0](contracts/modules/DegenerusGameAdvanceModule.sol#L1979)
 	Calls stack containing the loop:
@@ -12571,7 +12610,7 @@ contracts/modules/DegenerusGameAdvanceModule.sol#L1835-L1911
 contracts/modules/DegenerusGameAdvanceModule.sol#L1976-L1998
 
 
- - [ ] ID-911
+ - [ ] ID-914
 [DegenerusGameAdvanceModule._consolidatePoolsAndRewardJackpots(uint24,uint24,uint24,uint256,uint24)](contracts/modules/DegenerusGameAdvanceModule.sol#L932-L1115) has costly operations inside a loop:
 	- [claimablePool += uint128(claimableDelta)](contracts/modules/DegenerusGameAdvanceModule.sol#L1112)
 	Calls stack containing the loop:
@@ -12580,7 +12619,7 @@ contracts/modules/DegenerusGameAdvanceModule.sol#L1976-L1998
 contracts/modules/DegenerusGameAdvanceModule.sol#L932-L1115
 
 
- - [ ] ID-912
+ - [ ] ID-915
 [DegenerusGameAdvanceModule._applyDailyRng(uint24,uint256)](contracts/modules/DegenerusGameAdvanceModule.sol#L2090-L2106) has costly operations inside a loop:
 	- [rngWordCurrent = finalWord](contracts/modules/DegenerusGameAdvanceModule.sol#L2102)
 	Calls stack containing the loop:
@@ -12590,7 +12629,7 @@ contracts/modules/DegenerusGameAdvanceModule.sol#L932-L1115
 contracts/modules/DegenerusGameAdvanceModule.sol#L2090-L2106
 
 
- - [ ] ID-913
+ - [ ] ID-916
 [Coinflip._addDailyFlip(address,uint256,uint256,bool,bool)](contracts/Coinflip.sol#L671-L730) has costly operations inside a loop:
 	- [bountyOwedTo = player](contracts/Coinflip.sol#L725)
 	Calls stack containing the loop:
@@ -12599,7 +12638,7 @@ contracts/modules/DegenerusGameAdvanceModule.sol#L2090-L2106
 contracts/Coinflip.sol#L671-L730
 
 
- - [ ] ID-914
+ - [ ] ID-917
 [DegenerusGameStorage._setPendingPools(uint128,uint128)](contracts/storage/DegenerusGameStorage.sol#L824-L826) has costly operations inside a loop:
 	- [prizePoolPendingPacked = (uint256(future) << 128) | uint256(next)](contracts/storage/DegenerusGameStorage.sol#L825)
 	Calls stack containing the loop:
@@ -12610,7 +12649,7 @@ contracts/Coinflip.sol#L671-L730
 contracts/storage/DegenerusGameStorage.sol#L824-L826
 
 
- - [ ] ID-915
+ - [ ] ID-918
 [DegenerusGameAdvanceModule._finalizeRngRequest(bool,uint24,uint256)](contracts/modules/DegenerusGameAdvanceModule.sol#L1835-L1911) has costly operations inside a loop:
 	- [ticketRedemptionOpen = false](contracts/modules/DegenerusGameAdvanceModule.sol#L1879)
 	Calls stack containing the loop:
@@ -12620,7 +12659,7 @@ contracts/storage/DegenerusGameStorage.sol#L824-L826
 contracts/modules/DegenerusGameAdvanceModule.sol#L1835-L1911
 
 
- - [ ] ID-916
+ - [ ] ID-919
 [DegenerusGameAdvanceModule._finalizeRngRequest(bool,uint24,uint256)](contracts/modules/DegenerusGameAdvanceModule.sol#L1835-L1911) has costly operations inside a loop:
 	- [level = lvl](contracts/modules/DegenerusGameAdvanceModule.sol#L1891)
 	Calls stack containing the loop:
@@ -12630,7 +12669,7 @@ contracts/modules/DegenerusGameAdvanceModule.sol#L1835-L1911
 contracts/modules/DegenerusGameAdvanceModule.sol#L1835-L1911
 
 
- - [ ] ID-917
+ - [ ] ID-920
 [DegenerusGameAdvanceModule._unlockRng(uint24)](contracts/modules/DegenerusGameAdvanceModule.sol#L1976-L1998) has costly operations inside a loop:
 	- [vrfRequestId = 0](contracts/modules/DegenerusGameAdvanceModule.sol#L1980)
 	Calls stack containing the loop:
@@ -12639,7 +12678,7 @@ contracts/modules/DegenerusGameAdvanceModule.sol#L1835-L1911
 contracts/modules/DegenerusGameAdvanceModule.sol#L1976-L1998
 
 
- - [ ] ID-918
+ - [ ] ID-921
 [DegenerusGameAdvanceModule._endPhase(uint24)](contracts/modules/DegenerusGameAdvanceModule.sol#L816-L823) has costly operations inside a loop:
 	- [jackpotCounter = 0](contracts/modules/DegenerusGameAdvanceModule.sol#L821)
 	Calls stack containing the loop:
@@ -12648,14 +12687,14 @@ contracts/modules/DegenerusGameAdvanceModule.sol#L1976-L1998
 contracts/modules/DegenerusGameAdvanceModule.sol#L816-L823
 
 
- - [ ] ID-919
+ - [ ] ID-922
 [DegenerusGameAdvanceModule.advanceGame()](contracts/modules/DegenerusGameAdvanceModule.sol#L173-L651) has costly operations inside a loop:
 	- [ticketsFullyProcessed = true](contracts/modules/DegenerusGameAdvanceModule.sol#L361)
 
 contracts/modules/DegenerusGameAdvanceModule.sol#L173-L651
 
 
- - [ ] ID-920
+ - [ ] ID-923
 [sDGNRS._claimRedemptionFor(address,uint24,uint16,bool)](contracts/sDGNRS.sol#L840-L949) has costly operations inside a loop:
 	- [_pendingRedemptionEthValue = uint96(_pendingRedemptionEthValue - totalRolledEth)](contracts/sDGNRS.sol#L876)
 	Calls stack containing the loop:
@@ -12664,7 +12703,7 @@ contracts/modules/DegenerusGameAdvanceModule.sol#L173-L651
 contracts/sDGNRS.sol#L840-L949
 
 
- - [ ] ID-921
+ - [ ] ID-924
 [DegenerusGameAdvanceModule._freezePool()](contracts/modules/DegenerusGameAdvanceModule.sol#L1804-L1816) has costly operations inside a loop:
 	- [prizePoolPendingPacked = 0](contracts/modules/DegenerusGameAdvanceModule.sol#L1813)
 	Calls stack containing the loop:
@@ -12674,7 +12713,7 @@ contracts/sDGNRS.sol#L840-L949
 contracts/modules/DegenerusGameAdvanceModule.sol#L1804-L1816
 
 
- - [ ] ID-922
+ - [ ] ID-925
 [DegenerusGameStorage._setPrizePools(uint128,uint128)](contracts/storage/DegenerusGameStorage.sol#L810-L812) has costly operations inside a loop:
 	- [prizePoolsPacked = (uint256(future) << 128) | uint256(next)](contracts/storage/DegenerusGameStorage.sol#L811)
 	Calls stack containing the loop:
@@ -12685,7 +12724,7 @@ contracts/modules/DegenerusGameAdvanceModule.sol#L1804-L1816
 contracts/storage/DegenerusGameStorage.sol#L810-L812
 
 
- - [ ] ID-923
+ - [ ] ID-926
 [DegenerusGameAdvanceModule._unfreezePool()](contracts/modules/DegenerusGameAdvanceModule.sol#L1826-L1833) has costly operations inside a loop:
 	- [prizePoolFrozen = false](contracts/modules/DegenerusGameAdvanceModule.sol#L1832)
 	Calls stack containing the loop:
@@ -12695,21 +12734,21 @@ contracts/storage/DegenerusGameStorage.sol#L810-L812
 contracts/modules/DegenerusGameAdvanceModule.sol#L1826-L1833
 
 
- - [ ] ID-924
+ - [ ] ID-927
 [DegenerusGameAdvanceModule.advanceGame()](contracts/modules/DegenerusGameAdvanceModule.sol#L173-L651) has costly operations inside a loop:
 	- [jackpotPhaseFlag = false](contracts/modules/DegenerusGameAdvanceModule.sol#L504)
 
 contracts/modules/DegenerusGameAdvanceModule.sol#L173-L651
 
 
- - [ ] ID-925
+ - [ ] ID-928
 [DegenerusGameAdvanceModule.advanceGame()](contracts/modules/DegenerusGameAdvanceModule.sol#L173-L651) has costly operations inside a loop:
 	- [jackpotPhaseFlag = true](contracts/modules/DegenerusGameAdvanceModule.sol#L615)
 
 contracts/modules/DegenerusGameAdvanceModule.sol#L173-L651
 
 
- - [ ] ID-926
+ - [ ] ID-929
 [DegenerusGameAdvanceModule._swapTicketSlot()](contracts/modules/DegenerusGameAdvanceModule.sol#L1794-L1797) has costly operations inside a loop:
 	- [ticketsFullyProcessed = false](contracts/modules/DegenerusGameAdvanceModule.sol#L1796)
 	Calls stack containing the loop:
@@ -12719,7 +12758,7 @@ contracts/modules/DegenerusGameAdvanceModule.sol#L173-L651
 contracts/modules/DegenerusGameAdvanceModule.sol#L1794-L1797
 
 
- - [ ] ID-927
+ - [ ] ID-930
 [DegenerusGameAdvanceModule._unlockRng(uint24)](contracts/modules/DegenerusGameAdvanceModule.sol#L1976-L1998) has costly operations inside a loop:
 	- [dailyIdx = day](contracts/modules/DegenerusGameAdvanceModule.sol#L1977)
 	Calls stack containing the loop:
@@ -12728,7 +12767,7 @@ contracts/modules/DegenerusGameAdvanceModule.sol#L1794-L1797
 contracts/modules/DegenerusGameAdvanceModule.sol#L1976-L1998
 
 
- - [ ] ID-928
+ - [ ] ID-931
 [DegenerusGameLootboxModule._presaleBoxDgnrsReward(address,uint256,uint256)](contracts/modules/DegenerusGameLootboxModule.sol#L830-L852) has costly operations inside a loop:
 	- [presaleBoxDgnrsPoolStart = poolStart](contracts/modules/DegenerusGameLootboxModule.sol#L839)
 	Calls stack containing the loop:
@@ -12738,14 +12777,14 @@ contracts/modules/DegenerusGameAdvanceModule.sol#L1976-L1998
 contracts/modules/DegenerusGameLootboxModule.sol#L830-L852
 
 
- - [ ] ID-929
+ - [ ] ID-932
 [GameAfkingModule.processSubscriberStage(uint24,uint256)](contracts/modules/GameAfkingModule.sol#L1167-L1449) has costly operations inside a loop:
 	- [delete _subOf[player]](contracts/modules/GameAfkingModule.sol#L1289)
 
 contracts/modules/GameAfkingModule.sol#L1167-L1449
 
 
- - [ ] ID-930
+ - [ ] ID-933
 [DegenerusGameStorage._setPrizePools(uint128,uint128)](contracts/storage/DegenerusGameStorage.sol#L810-L812) has costly operations inside a loop:
 	- [prizePoolsPacked = (uint256(future) << 128) | uint256(next)](contracts/storage/DegenerusGameStorage.sol#L811)
 	Calls stack containing the loop:
@@ -12757,7 +12796,7 @@ contracts/modules/GameAfkingModule.sol#L1167-L1449
 contracts/storage/DegenerusGameStorage.sol#L810-L812
 
 
- - [ ] ID-931
+ - [ ] ID-934
 [DegenerusGameStorage._setPrizePools(uint128,uint128)](contracts/storage/DegenerusGameStorage.sol#L810-L812) has costly operations inside a loop:
 	- [prizePoolsPacked = (uint256(future) << 128) | uint256(next)](contracts/storage/DegenerusGameStorage.sol#L811)
 	Calls stack containing the loop:
@@ -12768,7 +12807,7 @@ contracts/storage/DegenerusGameStorage.sol#L810-L812
 contracts/storage/DegenerusGameStorage.sol#L810-L812
 
 
- - [ ] ID-932
+ - [ ] ID-935
 [GameAfkingModule._deliverAfkingBuy(address,DegenerusGameStorage.Sub,uint24,uint24,uint256,uint24,uint24,address,uint256,uint256,uint256,bool,bool)](contracts/modules/GameAfkingModule.sol#L772-L917) has costly operations inside a loop:
 	- [claimablePool -= uint128(claimableUse)](contracts/modules/GameAfkingModule.sol#L796)
 	Calls stack containing the loop:
@@ -12777,7 +12816,7 @@ contracts/storage/DegenerusGameStorage.sol#L810-L812
 contracts/modules/GameAfkingModule.sol#L772-L917
 
 
- - [ ] ID-933
+ - [ ] ID-936
 [DegenerusGameAdvanceModule._finalizeRngRequest(bool,uint24,uint256)](contracts/modules/DegenerusGameAdvanceModule.sol#L1835-L1911) has costly operations inside a loop:
 	- [decWindowOpen = true](contracts/modules/DegenerusGameAdvanceModule.sol#L1897)
 	Calls stack containing the loop:
@@ -12787,7 +12826,7 @@ contracts/modules/GameAfkingModule.sol#L772-L917
 contracts/modules/DegenerusGameAdvanceModule.sol#L1835-L1911
 
 
- - [ ] ID-934
+ - [ ] ID-937
 [DegenerusGameAdvanceModule._freezePool()](contracts/modules/DegenerusGameAdvanceModule.sol#L1804-L1816) has costly operations inside a loop:
 	- [prizePoolFrozen = true](contracts/modules/DegenerusGameAdvanceModule.sol#L1806)
 	Calls stack containing the loop:
@@ -12797,7 +12836,7 @@ contracts/modules/DegenerusGameAdvanceModule.sol#L1835-L1911
 contracts/modules/DegenerusGameAdvanceModule.sol#L1804-L1816
 
 
- - [ ] ID-935
+ - [ ] ID-938
 [DegenerusGameAdvanceModule._endPhase(uint24)](contracts/modules/DegenerusGameAdvanceModule.sol#L816-L823) has costly operations inside a loop:
 	- [phaseTransitionActive = true](contracts/modules/DegenerusGameAdvanceModule.sol#L817)
 	Calls stack containing the loop:
@@ -12806,14 +12845,14 @@ contracts/modules/DegenerusGameAdvanceModule.sol#L1804-L1816
 contracts/modules/DegenerusGameAdvanceModule.sol#L816-L823
 
 
- - [ ] ID-936
+ - [ ] ID-939
 [GameAfkingModule.processSubscriberStage(uint24,uint256)](contracts/modules/GameAfkingModule.sol#L1167-L1449) has costly operations inside a loop:
 	- [delete _subOf[player]](contracts/modules/GameAfkingModule.sol#L1332)
 
 contracts/modules/GameAfkingModule.sol#L1167-L1449
 
 
- - [ ] ID-937
+ - [ ] ID-940
 [Coinflip._addDailyFlip(address,uint256,uint256,bool,bool)](contracts/Coinflip.sol#L671-L730) has costly operations inside a loop:
 	- [biggestFlipEver = uint128(recordAmount)](contracts/Coinflip.sol#L713)
 	Calls stack containing the loop:
@@ -12822,14 +12861,14 @@ contracts/modules/GameAfkingModule.sol#L1167-L1449
 contracts/Coinflip.sol#L671-L730
 
 
- - [ ] ID-938
+ - [ ] ID-941
 [DegenerusGameAdvanceModule.advanceGame()](contracts/modules/DegenerusGameAdvanceModule.sol#L173-L651) has costly operations inside a loop:
 	- [compressedJackpotFlag = 1](contracts/modules/DegenerusGameAdvanceModule.sol#L577)
 
 contracts/modules/DegenerusGameAdvanceModule.sol#L173-L651
 
 
- - [ ] ID-939
+ - [ ] ID-942
 [DegenerusGameAdvanceModule._swapTicketSlot()](contracts/modules/DegenerusGameAdvanceModule.sol#L1794-L1797) has costly operations inside a loop:
 	- [ticketWriteSlot = ! ticketWriteSlot](contracts/modules/DegenerusGameAdvanceModule.sol#L1795)
 	Calls stack containing the loop:
@@ -12839,28 +12878,28 @@ contracts/modules/DegenerusGameAdvanceModule.sol#L173-L651
 contracts/modules/DegenerusGameAdvanceModule.sol#L1794-L1797
 
 
- - [ ] ID-940
+ - [ ] ID-943
 [DegenerusGameAdvanceModule.advanceGame()](contracts/modules/DegenerusGameAdvanceModule.sol#L173-L651) has costly operations inside a loop:
 	- [subsFullyProcessed = true](contracts/modules/DegenerusGameAdvanceModule.sol#L415)
 
 contracts/modules/DegenerusGameAdvanceModule.sol#L173-L651
 
 
- - [ ] ID-941
+ - [ ] ID-944
 [DegenerusGameAdvanceModule.advanceGame()](contracts/modules/DegenerusGameAdvanceModule.sol#L173-L651) has costly operations inside a loop:
 	- [purchaseStartDay = day](contracts/modules/DegenerusGameAdvanceModule.sol#L503)
 
 contracts/modules/DegenerusGameAdvanceModule.sol#L173-L651
 
 
- - [ ] ID-942
+ - [ ] ID-945
 [DegenerusGameAdvanceModule.advanceGame()](contracts/modules/DegenerusGameAdvanceModule.sol#L173-L651) has costly operations inside a loop:
 	- [lastPurchaseDay = true](contracts/modules/DegenerusGameAdvanceModule.sol#L575)
 
 contracts/modules/DegenerusGameAdvanceModule.sol#L173-L651
 
 
- - [ ] ID-943
+ - [ ] ID-946
 [DegenerusGameAdvanceModule._finalizeRngRequest(bool,uint24,uint256)](contracts/modules/DegenerusGameAdvanceModule.sol#L1835-L1911) has costly operations inside a loop:
 	- [vrfRequestId = requestId](contracts/modules/DegenerusGameAdvanceModule.sol#L1857)
 	Calls stack containing the loop:
@@ -12870,14 +12909,14 @@ contracts/modules/DegenerusGameAdvanceModule.sol#L173-L651
 contracts/modules/DegenerusGameAdvanceModule.sol#L1835-L1911
 
 
- - [ ] ID-944
+ - [ ] ID-947
 [DegenerusGameAdvanceModule.advanceGame()](contracts/modules/DegenerusGameAdvanceModule.sol#L173-L651) has costly operations inside a loop:
 	- [subsFullyProcessed = false](contracts/modules/DegenerusGameAdvanceModule.sol#L393)
 
 contracts/modules/DegenerusGameAdvanceModule.sol#L173-L651
 
 
- - [ ] ID-945
+ - [ ] ID-948
 [DegenerusGameAdvanceModule._applyDailyRng(uint24,uint256)](contracts/modules/DegenerusGameAdvanceModule.sol#L2090-L2106) has costly operations inside a loop:
 	- [lastVrfProcessedTimestamp = uint48(block.timestamp)](contracts/modules/DegenerusGameAdvanceModule.sol#L2104)
 	Calls stack containing the loop:
@@ -12887,21 +12926,21 @@ contracts/modules/DegenerusGameAdvanceModule.sol#L173-L651
 contracts/modules/DegenerusGameAdvanceModule.sol#L2090-L2106
 
 
- - [ ] ID-946
+ - [ ] ID-949
 [DegenerusGameAdvanceModule.advanceGame()](contracts/modules/DegenerusGameAdvanceModule.sol#L173-L651) has costly operations inside a loop:
 	- [_afkingResetDay = day](contracts/modules/DegenerusGameAdvanceModule.sol#L392)
 
 contracts/modules/DegenerusGameAdvanceModule.sol#L173-L651
 
 
- - [ ] ID-947
+ - [ ] ID-950
 [DegenerusGameAdvanceModule.advanceGame()](contracts/modules/DegenerusGameAdvanceModule.sol#L173-L651) has costly operations inside a loop:
 	- [_subCursor = 0](contracts/modules/DegenerusGameAdvanceModule.sol#L394)
 
 contracts/modules/DegenerusGameAdvanceModule.sol#L173-L651
 
 
- - [ ] ID-948
+ - [ ] ID-951
 [DegenerusGameAdvanceModule._lrAdvanceIndexClearPending()](contracts/modules/DegenerusGameAdvanceModule.sol#L1774-L1783) has costly operations inside a loop:
 	- [lootboxRngPacked = packed | ((nextIndex & LR_INDEX_MASK) << LR_INDEX_SHIFT)](contracts/modules/DegenerusGameAdvanceModule.sol#L1780-L1782)
 	Calls stack containing the loop:
@@ -12912,7 +12951,7 @@ contracts/modules/DegenerusGameAdvanceModule.sol#L173-L651
 contracts/modules/DegenerusGameAdvanceModule.sol#L1774-L1783
 
 
- - [ ] ID-949
+ - [ ] ID-952
 [DegenerusGameAdvanceModule._consolidatePoolsAndRewardJackpots(uint24,uint24,uint24,uint256,uint24)](contracts/modules/DegenerusGameAdvanceModule.sol#L932-L1115) has costly operations inside a loop:
 	- [currentPrizePool = uint128(memCurrent)](contracts/modules/DegenerusGameAdvanceModule.sol#L1109)
 	Calls stack containing the loop:
@@ -12921,21 +12960,21 @@ contracts/modules/DegenerusGameAdvanceModule.sol#L1774-L1783
 contracts/modules/DegenerusGameAdvanceModule.sol#L932-L1115
 
 
- - [ ] ID-950
+ - [ ] ID-953
 [DegenerusGameAdvanceModule.advanceGame()](contracts/modules/DegenerusGameAdvanceModule.sol#L173-L651) has costly operations inside a loop:
 	- [ticketsFullyProcessed = true](contracts/modules/DegenerusGameAdvanceModule.sol#L533)
 
 contracts/modules/DegenerusGameAdvanceModule.sol#L173-L651
 
 
- - [ ] ID-951
+ - [ ] ID-954
 [GameAfkingModule.processSubscriberStage(uint24,uint256)](contracts/modules/GameAfkingModule.sol#L1167-L1449) has costly operations inside a loop:
 	- [delete _subOf[player]](contracts/modules/GameAfkingModule.sol#L1392)
 
 contracts/modules/GameAfkingModule.sol#L1167-L1449
 
 
- - [ ] ID-952
+ - [ ] ID-955
 [DegenerusGameAdvanceModule._unlockRng(uint24)](contracts/modules/DegenerusGameAdvanceModule.sol#L1976-L1998) has costly operations inside a loop:
 	- [rngRequestTime = 0](contracts/modules/DegenerusGameAdvanceModule.sol#L1981)
 	Calls stack containing the loop:
@@ -12944,7 +12983,7 @@ contracts/modules/GameAfkingModule.sol#L1167-L1449
 contracts/modules/DegenerusGameAdvanceModule.sol#L1976-L1998
 
 
- - [ ] ID-953
+ - [ ] ID-956
 [DegenerusGameAdvanceModule._unfreezePool()](contracts/modules/DegenerusGameAdvanceModule.sol#L1826-L1833) has costly operations inside a loop:
 	- [prizePoolPendingPacked = 0](contracts/modules/DegenerusGameAdvanceModule.sol#L1831)
 	Calls stack containing the loop:
@@ -12954,7 +12993,7 @@ contracts/modules/DegenerusGameAdvanceModule.sol#L1976-L1998
 contracts/modules/DegenerusGameAdvanceModule.sol#L1826-L1833
 
 
- - [ ] ID-954
+ - [ ] ID-957
 [GameAfkingModule._removeFromSet(address)](contracts/modules/GameAfkingModule.sol#L633-L645) has costly operations inside a loop:
 	- [_subscribers.pop()](contracts/modules/GameAfkingModule.sol#L643)
 	Calls stack containing the loop:
@@ -12963,7 +13002,7 @@ contracts/modules/DegenerusGameAdvanceModule.sol#L1826-L1833
 contracts/modules/GameAfkingModule.sol#L633-L645
 
 
- - [ ] ID-955
+ - [ ] ID-958
 [DegenerusGameAdvanceModule._endPhase(uint24)](contracts/modules/DegenerusGameAdvanceModule.sol#L816-L823) has costly operations inside a loop:
 	- [compressedJackpotFlag = 0](contracts/modules/DegenerusGameAdvanceModule.sol#L822)
 	Calls stack containing the loop:
@@ -12972,7 +13011,7 @@ contracts/modules/GameAfkingModule.sol#L633-L645
 contracts/modules/DegenerusGameAdvanceModule.sol#L816-L823
 
 
- - [ ] ID-956
+ - [ ] ID-959
 [DegenerusGameAdvanceModule._finalizeRngRequest(bool,uint24,uint256)](contracts/modules/DegenerusGameAdvanceModule.sol#L1835-L1911) has costly operations inside a loop:
 	- [decWindowOpen = false](contracts/modules/DegenerusGameAdvanceModule.sol#L1901)
 	Calls stack containing the loop:
@@ -12982,14 +13021,14 @@ contracts/modules/DegenerusGameAdvanceModule.sol#L816-L823
 contracts/modules/DegenerusGameAdvanceModule.sol#L1835-L1911
 
 
- - [ ] ID-957
+ - [ ] ID-960
 [DegenerusGameAdvanceModule.advanceGame()](contracts/modules/DegenerusGameAdvanceModule.sol#L173-L651) has costly operations inside a loop:
 	- [ticketLevel = ffLevel | TICKET_FAR_FUTURE_BIT](contracts/modules/DegenerusGameAdvanceModule.sol#L480)
 
 contracts/modules/DegenerusGameAdvanceModule.sol#L173-L651
 
 
- - [ ] ID-958
+ - [ ] ID-961
 [DegenerusGameAdvanceModule._applyDailyRng(uint24,uint256)](contracts/modules/DegenerusGameAdvanceModule.sol#L2090-L2106) has costly operations inside a loop:
 	- [totalFlipReversals = 0](contracts/modules/DegenerusGameAdvanceModule.sol#L2100)
 	Calls stack containing the loop:
@@ -12999,7 +13038,7 @@ contracts/modules/DegenerusGameAdvanceModule.sol#L173-L651
 contracts/modules/DegenerusGameAdvanceModule.sol#L2090-L2106
 
 
- - [ ] ID-959
+ - [ ] ID-962
 [DegenerusGameAdvanceModule._consolidatePoolsAndRewardJackpots(uint24,uint24,uint24,uint256,uint24)](contracts/modules/DegenerusGameAdvanceModule.sol#L932-L1115) has costly operations inside a loop:
 	- [yieldAccumulator = memYieldAcc](contracts/modules/DegenerusGameAdvanceModule.sol#L1110)
 	Calls stack containing the loop:
@@ -13008,7 +13047,7 @@ contracts/modules/DegenerusGameAdvanceModule.sol#L2090-L2106
 contracts/modules/DegenerusGameAdvanceModule.sol#L932-L1115
 
 
- - [ ] ID-960
+ - [ ] ID-963
 [GameAfkingModule._removeFromSet(address)](contracts/modules/GameAfkingModule.sol#L633-L645) has costly operations inside a loop:
 	- [delete _subscriberIndex[player]](contracts/modules/GameAfkingModule.sol#L644)
 	Calls stack containing the loop:
@@ -13020,193 +13059,193 @@ contracts/modules/GameAfkingModule.sol#L633-L645
 ## cyclomatic-complexity
 Impact: Informational
 Confidence: High
- - [ ] ID-961
+ - [ ] ID-964
 [sDGNRS._claimRedemptionFor(address,uint24,uint16,bool)](contracts/sDGNRS.sol#L840-L949) has a high cyclomatic complexity (12).
 
 contracts/sDGNRS.sol#L840-L949
 
 
- - [ ] ID-962
-[DegenerusGameDegeneretteModule._wwxrpFactor(uint8,uint8,bool,bool)](contracts/modules/DegenerusGameDegeneretteModule.sol#L1151-L1178) has a high cyclomatic complexity (13).
+ - [ ] ID-965
+[DegenerusGameDegeneretteModule._wwxrpFactor(uint8,uint8,bool,bool)](contracts/modules/DegenerusGameDegeneretteModule.sol#L1156-L1183) has a high cyclomatic complexity (13).
 
-contracts/modules/DegenerusGameDegeneretteModule.sol#L1151-L1178
+contracts/modules/DegenerusGameDegeneretteModule.sol#L1156-L1183
 
 
- - [ ] ID-963
+ - [ ] ID-966
 [DegenerusGameBingoModule.claimAffiliateDgnrs(address)](contracts/modules/DegenerusGameBingoModule.sol#L228-L274) has a high cyclomatic complexity (12).
 
 contracts/modules/DegenerusGameBingoModule.sol#L228-L274
 
 
- - [ ] ID-964
+ - [ ] ID-967
 [GameAfkingModule.subscribe(address,bool,bool,uint8,address)](contracts/modules/GameAfkingModule.sol#L305-L585) has a high cyclomatic complexity (27).
 
 contracts/modules/GameAfkingModule.sol#L305-L585
 
 
- - [ ] ID-965
+ - [ ] ID-968
 [DegenerusGameWhaleModule.purchaseLazyPass(address)](contracts/modules/DegenerusGameWhaleModule.sol#L406-L535) has a high cyclomatic complexity (19).
 
 contracts/modules/DegenerusGameWhaleModule.sol#L406-L535
 
 
- - [ ] ID-966
+ - [ ] ID-969
 [DegenerusGameGameOverModule.handleGameOverDrain(uint24)](contracts/modules/DegenerusGameGameOverModule.sol#L75-L207) has a high cyclomatic complexity (16).
 
 contracts/modules/DegenerusGameGameOverModule.sol#L75-L207
 
 
- - [ ] ID-967
+ - [ ] ID-970
 [GameAfkingModule.processSubscriberStage(uint24,uint256)](contracts/modules/GameAfkingModule.sol#L1167-L1449) has a high cyclomatic complexity (17).
 
 contracts/modules/GameAfkingModule.sol#L1167-L1449
 
 
- - [ ] ID-968
+ - [ ] ID-971
 [DegenerusGameAdvanceModule.requestLootboxRng()](contracts/modules/DegenerusGameAdvanceModule.sol#L1189-L1254) has a high cyclomatic complexity (12).
 
 contracts/modules/DegenerusGameAdvanceModule.sol#L1189-L1254
 
 
- - [ ] ID-969
+ - [ ] ID-972
 [DegenerusGameWhaleModule.purchaseDeityPass(address,uint8)](contracts/modules/DegenerusGameWhaleModule.sol#L558-L698) has a high cyclomatic complexity (20).
 
 contracts/modules/DegenerusGameWhaleModule.sol#L558-L698
 
 
- - [ ] ID-970
+ - [ ] ID-973
 [DegenerusGameAdvanceModule._consolidatePoolsAndRewardJackpots(uint24,uint24,uint24,uint256,uint24)](contracts/modules/DegenerusGameAdvanceModule.sol#L932-L1115) has a high cyclomatic complexity (26).
 
 contracts/modules/DegenerusGameAdvanceModule.sol#L932-L1115
 
 
- - [ ] ID-971
+ - [ ] ID-974
 [DegenerusGameMintModule._callTicketPurchase(address,uint256,MintPaymentKind,bool,bytes32,uint256,uint24,bool)](contracts/modules/DegenerusGameMintModule.sol#L1924-L2071) has a high cyclomatic complexity (19).
 
 contracts/modules/DegenerusGameMintModule.sol#L1924-L2071
 
 
- - [ ] ID-972
+ - [ ] ID-975
 [DegenerusGameAdvanceModule.advanceGame()](contracts/modules/DegenerusGameAdvanceModule.sol#L173-L651) has a high cyclomatic complexity (51).
 
 contracts/modules/DegenerusGameAdvanceModule.sol#L173-L651
 
 
- - [ ] ID-973
+ - [ ] ID-976
 [DegenerusGameLootboxModule._applyBoon(address,uint8,uint24,uint24,uint256,bool)](contracts/modules/DegenerusGameLootboxModule.sol#L1725-L1955) has a high cyclomatic complexity (53).
 
 contracts/modules/DegenerusGameLootboxModule.sol#L1725-L1955
 
 
- - [ ] ID-974
+ - [ ] ID-977
 [GameAfkingModule._deliverAfkingBuy(address,DegenerusGameStorage.Sub,uint24,uint24,uint256,uint24,uint24,address,uint256,uint256,uint256,bool,bool)](contracts/modules/GameAfkingModule.sol#L772-L917) has a high cyclomatic complexity (15).
 
 contracts/modules/GameAfkingModule.sol#L772-L917
 
 
- - [ ] ID-975
-[DegenerusGameDegeneretteModule._getBasePayoutBps(uint8,uint8,bool,bool)](contracts/modules/DegenerusGameDegeneretteModule.sol#L1245-L1301) has a high cyclomatic complexity (13).
+ - [ ] ID-978
+[DegenerusGameDegeneretteModule._getBasePayoutBps(uint8,uint8,bool,bool)](contracts/modules/DegenerusGameDegeneretteModule.sol#L1250-L1306) has a high cyclomatic complexity (13).
 
-contracts/modules/DegenerusGameDegeneretteModule.sol#L1245-L1301
+contracts/modules/DegenerusGameDegeneretteModule.sol#L1250-L1306
 
 
- - [ ] ID-976
+ - [ ] ID-979
 [DegenerusJackpots.runBafJackpot(uint256,uint24,uint256)](contracts/DegenerusJackpots.sol#L245-L491) has a high cyclomatic complexity (23).
 
 contracts/DegenerusJackpots.sol#L245-L491
 
 
- - [ ] ID-977
+ - [ ] ID-980
 [ActivityCurveLib.decBucket(uint256,uint8)](contracts/libraries/ActivityCurveLib.sol#L151-L167) has a high cyclomatic complexity (12).
 
 contracts/libraries/ActivityCurveLib.sol#L151-L167
 
 
- - [ ] ID-978
+ - [ ] ID-981
 [DegenerusGameMintModule._purchaseForWithCached(address,uint256,uint256,bytes32,MintPaymentKind,uint256,bool,uint24,uint256,uint256)](contracts/modules/DegenerusGameMintModule.sol#L1351-L1750) has a high cyclomatic complexity (46).
 
 contracts/modules/DegenerusGameMintModule.sol#L1351-L1750
 
 
- - [ ] ID-979
+ - [ ] ID-982
 [DegenerusGameBoonModule.checkAndClearExpiredBoon(address)](contracts/modules/DegenerusGameBoonModule.sol#L128-L287) has a high cyclomatic complexity (26).
 
 contracts/modules/DegenerusGameBoonModule.sol#L128-L287
 
 
- - [ ] ID-980
+ - [ ] ID-983
 [DegenerusGameFoilPackModule.buyFoilPack(address,uint256,bytes32,MintPaymentKind)](contracts/modules/DegenerusGameFoilPackModule.sol#L140-L331) has a high cyclomatic complexity (22).
 
 contracts/modules/DegenerusGameFoilPackModule.sol#L140-L331
 
 
- - [ ] ID-981
+ - [ ] ID-984
 [DegenerusGameMintModule._processMintPayment(address,uint256,MintPaymentKind,uint256)](contracts/modules/DegenerusGameMintModule.sol#L225-L303) has a high cyclomatic complexity (17).
 
 contracts/modules/DegenerusGameMintModule.sol#L225-L303
 
 
- - [ ] ID-982
+ - [ ] ID-985
 [DegenerusAffiliate.payAffiliate(uint256,bytes32,address,uint24,bool,uint16)](contracts/DegenerusAffiliate.sol#L416-L589) has a high cyclomatic complexity (18).
 
 contracts/DegenerusAffiliate.sol#L416-L589
 
 
- - [ ] ID-983
+ - [ ] ID-986
 [DegenerusGameMintModule._buyPresaleBoxFor(address,uint256,uint256)](contracts/modules/DegenerusGameMintModule.sol#L1824-L1904) has a high cyclomatic complexity (14).
 
 contracts/modules/DegenerusGameMintModule.sol#L1824-L1904
 
 
- - [ ] ID-984
+ - [ ] ID-987
 [Coinflip._claimCoinflipsInternal(address,bool)](contracts/Coinflip.sol#L482-L664) has a high cyclomatic complexity (29).
 
 contracts/Coinflip.sol#L482-L664
 
 
- - [ ] ID-985
+ - [ ] ID-988
 [GameAfkingModule.mintFlip()](contracts/modules/GameAfkingModule.sol#L1646-L1730) has a high cyclomatic complexity (12).
 
 contracts/modules/GameAfkingModule.sol#L1646-L1730
 
 
- - [ ] ID-986
+ - [ ] ID-989
 [DegenerusGameMintStreakUtils._playerActivityScoreAt(address,uint32,uint24,uint24)](contracts/modules/DegenerusGameMintStreakUtils.sol#L312-L402) has a high cyclomatic complexity (14).
 
 contracts/modules/DegenerusGameMintStreakUtils.sol#L312-L402
 
 
- - [ ] ID-987
-[DegenerusGameDegeneretteModule._resolveBet(address,uint64,DegenerusGameDegeneretteModule.ResolveAcc,bool)](contracts/modules/DegenerusGameDegeneretteModule.sol#L694-L906) has a high cyclomatic complexity (18).
+ - [ ] ID-990
+[DegenerusGameDegeneretteModule._resolveBet(address,uint64,DegenerusGameDegeneretteModule.ResolveAcc,bool)](contracts/modules/DegenerusGameDegeneretteModule.sol#L699-L911) has a high cyclomatic complexity (18).
 
-contracts/modules/DegenerusGameDegeneretteModule.sol#L694-L906
+contracts/modules/DegenerusGameDegeneretteModule.sol#L699-L911
 
 
- - [ ] ID-988
+ - [ ] ID-991
 [sDGNRS._submitGamblingClaimFrom(address,address,uint256)](contracts/sDGNRS.sol#L1027-L1150) has a high cyclomatic complexity (13).
 
 contracts/sDGNRS.sol#L1027-L1150
 
 
- - [ ] ID-989
+ - [ ] ID-992
 [DegenerusGameWhaleModule.purchaseWhalePass(address,uint256)](contracts/modules/DegenerusGameWhaleModule.sol#L184-L387) has a high cyclomatic complexity (20).
 
 contracts/modules/DegenerusGameWhaleModule.sol#L184-L387
 
 
- - [ ] ID-990
+ - [ ] ID-993
 [DegenerusGameMintModule.processFutureTicketBatch(uint24,uint256)](contracts/modules/DegenerusGameMintModule.sol#L316-L475) has a high cyclomatic complexity (24).
 
 contracts/modules/DegenerusGameMintModule.sol#L316-L475
 
 
- - [ ] ID-991
+ - [ ] ID-994
 [DegenerusGameDegeneretteModule._placeDegeneretteBetCore(address,uint8,uint128,uint8,uint32,uint8,uint24)](contracts/modules/DegenerusGameDegeneretteModule.sol#L568-L651) has a high cyclomatic complexity (12).
 
 contracts/modules/DegenerusGameDegeneretteModule.sol#L568-L651
 
 
- - [ ] ID-992
+ - [ ] ID-995
 [DegenerusGameJackpotModule.payDailyJackpot(bool,uint24,uint256)](contracts/modules/DegenerusGameJackpotModule.sol#L297-L548) has a high cyclomatic complexity (19).
 
 contracts/modules/DegenerusGameJackpotModule.sol#L297-L548
@@ -13215,7 +13254,7 @@ contracts/modules/DegenerusGameJackpotModule.sol#L297-L548
 ## solc-version
 Impact: Informational
 Confidence: High
- - [ ] ID-993
+ - [ ] ID-996
 Version constraint ^0.8.20 contains known severe issues (https://solidity.readthedocs.io/en/latest/bugs.html)
 	- VerbatimInvalidDeduplication
 	- FullInlinerNonExpressionSplitArgumentEvaluationOrder
@@ -13234,126 +13273,133 @@ node_modules/@openzeppelin/contracts/utils/Base64.sol#L4
 ## low-level-calls
 Impact: Informational
 Confidence: High
- - [ ] ID-994
+ - [ ] ID-997
 Low level call in [DegenerusGame.drainAffiliateBase(address)](contracts/DegenerusGame.sol#L408-L415):
 	- [(ok,data) = ContractAddresses.GAME_AFKING_MODULE.delegatecall(msg.data)](contracts/DegenerusGame.sol#L409-L411)
 
 contracts/DegenerusGame.sol#L408-L415
 
 
- - [ ] ID-995
+ - [ ] ID-998
 Low level call in [DegenerusGame.consumeDecimatorBoon(address)](contracts/DegenerusGame.sol#L961-L975):
 	- [(ok,data) = ContractAddresses.GAME_BOON_MODULE.delegatecall(abi.encodeWithSelector(IDegenerusGameBoonModule.consumeDecimatorBoost.selector,player))](contracts/DegenerusGame.sol#L965-L972)
 
 contracts/DegenerusGame.sol#L961-L975
 
 
- - [ ] ID-996
+ - [ ] ID-999
 Low level call in [DegenerusGame._purchaseWhalePassFor(address,uint256)](contracts/DegenerusGame.sol#L841-L852):
 	- [(ok,data) = ContractAddresses.GAME_WHALE_MODULE.delegatecall(abi.encodeWithSelector(IDegenerusGameWhaleModule.purchaseWhalePass.selector,buyer,quantity))](contracts/DegenerusGame.sol#L842-L850)
 
 contracts/DegenerusGame.sol#L841-L852
 
 
- - [ ] ID-997
+ - [ ] ID-1000
 Low level call in [DegenerusGame.consumeCoinflipBoon(address)](contracts/DegenerusGame.sol#L942-L954):
 	- [(ok,data) = ContractAddresses.GAME_BOON_MODULE.delegatecall(msg.data)](contracts/DegenerusGame.sol#L949-L951)
 
 contracts/DegenerusGame.sol#L942-L954
 
 
- - [ ] ID-998
+ - [ ] ID-1001
 Low level call in [DegenerusGameAdvanceModule._distributeYieldSurplus(uint256)](contracts/modules/DegenerusGameAdvanceModule.sol#L882-L892):
 	- [(ok,data) = ContractAddresses.GAME_JACKPOT_MODULE.delegatecall(abi.encodeWithSelector(IDegenerusGameJackpotModule.distributeYieldSurplus.selector,rngWord))](contracts/modules/DegenerusGameAdvanceModule.sol#L883-L890)
 
 contracts/modules/DegenerusGameAdvanceModule.sol#L882-L892
 
 
- - [ ] ID-999
+ - [ ] ID-1002
 Low level call in [DegenerusGame.wireVrf(address,uint256,bytes32)](contracts/DegenerusGame.sol#L308-L313):
 	- [(ok,data) = ContractAddresses.GAME_ADVANCE_MODULE.delegatecall(msg.data)](contracts/DegenerusGame.sol#L309-L311)
 
 contracts/DegenerusGame.sol#L308-L313
 
 
- - [ ] ID-1000
+ - [ ] ID-1003
+Low level call in [DegenerusGameDegeneretteModule._resolveLootboxDirect(address,uint256,uint256,uint16)](contracts/modules/DegenerusGameDegeneretteModule.sol#L1023-L1041):
+	- [(ok,data) = ContractAddresses.GAME_LOOTBOX_MODULE.delegatecall(abi.encodeWithSelector(IDegenerusGameLootboxModule.resolveLootboxDirect.selector,player,amount,rngWord,activityScore))](contracts/modules/DegenerusGameDegeneretteModule.sol#L1029-L1039)
+
+contracts/modules/DegenerusGameDegeneretteModule.sol#L1023-L1041
+
+
+ - [ ] ID-1004
 Low level call in [DegenerusGameAdvanceModule.payDailyJackpot(bool,uint24,uint256)](contracts/modules/DegenerusGameAdvanceModule.sol#L1122-L1138):
 	- [(ok,data) = ContractAddresses.GAME_JACKPOT_MODULE.delegatecall(abi.encodeWithSelector(IDegenerusGameJackpotModule.payDailyJackpot.selector,isJackpotPhase,lvl,randWord))](contracts/modules/DegenerusGameAdvanceModule.sol#L1127-L1136)
 
 contracts/modules/DegenerusGameAdvanceModule.sol#L1122-L1138
 
 
- - [ ] ID-1001
+ - [ ] ID-1005
 Low level call in [DegenerusGame.withdrawAfkingFunding(uint256)](contracts/DegenerusGame.sol#L1416-L1426):
 	- [(ok,None) = msg.sender.call{value: amount}()](contracts/DegenerusGame.sol#L1423)
 
 contracts/DegenerusGame.sol#L1416-L1426
 
 
- - [ ] ID-1002
+ - [ ] ID-1006
 Low level call in [DegenerusGame.runTerminalDecimatorJackpot(uint256,uint24,uint256)](contracts/DegenerusGame.sol#L1183-L1195):
 	- [(ok,data) = ContractAddresses.GAME_DECIMATOR_MODULE.delegatecall(msg.data)](contracts/DegenerusGame.sol#L1189-L1191)
 
 contracts/DegenerusGame.sol#L1183-L1195
 
 
- - [ ] ID-1003
+ - [ ] ID-1007
 Low level call in [GNRUS._redeemTo(address,uint256,uint256,uint256,address)](contracts/GNRUS.sol#L319-L351):
 	- [(ok,None) = recipient.call{value: ethOut}()](contracts/GNRUS.sol#L348)
 
 contracts/GNRUS.sol#L319-L351
 
 
- - [ ] ID-1004
+ - [ ] ID-1008
 Low level call in [DegenerusGame.claimWhalePass(address)](contracts/DegenerusGame.sol#L1650-L1655):
 	- [(ok,data) = ContractAddresses.GAME_WHALE_MODULE.delegatecall(msg.data)](contracts/DegenerusGame.sol#L1651-L1653)
 
 contracts/DegenerusGame.sol#L1650-L1655
 
 
- - [ ] ID-1005
+ - [ ] ID-1009
 Low level call in [MockVRFCoordinator.cancelSubscription(uint256,address)](contracts/mocks/MockVRFCoordinator.sol#L38-L45):
 	- [(ok,None) = to.call{value: bal}()](contracts/mocks/MockVRFCoordinator.sol#L42)
 
 contracts/mocks/MockVRFCoordinator.sol#L38-L45
 
 
- - [ ] ID-1006
+ - [ ] ID-1010
 Low level call in [DegenerusGameLootboxModule._callFlipSpins(address,uint256,uint16,uint256)](contracts/modules/DegenerusGameLootboxModule.sol#L2136-L2153):
 	- [(ok,None) = ContractAddresses.GAME_DEGENERETTE_MODULE.delegatecall(abi.encodeWithSelector(IDegenerusGameDegeneretteModule.resolveFlipSpinsFromBox.selector,player,stake,activityScore,seed,uint32(0)))](contracts/modules/DegenerusGameLootboxModule.sol#L2142-L2151)
 
 contracts/modules/DegenerusGameLootboxModule.sol#L2136-L2153
 
 
- - [ ] ID-1007
+ - [ ] ID-1011
 Low level call in [DegenerusGame.resolveDegeneretteBets(address,uint64[])](contracts/DegenerusGame.sol#L924-L932):
 	- [(ok,data) = ContractAddresses.GAME_DEGENERETTE_MODULE.delegatecall(msg.data)](contracts/DegenerusGame.sol#L928-L930)
 
 contracts/DegenerusGame.sol#L924-L932
 
 
- - [ ] ID-1008
+ - [ ] ID-1012
 Low level call in [MockLinkToken.transferAndCall(address,uint256,bytes)](contracts/mocks/MockLinkToken.sol#L41-L60):
 	- [(ok,None) = to.call(abi.encodeWithSignature(onTokenTransfer(address,uint256,bytes),msg.sender,value,data))](contracts/mocks/MockLinkToken.sol#L50-L57)
 
 contracts/mocks/MockLinkToken.sol#L41-L60
 
 
- - [ ] ID-1009
+ - [ ] ID-1013
 Low level call in [DegenerusGameLootboxModule._resolveLootboxCommon(address,uint48,uint256,uint24,uint24,uint256,bool,uint256,uint256,bool,uint16,bool)](contracts/modules/DegenerusGameLootboxModule.sol#L1268-L1328):
 	- [(okAct,None) = ContractAddresses.GAME_BOON_MODULE.delegatecall(abi.encodeWithSelector(IDegenerusGameBoonModule.consumeActivityBoon.selector,player))](contracts/modules/DegenerusGameLootboxModule.sol#L1301-L1303)
 
 contracts/modules/DegenerusGameLootboxModule.sol#L1268-L1328
 
 
- - [ ] ID-1010
+ - [ ] ID-1014
 Low level call in [DegenerusGame.claimDecimatorJackpot(address,uint24)](contracts/DegenerusGame.sol#L1256-L1261):
 	- [(ok,data) = ContractAddresses.GAME_DECIMATOR_MODULE.delegatecall(msg.data)](contracts/DegenerusGame.sol#L1257-L1259)
 
 contracts/DegenerusGame.sol#L1256-L1261
 
 
- - [ ] ID-1011
+ - [ ] ID-1015
 Low level call in [sDGNRS._payEth(address,uint256)](contracts/sDGNRS.sol#L1157-L1176):
 	- [(success,None) = player.call{value: amount}()](contracts/sDGNRS.sol#L1162)
 	- [(success_scope_0,None) = player.call{value: ethOut}()](contracts/sDGNRS.sol#L1172)
@@ -13361,273 +13407,266 @@ Low level call in [sDGNRS._payEth(address,uint256)](contracts/sDGNRS.sol#L1157-L
 contracts/sDGNRS.sol#L1157-L1176
 
 
- - [ ] ID-1012
+ - [ ] ID-1016
 Low level call in [DegenerusGame.claimAffiliateDgnrs(address)](contracts/DegenerusGame.sol#L1445-L1450):
 	- [(ok,data) = ContractAddresses.GAME_BINGO_MODULE.delegatecall(msg.data)](contracts/DegenerusGame.sol#L1446-L1448)
 
 contracts/DegenerusGame.sol#L1445-L1450
 
 
- - [ ] ID-1013
+ - [ ] ID-1017
 Low level call in [DegenerusGame.claimFoilMatchMany(address[],uint24[],uint8[],uint8[])](contracts/DegenerusGame.sol#L757-L767):
 	- [(ok,data) = ContractAddresses.GAME_FOILPACK_MODULE.delegatecall(msg.data)](contracts/DegenerusGame.sol#L763-L765)
 
 contracts/DegenerusGame.sol#L757-L767
 
 
- - [ ] ID-1014
+ - [ ] ID-1018
 Low level call in [DegenerusGame.buyPresaleBox(address,uint256)](contracts/DegenerusGame.sol#L714-L729):
 	- [(ok,data) = ContractAddresses.GAME_MINT_MODULE.delegatecall(abi.encodeWithSelector(IDegenerusGameMintModule.buyPresaleBox.selector,buyer,boxAmount))](contracts/DegenerusGame.sol#L719-L727)
 
 contracts/DegenerusGame.sol#L714-L729
 
 
- - [ ] ID-1015
+ - [ ] ID-1019
 Low level call in [DegenerusGame.claimFoilMatch(address,uint256,uint256,uint8)](contracts/DegenerusGame.sol#L739-L749):
 	- [(ok,data) = ContractAddresses.GAME_FOILPACK_MODULE.delegatecall(msg.data)](contracts/DegenerusGame.sol#L745-L747)
 
 contracts/DegenerusGame.sol#L739-L749
 
 
- - [ ] ID-1016
+ - [ ] ID-1020
 Low level call in [DegenerusGame._claimWinningsWithCurse(address,uint256)](contracts/DegenerusGame.sol#L1345-L1353):
 	- [(ok,data) = ContractAddresses.GAME_AFKING_MODULE.delegatecall(abi.encodeWithSelector(IGameAfkingModule.maybeCurse.selector,player))](contracts/DegenerusGame.sol#L1347-L1351)
 
 contracts/DegenerusGame.sol#L1345-L1353
 
 
- - [ ] ID-1017
-Low level call in [DegenerusGameDegeneretteModule._resolveLootboxDirect(address,uint256,uint256,uint16)](contracts/modules/DegenerusGameDegeneretteModule.sol#L1018-L1036):
-	- [(ok,data) = ContractAddresses.GAME_LOOTBOX_MODULE.delegatecall(abi.encodeWithSelector(IDegenerusGameLootboxModule.resolveLootboxDirect.selector,player,amount,rngWord,activityScore))](contracts/modules/DegenerusGameDegeneretteModule.sol#L1024-L1034)
-
-contracts/modules/DegenerusGameDegeneretteModule.sol#L1018-L1036
-
-
- - [ ] ID-1018
+ - [ ] ID-1021
 Low level call in [DegenerusGame._payoutWithStethFallback(address,uint256)](contracts/DegenerusGame.sol#L2021-L2049):
 	- [(ok,None) = address(to).call{value: ethSend}()](contracts/DegenerusGame.sol#L2046)
 
 contracts/DegenerusGame.sol#L2021-L2049
 
 
- - [ ] ID-1019
+ - [ ] ID-1022
 Low level call in [DegenerusGameDecimatorModule._awardDecimatorLootbox(address,uint256,uint256,uint16)](contracts/modules/DegenerusGameDecimatorModule.sol#L647-L685):
 	- [(ok,data) = ContractAddresses.GAME_LOOTBOX_MODULE.delegatecall(abi.encodeWithSelector(IDegenerusGameLootboxModule.resolveLootboxDirect.selector,winner,amount,rngWord,evScore))](contracts/modules/DegenerusGameDecimatorModule.sol#L673-L683)
 
 contracts/modules/DegenerusGameDecimatorModule.sol#L647-L685
 
 
- - [ ] ID-1020
+ - [ ] ID-1023
 Low level call in [DegenerusGame.smite(uint256,address)](contracts/DegenerusGame.sol#L434-L439):
 	- [(ok,data) = ContractAddresses.GAME_AFKING_MODULE.delegatecall(msg.data)](contracts/DegenerusGame.sol#L435-L437)
 
 contracts/DegenerusGame.sol#L434-L439
 
 
- - [ ] ID-1021
+ - [ ] ID-1024
 Low level call in [MockVRFCoordinator.fulfillRandomWords(uint256,uint256)](contracts/mocks/MockVRFCoordinator.sol#L79-L95):
 	- [(ok,None) = req.consumer.call(abi.encodeWithSignature(rawFulfillRandomWords(uint256,uint256[]),requestId,words))](contracts/mocks/MockVRFCoordinator.sol#L87-L93)
 
 contracts/mocks/MockVRFCoordinator.sol#L79-L95
 
 
- - [ ] ID-1022
+ - [ ] ID-1025
 Low level call in [DegenerusGame.mintFlip()](contracts/DegenerusGame.sol#L382-L387):
 	- [(ok,data) = ContractAddresses.GAME_AFKING_MODULE.delegatecall(msg.data)](contracts/DegenerusGame.sol#L383-L385)
 
 contracts/DegenerusGame.sol#L382-L387
 
 
- - [ ] ID-1023
+ - [ ] ID-1026
 Low level call in [DegenerusVault._payEth(address,uint256)](contracts/DegenerusVault.sol#L978-L981):
 	- [(ok,None) = to.call{value: amount}()](contracts/DegenerusVault.sol#L979)
 
 contracts/DegenerusVault.sol#L978-L981
 
 
- - [ ] ID-1024
+ - [ ] ID-1027
 Low level call in [DegenerusGame._purchaseLazyPassFor(address)](contracts/DegenerusGame.sol#L863-L873):
 	- [(ok,data) = ContractAddresses.GAME_WHALE_MODULE.delegatecall(abi.encodeWithSelector(IDegenerusGameWhaleModule.purchaseLazyPass.selector,buyer))](contracts/DegenerusGame.sol#L864-L871)
 
 contracts/DegenerusGame.sol#L863-L873
 
 
- - [ ] ID-1025
+ - [ ] ID-1028
 Low level call in [DegenerusGame.recordTerminalDecBurn(address,uint24,uint256)](contracts/DegenerusGame.sol#L1153-L1162):
 	- [(ok,data) = ContractAddresses.GAME_DECIMATOR_MODULE.delegatecall(msg.data)](contracts/DegenerusGame.sol#L1158-L1160)
 
 contracts/DegenerusGame.sol#L1153-L1162
 
 
- - [ ] ID-1026
+ - [ ] ID-1029
 Low level call in [DegenerusGame.floorAfkingStreakBase(address,uint16)](contracts/DegenerusGame.sol#L454-L459):
 	- [(ok,data) = ContractAddresses.GAME_AFKING_MODULE.delegatecall(msg.data)](contracts/DegenerusGame.sol#L455-L457)
 
 contracts/DegenerusGame.sol#L454-L459
 
 
- - [ ] ID-1027
+ - [ ] ID-1030
 Low level call in [DegenerusGame.redeemFlip(address,uint256)](contracts/DegenerusGame.sol#L692-L707):
 	- [(ok,data) = ContractAddresses.GAME_MINT_MODULE.delegatecall(abi.encodeWithSelector(IDegenerusGameMintModule.redeemFlip.selector,buyer,entryQuantityScaled))](contracts/DegenerusGame.sol#L697-L705)
 
 contracts/DegenerusGame.sol#L692-L707
 
 
- - [ ] ID-1028
+ - [ ] ID-1031
 Low level call in [DegenerusGame.recordAfkingSecondary(address,uint16)](contracts/DegenerusGame.sol#L445-L450):
 	- [(ok,data) = ContractAddresses.GAME_AFKING_MODULE.delegatecall(msg.data)](contracts/DegenerusGame.sol#L446-L448)
 
 contracts/DegenerusGame.sol#L445-L450
 
 
- - [ ] ID-1029
+ - [ ] ID-1032
 Low level call in [DegenerusGame.previewSellFarFutureEntries(address,uint32[],uint256[])](contracts/DegenerusGame.sol#L1788-L1811):
 	- [(ok,data) = ContractAddresses.GAME_MINT_MODULE.delegatecall(msg.data)](contracts/DegenerusGame.sol#L1802-L1804)
 
 contracts/DegenerusGame.sol#L1788-L1811
 
 
- - [ ] ID-1030
+ - [ ] ID-1033
 Low level call in [DegenerusGame.claimBingo(address,uint24,uint8,uint32[8])](contracts/DegenerusGame.sol#L325-L335):
 	- [(ok,data) = ContractAddresses.GAME_BINGO_MODULE.delegatecall(msg.data)](contracts/DegenerusGame.sol#L331-L333)
 
 contracts/DegenerusGame.sol#L325-L335
 
 
- - [ ] ID-1031
+ - [ ] ID-1034
 Low level call in [DegenerusGame.rawFulfillRandomWords(uint256,uint256[])](contracts/DegenerusGame.sol#L1989-L1997):
 	- [(ok,data) = ContractAddresses.GAME_ADVANCE_MODULE.delegatecall(msg.data)](contracts/DegenerusGame.sol#L1993-L1995)
 
 contracts/DegenerusGame.sol#L1989-L1997
 
 
- - [ ] ID-1032
+ - [ ] ID-1035
 Low level call in [DegenerusGame.buyLootboxAndPresaleBox(address,uint256,uint256,bytes32,MintPaymentKind,uint256)](contracts/DegenerusGame.sol#L780-L803):
 	- [(ok,data) = ContractAddresses.GAME_MINT_MODULE.delegatecall(abi.encodeWithSelector(IDegenerusGameMintModule.buyLootboxAndPresaleBox.selector,buyer,entryQuantityScaled,lootBoxAmount,affiliateCode,payKind,boxAmount))](contracts/DegenerusGame.sol#L789-L801)
 
 contracts/DegenerusGame.sol#L780-L803
 
 
- - [ ] ID-1033
+ - [ ] ID-1036
 Low level call in [DegenerusGameLootboxModule._callEthSpin(address,uint256,uint16,uint256)](contracts/modules/DegenerusGameLootboxModule.sol#L2156-L2173):
 	- [(ok,None) = ContractAddresses.GAME_DEGENERETTE_MODULE.delegatecall(abi.encodeWithSelector(IDegenerusGameDegeneretteModule.resolveEthSpinFromBox.selector,player,stake,activityScore,seed,uint32(0)))](contracts/modules/DegenerusGameLootboxModule.sol#L2162-L2171)
 
 contracts/modules/DegenerusGameLootboxModule.sol#L2156-L2173
 
 
- - [ ] ID-1034
+ - [ ] ID-1037
 Low level call in [DegenerusGame.claimTerminalDecimatorJackpot()](contracts/DegenerusGame.sol#L1282-L1287):
 	- [(ok,data) = ContractAddresses.GAME_DECIMATOR_MODULE.delegatecall(msg.data)](contracts/DegenerusGame.sol#L1283-L1285)
 
 contracts/DegenerusGame.sol#L1282-L1287
 
 
- - [ ] ID-1035
+ - [ ] ID-1038
 Low level call in [DegenerusGame.creditRedemptionDirect(address,uint256)](contracts/DegenerusGame.sol#L1689-L1694):
 	- [(ok,data) = ContractAddresses.GAME_LOOTBOX_MODULE.delegatecall(msg.data)](contracts/DegenerusGame.sol#L1690-L1692)
 
 contracts/DegenerusGame.sol#L1689-L1694
 
 
- - [ ] ID-1036
+ - [ ] ID-1039
 Low level call in [DegenerusGame.claimAfkingFlip(address[])](contracts/DegenerusGame.sol#L395-L400):
 	- [(ok,data) = ContractAddresses.GAME_AFKING_MODULE.delegatecall(msg.data)](contracts/DegenerusGame.sol#L396-L398)
 
 contracts/DegenerusGame.sol#L395-L400
 
 
- - [ ] ID-1037
+ - [ ] ID-1040
 Low level call in [DegenerusGame._purchaseFor(address,uint256,uint256,bytes32,MintPaymentKind)](contracts/DegenerusGame.sol#L604-L624):
 	- [(ok,data) = ContractAddresses.GAME_MINT_MODULE.delegatecall(abi.encodeWithSelector(IDegenerusGameMintModule.purchase.selector,buyer,entryQuantityScaled,lootBoxAmount,affiliateCode,payKind))](contracts/DegenerusGame.sol#L611-L622)
 
 contracts/DegenerusGame.sol#L604-L624
 
 
- - [ ] ID-1038
+ - [ ] ID-1041
 Low level call in [DegenerusGame.subscribe(address,bool,bool,uint8,address)](contracts/DegenerusGame.sol#L364-L375):
 	- [(ok,data) = ContractAddresses.GAME_AFKING_MODULE.delegatecall(msg.data)](contracts/DegenerusGame.sol#L371-L373)
 
 contracts/DegenerusGame.sol#L364-L375
 
 
- - [ ] ID-1039
+ - [ ] ID-1042
 Low level call in [DegenerusGameAdvanceModule._payDailyCoinJackpot(uint24,uint256,uint24,uint24)](contracts/modules/DegenerusGameAdvanceModule.sol#L1165-L1183):
 	- [(ok,data) = ContractAddresses.GAME_JACKPOT_MODULE.delegatecall(abi.encodeWithSelector(IDegenerusGameJackpotModule.payDailyFlipJackpot.selector,lvl,randWord,minLevel,maxLevel))](contracts/modules/DegenerusGameAdvanceModule.sol#L1171-L1181)
 
 contracts/modules/DegenerusGameAdvanceModule.sol#L1165-L1183
 
 
- - [ ] ID-1040
+ - [ ] ID-1043
 Low level call in [DGNRS.burn(uint256)](contracts/DGNRS.sol#L226-L241):
 	- [(success,None) = msg.sender.call{value: ethOut}()](contracts/DGNRS.sol#L236)
 
 contracts/DGNRS.sol#L226-L241
 
 
- - [ ] ID-1041
+ - [ ] ID-1044
 Low level call in [DegenerusGame.resolveRedemptionLootbox(address,uint256,uint256,uint16)](contracts/DegenerusGame.sol#L1669-L1679):
 	- [(ok,data) = ContractAddresses.GAME_LOOTBOX_MODULE.delegatecall(msg.data)](contracts/DegenerusGame.sol#L1675-L1677)
 
 contracts/DegenerusGame.sol#L1669-L1679
 
 
- - [ ] ID-1042
+ - [ ] ID-1045
 Low level call in [DegenerusGame.issueDeityBoon(address,address,uint8)](contracts/DegenerusGame.sol#L1013-L1031):
 	- [(ok,data) = ContractAddresses.GAME_LOOTBOX_MODULE.delegatecall(abi.encodeWithSelector(IDegenerusGameLootboxModule.issueDeityBoon.selector,deity,recipient,slot))](contracts/DegenerusGame.sol#L1020-L1029)
 
 contracts/DegenerusGame.sol#L1013-L1031
 
 
- - [ ] ID-1043
+ - [ ] ID-1046
 Low level call in [DegenerusGame._purchaseDeityPassFor(address,uint8)](contracts/DegenerusGame.sol#L883-L894):
 	- [(ok,data) = ContractAddresses.GAME_WHALE_MODULE.delegatecall(abi.encodeWithSelector(IDegenerusGameWhaleModule.purchaseDeityPass.selector,buyer,symbolId))](contracts/DegenerusGame.sol#L884-L892)
 
 contracts/DegenerusGame.sol#L883-L894
 
 
- - [ ] ID-1044
+ - [ ] ID-1047
 Low level call in [GameAfkingModule.mintFlip()](contracts/modules/GameAfkingModule.sol#L1646-L1730):
 	- [(ok,data) = ContractAddresses.GAME_LOOTBOX_MODULE.delegatecall(abi.encodeWithSelector(IDegenerusGameLootboxModule.openHumanBoxes.selector,OPEN_BATCH - opened))](contracts/modules/GameAfkingModule.sol#L1692-L1699)
 
 contracts/modules/GameAfkingModule.sol#L1646-L1730
 
 
- - [ ] ID-1045
+ - [ ] ID-1048
 Low level call in [DegenerusGameLootboxModule._callWwxrpSpin(address,uint256,uint16,uint256)](contracts/modules/DegenerusGameLootboxModule.sol#L2116-L2133):
 	- [(ok,None) = ContractAddresses.GAME_DEGENERETTE_MODULE.delegatecall(abi.encodeWithSelector(IDegenerusGameDegeneretteModule.resolveWwxrpSpinFromBox.selector,player,stake,activityScore,seed,uint32(0)))](contracts/modules/DegenerusGameLootboxModule.sol#L2122-L2131)
 
 contracts/modules/DegenerusGameLootboxModule.sol#L2116-L2133
 
 
- - [ ] ID-1046
+ - [ ] ID-1049
 Low level call in [GNRUS.sweepResidualToVault()](contracts/GNRUS.sol#L412-L430):
 	- [(ok,None) = ContractAddresses.VAULT.call{value: ethBal}()](contracts/GNRUS.sol#L425)
 
 contracts/GNRUS.sol#L412-L430
 
 
- - [ ] ID-1047
+ - [ ] ID-1050
 Low level call in [DegenerusGameAdvanceModule._processFutureTicketBatch(uint24,uint256)](contracts/modules/DegenerusGameAdvanceModule.sol#L1577-L1593):
 	- [(ok,data) = ContractAddresses.GAME_MINT_MODULE.delegatecall(abi.encodeWithSelector(IDegenerusGameMintModule.processFutureTicketBatch.selector,lvl,entropy))](contracts/modules/DegenerusGameAdvanceModule.sol#L1581-L1589)
 
 contracts/modules/DegenerusGameAdvanceModule.sol#L1577-L1593
 
 
- - [ ] ID-1048
+ - [ ] ID-1051
 Low level call in [DegenerusGame.advanceGame()](contracts/DegenerusGame.sol#L285-L291):
 	- [(ok,data) = ContractAddresses.GAME_ADVANCE_MODULE.delegatecall(msg.data)](contracts/DegenerusGame.sol#L286-L288)
 
 contracts/DegenerusGame.sol#L285-L291
 
 
- - [ ] ID-1049
+ - [ ] ID-1052
 Low level call in [DegenerusGame.decurse(address)](contracts/DegenerusGame.sol#L422-L427):
 	- [(ok,data) = ContractAddresses.GAME_AFKING_MODULE.delegatecall(msg.data)](contracts/DegenerusGame.sol#L423-L425)
 
 contracts/DegenerusGame.sol#L422-L427
 
 
- - [ ] ID-1050
+ - [ ] ID-1053
 Low level call in [DegenerusGameAdvanceModule._handleGameOverPath(uint24,uint24)](contracts/modules/DegenerusGameAdvanceModule.sol#L688-L811):
 	- [(ok,data) = ContractAddresses.GAME_GAMEOVER_MODULE.delegatecall(abi.encodeWithSelector(IDegenerusGameGameOverModule.handleFinalSweep.selector))](contracts/modules/DegenerusGameAdvanceModule.sol#L704-L708)
 	- [(dOk,dData) = ContractAddresses.GAME_MINT_MODULE.delegatecall(abi.encodeWithSelector(IDegenerusGameMintModule.processTicketBatch.selector,drainLevel))](contracts/modules/DegenerusGameAdvanceModule.sol#L780-L787)
@@ -13636,7 +13675,7 @@ Low level call in [DegenerusGameAdvanceModule._handleGameOverPath(uint24,uint24)
 contracts/modules/DegenerusGameAdvanceModule.sol#L688-L811
 
 
- - [ ] ID-1051
+ - [ ] ID-1054
 Low level call in [DegenerusGame.openBoxes(uint256)](contracts/DegenerusGame.sol#L1607-L1637):
 	- [(ok,data) = ContractAddresses.GAME_AFKING_MODULE.delegatecall(abi.encodeWithSelector(IGameAfkingModule.drainAfkingBoxes.selector,maxCount))](contracts/DegenerusGame.sol#L1611-L1618)
 	- [(ok,data) = ContractAddresses.GAME_LOOTBOX_MODULE.delegatecall(abi.encodeWithSelector(IDegenerusGameLootboxModule.openHumanBoxes.selector,maxCount - openedAfking))](contracts/DegenerusGame.sol#L1625-L1632)
@@ -13644,7 +13683,7 @@ Low level call in [DegenerusGame.openBoxes(uint256)](contracts/DegenerusGame.sol
 contracts/DegenerusGame.sol#L1607-L1637
 
 
- - [ ] ID-1052
+ - [ ] ID-1055
 Low level call in [DegenerusGame._purchaseWithFoil(address,uint256,uint256,bytes32,MintPaymentKind)](contracts/DegenerusGame.sol#L637-L685):
 	- [(ok,data) = ContractAddresses.GAME_MINT_MODULE.delegatecall(abi.encodeWithSelector(IDegenerusGameMintModule.purchaseWith.selector,buyer,entryQuantityScaled,lootBoxAmount,affiliateCode,payKind,mintFresh))](contracts/DegenerusGame.sol#L658-L670)
 	- [(okFoil,dataFoil) = ContractAddresses.GAME_FOILPACK_MODULE.delegatecall(abi.encodeWithSelector(IDegenerusGameFoilPackModule.buyFoilPack.selector,buyer,fresh - mintFresh,affiliateCode,payKind))](contracts/DegenerusGame.sol#L673-L683)
@@ -13652,42 +13691,42 @@ Low level call in [DegenerusGame._purchaseWithFoil(address,uint256,uint256,bytes
 contracts/DegenerusGame.sol#L637-L685
 
 
- - [ ] ID-1053
+ - [ ] ID-1056
 Low level call in [DegenerusGameAdvanceModule.payDailyJackpotCoinAndTickets(uint256)](contracts/modules/DegenerusGameAdvanceModule.sol#L1144-L1156):
 	- [(ok,data) = ContractAddresses.GAME_JACKPOT_MODULE.delegatecall(abi.encodeWithSelector(IDegenerusGameJackpotModule.payDailyJackpotCoinAndTickets.selector,randWord))](contracts/modules/DegenerusGameAdvanceModule.sol#L1145-L1154)
 
 contracts/modules/DegenerusGameAdvanceModule.sol#L1144-L1156
 
 
- - [ ] ID-1054
+ - [ ] ID-1057
 Low level call in [DegenerusGameAdvanceModule._runSubscriberStage(uint24)](contracts/modules/DegenerusGameAdvanceModule.sol#L906-L917):
 	- [(ok,data) = ContractAddresses.GAME_AFKING_MODULE.delegatecall(abi.encodeWithSelector(IGameAfkingModule.processSubscriberStage.selector,processDay,SUB_STAGE_WEIGHT_BUDGET))](contracts/modules/DegenerusGameAdvanceModule.sol#L907-L915)
 
 contracts/modules/DegenerusGameAdvanceModule.sol#L906-L917
 
 
- - [ ] ID-1055
+ - [ ] ID-1058
 Low level call in [DegenerusGame.recordDecBurn(address,uint24,uint8,uint256,uint256)](contracts/DegenerusGame.sol#L1083-L1096):
 	- [(ok,data) = ContractAddresses.GAME_DECIMATOR_MODULE.delegatecall(msg.data)](contracts/DegenerusGame.sol#L1090-L1092)
 
 contracts/DegenerusGame.sol#L1083-L1096
 
 
- - [ ] ID-1056
+ - [ ] ID-1059
 Low level call in [GameAfkingModule._openAfkingBox(address,DegenerusGameStorage.Sub,uint256)](contracts/modules/GameAfkingModule.sol#L1523-L1547):
 	- [(ok,data) = ContractAddresses.GAME_LOOTBOX_MODULE.delegatecall(abi.encodeWithSelector(IDegenerusGameLootboxModule.resolveAfkingBox.selector,player,_unpackMilliEthToWei(uint64(sub.amount)),day,word,uint16(sub.score)))](contracts/modules/GameAfkingModule.sol#L1534-L1545)
 
 contracts/modules/GameAfkingModule.sol#L1523-L1547
 
 
- - [ ] ID-1057
+ - [ ] ID-1060
 Low level call in [DegenerusGame.emitDailyWinningTraits(uint24,uint256,uint24)](contracts/DegenerusGame.sol#L1239-L1249):
 	- [(ok,data) = ContractAddresses.GAME_JACKPOT_MODULE.delegatecall(msg.data)](contracts/DegenerusGame.sol#L1245-L1247)
 
 contracts/DegenerusGame.sol#L1239-L1249
 
 
- - [ ] ID-1058
+ - [ ] ID-1061
 Low level call in [DGNRS.yearSweep()](contracts/DGNRS.sol#L300-L335):
 	- [(ok,None) = address(ContractAddresses.GNRUS).call{value: ethToGnrus}()](contracts/DGNRS.sol#L326)
 	- [(ok_scope_0,None) = address(ContractAddresses.VAULT).call{value: ethToVault}()](contracts/DGNRS.sol#L330)
@@ -13695,147 +13734,147 @@ Low level call in [DGNRS.yearSweep()](contracts/DGNRS.sol#L300-L335):
 contracts/DGNRS.sol#L300-L335
 
 
- - [ ] ID-1059
+ - [ ] ID-1062
 Low level call in [DegenerusGameAdvanceModule._runProcessTicketBatch(uint24)](contracts/modules/DegenerusGameAdvanceModule.sol#L1656-L1670):
 	- [(ok,data) = ContractAddresses.GAME_MINT_MODULE.delegatecall(abi.encodeWithSelector(IDegenerusGameMintModule.processTicketBatch.selector,lvl))](contracts/modules/DegenerusGameAdvanceModule.sol#L1659-L1666)
 
 contracts/modules/DegenerusGameAdvanceModule.sol#L1656-L1670
 
 
- - [ ] ID-1060
+ - [ ] ID-1063
 Low level call in [DegenerusGame.requestLootboxRng()](contracts/DegenerusGame.sol#L1937-L1942):
 	- [(ok,data) = ContractAddresses.GAME_ADVANCE_MODULE.delegatecall(msg.data)](contracts/DegenerusGame.sol#L1938-L1940)
 
 contracts/DegenerusGame.sol#L1937-L1942
 
 
- - [ ] ID-1061
+ - [ ] ID-1064
 Low level call in [DegenerusGame.updateVrfCoordinatorAndSub(address,uint256,bytes32)](contracts/DegenerusGame.sol#L1921-L1930):
 	- [(ok,data) = ContractAddresses.GAME_ADVANCE_MODULE.delegatecall(msg.data)](contracts/DegenerusGame.sol#L1926-L1928)
 
 contracts/DegenerusGame.sol#L1921-L1930
 
 
- - [ ] ID-1062
+ - [ ] ID-1065
 Low level call in [DegenerusGame.runTerminalJackpot(uint256,uint24,uint256)](contracts/DegenerusGame.sol#L1217-L1229):
 	- [(ok,data) = ContractAddresses.GAME_JACKPOT_MODULE.delegatecall(msg.data)](contracts/DegenerusGame.sol#L1223-L1225)
 
 contracts/DegenerusGame.sol#L1217-L1229
 
 
- - [ ] ID-1063
+ - [ ] ID-1066
 Low level call in [DegenerusGameMintModule._drainFoil(uint32)](contracts/modules/DegenerusGameMintModule.sol#L744-L766):
 	- [(ok,data) = ContractAddresses.GAME_FOILPACK_MODULE.delegatecall(abi.encodeWithSelector(IDegenerusGameFoilPackModule.processFoilDrain.selector,room))](contracts/modules/DegenerusGameMintModule.sol#L751-L758)
 
 contracts/modules/DegenerusGameMintModule.sol#L744-L766
 
 
- - [ ] ID-1064
+ - [ ] ID-1067
 Low level call in [sDGNRS._deterministicBurnFrom(address,address,uint256)](contracts/sDGNRS.sol#L674-L719):
 	- [(success,None) = beneficiary.call{value: ethOut}()](contracts/sDGNRS.sol#L713)
 
 contracts/sDGNRS.sol#L674-L719
 
 
- - [ ] ID-1065
+ - [ ] ID-1068
 Low level call in [DegenerusGame.runDecimatorJackpot(uint256,uint24,uint256)](contracts/DegenerusGame.sol#L1106-L1118):
 	- [(ok,data) = ContractAddresses.GAME_DECIMATOR_MODULE.delegatecall(msg.data)](contracts/DegenerusGame.sol#L1112-L1114)
 
 contracts/DegenerusGame.sol#L1106-L1118
 
 
- - [ ] ID-1066
+ - [ ] ID-1069
 Low level call in [MockVRFCoordinator.fulfillRandomWordsRaw(uint256,address,uint256)](contracts/mocks/MockVRFCoordinator.sol#L103-L118):
 	- [(ok,None) = consumer.call(abi.encodeWithSignature(rawFulfillRandomWords(uint256,uint256[]),requestId,words))](contracts/mocks/MockVRFCoordinator.sol#L110-L116)
 
 contracts/mocks/MockVRFCoordinator.sol#L103-L118
 
 
- - [ ] ID-1067
+ - [ ] ID-1070
 Low level call in [DegenerusGame._payoutWithEthFallback(address,uint256)](contracts/DegenerusGame.sol#L2055-L2069):
 	- [(ok,None) = address(to).call{value: remaining}()](contracts/DegenerusGame.sol#L2067)
 
 contracts/DegenerusGame.sol#L2055-L2069
 
 
- - [ ] ID-1068
+ - [ ] ID-1071
 Low level call in [DegenerusGameLootboxModule._rollLootboxBoons(address,uint256,uint256,uint24,uint256)](contracts/modules/DegenerusGameLootboxModule.sol#L1427-L1490):
 	- [(okClr,None) = ContractAddresses.GAME_BOON_MODULE.delegatecall(abi.encodeWithSelector(IDegenerusGameBoonModule.checkAndClearExpiredBoon.selector,player))](contracts/modules/DegenerusGameLootboxModule.sol#L1442-L1444)
 
 contracts/modules/DegenerusGameLootboxModule.sol#L1427-L1490
 
 
- - [ ] ID-1069
+ - [ ] ID-1072
 Low level call in [DegenerusGame.placeDegeneretteBet(address,uint8,uint128,uint8,uint32,uint8)](contracts/DegenerusGame.sol#L904-L916):
 	- [(ok,data) = ContractAddresses.GAME_DEGENERETTE_MODULE.delegatecall(msg.data)](contracts/DegenerusGame.sol#L912-L914)
 
 contracts/DegenerusGame.sol#L904-L916
 
 
- - [ ] ID-1070
+ - [ ] ID-1073
 Low level call in [MockGameCharity.claimWinnings(address)](contracts/mocks/MockGameCharity.sol#L22-L28):
 	- [(ok,None) = player.call{value: amt}()](contracts/mocks/MockGameCharity.sol#L26)
 
 contracts/mocks/MockGameCharity.sol#L22-L28
 
 
- - [ ] ID-1071
+ - [ ] ID-1074
 Low level call in [DegenerusGame.runBafJackpot(uint256,uint24,uint256)](contracts/DegenerusGame.sol#L1128-L1140):
 	- [(ok,data) = ContractAddresses.GAME_JACKPOT_MODULE.delegatecall(msg.data)](contracts/DegenerusGame.sol#L1134-L1136)
 
 contracts/DegenerusGame.sol#L1128-L1140
 
 
- - [ ] ID-1072
+ - [ ] ID-1075
 Low level call in [DegenerusGame.openBox(address,uint48)](contracts/DegenerusGame.sol#L812-L817):
 	- [(ok,data) = ContractAddresses.GAME_LOOTBOX_MODULE.delegatecall(msg.data)](contracts/DegenerusGame.sol#L813-L815)
 
 contracts/DegenerusGame.sol#L812-L817
 
 
- - [ ] ID-1073
+ - [ ] ID-1076
 Low level call in [DegenerusGame.boostTerminalDecimator()](contracts/DegenerusGame.sol#L1168-L1173):
 	- [(ok,data) = ContractAddresses.GAME_DECIMATOR_MODULE.delegatecall(msg.data)](contracts/DegenerusGame.sol#L1169-L1171)
 
 contracts/DegenerusGame.sol#L1168-L1173
 
 
- - [ ] ID-1074
+ - [ ] ID-1077
 Low level call in [DegenerusGameMintModule._callTicketPurchase(address,uint256,MintPaymentKind,bool,bytes32,uint256,uint24,bool)](contracts/modules/DegenerusGameMintModule.sol#L1924-L2071):
 	- [(boostOk,boostData) = ContractAddresses.GAME_BOON_MODULE.delegatecall(abi.encodeWithSelector(IDegenerusGameBoonModule.consumePurchaseBoost.selector,buyer))](contracts/modules/DegenerusGameMintModule.sol#L1982-L1989)
 
 contracts/modules/DegenerusGameMintModule.sol#L1924-L2071
 
 
- - [ ] ID-1075
+ - [ ] ID-1078
 Low level call in [DegenerusGame.claimDecimatorJackpotMany(address[],uint24)](contracts/DegenerusGame.sol#L1268-L1276):
 	- [(ok,data) = ContractAddresses.GAME_DECIMATOR_MODULE.delegatecall(msg.data)](contracts/DegenerusGame.sol#L1272-L1274)
 
 contracts/DegenerusGame.sol#L1268-L1276
 
 
- - [ ] ID-1076
+ - [ ] ID-1079
 Low level call in [DegenerusGameGameOverModule._sendStethFirst(address,uint256,uint256)](contracts/modules/DegenerusGameGameOverModule.sol#L268-L283):
 	- [(ok,None) = address(to).call{value: ethAmount}()](contracts/modules/DegenerusGameGameOverModule.sol#L279)
 
 contracts/modules/DegenerusGameGameOverModule.sol#L268-L283
 
 
- - [ ] ID-1077
+ - [ ] ID-1080
 Low level call in [DegenerusGame.sellFarFutureEntries(address,uint32[],uint256[],uint256[])](contracts/DegenerusGame.sol#L1750-L1769):
 	- [(ok,data) = ContractAddresses.GAME_MINT_MODULE.delegatecall(abi.encodeWithSelector(IDegenerusGameMintModule.sellFarFutureEntries.selector,player,levels,quantities,queueIndices))](contracts/DegenerusGame.sol#L1757-L1767)
 
 contracts/DegenerusGame.sol#L1750-L1769
 
 
- - [ ] ID-1078
+ - [ ] ID-1081
 Low level call in [DegenerusGame.pullRedemptionReserve(uint256)](contracts/DegenerusGame.sol#L1711-L1740):
 	- [(ok,None) = address(ContractAddresses.SDGNRS).call{value: amount}()](contracts/DegenerusGame.sol#L1724)
 
 contracts/DegenerusGame.sol#L1711-L1740
 
 
- - [ ] ID-1079
+ - [ ] ID-1082
 Low level call in [DegenerusGameFoilPackModule._foilSpin(bytes4,address,uint256,uint16,uint256,uint32)](contracts/modules/DegenerusGameFoilPackModule.sol#L639-L658):
 	- [(ok,None) = ContractAddresses.GAME_DEGENERETTE_MODULE.delegatecall(abi.encodeWithSelector(selector,player,stake,activityScore,seed,customTraits))](contracts/modules/DegenerusGameFoilPackModule.sol#L647-L656)
 
@@ -13845,253 +13884,253 @@ contracts/modules/DegenerusGameFoilPackModule.sol#L639-L658
 ## missing-inheritance
 Impact: Informational
 Confidence: High
- - [ ] ID-1080
+ - [ ] ID-1083
 [DegenerusGame](contracts/DegenerusGame.sol#L87-L2624) should inherit from [IDegenerusGameWhaleModule](contracts/interfaces/IDegenerusGameModules.sol#L188-L206)
 
 contracts/DegenerusGame.sol#L87-L2624
 
 
- - [ ] ID-1081
+ - [ ] ID-1084
 [DegenerusGameWhaleModule](contracts/modules/DegenerusGameWhaleModule.sol#L20-L1026) should inherit from [IDegenerusGameWhaleModule](contracts/interfaces/IDegenerusGameModules.sol#L188-L206)
 
 contracts/modules/DegenerusGameWhaleModule.sol#L20-L1026
 
 
- - [ ] ID-1082
+ - [ ] ID-1085
 [DegenerusGame](contracts/DegenerusGame.sol#L87-L2624) should inherit from [IDegenerusGameBingoModule](contracts/interfaces/IDegenerusGameModules.sol#L488-L502)
 
 contracts/DegenerusGame.sol#L87-L2624
 
 
- - [ ] ID-1083
+ - [ ] ID-1086
 [MockVRFCoordinator](contracts/mocks/MockVRFCoordinator.sol#L8-L140) should inherit from [IVRFCoordinatorV2_5Owner](contracts/DegenerusAdmin.sol#L48-L82)
 
 contracts/mocks/MockVRFCoordinator.sol#L8-L140
 
 
- - [ ] ID-1084
+ - [ ] ID-1087
 [FLIP](contracts/FLIP.sol#L61-L743) should inherit from [IDegenerusCoin](contracts/interfaces/IDegenerusCoin.sol#L6-L40)
 
 contracts/FLIP.sol#L61-L743
 
 
- - [ ] ID-1085
+ - [ ] ID-1088
 [DegenerusGameLootboxModule](contracts/modules/DegenerusGameLootboxModule.sol#L39-L2359) should inherit from [IDegenerusGameLootboxModule](contracts/interfaces/IDegenerusGameModules.sol#L319-L386)
 
 contracts/modules/DegenerusGameLootboxModule.sol#L39-L2359
 
 
- - [ ] ID-1086
+ - [ ] ID-1089
 [DegenerusGameAdvanceModule](contracts/modules/DegenerusGameAdvanceModule.sol#L30-L2107) should inherit from [IDegenerusGameAdvanceModule](contracts/interfaces/IDegenerusGameModules.sol#L8-L45)
 
 contracts/modules/DegenerusGameAdvanceModule.sol#L30-L2107
 
 
- - [ ] ID-1087
+ - [ ] ID-1090
 [GNRUS](contracts/GNRUS.sol#L43-L730) should inherit from [IGNRUSResolve](contracts/modules/DegenerusGameAdvanceModule.sol#L25-L27)
 
 contracts/GNRUS.sol#L43-L730
 
 
- - [ ] ID-1088
+ - [ ] ID-1091
 [FLIP](contracts/FLIP.sol#L61-L743) should inherit from [IWWXRPMint](contracts/DegenerusVault.sol#L108-L111)
 
 contracts/FLIP.sol#L61-L743
 
 
- - [ ] ID-1089
-[DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1774) should inherit from [IDegenerusGameDegeneretteModule](contracts/interfaces/IDegenerusGameModules.sol#L418-L484)
+ - [ ] ID-1092
+[DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1779) should inherit from [IDegenerusGameDegeneretteModule](contracts/interfaces/IDegenerusGameModules.sol#L418-L484)
 
-contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1774
+contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1779
 
 
- - [ ] ID-1090
+ - [ ] ID-1093
 [DegenerusGame](contracts/DegenerusGame.sol#L87-L2624) should inherit from [IDeityBoonDataSource](contracts/DeityBoonViewer.sol#L5-L20)
 
 contracts/DegenerusGame.sol#L87-L2624
 
 
- - [ ] ID-1091
+ - [ ] ID-1094
 [MockLinkToken](contracts/mocks/MockLinkToken.sol#L5-L68) should inherit from [IDegenerusDeityPassMint](contracts/modules/DegenerusGameWhaleModule.sol#L1029-L1033)
 
 contracts/mocks/MockLinkToken.sol#L5-L68
 
 
- - [ ] ID-1092
+ - [ ] ID-1095
 [FLIP](contracts/FLIP.sol#L61-L743) should inherit from [IFLIP](contracts/Coinflip.sol#L31-L36)
 
 contracts/FLIP.sol#L61-L743
 
 
- - [ ] ID-1093
+ - [ ] ID-1096
 [DegenerusGameBingoModule](contracts/modules/DegenerusGameBingoModule.sol#L24-L288) should inherit from [IDegenerusGameBingoModule](contracts/interfaces/IDegenerusGameModules.sol#L488-L502)
 
 contracts/modules/DegenerusGameBingoModule.sol#L24-L288
 
 
- - [ ] ID-1094
+ - [ ] ID-1097
 [DegenerusVault](contracts/DegenerusVault.sol#L349-L989) should inherit from [IDegenerusVaultOwner](contracts/modules/DegenerusGameMintStreakUtils.sol#L10-L15)
 
 contracts/DegenerusVault.sol#L349-L989
 
 
- - [ ] ID-1095
+ - [ ] ID-1098
 [MockGameCharity](contracts/mocks/MockGameCharity.sol#L6-L31) should inherit from [IDegenerusGameDonations](contracts/GNRUS.sol#L14-L19)
 
 contracts/mocks/MockGameCharity.sol#L6-L31
 
 
- - [ ] ID-1096
+ - [ ] ID-1099
 [DegenerusGame](contracts/DegenerusGame.sol#L87-L2624) should inherit from [IDegenerusGameAdvanceModule](contracts/interfaces/IDegenerusGameModules.sol#L8-L45)
 
 contracts/DegenerusGame.sol#L87-L2624
 
 
- - [ ] ID-1097
+ - [ ] ID-1100
 [MockStETH](contracts/mocks/MockStETH.sol#L7-L100) should inherit from [IStETH](contracts/interfaces/IStETH.sol#L7-L36)
 
 contracts/mocks/MockStETH.sol#L7-L100
 
 
- - [ ] ID-1098
+ - [ ] ID-1101
 [DegenerusGameMintModule](contracts/modules/DegenerusGameMintModule.sol#L74-L2136) should inherit from [IDegenerusGameMintModule](contracts/interfaces/IDegenerusGameModules.sol#L210-L315)
 
 contracts/modules/DegenerusGameMintModule.sol#L74-L2136
 
 
- - [ ] ID-1099
+ - [ ] ID-1102
 [Icons32Data](contracts/Icons32Data.sol#L87-L228) should inherit from [IIcons32](contracts/DegenerusDeityPass.sol#L9-L18)
 
 contracts/Icons32Data.sol#L87-L228
 
 
- - [ ] ID-1100
+ - [ ] ID-1103
 [DegenerusQuests](contracts/DegenerusQuests.sol#L54-L2457) should inherit from [IQuestCompletionView](contracts/modules/GameAfkingModule.sol#L30-L32)
 
 contracts/DegenerusQuests.sol#L54-L2457
 
 
- - [ ] ID-1101
+ - [ ] ID-1104
 [DegenerusGameDecimatorModule](contracts/modules/DegenerusGameDecimatorModule.sol#L21-L1134) should inherit from [IDegenerusGameDecimatorModule](contracts/interfaces/IDegenerusGameModules.sol#L117-L184)
 
 contracts/modules/DegenerusGameDecimatorModule.sol#L21-L1134
 
 
- - [ ] ID-1102
+ - [ ] ID-1105
 [DegenerusGame](contracts/DegenerusGame.sol#L87-L2624) should inherit from [IDegenerusGamePlayerActions](contracts/DegenerusVault.sol#L10-L77)
 
 contracts/DegenerusGame.sol#L87-L2624
 
 
- - [ ] ID-1103
+ - [ ] ID-1106
 [DegenerusAffiliate](contracts/DegenerusAffiliate.sol#L76-L1095) should inherit from [IDegenerusAffiliate](contracts/interfaces/IDegenerusAffiliate.sol#L7-L101)
 
 contracts/DegenerusAffiliate.sol#L76-L1095
 
 
- - [ ] ID-1104
+ - [ ] ID-1107
 [GNRUS](contracts/GNRUS.sol#L43-L730) should inherit from [IGNRUSGameOver](contracts/modules/DegenerusGameGameOverModule.sol#L23-L26)
 
 contracts/GNRUS.sol#L43-L730
 
 
- - [ ] ID-1105
+ - [ ] ID-1108
 [DegenerusDeityPass](contracts/DegenerusDeityPass.sol#L44-L389) should inherit from [IDegenerusDeityPassMint](contracts/modules/DegenerusGameWhaleModule.sol#L1029-L1033)
 
 contracts/DegenerusDeityPass.sol#L44-L389
 
 
- - [ ] ID-1106
+ - [ ] ID-1109
 [WWXRP](contracts/WWXRP.sol#L25-L267) should inherit from [IWWXRPMint](contracts/DegenerusVault.sol#L108-L111)
 
 contracts/WWXRP.sol#L25-L267
 
 
- - [ ] ID-1107
+ - [ ] ID-1110
 [FLIP](contracts/FLIP.sol#L61-L743) should inherit from [ICoinPlayerActions](contracts/DegenerusVault.sol#L94-L97)
 
 contracts/FLIP.sol#L61-L743
 
 
- - [ ] ID-1108
+ - [ ] ID-1111
 [FLIP](contracts/FLIP.sol#L61-L743) should inherit from [IFlipTombstone](contracts/modules/DegenerusGameGameOverModule.sol#L28-L30)
 
 contracts/FLIP.sol#L61-L743
 
 
- - [ ] ID-1109
+ - [ ] ID-1112
 [DegenerusGameBoonModule](contracts/modules/DegenerusGameBoonModule.sol#L22-L343) should inherit from [IDegenerusGameBoonModule](contracts/interfaces/IDegenerusGameModules.sol#L390-L414)
 
 contracts/modules/DegenerusGameBoonModule.sol#L22-L343
 
 
- - [ ] ID-1110
+ - [ ] ID-1113
 [sDGNRS](contracts/sDGNRS.sol#L96-L1208) should inherit from [IsDGNRSBurn](contracts/DegenerusVault.sol#L100-L105)
 
 contracts/sDGNRS.sol#L96-L1208
 
 
- - [ ] ID-1111
+ - [ ] ID-1114
 [MockVRFCoordinator](contracts/mocks/MockVRFCoordinator.sol#L8-L140) should inherit from [IVRFCoordinator](contracts/interfaces/IVRFCoordinator.sol#L25-L46)
 
 contracts/mocks/MockVRFCoordinator.sol#L8-L140
 
 
- - [ ] ID-1112
+ - [ ] ID-1115
 [DegenerusDeityPass](contracts/DegenerusDeityPass.sol#L44-L389) should inherit from [IDegenerusDeityPassOwner](contracts/modules/GameAfkingModule.sol#L1944-L1946)
 
 contracts/DegenerusDeityPass.sol#L44-L389
 
 
- - [ ] ID-1113
+ - [ ] ID-1116
 [DegenerusGameGameOverModule](contracts/modules/DegenerusGameGameOverModule.sol#L37-L284) should inherit from [IDegenerusGameGameOverModule](contracts/interfaces/IDegenerusGameModules.sol#L49-L56)
 
 contracts/modules/DegenerusGameGameOverModule.sol#L37-L284
 
 
- - [ ] ID-1114
+ - [ ] ID-1117
 [WWXRP](contracts/WWXRP.sol#L25-L267) should inherit from [IWWXRP](contracts/modules/DegenerusGameDegeneretteModule.sol#L21-L31)
 
 contracts/WWXRP.sol#L25-L267
 
 
- - [ ] ID-1115
+ - [ ] ID-1118
 [MockStETH](contracts/mocks/MockStETH.sol#L7-L100) should inherit from [IDegenerusDeityPassMint](contracts/modules/DegenerusGameWhaleModule.sol#L1029-L1033)
 
 contracts/mocks/MockStETH.sol#L7-L100
 
 
- - [ ] ID-1116
+ - [ ] ID-1119
 [DegenerusDeityPass](contracts/DegenerusDeityPass.sol#L44-L389) should inherit from [ISDGNRSSnapshot](contracts/GNRUS.sol#L8-L11)
 
 contracts/DegenerusDeityPass.sol#L44-L389
 
 
- - [ ] ID-1117
+ - [ ] ID-1120
 [DegenerusAdmin](contracts/DegenerusAdmin.sol#L195-L1210) should inherit from [IDegenerusAdminShutdown](contracts/modules/DegenerusGameGameOverModule.sol#L18-L20)
 
 contracts/DegenerusAdmin.sol#L195-L1210
 
 
- - [ ] ID-1118
+ - [ ] ID-1121
 [Coinflip](contracts/Coinflip.sol#L44-L1330) should inherit from [ICoinflip](contracts/FLIP.sol#L33-L59)
 
 contracts/Coinflip.sol#L44-L1330
 
 
- - [ ] ID-1119
+ - [ ] ID-1122
 [DGNRS](contracts/DGNRS.sol#L38-L350) should inherit from [IDGNRS](contracts/sDGNRS.sol#L76-L79)
 
 contracts/DGNRS.sol#L38-L350
 
 
- - [ ] ID-1120
+ - [ ] ID-1123
 [DegenerusGameFoilPackModule](contracts/modules/DegenerusGameFoilPackModule.sol#L30-L815) should inherit from [IDegenerusGameFoilPackModule](contracts/interfaces/IDegenerusGameModules.sol#L577-L636)
 
 contracts/modules/DegenerusGameFoilPackModule.sol#L30-L815
 
 
- - [ ] ID-1121
+ - [ ] ID-1124
 [GameAfkingModule](contracts/modules/GameAfkingModule.sol#L82-L1941) should inherit from [IGameAfkingModule](contracts/interfaces/IDegenerusGameModules.sol#L513-L570)
 
 contracts/modules/GameAfkingModule.sol#L82-L1941
@@ -14100,373 +14139,373 @@ contracts/modules/GameAfkingModule.sol#L82-L1941
 ## naming-convention
 Impact: Informational
 Confidence: High
- - [ ] ID-1122
+ - [ ] ID-1125
 Constant [DegenerusVault.steth](contracts/DegenerusVault.sol#L414) is not in UPPER_CASE_WITH_UNDERSCORES
 
 contracts/DegenerusVault.sol#L414
 
 
- - [ ] ID-1123
+ - [ ] ID-1126
 Constant [DegenerusVault.gamePlayer](contracts/DegenerusVault.sol#L401-L402) is not in UPPER_CASE_WITH_UNDERSCORES
 
 contracts/DegenerusVault.sol#L401-L402
 
 
- - [ ] ID-1124
+ - [ ] ID-1127
 Constant [DegenerusGameDegeneretteModule.sdgnrs](contracts/modules/DegenerusGameDegeneretteModule.sol#L212-L213) is not in UPPER_CASE_WITH_UNDERSCORES
 
 contracts/modules/DegenerusGameDegeneretteModule.sol#L212-L213
 
 
- - [ ] ID-1125
+ - [ ] ID-1128
 Constant [DegenerusGameGameOverModule.flip](contracts/modules/DegenerusGameGameOverModule.sol#L50-L51) is not in UPPER_CASE_WITH_UNDERSCORES
 
 contracts/modules/DegenerusGameGameOverModule.sol#L50-L51
 
 
- - [ ] ID-1126
+ - [ ] ID-1129
 Constant [DegenerusVault.coinflipPlayer](contracts/DegenerusVault.sol#L404-L405) is not in UPPER_CASE_WITH_UNDERSCORES
 
 contracts/DegenerusVault.sol#L404-L405
 
 
- - [ ] ID-1127
+ - [ ] ID-1130
 Constant [DegenerusGameGameOverModule.charityGameOver](contracts/modules/DegenerusGameGameOverModule.sol#L46-L47) is not in UPPER_CASE_WITH_UNDERSCORES
 
 contracts/modules/DegenerusGameGameOverModule.sol#L46-L47
 
 
- - [ ] ID-1128
+ - [ ] ID-1131
 Constant [FLIP.degenerusGame](contracts/FLIP.sol#L217-L218) is not in UPPER_CASE_WITH_UNDERSCORES
 
 contracts/FLIP.sol#L217-L218
 
 
- - [ ] ID-1129
+ - [ ] ID-1132
 Constant [DegenerusAffiliate.coinflip](contracts/DegenerusAffiliate.sol#L212) is not in UPPER_CASE_WITH_UNDERSCORES
 
 contracts/DegenerusAffiliate.sol#L212
 
 
- - [ ] ID-1130
+ - [ ] ID-1133
 Constant [DegenerusGameAdvanceModule.steth](contracts/modules/DegenerusGameAdvanceModule.sol#L113) is not in UPPER_CASE_WITH_UNDERSCORES
 
 contracts/modules/DegenerusGameAdvanceModule.sol#L113
 
 
- - [ ] ID-1131
+ - [ ] ID-1134
 Parameter [MockSDGNRSCharity.setTotalSupply(uint256)._supply](contracts/mocks/MockSDGNRSCharity.sol#L10) is not in mixedCase
 
 contracts/mocks/MockSDGNRSCharity.sol#L10
 
 
- - [ ] ID-1132
+ - [ ] ID-1135
 Constant [sDGNRS.game](contracts/sDGNRS.sol#L354) is not in UPPER_CASE_WITH_UNDERSCORES
 
 contracts/sDGNRS.sol#L354
 
 
- - [ ] ID-1133
+ - [ ] ID-1136
 Constant [sDGNRS.coinflip](contracts/sDGNRS.sol#L357-L358) is not in UPPER_CASE_WITH_UNDERSCORES
 
 contracts/sDGNRS.sol#L357-L358
 
 
- - [ ] ID-1134
+ - [ ] ID-1137
 Constant [DegenerusGameAdvanceModule.charityResolve](contracts/modules/DegenerusGameAdvanceModule.sol#L115-L116) is not in UPPER_CASE_WITH_UNDERSCORES
 
 contracts/modules/DegenerusGameAdvanceModule.sol#L115-L116
 
 
- - [ ] ID-1135
+ - [ ] ID-1138
 Constant [DegenerusQuests.questGame](contracts/DegenerusQuests.sol#L245) is not in UPPER_CASE_WITH_UNDERSCORES
 
 contracts/DegenerusQuests.sol#L245
 
 
- - [ ] ID-1136
+ - [ ] ID-1139
 Constant [DegenerusGameAdvanceModule.jackpots](contracts/modules/DegenerusGameAdvanceModule.sol#L118-L119) is not in UPPER_CASE_WITH_UNDERSCORES
 
 contracts/modules/DegenerusGameAdvanceModule.sol#L118-L119
 
 
- - [ ] ID-1137
+ - [ ] ID-1140
 Contract [IVRFCoordinatorV2_5Owner](contracts/DegenerusAdmin.sol#L48-L82) is not in CapWords
 
 contracts/DegenerusAdmin.sol#L48-L82
 
 
- - [ ] ID-1138
+ - [ ] ID-1141
 Constant [DegenerusAdmin.gameAdmin](contracts/DegenerusAdmin.sol#L287-L288) is not in UPPER_CASE_WITH_UNDERSCORES
 
 contracts/DegenerusAdmin.sol#L287-L288
 
 
- - [ ] ID-1139
+ - [ ] ID-1142
 Constant [DGNRS.staked](contracts/DGNRS.sol#L100) is not in UPPER_CASE_WITH_UNDERSCORES
 
 contracts/DGNRS.sol#L100
 
 
- - [ ] ID-1140
+ - [ ] ID-1143
 Constant [DGNRS.game](contracts/DGNRS.sol#L103) is not in UPPER_CASE_WITH_UNDERSCORES
 
 contracts/DGNRS.sol#L103
 
 
- - [ ] ID-1141
+ - [ ] ID-1144
 Constant [sDGNRS.steth](contracts/sDGNRS.sol#L364) is not in UPPER_CASE_WITH_UNDERSCORES
 
 contracts/sDGNRS.sol#L364
 
 
- - [ ] ID-1142
+ - [ ] ID-1145
 Constant [DegenerusJackpots.degenerusGame](contracts/DegenerusJackpots.sol#L123) is not in UPPER_CASE_WITH_UNDERSCORES
 
 contracts/DegenerusJackpots.sol#L123
 
 
- - [ ] ID-1143
+ - [ ] ID-1146
 Constant [FLIP.coinflip](contracts/FLIP.sol#L225-L226) is not in UPPER_CASE_WITH_UNDERSCORES
 
 contracts/FLIP.sol#L225-L226
 
 
- - [ ] ID-1144
+ - [ ] ID-1147
 Constant [DegenerusAdmin.vrfCoordinator](contracts/DegenerusAdmin.sol#L285-L286) is not in UPPER_CASE_WITH_UNDERSCORES
 
 contracts/DegenerusAdmin.sol#L285-L286
 
 
- - [ ] ID-1145
+ - [ ] ID-1148
 Contract [sDGNRS](contracts/sDGNRS.sol#L96-L1208) is not in CapWords
 
 contracts/sDGNRS.sol#L96-L1208
 
 
- - [ ] ID-1146
+ - [ ] ID-1149
 Constant [DegenerusAffiliate.game](contracts/DegenerusAffiliate.sol#L214) is not in UPPER_CASE_WITH_UNDERSCORES
 
 contracts/DegenerusAffiliate.sol#L214
 
 
- - [ ] ID-1147
+ - [ ] ID-1150
 Constant [GNRUS.game](contracts/GNRUS.sol#L246) is not in UPPER_CASE_WITH_UNDERSCORES
 
 contracts/GNRUS.sol#L246
 
 
- - [ ] ID-1148
+ - [ ] ID-1151
 Constant [DegenerusVault.flipPlayer](contracts/DegenerusVault.sol#L407-L408) is not in UPPER_CASE_WITH_UNDERSCORES
 
 contracts/DegenerusVault.sol#L407-L408
 
 
- - [ ] ID-1149
+ - [ ] ID-1152
 Constant [DegenerusGameDegeneretteModule.wwxrp](contracts/modules/DegenerusGameDegeneretteModule.sol#L167-L168) is not in UPPER_CASE_WITH_UNDERSCORES
 
 contracts/modules/DegenerusGameDegeneretteModule.sol#L167-L168
 
 
- - [ ] ID-1150
+ - [ ] ID-1153
 Constant [FLIP.questModule](contracts/FLIP.sol#L221-L222) is not in UPPER_CASE_WITH_UNDERSCORES
 
 contracts/FLIP.sol#L221-L222
 
 
- - [ ] ID-1151
+ - [ ] ID-1154
 Constant [DegenerusDeityPass.vault](contracts/DegenerusDeityPass.sol#L70) is not in UPPER_CASE_WITH_UNDERSCORES
 
 contracts/DegenerusDeityPass.sol#L70
 
 
- - [ ] ID-1152
+ - [ ] ID-1155
 Constant [DegenerusAdmin.sDGNRS](contracts/DegenerusAdmin.sol#L293-L294) is not in UPPER_CASE_WITH_UNDERSCORES
 
 contracts/DegenerusAdmin.sol#L293-L294
 
 
- - [ ] ID-1153
+ - [ ] ID-1156
 Constant [DegenerusGameJackpotModule.steth](contracts/modules/DegenerusGameJackpotModule.sol#L116) is not in UPPER_CASE_WITH_UNDERSCORES
 
 contracts/modules/DegenerusGameJackpotModule.sol#L116
 
 
- - [ ] ID-1154
+ - [ ] ID-1157
 Constant [DegenerusVault.flipToken](contracts/DegenerusVault.sol#L410) is not in UPPER_CASE_WITH_UNDERSCORES
 
 contracts/DegenerusVault.sol#L410
 
 
- - [ ] ID-1155
+ - [ ] ID-1158
 Constant [GNRUS.steth](contracts/GNRUS.sol#L240) is not in UPPER_CASE_WITH_UNDERSCORES
 
 contracts/GNRUS.sol#L240
 
 
- - [ ] ID-1156
+ - [ ] ID-1159
 Constant [DegenerusAffiliate.afkingDrain](contracts/DegenerusAffiliate.sol#L219) is not in UPPER_CASE_WITH_UNDERSCORES
 
 contracts/DegenerusAffiliate.sol#L219
 
 
- - [ ] ID-1157
+ - [ ] ID-1160
 Constant [GNRUS.sdgnrs](contracts/GNRUS.sol#L243) is not in UPPER_CASE_WITH_UNDERSCORES
 
 contracts/GNRUS.sol#L243
 
 
- - [ ] ID-1158
+ - [ ] ID-1161
 Constant [DegenerusGameLootboxModule.steth](contracts/modules/DegenerusGameLootboxModule.sol#L162) is not in UPPER_CASE_WITH_UNDERSCORES
 
 contracts/modules/DegenerusGameLootboxModule.sol#L162
 
 
- - [ ] ID-1159
+ - [ ] ID-1162
 Constant [DegenerusAdmin.linkToken](contracts/DegenerusAdmin.sol#L289-L290) is not in UPPER_CASE_WITH_UNDERSCORES
 
 contracts/DegenerusAdmin.sol#L289-L290
 
 
- - [ ] ID-1160
+ - [ ] ID-1163
 Constant [DegenerusGameLootboxModule.wwxrp](contracts/modules/DegenerusGameLootboxModule.sol#L159) is not in UPPER_CASE_WITH_UNDERSCORES
 
 contracts/modules/DegenerusGameLootboxModule.sol#L159
 
 
- - [ ] ID-1161
+ - [ ] ID-1164
 Constant [DegenerusVault.sdgnrsToken](contracts/DegenerusVault.sol#L416-L417) is not in UPPER_CASE_WITH_UNDERSCORES
 
 contracts/DegenerusVault.sol#L416-L417
 
 
- - [ ] ID-1162
+ - [ ] ID-1165
 Constant [GNRUS.vault](contracts/GNRUS.sol#L249) is not in UPPER_CASE_WITH_UNDERSCORES
 
 contracts/GNRUS.sol#L249
 
 
- - [ ] ID-1163
+ - [ ] ID-1166
 Constant [DGNRS.steth](contracts/DGNRS.sol#L101) is not in UPPER_CASE_WITH_UNDERSCORES
 
 contracts/DGNRS.sol#L101
 
 
- - [ ] ID-1164
+ - [ ] ID-1167
 Constant [DegenerusGame.steth](contracts/DegenerusGame.sol#L147) is not in UPPER_CASE_WITH_UNDERSCORES
 
 contracts/DegenerusGame.sol#L147
 
 
- - [ ] ID-1165
+ - [ ] ID-1168
 Constant [DegenerusAdmin.vault](contracts/DegenerusAdmin.sol#L460-L461) is not in UPPER_CASE_WITH_UNDERSCORES
 
 contracts/DegenerusAdmin.sol#L460-L461
 
 
- - [ ] ID-1166
+ - [ ] ID-1169
 Constant [DegenerusAdmin.coinflipReward](contracts/DegenerusAdmin.sol#L291-L292) is not in UPPER_CASE_WITH_UNDERSCORES
 
 contracts/DegenerusAdmin.sol#L291-L292
 
 
- - [ ] ID-1167
+ - [ ] ID-1170
 Constant [DegenerusGameStorage.dgnrs](contracts/storage/DegenerusGameStorage.sol#L133-L134) is not in UPPER_CASE_WITH_UNDERSCORES
 
 contracts/storage/DegenerusGameStorage.sol#L133-L134
 
 
- - [ ] ID-1168
+ - [ ] ID-1171
 Constant [DegenerusGameJackpotModule.jackpots](contracts/modules/DegenerusGameJackpotModule.sol#L117-L118) is not in UPPER_CASE_WITH_UNDERSCORES
 
 contracts/modules/DegenerusGameJackpotModule.sol#L117-L118
 
 
- - [ ] ID-1169
+ - [ ] ID-1172
 Constant [Coinflip.questModule](contracts/Coinflip.sol#L156-L157) is not in UPPER_CASE_WITH_UNDERSCORES
 
 contracts/Coinflip.sol#L156-L157
 
 
- - [ ] ID-1170
+ - [ ] ID-1173
 Constant [DegenerusGameGameOverModule.steth](contracts/modules/DegenerusGameGameOverModule.sol#L39) is not in UPPER_CASE_WITH_UNDERSCORES
 
 contracts/modules/DegenerusGameGameOverModule.sol#L39
 
 
- - [ ] ID-1171
+ - [ ] ID-1174
 Constant [DegenerusAffiliate.quests](contracts/DegenerusAffiliate.sol#L210) is not in UPPER_CASE_WITH_UNDERSCORES
 
 contracts/DegenerusAffiliate.sol#L210
 
 
- - [ ] ID-1172
+ - [ ] ID-1175
 Constant [DegenerusGame.vault](contracts/DegenerusGame.sol#L150-L151) is not in UPPER_CASE_WITH_UNDERSCORES
 
 contracts/DegenerusGame.sol#L150-L151
 
 
- - [ ] ID-1173
+ - [ ] ID-1176
 Constant [DegenerusGameStorage.quests](contracts/storage/DegenerusGameStorage.sol#L129-L130) is not in UPPER_CASE_WITH_UNDERSCORES
 
 contracts/storage/DegenerusGameStorage.sol#L129-L130
 
 
- - [ ] ID-1174
+ - [ ] ID-1177
 Constant [sDGNRS.dgnrsWrapper](contracts/sDGNRS.sol#L361) is not in UPPER_CASE_WITH_UNDERSCORES
 
 contracts/sDGNRS.sol#L361
 
 
- - [ ] ID-1175
+ - [ ] ID-1178
 Constant [DegenerusJackpots.coin](contracts/DegenerusJackpots.sol#L120) is not in UPPER_CASE_WITH_UNDERSCORES
 
 contracts/DegenerusJackpots.sol#L120
 
 
- - [ ] ID-1176
+ - [ ] ID-1179
 Constant [DegenerusGameStorage.coin](contracts/storage/DegenerusGameStorage.sol#L125-L126) is not in UPPER_CASE_WITH_UNDERSCORES
 
 contracts/storage/DegenerusGameStorage.sol#L125-L126
 
 
- - [ ] ID-1177
+ - [ ] ID-1180
 Constant [DegenerusGameGameOverModule.admin](contracts/modules/DegenerusGameGameOverModule.sol#L42-L43) is not in UPPER_CASE_WITH_UNDERSCORES
 
 contracts/modules/DegenerusGameGameOverModule.sol#L42-L43
 
 
- - [ ] ID-1178
+ - [ ] ID-1181
 Constant [DegenerusGameStorage.coinflip](contracts/storage/DegenerusGameStorage.sol#L127-L128) is not in UPPER_CASE_WITH_UNDERSCORES
 
 contracts/storage/DegenerusGameStorage.sol#L127-L128
 
 
- - [ ] ID-1179
+ - [ ] ID-1182
 Constant [DegenerusQuests.coinflip](contracts/DegenerusQuests.sol#L248) is not in UPPER_CASE_WITH_UNDERSCORES
 
 contracts/DegenerusQuests.sol#L248
 
 
- - [ ] ID-1180
+ - [ ] ID-1183
 Parameter [MockGameCharity.setGameOver(bool)._over](contracts/mocks/MockGameCharity.sol#L10) is not in mixedCase
 
 contracts/mocks/MockGameCharity.sol#L10
 
 
- - [ ] ID-1181
+ - [ ] ID-1184
 Constant [DegenerusGameStorage.affiliate](contracts/storage/DegenerusGameStorage.sol#L131-L132) is not in UPPER_CASE_WITH_UNDERSCORES
 
 contracts/storage/DegenerusGameStorage.sol#L131-L132
 
 
- - [ ] ID-1182
+ - [ ] ID-1185
 Constant [DegenerusVault.wwxrpToken](contracts/DegenerusVault.sol#L412) is not in UPPER_CASE_WITH_UNDERSCORES
 
 contracts/DegenerusVault.sol#L412
 
 
- - [ ] ID-1183
+ - [ ] ID-1186
 Constant [DGNRS.vault](contracts/DGNRS.sol#L102) is not in UPPER_CASE_WITH_UNDERSCORES
 
 contracts/DGNRS.sol#L102
@@ -14475,13 +14514,13 @@ contracts/DGNRS.sol#L102
 ## redundant-statements
 Impact: Informational
 Confidence: High
- - [ ] ID-1184
+ - [ ] ID-1187
 Redundant expression "[traits](contracts/test/JackpotSoloTester.sol#L26)" in[JackpotSoloTester](contracts/test/JackpotSoloTester.sol#L14-L30)
 
 contracts/test/JackpotSoloTester.sol#L26
 
 
- - [ ] ID-1185
+ - [ ] ID-1188
 Redundant expression "[entropy](contracts/test/JackpotSoloTester.sol#L27)" in[JackpotSoloTester](contracts/test/JackpotSoloTester.sol#L14-L30)
 
 contracts/test/JackpotSoloTester.sol#L27
@@ -14490,9891 +14529,9891 @@ contracts/test/JackpotSoloTester.sol#L27
 ## too-many-digits
 Impact: Informational
 Confidence: Medium
- - [ ] ID-1186
+ - [ ] ID-1189
 [DegenerusGameDecimatorModule._terminalDecBoostFactorBps(uint256)](contracts/modules/DegenerusGameDecimatorModule.sol#L937-L949) uses literals with too many digits:
 	- [factorBps > 200000](contracts/modules/DegenerusGameDecimatorModule.sol#L947)
 
 contracts/modules/DegenerusGameDecimatorModule.sol#L937-L949
 
 
- - [ ] ID-1187
-[DegenerusGameDegeneretteModule.slitherConstructorConstantVariables()](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1774) uses literals with too many digits:
+ - [ ] ID-1190
+[DegenerusGameDegeneretteModule.slitherConstructorConstantVariables()](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1779) uses literals with too many digits:
 	- [QUICK_PLAY_PAYOUTS_N2_HEROGOLD_PACKED = 0x0001ef28000060910000150a0000076c0000025a000000f10000000000000000](contracts/modules/DegenerusGameDegeneretteModule.sol#L280)
 
-contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1774
-
-
- - [ ] ID-1188
-[DegenerusGameDegeneretteModule.slitherConstructorConstantVariables()](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1774) uses literals with too many digits:
-	- [WWXRP_FACTORS_N1_HEROGOLD_PACKED = 0x0000000003aef46a00000000003d043e0000000000b767d900000000001b448b](contracts/modules/DegenerusGameDegeneretteModule.sol#L323)
-
-contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1774
-
-
- - [ ] ID-1189
-[DegenerusGameDegeneretteModule.slitherConstructorConstantVariables()](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1774) uses literals with too many digits:
-	- [QUICK_PLAY_PAYOUTS_N0_PACKED = 0x0001905a00004e1400001103000005fe000001e7000000c30000000000000000](contracts/modules/DegenerusGameDegeneretteModule.sol#L277)
-
-contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1774
-
-
- - [ ] ID-1190
-[DegenerusGameDegeneretteModule.slitherConstructorConstantVariables()](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1774) uses literals with too many digits:
-	- [QUICK_PLAY_PAYOUTS_RIG_N2_PACKED = 0x00008532000019f6000005aa000001fe000000a2000000410000000000000000](contracts/modules/DegenerusGameDegeneretteModule.sol#L350)
-
-contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1774
+contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1779
 
 
  - [ ] ID-1191
-[DegenerusGameDegeneretteModule.slitherConstructorConstantVariables()](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1774) uses literals with too many digits:
-	- [WWXRP_FACTORS_RIG_N3_PACKED = 0x000000000a96251f000000000019298500000000005b77db0000000000108293](contracts/modules/DegenerusGameDegeneretteModule.sol#L366)
+[DegenerusGameDegeneretteModule.slitherConstructorConstantVariables()](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1779) uses literals with too many digits:
+	- [WWXRP_FACTORS_N1_HEROGOLD_PACKED = 0x0000000003aef46a00000000003d043e0000000000b767d900000000001b448b](contracts/modules/DegenerusGameDegeneretteModule.sol#L323)
 
-contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1774
+contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1779
 
 
  - [ ] ID-1192
-[DegenerusGameDegeneretteModule.slitherConstructorConstantVariables()](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1774) uses literals with too many digits:
-	- [QUICK_PLAY_PAYOUTS_N1_HEROGOLD_PACKED = 0x0001c57f0000587000001346000006ca00000227000000dd0000000000000000](contracts/modules/DegenerusGameDegeneretteModule.sol#L278)
+[DegenerusGameDegeneretteModule.slitherConstructorConstantVariables()](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1779) uses literals with too many digits:
+	- [QUICK_PLAY_PAYOUTS_N0_PACKED = 0x0001905a00004e1400001103000005fe000001e7000000c30000000000000000](contracts/modules/DegenerusGameDegeneretteModule.sol#L277)
 
-contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1774
+contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1779
 
 
  - [ ] ID-1193
-[DegenerusGameDegeneretteModule.slitherConstructorConstantVariables()](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1774) uses literals with too many digits:
-	- [QUICK_PLAY_PAYOUTS_N2_HEROCOMMON_PACKED = 0x0001e0c700005dc10000146f0000073300000249000000ea0000000000000000](contracts/modules/DegenerusGameDegeneretteModule.sol#L281)
+[DegenerusGameDegeneretteModule.slitherConstructorConstantVariables()](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1779) uses literals with too many digits:
+	- [QUICK_PLAY_PAYOUTS_RIG_N2_PACKED = 0x00008532000019f6000005aa000001fe000000a2000000410000000000000000](contracts/modules/DegenerusGameDegeneretteModule.sol#L350)
 
-contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1774
+contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1779
 
 
  - [ ] ID-1194
-[DegenerusGameDegeneretteModule.slitherConstructorConstantVariables()](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1774) uses literals with too many digits:
-	- [WWXRP_FACTORS_N2_HEROGOLD_PACKED = 0x0000000006442ce700000000005b52330000000000e67b0800000000001f15da](contracts/modules/DegenerusGameDegeneretteModule.sol#L325)
+[DegenerusGameDegeneretteModule.slitherConstructorConstantVariables()](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1779) uses literals with too many digits:
+	- [WWXRP_FACTORS_RIG_N3_PACKED = 0x000000000a96251f000000000019298500000000005b77db0000000000108293](contracts/modules/DegenerusGameDegeneretteModule.sol#L366)
 
-contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1774
+contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1779
 
 
  - [ ] ID-1195
-[DegenerusGameDegeneretteModule.slitherConstructorConstantVariables()](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1774) uses literals with too many digits:
-	- [WWXRP_FACTORS_RIG_N4_PACKED = 0x0000000011ba25db00000000002269d300000000006ee3e2000000000011eefc](contracts/modules/DegenerusGameDegeneretteModule.sol#L367)
+[DegenerusGameDegeneretteModule.slitherConstructorConstantVariables()](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1779) uses literals with too many digits:
+	- [QUICK_PLAY_PAYOUTS_N1_HEROGOLD_PACKED = 0x0001c57f0000587000001346000006ca00000227000000dd0000000000000000](contracts/modules/DegenerusGameDegeneretteModule.sol#L278)
 
-contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1774
+contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1779
 
 
  - [ ] ID-1196
-[DegenerusGameDegeneretteModule.slitherConstructorConstantVariables()](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1774) uses literals with too many digits:
-	- [QUICK_PLAY_PAYOUTS_RIG_N4_PACKED = 0x0000b330000022ed0000079d000002b1000000da000000570000000000000000](contracts/modules/DegenerusGameDegeneretteModule.sol#L352)
+[DegenerusGameDegeneretteModule.slitherConstructorConstantVariables()](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1779) uses literals with too many digits:
+	- [QUICK_PLAY_PAYOUTS_N2_HEROCOMMON_PACKED = 0x0001e0c700005dc10000146f0000073300000249000000ea0000000000000000](contracts/modules/DegenerusGameDegeneretteModule.sol#L281)
 
-contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1774
+contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1779
 
 
  - [ ] ID-1197
-[DegenerusGameDegeneretteModule.slitherConstructorConstantVariables()](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1774) uses literals with too many digits:
-	- [QUICK_PLAY_PAYOUTS_N3_HEROCOMMON_PACKED = 0x00020899000065880000161e000007d200000279000000fd0000000000000000](contracts/modules/DegenerusGameDegeneretteModule.sol#L283)
+[DegenerusGameDegeneretteModule.slitherConstructorConstantVariables()](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1779) uses literals with too many digits:
+	- [WWXRP_FACTORS_N2_HEROGOLD_PACKED = 0x0000000006442ce700000000005b52330000000000e67b0800000000001f15da](contracts/modules/DegenerusGameDegeneretteModule.sol#L325)
 
-contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1774
+contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1779
 
 
  - [ ] ID-1198
+[DegenerusGameDegeneretteModule.slitherConstructorConstantVariables()](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1779) uses literals with too many digits:
+	- [WWXRP_FACTORS_RIG_N4_PACKED = 0x0000000011ba25db00000000002269d300000000006ee3e2000000000011eefc](contracts/modules/DegenerusGameDegeneretteModule.sol#L367)
+
+contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1779
+
+
+ - [ ] ID-1199
+[DegenerusGameDegeneretteModule.slitherConstructorConstantVariables()](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1779) uses literals with too many digits:
+	- [QUICK_PLAY_PAYOUTS_RIG_N4_PACKED = 0x0000b330000022ed0000079d000002b1000000da000000570000000000000000](contracts/modules/DegenerusGameDegeneretteModule.sol#L352)
+
+contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1779
+
+
+ - [ ] ID-1200
+[DegenerusGameDegeneretteModule.slitherConstructorConstantVariables()](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1779) uses literals with too many digits:
+	- [QUICK_PLAY_PAYOUTS_N3_HEROCOMMON_PACKED = 0x00020899000065880000161e000007d200000279000000fd0000000000000000](contracts/modules/DegenerusGameDegeneretteModule.sol#L283)
+
+contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1779
+
+
+ - [ ] ID-1201
 [DegenerusGameDecimatorModule._terminalDecBoostFactorBps(uint256)](contracts/modules/DegenerusGameDecimatorModule.sol#L937-L949) uses literals with too many digits:
 	- [factorBps = 200000](contracts/modules/DegenerusGameDecimatorModule.sol#L947)
 
 contracts/modules/DegenerusGameDecimatorModule.sol#L937-L949
 
 
- - [ ] ID-1199
-[DegenerusGameDegeneretteModule.slitherConstructorConstantVariables()](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1774) uses literals with too many digits:
+ - [ ] ID-1202
+[DegenerusGameDegeneretteModule.slitherConstructorConstantVariables()](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1779) uses literals with too many digits:
 	- [QUICK_PLAY_PAYOUTS_RIG_N1_PACKED = 0x000070aa000015f6000004cc000001af00000089000000370000000000000000](contracts/modules/DegenerusGameDegeneretteModule.sol#L349)
 
-contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1774
-
-
- - [ ] ID-1200
-[DegenerusGameDegeneretteModule.slitherConstructorConstantVariables()](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1774) uses literals with too many digits:
-	- [WWXRP_FACTORS_N1_HEROCOMMON_PACKED = 0x0000000003aef46a00000000003ed11d0000000000ac8f35000000000019c09e](contracts/modules/DegenerusGameDegeneretteModule.sol#L324)
-
-contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1774
-
-
- - [ ] ID-1201
-[DegenerusGameDegeneretteModule.slitherConstructorConstantVariables()](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1774) uses literals with too many digits:
-	- [QUICK_PLAY_PAYOUTS_N3_HEROGOLD_PACKED = 0x0002185400006898000016c80000080b0000028c000001050000000000000000](contracts/modules/DegenerusGameDegeneretteModule.sol#L282)
-
-contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1774
-
-
- - [ ] ID-1202
-[DegenerusGameDegeneretteModule.slitherConstructorConstantVariables()](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1774) uses literals with too many digits:
-	- [WWXRP_FACTORS_RIG_N1_PACKED = 0x0000000003aef46a00000000000f5126000000000046a39f00000000000fa6f4](contracts/modules/DegenerusGameDegeneretteModule.sol#L364)
-
-contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1774
+contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1779
 
 
  - [ ] ID-1203
-[DegenerusGameDegeneretteModule.slitherConstructorConstantVariables()](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1774) uses literals with too many digits:
-	- [WWXRP_FACTORS_N4_PACKED = 0x0000000011ba25db0000000000e5669e0000000001aeccdd00000000002d2c05](contracts/modules/DegenerusGameDegeneretteModule.sol#L329)
+[DegenerusGameDegeneretteModule.slitherConstructorConstantVariables()](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1779) uses literals with too many digits:
+	- [WWXRP_FACTORS_N1_HEROCOMMON_PACKED = 0x0000000003aef46a00000000003ed11d0000000000ac8f35000000000019c09e](contracts/modules/DegenerusGameDegeneretteModule.sol#L324)
 
-contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1774
+contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1779
 
 
  - [ ] ID-1204
-[DegenerusGameDegeneretteModule.slitherConstructorConstantVariables()](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1774) uses literals with too many digits:
-	- [WWXRP_FACTORS_N2_HEROCOMMON_PACKED = 0x0000000006442ce700000000005e0d4c0000000000def66500000000001d41de](contracts/modules/DegenerusGameDegeneretteModule.sol#L326)
+[DegenerusGameDegeneretteModule.slitherConstructorConstantVariables()](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1779) uses literals with too many digits:
+	- [QUICK_PLAY_PAYOUTS_N3_HEROGOLD_PACKED = 0x0002185400006898000016c80000080b0000028c000001050000000000000000](contracts/modules/DegenerusGameDegeneretteModule.sol#L282)
 
-contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1774
+contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1779
 
 
  - [ ] ID-1205
-[DegenerusGameDegeneretteModule.slitherConstructorConstantVariables()](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1774) uses literals with too many digits:
-	- [QUICK_PLAY_PAYOUTS_RIG_N0_PACKED = 0x00005e9a00001273000004030000016c000000730000002e0000000000000000](contracts/modules/DegenerusGameDegeneretteModule.sol#L348)
+[DegenerusGameDegeneretteModule.slitherConstructorConstantVariables()](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1779) uses literals with too many digits:
+	- [WWXRP_FACTORS_RIG_N1_PACKED = 0x0000000003aef46a00000000000f5126000000000046a39f00000000000fa6f4](contracts/modules/DegenerusGameDegeneretteModule.sol#L364)
 
-contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1774
+contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1779
 
 
  - [ ] ID-1206
-[DegenerusGameDegeneretteModule.slitherConstructorConstantVariables()](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1774) uses literals with too many digits:
-	- [QUICK_PLAY_PAYOUTS_RIG_N3_PACKED = 0x00009b9a00001e5a0000069d00000254000000bd0000004c0000000000000000](contracts/modules/DegenerusGameDegeneretteModule.sol#L351)
+[DegenerusGameDegeneretteModule.slitherConstructorConstantVariables()](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1779) uses literals with too many digits:
+	- [WWXRP_FACTORS_N4_PACKED = 0x0000000011ba25db0000000000e5669e0000000001aeccdd00000000002d2c05](contracts/modules/DegenerusGameDegeneretteModule.sol#L329)
 
-contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1774
+contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1779
 
 
  - [ ] ID-1207
+[DegenerusGameDegeneretteModule.slitherConstructorConstantVariables()](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1779) uses literals with too many digits:
+	- [WWXRP_FACTORS_N2_HEROCOMMON_PACKED = 0x0000000006442ce700000000005e0d4c0000000000def66500000000001d41de](contracts/modules/DegenerusGameDegeneretteModule.sol#L326)
+
+contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1779
+
+
+ - [ ] ID-1208
+[DegenerusGameDegeneretteModule.slitherConstructorConstantVariables()](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1779) uses literals with too many digits:
+	- [QUICK_PLAY_PAYOUTS_RIG_N0_PACKED = 0x00005e9a00001273000004030000016c000000730000002e0000000000000000](contracts/modules/DegenerusGameDegeneretteModule.sol#L348)
+
+contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1779
+
+
+ - [ ] ID-1209
+[DegenerusGameDegeneretteModule.slitherConstructorConstantVariables()](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1779) uses literals with too many digits:
+	- [QUICK_PLAY_PAYOUTS_RIG_N3_PACKED = 0x00009b9a00001e5a0000069d00000254000000bd0000004c0000000000000000](contracts/modules/DegenerusGameDegeneretteModule.sol#L351)
+
+contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1779
+
+
+ - [ ] ID-1210
 [Math.log2(uint256)](node_modules/@openzeppelin/contracts/utils/math/Math.sol#L612-L651) uses literals with too many digits:
 	- [r = r | byte(uint256,uint256)(x >> r,0x0000010102020202030303030303030300000000000000000000000000000000)](node_modules/@openzeppelin/contracts/utils/math/Math.sol#L649)
 
 node_modules/@openzeppelin/contracts/utils/math/Math.sol#L612-L651
 
 
- - [ ] ID-1208
-[DegenerusGameDegeneretteModule.slitherConstructorConstantVariables()](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1774) uses literals with too many digits:
+ - [ ] ID-1211
+[DegenerusGameDegeneretteModule.slitherConstructorConstantVariables()](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1779) uses literals with too many digits:
 	- [WWXRP_FACTORS_N0_PACKED = 0x0000000002278add00000000002c86d300000000008cd6ca0000000000176ea0](contracts/modules/DegenerusGameDegeneretteModule.sol#L322)
 
-contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1774
-
-
- - [ ] ID-1209
-[DegenerusGameDegeneretteModule.slitherConstructorConstantVariables()](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1774) uses literals with too many digits:
-	- [QUICK_PLAY_PAYOUTS_N4_PACKED = 0x000241430000708c0000188c000008a5000002be000001190000000000000000](contracts/modules/DegenerusGameDegeneretteModule.sol#L284)
-
-contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1774
-
-
- - [ ] ID-1210
-[DegenerusGameDegeneretteModule.slitherConstructorConstantVariables()](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1774) uses literals with too many digits:
-	- [WWXRP_FACTORS_N3_HEROGOLD_PACKED = 0x000000000a96251f00000000008e8baa000000000133ace4000000000024a679](contracts/modules/DegenerusGameDegeneretteModule.sol#L327)
-
-contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1774
-
-
- - [ ] ID-1211
-[DegenerusGameDegeneretteModule.slitherConstructorConstantVariables()](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1774) uses literals with too many digits:
-	- [WWXRP_FACTORS_RIG_N0_PACKED = 0x0000000002278add00000000000ccc0200000000004153c400000000000fda8b](contracts/modules/DegenerusGameDegeneretteModule.sol#L363)
-
-contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1774
+contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1779
 
 
  - [ ] ID-1212
-[DegenerusGameDegeneretteModule.slitherConstructorConstantVariables()](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1774) uses literals with too many digits:
-	- [QUICK_PLAY_PAYOUTS_N1_HEROCOMMON_PACKED = 0x0001b880000055e6000012b80000069d00000218000000d60000000000000000](contracts/modules/DegenerusGameDegeneretteModule.sol#L279)
+[DegenerusGameDegeneretteModule.slitherConstructorConstantVariables()](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1779) uses literals with too many digits:
+	- [QUICK_PLAY_PAYOUTS_N4_PACKED = 0x000241430000708c0000188c000008a5000002be000001190000000000000000](contracts/modules/DegenerusGameDegeneretteModule.sol#L284)
 
-contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1774
+contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1779
 
 
  - [ ] ID-1213
-[DegenerusGameDegeneretteModule.slitherConstructorConstantVariables()](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1774) uses literals with too many digits:
-	- [WWXRP_FACTORS_N3_HEROCOMMON_PACKED = 0x000000000a96251f000000000092da3f00000000012ed253000000000022cef8](contracts/modules/DegenerusGameDegeneretteModule.sol#L328)
+[DegenerusGameDegeneretteModule.slitherConstructorConstantVariables()](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1779) uses literals with too many digits:
+	- [WWXRP_FACTORS_N3_HEROGOLD_PACKED = 0x000000000a96251f00000000008e8baa000000000133ace4000000000024a679](contracts/modules/DegenerusGameDegeneretteModule.sol#L327)
 
-contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1774
+contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1779
 
 
  - [ ] ID-1214
-[DegenerusGameDegeneretteModule.slitherConstructorConstantVariables()](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1774) uses literals with too many digits:
+[DegenerusGameDegeneretteModule.slitherConstructorConstantVariables()](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1779) uses literals with too many digits:
+	- [WWXRP_FACTORS_RIG_N0_PACKED = 0x0000000002278add00000000000ccc0200000000004153c400000000000fda8b](contracts/modules/DegenerusGameDegeneretteModule.sol#L363)
+
+contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1779
+
+
+ - [ ] ID-1215
+[DegenerusGameDegeneretteModule.slitherConstructorConstantVariables()](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1779) uses literals with too many digits:
+	- [QUICK_PLAY_PAYOUTS_N1_HEROCOMMON_PACKED = 0x0001b880000055e6000012b80000069d00000218000000d60000000000000000](contracts/modules/DegenerusGameDegeneretteModule.sol#L279)
+
+contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1779
+
+
+ - [ ] ID-1216
+[DegenerusGameDegeneretteModule.slitherConstructorConstantVariables()](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1779) uses literals with too many digits:
+	- [WWXRP_FACTORS_N3_HEROCOMMON_PACKED = 0x000000000a96251f000000000092da3f00000000012ed253000000000022cef8](contracts/modules/DegenerusGameDegeneretteModule.sol#L328)
+
+contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1779
+
+
+ - [ ] ID-1217
+[DegenerusGameDegeneretteModule.slitherConstructorConstantVariables()](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1779) uses literals with too many digits:
 	- [WWXRP_FACTORS_RIG_N2_PACKED = 0x0000000006442ce7000000000013314300000000004ecda200000000000fd37a](contracts/modules/DegenerusGameDegeneretteModule.sol#L365)
 
-contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1774
+contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1779
 
 
 ## unused-state
 Impact: Informational
 Confidence: High
- - [ ] ID-1215
+ - [ ] ID-1218
 [DegenerusGameStorage.LOOTBOX_EV_BENEFIT_CAP](contracts/storage/DegenerusGameStorage.sol#L1643-L1644) is never used in [DegenerusGameGameOverModule](contracts/modules/DegenerusGameGameOverModule.sol#L37-L284)
 
 contracts/storage/DegenerusGameStorage.sol#L1643-L1644
 
 
- - [ ] ID-1216
+ - [ ] ID-1219
 [DegenerusGameStorage.GO_TIME_MASK](contracts/storage/DegenerusGameStorage.sol#L1160) is never used in [DegenerusGameWhaleModule](contracts/modules/DegenerusGameWhaleModule.sol#L20-L1026)
 
 contracts/storage/DegenerusGameStorage.sol#L1160
 
 
- - [ ] ID-1217
+ - [ ] ID-1220
 [DegenerusGameStorage.GO_SWEPT_SHIFT](contracts/storage/DegenerusGameStorage.sol#L1163) is never used in [DegenerusGameDecimatorModule](contracts/modules/DegenerusGameDecimatorModule.sol#L21-L1134)
 
 contracts/storage/DegenerusGameStorage.sol#L1163
 
 
- - [ ] ID-1218
+ - [ ] ID-1221
 [DegenerusGameStorage.PS_MINT_ETH_MASK](contracts/storage/DegenerusGameStorage.sol#L1127) is never used in [DegenerusGameBingoModule](contracts/modules/DegenerusGameBingoModule.sol#L24-L288)
 
 contracts/storage/DegenerusGameStorage.sol#L1127
 
 
- - [ ] ID-1219
+ - [ ] ID-1222
 [DegenerusGameStorage.vrfSubscriptionId](contracts/storage/DegenerusGameStorage.sol#L1590) is never used in [SettleClaimableShortfallTester](contracts/test/SettleClaimableShortfallTester.sol#L17-L66)
 
 contracts/storage/DegenerusGameStorage.sol#L1590
 
 
- - [ ] ID-1220
+ - [ ] ID-1223
 [DegenerusGameStorage.wwxrpJackpotWhalePassBracketAwarded](contracts/storage/DegenerusGameStorage.sol#L1188) is never used in [DegenerusGame](contracts/DegenerusGame.sol#L87-L2624)
 
 contracts/storage/DegenerusGameStorage.sol#L1188
 
 
- - [ ] ID-1221
-[DegenerusGameStorage.PRESALE_BOX_ETH_CAP](contracts/storage/DegenerusGameStorage.sol#L1134) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1774)
+ - [ ] ID-1224
+[DegenerusGameStorage.PRESALE_BOX_ETH_CAP](contracts/storage/DegenerusGameStorage.sol#L1134) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1779)
 
 contracts/storage/DegenerusGameStorage.sol#L1134
 
 
- - [ ] ID-1222
-[DegenerusGameStorage.BP_WHALE_CLEAR](contracts/storage/DegenerusGameStorage.sol#L2090) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1774)
+ - [ ] ID-1225
+[DegenerusGameStorage.BP_WHALE_CLEAR](contracts/storage/DegenerusGameStorage.sol#L2090) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1779)
 
 contracts/storage/DegenerusGameStorage.sol#L2090
 
 
- - [ ] ID-1223
+ - [ ] ID-1226
 [DegenerusGameStorage.wwxrpJackpotWhalePassBracketAwarded](contracts/storage/DegenerusGameStorage.sol#L1188) is never used in [DegenerusGameFoilPackModule](contracts/modules/DegenerusGameFoilPackModule.sol#L30-L815)
 
 contracts/storage/DegenerusGameStorage.sol#L1188
 
 
- - [ ] ID-1224
+ - [ ] ID-1227
 [DegenerusGameStorage._subOpenCursor](contracts/storage/DegenerusGameStorage.sol#L2438) is never used in [DegenerusGameBoonModule](contracts/modules/DegenerusGameBoonModule.sol#L22-L343)
 
 contracts/storage/DegenerusGameStorage.sol#L2438
 
 
- - [ ] ID-1225
+ - [ ] ID-1228
 [DegenerusGameStorage.wwxrpJackpotWhalePassBracketAwarded](contracts/storage/DegenerusGameStorage.sol#L1188) is never used in [DegenerusGameGameOverModule](contracts/modules/DegenerusGameGameOverModule.sol#L37-L284)
 
 contracts/storage/DegenerusGameStorage.sol#L1188
 
 
- - [ ] ID-1226
+ - [ ] ID-1229
 [DegenerusGameStorage.FOIL_SPIN_TAG](contracts/storage/DegenerusGameStorage.sol#L2594) is never used in [DegenerusGameBoonModule](contracts/modules/DegenerusGameBoonModule.sol#L22-L343)
 
 contracts/storage/DegenerusGameStorage.sol#L2594
 
 
- - [ ] ID-1227
+ - [ ] ID-1230
 [DegenerusGameStorage.GO_JACKPOT_PAID_SHIFT](contracts/storage/DegenerusGameStorage.sol#L1161) is never used in [DegenerusGameDecimatorModule](contracts/modules/DegenerusGameDecimatorModule.sol#L21-L1134)
 
 contracts/storage/DegenerusGameStorage.sol#L1161
 
 
- - [ ] ID-1228
+ - [ ] ID-1231
 [DegenerusGameStorage.BP_DECIMATOR_TIER_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2056) is never used in [DegenerusGameBingoModule](contracts/modules/DegenerusGameBingoModule.sol#L24-L288)
 
 contracts/storage/DegenerusGameStorage.sol#L2056
 
 
- - [ ] ID-1229
+ - [ ] ID-1232
 [DegenerusGameStorage.boxCursor](contracts/storage/DegenerusGameStorage.sol#L2454) is never used in [DegenerusGameBingoModule](contracts/modules/DegenerusGameBingoModule.sol#L24-L288)
 
 contracts/storage/DegenerusGameStorage.sol#L2454
 
 
- - [ ] ID-1230
+ - [ ] ID-1233
 [DegenerusGameStorage.BP_LOOTBOX_DAY_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2050) is never used in [DegenerusGameDecimatorModule](contracts/modules/DegenerusGameDecimatorModule.sol#L21-L1134)
 
 contracts/storage/DegenerusGameStorage.sol#L2050
 
 
- - [ ] ID-1231
+ - [ ] ID-1234
 [DegenerusGameStorage._subOpenCursor](contracts/storage/DegenerusGameStorage.sol#L2438) is never used in [DegenerusGameWhaleModule](contracts/modules/DegenerusGameWhaleModule.sol#L20-L1026)
 
 contracts/storage/DegenerusGameStorage.sol#L2438
 
 
- - [ ] ID-1232
+ - [ ] ID-1235
 [DegenerusGameStorage.FOIL_PACK_ENTRIES](contracts/storage/DegenerusGameStorage.sol#L2566) is never used in [JackpotSoloTester](contracts/test/JackpotSoloTester.sol#L14-L30)
 
 contracts/storage/DegenerusGameStorage.sol#L2566
 
 
- - [ ] ID-1233
+ - [ ] ID-1236
 [DegenerusGameStorage.LR_PENDING_ETH_MASK](contracts/storage/DegenerusGameStorage.sol#L1614) is never used in [DegenerusGameBoonModule](contracts/modules/DegenerusGameBoonModule.sol#L22-L343)
 
 contracts/storage/DegenerusGameStorage.sol#L1614
 
 
- - [ ] ID-1234
+ - [ ] ID-1237
 [DegenerusGameStorage.PRESALE_BOX_AMOUNT_MASK](contracts/storage/DegenerusGameStorage.sol#L1110) is never used in [DegenerusGameWhaleModule](contracts/modules/DegenerusGameWhaleModule.sol#L20-L1026)
 
 contracts/storage/DegenerusGameStorage.sol#L1110
 
 
- - [ ] ID-1235
+ - [ ] ID-1238
 [DegenerusGameStorage.BP_DEITY_LOOTBOX_DAY_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2051) is never used in [SettleClaimableShortfallTester](contracts/test/SettleClaimableShortfallTester.sol#L17-L66)
 
 contracts/storage/DegenerusGameStorage.sol#L2051
 
 
- - [ ] ID-1236
+ - [ ] ID-1239
 [DegenerusGameStorage.presaleDrained](contracts/storage/DegenerusGameStorage.sol#L367) is never used in [DegenerusGameBoonModule](contracts/modules/DegenerusGameBoonModule.sol#L22-L343)
 
 contracts/storage/DegenerusGameStorage.sol#L367
 
 
- - [ ] ID-1237
+ - [ ] ID-1240
 [DegenerusGameStorage.subsFullyProcessed](contracts/storage/DegenerusGameStorage.sol#L358) is never used in [DegenerusGameWhaleModule](contracts/modules/DegenerusGameWhaleModule.sol#L20-L1026)
 
 contracts/storage/DegenerusGameStorage.sol#L358
 
 
- - [ ] ID-1238
+ - [ ] ID-1241
 [DegenerusGameStorage.BP_WHALE_CLEAR](contracts/storage/DegenerusGameStorage.sol#L2090) is never used in [DegenerusGameDecimatorModule](contracts/modules/DegenerusGameDecimatorModule.sol#L21-L1134)
 
 contracts/storage/DegenerusGameStorage.sol#L2090
 
 
- - [ ] ID-1239
+ - [ ] ID-1242
 [DegenerusGameStorage.deityRecipientBoonCount](contracts/storage/DegenerusGameStorage.sol#L2558) is never used in [DegenerusGameDecimatorModule](contracts/modules/DegenerusGameDecimatorModule.sol#L21-L1134)
 
 contracts/storage/DegenerusGameStorage.sol#L2558
 
 
- - [ ] ID-1240
+ - [ ] ID-1243
 [DegenerusGameStorage.BP_DEITY_PASS_CLEAR](contracts/storage/DegenerusGameStorage.sol#L2096-L2097) is never used in [DegenerusGameGameOverModule](contracts/modules/DegenerusGameGameOverModule.sol#L37-L284)
 
 contracts/storage/DegenerusGameStorage.sol#L2096-L2097
 
 
- - [ ] ID-1241
+ - [ ] ID-1244
 [DegenerusGameStorage.dgnrs](contracts/storage/DegenerusGameStorage.sol#L133-L134) is never used in [DegenerusGameBoonModule](contracts/modules/DegenerusGameBoonModule.sol#L22-L343)
 
 contracts/storage/DegenerusGameStorage.sol#L133-L134
 
 
- - [ ] ID-1242
+ - [ ] ID-1245
 [DegenerusGameStorage.degeneretteBetNonce](contracts/storage/DegenerusGameStorage.sol#L1788) is never used in [SettleClaimableShortfallTester](contracts/test/SettleClaimableShortfallTester.sol#L17-L66)
 
 contracts/storage/DegenerusGameStorage.sol#L1788
 
 
- - [ ] ID-1243
+ - [ ] ID-1246
 [DegenerusGameStorage.PASS_MINT_COUNT_FLOOR_POINTS](contracts/storage/DegenerusGameStorage.sol#L149) is never used in [SettleClaimableShortfallTester](contracts/test/SettleClaimableShortfallTester.sol#L17-L66)
 
 contracts/storage/DegenerusGameStorage.sol#L149
 
 
- - [ ] ID-1244
+ - [ ] ID-1247
 [DegenerusGameStorage.LR_MID_DAY_SHIFT](contracts/storage/DegenerusGameStorage.sol#L1619) is never used in [JackpotSoloTester](contracts/test/JackpotSoloTester.sol#L14-L30)
 
 contracts/storage/DegenerusGameStorage.sol#L1619
 
 
- - [ ] ID-1245
+ - [ ] ID-1248
 [DegenerusGameStorage.bingoClaimed](contracts/storage/DegenerusGameStorage.sol#L2039) is never used in [SettleClaimableShortfallTester](contracts/test/SettleClaimableShortfallTester.sol#L17-L66)
 
 contracts/storage/DegenerusGameStorage.sol#L2039
 
 
- - [ ] ID-1246
-[DegenerusGameStorage.terminalDecBucketBurnTotal](contracts/storage/DegenerusGameStorage.sol#L1975) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1774)
+ - [ ] ID-1249
+[DegenerusGameStorage.terminalDecBucketBurnTotal](contracts/storage/DegenerusGameStorage.sol#L1975) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1779)
 
 contracts/storage/DegenerusGameStorage.sol#L1975
 
 
- - [ ] ID-1247
+ - [ ] ID-1250
 [DegenerusGameStorage.BP_DECIMATOR_CLEAR](contracts/storage/DegenerusGameStorage.sol#L2087-L2088) is never used in [DegenerusGameLootboxModule](contracts/modules/DegenerusGameLootboxModule.sol#L39-L2359)
 
 contracts/storage/DegenerusGameStorage.sol#L2087-L2088
 
 
- - [ ] ID-1248
+ - [ ] ID-1251
 [DegenerusGameStorage.BOOTSTRAP_PRIZE_POOL](contracts/storage/DegenerusGameStorage.sol#L165) is never used in [DegenerusGameBingoModule](contracts/modules/DegenerusGameBingoModule.sol#L24-L288)
 
 contracts/storage/DegenerusGameStorage.sol#L165
 
 
- - [ ] ID-1249
+ - [ ] ID-1252
 [DegenerusGameStorage._subOpenCursor](contracts/storage/DegenerusGameStorage.sol#L2438) is never used in [SettleClaimableShortfallTester](contracts/test/SettleClaimableShortfallTester.sol#L17-L66)
 
 contracts/storage/DegenerusGameStorage.sol#L2438
 
 
- - [ ] ID-1250
+ - [ ] ID-1253
 [DegenerusGameStorage.LR_PENDING_FLIP_MASK](contracts/storage/DegenerusGameStorage.sol#L1618) is never used in [SettleClaimableShortfallTester](contracts/test/SettleClaimableShortfallTester.sol#L17-L66)
 
 contracts/storage/DegenerusGameStorage.sol#L1618
 
 
- - [ ] ID-1251
+ - [ ] ID-1254
 [DegenerusGameStorage.terminalDecBets](contracts/storage/DegenerusGameStorage.sol#L1971) is never used in [DegenerusGame](contracts/DegenerusGame.sol#L87-L2624)
 
 contracts/storage/DegenerusGameStorage.sol#L1971
 
 
- - [ ] ID-1252
+ - [ ] ID-1255
 [DegenerusGameStorage.ACTIVITY_SCORE_HARD_CAP_POINTS](contracts/storage/DegenerusGameStorage.sol#L143) is never used in [DegenerusGameLootboxModule](contracts/modules/DegenerusGameLootboxModule.sol#L39-L2359)
 
 contracts/storage/DegenerusGameStorage.sol#L143
 
 
- - [ ] ID-1253
+ - [ ] ID-1256
 [DegenerusGameStorage.deityBoonRecipientDay](contracts/storage/DegenerusGameStorage.sol#L1770) is never used in [DegenerusGameMintModule](contracts/modules/DegenerusGameMintModule.sol#L74-L2136)
 
 contracts/storage/DegenerusGameStorage.sol#L1770
 
 
- - [ ] ID-1254
+ - [ ] ID-1257
 [DegenerusGameStorage.subsFullyProcessed](contracts/storage/DegenerusGameStorage.sol#L358) is never used in [DegenerusGameMintModule](contracts/modules/DegenerusGameMintModule.sol#L74-L2136)
 
 contracts/storage/DegenerusGameStorage.sol#L358
 
 
- - [ ] ID-1255
+ - [ ] ID-1258
 [DegenerusGameStorage.BP_DEITY_COINFLIP_DAY_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2048) is never used in [GameAfkingModule](contracts/modules/GameAfkingModule.sol#L82-L1941)
 
 contracts/storage/DegenerusGameStorage.sol#L2048
 
 
- - [ ] ID-1256
+ - [ ] ID-1259
 [DegenerusGameStorage.BP_MASK_24](contracts/storage/DegenerusGameStorage.sol#L2074) is never used in [DegenerusGameBoonModule](contracts/modules/DegenerusGameBoonModule.sol#L22-L343)
 
 contracts/storage/DegenerusGameStorage.sol#L2074
 
 
- - [ ] ID-1257
+ - [ ] ID-1260
 [DegenerusGameStorage._fundingSourceOf](contracts/storage/DegenerusGameStorage.sol#L2420) is never used in [DegenerusGame](contracts/DegenerusGame.sol#L87-L2624)
 
 contracts/storage/DegenerusGameStorage.sol#L2420
 
 
- - [ ] ID-1258
+ - [ ] ID-1261
 [DegenerusGameStorage.presaleOver](contracts/storage/DegenerusGameStorage.sol#L348) is never used in [DegenerusGameFoilPackModule](contracts/modules/DegenerusGameFoilPackModule.sol#L30-L815)
 
 contracts/storage/DegenerusGameStorage.sol#L348
 
 
- - [ ] ID-1259
+ - [ ] ID-1262
 [DegenerusGameStorage.deityBoonRecipientDay](contracts/storage/DegenerusGameStorage.sol#L1770) is never used in [DegenerusGameDecimatorModule](contracts/modules/DegenerusGameDecimatorModule.sol#L21-L1134)
 
 contracts/storage/DegenerusGameStorage.sol#L1770
 
 
- - [ ] ID-1260
+ - [ ] ID-1263
 [DegenerusGameStorage.lootboxEth](contracts/storage/DegenerusGameStorage.sol#L1067) is never used in [SettleClaimableShortfallTester](contracts/test/SettleClaimableShortfallTester.sol#L17-L66)
 
 contracts/storage/DegenerusGameStorage.sol#L1067
 
 
- - [ ] ID-1261
+ - [ ] ID-1264
 [DegenerusGameStorage.GO_JACKPOT_PAID_SHIFT](contracts/storage/DegenerusGameStorage.sol#L1161) is never used in [DegenerusGameAdvanceModule](contracts/modules/DegenerusGameAdvanceModule.sol#L30-L2107)
 
 contracts/storage/DegenerusGameStorage.sol#L1161
 
 
- - [ ] ID-1262
+ - [ ] ID-1265
 [DegenerusGameStorage.PS_ACTIVE_SHIFT](contracts/storage/DegenerusGameStorage.sol#L1124) is never used in [DegenerusGameBoonModule](contracts/modules/DegenerusGameBoonModule.sol#L22-L343)
 
 contracts/storage/DegenerusGameStorage.sol#L1124
 
 
- - [ ] ID-1263
+ - [ ] ID-1266
 [DegenerusGameStorage.coinflip](contracts/storage/DegenerusGameStorage.sol#L127-L128) is never used in [DegenerusGameGameOverModule](contracts/modules/DegenerusGameGameOverModule.sol#L37-L284)
 
 contracts/storage/DegenerusGameStorage.sol#L127-L128
 
 
- - [ ] ID-1264
+ - [ ] ID-1267
 [DegenerusGameStorage.bingoFirsts](contracts/storage/DegenerusGameStorage.sol#L2044) is never used in [DegenerusGameWhaleModule](contracts/modules/DegenerusGameWhaleModule.sol#L20-L1026)
 
 contracts/storage/DegenerusGameStorage.sol#L2044
 
 
- - [ ] ID-1265
+ - [ ] ID-1268
 [DegenerusGameStorage.PS_ACTIVE_MASK](contracts/storage/DegenerusGameStorage.sol#L1125) is never used in [DegenerusGameDecimatorModule](contracts/modules/DegenerusGameDecimatorModule.sol#L21-L1134)
 
 contracts/storage/DegenerusGameStorage.sol#L1125
 
 
- - [ ] ID-1266
+ - [ ] ID-1269
 [DegenerusGameStorage.boxPlayers](contracts/storage/DegenerusGameStorage.sol#L2481) is never used in [DegenerusGameBoonModule](contracts/modules/DegenerusGameBoonModule.sol#L22-L343)
 
 contracts/storage/DegenerusGameStorage.sol#L2481
 
 
- - [ ] ID-1267
-[DegenerusGameStorage.BP_DEITY_PASS_DAY_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2067) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1774)
+ - [ ] ID-1270
+[DegenerusGameStorage.BP_DEITY_PASS_DAY_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2067) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1779)
 
 contracts/storage/DegenerusGameStorage.sol#L2067
 
 
- - [ ] ID-1268
+ - [ ] ID-1271
 [DegenerusGameStorage.GO_JACKPOT_PAID_MASK](contracts/storage/DegenerusGameStorage.sol#L1162) is never used in [SettleClaimableShortfallTester](contracts/test/SettleClaimableShortfallTester.sol#L17-L66)
 
 contracts/storage/DegenerusGameStorage.sol#L1162
 
 
- - [ ] ID-1269
+ - [ ] ID-1272
 [DegenerusGameStorage.compressedJackpotFlag](contracts/storage/DegenerusGameStorage.sol#L319) is never used in [DegenerusGameBingoModule](contracts/modules/DegenerusGameBingoModule.sol#L24-L288)
 
 contracts/storage/DegenerusGameStorage.sol#L319
 
 
- - [ ] ID-1270
+ - [ ] ID-1273
 [DegenerusGameStorage.affiliateDgnrsClaimedBy](contracts/storage/DegenerusGameStorage.sol#L1205-L1206) is never used in [DegenerusGameGameOverModule](contracts/modules/DegenerusGameGameOverModule.sol#L37-L284)
 
 contracts/storage/DegenerusGameStorage.sol#L1205-L1206
 
 
- - [ ] ID-1271
+ - [ ] ID-1274
 [DegenerusGameStorage.operatorApprovals](contracts/storage/DegenerusGameStorage.sol#L1195) is never used in [JackpotSoloTester](contracts/test/JackpotSoloTester.sol#L14-L30)
 
 contracts/storage/DegenerusGameStorage.sol#L1195
 
 
- - [ ] ID-1272
+ - [ ] ID-1275
 [DegenerusGameStorage.decBucketBurnTotal](contracts/storage/DegenerusGameStorage.sol#L1895) is never used in [DegenerusGame](contracts/DegenerusGame.sol#L87-L2624)
 
 contracts/storage/DegenerusGameStorage.sol#L1895
 
 
- - [ ] ID-1273
+ - [ ] ID-1276
 [DegenerusGameStorage.DEITY_PASS_ACTIVITY_BONUS_POINTS](contracts/storage/DegenerusGameStorage.sol#L137) is never used in [DegenerusGameDecimatorModule](contracts/modules/DegenerusGameDecimatorModule.sol#L21-L1134)
 
 contracts/storage/DegenerusGameStorage.sol#L137
 
 
- - [ ] ID-1274
+ - [ ] ID-1277
 [DegenerusGameStorage.BP_LOOTBOX_TIER_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2052) is never used in [SettleClaimableShortfallTester](contracts/test/SettleClaimableShortfallTester.sol#L17-L66)
 
 contracts/storage/DegenerusGameStorage.sol#L2052
 
 
- - [ ] ID-1275
+ - [ ] ID-1278
 [DegenerusGameStorage.foilBuyers](contracts/storage/DegenerusGameStorage.sol#L2541) is never used in [DegenerusGameDecimatorModule](contracts/modules/DegenerusGameDecimatorModule.sol#L21-L1134)
 
 contracts/storage/DegenerusGameStorage.sol#L2541
 
 
- - [ ] ID-1276
+ - [ ] ID-1279
 [DegenerusGameStorage.ticketRedemptionOpen](contracts/storage/DegenerusGameStorage.sol#L376) is never used in [JackpotSoloTester](contracts/test/JackpotSoloTester.sol#L14-L30)
 
 contracts/storage/DegenerusGameStorage.sol#L376
 
 
- - [ ] ID-1277
+ - [ ] ID-1280
 [DegenerusGameStorage.BP_MASK_24](contracts/storage/DegenerusGameStorage.sol#L2074) is never used in [JackpotSoloTester](contracts/test/JackpotSoloTester.sol#L14-L30)
 
 contracts/storage/DegenerusGameStorage.sol#L2074
 
 
- - [ ] ID-1278
+ - [ ] ID-1281
 [DegenerusGameStorage.BP_WHALE_CLEAR](contracts/storage/DegenerusGameStorage.sol#L2090) is never used in [JackpotSoloTester](contracts/test/JackpotSoloTester.sol#L14-L30)
 
 contracts/storage/DegenerusGameStorage.sol#L2090
 
 
- - [ ] ID-1279
+ - [ ] ID-1282
 [DegenerusGameStorage.BP_DEITY_LAZY_PASS_DAY_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2070) is never used in [GameAfkingModule](contracts/modules/GameAfkingModule.sol#L82-L1941)
 
 contracts/storage/DegenerusGameStorage.sol#L2070
 
 
- - [ ] ID-1280
+ - [ ] ID-1283
 [DegenerusGameStorage.presaleBoxDgnrsPoolStart](contracts/storage/DegenerusGameStorage.sol#L1264) is never used in [JackpotSoloTester](contracts/test/JackpotSoloTester.sol#L14-L30)
 
 contracts/storage/DegenerusGameStorage.sol#L1264
 
 
- - [ ] ID-1281
+ - [ ] ID-1284
 [DegenerusGameStorage.dailyHeroWagers](contracts/storage/DegenerusGameStorage.sol#L1915) is never used in [DegenerusGameBingoModule](contracts/modules/DegenerusGameBingoModule.sol#L24-L288)
 
 contracts/storage/DegenerusGameStorage.sol#L1915
 
 
- - [ ] ID-1282
-[DegenerusGameStorage.LR_THRESHOLD_SHIFT](contracts/storage/DegenerusGameStorage.sol#L1615) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1774)
+ - [ ] ID-1285
+[DegenerusGameStorage.LR_THRESHOLD_SHIFT](contracts/storage/DegenerusGameStorage.sol#L1615) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1779)
 
 contracts/storage/DegenerusGameStorage.sol#L1615
 
 
- - [ ] ID-1283
+ - [ ] ID-1286
 [DegenerusGameStorage.BP_DEITY_PASS_DAY_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2067) is never used in [DegenerusGameFoilPackModule](contracts/modules/DegenerusGameFoilPackModule.sol#L30-L815)
 
 contracts/storage/DegenerusGameStorage.sol#L2067
 
 
- - [ ] ID-1284
+ - [ ] ID-1287
 [DegenerusGameStorage.PS_ACTIVE_MASK](contracts/storage/DegenerusGameStorage.sol#L1125) is never used in [DegenerusGameWhaleModule](contracts/modules/DegenerusGameWhaleModule.sol#L20-L1026)
 
 contracts/storage/DegenerusGameStorage.sol#L1125
 
 
- - [ ] ID-1285
+ - [ ] ID-1288
 [DegenerusGameStorage.BOOTSTRAP_PRIZE_POOL](contracts/storage/DegenerusGameStorage.sol#L165) is never used in [DegenerusGameDecimatorModule](contracts/modules/DegenerusGameDecimatorModule.sol#L21-L1134)
 
 contracts/storage/DegenerusGameStorage.sol#L165
 
 
- - [ ] ID-1286
+ - [ ] ID-1289
 [DegenerusGameStorage.bingoFirsts](contracts/storage/DegenerusGameStorage.sol#L2044) is never used in [GameAfkingModule](contracts/modules/GameAfkingModule.sol#L82-L1941)
 
 contracts/storage/DegenerusGameStorage.sol#L2044
 
 
- - [ ] ID-1287
+ - [ ] ID-1290
 [DegenerusGameStorage.levelPrizePool](contracts/storage/DegenerusGameStorage.sol#L1202) is never used in [DegenerusGameDecimatorModule](contracts/modules/DegenerusGameDecimatorModule.sol#L21-L1134)
 
 contracts/storage/DegenerusGameStorage.sol#L1202
 
 
- - [ ] ID-1288
+ - [ ] ID-1291
 [DegenerusGameStorage.BP_LAZY_PASS_TIER_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2071) is never used in [DegenerusGame](contracts/DegenerusGame.sol#L87-L2624)
 
 contracts/storage/DegenerusGameStorage.sol#L2071
 
 
- - [ ] ID-1289
+ - [ ] ID-1292
 [DegenerusGameStorage.dgnrs](contracts/storage/DegenerusGameStorage.sol#L133-L134) is never used in [JackpotSoloTester](contracts/test/JackpotSoloTester.sol#L14-L30)
 
 contracts/storage/DegenerusGameStorage.sol#L133-L134
 
 
- - [ ] ID-1290
+ - [ ] ID-1293
 [DegenerusGameStorage.foilMatchClaimed](contracts/storage/DegenerusGameStorage.sol#L2518) is never used in [DegenerusGameMintModule](contracts/modules/DegenerusGameMintModule.sol#L74-L2136)
 
 contracts/storage/DegenerusGameStorage.sol#L2518
 
 
- - [ ] ID-1291
+ - [ ] ID-1294
 [DegenerusGameStorage.BP_COINFLIP_CLEAR](contracts/storage/DegenerusGameStorage.sol#L2079) is never used in [DegenerusGameMintModule](contracts/modules/DegenerusGameMintModule.sol#L74-L2136)
 
 contracts/storage/DegenerusGameStorage.sol#L2079
 
 
- - [ ] ID-1292
+ - [ ] ID-1295
 [DegenerusGameStorage.totalFlipReversals](contracts/storage/DegenerusGameStorage.sol#L429) is never used in [DegenerusGameBoonModule](contracts/modules/DegenerusGameBoonModule.sol#L22-L343)
 
 contracts/storage/DegenerusGameStorage.sol#L429
 
 
- - [ ] ID-1293
+ - [ ] ID-1296
 [DegenerusGameStorage.BP_ACTIVITY_CLEAR](contracts/storage/DegenerusGameStorage.sol#L2094) is never used in [DegenerusGameGameOverModule](contracts/modules/DegenerusGameGameOverModule.sol#L37-L284)
 
 contracts/storage/DegenerusGameStorage.sol#L2094
 
 
- - [ ] ID-1294
+ - [ ] ID-1297
 [DegenerusGameStorage.BP_MASK_24](contracts/storage/DegenerusGameStorage.sol#L2074) is never used in [DegenerusGameAdvanceModule](contracts/modules/DegenerusGameAdvanceModule.sol#L30-L2107)
 
 contracts/storage/DegenerusGameStorage.sol#L2074
 
 
- - [ ] ID-1295
-[DegenerusGameStorage.GO_TIME_SHIFT](contracts/storage/DegenerusGameStorage.sol#L1159) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1774)
+ - [ ] ID-1298
+[DegenerusGameStorage.GO_TIME_SHIFT](contracts/storage/DegenerusGameStorage.sol#L1159) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1779)
 
 contracts/storage/DegenerusGameStorage.sol#L1159
 
 
- - [ ] ID-1296
+ - [ ] ID-1299
 [DegenerusGameStorage.decBucketOffsetPacked](contracts/storage/DegenerusGameStorage.sol#L1904) is never used in [DegenerusGameBingoModule](contracts/modules/DegenerusGameBingoModule.sol#L24-L288)
 
 contracts/storage/DegenerusGameStorage.sol#L1904
 
 
- - [ ] ID-1297
+ - [ ] ID-1300
 [DegenerusGameStorage.presaleBoxEth](contracts/storage/DegenerusGameStorage.sol#L1103) is never used in [DegenerusGameBingoModule](contracts/modules/DegenerusGameBingoModule.sol#L24-L288)
 
 contracts/storage/DegenerusGameStorage.sol#L1103
 
 
- - [ ] ID-1298
+ - [ ] ID-1301
 [DegenerusGameStorage.BP_DEITY_PURCHASE_DAY_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2054) is never used in [DegenerusGameBingoModule](contracts/modules/DegenerusGameBingoModule.sol#L24-L288)
 
 contracts/storage/DegenerusGameStorage.sol#L2054
 
 
- - [ ] ID-1299
+ - [ ] ID-1302
 [DegenerusGameStorage.LR_THRESHOLD_SHIFT](contracts/storage/DegenerusGameStorage.sol#L1615) is never used in [DegenerusGameWhaleModule](contracts/modules/DegenerusGameWhaleModule.sol#L20-L1026)
 
 contracts/storage/DegenerusGameStorage.sol#L1615
 
 
- - [ ] ID-1300
+ - [ ] ID-1303
 [DegenerusGameStorage.presaleCloseIndex](contracts/storage/DegenerusGameStorage.sol#L2465) is never used in [DegenerusGameAdvanceModule](contracts/modules/DegenerusGameAdvanceModule.sol#L30-L2107)
 
 contracts/storage/DegenerusGameStorage.sol#L2465
 
 
- - [ ] ID-1301
+ - [ ] ID-1304
 [DegenerusGameStorage.GO_JACKPOT_PAID_MASK](contracts/storage/DegenerusGameStorage.sol#L1162) is never used in [DegenerusGameLootboxModule](contracts/modules/DegenerusGameLootboxModule.sol#L39-L2359)
 
 contracts/storage/DegenerusGameStorage.sol#L1162
 
 
- - [ ] ID-1302
+ - [ ] ID-1305
 [DegenerusGameStorage.degeneretteBetNonce](contracts/storage/DegenerusGameStorage.sol#L1788) is never used in [DegenerusGameAdvanceModule](contracts/modules/DegenerusGameAdvanceModule.sol#L30-L2107)
 
 contracts/storage/DegenerusGameStorage.sol#L1788
 
 
- - [ ] ID-1303
+ - [ ] ID-1306
 [DegenerusGameStorage.vrfCoordinator](contracts/storage/DegenerusGameStorage.sol#L1582) is never used in [DegenerusGameBoonModule](contracts/modules/DegenerusGameBoonModule.sol#L22-L343)
 
 contracts/storage/DegenerusGameStorage.sol#L1582
 
 
- - [ ] ID-1304
+ - [ ] ID-1307
 [DegenerusGameStorage.FOIL_PACK_TICKETS](contracts/storage/DegenerusGameStorage.sol#L2571) is never used in [DegenerusGameLootboxModule](contracts/modules/DegenerusGameLootboxModule.sol#L39-L2359)
 
 contracts/storage/DegenerusGameStorage.sol#L2571
 
 
- - [ ] ID-1305
+ - [ ] ID-1308
 [DegenerusGameStorage.LR_PENDING_ETH_MASK](contracts/storage/DegenerusGameStorage.sol#L1614) is never used in [DegenerusGameDecimatorModule](contracts/modules/DegenerusGameDecimatorModule.sol#L21-L1134)
 
 contracts/storage/DegenerusGameStorage.sol#L1614
 
 
- - [ ] ID-1306
+ - [ ] ID-1309
 [DegenerusGameStorage.LR_MID_DAY_MASK](contracts/storage/DegenerusGameStorage.sol#L1620) is never used in [DegenerusGameLootboxModule](contracts/modules/DegenerusGameLootboxModule.sol#L39-L2359)
 
 contracts/storage/DegenerusGameStorage.sol#L1620
 
 
- - [ ] ID-1307
+ - [ ] ID-1310
 [DegenerusGameStorage.decClaimRounds](contracts/storage/DegenerusGameStorage.sol#L1899) is never used in [DegenerusGameLootboxModule](contracts/modules/DegenerusGameLootboxModule.sol#L39-L2359)
 
 contracts/storage/DegenerusGameStorage.sol#L1899
 
 
- - [ ] ID-1308
+ - [ ] ID-1311
 [DegenerusGameStorage.PS_ACTIVE_MASK](contracts/storage/DegenerusGameStorage.sol#L1125) is never used in [DegenerusGameLootboxModule](contracts/modules/DegenerusGameLootboxModule.sol#L39-L2359)
 
 contracts/storage/DegenerusGameStorage.sol#L1125
 
 
- - [ ] ID-1309
+ - [ ] ID-1312
 [DegenerusGameStorage.GO_SWEPT_SHIFT](contracts/storage/DegenerusGameStorage.sol#L1163) is never used in [DegenerusGameLootboxModule](contracts/modules/DegenerusGameLootboxModule.sol#L39-L2359)
 
 contracts/storage/DegenerusGameStorage.sol#L1163
 
 
- - [ ] ID-1310
+ - [ ] ID-1313
 [DegenerusGameStorage.BP_DEITY_PASS_CLEAR](contracts/storage/DegenerusGameStorage.sol#L2096-L2097) is never used in [SettleClaimableShortfallTester](contracts/test/SettleClaimableShortfallTester.sol#L17-L66)
 
 contracts/storage/DegenerusGameStorage.sol#L2096-L2097
 
 
- - [ ] ID-1311
+ - [ ] ID-1314
 [DegenerusGameStorage.BP_LAZY_PASS_TIER_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2071) is never used in [DegenerusGameAdvanceModule](contracts/modules/DegenerusGameAdvanceModule.sol#L30-L2107)
 
 contracts/storage/DegenerusGameStorage.sol#L2071
 
 
- - [ ] ID-1312
+ - [ ] ID-1315
 [DegenerusGameStorage.bingoFirsts](contracts/storage/DegenerusGameStorage.sol#L2044) is never used in [DegenerusGameAdvanceModule](contracts/modules/DegenerusGameAdvanceModule.sol#L30-L2107)
 
 contracts/storage/DegenerusGameStorage.sol#L2044
 
 
- - [ ] ID-1313
+ - [ ] ID-1316
 [DegenerusGameStorage.BP_DEITY_PASS_CLEAR](contracts/storage/DegenerusGameStorage.sol#L2096-L2097) is never used in [DegenerusGameAdvanceModule](contracts/modules/DegenerusGameAdvanceModule.sol#L30-L2107)
 
 contracts/storage/DegenerusGameStorage.sol#L2096-L2097
 
 
- - [ ] ID-1314
+ - [ ] ID-1317
 [DegenerusGameStorage.PRESALE_BOX_AMOUNT_MASK](contracts/storage/DegenerusGameStorage.sol#L1110) is never used in [DegenerusGame](contracts/DegenerusGame.sol#L87-L2624)
 
 contracts/storage/DegenerusGameStorage.sol#L1110
 
 
- - [ ] ID-1315
+ - [ ] ID-1318
 [DegenerusGameStorage.FOIL_CCY_TAG](contracts/storage/DegenerusGameStorage.sol#L2593) is never used in [DegenerusGameGameOverModule](contracts/modules/DegenerusGameGameOverModule.sol#L37-L284)
 
 contracts/storage/DegenerusGameStorage.sol#L2593
 
 
- - [ ] ID-1316
+ - [ ] ID-1319
 [DegenerusGameStorage.degeneretteBetNonce](contracts/storage/DegenerusGameStorage.sol#L1788) is never used in [DegenerusGameBoonModule](contracts/modules/DegenerusGameBoonModule.sol#L22-L343)
 
 contracts/storage/DegenerusGameStorage.sol#L1788
 
 
- - [ ] ID-1317
+ - [ ] ID-1320
 [DegenerusGameStorage.presaleCloseIndex](contracts/storage/DegenerusGameStorage.sol#L2465) is never used in [GameAfkingModule](contracts/modules/GameAfkingModule.sol#L82-L1941)
 
 contracts/storage/DegenerusGameStorage.sol#L2465
 
 
- - [ ] ID-1318
+ - [ ] ID-1321
 [DegenerusGameStorage.LB_DISTRESS_SCALE](contracts/storage/DegenerusGameStorage.sol#L1078) is never used in [JackpotSoloTester](contracts/test/JackpotSoloTester.sol#L14-L30)
 
 contracts/storage/DegenerusGameStorage.sol#L1078
 
 
- - [ ] ID-1319
+ - [ ] ID-1322
 [DegenerusGameStorage.BP_MASK_24](contracts/storage/DegenerusGameStorage.sol#L2074) is never used in [DegenerusGameWhaleModule](contracts/modules/DegenerusGameWhaleModule.sol#L20-L1026)
 
 contracts/storage/DegenerusGameStorage.sol#L2074
 
 
- - [ ] ID-1320
+ - [ ] ID-1323
 [DegenerusGameStorage.BP_ACTIVITY_PENDING_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2063) is never used in [DegenerusGameBingoModule](contracts/modules/DegenerusGameBingoModule.sol#L24-L288)
 
 contracts/storage/DegenerusGameStorage.sol#L2063
 
 
- - [ ] ID-1321
+ - [ ] ID-1324
 [DegenerusGameStorage.LOOTBOX_EV_BENEFIT_CAP](contracts/storage/DegenerusGameStorage.sol#L1643-L1644) is never used in [JackpotSoloTester](contracts/test/JackpotSoloTester.sol#L14-L30)
 
 contracts/storage/DegenerusGameStorage.sol#L1643-L1644
 
 
- - [ ] ID-1322
+ - [ ] ID-1325
 [DegenerusGameStorage.dgnrs](contracts/storage/DegenerusGameStorage.sol#L133-L134) is never used in [DegenerusGameFoilPackModule](contracts/modules/DegenerusGameFoilPackModule.sol#L30-L815)
 
 contracts/storage/DegenerusGameStorage.sol#L133-L134
 
 
- - [ ] ID-1323
+ - [ ] ID-1326
 [DegenerusGameStorage.PS_MINT_ETH_MASK](contracts/storage/DegenerusGameStorage.sol#L1127) is never used in [DegenerusGameAdvanceModule](contracts/modules/DegenerusGameAdvanceModule.sol#L30-L2107)
 
 contracts/storage/DegenerusGameStorage.sol#L1127
 
 
- - [ ] ID-1324
+ - [ ] ID-1327
 [DegenerusGameStorage.rngWordCurrent](contracts/storage/DegenerusGameStorage.sol#L417) is never used in [DegenerusGameFoilPackModule](contracts/modules/DegenerusGameFoilPackModule.sol#L30-L815)
 
 contracts/storage/DegenerusGameStorage.sol#L417
 
 
- - [ ] ID-1325
+ - [ ] ID-1328
 [DegenerusGameStorage.bingoClaimed](contracts/storage/DegenerusGameStorage.sol#L2039) is never used in [GameAfkingModule](contracts/modules/GameAfkingModule.sol#L82-L1941)
 
 contracts/storage/DegenerusGameStorage.sol#L2039
 
 
- - [ ] ID-1326
+ - [ ] ID-1329
 [DegenerusGameStorage.decBucketOffsetPacked](contracts/storage/DegenerusGameStorage.sol#L1904) is never used in [DegenerusGameLootboxModule](contracts/modules/DegenerusGameLootboxModule.sol#L39-L2359)
 
 contracts/storage/DegenerusGameStorage.sol#L1904
 
 
- - [ ] ID-1327
+ - [ ] ID-1330
 [DegenerusGameStorage.BP_DEITY_DEITY_PASS_DAY_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2068) is never used in [DegenerusGame](contracts/DegenerusGame.sol#L87-L2624)
 
 contracts/storage/DegenerusGameStorage.sol#L2068
 
 
- - [ ] ID-1328
+ - [ ] ID-1331
 [DegenerusGameStorage.yieldAccumulator](contracts/storage/DegenerusGameStorage.sol#L1925) is never used in [SettleClaimableShortfallTester](contracts/test/SettleClaimableShortfallTester.sol#L17-L66)
 
 contracts/storage/DegenerusGameStorage.sol#L1925
 
 
- - [ ] ID-1329
+ - [ ] ID-1332
 [DegenerusGameStorage._fundingSourceOf](contracts/storage/DegenerusGameStorage.sol#L2420) is never used in [DegenerusGameBoonModule](contracts/modules/DegenerusGameBoonModule.sol#L22-L343)
 
 contracts/storage/DegenerusGameStorage.sol#L2420
 
 
- - [ ] ID-1330
-[DegenerusGameStorage._subscribers](contracts/storage/DegenerusGameStorage.sol#L2423) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1774)
+ - [ ] ID-1333
+[DegenerusGameStorage._subscribers](contracts/storage/DegenerusGameStorage.sol#L2423) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1779)
 
 contracts/storage/DegenerusGameStorage.sol#L2423
 
 
- - [ ] ID-1331
+ - [ ] ID-1334
 [DegenerusGameStorage.whalePassClaims](contracts/storage/DegenerusGameStorage.sol#L1183) is never used in [GameAfkingModule](contracts/modules/GameAfkingModule.sol#L82-L1941)
 
 contracts/storage/DegenerusGameStorage.sol#L1183
 
 
- - [ ] ID-1332
+ - [ ] ID-1335
 [DegenerusGameStorage.LOOTBOX_EV_BENEFIT_CAP](contracts/storage/DegenerusGameStorage.sol#L1643-L1644) is never used in [DegenerusGameAdvanceModule](contracts/modules/DegenerusGameAdvanceModule.sol#L30-L2107)
 
 contracts/storage/DegenerusGameStorage.sol#L1643-L1644
 
 
- - [ ] ID-1333
+ - [ ] ID-1336
 [DegenerusGameStorage.affiliate](contracts/storage/DegenerusGameStorage.sol#L131-L132) is never used in [DegenerusGameGameOverModule](contracts/modules/DegenerusGameGameOverModule.sol#L37-L284)
 
 contracts/storage/DegenerusGameStorage.sol#L131-L132
 
 
- - [ ] ID-1334
+ - [ ] ID-1337
 [DegenerusGameStorage.LR_PENDING_ETH_MASK](contracts/storage/DegenerusGameStorage.sol#L1614) is never used in [DegenerusGame](contracts/DegenerusGame.sol#L87-L2624)
 
 contracts/storage/DegenerusGameStorage.sol#L1614
 
 
- - [ ] ID-1335
+ - [ ] ID-1338
 [DegenerusGameStorage.LOOTBOX_PRESALE_ETH_CAP](contracts/storage/DegenerusGameStorage.sol#L1130) is never used in [DegenerusGameFoilPackModule](contracts/modules/DegenerusGameFoilPackModule.sol#L30-L815)
 
 contracts/storage/DegenerusGameStorage.sol#L1130
 
 
- - [ ] ID-1336
+ - [ ] ID-1339
 [DegenerusGameStorage.dailyJackpotCoinTicketsPending](contracts/storage/DegenerusGameStorage.sol#L312) is never used in [DegenerusGameMintModule](contracts/modules/DegenerusGameMintModule.sol#L74-L2136)
 
 contracts/storage/DegenerusGameStorage.sol#L312
 
 
- - [ ] ID-1337
+ - [ ] ID-1340
 [DegenerusGameStorage.boxCursor](contracts/storage/DegenerusGameStorage.sol#L2454) is never used in [DegenerusGameAdvanceModule](contracts/modules/DegenerusGameAdvanceModule.sol#L30-L2107)
 
 contracts/storage/DegenerusGameStorage.sol#L2454
 
 
- - [ ] ID-1338
+ - [ ] ID-1341
 [DegenerusGameStorage.BP_PURCHASE_CLEAR](contracts/storage/DegenerusGameStorage.sol#L2084-L2085) is never used in [DegenerusGameWhaleModule](contracts/modules/DegenerusGameWhaleModule.sol#L20-L1026)
 
 contracts/storage/DegenerusGameStorage.sol#L2084-L2085
 
 
- - [ ] ID-1339
+ - [ ] ID-1342
 [DegenerusGameStorage.LR_PENDING_ETH_MASK](contracts/storage/DegenerusGameStorage.sol#L1614) is never used in [DegenerusGameFoilPackModule](contracts/modules/DegenerusGameFoilPackModule.sol#L30-L815)
 
 contracts/storage/DegenerusGameStorage.sol#L1614
 
 
- - [ ] ID-1340
+ - [ ] ID-1343
 [DegenerusGameStorage.rngWordCurrent](contracts/storage/DegenerusGameStorage.sol#L417) is never used in [DegenerusGameMintModule](contracts/modules/DegenerusGameMintModule.sol#L74-L2136)
 
 contracts/storage/DegenerusGameStorage.sol#L417
 
 
- - [ ] ID-1341
-[DegenerusGameStorage.deityBySymbol](contracts/storage/DegenerusGameStorage.sol#L1255) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1774)
+ - [ ] ID-1344
+[DegenerusGameStorage.deityBySymbol](contracts/storage/DegenerusGameStorage.sol#L1255) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1779)
 
 contracts/storage/DegenerusGameStorage.sol#L1255
 
 
- - [ ] ID-1342
+ - [ ] ID-1345
 [DegenerusGameStorage.BP_LAZY_PASS_CLEAR](contracts/storage/DegenerusGameStorage.sol#L2099-L2100) is never used in [DegenerusGameLootboxModule](contracts/modules/DegenerusGameLootboxModule.sol#L39-L2359)
 
 contracts/storage/DegenerusGameStorage.sol#L2099-L2100
 
 
- - [ ] ID-1343
+ - [ ] ID-1346
 [DegenerusGameStorage.lootboxEth](contracts/storage/DegenerusGameStorage.sol#L1067) is never used in [DegenerusGameFoilPackModule](contracts/modules/DegenerusGameFoilPackModule.sol#L30-L815)
 
 contracts/storage/DegenerusGameStorage.sol#L1067
 
 
- - [ ] ID-1344
+ - [ ] ID-1347
 [DegenerusGameStorage.LR_PENDING_ETH_MASK](contracts/storage/DegenerusGameStorage.sol#L1614) is never used in [JackpotSoloTester](contracts/test/JackpotSoloTester.sol#L14-L30)
 
 contracts/storage/DegenerusGameStorage.sol#L1614
 
 
- - [ ] ID-1345
+ - [ ] ID-1348
 [DegenerusGameStorage.bingoClaimed](contracts/storage/DegenerusGameStorage.sol#L2039) is never used in [DegenerusGameLootboxModule](contracts/modules/DegenerusGameLootboxModule.sol#L39-L2359)
 
 contracts/storage/DegenerusGameStorage.sol#L2039
 
 
- - [ ] ID-1346
-[DegenerusGameStorage.ticketsFullyProcessed](contracts/storage/DegenerusGameStorage.sol#L326) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1774)
+ - [ ] ID-1349
+[DegenerusGameStorage.ticketsFullyProcessed](contracts/storage/DegenerusGameStorage.sol#L326) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1779)
 
 contracts/storage/DegenerusGameStorage.sol#L326
 
 
- - [ ] ID-1347
+ - [ ] ID-1350
 [DegenerusGameStorage.degeneretteBets](contracts/storage/DegenerusGameStorage.sol#L1785) is never used in [DegenerusGameBoonModule](contracts/modules/DegenerusGameBoonModule.sol#L22-L343)
 
 contracts/storage/DegenerusGameStorage.sol#L1785
 
 
- - [ ] ID-1348
+ - [ ] ID-1351
 [DegenerusGameStorage.LR_MID_DAY_SHIFT](contracts/storage/DegenerusGameStorage.sol#L1619) is never used in [DegenerusGameDecimatorModule](contracts/modules/DegenerusGameDecimatorModule.sol#L21-L1134)
 
 contracts/storage/DegenerusGameStorage.sol#L1619
 
 
- - [ ] ID-1349
+ - [ ] ID-1352
 [DegenerusGameStorage.PS_ACTIVE_MASK](contracts/storage/DegenerusGameStorage.sol#L1125) is never used in [JackpotSoloTester](contracts/test/JackpotSoloTester.sol#L14-L30)
 
 contracts/storage/DegenerusGameStorage.sol#L1125
 
 
- - [ ] ID-1350
+ - [ ] ID-1353
 [DegenerusGameStorage.BP_LAZY_PASS_TIER_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2071) is never used in [DegenerusGameBoonModule](contracts/modules/DegenerusGameBoonModule.sol#L22-L343)
 
 contracts/storage/DegenerusGameStorage.sol#L2071
 
 
- - [ ] ID-1351
+ - [ ] ID-1354
 [DegenerusGameStorage.LOOTBOX_EV_BENEFIT_CAP](contracts/storage/DegenerusGameStorage.sol#L1643-L1644) is never used in [DegenerusGameBingoModule](contracts/modules/DegenerusGameBingoModule.sol#L24-L288)
 
 contracts/storage/DegenerusGameStorage.sol#L1643-L1644
 
 
- - [ ] ID-1352
+ - [ ] ID-1355
 [DegenerusGameStorage.LR_INDEX_SHIFT](contracts/storage/DegenerusGameStorage.sol#L1611) is never used in [DegenerusGameFoilPackModule](contracts/modules/DegenerusGameFoilPackModule.sol#L30-L815)
 
 contracts/storage/DegenerusGameStorage.sol#L1611
 
 
- - [ ] ID-1353
+ - [ ] ID-1356
 [DegenerusGameStorage.yieldAccumulator](contracts/storage/DegenerusGameStorage.sol#L1925) is never used in [DegenerusGameWhaleModule](contracts/modules/DegenerusGameWhaleModule.sol#L20-L1026)
 
 contracts/storage/DegenerusGameStorage.sol#L1925
 
 
- - [ ] ID-1354
+ - [ ] ID-1357
 [DegenerusGameStorage.presaleBoxCredit](contracts/storage/DegenerusGameStorage.sol#L1093) is never used in [DegenerusGameDecimatorModule](contracts/modules/DegenerusGameDecimatorModule.sol#L21-L1134)
 
 contracts/storage/DegenerusGameStorage.sol#L1093
 
 
- - [ ] ID-1355
+ - [ ] ID-1358
 [DegenerusGameStorage.foilBuyers](contracts/storage/DegenerusGameStorage.sol#L2541) is never used in [SettleClaimableShortfallTester](contracts/test/SettleClaimableShortfallTester.sol#L17-L66)
 
 contracts/storage/DegenerusGameStorage.sol#L2541
 
 
- - [ ] ID-1356
+ - [ ] ID-1359
 [DegenerusGameStorage.BP_DEITY_DECIMATOR_DAY_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2057) is never used in [DegenerusGameMintModule](contracts/modules/DegenerusGameMintModule.sol#L74-L2136)
 
 contracts/storage/DegenerusGameStorage.sol#L2057
 
 
- - [ ] ID-1357
+ - [ ] ID-1360
 [DegenerusGameStorage._subOpenCursor](contracts/storage/DegenerusGameStorage.sol#L2438) is never used in [DegenerusGameLootboxModule](contracts/modules/DegenerusGameLootboxModule.sol#L39-L2359)
 
 contracts/storage/DegenerusGameStorage.sol#L2438
 
 
- - [ ] ID-1358
+ - [ ] ID-1361
 [DegenerusGameStorage.FOIL_SEED_TAG](contracts/storage/DegenerusGameStorage.sol#L2587) is never used in [DegenerusGame](contracts/DegenerusGame.sol#L87-L2624)
 
 contracts/storage/DegenerusGameStorage.sol#L2587
 
 
- - [ ] ID-1359
+ - [ ] ID-1362
 [DegenerusGameStorage.presaleBoxEth](contracts/storage/DegenerusGameStorage.sol#L1103) is never used in [GameAfkingModule](contracts/modules/GameAfkingModule.sol#L82-L1941)
 
 contracts/storage/DegenerusGameStorage.sol#L1103
 
 
- - [ ] ID-1360
+ - [ ] ID-1363
 [DegenerusGameStorage.BP_PURCHASE_CLEAR](contracts/storage/DegenerusGameStorage.sol#L2084-L2085) is never used in [DegenerusGame](contracts/DegenerusGame.sol#L87-L2624)
 
 contracts/storage/DegenerusGameStorage.sol#L2084-L2085
 
 
- - [ ] ID-1361
+ - [ ] ID-1364
 [DegenerusGameStorage.PS_ACTIVE_MASK](contracts/storage/DegenerusGameStorage.sol#L1125) is never used in [DegenerusGameBoonModule](contracts/modules/DegenerusGameBoonModule.sol#L22-L343)
 
 contracts/storage/DegenerusGameStorage.sol#L1125
 
 
- - [ ] ID-1362
+ - [ ] ID-1365
 [DegenerusGameStorage.BP_COINFLIP_TIER_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2049) is never used in [JackpotSoloTester](contracts/test/JackpotSoloTester.sol#L14-L30)
 
 contracts/storage/DegenerusGameStorage.sol#L2049
 
 
- - [ ] ID-1363
+ - [ ] ID-1366
 [DegenerusGameStorage.bingoFirsts](contracts/storage/DegenerusGameStorage.sol#L2044) is never used in [DegenerusGameBoonModule](contracts/modules/DegenerusGameBoonModule.sol#L22-L343)
 
 contracts/storage/DegenerusGameStorage.sol#L2044
 
 
- - [ ] ID-1364
+ - [ ] ID-1367
 [DegenerusGameStorage.BP_ACTIVITY_DAY_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2064) is never used in [DegenerusGame](contracts/DegenerusGame.sol#L87-L2624)
 
 contracts/storage/DegenerusGameStorage.sol#L2064
 
 
- - [ ] ID-1365
+ - [ ] ID-1368
 [DegenerusGameStorage.ticketsFullyProcessed](contracts/storage/DegenerusGameStorage.sol#L326) is never used in [DegenerusGameDecimatorModule](contracts/modules/DegenerusGameDecimatorModule.sol#L21-L1134)
 
 contracts/storage/DegenerusGameStorage.sol#L326
 
 
- - [ ] ID-1366
+ - [ ] ID-1369
 [DegenerusGameStorage.BP_WHALE_DAY_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2058) is never used in [DegenerusGameGameOverModule](contracts/modules/DegenerusGameGameOverModule.sol#L37-L284)
 
 contracts/storage/DegenerusGameStorage.sol#L2058
 
 
- - [ ] ID-1367
+ - [ ] ID-1370
 [DegenerusGameStorage.PS_MINT_ETH_SHIFT](contracts/storage/DegenerusGameStorage.sol#L1126) is never used in [DegenerusGameGameOverModule](contracts/modules/DegenerusGameGameOverModule.sol#L37-L284)
 
 contracts/storage/DegenerusGameStorage.sol#L1126
 
 
- - [ ] ID-1368
+ - [ ] ID-1371
 [DegenerusGameStorage.whalePassClaims](contracts/storage/DegenerusGameStorage.sol#L1183) is never used in [DegenerusGameBingoModule](contracts/modules/DegenerusGameBingoModule.sol#L24-L288)
 
 contracts/storage/DegenerusGameStorage.sol#L1183
 
 
- - [ ] ID-1369
+ - [ ] ID-1372
 [DegenerusGameStorage.deityPassPricePaid](contracts/storage/DegenerusGameStorage.sol#L1249) is never used in [DegenerusGameLootboxModule](contracts/modules/DegenerusGameLootboxModule.sol#L39-L2359)
 
 contracts/storage/DegenerusGameStorage.sol#L1249
 
 
- - [ ] ID-1370
+ - [ ] ID-1373
 [DegenerusGameStorage._afkingResetDay](contracts/storage/DegenerusGameStorage.sol#L2445) is never used in [DegenerusGameGameOverModule](contracts/modules/DegenerusGameGameOverModule.sol#L37-L284)
 
 contracts/storage/DegenerusGameStorage.sol#L2445
 
 
- - [ ] ID-1371
+ - [ ] ID-1374
 [DegenerusGameStorage.ticketRedemptionOpen](contracts/storage/DegenerusGameStorage.sol#L376) is never used in [DegenerusGameBingoModule](contracts/modules/DegenerusGameBingoModule.sol#L24-L288)
 
 contracts/storage/DegenerusGameStorage.sol#L376
 
 
- - [ ] ID-1372
+ - [ ] ID-1375
 [DegenerusGameStorage.BP_DEITY_PASS_DAY_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2067) is never used in [GameAfkingModule](contracts/modules/GameAfkingModule.sol#L82-L1941)
 
 contracts/storage/DegenerusGameStorage.sol#L2067
 
 
- - [ ] ID-1373
+ - [ ] ID-1376
 [DegenerusGameStorage.ticketsFullyProcessed](contracts/storage/DegenerusGameStorage.sol#L326) is never used in [SettleClaimableShortfallTester](contracts/test/SettleClaimableShortfallTester.sol#L17-L66)
 
 contracts/storage/DegenerusGameStorage.sol#L326
 
 
- - [ ] ID-1374
+ - [ ] ID-1377
 [DegenerusGameStorage.FOIL_PACK_ENTRIES](contracts/storage/DegenerusGameStorage.sol#L2566) is never used in [GameAfkingModule](contracts/modules/GameAfkingModule.sol#L82-L1941)
 
 contracts/storage/DegenerusGameStorage.sol#L2566
 
 
- - [ ] ID-1375
+ - [ ] ID-1378
 [DegenerusGameStorage.LR_THRESHOLD_SHIFT](contracts/storage/DegenerusGameStorage.sol#L1615) is never used in [DegenerusGameDecimatorModule](contracts/modules/DegenerusGameDecimatorModule.sol#L21-L1134)
 
 contracts/storage/DegenerusGameStorage.sol#L1615
 
 
- - [ ] ID-1376
+ - [ ] ID-1379
 [DegenerusGameStorage.boxCursor](contracts/storage/DegenerusGameStorage.sol#L2454) is never used in [DegenerusGameBoonModule](contracts/modules/DegenerusGameBoonModule.sol#L22-L343)
 
 contracts/storage/DegenerusGameStorage.sol#L2454
 
 
- - [ ] ID-1377
-[DegenerusGameStorage.FOIL_PACK_ENTRIES](contracts/storage/DegenerusGameStorage.sol#L2566) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1774)
+ - [ ] ID-1380
+[DegenerusGameStorage.FOIL_PACK_ENTRIES](contracts/storage/DegenerusGameStorage.sol#L2566) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1779)
 
 contracts/storage/DegenerusGameStorage.sol#L2566
 
 
- - [ ] ID-1378
+ - [ ] ID-1381
 [DegenerusGameStorage.degeneretteBets](contracts/storage/DegenerusGameStorage.sol#L1785) is never used in [DegenerusGameGameOverModule](contracts/modules/DegenerusGameGameOverModule.sol#L37-L284)
 
 contracts/storage/DegenerusGameStorage.sol#L1785
 
 
- - [ ] ID-1379
+ - [ ] ID-1382
 [DegenerusGameStorage.LR_THRESHOLD_MASK](contracts/storage/DegenerusGameStorage.sol#L1616) is never used in [DegenerusGameFoilPackModule](contracts/modules/DegenerusGameFoilPackModule.sol#L30-L815)
 
 contracts/storage/DegenerusGameStorage.sol#L1616
 
 
- - [ ] ID-1380
+ - [ ] ID-1383
 [DegenerusGameStorage.deityBoonPacked](contracts/storage/DegenerusGameStorage.sol#L1766) is never used in [SettleClaimableShortfallTester](contracts/test/SettleClaimableShortfallTester.sol#L17-L66)
 
 contracts/storage/DegenerusGameStorage.sol#L1766
 
 
- - [ ] ID-1381
+ - [ ] ID-1384
 [DegenerusGameStorage.BP_DEITY_DEITY_PASS_DAY_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2068) is never used in [JackpotSoloTester](contracts/test/JackpotSoloTester.sol#L14-L30)
 
 contracts/storage/DegenerusGameStorage.sol#L2068
 
 
- - [ ] ID-1382
+ - [ ] ID-1385
 [DegenerusGameStorage.PS_ACTIVE_SHIFT](contracts/storage/DegenerusGameStorage.sol#L1124) is never used in [DegenerusGameBingoModule](contracts/modules/DegenerusGameBingoModule.sol#L24-L288)
 
 contracts/storage/DegenerusGameStorage.sol#L1124
 
 
- - [ ] ID-1383
+ - [ ] ID-1386
 [DegenerusGameStorage.yieldAccumulator](contracts/storage/DegenerusGameStorage.sol#L1925) is never used in [DegenerusGameBoonModule](contracts/modules/DegenerusGameBoonModule.sol#L22-L343)
 
 contracts/storage/DegenerusGameStorage.sol#L1925
 
 
- - [ ] ID-1384
-[DegenerusGameStorage.PRESALE_BOX_AMOUNT_MASK](contracts/storage/DegenerusGameStorage.sol#L1110) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1774)
+ - [ ] ID-1387
+[DegenerusGameStorage.PRESALE_BOX_AMOUNT_MASK](contracts/storage/DegenerusGameStorage.sol#L1110) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1779)
 
 contracts/storage/DegenerusGameStorage.sol#L1110
 
 
- - [ ] ID-1385
+ - [ ] ID-1388
 [DegenerusGameStorage.decBucketBurnTotal](contracts/storage/DegenerusGameStorage.sol#L1895) is never used in [DegenerusGameBoonModule](contracts/modules/DegenerusGameBoonModule.sol#L22-L343)
 
 contracts/storage/DegenerusGameStorage.sol#L1895
 
 
- - [ ] ID-1386
+ - [ ] ID-1389
 [DegenerusGameStorage.LR_PENDING_FLIP_MASK](contracts/storage/DegenerusGameStorage.sol#L1618) is never used in [DegenerusGameBingoModule](contracts/modules/DegenerusGameBingoModule.sol#L24-L288)
 
 contracts/storage/DegenerusGameStorage.sol#L1618
 
 
- - [ ] ID-1387
-[DegenerusGameStorage._subscriberIndex](contracts/storage/DegenerusGameStorage.sol#L2427) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1774)
+ - [ ] ID-1390
+[DegenerusGameStorage._subscriberIndex](contracts/storage/DegenerusGameStorage.sol#L2427) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1779)
 
 contracts/storage/DegenerusGameStorage.sol#L2427
 
 
- - [ ] ID-1388
-[DegenerusGameStorage.BP_LOOTBOX_TIER_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2052) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1774)
+ - [ ] ID-1391
+[DegenerusGameStorage.BP_LOOTBOX_TIER_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2052) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1779)
 
 contracts/storage/DegenerusGameStorage.sol#L2052
 
 
- - [ ] ID-1389
+ - [ ] ID-1392
 [DegenerusGameStorage.terminalDecBucketBurnTotal](contracts/storage/DegenerusGameStorage.sol#L1975) is never used in [DegenerusGameLootboxModule](contracts/modules/DegenerusGameLootboxModule.sol#L39-L2359)
 
 contracts/storage/DegenerusGameStorage.sol#L1975
 
 
- - [ ] ID-1390
+ - [ ] ID-1393
 [DegenerusGameStorage.BP_ACTIVITY_CLEAR](contracts/storage/DegenerusGameStorage.sol#L2094) is never used in [DegenerusGame](contracts/DegenerusGame.sol#L87-L2624)
 
 contracts/storage/DegenerusGameStorage.sol#L2094
 
 
- - [ ] ID-1391
+ - [ ] ID-1394
 [DegenerusGameStorage.PS_MINT_ETH_SHIFT](contracts/storage/DegenerusGameStorage.sol#L1126) is never used in [DegenerusGameBingoModule](contracts/modules/DegenerusGameBingoModule.sol#L24-L288)
 
 contracts/storage/DegenerusGameStorage.sol#L1126
 
 
- - [ ] ID-1392
+ - [ ] ID-1395
 [DegenerusGameStorage.decBurn](contracts/storage/DegenerusGameStorage.sol#L1890) is never used in [DegenerusGameFoilPackModule](contracts/modules/DegenerusGameFoilPackModule.sol#L30-L815)
 
 contracts/storage/DegenerusGameStorage.sol#L1890
 
 
- - [ ] ID-1393
+ - [ ] ID-1396
 [DegenerusGameStorage.vrfRequestId](contracts/storage/DegenerusGameStorage.sol#L423) is never used in [GameAfkingModule](contracts/modules/GameAfkingModule.sol#L82-L1941)
 
 contracts/storage/DegenerusGameStorage.sol#L423
 
 
- - [ ] ID-1394
+ - [ ] ID-1397
 [DegenerusGameStorage.decBurn](contracts/storage/DegenerusGameStorage.sol#L1890) is never used in [DegenerusGameLootboxModule](contracts/modules/DegenerusGameLootboxModule.sol#L39-L2359)
 
 contracts/storage/DegenerusGameStorage.sol#L1890
 
 
- - [ ] ID-1395
+ - [ ] ID-1398
 [DegenerusGameStorage._subscriberIndex](contracts/storage/DegenerusGameStorage.sol#L2427) is never used in [JackpotSoloTester](contracts/test/JackpotSoloTester.sol#L14-L30)
 
 contracts/storage/DegenerusGameStorage.sol#L2427
 
 
- - [ ] ID-1396
+ - [ ] ID-1399
 [DegenerusGameStorage.FOIL_SEED_TAG](contracts/storage/DegenerusGameStorage.sol#L2587) is never used in [DegenerusGameGameOverModule](contracts/modules/DegenerusGameGameOverModule.sol#L37-L284)
 
 contracts/storage/DegenerusGameStorage.sol#L2587
 
 
- - [ ] ID-1397
+ - [ ] ID-1400
 [DegenerusGameStorage.ticketsFullyProcessed](contracts/storage/DegenerusGameStorage.sol#L326) is never used in [DegenerusGameGameOverModule](contracts/modules/DegenerusGameGameOverModule.sol#L37-L284)
 
 contracts/storage/DegenerusGameStorage.sol#L326
 
 
- - [ ] ID-1398
+ - [ ] ID-1401
 [DegenerusGameStorage.lootboxRngWordByIndex](contracts/storage/DegenerusGameStorage.sol#L1755) is never used in [DegenerusGameBingoModule](contracts/modules/DegenerusGameBingoModule.sol#L24-L288)
 
 contracts/storage/DegenerusGameStorage.sol#L1755
 
 
- - [ ] ID-1399
+ - [ ] ID-1402
 [DegenerusGameStorage.PS_ACTIVE_MASK](contracts/storage/DegenerusGameStorage.sol#L1125) is never used in [DegenerusGameBingoModule](contracts/modules/DegenerusGameBingoModule.sol#L24-L288)
 
 contracts/storage/DegenerusGameStorage.sol#L1125
 
 
- - [ ] ID-1400
+ - [ ] ID-1403
 [DegenerusGameStorage.BP_LAZY_PASS_DAY_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2069) is never used in [GameAfkingModule](contracts/modules/GameAfkingModule.sol#L82-L1941)
 
 contracts/storage/DegenerusGameStorage.sol#L2069
 
 
- - [ ] ID-1401
+ - [ ] ID-1404
 [DegenerusGameStorage.levelPrizePool](contracts/storage/DegenerusGameStorage.sol#L1202) is never used in [DegenerusGameWhaleModule](contracts/modules/DegenerusGameWhaleModule.sol#L20-L1026)
 
 contracts/storage/DegenerusGameStorage.sol#L1202
 
 
- - [ ] ID-1402
+ - [ ] ID-1405
 [DegenerusGameStorage.dailyTicketBudgetsPacked](contracts/storage/DegenerusGameStorage.sol#L442) is never used in [DegenerusGameBingoModule](contracts/modules/DegenerusGameBingoModule.sol#L24-L288)
 
 contracts/storage/DegenerusGameStorage.sol#L442
 
 
- - [ ] ID-1403
+ - [ ] ID-1406
 [DegenerusGameStorage.operatorApprovals](contracts/storage/DegenerusGameStorage.sol#L1195) is never used in [DegenerusGameAdvanceModule](contracts/modules/DegenerusGameAdvanceModule.sol#L30-L2107)
 
 contracts/storage/DegenerusGameStorage.sol#L1195
 
 
- - [ ] ID-1404
+ - [ ] ID-1407
 [DegenerusGameStorage.BP_ACTIVITY_PENDING_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2063) is never used in [DegenerusGameGameOverModule](contracts/modules/DegenerusGameGameOverModule.sol#L37-L284)
 
 contracts/storage/DegenerusGameStorage.sol#L2063
 
 
- - [ ] ID-1405
+ - [ ] ID-1408
 [DegenerusGameStorage.levelPrizePool](contracts/storage/DegenerusGameStorage.sol#L1202) is never used in [DegenerusGameFoilPackModule](contracts/modules/DegenerusGameFoilPackModule.sol#L30-L815)
 
 contracts/storage/DegenerusGameStorage.sol#L1202
 
 
- - [ ] ID-1406
+ - [ ] ID-1409
 [DegenerusGameStorage.BP_ACTIVITY_PENDING_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2063) is never used in [JackpotSoloTester](contracts/test/JackpotSoloTester.sol#L14-L30)
 
 contracts/storage/DegenerusGameStorage.sol#L2063
 
 
- - [ ] ID-1407
-[DegenerusGameStorage.LR_THRESHOLD_MASK](contracts/storage/DegenerusGameStorage.sol#L1616) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1774)
+ - [ ] ID-1410
+[DegenerusGameStorage.LR_THRESHOLD_MASK](contracts/storage/DegenerusGameStorage.sol#L1616) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1779)
 
 contracts/storage/DegenerusGameStorage.sol#L1616
 
 
- - [ ] ID-1408
+ - [ ] ID-1411
 [DegenerusGameStorage.vrfSubscriptionId](contracts/storage/DegenerusGameStorage.sol#L1590) is never used in [GameAfkingModule](contracts/modules/GameAfkingModule.sol#L82-L1941)
 
 contracts/storage/DegenerusGameStorage.sol#L1590
 
 
- - [ ] ID-1409
+ - [ ] ID-1412
 [DegenerusGameStorage.terminalDecBucketBurnTotal](contracts/storage/DegenerusGameStorage.sol#L1975) is never used in [SettleClaimableShortfallTester](contracts/test/SettleClaimableShortfallTester.sol#L17-L66)
 
 contracts/storage/DegenerusGameStorage.sol#L1975
 
 
- - [ ] ID-1410
+ - [ ] ID-1413
 [DegenerusGameStorage.terminalDecBets](contracts/storage/DegenerusGameStorage.sol#L1971) is never used in [JackpotSoloTester](contracts/test/JackpotSoloTester.sol#L14-L30)
 
 contracts/storage/DegenerusGameStorage.sol#L1971
 
 
- - [ ] ID-1411
+ - [ ] ID-1414
 [DegenerusGameStorage.BP_COINFLIP_DAY_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2047) is never used in [GameAfkingModule](contracts/modules/GameAfkingModule.sol#L82-L1941)
 
 contracts/storage/DegenerusGameStorage.sol#L2047
 
 
- - [ ] ID-1412
+ - [ ] ID-1415
 [DegenerusGameStorage.dailyTicketBudgetsPacked](contracts/storage/DegenerusGameStorage.sol#L442) is never used in [DegenerusGame](contracts/DegenerusGame.sol#L87-L2624)
 
 contracts/storage/DegenerusGameStorage.sol#L442
 
 
- - [ ] ID-1413
+ - [ ] ID-1416
 [DegenerusGameStorage.BP_WHALE_CLEAR](contracts/storage/DegenerusGameStorage.sol#L2090) is never used in [GameAfkingModule](contracts/modules/GameAfkingModule.sol#L82-L1941)
 
 contracts/storage/DegenerusGameStorage.sol#L2090
 
 
- - [ ] ID-1414
+ - [ ] ID-1417
 [DegenerusGameStorage.terminalDecBucketBurnTotal](contracts/storage/DegenerusGameStorage.sol#L1975) is never used in [DegenerusGameWhaleModule](contracts/modules/DegenerusGameWhaleModule.sol#L20-L1026)
 
 contracts/storage/DegenerusGameStorage.sol#L1975
 
 
- - [ ] ID-1415
+ - [ ] ID-1418
 [DegenerusGameStorage._subscribers](contracts/storage/DegenerusGameStorage.sol#L2423) is never used in [JackpotSoloTester](contracts/test/JackpotSoloTester.sol#L14-L30)
 
 contracts/storage/DegenerusGameStorage.sol#L2423
 
 
- - [ ] ID-1416
+ - [ ] ID-1419
 [DegenerusGameStorage.coin](contracts/storage/DegenerusGameStorage.sol#L125-L126) is never used in [JackpotSoloTester](contracts/test/JackpotSoloTester.sol#L14-L30)
 
 contracts/storage/DegenerusGameStorage.sol#L125-L126
 
 
- - [ ] ID-1417
+ - [ ] ID-1420
 [DegenerusGameStorage.GO_JACKPOT_PAID_SHIFT](contracts/storage/DegenerusGameStorage.sol#L1161) is never used in [DegenerusGameBoonModule](contracts/modules/DegenerusGameBoonModule.sol#L22-L343)
 
 contracts/storage/DegenerusGameStorage.sol#L1161
 
 
- - [ ] ID-1418
+ - [ ] ID-1421
 [DegenerusGameStorage.decBurn](contracts/storage/DegenerusGameStorage.sol#L1890) is never used in [DegenerusGameBoonModule](contracts/modules/DegenerusGameBoonModule.sol#L22-L343)
 
 contracts/storage/DegenerusGameStorage.sol#L1890
 
 
- - [ ] ID-1419
+ - [ ] ID-1422
 [DegenerusGameStorage.dailyJackpotCoinTicketsPending](contracts/storage/DegenerusGameStorage.sol#L312) is never used in [DegenerusGame](contracts/DegenerusGame.sol#L87-L2624)
 
 contracts/storage/DegenerusGameStorage.sol#L312
 
 
- - [ ] ID-1420
+ - [ ] ID-1423
 [DegenerusGameStorage.PS_MINT_ETH_SHIFT](contracts/storage/DegenerusGameStorage.sol#L1126) is never used in [DegenerusGameAdvanceModule](contracts/modules/DegenerusGameAdvanceModule.sol#L30-L2107)
 
 contracts/storage/DegenerusGameStorage.sol#L1126
 
 
- - [ ] ID-1421
+ - [ ] ID-1424
 [DegenerusGameStorage.BP_DEITY_PURCHASE_DAY_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2054) is never used in [GameAfkingModule](contracts/modules/GameAfkingModule.sol#L82-L1941)
 
 contracts/storage/DegenerusGameStorage.sol#L2054
 
 
- - [ ] ID-1422
+ - [ ] ID-1425
 [DegenerusGameStorage.BOOTSTRAP_PRIZE_POOL](contracts/storage/DegenerusGameStorage.sol#L165) is never used in [DegenerusGameGameOverModule](contracts/modules/DegenerusGameGameOverModule.sol#L37-L284)
 
 contracts/storage/DegenerusGameStorage.sol#L165
 
 
- - [ ] ID-1423
+ - [ ] ID-1426
 [DegenerusGameStorage.decBurn](contracts/storage/DegenerusGameStorage.sol#L1890) is never used in [DegenerusGameGameOverModule](contracts/modules/DegenerusGameGameOverModule.sol#L37-L284)
 
 contracts/storage/DegenerusGameStorage.sol#L1890
 
 
- - [ ] ID-1424
+ - [ ] ID-1427
 [DegenerusGameStorage.PASS_MINT_COUNT_FLOOR_POINTS](contracts/storage/DegenerusGameStorage.sol#L149) is never used in [DegenerusGameAdvanceModule](contracts/modules/DegenerusGameAdvanceModule.sol#L30-L2107)
 
 contracts/storage/DegenerusGameStorage.sol#L149
 
 
- - [ ] ID-1425
+ - [ ] ID-1428
 [DegenerusGameStorage.BP_DECIMATOR_CLEAR](contracts/storage/DegenerusGameStorage.sol#L2087-L2088) is never used in [DegenerusGameAdvanceModule](contracts/modules/DegenerusGameAdvanceModule.sol#L30-L2107)
 
 contracts/storage/DegenerusGameStorage.sol#L2087-L2088
 
 
- - [ ] ID-1426
+ - [ ] ID-1429
 [DegenerusGameStorage.PRESALE_BOX_AMOUNT_MASK](contracts/storage/DegenerusGameStorage.sol#L1110) is never used in [DegenerusGameAdvanceModule](contracts/modules/DegenerusGameAdvanceModule.sol#L30-L2107)
 
 contracts/storage/DegenerusGameStorage.sol#L1110
 
 
- - [ ] ID-1427
-[DegenerusGameStorage.vrfCoordinator](contracts/storage/DegenerusGameStorage.sol#L1582) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1774)
+ - [ ] ID-1430
+[DegenerusGameStorage.vrfCoordinator](contracts/storage/DegenerusGameStorage.sol#L1582) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1779)
 
 contracts/storage/DegenerusGameStorage.sol#L1582
 
 
- - [ ] ID-1428
+ - [ ] ID-1431
 [DegenerusGameStorage.ticketLevel](contracts/storage/DegenerusGameStorage.sol#L535) is never used in [DegenerusGameGameOverModule](contracts/modules/DegenerusGameGameOverModule.sol#L37-L284)
 
 contracts/storage/DegenerusGameStorage.sol#L535
 
 
- - [ ] ID-1429
+ - [ ] ID-1432
 [DegenerusGameStorage.PASS_STREAK_FLOOR_POINTS](contracts/storage/DegenerusGameStorage.sol#L146) is never used in [SettleClaimableShortfallTester](contracts/test/SettleClaimableShortfallTester.sol#L17-L66)
 
 contracts/storage/DegenerusGameStorage.sol#L146
 
 
- - [ ] ID-1430
+ - [ ] ID-1433
 [DegenerusGameStorage.LR_PENDING_FLIP_MASK](contracts/storage/DegenerusGameStorage.sol#L1618) is never used in [DegenerusGameMintModule](contracts/modules/DegenerusGameMintModule.sol#L74-L2136)
 
 contracts/storage/DegenerusGameStorage.sol#L1618
 
 
- - [ ] ID-1431
+ - [ ] ID-1434
 [DegenerusGameStorage.PRESALE_BOX_AMOUNT_MASK](contracts/storage/DegenerusGameStorage.sol#L1110) is never used in [DegenerusGameDecimatorModule](contracts/modules/DegenerusGameDecimatorModule.sol#L21-L1134)
 
 contracts/storage/DegenerusGameStorage.sol#L1110
 
 
- - [ ] ID-1432
+ - [ ] ID-1435
 [DegenerusGameStorage.presaleBoxCredit](contracts/storage/DegenerusGameStorage.sol#L1093) is never used in [DegenerusGameAdvanceModule](contracts/modules/DegenerusGameAdvanceModule.sol#L30-L2107)
 
 contracts/storage/DegenerusGameStorage.sol#L1093
 
 
- - [ ] ID-1433
+ - [ ] ID-1436
 [DegenerusGameStorage.LR_THRESHOLD_MASK](contracts/storage/DegenerusGameStorage.sol#L1616) is never used in [SettleClaimableShortfallTester](contracts/test/SettleClaimableShortfallTester.sol#L17-L66)
 
 contracts/storage/DegenerusGameStorage.sol#L1616
 
 
- - [ ] ID-1434
+ - [ ] ID-1437
 [DegenerusGameStorage.boxCursor](contracts/storage/DegenerusGameStorage.sol#L2454) is never used in [DegenerusGameWhaleModule](contracts/modules/DegenerusGameWhaleModule.sol#L20-L1026)
 
 contracts/storage/DegenerusGameStorage.sol#L2454
 
 
- - [ ] ID-1435
+ - [ ] ID-1438
 [DegenerusGameStorage.affiliate](contracts/storage/DegenerusGameStorage.sol#L131-L132) is never used in [JackpotSoloTester](contracts/test/JackpotSoloTester.sol#L14-L30)
 
 contracts/storage/DegenerusGameStorage.sol#L131-L132
 
 
- - [ ] ID-1436
+ - [ ] ID-1439
 [DegenerusGameStorage.BP_ACTIVITY_PENDING_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2063) is never used in [DegenerusGameFoilPackModule](contracts/modules/DegenerusGameFoilPackModule.sol#L30-L815)
 
 contracts/storage/DegenerusGameStorage.sol#L2063
 
 
- - [ ] ID-1437
+ - [ ] ID-1440
 [DegenerusGameStorage.LR_PENDING_FLIP_MASK](contracts/storage/DegenerusGameStorage.sol#L1618) is never used in [DegenerusGameLootboxModule](contracts/modules/DegenerusGameLootboxModule.sol#L39-L2359)
 
 contracts/storage/DegenerusGameStorage.sol#L1618
 
 
- - [ ] ID-1438
-[DegenerusGameStorage._fundingSourceOf](contracts/storage/DegenerusGameStorage.sol#L2420) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1774)
+ - [ ] ID-1441
+[DegenerusGameStorage._fundingSourceOf](contracts/storage/DegenerusGameStorage.sol#L2420) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1779)
 
 contracts/storage/DegenerusGameStorage.sol#L2420
 
 
- - [ ] ID-1439
+ - [ ] ID-1442
 [DegenerusGameStorage.decClaimRounds](contracts/storage/DegenerusGameStorage.sol#L1899) is never used in [GameAfkingModule](contracts/modules/GameAfkingModule.sol#L82-L1941)
 
 contracts/storage/DegenerusGameStorage.sol#L1899
 
 
- - [ ] ID-1440
+ - [ ] ID-1443
 [DegenerusGameStorage.presaleDrained](contracts/storage/DegenerusGameStorage.sol#L367) is never used in [DegenerusGameFoilPackModule](contracts/modules/DegenerusGameFoilPackModule.sol#L30-L815)
 
 contracts/storage/DegenerusGameStorage.sol#L367
 
 
- - [ ] ID-1441
+ - [ ] ID-1444
 [DegenerusGameStorage.degeneretteBets](contracts/storage/DegenerusGameStorage.sol#L1785) is never used in [DegenerusGameBingoModule](contracts/modules/DegenerusGameBingoModule.sol#L24-L288)
 
 contracts/storage/DegenerusGameStorage.sol#L1785
 
 
- - [ ] ID-1442
+ - [ ] ID-1445
 [DegenerusGameStorage.BP_WHALE_CLEAR](contracts/storage/DegenerusGameStorage.sol#L2090) is never used in [DegenerusGameLootboxModule](contracts/modules/DegenerusGameLootboxModule.sol#L39-L2359)
 
 contracts/storage/DegenerusGameStorage.sol#L2090
 
 
- - [ ] ID-1443
-[DegenerusGameStorage._subCursor](contracts/storage/DegenerusGameStorage.sol#L2434) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1774)
+ - [ ] ID-1446
+[DegenerusGameStorage._subCursor](contracts/storage/DegenerusGameStorage.sol#L2434) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1779)
 
 contracts/storage/DegenerusGameStorage.sol#L2434
 
 
- - [ ] ID-1444
-[DegenerusGameStorage.decClaimRounds](contracts/storage/DegenerusGameStorage.sol#L1899) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1774)
+ - [ ] ID-1447
+[DegenerusGameStorage.decClaimRounds](contracts/storage/DegenerusGameStorage.sol#L1899) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1779)
 
 contracts/storage/DegenerusGameStorage.sol#L1899
 
 
- - [ ] ID-1445
+ - [ ] ID-1448
 [DegenerusGameStorage.BP_PURCHASE_TIER_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2055) is never used in [DegenerusGame](contracts/DegenerusGame.sol#L87-L2624)
 
 contracts/storage/DegenerusGameStorage.sol#L2055
 
 
- - [ ] ID-1446
+ - [ ] ID-1449
 [DegenerusGameStorage.vrfCoordinator](contracts/storage/DegenerusGameStorage.sol#L1582) is never used in [DegenerusGameFoilPackModule](contracts/modules/DegenerusGameFoilPackModule.sol#L30-L815)
 
 contracts/storage/DegenerusGameStorage.sol#L1582
 
 
- - [ ] ID-1447
-[DegenerusGameStorage.foilMatchClaimed](contracts/storage/DegenerusGameStorage.sol#L2518) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1774)
+ - [ ] ID-1450
+[DegenerusGameStorage.foilMatchClaimed](contracts/storage/DegenerusGameStorage.sol#L2518) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1779)
 
 contracts/storage/DegenerusGameStorage.sol#L2518
 
 
- - [ ] ID-1448
+ - [ ] ID-1451
 [DegenerusGameStorage.BP_COINFLIP_TIER_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2049) is never used in [DegenerusGameWhaleModule](contracts/modules/DegenerusGameWhaleModule.sol#L20-L1026)
 
 contracts/storage/DegenerusGameStorage.sol#L2049
 
 
- - [ ] ID-1449
+ - [ ] ID-1452
 [DegenerusGameStorage.lastVrfProcessedTimestamp](contracts/storage/DegenerusGameStorage.sol#L435) is never used in [DegenerusGameBoonModule](contracts/modules/DegenerusGameBoonModule.sol#L22-L343)
 
 contracts/storage/DegenerusGameStorage.sol#L435
 
 
- - [ ] ID-1450
+ - [ ] ID-1453
 [DegenerusGameStorage._subOpenCursor](contracts/storage/DegenerusGameStorage.sol#L2438) is never used in [DegenerusGameMintModule](contracts/modules/DegenerusGameMintModule.sol#L74-L2136)
 
 contracts/storage/DegenerusGameStorage.sol#L2438
 
 
- - [ ] ID-1451
+ - [ ] ID-1454
 [DegenerusGameStorage.BP_DEITY_PURCHASE_DAY_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2054) is never used in [DegenerusGame](contracts/DegenerusGame.sol#L87-L2624)
 
 contracts/storage/DegenerusGameStorage.sol#L2054
 
 
- - [ ] ID-1452
+ - [ ] ID-1455
 [DegenerusGameStorage.BP_COINFLIP_CLEAR](contracts/storage/DegenerusGameStorage.sol#L2079) is never used in [DegenerusGameFoilPackModule](contracts/modules/DegenerusGameFoilPackModule.sol#L30-L815)
 
 contracts/storage/DegenerusGameStorage.sol#L2079
 
 
- - [ ] ID-1453
+ - [ ] ID-1456
 [DegenerusGameStorage.jackpotCounter](contracts/storage/DegenerusGameStorage.sol#L285) is never used in [DegenerusGameBingoModule](contracts/modules/DegenerusGameBingoModule.sol#L24-L288)
 
 contracts/storage/DegenerusGameStorage.sol#L285
 
 
- - [ ] ID-1454
+ - [ ] ID-1457
 [DegenerusGameStorage.vrfRequestId](contracts/storage/DegenerusGameStorage.sol#L423) is never used in [DegenerusGameBingoModule](contracts/modules/DegenerusGameBingoModule.sol#L24-L288)
 
 contracts/storage/DegenerusGameStorage.sol#L423
 
 
- - [ ] ID-1455
+ - [ ] ID-1458
 [DegenerusGameStorage.deityPassOwners](contracts/storage/DegenerusGameStorage.sol#L1252) is never used in [DegenerusGameDecimatorModule](contracts/modules/DegenerusGameDecimatorModule.sol#L21-L1134)
 
 contracts/storage/DegenerusGameStorage.sol#L1252
 
 
- - [ ] ID-1456
+ - [ ] ID-1459
 [DegenerusGameStorage.compressedJackpotFlag](contracts/storage/DegenerusGameStorage.sol#L319) is never used in [DegenerusGameLootboxModule](contracts/modules/DegenerusGameLootboxModule.sol#L39-L2359)
 
 contracts/storage/DegenerusGameStorage.sol#L319
 
 
- - [ ] ID-1457
+ - [ ] ID-1460
 [DegenerusGameStorage.LR_THRESHOLD_SHIFT](contracts/storage/DegenerusGameStorage.sol#L1615) is never used in [JackpotSoloTester](contracts/test/JackpotSoloTester.sol#L14-L30)
 
 contracts/storage/DegenerusGameStorage.sol#L1615
 
 
- - [ ] ID-1458
+ - [ ] ID-1461
 [DegenerusGameStorage.lootboxRngWordByIndex](contracts/storage/DegenerusGameStorage.sol#L1755) is never used in [SettleClaimableShortfallTester](contracts/test/SettleClaimableShortfallTester.sol#L17-L66)
 
 contracts/storage/DegenerusGameStorage.sol#L1755
 
 
- - [ ] ID-1459
+ - [ ] ID-1462
 [DegenerusGameStorage.deityPassOwners](contracts/storage/DegenerusGameStorage.sol#L1252) is never used in [DegenerusGameBoonModule](contracts/modules/DegenerusGameBoonModule.sol#L22-L343)
 
 contracts/storage/DegenerusGameStorage.sol#L1252
 
 
- - [ ] ID-1460
-[DegenerusGameStorage.LR_MID_DAY_SHIFT](contracts/storage/DegenerusGameStorage.sol#L1619) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1774)
+ - [ ] ID-1463
+[DegenerusGameStorage.LR_MID_DAY_SHIFT](contracts/storage/DegenerusGameStorage.sol#L1619) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1779)
 
 contracts/storage/DegenerusGameStorage.sol#L1619
 
 
- - [ ] ID-1461
+ - [ ] ID-1464
 [DegenerusGameStorage.BP_ACTIVITY_DAY_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2064) is never used in [DegenerusGameDecimatorModule](contracts/modules/DegenerusGameDecimatorModule.sol#L21-L1134)
 
 contracts/storage/DegenerusGameStorage.sol#L2064
 
 
- - [ ] ID-1462
+ - [ ] ID-1465
 [DegenerusGameStorage.PRESALE_BOX_ETH_CAP](contracts/storage/DegenerusGameStorage.sol#L1134) is never used in [DegenerusGameGameOverModule](contracts/modules/DegenerusGameGameOverModule.sol#L37-L284)
 
 contracts/storage/DegenerusGameStorage.sol#L1134
 
 
- - [ ] ID-1463
+ - [ ] ID-1466
 [DegenerusGameStorage.foilMatchClaimed](contracts/storage/DegenerusGameStorage.sol#L2518) is never used in [DegenerusGameLootboxModule](contracts/modules/DegenerusGameLootboxModule.sol#L39-L2359)
 
 contracts/storage/DegenerusGameStorage.sol#L2518
 
 
- - [ ] ID-1464
+ - [ ] ID-1467
 [DegenerusGameStorage.boxCursor](contracts/storage/DegenerusGameStorage.sol#L2454) is never used in [DegenerusGameGameOverModule](contracts/modules/DegenerusGameGameOverModule.sol#L37-L284)
 
 contracts/storage/DegenerusGameStorage.sol#L2454
 
 
- - [ ] ID-1465
-[DegenerusGameStorage.dgnrs](contracts/storage/DegenerusGameStorage.sol#L133-L134) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1774)
+ - [ ] ID-1468
+[DegenerusGameStorage.dgnrs](contracts/storage/DegenerusGameStorage.sol#L133-L134) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1779)
 
 contracts/storage/DegenerusGameStorage.sol#L133-L134
 
 
- - [ ] ID-1466
+ - [ ] ID-1469
 [DegenerusGameStorage.presaleBoxDgnrsPoolStart](contracts/storage/DegenerusGameStorage.sol#L1264) is never used in [DegenerusGame](contracts/DegenerusGame.sol#L87-L2624)
 
 contracts/storage/DegenerusGameStorage.sol#L1264
 
 
- - [ ] ID-1467
+ - [ ] ID-1470
 [DegenerusGameStorage.BP_DEITY_DECIMATOR_DAY_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2057) is never used in [SettleClaimableShortfallTester](contracts/test/SettleClaimableShortfallTester.sol#L17-L66)
 
 contracts/storage/DegenerusGameStorage.sol#L2057
 
 
- - [ ] ID-1468
+ - [ ] ID-1471
 [DegenerusGameStorage.foilCursor](contracts/storage/DegenerusGameStorage.sol#L2550) is never used in [DegenerusGameMintModule](contracts/modules/DegenerusGameMintModule.sol#L74-L2136)
 
 contracts/storage/DegenerusGameStorage.sol#L2550
 
 
- - [ ] ID-1469
+ - [ ] ID-1472
 [DegenerusGameStorage._subCursor](contracts/storage/DegenerusGameStorage.sol#L2434) is never used in [DegenerusGameWhaleModule](contracts/modules/DegenerusGameWhaleModule.sol#L20-L1026)
 
 contracts/storage/DegenerusGameStorage.sol#L2434
 
 
- - [ ] ID-1470
+ - [ ] ID-1473
 [DegenerusGameStorage.dailyHeroWagers](contracts/storage/DegenerusGameStorage.sol#L1915) is never used in [DegenerusGameFoilPackModule](contracts/modules/DegenerusGameFoilPackModule.sol#L30-L815)
 
 contracts/storage/DegenerusGameStorage.sol#L1915
 
 
- - [ ] ID-1471
+ - [ ] ID-1474
 [DegenerusGameStorage.LR_PENDING_ETH_MASK](contracts/storage/DegenerusGameStorage.sol#L1614) is never used in [SettleClaimableShortfallTester](contracts/test/SettleClaimableShortfallTester.sol#L17-L66)
 
 contracts/storage/DegenerusGameStorage.sol#L1614
 
 
- - [ ] ID-1472
+ - [ ] ID-1475
 [DegenerusGameStorage.lastVrfProcessedTimestamp](contracts/storage/DegenerusGameStorage.sol#L435) is never used in [DegenerusGameFoilPackModule](contracts/modules/DegenerusGameFoilPackModule.sol#L30-L815)
 
 contracts/storage/DegenerusGameStorage.sol#L435
 
 
- - [ ] ID-1473
+ - [ ] ID-1476
 [DegenerusGameStorage.lastVrfProcessedTimestamp](contracts/storage/DegenerusGameStorage.sol#L435) is never used in [JackpotSoloTester](contracts/test/JackpotSoloTester.sol#L14-L30)
 
 contracts/storage/DegenerusGameStorage.sol#L435
 
 
- - [ ] ID-1474
+ - [ ] ID-1477
 [DegenerusGameStorage.ticketLevel](contracts/storage/DegenerusGameStorage.sol#L535) is never used in [DegenerusGameWhaleModule](contracts/modules/DegenerusGameWhaleModule.sol#L20-L1026)
 
 contracts/storage/DegenerusGameStorage.sol#L535
 
 
- - [ ] ID-1475
+ - [ ] ID-1478
 [DegenerusGameStorage.BP_ACTIVITY_PENDING_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2063) is never used in [DegenerusGameAdvanceModule](contracts/modules/DegenerusGameAdvanceModule.sol#L30-L2107)
 
 contracts/storage/DegenerusGameStorage.sol#L2063
 
 
- - [ ] ID-1476
+ - [ ] ID-1479
 [DegenerusGameStorage.GO_SWEPT_SHIFT](contracts/storage/DegenerusGameStorage.sol#L1163) is never used in [DegenerusGameBoonModule](contracts/modules/DegenerusGameBoonModule.sol#L22-L343)
 
 contracts/storage/DegenerusGameStorage.sol#L1163
 
 
- - [ ] ID-1477
+ - [ ] ID-1480
 [DegenerusGameStorage.presaleDrained](contracts/storage/DegenerusGameStorage.sol#L367) is never used in [DegenerusGameDecimatorModule](contracts/modules/DegenerusGameDecimatorModule.sol#L21-L1134)
 
 contracts/storage/DegenerusGameStorage.sol#L367
 
 
- - [ ] ID-1478
+ - [ ] ID-1481
 [DegenerusGameStorage.BP_MASK_8](contracts/storage/DegenerusGameStorage.sol#L2075) is never used in [JackpotSoloTester](contracts/test/JackpotSoloTester.sol#L14-L30)
 
 contracts/storage/DegenerusGameStorage.sol#L2075
 
 
- - [ ] ID-1479
+ - [ ] ID-1482
 [DegenerusGameStorage.GO_TIME_MASK](contracts/storage/DegenerusGameStorage.sol#L1160) is never used in [JackpotSoloTester](contracts/test/JackpotSoloTester.sol#L14-L30)
 
 contracts/storage/DegenerusGameStorage.sol#L1160
 
 
- - [ ] ID-1480
+ - [ ] ID-1483
 [DegenerusGameStorage.lvlTraitEntry](contracts/storage/DegenerusGameStorage.sol#L473) is never used in [DegenerusGameWhaleModule](contracts/modules/DegenerusGameWhaleModule.sol#L20-L1026)
 
 contracts/storage/DegenerusGameStorage.sol#L473
 
 
- - [ ] ID-1481
+ - [ ] ID-1484
 [DegenerusGameStorage._sdgnrsBonusLevel](contracts/storage/DegenerusGameStorage.sol#L2473) is never used in [DegenerusGameBingoModule](contracts/modules/DegenerusGameBingoModule.sol#L24-L288)
 
 contracts/storage/DegenerusGameStorage.sol#L2473
 
 
- - [ ] ID-1482
+ - [ ] ID-1485
 [DegenerusGameStorage.coinflip](contracts/storage/DegenerusGameStorage.sol#L127-L128) is never used in [DegenerusGameWhaleModule](contracts/modules/DegenerusGameWhaleModule.sol#L20-L1026)
 
 contracts/storage/DegenerusGameStorage.sol#L127-L128
 
 
- - [ ] ID-1483
+ - [ ] ID-1486
 [DegenerusGameStorage.boxCursorIndex](contracts/storage/DegenerusGameStorage.sol#L2459) is never used in [DegenerusGameFoilPackModule](contracts/modules/DegenerusGameFoilPackModule.sol#L30-L815)
 
 contracts/storage/DegenerusGameStorage.sol#L2459
 
 
- - [ ] ID-1484
+ - [ ] ID-1487
 [DegenerusGameStorage.lootboxEth](contracts/storage/DegenerusGameStorage.sol#L1067) is never used in [DegenerusGameGameOverModule](contracts/modules/DegenerusGameGameOverModule.sol#L37-L284)
 
 contracts/storage/DegenerusGameStorage.sol#L1067
 
 
- - [ ] ID-1485
+ - [ ] ID-1488
 [DegenerusGameStorage.foilMatchClaimed](contracts/storage/DegenerusGameStorage.sol#L2518) is never used in [DegenerusGameAdvanceModule](contracts/modules/DegenerusGameAdvanceModule.sol#L30-L2107)
 
 contracts/storage/DegenerusGameStorage.sol#L2518
 
 
- - [ ] ID-1486
+ - [ ] ID-1489
 [DegenerusGameStorage.BP_DEITY_COINFLIP_DAY_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2048) is never used in [DegenerusGameBingoModule](contracts/modules/DegenerusGameBingoModule.sol#L24-L288)
 
 contracts/storage/DegenerusGameStorage.sol#L2048
 
 
- - [ ] ID-1487
+ - [ ] ID-1490
 [DegenerusGameStorage.vrfCoordinator](contracts/storage/DegenerusGameStorage.sol#L1582) is never used in [JackpotSoloTester](contracts/test/JackpotSoloTester.sol#L14-L30)
 
 contracts/storage/DegenerusGameStorage.sol#L1582
 
 
- - [ ] ID-1488
+ - [ ] ID-1491
 [DegenerusGameStorage.degeneretteBetNonce](contracts/storage/DegenerusGameStorage.sol#L1788) is never used in [DegenerusGameWhaleModule](contracts/modules/DegenerusGameWhaleModule.sol#L20-L1026)
 
 contracts/storage/DegenerusGameStorage.sol#L1788
 
 
- - [ ] ID-1489
+ - [ ] ID-1492
 [DegenerusGameStorage.decClaimRounds](contracts/storage/DegenerusGameStorage.sol#L1899) is never used in [DegenerusGameMintModule](contracts/modules/DegenerusGameMintModule.sol#L74-L2136)
 
 contracts/storage/DegenerusGameStorage.sol#L1899
 
 
- - [ ] ID-1490
+ - [ ] ID-1493
 [DegenerusGameStorage.presaleBoxDgnrsPoolStart](contracts/storage/DegenerusGameStorage.sol#L1264) is never used in [DegenerusGameBoonModule](contracts/modules/DegenerusGameBoonModule.sol#L22-L343)
 
 contracts/storage/DegenerusGameStorage.sol#L1264
 
 
- - [ ] ID-1491
-[DegenerusGameStorage.BP_PURCHASE_DAY_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2053) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1774)
+ - [ ] ID-1494
+[DegenerusGameStorage.BP_PURCHASE_DAY_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2053) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1779)
 
 contracts/storage/DegenerusGameStorage.sol#L2053
 
 
- - [ ] ID-1492
+ - [ ] ID-1495
 [DegenerusGameStorage.GO_TIME_SHIFT](contracts/storage/DegenerusGameStorage.sol#L1159) is never used in [DegenerusGameBoonModule](contracts/modules/DegenerusGameBoonModule.sol#L22-L343)
 
 contracts/storage/DegenerusGameStorage.sol#L1159
 
 
- - [ ] ID-1493
+ - [ ] ID-1496
 [DegenerusGameStorage.LR_THRESHOLD_MASK](contracts/storage/DegenerusGameStorage.sol#L1616) is never used in [JackpotSoloTester](contracts/test/JackpotSoloTester.sol#L14-L30)
 
 contracts/storage/DegenerusGameStorage.sol#L1616
 
 
- - [ ] ID-1494
+ - [ ] ID-1497
 [DegenerusGameStorage.BP_WHALE_CLEAR](contracts/storage/DegenerusGameStorage.sol#L2090) is never used in [SettleClaimableShortfallTester](contracts/test/SettleClaimableShortfallTester.sol#L17-L66)
 
 contracts/storage/DegenerusGameStorage.sol#L2090
 
 
- - [ ] ID-1495
+ - [ ] ID-1498
 [DegenerusGameStorage.degeneretteBets](contracts/storage/DegenerusGameStorage.sol#L1785) is never used in [DegenerusGameWhaleModule](contracts/modules/DegenerusGameWhaleModule.sol#L20-L1026)
 
 contracts/storage/DegenerusGameStorage.sol#L1785
 
 
- - [ ] ID-1496
+ - [ ] ID-1499
 [DegenerusGameStorage.ACTIVITY_SCORE_HARD_CAP_POINTS](contracts/storage/DegenerusGameStorage.sol#L143) is never used in [SettleClaimableShortfallTester](contracts/test/SettleClaimableShortfallTester.sol#L17-L66)
 
 contracts/storage/DegenerusGameStorage.sol#L143
 
 
- - [ ] ID-1497
+ - [ ] ID-1500
 [DegenerusGameStorage.presaleCloseIndex](contracts/storage/DegenerusGameStorage.sol#L2465) is never used in [DegenerusGameDecimatorModule](contracts/modules/DegenerusGameDecimatorModule.sol#L21-L1134)
 
 contracts/storage/DegenerusGameStorage.sol#L2465
 
 
- - [ ] ID-1498
+ - [ ] ID-1501
 [DegenerusGameStorage.ticketLevel](contracts/storage/DegenerusGameStorage.sol#L535) is never used in [SettleClaimableShortfallTester](contracts/test/SettleClaimableShortfallTester.sol#L17-L66)
 
 contracts/storage/DegenerusGameStorage.sol#L535
 
 
- - [ ] ID-1499
+ - [ ] ID-1502
 [DegenerusGameStorage.deityBySymbol](contracts/storage/DegenerusGameStorage.sol#L1255) is never used in [DegenerusGameMintModule](contracts/modules/DegenerusGameMintModule.sol#L74-L2136)
 
 contracts/storage/DegenerusGameStorage.sol#L1255
 
 
- - [ ] ID-1500
+ - [ ] ID-1503
 [DegenerusGameStorage.GO_SWEPT_MASK](contracts/storage/DegenerusGameStorage.sol#L1164) is never used in [DegenerusGameMintModule](contracts/modules/DegenerusGameMintModule.sol#L74-L2136)
 
 contracts/storage/DegenerusGameStorage.sol#L1164
 
 
- - [ ] ID-1501
+ - [ ] ID-1504
 [DegenerusGameStorage._subscriberIndex](contracts/storage/DegenerusGameStorage.sol#L2427) is never used in [DegenerusGame](contracts/DegenerusGame.sol#L87-L2624)
 
 contracts/storage/DegenerusGameStorage.sol#L2427
 
 
- - [ ] ID-1502
+ - [ ] ID-1505
 [DegenerusGameStorage._subscribers](contracts/storage/DegenerusGameStorage.sol#L2423) is never used in [DegenerusGameBingoModule](contracts/modules/DegenerusGameBingoModule.sol#L24-L288)
 
 contracts/storage/DegenerusGameStorage.sol#L2423
 
 
- - [ ] ID-1503
+ - [ ] ID-1506
 [DegenerusGameStorage.affiliateDgnrsClaimedBy](contracts/storage/DegenerusGameStorage.sol#L1205-L1206) is never used in [DegenerusGameWhaleModule](contracts/modules/DegenerusGameWhaleModule.sol#L20-L1026)
 
 contracts/storage/DegenerusGameStorage.sol#L1205-L1206
 
 
- - [ ] ID-1504
+ - [ ] ID-1507
 [DegenerusGameStorage.FOIL_PACK_TICKETS](contracts/storage/DegenerusGameStorage.sol#L2571) is never used in [DegenerusGameBingoModule](contracts/modules/DegenerusGameBingoModule.sol#L24-L288)
 
 contracts/storage/DegenerusGameStorage.sol#L2571
 
 
- - [ ] ID-1505
+ - [ ] ID-1508
 [DegenerusGameStorage.LR_THRESHOLD_SHIFT](contracts/storage/DegenerusGameStorage.sol#L1615) is never used in [DegenerusGameLootboxModule](contracts/modules/DegenerusGameLootboxModule.sol#L39-L2359)
 
 contracts/storage/DegenerusGameStorage.sol#L1615
 
 
- - [ ] ID-1506
+ - [ ] ID-1509
 [DegenerusGameStorage.boxCursor](contracts/storage/DegenerusGameStorage.sol#L2454) is never used in [JackpotSoloTester](contracts/test/JackpotSoloTester.sol#L14-L30)
 
 contracts/storage/DegenerusGameStorage.sol#L2454
 
 
- - [ ] ID-1507
+ - [ ] ID-1510
 [DegenerusGameStorage.GO_JACKPOT_PAID_SHIFT](contracts/storage/DegenerusGameStorage.sol#L1161) is never used in [DegenerusGameBingoModule](contracts/modules/DegenerusGameBingoModule.sol#L24-L288)
 
 contracts/storage/DegenerusGameStorage.sol#L1161
 
 
- - [ ] ID-1508
-[DegenerusGameStorage.boxPlayers](contracts/storage/DegenerusGameStorage.sol#L2481) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1774)
+ - [ ] ID-1511
+[DegenerusGameStorage.boxPlayers](contracts/storage/DegenerusGameStorage.sol#L2481) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1779)
 
 contracts/storage/DegenerusGameStorage.sol#L2481
 
 
- - [ ] ID-1509
+ - [ ] ID-1512
 [DegenerusGameStorage.boxPlayers](contracts/storage/DegenerusGameStorage.sol#L2481) is never used in [SettleClaimableShortfallTester](contracts/test/SettleClaimableShortfallTester.sol#L17-L66)
 
 contracts/storage/DegenerusGameStorage.sol#L2481
 
 
- - [ ] ID-1510
+ - [ ] ID-1513
 [DegenerusGameStorage.BP_DEITY_PASS_DAY_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2067) is never used in [DegenerusGame](contracts/DegenerusGame.sol#L87-L2624)
 
 contracts/storage/DegenerusGameStorage.sol#L2067
 
 
- - [ ] ID-1511
+ - [ ] ID-1514
 [DegenerusGameStorage.presaleDrained](contracts/storage/DegenerusGameStorage.sol#L367) is never used in [DegenerusGameMintModule](contracts/modules/DegenerusGameMintModule.sol#L74-L2136)
 
 contracts/storage/DegenerusGameStorage.sol#L367
 
 
- - [ ] ID-1512
+ - [ ] ID-1515
 [DegenerusGameStorage.BP_DEITY_PURCHASE_DAY_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2054) is never used in [DegenerusGameGameOverModule](contracts/modules/DegenerusGameGameOverModule.sol#L37-L284)
 
 contracts/storage/DegenerusGameStorage.sol#L2054
 
 
- - [ ] ID-1513
+ - [ ] ID-1516
 [DegenerusGameStorage.BP_LOOTBOX_DAY_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2050) is never used in [DegenerusGame](contracts/DegenerusGame.sol#L87-L2624)
 
 contracts/storage/DegenerusGameStorage.sol#L2050
 
 
- - [ ] ID-1514
+ - [ ] ID-1517
 [DegenerusGameStorage.PS_ACTIVE_SHIFT](contracts/storage/DegenerusGameStorage.sol#L1124) is never used in [DegenerusGameLootboxModule](contracts/modules/DegenerusGameLootboxModule.sol#L39-L2359)
 
 contracts/storage/DegenerusGameStorage.sol#L1124
 
 
- - [ ] ID-1515
+ - [ ] ID-1518
 [DegenerusGameStorage._sdgnrsBonusLevel](contracts/storage/DegenerusGameStorage.sol#L2473) is never used in [SettleClaimableShortfallTester](contracts/test/SettleClaimableShortfallTester.sol#L17-L66)
 
 contracts/storage/DegenerusGameStorage.sol#L2473
 
 
- - [ ] ID-1516
+ - [ ] ID-1519
 [DegenerusGameStorage.dailyHeroWagers](contracts/storage/DegenerusGameStorage.sol#L1915) is never used in [DegenerusGameBoonModule](contracts/modules/DegenerusGameBoonModule.sol#L22-L343)
 
 contracts/storage/DegenerusGameStorage.sol#L1915
 
 
- - [ ] ID-1517
-[DegenerusGameStorage.LB_DISTRESS_SCALE](contracts/storage/DegenerusGameStorage.sol#L1078) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1774)
+ - [ ] ID-1520
+[DegenerusGameStorage.LB_DISTRESS_SCALE](contracts/storage/DegenerusGameStorage.sol#L1078) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1779)
 
 contracts/storage/DegenerusGameStorage.sol#L1078
 
 
- - [ ] ID-1518
+ - [ ] ID-1521
 [DegenerusGameStorage.BP_DEITY_LAZY_PASS_DAY_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2070) is never used in [DegenerusGameMintModule](contracts/modules/DegenerusGameMintModule.sol#L74-L2136)
 
 contracts/storage/DegenerusGameStorage.sol#L2070
 
 
- - [ ] ID-1519
-[DegenerusGameStorage.presaleOver](contracts/storage/DegenerusGameStorage.sol#L348) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1774)
+ - [ ] ID-1522
+[DegenerusGameStorage.presaleOver](contracts/storage/DegenerusGameStorage.sol#L348) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1779)
 
 contracts/storage/DegenerusGameStorage.sol#L348
 
 
- - [ ] ID-1520
+ - [ ] ID-1523
 [DegenerusGameStorage._subscribers](contracts/storage/DegenerusGameStorage.sol#L2423) is never used in [DegenerusGameBoonModule](contracts/modules/DegenerusGameBoonModule.sol#L22-L343)
 
 contracts/storage/DegenerusGameStorage.sol#L2423
 
 
- - [ ] ID-1521
+ - [ ] ID-1524
 [DegenerusGameStorage.ticketCursor](contracts/storage/DegenerusGameStorage.sol#L532) is never used in [DegenerusGameDecimatorModule](contracts/modules/DegenerusGameDecimatorModule.sol#L21-L1134)
 
 contracts/storage/DegenerusGameStorage.sol#L532
 
 
- - [ ] ID-1522
+ - [ ] ID-1525
 [DegenerusGameStorage.foilMatchClaimed](contracts/storage/DegenerusGameStorage.sol#L2518) is never used in [SettleClaimableShortfallTester](contracts/test/SettleClaimableShortfallTester.sol#L17-L66)
 
 contracts/storage/DegenerusGameStorage.sol#L2518
 
 
- - [ ] ID-1523
+ - [ ] ID-1526
 [DegenerusGameStorage.LR_INDEX_SHIFT](contracts/storage/DegenerusGameStorage.sol#L1611) is never used in [JackpotSoloTester](contracts/test/JackpotSoloTester.sol#L14-L30)
 
 contracts/storage/DegenerusGameStorage.sol#L1611
 
 
- - [ ] ID-1524
+ - [ ] ID-1527
 [DegenerusGameStorage.BP_PURCHASE_TIER_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2055) is never used in [DegenerusGameFoilPackModule](contracts/modules/DegenerusGameFoilPackModule.sol#L30-L815)
 
 contracts/storage/DegenerusGameStorage.sol#L2055
 
 
- - [ ] ID-1525
+ - [ ] ID-1528
 [DegenerusGameStorage.BP_DEITY_COINFLIP_DAY_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2048) is never used in [DegenerusGameFoilPackModule](contracts/modules/DegenerusGameFoilPackModule.sol#L30-L815)
 
 contracts/storage/DegenerusGameStorage.sol#L2048
 
 
- - [ ] ID-1526
+ - [ ] ID-1529
 [DegenerusGameStorage.LR_MID_DAY_SHIFT](contracts/storage/DegenerusGameStorage.sol#L1619) is never used in [DegenerusGame](contracts/DegenerusGame.sol#L87-L2624)
 
 contracts/storage/DegenerusGameStorage.sol#L1619
 
 
- - [ ] ID-1527
+ - [ ] ID-1530
 [DegenerusGameStorage.LR_MID_DAY_SHIFT](contracts/storage/DegenerusGameStorage.sol#L1619) is never used in [DegenerusGameWhaleModule](contracts/modules/DegenerusGameWhaleModule.sol#L20-L1026)
 
 contracts/storage/DegenerusGameStorage.sol#L1619
 
 
- - [ ] ID-1528
+ - [ ] ID-1531
 [DegenerusGameStorage.FOIL_TO_FUTURE_BPS](contracts/storage/DegenerusGameStorage.sol#L2562) is never used in [DegenerusGameBoonModule](contracts/modules/DegenerusGameBoonModule.sol#L22-L343)
 
 contracts/storage/DegenerusGameStorage.sol#L2562
 
 
- - [ ] ID-1529
-[DegenerusGameStorage.PS_MINT_ETH_SHIFT](contracts/storage/DegenerusGameStorage.sol#L1126) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1774)
+ - [ ] ID-1532
+[DegenerusGameStorage.PS_MINT_ETH_SHIFT](contracts/storage/DegenerusGameStorage.sol#L1126) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1779)
 
 contracts/storage/DegenerusGameStorage.sol#L1126
 
 
- - [ ] ID-1530
+ - [ ] ID-1533
 [DegenerusGameStorage.LOOTBOX_PRESALE_ETH_CAP](contracts/storage/DegenerusGameStorage.sol#L1130) is never used in [GameAfkingModule](contracts/modules/GameAfkingModule.sol#L82-L1941)
 
 contracts/storage/DegenerusGameStorage.sol#L1130
 
 
- - [ ] ID-1531
+ - [ ] ID-1534
 [DegenerusGameStorage.terminalDecBucketBurnTotal](contracts/storage/DegenerusGameStorage.sol#L1975) is never used in [DegenerusGameFoilPackModule](contracts/modules/DegenerusGameFoilPackModule.sol#L30-L815)
 
 contracts/storage/DegenerusGameStorage.sol#L1975
 
 
- - [ ] ID-1532
+ - [ ] ID-1535
 [DegenerusGameStorage.PS_MINT_ETH_MASK](contracts/storage/DegenerusGameStorage.sol#L1127) is never used in [DegenerusGameBoonModule](contracts/modules/DegenerusGameBoonModule.sol#L22-L343)
 
 contracts/storage/DegenerusGameStorage.sol#L1127
 
 
- - [ ] ID-1533
+ - [ ] ID-1536
 [DegenerusGameStorage.foilBuyers](contracts/storage/DegenerusGameStorage.sol#L2541) is never used in [DegenerusGameMintModule](contracts/modules/DegenerusGameMintModule.sol#L74-L2136)
 
 contracts/storage/DegenerusGameStorage.sol#L2541
 
 
- - [ ] ID-1534
-[DegenerusGameStorage.BP_MASK_24](contracts/storage/DegenerusGameStorage.sol#L2074) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1774)
+ - [ ] ID-1537
+[DegenerusGameStorage.BP_MASK_24](contracts/storage/DegenerusGameStorage.sol#L2074) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1779)
 
 contracts/storage/DegenerusGameStorage.sol#L2074
 
 
- - [ ] ID-1535
+ - [ ] ID-1538
 [DegenerusGameStorage.BP_LOOTBOX_DAY_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2050) is never used in [DegenerusGameFoilPackModule](contracts/modules/DegenerusGameFoilPackModule.sol#L30-L815)
 
 contracts/storage/DegenerusGameStorage.sol#L2050
 
 
- - [ ] ID-1536
+ - [ ] ID-1539
 [DegenerusGameStorage._afkingResetDay](contracts/storage/DegenerusGameStorage.sol#L2445) is never used in [DegenerusGameFoilPackModule](contracts/modules/DegenerusGameFoilPackModule.sol#L30-L815)
 
 contracts/storage/DegenerusGameStorage.sol#L2445
 
 
- - [ ] ID-1537
-[DegenerusGameStorage.lvlTraitEntry](contracts/storage/DegenerusGameStorage.sol#L473) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1774)
+ - [ ] ID-1540
+[DegenerusGameStorage.lvlTraitEntry](contracts/storage/DegenerusGameStorage.sol#L473) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1779)
 
 contracts/storage/DegenerusGameStorage.sol#L473
 
 
- - [ ] ID-1538
+ - [ ] ID-1541
 [DegenerusGameStorage.foilBuyers](contracts/storage/DegenerusGameStorage.sol#L2541) is never used in [DegenerusGameLootboxModule](contracts/modules/DegenerusGameLootboxModule.sol#L39-L2359)
 
 contracts/storage/DegenerusGameStorage.sol#L2541
 
 
- - [ ] ID-1539
+ - [ ] ID-1542
 [DegenerusGameStorage.BP_COINFLIP_DAY_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2047) is never used in [DegenerusGame](contracts/DegenerusGame.sol#L87-L2624)
 
 contracts/storage/DegenerusGameStorage.sol#L2047
 
 
- - [ ] ID-1540
+ - [ ] ID-1543
 [DegenerusGameStorage.presaleBoxEth](contracts/storage/DegenerusGameStorage.sol#L1103) is never used in [JackpotSoloTester](contracts/test/JackpotSoloTester.sol#L14-L30)
 
 contracts/storage/DegenerusGameStorage.sol#L1103
 
 
- - [ ] ID-1541
+ - [ ] ID-1544
 [DegenerusGameStorage.LOOTBOX_EV_BENEFIT_CAP](contracts/storage/DegenerusGameStorage.sol#L1643-L1644) is never used in [SettleClaimableShortfallTester](contracts/test/SettleClaimableShortfallTester.sol#L17-L66)
 
 contracts/storage/DegenerusGameStorage.sol#L1643-L1644
 
 
- - [ ] ID-1542
+ - [ ] ID-1545
 [DegenerusGameStorage.BP_MASK_8](contracts/storage/DegenerusGameStorage.sol#L2075) is never used in [DegenerusGameMintModule](contracts/modules/DegenerusGameMintModule.sol#L74-L2136)
 
 contracts/storage/DegenerusGameStorage.sol#L2075
 
 
- - [ ] ID-1543
+ - [ ] ID-1546
 [DegenerusGameStorage.operatorApprovals](contracts/storage/DegenerusGameStorage.sol#L1195) is never used in [DegenerusGameWhaleModule](contracts/modules/DegenerusGameWhaleModule.sol#L20-L1026)
 
 contracts/storage/DegenerusGameStorage.sol#L1195
 
 
- - [ ] ID-1544
+ - [ ] ID-1547
 [DegenerusGameStorage.bingoClaimed](contracts/storage/DegenerusGameStorage.sol#L2039) is never used in [DegenerusGameFoilPackModule](contracts/modules/DegenerusGameFoilPackModule.sol#L30-L815)
 
 contracts/storage/DegenerusGameStorage.sol#L2039
 
 
- - [ ] ID-1545
+ - [ ] ID-1548
 [DegenerusGameStorage.LR_MID_DAY_SHIFT](contracts/storage/DegenerusGameStorage.sol#L1619) is never used in [SettleClaimableShortfallTester](contracts/test/SettleClaimableShortfallTester.sol#L17-L66)
 
 contracts/storage/DegenerusGameStorage.sol#L1619
 
 
- - [ ] ID-1546
+ - [ ] ID-1549
 [DegenerusGameStorage.whalePassClaims](contracts/storage/DegenerusGameStorage.sol#L1183) is never used in [DegenerusGameBoonModule](contracts/modules/DegenerusGameBoonModule.sol#L22-L343)
 
 contracts/storage/DegenerusGameStorage.sol#L1183
 
 
- - [ ] ID-1547
+ - [ ] ID-1550
 [DegenerusGameStorage.BP_MASK_24](contracts/storage/DegenerusGameStorage.sol#L2074) is never used in [DegenerusGameFoilPackModule](contracts/modules/DegenerusGameFoilPackModule.sol#L30-L815)
 
 contracts/storage/DegenerusGameStorage.sol#L2074
 
 
- - [ ] ID-1548
+ - [ ] ID-1551
 [DegenerusGameStorage.BP_ACTIVITY_PENDING_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2063) is never used in [DegenerusGameMintModule](contracts/modules/DegenerusGameMintModule.sol#L74-L2136)
 
 contracts/storage/DegenerusGameStorage.sol#L2063
 
 
- - [ ] ID-1549
+ - [ ] ID-1552
 [DegenerusGameStorage.deityPassPricePaid](contracts/storage/DegenerusGameStorage.sol#L1249) is never used in [DegenerusGameMintModule](contracts/modules/DegenerusGameMintModule.sol#L74-L2136)
 
 contracts/storage/DegenerusGameStorage.sol#L1249
 
 
- - [ ] ID-1550
+ - [ ] ID-1553
 [DegenerusGameStorage.affiliateDgnrsClaimedBy](contracts/storage/DegenerusGameStorage.sol#L1205-L1206) is never used in [DegenerusGameFoilPackModule](contracts/modules/DegenerusGameFoilPackModule.sol#L30-L815)
 
 contracts/storage/DegenerusGameStorage.sol#L1205-L1206
 
 
- - [ ] ID-1551
-[DegenerusGameStorage.BP_DEITY_DEITY_PASS_DAY_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2068) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1774)
+ - [ ] ID-1554
+[DegenerusGameStorage.BP_DEITY_DEITY_PASS_DAY_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2068) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1779)
 
 contracts/storage/DegenerusGameStorage.sol#L2068
 
 
- - [ ] ID-1552
+ - [ ] ID-1555
 [DegenerusGameStorage.FOIL_PACK_TICKETS](contracts/storage/DegenerusGameStorage.sol#L2571) is never used in [DegenerusGameDecimatorModule](contracts/modules/DegenerusGameDecimatorModule.sol#L21-L1134)
 
 contracts/storage/DegenerusGameStorage.sol#L2571
 
 
- - [ ] ID-1553
+ - [ ] ID-1556
 [DegenerusGameStorage.LR_THRESHOLD_MASK](contracts/storage/DegenerusGameStorage.sol#L1616) is never used in [DegenerusGameDecimatorModule](contracts/modules/DegenerusGameDecimatorModule.sol#L21-L1134)
 
 contracts/storage/DegenerusGameStorage.sol#L1616
 
 
- - [ ] ID-1554
+ - [ ] ID-1557
 [DegenerusGameStorage.BP_DECIMATOR_TIER_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2056) is never used in [GameAfkingModule](contracts/modules/GameAfkingModule.sol#L82-L1941)
 
 contracts/storage/DegenerusGameStorage.sol#L2056
 
 
- - [ ] ID-1555
+ - [ ] ID-1558
 [DegenerusGameStorage.rngWordCurrent](contracts/storage/DegenerusGameStorage.sol#L417) is never used in [DegenerusGameBingoModule](contracts/modules/DegenerusGameBingoModule.sol#L24-L288)
 
 contracts/storage/DegenerusGameStorage.sol#L417
 
 
- - [ ] ID-1556
+ - [ ] ID-1559
 [DegenerusGameStorage.presaleBoxEth](contracts/storage/DegenerusGameStorage.sol#L1103) is never used in [DegenerusGameFoilPackModule](contracts/modules/DegenerusGameFoilPackModule.sol#L30-L815)
 
 contracts/storage/DegenerusGameStorage.sol#L1103
 
 
- - [ ] ID-1557
+ - [ ] ID-1560
 [DegenerusGameStorage.PS_MINT_ETH_MASK](contracts/storage/DegenerusGameStorage.sol#L1127) is never used in [DegenerusGameWhaleModule](contracts/modules/DegenerusGameWhaleModule.sol#L20-L1026)
 
 contracts/storage/DegenerusGameStorage.sol#L1127
 
 
- - [ ] ID-1558
+ - [ ] ID-1561
 [DegenerusGameStorage.BP_DEITY_LOOTBOX_DAY_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2051) is never used in [DegenerusGame](contracts/DegenerusGame.sol#L87-L2624)
 
 contracts/storage/DegenerusGameStorage.sol#L2051
 
 
- - [ ] ID-1559
+ - [ ] ID-1562
 [DegenerusGameStorage.PRICE_COIN_UNIT](contracts/storage/DegenerusGameStorage.sol#L154) is never used in [DegenerusGameBoonModule](contracts/modules/DegenerusGameBoonModule.sol#L22-L343)
 
 contracts/storage/DegenerusGameStorage.sol#L154
 
 
- - [ ] ID-1560
+ - [ ] ID-1563
 [DegenerusGameStorage.BP_LOOTBOX_TIER_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2052) is never used in [GameAfkingModule](contracts/modules/GameAfkingModule.sol#L82-L1941)
 
 contracts/storage/DegenerusGameStorage.sol#L2052
 
 
- - [ ] ID-1561
+ - [ ] ID-1564
 [DegenerusGameStorage.ticketRedemptionOpen](contracts/storage/DegenerusGameStorage.sol#L376) is never used in [DegenerusGameWhaleModule](contracts/modules/DegenerusGameWhaleModule.sol#L20-L1026)
 
 contracts/storage/DegenerusGameStorage.sol#L376
 
 
- - [ ] ID-1562
+ - [ ] ID-1565
 [DegenerusGameStorage.affiliateDgnrsClaimedBy](contracts/storage/DegenerusGameStorage.sol#L1205-L1206) is never used in [DegenerusGameMintModule](contracts/modules/DegenerusGameMintModule.sol#L74-L2136)
 
 contracts/storage/DegenerusGameStorage.sol#L1205-L1206
 
 
- - [ ] ID-1563
+ - [ ] ID-1566
 [DegenerusGameStorage.boxCursorIndex](contracts/storage/DegenerusGameStorage.sol#L2459) is never used in [DegenerusGameGameOverModule](contracts/modules/DegenerusGameGameOverModule.sol#L37-L284)
 
 contracts/storage/DegenerusGameStorage.sol#L2459
 
 
- - [ ] ID-1564
-[DegenerusGameStorage.foilBuyers](contracts/storage/DegenerusGameStorage.sol#L2541) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1774)
+ - [ ] ID-1567
+[DegenerusGameStorage.foilBuyers](contracts/storage/DegenerusGameStorage.sol#L2541) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1779)
 
 contracts/storage/DegenerusGameStorage.sol#L2541
 
 
- - [ ] ID-1565
+ - [ ] ID-1568
 [DegenerusGameStorage.BP_DEITY_PASS_TIER_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2066) is never used in [DegenerusGameFoilPackModule](contracts/modules/DegenerusGameFoilPackModule.sol#L30-L815)
 
 contracts/storage/DegenerusGameStorage.sol#L2066
 
 
- - [ ] ID-1566
+ - [ ] ID-1569
 [DegenerusGameStorage.ticketRedemptionOpen](contracts/storage/DegenerusGameStorage.sol#L376) is never used in [SettleClaimableShortfallTester](contracts/test/SettleClaimableShortfallTester.sol#L17-L66)
 
 contracts/storage/DegenerusGameStorage.sol#L376
 
 
- - [ ] ID-1567
+ - [ ] ID-1570
 [DegenerusGameStorage.coin](contracts/storage/DegenerusGameStorage.sol#L125-L126) is never used in [DegenerusGameDecimatorModule](contracts/modules/DegenerusGameDecimatorModule.sol#L21-L1134)
 
 contracts/storage/DegenerusGameStorage.sol#L125-L126
 
 
- - [ ] ID-1568
+ - [ ] ID-1571
 [DegenerusGameStorage.lootboxEth](contracts/storage/DegenerusGameStorage.sol#L1067) is never used in [DegenerusGameBingoModule](contracts/modules/DegenerusGameBingoModule.sol#L24-L288)
 
 contracts/storage/DegenerusGameStorage.sol#L1067
 
 
- - [ ] ID-1569
+ - [ ] ID-1572
 [DegenerusGameStorage._subscribers](contracts/storage/DegenerusGameStorage.sol#L2423) is never used in [DegenerusGameMintModule](contracts/modules/DegenerusGameMintModule.sol#L74-L2136)
 
 contracts/storage/DegenerusGameStorage.sol#L2423
 
 
- - [ ] ID-1570
+ - [ ] ID-1573
 [DegenerusGameStorage.deityBySymbol](contracts/storage/DegenerusGameStorage.sol#L1255) is never used in [DegenerusGame](contracts/DegenerusGame.sol#L87-L2624)
 
 contracts/storage/DegenerusGameStorage.sol#L1255
 
 
- - [ ] ID-1571
+ - [ ] ID-1574
 [DegenerusGameStorage.BP_WHALE_DAY_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2058) is never used in [DegenerusGameBingoModule](contracts/modules/DegenerusGameBingoModule.sol#L24-L288)
 
 contracts/storage/DegenerusGameStorage.sol#L2058
 
 
- - [ ] ID-1572
+ - [ ] ID-1575
 [DegenerusGameStorage.BP_PURCHASE_TIER_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2055) is never used in [DegenerusGameBingoModule](contracts/modules/DegenerusGameBingoModule.sol#L24-L288)
 
 contracts/storage/DegenerusGameStorage.sol#L2055
 
 
- - [ ] ID-1573
+ - [ ] ID-1576
 [DegenerusGameStorage.BP_DECIMATOR_CLEAR](contracts/storage/DegenerusGameStorage.sol#L2087-L2088) is never used in [DegenerusGameDecimatorModule](contracts/modules/DegenerusGameDecimatorModule.sol#L21-L1134)
 
 contracts/storage/DegenerusGameStorage.sol#L2087-L2088
 
 
- - [ ] ID-1574
+ - [ ] ID-1577
 [DegenerusGameStorage.BP_LAZY_PASS_TIER_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2071) is never used in [DegenerusGameFoilPackModule](contracts/modules/DegenerusGameFoilPackModule.sol#L30-L815)
 
 contracts/storage/DegenerusGameStorage.sol#L2071
 
 
- - [ ] ID-1575
+ - [ ] ID-1578
 [DegenerusGameStorage.DEITY_PASS_ACTIVITY_BONUS_POINTS](contracts/storage/DegenerusGameStorage.sol#L137) is never used in [DegenerusGameAdvanceModule](contracts/modules/DegenerusGameAdvanceModule.sol#L30-L2107)
 
 contracts/storage/DegenerusGameStorage.sol#L137
 
 
- - [ ] ID-1576
+ - [ ] ID-1579
 [DegenerusGameStorage.LB_DISTRESS_SCALE](contracts/storage/DegenerusGameStorage.sol#L1078) is never used in [DegenerusGameFoilPackModule](contracts/modules/DegenerusGameFoilPackModule.sol#L30-L815)
 
 contracts/storage/DegenerusGameStorage.sol#L1078
 
 
- - [ ] ID-1577
+ - [ ] ID-1580
 [DegenerusGameStorage.presaleBoxCredit](contracts/storage/DegenerusGameStorage.sol#L1093) is never used in [DegenerusGameFoilPackModule](contracts/modules/DegenerusGameFoilPackModule.sol#L30-L815)
 
 contracts/storage/DegenerusGameStorage.sol#L1093
 
 
- - [ ] ID-1578
+ - [ ] ID-1581
 [DegenerusGameStorage.dailyHeroWagers](contracts/storage/DegenerusGameStorage.sol#L1915) is never used in [GameAfkingModule](contracts/modules/GameAfkingModule.sol#L82-L1941)
 
 contracts/storage/DegenerusGameStorage.sol#L1915
 
 
- - [ ] ID-1579
+ - [ ] ID-1582
 [DegenerusGameStorage.BP_PURCHASE_TIER_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2055) is never used in [DegenerusGameAdvanceModule](contracts/modules/DegenerusGameAdvanceModule.sol#L30-L2107)
 
 contracts/storage/DegenerusGameStorage.sol#L2055
 
 
- - [ ] ID-1580
-[DegenerusGameStorage.presaleCloseIndex](contracts/storage/DegenerusGameStorage.sol#L2465) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1774)
+ - [ ] ID-1583
+[DegenerusGameStorage.presaleCloseIndex](contracts/storage/DegenerusGameStorage.sol#L2465) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1779)
 
 contracts/storage/DegenerusGameStorage.sol#L2465
 
 
- - [ ] ID-1581
+ - [ ] ID-1584
 [DegenerusGameStorage.GO_TIME_MASK](contracts/storage/DegenerusGameStorage.sol#L1160) is never used in [DegenerusGameBoonModule](contracts/modules/DegenerusGameBoonModule.sol#L22-L343)
 
 contracts/storage/DegenerusGameStorage.sol#L1160
 
 
- - [ ] ID-1582
+ - [ ] ID-1585
 [DegenerusGameStorage.presaleBoxCredit](contracts/storage/DegenerusGameStorage.sol#L1093) is never used in [DegenerusGameLootboxModule](contracts/modules/DegenerusGameLootboxModule.sol#L39-L2359)
 
 contracts/storage/DegenerusGameStorage.sol#L1093
 
 
- - [ ] ID-1583
+ - [ ] ID-1586
 [DegenerusGameStorage.decBucketOffsetPacked](contracts/storage/DegenerusGameStorage.sol#L1904) is never used in [JackpotSoloTester](contracts/test/JackpotSoloTester.sol#L14-L30)
 
 contracts/storage/DegenerusGameStorage.sol#L1904
 
 
- - [ ] ID-1584
+ - [ ] ID-1587
 [DegenerusGameStorage._sdgnrsBonusLevel](contracts/storage/DegenerusGameStorage.sol#L2473) is never used in [DegenerusGameDecimatorModule](contracts/modules/DegenerusGameDecimatorModule.sol#L21-L1134)
 
 contracts/storage/DegenerusGameStorage.sol#L2473
 
 
- - [ ] ID-1585
+ - [ ] ID-1588
 [DegenerusGameStorage.lvlTraitEntry](contracts/storage/DegenerusGameStorage.sol#L473) is never used in [DegenerusGameGameOverModule](contracts/modules/DegenerusGameGameOverModule.sol#L37-L284)
 
 contracts/storage/DegenerusGameStorage.sol#L473
 
 
- - [ ] ID-1586
+ - [ ] ID-1589
 [DegenerusGameStorage.boxCursor](contracts/storage/DegenerusGameStorage.sol#L2454) is never used in [DegenerusGameDecimatorModule](contracts/modules/DegenerusGameDecimatorModule.sol#L21-L1134)
 
 contracts/storage/DegenerusGameStorage.sol#L2454
 
 
- - [ ] ID-1587
-[DegenerusGameStorage.GO_TIME_MASK](contracts/storage/DegenerusGameStorage.sol#L1160) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1774)
+ - [ ] ID-1590
+[DegenerusGameStorage.GO_TIME_MASK](contracts/storage/DegenerusGameStorage.sol#L1160) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1779)
 
 contracts/storage/DegenerusGameStorage.sol#L1160
 
 
- - [ ] ID-1588
+ - [ ] ID-1591
 [DegenerusGameStorage.presaleBoxEth](contracts/storage/DegenerusGameStorage.sol#L1103) is never used in [DegenerusGameBoonModule](contracts/modules/DegenerusGameBoonModule.sol#L22-L343)
 
 contracts/storage/DegenerusGameStorage.sol#L1103
 
 
- - [ ] ID-1589
+ - [ ] ID-1592
 [DegenerusGameStorage.decClaimRounds](contracts/storage/DegenerusGameStorage.sol#L1899) is never used in [DegenerusGameFoilPackModule](contracts/modules/DegenerusGameFoilPackModule.sol#L30-L815)
 
 contracts/storage/DegenerusGameStorage.sol#L1899
 
 
- - [ ] ID-1590
+ - [ ] ID-1593
 [DegenerusGameStorage.dailyTicketBudgetsPacked](contracts/storage/DegenerusGameStorage.sol#L442) is never used in [DegenerusGameLootboxModule](contracts/modules/DegenerusGameLootboxModule.sol#L39-L2359)
 
 contracts/storage/DegenerusGameStorage.sol#L442
 
 
- - [ ] ID-1591
+ - [ ] ID-1594
 [DegenerusGameStorage.foilMatchClaimed](contracts/storage/DegenerusGameStorage.sol#L2518) is never used in [JackpotSoloTester](contracts/test/JackpotSoloTester.sol#L14-L30)
 
 contracts/storage/DegenerusGameStorage.sol#L2518
 
 
- - [ ] ID-1592
+ - [ ] ID-1595
 [DegenerusGameStorage.BP_DECIMATOR_CLEAR](contracts/storage/DegenerusGameStorage.sol#L2087-L2088) is never used in [GameAfkingModule](contracts/modules/GameAfkingModule.sol#L82-L1941)
 
 contracts/storage/DegenerusGameStorage.sol#L2087-L2088
 
 
- - [ ] ID-1593
+ - [ ] ID-1596
 [DegenerusGameStorage.FOIL_SEED_TAG](contracts/storage/DegenerusGameStorage.sol#L2587) is never used in [DegenerusGameBoonModule](contracts/modules/DegenerusGameBoonModule.sol#L22-L343)
 
 contracts/storage/DegenerusGameStorage.sol#L2587
 
 
- - [ ] ID-1594
+ - [ ] ID-1597
 [DegenerusGameStorage.BP_DEITY_COINFLIP_DAY_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2048) is never used in [DegenerusGameWhaleModule](contracts/modules/DegenerusGameWhaleModule.sol#L20-L1026)
 
 contracts/storage/DegenerusGameStorage.sol#L2048
 
 
- - [ ] ID-1595
+ - [ ] ID-1598
 [DegenerusGameStorage.PASS_STREAK_FLOOR_POINTS](contracts/storage/DegenerusGameStorage.sol#L146) is never used in [DegenerusGameLootboxModule](contracts/modules/DegenerusGameLootboxModule.sol#L39-L2359)
 
 contracts/storage/DegenerusGameStorage.sol#L146
 
 
- - [ ] ID-1596
+ - [ ] ID-1599
 [DegenerusGameStorage.PRESALE_BOX_AMOUNT_MASK](contracts/storage/DegenerusGameStorage.sol#L1110) is never used in [DegenerusGameFoilPackModule](contracts/modules/DegenerusGameFoilPackModule.sol#L30-L815)
 
 contracts/storage/DegenerusGameStorage.sol#L1110
 
 
- - [ ] ID-1597
+ - [ ] ID-1600
 [DegenerusGameStorage.presaleCloseIndex](contracts/storage/DegenerusGameStorage.sol#L2465) is never used in [DegenerusGame](contracts/DegenerusGame.sol#L87-L2624)
 
 contracts/storage/DegenerusGameStorage.sol#L2465
 
 
- - [ ] ID-1598
+ - [ ] ID-1601
 [DegenerusGameStorage.BP_DECIMATOR_CLEAR](contracts/storage/DegenerusGameStorage.sol#L2087-L2088) is never used in [JackpotSoloTester](contracts/test/JackpotSoloTester.sol#L14-L30)
 
 contracts/storage/DegenerusGameStorage.sol#L2087-L2088
 
 
- - [ ] ID-1599
+ - [ ] ID-1602
 [DegenerusGameStorage.LR_THRESHOLD_MASK](contracts/storage/DegenerusGameStorage.sol#L1616) is never used in [DegenerusGameMintModule](contracts/modules/DegenerusGameMintModule.sol#L74-L2136)
 
 contracts/storage/DegenerusGameStorage.sol#L1616
 
 
- - [ ] ID-1600
+ - [ ] ID-1603
 [DegenerusGameStorage.LR_PENDING_ETH_SHIFT](contracts/storage/DegenerusGameStorage.sol#L1613) is never used in [DegenerusGameGameOverModule](contracts/modules/DegenerusGameGameOverModule.sol#L37-L284)
 
 contracts/storage/DegenerusGameStorage.sol#L1613
 
 
- - [ ] ID-1601
+ - [ ] ID-1604
 [DegenerusGameStorage.bingoFirsts](contracts/storage/DegenerusGameStorage.sol#L2044) is never used in [DegenerusGameGameOverModule](contracts/modules/DegenerusGameGameOverModule.sol#L37-L284)
 
 contracts/storage/DegenerusGameStorage.sol#L2044
 
 
- - [ ] ID-1602
+ - [ ] ID-1605
 [DegenerusGameStorage.lastVrfProcessedTimestamp](contracts/storage/DegenerusGameStorage.sol#L435) is never used in [SettleClaimableShortfallTester](contracts/test/SettleClaimableShortfallTester.sol#L17-L66)
 
 contracts/storage/DegenerusGameStorage.sol#L435
 
 
- - [ ] ID-1603
+ - [ ] ID-1606
 [DegenerusGameStorage.BP_MASK_8](contracts/storage/DegenerusGameStorage.sol#L2075) is never used in [SettleClaimableShortfallTester](contracts/test/SettleClaimableShortfallTester.sol#L17-L66)
 
 contracts/storage/DegenerusGameStorage.sol#L2075
 
 
- - [ ] ID-1604
+ - [ ] ID-1607
 [DegenerusGameStorage.LOOTBOX_PRESALE_ETH_CAP](contracts/storage/DegenerusGameStorage.sol#L1130) is never used in [DegenerusGameBingoModule](contracts/modules/DegenerusGameBingoModule.sol#L24-L288)
 
 contracts/storage/DegenerusGameStorage.sol#L1130
 
 
- - [ ] ID-1605
+ - [ ] ID-1608
 [DegenerusGameStorage.presaleBoxEthSold](contracts/storage/DegenerusGameStorage.sol#L1088) is never used in [DegenerusGameBingoModule](contracts/modules/DegenerusGameBingoModule.sol#L24-L288)
 
 contracts/storage/DegenerusGameStorage.sol#L1088
 
 
- - [ ] ID-1606
+ - [ ] ID-1609
 [DegenerusGameStorage.LR_PENDING_FLIP_SHIFT](contracts/storage/DegenerusGameStorage.sol#L1617) is never used in [SettleClaimableShortfallTester](contracts/test/SettleClaimableShortfallTester.sol#L17-L66)
 
 contracts/storage/DegenerusGameStorage.sol#L1617
 
 
- - [ ] ID-1607
+ - [ ] ID-1610
 [DegenerusGameStorage.terminalDecBucketBurnTotal](contracts/storage/DegenerusGameStorage.sol#L1975) is never used in [DegenerusGameBoonModule](contracts/modules/DegenerusGameBoonModule.sol#L22-L343)
 
 contracts/storage/DegenerusGameStorage.sol#L1975
 
 
- - [ ] ID-1608
+ - [ ] ID-1611
 [DegenerusGameStorage.BP_LOOTBOX_CLEAR](contracts/storage/DegenerusGameStorage.sol#L2081-L2082) is never used in [SettleClaimableShortfallTester](contracts/test/SettleClaimableShortfallTester.sol#L17-L66)
 
 contracts/storage/DegenerusGameStorage.sol#L2081-L2082
 
 
- - [ ] ID-1609
+ - [ ] ID-1612
 [DegenerusGameStorage.LR_INDEX_SHIFT](contracts/storage/DegenerusGameStorage.sol#L1611) is never used in [DegenerusGameBoonModule](contracts/modules/DegenerusGameBoonModule.sol#L22-L343)
 
 contracts/storage/DegenerusGameStorage.sol#L1611
 
 
- - [ ] ID-1610
+ - [ ] ID-1613
 [DegenerusGameStorage.dgnrs](contracts/storage/DegenerusGameStorage.sol#L133-L134) is never used in [DegenerusGameMintModule](contracts/modules/DegenerusGameMintModule.sol#L74-L2136)
 
 contracts/storage/DegenerusGameStorage.sol#L133-L134
 
 
- - [ ] ID-1611
+ - [ ] ID-1614
 [DegenerusGameStorage.dailyHeroWagers](contracts/storage/DegenerusGameStorage.sol#L1915) is never used in [DegenerusGameGameOverModule](contracts/modules/DegenerusGameGameOverModule.sol#L37-L284)
 
 contracts/storage/DegenerusGameStorage.sol#L1915
 
 
- - [ ] ID-1612
+ - [ ] ID-1615
 [DegenerusGameStorage.LR_THRESHOLD_SHIFT](contracts/storage/DegenerusGameStorage.sol#L1615) is never used in [DegenerusGameMintModule](contracts/modules/DegenerusGameMintModule.sol#L74-L2136)
 
 contracts/storage/DegenerusGameStorage.sol#L1615
 
 
- - [ ] ID-1613
+ - [ ] ID-1616
 [DegenerusGameStorage.vrfCoordinator](contracts/storage/DegenerusGameStorage.sol#L1582) is never used in [DegenerusGameWhaleModule](contracts/modules/DegenerusGameWhaleModule.sol#L20-L1026)
 
 contracts/storage/DegenerusGameStorage.sol#L1582
 
 
- - [ ] ID-1614
+ - [ ] ID-1617
 [DegenerusGameStorage.ticketCursor](contracts/storage/DegenerusGameStorage.sol#L532) is never used in [GameAfkingModule](contracts/modules/GameAfkingModule.sol#L82-L1941)
 
 contracts/storage/DegenerusGameStorage.sol#L532
 
 
- - [ ] ID-1615
-[DegenerusGameStorage.PS_ACTIVE_MASK](contracts/storage/DegenerusGameStorage.sol#L1125) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1774)
+ - [ ] ID-1618
+[DegenerusGameStorage.PS_ACTIVE_MASK](contracts/storage/DegenerusGameStorage.sol#L1125) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1779)
 
 contracts/storage/DegenerusGameStorage.sol#L1125
 
 
- - [ ] ID-1616
-[DegenerusGameStorage._sdgnrsBonusLevel](contracts/storage/DegenerusGameStorage.sol#L2473) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1774)
+ - [ ] ID-1619
+[DegenerusGameStorage._sdgnrsBonusLevel](contracts/storage/DegenerusGameStorage.sol#L2473) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1779)
 
 contracts/storage/DegenerusGameStorage.sol#L2473
 
 
- - [ ] ID-1617
+ - [ ] ID-1620
 [DegenerusGameStorage.rngWordCurrent](contracts/storage/DegenerusGameStorage.sol#L417) is never used in [DegenerusGameGameOverModule](contracts/modules/DegenerusGameGameOverModule.sol#L37-L284)
 
 contracts/storage/DegenerusGameStorage.sol#L417
 
 
- - [ ] ID-1618
+ - [ ] ID-1621
 [DegenerusGameStorage.PRESALE_BOX_SOLD_SHIFT](contracts/storage/DegenerusGameStorage.sol#L1108) is never used in [DegenerusGameFoilPackModule](contracts/modules/DegenerusGameFoilPackModule.sol#L30-L815)
 
 contracts/storage/DegenerusGameStorage.sol#L1108
 
 
- - [ ] ID-1619
+ - [ ] ID-1622
 [DegenerusGameStorage.boxPlayers](contracts/storage/DegenerusGameStorage.sol#L2481) is never used in [JackpotSoloTester](contracts/test/JackpotSoloTester.sol#L14-L30)
 
 contracts/storage/DegenerusGameStorage.sol#L2481
 
 
- - [ ] ID-1620
+ - [ ] ID-1623
 [DegenerusGameStorage.BOOTSTRAP_PRIZE_POOL](contracts/storage/DegenerusGameStorage.sol#L165) is never used in [DegenerusGameAdvanceModule](contracts/modules/DegenerusGameAdvanceModule.sol#L30-L2107)
 
 contracts/storage/DegenerusGameStorage.sol#L165
 
 
- - [ ] ID-1621
+ - [ ] ID-1624
 [DegenerusGameStorage.decClaimRounds](contracts/storage/DegenerusGameStorage.sol#L1899) is never used in [DegenerusGameAdvanceModule](contracts/modules/DegenerusGameAdvanceModule.sol#L30-L2107)
 
 contracts/storage/DegenerusGameStorage.sol#L1899
 
 
- - [ ] ID-1622
+ - [ ] ID-1625
 [DegenerusGameStorage.FOIL_CCY_TAG](contracts/storage/DegenerusGameStorage.sol#L2593) is never used in [DegenerusGameMintModule](contracts/modules/DegenerusGameMintModule.sol#L74-L2136)
 
 contracts/storage/DegenerusGameStorage.sol#L2593
 
 
- - [ ] ID-1623
+ - [ ] ID-1626
 [DegenerusGameStorage.BP_DEITY_COINFLIP_DAY_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2048) is never used in [SettleClaimableShortfallTester](contracts/test/SettleClaimableShortfallTester.sol#L17-L66)
 
 contracts/storage/DegenerusGameStorage.sol#L2048
 
 
- - [ ] ID-1624
+ - [ ] ID-1627
 [DegenerusGameStorage.decClaimRounds](contracts/storage/DegenerusGameStorage.sol#L1899) is never used in [SettleClaimableShortfallTester](contracts/test/SettleClaimableShortfallTester.sol#L17-L66)
 
 contracts/storage/DegenerusGameStorage.sol#L1899
 
 
- - [ ] ID-1625
+ - [ ] ID-1628
 [DegenerusGameStorage.lastTerminalDecClaimRound](contracts/storage/DegenerusGameStorage.sol#L1985) is never used in [DegenerusGameAdvanceModule](contracts/modules/DegenerusGameAdvanceModule.sol#L30-L2107)
 
 contracts/storage/DegenerusGameStorage.sol#L1985
 
 
- - [ ] ID-1626
+ - [ ] ID-1629
 [DegenerusGameStorage.PS_ACTIVE_SHIFT](contracts/storage/DegenerusGameStorage.sol#L1124) is never used in [SettleClaimableShortfallTester](contracts/test/SettleClaimableShortfallTester.sol#L17-L66)
 
 contracts/storage/DegenerusGameStorage.sol#L1124
 
 
- - [ ] ID-1627
+ - [ ] ID-1630
 [DegenerusGameStorage.bingoFirsts](contracts/storage/DegenerusGameStorage.sol#L2044) is never used in [DegenerusGameFoilPackModule](contracts/modules/DegenerusGameFoilPackModule.sol#L30-L815)
 
 contracts/storage/DegenerusGameStorage.sol#L2044
 
 
- - [ ] ID-1628
+ - [ ] ID-1631
 [DegenerusGameStorage.LR_MID_DAY_SHIFT](contracts/storage/DegenerusGameStorage.sol#L1619) is never used in [DegenerusGameLootboxModule](contracts/modules/DegenerusGameLootboxModule.sol#L39-L2359)
 
 contracts/storage/DegenerusGameStorage.sol#L1619
 
 
- - [ ] ID-1629
+ - [ ] ID-1632
 [DegenerusGameStorage.PRESALE_BOX_CLOSING_FLAG](contracts/storage/DegenerusGameStorage.sol#L1106) is never used in [DegenerusGameGameOverModule](contracts/modules/DegenerusGameGameOverModule.sol#L37-L284)
 
 contracts/storage/DegenerusGameStorage.sol#L1106
 
 
- - [ ] ID-1630
+ - [ ] ID-1633
 [DegenerusGameStorage.BP_MASK_24](contracts/storage/DegenerusGameStorage.sol#L2074) is never used in [SettleClaimableShortfallTester](contracts/test/SettleClaimableShortfallTester.sol#L17-L66)
 
 contracts/storage/DegenerusGameStorage.sol#L2074
 
 
- - [ ] ID-1631
+ - [ ] ID-1634
 [DegenerusGameStorage._sdgnrsBonusLevel](contracts/storage/DegenerusGameStorage.sol#L2473) is never used in [DegenerusGameFoilPackModule](contracts/modules/DegenerusGameFoilPackModule.sol#L30-L815)
 
 contracts/storage/DegenerusGameStorage.sol#L2473
 
 
- - [ ] ID-1632
+ - [ ] ID-1635
 [DegenerusGameStorage.LR_MID_DAY_SHIFT](contracts/storage/DegenerusGameStorage.sol#L1619) is never used in [DegenerusGameGameOverModule](contracts/modules/DegenerusGameGameOverModule.sol#L37-L284)
 
 contracts/storage/DegenerusGameStorage.sol#L1619
 
 
- - [ ] ID-1633
+ - [ ] ID-1636
 [DegenerusGameStorage.BP_DEITY_PURCHASE_DAY_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2054) is never used in [SettleClaimableShortfallTester](contracts/test/SettleClaimableShortfallTester.sol#L17-L66)
 
 contracts/storage/DegenerusGameStorage.sol#L2054
 
 
- - [ ] ID-1634
+ - [ ] ID-1637
 [DegenerusGameStorage.BP_COINFLIP_TIER_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2049) is never used in [DegenerusGameMintModule](contracts/modules/DegenerusGameMintModule.sol#L74-L2136)
 
 contracts/storage/DegenerusGameStorage.sol#L2049
 
 
- - [ ] ID-1635
+ - [ ] ID-1638
 [DegenerusGameStorage.affiliateDgnrsClaimedBy](contracts/storage/DegenerusGameStorage.sol#L1205-L1206) is never used in [DegenerusGameLootboxModule](contracts/modules/DegenerusGameLootboxModule.sol#L39-L2359)
 
 contracts/storage/DegenerusGameStorage.sol#L1205-L1206
 
 
- - [ ] ID-1636
+ - [ ] ID-1639
 [DegenerusGameStorage.BP_DEITY_PASS_TIER_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2066) is never used in [DegenerusGameAdvanceModule](contracts/modules/DegenerusGameAdvanceModule.sol#L30-L2107)
 
 contracts/storage/DegenerusGameStorage.sol#L2066
 
 
- - [ ] ID-1637
+ - [ ] ID-1640
 [DegenerusGameStorage.BP_PURCHASE_CLEAR](contracts/storage/DegenerusGameStorage.sol#L2084-L2085) is never used in [GameAfkingModule](contracts/modules/GameAfkingModule.sol#L82-L1941)
 
 contracts/storage/DegenerusGameStorage.sol#L2084-L2085
 
 
- - [ ] ID-1638
+ - [ ] ID-1641
 [DegenerusGameStorage._afkingResetDay](contracts/storage/DegenerusGameStorage.sol#L2445) is never used in [DegenerusGameMintModule](contracts/modules/DegenerusGameMintModule.sol#L74-L2136)
 
 contracts/storage/DegenerusGameStorage.sol#L2445
 
 
- - [ ] ID-1639
+ - [ ] ID-1642
 [DegenerusGameStorage.vrfCoordinator](contracts/storage/DegenerusGameStorage.sol#L1582) is never used in [DegenerusGameBingoModule](contracts/modules/DegenerusGameBingoModule.sol#L24-L288)
 
 contracts/storage/DegenerusGameStorage.sol#L1582
 
 
- - [ ] ID-1640
+ - [ ] ID-1643
 [DegenerusGameStorage.BP_COINFLIP_TIER_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2049) is never used in [DegenerusGame](contracts/DegenerusGame.sol#L87-L2624)
 
 contracts/storage/DegenerusGameStorage.sol#L2049
 
 
- - [ ] ID-1641
+ - [ ] ID-1644
 [DegenerusGameStorage.FOIL_PACK_TICKETS](contracts/storage/DegenerusGameStorage.sol#L2571) is never used in [DegenerusGameAdvanceModule](contracts/modules/DegenerusGameAdvanceModule.sol#L30-L2107)
 
 contracts/storage/DegenerusGameStorage.sol#L2571
 
 
- - [ ] ID-1642
+ - [ ] ID-1645
 [DegenerusGameStorage.foilCursor](contracts/storage/DegenerusGameStorage.sol#L2550) is never used in [DegenerusGameAdvanceModule](contracts/modules/DegenerusGameAdvanceModule.sol#L30-L2107)
 
 contracts/storage/DegenerusGameStorage.sol#L2550
 
 
- - [ ] ID-1643
+ - [ ] ID-1646
 [DegenerusGameStorage.rngWordCurrent](contracts/storage/DegenerusGameStorage.sol#L417) is never used in [DegenerusGameBoonModule](contracts/modules/DegenerusGameBoonModule.sol#L22-L343)
 
 contracts/storage/DegenerusGameStorage.sol#L417
 
 
- - [ ] ID-1644
+ - [ ] ID-1647
 [DegenerusGameStorage.boxCursorIndex](contracts/storage/DegenerusGameStorage.sol#L2459) is never used in [DegenerusGameBoonModule](contracts/modules/DegenerusGameBoonModule.sol#L22-L343)
 
 contracts/storage/DegenerusGameStorage.sol#L2459
 
 
- - [ ] ID-1645
+ - [ ] ID-1648
 [DegenerusGameStorage.BP_COINFLIP_DAY_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2047) is never used in [DegenerusGameBingoModule](contracts/modules/DegenerusGameBingoModule.sol#L24-L288)
 
 contracts/storage/DegenerusGameStorage.sol#L2047
 
 
- - [ ] ID-1646
+ - [ ] ID-1649
 [DegenerusGameStorage.boxCursorIndex](contracts/storage/DegenerusGameStorage.sol#L2459) is never used in [DegenerusGameBingoModule](contracts/modules/DegenerusGameBingoModule.sol#L24-L288)
 
 contracts/storage/DegenerusGameStorage.sol#L2459
 
 
- - [ ] ID-1647
+ - [ ] ID-1650
 [DegenerusGameStorage._subOpenCursor](contracts/storage/DegenerusGameStorage.sol#L2438) is never used in [DegenerusGameGameOverModule](contracts/modules/DegenerusGameGameOverModule.sol#L37-L284)
 
 contracts/storage/DegenerusGameStorage.sol#L2438
 
 
- - [ ] ID-1648
-[DegenerusGameStorage.GO_SWEPT_SHIFT](contracts/storage/DegenerusGameStorage.sol#L1163) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1774)
+ - [ ] ID-1651
+[DegenerusGameStorage.GO_SWEPT_SHIFT](contracts/storage/DegenerusGameStorage.sol#L1163) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1779)
 
 contracts/storage/DegenerusGameStorage.sol#L1163
 
 
- - [ ] ID-1649
+ - [ ] ID-1652
 [DegenerusGameStorage.BP_PURCHASE_TIER_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2055) is never used in [DegenerusGameGameOverModule](contracts/modules/DegenerusGameGameOverModule.sol#L37-L284)
 
 contracts/storage/DegenerusGameStorage.sol#L2055
 
 
- - [ ] ID-1650
+ - [ ] ID-1653
 [DegenerusGameStorage.BP_DEITY_ACTIVITY_DAY_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2065) is never used in [DegenerusGameFoilPackModule](contracts/modules/DegenerusGameFoilPackModule.sol#L30-L815)
 
 contracts/storage/DegenerusGameStorage.sol#L2065
 
 
- - [ ] ID-1651
-[DegenerusGameStorage.BP_LAZY_PASS_TIER_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2071) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1774)
+ - [ ] ID-1654
+[DegenerusGameStorage.BP_LAZY_PASS_TIER_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2071) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1779)
 
 contracts/storage/DegenerusGameStorage.sol#L2071
 
 
- - [ ] ID-1652
+ - [ ] ID-1655
 [DegenerusGameStorage.LB_DISTRESS_SCALE](contracts/storage/DegenerusGameStorage.sol#L1078) is never used in [DegenerusGameBoonModule](contracts/modules/DegenerusGameBoonModule.sol#L22-L343)
 
 contracts/storage/DegenerusGameStorage.sol#L1078
 
 
- - [ ] ID-1653
+ - [ ] ID-1656
 [DegenerusGameStorage.ticketRedemptionOpen](contracts/storage/DegenerusGameStorage.sol#L376) is never used in [DegenerusGameDecimatorModule](contracts/modules/DegenerusGameDecimatorModule.sol#L21-L1134)
 
 contracts/storage/DegenerusGameStorage.sol#L376
 
 
- - [ ] ID-1654
+ - [ ] ID-1657
 [DegenerusGameStorage.coin](contracts/storage/DegenerusGameStorage.sol#L125-L126) is never used in [DegenerusGameGameOverModule](contracts/modules/DegenerusGameGameOverModule.sol#L37-L284)
 
 contracts/storage/DegenerusGameStorage.sol#L125-L126
 
 
- - [ ] ID-1655
+ - [ ] ID-1658
 [DegenerusGameStorage._subscribers](contracts/storage/DegenerusGameStorage.sol#L2423) is never used in [DegenerusGameWhaleModule](contracts/modules/DegenerusGameWhaleModule.sol#L20-L1026)
 
 contracts/storage/DegenerusGameStorage.sol#L2423
 
 
- - [ ] ID-1656
+ - [ ] ID-1659
 [DegenerusGameStorage.BP_LOOTBOX_TIER_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2052) is never used in [DegenerusGameFoilPackModule](contracts/modules/DegenerusGameFoilPackModule.sol#L30-L815)
 
 contracts/storage/DegenerusGameStorage.sol#L2052
 
 
- - [ ] ID-1657
+ - [ ] ID-1660
 [DegenerusGameStorage.GO_TIME_SHIFT](contracts/storage/DegenerusGameStorage.sol#L1159) is never used in [DegenerusGameMintModule](contracts/modules/DegenerusGameMintModule.sol#L74-L2136)
 
 contracts/storage/DegenerusGameStorage.sol#L1159
 
 
- - [ ] ID-1658
+ - [ ] ID-1661
 [DegenerusGameStorage.degeneretteBets](contracts/storage/DegenerusGameStorage.sol#L1785) is never used in [DegenerusGameLootboxModule](contracts/modules/DegenerusGameLootboxModule.sol#L39-L2359)
 
 contracts/storage/DegenerusGameStorage.sol#L1785
 
 
- - [ ] ID-1659
+ - [ ] ID-1662
 [DegenerusGameStorage.BP_LAZY_PASS_DAY_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2069) is never used in [DegenerusGameMintModule](contracts/modules/DegenerusGameMintModule.sol#L74-L2136)
 
 contracts/storage/DegenerusGameStorage.sol#L2069
 
 
- - [ ] ID-1660
+ - [ ] ID-1663
 [DegenerusGameStorage.BP_LOOTBOX_DAY_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2050) is never used in [JackpotSoloTester](contracts/test/JackpotSoloTester.sol#L14-L30)
 
 contracts/storage/DegenerusGameStorage.sol#L2050
 
 
- - [ ] ID-1661
+ - [ ] ID-1664
 [DegenerusGameStorage.FOIL_TO_FUTURE_BPS](contracts/storage/DegenerusGameStorage.sol#L2562) is never used in [JackpotSoloTester](contracts/test/JackpotSoloTester.sol#L14-L30)
 
 contracts/storage/DegenerusGameStorage.sol#L2562
 
 
- - [ ] ID-1662
+ - [ ] ID-1665
 [DegenerusGameStorage.BP_WHALE_TIER_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2060) is never used in [DegenerusGame](contracts/DegenerusGame.sol#L87-L2624)
 
 contracts/storage/DegenerusGameStorage.sol#L2060
 
 
- - [ ] ID-1663
+ - [ ] ID-1666
 [DegenerusGameStorage._afkingResetDay](contracts/storage/DegenerusGameStorage.sol#L2445) is never used in [DegenerusGameBoonModule](contracts/modules/DegenerusGameBoonModule.sol#L22-L343)
 
 contracts/storage/DegenerusGameStorage.sol#L2445
 
 
- - [ ] ID-1664
+ - [ ] ID-1667
 [DegenerusGameStorage.LR_THRESHOLD_SHIFT](contracts/storage/DegenerusGameStorage.sol#L1615) is never used in [DegenerusGameGameOverModule](contracts/modules/DegenerusGameGameOverModule.sol#L37-L284)
 
 contracts/storage/DegenerusGameStorage.sol#L1615
 
 
- - [ ] ID-1665
+ - [ ] ID-1668
 [DegenerusGameStorage._subscriberIndex](contracts/storage/DegenerusGameStorage.sol#L2427) is never used in [DegenerusGameAdvanceModule](contracts/modules/DegenerusGameAdvanceModule.sol#L30-L2107)
 
 contracts/storage/DegenerusGameStorage.sol#L2427
 
 
- - [ ] ID-1666
+ - [ ] ID-1669
 [DegenerusGameStorage.deityPassPricePaid](contracts/storage/DegenerusGameStorage.sol#L1249) is never used in [DegenerusGameBingoModule](contracts/modules/DegenerusGameBingoModule.sol#L24-L288)
 
 contracts/storage/DegenerusGameStorage.sol#L1249
 
 
- - [ ] ID-1667
+ - [ ] ID-1670
 [DegenerusGameStorage.BP_PURCHASE_TIER_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2055) is never used in [JackpotSoloTester](contracts/test/JackpotSoloTester.sol#L14-L30)
 
 contracts/storage/DegenerusGameStorage.sol#L2055
 
 
- - [ ] ID-1668
+ - [ ] ID-1671
 [DegenerusGameStorage.presaleDrained](contracts/storage/DegenerusGameStorage.sol#L367) is never used in [DegenerusGameAdvanceModule](contracts/modules/DegenerusGameAdvanceModule.sol#L30-L2107)
 
 contracts/storage/DegenerusGameStorage.sol#L367
 
 
- - [ ] ID-1669
+ - [ ] ID-1672
 [DegenerusGameStorage.PS_ACTIVE_MASK](contracts/storage/DegenerusGameStorage.sol#L1125) is never used in [DegenerusGameFoilPackModule](contracts/modules/DegenerusGameFoilPackModule.sol#L30-L815)
 
 contracts/storage/DegenerusGameStorage.sol#L1125
 
 
- - [ ] ID-1670
+ - [ ] ID-1673
 [DegenerusGameStorage.GO_JACKPOT_PAID_MASK](contracts/storage/DegenerusGameStorage.sol#L1162) is never used in [DegenerusGameMintModule](contracts/modules/DegenerusGameMintModule.sol#L74-L2136)
 
 contracts/storage/DegenerusGameStorage.sol#L1162
 
 
- - [ ] ID-1671
+ - [ ] ID-1674
 [DegenerusGameStorage.foilBuyers](contracts/storage/DegenerusGameStorage.sol#L2541) is never used in [GameAfkingModule](contracts/modules/GameAfkingModule.sol#L82-L1941)
 
 contracts/storage/DegenerusGameStorage.sol#L2541
 
 
- - [ ] ID-1672
+ - [ ] ID-1675
 [DegenerusGameStorage.terminalDecBets](contracts/storage/DegenerusGameStorage.sol#L1971) is never used in [DegenerusGameAdvanceModule](contracts/modules/DegenerusGameAdvanceModule.sol#L30-L2107)
 
 contracts/storage/DegenerusGameStorage.sol#L1971
 
 
- - [ ] ID-1673
+ - [ ] ID-1676
 [DegenerusGameStorage.BP_DEITY_LOOTBOX_DAY_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2051) is never used in [DegenerusGameGameOverModule](contracts/modules/DegenerusGameGameOverModule.sol#L37-L284)
 
 contracts/storage/DegenerusGameStorage.sol#L2051
 
 
- - [ ] ID-1674
+ - [ ] ID-1677
 [DegenerusGameStorage.BP_COINFLIP_TIER_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2049) is never used in [SettleClaimableShortfallTester](contracts/test/SettleClaimableShortfallTester.sol#L17-L66)
 
 contracts/storage/DegenerusGameStorage.sol#L2049
 
 
- - [ ] ID-1675
+ - [ ] ID-1678
 [DegenerusGameStorage.BP_PURCHASE_DAY_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2053) is never used in [DegenerusGame](contracts/DegenerusGame.sol#L87-L2624)
 
 contracts/storage/DegenerusGameStorage.sol#L2053
 
 
- - [ ] ID-1676
-[DegenerusGameStorage.BP_ACTIVITY_PENDING_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2063) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1774)
+ - [ ] ID-1679
+[DegenerusGameStorage.BP_ACTIVITY_PENDING_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2063) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1779)
 
 contracts/storage/DegenerusGameStorage.sol#L2063
 
 
- - [ ] ID-1677
+ - [ ] ID-1680
 [DegenerusGameStorage.PASS_MINT_COUNT_FLOOR_POINTS](contracts/storage/DegenerusGameStorage.sol#L149) is never used in [DegenerusGameGameOverModule](contracts/modules/DegenerusGameGameOverModule.sol#L37-L284)
 
 contracts/storage/DegenerusGameStorage.sol#L149
 
 
- - [ ] ID-1678
+ - [ ] ID-1681
 [DegenerusGameStorage.GO_TIME_SHIFT](contracts/storage/DegenerusGameStorage.sol#L1159) is never used in [JackpotSoloTester](contracts/test/JackpotSoloTester.sol#L14-L30)
 
 contracts/storage/DegenerusGameStorage.sol#L1159
 
 
- - [ ] ID-1679
+ - [ ] ID-1682
 [DegenerusGameStorage.PRESALE_BOX_ETH_CAP](contracts/storage/DegenerusGameStorage.sol#L1134) is never used in [DegenerusGameBingoModule](contracts/modules/DegenerusGameBingoModule.sol#L24-L288)
 
 contracts/storage/DegenerusGameStorage.sol#L1134
 
 
- - [ ] ID-1680
+ - [ ] ID-1683
 [DegenerusGameStorage._subCursor](contracts/storage/DegenerusGameStorage.sol#L2434) is never used in [DegenerusGameFoilPackModule](contracts/modules/DegenerusGameFoilPackModule.sol#L30-L815)
 
 contracts/storage/DegenerusGameStorage.sol#L2434
 
 
- - [ ] ID-1681
+ - [ ] ID-1684
 [DegenerusGameStorage.decBucketOffsetPacked](contracts/storage/DegenerusGameStorage.sol#L1904) is never used in [DegenerusGameWhaleModule](contracts/modules/DegenerusGameWhaleModule.sol#L20-L1026)
 
 contracts/storage/DegenerusGameStorage.sol#L1904
 
 
- - [ ] ID-1682
+ - [ ] ID-1685
 [DegenerusGameStorage.BP_DEITY_ACTIVITY_DAY_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2065) is never used in [DegenerusGameMintModule](contracts/modules/DegenerusGameMintModule.sol#L74-L2136)
 
 contracts/storage/DegenerusGameStorage.sol#L2065
 
 
- - [ ] ID-1683
+ - [ ] ID-1686
 [DegenerusGameStorage.BP_DEITY_DEITY_PASS_DAY_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2068) is never used in [DegenerusGameMintModule](contracts/modules/DegenerusGameMintModule.sol#L74-L2136)
 
 contracts/storage/DegenerusGameStorage.sol#L2068
 
 
- - [ ] ID-1684
+ - [ ] ID-1687
 [DegenerusGameStorage.decWindowOpen](contracts/storage/DegenerusGameStorage.sol#L295) is never used in [DegenerusGameFoilPackModule](contracts/modules/DegenerusGameFoilPackModule.sol#L30-L815)
 
 contracts/storage/DegenerusGameStorage.sol#L295
 
 
- - [ ] ID-1685
+ - [ ] ID-1688
 [DegenerusGameStorage.BP_LAZY_PASS_DAY_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2069) is never used in [DegenerusGameGameOverModule](contracts/modules/DegenerusGameGameOverModule.sol#L37-L284)
 
 contracts/storage/DegenerusGameStorage.sol#L2069
 
 
- - [ ] ID-1686
+ - [ ] ID-1689
 [DegenerusGameStorage.deityPassOwners](contracts/storage/DegenerusGameStorage.sol#L1252) is never used in [DegenerusGameMintModule](contracts/modules/DegenerusGameMintModule.sol#L74-L2136)
 
 contracts/storage/DegenerusGameStorage.sol#L1252
 
 
- - [ ] ID-1687
+ - [ ] ID-1690
 [DegenerusGameStorage.vrfSubscriptionId](contracts/storage/DegenerusGameStorage.sol#L1590) is never used in [DegenerusGameWhaleModule](contracts/modules/DegenerusGameWhaleModule.sol#L20-L1026)
 
 contracts/storage/DegenerusGameStorage.sol#L1590
 
 
- - [ ] ID-1688
+ - [ ] ID-1691
 [DegenerusGameStorage.BP_DEITY_DECIMATOR_DAY_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2057) is never used in [DegenerusGameBingoModule](contracts/modules/DegenerusGameBingoModule.sol#L24-L288)
 
 contracts/storage/DegenerusGameStorage.sol#L2057
 
 
- - [ ] ID-1689
+ - [ ] ID-1692
 [DegenerusGameStorage.LR_PENDING_ETH_SHIFT](contracts/storage/DegenerusGameStorage.sol#L1613) is never used in [DegenerusGameBingoModule](contracts/modules/DegenerusGameBingoModule.sol#L24-L288)
 
 contracts/storage/DegenerusGameStorage.sol#L1613
 
 
- - [ ] ID-1690
+ - [ ] ID-1693
 [DegenerusGameStorage.presaleOver](contracts/storage/DegenerusGameStorage.sol#L348) is never used in [DegenerusGameAdvanceModule](contracts/modules/DegenerusGameAdvanceModule.sol#L30-L2107)
 
 contracts/storage/DegenerusGameStorage.sol#L348
 
 
- - [ ] ID-1691
+ - [ ] ID-1694
 [DegenerusGameStorage.lastVrfProcessedTimestamp](contracts/storage/DegenerusGameStorage.sol#L435) is never used in [DegenerusGameDecimatorModule](contracts/modules/DegenerusGameDecimatorModule.sol#L21-L1134)
 
 contracts/storage/DegenerusGameStorage.sol#L435
 
 
- - [ ] ID-1692
-[DegenerusGameStorage.ticketRedemptionOpen](contracts/storage/DegenerusGameStorage.sol#L376) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1774)
+ - [ ] ID-1695
+[DegenerusGameStorage.ticketRedemptionOpen](contracts/storage/DegenerusGameStorage.sol#L376) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1779)
 
 contracts/storage/DegenerusGameStorage.sol#L376
 
 
- - [ ] ID-1693
+ - [ ] ID-1696
 [DegenerusGameStorage.GO_TIME_MASK](contracts/storage/DegenerusGameStorage.sol#L1160) is never used in [DegenerusGameLootboxModule](contracts/modules/DegenerusGameLootboxModule.sol#L39-L2359)
 
 contracts/storage/DegenerusGameStorage.sol#L1160
 
 
- - [ ] ID-1694
+ - [ ] ID-1697
 [DegenerusGameStorage.LB_DISTRESS_SCALE](contracts/storage/DegenerusGameStorage.sol#L1078) is never used in [DegenerusGameDecimatorModule](contracts/modules/DegenerusGameDecimatorModule.sol#L21-L1134)
 
 contracts/storage/DegenerusGameStorage.sol#L1078
 
 
- - [ ] ID-1695
+ - [ ] ID-1698
 [DegenerusGameStorage.BP_COINFLIP_CLEAR](contracts/storage/DegenerusGameStorage.sol#L2079) is never used in [GameAfkingModule](contracts/modules/GameAfkingModule.sol#L82-L1941)
 
 contracts/storage/DegenerusGameStorage.sol#L2079
 
 
- - [ ] ID-1696
+ - [ ] ID-1699
 [DegenerusGameStorage.FOIL_PACK_ENTRIES](contracts/storage/DegenerusGameStorage.sol#L2566) is never used in [DegenerusGameLootboxModule](contracts/modules/DegenerusGameLootboxModule.sol#L39-L2359)
 
 contracts/storage/DegenerusGameStorage.sol#L2566
 
 
- - [ ] ID-1697
+ - [ ] ID-1700
 [DegenerusGameStorage.BP_COINFLIP_CLEAR](contracts/storage/DegenerusGameStorage.sol#L2079) is never used in [DegenerusGameDecimatorModule](contracts/modules/DegenerusGameDecimatorModule.sol#L21-L1134)
 
 contracts/storage/DegenerusGameStorage.sol#L2079
 
 
- - [ ] ID-1698
+ - [ ] ID-1701
 [DegenerusGameStorage.lootboxRngWordByIndex](contracts/storage/DegenerusGameStorage.sol#L1755) is never used in [GameAfkingModule](contracts/modules/GameAfkingModule.sol#L82-L1941)
 
 contracts/storage/DegenerusGameStorage.sol#L1755
 
 
- - [ ] ID-1699
+ - [ ] ID-1702
 [DegenerusGameStorage._fundingSourceOf](contracts/storage/DegenerusGameStorage.sol#L2420) is never used in [DegenerusGameDecimatorModule](contracts/modules/DegenerusGameDecimatorModule.sol#L21-L1134)
 
 contracts/storage/DegenerusGameStorage.sol#L2420
 
 
- - [ ] ID-1700
+ - [ ] ID-1703
 [DegenerusGameStorage.BP_DEITY_LAZY_PASS_DAY_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2070) is never used in [DegenerusGame](contracts/DegenerusGame.sol#L87-L2624)
 
 contracts/storage/DegenerusGameStorage.sol#L2070
 
 
- - [ ] ID-1701
+ - [ ] ID-1704
 [DegenerusGameStorage.lastTerminalDecClaimRound](contracts/storage/DegenerusGameStorage.sol#L1985) is never used in [DegenerusGame](contracts/DegenerusGame.sol#L87-L2624)
 
 contracts/storage/DegenerusGameStorage.sol#L1985
 
 
- - [ ] ID-1702
+ - [ ] ID-1705
 [DegenerusGameStorage.PRESALE_BOX_CLOSING_FLAG](contracts/storage/DegenerusGameStorage.sol#L1106) is never used in [GameAfkingModule](contracts/modules/GameAfkingModule.sol#L82-L1941)
 
 contracts/storage/DegenerusGameStorage.sol#L1106
 
 
- - [ ] ID-1703
+ - [ ] ID-1706
 [DegenerusGameStorage.BP_DEITY_PASS_TIER_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2066) is never used in [DegenerusGameBingoModule](contracts/modules/DegenerusGameBingoModule.sol#L24-L288)
 
 contracts/storage/DegenerusGameStorage.sol#L2066
 
 
- - [ ] ID-1704
+ - [ ] ID-1707
 [DegenerusGameStorage.presaleBoxDgnrsPoolStart](contracts/storage/DegenerusGameStorage.sol#L1264) is never used in [DegenerusGameWhaleModule](contracts/modules/DegenerusGameWhaleModule.sol#L20-L1026)
 
 contracts/storage/DegenerusGameStorage.sol#L1264
 
 
- - [ ] ID-1705
+ - [ ] ID-1708
 [DegenerusGameStorage.LR_PENDING_FLIP_MASK](contracts/storage/DegenerusGameStorage.sol#L1618) is never used in [DegenerusGameDecimatorModule](contracts/modules/DegenerusGameDecimatorModule.sol#L21-L1134)
 
 contracts/storage/DegenerusGameStorage.sol#L1618
 
 
- - [ ] ID-1706
+ - [ ] ID-1709
 [DegenerusGameStorage.BP_DEITY_WHALE_DAY_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2059) is never used in [GameAfkingModule](contracts/modules/GameAfkingModule.sol#L82-L1941)
 
 contracts/storage/DegenerusGameStorage.sol#L2059
 
 
- - [ ] ID-1707
+ - [ ] ID-1710
 [DegenerusGameStorage.bingoClaimed](contracts/storage/DegenerusGameStorage.sol#L2039) is never used in [DegenerusGameMintModule](contracts/modules/DegenerusGameMintModule.sol#L74-L2136)
 
 contracts/storage/DegenerusGameStorage.sol#L2039
 
 
- - [ ] ID-1708
+ - [ ] ID-1711
 [DegenerusGameStorage.PASS_STREAK_FLOOR_POINTS](contracts/storage/DegenerusGameStorage.sol#L146) is never used in [DegenerusGameAdvanceModule](contracts/modules/DegenerusGameAdvanceModule.sol#L30-L2107)
 
 contracts/storage/DegenerusGameStorage.sol#L146
 
 
- - [ ] ID-1709
+ - [ ] ID-1712
 [DegenerusGameStorage.degeneretteBetNonce](contracts/storage/DegenerusGameStorage.sol#L1788) is never used in [GameAfkingModule](contracts/modules/GameAfkingModule.sol#L82-L1941)
 
 contracts/storage/DegenerusGameStorage.sol#L1788
 
 
- - [ ] ID-1710
+ - [ ] ID-1713
 [DegenerusGameStorage.LR_PENDING_ETH_MASK](contracts/storage/DegenerusGameStorage.sol#L1614) is never used in [DegenerusGameGameOverModule](contracts/modules/DegenerusGameGameOverModule.sol#L37-L284)
 
 contracts/storage/DegenerusGameStorage.sol#L1614
 
 
- - [ ] ID-1711
+ - [ ] ID-1714
 [DegenerusGameStorage.decBurn](contracts/storage/DegenerusGameStorage.sol#L1890) is never used in [SettleClaimableShortfallTester](contracts/test/SettleClaimableShortfallTester.sol#L17-L66)
 
 contracts/storage/DegenerusGameStorage.sol#L1890
 
 
- - [ ] ID-1712
+ - [ ] ID-1715
 [DegenerusGameStorage.compressedJackpotFlag](contracts/storage/DegenerusGameStorage.sol#L319) is never used in [DegenerusGameBoonModule](contracts/modules/DegenerusGameBoonModule.sol#L22-L343)
 
 contracts/storage/DegenerusGameStorage.sol#L319
 
 
- - [ ] ID-1713
+ - [ ] ID-1716
 [DegenerusGameStorage.dailyJackpotCoinTicketsPending](contracts/storage/DegenerusGameStorage.sol#L312) is never used in [DegenerusGameFoilPackModule](contracts/modules/DegenerusGameFoilPackModule.sol#L30-L815)
 
 contracts/storage/DegenerusGameStorage.sol#L312
 
 
- - [ ] ID-1714
+ - [ ] ID-1717
 [DegenerusGameStorage.BP_WHALE_TIER_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2060) is never used in [DegenerusGameGameOverModule](contracts/modules/DegenerusGameGameOverModule.sol#L37-L284)
 
 contracts/storage/DegenerusGameStorage.sol#L2060
 
 
- - [ ] ID-1715
+ - [ ] ID-1718
 [DegenerusGameStorage.jackpotCounter](contracts/storage/DegenerusGameStorage.sol#L285) is never used in [DegenerusGameLootboxModule](contracts/modules/DegenerusGameLootboxModule.sol#L39-L2359)
 
 contracts/storage/DegenerusGameStorage.sol#L285
 
 
- - [ ] ID-1716
+ - [ ] ID-1719
 [DegenerusGameStorage.LB_DISTRESS_SCALE](contracts/storage/DegenerusGameStorage.sol#L1078) is never used in [DegenerusGameGameOverModule](contracts/modules/DegenerusGameGameOverModule.sol#L37-L284)
 
 contracts/storage/DegenerusGameStorage.sol#L1078
 
 
- - [ ] ID-1717
+ - [ ] ID-1720
 [DegenerusGameStorage.BP_DEITY_PASS_CLEAR](contracts/storage/DegenerusGameStorage.sol#L2096-L2097) is never used in [DegenerusGameBingoModule](contracts/modules/DegenerusGameBingoModule.sol#L24-L288)
 
 contracts/storage/DegenerusGameStorage.sol#L2096-L2097
 
 
- - [ ] ID-1718
+ - [ ] ID-1721
 [DegenerusGameStorage.PS_MINT_ETH_MASK](contracts/storage/DegenerusGameStorage.sol#L1127) is never used in [DegenerusGameLootboxModule](contracts/modules/DegenerusGameLootboxModule.sol#L39-L2359)
 
 contracts/storage/DegenerusGameStorage.sol#L1127
 
 
- - [ ] ID-1719
+ - [ ] ID-1722
 [DegenerusGameStorage.BP_PURCHASE_DAY_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2053) is never used in [DegenerusGameWhaleModule](contracts/modules/DegenerusGameWhaleModule.sol#L20-L1026)
 
 contracts/storage/DegenerusGameStorage.sol#L2053
 
 
- - [ ] ID-1720
-[DegenerusGameStorage.BP_LOOTBOX_CLEAR](contracts/storage/DegenerusGameStorage.sol#L2081-L2082) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1774)
+ - [ ] ID-1723
+[DegenerusGameStorage.BP_LOOTBOX_CLEAR](contracts/storage/DegenerusGameStorage.sol#L2081-L2082) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1779)
 
 contracts/storage/DegenerusGameStorage.sol#L2081-L2082
 
 
- - [ ] ID-1721
+ - [ ] ID-1724
 [DegenerusGameStorage.BP_DECIMATOR_TIER_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2056) is never used in [DegenerusGameDecimatorModule](contracts/modules/DegenerusGameDecimatorModule.sol#L21-L1134)
 
 contracts/storage/DegenerusGameStorage.sol#L2056
 
 
- - [ ] ID-1722
+ - [ ] ID-1725
 [DegenerusGameStorage.affiliateDgnrsClaimedBy](contracts/storage/DegenerusGameStorage.sol#L1205-L1206) is never used in [JackpotSoloTester](contracts/test/JackpotSoloTester.sol#L14-L30)
 
 contracts/storage/DegenerusGameStorage.sol#L1205-L1206
 
 
- - [ ] ID-1723
+ - [ ] ID-1726
 [DegenerusGameStorage.lootboxRngWordByIndex](contracts/storage/DegenerusGameStorage.sol#L1755) is never used in [DegenerusGameWhaleModule](contracts/modules/DegenerusGameWhaleModule.sol#L20-L1026)
 
 contracts/storage/DegenerusGameStorage.sol#L1755
 
 
- - [ ] ID-1724
+ - [ ] ID-1727
 [DegenerusGameStorage.rngWordCurrent](contracts/storage/DegenerusGameStorage.sol#L417) is never used in [DegenerusGameWhaleModule](contracts/modules/DegenerusGameWhaleModule.sol#L20-L1026)
 
 contracts/storage/DegenerusGameStorage.sol#L417
 
 
- - [ ] ID-1725
+ - [ ] ID-1728
 [DegenerusGameStorage.totalFlipReversals](contracts/storage/DegenerusGameStorage.sol#L429) is never used in [DegenerusGameLootboxModule](contracts/modules/DegenerusGameLootboxModule.sol#L39-L2359)
 
 contracts/storage/DegenerusGameStorage.sol#L429
 
 
- - [ ] ID-1726
+ - [ ] ID-1729
 [DegenerusGameStorage.BP_LOOTBOX_TIER_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2052) is never used in [DegenerusGameDecimatorModule](contracts/modules/DegenerusGameDecimatorModule.sol#L21-L1134)
 
 contracts/storage/DegenerusGameStorage.sol#L2052
 
 
- - [ ] ID-1727
+ - [ ] ID-1730
 [DegenerusGameStorage.PS_MINT_ETH_MASK](contracts/storage/DegenerusGameStorage.sol#L1127) is never used in [JackpotSoloTester](contracts/test/JackpotSoloTester.sol#L14-L30)
 
 contracts/storage/DegenerusGameStorage.sol#L1127
 
 
- - [ ] ID-1728
+ - [ ] ID-1731
 [DegenerusGameStorage._subscribers](contracts/storage/DegenerusGameStorage.sol#L2423) is never used in [DegenerusGameFoilPackModule](contracts/modules/DegenerusGameFoilPackModule.sol#L30-L815)
 
 contracts/storage/DegenerusGameStorage.sol#L2423
 
 
- - [ ] ID-1729
+ - [ ] ID-1732
 [DegenerusGameStorage.dailyTicketBudgetsPacked](contracts/storage/DegenerusGameStorage.sol#L442) is never used in [DegenerusGameAdvanceModule](contracts/modules/DegenerusGameAdvanceModule.sol#L30-L2107)
 
 contracts/storage/DegenerusGameStorage.sol#L442
 
 
- - [ ] ID-1730
+ - [ ] ID-1733
 [DegenerusGameStorage.lastTerminalDecClaimRound](contracts/storage/DegenerusGameStorage.sol#L1985) is never used in [DegenerusGameGameOverModule](contracts/modules/DegenerusGameGameOverModule.sol#L37-L284)
 
 contracts/storage/DegenerusGameStorage.sol#L1985
 
 
- - [ ] ID-1731
+ - [ ] ID-1734
 [DegenerusGameStorage.BP_LAZY_PASS_TIER_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2071) is never used in [SettleClaimableShortfallTester](contracts/test/SettleClaimableShortfallTester.sol#L17-L66)
 
 contracts/storage/DegenerusGameStorage.sol#L2071
 
 
- - [ ] ID-1732
+ - [ ] ID-1735
 [DegenerusGameStorage.presaleBoxDgnrsPoolStart](contracts/storage/DegenerusGameStorage.sol#L1264) is never used in [GameAfkingModule](contracts/modules/GameAfkingModule.sol#L82-L1941)
 
 contracts/storage/DegenerusGameStorage.sol#L1264
 
 
- - [ ] ID-1733
+ - [ ] ID-1736
 [DegenerusGameStorage.BP_WHALE_TIER_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2060) is never used in [SettleClaimableShortfallTester](contracts/test/SettleClaimableShortfallTester.sol#L17-L66)
 
 contracts/storage/DegenerusGameStorage.sol#L2060
 
 
- - [ ] ID-1734
+ - [ ] ID-1737
 [DegenerusGameStorage.degeneretteBetNonce](contracts/storage/DegenerusGameStorage.sol#L1788) is never used in [JackpotSoloTester](contracts/test/JackpotSoloTester.sol#L14-L30)
 
 contracts/storage/DegenerusGameStorage.sol#L1788
 
 
- - [ ] ID-1735
+ - [ ] ID-1738
 [DegenerusGameStorage._subCursor](contracts/storage/DegenerusGameStorage.sol#L2434) is never used in [DegenerusGameBingoModule](contracts/modules/DegenerusGameBingoModule.sol#L24-L288)
 
 contracts/storage/DegenerusGameStorage.sol#L2434
 
 
- - [ ] ID-1736
+ - [ ] ID-1739
 [DegenerusGameStorage.terminalDecBets](contracts/storage/DegenerusGameStorage.sol#L1971) is never used in [DegenerusGameWhaleModule](contracts/modules/DegenerusGameWhaleModule.sol#L20-L1026)
 
 contracts/storage/DegenerusGameStorage.sol#L1971
 
 
- - [ ] ID-1737
+ - [ ] ID-1740
 [DegenerusGameStorage.BP_LOOTBOX_CLEAR](contracts/storage/DegenerusGameStorage.sol#L2081-L2082) is never used in [DegenerusGameGameOverModule](contracts/modules/DegenerusGameGameOverModule.sol#L37-L284)
 
 contracts/storage/DegenerusGameStorage.sol#L2081-L2082
 
 
- - [ ] ID-1738
+ - [ ] ID-1741
 [DegenerusGameStorage.BP_DEITY_WHALE_DAY_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2059) is never used in [DegenerusGame](contracts/DegenerusGame.sol#L87-L2624)
 
 contracts/storage/DegenerusGameStorage.sol#L2059
 
 
- - [ ] ID-1739
+ - [ ] ID-1742
 [DegenerusGameStorage.foilMatchClaimed](contracts/storage/DegenerusGameStorage.sol#L2518) is never used in [DegenerusGameGameOverModule](contracts/modules/DegenerusGameGameOverModule.sol#L37-L284)
 
 contracts/storage/DegenerusGameStorage.sol#L2518
 
 
- - [ ] ID-1740
+ - [ ] ID-1743
 [DegenerusGameStorage.BOOTSTRAP_PRIZE_POOL](contracts/storage/DegenerusGameStorage.sol#L165) is never used in [DegenerusGameBoonModule](contracts/modules/DegenerusGameBoonModule.sol#L22-L343)
 
 contracts/storage/DegenerusGameStorage.sol#L165
 
 
- - [ ] ID-1741
+ - [ ] ID-1744
 [DegenerusGameStorage.BP_ACTIVITY_PENDING_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2063) is never used in [DegenerusGameDecimatorModule](contracts/modules/DegenerusGameDecimatorModule.sol#L21-L1134)
 
 contracts/storage/DegenerusGameStorage.sol#L2063
 
 
- - [ ] ID-1742
+ - [ ] ID-1745
 [DegenerusGameStorage.subsFullyProcessed](contracts/storage/DegenerusGameStorage.sol#L358) is never used in [JackpotSoloTester](contracts/test/JackpotSoloTester.sol#L14-L30)
 
 contracts/storage/DegenerusGameStorage.sol#L358
 
 
- - [ ] ID-1743
+ - [ ] ID-1746
 [DegenerusGameStorage.GO_TIME_MASK](contracts/storage/DegenerusGameStorage.sol#L1160) is never used in [DegenerusGameAdvanceModule](contracts/modules/DegenerusGameAdvanceModule.sol#L30-L2107)
 
 contracts/storage/DegenerusGameStorage.sol#L1160
 
 
- - [ ] ID-1744
+ - [ ] ID-1747
 [DegenerusGameStorage.vrfKeyHash](contracts/storage/DegenerusGameStorage.sol#L1586) is never used in [DegenerusGame](contracts/DegenerusGame.sol#L87-L2624)
 
 contracts/storage/DegenerusGameStorage.sol#L1586
 
 
- - [ ] ID-1745
+ - [ ] ID-1748
 [DegenerusGameStorage.deityBoonRecipientDay](contracts/storage/DegenerusGameStorage.sol#L1770) is never used in [DegenerusGame](contracts/DegenerusGame.sol#L87-L2624)
 
 contracts/storage/DegenerusGameStorage.sol#L1770
 
 
- - [ ] ID-1746
+ - [ ] ID-1749
 [DegenerusGameStorage.FOIL_SEED_TAG](contracts/storage/DegenerusGameStorage.sol#L2587) is never used in [DegenerusGameDecimatorModule](contracts/modules/DegenerusGameDecimatorModule.sol#L21-L1134)
 
 contracts/storage/DegenerusGameStorage.sol#L2587
 
 
- - [ ] ID-1747
+ - [ ] ID-1750
 [DegenerusGameStorage.dailyTicketBudgetsPacked](contracts/storage/DegenerusGameStorage.sol#L442) is never used in [SettleClaimableShortfallTester](contracts/test/SettleClaimableShortfallTester.sol#L17-L66)
 
 contracts/storage/DegenerusGameStorage.sol#L442
 
 
- - [ ] ID-1748
+ - [ ] ID-1751
 [DegenerusGameStorage.BP_DEITY_WHALE_DAY_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2059) is never used in [SettleClaimableShortfallTester](contracts/test/SettleClaimableShortfallTester.sol#L17-L66)
 
 contracts/storage/DegenerusGameStorage.sol#L2059
 
 
- - [ ] ID-1749
+ - [ ] ID-1752
 [DegenerusGameStorage.LOOTBOX_PRESALE_ETH_CAP](contracts/storage/DegenerusGameStorage.sol#L1130) is never used in [JackpotSoloTester](contracts/test/JackpotSoloTester.sol#L14-L30)
 
 contracts/storage/DegenerusGameStorage.sol#L1130
 
 
- - [ ] ID-1750
+ - [ ] ID-1753
 [DegenerusGameStorage.decBucketBurnTotal](contracts/storage/DegenerusGameStorage.sol#L1895) is never used in [DegenerusGameLootboxModule](contracts/modules/DegenerusGameLootboxModule.sol#L39-L2359)
 
 contracts/storage/DegenerusGameStorage.sol#L1895
 
 
- - [ ] ID-1751
+ - [ ] ID-1754
 [DegenerusGameStorage.deityPassOwners](contracts/storage/DegenerusGameStorage.sol#L1252) is never used in [DegenerusGameBingoModule](contracts/modules/DegenerusGameBingoModule.sol#L24-L288)
 
 contracts/storage/DegenerusGameStorage.sol#L1252
 
 
- - [ ] ID-1752
+ - [ ] ID-1755
 [DegenerusGameStorage.PRESALE_BOX_ETH_CAP](contracts/storage/DegenerusGameStorage.sol#L1134) is never used in [DegenerusGameDecimatorModule](contracts/modules/DegenerusGameDecimatorModule.sol#L21-L1134)
 
 contracts/storage/DegenerusGameStorage.sol#L1134
 
 
- - [ ] ID-1753
+ - [ ] ID-1756
 [DegenerusGameStorage.vrfRequestId](contracts/storage/DegenerusGameStorage.sol#L423) is never used in [SettleClaimableShortfallTester](contracts/test/SettleClaimableShortfallTester.sol#L17-L66)
 
 contracts/storage/DegenerusGameStorage.sol#L423
 
 
- - [ ] ID-1754
+ - [ ] ID-1757
 [DegenerusGameStorage.phaseTransitionActive](contracts/storage/DegenerusGameStorage.sol#L304) is never used in [DegenerusGameLootboxModule](contracts/modules/DegenerusGameLootboxModule.sol#L39-L2359)
 
 contracts/storage/DegenerusGameStorage.sol#L304
 
 
- - [ ] ID-1755
+ - [ ] ID-1758
 [DegenerusGameStorage.wwxrpJackpotWhalePassBracketAwarded](contracts/storage/DegenerusGameStorage.sol#L1188) is never used in [DegenerusGameMintModule](contracts/modules/DegenerusGameMintModule.sol#L74-L2136)
 
 contracts/storage/DegenerusGameStorage.sol#L1188
 
 
- - [ ] ID-1756
+ - [ ] ID-1759
 [DegenerusGameStorage.LR_PENDING_FLIP_MASK](contracts/storage/DegenerusGameStorage.sol#L1618) is never used in [DegenerusGameBoonModule](contracts/modules/DegenerusGameBoonModule.sol#L22-L343)
 
 contracts/storage/DegenerusGameStorage.sol#L1618
 
 
- - [ ] ID-1757
+ - [ ] ID-1760
 [DegenerusGameStorage.BP_WHALE_TIER_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2060) is never used in [JackpotSoloTester](contracts/test/JackpotSoloTester.sol#L14-L30)
 
 contracts/storage/DegenerusGameStorage.sol#L2060
 
 
- - [ ] ID-1758
+ - [ ] ID-1761
 [DegenerusGameStorage.LR_MID_DAY_SHIFT](contracts/storage/DegenerusGameStorage.sol#L1619) is never used in [DegenerusGameFoilPackModule](contracts/modules/DegenerusGameFoilPackModule.sol#L30-L815)
 
 contracts/storage/DegenerusGameStorage.sol#L1619
 
 
- - [ ] ID-1759
+ - [ ] ID-1762
 [DegenerusGameStorage.yieldAccumulator](contracts/storage/DegenerusGameStorage.sol#L1925) is never used in [DegenerusGameLootboxModule](contracts/modules/DegenerusGameLootboxModule.sol#L39-L2359)
 
 contracts/storage/DegenerusGameStorage.sol#L1925
 
 
- - [ ] ID-1760
+ - [ ] ID-1763
 [DegenerusGameStorage.BP_DEITY_DEITY_PASS_DAY_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2068) is never used in [DegenerusGameFoilPackModule](contracts/modules/DegenerusGameFoilPackModule.sol#L30-L815)
 
 contracts/storage/DegenerusGameStorage.sol#L2068
 
 
- - [ ] ID-1761
+ - [ ] ID-1764
 [DegenerusGameStorage.ticketRedemptionOpen](contracts/storage/DegenerusGameStorage.sol#L376) is never used in [DegenerusGameLootboxModule](contracts/modules/DegenerusGameLootboxModule.sol#L39-L2359)
 
 contracts/storage/DegenerusGameStorage.sol#L376
 
 
- - [ ] ID-1762
+ - [ ] ID-1765
 [DegenerusGameStorage.GO_JACKPOT_PAID_SHIFT](contracts/storage/DegenerusGameStorage.sol#L1161) is never used in [DegenerusGameWhaleModule](contracts/modules/DegenerusGameWhaleModule.sol#L20-L1026)
 
 contracts/storage/DegenerusGameStorage.sol#L1161
 
 
- - [ ] ID-1763
-[DegenerusGameStorage.foilCursor](contracts/storage/DegenerusGameStorage.sol#L2550) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1774)
+ - [ ] ID-1766
+[DegenerusGameStorage.foilCursor](contracts/storage/DegenerusGameStorage.sol#L2550) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1779)
 
 contracts/storage/DegenerusGameStorage.sol#L2550
 
 
- - [ ] ID-1764
+ - [ ] ID-1767
 [DegenerusGameStorage.PS_ACTIVE_MASK](contracts/storage/DegenerusGameStorage.sol#L1125) is never used in [DegenerusGameGameOverModule](contracts/modules/DegenerusGameGameOverModule.sol#L37-L284)
 
 contracts/storage/DegenerusGameStorage.sol#L1125
 
 
- - [ ] ID-1765
+ - [ ] ID-1768
 [DegenerusGameStorage.deityBoonPacked](contracts/storage/DegenerusGameStorage.sol#L1766) is never used in [DegenerusGameAdvanceModule](contracts/modules/DegenerusGameAdvanceModule.sol#L30-L2107)
 
 contracts/storage/DegenerusGameStorage.sol#L1766
 
 
- - [ ] ID-1766
+ - [ ] ID-1769
 [DegenerusGameStorage.vrfSubscriptionId](contracts/storage/DegenerusGameStorage.sol#L1590) is never used in [DegenerusGameMintModule](contracts/modules/DegenerusGameMintModule.sol#L74-L2136)
 
 contracts/storage/DegenerusGameStorage.sol#L1590
 
 
- - [ ] ID-1767
+ - [ ] ID-1770
 [DegenerusGameStorage.LOOTBOX_CLAIM_THRESHOLD](contracts/storage/DegenerusGameStorage.sol#L161) is never used in [DegenerusGameBoonModule](contracts/modules/DegenerusGameBoonModule.sol#L22-L343)
 
 contracts/storage/DegenerusGameStorage.sol#L161
 
 
- - [ ] ID-1768
+ - [ ] ID-1771
 [DegenerusGameStorage.deityBoonRecipientDay](contracts/storage/DegenerusGameStorage.sol#L1770) is never used in [DegenerusGameBoonModule](contracts/modules/DegenerusGameBoonModule.sol#L22-L343)
 
 contracts/storage/DegenerusGameStorage.sol#L1770
 
 
- - [ ] ID-1769
+ - [ ] ID-1772
 [DegenerusGameStorage.decClaimRounds](contracts/storage/DegenerusGameStorage.sol#L1899) is never used in [JackpotSoloTester](contracts/test/JackpotSoloTester.sol#L14-L30)
 
 contracts/storage/DegenerusGameStorage.sol#L1899
 
 
- - [ ] ID-1770
+ - [ ] ID-1773
 [DegenerusGameStorage.BP_PURCHASE_CLEAR](contracts/storage/DegenerusGameStorage.sol#L2084-L2085) is never used in [DegenerusGameGameOverModule](contracts/modules/DegenerusGameGameOverModule.sol#L37-L284)
 
 contracts/storage/DegenerusGameStorage.sol#L2084-L2085
 
 
- - [ ] ID-1771
+ - [ ] ID-1774
 [DegenerusGameStorage.deityBoonPacked](contracts/storage/DegenerusGameStorage.sol#L1766) is never used in [JackpotSoloTester](contracts/test/JackpotSoloTester.sol#L14-L30)
 
 contracts/storage/DegenerusGameStorage.sol#L1766
 
 
- - [ ] ID-1772
+ - [ ] ID-1775
 [DegenerusGameStorage.lootboxEth](contracts/storage/DegenerusGameStorage.sol#L1067) is never used in [DegenerusGameDecimatorModule](contracts/modules/DegenerusGameDecimatorModule.sol#L21-L1134)
 
 contracts/storage/DegenerusGameStorage.sol#L1067
 
 
- - [ ] ID-1773
-[DegenerusGameStorage.FOIL_PACK_TICKETS](contracts/storage/DegenerusGameStorage.sol#L2571) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1774)
+ - [ ] ID-1776
+[DegenerusGameStorage.FOIL_PACK_TICKETS](contracts/storage/DegenerusGameStorage.sol#L2571) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1779)
 
 contracts/storage/DegenerusGameStorage.sol#L2571
 
 
- - [ ] ID-1774
+ - [ ] ID-1777
 [DegenerusGameStorage.PS_MINT_ETH_SHIFT](contracts/storage/DegenerusGameStorage.sol#L1126) is never used in [DegenerusGame](contracts/DegenerusGame.sol#L87-L2624)
 
 contracts/storage/DegenerusGameStorage.sol#L1126
 
 
- - [ ] ID-1775
+ - [ ] ID-1778
 [DegenerusGameStorage.BP_LAZY_PASS_DAY_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2069) is never used in [JackpotSoloTester](contracts/test/JackpotSoloTester.sol#L14-L30)
 
 contracts/storage/DegenerusGameStorage.sol#L2069
 
 
- - [ ] ID-1776
+ - [ ] ID-1779
 [DegenerusGameStorage.terminalDecBets](contracts/storage/DegenerusGameStorage.sol#L1971) is never used in [GameAfkingModule](contracts/modules/GameAfkingModule.sol#L82-L1941)
 
 contracts/storage/DegenerusGameStorage.sol#L1971
 
 
- - [ ] ID-1777
+ - [ ] ID-1780
 [DegenerusGameStorage.deityBySymbol](contracts/storage/DegenerusGameStorage.sol#L1255) is never used in [DegenerusGameAdvanceModule](contracts/modules/DegenerusGameAdvanceModule.sol#L30-L2107)
 
 contracts/storage/DegenerusGameStorage.sol#L1255
 
 
- - [ ] ID-1778
+ - [ ] ID-1781
 [DegenerusGameStorage.BP_PURCHASE_CLEAR](contracts/storage/DegenerusGameStorage.sol#L2084-L2085) is never used in [DegenerusGameAdvanceModule](contracts/modules/DegenerusGameAdvanceModule.sol#L30-L2107)
 
 contracts/storage/DegenerusGameStorage.sol#L2084-L2085
 
 
- - [ ] ID-1779
+ - [ ] ID-1782
 [DegenerusGameStorage.GO_SWEPT_SHIFT](contracts/storage/DegenerusGameStorage.sol#L1163) is never used in [DegenerusGameMintModule](contracts/modules/DegenerusGameMintModule.sol#L74-L2136)
 
 contracts/storage/DegenerusGameStorage.sol#L1163
 
 
- - [ ] ID-1780
+ - [ ] ID-1783
 [DegenerusGameStorage.lastTerminalDecClaimRound](contracts/storage/DegenerusGameStorage.sol#L1985) is never used in [DegenerusGameLootboxModule](contracts/modules/DegenerusGameLootboxModule.sol#L39-L2359)
 
 contracts/storage/DegenerusGameStorage.sol#L1985
 
 
- - [ ] ID-1781
+ - [ ] ID-1784
 [DegenerusGameStorage._subscriberIndex](contracts/storage/DegenerusGameStorage.sol#L2427) is never used in [DegenerusGameLootboxModule](contracts/modules/DegenerusGameLootboxModule.sol#L39-L2359)
 
 contracts/storage/DegenerusGameStorage.sol#L2427
 
 
- - [ ] ID-1782
+ - [ ] ID-1785
 [DegenerusGameStorage.BP_PURCHASE_TIER_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2055) is never used in [SettleClaimableShortfallTester](contracts/test/SettleClaimableShortfallTester.sol#L17-L66)
 
 contracts/storage/DegenerusGameStorage.sol#L2055
 
 
- - [ ] ID-1783
+ - [ ] ID-1786
 [DegenerusGameStorage.presaleBoxEthSold](contracts/storage/DegenerusGameStorage.sol#L1088) is never used in [GameAfkingModule](contracts/modules/GameAfkingModule.sol#L82-L1941)
 
 contracts/storage/DegenerusGameStorage.sol#L1088
 
 
- - [ ] ID-1784
+ - [ ] ID-1787
 [DegenerusGameStorage.BP_DEITY_WHALE_DAY_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2059) is never used in [DegenerusGameBingoModule](contracts/modules/DegenerusGameBingoModule.sol#L24-L288)
 
 contracts/storage/DegenerusGameStorage.sol#L2059
 
 
- - [ ] ID-1785
+ - [ ] ID-1788
 [DegenerusGameStorage.BP_DECIMATOR_TIER_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2056) is never used in [DegenerusGameMintModule](contracts/modules/DegenerusGameMintModule.sol#L74-L2136)
 
 contracts/storage/DegenerusGameStorage.sol#L2056
 
 
- - [ ] ID-1786
-[DegenerusGameStorage.decBurn](contracts/storage/DegenerusGameStorage.sol#L1890) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1774)
+ - [ ] ID-1789
+[DegenerusGameStorage.decBurn](contracts/storage/DegenerusGameStorage.sol#L1890) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1779)
 
 contracts/storage/DegenerusGameStorage.sol#L1890
 
 
- - [ ] ID-1787
-[DegenerusGameStorage.BP_LAZY_PASS_CLEAR](contracts/storage/DegenerusGameStorage.sol#L2099-L2100) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1774)
+ - [ ] ID-1790
+[DegenerusGameStorage.BP_LAZY_PASS_CLEAR](contracts/storage/DegenerusGameStorage.sol#L2099-L2100) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1779)
 
 contracts/storage/DegenerusGameStorage.sol#L2099-L2100
 
 
- - [ ] ID-1788
+ - [ ] ID-1791
 [DegenerusGameStorage.BP_DEITY_PASS_TIER_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2066) is never used in [DegenerusGameDecimatorModule](contracts/modules/DegenerusGameDecimatorModule.sol#L21-L1134)
 
 contracts/storage/DegenerusGameStorage.sol#L2066
 
 
- - [ ] ID-1789
+ - [ ] ID-1792
 [DegenerusGameStorage.FOIL_PACK_TICKETS](contracts/storage/DegenerusGameStorage.sol#L2571) is never used in [DegenerusGameMintModule](contracts/modules/DegenerusGameMintModule.sol#L74-L2136)
 
 contracts/storage/DegenerusGameStorage.sol#L2571
 
 
- - [ ] ID-1790
+ - [ ] ID-1793
 [DegenerusGameStorage.BP_ACTIVITY_PENDING_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2063) is never used in [GameAfkingModule](contracts/modules/GameAfkingModule.sol#L82-L1941)
 
 contracts/storage/DegenerusGameStorage.sol#L2063
 
 
- - [ ] ID-1791
+ - [ ] ID-1794
 [DegenerusGameStorage.LR_INDEX_MASK](contracts/storage/DegenerusGameStorage.sol#L1612) is never used in [JackpotSoloTester](contracts/test/JackpotSoloTester.sol#L14-L30)
 
 contracts/storage/DegenerusGameStorage.sol#L1612
 
 
- - [ ] ID-1792
+ - [ ] ID-1795
 [DegenerusGameStorage.ticketLevel](contracts/storage/DegenerusGameStorage.sol#L535) is never used in [DegenerusGameDecimatorModule](contracts/modules/DegenerusGameDecimatorModule.sol#L21-L1134)
 
 contracts/storage/DegenerusGameStorage.sol#L535
 
 
- - [ ] ID-1793
+ - [ ] ID-1796
 [DegenerusGameStorage.dailyHeroWagers](contracts/storage/DegenerusGameStorage.sol#L1915) is never used in [SettleClaimableShortfallTester](contracts/test/SettleClaimableShortfallTester.sol#L17-L66)
 
 contracts/storage/DegenerusGameStorage.sol#L1915
 
 
- - [ ] ID-1794
+ - [ ] ID-1797
 [DegenerusGameStorage.BP_DECIMATOR_TIER_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2056) is never used in [DegenerusGameGameOverModule](contracts/modules/DegenerusGameGameOverModule.sol#L37-L284)
 
 contracts/storage/DegenerusGameStorage.sol#L2056
 
 
- - [ ] ID-1795
+ - [ ] ID-1798
 [DegenerusGameStorage.PASS_STREAK_FLOOR_POINTS](contracts/storage/DegenerusGameStorage.sol#L146) is never used in [DegenerusGameBoonModule](contracts/modules/DegenerusGameBoonModule.sol#L22-L343)
 
 contracts/storage/DegenerusGameStorage.sol#L146
 
 
- - [ ] ID-1796
+ - [ ] ID-1799
 [DegenerusGameStorage.deityPassPricePaid](contracts/storage/DegenerusGameStorage.sol#L1249) is never used in [SettleClaimableShortfallTester](contracts/test/SettleClaimableShortfallTester.sol#L17-L66)
 
 contracts/storage/DegenerusGameStorage.sol#L1249
 
 
- - [ ] ID-1797
+ - [ ] ID-1800
 [DegenerusGameStorage.decBucketOffsetPacked](contracts/storage/DegenerusGameStorage.sol#L1904) is never used in [DegenerusGameAdvanceModule](contracts/modules/DegenerusGameAdvanceModule.sol#L30-L2107)
 
 contracts/storage/DegenerusGameStorage.sol#L1904
 
 
- - [ ] ID-1798
+ - [ ] ID-1801
 [DegenerusGameStorage.LR_PENDING_ETH_SHIFT](contracts/storage/DegenerusGameStorage.sol#L1613) is never used in [SettleClaimableShortfallTester](contracts/test/SettleClaimableShortfallTester.sol#L17-L66)
 
 contracts/storage/DegenerusGameStorage.sol#L1613
 
 
- - [ ] ID-1799
+ - [ ] ID-1802
 [DegenerusGameStorage.FOIL_CCY_TAG](contracts/storage/DegenerusGameStorage.sol#L2593) is never used in [DegenerusGameDecimatorModule](contracts/modules/DegenerusGameDecimatorModule.sol#L21-L1134)
 
 contracts/storage/DegenerusGameStorage.sol#L2593
 
 
- - [ ] ID-1800
+ - [ ] ID-1803
 [DegenerusGameStorage.BP_LAZY_PASS_CLEAR](contracts/storage/DegenerusGameStorage.sol#L2099-L2100) is never used in [DegenerusGameAdvanceModule](contracts/modules/DegenerusGameAdvanceModule.sol#L30-L2107)
 
 contracts/storage/DegenerusGameStorage.sol#L2099-L2100
 
 
- - [ ] ID-1801
+ - [ ] ID-1804
 [DegenerusGameStorage.foilMatchClaimed](contracts/storage/DegenerusGameStorage.sol#L2518) is never used in [GameAfkingModule](contracts/modules/GameAfkingModule.sol#L82-L1941)
 
 contracts/storage/DegenerusGameStorage.sol#L2518
 
 
- - [ ] ID-1802
+ - [ ] ID-1805
 [DegenerusGameStorage.BOOTSTRAP_PRIZE_POOL](contracts/storage/DegenerusGameStorage.sol#L165) is never used in [DegenerusGameFoilPackModule](contracts/modules/DegenerusGameFoilPackModule.sol#L30-L815)
 
 contracts/storage/DegenerusGameStorage.sol#L165
 
 
- - [ ] ID-1803
+ - [ ] ID-1806
 [DegenerusGameStorage.presaleBoxEthSold](contracts/storage/DegenerusGameStorage.sol#L1088) is never used in [DegenerusGameGameOverModule](contracts/modules/DegenerusGameGameOverModule.sol#L37-L284)
 
 contracts/storage/DegenerusGameStorage.sol#L1088
 
 
- - [ ] ID-1804
+ - [ ] ID-1807
 [DegenerusGameStorage.decBurn](contracts/storage/DegenerusGameStorage.sol#L1890) is never used in [DegenerusGameWhaleModule](contracts/modules/DegenerusGameWhaleModule.sol#L20-L1026)
 
 contracts/storage/DegenerusGameStorage.sol#L1890
 
 
- - [ ] ID-1805
+ - [ ] ID-1808
 [DegenerusGameStorage.PRESALE_BOX_ETH_CAP](contracts/storage/DegenerusGameStorage.sol#L1134) is never used in [JackpotSoloTester](contracts/test/JackpotSoloTester.sol#L14-L30)
 
 contracts/storage/DegenerusGameStorage.sol#L1134
 
 
- - [ ] ID-1806
+ - [ ] ID-1809
 [DegenerusGameStorage.LR_MID_DAY_MASK](contracts/storage/DegenerusGameStorage.sol#L1620) is never used in [DegenerusGame](contracts/DegenerusGame.sol#L87-L2624)
 
 contracts/storage/DegenerusGameStorage.sol#L1620
 
 
- - [ ] ID-1807
+ - [ ] ID-1810
 [DegenerusGameStorage.PASS_MINT_COUNT_FLOOR_POINTS](contracts/storage/DegenerusGameStorage.sol#L149) is never used in [JackpotSoloTester](contracts/test/JackpotSoloTester.sol#L14-L30)
 
 contracts/storage/DegenerusGameStorage.sol#L149
 
 
- - [ ] ID-1808
+ - [ ] ID-1811
 [DegenerusGameStorage.PRESALE_BOX_AMOUNT_MASK](contracts/storage/DegenerusGameStorage.sol#L1110) is never used in [DegenerusGameBingoModule](contracts/modules/DegenerusGameBingoModule.sol#L24-L288)
 
 contracts/storage/DegenerusGameStorage.sol#L1110
 
 
- - [ ] ID-1809
+ - [ ] ID-1812
 [DegenerusGameStorage.BP_DEITY_LOOTBOX_DAY_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2051) is never used in [DegenerusGameBingoModule](contracts/modules/DegenerusGameBingoModule.sol#L24-L288)
 
 contracts/storage/DegenerusGameStorage.sol#L2051
 
 
- - [ ] ID-1810
+ - [ ] ID-1813
 [DegenerusGameStorage._subOpenCursor](contracts/storage/DegenerusGameStorage.sol#L2438) is never used in [DegenerusGame](contracts/DegenerusGame.sol#L87-L2624)
 
 contracts/storage/DegenerusGameStorage.sol#L2438
 
 
- - [ ] ID-1811
+ - [ ] ID-1814
 [DegenerusGameStorage.BP_ACTIVITY_CLEAR](contracts/storage/DegenerusGameStorage.sol#L2094) is never used in [DegenerusGameMintModule](contracts/modules/DegenerusGameMintModule.sol#L74-L2136)
 
 contracts/storage/DegenerusGameStorage.sol#L2094
 
 
- - [ ] ID-1812
+ - [ ] ID-1815
 [DegenerusGameStorage.GO_SWEPT_MASK](contracts/storage/DegenerusGameStorage.sol#L1164) is never used in [SettleClaimableShortfallTester](contracts/test/SettleClaimableShortfallTester.sol#L17-L66)
 
 contracts/storage/DegenerusGameStorage.sol#L1164
 
 
- - [ ] ID-1813
+ - [ ] ID-1816
 [DegenerusGameStorage.boxPlayers](contracts/storage/DegenerusGameStorage.sol#L2481) is never used in [DegenerusGameBingoModule](contracts/modules/DegenerusGameBingoModule.sol#L24-L288)
 
 contracts/storage/DegenerusGameStorage.sol#L2481
 
 
- - [ ] ID-1814
+ - [ ] ID-1817
 [DegenerusGameStorage.BP_DEITY_COINFLIP_DAY_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2048) is never used in [DegenerusGame](contracts/DegenerusGame.sol#L87-L2624)
 
 contracts/storage/DegenerusGameStorage.sol#L2048
 
 
- - [ ] ID-1815
+ - [ ] ID-1818
 [DegenerusGameStorage.LR_INDEX_MASK](contracts/storage/DegenerusGameStorage.sol#L1612) is never used in [DegenerusGameGameOverModule](contracts/modules/DegenerusGameGameOverModule.sol#L37-L284)
 
 contracts/storage/DegenerusGameStorage.sol#L1612
 
 
- - [ ] ID-1816
+ - [ ] ID-1819
 [DegenerusGameStorage.ticketCursor](contracts/storage/DegenerusGameStorage.sol#L532) is never used in [DegenerusGameGameOverModule](contracts/modules/DegenerusGameGameOverModule.sol#L37-L284)
 
 contracts/storage/DegenerusGameStorage.sol#L532
 
 
- - [ ] ID-1817
+ - [ ] ID-1820
 [DegenerusGameStorage.PRESALE_BOX_SOLD_SHIFT](contracts/storage/DegenerusGameStorage.sol#L1108) is never used in [DegenerusGameBingoModule](contracts/modules/DegenerusGameBingoModule.sol#L24-L288)
 
 contracts/storage/DegenerusGameStorage.sol#L1108
 
 
- - [ ] ID-1818
+ - [ ] ID-1821
 [DegenerusGameStorage.subsFullyProcessed](contracts/storage/DegenerusGameStorage.sol#L358) is never used in [GameAfkingModule](contracts/modules/GameAfkingModule.sol#L82-L1941)
 
 contracts/storage/DegenerusGameStorage.sol#L358
 
 
- - [ ] ID-1819
+ - [ ] ID-1822
 [DegenerusGameStorage.LOOTBOX_CLAIM_THRESHOLD](contracts/storage/DegenerusGameStorage.sol#L161) is never used in [DegenerusGameFoilPackModule](contracts/modules/DegenerusGameFoilPackModule.sol#L30-L815)
 
 contracts/storage/DegenerusGameStorage.sol#L161
 
 
- - [ ] ID-1820
+ - [ ] ID-1823
 [DegenerusGameStorage.PS_MINT_ETH_MASK](contracts/storage/DegenerusGameStorage.sol#L1127) is never used in [DegenerusGameGameOverModule](contracts/modules/DegenerusGameGameOverModule.sol#L37-L284)
 
 contracts/storage/DegenerusGameStorage.sol#L1127
 
 
- - [ ] ID-1821
+ - [ ] ID-1824
 [DegenerusGameStorage.dailyJackpotCoinTicketsPending](contracts/storage/DegenerusGameStorage.sol#L312) is never used in [DegenerusGameGameOverModule](contracts/modules/DegenerusGameGameOverModule.sol#L37-L284)
 
 contracts/storage/DegenerusGameStorage.sol#L312
 
 
- - [ ] ID-1822
+ - [ ] ID-1825
 [DegenerusGameStorage.coinflip](contracts/storage/DegenerusGameStorage.sol#L127-L128) is never used in [SettleClaimableShortfallTester](contracts/test/SettleClaimableShortfallTester.sol#L17-L66)
 
 contracts/storage/DegenerusGameStorage.sol#L127-L128
 
 
- - [ ] ID-1823
+ - [ ] ID-1826
 [DegenerusGameStorage.PRESALE_BOX_ETH_CAP](contracts/storage/DegenerusGameStorage.sol#L1134) is never used in [DegenerusGameAdvanceModule](contracts/modules/DegenerusGameAdvanceModule.sol#L30-L2107)
 
 contracts/storage/DegenerusGameStorage.sol#L1134
 
 
- - [ ] ID-1824
+ - [ ] ID-1827
 [DegenerusGameStorage.LR_PENDING_FLIP_SHIFT](contracts/storage/DegenerusGameStorage.sol#L1617) is never used in [DegenerusGameLootboxModule](contracts/modules/DegenerusGameLootboxModule.sol#L39-L2359)
 
 contracts/storage/DegenerusGameStorage.sol#L1617
 
 
- - [ ] ID-1825
+ - [ ] ID-1828
 [DegenerusGameStorage.BOOTSTRAP_PRIZE_POOL](contracts/storage/DegenerusGameStorage.sol#L165) is never used in [SettleClaimableShortfallTester](contracts/test/SettleClaimableShortfallTester.sol#L17-L66)
 
 contracts/storage/DegenerusGameStorage.sol#L165
 
 
- - [ ] ID-1826
+ - [ ] ID-1829
 [DegenerusGameStorage.BP_COINFLIP_DAY_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2047) is never used in [DegenerusGameMintModule](contracts/modules/DegenerusGameMintModule.sol#L74-L2136)
 
 contracts/storage/DegenerusGameStorage.sol#L2047
 
 
- - [ ] ID-1827
+ - [ ] ID-1830
 [DegenerusGameStorage.LR_THRESHOLD_SHIFT](contracts/storage/DegenerusGameStorage.sol#L1615) is never used in [DegenerusGameFoilPackModule](contracts/modules/DegenerusGameFoilPackModule.sol#L30-L815)
 
 contracts/storage/DegenerusGameStorage.sol#L1615
 
 
- - [ ] ID-1828
+ - [ ] ID-1831
 [DegenerusGameStorage.LR_INDEX_MASK](contracts/storage/DegenerusGameStorage.sol#L1612) is never used in [DegenerusGameBingoModule](contracts/modules/DegenerusGameBingoModule.sol#L24-L288)
 
 contracts/storage/DegenerusGameStorage.sol#L1612
 
 
- - [ ] ID-1829
+ - [ ] ID-1832
 [DegenerusGameStorage.BP_WHALE_TIER_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2060) is never used in [DegenerusGameBoonModule](contracts/modules/DegenerusGameBoonModule.sol#L22-L343)
 
 contracts/storage/DegenerusGameStorage.sol#L2060
 
 
- - [ ] ID-1830
+ - [ ] ID-1833
 [DegenerusGameStorage.decClaimRounds](contracts/storage/DegenerusGameStorage.sol#L1899) is never used in [DegenerusGameBingoModule](contracts/modules/DegenerusGameBingoModule.sol#L24-L288)
 
 contracts/storage/DegenerusGameStorage.sol#L1899
 
 
- - [ ] ID-1831
+ - [ ] ID-1834
 [DegenerusGameStorage.GO_SWEPT_MASK](contracts/storage/DegenerusGameStorage.sol#L1164) is never used in [DegenerusGameBoonModule](contracts/modules/DegenerusGameBoonModule.sol#L22-L343)
 
 contracts/storage/DegenerusGameStorage.sol#L1164
 
 
- - [ ] ID-1832
+ - [ ] ID-1835
 [DegenerusGameStorage.deityPassOwners](contracts/storage/DegenerusGameStorage.sol#L1252) is never used in [SettleClaimableShortfallTester](contracts/test/SettleClaimableShortfallTester.sol#L17-L66)
 
 contracts/storage/DegenerusGameStorage.sol#L1252
 
 
- - [ ] ID-1833
+ - [ ] ID-1836
 [DegenerusGameStorage.totalFlipReversals](contracts/storage/DegenerusGameStorage.sol#L429) is never used in [DegenerusGameGameOverModule](contracts/modules/DegenerusGameGameOverModule.sol#L37-L284)
 
 contracts/storage/DegenerusGameStorage.sol#L429
 
 
- - [ ] ID-1834
+ - [ ] ID-1837
 [DegenerusGameStorage.FOIL_SPIN_TAG](contracts/storage/DegenerusGameStorage.sol#L2594) is never used in [DegenerusGameWhaleModule](contracts/modules/DegenerusGameWhaleModule.sol#L20-L1026)
 
 contracts/storage/DegenerusGameStorage.sol#L2594
 
 
- - [ ] ID-1835
+ - [ ] ID-1838
 [DegenerusGameStorage.affiliateDgnrsClaimedBy](contracts/storage/DegenerusGameStorage.sol#L1205-L1206) is never used in [SettleClaimableShortfallTester](contracts/test/SettleClaimableShortfallTester.sol#L17-L66)
 
 contracts/storage/DegenerusGameStorage.sol#L1205-L1206
 
 
- - [ ] ID-1836
+ - [ ] ID-1839
 [DegenerusGameStorage.presaleBoxEthSold](contracts/storage/DegenerusGameStorage.sol#L1088) is never used in [DegenerusGameWhaleModule](contracts/modules/DegenerusGameWhaleModule.sol#L20-L1026)
 
 contracts/storage/DegenerusGameStorage.sol#L1088
 
 
- - [ ] ID-1837
+ - [ ] ID-1840
 [DegenerusGameStorage.BOOTSTRAP_PRIZE_POOL](contracts/storage/DegenerusGameStorage.sol#L165) is never used in [GameAfkingModule](contracts/modules/GameAfkingModule.sol#L82-L1941)
 
 contracts/storage/DegenerusGameStorage.sol#L165
 
 
- - [ ] ID-1838
+ - [ ] ID-1841
 [DegenerusGameStorage.BP_WHALE_CLEAR](contracts/storage/DegenerusGameStorage.sol#L2090) is never used in [DegenerusGameBingoModule](contracts/modules/DegenerusGameBingoModule.sol#L24-L288)
 
 contracts/storage/DegenerusGameStorage.sol#L2090
 
 
- - [ ] ID-1839
+ - [ ] ID-1842
 [DegenerusGameStorage.whalePassClaims](contracts/storage/DegenerusGameStorage.sol#L1183) is never used in [DegenerusGameGameOverModule](contracts/modules/DegenerusGameGameOverModule.sol#L37-L284)
 
 contracts/storage/DegenerusGameStorage.sol#L1183
 
 
- - [ ] ID-1840
+ - [ ] ID-1843
 [DegenerusGameStorage.decClaimRounds](contracts/storage/DegenerusGameStorage.sol#L1899) is never used in [DegenerusGame](contracts/DegenerusGame.sol#L87-L2624)
 
 contracts/storage/DegenerusGameStorage.sol#L1899
 
 
- - [ ] ID-1841
+ - [ ] ID-1844
 [DegenerusGameStorage.ticketLevel](contracts/storage/DegenerusGameStorage.sol#L535) is never used in [DegenerusGameBoonModule](contracts/modules/DegenerusGameBoonModule.sol#L22-L343)
 
 contracts/storage/DegenerusGameStorage.sol#L535
 
 
- - [ ] ID-1842
+ - [ ] ID-1845
 [DegenerusGameStorage.LB_DISTRESS_SCALE](contracts/storage/DegenerusGameStorage.sol#L1078) is never used in [DegenerusGameAdvanceModule](contracts/modules/DegenerusGameAdvanceModule.sol#L30-L2107)
 
 contracts/storage/DegenerusGameStorage.sol#L1078
 
 
- - [ ] ID-1843
+ - [ ] ID-1846
 [DegenerusGameStorage.FOIL_CCY_TAG](contracts/storage/DegenerusGameStorage.sol#L2593) is never used in [DegenerusGameBingoModule](contracts/modules/DegenerusGameBingoModule.sol#L24-L288)
 
 contracts/storage/DegenerusGameStorage.sol#L2593
 
 
- - [ ] ID-1844
+ - [ ] ID-1847
 [DegenerusGameStorage.presaleDrained](contracts/storage/DegenerusGameStorage.sol#L367) is never used in [SettleClaimableShortfallTester](contracts/test/SettleClaimableShortfallTester.sol#L17-L66)
 
 contracts/storage/DegenerusGameStorage.sol#L367
 
 
- - [ ] ID-1845
+ - [ ] ID-1848
 [DegenerusGameStorage.BP_COINFLIP_TIER_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2049) is never used in [DegenerusGameGameOverModule](contracts/modules/DegenerusGameGameOverModule.sol#L37-L284)
 
 contracts/storage/DegenerusGameStorage.sol#L2049
 
 
- - [ ] ID-1846
+ - [ ] ID-1849
 [DegenerusGameStorage.BP_DECIMATOR_TIER_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2056) is never used in [DegenerusGameFoilPackModule](contracts/modules/DegenerusGameFoilPackModule.sol#L30-L815)
 
 contracts/storage/DegenerusGameStorage.sol#L2056
 
 
- - [ ] ID-1847
+ - [ ] ID-1850
 [DegenerusGameStorage.dailyHeroWagers](contracts/storage/DegenerusGameStorage.sol#L1915) is never used in [DegenerusGameDecimatorModule](contracts/modules/DegenerusGameDecimatorModule.sol#L21-L1134)
 
 contracts/storage/DegenerusGameStorage.sol#L1915
 
 
- - [ ] ID-1848
+ - [ ] ID-1851
 [DegenerusGameStorage.BP_LOOTBOX_DAY_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2050) is never used in [GameAfkingModule](contracts/modules/GameAfkingModule.sol#L82-L1941)
 
 contracts/storage/DegenerusGameStorage.sol#L2050
 
 
- - [ ] ID-1849
+ - [ ] ID-1852
 [DegenerusGameStorage.ticketLevel](contracts/storage/DegenerusGameStorage.sol#L535) is never used in [DegenerusGameFoilPackModule](contracts/modules/DegenerusGameFoilPackModule.sol#L30-L815)
 
 contracts/storage/DegenerusGameStorage.sol#L535
 
 
- - [ ] ID-1850
-[DegenerusGameStorage.PS_ACTIVE_SHIFT](contracts/storage/DegenerusGameStorage.sol#L1124) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1774)
+ - [ ] ID-1853
+[DegenerusGameStorage.PS_ACTIVE_SHIFT](contracts/storage/DegenerusGameStorage.sol#L1124) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1779)
 
 contracts/storage/DegenerusGameStorage.sol#L1124
 
 
- - [ ] ID-1851
+ - [ ] ID-1854
 [DegenerusGameStorage.BP_LAZY_PASS_CLEAR](contracts/storage/DegenerusGameStorage.sol#L2099-L2100) is never used in [DegenerusGameBingoModule](contracts/modules/DegenerusGameBingoModule.sol#L24-L288)
 
 contracts/storage/DegenerusGameStorage.sol#L2099-L2100
 
 
- - [ ] ID-1852
+ - [ ] ID-1855
 [DegenerusGameStorage.ticketRedemptionOpen](contracts/storage/DegenerusGameStorage.sol#L376) is never used in [GameAfkingModule](contracts/modules/GameAfkingModule.sol#L82-L1941)
 
 contracts/storage/DegenerusGameStorage.sol#L376
 
 
- - [ ] ID-1853
+ - [ ] ID-1856
 [DegenerusGameStorage.dailyTicketBudgetsPacked](contracts/storage/DegenerusGameStorage.sol#L442) is never used in [DegenerusGameFoilPackModule](contracts/modules/DegenerusGameFoilPackModule.sol#L30-L815)
 
 contracts/storage/DegenerusGameStorage.sol#L442
 
 
- - [ ] ID-1854
+ - [ ] ID-1857
 [DegenerusGameStorage.PASS_STREAK_FLOOR_POINTS](contracts/storage/DegenerusGameStorage.sol#L146) is never used in [DegenerusGameGameOverModule](contracts/modules/DegenerusGameGameOverModule.sol#L37-L284)
 
 contracts/storage/DegenerusGameStorage.sol#L146
 
 
- - [ ] ID-1855
-[DegenerusGameStorage.BP_DECIMATOR_CLEAR](contracts/storage/DegenerusGameStorage.sol#L2087-L2088) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1774)
-
-contracts/storage/DegenerusGameStorage.sol#L2087-L2088
-
-
- - [ ] ID-1856
-[DegenerusGameStorage.BP_DECIMATOR_CLEAR](contracts/storage/DegenerusGameStorage.sol#L2087-L2088) is never used in [DegenerusGame](contracts/DegenerusGame.sol#L87-L2624)
-
-contracts/storage/DegenerusGameStorage.sol#L2087-L2088
-
-
- - [ ] ID-1857
-[DegenerusGameStorage.BP_DEITY_PASS_TIER_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2066) is never used in [DegenerusGameMintModule](contracts/modules/DegenerusGameMintModule.sol#L74-L2136)
-
-contracts/storage/DegenerusGameStorage.sol#L2066
-
-
  - [ ] ID-1858
-[DegenerusGameStorage.BP_DECIMATOR_CLEAR](contracts/storage/DegenerusGameStorage.sol#L2087-L2088) is never used in [DegenerusGameBingoModule](contracts/modules/DegenerusGameBingoModule.sol#L24-L288)
+[DegenerusGameStorage.BP_DECIMATOR_CLEAR](contracts/storage/DegenerusGameStorage.sol#L2087-L2088) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1779)
 
 contracts/storage/DegenerusGameStorage.sol#L2087-L2088
 
 
  - [ ] ID-1859
+[DegenerusGameStorage.BP_DECIMATOR_CLEAR](contracts/storage/DegenerusGameStorage.sol#L2087-L2088) is never used in [DegenerusGame](contracts/DegenerusGame.sol#L87-L2624)
+
+contracts/storage/DegenerusGameStorage.sol#L2087-L2088
+
+
+ - [ ] ID-1860
+[DegenerusGameStorage.BP_DEITY_PASS_TIER_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2066) is never used in [DegenerusGameMintModule](contracts/modules/DegenerusGameMintModule.sol#L74-L2136)
+
+contracts/storage/DegenerusGameStorage.sol#L2066
+
+
+ - [ ] ID-1861
+[DegenerusGameStorage.BP_DECIMATOR_CLEAR](contracts/storage/DegenerusGameStorage.sol#L2087-L2088) is never used in [DegenerusGameBingoModule](contracts/modules/DegenerusGameBingoModule.sol#L24-L288)
+
+contracts/storage/DegenerusGameStorage.sol#L2087-L2088
+
+
+ - [ ] ID-1862
 [DegenerusGameStorage.GO_JACKPOT_PAID_SHIFT](contracts/storage/DegenerusGameStorage.sol#L1161) is never used in [JackpotSoloTester](contracts/test/JackpotSoloTester.sol#L14-L30)
 
 contracts/storage/DegenerusGameStorage.sol#L1161
 
 
- - [ ] ID-1860
+ - [ ] ID-1863
 [DegenerusGameStorage.presaleCloseIndex](contracts/storage/DegenerusGameStorage.sol#L2465) is never used in [DegenerusGameWhaleModule](contracts/modules/DegenerusGameWhaleModule.sol#L20-L1026)
 
 contracts/storage/DegenerusGameStorage.sol#L2465
 
 
- - [ ] ID-1861
+ - [ ] ID-1864
 [DegenerusGameStorage.LR_PENDING_FLIP_MASK](contracts/storage/DegenerusGameStorage.sol#L1618) is never used in [DegenerusGameGameOverModule](contracts/modules/DegenerusGameGameOverModule.sol#L37-L284)
 
 contracts/storage/DegenerusGameStorage.sol#L1618
 
 
- - [ ] ID-1862
+ - [ ] ID-1865
 [DegenerusGameStorage.GO_TIME_MASK](contracts/storage/DegenerusGameStorage.sol#L1160) is never used in [DegenerusGameBingoModule](contracts/modules/DegenerusGameBingoModule.sol#L24-L288)
 
 contracts/storage/DegenerusGameStorage.sol#L1160
 
 
- - [ ] ID-1863
+ - [ ] ID-1866
 [DegenerusGameStorage.BP_ACTIVITY_CLEAR](contracts/storage/DegenerusGameStorage.sol#L2094) is never used in [DegenerusGameWhaleModule](contracts/modules/DegenerusGameWhaleModule.sol#L20-L1026)
 
 contracts/storage/DegenerusGameStorage.sol#L2094
 
 
- - [ ] ID-1864
+ - [ ] ID-1867
 [DegenerusGameStorage.PS_MINT_ETH_SHIFT](contracts/storage/DegenerusGameStorage.sol#L1126) is never used in [JackpotSoloTester](contracts/test/JackpotSoloTester.sol#L14-L30)
 
 contracts/storage/DegenerusGameStorage.sol#L1126
 
 
- - [ ] ID-1865
+ - [ ] ID-1868
 [DegenerusGameStorage.LR_PENDING_ETH_SHIFT](contracts/storage/DegenerusGameStorage.sol#L1613) is never used in [JackpotSoloTester](contracts/test/JackpotSoloTester.sol#L14-L30)
 
 contracts/storage/DegenerusGameStorage.sol#L1613
 
 
- - [ ] ID-1866
+ - [ ] ID-1869
 [DegenerusGameStorage.BP_PURCHASE_CLEAR](contracts/storage/DegenerusGameStorage.sol#L2084-L2085) is never used in [SettleClaimableShortfallTester](contracts/test/SettleClaimableShortfallTester.sol#L17-L66)
 
 contracts/storage/DegenerusGameStorage.sol#L2084-L2085
 
 
- - [ ] ID-1867
+ - [ ] ID-1870
 [DegenerusGameStorage._subCursor](contracts/storage/DegenerusGameStorage.sol#L2434) is never used in [SettleClaimableShortfallTester](contracts/test/SettleClaimableShortfallTester.sol#L17-L66)
 
 contracts/storage/DegenerusGameStorage.sol#L2434
 
 
- - [ ] ID-1868
+ - [ ] ID-1871
 [DegenerusGameStorage._fundingSourceOf](contracts/storage/DegenerusGameStorage.sol#L2420) is never used in [DegenerusGameFoilPackModule](contracts/modules/DegenerusGameFoilPackModule.sol#L30-L815)
 
 contracts/storage/DegenerusGameStorage.sol#L2420
 
 
- - [ ] ID-1869
+ - [ ] ID-1872
 [DegenerusGameStorage.lootboxRngWordByIndex](contracts/storage/DegenerusGameStorage.sol#L1755) is never used in [JackpotSoloTester](contracts/test/JackpotSoloTester.sol#L14-L30)
 
 contracts/storage/DegenerusGameStorage.sol#L1755
 
 
- - [ ] ID-1870
+ - [ ] ID-1873
 [DegenerusGameStorage.BP_DEITY_DECIMATOR_DAY_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2057) is never used in [DegenerusGameWhaleModule](contracts/modules/DegenerusGameWhaleModule.sol#L20-L1026)
 
 contracts/storage/DegenerusGameStorage.sol#L2057
 
 
- - [ ] ID-1871
-[DegenerusGameStorage.vrfKeyHash](contracts/storage/DegenerusGameStorage.sol#L1586) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1774)
+ - [ ] ID-1874
+[DegenerusGameStorage.vrfKeyHash](contracts/storage/DegenerusGameStorage.sol#L1586) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1779)
 
 contracts/storage/DegenerusGameStorage.sol#L1586
 
 
- - [ ] ID-1872
+ - [ ] ID-1875
 [DegenerusGameStorage.BP_WHALE_CLEAR](contracts/storage/DegenerusGameStorage.sol#L2090) is never used in [DegenerusGameAdvanceModule](contracts/modules/DegenerusGameAdvanceModule.sol#L30-L2107)
 
 contracts/storage/DegenerusGameStorage.sol#L2090
 
 
- - [ ] ID-1873
+ - [ ] ID-1876
 [DegenerusGameStorage.lvlTraitEntry](contracts/storage/DegenerusGameStorage.sol#L473) is never used in [DegenerusGameDecimatorModule](contracts/modules/DegenerusGameDecimatorModule.sol#L21-L1134)
 
 contracts/storage/DegenerusGameStorage.sol#L473
 
 
- - [ ] ID-1874
+ - [ ] ID-1877
 [DegenerusGameStorage.deityBySymbol](contracts/storage/DegenerusGameStorage.sol#L1255) is never used in [DegenerusGameFoilPackModule](contracts/modules/DegenerusGameFoilPackModule.sol#L30-L815)
 
 contracts/storage/DegenerusGameStorage.sol#L1255
 
 
- - [ ] ID-1875
+ - [ ] ID-1878
 [DegenerusGameStorage.FOIL_PACK_ENTRIES](contracts/storage/DegenerusGameStorage.sol#L2566) is never used in [DegenerusGameBingoModule](contracts/modules/DegenerusGameBingoModule.sol#L24-L288)
 
 contracts/storage/DegenerusGameStorage.sol#L2566
 
 
- - [ ] ID-1876
+ - [ ] ID-1879
 [DegenerusGameStorage.LR_PENDING_FLIP_MASK](contracts/storage/DegenerusGameStorage.sol#L1618) is never used in [DegenerusGameFoilPackModule](contracts/modules/DegenerusGameFoilPackModule.sol#L30-L815)
 
 contracts/storage/DegenerusGameStorage.sol#L1618
 
 
- - [ ] ID-1877
+ - [ ] ID-1880
 [DegenerusGameStorage.BP_LOOTBOX_CLEAR](contracts/storage/DegenerusGameStorage.sol#L2081-L2082) is never used in [DegenerusGameAdvanceModule](contracts/modules/DegenerusGameAdvanceModule.sol#L30-L2107)
 
 contracts/storage/DegenerusGameStorage.sol#L2081-L2082
 
 
- - [ ] ID-1878
-[DegenerusGameStorage.FOIL_SPIN_TAG](contracts/storage/DegenerusGameStorage.sol#L2594) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1774)
+ - [ ] ID-1881
+[DegenerusGameStorage.FOIL_SPIN_TAG](contracts/storage/DegenerusGameStorage.sol#L2594) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1779)
 
 contracts/storage/DegenerusGameStorage.sol#L2594
 
 
- - [ ] ID-1879
+ - [ ] ID-1882
 [DegenerusGameStorage.PRESALE_BOX_SOLD_SHIFT](contracts/storage/DegenerusGameStorage.sol#L1108) is never used in [SettleClaimableShortfallTester](contracts/test/SettleClaimableShortfallTester.sol#L17-L66)
 
 contracts/storage/DegenerusGameStorage.sol#L1108
 
 
- - [ ] ID-1880
+ - [ ] ID-1883
 [DegenerusGameStorage.GO_TIME_MASK](contracts/storage/DegenerusGameStorage.sol#L1160) is never used in [DegenerusGameMintModule](contracts/modules/DegenerusGameMintModule.sol#L74-L2136)
 
 contracts/storage/DegenerusGameStorage.sol#L1160
 
 
- - [ ] ID-1881
+ - [ ] ID-1884
 [DegenerusGameStorage.decBucketBurnTotal](contracts/storage/DegenerusGameStorage.sol#L1895) is never used in [JackpotSoloTester](contracts/test/JackpotSoloTester.sol#L14-L30)
 
 contracts/storage/DegenerusGameStorage.sol#L1895
 
 
- - [ ] ID-1882
+ - [ ] ID-1885
 [DegenerusGameStorage.LR_PENDING_FLIP_MASK](contracts/storage/DegenerusGameStorage.sol#L1618) is never used in [DegenerusGameWhaleModule](contracts/modules/DegenerusGameWhaleModule.sol#L20-L1026)
 
 contracts/storage/DegenerusGameStorage.sol#L1618
 
 
- - [ ] ID-1883
+ - [ ] ID-1886
 [DegenerusGameStorage.BP_WHALE_DAY_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2058) is never used in [DegenerusGameAdvanceModule](contracts/modules/DegenerusGameAdvanceModule.sol#L30-L2107)
 
 contracts/storage/DegenerusGameStorage.sol#L2058
 
 
- - [ ] ID-1884
+ - [ ] ID-1887
 [DegenerusGameStorage.ticketCursor](contracts/storage/DegenerusGameStorage.sol#L532) is never used in [DegenerusGameFoilPackModule](contracts/modules/DegenerusGameFoilPackModule.sol#L30-L815)
 
 contracts/storage/DegenerusGameStorage.sol#L532
 
 
- - [ ] ID-1885
+ - [ ] ID-1888
 [DegenerusGameStorage.BP_WHALE_TIER_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2060) is never used in [DegenerusGameAdvanceModule](contracts/modules/DegenerusGameAdvanceModule.sol#L30-L2107)
 
 contracts/storage/DegenerusGameStorage.sol#L2060
 
 
- - [ ] ID-1886
-[DegenerusGameStorage.presaleBoxDgnrsPoolStart](contracts/storage/DegenerusGameStorage.sol#L1264) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1774)
+ - [ ] ID-1889
+[DegenerusGameStorage.presaleBoxDgnrsPoolStart](contracts/storage/DegenerusGameStorage.sol#L1264) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1779)
 
 contracts/storage/DegenerusGameStorage.sol#L1264
 
 
- - [ ] ID-1887
+ - [ ] ID-1890
 [DegenerusGameStorage.presaleDrained](contracts/storage/DegenerusGameStorage.sol#L367) is never used in [DegenerusGame](contracts/DegenerusGame.sol#L87-L2624)
 
 contracts/storage/DegenerusGameStorage.sol#L367
 
 
- - [ ] ID-1888
+ - [ ] ID-1891
 [DegenerusGameStorage.ticketCursor](contracts/storage/DegenerusGameStorage.sol#L532) is never used in [DegenerusGameWhaleModule](contracts/modules/DegenerusGameWhaleModule.sol#L20-L1026)
 
 contracts/storage/DegenerusGameStorage.sol#L532
 
 
- - [ ] ID-1889
+ - [ ] ID-1892
 [DegenerusGameStorage.degeneretteBets](contracts/storage/DegenerusGameStorage.sol#L1785) is never used in [DegenerusGameAdvanceModule](contracts/modules/DegenerusGameAdvanceModule.sol#L30-L2107)
 
 contracts/storage/DegenerusGameStorage.sol#L1785
 
 
- - [ ] ID-1890
+ - [ ] ID-1893
 [DegenerusGameStorage.decBucketBurnTotal](contracts/storage/DegenerusGameStorage.sol#L1895) is never used in [DegenerusGameBingoModule](contracts/modules/DegenerusGameBingoModule.sol#L24-L288)
 
 contracts/storage/DegenerusGameStorage.sol#L1895
 
 
- - [ ] ID-1891
+ - [ ] ID-1894
 [DegenerusGameStorage.PS_MINT_ETH_MASK](contracts/storage/DegenerusGameStorage.sol#L1127) is never used in [SettleClaimableShortfallTester](contracts/test/SettleClaimableShortfallTester.sol#L17-L66)
 
 contracts/storage/DegenerusGameStorage.sol#L1127
 
 
- - [ ] ID-1892
+ - [ ] ID-1895
 [DegenerusGameStorage.vrfKeyHash](contracts/storage/DegenerusGameStorage.sol#L1586) is never used in [DegenerusGameBingoModule](contracts/modules/DegenerusGameBingoModule.sol#L24-L288)
 
 contracts/storage/DegenerusGameStorage.sol#L1586
 
 
- - [ ] ID-1893
+ - [ ] ID-1896
 [DegenerusGameStorage.presaleBoxCredit](contracts/storage/DegenerusGameStorage.sol#L1093) is never used in [JackpotSoloTester](contracts/test/JackpotSoloTester.sol#L14-L30)
 
 contracts/storage/DegenerusGameStorage.sol#L1093
 
 
- - [ ] ID-1894
+ - [ ] ID-1897
 [DegenerusGameStorage.BP_DEITY_ACTIVITY_DAY_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2065) is never used in [JackpotSoloTester](contracts/test/JackpotSoloTester.sol#L14-L30)
 
 contracts/storage/DegenerusGameStorage.sol#L2065
 
 
- - [ ] ID-1895
+ - [ ] ID-1898
 [DegenerusGameStorage.boxCursorIndex](contracts/storage/DegenerusGameStorage.sol#L2459) is never used in [DegenerusGameWhaleModule](contracts/modules/DegenerusGameWhaleModule.sol#L20-L1026)
 
 contracts/storage/DegenerusGameStorage.sol#L2459
 
 
- - [ ] ID-1896
+ - [ ] ID-1899
 [DegenerusGameStorage.PS_MINT_ETH_SHIFT](contracts/storage/DegenerusGameStorage.sol#L1126) is never used in [DegenerusGameFoilPackModule](contracts/modules/DegenerusGameFoilPackModule.sol#L30-L815)
 
 contracts/storage/DegenerusGameStorage.sol#L1126
 
 
- - [ ] ID-1897
+ - [ ] ID-1900
 [DegenerusGameStorage.BP_PURCHASE_DAY_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2053) is never used in [DegenerusGameBingoModule](contracts/modules/DegenerusGameBingoModule.sol#L24-L288)
 
 contracts/storage/DegenerusGameStorage.sol#L2053
 
 
- - [ ] ID-1898
+ - [ ] ID-1901
 [DegenerusGameStorage.LR_THRESHOLD_MASK](contracts/storage/DegenerusGameStorage.sol#L1616) is never used in [DegenerusGameBoonModule](contracts/modules/DegenerusGameBoonModule.sol#L22-L343)
 
 contracts/storage/DegenerusGameStorage.sol#L1616
 
 
- - [ ] ID-1899
+ - [ ] ID-1902
 [DegenerusGameStorage.decWindowOpen](contracts/storage/DegenerusGameStorage.sol#L295) is never used in [DegenerusGameBoonModule](contracts/modules/DegenerusGameBoonModule.sol#L22-L343)
 
 contracts/storage/DegenerusGameStorage.sol#L295
 
 
- - [ ] ID-1900
+ - [ ] ID-1903
 [DegenerusGameStorage.lvlTraitEntry](contracts/storage/DegenerusGameStorage.sol#L473) is never used in [DegenerusGameBoonModule](contracts/modules/DegenerusGameBoonModule.sol#L22-L343)
 
 contracts/storage/DegenerusGameStorage.sol#L473
 
 
- - [ ] ID-1901
+ - [ ] ID-1904
 [DegenerusGameStorage.PS_MINT_ETH_SHIFT](contracts/storage/DegenerusGameStorage.sol#L1126) is never used in [SettleClaimableShortfallTester](contracts/test/SettleClaimableShortfallTester.sol#L17-L66)
 
 contracts/storage/DegenerusGameStorage.sol#L1126
 
 
- - [ ] ID-1902
+ - [ ] ID-1905
 [DegenerusGameStorage.GO_SWEPT_MASK](contracts/storage/DegenerusGameStorage.sol#L1164) is never used in [JackpotSoloTester](contracts/test/JackpotSoloTester.sol#L14-L30)
 
 contracts/storage/DegenerusGameStorage.sol#L1164
 
 
- - [ ] ID-1903
+ - [ ] ID-1906
 [DegenerusGameStorage.BP_DEITY_LAZY_PASS_DAY_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2070) is never used in [DegenerusGameBingoModule](contracts/modules/DegenerusGameBingoModule.sol#L24-L288)
 
 contracts/storage/DegenerusGameStorage.sol#L2070
 
 
- - [ ] ID-1904
-[DegenerusGameStorage.dailyJackpotCoinTicketsPending](contracts/storage/DegenerusGameStorage.sol#L312) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1774)
+ - [ ] ID-1907
+[DegenerusGameStorage.dailyJackpotCoinTicketsPending](contracts/storage/DegenerusGameStorage.sol#L312) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1779)
 
 contracts/storage/DegenerusGameStorage.sol#L312
 
 
- - [ ] ID-1905
+ - [ ] ID-1908
 [DegenerusGameStorage.BP_DECIMATOR_CLEAR](contracts/storage/DegenerusGameStorage.sol#L2087-L2088) is never used in [SettleClaimableShortfallTester](contracts/test/SettleClaimableShortfallTester.sol#L17-L66)
 
 contracts/storage/DegenerusGameStorage.sol#L2087-L2088
 
 
- - [ ] ID-1906
+ - [ ] ID-1909
 [DegenerusGameStorage.decClaimRounds](contracts/storage/DegenerusGameStorage.sol#L1899) is never used in [DegenerusGameBoonModule](contracts/modules/DegenerusGameBoonModule.sol#L22-L343)
 
 contracts/storage/DegenerusGameStorage.sol#L1899
 
 
- - [ ] ID-1907
+ - [ ] ID-1910
 [DegenerusGameStorage.GO_JACKPOT_PAID_MASK](contracts/storage/DegenerusGameStorage.sol#L1162) is never used in [GameAfkingModule](contracts/modules/GameAfkingModule.sol#L82-L1941)
 
 contracts/storage/DegenerusGameStorage.sol#L1162
 
 
- - [ ] ID-1908
+ - [ ] ID-1911
 [DegenerusGameStorage.ticketLevel](contracts/storage/DegenerusGameStorage.sol#L535) is never used in [DegenerusGameLootboxModule](contracts/modules/DegenerusGameLootboxModule.sol#L39-L2359)
 
 contracts/storage/DegenerusGameStorage.sol#L535
 
 
- - [ ] ID-1909
-[DegenerusGameStorage.bingoClaimed](contracts/storage/DegenerusGameStorage.sol#L2039) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1774)
+ - [ ] ID-1912
+[DegenerusGameStorage.bingoClaimed](contracts/storage/DegenerusGameStorage.sol#L2039) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1779)
 
 contracts/storage/DegenerusGameStorage.sol#L2039
 
 
- - [ ] ID-1910
+ - [ ] ID-1913
 [DegenerusGameStorage.dailyTicketBudgetsPacked](contracts/storage/DegenerusGameStorage.sol#L442) is never used in [GameAfkingModule](contracts/modules/GameAfkingModule.sol#L82-L1941)
 
 contracts/storage/DegenerusGameStorage.sol#L442
 
 
- - [ ] ID-1911
+ - [ ] ID-1914
 [DegenerusGameStorage.degeneretteBetNonce](contracts/storage/DegenerusGameStorage.sol#L1788) is never used in [DegenerusGame](contracts/DegenerusGame.sol#L87-L2624)
 
 contracts/storage/DegenerusGameStorage.sol#L1788
 
 
- - [ ] ID-1912
+ - [ ] ID-1915
 [DegenerusGameStorage.FOIL_CCY_TAG](contracts/storage/DegenerusGameStorage.sol#L2593) is never used in [JackpotSoloTester](contracts/test/JackpotSoloTester.sol#L14-L30)
 
 contracts/storage/DegenerusGameStorage.sol#L2593
 
 
- - [ ] ID-1913
+ - [ ] ID-1916
 [DegenerusGameStorage.levelPrizePool](contracts/storage/DegenerusGameStorage.sol#L1202) is never used in [DegenerusGameBingoModule](contracts/modules/DegenerusGameBingoModule.sol#L24-L288)
 
 contracts/storage/DegenerusGameStorage.sol#L1202
 
 
- - [ ] ID-1914
+ - [ ] ID-1917
 [DegenerusGameStorage.FOIL_TO_FUTURE_BPS](contracts/storage/DegenerusGameStorage.sol#L2562) is never used in [DegenerusGameMintModule](contracts/modules/DegenerusGameMintModule.sol#L74-L2136)
 
 contracts/storage/DegenerusGameStorage.sol#L2562
 
 
- - [ ] ID-1915
+ - [ ] ID-1918
 [DegenerusGameStorage.FOIL_SEED_TAG](contracts/storage/DegenerusGameStorage.sol#L2587) is never used in [DegenerusGameMintModule](contracts/modules/DegenerusGameMintModule.sol#L74-L2136)
 
 contracts/storage/DegenerusGameStorage.sol#L2587
 
 
- - [ ] ID-1916
+ - [ ] ID-1919
 [DegenerusGameStorage.BP_WHALE_DAY_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2058) is never used in [DegenerusGameFoilPackModule](contracts/modules/DegenerusGameFoilPackModule.sol#L30-L815)
 
 contracts/storage/DegenerusGameStorage.sol#L2058
 
 
- - [ ] ID-1917
+ - [ ] ID-1920
 [DegenerusGameStorage.foilBuyers](contracts/storage/DegenerusGameStorage.sol#L2541) is never used in [DegenerusGameBingoModule](contracts/modules/DegenerusGameBingoModule.sol#L24-L288)
 
 contracts/storage/DegenerusGameStorage.sol#L2541
 
 
- - [ ] ID-1918
+ - [ ] ID-1921
 [DegenerusGameStorage._sdgnrsBonusLevel](contracts/storage/DegenerusGameStorage.sol#L2473) is never used in [DegenerusGameMintModule](contracts/modules/DegenerusGameMintModule.sol#L74-L2136)
 
 contracts/storage/DegenerusGameStorage.sol#L2473
 
 
- - [ ] ID-1919
+ - [ ] ID-1922
 [DegenerusGameStorage.BP_WHALE_TIER_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2060) is never used in [DegenerusGameFoilPackModule](contracts/modules/DegenerusGameFoilPackModule.sol#L30-L815)
 
 contracts/storage/DegenerusGameStorage.sol#L2060
 
 
- - [ ] ID-1920
+ - [ ] ID-1923
 [DegenerusGameStorage.BP_DEITY_LAZY_PASS_DAY_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2070) is never used in [SettleClaimableShortfallTester](contracts/test/SettleClaimableShortfallTester.sol#L17-L66)
 
 contracts/storage/DegenerusGameStorage.sol#L2070
 
 
- - [ ] ID-1921
-[DegenerusGameStorage.LOOTBOX_CLAIM_THRESHOLD](contracts/storage/DegenerusGameStorage.sol#L161) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1774)
+ - [ ] ID-1924
+[DegenerusGameStorage.LOOTBOX_CLAIM_THRESHOLD](contracts/storage/DegenerusGameStorage.sol#L161) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1779)
 
 contracts/storage/DegenerusGameStorage.sol#L161
 
 
- - [ ] ID-1922
+ - [ ] ID-1925
 [DegenerusGameStorage.dgnrs](contracts/storage/DegenerusGameStorage.sol#L133-L134) is never used in [GameAfkingModule](contracts/modules/GameAfkingModule.sol#L82-L1941)
 
 contracts/storage/DegenerusGameStorage.sol#L133-L134
 
 
- - [ ] ID-1923
+ - [ ] ID-1926
 [DegenerusGameStorage.LR_INDEX_SHIFT](contracts/storage/DegenerusGameStorage.sol#L1611) is never used in [SettleClaimableShortfallTester](contracts/test/SettleClaimableShortfallTester.sol#L17-L66)
 
 contracts/storage/DegenerusGameStorage.sol#L1611
 
 
- - [ ] ID-1924
+ - [ ] ID-1927
 [DegenerusGameStorage.terminalDecBucketBurnTotal](contracts/storage/DegenerusGameStorage.sol#L1975) is never used in [DegenerusGame](contracts/DegenerusGame.sol#L87-L2624)
 
 contracts/storage/DegenerusGameStorage.sol#L1975
 
 
- - [ ] ID-1925
+ - [ ] ID-1928
 [DegenerusGameStorage.LB_DISTRESS_SCALE](contracts/storage/DegenerusGameStorage.sol#L1078) is never used in [DegenerusGame](contracts/DegenerusGame.sol#L87-L2624)
 
 contracts/storage/DegenerusGameStorage.sol#L1078
 
 
- - [ ] ID-1926
+ - [ ] ID-1929
 [DegenerusGameStorage.BP_COINFLIP_TIER_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2049) is never used in [DegenerusGameBingoModule](contracts/modules/DegenerusGameBingoModule.sol#L24-L288)
 
 contracts/storage/DegenerusGameStorage.sol#L2049
 
 
- - [ ] ID-1927
+ - [ ] ID-1930
 [DegenerusGameStorage.decBurn](contracts/storage/DegenerusGameStorage.sol#L1890) is never used in [DegenerusGameBingoModule](contracts/modules/DegenerusGameBingoModule.sol#L24-L288)
 
 contracts/storage/DegenerusGameStorage.sol#L1890
 
 
- - [ ] ID-1928
+ - [ ] ID-1931
 [DegenerusGameStorage.ACTIVITY_SCORE_HARD_CAP_POINTS](contracts/storage/DegenerusGameStorage.sol#L143) is never used in [DegenerusGameGameOverModule](contracts/modules/DegenerusGameGameOverModule.sol#L37-L284)
 
 contracts/storage/DegenerusGameStorage.sol#L143
 
 
- - [ ] ID-1929
+ - [ ] ID-1932
 [DegenerusGameStorage.BP_ACTIVITY_CLEAR](contracts/storage/DegenerusGameStorage.sol#L2094) is never used in [DegenerusGameLootboxModule](contracts/modules/DegenerusGameLootboxModule.sol#L39-L2359)
 
 contracts/storage/DegenerusGameStorage.sol#L2094
 
 
- - [ ] ID-1930
+ - [ ] ID-1933
 [DegenerusGameStorage.lootboxEth](contracts/storage/DegenerusGameStorage.sol#L1067) is never used in [DegenerusGameBoonModule](contracts/modules/DegenerusGameBoonModule.sol#L22-L343)
 
 contracts/storage/DegenerusGameStorage.sol#L1067
 
 
- - [ ] ID-1931
+ - [ ] ID-1934
 [DegenerusGameStorage.LR_PENDING_ETH_MASK](contracts/storage/DegenerusGameStorage.sol#L1614) is never used in [DegenerusGameBingoModule](contracts/modules/DegenerusGameBingoModule.sol#L24-L288)
 
 contracts/storage/DegenerusGameStorage.sol#L1614
 
 
- - [ ] ID-1932
+ - [ ] ID-1935
 [DegenerusGameStorage.phaseTransitionActive](contracts/storage/DegenerusGameStorage.sol#L304) is never used in [DegenerusGameGameOverModule](contracts/modules/DegenerusGameGameOverModule.sol#L37-L284)
 
 contracts/storage/DegenerusGameStorage.sol#L304
 
 
- - [ ] ID-1933
+ - [ ] ID-1936
 [DegenerusGameStorage.GO_TIME_MASK](contracts/storage/DegenerusGameStorage.sol#L1160) is never used in [GameAfkingModule](contracts/modules/GameAfkingModule.sol#L82-L1941)
 
 contracts/storage/DegenerusGameStorage.sol#L1160
 
 
- - [ ] ID-1934
+ - [ ] ID-1937
 [DegenerusGameStorage.BP_ACTIVITY_PENDING_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2063) is never used in [DegenerusGameWhaleModule](contracts/modules/DegenerusGameWhaleModule.sol#L20-L1026)
 
 contracts/storage/DegenerusGameStorage.sol#L2063
 
 
- - [ ] ID-1935
+ - [ ] ID-1938
 [DegenerusGameStorage.deityBoonRecipientDay](contracts/storage/DegenerusGameStorage.sol#L1770) is never used in [DegenerusGameWhaleModule](contracts/modules/DegenerusGameWhaleModule.sol#L20-L1026)
 
 contracts/storage/DegenerusGameStorage.sol#L1770
 
 
- - [ ] ID-1936
+ - [ ] ID-1939
 [DegenerusGameStorage._sdgnrsBonusLevel](contracts/storage/DegenerusGameStorage.sol#L2473) is never used in [DegenerusGameWhaleModule](contracts/modules/DegenerusGameWhaleModule.sol#L20-L1026)
 
 contracts/storage/DegenerusGameStorage.sol#L2473
 
 
- - [ ] ID-1937
+ - [ ] ID-1940
 [DegenerusGameStorage.BP_LOOTBOX_DAY_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2050) is never used in [DegenerusGameBingoModule](contracts/modules/DegenerusGameBingoModule.sol#L24-L288)
 
 contracts/storage/DegenerusGameStorage.sol#L2050
 
 
- - [ ] ID-1938
+ - [ ] ID-1941
 [DegenerusGameStorage.BP_DEITY_PURCHASE_DAY_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2054) is never used in [DegenerusGameWhaleModule](contracts/modules/DegenerusGameWhaleModule.sol#L20-L1026)
 
 contracts/storage/DegenerusGameStorage.sol#L2054
 
 
- - [ ] ID-1939
+ - [ ] ID-1942
 [DegenerusGameStorage.FOIL_SPIN_TAG](contracts/storage/DegenerusGameStorage.sol#L2594) is never used in [SettleClaimableShortfallTester](contracts/test/SettleClaimableShortfallTester.sol#L17-L66)
 
 contracts/storage/DegenerusGameStorage.sol#L2594
 
 
- - [ ] ID-1940
+ - [ ] ID-1943
 [DegenerusGameStorage.foilCursor](contracts/storage/DegenerusGameStorage.sol#L2550) is never used in [DegenerusGameWhaleModule](contracts/modules/DegenerusGameWhaleModule.sol#L20-L1026)
 
 contracts/storage/DegenerusGameStorage.sol#L2550
 
 
- - [ ] ID-1941
+ - [ ] ID-1944
 [DegenerusGameStorage.deityBySymbol](contracts/storage/DegenerusGameStorage.sol#L1255) is never used in [DegenerusGameLootboxModule](contracts/modules/DegenerusGameLootboxModule.sol#L39-L2359)
 
 contracts/storage/DegenerusGameStorage.sol#L1255
 
 
- - [ ] ID-1942
+ - [ ] ID-1945
 [DegenerusGameStorage.degeneretteBetNonce](contracts/storage/DegenerusGameStorage.sol#L1788) is never used in [DegenerusGameGameOverModule](contracts/modules/DegenerusGameGameOverModule.sol#L37-L284)
 
 contracts/storage/DegenerusGameStorage.sol#L1788
 
 
- - [ ] ID-1943
+ - [ ] ID-1946
 [DegenerusGameStorage.BP_MASK_24](contracts/storage/DegenerusGameStorage.sol#L2074) is never used in [DegenerusGameDecimatorModule](contracts/modules/DegenerusGameDecimatorModule.sol#L21-L1134)
 
 contracts/storage/DegenerusGameStorage.sol#L2074
 
 
- - [ ] ID-1944
+ - [ ] ID-1947
 [DegenerusGameStorage.FOIL_PACK_ENTRIES](contracts/storage/DegenerusGameStorage.sol#L2566) is never used in [DegenerusGame](contracts/DegenerusGame.sol#L87-L2624)
 
 contracts/storage/DegenerusGameStorage.sol#L2566
 
 
- - [ ] ID-1945
+ - [ ] ID-1948
 [DegenerusGameStorage.BP_WHALE_DAY_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2058) is never used in [DegenerusGameDecimatorModule](contracts/modules/DegenerusGameDecimatorModule.sol#L21-L1134)
 
 contracts/storage/DegenerusGameStorage.sol#L2058
 
 
- - [ ] ID-1946
+ - [ ] ID-1949
 [DegenerusGameStorage.totalFlipReversals](contracts/storage/DegenerusGameStorage.sol#L429) is never used in [GameAfkingModule](contracts/modules/GameAfkingModule.sol#L82-L1941)
 
 contracts/storage/DegenerusGameStorage.sol#L429
 
 
- - [ ] ID-1947
+ - [ ] ID-1950
 [DegenerusGameStorage.LOOTBOX_EV_BENEFIT_CAP](contracts/storage/DegenerusGameStorage.sol#L1643-L1644) is never used in [DegenerusGameDecimatorModule](contracts/modules/DegenerusGameDecimatorModule.sol#L21-L1134)
 
 contracts/storage/DegenerusGameStorage.sol#L1643-L1644
 
 
- - [ ] ID-1948
+ - [ ] ID-1951
 [DegenerusGameStorage.foilCursor](contracts/storage/DegenerusGameStorage.sol#L2550) is never used in [DegenerusGameDecimatorModule](contracts/modules/DegenerusGameDecimatorModule.sol#L21-L1134)
 
 contracts/storage/DegenerusGameStorage.sol#L2550
 
 
- - [ ] ID-1949
+ - [ ] ID-1952
 [DegenerusGameStorage.BP_DEITY_PASS_CLEAR](contracts/storage/DegenerusGameStorage.sol#L2096-L2097) is never used in [DegenerusGameLootboxModule](contracts/modules/DegenerusGameLootboxModule.sol#L39-L2359)
 
 contracts/storage/DegenerusGameStorage.sol#L2096-L2097
 
 
- - [ ] ID-1950
+ - [ ] ID-1953
 [DegenerusGameStorage.PS_ACTIVE_SHIFT](contracts/storage/DegenerusGameStorage.sol#L1124) is never used in [JackpotSoloTester](contracts/test/JackpotSoloTester.sol#L14-L30)
 
 contracts/storage/DegenerusGameStorage.sol#L1124
 
 
- - [ ] ID-1951
+ - [ ] ID-1954
 [DegenerusGameStorage.PRESALE_BOX_ETH_CAP](contracts/storage/DegenerusGameStorage.sol#L1134) is never used in [SettleClaimableShortfallTester](contracts/test/SettleClaimableShortfallTester.sol#L17-L66)
 
 contracts/storage/DegenerusGameStorage.sol#L1134
 
 
- - [ ] ID-1952
+ - [ ] ID-1955
 [DegenerusGameStorage.boxPlayers](contracts/storage/DegenerusGameStorage.sol#L2481) is never used in [DegenerusGameDecimatorModule](contracts/modules/DegenerusGameDecimatorModule.sol#L21-L1134)
 
 contracts/storage/DegenerusGameStorage.sol#L2481
 
 
- - [ ] ID-1953
+ - [ ] ID-1956
 [DegenerusGameStorage.BP_LAZY_PASS_DAY_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2069) is never used in [DegenerusGameAdvanceModule](contracts/modules/DegenerusGameAdvanceModule.sol#L30-L2107)
 
 contracts/storage/DegenerusGameStorage.sol#L2069
 
 
- - [ ] ID-1954
+ - [ ] ID-1957
 [DegenerusGameStorage.presaleBoxEth](contracts/storage/DegenerusGameStorage.sol#L1103) is never used in [DegenerusGame](contracts/DegenerusGame.sol#L87-L2624)
 
 contracts/storage/DegenerusGameStorage.sol#L1103
 
 
- - [ ] ID-1955
+ - [ ] ID-1958
 [DegenerusGameStorage.presaleBoxEth](contracts/storage/DegenerusGameStorage.sol#L1103) is never used in [SettleClaimableShortfallTester](contracts/test/SettleClaimableShortfallTester.sol#L17-L66)
 
 contracts/storage/DegenerusGameStorage.sol#L1103
 
 
- - [ ] ID-1956
+ - [ ] ID-1959
 [DegenerusGameStorage.deityPassPricePaid](contracts/storage/DegenerusGameStorage.sol#L1249) is never used in [GameAfkingModule](contracts/modules/GameAfkingModule.sol#L82-L1941)
 
 contracts/storage/DegenerusGameStorage.sol#L1249
 
 
- - [ ] ID-1957
+ - [ ] ID-1960
 [DegenerusGameStorage.vrfKeyHash](contracts/storage/DegenerusGameStorage.sol#L1586) is never used in [DegenerusGameLootboxModule](contracts/modules/DegenerusGameLootboxModule.sol#L39-L2359)
 
 contracts/storage/DegenerusGameStorage.sol#L1586
 
 
- - [ ] ID-1958
+ - [ ] ID-1961
 [DegenerusGameStorage.boxCursorIndex](contracts/storage/DegenerusGameStorage.sol#L2459) is never used in [DegenerusGameAdvanceModule](contracts/modules/DegenerusGameAdvanceModule.sol#L30-L2107)
 
 contracts/storage/DegenerusGameStorage.sol#L2459
 
 
- - [ ] ID-1959
-[DegenerusGameStorage.BP_ACTIVITY_CLEAR](contracts/storage/DegenerusGameStorage.sol#L2094) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1774)
+ - [ ] ID-1962
+[DegenerusGameStorage.BP_ACTIVITY_CLEAR](contracts/storage/DegenerusGameStorage.sol#L2094) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1779)
 
 contracts/storage/DegenerusGameStorage.sol#L2094
 
 
- - [ ] ID-1960
+ - [ ] ID-1963
 [DegenerusGameStorage.foilMatchClaimed](contracts/storage/DegenerusGameStorage.sol#L2518) is never used in [DegenerusGameWhaleModule](contracts/modules/DegenerusGameWhaleModule.sol#L20-L1026)
 
 contracts/storage/DegenerusGameStorage.sol#L2518
 
 
- - [ ] ID-1961
+ - [ ] ID-1964
 [DegenerusGameStorage.LR_MID_DAY_MASK](contracts/storage/DegenerusGameStorage.sol#L1620) is never used in [DegenerusGameBingoModule](contracts/modules/DegenerusGameBingoModule.sol#L24-L288)
 
 contracts/storage/DegenerusGameStorage.sol#L1620
 
 
- - [ ] ID-1962
+ - [ ] ID-1965
 [DegenerusGameStorage.FOIL_PACK_ENTRIES](contracts/storage/DegenerusGameStorage.sol#L2566) is never used in [DegenerusGameGameOverModule](contracts/modules/DegenerusGameGameOverModule.sol#L37-L284)
 
 contracts/storage/DegenerusGameStorage.sol#L2566
 
 
- - [ ] ID-1963
+ - [ ] ID-1966
 [DegenerusGameStorage.BP_LAZY_PASS_CLEAR](contracts/storage/DegenerusGameStorage.sol#L2099-L2100) is never used in [DegenerusGameGameOverModule](contracts/modules/DegenerusGameGameOverModule.sol#L37-L284)
 
 contracts/storage/DegenerusGameStorage.sol#L2099-L2100
 
 
- - [ ] ID-1964
+ - [ ] ID-1967
 [DegenerusGameStorage.GO_TIME_SHIFT](contracts/storage/DegenerusGameStorage.sol#L1159) is never used in [DegenerusGameDecimatorModule](contracts/modules/DegenerusGameDecimatorModule.sol#L21-L1134)
 
 contracts/storage/DegenerusGameStorage.sol#L1159
 
 
- - [ ] ID-1965
-[DegenerusGameStorage.FOIL_TO_FUTURE_BPS](contracts/storage/DegenerusGameStorage.sol#L2562) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1774)
+ - [ ] ID-1968
+[DegenerusGameStorage.FOIL_TO_FUTURE_BPS](contracts/storage/DegenerusGameStorage.sol#L2562) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1779)
 
 contracts/storage/DegenerusGameStorage.sol#L2562
 
 
- - [ ] ID-1966
+ - [ ] ID-1969
 [DegenerusGameStorage.BP_DEITY_DECIMATOR_DAY_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2057) is never used in [DegenerusGameGameOverModule](contracts/modules/DegenerusGameGameOverModule.sol#L37-L284)
 
 contracts/storage/DegenerusGameStorage.sol#L2057
 
 
- - [ ] ID-1967
+ - [ ] ID-1970
 [DegenerusGameStorage.subsFullyProcessed](contracts/storage/DegenerusGameStorage.sol#L358) is never used in [DegenerusGameFoilPackModule](contracts/modules/DegenerusGameFoilPackModule.sol#L30-L815)
 
 contracts/storage/DegenerusGameStorage.sol#L358
 
 
- - [ ] ID-1968
-[DegenerusGameStorage.presaleBoxEth](contracts/storage/DegenerusGameStorage.sol#L1103) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1774)
+ - [ ] ID-1971
+[DegenerusGameStorage.presaleBoxEth](contracts/storage/DegenerusGameStorage.sol#L1103) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1779)
 
 contracts/storage/DegenerusGameStorage.sol#L1103
 
 
- - [ ] ID-1969
-[DegenerusGameStorage.lastVrfProcessedTimestamp](contracts/storage/DegenerusGameStorage.sol#L435) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1774)
+ - [ ] ID-1972
+[DegenerusGameStorage.lastVrfProcessedTimestamp](contracts/storage/DegenerusGameStorage.sol#L435) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1779)
 
 contracts/storage/DegenerusGameStorage.sol#L435
 
 
- - [ ] ID-1970
+ - [ ] ID-1973
 [DegenerusGameStorage.foilCursor](contracts/storage/DegenerusGameStorage.sol#L2550) is never used in [DegenerusGameLootboxModule](contracts/modules/DegenerusGameLootboxModule.sol#L39-L2359)
 
 contracts/storage/DegenerusGameStorage.sol#L2550
 
 
- - [ ] ID-1971
+ - [ ] ID-1974
 [DegenerusGameStorage._subscribers](contracts/storage/DegenerusGameStorage.sol#L2423) is never used in [SettleClaimableShortfallTester](contracts/test/SettleClaimableShortfallTester.sol#L17-L66)
 
 contracts/storage/DegenerusGameStorage.sol#L2423
 
 
- - [ ] ID-1972
+ - [ ] ID-1975
 [DegenerusGameStorage.GO_SWEPT_SHIFT](contracts/storage/DegenerusGameStorage.sol#L1163) is never used in [SettleClaimableShortfallTester](contracts/test/SettleClaimableShortfallTester.sol#L17-L66)
 
 contracts/storage/DegenerusGameStorage.sol#L1163
 
 
- - [ ] ID-1973
+ - [ ] ID-1976
 [DegenerusGameStorage.FOIL_SEED_TAG](contracts/storage/DegenerusGameStorage.sol#L2587) is never used in [SettleClaimableShortfallTester](contracts/test/SettleClaimableShortfallTester.sol#L17-L66)
 
 contracts/storage/DegenerusGameStorage.sol#L2587
 
 
- - [ ] ID-1974
+ - [ ] ID-1977
 [DegenerusGameStorage.BP_DEITY_PURCHASE_DAY_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2054) is never used in [DegenerusGameFoilPackModule](contracts/modules/DegenerusGameFoilPackModule.sol#L30-L815)
 
 contracts/storage/DegenerusGameStorage.sol#L2054
 
 
- - [ ] ID-1975
+ - [ ] ID-1978
 [DegenerusGameStorage.FOIL_SEED_TAG](contracts/storage/DegenerusGameStorage.sol#L2587) is never used in [DegenerusGameLootboxModule](contracts/modules/DegenerusGameLootboxModule.sol#L39-L2359)
 
 contracts/storage/DegenerusGameStorage.sol#L2587
 
 
- - [ ] ID-1976
+ - [ ] ID-1979
 [DegenerusGameStorage._subCursor](contracts/storage/DegenerusGameStorage.sol#L2434) is never used in [DegenerusGameBoonModule](contracts/modules/DegenerusGameBoonModule.sol#L22-L343)
 
 contracts/storage/DegenerusGameStorage.sol#L2434
 
 
- - [ ] ID-1977
+ - [ ] ID-1980
 [DegenerusGameStorage.deityBoonPacked](contracts/storage/DegenerusGameStorage.sol#L1766) is never used in [DegenerusGameMintModule](contracts/modules/DegenerusGameMintModule.sol#L74-L2136)
 
 contracts/storage/DegenerusGameStorage.sol#L1766
 
 
- - [ ] ID-1978
+ - [ ] ID-1981
 [DegenerusGameStorage.vrfRequestId](contracts/storage/DegenerusGameStorage.sol#L423) is never used in [DegenerusGameBoonModule](contracts/modules/DegenerusGameBoonModule.sol#L22-L343)
 
 contracts/storage/DegenerusGameStorage.sol#L423
 
 
- - [ ] ID-1979
+ - [ ] ID-1982
 [DegenerusGameStorage.BOOTSTRAP_PRIZE_POOL](contracts/storage/DegenerusGameStorage.sol#L165) is never used in [DegenerusGameWhaleModule](contracts/modules/DegenerusGameWhaleModule.sol#L20-L1026)
 
 contracts/storage/DegenerusGameStorage.sol#L165
 
 
- - [ ] ID-1980
+ - [ ] ID-1983
 [DegenerusGameStorage.LR_PENDING_FLIP_SHIFT](contracts/storage/DegenerusGameStorage.sol#L1617) is never used in [DegenerusGame](contracts/DegenerusGame.sol#L87-L2624)
 
 contracts/storage/DegenerusGameStorage.sol#L1617
 
 
- - [ ] ID-1981
+ - [ ] ID-1984
 [DegenerusGameStorage.decClaimRounds](contracts/storage/DegenerusGameStorage.sol#L1899) is never used in [DegenerusGameGameOverModule](contracts/modules/DegenerusGameGameOverModule.sol#L37-L284)
 
 contracts/storage/DegenerusGameStorage.sol#L1899
 
 
- - [ ] ID-1982
+ - [ ] ID-1985
 [DegenerusGameStorage.BP_DEITY_WHALE_DAY_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2059) is never used in [DegenerusGameFoilPackModule](contracts/modules/DegenerusGameFoilPackModule.sol#L30-L815)
 
 contracts/storage/DegenerusGameStorage.sol#L2059
 
 
- - [ ] ID-1983
+ - [ ] ID-1986
 [DegenerusGameStorage.yieldAccumulator](contracts/storage/DegenerusGameStorage.sol#L1925) is never used in [DegenerusGameFoilPackModule](contracts/modules/DegenerusGameFoilPackModule.sol#L30-L815)
 
 contracts/storage/DegenerusGameStorage.sol#L1925
 
 
- - [ ] ID-1984
+ - [ ] ID-1987
 [DegenerusGameStorage.LOOTBOX_CLAIM_THRESHOLD](contracts/storage/DegenerusGameStorage.sol#L161) is never used in [DegenerusGameLootboxModule](contracts/modules/DegenerusGameLootboxModule.sol#L39-L2359)
 
 contracts/storage/DegenerusGameStorage.sol#L161
 
 
- - [ ] ID-1985
+ - [ ] ID-1988
 [DegenerusGameStorage.FOIL_SPIN_TAG](contracts/storage/DegenerusGameStorage.sol#L2594) is never used in [DegenerusGame](contracts/DegenerusGame.sol#L87-L2624)
 
 contracts/storage/DegenerusGameStorage.sol#L2594
 
 
- - [ ] ID-1986
+ - [ ] ID-1989
 [DegenerusGameStorage._subOpenCursor](contracts/storage/DegenerusGameStorage.sol#L2438) is never used in [DegenerusGameFoilPackModule](contracts/modules/DegenerusGameFoilPackModule.sol#L30-L815)
 
 contracts/storage/DegenerusGameStorage.sol#L2438
 
 
- - [ ] ID-1987
+ - [ ] ID-1990
 [DegenerusGameStorage.deityPassPricePaid](contracts/storage/DegenerusGameStorage.sol#L1249) is never used in [DegenerusGameFoilPackModule](contracts/modules/DegenerusGameFoilPackModule.sol#L30-L815)
 
 contracts/storage/DegenerusGameStorage.sol#L1249
 
 
- - [ ] ID-1988
+ - [ ] ID-1991
 [DegenerusGameStorage.BP_ACTIVITY_DAY_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2064) is never used in [GameAfkingModule](contracts/modules/GameAfkingModule.sol#L82-L1941)
 
 contracts/storage/DegenerusGameStorage.sol#L2064
 
 
- - [ ] ID-1989
+ - [ ] ID-1992
 [DegenerusGameStorage.decBurn](contracts/storage/DegenerusGameStorage.sol#L1890) is never used in [JackpotSoloTester](contracts/test/JackpotSoloTester.sol#L14-L30)
 
 contracts/storage/DegenerusGameStorage.sol#L1890
 
 
- - [ ] ID-1990
+ - [ ] ID-1993
 [DegenerusGameStorage.presaleOver](contracts/storage/DegenerusGameStorage.sol#L348) is never used in [DegenerusGameGameOverModule](contracts/modules/DegenerusGameGameOverModule.sol#L37-L284)
 
 contracts/storage/DegenerusGameStorage.sol#L348
 
 
- - [ ] ID-1991
+ - [ ] ID-1994
 [DegenerusGameStorage.vrfKeyHash](contracts/storage/DegenerusGameStorage.sol#L1586) is never used in [DegenerusGameMintModule](contracts/modules/DegenerusGameMintModule.sol#L74-L2136)
 
 contracts/storage/DegenerusGameStorage.sol#L1586
 
 
- - [ ] ID-1992
+ - [ ] ID-1995
 [DegenerusGameStorage.degeneretteBetNonce](contracts/storage/DegenerusGameStorage.sol#L1788) is never used in [DegenerusGameMintModule](contracts/modules/DegenerusGameMintModule.sol#L74-L2136)
 
 contracts/storage/DegenerusGameStorage.sol#L1788
 
 
- - [ ] ID-1993
+ - [ ] ID-1996
 [DegenerusGameStorage.dailyJackpotCoinTicketsPending](contracts/storage/DegenerusGameStorage.sol#L312) is never used in [DegenerusGameBoonModule](contracts/modules/DegenerusGameBoonModule.sol#L22-L343)
 
 contracts/storage/DegenerusGameStorage.sol#L312
 
 
- - [ ] ID-1994
+ - [ ] ID-1997
 [DegenerusGameStorage.BP_DECIMATOR_TIER_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2056) is never used in [SettleClaimableShortfallTester](contracts/test/SettleClaimableShortfallTester.sol#L17-L66)
 
 contracts/storage/DegenerusGameStorage.sol#L2056
 
 
- - [ ] ID-1995
+ - [ ] ID-1998
 [DegenerusGameStorage.deityBoonRecipientDay](contracts/storage/DegenerusGameStorage.sol#L1770) is never used in [SettleClaimableShortfallTester](contracts/test/SettleClaimableShortfallTester.sol#L17-L66)
 
 contracts/storage/DegenerusGameStorage.sol#L1770
 
 
- - [ ] ID-1996
+ - [ ] ID-1999
 [DegenerusGameStorage.BP_DEITY_DEITY_PASS_DAY_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2068) is never used in [DegenerusGameAdvanceModule](contracts/modules/DegenerusGameAdvanceModule.sol#L30-L2107)
 
 contracts/storage/DegenerusGameStorage.sol#L2068
 
 
- - [ ] ID-1997
+ - [ ] ID-2000
 [DegenerusGameStorage.BP_LAZY_PASS_CLEAR](contracts/storage/DegenerusGameStorage.sol#L2099-L2100) is never used in [GameAfkingModule](contracts/modules/GameAfkingModule.sol#L82-L1941)
 
 contracts/storage/DegenerusGameStorage.sol#L2099-L2100
 
 
- - [ ] ID-1998
+ - [ ] ID-2001
 [DegenerusGameStorage.GO_JACKPOT_PAID_MASK](contracts/storage/DegenerusGameStorage.sol#L1162) is never used in [DegenerusGameBoonModule](contracts/modules/DegenerusGameBoonModule.sol#L22-L343)
 
 contracts/storage/DegenerusGameStorage.sol#L1162
 
 
- - [ ] ID-1999
+ - [ ] ID-2002
 [DegenerusGameStorage.BP_LAZY_PASS_CLEAR](contracts/storage/DegenerusGameStorage.sol#L2099-L2100) is never used in [DegenerusGameDecimatorModule](contracts/modules/DegenerusGameDecimatorModule.sol#L21-L1134)
 
 contracts/storage/DegenerusGameStorage.sol#L2099-L2100
 
 
- - [ ] ID-2000
+ - [ ] ID-2003
 [DegenerusGameStorage.BP_ACTIVITY_PENDING_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2063) is never used in [DegenerusGame](contracts/DegenerusGame.sol#L87-L2624)
 
 contracts/storage/DegenerusGameStorage.sol#L2063
 
 
- - [ ] ID-2001
+ - [ ] ID-2004
 [DegenerusGameStorage.FOIL_CCY_TAG](contracts/storage/DegenerusGameStorage.sol#L2593) is never used in [DegenerusGame](contracts/DegenerusGame.sol#L87-L2624)
 
 contracts/storage/DegenerusGameStorage.sol#L2593
 
 
- - [ ] ID-2002
+ - [ ] ID-2005
 [DegenerusGameStorage.presaleBoxEthSold](contracts/storage/DegenerusGameStorage.sol#L1088) is never used in [JackpotSoloTester](contracts/test/JackpotSoloTester.sol#L14-L30)
 
 contracts/storage/DegenerusGameStorage.sol#L1088
 
 
- - [ ] ID-2003
+ - [ ] ID-2006
 [DegenerusGameStorage.BP_LOOTBOX_TIER_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2052) is never used in [JackpotSoloTester](contracts/test/JackpotSoloTester.sol#L14-L30)
 
 contracts/storage/DegenerusGameStorage.sol#L2052
 
 
- - [ ] ID-2004
+ - [ ] ID-2007
 [DegenerusGameStorage.yieldAccumulator](contracts/storage/DegenerusGameStorage.sol#L1925) is never used in [DegenerusGameDecimatorModule](contracts/modules/DegenerusGameDecimatorModule.sol#L21-L1134)
 
 contracts/storage/DegenerusGameStorage.sol#L1925
 
 
- - [ ] ID-2005
+ - [ ] ID-2008
 [DegenerusGameStorage._afkingResetDay](contracts/storage/DegenerusGameStorage.sol#L2445) is never used in [DegenerusGameWhaleModule](contracts/modules/DegenerusGameWhaleModule.sol#L20-L1026)
 
 contracts/storage/DegenerusGameStorage.sol#L2445
 
 
- - [ ] ID-2006
-[DegenerusGameStorage.BP_MASK_8](contracts/storage/DegenerusGameStorage.sol#L2075) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1774)
+ - [ ] ID-2009
+[DegenerusGameStorage.BP_MASK_8](contracts/storage/DegenerusGameStorage.sol#L2075) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1779)
 
 contracts/storage/DegenerusGameStorage.sol#L2075
 
 
- - [ ] ID-2007
+ - [ ] ID-2010
 [DegenerusGameStorage.dgnrs](contracts/storage/DegenerusGameStorage.sol#L133-L134) is never used in [SettleClaimableShortfallTester](contracts/test/SettleClaimableShortfallTester.sol#L17-L66)
 
 contracts/storage/DegenerusGameStorage.sol#L133-L134
 
 
- - [ ] ID-2008
+ - [ ] ID-2011
 [DegenerusGameStorage.PRESALE_BOX_SOLD_SHIFT](contracts/storage/DegenerusGameStorage.sol#L1108) is never used in [DegenerusGameWhaleModule](contracts/modules/DegenerusGameWhaleModule.sol#L20-L1026)
 
 contracts/storage/DegenerusGameStorage.sol#L1108
 
 
- - [ ] ID-2009
-[DegenerusGameStorage.BP_COINFLIP_TIER_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2049) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1774)
+ - [ ] ID-2012
+[DegenerusGameStorage.BP_COINFLIP_TIER_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2049) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1779)
 
 contracts/storage/DegenerusGameStorage.sol#L2049
 
 
- - [ ] ID-2010
+ - [ ] ID-2013
 [DegenerusGameStorage.LR_THRESHOLD_SHIFT](contracts/storage/DegenerusGameStorage.sol#L1615) is never used in [DegenerusGameBoonModule](contracts/modules/DegenerusGameBoonModule.sol#L22-L343)
 
 contracts/storage/DegenerusGameStorage.sol#L1615
 
 
- - [ ] ID-2011
+ - [ ] ID-2014
 [DegenerusGameStorage.PASS_MINT_COUNT_FLOOR_POINTS](contracts/storage/DegenerusGameStorage.sol#L149) is never used in [DegenerusGameBingoModule](contracts/modules/DegenerusGameBingoModule.sol#L24-L288)
 
 contracts/storage/DegenerusGameStorage.sol#L149
 
 
- - [ ] ID-2012
+ - [ ] ID-2015
 [DegenerusGameStorage.boxPlayers](contracts/storage/DegenerusGameStorage.sol#L2481) is never used in [DegenerusGameAdvanceModule](contracts/modules/DegenerusGameAdvanceModule.sol#L30-L2107)
 
 contracts/storage/DegenerusGameStorage.sol#L2481
 
 
- - [ ] ID-2013
+ - [ ] ID-2016
 [DegenerusGameStorage._afkingResetDay](contracts/storage/DegenerusGameStorage.sol#L2445) is never used in [DegenerusGameLootboxModule](contracts/modules/DegenerusGameLootboxModule.sol#L39-L2359)
 
 contracts/storage/DegenerusGameStorage.sol#L2445
 
 
- - [ ] ID-2014
+ - [ ] ID-2017
 [DegenerusGameStorage.PRESALE_BOX_ETH_CAP](contracts/storage/DegenerusGameStorage.sol#L1134) is never used in [DegenerusGameFoilPackModule](contracts/modules/DegenerusGameFoilPackModule.sol#L30-L815)
 
 contracts/storage/DegenerusGameStorage.sol#L1134
 
 
- - [ ] ID-2015
+ - [ ] ID-2018
 [DegenerusGameStorage.BP_MASK_8](contracts/storage/DegenerusGameStorage.sol#L2075) is never used in [DegenerusGameFoilPackModule](contracts/modules/DegenerusGameFoilPackModule.sol#L30-L815)
 
 contracts/storage/DegenerusGameStorage.sol#L2075
 
 
- - [ ] ID-2016
+ - [ ] ID-2019
 [DegenerusGameStorage.deityBySymbol](contracts/storage/DegenerusGameStorage.sol#L1255) is never used in [GameAfkingModule](contracts/modules/GameAfkingModule.sol#L82-L1941)
 
 contracts/storage/DegenerusGameStorage.sol#L1255
 
 
- - [ ] ID-2017
-[DegenerusGameStorage.presaleBoxCredit](contracts/storage/DegenerusGameStorage.sol#L1093) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1774)
+ - [ ] ID-2020
+[DegenerusGameStorage.presaleBoxCredit](contracts/storage/DegenerusGameStorage.sol#L1093) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1779)
 
 contracts/storage/DegenerusGameStorage.sol#L1093
 
 
- - [ ] ID-2018
+ - [ ] ID-2021
 [DegenerusGameStorage.BP_LOOTBOX_TIER_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2052) is never used in [DegenerusGameAdvanceModule](contracts/modules/DegenerusGameAdvanceModule.sol#L30-L2107)
 
 contracts/storage/DegenerusGameStorage.sol#L2052
 
 
- - [ ] ID-2019
+ - [ ] ID-2022
 [DegenerusGameStorage.deityPassOwners](contracts/storage/DegenerusGameStorage.sol#L1252) is never used in [JackpotSoloTester](contracts/test/JackpotSoloTester.sol#L14-L30)
 
 contracts/storage/DegenerusGameStorage.sol#L1252
 
 
- - [ ] ID-2020
+ - [ ] ID-2023
 [DegenerusGameStorage.BP_PURCHASE_DAY_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2053) is never used in [DegenerusGameMintModule](contracts/modules/DegenerusGameMintModule.sol#L74-L2136)
 
 contracts/storage/DegenerusGameStorage.sol#L2053
 
 
- - [ ] ID-2021
+ - [ ] ID-2024
 [DegenerusGameStorage.GO_JACKPOT_PAID_SHIFT](contracts/storage/DegenerusGameStorage.sol#L1161) is never used in [DegenerusGameLootboxModule](contracts/modules/DegenerusGameLootboxModule.sol#L39-L2359)
 
 contracts/storage/DegenerusGameStorage.sol#L1161
 
 
- - [ ] ID-2022
+ - [ ] ID-2025
 [DegenerusGameStorage.wwxrpJackpotWhalePassBracketAwarded](contracts/storage/DegenerusGameStorage.sol#L1188) is never used in [GameAfkingModule](contracts/modules/GameAfkingModule.sol#L82-L1941)
 
 contracts/storage/DegenerusGameStorage.sol#L1188
 
 
- - [ ] ID-2023
+ - [ ] ID-2026
 [DegenerusGameStorage.deityBoonRecipientDay](contracts/storage/DegenerusGameStorage.sol#L1770) is never used in [DegenerusGameAdvanceModule](contracts/modules/DegenerusGameAdvanceModule.sol#L30-L2107)
 
 contracts/storage/DegenerusGameStorage.sol#L1770
 
 
- - [ ] ID-2024
+ - [ ] ID-2027
 [DegenerusGameStorage.coin](contracts/storage/DegenerusGameStorage.sol#L125-L126) is never used in [SettleClaimableShortfallTester](contracts/test/SettleClaimableShortfallTester.sol#L17-L66)
 
 contracts/storage/DegenerusGameStorage.sol#L125-L126
 
 
- - [ ] ID-2025
+ - [ ] ID-2028
 [DegenerusGameStorage.vrfCoordinator](contracts/storage/DegenerusGameStorage.sol#L1582) is never used in [DegenerusGameDecimatorModule](contracts/modules/DegenerusGameDecimatorModule.sol#L21-L1134)
 
 contracts/storage/DegenerusGameStorage.sol#L1582
 
 
- - [ ] ID-2026
+ - [ ] ID-2029
 [DegenerusGameStorage.lastVrfProcessedTimestamp](contracts/storage/DegenerusGameStorage.sol#L435) is never used in [DegenerusGameGameOverModule](contracts/modules/DegenerusGameGameOverModule.sol#L37-L284)
 
 contracts/storage/DegenerusGameStorage.sol#L435
 
 
- - [ ] ID-2027
+ - [ ] ID-2030
 [DegenerusGameStorage.operatorApprovals](contracts/storage/DegenerusGameStorage.sol#L1195) is never used in [DegenerusGameGameOverModule](contracts/modules/DegenerusGameGameOverModule.sol#L37-L284)
 
 contracts/storage/DegenerusGameStorage.sol#L1195
 
 
- - [ ] ID-2028
+ - [ ] ID-2031
 [DegenerusGameStorage.deityRecipientBoonCount](contracts/storage/DegenerusGameStorage.sol#L2558) is never used in [JackpotSoloTester](contracts/test/JackpotSoloTester.sol#L14-L30)
 
 contracts/storage/DegenerusGameStorage.sol#L2558
 
 
- - [ ] ID-2029
+ - [ ] ID-2032
 [DegenerusGameStorage.vrfRequestId](contracts/storage/DegenerusGameStorage.sol#L423) is never used in [DegenerusGameLootboxModule](contracts/modules/DegenerusGameLootboxModule.sol#L39-L2359)
 
 contracts/storage/DegenerusGameStorage.sol#L423
 
 
- - [ ] ID-2030
+ - [ ] ID-2033
 [DegenerusGameStorage.deityPassOwners](contracts/storage/DegenerusGameStorage.sol#L1252) is never used in [GameAfkingModule](contracts/modules/GameAfkingModule.sol#L82-L1941)
 
 contracts/storage/DegenerusGameStorage.sol#L1252
 
 
- - [ ] ID-2031
+ - [ ] ID-2034
 [DegenerusGameStorage.FOIL_PACK_ENTRIES](contracts/storage/DegenerusGameStorage.sol#L2566) is never used in [DegenerusGameAdvanceModule](contracts/modules/DegenerusGameAdvanceModule.sol#L30-L2107)
 
 contracts/storage/DegenerusGameStorage.sol#L2566
 
 
- - [ ] ID-2032
+ - [ ] ID-2035
 [DegenerusGameStorage.totalFlipReversals](contracts/storage/DegenerusGameStorage.sol#L429) is never used in [DegenerusGameBingoModule](contracts/modules/DegenerusGameBingoModule.sol#L24-L288)
 
 contracts/storage/DegenerusGameStorage.sol#L429
 
 
- - [ ] ID-2033
+ - [ ] ID-2036
 [DegenerusGameStorage.PS_ACTIVE_SHIFT](contracts/storage/DegenerusGameStorage.sol#L1124) is never used in [DegenerusGameFoilPackModule](contracts/modules/DegenerusGameFoilPackModule.sol#L30-L815)
 
 contracts/storage/DegenerusGameStorage.sol#L1124
 
 
- - [ ] ID-2034
+ - [ ] ID-2037
 [DegenerusGameStorage.DEITY_PASS_ACTIVITY_BONUS_POINTS](contracts/storage/DegenerusGameStorage.sol#L137) is never used in [DegenerusGameBoonModule](contracts/modules/DegenerusGameBoonModule.sol#L22-L343)
 
 contracts/storage/DegenerusGameStorage.sol#L137
 
 
- - [ ] ID-2035
+ - [ ] ID-2038
 [DegenerusGameFoilPackModule.JACKPOT_LEVEL_CAP](contracts/modules/DegenerusGameFoilPackModule.sol#L79) is never used in [DegenerusGameFoilPackModule](contracts/modules/DegenerusGameFoilPackModule.sol#L30-L815)
 
 contracts/modules/DegenerusGameFoilPackModule.sol#L79
 
 
- - [ ] ID-2036
+ - [ ] ID-2039
 [DegenerusGameStorage.BP_LAZY_PASS_CLEAR](contracts/storage/DegenerusGameStorage.sol#L2099-L2100) is never used in [DegenerusGame](contracts/DegenerusGame.sol#L87-L2624)
 
 contracts/storage/DegenerusGameStorage.sol#L2099-L2100
 
 
- - [ ] ID-2037
+ - [ ] ID-2040
 [DegenerusGameStorage.operatorApprovals](contracts/storage/DegenerusGameStorage.sol#L1195) is never used in [DegenerusGameLootboxModule](contracts/modules/DegenerusGameLootboxModule.sol#L39-L2359)
 
 contracts/storage/DegenerusGameStorage.sol#L1195
 
 
- - [ ] ID-2038
+ - [ ] ID-2041
 [DegenerusGameStorage.dailyTicketBudgetsPacked](contracts/storage/DegenerusGameStorage.sol#L442) is never used in [DegenerusGameMintModule](contracts/modules/DegenerusGameMintModule.sol#L74-L2136)
 
 contracts/storage/DegenerusGameStorage.sol#L442
 
 
- - [ ] ID-2039
+ - [ ] ID-2042
 [DegenerusGameStorage.PS_ACTIVE_MASK](contracts/storage/DegenerusGameStorage.sol#L1125) is never used in [SettleClaimableShortfallTester](contracts/test/SettleClaimableShortfallTester.sol#L17-L66)
 
 contracts/storage/DegenerusGameStorage.sol#L1125
 
 
- - [ ] ID-2040
+ - [ ] ID-2043
 [DegenerusGameStorage.foilBuyers](contracts/storage/DegenerusGameStorage.sol#L2541) is never used in [DegenerusGameAdvanceModule](contracts/modules/DegenerusGameAdvanceModule.sol#L30-L2107)
 
 contracts/storage/DegenerusGameStorage.sol#L2541
 
 
- - [ ] ID-2041
+ - [ ] ID-2044
 [DegenerusGameStorage.phaseTransitionActive](contracts/storage/DegenerusGameStorage.sol#L304) is never used in [DegenerusGameBoonModule](contracts/modules/DegenerusGameBoonModule.sol#L22-L343)
 
 contracts/storage/DegenerusGameStorage.sol#L304
 
 
- - [ ] ID-2042
+ - [ ] ID-2045
 [DegenerusGameStorage.wwxrpJackpotWhalePassBracketAwarded](contracts/storage/DegenerusGameStorage.sol#L1188) is never used in [DegenerusGameBingoModule](contracts/modules/DegenerusGameBingoModule.sol#L24-L288)
 
 contracts/storage/DegenerusGameStorage.sol#L1188
 
 
- - [ ] ID-2043
-[DegenerusGameStorage.BP_DEITY_ACTIVITY_DAY_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2065) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1774)
+ - [ ] ID-2046
+[DegenerusGameStorage.BP_DEITY_ACTIVITY_DAY_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2065) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1779)
 
 contracts/storage/DegenerusGameStorage.sol#L2065
 
 
- - [ ] ID-2044
+ - [ ] ID-2047
 [DegenerusGameStorage.lastTerminalDecClaimRound](contracts/storage/DegenerusGameStorage.sol#L1985) is never used in [SettleClaimableShortfallTester](contracts/test/SettleClaimableShortfallTester.sol#L17-L66)
 
 contracts/storage/DegenerusGameStorage.sol#L1985
 
 
- - [ ] ID-2045
+ - [ ] ID-2048
 [DegenerusGameStorage.coin](contracts/storage/DegenerusGameStorage.sol#L125-L126) is never used in [DegenerusGameBingoModule](contracts/modules/DegenerusGameBingoModule.sol#L24-L288)
 
 contracts/storage/DegenerusGameStorage.sol#L125-L126
 
 
- - [ ] ID-2046
+ - [ ] ID-2049
 [DegenerusGameStorage.PS_MINT_ETH_SHIFT](contracts/storage/DegenerusGameStorage.sol#L1126) is never used in [DegenerusGameDecimatorModule](contracts/modules/DegenerusGameDecimatorModule.sol#L21-L1134)
 
 contracts/storage/DegenerusGameStorage.sol#L1126
 
 
- - [ ] ID-2047
-[DegenerusGameStorage._subOpenCursor](contracts/storage/DegenerusGameStorage.sol#L2438) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1774)
+ - [ ] ID-2050
+[DegenerusGameStorage._subOpenCursor](contracts/storage/DegenerusGameStorage.sol#L2438) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1779)
 
 contracts/storage/DegenerusGameStorage.sol#L2438
 
 
- - [ ] ID-2048
+ - [ ] ID-2051
 [DegenerusGameStorage.presaleBoxDgnrsPoolStart](contracts/storage/DegenerusGameStorage.sol#L1264) is never used in [DegenerusGameGameOverModule](contracts/modules/DegenerusGameGameOverModule.sol#L37-L284)
 
 contracts/storage/DegenerusGameStorage.sol#L1264
 
 
- - [ ] ID-2049
+ - [ ] ID-2052
 [DegenerusGameStorage.lastVrfProcessedTimestamp](contracts/storage/DegenerusGameStorage.sol#L435) is never used in [DegenerusGameWhaleModule](contracts/modules/DegenerusGameWhaleModule.sol#L20-L1026)
 
 contracts/storage/DegenerusGameStorage.sol#L435
 
 
- - [ ] ID-2050
+ - [ ] ID-2053
 [DegenerusGameStorage.terminalDecBucketBurnTotal](contracts/storage/DegenerusGameStorage.sol#L1975) is never used in [DegenerusGameAdvanceModule](contracts/modules/DegenerusGameAdvanceModule.sol#L30-L2107)
 
 contracts/storage/DegenerusGameStorage.sol#L1975
 
 
- - [ ] ID-2051
+ - [ ] ID-2054
 [DegenerusGameStorage.decBucketOffsetPacked](contracts/storage/DegenerusGameStorage.sol#L1904) is never used in [DegenerusGameGameOverModule](contracts/modules/DegenerusGameGameOverModule.sol#L37-L284)
 
 contracts/storage/DegenerusGameStorage.sol#L1904
 
 
- - [ ] ID-2052
+ - [ ] ID-2055
 [DegenerusGameStorage.subsFullyProcessed](contracts/storage/DegenerusGameStorage.sol#L358) is never used in [DegenerusGameDecimatorModule](contracts/modules/DegenerusGameDecimatorModule.sol#L21-L1134)
 
 contracts/storage/DegenerusGameStorage.sol#L358
 
 
- - [ ] ID-2053
+ - [ ] ID-2056
 [DegenerusGameStorage.lastTerminalDecClaimRound](contracts/storage/DegenerusGameStorage.sol#L1985) is never used in [DegenerusGameMintModule](contracts/modules/DegenerusGameMintModule.sol#L74-L2136)
 
 contracts/storage/DegenerusGameStorage.sol#L1985
 
 
- - [ ] ID-2054
+ - [ ] ID-2057
 [DegenerusGameStorage.FOIL_TO_FUTURE_BPS](contracts/storage/DegenerusGameStorage.sol#L2562) is never used in [DegenerusGameLootboxModule](contracts/modules/DegenerusGameLootboxModule.sol#L39-L2359)
 
 contracts/storage/DegenerusGameStorage.sol#L2562
 
 
- - [ ] ID-2055
+ - [ ] ID-2058
 [DegenerusGameStorage.BP_COINFLIP_CLEAR](contracts/storage/DegenerusGameStorage.sol#L2079) is never used in [DegenerusGameLootboxModule](contracts/modules/DegenerusGameLootboxModule.sol#L39-L2359)
 
 contracts/storage/DegenerusGameStorage.sol#L2079
 
 
- - [ ] ID-2056
+ - [ ] ID-2059
 [DegenerusGameStorage.phaseTransitionActive](contracts/storage/DegenerusGameStorage.sol#L304) is never used in [DegenerusGameBingoModule](contracts/modules/DegenerusGameBingoModule.sol#L24-L288)
 
 contracts/storage/DegenerusGameStorage.sol#L304
 
 
- - [ ] ID-2057
+ - [ ] ID-2060
 [DegenerusGameStorage.LR_MID_DAY_SHIFT](contracts/storage/DegenerusGameStorage.sol#L1619) is never used in [DegenerusGameBingoModule](contracts/modules/DegenerusGameBingoModule.sol#L24-L288)
 
 contracts/storage/DegenerusGameStorage.sol#L1619
 
 
- - [ ] ID-2058
+ - [ ] ID-2061
 [DegenerusGameStorage.levelPrizePool](contracts/storage/DegenerusGameStorage.sol#L1202) is never used in [GameAfkingModule](contracts/modules/GameAfkingModule.sol#L82-L1941)
 
 contracts/storage/DegenerusGameStorage.sol#L1202
 
 
- - [ ] ID-2059
+ - [ ] ID-2062
 [DegenerusGameStorage.BP_WHALE_CLEAR](contracts/storage/DegenerusGameStorage.sol#L2090) is never used in [DegenerusGameMintModule](contracts/modules/DegenerusGameMintModule.sol#L74-L2136)
 
 contracts/storage/DegenerusGameStorage.sol#L2090
 
 
- - [ ] ID-2060
+ - [ ] ID-2063
 [DegenerusGameStorage.BP_COINFLIP_CLEAR](contracts/storage/DegenerusGameStorage.sol#L2079) is never used in [SettleClaimableShortfallTester](contracts/test/SettleClaimableShortfallTester.sol#L17-L66)
 
 contracts/storage/DegenerusGameStorage.sol#L2079
 
 
- - [ ] ID-2061
+ - [ ] ID-2064
 [DegenerusGameStorage.decBurn](contracts/storage/DegenerusGameStorage.sol#L1890) is never used in [GameAfkingModule](contracts/modules/GameAfkingModule.sol#L82-L1941)
 
 contracts/storage/DegenerusGameStorage.sol#L1890
 
 
- - [ ] ID-2062
+ - [ ] ID-2065
 [DegenerusGameStorage.bingoFirsts](contracts/storage/DegenerusGameStorage.sol#L2044) is never used in [DegenerusGameDecimatorModule](contracts/modules/DegenerusGameDecimatorModule.sol#L21-L1134)
 
 contracts/storage/DegenerusGameStorage.sol#L2044
 
 
- - [ ] ID-2063
+ - [ ] ID-2066
 [DegenerusGameStorage.presaleBoxDgnrsPoolStart](contracts/storage/DegenerusGameStorage.sol#L1264) is never used in [DegenerusGameMintModule](contracts/modules/DegenerusGameMintModule.sol#L74-L2136)
 
 contracts/storage/DegenerusGameStorage.sol#L1264
 
 
- - [ ] ID-2064
+ - [ ] ID-2067
 [DegenerusGameStorage.BP_DEITY_PASS_DAY_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2067) is never used in [DegenerusGameBingoModule](contracts/modules/DegenerusGameBingoModule.sol#L24-L288)
 
 contracts/storage/DegenerusGameStorage.sol#L2067
 
 
- - [ ] ID-2065
+ - [ ] ID-2068
 [DegenerusGameStorage._afkingResetDay](contracts/storage/DegenerusGameStorage.sol#L2445) is never used in [DegenerusGameDecimatorModule](contracts/modules/DegenerusGameDecimatorModule.sol#L21-L1134)
 
 contracts/storage/DegenerusGameStorage.sol#L2445
 
 
- - [ ] ID-2066
+ - [ ] ID-2069
 [DegenerusGameStorage._fundingSourceOf](contracts/storage/DegenerusGameStorage.sol#L2420) is never used in [SettleClaimableShortfallTester](contracts/test/SettleClaimableShortfallTester.sol#L17-L66)
 
 contracts/storage/DegenerusGameStorage.sol#L2420
 
 
- - [ ] ID-2067
+ - [ ] ID-2070
 [DegenerusGameStorage.deityPassPricePaid](contracts/storage/DegenerusGameStorage.sol#L1249) is never used in [DegenerusGame](contracts/DegenerusGame.sol#L87-L2624)
 
 contracts/storage/DegenerusGameStorage.sol#L1249
 
 
- - [ ] ID-2068
+ - [ ] ID-2071
 [DegenerusGameStorage.foilBuyers](contracts/storage/DegenerusGameStorage.sol#L2541) is never used in [DegenerusGameWhaleModule](contracts/modules/DegenerusGameWhaleModule.sol#L20-L1026)
 
 contracts/storage/DegenerusGameStorage.sol#L2541
 
 
- - [ ] ID-2069
+ - [ ] ID-2072
 [DegenerusGameStorage.BOOTSTRAP_PRIZE_POOL](contracts/storage/DegenerusGameStorage.sol#L165) is never used in [DegenerusGameMintModule](contracts/modules/DegenerusGameMintModule.sol#L74-L2136)
 
 contracts/storage/DegenerusGameStorage.sol#L165
 
 
- - [ ] ID-2070
+ - [ ] ID-2073
 [DegenerusGameStorage.BP_ACTIVITY_CLEAR](contracts/storage/DegenerusGameStorage.sol#L2094) is never used in [SettleClaimableShortfallTester](contracts/test/SettleClaimableShortfallTester.sol#L17-L66)
 
 contracts/storage/DegenerusGameStorage.sol#L2094
 
 
- - [ ] ID-2071
+ - [ ] ID-2074
 [DegenerusGameStorage.FOIL_TO_FUTURE_BPS](contracts/storage/DegenerusGameStorage.sol#L2562) is never used in [DegenerusGame](contracts/DegenerusGame.sol#L87-L2624)
 
 contracts/storage/DegenerusGameStorage.sol#L2562
 
 
- - [ ] ID-2072
+ - [ ] ID-2075
 [DegenerusGameStorage.decWindowOpen](contracts/storage/DegenerusGameStorage.sol#L295) is never used in [JackpotSoloTester](contracts/test/JackpotSoloTester.sol#L14-L30)
 
 contracts/storage/DegenerusGameStorage.sol#L295
 
 
- - [ ] ID-2073
+ - [ ] ID-2076
 [DegenerusGameStorage.boxPlayers](contracts/storage/DegenerusGameStorage.sol#L2481) is never used in [DegenerusGameGameOverModule](contracts/modules/DegenerusGameGameOverModule.sol#L37-L284)
 
 contracts/storage/DegenerusGameStorage.sol#L2481
 
 
- - [ ] ID-2074
+ - [ ] ID-2077
 [DegenerusGameStorage.presaleOver](contracts/storage/DegenerusGameStorage.sol#L348) is never used in [JackpotSoloTester](contracts/test/JackpotSoloTester.sol#L14-L30)
 
 contracts/storage/DegenerusGameStorage.sol#L348
 
 
- - [ ] ID-2075
-[DegenerusGameStorage.decBucketBurnTotal](contracts/storage/DegenerusGameStorage.sol#L1895) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1774)
+ - [ ] ID-2078
+[DegenerusGameStorage.decBucketBurnTotal](contracts/storage/DegenerusGameStorage.sol#L1895) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1779)
 
 contracts/storage/DegenerusGameStorage.sol#L1895
 
 
- - [ ] ID-2076
+ - [ ] ID-2079
 [DegenerusGameStorage.PS_MINT_ETH_MASK](contracts/storage/DegenerusGameStorage.sol#L1127) is never used in [DegenerusGame](contracts/DegenerusGame.sol#L87-L2624)
 
 contracts/storage/DegenerusGameStorage.sol#L1127
 
 
- - [ ] ID-2077
+ - [ ] ID-2080
 [DegenerusGameStorage.FOIL_TO_FUTURE_BPS](contracts/storage/DegenerusGameStorage.sol#L2562) is never used in [DegenerusGameDecimatorModule](contracts/modules/DegenerusGameDecimatorModule.sol#L21-L1134)
 
 contracts/storage/DegenerusGameStorage.sol#L2562
 
 
- - [ ] ID-2078
+ - [ ] ID-2081
 [DegenerusGameStorage.BP_MASK_24](contracts/storage/DegenerusGameStorage.sol#L2074) is never used in [GameAfkingModule](contracts/modules/GameAfkingModule.sol#L82-L1941)
 
 contracts/storage/DegenerusGameStorage.sol#L2074
 
 
- - [ ] ID-2079
+ - [ ] ID-2082
 [DegenerusGameStorage.lvlTraitEntry](contracts/storage/DegenerusGameStorage.sol#L473) is never used in [DegenerusGameLootboxModule](contracts/modules/DegenerusGameLootboxModule.sol#L39-L2359)
 
 contracts/storage/DegenerusGameStorage.sol#L473
 
 
- - [ ] ID-2080
+ - [ ] ID-2083
 [DegenerusGameStorage.BP_DEITY_WHALE_DAY_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2059) is never used in [DegenerusGameMintModule](contracts/modules/DegenerusGameMintModule.sol#L74-L2136)
 
 contracts/storage/DegenerusGameStorage.sol#L2059
 
 
- - [ ] ID-2081
+ - [ ] ID-2084
 [DegenerusGameStorage.lootboxEth](contracts/storage/DegenerusGameStorage.sol#L1067) is never used in [JackpotSoloTester](contracts/test/JackpotSoloTester.sol#L14-L30)
 
 contracts/storage/DegenerusGameStorage.sol#L1067
 
 
- - [ ] ID-2082
+ - [ ] ID-2085
 [DegenerusGameStorage.GO_SWEPT_MASK](contracts/storage/DegenerusGameStorage.sol#L1164) is never used in [DegenerusGameBingoModule](contracts/modules/DegenerusGameBingoModule.sol#L24-L288)
 
 contracts/storage/DegenerusGameStorage.sol#L1164
 
 
- - [ ] ID-2083
+ - [ ] ID-2086
 [DegenerusGameStorage.FOIL_TO_FUTURE_BPS](contracts/storage/DegenerusGameStorage.sol#L2562) is never used in [DegenerusGameAdvanceModule](contracts/modules/DegenerusGameAdvanceModule.sol#L30-L2107)
 
 contracts/storage/DegenerusGameStorage.sol#L2562
 
 
- - [ ] ID-2084
-[DegenerusGameStorage.BP_DEITY_PASS_CLEAR](contracts/storage/DegenerusGameStorage.sol#L2096-L2097) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1774)
+ - [ ] ID-2087
+[DegenerusGameStorage.BP_DEITY_PASS_CLEAR](contracts/storage/DegenerusGameStorage.sol#L2096-L2097) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1779)
 
 contracts/storage/DegenerusGameStorage.sol#L2096-L2097
 
 
- - [ ] ID-2085
+ - [ ] ID-2088
 [DegenerusGameStorage.vrfRequestId](contracts/storage/DegenerusGameStorage.sol#L423) is never used in [DegenerusGameWhaleModule](contracts/modules/DegenerusGameWhaleModule.sol#L20-L1026)
 
 contracts/storage/DegenerusGameStorage.sol#L423
 
 
- - [ ] ID-2086
+ - [ ] ID-2089
 [DegenerusGameStorage.dailyJackpotCoinTicketsPending](contracts/storage/DegenerusGameStorage.sol#L312) is never used in [SettleClaimableShortfallTester](contracts/test/SettleClaimableShortfallTester.sol#L17-L66)
 
 contracts/storage/DegenerusGameStorage.sol#L312
 
 
- - [ ] ID-2087
+ - [ ] ID-2090
 [DegenerusGameStorage.lastVrfProcessedTimestamp](contracts/storage/DegenerusGameStorage.sol#L435) is never used in [DegenerusGameMintModule](contracts/modules/DegenerusGameMintModule.sol#L74-L2136)
 
 contracts/storage/DegenerusGameStorage.sol#L435
 
 
- - [ ] ID-2088
+ - [ ] ID-2091
 [DegenerusGameStorage._subOpenCursor](contracts/storage/DegenerusGameStorage.sol#L2438) is never used in [JackpotSoloTester](contracts/test/JackpotSoloTester.sol#L14-L30)
 
 contracts/storage/DegenerusGameStorage.sol#L2438
 
 
- - [ ] ID-2089
-[DegenerusGameStorage.deityBoonRecipientDay](contracts/storage/DegenerusGameStorage.sol#L1770) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1774)
+ - [ ] ID-2092
+[DegenerusGameStorage.deityBoonRecipientDay](contracts/storage/DegenerusGameStorage.sol#L1770) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1779)
 
 contracts/storage/DegenerusGameStorage.sol#L1770
 
 
- - [ ] ID-2090
+ - [ ] ID-2093
 [DegenerusGameStorage.affiliateDgnrsClaimedBy](contracts/storage/DegenerusGameStorage.sol#L1205-L1206) is never used in [DegenerusGameBoonModule](contracts/modules/DegenerusGameBoonModule.sol#L22-L343)
 
 contracts/storage/DegenerusGameStorage.sol#L1205-L1206
 
 
- - [ ] ID-2091
+ - [ ] ID-2094
 [DegenerusGameStorage.affiliateDgnrsClaimedBy](contracts/storage/DegenerusGameStorage.sol#L1205-L1206) is never used in [DegenerusGameDecimatorModule](contracts/modules/DegenerusGameDecimatorModule.sol#L21-L1134)
 
 contracts/storage/DegenerusGameStorage.sol#L1205-L1206
 
 
- - [ ] ID-2092
+ - [ ] ID-2095
 [DegenerusGameStorage.ticketsFullyProcessed](contracts/storage/DegenerusGameStorage.sol#L326) is never used in [DegenerusGameWhaleModule](contracts/modules/DegenerusGameWhaleModule.sol#L20-L1026)
 
 contracts/storage/DegenerusGameStorage.sol#L326
 
 
- - [ ] ID-2093
+ - [ ] ID-2096
 [DegenerusGameStorage.decWindowOpen](contracts/storage/DegenerusGameStorage.sol#L295) is never used in [DegenerusGameBingoModule](contracts/modules/DegenerusGameBingoModule.sol#L24-L288)
 
 contracts/storage/DegenerusGameStorage.sol#L295
 
 
- - [ ] ID-2094
+ - [ ] ID-2097
 [DegenerusGameStorage.decBucketOffsetPacked](contracts/storage/DegenerusGameStorage.sol#L1904) is never used in [DegenerusGameFoilPackModule](contracts/modules/DegenerusGameFoilPackModule.sol#L30-L815)
 
 contracts/storage/DegenerusGameStorage.sol#L1904
 
 
- - [ ] ID-2095
+ - [ ] ID-2098
 [DegenerusGameStorage._afkingResetDay](contracts/storage/DegenerusGameStorage.sol#L2445) is never used in [DegenerusGameBingoModule](contracts/modules/DegenerusGameBingoModule.sol#L24-L288)
 
 contracts/storage/DegenerusGameStorage.sol#L2445
 
 
- - [ ] ID-2096
+ - [ ] ID-2099
 [DegenerusGameStorage.LR_THRESHOLD_SHIFT](contracts/storage/DegenerusGameStorage.sol#L1615) is never used in [SettleClaimableShortfallTester](contracts/test/SettleClaimableShortfallTester.sol#L17-L66)
 
 contracts/storage/DegenerusGameStorage.sol#L1615
 
 
- - [ ] ID-2097
-[DegenerusGameStorage.BP_PURCHASE_TIER_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2055) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1774)
+ - [ ] ID-2100
+[DegenerusGameStorage.BP_PURCHASE_TIER_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2055) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1779)
 
 contracts/storage/DegenerusGameStorage.sol#L2055
 
 
- - [ ] ID-2098
+ - [ ] ID-2101
 [DegenerusGameStorage.ticketCursor](contracts/storage/DegenerusGameStorage.sol#L532) is never used in [DegenerusGame](contracts/DegenerusGame.sol#L87-L2624)
 
 contracts/storage/DegenerusGameStorage.sol#L532
 
 
- - [ ] ID-2099
+ - [ ] ID-2102
 [DegenerusGameStorage._subscribers](contracts/storage/DegenerusGameStorage.sol#L2423) is never used in [DegenerusGameLootboxModule](contracts/modules/DegenerusGameLootboxModule.sol#L39-L2359)
 
 contracts/storage/DegenerusGameStorage.sol#L2423
 
 
- - [ ] ID-2100
+ - [ ] ID-2103
 [DegenerusGameStorage.BP_DEITY_DEITY_PASS_DAY_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2068) is never used in [GameAfkingModule](contracts/modules/GameAfkingModule.sol#L82-L1941)
 
 contracts/storage/DegenerusGameStorage.sol#L2068
 
 
- - [ ] ID-2101
+ - [ ] ID-2104
 [DegenerusGameStorage.GO_JACKPOT_PAID_MASK](contracts/storage/DegenerusGameStorage.sol#L1162) is never used in [DegenerusGameWhaleModule](contracts/modules/DegenerusGameWhaleModule.sol#L20-L1026)
 
 contracts/storage/DegenerusGameStorage.sol#L1162
 
 
- - [ ] ID-2102
+ - [ ] ID-2105
 [DegenerusGameStorage.PRESALE_BOX_ETH_CAP](contracts/storage/DegenerusGameStorage.sol#L1134) is never used in [DegenerusGameWhaleModule](contracts/modules/DegenerusGameWhaleModule.sol#L20-L1026)
 
 contracts/storage/DegenerusGameStorage.sol#L1134
 
 
- - [ ] ID-2103
+ - [ ] ID-2106
 [DegenerusGameStorage.BP_DEITY_DEITY_PASS_DAY_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2068) is never used in [SettleClaimableShortfallTester](contracts/test/SettleClaimableShortfallTester.sol#L17-L66)
 
 contracts/storage/DegenerusGameStorage.sol#L2068
 
 
- - [ ] ID-2104
+ - [ ] ID-2107
 [DegenerusGameStorage.BP_WHALE_DAY_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2058) is never used in [SettleClaimableShortfallTester](contracts/test/SettleClaimableShortfallTester.sol#L17-L66)
 
 contracts/storage/DegenerusGameStorage.sol#L2058
 
 
- - [ ] ID-2105
+ - [ ] ID-2108
 [DegenerusGameStorage.ticketRedemptionOpen](contracts/storage/DegenerusGameStorage.sol#L376) is never used in [DegenerusGameFoilPackModule](contracts/modules/DegenerusGameFoilPackModule.sol#L30-L815)
 
 contracts/storage/DegenerusGameStorage.sol#L376
 
 
- - [ ] ID-2106
+ - [ ] ID-2109
 [DegenerusGameStorage._subCursor](contracts/storage/DegenerusGameStorage.sol#L2434) is never used in [DegenerusGame](contracts/DegenerusGame.sol#L87-L2624)
 
 contracts/storage/DegenerusGameStorage.sol#L2434
 
 
- - [ ] ID-2107
+ - [ ] ID-2110
 [DegenerusGameStorage.PS_MINT_ETH_SHIFT](contracts/storage/DegenerusGameStorage.sol#L1126) is never used in [GameAfkingModule](contracts/modules/GameAfkingModule.sol#L82-L1941)
 
 contracts/storage/DegenerusGameStorage.sol#L1126
 
 
- - [ ] ID-2108
+ - [ ] ID-2111
 [DegenerusGameStorage.degeneretteBetNonce](contracts/storage/DegenerusGameStorage.sol#L1788) is never used in [DegenerusGameLootboxModule](contracts/modules/DegenerusGameLootboxModule.sol#L39-L2359)
 
 contracts/storage/DegenerusGameStorage.sol#L1788
 
 
- - [ ] ID-2109
+ - [ ] ID-2112
 [DegenerusGameStorage.BP_PURCHASE_CLEAR](contracts/storage/DegenerusGameStorage.sol#L2084-L2085) is never used in [DegenerusGameLootboxModule](contracts/modules/DegenerusGameLootboxModule.sol#L39-L2359)
 
 contracts/storage/DegenerusGameStorage.sol#L2084-L2085
 
 
- - [ ] ID-2110
+ - [ ] ID-2113
 [DegenerusGameStorage.BP_PURCHASE_CLEAR](contracts/storage/DegenerusGameStorage.sol#L2084-L2085) is never used in [DegenerusGameFoilPackModule](contracts/modules/DegenerusGameFoilPackModule.sol#L30-L815)
 
 contracts/storage/DegenerusGameStorage.sol#L2084-L2085
 
 
- - [ ] ID-2111
+ - [ ] ID-2114
 [DegenerusGameStorage.foilMatchClaimed](contracts/storage/DegenerusGameStorage.sol#L2518) is never used in [DegenerusGame](contracts/DegenerusGame.sol#L87-L2624)
 
 contracts/storage/DegenerusGameStorage.sol#L2518
 
 
- - [ ] ID-2112
+ - [ ] ID-2115
 [DegenerusGameStorage.BP_LOOTBOX_DAY_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2050) is never used in [DegenerusGameAdvanceModule](contracts/modules/DegenerusGameAdvanceModule.sol#L30-L2107)
 
 contracts/storage/DegenerusGameStorage.sol#L2050
 
 
- - [ ] ID-2113
+ - [ ] ID-2116
 [DegenerusGameStorage.LOOTBOX_CLAIM_THRESHOLD](contracts/storage/DegenerusGameStorage.sol#L161) is never used in [DegenerusGameAdvanceModule](contracts/modules/DegenerusGameAdvanceModule.sol#L30-L2107)
 
 contracts/storage/DegenerusGameStorage.sol#L161
 
 
- - [ ] ID-2114
+ - [ ] ID-2117
 [DegenerusGameStorage.presaleBoxEthSold](contracts/storage/DegenerusGameStorage.sol#L1088) is never used in [DegenerusGameAdvanceModule](contracts/modules/DegenerusGameAdvanceModule.sol#L30-L2107)
 
 contracts/storage/DegenerusGameStorage.sol#L1088
 
 
- - [ ] ID-2115
+ - [ ] ID-2118
 [DegenerusGameStorage.BP_COINFLIP_TIER_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2049) is never used in [DegenerusGameFoilPackModule](contracts/modules/DegenerusGameFoilPackModule.sol#L30-L815)
 
 contracts/storage/DegenerusGameStorage.sol#L2049
 
 
- - [ ] ID-2116
+ - [ ] ID-2119
 [DegenerusGameStorage.LOOTBOX_PRESALE_ETH_CAP](contracts/storage/DegenerusGameStorage.sol#L1130) is never used in [DegenerusGameLootboxModule](contracts/modules/DegenerusGameLootboxModule.sol#L39-L2359)
 
 contracts/storage/DegenerusGameStorage.sol#L1130
 
 
- - [ ] ID-2117
+ - [ ] ID-2120
 [DegenerusGameStorage.PRESALE_BOX_SOLD_SHIFT](contracts/storage/DegenerusGameStorage.sol#L1108) is never used in [GameAfkingModule](contracts/modules/GameAfkingModule.sol#L82-L1941)
 
 contracts/storage/DegenerusGameStorage.sol#L1108
 
 
- - [ ] ID-2118
+ - [ ] ID-2121
 [DegenerusGameStorage.BP_LOOTBOX_CLEAR](contracts/storage/DegenerusGameStorage.sol#L2081-L2082) is never used in [DegenerusGame](contracts/DegenerusGame.sol#L87-L2624)
 
 contracts/storage/DegenerusGameStorage.sol#L2081-L2082
 
 
- - [ ] ID-2119
+ - [ ] ID-2122
 [DegenerusGameStorage.BP_COINFLIP_CLEAR](contracts/storage/DegenerusGameStorage.sol#L2079) is never used in [DegenerusGameGameOverModule](contracts/modules/DegenerusGameGameOverModule.sol#L37-L284)
 
 contracts/storage/DegenerusGameStorage.sol#L2079
 
 
- - [ ] ID-2120
+ - [ ] ID-2123
 [DegenerusGameStorage._subCursor](contracts/storage/DegenerusGameStorage.sol#L2434) is never used in [DegenerusGameDecimatorModule](contracts/modules/DegenerusGameDecimatorModule.sol#L21-L1134)
 
 contracts/storage/DegenerusGameStorage.sol#L2434
 
 
- - [ ] ID-2121
+ - [ ] ID-2124
 [DegenerusGameStorage.BP_DEITY_LOOTBOX_DAY_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2051) is never used in [GameAfkingModule](contracts/modules/GameAfkingModule.sol#L82-L1941)
 
 contracts/storage/DegenerusGameStorage.sol#L2051
 
 
- - [ ] ID-2122
+ - [ ] ID-2125
 [DegenerusGameStorage.ticketsFullyProcessed](contracts/storage/DegenerusGameStorage.sol#L326) is never used in [DegenerusGameFoilPackModule](contracts/modules/DegenerusGameFoilPackModule.sol#L30-L815)
 
 contracts/storage/DegenerusGameStorage.sol#L326
 
 
- - [ ] ID-2123
+ - [ ] ID-2126
 [DegenerusGameStorage.boxCursor](contracts/storage/DegenerusGameStorage.sol#L2454) is never used in [DegenerusGameMintModule](contracts/modules/DegenerusGameMintModule.sol#L74-L2136)
 
 contracts/storage/DegenerusGameStorage.sol#L2454
 
 
- - [ ] ID-2124
+ - [ ] ID-2127
 [DegenerusGameStorage.PRICE_COIN_UNIT](contracts/storage/DegenerusGameStorage.sol#L154) is never used in [SettleClaimableShortfallTester](contracts/test/SettleClaimableShortfallTester.sol#L17-L66)
 
 contracts/storage/DegenerusGameStorage.sol#L154
 
 
- - [ ] ID-2125
-[DegenerusGameStorage.yieldAccumulator](contracts/storage/DegenerusGameStorage.sol#L1925) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1774)
+ - [ ] ID-2128
+[DegenerusGameStorage.yieldAccumulator](contracts/storage/DegenerusGameStorage.sol#L1925) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1779)
 
 contracts/storage/DegenerusGameStorage.sol#L1925
 
 
- - [ ] ID-2126
+ - [ ] ID-2129
 [DegenerusGameStorage.BP_WHALE_TIER_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2060) is never used in [GameAfkingModule](contracts/modules/GameAfkingModule.sol#L82-L1941)
 
 contracts/storage/DegenerusGameStorage.sol#L2060
 
 
- - [ ] ID-2127
-[DegenerusGameStorage.PS_MINT_ETH_MASK](contracts/storage/DegenerusGameStorage.sol#L1127) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1774)
+ - [ ] ID-2130
+[DegenerusGameStorage.PS_MINT_ETH_MASK](contracts/storage/DegenerusGameStorage.sol#L1127) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1779)
 
 contracts/storage/DegenerusGameStorage.sol#L1127
 
 
- - [ ] ID-2128
-[DegenerusGameStorage.BP_LAZY_PASS_DAY_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2069) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1774)
+ - [ ] ID-2131
+[DegenerusGameStorage.BP_LAZY_PASS_DAY_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2069) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1779)
 
 contracts/storage/DegenerusGameStorage.sol#L2069
 
 
- - [ ] ID-2129
+ - [ ] ID-2132
 [DegenerusGameStorage.BP_DEITY_COINFLIP_DAY_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2048) is never used in [DegenerusGameDecimatorModule](contracts/modules/DegenerusGameDecimatorModule.sol#L21-L1134)
 
 contracts/storage/DegenerusGameStorage.sol#L2048
 
 
- - [ ] ID-2130
+ - [ ] ID-2133
 [DegenerusGameStorage.phaseTransitionActive](contracts/storage/DegenerusGameStorage.sol#L304) is never used in [DegenerusGameDecimatorModule](contracts/modules/DegenerusGameDecimatorModule.sol#L21-L1134)
 
 contracts/storage/DegenerusGameStorage.sol#L304
 
 
- - [ ] ID-2131
+ - [ ] ID-2134
 [DegenerusGameStorage.BP_ACTIVITY_CLEAR](contracts/storage/DegenerusGameStorage.sol#L2094) is never used in [DegenerusGameFoilPackModule](contracts/modules/DegenerusGameFoilPackModule.sol#L30-L815)
 
 contracts/storage/DegenerusGameStorage.sol#L2094
 
 
- - [ ] ID-2132
+ - [ ] ID-2135
 [DegenerusGameStorage.PRESALE_BOX_SOLD_SHIFT](contracts/storage/DegenerusGameStorage.sol#L1108) is never used in [DegenerusGame](contracts/DegenerusGame.sol#L87-L2624)
 
 contracts/storage/DegenerusGameStorage.sol#L1108
 
 
- - [ ] ID-2133
+ - [ ] ID-2136
 [DegenerusGameStorage.BP_ACTIVITY_DAY_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2064) is never used in [DegenerusGameFoilPackModule](contracts/modules/DegenerusGameFoilPackModule.sol#L30-L815)
 
 contracts/storage/DegenerusGameStorage.sol#L2064
 
 
- - [ ] ID-2134
+ - [ ] ID-2137
 [DegenerusGameStorage.ACTIVITY_SCORE_HARD_CAP_POINTS](contracts/storage/DegenerusGameStorage.sol#L143) is never used in [DegenerusGameBingoModule](contracts/modules/DegenerusGameBingoModule.sol#L24-L288)
 
 contracts/storage/DegenerusGameStorage.sol#L143
 
 
- - [ ] ID-2135
+ - [ ] ID-2138
 [DegenerusGameStorage.BP_DEITY_PASS_TIER_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2066) is never used in [DegenerusGameGameOverModule](contracts/modules/DegenerusGameGameOverModule.sol#L37-L284)
 
 contracts/storage/DegenerusGameStorage.sol#L2066
 
 
- - [ ] ID-2136
+ - [ ] ID-2139
 [DegenerusGameStorage.wwxrpJackpotWhalePassBracketAwarded](contracts/storage/DegenerusGameStorage.sol#L1188) is never used in [DegenerusGameDecimatorModule](contracts/modules/DegenerusGameDecimatorModule.sol#L21-L1134)
 
 contracts/storage/DegenerusGameStorage.sol#L1188
 
 
- - [ ] ID-2137
+ - [ ] ID-2140
 [DegenerusGameStorage.ticketCursor](contracts/storage/DegenerusGameStorage.sol#L532) is never used in [DegenerusGameBingoModule](contracts/modules/DegenerusGameBingoModule.sol#L24-L288)
 
 contracts/storage/DegenerusGameStorage.sol#L532
 
 
- - [ ] ID-2138
+ - [ ] ID-2141
 [DegenerusGameStorage.PS_ACTIVE_SHIFT](contracts/storage/DegenerusGameStorage.sol#L1124) is never used in [DegenerusGameDecimatorModule](contracts/modules/DegenerusGameDecimatorModule.sol#L21-L1134)
 
 contracts/storage/DegenerusGameStorage.sol#L1124
 
 
- - [ ] ID-2139
+ - [ ] ID-2142
 [DegenerusGameStorage.ACTIVITY_SCORE_HARD_CAP_POINTS](contracts/storage/DegenerusGameStorage.sol#L143) is never used in [DegenerusGameBoonModule](contracts/modules/DegenerusGameBoonModule.sol#L22-L343)
 
 contracts/storage/DegenerusGameStorage.sol#L143
 
 
- - [ ] ID-2140
+ - [ ] ID-2143
 [DegenerusGameStorage.terminalDecBucketBurnTotal](contracts/storage/DegenerusGameStorage.sol#L1975) is never used in [DegenerusGameMintModule](contracts/modules/DegenerusGameMintModule.sol#L74-L2136)
 
 contracts/storage/DegenerusGameStorage.sol#L1975
 
 
- - [ ] ID-2141
+ - [ ] ID-2144
 [DegenerusGameStorage.presaleBoxEth](contracts/storage/DegenerusGameStorage.sol#L1103) is never used in [DegenerusGameGameOverModule](contracts/modules/DegenerusGameGameOverModule.sol#L37-L284)
 
 contracts/storage/DegenerusGameStorage.sol#L1103
 
 
- - [ ] ID-2142
+ - [ ] ID-2145
 [DegenerusGameStorage.LOOTBOX_PRESALE_ETH_CAP](contracts/storage/DegenerusGameStorage.sol#L1130) is never used in [DegenerusGameBoonModule](contracts/modules/DegenerusGameBoonModule.sol#L22-L343)
 
 contracts/storage/DegenerusGameStorage.sol#L1130
 
 
- - [ ] ID-2143
+ - [ ] ID-2146
 [DegenerusGameStorage.PRESALE_BOX_CLOSING_FLAG](contracts/storage/DegenerusGameStorage.sol#L1106) is never used in [DegenerusGameWhaleModule](contracts/modules/DegenerusGameWhaleModule.sol#L20-L1026)
 
 contracts/storage/DegenerusGameStorage.sol#L1106
 
 
- - [ ] ID-2144
+ - [ ] ID-2147
 [DegenerusGameStorage.LOOTBOX_CLAIM_THRESHOLD](contracts/storage/DegenerusGameStorage.sol#L161) is never used in [GameAfkingModule](contracts/modules/GameAfkingModule.sol#L82-L1941)
 
 contracts/storage/DegenerusGameStorage.sol#L161
 
 
- - [ ] ID-2145
+ - [ ] ID-2148
 [DegenerusGameStorage.presaleDrained](contracts/storage/DegenerusGameStorage.sol#L367) is never used in [DegenerusGameWhaleModule](contracts/modules/DegenerusGameWhaleModule.sol#L20-L1026)
 
 contracts/storage/DegenerusGameStorage.sol#L367
 
 
- - [ ] ID-2146
+ - [ ] ID-2149
 [DegenerusGameStorage.BP_PURCHASE_CLEAR](contracts/storage/DegenerusGameStorage.sol#L2084-L2085) is never used in [DegenerusGameDecimatorModule](contracts/modules/DegenerusGameDecimatorModule.sol#L21-L1134)
 
 contracts/storage/DegenerusGameStorage.sol#L2084-L2085
 
 
- - [ ] ID-2147
+ - [ ] ID-2150
 [DegenerusGameStorage.decBucketOffsetPacked](contracts/storage/DegenerusGameStorage.sol#L1904) is never used in [DegenerusGame](contracts/DegenerusGame.sol#L87-L2624)
 
 contracts/storage/DegenerusGameStorage.sol#L1904
 
 
- - [ ] ID-2148
+ - [ ] ID-2151
 [DegenerusGameStorage.subsFullyProcessed](contracts/storage/DegenerusGameStorage.sol#L358) is never used in [DegenerusGame](contracts/DegenerusGame.sol#L87-L2624)
 
 contracts/storage/DegenerusGameStorage.sol#L358
 
 
- - [ ] ID-2149
+ - [ ] ID-2152
 [DegenerusGameStorage.wwxrpJackpotWhalePassBracketAwarded](contracts/storage/DegenerusGameStorage.sol#L1188) is never used in [DegenerusGameBoonModule](contracts/modules/DegenerusGameBoonModule.sol#L22-L343)
 
 contracts/storage/DegenerusGameStorage.sol#L1188
 
 
- - [ ] ID-2150
+ - [ ] ID-2153
 [DegenerusGameStorage.BP_PURCHASE_CLEAR](contracts/storage/DegenerusGameStorage.sol#L2084-L2085) is never used in [DegenerusGameBingoModule](contracts/modules/DegenerusGameBingoModule.sol#L24-L288)
 
 contracts/storage/DegenerusGameStorage.sol#L2084-L2085
 
 
- - [ ] ID-2151
+ - [ ] ID-2154
 [DegenerusGameStorage.terminalDecBets](contracts/storage/DegenerusGameStorage.sol#L1971) is never used in [DegenerusGameFoilPackModule](contracts/modules/DegenerusGameFoilPackModule.sol#L30-L815)
 
 contracts/storage/DegenerusGameStorage.sol#L1971
 
 
- - [ ] ID-2152
+ - [ ] ID-2155
 [DegenerusGameStorage.FOIL_PACK_ENTRIES](contracts/storage/DegenerusGameStorage.sol#L2566) is never used in [DegenerusGameBoonModule](contracts/modules/DegenerusGameBoonModule.sol#L22-L343)
 
 contracts/storage/DegenerusGameStorage.sol#L2566
 
 
- - [ ] ID-2153
+ - [ ] ID-2156
 [DegenerusGameStorage.BP_PURCHASE_DAY_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2053) is never used in [DegenerusGameGameOverModule](contracts/modules/DegenerusGameGameOverModule.sol#L37-L284)
 
 contracts/storage/DegenerusGameStorage.sol#L2053
 
 
- - [ ] ID-2154
+ - [ ] ID-2157
 [DegenerusGameStorage.PRESALE_BOX_SOLD_SHIFT](contracts/storage/DegenerusGameStorage.sol#L1108) is never used in [JackpotSoloTester](contracts/test/JackpotSoloTester.sol#L14-L30)
 
 contracts/storage/DegenerusGameStorage.sol#L1108
 
 
- - [ ] ID-2155
-[DegenerusGameStorage.BP_DEITY_COINFLIP_DAY_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2048) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1774)
+ - [ ] ID-2158
+[DegenerusGameStorage.BP_DEITY_COINFLIP_DAY_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2048) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1779)
 
 contracts/storage/DegenerusGameStorage.sol#L2048
 
 
- - [ ] ID-2156
+ - [ ] ID-2159
 [DegenerusGameStorage.FOIL_CCY_TAG](contracts/storage/DegenerusGameStorage.sol#L2593) is never used in [DegenerusGameBoonModule](contracts/modules/DegenerusGameBoonModule.sol#L22-L343)
 
 contracts/storage/DegenerusGameStorage.sol#L2593
 
 
- - [ ] ID-2157
+ - [ ] ID-2160
 [DegenerusGameStorage.LR_PENDING_FLIP_MASK](contracts/storage/DegenerusGameStorage.sol#L1618) is never used in [JackpotSoloTester](contracts/test/JackpotSoloTester.sol#L14-L30)
 
 contracts/storage/DegenerusGameStorage.sol#L1618
 
 
- - [ ] ID-2158
+ - [ ] ID-2161
 [DegenerusGameStorage.compressedJackpotFlag](contracts/storage/DegenerusGameStorage.sol#L319) is never used in [DegenerusGameDecimatorModule](contracts/modules/DegenerusGameDecimatorModule.sol#L21-L1134)
 
 contracts/storage/DegenerusGameStorage.sol#L319
 
 
- - [ ] ID-2159
+ - [ ] ID-2162
 [DegenerusGameStorage.LR_THRESHOLD_SHIFT](contracts/storage/DegenerusGameStorage.sol#L1615) is never used in [GameAfkingModule](contracts/modules/GameAfkingModule.sol#L82-L1941)
 
 contracts/storage/DegenerusGameStorage.sol#L1615
 
 
- - [ ] ID-2160
+ - [ ] ID-2163
 [DegenerusGameStorage.PRESALE_BOX_CLOSING_FLAG](contracts/storage/DegenerusGameStorage.sol#L1106) is never used in [DegenerusGameBingoModule](contracts/modules/DegenerusGameBingoModule.sol#L24-L288)
 
 contracts/storage/DegenerusGameStorage.sol#L1106
 
 
- - [ ] ID-2161
+ - [ ] ID-2164
 [DegenerusGameStorage.rngWordCurrent](contracts/storage/DegenerusGameStorage.sol#L417) is never used in [GameAfkingModule](contracts/modules/GameAfkingModule.sol#L82-L1941)
 
 contracts/storage/DegenerusGameStorage.sol#L417
 
 
- - [ ] ID-2162
+ - [ ] ID-2165
 [DegenerusGameStorage.PRESALE_BOX_CLOSING_FLAG](contracts/storage/DegenerusGameStorage.sol#L1106) is never used in [DegenerusGame](contracts/DegenerusGame.sol#L87-L2624)
 
 contracts/storage/DegenerusGameStorage.sol#L1106
 
 
- - [ ] ID-2163
+ - [ ] ID-2166
 [DegenerusGameStorage.deityPassPricePaid](contracts/storage/DegenerusGameStorage.sol#L1249) is never used in [DegenerusGameBoonModule](contracts/modules/DegenerusGameBoonModule.sol#L22-L343)
 
 contracts/storage/DegenerusGameStorage.sol#L1249
 
 
- - [ ] ID-2164
+ - [ ] ID-2167
 [DegenerusGameStorage.decBurn](contracts/storage/DegenerusGameStorage.sol#L1890) is never used in [DegenerusGame](contracts/DegenerusGame.sol#L87-L2624)
 
 contracts/storage/DegenerusGameStorage.sol#L1890
 
 
- - [ ] ID-2165
+ - [ ] ID-2168
 [DegenerusGameStorage.PRESALE_BOX_CLOSING_FLAG](contracts/storage/DegenerusGameStorage.sol#L1106) is never used in [DegenerusGameFoilPackModule](contracts/modules/DegenerusGameFoilPackModule.sol#L30-L815)
 
 contracts/storage/DegenerusGameStorage.sol#L1106
 
 
- - [ ] ID-2166
+ - [ ] ID-2169
 [DegenerusGameStorage.BP_DEITY_ACTIVITY_DAY_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2065) is never used in [DegenerusGame](contracts/DegenerusGame.sol#L87-L2624)
 
 contracts/storage/DegenerusGameStorage.sol#L2065
 
 
- - [ ] ID-2167
+ - [ ] ID-2170
 [DegenerusGameStorage.vrfKeyHash](contracts/storage/DegenerusGameStorage.sol#L1586) is never used in [JackpotSoloTester](contracts/test/JackpotSoloTester.sol#L14-L30)
 
 contracts/storage/DegenerusGameStorage.sol#L1586
 
 
- - [ ] ID-2168
+ - [ ] ID-2171
 [DegenerusGameStorage.vrfSubscriptionId](contracts/storage/DegenerusGameStorage.sol#L1590) is never used in [DegenerusGameBoonModule](contracts/modules/DegenerusGameBoonModule.sol#L22-L343)
 
 contracts/storage/DegenerusGameStorage.sol#L1590
 
 
- - [ ] ID-2169
+ - [ ] ID-2172
 [DegenerusGameStorage.FOIL_SPIN_TAG](contracts/storage/DegenerusGameStorage.sol#L2594) is never used in [JackpotSoloTester](contracts/test/JackpotSoloTester.sol#L14-L30)
 
 contracts/storage/DegenerusGameStorage.sol#L2594
 
 
- - [ ] ID-2170
+ - [ ] ID-2173
 [DegenerusGameStorage.ticketRedemptionOpen](contracts/storage/DegenerusGameStorage.sol#L376) is never used in [DegenerusGameBoonModule](contracts/modules/DegenerusGameBoonModule.sol#L22-L343)
 
 contracts/storage/DegenerusGameStorage.sol#L376
 
 
- - [ ] ID-2171
+ - [ ] ID-2174
 [DegenerusGameStorage.BP_WHALE_TIER_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2060) is never used in [DegenerusGameDecimatorModule](contracts/modules/DegenerusGameDecimatorModule.sol#L21-L1134)
 
 contracts/storage/DegenerusGameStorage.sol#L2060
 
 
- - [ ] ID-2172
+ - [ ] ID-2175
 [DegenerusGameStorage.foilBuyers](contracts/storage/DegenerusGameStorage.sol#L2541) is never used in [DegenerusGame](contracts/DegenerusGame.sol#L87-L2624)
 
 contracts/storage/DegenerusGameStorage.sol#L2541
 
 
- - [ ] ID-2173
-[DegenerusGameStorage.BP_PURCHASE_CLEAR](contracts/storage/DegenerusGameStorage.sol#L2084-L2085) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1774)
+ - [ ] ID-2176
+[DegenerusGameStorage.BP_PURCHASE_CLEAR](contracts/storage/DegenerusGameStorage.sol#L2084-L2085) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1779)
 
 contracts/storage/DegenerusGameStorage.sol#L2084-L2085
 
 
- - [ ] ID-2174
+ - [ ] ID-2177
 [DegenerusGameStorage.lvlTraitEntry](contracts/storage/DegenerusGameStorage.sol#L473) is never used in [GameAfkingModule](contracts/modules/GameAfkingModule.sol#L82-L1941)
 
 contracts/storage/DegenerusGameStorage.sol#L473
 
 
- - [ ] ID-2175
+ - [ ] ID-2178
 [DegenerusGameStorage.jackpotCounter](contracts/storage/DegenerusGameStorage.sol#L285) is never used in [DegenerusGameDecimatorModule](contracts/modules/DegenerusGameDecimatorModule.sol#L21-L1134)
 
 contracts/storage/DegenerusGameStorage.sol#L285
 
 
- - [ ] ID-2176
+ - [ ] ID-2179
 [DegenerusGameStorage.GO_SWEPT_MASK](contracts/storage/DegenerusGameStorage.sol#L1164) is never used in [DegenerusGameDecimatorModule](contracts/modules/DegenerusGameDecimatorModule.sol#L21-L1134)
 
 contracts/storage/DegenerusGameStorage.sol#L1164
 
 
- - [ ] ID-2177
-[DegenerusGameStorage.PRESALE_BOX_SOLD_SHIFT](contracts/storage/DegenerusGameStorage.sol#L1108) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1774)
+ - [ ] ID-2180
+[DegenerusGameStorage.PRESALE_BOX_SOLD_SHIFT](contracts/storage/DegenerusGameStorage.sol#L1108) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1779)
 
 contracts/storage/DegenerusGameStorage.sol#L1108
 
 
- - [ ] ID-2178
+ - [ ] ID-2181
 [DegenerusGameStorage.BP_DEITY_DEITY_PASS_DAY_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2068) is never used in [DegenerusGameBingoModule](contracts/modules/DegenerusGameBingoModule.sol#L24-L288)
 
 contracts/storage/DegenerusGameStorage.sol#L2068
 
 
- - [ ] ID-2179
+ - [ ] ID-2182
 [DegenerusGameStorage.decWindowOpen](contracts/storage/DegenerusGameStorage.sol#L295) is never used in [SettleClaimableShortfallTester](contracts/test/SettleClaimableShortfallTester.sol#L17-L66)
 
 contracts/storage/DegenerusGameStorage.sol#L295
 
 
- - [ ] ID-2180
+ - [ ] ID-2183
 [DegenerusGameStorage.vrfSubscriptionId](contracts/storage/DegenerusGameStorage.sol#L1590) is never used in [DegenerusGameLootboxModule](contracts/modules/DegenerusGameLootboxModule.sol#L39-L2359)
 
 contracts/storage/DegenerusGameStorage.sol#L1590
 
 
- - [ ] ID-2181
+ - [ ] ID-2184
 [DegenerusGameStorage.BP_LAZY_PASS_TIER_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2071) is never used in [GameAfkingModule](contracts/modules/GameAfkingModule.sol#L82-L1941)
 
 contracts/storage/DegenerusGameStorage.sol#L2071
 
 
- - [ ] ID-2182
+ - [ ] ID-2185
 [DegenerusGameStorage._subscriberIndex](contracts/storage/DegenerusGameStorage.sol#L2427) is never used in [DegenerusGameMintModule](contracts/modules/DegenerusGameMintModule.sol#L74-L2136)
 
 contracts/storage/DegenerusGameStorage.sol#L2427
 
 
- - [ ] ID-2183
+ - [ ] ID-2186
 [DegenerusGameStorage.FOIL_PACK_TICKETS](contracts/storage/DegenerusGameStorage.sol#L2571) is never used in [DegenerusGameWhaleModule](contracts/modules/DegenerusGameWhaleModule.sol#L20-L1026)
 
 contracts/storage/DegenerusGameStorage.sol#L2571
 
 
- - [ ] ID-2184
+ - [ ] ID-2187
 [DegenerusGameStorage.dailyHeroWagers](contracts/storage/DegenerusGameStorage.sol#L1915) is never used in [DegenerusGameLootboxModule](contracts/modules/DegenerusGameLootboxModule.sol#L39-L2359)
 
 contracts/storage/DegenerusGameStorage.sol#L1915
 
 
- - [ ] ID-2185
+ - [ ] ID-2188
 [DegenerusGameStorage.GO_JACKPOT_PAID_MASK](contracts/storage/DegenerusGameStorage.sol#L1162) is never used in [DegenerusGameFoilPackModule](contracts/modules/DegenerusGameFoilPackModule.sol#L30-L815)
 
 contracts/storage/DegenerusGameStorage.sol#L1162
 
 
- - [ ] ID-2186
+ - [ ] ID-2189
 [DegenerusGameStorage.BP_LAZY_PASS_DAY_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2069) is never used in [DegenerusGameFoilPackModule](contracts/modules/DegenerusGameFoilPackModule.sol#L30-L815)
 
 contracts/storage/DegenerusGameStorage.sol#L2069
 
 
- - [ ] ID-2187
+ - [ ] ID-2190
 [DegenerusGameStorage.LR_MID_DAY_SHIFT](contracts/storage/DegenerusGameStorage.sol#L1619) is never used in [DegenerusGameMintModule](contracts/modules/DegenerusGameMintModule.sol#L74-L2136)
 
 contracts/storage/DegenerusGameStorage.sol#L1619
 
 
- - [ ] ID-2188
+ - [ ] ID-2191
 [DegenerusGameStorage._afkingResetDay](contracts/storage/DegenerusGameStorage.sol#L2445) is never used in [JackpotSoloTester](contracts/test/JackpotSoloTester.sol#L14-L30)
 
 contracts/storage/DegenerusGameStorage.sol#L2445
 
 
- - [ ] ID-2189
+ - [ ] ID-2192
 [DegenerusGameStorage.FOIL_SEED_TAG](contracts/storage/DegenerusGameStorage.sol#L2587) is never used in [DegenerusGameWhaleModule](contracts/modules/DegenerusGameWhaleModule.sol#L20-L1026)
 
 contracts/storage/DegenerusGameStorage.sol#L2587
 
 
- - [ ] ID-2190
+ - [ ] ID-2193
 [DegenerusGameStorage.deityBoonRecipientDay](contracts/storage/DegenerusGameStorage.sol#L1770) is never used in [GameAfkingModule](contracts/modules/GameAfkingModule.sol#L82-L1941)
 
 contracts/storage/DegenerusGameStorage.sol#L1770
 
 
- - [ ] ID-2191
+ - [ ] ID-2194
 [DegenerusGameStorage.BP_DEITY_DECIMATOR_DAY_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2057) is never used in [DegenerusGame](contracts/DegenerusGame.sol#L87-L2624)
 
 contracts/storage/DegenerusGameStorage.sol#L2057
 
 
- - [ ] ID-2192
+ - [ ] ID-2195
 [DegenerusGameStorage.LR_INDEX_SHIFT](contracts/storage/DegenerusGameStorage.sol#L1611) is never used in [DegenerusGameBingoModule](contracts/modules/DegenerusGameBingoModule.sol#L24-L288)
 
 contracts/storage/DegenerusGameStorage.sol#L1611
 
 
- - [ ] ID-2193
+ - [ ] ID-2196
 [DegenerusGameStorage.GO_SWEPT_SHIFT](contracts/storage/DegenerusGameStorage.sol#L1163) is never used in [JackpotSoloTester](contracts/test/JackpotSoloTester.sol#L14-L30)
 
 contracts/storage/DegenerusGameStorage.sol#L1163
 
 
- - [ ] ID-2194
+ - [ ] ID-2197
 [DegenerusGameStorage.BP_DEITY_PASS_TIER_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2066) is never used in [DegenerusGame](contracts/DegenerusGame.sol#L87-L2624)
 
 contracts/storage/DegenerusGameStorage.sol#L2066
 
 
- - [ ] ID-2195
+ - [ ] ID-2198
 [DegenerusGameStorage.BP_ACTIVITY_DAY_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2064) is never used in [SettleClaimableShortfallTester](contracts/test/SettleClaimableShortfallTester.sol#L17-L66)
 
 contracts/storage/DegenerusGameStorage.sol#L2064
 
 
- - [ ] ID-2196
+ - [ ] ID-2199
 [DegenerusGameStorage.boxCursorIndex](contracts/storage/DegenerusGameStorage.sol#L2459) is never used in [DegenerusGameDecimatorModule](contracts/modules/DegenerusGameDecimatorModule.sol#L21-L1134)
 
 contracts/storage/DegenerusGameStorage.sol#L2459
 
 
- - [ ] ID-2197
+ - [ ] ID-2200
 [DegenerusGameStorage.bingoClaimed](contracts/storage/DegenerusGameStorage.sol#L2039) is never used in [DegenerusGameDecimatorModule](contracts/modules/DegenerusGameDecimatorModule.sol#L21-L1134)
 
 contracts/storage/DegenerusGameStorage.sol#L2039
 
 
- - [ ] ID-2198
-[DegenerusGameStorage.BP_WHALE_DAY_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2058) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1774)
+ - [ ] ID-2201
+[DegenerusGameStorage.BP_WHALE_DAY_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2058) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1779)
 
 contracts/storage/DegenerusGameStorage.sol#L2058
 
 
- - [ ] ID-2199
+ - [ ] ID-2202
 [DegenerusGameStorage.decWindowOpen](contracts/storage/DegenerusGameStorage.sol#L295) is never used in [DegenerusGameMintModule](contracts/modules/DegenerusGameMintModule.sol#L74-L2136)
 
 contracts/storage/DegenerusGameStorage.sol#L295
 
 
- - [ ] ID-2200
+ - [ ] ID-2203
 [DegenerusGameStorage.GO_TIME_SHIFT](contracts/storage/DegenerusGameStorage.sol#L1159) is never used in [GameAfkingModule](contracts/modules/GameAfkingModule.sol#L82-L1941)
 
 contracts/storage/DegenerusGameStorage.sol#L1159
 
 
- - [ ] ID-2201
+ - [ ] ID-2204
 [DegenerusGameStorage.BP_DEITY_ACTIVITY_DAY_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2065) is never used in [DegenerusGameWhaleModule](contracts/modules/DegenerusGameWhaleModule.sol#L20-L1026)
 
 contracts/storage/DegenerusGameStorage.sol#L2065
 
 
- - [ ] ID-2202
+ - [ ] ID-2205
 [DegenerusGameStorage.PRESALE_BOX_AMOUNT_MASK](contracts/storage/DegenerusGameStorage.sol#L1110) is never used in [GameAfkingModule](contracts/modules/GameAfkingModule.sol#L82-L1941)
 
 contracts/storage/DegenerusGameStorage.sol#L1110
 
 
- - [ ] ID-2203
-[DegenerusGameStorage.deityBoonPacked](contracts/storage/DegenerusGameStorage.sol#L1766) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1774)
+ - [ ] ID-2206
+[DegenerusGameStorage.deityBoonPacked](contracts/storage/DegenerusGameStorage.sol#L1766) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1779)
 
 contracts/storage/DegenerusGameStorage.sol#L1766
 
 
- - [ ] ID-2204
+ - [ ] ID-2207
 [DegenerusGameStorage.vrfSubscriptionId](contracts/storage/DegenerusGameStorage.sol#L1590) is never used in [DegenerusGameBingoModule](contracts/modules/DegenerusGameBingoModule.sol#L24-L288)
 
 contracts/storage/DegenerusGameStorage.sol#L1590
 
 
- - [ ] ID-2205
+ - [ ] ID-2208
 [DegenerusGameStorage.LR_MID_DAY_MASK](contracts/storage/DegenerusGameStorage.sol#L1620) is never used in [DegenerusGameFoilPackModule](contracts/modules/DegenerusGameFoilPackModule.sol#L30-L815)
 
 contracts/storage/DegenerusGameStorage.sol#L1620
 
 
- - [ ] ID-2206
+ - [ ] ID-2209
 [DegenerusGameStorage.decBurn](contracts/storage/DegenerusGameStorage.sol#L1890) is never used in [DegenerusGameMintModule](contracts/modules/DegenerusGameMintModule.sol#L74-L2136)
 
 contracts/storage/DegenerusGameStorage.sol#L1890
 
 
- - [ ] ID-2207
+ - [ ] ID-2210
 [DegenerusGameStorage.coin](contracts/storage/DegenerusGameStorage.sol#L125-L126) is never used in [DegenerusGameAdvanceModule](contracts/modules/DegenerusGameAdvanceModule.sol#L30-L2107)
 
 contracts/storage/DegenerusGameStorage.sol#L125-L126
 
 
- - [ ] ID-2208
+ - [ ] ID-2211
 [DegenerusGameStorage.BP_LOOTBOX_DAY_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2050) is never used in [SettleClaimableShortfallTester](contracts/test/SettleClaimableShortfallTester.sol#L17-L66)
 
 contracts/storage/DegenerusGameStorage.sol#L2050
 
 
- - [ ] ID-2209
+ - [ ] ID-2212
 [DegenerusGameStorage.ticketLevel](contracts/storage/DegenerusGameStorage.sol#L535) is never used in [JackpotSoloTester](contracts/test/JackpotSoloTester.sol#L14-L30)
 
 contracts/storage/DegenerusGameStorage.sol#L535
 
 
- - [ ] ID-2210
+ - [ ] ID-2213
 [DegenerusGameStorage.affiliateDgnrsClaimedBy](contracts/storage/DegenerusGameStorage.sol#L1205-L1206) is never used in [DegenerusGameAdvanceModule](contracts/modules/DegenerusGameAdvanceModule.sol#L30-L2107)
 
 contracts/storage/DegenerusGameStorage.sol#L1205-L1206
 
 
- - [ ] ID-2211
+ - [ ] ID-2214
 [DegenerusGameStorage.LR_INDEX_MASK](contracts/storage/DegenerusGameStorage.sol#L1612) is never used in [DegenerusGameDecimatorModule](contracts/modules/DegenerusGameDecimatorModule.sol#L21-L1134)
 
 contracts/storage/DegenerusGameStorage.sol#L1612
 
 
- - [ ] ID-2212
+ - [ ] ID-2215
 [DegenerusGameStorage.rngWordCurrent](contracts/storage/DegenerusGameStorage.sol#L417) is never used in [DegenerusGameLootboxModule](contracts/modules/DegenerusGameLootboxModule.sol#L39-L2359)
 
 contracts/storage/DegenerusGameStorage.sol#L417
 
 
- - [ ] ID-2213
+ - [ ] ID-2216
 [DegenerusGameStorage.presaleOver](contracts/storage/DegenerusGameStorage.sol#L348) is never used in [DegenerusGameBoonModule](contracts/modules/DegenerusGameBoonModule.sol#L22-L343)
 
 contracts/storage/DegenerusGameStorage.sol#L348
 
 
- - [ ] ID-2214
+ - [ ] ID-2217
 [DegenerusGameStorage.boxCursorIndex](contracts/storage/DegenerusGameStorage.sol#L2459) is never used in [SettleClaimableShortfallTester](contracts/test/SettleClaimableShortfallTester.sol#L17-L66)
 
 contracts/storage/DegenerusGameStorage.sol#L2459
 
 
- - [ ] ID-2215
+ - [ ] ID-2218
 [DegenerusGameStorage.BP_DEITY_ACTIVITY_DAY_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2065) is never used in [DegenerusGameGameOverModule](contracts/modules/DegenerusGameGameOverModule.sol#L37-L284)
 
 contracts/storage/DegenerusGameStorage.sol#L2065
 
 
- - [ ] ID-2216
+ - [ ] ID-2219
 [DegenerusGameStorage.LR_MID_DAY_SHIFT](contracts/storage/DegenerusGameStorage.sol#L1619) is never used in [DegenerusGameBoonModule](contracts/modules/DegenerusGameBoonModule.sol#L22-L343)
 
 contracts/storage/DegenerusGameStorage.sol#L1619
 
 
- - [ ] ID-2217
+ - [ ] ID-2220
 [DegenerusGameStorage.presaleBoxEth](contracts/storage/DegenerusGameStorage.sol#L1103) is never used in [DegenerusGameWhaleModule](contracts/modules/DegenerusGameWhaleModule.sol#L20-L1026)
 
 contracts/storage/DegenerusGameStorage.sol#L1103
 
 
- - [ ] ID-2218
+ - [ ] ID-2221
 [DegenerusGameStorage.totalFlipReversals](contracts/storage/DegenerusGameStorage.sol#L429) is never used in [JackpotSoloTester](contracts/test/JackpotSoloTester.sol#L14-L30)
 
 contracts/storage/DegenerusGameStorage.sol#L429
 
 
- - [ ] ID-2219
+ - [ ] ID-2222
 [DegenerusGameStorage.PS_MINT_ETH_MASK](contracts/storage/DegenerusGameStorage.sol#L1127) is never used in [DegenerusGameFoilPackModule](contracts/modules/DegenerusGameFoilPackModule.sol#L30-L815)
 
 contracts/storage/DegenerusGameStorage.sol#L1127
 
 
- - [ ] ID-2220
+ - [ ] ID-2223
 [DegenerusGameStorage.terminalDecBets](contracts/storage/DegenerusGameStorage.sol#L1971) is never used in [DegenerusGameBingoModule](contracts/modules/DegenerusGameBingoModule.sol#L24-L288)
 
 contracts/storage/DegenerusGameStorage.sol#L1971
 
 
- - [ ] ID-2221
+ - [ ] ID-2224
 [DegenerusGameStorage.boxCursorIndex](contracts/storage/DegenerusGameStorage.sol#L2459) is never used in [JackpotSoloTester](contracts/test/JackpotSoloTester.sol#L14-L30)
 
 contracts/storage/DegenerusGameStorage.sol#L2459
 
 
- - [ ] ID-2222
+ - [ ] ID-2225
 [DegenerusGameStorage._subscriberIndex](contracts/storage/DegenerusGameStorage.sol#L2427) is never used in [DegenerusGameBingoModule](contracts/modules/DegenerusGameBingoModule.sol#L24-L288)
 
 contracts/storage/DegenerusGameStorage.sol#L2427
 
 
- - [ ] ID-2223
+ - [ ] ID-2226
 [DegenerusGameStorage.foilCursor](contracts/storage/DegenerusGameStorage.sol#L2550) is never used in [JackpotSoloTester](contracts/test/JackpotSoloTester.sol#L14-L30)
 
 contracts/storage/DegenerusGameStorage.sol#L2550
 
 
- - [ ] ID-2224
+ - [ ] ID-2227
 [DegenerusGameStorage.rngWordCurrent](contracts/storage/DegenerusGameStorage.sol#L417) is never used in [SettleClaimableShortfallTester](contracts/test/SettleClaimableShortfallTester.sol#L17-L66)
 
 contracts/storage/DegenerusGameStorage.sol#L417
 
 
- - [ ] ID-2225
+ - [ ] ID-2228
 [DegenerusGameStorage._subOpenCursor](contracts/storage/DegenerusGameStorage.sol#L2438) is never used in [DegenerusGameBingoModule](contracts/modules/DegenerusGameBingoModule.sol#L24-L288)
 
 contracts/storage/DegenerusGameStorage.sol#L2438
 
 
- - [ ] ID-2226
+ - [ ] ID-2229
 [DegenerusGameStorage.BP_COINFLIP_DAY_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2047) is never used in [SettleClaimableShortfallTester](contracts/test/SettleClaimableShortfallTester.sol#L17-L66)
 
 contracts/storage/DegenerusGameStorage.sol#L2047
 
 
- - [ ] ID-2227
+ - [ ] ID-2230
 [DegenerusGameStorage.BP_DEITY_COINFLIP_DAY_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2048) is never used in [DegenerusGameGameOverModule](contracts/modules/DegenerusGameGameOverModule.sol#L37-L284)
 
 contracts/storage/DegenerusGameStorage.sol#L2048
 
 
- - [ ] ID-2228
+ - [ ] ID-2231
 [DegenerusGameStorage.deityBoonPacked](contracts/storage/DegenerusGameStorage.sol#L1766) is never used in [DegenerusGameFoilPackModule](contracts/modules/DegenerusGameFoilPackModule.sol#L30-L815)
 
 contracts/storage/DegenerusGameStorage.sol#L1766
 
 
- - [ ] ID-2229
+ - [ ] ID-2232
 [DegenerusGameStorage._subscriberIndex](contracts/storage/DegenerusGameStorage.sol#L2427) is never used in [SettleClaimableShortfallTester](contracts/test/SettleClaimableShortfallTester.sol#L17-L66)
 
 contracts/storage/DegenerusGameStorage.sol#L2427
 
 
- - [ ] ID-2230
+ - [ ] ID-2233
 [DegenerusGameStorage._fundingSourceOf](contracts/storage/DegenerusGameStorage.sol#L2420) is never used in [DegenerusGameLootboxModule](contracts/modules/DegenerusGameLootboxModule.sol#L39-L2359)
 
 contracts/storage/DegenerusGameStorage.sol#L2420
 
 
- - [ ] ID-2231
+ - [ ] ID-2234
 [DegenerusGameStorage.FOIL_TO_FUTURE_BPS](contracts/storage/DegenerusGameStorage.sol#L2562) is never used in [GameAfkingModule](contracts/modules/GameAfkingModule.sol#L82-L1941)
 
 contracts/storage/DegenerusGameStorage.sol#L2562
 
 
- - [ ] ID-2232
+ - [ ] ID-2235
 [DegenerusGameStorage.BP_LAZY_PASS_TIER_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2071) is never used in [DegenerusGameBingoModule](contracts/modules/DegenerusGameBingoModule.sol#L24-L288)
 
 contracts/storage/DegenerusGameStorage.sol#L2071
 
 
- - [ ] ID-2233
+ - [ ] ID-2236
 [DegenerusGameStorage.LR_THRESHOLD_MASK](contracts/storage/DegenerusGameStorage.sol#L1616) is never used in [DegenerusGameWhaleModule](contracts/modules/DegenerusGameWhaleModule.sol#L20-L1026)
 
 contracts/storage/DegenerusGameStorage.sol#L1616
 
 
- - [ ] ID-2234
+ - [ ] ID-2237
 [DegenerusGameStorage.deityRecipientBoonCount](contracts/storage/DegenerusGameStorage.sol#L2558) is never used in [DegenerusGameBoonModule](contracts/modules/DegenerusGameBoonModule.sol#L22-L343)
 
 contracts/storage/DegenerusGameStorage.sol#L2558
 
 
- - [ ] ID-2235
+ - [ ] ID-2238
 [DegenerusGameStorage.BP_DECIMATOR_CLEAR](contracts/storage/DegenerusGameStorage.sol#L2087-L2088) is never used in [DegenerusGameMintModule](contracts/modules/DegenerusGameMintModule.sol#L74-L2136)
 
 contracts/storage/DegenerusGameStorage.sol#L2087-L2088
 
 
- - [ ] ID-2236
+ - [ ] ID-2239
 [DegenerusGameStorage._subscriberIndex](contracts/storage/DegenerusGameStorage.sol#L2427) is never used in [DegenerusGameFoilPackModule](contracts/modules/DegenerusGameFoilPackModule.sol#L30-L815)
 
 contracts/storage/DegenerusGameStorage.sol#L2427
 
 
- - [ ] ID-2237
+ - [ ] ID-2240
 [DegenerusGameStorage.GO_SWEPT_SHIFT](contracts/storage/DegenerusGameStorage.sol#L1163) is never used in [DegenerusGameWhaleModule](contracts/modules/DegenerusGameWhaleModule.sol#L20-L1026)
 
 contracts/storage/DegenerusGameStorage.sol#L1163
 
 
- - [ ] ID-2238
+ - [ ] ID-2241
 [DegenerusGameStorage.BP_COINFLIP_TIER_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2049) is never used in [GameAfkingModule](contracts/modules/GameAfkingModule.sol#L82-L1941)
 
 contracts/storage/DegenerusGameStorage.sol#L2049
 
 
- - [ ] ID-2239
+ - [ ] ID-2242
 [DegenerusGameStorage.BP_DEITY_DECIMATOR_DAY_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2057) is never used in [DegenerusGameAdvanceModule](contracts/modules/DegenerusGameAdvanceModule.sol#L30-L2107)
 
 contracts/storage/DegenerusGameStorage.sol#L2057
 
 
- - [ ] ID-2240
+ - [ ] ID-2243
 [DegenerusGameStorage.vrfRequestId](contracts/storage/DegenerusGameStorage.sol#L423) is never used in [JackpotSoloTester](contracts/test/JackpotSoloTester.sol#L14-L30)
 
 contracts/storage/DegenerusGameStorage.sol#L423
 
 
- - [ ] ID-2241
+ - [ ] ID-2244
 [DegenerusGameStorage.BP_COINFLIP_CLEAR](contracts/storage/DegenerusGameStorage.sol#L2079) is never used in [JackpotSoloTester](contracts/test/JackpotSoloTester.sol#L14-L30)
 
 contracts/storage/DegenerusGameStorage.sol#L2079
 
 
- - [ ] ID-2242
+ - [ ] ID-2245
 [DegenerusGameStorage.BP_LOOTBOX_TIER_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2052) is never used in [DegenerusGameBingoModule](contracts/modules/DegenerusGameBingoModule.sol#L24-L288)
 
 contracts/storage/DegenerusGameStorage.sol#L2052
 
 
- - [ ] ID-2243
+ - [ ] ID-2246
 [DegenerusGameStorage.terminalDecBets](contracts/storage/DegenerusGameStorage.sol#L1971) is never used in [DegenerusGameMintModule](contracts/modules/DegenerusGameMintModule.sol#L74-L2136)
 
 contracts/storage/DegenerusGameStorage.sol#L1971
 
 
- - [ ] ID-2244
+ - [ ] ID-2247
 [DegenerusGameStorage.vrfKeyHash](contracts/storage/DegenerusGameStorage.sol#L1586) is never used in [GameAfkingModule](contracts/modules/GameAfkingModule.sol#L82-L1941)
 
 contracts/storage/DegenerusGameStorage.sol#L1586
 
 
- - [ ] ID-2245
-[DegenerusGameStorage.GO_SWEPT_MASK](contracts/storage/DegenerusGameStorage.sol#L1164) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1774)
+ - [ ] ID-2248
+[DegenerusGameStorage.GO_SWEPT_MASK](contracts/storage/DegenerusGameStorage.sol#L1164) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1779)
 
 contracts/storage/DegenerusGameStorage.sol#L1164
 
 
- - [ ] ID-2246
-[DegenerusGameStorage.FOIL_SEED_TAG](contracts/storage/DegenerusGameStorage.sol#L2587) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1774)
+ - [ ] ID-2249
+[DegenerusGameStorage.FOIL_SEED_TAG](contracts/storage/DegenerusGameStorage.sol#L2587) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1779)
 
 contracts/storage/DegenerusGameStorage.sol#L2587
 
 
- - [ ] ID-2247
+ - [ ] ID-2250
 [DegenerusGameStorage.yieldAccumulator](contracts/storage/DegenerusGameStorage.sol#L1925) is never used in [GameAfkingModule](contracts/modules/GameAfkingModule.sol#L82-L1941)
 
 contracts/storage/DegenerusGameStorage.sol#L1925
 
 
- - [ ] ID-2248
+ - [ ] ID-2251
 [DegenerusGameStorage.deityPassPricePaid](contracts/storage/DegenerusGameStorage.sol#L1249) is never used in [DegenerusGameAdvanceModule](contracts/modules/DegenerusGameAdvanceModule.sol#L30-L2107)
 
 contracts/storage/DegenerusGameStorage.sol#L1249
 
 
- - [ ] ID-2249
+ - [ ] ID-2252
 [DegenerusGameStorage.degeneretteBetNonce](contracts/storage/DegenerusGameStorage.sol#L1788) is never used in [DegenerusGameDecimatorModule](contracts/modules/DegenerusGameDecimatorModule.sol#L21-L1134)
 
 contracts/storage/DegenerusGameStorage.sol#L1788
 
 
- - [ ] ID-2250
+ - [ ] ID-2253
 [DegenerusGameStorage._subscribers](contracts/storage/DegenerusGameStorage.sol#L2423) is never used in [DegenerusGame](contracts/DegenerusGame.sol#L87-L2624)
 
 contracts/storage/DegenerusGameStorage.sol#L2423
 
 
- - [ ] ID-2251
+ - [ ] ID-2254
 [DegenerusGameStorage.PASS_MINT_COUNT_FLOOR_POINTS](contracts/storage/DegenerusGameStorage.sol#L149) is never used in [DegenerusGameLootboxModule](contracts/modules/DegenerusGameLootboxModule.sol#L39-L2359)
 
 contracts/storage/DegenerusGameStorage.sol#L149
 
 
- - [ ] ID-2252
+ - [ ] ID-2255
 [DegenerusGameStorage.lastTerminalDecClaimRound](contracts/storage/DegenerusGameStorage.sol#L1985) is never used in [GameAfkingModule](contracts/modules/GameAfkingModule.sol#L82-L1941)
 
 contracts/storage/DegenerusGameStorage.sol#L1985
 
 
- - [ ] ID-2253
-[DegenerusGameStorage.deityPassOwners](contracts/storage/DegenerusGameStorage.sol#L1252) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1774)
+ - [ ] ID-2256
+[DegenerusGameStorage.deityPassOwners](contracts/storage/DegenerusGameStorage.sol#L1252) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1779)
 
 contracts/storage/DegenerusGameStorage.sol#L1252
 
 
- - [ ] ID-2254
+ - [ ] ID-2257
 [DegenerusGameStorage.dailyHeroWagers](contracts/storage/DegenerusGameStorage.sol#L1915) is never used in [DegenerusGameMintModule](contracts/modules/DegenerusGameMintModule.sol#L74-L2136)
 
 contracts/storage/DegenerusGameStorage.sol#L1915
 
 
- - [ ] ID-2255
+ - [ ] ID-2258
 [DegenerusGameStorage.vrfKeyHash](contracts/storage/DegenerusGameStorage.sol#L1586) is never used in [DegenerusGameBoonModule](contracts/modules/DegenerusGameBoonModule.sol#L22-L343)
 
 contracts/storage/DegenerusGameStorage.sol#L1586
 
 
- - [ ] ID-2256
-[DegenerusGameStorage.BP_DEITY_DECIMATOR_DAY_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2057) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1774)
+ - [ ] ID-2259
+[DegenerusGameStorage.BP_DEITY_DECIMATOR_DAY_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2057) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1779)
 
 contracts/storage/DegenerusGameStorage.sol#L2057
 
 
- - [ ] ID-2257
-[DegenerusGameStorage.vrfRequestId](contracts/storage/DegenerusGameStorage.sol#L423) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1774)
+ - [ ] ID-2260
+[DegenerusGameStorage.vrfRequestId](contracts/storage/DegenerusGameStorage.sol#L423) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1779)
 
 contracts/storage/DegenerusGameStorage.sol#L423
 
 
- - [ ] ID-2258
+ - [ ] ID-2261
 [DegenerusGameStorage.BP_COINFLIP_CLEAR](contracts/storage/DegenerusGameStorage.sol#L2079) is never used in [DegenerusGameWhaleModule](contracts/modules/DegenerusGameWhaleModule.sol#L20-L1026)
 
 contracts/storage/DegenerusGameStorage.sol#L2079
 
 
- - [ ] ID-2259
+ - [ ] ID-2262
 [DegenerusGameStorage.subsFullyProcessed](contracts/storage/DegenerusGameStorage.sol#L358) is never used in [DegenerusGameBoonModule](contracts/modules/DegenerusGameBoonModule.sol#L22-L343)
 
 contracts/storage/DegenerusGameStorage.sol#L358
 
 
- - [ ] ID-2260
+ - [ ] ID-2263
 [DegenerusGameStorage.deityRecipientBoonCount](contracts/storage/DegenerusGameStorage.sol#L2558) is never used in [SettleClaimableShortfallTester](contracts/test/SettleClaimableShortfallTester.sol#L17-L66)
 
 contracts/storage/DegenerusGameStorage.sol#L2558
 
 
- - [ ] ID-2261
+ - [ ] ID-2264
 [DegenerusGameStorage.ticketLevel](contracts/storage/DegenerusGameStorage.sol#L535) is never used in [DegenerusGame](contracts/DegenerusGame.sol#L87-L2624)
 
 contracts/storage/DegenerusGameStorage.sol#L535
 
 
- - [ ] ID-2262
+ - [ ] ID-2265
 [DegenerusGameStorage.BP_MASK_8](contracts/storage/DegenerusGameStorage.sol#L2075) is never used in [DegenerusGameAdvanceModule](contracts/modules/DegenerusGameAdvanceModule.sol#L30-L2107)
 
 contracts/storage/DegenerusGameStorage.sol#L2075
 
 
- - [ ] ID-2263
+ - [ ] ID-2266
 [DegenerusGameStorage.BP_MASK_24](contracts/storage/DegenerusGameStorage.sol#L2074) is never used in [DegenerusGameMintModule](contracts/modules/DegenerusGameMintModule.sol#L74-L2136)
 
 contracts/storage/DegenerusGameStorage.sol#L2074
 
 
- - [ ] ID-2264
+ - [ ] ID-2267
 [DegenerusGameStorage.affiliate](contracts/storage/DegenerusGameStorage.sol#L131-L132) is never used in [DegenerusGameBoonModule](contracts/modules/DegenerusGameBoonModule.sol#L22-L343)
 
 contracts/storage/DegenerusGameStorage.sol#L131-L132
 
 
- - [ ] ID-2265
+ - [ ] ID-2268
 [DegenerusGameStorage.GO_TIME_SHIFT](contracts/storage/DegenerusGameStorage.sol#L1159) is never used in [SettleClaimableShortfallTester](contracts/test/SettleClaimableShortfallTester.sol#L17-L66)
 
 contracts/storage/DegenerusGameStorage.sol#L1159
 
 
- - [ ] ID-2266
+ - [ ] ID-2269
 [DegenerusGameStorage.degeneretteBets](contracts/storage/DegenerusGameStorage.sol#L1785) is never used in [GameAfkingModule](contracts/modules/GameAfkingModule.sol#L82-L1941)
 
 contracts/storage/DegenerusGameStorage.sol#L1785
 
 
- - [ ] ID-2267
+ - [ ] ID-2270
 [DegenerusGameStorage.BP_PURCHASE_DAY_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2053) is never used in [SettleClaimableShortfallTester](contracts/test/SettleClaimableShortfallTester.sol#L17-L66)
 
 contracts/storage/DegenerusGameStorage.sol#L2053
 
 
- - [ ] ID-2268
+ - [ ] ID-2271
 [DegenerusGameStorage.FOIL_SPIN_TAG](contracts/storage/DegenerusGameStorage.sol#L2594) is never used in [GameAfkingModule](contracts/modules/GameAfkingModule.sol#L82-L1941)
 
 contracts/storage/DegenerusGameStorage.sol#L2594
 
 
- - [ ] ID-2269
+ - [ ] ID-2272
 [DegenerusGameStorage.LR_INDEX_SHIFT](contracts/storage/DegenerusGameStorage.sol#L1611) is never used in [DegenerusGameGameOverModule](contracts/modules/DegenerusGameGameOverModule.sol#L37-L284)
 
 contracts/storage/DegenerusGameStorage.sol#L1611
 
 
- - [ ] ID-2270
-[DegenerusGameStorage.levelPrizePool](contracts/storage/DegenerusGameStorage.sol#L1202) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1774)
+ - [ ] ID-2273
+[DegenerusGameStorage.levelPrizePool](contracts/storage/DegenerusGameStorage.sol#L1202) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1779)
 
 contracts/storage/DegenerusGameStorage.sol#L1202
 
 
- - [ ] ID-2271
+ - [ ] ID-2274
 [DegenerusGameStorage.degeneretteBetNonce](contracts/storage/DegenerusGameStorage.sol#L1788) is never used in [DegenerusGameBingoModule](contracts/modules/DegenerusGameBingoModule.sol#L24-L288)
 
 contracts/storage/DegenerusGameStorage.sol#L1788
 
 
- - [ ] ID-2272
+ - [ ] ID-2275
 [DegenerusGameStorage.FOIL_PACK_ENTRIES](contracts/storage/DegenerusGameStorage.sol#L2566) is never used in [DegenerusGameDecimatorModule](contracts/modules/DegenerusGameDecimatorModule.sol#L21-L1134)
 
 contracts/storage/DegenerusGameStorage.sol#L2566
 
 
- - [ ] ID-2273
+ - [ ] ID-2276
 [DegenerusGameStorage.ACTIVITY_SCORE_HARD_CAP_POINTS](contracts/storage/DegenerusGameStorage.sol#L143) is never used in [DegenerusGameDecimatorModule](contracts/modules/DegenerusGameDecimatorModule.sol#L21-L1134)
 
 contracts/storage/DegenerusGameStorage.sol#L143
 
 
- - [ ] ID-2274
+ - [ ] ID-2277
 [DegenerusGameStorage.decWindowOpen](contracts/storage/DegenerusGameStorage.sol#L295) is never used in [DegenerusGameDecimatorModule](contracts/modules/DegenerusGameDecimatorModule.sol#L21-L1134)
 
 contracts/storage/DegenerusGameStorage.sol#L295
 
 
- - [ ] ID-2275
+ - [ ] ID-2278
 [DegenerusGameStorage.BP_DEITY_PASS_DAY_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2067) is never used in [JackpotSoloTester](contracts/test/JackpotSoloTester.sol#L14-L30)
 
 contracts/storage/DegenerusGameStorage.sol#L2067
 
 
- - [ ] ID-2276
+ - [ ] ID-2279
 [DegenerusGameStorage.degeneretteBetNonce](contracts/storage/DegenerusGameStorage.sol#L1788) is never used in [DegenerusGameFoilPackModule](contracts/modules/DegenerusGameFoilPackModule.sol#L30-L815)
 
 contracts/storage/DegenerusGameStorage.sol#L1788
 
 
- - [ ] ID-2277
+ - [ ] ID-2280
 [DegenerusGameStorage._subscribers](contracts/storage/DegenerusGameStorage.sol#L2423) is never used in [DegenerusGameDecimatorModule](contracts/modules/DegenerusGameDecimatorModule.sol#L21-L1134)
 
 contracts/storage/DegenerusGameStorage.sol#L2423
 
 
- - [ ] ID-2278
+ - [ ] ID-2281
 [DegenerusGameStorage.FOIL_SEED_TAG](contracts/storage/DegenerusGameStorage.sol#L2587) is never used in [JackpotSoloTester](contracts/test/JackpotSoloTester.sol#L14-L30)
 
 contracts/storage/DegenerusGameStorage.sol#L2587
 
 
- - [ ] ID-2279
+ - [ ] ID-2282
 [DegenerusGameStorage.PASS_STREAK_FLOOR_POINTS](contracts/storage/DegenerusGameStorage.sol#L146) is never used in [DegenerusGameDecimatorModule](contracts/modules/DegenerusGameDecimatorModule.sol#L21-L1134)
 
 contracts/storage/DegenerusGameStorage.sol#L146
 
 
- - [ ] ID-2280
+ - [ ] ID-2283
 [DegenerusGameStorage.deityBoonPacked](contracts/storage/DegenerusGameStorage.sol#L1766) is never used in [DegenerusGameWhaleModule](contracts/modules/DegenerusGameWhaleModule.sol#L20-L1026)
 
 contracts/storage/DegenerusGameStorage.sol#L1766
 
 
- - [ ] ID-2281
+ - [ ] ID-2284
 [DegenerusGameStorage.BP_DEITY_PASS_CLEAR](contracts/storage/DegenerusGameStorage.sol#L2096-L2097) is never used in [JackpotSoloTester](contracts/test/JackpotSoloTester.sol#L14-L30)
 
 contracts/storage/DegenerusGameStorage.sol#L2096-L2097
 
 
- - [ ] ID-2282
+ - [ ] ID-2285
 [DegenerusGameStorage.BP_DEITY_LOOTBOX_DAY_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2051) is never used in [JackpotSoloTester](contracts/test/JackpotSoloTester.sol#L14-L30)
 
 contracts/storage/DegenerusGameStorage.sol#L2051
 
 
- - [ ] ID-2283
+ - [ ] ID-2286
 [DegenerusGameStorage.operatorApprovals](contracts/storage/DegenerusGameStorage.sol#L1195) is never used in [SettleClaimableShortfallTester](contracts/test/SettleClaimableShortfallTester.sol#L17-L66)
 
 contracts/storage/DegenerusGameStorage.sol#L1195
 
 
- - [ ] ID-2284
+ - [ ] ID-2287
 [DegenerusGameStorage.BP_COINFLIP_CLEAR](contracts/storage/DegenerusGameStorage.sol#L2079) is never used in [DegenerusGame](contracts/DegenerusGame.sol#L87-L2624)
 
 contracts/storage/DegenerusGameStorage.sol#L2079
 
 
- - [ ] ID-2285
+ - [ ] ID-2288
 [DegenerusGameStorage.PRESALE_BOX_SOLD_SHIFT](contracts/storage/DegenerusGameStorage.sol#L1108) is never used in [DegenerusGameDecimatorModule](contracts/modules/DegenerusGameDecimatorModule.sol#L21-L1134)
 
 contracts/storage/DegenerusGameStorage.sol#L1108
 
 
- - [ ] ID-2286
+ - [ ] ID-2289
 [DegenerusGameStorage.decBucketBurnTotal](contracts/storage/DegenerusGameStorage.sol#L1895) is never used in [SettleClaimableShortfallTester](contracts/test/SettleClaimableShortfallTester.sol#L17-L66)
 
 contracts/storage/DegenerusGameStorage.sol#L1895
 
 
- - [ ] ID-2287
+ - [ ] ID-2290
 [DegenerusGameStorage.GO_TIME_SHIFT](contracts/storage/DegenerusGameStorage.sol#L1159) is never used in [DegenerusGameFoilPackModule](contracts/modules/DegenerusGameFoilPackModule.sol#L30-L815)
 
 contracts/storage/DegenerusGameStorage.sol#L1159
 
 
- - [ ] ID-2288
+ - [ ] ID-2291
 [DegenerusGameStorage.BP_LOOTBOX_DAY_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2050) is never used in [DegenerusGameGameOverModule](contracts/modules/DegenerusGameGameOverModule.sol#L37-L284)
 
 contracts/storage/DegenerusGameStorage.sol#L2050
 
 
- - [ ] ID-2289
-[DegenerusGameStorage.ticketCursor](contracts/storage/DegenerusGameStorage.sol#L532) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1774)
+ - [ ] ID-2292
+[DegenerusGameStorage.ticketCursor](contracts/storage/DegenerusGameStorage.sol#L532) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1779)
 
 contracts/storage/DegenerusGameStorage.sol#L532
 
 
- - [ ] ID-2290
-[DegenerusGameStorage.affiliateDgnrsClaimedBy](contracts/storage/DegenerusGameStorage.sol#L1205-L1206) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1774)
+ - [ ] ID-2293
+[DegenerusGameStorage.affiliateDgnrsClaimedBy](contracts/storage/DegenerusGameStorage.sol#L1205-L1206) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1779)
 
 contracts/storage/DegenerusGameStorage.sol#L1205-L1206
 
 
- - [ ] ID-2291
+ - [ ] ID-2294
 [DegenerusGameStorage.BP_WHALE_CLEAR](contracts/storage/DegenerusGameStorage.sol#L2090) is never used in [DegenerusGameFoilPackModule](contracts/modules/DegenerusGameFoilPackModule.sol#L30-L815)
 
 contracts/storage/DegenerusGameStorage.sol#L2090
 
 
- - [ ] ID-2292
+ - [ ] ID-2295
 [DegenerusGameStorage.BP_ACTIVITY_CLEAR](contracts/storage/DegenerusGameStorage.sol#L2094) is never used in [DegenerusGameAdvanceModule](contracts/modules/DegenerusGameAdvanceModule.sol#L30-L2107)
 
 contracts/storage/DegenerusGameStorage.sol#L2094
 
 
- - [ ] ID-2293
+ - [ ] ID-2296
 [DegenerusGameStorage.BP_DEITY_COINFLIP_DAY_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2048) is never used in [DegenerusGameMintModule](contracts/modules/DegenerusGameMintModule.sol#L74-L2136)
 
 contracts/storage/DegenerusGameStorage.sol#L2048
 
 
- - [ ] ID-2294
+ - [ ] ID-2297
 [DegenerusGameStorage.BP_LAZY_PASS_CLEAR](contracts/storage/DegenerusGameStorage.sol#L2099-L2100) is never used in [JackpotSoloTester](contracts/test/JackpotSoloTester.sol#L14-L30)
 
 contracts/storage/DegenerusGameStorage.sol#L2099-L2100
 
 
- - [ ] ID-2295
+ - [ ] ID-2298
 [DegenerusGameStorage.vrfCoordinator](contracts/storage/DegenerusGameStorage.sol#L1582) is never used in [DegenerusGameLootboxModule](contracts/modules/DegenerusGameLootboxModule.sol#L39-L2359)
 
 contracts/storage/DegenerusGameStorage.sol#L1582
 
 
- - [ ] ID-2296
+ - [ ] ID-2299
 [DegenerusGameStorage.decWindowOpen](contracts/storage/DegenerusGameStorage.sol#L295) is never used in [DegenerusGameWhaleModule](contracts/modules/DegenerusGameWhaleModule.sol#L20-L1026)
 
 contracts/storage/DegenerusGameStorage.sol#L295
 
 
- - [ ] ID-2297
+ - [ ] ID-2300
 [DegenerusGameStorage.BP_ACTIVITY_CLEAR](contracts/storage/DegenerusGameStorage.sol#L2094) is never used in [DegenerusGameDecimatorModule](contracts/modules/DegenerusGameDecimatorModule.sol#L21-L1134)
 
 contracts/storage/DegenerusGameStorage.sol#L2094
 
 
- - [ ] ID-2298
+ - [ ] ID-2301
 [DegenerusGameStorage.BP_LAZY_PASS_DAY_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2069) is never used in [DegenerusGameDecimatorModule](contracts/modules/DegenerusGameDecimatorModule.sol#L21-L1134)
 
 contracts/storage/DegenerusGameStorage.sol#L2069
 
 
- - [ ] ID-2299
+ - [ ] ID-2302
 [DegenerusGameStorage.BP_LAZY_PASS_DAY_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2069) is never used in [SettleClaimableShortfallTester](contracts/test/SettleClaimableShortfallTester.sol#L17-L66)
 
 contracts/storage/DegenerusGameStorage.sol#L2069
 
 
- - [ ] ID-2300
+ - [ ] ID-2303
 [DegenerusGameStorage.dailyJackpotCoinTicketsPending](contracts/storage/DegenerusGameStorage.sol#L312) is never used in [DegenerusGameBingoModule](contracts/modules/DegenerusGameBingoModule.sol#L24-L288)
 
 contracts/storage/DegenerusGameStorage.sol#L312
 
 
- - [ ] ID-2301
+ - [ ] ID-2304
 [DegenerusGameStorage.presaleBoxCredit](contracts/storage/DegenerusGameStorage.sol#L1093) is never used in [DegenerusGameGameOverModule](contracts/modules/DegenerusGameGameOverModule.sol#L37-L284)
 
 contracts/storage/DegenerusGameStorage.sol#L1093
 
 
- - [ ] ID-2302
+ - [ ] ID-2305
 [DegenerusGameStorage.affiliate](contracts/storage/DegenerusGameStorage.sol#L131-L132) is never used in [DegenerusGameDecimatorModule](contracts/modules/DegenerusGameDecimatorModule.sol#L21-L1134)
 
 contracts/storage/DegenerusGameStorage.sol#L131-L132
 
 
- - [ ] ID-2303
+ - [ ] ID-2306
 [DegenerusGameStorage.BP_MASK_24](contracts/storage/DegenerusGameStorage.sol#L2074) is never used in [DegenerusGameBingoModule](contracts/modules/DegenerusGameBingoModule.sol#L24-L288)
 
 contracts/storage/DegenerusGameStorage.sol#L2074
 
 
- - [ ] ID-2304
+ - [ ] ID-2307
 [DegenerusGameStorage.BP_WHALE_TIER_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2060) is never used in [DegenerusGameBingoModule](contracts/modules/DegenerusGameBingoModule.sol#L24-L288)
 
 contracts/storage/DegenerusGameStorage.sol#L2060
 
 
- - [ ] ID-2305
+ - [ ] ID-2308
 [DegenerusGameStorage.FOIL_SEED_TAG](contracts/storage/DegenerusGameStorage.sol#L2587) is never used in [DegenerusGameBingoModule](contracts/modules/DegenerusGameBingoModule.sol#L24-L288)
 
 contracts/storage/DegenerusGameStorage.sol#L2587
 
 
- - [ ] ID-2306
+ - [ ] ID-2309
 [DegenerusGameStorage.foilCursor](contracts/storage/DegenerusGameStorage.sol#L2550) is never used in [DegenerusGameGameOverModule](contracts/modules/DegenerusGameGameOverModule.sol#L37-L284)
 
 contracts/storage/DegenerusGameStorage.sol#L2550
 
 
- - [ ] ID-2307
+ - [ ] ID-2310
 [DegenerusGameStorage.FOIL_PACK_TICKETS](contracts/storage/DegenerusGameStorage.sol#L2571) is never used in [JackpotSoloTester](contracts/test/JackpotSoloTester.sol#L14-L30)
 
 contracts/storage/DegenerusGameStorage.sol#L2571
 
 
- - [ ] ID-2308
+ - [ ] ID-2311
 [DegenerusGameStorage.BP_DEITY_PASS_DAY_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2067) is never used in [SettleClaimableShortfallTester](contracts/test/SettleClaimableShortfallTester.sol#L17-L66)
 
 contracts/storage/DegenerusGameStorage.sol#L2067
 
 
- - [ ] ID-2309
+ - [ ] ID-2312
 [DegenerusGameStorage.BP_DEITY_PURCHASE_DAY_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2054) is never used in [DegenerusGameDecimatorModule](contracts/modules/DegenerusGameDecimatorModule.sol#L21-L1134)
 
 contracts/storage/DegenerusGameStorage.sol#L2054
 
 
- - [ ] ID-2310
+ - [ ] ID-2313
 [DegenerusGameStorage.GO_SWEPT_MASK](contracts/storage/DegenerusGameStorage.sol#L1164) is never used in [DegenerusGameWhaleModule](contracts/modules/DegenerusGameWhaleModule.sol#L20-L1026)
 
 contracts/storage/DegenerusGameStorage.sol#L1164
 
 
- - [ ] ID-2311
+ - [ ] ID-2314
 [DegenerusGameStorage._fundingSourceOf](contracts/storage/DegenerusGameStorage.sol#L2420) is never used in [DegenerusGameAdvanceModule](contracts/modules/DegenerusGameAdvanceModule.sol#L30-L2107)
 
 contracts/storage/DegenerusGameStorage.sol#L2420
 
 
- - [ ] ID-2312
+ - [ ] ID-2315
 [DegenerusGameStorage.deityBoonRecipientDay](contracts/storage/DegenerusGameStorage.sol#L1770) is never used in [DegenerusGameFoilPackModule](contracts/modules/DegenerusGameFoilPackModule.sol#L30-L815)
 
 contracts/storage/DegenerusGameStorage.sol#L1770
 
 
- - [ ] ID-2313
+ - [ ] ID-2316
 [DegenerusGameStorage._fundingSourceOf](contracts/storage/DegenerusGameStorage.sol#L2420) is never used in [DegenerusGameMintModule](contracts/modules/DegenerusGameMintModule.sol#L74-L2136)
 
 contracts/storage/DegenerusGameStorage.sol#L2420
 
 
- - [ ] ID-2314
+ - [ ] ID-2317
 [DegenerusGameStorage.LR_PENDING_FLIP_SHIFT](contracts/storage/DegenerusGameStorage.sol#L1617) is never used in [DegenerusGameBingoModule](contracts/modules/DegenerusGameBingoModule.sol#L24-L288)
 
 contracts/storage/DegenerusGameStorage.sol#L1617
 
 
- - [ ] ID-2315
+ - [ ] ID-2318
 [DegenerusGameStorage.deityBoonRecipientDay](contracts/storage/DegenerusGameStorage.sol#L1770) is never used in [DegenerusGameBingoModule](contracts/modules/DegenerusGameBingoModule.sol#L24-L288)
 
 contracts/storage/DegenerusGameStorage.sol#L1770
 
 
- - [ ] ID-2316
+ - [ ] ID-2319
 [DegenerusGameStorage.PS_ACTIVE_SHIFT](contracts/storage/DegenerusGameStorage.sol#L1124) is never used in [DegenerusGameWhaleModule](contracts/modules/DegenerusGameWhaleModule.sol#L20-L1026)
 
 contracts/storage/DegenerusGameStorage.sol#L1124
 
 
- - [ ] ID-2317
+ - [ ] ID-2320
 [DegenerusGameStorage.BP_COINFLIP_DAY_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2047) is never used in [DegenerusGameDecimatorModule](contracts/modules/DegenerusGameDecimatorModule.sol#L21-L1134)
 
 contracts/storage/DegenerusGameStorage.sol#L2047
 
 
- - [ ] ID-2318
+ - [ ] ID-2321
 [DegenerusGameStorage.deityRecipientBoonCount](contracts/storage/DegenerusGameStorage.sol#L2558) is never used in [GameAfkingModule](contracts/modules/GameAfkingModule.sol#L82-L1941)
 
 contracts/storage/DegenerusGameStorage.sol#L2558
 
 
- - [ ] ID-2319
+ - [ ] ID-2322
 [DegenerusGameStorage.PRESALE_BOX_ETH_CAP](contracts/storage/DegenerusGameStorage.sol#L1134) is never used in [DegenerusGameLootboxModule](contracts/modules/DegenerusGameLootboxModule.sol#L39-L2359)
 
 contracts/storage/DegenerusGameStorage.sol#L1134
 
 
- - [ ] ID-2320
+ - [ ] ID-2323
 [DegenerusGameStorage.BP_DEITY_ACTIVITY_DAY_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2065) is never used in [DegenerusGameDecimatorModule](contracts/modules/DegenerusGameDecimatorModule.sol#L21-L1134)
 
 contracts/storage/DegenerusGameStorage.sol#L2065
 
 
- - [ ] ID-2321
+ - [ ] ID-2324
 [DegenerusGameStorage.lvlTraitEntry](contracts/storage/DegenerusGameStorage.sol#L473) is never used in [SettleClaimableShortfallTester](contracts/test/SettleClaimableShortfallTester.sol#L17-L66)
 
 contracts/storage/DegenerusGameStorage.sol#L473
 
 
- - [ ] ID-2322
+ - [ ] ID-2325
 [DegenerusGameStorage.BP_PURCHASE_DAY_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2053) is never used in [DegenerusGameAdvanceModule](contracts/modules/DegenerusGameAdvanceModule.sol#L30-L2107)
 
 contracts/storage/DegenerusGameStorage.sol#L2053
 
 
- - [ ] ID-2323
-[DegenerusGameStorage.decWindowOpen](contracts/storage/DegenerusGameStorage.sol#L295) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1774)
+ - [ ] ID-2326
+[DegenerusGameStorage.decWindowOpen](contracts/storage/DegenerusGameStorage.sol#L295) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1779)
 
 contracts/storage/DegenerusGameStorage.sol#L295
 
 
- - [ ] ID-2324
+ - [ ] ID-2327
 [DegenerusGameStorage.BP_LAZY_PASS_DAY_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2069) is never used in [DegenerusGame](contracts/DegenerusGame.sol#L87-L2624)
 
 contracts/storage/DegenerusGameStorage.sol#L2069
 
 
- - [ ] ID-2325
+ - [ ] ID-2328
 [DegenerusGameStorage.lastVrfProcessedTimestamp](contracts/storage/DegenerusGameStorage.sol#L435) is never used in [DegenerusGameLootboxModule](contracts/modules/DegenerusGameLootboxModule.sol#L39-L2359)
 
 contracts/storage/DegenerusGameStorage.sol#L435
 
 
- - [ ] ID-2326
-[DegenerusGameStorage.BP_WHALE_TIER_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2060) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1774)
+ - [ ] ID-2329
+[DegenerusGameStorage.BP_WHALE_TIER_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2060) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1779)
 
 contracts/storage/DegenerusGameStorage.sol#L2060
 
 
- - [ ] ID-2327
+ - [ ] ID-2330
 [DegenerusGameStorage.presaleBoxEthSold](contracts/storage/DegenerusGameStorage.sol#L1088) is never used in [DegenerusGameDecimatorModule](contracts/modules/DegenerusGameDecimatorModule.sol#L21-L1134)
 
 contracts/storage/DegenerusGameStorage.sol#L1088
 
 
- - [ ] ID-2328
+ - [ ] ID-2331
 [DegenerusGameStorage.BP_DEITY_PASS_CLEAR](contracts/storage/DegenerusGameStorage.sol#L2096-L2097) is never used in [DegenerusGameFoilPackModule](contracts/modules/DegenerusGameFoilPackModule.sol#L30-L815)
 
 contracts/storage/DegenerusGameStorage.sol#L2096-L2097
 
 
- - [ ] ID-2329
+ - [ ] ID-2332
 [DegenerusGameStorage.BP_MASK_8](contracts/storage/DegenerusGameStorage.sol#L2075) is never used in [DegenerusGameBoonModule](contracts/modules/DegenerusGameBoonModule.sol#L22-L343)
 
 contracts/storage/DegenerusGameStorage.sol#L2075
 
 
- - [ ] ID-2330
+ - [ ] ID-2333
 [DegenerusGameStorage.bingoClaimed](contracts/storage/DegenerusGameStorage.sol#L2039) is never used in [DegenerusGame](contracts/DegenerusGame.sol#L87-L2624)
 
 contracts/storage/DegenerusGameStorage.sol#L2039
 
 
- - [ ] ID-2331
+ - [ ] ID-2334
 [DegenerusGameStorage.BP_ACTIVITY_CLEAR](contracts/storage/DegenerusGameStorage.sol#L2094) is never used in [DegenerusGameBingoModule](contracts/modules/DegenerusGameBingoModule.sol#L24-L288)
 
 contracts/storage/DegenerusGameStorage.sol#L2094
 
 
- - [ ] ID-2332
+ - [ ] ID-2335
 [DegenerusGameStorage.ticketCursor](contracts/storage/DegenerusGameStorage.sol#L532) is never used in [SettleClaimableShortfallTester](contracts/test/SettleClaimableShortfallTester.sol#L17-L66)
 
 contracts/storage/DegenerusGameStorage.sol#L532
 
 
- - [ ] ID-2333
-[DegenerusGameStorage._afkingResetDay](contracts/storage/DegenerusGameStorage.sol#L2445) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1774)
+ - [ ] ID-2336
+[DegenerusGameStorage._afkingResetDay](contracts/storage/DegenerusGameStorage.sol#L2445) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1779)
 
 contracts/storage/DegenerusGameStorage.sol#L2445
 
 
- - [ ] ID-2334
+ - [ ] ID-2337
 [DegenerusGameStorage.FOIL_SPIN_TAG](contracts/storage/DegenerusGameStorage.sol#L2594) is never used in [DegenerusGameAdvanceModule](contracts/modules/DegenerusGameAdvanceModule.sol#L30-L2107)
 
 contracts/storage/DegenerusGameStorage.sol#L2594
 
 
- - [ ] ID-2335
+ - [ ] ID-2338
 [DegenerusGameStorage.BP_LOOTBOX_TIER_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2052) is never used in [DegenerusGame](contracts/DegenerusGame.sol#L87-L2624)
 
 contracts/storage/DegenerusGameStorage.sol#L2052
 
 
- - [ ] ID-2336
+ - [ ] ID-2339
 [DegenerusGameStorage.FOIL_SPIN_TAG](contracts/storage/DegenerusGameStorage.sol#L2594) is never used in [DegenerusGameLootboxModule](contracts/modules/DegenerusGameLootboxModule.sol#L39-L2359)
 
 contracts/storage/DegenerusGameStorage.sol#L2594
 
 
- - [ ] ID-2337
+ - [ ] ID-2340
 [DegenerusGameStorage.DEITY_PASS_ACTIVITY_BONUS_POINTS](contracts/storage/DegenerusGameStorage.sol#L137) is never used in [DegenerusGameLootboxModule](contracts/modules/DegenerusGameLootboxModule.sol#L39-L2359)
 
 contracts/storage/DegenerusGameStorage.sol#L137
 
 
- - [ ] ID-2338
+ - [ ] ID-2341
 [DegenerusGameStorage.LR_INDEX_MASK](contracts/storage/DegenerusGameStorage.sol#L1612) is never used in [DegenerusGameBoonModule](contracts/modules/DegenerusGameBoonModule.sol#L22-L343)
 
 contracts/storage/DegenerusGameStorage.sol#L1612
 
 
- - [ ] ID-2339
+ - [ ] ID-2342
 [DegenerusGameStorage.deityBoonRecipientDay](contracts/storage/DegenerusGameStorage.sol#L1770) is never used in [DegenerusGameGameOverModule](contracts/modules/DegenerusGameGameOverModule.sol#L37-L284)
 
 contracts/storage/DegenerusGameStorage.sol#L1770
 
 
- - [ ] ID-2340
+ - [ ] ID-2343
 [DegenerusGameStorage.operatorApprovals](contracts/storage/DegenerusGameStorage.sol#L1195) is never used in [DegenerusGameFoilPackModule](contracts/modules/DegenerusGameFoilPackModule.sol#L30-L815)
 
 contracts/storage/DegenerusGameStorage.sol#L1195
 
 
- - [ ] ID-2341
-[DegenerusGameStorage.BP_DEITY_WHALE_DAY_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2059) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1774)
+ - [ ] ID-2344
+[DegenerusGameStorage.BP_DEITY_WHALE_DAY_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2059) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1779)
 
 contracts/storage/DegenerusGameStorage.sol#L2059
 
 
- - [ ] ID-2342
+ - [ ] ID-2345
 [DegenerusGameStorage.BP_WHALE_DAY_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2058) is never used in [DegenerusGame](contracts/DegenerusGame.sol#L87-L2624)
 
 contracts/storage/DegenerusGameStorage.sol#L2058
 
 
- - [ ] ID-2343
+ - [ ] ID-2346
 [DegenerusGameStorage.degeneretteBets](contracts/storage/DegenerusGameStorage.sol#L1785) is never used in [DegenerusGameFoilPackModule](contracts/modules/DegenerusGameFoilPackModule.sol#L30-L815)
 
 contracts/storage/DegenerusGameStorage.sol#L1785
 
 
- - [ ] ID-2344
+ - [ ] ID-2347
 [DegenerusGameStorage.BP_DEITY_LOOTBOX_DAY_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2051) is never used in [DegenerusGameAdvanceModule](contracts/modules/DegenerusGameAdvanceModule.sol#L30-L2107)
 
 contracts/storage/DegenerusGameStorage.sol#L2051
 
 
- - [ ] ID-2345
+ - [ ] ID-2348
 [DegenerusGameStorage.bingoFirsts](contracts/storage/DegenerusGameStorage.sol#L2044) is never used in [SettleClaimableShortfallTester](contracts/test/SettleClaimableShortfallTester.sol#L17-L66)
 
 contracts/storage/DegenerusGameStorage.sol#L2044
 
 
- - [ ] ID-2346
+ - [ ] ID-2349
 [DegenerusGameStorage.jackpotCounter](contracts/storage/DegenerusGameStorage.sol#L285) is never used in [SettleClaimableShortfallTester](contracts/test/SettleClaimableShortfallTester.sol#L17-L66)
 
 contracts/storage/DegenerusGameStorage.sol#L285
 
 
- - [ ] ID-2347
+ - [ ] ID-2350
 [DegenerusGameStorage.degeneretteBets](contracts/storage/DegenerusGameStorage.sol#L1785) is never used in [SettleClaimableShortfallTester](contracts/test/SettleClaimableShortfallTester.sol#L17-L66)
 
 contracts/storage/DegenerusGameStorage.sol#L1785
 
 
- - [ ] ID-2348
+ - [ ] ID-2351
 [DegenerusGameStorage.LR_PENDING_ETH_SHIFT](contracts/storage/DegenerusGameStorage.sol#L1613) is never used in [DegenerusGameFoilPackModule](contracts/modules/DegenerusGameFoilPackModule.sol#L30-L815)
 
 contracts/storage/DegenerusGameStorage.sol#L1613
 
 
- - [ ] ID-2349
+ - [ ] ID-2352
 [DegenerusGameStorage.BP_LAZY_PASS_CLEAR](contracts/storage/DegenerusGameStorage.sol#L2099-L2100) is never used in [DegenerusGameFoilPackModule](contracts/modules/DegenerusGameFoilPackModule.sol#L30-L815)
 
 contracts/storage/DegenerusGameStorage.sol#L2099-L2100
 
 
- - [ ] ID-2350
+ - [ ] ID-2353
 [DegenerusGameStorage.ticketsFullyProcessed](contracts/storage/DegenerusGameStorage.sol#L326) is never used in [DegenerusGameLootboxModule](contracts/modules/DegenerusGameLootboxModule.sol#L39-L2359)
 
 contracts/storage/DegenerusGameStorage.sol#L326
 
 
- - [ ] ID-2351
+ - [ ] ID-2354
 [DegenerusGameStorage.BP_DEITY_DECIMATOR_DAY_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2057) is never used in [JackpotSoloTester](contracts/test/JackpotSoloTester.sol#L14-L30)
 
 contracts/storage/DegenerusGameStorage.sol#L2057
 
 
- - [ ] ID-2352
+ - [ ] ID-2355
 [DegenerusGameStorage.FOIL_CCY_TAG](contracts/storage/DegenerusGameStorage.sol#L2593) is never used in [SettleClaimableShortfallTester](contracts/test/SettleClaimableShortfallTester.sol#L17-L66)
 
 contracts/storage/DegenerusGameStorage.sol#L2593
 
 
- - [ ] ID-2353
+ - [ ] ID-2356
 [DegenerusGameStorage.LR_PENDING_FLIP_SHIFT](contracts/storage/DegenerusGameStorage.sol#L1617) is never used in [DegenerusGameBoonModule](contracts/modules/DegenerusGameBoonModule.sol#L22-L343)
 
 contracts/storage/DegenerusGameStorage.sol#L1617
 
 
- - [ ] ID-2354
+ - [ ] ID-2357
 [DegenerusGameStorage.deityPassPricePaid](contracts/storage/DegenerusGameStorage.sol#L1249) is never used in [JackpotSoloTester](contracts/test/JackpotSoloTester.sol#L14-L30)
 
 contracts/storage/DegenerusGameStorage.sol#L1249
 
 
- - [ ] ID-2355
+ - [ ] ID-2358
 [DegenerusGameStorage.deityBoonPacked](contracts/storage/DegenerusGameStorage.sol#L1766) is never used in [DegenerusGameBingoModule](contracts/modules/DegenerusGameBingoModule.sol#L24-L288)
 
 contracts/storage/DegenerusGameStorage.sol#L1766
 
 
- - [ ] ID-2356
+ - [ ] ID-2359
 [DegenerusGameStorage.bingoClaimed](contracts/storage/DegenerusGameStorage.sol#L2039) is never used in [JackpotSoloTester](contracts/test/JackpotSoloTester.sol#L14-L30)
 
 contracts/storage/DegenerusGameStorage.sol#L2039
 
 
- - [ ] ID-2357
+ - [ ] ID-2360
 [DegenerusGameStorage.BP_DECIMATOR_TIER_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2056) is never used in [DegenerusGame](contracts/DegenerusGame.sol#L87-L2624)
 
 contracts/storage/DegenerusGameStorage.sol#L2056
 
 
- - [ ] ID-2358
+ - [ ] ID-2361
 [DegenerusGameStorage.BP_DEITY_LAZY_PASS_DAY_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2070) is never used in [JackpotSoloTester](contracts/test/JackpotSoloTester.sol#L14-L30)
 
 contracts/storage/DegenerusGameStorage.sol#L2070
 
 
- - [ ] ID-2359
+ - [ ] ID-2362
 [DegenerusGameStorage.terminalDecBets](contracts/storage/DegenerusGameStorage.sol#L1971) is never used in [DegenerusGameGameOverModule](contracts/modules/DegenerusGameGameOverModule.sol#L37-L284)
 
 contracts/storage/DegenerusGameStorage.sol#L1971
 
 
- - [ ] ID-2360
+ - [ ] ID-2363
 [DegenerusGameStorage.PRESALE_BOX_AMOUNT_MASK](contracts/storage/DegenerusGameStorage.sol#L1110) is never used in [DegenerusGameGameOverModule](contracts/modules/DegenerusGameGameOverModule.sol#L37-L284)
 
 contracts/storage/DegenerusGameStorage.sol#L1110
 
 
- - [ ] ID-2361
+ - [ ] ID-2364
 [DegenerusGameStorage.affiliateDgnrsClaimedBy](contracts/storage/DegenerusGameStorage.sol#L1205-L1206) is never used in [DegenerusGame](contracts/DegenerusGame.sol#L87-L2624)
 
 contracts/storage/DegenerusGameStorage.sol#L1205-L1206
 
 
- - [ ] ID-2362
+ - [ ] ID-2365
 [DegenerusGameStorage.lvlTraitEntry](contracts/storage/DegenerusGameStorage.sol#L473) is never used in [DegenerusGameAdvanceModule](contracts/modules/DegenerusGameAdvanceModule.sol#L30-L2107)
 
 contracts/storage/DegenerusGameStorage.sol#L473
 
 
- - [ ] ID-2363
-[DegenerusGameStorage.lastTerminalDecClaimRound](contracts/storage/DegenerusGameStorage.sol#L1985) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1774)
+ - [ ] ID-2366
+[DegenerusGameStorage.lastTerminalDecClaimRound](contracts/storage/DegenerusGameStorage.sol#L1985) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1779)
 
 contracts/storage/DegenerusGameStorage.sol#L1985
 
 
- - [ ] ID-2364
+ - [ ] ID-2367
 [DegenerusGameStorage.deityBoonRecipientDay](contracts/storage/DegenerusGameStorage.sol#L1770) is never used in [JackpotSoloTester](contracts/test/JackpotSoloTester.sol#L14-L30)
 
 contracts/storage/DegenerusGameStorage.sol#L1770
 
 
- - [ ] ID-2365
+ - [ ] ID-2368
 [DegenerusGameStorage.deityPassPricePaid](contracts/storage/DegenerusGameStorage.sol#L1249) is never used in [DegenerusGameDecimatorModule](contracts/modules/DegenerusGameDecimatorModule.sol#L21-L1134)
 
 contracts/storage/DegenerusGameStorage.sol#L1249
 
 
- - [ ] ID-2366
+ - [ ] ID-2369
 [DegenerusGameStorage._fundingSourceOf](contracts/storage/DegenerusGameStorage.sol#L2420) is never used in [JackpotSoloTester](contracts/test/JackpotSoloTester.sol#L14-L30)
 
 contracts/storage/DegenerusGameStorage.sol#L2420
 
 
- - [ ] ID-2367
+ - [ ] ID-2370
 [DegenerusGameStorage.presaleDrained](contracts/storage/DegenerusGameStorage.sol#L367) is never used in [GameAfkingModule](contracts/modules/GameAfkingModule.sol#L82-L1941)
 
 contracts/storage/DegenerusGameStorage.sol#L367
 
 
- - [ ] ID-2368
+ - [ ] ID-2371
 [DegenerusGameStorage.lastTerminalDecClaimRound](contracts/storage/DegenerusGameStorage.sol#L1985) is never used in [DegenerusGameWhaleModule](contracts/modules/DegenerusGameWhaleModule.sol#L20-L1026)
 
 contracts/storage/DegenerusGameStorage.sol#L1985
 
 
- - [ ] ID-2369
+ - [ ] ID-2372
 [DegenerusGameStorage.BP_LAZY_PASS_TIER_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2071) is never used in [DegenerusGameDecimatorModule](contracts/modules/DegenerusGameDecimatorModule.sol#L21-L1134)
 
 contracts/storage/DegenerusGameStorage.sol#L2071
 
 
- - [ ] ID-2370
+ - [ ] ID-2373
 [DegenerusGameStorage.GO_TIME_MASK](contracts/storage/DegenerusGameStorage.sol#L1160) is never used in [SettleClaimableShortfallTester](contracts/test/SettleClaimableShortfallTester.sol#L17-L66)
 
 contracts/storage/DegenerusGameStorage.sol#L1160
 
 
- - [ ] ID-2371
+ - [ ] ID-2374
 [DegenerusGameStorage.BP_DEITY_PASS_CLEAR](contracts/storage/DegenerusGameStorage.sol#L2096-L2097) is never used in [DegenerusGame](contracts/DegenerusGame.sol#L87-L2624)
 
 contracts/storage/DegenerusGameStorage.sol#L2096-L2097
 
 
- - [ ] ID-2372
+ - [ ] ID-2375
 [DegenerusGameStorage.FOIL_TO_FUTURE_BPS](contracts/storage/DegenerusGameStorage.sol#L2562) is never used in [DegenerusGameWhaleModule](contracts/modules/DegenerusGameWhaleModule.sol#L20-L1026)
 
 contracts/storage/DegenerusGameStorage.sol#L2562
 
 
- - [ ] ID-2373
+ - [ ] ID-2376
 [DegenerusGameStorage.deityPassOwners](contracts/storage/DegenerusGameStorage.sol#L1252) is never used in [DegenerusGameFoilPackModule](contracts/modules/DegenerusGameFoilPackModule.sol#L30-L815)
 
 contracts/storage/DegenerusGameStorage.sol#L1252
 
 
- - [ ] ID-2374
+ - [ ] ID-2377
 [DegenerusGameStorage.BP_LAZY_PASS_DAY_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2069) is never used in [DegenerusGameBingoModule](contracts/modules/DegenerusGameBingoModule.sol#L24-L288)
 
 contracts/storage/DegenerusGameStorage.sol#L2069
 
 
- - [ ] ID-2375
+ - [ ] ID-2378
 [DegenerusGameStorage.presaleBoxCredit](contracts/storage/DegenerusGameStorage.sol#L1093) is never used in [DegenerusGameBoonModule](contracts/modules/DegenerusGameBoonModule.sol#L22-L343)
 
 contracts/storage/DegenerusGameStorage.sol#L1093
 
 
- - [ ] ID-2376
+ - [ ] ID-2379
 [DegenerusGameStorage.ticketCursor](contracts/storage/DegenerusGameStorage.sol#L532) is never used in [DegenerusGameBoonModule](contracts/modules/DegenerusGameBoonModule.sol#L22-L343)
 
 contracts/storage/DegenerusGameStorage.sol#L532
 
 
- - [ ] ID-2377
+ - [ ] ID-2380
 [DegenerusGameStorage.ticketsFullyProcessed](contracts/storage/DegenerusGameStorage.sol#L326) is never used in [DegenerusGameBoonModule](contracts/modules/DegenerusGameBoonModule.sol#L22-L343)
 
 contracts/storage/DegenerusGameStorage.sol#L326
 
 
- - [ ] ID-2378
+ - [ ] ID-2381
 [DegenerusGameStorage.BP_DEITY_DECIMATOR_DAY_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2057) is never used in [GameAfkingModule](contracts/modules/GameAfkingModule.sol#L82-L1941)
 
 contracts/storage/DegenerusGameStorage.sol#L2057
 
 
- - [ ] ID-2379
+ - [ ] ID-2382
 [DegenerusGameStorage.foilCursor](contracts/storage/DegenerusGameStorage.sol#L2550) is never used in [DegenerusGame](contracts/DegenerusGame.sol#L87-L2624)
 
 contracts/storage/DegenerusGameStorage.sol#L2550
 
 
- - [ ] ID-2380
+ - [ ] ID-2383
 [DegenerusGameStorage.decBucketBurnTotal](contracts/storage/DegenerusGameStorage.sol#L1895) is never used in [DegenerusGameMintModule](contracts/modules/DegenerusGameMintModule.sol#L74-L2136)
 
 contracts/storage/DegenerusGameStorage.sol#L1895
 
 
- - [ ] ID-2381
+ - [ ] ID-2384
 [DegenerusGameStorage.FOIL_PACK_TICKETS](contracts/storage/DegenerusGameStorage.sol#L2571) is never used in [DegenerusGameGameOverModule](contracts/modules/DegenerusGameGameOverModule.sol#L37-L284)
 
 contracts/storage/DegenerusGameStorage.sol#L2571
 
 
- - [ ] ID-2382
+ - [ ] ID-2385
 [DegenerusGameStorage.BP_DEITY_ACTIVITY_DAY_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2065) is never used in [SettleClaimableShortfallTester](contracts/test/SettleClaimableShortfallTester.sol#L17-L66)
 
 contracts/storage/DegenerusGameStorage.sol#L2065
 
 
- - [ ] ID-2383
+ - [ ] ID-2386
 [DegenerusGameStorage.bingoFirsts](contracts/storage/DegenerusGameStorage.sol#L2044) is never used in [DegenerusGameMintModule](contracts/modules/DegenerusGameMintModule.sol#L74-L2136)
 
 contracts/storage/DegenerusGameStorage.sol#L2044
 
 
- - [ ] ID-2384
+ - [ ] ID-2387
 [DegenerusGameStorage.decBucketBurnTotal](contracts/storage/DegenerusGameStorage.sol#L1895) is never used in [GameAfkingModule](contracts/modules/GameAfkingModule.sol#L82-L1941)
 
 contracts/storage/DegenerusGameStorage.sol#L1895
 
 
- - [ ] ID-2385
+ - [ ] ID-2388
 [DegenerusGameStorage.vrfSubscriptionId](contracts/storage/DegenerusGameStorage.sol#L1590) is never used in [DegenerusGame](contracts/DegenerusGame.sol#L87-L2624)
 
 contracts/storage/DegenerusGameStorage.sol#L1590
 
 
- - [ ] ID-2386
+ - [ ] ID-2389
 [DegenerusGameStorage._afkingResetDay](contracts/storage/DegenerusGameStorage.sol#L2445) is never used in [GameAfkingModule](contracts/modules/GameAfkingModule.sol#L82-L1941)
 
 contracts/storage/DegenerusGameStorage.sol#L2445
 
 
- - [ ] ID-2387
-[DegenerusGameStorage.decBucketOffsetPacked](contracts/storage/DegenerusGameStorage.sol#L1904) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1774)
+ - [ ] ID-2390
+[DegenerusGameStorage.decBucketOffsetPacked](contracts/storage/DegenerusGameStorage.sol#L1904) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1779)
 
 contracts/storage/DegenerusGameStorage.sol#L1904
 
 
- - [ ] ID-2388
+ - [ ] ID-2391
 [DegenerusGameStorage.decBucketBurnTotal](contracts/storage/DegenerusGameStorage.sol#L1895) is never used in [DegenerusGameFoilPackModule](contracts/modules/DegenerusGameFoilPackModule.sol#L30-L815)
 
 contracts/storage/DegenerusGameStorage.sol#L1895
 
 
- - [ ] ID-2389
+ - [ ] ID-2392
 [DegenerusGameStorage.subsFullyProcessed](contracts/storage/DegenerusGameStorage.sol#L358) is never used in [DegenerusGameLootboxModule](contracts/modules/DegenerusGameLootboxModule.sol#L39-L2359)
 
 contracts/storage/DegenerusGameStorage.sol#L358
 
 
- - [ ] ID-2390
+ - [ ] ID-2393
 [DegenerusGameStorage._subscriberIndex](contracts/storage/DegenerusGameStorage.sol#L2427) is never used in [DegenerusGameWhaleModule](contracts/modules/DegenerusGameWhaleModule.sol#L20-L1026)
 
 contracts/storage/DegenerusGameStorage.sol#L2427
 
 
- - [ ] ID-2391
+ - [ ] ID-2394
 [DegenerusGameStorage.deityRecipientBoonCount](contracts/storage/DegenerusGameStorage.sol#L2558) is never used in [DegenerusGameAdvanceModule](contracts/modules/DegenerusGameAdvanceModule.sol#L30-L2107)
 
 contracts/storage/DegenerusGameStorage.sol#L2558
 
 
- - [ ] ID-2392
+ - [ ] ID-2395
 [DegenerusGameStorage.presaleBoxDgnrsPoolStart](contracts/storage/DegenerusGameStorage.sol#L1264) is never used in [DegenerusGameFoilPackModule](contracts/modules/DegenerusGameFoilPackModule.sol#L30-L815)
 
 contracts/storage/DegenerusGameStorage.sol#L1264
 
 
- - [ ] ID-2393
+ - [ ] ID-2396
 [DegenerusGameStorage.BP_LOOTBOX_CLEAR](contracts/storage/DegenerusGameStorage.sol#L2081-L2082) is never used in [GameAfkingModule](contracts/modules/GameAfkingModule.sol#L82-L1941)
 
 contracts/storage/DegenerusGameStorage.sol#L2081-L2082
 
 
- - [ ] ID-2394
+ - [ ] ID-2397
 [DegenerusGameStorage.totalFlipReversals](contracts/storage/DegenerusGameStorage.sol#L429) is never used in [SettleClaimableShortfallTester](contracts/test/SettleClaimableShortfallTester.sol#L17-L66)
 
 contracts/storage/DegenerusGameStorage.sol#L429
 
 
- - [ ] ID-2395
+ - [ ] ID-2398
 [DegenerusGameStorage.ACTIVITY_SCORE_HARD_CAP_POINTS](contracts/storage/DegenerusGameStorage.sol#L143) is never used in [DegenerusGameAdvanceModule](contracts/modules/DegenerusGameAdvanceModule.sol#L30-L2107)
 
 contracts/storage/DegenerusGameStorage.sol#L143
 
 
- - [ ] ID-2396
+ - [ ] ID-2399
 [DegenerusGameStorage.BP_DEITY_LAZY_PASS_DAY_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2070) is never used in [DegenerusGameGameOverModule](contracts/modules/DegenerusGameGameOverModule.sol#L37-L284)
 
 contracts/storage/DegenerusGameStorage.sol#L2070
 
 
- - [ ] ID-2397
+ - [ ] ID-2400
 [DegenerusGameStorage.BP_ACTIVITY_DAY_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2064) is never used in [JackpotSoloTester](contracts/test/JackpotSoloTester.sol#L14-L30)
 
 contracts/storage/DegenerusGameStorage.sol#L2064
 
 
- - [ ] ID-2398
+ - [ ] ID-2401
 [DegenerusGameStorage.presaleBoxDgnrsPoolStart](contracts/storage/DegenerusGameStorage.sol#L1264) is never used in [DegenerusGameBingoModule](contracts/modules/DegenerusGameBingoModule.sol#L24-L288)
 
 contracts/storage/DegenerusGameStorage.sol#L1264
 
 
- - [ ] ID-2399
+ - [ ] ID-2402
 [DegenerusGameStorage.deityRecipientBoonCount](contracts/storage/DegenerusGameStorage.sol#L2558) is never used in [DegenerusGameBingoModule](contracts/modules/DegenerusGameBingoModule.sol#L24-L288)
 
 contracts/storage/DegenerusGameStorage.sol#L2558
 
 
- - [ ] ID-2400
+ - [ ] ID-2403
 [DegenerusGameStorage.PS_MINT_ETH_SHIFT](contracts/storage/DegenerusGameStorage.sol#L1126) is never used in [DegenerusGameWhaleModule](contracts/modules/DegenerusGameWhaleModule.sol#L20-L1026)
 
 contracts/storage/DegenerusGameStorage.sol#L1126
 
 
- - [ ] ID-2401
+ - [ ] ID-2404
 [DegenerusGameStorage.BP_DECIMATOR_CLEAR](contracts/storage/DegenerusGameStorage.sol#L2087-L2088) is never used in [DegenerusGameGameOverModule](contracts/modules/DegenerusGameGameOverModule.sol#L37-L284)
 
 contracts/storage/DegenerusGameStorage.sol#L2087-L2088
 
 
- - [ ] ID-2402
+ - [ ] ID-2405
 [DegenerusGameStorage.vrfRequestId](contracts/storage/DegenerusGameStorage.sol#L423) is never used in [DegenerusGameDecimatorModule](contracts/modules/DegenerusGameDecimatorModule.sol#L21-L1134)
 
 contracts/storage/DegenerusGameStorage.sol#L423
 
 
- - [ ] ID-2403
+ - [ ] ID-2406
 [DegenerusGameStorage.BP_DEITY_ACTIVITY_DAY_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2065) is never used in [DegenerusGameAdvanceModule](contracts/modules/DegenerusGameAdvanceModule.sol#L30-L2107)
 
 contracts/storage/DegenerusGameStorage.sol#L2065
 
 
- - [ ] ID-2404
+ - [ ] ID-2407
 [DegenerusGameStorage.coin](contracts/storage/DegenerusGameStorage.sol#L125-L126) is never used in [DegenerusGameLootboxModule](contracts/modules/DegenerusGameLootboxModule.sol#L39-L2359)
 
 contracts/storage/DegenerusGameStorage.sol#L125-L126
 
 
- - [ ] ID-2405
+ - [ ] ID-2408
 [DegenerusGameStorage.vrfSubscriptionId](contracts/storage/DegenerusGameStorage.sol#L1590) is never used in [DegenerusGameGameOverModule](contracts/modules/DegenerusGameGameOverModule.sol#L37-L284)
 
 contracts/storage/DegenerusGameStorage.sol#L1590
 
 
- - [ ] ID-2406
+ - [ ] ID-2409
 [DegenerusGameStorage._fundingSourceOf](contracts/storage/DegenerusGameStorage.sol#L2420) is never used in [DegenerusGameWhaleModule](contracts/modules/DegenerusGameWhaleModule.sol#L20-L1026)
 
 contracts/storage/DegenerusGameStorage.sol#L2420
 
 
- - [ ] ID-2407
+ - [ ] ID-2410
 [DegenerusGameStorage.presaleBoxCredit](contracts/storage/DegenerusGameStorage.sol#L1093) is never used in [SettleClaimableShortfallTester](contracts/test/SettleClaimableShortfallTester.sol#L17-L66)
 
 contracts/storage/DegenerusGameStorage.sol#L1093
 
 
- - [ ] ID-2408
+ - [ ] ID-2411
 [DegenerusGameStorage.vrfCoordinator](contracts/storage/DegenerusGameStorage.sol#L1582) is never used in [DegenerusGame](contracts/DegenerusGame.sol#L87-L2624)
 
 contracts/storage/DegenerusGameStorage.sol#L1582
 
 
- - [ ] ID-2409
+ - [ ] ID-2412
 [DegenerusGameStorage.bingoClaimed](contracts/storage/DegenerusGameStorage.sol#L2039) is never used in [DegenerusGameGameOverModule](contracts/modules/DegenerusGameGameOverModule.sol#L37-L284)
 
 contracts/storage/DegenerusGameStorage.sol#L2039
 
 
- - [ ] ID-2410
+ - [ ] ID-2413
 [DegenerusGameStorage.compressedJackpotFlag](contracts/storage/DegenerusGameStorage.sol#L319) is never used in [SettleClaimableShortfallTester](contracts/test/SettleClaimableShortfallTester.sol#L17-L66)
 
 contracts/storage/DegenerusGameStorage.sol#L319
 
 
- - [ ] ID-2411
+ - [ ] ID-2414
 [DegenerusGameStorage.GO_JACKPOT_PAID_MASK](contracts/storage/DegenerusGameStorage.sol#L1162) is never used in [DegenerusGame](contracts/DegenerusGame.sol#L87-L2624)
 
 contracts/storage/DegenerusGameStorage.sol#L1162
 
 
- - [ ] ID-2412
+ - [ ] ID-2415
 [DegenerusGameStorage.BP_PURCHASE_CLEAR](contracts/storage/DegenerusGameStorage.sol#L2084-L2085) is never used in [JackpotSoloTester](contracts/test/JackpotSoloTester.sol#L14-L30)
 
 contracts/storage/DegenerusGameStorage.sol#L2084-L2085
 
 
- - [ ] ID-2413
+ - [ ] ID-2416
 [DegenerusGameStorage.bingoFirsts](contracts/storage/DegenerusGameStorage.sol#L2044) is never used in [JackpotSoloTester](contracts/test/JackpotSoloTester.sol#L14-L30)
 
 contracts/storage/DegenerusGameStorage.sol#L2044
 
 
- - [ ] ID-2414
+ - [ ] ID-2417
 [DegenerusGameStorage.BP_LOOTBOX_CLEAR](contracts/storage/DegenerusGameStorage.sol#L2081-L2082) is never used in [DegenerusGameBingoModule](contracts/modules/DegenerusGameBingoModule.sol#L24-L288)
 
 contracts/storage/DegenerusGameStorage.sol#L2081-L2082
 
 
- - [ ] ID-2415
+ - [ ] ID-2418
 [DegenerusGameStorage.LOOTBOX_EV_BENEFIT_CAP](contracts/storage/DegenerusGameStorage.sol#L1643-L1644) is never used in [DegenerusGameBoonModule](contracts/modules/DegenerusGameBoonModule.sol#L22-L343)
 
 contracts/storage/DegenerusGameStorage.sol#L1643-L1644
 
 
- - [ ] ID-2416
+ - [ ] ID-2419
 [DegenerusGameStorage.vrfSubscriptionId](contracts/storage/DegenerusGameStorage.sol#L1590) is never used in [DegenerusGameDecimatorModule](contracts/modules/DegenerusGameDecimatorModule.sol#L21-L1134)
 
 contracts/storage/DegenerusGameStorage.sol#L1590
 
 
- - [ ] ID-2417
-[DegenerusGameStorage.presaleBoxEthSold](contracts/storage/DegenerusGameStorage.sol#L1088) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1774)
+ - [ ] ID-2420
+[DegenerusGameStorage.presaleBoxEthSold](contracts/storage/DegenerusGameStorage.sol#L1088) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1779)
 
 contracts/storage/DegenerusGameStorage.sol#L1088
 
 
- - [ ] ID-2418
+ - [ ] ID-2421
 [DegenerusGameStorage.FOIL_SPIN_TAG](contracts/storage/DegenerusGameStorage.sol#L2594) is never used in [DegenerusGameMintModule](contracts/modules/DegenerusGameMintModule.sol#L74-L2136)
 
 contracts/storage/DegenerusGameStorage.sol#L2594
 
 
- - [ ] ID-2419
+ - [ ] ID-2422
 [DegenerusGameStorage.PRESALE_BOX_AMOUNT_MASK](contracts/storage/DegenerusGameStorage.sol#L1110) is never used in [DegenerusGameBoonModule](contracts/modules/DegenerusGameBoonModule.sol#L22-L343)
 
 contracts/storage/DegenerusGameStorage.sol#L1110
 
 
- - [ ] ID-2420
+ - [ ] ID-2423
 [DegenerusGameStorage.BP_DEITY_WHALE_DAY_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2059) is never used in [JackpotSoloTester](contracts/test/JackpotSoloTester.sol#L14-L30)
 
 contracts/storage/DegenerusGameStorage.sol#L2059
 
 
- - [ ] ID-2421
+ - [ ] ID-2424
 [DegenerusGameStorage.whalePassClaims](contracts/storage/DegenerusGameStorage.sol#L1183) is never used in [SettleClaimableShortfallTester](contracts/test/SettleClaimableShortfallTester.sol#L17-L66)
 
 contracts/storage/DegenerusGameStorage.sol#L1183
 
 
- - [ ] ID-2422
+ - [ ] ID-2425
 [DegenerusGameStorage.presaleDrained](contracts/storage/DegenerusGameStorage.sol#L367) is never used in [JackpotSoloTester](contracts/test/JackpotSoloTester.sol#L14-L30)
 
 contracts/storage/DegenerusGameStorage.sol#L367
 
 
- - [ ] ID-2423
+ - [ ] ID-2426
 [DegenerusGameStorage._subscribers](contracts/storage/DegenerusGameStorage.sol#L2423) is never used in [DegenerusGameGameOverModule](contracts/modules/DegenerusGameGameOverModule.sol#L37-L284)
 
 contracts/storage/DegenerusGameStorage.sol#L2423
 
 
- - [ ] ID-2424
+ - [ ] ID-2427
 [DegenerusGameStorage.dailyTicketBudgetsPacked](contracts/storage/DegenerusGameStorage.sol#L442) is never used in [DegenerusGameGameOverModule](contracts/modules/DegenerusGameGameOverModule.sol#L37-L284)
 
 contracts/storage/DegenerusGameStorage.sol#L442
 
 
- - [ ] ID-2425
+ - [ ] ID-2428
 [DegenerusGameStorage.BP_DEITY_LAZY_PASS_DAY_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2070) is never used in [DegenerusGameFoilPackModule](contracts/modules/DegenerusGameFoilPackModule.sol#L30-L815)
 
 contracts/storage/DegenerusGameStorage.sol#L2070
 
 
- - [ ] ID-2426
+ - [ ] ID-2429
 [DegenerusGameStorage.FOIL_PACK_TICKETS](contracts/storage/DegenerusGameStorage.sol#L2571) is never used in [SettleClaimableShortfallTester](contracts/test/SettleClaimableShortfallTester.sol#L17-L66)
 
 contracts/storage/DegenerusGameStorage.sol#L2571
 
 
- - [ ] ID-2427
+ - [ ] ID-2430
 [DegenerusGameStorage.presaleOver](contracts/storage/DegenerusGameStorage.sol#L348) is never used in [SettleClaimableShortfallTester](contracts/test/SettleClaimableShortfallTester.sol#L17-L66)
 
 contracts/storage/DegenerusGameStorage.sol#L348
 
 
- - [ ] ID-2428
-[DegenerusGameStorage.BP_COINFLIP_DAY_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2047) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1774)
+ - [ ] ID-2431
+[DegenerusGameStorage.BP_COINFLIP_DAY_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2047) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1779)
 
 contracts/storage/DegenerusGameStorage.sol#L2047
 
 
- - [ ] ID-2429
+ - [ ] ID-2432
 [DegenerusGameStorage.yieldAccumulator](contracts/storage/DegenerusGameStorage.sol#L1925) is never used in [DegenerusGameMintModule](contracts/modules/DegenerusGameMintModule.sol#L74-L2136)
 
 contracts/storage/DegenerusGameStorage.sol#L1925
 
 
- - [ ] ID-2430
+ - [ ] ID-2433
 [DegenerusGameStorage.FOIL_CCY_TAG](contracts/storage/DegenerusGameStorage.sol#L2593) is never used in [DegenerusGameWhaleModule](contracts/modules/DegenerusGameWhaleModule.sol#L20-L1026)
 
 contracts/storage/DegenerusGameStorage.sol#L2593
 
 
- - [ ] ID-2431
+ - [ ] ID-2434
 [DegenerusGameStorage.foilBuyers](contracts/storage/DegenerusGameStorage.sol#L2541) is never used in [DegenerusGameGameOverModule](contracts/modules/DegenerusGameGameOverModule.sol#L37-L284)
 
 contracts/storage/DegenerusGameStorage.sol#L2541
 
 
- - [ ] ID-2432
+ - [ ] ID-2435
 [DegenerusGameStorage._afkingResetDay](contracts/storage/DegenerusGameStorage.sol#L2445) is never used in [DegenerusGame](contracts/DegenerusGame.sol#L87-L2624)
 
 contracts/storage/DegenerusGameStorage.sol#L2445
 
 
- - [ ] ID-2433
+ - [ ] ID-2436
 [DegenerusGameStorage.presaleBoxDgnrsPoolStart](contracts/storage/DegenerusGameStorage.sol#L1264) is never used in [DegenerusGameDecimatorModule](contracts/modules/DegenerusGameDecimatorModule.sol#L21-L1134)
 
 contracts/storage/DegenerusGameStorage.sol#L1264
 
 
- - [ ] ID-2434
+ - [ ] ID-2437
 [DegenerusGameStorage.BP_DEITY_PURCHASE_DAY_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2054) is never used in [JackpotSoloTester](contracts/test/JackpotSoloTester.sol#L14-L30)
 
 contracts/storage/DegenerusGameStorage.sol#L2054
 
 
- - [ ] ID-2435
+ - [ ] ID-2438
 [DegenerusGameStorage.rngWordCurrent](contracts/storage/DegenerusGameStorage.sol#L417) is never used in [JackpotSoloTester](contracts/test/JackpotSoloTester.sol#L14-L30)
 
 contracts/storage/DegenerusGameStorage.sol#L417
 
 
- - [ ] ID-2436
+ - [ ] ID-2439
 [DegenerusGameStorage.FOIL_SEED_TAG](contracts/storage/DegenerusGameStorage.sol#L2587) is never used in [GameAfkingModule](contracts/modules/GameAfkingModule.sol#L82-L1941)
 
 contracts/storage/DegenerusGameStorage.sol#L2587
 
 
- - [ ] ID-2437
+ - [ ] ID-2440
 [DegenerusGameStorage.subsFullyProcessed](contracts/storage/DegenerusGameStorage.sol#L358) is never used in [SettleClaimableShortfallTester](contracts/test/SettleClaimableShortfallTester.sol#L17-L66)
 
 contracts/storage/DegenerusGameStorage.sol#L358
 
 
- - [ ] ID-2438
+ - [ ] ID-2441
 [DegenerusGameStorage.LR_MID_DAY_MASK](contracts/storage/DegenerusGameStorage.sol#L1620) is never used in [GameAfkingModule](contracts/modules/GameAfkingModule.sol#L82-L1941)
 
 contracts/storage/DegenerusGameStorage.sol#L1620
 
 
- - [ ] ID-2439
+ - [ ] ID-2442
 [DegenerusGameStorage.subsFullyProcessed](contracts/storage/DegenerusGameStorage.sol#L358) is never used in [DegenerusGameGameOverModule](contracts/modules/DegenerusGameGameOverModule.sol#L37-L284)
 
 contracts/storage/DegenerusGameStorage.sol#L358
 
 
- - [ ] ID-2440
-[DegenerusGameStorage.BOOTSTRAP_PRIZE_POOL](contracts/storage/DegenerusGameStorage.sol#L165) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1774)
+ - [ ] ID-2443
+[DegenerusGameStorage.BOOTSTRAP_PRIZE_POOL](contracts/storage/DegenerusGameStorage.sol#L165) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1779)
 
 contracts/storage/DegenerusGameStorage.sol#L165
 
 
- - [ ] ID-2441
+ - [ ] ID-2444
 [DegenerusGameStorage.GO_SWEPT_MASK](contracts/storage/DegenerusGameStorage.sol#L1164) is never used in [DegenerusGameAdvanceModule](contracts/modules/DegenerusGameAdvanceModule.sol#L30-L2107)
 
 contracts/storage/DegenerusGameStorage.sol#L1164
 
 
- - [ ] ID-2442
+ - [ ] ID-2445
 [DegenerusGameStorage.BP_LAZY_PASS_TIER_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2071) is never used in [JackpotSoloTester](contracts/test/JackpotSoloTester.sol#L14-L30)
 
 contracts/storage/DegenerusGameStorage.sol#L2071
 
 
- - [ ] ID-2443
+ - [ ] ID-2446
 [DegenerusGameStorage.vrfCoordinator](contracts/storage/DegenerusGameStorage.sol#L1582) is never used in [GameAfkingModule](contracts/modules/GameAfkingModule.sol#L82-L1941)
 
 contracts/storage/DegenerusGameStorage.sol#L1582
 
 
- - [ ] ID-2444
+ - [ ] ID-2447
 [DegenerusGameStorage.vrfKeyHash](contracts/storage/DegenerusGameStorage.sol#L1586) is never used in [DegenerusGameGameOverModule](contracts/modules/DegenerusGameGameOverModule.sol#L37-L284)
 
 contracts/storage/DegenerusGameStorage.sol#L1586
 
 
- - [ ] ID-2445
+ - [ ] ID-2448
 [DegenerusGameStorage.BP_DEITY_WHALE_DAY_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2059) is never used in [DegenerusGameAdvanceModule](contracts/modules/DegenerusGameAdvanceModule.sol#L30-L2107)
 
 contracts/storage/DegenerusGameStorage.sol#L2059
 
 
- - [ ] ID-2446
-[DegenerusGameStorage.BP_LOOTBOX_DAY_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2050) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1774)
+ - [ ] ID-2449
+[DegenerusGameStorage.BP_LOOTBOX_DAY_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2050) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1779)
 
 contracts/storage/DegenerusGameStorage.sol#L2050
 
 
- - [ ] ID-2447
+ - [ ] ID-2450
 [DegenerusGameStorage.presaleCloseIndex](contracts/storage/DegenerusGameStorage.sol#L2465) is never used in [DegenerusGameGameOverModule](contracts/modules/DegenerusGameGameOverModule.sol#L37-L284)
 
 contracts/storage/DegenerusGameStorage.sol#L2465
 
 
- - [ ] ID-2448
+ - [ ] ID-2451
 [DegenerusGameStorage.BP_DECIMATOR_TIER_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2056) is never used in [DegenerusGameWhaleModule](contracts/modules/DegenerusGameWhaleModule.sol#L20-L1026)
 
 contracts/storage/DegenerusGameStorage.sol#L2056
 
 
- - [ ] ID-2449
+ - [ ] ID-2452
 [DegenerusGameStorage.dailyHeroWagers](contracts/storage/DegenerusGameStorage.sol#L1915) is never used in [DegenerusGameWhaleModule](contracts/modules/DegenerusGameWhaleModule.sol#L20-L1026)
 
 contracts/storage/DegenerusGameStorage.sol#L1915
 
 
- - [ ] ID-2450
+ - [ ] ID-2453
 [DegenerusGameStorage.totalFlipReversals](contracts/storage/DegenerusGameStorage.sol#L429) is never used in [DegenerusGameDecimatorModule](contracts/modules/DegenerusGameDecimatorModule.sol#L21-L1134)
 
 contracts/storage/DegenerusGameStorage.sol#L429
 
 
- - [ ] ID-2451
+ - [ ] ID-2454
 [DegenerusGameStorage.GO_JACKPOT_PAID_SHIFT](contracts/storage/DegenerusGameStorage.sol#L1161) is never used in [DegenerusGame](contracts/DegenerusGame.sol#L87-L2624)
 
 contracts/storage/DegenerusGameStorage.sol#L1161
 
 
- - [ ] ID-2452
+ - [ ] ID-2455
 [DegenerusGameStorage.deityRecipientBoonCount](contracts/storage/DegenerusGameStorage.sol#L2558) is never used in [DegenerusGameGameOverModule](contracts/modules/DegenerusGameGameOverModule.sol#L37-L284)
 
 contracts/storage/DegenerusGameStorage.sol#L2558
 
 
- - [ ] ID-2453
+ - [ ] ID-2456
 [DegenerusGameStorage.terminalDecBucketBurnTotal](contracts/storage/DegenerusGameStorage.sol#L1975) is never used in [DegenerusGameBingoModule](contracts/modules/DegenerusGameBingoModule.sol#L24-L288)
 
 contracts/storage/DegenerusGameStorage.sol#L1975
 
 
- - [ ] ID-2454
+ - [ ] ID-2457
 [DegenerusGameStorage.dailyTicketBudgetsPacked](contracts/storage/DegenerusGameStorage.sol#L442) is never used in [DegenerusGameWhaleModule](contracts/modules/DegenerusGameWhaleModule.sol#L20-L1026)
 
 contracts/storage/DegenerusGameStorage.sol#L442
 
 
- - [ ] ID-2455
+ - [ ] ID-2458
 [DegenerusGameStorage.presaleBoxEthSold](contracts/storage/DegenerusGameStorage.sol#L1088) is never used in [DegenerusGameLootboxModule](contracts/modules/DegenerusGameLootboxModule.sol#L39-L2359)
 
 contracts/storage/DegenerusGameStorage.sol#L1088
 
 
- - [ ] ID-2456
+ - [ ] ID-2459
 [DegenerusGameStorage._subOpenCursor](contracts/storage/DegenerusGameStorage.sol#L2438) is never used in [DegenerusGameAdvanceModule](contracts/modules/DegenerusGameAdvanceModule.sol#L30-L2107)
 
 contracts/storage/DegenerusGameStorage.sol#L2438
 
 
- - [ ] ID-2457
+ - [ ] ID-2460
 [DegenerusGameStorage.jackpotCounter](contracts/storage/DegenerusGameStorage.sol#L285) is never used in [DegenerusGameBoonModule](contracts/modules/DegenerusGameBoonModule.sol#L22-L343)
 
 contracts/storage/DegenerusGameStorage.sol#L285
 
 
- - [ ] ID-2458
+ - [ ] ID-2461
 [DegenerusGameStorage.decBucketBurnTotal](contracts/storage/DegenerusGameStorage.sol#L1895) is never used in [DegenerusGameWhaleModule](contracts/modules/DegenerusGameWhaleModule.sol#L20-L1026)
 
 contracts/storage/DegenerusGameStorage.sol#L1895
 
 
- - [ ] ID-2459
+ - [ ] ID-2462
 [DegenerusGameStorage.BP_DEITY_ACTIVITY_DAY_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2065) is never used in [DegenerusGameBingoModule](contracts/modules/DegenerusGameBingoModule.sol#L24-L288)
 
 contracts/storage/DegenerusGameStorage.sol#L2065
 
 
- - [ ] ID-2460
+ - [ ] ID-2463
 [DegenerusGameStorage.wwxrpJackpotWhalePassBracketAwarded](contracts/storage/DegenerusGameStorage.sol#L1188) is never used in [DegenerusGameWhaleModule](contracts/modules/DegenerusGameWhaleModule.sol#L20-L1026)
 
 contracts/storage/DegenerusGameStorage.sol#L1188
 
 
- - [ ] ID-2461
+ - [ ] ID-2464
 [DegenerusGameStorage.dailyHeroWagers](contracts/storage/DegenerusGameStorage.sol#L1915) is never used in [DegenerusGameAdvanceModule](contracts/modules/DegenerusGameAdvanceModule.sol#L30-L2107)
 
 contracts/storage/DegenerusGameStorage.sol#L1915
 
 
- - [ ] ID-2462
+ - [ ] ID-2465
 [DegenerusGameStorage.FOIL_PACK_ENTRIES](contracts/storage/DegenerusGameStorage.sol#L2566) is never used in [SettleClaimableShortfallTester](contracts/test/SettleClaimableShortfallTester.sol#L17-L66)
 
 contracts/storage/DegenerusGameStorage.sol#L2566
 
 
- - [ ] ID-2463
+ - [ ] ID-2466
 [DegenerusGameStorage.decClaimRounds](contracts/storage/DegenerusGameStorage.sol#L1899) is never used in [DegenerusGameWhaleModule](contracts/modules/DegenerusGameWhaleModule.sol#L20-L1026)
 
 contracts/storage/DegenerusGameStorage.sol#L1899
 
 
- - [ ] ID-2464
+ - [ ] ID-2467
 [DegenerusGameStorage.deityBySymbol](contracts/storage/DegenerusGameStorage.sol#L1255) is never used in [DegenerusGameGameOverModule](contracts/modules/DegenerusGameGameOverModule.sol#L37-L284)
 
 contracts/storage/DegenerusGameStorage.sol#L1255
 
 
- - [ ] ID-2465
+ - [ ] ID-2468
 [DegenerusGameStorage.FOIL_SPIN_TAG](contracts/storage/DegenerusGameStorage.sol#L2594) is never used in [DegenerusGameDecimatorModule](contracts/modules/DegenerusGameDecimatorModule.sol#L21-L1134)
 
 contracts/storage/DegenerusGameStorage.sol#L2594
 
 
- - [ ] ID-2466
+ - [ ] ID-2469
 [DegenerusGameStorage.operatorApprovals](contracts/storage/DegenerusGameStorage.sol#L1195) is never used in [DegenerusGameMintModule](contracts/modules/DegenerusGameMintModule.sol#L74-L2136)
 
 contracts/storage/DegenerusGameStorage.sol#L1195
 
 
- - [ ] ID-2467
+ - [ ] ID-2470
 [DegenerusGameStorage.ticketsFullyProcessed](contracts/storage/DegenerusGameStorage.sol#L326) is never used in [DegenerusGameBingoModule](contracts/modules/DegenerusGameBingoModule.sol#L24-L288)
 
 contracts/storage/DegenerusGameStorage.sol#L326
 
 
- - [ ] ID-2468
+ - [ ] ID-2471
 [DegenerusGameStorage.degeneretteBets](contracts/storage/DegenerusGameStorage.sol#L1785) is never used in [DegenerusGameDecimatorModule](contracts/modules/DegenerusGameDecimatorModule.sol#L21-L1134)
 
 contracts/storage/DegenerusGameStorage.sol#L1785
 
 
- - [ ] ID-2469
+ - [ ] ID-2472
 [DegenerusGameStorage.BP_WHALE_CLEAR](contracts/storage/DegenerusGameStorage.sol#L2090) is never used in [DegenerusGameGameOverModule](contracts/modules/DegenerusGameGameOverModule.sol#L37-L284)
 
 contracts/storage/DegenerusGameStorage.sol#L2090
 
 
- - [ ] ID-2470
+ - [ ] ID-2473
 [DegenerusGameStorage.FOIL_TO_FUTURE_BPS](contracts/storage/DegenerusGameStorage.sol#L2562) is never used in [DegenerusGameBingoModule](contracts/modules/DegenerusGameBingoModule.sol#L24-L288)
 
 contracts/storage/DegenerusGameStorage.sol#L2562
 
 
- - [ ] ID-2471
+ - [ ] ID-2474
 [DegenerusGameStorage.BP_ACTIVITY_PENDING_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2063) is never used in [SettleClaimableShortfallTester](contracts/test/SettleClaimableShortfallTester.sol#L17-L66)
 
 contracts/storage/DegenerusGameStorage.sol#L2063
 
 
- - [ ] ID-2472
+ - [ ] ID-2475
 [DegenerusGameStorage.PASS_MINT_COUNT_FLOOR_POINTS](contracts/storage/DegenerusGameStorage.sol#L149) is never used in [DegenerusGameDecimatorModule](contracts/modules/DegenerusGameDecimatorModule.sol#L21-L1134)
 
 contracts/storage/DegenerusGameStorage.sol#L149
 
 
- - [ ] ID-2473
+ - [ ] ID-2476
 [DegenerusGameStorage.ticketLevel](contracts/storage/DegenerusGameStorage.sol#L535) is never used in [DegenerusGameBingoModule](contracts/modules/DegenerusGameBingoModule.sol#L24-L288)
 
 contracts/storage/DegenerusGameStorage.sol#L535
 
 
- - [ ] ID-2474
+ - [ ] ID-2477
 [DegenerusGameStorage.BP_DEITY_ACTIVITY_DAY_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2065) is never used in [GameAfkingModule](contracts/modules/GameAfkingModule.sol#L82-L1941)
 
 contracts/storage/DegenerusGameStorage.sol#L2065
 
 
- - [ ] ID-2475
-[DegenerusGameStorage.terminalDecBets](contracts/storage/DegenerusGameStorage.sol#L1971) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1774)
+ - [ ] ID-2478
+[DegenerusGameStorage.terminalDecBets](contracts/storage/DegenerusGameStorage.sol#L1971) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1779)
 
 contracts/storage/DegenerusGameStorage.sol#L1971
 
 
- - [ ] ID-2476
+ - [ ] ID-2479
 [DegenerusGameStorage.BP_MASK_8](contracts/storage/DegenerusGameStorage.sol#L2075) is never used in [DegenerusGameBingoModule](contracts/modules/DegenerusGameBingoModule.sol#L24-L288)
 
 contracts/storage/DegenerusGameStorage.sol#L2075
 
 
- - [ ] ID-2477
-[DegenerusGameStorage.LR_MID_DAY_MASK](contracts/storage/DegenerusGameStorage.sol#L1620) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1774)
+ - [ ] ID-2480
+[DegenerusGameStorage.LR_MID_DAY_MASK](contracts/storage/DegenerusGameStorage.sol#L1620) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1779)
 
 contracts/storage/DegenerusGameStorage.sol#L1620
 
 
- - [ ] ID-2478
+ - [ ] ID-2481
 [DegenerusGameStorage.BP_WHALE_DAY_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2058) is never used in [DegenerusGameMintModule](contracts/modules/DegenerusGameMintModule.sol#L74-L2136)
 
 contracts/storage/DegenerusGameStorage.sol#L2058
 
 
- - [ ] ID-2479
+ - [ ] ID-2482
 [DegenerusGameStorage.LR_PENDING_FLIP_SHIFT](contracts/storage/DegenerusGameStorage.sol#L1617) is never used in [DegenerusGameDecimatorModule](contracts/modules/DegenerusGameDecimatorModule.sol#L21-L1134)
 
 contracts/storage/DegenerusGameStorage.sol#L1617
 
 
- - [ ] ID-2480
+ - [ ] ID-2483
 [DegenerusGameStorage._subCursor](contracts/storage/DegenerusGameStorage.sol#L2434) is never used in [DegenerusGameLootboxModule](contracts/modules/DegenerusGameLootboxModule.sol#L39-L2359)
 
 contracts/storage/DegenerusGameStorage.sol#L2434
 
 
- - [ ] ID-2481
+ - [ ] ID-2484
 [DegenerusGameStorage.decWindowOpen](contracts/storage/DegenerusGameStorage.sol#L295) is never used in [DegenerusGameGameOverModule](contracts/modules/DegenerusGameGameOverModule.sol#L37-L284)
 
 contracts/storage/DegenerusGameStorage.sol#L295
 
 
- - [ ] ID-2482
+ - [ ] ID-2485
 [DegenerusGameStorage.GO_SWEPT_SHIFT](contracts/storage/DegenerusGameStorage.sol#L1163) is never used in [DegenerusGameAdvanceModule](contracts/modules/DegenerusGameAdvanceModule.sol#L30-L2107)
 
 contracts/storage/DegenerusGameStorage.sol#L1163
 
 
- - [ ] ID-2483
+ - [ ] ID-2486
 [DegenerusGameStorage.vrfRequestId](contracts/storage/DegenerusGameStorage.sol#L423) is never used in [DegenerusGameMintModule](contracts/modules/DegenerusGameMintModule.sol#L74-L2136)
 
 contracts/storage/DegenerusGameStorage.sol#L423
 
 
- - [ ] ID-2484
+ - [ ] ID-2487
 [DegenerusGameStorage.BP_DECIMATOR_CLEAR](contracts/storage/DegenerusGameStorage.sol#L2087-L2088) is never used in [DegenerusGameWhaleModule](contracts/modules/DegenerusGameWhaleModule.sol#L20-L1026)
 
 contracts/storage/DegenerusGameStorage.sol#L2087-L2088
 
 
- - [ ] ID-2485
+ - [ ] ID-2488
 [DegenerusGameStorage.BP_MASK_8](contracts/storage/DegenerusGameStorage.sol#L2075) is never used in [DegenerusGameGameOverModule](contracts/modules/DegenerusGameGameOverModule.sol#L37-L284)
 
 contracts/storage/DegenerusGameStorage.sol#L2075
 
 
- - [ ] ID-2486
+ - [ ] ID-2489
 [DegenerusGameStorage.BP_COINFLIP_TIER_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2049) is never used in [DegenerusGameDecimatorModule](contracts/modules/DegenerusGameDecimatorModule.sol#L21-L1134)
 
 contracts/storage/DegenerusGameStorage.sol#L2049
 
 
- - [ ] ID-2487
+ - [ ] ID-2490
 [DegenerusGameStorage.PRESALE_BOX_SOLD_SHIFT](contracts/storage/DegenerusGameStorage.sol#L1108) is never used in [DegenerusGameAdvanceModule](contracts/modules/DegenerusGameAdvanceModule.sol#L30-L2107)
 
 contracts/storage/DegenerusGameStorage.sol#L1108
 
 
- - [ ] ID-2488
+ - [ ] ID-2491
 [DegenerusGameStorage.GO_TIME_SHIFT](contracts/storage/DegenerusGameStorage.sol#L1159) is never used in [DegenerusGameBingoModule](contracts/modules/DegenerusGameBingoModule.sol#L24-L288)
 
 contracts/storage/DegenerusGameStorage.sol#L1159
 
 
- - [ ] ID-2489
+ - [ ] ID-2492
 [DegenerusGameStorage.lootboxRngWordByIndex](contracts/storage/DegenerusGameStorage.sol#L1755) is never used in [DegenerusGameDecimatorModule](contracts/modules/DegenerusGameDecimatorModule.sol#L21-L1134)
 
 contracts/storage/DegenerusGameStorage.sol#L1755
 
 
- - [ ] ID-2490
+ - [ ] ID-2493
 [DegenerusGameStorage.BP_DEITY_WHALE_DAY_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2059) is never used in [DegenerusGameGameOverModule](contracts/modules/DegenerusGameGameOverModule.sol#L37-L284)
 
 contracts/storage/DegenerusGameStorage.sol#L2059
 
 
- - [ ] ID-2491
+ - [ ] ID-2494
 [DegenerusGameStorage.FOIL_SPIN_TAG](contracts/storage/DegenerusGameStorage.sol#L2594) is never used in [DegenerusGameGameOverModule](contracts/modules/DegenerusGameGameOverModule.sol#L37-L284)
 
 contracts/storage/DegenerusGameStorage.sol#L2594
 
 
- - [ ] ID-2492
+ - [ ] ID-2495
 [DegenerusGameStorage.deityBoonPacked](contracts/storage/DegenerusGameStorage.sol#L1766) is never used in [DegenerusGameBoonModule](contracts/modules/DegenerusGameBoonModule.sol#L22-L343)
 
 contracts/storage/DegenerusGameStorage.sol#L1766
 
 
- - [ ] ID-2493
-[DegenerusGameStorage.deityRecipientBoonCount](contracts/storage/DegenerusGameStorage.sol#L2558) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1774)
+ - [ ] ID-2496
+[DegenerusGameStorage.deityRecipientBoonCount](contracts/storage/DegenerusGameStorage.sol#L2558) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1779)
 
 contracts/storage/DegenerusGameStorage.sol#L2558
 
 
- - [ ] ID-2494
+ - [ ] ID-2497
 [DegenerusGameStorage.LR_MID_DAY_MASK](contracts/storage/DegenerusGameStorage.sol#L1620) is never used in [DegenerusGameBoonModule](contracts/modules/DegenerusGameBoonModule.sol#L22-L343)
 
 contracts/storage/DegenerusGameStorage.sol#L1620
 
 
- - [ ] ID-2495
+ - [ ] ID-2498
 [DegenerusGameStorage.degeneretteBets](contracts/storage/DegenerusGameStorage.sol#L1785) is never used in [JackpotSoloTester](contracts/test/JackpotSoloTester.sol#L14-L30)
 
 contracts/storage/DegenerusGameStorage.sol#L1785
 
 
- - [ ] ID-2496
+ - [ ] ID-2499
 [DegenerusGameStorage.vrfRequestId](contracts/storage/DegenerusGameStorage.sol#L423) is never used in [DegenerusGame](contracts/DegenerusGame.sol#L87-L2624)
 
 contracts/storage/DegenerusGameStorage.sol#L423
 
 
- - [ ] ID-2497
+ - [ ] ID-2500
 [DegenerusGameStorage.BP_DEITY_DEITY_PASS_DAY_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2068) is never used in [DegenerusGameDecimatorModule](contracts/modules/DegenerusGameDecimatorModule.sol#L21-L1134)
 
 contracts/storage/DegenerusGameStorage.sol#L2068
 
 
- - [ ] ID-2498
+ - [ ] ID-2501
 [DegenerusGameStorage.operatorApprovals](contracts/storage/DegenerusGameStorage.sol#L1195) is never used in [DegenerusGameDecimatorModule](contracts/modules/DegenerusGameDecimatorModule.sol#L21-L1134)
 
 contracts/storage/DegenerusGameStorage.sol#L1195
 
 
- - [ ] ID-2499
+ - [ ] ID-2502
 [DegenerusGameStorage.deityPassOwners](contracts/storage/DegenerusGameStorage.sol#L1252) is never used in [DegenerusGameAdvanceModule](contracts/modules/DegenerusGameAdvanceModule.sol#L30-L2107)
 
 contracts/storage/DegenerusGameStorage.sol#L1252
 
 
- - [ ] ID-2500
-[DegenerusGameStorage.LOOTBOX_PRESALE_ETH_CAP](contracts/storage/DegenerusGameStorage.sol#L1130) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1774)
+ - [ ] ID-2503
+[DegenerusGameStorage.LOOTBOX_PRESALE_ETH_CAP](contracts/storage/DegenerusGameStorage.sol#L1130) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1779)
 
 contracts/storage/DegenerusGameStorage.sol#L1130
 
 
- - [ ] ID-2501
+ - [ ] ID-2504
 [DegenerusGameStorage.phaseTransitionActive](contracts/storage/DegenerusGameStorage.sol#L304) is never used in [SettleClaimableShortfallTester](contracts/test/SettleClaimableShortfallTester.sol#L17-L66)
 
 contracts/storage/DegenerusGameStorage.sol#L304
 
 
- - [ ] ID-2502
+ - [ ] ID-2505
 [DegenerusGameStorage.BP_PURCHASE_TIER_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2055) is never used in [DegenerusGameWhaleModule](contracts/modules/DegenerusGameWhaleModule.sol#L20-L1026)
 
 contracts/storage/DegenerusGameStorage.sol#L2055
 
 
- - [ ] ID-2503
-[DegenerusGameStorage.vrfSubscriptionId](contracts/storage/DegenerusGameStorage.sol#L1590) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1774)
+ - [ ] ID-2506
+[DegenerusGameStorage.vrfSubscriptionId](contracts/storage/DegenerusGameStorage.sol#L1590) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1779)
 
 contracts/storage/DegenerusGameStorage.sol#L1590
 
 
- - [ ] ID-2504
+ - [ ] ID-2507
 [DegenerusGameStorage.GO_JACKPOT_PAID_MASK](contracts/storage/DegenerusGameStorage.sol#L1162) is never used in [JackpotSoloTester](contracts/test/JackpotSoloTester.sol#L14-L30)
 
 contracts/storage/DegenerusGameStorage.sol#L1162
 
 
- - [ ] ID-2505
+ - [ ] ID-2508
 [DegenerusGameStorage.vrfRequestId](contracts/storage/DegenerusGameStorage.sol#L423) is never used in [DegenerusGameFoilPackModule](contracts/modules/DegenerusGameFoilPackModule.sol#L30-L815)
 
 contracts/storage/DegenerusGameStorage.sol#L423
 
 
- - [ ] ID-2506
+ - [ ] ID-2509
 [DegenerusGameStorage._subCursor](contracts/storage/DegenerusGameStorage.sol#L2434) is never used in [DegenerusGameGameOverModule](contracts/modules/DegenerusGameGameOverModule.sol#L37-L284)
 
 contracts/storage/DegenerusGameStorage.sol#L2434
 
 
- - [ ] ID-2507
+ - [ ] ID-2510
 [DegenerusGameStorage.BP_MASK_8](contracts/storage/DegenerusGameStorage.sol#L2075) is never used in [DegenerusGameDecimatorModule](contracts/modules/DegenerusGameDecimatorModule.sol#L21-L1134)
 
 contracts/storage/DegenerusGameStorage.sol#L2075
 
 
- - [ ] ID-2508
+ - [ ] ID-2511
 [DegenerusGameStorage.wwxrpJackpotWhalePassBracketAwarded](contracts/storage/DegenerusGameStorage.sol#L1188) is never used in [JackpotSoloTester](contracts/test/JackpotSoloTester.sol#L14-L30)
 
 contracts/storage/DegenerusGameStorage.sol#L1188
 
 
- - [ ] ID-2509
+ - [ ] ID-2512
 [DegenerusGameStorage.BP_WHALE_DAY_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2058) is never used in [GameAfkingModule](contracts/modules/GameAfkingModule.sol#L82-L1941)
 
 contracts/storage/DegenerusGameStorage.sol#L2058
 
 
- - [ ] ID-2510
+ - [ ] ID-2513
 [DegenerusGameStorage.presaleOver](contracts/storage/DegenerusGameStorage.sol#L348) is never used in [DegenerusGameDecimatorModule](contracts/modules/DegenerusGameDecimatorModule.sol#L21-L1134)
 
 contracts/storage/DegenerusGameStorage.sol#L348
 
 
- - [ ] ID-2511
+ - [ ] ID-2514
 [DegenerusGameStorage.vrfKeyHash](contracts/storage/DegenerusGameStorage.sol#L1586) is never used in [DegenerusGameDecimatorModule](contracts/modules/DegenerusGameDecimatorModule.sol#L21-L1134)
 
 contracts/storage/DegenerusGameStorage.sol#L1586
 
 
- - [ ] ID-2512
+ - [ ] ID-2515
 [DegenerusGameStorage.decBucketOffsetPacked](contracts/storage/DegenerusGameStorage.sol#L1904) is never used in [SettleClaimableShortfallTester](contracts/test/SettleClaimableShortfallTester.sol#L17-L66)
 
 contracts/storage/DegenerusGameStorage.sol#L1904
 
 
- - [ ] ID-2513
+ - [ ] ID-2516
 [DegenerusGameStorage.lastTerminalDecClaimRound](contracts/storage/DegenerusGameStorage.sol#L1985) is never used in [DegenerusGameBingoModule](contracts/modules/DegenerusGameBingoModule.sol#L24-L288)
 
 contracts/storage/DegenerusGameStorage.sol#L1985
 
 
- - [ ] ID-2514
+ - [ ] ID-2517
 [DegenerusGameStorage.PRESALE_BOX_AMOUNT_MASK](contracts/storage/DegenerusGameStorage.sol#L1110) is never used in [DegenerusGameMintModule](contracts/modules/DegenerusGameMintModule.sol#L74-L2136)
 
 contracts/storage/DegenerusGameStorage.sol#L1110
 
 
- - [ ] ID-2515
+ - [ ] ID-2518
 [DegenerusGameStorage.BP_COINFLIP_CLEAR](contracts/storage/DegenerusGameStorage.sol#L2079) is never used in [DegenerusGameBingoModule](contracts/modules/DegenerusGameBingoModule.sol#L24-L288)
 
 contracts/storage/DegenerusGameStorage.sol#L2079
 
 
- - [ ] ID-2516
+ - [ ] ID-2519
 [DegenerusGameStorage.LR_PENDING_FLIP_SHIFT](contracts/storage/DegenerusGameStorage.sol#L1617) is never used in [DegenerusGameMintModule](contracts/modules/DegenerusGameMintModule.sol#L74-L2136)
 
 contracts/storage/DegenerusGameStorage.sol#L1617
 
 
- - [ ] ID-2517
+ - [ ] ID-2520
 [DegenerusGameStorage._subOpenCursor](contracts/storage/DegenerusGameStorage.sol#L2438) is never used in [DegenerusGameDecimatorModule](contracts/modules/DegenerusGameDecimatorModule.sol#L21-L1134)
 
 contracts/storage/DegenerusGameStorage.sol#L2438
 
 
- - [ ] ID-2518
+ - [ ] ID-2521
 [DegenerusGameStorage.BP_DEITY_PASS_TIER_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2066) is never used in [GameAfkingModule](contracts/modules/GameAfkingModule.sol#L82-L1941)
 
 contracts/storage/DegenerusGameStorage.sol#L2066
 
 
- - [ ] ID-2519
+ - [ ] ID-2522
 [DegenerusGameStorage._sdgnrsBonusLevel](contracts/storage/DegenerusGameStorage.sol#L2473) is never used in [DegenerusGame](contracts/DegenerusGame.sol#L87-L2624)
 
 contracts/storage/DegenerusGameStorage.sol#L2473
 
 
- - [ ] ID-2520
+ - [ ] ID-2523
 [DegenerusGameStorage.lootboxRngWordByIndex](contracts/storage/DegenerusGameStorage.sol#L1755) is never used in [DegenerusGameBoonModule](contracts/modules/DegenerusGameBoonModule.sol#L22-L343)
 
 contracts/storage/DegenerusGameStorage.sol#L1755
 
 
- - [ ] ID-2521
+ - [ ] ID-2524
 [DegenerusGameStorage.terminalDecBucketBurnTotal](contracts/storage/DegenerusGameStorage.sol#L1975) is never used in [JackpotSoloTester](contracts/test/JackpotSoloTester.sol#L14-L30)
 
 contracts/storage/DegenerusGameStorage.sol#L1975
 
 
- - [ ] ID-2522
+ - [ ] ID-2525
 [DegenerusGameStorage.presaleBoxDgnrsPoolStart](contracts/storage/DegenerusGameStorage.sol#L1264) is never used in [DegenerusGameAdvanceModule](contracts/modules/DegenerusGameAdvanceModule.sol#L30-L2107)
 
 contracts/storage/DegenerusGameStorage.sol#L1264
 
 
- - [ ] ID-2523
+ - [ ] ID-2526
 [DegenerusGameStorage.vrfKeyHash](contracts/storage/DegenerusGameStorage.sol#L1586) is never used in [DegenerusGameFoilPackModule](contracts/modules/DegenerusGameFoilPackModule.sol#L30-L815)
 
 contracts/storage/DegenerusGameStorage.sol#L1586
 
 
- - [ ] ID-2524
+ - [ ] ID-2527
 [DegenerusGameStorage.DEITY_PASS_ACTIVITY_BONUS_POINTS](contracts/storage/DegenerusGameStorage.sol#L137) is never used in [DegenerusGameGameOverModule](contracts/modules/DegenerusGameGameOverModule.sol#L37-L284)
 
 contracts/storage/DegenerusGameStorage.sol#L137
 
 
- - [ ] ID-2525
+ - [ ] ID-2528
 [DegenerusGameStorage.vrfKeyHash](contracts/storage/DegenerusGameStorage.sol#L1586) is never used in [SettleClaimableShortfallTester](contracts/test/SettleClaimableShortfallTester.sol#L17-L66)
 
 contracts/storage/DegenerusGameStorage.sol#L1586
 
 
- - [ ] ID-2526
+ - [ ] ID-2529
 [DegenerusGameStorage.terminalDecBets](contracts/storage/DegenerusGameStorage.sol#L1971) is never used in [SettleClaimableShortfallTester](contracts/test/SettleClaimableShortfallTester.sol#L17-L66)
 
 contracts/storage/DegenerusGameStorage.sol#L1971
 
 
- - [ ] ID-2527
+ - [ ] ID-2530
 [DegenerusGameStorage.LOOTBOX_CLAIM_THRESHOLD](contracts/storage/DegenerusGameStorage.sol#L161) is never used in [SettleClaimableShortfallTester](contracts/test/SettleClaimableShortfallTester.sol#L17-L66)
 
 contracts/storage/DegenerusGameStorage.sol#L161
 
 
- - [ ] ID-2528
+ - [ ] ID-2531
 [DegenerusGameStorage.wwxrpJackpotWhalePassBracketAwarded](contracts/storage/DegenerusGameStorage.sol#L1188) is never used in [DegenerusGameLootboxModule](contracts/modules/DegenerusGameLootboxModule.sol#L39-L2359)
 
 contracts/storage/DegenerusGameStorage.sol#L1188
 
 
- - [ ] ID-2529
+ - [ ] ID-2532
 [DegenerusGameStorage.ticketRedemptionOpen](contracts/storage/DegenerusGameStorage.sol#L376) is never used in [DegenerusGameGameOverModule](contracts/modules/DegenerusGameGameOverModule.sol#L37-L284)
 
 contracts/storage/DegenerusGameStorage.sol#L376
 
 
- - [ ] ID-2530
+ - [ ] ID-2533
 [DegenerusGameStorage.FOIL_TO_FUTURE_BPS](contracts/storage/DegenerusGameStorage.sol#L2562) is never used in [DegenerusGameGameOverModule](contracts/modules/DegenerusGameGameOverModule.sol#L37-L284)
 
 contracts/storage/DegenerusGameStorage.sol#L2562
 
 
- - [ ] ID-2531
+ - [ ] ID-2534
 [DegenerusGameStorage.LOOTBOX_PRESALE_ETH_CAP](contracts/storage/DegenerusGameStorage.sol#L1130) is never used in [DegenerusGameAdvanceModule](contracts/modules/DegenerusGameAdvanceModule.sol#L30-L2107)
 
 contracts/storage/DegenerusGameStorage.sol#L1130
 
 
- - [ ] ID-2532
+ - [ ] ID-2535
 [DegenerusGameStorage.LR_THRESHOLD_MASK](contracts/storage/DegenerusGameStorage.sol#L1616) is never used in [DegenerusGameBingoModule](contracts/modules/DegenerusGameBingoModule.sol#L24-L288)
 
 contracts/storage/DegenerusGameStorage.sol#L1616
 
 
- - [ ] ID-2533
+ - [ ] ID-2536
 [DegenerusGameStorage.BP_PURCHASE_DAY_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2053) is never used in [GameAfkingModule](contracts/modules/GameAfkingModule.sol#L82-L1941)
 
 contracts/storage/DegenerusGameStorage.sol#L2053
 
 
- - [ ] ID-2534
+ - [ ] ID-2537
 [DegenerusGameStorage.BP_COINFLIP_CLEAR](contracts/storage/DegenerusGameStorage.sol#L2079) is never used in [DegenerusGameAdvanceModule](contracts/modules/DegenerusGameAdvanceModule.sol#L30-L2107)
 
 contracts/storage/DegenerusGameStorage.sol#L2079
 
 
- - [ ] ID-2535
+ - [ ] ID-2538
 [DegenerusGameStorage.BP_DEITY_DECIMATOR_DAY_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2057) is never used in [DegenerusGameFoilPackModule](contracts/modules/DegenerusGameFoilPackModule.sol#L30-L815)
 
 contracts/storage/DegenerusGameStorage.sol#L2057
 
 
- - [ ] ID-2536
+ - [ ] ID-2539
 [DegenerusGameStorage.ticketsFullyProcessed](contracts/storage/DegenerusGameStorage.sol#L326) is never used in [DegenerusGameMintModule](contracts/modules/DegenerusGameMintModule.sol#L74-L2136)
 
 contracts/storage/DegenerusGameStorage.sol#L326
 
 
- - [ ] ID-2537
+ - [ ] ID-2540
 [DegenerusGameStorage.BP_LAZY_PASS_CLEAR](contracts/storage/DegenerusGameStorage.sol#L2099-L2100) is never used in [SettleClaimableShortfallTester](contracts/test/SettleClaimableShortfallTester.sol#L17-L66)
 
 contracts/storage/DegenerusGameStorage.sol#L2099-L2100
 
 
- - [ ] ID-2538
+ - [ ] ID-2541
 [DegenerusGameStorage.totalFlipReversals](contracts/storage/DegenerusGameStorage.sol#L429) is never used in [DegenerusGameMintModule](contracts/modules/DegenerusGameMintModule.sol#L74-L2136)
 
 contracts/storage/DegenerusGameStorage.sol#L429
 
 
- - [ ] ID-2539
+ - [ ] ID-2542
 [DegenerusGameStorage._sdgnrsBonusLevel](contracts/storage/DegenerusGameStorage.sol#L2473) is never used in [DegenerusGameGameOverModule](contracts/modules/DegenerusGameGameOverModule.sol#L37-L284)
 
 contracts/storage/DegenerusGameStorage.sol#L2473
 
 
- - [ ] ID-2540
+ - [ ] ID-2543
 [DegenerusGameStorage.presaleCloseIndex](contracts/storage/DegenerusGameStorage.sol#L2465) is never used in [SettleClaimableShortfallTester](contracts/test/SettleClaimableShortfallTester.sol#L17-L66)
 
 contracts/storage/DegenerusGameStorage.sol#L2465
 
 
- - [ ] ID-2541
+ - [ ] ID-2544
 [DegenerusGameStorage.FOIL_TO_FUTURE_BPS](contracts/storage/DegenerusGameStorage.sol#L2562) is never used in [SettleClaimableShortfallTester](contracts/test/SettleClaimableShortfallTester.sol#L17-L66)
 
 contracts/storage/DegenerusGameStorage.sol#L2562
 
 
- - [ ] ID-2542
+ - [ ] ID-2545
 [DegenerusGameStorage.BP_ACTIVITY_DAY_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2064) is never used in [DegenerusGameGameOverModule](contracts/modules/DegenerusGameGameOverModule.sol#L37-L284)
 
 contracts/storage/DegenerusGameStorage.sol#L2064
 
 
- - [ ] ID-2543
+ - [ ] ID-2546
 [DegenerusGameStorage.BP_ACTIVITY_CLEAR](contracts/storage/DegenerusGameStorage.sol#L2094) is never used in [JackpotSoloTester](contracts/test/JackpotSoloTester.sol#L14-L30)
 
 contracts/storage/DegenerusGameStorage.sol#L2094
 
 
- - [ ] ID-2544
+ - [ ] ID-2547
 [DegenerusGameStorage.BP_ACTIVITY_CLEAR](contracts/storage/DegenerusGameStorage.sol#L2094) is never used in [GameAfkingModule](contracts/modules/GameAfkingModule.sol#L82-L1941)
 
 contracts/storage/DegenerusGameStorage.sol#L2094
 
 
- - [ ] ID-2545
-[DegenerusGameStorage.BP_DEITY_PURCHASE_DAY_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2054) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1774)
+ - [ ] ID-2548
+[DegenerusGameStorage.BP_DEITY_PURCHASE_DAY_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2054) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1779)
 
 contracts/storage/DegenerusGameStorage.sol#L2054
 
 
- - [ ] ID-2546
+ - [ ] ID-2549
 [DegenerusGameStorage.GO_JACKPOT_PAID_MASK](contracts/storage/DegenerusGameStorage.sol#L1162) is never used in [DegenerusGameAdvanceModule](contracts/modules/DegenerusGameAdvanceModule.sol#L30-L2107)
 
 contracts/storage/DegenerusGameStorage.sol#L1162
 
 
- - [ ] ID-2547
+ - [ ] ID-2550
 [DegenerusGameStorage.affiliate](contracts/storage/DegenerusGameStorage.sol#L131-L132) is never used in [SettleClaimableShortfallTester](contracts/test/SettleClaimableShortfallTester.sol#L17-L66)
 
 contracts/storage/DegenerusGameStorage.sol#L131-L132
 
 
- - [ ] ID-2548
+ - [ ] ID-2551
 [DegenerusGameStorage.BP_PURCHASE_DAY_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2053) is never used in [DegenerusGameFoilPackModule](contracts/modules/DegenerusGameFoilPackModule.sol#L30-L815)
 
 contracts/storage/DegenerusGameStorage.sol#L2053
 
 
- - [ ] ID-2549
+ - [ ] ID-2552
 [DegenerusGameStorage.LR_PENDING_FLIP_SHIFT](contracts/storage/DegenerusGameStorage.sol#L1617) is never used in [JackpotSoloTester](contracts/test/JackpotSoloTester.sol#L14-L30)
 
 contracts/storage/DegenerusGameStorage.sol#L1617
 
 
- - [ ] ID-2550
+ - [ ] ID-2553
 [DegenerusGameStorage.presaleCloseIndex](contracts/storage/DegenerusGameStorage.sol#L2465) is never used in [DegenerusGameBingoModule](contracts/modules/DegenerusGameBingoModule.sol#L24-L288)
 
 contracts/storage/DegenerusGameStorage.sol#L2465
 
 
- - [ ] ID-2551
+ - [ ] ID-2554
 [DegenerusGameStorage.foilBuyers](contracts/storage/DegenerusGameStorage.sol#L2541) is never used in [DegenerusGameBoonModule](contracts/modules/DegenerusGameBoonModule.sol#L22-L343)
 
 contracts/storage/DegenerusGameStorage.sol#L2541
 
 
- - [ ] ID-2552
-[DegenerusGameStorage.subsFullyProcessed](contracts/storage/DegenerusGameStorage.sol#L358) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1774)
+ - [ ] ID-2555
+[DegenerusGameStorage.subsFullyProcessed](contracts/storage/DegenerusGameStorage.sol#L358) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1779)
 
 contracts/storage/DegenerusGameStorage.sol#L358
 
 
- - [ ] ID-2553
+ - [ ] ID-2556
 [DegenerusGameStorage.LR_INDEX_SHIFT](contracts/storage/DegenerusGameStorage.sol#L1611) is never used in [DegenerusGameDecimatorModule](contracts/modules/DegenerusGameDecimatorModule.sol#L21-L1134)
 
 contracts/storage/DegenerusGameStorage.sol#L1611
 
 
- - [ ] ID-2554
+ - [ ] ID-2557
 [DegenerusGameStorage.deityBoonPacked](contracts/storage/DegenerusGameStorage.sol#L1766) is never used in [GameAfkingModule](contracts/modules/GameAfkingModule.sol#L82-L1941)
 
 contracts/storage/DegenerusGameStorage.sol#L1766
 
 
- - [ ] ID-2555
+ - [ ] ID-2558
 [DegenerusGameStorage.BP_DEITY_PURCHASE_DAY_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2054) is never used in [DegenerusGameAdvanceModule](contracts/modules/DegenerusGameAdvanceModule.sol#L30-L2107)
 
 contracts/storage/DegenerusGameStorage.sol#L2054
 
 
- - [ ] ID-2556
+ - [ ] ID-2559
 [DegenerusGameStorage.PS_MINT_ETH_SHIFT](contracts/storage/DegenerusGameStorage.sol#L1126) is never used in [DegenerusGameLootboxModule](contracts/modules/DegenerusGameLootboxModule.sol#L39-L2359)
 
 contracts/storage/DegenerusGameStorage.sol#L1126
 
 
- - [ ] ID-2557
-[DegenerusGameStorage.ticketLevel](contracts/storage/DegenerusGameStorage.sol#L535) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1774)
+ - [ ] ID-2560
+[DegenerusGameStorage.ticketLevel](contracts/storage/DegenerusGameStorage.sol#L535) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1779)
 
 contracts/storage/DegenerusGameStorage.sol#L535
 
 
- - [ ] ID-2558
+ - [ ] ID-2561
 [DegenerusGameStorage.FOIL_PACK_TICKETS](contracts/storage/DegenerusGameStorage.sol#L2571) is never used in [DegenerusGameBoonModule](contracts/modules/DegenerusGameBoonModule.sol#L22-L343)
 
 contracts/storage/DegenerusGameStorage.sol#L2571
 
 
- - [ ] ID-2559
+ - [ ] ID-2562
 [DegenerusGameStorage.BP_DEITY_PASS_DAY_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2067) is never used in [DegenerusGameAdvanceModule](contracts/modules/DegenerusGameAdvanceModule.sol#L30-L2107)
 
 contracts/storage/DegenerusGameStorage.sol#L2067
 
 
- - [ ] ID-2560
+ - [ ] ID-2563
 [DegenerusGameStorage.LR_THRESHOLD_SHIFT](contracts/storage/DegenerusGameStorage.sol#L1615) is never used in [DegenerusGameBingoModule](contracts/modules/DegenerusGameBingoModule.sol#L24-L288)
 
 contracts/storage/DegenerusGameStorage.sol#L1615
 
 
- - [ ] ID-2561
-[DegenerusGameStorage.BP_DEITY_LOOTBOX_DAY_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2051) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1774)
+ - [ ] ID-2564
+[DegenerusGameStorage.BP_DEITY_LOOTBOX_DAY_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2051) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1779)
 
 contracts/storage/DegenerusGameStorage.sol#L2051
 
 
- - [ ] ID-2562
+ - [ ] ID-2565
 [DegenerusGameStorage.PRESALE_BOX_CLOSING_FLAG](contracts/storage/DegenerusGameStorage.sol#L1106) is never used in [DegenerusGameAdvanceModule](contracts/modules/DegenerusGameAdvanceModule.sol#L30-L2107)
 
 contracts/storage/DegenerusGameStorage.sol#L1106
 
 
- - [ ] ID-2563
-[DegenerusGameStorage.dailyTicketBudgetsPacked](contracts/storage/DegenerusGameStorage.sol#L442) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1774)
+ - [ ] ID-2566
+[DegenerusGameStorage.dailyTicketBudgetsPacked](contracts/storage/DegenerusGameStorage.sol#L442) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1779)
 
 contracts/storage/DegenerusGameStorage.sol#L442
 
 
- - [ ] ID-2564
+ - [ ] ID-2567
 [DegenerusGameStorage.BOOTSTRAP_PRIZE_POOL](contracts/storage/DegenerusGameStorage.sol#L165) is never used in [DegenerusGameLootboxModule](contracts/modules/DegenerusGameLootboxModule.sol#L39-L2359)
 
 contracts/storage/DegenerusGameStorage.sol#L165
 
 
- - [ ] ID-2565
+ - [ ] ID-2568
 [DegenerusGameStorage.PASS_STREAK_FLOOR_POINTS](contracts/storage/DegenerusGameStorage.sol#L146) is never used in [DegenerusGameBingoModule](contracts/modules/DegenerusGameBingoModule.sol#L24-L288)
 
 contracts/storage/DegenerusGameStorage.sol#L146
 
 
- - [ ] ID-2566
+ - [ ] ID-2569
 [DegenerusGameStorage.deityBySymbol](contracts/storage/DegenerusGameStorage.sol#L1255) is never used in [SettleClaimableShortfallTester](contracts/test/SettleClaimableShortfallTester.sol#L17-L66)
 
 contracts/storage/DegenerusGameStorage.sol#L1255
 
 
- - [ ] ID-2567
+ - [ ] ID-2570
 [DegenerusGameStorage.vrfCoordinator](contracts/storage/DegenerusGameStorage.sol#L1582) is never used in [DegenerusGameGameOverModule](contracts/modules/DegenerusGameGameOverModule.sol#L37-L284)
 
 contracts/storage/DegenerusGameStorage.sol#L1582
 
 
- - [ ] ID-2568
+ - [ ] ID-2571
 [DegenerusGameStorage.BP_COINFLIP_DAY_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2047) is never used in [DegenerusGameAdvanceModule](contracts/modules/DegenerusGameAdvanceModule.sol#L30-L2107)
 
 contracts/storage/DegenerusGameStorage.sol#L2047
 
 
- - [ ] ID-2569
+ - [ ] ID-2572
 [DegenerusGameStorage.presaleBoxCredit](contracts/storage/DegenerusGameStorage.sol#L1093) is never used in [DegenerusGameBingoModule](contracts/modules/DegenerusGameBingoModule.sol#L24-L288)
 
 contracts/storage/DegenerusGameStorage.sol#L1093
 
 
- - [ ] ID-2570
+ - [ ] ID-2573
 [DegenerusGameStorage.GO_JACKPOT_PAID_MASK](contracts/storage/DegenerusGameStorage.sol#L1162) is never used in [DegenerusGameBingoModule](contracts/modules/DegenerusGameBingoModule.sol#L24-L288)
 
 contracts/storage/DegenerusGameStorage.sol#L1162
 
 
- - [ ] ID-2571
+ - [ ] ID-2574
 [DegenerusGameStorage.terminalDecBucketBurnTotal](contracts/storage/DegenerusGameStorage.sol#L1975) is never used in [GameAfkingModule](contracts/modules/GameAfkingModule.sol#L82-L1941)
 
 contracts/storage/DegenerusGameStorage.sol#L1975
 
 
- - [ ] ID-2572
+ - [ ] ID-2575
 [DegenerusGameStorage.GO_JACKPOT_PAID_SHIFT](contracts/storage/DegenerusGameStorage.sol#L1161) is never used in [SettleClaimableShortfallTester](contracts/test/SettleClaimableShortfallTester.sol#L17-L66)
 
 contracts/storage/DegenerusGameStorage.sol#L1161
 
 
- - [ ] ID-2573
+ - [ ] ID-2576
 [DegenerusGameStorage.GO_JACKPOT_PAID_SHIFT](contracts/storage/DegenerusGameStorage.sol#L1161) is never used in [DegenerusGameFoilPackModule](contracts/modules/DegenerusGameFoilPackModule.sol#L30-L815)
 
 contracts/storage/DegenerusGameStorage.sol#L1161
 
 
- - [ ] ID-2574
+ - [ ] ID-2577
 [DegenerusGameStorage.BP_DEITY_PASS_TIER_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2066) is never used in [JackpotSoloTester](contracts/test/JackpotSoloTester.sol#L14-L30)
 
 contracts/storage/DegenerusGameStorage.sol#L2066
 
 
- - [ ] ID-2575
+ - [ ] ID-2578
 [DegenerusGameStorage.LR_PENDING_ETH_SHIFT](contracts/storage/DegenerusGameStorage.sol#L1613) is never used in [DegenerusGameLootboxModule](contracts/modules/DegenerusGameLootboxModule.sol#L39-L2359)
 
 contracts/storage/DegenerusGameStorage.sol#L1613
 
 
- - [ ] ID-2576
+ - [ ] ID-2579
 [DegenerusGameStorage.subsFullyProcessed](contracts/storage/DegenerusGameStorage.sol#L358) is never used in [DegenerusGameBingoModule](contracts/modules/DegenerusGameBingoModule.sol#L24-L288)
 
 contracts/storage/DegenerusGameStorage.sol#L358
 
 
- - [ ] ID-2577
+ - [ ] ID-2580
 [DegenerusGameStorage.operatorApprovals](contracts/storage/DegenerusGameStorage.sol#L1195) is never used in [DegenerusGameBoonModule](contracts/modules/DegenerusGameBoonModule.sol#L22-L343)
 
 contracts/storage/DegenerusGameStorage.sol#L1195
 
 
- - [ ] ID-2578
+ - [ ] ID-2581
 [DegenerusGameStorage.deityBoonPacked](contracts/storage/DegenerusGameStorage.sol#L1766) is never used in [DegenerusGameDecimatorModule](contracts/modules/DegenerusGameDecimatorModule.sol#L21-L1134)
 
 contracts/storage/DegenerusGameStorage.sol#L1766
 
 
- - [ ] ID-2579
+ - [ ] ID-2582
 [DegenerusGameStorage.LR_PENDING_FLIP_SHIFT](contracts/storage/DegenerusGameStorage.sol#L1617) is never used in [GameAfkingModule](contracts/modules/GameAfkingModule.sol#L82-L1941)
 
 contracts/storage/DegenerusGameStorage.sol#L1617
 
 
- - [ ] ID-2580
+ - [ ] ID-2583
 [DegenerusGameStorage.deityBySymbol](contracts/storage/DegenerusGameStorage.sol#L1255) is never used in [DegenerusGameBingoModule](contracts/modules/DegenerusGameBingoModule.sol#L24-L288)
 
 contracts/storage/DegenerusGameStorage.sol#L1255
 
 
- - [ ] ID-2581
+ - [ ] ID-2584
 [DegenerusGameStorage._fundingSourceOf](contracts/storage/DegenerusGameStorage.sol#L2420) is never used in [DegenerusGameBingoModule](contracts/modules/DegenerusGameBingoModule.sol#L24-L288)
 
 contracts/storage/DegenerusGameStorage.sol#L2420
 
 
- - [ ] ID-2582
+ - [ ] ID-2585
 [DegenerusGameStorage.BP_MASK_8](contracts/storage/DegenerusGameStorage.sol#L2075) is never used in [GameAfkingModule](contracts/modules/GameAfkingModule.sol#L82-L1941)
 
 contracts/storage/DegenerusGameStorage.sol#L2075
 
 
- - [ ] ID-2583
+ - [ ] ID-2586
 [DegenerusGameStorage.BP_WHALE_TIER_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2060) is never used in [DegenerusGameMintModule](contracts/modules/DegenerusGameMintModule.sol#L74-L2136)
 
 contracts/storage/DegenerusGameStorage.sol#L2060
 
 
- - [ ] ID-2584
+ - [ ] ID-2587
 [DegenerusGameStorage.deityRecipientBoonCount](contracts/storage/DegenerusGameStorage.sol#L2558) is never used in [DegenerusGameFoilPackModule](contracts/modules/DegenerusGameFoilPackModule.sol#L30-L815)
 
 contracts/storage/DegenerusGameStorage.sol#L2558
 
 
- - [ ] ID-2585
+ - [ ] ID-2588
 [DegenerusGameStorage.GO_JACKPOT_PAID_SHIFT](contracts/storage/DegenerusGameStorage.sol#L1161) is never used in [DegenerusGameMintModule](contracts/modules/DegenerusGameMintModule.sol#L74-L2136)
 
 contracts/storage/DegenerusGameStorage.sol#L1161
 
 
- - [ ] ID-2586
+ - [ ] ID-2589
 [DegenerusGameStorage.BP_DEITY_COINFLIP_DAY_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2048) is never used in [JackpotSoloTester](contracts/test/JackpotSoloTester.sol#L14-L30)
 
 contracts/storage/DegenerusGameStorage.sol#L2048
 
 
- - [ ] ID-2587
+ - [ ] ID-2590
 [DegenerusGameStorage.LOOTBOX_CLAIM_THRESHOLD](contracts/storage/DegenerusGameStorage.sol#L161) is never used in [DegenerusGameBingoModule](contracts/modules/DegenerusGameBingoModule.sol#L24-L288)
 
 contracts/storage/DegenerusGameStorage.sol#L161
 
 
- - [ ] ID-2588
+ - [ ] ID-2591
 [DegenerusGameStorage.foilMatchClaimed](contracts/storage/DegenerusGameStorage.sol#L2518) is never used in [DegenerusGameDecimatorModule](contracts/modules/DegenerusGameDecimatorModule.sol#L21-L1134)
 
 contracts/storage/DegenerusGameStorage.sol#L2518
 
 
- - [ ] ID-2589
-[DegenerusGameStorage.lootboxEth](contracts/storage/DegenerusGameStorage.sol#L1067) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1774)
+ - [ ] ID-2592
+[DegenerusGameStorage.lootboxEth](contracts/storage/DegenerusGameStorage.sol#L1067) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1779)
 
 contracts/storage/DegenerusGameStorage.sol#L1067
 
 
- - [ ] ID-2590
+ - [ ] ID-2593
 [DegenerusGameStorage.BP_MASK_8](contracts/storage/DegenerusGameStorage.sol#L2075) is never used in [DegenerusGameWhaleModule](contracts/modules/DegenerusGameWhaleModule.sol#L20-L1026)
 
 contracts/storage/DegenerusGameStorage.sol#L2075
 
 
- - [ ] ID-2591
+ - [ ] ID-2594
 [DegenerusGameStorage.ticketsFullyProcessed](contracts/storage/DegenerusGameStorage.sol#L326) is never used in [JackpotSoloTester](contracts/test/JackpotSoloTester.sol#L14-L30)
 
 contracts/storage/DegenerusGameStorage.sol#L326
 
 
- - [ ] ID-2592
+ - [ ] ID-2595
 [DegenerusGameStorage.BP_LAZY_PASS_CLEAR](contracts/storage/DegenerusGameStorage.sol#L2099-L2100) is never used in [DegenerusGameMintModule](contracts/modules/DegenerusGameMintModule.sol#L74-L2136)
 
 contracts/storage/DegenerusGameStorage.sol#L2099-L2100
 
 
- - [ ] ID-2593
+ - [ ] ID-2596
 [DegenerusGameStorage.LR_PENDING_ETH_SHIFT](contracts/storage/DegenerusGameStorage.sol#L1613) is never used in [DegenerusGame](contracts/DegenerusGame.sol#L87-L2624)
 
 contracts/storage/DegenerusGameStorage.sol#L1613
 
 
- - [ ] ID-2594
-[DegenerusGameStorage.FOIL_CCY_TAG](contracts/storage/DegenerusGameStorage.sol#L2593) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1774)
+ - [ ] ID-2597
+[DegenerusGameStorage.FOIL_CCY_TAG](contracts/storage/DegenerusGameStorage.sol#L2593) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1779)
 
 contracts/storage/DegenerusGameStorage.sol#L2593
 
 
- - [ ] ID-2595
+ - [ ] ID-2598
 [DegenerusGameStorage.vrfRequestId](contracts/storage/DegenerusGameStorage.sol#L423) is never used in [DegenerusGameGameOverModule](contracts/modules/DegenerusGameGameOverModule.sol#L37-L284)
 
 contracts/storage/DegenerusGameStorage.sol#L423
 
 
- - [ ] ID-2596
+ - [ ] ID-2599
 [DegenerusGameStorage.jackpotCounter](contracts/storage/DegenerusGameStorage.sol#L285) is never used in [DegenerusGameGameOverModule](contracts/modules/DegenerusGameGameOverModule.sol#L37-L284)
 
 contracts/storage/DegenerusGameStorage.sol#L285
 
 
- - [ ] ID-2597
+ - [ ] ID-2600
 [DegenerusGameStorage.phaseTransitionActive](contracts/storage/DegenerusGameStorage.sol#L304) is never used in [JackpotSoloTester](contracts/test/JackpotSoloTester.sol#L14-L30)
 
 contracts/storage/DegenerusGameStorage.sol#L304
 
 
- - [ ] ID-2598
+ - [ ] ID-2601
 [DegenerusGameStorage.FOIL_CCY_TAG](contracts/storage/DegenerusGameStorage.sol#L2593) is never used in [DegenerusGameLootboxModule](contracts/modules/DegenerusGameLootboxModule.sol#L39-L2359)
 
 contracts/storage/DegenerusGameStorage.sol#L2593
 
 
- - [ ] ID-2599
+ - [ ] ID-2602
 [DegenerusGameStorage.GO_TIME_SHIFT](contracts/storage/DegenerusGameStorage.sol#L1159) is never used in [DegenerusGameAdvanceModule](contracts/modules/DegenerusGameAdvanceModule.sol#L30-L2107)
 
 contracts/storage/DegenerusGameStorage.sol#L1159
 
 
- - [ ] ID-2600
+ - [ ] ID-2603
 [DegenerusGameStorage.presaleBoxEthSold](contracts/storage/DegenerusGameStorage.sol#L1088) is never used in [DegenerusGameBoonModule](contracts/modules/DegenerusGameBoonModule.sol#L22-L343)
 
 contracts/storage/DegenerusGameStorage.sol#L1088
 
 
- - [ ] ID-2601
+ - [ ] ID-2604
 [DegenerusGameStorage.BP_DEITY_PASS_DAY_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2067) is never used in [DegenerusGameGameOverModule](contracts/modules/DegenerusGameGameOverModule.sol#L37-L284)
 
 contracts/storage/DegenerusGameStorage.sol#L2067
 
 
- - [ ] ID-2602
+ - [ ] ID-2605
 [DegenerusGameStorage.GO_SWEPT_MASK](contracts/storage/DegenerusGameStorage.sol#L1164) is never used in [DegenerusGameFoilPackModule](contracts/modules/DegenerusGameFoilPackModule.sol#L30-L815)
 
 contracts/storage/DegenerusGameStorage.sol#L1164
 
 
- - [ ] ID-2603
+ - [ ] ID-2606
 [DegenerusGameStorage.PS_ACTIVE_SHIFT](contracts/storage/DegenerusGameStorage.sol#L1124) is never used in [DegenerusGameGameOverModule](contracts/modules/DegenerusGameGameOverModule.sol#L37-L284)
 
 contracts/storage/DegenerusGameStorage.sol#L1124
 
 
- - [ ] ID-2604
+ - [ ] ID-2607
 [DegenerusGameStorage.presaleCloseIndex](contracts/storage/DegenerusGameStorage.sol#L2465) is never used in [DegenerusGameBoonModule](contracts/modules/DegenerusGameBoonModule.sol#L22-L343)
 
 contracts/storage/DegenerusGameStorage.sol#L2465
 
 
- - [ ] ID-2605
+ - [ ] ID-2608
 [DegenerusGameStorage.vrfSubscriptionId](contracts/storage/DegenerusGameStorage.sol#L1590) is never used in [JackpotSoloTester](contracts/test/JackpotSoloTester.sol#L14-L30)
 
 contracts/storage/DegenerusGameStorage.sol#L1590
 
 
- - [ ] ID-2606
+ - [ ] ID-2609
 [DegenerusGameStorage.BP_DEITY_PASS_DAY_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2067) is never used in [DegenerusGameMintModule](contracts/modules/DegenerusGameMintModule.sol#L74-L2136)
 
 contracts/storage/DegenerusGameStorage.sol#L2067
 
 
- - [ ] ID-2607
+ - [ ] ID-2610
 [DegenerusGameStorage.BP_PURCHASE_DAY_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2053) is never used in [JackpotSoloTester](contracts/test/JackpotSoloTester.sol#L14-L30)
 
 contracts/storage/DegenerusGameStorage.sol#L2053
 
 
- - [ ] ID-2608
+ - [ ] ID-2611
 [DegenerusGameStorage.BP_LAZY_PASS_TIER_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2071) is never used in [DegenerusGameGameOverModule](contracts/modules/DegenerusGameGameOverModule.sol#L37-L284)
 
 contracts/storage/DegenerusGameStorage.sol#L2071
 
 
- - [ ] ID-2609
+ - [ ] ID-2612
 [DegenerusGameStorage.BP_DECIMATOR_CLEAR](contracts/storage/DegenerusGameStorage.sol#L2087-L2088) is never used in [DegenerusGameFoilPackModule](contracts/modules/DegenerusGameFoilPackModule.sol#L30-L815)
 
 contracts/storage/DegenerusGameStorage.sol#L2087-L2088
 
 
- - [ ] ID-2610
+ - [ ] ID-2613
 [DegenerusGameStorage.boxCursorIndex](contracts/storage/DegenerusGameStorage.sol#L2459) is never used in [DegenerusGameMintModule](contracts/modules/DegenerusGameMintModule.sol#L74-L2136)
 
 contracts/storage/DegenerusGameStorage.sol#L2459
 
 
- - [ ] ID-2611
+ - [ ] ID-2614
 [DegenerusGameStorage.vrfKeyHash](contracts/storage/DegenerusGameStorage.sol#L1586) is never used in [DegenerusGameWhaleModule](contracts/modules/DegenerusGameWhaleModule.sol#L20-L1026)
 
 contracts/storage/DegenerusGameStorage.sol#L1586
 
 
- - [ ] ID-2612
+ - [ ] ID-2615
 [DegenerusGameStorage.foilMatchClaimed](contracts/storage/DegenerusGameStorage.sol#L2518) is never used in [DegenerusGameBoonModule](contracts/modules/DegenerusGameBoonModule.sol#L22-L343)
 
 contracts/storage/DegenerusGameStorage.sol#L2518
 
 
- - [ ] ID-2613
-[DegenerusGameStorage.BP_ACTIVITY_DAY_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2064) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1774)
+ - [ ] ID-2616
+[DegenerusGameStorage.BP_ACTIVITY_DAY_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2064) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1779)
 
 contracts/storage/DegenerusGameStorage.sol#L2064
 
 
- - [ ] ID-2614
+ - [ ] ID-2617
 [DegenerusGameStorage.PASS_MINT_COUNT_FLOOR_POINTS](contracts/storage/DegenerusGameStorage.sol#L149) is never used in [DegenerusGameBoonModule](contracts/modules/DegenerusGameBoonModule.sol#L22-L343)
 
 contracts/storage/DegenerusGameStorage.sol#L149
 
 
- - [ ] ID-2615
+ - [ ] ID-2618
 [DegenerusGameStorage.LB_DISTRESS_SCALE](contracts/storage/DegenerusGameStorage.sol#L1078) is never used in [GameAfkingModule](contracts/modules/GameAfkingModule.sol#L82-L1941)
 
 contracts/storage/DegenerusGameStorage.sol#L1078
 
 
- - [ ] ID-2616
+ - [ ] ID-2619
 [DegenerusGameStorage.FOIL_PACK_TICKETS](contracts/storage/DegenerusGameStorage.sol#L2571) is never used in [GameAfkingModule](contracts/modules/GameAfkingModule.sol#L82-L1941)
 
 contracts/storage/DegenerusGameStorage.sol#L2571
 
 
- - [ ] ID-2617
+ - [ ] ID-2620
 [DegenerusGameStorage.GO_SWEPT_SHIFT](contracts/storage/DegenerusGameStorage.sol#L1163) is never used in [DegenerusGameBingoModule](contracts/modules/DegenerusGameBingoModule.sol#L24-L288)
 
 contracts/storage/DegenerusGameStorage.sol#L1163
 
 
- - [ ] ID-2618
+ - [ ] ID-2621
 [DegenerusGameStorage.GO_TIME_MASK](contracts/storage/DegenerusGameStorage.sol#L1160) is never used in [DegenerusGameFoilPackModule](contracts/modules/DegenerusGameFoilPackModule.sol#L30-L815)
 
 contracts/storage/DegenerusGameStorage.sol#L1160
 
 
- - [ ] ID-2619
+ - [ ] ID-2622
 [DegenerusGameStorage.yieldAccumulator](contracts/storage/DegenerusGameStorage.sol#L1925) is never used in [DegenerusGameBingoModule](contracts/modules/DegenerusGameBingoModule.sol#L24-L288)
 
 contracts/storage/DegenerusGameStorage.sol#L1925
 
 
- - [ ] ID-2620
+ - [ ] ID-2623
 [DegenerusGameStorage.LOOTBOX_EV_BENEFIT_CAP](contracts/storage/DegenerusGameStorage.sol#L1643-L1644) is never used in [DegenerusGameFoilPackModule](contracts/modules/DegenerusGameFoilPackModule.sol#L30-L815)
 
 contracts/storage/DegenerusGameStorage.sol#L1643-L1644
 
 
- - [ ] ID-2621
+ - [ ] ID-2624
 [DegenerusGameStorage.LOOTBOX_PRESALE_ETH_CAP](contracts/storage/DegenerusGameStorage.sol#L1130) is never used in [SettleClaimableShortfallTester](contracts/test/SettleClaimableShortfallTester.sol#L17-L66)
 
 contracts/storage/DegenerusGameStorage.sol#L1130
 
 
- - [ ] ID-2622
+ - [ ] ID-2625
 [DegenerusGameStorage.GO_SWEPT_SHIFT](contracts/storage/DegenerusGameStorage.sol#L1163) is never used in [DegenerusGameFoilPackModule](contracts/modules/DegenerusGameFoilPackModule.sol#L30-L815)
 
 contracts/storage/DegenerusGameStorage.sol#L1163
 
 
- - [ ] ID-2623
+ - [ ] ID-2626
 [DegenerusGameStorage.deityBySymbol](contracts/storage/DegenerusGameStorage.sol#L1255) is never used in [DegenerusGameBoonModule](contracts/modules/DegenerusGameBoonModule.sol#L22-L343)
 
 contracts/storage/DegenerusGameStorage.sol#L1255
 
 
- - [ ] ID-2624
+ - [ ] ID-2627
 [DegenerusGameStorage.foilCursor](contracts/storage/DegenerusGameStorage.sol#L2550) is never used in [GameAfkingModule](contracts/modules/GameAfkingModule.sol#L82-L1941)
 
 contracts/storage/DegenerusGameStorage.sol#L2550
 
 
- - [ ] ID-2625
+ - [ ] ID-2628
 [DegenerusGameStorage.BP_ACTIVITY_DAY_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2064) is never used in [DegenerusGameWhaleModule](contracts/modules/DegenerusGameWhaleModule.sol#L20-L1026)
 
 contracts/storage/DegenerusGameStorage.sol#L2064
 
 
- - [ ] ID-2626
+ - [ ] ID-2629
 [DegenerusGameStorage.dailyTicketBudgetsPacked](contracts/storage/DegenerusGameStorage.sol#L442) is never used in [DegenerusGameBoonModule](contracts/modules/DegenerusGameBoonModule.sol#L22-L343)
 
 contracts/storage/DegenerusGameStorage.sol#L442
 
 
- - [ ] ID-2627
+ - [ ] ID-2630
 [DegenerusGameStorage.LB_DISTRESS_SCALE](contracts/storage/DegenerusGameStorage.sol#L1078) is never used in [SettleClaimableShortfallTester](contracts/test/SettleClaimableShortfallTester.sol#L17-L66)
 
 contracts/storage/DegenerusGameStorage.sol#L1078
 
 
- - [ ] ID-2628
+ - [ ] ID-2631
 [DegenerusGameStorage.FOIL_SPIN_TAG](contracts/storage/DegenerusGameStorage.sol#L2594) is never used in [DegenerusGameBingoModule](contracts/modules/DegenerusGameBingoModule.sol#L24-L288)
 
 contracts/storage/DegenerusGameStorage.sol#L2594
 
 
- - [ ] ID-2629
+ - [ ] ID-2632
 [DegenerusGameStorage.PRESALE_BOX_CLOSING_FLAG](contracts/storage/DegenerusGameStorage.sol#L1106) is never used in [SettleClaimableShortfallTester](contracts/test/SettleClaimableShortfallTester.sol#L17-L66)
 
 contracts/storage/DegenerusGameStorage.sol#L1106
 
 
- - [ ] ID-2630
+ - [ ] ID-2633
 [DegenerusGameStorage.BP_PURCHASE_TIER_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2055) is never used in [DegenerusGameDecimatorModule](contracts/modules/DegenerusGameDecimatorModule.sol#L21-L1134)
 
 contracts/storage/DegenerusGameStorage.sol#L2055
 
 
- - [ ] ID-2631
-[DegenerusGameStorage.LOOTBOX_EV_BENEFIT_CAP](contracts/storage/DegenerusGameStorage.sol#L1643-L1644) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1774)
+ - [ ] ID-2634
+[DegenerusGameStorage.LOOTBOX_EV_BENEFIT_CAP](contracts/storage/DegenerusGameStorage.sol#L1643-L1644) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1779)
 
 contracts/storage/DegenerusGameStorage.sol#L1643-L1644
 
 
- - [ ] ID-2632
+ - [ ] ID-2635
 [DegenerusGameStorage.LR_THRESHOLD_MASK](contracts/storage/DegenerusGameStorage.sol#L1616) is never used in [GameAfkingModule](contracts/modules/GameAfkingModule.sol#L82-L1941)
 
 contracts/storage/DegenerusGameStorage.sol#L1616
 
 
- - [ ] ID-2633
+ - [ ] ID-2636
 [DegenerusGameStorage.decBucketOffsetPacked](contracts/storage/DegenerusGameStorage.sol#L1904) is never used in [DegenerusGameBoonModule](contracts/modules/DegenerusGameBoonModule.sol#L22-L343)
 
 contracts/storage/DegenerusGameStorage.sol#L1904
 
 
- - [ ] ID-2634
+ - [ ] ID-2637
 [DegenerusGameStorage.LR_MID_DAY_MASK](contracts/storage/DegenerusGameStorage.sol#L1620) is never used in [DegenerusGameDecimatorModule](contracts/modules/DegenerusGameDecimatorModule.sol#L21-L1134)
 
 contracts/storage/DegenerusGameStorage.sol#L1620
 
 
- - [ ] ID-2635
+ - [ ] ID-2638
 [DegenerusGameStorage.deityBoonPacked](contracts/storage/DegenerusGameStorage.sol#L1766) is never used in [DegenerusGameGameOverModule](contracts/modules/DegenerusGameGameOverModule.sol#L37-L284)
 
 contracts/storage/DegenerusGameStorage.sol#L1766
 
 
- - [ ] ID-2636
-[DegenerusGameStorage.bingoFirsts](contracts/storage/DegenerusGameStorage.sol#L2044) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1774)
+ - [ ] ID-2639
+[DegenerusGameStorage.bingoFirsts](contracts/storage/DegenerusGameStorage.sol#L2044) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1779)
 
 contracts/storage/DegenerusGameStorage.sol#L2044
 
 
- - [ ] ID-2637
+ - [ ] ID-2640
 [DegenerusGameStorage._subscriberIndex](contracts/storage/DegenerusGameStorage.sol#L2427) is never used in [DegenerusGameBoonModule](contracts/modules/DegenerusGameBoonModule.sol#L22-L343)
 
 contracts/storage/DegenerusGameStorage.sol#L2427
 
 
- - [ ] ID-2638
+ - [ ] ID-2641
 [DegenerusGameStorage.LOOTBOX_CLAIM_THRESHOLD](contracts/storage/DegenerusGameStorage.sol#L161) is never used in [DegenerusGameGameOverModule](contracts/modules/DegenerusGameGameOverModule.sol#L37-L284)
 
 contracts/storage/DegenerusGameStorage.sol#L161
 
 
- - [ ] ID-2639
+ - [ ] ID-2642
 [DegenerusGameStorage.BP_DEITY_LOOTBOX_DAY_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2051) is never used in [DegenerusGameFoilPackModule](contracts/modules/DegenerusGameFoilPackModule.sol#L30-L815)
 
 contracts/storage/DegenerusGameStorage.sol#L2051
 
 
- - [ ] ID-2640
+ - [ ] ID-2643
 [DegenerusGameStorage.presaleOver](contracts/storage/DegenerusGameStorage.sol#L348) is never used in [DegenerusGameBingoModule](contracts/modules/DegenerusGameBingoModule.sol#L24-L288)
 
 contracts/storage/DegenerusGameStorage.sol#L348
 
 
- - [ ] ID-2641
+ - [ ] ID-2644
 [DegenerusGameStorage.LR_PENDING_FLIP_SHIFT](contracts/storage/DegenerusGameStorage.sol#L1617) is never used in [DegenerusGameFoilPackModule](contracts/modules/DegenerusGameFoilPackModule.sol#L30-L815)
 
 contracts/storage/DegenerusGameStorage.sol#L1617
 
 
- - [ ] ID-2642
+ - [ ] ID-2645
 [DegenerusGameStorage.BP_ACTIVITY_DAY_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2064) is never used in [DegenerusGameBingoModule](contracts/modules/DegenerusGameBingoModule.sol#L24-L288)
 
 contracts/storage/DegenerusGameStorage.sol#L2064
 
 
- - [ ] ID-2643
+ - [ ] ID-2646
 [DegenerusGameStorage.PS_MINT_ETH_SHIFT](contracts/storage/DegenerusGameStorage.sol#L1126) is never used in [DegenerusGameBoonModule](contracts/modules/DegenerusGameBoonModule.sol#L22-L343)
 
 contracts/storage/DegenerusGameStorage.sol#L1126
 
 
- - [ ] ID-2644
+ - [ ] ID-2647
 [DegenerusGameStorage.BP_DEITY_LOOTBOX_DAY_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2051) is never used in [DegenerusGameDecimatorModule](contracts/modules/DegenerusGameDecimatorModule.sol#L21-L1134)
 
 contracts/storage/DegenerusGameStorage.sol#L2051
 
 
- - [ ] ID-2645
+ - [ ] ID-2648
 [DegenerusGameStorage.levelPrizePool](contracts/storage/DegenerusGameStorage.sol#L1202) is never used in [DegenerusGameBoonModule](contracts/modules/DegenerusGameBoonModule.sol#L22-L343)
 
 contracts/storage/DegenerusGameStorage.sol#L1202
 
 
- - [ ] ID-2646
-[DegenerusGameStorage.boxCursor](contracts/storage/DegenerusGameStorage.sol#L2454) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1774)
+ - [ ] ID-2649
+[DegenerusGameStorage.boxCursor](contracts/storage/DegenerusGameStorage.sol#L2454) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1779)
 
 contracts/storage/DegenerusGameStorage.sol#L2454
 
 
- - [ ] ID-2647
+ - [ ] ID-2650
 [DegenerusGameStorage.FOIL_SEED_TAG](contracts/storage/DegenerusGameStorage.sol#L2587) is never used in [DegenerusGameAdvanceModule](contracts/modules/DegenerusGameAdvanceModule.sol#L30-L2107)
 
 contracts/storage/DegenerusGameStorage.sol#L2587
 
 
- - [ ] ID-2648
+ - [ ] ID-2651
 [DegenerusGameStorage.LR_MID_DAY_MASK](contracts/storage/DegenerusGameStorage.sol#L1620) is never used in [JackpotSoloTester](contracts/test/JackpotSoloTester.sol#L14-L30)
 
 contracts/storage/DegenerusGameStorage.sol#L1620
 
 
- - [ ] ID-2649
+ - [ ] ID-2652
 [DegenerusGameStorage.BP_ACTIVITY_DAY_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2064) is never used in [DegenerusGameMintModule](contracts/modules/DegenerusGameMintModule.sol#L74-L2136)
 
 contracts/storage/DegenerusGameStorage.sol#L2064
 
 
- - [ ] ID-2650
+ - [ ] ID-2653
 [DegenerusGameStorage.deityBySymbol](contracts/storage/DegenerusGameStorage.sol#L1255) is never used in [DegenerusGameDecimatorModule](contracts/modules/DegenerusGameDecimatorModule.sol#L21-L1134)
 
 contracts/storage/DegenerusGameStorage.sol#L1255
 
 
- - [ ] ID-2651
+ - [ ] ID-2654
 [DegenerusGameStorage.dailyJackpotCoinTicketsPending](contracts/storage/DegenerusGameStorage.sol#L312) is never used in [GameAfkingModule](contracts/modules/GameAfkingModule.sol#L82-L1941)
 
 contracts/storage/DegenerusGameStorage.sol#L312
 
 
- - [ ] ID-2652
+ - [ ] ID-2655
 [DegenerusGameStorage.foilBuyers](contracts/storage/DegenerusGameStorage.sol#L2541) is never used in [JackpotSoloTester](contracts/test/JackpotSoloTester.sol#L14-L30)
 
 contracts/storage/DegenerusGameStorage.sol#L2541
 
 
- - [ ] ID-2653
+ - [ ] ID-2656
 [DegenerusGameStorage.BP_LOOTBOX_CLEAR](contracts/storage/DegenerusGameStorage.sol#L2081-L2082) is never used in [DegenerusGameDecimatorModule](contracts/modules/DegenerusGameDecimatorModule.sol#L21-L1134)
 
 contracts/storage/DegenerusGameStorage.sol#L2081-L2082
 
 
- - [ ] ID-2654
-[DegenerusGameStorage.presaleDrained](contracts/storage/DegenerusGameStorage.sol#L367) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1774)
+ - [ ] ID-2657
+[DegenerusGameStorage.presaleDrained](contracts/storage/DegenerusGameStorage.sol#L367) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1779)
 
 contracts/storage/DegenerusGameStorage.sol#L367
 
 
- - [ ] ID-2655
+ - [ ] ID-2658
 [DegenerusGameStorage.totalFlipReversals](contracts/storage/DegenerusGameStorage.sol#L429) is never used in [DegenerusGameFoilPackModule](contracts/modules/DegenerusGameFoilPackModule.sol#L30-L815)
 
 contracts/storage/DegenerusGameStorage.sol#L429
 
 
- - [ ] ID-2656
-[DegenerusGameStorage.BP_DECIMATOR_TIER_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2056) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1774)
+ - [ ] ID-2659
+[DegenerusGameStorage.BP_DECIMATOR_TIER_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2056) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1779)
 
 contracts/storage/DegenerusGameStorage.sol#L2056
 
 
- - [ ] ID-2657
+ - [ ] ID-2660
 [DegenerusGameStorage.LOOTBOX_CLAIM_THRESHOLD](contracts/storage/DegenerusGameStorage.sol#L161) is never used in [DegenerusGameWhaleModule](contracts/modules/DegenerusGameWhaleModule.sol#L20-L1026)
 
 contracts/storage/DegenerusGameStorage.sol#L161
 
 
- - [ ] ID-2658
+ - [ ] ID-2661
 [DegenerusGameStorage.whalePassClaims](contracts/storage/DegenerusGameStorage.sol#L1183) is never used in [DegenerusGameAdvanceModule](contracts/modules/DegenerusGameAdvanceModule.sol#L30-L2107)
 
 contracts/storage/DegenerusGameStorage.sol#L1183
 
 
- - [ ] ID-2659
+ - [ ] ID-2662
 [DegenerusGameStorage.bingoFirsts](contracts/storage/DegenerusGameStorage.sol#L2044) is never used in [DegenerusGame](contracts/DegenerusGame.sol#L87-L2624)
 
 contracts/storage/DegenerusGameStorage.sol#L2044
 
 
- - [ ] ID-2660
+ - [ ] ID-2663
 [DegenerusGameStorage.dailyJackpotCoinTicketsPending](contracts/storage/DegenerusGameStorage.sol#L312) is never used in [DegenerusGameLootboxModule](contracts/modules/DegenerusGameLootboxModule.sol#L39-L2359)
 
 contracts/storage/DegenerusGameStorage.sol#L312
 
 
- - [ ] ID-2661
+ - [ ] ID-2664
 [DegenerusGameStorage.dailyTicketBudgetsPacked](contracts/storage/DegenerusGameStorage.sol#L442) is never used in [DegenerusGameDecimatorModule](contracts/modules/DegenerusGameDecimatorModule.sol#L21-L1134)
 
 contracts/storage/DegenerusGameStorage.sol#L442
 
 
- - [ ] ID-2662
+ - [ ] ID-2665
 [DegenerusGameStorage.LOOTBOX_CLAIM_THRESHOLD](contracts/storage/DegenerusGameStorage.sol#L161) is never used in [DegenerusGame](contracts/DegenerusGame.sol#L87-L2624)
 
 contracts/storage/DegenerusGameStorage.sol#L161
 
 
- - [ ] ID-2663
+ - [ ] ID-2666
 [DegenerusGameStorage.DEITY_PASS_ACTIVITY_BONUS_POINTS](contracts/storage/DegenerusGameStorage.sol#L137) is never used in [DegenerusGameBingoModule](contracts/modules/DegenerusGameBingoModule.sol#L24-L288)
 
 contracts/storage/DegenerusGameStorage.sol#L137
 
 
- - [ ] ID-2664
+ - [ ] ID-2667
 [DegenerusGameStorage.wwxrpJackpotWhalePassBracketAwarded](contracts/storage/DegenerusGameStorage.sol#L1188) is never used in [SettleClaimableShortfallTester](contracts/test/SettleClaimableShortfallTester.sol#L17-L66)
 
 contracts/storage/DegenerusGameStorage.sol#L1188
 
 
- - [ ] ID-2665
+ - [ ] ID-2668
 [DegenerusGameStorage.PRESALE_BOX_AMOUNT_MASK](contracts/storage/DegenerusGameStorage.sol#L1110) is never used in [SettleClaimableShortfallTester](contracts/test/SettleClaimableShortfallTester.sol#L17-L66)
 
 contracts/storage/DegenerusGameStorage.sol#L1110
 
 
- - [ ] ID-2666
+ - [ ] ID-2669
 [DegenerusGameStorage.LR_PENDING_FLIP_SHIFT](contracts/storage/DegenerusGameStorage.sol#L1617) is never used in [DegenerusGameGameOverModule](contracts/modules/DegenerusGameGameOverModule.sol#L37-L284)
 
 contracts/storage/DegenerusGameStorage.sol#L1617
 
 
- - [ ] ID-2667
+ - [ ] ID-2670
 [DegenerusGameStorage._subCursor](contracts/storage/DegenerusGameStorage.sol#L2434) is never used in [DegenerusGameMintModule](contracts/modules/DegenerusGameMintModule.sol#L74-L2136)
 
 contracts/storage/DegenerusGameStorage.sol#L2434
 
 
- - [ ] ID-2668
+ - [ ] ID-2671
 [DegenerusGameStorage.presaleBoxEthSold](contracts/storage/DegenerusGameStorage.sol#L1088) is never used in [DegenerusGameFoilPackModule](contracts/modules/DegenerusGameFoilPackModule.sol#L30-L815)
 
 contracts/storage/DegenerusGameStorage.sol#L1088
 
 
- - [ ] ID-2669
+ - [ ] ID-2672
 [DegenerusGameStorage.PRESALE_BOX_ETH_CAP](contracts/storage/DegenerusGameStorage.sol#L1134) is never used in [DegenerusGameBoonModule](contracts/modules/DegenerusGameBoonModule.sol#L22-L343)
 
 contracts/storage/DegenerusGameStorage.sol#L1134
 
 
- - [ ] ID-2670
+ - [ ] ID-2673
 [DegenerusGameStorage.BP_DEITY_PURCHASE_DAY_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2054) is never used in [DegenerusGameMintModule](contracts/modules/DegenerusGameMintModule.sol#L74-L2136)
 
 contracts/storage/DegenerusGameStorage.sol#L2054
 
 
- - [ ] ID-2671
+ - [ ] ID-2674
 [DegenerusGameStorage.BP_PURCHASE_TIER_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2055) is never used in [DegenerusGameMintModule](contracts/modules/DegenerusGameMintModule.sol#L74-L2136)
 
 contracts/storage/DegenerusGameStorage.sol#L2055
 
 
- - [ ] ID-2672
+ - [ ] ID-2675
 [DegenerusGameStorage.GO_SWEPT_MASK](contracts/storage/DegenerusGameStorage.sol#L1164) is never used in [DegenerusGameLootboxModule](contracts/modules/DegenerusGameLootboxModule.sol#L39-L2359)
 
 contracts/storage/DegenerusGameStorage.sol#L1164
 
 
- - [ ] ID-2673
+ - [ ] ID-2676
 [DegenerusGameStorage.decBucketOffsetPacked](contracts/storage/DegenerusGameStorage.sol#L1904) is never used in [GameAfkingModule](contracts/modules/GameAfkingModule.sol#L82-L1941)
 
 contracts/storage/DegenerusGameStorage.sol#L1904
 
 
- - [ ] ID-2674
+ - [ ] ID-2677
 [DegenerusGameStorage.vrfCoordinator](contracts/storage/DegenerusGameStorage.sol#L1582) is never used in [SettleClaimableShortfallTester](contracts/test/SettleClaimableShortfallTester.sol#L17-L66)
 
 contracts/storage/DegenerusGameStorage.sol#L1582
 
 
- - [ ] ID-2675
+ - [ ] ID-2678
 [DegenerusGameStorage.vrfCoordinator](contracts/storage/DegenerusGameStorage.sol#L1582) is never used in [DegenerusGameMintModule](contracts/modules/DegenerusGameMintModule.sol#L74-L2136)
 
 contracts/storage/DegenerusGameStorage.sol#L1582
 
 
- - [ ] ID-2676
+ - [ ] ID-2679
 [DegenerusGameStorage.lootboxRngWordByIndex](contracts/storage/DegenerusGameStorage.sol#L1755) is never used in [DegenerusGameFoilPackModule](contracts/modules/DegenerusGameFoilPackModule.sol#L30-L815)
 
 contracts/storage/DegenerusGameStorage.sol#L1755
 
 
- - [ ] ID-2677
+ - [ ] ID-2680
 [DegenerusGameStorage.PRICE_COIN_UNIT](contracts/storage/DegenerusGameStorage.sol#L154) is never used in [DegenerusGameGameOverModule](contracts/modules/DegenerusGameGameOverModule.sol#L37-L284)
 
 contracts/storage/DegenerusGameStorage.sol#L154
 
 
- - [ ] ID-2678
-[DegenerusGameStorage.totalFlipReversals](contracts/storage/DegenerusGameStorage.sol#L429) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1774)
+ - [ ] ID-2681
+[DegenerusGameStorage.totalFlipReversals](contracts/storage/DegenerusGameStorage.sol#L429) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1779)
 
 contracts/storage/DegenerusGameStorage.sol#L429
 
 
- - [ ] ID-2679
+ - [ ] ID-2682
 [DegenerusGameStorage.LB_DISTRESS_SCALE](contracts/storage/DegenerusGameStorage.sol#L1078) is never used in [DegenerusGameBingoModule](contracts/modules/DegenerusGameBingoModule.sol#L24-L288)
 
 contracts/storage/DegenerusGameStorage.sol#L1078
 
 
- - [ ] ID-2680
+ - [ ] ID-2683
 [DegenerusGameStorage.foilMatchClaimed](contracts/storage/DegenerusGameStorage.sol#L2518) is never used in [DegenerusGameBingoModule](contracts/modules/DegenerusGameBingoModule.sol#L24-L288)
 
 contracts/storage/DegenerusGameStorage.sol#L2518
 
 
- - [ ] ID-2681
+ - [ ] ID-2684
 [DegenerusGameStorage.LR_PENDING_FLIP_MASK](contracts/storage/DegenerusGameStorage.sol#L1618) is never used in [DegenerusGame](contracts/DegenerusGame.sol#L87-L2624)
 
 contracts/storage/DegenerusGameStorage.sol#L1618
 
 
- - [ ] ID-2682
+ - [ ] ID-2685
 [DegenerusGameStorage.lootboxRngWordByIndex](contracts/storage/DegenerusGameStorage.sol#L1755) is never used in [DegenerusGameGameOverModule](contracts/modules/DegenerusGameGameOverModule.sol#L37-L284)
 
 contracts/storage/DegenerusGameStorage.sol#L1755
 
 
- - [ ] ID-2683
+ - [ ] ID-2686
 [DegenerusGameStorage.PS_MINT_ETH_MASK](contracts/storage/DegenerusGameStorage.sol#L1127) is never used in [GameAfkingModule](contracts/modules/GameAfkingModule.sol#L82-L1941)
 
 contracts/storage/DegenerusGameStorage.sol#L1127
 
 
- - [ ] ID-2684
+ - [ ] ID-2687
 [DegenerusGameStorage.totalFlipReversals](contracts/storage/DegenerusGameStorage.sol#L429) is never used in [DegenerusGameWhaleModule](contracts/modules/DegenerusGameWhaleModule.sol#L20-L1026)
 
 contracts/storage/DegenerusGameStorage.sol#L429
 
 
- - [ ] ID-2685
+ - [ ] ID-2688
 [DegenerusGameStorage.LR_PENDING_ETH_SHIFT](contracts/storage/DegenerusGameStorage.sol#L1613) is never used in [DegenerusGameBoonModule](contracts/modules/DegenerusGameBoonModule.sol#L22-L343)
 
 contracts/storage/DegenerusGameStorage.sol#L1613
 
 
- - [ ] ID-2686
+ - [ ] ID-2689
 [DegenerusGameStorage.BP_LOOTBOX_CLEAR](contracts/storage/DegenerusGameStorage.sol#L2081-L2082) is never used in [JackpotSoloTester](contracts/test/JackpotSoloTester.sol#L14-L30)
 
 contracts/storage/DegenerusGameStorage.sol#L2081-L2082
 
 
- - [ ] ID-2687
+ - [ ] ID-2690
 [DegenerusGameStorage.LOOTBOX_PRESALE_ETH_CAP](contracts/storage/DegenerusGameStorage.sol#L1130) is never used in [DegenerusGame](contracts/DegenerusGame.sol#L87-L2624)
 
 contracts/storage/DegenerusGameStorage.sol#L1130
 
 
- - [ ] ID-2688
+ - [ ] ID-2691
 [DegenerusGameStorage.presaleDrained](contracts/storage/DegenerusGameStorage.sol#L367) is never used in [DegenerusGameGameOverModule](contracts/modules/DegenerusGameGameOverModule.sol#L37-L284)
 
 contracts/storage/DegenerusGameStorage.sol#L367
 
 
- - [ ] ID-2689
+ - [ ] ID-2692
 [DegenerusGameStorage.LOOTBOX_PRESALE_ETH_CAP](contracts/storage/DegenerusGameStorage.sol#L1130) is never used in [DegenerusGameDecimatorModule](contracts/modules/DegenerusGameDecimatorModule.sol#L21-L1134)
 
 contracts/storage/DegenerusGameStorage.sol#L1130
 
 
- - [ ] ID-2690
+ - [ ] ID-2693
 [DegenerusGameStorage.GO_JACKPOT_PAID_MASK](contracts/storage/DegenerusGameStorage.sol#L1162) is never used in [DegenerusGameDecimatorModule](contracts/modules/DegenerusGameDecimatorModule.sol#L21-L1134)
 
 contracts/storage/DegenerusGameStorage.sol#L1162
 
 
- - [ ] ID-2691
+ - [ ] ID-2694
 [DegenerusGameStorage.BP_LOOTBOX_CLEAR](contracts/storage/DegenerusGameStorage.sol#L2081-L2082) is never used in [DegenerusGameFoilPackModule](contracts/modules/DegenerusGameFoilPackModule.sol#L30-L815)
 
 contracts/storage/DegenerusGameStorage.sol#L2081-L2082
 
 
- - [ ] ID-2692
+ - [ ] ID-2695
 [DegenerusGameStorage.lootboxEth](contracts/storage/DegenerusGameStorage.sol#L1067) is never used in [DegenerusGameAdvanceModule](contracts/modules/DegenerusGameAdvanceModule.sol#L30-L2107)
 
 contracts/storage/DegenerusGameStorage.sol#L1067
 
 
- - [ ] ID-2693
+ - [ ] ID-2696
 [DegenerusGameStorage.deityRecipientBoonCount](contracts/storage/DegenerusGameStorage.sol#L2558) is never used in [DegenerusGameMintModule](contracts/modules/DegenerusGameMintModule.sol#L74-L2136)
 
 contracts/storage/DegenerusGameStorage.sol#L2558
 
 
- - [ ] ID-2694
+ - [ ] ID-2697
 [DegenerusGameStorage._sdgnrsBonusLevel](contracts/storage/DegenerusGameStorage.sol#L2473) is never used in [JackpotSoloTester](contracts/test/JackpotSoloTester.sol#L14-L30)
 
 contracts/storage/DegenerusGameStorage.sol#L2473
 
 
- - [ ] ID-2695
+ - [ ] ID-2698
 [DegenerusGameStorage.BP_PURCHASE_TIER_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2055) is never used in [GameAfkingModule](contracts/modules/GameAfkingModule.sol#L82-L1941)
 
 contracts/storage/DegenerusGameStorage.sol#L2055
 
 
- - [ ] ID-2696
+ - [ ] ID-2699
 [DegenerusGameStorage.boxCursor](contracts/storage/DegenerusGameStorage.sol#L2454) is never used in [SettleClaimableShortfallTester](contracts/test/SettleClaimableShortfallTester.sol#L17-L66)
 
 contracts/storage/DegenerusGameStorage.sol#L2454
 
 
- - [ ] ID-2697
+ - [ ] ID-2700
 [DegenerusGameStorage.presaleBoxEth](contracts/storage/DegenerusGameStorage.sol#L1103) is never used in [DegenerusGameAdvanceModule](contracts/modules/DegenerusGameAdvanceModule.sol#L30-L2107)
 
 contracts/storage/DegenerusGameStorage.sol#L1103
 
 
- - [ ] ID-2698
+ - [ ] ID-2701
 [DegenerusGameStorage.deityRecipientBoonCount](contracts/storage/DegenerusGameStorage.sol#L2558) is never used in [DegenerusGameWhaleModule](contracts/modules/DegenerusGameWhaleModule.sol#L20-L1026)
 
 contracts/storage/DegenerusGameStorage.sol#L2558
 
 
- - [ ] ID-2699
+ - [ ] ID-2702
 [DegenerusGameStorage.compressedJackpotFlag](contracts/storage/DegenerusGameStorage.sol#L319) is never used in [DegenerusGameGameOverModule](contracts/modules/DegenerusGameGameOverModule.sol#L37-L284)
 
 contracts/storage/DegenerusGameStorage.sol#L319
 
 
- - [ ] ID-2700
+ - [ ] ID-2703
 [DegenerusGameStorage.LR_MID_DAY_MASK](contracts/storage/DegenerusGameStorage.sol#L1620) is never used in [DegenerusGameMintModule](contracts/modules/DegenerusGameMintModule.sol#L74-L2136)
 
 contracts/storage/DegenerusGameStorage.sol#L1620
 
 
- - [ ] ID-2701
+ - [ ] ID-2704
 [DegenerusGameStorage.LR_INDEX_MASK](contracts/storage/DegenerusGameStorage.sol#L1612) is never used in [DegenerusGameFoilPackModule](contracts/modules/DegenerusGameFoilPackModule.sol#L30-L815)
 
 contracts/storage/DegenerusGameStorage.sol#L1612
 
 
- - [ ] ID-2702
+ - [ ] ID-2705
 [DegenerusGameStorage.vrfSubscriptionId](contracts/storage/DegenerusGameStorage.sol#L1590) is never used in [DegenerusGameFoilPackModule](contracts/modules/DegenerusGameFoilPackModule.sol#L30-L815)
 
 contracts/storage/DegenerusGameStorage.sol#L1590
 
 
- - [ ] ID-2703
+ - [ ] ID-2706
 [DegenerusGameStorage.boxPlayers](contracts/storage/DegenerusGameStorage.sol#L2481) is never used in [DegenerusGameFoilPackModule](contracts/modules/DegenerusGameFoilPackModule.sol#L30-L815)
 
 contracts/storage/DegenerusGameStorage.sol#L2481
 
 
- - [ ] ID-2704
+ - [ ] ID-2707
 [DegenerusGameStorage.BP_DEITY_PASS_CLEAR](contracts/storage/DegenerusGameStorage.sol#L2096-L2097) is never used in [GameAfkingModule](contracts/modules/GameAfkingModule.sol#L82-L1941)
 
 contracts/storage/DegenerusGameStorage.sol#L2096-L2097
 
 
- - [ ] ID-2705
+ - [ ] ID-2708
 [DegenerusGameStorage.PRESALE_BOX_CLOSING_FLAG](contracts/storage/DegenerusGameStorage.sol#L1106) is never used in [DegenerusGameDecimatorModule](contracts/modules/DegenerusGameDecimatorModule.sol#L21-L1134)
 
 contracts/storage/DegenerusGameStorage.sol#L1106
 
 
- - [ ] ID-2706
+ - [ ] ID-2709
 [DegenerusGameStorage.LR_PENDING_ETH_MASK](contracts/storage/DegenerusGameStorage.sol#L1614) is never used in [DegenerusGameLootboxModule](contracts/modules/DegenerusGameLootboxModule.sol#L39-L2359)
 
 contracts/storage/DegenerusGameStorage.sol#L1614
 
 
- - [ ] ID-2707
+ - [ ] ID-2710
 [DegenerusGameStorage.LR_MID_DAY_MASK](contracts/storage/DegenerusGameStorage.sol#L1620) is never used in [SettleClaimableShortfallTester](contracts/test/SettleClaimableShortfallTester.sol#L17-L66)
 
 contracts/storage/DegenerusGameStorage.sol#L1620
 
 
- - [ ] ID-2708
-[DegenerusGameStorage.GO_JACKPOT_PAID_SHIFT](contracts/storage/DegenerusGameStorage.sol#L1161) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1774)
+ - [ ] ID-2711
+[DegenerusGameStorage.GO_JACKPOT_PAID_SHIFT](contracts/storage/DegenerusGameStorage.sol#L1161) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1779)
 
 contracts/storage/DegenerusGameStorage.sol#L1161
 
 
- - [ ] ID-2709
+ - [ ] ID-2712
 [DegenerusGameStorage.decBucketOffsetPacked](contracts/storage/DegenerusGameStorage.sol#L1904) is never used in [DegenerusGameMintModule](contracts/modules/DegenerusGameMintModule.sol#L74-L2136)
 
 contracts/storage/DegenerusGameStorage.sol#L1904
 
 
- - [ ] ID-2710
+ - [ ] ID-2713
 [DegenerusGameStorage.presaleBoxEth](contracts/storage/DegenerusGameStorage.sol#L1103) is never used in [DegenerusGameDecimatorModule](contracts/modules/DegenerusGameDecimatorModule.sol#L21-L1134)
 
 contracts/storage/DegenerusGameStorage.sol#L1103
 
 
- - [ ] ID-2711
+ - [ ] ID-2714
 [DegenerusGameStorage.decBucketBurnTotal](contracts/storage/DegenerusGameStorage.sol#L1895) is never used in [DegenerusGameGameOverModule](contracts/modules/DegenerusGameGameOverModule.sol#L37-L284)
 
 contracts/storage/DegenerusGameStorage.sol#L1895
 
 
- - [ ] ID-2712
+ - [ ] ID-2715
 [DegenerusGameStorage.BP_DEITY_DEITY_PASS_DAY_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2068) is never used in [DegenerusGameGameOverModule](contracts/modules/DegenerusGameGameOverModule.sol#L37-L284)
 
 contracts/storage/DegenerusGameStorage.sol#L2068
 
 
- - [ ] ID-2713
-[DegenerusGameStorage.GO_JACKPOT_PAID_MASK](contracts/storage/DegenerusGameStorage.sol#L1162) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1774)
+ - [ ] ID-2716
+[DegenerusGameStorage.GO_JACKPOT_PAID_MASK](contracts/storage/DegenerusGameStorage.sol#L1162) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1779)
 
 contracts/storage/DegenerusGameStorage.sol#L1162
 
 
- - [ ] ID-2714
+ - [ ] ID-2717
 [DegenerusGameStorage.ticketCursor](contracts/storage/DegenerusGameStorage.sol#L532) is never used in [JackpotSoloTester](contracts/test/JackpotSoloTester.sol#L14-L30)
 
 contracts/storage/DegenerusGameStorage.sol#L532
 
 
- - [ ] ID-2715
+ - [ ] ID-2718
 [DegenerusGameStorage.BP_MASK_8](contracts/storage/DegenerusGameStorage.sol#L2075) is never used in [DegenerusGame](contracts/DegenerusGame.sol#L87-L2624)
 
 contracts/storage/DegenerusGameStorage.sol#L2075
 
 
- - [ ] ID-2716
+ - [ ] ID-2719
 [DegenerusGameStorage._sdgnrsBonusLevel](contracts/storage/DegenerusGameStorage.sol#L2473) is never used in [DegenerusGameBoonModule](contracts/modules/DegenerusGameBoonModule.sol#L22-L343)
 
 contracts/storage/DegenerusGameStorage.sol#L2473
 
 
- - [ ] ID-2717
+ - [ ] ID-2720
 [DegenerusGameStorage.BP_COINFLIP_DAY_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2047) is never used in [DegenerusGameFoilPackModule](contracts/modules/DegenerusGameFoilPackModule.sol#L30-L815)
 
 contracts/storage/DegenerusGameStorage.sol#L2047
 
 
- - [ ] ID-2718
+ - [ ] ID-2721
 [DegenerusGameStorage.bingoClaimed](contracts/storage/DegenerusGameStorage.sol#L2039) is never used in [DegenerusGameAdvanceModule](contracts/modules/DegenerusGameAdvanceModule.sol#L30-L2107)
 
 contracts/storage/DegenerusGameStorage.sol#L2039
 
 
- - [ ] ID-2719
+ - [ ] ID-2722
 [DegenerusGameStorage.BP_DEITY_PASS_CLEAR](contracts/storage/DegenerusGameStorage.sol#L2096-L2097) is never used in [DegenerusGameMintModule](contracts/modules/DegenerusGameMintModule.sol#L74-L2136)
 
 contracts/storage/DegenerusGameStorage.sol#L2096-L2097
 
 
- - [ ] ID-2720
+ - [ ] ID-2723
 [DegenerusGameStorage.GO_TIME_MASK](contracts/storage/DegenerusGameStorage.sol#L1160) is never used in [DegenerusGameDecimatorModule](contracts/modules/DegenerusGameDecimatorModule.sol#L21-L1134)
 
 contracts/storage/DegenerusGameStorage.sol#L1160
 
 
- - [ ] ID-2721
+ - [ ] ID-2724
 [DegenerusGameStorage.lastVrfProcessedTimestamp](contracts/storage/DegenerusGameStorage.sol#L435) is never used in [GameAfkingModule](contracts/modules/GameAfkingModule.sol#L82-L1941)
 
 contracts/storage/DegenerusGameStorage.sol#L435
 
 
- - [ ] ID-2722
+ - [ ] ID-2725
 [DegenerusGameStorage.decWindowOpen](contracts/storage/DegenerusGameStorage.sol#L295) is never used in [GameAfkingModule](contracts/modules/GameAfkingModule.sol#L82-L1941)
 
 contracts/storage/DegenerusGameStorage.sol#L295
 
 
- - [ ] ID-2723
+ - [ ] ID-2726
 [DegenerusGameStorage.terminalDecBets](contracts/storage/DegenerusGameStorage.sol#L1971) is never used in [DegenerusGameBoonModule](contracts/modules/DegenerusGameBoonModule.sol#L22-L343)
 
 contracts/storage/DegenerusGameStorage.sol#L1971
 
 
- - [ ] ID-2724
+ - [ ] ID-2727
 [DegenerusGameStorage.PRESALE_BOX_ETH_CAP](contracts/storage/DegenerusGameStorage.sol#L1134) is never used in [GameAfkingModule](contracts/modules/GameAfkingModule.sol#L82-L1941)
 
 contracts/storage/DegenerusGameStorage.sol#L1134
 
 
- - [ ] ID-2725
+ - [ ] ID-2728
 [DegenerusGameStorage.PRESALE_BOX_CLOSING_FLAG](contracts/storage/DegenerusGameStorage.sol#L1106) is never used in [JackpotSoloTester](contracts/test/JackpotSoloTester.sol#L14-L30)
 
 contracts/storage/DegenerusGameStorage.sol#L1106
 
 
- - [ ] ID-2726
+ - [ ] ID-2729
 [DegenerusGameStorage.BP_MASK_24](contracts/storage/DegenerusGameStorage.sol#L2074) is never used in [DegenerusGameGameOverModule](contracts/modules/DegenerusGameGameOverModule.sol#L37-L284)
 
 contracts/storage/DegenerusGameStorage.sol#L2074
 
 
- - [ ] ID-2727
+ - [ ] ID-2730
 [DegenerusGameStorage.PS_MINT_ETH_MASK](contracts/storage/DegenerusGameStorage.sol#L1127) is never used in [DegenerusGameDecimatorModule](contracts/modules/DegenerusGameDecimatorModule.sol#L21-L1134)
 
 contracts/storage/DegenerusGameStorage.sol#L1127
 
 
- - [ ] ID-2728
+ - [ ] ID-2731
 [DegenerusGameStorage.wwxrpJackpotWhalePassBracketAwarded](contracts/storage/DegenerusGameStorage.sol#L1188) is never used in [DegenerusGameAdvanceModule](contracts/modules/DegenerusGameAdvanceModule.sol#L30-L2107)
 
 contracts/storage/DegenerusGameStorage.sol#L1188
 
 
- - [ ] ID-2729
-[DegenerusGameStorage.BP_DEITY_PASS_TIER_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2066) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1774)
+ - [ ] ID-2732
+[DegenerusGameStorage.BP_DEITY_PASS_TIER_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2066) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1779)
 
 contracts/storage/DegenerusGameStorage.sol#L2066
 
 
- - [ ] ID-2730
-[DegenerusGameStorage.deityPassPricePaid](contracts/storage/DegenerusGameStorage.sol#L1249) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1774)
+ - [ ] ID-2733
+[DegenerusGameStorage.deityPassPricePaid](contracts/storage/DegenerusGameStorage.sol#L1249) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1779)
 
 contracts/storage/DegenerusGameStorage.sol#L1249
 
 
- - [ ] ID-2731
+ - [ ] ID-2734
 [DegenerusGameStorage.rngWordCurrent](contracts/storage/DegenerusGameStorage.sol#L417) is never used in [DegenerusGameDecimatorModule](contracts/modules/DegenerusGameDecimatorModule.sol#L21-L1134)
 
 contracts/storage/DegenerusGameStorage.sol#L417
 
 
- - [ ] ID-2732
+ - [ ] ID-2735
 [DegenerusGameStorage.GO_JACKPOT_PAID_SHIFT](contracts/storage/DegenerusGameStorage.sol#L1161) is never used in [GameAfkingModule](contracts/modules/GameAfkingModule.sol#L82-L1941)
 
 contracts/storage/DegenerusGameStorage.sol#L1161
 
 
- - [ ] ID-2733
+ - [ ] ID-2736
 [DegenerusGameStorage.bingoClaimed](contracts/storage/DegenerusGameStorage.sol#L2039) is never used in [DegenerusGameWhaleModule](contracts/modules/DegenerusGameWhaleModule.sol#L20-L1026)
 
 contracts/storage/DegenerusGameStorage.sol#L2039
 
 
- - [ ] ID-2734
+ - [ ] ID-2737
 [DegenerusGameStorage.foilCursor](contracts/storage/DegenerusGameStorage.sol#L2550) is never used in [SettleClaimableShortfallTester](contracts/test/SettleClaimableShortfallTester.sol#L17-L66)
 
 contracts/storage/DegenerusGameStorage.sol#L2550
 
 
- - [ ] ID-2735
+ - [ ] ID-2738
 [DegenerusGameStorage.BP_ACTIVITY_DAY_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2064) is never used in [DegenerusGameAdvanceModule](contracts/modules/DegenerusGameAdvanceModule.sol#L30-L2107)
 
 contracts/storage/DegenerusGameStorage.sol#L2064
 
 
- - [ ] ID-2736
+ - [ ] ID-2739
 [DegenerusGameStorage.boxCursor](contracts/storage/DegenerusGameStorage.sol#L2454) is never used in [DegenerusGameFoilPackModule](contracts/modules/DegenerusGameFoilPackModule.sol#L30-L815)
 
 contracts/storage/DegenerusGameStorage.sol#L2454
 
 
- - [ ] ID-2737
+ - [ ] ID-2740
 [DegenerusGameStorage.LR_PENDING_ETH_SHIFT](contracts/storage/DegenerusGameStorage.sol#L1613) is never used in [DegenerusGameDecimatorModule](contracts/modules/DegenerusGameDecimatorModule.sol#L21-L1134)
 
 contracts/storage/DegenerusGameStorage.sol#L1613
 
 
- - [ ] ID-2738
+ - [ ] ID-2741
 [DegenerusGameStorage.GO_TIME_SHIFT](contracts/storage/DegenerusGameStorage.sol#L1159) is never used in [DegenerusGameLootboxModule](contracts/modules/DegenerusGameLootboxModule.sol#L39-L2359)
 
 contracts/storage/DegenerusGameStorage.sol#L1159
 
 
- - [ ] ID-2739
+ - [ ] ID-2742
 [DegenerusGameStorage.LR_INDEX_MASK](contracts/storage/DegenerusGameStorage.sol#L1612) is never used in [SettleClaimableShortfallTester](contracts/test/SettleClaimableShortfallTester.sol#L17-L66)
 
 contracts/storage/DegenerusGameStorage.sol#L1612
 
 
- - [ ] ID-2740
+ - [ ] ID-2743
 [DegenerusGameStorage.BP_DEITY_PASS_DAY_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2067) is never used in [DegenerusGameDecimatorModule](contracts/modules/DegenerusGameDecimatorModule.sol#L21-L1134)
 
 contracts/storage/DegenerusGameStorage.sol#L2067
 
 
- - [ ] ID-2741
+ - [ ] ID-2744
 [DegenerusGameStorage.LOOTBOX_EV_BENEFIT_CAP](contracts/storage/DegenerusGameStorage.sol#L1643-L1644) is never used in [DegenerusGame](contracts/DegenerusGame.sol#L87-L2624)
 
 contracts/storage/DegenerusGameStorage.sol#L1643-L1644
 
 
- - [ ] ID-2742
+ - [ ] ID-2745
 [DegenerusGameStorage.BOOTSTRAP_PRIZE_POOL](contracts/storage/DegenerusGameStorage.sol#L165) is never used in [JackpotSoloTester](contracts/test/JackpotSoloTester.sol#L14-L30)
 
 contracts/storage/DegenerusGameStorage.sol#L165
 
 
- - [ ] ID-2743
+ - [ ] ID-2746
 [DegenerusGameStorage.lastTerminalDecClaimRound](contracts/storage/DegenerusGameStorage.sol#L1985) is never used in [DegenerusGameBoonModule](contracts/modules/DegenerusGameBoonModule.sol#L22-L343)
 
 contracts/storage/DegenerusGameStorage.sol#L1985
 
 
- - [ ] ID-2744
+ - [ ] ID-2747
 [DegenerusGameStorage.levelPrizePool](contracts/storage/DegenerusGameStorage.sol#L1202) is never used in [DegenerusGameGameOverModule](contracts/modules/DegenerusGameGameOverModule.sol#L37-L284)
 
 contracts/storage/DegenerusGameStorage.sol#L1202
 
 
- - [ ] ID-2745
-[DegenerusGameStorage.BP_COINFLIP_CLEAR](contracts/storage/DegenerusGameStorage.sol#L2079) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1774)
+ - [ ] ID-2748
+[DegenerusGameStorage.BP_COINFLIP_CLEAR](contracts/storage/DegenerusGameStorage.sol#L2079) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1779)
 
 contracts/storage/DegenerusGameStorage.sol#L2079
 
 
- - [ ] ID-2746
+ - [ ] ID-2749
 [DegenerusGameStorage.presaleCloseIndex](contracts/storage/DegenerusGameStorage.sol#L2465) is never used in [DegenerusGameFoilPackModule](contracts/modules/DegenerusGameFoilPackModule.sol#L30-L815)
 
 contracts/storage/DegenerusGameStorage.sol#L2465
 
 
- - [ ] ID-2747
+ - [ ] ID-2750
 [DegenerusGameStorage.bingoClaimed](contracts/storage/DegenerusGameStorage.sol#L2039) is never used in [DegenerusGameBoonModule](contracts/modules/DegenerusGameBoonModule.sol#L22-L343)
 
 contracts/storage/DegenerusGameStorage.sol#L2039
 
 
- - [ ] ID-2748
+ - [ ] ID-2751
 [DegenerusGameStorage.BP_LOOTBOX_TIER_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2052) is never used in [DegenerusGameGameOverModule](contracts/modules/DegenerusGameGameOverModule.sol#L37-L284)
 
 contracts/storage/DegenerusGameStorage.sol#L2052
 
 
- - [ ] ID-2749
+ - [ ] ID-2752
 [DegenerusGameStorage.LR_PENDING_FLIP_MASK](contracts/storage/DegenerusGameStorage.sol#L1618) is never used in [GameAfkingModule](contracts/modules/GameAfkingModule.sol#L82-L1941)
 
 contracts/storage/DegenerusGameStorage.sol#L1618
 
 
- - [ ] ID-2750
+ - [ ] ID-2753
 [DegenerusGameStorage.deityRecipientBoonCount](contracts/storage/DegenerusGameStorage.sol#L2558) is never used in [DegenerusGame](contracts/DegenerusGame.sol#L87-L2624)
 
 contracts/storage/DegenerusGameStorage.sol#L2558
 
 
- - [ ] ID-2751
+ - [ ] ID-2754
 [DegenerusGameStorage.BP_DECIMATOR_TIER_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2056) is never used in [JackpotSoloTester](contracts/test/JackpotSoloTester.sol#L14-L30)
 
 contracts/storage/DegenerusGameStorage.sol#L2056
 
 
- - [ ] ID-2752
+ - [ ] ID-2755
 [DegenerusGameStorage.DEITY_PASS_ACTIVITY_BONUS_POINTS](contracts/storage/DegenerusGameStorage.sol#L137) is never used in [JackpotSoloTester](contracts/test/JackpotSoloTester.sol#L14-L30)
 
 contracts/storage/DegenerusGameStorage.sol#L137
 
 
- - [ ] ID-2753
+ - [ ] ID-2756
 [DegenerusGameStorage.BP_DEITY_LAZY_PASS_DAY_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2070) is never used in [DegenerusGameAdvanceModule](contracts/modules/DegenerusGameAdvanceModule.sol#L30-L2107)
 
 contracts/storage/DegenerusGameStorage.sol#L2070
 
 
- - [ ] ID-2754
+ - [ ] ID-2757
 [DegenerusGameStorage.ticketRedemptionOpen](contracts/storage/DegenerusGameStorage.sol#L376) is never used in [DegenerusGame](contracts/DegenerusGame.sol#L87-L2624)
 
 contracts/storage/DegenerusGameStorage.sol#L376
 
 
- - [ ] ID-2755
+ - [ ] ID-2758
 [DegenerusGameStorage.foilCursor](contracts/storage/DegenerusGameStorage.sol#L2550) is never used in [DegenerusGameBingoModule](contracts/modules/DegenerusGameBingoModule.sol#L24-L288)
 
 contracts/storage/DegenerusGameStorage.sol#L2550
 
 
- - [ ] ID-2756
+ - [ ] ID-2759
 [DegenerusGameStorage.BP_PURCHASE_CLEAR](contracts/storage/DegenerusGameStorage.sol#L2084-L2085) is never used in [DegenerusGameMintModule](contracts/modules/DegenerusGameMintModule.sol#L74-L2136)
 
 contracts/storage/DegenerusGameStorage.sol#L2084-L2085
 
 
- - [ ] ID-2757
+ - [ ] ID-2760
 [DegenerusGameStorage.PRESALE_BOX_SOLD_SHIFT](contracts/storage/DegenerusGameStorage.sol#L1108) is never used in [DegenerusGameBoonModule](contracts/modules/DegenerusGameBoonModule.sol#L22-L343)
 
 contracts/storage/DegenerusGameStorage.sol#L1108
 
 
- - [ ] ID-2758
+ - [ ] ID-2761
 [DegenerusGameStorage.coin](contracts/storage/DegenerusGameStorage.sol#L125-L126) is never used in [DegenerusGameBoonModule](contracts/modules/DegenerusGameBoonModule.sol#L22-L343)
 
 contracts/storage/DegenerusGameStorage.sol#L125-L126
 
 
- - [ ] ID-2759
+ - [ ] ID-2762
 [DegenerusGameStorage.bingoFirsts](contracts/storage/DegenerusGameStorage.sol#L2044) is never used in [DegenerusGameLootboxModule](contracts/modules/DegenerusGameLootboxModule.sol#L39-L2359)
 
 contracts/storage/DegenerusGameStorage.sol#L2044
 
 
- - [ ] ID-2760
+ - [ ] ID-2763
 [DegenerusGameStorage.dgnrs](contracts/storage/DegenerusGameStorage.sol#L133-L134) is never used in [DegenerusGameDecimatorModule](contracts/modules/DegenerusGameDecimatorModule.sol#L21-L1134)
 
 contracts/storage/DegenerusGameStorage.sol#L133-L134
 
 
- - [ ] ID-2761
+ - [ ] ID-2764
 [DegenerusGameStorage.BP_COINFLIP_DAY_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2047) is never used in [JackpotSoloTester](contracts/test/JackpotSoloTester.sol#L14-L30)
 
 contracts/storage/DegenerusGameStorage.sol#L2047
 
 
- - [ ] ID-2762
+ - [ ] ID-2765
 [DegenerusGameStorage.GO_TIME_SHIFT](contracts/storage/DegenerusGameStorage.sol#L1159) is never used in [DegenerusGameWhaleModule](contracts/modules/DegenerusGameWhaleModule.sol#L20-L1026)
 
 contracts/storage/DegenerusGameStorage.sol#L1159
 
 
- - [ ] ID-2763
+ - [ ] ID-2766
 [DegenerusGameStorage.lastVrfProcessedTimestamp](contracts/storage/DegenerusGameStorage.sol#L435) is never used in [DegenerusGameBingoModule](contracts/modules/DegenerusGameBingoModule.sol#L24-L288)
 
 contracts/storage/DegenerusGameStorage.sol#L435
 
 
- - [ ] ID-2764
+ - [ ] ID-2767
 [DegenerusGameStorage.lastTerminalDecClaimRound](contracts/storage/DegenerusGameStorage.sol#L1985) is never used in [DegenerusGameFoilPackModule](contracts/modules/DegenerusGameFoilPackModule.sol#L30-L815)
 
 contracts/storage/DegenerusGameStorage.sol#L1985
 
 
- - [ ] ID-2765
+ - [ ] ID-2768
 [DegenerusGameStorage.levelPrizePool](contracts/storage/DegenerusGameStorage.sol#L1202) is never used in [SettleClaimableShortfallTester](contracts/test/SettleClaimableShortfallTester.sol#L17-L66)
 
 contracts/storage/DegenerusGameStorage.sol#L1202
 
 
- - [ ] ID-2766
+ - [ ] ID-2769
 [DegenerusGameStorage.PRESALE_BOX_CLOSING_FLAG](contracts/storage/DegenerusGameStorage.sol#L1106) is never used in [DegenerusGameBoonModule](contracts/modules/DegenerusGameBoonModule.sol#L22-L343)
 
 contracts/storage/DegenerusGameStorage.sol#L1106
 
 
- - [ ] ID-2767
+ - [ ] ID-2770
 [DegenerusGameStorage.ticketLevel](contracts/storage/DegenerusGameStorage.sol#L535) is never used in [GameAfkingModule](contracts/modules/GameAfkingModule.sol#L82-L1941)
 
 contracts/storage/DegenerusGameStorage.sol#L535
 
 
- - [ ] ID-2768
+ - [ ] ID-2771
 [DegenerusGameStorage.BP_DEITY_LAZY_PASS_DAY_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2070) is never used in [DegenerusGameDecimatorModule](contracts/modules/DegenerusGameDecimatorModule.sol#L21-L1134)
 
 contracts/storage/DegenerusGameStorage.sol#L2070
 
 
- - [ ] ID-2769
+ - [ ] ID-2772
 [DegenerusGameStorage.LR_MID_DAY_MASK](contracts/storage/DegenerusGameStorage.sol#L1620) is never used in [DegenerusGameGameOverModule](contracts/modules/DegenerusGameGameOverModule.sol#L37-L284)
 
 contracts/storage/DegenerusGameStorage.sol#L1620
 
 
- - [ ] ID-2770
+ - [ ] ID-2773
 [DegenerusGameStorage._subscriberIndex](contracts/storage/DegenerusGameStorage.sol#L2427) is never used in [DegenerusGameGameOverModule](contracts/modules/DegenerusGameGameOverModule.sol#L37-L284)
 
 contracts/storage/DegenerusGameStorage.sol#L2427
 
 
- - [ ] ID-2771
+ - [ ] ID-2774
 [DegenerusGameStorage.affiliate](contracts/storage/DegenerusGameStorage.sol#L131-L132) is never used in [DegenerusGameLootboxModule](contracts/modules/DegenerusGameLootboxModule.sol#L39-L2359)
 
 contracts/storage/DegenerusGameStorage.sol#L131-L132
 
 
- - [ ] ID-2772
+ - [ ] ID-2775
 [DegenerusGameStorage.BP_DECIMATOR_TIER_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2056) is never used in [DegenerusGameAdvanceModule](contracts/modules/DegenerusGameAdvanceModule.sol#L30-L2107)
 
 contracts/storage/DegenerusGameStorage.sol#L2056
 
 
- - [ ] ID-2773
+ - [ ] ID-2776
 [DegenerusGameStorage.degeneretteBets](contracts/storage/DegenerusGameStorage.sol#L1785) is never used in [DegenerusGameMintModule](contracts/modules/DegenerusGameMintModule.sol#L74-L2136)
 
 contracts/storage/DegenerusGameStorage.sol#L1785
 
 
- - [ ] ID-2774
+ - [ ] ID-2777
 [DegenerusGameStorage.LR_MID_DAY_SHIFT](contracts/storage/DegenerusGameStorage.sol#L1619) is never used in [GameAfkingModule](contracts/modules/GameAfkingModule.sol#L82-L1941)
 
 contracts/storage/DegenerusGameStorage.sol#L1619
 
 
- - [ ] ID-2775
+ - [ ] ID-2778
 [DegenerusGameStorage._sdgnrsBonusLevel](contracts/storage/DegenerusGameStorage.sol#L2473) is never used in [DegenerusGameLootboxModule](contracts/modules/DegenerusGameLootboxModule.sol#L39-L2359)
 
 contracts/storage/DegenerusGameStorage.sol#L2473
 
 
- - [ ] ID-2776
-[DegenerusGameStorage.boxCursorIndex](contracts/storage/DegenerusGameStorage.sol#L2459) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1774)
+ - [ ] ID-2779
+[DegenerusGameStorage.boxCursorIndex](contracts/storage/DegenerusGameStorage.sol#L2459) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1779)
 
 contracts/storage/DegenerusGameStorage.sol#L2459
 
 
- - [ ] ID-2777
+ - [ ] ID-2780
 [DegenerusGameStorage.ACTIVITY_SCORE_HARD_CAP_POINTS](contracts/storage/DegenerusGameStorage.sol#L143) is never used in [JackpotSoloTester](contracts/test/JackpotSoloTester.sol#L14-L30)
 
 contracts/storage/DegenerusGameStorage.sol#L143
 
 
- - [ ] ID-2778
+ - [ ] ID-2781
 [DegenerusGameStorage.foilCursor](contracts/storage/DegenerusGameStorage.sol#L2550) is never used in [DegenerusGameBoonModule](contracts/modules/DegenerusGameBoonModule.sol#L22-L343)
 
 contracts/storage/DegenerusGameStorage.sol#L2550
 
 
- - [ ] ID-2779
+ - [ ] ID-2782
 [DegenerusGameStorage.presaleCloseIndex](contracts/storage/DegenerusGameStorage.sol#L2465) is never used in [JackpotSoloTester](contracts/test/JackpotSoloTester.sol#L14-L30)
 
 contracts/storage/DegenerusGameStorage.sol#L2465
 
 
- - [ ] ID-2780
-[DegenerusGameStorage.rngWordCurrent](contracts/storage/DegenerusGameStorage.sol#L417) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1774)
+ - [ ] ID-2783
+[DegenerusGameStorage.rngWordCurrent](contracts/storage/DegenerusGameStorage.sol#L417) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1779)
 
 contracts/storage/DegenerusGameStorage.sol#L417
 
 
- - [ ] ID-2781
+ - [ ] ID-2784
 [DegenerusGameStorage.DEITY_PASS_ACTIVITY_BONUS_POINTS](contracts/storage/DegenerusGameStorage.sol#L137) is never used in [SettleClaimableShortfallTester](contracts/test/SettleClaimableShortfallTester.sol#L17-L66)
 
 contracts/storage/DegenerusGameStorage.sol#L137
 
 
- - [ ] ID-2782
+ - [ ] ID-2785
 [DegenerusGameStorage.presaleBoxDgnrsPoolStart](contracts/storage/DegenerusGameStorage.sol#L1264) is never used in [SettleClaimableShortfallTester](contracts/test/SettleClaimableShortfallTester.sol#L17-L66)
 
 contracts/storage/DegenerusGameStorage.sol#L1264
 
 
- - [ ] ID-2783
+ - [ ] ID-2786
 [DegenerusGameStorage.LOOTBOX_PRESALE_ETH_CAP](contracts/storage/DegenerusGameStorage.sol#L1130) is never used in [DegenerusGameWhaleModule](contracts/modules/DegenerusGameWhaleModule.sol#L20-L1026)
 
 contracts/storage/DegenerusGameStorage.sol#L1130
 
 
- - [ ] ID-2784
-[DegenerusGameStorage.BP_DEITY_LAZY_PASS_DAY_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2070) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1774)
+ - [ ] ID-2787
+[DegenerusGameStorage.BP_DEITY_LAZY_PASS_DAY_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2070) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1779)
 
 contracts/storage/DegenerusGameStorage.sol#L2070
 
 
- - [ ] ID-2785
+ - [ ] ID-2788
 [DegenerusGameStorage.terminalDecBucketBurnTotal](contracts/storage/DegenerusGameStorage.sol#L1975) is never used in [DegenerusGameGameOverModule](contracts/modules/DegenerusGameGameOverModule.sol#L37-L284)
 
 contracts/storage/DegenerusGameStorage.sol#L1975
 
 
- - [ ] ID-2786
+ - [ ] ID-2789
 [DegenerusGameStorage.LR_THRESHOLD_MASK](contracts/storage/DegenerusGameStorage.sol#L1616) is never used in [DegenerusGameLootboxModule](contracts/modules/DegenerusGameLootboxModule.sol#L39-L2359)
 
 contracts/storage/DegenerusGameStorage.sol#L1616
 
 
- - [ ] ID-2787
+ - [ ] ID-2790
 [DegenerusGameStorage.BP_WHALE_CLEAR](contracts/storage/DegenerusGameStorage.sol#L2090) is never used in [DegenerusGame](contracts/DegenerusGame.sol#L87-L2624)
 
 contracts/storage/DegenerusGameStorage.sol#L2090
 
 
- - [ ] ID-2788
+ - [ ] ID-2791
 [DegenerusGameStorage.PRESALE_BOX_AMOUNT_MASK](contracts/storage/DegenerusGameStorage.sol#L1110) is never used in [JackpotSoloTester](contracts/test/JackpotSoloTester.sol#L14-L30)
 
 contracts/storage/DegenerusGameStorage.sol#L1110
 
 
- - [ ] ID-2789
+ - [ ] ID-2792
 [DegenerusGameStorage.BP_MASK_24](contracts/storage/DegenerusGameStorage.sol#L2074) is never used in [DegenerusGame](contracts/DegenerusGame.sol#L87-L2624)
 
 contracts/storage/DegenerusGameStorage.sol#L2074
 
 
- - [ ] ID-2790
+ - [ ] ID-2793
 [DegenerusGameStorage.BP_WHALE_DAY_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2058) is never used in [JackpotSoloTester](contracts/test/JackpotSoloTester.sol#L14-L30)
 
 contracts/storage/DegenerusGameStorage.sol#L2058
 
 
- - [ ] ID-2791
+ - [ ] ID-2794
 [DegenerusGameStorage.levelPrizePool](contracts/storage/DegenerusGameStorage.sol#L1202) is never used in [DegenerusGameLootboxModule](contracts/modules/DegenerusGameLootboxModule.sol#L39-L2359)
 
 contracts/storage/DegenerusGameStorage.sol#L1202
 
 
- - [ ] ID-2792
+ - [ ] ID-2795
 [DegenerusGameStorage.LOOTBOX_PRESALE_ETH_CAP](contracts/storage/DegenerusGameStorage.sol#L1130) is never used in [DegenerusGameGameOverModule](contracts/modules/DegenerusGameGameOverModule.sol#L37-L284)
 
 contracts/storage/DegenerusGameStorage.sol#L1130
 
 
- - [ ] ID-2793
+ - [ ] ID-2796
 [DegenerusGameStorage.FOIL_CCY_TAG](contracts/storage/DegenerusGameStorage.sol#L2593) is never used in [DegenerusGameAdvanceModule](contracts/modules/DegenerusGameAdvanceModule.sol#L30-L2107)
 
 contracts/storage/DegenerusGameStorage.sol#L2593
 
 
- - [ ] ID-2794
+ - [ ] ID-2797
 [DegenerusGameStorage.FOIL_PACK_ENTRIES](contracts/storage/DegenerusGameStorage.sol#L2566) is never used in [DegenerusGameWhaleModule](contracts/modules/DegenerusGameWhaleModule.sol#L20-L1026)
 
 contracts/storage/DegenerusGameStorage.sol#L2566
 
 
- - [ ] ID-2795
+ - [ ] ID-2798
 [DegenerusGameStorage._sdgnrsBonusLevel](contracts/storage/DegenerusGameStorage.sol#L2473) is never used in [DegenerusGameAdvanceModule](contracts/modules/DegenerusGameAdvanceModule.sol#L30-L2107)
 
 contracts/storage/DegenerusGameStorage.sol#L2473
 
 
- - [ ] ID-2796
+ - [ ] ID-2799
 [DegenerusGameStorage.FOIL_CCY_TAG](contracts/storage/DegenerusGameStorage.sol#L2593) is never used in [GameAfkingModule](contracts/modules/GameAfkingModule.sol#L82-L1941)
 
 contracts/storage/DegenerusGameStorage.sol#L2593
 
 
- - [ ] ID-2797
+ - [ ] ID-2800
 [DegenerusGameStorage.BP_COINFLIP_DAY_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2047) is never used in [DegenerusGameWhaleModule](contracts/modules/DegenerusGameWhaleModule.sol#L20-L1026)
 
 contracts/storage/DegenerusGameStorage.sol#L2047
 
 
- - [ ] ID-2798
+ - [ ] ID-2801
 [DegenerusGameStorage._afkingResetDay](contracts/storage/DegenerusGameStorage.sol#L2445) is never used in [SettleClaimableShortfallTester](contracts/test/SettleClaimableShortfallTester.sol#L17-L66)
 
 contracts/storage/DegenerusGameStorage.sol#L2445
 
 
- - [ ] ID-2799
+ - [ ] ID-2802
 [DegenerusGameStorage.LR_THRESHOLD_MASK](contracts/storage/DegenerusGameStorage.sol#L1616) is never used in [DegenerusGameGameOverModule](contracts/modules/DegenerusGameGameOverModule.sol#L37-L284)
 
 contracts/storage/DegenerusGameStorage.sol#L1616
 
 
- - [ ] ID-2800
+ - [ ] ID-2803
 [DegenerusGameStorage._subCursor](contracts/storage/DegenerusGameStorage.sol#L2434) is never used in [JackpotSoloTester](contracts/test/JackpotSoloTester.sol#L14-L30)
 
 contracts/storage/DegenerusGameStorage.sol#L2434
 
 
- - [ ] ID-2801
+ - [ ] ID-2804
 [DegenerusGameStorage.BP_PURCHASE_DAY_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2053) is never used in [DegenerusGameDecimatorModule](contracts/modules/DegenerusGameDecimatorModule.sol#L21-L1134)
 
 contracts/storage/DegenerusGameStorage.sol#L2053
 
 
- - [ ] ID-2802
+ - [ ] ID-2805
 [DegenerusGameStorage.affiliateDgnrsClaimedBy](contracts/storage/DegenerusGameStorage.sol#L1205-L1206) is never used in [GameAfkingModule](contracts/modules/GameAfkingModule.sol#L82-L1941)
 
 contracts/storage/DegenerusGameStorage.sol#L1205-L1206
 
 
- - [ ] ID-2803
+ - [ ] ID-2806
 [DegenerusGameStorage.presaleBoxEthSold](contracts/storage/DegenerusGameStorage.sol#L1088) is never used in [SettleClaimableShortfallTester](contracts/test/SettleClaimableShortfallTester.sol#L17-L66)
 
 contracts/storage/DegenerusGameStorage.sol#L1088
 
 
- - [ ] ID-2804
+ - [ ] ID-2807
 [DegenerusGameStorage.terminalDecBets](contracts/storage/DegenerusGameStorage.sol#L1971) is never used in [DegenerusGameLootboxModule](contracts/modules/DegenerusGameLootboxModule.sol#L39-L2359)
 
 contracts/storage/DegenerusGameStorage.sol#L1971
 
 
- - [ ] ID-2805
+ - [ ] ID-2808
 [DegenerusGameStorage.BP_COINFLIP_TIER_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2049) is never used in [DegenerusGameAdvanceModule](contracts/modules/DegenerusGameAdvanceModule.sol#L30-L2107)
 
 contracts/storage/DegenerusGameStorage.sol#L2049
 
 
- - [ ] ID-2806
+ - [ ] ID-2809
 [DegenerusGameStorage.PRESALE_BOX_SOLD_SHIFT](contracts/storage/DegenerusGameStorage.sol#L1108) is never used in [DegenerusGameGameOverModule](contracts/modules/DegenerusGameGameOverModule.sol#L37-L284)
 
 contracts/storage/DegenerusGameStorage.sol#L1108
 
 
- - [ ] ID-2807
+ - [ ] ID-2810
 [DegenerusGameStorage.decBucketBurnTotal](contracts/storage/DegenerusGameStorage.sol#L1895) is never used in [DegenerusGameAdvanceModule](contracts/modules/DegenerusGameAdvanceModule.sol#L30-L2107)
 
 contracts/storage/DegenerusGameStorage.sol#L1895
 
 
- - [ ] ID-2808
+ - [ ] ID-2811
 [DegenerusGameStorage.coinflip](contracts/storage/DegenerusGameStorage.sol#L127-L128) is never used in [DegenerusGameBoonModule](contracts/modules/DegenerusGameBoonModule.sol#L22-L343)
 
 contracts/storage/DegenerusGameStorage.sol#L127-L128
 
 
- - [ ] ID-2809
+ - [ ] ID-2812
 [DegenerusGameStorage.BP_LAZY_PASS_TIER_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2071) is never used in [DegenerusGameMintModule](contracts/modules/DegenerusGameMintModule.sol#L74-L2136)
 
 contracts/storage/DegenerusGameStorage.sol#L2071
 
 
- - [ ] ID-2810
+ - [ ] ID-2813
 [DegenerusGameStorage.BP_DEITY_PASS_CLEAR](contracts/storage/DegenerusGameStorage.sol#L2096-L2097) is never used in [DegenerusGameDecimatorModule](contracts/modules/DegenerusGameDecimatorModule.sol#L21-L1134)
 
 contracts/storage/DegenerusGameStorage.sol#L2096-L2097
 
 
- - [ ] ID-2811
+ - [ ] ID-2814
 [DegenerusGameStorage.dailyJackpotCoinTicketsPending](contracts/storage/DegenerusGameStorage.sol#L312) is never used in [DegenerusGameWhaleModule](contracts/modules/DegenerusGameWhaleModule.sol#L20-L1026)
 
 contracts/storage/DegenerusGameStorage.sol#L312
 
 
- - [ ] ID-2812
+ - [ ] ID-2815
 [DegenerusGameStorage.LR_PENDING_FLIP_SHIFT](contracts/storage/DegenerusGameStorage.sol#L1617) is never used in [DegenerusGameWhaleModule](contracts/modules/DegenerusGameWhaleModule.sol#L20-L1026)
 
 contracts/storage/DegenerusGameStorage.sol#L1617
 
 
- - [ ] ID-2813
+ - [ ] ID-2816
 [DegenerusGameStorage.ticketCursor](contracts/storage/DegenerusGameStorage.sol#L532) is never used in [DegenerusGameLootboxModule](contracts/modules/DegenerusGameLootboxModule.sol#L39-L2359)
 
 contracts/storage/DegenerusGameStorage.sol#L532
 
 
- - [ ] ID-2814
+ - [ ] ID-2817
 [DegenerusGameStorage.presaleDrained](contracts/storage/DegenerusGameStorage.sol#L367) is never used in [DegenerusGameBingoModule](contracts/modules/DegenerusGameBingoModule.sol#L24-L288)
 
 contracts/storage/DegenerusGameStorage.sol#L367
 
 
- - [ ] ID-2815
+ - [ ] ID-2818
 [DegenerusGameStorage.dailyJackpotCoinTicketsPending](contracts/storage/DegenerusGameStorage.sol#L312) is never used in [DegenerusGameDecimatorModule](contracts/modules/DegenerusGameDecimatorModule.sol#L21-L1134)
 
 contracts/storage/DegenerusGameStorage.sol#L312
 
 
- - [ ] ID-2816
+ - [ ] ID-2819
 [DegenerusGameStorage.BP_DEITY_DECIMATOR_DAY_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2057) is never used in [DegenerusGameDecimatorModule](contracts/modules/DegenerusGameDecimatorModule.sol#L21-L1134)
 
 contracts/storage/DegenerusGameStorage.sol#L2057
 
 
- - [ ] ID-2817
+ - [ ] ID-2820
 [DegenerusGameStorage._fundingSourceOf](contracts/storage/DegenerusGameStorage.sol#L2420) is never used in [DegenerusGameGameOverModule](contracts/modules/DegenerusGameGameOverModule.sol#L37-L284)
 
 contracts/storage/DegenerusGameStorage.sol#L2420
 
 
- - [ ] ID-2818
+ - [ ] ID-2821
 [DegenerusGameStorage.BP_DEITY_COINFLIP_DAY_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2048) is never used in [DegenerusGameAdvanceModule](contracts/modules/DegenerusGameAdvanceModule.sol#L30-L2107)
 
 contracts/storage/DegenerusGameStorage.sol#L2048
 
 
- - [ ] ID-2819
+ - [ ] ID-2822
 [DegenerusGameStorage.LR_MID_DAY_MASK](contracts/storage/DegenerusGameStorage.sol#L1620) is never used in [DegenerusGameWhaleModule](contracts/modules/DegenerusGameWhaleModule.sol#L20-L1026)
 
 contracts/storage/DegenerusGameStorage.sol#L1620
 
 
- - [ ] ID-2820
+ - [ ] ID-2823
 [DegenerusGameStorage._subscriberIndex](contracts/storage/DegenerusGameStorage.sol#L2427) is never used in [DegenerusGameDecimatorModule](contracts/modules/DegenerusGameDecimatorModule.sol#L21-L1134)
 
 contracts/storage/DegenerusGameStorage.sol#L2427
 
 
- - [ ] ID-2821
+ - [ ] ID-2824
 [DegenerusGameStorage.LOOTBOX_CLAIM_THRESHOLD](contracts/storage/DegenerusGameStorage.sol#L161) is never used in [DegenerusGameMintModule](contracts/modules/DegenerusGameMintModule.sol#L74-L2136)
 
 contracts/storage/DegenerusGameStorage.sol#L161
 
 
- - [ ] ID-2822
+ - [ ] ID-2825
 [DegenerusGameStorage.BP_DEITY_WHALE_DAY_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2059) is never used in [DegenerusGameDecimatorModule](contracts/modules/DegenerusGameDecimatorModule.sol#L21-L1134)
 
 contracts/storage/DegenerusGameStorage.sol#L2059
 
 
- - [ ] ID-2823
+ - [ ] ID-2826
 [DegenerusGameStorage.BP_DEITY_PASS_TIER_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2066) is never used in [SettleClaimableShortfallTester](contracts/test/SettleClaimableShortfallTester.sol#L17-L66)
 
 contracts/storage/DegenerusGameStorage.sol#L2066
 
 
- - [ ] ID-2824
-[DegenerusGameStorage.PRESALE_BOX_CLOSING_FLAG](contracts/storage/DegenerusGameStorage.sol#L1106) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1774)
+ - [ ] ID-2827
+[DegenerusGameStorage.PRESALE_BOX_CLOSING_FLAG](contracts/storage/DegenerusGameStorage.sol#L1106) is never used in [DegenerusGameDegeneretteModule](contracts/modules/DegenerusGameDegeneretteModule.sol#L42-L1779)
 
 contracts/storage/DegenerusGameStorage.sol#L1106
 
 
- - [ ] ID-2825
+ - [ ] ID-2828
 [DegenerusGameStorage.decBurn](contracts/storage/DegenerusGameStorage.sol#L1890) is never used in [DegenerusGameAdvanceModule](contracts/modules/DegenerusGameAdvanceModule.sol#L30-L2107)
 
 contracts/storage/DegenerusGameStorage.sol#L1890
 
 
- - [ ] ID-2826
+ - [ ] ID-2829
 [DegenerusGameStorage.PASS_STREAK_FLOOR_POINTS](contracts/storage/DegenerusGameStorage.sol#L146) is never used in [JackpotSoloTester](contracts/test/JackpotSoloTester.sol#L14-L30)
 
 contracts/storage/DegenerusGameStorage.sol#L146
 
 
- - [ ] ID-2827
+ - [ ] ID-2830
 [DegenerusGameStorage.lastTerminalDecClaimRound](contracts/storage/DegenerusGameStorage.sol#L1985) is never used in [JackpotSoloTester](contracts/test/JackpotSoloTester.sol#L14-L30)
 
 contracts/storage/DegenerusGameStorage.sol#L1985
 
 
- - [ ] ID-2828
+ - [ ] ID-2831
 [DegenerusGameStorage.BP_COINFLIP_DAY_SHIFT](contracts/storage/DegenerusGameStorage.sol#L2047) is never used in [DegenerusGameGameOverModule](contracts/modules/DegenerusGameGameOverModule.sol#L37-L284)
 
 contracts/storage/DegenerusGameStorage.sol#L2047
@@ -24383,259 +24422,259 @@ contracts/storage/DegenerusGameStorage.sol#L2047
 ## constable-states
 Impact: Optimization
 Confidence: High
- - [ ] ID-2829
+ - [ ] ID-2832
 [DegenerusGameStorage.rngRequestTime](contracts/storage/DegenerusGameStorage.sol#L261) should be constant 
 
 contracts/storage/DegenerusGameStorage.sol#L261
 
 
- - [ ] ID-2830
+ - [ ] ID-2833
 [DegenerusGameStorage.lastPurchaseDay](contracts/storage/DegenerusGameStorage.sol#L290) should be constant 
 
 contracts/storage/DegenerusGameStorage.sol#L290
 
 
- - [ ] ID-2831
+ - [ ] ID-2834
 [DegenerusGameStorage.dailyJackpotCoinTicketsPending](contracts/storage/DegenerusGameStorage.sol#L312) should be constant 
 
 contracts/storage/DegenerusGameStorage.sol#L312
 
 
- - [ ] ID-2832
+ - [ ] ID-2835
 [DegenerusGameStorage.purchaseStartDay](contracts/storage/DegenerusGameStorage.sol#L245) should be constant 
 
 contracts/storage/DegenerusGameStorage.sol#L245
 
 
- - [ ] ID-2833
+ - [ ] ID-2836
 [DegenerusGameStorage.foilLastResolveDay](contracts/storage/DegenerusGameStorage.sol#L2552) should be constant 
 
 contracts/storage/DegenerusGameStorage.sol#L2552
 
 
- - [ ] ID-2834
+ - [ ] ID-2837
 [DegenerusGameStorage.dailyTicketBudgetsPacked](contracts/storage/DegenerusGameStorage.sol#L442) should be constant 
 
 contracts/storage/DegenerusGameStorage.sol#L442
 
 
- - [ ] ID-2835
+ - [ ] ID-2838
 [DegenerusGameStorage.presaleDrained](contracts/storage/DegenerusGameStorage.sol#L367) should be constant 
 
 contracts/storage/DegenerusGameStorage.sol#L367
 
 
- - [ ] ID-2836
+ - [ ] ID-2839
 [DegenerusGameStorage.ticketCursor](contracts/storage/DegenerusGameStorage.sol#L532) should be constant 
 
 contracts/storage/DegenerusGameStorage.sol#L532
 
 
- - [ ] ID-2837
+ - [ ] ID-2840
 [DegenerusGameStorage.yieldAccumulator](contracts/storage/DegenerusGameStorage.sol#L1925) should be constant 
 
 contracts/storage/DegenerusGameStorage.sol#L1925
 
 
- - [ ] ID-2838
+ - [ ] ID-2841
 [DegenerusGameStorage.vrfCoordinator](contracts/storage/DegenerusGameStorage.sol#L1582) should be constant 
 
 contracts/storage/DegenerusGameStorage.sol#L1582
 
 
- - [ ] ID-2839
+ - [ ] ID-2842
 [DegenerusGameStorage.level](contracts/storage/DegenerusGameStorage.sol#L267) should be constant 
 
 contracts/storage/DegenerusGameStorage.sol#L267
 
 
- - [ ] ID-2840
+ - [ ] ID-2843
 [DegenerusGameStorage.totalFlipReversals](contracts/storage/DegenerusGameStorage.sol#L429) should be constant 
 
 contracts/storage/DegenerusGameStorage.sol#L429
 
 
- - [ ] ID-2841
+ - [ ] ID-2844
 [DegenerusGameStorage.gameOver](contracts/storage/DegenerusGameStorage.sol#L307) should be constant 
 
 contracts/storage/DegenerusGameStorage.sol#L307
 
 
- - [ ] ID-2842
+ - [ ] ID-2845
 [DegenerusGameStorage.presaleCloseIndex](contracts/storage/DegenerusGameStorage.sol#L2465) should be constant 
 
 contracts/storage/DegenerusGameStorage.sol#L2465
 
 
- - [ ] ID-2843
+ - [ ] ID-2846
 [DegenerusGameStorage.compressedJackpotFlag](contracts/storage/DegenerusGameStorage.sol#L319) should be constant 
 
 contracts/storage/DegenerusGameStorage.sol#L319
 
 
- - [ ] ID-2844
+ - [ ] ID-2847
 [DegenerusGameStorage.vrfRequestId](contracts/storage/DegenerusGameStorage.sol#L423) should be constant 
 
 contracts/storage/DegenerusGameStorage.sol#L423
 
 
- - [ ] ID-2845
+ - [ ] ID-2848
 [DegenerusGameStorage.decWindowOpen](contracts/storage/DegenerusGameStorage.sol#L295) should be constant 
 
 contracts/storage/DegenerusGameStorage.sol#L295
 
 
- - [ ] ID-2846
+ - [ ] ID-2849
 [DegenerusGameStorage.vrfKeyHash](contracts/storage/DegenerusGameStorage.sol#L1586) should be constant 
 
 contracts/storage/DegenerusGameStorage.sol#L1586
 
 
- - [ ] ID-2847
+ - [ ] ID-2850
 [DegenerusGameStorage.subsFullyProcessed](contracts/storage/DegenerusGameStorage.sol#L358) should be constant 
 
 contracts/storage/DegenerusGameStorage.sol#L358
 
 
- - [ ] ID-2848
+ - [ ] ID-2851
 [DegenerusGameStorage.presaleOver](contracts/storage/DegenerusGameStorage.sol#L348) should be constant 
 
 contracts/storage/DegenerusGameStorage.sol#L348
 
 
- - [ ] ID-2849
+ - [ ] ID-2852
 [DegenerusGameStorage.presaleBoxDgnrsPoolStart](contracts/storage/DegenerusGameStorage.sol#L1264) should be constant 
 
 contracts/storage/DegenerusGameStorage.sol#L1264
 
 
- - [ ] ID-2850
+ - [ ] ID-2853
 [DegenerusGameStorage._sdgnrsBonusLevel](contracts/storage/DegenerusGameStorage.sol#L2473) should be constant 
 
 contracts/storage/DegenerusGameStorage.sol#L2473
 
 
- - [ ] ID-2851
+ - [ ] ID-2854
 [DegenerusGameStorage.boxCursorIndex](contracts/storage/DegenerusGameStorage.sol#L2459) should be constant 
 
 contracts/storage/DegenerusGameStorage.sol#L2459
 
 
- - [ ] ID-2852
+ - [ ] ID-2855
 [DegenerusGameStorage.vrfSubscriptionId](contracts/storage/DegenerusGameStorage.sol#L1590) should be constant 
 
 contracts/storage/DegenerusGameStorage.sol#L1590
 
 
- - [ ] ID-2853
+ - [ ] ID-2856
 [DegenerusGameStorage.rngLockedFlag](contracts/storage/DegenerusGameStorage.sol#L301) should be constant 
 
 contracts/storage/DegenerusGameStorage.sol#L301
 
 
- - [ ] ID-2854
+ - [ ] ID-2857
 [DegenerusGameStorage.jackpotCounter](contracts/storage/DegenerusGameStorage.sol#L285) should be constant 
 
 contracts/storage/DegenerusGameStorage.sol#L285
 
 
- - [ ] ID-2855
+ - [ ] ID-2858
 [DegenerusGameStorage.dailyIdx](contracts/storage/DegenerusGameStorage.sol#L253) should be constant 
 
 contracts/storage/DegenerusGameStorage.sol#L253
 
 
- - [ ] ID-2856
+ - [ ] ID-2859
 [DegenerusGameStorage._afkingResetDay](contracts/storage/DegenerusGameStorage.sol#L2445) should be constant 
 
 contracts/storage/DegenerusGameStorage.sol#L2445
 
 
- - [ ] ID-2857
+ - [ ] ID-2860
 [DegenerusGameStorage.phaseTransitionActive](contracts/storage/DegenerusGameStorage.sol#L304) should be constant 
 
 contracts/storage/DegenerusGameStorage.sol#L304
 
 
- - [ ] ID-2858
+ - [ ] ID-2861
 [DegenerusGameStorage.rngWordCurrent](contracts/storage/DegenerusGameStorage.sol#L417) should be constant 
 
 contracts/storage/DegenerusGameStorage.sol#L417
 
 
- - [ ] ID-2859
+ - [ ] ID-2862
 [DegenerusGameStorage.ticketsFullyProcessed](contracts/storage/DegenerusGameStorage.sol#L326) should be constant 
 
 contracts/storage/DegenerusGameStorage.sol#L326
 
 
- - [ ] ID-2860
+ - [ ] ID-2863
 [DegenerusGameStorage.boxCursor](contracts/storage/DegenerusGameStorage.sol#L2454) should be constant 
 
 contracts/storage/DegenerusGameStorage.sol#L2454
 
 
- - [ ] ID-2861
+ - [ ] ID-2864
 [DegenerusGameStorage._subOpenCursor](contracts/storage/DegenerusGameStorage.sol#L2438) should be constant 
 
 contracts/storage/DegenerusGameStorage.sol#L2438
 
 
- - [ ] ID-2862
+ - [ ] ID-2865
 [DegenerusGameStorage.lastVrfProcessedTimestamp](contracts/storage/DegenerusGameStorage.sol#L435) should be constant 
 
 contracts/storage/DegenerusGameStorage.sol#L435
 
 
- - [ ] ID-2863
+ - [ ] ID-2866
 [DegenerusGameStorage.foilCursor](contracts/storage/DegenerusGameStorage.sol#L2550) should be constant 
 
 contracts/storage/DegenerusGameStorage.sol#L2550
 
 
- - [ ] ID-2864
+ - [ ] ID-2867
 [DegenerusGameStorage.ticketWriteSlot](contracts/storage/DegenerusGameStorage.sol#L335) should be constant 
 
 contracts/storage/DegenerusGameStorage.sol#L335
 
 
- - [ ] ID-2865
+ - [ ] ID-2868
 [DegenerusGameStorage.ticketLevel](contracts/storage/DegenerusGameStorage.sol#L535) should be constant 
 
 contracts/storage/DegenerusGameStorage.sol#L535
 
 
- - [ ] ID-2866
+ - [ ] ID-2869
 [DegenerusGameStorage.foilDrainDay](contracts/storage/DegenerusGameStorage.sol#L2551) should be constant 
 
 contracts/storage/DegenerusGameStorage.sol#L2551
 
 
- - [ ] ID-2867
+ - [ ] ID-2870
 [DegenerusGameStorage.prizePoolFrozen](contracts/storage/DegenerusGameStorage.sol#L342) should be constant 
 
 contracts/storage/DegenerusGameStorage.sol#L342
 
 
- - [ ] ID-2868
+ - [ ] ID-2871
 [DegenerusGameStorage._subCursor](contracts/storage/DegenerusGameStorage.sol#L2434) should be constant 
 
 contracts/storage/DegenerusGameStorage.sol#L2434
 
 
- - [ ] ID-2869
+ - [ ] ID-2872
 [DegenerusGameStorage.presaleBoxEthSold](contracts/storage/DegenerusGameStorage.sol#L1088) should be constant 
 
 contracts/storage/DegenerusGameStorage.sol#L1088
 
 
- - [ ] ID-2870
+ - [ ] ID-2873
 [DegenerusGameStorage.ticketRedemptionOpen](contracts/storage/DegenerusGameStorage.sol#L376) should be constant 
 
 contracts/storage/DegenerusGameStorage.sol#L376
 
 
- - [ ] ID-2871
+ - [ ] ID-2874
 [DegenerusGameStorage.jackpotPhaseFlag](contracts/storage/DegenerusGameStorage.sol#L274) should be constant 
 
 contracts/storage/DegenerusGameStorage.sol#L274
@@ -24644,13 +24683,13 @@ contracts/storage/DegenerusGameStorage.sol#L274
 ## immutable-states
 Impact: Optimization
 Confidence: High
- - [ ] ID-2872
+ - [ ] ID-2875
 [DegenerusGameStorage.dailyIdx](contracts/storage/DegenerusGameStorage.sol#L253) should be immutable 
 
 contracts/storage/DegenerusGameStorage.sol#L253
 
 
- - [ ] ID-2873
+ - [ ] ID-2876
 [DegenerusGameStorage.purchaseStartDay](contracts/storage/DegenerusGameStorage.sol#L245) should be immutable 
 
 contracts/storage/DegenerusGameStorage.sol#L245

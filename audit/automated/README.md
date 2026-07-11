@@ -1,6 +1,6 @@
 # Automated analysis — bot-race baseline
 
-**Subject:** `contracts/` tree `f79fda85` @ tag `degenerus-c4a`. Run 2026-07-10.
+**Subject:** `contracts/` tree `d6abb363` @ tag `degenerus-c4a`. Run 2026-07-11.
 
 These are the pre-run static-analysis findings. Per [`KNOWN-ISSUES.md`](../../KNOWN-ISSUES.md) §7,
 any finding whose category + mechanism is captured here is a publicly-known issue and is **not
@@ -16,15 +16,15 @@ category-level dispositions (why each is by-design / defended / not-applicable) 
 
 (4naly3er was not run; Aderyn serves as the second independent static analyzer.)
 
-## Slither — 2,874 results, 101 detectors, 125 contracts
+## Slither — 2,877 results, 101 detectors, 125 contracts
 
-By impact: **Informational 1,966 · Medium 387 · Low 337 · High 139 · Optimization 45**.
+By impact: **Informational 1,966 · Medium 387 · Low 340 · High 139 · Optimization 45**.
 
 | Detector | Count | Detector | Count |
 |----------|------:|----------|------:|
 | unused-state | 1614 | too-many-digits | 29 |
 | uninitialized-local | 156 | missing-zero-check | 10 |
-| reentrancy-events | 138 | weak-prng | 9 |
+| reentrancy-events | 140 | weak-prng | 9 |
 | uninitialized-state | 109 | shadowing-local | 9 |
 | calls-loop | 91 | reentrancy-balance | 6 |
 | low-level-calls | 86 | delegatecall-loop | 5 |
@@ -32,7 +32,7 @@ By impact: **Informational 1,966 · Medium 387 · Low 337 · High 139 · Optimiz
 | divide-before-multiply | 73 | locked-ether | 3 |
 | costly-loop | 67 | shadowing-state | 2 |
 | naming-convention | 62 | reentrancy-eth | 2 |
-| reentrancy-benign | 49 | redundant-statements | 2 |
+| reentrancy-benign | 50 | redundant-statements | 2 |
 | constable-states | 43 | incorrect-exp | 2 |
 | missing-inheritance | 42 | immutable-states | 2 |
 | timestamp | 39 | solc-version | 1 |
