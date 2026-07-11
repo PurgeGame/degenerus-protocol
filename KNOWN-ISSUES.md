@@ -4,7 +4,7 @@ Pre-disclosure for audit wardens. **If a finding's mechanism + impact is describ
 already known and is not eligible.** This is a precise perimeter — each entry names the exact
 mechanism and why it is by-design, defended, or out-of-scope. There are no vague blanket disclaimers.
 
-Frozen subject: `contracts/` tree `49b36da3` @ tag `degenerus-c4a`. Pre-scanned with Slither v0.11.5
+Frozen subject: `contracts/` tree `f79fda85` @ tag `degenerus-c4a`. Pre-scanned with Slither v0.11.5
 + Aderyn 0.6.8; those findings are triaged in the automated-tools section below.
 
 ---
@@ -91,7 +91,7 @@ transaction (a coin credit, not ETH-backed value). Immaterial; documented, not e
 ## 5. Automated tool findings (pre-disclosed)
 
 The full machine-readable baseline for the frozen tree is committed in `audit/automated/` — Slither
-0.11.5 (2,551 results / 101 detectors; the 136 "High" are dominated by `uninitialized-state` false
+0.11.5 (2,874 results / 101 detectors; the 139 "High" are dominated by `uninitialized-state` false
 positives from the shared-storage delegatecall architecture) + Aderyn 0.6.8 (9 High / 22 Low), each
 category mapped to its disposition there. The notes below are the standing per-category triage.
 

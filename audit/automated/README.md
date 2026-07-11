@@ -1,6 +1,6 @@
 # Automated analysis — bot-race baseline
 
-**Subject:** `contracts/` tree `49b36da3` @ tag `degenerus-c4a`. Run 2026-07-10.
+**Subject:** `contracts/` tree `f79fda85` @ tag `degenerus-c4a`. Run 2026-07-10.
 
 These are the pre-run static-analysis findings. Per [`KNOWN-ISSUES.md`](../../KNOWN-ISSUES.md) §7,
 any finding whose category + mechanism is captured here is a publicly-known issue and is **not
@@ -16,30 +16,32 @@ category-level dispositions (why each is by-design / defended / not-applicable) 
 
 (4naly3er was not run; Aderyn serves as the second independent static analyzer.)
 
-## Slither — 2,551 results, 101 detectors, 125 contracts
+## Slither — 2,874 results, 101 detectors, 125 contracts
 
-By impact: **Informational 1,661 · Medium 376 · Low 333 · High 136 · Optimization 45**.
+By impact: **Informational 1,966 · Medium 387 · Low 337 · High 139 · Optimization 45**.
 
 | Detector | Count | Detector | Count |
 |----------|------:|----------|------:|
-| unused-state | 1343 | reentrancy-benign | 49 |
-| uninitialized-local | 156 | constable-states | 43 |
-| reentrancy-events | 138 | timestamp | 39 |
-| uninitialized-state | 109 | unused-return | 38 |
-| calls-loop | 91 | missing-inheritance | 36 |
-| reentrancy-no-eth | 81 | incorrect-equality | 35 |
-| low-level-calls | 81 | cyclomatic-complexity | 32 |
-| costly-loop | 67 | too-many-digits | 28 |
-| divide-before-multiply | 63 | assembly | 14 |
-| naming-convention | 60 | weak-prng | 9 |
-| shadowing-local | 9 | reentrancy-balance | 6 |
-| missing-zero-check | 6 | delegatecall-loop | 5 |
-| arbitrary-send-eth | 2 | reentrancy-eth | 2 |
-| shadowing-state | 2 | locked-ether | 2 |
-| immutable-states | 2 | incorrect-exp | 1 |
-| boolean-cst | 1 | events-maths | 1 |
+| unused-state | 1614 | too-many-digits | 29 |
+| uninitialized-local | 156 | missing-zero-check | 10 |
+| reentrancy-events | 138 | weak-prng | 9 |
+| uninitialized-state | 109 | shadowing-local | 9 |
+| calls-loop | 91 | reentrancy-balance | 6 |
+| low-level-calls | 86 | delegatecall-loop | 5 |
+| reentrancy-no-eth | 81 | arbitrary-send-eth | 4 |
+| divide-before-multiply | 73 | locked-ether | 3 |
+| costly-loop | 67 | shadowing-state | 2 |
+| naming-convention | 62 | reentrancy-eth | 2 |
+| reentrancy-benign | 49 | redundant-statements | 2 |
+| constable-states | 43 | incorrect-exp | 2 |
+| missing-inheritance | 42 | immutable-states | 2 |
+| timestamp | 39 | solc-version | 1 |
+| unused-return | 38 | pragma | 1 |
+| incorrect-equality | 35 | events-maths | 1 |
+| cyclomatic-complexity | 32 | boolean-cst | 1 |
+| assembly | 30 |  |  |
 
-### On the 136 "High"-impact results
+### On the 139 "High"-impact results
 
 Dominated by **`uninitialized-state` (109)** — a false-positive class for this architecture: the 12
 game modules share `DegenerusGameStorage` via `delegatecall`, so Slither reads the router's storage
@@ -49,14 +51,14 @@ detectors — all pre-triaged in KNOWN-ISSUES §7:
 - **weak-prng (9)** — entropy derivations that consume VRF words. By-design: VRF V2.5 is the sole
   randomness source and every RNG input is committed *before* the VRF request (see the RNG-freeze
   invariants). Not player/proposer-manipulable on a live coordinator.
-- **arbitrary-send-eth (2)** — `_payoutWith*Fallback` / `_payEth` send to access-controlled
+- **arbitrary-send-eth (4)** — `_payoutWith*Fallback` / `_payEth` send to access-controlled
   recipients (`msg.sender` or player addresses read from game state).
 - **reentrancy-eth (2) / reentrancy-balance (6)** — CEI is followed; recipients are player addresses
   (self-grief only) or known protocol contracts with minimal `receive()` (`steth.transfer`,
   `dgnrs.transferFromPool`).
 - **shadowing-state (2)** — the per-module `JACKPOT_LEVEL_CAP` constants intentionally mirror the same
   literal declared on the shared `DegenerusGameMintStreakUtils` base; identical value, no divergence.
-- **incorrect-exp (1) / delegatecall-loop (5)** — the `^`-vs-`**` scan and the module-dispatch loop
+- **incorrect-exp (2) / delegatecall-loop (5)** — the `^`-vs-`**` scan and the module-dispatch loop
   pattern; reviewed, no exponentiation bug and delegatecall targets are compile-time constants.
 
 ## Aderyn — 9 High, 22 Low
