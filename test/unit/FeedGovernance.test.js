@@ -579,6 +579,47 @@ describe("Feed Governance", function () {
       expect(execEvents.length).to.equal(1);
       expect(await admin.linkEthPriceFeed()).to.equal(await feed2.getAddress());
     });
+
+    it("pre-swap live survivor cannot overwrite the feed after an unhealthy install (epoch cutoff)", async function () {
+      const { admin, sdgnrs, game, deployer, bob } = await loadFixture(deployFullProtocol);
+      const feed1 = await deployNewFeed();
+      const feed2 = await deployNewFeed();
+      const feed1Addr = await feed1.getAddress();
+      const feed2Addr = await feed2.getAddress();
+
+      // Feed starts as zero (infinite stall) → both paths can propose immediately.
+      // Give deployer (Admin path) and bob (Community path) 50% of voting supply EACH, so each
+      // proposal is independently execute-capable at the 50% threshold. This makes the block on the
+      // survivor meaningful: bob's proposal has enough weight to execute — only the cutoff stops it.
+      await grantSdgnrs(sdgnrs, game, deployer.address, eth("1000"));
+      await grantSdgnrs(sdgnrs, game, bob.address, eth("1000"));
+
+      // Two LIVE proposals coexist: A (admin, id 1) and B (community, id 2).
+      await admin.connect(deployer).proposeFeedSwap(feed1Addr); // id 1
+      await admin.connect(bob).proposeFeedSwap(feed2Addr); // id 2
+
+      // A executes and installs feed1 (healthy). The epoch cutoff advances past every existing id.
+      await admin.connect(deployer).voteFeedSwap(1, true);
+      expect(await admin.linkEthPriceFeed()).to.equal(feed1Addr);
+
+      // feed1 later goes unhealthy → the feed-health gate reopens.
+      await makeFeedStale(feed1, 3 * DAY);
+      await hre.ethers.provider.send("evm_mine");
+
+      // The pre-swap survivor B (id 2, below the cutoff) can NEVER execute or overwrite, even though
+      // the feed is unhealthy and B holds execute-capable approval weight.
+      expect(await admin.canExecuteFeedSwap(2)).to.equal(false);
+      await expect(
+        admin.connect(bob).voteFeedSwap(2, true)
+      ).to.be.revertedWithCustomError(admin, "ProposalNotActive");
+      expect(await admin.linkEthPriceFeed()).to.equal(feed1Addr); // not overwritten to feed2
+
+      // Governance is NOT bricked: a FRESH proposal (id >= cutoff) still executes against the
+      // now-unhealthy feed. The proposer's old slot (superseded) no longer blocks re-proposal.
+      await admin.connect(deployer).proposeFeedSwap(feed2Addr); // id 3
+      await admin.connect(deployer).voteFeedSwap(3, true);
+      expect(await admin.linkEthPriceFeed()).to.equal(feed2Addr);
+    });
   });
 
   // =========================================================================

@@ -58,7 +58,7 @@
   {
     "bytes": "32",
     "encoding": "inplace",
-    "label": "voidedUpTo",
+    "label": "validFromId",
     "offset": 0,
     "slot": 7,
     "typeLabel": "uint256"
@@ -98,7 +98,7 @@
   {
     "bytes": "32",
     "encoding": "inplace",
-    "label": "feedVoidedUpTo",
+    "label": "feedValidFromId",
     "offset": 0,
     "slot": 12,
     "typeLabel": "uint256"

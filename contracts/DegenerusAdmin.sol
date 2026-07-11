@@ -338,9 +338,10 @@ contract DegenerusAdmin {
     /// @notice Tracks each address's current active proposal ID (0 = none).
     mapping(address => uint256) public activeProposalId;
 
-    /// @dev Proposal ID up to which all proposals are guaranteed non-Active.
-    ///      _voidAllActive starts scanning from this index instead of 1.
-    uint256 private voidedUpTo;
+    /// @dev Epoch cutoff: proposals with id < validFromId were superseded by an executed swap and can
+    ///      no longer vote or execute (they keep state == Active in storage). Advanced to
+    ///      proposalCount + 1 on every execution, invalidating all prior competitors in O(1).
+    uint256 private validFromId;
 
     // =========================================================================
     // FEED GOVERNANCE STATE
@@ -383,8 +384,10 @@ contract DegenerusAdmin {
     /// @notice Tracks each address's current active feed proposal ID (0 = none).
     mapping(address => uint256) public activeFeedProposalId;
 
-    /// @dev Feed proposal ID up to which all proposals are guaranteed non-Active.
-    uint256 private feedVoidedUpTo;
+    /// @dev Epoch cutoff: feed proposals with id < feedValidFromId were superseded by an executed
+    ///      swap and can no longer vote or execute (they keep state == Active in storage). Advanced to
+    ///      feedProposalCount + 1 on every execution, invalidating all prior competitors in O(1).
+    uint256 private feedValidFromId;
 
     // Feed governance events
     event FeedProposalCreated(
@@ -443,11 +446,6 @@ contract DegenerusAdmin {
 
     /// @dev Minimum sDGNRS stake to propose via community path (0.5% = 50 bps).
     uint256 private constant COMMUNITY_PROPOSE_BPS = 50;
-
-    /// @dev Max feed proposals voided per execution. Expired proposals keep state == Active until
-    ///      voided, so an accumulated history could otherwise make the void loop exceed the block gas
-    ///      limit and strand the feed swap; batching bounds the loop and voids the rest on later calls.
-    uint256 private constant FEED_VOID_BATCH = 256;
 
     /// @dev Proposal lifetime before expiry (168 hours = 7 days).
     uint256 private constant PROPOSAL_LIFETIME = 168 hours;
@@ -558,11 +556,12 @@ contract DegenerusAdmin {
         // Active-proposal limit. The Admin path is capped to ONE active proposal GLOBALLY, keyed on a
         // fixed sentinel (the vault address, which never proposes for itself): vault ownership is a
         // single >50.1% DGVE position, so shuttling that majority stake through fresh addresses cannot
-        // mint multiple simultaneous admin proposals for the void loop to iterate. The Community path
-        // keeps its own per-address slot.
+        // mint multiple simultaneous admin proposals. The Community path keeps its own per-address
+        // slot. A slot pointing at a superseded proposal (id < feedValidFromId) no longer blocks: the
+        // proposer may file afresh against the current feed state.
         address limitKey = path == ProposalPath.Admin ? address(vault) : msg.sender;
         uint256 existing = activeFeedProposalId[limitKey];
-        if (existing != 0) {
+        if (existing >= feedValidFromId && existing != 0) {
             FeedProposal storage ep = feedProposals[existing];
             if (_isActiveProposal(ep.state, ep.createdAt, FEED_PROPOSAL_LIFETIME)) {
                 revert AlreadyHasActiveProposal();
@@ -598,6 +597,9 @@ contract DegenerusAdmin {
 
         FeedProposal storage p = feedProposals[proposalId];
         uint40 createdAt = p.createdAt;
+        // A prior executed swap advances feedValidFromId, invalidating every earlier proposal in O(1);
+        // such superseded proposals keep state == Active but can no longer vote or execute.
+        if (proposalId < feedValidFromId) revert ProposalNotActive();
         _requireActiveProposal(p.state, createdAt, FEED_PROPOSAL_LIFETIME);
 
         // Record vote only if caller has sDGNRS; otherwise skip to threshold checks (poke)
@@ -650,6 +652,7 @@ contract DegenerusAdmin {
     function canExecuteFeedSwap(uint256 proposalId) external view returns (bool) {
         FeedProposal storage p = feedProposals[proposalId];
         uint40 createdAt = p.createdAt;
+        if (proposalId < feedValidFromId) return false;
         if (!_isActiveProposal(p.state, createdAt, FEED_PROPOSAL_LIFETIME)) return false;
         if (_feedHealthy(linkEthPriceFeed)) return false;
 
@@ -658,34 +661,20 @@ contract DegenerusAdmin {
         ) == Resolution.Execute;
     }
 
-    /// @dev Execute feed swap and void other active feed proposals (bounded per call).
+    /// @dev Execute feed swap and invalidate every competing proposal in O(1).
     function _executeFeedSwap(uint256 proposalId) internal {
         FeedProposal storage p = feedProposals[proposalId];
         p.state = ProposalState.Executed;
 
-        // Void other active feed proposals in bounded batches so a feed swap can never be
-        // gas-stranded by a large accumulated proposal history (expired proposals keep
-        // state == Active until voided). Each execution voids up to FEED_VOID_BATCH and advances
-        // the watermark by that many; the rest are voided by later executions. Un-voided competing
-        // proposals cannot execute meanwhile — vote/canExecute gate on feed health (healthy after
-        // this swap) and the 7-day lifetime — so partial voiding is safe. The bound never reads
-        // past feedProposalCount, whose uncreated slots default to state == Active.
-        uint256 start = feedVoidedUpTo + 1;
-        uint256 count = feedProposalCount;
-        if (start <= count) {
-            uint256 end = count - start >= FEED_VOID_BATCH
-                ? start + FEED_VOID_BATCH - 1
-                : count;
-            for (uint256 i = start; i <= end; i++) {
-                if (i == proposalId) continue;
-                FeedProposal storage q = feedProposals[i];
-                if (q.state == ProposalState.Active) {
-                    q.state = ProposalState.Killed;
-                    emit FeedProposalKilled(i);
-                }
-            }
-            feedVoidedUpTo = end;
-        }
+        // Invalidate all competing proposals by advancing the epoch cutoff past every existing ID.
+        // Proposals with id < feedValidFromId keep state == Active but can no longer vote or execute
+        // (voteFeedSwap / canExecuteFeedSwap / the propose active-slot check all gate on the cutoff),
+        // and the freed proposer can re-propose. This is O(1) and independent of history size, so a
+        // large accumulated proposal backlog can never gas-strand a feed swap. It also holds
+        // unconditionally — even when this swap installs address(0) or an unhealthy feed that leaves
+        // the health gate open — so a pre-swap survivor can never overwrite the selection; any
+        // post-swap change requires a fresh proposal (id >= cutoff) against the new feed state.
+        feedValidFromId = feedProposalCount + 1;
 
         address oldFeed = linkEthPriceFeed;
         linkEthPriceFeed = p.feed;
@@ -725,9 +714,10 @@ contract DegenerusAdmin {
         if (newCoordinator == address(0) || newKeyHash == bytes32(0))
             revert ZeroAddress();
 
-        // 1-per-address active proposal limit
+        // 1-per-address active proposal limit. A slot pointing at a superseded proposal
+        // (id < validFromId) no longer blocks: the proposer may file afresh.
         uint256 existing = activeProposalId[msg.sender];
-        if (existing != 0) {
+        if (existing >= validFromId && existing != 0) {
             Proposal storage ep = proposals[existing];
             if (_isActiveProposal(ep.state, ep.createdAt, PROPOSAL_LIFETIME)) {
                 revert AlreadyHasActiveProposal();
@@ -775,6 +765,9 @@ contract DegenerusAdmin {
     function vote(uint256 proposalId, bool approve) external {
         Proposal storage p = proposals[proposalId];
         uint40 createdAt = p.createdAt;
+        // A prior executed swap advances validFromId, invalidating every earlier proposal in O(1);
+        // such superseded proposals keep state == Active but can no longer vote or execute.
+        if (proposalId < validFromId) revert ProposalNotActive();
         _requireActiveProposal(p.state, createdAt, PROPOSAL_LIFETIME);
 
         // Invalidate (KILL) the proposal if VRF is healthy NOW, or if any VRF word was fulfilled
@@ -844,6 +837,7 @@ contract DegenerusAdmin {
     function canExecute(uint256 proposalId) external view returns (bool) {
         Proposal storage p = proposals[proposalId];
         uint40 createdAt = p.createdAt;
+        if (proposalId < validFromId) return false;
         if (!_isActiveProposal(p.state, createdAt, PROPOSAL_LIFETIME)) return false;
 
         // Stall check + recovery-spanning invalidation (mirrors vote(): a fulfillment after
@@ -950,8 +944,11 @@ contract DegenerusAdmin {
         Proposal storage p = proposals[proposalId];
         p.state = ProposalState.Executed;
 
-        // Void all other active proposals before external calls (CEI)
-        _voidAllActive(proposalId);
+        // Invalidate all competing proposals by advancing the epoch cutoff past every existing ID,
+        // before external calls (CEI). O(1) and independent of history size — no loop can gas-strand a
+        // coordinator swap. Superseded proposals (id < validFromId) keep state == Active but can no
+        // longer vote or execute; the freed proposer can re-propose against the current VRF state.
+        validFromId = proposalCount + 1;
 
         address newCoordinator = p.coordinator;
         bytes32 newKeyHash = p.keyHash;
@@ -1007,23 +1004,6 @@ contract DegenerusAdmin {
         }
 
         emit ProposalExecuted(proposalId, newCoordinator, newSubId);
-    }
-
-    /// @dev Mark all active proposals (except the executed one) as Killed.
-    ///      Uses voidedUpTo watermark to skip already-voided prefix.
-    function _voidAllActive(uint256 exceptId) internal {
-        uint256 start = voidedUpTo + 1;
-        uint256 count = proposalCount;
-        for (uint256 i = start; i <= count; i++) {
-            if (i == exceptId) continue;
-            Proposal storage q = proposals[i];
-            if (q.state == ProposalState.Active) {
-                q.state = ProposalState.Killed;
-                emit ProposalKilled(i);
-            }
-        }
-        // All proposals up to count are now non-Active (except exceptId which is Executed).
-        voidedUpTo = count;
     }
 
     // =========================================================================

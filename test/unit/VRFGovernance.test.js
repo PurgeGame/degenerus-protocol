@@ -588,10 +588,10 @@ describe("VRF Governance", function () {
   });
 
   // =========================================================================
-  // 12. _voidAllActive correctness (multi-proposal void)
+  // 12. Epoch-cutoff invalidation (multi-proposal, O(1), no loop)
   // =========================================================================
-  describe("_voidAllActive via execute with multiple proposals", function () {
-    it("executing one proposal voids all other active proposals", async function () {
+  describe("epoch-cutoff invalidation on execute", function () {
+    it("executing one proposal invalidates all others via epoch cutoff (no loop, no kill events)", async function () {
       const { admin, mockVRF, deployer, alice, bob, sdgnrs, game } =
         await loadFixture(deployFullProtocol);
       const vrfAddr = await mockVRF.getAddress();
@@ -611,34 +611,32 @@ describe("VRF Governance", function () {
 
       expect(await admin.proposalCount()).to.equal(3n);
 
-      // Vote approve on proposal 2 — deployer has enough weight to trigger execution
+      // Vote approve on proposal 2 — deployer has enough weight to trigger execution.
+      // The epoch cutoff advances past every existing id in O(1) (no void loop).
       const tx = await admin.connect(deployer).vote(2, true);
 
-      // Verify proposal 2 is Executed (enum value 1)
+      // Proposal 2: Executed
       const [, , , , state2] = await admin.proposals(2);
       expect(state2).to.equal(1, "Proposal 2 should be Executed");
 
-      // Verify proposal 1 is Killed (enum value 2) by _voidAllActive
-      const [, , , , state1] = await admin.proposals(1);
-      expect(state1).to.equal(2, "Proposal 1 should be Killed");
-
-      // Verify proposal 3 is Killed (enum value 2) by _voidAllActive
-      const [, , , , state3] = await admin.proposals(3);
-      expect(state3).to.equal(2, "Proposal 3 should be Killed");
-
-      // Verify ProposalKilled events emitted for proposals 1 and 3
-      const events = await getEvents(tx, admin, "ProposalKilled");
-      const killedIds = events.map((e) => Number(e.args.proposalId));
-      expect(killedIds).to.include(1);
-      expect(killedIds).to.include(3);
-      expect(killedIds).to.not.include(2);
+      // Competitors 1 and 3 keep state == Active in storage (no loop rewrites them) but are inert:
+      // canExecute returns false and any vote reverts. No ProposalKilled events fire on execution.
+      expect(await admin.canExecute(1)).to.equal(false);
+      expect(await admin.canExecute(3)).to.equal(false);
+      await expect(
+        admin.connect(alice).vote(1, true)
+      ).to.be.revertedWithCustomError(admin, "ProposalNotActive");
+      await expect(
+        admin.connect(bob).vote(3, true)
+      ).to.be.revertedWithCustomError(admin, "ProposalNotActive");
+      expect((await getEvents(tx, admin, "ProposalKilled")).length).to.equal(0);
 
       // Verify ProposalExecuted event for proposal 2
       const execEvent = await getEvent(tx, admin, "ProposalExecuted");
       expect(execEvent.args.proposalId).to.equal(2n);
     });
 
-    it("_voidAllActive skips non-Active proposals (already killed)", async function () {
+    it("a reject-killed proposal stays Killed; executing another invalidates the rest via cutoff", async function () {
       const { admin, mockVRF, deployer, alice, bob, sdgnrs, game } =
         await loadFixture(deployFullProtocol);
       const vrfAddr = await mockVRF.getAddress();
@@ -658,34 +656,32 @@ describe("VRF Governance", function () {
 
       // Kill proposal 1 by voting reject with enough weight
       await admin.connect(deployer).vote(1, false);
-
-      // Verify proposal 1 is now Killed
       const [, , , , state1Before] = await admin.proposals(1);
       expect(state1Before).to.equal(2, "Proposal 1 should be Killed after reject vote");
 
-      // Now execute proposal 2 — _voidAllActive should skip proposal 1 (already Killed)
+      // Execute proposal 2 — cutoff advances; no loop touches proposal 1.
       const tx = await admin.connect(deployer).vote(2, true);
 
-      // Proposal 2: Executed
       const [, , , , state2] = await admin.proposals(2);
       expect(state2).to.equal(1, "Proposal 2 should be Executed");
 
-      // Proposal 1: still Killed (not changed by _voidAllActive)
+      // Proposal 1: still Killed (unchanged)
       const [, , , , state1After] = await admin.proposals(1);
       expect(state1After).to.equal(2, "Proposal 1 should still be Killed");
 
-      // Proposal 3: Killed by _voidAllActive
+      // Proposal 3: Active in storage but inert via cutoff
       const [, , , , state3] = await admin.proposals(3);
-      expect(state3).to.equal(2, "Proposal 3 should be Killed");
+      expect(state3).to.equal(0, "Proposal 3 still Active in storage");
+      expect(await admin.canExecute(3)).to.equal(false);
+      await expect(
+        admin.connect(bob).vote(3, true)
+      ).to.be.revertedWithCustomError(admin, "ProposalNotActive");
 
-      // Only proposal 3 should be newly killed (proposal 1 was already killed)
-      const events = await getEvents(tx, admin, "ProposalKilled");
-      const killedIds = events.map((e) => Number(e.args.proposalId));
-      expect(killedIds).to.include(3);
-      expect(killedIds).to.not.include(1); // Already killed, no duplicate event
+      // Execution emits no kill events (cutoff is silent)
+      expect((await getEvents(tx, admin, "ProposalKilled")).length).to.equal(0);
     });
 
-    it("voidedUpTo watermark skips previously voided proposals on second stall", async function () {
+    it("after a swap, superseded proposals stay inert and fresh proposals (id >= cutoff) execute", async function () {
       const { admin, mockVRF, deployer, alice, sdgnrs, game } =
         await loadFixture(deployFullProtocol);
       const vrfAddr = await mockVRF.getAddress();
@@ -701,33 +697,31 @@ describe("VRF Governance", function () {
       await admin.connect(alice).propose(vrfAddr, hre.ethers.id("key2"));
       expect(await admin.proposalCount()).to.equal(2n);
 
-      // Execute proposal 1 — voids proposal 2, advances voidedUpTo to 2
+      // Execute proposal 1 — cutoff advances to 3; proposal 2 is superseded.
       await admin.connect(deployer).vote(1, true);
 
       const [, , , , s1] = await admin.proposals(1);
-      const [, , , , s2] = await admin.proposals(2);
       expect(s1).to.equal(1, "Proposal 1 Executed");
-      expect(s2).to.equal(2, "Proposal 2 Killed");
+      const [, , , , s2] = await admin.proposals(2);
+      expect(s2).to.equal(0, "Proposal 2 still Active in storage");
+      expect(await admin.canExecute(2)).to.equal(false);
+      await expect(
+        admin.connect(alice).vote(2, true)
+      ).to.be.revertedWithCustomError(admin, "ProposalNotActive");
 
-      // Second stall episode: new proposals get IDs 3+
-      // VRF was swapped but the new coordinator is also stalled (mock)
+      // Second stall episode: the new coordinator is also stalled (mock). Fresh proposals
+      // (id >= cutoff) are executable; the superseded proposers' active slots are freed.
       await admin.connect(deployer).propose(vrfAddr, hre.ethers.id("key3"));
       await admin.connect(alice).propose(vrfAddr, hre.ethers.id("key4"));
       expect(await admin.proposalCount()).to.equal(4n);
 
-      // Execute proposal 3 — _voidAllActive only scans from voidedUpTo+1=3
-      // Proposals 1 and 2 are NOT re-scanned
+      // Execute proposal 3 — O(1), no loop over prior history.
       const tx = await admin.connect(deployer).vote(3, true);
 
       const [, , , , s3] = await admin.proposals(3);
-      const [, , , , s4] = await admin.proposals(4);
       expect(s3).to.equal(1, "Proposal 3 Executed");
-      expect(s4).to.equal(2, "Proposal 4 Killed");
-
-      // Only proposal 4 should be killed (proposals 1 and 2 are below watermark)
-      const events = await getEvents(tx, admin, "ProposalKilled");
-      const killedIds = events.map((e) => Number(e.args.proposalId));
-      expect(killedIds).to.deep.equal([4]);
+      expect(await admin.canExecute(4)).to.equal(false); // 4 now superseded
+      expect((await getEvents(tx, admin, "ProposalKilled")).length).to.equal(0);
     });
   });
 
