@@ -1,37 +1,9 @@
-# Build artifacts
-node_modules/
-cache/
-artifacts/
-forge-out/
-foundry.lock
-out/
-coverage/
-lcov.info
-.gas-snapshot
-.gas-snapshot-*
+# Public tree is contracts/ + README + LICENSE only; everything else stays local.
+/*
+!/contracts
+!/README.md
+!/LICENSE
+!/.gitignore
 
-# Local state
-.env
-runs/
-scripts/*.db
+# Local junk that can appear inside tracked dirs
 *.sol.bak
-/memory
-.claude/
-
-# Internal planning artifacts
-.planning/
-
-# Internal audit/review docs — keep only the contest readme visible
-audit/*
-!audit/C4A-CONTEST-README.md
-
-# Machine-local bytecode-identity snapshot (scripts/bytecode-manifest.sh)
-.bytecode-manifest
-
-# v74 adversarial agent: runtime state + local-node deployment artifacts + design scratch
-agent/
-deployments/localhost.json
-deployments/localhost-abis/
-deployments/testnet.json
-deployments/testnet-abis/
-.agent-design/
