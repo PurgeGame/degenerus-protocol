@@ -104,12 +104,6 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
     /// @dev Whale pass minter reward: 1% of whale pool.
     uint32 private constant DGNRS_WHALE_MINTER_PPM = 10_000;
 
-    /// @dev Direct affiliate reward for whale pass: 0.1% of affiliate pool.
-    uint32 private constant DGNRS_AFFILIATE_DIRECT_WHALE_PPM = 1_000;
-
-    /// @dev Upline affiliate reward for whale pass: 0.02% of affiliate pool.
-    uint32 private constant DGNRS_AFFILIATE_UPLINE_WHALE_PPM = 200;
-
     /// @dev Direct affiliate reward for deity pass: 0.5% of affiliate pool.
     uint32 private constant DGNRS_AFFILIATE_DIRECT_DEITY_PPM = 5_000;
 
@@ -168,7 +162,9 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
      *      - Boosts levelCount by delta between current freeze and new freeze (max 100, no double dipping).
      *      - Queues 40 × quantity bonus tickets/lvl for levels passLevel-10, 2 × quantity standard tickets/lvl for the rest.
      *      - Lootbox: 10% of price.
-     *      - Distributes DGNRS rewards to buyer and affiliates.
+     *      - Distributes DGNRS minter rewards to the buyer.
+     *      - Affiliate: 20% fresh / 5% recycled of the price in FLIP, exactly like a ticket mint
+     *        (kickback share credited back to the buyer).
      *
      *      Price: 2.4 ETH at levels 0-3, 4 ETH at levels 4+, 10/25/50% off standard with boon.
      *
@@ -177,13 +173,15 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
      *      - Post-game (level > 0): 5% next pool, 95% future pool
      * @param buyer The address receiving the pass.
      * @param quantity Number of passes to purchase (1-100).
+     * @param affiliateCode Affiliate/referral code for the purchase (bytes32(0) = stored code).
      * @custom:reverts GameOver When gameOver is true.
      * @custom:reverts InvalidQuantity When quantity is 0 or exceeds 100.
      * @custom:reverts MinQuantityRequired When a century (x00) pass level is purchased with quantity < 2.
      */
     function purchaseWhalePass(
         address buyer,
-        uint256 quantity
+        uint256 quantity,
+        bytes32 affiliateCode
     ) external payable {
         if (_livenessTriggered()) revert GameOver();
         uint24 passLevel = level + 1;
@@ -341,18 +339,40 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
             false
         );
 
-        address affiliateAddr = affiliate.getReferrer(buyer);
-        address upline;
-        address upline2;
-        if (affiliateAddr != address(0)) {
-            upline = affiliate.getReferrer(affiliateAddr);
-            if (upline != address(0)) {
-                upline2 = affiliate.getReferrer(upline);
+        // Affiliate, 20% fresh / 5% recycle exactly like a normal ticket mint: the fresh
+        // portion (freshPaid) at the fresh rate, the claimable/afking-funded remainder at
+        // the recycle rate, both frozen at level + 1 like the ticket affiliate (score 0,
+        // same as tickets). The FLIP basis converts at the pass ticket level's price; the
+        // kickback share is credited back to the buyer in one Coinflip write.
+        {
+            uint256 passPriceWei = PriceLookupLib.priceForLevel(passLevel);
+            uint256 kickback;
+            if (freshPaid != 0) {
+                kickback = affiliate.payAffiliate(
+                    (freshPaid * PRICE_COIN_UNIT) / passPriceWei,
+                    affiliateCode,
+                    buyer,
+                    passLevel,
+                    true,
+                    0
+                );
             }
+            uint256 recycled = totalPrice - freshPaid;
+            if (recycled != 0) {
+                kickback += affiliate.payAffiliate(
+                    (recycled * PRICE_COIN_UNIT) / passPriceWei,
+                    affiliateCode,
+                    buyer,
+                    passLevel,
+                    false,
+                    0
+                );
+            }
+            if (kickback != 0) coinflip.creditFlip(buyer, kickback);
         }
 
         for (uint256 i = 0; i < quantity; ) {
-            _rewardWhalePassDgnrs(buyer, affiliateAddr, upline, upline2);
+            _rewardWhalePassDgnrs(buyer);
             unchecked {
                 ++i;
             }
@@ -397,13 +417,19 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
      *        ticket prices across the 10-level window at levels 3+.
      *      - Awards a lootbox equal to 10% of pass value.
      *      - Boon purchases apply the boon's tier discount (10/25/50%) to the payment amount.
+     *      - Affiliate: 20% fresh / 5% recycled of the price in FLIP, exactly like a ticket mint
+     *        (kickback share credited back to the buyer).
      * @param buyer The address receiving the pass.
+     * @param affiliateCode Affiliate/referral code for the purchase (bytes32(0) = stored code).
      * @custom:reverts OnlyDelegatecall When invoked outside the Game delegatecall context.
      * @custom:reverts InvalidLevelForPass When the level is not 0-2, x9 (excl. x99), or a century x00 in its purchase phase, and no boon applies.
      * @custom:reverts DeityPassConflict When the buyer already holds a deity pass.
      * @custom:reverts PassNotExpired When an active frozen pass still has 8+ levels remaining.
      */
-    function purchaseLazyPass(address buyer) external payable {
+    function purchaseLazyPass(
+        address buyer,
+        bytes32 affiliateCode
+    ) external payable {
         // Delegatecall-only: address(this) == GAME under the nested dispatch. A direct call on the
         // deployed module would trap the in-flight msg.value against empty local state.
         if (address(this) != ContractAddresses.GAME) revert OnlyDelegatecall();
@@ -500,6 +526,38 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
         // Coin-presale-box credit accrual: 25% of the price paid while presale open.
         if (!presaleOver) {
             presaleBoxCredit[buyer] += totalPrice / 4;
+        }
+
+        // Affiliate, 20% fresh / 5% recycle exactly like a normal ticket mint: the fresh
+        // portion (freshPaid) at the fresh rate, the claimable/afking-funded remainder at
+        // the recycle rate, both frozen at level + 1 like the ticket affiliate (score 0,
+        // same as tickets). The FLIP basis converts at the pass start level's price; the
+        // kickback share is credited back to the buyer in one Coinflip write.
+        {
+            uint256 passPriceWei = PriceLookupLib.priceForLevel(startLevel);
+            uint256 kickback;
+            if (freshPaid != 0) {
+                kickback = affiliate.payAffiliate(
+                    (freshPaid * PRICE_COIN_UNIT) / passPriceWei,
+                    affiliateCode,
+                    buyer,
+                    currentLevel + 1,
+                    true,
+                    0
+                );
+            }
+            uint256 recycled = totalPrice - freshPaid;
+            if (recycled != 0) {
+                kickback += affiliate.payAffiliate(
+                    (recycled * PRICE_COIN_UNIT) / passPriceWei,
+                    affiliateCode,
+                    buyer,
+                    currentLevel + 1,
+                    false,
+                    0
+                );
+            }
+            if (kickback != 0) coinflip.creditFlip(buyer, kickback);
         }
 
         _activate10LevelPass(buyer, startLevel, LAZY_PASS_ENTRIES_PER_LEVEL);
@@ -714,17 +772,10 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
         }
     }
 
-    /// @dev Distribute DGNRS rewards for whale pass purchase to buyer and affiliates.
-    /// @param buyer The pass purchaser receiving minter reward.
-    /// @param affiliateAddr Direct referrer (receives 0.1% of affiliate pool).
-    /// @param upline Second-level referrer (receives 0.02% of affiliate pool).
-    /// @param upline2 Third-level referrer (receives 0.01% of affiliate pool).
-    function _rewardWhalePassDgnrs(
-        address buyer,
-        address affiliateAddr,
-        address upline,
-        address upline2
-    ) private {
+    /// @dev Distribute the DGNRS minter reward for a whale pass purchase to the buyer.
+    ///      Affiliates are compensated in FLIP by the purchase path (payAffiliate), not DGNRS.
+    /// @param buyer The pass purchaser receiving the minter reward (1% of the Whale pool).
+    function _rewardWhalePassDgnrs(address buyer) private {
         uint256 whaleReserve = dgnrs.poolBalance(
             IsDGNRS.Pool.Whale
         );
@@ -738,48 +789,6 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
                     minterShare
                 );
             }
-        }
-
-        uint256 affiliateReserve = dgnrs.poolBalance(
-            IsDGNRS.Pool.Affiliate
-        );
-        if (affiliateReserve == 0) return;
-        // Reserve the outstanding level claim allocation so whale purchases
-        // cannot drain tokens owed to affiliate claimants.
-        (uint256 allocation, uint256 claimed) = _getLevelDgnrs(level);
-        uint256 reserved = allocation - claimed;
-        if (reserved >= affiliateReserve) return;
-        affiliateReserve -= reserved;
-
-        if (affiliateAddr != address(0)) {
-            uint256 affiliateShare = (affiliateReserve *
-                DGNRS_AFFILIATE_DIRECT_WHALE_PPM) /
-                DGNRS_WHALE_REWARD_PPM_SCALE;
-            if (affiliateShare != 0) {
-                dgnrs.transferFromPool(
-                    IsDGNRS.Pool.Affiliate,
-                    affiliateAddr,
-                    affiliateShare
-                );
-            }
-        }
-
-        uint256 uplineShare = (affiliateReserve *
-            DGNRS_AFFILIATE_UPLINE_WHALE_PPM) / DGNRS_WHALE_REWARD_PPM_SCALE;
-        if (upline != address(0) && uplineShare != 0) {
-            dgnrs.transferFromPool(
-                IsDGNRS.Pool.Affiliate,
-                upline,
-                uplineShare
-            );
-        }
-        uint256 upline2Share = uplineShare / 2;
-        if (upline2 != address(0) && upline2Share != 0) {
-            dgnrs.transferFromPool(
-                IsDGNRS.Pool.Affiliate,
-                upline2,
-                upline2Share
-            );
         }
     }
 

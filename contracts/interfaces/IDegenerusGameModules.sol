@@ -189,11 +189,13 @@ interface IDegenerusGameWhaleModule {
     /// @notice Purchases a whale pass for the buyer
     /// @param buyer Address receiving the pass
     /// @param quantity Number of passes to purchase
-    function purchaseWhalePass(address buyer, uint256 quantity) external payable;
+    /// @param affiliateCode Affiliate/referral code for the purchase (bytes32(0) = stored code)
+    function purchaseWhalePass(address buyer, uint256 quantity, bytes32 affiliateCode) external payable;
 
     /// @notice Purchases a 10-level lazy pass for the buyer
     /// @param buyer Address receiving the pass
-    function purchaseLazyPass(address buyer) external payable;
+    /// @param affiliateCode Affiliate/referral code for the purchase (bytes32(0) = stored code)
+    function purchaseLazyPass(address buyer, bytes32 affiliateCode) external payable;
 
     /// @notice Purchases a deity pass for a specific symbol
     /// @param buyer Address receiving the deity pass

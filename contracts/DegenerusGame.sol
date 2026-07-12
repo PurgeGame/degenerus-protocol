@@ -830,22 +830,29 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     ///      Example at level 51: 4 tickets each for levels 51-150, stats boosted, frozen until 150.
     /// @param buyer Player address to receive pass rewards (address(0) = msg.sender).
     /// @param quantity Number of passes to purchase.
+    /// @param affiliateCode Affiliate/referral code for the purchase (bytes32(0) = stored code).
     function purchaseWhalePass(
         address buyer,
-        uint256 quantity
+        uint256 quantity,
+        bytes32 affiliateCode
     ) external payable {
         buyer = _resolvePlayer(buyer);
-        _purchaseWhalePassFor(buyer, quantity);
+        _purchaseWhalePassFor(buyer, quantity, affiliateCode);
     }
 
-    function _purchaseWhalePassFor(address buyer, uint256 quantity) private {
+    function _purchaseWhalePassFor(
+        address buyer,
+        uint256 quantity,
+        bytes32 affiliateCode
+    ) private {
         (bool ok, bytes memory data) = ContractAddresses
             .GAME_WHALE_MODULE
             .delegatecall(
                 abi.encodeWithSelector(
                     IDegenerusGameWhaleModule.purchaseWhalePass.selector,
                     buyer,
-                    quantity
+                    quantity,
+                    affiliateCode
                 )
             );
         if (!ok) _revertDelegate(data);
@@ -855,18 +862,20 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     /// @dev Available at levels 0-2 or x9 (9, 19, 29...), or with a valid lazy pass boon.
     ///      Levels 0-2: flat 0.24 ETH. Levels 3+: sum of per-level ticket prices across 10-level window.
     /// @param buyer Player address to receive pass (address(0) = msg.sender).
-    function purchaseLazyPass(address buyer) external payable {
+    /// @param affiliateCode Affiliate/referral code for the purchase (bytes32(0) = stored code).
+    function purchaseLazyPass(address buyer, bytes32 affiliateCode) external payable {
         buyer = _resolvePlayer(buyer);
-        _purchaseLazyPassFor(buyer);
+        _purchaseLazyPassFor(buyer, affiliateCode);
     }
 
-    function _purchaseLazyPassFor(address buyer) private {
+    function _purchaseLazyPassFor(address buyer, bytes32 affiliateCode) private {
         (bool ok, bytes memory data) = ContractAddresses
             .GAME_WHALE_MODULE
             .delegatecall(
                 abi.encodeWithSelector(
                     IDegenerusGameWhaleModule.purchaseLazyPass.selector,
-                    buyer
+                    buyer,
+                    affiliateCode
                 )
             );
         if (!ok) _revertDelegate(data);
