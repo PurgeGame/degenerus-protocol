@@ -1,5 +1,0 @@
-```
-VERDICT: NOT-EXPLOITABLE
-RATIONALE: The v56 refactor safely defers the cross-contract storm by packing the new accumulator fields (`affiliateBase`, `questProgress`) into disjoint bits of the single `Sub` slot. Because EVM transactions are strictly serial and Solidity's storage pointer assignments (`sub.field = val`) perform an atomic `SLOAD`-mask-`SSTORE` precisely at the point of assignment, the buy and settle paths cannot race with or clobber the open path's `lastOpenedDay` and `lastAutoBoughtDay` markers (no stale memory reads). The open path's core invariants remain intact: the `lastOpenedDay` marker is advanced before the resolve (effects-first, precluding re-entrant double-opens), both human and afking opens safely share the live-level EV-cap budget via the same mapping (preventing double-draws), and the box seed is immutably derived from the frozen stamp day's VRF word, rendering any level-timing edge irrelevant.
-OPEN-VECTOR: none — the open's frozen-seed + live-level + monotone-marker + exactly-once-EV-cap invariants survive the refactor; the accumulator fields are disjoint from the open markers
-```

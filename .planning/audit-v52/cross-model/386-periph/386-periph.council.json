@@ -1,7 +1,0 @@
-{
-  "label": "386-periph",
-  "schema": "",
-  "models": ["gemini", "codex"],
-  "skipped": [],
-  "outputs": {"gemini": ".planning/audit-v52/cross-model/386-periph/386-periph.gemini.txt", "codex": ".planning/audit-v52/cross-model/386-periph/386-periph.codex.txt"}
-}

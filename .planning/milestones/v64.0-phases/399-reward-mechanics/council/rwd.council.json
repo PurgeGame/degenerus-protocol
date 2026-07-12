@@ -1,7 +1,0 @@
-{
-  "label": "rwd",
-  "schema": "",
-  "models": ["gemini", "codex"],
-  "skipped": [],
-  "outputs": {"gemini": ".planning/phases/399-reward-mechanics/council/rwd.gemini.txt", "codex": ".planning/phases/399-reward-mechanics/council/rwd.codex.txt"}
-}

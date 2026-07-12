@@ -1,7 +1,0 @@
-{
-  "label": "storage",
-  "schema": "",
-  "models": ["gemini", "codex"],
-  "skipped": [],
-  "outputs": {"gemini": ".planning/phases/389-packing-identity/council/storage.gemini.txt", "codex": ".planning/phases/389-packing-identity/council/storage.codex.txt"}
-}

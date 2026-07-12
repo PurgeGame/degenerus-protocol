@@ -1,7 +1,0 @@
-{
-  "label": "gasid",
-  "schema": "",
-  "models": ["gemini", "codex"],
-  "skipped": [],
-  "outputs": {"gemini": ".planning/phases/389-packing-identity/council/gasid.gemini.txt", "codex": ".planning/phases/389-packing-identity/council/gasid.codex.txt"}
-}

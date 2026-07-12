@@ -1,7 +1,0 @@
-{
-  "label": "fuzz-completeness",
-  "schema": "",
-  "models": ["gemini", "codex"],
-  "skipped": [],
-  "outputs": {"gemini": ".planning/audit-v52/cross-model/381-fuzz-completeness/fuzz-completeness.gemini.txt", "codex": ".planning/audit-v52/cross-model/381-fuzz-completeness/fuzz-completeness.codex.txt"}
-}

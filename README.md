@@ -10,38 +10,19 @@ Three products share one economy:
 
 - **Tickets** — straightforward lottery entries. Traits are assigned by VRF, jackpots pay trait-matched holders. Honestly -EV, provably fair.
 - **Lootboxes and passes** — longer-horizon products that fund the prize pools and receive future-level tickets in return. EV depends on activity score (how much you play) and level velocity (how fast the game progresses).
-- **Affiliate network** — three-tier referral system. Commissions are paid as BURNIE coinflip credits, not direct ETH, which filters out mercenary referral farmers.
+- **Affiliate network** — three-tier referral system. Commissions are paid as FLIP coinflip credits, not direct ETH, which filters out mercenary referral farmers.
 
 The protocol extracts zero rake after presale. Every wei of ETH that enters goes into prize pools and recirculates to players. No operator fees, no admin withdrawal function. The contracts are immutable with no upgrade path.
 
 Ownership is vault-based: the DGVE holder (>50.1% of vault governance token) acts as admin. Powers are narrowly scoped — VRF coordinator swaps (via sDGNRS-holder governance with decaying approval threshold), ETH→stETH liquidity conversion, lootbox RNG threshold, and LINK price feed configuration. The admin cannot access player funds or modify core game rules. A community governance path allows 0.5%+ sDGNRS holders to propose VRF coordinator swaps after a 7-day VRF stall.
 
-Two liveness guards prevent permanent fund lockup. At level 0, a 365-day deploy timeout fires if no level ever completes. Once past level 0, a 120-day inactivity guard fires if no level completes for 120 consecutive days (VRF stall durations are excluded from this count). When either guard triggers, remaining funds are distributed: deity pass holders receive 20 ETH refunds each (if game ends before level 10), then 10% goes to Decimator death-bet holders and 90% to the phase-correct terminal ticket cohort (next-level tickets during the ordinary purchase phase; current-level tickets during jackpot phase or a locked final-purchase transition). Any uncredited remainder is split between the vault and DGNRS backing. A 30-day final sweep forfeits unclaimed winnings and sends all remaining balances to vault (50%) and DGNRS (50%). The terminal payout math makes buying during a stall individually rational, which is what prevents the stall from lasting 120 days. Full analysis in the [game theory paper](https://degener.us/theory/).
-
-## Quick Start
-
-```bash
-npm install
-npx hardhat compile
-```
-
-Requires Node.js 18+.
-
-## Tests
-
-```bash
-# Hardhat tests (~1,350 tests)
-npx hardhat test
-
-# Foundry invariant fuzzing
-forge test
-```
+Two liveness guards prevent permanent fund lockup. At level 0, a 365-day deploy timeout fires if no level ever completes. Once past level 0, a 120-day inactivity guard fires if no level completes for 120 consecutive days (VRF stall durations are excluded from this count). When either guard triggers, remaining funds are distributed: deity pass holders receive refunds of up to 20 ETH each (if game ends before level 10), then 10% goes to Decimator death-bet holders and 90% to the phase-correct terminal ticket cohort (next-level tickets during the ordinary purchase phase; current-level tickets during jackpot phase or a locked final-purchase transition). Any uncredited remainder is split three ways between the vault, sDGNRS backing, and GNRUS. A 30-day final sweep forfeits unclaimed winnings and splits all remaining balances three ways between the vault, sDGNRS, and GNRUS. The terminal payout math makes buying during a stall individually rational, which is what prevents the stall from lasting 120 days. Full analysis in the [game theory paper](https://degener.us/theory/).
 
 ## Architecture
 
-- **25 deployable contracts** (15 core + 10 delegatecall modules), sharing storage via `DegenerusGameStorage`
-- Solidity 0.8.34, `viaIR` enabled, optimizer runs = 200
-- All contracts under 24KB (DegenerusGame largest at 19KB)
+- **27 deployable contracts** (15 core + 12 delegatecall modules), sharing storage via `DegenerusGameStorage`
+- Solidity 0.8.34, `viaIR` enabled, optimizer runs = 1000, EVM target `osaka`
+- All contracts under the 24,576-byte EIP-170 limit (largest: MintModule at ~23.6KB)
 - External dependencies: Chainlink VRF V2.5, Lido stETH, LINK token
 - Pull-pattern ETH/stETH withdrawals (no push payments)
 
@@ -50,11 +31,13 @@ DegenerusGame.sol (main entry point, delegatecall dispatcher)
   ├── MintModule           Ticket purchasing, ETH splitting
   ├── AdvanceModule        Level advancement, VRF requests
   ├── JackpotModule        Daily/weekly/grand jackpots
-  ├── EndgameModule        Final-round resolution
   ├── GameOverModule       Game-over distribution and sweep
   ├── LootboxModule        Lootbox drops and claims
   ├── WhaleModule          Whale bundles, lazy passes, deity passes
   ├── BoonModule           Deity boon rewards
+  ├── BingoModule          Bingo color-completion claims
+  ├── FoilPackModule       Foil pack purchases and match claims
+  ├── AfkingModule         AfKing auto-play subscriptions
   ├── DecimatorModule      Elimination events
   └── DegeneretteModule    Degenerette mini-game
 ```
@@ -63,65 +46,53 @@ DegenerusGame.sol (main entry point, delegatecall dispatcher)
 
 | Contract | Purpose |
 |----------|---------|
-| BurnieCoin | Deflationary ERC-20 game token |
-| BurnieCoinflip | Daily coinflip side-game |
+| FLIP | Deflationary ERC-20 game token |
+| Coinflip | Daily coinflip side-game |
 | DegenerusVault | stETH yield treasury |
 | DegenerusJackpots | Jackpot pool accounting |
 | DegenerusQuests | On-chain quest/streak system |
 | DegenerusAffiliate | Referral tracking and payouts |
 | DegenerusAdmin | Admin configuration, VRF wiring |
 | DegenerusDeityPass | ERC-721 with on-chain SVG rendering |
-| StakedDegenerusStonk | Soulbound reserve token (sDGNRS), holds all pools |
-| DegenerusStonk | Transferable ERC-20 wrapper (DGNRS) for sDGNRS |
+| sDGNRS | Soulbound reserve token, holds all pools |
+| DGNRS | Transferable ERC-20 wrapper for sDGNRS |
 | DeityBoonViewer | Standalone deity boon slot viewer |
 | GNRUS | Soulbound charity token with sDGNRS-governed level-based donations |
-| WrappedWrappedXRP | Meme wrapper contract |
+| WWXRP | Meme wrapper contract |
+| Icons32Data | On-chain SVG icon path and symbol name storage |
 
 ### Libraries
 
 | Library | Purpose |
 |---------|---------|
+| ActivityCurveLib | Activity-score reward curves |
 | BitPackingLib | Bit-level packing for gas-efficient storage |
 | EntropyLib | Deterministic entropy from VRF seeds |
 | GameTimeLib | Day/epoch boundary calculations |
 | JackpotBucketLib | Jackpot tier allocation math |
 | PriceLookupLib | Ticket price curves by level |
 
+## Repository Layout
+
+49 production Solidity files: 17 in `contracts/` (15 deployable + `ContractAddresses` + `DegenerusTraitUtils`), 14 in `modules/` (12 deployable + 2 abstract utils), 1 shared storage contract, 6 libraries, and 11 interfaces. `contracts/mocks/` and `contracts/test/` are test scaffolding and are never deployed.
+
 ## Deployment
 
-All contract addresses are compile-time constants in `ContractAddresses.sol`. The deploy pipeline:
-1. Predicts nonce-based addresses (`scripts/lib/predictAddresses.js`)
-2. Patches `ContractAddresses.sol` with concrete addresses
-3. Recompiles and deploys in deterministic order
-
-Icons32Data and modules deploy first (nonce N+0..10), then supporting contracts (COIN, COINFLIP, GAME, etc.), then contracts that depend on earlier ones (VAULT, DGNRS, ADMIN, GNRUS).
-
-## Scope
-
-See [`scope.txt`](scope.txt) for the complete in-scope file list.
-
-**In scope:** 17 core files (15 deployable + ContractAddresses + DegenerusTraitUtils) + 12 module files (10 deployable + 2 abstract utils) + 1 shared storage + 5 libraries + 12 interfaces = 47 Solidity files
-
-**Out of scope:** `contracts/mocks/`, `contracts/test/`
+All contract addresses are compile-time constants in `ContractAddresses.sol`. Deployment is nonce-deterministic: addresses are predicted from the deployer nonce, patched into `ContractAddresses.sol`, then everything is recompiled and deployed in fixed order — Icons32Data and the modules first, then the tokens and game contracts, then contracts that depend on earlier ones (DGNRS, ADMIN, GNRUS). The FoilPack module deploys last so it shifts no other address.
 
 ## Key Mechanics
 
 - **VRF State Machine:** `rngLockedFlag` prevents concurrent daily VRF requests. Request -> fulfill -> unlock cycle. 12-hour retry timeout, 14-day emergency game-over fallback.
 - **Prize Pool Split:** 90% current level / 10% future levels on ticket purchase.
 - **Whale Pricing:** Bundles 2.4-4 ETH, lazy passes 0.24 ETH+, deity passes 24 + T(n) ETH triangular.
-- **Game Over:** Liveness guard fires inside `advanceGame` (120-day inactivity or 365-day deploy timeout). `handleGameOverDrain` distributes funds using historical RNG (14-day fallback if Chainlink is stalled, or immediate fallback once the >120-day suppressed-phase deadman fires). A 30-day final sweep sends unclaimed remainder to vault and DGNRS.
+- **Game Over:** Liveness guard fires inside `advanceGame` (120-day inactivity or 365-day deploy timeout). `handleGameOverDrain` distributes funds using historical RNG (14-day fallback if Chainlink is stalled, or immediate fallback once the >120-day suppressed-phase deadman fires). A 30-day final sweep sends unclaimed remainder three ways to the vault, sDGNRS, and GNRUS.
 - **Pull Payments:** All ETH/stETH withdrawals use pull pattern via `claimWinnings()`.
 
-## Audit
+## Security
 
-- **[`KNOWN-ISSUES.md`](KNOWN-ISSUES.md)** — Pre-disclosed known issues and intentional design decisions for wardens
-- **[`audit/C4A-CONTEST-README.md`](audit/C4A-CONTEST-README.md)** — C4A contest submission README
+The contracts are covered by an extensive test and review pipeline maintained outside this repository (~1,350 Hardhat tests, 27 Foundry fuzz/invariant harnesses, Slither/Aderyn static analysis).
 
-### Test Coverage
-
-- **~1,350 Hardhat tests** — unit, integration, access control, edge cases, adversarial, PoC, validation
-- **27 Foundry test harnesses** (24 fuzz/invariant, 3 Halmos) — ETH solvency, supply invariants, VRF lifecycle, vault math, FSM, composition
-- **Slither** static analysis triaged (all HIGH/MEDIUM detections reviewed)
+Security contact: [burnie@degener.us](mailto:burnie@degener.us)
 
 ## License
 

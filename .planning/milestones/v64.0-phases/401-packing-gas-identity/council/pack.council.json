@@ -1,7 +1,0 @@
-{
-  "label": "pack",
-  "schema": "",
-  "models": ["gemini"],
-  "skipped": ["codex"],
-  "outputs": {"gemini": ".planning/phases/401-packing-gas-identity/council/pack.gemini.txt"}
-}

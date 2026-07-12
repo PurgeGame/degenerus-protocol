@@ -1,7 +1,0 @@
-{
-  "label": "delegate",
-  "schema": ".planning/phases/419-delegate-delegatecall-integrity/419-delegate-schema.json",
-  "models": ["gemini", "codex"],
-  "skipped": [],
-  "outputs": {"gemini": ".planning/phases/419-delegate-delegatecall-integrity/council/delegate.gemini.json", "codex": ".planning/phases/419-delegate-delegatecall-integrity/council/delegate.codex.json"}
-}

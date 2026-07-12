@@ -1,9 +1,0 @@
-# Money-movement sweep — Coinflip + Vault + Affiliate (2026-07-10, tree 9777a3f7)
-
-Sweep: `fable-contract-review` run `wf_5557a479-99d`, 26 chunks. Fable 5 usage limit hit mid-run; harness auto-swapped to Sonnet (T3-swap-sonnet) → **26/26 complete, coverage intact**. 23 clean / 3 concerns. All 3 concerns dispositioned NON-FINDING:
-
-- **MM1 (Coinflip `_claimCoinflipsInternal` autoRebuyCarry uint128 truncation)** — NON-FINDING. Compounding carry can only exceed uint128 after ~65-90 consecutive coinflip WINS. Win = `(rngWord & 1)==1` (Coinflip.sol:913), a 50/50 off the daily VRF word, stored once per epoch, SHARED across all players, not per-player, not rerollable. 65+ consecutive wins = 2^-65. Probabilistically unreachable (same class as F2 century-shield faucet). USER concurred.
-- **MM2 (Coinflip `setCoinflipAutoRebuy` takeProfit uint128 truncation)** — NON-FINDING / trivial. `takeProfit` is the caller's OWN self-set auto-rebuy config; passing ≥2^128 wei (~3.4e20 ETH, absurd) truncates only their own setting (+ event/state divergence). Self-inflicted, no pool impact. Optional 1-line `require(takeProfit <= type(uint128).max)` hardening if desired; not required.
-- **MM3 (Vault `burnEth` supplyBefore snapshot)** — NON-FINDING. `burnEth` (Vault:800) reads `supplyBefore` at :806 before the external `gamePlayer.claimWinnings` at :814, unlike `burnCoin` which snapshots atomically from vaultBurn. But `ethShare` supply is mutable ONLY via vaultMint/vaultBurn (onlyVault); claimWinnings pays ETH to the vault and cannot mint/burn the vault's share token, so supplyBefore == actual pre-burn supply at :827 always. The `supplyBefore == amount` refill check is exact. Stylistic asymmetry, not a bug.
-
-**RESULT: Coinflip/Vault/Affiliate value-handling set CLEAN.** No solvency/accounting defect. Track 1.4 done (round 1).

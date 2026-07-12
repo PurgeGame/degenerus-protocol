@@ -1,7 +1,0 @@
-{
-  "label": "382-prime",
-  "schema": "",
-  "models": ["gemini", "codex"],
-  "skipped": [],
-  "outputs": {"gemini": ".planning/audit-v52/cross-model/382-prime/382-prime.gemini.txt", "codex": ".planning/audit-v52/cross-model/382-prime/382-prime.codex.txt"}
-}
