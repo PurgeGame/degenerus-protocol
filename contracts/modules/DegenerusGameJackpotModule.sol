@@ -184,8 +184,9 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     uint16 private constant DAILY_CURRENT_BPS_MIN = 600;
     uint16 private constant DAILY_CURRENT_BPS_MAX = 1400;
 
-    /// @dev Portion of purchase-phase reward-pool jackpots converted to loot boxes (3/4).
-    uint16 private constant PURCHASE_REWARD_JACKPOT_LOOTBOX_BPS = 7500;
+    /// @dev Portion of the purchase-phase drip routed to the ticket leg (3/4):
+    ///      backing ETH moves to nextPrizePool, tickets go to trait winners.
+    uint16 private constant PURCHASE_REWARD_JACKPOT_TICKET_BPS = 7500;
 
     /// @dev Max winners per single trait bucket (must fit in uint8 for _randTraitTicket).
     ///      Set to 250 to allow all ticket winners in single trait if others are empty.
@@ -195,7 +196,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     // Constants — Jackpot Bucket Scaling (Gas Guardrails)
     // -------------------------------------------------------------------------
 
-    /// @dev Maximum ticket winners for purchase phase lootbox distribution.
+    /// @dev Maximum ticket winners for the purchase-phase drip ticket distribution.
     /// Higher than ETH winners because ticket distribution is cheaper per winner.
     uint16 private constant PURCHASE_PHASE_TICKET_MAX_WINNERS = 120;
 
@@ -215,9 +216,9 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     /// @dev Domain separator for far-future coin jackpot entropy derivation.
     bytes32 private constant FAR_FUTURE_FLIP_TAG = keccak256("far-future-coin");
 
-    /// @dev Maximum winners for lootbox jackpot distributions (gas safety).
-    ///      Lower than the daily ETH winner ceiling because lootboxes do multiple rolls per winner.
-    uint16 private constant LOOTBOX_MAX_WINNERS = 100;
+    /// @dev Maximum winners per ticket jackpot distribution (gas safety);
+    ///      the daily, carryover, and early-bird legs each apply it separately.
+    uint16 private constant TICKET_JACKPOT_MAX_WINNERS = 100;
 
     /// @dev Daily jackpot max scale (6.36x) producing bucket counts 159/95/50/1 at 200+ ETH.
     ///      All 305 winners (159 + 95 + 50 + 1) are paid in a single call.
@@ -279,7 +280,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     ///      JACKPOT PHASE PATH (isJackpotPhase=true):
     ///      - Day 1-4: Distributes a random 6%-14% slice of remaining currentPrizePool.
     ///      - Day 5: Distributes 100% of remaining currentPrizePool.
-    ///      - Day 1 also runs the early-bird lootbox jackpot (from futurePrizePool).
+    ///      - Day 1 also runs the early-bird ticket jackpot (from futurePrizePool).
     ///      - On day 2-4, takes 0.5% of futurePrizePool and buys current-level tickets
     ///        for winners from a random source level in [lvl+1, lvl+4], deposited into nextPool.
     ///      - Increments jackpotCounter on completion.
@@ -288,8 +289,9 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     ///      - Triggered during purchase phase when burns occur.
     ///      - Rolls winning traits (random + hero override) and runs trait-based jackpot.
     ///      - Fixed winner counts [20, 12, 6, 1] = 39 ETH winners, up to 120 ticket winners.
-    ///      - Adds a 1% futurePrizePool ETH slice every purchase day with 75%
-    ///        converted to lootbox tickets and remainder distributed as ETH.
+    ///      - Adds a 1% futurePrizePool ETH slice every purchase day: 75% routed to
+    ///        the ticket leg (backing ETH → nextPrizePool, tickets to trait winners)
+    ///        and the remainder distributed as ETH.
     ///
     /// @param isJackpotPhase True for jackpot phase dailies, false for purchase phase jackpot.
     /// @param lvl Current game level.
@@ -342,29 +344,29 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
                 }
                 uint256 budget = (curPool * dailyBps) / 10_000;
 
-                // Run the early-bird lootbox jackpot on day 1 only.
+                // Run the early-bird ticket jackpot on day 1 only.
                 // This day replaces the normal daily carryover flow.
                 if (isEarlyBirdDay) {
-                    _runEarlyBirdLootboxJackpot(lvl + 1, randWord);
+                    _runEarlyBirdTicketJackpot(lvl + 1, randWord);
                 }
 
                 // Gas optimization: 20% = 1/5 (cheaper than * 2000 / 10000)
-                uint256 dailyLootboxBudget = budget / 5;
-                if (dailyLootboxBudget != 0) {
-                    budget -= dailyLootboxBudget;
+                uint256 dailyTicketBudget = budget / 5;
+                if (dailyTicketBudget != 0) {
+                    budget -= dailyTicketBudget;
                 }
 
                 // Calculate daily ticket units (distributed in Phase 2 via payDailyJackpotCoinAndTickets)
                 uint256 dailyEntries = _budgetToEntries(
-                    dailyLootboxBudget,
+                    dailyTicketBudget,
                     lvl + 1
                 );
                 if (dailyEntries != 0) {
                     // Deduct from current pool and add to next pool to back tickets.
                     // curPool is still exact: nothing above writes currentPrizePool.
-                    curPool -= dailyLootboxBudget;
+                    curPool -= dailyTicketBudget;
                     _setCurrentPrizePool(curPool);
-                    _addNextPrizePool(dailyLootboxBudget);
+                    _addNextPrizePool(dailyTicketBudget);
                 }
 
                 uint8 sourceLevelOffset;
@@ -490,10 +492,10 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         uint256 ethDaySlice = futureBal / 100;
 
         uint256 ethPool = ethDaySlice;
-        uint256 lootboxBudget;
+        uint256 ticketLegBudget;
         if (ethPool != 0) {
-            lootboxBudget = (ethPool * PURCHASE_REWARD_JACKPOT_LOOTBOX_BPS) / 10_000;
-            if (lootboxBudget != 0) ethPool -= lootboxBudget;
+            ticketLegBudget = (ethPool * PURCHASE_REWARD_JACKPOT_TICKET_BPS) / 10_000;
+            if (ticketLegBudget != 0) ethPool -= ticketLegBudget;
         }
 
         // Fixed bucket counts [20, 12, 6, 1] = 39 winners, rotated by entropy.
@@ -533,14 +535,14 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         // futureBal is still exact: nothing above writes prizePoolsPacked
         // (purchase-phase distribution never reaches the solo whale-pass leg).
         if (ethDaySlice != 0) {
-            _setFuturePrizePool(futureBal - lootboxBudget - paidEth);
+            _setFuturePrizePool(futureBal - ticketLegBudget - paidEth);
         }
 
-        if (lootboxBudget != 0) {
-            _distributeLootboxAndTickets(
+        if (ticketLegBudget != 0) {
+            _distributePoolBackedTickets(
                 lvl,
                 winningTraitsPacked,
-                lootboxBudget,
+                ticketLegBudget,
                 randWord,
                 5_000 // 50% ticket conversion — improves pool/ticket backing ratio
             );
@@ -588,7 +590,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
                 mainTraitsPacked,
                 dailyEntries,
                 EntropyLib.hash2(randWord, lvl),
-                LOOTBOX_MAX_WINNERS,
+                TICKET_JACKPOT_MAX_WINNERS,
                 241
             );
         }
@@ -606,7 +608,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
                 bonusTraitsPacked,
                 carryoverEntries,
                 EntropyLib.hash2(randWord, sourceLevel),
-                LOOTBOX_MAX_WINNERS,
+                TICKET_JACKPOT_MAX_WINNERS,
                 240
             );
         }
@@ -621,7 +623,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         dailyTicketBudgetsPacked = 0;
     }
 
-    /// @dev Execute the early-bird lootbox jackpot from the unified future pool.
+    /// @dev Execute the early-bird ticket jackpot from the unified future pool.
     ///      Routes through the shared ticket distributor so the budget→ticket
     ///      conversion (`_budgetToEntries`, the same 4-entries-per-ticket basis
     ///      every other jackpot path uses) and the winner cap match the daily and
@@ -630,7 +632,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     ///      budgets to zero), with the exact base+remainder rotation keeping the award
     ///      fully backed. Winners drawn from `lvlTraitEntry[lvl]`, tickets queued at
     ///      `lvl` (= outer level + 1). The full 3% budget always moves future→next.
-    function _runEarlyBirdLootboxJackpot(uint24 lvl, uint256 rngWord) private {
+    function _runEarlyBirdTicketJackpot(uint24 lvl, uint256 rngWord) private {
         (uint128 nextBal, uint128 futureBal) = _getPrizePools();
         uint256 totalBudget = (uint256(futureBal) * 300) / 10_000; // 3%
         if (totalBudget == 0) return;
@@ -643,7 +645,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
                 _rollWinningTraits(rngWord, true),
                 entries,
                 EntropyLib.hash2(rngWord, lvl),
-                LOOTBOX_MAX_WINNERS,
+                TICKET_JACKPOT_MAX_WINNERS,
                 239
             );
         }
@@ -730,26 +732,29 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     // Internal Helpers — Ticket Rewards
     // =========================================================================
 
-    /// @dev Distributes lootbox budget to next pool and tickets to trait winners.
+    /// @dev Moves the full budget to nextPrizePool and distributes pool-backed
+    ///      tickets to trait winners.
     /// @param ticketConversionBps Fraction of budget used for ticket calculation (10000 = 100%).
     ///        Full budget always flows to nextPrizePool regardless of this parameter.
-    function _distributeLootboxAndTickets(
+    function _distributePoolBackedTickets(
         uint24 lvl,
         uint32 winningTraitsPacked,
-        uint256 lootboxBudget,
+        uint256 budget,
         uint256 randWord,
         uint16 ticketConversionBps
     ) private {
-        // Add lootbox budget to nextPrizePool
-        _addNextPrizePool(lootboxBudget);
+        // Full budget backs the tickets via nextPrizePool
+        _addNextPrizePool(budget);
 
         // Distribute tickets to winners (may use reduced basis for backing ratio)
-        uint256 ticketBasis = (lootboxBudget * ticketConversionBps) / 10_000;
-        uint256 entries = _budgetToEntries(ticketBasis, lvl + 1);
+        // Tickets are queued at the current purchase level (`lvl`), matching the
+        // nextPrizePool credit above that backs them.
+        uint256 ticketBasis = (budget * ticketConversionBps) / 10_000;
+        uint256 entries = _budgetToEntries(ticketBasis, lvl);
         if (entries != 0) {
             _distributeTicketJackpot(
                 lvl,
-                lvl + 1,
+                lvl,
                 winningTraitsPacked,
                 entries,
                 EntropyLib.hash2(randWord, lvl),
