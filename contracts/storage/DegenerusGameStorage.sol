@@ -2472,6 +2472,29 @@ abstract contract DegenerusGameStorage {
     ///      warm; a uint24 holds the full level range (matches `level`).
     uint24 internal _sdgnrsBonusLevel;
 
+    /// @dev Count of stamped-but-unopened afking boxes (at most one per subscriber — the
+    ///      no-orphan rule blocks re-stamping, eviction, reclaim, and funding-kill while a
+    ///      box is pending, so the daily STAGE box stamps are the ONLY increments — batched
+    ///      one add per STAGE chunk, plus the once-per-level sDGNRS bonus box inline — and
+    ///      the box open the ONLY decrement). The rewarded open crank early-outs on zero, making a
+    ///      drained-ring "any work?" check O(1) instead of a full ring scan; the unrewarded
+    ///      openBoxes valve never consults it, so a counter fault can only cost gas (a walk
+    ///      that finds nothing), never box liveness. Packs into the cursor slot (warm for
+    ///      both writers); uint16 covers the 1000-subscriber cap.
+    uint16 internal _pendingBoxCount;
+
+    /// @dev Afking opens already knee-credited in the CURRENT forced-split bounty batch.
+    ///      The weighted walk can split what a single unweighted call used to drain (a long
+    ///      skip run eats budget), and each split chunk would otherwise re-satisfy the
+    ///      OPEN_KNEE and re-pay a full bounty. The rewarded crank credits only
+    ///      min(carry + opened, KNEE) - min(carry, KNEE) toward the knee, carries the batch
+    ///      total while the walk is budget-exhausted with boxes still pending (always < 80,
+    ///      fits uint16), and the batch closes — carry zeroed — when the pending counter
+    ///      drains to zero (any open path) or a chunk reaches the full OPEN_BATCH of opens.
+    ///      Aggregate bounty over the split chunks equals the unsplit call's. Packs into the
+    ///      cursor slot (warm for every reader/writer).
+    uint16 internal _openBountyCarry;
+
     /// @dev Players with an open box queued per lootbox RNG index, enqueued once at
     ///      first deposit (the lootboxEth amount == 0 signal). Keyed on the lootbox index,
     ///      which re-couples to the VRF-rotation orphan-index keyspace — the box auto-open

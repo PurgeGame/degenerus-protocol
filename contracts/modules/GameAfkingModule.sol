@@ -262,6 +262,20 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
     ///      hard ceiling.
     uint256 internal constant OPEN_BATCH = 80;
 
+    /// @dev Weight of one box open — afking box or human-sweep step — in walk-budget units,
+    ///      with one ring-scan subscriber visit (a skip) = 1 unit. Calibrated from COLD
+    ///      measurements (open ≈ 111k gas, skip ≈ 4.7k, heavy human entry ≈ 104k —
+    ///      test/gas/OpenWalkCompositionGas.t.sol): per-unit gas is ≈ equal (~4.7k) across
+    ///      item kinds, so ANY budget mix costs about the same total gas.
+    uint256 internal constant OPEN_ITEM_WEIGHT = 24;
+
+    /// @dev Shared afking-walk + human-sweep budget per rewarded crank, in walk units:
+    ///      80 opens (the OPEN_BATCH-equivalent) with zero skips, or pro-rata fewer opens
+    ///      as ring-scan skips consume units. Bounds one call's open-leg gas at
+    ///      ≈ 1920 × ~4.7k ≈ 9.1M structurally — skips can no longer stack a full-ring
+    ///      scan on top of a full-budget human sweep.
+    uint256 internal constant OPEN_WEIGHT_BUDGET = OPEN_BATCH * OPEN_ITEM_WEIGHT;
+
     /*------------------------------------------------------------------
                           Subscription entrypoint
     ------------------------------------------------------------------*/
@@ -872,6 +886,12 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
                 // ledger); the EV-cap RMW is deferred to OPEN, fed this frozen score, and
                 // the level + EV-cap key read LIVE at open. milli-ETH stamp (the EV/seed input
                 // only — the ETH debit used the full wei ethValue).
+                // The stamp below leaves lastOpenedDay behind lastAutoBoughtDay — the ONLY
+                // pending-box-creating shape (ticket buys and cover-buys mark themselves
+                // box-clean above). `_pendingBoxCount` is maintained by the two callers that
+                // reach this branch: the STAGE loop batches one add per chunk off its
+                // box-accrual count, and the sDGNRS level-bonus site increments inline —
+                // both atomic with this stamp (same tx, revert-together).
                 sub.score = score;
                 sub.amount = uint24(_packEthToMilliEth(amount));
             }
@@ -1225,11 +1245,17 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
                     false
                 );
                 _routeAfkingPoolEth(box, 0);
+                // The bonus delivery is a coverBuy=false lootbox stamp — a pending box.
+                // Once-per-level site, so the inline counter RMW costs nothing amortized.
+                unchecked {
+                    ++_pendingBoxCount;
+                }
             }
         }
 
         uint256 cursor = _subCursor;
         uint256 weight; // accumulated gas-weight; the chunk ends at weightBudget
+        uint256 boxStamps; // pending boxes stamped this chunk — one batched counter add at chunk end
         // Batched prize-pool routing: each funded buy debits its full cost from the funding
         // source and accrues that spend here by mode; the pools are credited ONCE at chunk end
         // (boxes 90% future / 10% next, tickets 90% next / 10% future) so the per-sub cost is
@@ -1431,8 +1457,16 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
             // pool. The afking entry-unit `amount` is the box's wei spend only in lootbox mode,
             // so the routing keys on `cost`, never `amount`.
             uint256 cost = ethValue + claimableUse;
-            if (isTicket) ticketEthAccrued += cost;
-            else boxEthAccrued += cost;
+            if (isTicket) {
+                ticketEthAccrued += cost;
+            } else {
+                boxEthAccrued += cost;
+                // Every non-ticket STAGE delivery is a Sub-stamp box (coverBuy=false here),
+                // i.e. one pending box — counted locally, committed once per chunk below.
+                unchecked {
+                    ++boxStamps;
+                }
+            }
 
             unchecked {
                 ++cursor;
@@ -1443,6 +1477,13 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
 
         // Persist the advanced cursor (uint16) for the next chunk / call.
         _subCursor = uint16(cursor);
+        // Commit this chunk's pending-box count in ONE warm RMW (the cursor write above
+        // already dirtied the shared slot) — the per-stamp version would pay it per sub.
+        if (boxStamps != 0) {
+            unchecked {
+                _pendingBoxCount += uint16(boxStamps);
+            }
+        }
         // Credit the prize pools once for this chunk's batched box + ticket spend.
         _routeAfkingPoolEth(boxEthAccrued, ticketEthAccrued);
         return processed;
@@ -1526,6 +1567,19 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
         // Advance the day-keyed no-double-open marker BEFORE the resolve (effects-first; a
         // re-entrant open re-checks `lastOpenedDay < lastAutoBoughtDay` → false → no-op).
         sub.lastOpenedDay = sub.lastAutoBoughtDay;
+        // Pending box consumed — the sole decrement paired with the daily stamp's sole
+        // increment. Unchecked: a (never-expected) underflow wraps the counter HIGH, which
+        // only re-enables walks that find nothing (the safe direction); flooring at zero
+        // would instead bias toward under-count, the direction that skips real work.
+        unchecked {
+            --_pendingBoxCount;
+        }
+        // Backlog fully drained (via ANY open path, rewarded or valve): the forced-split
+        // bounty batch is over — clear the carry so the next backlog's knee starts fresh.
+        // Same packed slot as the counter, so both accesses are warm.
+        if (_pendingBoxCount == 0 && _openBountyCarry != 0) {
+            _openBountyCarry = 0;
+        }
 
         // boons OFF ⇒ the stamped spend IS the box amount (unpacked milli-ETH → wei). The
         // word (the frozen stamp day's `rngWordByDay[day]`, passed in from the readiness check
@@ -1551,21 +1605,28 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
     /// @dev The open leg no-ops during the freeze (a mid-day RNG lock or the terminal-jackpot
     ///      liveness control), so the loop body cannot revert under the entry-gate (each open
     ///      is pre-gated on a landed word) — no per-item try/catch. Walks `_subscribers` from
-    ///      `_subOpenCursor`, opening up to `maxCount` materializable boxes; the per-sub
-    ///      day-keyed `lastOpenedDay` marker makes the walk idempotent, so the cursor
-    ///      wrap-resets to 0 at the set end (a re-walk skips already-opened subs by the marker
-    ///      — no extra per-index storage). Concurrent callers self-partition via the advancing
-    ///      cursor.
-    /// @param maxCount Max boxes to open this call (0 = OPEN_BATCH). Caller-bounded; every
-    ///        afking box is uniform O(1), like a human box.
+    ///      `_subOpenCursor` under a WEIGHTED budget: every subscriber visit costs 1 unit and
+    ///      every open costs OPEN_ITEM_WEIGHT, so a long skip run consumes budget instead of
+    ///      stacking a free full-ring scan onto the caller's remaining work. The per-sub
+    ///      day-keyed `lastOpenedDay` marker makes the walk idempotent, and the cursor commits
+    ///      wherever the budget (or the ring) ends — skip-only progress is real progress the
+    ///      next call resumes from. Concurrent callers self-partition via the advancing cursor.
+    /// @param budgetUnits Walk budget in units (0 = OPEN_WEIGHT_BUDGET). One visit = 1 unit;
+    ///        one open = OPEN_ITEM_WEIGHT units. Every item kind costs ≈ the same gas per unit.
     /// @return opened The number of afking boxes materialized this call.
-    function _autoOpen(uint256 maxCount) internal returns (uint256 opened) {
-        if (maxCount == 0) maxCount = OPEN_BATCH;
+    /// @return unitsUsed Budget units consumed (visits + opens); the caller derives the
+    ///         human-sweep leg's remaining step budget from it.
+    /// @return exhausted True when the walk stopped on the BUDGET with ring left unvisited
+    ///         (a forced split) — the bounty-carry signal; false when the lap completed.
+    function _autoOpen(
+        uint256 budgetUnits
+    ) internal returns (uint256 opened, uint256 unitsUsed, bool exhausted) {
+        if (budgetUnits == 0) budgetUnits = OPEN_WEIGHT_BUDGET;
         // Entry-gate: the open path no-ops in the freeze / terminal control.
-        if (rngLockedFlag || _livenessTriggered()) return 0;
+        if (rngLockedFlag || _livenessTriggered()) return (0, 0, false);
 
         uint256 len = _subscribers.length;
-        if (len == 0) return 0;
+        if (len == 0) return (0, 0, false);
         uint256 cursor = _subOpenCursor;
         // Wrap a spent cursor back to the set start (the marker makes the re-walk a no-op
         // on already-opened subs; a fresh-stamp sub past its marker opens).
@@ -1573,31 +1634,34 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
 
         // Day-cache: the boxes in one pass are almost always all stamped on the current day,
         // so the frozen stamp-day word is read from `rngWordByDay` once per DISTINCT day, not
-        // once per box. Mixed days CAN occur (the open leg falls behind OPEN_BATCH or a keeper
+        // once per box. Mixed days CAN occur (the open leg falls behind the budget or a keeper
         // skips a day → the no-orphan rule keeps an old-day box), so each box still resolves
         // ITS OWN stamp day — the cache only short-circuits the repeated same-day SLOAD, never
         // crosses a box to another day's word (the seed-freeze invariant).
         uint24 cachedDay;
         uint256 cachedWord; // != 0 ⇒ cache holds rngWordByDay[cachedDay]
 
-        // Full-ring scan: visit up to `len` subs from the cursor, wrapping mid-scan, so a
-        // 0-open result means the WHOLE set is drained — not just [cursor, len). Without the
-        // mid-scan wrap a cursor left at an index < len (e.g. a `subscribe` grew the set while
-        // the cursor sat at the old length, or any non-openable sub sits at/after the cursor)
-        // strands [0, cursor): the leg returns 0 with boxes still openable and mintFlip reverts
-        // NoWork, never re-reaching them. Per-call opens stay bounded by `maxCount`.
+        // Budgeted ring walk: visit up to `len` subs from the cursor, wrapping mid-scan, at
+        // most one full lap per call. A call that completes the lap with 0 opens has PROVEN
+        // the set drained; a call that exhausts its budget first commits the cursor mid-ring
+        // and the next call resumes there — [0, cursor) is never stranded because the wrap
+        // (line below the loop entry) re-reaches it on a later lap. The caller treats cursor
+        // movement as progress (no NoWork revert), so a skip run grinds down across calls.
         uint256 scanned;
-        while (scanned < len && opened < maxCount) {
+        while (scanned < len && unitsUsed < budgetUnits) {
             if (cursor >= len) cursor = 0;
             address player = _subscribers[cursor];
             Sub storage sub = _subOf[player];
-            unchecked {
-                ++cursor;
-                ++scanned;
-            }
             // Skip subs with no pending box (already-opened: lastOpenedDay >= lastAutoBoughtDay).
             uint24 stampDay = sub.lastAutoBoughtDay;
-            if (sub.lastOpenedDay >= stampDay) continue;
+            if (sub.lastOpenedDay >= stampDay) {
+                unchecked {
+                    ++cursor;
+                    ++scanned;
+                    ++unitsUsed;
+                }
+                continue;
+            }
             // Resolve this box's frozen stamp-day word — cache hit on the common same-day path.
             uint256 word;
             if (stampDay == cachedDay && cachedWord != 0) {
@@ -1608,15 +1672,31 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
                 cachedWord = word;
             }
             // word == 0 ⇒ the stamp day's word hasn't landed yet — skip until it does.
-            if (word == 0) continue;
+            if (word == 0) {
+                unchecked {
+                    ++cursor;
+                    ++scanned;
+                    ++unitsUsed;
+                }
+                continue;
+            }
+            // An open costs OPEN_ITEM_WEIGHT units. Stop BEFORE the box when the remaining
+            // budget cannot afford one — the cursor stays ON this sub, so the next call
+            // opens it first. Entry budgets are always >= OPEN_ITEM_WEIGHT, so a call can
+            // never wedge with zero progress.
+            if (budgetUnits - unitsUsed < OPEN_ITEM_WEIGHT) break;
             // Guaranteed-non-reverting under the entry-gate + the readiness pre-gate.
             _openAfkingBox(player, sub, word);
             unchecked {
                 ++opened;
+                ++cursor;
+                ++scanned;
+                unitsUsed += OPEN_ITEM_WEIGHT;
             }
         }
 
         _subOpenCursor = uint16(cursor >= len ? 0 : cursor);
+        exhausted = scanned < len;
     }
 
     /// @notice Unified permissionless afking router: do ONE category of pending work this
@@ -1667,18 +1747,78 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
         }
         // (2) box open — FALSE during rngLock; opens mid-day-resolved stamped boxes.
         // Afking boxes FIRST via _subOpenCursor, then human boxes with the leftover
-        // budget (a verbatim mirror of the unrewarded openBoxes valve — both legs are
-        // uniform O(1) and the human leg is pull-only, so the tx stays gas-bounded and
-        // reentrancy-free). The combined count is bountied 1x pro-rated below the knee,
-        // flat 1x at/above — kills the small-batch farm-by-splitting corner.
+        // budget. The two legs share ONE weighted budget (visits = 1 unit, opens =
+        // OPEN_ITEM_WEIGHT), so a long afking skip run can never stack a free full-ring
+        // scan on top of a full-budget human sweep; both legs are pull-only, so the tx
+        // stays gas-bounded and reentrancy-free. The combined open count is bountied 1x
+        // pro-rated below the knee, flat 1x at/above — kills the small-batch
+        // farm-by-splitting corner.
         else {
-            uint256 opened = _autoOpen(OPEN_BATCH);
-            // Human-box leg with the remaining budget — the multi-index sweep lives in
-            // the lootbox module (delegatecall runs it in this Game's storage, the same
-            // nested pattern as _openAfkingBox's resolveAfkingBox). Skipped once the
-            // afking leg has already spent the full batch.
+            uint256 opened;
+            uint256 unitsUsed;
+            // Afking opens creditable toward the bounty knee THIS call: net of the
+            // forced-split carry, so a backlog the weighted budget splits across calls
+            // pays the same aggregate bounty the unsplit call would have.
+            uint256 afkKneeCredit;
+            // Afking-leg progress = a box opened OR the cursor advanced over a skip run.
+            // Skip-only progress commits (later calls resume past it) but pays no bounty.
+            bool afkProgress;
+            // O(1) drained gate: zero pending afking boxes ⇒ skip the ring walk entirely
+            // (a walk would only prove "no work" at ~1 unit per subscriber). The unrewarded
+            // openBoxes valve never consults the counter, so a counter fault can only cost
+            // gas (a walk that finds nothing — the ungated behavior), never box liveness.
+            if (_pendingBoxCount != 0) {
+                uint256 cursorBefore = _subOpenCursor;
+                // Read the carry BEFORE the walk: opening the batch's last pending box
+                // fires the open-side clear mid-walk, and the netting below must see the
+                // pre-walk batch state, not the cleared slot.
+                uint256 carry = _openBountyCarry;
+                bool afkExhausted;
+                (opened, unitsUsed, afkExhausted) = _autoOpen(OPEN_WEIGHT_BUDGET);
+                afkProgress = opened != 0 || _subOpenCursor != cursorBefore;
+                // Netting runs only when the walk actually ran (a freeze/liveness early
+                // return leaves the batch state untouched — no spurious carry clear,
+                // independent of the NoWork revert below).
+                if (unitsUsed != 0 || opened != 0) {
+                    // Forced-split bounty batch: knee-credit only the opens beyond what
+                    // the carry already credited. A batch is one OPEN_BATCH's worth of
+                    // opens (what a single unsplit call used to drain); opens past that
+                    // boundary begin a FRESH batch with a fresh knee, exactly as a
+                    // separate old call would have. The carry persists while the walk is
+                    // budget-exhausted with boxes still pending, and clears at a completed
+                    // lap, at the boundary, or when the pending counter drains to zero
+                    // (the open-side clear). Aggregate bounty over the split chunks == the
+                    // unsplit calls' aggregate.
+                    uint256 batchOpens = carry + opened;
+                    uint256 carryKnee = carry < OPEN_KNEE ? carry : OPEN_KNEE;
+                    uint16 newCarry;
+                    if (batchOpens >= OPEN_BATCH) {
+                        // carry < 80 and opened <= 80 ⇒ at most one boundary crossing.
+                        uint256 beyond = batchOpens - OPEN_BATCH;
+                        uint256 beyondKnee = beyond < OPEN_KNEE ? beyond : OPEN_KNEE;
+                        afkKneeCredit = (OPEN_KNEE - carryKnee) + beyondKnee;
+                        newCarry = (afkExhausted && _pendingBoxCount != 0)
+                            ? uint16(beyond)
+                            : 0;
+                    } else {
+                        uint256 batchKnee = batchOpens < OPEN_KNEE
+                            ? batchOpens
+                            : OPEN_KNEE;
+                        afkKneeCredit = batchKnee - carryKnee;
+                        newCarry = (afkExhausted && _pendingBoxCount != 0)
+                            ? uint16(batchOpens)
+                            : 0;
+                    }
+                    if (newCarry != carry) _openBountyCarry = newCarry;
+                }
+            }
+            // Human-box leg with the remaining budget, converted back to sweep steps —
+            // the multi-index sweep lives in the lootbox module (delegatecall runs it in
+            // this Game's storage, the same nested pattern as _openAfkingBox's
+            // resolveAfkingBox) and charges every entry/skip/index-header as one step.
             bool sweptFrontier;
-            if (opened < OPEN_BATCH) {
+            uint256 humanSteps = (OPEN_WEIGHT_BUDGET - unitsUsed) / OPEN_ITEM_WEIGHT;
+            if (humanSteps != 0) {
                 // Snapshot the monotonic human-box frontier: the sweep advances it over
                 // already-opened / dead entries (skips) even when it opens nothing, and that
                 // advance is real forward progress (later sweeps start past the skips). Commit
@@ -1694,11 +1834,16 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
                     .delegatecall(
                         abi.encodeWithSelector(
                             IDegenerusGameLootboxModule.openHumanBoxes.selector,
-                            OPEN_BATCH - opened
+                            humanSteps
                         )
                     );
                 if (!ok) _revertDelegate(data);
-                opened += abi.decode(data, (uint256));
+                uint256 humanOpened = abi.decode(data, (uint256));
+                opened += humanOpened;
+                // Human opens knee-credit at face value every call — human-sweep splitting
+                // predates the weighted budget (its steps were always charged), so only the
+                // afking side carries forced-split netting.
+                afkKneeCredit += humanOpened;
                 uint48 finalFrontierIdx = boxCursorIndex == 0
                     ? 1
                     : boxCursorIndex;
@@ -1708,17 +1853,19 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
             if (opened > 0) {
                 // Priced after the open legs: box resolution never writes
                 // level/jackpotPhaseFlag, so this equals the entry-time price — and the
-                // lookup is skipped entirely on the NoWork probe.
+                // lookup is skipped entirely on the NoWork probe. The knee basis is the
+                // carry-netted credit, so a forced-split chunk whose opens were already
+                // knee-credited pays nothing extra (opened > 0 still suppresses NoWork).
                 uint256 unit = (BOUNTY_ETH_TARGET * PRICE_COIN_UNIT) /
                     _mintPriceInContext();
-                uint256 k = opened < OPEN_KNEE ? opened : OPEN_KNEE;
+                uint256 k = afkKneeCredit < OPEN_KNEE ? afkKneeCredit : OPEN_KNEE;
                 bountyEarned = (unit * k) / OPEN_KNEE;
-            } else if (!sweptFrontier) {
-                // Nothing opened AND the frontier did not move (no afking box, no human box,
-                // no skips swept) — the clean no-work signal.
+            } else if (!sweptFrontier && !afkProgress) {
+                // Nothing opened AND neither cursor moved (no afking box, no human box,
+                // no skip run swept on either leg) — the clean no-work signal.
                 revert NoWork();
             }
-            // else: the human sweep advanced the frontier past a skip run — commit it, no bounty.
+            // else: a leg advanced its cursor past a skip run — commit it, no bounty.
         }
 
         // The single unified bounty: ONE creditFlip, CEI-LAST, after the one-category
@@ -1734,10 +1881,23 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
     ///         only mintFlip() credits. Reached via the Game's openBoxes() liveness valve
     ///         (which pairs this afking cursor walk with the lootbox module's openHumanBoxes
     ///         human sweep; calling this module contract directly hits empty storage).
-    /// @param count Max afking boxes to open this call (0 = the default OPEN_BATCH).
+    /// @param count Max afking boxes to open this call (0 = the default OPEN_BATCH-equivalent
+    ///        budget). Converted to walk units (count × OPEN_ITEM_WEIGHT, count clamped to the
+    ///        subscriber cap), so a skip run consumes budget here too — the caller sizes count
+    ///        to the gas they can afford, exactly as before. NEVER gated on the pending-box
+    ///        counter: this valve is the liveness floor that stays correct even if the counter
+    ///        ever under-reports. Pays no bounty and never touches the bounty carry.
     /// @return opened The number of afking boxes opened this call.
-    function drainAfkingBoxes(uint256 count) external returns (uint256 opened) {
-        return _autoOpen(count);
+    /// @return stepsUsed Walk budget consumed in OPEN-STEP currency (units ÷ OPEN_ITEM_WEIGHT,
+    ///         rounded up) — the Game's openBoxes subtracts it from the caller's maxCount so a
+    ///         drained-ring scan can no longer hand the human sweep an uncharged full budget.
+    function drainAfkingBoxes(
+        uint256 count
+    ) external returns (uint256 opened, uint256 stepsUsed) {
+        if (count > SUBSCRIBER_CAP) count = SUBSCRIBER_CAP;
+        uint256 unitsUsed;
+        (opened, unitsUsed, ) = _autoOpen(count * OPEN_ITEM_WEIGHT);
+        stepsUsed = (unitsUsed + OPEN_ITEM_WEIGHT - 1) / OPEN_ITEM_WEIGHT;
     }
 
     /// @dev O(1) in-context advance-work discovery for the router — a verbatim copy of

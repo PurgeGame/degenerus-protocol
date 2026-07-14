@@ -531,9 +531,14 @@ interface IGameAfkingModule {
     ///         (advance → box open: afking boxes first, then human boxes) and pay ONE bounty.
     function mintFlip() external;
 
-    /// @notice Drain up to `count` ready afking boxes (walks _subOpenCursor); returns the
-    ///         number opened. Unrewarded; reached via the Game's openBoxes() valve.
-    function drainAfkingBoxes(uint256 count) external returns (uint256 opened);
+    /// @notice Drain up to `count` ready afking boxes (walks _subOpenCursor under a weighted
+    ///         budget of count × open-weight units); returns the number opened AND the walk
+    ///         budget consumed in open-step currency (skips included, rounded up) so the
+    ///         caller can charge the scan against its remaining work budget. Unrewarded;
+    ///         reached via the Game's openBoxes() valve.
+    function drainAfkingBoxes(
+        uint256 count
+    ) external returns (uint256 opened, uint256 stepsUsed);
 
     /// @notice Permissionless FLIP claim — pays each sub its accrued pendingFlip (the
     ///         per-delivered-day slot-0 quest reward + ticket buyer-bonus) in one creditFlip

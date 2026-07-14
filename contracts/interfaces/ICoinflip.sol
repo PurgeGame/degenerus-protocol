@@ -139,6 +139,21 @@ interface ICoinflip {
         uint256[] calldata amounts
     ) external;
 
+    /// @notice Credit flips to exactly two players in a single call.
+    /// @dev Fixed-arity variant of creditFlipBatch — spares the caller the two array
+    ///      allocations and the dynamic ABI encode. Skips zero addresses and amounts.
+    /// @param player1 First recipient.
+    /// @param amount1 First credit amount.
+    /// @param player2 Second recipient.
+    /// @param amount2 Second credit amount.
+    /// @custom:reverts OnlyFlipCreditors If caller is not an authorized creditor.
+    function creditFlipPair(
+        address player1,
+        uint256 amount1,
+        address player2,
+        uint256 amount2
+    ) external;
+
     /// @notice Settle-then-read sDGNRS's redeemable coinflip backing (claimableStored + carry).
     /// @dev sDGNRS-only. Settles all resolved days first so the two summed components are disjoint
     ///      and current; the held wallet balance is read separately by sDGNRS.

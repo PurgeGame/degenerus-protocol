@@ -1023,6 +1023,28 @@ contract Coinflip {
         }
     }
 
+    /// @notice Credit flips to exactly two players (called by GAME modules, QUESTS, AFFILIATE, or ADMIN).
+    /// @dev Fixed-arity variant of creditFlipBatch for the purchase hot path — spares the
+    ///      caller the two array allocations and the dynamic ABI encode. address(0) and
+    ///      zero-amount legs are skipped, matching the batch behavior.
+    /// @param player1 First recipient (address(0) entries are skipped).
+    /// @param amount1 First FLIP-denominated flip stake amount (0 entries are skipped).
+    /// @param player2 Second recipient (address(0) entries are skipped).
+    /// @param amount2 Second FLIP-denominated flip stake amount (0 entries are skipped).
+    function creditFlipPair(
+        address player1,
+        uint256 amount1,
+        address player2,
+        uint256 amount2
+    ) external onlyFlipCreditors {
+        if (player1 != address(0) && amount1 != 0) {
+            _addDailyFlip(player1, amount1, 0, false, false);
+        }
+        if (player2 != address(0) && amount2 != 0) {
+            _addDailyFlip(player2, amount2, 0, false, false);
+        }
+    }
+
     /// @notice Settle-then-read sDGNRS's redeemable FLIP coinflip backing (sDGNRS only).
     /// @dev Forces all resolved days into claimableStored / autoRebuyCarry first so the two summed
     ///      components are disjoint and current even after a multi-day advance stall (otherwise a

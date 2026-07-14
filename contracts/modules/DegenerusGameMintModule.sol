@@ -974,9 +974,7 @@ contract DegenerusGameMintModule is
                     entryQuantityScaled,
                     MintPaymentKind.DirectEth,
                     true,
-                    bytes32(0),
                     0,
-                    cachedLevel,
                     jackpotPhaseFlag
                 );
 
@@ -1372,7 +1370,12 @@ contract DegenerusGameMintModule is
         // the two events stay disjoint for off-chain ETH-in totals.
         if (ticketCost != 0) emit EntriesBought(buyer, entryQuantityScaled, ticketCost);
 
-        uint256 initialClaimable = _claimableOf(buyer);
+        // DirectEth draws no claimable on either leg, so the recycle-bonus basis below is
+        // necessarily zero there — the balance snapshot is skipped on that kind.
+        uint256 initialClaimable;
+        if (payKind != MintPaymentKind.DirectEth) {
+            initialClaimable = _claimableOf(buyer);
+        }
 
         // ethValue is the per-slice fresh-ETH portion (== msg.value for single-tx callers; the
         // explicit afking ticket-buy slice routed through purchaseWith from the process STAGE).
@@ -1437,9 +1440,7 @@ contract DegenerusGameMintModule is
                     entryQuantityScaled,
                     payKind,
                     false,
-                    affiliateCode,
                     remainingEth,
-                    cachedLevel,
                     cachedJpFlag
                 );
         }
@@ -1560,8 +1561,7 @@ contract DegenerusGameMintModule is
 
         // --- Single quest handler call (post-action: handlers execute before score) ---
         // MINT_ETH quest progress is credited 1:1 in wei on the gross ETH-denominated
-        // ticket + lootbox spend, regardless of fresh-vs-recycled funding source.
-        uint256 ethMintSpendWei = ticketCost + lootBoxAmount;
+        // ticket + lootbox spend (totalCost), regardless of fresh-vs-recycled funding source.
         uint32 questStreak;
         {
             (
@@ -1571,7 +1571,7 @@ contract DegenerusGameMintModule is
                 bool questCompleted
             ) = quests.handlePurchase(
                     buyer,
-                    ethMintSpendWei,
+                    totalCost,
                     flipMintUnits,
                     lootBoxAmount,
                     priceWei,
@@ -1589,7 +1589,8 @@ contract DegenerusGameMintModule is
             questStreak = afkLive ? afkStreak : streak;
             if (questCompleted) {
                 lootboxFlipCredit += questReward;
-                if (ethMintSpendWei > 0 && questType == 1) {
+                // Every purchase carries ETH spend (totalCost != 0 enforced at entry).
+                if (questType == 1) {
                     _recordMintStreakForLevel(buyer, _activeTicketLevel());
                 }
             }
@@ -1687,11 +1688,12 @@ contract DegenerusGameMintModule is
         }
 
         // Settle all affiliate legs (ticket + lootbox, fresh + recycled) in ONE call. The kickback
-        // joins the buyer's flip credit; the rolled winner credit is returned and batched below.
-        // Runs on any ETH spend; affiliate scores freeze at level + 1.
+        // joins the buyer's flip credit; the rolled winner credit is returned and paired below.
+        // Runs unconditionally — every purchase carries ETH spend (totalCost != 0 enforced at
+        // entry); affiliate scores freeze at level + 1.
         address affWinner;
         uint256 affWinnerCredit;
-        if (ticketCost != 0 || lootBoxAmount != 0) {
+        {
             uint256 lbFreshFlip = lootboxFreshEth != 0
                 ? _ethToFlipValue(lootboxFreshEth, priceWei)
                 : 0;
@@ -1716,36 +1718,35 @@ contract DegenerusGameMintModule is
         // ticket + lootbox spend (fresh + recycled) earns 25% spendable box credit.
         // Covers the afking ticket buy, which routes through this path.
         if (!presaleOver) {
-            presaleBoxCredit[buyer] += (ticketCost + lootBoxAmount) / 4;
+            presaleBoxCredit[buyer] += totalCost / 4;
         }
-
-        uint256 finalClaimable = payKind == MintPaymentKind.DirectEth
-            ? initialClaimable
-            : _claimableOf(buyer);
-        uint256 totalClaimableUsed = initialClaimable > finalClaimable
-            ? initialClaimable - finalClaimable
-            : 0;
 
         // Recycle bonus: spending at least 3 whole tickets' worth of claimable
         // winnings (priceWei is the per-whole-ticket cost) earns 10% of the
         // recycled value back as FLIP flip credit, regardless of any remaining
-        // claimable balance.
-        if (totalClaimableUsed >= priceWei * 3) {
-            lootboxFlipCredit +=
-                (totalClaimableUsed * PRICE_COIN_UNIT * 10) /
-                (priceWei * 100);
+        // claimable balance. DirectEth draws no claimable on either leg, so the
+        // basis is necessarily zero there and the balance read is skipped.
+        if (payKind != MintPaymentKind.DirectEth) {
+            uint256 finalClaimable = _claimableOf(buyer);
+            uint256 totalClaimableUsed = initialClaimable > finalClaimable
+                ? initialClaimable - finalClaimable
+                : 0;
+            if (totalClaimableUsed >= priceWei * 3) {
+                lootboxFlipCredit +=
+                    (totalClaimableUsed * PRICE_COIN_UNIT) /
+                    (priceWei * 10);
+            }
         }
 
         // One Coinflip write for the buyer credit + the rolled affiliate winner. winner != buyer
-        // (winner == sender credits nothing), so no slot collision; the batch skips zero entries.
+        // (winner == sender credits nothing), so no slot collision; the pair call skips zero legs.
         if (lootboxFlipCredit != 0 || affWinnerCredit != 0) {
-            address[] memory flipRecips = new address[](2);
-            uint256[] memory flipAmounts = new uint256[](2);
-            flipRecips[0] = buyer;
-            flipRecips[1] = affWinner;
-            flipAmounts[0] = lootboxFlipCredit;
-            flipAmounts[1] = affWinnerCredit;
-            coinflip.creditFlipBatch(flipRecips, flipAmounts);
+            coinflip.creditFlipPair(
+                buyer,
+                lootboxFlipCredit,
+                affWinner,
+                affWinnerCredit
+            );
         }
     }
 
@@ -1926,9 +1927,7 @@ contract DegenerusGameMintModule is
         uint256 quantity,
         MintPaymentKind payKind,
         bool payInCoin,
-        bytes32 affiliateCode,
         uint256 value,
-        uint24 cachedLevel,
         bool cachedJpFlag
     )
         private
@@ -2014,7 +2013,13 @@ contract DegenerusGameMintModule is
         } else {
             uint32 mintUnits = adjustedQty32;
 
-            uint256 claimableBefore = _claimableOf(buyer);
+            // DirectEth never draws claimable, so freshEth == costWei with no balance
+            // reads; the other kinds snapshot the balance around the payment call to
+            // measure the claimable draw.
+            uint256 claimableBefore;
+            if (payKind != MintPaymentKind.DirectEth) {
+                claimableBefore = _claimableOf(buyer);
+            }
             // Direct internal payment processing — `value` is the exact ETH this leg carries
             // (what the former value-bearing self-call re-scoped into its msg.value). The
             // prize-pool shares are returned, not written, so the caller folds the ticket and
@@ -2032,7 +2037,9 @@ contract DegenerusGameMintModule is
             // portion the payment just drew; the afking-drawn portion counts as fresh (own
             // principal -> fresh-rate affiliate, including the lootbox activity score). Pay-kind
             // validation already ran inside the payment processing.
-            uint256 freshEth = costWei - (claimableBefore - _claimableOf(buyer));
+            uint256 freshEth = payKind == MintPaymentKind.DirectEth
+                ? costWei
+                : costWei - (claimableBefore - _claimableOf(buyer));
 
             // Day before final jackpot draw (not turbo): +100 FLIP per ticket for affiliates
             // Basis inflated by 7/5 (lvl 0-3, 25% rate) or 3/2 (lvl 4+, 20% rate) to yield +100 after scaling

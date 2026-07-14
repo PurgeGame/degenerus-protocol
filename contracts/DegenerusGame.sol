@@ -1626,17 +1626,23 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
                 )
             );
         if (!ok) _revertDelegate(data);
-        uint256 openedAfking = abi.decode(data, (uint256));
+        (uint256 openedAfking, uint256 afkingSteps) = abi.decode(
+            data,
+            (uint256, uint256)
+        );
         // Then human boxes with the remaining budget — the multi-index sweep lives in the
         // lootbox module (delegatecall runs it in this Game's storage), mirroring the afking
-        // leg above. The walk + per-entry both-leg open are byte-equivalent there.
-        if (openedAfking < maxCount) {
+        // leg above. The afking leg's FULL step consumption (opens AND ring-scan skips, in
+        // open-step currency) is charged against maxCount, so a long drained-ring scan can
+        // never hand the human sweep an uncharged full budget — the same shared-budget rule
+        // the rewarded mintFlip crank enforces.
+        if (afkingSteps < maxCount) {
             (ok, data) = ContractAddresses
                 .GAME_LOOTBOX_MODULE
                 .delegatecall(
                     abi.encodeWithSelector(
                         IDegenerusGameLootboxModule.openHumanBoxes.selector,
-                        maxCount - openedAfking
+                        maxCount - afkingSteps
                     )
                 );
             if (!ok) _revertDelegate(data);
