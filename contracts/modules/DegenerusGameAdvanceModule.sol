@@ -181,15 +181,33 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         uint24 dIdx = dailyIdx;
         bool locked = rngLockedFlag;
         // RNGREUSE guard: never resolve a NEW wall-day with a prior day's still-unsealed
-        // VRF word. If the in-progress day (dailyIdx+1) already recorded its word but was
-        // not yet sealed (_unlockRng deferred behind chunked drains / a pending daily
-        // jackpot / a phase transition) and the wall-clock has moved past it, clamp this
-        // advance to that day so its OWN word resolves it: rngGate returns the cached word,
-        // the deferred jackpot half stays on its Phase-1 word, and the afking box keeps a
-        // real word. The next advance picks up the wall-day with a fresh VRF request.
-        // Distinct from a VRF gap stall (rngWordByDay[dailyIdx+1] == 0 → backfill path).
-        if (day > dIdx + 1 && rngWordByDay[dIdx + 1] != 0) {
-            day = dIdx + 1;
+        // VRF word. Two arms, both clamping this advance to the in-progress day so its
+        // OWN word resolves it, with the next advance picking up the wall-day on a fresh
+        // VRF request:
+        // - Recorded: the in-progress day (dailyIdx+1) already recorded its word but was
+        //   not yet sealed (_unlockRng deferred behind chunked drains / a pending daily
+        //   jackpot / a phase transition) and the wall-clock has moved past it. rngGate
+        //   returns the cached word, the deferred jackpot half stays on its Phase-1 word,
+        //   and the afking box keeps a real word.
+        // - Buffered: a delivered daily word (rngWordCurrent) is public from its
+        //   fulfillment tx, and flip deposits stay open during the lock targeting
+        //   wallDay+1 — so a word requested on day R may only resolve days <= R, whose
+        //   deposit windows closed before the request fired. The clamp (dailyIdx+1 <= R)
+        //   points the word at a day whose flips were committed before it existed.
+        // A stall whose word was requested on the current wall-day stays unclamped:
+        // rngGate's backfill handles it, and every backfilled day's deposits closed
+        // before that word became public.
+        if (day > dIdx + 1) {
+            if (rngWordByDay[dIdx + 1] != 0) {
+                day = dIdx + 1;
+            } else if (
+                locked &&
+                rngWordCurrent != 0 &&
+                rngRequestTime != 0 &&
+                _simulatedDayIndexAt(rngRequestTime) < day
+            ) {
+                day = dIdx + 1;
+            }
         }
         bool inJackpot = jackpotPhaseFlag;
         uint24 lvl = level;
@@ -1326,12 +1344,18 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
             // opens. Gated on gapDays == 0 so a VRF-stall backfill (which defers the whole
             // transition to the next advance, line 412) does not roll the foil quest early.
             // Mutually exclusive with the first-jackpot-day MINT_FLIP force (opposite cycle ends).
-            quests.rollDailyQuest(
-                day,
-                currentWord,
-                lastPurchaseDay && compressedJackpotFlag != 2,
-                phaseTransitionActive && gapDays == 0
-            );
+            // Skipped entirely on a late-consumed word (buffered RNGREUSE clamp: day < wall day):
+            // that day's quest never rolled while the day was live, so a roll now would create a
+            // retroactive quest that immediately counts as a rolled miss against every streak.
+            // The day stays unrolled — forgiven, matching gap-backfill days.
+            if (day == _simulatedDayIndexAt(ts)) {
+                quests.rollDailyQuest(
+                    day,
+                    currentWord,
+                    lastPurchaseDay && compressedJackpotFlag != 2,
+                    phaseTransitionActive && gapDays == 0
+                );
+            }
 
             // Resolve the sentinel-stamped gambling-burn pool if any. Reading the
             // sentinel rather than deriving `day - 1` makes multi-day RNG stalls correct by
