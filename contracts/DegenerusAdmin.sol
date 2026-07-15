@@ -1061,14 +1061,16 @@ contract DegenerusAdmin {
         address feed = linkEthPriceFeed;
 
         // Reward valuation is disabled until governance installs a price feed —
-        // skip the subscription read + multiplier math entirely in that state
+        // skip the subscription read + reward math entirely in that state
         // (mult stays 0 and the post-funding return below covers it).
         uint256 mult;
         if (feed != address(0)) {
             (uint96 bal, , , , ) = IVRFCoordinatorV2_5Owner(coord).getSubscription(
                 subId
             );
-            mult = _linkRewardMultiplier(uint256(bal));
+            // Length-weighted average multiplier across [bal, bal+amount], so a
+            // donation earns the same credit whether it arrives whole or split.
+            mult = _linkRewardIntegral(uint256(bal), amount) / amount;
         }
 
         try
@@ -1155,6 +1157,41 @@ contract DegenerusAdmin {
         unchecked {
             return 1e18 - delta2;
         }
+    }
+
+    /// @dev Area under the piecewise-linear multiplier curve over
+    ///      [bal, bal+amount], in (1e18 * wei) units. Dividing by amount yields
+    ///      the length-weighted average multiplier, so one donation credits
+    ///      identically to the same LINK split into many. LINK past the
+    ///      1000-ether zero point contributes nothing.
+    function _linkRewardIntegral(
+        uint256 bal,
+        uint256 amount
+    ) private pure returns (uint256 area) {
+        if (bal >= 1000 ether) return 0;
+        uint256 end = bal + amount;
+        if (end > 1000 ether) end = 1000 ether;
+
+        if (bal < 200 ether) {
+            uint256 hi = end < 200 ether ? end : 200 ether;
+            area += _trapezoid(bal, hi);
+        }
+        if (end > 200 ether) {
+            uint256 lo = bal > 200 ether ? bal : 200 ether;
+            area += _trapezoid(lo, end);
+        }
+    }
+
+    /// @dev Exact integral of the multiplier across one linear tier [lo, hi].
+    ///      The curve is continuous and linear within a tier, so the trapezoid
+    ///      of its endpoint values is exact.
+    function _trapezoid(
+        uint256 lo,
+        uint256 hi
+    ) private pure returns (uint256) {
+        uint256 mLo = _linkRewardMultiplier(lo);
+        uint256 mHi = _linkRewardMultiplier(hi);
+        return ((mLo + mHi) * (hi - lo)) / 2;
     }
 
     /// @dev Returns how long the feed has been unhealthy (0 if healthy).
