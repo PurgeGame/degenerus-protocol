@@ -1072,7 +1072,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         }
 
         // Decimator jackpot fires at the window-close bump.
-        // x00 draws 30% from pre-jackpot future; x5 (non-x95) draws 10% from current.
+        // x00 draws 30% from the pre-jackpot future snapshot; x5 (non-x95) draws 10% from future.
         uint256 decPoolWei;
         if (prevMod100 == 0) {
             decPoolWei = (baseMemFuture * 30) / 100;
@@ -1289,14 +1289,16 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
     // full     Coinflip reward percent     keccak256(rngWord, epoch) % 20    Coinflip._resolveDay
     // full     Jackpot winner selection    via delegatecall (full word)      JackpotModule (payDailyJackpot)
     // full     Coin jackpot                via delegatecall (full word)      JackpotModule (_payDailyCoinJackpot)
-    // full     Lootbox RNG                 stored as lootboxRngWordByIndex   AdvanceModule._applyDailyRng
-    // full     Future take variance        rngWord % (variance * 2 + 1)      AdvanceModule._takeFuturePrizePoolSlice
-    // full     Prize pool consolidation    via delegatecall (full word)      JackpotModule (consolidatePrizePools)
-    // full     Reward jackpots             via delegatecall (full word)      JackpotModule (_runRewardJackpots)
+    // 64+/192+ Future take variance        (rngWord>>64/>>192) % range       _consolidatePoolsAndRewardJackpots
+    // low      Additive skim random        rngWord % (ADDITIVE_RANDOM_BPS+1) _consolidatePoolsAndRewardJackpots
+    // full     Prize pool consolidation    in-module memory batch            _consolidatePoolsAndRewardJackpots
+    // full     Reward jackpots (BAF/Dec)   self-call (BAF/Decimator)         _consolidatePoolsAndRewardJackpots
+    // full     Lootbox RNG                 stored as lootboxRngWordByIndex   _finalizeLootboxRng
     //
-    // NOTE: Bits 0 and 8+ are the only direct bit-level consumers.
-    //       All "full" consumers use modular arithmetic or keccak mixing,
-    //       so bit overlap with bits 0 and 8+ is not a collision concern.
+    // NOTE: Direct bit-level consumers are bit 0, bits 8+, and the future-take
+    //       variance rolls (rngWord>>64, rngWord>>192). All other 'full' consumers
+    //       use modular arithmetic or keccak mixing, so bit overlap is not a
+    //       collision concern.
 
     /// @dev Daily RNG processing gate called during advanceGame. Applies VRF word,
     ///      processes coinflip payouts, rolls daily quest, resolves pending gambling
@@ -1570,10 +1572,10 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
     }
 
     /*+======================================================================+
-      |                    FUTURE PRIZE POOL DRAW                            |
+      |                       NEXT-TO-FUTURE SKIM RATE                       |
       +======================================================================+
-      |  Release a portion of the future prize pool once per level.          |
-      |  Normal levels draw 15%, x00 levels skip the draw.                   |
+      |  Compute the bps skimmed from the next pool into the future pool,    |
+      |  ramping by days elapsed and by level within the 100-level cycle.    |
       +======================================================================+*/
 
     function _nextToFutureBps(
@@ -1613,18 +1615,19 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
     /*+======================================================================+
       |                    FUTURE TICKET ACTIVATION                          |
       +======================================================================+
-      |  Future ticket rewards are staged per level and activated at the     |
-      |  start of the PREVIOUS level's jackpot phase (making them eligible   |
-      |  for daily jackpots and purchase phase rewards).                     |
+      |  Future ticket rewards are staged per level and drained on every     |
+      |  advance over a rolling near-future range (lvl+1..lvl+4 in jackpot   |
+      |  phase, purchaseLevel+1..+4 in purchase), before the day's draws.    |
+      |  Far-future entries promote at each level transition.                |
       +======================================================================+*/
 
     /// @dev Process a batch of future ticket rewards for the specified level.
-    ///      Called during jackpot phase of level N-1 to activate tickets for level N.
+    ///      Drained on every advance over the rolling near-future range (not only at the prior level's jackpot).
     /// @param lvl Target level to activate (typically current level + 1).
     /// @param entropy Today's daily RNG word (from rngGate) used for rarity rolls.
     /// @return worked True if any queued entries were processed.
     /// @return finished True if all queued entries for this level are processed.
-    /// @return writesUsed Number of SSTORE operations used in this batch.
+    /// @return writesUsed Write-budget units consumed (each storage write or skip costs one unit), not a raw SSTORE count.
     function _processFutureTicketBatch(
         uint24 lvl,
         uint256 entropy
@@ -1724,7 +1727,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
     ///      Vault addresses (SDGNRS, VAULT) get generic queued tickets.
     /// @param purchaseLevel Current purchase level (level + 1).
     function _processPhaseTransition(uint24 purchaseLevel) private {
-        // Vault perpetual tickets: 16 generic tickets per level for DGNRS and VAULT
+        // Vault perpetual entries: 16 entries (= 4 whole tickets) per level for DGNRS and VAULT
         uint24 targetLevel = purchaseLevel + 99;
         _queueEntries(
             ContractAddresses.SDGNRS,
