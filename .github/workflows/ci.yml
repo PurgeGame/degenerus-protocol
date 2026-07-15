@@ -33,7 +33,11 @@ jobs:
       # Add swap to give the compile headroom; it slows but no longer dies.
       - name: Add swap space (via-IR build headroom)
         run: |
-          sudo fallocate -l 12G /swapfile
+          # The hosted runner ships an active /swapfile (~4G); disable and replace
+          # it with a larger one so via-IR doesn't OOM-kill forge build (exit 143).
+          sudo swapoff -a || true
+          sudo rm -f /swapfile
+          sudo fallocate -l 14G /swapfile || sudo dd if=/dev/zero of=/swapfile bs=1M count=14336
           sudo chmod 600 /swapfile
           sudo mkswap /swapfile
           sudo swapon /swapfile
