@@ -92,7 +92,7 @@ contract WWXRP {
     /*+======================================================================+
       |                              EVENTS                                  |
       +======================================================================+
-      |  Standard ERC20 events plus vault allowance tracking                |
+      |  Standard ERC20 events plus vault allowance tracking                 |
       +======================================================================+*/
 
     /// @notice Emitted when tokens are transferred between addresses
@@ -155,7 +155,7 @@ contract WWXRP {
     /*+======================================================================+
       |                              ERRORS                                  |
       +======================================================================+
-      |  Custom errors for gas-efficient reverts                            |
+      |  Custom errors for gas-efficient reverts                             |
       +======================================================================+*/
 
     /// @notice Thrown when zero address is provided where not allowed
@@ -204,7 +204,7 @@ contract WWXRP {
     /*+======================================================================+
       |                         ERC20 STATE                                  |
       +======================================================================+
-      |  Standard ERC20 metadata and balances                               |
+      |  Standard ERC20 metadata and balances                                |
       +======================================================================+*/
 
     /// @notice Token name (a parody; not affiliated with or backed by XRP)
@@ -234,7 +234,7 @@ contract WWXRP {
     /*+======================================================================+
       |                    WIRED CONTRACTS & CONSTANTS                       |
       +======================================================================+
-      |  All external dependencies are compile-time constants sourced from  |
+      |  All external dependencies are compile-time constants sourced from   |
       |  ContractAddresses. No storage slots consumed for wiring.            |
       +======================================================================+*/
 
@@ -327,7 +327,7 @@ contract WWXRP {
     /*+======================================================================+
       |                       ERC20 FUNCTIONS                                |
       +======================================================================+
-      |  Standard ERC20 implementation                                      |
+      |  Standard ERC20 implementation                                       |
       +======================================================================+*/
 
     /// @notice Approve spender to transfer up to amount on behalf of caller
@@ -415,7 +415,7 @@ contract WWXRP {
     /*+======================================================================+
       |                       PRIVILEGED MINT/BURN FUNCTIONS                 |
       +======================================================================+
-      |  Allows authorized minters to create/destroy WWXRP                  |
+      |  Allows authorized minters to create/destroy WWXRP                   |
       +======================================================================+*/
 
     /// @notice Mint WWXRP to a recipient (for lootbox/game prizes)

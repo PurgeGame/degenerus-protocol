@@ -176,13 +176,13 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
       |  [48-71]  ethLevelStreak   - Consecutive levels with ETH mints       |
       |  [72-103] lastEthDay       - Day index of last ETH mint              |
       |  [104-127] unitsLevel      - Level index for unitsAtLevel tracking   |
-      |  [128-151] frozenUntilLevel - Whale pass freeze level (0 = none)   |
-      |  [152-153] whalePassType  - Pass type (0=none,1=10,3=100)        |
-      |  [154-159] (reserved)       - 6 unused bits                           |
-      |  [160-183] mintStreakLast  - Mint streak last completed level (24b)   |
+      |  [128-151] frozenUntilLevel - Whale pass freeze level (0 = none)     |
+      |  [152-153] whalePassType  - Pass type (0=none,1=10,3=100)            |
+      |  [154-159] (reserved)       - 6 unused bits                          |
+      |  [160-183] mintStreakLast  - Mint streak last completed level (24b)  |
       |  [184]    hasDeityPass     - Deity pass holder flag (1b)             |
-      |  [185-208] affBonusLevel   - Cached affiliate bonus level (24b)     |
-      |  [209-214] affBonusPoints  - Cached affiliate bonus points (6b)     |
+      |  [185-208] affBonusLevel   - Cached affiliate bonus level (24b)      |
+      |  [209-214] affBonusPoints  - Cached affiliate bonus points (6b)      |
       |  [215-222] curseCount      - Cashout/smite curse counter (8b)        |
       |  [223-227] (reserved)      - 5 unused bits                           |
       |  [228-243] unitsAtLevel    - Mints at current level                  |
@@ -234,29 +234,29 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
       |                           MODIFIERS                                  |
       +======================================================================+*/
 
-    /*+========================================================================================+
-      |                    CORE STATE MACHINE: advanceGame()                                   |
-      +========================================================================================+
-      |  The heart of the game. This function progresses the state machine                     |
+    /*+===================================================================================================+
+      |                    CORE STATE MACHINE: advanceGame()                                              |
+      +===================================================================================================+
+      |  The heart of the game. This function progresses the state machine                                |
       |  through its 2 active phases: PURCHASE (jackpotPhaseFlag=false), JACKPOT (jackpotPhaseFlag=true). |
-      |  Each call performs one "tick" of work. gameOver is terminal.                          |
-      |                                                                                        |
-      |  State Transitions:                                                                    |
-      |  • PURCHASE (jackpotPhaseFlag=false): Process ticket batches until target met, then → JACKPOT|
-      |  • JACKPOT (jackpotPhaseFlag=true): Pay daily jackpots, wait for burns, then → PURCHASE      |
-      |  • GAMEOVER (gameOver=true): Terminal state, no transitions                             |
-      |                                                                                        |
-      |  Gating (tiered bypass):                                                                |
-      |  • Deity pass holder — always bypasses                                                 |
-      |  • Anyone — bypasses after 30+ min since level start                                   |
-      |  • Pass holder (lazy/whale) — bypasses after 15+ min                                   |
-      |  • DGVE majority holder — always bypasses (last resort, external call)                 |
-      |  • RNG must be ready (not locked) or recently stale (12h timeout)                      |
-      |                                                                                        |
-      |  Presale: packed presale-active toggle (orthogonal to state machine)                    |
-      |  • Starts active: 62% bonus FLIP from loot boxes                                       |
-      |  • Auto-ends when PURCHASE→JACKPOT, or admin can end manually (one-way, cannot re-enable) |
-      +========================================================================================+*/
+      |  Each call performs one "tick" of work. gameOver is terminal.                                     |
+      |                                                                                                   |
+      |  State Transitions:                                                                               |
+      |  • PURCHASE (jackpotPhaseFlag=false): Process ticket batches until target met, then → JACKPOT     |
+      |  • JACKPOT (jackpotPhaseFlag=true): Pay daily jackpots, wait for burns, then → PURCHASE           |
+      |  • GAMEOVER (gameOver=true): Terminal state, no transitions                                       |
+      |                                                                                                   |
+      |  Gating (tiered bypass):                                                                          |
+      |  • Deity pass holder — always bypasses                                                            |
+      |  • Anyone — bypasses after 30+ min since level start                                              |
+      |  • Pass holder (lazy/whale) — bypasses after 15+ min                                              |
+      |  • DGVE majority holder — always bypasses (last resort, external call)                            |
+      |  • RNG must be ready (not locked) or recently stale (12h timeout)                                 |
+      |                                                                                                   |
+      |  Presale: packed presale-active toggle (orthogonal to state machine)                              |
+      |  • Starts active: 62% bonus FLIP from loot boxes                                                  |
+      |  • Auto-ends when PURCHASE→JACKPOT, or admin can end manually (one-way, cannot re-enable)         |
+      +===================================================================================================+*/
 
     /// @notice Advance the game state machine by one tick.
     /// @dev Anyone can call, but standard flows require an ETH mint today.
@@ -334,21 +334,21 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         if (!ok) _revertDelegate(data);
     }
 
-    /*+======================================================================+
-      |                      AFKING DISPATCH STUBS                          |
-      +======================================================================+
-      |  Thin delegatecall dispatch stubs into GAME_AFKING_MODULE (the AfKing     |
-      |  subscription logic), shaped exactly like claimBingo.                     |
-      |  The afking subscriber set / cursors / Sub stamps live in this Game's     |
-      |  storage (DegenerusGameStorage), so the module MUST run in this           |
-      |  contract's context — delegatecall preserves msg.sender, so the consent   |
-      |  gates and the mintFlip bounty payee read the real caller. These are the  |
-      |  canonical afking entrypoints. `subscribe` is the SINGLE subscription      |
-      |  mutator (create / replace / cancel). The afking box-open is reached via  |
-      |  mintFlip's router (which also drains human boxes after the afking ones,  |
-      |  the same as openBoxes) and, unrewarded, via openBoxes; the module's      |
-      |  cursor walk is exposed as drainAfkingBoxes, not re-stubbed here.         |
-      +======================================================================+*/
+    /*+==========================================================================+
+      |                      AFKING DISPATCH STUBS                               |
+      +==========================================================================+
+      |  Thin delegatecall dispatch stubs into GAME_AFKING_MODULE (the AfKing    |
+      |  subscription logic), shaped exactly like claimBingo.                    |
+      |  The afking subscriber set / cursors / Sub stamps live in this Game's    |
+      |  storage (DegenerusGameStorage), so the module MUST run in this          |
+      |  contract's context — delegatecall preserves msg.sender, so the consent  |
+      |  gates and the mintFlip bounty payee read the real caller. These are the |
+      |  canonical afking entrypoints. `subscribe` is the SINGLE subscription    |
+      |  mutator (create / replace / cancel). The afking box-open is reached via |
+      |  mintFlip's router (which also drains human boxes after the afking ones, |
+      |  the same as openBoxes) and, unrewarded, via openBoxes; the module's     |
+      |  cursor walk is exposed as drainAfkingBoxes, not re-stubbed here.        |
+      +==========================================================================+*/
 
     /// @notice Start or extend a daily afking subscription for `player`.
     /// @dev The self-consent / funding-gate consent checks run in-context against the
@@ -495,7 +495,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     }
 
     /*+======================================================================+
-      |                      OPERATOR APPROVALS                             |
+      |                      OPERATOR APPROVALS                              |
       +======================================================================+*/
 
     /// @notice Approve or revoke an operator to act on your behalf.
@@ -534,7 +534,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     }
 
     /*+======================================================================+
-      |                       LOOT BOX CONTROLS                             |
+      |                       LOOT BOX CONTROLS                              |
       +======================================================================+*/
 
     /// @notice Current day index.
@@ -1039,12 +1039,12 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         if (!ok) _revertDelegate(data);
     }
 
-    /*+======================================================================+
-      |                       TICKET QUEUEING                                |
-      +======================================================================+
-      |  Tickets are queued for batch processing rather than minted immediately.|
-      |  This prevents gas exhaustion from large purchases.                  |
-      +======================================================================+*/
+    /*+==========================================================================+
+      |                       TICKET QUEUEING                                    |
+      +==========================================================================+
+      |  Tickets are queued for batch processing rather than minted immediately. |
+      |  This prevents gas exhaustion from large purchases.                      |
+      +==========================================================================+*/
 
     /*+================================================================================================================+
       |                    DELEGATE MODULE HELPERS                                                                     |
@@ -1055,12 +1055,12 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
       |  Modules:                                                                                                      |
       |  • GAME_ADVANCE_MODULE      - Daily advance, VRF, daily processing                                             |
       |  • GAME_BOON_MODULE         - Deity boon effects and activation                                                |
-      |  • GAME_DECIMATOR_MODULE    - Decimator claim credits and lootbox payouts                                       |
-      |  • GAME_DEGENERETTE_MODULE  - Degenerette bet placement and resolution                                          |
-      |  • GAME_JACKPOT_MODULE      - Jackpot calculations and payouts                                                  |
-      |  • GAME_LOOTBOX_MODULE      - Lootbox open, credit, and payout                                                  |
-      |  • GAME_MINT_MODULE         - Mint data recording, airdrop multipliers                                          |
-      |  • GAME_WHALE_MODULE        - Whale pass purchases and whale pass claims                                      |
+      |  • GAME_DECIMATOR_MODULE    - Decimator claim credits and lootbox payouts                                      |
+      |  • GAME_DEGENERETTE_MODULE  - Degenerette bet placement and resolution                                         |
+      |  • GAME_JACKPOT_MODULE      - Jackpot calculations and payouts                                                 |
+      |  • GAME_LOOTBOX_MODULE      - Lootbox open, credit, and payout                                                 |
+      |  • GAME_MINT_MODULE         - Mint data recording, airdrop multipliers                                         |
+      |  • GAME_WHALE_MODULE        - Whale pass purchases and whale pass claims                                       |
       |                                                                                                                |
       |  SECURITY: delegatecall executes module code in this contract's                                                |
       |  context, with access to all storage. Modules are constant addresses.                                          |
@@ -1300,7 +1300,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
       |                    CLAIMING WINNINGS (ETH)                                             |
       +========================================================================================+
       |  Players claim accumulated winnings from ContractAddresses.JACKPOTS, affiliates,       |
-      |  and endgame payouts through the claimWinnings() function.                              |
+      |  and endgame payouts through the claimWinnings() function.                             |
       |                                                                                        |
       |  SECURITY:                                                                             |
       |  • Uses CEI pattern (Checks-Effects-Interactions)                                      |
@@ -1478,12 +1478,12 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     }
 
     /*+======================================================================+
-      |                 AUTO-WORK + AFKING BATCH                        |
+      |                 AUTO-WORK + AFKING BATCH                             |
       +======================================================================+
       |  Permissionless layer letting any caller settle pending game work    |
-      |  on others' behalf for a small gas-pegged FLIP reward paid as       |
-      |  coinflip stake credit (deferred mint). Resolution writes game        |
-      |  storage directly, so it lives in-game by construction.               |
+      |  on others' behalf for a small gas-pegged FLIP reward paid as        |
+      |  coinflip stake credit (deferred mint). Resolution writes game       |
+      |  storage directly, so it lives in-game by construction.              |
       +======================================================================+*/
 
     /// @dev Flat ~1-FLIP "lose" reward for the Degenerette resolve helper, paid ONCE per tx
@@ -1652,7 +1652,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     }
 
     /*+======================================================================+
-      |                    LOOTBOX CLAIMS                                   |
+      |                    LOOTBOX CLAIMS                                    |
       +======================================================================+*/
 
     /// @notice Claim deferred whale pass rewards from large lootbox wins (>5 ETH).
@@ -1670,7 +1670,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     }
 
     /*+======================================================================+
-      |                    REDEMPTION LOOTBOX                               |
+      |                    REDEMPTION LOOTBOX                                |
       +======================================================================+*/
 
     /// @notice Resolve redemption lootboxes for an sDGNRS gambling burn claim.
@@ -1832,7 +1832,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
       |  lives in the ContractAddresses.GAME_JACKPOT_MODULE (via delegatecall).                       |
       |                                                                                               |
       |  Jackpot Types:                                                                               |
-      |  • Daily jackpot - Paid each day to burn ticket holders (day 5 = full pool payout)             |
+      |  • Daily jackpot - Paid each day to burn ticket holders (day 5 = full pool payout)            |
       |  • Decimator - Special 100-level milestone jackpot (30% of pool)                              |
       |  • BAF - Big-ass-flip jackpot (20% of pool at L%100=0)                                        |
       +===============================================================================================+*/
@@ -2354,8 +2354,8 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
       |  • Quest streak: +1% per consecutive quest (cap 100%)                |
       |  • Affiliate points: +1% per affiliate point (cap 50%)               |
       |  • Whale pass bonus (active only while frozen):                      |
-      |    - 10-level pass: +10%                                           |
-      |    - 100-level pass: +40%                                          |
+      |    - 10-level pass: +10%                                             |
+      |    - 100-level pass: +40%                                            |
       |  • Deity pass bonus: +80% (always active)                            |
       |                                                                      |
       +======================================================================+*/
@@ -2531,7 +2531,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     }
 
     /*+======================================================================+
-      |                    VIEW: TRAIT TICKET QUERIES                         |
+      |                    VIEW: TRAIT TICKET QUERIES                        |
       +======================================================================+
       |  Read-only functions for querying trait state and game history.      |
       +======================================================================+*/

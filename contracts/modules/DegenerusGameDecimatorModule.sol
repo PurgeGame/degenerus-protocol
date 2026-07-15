@@ -696,7 +696,7 @@ contract DegenerusGameDecimatorModule is DegenerusGamePayoutUtils {
       +======================================================================+
       |  Burn for GAMEOVER (blocked within 7 days of death clock).           |
       |  Time multiplier rewards early                                       |
-      |  conviction. 200k cap equalizes bankroll — timing differentiates.   |
+      |  conviction. 200k cap equalizes bankroll — timing differentiates.    |
       +======================================================================+*/
 
     // -------------------------------------------------------------------------

@@ -43,38 +43,38 @@ import {MintPaymentKind} from "../interfaces/IDegenerusGame.sol";
  * STORAGE SLOT LAYOUT (EVM assigns slots sequentially):
  * -----------------------------------------------------------------------------
  *
- * +-----------------------------------------------------------------------------+
- * | EVM SLOT 0 (32 bytes) -- Timing, FSM, Counters, Flags, Buffer, Freeze       |
- * +-----------------------------------------------------------------------------+
- * | [0:3]   purchaseStartDay         uint24   Day index when purchase/deploy began|
- * | [3:6]   dailyIdx                 uint24   Monotonic day counter             |
- * | [6:12]  rngRequestTime           uint48   When last VRF request was fired   |
- * | [12:15] level                    uint24   Current jackpot level (starts at 0)|
- * | [15:16] jackpotPhaseFlag         bool     Phase: false=PURCHASE, true=JACKPOT|
- * | [16:17] jackpotCounter           uint8    Jackpots processed this level      |
- * | [17:18] lastPurchaseDay          bool     Prize target met flag              |
- * | [18:19] decWindowOpen            bool     Decimator window latch             |
- * | [19:20] rngLockedFlag            bool     Daily RNG lock (jackpot window)    |
- * | [20:21] phaseTransitionActive    bool     Level transition in progress       |
- * | [21:22] gameOver                 bool     Terminal state flag                |
- * | [22:23] dailyJackpotCoinTicketsPending bool Split jackpot pending flag       |
- * | [23:24] compressedJackpotFlag    uint8    0=normal, 1=compressed, 2=turbo    |
- * | [24:25] ticketsFullyProcessed    bool     Read slot fully drained flag       |
- * | [25:26] ticketWriteSlot          bool     Double-buffer write toggle         |
- * | [26:27] prizePoolFrozen          bool     Prize pool freeze active flag      |
- * | [27:28] presaleOver              bool     Coin-presale-box terminal latch    |
- * | [28:29] subsFullyProcessed       bool     Afking STAGE drain-complete flag    |
- * | [29:30] presaleDrained           bool     All presale boxes opened (sweep)    |
- * | [30:31] ticketRedemptionOpen         bool     FLIP ticket purchase window latch |
- * +-----------------------------------------------------------------------------+
+ * +---------------------------------------------------------------------------------+
+ * | EVM SLOT 0 (32 bytes) -- Timing, FSM, Counters, Flags, Buffer, Freeze           |
+ * +---------------------------------------------------------------------------------+
+ * | [0:3]   purchaseStartDay         uint24   Day index when purchase/deploy began  |
+ * | [3:6]   dailyIdx                 uint24   Monotonic day counter                 |
+ * | [6:12]  rngRequestTime           uint48   When last VRF request was fired       |
+ * | [12:15] level                    uint24   Current jackpot level (starts at 0)   |
+ * | [15:16] jackpotPhaseFlag         bool     Phase: false=PURCHASE, true=JACKPOT   |
+ * | [16:17] jackpotCounter           uint8    Jackpots processed this level         |
+ * | [17:18] lastPurchaseDay          bool     Prize target met flag                 |
+ * | [18:19] decWindowOpen            bool     Decimator window latch                |
+ * | [19:20] rngLockedFlag            bool     Daily RNG lock (jackpot window)       |
+ * | [20:21] phaseTransitionActive    bool     Level transition in progress          |
+ * | [21:22] gameOver                 bool     Terminal state flag                   |
+ * | [22:23] dailyJackpotCoinTicketsPending bool Split jackpot pending flag          |
+ * | [23:24] compressedJackpotFlag    uint8    0=normal, 1=compressed, 2=turbo       |
+ * | [24:25] ticketsFullyProcessed    bool     Read slot fully drained flag          |
+ * | [25:26] ticketWriteSlot          bool     Double-buffer write toggle            |
+ * | [26:27] prizePoolFrozen          bool     Prize pool freeze active flag         |
+ * | [27:28] presaleOver              bool     Coin-presale-box terminal latch       |
+ * | [28:29] subsFullyProcessed       bool     Afking STAGE drain-complete flag      |
+ * | [29:30] presaleDrained           bool     All presale boxes opened (sweep)      |
+ * | [30:31] ticketRedemptionOpen     bool     FLIP ticket purchase window latch     |
+ * +---------------------------------------------------------------------------------+
  *   Total: 31 bytes used (1 byte padding)
  *
- * +-----------------------------------------------------------------------------+
- * | EVM SLOT 1 (32 bytes) -- Prize Pools                                        |
- * +-----------------------------------------------------------------------------+
- * | [0:16]  currentPrizePool         uint128  Active prize pool for current level|
- * | [16:32] claimablePool            uint128  Aggregate ETH liability for claims |
- * +-----------------------------------------------------------------------------+
+ * +---------------------------------------------------------------------------------+
+ * | EVM SLOT 1 (32 bytes) -- Prize Pools                                            |
+ * +---------------------------------------------------------------------------------+
+ * | [0:16]  currentPrizePool         uint128  Active prize pool for current level   |
+ * | [16:32] claimablePool            uint128  Aggregate ETH liability for claims    |
+ * +---------------------------------------------------------------------------------+
  *   Total: 32 bytes used (0 bytes padding -- FULL)
  *
  * SLOTS 2+ -- Full-width variables, arrays, and mappings
@@ -536,7 +536,6 @@ abstract contract DegenerusGameStorage {
     /// @dev Current level being processed in ticket queue operations.
     uint24 internal ticketLevel;
 
-    // =========================================================================
     // =========================================================================
     // Ticket Queue Helpers
     // =========================================================================

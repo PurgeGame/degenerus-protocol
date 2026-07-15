@@ -149,7 +149,7 @@ contract DegenerusAffiliate {
      * STORAGE LAYOUT (32 bytes):
      * +----------------------------------------------------+
      * | [0:20]  player   address   Top affiliate address   |
-     * | [20:32] score    uint96    Raw FLIP earned       |
+     * | [20:32] score    uint96    Raw FLIP earned         |
      * +----------------------------------------------------+
      */
     struct PlayerScore {
@@ -391,7 +391,7 @@ contract DegenerusAffiliate {
      * | 3. Apply lootbox activity taper if applicable                      |
      * | 4. Update leaderboard (post-taper amount)                          |
      * | 5. Calculate kickback (returned to caller for player credit)       |
-     * | 6. Roll 75/20/5 between affiliate, upline1, upline2               |
+     * | 6. Roll 75/20/5 between affiliate, upline1, upline2                |
      * | 7. Winner gets full pot (scaled - kickback) + quest reward         |
      * +--------------------------------------------------------------------+
      *

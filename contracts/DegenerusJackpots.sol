@@ -174,7 +174,7 @@ contract DegenerusJackpots is IDegenerusJackpots {
     /*+======================================================================+
       |                      COINFLIP CONTRACT HOOKS                         |
       +======================================================================+
-      |  Called by Coinflip to record coinflip activity.               |
+      |  Called by Coinflip to record coinflip activity.                     |
       |  These hooks build state used by jackpot resolution.                 |
       +======================================================================+*/
 
@@ -205,31 +205,31 @@ contract DegenerusJackpots is IDegenerusJackpots {
         emit BafFlipRecorded(player, lvl, amount, total);
     }
 
-    /*+======================================================================+
-      |                      BAF JACKPOT RESOLUTION                          |
-      +======================================================================+
-      |  Distributes ETH prize pool to various winner categories.            |
-      |                                                                      |
-      |  PRIZE DISTRIBUTION:                                                 |
-      |  +-----------------------------------------------------------------+ |
-      |  | 10% | Top BAF bettor for this level                             | |
-      |  |  5% | Top coinflip bettor from last 24h window                  | |
-      |  |  5% | Random pick: 3rd or 4th BAF slot                          | |
-      |  |  5% | Far-future ticket holders (3% 1st / 2% 2nd by BAF score)  | |
-      |  |  5% | Far-future ticket holders 2nd draw (3% 1st / 2% 2nd)      | |
+    /*+========================================================================+
+      |                      BAF JACKPOT RESOLUTION                            |
+      +========================================================================+
+      |  Distributes ETH prize pool to various winner categories.              |
+      |                                                                        |
+      |  PRIZE DISTRIBUTION:                                                   |
+      |  +-------------------------------------------------------------------+ |
+      |  | 10% | Top BAF bettor for this level                               | |
+      |  |  5% | Top coinflip bettor from last 24h window                    | |
+      |  |  5% | Random pick: 3rd or 4th BAF slot                            | |
+      |  |  5% | Far-future ticket holders (3% 1st / 2% 2nd by BAF score)    | |
+      |  |  5% | Far-future ticket holders 2nd draw (3% 1st / 2% 2nd)        | |
       |  | 45% | Scatter 1st place (50 rounds x 4 multi-level trait tickets) | |
       |  | 25% | Scatter 2nd place (50 rounds x 4 multi-level trait tickets) | |
-      |  +-----------------------------------------------------------------+ |
-      |                                                                      |
-      |  ELIGIBILITY:                                                        |
-      |  * Non-zero address only (no streak requirement)                     |
-      |                                                                      |
-      |  SECURITY:                                                           |
-      |  • VRF-derived randomness for all random selections                  |
-      |  • Entropy chained via keccak256 for independence                    |
-      |  • Unfilled prizes returned via returnAmountWei                      |
-      |  • Unfilled scatter rounds return to future pool                     |
-      +======================================================================+*/
+      |  +-------------------------------------------------------------------+ |
+      |                                                                        |
+      |  ELIGIBILITY:                                                          |
+      |  * Non-zero address only (no streak requirement)                       |
+      |                                                                        |
+      |  SECURITY:                                                             |
+      |  • VRF-derived randomness for all random selections                    |
+      |  • Entropy chained via keccak256 for independence                      |
+      |  • Unfilled prizes returned via returnAmountWei                        |
+      |  • Unfilled scatter rounds return to future pool                       |
+      +========================================================================+*/
 
     /// @notice Resolve the BAF jackpot for a level.
     /// @dev Distributes poolWei across multiple winner categories with eligibility checks.
@@ -509,7 +509,7 @@ contract DegenerusJackpots is IDegenerusJackpots {
     /*+======================================================================+
       |                      INTERNAL HELPER FUNCTIONS                       |
       +======================================================================+
-      |  Utility functions for bucket packing and scoring.                    |
+      |  Utility functions for bucket packing and scoring.                   |
       +======================================================================+*/
 
     /// @dev Credit prize to non-zero winner or return false for refund.

@@ -181,7 +181,7 @@ library DegenerusTraitUtils {
       |                  DEGENERETTE TRAIT PACKING (NEAR-UNIFORM)            |
       +======================================================================+
       |  Sibling helper to packedTraitsFromSeed using a per-quadrant         |
-      |  near-uniform color distribution: 7 commons at 2/15 each (13.333%), |
+      |  near-uniform color distribution: 7 commons at 2/15 each (13.333%),  |
       |  gold at 1/15 (6.667%). Symbol uniform 1/8 from the high 32 bits of  |
       |  each 64-bit lane. Output format mirrors packedTraitsFromSeed:       |
       |  [QQ][CCC][SSS] per byte, 4 bytes packed into uint32. This producer  |
@@ -223,17 +223,17 @@ library DegenerusTraitUtils {
     }
 
     /*+======================================================================+
-      |                  FOIL TRAIT GENERATION (ACTIVITY-BOOSTED)           |
+      |                  FOIL TRAIT GENERATION (ACTIVITY-BOOSTED)            |
       +======================================================================+
       |  Sibling producers to traitFromWord / packedTraitsFromSeed that      |
-      |  lift the rare color tiers by an activity-frozen multiplier M =       |
+      |  lift the rare color tiers by an activity-frozen multiplier M =      |
       |  multBps / 10000 (10000 = 1x). The boost is tapered by rare-rank:    |
       |  gold takes the full M, each less-rare tier tapers toward 1x, and    |
-      |  the three 25% commons (colors 0/1/2) are the sole shrink sink.       |
-      |  Color cutoffs are computed in a /15360 super-ladder (15360 = 256 x   |
-      |  60; x60 clears the /5 taper denominator and the 3-way common split)  |
-      |  so the taper resolves exactly. Symbol stays uniform 1/8 from the     |
-      |  high word and the pack layout is identical to packedTraitsFromSeed.  |
+      |  the three 25% commons (colors 0/1/2) are the sole shrink sink.      |
+      |  Color cutoffs are computed in a /15360 super-ladder (15360 = 256 x  |
+      |  60; x60 clears the /5 taper denominator and the 3-way common split) |
+      |  so the taper resolves exactly. Symbol stays uniform 1/8 from the    |
+      |  high word and the pack layout is identical to packedTraitsFromSeed. |
       +======================================================================+*/
 
     /// @notice Builds the /15360 tapered color-cutoff ladder for an activity

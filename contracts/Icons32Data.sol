@@ -11,37 +11,37 @@ import {ContractAddresses} from "./ContractAddresses.sol";
 |                                                                                                       |
 |  ARCHITECTURE OVERVIEW                                                                                |
 |  ---------------------                                                                                |
-|  Icons32Data is an on-chain storage contract for SVG path data. It holds 33 icon                     |
+|  Icons32Data is an on-chain storage contract for SVG path data. It holds 33 icon                      |
 |  paths representing the symbols used in Degenerus tokens and trophies.                                |
 |  Data is mutable until finalize() is called, after which it becomes immutable.                        |
 |                                                                                                       |
 |  +--------------------------------------------------------------------------------------------------+ |
 |  |                              ICON INDEX LAYOUT                                                   | |
 |  |                                                                                                  | |
-|  |   _paths[0-7]   -► Quadrant 0 (Crypto):   Bitcoin, Ethereum, Litecoin, etc.                     | |
-|  |   _paths[8-15]  -► Quadrant 1 (Zodiac):   Aries, Taurus, Gemini, etc.                           | |
-|  |   _paths[16-23] -► Quadrant 2 (Cards):    Horseshoe, King, Cashsack, Club, Diamond, Heart       | |
-|  |                                      Spade, Ace                                                 | |
-|  |   _paths[24-31] -► Quadrant 3 (Dice):     1-8                                                   | |
-|  |   _paths[32]    -► Affiliate Badge:       Special icon for affiliate trophies                   | |
+|  |   _paths[0-7]   -► Quadrant 0 (Crypto):   Bitcoin, Ethereum, Litecoin, etc.                      | |
+|  |   _paths[8-15]  -► Quadrant 1 (Zodiac):   Aries, Taurus, Gemini, etc.                            | |
+|  |   _paths[16-23] -► Quadrant 2 (Cards):    Horseshoe, King, Cashsack, Club, Diamond, Heart        | |
+|  |                                      Spade, Ace                                                  | |
+|  |   _paths[24-31] -► Quadrant 3 (Dice):     1-8                                                    | |
+|  |   _paths[32]    -► Affiliate Badge:       Special icon for affiliate trophies                    | |
 |  |                                                                                                  | |
 |  |   _paths[32]    -► Flame icon:             Center glyph for all token renders                    | |
 |  |                                                                                                  | |
-|  |   _symQ1[0-7]   -► Crypto symbol names:   "Bitcoin", "Ethereum", etc.                           | |
-|  |   _symQ2[0-7]   -► Zodiac symbol names:   "Aries", "Taurus", etc.                               | |
-|  |   _symQ3[0-7]   -► Cards symbol names:    "Club", "Diamond", "Heart", "Spade",                  | |
-|  |                                      "Horseshoe", "Cashsack", "King", "Ace"                    | |
-|  |   (Q4 Dice names are generated dynamically: "1", "2", etc.)                                     | |
+|  |   _symQ1[0-7]   -► Crypto symbol names:   "Bitcoin", "Ethereum", etc.                            | |
+|  |   _symQ2[0-7]   -► Zodiac symbol names:   "Aries", "Taurus", etc.                                | |
+|  |   _symQ3[0-7]   -► Cards symbol names:    "Club", "Diamond", "Heart", "Spade",                   | |
+|  |                                      "Horseshoe", "Cashsack", "King", "Ace"                      | |
+|  |   (Q4 Dice names are generated dynamically: "1", "2", etc.)                                      | |
 |  +--------------------------------------------------------------------------------------------------+ |
 |                                                                                                       |
 |  DESIGN RATIONALE                                                                                     |
 |  ----------------                                                                                     |
-|  1. On-chain storage ensures token metadata remains available even if IPFS/centralized              |
+|  1. On-chain storage ensures token metadata remains available even if IPFS/centralized                |
 |     servers become unavailable.                                                                       |
-|  2. Batch initialization via setter functions allows data population within gas limits.              |
-|  3. finalize() locks all data permanently, making it immutable after initialization.                 |
-|  4. View functions allow efficient reading by renderers without state changes.                       |
-|  5. SVG paths are stored as raw strings (not base64) to allow renderer flexibility.                  |
+|  2. Batch initialization via setter functions allows data population within gas limits.               |
+|  3. finalize() locks all data permanently, making it immutable after initialization.                  |
+|  4. View functions allow efficient reading by renderers without state changes.                        |
+|  5. SVG paths are stored as raw strings (not base64) to allow renderer flexibility.                   |
 |                                                                                                       |
 +=======================================================================================================+
 |  SECURITY CONSIDERATIONS                                                                              |
@@ -59,7 +59,7 @@ import {ContractAddresses} from "./ContractAddresses.sol";
 |  3. BOUNDS CHECKING                                                                                   |
 |     • setPaths() reverts if batch would exceed array bounds                                           |
 |     • data(i) will revert if i >= 33 (array bounds)                                                   |
-|     • symbol(q, idx) returns "" for quadrant 3 or invalid quadrant; reverts for invalid idx          |
+|     • symbol(q, idx) returns "" for quadrant 3 or invalid quadrant; reverts for invalid idx           |
 |                                                                                                       |
 |  4. NO EXTERNAL CALLS                                                                                 |
 |     • Pure data storage, no dependencies on other contracts (except ContractAddresses)                |

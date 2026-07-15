@@ -837,7 +837,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
     }
 
     /*+======================================================================+
-      |                           LEVEL END                                 |
+      |                           LEVEL END                                  |
       +======================================================================+*/
     function _endPhase(uint24 lvl) private {
         phaseTransitionActive = true;
@@ -857,7 +857,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
       |  Modules:                                                                                                      |
       |  • ContractAddresses.GAME_DECIMATOR_MODULE - Decimator claim credits and lootbox payouts                       |
       |  • ContractAddresses.GAME_MINT_MODULE     - Mint data recording, airdrop multipliers                           |
-      |  • ContractAddresses.GAME_WHALE_MODULE    - Whale pass purchases and whale pass claims                       |
+      |  • ContractAddresses.GAME_WHALE_MODULE    - Whale pass purchases and whale pass claims                         |
       |  • ContractAddresses.GAME_JACKPOT_MODULE  - Jackpot calculations and payouts                                   |
       |                                                                                                                |
       |  SECURITY: delegatecall executes module code in this contract's                                                |
@@ -1570,9 +1570,9 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
     }
 
     /*+======================================================================+
-      |                    FUTURE PRIZE POOL DRAW                           |
+      |                    FUTURE PRIZE POOL DRAW                            |
       +======================================================================+
-      |  Release a portion of the future prize pool once per level.         |
+      |  Release a portion of the future prize pool once per level.          |
       |  Normal levels draw 15%, x00 levels skip the draw.                   |
       +======================================================================+*/
 
@@ -1611,10 +1611,10 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
     }
 
     /*+======================================================================+
-      |                    FUTURE TICKET ACTIVATION                         |
+      |                    FUTURE TICKET ACTIVATION                          |
       +======================================================================+
       |  Future ticket rewards are staged per level and activated at the     |
-      |  start of the PREVIOUS level's jackpot phase (making them eligible    |
+      |  start of the PREVIOUS level's jackpot phase (making them eligible   |
       |  for daily jackpots and purchase phase rewards).                     |
       +======================================================================+*/
 
@@ -1691,7 +1691,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
     }
 
     /*+======================================================================+
-      |                    TICKET / TOKEN AIRDROP BATCHING                         |
+      |                    TICKET / TOKEN AIRDROP BATCHING                   |
       +======================================================================+
       |  Ticket entries are processed in batches to prevent gas exhaustion.  |
       |  Large purchases are queued and processed across multiple txs.       |

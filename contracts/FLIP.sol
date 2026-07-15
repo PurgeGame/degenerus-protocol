@@ -204,7 +204,7 @@ contract FLIP {
     /*+======================================================================+
       |                    WIRED CONTRACTS & MODULE STATE                    |
       +======================================================================+
-      |  All external dependencies are compile-time constants sourced from  |
+      |  All external dependencies are compile-time constants sourced from   |
       |  ContractAddresses. No storage slots are consumed for wiring, and    |
       |  the references cannot be updated post-deploy.                       |
       |                                                                      |
@@ -463,8 +463,8 @@ contract FLIP {
     /*+======================================================================+
       |                  COINFLIP CONTRACT INTEGRATION                       |
       +======================================================================+
-      |  Permission functions for Coinflip contract to burn/mint      |
-      |  FLIP tokens. Only the designated coinflip contract can call.     |
+      |  Permission functions for Coinflip contract to burn/mint             |
+      |  FLIP tokens. Only the designated coinflip contract can call.        |
       +======================================================================+*/
 
     /// @notice Burns FLIP from a player for coinflip deposits.
@@ -632,9 +632,9 @@ contract FLIP {
     }
 
     /*+======================================================================+
-      |                          DECIMATOR                                  |
+      |                          DECIMATOR                                   |
       +======================================================================+
-      |  Burn FLIP during active decimator windows to accrue weighted      |
+      |  Burn FLIP during active decimator windows to accrue weighted        |
       |  participation for the decimator jackpot.                            |
       +======================================================================+*/
 

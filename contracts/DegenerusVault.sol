@@ -118,7 +118,7 @@ interface IWWXRPMint {
 |                                                                                                        |
 |  ARCHITECTURE OVERVIEW                                                                                 |
 |  ---------------------                                                                                 |
-|  DegenerusVault holds two asset types with two independent share classes for claims:                 |
+|  DegenerusVault holds two asset types with two independent share classes for claims:                   |
 |                                                                                                        |
 |  +---------------------------------------------------------------------------------------------------+ |
 |  |                              ASSET & SHARE MAPPING                                                | |
@@ -129,7 +129,7 @@ interface IWWXRPMint {
 |  |   |  ETH            |----►|  ethShare       |  DGVE - Claims ETH + stETH proportionally           | |
 |  |   |  stETH          |----►|  (combined)     |                                                     | |
 |  |   +-----------------+     +-----------------+                                                     | |
-|  |   |  FLIP         |----►|  flipShare      |  DGVF - Claims FLIP only                          | |
+|  |   |  FLIP         |----►|  flipShare      |  DGVF - Claims FLIP only                              | |
 |  |   +-----------------+     +-----------------+                                                     | |
 |  |                                                                                                   | |
 |  |   DGVE and DGVF have independent supply and proportional claim rights.                            | |
@@ -140,17 +140,17 @@ interface IWWXRPMint {
 |  |                                                                                                   | |
 |  |   ETH    ----► receive() donations + game claimable-winnings credits claimed by the vault         | |
 |  |   stETH  ----► direct ERC20 transfers from game flows                                             | |
-|  |   FLIP ----► FLIP credits the vault's mint allowance internally (virtual, no transfer)    | |
+|  |   FLIP ----► FLIP credits the vault's mint allowance internally (virtual, no transfer)            | |
 |  |                                                                                                   | |
-|  |   Split: ETH+stETH accrue to DGVE. FLIP mint allowance is claimable by DGVF.                    | |
+|  |   Split: ETH+stETH accrue to DGVE. FLIP mint allowance is claimable by DGVF.                      | |
 |  +---------------------------------------------------------------------------------------------------+ |
 |                                                                                                        |
 |  +---------------------------------------------------------------------------------------------------+ |
 |  |                              CLAIM FLOW (Burn Shares)                                             | |
 |  |                                                                                                   | |
-|  |   User ----► burnCoin(amount) ----► Burns flipShare ----► Mints FLIP to user                    | |
+|  |   User ----► burnCoin(amount) ----► Burns flipShare ----► Mints FLIP to user                      | |
 |  |   User ----► burnEth(amount) -----► Burns ethShare -----► Sends ETH + stETH to user               | |
-|  |   (No DGNRS share class in the vault)                                                              | |
+|  |   (No DGNRS share class in the vault)                                                             | |
 |  |                                                                                                   | |
 |  |   Formula: claimAmount = (reserveBalance * sharesBurned) / totalShareSupply                       | |
 |  |                                                                                                   | |
