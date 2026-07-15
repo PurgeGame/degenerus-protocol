@@ -58,11 +58,11 @@ contract DegenerusJackpots is IDegenerusJackpots {
       |  Events for tracking BAF state changes for indexers.                 |
       +======================================================================+*/
 
-    /// @notice Emitted when a player's BAF flip stake is recorded.
+    /// @notice Emitted when a player's winning-flip payout is credited to their BAF score.
     /// @param player Address of the player.
-    /// @param lvl Current game level (BAF bracket).
+    /// @param lvl BAF bracket (level rounded up to the next multiple of 10).
     /// @param amount Amount added this flip.
-    /// @param newTotal Player's new total stake for this level.
+    /// @param newTotal Player's new accumulated BAF credit for this bracket.
     event BafFlipRecorded(
         address indexed player,
         uint24 indexed lvl,
@@ -81,12 +81,12 @@ contract DegenerusJackpots is IDegenerusJackpots {
       |  Data structures for BAF leaderboard tracking.                       |
       +======================================================================+*/
 
-    /// @notice Leaderboard entry for BAF coinflip stakes.
+    /// @notice Leaderboard entry for BAF credited-payout scores.
     /// @dev Packed into single slot: address (160) + score (96) = 256 bits.
     struct PlayerScore {
         /// @notice Player address.
         address player;
-        /// @notice Weighted coinflip stake (whole tokens, capped at uint96.max).
+        /// @notice Accumulated winning-flip payout credit (whole tokens, capped at uint96.max).
         uint96 score;
     }
 
@@ -94,7 +94,7 @@ contract DegenerusJackpots is IDegenerusJackpots {
     /// @dev Packed into single slot: total (192) + epoch (64) = 256 bits.
     ///      A total whose epoch is stale (bracket already resolved) reads as zero.
     struct BafPlayer {
-        /// @notice Accumulated winning-flip stake (saturates at uint192.max).
+        /// @notice Accumulated winning-flip payout credit (saturates at uint192.max).
         uint192 total;
         /// @notice Bracket epoch the total belongs to.
         uint64 epoch;
@@ -139,7 +139,7 @@ contract DegenerusJackpots is IDegenerusJackpots {
       |  Per-player BAF totals and top-4 leaderboard per level.              |
       +======================================================================+*/
 
-    /// @notice Accumulated coinflip stake + owning epoch per player per BAF bracket level.
+    /// @notice Accumulated winning-flip payout credit + owning epoch per player per BAF bracket.
     mapping(uint24 => mapping(address => BafPlayer)) internal bafPlayer;
 
     /// @notice Top-4 coinflip bettors for BAF per level (sorted by score descending).
@@ -185,7 +185,7 @@ contract DegenerusJackpots is IDegenerusJackpots {
     ///      top-bettor slices. sDGNRS gets no BAF score at all: it is skipped upstream at the
     ///      recordBafFlip call site (its free per-level flips would otherwise dominate the slices).
     /// @param player Address of the player.
-    /// @param lvl Current game level (BAF bracket).
+    /// @param lvl BAF bracket (level rounded up to the next multiple of 10).
     /// @param amount Winning coinflip payout credited to the player's BAF score.
     /// @custom:access Restricted to COINFLIP via onlyCoin modifier.
     function recordBafFlip(address player, uint24 lvl, uint256 amount) external override onlyCoin {
@@ -222,11 +222,13 @@ contract DegenerusJackpots is IDegenerusJackpots {
       |  +-------------------------------------------------------------------+ |
       |                                                                        |
       |  ELIGIBILITY:                                                          |
-      |  * Non-zero address only (no streak requirement)                       |
+      |  * Top-BAF/top-flip/pick: any non-zero address (no streak req)         |
+      |  * Far-future & scatter: additionally require a positive BAF score;    |
+      |    zero-score candidates are skipped and their share refunds           |
       |                                                                        |
       |  SECURITY:                                                             |
       |  • VRF-derived randomness for all random selections                    |
-      |  • Entropy chained via keccak256 for independence                      |
+      |  • Draws keccak-chained from the single VRF seed (pseudo-independent)  |
       |  • Unfilled prizes returned via returnAmountWei                        |
       |  • Unfilled scatter rounds return to future pool                       |
       +========================================================================+*/
@@ -253,7 +255,7 @@ contract DegenerusJackpots is IDegenerusJackpots {
         returns (address[] memory winners, uint256[] memory amounts, uint256 returnAmountWei)
     {
         uint256 P = poolWei;
-        // Max distinct winners: 1 (top BAF) + 1 (top flip) + 1 (pick) + 4 (far-future x2) + 50 + 50 (scatter) = 107.
+        // Max prize entries (same address may fill several): 1 (top BAF) + 1 (top flip) + 1 (pick) + 4 (far-future x2) + 100 (scatter) = 107.
         address[] memory tmpW = new address[](107);
         uint256[] memory tmpA = new uint256[](107);
         uint256 n;
@@ -299,7 +301,7 @@ contract DegenerusJackpots is IDegenerusJackpots {
             uint256 prize = P / 20;
             uint8 pick = 2 + uint8(entropy & 1);
             (address w, ) = _bafTop(lvl, pick);
-            // Slice B: 5% to either the 3rd or 4th BAF leaderboard slot (pseudo-random tie-break).
+            // Slice B: 5% to a coin-flip-random pick between the 3rd and 4th BAF leaderboard slots.
             if (_creditOrRefund(w, prize, tmpW, tmpA, n)) {
                 unchecked {
                     ++n;
@@ -493,7 +495,7 @@ contract DegenerusJackpots is IDegenerusJackpots {
     /// @notice Mark a BAF bracket as skipped because the daily flip lost.
     /// @dev Bumps lastBafResolvedDay so pre-skip winning-flip credit is filtered
     ///      out of future claims (Coinflip gates winningBafCredit on
-    ///      cursor > lastBafResolvedDay). Leaderboard state for lvl is left
+    ///      cursor >= lastBafResolvedDay). Leaderboard state for lvl is left
     ///      as-is — no new writes ever target a past bracket, so clearing
     ///      would only burn gas.
     /// @param lvl Level whose BAF was skipped.
@@ -546,7 +548,7 @@ contract DegenerusJackpots is IDegenerusJackpots {
     /// @param player Address to query.
     /// @param lvl Level number.
     /// @param currentEpoch The bracket's current epoch (read once per resolution by callers).
-    /// @return Accumulated coinflip total (0 if the stored epoch is stale).
+    /// @return Accumulated winning-flip payout credit (0 if the stored epoch is stale).
     function _bafScore(address player, uint24 lvl, uint64 currentEpoch) private view returns (uint256) {
         BafPlayer memory ps = bafPlayer[lvl][player];
         if (ps.epoch != currentEpoch) return 0;
