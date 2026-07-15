@@ -12,9 +12,10 @@ constants and formulas, not projected returns.
 
 ## 1. Value flow — the non-negotiables
 
-- **No rake after presale.** Every wei of ticket ETH goes into prize pools and recirculates
-  to players. There is no operator fee. The one up-front creator inflow — the presale-box, bounded
-  at ≤40 ETH — is disclosed in §2c.
+- **No rake on gameplay.** Every wei of ticket and lootbox ETH goes into prize pools and
+  recirculates to players — no operator fee is skimmed from play. The creator's up-front funding is a
+  **bounded initial coin offering** (the presale box, ≤40 ETH to the creator) — a primary sale of
+  coin, not a rake (§2c).
 - **No admin withdrawal.** There is no privileged function that moves player ETH/stETH. The
   protocol has no proxy, no upgradeability, and no configurable privileged addresses — every
   cross-contract authority is a compile-time constant in `ContractAddresses.sol`. The bounded
@@ -73,18 +74,19 @@ pools, not the creator (`sDGNRS.sol:311-315,385-395`):
 
 Sum = 10,000 bps (100%); any rounding dust is retained by the reserve (`sDGNRS.sol:395`).
 
-### (c) Presale-box proceeds — the one up-front ETH inflow (≤40 ETH)
+### (c) Presale box — a bounded initial coin offering (≤40 ETH to the creator)
 
-During the presale window, coin-presale-box purchases are capped at **50 ETH total**
-(`PRESALE_BOX_ETH_CAP = 50 ether`, `storage/DegenerusGameStorage.sol:1136`). Their ETH proceeds route
-**80% to the vault (creator), 20% to sDGNRS** (`_creditBoxProceeds`,
-`modules/DegenerusGamePayoutUtils.sol:13-26`), both as claimable credits with `claimablePool` bumped
-by the full amount so solvency holds. The creator's entire presale ETH take is therefore **bounded at
-≤40 ETH** (80% of the 50-ETH cap) — this is the "presale" that §1's *"no rake after presale"* refers
-to; once the window closes, no further ETH routes to the creator.
+The presale box is a **primary sale at genesis**: buyers voluntarily exchange ETH for presale-box
+credits (backed by the 10% presale-box sDGNRS pool, §2b). It is an initial offering of coin — **not a
+rake**; no fee is taken from player gameplay. Total presale-box ETH is capped at **50 ETH**
+(`PRESALE_BOX_ETH_CAP = 50 ether`, `storage/DegenerusGameStorage.sol:1136`); proceeds route **80% to
+the vault (creator), 20% to sDGNRS** (`_creditBoxProceeds`, `modules/DegenerusGamePayoutUtils.sol:13-26`),
+with `claimablePool` bumped by the full amount so solvency holds. The creator's proceeds are therefore
+**bounded at ≤40 ETH** (80% of the 50-ETH cap).
 
-The separate lootbox presale is capped at 200 ETH (`LOOTBOX_PRESALE_ETH_CAP`) but routes **100% to the
-prize pool**, rake-free (`modules/DegenerusGameMintModule.sol:1519`) — it is not a creator inflow.
+Everything else is rake-free: the separate lootbox presale (200 ETH cap, `LOOTBOX_PRESALE_ETH_CAP`)
+routes **100% to the prize pool** (`modules/DegenerusGameMintModule.sol:1519`), and all post-genesis
+ticket/lootbox ETH goes to pools — no proceeds route to the creator.
 
 ## 3. Creator DGNRS vesting
 
