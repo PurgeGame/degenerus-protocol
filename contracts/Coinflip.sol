@@ -223,7 +223,9 @@ contract Coinflip {
     ///      in-context creditFlip bounty, which pays AS the GAME, not a separate keeper contract),
     ///      QUESTS (level quest rewards), AFFILIATE, ADMIN, SDGNRS (redemption win-credit at claim:
     ///      the escrowed slice was already removed from sDGNRS's backing at submit via
-    ///      withdrawRedeemedFlip, so the claim-time mint to the redeemer is FLIP-neutral).
+    ///      withdrawRedeemedFlip, so the claim-time mint to the redeemer is FLIP-neutral),
+    ///      and WWXRP (daily-draw prizes: a fixed, RNG-verified stake credited to the
+    ///      recorded winner).
     modifier onlyFlipCreditors() {
         address sender = msg.sender;
         if (
@@ -231,7 +233,8 @@ contract Coinflip {
             sender != ContractAddresses.QUESTS &&
             sender != ContractAddresses.AFFILIATE &&
             sender != ContractAddresses.ADMIN &&
-            sender != ContractAddresses.SDGNRS
+            sender != ContractAddresses.SDGNRS &&
+            sender != ContractAddresses.WWXRP
         ) revert OnlyFlipCreditors();
         _;
     }
