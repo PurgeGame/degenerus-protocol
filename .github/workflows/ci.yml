@@ -28,6 +28,21 @@ jobs:
         with:
           submodules: recursive
 
+      # via-IR + optimizer_runs=1000 over the full protocol peaks above the ~7GB
+      # hosted-runner RAM, so forge build was being OOM-killed (exit 143) mid-compile.
+      # Add swap to give the compile headroom; it slows but no longer dies.
+      - name: Add swap space (via-IR build headroom)
+        run: |
+          sudo fallocate -l 12G /swapfile
+          sudo chmod 600 /swapfile
+          sudo mkswap /swapfile
+          sudo swapon /swapfile
+          free -h
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
       - name: Install Foundry
         uses: foundry-rs/foundry-toolchain@v1
 
@@ -72,6 +87,12 @@ jobs:
       # committed golden (whole-protocol corruption risk under 155 delegatecall sites).
       - name: Storage-layout oracle (MECH-02)
         run: bash scripts/layout/storage_layout_oracle.sh
+
+      # Source-drift gates: interface coverage, delegatecall target alignment, raw-selector
+      # bans, RNG-window consumer classification, pool-write provenance. These enforce the
+      # invariants the README advertises — a green build must also pass all five.
+      - name: Source-drift gates
+        run: make check-interfaces check-delegatecall check-raw-selectors check-rng-window check-pool-writes
 
       - name: forge test
         run: forge test -vvv

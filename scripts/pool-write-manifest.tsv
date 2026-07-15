@@ -6,8 +6,8 @@
 # mirrors in test/fuzz/helpers/SolvencyObligations.sol):
 #   currentPrizePool + next/future (prizePoolsPacked) + claimablePool
 #   + yieldAccumulator + pending next/future (prizePoolPendingPacked).
-# audit/ETH-SUBPOOL-PROVENANCE-PROOF.md proves this enumeration COMPLETE at the
-# time of review: every sub-pool is carved from a counted term or holds no wei.
+# This enumeration was proven COMPLETE at review time: every sub-pool is carved
+# from a counted term or holds no wei.
 # This manifest is the drift gate that keeps that proof true: a new/moved site
 # that mutates a counted term (or calls a canonical mutator) must be classified
 # here, forcing the provenance question (paired? backed? relabel?) on review.

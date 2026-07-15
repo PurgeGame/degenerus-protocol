@@ -99,7 +99,7 @@ npm ci        # OpenZeppelin + Hardhat deps, pinned via package-lock.json
 forge build   # Solidity 0.8.34, viaIR, optimizer runs=1000, evm=osaka
 ```
 
-The toolchain is fully pinned — `foundry.toml` fixes the compiler and codegen settings, `foundry.lock` pins forge-std, `package-lock.json` pins the npm tree. A clean checkout compiles and tests with no local patches.
+The Solidity build is pinned — `foundry.toml` fixes the compiler (solc 0.8.34) and codegen, `foundry.lock` pins forge-std, `package-lock.json` pins the npm tree. A clean checkout compiles and tests with no local patches. (CI runs on a pinned Node; runner tool versions like Foundry/Aderyn track their action defaults.)
 
 ## Tests & Verification
 
@@ -107,7 +107,7 @@ The full assurance pipeline lives in this repository and runs in CI (`.github/wo
 
 - **`forge test`** — **1,069 Foundry tests across 161 suites**, all passing: unit, integration, fuzz, invariant, gas, access-control, governance, economics, and named regression harnesses for every fixed finding.
 - **EIP-170 size gate** — CI fails if any deployed contract breaches the 24,576-byte limit.
-- **Storage-layout oracle** (`scripts/layout/storage_layout_oracle.sh`) — 13 modules execute by `delegatecall` against one shared `DegenerusGameStorage`, so CI fails the build if any storage slot in the game, any state contract, or any module moves versus a committed golden. This makes the "a module writes a slot the game uses for something else" corruption class un-shippable.
+- **Storage-layout oracle** (`scripts/layout/storage_layout_oracle.sh`) — 12 modules execute by `delegatecall` against one shared `DegenerusGameStorage`, so CI fails the build if any storage slot in the game, any state contract, or any module moves versus a committed golden. This makes the "a module writes a slot the game uses for something else" corruption class un-shippable.
 - **Source-drift gates** (`make check-*`) — interface coverage, delegatecall target alignment, raw-selector bans, RNG-window consumer classification, pool-write provenance.
 - **Static analysis** — Slither + Aderyn (non-blocking).
 - **Weekly** — 31 Halmos symbolic proofs + a deep invariant sweep (runs=1000, depth=256).

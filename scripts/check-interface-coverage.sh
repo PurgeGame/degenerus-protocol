@@ -34,7 +34,7 @@ MAPPINGS=(
   "contracts/interfaces/IDegenerusQuests.sol:IDegenerusQuests|contracts/DegenerusQuests.sol:DegenerusQuests"
   "contracts/interfaces/IsDGNRS.sol:IsDGNRS|contracts/sDGNRS.sol:sDGNRS"
   "contracts/interfaces/IVaultCoin.sol:IVaultCoin|contracts/FLIP.sol:FLIP"
-  # IDegenerusGameModules.sol contains 9 module interfaces. Each module is deployed
+  # IDegenerusGameModules.sol contains the 12 module interfaces. Each module is deployed
   # as a separate contract that DegenerusGame delegatecalls into. Check the module
   # contract itself (code runs from the module, storage lives on DegenerusGame via
   # shared DegenerusGameStorage inheritance).
@@ -47,6 +47,9 @@ MAPPINGS=(
   "contracts/interfaces/IDegenerusGameModules.sol:IDegenerusGameLootboxModule|contracts/modules/DegenerusGameLootboxModule.sol:DegenerusGameLootboxModule"
   "contracts/interfaces/IDegenerusGameModules.sol:IDegenerusGameBoonModule|contracts/modules/DegenerusGameBoonModule.sol:DegenerusGameBoonModule"
   "contracts/interfaces/IDegenerusGameModules.sol:IDegenerusGameDegeneretteModule|contracts/modules/DegenerusGameDegeneretteModule.sol:DegenerusGameDegeneretteModule"
+  "contracts/interfaces/IDegenerusGameModules.sol:IDegenerusGameBingoModule|contracts/modules/DegenerusGameBingoModule.sol:DegenerusGameBingoModule"
+  "contracts/interfaces/IDegenerusGameModules.sol:IGameAfkingModule|contracts/modules/GameAfkingModule.sol:GameAfkingModule"
+  "contracts/interfaces/IDegenerusGameModules.sol:IDegenerusGameFoilPackModule|contracts/modules/DegenerusGameFoilPackModule.sol:DegenerusGameFoilPackModule"
 )
 
 # Extract "<selector>\t<signature>" rows from `forge inspect ... methods` output.

@@ -104,10 +104,11 @@ transaction (a coin credit, not ETH-backed value). Immaterial; documented, not e
 
 ## 5. Automated tool findings (pre-disclosed)
 
-The full machine-readable baseline for the frozen tree is committed in `audit/automated/` — Slither
-0.11.5 (2,585 results / 101 detectors; the 136 "High" are dominated by `uninitialized-state` false
-positives from the shared-storage delegatecall architecture) + Aderyn 0.6.8 (9 High / 22 Low), each
-category mapped to its disposition there. The notes below are the standing per-category triage.
+The full machine-readable Slither/Aderyn baseline is maintained internally — Slither 0.11.5 (2,585
+results / 101 detectors; the 136 "High" are dominated by `uninitialized-state` false positives from
+the shared-storage delegatecall architecture) + Aderyn 0.6.8 (9 High / 22 Low). CI re-runs both
+analyzers on every push (`.github/workflows/ci.yml`); the standing per-category triage — why each is
+by-design, defended, or not-applicable — is below.
 
 **Arbitrary-send-eth.** `_payoutWithStethFallback` / `_payoutWithEthFallback` / `_payEth` send ETH via
 `.call{value:}` to `msg.sender` or player addresses read from game state — all access-controlled.

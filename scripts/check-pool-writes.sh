@@ -5,8 +5,8 @@
 # of a canonical mutator helper — is registered and classified in
 # scripts/pool-write-manifest.tsv. The manifest is the reviewed source-of-truth
 # for "which sites move obligation value and why each preserves the accounting
-# model" (audit/ETH-SUBPOOL-PROVENANCE-PROOF.md proved the obligation enumeration
-# complete; this gate keeps that proof true against source drift).
+# model" (the obligation enumeration was proven complete against source at review
+# time; this gate keeps that true against source drift).
 #
 # The gate FAILS when:
 #   SOLV-01  a live scoped access (identifier|function|file|mode) is NOT in the
@@ -226,6 +226,6 @@ if run_gate; then
   exit 0
 fi
 echo
-printf "%bFAIL%b pool-write registry drifted from source — classify new sites in %s (see audit/ETH-SUBPOOL-PROVENANCE-PROOF.md for the method)\n" \
+printf "%bFAIL%b pool-write registry drifted from source — classify new sites in %s (see the manifest header for the enumeration method)\n" \
   "$RED" "$NC" "$MANIFEST_FILE"
 exit 1

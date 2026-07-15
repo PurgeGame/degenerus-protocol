@@ -88,8 +88,18 @@ function replaceAddressConstant(src, constantName, address) {
   // declaration spans two lines. Match any whitespace between `=` and the
   // `address(...)` literal so both single-line and multi-line formats work.
   const regex = new RegExp(
-    `(address internal constant ${constantName} =\\s*)address\\(0x?[0-9a-fA-F]*\\);`
+    `(address internal constant ${constantName} =\\s*)address\\(0x?[0-9a-fA-F]*\\);`,
+    "g"
   );
-  const replacement = `$1address(${address});`;
-  return src.replace(regex, replacement);
+  // Assert exactly one match: a renamed/removed constant or a format change would
+  // otherwise silently no-op, deploying a contract wired to a stale peer address.
+  const matches = src.match(regex);
+  if (!matches || matches.length !== 1) {
+    throw new Error(
+      `patchContractAddresses: expected exactly one '${constantName}' address constant, ` +
+        `found ${matches ? matches.length : 0} — refusing to patch (renamed/removed constant ` +
+        `or format drift in ContractAddresses.sol).`
+    );
+  }
+  return src.replace(regex, `$1address(${address});`);
 }
