@@ -46,9 +46,9 @@ contract KeeperLeversAndPacking is DeployProtocol {
 
     /// @dev lootboxRngPacked at slot 34 (RE-DERIVED via `solc --storage-layout` on the working tree
     ///      after the Stage B Game-storage packing); lootboxRngIndex is the low 48 bits.
-    uint256 private constant LOOTBOX_RNG_PACKED_SLOT = 34;
+    uint256 private constant LOOTBOX_RNG_PACKED_SLOT = 33;
     /// @dev lootboxRngWordByIndex mapping root slot.
-    uint256 private constant LOOTBOX_RNG_WORD_SLOT = 35;
+    uint256 private constant LOOTBOX_RNG_WORD_SLOT = 34;
 
     // -------------------------------------------------------------------------
     // Constants

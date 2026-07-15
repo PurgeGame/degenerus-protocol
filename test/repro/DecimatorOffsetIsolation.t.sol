@@ -24,8 +24,8 @@ contract DecimatorOffsetIsolationTest is DeployProtocol {
     //   decBucketOffsetPacked      mapping(uint24  => uint64)   slot 44
     //   terminalDecBucketBurnTotal mapping(bytes32 => uint256)  slot 49
     //   lastTerminalDecClaimRound  struct (lvl in low bytes)    slot 50 (fresh game => 0)
-    uint256 internal constant SLOT_DEC_OFFSET_PACKED = 44;
-    uint256 internal constant SLOT_TERMINAL_BUCKET_BURN = 49;
+    uint256 internal constant SLOT_DEC_OFFSET_PACKED = 43;
+    uint256 internal constant SLOT_TERMINAL_BUCKET_BURN = 48;
 
     // Mirror of the module's denominator span (2..12 inclusive).
     uint8 internal constant DECIMATOR_MAX_DENOM = 12;

@@ -78,12 +78,12 @@ contract VRFStallEdgeCases is DeployProtocol {
     /// @dev Read lootboxRngIndex directly from storage slot 35 (lower 48 bits of lootboxRngPacked)
     ///      (Stage B packing: lootboxRngPacked = slot 34).
     function _lootboxRngIndex() internal view returns (uint48) {
-        return uint48(uint256(vm.load(address(game), bytes32(uint256(34)))));
+        return uint48(uint256(vm.load(address(game), bytes32(uint256(33)))));
     }
 
-    /// @dev Read lootboxRngWordByIndex[index] from storage (mapping at slot 35, Stage B Game pack).
+    /// @dev Read lootboxRngWordByIndex[index] from storage (mapping at slot 34, Stage B Game pack).
     function _lootboxRngWord(uint48 index) internal view returns (uint256) {
-        bytes32 slot = keccak256(abi.encode(uint256(index), uint256(35)));
+        bytes32 slot = keccak256(abi.encode(uint256(index), uint256(34)));
         return uint256(vm.load(address(game), slot));
     }
 
@@ -350,7 +350,7 @@ contract VRFStallEdgeCases is DeployProtocol {
     /// @dev Storage slot for totalFlipReversals (verified via forge inspect).
     uint256 constant SLOT_TOTAL_FLIP_REVERSALS = 5;
     /// @dev Storage slot for lootboxRngPacked (post V62 lootbox repack: was 36).
-    uint256 constant SLOT_LOOTBOX_RNG_PACKED = 34;
+    uint256 constant SLOT_LOOTBOX_RNG_PACKED = 33;
 
     /// @notice Unit: coordinator swap with a daily request in flight preserves the RNG lock
     ///         and re-issues the request on the new coordinator; intentionally-kept variables

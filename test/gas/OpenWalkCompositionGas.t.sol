@@ -71,9 +71,9 @@ contract OpenWalkCompositionGas is DeployProtocol {
     // -------------------------------------------------------------------------
 
     uint256 private constant RNG_WORD_BY_DAY_SLOT = 10; // mapping(uint24 => uint256) — afking box's DAY-keyed word + readiness gate
-    uint256 private constant SUBOF_SLOT = 54;            // _subOf mapping root (address => Sub, one packed slot)
-    uint256 private constant CURSOR_SLOT = 58;           // packed: _subCursor/_subOpenCursor/.../_pendingBoxCount
-    uint256 private constant SUBSCRIBERS_SLOT = 56;      // address[] _subscribers (slot holds the length; elements at keccak256(slot)+i)
+    uint256 private constant SUBOF_SLOT = 53;            // _subOf mapping root (address => Sub, one packed slot)
+    uint256 private constant CURSOR_SLOT = 57;           // packed: _subCursor/_subOpenCursor/.../_pendingBoxCount
+    uint256 private constant SUBSCRIBERS_SLOT = 55;      // address[] _subscribers (slot holds the length; elements at keccak256(slot)+i)
 
     // Sub packed-field byte offsets (see V56AfkingGasMarginal.t.sol header for the full v56 layout).
     uint256 private constant OFF_LASTBOUGHT = 10; // uint24 lastAutoBoughtDay (bytes 11..13)

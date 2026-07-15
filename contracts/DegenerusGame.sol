@@ -10,7 +10,7 @@ pragma solidity 0.8.34;
  *      - Level-centered lifecycle; advanceGame() is permissionless (caller tier gates only the keeper bounty)
  *      - jackpotPhaseFlag selects the daily payout mode within a level: PURCHASE(false) / JACKPOT(true)
  *      - gameOver flag is terminal
- *      - Presale: two independent mechanisms — lootbox-presale flag + coin presale-box (presaleOver) sale
+ *      - Presale: single coin presale-box (presaleOver) latch, closing at the 50-ETH applied-box-spend cap
  *      - Chainlink VRF for randomness with RNG lock to prevent manipulation
  *      - Delegatecall modules: advance, boon, decimator, degenerette, jackpot, lootbox, mint, whale (must inherit DegenerusGameStorage)
  *      - Prize pool flow: futurePrizePool (unified reserve) → nextPrizePool → currentPrizePool → claimableWinnings
@@ -23,7 +23,7 @@ pragma solidity 0.8.34;
  *         until claimed — always in the solvency-safe direction. Equality holds at full settlement,
  *         modulo pro-rata rounding dust.)
  *      - jackpotPhaseFlag is the daily payout mode: false(PURCHASE) / true(JACKPOT); gameOver is terminal
- *      - Lootbox-presale flag starts active; clears after 200 ETH tracked mint-lootbox spend or the level-3+ transition (one-way; no admin setter)
+ *      - Presale is the coin-presale-box sale, active until applied box spend fills the 50-ETH cap (presaleOver latch; one-way, no admin setter)
  *
  * @dev SECURITY:
  *      - Pull pattern for ETH/stETH withdrawals (claimWinnings)
@@ -257,12 +257,10 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
       |  Keeper-bounty tiers (reward only, never an advance gate): minted today/yesterday, deity pass,    |
       |  anyone >=30 min since level start, any pass holder >=15 min, active AFKing sub, DGVE majority.   |
       |                                                                                                   |
-      |  Presale — two independent mechanisms:                                                            |
-      |  • Lootbox-presale flag (presaleStatePacked): starts active, clears after 200 ETH of tracked      |
-      |    mint lootbox spend or at the level-3+ transition; labels events and gates VAULT-referral       |
-      |    mutability. No admin setter; lootbox ETH is rake-free both in and out of presale.              |
-      |  • Coin presale-box sale (presaleOver latch): credit-gated, closes when applied box spend fills   |
-      |    exactly 50 ETH; boxes bought before close stay openable afterward.                             |
+      |  Presale — a single latch (presaleOver): the credit-gated coin-presale-box sale, active until     |
+      |  applied box spend fills exactly 50 ETH; boxes bought before close stay openable afterward. The   |
+      |  same latch labels lootbox events and gates VAULT-referral mutability. No admin setter; lootbox   |
+      |  ETH is rake-free both in and out of presale.                                                     |
       +===================================================================================================+*/
 
     /// @notice Advance the game state machine by one tick.
@@ -551,7 +549,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
 
     /// @notice Update lootbox RNG request threshold (wei).
     /// @dev Access: vault owner only (DGVE majority holder).
-    /// @param newThreshold New threshold in wei (must be non-zero).
+    /// @param newThreshold New threshold in wei, non-zero (stored at 0.001 ETH resolution, rounded down; the event echoes the requested wei).
     /// @custom:reverts OnlyVault If caller is not the vault owner.
     /// @custom:reverts ZeroValue If newThreshold is zero.
     function setLootboxRngThreshold(uint256 newThreshold) external {
@@ -572,7 +570,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     ///      Adds affiliate support for loot box purchases.
     ///      SECURITY: Blocked when RNG is locked.
     /// @param buyer Player address to receive purchases (address(0) = msg.sender).
-    /// @param entryQuantityScaled Number of tickets to purchase (2 decimals, scaled by 100; 0 to skip).
+    /// @param entryQuantityScaled Purchase units (400 = 4*QTY_SCALE = one whole ticket = 4 entries; 0 to skip).
     /// @param lootBoxAmount ETH amount for loot boxes, minimum 0.01 ETH (0 to skip).
     /// @param affiliateCode Affiliate/referral code for all purchases.
     /// @param payKind Payment method (DirectEth, Claimable, or Combined).
@@ -695,7 +693,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     /// @dev Main entry point for FLIP ticket purchases. Mirrors purchase() but for FLIP payments.
     ///      SECURITY: Blocked when RNG is locked.
     /// @param buyer Player address to receive purchases (address(0) = msg.sender).
-    /// @param entryQuantityScaled Number of tickets to purchase (2 decimals, scaled by 100; 0 to skip).
+    /// @param entryQuantityScaled Purchase units (400 = 4*QTY_SCALE = one whole ticket = 4 entries; 0 to skip).
     function redeemFlip(
         address buyer,
         uint256 entryQuantityScaled
@@ -779,7 +777,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     ///      funded by the same mix as any other purchase — fresh ETH, claimable, or afking
     ///      per payKind. Both queue at one index for co-resolution.
     /// @param buyer Player to receive both legs (address(0) = msg.sender).
-    /// @param entryQuantityScaled Tickets to buy (0 to skip).
+    /// @param entryQuantityScaled Purchase units (400 = one whole ticket = 4 entries; 0 to skip).
     /// @param lootBoxAmount ETH lootbox spend (0 to skip).
     /// @param affiliateCode Affiliate/referral code for the mint leg.
     /// @param payKind Payment method for the mint leg.
@@ -823,18 +821,19 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         if (!ok) _revertDelegate(data);
     }
 
-    /// @notice Purchase whale pass: boosts levelCount, queues 400 tickets, includes lootbox.
+    /// @notice Purchase whale pass: boosts levelCount, queues 100 levels of ticket entries, includes lootbox.
     /// @dev Available at any level. Can be purchased multiple times (1-100 per call).
     ///      Price: 2.4 ETH (levels 0-3), 4 ETH (levels 4+), or discounted with boon.
-    ///      Queues 4 tickets for each of 100 levels [ticketStart, ticketStart+99].
+    ///      Per pass x quantity: 40 entries/level for [passLevel..10] and 2 entries/level for the rest,
+    ///      spanning 100 levels from passLevel = level+1 (4 entries = 1 whole ticket).
     ///      Includes lootbox (10% of price).
     ///      Frozen stats don't increment until game reaches the frozen level.
     ///
     ///      Fund distribution - Level 0: 30% next / 70% future.
     ///      Fund distribution - Other levels: 5% next / 95% future.
     ///
-    ///      Example at level 1: 4 tickets each for levels 1-100, stats boosted, frozen until 100.
-    ///      Example at level 51: 4 tickets each for levels 51-150, stats boosted, frozen until 150.
+    ///      Example at level 1 (passLevel 2): 40 entries/lvl for 2-10, 2 entries/lvl for 11-101, frozen until 101.
+    ///      Example at level 51 (passLevel 52): no bonus levels, 2 entries/lvl for 52-151, frozen until 151.
     /// @param buyer Player address to receive pass rewards (address(0) = msg.sender).
     /// @param quantity Number of passes to purchase.
     /// @param affiliateCode Affiliate/referral code for the purchase (bytes32(0) = stored code).
@@ -1221,7 +1220,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         open = !gameOver && !lastPurchaseDay && lvl != 0;
     }
 
-    /// @notice Terminal jackpot for x00 levels: Day-5-style bucket distribution.
+    /// @notice Game-over terminal jackpot: Day-5-style bucket distribution to the final ticket cohort.
     /// @dev Access: Game-only (self-call). Delegatecalls to JackpotModule.
     ///      Updates claimablePool internally — callers must NOT double-count.
     ///      Signature: runTerminalJackpot(uint256 poolWei, uint24 targetLvl, uint256 rngWord) —
@@ -1266,7 +1265,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
 
     /// @notice Permissionlessly resolve `player`'s Decimator jackpot claim (value credits to player).
     /// @dev Signature: claimDecimatorJackpot(address player, uint24 lvl) — the winner whose
-    ///      claim to resolve, and the level to claim from (must be the last decimator). The
+    ///      claim to resolve, and the level to claim from (per-level snapshots persist, no expiry). The
     ///      signature matches the module function exactly (identical selector), so the calldata
     ///      forwards as-is — re-encoding here would cost contract-size headroom for no behavior change.
     function claimDecimatorJackpot(address, uint24) external {
@@ -1319,7 +1318,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     /// @notice Emitted when claimable ETH winnings are paid out.
     /// @param player Player whose balance is claimed.
     /// @param caller Address that initiated the claim.
-    /// @param amount ETH amount paid (excludes 1 wei sentinel).
+    /// @param amount Total value paid — native ETH plus any stETH fallback (excludes the 1 wei sentinel).
     event WinningsClaimed(
         address indexed player,
         address indexed caller,
@@ -1999,23 +1998,36 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     }
 
     /// @notice Chainlink VRF callback for random word fulfillment.
-    /// @dev Access: VRF coordinator only.
-    ///      Applies any queued nudges before storing the word.
-    ///      SECURITY: Validates requestId and coordinator address.
-    ///      Signature: rawFulfillRandomWords(uint256 requestId, uint256[] randomWords) — the
-    ///      request ID to match, and the array containing the random word (length 1). The
-    ///      coordinator-only msg.sender gate lives in the module body (delegatecall preserves
-    ///      msg.sender). The signature matches the module function exactly (identical selector),
-    ///      so the calldata forwards as-is — re-encoding the array here would cost contract-size
-    ///      headroom for no behavior change.
+    /// @dev Access: VRF coordinator only. Handled inline (not delegated): the body is a few
+    ///      SLOADs plus one branch, so keeping it here saves the module delegatecall's cold
+    ///      account access on every fulfillment. Daily RNG stores the word for advanceGame
+    ///      (_applyDailyRng applies queued nudges there); mid-day RNG finalizes the lootbox
+    ///      word directly and clears the request. A zero word is coerced to 1 so it never
+    ///      reads as "unset". Stale/duplicate fulfillments (wrong requestId or word already
+    ///      stored) are ignored, not reverted, so a late coordinator retry never bricks.
+    /// @param requestId The request ID to match.
+    /// @param randomWords Array containing the random word (length 1).
     function rawFulfillRandomWords(
-        uint256,
-        uint256[] calldata
+        uint256 requestId,
+        uint256[] calldata randomWords
     ) external {
-        (bool ok, bytes memory data) = ContractAddresses
-            .GAME_ADVANCE_MODULE
-            .delegatecall(msg.data);
-        if (!ok) _revertDelegate(data);
+        if (msg.sender != address(vrfCoordinator)) revert OnlyCoordinator();
+        if (requestId != vrfRequestId || rngWordCurrent != 0) return;
+
+        uint256 word = randomWords[0];
+        if (word == 0) word = 1;
+
+        if (rngLockedFlag) {
+            // Daily RNG: store for advanceGame processing (nudges applied there)
+            rngWordCurrent = word;
+        } else {
+            // Mid-day RNG: directly finalize lootbox and clear state
+            uint48 index = uint48(_lrRead(LR_INDEX_SHIFT, LR_INDEX_MASK)) - 1;
+            lootboxRngWordByIndex[index] = word;
+            emit LootboxRngApplied(index, word, requestId);
+            vrfRequestId = 0;
+            rngRequestTime = 0;
+        }
     }
 
     /*+======================================================================+
@@ -2144,7 +2156,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         // Direct storage access - lootboxEth stores the box amount in the low 128 bits.
         uint256 packed = lootboxEth[lootboxIndex][player];
         amount = packed & LB_AMOUNT_MASK;
-        presale = _psRead(PS_ACTIVE_SHIFT, PS_ACTIVE_MASK) != 0;
+        presale = !presaleOver;
     }
 
     /// @notice View Degenerette packed bet info for a player/betId.
@@ -2160,7 +2172,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     /// @notice Check whether lootbox presale mode is currently active.
     /// @return active True if presale is active.
     function lootboxPresaleActiveFlag() external view returns (bool active) {
-        return _psRead(PS_ACTIVE_SHIFT, PS_ACTIVE_MASK) != 0;
+        return !presaleOver;
     }
 
     /// @notice Spendable coin-presale-box credit accrued by a player.
@@ -2364,7 +2376,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
       |  Activity Score Components (player engagement/loyalty metrics):      |
       |  • Mint streak: +1% per consecutive level minted (cap 50%)           |
       |  • Mint count: +25% for 100% participation, scaled proportionally    |
-      |  • Quest streak: +1% per consecutive quest (cap 100%)                |
+      |  • Quest streak: +1 pt per 2 quests completed (uncapped)             |
       |  • Affiliate points: +1% per affiliate point (cap 50%)               |
       |  • Whale pass bonus (active only while frozen):                      |
       |    - 10-level pass: +10%                                             |
@@ -2374,8 +2386,8 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
       +======================================================================+*/
 
     /// @notice Calculate player's activity score in whole points.
-    /// @dev Activity Score: 50 (streak) + 25 (count) + 100 (quest) + 50 (affiliate) + 40 (whale) = 265 pt max
-    ///      Deity pass adds +80 in place of whale pass bonus (305 pt max base).
+    /// @dev Activity Score: 50 (streak) + 25 (count) + questStreak/2 (uncapped) + 50 (affiliate) + 40 (whale)
+    ///      Deity pass adds +80 in place of the whale bonus. Global hard cap: 65,534 points.
     ///      Consumers apply their own caps (lootbox EV: 400, degenerette ROI: 305, decimator: 235).
     /// @param player The player address to calculate for.
     /// @return scorePoints Total activity score in whole points.

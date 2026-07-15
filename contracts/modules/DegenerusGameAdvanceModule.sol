@@ -94,7 +94,6 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         uint256 nudges,
         uint256 finalWord
     );
-    event LootboxRngApplied(uint48 index, uint256 word, uint256 requestId);
     event VrfCoordinatorUpdated(
         address indexed previous,
         address indexed current
@@ -632,10 +631,6 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                     rngWord,
                     psd
                 );
-
-                if (lvl >= 3 && _psRead(PS_ACTIVE_SHIFT, PS_ACTIVE_MASK) != 0) {
-                    _psWrite(PS_ACTIVE_SHIFT, PS_ACTIVE_MASK, 0);
-                }
 
                 // Transition to jackpot phase
                 jackpotPhaseFlag = true;
@@ -2058,35 +2053,6 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         }
     }
 
-    /// @notice Chainlink VRF callback for random word fulfillment.
-    /// @dev Access: VRF coordinator only.
-    ///      Daily RNG: stores word for advanceGame processing (nudges applied there).
-    ///      Mid-day RNG: directly finalizes lootbox RNG, no advanceGame needed.
-    ///      SECURITY: Validates requestId and coordinator address.
-    /// @param requestId The request ID to match.
-    /// @param randomWords Array containing the random word (length 1).
-    function rawFulfillRandomWords(
-        uint256 requestId,
-        uint256[] calldata randomWords
-    ) external {
-        if (msg.sender != address(vrfCoordinator)) revert OnlyCoordinator();
-        if (requestId != vrfRequestId || rngWordCurrent != 0) return;
-
-        uint256 word = randomWords[0];
-        if (word == 0) word = 1;
-
-        if (rngLockedFlag) {
-            // Daily RNG: store for advanceGame processing (nudges applied there)
-            rngWordCurrent = word;
-        } else {
-            // Mid-day RNG: directly finalize lootbox and clear state
-            uint48 index = uint48(_lrRead(LR_INDEX_SHIFT, LR_INDEX_MASK)) - 1;
-            lootboxRngWordByIndex[index] = word;
-            emit LootboxRngApplied(index, word, requestId);
-            vrfRequestId = 0;
-            rngRequestTime = 0;
-        }
-    }
 
     /// @dev Backfill rngWordByDay and process coinflip payouts for gap days
     ///      caused by VRF stall. Derives deterministic words from the first

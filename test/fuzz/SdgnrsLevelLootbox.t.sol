@@ -16,8 +16,8 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 contract SdgnrsLevelLootbox is DeployProtocol {
     uint256 private constant GAME_CLAIMABLE_SLOT = 7; // balancesPacked root (low-128 = claimableWinnings)
     uint256 private constant CLAIMABLE_POOL_SLOT = 1; // claimablePool uint128 @ slot 1, high-128
-    uint256 private constant SUBOF_SLOT = 54; // _subOf mapping root (address => Sub, one packed slot)
-    uint256 private constant CURSOR_SLOT = 58; // cursor slot; _sdgnrsBonusLevel uint24 @ byte 25
+    uint256 private constant SUBOF_SLOT = 53; // _subOf mapping root (address => Sub, one packed slot)
+    uint256 private constant CURSOR_SLOT = 57; // cursor slot; _sdgnrsBonusLevel uint24 @ byte 25
     uint256 private constant SDGNRS_BONUS_OFFBYTES = 25;
     uint256 private constant MINTPACKED_SLOT = 9; // mintPacked_ root (deity bit @ 184)
     uint256 private constant DEITY_SHIFT = 184;

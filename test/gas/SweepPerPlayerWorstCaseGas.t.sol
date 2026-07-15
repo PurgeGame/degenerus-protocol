@@ -49,9 +49,9 @@ contract SweepPerPlayerWorstCaseGas is DeployProtocol {
     uint256 private constant CLAIMABLE_WINNINGS_SLOT = 7;   // balancesPacked root — the SUB-04 reinvest read masks the low-128 claimable half
     uint256 private constant CLAIMABLE_POOL_SLOT = 1;       // uint128 @ slot 1, byte 16 (SOLVENCY-01 tandem)
     uint256 private constant CLAIMABLE_POOL_OFFBYTES = 16;
-    uint256 private constant SUBOF_SLOT = 54;              // _subOf mapping root (address => Sub, one packed slot)
-    uint256 private constant SUBSCRIBERS_SLOT = 56;        // address[] _subscribers (slot holds the length)
-    uint256 private constant SUBSCRIBER_INDEX_SLOT = 57;   // mapping(address => uint256) _subscriberIndex
+    uint256 private constant SUBOF_SLOT = 53;              // _subOf mapping root (address => Sub, one packed slot)
+    uint256 private constant SUBSCRIBERS_SLOT = 55;        // address[] _subscribers (slot holds the length)
+    uint256 private constant SUBSCRIBER_INDEX_SLOT = 56;   // mapping(address => uint256) _subscriberIndex
 
     // Sub packed-field byte offsets (DegenerusGameStorage.sol; the v56 re-packed single 256-bit slot —
     // the markers are uint24 each, not the old uint32 232-bit layout).

@@ -143,12 +143,10 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
     /// @param buyer The box recipient.
     /// @param index The lootbox RNG index the box queued at.
     /// @param amount The box ETH spend (boons off ⇒ raw spend).
-    /// @param presale True if presale is active at the cover-buy.
     event LootBoxBuy(
         address indexed buyer,
         uint48 indexed index,
-        uint256 amount,
-        bool presale
+        uint256 amount
     );
 
     /// @notice Emitted once per subscriber per delivered afking day — the authoritative
@@ -1078,12 +1076,7 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
             ((pendingEth & LR_PENDING_ETH_MASK) << LR_PENDING_ETH_SHIFT);
 
         // One box-buy event across paths (same topic as the mint + whale LootBoxBuy).
-        emit LootBoxBuy(
-            player,
-            index,
-            amount,
-            _psRead(PS_ACTIVE_SHIFT, PS_ACTIVE_MASK) != 0
-        );
+        emit LootBoxBuy(player, index, amount);
     }
 
     /// @dev Hand the afking-computed streak back to the manual quest system on a sub-ending path,

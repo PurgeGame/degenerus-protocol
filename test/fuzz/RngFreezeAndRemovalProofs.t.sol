@@ -66,13 +66,13 @@ contract RngFreezeAndRemovalProofs is DeployProtocol {
     // -------------------------------------------------------------------------
 
     /// @dev lootboxRngPacked at slot 34; lootboxRngIndex is the low 48 bits.
-    uint256 private constant LOOTBOX_RNG_PACKED_SLOT = 34;
+    uint256 private constant LOOTBOX_RNG_PACKED_SLOT = 33;
     /// @dev lootboxRngWordByIndex mapping root slot.
-    uint256 private constant LOOTBOX_RNG_WORD_SLOT = 35;
+    uint256 private constant LOOTBOX_RNG_WORD_SLOT = 34;
     /// @dev degeneretteBets mapping root slot (address => betId => packed).
-    uint256 private constant DEGENERETTE_BETS_SLOT = 38;
+    uint256 private constant DEGENERETTE_BETS_SLOT = 37;
     /// @dev degeneretteBetNonce mapping root slot (address => uint64).
-    uint256 private constant DEGENERETTE_BET_NONCE_SLOT = 39;
+    uint256 private constant DEGENERETTE_BET_NONCE_SLOT = 38;
     /// @dev lootboxEth (the single folded box word) mapping root slot. The amount sub-field (low
     ///      128 bits) is the box-owed signal (set on first deposit, zeroed on open) — it replaced
     ///      the removed lootboxEthBase mapping the old pin read.
@@ -512,7 +512,7 @@ contract RngFreezeAndRemovalProofs is DeployProtocol {
 
     /// @dev Storage slot for the `whalePassClaims` mapping (DegenerusGame slot 21; confirmed via
     ///      `forge inspect contracts/DegenerusGame.sol:DegenerusGame storage` and 336-01's same probe).
-    uint256 private constant WHALE_PASS_CLAIMS_SLOT = 21;
+    uint256 private constant WHALE_PASS_CLAIMS_SLOT = 20;
 
     /// @dev BitPackingLib shifts used by `_applyWhalePassStats` (mirrored locally so the test
     ///      reads the SAME slot fields the contract writes). Verified against
@@ -948,7 +948,7 @@ contract RngFreezeAndRemovalProofs is DeployProtocol {
     ///      finalized index (the realistic state where lower indices are drained). Without this the
     ///      sweep would orphan-break at the first un-worded lower index.
     function _parkBoxFrontier(uint48 index) internal {
-        bytes32 slot = bytes32(uint256(58));
+        bytes32 slot = bytes32(uint256(57));
         uint256 packed = uint256(vm.load(address(game), slot));
         uint256 cursorMask = (uint256(1) << 48) - 1;
         packed &= ~(cursorMask << (7 * 8));   // boxCursor = 0

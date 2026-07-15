@@ -56,12 +56,10 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
     /// @param buyer The box recipient.
     /// @param index The lootbox RNG index the box queued at.
     /// @param amount The deposited box ETH (this deposit).
-    /// @param presale Always false here — a pass box is never a presale box.
     event LootBoxBuy(
         address indexed buyer,
         uint48 indexed index,
-        uint256 amount,
-        bool presale
+        uint256 amount
     );
 
     /// @notice weiIn = whale-pass ETH-in (any funding source); the pass's reward LootBoxBuy is
@@ -951,8 +949,8 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
         lootboxEth[index][buyer] = _packLootbox(newAmount, adj, score, distressUnits);
 
         // One box-buy event across paths (same topic as the mint module's LootBoxBuy), on every
-        // deposit. presale=false — a pass-bundled box is never a presale box.
-        emit LootBoxBuy(buyer, index, lootboxAmount, false);
+        // deposit.
+        emit LootBoxBuy(buyer, index, lootboxAmount);
     }
 
     /// @dev Apply any active lootbox boost boon to the purchase amount.

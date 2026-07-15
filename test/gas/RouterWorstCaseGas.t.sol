@@ -57,12 +57,12 @@ contract RouterWorstCaseGas is DeployProtocol {
 
     uint256 private constant RNG_WORD_BY_DAY_SLOT = 10;             // mapping(uint24 => uint256) — the afking box's DAY-keyed word
     uint256 private constant LOOTBOX_ETH_SLOT = 15;                 // folded box word; amount[0:128] = box-owed signal
-    uint256 private constant LOOTBOX_RNG_PACKED_SLOT = 34;          // [0:47] lootboxRngIndex
-    uint256 private constant LOOTBOX_RNG_WORD_BY_INDEX_SLOT = 35;   // mapping(uint48 => uint256) (human box)
-    uint256 private constant SUBOF_SLOT = 54;                       // _subOf mapping root (address => Sub, one packed slot)
-    uint256 private constant SUBSCRIBERS_SLOT = 56;                 // address[] _subscribers (slot holds the length)
-    uint256 private constant SUBSCRIBER_INDEX_SLOT = 57;            // mapping(address => uint256) _subscriberIndex
-    uint256 private constant SUBCURSOR_SLOT = 58;                   // _subCursor (uint16 @ byte 0) + _subOpenCursor (@ byte 2) + _afkingResetDay (@ byte 4)
+    uint256 private constant LOOTBOX_RNG_PACKED_SLOT = 33;          // [0:47] lootboxRngIndex
+    uint256 private constant LOOTBOX_RNG_WORD_BY_INDEX_SLOT = 34;   // mapping(uint48 => uint256) (human box)
+    uint256 private constant SUBOF_SLOT = 53;                       // _subOf mapping root (address => Sub, one packed slot)
+    uint256 private constant SUBSCRIBERS_SLOT = 55;                 // address[] _subscribers (slot holds the length)
+    uint256 private constant SUBSCRIBER_INDEX_SLOT = 56;            // mapping(address => uint256) _subscriberIndex
+    uint256 private constant SUBCURSOR_SLOT = 57;                   // _subCursor (uint16 @ byte 0) + _subOpenCursor (@ byte 2) + _afkingResetDay (@ byte 4)
 
     // Sub packed-field byte offsets (DegenerusGameStorage.sol; the v56 re-packed single 256-bit slot,
     // 241/256 bits used — the markers are uint24 each, not the old uint32 232-bit layout).

@@ -17,13 +17,13 @@ contract RngIndexDrainBindingTest is DeployProtocol {
     /// @dev Storage slot for `lootboxRngWordByIndex` mapping. Authoritative at the
     ///      working tree via `solc --storage-layout` (post Stage B Game pack:
     ///      lootboxRngWordByIndex = slot 35, was 36).
-    uint256 internal constant SLOT_LOOTBOX_MAPPING = 35;
+    uint256 internal constant SLOT_LOOTBOX_MAPPING = 34;
     /// @dev Storage slot for `lootboxRngPacked` (LR_INDEX at low 48 bits).
     ///      Authoritative slot 34 (post Stage B Game pack: was 35).
-    uint256 internal constant SLOT_LR_INDEX = 34;
+    uint256 internal constant SLOT_LR_INDEX = 33;
     /// @dev Base slot for `boxPlayers` mapping(uint48 => address[]). Authoritative
     ///      at the working tree (confirmed at runtime: boxPlayers[idx][0] == buyer).
-    uint256 internal constant SLOT_BOX_PLAYERS_MAPPING = 59;
+    uint256 internal constant SLOT_BOX_PLAYERS_MAPPING = 58;
     /// @dev Base slot for `presaleBoxEth` mapping(uint48 => mapping(address => uint256)).
     ///      Authoritative at the working tree (confirmed at runtime: low-96 cell == applied box ETH).
     uint256 internal constant SLOT_PRESALE_BOX_ETH_MAPPING = 15;

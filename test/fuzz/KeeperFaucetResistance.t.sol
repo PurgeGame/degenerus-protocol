@@ -52,16 +52,16 @@ contract KeeperFaucetResistance is DeployProtocol {
     // -------------------------------------------------------------------------
 
     /// @dev lootboxRngPacked at slot 34; lootboxRngIndex is the low 48 bits.
-    uint256 private constant LOOTBOX_RNG_PACKED_SLOT = 34;
+    uint256 private constant LOOTBOX_RNG_PACKED_SLOT = 33;
 
     /// @dev lootboxRngWordByIndex mapping root slot.
-    uint256 private constant LOOTBOX_RNG_WORD_SLOT = 35;
+    uint256 private constant LOOTBOX_RNG_WORD_SLOT = 34;
 
     /// @dev degeneretteBets mapping root slot.
-    uint256 private constant DEGENERETTE_BETS_SLOT = 38;
+    uint256 private constant DEGENERETTE_BETS_SLOT = 37;
 
     /// @dev degeneretteBetNonce mapping root slot.
-    uint256 private constant DEGENERETTE_BET_NONCE_SLOT = 39;
+    uint256 private constant DEGENERETTE_BET_NONCE_SLOT = 38;
 
     /// @dev WWXRP balanceOf mapping root slot.
     uint256 private constant WWXRP_BALANCEOF_SLOT = 2;
@@ -115,7 +115,7 @@ contract KeeperFaucetResistance is DeployProtocol {
     // -------------------------------------------------------------------------
 
     /// @dev _subOf mapping root (one packed Sub slot per subscriber).
-    uint256 private constant SUBOF_SLOT = 54;
+    uint256 private constant SUBOF_SLOT = 53;
     uint256 private constant OFF_LASTBOUGHT = 10; // uint24 lastAutoBoughtDay (bytes 11..13)
     uint256 private constant OFF_LASTOPENED = 13; // uint24 lastOpenedDay     (bytes 14..16)
     uint256 private constant MINTPACKED_SLOT = 9; // mintPacked_ mapping root (deity bit)

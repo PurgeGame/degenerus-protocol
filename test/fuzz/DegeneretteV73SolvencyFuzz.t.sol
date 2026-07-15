@@ -20,10 +20,10 @@ import {Vm} from "forge-std/Vm.sol";
 /// @dev Run: forge test --match-path test/fuzz/DegeneretteV73SolvencyFuzz.t.sol
 contract DegeneretteV73SolvencyFuzz is DeployProtocol {
     uint256 private constant PRIZE_POOLS_PACKED_SLOT = 2;
-    uint256 private constant LOOTBOX_RNG_WORD_SLOT = 35;
-    uint256 private constant LOOTBOX_RNG_PACKED_SLOT = 34;
-    uint256 private constant DEGENERETTE_BET_NONCE_SLOT = 39;
-    uint256 private constant DEGENERETTE_BETS_SLOT = 38;
+    uint256 private constant LOOTBOX_RNG_WORD_SLOT = 34;
+    uint256 private constant LOOTBOX_RNG_PACKED_SLOT = 33;
+    uint256 private constant DEGENERETTE_BET_NONCE_SLOT = 38;
+    uint256 private constant DEGENERETTE_BETS_SLOT = 37;
     uint256 private constant DEGEN_ACTIVITY_SHIFT = 202;
 
     bytes1 private constant QUICK_PLAY_SALT = 0x51;

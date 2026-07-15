@@ -180,7 +180,7 @@ const DEITY_SENTINEL_TICKET_IDX =
 // test runtime via `forge inspect storageLayout`. These match Phase 294 §2
 // EMPTY-diff attestation against the v41 close pin.
 const FALLBACK_TRAIT_BURN_TICKET_SLOT = 8n;
-const FALLBACK_DEITY_BY_SYMBOL_SLOT = 29n; // Stage B Game-storage packing shifted 30 -> 29
+const FALLBACK_DEITY_BY_SYMBOL_SLOT = 28n; // Stage B Game-storage packing shifted 30 -> 29
 
 // -----------------------------------------------------------------------------
 // Module-level helpers

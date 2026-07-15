@@ -46,7 +46,7 @@ describe("Distress-Mode Lootboxes", function () {
    * Parse LootBoxBuy events from a tx using the MintModule ABI
    * (event is emitted via delegatecall, so must use module interface).
    *
-   * LootBoxBuy event fields (current): buyer, index, amount, presale.
+   * LootBoxBuy event fields (current): buyer, index, amount.
    * Pool split shares / day / level are no longer emitted as event fields — use pool
    * balance deltas to verify split behavior.
    */

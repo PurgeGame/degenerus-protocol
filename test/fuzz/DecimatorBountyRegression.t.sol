@@ -28,9 +28,9 @@ contract DecimatorBountyRegression is DeployProtocol {
     // forge inspect DegenerusGame storageLayout (Stage B POST layout):
     uint256 internal constant SLOT_HEADER = 0; // packed flags incl. gameOver @ byte 21
     uint256 internal constant SLOT_POOLS_1 = 1; // currentPrizePool[0:128] | claimablePool[128:256]
-    uint256 internal constant SLOT_DEC_BURN = 41; // mapping(uint24 => mapping(address => DecBet))
-    uint256 internal constant SLOT_DEC_CLAIM_ROUNDS = 43; // mapping(uint24 => DecClaimRound) (one slot)
-    uint256 internal constant SLOT_DEC_OFFSET_PACKED = 44; // mapping(uint24 => uint64)
+    uint256 internal constant SLOT_DEC_BURN = 40; // mapping(uint24 => mapping(address => DecBet))
+    uint256 internal constant SLOT_DEC_CLAIM_ROUNDS = 42; // mapping(uint24 => DecClaimRound) (one slot)
+    uint256 internal constant SLOT_DEC_OFFSET_PACKED = 43; // mapping(uint24 => uint64)
 
     uint256 internal constant PRICE_COIN_UNIT = 1000 ether;
     uint256 internal constant BOX_BOUNTY_ETH_TARGET = 15_000_000_000_000; // mirror of the module constant

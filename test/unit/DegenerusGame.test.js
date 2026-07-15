@@ -316,8 +316,8 @@ describe("DegenerusGame", function () {
     });
   });
 
-  // endLootboxPresale was removed in 840a083 — presale now ends only via
-  // automatic triggers (level 3 or 200 ETH cap).
+  // There is no admin presale setter — the presale flag mirrors !presaleOver,
+  // which latches only when the coin-presale-box 50-ETH cap is filled.
 
   // ---------------------------------------------------------------------------
   // 5. setLootboxRngThreshold

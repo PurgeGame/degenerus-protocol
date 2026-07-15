@@ -50,7 +50,7 @@ contract QuestBoonAfkingStreakLossTest is DeployProtocol {
     // -------------------------------------------------------------------------
     // Game-resident _subOf accumulator (post-PACK offsets, re-derived from the v69 storageLayout)
     // -------------------------------------------------------------------------
-    uint256 private constant SUBOF_SLOT = 54;
+    uint256 private constant SUBOF_SLOT = 53;
     uint256 private constant MINTPACKED_SLOT = 9;
     uint256 private constant DEITY_SHIFT = 184;
     uint256 private constant OFF_AFKINGSTART = 19; // uint24 afkingStartDay

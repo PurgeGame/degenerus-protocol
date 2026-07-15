@@ -154,8 +154,8 @@ const QUICK_PLAY_SALT = "0x51"; // bytes1 = 'Q'
 // additions minus the earlybird removals shifted these mapping/packed slots down by
 // 2 (lootboxRngPacked 35->37, lootboxRngWordByIndex 36->38). Mirrors the Phase
 // 323-01 foundry slot-shift repair.
-const LOOTBOX_RNG_WORD_SLOT = 38n;
-const LOOTBOX_RNG_PACKED_SLOT = 37n;
+const LOOTBOX_RNG_WORD_SLOT = 37n;
+const LOOTBOX_RNG_PACKED_SLOT = 36n;
 
 // Stage constants (mirror test/gas/Phase264GasRegression.test.js L130-133).
 const STAGE_RNG_REQUESTED = 1n;

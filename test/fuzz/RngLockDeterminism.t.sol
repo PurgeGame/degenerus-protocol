@@ -46,8 +46,8 @@ contract RngLockDeterminism is DeployProtocol {
     uint256 constant SLOT_VRF_REQUEST_ID = 4;
     // Via forge inspect (Stage B Game-storage packing shifted these down):
     // lootboxRngPacked = slot 34 (the lootbox RNG index lives in bits[0:47]), lootboxRngWordByIndex = slot 35.
-    uint256 constant SLOT_LOOTBOX_RNG_INDEX = 34;
-    uint256 constant SLOT_LOOTBOX_RNG_WORD_BY_INDEX = 35;
+    uint256 constant SLOT_LOOTBOX_RNG_INDEX = 33;
+    uint256 constant SLOT_LOOTBOX_RNG_WORD_BY_INDEX = 34;
     // lootboxEth (the single folded box word) = slot 15; amount is the low 128 bits (the box-owed signal).
     uint256 constant SLOT_LOOTBOX_ETH = 15;
     uint256 constant LB_AMOUNT_MASK = (uint256(1) << 128) - 1;
@@ -1798,7 +1798,7 @@ contract RngLockDeterminism is DeployProtocol {
     /// @notice Storage slot for the `whalePassClaims` mapping (verified via
     ///         `forge inspect contracts/DegenerusGame.sol:DegenerusGame storage-layout`
     ///         → slot 21). The inner address-keyed slot is keccak256(abi.encode(player, 21)).
-    uint256 constant SLOT_WHALE_PASS_CLAIMS = 21;
+    uint256 constant SLOT_WHALE_PASS_CLAIMS = 20;
 
     /// @dev Pre-loads `whalePassClaims[claimant] = halfPasses` via direct storage write so
     ///      the perturbation has work to do (otherwise `claimWhalePass` reverts on
@@ -2142,7 +2142,7 @@ contract RngLockDeterminism is DeployProtocol {
     ///      62) at `index` with a zero in-index cursor, so the relocated multi-index sweep begins
     ///      exactly at this finalized index (the realistic state where every lower index is already
     ///      drained). Without this the sweep would orphan-break at the first un-worded lower index.
-    uint256 constant SLOT_BOX_CURSORS = 58;
+    uint256 constant SLOT_BOX_CURSORS = 57;
     function _parkBoxFrontier(uint48 index) internal {
         bytes32 slot = bytes32(uint256(SLOT_BOX_CURSORS));
         uint256 packed = uint256(vm.load(address(game), slot));

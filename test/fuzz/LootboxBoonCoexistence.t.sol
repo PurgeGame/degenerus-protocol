@@ -24,10 +24,10 @@ contract LootboxBoonCoexistence is DeployProtocol {
     // the single lootboxEth word (amount[0:128] | adj[128:192] | scorePlus1[192:208] |
     // distressUnits[208:256]) and removed the dead lootboxFlip mapping; the Stage B packing further
     // folded deity/VRF/boon fields, shifting lootboxRngPacked, lootboxRngWordByIndex, and boonPacked down.
-    uint256 constant SLOT_BOON_PACKED     = 51;   // mapping(address => BoonPacked)
+    uint256 constant SLOT_BOON_PACKED     = 50;   // mapping(address => BoonPacked)
     uint256 constant SLOT_LOOTBOX_ETH     = 15;   // mapping(uint48 => mapping(address => uint256)) (folded word)
-    uint256 constant SLOT_LOOTBOX_RNG_IDX = 34;   // lootboxRngPacked (low 48 bits = lootboxRngIndex)
-    uint256 constant SLOT_LOOTBOX_WORD    = 35;   // mapping(uint48 => uint256) lootboxRngWordByIndex
+    uint256 constant SLOT_LOOTBOX_RNG_IDX = 33;   // lootboxRngPacked (low 48 bits = lootboxRngIndex)
+    uint256 constant SLOT_LOOTBOX_WORD    = 34;   // mapping(uint48 => uint256) lootboxRngWordByIndex
 
     // Packed lootboxEth bit layout (mirrors DegenerusGameStorage _packLootbox).
     uint256 constant LB_AMOUNT_MASK    = (uint256(1) << 128) - 1; // amount   [0:128]

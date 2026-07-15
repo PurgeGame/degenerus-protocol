@@ -52,7 +52,7 @@ contract VRFCore is DeployProtocol {
     /// @dev Read lootboxRngIndex from lootboxRngPacked (storage slot 34, low 48 bits = LR_INDEX)
     ///      (post V62 lootbox repack: was 35).
     function _lootboxRngIndex() internal view returns (uint48) {
-        return uint48(uint256(vm.load(address(game), bytes32(uint256(34)))));
+        return uint48(uint256(vm.load(address(game), bytes32(uint256(33)))));
     }
 
     /// @dev Read vrfRequestId directly from storage slot 4.
@@ -62,7 +62,7 @@ contract VRFCore is DeployProtocol {
 
     /// @dev Read LR_MID_DAY from lootboxRngPacked (slot 34, bits [224:232]).
     function _lrMidDay() internal view returns (uint8) {
-        return uint8(uint256(vm.load(address(game), bytes32(uint256(34)))) >> 224);
+        return uint8(uint256(vm.load(address(game), bytes32(uint256(33)))) >> 224);
     }
 
     /// @dev Read rngWordCurrent directly from storage slot 3.

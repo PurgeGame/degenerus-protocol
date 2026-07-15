@@ -48,10 +48,10 @@ contract V56FreezeSolvency is DeployProtocol {
     uint256 private constant CLAIMABLE_POOL_OFFBYTES = 16;
     uint256 private constant MINTPACKED_SLOT = 9; // mintPacked_ mapping root (deity bit @ bit 184)
     uint256 private constant RNG_WORD_BY_DAY_SLOT = 10; // mapping(uint32 => uint256) — the afking box DAY-keyed word
-    uint256 private constant LOOTBOX_RNG_PACKED_SLOT = 34; // [0:47] lootboxRngIndex (was 35)
-    uint256 private constant LOOTBOX_RNG_WORD_BY_INDEX_SLOT = 35; // mapping(uint48 => uint256) (was 36)
-    uint256 private constant SUBOF_SLOT = 54; // _subOf mapping root (address => Sub, one packed slot) (was 58)
-    uint256 private constant SUBSCRIBER_INDEX_SLOT = 57; // mapping(address => uint256) _subscriberIndex (1-indexed) (was 61)
+    uint256 private constant LOOTBOX_RNG_PACKED_SLOT = 33; // [0:47] lootboxRngIndex (was 35)
+    uint256 private constant LOOTBOX_RNG_WORD_BY_INDEX_SLOT = 34; // mapping(uint48 => uint256) (was 36)
+    uint256 private constant SUBOF_SLOT = 53; // _subOf mapping root (address => Sub, one packed slot) (was 58)
+    uint256 private constant SUBSCRIBER_INDEX_SLOT = 56; // mapping(address => uint256) _subscriberIndex (1-indexed) (was 61)
 
     //   dailyQuantity u8 @0 · validThroughLevel u24 @1 · reinvestPct u8 @4 · flags u8 @5
     //   scorePlus1 u16 @6 · amount u24 @8 (milli-ETH)

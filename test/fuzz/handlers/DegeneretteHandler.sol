@@ -21,8 +21,8 @@ contract DegeneretteHandler is Test {
     ///      gates on (LR_INDEX != 0) AND (lootboxRngWordByIndex[LR_INDEX] == 0); resolution
     ///      gates on lootboxRngWordByIndex[betIndex] != 0. The handler seeds both so the fuzzer
     ///      reaches a non-vacuous place->resolve sequence regardless of call ordering.
-    uint256 private constant LOOTBOX_RNG_PACKED_SLOT = 34; // post Stage-B game-storage repack: was 35
-    uint256 private constant LOOTBOX_RNG_WORD_SLOT = 35;   // post Stage-B game-storage repack: was 36
+    uint256 private constant LOOTBOX_RNG_PACKED_SLOT = 33; // post Stage-B game-storage repack: was 35
+    uint256 private constant LOOTBOX_RNG_WORD_SLOT = 34;   // post Stage-B game-storage repack: was 36
     uint48 private constant SEED_LR_INDEX = 1;
 
     // --- Ghost variables ---

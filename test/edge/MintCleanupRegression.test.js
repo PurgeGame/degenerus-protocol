@@ -275,8 +275,8 @@ async function pinDailyEntropy(game, deployer, mockVRF, word) {
 // Storage slots for entropy source lookup (post-MINTCLN; v42 contract).
 // Source: `forge inspect contracts/storage/DegenerusGameStorage.sol:DegenerusGameStorage storage-layout`.
 const RNG_WORD_BY_DAY_BASE_SLOT = 10n;
-const LOOTBOX_RNG_PACKED_SLOT = 34n; // Stage B Game-storage packing shifted 35 -> 34
-const LOOTBOX_RNG_WORD_BY_INDEX_BASE_SLOT = 35n; // Stage B Game-storage packing shifted 36 -> 35
+const LOOTBOX_RNG_PACKED_SLOT = 33n; // Stage B Game-storage packing shifted 35 -> 34
+const LOOTBOX_RNG_WORD_BY_INDEX_BASE_SLOT = 34n; // Stage B Game-storage packing shifted 36 -> 35
 
 async function readLootboxEntropy(gameAddr) {
   const packed = BigInt(

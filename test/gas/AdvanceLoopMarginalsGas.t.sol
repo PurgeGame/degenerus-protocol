@@ -40,8 +40,8 @@ contract AdvanceLoopMarginalsGas is DeployProtocol {
     uint256 private constant HEADER_SLOT = 0;
     uint256 private constant SLOT_RNG_WORD_CURRENT = 3;
     uint256 private constant RNG_WORD_BY_DAY_SLOT = 10;
-    uint256 private constant SLOT_LOOTBOX_RNG_PACKED = 34;
-    uint256 private constant LOOTBOX_RNG_WORD_SLOT = 35;
+    uint256 private constant SLOT_LOOTBOX_RNG_PACKED = 33;
+    uint256 private constant LOOTBOX_RNG_WORD_SLOT = 34;
     uint256 private constant LR_INDEX_MASK = 0xFFFFFFFFFFFF; // low 48 bits of slot 34
 
     /// @dev The 16.7M HARD never-exceed ceiling (USER-LOCKED dual bound; a breach on the

@@ -31,9 +31,9 @@ contract PresaleBoxDrain is DeployProtocol {
     uint256 constant SLOT_PRESALE_BOX_ETH_SOLD = 16;    // uint96
     uint256 constant SLOT_PRESALE_BOX_CREDIT = 17;      // mapping(address => uint256)
     uint256 constant SLOT_PRESALE_BOX_ETH = 18;         // mapping(uint48 => mapping(address => uint256))
-    uint256 constant SLOT_PRESALE_BOX_DGNRS_POOL_START = 30; // uint256
-    uint256 constant SLOT_LOOTBOX_RNG_PACKED = 34;      // LR_INDEX = low 48 bits
-    uint256 constant SLOT_LOOTBOX_RNG_WORD = 35;        // mapping(uint48 => uint256)
+    uint256 constant SLOT_PRESALE_BOX_DGNRS_POOL_START = 29; // uint256
+    uint256 constant SLOT_LOOTBOX_RNG_PACKED = 33;      // LR_INDEX = low 48 bits
+    uint256 constant SLOT_LOOTBOX_RNG_WORD = 34;        // mapping(uint48 => uint256)
 
     // ── Contract constants mirrored from DegenerusGameLootboxModule (the FIXED curve) ──
     // base = poolStart / 40 DGNRS-per-ETH; tier multiplier in tenths; reward divisor 400.

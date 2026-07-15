@@ -15,9 +15,9 @@ import {VmSafe} from "forge-std/Vm.sol";
 ///             OPEN_BATCH boundary, so its beyond-boundary opens open a FRESH knee — both
 ///             chunks pay a full bounty, matching the two old calls.
 contract OpenBountyCarry is DeployProtocol {
-    uint256 private constant SUBOF_SLOT = 54;
-    uint256 private constant SUBSCRIBERS_SLOT = 56;
-    uint256 private constant CURSOR_SLOT = 58;
+    uint256 private constant SUBOF_SLOT = 53;
+    uint256 private constant SUBSCRIBERS_SLOT = 55;
+    uint256 private constant CURSOR_SLOT = 57;
     uint256 private constant PENDING_SHIFT = 224;
     uint256 private constant CARRY_SHIFT = 240;
     uint256 private constant MINTPACKED_SLOT = 9;

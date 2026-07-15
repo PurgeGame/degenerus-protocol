@@ -129,8 +129,7 @@ contract DegenerusGameMintModule is
     event LootBoxBuy(
         address indexed buyer,
         uint48 indexed index,
-        uint256 amount,
-        bool presale
+        uint256 amount
     );
     /// @notice Emitted when a coin-presale box is bought and queued for resolution.
     /// @param buyer The player who bought the box.
@@ -1463,13 +1462,11 @@ contract DegenerusGameMintModule is
             // combining with the ticket leg so cumulative spend of either kind crosses
             // the whole-ticket participation floor (mint day / streak / quest gate).
             _recordLootboxUnits(buyer, lootBoxAmount);
-            // Single SLOAD of each packed slot, written back once below. Nothing in
-            // between touches lootboxRngPacked or presaleStatePacked (the queue push
-            // writes boxPlayers; the boost consume writes boonPacked only).
+            // Single SLOAD of the packed slot, written back once below. Nothing in
+            // between touches lootboxRngPacked (the queue push writes boxPlayers;
+            // the boost consume writes boonPacked only).
             uint256 lrWord = lootboxRngPacked;
             lbIndex = uint48((lrWord >> LR_INDEX_SHIFT) & LR_INDEX_MASK);
-            uint256 psWord = presaleStatePacked;
-            bool presale = ((psWord >> PS_ACTIVE_SHIFT) & PS_ACTIVE_MASK) != 0;
 
             uint256 packed = lootboxEth[lbIndex][buyer];
             uint256 existingAmount = packed & LB_AMOUNT_MASK;
@@ -1497,17 +1494,6 @@ contract DegenerusGameMintModule is
                 (lrWord & ~(LR_PENDING_ETH_MASK << LR_PENDING_ETH_SHIFT)) |
                 ((newPendingEth & LR_PENDING_ETH_MASK) << LR_PENDING_ETH_SHIFT);
 
-            if (presale) {
-                uint256 psPacked = psWord;
-                uint256 newMintEth = ((psPacked >> PS_MINT_ETH_SHIFT) & PS_MINT_ETH_MASK) + lootBoxAmount;
-                psPacked = (psPacked & ~(PS_MINT_ETH_MASK << PS_MINT_ETH_SHIFT))
-                         | ((newMintEth & PS_MINT_ETH_MASK) << PS_MINT_ETH_SHIFT);
-                if (newMintEth >= LOOTBOX_PRESALE_ETH_CAP) {
-                    psPacked &= ~uint256(PS_ACTIVE_MASK);
-                }
-                presaleStatePacked = psPacked;
-            }
-
             bool distress = _isDistressMode();
             // Distress fraction rides in the packed slot at 0.01-ETH granularity. Accumulate
             // the per-deposit units (sub-0.01-ETH residue on the bonus basis is accepted); the
@@ -1532,7 +1518,7 @@ contract DegenerusGameMintModule is
             lbFutureShare = (lootBoxAmount * futureBps) / 10_000;
             lbNextShare = (lootBoxAmount * nextBps) / 10_000;
 
-            emit LootBoxBuy(buyer, lbIndex, lootBoxAmount, presale);
+            emit LootBoxBuy(buyer, lbIndex, lootBoxAmount);
         }
 
         // --- One combined prize-pool RMW for both legs ---

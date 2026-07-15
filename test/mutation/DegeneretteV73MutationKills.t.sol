@@ -19,9 +19,9 @@ import {Vm} from "forge-std/Vm.sol";
 ///      `git checkout -- contracts/` restored the frozen subject (TEST-ONLY; no persistent .sol edit).
 contract DegeneretteV73MutationKills is DeployProtocol {
     uint256 private constant PRIZE_POOLS_PACKED_SLOT = 2;
-    uint256 private constant LOOTBOX_RNG_WORD_SLOT = 35;
-    uint256 private constant LOOTBOX_RNG_PACKED_SLOT = 34;
-    uint256 private constant DEGENERETTE_BET_NONCE_SLOT = 39;
+    uint256 private constant LOOTBOX_RNG_WORD_SLOT = 34;
+    uint256 private constant LOOTBOX_RNG_PACKED_SLOT = 33;
+    uint256 private constant DEGENERETTE_BET_NONCE_SLOT = 38;
 
     bytes1 private constant QUICK_PLAY_SALT = 0x51; // 'Q'
     uint8 private constant CURRENCY_ETH = 0;
@@ -36,7 +36,7 @@ contract DegeneretteV73MutationKills is DeployProtocol {
     uint256 private constant ROI_MIN_BPS = 9_000;
     uint256 private constant ROI_VA_BPS = 9_891;
     uint256 private constant DEGEN_ACTIVITY_SHIFT = 202;
-    uint256 private constant DEGENERETTE_BETS_SLOT = 38;
+    uint256 private constant DEGENERETTE_BETS_SLOT = 37;
 
     address private player;
 

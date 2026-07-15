@@ -33,15 +33,6 @@ interface IDegenerusGameAdvanceModule {
         uint256 newSubId,
         bytes32 newKeyHash
     ) external;
-
-    /// @notice VRF callback function to receive random words
-    /// @dev Called by the VRF coordinator to fulfill randomness requests
-    /// @param requestId The ID of the VRF request being fulfilled
-    /// @param randomWords Array of random words returned by VRF
-    function rawFulfillRandomWords(
-        uint256 requestId,
-        uint256[] calldata randomWords
-    ) external;
 }
 
 /// @title IDegenerusGameGameOverModule

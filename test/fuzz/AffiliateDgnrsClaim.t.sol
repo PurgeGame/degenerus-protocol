@@ -25,7 +25,7 @@ contract AffiliateDgnrsClaim is DeployProtocol {
     // are merged into one packed mapping levelDgnrsPacked @ slot 26: bits [0:128) = allocation,
     // bits [128:256) = claimed.
     uint256 constant SLOT_LEVEL = 0; // level is at slot 0, offset 12, 3 bytes (uint24)
-    uint256 constant SLOT_LEVEL_DGNRS_PACKED = 26;
+    uint256 constant SLOT_LEVEL_DGNRS_PACKED = 25;
 
     uint256 buyerNonce;
 

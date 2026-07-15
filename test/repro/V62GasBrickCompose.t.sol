@@ -45,8 +45,8 @@ contract V62GasBrickCompose is DeployProtocol {
     // (carried verbatim from V56AfkingGasMarginal so the probes are slot-faithful)
     // -------------------------------------------------------------------------
     uint256 private constant RNG_WORD_BY_DAY_SLOT = 10;
-    uint256 private constant SUBOF_SLOT = 54;       // post V62 lootbox repack: was 58
-    uint256 private constant SUBSCRIBERS_SLOT = 56; // post V62 lootbox repack: was 60
+    uint256 private constant SUBOF_SLOT = 53;       // post V62 lootbox repack: was 58
+    uint256 private constant SUBSCRIBERS_SLOT = 55; // post V62 lootbox repack: was 60
 
     uint256 private constant OFF_VALIDTHROUGH = 1; // uint24 validThroughLevel (bytes 1..3)
 

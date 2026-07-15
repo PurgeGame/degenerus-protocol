@@ -70,9 +70,9 @@ contract V56AfkingGasMarginal is DeployProtocol {
     // RE-DERIVED via `solc --storage-layout` on the working tree after the V62 lootbox repack — the
     // folded lootboxEth word + removed lootboxEthBase/Flip/Purchase/Distress shifted later slots down.
     uint256 private constant RNG_WORD_BY_DAY_SLOT = 10; // mapping(uint24 => uint256) — the afking box's DAY-keyed word + readiness gate
-    uint256 private constant SUBOF_SLOT = 54;           // _subOf mapping root (address => Sub, one packed slot)
-    uint256 private constant SUBSCRIBERS_SLOT = 56;     // address[] _subscribers (slot holds the length)
-    uint256 private constant SUBCURSOR_SLOT = 58;       // _subCursor (uint16 @ byte 0) + _subOpenCursor (uint16 @ byte 2) + _afkingResetDay (uint24 @ byte 4) + boxCursor (uint48 @ byte 7) + boxCursorIndex (uint48 @ byte 13)
+    uint256 private constant SUBOF_SLOT = 53;           // _subOf mapping root (address => Sub, one packed slot)
+    uint256 private constant SUBSCRIBERS_SLOT = 55;     // address[] _subscribers (slot holds the length)
+    uint256 private constant SUBCURSOR_SLOT = 57;       // _subCursor (uint16 @ byte 0) + _subOpenCursor (uint16 @ byte 2) + _afkingResetDay (uint24 @ byte 4) + boxCursor (uint48 @ byte 7) + boxCursorIndex (uint48 @ byte 13)
 
     // Sub packed-field byte offsets — RE-DERIVED via `forge inspect DegenerusGame storageLayout` after the
     // v56 compute-on-read re-pack: `amount` narrowed uint32→uint24 (so everything after it shifts down one

@@ -54,8 +54,8 @@ contract RngLockRotationDeterminism is DeployProtocol {
     uint256 private constant SLOT_PACKED_0 = 0;
     uint256 private constant SLOT_RNG_WORD_CURRENT = 3;
     uint256 private constant SLOT_VRF_REQUEST_ID = 4;
-    uint256 private constant SLOT_LOOTBOX_RNG_INDEX = 34;          // post Stage B Game pack: was 35
-    uint256 private constant SLOT_LOOTBOX_RNG_WORD_BY_INDEX = 35;  // post Stage B Game pack: was 36
+    uint256 private constant SLOT_LOOTBOX_RNG_INDEX = 33;          // post Stage B Game pack: was 35
+    uint256 private constant SLOT_LOOTBOX_RNG_WORD_BY_INDEX = 34;  // post Stage B Game pack: was 36
 
     /// @dev Last VRF request id fulfilled on the ACTIVE coordinator; avoids
     ///      double-fulfil when the game reuses a stale rngWordCurrent across

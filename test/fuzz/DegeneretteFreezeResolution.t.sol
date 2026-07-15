@@ -50,10 +50,10 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
     uint256 private constant PENDING_PACKED_SLOT = 11;
 
     /// @dev lootboxRngWordByIndex mapping root slot (post Stage-B game-storage repack: was 36).
-    uint256 private constant LOOTBOX_RNG_WORD_SLOT = 35;
+    uint256 private constant LOOTBOX_RNG_WORD_SLOT = 34;
 
     /// @dev lootboxRngPacked at slot 34 (post Stage-B game-storage repack: was 35); lootboxRngIndex is the low 48 bits.
-    uint256 private constant LOOTBOX_RNG_PACKED_SLOT = 34;
+    uint256 private constant LOOTBOX_RNG_PACKED_SLOT = 33;
 
     /// @dev Salt used in degenerette bet resolution for the first spin.
     bytes1 private constant QUICK_PLAY_SALT = 0x51; // 'Q'
@@ -63,9 +63,9 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
     /// @dev claimablePool (uint128) lives in slot 1, byte 16.
     uint256 private constant CLAIMABLE_POOL_SLOT = 1;
     /// @dev degeneretteBets mapping root slot (post Stage-B game-storage repack: was 40).
-    uint256 private constant DEGENERETTE_BETS_SLOT = 38;
+    uint256 private constant DEGENERETTE_BETS_SLOT = 37;
     /// @dev degeneretteBetNonce mapping root slot (post Stage-B game-storage repack: was 41).
-    uint256 private constant DEGENERETTE_BET_NONCE_SLOT = 39;
+    uint256 private constant DEGENERETTE_BET_NONCE_SLOT = 38;
     /// @dev FLIP.balanceOf mapping root slot.
     uint256 private constant FLIP_BALANCEOF_SLOT = 1;
     /// @dev WWXRP.balanceOf / totalSupply slots.

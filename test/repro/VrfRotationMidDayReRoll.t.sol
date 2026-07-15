@@ -19,8 +19,8 @@ import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 /// @dev TEST-ONLY. No contracts/*.sol touched. Storage-read helpers mirror VrfRotationOrphanIndex.
 ///      Run: forge test --match-path test/repro/VrfRotationMidDayReRoll.t.sol -vv
 contract VrfRotationMidDayReRoll is DeployProtocol {
-    uint256 private constant SLOT_LOOTBOX_PACKED = 34;
-    uint256 private constant SLOT_LOOTBOX_WORD_MAP = 35;
+    uint256 private constant SLOT_LOOTBOX_PACKED = 33;
+    uint256 private constant SLOT_LOOTBOX_WORD_MAP = 34;
     uint256 private constant LR_MID_DAY_BIT = 224;
     uint256 private _lastFulfilledReqId;
 

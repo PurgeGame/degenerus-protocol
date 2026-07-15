@@ -19,9 +19,9 @@ import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
 ///      eviction is not driven here: the no-orphan guard makes it unreachable while pending,
 ///      and a box-clean evict never touches the counter (see GameAfkingModule stage loop).
 contract PendingBoxCountInvariant is DeployProtocol {
-    uint256 private constant SUBOF_SLOT = 54;
-    uint256 private constant SUBSCRIBERS_SLOT = 56;
-    uint256 private constant CURSOR_SLOT = 58;
+    uint256 private constant SUBOF_SLOT = 53;
+    uint256 private constant SUBSCRIBERS_SLOT = 55;
+    uint256 private constant CURSOR_SLOT = 57;
     uint256 private constant PENDING_COUNT_SHIFT = 224;
     uint256 private constant MINTPACKED_SLOT = 9;
     uint256 private constant DEITY_SHIFT = 184;

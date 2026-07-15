@@ -11,9 +11,9 @@ import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 ///         security property under test is NO DRAIN: a gift never debits a non-consenting target.
 contract PermissionlessGiftAndApproval is DeployProtocol {
     // Storage slots (game) — mirror DegeneretteResolveRepeg.t.sol.
-    uint256 private constant LOOTBOX_RNG_PACKED_SLOT = 34;
-    uint256 private constant DEGENERETTE_BET_NONCE_SLOT = 39;
-    uint256 private constant DEGENERETTE_BETS_SLOT = 38;
+    uint256 private constant LOOTBOX_RNG_PACKED_SLOT = 33;
+    uint256 private constant DEGENERETTE_BET_NONCE_SLOT = 38;
+    uint256 private constant DEGENERETTE_BETS_SLOT = 37;
 
     uint8 private constant CURRENCY_ETH = 0;
     uint8 private constant CURRENCY_FLIP = 1;

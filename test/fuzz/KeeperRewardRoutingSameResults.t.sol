@@ -80,9 +80,9 @@ contract KeeperRewardRoutingSameResults is DeployProtocol {
     // the AfKing-standalone SUBOF_SLOT=65 / TICKET_QUEUE_SLOT=12 / TICKETS_OWED_PACKED_SLOT=13 were WRONG).
     // -------------------------------------------------------------------------
 
-    uint256 private constant SUBOF_SLOT = 54; // _subOf mapping root (address => Sub, one packed slot)
+    uint256 private constant SUBOF_SLOT = 53; // _subOf mapping root (address => Sub, one packed slot)
     uint256 private constant OFF_LASTBOUGHT = 10; // uint24 lastAutoBoughtDay (bytes 11..13 of the Sub slot)
-    uint256 private constant SUBSCRIBERS_SLOT = 56; // _subscribers address[] (length here)
+    uint256 private constant SUBSCRIBERS_SLOT = 55; // _subscribers address[] (length here)
     uint256 private constant MINTPACKED_SLOT = 9; // mintPacked_ mapping root (deity bit)
     uint256 private constant DEITY_SHIFT = 184; // HAS_DEITY_PASS_SHIFT in mintPacked_
 

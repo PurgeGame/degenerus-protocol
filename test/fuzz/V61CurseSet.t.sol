@@ -38,7 +38,7 @@ contract V61CurseSet is DeployProtocol {
     uint256 private constant CLAIMABLE_POOL_SLOT = 1; // uint128 @ byte 16
     uint256 private constant CLAIMABLE_POOL_OFFBYTES = 16;
     uint256 private constant MINTPACKED_SLOT = 9;
-    uint256 private constant SUBOF_SLOT = 54; // was 58
+    uint256 private constant SUBOF_SLOT = 53; // was 58
 
     // mintPacked_ field shifts (BitPackingLib).
     uint256 private constant DAY_SHIFT = 72; // lastEthDay (32 bits)

@@ -58,10 +58,10 @@ contract SweepViewer is DegenerusGame {
 ///      etched to inspect internal maps; the real code is restored after every read.
 contract SweepWorstCaseDrain is DeployProtocol {
     // Authoritative slots (post Stage B pack), RE-DERIVED via `solc --storage-layout`.
-    uint256 private constant SLOT_LOOTBOX_RNG_PACKED = 34;   // [0:47] lootboxRngIndex
-    uint256 private constant SLOT_LOOTBOX_RNG_WORD = 35;     // mapping(uint48 => uint256)
-    uint256 private constant SLOT_BOX_PLAYERS = 59;          // mapping(uint48 => address[])
-    uint256 private constant SLOT_BOX_CURSORS = 58;          // boxCursor @ byte 7, boxCursorIndex @ byte 13
+    uint256 private constant SLOT_LOOTBOX_RNG_PACKED = 33;   // [0:47] lootboxRngIndex
+    uint256 private constant SLOT_LOOTBOX_RNG_WORD = 34;     // mapping(uint48 => uint256)
+    uint256 private constant SLOT_BOX_PLAYERS = 58;          // mapping(uint48 => address[])
+    uint256 private constant SLOT_BOX_CURSORS = 57;          // boxCursor @ byte 7, boxCursorIndex @ byte 13
     uint256 private constant LR_INDEX_MASK = 0xFFFFFFFFFFFF;
 
     // Hard per-tx ceilings (mirrors V56AfkingGasMarginal): 16.7M = the gameover-composition gg bound.

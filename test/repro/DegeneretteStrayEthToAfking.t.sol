@@ -7,7 +7,7 @@ import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
 ///         ETH — is credited to the funder's withdrawable afking balance (solvency-preserving via
 ///         claimablePool), not stranded in the contract. A zero-value token bet is unaffected.
 contract DegeneretteStrayEthToAfking is DeployProtocol {
-    uint256 private constant LOOTBOX_RNG_PACKED_SLOT = 34;
+    uint256 private constant LOOTBOX_RNG_PACKED_SLOT = 33;
     uint256 private constant PRIZE_POOLS_PACKED_SLOT = 2;
     uint8 private constant CURRENCY_FLIP = 1;
     uint8 private constant CURRENCY_WWXRP = 3;

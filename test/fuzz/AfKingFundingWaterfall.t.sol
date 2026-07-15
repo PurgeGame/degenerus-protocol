@@ -51,9 +51,9 @@ contract AfKingFundingWaterfall is DeployProtocol {
     // -------------------------------------------------------------------------
     // Game-resident storage slots (RE-DERIVED via `forge inspect storage DegenerusGame`).
     // -------------------------------------------------------------------------
-    uint256 private constant SUBOF_SLOT = 54; // _subOf mapping root
-    uint256 private constant FUNDINGSOURCE_SLOT = 55; // _fundingSourceOf mapping root
-    uint256 private constant SUBSCRIBER_INDEX_SLOT = 57; // _subscriberIndex mapping root (1-indexed)
+    uint256 private constant SUBOF_SLOT = 53; // _subOf mapping root
+    uint256 private constant FUNDINGSOURCE_SLOT = 54; // _fundingSourceOf mapping root
+    uint256 private constant SUBSCRIBER_INDEX_SLOT = 56; // _subscriberIndex mapping root (1-indexed)
     uint256 private constant MINTPACKED_SLOT = 9; // mintPacked_ mapping root (deity bit)
     uint256 private constant GAME_CLAIMABLE_SLOT = 7; // claimableWinnings mapping root
 

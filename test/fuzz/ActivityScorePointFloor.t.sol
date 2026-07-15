@@ -34,7 +34,7 @@ contract ActivityScorePointFloorTest is DeployProtocol {
     ///      bit @ bit 184. The accumulator section after the repack is affiliateBase u32 off23,
     ///      pendingFlip u24 off27, subStreakLatch u16 off30 (the latch widened 8->16, pendingFlip narrowed
     ///      32->24). The two afking day markers are afkCoveredThroughDay u24 off17, afkingStartDay u24 off20.
-    uint256 private constant SUBOF_SLOT = 54;
+    uint256 private constant SUBOF_SLOT = 53;
     uint256 private constant MINTPACKED_SLOT = 9;
     uint256 private constant DEITY_SHIFT = 184;
     uint256 private constant OFF_AFKCOVERED = 16;

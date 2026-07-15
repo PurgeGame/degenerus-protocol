@@ -43,8 +43,8 @@ contract V56SubHardening is DeployProtocol {
     // -------------------------------------------------------------------------
     // Game-resident storage slots + the v56 Sub-slot offset block (V56SecUnmanipulable:44-67)
     // -------------------------------------------------------------------------
-    uint256 private constant SUBOF_SLOT = 54;            // _subOf mapping root (address => Sub, one packed slot)
-    uint256 private constant SUBSCRIBER_INDEX_SLOT = 57; // mapping(address => uint256) _subscriberIndex (1-indexed)
+    uint256 private constant SUBOF_SLOT = 53;            // _subOf mapping root (address => Sub, one packed slot)
+    uint256 private constant SUBSCRIBER_INDEX_SLOT = 56; // mapping(address => uint256) _subscriberIndex (1-indexed)
     uint256 private constant MINTPACKED_SLOT = 9;        // mintPacked_ mapping root (deity bit @ 184, frozenUntil @ 128)
 
     //   dailyQuantity u8 @0 · validThroughLevel u24 @1 · flags u8 @4

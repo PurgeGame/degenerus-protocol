@@ -42,7 +42,7 @@ contract V61Smite is DeployProtocol {
     uint256 private constant CLAIMABLE_POOL_SLOT = 1;
     uint256 private constant CLAIMABLE_POOL_OFFBYTES = 16;
     uint256 private constant MINTPACKED_SLOT = 9;
-    uint256 private constant SUBOF_SLOT = 54; // was 58
+    uint256 private constant SUBOF_SLOT = 53; // was 58
 
     uint256 private constant CURSE_COUNT_SHIFT = 215; // (8 bits)
     uint256 private constant CURSE_COUNT_CAP = 20;

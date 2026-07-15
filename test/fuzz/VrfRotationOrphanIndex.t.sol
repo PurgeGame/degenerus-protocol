@@ -14,15 +14,15 @@ import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 /// @dev    Storage slots are authoritative per `forge inspect DegenerusGame storage-layout`:
 ///         slot 34 = lootboxRngPacked (LR_INDEX in low bits, LR_MID_DAY at bit 224 mask 0xFF),
 ///         slot 35 = lootboxRngWordByIndex mapping (lootboxRngWordByIndex[i] at
-///         keccak256(abi.encode(uint256(i), uint256(35)))).
+///         keccak256(abi.encode(uint256(i), uint256(34)))).
 ///         The consumer at DegenerusGameMintModule:686 reads
 ///         entropy = lootboxRngWordByIndex[LR_INDEX - 1] and flows it unguarded into
 ///         _processOneTicketEntry; that index is the slot both arms target.
 ///         ZERO contracts/ mutation -- audit-only (D-43N-AUDIT-ONLY-01).
 contract VrfRotationOrphanIndex is DeployProtocol {
     /// @dev Storage slot constants (authoritative storage-layout, not the drifted analog).
-    uint256 private constant SLOT_LOOTBOX_PACKED = 34;   // post Stage B Game pack: was 35
-    uint256 private constant SLOT_LOOTBOX_WORD_MAP = 35;  // post Stage B Game pack: was 36
+    uint256 private constant SLOT_LOOTBOX_PACKED = 33;   // post Stage B Game pack: was 35
+    uint256 private constant SLOT_LOOTBOX_WORD_MAP = 34;  // post Stage B Game pack: was 36
     /// @dev LR_MID_DAY occupies byte 28 of lootboxRngPacked (bit offset 224, mask 0xFF).
     uint256 private constant LR_MID_DAY_BIT = 224;
 

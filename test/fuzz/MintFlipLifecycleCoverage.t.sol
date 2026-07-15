@@ -41,10 +41,10 @@ contract MintFlipLifecycleCoverage is DeployProtocol {
     //  cursors@58 — _subCursor u16 @byte0 · _subOpenCursor u16 @byte2 · _afkingResetDay u24 @byte4;
     //  subsFullyProcessed bool @slot0 byte28.)
     // -------------------------------------------------------------------------
-    uint256 private constant SUBOF_SLOT = 54;            // _subOf mapping root (address => Sub, one packed slot)
-    uint256 private constant SUBSCRIBERS_SLOT = 56;      // address[] _subscribers (length @ slot; elements @ keccak256(slot)+i)
-    uint256 private constant SUBSCRIBER_INDEX_SLOT = 57; // mapping(address => uint256) _subscriberIndex (1-indexed)
-    uint256 private constant CURSOR_SLOT = 58;           // packed: _subCursor u16 @byte0 · _subOpenCursor u16 @byte2 · _afkingResetDay u24 @byte4
+    uint256 private constant SUBOF_SLOT = 53;            // _subOf mapping root (address => Sub, one packed slot)
+    uint256 private constant SUBSCRIBERS_SLOT = 55;      // address[] _subscribers (length @ slot; elements @ keccak256(slot)+i)
+    uint256 private constant SUBSCRIBER_INDEX_SLOT = 56; // mapping(address => uint256) _subscriberIndex (1-indexed)
+    uint256 private constant CURSOR_SLOT = 57;           // packed: _subCursor u16 @byte0 · _subOpenCursor u16 @byte2 · _afkingResetDay u24 @byte4
     uint256 private constant SUBCURSOR_BYTE = 0;         // byte offset of _subCursor within CURSOR_SLOT
     uint256 private constant OPEN_CURSOR_BYTE = 2;       // byte offset of _subOpenCursor within CURSOR_SLOT
     uint256 private constant MINTPACKED_SLOT = 9;        // mintPacked_ mapping root (deity bit @ 184)

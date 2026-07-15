@@ -28,9 +28,9 @@ import {GameTimeLib} from "../../contracts/libraries/GameTimeLib.sol";
 contract DegeneretteHeroScoreTest is DeployProtocol {
     // --- Storage slots (mirror DegeneretteFreezeResolution.t.sol) ---
     uint256 private constant PRIZE_POOLS_PACKED_SLOT = 2;
-    uint256 private constant LOOTBOX_RNG_WORD_SLOT = 35;   // post Stage-B game-storage repack: was 36
-    uint256 private constant LOOTBOX_RNG_PACKED_SLOT = 34; // post Stage-B game-storage repack: was 35
-    uint256 private constant DEGENERETTE_BET_NONCE_SLOT = 39; // post Stage-B game-storage repack: was 41
+    uint256 private constant LOOTBOX_RNG_WORD_SLOT = 34;   // post Stage-B game-storage repack: was 36
+    uint256 private constant LOOTBOX_RNG_PACKED_SLOT = 33; // post Stage-B game-storage repack: was 35
+    uint256 private constant DEGENERETTE_BET_NONCE_SLOT = 38; // post Stage-B game-storage repack: was 41
     uint256 private constant CLAIMABLE_POOL_SLOT = 1;
 
     bytes1 private constant QUICK_PLAY_SALT = 0x51; // 'Q'
@@ -853,7 +853,7 @@ contract DegeneretteHeroScoreTest is DeployProtocol {
     uint256 private constant ROI_VB_BPS = 9_970;
     uint256 private constant ROI_MAX_BPS = 9_990;
     uint256 private constant DEGEN_ACTIVITY_SHIFT = 202;
-    uint256 private constant DEGENERETTE_BETS_SLOT = 38; // post Stage-B game-storage repack: was 40
+    uint256 private constant DEGENERETTE_BETS_SLOT = 37; // post Stage-B game-storage repack: was 40
 
     /// @dev Read the activityScore the contract stored in the packed bet (bits
     ///      [202..217]) and mirror _roiBpsFromScore to recover the exact roiBps used.

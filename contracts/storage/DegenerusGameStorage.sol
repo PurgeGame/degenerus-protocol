@@ -611,6 +611,11 @@ abstract contract DegenerusGameStorage {
     /// @dev Emitted when ETH is credited to a player's claimable balance.
     event PlayerCredited(address indexed player, uint256 amount);
 
+    /// @dev Emitted when a VRF word is bound to a lootbox RNG index (mid-day finalize,
+    ///      daily apply, or dead-man fallback). Emitted from both the Game callback and
+    ///      the AdvanceModule, so it lives in the shared base.
+    event LootboxRngApplied(uint48 index, uint256 word, uint256 requestId);
+
     /// @dev Emitted whenever prepaid afking ETH is spent to fund a buy (the afking-as-payment
     ///      waterfall's third tier) — full observability of where afking principal goes.
     event AfkingSpent(address indexed player, uint256 amount);
@@ -1058,7 +1063,7 @@ abstract contract DegenerusGameStorage {
     }
 
     // =========================================================================
-    // Loot Box State & Presale Toggle
+    // Loot Box State
     // =========================================================================
 
     /// @dev Loot box state per RNG index per player, packed into one word. The amount may
@@ -1117,38 +1122,12 @@ abstract contract DegenerusGameStorage {
     uint256 internal constant PRESALE_BOX_AMOUNT_MASK = 0xFFFFFFFFFFFFFFFFFFFFFFFF; // 96 bits
 
     // =========================================================================
-    // Presale State (packed: 2 variables in 136/256 bits)
+    // Presale State
     // =========================================================================
-    //
-    // Layout (LSB -> MSB):
-    //   [bits   0:7]   lootboxPresaleActive   uint8    1 = presale active (starts true)
-    //   [bits  8:135]  lootboxPresaleMintEth  uint128  ETH from regular mints (200 ETH cap)
-
-    /// @dev Packed presale state. Initialized with lootboxPresaleActive = 1.
-    uint256 internal presaleStatePacked = uint256(1);  // lootboxPresaleActive = true
-
-    // ---- presaleState shifts and masks ----
-    uint256 internal constant PS_ACTIVE_SHIFT = 0;
-    uint256 internal constant PS_ACTIVE_MASK = 0xFF;                             // 8 bits
-    uint256 internal constant PS_MINT_ETH_SHIFT = 8;
-    uint256 internal constant PS_MINT_ETH_MASK = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF;  // 128 bits
-
-    /// @dev Presale auto-ends once cumulative mint-only lootbox ETH crosses this cap.
-    uint256 internal constant LOOTBOX_PRESALE_ETH_CAP = 200 ether;
 
     /// @dev Cumulative coin-presale-box ETH cap. The box buy crossing this latches
-    ///      presaleOver. Distinct from the 200-ETH mint-only LOOTBOX_PRESALE_ETH_CAP.
+    ///      presaleOver.
     uint256 internal constant PRESALE_BOX_ETH_CAP = 50 ether;
-
-    /// @dev Read a field from the packed presale state.
-    function _psRead(uint256 shift, uint256 mask) internal view returns (uint256) {
-        return (presaleStatePacked >> shift) & mask;
-    }
-
-    /// @dev Write a field to the packed presale state.
-    function _psWrite(uint256 shift, uint256 mask, uint256 value) internal {
-        presaleStatePacked = (presaleStatePacked & ~(mask << shift)) | ((value & mask) << shift);
-    }
 
     // =========================================================================
     // Game Over State (packed: 3 variables in 64/256 bits)

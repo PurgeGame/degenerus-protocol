@@ -75,9 +75,9 @@ contract RngIndexDrainHandler is Test {
 
     /// @dev Storage slot for lootboxRngWordByIndex mapping. RE-DERIVED via `solc --storage-layout`
     ///      on the working tree (post Stage B pack: was 36, also stale pre-repack).
-    uint256 internal constant SLOT_LOOTBOX_MAPPING = 35;
+    uint256 internal constant SLOT_LOOTBOX_MAPPING = 34;
     /// @dev Storage slot for lootboxRngPacked (LR_INDEX at low 48 bits) (post Stage B pack: was 35).
-    uint256 internal constant SLOT_LR_INDEX = 34;
+    uint256 internal constant SLOT_LR_INDEX = 33;
 
     /// @dev Keccak topic-0 for TraitsGenerated(address,uint24,uint32,uint32,uint32,uint256).
     bytes32 internal constant TOPIC_TRAITS_GENERATED =
