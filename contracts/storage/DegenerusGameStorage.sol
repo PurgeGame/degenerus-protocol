@@ -44,13 +44,13 @@ import {MintPaymentKind} from "../interfaces/IDegenerusGame.sol";
  * -----------------------------------------------------------------------------
  *
  * +---------------------------------------------------------------------------------+
- * | EVM SLOT 0 (32 bytes) -- Timing, FSM, Counters, Flags, Buffer, Freeze           |
+ * | EVM SLOT 0 (32 bytes) -- Timing, per-level flags, counters, buffer, freeze      |
  * +---------------------------------------------------------------------------------+
- * | [0:3]   purchaseStartDay         uint24   Day index when purchase/deploy began  |
- * | [3:6]   dailyIdx                 uint24   Monotonic day counter                 |
+ * | [0:3]   purchaseStartDay         uint24   Deploy-relative day idx level began   |
+ * | [3:6]   dailyIdx                 uint24   Deploy-rel day idx of last sealed day |
  * | [6:12]  rngRequestTime           uint48   When last VRF request was fired       |
  * | [12:15] level                    uint24   Current jackpot level (starts at 0)   |
- * | [15:16] jackpotPhaseFlag         bool     Phase: false=PURCHASE, true=JACKPOT   |
+ * | [15:16] jackpotPhaseFlag         bool     Payout mode: purchase(F)/jackpot(T)   |
  * | [16:17] jackpotCounter           uint8    Jackpots processed this level         |
  * | [17:18] lastPurchaseDay          bool     Prize target met flag                 |
  * | [18:19] decWindowOpen            bool     Decimator window latch                |
@@ -92,14 +92,15 @@ import {MintPaymentKind} from "../interfaces/IDegenerusGame.sol";
  *    declared its own storage variables, they would occupy the same slots as
  *    game data, causing catastrophic corruption.
  *
- * 3. ACCESS CONTROL: All variables are `internal`, preventing external reads.
- *    Public getters in DegenerusGame expose only what's needed.
+ * 3. ACCESS CONTROL: Most state is `internal`; `level`, `gameOver`, and `boonPacked` are `public`
+ *    (auto-getters). Other external reads go through explicit getters in DegenerusGame.
  *
  * 4. INITIALIZATION: Default values are set inline. For critical variables:
  *    - purchaseStartDay = deploy day index (set in constructor via GameTimeLib.currentDayIndex())
  *    - jackpotPhaseFlag = false (purchase phase)
  *    - decWindowOpen = false (opens at level 4 jackpot phase start)
- *    - levelPrizePool uses BOOTSTRAP_PRIZE_POOL (50 ether) as fallback for level 0
+ *    - levelPrizePool[level] is the per-level ratchet target; levelPrizePool[0] is set to
+ *      BOOTSTRAP_PRIZE_POOL (50 ether) in the constructor (also the zero-fallback in the view)
  *
  * 5. OVERFLOW PROTECTION: Solidity 0.8+ provides automatic overflow checks.
  *    `unchecked` blocks in modules are intentional optimizations for safe ops.
@@ -246,7 +247,7 @@ abstract contract DegenerusGameStorage {
 
     /// @dev Monotonically increasing "day" counter derived from block timestamps.
     ///      Incremented during game progression; used to key RNG words and track
-    ///      daily jackpot eligibility. NOT tied to calendar days — it's game-relative.
+    ///      daily jackpot eligibility. NOT tied to calendar days — it's the deploy-relative day index (frozen during a VRF stall).
     ///
     ///      SECURITY: uint24 holds day indices up to ~16.7 million — effectively unlimited
     ///      for day-granularity counters.
@@ -516,6 +517,11 @@ abstract contract DegenerusGameStorage {
     ///      EXAMPLE (Level 5 purchase phase):
     ///      - lvlOffset=0 → ticketQueue[5] → Processed continuously throughout level 5
     ///      - lvlOffset=1 → ticketQueue[6] → Activated at end of purchase phase (before pool consolidation)
+    ///
+    ///      Keys are encoded: ticketQueue is indexed by (lvl | slotBit) — bit 23 selects the
+    ///      double-buffer write/read half (ticketWriteSlot); tickets targeting > level+5 use the
+    ///      disjoint far-future key space (bit 22). Raw-level indices above hold only when
+    ///      ticketWriteSlot is false.
     ///
     ///      This allows lootbox tickets to participate in early-bird jackpots at jackpot phase start.
     mapping(uint24 => address[]) internal ticketQueue;
@@ -1596,8 +1602,8 @@ abstract contract DegenerusGameStorage {
     //
     // Layout (LSB -> MSB):
     //   [bits   0:47]   lootboxRngIndex          uint48   (281T indices)
-    //   [bits  48:111]  lootboxRngPendingEth     uint64   (scaled /1e15, 0.001 ETH res, max ~18,446 ETH)
-    //   [bits 112:175]  lootboxRngThreshold      uint64   (scaled /1e15, 0.001 ETH res, max ~18,446 ETH)
+    //   [bits  48:111]  lootboxRngPendingEth     uint64   (scaled /1e15, 0.001 ETH res, far exceeds ETH supply)
+    //   [bits 112:175]  lootboxRngThreshold      uint64   (scaled /1e15, 0.001 ETH res, far exceeds ETH supply)
     //   [bits 176:183]  (unused)
     //   [bits 184:223]  lootboxRngPendingFlip  uint40   (scaled /1e18, 1 FLIP res, max ~1.1T FLIP)
     //   [bits 224:231]  midDayTicketRngPending   uint8    (bool flag, 8 bits)
@@ -1920,7 +1926,7 @@ abstract contract DegenerusGameStorage {
     // =========================================================================
 
     /// @dev Segregated stETH yield accumulator.
-    ///      Collects 46% of yield surplus each level transition.
+    ///      Collects 23% of yield surplus each level transition (one of four 23% shares).
     ///      x00 milestones: 50% to currentPrizePool, 50% retained as terminal insurance.
     ///      INVARIANT: counted as obligation in yield surplus calculation.
     uint256 internal yieldAccumulator;
@@ -2429,7 +2435,7 @@ abstract contract DegenerusGameStorage {
 
     /// @dev The two uint16 cursors + the uint24 afking reset-day pack into ONE slot
     ///      (16 + 16 + 24 = 56 bits). The cursors index `_subscribers` (the active set
-    ///      is capped at 500 — GameAfkingModule.SUBSCRIBER_CAP, well within uint16) and
+    ///      is capped at 1000 — GameAfkingModule.SUBSCRIBER_CAP, well within uint16) and
     ///      are drained in chunks across advanceGame / router calls.
     /// @dev Process-STAGE cursor: the pre-RNG stamp pass position.
     uint16 internal _subCursor;
