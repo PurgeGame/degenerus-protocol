@@ -7,9 +7,10 @@ pragma solidity 0.8.34;
  * @notice Core game contract managing state machine, VRF integration, jackpots, and prize pools.
  *
  * @dev ARCHITECTURE:
- *      - 2-state FSM: PURCHASE(false) ↔ JACKPOT(true) → (cycle)
+ *      - Level-centered lifecycle; advanceGame() is permissionless (caller tier gates only the keeper bounty)
+ *      - jackpotPhaseFlag selects the daily payout mode within a level: PURCHASE(false) / JACKPOT(true)
  *      - gameOver flag is terminal
- *      - Presale is a toggle (packed in presaleStatePacked), not a state
+ *      - Presale: two independent mechanisms — lootbox-presale flag + coin presale-box (presaleOver) sale
  *      - Chainlink VRF for randomness with RNG lock to prevent manipulation
  *      - Delegatecall modules: advance, boon, decimator, degenerette, jackpot, lootbox, mint, whale (must inherit DegenerusGameStorage)
  *      - Prize pool flow: futurePrizePool (unified reserve) → nextPrizePool → currentPrizePool → claimableWinnings
@@ -21,8 +22,8 @@ pragma solidity 0.8.34;
  *         while winners pull their shares lazily, so the un-itemized remainder over-reserves
  *         until claimed — always in the solvency-safe direction. Equality holds at full settlement,
  *         modulo pro-rata rounding dust.)
- *      - jackpotPhaseFlag transitions: false(PURCHASE) ↔ true(JACKPOT); gameOver is terminal
- *      - Presale starts active, auto-ends at PURCHASE→JACKPOT or via admin (one-way: never re-enables)
+ *      - jackpotPhaseFlag is the daily payout mode: false(PURCHASE) / true(JACKPOT); gameOver is terminal
+ *      - Lootbox-presale flag starts active; clears after 200 ETH tracked mint-lootbox spend or the level-3+ transition (one-way; no admin setter)
  *
  * @dev SECURITY:
  *      - Pull pattern for ETH/stETH withdrawals (claimWinnings)
@@ -237,25 +238,31 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     /*+===================================================================================================+
       |                    CORE STATE MACHINE: advanceGame()                                              |
       +===================================================================================================+
-      |  The heart of the game. This function progresses the state machine                                |
-      |  through its 2 active phases: PURCHASE (jackpotPhaseFlag=false), JACKPOT (jackpotPhaseFlag=true). |
-      |  Each call performs one "tick" of work. gameOver is terminal.                                     |
       |                                                                                                   |
-      |  State Transitions:                                                                               |
-      |  • PURCHASE (jackpotPhaseFlag=false): Process ticket batches until target met, then → JACKPOT     |
-      |  • JACKPOT (jackpotPhaseFlag=true): Pay daily jackpots, wait for burns, then → PURCHASE           |
-      |  • GAMEOVER (gameOver=true): Terminal state, no transitions                                       |
+      |  Progresses one "tick" of work per call. advanceGame() is permissionless — anyone may call it;    |
+      |  caller tier gates only the keeper bounty (in mintFlip), never the advance work. gameOver is      |
+      |  terminal.                                                                                        |
       |                                                                                                   |
-      |  Gating (tiered bypass):                                                                          |
-      |  • Deity pass holder — always bypasses                                                            |
-      |  • Anyone — bypasses after 30+ min since level start                                              |
-      |  • Pass holder (lazy/whale) — bypasses after 15+ min                                              |
-      |  • DGVE majority holder — always bypasses (last resort, external call)                            |
-      |  • RNG must be ready (not locked) or recently stale (12h timeout)                                 |
+      |  Level-centered lifecycle. jackpotPhaseFlag selects the daily PAYOUT mode, not access:            |
+      |  • Each daily tick drains pending ticket + subscriber work, applies the day's VRF, and pays the   |
+      |    daily jackpot in the current mode. Purchases stay open in BOTH modes.                          |
+      |  • Purchase mode (false): new tickets target level+1; jackpots use the future-pool drip formula.  |
+      |    When nextPrizePool reaches the prior level's target, the transition latch is set.              |
+      |  • On fresh randomness the level advances: staged tickets activate, pools consolidate, the level  |
+      |    quest rolls, and up to 5 logical daily draws begin (compressible via compressedJackpotFlag).   |
+      |  • Jackpot mode (true): draws pay out; purchases target the current level, and the final draw     |
+      |    routes new purchases to the next level. After the 5th draw, housekeeping clears the payout     |
+      |    mode and resets the level-start day.                                                           |
       |                                                                                                   |
-      |  Presale: packed presale-active toggle (orthogonal to state machine)                              |
-      |  • Starts active: 62% bonus FLIP from loot boxes                                                  |
-      |  • Auto-ends when PURCHASE→JACKPOT, or admin can end manually (one-way, cannot re-enable)         |
+      |  Keeper-bounty tiers (reward only, never an advance gate): minted today/yesterday, deity pass,    |
+      |  anyone >=30 min since level start, any pass holder >=15 min, active AFKing sub, DGVE majority.   |
+      |                                                                                                   |
+      |  Presale — two independent mechanisms:                                                            |
+      |  • Lootbox-presale flag (presaleStatePacked): starts active, clears after 200 ETH of tracked      |
+      |    mint lootbox spend or at the level-3+ transition; labels events and gates VAULT-referral       |
+      |    mutability. No admin setter; lootbox ETH is rake-free both in and out of presale.              |
+      |  • Coin presale-box sale (presaleOver latch): credit-gated, closes when applied box spend fills   |
+      |    exactly 50 ETH; boxes bought before close stay openable afterward.                             |
       +===================================================================================================+*/
 
     /// @notice Advance the game state machine by one tick.
