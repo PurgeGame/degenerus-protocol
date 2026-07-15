@@ -12,7 +12,9 @@ enum MintPaymentKind {
 
 /// @title IDegenerusGame
 /// @notice Core game contract interface for state machine, purchases, and prize pool management.
-/// @dev Implements 2-state FSM: PURCHASE(false) → JACKPOT(true) → PURCHASE(false). gameOver() is terminal.
+/// @dev Per level: a purchase phase (jackpotPhase()==false) transitions to a multi-day jackpot
+///      payout phase (jackpotPhase()==true) once the prize target is met, then the level advances.
+///      Ticket purchases stay open in both phases. gameOver() is terminal.
 interface IDegenerusGame {
     /// @notice Get the current jackpot level.
     /// @return Current jackpot level (starts at 0).
@@ -54,7 +56,7 @@ interface IDegenerusGame {
     ///      and the final jackpot RNG window (buys route to level+1) — this is intentional.
     /// @return lvl Actual current game level.
     /// @return inJackpotPhase True if jackpot phase is active.
-    /// @return lastPurchaseDay_ True if this is the last day to purchase.
+    /// @return lastPurchaseDay_ True once the level's prize target is met (jackpot transition pending); purchases stay open.
     /// @return rngLocked_ True if RNG is locked (VRF pending).
     /// @return priceWei Current buy-now mint price in wei (at the routed ticket level).
     function purchaseInfo()
@@ -183,7 +185,7 @@ interface IDegenerusGame {
     /// @return lvl The current level for terminal decimator.
     function terminalDecWindow() external view returns (bool open, uint24 lvl);
 
-    /// @notice Terminal jackpot for x00 levels: Day-5-style bucket distribution.
+    /// @notice Game-over terminal jackpot: Day-5-style bucket distribution to the final ticket cohort.
     /// @param poolWei Total ETH to distribute.
     /// @param targetLvl Level to sample winners from.
     /// @param rngWord VRF entropy seed.
@@ -258,12 +260,12 @@ interface IDegenerusGame {
 
     /// @notice Buy a credit-gated coin-presale box (ETH + claimable shortfall).
     /// @param buyer Player to receive the box (address(0) = msg.sender).
-    /// @param boxAmount Requested box ETH (>= 0.01 ETH; excess refunded if clamped).
+    /// @param boxAmount Requested box ETH (>= 0.01 ETH; overpay and clamp-to-50 excess credit to AFKing).
     function buyPresaleBox(address buyer, uint256 boxAmount) external payable;
 
     /// @notice Buy tickets/lootbox AND a presale box in one tx, sharing one RNG index.
     /// @param buyer Player to receive both legs (address(0) = msg.sender).
-    /// @param entryQuantityScaled Tickets to buy (0 to skip).
+    /// @param entryQuantityScaled Scaled entry quantity (400 units = 1 whole ticket; 0 to skip).
     /// @param lootBoxAmount ETH lootbox spend (0 to skip).
     /// @param affiliateCode Affiliate/referral code for the mint leg.
     /// @param payKind Payment method for the mint leg.
@@ -359,7 +361,7 @@ interface IDegenerusGame {
     /// @dev Main entry point for all ETH/claimable purchases.
     ///      Recycling at least 3 tickets' worth of claimable winnings earns a 10% FLIP flip-credit bonus.
     /// @param buyer Player address to receive purchases (address(0) = msg.sender).
-    /// @param entryQuantityScaled Number of tickets to purchase (0 to skip).
+    /// @param entryQuantityScaled Scaled entry quantity (400 units = 1 whole ticket; 0 to skip).
     /// @param lootBoxAmount ETH amount for loot boxes, minimum 0.01 ETH (0 to skip).
     /// @param affiliateCode Affiliate/referral code for all purchases.
     /// @param payKind Payment method (DirectEth, Claimable, or Combined).
@@ -377,7 +379,7 @@ interface IDegenerusGame {
     /// @notice Purchase tickets with FLIP.
     /// @dev Entry point for FLIP ticket purchases.
     /// @param buyer Player address to receive purchases (address(0) = msg.sender).
-    /// @param entryQuantityScaled Number of tickets to purchase (0 to skip).
+    /// @param entryQuantityScaled Scaled entry quantity (400 units = 1 whole ticket; 0 to skip).
     function redeemFlip(
         address buyer,
         uint256 entryQuantityScaled
