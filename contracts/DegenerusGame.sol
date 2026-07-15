@@ -1920,7 +1920,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
       |                                                                      |
       |  SECURITY:                                                           |
       |  • RNG lock prevents state manipulation during VRF window            |
-      |  • 12-hour timeout allows recovery from stale requests               |
+      |  • Single 12h timeout retry (vault owner 1h early) per daily request |
       |  • Governance-gated coordinator rotation via Admin                   |
       |  • Nudge system allows players to influence (not predict) RNG        |
       +======================================================================+*/

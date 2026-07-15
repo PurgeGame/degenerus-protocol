@@ -26,6 +26,11 @@ interface IGNRUSResolve {
     function pickCharity(uint24 level) external;
 }
 
+/// @dev Vault interface for the >50.1%-DGVE owner check (daily VRF retry head start).
+interface IVaultOwnerCheck {
+    function isVaultOwner(address account) external view returns (bool);
+}
+
 /// @notice Delegate-called module for advanceGame and VRF lifecycle handling.
 contract DegenerusGameAdvanceModule is DegenerusGameStorage {
     /*+======================================================================+
@@ -127,6 +132,9 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
 
     uint16 private constant VRF_REQUEST_CONFIRMATIONS = 10;
     uint16 private constant VRF_MIDDAY_CONFIRMATIONS = 4;
+
+    uint48 private constant DAILY_RNG_RETRY_TIMEOUT = 12 hours;
+    uint48 private constant DAILY_RNG_RETRY_HEAD_START = 1 hours;
 
     uint32 private constant VAULT_PERPETUAL_ENTRIES = 16;
     uint16 private constant NEXT_TO_FUTURE_BPS_FAST = 3000;
@@ -1378,15 +1386,34 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
             return (currentWord, gapDays);
         }
 
-        // Waiting for VRF - check for timeout retry. A daily request (rngLockedFlag) gets the
-        // 12h VRF retry; a lootbox-only mid-day request (rngLockedFlag == false) that bled past
-        // the day boundary is abandoned after MIDDAY_RNG_STALL_TIMEOUT and promoted to this day's
-        // daily request — _requestRng's isRetry path keeps the reserved index, so the fresh daily
-        // word finalizes that bucket just as the mid-day word would have.
+        // Waiting for VRF - check for timeout retry. A daily request (rngLockedFlag) gets ONE
+        // 12h VRF retry, with a 1h head start for the >50.1%-DGVE vault owner. The retry
+        // overwrites the outstanding request ID, so whoever fires it discards a late-arriving
+        // word — a once-per-stall reroll, offered first to the party already trusted with the
+        // (functionally identical) coordinator-swap reroll. The retry-spent state rides in the
+        // LSB of rngRequestTime (set by _finalizeRngRequest); once spent, recovery is the
+        // retried request's fulfillment or a governance coordinator swap, which re-arms the
+        // retry. A lootbox-only mid-day request (rngLockedFlag == false) that bled past the day
+        // boundary is instead abandoned after MIDDAY_RNG_STALL_TIMEOUT and promoted to this
+        // day's daily request — _requestRng's isRetry path keeps the reserved index, so the
+        // fresh daily word finalizes that bucket just as the mid-day word would have. The
+        // promotion is that day's FIRST daily request (isDailyRetry false), so it keeps a retry.
         if (rngRequestTime != 0) {
             uint48 elapsed = ts - rngRequestTime;
-            uint48 timeout = rngLockedFlag ? 12 hours : MIDDAY_RNG_STALL_TIMEOUT;
-            if (elapsed >= timeout) {
+            if (rngLockedFlag) {
+                if (
+                    (rngRequestTime & 1) == 0 &&
+                    (elapsed >= DAILY_RNG_RETRY_TIMEOUT ||
+                        (elapsed >=
+                            DAILY_RNG_RETRY_TIMEOUT -
+                                DAILY_RNG_RETRY_HEAD_START &&
+                            IVaultOwnerCheck(ContractAddresses.VAULT)
+                                .isVaultOwner(msg.sender)))
+                ) {
+                    _requestRng(isTicketJackpotDay, lvl);
+                    return (1, 0);
+                }
+            } else if (elapsed >= MIDDAY_RNG_STALL_TIMEOUT) {
                 _requestRng(isTicketJackpotDay, lvl);
                 return (1, 0);
             }
@@ -1880,7 +1907,13 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
 
         vrfRequestId = requestId;
         rngWordCurrent = 0;
-        rngRequestTime = uint48(block.timestamp);
+        // The LSB of rngRequestTime doubles as the daily retry-spent flag: 0 on a fresh daily
+        // request (mid-day promotion included), 1 once the single daily retry has fired. Both
+        // forms round DOWN (<=1s into the past) so same-second `ts - rngRequestTime` reads
+        // never underflow; the skew is harmless to every elapsed-time and day-index reader.
+        rngRequestTime = isDailyRetry
+            ? (uint48(block.timestamp) - 1) | 1
+            : uint48(block.timestamp) & ~uint48(1);
         rngLockedFlag = true;
 
         // Close the FLIP purchase window at the final jackpot day's RNG request — the boundary where
@@ -1977,9 +2010,10 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         } else if (rngLockedFlag) {
             // Daily in flight: KEEP rngLockedFlag=true.
             if (rngWordCurrent == 0) {
-                // Daily word not yet delivered: re-request on the new coordinator (-> :1768).
+                // Daily word not yet delivered: re-request on the new coordinator. The cleared
+                // LSB re-arms the single daily retry — a new coordinator gets its own retry.
                 vrfRequestId = _requestVrfWord(VRF_REQUEST_CONFIRMATIONS);
-                rngRequestTime = uint48(block.timestamp);
+                rngRequestTime = uint48(block.timestamp) & ~uint48(1);
             }
             // else: daily word already delivered and valid -> preserve it; no re-issue
             // (a fresh callback would be rejected by the :1761 rngWordCurrent!=0 guard).

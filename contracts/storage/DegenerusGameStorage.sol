@@ -258,6 +258,8 @@ abstract contract DegenerusGameStorage {
     ///
     ///      SECURITY: Timeout mechanism prevents permanent lockup if VRF fails.
     ///      Note: rngLockedFlag (separate bool) controls the daily RNG lock state.
+    ///      The LSB doubles as the daily retry-spent flag (0 = retry available, 1 = spent);
+    ///      written only by DegenerusGameAdvanceModule (_finalizeRngRequest / coordinator swap).
     uint48 internal rngRequestTime;
 
     /// @notice Current jackpot level (starts at 0). Purchase phase targets level + 1.
