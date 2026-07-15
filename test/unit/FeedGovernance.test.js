@@ -485,6 +485,47 @@ describe("Feed Governance", function () {
   });
 
   // =========================================================================
+  // 6b. Reward-valuation price cap (LINK_ETH_MAX_PRICE = 0.05 ether)
+  // =========================================================================
+  describe("Price cap", function () {
+    const MAX = eth("0.05");
+
+    async function installFeedAtPrice(admin, sdgnrs, game, deployer, price) {
+      const MockFeed = await hre.ethers.getContractFactory("MockLinkEthFeed");
+      const feed = await MockFeed.deploy(price);
+      await setFeedViaGovernance(admin, sdgnrs, game, deployer, await feed.getAddress());
+      return feed;
+    }
+
+    it("answer exactly at the cap values linearly (1 LINK -> 0.05 ETH)", async function () {
+      const { admin, sdgnrs, game, deployer } = await loadFixture(deployFullProtocol);
+      await installFeedAtPrice(admin, sdgnrs, game, deployer, MAX);
+      expect(await admin.linkAmountToEth(eth("1"))).to.equal(MAX);
+    });
+
+    it("answer one wei above the cap is clamped, not zeroed", async function () {
+      const { admin, sdgnrs, game, deployer } = await loadFixture(deployFullProtocol);
+      await installFeedAtPrice(admin, sdgnrs, game, deployer, MAX + 1n);
+      // Capped to 0.05 ETH/LINK: identical to the exactly-at-cap result — never larger, never zero.
+      expect(await admin.linkAmountToEth(eth("1"))).to.equal(MAX);
+    });
+
+    it("an absurdly high answer cannot mint FLIP beyond the cap", async function () {
+      const { admin, sdgnrs, game, deployer } = await loadFixture(deployFullProtocol);
+      await installFeedAtPrice(admin, sdgnrs, game, deployer, eth("100")); // 2000x the cap
+      expect(await admin.linkAmountToEth(eth("1"))).to.equal(MAX);
+      expect(await admin.linkAmountToEth(eth("100"))).to.equal(MAX * 100n);
+    });
+
+    it("answers below the cap are unaffected (linear valuation preserved)", async function () {
+      const { admin, sdgnrs, game, deployer } = await loadFixture(deployFullProtocol);
+      await installFeedAtPrice(admin, sdgnrs, game, deployer, eth("0.005"));
+      // 1 LINK * 0.005 = 0.005 ETH
+      expect(await admin.linkAmountToEth(eth("1"))).to.equal(eth("0.005"));
+    });
+  });
+
+  // =========================================================================
   // 7. Kill Path
   // =========================================================================
   describe("Kill path", function () {

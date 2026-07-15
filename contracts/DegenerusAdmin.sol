@@ -421,6 +421,13 @@ contract DegenerusAdmin {
     /// @dev Max staleness window before LINK/ETH feed is considered unhealthy.
     uint256 private constant LINK_ETH_MAX_STALE = 1 days;
 
+    /// @dev Reward-valuation ceiling on the LINK/ETH oracle answer (18 decimals).
+    ///      The effective answer is capped at this value, so no misbehaving or
+    ///      hostile governance-installed feed can value a donation — and thus
+    ///      mint FLIP credit — beyond it. A genuine LINK appreciation past this
+    ///      point merely under-credits donations; it never over-credits.
+    uint256 private constant LINK_ETH_MAX_PRICE = 0.05 ether;
+
     // =========================================================================
     // GOVERNANCE CONSTANTS
     // =========================================================================
@@ -1109,7 +1116,9 @@ contract DegenerusAdmin {
     /// @dev Valuation core: returns 0 on a missing feed, zero amount, any feed
     ///      revert, invalid/stale round data, or a multiplication overflow from
     ///      an absurd feed answer — a broken or hostile governance-installed
-    ///      feed can never block the donation path.
+    ///      feed can never block the donation path. The effective answer is
+    ///      capped at LINK_ETH_MAX_PRICE so such a feed can never mint FLIP
+    ///      credit beyond that ceiling.
     function _linkAmountToEth(
         uint256 amount,
         address feed
@@ -1131,6 +1140,7 @@ contract DegenerusAdmin {
             }
 
             uint256 a = uint256(answer);
+            if (a > LINK_ETH_MAX_PRICE) a = LINK_ETH_MAX_PRICE;
             if (amount > type(uint256).max / a) return 0;
             unchecked {
                 return (amount * a) / 1 ether;
