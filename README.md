@@ -80,6 +80,8 @@ DegenerusGame.sol (main entry point, delegatecall dispatcher)
 
 All contract addresses are compile-time constants in `ContractAddresses.sol`. Deployment is nonce-deterministic: addresses are predicted from the deployer nonce, patched into `ContractAddresses.sol`, then everything is recompiled and deployed in fixed order — Icons32Data and the modules first, then the tokens and game contracts, then contracts that depend on earlier ones (DGNRS, ADMIN, GNRUS). The FoilPack module deploys last so it shifts no other address.
 
+The `ContractAddresses.sol` values committed here are the **Foundry deterministic-test set** (with template `VRF_KEY_HASH = 0xabab…` and `DEPLOY_DAY_BOUNDARY = 0`), not a production manifest — a clean checkout builds and tests against them with no patching. `scripts/lib/predictAddresses.js` and `scripts/deploy.js` regenerate the real set for an actual deployment.
+
 ## Key Mechanics
 
 - **VRF State Machine:** `rngLockedFlag` prevents concurrent daily VRF requests. Request -> fulfill -> unlock cycle. 12-hour retry timeout, 14-day emergency game-over fallback.
@@ -88,11 +90,48 @@ All contract addresses are compile-time constants in `ContractAddresses.sol`. De
 - **Game Over:** Liveness guard fires inside `advanceGame` (120-day inactivity or 365-day deploy timeout). `handleGameOverDrain` distributes funds using historical RNG (14-day fallback if Chainlink is stalled, or immediate fallback once the >120-day suppressed-phase deadman fires). A 30-day final sweep sends unclaimed remainder three ways to the vault, sDGNRS, and GNRUS.
 - **Pull Payments:** All ETH/stETH withdrawals use pull pattern via `claimWinnings()`.
 
+## Build
+
+```
+git clone --recursive https://github.com/PurgeGame/degenerus-protocol
+cd degenerus-protocol
+npm ci        # OpenZeppelin + Hardhat deps, pinned via package-lock.json
+forge build   # Solidity 0.8.34, viaIR, optimizer runs=1000, evm=osaka
+```
+
+The toolchain is fully pinned — `foundry.toml` fixes the compiler and codegen settings, `foundry.lock` pins forge-std, `package-lock.json` pins the npm tree. A clean checkout compiles and tests with no local patches.
+
+## Tests & Verification
+
+The full assurance pipeline lives in this repository and runs in CI (`.github/workflows/ci.yml`) on every push:
+
+- **`forge test`** — **1,069 Foundry tests across 161 suites**, all passing: unit, integration, fuzz, invariant, gas, access-control, governance, economics, and named regression harnesses for every fixed finding.
+- **EIP-170 size gate** — CI fails if any deployed contract breaches the 24,576-byte limit.
+- **Storage-layout oracle** (`scripts/layout/storage_layout_oracle.sh`) — 13 modules execute by `delegatecall` against one shared `DegenerusGameStorage`, so CI fails the build if any storage slot in the game, any state contract, or any module moves versus a committed golden. This makes the "a module writes a slot the game uses for something else" corruption class un-shippable.
+- **Source-drift gates** (`make check-*`) — interface coverage, delegatecall target alignment, raw-selector bans, RNG-window consumer classification, pool-write provenance.
+- **Static analysis** — Slither + Aderyn (non-blocking).
+- **Weekly** — 31 Halmos symbolic proofs + a deep invariant sweep (runs=1000, depth=256).
+
+Reproduce the core suite locally:
+
+```
+forge test    # 1,069 passing
+make check-interfaces check-delegatecall check-raw-selectors check-rng-window check-pool-writes
+bash scripts/layout/storage_layout_oracle.sh
+```
+
+A secondary Hardhat behavioral suite (`npx hardhat test`) provides additional coverage.
+
+## Scope & Known Issues
+
+- **`scope.txt` / `out_of_scope.txt`** — the exact audited surface, pinned to `contracts/` tree `2dc4a67b` (tag `degenerus-c4a`).
+- **`KNOWN-ISSUES.md`** — every pre-triaged finding, by-design ruling, and static-analysis disposition, each with its precise mechanism. Not vague disclaimers.
+- **`SECURITY.md`** — threat model, trusted-role matrix (functional authority, not just Solidity modifiers), and disclosure process.
+- **`ECONOMIC_DISCLOSURES.md`** — creator allocations, vesting, governance control, referral economics, and terminal value — every figure cited to a contract line.
+
 ## Security
 
-The contracts are covered by an extensive test and review pipeline maintained outside this repository (~1,350 Hardhat tests, 27 Foundry fuzz/invariant harnesses, Slither/Aderyn static analysis).
-
-Security contact: [burnie@degener.us](mailto:burnie@degener.us)
+The code is **not yet deployed** — no live funds, no disclosure embargo. Security contact: [burnie@degener.us](mailto:burnie@degener.us). See `SECURITY.md` for the threat model and reporting guidance.
 
 ## License
 

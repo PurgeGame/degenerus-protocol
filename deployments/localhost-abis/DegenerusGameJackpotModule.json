@@ -1,0 +1,862 @@
+[
+  {
+    "inputs": [],
+    "name": "AlreadySwept",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "E",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "EmptyReturn",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "EmptyRevert",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "GameOver",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "Insolvent",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "Invariant",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "LengthMismatch",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "NotStarted",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "NothingToClaim",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "OnlyAdmin",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "OnlyCoordinator",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "OnlyDelegatecall",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "OnlyGame",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "OnlySDGNRS",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "OnlySelf",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "OnlyVault",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "RngLocked",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "TransferFailed",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "Unauthorized",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "ZeroAddress",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "ZeroValue",
+    "type": "error"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "amount",
+        "type": "uint256"
+      }
+    ],
+    "name": "AdminStakeEthForStEth",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "recipient",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "amount",
+        "type": "uint256"
+      }
+    ],
+    "name": "AdminSwapEthForStEth",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "player",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "amount",
+        "type": "uint256"
+      }
+    ],
+    "name": "AfkingFunded",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "player",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "amount",
+        "type": "uint256"
+      }
+    ],
+    "name": "AfkingSpent",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "player",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint8",
+        "name": "boonType",
+        "type": "uint8"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint16",
+        "name": "boostBps",
+        "type": "uint16"
+      }
+    ],
+    "name": "BoonConsumed",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "uint24",
+        "name": "day",
+        "type": "uint24"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint32",
+        "name": "mainTraitsPacked",
+        "type": "uint32"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint32",
+        "name": "bonusTraitsPacked",
+        "type": "uint32"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint24",
+        "name": "bonusTargetLevel",
+        "type": "uint24"
+      }
+    ],
+    "name": "DailyWinningTraits",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "buyer",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint8",
+        "name": "symbolId",
+        "type": "uint8"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "price",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint24",
+        "name": "level",
+        "type": "uint24"
+      }
+    ],
+    "name": "DeityPassPurchased",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "buyer",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint24",
+        "name": "targetLevel",
+        "type": "uint24"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint32",
+        "name": "entries",
+        "type": "uint32"
+      }
+    ],
+    "name": "EntriesQueued",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "buyer",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint24",
+        "name": "startLevel",
+        "type": "uint24"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint24",
+        "name": "numLevels",
+        "type": "uint24"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint32",
+        "name": "entriesPerLevel",
+        "type": "uint32"
+      }
+    ],
+    "name": "EntriesQueuedRange",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "buyer",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint24",
+        "name": "targetLevel",
+        "type": "uint24"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint32",
+        "name": "entriesScaled",
+        "type": "uint32"
+      }
+    ],
+    "name": "EntriesQueuedScaled",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "winner",
+        "type": "address"
+      },
+      {
+        "indexed": true,
+        "internalType": "uint24",
+        "name": "currentLevel",
+        "type": "uint24"
+      },
+      {
+        "indexed": true,
+        "internalType": "uint24",
+        "name": "winnerLevel",
+        "type": "uint24"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "amount",
+        "type": "uint256"
+      }
+    ],
+    "name": "FarFutureFlipJackpotWinner",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "totalFunds",
+        "type": "uint256"
+      }
+    ],
+    "name": "FinalSwept",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": false,
+        "internalType": "uint24",
+        "name": "level",
+        "type": "uint24"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "available",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "claimablePool",
+        "type": "uint256"
+      }
+    ],
+    "name": "GameOverDrained",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "winner",
+        "type": "address"
+      },
+      {
+        "indexed": true,
+        "internalType": "uint24",
+        "name": "level",
+        "type": "uint24"
+      },
+      {
+        "indexed": true,
+        "internalType": "uint16",
+        "name": "traitId",
+        "type": "uint16"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "amount",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "entryIndex",
+        "type": "uint256"
+      }
+    ],
+    "name": "JackpotEthWin",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "winner",
+        "type": "address"
+      },
+      {
+        "indexed": true,
+        "internalType": "uint24",
+        "name": "level",
+        "type": "uint24"
+      },
+      {
+        "indexed": true,
+        "internalType": "uint8",
+        "name": "traitId",
+        "type": "uint8"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "amount",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "entryIndex",
+        "type": "uint256"
+      }
+    ],
+    "name": "JackpotFlipWin",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "winner",
+        "type": "address"
+      },
+      {
+        "indexed": true,
+        "internalType": "uint24",
+        "name": "entryLevel",
+        "type": "uint24"
+      },
+      {
+        "indexed": true,
+        "internalType": "uint16",
+        "name": "traitId",
+        "type": "uint16"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint32",
+        "name": "entryCount",
+        "type": "uint32"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint24",
+        "name": "sourceLevel",
+        "type": "uint24"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "entryIndex",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "bool",
+        "name": "roundedUp",
+        "type": "bool"
+      }
+    ],
+    "name": "JackpotTicketWin",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "winner",
+        "type": "address"
+      },
+      {
+        "indexed": true,
+        "internalType": "uint24",
+        "name": "level",
+        "type": "uint24"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "halfPassCount",
+        "type": "uint256"
+      }
+    ],
+    "name": "JackpotWhalePassWin",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "player",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "amount",
+        "type": "uint256"
+      }
+    ],
+    "name": "PlayerCredited",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "next",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "future",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "current",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "claimable",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "totalBalance",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "yieldAccumulator",
+        "type": "uint256"
+      }
+    ],
+    "name": "PrizePoolDailySnapshot",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "player",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "baseKey",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint32",
+        "name": "take",
+        "type": "uint32"
+      }
+    ],
+    "name": "TraitsGenerated",
+    "type": "event"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "name": "boonPacked",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "slot0",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "slot1",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "name": "distributeYieldSurplus",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint24",
+        "name": "",
+        "type": "uint24"
+      },
+      {
+        "internalType": "uint256",
+        "name": "randWord",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint24",
+        "name": "bonusTargetLevel",
+        "type": "uint24"
+      }
+    ],
+    "name": "emitDailyWinningTraits",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "gameOver",
+    "outputs": [
+      {
+        "internalType": "bool",
+        "name": "",
+        "type": "bool"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "level",
+    "outputs": [
+      {
+        "internalType": "uint24",
+        "name": "",
+        "type": "uint24"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint24",
+        "name": "lvl",
+        "type": "uint24"
+      },
+      {
+        "internalType": "uint256",
+        "name": "randWord",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint24",
+        "name": "minLevel",
+        "type": "uint24"
+      },
+      {
+        "internalType": "uint24",
+        "name": "maxLevel",
+        "type": "uint24"
+      }
+    ],
+    "name": "payDailyFlipJackpot",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bool",
+        "name": "isJackpotPhase",
+        "type": "bool"
+      },
+      {
+        "internalType": "uint24",
+        "name": "lvl",
+        "type": "uint24"
+      },
+      {
+        "internalType": "uint256",
+        "name": "randWord",
+        "type": "uint256"
+      }
+    ],
+    "name": "payDailyJackpot",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "randWord",
+        "type": "uint256"
+      }
+    ],
+    "name": "payDailyJackpotCoinAndTickets",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "poolWei",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint24",
+        "name": "lvl",
+        "type": "uint24"
+      },
+      {
+        "internalType": "uint256",
+        "name": "rngWord",
+        "type": "uint256"
+      }
+    ],
+    "name": "runBafJackpot",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "claimableDelta",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "poolWei",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint24",
+        "name": "targetLvl",
+        "type": "uint24"
+      },
+      {
+        "internalType": "uint256",
+        "name": "rngWord",
+        "type": "uint256"
+      }
+    ],
+    "name": "runTerminalJackpot",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "paidWei",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  }
+]

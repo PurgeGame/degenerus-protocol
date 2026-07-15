@@ -1,0 +1,1012 @@
+[
+  {
+    "inputs": [],
+    "name": "OnlyCoin",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "OnlyGame",
+    "type": "error"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "player",
+        "type": "address"
+      },
+      {
+        "indexed": true,
+        "internalType": "uint24",
+        "name": "level",
+        "type": "uint24"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint8",
+        "name": "questType",
+        "type": "uint8"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "reward",
+        "type": "uint256"
+      }
+    ],
+    "name": "LevelQuestCompleted",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "player",
+        "type": "address"
+      },
+      {
+        "indexed": true,
+        "internalType": "uint24",
+        "name": "day",
+        "type": "uint24"
+      },
+      {
+        "indexed": true,
+        "internalType": "uint8",
+        "name": "slot",
+        "type": "uint8"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint8",
+        "name": "questType",
+        "type": "uint8"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint32",
+        "name": "streak",
+        "type": "uint32"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "reward",
+        "type": "uint256"
+      }
+    ],
+    "name": "QuestCompleted",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "player",
+        "type": "address"
+      },
+      {
+        "indexed": true,
+        "internalType": "uint24",
+        "name": "day",
+        "type": "uint24"
+      },
+      {
+        "indexed": true,
+        "internalType": "uint8",
+        "name": "slot",
+        "type": "uint8"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint8",
+        "name": "questType",
+        "type": "uint8"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint128",
+        "name": "progress",
+        "type": "uint128"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "target",
+        "type": "uint256"
+      }
+    ],
+    "name": "QuestProgressUpdated",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "uint24",
+        "name": "day",
+        "type": "uint24"
+      },
+      {
+        "indexed": true,
+        "internalType": "uint8",
+        "name": "slot",
+        "type": "uint8"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint8",
+        "name": "questType",
+        "type": "uint8"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint8",
+        "name": "flags",
+        "type": "uint8"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint24",
+        "name": "version",
+        "type": "uint24"
+      }
+    ],
+    "name": "QuestSlotRolled",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "player",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint16",
+        "name": "amount",
+        "type": "uint16"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint24",
+        "name": "newStreak",
+        "type": "uint24"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint24",
+        "name": "currentDay",
+        "type": "uint24"
+      }
+    ],
+    "name": "QuestStreakBonusAwarded",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "player",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint24",
+        "name": "previousStreak",
+        "type": "uint24"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint24",
+        "name": "currentDay",
+        "type": "uint24"
+      }
+    ],
+    "name": "QuestStreakReset",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "player",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint16",
+        "name": "amount",
+        "type": "uint16"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint8",
+        "name": "newTotal",
+        "type": "uint8"
+      }
+    ],
+    "name": "QuestStreakShieldGranted",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "player",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint16",
+        "name": "used",
+        "type": "uint16"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint16",
+        "name": "remaining",
+        "type": "uint16"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint24",
+        "name": "currentDay",
+        "type": "uint24"
+      }
+    ],
+    "name": "QuestStreakShieldUsed",
+    "type": "event"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "player",
+        "type": "address"
+      },
+      {
+        "internalType": "uint16",
+        "name": "amount",
+        "type": "uint16"
+      },
+      {
+        "internalType": "uint24",
+        "name": "currentDay",
+        "type": "uint24"
+      }
+    ],
+    "name": "awardQuestStreakBonus",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "player",
+        "type": "address"
+      },
+      {
+        "internalType": "uint16",
+        "name": "amount",
+        "type": "uint16"
+      }
+    ],
+    "name": "awardQuestStreakShield",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "player",
+        "type": "address"
+      },
+      {
+        "internalType": "uint24",
+        "name": "currentDay",
+        "type": "uint24"
+      }
+    ],
+    "name": "beginAfking",
+    "outputs": [
+      {
+        "internalType": "uint24",
+        "name": "streak",
+        "type": "uint24"
+      }
+    ],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "player",
+        "type": "address"
+      }
+    ],
+    "name": "effectiveBaseStreak",
+    "outputs": [
+      {
+        "internalType": "uint32",
+        "name": "",
+        "type": "uint32"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "player",
+        "type": "address"
+      }
+    ],
+    "name": "effectiveBaseStreakAndAfking",
+    "outputs": [
+      {
+        "internalType": "uint32",
+        "name": "streak",
+        "type": "uint32"
+      },
+      {
+        "internalType": "bool",
+        "name": "afking",
+        "type": "bool"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "player",
+        "type": "address"
+      },
+      {
+        "internalType": "uint24",
+        "name": "earnedStreak",
+        "type": "uint24"
+      },
+      {
+        "internalType": "uint24",
+        "name": "afkingCoveredDay",
+        "type": "uint24"
+      },
+      {
+        "internalType": "uint24",
+        "name": "currentDay",
+        "type": "uint24"
+      }
+    ],
+    "name": "finalizeAfking",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "getActiveQuests",
+    "outputs": [
+      {
+        "components": [
+          {
+            "internalType": "uint24",
+            "name": "day",
+            "type": "uint24"
+          },
+          {
+            "internalType": "uint8",
+            "name": "questType",
+            "type": "uint8"
+          },
+          {
+            "internalType": "bool",
+            "name": "highDifficulty",
+            "type": "bool"
+          },
+          {
+            "components": [
+              {
+                "internalType": "uint32",
+                "name": "mints",
+                "type": "uint32"
+              },
+              {
+                "internalType": "uint256",
+                "name": "tokenAmount",
+                "type": "uint256"
+              }
+            ],
+            "internalType": "struct QuestRequirements",
+            "name": "requirements",
+            "type": "tuple"
+          }
+        ],
+        "internalType": "struct QuestInfo[2]",
+        "name": "quests",
+        "type": "tuple[2]"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "player",
+        "type": "address"
+      }
+    ],
+    "name": "getPlayerLevelQuestView",
+    "outputs": [
+      {
+        "internalType": "uint8",
+        "name": "questType",
+        "type": "uint8"
+      },
+      {
+        "internalType": "uint128",
+        "name": "progress",
+        "type": "uint128"
+      },
+      {
+        "internalType": "uint256",
+        "name": "target",
+        "type": "uint256"
+      },
+      {
+        "internalType": "bool",
+        "name": "completed",
+        "type": "bool"
+      },
+      {
+        "internalType": "bool",
+        "name": "eligible",
+        "type": "bool"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "player",
+        "type": "address"
+      }
+    ],
+    "name": "getPlayerQuestView",
+    "outputs": [
+      {
+        "components": [
+          {
+            "components": [
+              {
+                "internalType": "uint24",
+                "name": "day",
+                "type": "uint24"
+              },
+              {
+                "internalType": "uint8",
+                "name": "questType",
+                "type": "uint8"
+              },
+              {
+                "internalType": "bool",
+                "name": "highDifficulty",
+                "type": "bool"
+              },
+              {
+                "components": [
+                  {
+                    "internalType": "uint32",
+                    "name": "mints",
+                    "type": "uint32"
+                  },
+                  {
+                    "internalType": "uint256",
+                    "name": "tokenAmount",
+                    "type": "uint256"
+                  }
+                ],
+                "internalType": "struct QuestRequirements",
+                "name": "requirements",
+                "type": "tuple"
+              }
+            ],
+            "internalType": "struct QuestInfo[2]",
+            "name": "quests",
+            "type": "tuple[2]"
+          },
+          {
+            "internalType": "uint128[2]",
+            "name": "progress",
+            "type": "uint128[2]"
+          },
+          {
+            "internalType": "bool[2]",
+            "name": "completed",
+            "type": "bool[2]"
+          },
+          {
+            "internalType": "uint24",
+            "name": "lastCompletedDay",
+            "type": "uint24"
+          },
+          {
+            "internalType": "uint32",
+            "name": "baseStreak",
+            "type": "uint32"
+          }
+        ],
+        "internalType": "struct PlayerQuestView",
+        "name": "viewData",
+        "type": "tuple"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "player",
+        "type": "address"
+      },
+      {
+        "internalType": "uint256",
+        "name": "amount",
+        "type": "uint256"
+      }
+    ],
+    "name": "handleAffiliate",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "reward",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint8",
+        "name": "questType",
+        "type": "uint8"
+      },
+      {
+        "internalType": "uint32",
+        "name": "streak",
+        "type": "uint32"
+      },
+      {
+        "internalType": "bool",
+        "name": "completed",
+        "type": "bool"
+      }
+    ],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "player",
+        "type": "address"
+      },
+      {
+        "internalType": "uint256",
+        "name": "burnAmount",
+        "type": "uint256"
+      }
+    ],
+    "name": "handleDecimator",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "reward",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint8",
+        "name": "questType",
+        "type": "uint8"
+      },
+      {
+        "internalType": "uint32",
+        "name": "streak",
+        "type": "uint32"
+      },
+      {
+        "internalType": "bool",
+        "name": "completed",
+        "type": "bool"
+      }
+    ],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "player",
+        "type": "address"
+      },
+      {
+        "internalType": "uint256",
+        "name": "amount",
+        "type": "uint256"
+      },
+      {
+        "internalType": "bool",
+        "name": "paidWithEth",
+        "type": "bool"
+      },
+      {
+        "internalType": "uint256",
+        "name": "mintPrice",
+        "type": "uint256"
+      }
+    ],
+    "name": "handleDegenerette",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "reward",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint8",
+        "name": "questType",
+        "type": "uint8"
+      },
+      {
+        "internalType": "uint32",
+        "name": "streak",
+        "type": "uint32"
+      },
+      {
+        "internalType": "bool",
+        "name": "completed",
+        "type": "bool"
+      }
+    ],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "player",
+        "type": "address"
+      },
+      {
+        "internalType": "uint256",
+        "name": "flipCredit",
+        "type": "uint256"
+      }
+    ],
+    "name": "handleFlip",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "reward",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint8",
+        "name": "questType",
+        "type": "uint8"
+      },
+      {
+        "internalType": "uint32",
+        "name": "streak",
+        "type": "uint32"
+      },
+      {
+        "internalType": "bool",
+        "name": "completed",
+        "type": "bool"
+      }
+    ],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "player",
+        "type": "address"
+      },
+      {
+        "internalType": "uint256",
+        "name": "ethMintSpendWei",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint32",
+        "name": "flipMintQty",
+        "type": "uint32"
+      },
+      {
+        "internalType": "uint256",
+        "name": "lootBoxAmount",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "mintPrice",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "levelQuestPrice",
+        "type": "uint256"
+      }
+    ],
+    "name": "handleFoilPurchase",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "reward",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint8",
+        "name": "questType",
+        "type": "uint8"
+      },
+      {
+        "internalType": "bool",
+        "name": "completed",
+        "type": "bool"
+      },
+      {
+        "internalType": "uint32",
+        "name": "streakSnapshot",
+        "type": "uint32"
+      }
+    ],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "player",
+        "type": "address"
+      },
+      {
+        "internalType": "uint32",
+        "name": "quantity",
+        "type": "uint32"
+      },
+      {
+        "internalType": "bool",
+        "name": "paidWithEth",
+        "type": "bool"
+      },
+      {
+        "internalType": "uint256",
+        "name": "mintPrice",
+        "type": "uint256"
+      }
+    ],
+    "name": "handleMint",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "reward",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint8",
+        "name": "questType",
+        "type": "uint8"
+      },
+      {
+        "internalType": "uint32",
+        "name": "streak",
+        "type": "uint32"
+      },
+      {
+        "internalType": "bool",
+        "name": "completed",
+        "type": "bool"
+      }
+    ],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "player",
+        "type": "address"
+      },
+      {
+        "internalType": "uint256",
+        "name": "ethMintSpendWei",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint32",
+        "name": "flipMintQty",
+        "type": "uint32"
+      },
+      {
+        "internalType": "uint256",
+        "name": "lootBoxAmount",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "mintPrice",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "levelQuestPrice",
+        "type": "uint256"
+      }
+    ],
+    "name": "handlePurchase",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "reward",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint8",
+        "name": "questType",
+        "type": "uint8"
+      },
+      {
+        "internalType": "uint32",
+        "name": "streak",
+        "type": "uint32"
+      },
+      {
+        "internalType": "bool",
+        "name": "completed",
+        "type": "bool"
+      }
+    ],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "player",
+        "type": "address"
+      }
+    ],
+    "name": "playerQuestStates",
+    "outputs": [
+      {
+        "internalType": "uint32",
+        "name": "streak",
+        "type": "uint32"
+      },
+      {
+        "internalType": "uint24",
+        "name": "lastCompletedDay",
+        "type": "uint24"
+      },
+      {
+        "internalType": "uint128[2]",
+        "name": "progress",
+        "type": "uint128[2]"
+      },
+      {
+        "internalType": "bool[2]",
+        "name": "completed",
+        "type": "bool[2]"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "player",
+        "type": "address"
+      }
+    ],
+    "name": "questCompletionToday",
+    "outputs": [
+      {
+        "internalType": "bool",
+        "name": "slot0",
+        "type": "bool"
+      },
+      {
+        "internalType": "bool",
+        "name": "slot1",
+        "type": "bool"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint24",
+        "name": "day",
+        "type": "uint24"
+      },
+      {
+        "internalType": "uint256",
+        "name": "entropy",
+        "type": "uint256"
+      },
+      {
+        "internalType": "bool",
+        "name": "forceMintFlip",
+        "type": "bool"
+      },
+      {
+        "internalType": "bool",
+        "name": "forceFoil",
+        "type": "bool"
+      }
+    ],
+    "name": "rollDailyQuest",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "entropy",
+        "type": "uint256"
+      }
+    ],
+    "name": "rollLevelQuest",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  }
+]

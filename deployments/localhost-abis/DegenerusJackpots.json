@@ -1,0 +1,150 @@
+[
+  {
+    "inputs": [],
+    "name": "OnlyCoin",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "OnlyGame",
+    "type": "error"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "player",
+        "type": "address"
+      },
+      {
+        "indexed": true,
+        "internalType": "uint24",
+        "name": "lvl",
+        "type": "uint24"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "amount",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "newTotal",
+        "type": "uint256"
+      }
+    ],
+    "name": "BafFlipRecorded",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "uint24",
+        "name": "lvl",
+        "type": "uint24"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint24",
+        "name": "day",
+        "type": "uint24"
+      }
+    ],
+    "name": "BafSkipped",
+    "type": "event"
+  },
+  {
+    "inputs": [],
+    "name": "getLastBafResolvedDay",
+    "outputs": [
+      {
+        "internalType": "uint24",
+        "name": "",
+        "type": "uint24"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint24",
+        "name": "lvl",
+        "type": "uint24"
+      }
+    ],
+    "name": "markBafSkipped",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "player",
+        "type": "address"
+      },
+      {
+        "internalType": "uint24",
+        "name": "lvl",
+        "type": "uint24"
+      },
+      {
+        "internalType": "uint256",
+        "name": "amount",
+        "type": "uint256"
+      }
+    ],
+    "name": "recordBafFlip",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "poolWei",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint24",
+        "name": "lvl",
+        "type": "uint24"
+      },
+      {
+        "internalType": "uint256",
+        "name": "rngWord",
+        "type": "uint256"
+      }
+    ],
+    "name": "runBafJackpot",
+    "outputs": [
+      {
+        "internalType": "address[]",
+        "name": "winners",
+        "type": "address[]"
+      },
+      {
+        "internalType": "uint256[]",
+        "name": "amounts",
+        "type": "uint256[]"
+      },
+      {
+        "internalType": "uint256",
+        "name": "returnAmountWei",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  }
+]

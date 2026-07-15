@@ -1,0 +1,139 @@
+name: CI
+
+# Pre-launch hardening gate: build + size-ceiling + tests, plus non-blocking
+# static analysis (Slither + Aderyn). Keeps the regression net running on every
+# change so nothing silently regresses before the C4A contest.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+  schedule:
+    # Weekly (Mon 06:00 UTC) strong-but-slow guarantees that per-PR CI skips:
+    # Halmos symbolic proofs + the deep-profile invariant sweep. A proof that
+    # regresses fails this run instead of silently shipping green.
+    - cron: '0 6 * * 1'
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  foundry:
+    name: Foundry build + tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install Foundry
+        uses: foundry-rs/foundry-toolchain@v1
+
+      - name: Install npm deps (OpenZeppelin, etc.)
+        run: npm ci || npm install
+
+      - name: forge build
+        run: forge build --sizes || true   # informational size table; the ceiling is enforced by the gate below
+
+      # EIP-170 guard: DegenerusGame runs perpetually near the 24,576-byte
+      # ceiling. Fail CI if any DEPLOYABLE contract breaches it. Test scaffolding
+      # (harnesses / testers / mocks — never deployed) is excluded by naming
+      # convention; `forge build --sizes` exits non-zero on any breach, so the
+      # build line is guarded and enforcement is done from the parsed JSON.
+      - name: Contract size ceiling (EIP-170)
+        run: |
+          forge build --sizes --json > sizes.json || true
+          python3 - <<'PY'
+          import json, sys
+          sizes = json.load(open('sizes.json'))
+          LIMIT = 24576
+          def is_scaffold(n):
+              return n.endswith(('Harness', 'Tester')) or n.startswith('Mock')
+          bad = []
+          for name, info in sizes.items():
+              if is_scaffold(name):
+                  continue
+              rt = (info.get('runtime_size') or info.get('size') or 0)
+              if isinstance(rt, dict):
+                  rt = rt.get('runtime', 0)
+              if rt and rt > LIMIT:
+                  bad.append((name, rt))
+          if bad:
+              for n, s in bad:
+                  print(f"::error::{n} runtime size {s} > {LIMIT} (EIP-170)")
+              sys.exit(1)
+          print("All deployable contracts within the 24,576-byte ceiling.")
+          PY
+
+      # MECH-02: deterministic storage-layout gate. Fails the PR if any slot/offset
+      # in DegenerusGame, a state contract, or a delegatecall module moves vs the
+      # committed golden (whole-protocol corruption risk under 155 delegatecall sites).
+      - name: Storage-layout oracle (MECH-02)
+        run: bash scripts/layout/storage_layout_oracle.sh
+
+      - name: forge test
+        run: forge test -vvv
+
+  slither:
+    name: Slither (static analysis, non-blocking)
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: foundry-rs/foundry-toolchain@v1
+      - run: npm ci || npm install
+      - name: Run Slither
+        uses: crytic/slither-action@v0.4.0
+        with:
+          fail-on: none
+          slither-args: --exclude-informational --exclude-optimization
+
+  aderyn:
+    name: Aderyn (static analysis, non-blocking)
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: foundry-rs/foundry-toolchain@v1
+      - run: npm ci || npm install
+      - name: Install Aderyn
+        run: cargo install aderyn || npm install -g @cyfrin/aderyn
+      - name: Run Aderyn
+        run: aderyn . -o aderyn-report.md
+      - uses: actions/upload-artifact@v4
+        with:
+          name: aderyn-report
+          path: aderyn-report.md
+
+  # Strong-but-slow guarantees the per-PR gate skips: the 31 Halmos symbolic proofs
+  # and the deep-profile invariant sweep (runs=1000/depth=256, ~8x the per-PR budget).
+  # Runs on the weekly schedule and on manual dispatch — a proof or deep invariant that
+  # regresses fails here instead of silently shipping green. (The mutation campaign is
+  # NOT wired here: its harness lives in the gitignored audit/ tree and a full run far
+  # exceeds the 6h job ceiling — it is run locally/overnight and its kill-rate evidence
+  # is committed to the audit pack.)
+  deep-guarantees:
+    name: Halmos proofs + deep invariant sweep (scheduled / manual)
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 330
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: Install Foundry
+        uses: foundry-rs/foundry-toolchain@v1
+      - name: Install npm deps (OpenZeppelin, etc.)
+        run: npm ci || npm install
+      - name: Install Halmos
+        run: pip install --upgrade halmos
+      - name: Halmos symbolic proofs
+        run: halmos --match-path 'test/halmos/*.t.sol'
+      - name: Deep invariant sweep (runs=1000 / depth=256)
+        run: FOUNDRY_PROFILE=deep forge test --match-path 'test/fuzz/invariant/*.inv.t.sol'

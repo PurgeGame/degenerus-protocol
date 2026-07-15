@@ -1,0 +1,58 @@
+[
+  {
+    "bytes": "32",
+    "encoding": "inplace",
+    "label": "totalSupply",
+    "offset": 0,
+    "slot": 0,
+    "typeLabel": "uint256"
+  },
+  {
+    "bytes": "32",
+    "encoding": "inplace",
+    "label": "vaultAllowance",
+    "offset": 0,
+    "slot": 1,
+    "typeLabel": "uint256"
+  },
+  {
+    "bytes": "32",
+    "encoding": "mapping",
+    "label": "balanceOf",
+    "offset": 0,
+    "slot": 2,
+    "typeLabel": "mapping(address => uint256)"
+  },
+  {
+    "bytes": "32",
+    "encoding": "mapping",
+    "label": "allowance",
+    "offset": 0,
+    "slot": 3,
+    "typeLabel": "mapping(address => mapping(address => uint256))"
+  },
+  {
+    "bytes": "32",
+    "encoding": "mapping",
+    "label": "_drawHeader",
+    "offset": 0,
+    "slot": 4,
+    "typeLabel": "mapping(uint256 => uint256)"
+  },
+  {
+    "bytes": "32",
+    "encoding": "mapping",
+    "label": "_drawEntry",
+    "offset": 0,
+    "slot": 5,
+    "typeLabel": "mapping(uint256 => uint256)"
+  },
+  {
+    "bytes": "32",
+    "encoding": "mapping",
+    "label": "dayClaimed",
+    "offset": 0,
+    "slot": 6,
+    "typeLabel": "mapping(uint24 => bool)"
+  }
+]

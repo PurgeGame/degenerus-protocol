@@ -1,0 +1,488 @@
+[
+  {
+    "type": "constructor",
+    "inputs": [
+      {
+        "name": "bootstrapOwners",
+        "type": "address[]",
+        "internalType": "address[]"
+      },
+      {
+        "name": "bootstrapCodes",
+        "type": "bytes32[]",
+        "internalType": "bytes32[]"
+      },
+      {
+        "name": "bootstrapKickbacks",
+        "type": "uint8[]",
+        "internalType": "uint8[]"
+      },
+      {
+        "name": "bootstrapPlayers",
+        "type": "address[]",
+        "internalType": "address[]"
+      },
+      {
+        "name": "bootstrapReferralCodes",
+        "type": "bytes32[]",
+        "internalType": "bytes32[]"
+      }
+    ],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "affiliateBonusPointsBest",
+    "inputs": [
+      {
+        "name": "currLevel",
+        "type": "uint24",
+        "internalType": "uint24"
+      },
+      {
+        "name": "player",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "points",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "affiliateCode",
+    "inputs": [
+      {
+        "name": "",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "owner",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "kickback",
+        "type": "uint8",
+        "internalType": "uint8"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "affiliateScore",
+    "inputs": [
+      {
+        "name": "lvl",
+        "type": "uint24",
+        "internalType": "uint24"
+      },
+      {
+        "name": "player",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "score",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "affiliateTop",
+    "inputs": [
+      {
+        "name": "lvl",
+        "type": "uint24",
+        "internalType": "uint24"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "player",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "score",
+        "type": "uint96",
+        "internalType": "uint96"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "claim",
+    "inputs": [
+      {
+        "name": "subs",
+        "type": "address[]",
+        "internalType": "address[]"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "createAffiliateCode",
+    "inputs": [
+      {
+        "name": "code_",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      },
+      {
+        "name": "kickbackPct",
+        "type": "uint8",
+        "internalType": "uint8"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "defaultCode",
+    "inputs": [
+      {
+        "name": "addr",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      }
+    ],
+    "stateMutability": "pure"
+  },
+  {
+    "type": "function",
+    "name": "getReferrer",
+    "inputs": [
+      {
+        "name": "player",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "payAffiliate",
+    "inputs": [
+      {
+        "name": "amount",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "code",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      },
+      {
+        "name": "sender",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "lvl",
+        "type": "uint24",
+        "internalType": "uint24"
+      },
+      {
+        "name": "isFreshEth",
+        "type": "bool",
+        "internalType": "bool"
+      },
+      {
+        "name": "lootboxActivityScore",
+        "type": "uint16",
+        "internalType": "uint16"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "playerKickback",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "payAffiliateCombined",
+    "inputs": [
+      {
+        "name": "code",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      },
+      {
+        "name": "sender",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "lvl",
+        "type": "uint24",
+        "internalType": "uint24"
+      },
+      {
+        "name": "tktFreshFlip",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "tktRecycledFlip",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "lbFreshFlip",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "lbRecycledFlip",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "lbFreshScore",
+        "type": "uint16",
+        "internalType": "uint16"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "winner",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "winnerCredit",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "playerKickback",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "referPlayer",
+    "inputs": [
+      {
+        "name": "code_",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "totalAffiliateScore",
+    "inputs": [
+      {
+        "name": "lvl",
+        "type": "uint24",
+        "internalType": "uint24"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "total",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "event",
+    "name": "Affiliate",
+    "inputs": [
+      {
+        "name": "amount",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      },
+      {
+        "name": "code",
+        "type": "bytes32",
+        "indexed": true,
+        "internalType": "bytes32"
+      },
+      {
+        "name": "sender",
+        "type": "address",
+        "indexed": false,
+        "internalType": "address"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "AffiliateEarningsRecorded",
+    "inputs": [
+      {
+        "name": "level",
+        "type": "uint24",
+        "indexed": true,
+        "internalType": "uint24"
+      },
+      {
+        "name": "affiliate",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "amount",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      },
+      {
+        "name": "newTotal",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      },
+      {
+        "name": "sender",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "code",
+        "type": "bytes32",
+        "indexed": false,
+        "internalType": "bytes32"
+      },
+      {
+        "name": "isFreshEth",
+        "type": "bool",
+        "indexed": false,
+        "internalType": "bool"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "AffiliateTopUpdated",
+    "inputs": [
+      {
+        "name": "level",
+        "type": "uint24",
+        "indexed": true,
+        "internalType": "uint24"
+      },
+      {
+        "name": "player",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "score",
+        "type": "uint96",
+        "indexed": false,
+        "internalType": "uint96"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "ReferralUpdated",
+    "inputs": [
+      {
+        "name": "player",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "code",
+        "type": "bytes32",
+        "indexed": true,
+        "internalType": "bytes32"
+      },
+      {
+        "name": "referrer",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "locked",
+        "type": "bool",
+        "indexed": false,
+        "internalType": "bool"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "error",
+    "name": "Insufficient",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "InvalidKickback",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "OnlyAuthorized",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "Zero",
+    "inputs": []
+  }
+]

@@ -1,0 +1,46 @@
+{
+  "name": "degenerus-contracts",
+  "version": "1.0.0",
+  "description": "Degenerus Protocol - Smart Contracts",
+  "type": "module",
+  "scripts": {
+    "compile": "hardhat compile",
+    "test": "hardhat test test/unit/*.test.js test/integration/*.test.js test/deploy/*.test.js test/access/*.test.js test/edge/*.test.js test/gas/AdvanceGameGas.test.js test/gas/Phase264GasRegression.test.js test/gas/LootboxOpenGas.test.js",
+    "test:stat": "hardhat test test/stat/TraitDistribution.test.js test/stat/GoldSoloCoverage.test.js test/stat/SoloEvUplift.test.js test/stat/PackFeel.test.js test/stat/SurfaceRegression.test.js test/stat/PerPullLevelDistribution.test.js test/stat/PerPullEmptyBucketSkip.test.js test/stat/LootboxEntropyDistribution.test.js test/stat/DegenerettePerNEvExactness.test.js test/stat/DegeneretteV73Invariants.test.js test/stat/DegeneretteProducerChi2.test.js test/stat/DegeneretteBonusEv.test.js test/stat/LootboxBernoulliEv.test.js test/stat/LootboxAutoResolveBernoulliEv.test.js test/stat/LootboxAutoResolveSeedUniqueness.test.js test/stat/JackpotTicketRollBernoulliEv.test.js test/stat/JackpotTicketRollSeedUniqueness.test.js test/stat/Ent05KeccakRefactorInvariant.test.js test/stat/WholeFlipFloorInvariant.test.js",
+    "test:gas": "hardhat test test/gas/Phase261GasRegression.test.js test/gas/Phase264GasRegression.test.js test/gas/Phase268GasRegression.test.js test/gas/LootboxOpenGas.test.js test/gas/AdvanceGameGas.test.js",
+    "test:unit": "hardhat test test/unit/",
+    "test:evt-uni": "hardhat test test/unit/EventSurfaceUnification.test.js test/edge/LootboxAutoResolveRegression.test.js test/unit/LootboxWholeTicket.test.js test/unit/JackpotTicketRollSilentColdBust.test.js",
+    "test:integration": "hardhat test test/integration/",
+    "test:deploy": "hardhat test test/deploy/",
+    "test:access": "hardhat test test/access/",
+    "test:edge": "hardhat test test/edge/",
+    "agent": "node agent/src/index.js",
+    "agent:local": "node agent/src/index.js --mode local --steps 80 --drive-every 3",
+    "agent:live": "node agent/src/index.js --mode live",
+    "agent:test": "node --test agent/test/unit.test.js",
+    "deploy:mainnet": "hardhat run scripts/deploy.js --network mainnet",
+    "deploy:sepolia": "hardhat run scripts/deploy.js --network sepolia",
+    "node": "hardhat node",
+    "deploy:local": "hardhat run scripts/deploy-local.js --network localhost",
+    "coverage": "hardhat coverage",
+    "slither": "unset VIRTUAL_ENV && slither . --filter-paths 'node_modules|mocks' --exclude naming-convention,solc-version,low-level-calls,assembly,too-many-digits,similar-names,dead-code",
+    "fuzz": "forge test --match-path 'test/fuzz/*' -vv"
+  },
+  "keywords": [
+    "solidity",
+    "ethereum",
+    "degenerus",
+    "smart-contracts"
+  ],
+  "license": "AGPL-3.0-only",
+  "devDependencies": {
+    "@nomicfoundation/hardhat-toolbox": "^6.1.0",
+    "@openzeppelin/contracts": "5.4.0",
+    "dotenv": "^17.3.1",
+    "hardhat": "^2.28.3",
+    "solidity-coverage": "^0.8.17"
+  },
+  "dependencies": {
+    "better-sqlite3": "^12.6.2"
+  }
+}

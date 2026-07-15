@@ -1,0 +1,118 @@
+[
+  {
+    "inputs": [],
+    "stateMutability": "nonpayable",
+    "type": "constructor"
+  },
+  {
+    "inputs": [],
+    "name": "AlreadyFinalized",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "IndexOutOfBounds",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "InvalidQuadrant",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "MaxBatch",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "OnlyCreator",
+    "type": "error"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "i",
+        "type": "uint256"
+      }
+    ],
+    "name": "data",
+    "outputs": [
+      {
+        "internalType": "string",
+        "name": "",
+        "type": "string"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "finalize",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "startIndex",
+        "type": "uint256"
+      },
+      {
+        "internalType": "string[]",
+        "name": "paths",
+        "type": "string[]"
+      }
+    ],
+    "name": "setPaths",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "quadrant",
+        "type": "uint256"
+      },
+      {
+        "internalType": "string[8]",
+        "name": "symbols",
+        "type": "string[8]"
+      }
+    ],
+    "name": "setSymbols",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "quadrant",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint8",
+        "name": "idx",
+        "type": "uint8"
+      }
+    ],
+    "name": "symbol",
+    "outputs": [
+      {
+        "internalType": "string",
+        "name": "",
+        "type": "string"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  }
+]

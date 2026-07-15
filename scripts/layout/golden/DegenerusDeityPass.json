@@ -1,0 +1,50 @@
+[
+  {
+    "bytes": "32",
+    "encoding": "mapping",
+    "label": "_owners",
+    "offset": 0,
+    "slot": 0,
+    "typeLabel": "mapping(uint256 => address)"
+  },
+  {
+    "bytes": "32",
+    "encoding": "mapping",
+    "label": "_balances",
+    "offset": 0,
+    "slot": 1,
+    "typeLabel": "mapping(address => uint256)"
+  },
+  {
+    "bytes": "20",
+    "encoding": "inplace",
+    "label": "renderer",
+    "offset": 0,
+    "slot": 2,
+    "typeLabel": "address"
+  },
+  {
+    "bytes": "32",
+    "encoding": "bytes",
+    "label": "_outlineColor",
+    "offset": 0,
+    "slot": 3,
+    "typeLabel": "string"
+  },
+  {
+    "bytes": "32",
+    "encoding": "bytes",
+    "label": "_backgroundColor",
+    "offset": 0,
+    "slot": 4,
+    "typeLabel": "string"
+  },
+  {
+    "bytes": "32",
+    "encoding": "bytes",
+    "label": "_nonCryptoSymbolColor",
+    "offset": 0,
+    "slot": 5,
+    "typeLabel": "string"
+  }
+]

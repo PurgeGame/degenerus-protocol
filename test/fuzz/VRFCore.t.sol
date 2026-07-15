@@ -1,0 +1,798 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+pragma solidity ^0.8.26;
+
+import {DeployProtocol} from "./helpers/DeployProtocol.sol";
+import {VRFHandler} from "./helpers/VRFHandler.sol";
+import {MockVRFCoordinator} from "../../contracts/mocks/MockVRFCoordinator.sol";
+import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
+
+/// @title VRFCore -- Audit tests for VRF request/fulfillment correctness
+/// @notice Covers VRFC-01 (callback revert-safety + gas), VRFC-02 (requestId lifecycle),
+///         VRFC-03 (mutual exclusion), VRFC-04 (12h timeout retry).
+contract VRFCore is DeployProtocol {
+    VRFHandler public vrfHandler;
+
+    /// @dev Storage slot constants for direct state inspection via vm.load.
+    ///      Verified via `forge inspect DegenerusGame storage-layout`.
+    ///      Slot 0: packed timing/flags (see DegenerusGameStorage layout).
+    ///      Slot 3: rngWordCurrent (uint256).
+    ///      Slot 4: vrfRequestId (uint256).
+    uint256 constant SLOT_PACKED_0 = 0;
+    uint256 constant SLOT_RNG_WORD_CURRENT = 3;
+    uint256 constant SLOT_VRF_REQUEST_ID = 4;
+
+    function setUp() public {
+        _deployProtocol();
+        vm.warp(block.timestamp + 1 days);
+        vrfHandler = new VRFHandler(mockVRF, game);
+    }
+
+    // ──────────────────────────────────────────────────────────────────────
+    // Helpers
+    // ──────────────────────────────────────────────────────────────────────
+
+    /// @dev Complete a full day: advanceGame -> VRF fulfill -> loop until unlocked.
+    ///      Tracks the last-known request ID to avoid double-fulfillment when the
+    ///      game reuses a stale rngWordCurrent across day boundaries.
+    uint256 private _lastFulfilledReqId;
+
+    function _completeDay(uint256 vrfWord) internal {
+        game.advanceGame();
+        uint256 reqId = mockVRF.lastRequestId();
+        if (reqId != _lastFulfilledReqId && reqId > 0) {
+            mockVRF.fulfillRandomWords(reqId, vrfWord);
+            _lastFulfilledReqId = reqId;
+        }
+        for (uint256 i = 0; i < 50; i++) {
+            if (!game.rngLocked()) break;
+            game.advanceGame();
+        }
+    }
+
+    /// @dev Read lootboxRngIndex from lootboxRngPacked (storage slot 34, low 48 bits = LR_INDEX)
+    ///      (post V62 lootbox repack: was 35).
+    function _lootboxRngIndex() internal view returns (uint48) {
+        return uint48(uint256(vm.load(address(game), bytes32(uint256(34)))));
+    }
+
+    /// @dev Read vrfRequestId directly from storage slot 4.
+    function _readVrfRequestId() internal view returns (uint256) {
+        return uint256(vm.load(address(game), bytes32(uint256(SLOT_VRF_REQUEST_ID))));
+    }
+
+    /// @dev Read LR_MID_DAY from lootboxRngPacked (slot 34, bits [224:232]).
+    function _lrMidDay() internal view returns (uint8) {
+        return uint8(uint256(vm.load(address(game), bytes32(uint256(34)))) >> 224);
+    }
+
+    /// @dev Read rngWordCurrent directly from storage slot 3.
+    function _readRngWordCurrent() internal view returns (uint256) {
+        return uint256(vm.load(address(game), bytes32(uint256(SLOT_RNG_WORD_CURRENT))));
+    }
+
+    /// @dev Read rngRequestTime from packed slot 0, bytes [6:12] (uint48, bit offset 48).
+    function _readRngRequestTime() internal view returns (uint48) {
+        uint256 packed = uint256(vm.load(address(game), bytes32(uint256(SLOT_PACKED_0))));
+        return uint48(packed >> 48);
+    }
+
+    /// @dev Deploy a new MockVRFCoordinator and wire it up via admin prank.
+    ///      Resets _lastFulfilledReqId since the new mock has its own request counter.
+    function _doCoordinatorSwap() internal returns (MockVRFCoordinator newVRF) {
+        newVRF = new MockVRFCoordinator();
+        uint256 newSubId = newVRF.createSubscription();
+        newVRF.addConsumer(newSubId, address(game));
+        vm.prank(address(admin));
+        game.updateVrfCoordinatorAndSub(address(newVRF), newSubId, bytes32(uint256(1)));
+        _lastFulfilledReqId = 0;
+    }
+
+    /// @dev Setup for mid-day lootbox RNG: complete a day, make a purchase on the
+    ///      new day to create pending lootbox ETH, fund VRF subscription with LINK.
+    ///      Returns the current timestamp for boundary checks.
+    function _setupForMidDayRng() internal returns (uint256 ts) {
+        // Complete day 1
+        _completeDay(0xDEAD0001);
+
+        // Warp to day 2 (next day boundary)
+        vm.warp(block.timestamp + 1 days);
+
+        // Complete day 2 so rngWordByDay[day2] != 0
+        _completeDay(0xDEAD0002);
+
+        // Purchase with lootbox amount to create pending ETH
+        address buyer = makeAddr("lootboxBuyer");
+        vm.deal(buyer, 100 ether);
+        vm.prank(buyer);
+        game.purchase{value: 1.01 ether}(buyer, 400, 1 ether, bytes32(0), MintPaymentKind.DirectEth, false);
+
+        // Fund VRF subscription with LINK
+        // Admin created subscription 1 during deploy; fund it
+        mockVRF.fundSubscription(1, 100e18);
+
+        ts = block.timestamp;
+    }
+
+    // ──────────────────────────────────────────────────────────────────────
+    // VRFC-01: Callback Revert-Safety and Gas Budget
+    // ──────────────────────────────────────────────────────────────────────
+
+    /// @notice Callback never reverts on daily fulfillment with any fuzzed word.
+    function test_callbackNeverReverts_daily(uint256 randomWord) public {
+        // Trigger daily VRF request
+        game.advanceGame();
+        assertTrue(game.rngLocked(), "rngLocked after advanceGame");
+
+        uint256 reqId = mockVRF.lastRequestId();
+        assertTrue(reqId > 0, "VRF request sent");
+
+        // Fulfill with fuzzed word -- must not revert
+        mockVRF.fulfillRandomWords(reqId, randomWord);
+
+        // Verify word stored (zero-guarded to 1)
+        uint256 stored = _readRngWordCurrent();
+        if (randomWord == 0) {
+            assertEq(stored, 1, "Zero word should be stored as 1");
+        } else {
+            assertEq(stored, randomWord, "Word should be stored as-is");
+        }
+    }
+
+    /// @notice Callback silently returns (no revert) when requestId doesn't match.
+    function test_callbackNeverReverts_staleId(uint256 staleId, uint256 randomWord) public {
+        // Trigger daily VRF request
+        game.advanceGame();
+        uint256 realReqId = mockVRF.lastRequestId();
+
+        // Ensure staleId != realReqId to trigger the mismatch path
+        vm.assume(staleId != realReqId);
+
+        // Record state before
+        uint256 wordBefore = _readRngWordCurrent();
+
+        // Fulfill with wrong requestId via raw call -- must not revert, no state change
+        mockVRF.fulfillRandomWordsRaw(staleId, address(game), randomWord);
+
+        // State unchanged
+        assertEq(_readRngWordCurrent(), wordBefore, "Stale ID should not change state");
+    }
+
+    /// @notice Callback silently returns on duplicate fulfillment (rngWordCurrent already set).
+    function test_callbackNeverReverts_duplicateFulfillment(uint256 randomWord) public {
+        vm.assume(randomWord != 0); // Ensure first fulfillment sets a nonzero word
+
+        // Trigger daily VRF request
+        game.advanceGame();
+        uint256 reqId = mockVRF.lastRequestId();
+
+        // First fulfillment
+        mockVRF.fulfillRandomWords(reqId, randomWord);
+        uint256 storedAfterFirst = _readRngWordCurrent();
+        assertEq(storedAfterFirst, randomWord, "First fulfillment should store word");
+
+        // Second fulfillment via raw call (same requestId) -- should silently return
+        // because rngWordCurrent != 0. Use a different word (XOR to avoid overflow).
+        uint256 differentWord = randomWord ^ 0xDEAD;
+        if (differentWord == 0) differentWord = 1;
+        mockVRF.fulfillRandomWordsRaw(reqId, address(game), differentWord);
+        assertEq(_readRngWordCurrent(), storedAfterFirst, "Duplicate should not change word");
+    }
+
+    /// @notice Callback reverts when msg.sender is not the VRF coordinator.
+    function test_callbackReverts_unauthorizedSender() public {
+        // Trigger daily VRF request
+        game.advanceGame();
+        uint256 reqId = mockVRF.lastRequestId();
+
+        // Attempt direct call from non-coordinator address
+        uint256[] memory words = new uint256[](1);
+        words[0] = 12345;
+
+        vm.prank(address(0xdead));
+        vm.expectRevert();
+        game.rawFulfillRandomWords(reqId, words);
+    }
+
+    /// @notice Gas budget: daily callback path under 300k gas.
+    function test_callbackGasBudget_daily() public {
+        // Trigger daily VRF request
+        game.advanceGame();
+        uint256 reqId = mockVRF.lastRequestId();
+
+        // Measure gas for fulfillment (includes mock overhead, but callback itself is ~33k)
+        uint256 gasBefore = gasleft();
+        mockVRF.fulfillRandomWords(reqId, 0xDEAD);
+        uint256 gasUsed = gasBefore - gasleft();
+
+        // The callback gas budget is 300k. Total measured includes mock overhead,
+        // but even with overhead it should be well under 300k.
+        assertLt(gasUsed, 300_000, "Daily callback should use < 300k gas");
+    }
+
+    /// @notice Gas budget: mid-day callback path under 300k gas.
+    function test_callbackGasBudget_midday() public {
+        _setupForMidDayRng();
+
+        // Trigger mid-day lootbox RNG request
+        game.requestLootboxRng();
+        uint256 reqId = mockVRF.lastRequestId();
+
+        // Measure gas for fulfillment
+        uint256 gasBefore = gasleft();
+        mockVRF.fulfillRandomWords(reqId, 0xCAFE);
+        uint256 gasUsed = gasBefore - gasleft();
+
+        assertLt(gasUsed, 300_000, "Mid-day callback should use < 300k gas");
+    }
+
+    /// @notice Zero-guard: randomWord == 0 produces stored value of 1.
+    function test_callbackZeroGuard(uint256 randomWord) public {
+        // Bound to only test the zero case explicitly
+        randomWord = 0;
+
+        // Trigger daily VRF request
+        game.advanceGame();
+        uint256 reqId = mockVRF.lastRequestId();
+
+        // Fulfill with word=0
+        mockVRF.fulfillRandomWords(reqId, randomWord);
+
+        // rngWordCurrent must be 1, not 0
+        assertEq(_readRngWordCurrent(), 1, "Zero word must be guarded to 1");
+    }
+
+    // ──────────────────────────────────────────────────────────────────────
+    // VRFC-02: vrfRequestId Lifecycle
+    // ──────────────────────────────────────────────────────────────────────
+
+    /// @notice Daily request: vrfRequestId set on request, cleared after full processing.
+    function test_vrfRequestIdLifecycle_dailyFreshRequest() public {
+        // Before any request
+        assertEq(_readVrfRequestId(), 0, "vrfRequestId should start at 0");
+
+        // Trigger daily VRF request
+        game.advanceGame();
+        uint256 reqId = mockVRF.lastRequestId();
+
+        // vrfRequestId should match
+        assertEq(_readVrfRequestId(), reqId, "vrfRequestId should match mock's lastRequestId");
+        assertTrue(reqId > 0, "Request ID should be nonzero");
+
+        // Fulfill
+        mockVRF.fulfillRandomWords(reqId, 0xDEAD);
+
+        // Process until unlocked (daily branch: rngWordCurrent set, advanceGame processes)
+        for (uint256 i = 0; i < 50; i++) {
+            if (!game.rngLocked()) break;
+            game.advanceGame();
+        }
+        assertFalse(game.rngLocked(), "Should be unlocked after full processing");
+
+        // After _unlockRng: vrfRequestId should be 0
+        assertEq(_readVrfRequestId(), 0, "vrfRequestId should be cleared after unlock");
+    }
+
+    /// @notice Mid-day request: vrfRequestId set, cleared after mid-day fulfillment.
+    function test_vrfRequestIdLifecycle_middayRequest() public {
+        _setupForMidDayRng();
+
+        // Before mid-day request, vrfRequestId should be 0 (cleared by _unlockRng from day 2)
+        assertEq(_readVrfRequestId(), 0, "vrfRequestId should be 0 before mid-day request");
+
+        // Fire mid-day request
+        game.requestLootboxRng();
+        uint256 reqId = mockVRF.lastRequestId();
+
+        // vrfRequestId should match
+        assertEq(_readVrfRequestId(), reqId, "vrfRequestId should match after requestLootboxRng");
+
+        // Fulfill mid-day
+        mockVRF.fulfillRandomWords(reqId, 0xCAFE);
+
+        // After mid-day branch: vrfRequestId cleared to 0
+        assertEq(_readVrfRequestId(), 0, "vrfRequestId should be cleared after mid-day fulfillment");
+        // rngRequestTime also cleared
+        assertEq(_readRngRequestTime(), 0, "rngRequestTime should be cleared after mid-day fulfillment");
+    }
+
+    /// @notice Fresh daily request: isRetry=false, lootboxRngIndex increments by 1.
+    function test_retryDetection_fresh() public {
+        // Record initial lootboxRngIndex
+        uint48 indexBefore = _lootboxRngIndex();
+
+        // Trigger fresh daily VRF request
+        game.advanceGame();
+
+        // lootboxRngIndex should have incremented (fresh request)
+        uint48 indexAfter = _lootboxRngIndex();
+        assertEq(indexAfter, indexBefore + 1, "Fresh request should increment lootboxRngIndex by 1");
+    }
+
+    /// @notice Timeout retry: lootboxRngIndex does NOT increment again.
+    function test_retryDetection_timeout() public {
+        // Day 1: complete normally
+        _completeDay(0xDEAD0001);
+
+        // Day 2: warp to next day, trigger VRF request
+        vm.warp(block.timestamp + 1 days);
+        game.advanceGame();
+        assertTrue(game.rngLocked(), "Day 2 VRF request pending");
+
+        // Record lootboxRngIndex after initial request
+        uint48 indexAfterRequest = _lootboxRngIndex();
+
+        // Do NOT fulfill -- wait 13 hours for timeout
+        vm.warp(block.timestamp + 13 hours);
+
+        // Retry: advanceGame triggers timeout path -> _requestRng -> _finalizeRngRequest(isRetry=true)
+        game.advanceGame();
+
+        // lootboxRngIndex should NOT have changed (retry, not fresh)
+        uint48 indexAfterRetry = _lootboxRngIndex();
+        assertEq(indexAfterRetry, indexAfterRequest, "Retry should NOT increment lootboxRngIndex");
+    }
+
+    /// @notice Fuzz retry scenario: request -> timeout -> retry -> fulfill.
+    ///         lootboxRngIndex must remain unchanged between first request and post-retry.
+    function test_retryDetection_fuzz(uint256 word1, uint256 word2) public {
+        vm.assume(word1 != 0 && word2 != 0);
+
+        // Day 1: complete normally
+        _completeDay(word1);
+
+        // Day 2: request
+        vm.warp(block.timestamp + 1 days);
+        game.advanceGame();
+
+        // Check if a new VRF request was actually fired by comparing mock's request counter.
+        // If the game processed day 2 inline (using a stale rngWordCurrent), no new
+        // VRF request was made. rngLocked() may still be true from ticket batch processing.
+        uint256 currentReqId = mockVRF.lastRequestId();
+        if (currentReqId == _lastFulfilledReqId) {
+            // No new VRF request was made -- nothing to timeout-retry.
+            // Process remaining ticket batches and return.
+            for (uint256 i = 0; i < 50; i++) {
+                if (!game.rngLocked()) break;
+                game.advanceGame();
+            }
+            return;
+        }
+
+        uint48 indexAfterRequest = _lootboxRngIndex();
+
+        // Timeout + retry
+        vm.warp(block.timestamp + 13 hours);
+        game.advanceGame();
+        uint48 indexAfterRetry = _lootboxRngIndex();
+        assertEq(indexAfterRetry, indexAfterRequest, "Fuzz: retry should not change index");
+
+        // Fulfill the retried request and complete the day
+        uint256 newReqId = mockVRF.lastRequestId();
+        mockVRF.fulfillRandomWords(newReqId, word2);
+        _lastFulfilledReqId = newReqId;
+        for (uint256 i = 0; i < 50; i++) {
+            if (!game.rngLocked()) break;
+            game.advanceGame();
+        }
+
+        // Index should still be the same (no double increment)
+        assertEq(_lootboxRngIndex(), indexAfterRequest, "Fuzz: index unchanged after retry+fulfill");
+    }
+
+    // ──────────────────────────────────────────────────────────────────────
+    // VRFC-03: rngLockedFlag Mutual Exclusion
+    // ──────────────────────────────────────────────────────────────────────
+
+    /// @notice During daily RNG (rngLockedFlag==true), requestLootboxRng must revert.
+    function test_rngLocked_blocksMidDayRequest() public {
+        // Complete day 1 so daily word exists
+        _completeDay(0xDEAD0001);
+
+        // Warp to day 2
+        vm.warp(block.timestamp + 1 days);
+
+        // Trigger daily VRF request -> rngLockedFlag = true
+        game.advanceGame();
+        assertTrue(game.rngLocked(), "Daily RNG should lock");
+
+        // Mid-day request must revert with RngLocked
+        vm.expectRevert();
+        game.requestLootboxRng();
+    }
+
+    /// @notice A stalled mid-day ticket request no longer gates the next-day advance: it is
+    ///         abandoned and folded into the daily word. A purchase that creates pending lootbox
+    ///         ETH also leaves tickets in the write slot, so requestLootboxRng swaps a non-empty
+    ///         buffer (LR_MID_DAY=1, ticketsFullyProcessed=false, daily lock clear). When that
+    ///         mid-day VRF stalls past MIDDAY_RNG_STALL_TIMEOUT, the new-day drain gate abandons
+    ///         it and promotes it to this day's daily request: the fresh daily word seals the day,
+    ///         finalizes the reserved bucket, drains the swapped batch, and releases the
+    ///         LR_MID_DAY latch — no retryLootboxRng, no permanent gate.
+    function test_midDayTicketRequest_takenOverByDailyAfterStall() public {
+        _setupForMidDayRng();
+
+        game.requestLootboxRng();
+        assertFalse(game.rngLocked(), "mid-day request must not set the daily lock");
+        uint256 stalledReqId = mockVRF.lastRequestId();
+
+        // Word does NOT arrive; cross the day boundary, well past MIDDAY_RNG_STALL_TIMEOUT (4h).
+        vm.warp(block.timestamp + 1 days + 13 hours);
+
+        // The new-day advance no longer reverts: it abandons the stalled mid-day request and
+        // promotes it to this day's daily request (drain-gate takeover) in one call.
+        game.advanceGame();
+        uint256 dailyReqId = mockVRF.lastRequestId();
+        assertTrue(dailyReqId != stalledReqId, "takeover issued a fresh daily VRF request");
+        assertTrue(game.rngLocked(), "takeover promoted the request to the daily lock");
+
+        // The abandoned mid-day request is rejected on late arrival (requestId mismatch).
+        mockVRF.fulfillRandomWords(stalledReqId, 0x1111);
+
+        // The fresh daily word drains the swapped batch and releases the latch.
+        mockVRF.fulfillRandomWords(dailyReqId, 0xBEEF);
+        uint256 lastFulfilled = dailyReqId;
+        for (uint256 i = 0; i < 50; i++) {
+            game.advanceGame();
+            uint256 rid = mockVRF.lastRequestId();
+            if (rid != lastFulfilled && rid > 0) {
+                mockVRF.fulfillRandomWords(rid, 0xD00D);
+                lastFulfilled = rid;
+            }
+            if (!game.rngLocked() && _lrMidDay() == 0) break;
+        }
+        assertEq(_lrMidDay(), 0, "latch released after the daily takeover drains");
+    }
+
+    /// @notice After mid-day VRF fulfills, vrfRequestId and rngRequestTime are cleared,
+    ///         allowing daily flow to proceed cleanly.
+    function test_midDayFulfillment_clearsState() public {
+        _setupForMidDayRng();
+
+        // Fire mid-day request
+        game.requestLootboxRng();
+        uint256 reqId = mockVRF.lastRequestId();
+
+        // Verify state is set
+        assertTrue(_readVrfRequestId() != 0, "vrfRequestId should be set");
+        assertTrue(_readRngRequestTime() != 0, "rngRequestTime should be set");
+
+        // Fulfill mid-day
+        mockVRF.fulfillRandomWords(reqId, 0xCAFE);
+
+        // Both should be cleared
+        assertEq(_readVrfRequestId(), 0, "vrfRequestId cleared after mid-day fulfillment");
+        assertEq(_readRngRequestTime(), 0, "rngRequestTime cleared after mid-day fulfillment");
+    }
+
+    /// @notice A mid-day ticket batch whose drain completes on the NEW-day path must still
+    ///         release the LR_MID_DAY latch. The same-day release runs only while day == dIdx,
+    ///         so a batch whose drain crosses the day boundary completes on the daily-drain gate
+    ///         instead; that gate must release the latch too, or the mid-day fast path
+    ///         (requestLootboxRng) stays permanently blocked for the rest of the game.
+    function test_midDayLatch_clearsOnCrossDayDrain() public {
+        _setupForMidDayRng();
+
+        // Mid-day request: swaps the non-empty ticket buffer -> LR_MID_DAY = 1, advances LR_INDEX.
+        game.requestLootboxRng();
+        uint256 reqId = mockVRF.lastRequestId();
+        assertEq(_lrMidDay(), 1, "LR_MID_DAY set by the mid-day ticket request");
+
+        // The mid-day word ARRIVES (no stall) — the failure mode is purely the cross-day drain.
+        mockVRF.fulfillRandomWords(reqId, 0xCAFE);
+
+        // No same-day advanceGame: cross the day boundary so the read-slot drain lands on the
+        // new-day daily-drain gate rather than the same-day mid-day block.
+        vm.warp(block.timestamp + 1 days);
+
+        // Drain the read slot + process the new day (fulfilling the daily VRF when requested).
+        uint256 lastFulfilled = reqId;
+        for (uint256 i = 0; i < 50; i++) {
+            game.advanceGame();
+            uint256 rid = mockVRF.lastRequestId();
+            if (rid != lastFulfilled && rid > 0) {
+                mockVRF.fulfillRandomWords(rid, 0xDEAD0003);
+                lastFulfilled = rid;
+            }
+            if (!game.rngLocked() && _lrMidDay() == 0) break;
+        }
+
+        // The latch is released once the batch fully drains — the mid-day fast path is not bricked.
+        assertEq(_lrMidDay(), 0, "LR_MID_DAY released after the batch drains on the new-day path");
+    }
+
+    /// @notice requestLootboxRng within 15 minutes of day boundary must revert.
+    function test_preResetWindow_blocksMidDay() public {
+        _setupForMidDayRng();
+
+        // Current day is day 2 (after completing days 1 and 2).
+        // Day 3 boundary = (current day index + 1) * 86400.
+        // We need to warp to 15 minutes before the day 3 boundary.
+        uint48 currentDay = game.currentDayView();
+        uint256 nextDayBoundary = uint256(currentDay + 1) * 86400;
+        uint256 preResetTime = nextDayBoundary - 15 minutes;
+
+        // Warp to 15 minutes before next day boundary
+        vm.warp(preResetTime);
+
+        // requestLootboxRng should revert (15-minute pre-reset guard)
+        vm.expectRevert();
+        game.requestLootboxRng();
+    }
+
+    /// @notice After updateVrfCoordinatorAndSub with a daily request in flight, rngLockedFlag
+    ///         is preserved and the request is re-issued on the new coordinator; the day
+    ///         completes once the re-issued request is fulfilled.
+    function test_coordinatorSwap_clearsRngLocked() public {
+        // Complete day 1
+        _completeDay(0xDEAD0001);
+
+        // Warp to day 2, trigger daily VRF request
+        vm.warp(block.timestamp + 1 days);
+        game.advanceGame();
+        assertTrue(game.rngLocked(), "Daily RNG should lock");
+        assertTrue(_readVrfRequestId() != 0, "vrfRequestId should be set");
+        assertTrue(_readRngRequestTime() != 0, "rngRequestTime should be set");
+
+        // Coordinator swap (daily in flight, rngWordCurrent==0 -> preserve+re-issue)
+        MockVRFCoordinator newVRF = _doCoordinatorSwap();
+
+        // RNG lock preserved; request re-issued on the new coordinator
+        assertTrue(game.rngLocked(), "rngLocked stays true after swap (daily preserved)");
+        assertTrue(_readVrfRequestId() != 0, "vrfRequestId re-issued (fresh) after swap");
+        assertTrue(_readRngRequestTime() != 0, "rngRequestTime refreshed by re-issue");
+        assertEq(_readRngWordCurrent(), 0, "rngWordCurrent still 0 (re-issued word not yet delivered)");
+        assertTrue(newVRF.lastRequestId() != 0, "re-issued request exists on new coordinator");
+
+        // Fulfilling the re-issued request on the new coordinator completes the day
+        newVRF.fulfillRandomWords(newVRF.lastRequestId(), 0xCAFE0002);
+        for (uint256 i = 0; i < 50; i++) {
+            if (!game.rngLocked()) break;
+            game.advanceGame();
+        }
+        assertFalse(game.rngLocked(), "Day completes after re-issued request fulfilled");
+    }
+
+    // ──────────────────────────────────────────────────────────────────────
+    // VRFC-04: 12h Timeout Retry
+    // ──────────────────────────────────────────────────────────────────────
+
+    /// @notice After exactly 12 hours, advanceGame triggers retry (not RngNotReady revert).
+    function test_timeoutRetry_12h() public {
+        // Day 1: complete normally
+        _completeDay(0xDEAD0001);
+
+        // Day 2: trigger VRF request
+        vm.warp(block.timestamp + 1 days);
+        game.advanceGame();
+        assertTrue(game.rngLocked(), "Day 2 VRF request pending");
+        uint48 requestTime = _readRngRequestTime();
+        uint256 oldReqId = _readVrfRequestId();
+
+        // Warp to exactly rngRequestTime + 12 hours
+        vm.warp(uint256(requestTime) + 12 hours);
+
+        // Record lootboxRngIndex before retry
+        uint48 indexBefore = _lootboxRngIndex();
+
+        // advanceGame should trigger retry (not revert)
+        game.advanceGame();
+
+        // After retry: rngLocked still true (new request in flight)
+        assertTrue(game.rngLocked(), "Should still be locked after retry");
+
+        // vrfRequestId should have changed (new request)
+        uint256 newReqId = _readVrfRequestId();
+        assertTrue(newReqId != oldReqId, "vrfRequestId should change on retry");
+
+        // lootboxRngIndex should be unchanged (retry detection)
+        assertEq(_lootboxRngIndex(), indexBefore, "Index unchanged on retry");
+    }
+
+    /// @notice Before the retry window opens, advanceGame reverts with RngNotReady:
+    ///         everyone until 11h, non-vault-owners until 12h.
+    function test_noRetry_before12h() public {
+        // Day 1: complete normally
+        _completeDay(0xDEAD0001);
+
+        // Day 2: trigger VRF request
+        vm.warp(block.timestamp + 1 days);
+        game.advanceGame();
+        assertTrue(game.rngLocked(), "Day 2 VRF request pending");
+        uint48 requestTime = _readRngRequestTime();
+
+        // 10h59m: even the vault owner (this test contract holds the DGVE majority)
+        // is before the 11h head start
+        vm.warp(uint256(requestTime) + 11 hours - 1 minutes);
+        vm.expectRevert();
+        game.advanceGame();
+
+        // 11h59m: inside the head-start window a non-owner still reverts
+        vm.warp(uint256(requestTime) + 12 hours - 1 minutes);
+        vm.prank(makeAddr("nonOwner"));
+        vm.expectRevert();
+        game.advanceGame();
+    }
+
+    /// @notice The vault owner can fire the retry from 11h; the retry is single-use
+    ///         (further timeouts revert for everyone) and the retried request's late
+    ///         fulfillment still completes the day.
+    function test_headStartAndSingleRetry() public {
+        // Day 1: complete normally
+        _completeDay(0xDEAD0001);
+
+        // Day 2: trigger VRF request
+        vm.warp(block.timestamp + 1 days);
+        game.advanceGame();
+        uint48 requestTime = _readRngRequestTime();
+        uint256 oldReqId = _readVrfRequestId();
+
+        // 11h: vault owner retries during the head start
+        vm.warp(uint256(requestTime) + 11 hours);
+        game.advanceGame();
+        uint256 retryReqId = _readVrfRequestId();
+        assertTrue(retryReqId != oldReqId, "Retry re-issues the request");
+        assertTrue(game.rngLocked(), "Still locked after retry");
+        assertEq(_readRngRequestTime() & 1, 1, "Retry-spent LSB set");
+
+        // Retry spent: 12h+ later even the vault owner gets RngNotReady
+        vm.warp(uint256(_readRngRequestTime()) + 12 hours + 1);
+        vm.expectRevert();
+        game.advanceGame();
+
+        // The retried request's late fulfillment still lands and completes the day
+        mockVRF.fulfillRandomWords(retryReqId, 0xC0FFEE01);
+        _lastFulfilledReqId = retryReqId;
+        for (uint256 i = 0; i < 50; i++) {
+            if (!game.rngLocked()) break;
+            game.advanceGame();
+        }
+        assertFalse(game.rngLocked(), "Day completes on the retried request's word");
+
+        // Next day starts with a fresh retry allowance
+        vm.warp(vm.getBlockTimestamp() + 1 days);
+        game.advanceGame();
+        assertEq(_readRngRequestTime() & 1, 0, "Fresh daily request re-arms the retry");
+    }
+
+    /// @notice After the single retry is spent, a coordinator swap re-issues the
+    ///         request and re-arms the retry allowance.
+    function test_coordinatorSwapReArmsRetry() public {
+        // Day 1: complete normally
+        _completeDay(0xDEAD0001);
+
+        // Day 2: request, then spend the single retry at 12h
+        vm.warp(block.timestamp + 1 days);
+        game.advanceGame();
+        uint48 requestTime = _readRngRequestTime();
+        vm.warp(uint256(requestTime) + 12 hours);
+        game.advanceGame();
+        assertEq(_readRngRequestTime() & 1, 1, "Retry spent");
+
+        // Governance coordinator swap re-issues on the new coordinator
+        MockVRFCoordinator newVRF = _doCoordinatorSwap();
+        assertEq(_readRngRequestTime() & 1, 0, "Swap re-arms the retry");
+
+        // The re-armed retry fires again after another 12h stall
+        vm.warp(uint256(_readRngRequestTime()) + 12 hours);
+        uint256 swapReqId = _readVrfRequestId();
+        game.advanceGame();
+        assertTrue(_readVrfRequestId() != swapReqId, "Re-armed retry re-issues");
+        assertEq(_readRngRequestTime() & 1, 1, "Second-generation retry spent");
+
+        // Fulfill on the new coordinator and complete the day
+        newVRF.fulfillRandomWords(_readVrfRequestId(), 0xC0FFEE02);
+        for (uint256 i = 0; i < 50; i++) {
+            if (!game.rngLocked()) break;
+            game.advanceGame();
+        }
+        assertFalse(game.rngLocked(), "Day completes after swap + retry");
+    }
+
+    /// @notice After retry overwrites vrfRequestId, old fulfillment is silently discarded.
+    ///         New fulfillment (with new requestId) succeeds.
+    function test_timeoutRetry_staleWordDiscarded(uint256 word1, uint256 word2) public {
+        vm.assume(word1 != 0 && word2 != 0);
+
+        // Day 1: complete normally
+        _completeDay(0xBEEF0001);
+
+        // Day 2: trigger VRF request
+        vm.warp(block.timestamp + 1 days);
+        game.advanceGame();
+        uint256 oldReqId = mockVRF.lastRequestId();
+
+        // Timeout + retry
+        vm.warp(block.timestamp + 13 hours);
+        game.advanceGame();
+        uint256 newReqId = mockVRF.lastRequestId();
+        assertTrue(newReqId != oldReqId, "New request ID after retry");
+
+        // Old fulfillment via raw call: silently discarded (requestId mismatch)
+        mockVRF.fulfillRandomWordsRaw(oldReqId, address(game), word1);
+        assertEq(_readRngWordCurrent(), 0, "Old fulfillment should be discarded (word still 0)");
+
+        // New fulfillment: succeeds
+        mockVRF.fulfillRandomWordsRaw(newReqId, address(game), word2);
+        uint256 stored = _readRngWordCurrent();
+        if (word2 == 0) {
+            assertEq(stored, 1, "Zero-guarded word stored as 1");
+        } else {
+            assertEq(stored, word2, "New fulfillment should store word");
+        }
+    }
+
+    /// @notice Fuzz: timeout retry never double-increments lootboxRngIndex.
+    function test_timeoutRetry_lootboxIndexPreserved_fuzz(uint256 word) public {
+        vm.assume(word != 0);
+
+        // Day 1: complete normally
+        _completeDay(0xFEED0001);
+
+        // Day 2: trigger VRF request
+        vm.warp(block.timestamp + 1 days);
+        game.advanceGame();
+        uint48 indexAfterRequest = _lootboxRngIndex();
+
+        // Timeout + retry
+        vm.warp(block.timestamp + 13 hours);
+        game.advanceGame();
+        assertEq(_lootboxRngIndex(), indexAfterRequest, "Index unchanged after retry");
+
+        // Fulfill new request and complete day
+        uint256 newReqId = mockVRF.lastRequestId();
+        mockVRF.fulfillRandomWords(newReqId, word);
+        for (uint256 i = 0; i < 50; i++) {
+            if (!game.rngLocked()) break;
+            game.advanceGame();
+        }
+
+        // Index should remain the same (retry path, no double increment)
+        assertEq(_lootboxRngIndex(), indexAfterRequest, "Index unchanged after retry+fulfill");
+    }
+
+    /// @notice VRF word from previous day's request: rngGate detects requestDay < day,
+    ///         redirects the stale word to lootbox via _finalizeLootboxRng, then processes
+    ///         the day using a derived or sentinel word. The game may process the stale-day
+    ///         and current-day inline without firing a fresh VRF request.
+    function test_crossDayStaleWord() public {
+        // Complete the first post-deploy day normally
+        _completeDay(0xDEAD0001);
+
+        // Trigger VRF request for the next day using absolute timestamp
+        uint256 nextDayStart = 3 * 86400;
+        vm.warp(nextDayStart);
+        game.advanceGame();
+        assertTrue(game.rngLocked(), "Next day VRF pending");
+        uint256 reqId = mockVRF.lastRequestId();
+
+        // Fulfill the VRF (word stored in rngWordCurrent)
+        mockVRF.fulfillRandomWords(reqId, 0xC0FFEE);
+        _lastFulfilledReqId = reqId;
+        assertEq(_readRngWordCurrent(), 0xC0FFEE, "Word should be stored");
+
+        // Warp PAST day boundary to the following day using absolute timestamp
+        uint256 followingDayStart = 4 * 86400;
+        vm.warp(followingDayStart);
+
+        // advanceGame on the following day: rngGate sees rngWordCurrent != 0 but requestDay < current day.
+        // The game redirects the stale word to lootbox and processes both days inline.
+        // A new VRF request may or may not be fired depending on the contract's rngGate logic.
+        game.advanceGame();
+
+        // Process until unlocked (may take multiple advanceGame calls for batched ticket work)
+        for (uint256 i = 0; i < 50; i++) {
+            if (!game.rngLocked()) break;
+            // If a new VRF was requested, fulfill it
+            uint256 latestReqId = mockVRF.lastRequestId();
+            if (latestReqId > _lastFulfilledReqId) {
+                mockVRF.fulfillRandomWords(latestReqId, 0xDA300003);
+                _lastFulfilledReqId = latestReqId;
+            }
+            game.advanceGame();
+        }
+        assertFalse(game.rngLocked(), "Should be unlocked after processing");
+
+        // The day with the in-flight VRF should have an RNG word recorded (from the stale redirect)
+        assertTrue(game.rngWordForDay(3) != 0, "Day 3 should have RNG word from stale redirect");
+    }
+}

@@ -1,6 +1,47 @@
-# Public tree is contracts/ + README + LICENSE only; everything else stays local.
+# Public tree = contracts + the assurance layer (build config, tests, tooling,
+# CI, scope/security docs). Everything else — internal planning, audit working
+# notes, sim runs, build output — stays local.
+#
+# Default is PRIVATE: `/*` ignores everything at root; only paths explicitly
+# un-ignored below are ever published. Anything new/unknown stays private until
+# it is deliberately added here.
 /*
+
+# ── Source ──────────────────────────────────────────────────────────────
 !/contracts
+
+# ── Build & reproducibility (pinned toolchain) ──────────────────────────
+!/foundry.toml
+!/foundry.lock
+!/remappings.txt
+!/.gitmodules
+!/lib
+!/hardhat.config.js
+!/package.json
+!/package-lock.json
+!/.env.example
+!/Makefile
+
+# ── Tests (full suite: unit, integration, fuzz, invariant, gas, ...) ─────
+!/test
+
+# ── Tooling: deploy, address prediction, drift gates, storage-layout oracle
+!/scripts
+/scripts/v65_flip_rename.py
+
+# ── CI ──────────────────────────────────────────────────────────────────
+!/.github
+
+# ── Scope, security policy, findings dispositions, reference docs ───────
+!/scope.txt
+!/out_of_scope.txt
+!/KNOWN-ISSUES.md
+!/SECURITY.md
+!/ECONOMIC_DISCLOSURES.md
+!/docs
+!/deployments
+
+# ── Meta ────────────────────────────────────────────────────────────────
 !/README.md
 !/LICENSE
 !/.gitignore
