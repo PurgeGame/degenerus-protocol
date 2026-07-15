@@ -85,7 +85,7 @@ interface IDegenerusGameJackpotModule {
     /// @param bonusTargetLevel Target level for the primary bonus coin distribution.
     function emitDailyWinningTraits(uint24 lvl, uint256 randWord, uint24 bonusTargetLevel) external;
 
-    /// @notice Terminal jackpot for x00 levels: Day-5-style bucket distribution.
+    /// @notice Game-over terminal jackpot: Day-5-style bucket distribution to the final ticket cohort.
     /// @param poolWei Total ETH to distribute.
     /// @param targetLvl Level to sample winners from.
     /// @param rngWord VRF entropy seed.
@@ -212,7 +212,7 @@ interface IDegenerusGameWhaleModule {
 interface IDegenerusGameMintModule {
     /// @notice Processes a ticket and lootbox purchase
     /// @param buyer Address of the buyer
-    /// @param entryQuantityScaled Number of tickets to purchase
+    /// @param entryQuantityScaled Ticket quantity in scaled entry units (400 = one whole ticket; 2 decimals, x100)
     /// @param lootBoxAmount Amount of lootboxes to purchase
     /// @param affiliateCode Affiliate code for referral tracking
     /// @param payKind Payment method used for the purchase
@@ -240,7 +240,7 @@ interface IDegenerusGameMintModule {
 
     /// @notice Processes a FLIP purchase of tickets
     /// @param buyer Address of the buyer
-    /// @param entryQuantityScaled Number of tickets to purchase
+    /// @param entryQuantityScaled Ticket quantity in scaled entry units (400 = one whole ticket; 2 decimals, x100)
     function redeemFlip(
         address buyer,
         uint256 entryQuantityScaled
@@ -274,7 +274,7 @@ interface IDegenerusGameMintModule {
             uint256 flipTokens
         );
 
-    /// @notice Buys a credit-gated coin-presale box (ETH + claimable shortfall)
+    /// @notice Buys a credit-gated coin-presale box (msg.value, then claimable + afking shortfall)
     /// @param buyer Player receiving the box
     /// @param boxAmount Requested box ETH (>= 0.01 ETH, pre-clamp)
     function buyPresaleBox(address buyer, uint256 boxAmount) external;
@@ -285,7 +285,7 @@ interface IDegenerusGameMintModule {
     /// @param lootBoxAmount ETH lootbox spend
     /// @param affiliateCode Affiliate code for the mint leg
     /// @param payKind Payment method for the mint leg
-    /// @param boxAmount Requested presale-box ETH (claimable-funded)
+    /// @param boxAmount Requested presale-box ETH (funded by the mint leg's leftover fresh ETH, then claimable, then afking)
     function buyLootboxAndPresaleBox(
         address buyer,
         uint256 entryQuantityScaled,
@@ -568,7 +568,7 @@ interface IGameAfkingModule {
     ///         AdvanceModule via delegatecall; it runs pre-RNG, so the day's word is uncommitted
     ///         at stamp. A no-orphan guard skips any sub with a pending unopened box.
     /// @param processDay The boundary-pinned process day (seeds the open).
-    /// @param weightBudget Per-chunk gas-weight budget (cheap buy 1, sub-ending finalize heavier).
+    /// @param weightBudget Per-chunk gas-weight budget: a same-day skip costs 1, a lootbox buy SUB_STAGE_LOOTBOX_WEIGHT, a ticket buy SUB_STAGE_TICKET_WEIGHT, a sub-ending finalize SUB_STAGE_EVICT_WEIGHT; the chunk ends when accumulated weight reaches the budget.
     /// @return processed Number of set entries advanced/handled this chunk.
     function processSubscriberStage(
         uint24 processDay,
