@@ -2220,6 +2220,12 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
             claimablePool +
             _getFuturePrizePool() +
             yieldAccumulator;
+        // Freeze-window revenue lands in balance but routes to prizePoolPendingPacked
+        // (outside the live pools above) until _unfreezePool folds it back. Count it as
+        // a live liability so the view matches distributeYieldSurplus and never reports
+        // that pending buffer as distributable surplus. Reads 0 when not frozen.
+        (uint128 pNext, uint128 pFuture) = _getPendingPools();
+        obligations += uint256(pNext) + uint256(pFuture);
         if (totalBalance <= obligations) return 0;
         return totalBalance - obligations;
     }

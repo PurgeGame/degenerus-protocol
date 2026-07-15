@@ -5,7 +5,10 @@
  * The core solvency invariant is:
  *   game.balance + steth.balanceOf(game) >= currentPrizePool + nextPrizePool + futurePrizePool + claimablePool
  *
- * This mirrors the yieldPoolView() internal calculation in DegenerusGame.
+ * This is a deliberately loose lower bound: it omits yieldAccumulator and the
+ * frozen pending buffer, so it under-states obligations and only asserts the >=
+ * direction. yieldPoolView() in DegenerusGame counts the full obligation set
+ * (adds yieldAccumulator + pending) to report distributable surplus.
  *
  * IMPORTANT: Only public view getters are used — no raw storage reads.
  * This ensures the invariant reflects the same values the contract operates on.
