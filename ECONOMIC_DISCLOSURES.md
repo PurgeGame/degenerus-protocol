@@ -96,12 +96,16 @@ with `claimablePool` bumped by the full amount so solvency holds. The creator's 
 **bounded at ≈40 ETH** (80% of the 50-ETH cap; the integer-division remainder — at most a few
 thousand wei — rounds to the vault).
 
+On top of the ETH proceeds, presale boxes distribute DGNRS to buyers from the 10% presale-box pool on a
+tiered curve (`_presaleBoxDgnrsReward`, `modules/DegenerusGameLootboxModule.sol:793,827`). The vault's
+default-referrer position (§2a) captures the affiliate share of DGNRS on unreferred presale spend — the
+builder estimates this at ~20% of the distributed DGNRS, roughly **2 ETH-equivalent** — so the full
+presale-side creator take is ≈40 ETH plus ~2 ETH of DGNRS.
+
 Everything else is rake-free: all lootbox and post-genesis ticket ETH routes **100% to the prize
-pools** (`modules/DegenerusGameMintModule.sol:1519`) — none to the creator. Note that
-`LOOTBOX_PRESALE_ETH_CAP` (200 ETH) is *not* a second sale: it is the threshold of cumulative
-mint-only lootbox ETH that auto-ends the presale window (`storage/DegenerusGameStorage.sol:1131`).
-Presale-box eligibility is **earned by playing** during that window (`presaleBoxCredit` accrues as 25%
-of spend), not bought.
+pools** (`modules/DegenerusGameMintModule.sol:1500`) — none to the creator. Presale-box eligibility
+is **earned by playing** during the presale window (`presaleBoxCredit` accrues as 25% of spend),
+not bought.
 
 ## 3. Creator DGNRS vesting
 
