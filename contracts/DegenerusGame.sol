@@ -33,21 +33,13 @@ pragma solidity 0.8.34;
  *      - 12h VRF timeout, 14-day gameover-RNG fallback, 120-day inactivity guard
  */
 
-import {IDegenerusCoin} from "./interfaces/IDegenerusCoin.sol";
-import {ICoinflip} from "./interfaces/ICoinflip.sol";
-import {IDegenerusAffiliate} from "./interfaces/IDegenerusAffiliate.sol";
 import {IsDGNRS} from "./interfaces/IsDGNRS.sol";
 import {IStETH} from "./interfaces/IStETH.sol";
 import {
-    IDegenerusGameAdvanceModule,
-    IDegenerusGameDecimatorModule,
-    IDegenerusGameJackpotModule,
     IDegenerusGameMintModule,
     IDegenerusGameWhaleModule,
     IDegenerusGameLootboxModule,
     IDegenerusGameBoonModule,
-    IDegenerusGameDegeneretteModule,
-    IDegenerusGameBingoModule,
     IGameAfkingModule,
     IDegenerusGameFoilPackModule
 } from "./interfaces/IDegenerusGameModules.sol";

@@ -5,7 +5,6 @@ import {
     IDegenerusGameLootboxModule
 } from "../interfaces/IDegenerusGameModules.sol";
 import {IDegenerusGame} from "../interfaces/IDegenerusGame.sol";
-import {IDegenerusQuests} from "../interfaces/IDegenerusQuests.sol";
 import {DegenerusGamePayoutUtils} from "./DegenerusGamePayoutUtils.sol";
 import {ContractAddresses} from "../ContractAddresses.sol";
 import {PriceLookupLib} from "../libraries/PriceLookupLib.sol";
@@ -424,23 +423,6 @@ contract DegenerusGameDecimatorModule is DegenerusGamePayoutUtils {
         );
     }
 
-    /// @notice Check if player can claim Decimator jackpot for a level.
-    /// @dev View function for UI to show claimable amounts.
-    /// @param player Address to check.
-    /// @param lvl Level to check.
-    /// @return amountWei Claimable amount (0 if not winner or already claimed).
-    /// @return winner True if player is a winner for this level.
-    function decClaimable(
-        address player,
-        uint24 lvl
-    ) external view returns (uint256 amountWei, bool winner) {
-        DecClaimRound storage round = decClaimRounds[lvl];
-        if (round.poolWei == 0) {
-            return (0, false);
-        }
-        return _decClaimable(round, player, lvl);
-    }
-
     // -------------------------------------------------------------------------
     // Decimator Helpers
     // -------------------------------------------------------------------------
@@ -559,33 +541,6 @@ contract DegenerusGameDecimatorModule is DegenerusGamePayoutUtils {
 
         // Pro-rata share: (pool × playerBurn) / totalBurn
         amountWei = (poolWei * uint256(decBetBurn)) / totalBurn;
-    }
-
-    /// @dev Internal view helper for decClaimable.
-    /// @param round DecClaimRound storage reference.
-    /// @param player Address to check.
-    /// @param lvl Level number.
-    /// @return amountWei Claimable amount.
-    /// @return winner True if player is a winner.
-    function _decClaimable(
-        DecClaimRound storage round,
-        address player,
-        uint24 lvl
-    ) internal view returns (uint256 amountWei, bool winner) {
-        uint256 totalBurn = uint256(round.totalBurn);
-        if (totalBurn == 0) return (0, false);
-
-        DecBet storage e = decBurn[lvl][player];
-        if (e.claimed != 0) return (0, false);
-
-        uint64 packedOffsets = decBucketOffsetPacked[lvl];
-        amountWei = _decClaimableFromBet(
-            round.poolWei,
-            totalBurn,
-            e,
-            packedOffsets
-        );
-        winner = amountWei != 0;
     }
 
     /// @dev Update aggregated burn totals for a subbucket. Callers guarantee
@@ -1028,39 +983,6 @@ contract DegenerusGameDecimatorModule is DegenerusGamePayoutUtils {
 
         _creditClaimable(msg.sender, amountWei);
         emit TerminalDecimatorClaimed(msg.sender, lvl, amountWei);
-    }
-
-    /// @notice Check if player can claim terminal decimator jackpot.
-    /// @param player Address to check.
-    /// @return amountWei Claimable amount.
-    /// @return winner True if player won.
-    function terminalDecClaimable(
-        address player
-    ) external view returns (uint256 amountWei, bool winner) {
-        uint24 lvl = lastTerminalDecClaimRound.lvl;
-        if (lvl == 0) return (0, false);
-
-        TerminalDecBet storage e = terminalDecBets[player];
-        if (
-            e.burnLevel != uint48(lvl) || e.weightedBurn == 0 || e.bucket == 0
-        ) {
-            return (0, false);
-        }
-
-        // Terminal offset lives at lvl + 1 (see runTerminalDecimatorJackpot) to avoid aliasing the
-        // regular round's decBucketOffsetPacked[lvl].
-        uint64 packedOffsets = decBucketOffsetPacked[lvl + 1];
-        uint8 winningSub = _unpackDecWinningSubbucket(packedOffsets, e.bucket);
-        if (e.subBucket != winningSub) return (0, false);
-
-        uint256 totalBurn = uint256(lastTerminalDecClaimRound.totalBurn);
-        if (totalBurn == 0) return (0, false);
-
-        amountWei =
-            (uint256(lastTerminalDecClaimRound.poolWei) *
-                uint256(e.weightedBurn)) /
-            totalBurn;
-        winner = amountWei != 0;
     }
 
     /// @dev Validate and consume terminal dec claim.

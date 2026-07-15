@@ -1,9 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.34;
 
-import {IDegenerusCoin} from "../interfaces/IDegenerusCoin.sol";
-import {ICoinflip} from "../interfaces/ICoinflip.sol";
-import {IDegenerusGame} from "../interfaces/IDegenerusGame.sol";
 import {IsDGNRS} from "../interfaces/IsDGNRS.sol";
 import {IStETH} from "../interfaces/IStETH.sol";
 

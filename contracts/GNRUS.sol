@@ -57,9 +57,6 @@ contract GNRUS {
     /// @notice Thrown when burn amount is 0 or below minimum
     error InsufficientBurn();
 
-    /// @notice Thrown when game is not in gameover state
-    error GameNotOver();
-
     /// @notice Thrown when burnAtGameOver has already been called
     error AlreadyFinalized();
 

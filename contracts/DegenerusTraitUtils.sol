@@ -186,7 +186,7 @@ library DegenerusTraitUtils {
       |  each 64-bit lane. Output format mirrors packedTraitsFromSeed:       |
       |  [QQ][CCC][SSS] per byte, 4 bytes packed into uint32. This producer  |
       |  feeds the Degenerette quickPlay payout schedule (5 per-N tables);   |
-      |  packedTraitsFromSeed (heavy-tail color) feeds Mint + Jackpot.       |
+      |  packedTraitsFromSeed (heavy-tail color) is the reference packer.    |
       +======================================================================+*/
 
     /// @notice Packs 4 quadrant traits using the Degenerette near-uniform color

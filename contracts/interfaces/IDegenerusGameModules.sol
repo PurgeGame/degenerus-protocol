@@ -141,13 +141,6 @@ interface IDegenerusGameDecimatorModule {
     /// @dev Non-claimable entries are skipped, not reverted.
     function claimDecimatorJackpotMany(address[] calldata players, uint24 lvl) external;
 
-    /// @notice Check if player can claim Decimator jackpot for a level.
-    /// @param player Address to check.
-    /// @param lvl Level to check (must be the last decimator).
-    /// @return amountWei Claimable amount (0 if not winner, already claimed, or expired).
-    /// @return winner True if player is a winner for this level.
-    function decClaimable(address player, uint24 lvl) external view returns (uint256 amountWei, bool winner);
-
     // Terminal Decimator (Death Bet)
 
     /// @notice Record a terminal decimator burn.
@@ -169,9 +162,6 @@ interface IDegenerusGameDecimatorModule {
 
     /// @notice Claim terminal decimator jackpot for caller.
     function claimTerminalDecimatorJackpot() external;
-
-    /// @notice Check terminal decimator claimable amount.
-    function terminalDecClaimable(address player) external view returns (uint256 amountWei, bool winner);
 }
 
 /// @title IDegenerusGameWhaleModule

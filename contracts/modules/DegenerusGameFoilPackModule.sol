@@ -1,8 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.34;
 
-import {IDegenerusCoin} from "../interfaces/IDegenerusCoin.sol";
-import {IDegenerusQuests} from "../interfaces/IDegenerusQuests.sol";
 import {MintPaymentKind} from "../interfaces/IDegenerusGame.sol";
 import {
     IDegenerusGameDegeneretteModule
@@ -71,12 +69,6 @@ contract DegenerusGameFoilPackModule is
     uint256 private constant FOIL_FACES_T6 = 35;
     uint256 private constant FOIL_FACES_T7 = 400;
     uint256 private constant FOIL_FACES_T8 = 10_000;
-
-    /// @dev Mirrors the jackpot module's per-level daily-jackpot cap (five logical
-    ///      daily jackpots). Used to detect the final jackpot day so a pack bought in
-    ///      that slice keys on the next cycle (where its resolveDay draw seals), not the
-    ///      ending one — the same reroute the mint module applies to a stranded ticket.
-    uint8 private constant JACKPOT_LEVEL_CAP = 5;
 
     /// @dev Per-settled-claim keeper bounty target (ETH-equivalent wei) for the
     ///      permissionless batch claimer, converted to FLIP at the reference price.

@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.34;
 
-import {IDegenerusQuests} from "../interfaces/IDegenerusQuests.sol";
 import {ContractAddresses} from "../ContractAddresses.sol";
 import {DegenerusGameStorage} from "../storage/DegenerusGameStorage.sol";
 import {BitPackingLib} from "../libraries/BitPackingLib.sol";

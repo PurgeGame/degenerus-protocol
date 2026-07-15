@@ -1,11 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.34;
 
-import {IDegenerusAffiliate} from "../interfaces/IDegenerusAffiliate.sol";
-import {IDegenerusCoin} from "../interfaces/IDegenerusCoin.sol";
-import {ICoinflip} from "../interfaces/ICoinflip.sol";
 import {MintPaymentKind} from "../interfaces/IDegenerusGame.sol";
-import {IDegenerusQuests} from "../interfaces/IDegenerusQuests.sol";
 import {
     IDegenerusGameBoonModule,
     IDegenerusGameFoilPackModule
@@ -15,7 +11,6 @@ import {DegenerusGameStorage} from "../storage/DegenerusGameStorage.sol";
 import {DegenerusGameMintStreakUtils, IDegenerusVaultOwner} from "./DegenerusGameMintStreakUtils.sol";
 import {DegenerusGamePayoutUtils} from "./DegenerusGamePayoutUtils.sol";
 import {DegenerusTraitUtils} from "../DegenerusTraitUtils.sol";
-import {BitPackingLib} from "../libraries/BitPackingLib.sol";
 import {PriceLookupLib} from "../libraries/PriceLookupLib.sol";
 import {EntropyLib} from "../libraries/EntropyLib.sol";
 import {ActivityCurveLib} from "../libraries/ActivityCurveLib.sol";
