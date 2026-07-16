@@ -21,6 +21,13 @@
 # on the same line or within the two preceding lines (e.g. a compile-time
 # bounded array proven small).
 #
+# LIMITATION: the declaration scan sees direct dynamic-array variables and
+# mappings only — it does not resolve struct types, so `delete` on a struct
+# variable whose MEMBERS include a dynamic array compiles into the same
+# unbounded clear but is not flagged. No production struct currently nests a
+# dynamic member; verify against optimized IR (no clear_storage helpers)
+# before trusting this gate across a change that adds one.
+#
 # Usage: scripts/check-array-delete.sh
 # Exit code: 0 if no unjustified sites found, 1 otherwise.
 #

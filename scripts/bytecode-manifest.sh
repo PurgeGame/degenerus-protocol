@@ -18,8 +18,9 @@ CONTRACTS=(
   DegenerusVault DeityBoonViewer GNRUS Icons32Data sDGNRS
   WWXRP DegenerusGameAdvanceModule DegenerusGameBingoModule
   DegenerusGameBoonModule DegenerusGameDecimatorModule DegenerusGameDegeneretteModule
-  DegenerusGameGameOverModule DegenerusGameJackpotModule DegenerusGameLootboxModule
-  DegenerusGameMintModule DegenerusGameWhaleModule GameAfkingModule
+  DegenerusGameFoilPackModule DegenerusGameGameOverModule DegenerusGameJackpotModule
+  DegenerusGameLootboxModule DegenerusGameMintModule DegenerusGameWhaleModule
+  GameAfkingModule
 )
 
 forge build > /dev/null 2>&1

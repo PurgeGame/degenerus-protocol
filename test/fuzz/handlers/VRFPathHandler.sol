@@ -52,6 +52,12 @@ contract VRFPathHandler is Test {
         return uint48(uint256(vm.load(address(game), bytes32(uint256(33)))));
     }
 
+    /// @notice Current lootboxRngIndex read from game storage, for invariant assertions
+    ///         against ghost_expectedIndex.
+    function actualLootboxRngIndex() external view returns (uint48) {
+        return _lootboxRngIndex();
+    }
+
     /// @dev Read dailyIdx from storage slot 0 (uint24 at byte offset 3 = bits 24-47).
     function _dailyIdx() internal view returns (uint48) {
         uint256 raw = uint256(vm.load(address(game), bytes32(uint256(0))));
@@ -173,6 +179,14 @@ contract VRFPathHandler is Test {
         // TEST-01: track expected index
         if (indexAfter > indexBefore) {
             ghost_expectedIndex += (indexAfter - indexBefore);
+            // A fresh allocation opens a new pending index; the one pending before it
+            // (indexBefore - 1) must already carry a word — the unworded trailing
+            // suffix never exceeds the single in-flight index. indexBefore >= 2 skips
+            // genesis, where lootboxRngIndex still sits at its initial 1 and no index
+            // has ever been pending.
+            if (indexBefore >= 2 && _lootboxRngWord(indexBefore - 1) == 0) {
+                ghost_orphanedIndices++;
+            }
         }
 
         // TEST-02: recovery detection after coordinator swap
@@ -244,12 +258,11 @@ contract VRFPathHandler is Test {
 
         uint48 indexAfter = _lootboxRngIndex();
 
-        // TEST-01: check for orphaned indices after VRF unlock
-        // Only check the most recently unlocked index to avoid re-counting
-        if (!game.rngLocked() && indexAfter > 0 && indexAfter > indexBefore) {
-            if (_lootboxRngWord(indexAfter - 1) == 0) {
-                ghost_orphanedIndices++;
-            }
+        // TEST-01: fulfillment words the pending index (daily: staged in rngWordCurrent;
+        // mid-day: written to lootboxRngWordByIndex directly) but never allocates —
+        // only a fresh request advances lootboxRngIndex.
+        if (indexAfter != indexBefore) {
+            ghost_indexSkipViolations++;
         }
     }
 
@@ -274,6 +287,11 @@ contract VRFPathHandler is Test {
 
         if (indexAfter > indexBefore) {
             ghost_expectedIndex += (indexAfter - indexBefore);
+            // Same trailing-suffix rule as advanceGame: the previously pending index
+            // must be worded before a new one is opened.
+            if (indexBefore >= 2 && _lootboxRngWord(indexBefore - 1) == 0) {
+                ghost_orphanedIndices++;
+            }
         }
     }
 
@@ -285,6 +303,7 @@ contract VRFPathHandler is Test {
 
         ghost_dayBeforeSwap = game.currentDayView();
         bool lockedBefore = game.rngLocked();
+        uint48 indexBefore = _lootboxRngIndex();
 
         MockVRFCoordinator newVRF = new MockVRFCoordinator();
         uint256 newSubId = newVRF.createSubscription();
@@ -310,6 +329,12 @@ contract VRFPathHandler is Test {
         // idle or mid-day-only state keeps rngLocked=false.
         if (game.rngLocked() != lockedBefore) {
             ghost_stateViolations++;
+        }
+
+        // TEST-01: a swap re-issues any in-flight request as a retry; retries never
+        // advance lootboxRngIndex.
+        if (_lootboxRngIndex() != indexBefore) {
+            ghost_indexSkipViolations++;
         }
     }
 

@@ -24,12 +24,24 @@ contract VRFPathInvariants is DeployProtocol {
     // TEST-01: Lootbox RNG Index Lifecycle
     // ═══════════════════════════════════════════════════════════════════════
 
-    /// @notice lootboxRngIndex never skips a value across any arbitrary sequence
+    /// @notice lootboxRngIndex never moves during VRF fulfillment or a coordinator swap —
+    ///         only fresh requests advance it
     function invariant_indexNeverSkips() public view {
         assertEq(
             handler.ghost_indexSkipViolations(),
             0,
-            "VRFPath: lootboxRngIndex skipped a value"
+            "VRFPath: lootboxRngIndex moved outside a fresh request"
+        );
+    }
+
+    /// @notice lootboxRngIndex equals the sum of increments observed on the two request
+    ///         paths (advanceGame daily request, requestLootboxRng mid-day request) —
+    ///         no other action allocates an index
+    function invariant_indexMatchesExpected() public view {
+        assertEq(
+            handler.actualLootboxRngIndex(),
+            handler.ghost_expectedIndex(),
+            "VRFPath: lootboxRngIndex diverged from sanctioned request-path increments"
         );
     }
 
@@ -42,12 +54,13 @@ contract VRFPathInvariants is DeployProtocol {
         );
     }
 
-    /// @notice Every unlocked lootboxRngIndex has a nonzero word
+    /// @notice The unworded trailing suffix never exceeds the single in-flight index:
+    ///         every fresh allocation finds the previously pending index already worded
     function invariant_everyIndexHasWord() public view {
         assertEq(
             handler.ghost_orphanedIndices(),
             0,
-            "VRFPath: lootboxRngIndex has orphaned index with no word"
+            "VRFPath: fresh request allocated over an unworded pending index"
         );
     }
 
