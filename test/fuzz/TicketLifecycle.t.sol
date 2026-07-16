@@ -891,9 +891,13 @@ contract TicketLifecycleTest is DeployProtocol {
         assertGe(ff10After, 3,
             "FF queue at level 10 should have >= 3 entries (2 constructor + 1 whale buyer)");
 
-        // Also verify a higher FF level got whale entries
+        // Also verify a higher FF level got whale entries. One pass's standard leg is a
+        // whole ticket every 2nd level from level 11 (bonus window ends at 10), so odd
+        // levels 11-99 are covered and even levels get no whale entries.
+        uint256 ff51 = _ffQueueLength(51);
+        assertGe(ff51, 3, "FF queue at level 51 (covered stride offset) should have >= 3 entries (2 constructor + 1 whale)");
         uint256 ff50 = _ffQueueLength(50);
-        assertGe(ff50, 3, "FF queue at level 50 should have >= 3 entries (2 constructor + 1 whale)");
+        assertEq(ff50, 2, "FF queue at level 50 (uncovered stride offset) should hold only the 2 constructor entries");
 
         // Verify that buyer1 has ticketsOwed at a near-future level (proves write-key routing)
         bool hasNearTicketsOwed = false;
@@ -921,6 +925,60 @@ contract TicketLifecycleTest is DeployProtocol {
         // FF queues well beyond the drain range should still have entries
         assertGe(_ffQueueLength(uint24(reached) + 10), 2,
             "FF queue well beyond drain range should still have entries");
+    }
+
+    // =========================================================================
+    // Test 15b [SRC-07]: claimWhalePass awards half-passes as whole-ticket
+    //         chunks on strided levels; a materialized chunk spans all four
+    //         trait quadrants.
+    // =========================================================================
+
+    /// @notice Credit 2 half-passes (= one whale pass's standard award) and claim at
+    ///         level 0. Verify the stride-2 whole-ticket shape across near + FF keys,
+    ///         then drive past level 1 and verify the materialized chunk holds exactly
+    ///         one trait entry in each quadrant (the batch walks i & 3 across a chunk).
+    function testClaimWhalePassStridedWholeTicketQuadrants() public {
+        address claimant = makeAddr("strided_claimant");
+
+        // Credit whalePassClaims[claimant] = 2 directly (mapping(address => uint256)
+        // at slot 20, confirmed via forge inspect).
+        bytes32 claimSlot = keccak256(abi.encode(uint256(uint160(claimant)), uint256(20)));
+        vm.store(address(game), claimSlot, bytes32(uint256(2)));
+
+        game.claimWhalePass(claimant);
+
+        // h=2 -> one whole ticket (4 entries) every 2nd level from startLevel 1:
+        // odd levels covered, even levels empty.
+        for (uint24 lvl = 1; lvl <= 5; lvl++) {
+            assertEq(_ticketsOwed(_writeKeyForLevel(lvl), claimant), lvl % 2 == 1 ? 4 : 0,
+                string.concat("near-key claim shape at level ", _uint2str(lvl)));
+        }
+        for (uint24 lvl = 6; lvl <= 12; lvl++) {
+            assertEq(_ticketsOwed(keyComputer.tqFarFutureKey(lvl), claimant), lvl % 2 == 1 ? 4 : 0,
+                string.concat("FF claim shape at level ", _uint2str(lvl)));
+        }
+
+        // Materialize level 1, then check the chunk's quadrant spread.
+        _driveToLevel(2);
+        assertGe(game.level(), 1, "must advance past level 1");
+
+        uint24 totalEntries;
+        for (uint16 q = 0; q < 4; q++) {
+            uint24 quadCount;
+            for (uint16 t = 0; t < 64; t++) {
+                (uint24 count, , ) = game.getEntries(
+                    uint8(q * 64 + t),
+                    1,
+                    0,
+                    type(uint32).max,
+                    claimant
+                );
+                quadCount += count;
+            }
+            assertEq(quadCount, 1, "one trait per quadrant per whole-ticket chunk");
+            totalEntries += quadCount;
+        }
+        assertEq(totalEntries, 4, "whole ticket materializes 4 entries");
     }
 
     // =========================================================================

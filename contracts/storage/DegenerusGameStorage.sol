@@ -568,11 +568,13 @@ abstract contract DegenerusGameStorage {
         uint32 entriesScaled
     );
 
-    /// @notice Emitted when entries are queued across a contiguous range of levels.
+    /// @notice Emitted when entries are queued across a range of levels. Covered levels are
+    ///         startLevel, startLevel + stride, ... (numLevels of them); stride 1 = contiguous.
     event EntriesQueuedRange(
         address indexed buyer,
         uint24 startLevel,
         uint24 numLevels,
+        uint24 stride,
         uint32 entriesPerLevel
     );
 
@@ -771,7 +773,6 @@ abstract contract DegenerusGameStorage {
     }
 
     /// @dev Queues tickets for a contiguous range of levels with same quantity per level.
-    ///      Optimized for whale pass claims to minimize loop overhead.
     /// @param buyer Address to receive tickets.
     /// @param startLevel First level in range (inclusive).
     /// @param numLevels Number of consecutive levels.
@@ -783,8 +784,35 @@ abstract contract DegenerusGameStorage {
         uint32 entriesPerLevel,
         bool rngBypass
     ) internal {
+        _queueEntryRangeStrided(
+            buyer,
+            startLevel,
+            numLevels,
+            1,
+            entriesPerLevel,
+            rngBypass
+        );
+    }
+
+    /// @dev Queues entries at every `stride`-th level: startLevel, startLevel + stride, ...
+    ///      (`numLevels` covered levels). Shared walk for contiguous (stride 1) and strided
+    ///      whole-ticket awards; far-future routing, RNG-lock revert, and write-slot selection
+    ///      are per-level, so skipped levels need no handling.
+    /// @param buyer Address to receive tickets.
+    /// @param startLevel First covered level (inclusive).
+    /// @param numLevels Number of covered levels.
+    /// @param stride Gap between covered levels (1 = contiguous).
+    /// @param entriesPerLevel Entries to award per covered level (4 entries = 1 whole ticket).
+    function _queueEntryRangeStrided(
+        address buyer,
+        uint24 startLevel,
+        uint24 numLevels,
+        uint24 stride,
+        uint32 entriesPerLevel,
+        bool rngBypass
+    ) internal {
         // No liveness gate (see _queueEntries): post-liveness queued tickets are harmless.
-        emit EntriesQueuedRange(buyer, startLevel, numLevels, entriesPerLevel);
+        emit EntriesQueuedRange(buyer, startLevel, numLevels, stride, entriesPerLevel);
         // Loop-invariant slot-0 reads cached outside the loop (the body's mapping
         // SSTOREs block the optimizer from hoisting them; neither value has a
         // writer reachable from the body). The per-level lock check observes the
@@ -809,9 +837,46 @@ abstract contract DegenerusGameStorage {
             entriesOwedPacked[wk][buyer] = (uint40(owed) << 8) | uint40(rem);
 
             unchecked {
-                ++lvl;
+                lvl += stride;
                 ++i;
             }
+        }
+    }
+
+    /// @dev Queues a half-pass award (1 half-pass = 1 entry/level over the span) as
+    ///      whole-ticket (4-entry) chunks so every chunk spans all four trait quadrants:
+    ///      - base leg: (halfPasses / 4) * 4 entries on every level of the span;
+    ///      - remainder 2: one whole ticket every 2nd level (offsets 0, 2, ...);
+    ///      - remainder 1: one whole ticket every 4th level (offsets 0, 4, ...);
+    ///      - remainder 3: both legs, the every-4th leg offset by +1 (offsets 1, 5, ...)
+    ///        so the two remainder legs cover disjoint levels.
+    ///      Covered-level counts round up on odd spans (at most one extra whole ticket
+    ///      per leg, in the buyer's favor). Total queued entries = halfPasses × span for
+    ///      stride-aligned spans (any span divisible by 4, incl. the 100-level claims).
+    /// @param buyer Address to receive tickets.
+    /// @param startLevel First level of the span (inclusive).
+    /// @param span Number of levels the award covers.
+    /// @param halfPasses Half-pass count (1 half-pass = 1 entry/level equivalent).
+    function _queueHalfPassAward(
+        address buyer,
+        uint24 startLevel,
+        uint24 span,
+        uint256 halfPasses,
+        bool rngBypass
+    ) internal {
+        uint32 baseEntries = uint32((halfPasses / 4) * 4);
+        if (baseEntries != 0) {
+            _queueEntryRangeStrided(buyer, startLevel, span, 1, baseEntries, rngBypass);
+        }
+        uint256 rem = halfPasses % 4;
+        if (rem == 0) return;
+        if (rem >= 2) {
+            _queueEntryRangeStrided(buyer, startLevel, (span + 1) / 2, 2, 4, rngBypass);
+        }
+        if (rem == 1) {
+            _queueEntryRangeStrided(buyer, startLevel, (span + 3) / 4, 4, 4, rngBypass);
+        } else if (rem == 3) {
+            _queueEntryRangeStrided(buyer, startLevel + 1, (span + 2) / 4, 4, 4, rngBypass);
         }
     }
 

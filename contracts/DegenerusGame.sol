@@ -1758,7 +1758,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     ///      executing via previewSellFarFutureEntries.
     /// @param player Owner of the far entries / recipient (resolved via _resolvePlayer).
     /// @param levels Target levels to sell from (each 6 <= level - currentLevel <= 100).
-    /// @param quantities Entries to sell at each level (4 entries = 1 whole ticket).
+    /// @param quantities Entries to sell at each level, in whole-ticket multiples of 4 (4 entries = 1 whole ticket).
     /// @param queueIndices Caller-supplied ticketQueue position of the resolved player at each level.
     function sellFarFutureEntries(
         address player,
@@ -1784,7 +1784,8 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     /// @notice Quote a far-future salvage swap WITHOUT executing (the UI offer; -EV by design).
     /// @dev Read-only; shares the exact valuation (curve + daily per-player jitter + ETH/FLIP
     ///      split) the executing path uses, so the displayed offer matches what would be paid.
-    ///      Reverts on an ineligible distance / zero quantity; does NOT check ownership (a quote
+    ///      Reverts on an ineligible distance or a zero / non-whole-ticket quantity (quantities are
+    ///      entry counts in multiples of 4); does NOT check ownership (a quote
     ///      for the given bundle). For a bundle too small to fund one current entry,
     ///      ticketWei == totalBudget and the cash legs are 0 (the executing path reverts on that).
     ///      The cash leg splits into ETH + FLIP: when sDGNRS holds no FLIP (or the seed targets

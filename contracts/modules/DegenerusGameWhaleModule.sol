@@ -130,8 +130,9 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
     /// @dev Whale pass bonus entries per level for levels up to 10.
     uint32 private constant WHALE_BONUS_ENTRIES_PER_LEVEL = 40;
 
-    /// @dev Whale pass standard entries per level for levels 11+.
-    uint32 private constant WHALE_STANDARD_ENTRIES_PER_LEVEL = 2;
+    /// @dev Half-passes per whale pass (1 half-pass = 1 entry/level equivalent); the
+    ///      standard leg awards these as whole-ticket chunks via _queueHalfPassAward.
+    uint256 private constant WHALE_HALF_PASSES_PER_PASS = 2;
 
     /// @dev Last level eligible for whale pass bonus entries.
     uint24 private constant WHALE_BONUS_END_LEVEL = 10;
@@ -156,7 +157,9 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
      * @notice Purchase a 100-level whale pass.
      * @dev Available at any level. Tickets always start at x1.
      *      - Boosts levelCount by delta between current freeze and new freeze (max 100, no double dipping).
-     *      - Queues 40 × quantity bonus entries/lvl for levels passLevel-10, 2 × quantity standard entries/lvl for the rest (4 entries = 1 whole ticket).
+     *      - Queues 40 × quantity bonus entries/lvl for levels passLevel-10; the rest of the span
+     *        is awarded as whole tickets (4 entries each): quantity/2 tickets on every level, plus
+     *        one ticket every 2nd level when quantity is odd (1 pass = 1 whole ticket per 2 levels).
      *      - Lootbox: 10% of price.
      *      - Distributes DGNRS minter rewards to the buyer.
      *      - Affiliate: 20% fresh / 5% recycled of the price in FLIP, exactly like a ticket mint
@@ -310,11 +313,9 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
 
         mintPacked_[buyer] = data;
 
-        // Queue entries: 40*quantity/lvl for bonus levels (passLevel to 10), 2*quantity/lvl for the rest
+        // Queue entries: 40*quantity/lvl for bonus levels (passLevel to 10); the standard
+        // leg awards 2*quantity half-passes as whole-ticket chunks (strided when odd).
         uint32 bonusEntries = uint32(WHALE_BONUS_ENTRIES_PER_LEVEL * quantity);
-        uint32 standardEntries = uint32(
-            WHALE_STANDARD_ENTRIES_PER_LEVEL * quantity
-        );
         uint24 bonusCount = passLevel <= WHALE_BONUS_END_LEVEL
             ? (WHALE_BONUS_END_LEVEL - passLevel + 1)
             : 0;
@@ -327,11 +328,11 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
                 false
             );
         }
-        _queueEntryRange(
+        _queueHalfPassAward(
             buyer,
             ticketStartLevel + bonusCount,
             100 - bonusCount,
-            standardEntries,
+            WHALE_HALF_PASSES_PER_PASS * quantity,
             false
         );
 
@@ -699,7 +700,7 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
         // purchase confers goes to the deity's affiliate (affiliateAddr is always non-zero —
         // getReferrer defaults to VAULT when the buyer has no real referrer): queued immediately
         // for 100 levels from passLevel (= level + 1), 40/lvl over the level-1-10 bonus window +
-        // 2/lvl standard, plus the whale-pass freeze/stat boost.
+        // one whole ticket every 2nd level standard, plus the whale-pass freeze/stat boost.
         uint24 ticketStartLevel = passLevel;
         uint24 bonusCount = passLevel <= WHALE_BONUS_END_LEVEL
             ? (WHALE_BONUS_END_LEVEL - passLevel + 1)
@@ -713,11 +714,11 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
                 false
             );
         }
-        _queueEntryRange(
+        _queueHalfPassAward(
             affiliateAddr,
             ticketStartLevel + bonusCount,
             100 - bonusCount,
-            WHALE_STANDARD_ENTRIES_PER_LEVEL,
+            WHALE_HALF_PASSES_PER_PASS,
             false
         );
         _applyWhalePassStats(affiliateAddr, ticketStartLevel);
@@ -1017,16 +1018,17 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
         // Clear before awarding to avoid double-claiming
         whalePassClaims[player] = 0;
 
-        // Award entries for 100 levels, with N entries per level (N = half-passes;
-        // 4 entries = 1 whole ticket). Entries start at level+1 to avoid awarding
-        // for an already-active level.
-        // Example: 3 half-passes = 3 entries/level x 100 levels = 300 entries (75 tickets)
+        // Award the half-passes over 100 levels as whole-ticket (4-entry) chunks:
+        // halfPasses/4 tickets on every level, remainder strided (2 half-passes = one
+        // ticket every 2nd level, 1 = every 4th). Entries start at level+1 to avoid
+        // awarding for an already-active level.
+        // Example: 5 half-passes = 4 entries/level + 4 entries every 4th level = 500 entries.
         // Safe: halfPasses fits in uint32 (ETH supply limits prevent overflow)
         uint24 startLevel = level + 1;
 
         _applyWhalePassStats(player, startLevel);
         emit WhalePassClaimed(player, msg.sender, halfPasses, startLevel);
-        _queueEntryRange(player, startLevel, 100, uint32(halfPasses), false);
+        _queueHalfPassAward(player, startLevel, 100, halfPasses, false);
     }
 }
 

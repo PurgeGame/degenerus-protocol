@@ -19,7 +19,7 @@ interface IDegenerusVaultOwner {
 ///      and mint streak helpers (credits on completed 1x price ETH quest).
 abstract contract DegenerusGameMintStreakUtils is DegenerusGameStorage {
     error InvalidDistance(); // mint-streak distance argument out of range
-    error InvalidQuantity(); // quantity argument is zero or out of range (mint units, or whale-pass count)
+    error InvalidQuantity(); // quantity argument is zero or out of range (mint units, whale-pass count, or a salvage quantity that is not a whole-ticket multiple of 4)
 
     /// @dev Jackpots processed per level before the phase ends. Mirrors the per-module copies;
     ///      declared here for _activeTicketLevel's final-jackpot-day reroute.
@@ -177,10 +177,11 @@ abstract contract DegenerusGameMintStreakUtils is DegenerusGameStorage {
     /// @dev Shared far-future salvage QUOTE (read-only valuation) used by BOTH the executing
     ///      entrypoint (MintModule.sellFarFutureEntries) and the preview view
     ///      (DegenerusGame.previewSellFarFutureEntries), so the offer shown can never drift from the
-    ///      offer executed. quantities[i] is an ENTRY count (4 entries = 1 whole ticket); each line's
-    ///      face is priceForLevel(L) * n / 4 (per-entry price) with the two-line fractionBps(d) curve +
-    ///      the daily per-player jitter seeded from the SETTLED prior-day VRF word (freeze-safe). Reverts
-    ///      on an ineligible distance or zero quantity; does NOT check ownership (the executing path checks
+    ///      offer executed. quantities[i] is an ENTRY count in whole-ticket multiples (4 entries =
+    ///      1 whole ticket); each line's face is priceForLevel(L) * n / 4 (per-entry price) with the
+    ///      two-line fractionBps(d) curve + the daily per-player jitter seeded from the SETTLED
+    ///      prior-day VRF word (freeze-safe). Reverts on an ineligible distance or a zero /
+    ///      non-whole-ticket quantity; does NOT check ownership (the executing path checks
     ///      holdings at debit). The split clamps the ticket leg to <= totalBudget so the preview is safe for
     ///      a too-small bundle (the executing path separately requires totalBudget >= one current entry).
     /// @param cl The active ticket level (caller-computed, shared with the split).
@@ -216,7 +217,10 @@ abstract contract DegenerusGameMintStreakUtils is DegenerusGameStorage {
             uint256 d = uint256(L) - uint256(cl); // reverts if L < cl
             if (d < 6 || d > 100) revert InvalidDistance();
             uint256 n = quantities[i];
-            if (n == 0 || n > type(uint32).max) revert InvalidQuantity();
+            // Whole-ticket granularity: every far-future producer queues 4-entry chunks,
+            // so 4-aligned balances stay 4-aligned and a partial sale can never strand a
+            // fragment on either side of the swap.
+            if (n == 0 || n % 4 != 0 || n > type(uint32).max) revert InvalidQuantity();
             // n is an ENTRY count; per-entry face = whole-ticket price / 4 (coupled with the entry-granular
             // debit in MintModule.sellFarFutureEntries — changing only the debit would mis-value 4x).
             uint256 faceWei = (PriceLookupLib.priceForLevel(L) * n) / 4;

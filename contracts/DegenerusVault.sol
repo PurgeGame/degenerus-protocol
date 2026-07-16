@@ -624,8 +624,8 @@ contract DegenerusVault {
     }
 
     /// @notice Salvage the vault's far-future ticket entries for current tickets + cash — vault owner. Counterparty resolves to sDGNRS or, on fallback, to the vault itself.
-    /// @dev The >50.1% DGVE holder can trim VAULT's far inventory (4 entries = 1 whole ticket). VAULT
-    ///      self-calls (no operator).
+    /// @dev The >50.1% DGVE holder can trim VAULT's far inventory (entry counts in whole-ticket
+    ///      multiples of 4). VAULT self-calls (no operator).
     function gameSellFarFutureEntries(
         uint32[] calldata levels,
         uint256[] calldata quantities,

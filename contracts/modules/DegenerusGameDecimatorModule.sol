@@ -612,7 +612,7 @@ contract DegenerusGameDecimatorModule is DegenerusGamePayoutUtils {
             uint256 remainder = amount % HALF_WHALE_PASS_PRICE;
             uint24 startLevel = level + 1;
             _applyWhalePassStats(winner, startLevel);
-            _queueEntryRange(winner, startLevel, 100, uint32(fullHalfPasses), false);
+            _queueHalfPassAward(winner, startLevel, 100, fullHalfPasses, false);
             // Sub-half-pass remainder (< 2.25 ether, so always below the threshold):
             // falls through to direct-resolve as a futurePool-backed lootbox (like any
             // small decimator claim), staying in futurePrizePool where the caller put it

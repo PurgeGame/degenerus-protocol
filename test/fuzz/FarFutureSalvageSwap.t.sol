@@ -439,15 +439,15 @@ contract FarFutureSalvageSwapTest is DeployProtocol {
     }
 
     /// @notice (b) Entry floor: a swap whose totalBudget < oneTicketWei/4 (one entry) REVERTS; a swap that
-    ///         clears the entry floor succeeds and the ticket leg delivers >= one entry. Entry granularity
-    ///         lowers the floor from one WHOLE ticket to one entry (4 entries = 1 whole ticket).
+    ///         clears the entry floor succeeds and the ticket leg delivers >= one entry. The floor is one
+    ///         ENTRY of budget even though quantities are whole-ticket multiples (4 entries = 1 whole ticket).
     function test_SWAP09_EntryFloorEnforced() public {
         uint256 oneTicketWei = PriceLookupLib.priceForLevel(game.level() + 1); // 0.01 ETH at deploy
         uint256 oneEntryWei = oneTicketWei / 4;                                 // 0.0025 ETH
 
-        // Sub-floor bundle: a single ENTRY at d=100 (the lowest 5% fraction; 0.04 ETH face / 4) yields a
-        // budget far below one entry's price -> revert on the entry floor. The floor check fires before any
-        // debit, so no holdings are strictly needed; seed defensively anyway.
+        // Sub-floor bundle: one whole ticket at d=100 (the lowest 5% fraction; 0.04 ETH face) yields a
+        // budget (<= 0.04 * 5% * 110% = 0.0022 ETH) below one entry's price -> revert on the entry floor.
+        // The floor check fires before any debit, so no holdings are strictly needed; seed defensively anyway.
         uint24 cl = game.level() + 1;
         uint24 Lsmall = uint24(cl + 100);
         _setPriorDayRngWord(uint256(keccak256("floor_small")));
@@ -458,7 +458,7 @@ contract FarFutureSalvageSwapTest is DeployProtocol {
             uint256[] memory qtys = new uint256[](1);
             uint256[] memory idxs = new uint256[](1);
             levels[0] = uint32(Lsmall);
-            qtys[0] = 1; // one ENTRY
+            qtys[0] = 4; // one whole ticket (the minimum sellable bundle)
             idxs[0] = 0;
             (, uint256 budgetSmall, , , ) = game.previewSellFarFutureEntries(seller, levels, qtys);
             assertGt(budgetSmall, 0, "fixture: sub-floor budget must be a positive quote");
@@ -482,44 +482,49 @@ contract FarFutureSalvageSwapTest is DeployProtocol {
         assertEq(_ownedEntries(seller, uint24(levels2[0])), 0, "far entries must clear on a floor-clearing swap");
     }
 
-    /// @notice (f) Sub-whole-ticket salvage: with entry granularity a seller can salvage a FRACTION of a
-    ///         whole ticket. Seed 4 entries (1 whole ticket) at a high-face far level and sell 2 entries
-    ///         (half a ticket): the seller's far position drops by EXACTLY 2 (4 -> 2, NOT popped) and the
-    ///         buyer receives EXACTLY 2 entries. Preview linearity proves the per-entry valuation is correct
-    ///         (faceWei scales 1:1 with entries -> no 4x mis-value).
-    function test_SWAP09_SubWholeTicketSalvage() public {
+    /// @notice (f) Whole-ticket granularity: quantities that are not multiples of 4 REVERT (preview and
+    ///         exec share the quote, so both reject), keeping every far-future position whole-ticket
+    ///         aligned — every far-future producer queues 4-entry chunks, so a swap can never strand a
+    ///         fragment on either side. A partial WHOLE-ticket sale (sell 4 of 8) still works and does
+    ///         NOT pop the seller. Preview linearity holds per whole ticket (no 4x mis-value).
+    function test_SWAP09_WholeTicketGranularityEnforced() public {
         _setPriorDayRngWord(uint256(keccak256("subwhole_jitter")));
         _seedClaimable(ContractAddresses.SDGNRS, 50 ether);
 
-        // d=99 -> L=cl+99=100 (milestone, priceForLevel=0.24 ETH) so even 2 entries clears the entry floor.
+        // d=99 -> L=cl+99=100 (milestone, priceForLevel=0.24 ETH) so one ticket clears the entry floor.
         uint24 cl = game.level() + 1;
         uint24 L = uint24(cl + 99);
         uint256 priceL = PriceLookupLib.priceForLevel(L);
         assertEq(priceL, 0.24 ether, "fixture: milestone far level price");
 
-        // Preview linearity: faceWei is exactly per-entry (price/4) and scales 1:1 with the entry count.
-        uint256 face1 = _previewFace(L, 1);
-        uint256 face2 = _previewFace(L, 2);
+        // Preview linearity across whole tickets: faceWei = price * n / 4 for aligned n.
         uint256 face4 = _previewFace(L, 4);
-        assertEq(face1, priceL / 4, "1 entry face = price/4");
-        assertEq(face2, (priceL * 2) / 4, "2 entries face = price/2");
-        assertEq(face4, priceL, "4 entries face = one whole ticket (aligned)");
-        assertEq(face4, 4 * face1, "face scales linearly per entry (no 4x mis-value)");
-        assertEq(face2, 2 * face1, "face scales linearly per entry");
+        uint256 face8 = _previewFace(L, 8);
+        assertEq(face4, priceL, "4 entries face = one whole ticket");
+        assertEq(face8, 2 * face4, "face scales linearly per whole ticket (no 4x mis-value)");
 
-        // Seed exactly 1 whole ticket (4 entries) and sell 2 (half).
-        uint256 idx = _seedFarTickets(seller, L, 1); // 4 entries
-        assertEq(_ownedEntries(seller, L), 4, "seeded 4 entries");
-
+        // Non-multiples of 4 revert in BOTH preview and exec (shared quote).
+        uint256 idx = _seedFarTickets(seller, L, 2); // 8 entries (2 whole tickets)
+        assertEq(_ownedEntries(seller, L), 8, "seeded 8 entries");
         uint32[] memory levels = new uint32[](1);
         uint256[] memory qtys = new uint256[](1);
         uint256[] memory idxs = new uint256[](1);
         levels[0] = uint32(L);
-        qtys[0] = 2; // sub-whole: 2 of 4 entries
         idxs[0] = idx;
+        uint256[3] memory badQtys = [uint256(1), uint256(2), uint256(6)];
+        for (uint256 k = 0; k < 3; ++k) {
+            qtys[0] = badQtys[k];
+            vm.expectRevert();
+            game.previewSellFarFutureEntries(seller, levels, qtys);
+            vm.prank(seller);
+            vm.expectRevert();
+            game.sellFarFutureEntries(seller, levels, qtys, idxs);
+        }
 
+        // Partial WHOLE-ticket sale: sell 4 of 8 -> seller keeps 4 (NOT popped), buyer +4.
+        qtys[0] = 4;
         (, uint256 budget, , , ) = game.previewSellFarFutureEntries(seller, levels, qtys);
-        assertGe(budget, PriceLookupLib.priceForLevel(cl) / 4, "2-entry budget clears the entry floor");
+        assertGe(budget, PriceLookupLib.priceForLevel(cl) / 4, "one-ticket budget clears the entry floor");
 
         uint256 buyerBefore = _ownedEntries(ContractAddresses.SDGNRS, L);
         uint256 lenBefore = _ffQueueLen(L);
@@ -527,10 +532,9 @@ contract FarFutureSalvageSwapTest is DeployProtocol {
         vm.prank(seller);
         game.sellFarFutureEntries(seller, levels, qtys, idxs);
 
-        // Fractional outcome: seller 4 -> 2 (NOT popped, partial), buyer +2.
-        assertEq(_ownedEntries(seller, L), 2, "seller far entries drop by exactly 2 (sub-whole sell)");
-        assertEq(_ffQueueLen(L), lenBefore, "partial sub-whole sell must NOT pop the seller");
-        assertEq(_ownedEntries(ContractAddresses.SDGNRS, L), buyerBefore + 2, "buyer received exactly 2 entries");
+        assertEq(_ownedEntries(seller, L), 4, "seller far entries drop by exactly one whole ticket");
+        assertEq(_ffQueueLen(L), lenBefore, "partial whole-ticket sell must NOT pop the seller");
+        assertEq(_ownedEntries(ContractAddresses.SDGNRS, L), buyerBefore + 4, "buyer received exactly 4 entries");
     }
 
     /// @notice (g) Whole-ticket-aligned no-regression: previewing 4 entries (one whole ticket) reproduces

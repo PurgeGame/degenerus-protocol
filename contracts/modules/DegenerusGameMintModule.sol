@@ -1024,7 +1024,8 @@ contract DegenerusGameMintModule is
     ///      per-player jitter + ETH/FLIP split) the executing path uses, so the displayed offer
     ///      matches what would be paid. Resolves the same buyer the executing path would (sDGNRS, or
     ///      the vault on the owner-enabled fallback) so the ETH/FLIP breakdown reflects the actual
-    ///      counterparty's FLIP inventory. Reverts on an ineligible distance / zero quantity; does
+    ///      counterparty's FLIP inventory. Reverts on an ineligible distance or a zero /
+    ///      non-whole-ticket quantity (entry counts in multiples of 4); does
     ///      NOT check ownership (a quote for the given bundle). When the resolved buyer holds no FLIP
     ///      (or the seed targets zero) the whole cash leg is paid in ETH; conserved as ethCashWei +
     ///      value(flipTokens).
