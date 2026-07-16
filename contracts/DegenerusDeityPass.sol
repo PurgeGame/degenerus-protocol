@@ -23,7 +23,8 @@ interface IDegenerusVaultOwner {
 }
 
 /// @notice Optional external renderer interface (v1).
-/// @dev Calls are bounded and always fallback to internal renderer on failure.
+/// @dev A reverting or empty external render falls back to the internal renderer;
+///      the staticcall is not gas-capped, and the renderer is owner-set and trusted.
 interface IDeityPassRendererV1 {
     function render(
         uint256 tokenId,
@@ -121,8 +122,9 @@ contract DegenerusDeityPass {
     }
 
     /// @notice On-chain SVG metadata for each deity pass.
-    /// @dev Uses internal renderer by default; optional external renderer can override
-    ///      but never break tokenURI due to bounded staticcall + fallback.
+    /// @dev Uses the internal renderer by default; an owner-set external renderer may override.
+    ///      A reverting or empty return falls back to internal render. The staticcall is not
+    ///      gas-capped, so tokenURI integrity relies on the owner setting a sane renderer.
     function tokenURI(uint256 tokenId) external view returns (string memory) {
         if (_owners[tokenId] == address(0)) revert InvalidToken();
 

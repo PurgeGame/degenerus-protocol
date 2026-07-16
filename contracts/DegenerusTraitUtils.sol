@@ -77,7 +77,7 @@ pragma solidity 0.8.34;
   |     - Scaling uses uint64 intermediate to prevent truncation                 |
   |                                                                              |
   |  3. DETERMINISM:                                                             |
-  |     - Same tokenId always produces same traits (via keccak256)               |
+  |     - Same input seed/word always yields the same traits (pure functions)    |
   |     - Critical for on-chain trait verification                               |
   |                                                                              |
   +==============================================================================+*/

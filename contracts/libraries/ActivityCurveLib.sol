@@ -22,7 +22,7 @@ library ActivityCurveLib {
     // Shared segment knees
     // -------------------------------------------------------------------------
 
-    /// @dev Score where the shallow middle leg ends (98% of the gain delivered).
+    /// @dev Score where the shallow middle leg ends; each curve delivers its own fraction of the gain here (~98% decimator/century, 87.5% foil).
     uint256 internal constant ACTIVITY_SEG_B_KNEE_POINTS = 500;
 
     /// @dev Score where every curve reaches MAX and saturates flat beyond.

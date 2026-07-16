@@ -11,7 +11,7 @@ struct QuestRequirements {
 
 /// @notice Information about a single quest
 struct QuestInfo {
-    /// @notice The day this quest is active (unix day)
+    /// @notice The day this quest is active (deploy-relative day index; Day 1 = deploy day)
     uint24 day;
     /// @notice The type of quest (mint, flip, affiliate, etc.)
     uint8 questType;
@@ -29,9 +29,9 @@ struct PlayerQuestView {
     uint128[2] progress;
     /// @notice Whether the player has completed each quest
     bool[2] completed;
-    /// @notice The last day the player completed a quest
+    /// @notice The last day the player completed the primary (slot 0) quest
     uint24 lastCompletedDay;
-    /// @notice The player's base streak count before shields
+    /// @notice The player's effective (gap/shield-decayed) base streak
     uint32 baseStreak;
 }
 
@@ -41,7 +41,7 @@ struct PlayerQuestView {
 interface IDegenerusQuests {
     /// @notice Rolls the daily quest for a given day using provided entropy.
     /// @dev Called by AdvanceModule (via GAME delegatecall) to determine which quests are active.
-    /// @param day The unix day to roll quests for
+    /// @param day The deploy-relative day index to roll quests for (Day 1 = deploy day)
     /// @param entropy Random entropy used to determine the slot 1 quest type
     /// @param forceMintFlip Force slot 1 to MINT_FLIP (the first jackpot day, when the FLIP
     ///        redeem window is live); otherwise MINT_FLIP is excluded from the slot 1 roll.
@@ -199,8 +199,8 @@ interface IDegenerusQuests {
 
     /// @notice Returns the quest state for a specific player
     /// @param player The address of the player to query
-    /// @return streak The player's current quest streak
-    /// @return lastCompletedDay The last day the player completed a quest
+    /// @return streak The player's raw stored streak (not gap/shield-decayed; use getPlayerQuestView / effectiveBaseStreak for the effective value)
+    /// @return lastCompletedDay The last day the player completed the primary (slot 0) quest
     /// @return progress The player's current progress on each of the two quests
     /// @return completed Whether the player has completed each of the two quests
     function playerQuestStates(address player)

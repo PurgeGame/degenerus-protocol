@@ -14,22 +14,22 @@ import {ContractAddresses} from "./ContractAddresses.sol";
  * @dev Architecture Overview
  * -----------------------------------------------------------------------------
  * This contract operates as an external standalone contract (NOT delegatecall)
- * called by the Degenerus ContractAddresses.COIN contract. It manages:
+ * called by the COIN, COINFLIP, GAME, and AFFILIATE contracts. It manages:
  *   1. Daily quest rolling using VRF entropy
  *   2. Per-player progress tracking with day-gated resets
  *   3. Streak accounting with fixed rewards/targets
  *
  * Security Model
  * -----------------------------------------------------------------------------
- * • All player-action handlers are ContractAddresses.COIN-gated via `onlyCoin` modifier
- * • Quest normalization allows ContractAddresses.COIN OR game to trigger via `onlyCoinOrGame`
+ * • Player-action handlers are `onlyCoin`-gated (COIN/COINFLIP/GAME/AFFILIATE)
+ * • Rolling, afking, streak awards, and the foil handler are `onlyGame`-gated
  * • Game address fixed at deploy time
- * • No external calls to untrusted contracts — only reads trusted `questGame`
+ * • External calls only to the trusted questGame (reads + recordAfkingSecondary/floorAfkingStreakBase) and coinflip.creditFlip
  * • No ETH handling or callbacks — reentrancy is not a concern
  *
  * Quest Lifecycle
  * -----------------------------------------------------------------------------
- * 1. Coin calls `rollDailyQuest()` with VRF entropy at day transition
+ * 1. GAME (AdvanceModule) calls `rollDailyQuest()` with VRF entropy at day transition
  * 2. Slot 0 is always a fixed "deposit new ETH" quest (mint with ETH)
  * 3. Slot 1 is a weighted-random quest from the remaining quest types
  * 4. Player actions trigger handle* functions (handleMint, handleFlip, etc.)
@@ -45,7 +45,7 @@ import {ContractAddresses} from "./ContractAddresses.sol";
  * Streak System
  * -----------------------------------------------------------------------------
  * • Every quest completion increments the streak — primary, secondary, and level
- *   quests credit independently (0.5% activity score each, uncapped)
+ *   quests credit independently (0.5% activity score each; uint16-capped, bounded by the activity-score cap)
  * • The secondary is gated behind the primary, so the missed-day reset stays keyed
  *   to the primary; while afking the funded auto-buy stands in for the primary
  * • No tiers or difficulty variance; targets are fixed
@@ -444,7 +444,7 @@ contract DegenerusQuests is IDegenerusQuests {
      * @dev Access: GAME contract only.
      *      Does not alter per-day completion snapshots.
      *      Silently returns if player is zero address, amount is zero, or currentDay is zero.
-     *      Clamps at uint24 max on overflow.
+     *      Clamps at uint16 max on overflow.
      * @param player The player to receive the streak bonus.
      * @param amount Number of streak days to add.
      * @param currentDay The caller's current calendar day; synchronization is pinned to the
@@ -732,11 +732,11 @@ contract DegenerusQuests is IDegenerusQuests {
     }
 
     /**
-     * @notice Handle flip/unstake progress credited in FLIP base units (18 decimals).
+     * @notice Handle flip-stake progress credited in FLIP base units (18 decimals).
      * @dev Access: COIN or COINFLIP contract only.
      *      Progress tracks cumulative flip volume for the day.
-     * @param player The player who staked/unstaked.
-     * @param flipCredit Amount of FLIP staked/unstaked (in base units).
+     * @param player The player who staked FLIP.
+     * @param flipCredit Amount of FLIP staked (in base units).
      * @return reward FLIP tokens earned (in base units, 18 decimals).
      * @return questType The type of quest that was processed.
      * @return streak Player's current streak after this action.
@@ -965,9 +965,9 @@ contract DegenerusQuests is IDegenerusQuests {
      * @notice Handle combined purchase-path activity (mint tickets + lootbox) in a single call.
      * @dev Access: COIN or COINFLIP contract only.
      *      Combines the mint + lootbox quest legs for the purchase path.
-     *      FLIP mint rewards are creditFlipped internally; ETH mint and lootbox rewards are
-     *      returned for the caller to batch (the caller credits the lootbox reward exactly
-     *      once). Returns streak for compute-once score forwarding.
+     *      No reward is credited here; the ETH-mint, FLIP-mint, and lootbox rewards are summed
+     *      and returned for the caller to credit exactly once. Returns streak for compute-once
+     *      score forwarding.
      * @param player The player who purchased.
      * @param ethMintSpendWei Gross ETH-denominated spend on tickets + lootbox in wei
      *        (fresh + recycled), credited 1:1 to MINT_ETH quest.
@@ -2361,9 +2361,9 @@ contract DegenerusQuests is IDegenerusQuests {
 
     /// @dev Shared level quest progress handler called by each of the 6 handlers.
     ///      Reads levelQuestType and levelQuestVersion (packed in one slot)
-    ///      to get both level and type. Short-circuits on type mismatch before any
+    ///      to get both the active type and the current version. Short-circuits on type mismatch before any
     ///      player state read. Eligibility is deferred to the completion boundary —
-    ///      ineligible players accumulate phantom progress that can never complete.
+    ///      an ineligible player keeps accumulating progress and completes once they later qualify.
     /// @param player The player earning progress.
     /// @param handlerQuestType The quest type this handler tracks.
     /// @param delta The progress delta (units match quest type).
