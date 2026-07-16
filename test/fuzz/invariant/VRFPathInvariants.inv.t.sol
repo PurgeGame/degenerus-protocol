@@ -113,4 +113,16 @@ contract VRFPathInvariants is DeployProtocol {
             "VRFPath: handler game reference is zero"
         );
     }
+
+    /// @notice Runs after each call sequence: at least one fresh index allocation
+    ///         happened (lootboxRngIndex initializes to 1), so the TEST-01 detection
+    ///         sites were exercised — a sequence where the index never moves would
+    ///         make every index invariant above pass vacuously.
+    function afterInvariant() public view {
+        assertGt(
+            handler.actualLootboxRngIndex(),
+            1,
+            "VRFPath: no fresh index allocation in sequence - TEST-01 unexercised"
+        );
+    }
 }

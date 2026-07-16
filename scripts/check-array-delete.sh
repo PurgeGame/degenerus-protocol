@@ -10,23 +10,21 @@
 # length slot (see DegenerusGameStorage._releaseTicketQueue) or advance a
 # cursor past the data.
 #
-# Detection (source text, two passes over production contracts/):
+# Detection (source text, three passes over production contracts/):
 #   ADC-01: `delete <name>` / `delete <name>[...]` where <name> is a declared
 #           dynamic-array storage variable or a mapping whose value type is a
 #           dynamic array (declaration scan across all production files).
 #   ADC-02: `delete <ident>;` where <ident> is a local `T[] storage` pointer
 #           (alias-delete of a dynamic array; same-file scan).
+#   ADC-03: `delete <name>` / `delete <name>[...]` where <name> is a storage
+#           variable (or mapping value) of a struct type that contains a
+#           dynamic array in any member, transitively through struct-typed
+#           members — `delete` recurses into members, so the same unbounded
+#           clear hides behind the struct.
 #
 # Sites may be silenced by a `// array-delete: justified — <reason>` comment
 # on the same line or within the two preceding lines (e.g. a compile-time
 # bounded array proven small).
-#
-# LIMITATION: the declaration scan sees direct dynamic-array variables and
-# mappings only — it does not resolve struct types, so `delete` on a struct
-# variable whose MEMBERS include a dynamic array compiles into the same
-# unbounded clear but is not flagged. No production struct currently nests a
-# dynamic member; verify against optimized IR (no clear_storage helpers)
-# before trusting this gate across a change that adds one.
 #
 # Usage: scripts/check-array-delete.sh
 # Exit code: 0 if no unjustified sites found, 1 otherwise.
@@ -73,6 +71,62 @@ done < <(
     | grep -oE '[A-Za-z_][A-Za-z0-9_]*[[:space:]]*$' | sort -u
 )
 
+# Pass 0b: names of struct types carrying a dynamic array in any member,
+# transitively through struct-typed members. One awk scan emits
+# `<struct> DYN` for a direct `[]` member and `<struct> DEP <memberType>`
+# edges; a fixpoint loop then propagates DYN across DEP edges.
+STRUCT_FACTS=$(
+  cat "${FILES[@]}" | sed 's|//.*||' | awk '
+    /(^|[^A-Za-z0-9_])struct[[:space:]]+[A-Za-z_][A-Za-z0-9_]*[[:space:]]*\{/ {
+      match($0, /struct[[:space:]]+[A-Za-z_][A-Za-z0-9_]*/)
+      name = substr($0, RSTART, RLENGTH)
+      sub(/^struct[[:space:]]+/, "", name)
+      inStruct = 1; next
+    }
+    inStruct && /\}/ { inStruct = 0; next }
+    inStruct {
+      if ($0 ~ /\[\]/) print name, "DYN"
+      if (match($0, /^[[:space:]]*[A-Za-z_][A-Za-z0-9_.]*/)) {
+        t = substr($0, RSTART, RLENGTH)
+        sub(/^[[:space:]]+/, "", t)
+        sub(/^.*\./, "", t)            # strip a Contract./Lib. qualifier
+        if (t != "mapping") print name, "DEP", t
+      }
+    }'
+)
+
+declare -A DYN_STRUCT=()
+while read -r s tag _; do
+  [[ "$tag" == "DYN" ]] && DYN_STRUCT["$s"]=1
+done <<< "$STRUCT_FACTS"
+
+# Fixpoint: a struct whose member type is a DYN struct is itself DYN.
+changed=1
+while [[ $changed -eq 1 ]]; do
+  changed=0
+  while read -r s tag t; do
+    if [[ "$tag" == "DEP" && -n "${DYN_STRUCT[$t]:-}" && -z "${DYN_STRUCT[$s]:-}" ]]; then
+      DYN_STRUCT["$s"]=1
+      changed=1
+    fi
+  done <<< "$STRUCT_FACTS"
+done
+
+# Pass 0c: storage variables (bare or mapping-valued) whose type is a DYN
+# struct — `delete` on them recurses into the dynamic member.
+DYN_STRUCT_VAR_NAMES=()
+if [[ ${#DYN_STRUCT[@]} -gt 0 ]]; then
+  for s in "${!DYN_STRUCT[@]}"; do
+    while IFS= read -r name; do
+      [[ -n "$name" ]] && DYN_STRUCT_VAR_NAMES+=("$name")
+    done < <(
+      cat "${FILES[@]}" | sed 's|//.*||' | grep -hoE \
+        "^[[:space:]]*([A-Za-z_][A-Za-z0-9_]*\.)?${s}[[:space:]]+(internal|private|public)[[:space:]]+[A-Za-z_][A-Za-z0-9_]*|mapping\([^;]*=>[[:space:]]*([A-Za-z_][A-Za-z0-9_]*\.)?${s}[[:space:]]*\)+[[:space:]]+(internal|private|public)[[:space:]]+[A-Za-z_][A-Za-z0-9_]*" \
+        | grep -oE '[A-Za-z_][A-Za-z0-9_]*[[:space:]]*$' | sort -u
+    )
+  done
+fi
+
 # A site is silenced when the line itself or either of the two preceding lines
 # carries the justification marker.
 justified() {
@@ -98,6 +152,18 @@ for f in "${FILES[@]}"; do
         [[ -z "$ln" ]] && continue
         justified "$f" "$ln" && continue
         report "ADC-01 delete of dynamic storage array" "$f" "$ln" "$(echo "$text" | sed 's/^[[:space:]]*//')"
+      done < <(sed 's|//.*||' "$f" | grep -nE "\bdelete[[:space:]]+${name}\b" || true)
+    done
+  fi
+
+  # ADC-03: delete of a storage variable whose struct type (transitively)
+  # contains a dynamic array — the recursive clear is the same unbounded loop.
+  if [[ ${#DYN_STRUCT_VAR_NAMES[@]} -gt 0 ]]; then
+    for name in "${DYN_STRUCT_VAR_NAMES[@]}"; do
+      while IFS=: read -r ln text; do
+        [[ -z "$ln" ]] && continue
+        justified "$f" "$ln" && continue
+        report "ADC-03 delete of struct containing dynamic array" "$f" "$ln" "$(echo "$text" | sed 's/^[[:space:]]*//')"
       done < <(sed 's|//.*||' "$f" | grep -nE "\bdelete[[:space:]]+${name}\b" || true)
     done
   fi
