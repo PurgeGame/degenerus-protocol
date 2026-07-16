@@ -122,7 +122,7 @@ interface ICoinflip {
       +======================================================================+*/
 
     /// @notice Credit flip stake to a player without burning tokens.
-    /// @dev Called by authorized creditors (GAME, QUESTS, AFFILIATE, ADMIN) for rewards.
+    /// @dev Called by authorized creditors (GAME, QUESTS, AFFILIATE, ADMIN, SDGNRS, WWXRP) for rewards.
     ///      Does not set bounty records or trigger bounty eligibility.
     /// @param player The player receiving the flip credit.
     /// @param amount Amount of flip credit to add to next day's stake.
@@ -156,15 +156,16 @@ interface ICoinflip {
 
     /// @notice Settle-then-read sDGNRS's redeemable coinflip backing (claimableStored + carry).
     /// @dev sDGNRS-only. Settles all resolved days first so the two summed components are disjoint
-    ///      and current; the held wallet balance is read separately by sDGNRS.
+    ///      and current; sDGNRS holds no wallet balance — its entire FLIP backing lives in these two.
     /// @return backing claimableStored + autoRebuyCarry for sDGNRS.
     /// @custom:reverts OnlysDGNRS If caller is not the sDGNRS contract.
     function redeemableFlipBacking() external returns (uint256 backing);
 
     /// @notice Remove `base` (wei) of sDGNRS's FLIP backing at redemption submit.
-    /// @dev sDGNRS-only. Waterfall: held wallet balance (burned) → settled claimable (consumed) →
-    ///      auto-rebuy carry (decremented). Credits nothing; the redeemer's escrowed slice is paid
-    ///      later on the resolving day's coinflip win via creditFlip. Fail-closed if backing < base.
+    /// @dev sDGNRS-only. Waterfall: settled claimable (consumed) → auto-rebuy carry (decremented) —
+    ///      sDGNRS holds no wallet balance, so backing lives entirely in these two. Credits nothing;
+    ///      the redeemer's escrowed slice is paid later on the resolving day's coinflip win via
+    ///      creditFlip. Fail-closed if backing < base.
     /// @param base Whole-token-aligned FLIP backing (wei) to remove from sDGNRS.
     /// @custom:reverts OnlysDGNRS If caller is not the sDGNRS contract.
     function withdrawRedeemedFlip(uint256 base) external;

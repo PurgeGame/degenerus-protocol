@@ -239,8 +239,9 @@ contract Coinflip {
         _;
     }
 
-    /// @dev Restricts access to FLIP, which claims/consumes a player's unclaimed
-    ///      coinflip winnings to cover transfer and burn shortfalls.
+    /// @dev Restricts access to FLIP, which uses this both to claim/consume a player's
+    ///      unclaimed coinflip winnings (covering transfer and burn shortfalls) and to
+    ///      route de-circulated FLIP into sDGNRS's coinflip-claimable backing.
     modifier onlyFLIP() {
         if (msg.sender != ContractAddresses.COIN) revert OnlyFLIP();
         _;
@@ -995,7 +996,7 @@ contract Coinflip {
       |                    FLIP CREDITING                                    |
       +======================================================================+*/
 
-    /// @notice Credit flip to a player (called by GAME modules, QUESTS, AFFILIATE, or ADMIN).
+    /// @notice Credit flip to a player (called by GAME modules, QUESTS, AFFILIATE, ADMIN, SDGNRS, or WWXRP).
     /// @param player The player receiving the flip credit.
     /// @param amount Amount of FLIP-denominated flip stake to credit.
     function creditFlip(
@@ -1006,9 +1007,9 @@ contract Coinflip {
         _addDailyFlip(player, amount, 0, false, false);
     }
 
-    /// @notice Credit flips to multiple players (called by GAME modules, QUESTS, AFFILIATE, or ADMIN).
-    /// @param players Array of 3 player addresses to credit (address(0) entries are skipped).
-    /// @param amounts Array of 3 FLIP-denominated flip stake amounts (0 entries are skipped).
+    /// @notice Credit flips to multiple players (called by GAME jackpot modules).
+    /// @param players Player addresses to credit (address(0) entries are skipped).
+    /// @param amounts FLIP-denominated flip stake amounts, one per player (0 entries are skipped).
     function creditFlipBatch(
         address[] calldata players,
         uint256[] calldata amounts
@@ -1026,7 +1027,7 @@ contract Coinflip {
         }
     }
 
-    /// @notice Credit flips to exactly two players (called by GAME modules, QUESTS, AFFILIATE, or ADMIN).
+    /// @notice Credit flips to exactly two players (called by the GAME purchase path).
     /// @dev Fixed-arity variant of creditFlipBatch for the purchase hot path — spares the
     ///      caller the two array allocations and the dynamic ABI encode. address(0) and
     ///      zero-amount legs are skipped, matching the batch behavior.

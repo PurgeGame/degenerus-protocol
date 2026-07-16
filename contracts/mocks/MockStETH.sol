@@ -14,7 +14,7 @@ contract MockStETH {
     uint256 public totalPooledEther;
     uint256 public totalShares;
 
-    /// @dev Daily yield in basis points (10 = 0.10% ≈ 3.65% APY).
+    /// @dev Daily yield in basis points (10 = 0.10% ≈ 36.5% APY).
     uint256 public rebaseYieldBps = 10;
 
     event Transfer(address indexed from, address indexed to, uint256 value);

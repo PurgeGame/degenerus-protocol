@@ -38,7 +38,7 @@ interface IDegenerusGamePlayer {
     function rngLocked() external view returns (bool);
     /// @notice Check if game is over.
     function gameOver() external view returns (bool);
-    /// @notice Check if the liveness-timeout game-over trigger is active (State 1 precursor).
+    /// @notice Check if the liveness-timeout game-over trigger is active (fires before gameOver latches).
     function livenessTriggered() external view returns (bool);
     /// @notice Get RNG word for a specific day.
     function rngWordForDay(uint24 day) external view returns (uint256);
@@ -416,8 +416,8 @@ contract sDGNRS {
         // Protocol-owned self-subscription: claimable-first daily lootbox
         // buy of flat quantity 1. Self-consent —
         // sDGNRS IS the player (player == msg.sender). sDGNRS holds the permanent
-        // deity pass (granted in the DegenerusGame constructor), so the afking's
-        // pass-OR-pay gate takes the free 30-day extend at zero cost.
+        // deity-pass bit (granted in the DegenerusGame constructor), so the afking's
+        // pass-OR-pay gate reads an unbounded pass horizon (type(uint24).max) at zero cost.
         // The afking surface is GAME-resident; self-subscribe directly against the
         // GAME (subscriber == msg.sender ⇒ the GAME's self-consent path, no operator
         // approval needed).

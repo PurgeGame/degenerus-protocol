@@ -83,7 +83,7 @@ interface IsDGNRS {
 
     /// @notice Check if day `day` has an unresolved gambling-burn pool.
     /// @param day Wall-clock day to query.
-    /// @return True if `pendingByDay[day]` has non-zero ETH or FLIP base.
+    /// @return True if `pendingByDay[day]` has a non-zero ETH base.
     function hasPendingRedemptions(uint24 day) external view returns (bool);
 
     /// @notice Sentinel for the single-pool invariant.
@@ -92,7 +92,8 @@ interface IsDGNRS {
     function pendingResolveDay() external view returns (uint24);
 
     /// @notice Total ETH physically held but reserved for in-flight gambling-burn redemptions.
-    /// @dev handleGameOverDrain subtracts this so reserved ETH is not swept into terminal payouts.
+    /// @dev Already excluded from the Game's terminal-drain balance: pullRedemptionReserve moves this
+    ///      ETH out of the Game and into sDGNRS at submit, so handleGameOverDrain never re-subtracts it.
     function pendingRedemptionEthValue() external view returns (uint256);
 
     /// @notice Resolve day `dayToResolve`'s gambling-burn pool with RNG results.

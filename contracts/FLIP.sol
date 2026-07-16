@@ -92,11 +92,11 @@ contract FLIP {
     event TerminalDecimatorBurn(address indexed player, uint256 amountBurned);
 
     /// @notice Emitted when virtual coin is escrowed to the vault reserve.
-    /// @param sender The contract that escrowed the funds (VAULT or GAME).
+    /// @param sender The account tied to the escrow: the original transfer sender when routed to VAULT via _transfer, address(0) on a direct mint to VAULT, or the calling contract (GAME/VAULT) for vaultEscrow/tombstoneAtGameOver.
     /// @param amount The amount added to vault mint allowance (18 decimals).
     event VaultEscrowRecorded(address indexed sender, uint256 amount);
     /// @notice Emitted when the vault spends from its mint allowance (may or may not mint tokens).
-    /// @param spender The contract spending from allowance.
+    /// @param spender The account tied to the allowance decrease: VAULT when spent via burnCoinForSalvage's _burn path, or the FLIP contract (address(this)) when minted out via vaultMintTo.
     /// @param amount The amount consumed from allowance (18 decimals).
     event VaultAllowanceSpent(address indexed spender, uint256 amount);
 
@@ -142,8 +142,9 @@ contract FLIP {
       |  | Slot | Variable                    | Type                       | |
       |  +------+-----------------------------+----------------------------+ |
       |  |  0   | _supply (total/vault)       | uint128 + uint128          | |
-      |  |  1   | balanceOf                   | mapping(address => uint256)| |
-      |  |  2   | allowance                   | mapping(addr => mapping)   | |
+      |  |  1   | _tombstoneFlooded          | bool                       | |
+      |  |  2   | balanceOf                  | mapping(address => uint256)| |
+      |  |  3   | allowance                  | mapping(addr => mapping)   | |
       |  +-----------------------------------------------------------------+ |
       +======================================================================+*/
 
@@ -213,7 +214,7 @@ contract FLIP {
       |  • VAULT, ADMIN, COINFLIP                                            |
       +======================================================================+*/
 
-    /// @notice The main game contract; provides level, RNG state, and purchase info.
+    /// @notice The main game contract; provides RNG-lock state, level, decimator/terminal-decimator windows, operator-approval checks, and activity-score/boon bookkeeping.
     IDegenerusGame internal constant degenerusGame =
         IDegenerusGame(ContractAddresses.GAME);
 
@@ -439,7 +440,7 @@ contract FLIP {
 
     /// @notice Internal burn helper - destroys tokens.
     /// @dev Decreases totalSupply and sender balance. Emits Transfer to address(0).
-    ///      SECURITY: Burns BEFORE any external calls (CEI pattern) in burnCoin/decimatorBurn/burnForCoinflip/terminalDecimatorBurn.
+    ///      SECURITY: Burns BEFORE any external calls (CEI pattern) in burnCoin/decimatorBurn/burnForCoinflip/burnCoinForSalvage/terminalDecimatorBurn.
     /// @param from The address to burn from (cannot be zero).
     /// @param amount The amount to burn (18 decimals).
     function _burn(address from, uint256 amount) internal {
@@ -522,7 +523,7 @@ contract FLIP {
       +======================================================================+*/
 
     /// @dev Restricts access to game contract.
-    ///      Used for: burnCoin (gameplay burns).
+    ///      Used for: burnCoin, burnCoinForSalvage (gameplay/salvage burns).
     modifier onlyGame() {
         if (msg.sender != ContractAddresses.GAME) revert OnlyGame();
         _;
@@ -711,8 +712,9 @@ contract FLIP {
       +======================================================================+*/
 
     /// @notice Burn FLIP as a terminal decimator (death bet).
-    /// @dev Always open (no milestone gating). Blocked on lastPurchaseDay
-    ///      (level completing, death bet can never fire) and after death clock expires.
+    /// @dev Always open (no milestone gating). Blocked on lastPurchaseDay (level completing,
+    ///      death bet can never fire), gameOver, level 0 (unresolvable sentinel round), and
+    ///      after the death-clock deadline.
     ///      Bucket computed internally using lvl 100 rules (min bucket 2).
     /// @param player Player address to burn for (address(0) = msg.sender).
     /// @param amount Amount (18 decimals) to burn; must satisfy MIN (1,000 FLIP).

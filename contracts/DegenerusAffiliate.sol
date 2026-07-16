@@ -20,10 +20,10 @@ import {PriceLookupLib} from "./libraries/PriceLookupLib.sol";
  *      - Affiliate payouts + quest bonuses via coinflip.creditFlip; kickback returned to caller
  *      - Fresh ETH rewards: 25% (levels 0-3), 20% (levels 4+)
  *      - Recycled ETH rewards: 5% (all levels)
- *      - Leaderboard: tracks top affiliate per level for mint trait bonus
+ *      - Leaderboard: tracks top affiliate per level for a DGNRS pool reward at level transition
  *
  * @dev SECURITY:
- *      - Access control: payAffiliate (game)
+ *      - Access control: payAffiliate / payAffiliateCombined (game only); claim (permissionless settlement)
  *      - Referral locking: invalid codes lock slot (REF_CODE_LOCKED sentinel)
  *      - Fixed contract addresses at deploy (no re-pointing)
  */
@@ -101,7 +101,7 @@ contract DegenerusAffiliate {
     /// @param newTotal The affiliate's new total for this level.
     /// @param sender The player whose action generated the reward.
     /// @param code The referral code used.
-    /// @param isFreshEth True if reward was from fresh ETH, false if recycled.
+    /// @param isFreshEth Fresh-vs-recycled flag for the single-leg payAffiliate path; always true for the pooled total in payAffiliateCombined, and false in claim to mark the afking-claim leaderboard write.
     event AffiliateEarningsRecorded(
         uint24 indexed level,
         address indexed affiliate,
@@ -178,7 +178,7 @@ contract DegenerusAffiliate {
     // =====================================================================
 
     /// @notice Maximum bonus points an affiliate can earn from recent earnings.
-    /// @dev Applied to mint trait rolls; capped at 50 points (50%).
+    /// @dev Contributes to the player's activity score (lootbox EV, ticket bonus, Degenerette ROI); capped at 50 points (50%).
     uint256 private constant AFFILIATE_BONUS_MAX = 50;
     uint8 private constant MAX_KICKBACK_PCT = 25;
     uint16 private constant REWARD_SCALE_FRESH_L1_3_BPS = 2_500;
@@ -867,7 +867,7 @@ contract DegenerusAffiliate {
     /**
      * @notice Get the top affiliate for a given game level.
      * @dev Returns the affiliate with the highest earnings for that level.
-     *      Used for trophies and jackpot affiliate selection.
+     *      Used to pay the top affiliate a DGNRS pool reward at level transition.
      * @param lvl The game level to query.
      * @return player Address of the top affiliate.
      * @return score Their score in FLIP base units (18 decimals).

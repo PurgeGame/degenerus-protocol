@@ -3,7 +3,7 @@ pragma solidity 0.8.34;
 
 /// @title IDegenerusAffiliate
 /// @notice Interface for the affiliate referral system (contract-to-contract calls only).
-/// @dev Implements 3-tier referral structure: Player -> Affiliate (base) -> Upline1 (20%) -> Upline2 (4%).
+/// @dev Implements 3-tier referral structure: Player -> Affiliate (75%) -> Upline1 (20%) -> Upline2 (5%).
 interface IDegenerusAffiliate {
     /// @notice Process affiliate rewards for a purchase or gameplay action.
     /// @dev Handles referral resolution, reward scaling, and multi-tier distribution.
@@ -57,13 +57,13 @@ interface IDegenerusAffiliate {
     /// @dev Permissionless. All `subs` must resolve to the same direct affiliate `A` (else revert).
     ///      Drains each sub's `affiliateBase` atomically at the Game storage owner, splits the total
     ///      75/20/5 (floored, remainder to A) and pays A / U1 / U2 directly via `creditFlip`; no-referrer
-    ///      subs split 50/50 VAULT/DGNRS. Fixed split (no roll, no seed). Leaderboard credits A once.
+    ///      subs split 50/50 VAULT/sDGNRS. Fixed split (no roll, no seed). Leaderboard credits A once.
     /// @param subs Afking subscribers to settle; all must share the same direct affiliate `A`.
     function claim(address[] calldata subs) external;
 
     /// @notice Get the top affiliate for a given game level.
     /// @dev Returns the affiliate with the highest earnings for that level.
-    ///      Used for affiliate trophies and jackpot selections.
+    ///      Used to pay the top affiliate a DGNRS pool reward at level transition.
     /// @param lvl The game level to query.
     /// @return player Address of the top affiliate.
     /// @return score Their score in FLIP base units (18 decimals).

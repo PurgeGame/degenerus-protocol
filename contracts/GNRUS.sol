@@ -108,7 +108,7 @@ contract GNRUS {
     /// @notice Emitted when a level resolves with no eligible winner
     event LevelSkipped(uint24 indexed level);
 
-    /// @notice Emitted when gameover finalization burns unallocated GNRUS and claims winnings
+    /// @notice Emitted when gameover finalization burns unallocated GNRUS (ethClaimed/stethClaimed always 0; final ETH/stETH is pushed to the vault/sDGNRS/GNRUS by the game, not claimed here)
     event GameOverFinalized(uint256 gnrusBurned, uint256 ethClaimed, uint256 stethClaimed);
 
     /// @notice Emitted when the vault owner sweeps unredeemed GNRUS residual to the vault after the recovery delay
@@ -171,7 +171,7 @@ contract GNRUS {
     mapping(uint24 => mapping(address => mapping(uint8 => bool))) public hasVoted;
 
     /// @notice Current-level charity slate. Index = uint8 slot id (0..19). Address-only, no metadata.
-    /// @dev `private` — auto-getter would clash with the named `getCharity(uint8)` view.
+    /// @dev `private` — access is exposed only via the explicit `getCharity(uint8)` view (with its own bounds check), not an auto-generated array getter.
     address[20] private currentSlate;
 
     /// @notice Pending edit queue. Recipient value at slot index; sentinel via `pendingEditSet` bitmap.
@@ -598,8 +598,8 @@ contract GNRUS {
         if (currentSlate[slot] == address(0)) revert VoteRejected(REJECT_EMPTY_SLOT);
 
         // 2b. Previous-winner rejection (one cold SLOAD on lastWinningRecipient; reuses the
-        //     currentSlate[slot] read from step 2 above by recomputing — single SLOAD via mapping
-        //     access; the optimizer collapses the duplicate read at the same source slot).
+        //     currentSlate[slot] read from step 2 above — same storage-array slot, no intervening
+        //     write, so the optimizer collapses the duplicate SLOAD).
         if (currentSlate[slot] == lastWinningRecipient) revert PreviousWinnerNotVotable();
 
         // 3. Already-voted rejection (one cold SLOAD on hasVoted[level][voter][slot])

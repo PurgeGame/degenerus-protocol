@@ -63,7 +63,7 @@ interface IDegenerusGamePlayerActions {
         address buyer,
         uint256 entryQuantityScaled
     ) external;
-    /// @notice Sell far-future ticket entries to sDGNRS for current-level tickets + cash.
+    /// @notice Sell far-future ticket entries for current-level tickets + cash; the counterparty resolves to sDGNRS, or to the vault as buyer-of-last-resort when sDGNRS cannot fund the swap.
     function sellFarFutureEntries(
         address player,
         uint32[] calldata levels,
@@ -72,7 +72,7 @@ interface IDegenerusGamePlayerActions {
     ) external;
     /// @notice Withdraw the caller's prepaid afking ETH (sends to the caller).
     function withdrawAfkingFunding(uint256 amount) external;
-    /// @notice The caller's prepaid afking ETH balance.
+    /// @notice A player's prepaid afking ETH balance.
     function afkingFundingOf(address player) external view returns (uint256);
 }
 
@@ -623,7 +623,7 @@ contract DegenerusVault {
         gamePlayer.resolveDegeneretteBets(address(this), betIds);
     }
 
-    /// @notice Salvage the vault's far-future ticket entries to sDGNRS (current tickets + cash) — vault owner.
+    /// @notice Salvage the vault's far-future ticket entries for current tickets + cash — vault owner. Counterparty resolves to sDGNRS or, on fallback, to the vault itself.
     /// @dev The >50.1% DGVE holder can trim VAULT's far inventory (4 entries = 1 whole ticket). VAULT
     ///      self-calls (no operator).
     function gameSellFarFutureEntries(

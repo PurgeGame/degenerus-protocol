@@ -634,7 +634,7 @@ contract DegenerusAdmin {
     }
 
     /// @notice Current approval threshold for a feed proposal (basis points, decays daily).
-    /// @dev Defence-weighted schedule: 50% → 40% → 25% → 15% over 4 days.
+    /// @dev Defence-weighted schedule: 50% → 40% → 25% → 15% over 3 days, then holds at the 15% floor until the 7-day proposal lifetime expires.
     ///      Floor is 15% (1500 bps) — if community can't reach 15% with approve > reject,
     ///      the proposal expires. Defence matters more than restoring LINK rewards.
     /// @param proposalId ID of the feed proposal.

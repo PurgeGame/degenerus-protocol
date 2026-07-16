@@ -83,7 +83,7 @@ interface IDrawGame {
 }
 
 /// @dev Coinflip stake-credit channel for draw prizes (WWXRP is an authorized
-///      flip creditor alongside game/quests/affiliate/admin).
+///      flip creditor alongside game/quests/affiliate/admin/sDGNRS).
 interface IDrawCoinflip {
     function creditFlip(address player, uint256 amount) external;
 }
