@@ -64,7 +64,7 @@ contract DegenerusGameBingoModule is DegenerusGameStorage {
     // claimAffiliateDgnrs constants
     // -------------------------------------------------------------------------
 
-    /// @dev Bonus FLIP flip credit for deity pass affiliate claims (20% of payout).
+    /// @dev Bonus FLIP credit for deity-pass affiliate claims: 20% of the claimant's affiliate score, capped (see CAP_ETH).
     uint16 private constant AFFILIATE_DGNRS_DEITY_BONUS_BPS = 2000;
 
     /// @dev Max deity bonus per level, denominated in ETH (converted to FLIP at current price).

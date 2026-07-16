@@ -916,7 +916,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
     ///      delegatecall (the module operates on this contract's storage in-context —
     ///      the subscriber set / cursors / Sub stamps all live in
     ///      DegenerusGameStorage). For each funded sub the callee STAMPS the per-sub box
-    ///      fields (lootbox mode) or QUEUES whole tickets via purchaseWith (ticket mode),
+    ///      fields (lootbox mode) or QUEUES whole tickets directly via _queueEntriesScaled (ticket mode),
     ///      sets the lastAutoBoughtDay marker, debits afkingFunding (claimablePool in
     ///      tandem, fail loud — no error-swallowing valve), and advances _subCursor until the
     ///      accumulated gas-weight reaches SUB_STAGE_WEIGHT_BUDGET; it persists _subCursor

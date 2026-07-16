@@ -95,8 +95,8 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
     /// @dev subscribe(_, 0) cancel where the caller has no active subscription
     ///      (nothing to tombstone).
     error NotSubscribed();
-    /// @dev subscribe would grow the active subscriber set past the uint16 cursor
-    ///      cap (65,535). NEW-subscriber path only — re-subscribe never trips it.
+    /// @dev subscribe would grow the active subscriber set past SUBSCRIBER_CAP
+    ///      (1000). NEW-subscriber path only — re-subscribe never trips it.
     error SubscriberCapReached();
     /// @dev mintFlip() found all router categories empty — the clean no-work signal
     ///      (the unbounded-scan-free early-return on no pending work).
@@ -178,8 +178,9 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
     ///      lootbox mode.
     uint8 internal constant FLAG_USE_TICKETS = 4;
 
-    /// @dev externalFunding bit within Sub.flags — set ONLY when a non-self
-    ///      `fundingSource` is registered in the sparse `_fundingSourceOf` map.
+    /// @dev externalFunding bit within Sub.flags — set when a non-zero
+    ///      `fundingSource` is registered in the sparse `_fundingSourceOf` map
+    ///      (an explicit self-address included; only address(0) takes the flagless self path).
     ///      Lets the common self-funded path resolve `src = player` from the
     ///      already-loaded flags byte and SKIP the per-sub `_fundingSourceOf` SLOAD
     ///      (the map is read only for the rare operator-funded sub).
@@ -198,7 +199,7 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
 
     /// @dev Per-sub gas-weight of a LOOTBOX buy — the unit the ticket/evict weights are ratioed
     ///      against. Measured ≈34k marginal → weight 10 (≈3.4k per weight-unit), giving enough
-    ///      granularity for ticket (≈73k → 22) and evict (≈27k → 8) to ratio on real marginal
+    ///      granularity for ticket (≈73k → 21) and evict (≈27k → 8) to ratio on real marginal
     ///      cost, so the chunk gas is composition-flat (`per-call overhead + budget × ~3.4k`).
     uint256 internal constant SUB_STAGE_LOOTBOX_WEIGHT = 10;
 
@@ -439,8 +440,8 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
         // eviction handles that.
         if (!exemptSub && (s.validThroughLevel == 0 || s.validThroughLevel < level))
             revert NoPass();
-        // Sparse funder map: store only a non-self source; clear on self so re-pointing an
-        // operator-funded sub back to self does not strand a stale funder. Re-pointing the
+        // Sparse funder map: store any non-zero source; only address(0) (self) clears it, so
+        // re-pointing an operator-funded sub back to address(0) does not strand a stale funder. Re-pointing the
         // source IS a re-subscribe, which re-runs the operator-approval gate.
         if (fundingSource != address(0)) {
             _fundingSourceOf[subscriber] = fundingSource;
@@ -1115,7 +1116,7 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
     ///      25% of that spend is the manual buyer's presale-box credit; a ticket sub's
     ///      owed also carries the quantity-scaling buyer-bonus on top of the flat slot-0,
     ///      overstating the mint spend — divide the ticket grant back toward it: /3 for
-    ///      heavy buyers (dailyQuantity >= 10, where the bonus doubles to 20%), else /2),
+    ///      heavy buyers (dailyQuantity >= 10, where the bonus rises to 15%), else /2),
     ///      then pay the whole-FLIP owed in ONE `creditFlip`. Always credits the sub,
     ///      never the caller; no-op at owed == 0. Keyed on the record's CURRENT flags +
     ///      dailyQuantity, so the credit reflects the state in force during accrual.
@@ -1147,8 +1148,8 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
     ///         slice and, per mode: a LOOTBOX sub STAMPS the two
     ///         genuinely-per-sub box inputs (`score`, `amount`) warm-dirty into the
     ///         single-slot Sub record — the box is materialized LATER by the open
-    ///         leg at the LIVE level; a TICKET sub QUEUES whole tickets NOW via
-    ///         the MintModule `purchaseWith` path (no box). Both modes debit
+    ///         leg at the LIVE level; a TICKET sub QUEUES whole tickets NOW directly
+    ///         via the inherited `_queueEntriesScaled` primitive (no box). Both modes debit
     ///         `afkingFunding[src]` then set the `lastAutoBoughtDay` success-marker AFTER
     ///         the debit (it also doubles as the lootbox seed `day`), and carry the
     ///         set-mutation semantics (no cursor advance after swap-pop).

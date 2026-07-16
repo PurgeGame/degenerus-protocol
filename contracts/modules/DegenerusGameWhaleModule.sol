@@ -100,10 +100,10 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
     /// @dev Whale pass minter reward: 1% of whale pool.
     uint32 private constant DGNRS_WHALE_MINTER_PPM = 10_000;
 
-    /// @dev Direct affiliate reward for deity pass: 0.5% of affiliate pool.
+    /// @dev Direct affiliate reward for deity pass: 0.5% of the unreserved affiliate pool (after reserving outstanding level claims).
     uint32 private constant DGNRS_AFFILIATE_DIRECT_DEITY_PPM = 5_000;
 
-    /// @dev Upline affiliate reward for deity pass: 0.1% of affiliate pool.
+    /// @dev Upline affiliate reward for deity pass: 0.1% of the unreserved affiliate pool.
     uint32 private constant DGNRS_AFFILIATE_UPLINE_DEITY_PPM = 1_000;
 
     /// @dev Deity pass buyer reward: 5% of whale pool.
@@ -112,7 +112,7 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
     /// @dev Lazy pass: number of levels covered.
     uint24 private constant LAZY_PASS_LEVELS = 10;
 
-    /// @dev Lazy pass: tickets per level (4 tickets = 1 level).
+    /// @dev Lazy pass: entries per level (4 entries = 1 whole ticket).
     uint32 private constant LAZY_PASS_ENTRIES_PER_LEVEL = 4;
 
     /// @dev Lazy pass: share of purchase value awarded as lootbox (10%).
@@ -127,13 +127,13 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
     /// @dev Whale pass standard price (levels 4+).
     uint256 private constant WHALE_PASS_STANDARD_PRICE = 4 ether;
 
-    /// @dev Whale pass bonus tickets per level for levels up to 10.
+    /// @dev Whale pass bonus entries per level for levels up to 10.
     uint32 private constant WHALE_BONUS_ENTRIES_PER_LEVEL = 40;
 
-    /// @dev Whale pass standard tickets per level for levels 11+.
+    /// @dev Whale pass standard entries per level for levels 11+.
     uint32 private constant WHALE_STANDARD_ENTRIES_PER_LEVEL = 2;
 
-    /// @dev Last level eligible for whale pass bonus tickets.
+    /// @dev Last level eligible for whale pass bonus entries.
     uint24 private constant WHALE_BONUS_END_LEVEL = 10;
 
     /// @dev Whale pass lootbox share (10%).
@@ -156,7 +156,7 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
      * @notice Purchase a 100-level whale pass.
      * @dev Available at any level. Tickets always start at x1.
      *      - Boosts levelCount by delta between current freeze and new freeze (max 100, no double dipping).
-     *      - Queues 40 × quantity bonus tickets/lvl for levels passLevel-10, 2 × quantity standard tickets/lvl for the rest.
+     *      - Queues 40 × quantity bonus entries/lvl for levels passLevel-10, 2 × quantity standard entries/lvl for the rest (4 entries = 1 whole ticket).
      *      - Lootbox: 10% of price.
      *      - Distributes DGNRS minter rewards to the buyer.
      *      - Affiliate: 20% fresh / 5% recycled of the price in FLIP, exactly like a ticket mint
@@ -310,7 +310,7 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
 
         mintPacked_[buyer] = data;
 
-        // Queue tickets: 40*quantity/lvl for bonus levels (passLevel to 10), 2*quantity/lvl for the rest
+        // Queue entries: 40*quantity/lvl for bonus levels (passLevel to 10), 2*quantity/lvl for the rest
         uint32 bonusEntries = uint32(WHALE_BONUS_ENTRIES_PER_LEVEL * quantity);
         uint32 standardEntries = uint32(
             WHALE_STANDARD_ENTRIES_PER_LEVEL * quantity
@@ -404,10 +404,10 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
 
     /**
      * @notice Purchase a 10-level lazy pass (direct in-game activation).
-     * @dev Available at levels 0-2, x9 (9, 19, 29... excluding x99), or x0 (10, 20, 30...
-     *      excluding the terminal x00), or with a valid lazy pass boon.
+     * @dev Available at levels 0-2, x9 (9, 19, 29...; not x99), any x0 (10, 20, 30...), a century
+     *      x00 during its purchase phase (blocked once jackpotPhaseFlag is set), or with a valid lazy pass boon.
      *      Can renew when 7 or fewer levels remain on current pass freeze.
-     *      - Grants 4 tickets per level for the next 10 levels (starting at current level + 1).
+     *      - Grants 4 entries (one whole ticket) per level for the next 10 levels (starting at current level + 1).
      *      - Applies the standard 10-level stat boost via _activate10LevelPass.
      *      - Price: flat 0.24 ETH at levels 0-2 (excess buys bonus tickets), sum of per-level
      *        ticket prices across the 10-level window at levels 3+.
@@ -418,7 +418,7 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
      * @param buyer The address receiving the pass.
      * @param affiliateCode Affiliate/referral code for the purchase (bytes32(0) = stored code).
      * @custom:reverts OnlyDelegatecall When invoked outside the Game delegatecall context.
-     * @custom:reverts InvalidLevelForPass When the level is not 0-2, x9 (excl. x99), or a century x00 in its purchase phase, and no boon applies.
+     * @custom:reverts InvalidLevelForPass When the level is not 0-2, x9 (excl. x99), any x0, or a century x00 in its purchase phase, and no boon applies.
      * @custom:reverts DeityPassConflict When the buyer already holds a deity pass.
      * @custom:reverts PassNotExpired When an active frozen pass still has 8+ levels remaining.
      */
@@ -790,9 +790,9 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
 
     /// @dev Distribute DGNRS rewards for deity pass purchase to buyer and affiliates.
     /// @param buyer The pass purchaser receiving 5% of whale pool.
-    /// @param affiliateAddr Direct referrer (receives 0.5% of affiliate pool).
-    /// @param upline Second-level referrer (receives 0.1% of affiliate pool).
-    /// @param upline2 Third-level referrer (receives 0.05% of affiliate pool).
+    /// @param affiliateAddr Direct referrer (receives 0.5% of the unreserved affiliate pool).
+    /// @param upline Second-level referrer (receives 0.1% of the unreserved affiliate pool).
+    /// @param upline2 Third-level referrer (receives 0.05% of the unreserved affiliate pool).
     function _rewardDeityPassDgnrs(
         address buyer,
         address affiliateAddr,
