@@ -16,7 +16,7 @@ import {PriceLookupLib} from "../libraries/PriceLookupLib.sol";
  * @title DegenerusGameFoilPackModule
  * @author Burnie Degenerus
  * @notice Delegate-called module for the foil pack: a 10x-priced four-ticket SKU
- *         whose four match signatures and boost multiplier freeze at buy, and a
+ *         whose boost multiplier and activity score freeze at buy (the match lines resolve later), and a
  *         per-(day, ticket, drawKind) match claim that reads the day's sealed
  *         winning sets and pays an isolated 40/40/20 spin.
  * @dev All storage reads/writes operate on the inherited DegenerusGameStorage.
@@ -80,7 +80,7 @@ contract DegenerusGameFoilPackModule is
     // Events
     // -------------------------------------------------------------------------
 
-    /// @notice Emitted when a foil pack is bought and its signatures freeze.
+    /// @notice Emitted when a foil pack is bought and its boost freezes.
     /// @param buyer The player who bought the pack.
     /// @param level The cycle level the pack bets into.
     /// @param multBps The frozen activity-boost multiplier (20000..60000).
@@ -116,8 +116,8 @@ contract DegenerusGameFoilPackModule is
 
     /// @notice Deliver one foil pack (four tickets) for the active cycle as the foil leg
     ///         of an additive ticket/lootbox/foil purchase.
-    /// @dev Delegatecall-only from the mint module's purchase path: address(this) == GAME
-    ///      under the nested dispatch. A direct call on the deployed module would trap the
+    /// @dev Delegatecall-only from the Game facade's combined purchase path (_purchaseWithFoil), a
+    ///      sibling leg to the mint ticket/lootbox leg: address(this) == GAME. A direct call on the deployed module would trap the
     ///      in-flight msg.value against empty local state. Liveness is gated by the purchase
     ///      path. This handles the ENTIRE foil leg so a foil pack counts exactly like a
     ///      ticket purchase: its own payment (75/25 pool), the 20/5 affiliate, the ten
@@ -280,7 +280,7 @@ contract DegenerusGameFoilPackModule is
         // days + in-run secondaries), not the decayed manual snapshot, so use the afking-live
         // value when a run is active — the same basis the mint path's cachedScore uses for the
         // lootbox EV. The raw score is also frozen into the record and reused as the claim
-        // spin's RTP input, so the payout is fully determined at buy.
+        // spin's RTP input, so the spin's RTP is fixed at buy (the match resolves later, against the future resolveDay word).
         (bool afkLive, uint32 afkStreak) = _liveAfkingStreak(buyer);
         uint256 score = _playerActivityScore(buyer, afkLive ? afkStreak : streakSnapshot);
         uint16 multBps = uint16(ActivityCurveLib.foilBoostBps(score));
@@ -551,7 +551,7 @@ contract DegenerusGameFoilPackModule is
     ///      (ETH/FLIP/WWXRP) and the spin is seeded — both off the retained daily
     ///      word. The per-N-calibrated box-spins are EV-neutral (RTP scales with the
     ///      buyer's activity score frozen at buy), so the foil's boosted traits cannot
-    ///      tilt EV and the ~2-faces/pack/30d calibration holds. FLIP stakes split into
+    ///      tilt EV and the ~2.633-faces/pack/30d calibration holds. FLIP stakes split into
     ///      thirds across three spins under one survival flip; ETH and WWXRP are single
     ///      spins. The T=8 tier (all four full doubles) also grants a half whale pass. All effects run after
     ///      the double-claim marker is set (CEI). The matched signature `sel` is the

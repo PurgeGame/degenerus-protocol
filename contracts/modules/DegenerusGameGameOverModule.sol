@@ -50,22 +50,24 @@ contract DegenerusGameGameOverModule is DegenerusGameStorage {
     IFlipTombstone private constant flip =
         IFlipTombstone(ContractAddresses.COIN);
 
-    /// @notice Fixed refund amount per deity pass for early game over (levels 0-9)
+    /// @notice Refund cap per deity pass for early game over (levels 0-9)
     uint256 private constant DEITY_PASS_EARLY_GAMEOVER_REFUND =
         20 ether;
 
     // error E() — inherited from DegenerusGameStorage
 
     /// @notice Process game over by distributing remaining funds via jackpots.
-    /// @dev Called when liveness guards trigger (1yr deploy timeout or 120-day inactivity).
+    /// @dev Called when a liveness guard fires: 1yr deploy-idle timeout (level 0), 120-day
+    ///      inactivity (level>0), a 14-day VRF-stall grace, or the 120-day VRF-death deadman
+    ///      (jackpot/last-purchase phases).
     ///      Sets terminal gameOver flag.
     ///
     ///      Distribution logic:
-    ///      - If game ended early (levels 0-9): Fixed 20 ETH refund per deity pass purchased,
+    ///      - If game ended early (levels 0-9): refund of the price paid (capped at 20 ETH) per deity pass,
     ///        FIFO by purchase order, budget-capped to available funds minus claimablePool
     ///      - Remaining funds: 10% to Decimator, 90% to the phase-correct terminal ticket cohort
     ///      - Decimator refunds flow to terminal jackpot pool
-    ///      - Any uncredited remainder swept to vault and sDGNRS
+    ///      - Any uncredited remainder later swept by handleFinalSweep three-way to vault / sDGNRS / GNRUS
     ///
     ///      Reads rngWordByDay[day] for entropy; reverts if funds exist but word is not yet available.
     ///      VRF fallback logic (historical word, stall timeout) is in AdvanceModule._gameOverEntropy.
@@ -258,9 +260,9 @@ contract DegenerusGameGameOverModule is DegenerusGameStorage {
     }
 
     /// @dev Send stETH first to a recipient, then ETH for the remainder. Returns updated stETH balance.
-    ///      IMPORTANT: Hard-reverts on stETH/ETH transfer failure. Because game-over
-    ///      sets terminal state flags that roll back on revert, a stuck stETH transfer
-    ///      would block game-over processing until the transfer succeeds.
+    ///      IMPORTANT: Hard-reverts on stETH/ETH transfer failure. handleFinalSweep latches
+    ///      GO_SWEPT before transferring, so a stuck stETH transfer reverts the whole sweep
+    ///      (GO_SWEPT rolls back), blocking the final sweep until the transfer succeeds.
     /// @param to Recipient address.
     /// @param amount Total amount to send (stETH preferred, ETH as fallback).
     /// @param stethBal Remaining stETH balance available for transfers.

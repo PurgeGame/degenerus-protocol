@@ -8,15 +8,17 @@ import {BitPackingLib} from "../libraries/BitPackingLib.sol";
 /**
  * @title DegenerusGameBoonModule
  * @author Burnie Degenerus
- * @notice Delegatecall module for boon consumption.
+ * @notice Delegatecall module for boon consumption and expiry maintenance.
  *
- * @dev Boon consumption logic for coinflip, purchase, decimator, activity, and deity pass boons.
+ * @dev Consumes coinflip, purchase, decimator, and activity boons; separately clears expired
+ *      coinflip, lootbox, purchase, decimator, whale, activity, deity-pass, and lazy-pass boons.
  *      Called via `delegatecall` from DegenerusGame -- all storage reads/writes
  *      operate on the game contract's storage.
  *
  *      All boon state is packed into a 2-slot BoonPacked struct per player.
- *      Each function loads the relevant slot(s), modifies in memory, and writes
- *      back in a single SSTORE. See DegenerusGameStorage for bit layout.
+ *      Each function loads the relevant slot(s), modifies in memory, and writes back only
+ *      changed slots (at most 2 SSTOREs; consumeActivityBoon also updates mintPacked_).
+ *      See DegenerusGameStorage for bit layout.
  */
 contract DegenerusGameBoonModule is DegenerusGameStorage {
     // =========================================================================
