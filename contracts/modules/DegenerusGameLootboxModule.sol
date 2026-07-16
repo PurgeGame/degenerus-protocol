@@ -57,7 +57,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
 
     /// @notice Emitted when an ETH lootbox is successfully opened
     /// @param player The player who opened the lootbox
-    /// @param lootboxIndex The per-player storage index of the opened lootbox
+    /// @param lootboxIndex The shared (system-wide) RNG index of the opened lootbox
     /// @param amount The ETH amount of the lootbox (in wei)
     /// @param futureLevel The target level for future tickets
     /// @param futureTickets The pre-Bernoulli scaled (× QTY_SCALE) future ticket count
@@ -124,7 +124,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
 
     /// @notice Unified lootbox reward event for boon awards
     /// @param player The player receiving the reward
-    /// @param rewardType The type of reward (2=CoinflipBoon, 4=Boost5, 5=Boost15, 6=Boost25/Purchase, 8=DecimatorBoost, 9=WhaleBoon, 10=ActivityBoon/DeityPassBoon, 11=LazyPassBoon)
+    /// @param rewardType The type of reward (2=CoinflipBoon, 4=Boost5, 5=Boost15, 6=Boost25/Purchase, 8=DecimatorBoost, 9=WhaleBoon, 10=ActivityBoon/DeityPassBoon, 11=LazyPassBoon, 12=QuestShield)
     /// @param lootboxAmount The lootbox amount spent (ETH-equivalent for FLIP lootboxes)
     /// @param amount Primary reward amount (varies by type: BPS for boosts, token amount for boons)
     event LootBoxReward(
@@ -201,7 +201,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     /// @dev Whale pass standard price (used for whale discount boon EV estimation).
     uint256 private constant WHALE_PASS_STANDARD_PRICE =
         4 ether;
-    /// @dev Whale pass standard tickets per level. Reported in the
+    /// @dev Whale pass standard entries per level (4 entries = 1 ticket). Reported in the
     ///      LootBoxWhalePassJackpot event for downstream indexers; the
     ///      actual ticket materialization happens in claimWhalePass.
     uint32 private constant WHALE_PASS_ENTRIES_PER_LEVEL = 2;
@@ -332,7 +332,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     /// @dev Cumulative box-ETH width of each DGNRS tier (10 ETH).
     uint256 private constant PRESALE_BOX_DGNRS_TIER_WIDTH = 10 ether;
 
-    /// @dev Whale pass price (200 tickets over levels 10-109)
+    /// @dev Whale pass price (200 entries = 50 tickets over 100 levels)
     uint256 private constant LOOTBOX_WHALE_PASS_PRICE =
         4.50 ether;
     /// @dev Threshold above which lootbox is split into two rolls (0.5 ETH scaled)
@@ -743,7 +743,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     /// @param player Box owner.
     /// @param index The box's RNG index (event tag).
     /// @param stored Packed record: [bit255 closing][96:191 soldBefore][0:95 amount].
-    /// @param rngWord The committed daily word for this index (frozen at buy).
+    /// @param rngWord The index's committed daily word (lands at the index's advance, not at buy; the box only binds to the index at buy).
     function _resolvePresaleBox(
         address player,
         uint48 index,
@@ -1035,7 +1035,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     /// @dev The afking open route: the LIVE-LEVEL twin of `resolveLootboxDirect` — identical
     ///      resolution shape (derive the seed, roll the target level from the LIVE level, do
     ///      the SINGLE `_applyEvMultiplierWithCap` RMW at open, then `_resolveLootboxCommon`)
-    ///      — with exactly TWO deviations from `resolveLootboxDirect`:
+    ///      — with two AFKing-specific twists (vs the human `_openLootBoxLeg`):
     ///
     ///        1. the RNG `rngWord` is a CALLER-PASSED param (the GameAfkingModule open-leg
     ///           passes the frozen stamp day's word), NOT read from any index-keyed map; and
@@ -1043,7 +1043,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     ///           live `_simulatedDayIndex()` — the day MUST stay frozen in the seed or a
     ///           self-keepering player could grind the seed by open-timing.
     ///
-    ///      Everything else is IDENTICAL to `resolveLootboxDirect`: `currentLevel = level +
+    ///      The live-level handling matches `resolveLootboxDirect`: `currentLevel = level +
     ///      1` LIVE, `targetLevel = _rollTargetLevel(currentLevel, seed)` rolls from the LIVE
     ///      level (NO stored baseLevel floor — auto-open removes the player's ability to time
     ///      the level, so the level freeze is unnecessary),
@@ -1091,9 +1091,9 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     ) external {
         if (amount == 0) return;
 
-        // Byte-identical to the human box open (`_openLootBoxLeg`) / resolveLootboxDirect: the
-        // abi.encode preimage — with the FROZEN stamped `day` (prevents seed-grinding by
-        // open-timing) and the CALLER-PASSED frozen-day word `rngWordByDay[day]`.
+        // Same abi.encode seed shape as the human box open (`_openLootBoxLeg`) plus a FROZEN
+        // stamped `day` (prevents seed-grinding by open-timing) and the CALLER-PASSED frozen-day
+        // word `rngWordByDay[day]`; resolveLootboxDirect uses a different preimage (hash2, no day).
         uint256 seed = uint256(keccak256(abi.encode(rngWord, player, day, amount)));
 
         // LIVE level, exactly like resolveLootboxDirect: auto-open removes the
@@ -1224,7 +1224,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     /// @dev Common lootbox resolution logic shared by ETH and FLIP lootboxes.
     ///      Handles whale pass jackpots, lazy pass awards, ticket/FLIP rolls, and boons.
     /// @param player Player receiving rewards
-    /// @param index Per-player storage index of the lootbox being opened. Used purely as
+    /// @param index Shared (system-wide) RNG index of the lootbox being opened. Used purely as
     ///        the `lootboxIndex` identifier on the manual `LootBoxOpened` emit; auto-resolve
     ///        callers pass `0`.
     /// @param amount ETH-equivalent amount for reward calculations
@@ -1326,12 +1326,12 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
 
     /// @dev Settle ONE reward roll: the reward-type draw, then (for a ticket roll) the distress
     ///      bonus + single Bernoulli whole-collapse + queue at `rollLevel`, the whole-FLIP
-    ///      floor + creditFlip, and one LootBoxOpened. `fullAmount` (the box's pre-split amount)
-    ///      feeds the reward calc and the event's amount field, so an UNSPLIT box settles and
+    ///      floor + creditFlip, and one LootBoxOpened. `rollAmount` drives the reward calc;
+    ///      `fullAmount` fills the event's amount field, so an UNSPLIT box settles and
     ///      emits exactly as a single combined resolution did; a split box runs this twice, each
     ///      half at its own re-rolled level with its own event.
     /// @param rollAmount This roll's ETH chunk (the whole main amount, or one split half).
-    /// @param fullAmount The box's full ETH-equivalent amount (reward basis + event amount).
+    /// @param fullAmount The box's full ETH-equivalent amount — event amount field only, not the reward basis.
     /// @param rollLevel The target level this roll's tickets queue at.
     /// @param rollSeed This roll's seed (primary `seed` for roll 1, `seed2` for roll 2).
     /// @param isFarFuture True when rollLevel is far-future (>= base + 5) — weights the ticket budget.
@@ -1412,7 +1412,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     }
 
     /// @dev Roll for lootbox boons. Lootbox can award at most one boon.
-    ///      If a boon is already active, only refresh or upgrade that same category.
+    ///      Categories are independent and coexist; within a category only a strictly higher tier upgrades.
     ///      Uses a single roll with granular ppm-based probability and deity-weighted pool.
     ///      Bit budget (consumed from `seed`):
     ///        - boon roll: bits[120..151] via uint32(seed >> 120) % BOON_PPM_SCALE (bias 0.022%; BOON_PPM_SCALE = 1_000_000)
@@ -1716,7 +1716,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     ///      Lootbox boons: emit events, deity day = 0.
     ///      Deity boons: no events, deity day = day.
     ///      All boon state is stored in boonPacked[player] (2-slot packed struct).
-    ///      Players can hold one boon per category simultaneously (up to 9 categories).
+    ///      Players can hold one boon per category simultaneously (8 categories).
     ///      Isolated bit fields per category -- applying a boon in one category cannot
     ///      affect another category's bits (targeted bitmask operations: & ~mask | value).
     function _applyBoon(

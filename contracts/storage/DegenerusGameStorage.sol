@@ -885,6 +885,22 @@ abstract contract DegenerusGameStorage {
         return lvl | TICKET_FAR_FUTURE_BIT;
     }
 
+    /// @dev Release a drained ticket queue in O(1): zero only the array's LENGTH
+    ///      slot. `delete` on a dynamic storage array compiles into a loop zeroing
+    ///      every element slot (~5k gas each against committed storage), so a long
+    ///      queue would push the finishing batch past the block gas limit and brick
+    ///      advancement — the batch loop is write-budgeted, but a `delete`'s
+    ///      compiler-generated clear is not. Zeroing just the length keeps every
+    ///      `.length` readiness gate exact while leaving stale element slots
+    ///      behind; they are unreachable because all reads are length-gated and a
+    ///      push overwrites slots from index 0 upward.
+    function _releaseTicketQueue(uint24 rk) internal {
+        address[] storage q = ticketQueue[rk];
+        assembly ("memory-safe") {
+            sstore(q.slot, 0)
+        }
+    }
+
     // =========================================================================
     // Single-Component Prize Pool Accessors
     // =========================================================================

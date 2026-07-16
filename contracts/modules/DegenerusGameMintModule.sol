@@ -51,7 +51,8 @@ import {ActivityCurveLib} from "../libraries/ActivityCurveLib.sol";
  * Bit  184:     hasDeityPass        - Deity pass flag
  * Bits 185-208: affBonusLevel       - Cached affiliate bonus level
  * Bits 209-214: affBonusPoints      - Cached affiliate bonus points (0-50)
- * Bits 215-227: (unused)
+ * Bits 215-222: curseCount          - Cashout/smite curse counter (0-20)
+ * Bits 223-227: (unused)
  * Bits 228-243: levelUnits         - Units minted this level
  * Bit 244:      (unused)
  * ```
@@ -61,9 +62,11 @@ import {ActivityCurveLib} from "../libraries/ActivityCurveLib.sol";
  *
  * ## Trait Generation
  *
- * Traits are deterministically derived from tokenId via keccak256:
- * - Each token has 4 traits (one per quadrant: 0-63, 64-127, 128-191, 192-255)
- * - Uses 8×8 weighted grid for non-uniform distribution
+ * Trait tickets are generated per queue entry in _raritySymbolBatch (not from a tokenId):
+ * an LCG seeded by keccak256(baseKey, VRF entropyWord, groupIdx) — baseKey packs
+ * (level, queueIdx, player, owed) — drives each entry's roll.
+ * - Entry index & 3 selects the quadrant/category (0-63, 64-127, 128-191, 192-255)
+ * - traitFromWord maps the word through an 8×8 weighted color×symbol grid
  * - Higher-numbered sub-traits within each category are slightly rarer
  */
 contract DegenerusGameMintModule is
@@ -162,7 +165,7 @@ contract DegenerusGameMintModule is
     ///      allocates to this leg — every payment-mode check binds to it, never to the outer
     ///      purchase tx's msg.value (a combined purchase splits one msg.value across legs).
     ///      Payment modes:
-    ///      - DirectEth: ethForLeg must be >= costWei (overage ignored for accounting)
+    ///      - DirectEth: fresh ETH first (overage ignored); afking covers any shortfall; claimable skipped
     ///      - Claimable: deduct from claimableWinnings (ethForLeg must be 0)
     ///      - Combined: ETH first, then claimable for remainder
     ///      Afking covers any remaining shortfall on every mode.
@@ -201,7 +204,7 @@ contract DegenerusGameMintModule is
     /// @dev Process mint payment and return amount contributed to prize pool.
     ///      Handles three payment modes with strict validation:
     ///
-    ///      DirectEth: ethForLeg must be >= amount (overage ignored for accounting)
+    ///      DirectEth: fresh ETH first (overage ignored); afking covers any shortfall; claimable skipped
     ///      Claimable: ethForLeg must be 0, deduct from claimableWinnings
     ///      Combined: ETH first (any amount ≤ cost), then claimable for rest
     ///
@@ -329,7 +332,7 @@ contract DegenerusGameMintModule is
 
         uint256 idx = ticketCursor;
         if (idx >= total) {
-            delete ticketQueue[rk];
+            _releaseTicketQueue(rk);
             ticketCursor = 0;
             ticketLevel = 0;
             return (false, true, 0);
@@ -445,7 +448,7 @@ contract DegenerusGameMintModule is
         writesUsed = used;
         finished = (idx >= total);
         if (finished) {
-            delete ticketQueue[rk];
+            _releaseTicketQueue(rk);
             if (!inFarFuture) {
                 uint24 ffk = _tqFarFutureKey(lvl);
                 if (ticketQueue[ffk].length > 0) {
@@ -639,7 +642,7 @@ contract DegenerusGameMintModule is
             // false (resume next tx) only if a budget-short foil pack defers. _drainFoil
             // short-circuits on _foilDrainPending, so a no-foil call is a single SLOAD.
             if (total != 0) {
-                delete ticketQueue[rk];
+                _releaseTicketQueue(rk);
             }
             (bool foilDoneEmpty, bool foilDrainedEmpty) = _drainFoil(writesBudget);
             ticketCursor = 0;
@@ -697,7 +700,7 @@ contract DegenerusGameMintModule is
             // drain are caught up is the level finished, so the readiness gate cannot
             // let the jackpot draw early.
             if (total != 0) {
-                delete ticketQueue[rk];
+                _releaseTicketQueue(rk);
             }
             // A final loop iteration can push `used` past writesBudget, so clamp the
             // leftover to 0 (an over-budget call leaves no room for foil and defers it
@@ -1519,7 +1522,7 @@ contract DegenerusGameMintModule is
         // --- One combined prize-pool RMW for both legs ---
         // Each leg's next/future split was computed above (ticket inside _callTicketPurchase,
         // lootbox in the block above); summing the post-split totals lands both in a single
-        // packed write. This runs before any external call (quest handler / affiliate) so no
+        // packed write. This runs before the quest-handler / affiliate calls so no
         // observer ever sees a half-applied contribution, and prizePoolFrozen never flips
         // mid-purchase, so both legs route to the same accumulator.
         _addPrizeContribution(

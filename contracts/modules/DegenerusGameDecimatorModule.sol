@@ -127,18 +127,18 @@ contract DegenerusGameDecimatorModule is DegenerusGamePayoutUtils {
 
     /// @notice Record a Decimator burn for jackpot eligibility.
     /// @dev Called by coin contract on every Decimator burn.
-    ///      First burn sets player's bucket (denominator) choice.
+    ///      First burn sets the player's bucket (denominator), derived from their activity score.
     ///      Subbucket is deterministically assigned from hash(player, lvl, bucket).
-    ///      Subsequent burns accumulate in that bucket unless a strictly better
-    ///      bucket (lower denominator) is provided. On improvement, previous burn
+    ///      Subsequent burns accumulate in that bucket unless a rising activity score qualifies a
+    ///      strictly better (lower denominator) bucket. On improvement, previous burn
     ///      is removed from old aggregate, carried over to the new bucket, and bet migrates.
     ///      Burn amount capped at uint192.max with saturation.
     /// @param player Address of the player.
     /// @param lvl Current game level.
-    /// @param bucket Player's chosen denominator (2-12).
+    /// @param bucket Activity-derived denominator (2-12); FLIP computes it from the player's activity score.
     /// @param baseAmount Burn amount before multiplier.
     /// @param multBps Player bonus multiplier in basis points (10000 = 1x).
-    /// @return bucketUsed The bucket actually used (may differ from requested if not an improvement).
+    /// @return bucketUsed The bucket actually used (unchanged unless the passed bucket is a strict improvement).
     /// @custom:access Restricted to coin contract.
     function recordDecBurn(
         address player,
@@ -284,9 +284,9 @@ contract DegenerusGameDecimatorModule is DegenerusGamePayoutUtils {
       |                      DECIMATOR CLAIM FUNCTIONS                       |
       +======================================================================+*/
 
-    /// @notice Claim Decimator jackpot for caller.
-    /// @dev Public function for players to claim their own jackpot.
-    ///      Credits payout to player's claimable balance.
+    /// @notice Resolve a Decimator jackpot claim for `player` (permissionless).
+    /// @dev Anyone may crank any winner's claim; payout always credits `player`, never the
+    ///      caller. Resolution-into-claimable only (no ETH leaves here).
     /// @param lvl Level to claim from.
     /// @custom:reverts DecClaimInactive When no decimator snapshot exists for this level.
     /// @custom:reverts DecAlreadyClaimed When caller has already claimed for this level.
@@ -321,7 +321,7 @@ contract DegenerusGameDecimatorModule is DegenerusGamePayoutUtils {
     /// @dev Non-claimable entries (already claimed / non-winner) are skipped, not reverted,
     ///      so one stale address can't poison a mass-claim sweep.
     /// @param players Winners whose claims to resolve.
-    /// @param lvl Level to claim from (must be the last decimator).
+    /// @param lvl Level to claim from (any persisted round; snapshots never expire).
     /// @custom:reverts DecClaimInactive When no decimator snapshot exists for this level.
     function claimDecimatorJackpotMany(
         address[] calldata players,

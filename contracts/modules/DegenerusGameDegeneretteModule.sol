@@ -108,7 +108,7 @@ contract DegenerusGameDegeneretteModule is
     /// @notice Emitted when ETH payout exceeds pool cap and excess is converted to lootbox.
     /// @param player The player address.
     /// @param cappedEthPayout The ETH payout after capping.
-    /// @param excessConverted The excess ETH value converted to lootbox rewards.
+    /// @param excessConverted Total ETH routed to the lootbox for this spin — the 3-tier split remainder plus the pool-cap overflow (= payout − cappedEthPayout).
     event PayoutCapped(
         address indexed player,
         uint256 cappedEthPayout,
@@ -252,7 +252,7 @@ contract DegenerusGameDegeneretteModule is
     // lane, by whether the hero quadrant is gold (Variant-2 couples color to symbol,
     // so hero-goldness shifts P(S)). Each table is calibrated against THAT sub-case's
     // Variant-2 score distribution P_(N,heroGold)(S) (color gated behind symbol,
-    // hero symbol +2; S ∈ {0..9}) so that basePayoutEV = exactly 100 centi-x per
+    // hero symbol +2; S ∈ {0..9}) so that basePayoutEV ≈ 100 centi-x (integer-rounded) per
     // sub-case (DEC-02 Option B — exact EV-equality across hero placement). EV-equality
     // across picks is enforced by the table calibration; runtime payout =
     // bet × basePayout_(N,heroGold)(S) × roiBps / 1_000_000.
@@ -313,7 +313,7 @@ contract DegenerusGameDegeneretteModule is
     // with B=6 in the low 64 bits. Read via `(packed >> ((bucket - 6) * 64)) & 0xFFFFFFFFFFFFFFFF`.
     //
     // The factor constants below are calibrated for the S∈{0..9} distribution so that
-    // total ETH bonus EV = exactly 5.000% per N.
+    // total ETH bonus EV ≈ 5.000% per N (integer-rounded).
     uint256 private constant WWXRP_BONUS_FACTOR_SCALE = 1_000_000;
     uint256 private constant WWXRP_FACTORS_N0_PACKED = 0x0000000002278add00000000002c86d300000000008cd6ca0000000000176ea0;
     uint256 private constant WWXRP_FACTORS_N1_HEROGOLD_PACKED = 0x0000000003aef46a00000000003d043e0000000000b767d900000000001b448b;
@@ -1523,10 +1523,10 @@ contract DegenerusGameDegeneretteModule is
     // `address(this) != GAME` guard rejects any direct call on the deployed module
     // instance. Spin draws derive purely from the passed (hash2-tagged, freeze-safe)
     // seed — no live state enters the seed, so the outcome is fixed at fulfillment.
-    // Each spin emits the same DegeneretteResult / DegeneretteResolved pair a regular bet
-    // does (synthetic betId = low 64 bits of the seed) so the off-chain indexer renders
-    // box spins exactly like ordinary spins, plus one Box* marker carrying the box-origin
-    // stake / split.
+    // Each spin emits ONE self-contained BoxSpin event (the per-spin DegeneretteResult /
+    // DegeneretteResolved pair is intentionally NOT emitted for box rolls — BoxSpin carries
+    // every reel plus the resolved reward). The synthetic betId self-classifies: bit 63 =
+    // box-origin sentinel, bits 62-60 = spin type, bits 59-0 = seed entropy.
 
     uint256 private constant BOX_FLIP_SPINS = 3;
     uint256 private constant BOX_SURVIVAL_TAG = 0x537572766976616c; // "Survival"
@@ -1638,7 +1638,7 @@ contract DegenerusGameDegeneretteModule is
     }
 
     /// @notice Three FLIP Degenerette spins under one survival flip (mint-only, safe on any box).
-    /// @dev The total stake is split evenly across three spins; the summed payout then double-or-
+    /// @dev The total stake splits into three equal per-spin stakes (totalStake / 3; the 0-2 wei integer remainder is dropped, un-staked); the summed payout then double-or-
     ///      nothings on one fair flip (EV-neutral) before a single FLIP mint. No pool / ETH /
     ///      recirc touch, so this is solvency-safe on every box path including recirc.
     function resolveFlipSpinsFromBox(

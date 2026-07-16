@@ -720,8 +720,11 @@ contract DegenerusGameFoilPackModule is
                 }
             }
 
-            // Bucket fully drained: free it and advance to the next day.
-            if (total != 0) delete foilBuyers[dd];
+            // Bucket fully drained: advance to the next day. The bucket is left in
+            // place — days are monotonic and both the walk and the pending gate read
+            // only foilDrainDay/foilLastResolveDay, so a passed bucket is unreachable.
+            // (`delete foilBuyers[dd]` would compile into a loop zeroing every
+            // element slot: unbounded gas on a big buy day, bricking the drain.)
             unchecked {
                 ++dd;
             }
