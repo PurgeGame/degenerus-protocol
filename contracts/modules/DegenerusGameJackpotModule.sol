@@ -204,7 +204,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     ///      At max scale (6.36x, 200+ ETH pool): 159 + 95 + 50 + 1 = 305.
     uint16 private constant DAILY_ETH_MAX_WINNERS = 305;
 
-    /// @dev Maximum winners for daily coin jackpot (coinflip.creditFlip is 1 external call each).
+    /// @dev Maximum winners for daily coin jackpot (all paid in one coinflip.creditFlipBatch call).
     uint16 private constant DAILY_COIN_MAX_WINNERS = 50;
 
     /// @dev Share of daily FLIP budget awarded to far-future ticket holders (25%).
@@ -228,7 +228,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     // External Entry Points (delegatecall targets)
     // =========================================================================
 
-    /// @notice Terminal jackpot for x00 levels: Day-5-style bucket distribution.
+    /// @notice Terminal (game-over) jackpot: Day-5-style bucket distribution.
     /// @dev Called via IDegenerusGame(address(this)) from GameOverModule.
     ///      Uses FINAL_DAY_SHARES_PACKED (60/13/13/13) with trait-based bucket distribution.
     ///      Updates claimablePool internally — callers must NOT double-count.
@@ -281,7 +281,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     ///      - Day 1-4: Distributes a random 6%-14% slice of remaining currentPrizePool.
     ///      - Day 5: Distributes 100% of remaining currentPrizePool.
     ///      - Day 1 also runs the early-bird ticket jackpot (from futurePrizePool).
-    ///      - On day 2-4, takes 0.5% of futurePrizePool and buys current-level tickets
+    ///      - On every non-early-bird day (2-5), takes 0.5% of futurePrizePool and buys current-level tickets
     ///        for winners from a random source level in [lvl+1, lvl+4], deposited into nextPool.
     ///      - Increments jackpotCounter on completion.
     ///
@@ -302,8 +302,8 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         uint256 randWord
     ) external {
         uint24 questDay = _simulatedDayIndex();
-        // One hero pass serves both rolls: main and bonus traits share the same
-        // (quadrant, symbol) hero result within a single resolution.
+        // One VRF word drives both rolls; each rolls its OWN hero — the bonus hero is
+        // forced distinct from the main hero (main slot excluded from the bonus roll).
         (
             uint32 winningTraitsPacked,
             uint32 bonusTraitsPacked
@@ -571,7 +571,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
             uint8 carryoverSourceOffset
         ) = _unpackDailyTicketBudgets(dailyTicketBudgetsPacked);
 
-        // Derive traits inline from randWord; one hero pass serves both rolls.
+        // Derive traits inline from randWord; main and bonus each roll a distinct hero.
         uint24 lvl = level;
         (
             uint32 mainTraitsPacked,
@@ -1031,7 +1031,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     ///      in a single call (the full DAILY_ETH_MAX_WINNERS ceiling).
     ///
     ///      JACKPOT PHASE vs PURCHASE/TERMINAL:
-    ///      - Jackpot phase (isJackpotPhase=true): Solo bucket gets whale pass + DGNRS on final day.
+    ///      - Jackpot phase (isJackpotPhase=true): solo bucket routes its winner through the whale-pass handler (75% ETH / 25% half-passes).
     ///      - Purchase/terminal (isJackpotPhase=false): All buckets paid uniformly.
     ///
     /// @param lvl The level whose winners are being paid.
@@ -1110,7 +1110,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     /// @dev Resolves and pays one trait bucket. Selects up to MAX_BUCKET_WINNERS
     ///      ticket holders for the bucket and credits each winner. The solo path
     ///      (isSolo, jackpot phase only) routes the single winner through the
-    ///      whale-pass + final-day DGNRS handler; every other bucket pays 100% ETH.
+    ///      whale-pass handler; every other bucket pays 100% ETH.
     /// @return paidDelta ETH value paid out for this bucket.
     /// @return claimDelta Claimable-liability added for this bucket.
     /// @return newEntropy Updated entropy after winner selection.
@@ -1144,7 +1144,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         if (perWinner == 0) return (0, 0, newEntropy);
 
         if (isSolo) {
-            // Solo bucket (jackpot phase): whale pass + DGNRS on final day
+            // Solo bucket (jackpot phase): 75% ETH + 25% whale passes
             address w = winners[0];
             if (w != address(0)) {
                 (claimDelta, paidDelta, newEntropy) = _handleSoloBucketWinner(
@@ -1277,11 +1277,10 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     ///      write to `dailyHeroWagers[D]`; day D+1's jackpot reads slot[D] via
     ///      `dailyIdx == D` (set by day D's `_unlockRng`).
     ///
-    ///      `heroEntropy` is the raw VRF entropy word for the day; the same value flows into
-    ///      every `_applyHeroOverride` invocation within a jackpot resolution, so on days
-    ///      that produce both regular and bonus trait rolls both rolls land on the same hero
-    ///      `(quadrant, symbol)` pair (only the per-quadrant colors differ, sampled from
-    ///      `randomWord`). Symbol entropy and color entropy live in orthogonal domains:
+    ///      `heroEntropy` is the raw VRF entropy word for the day. This applies the main draw's
+    ///      hero; the bonus draw rolls a SEPARATE hero (main slot excluded) in
+    ///      `_rollWinningTraitsPair`, so the two heroes never coincide. Symbol entropy and color
+    ///      entropy live in orthogonal domains:
     ///      colors read bit-slices of `randomWord`; the symbol roll consumes
     ///      `keccak256(abi.encode(heroEntropy, day))`.
     function _applyHeroOverride(

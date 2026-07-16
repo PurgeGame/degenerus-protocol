@@ -258,8 +258,8 @@ abstract contract DegenerusGameMintStreakUtils is DegenerusGameStorage {
     ) internal view returns (uint256 ethCashWei, uint256 flipTokens) {
         if (cashWei == 0) return (0, 0);
 
-        // Third slice (distinct window from the jitter [bits 0..] and ticket-share [bits 128..]
-        // slices): an ETH target in [0, cashWei].
+        // Third reduction of the seed (>> 64), decorrelated from the jitter (seed % 4001)
+        // and ticket-share (seed >> 128) reductions: an ETH target in [0, cashWei].
         uint256 targetEth = ((seed >> 64) % (cashWei + 1));
         if (targetEth == 0) return (cashWei, 0);
 
@@ -342,7 +342,7 @@ abstract contract DegenerusGameMintStreakUtils is DegenerusGameStorage {
             } else {
                 // Mint streak: 1 point per consecutive level minted, max 50 points
                 uint256 streakPoints = streak > 50 ? 50 : uint256(streak);
-                // Mint count bonus: 1 point each
+                // Mint count bonus: floor(count * 25 / level), capped at 25 (100% participation = 25)
                 uint256 mintCountPoints = _mintCountBonusPoints(
                     levelCount,
                     currLevel
@@ -491,9 +491,10 @@ abstract contract DegenerusGameMintStreakUtils is DegenerusGameStorage {
      *
      * ## Level Transition Logic
      *
-     * - Same level: Just update units
-     * - New level with <4 units: Only track units, don't count as "minted"
-     * - New level with ≥4 units: Update level count total and refresh affiliate bonus cache
+     * - Same level: stamp mint day + accumulate units
+     * - New level with <400 scaled units (4 * QTY_SCALE = one whole ticket): only track units, not "minted"
+     * - New level with ≥400 scaled units: stamp mint day, bump lifetime level count (skipped while
+     *   whale-pass frozen; pass flag/type clear once lvl passes frozenUntilLevel), refresh affiliate cache
      */
     function _recordMintData(
         address player,
