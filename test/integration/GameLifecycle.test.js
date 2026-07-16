@@ -139,10 +139,10 @@ describe("GameLifecycle", function () {
       await purchaseTickets(game, bob);
       await purchaseTickets(game, carol);
 
-      // purchaseInfo reflects purchase phase and level 1 active ticket level.
+      // purchaseInfo reflects purchase phase and the actual game level.
       const info = await game.purchaseInfo();
       expect(info.inJackpotPhase).to.equal(false);
-      expect(info.lvl).to.equal(1); // active direct-ticket level = level+1 during purchase phase
+      expect(info.lvl).to.equal(0); // actual level; buys route to level+1 via priceWei
     });
 
     it("purchase with zero ETH and zero ticketQuantity reverts", async function () {
@@ -457,8 +457,9 @@ describe("GameLifecycle", function () {
       expect(info.inJackpotPhase).to.equal(false);
       expect(info.rngLocked_).to.equal(false);
       expect(info.priceWei).to.equal(eth("0.01"));
-      // Active ticket level = level+1 = 1 during purchase phase at level 0.
-      expect(info.lvl).to.equal(1);
+      // lvl is the actual game level (0 at deploy); priceWei is quoted at the
+      // routed ticket level (level + 1 during the purchase phase).
+      expect(info.lvl).to.equal(0);
     });
 
     it("priceWei remains 0.01 ETH before level 5", async function () {

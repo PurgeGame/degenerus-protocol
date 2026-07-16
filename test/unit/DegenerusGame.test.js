@@ -81,12 +81,12 @@ describe("DegenerusGame", function () {
       expect(await game.rngLocked()).to.be.false;
     });
 
-    it("levelPrizePool[0] is bootstrapped (activeTicketLevel=1 in purchase phase at level 0)", async function () {
+    it("purchaseInfo().lvl reports the actual game level (0 at genesis)", async function () {
       const { game } = await loadFixture(deployFullProtocol);
-      // In purchase phase at level=0, activeTicketLevel = level + 1 = 1
+      // lvl is the ACTUAL game level; purchase-phase routing to level+1
+      // shows up in priceWei (quoted at the routed level), not in lvl.
       const info = await game.purchaseInfo();
-      expect(info.lvl).to.equal(1n);
-      // Base level (game.level()) is 0
+      expect(info.lvl).to.equal(0n);
       expect(await game.level()).to.equal(0n);
     });
 
@@ -103,8 +103,9 @@ describe("DegenerusGame", function () {
       const { game } = await loadFixture(deployFullProtocol);
       const [lvl, inJackpotPhase, lastPurchaseDay, rngLocked_, priceWei] =
         await game.purchaseInfo();
-      // lvl is the active ticket level: level + 1 = 1 in purchase phase at game start
-      expect(lvl).to.equal(1n);
+      // lvl is the actual game level (0 at start); priceWei is quoted at the
+      // routed ticket level (level + 1 during the purchase phase).
+      expect(lvl).to.equal(0n);
       expect(inJackpotPhase).to.be.false;
       expect(rngLocked_).to.be.false;
       expect(priceWei).to.equal(eth("0.01"));

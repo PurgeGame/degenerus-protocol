@@ -64,11 +64,11 @@ describe("PriceEscalation", function () {
       expect(info.priceWei).to.equal(eth(0.01));
     });
 
-    it("purchaseInfo().lvl is 1 (activeTicketLevel = level + 1)", async function () {
+    it("purchaseInfo().lvl is the actual level (0); price is quoted at the routed level", async function () {
       const { game } = await loadFixture(deployFullProtocol);
 
       const info = await game.purchaseInfo();
-      expect(info.lvl).to.equal(1n);
+      expect(info.lvl).to.equal(0n);
       expect(await game.level()).to.equal(0n);
     });
 

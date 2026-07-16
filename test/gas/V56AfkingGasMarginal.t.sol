@@ -1673,4 +1673,175 @@ contract V56AfkingGasMarginal is DeployProtocol {
         assertLt(chunkGas, 10_500_000, "LIVE: the saturated all-evict chunk lands on the <10M target");
     }
 
+    // =========================================================================
+    // (n) SUBS+JACKPOT COINCIDENCE — the RNGREUSE-clamp re-run composition
+    // =========================================================================
+
+    /// @dev The 305-winner daily-ETH jackpot standalone gas, referenced from the sibling
+    ///      AdvanceStageWorstCaseGas harness (test_Stage8_11_12_DailyEthJackpot_305Winners_Measured ~7.1M live /
+    ///      ~7.5M the standalone daily-eth row). Use the CONSERVATIVE higher value so the coincident-sum verdict
+    ///      is an upper bound. This is the jackpot DISTRIBUTION work only (no advanceGame entry overhead), so
+    ///      adding it to a measured completing chunk (which DOES carry the advance overhead) counts the overhead
+    ///      exactly once — a faithful (slightly conservative, warm-sharing-ignoring) coincident-tx sum.
+    uint256 internal constant JACKPOT_305_REF_GAS = 7_500_000;
+
+    /// @notice SUBS+JACKPOT coincidence measurement. The RNGREUSE clamp (AdvanceModule 207-218) can re-open the
+    ///         subscriber STAGE on a consuming/replay advance where `day == dailyIdx+1`, so BOTH decouplers
+    ///         (SUBS_BACKFILL_DEFERRED needs day>dIdx+1; GAP_BACKFILLED needs gapDays!=0) structurally cannot
+    ///         fire — the completing subscriber chunk falls straight into the daily jackpot in ONE tx. The
+    ///         current-level ticket drain (AdvanceModule:551) breaks the composition ONLY if the chunk pushed
+    ///         ticketQueue entries, so a TICKET-mode chunk self-defeats; a LOOTBOX-mode chunk (no queue push)
+    ///         reaches the jackpot. On the replay day every OLD sub (stamped to the request-pass day R >=
+    ///         processDay) SKIPS at weight 1 (GameAfkingModule:1324); only NEW subs added in the keeper gap do
+    ///         real lootbox buys. This measures the two COLD marginals (per-skip, per-lootbox-buy), composes the
+    ///         all-skip completing chunk (the COINCIDENT-REACHABLE worst case — buy-subs cannot join under the
+    ///         freeze lock the clamp requires; see test_BufferedClampReopen_FreezeInvariantBlocksNewSubs), and
+    ///         sums it with the 305-winner jackpot. FINDING: the reachable coincident tx stays under the
+    ///         16,777,216 EIP-7825 cap — the composition is reachable but the freeze invariant bounds it. The
+    ///         heavy skip+buy chunk is emitted for CONTRAST only (worst chunk IN ISOLATION, never coincident).
+    function test_SubsJackpotCoincidence_WorstCompletingChunk() public {
+        uint256 snap = vm.snapshotState();
+
+        // (1) per-SKIP cold marginal: N vs N-1 skip-dominated subs (the old-sub-stamped-to-R skip at :1324).
+        uint256 sN = _measureSkipStageGasCold(N_HI, "sjcSkHi_");
+        vm.revertToState(snap);
+        uint256 sNm1 = _measureSkipStageGasCold(N_LO, "sjcSkLo_");
+        require(sN > sNm1, "the Nth skip did real work (cold slot read + PlayerSkipped emit)");
+        uint256 perSkip = sN - sNm1;
+
+        // (2) per-LOOTBOX-BUY cold marginal (the new-sub real buy that reaches the jackpot — no ticketQueue push).
+        vm.revertToState(snap);
+        uint256 lN = _measureStageAdvanceGasCold(N_HI, "sjcLbHi_", false);
+        vm.revertToState(snap);
+        uint256 lNm1 = _measureStageAdvanceGasCold(N_LO, "sjcLbLo_", false);
+        require(lN > lNm1, "the Nth lootbox buy did real work");
+        uint256 perLootbox = lN - lNm1;
+
+        // (3) The COINCIDENT-REACHABLE completing chunk is ALL SKIPS, NOT the heavy skip+buy mix. The clamp
+        //     that would compose a completing chunk with the jackpot requires the RNG lock (AdvanceModule:211
+        //     `locked`), and during that lock subscribe/replace/cancel ALL revert (GameAfkingModule:328, the
+        //     v45 freeze invariant — proven live by test_BufferedClampReopen_FreezeInvariantBlocksNewSubs).
+        //     So no NEW buy-subs (or cancels/evicts) can enter the window: every sub in the re-opened set was
+        //     stamped to the far request-day on the pre-lock advance and SKIPS at guard :1324 (before any
+        //     evict branch). The reachable coincident chunk is therefore <= SUBSCRIBER_CAP all-skip subs.
+        uint256 fixedOverhead = sN > perSkip * N_HI ? sN - perSkip * N_HI : 0;
+        uint256 allSkipChunk = fixedOverhead + SUBSCRIBER_CAP * perSkip; // 1000 skips, the reachable worst chunk
+        // The heavy skip+buy mix is measured for CONTRAST — it is the worst chunk IN ISOLATION (a normal
+        // request-path advance, which then breaks at STAGE_RNG_REQUESTED and never reaches the jackpot), NOT a
+        // coincident-with-jackpot chunk (buy-subs cannot join under the freeze lock).
+        uint256 B = (SUB_STAGE_WEIGHT_BUDGET - SUBSCRIBER_CAP) / (SUB_STAGE_LOOTBOX_WEIGHT - 1); // 166
+        uint256 isolatedHeavyChunk = fixedOverhead + (SUBSCRIBER_CAP - B) * perSkip + B * perLootbox;
+
+        // (4) The reachable coincident single-tx cost = the all-skip chunk + the 305-winner jackpot distribution.
+        uint256 coincidentTx = allSkipChunk + JACKPOT_305_REF_GAS;
+
+        emit log_named_uint("per_skip_cold_marginal_gas", perSkip);
+        emit log_named_uint("per_lootbox_buy_cold_marginal_gas", perLootbox);
+        emit log_named_uint("all_skip_reachable_chunk_gas", allSkipChunk);
+        emit log_named_uint("isolated_heavy_chunk_gas_NOT_coincident", isolatedHeavyChunk);
+        emit log_named_uint("jackpot_305_referenced_gas", JACKPOT_305_REF_GAS);
+        emit log_named_uint("coincident_tx_reachable_sum_gas", coincidentTx);
+        emit log_named_uint("eip7825_tx_gas_cap", EIP7825_TX_GAS_CAP);
+        emit log_named_uint("coincident_tx_headroom_gas", EIP7825_TX_GAS_CAP - coincidentTx);
+        emit log_named_string(
+            "FINDING",
+            "The subscriber-chunk + jackpot composition is REACHABLE (buffered-clamp re-open) but the v45 freeze "
+            "invariant (subscribe/cancel revert under the RNG lock the clamp requires) bounds the re-opened chunk "
+            "to ALL SKIPS. all-skip chunk + full jackpot leg stays under the 16,777,216 cap. NOT a breach."
+        );
+
+        // The reachable coincident tx stays under the EIP-7825 cap. Use the full jackpot leg headroom (the 305
+        // ETH leg reference plus generous room for the coin/traits/seal legs) — even at a ~10M full jackpot leg,
+        // the all-skip chunk (~6.4M) leaves margin.
+        assertLt(allSkipChunk + 10_000_000, EIP7825_TX_GAS_CAP, "reachable all-skip chunk + a full ~10M jackpot leg stays < the EIP-7825 cap");
+        // Marginals are bounded O(1) (non-vacuity sanity).
+        assertLt(perSkip, 200_000, "per-skip is a bounded O(1) cold slot read");
+        assertLt(perLootbox, 200_000, "per-lootbox-buy is a bounded O(1)");
+    }
+
+    /// @notice STRUCTURAL PROTECTION PROOF: the subscriber-chunk + jackpot composition (buffered-clamp re-open)
+    ///         cannot carry a HEAVY chunk, because the clamp requires the RNG lock (AdvanceModule:211 `locked`)
+    ///         and the v45 freeze invariant reverts ALL subscribe/replace/cancel under that lock
+    ///         (GameAfkingModule:328). This drives the exact buffered-clamp window ORGANICALLY (multi-day gap ->
+    ///         far-day request -> fulfill -> one more wall-day) and asserts that AT the consuming window the game
+    ///         is rngLocked and a NEW subscribe REVERTS RngLocked(). So no new buy-subs (nor cancels/evicts) can
+    ///         enter the window: every re-opened sub was stamped to the far request-day and SKIPS at guard :1324.
+    ///         The re-opened chunk is therefore all-skip (bounded ~6.4M), and all-skip + the jackpot leg stays
+    ///         under the EIP-7825 cap. This is why the composition is reachable but NOT a cap breach.
+    function test_BufferedClampReopen_FreezeInvariantBlocksNewSubs() public {
+        address[] memory old = _setupFundedSubs(1, "frzbuf_old_", 50 ether, false);
+        _settleClean(uint256(keccak256("frzbuf_base")) | 1);
+        vm.prank(makeAddr("frzbuf_open"));
+        game.openBoxes(400);
+        require(!game.advanceDue() && !game.rngLocked(), "fixture: clean idle baseline");
+
+        uint32 dIdx0 = _dailyIdx();
+
+        // Multi-day keeper gap with a CLEAN rng state -> the first post-gap advance processes a FAR day and
+        // REQUESTS a word (engaging the RNG lock). This is the moment the buffered-clamp precondition is armed.
+        vm.warp(block.timestamp + 4 days);
+        uint32 farDay = game.currentDayView();
+        require(farDay > dIdx0 + 1, "fixture: a multi-day gap opened (wallDay >> dailyIdx)");
+        require(game.advanceDue(), "fixture: advanceDue after the gap");
+        game.advanceGame();
+        require(game.rngLocked(), "fixture: the far-day advance requested a word (RNG LOCK engaged)");
+        require(_dailyIdx() == dIdx0, "fixture: the request advance did NOT seal (dailyIdx unchanged)");
+
+        _fulfillPending(uint256(keccak256("frzbuf_word")) | 1);
+        // One MORE wall-day passes with no advance -> the buffered clamp WILL fire on the next advance, and the
+        // game is STILL rngLocked (the lock clears only at _unlockRng, which the next advance's clamp defers).
+        vm.warp(block.timestamp + 1 days);
+        require(game.currentDayView() > farDay, "fixture: one more wall-day (buffered-clamp precondition met)");
+        assertTrue(game.rngLocked(), "the buffered-clamp consuming window is RNG-LOCKED (the clamp requires `locked`)");
+
+        // THE STRUCTURAL PROTECTION: a NEW subscribe in this exact window REVERTS — so no buy-sub can join the
+        // re-opened chunk. The v45 freeze invariant IS the reason the composition can never carry a heavy chunk.
+        address newBuyer = makeAddr("frzbuf_newbuyer");
+        _grantDeityPass(newBuyer);
+        _fundPool(newBuyer, 50 ether);
+        vm.prank(newBuyer);
+        vm.expectRevert(); // RngLocked() — GameAfkingModule:328, blocks create/replace/cancel under the lock
+        game.subscribe(address(0), false, false, 1, address(0));
+
+        emit log_named_string(
+            "FINDING",
+            "The buffered-clamp consuming window is RNG-locked, and subscribe/cancel revert under the lock (v45 "
+            "freeze invariant). No new buy-subs can enter the re-opened chunk, so it is all-skip (bounded) -- the "
+            "subscriber+jackpot composition is reachable but structurally cannot carry a heavy chunk. NOT a breach."
+        );
+        require(old.length == 1, "fixture: old sub intact");
+    }
+
+    /// @dev Measure a cold new-day advance whose STAGE processes N SKIP-dominated subs (each poked so
+    ///      lastAutoBoughtDay == lastOpenedDay >= processDay -> the AlreadyAutoBoughtToday skip at
+    ///      GameAfkingModule:1324, weight 1, a cold Sub-slot read + PlayerSkipped emit). Both runs from one clean
+    ///      baseline; the (gasN - gasNm1) marginal isolates one skip. Models the RNGREUSE-replay old sub stamped
+    ///      to the request-pass day R (>= the clamped processDay).
+    function _measureSkipStageGasCold(uint256 n, string memory prefix) internal returns (uint256 advGas) {
+        _settleClean(uint256(keccak256(abi.encodePacked(prefix, "base"))) | 1);
+        address[] memory subs = _setupFundedSubs(n, prefix, 5 ether, false);
+        // Open the grounded cover boxes so lastOpenedDay == the stamp day (not behind it) -> the no-orphan guard
+        // (:1287, lastOpenedDay < lastAutoBoughtDay) does NOT fire; the skip routes through :1324 instead.
+        vm.prank(makeAddr(string(abi.encodePacked(prefix, "open"))));
+        game.openBoxes(400);
+
+        _warpToBoundary(false);
+        uint32 processDay = _simulatedDayIndex();
+        // Poke lastAutoBoughtDay AND lastOpenedDay to a day >= processDay so :1287 is false and :1324 skips.
+        for (uint256 i; i < n; ++i) {
+            _pokeLastBoughtDay(subs[i], processDay + 5);
+            _pokeLastOpenedDay(subs[i], processDay + 5);
+        }
+        require(game.advanceDue(), "fixture: advanceDue on the new day");
+        vm.cool(address(game)); // cold first-touch -> each skip is a realistic cold Sub-slot read
+        uint256 gasBefore = gasleft();
+        game.advanceGame();
+        advGas = gasBefore - gasleft();
+
+        // Non-vacuity: each sub SKIPPED (still stamped to the poked future day, NOT re-stamped to processDay).
+        for (uint256 i; i < n; ++i) {
+            require(_lastBoughtDayOf(subs[i]) == processDay + 5, "skip non-vacuity: each sub skipped (not re-stamped)");
+        }
+    }
+
 }
