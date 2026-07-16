@@ -14,8 +14,9 @@ contract MockStETH {
     uint256 public totalPooledEther;
     uint256 public totalShares;
 
-    /// @dev Daily yield in basis points (10 = 0.10% ≈ 36.5% APY).
-    uint256 public rebaseYieldBps = 10;
+    /// @dev Annual yield in basis points (250 = 2.5% APR ≈ real Lido).
+    ///      Each rebase() applies one day's share of this rate.
+    uint256 public rebaseAprBps = 250;
 
     event Transfer(address indexed from, address indexed to, uint256 value);
     event Approval(address indexed owner, address indexed spender, uint256 value);
@@ -63,16 +64,16 @@ contract MockStETH {
         return true;
     }
 
-    /// @dev Simulate daily Lido rebase — increases totalPooledEther by yield %.
-    ///      All holders' balanceOf() increases proportionally.
+    /// @dev Simulate daily Lido rebase — increases totalPooledEther by one day
+    ///      of the annual rate. All holders' balanceOf() increases proportionally.
     function rebase() external {
         if (totalPooledEther == 0) return;
-        totalPooledEther += (totalPooledEther * rebaseYieldBps) / 10_000;
+        totalPooledEther += (totalPooledEther * rebaseAprBps) / (10_000 * 365);
     }
 
-    /// @dev Test helper: adjust daily yield rate.
-    function setRebaseYieldBps(uint256 bps) external {
-        rebaseYieldBps = bps;
+    /// @dev Test helper: adjust annual yield rate in basis points.
+    function setRebaseAprBps(uint256 bps) external {
+        rebaseAprBps = bps;
     }
 
     /// @dev Test helper: mint stETH directly (calculates shares at current rate).
