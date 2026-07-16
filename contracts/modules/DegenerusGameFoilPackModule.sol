@@ -698,6 +698,21 @@ contract DegenerusGameFoilPackModule is
             uint256 entropy = rngWordByDay[dd];
             if (entropy == 0) break; // future-dated bucket: its word has not sealed yet
 
+            // Meter the day-walk itself. A drained-past (empty) bucket between the low- and
+            // high-water marks advances dd without entering the per-buyer loop, so a long run
+            // of them — a whale/Sybil buy day keeps the drain behind while later calendar days
+            // seal with no foil buys — would otherwise burn unbounded gas in one finishing call.
+            // Charge one unit per day stepped and defer when the leftover budget is spent, the
+            // same resumable shape as the per-buyer guard below.
+            if (room == 0) {
+                foilDrainDay = dd;
+                foilCursor = uint32(cursor);
+                return (false, drained);
+            }
+            unchecked {
+                --room;
+            }
+
             uint256[] storage bucket = foilBuyers[dd];
             uint256 total = bucket.length;
             while (cursor < total) {
