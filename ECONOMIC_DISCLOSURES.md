@@ -3,7 +3,7 @@
 For a gambling protocol, economic transparency matters as much as contract transparency.
 **Every figure below cites the exact contract line that defines it.** Nothing here is
 marketing math — verify each number against the frozen subject (`contracts/` tree
-`2dc4a67b`, tag `degenerus-c4a`).
+`836b9abe`, tag `degenerus-c4a`).
 
 The code is **not yet deployed**. There are no live token prices. Figures are on-chain
 constants and formulas, not projected returns.

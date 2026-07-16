@@ -1,7 +1,7 @@
 # Degenerus Protocol — Audit Scope
 # Solidity 0.8.34 | Hardhat + Foundry | viaIR=true | Optimizer runs=1000 | evmVersion=osaka
 #
-# Frozen subject: contracts/ tree 2dc4a67b @ tag degenerus-c4a (post-v75.0 hardening freeze).
+# Frozen subject: contracts/ tree 836b9abe @ tag degenerus-c4a (post-v75.0 hardening freeze).
 # Checkout: git checkout degenerus-c4a
 # This list supersedes the v55-era scope.txt (which named BurnieCoin/BurnieCoinflip/
 # WrappedWrappedXRP/EndgameModule — all renamed or removed in this subject).
@@ -47,7 +47,7 @@ contracts/modules/DegenerusGameBoonModule.sol         #                         
 contracts/modules/DegenerusGameDegeneretteModule.sol  #                           1041
 contracts/modules/DegenerusGameBingoModule.sol        #                            136
 contracts/modules/GameAfkingModule.sol                # afking + sDGNRS box        954
-contracts/modules/DegenerusGameFoilPackModule.sol     # foil pack                  441
+contracts/modules/DegenerusGameFoilPackModule.sol     # foil pack                  440
 
 ## In Scope — Linked abstract module bases (2)                              nSLOC
 # Inherited by deployed modules; part of their compiled bytecode (not separately deployed).
@@ -55,7 +55,7 @@ contracts/modules/DegenerusGameMintStreakUtils.sol    #                         
 contracts/modules/DegenerusGamePayoutUtils.sol        #                             29
 
 ## In Scope — Shared storage (1)                                            nSLOC
-contracts/storage/DegenerusGameStorage.sol            #                           1125
+contracts/storage/DegenerusGameStorage.sol            #                           1131
 
 ## In Scope — Libraries (8)                                                 nSLOC
 contracts/DegenerusTraitUtils.sol            # trait generation library            80
@@ -87,14 +87,14 @@ contracts/DeityBoonViewer.sol      # read-only deity-boon lens (no value custody
 
 ## nSLOC totals
 #   Core deployed (14)              7741
-#   Deployed modules (12)           9815
+#   Deployed modules (12)           9814
 #   Abstract module bases (2)        450
-#   Shared storage (1)              1127
+#   Shared storage (1)              1133
 #   Libraries (8)                    561
 #   Interfaces (11)                  675
 #   Standalone in-scope (1)          154
 #   --------------------------------------
-#   TOTAL  49 files                20523 nSLOC
+#   TOTAL  49 files                20528 nSLOC
 #   (Group/grand totals delta-tracked from the 20004 tree-16e51875 baseline across the
 #    calibration re-freeze; the per-file annotations above are
 #    v74-approximate and lag the v75 rename pass — the totals here are authoritative.)
