@@ -1,4 +1,4 @@
-.PHONY: test test-foundry test-hardhat check-interfaces check-delegatecall check-raw-selectors check-rng-window check-pool-writes coverage-check invariant-test invariant-build invariant-clean
+.PHONY: test test-foundry test-hardhat check-interfaces check-delegatecall check-raw-selectors check-rng-window check-pool-writes check-array-delete coverage-check invariant-test invariant-build invariant-clean
 
 # ── Interface coverage gate ─────────────────────────────────────────────
 # Verifies every function declared in contracts/interfaces/ has a matching
@@ -42,6 +42,18 @@ check-raw-selectors:
 check-rng-window:
 	@scripts/check-rng-window.sh
 
+# ── Unbounded-storage-clear gate ────────────────────────────────────────
+# Forbids `delete` on dynamic storage arrays (directly, mapping-indexed, or
+# via a `T[] storage` pointer) in production contracts/. The compiler expands
+# such a delete into a loop zeroing every element slot — unbounded gas that
+# the explicit write-budgeted batch loops never see (measured 15.16M gas at
+# 3,000 elements, an out-of-gas liveness brick past ~3,300). Release arrays
+# in O(1) instead: zero the length slot (DegenerusGameStorage's
+# _releaseTicketQueue) or advance a cursor past the data. Operates on source
+# text — no forge build prerequisite.
+check-array-delete:
+	@scripts/check-array-delete.sh
+
 # ── SOLV pool-write drift gate ──────────────────────────────────────────
 # Every mutation of a counted ETH-obligation term (and every canonical
 # mutator call) must be classified in scripts/pool-write-manifest.tsv.
@@ -69,7 +81,7 @@ coverage-check:
 
 # Run all Foundry fuzz tests (patch → test → restore)
 # forge test handles its own compilation with the patched addresses in place.
-test-foundry: check-interfaces check-delegatecall check-raw-selectors check-rng-window check-pool-writes
+test-foundry: check-interfaces check-delegatecall check-raw-selectors check-rng-window check-pool-writes check-array-delete
 	@echo "Patching ContractAddresses.sol for Foundry..."
 	@node scripts/lib/patchForFoundry.js
 	@echo "Running Foundry tests..."
@@ -79,7 +91,7 @@ test-foundry: check-interfaces check-delegatecall check-raw-selectors check-rng-
 		exit $$TEST_EXIT
 
 # Run Hardhat tests (no patching needed — Hardhat deploys fresh)
-test-hardhat: check-interfaces check-delegatecall check-raw-selectors check-rng-window check-pool-writes
+test-hardhat: check-interfaces check-delegatecall check-raw-selectors check-rng-window check-pool-writes check-array-delete
 	@npx hardhat test $(ARGS)
 
 # Run both suites
