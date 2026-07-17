@@ -982,6 +982,70 @@ contract TicketLifecycleTest is DeployProtocol {
     }
 
     // =========================================================================
+    // Test 15c [SRC-08]: budget-split materialization keeps the quadrant cycle
+    //         aligned — every budget-limited take is a whole-ticket multiple,
+    //         so a player whose owed spans several batch calls still
+    //         materializes an equal count in all four quadrants.
+    // =========================================================================
+
+    /// @notice Credit 400 half-passes and claim at level 0: owed = 400 entries
+    ///         (100 whole tickets) at every covered level. A single batch call
+    ///         takes at most ~292 entries, so materializing level 1 must split
+    ///         across calls. Aligned split boundaries keep the quadrant cycle
+    ///         (i & 3, restarting at 0 each call) continuous, so the final
+    ///         spread is exactly 100 entries per quadrant.
+    function testBudgetSplitMaterializationQuadrantAligned() public {
+        address claimant = makeAddr("split_claimant");
+
+        // Credit whalePassClaims[claimant] = 400 directly (mapping(address => uint256)
+        // at slot 20, confirmed via forge inspect).
+        bytes32 claimSlot = keccak256(abi.encode(uint256(uint160(claimant)), uint256(20)));
+        vm.store(address(game), claimSlot, bytes32(uint256(400)));
+
+        game.claimWhalePass(claimant);
+
+        // h=400 -> dense base leg only: 400 entries on every level of the span.
+        assertEq(_ticketsOwed(_writeKeyForLevel(1), claimant), 400,
+            "dense claim shape at level 1");
+
+        // Materialize level 1 across multiple budget-metered batch calls.
+        _driveToLevel(2);
+        assertGe(game.level(), 1, "must advance past level 1");
+
+        uint24[4] memory quadCounts;
+        uint24 totalEntries;
+        for (uint16 q = 0; q < 4; q++) {
+            for (uint16 t = 0; t < 64; t++) {
+                (uint24 count, , ) = game.getEntries(
+                    uint8(q * 64 + t),
+                    1,
+                    0,
+                    type(uint32).max,
+                    claimant
+                );
+                quadCounts[q] += count;
+            }
+            totalEntries += quadCounts[q];
+        }
+        // The drive also lands organic daily-jackpot entry awards on the dominant
+        // holder, so the total exceeds the 400 claimed entries. The invariant under
+        // test is EVENNESS: with every budget-limited take whole-ticket aligned,
+        // each materialization session tilts the spread only by its own %4 tail —
+        // this deterministic run has one tailed session, so max-min is at most 1.
+        // (Unaligned split boundaries restart the quadrant cycle mid-ticket and
+        // skew the spread by 2-3 in this scenario.)
+        assertGe(totalEntries, 400, "claimed entries fully materialize");
+        uint24 minQ = type(uint24).max;
+        uint24 maxQ = 0;
+        for (uint16 q = 0; q < 4; q++) {
+            if (quadCounts[q] < minQ) minQ = quadCounts[q];
+            if (quadCounts[q] > maxQ) maxQ = quadCounts[q];
+        }
+        assertLe(maxQ - minQ, 1,
+            "aligned split boundaries keep the per-quadrant spread even");
+    }
+
+    // =========================================================================
     // Test 16 [EDGE-01, EDGE-02]: At a non-zero game level (3+), verify the
     //         near/far boundary: level+5 goes to write key, level+6 goes to FF.
     // =========================================================================

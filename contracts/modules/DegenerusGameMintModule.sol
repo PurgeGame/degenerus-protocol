@@ -399,6 +399,10 @@ contract DegenerusGameMintModule is
 
             uint32 maxT = (room <= 256) ? (room / 2) : (room - 256);
             uint32 take = owed > maxT ? maxT : owed;
+            // Budget-limited takes stay whole-ticket (%4) aligned: `processed` does not
+            // survive a cross-call resume, so the quadrant cycle (i & 3) restarts at 0 —
+            // an aligned split boundary makes that restart the correct continuation.
+            if (take != owed) take &= ~uint32(3);
             if (take == 0) break;
 
             _raritySymbolBatch(
@@ -832,6 +836,9 @@ contract DegenerusGameMintModule is
                 : (availRoom - 256);
             take = owed > maxT ? maxT : owed;
         }
+        // Budget-limited takes stay whole-ticket (%4) aligned so the quadrant cycle
+        // restarts correctly on a cross-call resume (see processFutureTicketBatch).
+        if (take != owed) take &= ~uint32(3);
         if (take == 0) return (0, 0, false);
 
         _raritySymbolBatch(
