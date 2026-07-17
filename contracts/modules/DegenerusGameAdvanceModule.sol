@@ -1914,6 +1914,14 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
             : uint48(block.timestamp) & ~uint48(1);
         rngLockedFlag = true;
 
+        // Decimator day-one bonus window closes at the next fresh daily request.
+        // A retry re-requests the SAME day's word, so it must not clear the latch.
+        // Runs before the window-open branch below, so the arming request itself
+        // (clear-then-set) leaves the latch armed.
+        if (!isDailyRetry && decDayOneActive) {
+            decDayOneActive = false;
+        }
+
         // Close the FLIP purchase window at the final jackpot day's RNG request — the boundary where
         // new tickets begin routing to the next level (mirrors the route-to-level+1 step in the mint
         // module). jackpotCounter + step catches the final daily jackpot; the isTicketJackpotDay
@@ -1950,6 +1958,9 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
             uint24 mod10 = lvl % 10;
             if ((mod10 == 4 && mod100 != 94) || mod100 == 99) {
                 decWindowOpen = true;
+                // Arm the day-one burn bonus: recordDecBurn grants the boosted
+                // weight until the next fresh daily request clears the latch.
+                decDayOneActive = true;
             } else if (
                 decWindowOpen && ((mod10 == 5 && mod100 != 95) || mod100 == 0)
             ) {

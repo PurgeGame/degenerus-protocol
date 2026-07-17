@@ -66,8 +66,9 @@ import {MintPaymentKind} from "../interfaces/IDegenerusGame.sol";
  * | [28:29] subsFullyProcessed       bool     Afking STAGE drain-complete flag      |
  * | [29:30] presaleDrained           bool     All presale boxes opened (sweep)      |
  * | [30:31] ticketRedemptionOpen     bool     FLIP ticket purchase window latch     |
+ * | [31:32] decDayOneActive          bool     Decimator day-one burn bonus latch    |
  * +---------------------------------------------------------------------------------+
- *   Total: 31 bytes used (1 byte padding)
+ *   Total: 32 bytes used (0 bytes padding -- FULL)
  *
  * +---------------------------------------------------------------------------------+
  * | EVM SLOT 1 (32 bytes) -- Prize Pools                                            |
@@ -374,9 +375,16 @@ abstract contract DegenerusGameStorage {
     ///      RNG in flight); it persists through the jackpot days and is cleared in the advance at the
     ///      final jackpot day's RNG request — the same boundary where new tickets route to the next
     ///      level. While closed, FLIP ticket purchases revert, so FLIP tickets only ever join a
-    ///      happening jackpot, never an open/stalled purchase phase. Occupies slot-0 byte [31:32], which
+    ///      happening jackpot, never an open/stalled purchase phase. Occupies slot-0 byte [30:31], which
     ///      the purchase/advance paths already SLOAD, so the gate is a free read.
     bool internal ticketRedemptionOpen;
+
+    /// @dev Decimator day-one burn bonus latch. Set by the RNG request that opens the
+    ///      decimator window (the x4/x99 level increment); cleared by the next fresh daily
+    ///      request (the same-day VRF retry does not clear it). While set, recordDecBurn
+    ///      grants the day-one weight multiplier. Occupies slot-0 byte [31:32], which the
+    ///      request path already writes, so set/clear ride existing slot-0 stores.
+    bool internal decDayOneActive;
 
     // =========================================================================
     // EVM SLOT 1: Prize Pools

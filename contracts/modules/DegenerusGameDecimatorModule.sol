@@ -110,6 +110,10 @@ contract DegenerusGameDecimatorModule is DegenerusGamePayoutUtils {
     /// @dev Maximum denominator for Decimator buckets (2-12 inclusive).
     uint8 private constant DECIMATOR_MAX_DENOM = 12;
 
+    /// @dev Weight multiplier (bps) for burns on the window-open day. Prices early
+    ///      conviction against the information value of waiting for the window close.
+    uint16 private constant DEC_DAY_ONE_BONUS_BPS = 12_000;
+
     /// @dev Keeper box-bounty target (ETH wei) per settled decimator claim. Sized so the FLIP
     ///      bounty's ETH-value reimburses the ~30k-gas per-box settle at the ~0.5-gwei reference.
     ///      The reward is an illiquid coinflip credit, and every claimable bet costs a real
@@ -175,6 +179,13 @@ contract DegenerusGameDecimatorModule is DegenerusGamePayoutUtils {
         }
 
         bucketUsed = m.bucket;
+
+        // Day-one bonus: burns while the window-open latch is armed carry 1.2x
+        // weight. Rides multBps so DECIMATOR_MULTIPLIER_CAP bounds the boosted
+        // accrual.
+        if (decDayOneActive) {
+            multBps = (multBps * DEC_DAY_ONE_BONUS_BPS) / BPS_DENOMINATOR;
+        }
 
         uint256 effectiveAmount = _decEffectiveAmount(
             uint256(prevBurn),
