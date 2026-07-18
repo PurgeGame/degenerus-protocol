@@ -81,13 +81,9 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
     ///      re-entry (gapDays == 0 next call), dailyIdx is not yet advanced, so advanceDue()
     ///      stays true and the next advance pays the jackpot with the same frozen word.
     uint8 private constant STAGE_GAP_BACKFILLED = 12;
-    /// @dev The funded subscriber set drained to its end this advance AND a multi-day VRF-stall
-    ///      gap backfill is pending. rngGate (and its backfill) is deferred to the next advance so
-    ///      the heavy completing subscriber chunk and the up-to-120-day backfill never share one tx
-    ///      (the upstream mirror of STAGE_GAP_BACKFILLED). subsFullyProcessed is already set and
-    ///      dailyIdx is not advanced, so advanceDue() stays true: the next advance runs the backfill
-    ///      alone, then defers the jackpot via STAGE_GAP_BACKFILLED.
-    uint8 private constant STAGE_SUBS_BACKFILL_DEFERRED = 13;
+    // (stage 13, STAGE_SUBS_BACKFILL_DEFERRED, is retired: the subscriber STAGE is
+    // entry-gated on !rngLockedFlag, so it can never complete in a tx that also has a
+    // buffered word / pending backfill — the composition it deferred is unreachable.)
     event DailyRngApplied(
         uint24 day,
         uint256 rawWord,
@@ -158,7 +154,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
     ///      settle day), so there is a SINGLE budget. The STAGE consumes a gas-weight per
     ///      iteration — buys and finalizes are weighted by true marginal cost (a lootbox buy
     ///      ≈34k = `SUB_STAGE_LOOTBOX_WEIGHT` (10), a ticket buy ≈73k = `SUB_STAGE_TICKET_WEIGHT`
-    ///      (21), a cross-contract sub-ending finalize / pass-evict / funding-kill ≈29k =
+    ///      (21), a cross-contract sub-ending finalize (cancel-reclaim / funding-kill) ≈29k =
     ///      `SUB_STAGE_EVICT_WEIGHT` (8)) — and ends the chunk on accumulated weight, not raw
     ///      count, so EVERY composition (including a saturated all-evict swap-pop chunk) stays on
     ///      the <10M target with deep headroom to the 16.7M advance-chain ceiling. The lootbox and
@@ -240,7 +236,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         ) {
             uint32 purchaseDays = day - psd;
             if (
-                purchaseDays <= 1 && _getNextPrizePool() >= levelPrizePool[lvl]
+                purchaseDays <= 1 && _getNextPrizePool() > levelPrizePool[lvl]
             ) {
                 lastPurchaseDay = true;
                 compressedJackpotFlag = 2;
@@ -407,49 +403,43 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
             // load-bearing freeze property. The box reads the LIVE level +
             // rngWordByDay[lastAutoBoughtDay] at open.
             //
-            // Forward-looking per-day reset: the first time the advance enters a new `day`,
-            // flip the drain gate + cursor BEFORE that day's STAGE runs. subsFullyProcessed
-            // stays true after a day's STAGE completes (it means "afking done for that day")
-            // until the next day flips it here. Stamped to `day` at the reset, so it fires
-            // exactly once per day and never re-fires within the day (independent of when
-            // dailyIdx catches up in _unlockRng).
-            if (_afkingResetDay != day) {
-                _afkingResetDay = day;
-                subsFullyProcessed = false;
-                _subCursor = 0;
-            }
-            if (!subsFullyProcessed) {
-                if (_subscribers.length != 0) {
-                    _runSubscriberStage(day);
-                    if (_subCursor < _subscribers.length) {
-                        // Partial drain: more subs remain this cycle — break before
-                        // rngGate and return mult (no RNG request yet). subsFullyProcessed
-                        // stays false; the next advance call resumes the cursor.
-                        stage = STAGE_SUBS_WORKING;
-                        break;
+            // Forward-looking per-day reset: the first UNLOCKED advance entry of a new
+            // `day` flips the drain gate + cursor BEFORE that day's STAGE runs (locked
+            // entries skip the whole block below, so a stall never spends resets or
+            // walks). subsFullyProcessed stays true after a day's STAGE completes (it
+            // means "afking done for that day") until the next unlocked new-day entry
+            // flips it here. Stamped to `day` at the reset, so it fires exactly once
+            // per day and never re-fires within the day (independent of when dailyIdx
+            // catches up in _unlockRng).
+            // VRF-outstanding gate: the STAGE never runs while rngLockedFlag is set
+            // [request -> unlock]. In that window the walk can do nothing — every live
+            // sub is stamped ahead (the AlreadyAutoBoughtToday skip), pending boxes are
+            // no-orphan-protected, and subscribe/cancel revert under the freeze, so
+            // no tombstones can appear mid-window. Gating entry here also
+            // makes the one heavy composition structurally impossible: a completing
+            // subscriber chunk can never share a tx with a buffered-word apply or a
+            // gap backfill (both run under the lock, released only at _unlockRng), so
+            // the chunk and the ~10M jackpot/backfill legs never fuse against the
+            // per-tx gas ceiling — at ANY subscriber cap. The stamp-before-request
+            // ordering is untouched: an unlocked advance walks the stage to completion
+            // and only then reaches rngGate to fire the day's request.
+            if (!locked) {
+                if (_afkingResetDay != day) {
+                    _afkingResetDay = day;
+                    subsFullyProcessed = false;
+                    _subCursor = 0;
+                }
+                if (!subsFullyProcessed) {
+                    if (_subscribers.length != 0) {
+                        _runSubscriberStage(day);
+                        if (_subCursor < _subscribers.length) {
+                            // Partial drain: more subs remain this cycle — break before
+                            // rngGate and return mult (no RNG request yet). subsFullyProcessed
+                            // stays false; the next advance call resumes the cursor.
+                            stage = STAGE_SUBS_WORKING;
+                            break;
+                        }
                     }
-                    // The set drained to its end THIS tx — a heavy completing chunk (up to the
-                    // weight budget, or a saturated all-evict swap-pop chunk that empties the set
-                    // in one pass). If a multi-day VRF-stall gap backfill is ALSO pending, defer
-                    // rngGate to the next advance so the completing subscriber chunk and the
-                    // up-to-120-day backfill never share one tx and blow the per-tx gas ceiling.
-                    // Upstream mirror of the STAGE_GAP_BACKFILLED decouple: same gate rngGate uses
-                    // to enter _backfillGapDays. dailyIdx is unadvanced and rngWordByDay[day] is
-                    // unset, so advanceDue() stays true and the next advance runs the (idempotent)
-                    // rngGate — it backfills, then defers the jackpot via STAGE_GAP_BACKFILLED.
-                    subsFullyProcessed = true;
-                    if (
-                        rngWordCurrent != 0 &&
-                        rngRequestTime != 0 &&
-                        day > dIdx + 1 &&
-                        rngWordByDay[dIdx + 1] == 0
-                    ) {
-                        stage = STAGE_SUBS_BACKFILL_DEFERRED;
-                        break;
-                    }
-                } else {
-                    // Empty set — nothing was stamped, no heavy chunk to segregate. Fall through
-                    // to rngGate (a lone backfill stays under the per-tx ceiling).
                     subsFullyProcessed = true;
                 }
             }
@@ -588,7 +578,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                             purchaseLevel + 4
                         );
                     }
-                    bool targetMet = _getNextPrizePool() >=
+                    bool targetMet = _getNextPrizePool() >
                         levelPrizePool[purchaseLevel - 1];
                     // Do not latch on an RNGREUSE replay day. Its NEXT day may also have a cached
                     // backfill word, which would let rngGate bypass the sole `level = lvl` writer in
@@ -740,7 +730,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         // target reads as met.
         if (
             lvl != 0 &&
-            _getNextPrizePool() >= levelPrizePool[lvl] &&
+            _getNextPrizePool() > levelPrizePool[lvl] &&
             !_vrfDeadmanFired()
         ) {
             return (false, 0);

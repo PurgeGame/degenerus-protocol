@@ -30,8 +30,8 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 ///      floor `floorAfkingStreakBase(...)`). `awardQuestStreakBonus` is the only source missing this routing.
 ///
 ///      Fixture reuse: the afking-run drive (deity grant, funding, lootbox subscribe, day delivery, sub-slot
-///      offsets) is ported from StreakSnapshotAndPendingFlipClamp.t.sol, RE-POINTED to the same post-PACK Sub
-///      accumulator offsets. The afking sub streak base is the uint16 `subStreakLatch` (off 30). The manual
+///      offsets) is ported from StreakSnapshotAndPendingFlipClamp.t.sol, RE-POINTED to the same AFKing-Coin-era
+///      Sub accumulator offsets. The afking sub streak base is the uint16 `subStreakLatch` (off 26). The manual
 ///      quest streak / shield are read from `questPlayerState` (DegenerusQuests slot 1) packed fields.
 ///      Test-only: ZERO contracts/*.sol mutation in this file.
 contract QuestBoonAfkingStreakLossTest is DeployProtocol {
@@ -48,13 +48,11 @@ contract QuestBoonAfkingStreakLossTest is DeployProtocol {
     uint256 private constant OFF_QS_HIGHWATER = 26; // uint8 shieldCenturyHighWater
 
     // -------------------------------------------------------------------------
-    // Game-resident _subOf accumulator (post-PACK offsets, re-derived from the v69 storageLayout)
+    // Game-resident _subOf accumulator (AFKing-Coin-era offsets, DegenerusGameStorage.sol struct Sub)
     // -------------------------------------------------------------------------
     uint256 private constant SUBOF_SLOT = 53;
-    uint256 private constant MINTPACKED_SLOT = 9;
-    uint256 private constant DEITY_SHIFT = 184;
-    uint256 private constant OFF_AFKINGSTART = 19; // uint24 afkingStartDay
-    uint256 private constant OFF_STREAKLATCH = 29; // uint16 subStreakLatch (the afking sub streak base)
+    uint256 private constant OFF_AFKINGSTART = 16; // uint24 afkingStartDay
+    uint256 private constant OFF_STREAKLATCH = 26; // uint16 subStreakLatch (the afking sub streak base)
 
     uint256 private constant DRAIN_MAX_ITERATIONS = 60;
     uint256 private _lastFulfilledReqId;
@@ -89,7 +87,6 @@ contract QuestBoonAfkingStreakLossTest is DeployProtocol {
         // Park the dormant manual streak at 95 (lastSyncDay non-zero, day anchors 0 so _questSyncState skips
         // its decay branch and leaves the value verbatim). The +10 bonus below crosses the 100 century.
         _setManualQuestStreak(p, 95);
-        _grantDeityPass(p);
         _fundPool(p, 50 ether);
         _subscribeLootbox(p, 1); // beginAfking: afkingActive = true; snapshots state.streak (95) into the latch
         // Deliver one funded day so the run is LIVE (afkingStartDay != 0) -- the precondition the boon hits via an
@@ -187,7 +184,7 @@ contract QuestBoonAfkingStreakLossTest is DeployProtocol {
     ///      no older than yesterday -- mirrors GameAfkingModule._afkingStreak so the finalize hand-back is checked
     ///      against the same value the contract earns.
     function _liveAfkingStreakOf(address who) internal view returns (uint256) {
-        uint256 covered = _subField(who, 16, 24); // afkCoveredThroughDay u24 off16
+        uint256 covered = _subField(who, 13, 24); // afkCoveredThroughDay u24 off13
         uint256 today = game.currentDayView();
         if (today == 0 || covered + 1 < today) return 0;
         return _streakLatch16Of(who) + covered - _afkingStartOf(who);
@@ -284,6 +281,7 @@ contract QuestBoonAfkingStreakLossTest is DeployProtocol {
     }
 
     function _subscribeLootbox(address who, uint8 q) internal {
+        _grantSeat(who); // the AFKing Subscription Token is the subscribe credential (NoCoin without it)
         vm.prank(who);
         game.subscribe(address(0), false, false, q, address(0)); // self, lootbox mode, no reinvest
     }
@@ -291,11 +289,5 @@ contract QuestBoonAfkingStreakLossTest is DeployProtocol {
     function _fundPool(address who, uint256 amount) internal {
         vm.deal(address(this), amount);
         game.depositAfkingFunding{value: amount}(who);
-    }
-
-    function _grantDeityPass(address who) internal {
-        bytes32 slot = keccak256(abi.encode(who, uint256(MINTPACKED_SLOT)));
-        uint256 packed = uint256(vm.load(address(game), slot));
-        vm.store(address(game), slot, bytes32(packed | (uint256(1) << DEITY_SHIFT)));
     }
 }

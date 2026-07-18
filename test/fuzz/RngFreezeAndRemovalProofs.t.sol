@@ -30,16 +30,19 @@ import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 ///         (`processCoinflipPayouts` + `(rngWord & 1) == 1`) is byte-identical.
 ///
 /// @notice v50.0 D-IMPL-02 trivial freeze-side migrations (Plan 335-05 Task 5):
-///   - The v45 KEPT-pass-view attestation now pins the AfKing module's in-context
-///     `_passHorizonOf` read (`testKeptPassHorizonReadPresent`) — the canonical pass-horizon
-///     semantics (deity sentinel / frozenUntilLevel). The Game-side external mirrors were
-///     removed as zero-on-chain-caller surface.
-///   - Two trivial positive freeze-side assertions are added: (1) the box-open
+///   - The v45 KEPT-pass-view attestation (`testKeptPassHorizonReadPresent` /
+///     `testPassHorizonReadIsViewOnly`, formerly pinning the AfKing module's in-context
+///     `_passHorizonOf` read) is SUPERSEDED and REMOVED: the AFKing Subscription Token credential change
+///     deleted `_passHorizonOf` / `validThroughLevel` / the crossing refresh-or-evict branch
+///     entirely — subscribe's sole credential is now a single `balanceOf >= 1` staticcall at
+///     subscribe time (never inside the RNG window; subscribe itself reverts under
+///     `rngLockedFlag`), and the process STAGE never re-checks it. The freeze surface this
+///     attestation covered is now smaller by one read, not just re-shaped, so there is no
+///     successor read to pin.
+///   - One trivial positive freeze-side assertion remains: the box-open
 ///     `whalePassClaims +=` write at the LootboxModule's whale-pass activation site (Plan 335-02)
 ///     targets a NON-FROZEN slot — the accumulator is a pending-claim slot per
-///     334-WHALE04-FREEZE-PROOF §1, not a VRF-influenced slot; (2) the AfKing crossing's
-///     `_passHorizonOf` in-context read is a NON-RNG-WINDOW read — it does not write
-///     `mintPacked_` or any VRF-frozen slot (334-WHALE04-FREEZE-PROOF §5).
+///     334-WHALE04-FREEZE-PROOF §1, not a VRF-influenced slot.
 ///   - The DEEPER RNG-freeze fuzz of the deferred-claim path (the WhaleModule:1018
 ///     `claimWhalePass` invariant under rngLock) lives at Phase 336 / TST-01 freeze leg
 ///     in `test/fuzz/RngLockDeterminism.t.sol::testFuzz_RngLockDeterminism_ClaimWhalePassDuringLockSafe`
@@ -415,33 +418,20 @@ contract RngFreezeAndRemovalProofs is DeployProtocol {
         }
     }
 
-    /// @notice The canonical pass-horizon read is the AfKing module's in-context
-    ///         `_passHorizonOf` (deity holders → the type(uint24).max sentinel; lazy/whale
-    ///         holders → their `frozenUntilLevel`). The Game-side external mirrors
-    ///         (`hasAnyLazyPass` / `lazyPassHorizon`) were removed as zero-on-chain-caller
-    ///         surface; this attestation pins the surviving in-context read so a future
-    ///         regression deleting it flips RED.
-    function testKeptPassHorizonReadPresent() public view {
-        string memory src = vm.readFile("contracts/modules/GameAfkingModule.sol");
-        assertGt(
-            _countOccurrences(src, "function _passHorizonOf(address player) internal view returns (uint24)"),
-            0,
-            "canonical in-context pass-horizon read present in GameAfkingModule.sol"
-        );
-        assertGt(
-            _countOccurrences(src, "type(uint24).max"),
-            0,
-            "deity sentinel (type(uint24).max) present in the module horizon semantics"
-        );
-    }
+    // testKeptPassHorizonReadPresent DELETED (AFKing Subscription Token credential change): the AfKing
+    // module's `_passHorizonOf` in-context read this test pinned no longer exists —
+    // subscribe's sole credential is a `balanceOf >= 1` staticcall at subscribe time
+    // (GameAfkingModule.sol subscribe(), coin-required gate); membership is never re-checked
+    // by level or read again inside the module. No successor read to pin.
 
     // =========================================================================
     // v50.0 D-IMPL-02 — trivial freeze-side positive assertions for the new write paths
     //
     // The DEEPER RNG-freeze fuzz proof of the deferred-claim path lives at Phase 336 / TST-01
-    // freeze leg per 335-CONTEXT.md D-IMPL-02. These two tests pin the TRIVIAL property only:
-    //   (1) the box-open `whalePassClaims +=` write (Plan 335-02) targets a non-frozen slot;
-    //   (2) the AfKing crossing's `_passHorizonOf` in-context read (Plan 335-04) is a non-RNG-window read.
+    // freeze leg per 335-CONTEXT.md D-IMPL-02. This test pins the TRIVIAL property only: the
+    // box-open `whalePassClaims +=` write (Plan 335-02) targets a non-frozen slot. The AfKing
+    // crossing's former `_passHorizonOf` in-context read (Plan 335-04) had no successor after
+    // the AFKing Subscription Token credential change deleted the crossing entirely (see the class doc).
     // 336 owns the deeper freeze-fuzz extension of `RngLockDeterminism.t.sol` (deferred-claim
     // path × rngLock interaction × write-set equivalence).
     // =========================================================================
@@ -469,20 +459,12 @@ contract RngFreezeAndRemovalProofs is DeployProtocol {
         // accumulator (WHALE04-FREEZE-PROOF §1 — non-VRF-influenced, not in the freeze write-set).
     }
 
-    /// @notice WHALE04-FREEZE-PROOF §5: the AfKing crossing's pass-horizon read is a
-    ///         NON-RNG-WINDOW read. It reads `mintPacked_[player]` (a frozen slot for VRF
-    ///         purposes) but does NOT WRITE — the read happens in-context via the module's
-    ///         `_passHorizonOf`, declared `internal view`, so the no-write property is
-    ///         compiler-enforced. This attestation pins the `view` mutability so a future
-    ///         regression relaxing it flips RED.
-    function testPassHorizonReadIsViewOnly() public view {
-        string memory src = vm.readFile("contracts/modules/GameAfkingModule.sol");
-        assertGt(
-            _countOccurrences(src, "function _passHorizonOf(address player) internal view"),
-            0,
-            "pass-horizon read is `internal view` (no writes to frozen slots possible)"
-        );
-    }
+    // testPassHorizonReadIsViewOnly DELETED (AFKing Subscription Token credential change): WHALE04-FREEZE-PROOF
+    // §5 pinned the AfKing crossing's `_passHorizonOf` in-context read as a NON-RNG-WINDOW,
+    // `view`-only (no-write) read on a frozen slot. The crossing branch (and `_passHorizonOf`
+    // itself) is deleted — subscribe's coin-balance check happens only at subscribe (which
+    // itself reverts under `rngLockedFlag`, so it can never run inside the window), and the
+    // process STAGE performs zero credential reads at all. No in-window read survives to pin.
 
     /// @dev Grant `who` the permanent deity-pass bit (shift 184) in DegenerusGame.mintPacked_ (slot 9).
     function _grantDeityPass(address who) internal {

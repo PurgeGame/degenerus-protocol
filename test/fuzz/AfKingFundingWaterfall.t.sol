@@ -57,11 +57,11 @@ contract AfKingFundingWaterfall is DeployProtocol {
     uint256 private constant MINTPACKED_SLOT = 9; // mintPacked_ mapping root (deity bit)
     uint256 private constant GAME_CLAIMABLE_SLOT = 7; // claimableWinnings mapping root
 
-    // Sub packed-field byte offsets (DegenerusGameStorage.sol:1895; the v56 compute-on-read re-pack
-    // narrowed validThroughLevel + the day markers to uint24).
+    // Sub packed-field byte offsets (DegenerusGameStorage.sol:2341; the AFKing-Coin repack dropped
+    // validThroughLevel entirely — sub <=> coin is the sole credential now — shifting every field
+    // after it down 3 bytes).
     uint256 private constant OFF_DAILY = 0; // uint8  dailyQuantity     (byte 0)
-    uint256 private constant OFF_VALIDTHROUGH = 1; // uint24 validThroughLevel (bytes 1..3)
-    uint256 private constant OFF_LASTBOUGHT = 10; // uint24 lastAutoBoughtDay (bytes 11..13)
+    uint256 private constant OFF_LASTBOUGHT = 7; // uint24 lastAutoBoughtDay (bytes 7..9)
 
     uint256 private constant DEITY_SHIFT = 184;
 
@@ -499,7 +499,8 @@ contract AfKingFundingWaterfall is DeployProtocol {
         vm.store(address(game), s1, bytes32(p1));
     }
 
-    /// @dev Grant `who` the permanent deity bit (RE-DERIVED slot 10) so _passHorizonOf(who) == max.
+    /// @dev Grant `who` the permanent deity bit (RE-DERIVED slot 10) — an activity-score/bounty-tier
+    ///      flag, unrelated to the AFKing Subscription Token subscribe credential.
     function _grantDeityPass(address who) internal {
         bytes32 slot = keccak256(abi.encode(who, uint256(MINTPACKED_SLOT)));
         uint256 packed = uint256(vm.load(address(game), slot));
@@ -507,12 +508,17 @@ contract AfKingFundingWaterfall is DeployProtocol {
         vm.store(address(game), slot, bytes32(packed));
     }
 
-    /// @dev Force `who` into the crossing branch: validThroughLevel = 0, lastAutoBoughtDay = 0, bump
-    ///      game.level to 1 (uint24 at slot 0 bytes 14..16).
+    /// @dev SUPERSEDED (AFKing Subscription Token credential change): the level-crossing eviction branch this
+    ///      helper targeted (`validThroughLevel` + the refresh-or-evict check) is DELETED — a sub
+    ///      is never evicted by level changes anymore, only by cancel, funding-skip kill, or the
+    ///      coin's seat lock (an active sub's last coin cannot transfer; unsub first). Kept only so `testPassEvictionPreservesFundingSourceStorage` (already
+    ///      skipped, D-12 supersession) still compiles; it now just clears `lastAutoBoughtDay` and
+    ///      bumps `game.level` to 1 (uint24 at slot 0 bytes 14..16), which no longer forces any
+    ///      eviction.
     function _forceCrossingDue(address who) internal {
         bytes32 slot = keccak256(abi.encode(who, uint256(SUBOF_SLOT)));
         uint256 packed = uint256(vm.load(address(game), slot));
-        uint256 mask = (uint256(0xFFFFFF) << (OFF_LASTBOUGHT * 8)) | (uint256(0xFFFFFF) << (OFF_VALIDTHROUGH * 8));
+        uint256 mask = uint256(0xFFFFFF) << (OFF_LASTBOUGHT * 8);
         packed &= ~mask;
         vm.store(address(game), slot, bytes32(packed));
         uint256 slot0 = uint256(vm.load(address(game), bytes32(uint256(0))));

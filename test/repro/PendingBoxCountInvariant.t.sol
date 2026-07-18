@@ -23,10 +23,8 @@ contract PendingBoxCountInvariant is DeployProtocol {
     uint256 private constant SUBSCRIBERS_SLOT = 55;
     uint256 private constant CURSOR_SLOT = 57;
     uint256 private constant PENDING_COUNT_SHIFT = 224;
-    uint256 private constant MINTPACKED_SLOT = 9;
-    uint256 private constant DEITY_SHIFT = 184;
-    uint256 private constant OFF_LASTBOUGHT = 10;
-    uint256 private constant OFF_LASTOPENED = 13;
+    uint256 private constant OFF_LASTBOUGHT = 7;  // uint24 lastAutoBoughtDay (bytes 7..9)
+    uint256 private constant OFF_LASTOPENED = 10; // uint24 lastOpenedDay     (bytes 10..12)
     uint256 private _lastFulfilledReqId;
 
     uint256 private constant N_LOOTBOX = 12;
@@ -194,7 +192,7 @@ contract PendingBoxCountInvariant is DeployProtocol {
         for (uint256 i; i < n; ++i) {
             address who = makeAddr(string(abi.encodePacked(prefix, _u(i))));
             subs[i] = who;
-            _grantDeityPass(who);
+            _grantSeat(who); // the AFKing Subscription Token is the subscribe credential (NoCoin without it)
             _fundPool(who, poolEach);
             vm.prank(who);
             game.subscribe(address(0), false, isTicket, 1, address(0));
@@ -204,13 +202,6 @@ contract PendingBoxCountInvariant is DeployProtocol {
     function _fundPool(address who, uint256 amount) internal {
         vm.deal(address(this), amount);
         game.depositAfkingFunding{value: amount}(who);
-    }
-
-    function _grantDeityPass(address who) internal {
-        bytes32 slot = keccak256(abi.encode(who, uint256(MINTPACKED_SLOT)));
-        uint256 packed = uint256(vm.load(address(game), slot));
-        packed |= (uint256(1) << DEITY_SHIFT);
-        vm.store(address(game), slot, bytes32(packed));
     }
 
     function _runStageNewDay(uint256 vrfWord) internal {

@@ -43,9 +43,9 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 ///
 /// @dev Builds on the 351-01-repaired DeployProtocol fixture (GameAfkingModule live; the two SUB-09
 ///      self-subscribes VAULT + SDGNRS already present). Test subscribers are driven through the public
-///      game.subscribe() API. The crossing branch is reached by forcing a sub's validThroughLevel below
-///      the current game level via a single targeted slot write on _subOf. Test-only: no contracts/*.sol
-///      mutated.
+///      game.subscribe() API. Credential model: the AFKing Subscription Token (sub <=> coin) — subscribe requires
+///      balanceOf >= 1 (granted via DeployProtocol._grantSeat) and the process pass never re-checks;
+///      the pass/horizon crossing machinery is deleted. Test-only: no contracts/*.sol mutated.
 contract AfKingSubscription is DeployProtocol {
     // -------------------------------------------------------------------------
     // Game-resident storage slots (RE-DERIVED via `forge inspect storage DegenerusGame`).
@@ -53,22 +53,17 @@ contract AfKingSubscription is DeployProtocol {
     uint256 private constant SUBOF_SLOT = 53; // _subOf mapping root (address => Sub, one packed slot)
     uint256 private constant FUNDING_SOURCE_SLOT = 54; // _fundingSourceOf mapping root (address => address)
     uint256 private constant SUBSCRIBER_INDEX_SLOT = 56; // _subscriberIndex mapping root (1-indexed)
-    uint256 private constant MINTPACKED_SLOT = 9; // mintPacked_ mapping root (deity bit lives here)
 
     // Sub packed-field byte offsets (DegenerusGameStorage.sol:1895; the v56 compute-on-read re-pack
     // narrowed validThroughLevel + the day markers to uint24).
     uint256 private constant OFF_DAILY = 0; // uint8  dailyQuantity      (byte 0)
-    uint256 private constant OFF_VALIDTHROUGH = 1; // uint24 validThroughLevel  (bytes 1..3)
-    uint256 private constant OFF_LASTBOUGHT = 10; // uint24 lastAutoBoughtDay  (bytes 11..13)
-
-    uint256 private constant DEITY_SHIFT = 184; // HAS_DEITY_PASS_SHIFT in mintPacked_
+    uint256 private constant OFF_LASTBOUGHT = 7; // uint24 lastAutoBoughtDay  (bytes 7..9; post-validThroughLevel-removal repack)
 
     /// @dev keccak256("CoinflipStakeUpdated(address,uint24,uint256,uint256)") — one per creditFlip.
     bytes32 private constant COINFLIP_STAKE_UPDATED_SIG =
         keccak256("CoinflipStakeUpdated(address,uint24,uint256,uint256)");
 
-    /// @dev Game-resident module event signatures (emitter == address(game) via delegatecall).
-    bytes32 private constant EXTENDED_FREE_SIG = keccak256("SubscriptionExtendedFree(address,uint24)");
+    /// @dev Game-resident module event signature (emitter == address(game) via delegatecall).
     bytes32 private constant SUB_EXPIRED_SIG = keccak256("SubscriptionExpired(address,uint8)");
 
     uint256 private constant DRAIN_MAX_ITERATIONS = 60;
@@ -80,74 +75,32 @@ contract AfKingSubscription is DeployProtocol {
     }
 
     // =========================================================================
-    // Task 3a — Pass-eviction-OR-refresh crossing gate (AFSUB-02 / AFSUB-03)
+    // Task 3a — Coin credential: no process-pass re-check, no crossing machinery
+    // (supersedes AFSUB-02/AFSUB-03: the pass horizon + refresh/evict crossing
+    // branch is DELETED — the AFKing Subscription Token is the sole credential, enforced only
+    // at subscribe (NoCoin) and by the coin's seat lock (SeatInUse on an active sub's last-coin transfer))
     // =========================================================================
 
-    /// @notice AFSUB-03 (REFRESH branch): at the crossing (`currentLevel > sub.validThroughLevel`) a
-    ///         subscriber whose `_passHorizonOf(player)` STILL COVERS `currentLevel` is REFRESHED in
-    ///         place — SubscriptionExtendedFree emitted, `validThroughLevel` stamped to `h`,
-    ///         dailyQuantity preserved, NO eviction, NO FLIP burn. Deity = sentinel horizon
-    ///         (`type(uint24).max`), which always covers the current level.
-    function testCrossingPassHolderRefreshedNotEvicted() public {
-        address pass = makeAddr("pass_holder");
-        _grantDeityPass(pass); // _passHorizonOf(pass) = type(uint24).max (deity sentinel)
-        _fundPool(pass, 1 ether);
-        _subscribeLootboxMode(pass, 1);
-        _forceCrossingDue(pass); // validThroughLevel = 0 -> currentLevel > 0 -> crossing fires
+    /// @notice A coin-holding, PASSLESS subscriber is processed across the STAGE with
+    ///         no credential re-check: no eviction event, no FLIP burn, stays in the
+    ///         iterable set with dailyQuantity preserved. This is the successor of the
+    ///         crossing refresh/evict pair — level crossings are now a non-event for
+    ///         subscription membership.
+    function testPasslessCoinHolderProcessedNoEviction() public {
+        address seated = makeAddr("seated_no_pass");
+        _grantSeat(seated); // the coin IS the credential; no pass anywhere
+        _fundPool(seated, 1 ether);
+        _subscribeLootboxMode(seated, 1);
 
-        uint256 flipBefore = coin.balanceOf(pass);
+        uint256 flipBefore = coin.balanceOf(seated);
 
         vm.recordLogs();
         _runStageOnce();
 
-        // REFRESH taken: SubscriptionExtendedFree emitted; NO SubscriptionExpired (evict) for this sub.
-        assertEq(_countEvent(address(game), EXTENDED_FREE_SIG), 1, "pass-holder refreshed at crossing");
-        assertEq(_countEventFor(address(game), SUB_EXPIRED_SIG, pass), 0, "pass-holder NOT evicted");
-
-        // NO FLIP involvement: AFSUB-01 removed the FLIP-prepay window entirely.
-        assertEq(coin.balanceOf(pass), flipBefore, "no FLIP burned at crossing (AFSUB-01)");
-
-        // Refresh stamped a horizon strictly past the current level (deity = uint24.max).
-        assertGt(
-            _validThroughLevelOf(pass),
-            uint32(_currentLevel()),
-            "validThroughLevel refreshed past current level"
-        );
-        // Sub still active (dailyQuantity preserved, still in iterable set).
-        assertGt(_dailyQtyOf(pass), 0, "refreshed sub stays active");
-        assertGt(_subscriberIndexOf(pass), 0, "refreshed sub stays in the iterable set");
-    }
-
-    /// @notice AFSUB-03 (EVICT branch): at the crossing a subscriber whose `_passHorizonOf(player)` NO
-    ///         LONGER COVERS `currentLevel` (no pass → horizon == 0 < currentLevel) is EVICTED via the
-    ///         tombstone-then-reclaim path. dailyQuantity zeroed, _removeFromSet fired,
-    ///         SubscriptionExpired(player, 1) emitted, the STAGE does NOT revert. The swap-pop
-    ///         invariant (membership ⟺ packed != 0) is preserved.
-    function testCrossingNoPassEvictedViaTombstone() public {
-        // 357-00d HEAD'''' supersession: this fixture subscribes a PASSLESS sub (_passHorizonOf == 0) to set
-        // up the crossing, but the USER-caught HEAD'''' D-11 fix (77d8bc88) now rejects a zero horizon at
-        // EVERY level (including 0) — the passless subscribe reverts NoPass() before the crossing can be
-        // exercised. The crossing-eviction successor property is re-proven GREEN by
-        // V56SubHardening::testCrossingEvictionStillEvictsOutgrownPass (a pass valid at subscribe, then
-        // outgrown). Skip-with-reason (the §3b/§8c removed/adapted-surface discipline).
-        vm.skip(true, "357-00d: HEAD'''' D-11 rejects passless subscribe at any level; crossing re-proven by V56SubHardening");
-        address nopass = makeAddr("no_pass");
-        // No grantDeityPass: _passHorizonOf(nopass) == 0.
-        _fundPool(nopass, 1 ether);
-        _subscribeLootboxMode(nopass, 1);
-        _forceCrossingDue(nopass);
-
-        uint256 flipBefore = coin.balanceOf(nopass);
-
-        vm.recordLogs();
-        _runStageOnce(); // MUST NOT revert despite the eviction
-
-        assertGe(_countEvent(address(game), SUB_EXPIRED_SIG), 1, "no-pass evicted at crossing");
-        assertEq(_countEventFor(address(game), EXTENDED_FREE_SIG, nopass), 0, "no-pass did NOT refresh");
-        assertEq(_dailyQtyOf(nopass), 0, "tombstoned (dailyQuantity zeroed)");
-        assertEq(_subscriberIndexOf(nopass), 0, "removed from iterable set (swap-pop)");
-
-        assertEq(coin.balanceOf(nopass), flipBefore, "no FLIP burned on eviction (AFSUB-01)");
+        assertEq(_countEventFor(address(game), SUB_EXPIRED_SIG, seated), 0, "no eviction: coin held");
+        assertEq(coin.balanceOf(seated), flipBefore, "no FLIP burned during the STAGE");
+        assertGt(_dailyQtyOf(seated), 0, "sub stays active");
+        assertGt(_subscriberIndexOf(seated), 0, "sub stays in the iterable set");
     }
 
     // =========================================================================
@@ -158,61 +111,18 @@ contract AfKingSubscription is DeployProtocol {
     ///         UNCHANGED across subscribe; their `validThroughLevel` is encoded as `_passHorizonOf`
     ///         (zero for a no-pass subscriber).
     function testSubscribeNoFlipChargeRegardlessOfPass() public {
-        // 357-00d HEAD'''' supersession: arm (a) relied on the pre-HEAD'''' level-0 D-11 vacuity ("a no-pass
-        // sub clears D-11 (validThroughLevel 0 < level 0 is false)") to subscribe a PASSLESS sub at level 0.
-        // The USER-caught HEAD'''' fix (77d8bc88) now rejects a zero horizon at level 0 too, so the passless
-        // subscribe reverts NoPass(). The AFSUB-01 no-FLIP-charge successor is re-proven GREEN by
-        // V56SubHardening::testD11RealPassSubscribesAtLevelZero / testD11DeityHolderSubscribesAtLevelZero
-        // (a real-pass/deity subscribe at level 0 charges no FLIP). Skip-with-reason (§3b/§8c discipline).
-        vm.skip(true, "357-00d: HEAD'''' D-11 rejects passless-at-level-0 subscribe; AFSUB-01 re-proven by V56SubHardening");
-        // (a) no-pass subscriber: zero FLIP → subscribe charges no FLIP; balance unchanged. At level 0 a
-        // no-pass sub clears D-11 (validThroughLevel 0 < level 0 is false); funded (the grounding deposit)
-        // clears D-12. AFSUB-01 (no FLIP charge at subscribe) is the property under test.
+        // Formerly skipped (357-00d): the pass gate rejected a passless subscribe at every
+        // level. The AFKing Subscription Token credential resurrects this coverage — a passless,
+        // coin-holding subscriber is first-class. AFSUB-01 (no FLIP charge at subscribe)
+        // is the property under test; the coin gate charges nothing either.
         address nopass = makeAddr("subscribe_nopass");
+        _grantSeat(nopass);
         _fundPool(nopass, 1 ether); // grounds the NEW-run cover-buy (D-12); the deposit is ETH, not FLIP
         uint256 nopassBefore = coin.balanceOf(nopass); // == 0
         vm.prank(nopass);
         game.subscribe(address(0), false, true, 1, address(0)); // MUST NOT revert; charges no FLIP
-        assertEq(coin.balanceOf(nopass), nopassBefore, "AFSUB-01: no FLIP burned at subscribe (no-pass)");
-        assertEq(_validThroughLevelOf(nopass), 0, "no-pass subscriber: validThroughLevel = 0");
-
-        // (b) pass-holder: ditto — deity holder also has zero FLIP charge.
-        address pass = makeAddr("subscribe_pass");
-        _grantDeityPass(pass);
-        _fundPool(pass, 1 ether); // grounds the NEW-run cover-buy (D-12)
-        uint256 passBefore = coin.balanceOf(pass);
-        vm.prank(pass);
-        game.subscribe(address(0), false, true, 1, address(0));
-        assertEq(coin.balanceOf(pass), passBefore, "AFSUB-01: no FLIP burned at subscribe (pass-holder)");
-        assertEq(
-            _validThroughLevelOf(pass),
-            uint32(type(uint24).max),
-            "deity subscriber: validThroughLevel = sentinel (uint24.max)"
-        );
-    }
-
-    /// @notice AFSUB-02 (no-SLOAD oracle reframe, D-351-01): the per-iter validity check is a pure
-    ///         stored-field compare — `currentLevel <= sub.validThroughLevel` (GameAfkingModule.sol:612).
-    ///         A sub whose horizon STILL COVERS the current level is NOT at the crossing this STAGE; no
-    ///         SubscriptionExtendedFree fires (refresh is the crossing branch only) and the sub stays
-    ///         in-set with no eviction. Asserts the non-crossing case: a pass-holder at the deity
-    ///         sentinel is processed cleanly with NO refresh event (the per-iter path reads no external
-    ///         horizon — it is the in-context stored-field compare, the GAS-02-class invariant).
-    function testNonCrossingPassHolderProcessedWithoutRefresh() public {
-        address pass = makeAddr("nx_pass_holder");
-        _grantDeityPass(pass); // horizon = uint24.max
-        _fundPool(pass, 1 ether);
-        _subscribeLootboxMode(pass, 1); // validThroughLevel = uint24.max (deity sentinel)
-        // DO NOT force crossing — leave validThroughLevel at the sentinel so currentLevel <= horizon.
-
-        vm.recordLogs();
-        _runStageOnce();
-
-        // Non-crossing path: NO refresh event, NO eviction event for this sub.
-        assertEq(_countEventFor(address(game), EXTENDED_FREE_SIG, pass), 0, "non-crossing: no refresh");
-        assertEq(_countEventFor(address(game), SUB_EXPIRED_SIG, pass), 0, "non-crossing: no eviction");
-        // Sub still active.
-        assertGt(_subscriberIndexOf(pass), 0, "non-crossing sub stays in set");
+        assertEq(coin.balanceOf(nopass), nopassBefore, "AFSUB-01: no FLIP burned at subscribe (no pass)");
+        assertGt(_dailyQtyOf(nopass), 0, "passless coin-holder subscribed");
     }
 
     // =========================================================================
@@ -258,14 +168,13 @@ contract AfKingSubscription is DeployProtocol {
     ///         after the source approves the subscriber, the SAME subscribe is honored. Proves the
     ///         money-holder-grants-spender direction: S must approve M for M to draw from S.
     function testUnapprovedFundingSourceRefusedThenHonored() public {
-        // 357-00d HEAD'''' supersession: the HONORED leg subscribes a PASSLESS subscriber (M) at level 0
-        // (no _grantDeityPass), which the USER-caught HEAD'''' D-11 fix (77d8bc88) now rejects with NoPass()
-        // (zero horizon rejected at every level). The OPEN-E operator-approval gate ordering is re-proven by
-        // V56SubHardening (the D-13 carve-out + the funded-source grounding); the REFUSED leg (NotApproved
-        // before any pass check) is unaffected. Skip-with-reason (§3b/§8c removed/adapted-surface discipline).
-        vm.skip(true, "357-00d: HEAD'''' D-11 rejects passless honored-subscribe at level 0; OPEN-E gate re-proven by V56SubHardening");
+        // Formerly skipped (357-00d): the pass gate rejected the passless honored-subscribe.
+        // The AFKing Subscription Token credential resurrects the full REFUSED->HONORED sequence: the
+        // NotApproved consent gate fires BEFORE the coin gate, and the honored leg
+        // subscribes a coin-holding M.
         address s = makeAddr("auth_s");
         address m = makeAddr("auth_m");
+        _grantSeat(m);
 
         // REFUSED: M has NOT been approved by S -> the non-zero non-self source reverts NotApproved.
         vm.prank(m);
@@ -290,14 +199,13 @@ contract AfKingSubscription is DeployProtocol {
     ///         re-checks approval at the per-day draw — the trust-the-sub temporal bound). The sub is
     ///         stopped only when S DEFUNDS or M cancels.
     function testRevokeDoesNotStopActiveSub() public {
-        // 357-00d HEAD'''' supersession: M subscribes PASSLESS at level 0 (no _grantDeityPass), which the
-        // USER-caught HEAD'''' D-11 fix (77d8bc88) now rejects with NoPass() (zero horizon rejected at every
-        // level). The trust-the-sub revoke semantics (source fixed at subscribe, no per-draw re-check) are
-        // orthogonal to the pass gate and re-proven structurally by the surviving V56-native suites.
-        // Skip-with-reason (§3b/§8c removed/adapted-surface discipline).
-        vm.skip(true, "357-00d: HEAD'''' D-11 rejects passless subscribe at level 0; trust-the-sub revoke orthogonal");
+        // Formerly skipped (357-00d): the pass gate rejected M's passless subscribe. The
+        // AFKing Subscription Token credential resurrects it — M holds a seat, S funds; the revoke
+        // semantics under test (source fixed at subscribe, no per-draw re-check) are
+        // unchanged.
         address s = makeAddr("revoke_s");
         address m = makeAddr("revoke_m");
+        _grantSeat(m);
         vm.prank(s);
         game.setOperatorApproval(m, true);
         // Fund S's bucket BEFORE subscribe so M's NEW-run cover-buy (drawn from the resolved source S) is
@@ -361,10 +269,9 @@ contract AfKingSubscription is DeployProtocol {
         game.subscribe(address(0), false, false, q, address(0)); // self, lootbox mode, no reinvest, self-funded
     }
 
-    /// @dev A fully-healthy buying sub (lootbox mode, granted deity so it survives any crossing, funded).
-    ///      Granted deity because a no-pass sub at level>0 would evict at the crossing before buying.
+    /// @dev A fully-healthy buying sub (lootbox mode, seated with an AFKing Subscription Token, funded).
     function _setupHealthyBuyingSub(address who) internal {
-        _grantDeityPass(who);
+        _grantSeat(who);
         _fundPool(who, 1 ether); // fund BEFORE subscribe to ground the NEW-run cover-buy (D-12)
         _subscribeLootboxMode(who, 1);
     }
@@ -373,35 +280,6 @@ contract AfKingSubscription is DeployProtocol {
     function _fundPool(address who, uint256 amount) internal {
         vm.deal(address(this), amount);
         game.depositAfkingFunding{value: amount}(who);
-    }
-
-    /// @dev Grant `who` the permanent deity bit so _passHorizonOf(who) == type(uint24).max. mintPacked_
-    ///      is slot 9 on DegenerusGame (the deity bit lives at HAS_DEITY_PASS_SHIFT within the packed word).
-    function _grantDeityPass(address who) internal {
-        bytes32 slot = keccak256(abi.encode(who, uint256(MINTPACKED_SLOT)));
-        uint256 packed = uint256(vm.load(address(game), slot));
-        packed |= (uint256(1) << DEITY_SHIFT);
-        vm.store(address(game), slot, bytes32(packed));
-    }
-
-    /// @dev Force `who`'s sub into the crossing branch: write validThroughLevel = 0 (so any
-    ///      currentLevel > 0 triggers the crossing). Clear lastAutoBoughtDay so the AlreadyAutoBought
-    ///      skip does not fire first. Also bump game.level from 0 to 1 so the crossing is reachable.
-    ///      `level` is uint24 packed at DegenerusGameStorage slot 0 bytes 12..14.
-    function _forceCrossingDue(address who) internal {
-        bytes32 slot = keccak256(abi.encode(who, uint256(SUBOF_SLOT)));
-        uint256 packed = uint256(vm.load(address(game), slot));
-        // Clear lastAutoBoughtDay (uint24, bytes 11..13) and validThroughLevel (uint24, bytes 1..3).
-        uint256 mask = (uint256(0xFFFFFF) << (OFF_LASTBOUGHT * 8)) | (uint256(0xFFFFFF) << (OFF_VALIDTHROUGH * 8));
-        packed &= ~mask;
-        vm.store(address(game), slot, bytes32(packed));
-        // Bump game.level to 1 if currently 0 so `currentLevel > validThroughLevel = 0` is true.
-        uint256 slot0 = uint256(vm.load(address(game), bytes32(uint256(0))));
-        uint256 levelMask = uint256(0xFFFFFF) << (12 * 8);
-        if (uint24((slot0 & levelMask) >> (12 * 8)) == 0) {
-            slot0 = (slot0 & ~levelMask) | (uint256(1) << (12 * 8));
-            vm.store(address(game), bytes32(uint256(0)), bytes32(slot0));
-        }
     }
 
     // ---- Sub field reads (game-resident _subOf slot 54 + verified packed offsets) ----
@@ -413,10 +291,6 @@ contract AfKingSubscription is DeployProtocol {
 
     function _dailyQtyOf(address who) internal view returns (uint8) {
         return uint8(_subField(who, OFF_DAILY, 8));
-    }
-
-    function _validThroughLevelOf(address who) internal view returns (uint32) {
-        return uint32(_subField(who, OFF_VALIDTHROUGH, 24));
     }
 
     /// @dev Read `who`'s 1-indexed subscriber index (slot 57); 0 = not in set.

@@ -401,6 +401,7 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
         // Lootbox: 10% of price
         uint256 lootboxAmount = (totalPrice * WHALE_LOOTBOX_BPS) / 10_000;
         _recordLootboxEntry(buyer, lootboxAmount);
+        _grantSeatCoin(buyer);
     }
 
     /**
@@ -587,6 +588,7 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
         // Award lootbox as 10% of the price paid
         uint256 lootboxAmount = (totalPrice * LAZY_PASS_LOOTBOX_BPS) / 10_000;
         _recordLootboxEntry(buyer, lootboxAmount);
+        _grantSeatCoin(buyer);
     }
 
     /**
@@ -722,6 +724,7 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
             false
         );
         _applyWhalePassStats(affiliateAddr, ticketStartLevel);
+        _grantSeatCoin(affiliateAddr);
 
         // Fund distribution: pre-game 70/30, post-game 95/5 (future/next).
         // passLevel == 1 <=> level == 0: level cannot move within the purchase.
@@ -750,6 +753,7 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
         _recordLootboxEntry(buyer, lootboxAmount);
 
         emit DeityPassPurchased(buyer, symbolId, totalPrice, passLevel);
+        _grantSeatCoin(buyer);
     }
 
     // -------------------------------------------------------------------------
@@ -1029,6 +1033,26 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
         _applyWhalePassStats(player, startLevel);
         emit WhalePassClaimed(player, msg.sender, halfPasses, startLevel);
         _queueHalfPassAward(player, startLevel, 100, halfPasses, false);
+        _grantSeatCoin(player);
+    }
+
+    /// @dev One-per-address-LIFETIME AFKing seat eligibility latch, fired on
+    ///      every pass acquisition through this module (whale/lazy/deity
+    ///      purchase, the deity purchase's conferred affiliate pass, and the
+    ///      whale-pass claim). Latch-only — no external call: the AFKing Subscription Token reads the
+    ///      `mintPacked_` SEAT_CLAIMED bit through the game's mintPackedFor
+    ///      view when the buyer claims their seat (claimSeat, buyer-chosen
+    ///      traits), and the token caps free claims at 1,000 on its side.
+    ///      The bit stays set even once the free tranche is exhausted, so
+    ///      each address consumes its one chance exactly once and every
+    ///      pass acquisition after the first pays only this bit test.
+    function _grantSeatCoin(address who) private {
+        uint256 packed = mintPacked_[who];
+        if ((packed >> BitPackingLib.SEAT_CLAIMED_SHIFT) & 1 == 0) {
+            mintPacked_[who] =
+                packed |
+                (uint256(1) << BitPackingLib.SEAT_CLAIMED_SHIFT);
+        }
     }
 }
 

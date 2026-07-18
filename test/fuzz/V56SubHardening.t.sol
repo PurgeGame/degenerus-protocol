@@ -7,25 +7,30 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {IGameAfkingModule} from "../../contracts/interfaces/IDegenerusGameModules.sol";
 
 /// @title V56SubHardening -- the D-14 positive proofs for the 357-00 subscribe-hardening gates
-///        (D-11 pass-required / D-12 purchase-grounded / D-13 VAULT/sDGNRS bootstrap exemption) and the
+///        (D-11 coin-required / D-12 purchase-grounded / D-13 VAULT/sDGNRS bootstrap exemption) and the
 ///        F-356-01 drainAffiliateBase Game dispatch-stub reachability. Run against the re-frozen audit
 ///        subject HEAD' = ac5f1e033a785d18a9f0b89b7de5d05268431dbd (the sole .sol commit of phase 357).
 ///
-/// @notice The three 357-00 gates as built (GameAfkingModule.subscribe, the UPSERT branch):
-///   - D-11 (NoPass, :369): `if (!exemptSub && s.validThroughLevel < level) revert NoPass();` where
-///     `s.validThroughLevel = _passHorizonOf(subscriber)` (:364) — the deity sentinel `type(uint24).max`
-///     always covers; a finite frozenUntilLevel covers iff it reaches the live `level`. Fires on ANY
-///     UPSERT subscribe (new OR re-sub) whose stored horizon is below the live level.
-///   - D-12 (MustPurchaseToBeginAfking, :483): in the NEW-run leg (`!wasActive`), when the subscriber is
+/// @notice The 357-00 gates as built (GameAfkingModule.subscribe, the UPSERT branch), post the
+///         AFKing Subscription Token credential swap (sub <=> coin: `Sub.validThroughLevel` / `_passHorizonOf` /
+///         `NoPass()` / `SubscriptionExtendedFree` all DELETED from the module):
+///   - D-11 (NoCoin, :419): `if (!exemptSub && ISeatToken(AFKING_SUB_TOKEN).balanceOf(subscriber) == 0) revert
+///     NoCoin();` — a single balanceOf staticcall, checked at subscribe ONLY. Deity confers nothing for
+///     afking gating anymore (a deity holder without a coin still reverts NoCoin); any seated (>= 1 coin)
+///     subscriber clears it regardless of level.
+///   - D-12 (MustPurchaseToBeginAfking, :561): in the NEW-run leg (`!wasActive`), when the subscriber is
 ///     not grounded on a real purchase — neither `done[0]` (manual slot-0 today) NOR a funded in-tx
 ///     cover-buy executes — the start reverts. VAULT/sDGNRS take the `else if (exemptSub)` base-0
-///     bootstrap branch (:475) instead of reverting.
-///   - D-13 (exemptSub, :359-360): `subscriber == ContractAddresses.VAULT || subscriber ==
+///     bootstrap branch instead of reverting.
+///   - D-13 (exemptSub, :410-411): `subscriber == ContractAddresses.VAULT || subscriber ==
 ///     ContractAddresses.SDGNRS` short-circuits BOTH gates, keyed on the un-spoofable resolved
-///     subscriber identity (:278). Load-bearing for the construction-time VAULT/sDGNRS self-subscribe.
-///   - The per-iter crossing eviction (:969 `currentLevel > sub.validThroughLevel`) is KEPT — a pass
-///     valid at subscribe can be outgrown; the STAGE re-reads the horizon and EVICTS (tombstone) without
-///     reverting.
+///     subscriber identity. Load-bearing for the construction-time VAULT/sDGNRS self-subscribe, which
+///     predates the coin's deploy (the coin seeds them 999/1 on construction, after they have already
+///     self-subscribed through this identity carve).
+///   - Level-crossing membership eviction is GONE: a sub is never evicted by a level change. Membership
+///     ends only via cancel or funding-skip kill (SubscriptionExpired reason 1); the coin's seat lock
+///     blocks an active sub's last-coin transfer (SeatInUse) until manual unsub/eviction. The STAGE runs a
+///     seated sub through arbitrary level changes untouched.
 ///
 /// @notice F-356-01 (drainAffiliateBase Game dispatch stub, DegenerusGame.sol:428): the guard-less
 ///   delegatecall to GAME_AFKING_MODULE.drainAffiliateBase (mirrors claimAfkingFlip), `_revertDelegate`
@@ -35,40 +40,40 @@ import {IGameAfkingModule} from "../../contracts/interfaces/IDegenerusGameModule
 ///   which under delegatecall sees `msg.sender` as the caller of the Game stub. So the affiliate path
 ///   (msg.sender == AFFILIATE) drains-and-zeroes; any other caller reverts NotApproved().
 ///
-/// @dev Copies the V56SecUnmanipulable harness VERBATIM (the v56 Sub-slot offset block + the delivery
-///   helpers + the deity/level/validThroughLevel pokes + the funded/unfunded pool helpers — NOT the stale
-///   v55 offsets), adding a finite-(non-deity)-pass poke and a level poke for the D-11 finite/negative
-///   arms. Test-only: ZERO contracts/*.sol mutation.
+/// @dev Copies the V56SecUnmanipulable harness VERBATIM for the delivery helpers + the funded/unfunded
+///   pool helpers, with the Sub-slot offset block RE-DERIVED for the post-coin-gate packed layout
+///   (`validThroughLevel` deleted from the struct — every field at/after the old byte-1 slot shifts down
+///   3 bytes) and a `_grantSeat`-driven credential poke replacing the deity/finite-pass/validThroughLevel
+///   pokes. Test-only: ZERO contracts/*.sol mutation.
 contract V56SubHardening is DeployProtocol {
     // -------------------------------------------------------------------------
-    // Game-resident storage slots + the v56 Sub-slot offset block (V56SecUnmanipulable:44-67)
+    // Game-resident storage slots + the Sub-slot offset block (post-coin-gate layout;
+    // validThroughLevel deleted, every later field shifted down 3 bytes)
     // -------------------------------------------------------------------------
     uint256 private constant SUBOF_SLOT = 53;            // _subOf mapping root (address => Sub, one packed slot)
     uint256 private constant SUBSCRIBER_INDEX_SLOT = 56; // mapping(address => uint256) _subscriberIndex (1-indexed)
-    uint256 private constant MINTPACKED_SLOT = 9;        // mintPacked_ mapping root (deity bit @ 184, frozenUntil @ 128)
+    uint256 private constant MINTPACKED_SLOT = 9;        // mintPacked_ mapping root (deity bit @ 184)
 
-    //   dailyQuantity u8 @0 · validThroughLevel u24 @1 · flags u8 @4
-    //   scorePlus1 u16 @5 · amount u24 @7
-    //   lastAutoBoughtDay u24 @10 · lastOpenedDay u24 @13 · afkCoveredThroughDay u24 @16 · afkingStartDay u24 @19
-    //   affiliateBase u32 @22 · pendingFlip u24 @26 · subStreakLatch u16 @29
+    //   dailyQuantity u8 @0 · flags u8 @1 · score u16 @2 · amount u24 @4
+    //   lastAutoBoughtDay u24 @7 · lastOpenedDay u24 @10 · afkCoveredThroughDay u24 @13 · afkingStartDay u24 @16
+    //   affiliateBase u32 @19 · pendingFlip u24 @23 · subStreakLatch u16 @26
     uint256 private constant OFF_DAILY = 0;           // uint8  dailyQuantity        (byte 0)
-    uint256 private constant OFF_VALIDTHROUGH = 1;     // uint24 validThroughLevel    (bytes 1..3)
-    uint256 private constant OFF_LASTBOUGHT = 10;     // uint24 lastAutoBoughtDay    (bytes 10..12)
-    uint256 private constant OFF_LASTOPENED = 13;     // uint24 lastOpenedDay        (bytes 13..15)
-    uint256 private constant OFF_AFKCOVERED = 16;     // uint24 afkCoveredThroughDay (bytes 16..18)
-    uint256 private constant OFF_AFKINGSTART = 19;    // uint24 afkingStartDay       (bytes 19..21)
-    uint256 private constant OFF_AFFBASE = 22;        // uint32 affiliateBase        (bytes 22..25)
-    uint256 private constant OFF_PENDINGFLIP = 26;  // uint24 pendingFlip        (bytes 26..28)
-    uint256 private constant OFF_STREAKLATCH = 29;    // uint16 subStreakLatch       (bytes 29..30)
+    uint256 private constant OFF_LASTBOUGHT = 7;      // uint24 lastAutoBoughtDay    (bytes 7..9)
+    uint256 private constant OFF_LASTOPENED = 10;     // uint24 lastOpenedDay        (bytes 10..12)
+    uint256 private constant OFF_AFKCOVERED = 13;     // uint24 afkCoveredThroughDay (bytes 13..15)
+    uint256 private constant OFF_AFKINGSTART = 16;    // uint24 afkingStartDay       (bytes 16..18)
+    uint256 private constant OFF_AFFBASE = 19;        // uint32 affiliateBase        (bytes 19..22)
+    uint256 private constant OFF_PENDINGFLIP = 23;    // uint24 pendingFlip          (bytes 23..25)
+    uint256 private constant OFF_STREAKLATCH = 26;    // uint16 subStreakLatch       (bytes 26..27)
 
-    uint256 private constant DEITY_SHIFT = 184;       // HAS_DEITY_PASS_SHIFT in mintPacked_
-    uint256 private constant FROZEN_UNTIL_SHIFT = 128; // FROZEN_UNTIL_LEVEL_SHIFT (uint24) in mintPacked_
+    uint256 private constant DEITY_SHIFT = 184;       // HAS_DEITY_PASS_SHIFT in mintPacked_ (bounty-eligibility tier only; confers nothing for afking gating)
 
-    /// @dev The game `level` lives in slot 0 at byte 12 (uint24) — poked up to drive the D-11 negative /
-    ///      finite-pass arms and the crossing eviction (the fixture level does not advance organically).
+    /// @dev The game `level` lives in slot 0 at byte 12 (uint24) — poked up to drive the level-crossing
+    ///      membership-survival proof (the fixture level does not advance organically).
     uint256 private constant LEVEL_OFF = 12;
 
-    /// @dev SubscriptionExpired(player indexed, uint8 reason): reason 1 = pass-evict / funding-kill.
+    /// @dev SubscriptionExpired(player indexed, uint8 reason): reason 1 = funding-skip kill; reason 2 =
+    ///      cancel-tombstone reclaim. Neither is level-crossing related anymore.
     bytes32 private constant SUB_EXPIRED_SIG = keccak256("SubscriptionExpired(address,uint8)");
 
     uint256 private constant DRAIN_MAX_ITERATIONS = 60;
@@ -83,63 +88,60 @@ contract V56SubHardening is DeployProtocol {
     }
 
     // =========================================================================
-    // D-11 — pass-required subscribe (NoPass on the UPSERT branch)
+    // D-11 — coin-required subscribe (NoCoin on the UPSERT branch)
     // =========================================================================
 
-    /// @notice D-11 NEGATIVE: a passless EOA whose stored horizon (`_passHorizonOf == 0`) is below the
-    ///         live level reverts NoPass() on an UPSERT subscribe (dailyQuantity >= 1). The fixture level
-    ///         is poked up so `validThroughLevel(0) < level` holds (at level 0 the gate is vacuously
-    ///         satisfied). NoPass fires at :369, ahead of the D-12 grounding gate, so the EOA is funded
-    ///         to isolate the pass failure.
-    function testD11PasslessEoaRevertsNoPass() public {
-        address p = makeAddr("d11_nopass");
-        _setLevel(5);                 // currentLevel = 5 > validThroughLevel(0) for a passless EOA
-        _fundPool(p, 50 ether);       // funded, so the revert can ONLY be NoPass (not MustPurchase)
+    /// @notice D-11 NEGATIVE: an EOA holding NO AFKing Subscription Token reverts NoCoin() on an UPSERT subscribe
+    ///         (dailyQuantity >= 1) — the sole afking credential (sub <=> coin), checked with a single
+    ///         balanceOf staticcall at subscribe. NoCoin fires ahead of the D-12 grounding gate, so the
+    ///         EOA is funded to isolate the credential failure.
+    function testD11CoinlessEoaRevertsNoCoin() public {
+        address p = makeAddr("d11_nocoin");
+        _fundPool(p, 50 ether);       // funded, so the revert can ONLY be NoCoin (not MustPurchase)
         vm.prank(p);
-        vm.expectRevert(abi.encodeWithSignature("NoPass()"));
+        vm.expectRevert(abi.encodeWithSignature("NoCoin()"));
         game.subscribe(address(0), false, false, 1, address(0));
-        assertEq(_subscriberIndexOf(p), 0, "D-11: the passless sub was never created");
+        assertEq(_subscriberIndexOf(p), 0, "D-11: the coinless sub was never created");
     }
 
-    /// @notice D-11 POSITIVE (finite pass): an EOA whose finite frozenUntilLevel horizon reaches the live
-    ///         level passes D-11 and subscribes successfully (funded so D-12 is also satisfied). Proves a
-    ///         non-deity pass covering currentLevel clears the gate.
-    function testD11FinitePassCoveringCurrentLevelSubscribes() public {
-        address p = makeAddr("d11_finite");
-        _setLevel(5);
-        _grantFinitePass(p, 9);       // frozenUntilLevel = 9 >= level(5) -> horizon covers
+    /// @notice D-11 POSITIVE: an EOA holding >= 1 AFKing Subscription Token (granted via `_grantSeat`, no pass anywhere
+    ///         — the pass/horizon machinery is deleted) clears D-11 and subscribes successfully (funded so
+    ///         D-12 is also satisfied). The successor of the old finite-pass-covers-the-level proof: the
+    ///         coin gate has no level dependence at all.
+    function testD11SeatedEoaSubscribes() public {
+        address p = makeAddr("d11_seated");
+        _grantSeat(p);
         _fundPool(p, 50 ether);
         vm.prank(p);
         game.subscribe(address(0), false, false, 1, address(0)); // MUST NOT revert
-        assertGt(_subscriberIndexOf(p), 0, "D-11: finite-pass sub created");
-        assertEq(_validThroughLevelOf(p), 9, "D-11: validThroughLevel stamped to the finite horizon");
+        assertGt(_subscriberIndexOf(p), 0, "D-11: seated sub created");
     }
 
-    /// @notice D-11 POSITIVE (deity bypass): a deity holder (deity bit set -> horizon == type(uint24).max)
-    ///         subscribes at any level. The sentinel always covers, so the gate never reverts for deity.
-    function testD11DeityHolderBypassesPassGate() public {
-        address p = makeAddr("d11_deity");
-        _setLevel(5);
-        _grantDeityPass(p);           // _passHorizonOf == type(uint24).max
-        _fundPool(p, 50 ether);
+    /// @notice D-11 (deity confers nothing for afking gating): a deity holder WITHOUT an AFKing Subscription Token still
+    ///         reverts NoCoin() — the successor of the old deity-sentinel-bypass proof. Deity is a
+    ///         bounty-eligibility tier only now; it has no bearing on the afking credential.
+    function testD11DeityHolderWithoutCoinRevertsNoCoin() public {
+        address p = makeAddr("d11_deity_nocoin");
+        _grantDeityPass(p);           // deity bit set — confers nothing for the coin gate
+        _fundPool(p, 50 ether);       // funded, so the revert can ONLY be NoCoin (not MustPurchase)
         vm.prank(p);
-        game.subscribe(address(0), false, false, 1, address(0)); // MUST NOT revert
-        assertGt(_subscriberIndexOf(p), 0, "D-11: deity sub created (sentinel covers)");
-        assertEq(_validThroughLevelOf(p), uint32(type(uint24).max), "D-11: deity validThroughLevel == sentinel");
+        vm.expectRevert(abi.encodeWithSignature("NoCoin()"));
+        game.subscribe(address(0), false, false, 1, address(0));
+        assertEq(_subscriberIndexOf(p), 0, "D-11: a deity holder without a coin is still rejected (NoCoin)");
     }
 
     // =========================================================================
     // D-12 — purchase-grounded subscribe (MustPurchaseToBeginAfking on the unfunded NEW run)
     // =========================================================================
 
-    /// @notice D-12 NEGATIVE: a pass-holding (deity, so D-11 is cleared) but UNFUNDED EOA reverts
+    /// @notice D-12 NEGATIVE: a seated (coin-holding, so D-11 is cleared) but UNFUNDED EOA reverts
     ///         MustPurchaseToBeginAfking() on a NEW-run UPSERT subscribe — neither bought-today (`done[0]`)
     ///         nor a funded in-tx cover-buy, so the start would free-ride the advance gate. The revert is
-    ///         the D-12 leg at :483 (the unfunded NEW-run else branch), NOT NoPass (the deity bit clears
-    ///         D-11), isolating the grounding failure.
+    ///         the D-12 leg (the unfunded NEW-run else branch), NOT NoCoin (the seat clears D-11),
+    ///         isolating the grounding failure.
     function testD12UnfundedEoaRevertsMustPurchase() public {
         address p = makeAddr("d12_unfunded");
-        _grantDeityPass(p);           // clears D-11; isolates the D-12 grounding failure
+        _grantSeat(p);                // clears D-11; isolates the D-12 grounding failure
         // NO _fundPool: afkingFunding[p] == 0 -> the cover-buy is unfunded -> the NEW-run start reverts.
         vm.prank(p);
         vm.expectRevert(abi.encodeWithSignature("MustPurchaseToBeginAfking()"));
@@ -147,12 +149,12 @@ contract V56SubHardening is DeployProtocol {
         assertEq(_subscriberIndexOf(p), 0, "D-12: the unfunded sub was never created");
     }
 
-    /// @notice D-12 POSITIVE (funded): a pass-holding EOA pre-funded so the in-tx cover-buy executes
-    ///         subscribes successfully (the funded NEW-run leg at :462-474 keeps the snapshot + delivers
-    ///         the buy). No MustPurchase revert.
+    /// @notice D-12 POSITIVE (funded): a seated EOA pre-funded so the in-tx cover-buy executes subscribes
+    ///         successfully (the funded NEW-run leg keeps the snapshot + delivers the buy). No MustPurchase
+    ///         revert.
     function testD12FundedEoaSubscribes() public {
         address p = makeAddr("d12_funded");
-        _grantDeityPass(p);
+        _grantSeat(p);
         _fundPool(p, 50 ether);       // funds the cover-buy -> grounded NEW run
         vm.prank(p);
         game.subscribe(address(0), false, false, 1, address(0)); // MUST NOT revert
@@ -166,9 +168,9 @@ contract V56SubHardening is DeployProtocol {
     ///         today skip preserves the run). Proves D-12 never reverts a genuinely-grounded re-subscribe.
     function testD12ActiveResubAlreadyGroundedNoRevert() public {
         address p = makeAddr("d12_resub");
-        _grantDeityPass(p);
+        _grantSeat(p);
         _fundPool(p, 80 ether);       // fund BEFORE subscribe so the NEW-run cover-buy is grounded (D-12)
-        _subscribeLootbox(p, 1);      // grounded NEW run (deity clears D-11, funded clears D-12)
+        _subscribeLootbox(p, 1);      // grounded NEW run (seat clears D-11, funded clears D-12)
         _deliverDay(_singleton(p), 0xD12E50); // an active funded run; box opened, bought today
         assertGt(_subscriberIndexOf(p), 0, "non-vacuity: the sub is active");
         // Re-subscribe the active sub (wasActive == true) — the NEW-run D-12 gate is not on this path.
@@ -178,62 +180,62 @@ contract V56SubHardening is DeployProtocol {
     }
 
     // =========================================================================
-    // D-13 — VAULT / sDGNRS bootstrap exemption (no pass + unfunded still subscribes)
+    // D-13 — VAULT / sDGNRS bootstrap exemption (no coin + unfunded still subscribes)
     // =========================================================================
 
-    /// @notice D-13 (VAULT exempt): VAULT subscribes with NO pass and UNFUNDED and is NOT reverted by
-    ///         either gate — the `exemptSub` short-circuit (D-11 via `!exemptSub`, D-12 via the
-    ///         `else if (exemptSub)` base-0 bootstrap). Drives the gate against a poked-up level so a
-    ///         non-exempt no-pass sub WOULD trip NoPass, proving the carve-out is what lets VAULT through.
-    ///         Self-subscribe shape (`subscribe(address(this), ...)`) keyed on the resolved identity.
-    function testD13VaultExemptSubscribesNoPassUnfunded() public {
-        _setLevel(5);                 // a non-exempt no-pass sub at this level would revert NoPass
+    /// @notice D-13 (VAULT exempt): VAULT subscribes with NO AFKing Subscription Token and UNFUNDED and is NOT reverted
+    ///         by either gate — the `exemptSub` short-circuit (D-11 via `!exemptSub`, D-12 via the
+    ///         `else if (exemptSub)` base-0 bootstrap). Load-bearing: VAULT self-subscribes at
+    ///         construction, BEFORE the coin exists in the deploy order. Self-subscribe shape
+    ///         (`subscribe(address(this), ...)`) keyed on the resolved identity.
+    function testD13VaultExemptSubscribesNoCoinUnfunded() public {
         vm.prank(ContractAddresses.VAULT);
-        game.subscribe(ContractAddresses.VAULT, true, false, 1, address(0)); // no pass, unfunded
-        assertGt(_subscriberIndexOf(ContractAddresses.VAULT), 0, "D-13: VAULT exempt subscribe succeeded (no NoPass / no MustPurchase)");
+        game.subscribe(ContractAddresses.VAULT, true, false, 1, address(0)); // no coin, unfunded
+        assertGt(_subscriberIndexOf(ContractAddresses.VAULT), 0, "D-13: VAULT exempt subscribe succeeded (no NoCoin / no MustPurchase)");
     }
 
-    /// @notice D-13 (sDGNRS exempt): sDGNRS subscribes with NO pass and UNFUNDED and is NOT reverted —
-    ///         the same pinned-identity exemption. Both protocol self-subscribers bootstrap at
-    ///         construction with no pass + no funds; the gates MUST carve them out or deploy breaks.
-    function testD13SdgnrsExemptSubscribesNoPassUnfunded() public {
-        _setLevel(5);
+    /// @notice D-13 (sDGNRS exempt): sDGNRS subscribes with NO AFKing Subscription Token and UNFUNDED and is NOT
+    ///         reverted — the same pinned-identity exemption. Both protocol self-subscribers bootstrap at
+    ///         construction with no coin + no funds (the coin deploys LAST and seeds them 999/1
+    ///         afterward); the gates MUST carve them out or deploy breaks.
+    function testD13SdgnrsExemptSubscribesNoCoinUnfunded() public {
         vm.prank(ContractAddresses.SDGNRS);
-        game.subscribe(ContractAddresses.SDGNRS, true, false, 1, address(0)); // no pass, unfunded
-        assertGt(_subscriberIndexOf(ContractAddresses.SDGNRS), 0, "D-13: sDGNRS exempt subscribe succeeded (no NoPass / no MustPurchase)");
+        game.subscribe(ContractAddresses.SDGNRS, true, false, 1, address(0)); // no coin, unfunded
+        assertGt(_subscriberIndexOf(ContractAddresses.SDGNRS), 0, "D-13: sDGNRS exempt subscribe succeeded (no NoCoin / no MustPurchase)");
     }
 
     // =========================================================================
-    // Crossing eviction KEPT — a pass valid at subscribe is still evicted when outgrown
+    // Crossing eviction SUPERSEDED — a seated sub survives level changes / STAGE
+    // processing without eviction. The pass/horizon crossing gate (the per-iter
+    // `currentLevel > sub.validThroughLevel` re-read that used to refresh-or-evict)
+    // is DELETED along with `Sub.validThroughLevel` / `_passHorizonOf`. Membership
+    // is no longer level-dependent at all: it ends only via cancel, funding-skip
+    // kill (SubscriptionExpired reason 1); the coin's seat lock blocks an active sub's last-coin transfer.
     // =========================================================================
 
-    /// @notice The per-iter crossing eviction (:969) is KEPT under D-11/D-12: a sub with a pass VALID at
-    ///         subscribe (deity sentinel) is later EVICTED via the crossing path (tombstone, reason-1
-    ///         SubscriptionExpired, MUST NOT revert) once the deity bit is cleared + validThroughLevel is
-    ///         poked below a poked-up level. Mirrors V56SecUnmanipulable's Hook-C eviction proof: D-11 is
-    ///         a subscribe-time gate; the crossing eviction remains the runtime outgrow handler.
-    function testCrossingEvictionStillEvictsOutgrownPass() public {
-        address p = makeAddr("crossing_evict");
-        _grantDeityPass(p);           // valid pass AT subscribe (sentinel covers)
-        _fundPool(p, 50 ether);       // fund BEFORE subscribe so the grounded NEW run is created (D-12)
+    /// @notice A seated (coin-holding) sub is carried through an arbitrary level change across the STAGE
+    ///         with NO eviction: still in the set, dailyQuantity intact, no SubscriptionExpired of any
+    ///         reason. Successor of the old outgrown-pass eviction proof — a level crossing is now a
+    ///         non-event for subscription membership.
+    function testSeatedSubSurvivesLevelCrossingNoEviction() public {
+        address p = makeAddr("crossing_survives");
+        _grantSeat(p);                 // the coin is the sole credential; no pass anywhere
+        _fundPool(p, 50 ether);        // fund BEFORE subscribe so the grounded NEW run is created (D-12)
         _subscribeLootbox(p, 1);
         _deliverDay(_singleton(p), 0xC10551); // an active afking run; box opened (no pending-box skip)
         assertGt(_subscriberIndexOf(p), 0, "non-vacuity: sub active before the crossing");
 
-        // Force the outgrow crossing: clear the deity bit (horizon -> finite 0), set a finite
-        // validThroughLevel, poke the level above it -> the next STAGE takes the EVICT branch.
-        _clearDeityPass(p);
-        _setValidThroughLevel(p, 3);
-
         vm.recordLogs();
-        _settleGame(uint256(keccak256("evict_pre")) | 1);
+        _settleGame(uint256(keccak256("cross_pre")) | 1);
         _t += 1 days;
         vm.warp(_t);
-        _setLevel(10);                // currentLevel(10) > validThroughLevel(3) -> crossing fires
-        _settleGame(uint256(keccak256("evict_go")) | 1); // STAGE runs -> EVICT (MUST NOT revert)
+        _setLevel(10);                 // poke the level up across a fresh-day STAGE pass
+        _settleGame(uint256(keccak256("cross_go")) | 1); // STAGE runs -> no eviction branch exists anymore
 
-        assertGt(_countExpired(p, 1), 0, "crossing: pass-eviction fired (SubscriptionExpired reason 1)");
-        assertEq(_subscriberIndexOf(p), 0, "crossing: the outgrown sub was evicted (removed from set)");
+        assertEq(_countExpired(p, 1), 0, "crossing: no funding-skip kill fired (the sub stayed funded)");
+        assertEq(_countExpired(p, 2), 0, "crossing: no cancel-tombstone reclaim fired (never cancelled)");
+        assertGt(_subscriberIndexOf(p), 0, "crossing: the seated sub was NOT evicted by the level change");
+        assertGt(_dailyQtyOf(p), 0, "crossing: dailyQuantity preserved across the crossing");
     }
 
     // =========================================================================
@@ -247,18 +249,19 @@ contract V56SubHardening is DeployProtocol {
     // slot-0 re-accrual. Mirrors the active-sub re-subscribe guard at :395.
     // =========================================================================
 
-    /// @notice CHURN-IDEMPOTENCY: a pass-holding + funded EOA subscribes (a grounded NEW run whose funded
+    /// @notice CHURN-IDEMPOTENCY: a seated + funded EOA subscribes (a grounded NEW run whose funded
     ///         cover-buy stamps `lastAutoBoughtDay = today` and accrues the flat per-day slot-0 FLIP into
     ///         `pendingFlip` ONCE), then churns subscribe(dailyQuantity 0) [cancel] -> subscribe N times
     ///         in the SAME day. After every same-day churn cycle `pendingFlip` is UNCHANGED — the per-day
     ///         flat slot-0 reward is accrued EXACTLY ONCE, not N×. Pre-HEAD''' the NEW-run cover-buy guarded
     ///         only on the manual `done[0]` (which an afking buy never sets), so each re-subscribe re-ran the
     ///         cover-buy and re-accrued the flat reward; the HEAD''' guard (`s.lastAutoBoughtDay ==
-    ///         uint24(today)`, :451) closes that. Deity-passed (clears D-11) + funded (grounds D-12) so the
-    ///         churn loop actually reaches the cover-buy on the FIRST subscribe.
+    ///         uint24(today)`) closes that. Seated (clears D-11; the coin persists unspent across cancel/
+    ///         re-subscribe cycles) + funded (grounds D-12) so the churn loop actually reaches the cover-buy
+    ///         on the FIRST subscribe.
     function testChurnSameDayAccruesSlot0Once() public {
         address p = makeAddr("churn_idempotency");
-        _grantDeityPass(p);            // clears D-11 so the sub can be created at every cycle
+        _grantSeat(p);                 // clears D-11 for every cycle (the coin is never spent by subscribe)
         _fundPool(p, 200 ether);       // funds the FIRST cover-buy (grounds D-12) + leaves headroom
 
         // FIRST subscribe — a grounded NEW run; the funded cover-buy stamps lastAutoBoughtDay = today and
@@ -317,76 +320,13 @@ contract V56SubHardening is DeployProtocol {
     }
 
     // =========================================================================
-    // LEVEL-0 PASS GATE (HEAD'''' = 77d8bc88) — a zero pass horizon (== no pass) is
-    // rejected at EVERY level, INCLUDING level 0. Pre-HEAD'''' the gate was
-    // `validThroughLevel < level`, vacuous at level 0 (`0 < 0` is false), so a funded
-    // PASSLESS EOA (horizon 0) cleared NoPass at level 0 and could afk through level 0
-    // (evicted at L1). The gate is now `(validThroughLevel == 0 || validThroughLevel <
-    // level)` (:372) — a zero horizon is rejected at level 0 too. A real pass has
-    // horizon >= passLevel+99 (never 0); deity = type(uint24).max; VAULT/SDGNRS stay
-    // D-13 exempt. The existing D-11 negative proof runs at level >= 1 and never
-    // exercised level 0 — exactly the gap the 357-02 sweep MISSED, USER-caught.
+    // LEVEL-0 PASS GATE — SUPERSEDED. The old `(validThroughLevel == 0 ||
+    // validThroughLevel < level)` boundary was specific to the deleted pass/horizon
+    // gate; the AFKing Subscription Token credential (D-11, above) has no level dependence
+    // whatsoever, so there is no level-0 boundary left to exercise. The D-11 /
+    // D-13 sections above already cover coinless/seated/deity-without-coin/
+    // VAULT-SDGNRS-exempt subscribe, and none of those outcomes vary with level.
     // =========================================================================
-
-    /// @notice LEVEL-0 NEGATIVE (the closed gap): at level 0 (the initial fixture state, made explicit via
-    ///         `_setLevel(0)`), a FUNDED PASSLESS EOA reverts `NoPass()` on subscribe. Pre-HEAD'''' the gate
-    ///         `validThroughLevel(0) < level(0)` was `0 < 0` == false, so the passless EOA slipped through
-    ///         at level 0 (evicted only at L1). The `== 0` arm now rejects a zero horizon at level 0 too.
-    ///         Funded (so the revert can ONLY be NoPass, not MustPurchase — isolates the pass failure at the
-    ///         level-0 boundary the existing level-5 negative never reached).
-    function testD11PasslessEoaRevertsNoPassAtLevelZero() public {
-        address p = makeAddr("d11_nopass_l0");
-        _setLevel(0);                 // the boundary the existing level>=1 negative proof never exercised
-        _fundPool(p, 50 ether);       // funded -> the revert can ONLY be NoPass (the level-0 zero-horizon arm)
-        vm.prank(p);
-        vm.expectRevert(abi.encodeWithSignature("NoPass()"));
-        game.subscribe(address(0), false, false, 1, address(0));
-        assertEq(_subscriberIndexOf(p), 0, "LEVEL-0: the passless sub was rejected at level 0 (no NoPass-vacuity slip)");
-    }
-
-    /// @notice LEVEL-0 POSITIVE (real finite pass): at level 0, an EOA with a real finite pass horizon
-    ///         (`validThroughLevel >= 1`, e.g. 99) subscribes OK — the `== 0` arm rejects only a ZERO
-    ///         horizon, so a genuine pass (never 0) is unaffected at level 0. Funded so D-12 is also cleared.
-    function testD11RealPassSubscribesAtLevelZero() public {
-        address p = makeAddr("d11_realpass_l0");
-        _setLevel(0);
-        _grantFinitePass(p, 99);      // a real pass horizon (>= passLevel+99 in production; never 0)
-        _fundPool(p, 50 ether);
-        vm.prank(p);
-        game.subscribe(address(0), false, false, 1, address(0)); // MUST NOT revert (horizon 99 != 0)
-        assertGt(_subscriberIndexOf(p), 0, "LEVEL-0: a real finite-pass holder subscribes at level 0");
-        assertEq(_validThroughLevelOf(p), 99, "LEVEL-0: the real horizon was stamped (not zeroed by the gate)");
-    }
-
-    /// @notice LEVEL-0 POSITIVE (deity): at level 0, a deity holder (horizon == type(uint24).max) subscribes
-    ///         OK — the sentinel covers every level and is never 0, so the `== 0` arm never fires for deity.
-    function testD11DeityHolderSubscribesAtLevelZero() public {
-        address p = makeAddr("d11_deity_l0");
-        _setLevel(0);
-        _grantDeityPass(p);           // _passHorizonOf == type(uint24).max (never 0)
-        _fundPool(p, 50 ether);
-        vm.prank(p);
-        game.subscribe(address(0), false, false, 1, address(0)); // MUST NOT revert
-        assertGt(_subscriberIndexOf(p), 0, "LEVEL-0: a deity holder subscribes at level 0 (sentinel covers)");
-        assertEq(_validThroughLevelOf(p), uint32(type(uint24).max), "LEVEL-0: deity sentinel stamped at level 0");
-    }
-
-    /// @notice LEVEL-0 POSITIVE (D-13 VAULT/sDGNRS exempt): at level 0, the two protocol self-subscribers
-    ///         subscribe with NO pass + UNFUNDED — the `exemptSub` short-circuit gates the WHOLE
-    ///         `(validThroughLevel == 0 || ...)` predicate, so the new `== 0` arm does NOT break the
-    ///         construction-time bootstrap (they have horizon 0 and would otherwise be rejected by the new
-    ///         arm — the carve-out is what lets them through at level 0).
-    function testD13VaultSdgnrsExemptAtLevelZero() public {
-        _setLevel(0);
-        // VAULT — no pass (horizon 0), unfunded; the new `== 0` arm would reject a non-exempt sub here.
-        vm.prank(ContractAddresses.VAULT);
-        game.subscribe(ContractAddresses.VAULT, true, false, 1, address(0));
-        assertGt(_subscriberIndexOf(ContractAddresses.VAULT), 0, "LEVEL-0: VAULT exempt subscribe at level 0 (zero horizon carve-out)");
-        // sDGNRS — same pinned-identity exemption at level 0.
-        vm.prank(ContractAddresses.SDGNRS);
-        game.subscribe(ContractAddresses.SDGNRS, true, false, 1, address(0));
-        assertGt(_subscriberIndexOf(ContractAddresses.SDGNRS), 0, "LEVEL-0: sDGNRS exempt subscribe at level 0 (zero horizon carve-out)");
-    }
 
     // =========================================================================
     // F-356-01 — the drainAffiliateBase Game dispatch stub is reachable + AFFILIATE-only
@@ -401,7 +341,7 @@ contract V56SubHardening is DeployProtocol {
     ///         claim() reverted (the F-356-01 bug). NOW it succeeds.
     function testDrainAffiliateBaseReachableFromAffiliatePath() public {
         address p = makeAddr("drain_reach");
-        _grantDeityPass(p);
+        _grantSeat(p);
         _fundPool(p, 50 ether);       // fund BEFORE subscribe so the grounded NEW run is created (D-12)
         _subscribeLootbox(p, 1);
         _deliverDay(_singleton(p), 0xD4A10B); // accrue affiliateBase via a delivered buy
@@ -422,7 +362,7 @@ contract V56SubHardening is DeployProtocol {
     ///         is reachable ONLY for the affiliate, never a third party redirecting another sub's base.
     function testDrainAffiliateBaseStubAffiliateOnly() public {
         address p = makeAddr("drain_gate");
-        _grantDeityPass(p);
+        _grantSeat(p);
         _fundPool(p, 50 ether);       // fund BEFORE subscribe so the grounded NEW run is created (D-12)
         _subscribeLootbox(p, 1);
         _deliverDay(_singleton(p), 0xD4A106);
@@ -444,7 +384,7 @@ contract V56SubHardening is DeployProtocol {
     // self-call and pays the advance bounty only when mult>0 && eligible.
     // =========================================================================
 
-    /// @notice advanceGame LIVENESS: a passless / unfunded non-DGVE EOA, in the first seconds of a fresh
+    /// @notice advanceGame LIVENESS: a coinless / unfunded non-DGVE EOA, in the first seconds of a fresh
     ///         day (dailyIdx >= 2), can crank advanceGame() with NO MustMintToday revert — that error was
     ///         removed; the advance work is unconditionally permitted. The pre-357 hard gate would have
     ///         reverted a fresh non-minter in the first 15 min; HEAD'' does not. We settle clean, warp one
@@ -457,7 +397,7 @@ contract V56SubHardening is DeployProtocol {
         _warpToDayBoundary(5);
         assertTrue(game.advanceDue(), "fixture: advance is due on the fresh day");
 
-        address keeper = makeAddr("fresh_keeper"); // passless, unfunded, non-DGVE, no afking sub
+        address keeper = makeAddr("fresh_keeper"); // coinless, unfunded, non-DGVE, no afking sub
         assertFalse(game.bountyEligible(keeper), "first-15-min fresh non-minter is NOT bounty-eligible");
 
         // The advance WORK is permissionless — no MustMintToday (that error no longer exists). It may
@@ -481,18 +421,19 @@ contract V56SubHardening is DeployProtocol {
         _warpToDayBoundary(5);
         require(game.currentDayView() >= 2, "fixture: past the gateIdx==0 first-day bypass");
 
-        // (1) fresh non-minter, non-DGVE, no pass, no sub, < 15 min in -> ineligible.
+        // (1) fresh non-minter, non-DGVE, no coin, no sub, < 15 min in -> ineligible.
         address fresh = makeAddr("be_fresh");
         assertFalse(game.bountyEligible(fresh), "fresh non-minter <15min: ineligible");
 
         // (2) deity holder -> eligible at any time (the deity tier short-circuits before the clock).
+        //     Deity confers nothing for afking gating; this is a bounty-eligibility tier only.
         address deity = makeAddr("be_deity");
         _grantDeityPass(deity);
         assertTrue(game.bountyEligible(deity), "deity holder: eligible");
 
         // (3) active afking sub -> eligible (dailyQuantity != 0; the auto-buy participation tier).
         address sub = makeAddr("be_sub");
-        _grantDeityPass(sub);          // clears D-11 so the sub can be created
+        _grantSeat(sub);                // clears D-11 so the sub can be created
         _fundPool(sub, 50 ether);      // grounds D-12
         _subscribeLootbox(sub, 1);
         assertTrue(_dailyQtyOf(sub) != 0, "fixture: the afking sub is active");
@@ -526,7 +467,7 @@ contract V56SubHardening is DeployProtocol {
         assertGt(coinflip.coinflipAmount(keeper), before, "ELIGIBLE keeper earned a nonzero advance bounty");
     }
 
-    /// @notice mintFlip pay soft-gate (INELIGIBLE): a fresh non-minter keeper (first 15 min, no pass,
+    /// @notice mintFlip pay soft-gate (INELIGIBLE): a fresh non-minter keeper (first 15 min, no coin,
     ///         no sub, non-DGVE) cranking mintFlip still performs the advance WORK but earns ZERO
     ///         advance bounty (mult>0 but !eligible -> bountyEarned == 0; the creditFlip is skipped).
     ///         Directional invariant: the work is done (advance consumed), the keeper's flip balance is
@@ -536,7 +477,7 @@ contract V56SubHardening is DeployProtocol {
         _warpToDayBoundary(5);         // < 15 min in
         assertTrue(game.advanceDue(), "fixture: advance due so mintFlip runs the advance leg");
 
-        address keeper = makeAddr("pay_ineligible"); // passless, unfunded, non-DGVE, no sub
+        address keeper = makeAddr("pay_ineligible"); // coinless, unfunded, non-DGVE, no sub
         assertFalse(game.bountyEligible(keeper), "fixture: the keeper is NOT bounty-eligible");
 
         uint256 before = coinflip.coinflipAmount(keeper);
@@ -595,7 +536,8 @@ contract V56SubHardening is DeployProtocol {
     }
 
     // =========================================================================
-    // Protocol-driving helpers (ported VERBATIM from V56SecUnmanipulable + the finite-pass poke)
+    // Protocol-driving helpers (ported VERBATIM from V56SecUnmanipulable, minus the deleted
+    // pass/horizon pokes — the credential poke is `_grantSeat` from DeployProtocol)
     // =========================================================================
 
     /// @dev Warp to a fresh day boundary + `offsetSeconds` (the daily reset is 82620s past midnight).
@@ -674,6 +616,7 @@ contract V56SubHardening is DeployProtocol {
         game.depositAfkingFunding{value: amount}(who);
     }
 
+    /// @dev Deity bit only — a bounty-eligibility tier now; confers nothing for the afking coin gate.
     function _grantDeityPass(address who) internal {
         bytes32 slot = keccak256(abi.encode(who, uint256(MINTPACKED_SLOT)));
         uint256 packed = uint256(vm.load(address(game), slot));
@@ -681,34 +624,8 @@ contract V56SubHardening is DeployProtocol {
         vm.store(address(game), slot, bytes32(packed));
     }
 
-    /// @dev Grant `who` a FINITE (non-deity) pass horizon: poke mintPacked_ FROZEN_UNTIL_LEVEL_SHIFT
-    ///      (bit 128, uint24) to `horizon` so `_passHorizonOf` returns that finite value (deity bit clear).
-    function _grantFinitePass(address who, uint24 horizon) internal {
-        bytes32 slot = keccak256(abi.encode(who, uint256(MINTPACKED_SLOT)));
-        uint256 packed = uint256(vm.load(address(game), slot));
-        packed &= ~(uint256(1) << DEITY_SHIFT);             // ensure NOT deity (finite-horizon read)
-        packed &= ~(uint256(0xFFFFFF) << FROZEN_UNTIL_SHIFT);
-        packed |= (uint256(horizon) & 0xFFFFFF) << FROZEN_UNTIL_SHIFT;
-        vm.store(address(game), slot, bytes32(packed));
-    }
-
-    function _clearDeityPass(address who) internal {
-        bytes32 slot = keccak256(abi.encode(who, uint256(MINTPACKED_SLOT)));
-        uint256 packed = uint256(vm.load(address(game), slot));
-        packed &= ~(uint256(1) << DEITY_SHIFT);
-        vm.store(address(game), slot, bytes32(packed));
-    }
-
-    function _setValidThroughLevel(address who, uint24 lvl) internal {
-        bytes32 slot = keccak256(abi.encode(who, uint256(SUBOF_SLOT)));
-        uint256 packed = uint256(vm.load(address(game), slot));
-        packed &= ~(uint256(0xFFFFFF) << (OFF_VALIDTHROUGH * 8));
-        packed |= (uint256(lvl) & 0xFFFFFF) << (OFF_VALIDTHROUGH * 8);
-        vm.store(address(game), slot, bytes32(packed));
-    }
-
-    /// @dev Poke the game `level` (slot 0, byte 12, uint24) so the D-11 negative/finite arms and the
-    ///      crossing eviction fire (the fixture level does not advance organically over the harness loop).
+    /// @dev Poke the game `level` (slot 0, byte 12, uint24) to drive the level-crossing
+    ///      membership-survival proof (the fixture level does not advance organically over the harness loop).
     function _setLevel(uint24 lvl) internal {
         uint256 s0 = uint256(vm.load(address(game), bytes32(uint256(0))));
         s0 &= ~(uint256(0xFFFFFF) << (LEVEL_OFF * 8));
@@ -731,7 +648,7 @@ contract V56SubHardening is DeployProtocol {
         arr[0] = a;
     }
 
-    // ---- Sub-slot reads (_subOf slot 54 + the v56 offsets) ----
+    // ---- Sub-slot reads (_subOf slot 53 + the post-coin-gate offsets) ----
 
     function _subField(address who, uint256 off, uint256 widthBits) internal view returns (uint256) {
         uint256 p = uint256(vm.load(address(game), keccak256(abi.encode(who, uint256(SUBOF_SLOT))))) >> (off * 8);
@@ -740,10 +657,6 @@ contract V56SubHardening is DeployProtocol {
 
     function _dailyQtyOf(address who) internal view returns (uint8) {
         return uint8(_subField(who, OFF_DAILY, 8));
-    }
-
-    function _validThroughLevelOf(address who) internal view returns (uint32) {
-        return uint32(_subField(who, OFF_VALIDTHROUGH, 24));
     }
 
     function _lastBoughtDayOf(address who) internal view returns (uint32) {

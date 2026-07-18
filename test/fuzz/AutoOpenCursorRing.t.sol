@@ -41,12 +41,11 @@ contract AutoOpenCursorRing is DeployProtocol {
     uint256 private constant OPEN_CURSOR_BYTE = 2;       // byte offset of _subOpenCursor within CURSOR_SLOT
     uint256 private constant MINTPACKED_SLOT = 9;        // mintPacked_ mapping root (deity bit @ 184)
 
-    //   dailyQuantity u8 @0 · validThroughLevel u24 @1 · reinvestPct u8 @4 · flags u8 @5
-    //   scorePlus1 u16 @6 · amount u24 @8
-    //   lastAutoBoughtDay u24 @11 · lastOpenedDay u24 @14 · afkCoveredThroughDay u24 @17 · afkingStartDay u24 @20
-    //   affiliateBase u32 @23 · pendingFlip u24 @27 · subStreakLatch u16 @30
-    uint256 private constant OFF_LASTBOUGHT = 10;     // uint24 lastAutoBoughtDay (bytes 11..13)
-    uint256 private constant OFF_LASTOPENED = 13;     // uint24 lastOpenedDay     (bytes 14..16)
+    //   dailyQuantity u8 @0 · flags u8 @1 · score u16 @2 · amount u24 @4
+    //   lastAutoBoughtDay u24 @7 · lastOpenedDay u24 @10 · afkCoveredThroughDay u24 @13 · afkingStartDay u24 @16
+    //   affiliateBase u32 @19 · pendingFlip u24 @23 · subStreakLatch u16 @26
+    uint256 private constant OFF_LASTBOUGHT = 7;      // uint24 lastAutoBoughtDay (bytes 7..9)
+    uint256 private constant OFF_LASTOPENED = 10;     // uint24 lastOpenedDay     (bytes 10..12)
 
     uint256 private constant DEITY_SHIFT = 184;
 
@@ -229,14 +228,14 @@ contract AutoOpenCursorRing is DeployProtocol {
 
     uint256 private _deliverNonce;
 
-    /// @dev Create `n` deity-passed, funded subs and stamp ONE sealed openable box on each: a new-day STAGE
+    /// @dev Create `n` seated, funded subs and stamp ONE sealed openable box on each: a new-day STAGE
     ///      buy that stamps the box + lands its stamp-day word, with NO subsequent open. Each sub ends up
     ///      with lastOpenedDay < lastAutoBoughtDay and rngWordByDay[lastAutoBoughtDay] != 0 (openable).
     function _stampSealedOpenableSubs(uint256 n) internal returns (address[] memory subs) {
         subs = new address[](n);
         for (uint256 i; i < n; i++) {
             address p = makeAddr(string(abi.encodePacked("ring_sub_", vm.toString(i))));
-            _grantDeityPass(p);     // clears the pass gate
+            _grantSeat(p);          // the AFKing Subscription Token is the sole subscribe credential
             _fundPool(p, 80 ether); // grounds the NEW-run cover-buy
             _subscribeLootbox(p, 1);
             subs[i] = p;
@@ -256,11 +255,11 @@ contract AutoOpenCursorRing is DeployProtocol {
         require(_isOpenable(p), "fixture: a fresh sealed openable box was stamped");
     }
 
-    /// @dev Create a fresh subscriber (deity-passed + funded so the subscribe succeeds) WITHOUT delivering /
+    /// @dev Create a fresh subscriber (seated + funded so the subscribe succeeds) WITHOUT delivering /
     ///      opening it — it joins `_subscribers` at the tail with no pending box (non-openable).
     function _freshUnstampedSub(string memory tag) internal returns (address p) {
         p = makeAddr(tag);
-        _grantDeityPass(p);
+        _grantSeat(p);
         _fundPool(p, 80 ether);
         _subscribeLootbox(p, 1);
         require(_subscriberIndexOf(p) > 0, "fixture: the fresh sub joined the set");

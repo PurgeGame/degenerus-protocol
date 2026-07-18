@@ -7,7 +7,7 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {IGameAfkingModule} from "../../contracts/interfaces/IDegenerusGameModules.sol";
 
 /// @title V56SecUnmanipulable -- the SEC-01 PRIMARY proof: the v56.0 afking system (buy + open) is
-///        unmanipulable via strategic sub/unsub churn. Both a stateful churn-fuzz invariant AND all four
+///        unmanipulable via strategic sub/unsub churn. Both a stateful churn-fuzz invariant AND all
 ///        named repros (CONTEXT D-02) against the FROZEN v56 subject.
 ///
 /// @notice The shipped streak is COMPUTE-ON-READ with decay — there is NO settle day. `_afkingStreak`
@@ -23,15 +23,20 @@ import {IGameAfkingModule} from "../../contracts/interfaces/IDegenerusGameModule
 ///   no-orphan guard, :892, skips a sub with a pending unopened box, so the box must be opened before the
 ///   next day's buy). Strategic churn = unsub/re-sub/claim sequenced around that buy+open.
 ///
-/// @notice The four designed-against vectors (each a legible "this exact vector is closed" regression):
+/// @notice The designed-against vectors (each a legible "this exact vector is closed" regression):
 ///   1. Affiliate re-claim churn — sub/unsub/re-sub neither forfeits nor duplicates the accrued base; the
 ///      total drained EQUALS honest continuous accrual.
 ///   2. Streak decay / gap dodge — miss one funded day -> the read decays to 0; resume after a gap -> the run
 ///      re-bases (`afkingStartDay`/streak base reset on the delivered day); advances ONLY on delivered days.
 ///   3. pendingFlip double-claim CEI idempotency (Task 2).
-///   4. The four finalize hooks write the decay-applied streak BEFORE the slot delete (Task 2).
+///   4. The surviving finalize hooks write the decay-applied streak BEFORE the slot delete (Task 2). The
+///      membership credential is the AFKing Subscription Token (sub <=> coin), enforced only at subscribe (NoCoin) and at
+///      the coin's SeatInUse seat lock; there is no per-level validity horizon and no crossing
+///      refresh/evict branch to hook into, so the former pass-eviction finalize hook is gone (the
+///      "no eviction on a level crossing" property it stood for is proven directly by
+///      AfKingSubscription.t.sol's `testPasslessCoinHolderProcessedNoEviction`).
 ///
-/// @dev Reuses the funded-sub + deity-pass + new-day STAGE harness ported from the v56-migrated
+/// @dev Reuses the funded-sub + seated + new-day STAGE harness ported from the v56-migrated
 ///   V55SetMutationOpenE / V55RevertFreeEvCap (the fulfill-first `_settleGame`/`_settleClean` from
 ///   V56AfkingGasMarginal, an accumulating-`t` warp so the simulated day advances across a multi-day loop).
 ///   Copies the v56 Sub-slot offset block + the SEC-01 probe accessors VERBATIM from V56AfkingGasMarginal
@@ -44,33 +49,24 @@ contract V56SecUnmanipulable is DeployProtocol {
     // -------------------------------------------------------------------------
     uint256 private constant SUBOF_SLOT = 53;            // _subOf mapping root (address => Sub, one packed slot) (was 58)
     uint256 private constant SUBSCRIBER_INDEX_SLOT = 56; // mapping(address => uint256) _subscriberIndex (1-indexed) (was 61)
-    uint256 private constant MINTPACKED_SLOT = 9;        // mintPacked_ mapping root (deity bit @ bit 184)
 
-    //   dailyQuantity u8 @0 · validThroughLevel u24 @1 · reinvestPct u8 @4 · flags u8 @5
-    //   scorePlus1 u16 @6 · amount u24 @8
-    //   lastAutoBoughtDay u24 @11 · lastOpenedDay u24 @14 · afkCoveredThroughDay u24 @17 · afkingStartDay u24 @20
-    //   affiliateBase u32 @23 · pendingFlip u24 @27 · subStreakLatch u16 @30
+    //   dailyQuantity u8 @0 · flags u8 @1 · score u16 @2 · amount u24 @4
+    //   lastAutoBoughtDay u24 @7 · lastOpenedDay u24 @10 · afkCoveredThroughDay u24 @13 · afkingStartDay u24 @16
+    //   affiliateBase u32 @19 · pendingFlip u24 @23 · subStreakLatch u16 @26
     uint256 private constant OFF_DAILY = 0;           // uint8  dailyQuantity        (byte 0)
-    uint256 private constant OFF_VALIDTHROUGH = 1;     // uint24 validThroughLevel    (bytes 1..3)
-    uint256 private constant OFF_LASTBOUGHT = 10;     // uint24 lastAutoBoughtDay    (bytes 11..13)
-    uint256 private constant OFF_LASTOPENED = 13;     // uint24 lastOpenedDay        (bytes 14..16)
-    uint256 private constant OFF_AFKCOVERED = 16;     // uint24 afkCoveredThroughDay (bytes 17..19)
-    uint256 private constant OFF_AFKINGSTART = 19;    // uint24 afkingStartDay       (bytes 20..22)
-    uint256 private constant OFF_AFFBASE = 22;        // uint32 affiliateBase        (bytes 23..26)
-    uint256 private constant OFF_PENDINGFLIP = 26;  // uint24 pendingFlip        (bytes 27..29)
-    uint256 private constant OFF_STREAKLATCH = 29;    // uint16 subStreakLatch       (bytes 30..31; full streak counter)
-
-    uint256 private constant DEITY_SHIFT = 184;
-
-    /// @dev The game `level` lives in slot 0 at byte 12 (uint24) — poked up to drive the pass-eviction
-    ///      crossing (the fixture level does not advance organically over the harness's day loop).
-    uint256 private constant LEVEL_OFF = 12;
+    uint256 private constant OFF_LASTBOUGHT = 7;      // uint24 lastAutoBoughtDay    (bytes 7..9)
+    uint256 private constant OFF_LASTOPENED = 10;     // uint24 lastOpenedDay        (bytes 10..12)
+    uint256 private constant OFF_AFKCOVERED = 13;     // uint24 afkCoveredThroughDay (bytes 13..15)
+    uint256 private constant OFF_AFKINGSTART = 16;    // uint24 afkingStartDay       (bytes 16..18)
+    uint256 private constant OFF_AFFBASE = 19;        // uint32 affiliateBase        (bytes 19..22)
+    uint256 private constant OFF_PENDINGFLIP = 23;    // uint24 pendingFlip          (bytes 23..25)
+    uint256 private constant OFF_STREAKLATCH = 26;    // uint16 subStreakLatch       (bytes 26..27; full streak counter)
 
     /// @dev QUEST_SLOT0_REWARD / 1 ether = 100 whole FLIP accrued to pendingFlip per delivered buy.
     uint256 private constant SLOT0_FLIP_PER_BUY = 100;
 
-    /// @dev SubscriptionExpired(player indexed, uint8 reason): reason 1 = pass-evict / funding-kill,
-    ///      reason 2 = cancel-reclaim (the in-stage tombstone reclaim).
+    /// @dev SubscriptionExpired(player indexed, uint8 reason): reason 1 = AutoPause (funding-skip kill of
+    ///      a NORMAL sub), reason 2 = cancel-reclaim (the in-stage tombstone reclaim).
     bytes32 private constant SUB_EXPIRED_SIG = keccak256("SubscriptionExpired(address,uint8)");
 
     uint256 private constant DRAIN_MAX_ITERATIONS = 60;
@@ -109,8 +105,8 @@ contract V56SecUnmanipulable is DeployProtocol {
         vm.skip(true); // DEF-380-04-FC4 — frozen cancel drains affiliateBase to upline (not persist); council adjudicates the no-farm property
         address honest = makeAddr("aff_honest");
         address churner = makeAddr("aff_churn");
-        _grantDeityPass(honest);
-        _grantDeityPass(churner);
+        _grantSeat(honest);
+        _grantSeat(churner);
 
         uint256 D = 3;
 
@@ -158,7 +154,7 @@ contract V56SecUnmanipulable is DeployProtocol {
     ///         path; a direct non-affiliate call reverts before touching the slot.)
     function testAffiliateBaseDrainAffiliateOnly() public {
         address p = makeAddr("aff_gate");
-        _grantDeityPass(p);
+        _grantSeat(p);
         _fundPool(p, 50 ether);
         _subscribeLootbox(p, 1);
         _deliverDay(_singleton(p), 0xA66A11);
@@ -183,7 +179,7 @@ contract V56SecUnmanipulable is DeployProtocol {
     ///         handed-back streak. The streak therefore credits no non-delivered day.
     function testStreakDecaysToZeroAfterOneMissedFundedDay() public {
         address p = makeAddr("decay_p");
-        _grantDeityPass(p);
+        _grantSeat(p);
         _fundPool(p, 50 ether);
         _subscribeLootbox(p, 1);
 
@@ -222,7 +218,7 @@ contract V56SecUnmanipulable is DeployProtocol {
     ///         debit-DELIVERED days since the resume.
     function testGapResetOnResumeRebasesTheRun() public {
         address p = makeAddr("gapresume_p");
-        _grantDeityPass(p);
+        _grantSeat(p);
         _fundPool(p, 50 ether);
         _subscribeLootbox(p, 1);
 
@@ -273,8 +269,8 @@ contract V56SecUnmanipulable is DeployProtocol {
         uint256 D = 4;
         address honest = makeAddr("fz_honest");
         address churner = makeAddr("fz_churn");
-        _grantDeityPass(honest);
-        _grantDeityPass(churner);
+        _grantSeat(honest);
+        _grantSeat(churner);
         _fundPool(honest, 80 ether);
         _subscribeLootbox(honest, 1);
         _fundPool(churner, 80 ether);
@@ -342,7 +338,7 @@ contract V56SecUnmanipulable is DeployProtocol {
     ///         next-day coinflip stake delta: it rises by exactly `owed * 1e18` once, then not again.
     function testDoubleClaimPaysExactlyOnceCEI() public {
         address p = makeAddr("dbl_p");
-        _grantDeityPass(p);
+        _grantSeat(p);
         _fundPool(p, 50 ether);
         _subscribeLootbox(p, 1); // join-day cover-buy accrues 100
         _deliverDay(_singleton(p), 0xDB1C01); // next-day STAGE buy accrues another 100
@@ -387,7 +383,7 @@ contract V56SecUnmanipulable is DeployProtocol {
     ///         (dailyQuantity == 0) — the streak was handed back before the tombstone.
     function testFinalizeHookA_ExplicitCancelBeforeTombstone() public {
         address p = makeAddr("hookA");
-        _grantDeityPass(p);
+        _grantSeat(p);
         _fundPool(p, 50 ether);
         _subscribeLootbox(p, 1);
         _deliverDay(_singleton(p), 0xA0A0);
@@ -410,14 +406,14 @@ contract V56SecUnmanipulable is DeployProtocol {
         // 357-00 D-12 gate (MustPurchaseToBeginAfking) an ungrounded sub can no longer be created — and
         // grounding p (fund-before-subscribe) stamps a pending box that the no-orphan guard then protects,
         // suppressing the reclaim branch. The finalize-before-delete invariant this proved is re-proven by
-        // the GREEN hooks A (explicit-cancel-before-tombstone), C (pass-evict-before-remove), and D
-        // (funding-kill-before-remove) — all of which finalize ahead of the slot mutation. Re-proven GREEN
-        // by V56SubHardening (the D-12 gate + crossing eviction) + the surviving finalize hooks.
-        vm.skip(true, "357-00b D-12 supersession: cannot tombstone an ungrounded sub; finalize-before-delete covered by hooks A/C/D + V56SubHardening");
+        // the GREEN hooks A (explicit-cancel-before-tombstone) and D (funding-kill-before-remove) — both of
+        // which finalize ahead of the slot mutation. Re-proven GREEN by V56SubHardening (the D-12 gate) +
+        // the surviving finalize hooks.
+        vm.skip(true, "357-00b D-12 supersession: cannot tombstone an ungrounded sub; finalize-before-delete covered by hooks A/D + V56SubHardening");
         address p = makeAddr("hookB");
         address keep = makeAddr("hookB_keep");
-        _grantDeityPass(p);
-        _grantDeityPass(keep);
+        _grantSeat(p);
+        _grantSeat(keep);
         _subscribeLootbox(p, 1);
         _subscribeLootbox(keep, 1);
         vm.prank(p);
@@ -432,36 +428,11 @@ contract V56SecUnmanipulable is DeployProtocol {
         assertEq(_subscriberIndexOf(p), 0, "hook B: _subOf record deleted AFTER the finalize (removed from set)");
     }
 
-    /// @notice Hook (C) pass-eviction crossing: when the current level rises past a sub's pass horizon and
-    ///         the re-read horizon no longer covers, `_finalizeAfking` (:952) runs BEFORE the tombstone +
-    ///         remove (:953-954). Driven by delivering a deity-passed sub a day (box opened), then CLEARING
-    ///         its deity bit + poking validThroughLevel below a poked-up game level, so the next STAGE's
-    ///         pass-validity gate (`currentLevel > sub.validThroughLevel` with the re-read horizon no longer
-    ///         covering) takes the EVICT branch. (The fixture's level does not advance organically, so the
-    ///         crossing is set up by the level poke — the same vm.store technique the gas/v55 harnesses use.)
-    function testFinalizeHookC_PassEvictBeforeRemove() public {
-        address p = makeAddr("hookC");
-        _grantDeityPass(p);
-        _fundPool(p, 50 ether);
-        _subscribeLootbox(p, 1);
-        _deliverDay(_singleton(p), 0xC0C0); // an active afking run; the box is opened (no pending-box skip)
-
-        // Force the pass-eviction crossing: clear the deity bit (so _passHorizonOf reads the finite frozen
-        // horizon 0), set a finite validThroughLevel, and poke the game level ABOVE it so the next STAGE sees
-        // currentLevel > validThroughLevel AND the re-read horizon (0) < currentLevel -> EVICT.
-        _clearDeityPass(p);
-        _setValidThroughLevel(p, 3);
-
-        vm.recordLogs();
-        _settleGame(uint256(keccak256("hookC_pre")) | 1); // reach a clean pre-advance point
-        _t += 1 days;
-        vm.warp(_t);
-        _setLevel(10); // poke the level up so the new-day STAGE crosses the pass gate
-        _settleGame(uint256(keccak256("hookC_ev")) | 1); // the STAGE runs -> EVICT (finalize -> tombstone -> remove)
-
-        assertGt(_countExpired(p, 1), 0, "hook C: pass-eviction fired (SubscriptionExpired reason 1)");
-        assertEq(_subscriberIndexOf(p), 0, "hook C: removed from set AFTER the finalize handed the streak back");
-    }
+    // Hook (C) pass-eviction crossing was DROPPED: the per-level validity horizon, the crossing
+    // refresh/evict branch, and `_passHorizonOf` are all deleted — membership now ends only via cancel,
+    // funding-skip kill (reason 1) — the AFKing Subscription Token's seat lock blocks exits-by-transfer — and a level crossing
+    // is a non-event for an in-set sub. The property this hook stood for ("no eviction on a level crossing")
+    // is proven directly by AfKingSubscription.t.sol's `testPasslessCoinHolderProcessedNoEviction`.
 
     /// @notice Hook (D) funding-kill + the funding-kill BOUNDARY (Pitfall 4). A NORMAL underfunded sub is
     ///         finalized (`_finalizeAfking` at :1010) BEFORE the tombstone + remove (:1011-1012). The
@@ -473,7 +444,7 @@ contract V56SecUnmanipulable is DeployProtocol {
     function testFinalizeHookD_FundingKillBoundaryKeptAndZeroed() public {
         // ---- KEPT boundary: lastValid == currentDay - 1 (delivered yesterday) ----
         address kept = makeAddr("hookD_kept");
-        _grantDeityPass(kept);
+        _grantSeat(kept);
         _fundPool(kept, 50 ether);
         _subscribeLootbox(kept, 1);
         _deliverDay(_singleton(kept), 0xD0D0);
@@ -494,7 +465,7 @@ contract V56SecUnmanipulable is DeployProtocol {
 
         // ---- ZEROED boundary: lastValid <= currentDay - 2 (a full prior funded day missed) ----
         address zeroed = makeAddr("hookD_zeroed");
-        _grantDeityPass(zeroed);
+        _grantSeat(zeroed);
         _fundPool(zeroed, 50 ether);
         _subscribeLootbox(zeroed, 1);
         _deliverDay(_singleton(zeroed), 0xD1D0);
@@ -528,7 +499,7 @@ contract V56SecUnmanipulable is DeployProtocol {
     ///         (do NOT open it), then run a STAGE: the sub stays in-set with its stamp markers byte-unchanged.
     function testNoOrphanPendingBoxSubUntouchedByStage() public {
         address p = makeAddr("orphan_p");
-        _grantDeityPass(p);
+        _grantSeat(p);
         _fundPool(p, 50 ether);
         _subscribeLootbox(p, 1);
         // STAGE a buy but DO NOT open — the box is pending (lastOpenedDay < lastAutoBoughtDay).
@@ -642,42 +613,8 @@ contract V56SecUnmanipulable is DeployProtocol {
         game.withdrawAfkingFunding(bal);
     }
 
-    function _grantDeityPass(address who) internal {
-        bytes32 slot = keccak256(abi.encode(who, uint256(MINTPACKED_SLOT)));
-        uint256 packed = uint256(vm.load(address(game), slot));
-        packed |= (uint256(1) << DEITY_SHIFT);
-        vm.store(address(game), slot, bytes32(packed));
-    }
-
-    /// @dev Clear `who`'s deity-pass bit so `_passHorizonOf` reads the finite frozen horizon (the
-    ///      pass-eviction crossing setup).
-    function _clearDeityPass(address who) internal {
-        bytes32 slot = keccak256(abi.encode(who, uint256(MINTPACKED_SLOT)));
-        uint256 packed = uint256(vm.load(address(game), slot));
-        packed &= ~(uint256(1) << DEITY_SHIFT);
-        vm.store(address(game), slot, bytes32(packed));
-    }
-
-    /// @dev Poke `who`'s Sub.validThroughLevel (bytes 1..3, uint24) so the pass-validity gate compares the
-    ///      live level against this stored horizon.
-    function _setValidThroughLevel(address who, uint24 lvl) internal {
-        bytes32 slot = keccak256(abi.encode(who, uint256(SUBOF_SLOT)));
-        uint256 packed = uint256(vm.load(address(game), slot));
-        packed &= ~(uint256(0xFFFFFF) << (OFF_VALIDTHROUGH * 8));
-        packed |= (uint256(lvl) & 0xFFFFFF) << (OFF_VALIDTHROUGH * 8);
-        vm.store(address(game), slot, bytes32(packed));
-    }
-
-    /// @dev Poke the game `level` (slot 0, byte 12, uint24) up so the pass-validity crossing fires.
-    function _setLevel(uint24 lvl) internal {
-        uint256 s0 = uint256(vm.load(address(game), bytes32(uint256(0))));
-        s0 &= ~(uint256(0xFFFFFF) << (LEVEL_OFF * 8));
-        s0 |= (uint256(lvl) & 0xFFFFFF) << (LEVEL_OFF * 8);
-        vm.store(address(game), bytes32(uint256(0)), bytes32(s0));
-    }
-
     /// @dev Count the SubscriptionExpired(player, reason) events recorded since the last vm.recordLogs()
-    ///      for `who` with the given reason (1 = pass-evict/funding-kill, 2 = cancel-reclaim). The
+    ///      for `who` with the given reason (1 = AutoPause/funding-kill, 2 = cancel-reclaim). The
     ///      game-resident module emits via delegatecall, so the emitter is address(game).
     function _countExpired(address who, uint8 reason) internal returns (uint256 count) {
         Vm.Log[] memory logs = vm.getRecordedLogs();

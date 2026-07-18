@@ -371,7 +371,7 @@ abstract contract DegenerusGameStorage {
     bool internal presaleDrained;
 
     /// @dev FLIP ticket purchase window latch. redeemFlip lazily opens it the moment the prize
-    ///      target is met in the purchase phase (_getNextPrizePool() >= levelPrizePool[level], with no
+    ///      target is met in the purchase phase (_getNextPrizePool() > levelPrizePool[level], with no
     ///      RNG in flight); it persists through the jackpot days and is cleared in the advance at the
     ///      final jackpot day's RNG request — the same boundary where new tickets route to the next
     ///      level. While closed, FLIP ticket purchases revert, so FLIP tickets only ever join a
@@ -2292,10 +2292,10 @@ abstract contract DegenerusGameStorage {
 
     /// @notice Per-player AfKing subscription record: the per-buy box stamp plus the
     ///         in-slot per-sub accumulator.
-    /// @dev Layout (Solidity packs sequentially) — fits in ONE 32-byte slot (248 bits used,
-    ///      8 free at the top), so the whole record reads/writes as a single warm slot with no
+    /// @dev Layout (Solidity packs sequentially) — fits in ONE 32-byte slot (224 bits used,
+    ///      32 free at the top), so the whole record reads/writes as a single warm slot with no
     ///      extra cold slot:
-    ///        config (40b):  dailyQuantity(8) + validThroughLevel(24) + flags(8)
+    ///        config (16b):  dailyQuantity(8) + flags(8)
     ///        per-sub stamp (40b): score(16) + amount(24, milli-ETH)
     ///        markers (96b): lastAutoBoughtDay(24) + lastOpenedDay(24) + afkCoveredThroughDay(24) + afkingStartDay(24)
     ///        accumulator (72b): affiliateBase(32) + pendingFlip(24) + subStreakLatch(16)
@@ -2339,14 +2339,9 @@ abstract contract DegenerusGameStorage {
     ///      `afkCoveredThroughDay` is a delivered-day high-water mark, not a settle
     ///      marker.
     struct Sub {
-        // --- config (40 bits) ---
+        // --- config (16 bits) ---
         /// @dev 0 = paused / never-subscribed; minimum 1 when active.
         uint8 dailyQuantity;
-        /// @dev Game-level horizon through which the sub's pass coverage extends
-        ///      (_passHorizonOf snapshot at subscribe; refreshed on crossing;
-        ///      deity sentinel = type(uint24).max; non-pass = 0). uint24 gives ~16.7M
-        ///      levels of headroom and the deity sentinel type(uint24).max fits exactly.
-        uint24 validThroughLevel;
         /// @dev bit 0 free; bit 1 = drainGameCreditFirst; bit 2 = useTickets.
         uint8 flags;
         // --- per-sub stamp (40 bits) ---
@@ -2503,7 +2498,7 @@ abstract contract DegenerusGameStorage {
 
     /// @dev The two uint16 cursors + the uint24 afking reset-day pack into ONE slot
     ///      (16 + 16 + 24 = 56 bits). The cursors index `_subscribers` (the active set
-    ///      is capped at 1000 — GameAfkingModule.SUBSCRIBER_CAP, well within uint16) and
+    ///      is capped at 2005 — GameAfkingModule.SUBSCRIBER_CAP, well within uint16) and
     ///      are drained in chunks across advanceGame / router calls.
     /// @dev Process-STAGE cursor: the pre-RNG stamp pass position.
     uint16 internal _subCursor;

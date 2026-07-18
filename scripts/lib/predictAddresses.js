@@ -57,6 +57,11 @@ export const DEPLOY_ORDER = [
   // addresses feed trait derivation; keeping them fixed avoids perturbing RNG). It
   // has no ctor args and no deploy-time dependents — only GAME's runtime delegatecalls.
   "GAME_FOILPACK_MODULE",  // N+25: DegenerusGameFoilPackModule
+  // AFKing seat coin. Appended LAST so adding it shifts no existing predicted
+  // address. Constructor mints the 999/1 sale tranche to the already-deployed
+  // VAULT/SDGNRS; GAME (its minter + seat-exit target) is a compile-time
+  // constant, so it has no deploy-time dependents.
+  "AFKING_SUB_TOKEN",           // N+26: AFKingSubscriptionToken
 ];
 
 /**
@@ -89,6 +94,7 @@ export const KEY_TO_CONTRACT = {
   ADMIN: "DegenerusAdmin",
   GNRUS: "GNRUS",
   GAME_FOILPACK_MODULE: "DegenerusGameFoilPackModule",
+  AFKING_SUB_TOKEN: "AFKingSubscriptionToken",
 };
 
 /**

@@ -71,13 +71,13 @@ contract KeeperNonBrick is DeployProtocol {
     uint256 private constant SUBSCRIBERS_SLOT = 55; // address[] _subscribers
     uint256 private constant SUBSCRIBER_INDEX_SLOT = 56; // mapping(address => uint256) _subscriberIndex (1-indexed)
 
-    // Sub packed-field byte offsets (DegenerusGameStorage.sol:1895; the v56 compute-on-read re-pack
-    // narrowed `amount` to uint24 and the day markers to uint24).
+    // Sub packed-field byte offsets (DegenerusGameStorage.sol:2341; the AFKing-Coin repack dropped
+    // validThroughLevel, shifting every field after it down 3 bytes).
     uint256 private constant OFF_DAILY = 0; // uint8  dailyQuantity     (byte 0)
-    uint256 private constant OFF_SCOREPLUS1 = 5; // uint16 scorePlus1     (bytes 6..7)
-    uint256 private constant OFF_AMOUNT = 7; // uint24 amount            (bytes 8..10)
-    uint256 private constant OFF_LASTBOUGHT = 10; // uint24 lastAutoBoughtDay (bytes 11..13)
-    uint256 private constant OFF_LASTOPENED = 13; // uint24 lastOpenedDay     (bytes 14..16)
+    uint256 private constant OFF_SCORE = 2; // uint16 score             (bytes 2..3)
+    uint256 private constant OFF_AMOUNT = 4; // uint24 amount            (bytes 4..6)
+    uint256 private constant OFF_LASTBOUGHT = 7; // uint24 lastAutoBoughtDay (bytes 7..9)
+    uint256 private constant OFF_LASTOPENED = 10; // uint24 lastOpenedDay     (bytes 10..12)
 
     uint256 private constant DEITY_SHIFT = 184;
 
@@ -638,8 +638,8 @@ contract KeeperNonBrick is DeployProtocol {
         }
     }
 
-    /// @dev Subscribe `n` funded lootbox-mode subs (deity-passed so the pass-validity gate never evicts),
-    ///      each pool-funded with `poolEach`. Returns the addresses.
+    /// @dev Subscribe `n` funded lootbox-mode subs (seated with an AFKing Subscription Token — the sole subscribe
+    ///      credential), each pool-funded with `poolEach`. Returns the addresses.
     function _setupFundedLootboxSubs(uint256 n, string memory prefix, uint256 poolEach)
         internal
         returns (address[] memory subs)
@@ -648,7 +648,7 @@ contract KeeperNonBrick is DeployProtocol {
         for (uint256 i; i < n; i++) {
             address who = makeAddr(string(abi.encodePacked(prefix, _u(i))));
             subs[i] = who;
-            _grantDeityPass(who);
+            _grantSeat(who);
             vm.prank(who);
             game.subscribe(address(0), false, false, 1, address(0)); // self, lootbox mode, qty 1
             _fundPool(who, poolEach);

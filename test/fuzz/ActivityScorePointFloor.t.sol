@@ -29,17 +29,17 @@ contract ActivityScorePointFloorTest is DeployProtocol {
     uint256 private constant OFF_QS_SYNCDAY = 6;
     uint256 private constant OFF_QS_STREAK = 9;
 
-    /// @dev Game-resident slots + the POST-PACK Sub-slot accumulator offsets (re-derived from the v69
-    ///      storageLayout, NOT the pre-PACK V56 offsets): _subOf mapping root @ slot 54; mintPacked_ deity
-    ///      bit @ bit 184. The accumulator section after the repack is affiliateBase u32 off23,
-    ///      pendingFlip u24 off27, subStreakLatch u16 off30 (the latch widened 8->16, pendingFlip narrowed
-    ///      32->24). The two afking day markers are afkCoveredThroughDay u24 off17, afkingStartDay u24 off20.
+    /// @dev Game-resident slots + the AFKing-Coin-era Sub-slot accumulator offsets (DegenerusGameStorage.sol
+    ///      struct Sub, post `validThroughLevel` deletion): _subOf mapping root @ slot 54; mintPacked_ deity
+    ///      bit @ bit 184. The accumulator section is affiliateBase u32 off19, pendingFlip u24 off23,
+    ///      subStreakLatch u16 off26. The two afking day markers are afkCoveredThroughDay u24 off13,
+    ///      afkingStartDay u24 off16.
     uint256 private constant SUBOF_SLOT = 53;
     uint256 private constant MINTPACKED_SLOT = 9;
     uint256 private constant DEITY_SHIFT = 184;
-    uint256 private constant OFF_AFKCOVERED = 16;
-    uint256 private constant OFF_AFKINGSTART = 19;
-    uint256 private constant OFF_STREAKLATCH = 29;
+    uint256 private constant OFF_AFKCOVERED = 13;
+    uint256 private constant OFF_AFKINGSTART = 16;
+    uint256 private constant OFF_STREAKLATCH = 26;
 
     /// @dev A deity-passed player with no quest streak scores exactly 50 + 25 + 80 = 155 points (the deity
     ///      base plus the deity activity bonus), with zero affiliate/whale/curse contribution — so the quest
@@ -309,6 +309,7 @@ contract ActivityScorePointFloorTest is DeployProtocol {
     }
 
     function _subscribeLootbox(address who, uint8 q) internal {
+        _grantSeat(who); // the AFKing Subscription Token is the subscribe credential (NoCoin without it)
         vm.prank(who);
         game.subscribe(address(0), false, false, q, address(0)); // self, lootbox mode, no reinvest
     }

@@ -75,12 +75,9 @@ contract OpenWalkCompositionGas is DeployProtocol {
     uint256 private constant CURSOR_SLOT = 57;           // packed: _subCursor/_subOpenCursor/.../_pendingBoxCount
     uint256 private constant SUBSCRIBERS_SLOT = 55;      // address[] _subscribers (slot holds the length; elements at keccak256(slot)+i)
 
-    // Sub packed-field byte offsets (see V56AfkingGasMarginal.t.sol header for the full v56 layout).
-    uint256 private constant OFF_LASTBOUGHT = 10; // uint24 lastAutoBoughtDay (bytes 11..13)
-    uint256 private constant OFF_LASTOPENED = 13; // uint24 lastOpenedDay     (bytes 14..16)
-
-    uint256 private constant MINTPACKED_SLOT = 9;
-    uint256 private constant DEITY_SHIFT = 184;
+    // Sub packed-field byte offsets (DegenerusGameStorage.sol struct Sub, post `validThroughLevel` deletion).
+    uint256 private constant OFF_LASTBOUGHT = 7;  // uint24 lastAutoBoughtDay (bytes 7..9)
+    uint256 private constant OFF_LASTOPENED = 10; // uint24 lastOpenedDay     (bytes 10..12)
 
     // -------------------------------------------------------------------------
     // Measurement constants
@@ -102,10 +99,11 @@ contract OpenWalkCompositionGas is DeployProtocol {
     ///      never subtracted from an assertion.
     uint256 internal constant INTRINSIC_TX_GAS = 21_064;
 
-    /// @dev SUBSCRIBER_CAP (GameAfkingModule.sol:199) is 1000 active subs INCLUDING the 2
-    ///      permanent deploy subs (VAULT + sDGNRS, self-subscribed in their constructors — see
-    ///      V56AfkingGasMarginal.t.sol's SUBSCRIBER_CAP doc). So a 1000-subscriber ring is built
-    ///      from 998 NEW subs + the 2 always-present deploy subs.
+    /// @dev SUBSCRIBER_CAP (GameAfkingModule.sol) is 2000 active subs, including the 2 permanent
+    ///      deploy subs (VAULT + sDGNRS, self-subscribed in their constructors). This suite
+    ///      measures a representative 1000-subscriber ring (998 new subs + the 2 always-present
+    ///      deploy subs), not the full cap — these are loose baseline recorders, not a cap-sized
+    ///      regression gate.
     uint256 internal constant RING_1000_NEW_SUBS = 998;
     uint256 internal constant RING_500_NEW_SUBS = 500;
     uint256 internal constant RING_100_NEW_SUBS = 100;
@@ -458,7 +456,7 @@ contract OpenWalkCompositionGas is DeployProtocol {
         for (uint256 i; i < n; ++i) {
             address who = makeAddr(string(abi.encodePacked(prefix, _u(i))));
             subs[i] = who;
-            _grantDeityPass(who);
+            _grantSeat(who); // the AFKing Subscription Token is the subscribe credential (NoCoin without it)
             _fundPool(who, poolEach);
             vm.prank(who);
             game.subscribe(address(0), false, isTicket, 1, address(0));
@@ -468,13 +466,6 @@ contract OpenWalkCompositionGas is DeployProtocol {
     function _fundPool(address who, uint256 amount) internal {
         vm.deal(address(this), amount);
         game.depositAfkingFunding{value: amount}(who);
-    }
-
-    function _grantDeityPass(address who) internal {
-        bytes32 slot = keccak256(abi.encode(who, uint256(MINTPACKED_SLOT)));
-        uint256 packed = uint256(vm.load(address(game), slot));
-        packed |= (uint256(1) << DEITY_SHIFT);
-        vm.store(address(game), slot, bytes32(packed));
     }
 
     /// @dev Drive a fresh new-day STAGE then land the day's word (the per-sub stamp becomes a

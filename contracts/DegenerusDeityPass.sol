@@ -72,7 +72,14 @@ contract DegenerusDeityPass {
     address public renderer;
 
     uint16 private constant ICON_VB = 512;
-    uint32 private constant SYMBOL_HALF_SIZE = 37;
+
+    /// @dev The three-ring badge radii on the ±50 card: one big badge with
+    ///      the ticket renderer's ring ratios (mid = 0.78 × outer, inner =
+    ///      0.62 × outer, integer-floored), sized to leave a 4-unit gutter
+    ///      inside the card stroke.
+    uint32 private constant RING_OUTER = 46;
+    uint32 private constant RING_MID = 35;
+    uint32 private constant RING_INNER = 28;
 
     string private _outlineColor = "#3f1a82";
     string private _backgroundColor = "#d9d9d9";
@@ -179,6 +186,10 @@ contract DegenerusDeityPass {
         ));
     }
 
+    /// @dev The protocol's three-ring badge, one big badge centered on the
+    ///      card: outer ring in the outline color, middle #111, inner #fff,
+    ///      the pass's symbol fitted into the inner circle. Crypto symbols
+    ///      keep source colors; non-crypto symbols use the settable ink.
     function _renderSvgInternal(
         string memory iconPath,
         uint8 quadrant,
@@ -186,39 +197,65 @@ contract DegenerusDeityPass {
         bool isCrypto
     ) private view returns (string memory) {
         uint32 fitSym1e6 = _symbolFitScale(quadrant, symbolIdx);
-        uint32 sSym1e6 = uint32((uint256(2) * SYMBOL_HALF_SIZE * fitSym1e6) / ICON_VB);
-        // Center the scaled icon: translate by -(viewBox * scale) / 2 on each axis.
+        uint32 sSym1e6 = uint32((uint256(2) * RING_INNER * fitSym1e6) / ICON_VB);
+        // Center the scaled icon: translate by -(viewBox * scale) / 2 on each
+        // axis. Icons are stored pre-normalized to the 512 box (each path
+        // carries its own wrapper transform), so box-centering is exact.
         int256 t = -(int256(uint256(ICON_VB)) * int256(uint256(sSym1e6))) / 2;
 
+        // Crypto symbols keep their source colors; non-crypto symbols are
+        // tinted by ATTRIBUTE inheritance (fill/stroke on the wrapper group),
+        // so explicit fills inside an icon — dice pips, cutouts — survive.
+        string memory colorOpen;
+        if (isCrypto) {
+            colorOpen = "'><g style='vector-effect:non-scaling-stroke'>";
+        } else {
+            string memory ncColor = _nonCryptoSymbolColor;
+            colorOpen = string(
+                abi.encodePacked(
+                    "'><g fill='",
+                    ncColor,
+                    "' stroke='",
+                    ncColor,
+                    "' style='vector-effect:non-scaling-stroke'>"
+                )
+            );
+        }
         string memory symbolGroup = string(
             abi.encodePacked(
                 "<g transform='",
                 _mat6(sSym1e6, t, t),
-                isCrypto
-                    ? "'><g style='vector-effect:non-scaling-stroke'>"
-                    : "'><g class='nonCrypto' style='vector-effect:non-scaling-stroke'>",
+                colorOpen,
                 iconPath,
                 "</g></g>"
             )
         );
 
-        string memory ncColor = _nonCryptoSymbolColor;
         return string(abi.encodePacked(
             '<svg xmlns="http://www.w3.org/2000/svg" viewBox="-51 -51 102 102">'
-            '<defs>'
-            '<style>.nonCrypto *{fill:',
-            ncColor,
-            '!important;stroke:',
-            ncColor,
-            '!important;}</style>'
-            '</defs>'
             '<rect x="-50" y="-50" width="100" height="100" rx="12" fill="',
             _backgroundColor,
             '" stroke="',
             _outlineColor,
             '" stroke-width="2.2"/>',
+            _rings(_outlineColor),
             symbolGroup,
             "</svg>"
+        ));
+    }
+
+    /// @dev Concentric badge rings centered on the card (cx/cy default 0).
+    function _rings(string memory outer) private pure returns (string memory) {
+        return string(abi.encodePacked(
+            '<circle r="',
+            Strings.toString(uint256(RING_OUTER)),
+            '" fill="',
+            outer,
+            '"/><circle r="',
+            Strings.toString(uint256(RING_MID)),
+            '" fill="#111"/><circle r="',
+            Strings.toString(uint256(RING_INNER)),
+            '" fill="#fff"/>'
         ));
     }
 
@@ -262,12 +299,31 @@ contract DegenerusDeityPass {
         return true;
     }
 
+    /// @dev Per-icon fit inside the inner circle — the original game's
+    ///      hand-calibrated table (750000 base × 95% default, per-icon
+    ///      adjustments), matched to the icon set in Icons32Data.
     function _symbolFitScale(uint8 quadrant, uint8 symbolIdx) private pure returns (uint32) {
-        if (quadrant == 0 && (symbolIdx == 1 || symbolIdx == 5)) return 790_000;
-        if (quadrant == 2 && (symbolIdx == 1 || symbolIdx == 5)) return 820_000;
-        if (quadrant == 1 && symbolIdx == 6) return 820_000;
-        if (quadrant == 3 && symbolIdx == 7) return 780_000;
-        return 890_000;
+        uint32 f = 712_500; // 95% of the 750000 base fit
+        if (quadrant == 1 && symbolIdx == 6) {
+            // Sagittarius
+            f = uint32((uint256(f) * 722_500) / 1_000_000);
+        } else if (quadrant == 2 && symbolIdx == 7) {
+            // Ace
+            f = uint32((uint256(f) * 130_000) / 100_000);
+        } else if (quadrant == 3 && (symbolIdx == 6 || symbolIdx == 7)) {
+            // Dice 7 / Dice 8
+            f = uint32((uint256(f) * 110_000) / 100_000);
+        } else if (quadrant == 0 && symbolIdx == 6) {
+            // Ethereum
+            f = uint32((uint256(f) * 110_000) / 100_000);
+        } else if (quadrant == 2 && symbolIdx == 5) {
+            // Heart
+            f = uint32((uint256(f) * 95_000) / 100_000);
+        } else if (quadrant == 0 && (symbolIdx == 3 || symbolIdx == 7)) {
+            // Monero / Bitcoin: full fit
+            f = 1_000_000;
+        }
+        return f;
     }
 
     function _mat6(

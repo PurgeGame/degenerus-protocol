@@ -49,12 +49,11 @@ contract MintFlipLifecycleCoverage is DeployProtocol {
     uint256 private constant OPEN_CURSOR_BYTE = 2;       // byte offset of _subOpenCursor within CURSOR_SLOT
     uint256 private constant MINTPACKED_SLOT = 9;        // mintPacked_ mapping root (deity bit @ 184)
 
-    //   dailyQuantity u8 @0 · validThroughLevel u24 @1 · reinvestPct u8 @4 · flags u8 @5
-    //   scorePlus1 u16 @6 · amount u24 @8
-    //   lastAutoBoughtDay u24 @11 · lastOpenedDay u24 @14 · afkCoveredThroughDay u24 @17 · afkingStartDay u24 @20
-    //   affiliateBase u32 @23 · pendingFlip u24 @27 · subStreakLatch u16 @30
-    uint256 private constant OFF_LASTBOUGHT = 10;     // uint24 lastAutoBoughtDay (bytes 11..13)
-    uint256 private constant OFF_LASTOPENED = 13;     // uint24 lastOpenedDay     (bytes 14..16)
+    //   dailyQuantity u8 @0 · flags u8 @1 · score u16 @2 · amount u24 @4
+    //   lastAutoBoughtDay u24 @7 · lastOpenedDay u24 @10 · afkCoveredThroughDay u24 @13 · afkingStartDay u24 @16
+    //   affiliateBase u32 @19 · pendingFlip u24 @23 · subStreakLatch u16 @26
+    uint256 private constant OFF_LASTBOUGHT = 7;      // uint24 lastAutoBoughtDay (bytes 7..9)
+    uint256 private constant OFF_LASTOPENED = 10;     // uint24 lastOpenedDay     (bytes 10..12)
 
     uint256 private constant DEITY_SHIFT = 184;
 
@@ -339,14 +338,14 @@ contract MintFlipLifecycleCoverage is DeployProtocol {
     // Box-drive helpers
     // =========================================================================
 
-    /// @dev Spawn `n` deity-passed, funded, lootbox-mode subscribers. They join `_subscribers`; the
+    /// @dev Spawn `n` seated, funded, lootbox-mode subscribers. They join `_subscribers`; the
     ///      first new-day STAGE buy stamps a box on each. Funding is generous so the cover-buy + daily
     ///      buys never underflow the pool (no funding-kill mid-test).
     function _spawnSubs(uint256 n, string memory prefix) internal returns (address[] memory subs) {
         subs = new address[](n);
         for (uint256 i; i < n; i++) {
             address p = makeAddr(string(abi.encodePacked(prefix, vm.toString(i))));
-            _grantDeityPass(p);      // clears the pass gate (deity = sentinel horizon)
+            _grantSeat(p);           // the AFKing Subscription Token is the sole subscribe credential
             _fundPool(p, 200 ether); // generous: grounds the cover-buy + every daily buy across the test
             _subscribeLootbox(p, 1);
             require(_subscriberIndexOf(p) > 0, "fixture: the sub joined the set");

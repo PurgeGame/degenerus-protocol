@@ -18,6 +18,7 @@ import {DegenerusGameDegeneretteModule} from "../../../contracts/modules/Degener
 import {DegenerusGameBingoModule} from "../../../contracts/modules/DegenerusGameBingoModule.sol";
 import {GameAfkingModule} from "../../../contracts/modules/GameAfkingModule.sol";
 import {DegenerusGameFoilPackModule} from "../../../contracts/modules/DegenerusGameFoilPackModule.sol";
+import {AFKingSubscriptionToken} from "../../../contracts/AFKingSubscriptionToken.sol";
 import {FLIP} from "../../../contracts/FLIP.sol";
 import {Coinflip} from "../../../contracts/Coinflip.sol";
 import {DegenerusGame} from "../../../contracts/DegenerusGame.sol";
@@ -39,7 +40,7 @@ import {MockLinkToken} from "../../../contracts/mocks/MockLinkToken.sol";
 import {MockLinkEthFeed} from "../../../contracts/mocks/MockLinkEthFeed.sol";
 
 /// @title DeployProtocol -- Abstract base for Foundry invariant tests
-/// @notice Deploys all 4 mocks + 25 protocol contracts in setUp().
+/// @notice Deploys all 4 mocks + 27 protocol contracts in setUp().
 ///         Inherit this, call _deployProtocol() in your setUp().
 /// @dev Address correctness depends on patchForFoundry.js having patched
 ///      ContractAddresses.sol before forge build (there is no pretest hook —
@@ -66,6 +67,7 @@ abstract contract DeployProtocol is Test {
     DegenerusGameBingoModule public bingoModule;
     GameAfkingModule public afkingModule;
     DegenerusGameFoilPackModule public foilModule;
+    AFKingSubscriptionToken public afkingSubToken;
     FLIP public coin;
     Coinflip public coinflip;
     DegenerusGame public game;
@@ -87,7 +89,7 @@ abstract contract DeployProtocol is Test {
         vm.warp(86400);
 
         // --- Deploy 4 mocks (nonces 1-4) ---
-        // Then 25 protocol contracts (nonces 5-29) ---
+        // Then 27 protocol contracts (nonces 5-31) ---
         mockVRF = new MockVRFCoordinator();           // nonce 1
         mockStETH = new MockStETH();                  // nonce 2
         mockLINK = new MockLinkToken();               // nonce 3
@@ -161,6 +163,40 @@ abstract contract DeployProtocol is Test {
         // so it adds no nonce shift to any existing contract — only GAME's runtime
         // delegatecalls reference it, and it has no ctor args / no deploy-time deps.
         foilModule = new DegenerusGameFoilPackModule(); // N+25 = nonce 30
+
+        // AFKing seat coin — appended after everything it references (VAULT /
+        // SDGNRS receive the 999/1 sale tranche in its constructor; GAME is its
+        // minter + seat-lock view consumer). VAULT/SDGNRS self-subscribed above through
+        // the coin gate's identity carve, which exists precisely because the coin
+        // deploys after them.
+        afkingSubToken = new AFKingSubscriptionToken();                  // N+26 = nonce 31
+    }
+
+    /// @dev Grant `player` an AFKing seat (the sole afking credential —
+    ///      subscribe reverts NoCoin without one): latch the game-side
+    ///      eligibility bit exactly as a pass acquisition would, then claim
+    ///      through the token's free tranche with default traits.
+    ///      Idempotent: skips holders (returns 0 then).
+    function _grantSeat(address player) internal returns (uint256 tokenId) {
+        if (afkingSubToken.balanceOf(player) == 0) {
+            _markSeatEligible(player);
+            vm.prank(player);
+            tokenId = afkingSubToken.claimSeat(0, 0xd9d9d9, 0x3f1a82);
+        }
+    }
+
+    /// @dev Set the SEAT_CLAIMED lifetime eligibility latch (bit 154 of
+    ///      `mintPacked_`, storage slot 9) as the whale module's
+    ///      pass-acquisition hook would. Self-validating via the game's
+    ///      mintPackedFor view: reverts if the slot layout drifted.
+    function _markSeatEligible(address player) internal {
+        bytes32 slot = keccak256(abi.encode(player, uint256(9)));
+        uint256 packed = uint256(vm.load(address(game), slot));
+        vm.store(address(game), slot, bytes32(packed | (uint256(1) << 154)));
+        require(
+            (game.mintPackedFor(player) >> 154) & 1 == 1,
+            "seatEligible: mintPacked_ slot mismatch"
+        );
     }
 
     /// @dev Satisfy the gambling-burn admission gate (rngWordForDay(currentDay) != 0) by landing a

@@ -20,10 +20,8 @@ contract OpenBountyCarry is DeployProtocol {
     uint256 private constant CURSOR_SLOT = 57;
     uint256 private constant PENDING_SHIFT = 224;
     uint256 private constant CARRY_SHIFT = 240;
-    uint256 private constant MINTPACKED_SLOT = 9;
-    uint256 private constant DEITY_SHIFT = 184;
-    uint256 private constant OFF_LASTBOUGHT = 10;
-    uint256 private constant OFF_LASTOPENED = 13;
+    uint256 private constant OFF_LASTBOUGHT = 7;  // uint24 lastAutoBoughtDay (bytes 7..9)
+    uint256 private constant OFF_LASTOPENED = 10; // uint24 lastOpenedDay     (bytes 10..12)
     uint256 private _lastFulfilledReqId;
 
     bytes32 private constant STAKE_UPDATED_SIG =
@@ -141,8 +139,7 @@ contract OpenBountyCarry is DeployProtocol {
         for (uint256 i; i < n; ++i) {
             address who = makeAddr(string(abi.encodePacked(prefix, _u(i))));
             subs[i] = who;
-            bytes32 slot = keccak256(abi.encode(who, uint256(MINTPACKED_SLOT)));
-            vm.store(address(game), slot, bytes32(uint256(vm.load(address(game), slot)) | (uint256(1) << DEITY_SHIFT)));
+            _grantSeat(who); // the AFKing Subscription Token is the subscribe credential (NoCoin without it)
             vm.deal(address(this), poolEach);
             game.depositAfkingFunding{value: poolEach}(who);
             vm.prank(who);

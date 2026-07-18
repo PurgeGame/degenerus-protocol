@@ -25,8 +25,8 @@ import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 ///         OPENED later; it exists ONLY as (Sub stamp + lastAutoBoughtDay) with no cold ledger. The open
 ///         leg walks `_subscribers`, so ANY removal of the sub from `_subscribers` between stamp and open
 ///         ORPHANS the paid-for box (the player was debited at stamp, gets nothing) — and the process
-///         STAGE's NO-ORPHAN guard (GameAfkingModule.sol:570) DOMINATES all four mutation paths
-///         (re-stamp / cancel-reclaim / pass-evict / funding-kill) by leaving a pending-box sub ENTIRELY
+///         STAGE's NO-ORPHAN guard (GameAfkingModule.sol:570) DOMINATES every mutation path
+///         (re-stamp / cancel-reclaim / funding-kill) by leaving a pending-box sub ENTIRELY
 ///         untouched, so the contract itself never orphans. This proof asserts both: (a) the contract
 ///         never orphans a pending-box sub via the STAGE, and (b) IF the sub is removed from the set
 ///         (the orphan condition) the open leg materializes NO box for it.
@@ -47,18 +47,15 @@ contract V55SetMutationOpenE is DeployProtocol {
     uint256 private constant SUBOF_SLOT = 53; // _subOf mapping root
     uint256 private constant SUBSCRIBERS_SLOT = 55; // _subscribers address[] (length here; data at keccak(56))
     uint256 private constant SUBSCRIBER_INDEX_SLOT = 56; // _subscriberIndex mapping root (1-indexed)
-    uint256 private constant MINTPACKED_SLOT = 9; // mintPacked_ mapping root (deity bit)
 
-    // Sub packed-field byte offsets — the v56 compute-on-read re-pack (single 256-bit slot).
-    // OFF_DAILY/OFF_VALIDTHROUGH did not move; scorePlus1/amount/day-markers shifted down.
+    // Sub packed-field byte offsets — the v56 compute-on-read re-pack (single 256-bit slot); the
+    // validThroughLevel field is deleted (the AFKing Subscription Token replaced the pass-horizon credential), so
+    // every field after dailyQuantity shifted down 3 bytes.
     uint256 private constant OFF_DAILY = 0; // uint8  dailyQuantity     (byte 0)
-    uint256 private constant OFF_VALIDTHROUGH = 1; // uint24 validThroughLevel (bytes 1..3)
-    uint256 private constant OFF_SCOREPLUS1 = 5; // uint16 scorePlus1        (bytes 6..7)
-    uint256 private constant OFF_AMOUNT = 7; // uint24 amount            (bytes 8..10)
-    uint256 private constant OFF_LASTBOUGHT = 10; // uint24 lastAutoBoughtDay (bytes 11..13)
-    uint256 private constant OFF_LASTOPENED = 13; // uint24 lastOpenedDay     (bytes 14..16)
-
-    uint256 private constant DEITY_SHIFT = 184;
+    uint256 private constant OFF_SCOREPLUS1 = 2; // uint16 score             (bytes 2..3)
+    uint256 private constant OFF_AMOUNT = 4; // uint24 amount            (bytes 4..6)
+    uint256 private constant OFF_LASTBOUGHT = 7; // uint24 lastAutoBoughtDay (bytes 7..9)
+    uint256 private constant OFF_LASTOPENED = 10; // uint24 lastOpenedDay     (bytes 10..12)
 
     bytes32 private constant SUB_EXPIRED_SIG = keccak256("SubscriptionExpired(address,uint8)");
 
@@ -91,7 +88,7 @@ contract V55SetMutationOpenE is DeployProtocol {
         vm.skip(true, "v56: unified openBoxes valve opens afking-first; coexistence re-proven in V56AfkingGasMarginal LIVE-01");
         // AFKING arm: a funded lootbox sub gets a stamped box via the STAGE.
         address afk = makeAddr("afk_player");
-        _grantDeityPass(afk);
+        _grantSeat(afk);
         _subscribeLootbox(afk, 1);
         _fundPool(afk, 5 ether);
         _runStageNewDay(0xC0A1); // stamp the afking box (lastAutoBoughtDay set, lastOpenedDay < it)
@@ -133,7 +130,7 @@ contract V55SetMutationOpenE is DeployProtocol {
     function testNoOrphanControlInSetSubOpens() public {
         vm.skip(true, "357-00b D-12 supersession: the v55 set-mutation/OPEN-E harness subscribes an ungrounded sub then exercises the no-orphan/swap-pop/OPEN-E STAGE; the grounded subscribe stamps a no-orphan-protected box at subscribe; re-proven by V56SecUnmanipulable (no-orphan + finalize hooks) + V56SubHardening (D-13 exemption + crossing eviction)");
         address p = makeAddr("orphan_control");
-        _grantDeityPass(p);
+        _grantSeat(p);
         _subscribeLootbox(p, 1);
         _fundPool(p, 5 ether);
         _runStageNewDay(0xCC01);
@@ -157,7 +154,7 @@ contract V55SetMutationOpenE is DeployProtocol {
     function testNoOrphanRemovedSubGetsNoBox() public {
         vm.skip(true, "357-00b D-12 supersession: the v55 set-mutation/OPEN-E harness subscribes an ungrounded sub then exercises the no-orphan/swap-pop/OPEN-E STAGE; the grounded subscribe stamps a no-orphan-protected box at subscribe; re-proven by V56SecUnmanipulable (no-orphan + finalize hooks) + V56SubHardening (D-13 exemption + crossing eviction)");
         address p = makeAddr("orphan_removed");
-        _grantDeityPass(p);
+        _grantSeat(p);
         _subscribeLootbox(p, 1);
         _fundPool(p, 5 ether);
         _runStageNewDay(0xCD01);
@@ -186,7 +183,7 @@ contract V55SetMutationOpenE is DeployProtocol {
     function testNoOrphanGuardLeavesPendingBoxSubUntouchedByStage() public {
         vm.skip(true, "357-00b D-12 supersession: the v55 set-mutation/OPEN-E harness subscribes an ungrounded sub then exercises the no-orphan/swap-pop/OPEN-E STAGE; the grounded subscribe stamps a no-orphan-protected box at subscribe; re-proven by V56SecUnmanipulable (no-orphan + finalize hooks) + V56SubHardening (D-13 exemption + crossing eviction)");
         address p = makeAddr("orphan_guard");
-        _grantDeityPass(p);
+        _grantSeat(p);
         _subscribeLootbox(p, 1);
         _fundPool(p, 5 ether);
         _runStageNewDay(0xCE01);
@@ -232,13 +229,13 @@ contract V55SetMutationOpenE is DeployProtocol {
         uint256 N = 3;
         address[] memory subs = new address[](N);
         // Subscribe ctrl first (a stable mid-set member that is never displaced).
-        _grantDeityPass(ctrl);
+        _grantSeat(ctrl);
         _subscribeLootbox(ctrl, 1);
         _fundPool(ctrl, 5 ether);
         for (uint256 i; i < N; i++) {
             address w = makeAddr(string(abi.encodePacked("streak_disp_", _u(i))));
             subs[i] = w;
-            _grantDeityPass(w);
+            _grantSeat(w);
             _subscribeLootbox(w, 1);
             _fundPool(w, 5 ether);
         }
@@ -366,7 +363,7 @@ contract V55SetMutationOpenE is DeployProtocol {
         for (uint256 i; i < N; i++) {
             address w = makeAddr(string(abi.encodePacked("ord_", _u(i))));
             subs[i] = w;
-            _grantDeityPass(w);
+            _grantSeat(w);
             vm.prank(w);
             game.subscribe(address(0), false, true, 1, address(0)); // self-funded
             _fundPool(w, 1 ether);
@@ -432,13 +429,6 @@ contract V55SetMutationOpenE is DeployProtocol {
         game.depositAfkingFunding{value: amount}(who);
     }
 
-    function _grantDeityPass(address who) internal {
-        bytes32 slot = keccak256(abi.encode(who, uint256(MINTPACKED_SLOT)));
-        uint256 packed = uint256(vm.load(address(game), slot));
-        packed |= (uint256(1) << DEITY_SHIFT);
-        vm.store(address(game), slot, bytes32(packed));
-    }
-
     /// @dev Forcibly remove `who` from `_subscribers` (the orphan condition): zero its
     ///      `_subscriberIndex` and shrink the array length by 1 (a test-only simulation of a removal
     ///      between stamp and open; the contract's own STAGE never does this to a pending-box sub).
@@ -486,7 +476,7 @@ contract V55SetMutationOpenE is DeployProtocol {
         return uint32(_subField(who, OFF_LASTOPENED, 24));
     }
 
-    /// @dev Pin `who`'s scorePlus1 (bytes 6..7) — the mint-streak EV input.
+    /// @dev Pin `who`'s scorePlus1 (bytes 2..3) — the mint-streak EV input.
     function _setScorePlus1(address who, uint16 score) internal {
         bytes32 slot = _subSlot(who);
         uint256 packed = uint256(vm.load(address(game), slot));

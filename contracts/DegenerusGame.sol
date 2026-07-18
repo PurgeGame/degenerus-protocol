@@ -171,7 +171,8 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
       |  [104-127] unitsLevel      - Level index for unitsAtLevel tracking   |
       |  [128-151] frozenUntilLevel - Whale pass freeze level (0 = none)     |
       |  [152-153] whalePassType  - Pass type (0=none,1=10,3=100)            |
-      |  [154-159] (reserved)       - 6 unused bits                          |
+      |  [154]    seatClaimed      - AFKing seat eligibility latch (1b)      |
+      |  [155-159] (reserved)       - 5 unused bits                          |
       |  [160-183] mintStreakLast  - Mint streak last completed level (24b)  |
       |  [184]    hasDeityPass     - Deity pass holder flag (1b)             |
       |  [185-208] affBonusLevel   - Cached affiliate bonus level (24b)      |
@@ -239,7 +240,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
       |  • Each daily tick drains pending ticket + subscriber work, applies the day's VRF, and pays the   |
       |    daily jackpot in the current mode. Purchases stay open in BOTH modes.                          |
       |  • Purchase mode (false): new tickets target level+1; jackpots use the future-pool drip formula.  |
-      |    When nextPrizePool reaches the prior level's target, the transition latch is set.              |
+      |    When nextPrizePool exceeds the prior level's target, the transition latch is set.              |
       |  • On fresh randomness the level advances: staged tickets activate, pools consolidate, the level  |
       |    quest rolls, and up to 5 logical daily draws begin (compressible via compressedJackpotFlag).   |
       |  • Jackpot mode (true): draws pay out; purchases target the current level, and the final draw     |
@@ -421,6 +422,39 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
             .GAME_AFKING_MODULE
             .delegatecall(msg.data);
         if (!ok) _revertDelegate(data);
+    }
+
+    /// @notice Number of entries in the afking subscriber ring (active subs plus
+    ///         cancel tombstones awaiting the in-pass reclaim; hard-capped at 2005 —
+    ///         the 2,000-coin supply plus reclaim slack).
+    function subscriberCount() external view returns (uint256) {
+        return _subscribers.length;
+    }
+
+    /// @notice A subscriber's afking record: active flag, daily quantity, the
+    ///         current run's activation day, and the funded-through high-water.
+    ///         Tenure (funded days) = afkCoveredThroughDay - afkingStartDay while
+    ///         active; both are day indexes. `active` is also the AFKing Subscription Token's
+    ///         transfer guard: the coin staticcalls this view and reverts a
+    ///         last-coin transfer while the holder's sub is active (leaving is by
+    ///         manual cancel or eviction, then the seat is free to sell).
+    function subInfo(
+        address player
+    )
+        external
+        view
+        returns (
+            bool active,
+            uint8 dailyQuantity,
+            uint24 afkingStartDay,
+            uint24 afkCoveredThroughDay
+        )
+    {
+        Sub storage s = _subOf[player];
+        active = s.dailyQuantity != 0;
+        dailyQuantity = s.dailyQuantity;
+        afkingStartDay = s.afkingStartDay;
+        afkCoveredThroughDay = s.afkCoveredThroughDay;
     }
 
     /// @notice Deity-gated smite: add a curse stack to `smitee` for 200 FLIP.
@@ -2104,8 +2138,8 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
 
     /// @notice Get the next-pool ratchet target for level progression.
     /// @dev Returns the pre-skim nextPrizePool captured at the previous level
-    ///      transition. The current level must accumulate at least this much
-    ///      in nextPrizePool to trigger lastPurchaseDay.
+    ///      transition. The current level must accumulate strictly more than
+    ///      this in nextPrizePool to trigger lastPurchaseDay.
     ///      Threshold check uses levelPrizePool[purchaseLevel - 1] = levelPrizePool[level].
     /// @return The ratchet target value (ETH wei).
     function prizePoolTargetView() external view returns (uint256) {

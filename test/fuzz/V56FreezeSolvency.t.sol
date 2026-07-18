@@ -31,7 +31,7 @@ import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 ///   prevrandao/coinbase) materialize byte-identical boxes. The afking open is reached via mintFlip() (the
 ///   autoOpen selector was dropped — not re-exposed on the Game).
 ///
-/// @dev Reuses the funded-sub + deity-pass + new-day STAGE harness (the accumulating-`_t` warp +
+/// @dev Reuses the funded-sub + seated + new-day STAGE harness (the accumulating-`_t` warp +
 ///   fulfill-first `_settleGame`/`_settleClean`/`_fulfillPending` from V56AfkingGasMarginal / the 356-03
 ///   V56SecUnmanipulable), the materialized-box byte-identity oracle from the v56-migrated
 ///   V55FreezeDeterminism, and the claimablePool slot read from the v56-migrated V55RevertFreeEvCap. Copies
@@ -46,25 +46,21 @@ contract V56FreezeSolvency is DeployProtocol {
     // -------------------------------------------------------------------------
     uint256 private constant CLAIMABLE_POOL_SLOT = 1; // uint128 @ slot 1, byte 16
     uint256 private constant CLAIMABLE_POOL_OFFBYTES = 16;
-    uint256 private constant MINTPACKED_SLOT = 9; // mintPacked_ mapping root (deity bit @ bit 184)
     uint256 private constant RNG_WORD_BY_DAY_SLOT = 10; // mapping(uint32 => uint256) — the afking box DAY-keyed word
     uint256 private constant LOOTBOX_RNG_PACKED_SLOT = 33; // [0:47] lootboxRngIndex (was 35)
     uint256 private constant LOOTBOX_RNG_WORD_BY_INDEX_SLOT = 34; // mapping(uint48 => uint256) (was 36)
     uint256 private constant SUBOF_SLOT = 53; // _subOf mapping root (address => Sub, one packed slot) (was 58)
     uint256 private constant SUBSCRIBER_INDEX_SLOT = 56; // mapping(address => uint256) _subscriberIndex (1-indexed) (was 61)
 
-    //   dailyQuantity u8 @0 · validThroughLevel u24 @1 · reinvestPct u8 @4 · flags u8 @5
-    //   scorePlus1 u16 @6 · amount u24 @8 (milli-ETH)
-    //   lastAutoBoughtDay u24 @11 · lastOpenedDay u24 @14 · afkCoveredThroughDay u24 @17 · afkingStartDay u24 @20
-    //   affiliateBase u32 @23 · pendingFlip u24 @27 · subStreakLatch u16 @30
-    uint256 private constant OFF_SCOREPLUS1 = 5; // uint16 scorePlus1        (bytes 6..7)
-    uint256 private constant OFF_AMOUNT = 7; // uint24 amount (milli-ETH)   (bytes 8..10)
-    uint256 private constant OFF_LASTBOUGHT = 10; // uint24 lastAutoBoughtDay (bytes 11..13)
-    uint256 private constant OFF_LASTOPENED = 13; // uint24 lastOpenedDay     (bytes 14..16)
-    uint256 private constant OFF_AFKCOVERED = 16; // uint24 afkCoveredThroughDay (bytes 17..19)
-    uint256 private constant OFF_PENDINGFLIP = 26; // uint24 pendingFlip (bytes 27..29)
-
-    uint256 private constant DEITY_SHIFT = 184;
+    //   dailyQuantity u8 @0 · flags u8 @1 · score u16 @2 · amount u24 @4 (milli-ETH)
+    //   lastAutoBoughtDay u24 @7 · lastOpenedDay u24 @10 · afkCoveredThroughDay u24 @13 · afkingStartDay u24 @16
+    //   affiliateBase u32 @19 · pendingFlip u24 @23 · subStreakLatch u16 @26
+    uint256 private constant OFF_SCOREPLUS1 = 2; // uint16 score             (bytes 2..3)
+    uint256 private constant OFF_AMOUNT = 4; // uint24 amount (milli-ETH)   (bytes 4..6)
+    uint256 private constant OFF_LASTBOUGHT = 7; // uint24 lastAutoBoughtDay (bytes 7..9)
+    uint256 private constant OFF_LASTOPENED = 10; // uint24 lastOpenedDay     (bytes 10..12)
+    uint256 private constant OFF_AFKCOVERED = 13; // uint24 afkCoveredThroughDay (bytes 13..15)
+    uint256 private constant OFF_PENDINGFLIP = 23; // uint24 pendingFlip (bytes 23..25)
 
     /// @dev keccak256 of the materialized-box event — the byte-identity oracle's source signature.
     bytes32 private constant LOOTBOX_OPENED_SIG =
@@ -109,8 +105,8 @@ contract V56FreezeSolvency is DeployProtocol {
     function testFuzzSolvencyInvariantUnderChurn(uint256 seq, uint8 rounds) public {
         address a = makeAddr("solv_a");
         address b = makeAddr("solv_b");
-        _grantDeityPass(a);
-        _grantDeityPass(b);
+        _grantSeat(a);
+        _grantSeat(b);
         // Fund BEFORE subscribe so each NEW-run cover-buy is grounded (D-12 — an unfunded start reverts).
         _fundPool(a, 200 ether);
         _fundPool(b, 200 ether);
@@ -171,7 +167,7 @@ contract V56FreezeSolvency is DeployProtocol {
     ///         across both.
     function testSolvencyHoldsBuyThenFlipClaim() public {
         address p = makeAddr("solv_repro");
-        _grantDeityPass(p);
+        _grantSeat(p);
         // Fund-before-subscribe grounds the NEW-run cover-buy (D-12); under the hardened gate the grounded
         // subscribe IS the delivered buy, so measure the claimablePool debit across the subscribe itself.
         _fundPool(p, 50 ether);
@@ -209,7 +205,7 @@ contract V56FreezeSolvency is DeployProtocol {
     ///         (the debit is the same `ethValue` on both ledgers — the byte-frozen v55 SOLVENCY-01 behavior).
     function testDebitEqualsDeliveredEthValueExactly() public {
         address p = makeAddr("debit_eq");
-        _grantDeityPass(p);
+        _grantSeat(p);
         // Fund BEFORE subscribe; under D-12 the grounded subscribe IS the delivered buy (the cover-buy
         // debits the fresh-ETH spend at the subscribe site), so measure the SOLVENCY-01 leg-1 debit across
         // the grounded subscribe itself — exactly the byte-frozen `afkingFunding -= ethValue; claimablePool
@@ -244,7 +240,7 @@ contract V56FreezeSolvency is DeployProtocol {
     ///         debit.) Asserted by isolating the claim: the pool is byte-unchanged across the claim alone.
     function testFlipClaimLeavesClaimablePoolUnchanged() public {
         address p = makeAddr("flip_offpath");
-        _grantDeityPass(p);
+        _grantSeat(p);
         _fundPool(p, 50 ether);
         _subscribeLootbox(p, 1); // join-day cover-buy accrues 100
         _deliverDay(0xB04E0FF); // next-day STAGE buy accrues another 100 + affiliateBase
@@ -276,7 +272,7 @@ contract V56FreezeSolvency is DeployProtocol {
     ///         and a subsequent open DOES emit LootBoxOpened (so the absence above is real, not vacuous).
     function testSubscribeMinBuyStampsNoInlineResolve() public {
         address p = makeAddr("stamp_noresolve");
-        _grantDeityPass(p);
+        _grantSeat(p);
 
         // Record across BOTH the subscribe (min-buy) AND the funded STAGE buy: neither materializes a box.
         vm.recordLogs();
@@ -305,7 +301,7 @@ contract V56FreezeSolvency is DeployProtocol {
     ///         day moved between stamp and open). Adapted from V55FreezeDeterminism:91+ to the v56 harness.
     function testStampedDayOpenAtTwoBlocksByteIdentical() public {
         address afk = makeAddr("freeze_twoblock");
-        _grantDeityPass(afk);
+        _grantSeat(afk);
         _fundPool(afk, 50 ether);
         _subscribeLootbox(afk, 1);
         _runStageNewDay(0xF00D01);
@@ -343,7 +339,7 @@ contract V56FreezeSolvency is DeployProtocol {
     ///         so the single-roll open + pendingFlip credit consume ONLY the frozen rngWordByDay[stampDay].
     function testFuzzTwoBlockOpenNoBlockEntropy(uint256 r1, uint256 r2, uint64 dt1, uint64 dt2) public {
         address afk = makeAddr("freeze_twoblock_fz");
-        _grantDeityPass(afk);
+        _grantSeat(afk);
         _fundPool(afk, 50 ether);
         _subscribeLootbox(afk, 1);
         _runStageNewDay(0xACE5EED);
@@ -526,13 +522,6 @@ contract V56FreezeSolvency is DeployProtocol {
     function _fundPool(address who, uint256 amount) internal {
         vm.deal(address(this), amount);
         game.depositAfkingFunding{value: amount}(who);
-    }
-
-    function _grantDeityPass(address who) internal {
-        bytes32 slot = keccak256(abi.encode(who, uint256(MINTPACKED_SLOT)));
-        uint256 packed = uint256(vm.load(address(game), slot));
-        packed |= (uint256(1) << DEITY_SHIFT);
-        vm.store(address(game), slot, bytes32(packed));
     }
 
     function _singleton(address a) internal pure returns (address[] memory arr) {

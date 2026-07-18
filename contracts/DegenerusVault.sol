@@ -110,6 +110,14 @@ interface IWWXRPMint {
     function vaultMintTo(address to, uint256 amount) external;
 }
 
+/// @notice Interface for the AFKing seat token's vault-held claim-rights
+///         allowance (998 seats; grants locked until the free tranche fills).
+interface IAFKingSubscriptionToken {
+    /// @notice Grant seat claim rights from the vault's allowance; the
+    ///         grantee mints via claimSeat with their own traits.
+    function vaultGrant(address to, uint256 amount) external;
+}
+
 /*
 +========================================================================================================+
 |                                        DegenerusVault                                                  |
@@ -410,6 +418,9 @@ contract DegenerusVault {
     IVaultCoin internal constant flipToken = IVaultCoin(ContractAddresses.COIN);
     /// @dev WWXRP token contract for vault minting
     IWWXRPMint internal constant wwxrpToken = IWWXRPMint(ContractAddresses.WWXRP);
+    /// @dev AFKing seat token: the vault holds a 998-seat claim-rights allowance
+    IAFKingSubscriptionToken internal constant afkingSubToken =
+        IAFKingSubscriptionToken(ContractAddresses.AFKING_SUB_TOKEN);
     /// @dev stETH (Lido) token contract
     IStETH internal constant steth = IStETH(ContractAddresses.STETH_TOKEN);
     /// @dev sDGNRS contract for burning vault-held sDGNRS
@@ -711,6 +722,19 @@ contract DegenerusVault {
     function wwxrpMint(address to, uint256 amount) external onlyVaultOwner {
         if (amount == 0) return;
         wwxrpToken.vaultMintTo(to, amount);
+    }
+
+    /// @notice Grant AFKing seat claim rights from the vault's 998-seat mint
+    ///         allowance (the sale tranche is never pre-minted — grantees
+    ///         mint via the token's claimSeat with their own traits)
+    /// @dev The token enforces the sale lock (grants revert until all 1,000
+    ///      free-tranche seats are claimed) and the 998-grant lifetime cap.
+    /// @param to Grantee address
+    /// @param amount Seat claim rights to grant
+    /// @custom:reverts NotVaultOwner If caller does not hold >50.1% of DGVE
+    function afkingGrant(address to, uint256 amount) external onlyVaultOwner {
+        if (amount == 0) return;
+        afkingSubToken.vaultGrant(to, amount);
     }
 
     /// @notice Burn vault-held sDGNRS to claim proportional backing assets

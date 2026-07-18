@@ -46,8 +46,6 @@ contract V61AfpayWaterfall is DeployProtocol {
     uint256 private constant CLAIMABLE_POOL_OFFBYTES = 16;
     uint256 private constant PRIZE_POOLS_SLOT = 2; // prizePoolsPacked [future:hi128 | next:lo128]
     uint256 private constant PRIZE_POOL_PENDING_SLOT = 11; // prizePoolPendingPacked (frozen-phase sink)
-    uint256 private constant MINTPACKED_SLOT = 9;
-    uint256 private constant DEITY_SHIFT = 184;
 
     /// @dev AfkingSpent(address indexed player, uint256 amount) — the headline transparency signal.
     bytes32 private constant AFKING_SPENT_SIG = keccak256("AfkingSpent(address,uint256)");
@@ -322,7 +320,6 @@ contract V61AfpayWaterfall is DeployProtocol {
     ///         does not emit AfkingSpent). So no path double-debits afking for the same buy.
     function testAfkingAutoBuyNoDoubleDrawNoProcessMintPayment() public {
         address p = makeAddr("autobuy_nodouble");
-        _grantDeityPass(p);
         _fundPool(p, 200 ether);
         _subscribeLootbox(p, 1);
 
@@ -469,6 +466,7 @@ contract V61AfpayWaterfall is DeployProtocol {
     }
 
     function _subscribeLootbox(address who, uint8 q) internal {
+        _grantSeat(who); // the AFKing Subscription Token is the subscribe credential (NoCoin without it)
         vm.prank(who);
         game.subscribe(address(0), false, false, q, address(0));
     }
@@ -476,12 +474,5 @@ contract V61AfpayWaterfall is DeployProtocol {
     function _fundPool(address who, uint256 amount) internal {
         vm.deal(address(this), amount);
         game.depositAfkingFunding{value: amount}(who);
-    }
-
-    function _grantDeityPass(address who) internal {
-        bytes32 slot = keccak256(abi.encode(who, uint256(MINTPACKED_SLOT)));
-        uint256 packed = uint256(vm.load(address(game), slot));
-        packed |= (uint256(1) << DEITY_SHIFT);
-        vm.store(address(game), slot, bytes32(packed));
     }
 }

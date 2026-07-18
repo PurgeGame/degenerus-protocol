@@ -65,6 +65,8 @@ library ContractAddresses {
     // v71.0 foil pack module — deployed last (append) so it shifts no other address.
     address internal constant GAME_FOILPACK_MODULE =
         address(0x89CA9F4f77B267778EB2eA0Ba1bEAdEe8523af36);
+    address internal constant AFKING_SUB_TOKEN =
+        address(0xe54a55121A47451c5727ADBAF9b9FC1643477e25);
     address internal constant CREATOR =
         address(0x7FA9385bE102ac3EAc297483Dd6233D62b3e1496);
     address internal constant VRF_COORDINATOR =

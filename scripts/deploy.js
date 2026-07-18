@@ -1,5 +1,5 @@
 import hre from "hardhat";
-import { writeFileSync, mkdirSync, existsSync } from "node:fs";
+import { readFileSync, writeFileSync, mkdirSync, existsSync } from "node:fs";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
@@ -12,7 +12,11 @@ import {
   patchContractAddresses,
   cleanupBackup,
 } from "./lib/patchContractAddresses.js";
-import { deployContract, verifyAddresses } from "./lib/deployHelpers.js";
+import {
+  deployContract,
+  verifyAddresses,
+  wireIcons32,
+} from "./lib/deployHelpers.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -93,7 +97,20 @@ async function main() {
     verifyAddresses(predicted, deployed);
     console.log("All addresses match predictions.\n");
 
-    // 8. Save deployment manifest
+    // 8. Wire + finalize Icons32Data (paths, symbols, then permanent lock)
+    console.log("Wiring Icons32Data (33 paths, 3 name quadrants, finalize)...");
+    const iconsData = JSON.parse(
+      readFileSync(resolve(__dirname, "data/icons32Data.json"), "utf8")
+    );
+    const icons32 = await hre.ethers.getContractAt(
+      "Icons32Data",
+      deployed.get("ICONS_32"),
+      deployer
+    );
+    await wireIcons32(icons32, iconsData);
+    console.log("Icons32Data wired and finalized.\n");
+
+    // 9. Save deployment manifest
     const manifest = {
       network,
       deployer: deployer.address,

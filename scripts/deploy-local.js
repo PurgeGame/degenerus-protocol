@@ -12,7 +12,11 @@ import {
   patchContractAddresses,
   cleanupBackup,
 } from "./lib/patchContractAddresses.js";
-import { deployContract, verifyAddresses } from "./lib/deployHelpers.js";
+import {
+  deployContract,
+  verifyAddresses,
+  wireIcons32,
+} from "./lib/deployHelpers.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ZERO_BYTES32 =
@@ -128,6 +132,14 @@ async function main() {
     // Verify addresses match predictions
     verifyAddresses(predicted, deployedAddrs);
     console.log("  All addresses verified.");
+
+    // Wire + finalize Icons32Data (paths, symbols, then permanent lock)
+    console.log("  Wiring Icons32Data (33 paths, 3 name quadrants, finalize)...");
+    const iconsData = JSON.parse(
+      readFileSync(resolve(__dirname, "data/icons32Data.json"), "utf8")
+    );
+    await wireIcons32(contracts.ICONS_32.connect(deployer), iconsData);
+    console.log("  Icons32Data wired and finalized.");
     console.log("");
 
     // =========================================================================

@@ -527,7 +527,7 @@ contract AfKingConcurrency is DeployProtocol {
         for (uint256 i; i < n; i++) {
             address who = makeAddr(string(abi.encodePacked(prefix, _u(i))));
             subs[i] = who;
-            _grantDeityPass(who); // survive the crossing (set-mutation, not pass-gating, is the subject)
+            _grantSeat(who); // the AFKing Subscription Token is the subscribe credential (sub <=> coin)
             _approveKeeper(who);
             _fundPool(who, 1 ether); // fund BEFORE subscribe to ground the NEW-run cover-buy (D-12)
             vm.prank(who);

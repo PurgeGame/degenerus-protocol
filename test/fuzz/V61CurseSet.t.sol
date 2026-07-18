@@ -49,7 +49,7 @@ contract V61CurseSet is DeployProtocol {
     uint256 private constant AFFILIATE_BONUS_POINTS_SHIFT = 209; // (6 bits)
     uint256 private constant CURSE_COUNT_SHIFT = 215; // (8 bits)
 
-    uint256 private constant OFF_SCOREPLUS1 = 5; // uint16 scorePlus1 in the Sub slot (V56 offset)
+    uint256 private constant OFF_SCOREPLUS1 = 2; // uint16 scorePlus1 (Sub.score) in the Sub slot
     uint256 private constant CURSE_COUNT_CAP = 20;
 
     uint256 private constant DRAIN_MAX_ITERATIONS = 60;
@@ -145,13 +145,10 @@ contract V61CurseSet is DeployProtocol {
     ///         stale claimant is cursed. The active afker is set up with a real funded subscription.
     function testActiveAfkerExemptByContrast() public {
         address afk = makeAddr("afker_exempt");
-        _grantDeityPass(afk); // pass-required subscribe gate; deity covers it
         _fundPool(afk, 50 ether);
-        _subscribeLootbox(afk, 1); // dailyQuantity != 0 now
+        _subscribeLootbox(afk, 1); // dailyQuantity != 0 now (the AFKing Subscription Token is the subscribe credential)
         // Seed claimable AFTER subscribing so the claim has something to cash out (subscribe doesn't credit
-        // claimable). The deity pass would ALSO exempt — so prove the afker bail in isolation by clearing the
-        // deity bit first, leaving ONLY the active-afker condition.
-        _clearDeityPass(afk);
+        // claimable).
         _seedClaimable(afk, 10 ether);
         assertTrue(_dailyQtyOf(afk) != 0, "setup: active afker (dailyQuantity != 0)");
 
@@ -306,10 +303,9 @@ contract V61CurseSet is DeployProtocol {
 
     function _setupFundedSub(string memory name) internal returns (address a) {
         a = makeAddr(name);
-        _grantDeityPass(a);
         _fundPool(a, 100 ether);
-        _subscribeLootbox(a, 1);
-        _clearDeityPass(a); // remove the deity score bonus so the affiliate base is the sole positive score
+        _subscribeLootbox(a, 1); // the AFKing Subscription Token is the subscribe credential; no deity score bonus, so the
+        // affiliate base is the sole positive score
     }
 
     // =========================================================================
@@ -372,10 +368,6 @@ contract V61CurseSet is DeployProtocol {
 
     function _grantDeityPass(address who) internal {
         _seedField(who, DEITY_SHIFT, 0x1, 1);
-    }
-
-    function _clearDeityPass(address who) internal {
-        _seedField(who, DEITY_SHIFT, 0x1, 0);
     }
 
     /// @dev Grant a whale/lazy pass: passType (1 or 3) + frozenUntilLevel high enough to cover the level.
@@ -492,6 +484,7 @@ contract V61CurseSet is DeployProtocol {
     }
 
     function _subscribeLootbox(address who, uint8 q) internal {
+        _grantSeat(who); // the AFKing Subscription Token is the subscribe credential (NoCoin without it)
         vm.prank(who);
         game.subscribe(address(0), false, false, q, address(0));
     }

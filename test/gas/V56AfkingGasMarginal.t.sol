@@ -2,7 +2,7 @@
 pragma solidity ^0.8.26;
 
 import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
-import {VmSafe} from "forge-std/Vm.sol";
+import {Vm, VmSafe} from "forge-std/Vm.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {IGameAfkingModule} from "../../contracts/interfaces/IDegenerusGameModules.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
@@ -32,9 +32,11 @@ import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 ///             pendingFlip uint24 / subStreakLatch uint16). The accumulator is IN-SLOT — the per-buy accrue
 ///             is a warm write on the SAME slot the stamp dirtied, NOT a new cold slot.
 ///
-///         (3) Sub-ending finalize (cancel / cancel-reclaim / pass-evict / funding-kill): the only cross-contract
+///         (3) Sub-ending finalize (cancel / cancel-reclaim / funding-kill): the only cross-contract
 ///             work left on the advance chain (a DegenerusQuests playerQuestStates read + finalizeAfking streak
-///             write), so an in-stage evict is the heavier branch — weighted SUB_STAGE_EVICT_WEIGHT in the budget.
+///             write), so an in-stage finalize is the heavier branch — weighted SUB_STAGE_EVICT_WEIGHT in the
+///             budget. Membership never ends on a level crossing (the AFKing Subscription Token credential needs no per-sub
+///             stored pass horizon) — only cancel or funding-skip kill end a sub; the coin's seat lock blocks exits-by-transfer.
 ///
 /// @notice The MARGINAL rule (CR-01 / 350-SPEC §0, load-bearing, verbatim): every per-item number is the
 ///         loop-N-divide MARGINAL — (gas for N items − gas for N−1 items), NEVER a single-item TOTAL. A
@@ -57,11 +59,12 @@ import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 ///
 /// @dev Live `DeployProtocol` fixture; reuses the validated game-resident driving harness (the
 ///      `_settleGame`/`_settleClean` VRF drain, the funded-sub setup, `depositAfkingFunding` funding,
-///      `_grantDeityPass`, the Sub-slot reads, the snapshot/revert two-near-N form) ported from
+///      `_grantSeat`, the Sub-slot reads, the snapshot/revert two-near-N form) ported from
 ///      V55AfkingGasMarginal. All pinned slots taken from `forge inspect DegenerusGame storageLayout`
 ///      against the POST subject (`_subOf = 54`, `_subscribers = 56`, `_subCursor = 58:0`,
-///      `_subOpenCursor = 58:2`, `rngWordByDay = 10`; the Sub field byte offsets are the v56 re-pack,
-///      unchanged by the PACK fold). Test-only: ZERO contracts/*.sol mutated.
+///      `_subOpenCursor = 58:2`, `rngWordByDay = 10`; the Sub field byte offsets shift down 3 bytes past
+///      `amount` after the AFKing Subscription Token credential deleted the stored `validThroughLevel` pass horizon).
+///      Test-only: ZERO contracts/*.sol mutated.
 contract V56AfkingGasMarginal is DeployProtocol {
     // -------------------------------------------------------------------------
     // Game-resident storage slots (forge inspect DegenerusGame storageLayout, v61)
@@ -74,28 +77,23 @@ contract V56AfkingGasMarginal is DeployProtocol {
     uint256 private constant SUBSCRIBERS_SLOT = 55;     // address[] _subscribers (slot holds the length)
     uint256 private constant SUBCURSOR_SLOT = 57;       // _subCursor (uint16 @ byte 0) + _subOpenCursor (uint16 @ byte 2) + _afkingResetDay (uint24 @ byte 4) + boxCursor (uint48 @ byte 7) + boxCursorIndex (uint48 @ byte 13)
 
-    // Sub packed-field byte offsets — RE-DERIVED via `forge inspect DegenerusGame storageLayout` after the
-    // v56 compute-on-read re-pack: `amount` narrowed uint32→uint24 (so everything after it shifts down one
-    // byte), `questProgress` DROPPED, `afkingStartDay` ADDED, `hasEverSubscribed` bool → `subStreakLatch`
-    // uint8. Single 256-bit Sub slot (exactly one slot, 0 free):
-    //   dailyQuantity u8 @0 · validThroughLevel u24 @1 · reinvestPct u8 @4 · flags u8 @5
-    //   scorePlus1 u16 @6 · amount u24 @8
-    //   lastAutoBoughtDay u24 @11 · lastOpenedDay u24 @14 · afkCoveredThroughDay u24 @17 · afkingStartDay u24 @20
-    //   affiliateBase u32 @23 · pendingFlip u24 @27 · subStreakLatch u16 @30
-    uint256 private constant OFF_VALIDTHROUGH = 1; // uint24 validThroughLevel   (bytes 1..3)
-    uint256 private constant OFF_AMOUNT = 7;      // uint24 amount (milli-ETH)   (bytes 8..10)
-    uint256 private constant OFF_LASTBOUGHT = 10; // uint24 lastAutoBoughtDay    (bytes 11..13)
-    uint256 private constant OFF_LASTOPENED = 13; // uint24 lastOpenedDay        (bytes 14..16)
+    // Sub packed-field byte offsets — RE-DERIVED via `forge inspect DegenerusGame storageLayout`. The
+    // AFKing Subscription Token credential (sub <=> coin) needs no stored pass horizon, so `validThroughLevel` (the old
+    // 3-byte crossing-refresh marker) is DELETED and every field after it shifts down 3 bytes. Single
+    // 256-bit Sub slot (28 used bytes, 4 free):
+    //   dailyQuantity u8 @0 · flags u8 @1 · score u16 @2 · amount u24 @4
+    //   lastAutoBoughtDay u24 @7 · lastOpenedDay u24 @10 · afkCoveredThroughDay u24 @13 · afkingStartDay u24 @16
+    //   affiliateBase u32 @19 · pendingFlip u24 @23 · subStreakLatch u16 @26
+    uint256 private constant OFF_AMOUNT = 4;      // uint24 amount (milli-ETH)   (bytes 4..6)
+    uint256 private constant OFF_LASTBOUGHT = 7;  // uint24 lastAutoBoughtDay    (bytes 7..9)
+    uint256 private constant OFF_LASTOPENED = 10; // uint24 lastOpenedDay        (bytes 10..12)
     /// @dev milli-ETH packing scale (DegenerusGameStorage.LR_ETH_SCALE) — sub.amount * this = box wei.
     uint256 private constant MILLI_ETH_SCALE = 1e15;
-    uint256 private constant OFF_AFKCOVERED = 16; // uint24 afkCoveredThroughDay (bytes 17..19)
-    uint256 private constant OFF_AFKINGSTART = 19; // uint24 afkingStartDay      (bytes 20..22)
-    uint256 private constant OFF_AFFBASE = 22;    // uint32 affiliateBase        (bytes 23..26)
-    uint256 private constant OFF_PENDINGFLIP = 26; // uint24 pendingFlip     (bytes 27..29)
-    uint256 private constant OFF_STREAKLATCH = 29; // uint16 subStreakLatch      (bytes 30..31; full streak counter)
-
-    uint256 private constant MINTPACKED_SLOT = 9;
-    uint256 private constant DEITY_SHIFT = 184;
+    uint256 private constant OFF_AFKCOVERED = 13;  // uint24 afkCoveredThroughDay (bytes 13..15)
+    uint256 private constant OFF_AFKINGSTART = 16; // uint24 afkingStartDay      (bytes 16..18)
+    uint256 private constant OFF_AFFBASE = 19;    // uint32 affiliateBase        (bytes 19..22)
+    uint256 private constant OFF_PENDINGFLIP = 23; // uint24 pendingFlip     (bytes 23..25)
+    uint256 private constant OFF_STREAKLATCH = 26; // uint16 subStreakLatch      (bytes 26..27; full streak counter)
 
     /// @dev The packed header slot 0 holds `purchaseStartDay` (uint24 @ byte 0) + `dailyIdx` (uint24 @ byte 3)
     ///      + `rngRequestTime` (uint48 @ byte 6) + `level` (uint24 @ byte 12) (RE-DERIVED via
@@ -134,8 +132,13 @@ contract V56AfkingGasMarginal is DeployProtocol {
     ///      marginal cost. Mirror of the contract constant — keep in sync.
     uint256 internal constant SUB_STAGE_LOOTBOX_WEIGHT = 10;
 
+    /// @dev SUB_STAGE_SKIP_WEIGHT (GameAfkingModule.sol): the gas-weight of a ring-scan skip visit
+    ///      (≈4.7k cold marginal, honestly rounded to 2 units of the ≈3.4k/unit scale). Bounds an
+    ///      all-skip chunk at SUB_STAGE_WEIGHT_BUDGET / 2 = 1250 visits regardless of ring size.
+    uint256 internal constant SUB_STAGE_SKIP_WEIGHT = 2;
+
     /// @dev SUB_STAGE_EVICT_WEIGHT (GameAfkingModule.sol): the gas-weight of an in-stage sub-ending finalize
-    ///      (pass-evict / funding-kill / cancel-reclaim) — a cross-contract quest streak write + swap-pop,
+    ///      (funding-kill / cancel-reclaim) — a cross-contract quest streak write + swap-pop,
     ///      measured ≈29k cold → weight 8. Mirror of the contract constant — keep in sync.
     uint256 internal constant SUB_STAGE_EVICT_WEIGHT = 8;
 
@@ -152,10 +155,11 @@ contract V56AfkingGasMarginal is DeployProtocol {
     ///      longer have a settle cadence (compute-on-read obviated it); this is purely a test warp helper.
     uint256 internal constant SETTLE_PERIOD = 10;
 
-    /// @dev SUBSCRIBER_CAP (GameAfkingModule.sol:165): the shipped worst-case active sub count. The binding
-    ///      constant is 1000 (the :499/:505 `500` in the contract are stale COMMENTS only). A per-tx ceiling
-    ///      proof "at the cap" must use 1000 — a 500 under-states the worst-case STAGE/open chunk by 2x.
-    uint256 internal constant SUBSCRIBER_CAP = 1000;
+    /// @dev SUBSCRIBER_CAP (GameAfkingModule.sol): the shipped worst-case active sub count — a hard
+    ///      backstop AT the natural bound, since membership requires holding an AFKing Subscription Token (a fixed
+    ///      2,000-coin supply); distinct subscribers can never exceed the coin count, so the cap only
+    ///      fail-louds that invariant. A per-tx ceiling proof "at the cap" must use 2000.
+    uint256 internal constant SUBSCRIBER_CAP = 2000;
 
     /// @dev The hard EIP-7825 per-transaction gas bar. The D-06 per-advance asserts use this exact value
     ///      (16_777_216), not the harness EFFECTIVE_GAS_CEILING comfort constant (16_700_000): EVERY single
@@ -364,13 +368,14 @@ contract V56AfkingGasMarginal is DeployProtocol {
     // =========================================================================
 
     /// @notice The per-evict marginal = (gas for N evicting subs - gas for N-1) / 1, snapshot/revert. An
-    ///         in-stage sub-ending finalize (pass-evict / funding-kill / cancel-reclaim) does a cross-contract
+    ///         in-stage sub-ending finalize (funding-kill / cancel-reclaim) does a cross-contract
     ///         DegenerusQuests read (playerQuestStates) + streak write (finalizeAfking) that the now call-free
     ///         local buy does not. Emits the WARM-measured ceil(evict/buy) for reference, but note it is
     ///         warm-distorted: warm same-tx slots make evict ≈ 1.4x a buy, whereas the cold-sized weight is 1
     ///         (cold evict ≈18k < lootbox ≈34k, the large-scale bench — see testColdMarginalCalibration). The
     ///         binding evict safety is the all-evict chunk-under-ceiling proven in testResidualR1, not this
-    ///         warm ratio. Subs are pass-evicted (no deity pass -> validThroughLevel 0 < currentLevel).
+    ///         warm ratio. Subs are funding-killed (their afkingFunding bucket drained to 0 so the STAGE's
+    ///         cover-buy finds itself unfunded) — membership never ends on a level crossing.
     function testEvictFinalizeMarginal() public {
         uint256 snap = vm.snapshotState();
         uint256 gasN = _measureEvictStageGas(N_HI, "evHi_");
@@ -460,30 +465,22 @@ contract V56AfkingGasMarginal is DeployProtocol {
     ///         the gap-backfill break, advance N+1 = the deferred jackpot) is STRICTLY under 16,777,216
     ///         (EIP-7825) INDIVIDUALLY — NOT the ~25M total. This is the empirical answer to the proof's
     ///         per-tx gap-resume ESTIMATE (~15.8M), bracketing each advance separately (gasleft before/after a
-    ///         single advanceGame call). At a worst-case SUBSCRIBER_CAP=1000 STAGE the backfill advance ALSO
-    ///         processes the resumed-day STAGE, so the cap fix (500->1000) is load-bearing here.
+    ///         single advanceGame call). At a worst-case SUBSCRIBER_CAP=2000 STAGE the backfill advance ALSO
+    ///         processes the resumed-day STAGE, so the full-cap sizing is load-bearing here.
     function testGapResumePerAdvanceCeilingAndDecouple() public {
-        // Heavy state: a funded STAGE at the cap-relevant scale. On a gap resume the STAGE completes in
-        // advance N and DEFERS the backfill (STAGE_SUBS_BACKFILL_DEFERRED) rather than composing with it, so
-        // the three heavy legs each get their own tx: advance N = the STAGE chunk, advance N+1 = the gap
-        // backfill alone, advance N+2 = the deferred daily jackpot. None of the three ever share a tx, so each
-        // stays under the per-tx ceiling regardless of how heavy the STAGE chunk is (the V62-02 close — an
-        // all-evict ~9.7M chunk + a ~7M backfill would still compose to ~17M > 16,777,216 and brick).
+        // Heavy state: a funded STAGE at scale, driven through an ORGANIC gap resume. The
+        // UNLOCKED resume entry (advance N) walks the STAGE first — the funded buys — and
+        // then falls through to a cheap fresh request: the normal stamp-before-request tx.
+        // The fulfilled word arrives buffered UNDER the lock, where the VRF-outstanding
+        // entry gate keeps the STAGE out entirely, so the gap backfill (advance N+1) and
+        // the deferred daily jackpot (advance N+2) each get their own ring-walk-free tx.
+        // None of the heavy legs ever share a tx, so each stays under the per-tx ceiling
+        // regardless of ring size (the V62-02 close).
         address[] memory subs = _setupFundedSubs(N_HI, "gr_", 5 ether, false);
 
-        // Reconstruct the proof's reachable worst-case resume state (test-only direct-storage injection, the
-        // same technique this harness uses for the deity-pass grant + the Sub-slot probes). A real 121+ day
-        // VRF/keeper stall reaches this precisely: the death-clock EXCLUDES gap days (purchaseStartDay is kept
-        // recent across the stall, so the game stays ALIVE — not the gameover/idle path), the resumed-day word
-        // arrives via a recent VRF retry (rngRequestTime within the 14-day grace, rngWordCurrent set), and
-        // dailyIdx lags currentDayView() by the gap with rngWordByDay[idx+1..] unbackfilled. Injecting this
-        // exact precondition isolates the gap-backfill + decouple for the per-tx ceiling measurement (driving
-        // it organically would either trip the VRF-grace liveness gate or the lvl-0 idle gameover path first).
         _settleClean(uint256(keccak256("gr_clean")) | 1);
-        // level >= 1 so the alive-guard is the 120-day inactivity clock (not the lvl-0 365-day idle path).
-        _setHeaderField(12, 3, 1); // level = 1
-        // A fresh resumed-day VRF word is ready (rngWordCurrent slot 3) — the gap-backfill trigger.
-        vm.store(address(game), bytes32(uint256(3)), bytes32(uint256(keccak256("gr_freshword")) | 1));
+        // Level stays at genesis: the 120-day stall is within the lvl-0 365-day idle clock,
+        // and the resume settles without a level transition (no charity-pick dependency).
 
         uint32 idxBeforeStall = _dailyIdx();
         uint32 psdBeforeResume;
@@ -494,37 +491,41 @@ contract V56AfkingGasMarginal is DeployProtocol {
         uint32 resumeDay = game.currentDayView();
         // Death-clock excludes gap days -> purchaseStartDay kept recent (game alive: resumeDay - psd = 1 < 120).
         _setHeaderField(0, 3, resumeDay - 1); // purchaseStartDay = resumeDay - 1
-        // The resume word arrives via a recent VRF retry -> rngRequestTime within the 14-day VRF grace window.
-        _setHeaderField(6, 6, uint48(block.timestamp));
         psdBeforeResume = _purchaseStartDay();
 
         require(resumeDay > idxBeforeStall + 1, "fixture: a multi-day gap opened (day >> dailyIdx)");
         require(rngWordByDay(idxBeforeStall + 1) == 0, "fixture: the gap range is unbackfilled pre-resume");
         require(game.advanceDue(), "fixture: advanceDue on resume");
 
-        // ---- Advance N: the STAGE defer leg (the STAGE completes, then breaks STAGE_SUBS_BACKFILL_DEFERRED
-        // because a gap backfill is pending — rngGate does NOT run yet, so NO backfill, NO jackpot) ----
+        // ---- Advance N (UNLOCKED resume entry): the STAGE chunk + the fresh daily request.
+        // The stamp-before-request ordering: the ring walks to completion, then rngGate fires
+        // the request (cheap) — no word exists yet, so no backfill/jackpot can share this tx. ----
         uint256 gasBeforeN = gasleft();
         game.advanceGame();
         uint256 advNGas = gasBeforeN - gasleft();
 
-        // D-06: advance N (the lone STAGE chunk) is strictly under the EIP-7825 per-tx ceiling.
-        emit log_named_uint("stage_defer_advance_N_gas", advNGas);
-        assertLt(advNGas, EIP7825_TX_GAS_CAP, "D-06: the STAGE-defer advance N is strictly < 16,777,216 (EIP-7825)");
+        // D-06: advance N (the STAGE chunk + request) is strictly under the EIP-7825 per-tx ceiling.
+        emit log_named_uint("resume_stage_plus_request_advance_N_gas", advNGas);
+        assertLt(advNGas, EIP7825_TX_GAS_CAP, "D-06: the resume STAGE+request advance N is strictly < 16,777,216 (EIP-7825)");
 
-        // Non-vacuity + segregation invariants on advance N (the V62-02 upstream decouple leg):
-        //  - the STAGE actually ran and completed (STAGE_SUBS_BACKFILL_DEFERRED is only reachable past it).
+        // Non-vacuity + segregation invariants on advance N:
+        //  - the STAGE actually ran and completed before the request fired.
         assertTrue(_subsFullyProcessed(), "V62-02: the STAGE completed in advance N (subsFullyProcessed set)");
-        //  - the gap is NOT backfilled yet (rngGate did not run) — the backfill is segregated OUT of the STAGE tx.
-        assertTrue(rngWordByDay(idxBeforeStall + 1) == 0, "V62-02: advance N did NOT backfill (segregated from the STAGE chunk)");
-        //  - the resumed day's word is NOT committed yet (rngGate did not run on N).
-        assertTrue(rngWordByDay(resumeDay) == 0, "V62-02: advance N did NOT run rngGate (resumed-day word uncommitted)");
-        //  - dailyIdx NOT advanced and purchaseStartDay NOT bumped (no rngGate, no _unlockRng) -> advanceDue stays true.
+        //  - the request is in flight (LOCKED) — the entry gate now excludes the ring from every leg below.
+        assertTrue(game.rngLocked(), "V62-02: advance N fired the resume request (rngLocked)");
+        //  - no word existed in this tx, so nothing backfilled/sealed — structurally no composition.
+        assertTrue(rngWordByDay(idxBeforeStall + 1) == 0, "V62-02: advance N did NOT backfill (no word yet)");
+        assertTrue(rngWordByDay(resumeDay) == 0, "V62-02: advance N committed no resumed-day word (request only)");
         assertEq(_dailyIdx(), idxBeforeStall, "V62-02: advance N did NOT advance dailyIdx");
-        assertEq(_purchaseStartDay(), psdBeforeResume, "V62-02: advance N did NOT bump purchaseStartDay (rngGate deferred)");
-        assertTrue(game.advanceDue(), "V62-02: advanceDue() stays true after the STAGE-defer break (liveness preserved)");
+        assertEq(_purchaseStartDay(), psdBeforeResume, "V62-02: advance N did NOT bump purchaseStartDay (no gap accounting yet)");
+        assertTrue(game.advanceDue(), "V62-02: advanceDue() stays true after advance N (liveness preserved)");
 
-        // ---- Advance N+1: the gap-backfill leg (STAGE skipped now — subsFullyProcessed; rngGate backfills the
+        // The word arrives — buffered, STILL LOCKED (the organic buffered-clamp state; the lock
+        // clears only at _unlockRng, and the entry gate keeps the STAGE out until then).
+        _fulfillPending(uint256(keccak256("gr_resume_word")) | 1);
+        assertTrue(game.rngLocked(), "buffered word: still rngLocked until _unlockRng");
+
+        // ---- Advance N+1: the gap-backfill leg (STAGE gated out — rngLocked; rngGate backfills the
         // gap ALONE and breaks STAGE_GAP_BACKFILLED, deferring the jackpot downstream) ----
         uint256 gasBeforeNp1 = gasleft();
         game.advanceGame();
@@ -599,8 +600,8 @@ contract V56AfkingGasMarginal is DeployProtocol {
     function testResidualR1StageWeightModelFidelity() public {
         uint256 snap = vm.snapshotState();
 
-        // The level-crossing pass refresh-or-evict iter (the heavier in-stage finalize branch), measured COLD
-        // (vm.cool first-touch) — the realistic daily-advance regime where an evicted sub's slots are cold (it
+        // The funding-kill finalize iter (the heavier in-stage finalize branch), measured COLD
+        // (vm.cool first-touch) — the realistic daily-advance regime where a killed sub's slots are cold (it
         // was funded/stamped on a prior tx). This is the regime the binding all-evict chunk actually runs in.
         uint256 coldEvN = _measureEvictStageGasCold(N_HI, "r1evHi_");
         vm.revertToState(snap);
@@ -773,10 +774,10 @@ contract V56AfkingGasMarginal is DeployProtocol {
     // (j) D-06 residual R4 — heaviest reachable per-iter state (re-measure the marginals at the heavy state)
     // =========================================================================
 
-    /// @notice Residual R4: the per-iter marginals come from the fixture's 5-ETH-sub + deity-pass states; the
-    ///         true heaviest reachable per-iter state (max streak hand-back / level crossing) may exceed them.
-    ///         The v56 streak is compute-on-read (no per-iter streak SSTORE storm), so the heaviest per-iter
-    ///         state is the level-crossing finalize (R1's evict branch) and the heaviest open (R3's mixed-day,
+    /// @notice Residual R4: the per-iter marginals come from the fixture's 5-ETH-sub + coin-seat states; the
+    ///         true heaviest reachable per-iter state (max streak hand-back / funding-kill finalize) may exceed
+    ///         them. The v56 streak is compute-on-read (no per-iter streak SSTORE storm), so the heaviest per-iter
+    ///         state is the funding-kill finalize (R1's evict branch) and the heaviest open (R3's mixed-day,
     ///         cold-SLOAD-per-box). This asserts the heaviest of {evict marginal, mixed-day open marginal} is
     ///         still a bounded O(1) per-iter cost (no marginal scales with player magnitude), so the
     ///         weight-budget / OPEN_BATCH chunk bounds hold at the heaviest reachable state.
@@ -824,7 +825,7 @@ contract V56AfkingGasMarginal is DeployProtocol {
     function testLive01AfkingFirstOrdering() public {
         // AFKING backlog: a funded lootbox sub gets a stamped box.
         address afk = makeAddr("v_afk");
-        _grantDeityPass(afk);
+        _grantSeat(afk);
         _fundPool(afk, 5 ether); // fund BEFORE subscribe to ground the NEW-run cover-buy (D-12)
         vm.prank(afk);
         game.subscribe(address(0), false, false, 1, address(0));
@@ -930,7 +931,7 @@ contract V56AfkingGasMarginal is DeployProtocol {
     function testLive01DrainAfkingBoxesSelectorIsolation() public {
         // Populate a real afking backlog in the GAME's storage.
         address afk = makeAddr("vsel_afk");
-        _grantDeityPass(afk);
+        _grantSeat(afk);
         _fundPool(afk, 5 ether); // fund BEFORE subscribe to ground the NEW-run cover-buy (D-12)
         vm.prank(afk);
         game.subscribe(address(0), false, false, 1, address(0));
@@ -961,8 +962,8 @@ contract V56AfkingGasMarginal is DeployProtocol {
         // outcome is identical (same _autoOpen path, same rngWordByDay[stampDay] seed).
         address viaValve = makeAddr("vbu_valve");
         address viaBounty = makeAddr("vbu_bounty");
-        _grantDeityPass(viaValve);
-        _grantDeityPass(viaBounty);
+        _grantSeat(viaValve);
+        _grantSeat(viaBounty);
         // Fund BEFORE subscribe so each grounded NEW-run cover-buy is funded (D-12).
         _fundPool(viaValve, 5 ether);
         _fundPool(viaBounty, 5 ether);
@@ -1045,7 +1046,7 @@ contract V56AfkingGasMarginal is DeployProtocol {
     ///      Each in-set funded sub re-stamps to the SAME day every STAGE, so to model the proof's mixed-day
     ///      worst case (the open leg fell behind OPEN_BATCH / a keeper skipped days, so the no-orphan rule
     ///      preserved older-day boxes) we inject DISTINCT stamp days + words directly (test-only Sub-slot poke,
-    ///      the same direct-storage technique the harness uses for the deity-pass grant). Each box then carries
+    ///      the same direct-storage technique the harness uses for the header-field pokes). Each box then carries
     ///      a distinct lastAutoBoughtDay, so the open walk re-reads rngWordByDay PER box (defeating the
     ///      cachedDay/cachedWord short-circuit at GameAfkingModule:1157-1163). Returns the bracketed openBoxes
     ///      open-leg gas; the 2 deploy subs add a constant offset that cancels in the (gasN - gasNm1) marginal.
@@ -1123,64 +1124,40 @@ contract V56AfkingGasMarginal is DeployProtocol {
         vm.store(address(game), slot, bytes32(cur));
     }
 
-    /// @dev Test-only poke of a Sub's validThroughLevel (uint24 @ byte 1) — forces the pass-evict crossing
-    ///      (currentLevel > validThroughLevel) on the next STAGE without re-running the contract path.
-    function _pokeValidThroughLevel(address who, uint24 lvl) internal {
-        bytes32 slot = keccak256(abi.encode(who, uint256(SUBOF_SLOT)));
-        uint256 cur = uint256(vm.load(address(game), slot));
-        uint256 mask = (uint256(0xFFFFFF)) << (OFF_VALIDTHROUGH * 8);
-        cur = (cur & ~mask) | ((uint256(lvl) << (OFF_VALIDTHROUGH * 8)) & mask);
-        vm.store(address(game), slot, bytes32(cur));
-    }
-
-    /// @dev Clear `who`'s deity bit so `_passHorizonOf` reads the finite frozen horizon (0 here) at the
-    ///      crossing re-read — the EVICT branch then fires instead of REFRESH.
-    function _clearDeityPass(address who) internal {
-        bytes32 slot = keccak256(abi.encode(who, uint256(MINTPACKED_SLOT)));
-        uint256 packed = uint256(vm.load(address(game), slot));
-        packed &= ~(uint256(1) << DEITY_SHIFT);
-        vm.store(address(game), slot, bytes32(packed));
-    }
-
-    /// @dev Poke the game `level` (slot 0, uint24 @ byte 12) so the pass-evict crossing
-    ///      (currentLevel > validThroughLevel) is reachable in the gas harness (the fixture level does not
-    ///      advance organically over the bracketed STAGE measure).
-    function _setLevel(uint24 lvl) internal {
-        uint256 s0 = uint256(vm.load(address(game), bytes32(uint256(0))));
-        s0 &= ~(uint256(0xFFFFFF) << (12 * 8));
-        s0 |= (uint256(lvl) & 0xFFFFFF) << (12 * 8);
-        vm.store(address(game), bytes32(uint256(0)), bytes32(s0));
-    }
-
-    /// @dev Drive a new-day STAGE advance over N unfunded, NON-deity subs that all PASS-EVICT this cycle
-    ///      (validThroughLevel 0 < currentLevel -> each routes through _finalizeAfking + swap-pop), returning the
-    ///      bracketed advance gas. Both runs from one clean baseline.
+    /// @dev Drive a new-day STAGE advance over N grounded subs that all FUNDING-KILL this cycle (their
+    ///      afkingFunding bucket drained to 0 after the grounded day-0 cover-buy, so the STAGE's fresh-ETH
+    ///      resolve finds srcFunding(0) < ethValue and each routes through _finalizeAfking + delete +
+    ///      swap-pop — SubscriptionExpired reason 1, the successor of the deleted pass-evict crossing; a
+    ///      sub's membership no longer ends on a level crossing, only cancel / funding-skip kill / the
+    ///      coin's seat lock). Returns the bracketed advance gas. Both runs from one clean baseline.
     function _measureEvictStageGas(uint256 n, string memory prefix) internal returns (uint256 advGas) {
         _settleClean(uint256(keccak256(abi.encodePacked(prefix, "base"))) | 1);
-        // Under the 357-00 D-11/D-12 gates an unfunded passless subscribe REVERTS, so the evicting subs are
-        // built GROUNDED (deity + funded -> subscribe passes both gates), then forced into the pass-evict
-        // crossing by clearing the deity bit + poking validThroughLevel to 0 (so the STAGE re-reads horizon 0
-        // < currentLevel -> each routes through _finalizeAfking + swap-pop, the same EVICT path measured before).
+        // Under the D-11/D-12 gates an unfunded subscribe REVERTS, so the funding-killable subs are built
+        // GROUNDED (seat + funded -> subscribe passes both gates); the funding drain below (after the
+        // day-0 cover-buy consumes its slice) forces the next STAGE cycle's cover-buy unfunded.
+        address[] memory subs = new address[](n);
         for (uint256 i; i < n; ++i) {
             address who = makeAddr(string(abi.encodePacked(prefix, _u(i))));
-            _grantDeityPass(who);
+            subs[i] = who;
+            _grantSeat(who);
             _fundPool(who, 5 ether);
             vm.prank(who);
             game.subscribe(address(0), false, false, 1, address(0));
         }
-        // OPEN the grounded subscribe's pending boxes first — the no-orphan guard dominates the evict branch,
-        // so a pending-box sub would be skipped, not evicted. After the open, clear the deity bit + poke
-        // validThroughLevel to 0 so the STAGE crossing re-reads horizon 0 < currentLevel -> the EVICT path.
+        // OPEN the grounded subscribe's pending boxes first — the no-orphan guard dominates the funding-kill
+        // branch, so a pending-box sub would be skipped, not killed. Then drain each sub's remaining
+        // afkingFunding bucket to 0 -> the next STAGE cycle's cover-buy is unfunded (funding-kill fires).
         vm.prank(makeAddr(string(abi.encodePacked(prefix, "ev_open"))));
         game.openBoxes(400);
         for (uint256 i; i < n; ++i) {
-            address who = makeAddr(string(abi.encodePacked(prefix, _u(i))));
-            _clearDeityPass(who);          // horizon -> finite 0 at the crossing re-read
-            _pokeValidThroughLevel(who, 0); // validThroughLevel 0 < currentLevel -> the EVICT branch fires
+            uint256 bal = game.afkingFundingOf(subs[i]);
+            if (bal > 0) {
+                vm.prank(subs[i]);
+                game.withdrawAfkingFunding(bal);
+            }
         }
-        _setLevel(10); // ensure currentLevel(10) > validThroughLevel(0) at the STAGE crossing
         uint256 preCount = _subscriberCount();
-        require(preCount >= n, "fixture: N evicting subs in the set");
+        require(preCount >= n, "fixture: N funding-killable subs in the set");
 
         _warpToBoundary(false);
         require(game.advanceDue(), "fixture: advanceDue on the new day");
@@ -1188,7 +1165,7 @@ contract V56AfkingGasMarginal is DeployProtocol {
         game.advanceGame();
         advGas = gasBefore - gasleft();
 
-        require(_subscriberCount() < preCount, "evict non-vacuity: the stage evicted subs");
+        require(_subscriberCount() < preCount, "evict non-vacuity: the stage funding-killed subs");
     }
 
     /// @dev Measure a full-budget all-buys STAGE chunk: SUB_STAGE_WEIGHT_BUDGET funded lootbox subs, one
@@ -1287,10 +1264,11 @@ contract V56AfkingGasMarginal is DeployProtocol {
     }
 
     /// @dev Subscribe `n` fresh players as funded subs in the requested mode (lootbox = useTickets false /
-    ///      ticket = useTickets true), deity-passed so pass-gated valid; funded via depositAfkingFunding so
-    ///      the STAGE :744 afkingFunding debit + :745 claimablePool debit land in tandem (SOLVENCY-01
-    ///      balanced). The STAGE stamps/queues each into a warm Sub slot (GAS-01) + runs the v56 mode-agnostic
-    ///      in-slot accrue (no per-buy cross-contract storm — that is deferred to the settle day).
+    ///      ticket = useTickets true), seated with an AFKing Subscription Token so the coin gate at subscribe passes;
+    ///      funded via depositAfkingFunding so the STAGE :744 afkingFunding debit + :745 claimablePool debit
+    ///      land in tandem (SOLVENCY-01 balanced). The STAGE stamps/queues each into a warm Sub slot (GAS-01)
+    ///      + runs the v56 mode-agnostic in-slot accrue (no per-buy cross-contract storm — that is deferred
+    ///      to the settle day).
     function _setupFundedSubs(uint256 n, string memory prefix, uint256 poolEach, bool isTicket)
         internal
         returns (address[] memory subs)
@@ -1299,7 +1277,7 @@ contract V56AfkingGasMarginal is DeployProtocol {
         for (uint256 i; i < n; ++i) {
             address who = makeAddr(string(abi.encodePacked(prefix, _u(i))));
             subs[i] = who;
-            _grantDeityPass(who);
+            _grantSeat(who);
             // Fund BEFORE subscribe so the grounded NEW-run cover-buy is funded (D-12 — an unfunded start
             // reverts MustPurchaseToBeginAfking).
             _fundPool(who, poolEach);
@@ -1335,13 +1313,6 @@ contract V56AfkingGasMarginal is DeployProtocol {
     function _fundPool(address who, uint256 amount) internal {
         vm.deal(address(this), amount);
         game.depositAfkingFunding{value: amount}(who);
-    }
-
-    function _grantDeityPass(address who) internal {
-        bytes32 slot = keccak256(abi.encode(who, uint256(MINTPACKED_SLOT)));
-        uint256 packed = uint256(vm.load(address(game), slot));
-        packed |= (uint256(1) << DEITY_SHIFT);
-        vm.store(address(game), slot, bytes32(packed));
     }
 
     /// @dev Drive a fresh new-day STAGE then land the day's word (the per-sub stamp becomes a ready box).
@@ -1626,14 +1597,16 @@ contract V56AfkingGasMarginal is DeployProtocol {
         }
     }
 
-    /// @dev COLD variant of _measureEvictStageGas: identical pass-evict setup, vm.cool before the bracketed
-    ///      advance so each evicting sub's cross-contract finalize (quest read + streak write) is a cold
-    ///      first-touch — the realistic cold evict marginal that sets SUB_STAGE_EVICT_WEIGHT.
+    /// @dev COLD variant of _measureEvictStageGas: identical funding-kill setup, vm.cool before the
+    ///      bracketed advance so each killed sub's cross-contract finalize (quest read + streak write) is a
+    ///      cold first-touch — the realistic cold evict marginal that sets SUB_STAGE_EVICT_WEIGHT.
     function _measureEvictStageGasCold(uint256 n, string memory prefix) internal returns (uint256 advGas) {
         _settleClean(uint256(keccak256(abi.encodePacked(prefix, "base"))) | 1);
+        address[] memory subs = new address[](n);
         for (uint256 i; i < n; ++i) {
             address who = makeAddr(string(abi.encodePacked(prefix, _u(i))));
-            _grantDeityPass(who);
+            subs[i] = who;
+            _grantSeat(who);
             _fundPool(who, 5 ether);
             vm.prank(who);
             game.subscribe(address(0), false, false, 1, address(0));
@@ -1641,13 +1614,14 @@ contract V56AfkingGasMarginal is DeployProtocol {
         vm.prank(makeAddr(string(abi.encodePacked(prefix, "ev_open"))));
         game.openBoxes(400);
         for (uint256 i; i < n; ++i) {
-            address who = makeAddr(string(abi.encodePacked(prefix, _u(i))));
-            _clearDeityPass(who);
-            _pokeValidThroughLevel(who, 0);
+            uint256 bal = game.afkingFundingOf(subs[i]);
+            if (bal > 0) {
+                vm.prank(subs[i]);
+                game.withdrawAfkingFunding(bal);
+            }
         }
-        _setLevel(10);
         uint256 preCount = _subscriberCount();
-        require(preCount >= n, "fixture: N evicting subs in the set");
+        require(preCount >= n, "fixture: N funding-killable subs in the set");
 
         _warpToBoundary(false);
         require(game.advanceDue(), "fixture: advanceDue on the new day");
@@ -1656,7 +1630,7 @@ contract V56AfkingGasMarginal is DeployProtocol {
         game.advanceGame();
         advGas = gasBefore - gasleft();
 
-        require(_subscriberCount() < preCount, "cold evict non-vacuity: the stage evicted subs");
+        require(_subscriberCount() < preCount, "cold evict non-vacuity: the stage funding-killed subs");
     }
 
     /// @dev LIVE binding-stage worst case: a saturated all-evict crank measured cold through the REAL advanceGame
@@ -1677,28 +1651,16 @@ contract V56AfkingGasMarginal is DeployProtocol {
     // (n) SUBS+JACKPOT COINCIDENCE — the RNGREUSE-clamp re-run composition
     // =========================================================================
 
-    /// @dev The 305-winner daily-ETH jackpot standalone gas, referenced from the sibling
-    ///      AdvanceStageWorstCaseGas harness (test_Stage8_11_12_DailyEthJackpot_305Winners_Measured ~7.1M live /
-    ///      ~7.5M the standalone daily-eth row). Use the CONSERVATIVE higher value so the coincident-sum verdict
-    ///      is an upper bound. This is the jackpot DISTRIBUTION work only (no advanceGame entry overhead), so
-    ///      adding it to a measured completing chunk (which DOES carry the advance overhead) counts the overhead
-    ///      exactly once — a faithful (slightly conservative, warm-sharing-ignoring) coincident-tx sum.
-    uint256 internal constant JACKPOT_305_REF_GAS = 7_500_000;
-
-    /// @notice SUBS+JACKPOT coincidence measurement. The RNGREUSE clamp (AdvanceModule 207-218) can re-open the
-    ///         subscriber STAGE on a consuming/replay advance where `day == dailyIdx+1`, so BOTH decouplers
-    ///         (SUBS_BACKFILL_DEFERRED needs day>dIdx+1; GAP_BACKFILLED needs gapDays!=0) structurally cannot
-    ///         fire — the completing subscriber chunk falls straight into the daily jackpot in ONE tx. The
-    ///         current-level ticket drain (AdvanceModule:551) breaks the composition ONLY if the chunk pushed
-    ///         ticketQueue entries, so a TICKET-mode chunk self-defeats; a LOOTBOX-mode chunk (no queue push)
-    ///         reaches the jackpot. On the replay day every OLD sub (stamped to the request-pass day R >=
-    ///         processDay) SKIPS at weight 1 (GameAfkingModule:1324); only NEW subs added in the keeper gap do
-    ///         real lootbox buys. This measures the two COLD marginals (per-skip, per-lootbox-buy), composes the
-    ///         all-skip completing chunk (the COINCIDENT-REACHABLE worst case — buy-subs cannot join under the
-    ///         freeze lock the clamp requires; see test_BufferedClampReopen_FreezeInvariantBlocksNewSubs), and
-    ///         sums it with the 305-winner jackpot. FINDING: the reachable coincident tx stays under the
-    ///         16,777,216 EIP-7825 cap — the composition is reachable but the freeze invariant bounds it. The
-    ///         heavy skip+buy chunk is emitted for CONTRAST only (worst chunk IN ISOLATION, never coincident).
+    /// @notice ALL-SKIP CHUNK BOUND. The subs+jackpot coincident SUM is retired: the VRF-outstanding
+    ///         entry gate (AdvanceModule) means the subscriber STAGE never runs while rngLockedFlag is
+    ///         set, and a buffered word only exists locked — so a completing chunk can never share a tx
+    ///         with a jackpot apply at ANY ring size (proven organically by
+    ///         test_BufferedClampReopen_GateSkipsStageUnderLock). What remains gas-relevant is the
+    ///         STANDALONE all-skip chunk: with SUB_STAGE_SKIP_WEIGHT = 2, a chunk carries at most
+    ///         SUB_STAGE_WEIGHT_BUDGET / 2 = 1250 skip visits regardless of the 2000-coin ring, so the
+    ///         worst all-skip tx = fixedOverhead + 1250 × perSkip. This measures the COLD per-skip and
+    ///         per-lootbox marginals (N vs N-1) and asserts the composed worst chunk sits on the <10M
+    ///         per-tx target with deep headroom to the 16,777,216 EIP-7825 cap.
     function test_SubsJackpotCoincidence_WorstCompletingChunk() public {
         uint256 snap = vm.snapshotState();
 
@@ -1717,43 +1679,32 @@ contract V56AfkingGasMarginal is DeployProtocol {
         require(lN > lNm1, "the Nth lootbox buy did real work");
         uint256 perLootbox = lN - lNm1;
 
-        // (3) The COINCIDENT-REACHABLE completing chunk is ALL SKIPS, NOT the heavy skip+buy mix. The clamp
-        //     that would compose a completing chunk with the jackpot requires the RNG lock (AdvanceModule:211
-        //     `locked`), and during that lock subscribe/replace/cancel ALL revert (GameAfkingModule:328, the
-        //     v45 freeze invariant — proven live by test_BufferedClampReopen_FreezeInvariantBlocksNewSubs).
-        //     So no NEW buy-subs (or cancels/evicts) can enter the window: every sub in the re-opened set was
-        //     stamped to the far request-day on the pre-lock advance and SKIPS at guard :1324 (before any
-        //     evict branch). The reachable coincident chunk is therefore <= SUBSCRIBER_CAP all-skip subs.
+        // (3) The worst STANDALONE all-skip chunk: SUB_STAGE_SKIP_WEIGHT = 2 ends a pure-skip chunk at
+        //     SUB_STAGE_WEIGHT_BUDGET / 2 = 1250 visits — the budget binds BEFORE the 2000-coin ring does,
+        //     so ring growth can no longer grow the chunk. (The coincident-with-jackpot sum is retired:
+        //     the AdvanceModule entry gate keeps the STAGE out of every locked/buffered tx, so a chunk
+        //     and a jackpot apply are never tx-neighbors — proven organically by
+        //     test_BufferedClampReopen_GateSkipsStageUnderLock.)
         uint256 fixedOverhead = sN > perSkip * N_HI ? sN - perSkip * N_HI : 0;
-        uint256 allSkipChunk = fixedOverhead + SUBSCRIBER_CAP * perSkip; // 1000 skips, the reachable worst chunk
-        // The heavy skip+buy mix is measured for CONTRAST — it is the worst chunk IN ISOLATION (a normal
-        // request-path advance, which then breaks at STAGE_RNG_REQUESTED and never reaches the jackpot), NOT a
-        // coincident-with-jackpot chunk (buy-subs cannot join under the freeze lock).
-        uint256 B = (SUB_STAGE_WEIGHT_BUDGET - SUBSCRIBER_CAP) / (SUB_STAGE_LOOTBOX_WEIGHT - 1); // 166
-        uint256 isolatedHeavyChunk = fixedOverhead + (SUBSCRIBER_CAP - B) * perSkip + B * perLootbox;
-
-        // (4) The reachable coincident single-tx cost = the all-skip chunk + the 305-winner jackpot distribution.
-        uint256 coincidentTx = allSkipChunk + JACKPOT_305_REF_GAS;
+        uint256 maxSkipsPerChunk = SUB_STAGE_WEIGHT_BUDGET / SUB_STAGE_SKIP_WEIGHT; // 1250 < the 2000 ring
+        uint256 allSkipChunk = fixedOverhead + maxSkipsPerChunk * perSkip;
 
         emit log_named_uint("per_skip_cold_marginal_gas", perSkip);
         emit log_named_uint("per_lootbox_buy_cold_marginal_gas", perLootbox);
-        emit log_named_uint("all_skip_reachable_chunk_gas", allSkipChunk);
-        emit log_named_uint("isolated_heavy_chunk_gas_NOT_coincident", isolatedHeavyChunk);
-        emit log_named_uint("jackpot_305_referenced_gas", JACKPOT_305_REF_GAS);
-        emit log_named_uint("coincident_tx_reachable_sum_gas", coincidentTx);
+        emit log_named_uint("max_skips_per_chunk_budget_bound", maxSkipsPerChunk);
+        emit log_named_uint("all_skip_worst_chunk_gas", allSkipChunk);
         emit log_named_uint("eip7825_tx_gas_cap", EIP7825_TX_GAS_CAP);
-        emit log_named_uint("coincident_tx_headroom_gas", EIP7825_TX_GAS_CAP - coincidentTx);
+        emit log_named_uint("all_skip_chunk_headroom_gas", EIP7825_TX_GAS_CAP - allSkipChunk);
         emit log_named_string(
             "FINDING",
-            "The subscriber-chunk + jackpot composition is REACHABLE (buffered-clamp re-open) but the v45 freeze "
-            "invariant (subscribe/cancel revert under the RNG lock the clamp requires) bounds the re-opened chunk "
-            "to ALL SKIPS. all-skip chunk + full jackpot leg stays under the 16,777,216 cap. NOT a breach."
+            "The all-skip chunk is budget-bound (1250 visits at SUB_STAGE_SKIP_WEIGHT=2), independent of the "
+            "2000-coin ring, and the entry gate keeps every chunk out of locked/buffered txs -- no composition "
+            "with jackpot legs exists at any cap. The standalone chunk sits on the <10M per-tx target."
         );
 
-        // The reachable coincident tx stays under the EIP-7825 cap. Use the full jackpot leg headroom (the 305
-        // ETH leg reference plus generous room for the coin/traits/seal legs) — even at a ~10M full jackpot leg,
-        // the all-skip chunk (~6.4M) leaves margin.
-        assertLt(allSkipChunk + 10_000_000, EIP7825_TX_GAS_CAP, "reachable all-skip chunk + a full ~10M jackpot leg stays < the EIP-7825 cap");
+        // The standalone worst all-skip chunk honors the <10M per-tx target (and trivially the hard cap).
+        assertLt(allSkipChunk, 10_500_000, "worst all-skip chunk lands on the <10M per-tx target");
+        assertLt(allSkipChunk, EIP7825_TX_GAS_CAP, "worst all-skip chunk is far under the EIP-7825 cap");
         // Marginals are bounded O(1) (non-vacuity sanity).
         assertLt(perSkip, 200_000, "per-skip is a bounded O(1) cold slot read");
         assertLt(perLootbox, 200_000, "per-lootbox-buy is a bounded O(1)");
@@ -1768,7 +1719,7 @@ contract V56AfkingGasMarginal is DeployProtocol {
     ///         enter the window: every re-opened sub was stamped to the far request-day and SKIPS at guard :1324.
     ///         The re-opened chunk is therefore all-skip (bounded ~6.4M), and all-skip + the jackpot leg stays
     ///         under the EIP-7825 cap. This is why the composition is reachable but NOT a cap breach.
-    function test_BufferedClampReopen_FreezeInvariantBlocksNewSubs() public {
+    function test_BufferedClampReopen_GateSkipsStageUnderLock() public {
         address[] memory old = _setupFundedSubs(1, "frzbuf_old_", 50 ether, false);
         _settleClean(uint256(keccak256("frzbuf_base")) | 1);
         vm.prank(makeAddr("frzbuf_open"));
@@ -1797,17 +1748,35 @@ contract V56AfkingGasMarginal is DeployProtocol {
         // THE STRUCTURAL PROTECTION: a NEW subscribe in this exact window REVERTS — so no buy-sub can join the
         // re-opened chunk. The v45 freeze invariant IS the reason the composition can never carry a heavy chunk.
         address newBuyer = makeAddr("frzbuf_newbuyer");
-        _grantDeityPass(newBuyer);
+        _grantSeat(newBuyer);
         _fundPool(newBuyer, 50 ether);
         vm.prank(newBuyer);
         vm.expectRevert(); // RngLocked() — GameAfkingModule:328, blocks create/replace/cancel under the lock
         game.subscribe(address(0), false, false, 1, address(0));
 
+        // THE ENTRY GATE, proven organically: drive the buffered-clamp consuming advance and
+        // assert the subscriber STAGE did not run in it — zero PlayerSkipped emissions (the walk
+        // visits nothing under the lock; the old code re-opened an all-skip walk here) while the
+        // clamp still made real progress (the day applied / sealed). The gate is why a completing
+        // subscriber chunk and a buffered-word jackpot apply can never share one tx.
+        uint32 idxBeforeConsume = _dailyIdx();
+        vm.recordLogs();
+        game.advanceGame();
+        Vm.Log[] memory consumeLogs = vm.getRecordedLogs();
+        bytes32 skippedSig = keccak256("PlayerSkipped(address,uint8)");
+        for (uint256 i; i < consumeLogs.length; ++i) {
+            assertTrue(
+                consumeLogs[i].topics.length == 0 || consumeLogs[i].topics[0] != skippedSig,
+                "GATE: the subscriber stage never runs while rngLocked (no ring visits in the consuming tx)"
+            );
+        }
+        assertGt(_dailyIdx(), idxBeforeConsume, "non-vacuity: the consuming advance applied/sealed a day");
+
         emit log_named_string(
             "FINDING",
-            "The buffered-clamp consuming window is RNG-locked, and subscribe/cancel revert under the lock (v45 "
-            "freeze invariant). No new buy-subs can enter the re-opened chunk, so it is all-skip (bounded) -- the "
-            "subscriber+jackpot composition is reachable but structurally cannot carry a heavy chunk. NOT a breach."
+            "The buffered-clamp consuming window is RNG-locked: subscribe/cancel revert (v45 freeze) "
+            "AND the VRF-outstanding entry gate keeps the subscriber STAGE out of the consuming tx entirely -- "
+            "the subscriber+jackpot composition is structurally impossible at any ring size."
         );
         require(old.length == 1, "fixture: old sub intact");
     }

@@ -499,7 +499,7 @@ interface IGameAfkingModule {
     ///         (self when 0/msg.sender).
     /// @dev rngLock guard on all of create / replace / cancel; self-consent OR
     ///      operator-approval (third-party path); funding-source operator-approval
-    ///      gate; validThroughLevel write.
+    ///      gate; AFKing Subscription Token balance gate (>= 1 coin, the sole afking credential).
     function subscribe(
         address player,
         bool drainGameCreditFirst,
@@ -549,7 +549,7 @@ interface IGameAfkingModule {
     ///         AdvanceModule via delegatecall; it runs pre-RNG, so the day's word is uncommitted
     ///         at stamp. A no-orphan guard skips any sub with a pending unopened box.
     /// @param processDay The boundary-pinned process day (seeds the open).
-    /// @param weightBudget Per-chunk gas-weight budget: a same-day skip costs 1, a lootbox buy SUB_STAGE_LOOTBOX_WEIGHT, a ticket buy SUB_STAGE_TICKET_WEIGHT, a sub-ending finalize SUB_STAGE_EVICT_WEIGHT; the chunk ends when accumulated weight reaches the budget.
+    /// @param weightBudget Per-chunk gas-weight budget: a same-day skip costs SUB_STAGE_SKIP_WEIGHT, a lootbox buy SUB_STAGE_LOOTBOX_WEIGHT, a ticket buy SUB_STAGE_TICKET_WEIGHT, a sub-ending finalize SUB_STAGE_EVICT_WEIGHT; the chunk ends when accumulated weight reaches the budget.
     /// @return processed Number of set entries advanced/handled this chunk.
     function processSubscriberStage(
         uint24 processDay,

@@ -31,6 +31,13 @@ interface IQuestCompletionView {
     function questCompletionToday(address player) external view returns (bool slot0, bool slot1);
 }
 
+/// @title ISeatToken
+/// @notice Minimal AFKing Subscription Token surface for the subscribe coin gate: holding
+///         >= 1 coin is the sole afking credential (sub <=> coin).
+interface ISeatToken {
+    function balanceOf(address account) external view returns (uint256);
+}
+
 /**
  * @title GameAfkingModule
  * @author Burnie Degenerus
@@ -96,15 +103,15 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
     ///      (nothing to tombstone).
     error NotSubscribed();
     /// @dev subscribe would grow the active subscriber set past SUBSCRIBER_CAP
-    ///      (1000). NEW-subscriber path only — re-subscribe never trips it.
+    ///      (2005). NEW-subscriber path only — re-subscribe never trips it.
     error SubscriberCapReached();
     /// @dev mintFlip() found all router categories empty — the clean no-work signal
     ///      (the unbounded-scan-free early-return on no pending work).
     error NoWork();
-    /// @dev subscribe (upsert) where the subscriber's live pass horizon does not reach
-    ///      the current level — an active sub must hold a pass that covers `level` so it
-    ///      cannot occupy a subscriber slot without a valid pass.
-    error NoPass();
+    /// @dev subscribe (upsert) where the subscriber holds no AFKing Subscription Token — holding
+    ///      >= 1 coin is the sole afking credential (sub <=> coin), so a coinless
+    ///      address cannot occupy a subscriber slot.
+    error NoCoin();
     /// @dev subscribe (upsert) starting a NEW afking run that is not grounded on a real
     ///      purchase — neither already bought today nor a funded in-tx cover-buy. An
     ///      unfunded start reverts rather than beginning an inert, free-riding run.
@@ -129,12 +136,8 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
     ///        3 = InsufficientPool  (afkingFunding[src] < ethValue) — funding skip
     ///      lastAutoBoughtDay is UNCHANGED on a skip.
     event PlayerSkipped(address indexed player, uint8 reason);
-    /// @dev Pass-validity refresh — emitted at the AFSUB-03 crossing branch when
-    ///      the re-read horizon still covers the current level. Writes the new
-    ///      validThroughLevel and continues without eviction.
-    event SubscriptionExtendedFree(address indexed player, uint24 day);
     /// @dev Subscription removed from the iterable set. `reason`:
-    ///        1 = AutoPause (AFSUB-03 pass-eviction at crossing OR funding-skip kill of a NORMAL sub)
+    ///        1 = AutoPause (funding-skip kill of a NORMAL sub)
     ///        2 = CancelReclaim (in-pass reclaim of an externally-cancelled tombstone)
     event SubscriptionExpired(address indexed player, uint8 reason);
 
@@ -186,16 +189,18 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
     ///      (the map is read only for the rare operator-funded sub).
     uint8 internal constant FLAG_EXTERNAL_FUNDING = 1;
 
-    /// @dev Active-subscriber cap = 1000. Bounds the iterable set the protocol pays
-    ///      to iterate every cycle — the advance chain walks `_subscribers` in the
-    ///      process/open passes, so an unbounded set would bog the daily heartbeat.
-    ///      1000 keeps the per-cycle work cheap (every pass is weight-/OPEN_BATCH-chunked,
-    ///      so the cap bounds total subs, not per-tx gas) and sits well within the uint16
-    ///      `_subCursor`/`_subOpenCursor` range (no cursor aliasing). `subscribe`
-    ///      reverts a NEW-subscriber insert at the cap; a re-subscribe of an existing
-    ///      member does not grow the set, so it is exempt. Demand past 1000 is not the
-    ///      protocol's burden to service — those users arrange their own keepering.
-    uint256 internal constant SUBSCRIBER_CAP = 1000;
+    /// @dev Ring-length cap = 2005: the 2,000-coin supply (the natural bound on distinct
+    ///      subscribers — membership requires holding an AFKing Subscription Token) plus 5 slack slots
+    ///      for transient cancel/seat-exit tombstones awaiting the in-pass reclaim, so
+    ///      honest churn at full utilization never trips the backstop and ring-stuffing
+    ///      must burn extra funded entries before inconveniencing any joiner. Bounds the
+    ///      iterable set the protocol pays to iterate every cycle — the advance chain
+    ///      walks `_subscribers` in the process/open passes (every pass is
+    ///      weight-/OPEN_BATCH-chunked, so the cap bounds total subs and chunk count,
+    ///      never per-tx gas) and sits well within the uint16 `_subCursor`/`_subOpenCursor`
+    ///      range (no cursor aliasing). `subscribe` reverts a NEW-subscriber insert at the
+    ///      cap; a re-subscribe of an existing member does not grow the set, so it is exempt.
+    uint256 internal constant SUBSCRIBER_CAP = 2005;
 
     /// @dev Per-sub gas-weight of a LOOTBOX buy — the unit the ticket/evict weights are ratioed
     ///      against. Measured ≈34k marginal → weight 10 (≈3.4k per weight-unit), giving enough
@@ -203,8 +208,16 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
     ///      cost, so the chunk gas is composition-flat (`per-call overhead + budget × ~3.4k`).
     uint256 internal constant SUB_STAGE_LOOTBOX_WEIGHT = 10;
 
-    /// @dev Per-sub gas-weight of an in-stage sub-ending finalize (cancel-reclaim / pass-evict
-    ///      / funding-kill) relative to the lootbox-buy unit (weight 10). The pass-evict finalize
+    /// @dev Per-sub gas-weight of a ring-scan skip visit (the no-orphan, already-bought
+    ///      and protocol-sub funding-skip continue paths). Measured ≈4.7k COLD (≈1.4
+    ///      units of the ≈3.4k/unit scale), billed at 2 — rounded UP so the bound stays
+    ///      conservative — capping an all-skip chunk at SUB_STAGE_WEIGHT_BUDGET/2 =
+    ///      1250 visits ≈ 5.9M, under the <10M per-tx target; a full 2005-entry
+    ///      all-skip ring drains in two chunks.
+    uint256 internal constant SUB_STAGE_SKIP_WEIGHT = 2;
+
+    /// @dev Per-sub gas-weight of an in-stage sub-ending finalize (cancel-reclaim /
+    ///      funding-kill) relative to the lootbox-buy unit (weight 10). The finalize
     ///      does a cross-contract quest streak write + a swap-pop the call-free buy does not;
     ///      measured ≈29k after the decay-aware finalize path → weight 8.
     ///      Weighting it on the TRUE marginal (not the cheaper call-free reclaim) keeps a saturated
@@ -293,12 +306,14 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
     ///      approved (in-context `operatorApprovals[subscriber][msg.sender]` —
     ///      the same predicate `isOperatorApproved` returns). Authorization is
     ///      NEVER re-checked at process-time.
-    /// @dev Pass-gating: subscribe encodes the subscriber's current pass
-    ///      horizon (in-context `_passHorizonOf(subscriber)`) into
-    ///      `Sub.validThroughLevel` with a SINGLE read. No FLIP charge — the
-    ///      pass-gated model. The per-iter process validity check is the
-    ///      cheap stored-field compare `level <= sub.validThroughLevel`; at the
-    ///      crossing the pass is re-read EXACTLY ONCE and refresh-or-evicted.
+    /// @dev Coin-gating: holding >= 1 AFKing Subscription Token is the sole afking credential
+    ///      (sub <=> coin), checked with a SINGLE balanceOf staticcall at
+    ///      subscribe ONLY — the process passes never re-check. The coin holds
+    ///      the other side: a transfer that would empty an ACTIVE subscriber's
+    ///      balance reverts token-side (SeatInUse, read from the Game's subInfo
+    ///      view), so leaving is by manual cancel (dailyQuantity == 0) or
+    ///      eviction — after which the seat is free to sell. No pass
+    ///      requirement and no per-level validity horizon.
     /// @dev msg.value > 0 credits the Game's afkingFunding ledger in-context
     ///      (claimablePool moved in tandem — the solvency invariant), keyed on the
     ///      resolved funding bucket (the funder for an operator-funded sub, else the
@@ -385,6 +400,8 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
             IDegenerusAffiliate(ContractAddresses.AFFILIATE).claim(drainOne);
 
             // Hand the afking-computed streak back to the manual quest system, then tombstone.
+            // The tombstone also releases the seat: the coin's transfer guard reads
+            // subInfo.active, so the just-cancelled holder can sell immediately.
             _finalizeAfking(subscriber, c, _simulatedDayIndex());
             c.dailyQuantity = 0;
             // The sparse `_fundingSourceOf` map holds an entry iff FLAG_EXTERNAL_FUNDING
@@ -422,24 +439,23 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
         if (useTickets) s.flags |= FLAG_USE_TICKETS;
         else s.flags &= ~FLAG_USE_TICKETS;
         // The two protocol self-subscribers (VAULT / sDGNRS) self-subscribe at
-        // construction with no pass and no funds; they are exempt from the pass-required
-        // and purchase-grounded gates below, keyed on the un-spoofable resolved subscriber
-        // identity. Every other sub must clear both gates.
+        // construction with no funds and BEFORE the AFKing Subscription Token exists in the
+        // deploy order (the coin deploys last; its constructor mints both
+        // permanent construction seats — serial 1 to SDGNRS, serial 2 to the
+        // vault); they are exempt from the coin-required and
+        // purchase-grounded gates below, keyed on the un-spoofable resolved
+        // subscriber identity. Every other sub must clear both gates.
         bool exemptSub = subscriber == ContractAddresses.VAULT ||
             subscriber == ContractAddresses.SDGNRS;
-        // Single read; encodes the subscriber's pass horizon (deity sentinel =
-        // type(uint24).max) into the field the per-iter check and crossing branch compare
-        // against.
-        s.validThroughLevel = _passHorizonOf(subscriber);
-        // Pass-required: the just-stored horizon must reach the current level (the deity
-        // sentinel type(uint24).max always covers). Reuses the value written above — no
-        // second pass read. A zero horizon means NO pass and is rejected at every level —
-        // including level 0, where `< level` (0 < 0) would otherwise be vacuously false and
-        // let a passless EOA afk through level 0 (a real pass has horizon >= passLevel+99,
-        // never 0). A pass valid now can still be outgrown later; the per-iter crossing
-        // eviction handles that.
-        if (!exemptSub && (s.validThroughLevel == 0 || s.validThroughLevel < level))
-            revert NoPass();
+        // Coin-required: >= 1 AFKing Subscription Token is the sole afking credential.
+        // Checked at subscribe ONLY; the coin enforces the invariant from the
+        // other side (its transfer guard reverts a last-coin transfer while
+        // subInfo.active), so an active sub always holds a coin without any
+        // process-pass re-check.
+        if (
+            !exemptSub &&
+            ISeatToken(ContractAddresses.AFKING_SUB_TOKEN).balanceOf(subscriber) == 0
+        ) revert NoCoin();
         // Sparse funder map: store any non-zero source; only address(0) (self) clears it, so
         // re-pointing an operator-funded sub back to address(0) does not strand a stale funder. Re-pointing the
         // source IS a re-subscribe, which re-runs the operator-approval gate.
@@ -598,37 +614,17 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
     }
 
     /*------------------------------------------------------------------
-                          In-context views
-    ------------------------------------------------------------------*/
-    /// @dev In-context pass-horizon read (the pass-gating producer).
-    ///      The canonical horizon semantics: deity holders return the type(uint24).max
-    ///      sentinel; everyone else returns their frozenUntilLevel. Single definition
-    ///      (one canonical horizon read), called at the subscribe-time write + the
-    ///      process-pass crossing re-read so both share the exact same semantics.
-    function _passHorizonOf(address player) internal view returns (uint24) {
-        uint256 packed = mintPacked_[player];
-        if (packed >> BitPackingLib.HAS_DEITY_PASS_SHIFT & 1 != 0) {
-            return type(uint24).max;
-        }
-        return
-            uint24(
-                (packed >> BitPackingLib.FROZEN_UNTIL_LEVEL_SHIFT) &
-                    BitPackingLib.MASK_24
-            );
-    }
-
-    /*------------------------------------------------------------------
                           Iterable set (hand-inlined OZ EnumerableSet)
     ------------------------------------------------------------------*/
     /// @dev Iterable set insert. Idempotent on already-in-set. 1-indexed
     ///      `_subscriberIndex` (0 = not in set). Reverts a NEW insert at
-    ///      SUBSCRIBER_CAP (1000 active subs) — the protocol caps the set it pays to
-    ///      iterate each cycle. A re-subscribe of an existing member is
+    ///      SUBSCRIBER_CAP (2005: coin supply + tombstone slack) — the protocol caps the set it
+    ///      pays to iterate each cycle. A re-subscribe of an existing member is
     ///      already-in-set (no growth) so it never trips the cap.
     function _addToSet(address player) internal {
         if (_subscriberIndex[player] == 0) {
             // Cap the NEW-subscriber path only: bound the active set the advance
-            // chain walks (SUBSCRIBER_CAP = 1000) so the per-cycle work stays cheap.
+            // chain walks (SUBSCRIBER_CAP = 2005) so the per-cycle work stays cheap.
             if (_subscribers.length >= SUBSCRIBER_CAP) {
                 revert SubscriberCapReached();
             }
@@ -1174,8 +1170,10 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
     ///      propagate). There is no per-cycle eviction cap.
     /// @param processDay The boundary-pinned process day (computed once by the STAGE).
     /// @param weightBudget Per-call gas-weight budget (caller-bounded — the anti-gas-DoS
-    ///        property). Each iteration consumes weight — a cheap local buy/skip 1, a
-    ///        cross-contract sub-ending finalize `SUB_STAGE_EVICT_WEIGHT` — and the chunk ends
+    ///        property). Each iteration consumes weight — a ring-scan skip
+    ///        `SUB_STAGE_SKIP_WEIGHT`, a local buy `SUB_STAGE_LOOTBOX_WEIGHT` /
+    ///        `SUB_STAGE_TICKET_WEIGHT`, a cross-contract sub-ending finalize
+    ///        `SUB_STAGE_EVICT_WEIGHT` — and the chunk ends
     ///        when the accumulated weight reaches the budget, bounding even an all-evicts chunk.
     /// @return processed Number of set entries advanced/handled this chunk.
     function processSubscriberStage(
@@ -1257,8 +1255,8 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
         uint256 boxEthAccrued;
         uint256 ticketEthAccrued;
 
-        // Locally mirrored set length: each of the three in-loop swap-pop removals
-        // (tombstone reclaim / pass-evict / funding-kill) decrements it in lockstep with
+        // Locally mirrored set length: each in-loop swap-pop removal
+        // (tombstone reclaim / funding-kill) decrements it in lockstep with
         // `_removeFromSet`'s pop — every removed player came from `_subscribers[cursor]`
         // and is provably in-set, so the pop always happens — keeping the loop bound
         // SLOAD-free per iteration.
@@ -1277,8 +1275,8 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
             // ENTIRELY untouched this cycle — no reclaim, no evict, no funding-kill, no
             // re-stamp; it stays in-set (reachable), `_autoOpen` opens it, and a LATER
             // cycle processes it (now boxless, lastOpenedDay == lastAutoBoughtDay).
-            // Positioned BEFORE the cancel-reclaim so it dominates ALL FOUR orphan paths
-            // (re-stamp / cancel-reclaim / pass-evict / funding-kill). SKIP, not
+            // Positioned BEFORE the cancel-reclaim so it dominates ALL the orphan paths
+            // (re-stamp / cancel-reclaim / funding-kill). SKIP, not
             // force-open: keeps the heavy open out of the gas-critical advance
             // chain; the FLIP open-bounty keeps opens prompt so it ~never skips a buy. No
             // double-charge — the debit is downstream of this guard. Composes with the
@@ -1288,7 +1286,7 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
                 unchecked {
                     ++cursor;
                     ++processed;
-                    ++weight;
+                    weight += SUB_STAGE_SKIP_WEIGHT;
                 }
                 continue;
             }
@@ -1326,42 +1324,15 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
                 unchecked {
                     ++cursor;
                     ++processed;
-                    ++weight;
+                    weight += SUB_STAGE_SKIP_WEIGHT;
                 }
                 continue;
             }
 
-            // (2) Pass-validity gate. Non-crossing path is a pure stored-field
-            // compare (currentLevel <= validThroughLevel) — no extra read. At the crossing
-            // the pass re-reads the horizon EXACTLY ONCE and refreshes (still covered) or
-            // evicts via the tombstone-then-reclaim shape (membership ⟺ packed
-            // != 0 preserved; a direct mid-pass removal would re-open the swap-miss hazard).
-            if (currentLevel > sub.validThroughLevel) {
-                uint24 h = _passHorizonOf(player);
-                if (currentLevel <= h) {
-                    // REFRESH — still covered (newly minted pass, upgrade, etc.).
-                    sub.validThroughLevel = h;
-                    emit SubscriptionExtendedFree(player, processDay);
-                } else {
-                    // EVICT — finalize the afking streak (hand it back), then delete the slot
-                    // and swap-pop out of the set (no cursor advance after the swap-pop). The
-                    // finalize is the EVICT_WEIGHT cross-call. A got-kicked sub forfeits both
-                    // accumulators: deleting _subOf wipes pendingFlip / affiliateBase so
-                    // nothing survives claimable out-of-set.
-                    _finalizeAfking(player, sub, processDay);
-                    delete _subOf[player];
-                    _removeFromSet(player);
-                    unchecked {
-                        --len;
-                    }
-                    emit SubscriptionExpired(player, 1);
-                    unchecked {
-                        ++processed;
-                        weight += SUB_STAGE_EVICT_WEIGHT;
-                    }
-                    continue;
-                }
-            }
+            // No pass/validity gate: the AFKing Subscription Token is the sole afking
+            // credential and it is enforced entirely at the edges (subscribe's
+            // coin gate in + the coin's SeatInUse transfer lock out), so the process
+            // pass never re-checks membership credentials.
 
             // Resolve the once-per-iteration funding source. The common self-funded path
             // is detected from the already-loaded `sub.flags` (FLAG_EXTERNAL_FUNDING clear
@@ -1399,7 +1370,7 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
                     unchecked {
                         ++cursor;
                         ++processed;
-                        ++weight;
+                        weight += SUB_STAGE_SKIP_WEIGHT;
                     }
                     continue;
                 }

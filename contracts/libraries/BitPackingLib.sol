@@ -14,7 +14,8 @@ pragma solidity 0.8.34;
  *      [104-127] LEVEL_UNITS_LEVEL_SHIFT     - Level for unit tracking (24 bits)
  *      [128-151] FROZEN_UNTIL_LEVEL_SHIFT    - Frozen level for whale passes (24 bits)
  *      [152-153] WHALE_PASS_TYPE_SHIFT     - Pass type (2 bits: 0=none, 1=10-lvl, 3=100-lvl)
- *      [154-159] (unused)
+ *      [154]     SEAT_CLAIMED_SHIFT          - AFKing seat eligibility latch (1 bit)
+ *      [155-159] (unused)
  *      [160-183] MINT_STREAK_LAST_COMPLETED  - Last level credited for mint streak (24 bits, managed by MintStreakUtils)
  *      [184]     HAS_DEITY_PASS_SHIFT        - Deity pass flag (1 bit)
  *      [185-208] AFFILIATE_BONUS_LEVEL_SHIFT - Cached affiliate bonus level (24 bits)
@@ -68,6 +69,14 @@ library BitPackingLib {
 
     /// @notice Bit position for whale pass type (bits 152-153)
     uint256 internal constant WHALE_PASS_TYPE_SHIFT = 152;
+
+    /// @notice Bit position for the AFKing seat eligibility latch (bit 154).
+    ///         Set on the FIRST pass acquisition (whale/lazy/deity purchase,
+    ///         whale-pass claim, or a deity purchase's conferred affiliate
+    ///         pass); one free-tranche seat claim per address,
+    ///         ever. The AFKing Subscription Token reads it via the game's mintPackedFor
+    ///         view at claimSeat and caps free claims at 1,000 token-side.
+    uint256 internal constant SEAT_CLAIMED_SHIFT = 154;
 
     /// @notice Bit position for last level credited for mint streak (bits 160-183)
     uint256 internal constant MINT_STREAK_LAST_COMPLETED_SHIFT = 160;

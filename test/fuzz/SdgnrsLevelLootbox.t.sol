@@ -21,7 +21,7 @@ contract SdgnrsLevelLootbox is DeployProtocol {
     uint256 private constant SDGNRS_BONUS_OFFBYTES = 25;
     uint256 private constant MINTPACKED_SLOT = 9; // mintPacked_ root (deity bit @ 184)
     uint256 private constant DEITY_SHIFT = 184;
-    uint256 private constant OFF_AMOUNT = 7; // Sub.amount (milli-ETH) byte offset
+    uint256 private constant OFF_AMOUNT = 4; // Sub.amount (milli-ETH) byte offset (bytes 4..6)
     uint256 private constant LR_ETH_SCALE = 1e15; // milli-ETH (the Sub.amount unit)
     uint256 private constant LEVEL_OFFBYTES = 12; // `level` uint24 @ slot 0, byte 12
 

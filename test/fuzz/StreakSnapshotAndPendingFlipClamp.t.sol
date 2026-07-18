@@ -16,10 +16,10 @@ import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 ///      clamp `min(newOwed, type(uint24).max)` PRECEDES the `uint24(...)` cast, so the cast is lossless by
 ///      construction: at/over the ceiling the field reads exactly 16_777_215, never a wrapped small value.
 ///
-/// @dev Reuses the afking-run drive ported from V56SecUnmanipulable, RE-POINTED to the post-PACK Sub
-///   accumulator (affiliateBase u32 off23, pendingFlip u24 off27, subStreakLatch u16 off30 — re-derived from
-///   the v69 storageLayout, NOT the stale pre-PACK V56 offsets which read pendingFlip u32 off27 /
-///   subStreakLatch u8 off31). The manual quest streak is driven by writing `questPlayerState[player].streak`
+/// @dev Reuses the afking-run drive ported from V56SecUnmanipulable, RE-POINTED to the AFKing-Coin-era Sub
+///   accumulator (affiliateBase u32 off19, pendingFlip u24 off23, subStreakLatch u16 off26 — DegenerusGameStorage.sol
+///   struct Sub, post `validThroughLevel` deletion; NOT the stale pre-PACK V56 offsets which read pendingFlip
+///   u32 off27 / subStreakLatch u8 off31). The manual quest streak is driven by writing `questPlayerState[player].streak`
 ///   (uint16, slot 1 off9) directly, the same dormant value `beginAfking` snapshots; day anchors are left so
 ///   the decay branch stays inert. Test-only: ZERO contracts/*.sol mutation.
 contract StreakSnapshotAndPendingFlipClampTest is DeployProtocol {
@@ -33,19 +33,16 @@ contract StreakSnapshotAndPendingFlipClampTest is DeployProtocol {
     uint256 private constant OFF_QS_STREAK = 9;
 
     // -------------------------------------------------------------------------
-    // Game-resident slots + the POST-PACK Sub accumulator offsets (re-derived from the v69 storageLayout)
+    // Game-resident slots + the AFKing-Coin-era Sub accumulator offsets (DegenerusGameStorage.sol struct Sub)
     // -------------------------------------------------------------------------
-    /// @dev _subOf mapping root @ slot 54; mintPacked_ deity bit @ bit 184. The repacked accumulator section
-    ///      is affiliateBase u32 off23, pendingFlip u24 off27, subStreakLatch u16 off30 (latch widened 8->16,
-    ///      pendingFlip narrowed 32->24). The afking day markers: afkCoveredThroughDay u24 off17,
-    ///      afkingStartDay u24 off20.
+    /// @dev _subOf mapping root @ slot 54. The accumulator section is affiliateBase u32 off19,
+    ///      pendingFlip u24 off23, subStreakLatch u16 off26. The afking day markers:
+    ///      afkCoveredThroughDay u24 off13, afkingStartDay u24 off16.
     uint256 private constant SUBOF_SLOT = 53;
-    uint256 private constant MINTPACKED_SLOT = 9;
-    uint256 private constant DEITY_SHIFT = 184;
-    uint256 private constant OFF_AFKCOVERED = 16;
-    uint256 private constant OFF_AFKINGSTART = 19;
-    uint256 private constant OFF_PENDINGFLIP = 26; // uint24 pendingFlip (bytes 27..29)
-    uint256 private constant OFF_STREAKLATCH = 29; // uint16 subStreakLatch (bytes 30..31)
+    uint256 private constant OFF_AFKCOVERED = 13;
+    uint256 private constant OFF_AFKINGSTART = 16;
+    uint256 private constant OFF_PENDINGFLIP = 23; // uint24 pendingFlip (bytes 23..25)
+    uint256 private constant OFF_STREAKLATCH = 26; // uint16 subStreakLatch (bytes 26..27)
 
     /// @dev recordAfkingSecondary is QUESTS-gated; the live +1 bump is driven by pranking as this caller.
     address private constant QUESTS_CALLER = address(0x3Cff5E7eBecb676c3Cb602D0ef2d46710b88854E);
@@ -100,7 +97,6 @@ contract StreakSnapshotAndPendingFlipClampTest is DeployProtocol {
     ///         never 0 (wrapped 65536 -> 0). The clamp guards the bump from wrapping the field at the ceiling.
     function test_SetStreakBaseClampSaturatesAtUint16Max() public {
         address p = makeAddr("clamp_p");
-        _grantDeityPass(p);
         _fundPool(p, 50 ether);
         _subscribeLootbox(p, 1);
         // Ground a live run so afkingStartDay != 0 and recordAfkingSecondary is not a no-op.
@@ -152,7 +148,6 @@ contract StreakSnapshotAndPendingFlipClampTest is DeployProtocol {
     ///      proving the carried-in value survives both the snapshot and the finalize past the old uint8 ceiling.
     function _assertSnapshotExact(address who, uint16 streakValue) internal {
         _setManualQuestStreak(who, streakValue);
-        _grantDeityPass(who);
         _fundPool(who, 50 ether);
 
         // Subscribe grounds the run: beginAfking snapshots state.streak (uint16) and _setStreakBase writes it
@@ -261,10 +256,9 @@ contract StreakSnapshotAndPendingFlipClampTest is DeployProtocol {
         assertEq(_affiliateBase32Of(p), affBefore, "settle/clamp leaves affiliateBase untouched (its own clamp is out of scope)");
     }
 
-    /// @dev Arm a deity-passed, funded, live sub for `who` (subscribe + deliver one day) so the on-chain accrue
+    /// @dev Arm a funded, live sub for `who` (subscribe + deliver one day) so the on-chain accrue
     ///      + clamp path runs against a pre-loaded near-ceiling pendingFlip.
     function _armLiveSub(address who) internal {
-        _grantDeityPass(who);
         _fundPool(who, 50 ether);
         _subscribeLootbox(who, 1);
     }
@@ -273,7 +267,7 @@ contract StreakSnapshotAndPendingFlipClampTest is DeployProtocol {
     // Sub-slot writers/readers (POST-PACK offsets) + manual-streak drive
     // =========================================================================
 
-    /// @dev Write the uint16 streak latch (off 30) directly, leaving the rest of the slot intact.
+    /// @dev Write the uint16 streak latch (off 26) directly, leaving the rest of the slot intact.
     function _setStreakLatchSlot(address who, uint256 value) internal {
         bytes32 slot = keccak256(abi.encode(who, uint256(SUBOF_SLOT)));
         uint256 packed = uint256(vm.load(address(game), slot));
@@ -282,7 +276,7 @@ contract StreakSnapshotAndPendingFlipClampTest is DeployProtocol {
         vm.store(address(game), slot, bytes32(packed));
     }
 
-    /// @dev Write the uint24 pendingFlip (off 27) directly, leaving the rest of the slot intact.
+    /// @dev Write the uint24 pendingFlip (off 23) directly, leaving the rest of the slot intact.
     function _setPendingFlipSlot(address who, uint256 value) internal {
         bytes32 slot = keccak256(abi.encode(who, uint256(SUBOF_SLOT)));
         uint256 packed = uint256(vm.load(address(game), slot));
@@ -296,18 +290,18 @@ contract StreakSnapshotAndPendingFlipClampTest is DeployProtocol {
         return p & ((uint256(1) << widthBits) - 1);
     }
 
-    /// @dev The afking-run streak base — the FULL post-PACK uint16 latch (off 30, width 16).
+    /// @dev The afking-run streak base — the FULL uint16 latch (off 26, width 16).
     function _streakLatch16Of(address who) internal view returns (uint256) {
         return _subField(who, OFF_STREAKLATCH, 16);
     }
 
-    /// @dev pendingFlip — the post-PACK uint24 accumulator (off 27, width 24), NOT the V56 width-32 reader.
+    /// @dev pendingFlip — the uint24 accumulator (off 23, width 24), NOT the V56 width-32 reader.
     function _pendingFlip24Of(address who) internal view returns (uint256) {
         return _subField(who, OFF_PENDINGFLIP, 24);
     }
 
     function _affiliateBase32Of(address who) internal view returns (uint256) {
-        return _subField(who, 22, 32);
+        return _subField(who, 19, 32);
     }
 
     function _afkingStartOf(address who) internal view returns (uint32) {
@@ -384,6 +378,7 @@ contract StreakSnapshotAndPendingFlipClampTest is DeployProtocol {
     }
 
     function _subscribeLootbox(address who, uint8 q) internal {
+        _grantSeat(who); // the AFKing Subscription Token is the subscribe credential (NoCoin without it)
         vm.prank(who);
         game.subscribe(address(0), false, false, q, address(0)); // self, lootbox mode, no reinvest
     }
@@ -391,12 +386,6 @@ contract StreakSnapshotAndPendingFlipClampTest is DeployProtocol {
     function _fundPool(address who, uint256 amount) internal {
         vm.deal(address(this), amount);
         game.depositAfkingFunding{value: amount}(who);
-    }
-
-    function _grantDeityPass(address who) internal {
-        bytes32 slot = keccak256(abi.encode(who, uint256(MINTPACKED_SLOT)));
-        uint256 packed = uint256(vm.load(address(game), slot));
-        vm.store(address(game), slot, bytes32(packed | (uint256(1) << DEITY_SHIFT)));
     }
 
     function _singleton(address a) internal pure returns (address[] memory arr) {

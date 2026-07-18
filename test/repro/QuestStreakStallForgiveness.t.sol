@@ -18,14 +18,12 @@ contract QuestStreakStallForgiveness is DeployProtocol {
 
     uint256 private constant GAME_HEADER_SLOT = 0;
     uint256 private constant OFF_DAILY_IDX = 3;
-    uint256 private constant MINT_PACKED_SLOT = 9;
-    uint256 private constant DEITY_SHIFT = 184;
     uint256 private constant SUB_OF_SLOT = 53;
-    uint256 private constant OFF_SUB_SCORE = 5;
-    uint256 private constant OFF_SUB_LAST_AUTO = 10;
-    uint256 private constant OFF_SUB_COVERED = 16;
-    uint256 private constant OFF_SUB_START = 19;
-    uint256 private constant OFF_SUB_STREAK_BASE = 29;
+    uint256 private constant OFF_SUB_SCORE = 2;       // uint16 score              (bytes 2..3)
+    uint256 private constant OFF_SUB_LAST_AUTO = 7;   // uint24 lastAutoBoughtDay  (bytes 7..9)
+    uint256 private constant OFF_SUB_COVERED = 13;    // uint24 afkCoveredThroughDay (bytes 13..15)
+    uint256 private constant OFF_SUB_START = 16;      // uint24 afkingStartDay     (bytes 16..18)
+    uint256 private constant OFF_SUB_STREAK_BASE = 26; // uint16 subStreakLatch    (bytes 26..27)
 
     uint256 private constant MINT_PRICE = 0.5 ether;
 
@@ -447,7 +445,7 @@ contract QuestStreakStallForgiveness is DeployProtocol {
         uint24 today = uint24(game.currentDayView());
         _roll(today);
         _award(player, streak, today);
-        _grantDeityPass(player);
+        _grantSeat(player); // the AFKing Subscription Token is the subscribe credential (NoCoin without it)
         vm.deal(address(this), 50 ether);
         game.depositAfkingFunding{value: 50 ether}(player);
         vm.prank(player);
@@ -482,12 +480,6 @@ contract QuestStreakStallForgiveness is DeployProtocol {
 
     function _activeQuestDay() private view returns (uint24) {
         return uint24(uint256(vm.load(address(quests), bytes32(0))));
-    }
-
-    function _grantDeityPass(address player) private {
-        bytes32 slot = keccak256(abi.encode(player, MINT_PACKED_SLOT));
-        uint256 packed = uint256(vm.load(address(game), slot));
-        vm.store(address(game), slot, bytes32(packed | (uint256(1) << DEITY_SHIFT)));
     }
 
     function _questWord(address player) private view returns (uint256) {

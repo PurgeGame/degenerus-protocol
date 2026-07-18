@@ -298,15 +298,13 @@ contract V61Smite is DeployProtocol {
     // Active-afker setup (real funded subscription)
     // =========================================================================
 
-    /// @dev Set up `name` as an active afker (a funded lootbox subscription ⇒ dailyQuantity != 0). A deity-pass
-    ///      score bit is set first to satisfy the pass-required subscribe gate, then cleared so ONLY the active-
-    ///      afker condition remains (the smite immunity under test reads _subOf[smitee].dailyQuantity).
+    /// @dev Set up `name` as an active afker (a funded lootbox subscription ⇒ dailyQuantity != 0). The AFKing
+    ///      Coin is the sole subscribe credential (the smite immunity under test reads
+    ///      _subOf[smitee].dailyQuantity, independent of any deity-pass score bit).
     function _setupActiveAfker(string memory name) internal returns (address a) {
         a = makeAddr(name);
-        _seedField(a, 184, 0x1, 1); // HAS_DEITY_PASS score bit ⇒ subscribe gate satisfied
         _fundPool(a, 50 ether);
         _subscribeLootbox(a, 1);
-        _seedField(a, 184, 0x1, 0); // clear the deity bit; the active-afker condition remains
     }
 
     // =========================================================================
@@ -355,6 +353,7 @@ contract V61Smite is DeployProtocol {
     }
 
     function _subscribeLootbox(address who, uint8 q) internal {
+        _grantSeat(who); // the AFKing Subscription Token is the subscribe credential (NoCoin without it)
         vm.prank(who);
         game.subscribe(address(0), false, false, q, address(0));
     }

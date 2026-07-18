@@ -214,25 +214,26 @@ contract KeeperLeversAndPacking is DeployProtocol {
     /// @notice GAS-04: the game-resident `Sub` struct packs to ONE slot (RE-DERIVED), `boxCursor`/
     ///         `boxCursorIndex` are uint48, and the crank adds storage ONLY via the first-deposit
     ///         `boxPlayers` push (inlined at the module first-deposit sites).
-    /// @dev    The game-resident `Sub` is twelve fields summing to 31 used bytes (one 256-bit slot,
-    ///         1 free byte). The in-slot accumulator section is `affiliateBase` uint32 + `pendingFlip` uint24 +
-    ///         `subStreakLatch` uint16 = 72 bits, ending at byte 31:
-    ///           uint8 dailyQuantity(1) + uint24 validThroughLevel(3) + uint8 flags(1)
-    ///           + uint16 score(2) + uint24 amount(3) + uint24 lastAutoBoughtDay(3) + uint24 lastOpenedDay(3)
-    ///           + uint24 afkCoveredThroughDay(3) + uint24 afkingStartDay(3) + uint32 affiliateBase(4)
-    ///           + uint24 pendingFlip(3) + uint16 subStreakLatch(2) = 31 bytes. This is a SOURCE-GREP oracle
-    ///         (it greps STORAGE_SRC for the exact field declarations); the `forge inspect storageLayout`
-    ///         snapshot is a separate golden.
+    /// @dev    The game-resident `Sub` is eleven fields summing to 28 used bytes (one 256-bit slot,
+    ///         4 free bytes). The in-slot accumulator section is `affiliateBase` uint32 + `pendingFlip` uint24 +
+    ///         `subStreakLatch` uint16 = 72 bits, ending at byte 27:
+    ///           uint8 dailyQuantity(1) + uint8 flags(1) + uint16 score(2) + uint24 amount(3)
+    ///           + uint24 lastAutoBoughtDay(3) + uint24 lastOpenedDay(3) + uint24 afkCoveredThroughDay(3)
+    ///           + uint24 afkingStartDay(3) + uint32 affiliateBase(4) + uint24 pendingFlip(3)
+    ///           + uint16 subStreakLatch(2) = 28 bytes. The AFKing Subscription Token credential (sub <=> coin) needs no
+    ///         stored pass horizon, so the old `validThroughLevel` (3 bytes) is DELETED — the coin gate at
+    ///         subscribe plus the coin's SeatInUse seat lock enforce membership without a per-sub
+    ///         stored field. This is a SOURCE-GREP oracle (it greps STORAGE_SRC for the exact field
+    ///         declarations); the `forge inspect storageLayout` snapshot is a separate golden.
     function testGas04PackingAndNoNewHotPathStorageSourcePresence() public view {
         string memory storage_ = _stripComments(vm.readFile(STORAGE_SRC));
         string memory game_ = _strippedGame();
 
-        // Sub struct: the twelve game-resident fields at their exact widths sum to 31 bytes (one slot, 1
-        // free byte after the reinvestPct removal). The accumulator section is affiliateBase u32 + pendingFlip
-        // u24 + subStreakLatch u16 = 72 bits; the day markers and the per-sub stamp are uint24.
+        // Sub struct: the eleven game-resident fields at their exact widths sum to 28 bytes (one slot, 4
+        // free bytes after the validThroughLevel removal). The accumulator section is affiliateBase u32 +
+        // pendingFlip u24 + subStreakLatch u16 = 72 bits; the day markers and the per-sub stamp are uint24.
         uint256 subBytes =
             _structFieldBytes(storage_, "uint8 dailyQuantity;", 1) +
-            _structFieldBytes(storage_, "uint24 validThroughLevel;", 3) +
             _structFieldBytes(storage_, "uint8 flags;", 1) +
             _structFieldBytes(storage_, "uint16 score;", 2) +
             _structFieldBytes(storage_, "uint24 amount;", 3) +
@@ -244,7 +245,7 @@ contract KeeperLeversAndPacking is DeployProtocol {
             _structFieldBytes(storage_, "uint24 pendingFlip;", 3) +
             _structFieldBytes(storage_, "uint16 subStreakLatch;", 2);
         assertLe(subBytes, 32, "GAS-04: Sub struct fields sum to <= 32 bytes (one slot)");
-        assertEq(subBytes, 31, "GAS-04: the game-resident Sub is 31 used bytes (12 fields, 1 free byte after reinvestPct removal)");
+        assertEq(subBytes, 28, "GAS-04: the game-resident Sub is 28 used bytes (11 fields, 4 free bytes after validThroughLevel removal)");
         // The `struct Sub {` declaration is byte-present (the packed sub record exists at all).
         assertGt(_countOccurrences(storage_, "struct Sub {"), 0, "GAS-04: Sub struct present (the packed sub record)");
         // The two prior standalone bools must be GONE (folded into `flags`) — re-introducing one would push
