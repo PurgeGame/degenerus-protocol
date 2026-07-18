@@ -9,7 +9,7 @@ import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 /// @notice FLIP redemptions are blocked during an open/stalled purchase phase and allowed only
 ///         once a jackpot is locked in or live, so bonus tickets and prize ETH accrue to real-ETH
 ///         buyers. The gate (MintModule:1102-1109): if the window is not open, revert when
-///         rngLockedFlag is set OR (purchase phase AND nextPrizePool < levelPrizePool[level]);
+///         rngLockedFlag is set OR (purchase phase AND nextPrizePool <= levelPrizePool[level]);
 ///         otherwise latch ticketRedemptionOpen=true. Once latched the gate is bypassed; the window is
 ///         closed again at the final jackpot day's RNG request (verified separately in the advance
 ///         chain). These tests pin the player-facing open/close truth table by forcing the slot-0

@@ -85,7 +85,7 @@ contract FarFutureIntegrationTest is DeployProtocol {
 
         // --- Phase 2: Drive game through levels ---
         // Each level requires:
-        //   1. nextPrizePool >= levelPrizePool[level] (prize pool target met)
+        //   1. nextPrizePool > levelPrizePool[level] (prize pool target met)
         //   2. advanceGame daily cycles: ticket processing -> VRF -> daily jackpot -> if target met,
         //      transition to jackpot phase -> 5 jackpot days -> phase transition -> level++
         //

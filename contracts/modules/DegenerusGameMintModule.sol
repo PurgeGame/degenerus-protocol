@@ -958,7 +958,7 @@ contract DegenerusGameMintModule is
             if (!ticketRedemptionOpen) {
                 if (
                     rngLockedFlag ||
-                    _getNextPrizePool() < levelPrizePool[level]
+                    _getNextPrizePool() <= levelPrizePool[level]
                 ) revert E();
                 ticketRedemptionOpen = true;
             }
