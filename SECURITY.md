@@ -1,6 +1,6 @@
 # Security Policy
 
-Frozen subject: `contracts/` tree `22cde80f` @ tag `degenerus-c4a` (post-v75.0 hardening freeze).
+Frozen subject: `contracts/` tree `012dc892` @ tag `degenerus-c4a` (post-v75.0 hardening freeze).
 
 ## Reporting a vulnerability
 
@@ -78,7 +78,11 @@ its own constructor). CREATOR holds the initial 1T supply of each; the role tran
 **Powers (`onlyVaultOwner`, unilateral):** swap/stake ETH↔stETH (the vault's own custodied position),
 set the lootbox mid-day-RNG threshold (the pending-lootbox ETH-equivalent value that must accumulate
 before an extra *intra-day* lootbox VRF request may be triggered — a LINK-cost-limiting operational
-knob, not a security parameter), the owner-gated salvage-buy fallback, and a family of `game*` /
+knob, not a security parameter), the owner-gated salvage-buy fallback, **AFKing seat grants**
+(`afkingGrant` — grant seat claim rights from the vault's 998-seat allowance on
+`AFKingSubscriptionToken`; the token itself enforces the sale lock — grants revert until all 1,000
+free-tranche seats are claimed — and the 998 lifetime cap, so the owner cannot dilute the free
+tranche or mint past supply), and a family of `game*` /
 `coin*` / `wwxrp*` / `sdgnrs*` proxy actions the vault performs *as itself* (it custodies perpetual
 tickets and reserves). **Post-gameOver GNRUS charity recovery** (`VAULT.isVaultOwner`-gated, on the
 GNRUS contract): once the game's final sweep has run, `GNRUS.vaultRedeemFor(holder)` redeems a
