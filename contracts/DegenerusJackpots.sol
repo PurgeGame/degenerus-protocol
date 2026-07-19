@@ -31,12 +31,20 @@ interface IDegenerusCoinJackpotView {
 // Contract
 // ===========================================================================
 
+/// @notice WWXRP mint surface for skipped-bracket consolation prizes.
+interface IWwxrpMintPrize {
+    /// @notice Mint WWXRP to a recipient.
+    function mintPrize(address to, uint256 amount) external;
+}
+
 /// @title DegenerusJackpots
 /// @author Burnie Degenerus
 /// @notice Standalone contract managing the BAF jackpot system.
 /// @dev Coinflip forwards flips into this contract; game calls to resolve jackpots.
 ///      - BAF: Leaderboard-based distribution to top coinflip bettors
 ///      - Decimator: handled in the game decimator module
+///      - Skipped brackets (daily flip lost): players claim a WWXRP consolation
+///        proportional to their frozen bracket score via claimBafConsolation
 /// @custom:security-contact burnie@degener.us
 contract DegenerusJackpots is IDegenerusJackpots {
     /*+======================================================================+
@@ -51,6 +59,9 @@ contract DegenerusJackpots is IDegenerusJackpots {
 
     /// @notice Thrown when a function restricted to the game contract is called by another address.
     error OnlyGame();
+
+    /// @notice Thrown when a consolation claim covers no claimable score.
+    error NothingToClaim();
 
     /*+======================================================================+
       |                              EVENTS                                  |
@@ -74,6 +85,18 @@ contract DegenerusJackpots is IDegenerusJackpots {
     /// @param lvl Level whose BAF was skipped.
     /// @param day Day index on which the skip occurred.
     event BafSkipped(uint24 indexed lvl, uint24 day);
+
+    /// @notice Emitted when the WWXRP consolation for a skipped bracket is claimed.
+    /// @param player Score owner credited with the mint (claims are permissionless).
+    /// @param lvl Skipped BAF bracket level.
+    /// @param score Frozen bracket score consumed by the claim (FLIP-denominated).
+    /// @param wwxrpAmount WWXRP minted (score / 1000).
+    event BafConsolationClaimed(
+        address indexed player,
+        uint24 indexed lvl,
+        uint256 score,
+        uint256 wwxrpAmount
+    );
 
     /*+======================================================================+
       |                              STRUCTS                                 |
@@ -101,13 +124,18 @@ contract DegenerusJackpots is IDegenerusJackpots {
     }
 
     /// @notice Per-level BAF bracket state.
-    /// @dev Packed into single slot: epoch (64) + topLen (8). Both are touched by
-    ///      every flip credit, so sharing a slot makes the second read warm.
+    /// @dev Packed into single slot: epoch (64) + topLen (8) + skipped (8). Epoch and
+    ///      topLen are touched by every flip credit, so sharing a slot makes the second
+    ///      read warm; skipped rides along for free.
     struct BafLevel {
         /// @notice Epoch counter, incremented on jackpot resolution (lazy-resets player totals).
         uint64 epoch;
         /// @notice Current length of the bafTop board (0-4).
         uint8 topLen;
+        /// @notice True once the bracket's BAF was skipped (daily flip lost). Terminal:
+        ///         a skipped bracket can never resolve, so this is the exact gate for
+        ///         WWXRP consolation claims against the bracket's frozen scores.
+        bool skipped;
     }
 
     /*+======================================================================+
@@ -122,6 +150,9 @@ contract DegenerusJackpots is IDegenerusJackpots {
     /// @notice Core game contract for jackpot resolution and player queries (constant).
     IDegenerusGame internal constant degenerusGame = IDegenerusGame(ContractAddresses.GAME);
 
+    /// @notice WWXRP token minted as skipped-bracket consolation (constant).
+    IWwxrpMintPrize internal constant wwxrp = IWwxrpMintPrize(ContractAddresses.WWXRP);
+
 
     /*+======================================================================+
       |                            CONSTANTS                                 |
@@ -131,6 +162,12 @@ contract DegenerusJackpots is IDegenerusJackpots {
 
     /// @dev Fixed number of scatter rounds to keep BAF gas bounded.
     uint8 private constant BAF_SCATTER_ROUNDS = 50;
+
+    /// @dev Skipped-bracket consolation rate: 1 WWXRP per 1000 FLIP of frozen
+    ///      bracket score (both 18 decimals). WWXRP emission is economically
+    ///      inert — daily-draw prizes are fixed FLIP amounts at fixed odds —
+    ///      so the mint carries no protocol liability.
+    uint256 private constant CONSOLATION_DIVISOR = 1000;
 
 
     /*+======================================================================+
@@ -483,7 +520,7 @@ contract DegenerusJackpots is IDegenerusJackpots {
                 unchecked { ++i; }
             }
             unchecked {
-                bafLevel[lvl] = BafLevel({epoch: currentEpoch + 1, topLen: 0});
+                bafLevel[lvl] = BafLevel({epoch: currentEpoch + 1, topLen: 0, skipped: false});
             }
         }
         // Day computed locally: identical to game.currentDayView() (pure GameTimeLib
@@ -497,15 +534,65 @@ contract DegenerusJackpots is IDegenerusJackpots {
     ///      out of future claims (Coinflip gates winningBafCredit on
     ///      cursor >= lastBafResolvedDay). Leaderboard state for lvl is left
     ///      as-is — no new writes ever target a past bracket, so clearing
-    ///      would only burn gas.
+    ///      would only burn gas. Sets the bracket's skipped flag: the frozen
+    ///      player scores become claimable as WWXRP consolation.
     /// @param lvl Level whose BAF was skipped.
     /// @custom:access Restricted to game contract via onlyGame modifier.
     function markBafSkipped(uint24 lvl) external onlyGame {
+        bafLevel[lvl].skipped = true;
         // Day computed locally: identical to game.currentDayView() (pure GameTimeLib
         // wall-clock) without the external call.
         uint24 today = GameTimeLib.currentDayIndex();
         lastBafResolvedDay = today;
         emit BafSkipped(lvl, today);
+    }
+
+    /*+======================================================================+
+      |                  SKIPPED-BRACKET WWXRP CONSOLATION                   |
+      +======================================================================+
+      |  When a bracket's BAF skips (daily flip lost), the ETH pool rolls    |
+      |  forward but the players' accumulated scores are wasted. Those       |
+      |  scores are frozen in storage (the epoch only bumps on resolution,   |
+      |  and no new credit can target a past bracket), so each score can be  |
+      |  redeemed once for WWXRP at score / 1000.                            |
+      +======================================================================+*/
+
+    /// @notice Claim the WWXRP consolation for a player's skipped BAF bracket.
+    /// @dev Permissionless: anyone may execute, but the mint always goes to
+    ///      the recorded score owner — no value can move from a non-consenting
+    ///      party. Pays only when the bracket is marked skipped and the score
+    ///      belongs to the bracket's live epoch (a resolved bracket bumped its
+    ///      epoch, so its scores read stale and pay nothing). Deleting the
+    ///      score slot is the claim flag — no separate mapping. The delete can
+    ///      never affect a jackpot resolution: skipped is terminal, so a
+    ///      claimable bracket can never resolve later. VAULT's consolation
+    ///      (it accrues bracket score from its daily flips) escrows into its
+    ///      WWXRP mint allowance via the token's vault routing.
+    /// @param player Score owner credited with the mint.
+    /// @param lvl Skipped bracket level to claim.
+    /// @custom:reverts NothingToClaim When the bracket is not skipped, the
+    ///         score is stale/absent/already claimed, or rounds to zero.
+    function claimBafConsolation(address player, uint24 lvl) external {
+        BafLevel memory lv = bafLevel[lvl];
+        if (!lv.skipped) revert NothingToClaim();
+        BafPlayer memory ps = bafPlayer[lvl][player];
+        if (ps.epoch != lv.epoch) revert NothingToClaim();
+        uint256 amount = uint256(ps.total) / CONSOLATION_DIVISOR;
+        if (amount == 0) revert NothingToClaim();
+        delete bafPlayer[lvl][player];
+        emit BafConsolationClaimed(player, lvl, ps.total, amount);
+        wwxrp.mintPrize(player, amount);
+    }
+
+    /// @notice Claimable WWXRP consolation for a player at a bracket level.
+    /// @return Zero unless the bracket is skipped and the player holds an
+    ///         unclaimed live-epoch score.
+    function bafConsolationOf(address player, uint24 lvl) external view returns (uint256) {
+        BafLevel memory lv = bafLevel[lvl];
+        if (!lv.skipped) return 0;
+        BafPlayer memory ps = bafPlayer[lvl][player];
+        if (ps.epoch != lv.epoch) return 0;
+        return uint256(ps.total) / CONSOLATION_DIVISOR;
     }
 
     /*+======================================================================+
