@@ -371,7 +371,7 @@ abstract contract DegenerusGameStorage {
     bool internal presaleDrained;
 
     /// @dev FLIP ticket purchase window latch. redeemFlip lazily opens it the moment the prize
-    ///      target is met in the purchase phase (_getNextPrizePool() > levelPrizePool[level], with no
+    ///      target is met in the purchase phase (_getNextPrizePool() > _prizePoolTarget(level + 1), with no
     ///      RNG in flight); it persists through the jackpot days and is cleared in the advance at the
     ///      final jackpot day's RNG request — the same boundary where new tickets route to the next
     ///      level. While closed, FLIP ticket purchases revert, so FLIP tickets only ever join a
@@ -1000,6 +1000,37 @@ abstract contract DegenerusGameStorage {
     function _setFuturePrizePool(uint256 val) internal {
         (uint128 next, ) = _getPrizePools();
         _setPrizePools(next, uint128(val));
+    }
+
+    /// @dev Century growth curve: an x00 level's target must reach a multiple of the
+    ///      previous century's achieved pool — 2x by default, tapering as the game gets
+    ///      huge (1.5x above 500k ETH, 1.3x above 1M ETH) so late centuries stay
+    ///      reachable while still forcing real growth.
+    uint256 internal constant CENTURY_FLOOR_BPS = 20_000;
+    uint256 internal constant CENTURY_FLOOR_MID_BPS = 15_000;
+    uint256 internal constant CENTURY_FLOOR_TOP_BPS = 13_000;
+    uint256 internal constant CENTURY_FLOOR_MID_THRESHOLD = 500_000 ether;
+    uint256 internal constant CENTURY_FLOOR_TOP_THRESHOLD = 1_000_000 ether;
+
+    /// @dev Effective next-pool ratchet target for a purchase level: the previous
+    ///      level's recorded pool, raised at century levels (x00) to at least the
+    ///      curved multiple of the previous century's achieved pool
+    ///      (lastCenturyPrizePool). Every gate compares nextPrizePool strictly
+    ///      greater than this target.
+    function _prizePoolTarget(
+        uint24 purchaseLvl
+    ) internal view returns (uint256 target) {
+        target = levelPrizePool[purchaseLvl - 1];
+        if (purchaseLvl % 100 == 0) {
+            uint256 snap = uint256(lastCenturyPrizePool);
+            uint256 multBps = snap > CENTURY_FLOOR_TOP_THRESHOLD
+                ? CENTURY_FLOOR_TOP_BPS
+                : snap > CENTURY_FLOOR_MID_THRESHOLD
+                    ? CENTURY_FLOOR_MID_BPS
+                    : CENTURY_FLOOR_BPS;
+            uint256 centuryFloor = (snap * multBps) / 10_000;
+            if (centuryFloor > target) target = centuryFloor;
+        }
     }
 
     // =========================================================================
@@ -2643,6 +2674,17 @@ abstract contract DegenerusGameStorage {
     uint32 internal foilCursor;
     uint24 internal foilDrainDay;
     uint24 internal foilLastResolveDay;
+
+    /// @dev The previous century level's achieved prize pool: the pre-skim nextPrizePool
+    ///      recorded at the last x00 purchase→jackpot transition. _prizePoolTarget
+    ///      raises every x00 level's ratchet target to at least the curved multiple of
+    ///      this (CENTURY_FLOOR_*), so each century jackpot must outgrow the last. Zero
+    ///      until the first century completes — a zero snapshot imposes no floor, so
+    ///      level 100 itself runs on the plain ratchet. Snapshotted separately because
+    ///      _endPhase overwrites levelPrizePool[x00] with futurePool/3 as the reachable
+    ///      x01 ratchet base. Packs into the foil-cursor slot's free bytes; no prior
+    ///      storage slot shifts.
+    uint128 internal lastCenturyPrizePool;
 
     /// @dev Lifetime count of deity boons issued from a given deity to a given
     ///      recipient, keyed [deity][recipient]. Capped at DEITY_RECIPIENT_BOON_CAP

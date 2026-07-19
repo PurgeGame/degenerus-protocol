@@ -160,6 +160,14 @@
     "typeLabel": "bool"
   },
   {
+    "bytes": "1",
+    "encoding": "inplace",
+    "label": "decDayOneActive",
+    "offset": 31,
+    "slot": 0,
+    "typeLabel": "bool"
+  },
+  {
     "bytes": "16",
     "encoding": "inplace",
     "label": "currentPrizePool",
@@ -766,6 +774,14 @@
     "offset": 7,
     "slot": 63,
     "typeLabel": "uint24"
+  },
+  {
+    "bytes": "16",
+    "encoding": "inplace",
+    "label": "lastCenturyPrizePool",
+    "offset": 10,
+    "slot": 63,
+    "typeLabel": "uint128"
   },
   {
     "bytes": "32",

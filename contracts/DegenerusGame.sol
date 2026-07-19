@@ -2138,12 +2138,13 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
 
     /// @notice Get the next-pool ratchet target for level progression.
     /// @dev Returns the pre-skim nextPrizePool captured at the previous level
-    ///      transition. The current level must accumulate strictly more than
-    ///      this in nextPrizePool to trigger lastPurchaseDay.
-    ///      Threshold check uses levelPrizePool[purchaseLevel - 1] = levelPrizePool[level].
+    ///      transition, raised at century levels (x00) to the curved multiple of
+    ///      the previous century's achieved pool (2x, tapering to 1.5x above 500k
+    ///      ETH and 1.3x above 1M ETH). The current level must accumulate
+    ///      strictly more than this in nextPrizePool to trigger lastPurchaseDay.
     /// @return The ratchet target value (ETH wei).
     function prizePoolTargetView() external view returns (uint256) {
-        uint256 pool = levelPrizePool[level];
+        uint256 pool = _prizePoolTarget(level + 1);
         return pool != 0 ? pool : BOOTSTRAP_PRIZE_POOL;
     }
 

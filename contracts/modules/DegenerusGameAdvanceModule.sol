@@ -236,7 +236,8 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         ) {
             uint32 purchaseDays = day - psd;
             if (
-                purchaseDays <= 1 && _getNextPrizePool() > levelPrizePool[lvl]
+                purchaseDays <= 1 &&
+                _getNextPrizePool() > _prizePoolTarget(lvl + 1)
             ) {
                 lastPurchaseDay = true;
                 compressedJackpotFlag = 2;
@@ -579,7 +580,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                         );
                     }
                     bool targetMet = _getNextPrizePool() >
-                        levelPrizePool[purchaseLevel - 1];
+                        _prizePoolTarget(purchaseLevel);
                     // Do not latch on an RNGREUSE replay day. Its NEXT day may also have a cached
                     // backfill word, which would let rngGate bypass the sole `level = lvl` writer in
                     // _finalizeRngRequest and enter jackpot one level behind. Latch only after the
@@ -611,8 +612,17 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                     }
                 }
 
-                // Consolidate prize pools for level transition
-                levelPrizePool[purchaseLevel] = _getNextPrizePool();
+                // Consolidate prize pools for level transition. A century level's
+                // achieved pool is also snapshotted as the doubling base for the
+                // next x00 target (levelPrizePool[x00] itself is later overwritten
+                // by _endPhase with the reachable x01 ratchet base).
+                {
+                    uint256 achievedPool = _getNextPrizePool();
+                    levelPrizePool[purchaseLevel] = achievedPool;
+                    if (purchaseLevel % 100 == 0) {
+                        lastCenturyPrizePool = uint128(achievedPool);
+                    }
+                }
                 _distributeYieldSurplus(rngWord);
                 _consolidatePoolsAndRewardJackpots(
                     lvl,
@@ -730,7 +740,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         // target reads as met.
         if (
             lvl != 0 &&
-            _getNextPrizePool() > levelPrizePool[lvl] &&
+            _getNextPrizePool() > _prizePoolTarget(lvl + 1) &&
             !_vrfDeadmanFired()
         ) {
             return (false, 0);
