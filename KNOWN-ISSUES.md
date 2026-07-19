@@ -104,9 +104,10 @@ transaction (a coin credit, not ETH-backed value). Immaterial; documented, not e
 
 ## 5. Automated tool findings (pre-disclosed)
 
-The full machine-readable Slither/Aderyn baseline is maintained internally — Slither 0.11.5 (2,585
-results / 101 detectors; the 136 "High" are dominated by `uninitialized-state` false positives from
-the shared-storage delegatecall architecture) + Aderyn 0.6.8 (9 High / 22 Low). CI re-runs both
+The full machine-readable Slither/Aderyn baseline is maintained internally — Slither 0.11.5 (2,558
+results / 101 detectors at tree `083e092a`; the 141 "High" are dominated by `uninitialized-state`
+false positives from the shared-storage delegatecall architecture) + Aderyn 0.6.8 (9 High / 19 Low).
+CI re-runs both
 analyzers on every push (`.github/workflows/ci.yml`); the standing per-category triage — why each is
 by-design, defended, or not-applicable — is below.
 
@@ -115,6 +116,10 @@ by-design, defended, or not-applicable — is below.
 
 **events-maths.** `resolveRedemptionLootbox` decrements `claimablePool` without a dedicated event;
 higher-level redemption events capture the context (the variable is a running tally, not a balance).
+
+**encode-packed-collision.** `AFKingSubscriptionToken._renderSvgInternal` concatenates SVG fragments
+with `abi.encodePacked(string, ...)`; the bytes render a tokenURI image and are never hashed for
+identity, keys, or authorization.
 
 **Centralization `[M-2]`.** Critical admin functions (VRF/feed swap) require sDGNRS governance; the
 remaining `onlyOwner` functions are operational (staking) or deity-pass metadata. Admin cannot drain
