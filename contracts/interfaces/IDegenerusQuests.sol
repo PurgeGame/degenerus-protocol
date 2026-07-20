@@ -45,11 +45,16 @@ interface IDegenerusQuests {
     /// @param entropy Random entropy used to determine the slot 1 quest type
     /// @param forceMintFlip Force slot 1 to MINT_FLIP (the first jackpot day, when the FLIP
     ///        redeem window is live); otherwise MINT_FLIP is excluded from the slot 1 roll.
+    /// @param forceFoil Force slot 1 to FOIL (the day the purchase phase opens); otherwise FOIL
+    ///        is excluded from the slot 1 roll.
+    /// @param forceDecimator Force slot 1 to DECIMATOR (the day a decimator burn window is
+    ///        armed). Outranks the other two.
     function rollDailyQuest(
         uint24 day,
         uint256 entropy,
         bool forceMintFlip,
-        bool forceFoil
+        bool forceFoil,
+        bool forceDecimator
     ) external;
 
     /// @notice Records player minting activity and checks quest completion

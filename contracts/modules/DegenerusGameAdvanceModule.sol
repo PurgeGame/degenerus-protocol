@@ -1373,23 +1373,52 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
             // jackpot not yet entered) so the FLIP-mint quest only lands when the redeem window is
             // live. Turbo (compressedJackpotFlag == 2) is skipped — its jackpot collapses at this
             // request, leaving no full open day for that quest.
-            // Force the buy-a-foil-pack daily on the first purchase day of a level:
-            // phaseTransitionActive is set at level end (_endPhase) and cleared only once
-            // the transition completes (line 440), and this roll runs before that completion
-            // in the same advance — so it is true exactly on the day the new purchase phase
-            // opens. Gated on gapDays == 0 so a VRF-stall backfill (which defers the whole
-            // transition to the next advance, line 412) does not roll the foil quest early.
-            // Mutually exclusive with the first-jackpot-day MINT_FLIP force (opposite cycle ends).
-            // Skipped entirely on a late-consumed word (buffered RNGREUSE clamp: day < wall day):
-            // that day's quest never rolled while the day was live, so a roll now would create a
-            // retroactive quest that immediately counts as a rolled miss against every streak.
-            // The day stays unrolled — forgiven, matching gap-backfill days.
+            // Force the buy-a-foil-pack daily on the day the purchase phase opens — the day
+            // whose jackpot run is the level's last, since the transition drains and reopens
+            // purchasing later in that same day. Whether this pass carries the final run is
+            // already decidable here, by the step arithmetic the redemption-close mirrors:
+            // turbo collapses all five logical days at the transition request (jackpotPhaseFlag
+            // is not yet set, so isTicketJackpotDay stands in for it), compressed advances two
+            // at a time mid-phase, everything else one. (phaseTransitionActive cannot serve
+            // here: it is raised after the day's word is recorded and dropped before
+            // _unlockRng, so every roll while it is set takes the recorded-word early return
+            // above.) Never collides with the MINT_FLIP force below: that fires on a level's
+            // first jackpot day, which is final only for turbo — where its own flag-2 exclusion
+            // already stands it down. Gated on gapDays == 0 so a VRF-stall backfill (which
+            // defers the whole transition to the next advance, line 412) does not roll the
+            // foil quest early.
+            //
+            // Force the decimator daily on the day a burn window arms. decDayOneActive is
+            // exactly that day: the arming request raises it a few lines after opening the
+            // window, and only the NEXT day's fresh request clears it, so it still reads true
+            // when this roll consumes the arming day's word. It outranks the other two forces
+            // (see rollDailyQuest), which costs the MINT_FLIP force on x4/x99 levels — the
+            // arming day is also those levels' first jackpot day.
+            //
+            // All three forces are skipped entirely on a late-consumed word (buffered RNGREUSE
+            // clamp: day < wall day): that day's quest never rolled while the day was live, so
+            // a roll now would create a retroactive quest that immediately counts as a rolled
+            // miss against every streak. The day stays unrolled — forgiven, matching
+            // gap-backfill days.
+            uint8 foilJpStep = 1;
+            if (compressedJackpotFlag == 2 && jackpotCounter == 0) {
+                foilJpStep = JACKPOT_LEVEL_CAP;
+            } else if (
+                compressedJackpotFlag == 1 &&
+                jackpotCounter > 0 &&
+                jackpotCounter < JACKPOT_LEVEL_CAP - 1
+            ) {
+                foilJpStep = 2;
+            }
+            bool finalJackpotRun = (jackpotPhaseFlag || isTicketJackpotDay) &&
+                jackpotCounter + foilJpStep >= JACKPOT_LEVEL_CAP;
             if (day == _simulatedDayIndexAt(ts)) {
                 quests.rollDailyQuest(
                     day,
                     currentWord,
                     lastPurchaseDay && compressedJackpotFlag != 2,
-                    phaseTransitionActive && gapDays == 0
+                    finalJackpotRun && gapDays == 0,
+                    decDayOneActive && gapDays == 0
                 );
             }
 

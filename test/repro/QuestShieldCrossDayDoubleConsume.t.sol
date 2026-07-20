@@ -98,7 +98,7 @@ contract QuestShieldCrossDayDoubleConsume is DeployProtocol {
 
     function _roll(uint24 day) private {
         vm.prank(ContractAddresses.GAME);
-        quests.rollDailyQuest(day, uint256(keccak256(abi.encode("f3-quest", day))) | 1, false, false);
+        quests.rollDailyQuest(day, uint256(keccak256(abi.encode("f3-quest", day))) | 1, false, false, false);
     }
 
     function _award(address player, uint16 amount, uint24 wallDay) private {

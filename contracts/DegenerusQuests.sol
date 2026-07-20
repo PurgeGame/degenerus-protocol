@@ -402,23 +402,35 @@ contract DegenerusQuests is IDegenerusQuests {
     /// @param forceMintFlip When true, slot 1 is MINT_FLIP (the FLIP redeem window is live this
     ///        day); when false, MINT_FLIP is excluded from the slot 1 roll so a player is never handed
     ///        a daily FLIP-mint quest they cannot complete while the window is shut.
-    /// @param forceFoil When true (the first purchase day of a level), slot 1 is the buy-a-foil-pack
-    ///        quest. Takes precedence over forceMintFlip; the two never coincide (opposite cycle ends).
-    function rollDailyQuest(uint24 day, uint256 entropy, bool forceMintFlip, bool forceFoil)
-        external
-        onlyGame
-    {
+    /// @param forceFoil When true (the day a level's purchase phase opens), slot 1 is the
+    ///        buy-a-foil-pack quest. Takes precedence over forceMintFlip.
+    /// @param forceDecimator When true (the day a decimator burn window is armed), slot 1 is the
+    ///        decimator quest, outranking both other forces so the window's opening day always
+    ///        carries it. On an x4/x99 level this is that level's first jackpot day, so it
+    ///        displaces forceMintFlip there; if that level also collapses its phase in one day
+    ///        (turbo) it displaces forceFoil too.
+    function rollDailyQuest(
+        uint24 day,
+        uint256 entropy,
+        bool forceMintFlip,
+        bool forceFoil,
+        bool forceDecimator
+    ) external onlyGame {
         DailyQuest[QUEST_SLOT_COUNT] memory quests = _loadActiveQuests();
         if (quests[0].day == day) return;
 
         // Slot 0: always MINT_ETH — just stamp the day
         _seedQuestType(quests[0], day, QUEST_TYPE_MINT_ETH);
 
-        // Slot 1: FOIL forced on the first purchase day, else MINT_FLIP on the first jackpot day
-        // (redeem window live), else a weighted random distinct from slot 0. Neither FOIL nor
-        // MINT_FLIP is in the random pool (see _bonusQuestType), so each only lands on its forced day.
+        // Slot 1: DECIMATOR forced on the day a burn window arms, else FOIL on the day the
+        // purchase phase opens, else MINT_FLIP on the first jackpot day (redeem window live),
+        // else a weighted random distinct from slot 0. Neither FOIL nor MINT_FLIP is in the
+        // random pool (see _bonusQuestType), so each only lands on its forced day; DECIMATOR is
+        // additionally rollable at random for the rest of a window.
         uint8 bonusType;
-        if (forceFoil) {
+        if (forceDecimator) {
+            bonusType = QUEST_TYPE_DECIMATOR;
+        } else if (forceFoil) {
             bonusType = QUEST_TYPE_FOIL;
         } else if (forceMintFlip) {
             bonusType = QUEST_TYPE_MINT_FLIP;
@@ -1544,14 +1556,20 @@ contract DegenerusQuests is IDegenerusQuests {
      *
      *      Availability Rules:
      *      1. decWindow() must be true (set by game during decimator windows)
-     *      2. Level 100, 200, 300... (multiples of DECIMATOR_SPECIAL_LEVEL)
-     *      3. Level 5, 15, 25, 35... ending in 5 (except 95, 195, etc.)
+     *      2. Resolution level 100, 200, 300... (multiples of DECIMATOR_SPECIAL_LEVEL)
+     *      3. Resolution level 5, 15, 25, 35... ending in 5 (except 95, 195, etc.)
+     *
+     *      The rules are written against the RESOLUTION level -- the level burns key
+     *      into, which is level() + 1 (the basis FLIP uses at FLIP.sol:664). While a
+     *      window is open the stored level still reads the x4/x99 that opened it (the
+     *      game opens at x4/x99 and closes at x5/x00, both keyed on the incremented
+     *      level), so testing the stored level directly would never match.
      * @return True if decimator quests can be rolled.
      */
     function _canRollDecimatorQuest() private view returns (bool) {
         IDegenerusGame game_ = questGame;
         if (!game_.decWindow()) return false;
-        uint24 lvl = game_.level();
+        uint24 lvl = game_.level() + 1;
         // Always available at 100-level milestones
         if (lvl != 0 && (lvl % DECIMATOR_SPECIAL_LEVEL) == 0) return true;
         // Available at X5 levels (5, 15, 25, 35...) except X95

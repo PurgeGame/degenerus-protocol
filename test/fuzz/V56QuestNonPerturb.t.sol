@@ -276,7 +276,7 @@ contract V56QuestNonPerturb is DeployProtocol {
     ///      as GAME. Returns the day so callers thread the same currentDay into the handlers.
     function _rollDay(uint32 day) internal returns (uint32) {
         vm.prank(ContractAddresses.GAME);
-        quests.rollDailyQuest(uint24(day), uint256(keccak256(abi.encode(day, "v56qnp"))), false, false);
+        quests.rollDailyQuest(uint24(day), uint256(keccak256(abi.encode(day, "v56qnp"))), false, false, false);
         return day;
     }
 

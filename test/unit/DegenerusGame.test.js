@@ -30,7 +30,7 @@ async function rollQuestAsGame(quests, game, day, entropy) {
     "0x1000000000000000000",
   ]);
   const gameSigner = await hre.ethers.getSigner(gameAddr);
-  await quests.connect(gameSigner).rollDailyQuest(day, entropy, false, false);
+  await quests.connect(gameSigner).rollDailyQuest(day, entropy, false, false, false);
   await hre.network.provider.request({
     method: "hardhat_stopImpersonatingAccount",
     params: [gameAddr],

@@ -66,7 +66,7 @@ async function rollQuestAsGame(hreEthers, game, quests, day, entropy, forceMintF
     "0x1000000000000000000",
   ]);
   const gameSigner = await hreEthers.getSigner(gameAddr);
-  const tx = await quests.connect(gameSigner).rollDailyQuest(day, entropy, forceMintFlip, false);
+  const tx = await quests.connect(gameSigner).rollDailyQuest(day, entropy, forceMintFlip, false, false);
   await hreEthers.provider.send("hardhat_stopImpersonatingAccount", [gameAddr]);
   return { tx };
 }
@@ -126,10 +126,10 @@ async function rollQuestWithBonusType(hreEthers, game, quests, day, targetBonusT
     try {
       const [, questTypes] = await quests
         .connect(gameSigner)
-        .rollDailyQuest.staticCall(day, i, false, false);
+        .rollDailyQuest.staticCall(day, i, false, false, false);
       if (Number(questTypes[1]) === targetBonusType) {
         // Actually roll it
-        await quests.connect(gameSigner).rollDailyQuest(day, i, false, false);
+        await quests.connect(gameSigner).rollDailyQuest(day, i, false, false, false);
         found = { entropy: i, questTypes };
         break;
       }
@@ -156,7 +156,7 @@ describe("DegenerusQuests", function () {
     it("reverts OnlyGame when called by a random EOA", async function () {
       const { quests, alice } = await loadFixture(deployFullProtocol);
       await expect(
-        quests.connect(alice).rollDailyQuest(1n, 12345n, false, false)
+        quests.connect(alice).rollDailyQuest(1n, 12345n, false, false, false)
       ).to.be.revertedWithCustomError(quests, "OnlyGame");
     });
 
@@ -170,7 +170,7 @@ describe("DegenerusQuests", function () {
       ]);
       const coinSigner = await hre.ethers.getSigner(coinAddr);
       await expect(
-        quests.connect(coinSigner).rollDailyQuest(1n, 12345n, false, false)
+        quests.connect(coinSigner).rollDailyQuest(1n, 12345n, false, false, false)
       ).to.be.revertedWithCustomError(quests, "OnlyGame");
       await hre.ethers.provider.send("hardhat_stopImpersonatingAccount", [coinAddr]);
     });
@@ -1060,7 +1060,7 @@ describe("DegenerusQuests", function () {
       const gameSigner = await hre.ethers.getSigner(gameAddr);
       let chosenDay = 0n;
       for (let d = 1n; d <= 300n; d++) {
-        await quests.connect(gameSigner).rollDailyQuest(d, d * 7919n, false, false);
+        await quests.connect(gameSigner).rollDailyQuest(d, d * 7919n, false, false, false);
         const active = await quests.getActiveQuests();
         if (Number(active[1].questType) !== QUEST_TYPE_FLIP) {
           chosenDay = d;
