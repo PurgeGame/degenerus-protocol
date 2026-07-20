@@ -311,9 +311,9 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     }
 
     /// @notice Claim color-completion bingo: all 8 colors of one symbol on a level.
-    /// @dev Dispatches to GAME_BINGO_MODULE via delegatecall; void return. Sender-or-approved:
-    ///      the bingo settles to `player`, so the caller must be the owner or an approved
-    ///      operator (address(0) = msg.sender).
+    /// @dev Dispatches to GAME_BINGO_MODULE via delegatecall; void return. Permissionless:
+    ///      the bingo settles to `player` (the slot owner), never the caller, so any caller
+    ///      may settle any owner's claim (address(0) = msg.sender).
     ///      Signature: claimBingo(address player, uint24 level, uint8 symbol, uint32[8] slots) —
     ///      the owner to claim for, the level (uint24 storage-key width), the symbol 0-31
     ///      (quadrant = symbol >> 3, symInQ = symbol & 7), and the per-color positions in

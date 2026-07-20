@@ -406,8 +406,10 @@ contract RngLockDeterminism is DeployProtocol {
             return;
         }
         if (action == 18) {
+            // game.claimWhalePass is permissionless and settles to the address passed in,
+            // so the vault's claim is driven directly (no vault-side wrapper).
             vm.prank(vaultOwner);
-            try vault.gameClaimWhalePass() {} catch { return; }
+            try game.claimWhalePass(address(vault)) {} catch { return; }
             return;
         }
         if (action == 19) {

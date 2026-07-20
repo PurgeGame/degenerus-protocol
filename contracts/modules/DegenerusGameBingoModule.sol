@@ -39,9 +39,6 @@ contract DegenerusGameBingoModule is DegenerusGameStorage {
     /// @notice Thrown when this player has already claimed this (level, quadrant).
     error AlreadyClaimed();
 
-    /// @notice Thrown when msg.sender is neither the player nor an approved operator.
-    error NotApproved();
-
     // -------------------------------------------------------------------------
     // Reward constants
     // -------------------------------------------------------------------------
@@ -109,15 +106,18 @@ contract DegenerusGameBingoModule is DegenerusGameStorage {
     // -------------------------------------------------------------------------
 
     /// @notice Claim color-completion bingo: all 8 colors of one symbol on a level.
-    /// @dev Sender-or-approved: the bingo settles to `player` (the slot owner), so the caller
-    ///      must be the owner or an operator the owner approved (address(0) = msg.sender).
-    /// @param player The bingo owner to claim for (address(0) = msg.sender, else operator-approved).
+    /// @dev Permissionless: the reward settles to `player` (the slot owner the 8-color check
+    ///      verifies), never the caller, so an uninvited claim only ever harvests inward.
+    ///      Claiming early is never worse — Pool.Reward only shrinks and bingoFirsts bits only
+    ///      get set, so an earlier claim pays >= a later one.
+    /// @param player The bingo owner to claim for (address(0) = msg.sender).
     /// @param level The level to claim on (uint24 — the internal storage key width;
     ///        the ABI decoder fail-closes on an oversized value, no truncation).
     /// @param symbol Symbol 0-31 (quadrant = symbol >> 3, symInQ = symbol & 7).
     /// @param slots Per-color positions in lvlTraitEntry[level][traitId] the owner occupies.
     function claimBingo(address player, uint24 level, uint8 symbol, uint32[8] calldata slots) external {
-        player = _resolvePlayer(player);
+        // Permissionless: a settled claim only ever credits the slot owner, never the caller.
+        if (player == address(0)) player = msg.sender;
         // ---- Validation (gameOver hard cutoff + range gates) ----
         // No level upper-bound guard: the 8-color ownership check below is
         // self-gating — an unresolved/future-level bucket is empty, so the
@@ -209,9 +209,7 @@ contract DegenerusGameBingoModule is DegenerusGameStorage {
     // dispatch stub shaped like claimBingo. It is reached via the Game's
     // delegatecall (so the outbound msg.sender to SDGNRS / coinflip is GAME, which
     // both transferFromPool [onlyGame] and creditFlip [onlyFlipCreditors] require);
-    // a direct call to this module address would revert at those gates. The private
-    // caller-resolution helper (_resolvePlayer) lives here too — it gates claimBingo's
-    // sender-or-approved claim (operatorApprovals is inherited from DegenerusGameStorage).
+    // a direct call to this module address would revert at those gates.
     // -------------------------------------------------------------------------
 
     /// @notice Claim DGNRS affiliate rewards for the current level.
@@ -271,18 +269,5 @@ contract DegenerusGameBingoModule is DegenerusGameStorage {
 
         affiliateDgnrsClaimedBy[currLevel][player] = true;
         emit AffiliateDgnrsClaimed(player, currLevel, msg.sender, score, paid);
-    }
-
-    /// @dev Resolve a player argument: address(0) -> msg.sender; otherwise require
-    ///      msg.sender is the player or an approved operator. Relocated with
-    ///      claimAffiliateDgnrs (the Game retains its own copies for other callers).
-    function _resolvePlayer(
-        address player
-    ) private view returns (address resolved) {
-        if (player == address(0)) return msg.sender;
-        if (player != msg.sender && !operatorApprovals[player][msg.sender]) {
-            revert NotApproved();
-        }
-        return player;
     }
 }

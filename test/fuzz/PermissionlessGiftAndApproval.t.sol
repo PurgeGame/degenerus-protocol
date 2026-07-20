@@ -6,7 +6,7 @@ import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 /// @title PermissionlessGiftAndApproval
 /// @notice Covers the permissionless-settlement behaviors added in the permissionless work:
 ///         caller-funded gift placement (degenerette) and deposit (coinflip), the WWXRP gift
-///         exclusion, the approved-operator path, claimBingo sender-or-approved gating, and the
+///         exclusion, the approved-operator path, claimBingo permissionless settlement, and the
 ///         claimAffiliateDgnrs array overload (batch isolation + blank-array-is-self). The
 ///         security property under test is NO DRAIN: a gift never debits a non-consenting target.
 contract PermissionlessGiftAndApproval is DeployProtocol {
@@ -139,17 +139,18 @@ contract PermissionlessGiftAndApproval is DeployProtocol {
 
     event CoinflipDeposit(address indexed player, uint256 creditedFlip);
 
-    // ----- claimBingo sender-or-approved -----
+    // ----- claimBingo permissionless -----
 
-    /// @notice A non-approved third party cannot claim another player's bingo (gated at resolve).
-    function testClaimBingoThirdPartyRevertsNotApproved() public {
+    /// @notice A non-approved third party may settle another player's bingo: there is no approval
+    ///         gate, so the call falls through to the 8-color slot-ownership check.
+    function testClaimBingoThirdPartyPassesGate() public {
         uint32[8] memory slots;
         vm.prank(gifter);
-        vm.expectRevert(NotApproved.selector);
+        vm.expectRevert(NotSlotOwner.selector);
         game.claimBingo(player, 1, 0, slots);
     }
 
-    /// @notice Self-claim (address(0)) passes the approval gate (fails later on slot ownership).
+    /// @notice Self-claim (address(0)) resolves to msg.sender (fails later on slot ownership).
     function testClaimBingoSelfPassesGate() public {
         uint32[8] memory slots;
         vm.prank(player);
@@ -157,7 +158,7 @@ contract PermissionlessGiftAndApproval is DeployProtocol {
         game.claimBingo(address(0), 1, 0, slots);
     }
 
-    /// @notice An approved operator passes the gate too (fails later on slot ownership).
+    /// @notice Operator approval is neither required nor harmful on the permissionless path.
     function testClaimBingoApprovedOperatorPassesGate() public {
         vm.prank(player);
         game.setOperatorApproval(gifter, true);

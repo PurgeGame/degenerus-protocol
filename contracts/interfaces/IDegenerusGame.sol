@@ -387,7 +387,7 @@ interface IDegenerusGame {
 
     /// @notice Claim color-completion bingo: all 8 colors of one symbol on a level (v51.0).
     /// @dev Tiered reward (regular / symbol-first / quadrant-first); dispatches to the bingo module.
-    ///      Sender-or-approved: settles to `player` (address(0) = msg.sender, else operator-approved).
+    ///      Permissionless: settles to `player`, the slot owner, never the caller (address(0) = msg.sender).
     /// @param player Bingo owner to claim for (address(0) = msg.sender).
     /// @param level The level to claim on (uint24 storage-key width).
     /// @param symbol Symbol 0-31 (quadrant = symbol >> 3, symInQ = symbol & 7).

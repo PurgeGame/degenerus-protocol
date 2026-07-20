@@ -470,7 +470,7 @@ interface IDegenerusGameDegeneretteModule {
 /// @notice Interface for color-completion bingo claims + the affiliate-DGNRS claim.
 interface IDegenerusGameBingoModule {
     /// @notice Claim color-completion bingo: all 8 colors of one symbol on a level.
-    /// @param player Bingo owner to claim for (address(0) = msg.sender, else operator-approved).
+    /// @param player Bingo owner to claim for (address(0) = msg.sender); permissionless.
     /// @param level The level to claim on (uint24 storage-key width).
     /// @param symbol Symbol 0-31 (quadrant = symbol >> 3, symInQ = symbol & 7).
     /// @param slots Per-color positions in lvlTraitEntry[level][traitId] the owner occupies.

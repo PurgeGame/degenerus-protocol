@@ -248,10 +248,6 @@ describe("Governance & Gating (Phase 43)", function () {
       await expect(
         vault.connect(alice).gameClaimWinnings()
       ).to.be.revertedWithCustomError(vault, "NotVaultOwner");
-
-      await expect(
-        vault.connect(alice).gameClaimWhalePass()
-      ).to.be.revertedWithCustomError(vault, "NotVaultOwner");
     });
   });
 

@@ -944,18 +944,11 @@ contract CoverageGap222 is DeployProtocol {
         (bool o5, ) = address(sdgnrs).call(
             abi.encodeWithSignature("gameAdvance()")
         );
-        vm.prank(buyer);
-        (bool o6, ) = address(sdgnrs).call(
-            abi.encodeWithSignature("gameClaimWhalePass()")
-        );
         assertFalse(o1, "sdgnrs.resolveRedemptionPeriod rejected non-authorized caller");
         assertFalse(o2, "sdgnrs.claimRedemption rejected caller with no pending redemption");
         assertFalse(o3, "sdgnrs.burnAtGameOver rejected caller before game over");
         assertFalse(o4, "sdgnrs.depositSteth rejected non-authorized caller");
         assertFalse(o5, "sdgnrs.gameAdvance rejected non-game caller");
-        // gameClaimWhalePass is a proxy for the caller's own whale-pass claim;
-        // sDGNRS has nothing pending here, so the claim reverts (same shape as game.claimWhalePass).
-        assertFalse(o6, "sdgnrs.gameClaimWhalePass reverts when nothing pending");
     }
 
     // ====================================================================
@@ -1039,10 +1032,6 @@ contract CoverageGap222 is DeployProtocol {
             abi.encodeWithSignature("gameClaimWinnings()")
         );
         vm.prank(buyer);
-        (bool o3, ) = address(vault).call(
-            abi.encodeWithSignature("gameClaimWhalePass()")
-        );
-        vm.prank(buyer);
         (bool o4, ) = address(vault).call(
             abi.encodeWithSignature("gameSetAutoRebuy(bool)", true)
         );
@@ -1072,7 +1061,6 @@ contract CoverageGap222 is DeployProtocol {
         );
         assertFalse(o1, "vault.gameAdvance rejected non-vaultOwner caller");
         assertFalse(o2, "vault.gameClaimWinnings rejected non-vaultOwner caller");
-        assertFalse(o3, "vault.gameClaimWhalePass rejected non-vaultOwner caller");
         assertFalse(o4, "vault.gameSetAutoRebuy rejected non-vaultOwner caller");
         assertFalse(o5, "vault.gameSetAutoRebuyTakeProfit rejected non-vaultOwner caller");
         assertFalse(o6, "vault.gameSetAfKingMode rejected non-vaultOwner caller");

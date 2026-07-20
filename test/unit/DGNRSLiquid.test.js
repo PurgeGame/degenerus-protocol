@@ -516,11 +516,13 @@ describe("DGNRS (DGNRS Liquid Token)", function () {
       await expect(sdgnrs.connect(alice).gameAdvance()).to.not.be.reverted;
     });
 
-    it("gameClaimWhalePass is permissionless (no auth gate; reverts only because nothing is pending)", async function () {
+    it("sDGNRS's whale pass is claimable by anyone (no auth gate; reverts only because nothing is pending)", async function () {
       const { sdgnrs, alice, game } = await loadFixture(deployFullProtocol);
-      // No caller restriction: alice (a non-owner) reaches the claim logic and reverts with
-      // the game's NothingToClaim error (empty claim) — not an authorization error.
-      await expect(sdgnrs.connect(alice).gameClaimWhalePass())
+      // game.claimWhalePass is permissionless and settles to the address passed in, so alice
+      // (a non-owner) can settle sDGNRS's claim directly — no sDGNRS-side wrapper needed.
+      // She reaches the claim logic and reverts with NothingToClaim (empty claim), not an
+      // authorization error.
+      await expect(game.connect(alice).claimWhalePass(sdgnrs.target))
         .to.be.revertedWithCustomError(game, "NothingToClaim");
     });
 
