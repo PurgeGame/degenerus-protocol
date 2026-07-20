@@ -2323,7 +2323,9 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         return decWindowOpen;
     }
 
-    /// @notice Jackpot compression tier: 0=normal, 1=compressed (3d), 2=turbo (1d).
+    /// @notice Jackpot compression tier: 0=normal, 1=compressed (3d), 2=turbo (1d). A turbo's
+    ///         2 lingers through the next level's first purchase-day settlement, where it is
+    ///         consumed as the coinflip bonus-day latch.
     function jackpotCompressionTier() external view returns (uint8) {
         return compressedJackpotFlag;
     }

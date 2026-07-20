@@ -664,14 +664,23 @@ describe("CompressedJackpot", function () {
       await drainTurboSameDay(game, deployer, mockVRF, advanceModule, 42n);
       const tsAfter = await getBlockTimestamp();
 
-      // Level advanced, phase is back to purchase, flag reset — all within one day.
+      // Level advanced, phase is back to purchase — all within one day. The
+      // turbo flag survives phase end as the coinflip bonus-day latch (the
+      // collapsed phase never spans a flip settlement, so the bonus shifts to
+      // the next level's first purchase day).
       expect(await game.level()).to.equal(levelBefore + 1n, "Level should advance by 1");
       expect(await game.jackpotPhase()).to.equal(false, "Should be back in purchase phase");
-      expect(await game.jackpotCompressionTier()).to.equal(0, "Turbo flag should reset");
+      expect(await game.jackpotCompressionTier()).to.equal(2, "Turbo flag survives as the bonus-day latch");
 
       // Drain completed without any day-boundary crossing (timestamp stayed within 24h window).
       expect(tsAfter - tsBefore).to.be.lessThan(86400,
         "Turbo drain should complete within a single physical day (no day rollover)");
+
+      // The next (normal) purchase day's settlement consumes the latch.
+      await advanceToNextDay();
+      await driveOneCycleSameDay(game, deployer, mockVRF, advanceModule, 4242n);
+      expect(await game.jackpotCompressionTier()).to.equal(0,
+        "Latch consumed by the next purchase day's settlement");
     });
 
     it("two consecutive turbo levels complete in 2 physical days (1 day per level)", async function () {
@@ -687,7 +696,9 @@ describe("CompressedJackpot", function () {
       await advanceToNextDay();
       await drainTurboSameDay(game, deployer, mockVRF, advanceModule, 42n);
       expect(await game.level()).to.equal(levelBefore + 1n);
-      expect(await game.jackpotCompressionTier()).to.equal(0);
+      // Bonus-day latch armed; the next day is itself a last-purchase (turbo)
+      // day, so the latch defers rather than consuming.
+      expect(await game.jackpotCompressionTier()).to.equal(2);
 
       // Fund the next level's pool so the target is already met when the
       // next purchase phase's first advance runs.
@@ -700,7 +711,14 @@ describe("CompressedJackpot", function () {
 
       expect(await game.level()).to.equal(levelBefore + 2n, "Second level should also advance");
       expect(await game.jackpotPhase()).to.equal(false);
-      expect(await game.jackpotCompressionTier()).to.equal(0);
+      // Chain latch still armed after the second collapse; the first normal
+      // purchase day settles and consumes it.
+      expect(await game.jackpotCompressionTier()).to.equal(2);
+
+      await advanceToNextDay();
+      await driveOneCycleSameDay(game, deployer, mockVRF, advanceModule, 7777n);
+      expect(await game.jackpotCompressionTier()).to.equal(0,
+        "Deferred chain latch consumed on the first normal purchase day");
     });
   });
 });

@@ -873,7 +873,9 @@ contract Coinflip {
 
     /// @notice Process coinflip payout for a day (called by game contract).
     /// @param bonus Reward-percent bonus for this day, precomputed by the caller from frozen state:
-    ///        0 = normal day, 2 = bonus day (level 0 or a first jackpot day), 6 = x0-level bonus day.
+    ///        0 = normal day, 2 = bonus day (a level-0 day, the second day of a level's jackpot
+    ///        phase, or the first purchase day after a turbo collapse), 6 = the same on an x0
+    ///        BAF level (10, 20, 30, …).
     /// @param rngWord VRF-derived random word for determining win/loss and bonus.
     /// @param epoch The day index being resolved.
     function processCoinflipPayouts(
@@ -901,9 +903,10 @@ contract Coinflip {
         }
         IDegenerusGame game = degenerusGame;
         // Apply the day's coinflip bonus, precomputed by the caller from frozen protocol state
-        // (not a player-flippable flag): 0 on a normal day, +2 on a bonus day (level 0 or a
-        // level's first jackpot day), +6 on a post-BAF x0-level bonus day. Sized so a recycling
-        // player nets ~99.9% / ~101.9% RTP after the recycle bonus compounds. Adding 0 is a no-op.
+        // (not a player-flippable flag): 0 on a normal day, +2 on a bonus day (a level-0 day,
+        // the second day of a level's jackpot phase, or the first purchase day after a turbo
+        // collapse), +6 on an x0 BAF-level bonus day. Sized so a recycling player nets
+        // ~99.9% / ~101.9% RTP after the recycle bonus compounds. Adding 0 is a no-op.
         unchecked {
             rewardPercent += bonus;
         }

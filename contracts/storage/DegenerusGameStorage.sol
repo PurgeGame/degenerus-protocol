@@ -319,7 +319,8 @@ abstract contract DegenerusGameStorage {
     ///      Set when purchase-phase target is met quickly, signaling high player interest.
     ///      Turbo (2): target met within 1 day — entire jackpot in 1 physical day.
     ///      Compressed (1): target met within 3 days — 5 logical days in 3 physical.
-    ///      Cleared at phase end.
+    ///      0/1 clear at phase end; 2 survives as the coinflip bonus-day latch and is
+    ///      consumed by the next level's first purchase-day settlement in rngGate.
     uint8 internal compressedJackpotFlag;
 
     /// @dev True when the read slot has been fully drained (all tickets processed).

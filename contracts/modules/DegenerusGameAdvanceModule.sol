@@ -446,11 +446,26 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
             }
 
             // RNG: use existing word or request new one. Precompute the day's coinflip reward
-            // bonus from the frozen level: +2 on a bonus day (level 0 or a level's first jackpot
-            // day), +6 on a post-BAF x0-level first-jackpot-day (levels 10, 20, 30, …; level 0
-            // is excluded — no BAF precedes it), 0 otherwise. Sized so a recycling (auto-rebuy)
-            // player nets ~99.9% / ~101.9% RTP once the 0.75% recycle bonus compounds in.
-            bool bonusDay = (inJackpot && jackpotCounter == 0) || lvl == 0;
+            // bonus from the frozen level: +2 on a bonus day, +6 when the bonus level is an x0
+            // BAF level (10, 20, 30, …), 0 otherwise. The bonus day is the SECOND day of a
+            // level's jackpot phase — phase entry and jackpot #1 land on the prior (last
+            // purchase) day, whose flips settle before the jackpotPhaseFlag write below, so the
+            // second day's settlement is the one that observes jackpotCounter == 1. Level-0 days
+            // all carry +2. A turbo level's collapsed phase never spans a settlement, so its
+            // bonus shifts to the next level's first purchase day, marked by the
+            // compressedJackpotFlag == 2 latch that _endPhase preserves and rngGate consumes at
+            // that settlement; a last-purchase day is excluded (its flag 2 is a freshly-armed
+            // turbo, not a surviving latch), which defers a back-to-back turbo chain's bonus to
+            // the first normal purchase day after the final collapse. lvl already names the
+            // bonus level in every branch: pre-incremented at the transition request for
+            // jackpot days, not yet re-incremented on the post-turbo purchase day. Sized so a
+            // recycling (auto-rebuy) player nets ~99.9% / ~101.9% RTP once the 0.75% recycle
+            // bonus compounds in.
+            bool bonusDay = (inJackpot && jackpotCounter == 1) ||
+                lvl == 0 ||
+                (!inJackpot &&
+                    !lastPurchase &&
+                    compressedJackpotFlag == 2);
             uint8 coinflipBonus = bonusDay
                 ? (lvl != 0 && lvl % 10 == 0 ? 6 : 2)
                 : 0;
@@ -840,7 +855,12 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
             levelPrizePool[lvl] = _getFuturePrizePool() / 3;
         }
         jackpotCounter = 0;
-        compressedJackpotFlag = 0;
+        // Turbo (2) survives phase end as the coinflip bonus-day latch: a
+        // collapsed phase never spans a flip settlement, so the level's bonus
+        // day shifts to the next level's first purchase day, where rngGate
+        // consumes the latch. Compressed (1) keeps a real second jackpot day
+        // and clears here like a normal level.
+        if (compressedJackpotFlag != 2) compressedJackpotFlag = 0;
     }
 
     /*+================================================================================================================+
@@ -1338,6 +1358,17 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
             // Normal daily RNG processing (request from current day)
             currentWord = _applyDailyRng(day, currentWord);
             coinflip.processCoinflipPayouts(coinflipBonus, currentWord, day);
+            // Consume the turbo coinflip-bonus latch once the settlement it
+            // marks (the next level's first purchase day) has been paid. A
+            // last-purchase day's settlement leaves flag 2 in place: that is a
+            // freshly-armed turbo for tonight's collapse, not a spent latch.
+            if (
+                compressedJackpotFlag == 2 &&
+                !jackpotPhaseFlag &&
+                !isTicketJackpotDay
+            ) {
+                compressedJackpotFlag = 0;
+            }
             // Force the MINT_FLIP daily on the first jackpot day (lastPurchaseDay still set here,
             // jackpot not yet entered) so the FLIP-mint quest only lands when the redeem window is
             // live. Turbo (compressedJackpotFlag == 2) is skipped — its jackpot collapses at this
