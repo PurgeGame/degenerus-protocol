@@ -109,6 +109,7 @@ results / 101 detectors at tree `3878469e`; the 143 "High" are dominated by `uni
 false positives from the shared-storage delegatecall architecture) + Aderyn 0.6.8 (9 High / 19 Low).
 Slither totals are sensitive to the scan environment (solc/toolchain resolution), so the absolute
 count is not comparable across machines — re-runs should compare category triage, not the total.
+These counts were measured directly at tree `3878469e`, not carried forward from an earlier scan.
 CI re-runs both
 analyzers on every push (`.github/workflows/ci.yml`); the standing per-category triage — why each is
 by-design, defended, or not-applicable — is below.
