@@ -10,9 +10,9 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 ///        VAULT's pinned slot 0 excluded, prize = 10 whole FLIP per funded
 ///        tenure day capped at 4,000, credited via coinflip.creditFlip. The
 ///        winner is fully deterministic from the sealed day's word, so each
-///        day's SeatDrawWon (or its dud absence) is asserted exactly.
+///        day's SubDrawWon (or its dud absence) is asserted exactly.
 contract SeatTenureDraw is DeployProtocol {
-    event SeatDrawWon(
+    event SubDrawWon(
         address indexed winner,
         uint24 day,
         uint24 spanDays,
@@ -62,14 +62,14 @@ contract SeatTenureDraw is DeployProtocol {
         return 1 + (uint256(keccak256(abi.encodePacked("SEATDRAW", word))) % (len - 1));
     }
 
-    /// @dev Collect SeatDrawWon events recorded since the last vm.recordLogs().
+    /// @dev Collect SubDrawWon events recorded since the last vm.recordLogs().
     ///      The module emits under delegatecall, so the emitter is address(game).
     function _drawEvents()
         internal
         returns (uint256 count, address winner, uint24 day, uint24 span, uint256 flipAmount)
     {
         Vm.Log[] memory logs = vm.getRecordedLogs();
-        bytes32 sig = keccak256("SeatDrawWon(address,uint24,uint24,uint256)");
+        bytes32 sig = keccak256("SubDrawWon(address,uint24,uint24,uint256)");
         for (uint256 i; i < logs.length; i++) {
             if (logs[i].emitter != address(game) || logs[i].topics[0] != sig) continue;
             count++;

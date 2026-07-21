@@ -1,7 +1,7 @@
 # Degenerus Protocol — Audit Scope
 # Solidity 0.8.34 | Hardhat + Foundry | viaIR=true | Optimizer runs=1000 | evmVersion=osaka
 #
-# Frozen subject: contracts/ tree 622b9a51 @ tag degenerus-c4a (post-v75.0 hardening freeze).
+# Frozen subject: contracts/ tree 0320e3d3 @ tag degenerus-c4a (post-v75.0 hardening freeze).
 # Checkout: git checkout degenerus-c4a
 # This list supersedes the v55-era scope.txt (which named BurnieCoin/BurnieCoinflip/
 # WrappedWrappedXRP/EndgameModule — all renamed or removed in this subject).
@@ -38,7 +38,7 @@ contracts/AFKingSubscriptionToken.sol        # afking seat ERC-721 (sub <=> seat
 ## In Scope — Deployed delegatecall game modules (12)                       nSLOC
 # All share DegenerusGameStorage; execute in DegenerusGame's context.
 contracts/modules/DegenerusGameMintModule.sol         #                          1365
-contracts/modules/DegenerusGameAdvanceModule.sol      # VRF + advance + deadman   1326
+contracts/modules/DegenerusGameAdvanceModule.sol      # VRF + advance + deadman   1355
 contracts/modules/DegenerusGameWhaleModule.sol        # whale/lazy/deity passes    676
 contracts/modules/DegenerusGameJackpotModule.sol      # daily jackpots + BAF      1425
 contracts/modules/DegenerusGameDecimatorModule.sol    #                            585
@@ -88,14 +88,14 @@ contracts/DeityBoonViewer.sol      # read-only deity-boon lens (no value custody
 
 ## nSLOC totals
 #   Core deployed (15)              8428
-#   Deployed modules (12)           9739
+#   Deployed modules (12)           9768
 #   Abstract module bases (2)        461
 #   Shared storage (1)              1183
 #   Libraries (8)                    482
 #   Interfaces (11)                  670
 #   Standalone in-scope (1)          154
 #   --------------------------------------
-#   TOTAL  50 files                21117 nSLOC
+#   TOTAL  50 files                21146 nSLOC
 #   (nSLOC = non-blank, non-comment source lines, comment- and string-aware. Every
 #    per-file value above and every subtotal here is measured directly at the pinned
 #    tree; rows sum to their group subtotal and the subtotals sum to TOTAL.)
