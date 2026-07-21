@@ -58,6 +58,7 @@ DegenerusGame.sol (main entry point, delegatecall dispatcher)
 | DGNRS | Transferable ERC-20 wrapper for sDGNRS |
 | DeityBoonViewer | Standalone deity boon slot viewer |
 | GNRUS | Soulbound charity token with sDGNRS-governed level-based donations |
+| AFKingSubscriptionToken | AfKing seat ERC-721 (subscription <-> seat) |
 | WWXRP | Meme wrapper contract |
 | Icons32Data | On-chain SVG icon path and symbol name storage |
 
@@ -71,6 +72,7 @@ DegenerusGame.sol (main entry point, delegatecall dispatcher)
 | GameTimeLib | Day/epoch boundary calculations |
 | JackpotBucketLib | Jackpot tier allocation math |
 | PriceLookupLib | Ticket price curves by level |
+| DegenerusTraitUtils | Trait generation and foil rarity math (lives at `contracts/`, not `contracts/libraries/`) |
 
 ## Repository Layout
 
@@ -78,7 +80,7 @@ DegenerusGame.sol (main entry point, delegatecall dispatcher)
 
 ## Deployment
 
-All contract addresses are compile-time constants in `ContractAddresses.sol`. Deployment is nonce-deterministic: addresses are predicted from the deployer nonce, patched into `ContractAddresses.sol`, then everything is recompiled and deployed in fixed order — Icons32Data and the modules first, then the tokens and game contracts, then contracts that depend on earlier ones (DGNRS, ADMIN, GNRUS). The FoilPack module deploys last so it shifts no other address.
+All contract addresses are compile-time constants in `ContractAddresses.sol`. Deployment is nonce-deterministic: addresses are predicted from the deployer nonce, patched into `ContractAddresses.sol`, then everything is recompiled and deployed in fixed order — Icons32Data and the modules first, then the tokens and game contracts, then contracts that depend on earlier ones (DGNRS, ADMIN, GNRUS). The FoilPack module and then AFKingSubscriptionToken are appended last, so neither shifts any earlier address.
 
 The `ContractAddresses.sol` values committed here are the **Foundry deterministic-test set** (with template `VRF_KEY_HASH = 0xabab…` and `DEPLOY_DAY_BOUNDARY = 0`), not a production manifest — a clean checkout builds and tests against them with no patching. `scripts/lib/predictAddresses.js` and `scripts/deploy.js` regenerate the real set for an actual deployment.
 
@@ -124,7 +126,7 @@ A secondary Hardhat behavioral suite (`npx hardhat test`) provides additional co
 
 ## Scope & Known Issues
 
-- **`scope.txt` / `out_of_scope.txt`** — the exact audited surface, pinned to `contracts/` tree `da490ee0` (tag `degenerus-c4a`).
+- **`scope.txt` / `out_of_scope.txt`** — the exact audited surface, pinned to `contracts/` tree `2542ff78` (tag `degenerus-c4a`).
 - **`KNOWN-ISSUES.md`** — every pre-triaged finding, by-design ruling, and static-analysis disposition, each with its precise mechanism. Not vague disclaimers.
 - **`SECURITY.md`** — threat model, trusted-role matrix (functional authority, not just Solidity modifiers), and disclosure process.
 - **`ECONOMIC_DISCLOSURES.md`** — creator allocations, vesting, governance control, the WWXRP reserve, and terminal value — every figure cited to a contract line.
