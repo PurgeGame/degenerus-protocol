@@ -2325,7 +2325,9 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
 
     /// @notice Jackpot compression tier: 0=normal, 1=compressed (3d), 2=turbo (1d). A turbo's
     ///         2 lingers through the next level's first purchase-day settlement, where it is
-    ///         consumed as the coinflip bonus-day latch.
+    ///         consumed as the coinflip bonus-day latch. 3 = that settlement day armed the
+    ///         next turbo before settling (back-to-back chain): armed + bonus owed, dropping
+    ///         back to 2 at the settlement.
     function jackpotCompressionTier() external view returns (uint8) {
         return compressedJackpotFlag;
     }

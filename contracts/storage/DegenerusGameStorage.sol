@@ -58,7 +58,7 @@ import {MintPaymentKind} from "../interfaces/IDegenerusGame.sol";
  * | [20:21] phaseTransitionActive    bool     Level transition in progress          |
  * | [21:22] gameOver                 bool     Terminal state flag                   |
  * | [22:23] dailyJackpotCoinTicketsPending bool Split jackpot pending flag          |
- * | [23:24] compressedJackpotFlag    uint8    0=normal, 1=compressed, 2=turbo       |
+ * | [23:24] compressedJackpotFlag    uint8    0=norm 1=comp 2=turbo 3=turbo+owed    |
  * | [24:25] ticketsFullyProcessed    bool     Read slot fully drained flag          |
  * | [25:26] ticketWriteSlot          bool     Double-buffer write toggle            |
  * | [26:27] prizePoolFrozen          bool     Prize pool freeze active flag         |
@@ -320,7 +320,10 @@ abstract contract DegenerusGameStorage {
     ///      Turbo (2): target met within 1 day — entire jackpot in 1 physical day.
     ///      Compressed (1): target met within 3 days — 5 logical days in 3 physical.
     ///      0/1 clear at phase end; 2 survives as the coinflip bonus-day latch and is
-    ///      consumed by the next level's first purchase-day settlement in rngGate.
+    ///      consumed by the next level's first purchase-day settlement in rngGate. When
+    ///      that day itself arms the next turbo (back-to-back chain), the arm escalates
+    ///      the latch to 3 = armed turbo + predecessor's bonus still owed; the day's
+    ///      settlement pays the bonus and drops 3 back to 2.
     uint8 internal compressedJackpotFlag;
 
     /// @dev True when the read slot has been fully drained (all tickets processed).

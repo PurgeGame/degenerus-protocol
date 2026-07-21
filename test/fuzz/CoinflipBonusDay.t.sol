@@ -73,13 +73,15 @@ contract CoinflipBonusRecorder {
 ///           observes jackpotPhase == true (phase entry and jackpot day 1 both
 ///           happen on the prior, last-purchase day).
 ///         - turbo level N (1-day jackpot collapse): same bonus exactly on the
-///           first purchase day of the next level — the first settled epoch
-///           after the collapse that is not itself a last-purchase day. The
-///           compressedJackpotFlag == 2 latch survives _endPhase to mark it and
-///           is consumed by that settlement.
-///         - back-to-back turbos defer: each intermediate day is itself a
-///           last-purchase day, so the chain pays a single bonus on the first
-///           normal purchase day after the final collapse.
+///           first purchase day of the next level, whether or not that day
+///           itself arms the next turbo. The compressedJackpotFlag == 2 latch
+///           survives _endPhase to mark it and is consumed by that settlement;
+///           a same-day arm escalates it to 3 (armed + bonus owed) so the
+///           bonus still pays, keyed to the COLLAPSED level.
+///         - back-to-back turbos: every post-payout day carries its own bonus.
+///           A chained arm day records tier 3 and its bonus keys level - 1
+///           (the recorded level is the newly-armed cohort, pre-incremented at
+///           the arm request).
 ///         - every other settled epoch carries bonus 0.
 contract CoinflipBonusDayTest is DeployProtocol {
     uint256 private constant PRIZE_POOLS_PACKED_SLOT = 2;
@@ -305,11 +307,15 @@ contract CoinflipBonusDayTest is DeployProtocol {
                     assertEq(r.bonus, 0, "later jackpot days carry no bonus");
                 }
             } else if (r.bonus != 0) {
-                // Out-of-phase bonus: only legal as a consumed turbo latch.
-                assertEq(
-                    r.tier,
-                    2,
+                // Out-of-phase bonus: only legal as a turbo-latch settlement.
+                // Tier 3 = a chained arm day (armed + owed): the recorded
+                // level is the newly-armed cohort, so the bonus keys level-1.
+                assertTrue(
+                    r.tier == 2 || r.tier == 3,
                     "out-of-phase bonus requires the turbo latch armed"
+                );
+                expected = _expectedLevelBonus(
+                    r.tier == 3 ? r.lvl - 1 : r.lvl
                 );
                 assertEq(
                     r.bonus,
@@ -444,9 +450,12 @@ contract CoinflipBonusDayTest is DeployProtocol {
         );
     }
 
-    /// @notice Back-to-back turbos: intermediate days are last-purchase days,
-    ///         so the chain pays exactly one bonus, after the final collapse.
-    function testBackToBackTurboPaysSingleDeferredBonus() public {
+    /// @notice Back-to-back turbos: every post-payout day pays its own bonus.
+    ///         Cohort 4's bonus lands on cohort 5's arm day (recorded tier 3
+    ///         at the post-increment level 5, keying collapsed level 4);
+    ///         cohort 5's lands on cohort 6's first purchase day via the plain
+    ///         tier-2 latch.
+    function testBackToBackTurboPaysBonusPerCollapse() public {
         for (uint256 day = 0; day < 250; day++) {
             if (game.gameOver()) break;
             if (game.level() > 6) break;
@@ -461,35 +470,46 @@ contract CoinflipBonusDayTest is DeployProtocol {
         assertEq(_inPhaseEpochCount(4), 0, "cohort 4 collapsed");
         assertEq(_inPhaseEpochCount(5), 0, "cohort 5 collapsed");
 
-        // Exactly one out-of-phase (turbo) bonus for the seeded 4->5 chain,
-        // keyed to the LAST collapsed level; the audit separately pins every
-        // bonus's value/tier. Early levels may turbo organically (their
-        // targets sit below the drive baseline), so the count is scoped to
-        // the chain's levels rather than the whole drive.
+        // Both chain bonuses record level 5: the tier-3 settlement is cohort
+        // 5's arm day (level pre-incremented by the arm request, bonus keyed
+        // to collapsed cohort 4) and the tier-2 settlement is cohort 6's
+        // first purchase day (level not yet re-incremented, keyed to cohort
+        // 5). The audit separately pins every bonus's value/tier; the scan is
+        // scoped to level 5 because early levels may turbo organically.
         (uint256 bonusEpochs, ) = _auditAllEpochs();
-        uint256 chainBonuses;
+        uint256 chainedBonuses;
+        uint256 latchBonuses;
+        uint256 chainedEpoch = type(uint256).max;
+        uint256 latchEpoch;
         for (uint256 e = 0; e <= MAX_EPOCH_SCAN; e++) {
             DayRec memory r = _rec(e);
-            if (
-                r.settled &&
-                !r.inJackpot &&
-                r.bonus != 0 &&
-                (r.lvl == 4 || r.lvl == 5)
-            ) {
-                chainBonuses++;
-                assertEq(
-                    r.lvl,
-                    5,
-                    "deferred chain bonus keys the last collapsed level"
-                );
+            if (!r.settled || r.inJackpot || r.bonus == 0 || r.lvl != 5) {
+                continue;
+            }
+            if (r.tier == 3) {
+                chainedBonuses++;
+                chainedEpoch = e;
+            } else {
+                latchBonuses++;
+                latchEpoch = e;
             }
         }
         assertEq(
-            chainBonuses,
+            chainedBonuses,
             1,
-            "turbo chain pays exactly one deferred bonus"
+            "cohort 4's bonus pays on cohort 5's arm day (tier 3)"
         );
-        assertGe(bonusEpochs, 1, "audit saw the chain bonus");
+        assertEq(
+            latchBonuses,
+            1,
+            "cohort 5's bonus pays on cohort 6's first purchase day"
+        );
+        assertLt(
+            chainedEpoch,
+            latchEpoch,
+            "chained bonus settles before the plain latch bonus"
+        );
+        assertGe(bonusEpochs, 2, "audit saw both chain bonuses");
         assertEq(game.jackpotCompressionTier(), 0, "latch clear at end");
     }
 }
