@@ -4,7 +4,7 @@ Pre-disclosure for audit wardens. **If a finding's mechanism + impact is describ
 already known and is not eligible.** This is a precise perimeter — each entry names the exact
 mechanism and why it is by-design, defended, or out-of-scope. There are no vague blanket disclaimers.
 
-Frozen subject: `contracts/` tree `c334546f` @ tag `degenerus-c4a`. Pre-scanned with Slither v0.11.5
+Frozen subject: `contracts/` tree `da490ee0` @ tag `degenerus-c4a`. Pre-scanned with Slither v0.11.5
 + Aderyn 0.6.8; those findings are triaged in the automated-tools section below.
 
 ---
@@ -105,11 +105,11 @@ transaction (a coin credit, not ETH-backed value). Immaterial; documented, not e
 ## 5. Automated tool findings (pre-disclosed)
 
 The full machine-readable Slither/Aderyn baseline is maintained internally — Slither 0.11.5 (2,879
-results / 101 detectors at tree `c334546f`; the 143 "High" are dominated by `uninitialized-state`
+results / 101 detectors at tree `da490ee0`; the 143 "High" are dominated by `uninitialized-state`
 false positives from the shared-storage delegatecall architecture) + Aderyn 0.6.8 (9 High / 19 Low).
 Slither totals are sensitive to the scan environment (solc/toolchain resolution), so the absolute
 count is not comparable across machines — re-runs should compare category triage, not the total.
-These counts were measured directly at tree `c334546f`, not carried forward from an earlier scan.
+These counts were measured directly at tree `da490ee0`, not carried forward from an earlier scan.
 CI re-runs both
 analyzers on every push (`.github/workflows/ci.yml`); the standing per-category triage — why each is
 by-design, defended, or not-applicable — is below.
