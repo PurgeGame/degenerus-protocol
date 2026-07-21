@@ -521,17 +521,13 @@ contract JackpotSingleCallCorrectness is Test {
         );
     }
 
-    /// @notice JGAS-03 preserved ceiling: the 305-winner ceiling + the max scale + the
-    ///         159/95/50/1 bucket geometry survive byte-faithfully in the JackpotModule (the split
-    ///         removal changed routing only, not amounts/winner-counts).
+    /// @notice JGAS-03 preserved scale: the 6.36x max scale survives byte-faithfully in the
+    ///         JackpotModule. The 305-winner ceiling itself is pinned dynamically against the
+    ///         live bucket geometry by testJgas04WorstCaseFirstReframeWithMargin, which is a
+    ///         stronger check than a source grep.
     function testPreservedCeilingAndScaleConstants() public view {
         string memory src = _stripComments(
             vm.readFile("contracts/modules/DegenerusGameJackpotModule.sol")
-        );
-        assertEq(
-            _countOccurrences(src, "DAILY_ETH_MAX_WINNERS = 305"),
-            1,
-            "the 305 winner ceiling is preserved"
         );
         assertEq(
             _countOccurrences(src, "DAILY_JACKPOT_SCALE_MAX_BPS = 63_600"),

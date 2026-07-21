@@ -200,13 +200,6 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     /// Higher than ETH winners because ticket distribution is cheaper per winner.
     uint16 private constant PURCHASE_PHASE_TICKET_MAX_WINNERS = 120;
 
-    /// @dev Maximum total ETH winners across daily + carryover jackpots — the structural
-    ///      ceiling of the bucket geometry, not an enforced input: base [25,15,8,1] at the
-    ///      6.36x max scale gives 159 + 95 + 50 + 1 = 305. Per-bucket gas is bounded
-    ///      independently by MAX_BUCKET_WINNERS in _processBucket. The gas suite asserts
-    ///      this value against the geometry so a scale/base change fails loudly.
-    uint16 private constant DAILY_ETH_MAX_WINNERS = 305;
-
     /// @dev Maximum winners for daily coin jackpot (all paid in one coinflip.creditFlipBatch call).
     uint16 private constant DAILY_COIN_MAX_WINNERS = 50;
 
@@ -1028,8 +1021,10 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     // Daily Jackpot ETH — Distribution
     // =========================================================================
 
-    /// @dev Unified ETH distribution across trait buckets. All buckets are paid
-    ///      in a single call (the full DAILY_ETH_MAX_WINNERS ceiling).
+    /// @dev Unified ETH distribution across trait buckets. All buckets are paid in a single
+    ///      call. The winner total is bounded by the bucket geometry: base [25,15,8,1] at the
+    ///      DAILY_JACKPOT_SCALE_MAX_BPS ceiling gives 159 + 95 + 50 + 1 = 305, and each bucket
+    ///      is independently clamped to MAX_BUCKET_WINNERS in _processBucket.
     ///
     ///      JACKPOT PHASE vs PURCHASE/TERMINAL:
     ///      - Jackpot phase (isJackpotPhase=true): solo bucket routes its winner through the whale-pass handler (75% ETH / 25% half-passes).
