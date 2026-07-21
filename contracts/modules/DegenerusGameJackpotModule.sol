@@ -1275,13 +1275,11 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     ///
     ///      `heroEntropy` is the raw VRF entropy word for the day. This applies the main draw's
     ///      hero; the bonus draw rolls a SEPARATE hero (main slot excluded) in
-    ///      `_rollWinningTraitsPair`, so the two heroes never coincide. Symbol entropy and color
-    ///      entropy live in orthogonal domains:
-    ///      colors read bit-slices of `randomWord`; the symbol roll consumes
-    ///      `keccak256(abi.encode(heroEntropy, day))`.
+    ///      `_rollWinningTraitsPair`, so the two heroes never coincide. The symbol roll
+    ///      consumes `keccak256(abi.encode(heroEntropy, day))`; colors are untouched by
+    ///      the hero — each quadrant keeps its base-rolled color.
     function _applyHeroOverride(
         uint8[4] memory w,
-        uint256 randomWord,
         uint256 heroEntropy
     ) private view {
         (
@@ -1289,37 +1287,21 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
             uint8 heroQuadrant,
             uint8 heroSymbol
         ) = _rollHeroSymbol(dailyIdx, heroEntropy, _NO_HERO_EXCLUDE);
-        _applyHeroResult(w, randomWord, hasHeroWinner, heroQuadrant, heroSymbol);
+        _applyHeroResult(w, hasHeroWinner, heroQuadrant, heroSymbol);
     }
 
-    /// @dev Applies a resolved hero (quadrant, symbol) to a trait set, sampling
-    ///      the winning quadrant's color from `randomWord` (the per-roll word, so
-    ///      colors stay independent across rolls that share one hero result).
+    /// @dev Applies a resolved hero (quadrant, symbol) to a trait set: the hero symbol
+    ///      replaces the winning quadrant's symbol bits only. The quadrant keeps its
+    ///      base-rolled color, so all four colors stay independent 1/8 draws
+    ///      regardless of where (or whether) a hero lands.
     function _applyHeroResult(
         uint8[4] memory w,
-        uint256 randomWord,
         bool hasHeroWinner,
         uint8 heroQuadrant,
         uint8 heroSymbol
     ) private pure {
         if (!hasHeroWinner) return;
-
-        uint8 heroColor;
-        if (heroQuadrant == 0) {
-            heroColor = uint8(randomWord & 7);
-        } else if (heroQuadrant == 1) {
-            heroColor = uint8((randomWord >> 3) & 7);
-        } else if (heroQuadrant == 2) {
-            heroColor = uint8((randomWord >> 6) & 7);
-        } else {
-            heroColor = uint8((randomWord >> 9) & 7);
-        }
-
-        w[heroQuadrant] = uint8(
-            (uint256(heroQuadrant) << 6) |
-                (uint256(heroColor) << 3) |
-                uint256(heroSymbol)
-        );
+        w[heroQuadrant] = (w[heroQuadrant] & 0xF8) | heroSymbol;
     }
 
     /// @dev Samples the day's hero `(quadrant, symbol)` via a weighted random roll across
@@ -1757,7 +1739,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         if (!isBonus) {
             // Main draw — unchanged: base + hero both off the unsalted word.
             uint8[4] memory mTraits = JackpotBucketLib.getRandomTraits(randWord);
-            _applyHeroOverride(mTraits, randWord, randWord);
+            _applyHeroOverride(mTraits, randWord);
             return JackpotBucketLib.packWinningTraits(mTraits);
         }
         // Bonus draw — base off the salted word, with its own hero rolled off the
@@ -1772,7 +1754,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         );
         uint8 excl = mHas ? ((mQ << 3) | mS) : _NO_HERO_EXCLUDE;
         (bool bHas, uint8 bQ, uint8 bS) = _rollHeroSymbol(dailyIdx, r, excl);
-        _applyHeroResult(traits, r, bHas, bQ, bS);
+        _applyHeroResult(traits, bHas, bQ, bS);
         packed = JackpotBucketLib.packWinningTraits(traits);
     }
 
@@ -1780,8 +1762,9 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     ///      rolls its hero off the unsalted word; the bonus draw rolls its OWN hero
     ///      off the salted word with the main hero's slot excluded, so the two
     ///      heroes never coincide (an empty post-exclusion pool yields no bonus
-    ///      hero). Base traits and hero colors derive from each roll's own word
-    ///      (main: randWord; bonus: keccak-salted with BONUS_TRAITS_TAG).
+    ///      hero). Base traits derive from each roll's own word (main: randWord;
+    ///      bonus: keccak-salted with BONUS_TRAITS_TAG); heroes override symbol
+    ///      bits only, leaving every quadrant's base-rolled color intact.
     function _rollWinningTraitsPair(
         uint256 randWord
     ) private view returns (uint32 mainPacked, uint32 bonusPacked) {
@@ -1792,7 +1775,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         ) = _rollHeroSymbol(dailyIdx, randWord, _NO_HERO_EXCLUDE);
 
         uint8[4] memory traits = JackpotBucketLib.getRandomTraits(randWord);
-        _applyHeroResult(traits, randWord, hasHeroWinner, heroQuadrant, heroSymbol);
+        _applyHeroResult(traits, hasHeroWinner, heroQuadrant, heroSymbol);
         mainPacked = JackpotBucketLib.packWinningTraits(traits);
 
         uint256 rBonus = EntropyLib.hash2(randWord, uint256(BONUS_TRAITS_TAG));
@@ -1804,7 +1787,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
             ? ((heroQuadrant << 3) | heroSymbol)
             : _NO_HERO_EXCLUDE;
         (bool bHas, uint8 bQ, uint8 bS) = _rollHeroSymbol(dailyIdx, rBonus, excl);
-        _applyHeroResult(traits, rBonus, bHas, bQ, bS);
+        _applyHeroResult(traits, bHas, bQ, bS);
         bonusPacked = JackpotBucketLib.packWinningTraits(traits);
     }
 
