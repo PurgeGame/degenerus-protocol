@@ -106,6 +106,21 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         uint256 dgnrsAmount
     );
 
+    /// @notice Daily seat-tenure drawing paid out: one uniform draw over the afking
+    ///         ring (the VAULT's pinned slot 0 excluded) at each day-seal, prize
+    ///         proportional to the winner's funded tenure. A drawn tombstone or
+    ///         span-0 sub is a dud day (no event).
+    /// @param winner Drawn subscriber credited the FLIP prize
+    /// @param day Sealed day whose committed word drove the draw
+    /// @param spanDays Winner's funded tenure span (afkCoveredThroughDay - afkingStartDay)
+    /// @param flipAmount Whole-FLIP prize (SEAT_DRAW_FLIP_PER_DAY x span, capped)
+    event SubDrawWon(
+        address indexed winner,
+        uint24 day,
+        uint24 spanDays,
+        uint256 flipAmount
+    );
+
     /*+=======================================================================+
       |                   PRECOMPUTED ADDRESSES (CONSTANT)                    |
       +=======================================================================+*/
@@ -161,6 +176,13 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
     ///      sizes the evict chunk at ≈312 finalizes so a saturated all-evict crank stays below 10M.
     ///      A large set drains across several advanceGame calls.
     uint256 private constant SUB_STAGE_WEIGHT_BUDGET = 2500;
+
+    /// @dev Seat-tenure drawing prize rate: whole FLIP per funded tenure day of the
+    ///      drawn winner (pure days — dailyQuantity does not scale the prize).
+    uint256 private constant SEAT_DRAW_FLIP_PER_DAY = 10;
+
+    /// @dev Seat-tenure drawing prize ceiling, whole FLIP (binds from a 400-day span).
+    uint256 private constant SEAT_DRAW_MAX_FLIP = 4000;
 
     /// @notice DGNRS reward for top affiliate: 1% of remaining affiliate pool.
     uint16 private constant AFFILIATE_POOL_REWARD_BPS = 100;
@@ -2131,7 +2153,44 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                 address(this).balance + steth.balanceOf(address(this)),
                 yieldAccumulator
             );
+            _afKingSubDraw(day);
         }
+    }
+
+    /// @dev Daily seat-tenure drawing, run once per day-seal: one uniform draw over
+    ///      the afking ring, FLIP prize proportional to the winner's funded tenure
+    ///      (10/day, capped 4,000 — EV-identical to a tenure-weighted draw with a
+    ///      fixed prize, but selection is O(1)). Index 0 is the VAULT's pinned
+    ///      construction slot (never relocated: the vault is never killed or
+    ///      cancelled, and a swap-pop only moves the tail into a freed slot) and is
+    ///      excluded; index 1 (sDGNRS) and every player sub are eligible. A drawn
+    ///      tombstone or span-0 sub (no live run, or day-0) is a dud day — no
+    ///      payout, no re-probe, keeping the draw O(1); the ring is post-STAGE at
+    ///      the seal so duds are rare.
+    ///      RNG-freeze: every input is frozen across [request -> unlock] — the ring
+    ///      and Sub span fields mutate only in the pre-request STAGE and the
+    ///      lock-gated subscribe/cancel path — and the word is domain-separated
+    ///      ("SEATDRAW") from every other consumer. Gap days backfilled after a
+    ///      stall never seal through _unlockRng, so they hold no drawing.
+    function _afKingSubDraw(uint24 day) private {
+        uint256 len = _subscribers.length;
+        uint256 word = rngWordByDay[day];
+        if (len < 2 || word == 0) return;
+        uint256 idx = 1 +
+            (uint256(keccak256(abi.encodePacked("SEATDRAW", word))) % (len - 1));
+        address winner = _subscribers[idx];
+        Sub storage s = _subOf[winner];
+        uint24 startDay = s.afkingStartDay;
+        uint24 covered = s.afkCoveredThroughDay;
+        if (s.dailyQuantity == 0 || startDay == 0 || covered <= startDay) return;
+        uint256 spanDays;
+        unchecked {
+            spanDays = covered - startDay;
+        }
+        uint256 prize = spanDays * SEAT_DRAW_FLIP_PER_DAY;
+        if (prize > SEAT_DRAW_MAX_FLIP) prize = SEAT_DRAW_MAX_FLIP;
+        coinflip.creditFlip(winner, prize * 1 ether);
+        emit SubDrawWon(winner, day, uint24(spanDays), prize);
     }
 
 
