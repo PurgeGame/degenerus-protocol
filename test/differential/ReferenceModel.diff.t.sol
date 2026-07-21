@@ -98,17 +98,16 @@ contract ReferenceModelDiffTest is Test {
         return maxScaleBps;
     }
 
-    /// @notice Drives the production scaler with the cap set high enough that capBucketCounts cannot
-    ///         bind, so the observed large-bucket count isolates the piecewise-linear scale multiplier.
-    ///         Compares against the reference scale applied to the largest base bucket (25).
+    /// @notice Drives the production scaler so the observed large-bucket count isolates the
+    ///         piecewise-linear scale multiplier. Compares against the reference scale applied
+    ///         to the largest base bucket (25).
     function testFuzz_scale_matchesSpec(uint256 ethPool, uint32 maxScaleBps) public pure {
         ethPool = bound(ethPool, 0, 10_000 ether);
         maxScaleBps = uint32(bound(maxScaleBps, 20_000, 40_000)); // >= 2x per the spec's monotonic curve
 
         uint16[4] memory base = [uint16(25), 15, 8, 1];
-        uint16 hugeCap = type(uint16).max; // cap cannot bind: scaled total << 65535
         uint16[4] memory got =
-            JackpotBucketLib.scaleTraitBucketCountsWithCap(base, ethPool, 0, hugeCap, maxScaleBps);
+            JackpotBucketLib.scaleTraitBucketCounts(base, ethPool, maxScaleBps);
 
         uint256 scaleBps = _refScaleBps(ethPool, maxScaleBps);
         // Largest bucket (25) — spec: scaled = base * scaleBps / 10_000, floored at base.

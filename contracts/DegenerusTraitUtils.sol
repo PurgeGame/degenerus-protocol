@@ -73,7 +73,9 @@ pragma solidity 0.8.34;
   |                                                                              |
   |  2. ARITHMETIC SAFETY:                                                       |
   |     - Uses unchecked blocks for gas efficiency                               |
-  |     - All operations within safe bounds (no overflow possible)               |
+  |     - Safety rests on documented per-function preconditions, not on the       |
+  |       operations being unconditionally overflow-free (foilCuts requires        |
+  |       multBps in [20000, 60000])                                              |
   |     - Scaling uses uint64 intermediate to prevent truncation                 |
   |                                                                              |
   |  3. DETERMINISM:                                                             |
@@ -254,7 +256,7 @@ library DegenerusTraitUtils {
     /// @return cut Seven cumulative /15360 color cutoffs for `foilTrait`
     function foilCuts(uint16 multBps) internal pure returns (uint256[7] memory cut) {
         unchecked {
-            // /15360 tapered rare widths: base[c]*60 * (50000 + (M-1)*5*w5[c]) / 50000.
+            // /15360 tapered rare widths: base[c]*60 * (50000 + boost*w5[c]) / 50000.
             uint256 boost = uint256(multBps) - 10000;
             uint256 w3 = uint256(32) * 60; // color 3 unboosted (w5=0): held at baseline 1920
             uint256 w4 = (uint256(16) * 60 * (50000 + boost * 2)) / 50000;

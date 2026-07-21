@@ -81,9 +81,9 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
     ///      re-entry (gapDays == 0 next call), dailyIdx is not yet advanced, so advanceDue()
     ///      stays true and the next advance pays the jackpot with the same frozen word.
     uint8 private constant STAGE_GAP_BACKFILLED = 12;
-    // (stage 13, STAGE_SUBS_BACKFILL_DEFERRED, is retired: the subscriber STAGE is
-    // entry-gated on !rngLockedFlag, so it can never complete in a tx that also has a
-    // buffered word / pending backfill — the composition it deferred is unreachable.)
+    // 12 is the last stage: the subscriber STAGE is entry-gated on !rngLockedFlag, so it can
+    // never complete in a tx that also has a buffered word / pending backfill — there is no
+    // deferred-composition case left to stage.
     event DailyRngApplied(
         uint24 day,
         uint256 rawWord,
@@ -157,9 +157,8 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
     ///      (21), a cross-contract sub-ending finalize (cancel-reclaim / funding-kill) ≈29k =
     ///      `SUB_STAGE_EVICT_WEIGHT` (8)) — and ends the chunk on accumulated weight, not raw
     ///      count, so EVERY composition (including a saturated all-evict swap-pop chunk) stays on
-    ///      the <10M target with deep headroom to the 16.7M advance-chain ceiling. The lootbox and
-    ///      ticket per-chunk counts are unchanged from the prior calibration; only the evict chunk
-    ///      shrinks (≈500 → ≈312 finalizes) so a saturated all-evict crank stays below 10M.
+    ///      the <10M target with deep headroom to the 16.7M advance-chain ceiling. The budget
+    ///      sizes the evict chunk at ≈312 finalizes so a saturated all-evict crank stays below 10M.
     ///      A large set drains across several advanceGame calls.
     uint256 private constant SUB_STAGE_WEIGHT_BUDGET = 2500;
 
@@ -394,7 +393,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
             }
 
             // --- Afking process STAGE: stamp the funded subscriber set BEFORE the day
-            // requests its RNG. Inserted on the new-day path only, after the daily
+            // requests its RNG. Runs on the new-day path only, after the daily
             // ticket-drain gate and strictly before rngGate. The mid-day same-day path
             // returns earlier, so the STAGE never runs mid-day. Chunked by SUB_STAGE_BATCH across advance calls
             // (BUY_BATCH-style) so a large set stays under the 16.7M advance-chain
@@ -506,7 +505,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
             // Phase transition housekeeping + FF promotion
             if (phaseTransitionActive) {
                 // Drain the one FF level that entered near-future at this level transition.
-                // At new level L, the boundary moved from >L+4 to >L+5, making L+5 near-future.
+                // At new level L the near-future boundary is >L+5, so L+5 is near-future.
                 // No new FF entries can arrive at L+5 (tickets targeting it now route to write key).
                 // purchaseLevel = level + 1, so the FF level is purchaseLevel + 4 = level + 5.
                 uint24 ffLevel = purchaseLevel + 4;
@@ -1305,12 +1304,12 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
     //
     // Bit(s)   Consumer                    Operation                         Location
     // ------   --------                    ---------                         --------
-    // 0        Coinflip win/loss           rngWord & 1                       Coinflip._resolveDay
+    // 0        Coinflip win/loss           rngWord & 1                       Coinflip.processCoinflipPayouts
     // 0        BAF fire gate               rngWord & 1                       AdvanceModule._consolidatePoolsAndRewardJackpots
     // 8+       Redemption roll             (currentWord >> 8) % 151 + 25     AdvanceModule.rngGate
-    // full     Coinflip reward percent     keccak256(rngWord, epoch) % 20    Coinflip._resolveDay
+    // full     Coinflip reward percent     keccak256(rngWord, epoch) % 20    Coinflip.processCoinflipPayouts
     // full     Jackpot winner selection    via delegatecall (full word)      JackpotModule (payDailyJackpot)
-    // full     Coin jackpot                via delegatecall (full word)      JackpotModule (_payDailyCoinJackpot)
+    // full     Coin jackpot                via delegatecall (full word)      AdvanceModule._payDailyCoinJackpot -> payDailyFlipJackpot
     // 64+/192+ Future take variance        (rngWord>>64/>>192) % range       _consolidatePoolsAndRewardJackpots
     // low      Additive skim random        rngWord % (ADDITIVE_RANDOM_BPS+1) _consolidatePoolsAndRewardJackpots
     // full     Prize pool consolidation    in-module memory batch            _consolidatePoolsAndRewardJackpots
@@ -1503,7 +1502,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
     ///      After the 14-day GAMEOVER_RNG_FALLBACK_DELAY, uses earliest historical VRF word as
     ///      fallback (more secure than blockhash since it's already verified on-chain and
     ///      cannot be manipulated).
-    ///      Also resolves any pending gambling burn redemptions (mirrors rngGate behavior, CP-06 fix).
+    ///      Also resolves any pending gambling burn redemptions (mirrors rngGate behavior).
     /// @return word RNG word, 1 if request sent, or 0 if waiting on fallback.
     function _gameOverEntropy(
         uint48 ts,

@@ -172,7 +172,7 @@ contract DegenerusGameBoonModule is DegenerusGameStorage {
                 }
             }
         } else {
-            // Stale deity day clearing for inactive lootbox boon (matches original behavior)
+            // Stale deity day clearing for inactive lootbox boon
             uint24 deityDay = uint24(s0 >> BP_DEITY_LOOTBOX_DAY_SHIFT);
             if (deityDay != 0 && deityDay != currentDay) {
                 s0 = s0 & BP_LOOTBOX_CLEAR;

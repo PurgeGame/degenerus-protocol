@@ -12,7 +12,8 @@ pragma solidity 0.8.34;
  *      - gameOver flag is terminal
  *      - Presale: single coin presale-box (presaleOver) latch, closing at the 50-ETH applied-box-spend cap
  *      - Chainlink VRF for randomness with RNG lock to prevent manipulation
- *      - Delegatecall modules: advance, boon, decimator, degenerette, jackpot, lootbox, mint, whale (must inherit DegenerusGameStorage)
+ *      - Delegatecall modules: advance, afking, bingo, boon, decimator, degenerette, foilpack,
+ *        gameover, jackpot, lootbox, mint, whale (must inherit DegenerusGameStorage)
  *      - Prize pool flow: futurePrizePool (unified reserve) → nextPrizePool → currentPrizePool → claimableWinnings
  *
  * @dev CRITICAL INVARIANTS:
@@ -74,7 +75,8 @@ interface IDegenerusVaultOwnerGame {
  * @notice Core game contract implementing the game state machine, VRF integration,
  *         and orchestration of all gameplay mechanics.
  * @dev Inherits DegenerusGameStorage for shared storage layout with delegate modules.
- *      Uses delegatecall pattern for complex logic (8 modules: advance, boon, decimator, degenerette, jackpot, lootbox, mint, whale).
+ *      Uses delegatecall pattern for complex logic (12 modules: advance, afking, bingo, boon,
+ *      decimator, degenerette, foilpack, gameover, jackpot, lootbox, mint, whale).
  * @custom:security-contact burnie@degener.us
  */
 contract DegenerusGame is DegenerusGameMintStreakUtils {
@@ -248,7 +250,8 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
       |    mode and resets the level-start day.                                                           |
       |                                                                                                   |
       |  Keeper-bounty tiers (reward only, never an advance gate): minted today/yesterday, deity pass,    |
-      |  anyone >=30 min since level start, any pass holder >=15 min, active AFKing sub, DGVE majority.   |
+      |  anyone >=30 min into the day, any pass holder >=15 min in, active AFKing sub, DGVE majority.     |
+      |  The elapsed clock runs from the 22:57 UTC daily reset, not from level start.                     |
       |                                                                                                   |
       |  Presale — a single latch (presaleOver): the credit-gated coin-presale-box sale, active until     |
       |  applied box spend fills exactly 50 ETH; boxes bought before close stay openable afterward. The   |
@@ -257,24 +260,24 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
       +===================================================================================================+*/
 
     /// @notice Advance the game state machine by one tick.
-    /// @dev Anyone can call, but standard flows require an ETH mint today.
-    ///      This is the primary driver of game progression - called repeatedly
-    ///      to move through states and process batched operations.
+    /// @dev Permissionless — any caller, no participation requirement. This is the primary
+    ///      driver of game progression, called repeatedly to move through states and process
+    ///      batched operations.
     ///
     ///      FLOW OVERVIEW:
     ///      1. Check liveness guards (1yr deploy timeout, 120-day inactivity)
-    ///      2. Apply tiered daily gate (deity > anyone after 30min > pass after 15min > DGVE majority)
-    ///      3. Process transition housekeeping during jackpot→purchase transition
-    ///      4. Gate on RNG readiness (request new VRF if needed)
-    ///      5. Process ticket batches
-    ///      6. Execute state-specific logic:
+    ///      2. Process transition housekeeping during jackpot→purchase transition
+    ///      3. Gate on RNG readiness (request new VRF if needed)
+    ///      4. Process ticket batches
+    ///      5. Execute state-specific logic:
     ///         - TRANSITION: Housekeeping + near-future ticket prep after burn completes
     ///         - PURCHASE/JACKPOT: Process phase-specific logic
-    ///      7. Credit caller with FLIP bounty during jackpot time when not requesting or unlocking RNG
+    ///
+    ///      Returns the day-epoch stall multiplier. A standalone caller earns nothing; the
+    ///      keeper bounty is paid by the AFKing mintFlip router, which gates on _bountyEligible.
     ///
     ///      SECURITY:
     ///      - Liveness guards prevent abandoned game lockup
-    ///      - Daily gate prevents non-participants from advancing
     ///      - RNG gating ensures fairness (no manipulation during VRF window)
     ///      - Batched processing prevents DoS from large queues
     ///
@@ -1466,7 +1469,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         emit AfkingWithdrew(msg.sender, amount);
     }
 
-    /// @notice The canonical per-player prepaid afking ETH balance (replaces AfKing.poolOf).
+    /// @notice The canonical per-player prepaid afking ETH balance.
     /// @param player The player to query.
     /// @return The player's afkingFunding balance (wei).
     function afkingFundingOf(address player) external view returns (uint256) {
@@ -1865,9 +1868,11 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
       |  lives in the ContractAddresses.GAME_JACKPOT_MODULE (via delegatecall).                       |
       |                                                                                               |
       |  Jackpot Types:                                                                               |
-      |  • Daily jackpot - Paid each day to burn ticket holders (day 5 = full pool payout)            |
-      |  • Decimator - Special 100-level milestone jackpot (30% of pool)                              |
-      |  • BAF - Big-ass-flip jackpot (20% of pool at L%100=0)                                        |
+      |  • Daily jackpot - Paid each day to the level's trait-entry holders (day 5 = full pool)       |
+      |  • BAF (Big Ass Flip) - At every x10 level, and only if that day's flip won: 10% of the       |
+      |    future pool, raised to 20% at level 50 and at every x00. A losing flip marks the           |
+      |    bracket skipped and leaves the pool in place.                                              |
+      |  • Decimator - 10% of the future pool at x5 levels (excluding x95), 30% at every x00.         |
       +===============================================================================================+*/
 
     /*+======================================================================+
@@ -1879,7 +1884,8 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
       |  SECURITY:                                                           |
       |  • Admin-only access (VRF owner contract)                            |
       |  • Cannot touch claimablePool reserve (protected for player claims)  |
-      |  • All operations are value-preserving (no fund extraction)          |
+      |  • Swaps are unit-for-unit in nominal terms (no fund extraction);    |
+      |    economic parity depends on stETH trading at par, not checked here |
       +======================================================================+*/
 
     /// @notice Admin-only swap: caller sends ETH in and receives game-held stETH.
@@ -1932,7 +1938,8 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         uint256 stakeable = ethBal - reserve;
         if (amount > stakeable) revert Insolvent();
 
-        // stETH return value intentionally ignored: Lido mints 1:1 for ETH, validated by input checks
+        // submit() returns shares minted, not a stETH amount, and the value is intentionally
+        // ignored: nothing here validates the mint. Relies on Lido minting stETH ~1:1 for ETH.
         try steth.submit{value: amount}(address(0)) returns (uint256) {} catch {
             revert TransferFailed();
         }
@@ -2132,8 +2139,8 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     /*+======================================================================+
       |                   VIEW: GAME STATUS & STATE                          |
       +======================================================================+
-      |  Lightweight view functions for UI/frontend consumption. These       |
-      |  provide read-only access to game state without gas costs.           |
+      |  Lightweight view functions for UI/frontend consumption. Off-chain   |
+      |  eth_call reads are free; on-chain callers still pay gas.            |
       +======================================================================+*/
 
     /// @notice Get the next-pool ratchet target for level progression.
@@ -2405,22 +2412,27 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
       +======================================================================+
       |  Player activity score multiplier determines airdrop rewards.        |
       |                                                                      |
-      |  Activity Score Components (player engagement/loyalty metrics):      |
-      |  • Mint streak: +1% per consecutive level minted (cap 50%)           |
-      |  • Mint count: +25% for 100% participation, scaled proportionally    |
+      |  Activity Score Components — all in WHOLE POINTS, not percentages.   |
+      |  Reward curves over the score are nonlinear (see ActivityCurveLib).  |
+      |  • Mint streak: +1 pt per consecutive level minted (cap 50)          |
+      |  • Mint count: +25 pts for 100% participation, scaled proportionally |
       |  • Quest streak: +1 pt per 2 quests completed (uncapped)             |
-      |  • Affiliate points: +1% per affiliate point (cap 50%)               |
-      |  • Whale pass bonus (active only while frozen):                      |
-      |    - 10-level pass: +10%                                             |
-      |    - 100-level pass: +40%                                            |
-      |  • Deity pass bonus: +80% (always active)                            |
+      |  • Affiliate points: +1 pt per affiliate point (cap 50)              |
+      |  • Pass bonus (active only while frozen):                            |
+      |    - lazy pass (10-level): +10 pts                                   |
+      |    - whale pass (100-level): +40 pts                                 |
+      |  • Deity pass bonus: +80 pts (always active)                         |
+      |  • Cashout/smite curse: -1 pt per curse point, floored at 0          |
       |                                                                      |
       +======================================================================+*/
 
     /// @notice Calculate player's activity score in whole points.
     /// @dev Activity Score: 50 (streak) + 25 (count) + questStreak/2 (uncapped) + 50 (affiliate) + 40 (whale)
-    ///      Deity pass adds +80 in place of the whale bonus. Global hard cap: 65,534 points.
-    ///      Consumers apply their own caps (lootbox EV: 400, degenerette ROI: 305, decimator: 235).
+    ///      Deity pass adds +80 in place of the whale bonus; cashout/smite curse points subtract 1 each,
+    ///      floored at 0. Global hard cap: 65,534 points.
+    ///      Consumers map the score through their own ActivityCurveLib curve. 400 (lootbox EV),
+    ///      305 (degenerette ROI) and 235 (decimator) are that curve's first knee, not a cap — each
+    ///      curve keeps rising past its knee and saturates at ACTIVITY_EFFECTIVE_CAP_POINTS (30,000).
     /// @param player The player address to calculate for.
     /// @return scorePoints Total activity score in whole points.
     function playerActivityScore(

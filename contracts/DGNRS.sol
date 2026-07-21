@@ -222,7 +222,7 @@ contract DGNRS {
     /// @return ethOut ETH received from backing.
     /// @return stethOut stETH received from backing.
     /// @return flipOut Always 0 (kept for ABI stability).
-    /// @custom:reverts GameNotOver If called during active game (Seam-1 fix).
+    /// @custom:reverts GameNotOver If called during active game.
     function burn(uint256 amount) external returns (uint256 ethOut, uint256 stethOut, uint256 flipOut) {
         _burn(msg.sender, amount);
         if (!game.gameOver()) revert GameNotOver();

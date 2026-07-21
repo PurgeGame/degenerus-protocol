@@ -3,9 +3,9 @@ pragma solidity 0.8.34;
 
 /// @title IDegenerusJackpots
 /// @notice Interface for the jackpot distribution contract.
-/// @dev Handles BAF (Biggest and First) jackpot calculations and payouts.
+/// @dev Handles BAF (Big Ass Flip) jackpot calculations and payouts.
 interface IDegenerusJackpots {
-    /// @notice Run the BAF (Biggest and First) jackpot distribution for a level.
+    /// @notice Run the BAF (Big Ass Flip) jackpot distribution for a level.
     /// @dev Uses VRF randomness for winner selection. Access restricted to game contract.
     /// @param poolWei Total ETH pool to distribute.
     /// @param lvl The level being settled.

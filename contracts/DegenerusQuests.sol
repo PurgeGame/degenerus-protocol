@@ -44,12 +44,17 @@ import {ContractAddresses} from "./ContractAddresses.sol";
  *
  * Streak System
  * -----------------------------------------------------------------------------
- * • Every quest completion increments the streak — primary, secondary, and level
- *   quests credit independently (0.5% activity score each; uint16-capped, bounded by the activity-score cap)
+ * • Primary, secondary, and level quests credit the streak independently. A daily
+ *   completion adds 1; a level quest adds LEVEL_QUEST_STREAK_BONUS (5). While an
+ *   afking run is active, a slot-0 (primary) completion is streak-neutral locally —
+ *   the afking compute-on-read owns the primary
+ * • The streak contributes floor(questStreak / 2) whole activity-score points
+ *   (uint16-capped, and bounded again by the activity-score cap)
  * • The secondary is gated behind the primary, so the missed-day reset stays keyed
  *   to the primary; while afking the funded auto-buy stands in for the primary
  * • No tiers or difficulty variance; targets are fixed
- * • Missing a day resets streak to zero
+ * • A missed day does not always reset: unrolled/stall days can be forgiven, and
+ *   stacked streak shields are consumed before the streak drops to zero
  */
 contract DegenerusQuests is IDegenerusQuests {
     // =========================================================================
@@ -303,7 +308,7 @@ contract DegenerusQuests is IDegenerusQuests {
         uint24 lastProgressDay1;   // Slot 1: day when progress was recorded
         uint16 progress0;          // Slot 0: accumulated progress in stored units (milli-ETH / whole-FLIP / ticket count)
         uint16 progress1;          // Slot 1: accumulated progress in stored units
-        uint8 completionMask;      // Bits 0-1: per-slot completion (deduped once-per-day; every completion credits the streak)
+        uint8 completionMask;      // Bits 0-1: per-slot completion (deduped once-per-day; each completion credits the streak, except a slot-0 completion during an active afking run)
         uint8 streakShield;        // Stackable quest-streak shields, consumed on missed days to preserve streak
         uint8 shieldCenturyHighWater; // Highest streak-century credited a milestone shield this run; re-arms down on a streak reset so a genuine re-climb re-earns, while preventing double-credit of a century already passed within the run
     }
@@ -1494,8 +1499,8 @@ contract DegenerusQuests is IDegenerusQuests {
      * @dev Decode quest requirements (fixed targets, no tiers or difficulty variance).
      *      Different quest types use different requirement fields:
      *      - MINT_FLIP, FOIL → req.mints (small integer count)
-     *      - MINT_ETH, LOOTBOX → req.tokenAmount (ETH wei)
-     *      - FLIP, DECIMATOR, AFFILIATE → req.tokenAmount (FLIP base units)
+     *      - MINT_ETH, LOOTBOX, DEGENERETTE_ETH → req.tokenAmount (ETH wei)
+     *      - FLIP, DECIMATOR, AFFILIATE, DEGENERETTE_FLIP → req.tokenAmount (FLIP base units)
      * @param quest The quest to calculate requirements for.
      * @return req Requirements struct with either mints count or tokenAmount.
      */
@@ -2322,7 +2327,7 @@ contract DegenerusQuests is IDegenerusQuests {
     }
 
     /// @dev Checks if a player is eligible for the level quest.
-    ///      Requires (levelStreak >= 5 OR any active pass) AND a whole ticket's worth
+    ///      Requires (levelStreak >= 5 OR any pass ever held) AND a whole ticket's worth
     ///      of units (400 = 4 entries x the 100x quantity scale) minted at the current
     ///      or next ticket level.
     /// @param player The player address to check.
@@ -2339,7 +2344,9 @@ contract DegenerusQuests is IDegenerusQuests {
         uint16 units = uint16(packed >> 228);
         if (units < 400) return false;
 
-        // Loyalty gate: levelStreak >= 5 OR any active pass
+        // Loyalty gate: levelStreak >= 5 OR any pass ever held. By design this does NOT
+        // expire: passType is never cleared and frozenUntilLevel keeps its historical value,
+        // so a lapsed pass still satisfies the gate.
         uint24 streak = uint24(packed >> 48);
         if (streak >= 5) return true;
 

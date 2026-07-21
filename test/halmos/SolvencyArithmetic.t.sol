@@ -8,10 +8,7 @@ import {JackpotBucketLib} from "../../contracts/libraries/JackpotBucketLib.sol";
 /// @notice Proves for ALL inputs the conservation/bound properties the audit agents
 ///         argued informally:
 ///         (1) the v61 packed-pool halves round-trip with no cross-half corruption;
-///         (2) capBucketCounts bounds the winner total by maxTotal (the advanceGame
-///             gas-brick / uint8-cast guard — a counterexample = a winner count that
-///             can exceed the cap = a potential gas-DoS);
-///         (3) bucketShares never distributes MORE than the pool (no over-payment /
+///         (2) bucketShares never distributes MORE than the pool (no over-payment /
 ///             insolvency — a counterexample = ETH paid out > pool drawn from).
 /// @dev halmos --contract SolvencyArithmeticTest --solver-timeout-assertion 120000
 contract SolvencyArithmeticTest is Test {
@@ -37,14 +34,10 @@ contract SolvencyArithmeticTest is Test {
         assert(uint128(packed2) == newNext); // low half updated
     }
 
-    // NOTE: capBucketCounts is NOT exact — its trim/min-1 rounding can leave the
-    //       winner total a few above maxTotal (characterized + bounded in
-    //       test/fuzz/JackpotCapBound.t.sol). It is intractable for Halmos (symbolic
-    //       division + the capping loop trigger SMT internal-errors), and the property
-    //       it would assert (total <= maxTotal) is false anyway. The overflow is safe
-    //       because every downstream uint8 cast of a bucket count is either clamped to
-    //       250 (JackpotModule:1154/:1234, the pool-cap paths) or on a path bounded to
-    //       <=120 (the :881 _distributeTicketJackpot path). Proven via forge fuzz, not here.
+    // NOTE: there is no winner-total cap function to prove. The total is bounded
+    //       structurally by the bucket geometry: base [25,15,8,1] scaled by at most
+    //       DAILY_JACKPOT_SCALE_MAX_BPS (6.36x) gives 159+95+50+1 = 305, with the solo
+    //       bucket never scaled. The gas suite pins that ceiling directly.
 
     // -------------------------------------------------------------------------
     // (2) bucketShares: sum of distributed shares never exceeds the pool.

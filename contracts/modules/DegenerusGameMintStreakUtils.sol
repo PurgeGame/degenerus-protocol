@@ -384,11 +384,11 @@ abstract contract DegenerusGameMintStreakUtils is DegenerusGameStorage {
             if (hasDeityPass) {
                 bonusPoints += DEITY_PASS_ACTIVITY_BONUS_POINTS;
             } else if (frozenUntilLevel >= currLevel) {
-                // Whale pass bonus: varies by pass type (only active while frozen)
+                // Pass bonus: varies by pass type (only active while frozen)
                 if (passType == 1) {
-                    bonusPoints += 10; // +10 points for 10-level pass
+                    bonusPoints += 10; // +10 points for the 10-level lazy pass
                 } else if (passType == 3) {
-                    bonusPoints += 40; // +40 points for 100-level pass
+                    bonusPoints += 40; // +40 points for the 100-level whale pass
                 }
             }
         }

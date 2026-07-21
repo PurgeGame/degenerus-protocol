@@ -200,8 +200,11 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     /// Higher than ETH winners because ticket distribution is cheaper per winner.
     uint16 private constant PURCHASE_PHASE_TICKET_MAX_WINNERS = 120;
 
-    /// @dev Maximum total ETH winners across daily + carryover jackpots.
-    ///      At max scale (6.36x, 200+ ETH pool): 159 + 95 + 50 + 1 = 305.
+    /// @dev Maximum total ETH winners across daily + carryover jackpots — the structural
+    ///      ceiling of the bucket geometry, not an enforced input: base [25,15,8,1] at the
+    ///      6.36x max scale gives 159 + 95 + 50 + 1 = 305. Per-bucket gas is bounded
+    ///      independently by MAX_BUCKET_WINNERS in _processBucket. The gas suite asserts
+    ///      this value against the geometry so a scale/base change fails loudly.
     uint16 private constant DAILY_ETH_MAX_WINNERS = 305;
 
     /// @dev Maximum winners for daily coin jackpot (all paid in one coinflip.creditFlipBatch call).
@@ -252,10 +255,9 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
             EntropyLib.hash2(rngWord, targetLvl)
         );
 
-        uint16[4] memory bucketCounts = JackpotBucketLib.bucketCountsForPoolCap(
+        uint16[4] memory bucketCounts = JackpotBucketLib.bucketCountsForPool(
             poolWei,
             effectiveEntropy,
-            DAILY_ETH_MAX_WINNERS,
             DAILY_JACKPOT_SCALE_MAX_BPS
         );
         uint16[4] memory shareBps = JackpotBucketLib.shareBpsByBucket(
@@ -423,10 +425,9 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
 
             if (dailyEthBudget != 0) {
                 uint16[4] memory bucketCountsDaily = JackpotBucketLib
-                    .bucketCountsForPoolCap(
+                    .bucketCountsForPool(
                         dailyEthBudget,
                         effectiveEntropyDaily,
-                        DAILY_ETH_MAX_WINNERS,
                         DAILY_JACKPOT_SCALE_MAX_BPS
                     );
 

@@ -27,8 +27,8 @@ import {ContractAddresses} from "./ContractAddresses.sol";
 |  |                                                                                                  | |
 |  |   _symQ1[0-7]   -► Crypto symbol names:   "Bitcoin", "Ethereum", etc.                            | |
 |  |   _symQ2[0-7]   -► Zodiac symbol names:   "Aries", "Taurus", etc.                                | |
-|  |   _symQ3[0-7]   -► Cards symbol names:    "Club", "Diamond", "Heart", "Spade",                   | |
-|  |                                      "Horseshoe", "Cashsack", "King", "Ace"                      | |
+|  |   _symQ3[0-7]   -► Cards symbol names:    "Horseshoe", "King", "Cashsack", "Club",              | |
+|  |                                      "Diamond", "Heart", "Spade", "Ace"                          | |
 |  |   (Q4 Dice names are generated dynamically: "1", "2", etc.)                                      | |
 |  +--------------------------------------------------------------------------------------------------+ |
 |                                                                                                       |
@@ -57,7 +57,8 @@ import {ContractAddresses} from "./ContractAddresses.sol";
 |  3. BOUNDS CHECKING                                                                                   |
 |     • setPaths() reverts if batch would exceed array bounds                                           |
 |     • data(i) will revert if i >= 33 (array bounds)                                                   |
-|     • symbol(q, idx) returns "" for quadrant 3 or invalid quadrant; reverts for invalid idx           |
+|     • symbol(q, idx) returns "" for quadrant >= 3 (idx never read); for quadrant 0-2 it reverts       |
+|       on idx >= 8 (array bounds)                                                                      |
 |                                                                                                       |
 |  4. NO EXTERNAL CALLS                                                                                 |
 |     • Pure data storage, no dependencies on other contracts (except ContractAddresses)                |
@@ -141,7 +142,8 @@ contract Icons32Data {
     // ---------------------------------------------------------------------
 
     /// @notice Set a batch of icon paths
-    /// @dev Only callable by CREATOR before finalization. Max 10 paths per call to stay under gas limits.
+    /// @dev Only callable by CREATOR before finalization. Batch capped at 10 paths per call; path
+    ///      strings are individually unbounded, so the caller still sizes the batch to fit gas.
     /// @param startIndex Starting index in _paths array (0-32)
     /// @param paths Array of SVG path strings to set (max 10)
     /// @custom:reverts OnlyCreator When caller is not ContractAddresses.CREATOR

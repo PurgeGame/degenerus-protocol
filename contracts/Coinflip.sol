@@ -644,8 +644,7 @@ contract Coinflip {
             }
             // BAF bracket = the level's decade ceiling: a level in [10k, 10k+9] records to
             // bracket 10*(k+1). _bafBracketLevel rounds up to the next multiple of 10, so
-            // (level + 1) maps every decade — including the x10 boundary — to its closing
-            // bracket (equivalent to the former phase-branched bafLevel, minus its dead cases).
+            // (level + 1) maps every decade — including the x10 boundary — to its closing bracket.
             uint24 bafLvl = _bafBracketLevel(cachedLevel + 1);
             jackpots.recordBafFlip(player, bafLvl, winningBafCredit);
         }

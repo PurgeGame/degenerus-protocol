@@ -141,12 +141,12 @@ abstract contract AdvanceGasCeilingBase is DeployProtocol {
     uint32 internal constant DAILY_JACKPOT_SCALE_MAX_BPS = 63_600;
 
     /// @dev Pool funded into the game so the terminal jackpot reaches the full geometry. >> 200 ETH
-    ///      floor so bucketCountsForPoolCap saturates to the 305-winner cap.
+    ///      floor so bucketCountsForPool reaches the 305-winner geometry ceiling.
     uint256 internal constant GAME_FUNDS = 1000 ether;
 
     /// @notice Derive the winning traits + bucket geometry runTerminalJackpot will actually roll for
     ///         `rngWord` at `lvl` and `GAME_FUNDS`, so the seeded buckets match the live jackpot's roll.
-    /// @dev Mirrors runTerminalJackpot's getRandomTraits + bucketCountsForPoolCap derivation.
+    /// @dev Mirrors runTerminalJackpot's getRandomTraits + bucketCountsForPool derivation.
     function _deriveJackpot(uint24 lvl, uint256 rngWord)
         internal
         pure
@@ -154,8 +154,8 @@ abstract contract AdvanceGasCeilingBase is DeployProtocol {
     {
         traitIds = JackpotBucketLib.getRandomTraits(rngWord);
         uint256 effEntropy = EntropyLib.hash2(rngWord, uint256(lvl) + 1);
-        bucketCounts = JackpotBucketLib.bucketCountsForPoolCap(
-            GAME_FUNDS, effEntropy, DAILY_ETH_MAX_WINNERS, DAILY_JACKPOT_SCALE_MAX_BPS
+        bucketCounts = JackpotBucketLib.bucketCountsForPool(
+            GAME_FUNDS, effEntropy, DAILY_JACKPOT_SCALE_MAX_BPS
         );
     }
 

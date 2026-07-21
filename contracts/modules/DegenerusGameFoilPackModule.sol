@@ -56,7 +56,7 @@ contract DegenerusGameFoilPackModule is
     ///      (the lane carries no value); only the ETH and FLIP lanes pay.
     uint256 private constant WWXRP_FACE_AMOUNT = 1e18;
 
-    // Per-score face counts for the graded "Variant-2" match (see _tryClaimFoilMatch).
+    // Per-score face counts for the graded match (see _tryClaimFoilMatch).
     // One face stakes 1,000 FLIP or priceForLevel(L) ETH — one ticket of value either
     // way (WWXRP, the third currency, is worthless). Calibrated to
     // E[faces/comparison] = 0.010972 (E[faces/pack/30d] = 2.633) — byte-identical EV to
@@ -470,7 +470,7 @@ contract DegenerusGameFoilPackModule is
             multBps
         )[ticketIndex];
 
-        // Graded "Variant-2" score vs the day's winning set: per quadrant a symbol
+        // Graded score vs the day's winning set: per quadrant a symbol
         // match scores +1, and if the color of that same quadrant also matches it
         // scores +2; a symbol miss scores 0 (color only counts once the symbol is hit).
         // Score T in {0..8}. Color (bits 5-3) is boosted on the foil line but the

@@ -5,7 +5,7 @@ pragma solidity 0.8.34;
  * @title JackpotBucketLib
  * @notice Pure helper functions for jackpot bucket sizing and share calculations.
  * @dev All functions are internal and pure, so they get inlined by the compiler
- *      with ZERO gas overhead. Extracted from DegenerusGameJackpotModule to reduce bytecode.
+ *      with no runtime call boundary. Extracted from DegenerusGameJackpotModule to reduce bytecode.
  */
 library JackpotBucketLib {
     // -------------------------------------------------------------------------
@@ -18,7 +18,8 @@ library JackpotBucketLib {
     /// @dev First scale target (2x) by this pool size.
     uint256 internal constant JACKPOT_SCALE_FIRST_WEI = 50 ether;
 
-    /// @dev Second scale target (4x) by this pool size; cap beyond.
+    /// @dev Pool size at which the caller's maxScaleBps is reached; cap beyond.
+    ///      Both production callers pass 63_600 bps (6.36x).
     uint256 internal constant JACKPOT_SCALE_SECOND_WEI = 200 ether;
 
     /// @dev Scale values in basis points.
@@ -50,13 +51,13 @@ library JackpotBucketLib {
         }
     }
 
-    /// @dev Scales base bucket counts by jackpot size (excluding solo) with a hard cap.
-    ///      1x under 10 ETH, linearly to 2x by 50 ETH, linearly to maxScaleBps by 200 ETH, then capped.
-    function scaleTraitBucketCountsWithCap(
+    /// @dev Scales base bucket counts by jackpot size (excluding solo).
+    ///      1x under 10 ETH, linearly to 2x by 50 ETH, linearly to maxScaleBps by 200 ETH, then flat.
+    ///      The solo bucket is never scaled, so the total is bounded by the base geometry times
+    ///      maxScaleBps: at the production 6.36x ceiling [25,15,8,1] -> [159,95,50,1] = 305 winners.
+    function scaleTraitBucketCounts(
         uint16[4] memory baseCounts,
         uint256 ethPool,
-        uint256 entropy,
-        uint16 maxTotal,
         uint32 maxScaleBps
     ) internal pure returns (uint16[4] memory counts) {
         counts = baseCounts;
@@ -91,115 +92,23 @@ library JackpotBucketLib {
             }
         }
 
-        return capBucketCounts(counts, maxTotal, entropy);
+        return counts;
     }
 
-    /// @dev Computes base + scaled bucket counts for a given pool with cap; returns zeroes when pool is empty.
-    function bucketCountsForPoolCap(
+    /// @dev Computes base + scaled bucket counts for a given pool; returns zeroes when pool is empty.
+    function bucketCountsForPool(
         uint256 ethPool,
         uint256 entropy,
-        uint16 maxTotal,
         uint32 maxScaleBps
     ) internal pure returns (uint16[4] memory bucketCounts) {
         if (ethPool == 0) return bucketCounts;
         uint16[4] memory baseCounts = traitBucketCounts(entropy);
-        return scaleTraitBucketCountsWithCap(baseCounts, ethPool, entropy, maxTotal, maxScaleBps);
+        return scaleTraitBucketCounts(baseCounts, ethPool, maxScaleBps);
     }
 
     /// @dev Sums the bucket counts.
     function sumBucketCounts(uint16[4] memory counts) internal pure returns (uint256 total) {
         total = uint256(counts[0]) + counts[1] + counts[2] + counts[3];
-    }
-
-    /// @dev Caps total winners while keeping the solo bucket fixed at 1 when present.
-    function capBucketCounts(
-        uint16[4] memory counts,
-        uint16 maxTotal,
-        uint256 entropy
-    ) internal pure returns (uint16[4] memory capped) {
-        capped = counts;
-        if (maxTotal == 0) {
-            capped[0] = 0;
-            capped[1] = 0;
-            capped[2] = 0;
-            capped[3] = 0;
-            return capped;
-        }
-
-        uint256 total = sumBucketCounts(counts);
-        if (total == 0) {
-            capped[0] = 0;
-            capped[1] = 0;
-            capped[2] = 0;
-            capped[3] = 0;
-            return capped;
-        }
-        if (maxTotal == 1) {
-            capped[0] = 0;
-            capped[1] = 0;
-            capped[2] = 0;
-            capped[3] = 0;
-            capped[soloBucketIndex(entropy)] = 1;
-            return capped;
-        }
-        if (total <= maxTotal) return capped;
-
-        uint256 nonSoloCap = uint256(maxTotal) - 1;
-        uint256 nonSoloTotal = total - 1;
-        uint256 scaledTotal;
-
-        for (uint8 i; i < 4; ) {
-            uint16 bucketCount = counts[i];
-            if (bucketCount > 1) {
-                uint256 scaled = (uint256(bucketCount) * nonSoloCap) / nonSoloTotal;
-                if (scaled == 0) scaled = 1;
-                capped[i] = uint16(scaled);
-                scaledTotal += scaled;
-            }
-            unchecked {
-                ++i;
-            }
-        }
-
-        // When nonSoloCap is very small (e.g. 1-2), the minimum-1 guarantee
-        // for each non-solo bucket can cause scaledTotal to exceed nonSoloCap.
-        // Trim excess by zeroing out the smallest non-solo buckets.
-        if (scaledTotal > nonSoloCap) {
-            uint256 excess = scaledTotal - nonSoloCap;
-            uint8 trimOff = uint8((entropy >> 24) & 3);
-            for (uint8 i; i < 4 && excess != 0; ) {
-                uint8 idx = uint8((uint256(trimOff) + 3 - i) & 3);
-                if (capped[idx] == 1 && counts[idx] > 1) {
-                    capped[idx] = 0;
-                    unchecked {
-                        --excess;
-                    }
-                }
-                unchecked {
-                    ++i;
-                }
-            }
-            return capped;
-        }
-
-        uint256 remainder = nonSoloCap - scaledTotal;
-        if (remainder != 0) {
-            uint8 offset = uint8((entropy >> 24) & 3);
-            for (uint8 i; i < 4 && remainder != 0; ) {
-                uint8 idx = uint8((uint256(offset) + i) & 3);
-                if (capped[idx] > 1) {
-                    capped[idx] += 1;
-                    unchecked {
-                        --remainder;
-                    }
-                }
-                unchecked {
-                    ++i;
-                }
-            }
-        }
-
-        return capped;
     }
 
     // -------------------------------------------------------------------------

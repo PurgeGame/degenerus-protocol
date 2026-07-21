@@ -14,7 +14,8 @@ contract MockStETH {
     uint256 public totalPooledEther;
     uint256 public totalShares;
 
-    /// @dev Annual yield in basis points (250 = 2.5% APR ≈ real Lido).
+    /// @dev Annual yield in basis points (250 = 2.5% APR), a fixed test rate for
+    ///      deterministic rebase simulation.
     ///      Each rebase() applies one day's share of this rate.
     uint256 public rebaseAprBps = 250;
 

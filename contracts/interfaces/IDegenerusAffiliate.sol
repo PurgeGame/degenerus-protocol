@@ -84,7 +84,8 @@ interface IDegenerusAffiliate {
     /// @notice Calculate the affiliate bonus points for a player.
     /// @dev Sums the player's affiliate scores for the previous 5 levels, converted to
     ///      weighted referred ETH volume (score × level ticket price / PRICE_COIN_UNIT,
-    ///      normalized by the 20% fresh reward rate; fresh ≈ 1:1, recycled 0.25×).
+    ///      normalized by the 20% L4+ fresh reward rate; fresh ≈ 1:1 (levels 0-3 fresh 1.25×),
+    ///      recycled 0.25×).
     ///      Awards 4 points per ETH for the first 5 ETH, 1.5 points per ETH for the next 20 ETH, capped at 50.
     /// @param currLevel The current game level.
     /// @param player The player to calculate bonus for.

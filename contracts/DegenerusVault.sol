@@ -122,7 +122,7 @@ interface IAFKingSubscriptionToken {
 |                                                                                                        |
 |  ARCHITECTURE OVERVIEW                                                                                 |
 |  ---------------------                                                                                 |
-|  DegenerusVault holds two asset types with two independent share classes for claims:                   |
+|  DegenerusVault holds three assets (ETH, stETH, FLIP) across two independent share classes:            |
 |                                                                                                        |
 |  +---------------------------------------------------------------------------------------------------+ |
 |  |                              ASSET & SHARE MAPPING                                                | |

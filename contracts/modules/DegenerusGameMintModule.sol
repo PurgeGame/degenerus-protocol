@@ -34,7 +34,8 @@ import {ActivityCurveLib} from "../libraries/ActivityCurveLib.sol";
  * - **Level Streak**: Consecutive level purchases
  * - **Quest Streak**: Daily quest completion streak (tracked in DegenerusQuests)
  * - **Affiliate Points**: Referral program bonus points (tracked in DegenerusAffiliate)
- * - **Whale Pass**: Active pass type (10-lvl or 100-lvl)
+ * - **Pass**: Active pass type (lazy = 10-lvl, whale = 100-lvl; every pass also acts as an
+ *   AFKing pass)
  *
  * ### Mint Data Bit Packing Layout (mintPacked_):
  *
@@ -45,8 +46,9 @@ import {ActivityCurveLib} from "../libraries/ActivityCurveLib.sol";
  * Bits 72-103:  lastMintDay        - Day index of last mint
  * Bits 104-127: unitsLevel         - Level index for levelUnits tracking
  * Bits 128-151: frozenUntilLevel   - Whale pass: freeze stats until this level (0 = not frozen)
- * Bits 152-153: whalePassType    - Active pass type (0=none, 1=10-lvl, 3=100-lvl) [Activity Score]
- * Bits 154-159: (unused)
+ * Bits 152-153: whalePassType    - Active pass type (0=none, 1=lazy/10-lvl, 3=whale/100-lvl) [Activity Score]
+ * Bit  154:     seatClaimed        - AFKing seat-claim latch
+ * Bits 155-159: (unused)
  * Bits 160-183: mintStreakLast      - Last level credited for mint streak
  * Bit  184:     hasDeityPass        - Deity pass flag
  * Bits 185-208: affBonusLevel       - Cached affiliate bonus level
@@ -54,11 +56,11 @@ import {ActivityCurveLib} from "../libraries/ActivityCurveLib.sol";
  * Bits 215-222: curseCount          - Cashout/smite curse counter (0-20)
  * Bits 223-227: (unused)
  * Bits 228-243: levelUnits         - Units minted this level
- * Bit 244:      (unused)
+ * Bits 244-255: (reserved)
  * ```
  *
  * Note: Quest Streak is tracked in DegenerusQuests.questPlayerState.
- * Affiliate Points are tracked in DegenerusAffiliate and cached in mintPacked_ bits 185-214 on level transitions.
+ * Affiliate Points are tracked in DegenerusAffiliate and cached in mintPacked_ bits 185-214 during that player's own mint (_recordMintData).
  *
  * ## Trait Generation
  *
@@ -67,7 +69,8 @@ import {ActivityCurveLib} from "../libraries/ActivityCurveLib.sol";
  * (level, queueIdx, player, owed) — drives each entry's roll.
  * - Entry index & 3 selects the quadrant/category (0-63, 64-127, 128-191, 192-255)
  * - traitFromWord maps the word through an 8×8 weighted color×symbol grid
- * - Higher-numbered sub-traits within each category are slightly rarer
+ * - Symbol is a uniform 3-bit slice; color is heavy-tailed — tiers 0-2 are equally
+ *   common (25% each), then each higher tier roughly halves, down to 0.781% at tier 7
  */
 contract DegenerusGameMintModule is
     DegenerusGamePayoutUtils,
@@ -2012,8 +2015,7 @@ contract DegenerusGameMintModule is
             if (payKind != MintPaymentKind.DirectEth) {
                 claimableBefore = _claimableOf(buyer);
             }
-            // Direct internal payment processing — `value` is the exact ETH this leg carries
-            // (what the former value-bearing self-call re-scoped into its msg.value). The
+            // Direct internal payment processing — `value` is the exact ETH this leg carries. The
             // prize-pool shares are returned, not written, so the caller folds the ticket and
             // lootbox legs into one pool RMW.
             (

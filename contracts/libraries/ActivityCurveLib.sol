@@ -4,18 +4,17 @@ pragma solidity 0.8.34;
 /**
  * @title ActivityCurveLib
  * @notice Pure activity-score reward curves shared across the Degenerus contracts.
- * @dev All functions are internal and pure, so the compiler inlines them with ZERO
- *      gas overhead. Centralizing the math keeps the decimator multiplier and bucket
- *      ladder identical between FLIP and the decimator module, and the century bonus
- *      identical between the mint and afking paths — one source of truth for weights
- *      that are still being tuned.
+ * @dev All functions are internal and pure, so the compiler inlines them with no
+ *      runtime call boundary. Centralizing the math keeps the decimator multiplier and
+ *      bucket ladder identical between FLIP and the decimator module, and the century
+ *      bonus identical between the mint and afking paths — one source of truth.
  *
- *      Value-curve shape: a steep early ramp to vA at the old cap K, a shallow middle
+ *      Value-curve shape: a steep early ramp to vA at the seg-A knee K, a shallow middle
  *      leg to vB at ACTIVITY_SEG_B_KNEE_POINTS, then a long near-flat crawl to MAX at
  *      ACTIVITY_EFFECTIVE_CAP_POINTS, flat at MAX beyond. Score is in whole points and
  *      is already bounded by the game's activity-score hard cap before it arrives here,
- *      so the >= ACTIVITY_EFFECTIVE_CAP_POINTS branch is the saturation guard (the curve
- *      self-caps; callers no longer pre-clamp the input).
+ *      so the >= ACTIVITY_EFFECTIVE_CAP_POINTS branch is the saturation guard: the curve
+ *      self-caps and callers pass the score through unclamped.
  */
 library ActivityCurveLib {
     // -------------------------------------------------------------------------
@@ -33,7 +32,7 @@ library ActivityCurveLib {
     // -------------------------------------------------------------------------
 
     uint256 internal constant MULT_MIN_BPS = 10_000; // 1.0x at score 0 (no-boost gate)
-    uint256 internal constant MULT_K_POINTS = 235; // old cap / seg-A knee
+    uint256 internal constant MULT_K_POINTS = 235; // seg-A knee
     uint256 internal constant MULT_VA_BPS = 17_049; // ~1.705x at K (90% of gain)
     uint256 internal constant MULT_VB_BPS = 17_676; // ~1.768x at the seg-B knee (98%)
     uint256 internal constant MULT_MAX_BPS = 17_833; // 1.7833x at the effective cap
@@ -64,7 +63,7 @@ library ActivityCurveLib {
     // Century mint/afking bonus (bps of base quantity; 10000 = 100%)
     // -------------------------------------------------------------------------
 
-    uint256 internal constant CENTURY_K_POINTS = 305; // old cap / seg-A knee
+    uint256 internal constant CENTURY_K_POINTS = 305; // seg-A knee
     uint256 internal constant CENTURY_VA_BPS = 9_000; // 90% of qty at K
     uint256 internal constant CENTURY_VB_BPS = 9_800; // 98% at the seg-B knee
     uint256 internal constant CENTURY_MAX_BPS = 10_000; // 100% at the effective cap
@@ -168,6 +167,8 @@ library ActivityCurveLib {
 
     /// @notice Minimum activity score that lands a burn in `bucket` (the pre-floor
     ///         inverse of decBucket). Seals the lootbox EV score at decimator-claim time.
+    /// @dev Defined over bucket ∈ [2,11]; bucket >= BUCKET_BASE returns 0. decBucket never
+    ///      assigns 0 or 1, so those inputs fall through to the bucket-2 threshold.
     function minScoreForBucket(uint8 bucket) internal pure returns (uint16) {
         if (bucket >= BUCKET_BASE) return 0;
         if (bucket == 11) return BUCKET_T11;

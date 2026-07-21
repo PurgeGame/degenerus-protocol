@@ -144,10 +144,10 @@ contract AdvanceStageWorstCaseGas is Test {
     }
 
     /// @dev Produce the 4 winning trait ids `runTerminalJackpot` will roll for THIS rngWord, plus the
-    ///      effective entropy `bucketCountsForPoolCap` keys off. We mirror the module's derivation exactly:
+    ///      effective entropy `bucketCountsForPool` keys off. We mirror the module's derivation exactly:
     ///      `_rollWinningTraits(rngWord,false)` packs 4 traits; we unpack them and seed those 4 buckets so
     ///      every selected winner resolves to a real holder. Exact trait values do not affect gas (the
-    ///      bucket SIZES are pinned by bucketCountsForPoolCap at max scale).
+    ///      bucket SIZES are pinned by bucketCountsForPool at max scale).
     function _deriveTraits(uint256 rngWord)
         internal
         pure
@@ -183,8 +183,8 @@ contract AdvanceStageWorstCaseGas is Test {
         (uint8[4] memory traitIds, uint256 effEntropy) = _deriveTraits(_word());
 
         // Worst-case-FIRST: assert the bucket geometry IS the 305 hard cap before measuring.
-        uint16[4] memory bc = JackpotBucketLib.bucketCountsForPoolCap(
-            POOL_WEI, effEntropy, DAILY_ETH_MAX_WINNERS, DAILY_JACKPOT_SCALE_MAX_BPS
+        uint16[4] memory bc = JackpotBucketLib.bucketCountsForPool(
+            POOL_WEI, effEntropy, DAILY_JACKPOT_SCALE_MAX_BPS
         );
         assertEq(
             JackpotBucketLib.sumBucketCounts(bc),
@@ -244,8 +244,8 @@ contract AdvanceStageWorstCaseGas is Test {
 
         // Run 2: a small pool that pins to a much smaller winner geometry (still > 0 winners).
         uint256 smallPool = 5 ether; // below the max-scale floor -> a small bucket geometry
-        uint16[4] memory bcLo = JackpotBucketLib.bucketCountsForPoolCap(
-            smallPool, EntropyLib.hash2(_word(), TARGET_LVL), DAILY_ETH_MAX_WINNERS, DAILY_JACKPOT_SCALE_MAX_BPS
+        uint16[4] memory bcLo = JackpotBucketLib.bucketCountsForPool(
+            smallPool, EntropyLib.hash2(_word(), TARGET_LVL), DAILY_JACKPOT_SCALE_MAX_BPS
         );
         uint256 loWinners = JackpotBucketLib.sumBucketCounts(bcLo);
         _seedAllBuckets(traitIds);

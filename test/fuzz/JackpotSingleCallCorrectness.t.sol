@@ -140,10 +140,9 @@ contract JackpotSingleCallCorrectness is Test {
         (uint8[4] memory traitIds, uint256 effectiveEntropy) = _deriveTraits(_word());
 
         // Confirm the bucket geometry IS the 305 ceiling (159/95/50/1) BEFORE driving the call.
-        uint16[4] memory bc = JackpotBucketLib.bucketCountsForPoolCap(
+        uint16[4] memory bc = JackpotBucketLib.bucketCountsForPool(
             POOL_WEI,
             effectiveEntropy,
-            DAILY_ETH_MAX_WINNERS,
             DAILY_JACKPOT_SCALE_MAX_BPS
         );
         assertEq(JackpotBucketLib.sumBucketCounts(bc), 305, "max-scale total == 305");
@@ -201,8 +200,8 @@ contract JackpotSingleCallCorrectness is Test {
     ///         equals its computed unit-rounded share (exact, none missed/over).
     function testPerBucketExactShareNoDoublePay() public {
         (uint8[4] memory traitIds, uint256 effectiveEntropy) = _deriveTraits(_word());
-        uint16[4] memory bc = JackpotBucketLib.bucketCountsForPoolCap(
-            POOL_WEI, effectiveEntropy, DAILY_ETH_MAX_WINNERS, DAILY_JACKPOT_SCALE_MAX_BPS
+        uint16[4] memory bc = JackpotBucketLib.bucketCountsForPool(
+            POOL_WEI, effectiveEntropy, DAILY_JACKPOT_SCALE_MAX_BPS
         );
 
         uint8 soloIdx = JackpotBucketLib.soloBucketIndex(effectiveEntropy);
@@ -243,8 +242,8 @@ contract JackpotSingleCallCorrectness is Test {
         uint256 pool = 200 ether + bound(uint256(extraWei), 0, 5000 ether);
         (uint8[4] memory traitIds, uint256 effEntropy) = _deriveTraits(_word());
 
-        uint16[4] memory bc = JackpotBucketLib.bucketCountsForPoolCap(
-            pool, effEntropy, DAILY_ETH_MAX_WINNERS, DAILY_JACKPOT_SCALE_MAX_BPS
+        uint16[4] memory bc = JackpotBucketLib.bucketCountsForPool(
+            pool, effEntropy, DAILY_JACKPOT_SCALE_MAX_BPS
         );
         assertEq(JackpotBucketLib.sumBucketCounts(bc), 305, "any >=200-ETH pool hits the 305 ceiling");
 
@@ -277,8 +276,8 @@ contract JackpotSingleCallCorrectness is Test {
         (uint8[4] memory traitIds, uint256 effEntropy) = _deriveTraits(_word());
 
         // Establish this IS the worst case: 305 winners, the maximum the daily-ETH path emits.
-        uint16[4] memory bc = JackpotBucketLib.bucketCountsForPoolCap(
-            POOL_WEI, effEntropy, DAILY_ETH_MAX_WINNERS, DAILY_JACKPOT_SCALE_MAX_BPS
+        uint16[4] memory bc = JackpotBucketLib.bucketCountsForPool(
+            POOL_WEI, effEntropy, DAILY_JACKPOT_SCALE_MAX_BPS
         );
         assertEq(JackpotBucketLib.sumBucketCounts(bc), 305, "worst case: 305 winners (the hard cap)");
 
@@ -316,8 +315,8 @@ contract JackpotSingleCallCorrectness is Test {
 
         // Worst-case-FIRST (assert the scenario IS the max BEFORE measuring):
         //  (a) the bucket geometry reaches exactly the DAILY_ETH_MAX_WINNERS = 305 hard cap;
-        uint16[4] memory bc = JackpotBucketLib.bucketCountsForPoolCap(
-            POOL_WEI, effEntropy, DAILY_ETH_MAX_WINNERS, DAILY_JACKPOT_SCALE_MAX_BPS
+        uint16[4] memory bc = JackpotBucketLib.bucketCountsForPool(
+            POOL_WEI, effEntropy, DAILY_JACKPOT_SCALE_MAX_BPS
         );
         assertEq(
             JackpotBucketLib.sumBucketCounts(bc),
@@ -428,8 +427,8 @@ contract JackpotSingleCallCorrectness is Test {
         (uint8[4] memory traitIds, uint256 effEntropy) = _deriveTraits(_word());
         uint8 soloIdx = JackpotBucketLib.soloBucketIndex(effEntropy);
         uint256 unit = PriceLookupLib.priceForLevel(TARGET_LVL + 1) >> 2;
-        uint16[4] memory bc = JackpotBucketLib.bucketCountsForPoolCap(
-            POOL_WEI, effEntropy, DAILY_ETH_MAX_WINNERS, DAILY_JACKPOT_SCALE_MAX_BPS
+        uint16[4] memory bc = JackpotBucketLib.bucketCountsForPool(
+            POOL_WEI, effEntropy, DAILY_JACKPOT_SCALE_MAX_BPS
         );
         uint16[4] memory shareBps = JackpotBucketLib.shareBpsByBucket(
             FINAL_DAY_SHARES_PACKED, uint8(effEntropy & 3)

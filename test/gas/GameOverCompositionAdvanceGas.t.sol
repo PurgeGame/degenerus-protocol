@@ -117,8 +117,8 @@ contract GameOverCompositionAdvanceGas is DeployProtocol {
         uint256 rngWord = _word();
         traitIds = JackpotBucketLib.getRandomTraits(rngWord);
         uint256 effEntropy = EntropyLib.hash2(rngWord, LVL + 1);
-        bucketCounts = JackpotBucketLib.bucketCountsForPoolCap(
-            GAME_FUNDS, effEntropy, DAILY_ETH_MAX_WINNERS, DAILY_JACKPOT_SCALE_MAX_BPS
+        bucketCounts = JackpotBucketLib.bucketCountsForPool(
+            GAME_FUNDS, effEntropy, DAILY_JACKPOT_SCALE_MAX_BPS
         );
     }
 

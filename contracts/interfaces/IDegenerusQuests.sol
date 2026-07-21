@@ -15,7 +15,7 @@ struct QuestInfo {
     uint24 day;
     /// @notice The type of quest (mint, flip, affiliate, etc.)
     uint8 questType;
-    /// @notice Whether this is a high difficulty quest with increased requirements and rewards
+    /// @notice Reserved; always false — no path in the quest system sets it
     bool highDifficulty;
     /// @notice The requirements to complete this quest
     QuestRequirements requirements;

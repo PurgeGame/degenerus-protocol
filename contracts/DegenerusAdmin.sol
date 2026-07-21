@@ -29,10 +29,10 @@ import {ContractAddresses} from "./ContractAddresses.sol";
  *   1. Created atomically during constructor call
  *   2. Consumer (Game contract) added automatically during construction
  *   3. LINK funding via onTokenTransfer (ERC-677)
- *   4. Governed VRF swap via propose/vote/execute (M-02 mitigation)
+ *   4. Governed VRF swap via propose/vote/execute
  *   5. Shutdown after GAME-over with LINK refund
  *
- * GOVERNANCE (M-02 Mitigation):
+ * GOVERNANCE:
  *   - Admin path: DGVE holder proposes after 20h VRF stall
  *   - Community path: 0.5%+ sDGNRS holder proposes after 7d VRF stall
  *   - Approval voting with decaying threshold (50% → 5% over 7 days)
@@ -702,7 +702,7 @@ contract DegenerusAdmin {
     }
 
     // =========================================================================
-    // VRF COORDINATOR SWAP GOVERNANCE (M-02 Mitigation)
+    // VRF COORDINATOR SWAP GOVERNANCE
     // =========================================================================
 
     /// @notice Propose an emergency VRF coordinator swap.

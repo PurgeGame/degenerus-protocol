@@ -25,7 +25,8 @@ library GameTimeLib {
     /**
      * @notice Get day index for a specific timestamp.
      * @dev Day 1 = deploy day. Days reset at JACKPOT_RESET_TIME (22:57 UTC).
-     * @param ts Timestamp to evaluate.
+     * @param ts Timestamp to evaluate. Must be at or after the deploy-day reset boundary;
+     *        earlier values underflow the unsigned subtraction and wrap.
      * @return Day index (1-indexed from deploy day).
      */
     function currentDayIndexAt(uint48 ts) internal pure returns (uint24) {

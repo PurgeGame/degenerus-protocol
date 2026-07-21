@@ -48,10 +48,10 @@ interface ICoinflipAffiliate {
     function creditFlip(address player, uint256 amount) external;
 }
 
-/// @notice Game-side accessor for the afking affiliate-base PULL (354-03 producer, 354-04 consumer).
+/// @notice Game-side accessor for the afking affiliate-base PULL.
 /// @dev The atomic read-and-zero of a sub's accrued `affiliateBase` (the running unclaimed flat-7%
 ///      affiliate balance, WHOLE FLIP) happens AT THE STORAGE OWNER (the Game / GameAfkingModule via
-///      delegatecall) — AFF-PULL guardrail 1: the affiliate `claim` consumer can NEVER pre-load the
+///      delegatecall) — guardrail 1: the affiliate `claim` consumer can NEVER pre-load the
 ///      bases into a memory array, so a duplicate sub in `subs[]` drains 0 the second time. The accessor
 ///      is AFFILIATE-gated on the Game side (only `ContractAddresses.AFFILIATE` may drain).
 interface IGameAfkingDrain {
@@ -215,7 +215,7 @@ contract DegenerusAffiliate {
     /// @notice Game-side afking accessor for the affiliate-base PULL drain + claim-time level (constant).
     /// @dev Same address as `game` (the GameAfkingModule runs in the Game's storage context via
     ///      delegatecall); a distinct typed handle for the `drainAffiliateBase` / `level` calls the
-    ///      flat-7% deterministic-split PULL consumes (354-03 producer).
+    ///      flat-7% deterministic-split PULL consumes.
     IGameAfkingDrain internal constant afkingDrain = IGameAfkingDrain(ContractAddresses.GAME);
 
     // =====================================================================

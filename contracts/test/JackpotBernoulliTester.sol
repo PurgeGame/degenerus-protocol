@@ -5,15 +5,17 @@ pragma solidity 0.8.34;
 /// @notice Test helper that exposes the jackpot ticket-roll Bernoulli whole-ticket
 ///         collapse arithmetic from `DegenerusGameJackpotModule._jackpotTicketRoll`
 ///         as external-pure passthroughs. Enables direct empirical verification of:
-///           - EV-neutrality of the round-up: `E[whole] * 100 == scaledTickets`
+///           - EV-neutrality of the round-up: `E[whole] * 100 ≈ scaledTickets`
+///             (exact under an ideal uniform mod-100 draw; the uint32 % 100 bias is ~2e-8)
 ///           - Boundary cases at scaledTickets ∈ {0, 1, 99, 100, 101, 199, 200}
 ///           - bits[96..127] bit-slice independence from the bits[0..12]
 ///             path/level-selection consumers in the same `entropy` word
 ///           - 2-roll uniqueness across the `EntropyLib.hash2(entropy, entropy)`
 ///             keccak self-mix evolution between the medium-amount-branch rolls
-/// @dev    The arithmetic mirrored here is the EXACT instruction sequence that ships
-///         in `DegenerusGameJackpotModule._jackpotTicketRoll` (the inline Bernoulli
-///         block). The test suite asserts byte-identical reproduction by grepping the
+/// @dev    The arithmetic mirrored here is the instruction sequence that ships in
+///         `DegenerusGameJackpotModule._jackpotTicketRoll` from the Bernoulli block
+///         onward; production first saturates `wholeTicketsScaled` to `uint32.max`,
+///         which this tester takes as its already-`uint32` input. The test suite asserts byte-identical reproduction by grepping the
 ///         production source for the canonical predicate
 ///         `(uint32(entropy >> 96) % uint32(QTY_SCALE)) < frac`; if either drifts,
 ///         the drift-detection test fails first and the math test becomes informative

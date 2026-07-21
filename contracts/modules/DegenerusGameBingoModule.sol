@@ -27,7 +27,7 @@ contract DegenerusGameBingoModule is DegenerusGameStorage {
     // -------------------------------------------------------------------------
 
     // error E() — inherited from DegenerusGameStorage
-    error ScoreTooLow(); // Thrown when the caller is not a deity holder and their affiliate score is below AFFILIATE_DGNRS_MIN_SCORE.
+    error ScoreTooLow(); // Thrown when the player (the claim beneficiary — claims are permissionless, so not necessarily the caller) is not a deity holder and their affiliate score is below AFFILIATE_DGNRS_MIN_SCORE.
 
     /// @notice Thrown when caller does not own the slot at the cited trait/index,
     ///         or the slot index is out of bounds for that trait's holder array.

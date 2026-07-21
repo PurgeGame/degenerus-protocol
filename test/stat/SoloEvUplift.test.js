@@ -2,7 +2,7 @@
 // Phase 261 STAT-06 — per-surface 100K-sample EV-uplift Monte Carlo.
 // D-04: per-surface assertion model (final-day / daily / purchase, three independent sims).
 // D-05: base bucket counts [25, 15, 8, 1]; ethPool below JACKPOT_SCALE_MIN_WEI so
-//       bucketCountsForPoolCap returns base unchanged. No pool-scaling confound.
+//       bucketCountsForPool returns base unchanged. No pool-scaling confound.
 // D-06: ±5% relative tolerance (5σ safety at 100K samples).
 // D-07: owns-the-gold-quadrant-ticket model — for each draw conditioned on >=1 gold,
 //       compute (with-priority EV) = 1/goldCount × solo-payout-per-ticket

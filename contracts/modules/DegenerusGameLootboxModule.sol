@@ -1383,8 +1383,8 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
                 unchecked { whole += 1; }
                 roundedUp = true;
             }
-            // `_queueEntries` early-returns on `whole == 0`. The manual caller (`_openLootBoxLeg`)
-            // pays the WWXRP cold-bust consolation here; auto-resolve callers stay silent.
+            // `_queueEntries` early-returns on `whole == 0`. `_openLootBoxLeg` and `resolveAfkingBox`
+            // pay the WWXRP cold-bust consolation here; the other auto-resolve callers stay silent.
             _queueEntries(player, rollLevel, wholeTicketsToEntries(whole), false);
             if (payColdBustConsolation && whole == 0) {
                 wwxrp.mintPrize(player, LOOTBOX_WWXRP_CONSOLATION);

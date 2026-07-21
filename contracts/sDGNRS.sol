@@ -712,7 +712,7 @@ contract sDGNRS {
             // amount. The MAX − rolled difference is over-pulled ETH that stays as free backing.
             uint256 segregatedMax = (ethBase * MAX_ROLL) / 100;
             uint256 rolledEth = (ethBase * roll) / 100;
-            // Checked arithmetic preserved (reverts on underflow as before); narrowing cast is safe.
+            // Checked arithmetic (reverts on underflow); narrowing cast is safe.
             _pendingRedemptionEthValue = uint96(_pendingRedemptionEthValue - segregatedMax + rolledEth);
         }
 

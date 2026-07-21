@@ -99,7 +99,8 @@ interface IDegenerusGameJackpotModule {
     ) external returns (uint256 claimableDelta);
 
     /// @notice Distribute yield surplus to stakeholders.
-    /// @param rngWord VRF entropy for auto-rebuy targeting.
+    /// @param rngWord Unused — the surplus split is deterministic. Carried only to keep the
+    ///        delegatecall signature uniform with the other AdvanceModule entry points.
     function distributeYieldSurplus(uint256 rngWord) external;
 }
 

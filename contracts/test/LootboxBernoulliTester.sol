@@ -5,7 +5,8 @@ pragma solidity 0.8.34;
 /// @notice Test helper that exposes the manual-path Bernoulli whole-ticket collapse
 ///         arithmetic from `DegenerusGameLootboxModule._settleLootboxRoll` as
 ///         external-pure passthroughs. Enables direct empirical verification of:
-///           - EV-neutrality of the round-up: `E[whole] * 100 == scaledPre`
+///           - EV-neutrality of the round-up: `E[whole] * 100 ≈ scaledPre`
+///             (exact under an ideal uniform mod-100 draw; the uint32 % 100 bias is ~2e-8)
 ///           - Boundary cases at scaledPre ∈ {0, 1, 99, 100, 101, 199, 200}
 ///           - bits[224..255] bit-slice independence from other primary-chunk consumers
 ///           - Magnitude equivalence: `LOOTBOX_WWXRP_CONSOLATION == LOOTBOX_WWXRP_PRIZE`
@@ -25,8 +26,10 @@ contract LootboxBernoulliTester {
     uint256 public constant LOOTBOX_WWXRP_CONSOLATION = 1 ether;
 
     /// @notice Bernoulli whole-ticket collapse on bits[224..255] of `seed`.
-    /// @dev Exact instruction-sequence parity with the manual branch of
-    ///      `_settleLootboxRoll`:
+    /// @dev Instruction-sequence parity with the Bernoulli-collapse sub-step of the manual
+    ///      branch of `_settleLootboxRoll`. Production wraps this with the upstream
+    ///      distress-bonus adjustment (and its own uint32 saturation) and the downstream
+    ///      `_queueEntries(player, rollLevel, wholeTicketsToEntries(whole), false)`:
     ///        uint32 scaledPre = futureTickets;
     ///        uint32 whole = futureTickets / uint32(QTY_SCALE);
     ///        uint32 frac  = futureTickets % uint32(QTY_SCALE);
@@ -72,8 +75,9 @@ contract LootboxBernoulliTester {
     ///           if (payColdBustConsolation && whole == 0) {
     ///               wwxrp.mintPrize(player, LOOTBOX_WWXRP_CONSOLATION);
     ///           }
-    ///         The manual callers pass `payColdBustConsolation = true`; the auto-resolve
-    ///         callers (`resolveLootboxDirect`, `resolveRedemptionLootbox`) pass `false`.
+    ///         The manual callers and `resolveAfkingBox` pass `payColdBustConsolation = true`;
+    ///         the other auto-resolve callers (`resolveLootboxDirect`,
+    ///         `resolveRedemptionLootbox`) pass `false`.
     /// @param payColdBustConsolation The per-caller flag gating the consolation payout.
     /// @param scaledPre Pre-Bernoulli scaled ticket count.
     /// @param seed Per-resolution 256-bit keccak seed.

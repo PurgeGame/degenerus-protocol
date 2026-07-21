@@ -41,9 +41,10 @@ interface ISeatToken {
 /**
  * @title GameAfkingModule
  * @author Burnie Degenerus
- * @notice Delegate-called module owning the AfKing subscription logic. Its bytecode
- *         is its OWN EIP-170 budget — 0 B to the DegenerusGame image — so the
- *         running-total is unaffected by this module.
+ * @notice Delegate-called module owning the AfKing subscription logic. The bulk of that
+ *         logic sits in this module's OWN EIP-170 budget; only the thin dispatch stubs
+ *         (subscribe / mintFlip / claimAfkingFlip / drainAffiliateBase / decurse /
+ *         subscriberCount / the sub-record view) occupy space in the DegenerusGame image.
  *
  * @dev DELEGATECALL CONTEXT: the module inherits `DegenerusGameStorage` (via
  *      `DegenerusGameMintStreakUtils`), so the subscriber set
@@ -68,7 +69,7 @@ interface ISeatToken {
  *      afking-stamp open leg, driven by `_subOpenCursor`, materializing each box
  *      from its frozen stamp via a delegatecall to the LootboxModule's
  *      `resolveAfkingBox` — the FROZEN-INPUT twin of `resolveLootboxDirect`) and
- *      the ROUTER (`mintFlip`/`autoOpen`, the one-category early-return
+ *      the ROUTER (`mintFlip`/`_autoOpen`, the one-category early-return
  *      dispatch). The open consumes the stamp the PART-A process STAGE produces.
  * @dev Bounty: the buy/process bounty FOLDS INTO the advance bounty
  *      (`mintFlip`'s advance leg pays `2×·mult`, scaling the AdvanceModule's
@@ -843,7 +844,8 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
             }
 
             // No pending box: keep lastOpenedDay == lastAutoBoughtDay so the no-orphan guard and
-            // _afkingBoxReady never treat a ticket sub as box-pending.
+            // the open leg's `lastOpenedDay < lastAutoBoughtDay` gate never treat a ticket sub as
+            // box-pending.
             sub.lastOpenedDay = uint24(processDay);
         } else {
             // Lootbox box. The per-buy manual side-effects (handlePurchase, affiliate ×2, the
@@ -1459,7 +1461,7 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
     ///      `_purchaseForWith`), ticket ETH 90% next / 10% future (matching `_recordMintPayment`). One
     ///      pooled read+write per chunk; routes to the pending pools while the prize pool is
     ///      frozen. The per-buy debit already moved the ETH out of the funding source, so this
-    ///      only credits the pools (the SOLVENCY-01 counterpart of that debit).
+    ///      only credits the pools (the counterpart of that debit).
     function _routeAfkingPoolEth(uint256 boxEth, uint256 ticketEth) private {
         if (boxEth == 0 && ticketEth == 0) return;
         uint256 nextShare;
@@ -1512,7 +1514,7 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
     ///      stamp day); the level and the EV-cap key read live inside `resolveAfkingBox`;
     ///      the per-sub inputs (amount, score) come from the Sub record. Day-keyed
     ///      no-double-open: the leg runs only while `lastOpenedDay < lastAutoBoughtDay`
-    ///      (pre-gated by `_afkingBoxReady`), and advances the marker
+    ///      (the router pre-gates on the same condition), and advances the marker
     ///      (`lastOpenedDay = lastAutoBoughtDay`) BEFORE the resolve (effects-before-
     ///      interaction; a re-entrant open re-checks the now-equal marker and no-ops). The
     ///      box is materialized by delegatecalling the LootboxModule's `resolveAfkingBox`
@@ -1567,7 +1569,7 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
 
     /// @notice The post-RNG afking-box OPEN leg — an `OPEN_BATCH`-style router category
     ///         driven by `_subOpenCursor` (not folded into advance).
-    /// @dev The open leg no-ops during the freeze (a mid-day RNG lock or the terminal-jackpot
+    /// @dev The open leg no-ops during the freeze (the daily RNG lock or the terminal-jackpot
     ///      liveness control), so the loop body cannot revert under the entry-gate (each open
     ///      is pre-gated on a landed word) — no per-item try/catch. Walks `_subscribers` from
     ///      `_subOpenCursor` under a WEIGHTED budget: every subscriber visit costs 1 unit and
@@ -1747,9 +1749,8 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
                 if (unitsUsed != 0 || opened != 0) {
                     // Forced-split bounty batch: knee-credit only the opens beyond what
                     // the carry already credited. A batch is one OPEN_BATCH's worth of
-                    // opens (what a single unsplit call used to drain); opens past that
-                    // boundary begin a FRESH batch with a fresh knee, exactly as a
-                    // separate old call would have. The carry persists while the walk is
+                    // opens; opens past that boundary begin a FRESH batch with a fresh
+                    // knee. The carry persists while the walk is
                     // budget-exhausted with boxes still pending, and clears at a completed
                     // lap, at the boundary, or when the pending counter drains to zero
                     // (the open-side clear). Aggregate bounty over the split chunks == the
@@ -1805,9 +1806,8 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
                 if (!ok) _revertDelegate(data);
                 uint256 humanOpened = abi.decode(data, (uint256));
                 opened += humanOpened;
-                // Human opens knee-credit at face value every call — human-sweep splitting
-                // predates the weighted budget (its steps were always charged), so only the
-                // afking side carries forced-split netting.
+                // Human opens knee-credit at face value every call — the human sweep's steps
+                // are always charged, so only the afking side carries forced-split netting.
                 afkKneeCredit += humanOpened;
                 uint48 finalFrontierIdx = boxCursorIndex == 0
                     ? 1
@@ -1849,7 +1849,7 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
     /// @param count Max afking boxes to open this call (0 = the default OPEN_BATCH-equivalent
     ///        budget). Converted to walk units (count × OPEN_ITEM_WEIGHT, count clamped to the
     ///        subscriber cap), so a skip run consumes budget here too — the caller sizes count
-    ///        to the gas they can afford, exactly as before. NEVER gated on the pending-box
+    ///        to the gas they can afford. NEVER gated on the pending-box
     ///        counter: this valve is the liveness floor that stays correct even if the counter
     ///        ever under-reports. Pays no bounty and never touches the bounty carry.
     /// @return opened The number of afking boxes opened this call.

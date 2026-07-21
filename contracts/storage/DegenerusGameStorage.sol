@@ -32,6 +32,9 @@ import {MintPaymentKind} from "../interfaces/IDegenerusGame.sol";
  *   - DegenerusGameDecimatorModule (delegatecall module)
  *   - DegenerusGameDegeneretteModule (delegatecall module)
  *   - DegenerusGameGameOverModule (delegatecall module)
+ *   - DegenerusGameBingoModule (delegatecall module)
+ *   - GameAfkingModule (delegatecall module)
+ *   - DegenerusGameFoilPackModule (delegatecall module)
  *
  * DELEGATECALL PATTERN:
  * When DegenerusGame calls `module.delegatecall(...)`, the module's code executes
@@ -236,7 +239,7 @@ abstract contract DegenerusGameStorage {
     // =========================================================================
     // These variables pack into a single 32-byte storage slot for gas efficiency.
     // Order matters: EVM packs from low to high within a slot.
-    // 31/32 bytes used (1 byte padding).
+    // All 32 bytes are used — see the SLOT 0 table in the file header for byte offsets.
 
     /// @dev Game day index when the purchase phase (or deploy) began.
     ///      Initialized to GameTimeLib.currentDayIndex() in the constructor.
@@ -312,7 +315,7 @@ abstract contract DegenerusGameStorage {
 
     /// @dev True when daily jackpot ETH phase completed but coin+tickets phase pending.
     ///      Gas optimization: splits daily jackpot into multiple advanceGame calls to
-    ///      stay under 15M gas block limit. Cleared after coin+ticket distribution.
+    ///      stay under the ~10M per-tx internal budget. Cleared after coin+ticket distribution.
     bool internal dailyJackpotCoinTicketsPending;
 
     /// @dev Jackpot compression tier: 0=normal (5d), 1=compressed (3d), 2=turbo (1d).
@@ -352,7 +355,7 @@ abstract contract DegenerusGameStorage {
     /// @dev Latching terminal for the coin-presale-box window. Set once, in the
     ///      box purchase that crosses the 50-ETH cumulative box cap. While false,
     ///      ETH buys accrue presaleBoxCredit; once true, no further box buys or
-    ///      credit accrual occur. Occupies slot-0 padding byte [30:31].
+    ///      credit accrual occur. Packed into slot 0.
     bool internal presaleOver;
 
     /// @dev Afking process-STAGE drain-completion flag — the subscriber-drain sibling
@@ -360,16 +363,16 @@ abstract contract DegenerusGameStorage {
     ///      subscriber set this day; set true once the set is fully drained; flipped back
     ///      to false forward-looking at the start of the next day (the advance's
     ///      `_afkingResetDay != day` gate), so it always reflects "afking done for the
-    ///      current day". Packed into slot-0 byte [31:32] alongside `level` /
-    ///      `rngLockedFlag` / `ticketsFullyProcessed`, which the advance-path STAGE
-    ///      already SLOADs, so its read/write is free.
+    ///      current day". Packed into slot 0 alongside `level` / `rngLockedFlag` /
+    ///      `ticketsFullyProcessed`, which the advance-path STAGE already SLOADs, so it
+    ///      costs no additional cold slot access on that path.
     bool internal subsFullyProcessed;
 
     /// @dev One-way "all coin-presale boxes have been opened" flag. False until the auto-open sweep
     ///      has advanced its cursor PAST presaleCloseIndex — i.e. every box at indices <= the close
-    ///      index is opened, so none can remain. Lives in slot-0 padding byte [30:31], which every
-    ///      open path already SLOADs (`level` / `rngLockedFlag`), so the gate `!presaleDrained` is a
-    ///      free read: once set, the post-presale sweep AND manual opens skip the cold presaleBoxEth
+    ///      index is opened, so none can remain. Packed into slot 0, which every open path already
+    ///      SLOADs (`level` / `rngLockedFlag`), so the gate `!presaleDrained` costs no additional
+    ///      cold slot access: once set, the post-presale sweep AND manual opens skip the presaleBoxEth
     ///      SLOAD. Flipped only by the in-order sweep (never the manual path), so an out-of-order
     ///      manual open of the closing box cannot trip it early and strand a still-queued box.
     bool internal presaleDrained;
@@ -379,8 +382,8 @@ abstract contract DegenerusGameStorage {
     ///      RNG in flight); it persists through the jackpot days and is cleared in the advance at the
     ///      final jackpot day's RNG request — the same boundary where new tickets route to the next
     ///      level. While closed, FLIP ticket purchases revert, so FLIP tickets only ever join a
-    ///      happening jackpot, never an open/stalled purchase phase. Occupies slot-0 byte [30:31], which
-    ///      the purchase/advance paths already SLOAD, so the gate is a free read.
+    ///      happening jackpot, never an open/stalled purchase phase. Packed into slot 0, which the
+    ///      purchase/advance paths already SLOAD, so the gate costs no additional cold slot access.
     bool internal ticketRedemptionOpen;
 
     /// @dev Decimator day-one burn bonus latch. Set by the RNG request that opens the
@@ -2589,8 +2592,8 @@ abstract contract DegenerusGameStorage {
     uint16 internal _pendingBoxCount;
 
     /// @dev Afking opens already knee-credited in the CURRENT forced-split bounty batch.
-    ///      The weighted walk can split what a single unweighted call used to drain (a long
-    ///      skip run eats budget), and each split chunk would otherwise re-satisfy the
+    ///      The weighted walk can split one logical drain across chunks (a long skip run eats
+    ///      budget), and each split chunk would otherwise re-satisfy the
     ///      OPEN_KNEE and re-pay a full bounty. The rewarded crank credits only
     ///      min(carry + opened, KNEE) - min(carry, KNEE) toward the knee, carries the batch
     ///      total while the walk is budget-exhausted with boxes still pending (always < 80,
@@ -2686,14 +2689,12 @@ abstract contract DegenerusGameStorage {
     ///      until the first century completes — a zero snapshot imposes no floor, so
     ///      level 100 itself runs on the plain ratchet. Snapshotted separately because
     ///      _endPhase overwrites levelPrizePool[x00] with futurePool/3 as the reachable
-    ///      x01 ratchet base. Packs into the foil-cursor slot's free bytes; no prior
-    ///      storage slot shifts.
+    ///      x01 ratchet base. Packs into the foil-cursor slot's free bytes.
     uint128 internal lastCenturyPrizePool;
 
     /// @dev Lifetime count of deity boons issued from a given deity to a given
     ///      recipient, keyed [deity][recipient]. Capped at DEITY_RECIPIENT_BOON_CAP
-    ///      in issueDeityBoon. Appended here (after the last existing state slot) so
-    ///      no prior storage slot shifts.
+    ///      in issueDeityBoon.
     mapping(address => mapping(address => uint8)) internal deityRecipientBoonCount;
 
     /// @dev 75/25 next/future split for the foil leg (forked from the 90/10

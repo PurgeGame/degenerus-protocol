@@ -6,10 +6,10 @@ import {DegenerusGameStorage} from "../storage/DegenerusGameStorage.sol";
 /// @title SettleClaimableShortfallTester
 /// @notice Test-only harness that exposes the canonical shortfall settle
 ///         (`DegenerusGameStorage._settleShortfall`) plus minimal getters/setters for the
-///         packed claimable/afking balances and `claimablePool`, so the refinement suite can
-///         assert the paired-debit invariant `claimablePool == Σ (claimable + afking)`, the
-///         strict 1-wei sentinel, and the claimable-then-afking waterfall in isolation — a
-///         focused refinement check, NOT a full re-audit of the whale/mint/presale callers.
+///         packed claimable/afking balances and `claimablePool`, so tests can assert the
+///         paired-debit invariant `claimablePool == Σ (claimable + afking)`, the strict 1-wei
+///         sentinel, and the claimable-then-afking waterfall in isolation. Scope is the
+///         settle body itself, not the whale/mint/presale callers.
 /// @dev Inherits the canonical storage layout so the EXACT production `_settleShortfall` body
 ///      runs (no re-implementation), reading and writing the same packed balance slot through
 ///      the accessors. The internal-constant external-contract references in DegenerusGameStorage
