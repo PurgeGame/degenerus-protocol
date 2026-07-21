@@ -107,11 +107,17 @@ interface IWWXRPMint {
 }
 
 /// @notice Interface for the AFKing seat token's vault-held claim-rights
-///         allowance (998 seats; grants locked until the free tranche fills).
+///         allowance (998 seats; grants locked until the free tranche fills)
+///         and vault-held seats (the construction seat plus eviction-forfeit
+///         repossessions sent in by reclaimSeat).
 interface IAFKingSubscriptionToken {
     /// @notice Grant seat claim rights from the vault's allowance; the
     ///         grantee mints via claimSeat with their own traits.
     function vaultGrant(address to, uint256 amount) external;
+
+    /// @notice ERC721 transfer of a vault-held seat (the vault is the owner,
+    ///         so the direct-owner authorization path applies).
+    function transferFrom(address from, address to, uint256 tokenId) external;
 }
 
 /*
@@ -714,6 +720,21 @@ contract DegenerusVault {
     function afkingGrant(address to, uint256 amount) external onlyVaultOwner {
         if (amount == 0) return;
         afkingSubToken.vaultGrant(to, amount);
+    }
+
+    /// @notice Transfer a vault-held AFKing seat out — the disposal path for
+    ///         eviction-forfeit repossessions sent in by the token's
+    ///         reclaimSeat (the vault otherwise has no ERC721-out path).
+    /// @dev The token's seat lock still binds the vault as `from`: a transfer
+    ///      emptying the vault's balance reverts SeatInUse token-side (the
+    ///      vault is a permanently active subscriber), so the construction
+    ///      seat's tenure survives any disposal sequence — only surplus
+    ///      seats can leave.
+    /// @param tokenId Vault-held seat serial to transfer
+    /// @param to Recipient of the seat
+    /// @custom:reverts NotVaultOwner If caller does not hold >50.1% of DGVE
+    function afkingSeatTransfer(uint256 tokenId, address to) external onlyVaultOwner {
+        afkingSubToken.transferFrom(address(this), to, tokenId);
     }
 
     /// @notice Burn vault-held sDGNRS to claim proportional backing assets

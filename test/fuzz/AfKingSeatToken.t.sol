@@ -10,8 +10,9 @@ import {GameAfkingModule} from "../../contracts/modules/GameAfkingModule.sol";
 ///        (sub <=> seat): the pass-acquisition eligibility latch (whale
 ///        module -> mintPacked_ bit 154, read back through mintPackedFor),
 ///        the two-step claim flow, the subscribe coin gate, the seat lock
-///        (an active sub's last-seat transfer reverts SeatInUse until manual
-///        unsub or eviction), and the subscriberCount/subInfo views. Real
+///        (an encumbered holder's last-seat transfer reverts SeatInUse until
+///        manual unsub; an eviction forfeits the seat to the vault via
+///        reclaimSeat), and the subscriberCount/subInfo views. Real
 ///        protocol deploy — the token sits at the predicted AFKING_SUB_TOKEN
 ///        address; SDGNRS holds serial 1 from construction and the vault
 ///        holds a 999-seat claim-rights allowance, never tokens.
@@ -265,6 +266,83 @@ contract AfKingSeatToken is DeployProtocol {
         vm.prank(player);
         game.subscribe(address(0), false, false, 1, address(0));
         assertTrue(_isActive(player), "re-subscribe works with the seat back");
+    }
+
+    // ──────────────────────────────────────────────────────────────────────
+    // Eviction forfeit: trapped seat, blocked re-subscribe, vault reclaim
+    // ──────────────────────────────────────────────────────────────────────
+
+    /// @dev Drive `who` into the funding-kill: drain their afking funding and
+    ///      complete days until the STAGE evicts (the no-orphan guard can
+    ///      defer the kill a cycle while a stamped box awaits its open).
+    function _evict(address who, string memory seedTag) internal {
+        for (uint256 i; i < 5 && _isActive(who); i++) {
+            uint256 rem = game.afkingFundingOf(who);
+            if (rem > 0) {
+                vm.prank(who);
+                game.withdrawAfkingFunding(rem);
+            }
+            _completeDay(uint256(keccak256(abi.encode(seedTag, i))) | 1);
+        }
+        assertFalse(_isActive(who), "fixture: the funding-kill evicted the sub");
+    }
+
+    /// @notice End-to-end forfeit: an evicted sub's last seat is trapped
+    ///         (SeatInUse), a fresh re-subscribe reverts SeatForfeited, anyone
+    ///         collects the forfeit to the vault, the vault owner disposes of
+    ///         the repossession, and the settled evictee re-enters with a
+    ///         fresh seat.
+    function testEvictionForfeitEndToEnd() public {
+        address p = makeAddr("evictee");
+        address flipper = makeAddr("repo-buyer");
+        uint256 id = _seatAndSubscribe(p);
+
+        _evict(p, "evict-e2e");
+
+        // Trapped: the evicted holder cannot move the seat...
+        vm.prank(p);
+        vm.expectRevert(AFKingSubscriptionToken.SeatInUse.selector);
+        afkingSubToken.transferFrom(p, flipper, id);
+        // ...and cannot re-subscribe past the forfeit.
+        _fundPool(p, 1 ether);
+        vm.prank(p);
+        vm.expectRevert(GameAfkingModule.SeatForfeited.selector);
+        game.subscribe(address(0), false, false, 1, address(0));
+
+        // Permissionless collection to the vault.
+        afkingSubToken.reclaimSeat(id);
+        assertEq(afkingSubToken.ownerOf(id), address(vault), "seat repossessed");
+        assertEq(afkingSubToken.balanceOf(p), 0);
+
+        // A second collection has nothing to take.
+        vm.expectRevert(AFKingSubscriptionToken.NotEvicted.selector);
+        afkingSubToken.reclaimSeat(id);
+
+        // Vault-owner disposal (CREATOR holds the DGVE majority); the rando
+        // arm proves the gate.
+        vm.prank(makeAddr("rando"));
+        vm.expectRevert(NotVaultOwner.selector);
+        vault.afkingSeatTransfer(id, flipper);
+        vm.prank(ContractAddresses.CREATOR);
+        vault.afkingSeatTransfer(id, flipper);
+        assertEq(afkingSubToken.ownerOf(id), flipper, "vault re-sold the seat");
+
+        // Settled: with a seat back in hand the evictee subscribes again.
+        vm.prank(flipper);
+        afkingSubToken.transferFrom(flipper, p, id);
+        vm.prank(p);
+        game.subscribe(address(0), false, false, 1, address(0));
+        assertTrue(_isActive(p), "forfeit settled -> re-subscribe works");
+    }
+
+    /// @notice The vault cannot dispose of its LAST seat: the construction
+    ///         seat's permanent self-subscription keeps the seat lock binding
+    ///         on the vault as `from`.
+    function testVaultCannotDisposeConstructionSeat() public {
+        // Serial 2 is the vault's only seat at deploy.
+        vm.prank(ContractAddresses.CREATOR);
+        vm.expectRevert(AFKingSubscriptionToken.SeatInUse.selector);
+        vault.afkingSeatTransfer(2, makeAddr("nope"));
     }
 
     // ──────────────────────────────────────────────────────────────────────

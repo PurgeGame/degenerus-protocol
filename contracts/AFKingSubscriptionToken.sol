@@ -25,19 +25,35 @@ pragma solidity 0.8.34;
  *        2 + 1,000 + 998 = 2,000: the tranche accounting IS the supply cap
  *        (MAX_SERIAL is a fail-loud backstop).
  *      - The game gates subscribe on balanceOf >= 1. Ownership is checked
- *        ONLY there; the seat lock below blocks an active subscriber's
- *        last-seat transfer until they unsubscribe (or are evicted).
+ *        ONLY there; the seat lock below blocks an encumbered holder's
+ *        last-seat transfer until they unsubscribe cleanly (an eviction
+ *        forfeits the seat instead — see EVICTION FORFEIT).
  *
  * @dev SEAT LOCK (the only nonstandard ERC721 transfer behavior):
  *      Whenever a transfer takes a sender's balance to exactly 0, it
- *      STATICCALLs the game's subInfo view and reverts SeatInUse while the
- *      sender has an ACTIVE afking subscription. The seat is the credential
+ *      STATICCALLs the game's subInfo view and mintPackedFor's
+ *      SEAT_ENCUMBERED bit and reverts SeatInUse while either holds: an
+ *      ACTIVE afking subscription, or a still-set encumbrance latch (an
+ *      eviction forfeit awaiting reclaimSeat). The seat is the credential
  *      (sub <=> seat), so an active subscriber cannot part with their last
- *      seat — they manually unsubscribe (or get evicted) first, and then
- *      the seat is free to sell. Multi-seat holders and plain holders are
- *      never blocked; a self-transfer nets to a nonzero balance and never
- *      triggers the check. The game call is read-only — mints cannot cross
- *      to zero, and there is no burn path.
+ *      seat — a manual unsubscribe clears both and frees the seat to sell
+ *      in the next tx. Multi-seat holders and plain holders are never
+ *      blocked; a self-transfer nets to a nonzero balance and never
+ *      triggers the check. The game calls here are read-only — mints
+ *      cannot cross to zero, and there is no burn path.
+ *
+ * @dev EVICTION FORFEIT (reclaimSeat): the game's subscribe sets the
+ *      holder's SEAT_ENCUMBERED latch and only a manual cancel clears it,
+ *      so an evicted (funding-killed) sub leaves the bit set with no
+ *      active sub — the provable forfeit state. While it holds: the seat
+ *      lock traps the holder's last seat, tokenURI renders the evicted
+ *      WWXRP art, the game refuses a fresh subscribe (SeatForfeited), and
+ *      ANYONE may call reclaimSeat to force-transfer exactly one of the
+ *      holder's seats to the VAULT (which re-sells via its owner-gated
+ *      afkingSeatTransfer). The reclaim then clears the latch through the
+ *      game's AFKING_SUB_TOKEN-only clearSeatEncumbrance, ending the
+ *      forfeit: no second seat is seizable, remaining seats transfer
+ *      freely, and the address may subscribe again once it holds a seat.
  *
  * @dev ART (the protocol's three-ring ticket badge, one big badge instead
  *      of four quadrants): a rounded card filled with the buyer's
@@ -69,12 +85,17 @@ interface IIcons32 {
     function symbol(uint256 quadrant, uint8 idx) external view returns (string memory);
 }
 
-/// @dev Game views consumed by this token: subInfo backs the seat lock
+/// @dev Game surface consumed by this token: subInfo backs the seat lock
 ///      (only `active` — the first return — is read: true while the holder
 ///      has a live afking subscription); mintPackedFor backs the free-claim
 ///      eligibility check (the SEAT_CLAIMED bit is the lifetime latch the
-///      whale module sets on every pass acquisition).
+///      whale module sets on every pass acquisition) AND the seat lock /
+///      forfeit checks (the SEAT_ENCUMBERED bit); clearSeatEncumbrance is
+///      the one mutator — AFKING_SUB_TOKEN-only game-side, called by
+///      reclaimSeat after seizing a forfeited seat.
 interface ISeatGameViews {
+    function clearSeatEncumbrance(address holder) external;
+
     function subInfo(
         address player
     )
@@ -141,9 +162,14 @@ contract AFKingSubscriptionToken {
     /// @notice symbolId >= 32 at claim
     error InvalidTrait();
 
-    /// @notice Thrown when a transfer would empty an active subscriber's
-    ///         balance — unsubscribe (or be evicted) before selling the seat
+    /// @notice Thrown when a transfer would empty an encumbered holder's
+    ///         balance — an active subscriber unsubscribes before selling the
+    ///         seat; an evicted holder's seat is forfeit until reclaimSeat
     error SeatInUse();
+
+    /// @notice reclaimSeat target's holder is not in the eviction-forfeit
+    ///         state (SEAT_ENCUMBERED set with no active sub)
+    error NotEvicted();
 
     /// @notice Caller has no seat to claim: not latched eligible game-side,
     ///         free tranche exhausted or already used, and no vault grant
@@ -200,6 +226,11 @@ contract AFKingSubscriptionToken {
     /// @param amount Claim rights granted
     /// @param granted Lifetime total granted after this call (<= 998)
     event VaultSeatsGranted(address indexed to, uint256 amount, uint256 granted);
+
+    /// @notice An evicted holder's forfeited seat was reclaimed to the vault
+    /// @param holder Evicted holder the seat was seized from
+    /// @param tokenId Serial force-transferred to the VAULT
+    event SeatReclaimed(address indexed holder, uint256 indexed tokenId);
 
     /// @notice External renderer changed
     event RendererUpdated(address indexed previousRenderer, address indexed newRenderer);
@@ -476,14 +507,17 @@ contract AFKingSubscriptionToken {
     }
 
     /// @notice Transfer a seat — enforces the seat lock: a transfer that
-    ///         empties an active subscriber's balance reverts SeatInUse
-    ///         (unsubscribe or be evicted first; the cancel tombstone reads
-    ///         inactive immediately, so the seat sells in the very next tx).
+    ///         empties an encumbered holder's balance reverts SeatInUse.
+    ///         A manual unsubscribe clears both halves of the lock (the
+    ///         cancel tombstone reads inactive and the encumbrance latch is
+    ///         cleared in the same tx), so a clean leaver's seat sells in
+    ///         the very next tx; an evicted holder's latch stays set, so
+    ///         their last seat is trapped until reclaimSeat forfeits it.
     /// @custom:reverts InvalidToken When the serial is not minted or `from` is not its owner
     /// @custom:reverts ZeroAddress When to is address(0)
     /// @custom:reverts NotAuthorized When caller is neither owner, approved, nor operator
     /// @custom:reverts SeatInUse When this transfer would empty the balance of
-    ///                 an active subscriber
+    ///                 an active subscriber or an unreclaimed evicted holder
     function transferFrom(address from, address to, uint256 tokenId) public {
         if (to == address(0)) revert ZeroAddress();
         address ownerAddr = _owners[tokenId];
@@ -503,11 +537,59 @@ contract AFKingSubscriptionToken {
         emit Transfer(from, to, tokenId);
 
         // Seat lock: a self-transfer nets to the original balance before this
-        // check, so it can never trigger. The game call is read-only.
+        // check, so it can never trigger. Both game calls are read-only.
+        // Blocked while EITHER holds — an active sub, or a still-set
+        // SEAT_ENCUMBERED latch (an eviction forfeit awaiting reclaimSeat).
         if (_balances[from] == 0) {
             (bool active, , , ) = game.subInfo(from);
-            if (active) revert SeatInUse();
+            if (
+                active ||
+                (game.mintPackedFor(from) >>
+                    BitPackingLib.SEAT_ENCUMBERED_SHIFT) &
+                    1 !=
+                0
+            ) revert SeatInUse();
         }
+    }
+
+    /// @notice Collect an eviction forfeit: force-transfer `tokenId` from its
+    ///         evicted holder to the VAULT and clear the holder's encumbrance
+    ///         latch. Permissionless — the holder is in the forfeit state
+    ///         (SEAT_ENCUMBERED set with no active sub) only after an eviction,
+    ///         so there is nothing to grief: the seizure target is fixed (the
+    ///         VAULT) and exactly one seat per eviction is seizable (the latch
+    ///         clear below ends the forfeit). The evicted holder may call this
+    ///         themselves to settle up and re-enter with another seat. The
+    ///         vault re-sells repossessions via its owner-gated
+    ///         afkingSeatTransfer.
+    /// @param tokenId Serial to seize; must be owned by an evicted holder.
+    /// @custom:reverts InvalidToken When the serial is not minted
+    /// @custom:reverts NotEvicted When the holder has an active sub or no
+    ///                 encumbrance latch set (nothing is forfeit)
+    function reclaimSeat(uint256 tokenId) external {
+        address holder = ownerOf(tokenId);
+        (bool active, , , ) = game.subInfo(holder);
+        if (
+            active ||
+            (game.mintPackedFor(holder) >>
+                BitPackingLib.SEAT_ENCUMBERED_SHIFT) &
+                1 ==
+            0
+        ) revert NotEvicted();
+
+        delete _tokenApprovals[tokenId];
+        unchecked {
+            _balances[holder] -= 1;
+            _balances[ContractAddresses.VAULT] += 1;
+        }
+        _owners[tokenId] = ContractAddresses.VAULT;
+        emit Transfer(holder, ContractAddresses.VAULT, tokenId);
+
+        // Settle the forfeit game-side: clears SEAT_ENCUMBERED (this token is
+        // the only authorized caller), so no second seat is seizable and the
+        // holder may subscribe again once they hold a seat.
+        game.clearSeatEncumbrance(holder);
+        emit SeatReclaimed(holder, tokenId);
     }
 
     /// @notice transferFrom + ERC721Receiver acceptance check for contracts
@@ -553,24 +635,37 @@ contract AFKingSubscriptionToken {
       |                             TOKEN URI                                |
       +======================================================================+*/
 
-    /// @notice On-chain SVG metadata for each seat. LIVE lock state: a seat
-    ///         is "Locked" while its holder has an active afking subscription
-    ///         and this is their only seat (the seat lock would block its
-    ///         transfer); it renders a corner padlock and a Status attribute.
-    ///         Metadata is dynamic — it flips back to "Transferable" the
-    ///         moment the holder unsubscribes, is evicted, or gains a second
-    ///         seat.
+    /// @notice On-chain SVG metadata for each seat. LIVE state, dynamic per
+    ///         holder: a seat is "Locked" while the seat lock would block its
+    ///         transfer (the holder is encumbered — active sub or unreclaimed
+    ///         eviction — and this is their only seat), rendering a corner
+    ///         padlock and a Status attribute; it reads "Transferable" again
+    ///         the moment the holder unsubscribes cleanly or gains a second
+    ///         seat. An EVICTED holder's seats render the forfeit art instead:
+    ///         the WWXRP mark (the XRP glyph, Icons32 index 0) near-full-card
+    ///         with NO badge rings, a WWXRP wordmark at the card foot, and
+    ///         Status "Evicted - reclaimable" — flipping back to the normal
+    ///         badge art as soon as the seat is reclaimed to the vault (a
+    ///         clean holder again) or the forfeit is otherwise settled.
     /// @dev Uses the internal renderer by default; an owner-set external renderer may override.
     ///      A reverting or empty return falls back to internal render. The staticcall is not
     ///      gas-capped, so tokenURI integrity relies on the owner setting a sane renderer.
+    ///      Evicted seats always internal-render (the renderer interface carries no
+    ///      evicted flag).
     function tokenURI(uint256 tokenId) external view returns (string memory) {
         (uint8 symbolId, uint24 bgRgb, uint24 trimRgb) = seatTraits(tokenId);
 
         bool seatLocked;
+        bool evicted;
         {
             address holder = _owners[tokenId];
             (bool active, , , ) = game.subInfo(holder);
-            seatLocked = active && _balances[holder] == 1;
+            bool encumbered = (game.mintPackedFor(holder) >>
+                BitPackingLib.SEAT_ENCUMBERED_SHIFT) &
+                1 !=
+                0;
+            evicted = encumbered && !active;
+            seatLocked = (active || encumbered) && _balances[holder] == 1;
         }
 
         IIcons32 icons = IIcons32(ContractAddresses.ICONS_32);
@@ -585,10 +680,11 @@ contract AFKingSubscriptionToken {
         string memory backgroundColor = _rgbToHex(bgRgb);
         string memory trimColor = _rgbToHex(trimRgb);
 
-        // External renderer first; the internal render runs only when the
-        // renderer is unset, the call fails, or it returns empty (fallback).
+        // Evicted seats always internal-render the forfeit art; otherwise the
+        // external renderer runs first and the internal render is the fallback
+        // (renderer unset, call fails, or empty return).
         string memory svg;
-        address rendererAddr = renderer;
+        address rendererAddr = evicted ? address(0) : renderer;
         if (rendererAddr != address(0)) {
             (bool ok, string memory extSvg) = _tryRenderExternal(
                 rendererAddr,
@@ -606,15 +702,22 @@ contract AFKingSubscriptionToken {
             }
         }
         if (bytes(svg).length == 0) {
-            svg = _renderSvgInternal(
-                iconPath,
-                quadrant,
-                symbolIdx,
-                isCrypto,
-                seatLocked,
-                backgroundColor,
-                trimColor
-            );
+            svg = evicted
+                ? _renderEvictedSvg(
+                    icons.data(0),
+                    seatLocked,
+                    backgroundColor,
+                    trimColor
+                )
+                : _renderSvgInternal(
+                    iconPath,
+                    quadrant,
+                    symbolIdx,
+                    isCrypto,
+                    seatLocked,
+                    backgroundColor,
+                    trimColor
+                );
         }
 
         string memory json = string(abi.encodePacked(
@@ -624,7 +727,11 @@ contract AFKingSubscriptionToken {
             '"},{"trait_type":"Background","value":"', backgroundColor,
             '"},{"trait_type":"Trim","value":"', trimColor,
             '"},{"trait_type":"Status","value":"',
-            seatLocked ? "Locked - seat in use" : "Transferable",
+            evicted
+                ? "Evicted - reclaimable"
+                : seatLocked
+                    ? "Locked - seat in use"
+                    : "Transferable",
             '"}],"image":"data:image/svg+xml;base64,',
             Base64.encode(bytes(svg)),
             '"}'
@@ -689,6 +796,47 @@ contract AFKingSubscriptionToken {
             '" stroke-width="2.2"/>',
             _rings(trimColor),
             symbolGroup,
+            seatLocked ? _lockGlyph() : "",
+            "</svg>"
+        ));
+    }
+
+    /// @dev Evicted-seat forfeit art: the card in the holder's colors carrying
+    ///      the WWXRP mark — the XRP glyph (source colors, passed in from
+    ///      Icons32 index 0) blown up near-full-card with NO badge rings,
+    ///      centered 4 units above center — over a WWXRP wordmark at the card
+    ///      foot, plus the padlock while the seat lock traps this seat.
+    function _renderEvictedSvg(
+        string memory xrpPath,
+        bool seatLocked,
+        string memory backgroundColor,
+        string memory trimColor
+    ) private pure returns (string memory) {
+        // 76-unit glyph box on the ±50 card, leaving the foot row for the
+        // wordmark: scale = 76e6 / 512; center via the box-centering translate,
+        // then lift the glyph 4 units.
+        uint32 sSym1e6 = uint32((uint256(76) * 1_000_000) / ICON_VB);
+        int256 t = -(int256(uint256(ICON_VB)) * int256(uint256(sSym1e6))) / 2;
+        string memory glyph = string(
+            abi.encodePacked(
+                "<g transform='",
+                _mat6(sSym1e6, t, t - 4_000_000),
+                "'><g style='vector-effect:non-scaling-stroke'>",
+                xrpPath,
+                "</g></g>"
+            )
+        );
+        return string(abi.encodePacked(
+            '<svg xmlns="http://www.w3.org/2000/svg" viewBox="-51 -51 102 102">'
+            '<rect x="-50" y="-50" width="100" height="100" rx="12" fill="',
+            backgroundColor,
+            '" stroke="',
+            trimColor,
+            '" stroke-width="2.2"/>',
+            glyph,
+            '<text y="45" text-anchor="middle" font-family="Arial,sans-serif" font-size="11" font-weight="bold" fill="',
+            trimColor,
+            '">WWXRP</text>',
             seatLocked ? _lockGlyph() : "",
             "</svg>"
         ));

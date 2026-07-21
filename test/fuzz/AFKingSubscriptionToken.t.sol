@@ -5,12 +5,15 @@ import "forge-std/Test.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {AFKingSubscriptionToken} from "../../contracts/AFKingSubscriptionToken.sol";
 
-/// @dev Stand-in for the game's views, etched at the compile-time GAME
-///      address. The seat lock reads subInfo's `active`; the free-claim path
-///      reads the SEAT_CLAIMED eligibility bit (154) out of mintPackedFor.
+/// @dev Stand-in for the game's surface, etched at the compile-time GAME
+///      address. The seat lock reads subInfo's `active` plus the
+///      SEAT_ENCUMBERED bit (155) out of mintPackedFor; the free-claim path
+///      reads the SEAT_CLAIMED eligibility bit (154); reclaimSeat settles a
+///      forfeit through clearSeatEncumbrance.
 contract MockSeatGame {
     mapping(address => bool) public activeOf;
     mapping(address => bool) public eligibleOf;
+    mapping(address => bool) public encumberedOf;
 
     function setActive(address who, bool a) external {
         activeOf[who] = a;
@@ -20,6 +23,14 @@ contract MockSeatGame {
         eligibleOf[who] = e;
     }
 
+    function setEncumbered(address who, bool e) external {
+        encumberedOf[who] = e;
+    }
+
+    function clearSeatEncumbrance(address holder) external {
+        encumberedOf[holder] = false;
+    }
+
     function subInfo(
         address player
     ) external view returns (bool, uint8, uint24, uint24) {
@@ -27,7 +38,9 @@ contract MockSeatGame {
     }
 
     function mintPackedFor(address player) external view returns (uint256) {
-        return eligibleOf[player] ? (uint256(1) << 154) : 0;
+        uint256 word = eligibleOf[player] ? (uint256(1) << 154) : 0;
+        if (encumberedOf[player]) word |= uint256(1) << 155;
+        return word;
     }
 }
 
@@ -576,6 +589,142 @@ contract AFKingSubscriptionTokenTest is Test {
     }
 
     // ──────────────────────────────────────────────────────────────────────
+    // Eviction forfeit (reclaimSeat)
+    // ──────────────────────────────────────────────────────────────────────
+
+    /// @dev The forfeit state: SEAT_ENCUMBERED set with no active sub.
+    function _evict(address who) internal {
+        game.setActive(who, false);
+        game.setEncumbered(who, true);
+    }
+
+    function testEvictedLastSeatTransferBlocked() public {
+        uint256 id = _claim(alice, 1, 1, 1);
+        _evict(alice);
+        vm.prank(alice);
+        vm.expectRevert(AFKingSubscriptionToken.SeatInUse.selector);
+        coin.transferFrom(alice, bob, id);
+        assertEq(coin.ownerOf(id), alice, "forfeited seat is trapped");
+    }
+
+    function testEvictedExtraSeatStillTransfers() public {
+        uint256 first = _claim(alice, 1, 1, 1);
+        _exhaustFreeTranche();
+        vm.prank(VAULT);
+        coin.vaultGrant(alice, 1);
+        vm.prank(alice);
+        uint256 second = coin.claimSeat(2, 2, 2);
+        _evict(alice);
+
+        // Only the LAST seat is trapped — exactly one seat is forfeit.
+        vm.prank(alice);
+        coin.transferFrom(alice, bob, first);
+        assertEq(coin.ownerOf(first), bob, "surplus seat leaves freely");
+        vm.prank(alice);
+        vm.expectRevert(AFKingSubscriptionToken.SeatInUse.selector);
+        coin.transferFrom(alice, bob, second);
+    }
+
+    function testReclaimSeatSeizesToVaultAndSettles() public {
+        uint256 id = _claim(alice, 1, 1, 1);
+        _evict(alice);
+
+        // Permissionless: any caller may collect the forfeit — to the VAULT only.
+        vm.expectEmit(true, true, true, true, address(coin));
+        emit AFKingSubscriptionToken.Transfer(alice, VAULT, id);
+        vm.expectEmit(true, true, true, true, address(coin));
+        emit AFKingSubscriptionToken.SeatReclaimed(alice, id);
+        vm.prank(bob);
+        coin.reclaimSeat(id);
+
+        assertEq(coin.ownerOf(id), VAULT, "seat repossessed to the vault");
+        assertEq(coin.balanceOf(alice), 0);
+        assertEq(coin.balanceOf(VAULT), 2, "construction seat + repossession");
+        assertFalse(game.encumberedOf(alice), "forfeit settled game-side");
+        // The vault is a clean holder: the repossession reads Transferable again.
+        assertTrue(
+            _contains(_decodeJson(coin.tokenURI(id)), "Transferable"),
+            "vault-held repossession -> normal metadata"
+        );
+    }
+
+    function testReclaimSeatRevertsUnlessForfeitState() public {
+        uint256 id = _claim(alice, 1, 1, 1);
+        // Clean holder: nothing forfeit.
+        vm.expectRevert(AFKingSubscriptionToken.NotEvicted.selector);
+        coin.reclaimSeat(id);
+        // Active sub (encumbered but not evicted): nothing forfeit.
+        game.setActive(alice, true);
+        game.setEncumbered(alice, true);
+        vm.expectRevert(AFKingSubscriptionToken.NotEvicted.selector);
+        coin.reclaimSeat(id);
+        // Unminted serial.
+        vm.expectRevert(AFKingSubscriptionToken.InvalidToken.selector);
+        coin.reclaimSeat(1999);
+    }
+
+    function testReclaimSettlesRemainingSeatsAndStops() public {
+        uint256 first = _claim(alice, 1, 1, 1);
+        _exhaustFreeTranche();
+        vm.prank(VAULT);
+        coin.vaultGrant(alice, 1);
+        vm.prank(alice);
+        uint256 second = coin.claimSeat(2, 2, 2);
+        _evict(alice);
+
+        vm.prank(bob);
+        coin.reclaimSeat(second);
+        // The clear ends the forfeit: no second seizure, and the remaining
+        // seat transfers freely again.
+        vm.expectRevert(AFKingSubscriptionToken.NotEvicted.selector);
+        coin.reclaimSeat(first);
+        vm.prank(alice);
+        coin.transferFrom(alice, bob, first);
+        assertEq(coin.ownerOf(first), bob, "remaining seat freed by the settle");
+    }
+
+    /// @dev Evicted metadata: Status flips to the forfeit flag, the art is the
+    ///      WWXRP mark (no badge rings), and an external renderer is bypassed.
+    function testTokenURIEvictedArtAndStatus() public {
+        uint256 id = _claim(alice, 9, 0xff8800, 0x123abc);
+        string memory normalJson = _decodeJson(coin.tokenURI(id));
+
+        _evict(alice);
+        string memory evictedUri = coin.tokenURI(id);
+        string memory evictedJson = _decodeJson(evictedUri);
+        assertTrue(
+            _contains(evictedJson, "Evicted - reclaimable"),
+            "forfeit status flag"
+        );
+        assertTrue(
+            keccak256(bytes(evictedJson)) != keccak256(bytes(normalJson)),
+            "evicted art differs"
+        );
+        string memory svg = _decodeSvg(evictedJson);
+        assertTrue(_contains(svg, "WWXRP"), "WWXRP wordmark in the art");
+        assertFalse(_contains(svg, "<circle r="), "no badge rings");
+
+        // Evicted seats always internal-render: an external renderer is ignored.
+        MockSeatRenderer r = new MockSeatRenderer();
+        vm.prank(admin);
+        coin.setRenderer(address(r));
+        r.set("<svg>external</svg>", false);
+        assertEq(
+            coin.tokenURI(id),
+            evictedUri,
+            "external renderer bypassed while evicted"
+        );
+
+        // Settling the forfeit restores the badge art.
+        vm.prank(bob);
+        coin.reclaimSeat(id);
+        assertTrue(
+            _contains(_decodeJson(coin.tokenURI(id)), "Transferable"),
+            "reclaimed seat renders normally"
+        );
+    }
+
+    // ──────────────────────────────────────────────────────────────────────
     // Admin render surface
     // ──────────────────────────────────────────────────────────────────────
 
@@ -686,6 +835,37 @@ contract AFKingSubscriptionTokenTest is Test {
         bytes memory payload = new bytes(b.length - prefixLen);
         for (uint256 i; i < payload.length; i++) {
             payload[i] = b[prefixLen + i];
+        }
+        return string(_b64decode(payload));
+    }
+
+    /// @dev Extract and base64-decode the SVG image payload out of the
+    ///      decoded JSON body.
+    function _decodeSvg(
+        string memory json
+    ) private pure returns (string memory) {
+        bytes memory b = bytes(json);
+        bytes memory marker = bytes("data:image/svg+xml;base64,");
+        uint256 start = type(uint256).max;
+        for (uint256 i; i + marker.length <= b.length; i++) {
+            bool hit = true;
+            for (uint256 j; j < marker.length; j++) {
+                if (b[i + j] != marker[j]) {
+                    hit = false;
+                    break;
+                }
+            }
+            if (hit) {
+                start = i + marker.length;
+                break;
+            }
+        }
+        require(start != type(uint256).max, "svg marker not found");
+        uint256 end = start;
+        while (end < b.length && b[end] != bytes1(0x22)) end++;
+        bytes memory payload = new bytes(end - start);
+        for (uint256 i; i < payload.length; i++) {
+            payload[i] = b[start + i];
         }
         return string(_b64decode(payload));
     }

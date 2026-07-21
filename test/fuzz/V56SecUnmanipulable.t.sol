@@ -203,6 +203,7 @@ contract V56SecUnmanipulable is DeployProtocol {
         // CANCEL on a post-gap day -> finalize hands back the streak, but the decay guard zeroes it (a full
         // prior funded day was missed with no valid mint). The quest streak written is 0.
         if (_subscriberIndexOf(p) == 0) {
+            _settleForfeit(p); // the funding-kill left the forfeit gate set
             _subscribeLootbox(p, 1); // re-create the slot to drive the explicit-cancel finalize
         }
         vm.recordLogs();
@@ -242,7 +243,10 @@ contract V56SecUnmanipulable is DeployProtocol {
         // fresh day after the gap. The buy re-bases the run (afkingStartDay := the resume day; base := 0)
         // because covered + 1 < processDay (decay-on-read).
         _fundPool(p, 50 ether);
-        if (_subscriberIndexOf(p) == 0) _subscribeLootbox(p, 1);
+        if (_subscriberIndexOf(p) == 0) {
+            _settleForfeit(p); // the funding-kill left the forfeit gate set
+            _subscribeLootbox(p, 1);
+        }
         _deliverDay(_singleton(p), 0x6A9007);
 
         uint32 startAfter = _afkingStartOf(p);
@@ -481,7 +485,10 @@ contract V56SecUnmanipulable is DeployProtocol {
         // Re-fund (grounds the re-sub's NEW-run cover-buy — D-12) before the post-gap re-subscribe; the
         // re-sub re-bases to base 0 (a full funded day was missed), so the immediate cancel still finalizes 0.
         _fundPool(zeroed, 50 ether);
-        if (_subscriberIndexOf(zeroed) == 0) _subscribeLootbox(zeroed, 1);
+        if (_subscriberIndexOf(zeroed) == 0) {
+            _settleForfeit(zeroed); // the funding-kill left the forfeit gate set
+            _subscribeLootbox(zeroed, 1);
+        }
         vm.recordLogs();
         vm.prank(zeroed);
         game.subscribe(address(0), false, false, 0, address(0)); // explicit cancel finalize on a post-gap day
@@ -611,6 +618,17 @@ contract V56SecUnmanipulable is DeployProtocol {
         if (bal == 0) return;
         vm.prank(who);
         game.withdrawAfkingFunding(bal);
+    }
+
+    /// @dev Settle a funding-kill's seat forfeit test-side: clear the SEAT_ENCUMBERED
+    ///      bit (155 of `mintPacked_`, storage slot 9) so a post-eviction re-subscribe
+    ///      under test isn't blocked by the forfeit gate (SeatForfeited). The forfeit
+    ///      flow itself (trapped seat -> reclaimSeat -> vault) is proven in
+    ///      AfKingSeatToken; these streak tests only need the re-entry.
+    function _settleForfeit(address who) internal {
+        bytes32 slot = keccak256(abi.encode(who, uint256(9)));
+        uint256 packed = uint256(vm.load(address(game), slot));
+        vm.store(address(game), slot, bytes32(packed & ~(uint256(1) << 155)));
     }
 
     /// @dev Count the SubscriptionExpired(player, reason) events recorded since the last vm.recordLogs()

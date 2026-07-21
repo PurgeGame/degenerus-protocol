@@ -437,10 +437,11 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     /// @notice A subscriber's afking record: active flag, daily quantity, the
     ///         current run's activation day, and the funded-through high-water.
     ///         Tenure (funded days) = afkCoveredThroughDay - afkingStartDay while
-    ///         active; both are day indexes. `active` is also the AFKing Subscription Token's
-    ///         transfer guard: the coin staticcalls this view and reverts a
-    ///         last-coin transfer while the holder's sub is active (leaving is by
-    ///         manual cancel or eviction, then the seat is free to sell).
+    ///         active; both are day indexes. `active` is half the AFKing Subscription
+    ///         Token's transfer guard (the other half is the SEAT_ENCUMBERED bit in
+    ///         mintPackedFor): the coin staticcalls both and reverts a last-coin
+    ///         transfer while either holds — active sub, or eviction forfeit awaiting
+    ///         reclaimSeat. Manual cancel clears both, so a clean leaver sells freely.
     function subInfo(
         address player
     )
@@ -458,6 +459,19 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         dailyQuantity = s.dailyQuantity;
         afkingStartDay = s.afkingStartDay;
         afkCoveredThroughDay = s.afkCoveredThroughDay;
+    }
+
+    /// @notice AFKING_SUB_TOKEN-only: clear `holder`'s SEAT_ENCUMBERED latch after the
+    ///         coin's reclaimSeat seizes an evicted holder's forfeited seat to the vault.
+    /// @dev Thin delegatecall dispatch stub into GameAfkingModule's clearSeatEncumbrance
+    ///      body (the module enforces the AFKING_SUB_TOKEN-only gate under delegatecall,
+    ///      msg.sender preserved). Signature: clearSeatEncumbrance(address holder) —
+    ///      matches the module selector, so the calldata forwards as-is.
+    function clearSeatEncumbrance(address) external {
+        (bool ok, bytes memory data) = ContractAddresses
+            .GAME_AFKING_MODULE
+            .delegatecall(msg.data);
+        if (!ok) _revertDelegate(data);
     }
 
     /// @notice Deity-gated smite: add a curse stack to `smitee` for 200 FLIP.

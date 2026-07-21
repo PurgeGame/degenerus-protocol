@@ -113,6 +113,12 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
     ///      >= 1 coin is the sole afking credential (sub <=> coin), so a coinless
     ///      address cannot occupy a subscriber slot.
     error NoCoin();
+
+    /// @notice subscribe() fresh-subscribe by a holder with an uncollected eviction
+    ///         forfeit (SEAT_ENCUMBERED set with no active sub) — the forfeited seat
+    ///         must be reclaimed to the vault (AFKING_SUB_TOKEN.reclaimSeat) before
+    ///         the address can subscribe again.
+    error SeatForfeited();
     /// @dev subscribe (upsert) starting a NEW afking run that is not grounded on a real
     ///      purchase — neither already bought today nor a funded in-tx cover-buy. An
     ///      unfunded start reverts rather than beginning an inert, free-riding run.
@@ -310,11 +316,15 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
     /// @dev Coin-gating: holding >= 1 AFKing Subscription Token is the sole afking credential
     ///      (sub <=> coin), checked with a SINGLE balanceOf staticcall at
     ///      subscribe ONLY — the process passes never re-check. The coin holds
-    ///      the other side: a transfer that would empty an ACTIVE subscriber's
+    ///      the other side: a transfer that would empty an encumbered holder's
     ///      balance reverts token-side (SeatInUse, read from the Game's subInfo
-    ///      view), so leaving is by manual cancel (dailyQuantity == 0) or
-    ///      eviction — after which the seat is free to sell. No pass
-    ///      requirement and no per-level validity horizon.
+    ///      view and the SEAT_ENCUMBERED mintPacked bit). Manual cancel
+    ///      (dailyQuantity == 0) clears the bit, so a clean leaver's seat is
+    ///      free to sell; an eviction leaves it set, so the evicted seat is
+    ///      forfeit — locked until anyone reclaims it to the vault
+    ///      (AFKING_SUB_TOKEN.reclaimSeat) — and the address cannot re-subscribe
+    ///      until that forfeit is collected. No pass requirement and no
+    ///      per-level validity horizon.
     /// @dev msg.value > 0 credits the Game's afkingFunding ledger in-context
     ///      (claimablePool moved in tandem — the solvency invariant), keyed on the
     ///      resolved funding bucket (the funder for an operator-funded sub, else the
@@ -401,10 +411,14 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
             IDegenerusAffiliate(ContractAddresses.AFFILIATE).claim(drainOne);
 
             // Hand the afking-computed streak back to the manual quest system, then tombstone.
-            // The tombstone also releases the seat: the coin's transfer guard reads
-            // subInfo.active, so the just-cancelled holder can sell immediately.
+            // The tombstone plus the encumbrance clear below release the seat: the coin's
+            // transfer guard reads subInfo.active and the SEAT_ENCUMBERED bit, so the
+            // just-cancelled holder can sell immediately. Manual cancel is the graceful
+            // exit — an eviction never reaches this branch, leaving the bit set so the
+            // seat is forfeit (reclaimable to the vault) instead.
             _finalizeAfking(subscriber, c, _simulatedDayIndex());
             c.dailyQuantity = 0;
+            mintPacked_[subscriber] &= ~(uint256(1) << BitPackingLib.SEAT_ENCUMBERED_SHIFT);
             // The sparse `_fundingSourceOf` map holds an entry iff FLAG_EXTERNAL_FUNDING
             // is set (the upsert writes/clears both together), so the common self-funded
             // cancel emits address(0) straight from the already-loaded flags — no map read.
@@ -457,6 +471,21 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
             !exemptSub &&
             ISeatToken(ContractAddresses.AFKING_SUB_TOKEN).balanceOf(subscriber) == 0
         ) revert NoCoin();
+        // Seat-encumbrance latch (fresh subscribe only — an active sub's bit is
+        // already set). A still-set bit here means the last run ended by eviction
+        // (manual cancel is the only player-side clear), so the seat is forfeit:
+        // block re-entry until reclaimSeat sends it to the vault and clears the
+        // bit token-side. Otherwise set the latch — it holds the coin's transfer
+        // guard on the last seat for the whole run and through an eviction.
+        if (!exemptSub && !wasActive) {
+            uint256 packedWord = mintPacked_[subscriber];
+            if (
+                (packedWord >> BitPackingLib.SEAT_ENCUMBERED_SHIFT) & 1 != 0
+            ) revert SeatForfeited();
+            mintPacked_[subscriber] =
+                packedWord |
+                (uint256(1) << BitPackingLib.SEAT_ENCUMBERED_SHIFT);
+        }
         // Sparse funder map: store any non-zero source; only address(0) (self) clears it, so
         // re-pointing an operator-funded sub back to address(0) does not strand a stale funder. Re-pointing the
         // source IS a re-subscribe, which re-runs the operator-approval gate.
@@ -1990,6 +2019,21 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
         Sub storage s = _subOf[player];
         if (s.afkingStartDay == 0) return;
         if (_streakBaseOf(s) < floor) _setStreakBase(s, floor);
+    }
+
+    /// @notice AFKING_SUB_TOKEN-only: clear `holder`'s SEAT_ENCUMBERED latch. Called by
+    ///         the coin's reclaimSeat AFTER it seizes one of the evicted holder's seats
+    ///         to the vault, settling the eviction forfeit: the holder's remaining seats
+    ///         (if any) transfer freely again and a fresh subscribe stops reverting
+    ///         SeatForfeited. Exactly one seat is seized per eviction — this clear is
+    ///         what stops a second reclaim.
+    /// @dev Runs in the Game's storage context under delegatecall; `msg.sender` is the
+    ///      original caller (the AFKing Subscription Token). The coin verifies the
+    ///      forfeit state (SEAT_ENCUMBERED set with no active sub) before calling.
+    /// @param holder The evicted holder whose encumbrance latch is cleared.
+    function clearSeatEncumbrance(address holder) external {
+        if (msg.sender != ContractAddresses.AFKING_SUB_TOKEN) revert NotApproved();
+        mintPacked_[holder] &= ~(uint256(1) << BitPackingLib.SEAT_ENCUMBERED_SHIFT);
     }
 
     /// @notice Emitted when a curse is cleared via the permissionless paid cure.

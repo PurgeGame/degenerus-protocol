@@ -500,7 +500,9 @@ interface IGameAfkingModule {
     ///         (self when 0/msg.sender).
     /// @dev rngLock guard on all of create / replace / cancel; self-consent OR
     ///      operator-approval (third-party path); funding-source operator-approval
-    ///      gate; AFKing Subscription Token balance gate (>= 1 coin, the sole afking credential).
+    ///      gate; AFKing Subscription Token balance gate (>= 1 coin, the sole afking credential);
+    ///      seat-forfeit gate (a fresh subscribe reverts SeatForfeited after an
+    ///      eviction until the forfeited seat is reclaimed to the vault).
     function subscribe(
         address player,
         bool drainGameCreditFirst,
@@ -543,6 +545,11 @@ interface IGameAfkingModule {
 
     /// @notice Deity-gated smite: add a saturating curse stack to `smitee` for 200 FLIP.
     function smite(uint256 deityId, address smitee) external;
+
+    /// @notice AFKING_SUB_TOKEN-only: clear `holder`'s SEAT_ENCUMBERED latch — the
+    ///         settle step of the coin's reclaimSeat after it seizes an evicted
+    ///         holder's forfeited seat to the vault.
+    function clearSeatEncumbrance(address holder) external;
 
     /// @notice For each funded sub it stamps the per-sub box fields (lootbox mode) or
     ///         queues whole tickets (ticket mode), debits afkingFunding, and advances

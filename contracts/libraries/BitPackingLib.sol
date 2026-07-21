@@ -15,7 +15,8 @@ pragma solidity 0.8.34;
  *      [128-151] FROZEN_UNTIL_LEVEL_SHIFT    - Frozen level for lazy/whale passes (24 bits)
  *      [152-153] WHALE_PASS_TYPE_SHIFT     - Pass type (2 bits: 0=none, 1=lazy/10-lvl, 3=whale/100-lvl)
  *      [154]     SEAT_CLAIMED_SHIFT          - AFKing seat eligibility latch (1 bit)
- *      [155-159] (unused)
+ *      [155]     SEAT_ENCUMBERED_SHIFT       - AFKing seat encumbrance latch (1 bit)
+ *      [156-159] (unused)
  *      [160-183] MINT_STREAK_LAST_COMPLETED  - Last level credited for mint streak (24 bits, managed by MintStreakUtils)
  *      [184]     HAS_DEITY_PASS_SHIFT        - Deity pass flag (1 bit)
  *      [185-208] AFFILIATE_BONUS_LEVEL_SHIFT - Cached affiliate bonus level (24 bits)
@@ -77,6 +78,17 @@ library BitPackingLib {
     ///         ever. The AFKing Subscription Token reads it via the game's mintPackedFor
     ///         view at claimSeat and caps free claims at 1,000 token-side.
     uint256 internal constant SEAT_CLAIMED_SHIFT = 154;
+
+    /// @notice Bit position for the AFKing seat encumbrance latch (bit 155).
+    ///         Set by a fresh subscribe, cleared by a manual cancel and by the
+    ///         AFKING_SUB_TOKEN-only clearSeatEncumbrance — an eviction leaves
+    ///         it set, so `encumbered && !active` proves an uncollected
+    ///         eviction forfeit. While set: the AFKing Subscription Token's
+    ///         transfer guard blocks the holder's last-seat exit, tokenURI
+    ///         renders the evicted art once the sub is inactive, reclaimSeat
+    ///         can seize one seat to the vault, and a fresh subscribe reverts
+    ///         SeatForfeited.
+    uint256 internal constant SEAT_ENCUMBERED_SHIFT = 155;
 
     /// @notice Bit position for last level credited for mint streak (bits 160-183)
     uint256 internal constant MINT_STREAK_LAST_COMPLETED_SHIFT = 160;
