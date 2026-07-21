@@ -1,7 +1,7 @@
 # Degenerus Protocol — Audit Scope
 # Solidity 0.8.34 | Hardhat + Foundry | viaIR=true | Optimizer runs=1000 | evmVersion=osaka
 #
-# Frozen subject: contracts/ tree 3878469e @ tag degenerus-c4a (post-v75.0 hardening freeze).
+# Frozen subject: contracts/ tree 909f963c @ tag degenerus-c4a (post-v75.0 hardening freeze).
 # Checkout: git checkout degenerus-c4a
 # This list supersedes the v55-era scope.txt (which named BurnieCoin/BurnieCoinflip/
 # WrappedWrappedXRP/EndgameModule — all renamed or removed in this subject).
@@ -38,7 +38,7 @@ contracts/AFKingSubscriptionToken.sol        # afking seat ERC-721 (sub <=> seat
 ## In Scope — Deployed delegatecall game modules (12)                       nSLOC
 # All share DegenerusGameStorage; execute in DegenerusGame's context.
 contracts/modules/DegenerusGameMintModule.sol         #                          1385
-contracts/modules/DegenerusGameAdvanceModule.sol      # VRF + advance + deadman   1289
+contracts/modules/DegenerusGameAdvanceModule.sol      # VRF + advance + deadman   1294
 contracts/modules/DegenerusGameWhaleModule.sol        # whale/lazy/deity passes    685
 contracts/modules/DegenerusGameJackpotModule.sol      # daily jackpots + BAF      1454
 contracts/modules/DegenerusGameDecimatorModule.sol    #                            637
@@ -88,14 +88,14 @@ contracts/DeityBoonViewer.sol      # read-only deity-boon lens (no value custody
 
 ## nSLOC totals
 #   Core deployed (15)              8348
-#   Deployed modules (12)           9826
+#   Deployed modules (12)           9831
 #   Abstract module bases (2)        450
 #   Shared storage (1)              1194
 #   Libraries (8)                    564
 #   Interfaces (11)                  676
 #   Standalone in-scope (1)          154
 #   --------------------------------------
-#   TOTAL  50 files                21212 nSLOC
+#   TOTAL  50 files                21217 nSLOC
 #   (Group/grand totals delta-tracked from the 20004 tree-16e51875 baseline across the
 #    calibration re-freeze; the per-file annotations above are
 #    v74-approximate and lag the v75 rename pass — the totals here are authoritative.)

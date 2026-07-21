@@ -4,7 +4,7 @@ Pre-disclosure for audit wardens. **If a finding's mechanism + impact is describ
 already known and is not eligible.** This is a precise perimeter — each entry names the exact
 mechanism and why it is by-design, defended, or out-of-scope. There are no vague blanket disclaimers.
 
-Frozen subject: `contracts/` tree `3878469e` @ tag `degenerus-c4a`. Pre-scanned with Slither v0.11.5
+Frozen subject: `contracts/` tree `909f963c` @ tag `degenerus-c4a`. Pre-scanned with Slither v0.11.5
 + Aderyn 0.6.8; those findings are triaged in the automated-tools section below.
 
 ---
@@ -30,7 +30,7 @@ extracted. (Slither `arbitrary-send` family / event-only.)
 death-clock: a VRF-swap proposal cannot be created until VRF has stalled `ADMIN_STALL_THRESHOLD =
 44 hours` (vault-owner path) / `COMMUNITY_STALL_THRESHOLD = 7 days` (0.5%-sDGNRS community path); the vote threshold decays 50%→5%
 over a 168h lifetime and requires approve-weight > reject-weight. A proposal is auto-killed the
-moment VRF recovers or a word is fulfilled after creation (see §3 "kill-on-recovery"). Feed swap
+moment VRF recovers or a word is fulfilled after creation (see SECURITY.md role 1, "kill-on-recovery"). Feed swap
 requires the feed unhealthy 2d (admin) / 7d (community); a down feed only suspends LINK→FLIP donation
 credit (LINK donations still process). This is the intended trust model (see SECURITY.md).
 
@@ -71,12 +71,12 @@ is no victim. An admin-power finding must exhibit an **engaged-community victim*
 ## 3. Accepted out-of-scope risk: the > 120-day VRF-death deadman fallback (do NOT submit)
 
 **Mechanism.** When the game has not sealed a day for more than 120 days
-(`_vrfDeadmanFired ≡ _simulatedDayIndex() − dailyIdx > 120`, `DegenerusGameStorage.sol:1534-1536`;
+(`_vrfDeadmanFired ≡ _simulatedDayIndex() − dailyIdx > 120`, `DegenerusGameStorage.sol:1652-1654`;
 `dailyIdx` is uint24 and always `<= _simulatedDayIndex()` so no underflow), the terminal release no
-longer waits for Chainlink. `_getHistoricalRngFallback` (`DegenerusGameAdvanceModule.sol:1444-1468`)
+longer waits for Chainlink. `_getHistoricalRngFallback` (`DegenerusGameAdvanceModule.sol:1613-1637`)
 commits a fallback word from sealed historical `rngWordByDay` admixed with `block.prevrandao`; the
 `reverseFlip` nudge is cancelled-and-consumed (`unchecked fallbackWord -= totalFlipReversals`,
-`:1395`, against the `+=` in `_applyDailyRng :2023-2030`).
+`:1562`, against the consumption in `_applyDailyRng :2199-2215`).
 
 **Why a block proposer's 1-bit `prevrandao` grind over the terminal distribution is accepted:** this
 path is reachable **only** after a catastrophic, unrecovered Chainlink VRF death — VRF itself dead
@@ -104,12 +104,12 @@ transaction (a coin credit, not ETH-backed value). Immaterial; documented, not e
 
 ## 5. Automated tool findings (pre-disclosed)
 
-The full machine-readable Slither/Aderyn baseline is maintained internally — Slither 0.11.5 (2,878
-results / 101 detectors at tree `3878469e`; the 143 "High" are dominated by `uninitialized-state`
+The full machine-readable Slither/Aderyn baseline is maintained internally — Slither 0.11.5 (2,879
+results / 101 detectors at tree `909f963c`; the 143 "High" are dominated by `uninitialized-state`
 false positives from the shared-storage delegatecall architecture) + Aderyn 0.6.8 (9 High / 19 Low).
 Slither totals are sensitive to the scan environment (solc/toolchain resolution), so the absolute
 count is not comparable across machines — re-runs should compare category triage, not the total.
-These counts were measured directly at tree `3878469e`, not carried forward from an earlier scan.
+These counts were measured directly at tree `909f963c`, not carried forward from an earlier scan.
 CI re-runs both
 analyzers on every push (`.github/workflows/ci.yml`); the standing per-category triage — why each is
 by-design, defended, or not-applicable — is below.
