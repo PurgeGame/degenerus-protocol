@@ -171,12 +171,6 @@ contract sDGNRS {
     /// @param amount Amount transferred
     event PoolTransfer(Pool indexed pool, address indexed to, uint256 amount);
 
-    /// @notice Emitted when sDGNRS is moved between reward pools
-    /// @param from Source pool
-    /// @param to Destination pool
-    /// @param amount Amount transferred
-    event PoolRebalance(Pool indexed from, Pool indexed to, uint256 amount);
-
     /// @notice Emitted when a player submits a gambling burn redemption
     /// @param flipEscrowed FLIP backing (wei) removed from sDGNRS at submit and escrowed,
     ///        contingent on the resolving day's coinflip (paid to the redeemer only on a win)
@@ -557,29 +551,6 @@ contract sDGNRS {
             emit Transfer(address(this), to, amount);
         }
         emit PoolTransfer(pool, to, amount);
-        return amount;
-    }
-
-    /// @notice Transfer sDGNRS between two reward pools
-    /// @dev Only callable by game contract. No token movement — just rebalances internal pool accounting.
-    /// @param from Source pool
-    /// @param to Destination pool
-    /// @param amount Requested amount to move
-    /// @return transferred Actual amount transferred (may be less if source pool has insufficient balance)
-    function transferBetweenPools(Pool from, Pool to, uint256 amount) external onlyGame returns (uint256 transferred) {
-        if (amount == 0) return 0;
-        uint8 fromIdx = _poolIndex(from);
-        uint8 toIdx = _poolIndex(to);
-        uint256 available = poolBalances[fromIdx];
-        if (available == 0) return 0;
-        if (amount > available) {
-            amount = available;
-        }
-        unchecked {
-            poolBalances[fromIdx] = uint128(available - amount);
-        }
-        poolBalances[toIdx] = uint128(poolBalances[toIdx] + amount);
-        emit PoolRebalance(from, to, amount);
         return amount;
     }
 

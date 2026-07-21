@@ -893,15 +893,6 @@ contract CoverageGap222 is DeployProtocol {
             )
         );
         vm.prank(buyer);
-        (bool o2, ) = address(sdgnrs).call(
-            abi.encodeWithSignature(
-                "transferBetweenPools(uint8,uint8,uint256)",
-                uint8(0),
-                uint8(1),
-                uint256(1)
-            )
-        );
-        vm.prank(buyer);
         (bool o3, ) = address(sdgnrs).call(
             abi.encodeWithSignature(
                 "wrapperTransferTo(address,uint256)",
@@ -910,7 +901,6 @@ contract CoverageGap222 is DeployProtocol {
             )
         );
         assertFalse(o1, "sdgnrs.transferFromPool rejected non-authorized caller");
-        assertFalse(o2, "sdgnrs.transferBetweenPools rejected non-authorized caller");
         assertFalse(o3, "sdgnrs.wrapperTransferTo rejected non-authorized caller");
     }
 

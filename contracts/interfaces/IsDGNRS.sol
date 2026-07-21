@@ -33,14 +33,6 @@ interface IsDGNRS {
     /// @return transferred Amount actually transferred (may be less if pool has insufficient balance)
     function transferFromPool(Pool pool, address to, uint256 amount) external returns (uint256 transferred);
 
-    /// @notice Transfer sDGNRS between two reward pools
-    /// @dev Restricted to authorized game contracts only
-    /// @param from Pool to transfer from
-    /// @param to Pool to transfer to
-    /// @param amount Amount of sDGNRS to transfer
-    /// @return transferred Amount actually transferred (may be less if source pool has insufficient balance)
-    function transferBetweenPools(Pool from, Pool to, uint256 amount) external returns (uint256 transferred);
-
     /// @notice Burn all undistributed pool tokens at game over
     function burnAtGameOver() external;
 

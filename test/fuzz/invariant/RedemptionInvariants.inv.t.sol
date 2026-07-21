@@ -167,8 +167,8 @@ contract RedemptionInvariants is DeployProtocol {
     /// @notice The five reward-pool sub-ledgers sum to exactly the sDGNRS contract's own
     ///         token balance: `Σ poolBalances == balanceOf(sDGNRS)`.
     /// @dev Every pool debit pairs a contract-balance debit (`transferFromPool` decrements both
-    ///      poolBalances[idx] and balanceOf[address(this)] by the same amount; `transferBetweenPools`
-    ///      moves within the array with the sum invariant; `burnAtGameOver` zeroes both). A mutation
+    ///      poolBalances[idx] and balanceOf[address(this)] by the same amount; `burnAtGameOver`
+    ///      zeroes both). A mutation
     ///      that desyncs the pool ledger from the held balance (the sDGNRS:566/567 survivor cluster
     ///      in mutation/FINDINGS-v75.md) breaks this equality. Non-vacuous: the redemption handler
     ///      funds actors via `transferFromPool(Pool.Reward, ...)`, exercising the paired debit.

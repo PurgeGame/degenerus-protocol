@@ -257,37 +257,6 @@ contract MutationKills is DeployProtocol {
     }
 
     // ---------------------------------------------------------------------
-    //                  sDGNRS — transferBetweenPools
-    // ---------------------------------------------------------------------
-
-    /// @notice KILLS sDGNRS.sol:580/584/586/589/591/592/593 [RR] — pool-to-pool
-    ///         rebalance: from-pool debit, to-pool credit, return value. Conservation: the two pools'
-    ///         combined balance is invariant; no token movement.
-    function test_kills_StakedStonk_transferBetweenPools_conserves() public {
-        uint256 fromBefore = sdgnrs.poolBalance(sDGNRS.Pool.Reward);
-        uint256 toBefore = sdgnrs.poolBalance(sDGNRS.Pool.Lootbox);
-        uint256 supplyBefore = sdgnrs.totalSupply();
-        uint256 req = 7_000 ether;
-        require(fromBefore >= req, "fixture: source pool too small");
-
-        vm.prank(address(game));
-        uint256 moved = sdgnrs.transferBetweenPools(
-            sDGNRS.Pool.Reward, sDGNRS.Pool.Lootbox, req
-        );
-
-        assertEq(moved, req, "rebalance return value wrong");
-        assertEq(sdgnrs.poolBalance(sDGNRS.Pool.Reward), fromBefore - req, "from pool not debited");
-        assertEq(sdgnrs.poolBalance(sDGNRS.Pool.Lootbox), toBefore + req, "to pool not credited");
-        // Conservation: combined pool balance and total supply both unchanged.
-        assertEq(
-            sdgnrs.poolBalance(sDGNRS.Pool.Reward) + sdgnrs.poolBalance(sDGNRS.Pool.Lootbox),
-            fromBefore + toBefore,
-            "rebalance did not conserve combined pool balance"
-        );
-        assertEq(sdgnrs.totalSupply(), supplyBefore, "rebalance must not move supply");
-    }
-
-    // ---------------------------------------------------------------------
     //                  sDGNRS — wrapperTransferTo
     // ---------------------------------------------------------------------
 
