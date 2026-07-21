@@ -1,7 +1,7 @@
 # Degenerus Protocol — Audit Scope
 # Solidity 0.8.34 | Hardhat + Foundry | viaIR=true | Optimizer runs=1000 | evmVersion=osaka
 #
-# Frozen subject: contracts/ tree 909f963c @ tag degenerus-c4a (post-v75.0 hardening freeze).
+# Frozen subject: contracts/ tree c334546f @ tag degenerus-c4a (post-v75.0 hardening freeze).
 # Checkout: git checkout degenerus-c4a
 # This list supersedes the v55-era scope.txt (which named BurnieCoin/BurnieCoinflip/
 # WrappedWrappedXRP/EndgameModule — all renamed or removed in this subject).
@@ -24,7 +24,7 @@ contracts/DegenerusAdmin.sol                 # VRF + feed governance (sDGNRS)   
 contracts/DegenerusAffiliate.sol             # referral codes + bonus points      576
 contracts/FLIP.sol                           # FLIP ERC-20 (coinflip + vault)     335
 contracts/Coinflip.sol                       # coinflip resolution + bounty       861
-contracts/sDGNRS.sol                         # soulbound; reserves/pools/redeem    527
+contracts/sDGNRS.sol                         # soulbound; reserves/pools/redeem    510
 contracts/DGNRS.sol                          # transferable wrapper over sDGNRS    170
 contracts/DegenerusVault.sol                 # stETH vault; DGVE/DGVF share ERC20s 454
 contracts/DegenerusJackpots.sol              # jackpot state + BAF helpers         374
@@ -87,7 +87,7 @@ contracts/interfaces/IVRFCoordinator.sol              #                         
 contracts/DeityBoonViewer.sol      # read-only deity-boon lens (no value custody)  154
 
 ## nSLOC totals
-#   Core deployed (15)              8348
+#   Core deployed (15)              8331
 #   Deployed modules (12)           9831
 #   Abstract module bases (2)        450
 #   Shared storage (1)              1194
@@ -95,7 +95,7 @@ contracts/DeityBoonViewer.sol      # read-only deity-boon lens (no value custody
 #   Interfaces (11)                  676
 #   Standalone in-scope (1)          154
 #   --------------------------------------
-#   TOTAL  50 files                21217 nSLOC
+#   TOTAL  50 files                21200 nSLOC
 #   (Group/grand totals delta-tracked from the 20004 tree-16e51875 baseline across the
 #    calibration re-freeze; the per-file annotations above are
 #    v74-approximate and lag the v75 rename pass — the totals here are authoritative.)
