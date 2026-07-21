@@ -4,7 +4,7 @@ Pre-disclosure for audit wardens. **If a finding's mechanism + impact is describ
 already known and is not eligible.** This is a precise perimeter — each entry names the exact
 mechanism and why it is by-design, defended, or out-of-scope. There are no vague blanket disclaimers.
 
-Frozen subject: `contracts/` tree `2542ff78` @ tag `degenerus-c4a`. Pre-scanned with Slither v0.11.5
+Frozen subject: `contracts/` tree `622b9a51` @ tag `degenerus-c4a`. Pre-scanned with Slither v0.11.5
 + Aderyn 0.6.8; those findings are triaged in the automated-tools section below.
 
 ---
@@ -104,12 +104,12 @@ transaction (a coin credit, not ETH-backed value). Immaterial; documented, not e
 
 ## 5. Automated tool findings (pre-disclosed)
 
-The full machine-readable Slither/Aderyn baseline is maintained internally — Slither 0.11.5 (2,878
-results / 101 detectors at tree `2542ff78`; the 143 "High" are dominated by `uninitialized-state`
+The full machine-readable Slither/Aderyn baseline is maintained internally — Slither 0.11.5 (2,883
+results / 101 detectors at tree `622b9a51`; the 143 "High" are dominated by `uninitialized-state`
 false positives from the shared-storage delegatecall architecture) + Aderyn 0.6.8 (9 High / 19 Low).
 Slither totals are sensitive to the scan environment (solc/toolchain resolution), so the absolute
 count is not comparable across machines — re-runs should compare category triage, not the total.
-These counts were measured directly at tree `2542ff78`, not carried forward from an earlier scan.
+These counts were measured directly at tree `622b9a51`, not carried forward from an earlier scan.
 CI re-runs both
 analyzers on every push (`.github/workflows/ci.yml`); the standing per-category triage — why each is
 by-design, defended, or not-applicable — is below.
@@ -123,6 +123,10 @@ higher-level redemption events capture the context (the variable is a running ta
 **encode-packed-collision.** `AFKingSubscriptionToken._renderSvgInternal` concatenates SVG fragments
 with `abi.encodePacked(string, ...)`; the bytes render a tokenURI image and are never hashed for
 identity, keys, or authorization.
+
+**erc20-interface.** `DegenerusVault`'s local `IAFKingSubscriptionToken.transferFrom` declares the
+seat token's ERC-721 transfer (three args, no bool return); the detector pattern-matches the ERC-20
+function name. The target is an ERC-721 — there is no ERC-20 interface to mismatch.
 
 **Centralization `[M-2]`.** Critical admin functions (VRF/feed swap) require sDGNRS governance; the
 remaining `onlyOwner` functions are operational (staking) or deity-pass metadata. Admin cannot drain
