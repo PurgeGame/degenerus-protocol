@@ -1106,8 +1106,13 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         // monotonic down-clamp, keyed [player][currentLevel] on the SAME
         // per-level 10-ETH budget map the human buy-time write uses. Fed the FROZEN
         // evMultiplierBps from the stamped activityScore. Hard-clamped, no revert.
+        // sDGNRS's protocol-owned self-subscription boxes are exempt: the full amount
+        // takes the multiplier and no per-level budget is drawn — its EV benefit is
+        // redemption backing, not a player subsidy to bound.
         uint256 evMultiplierBps = _lootboxEvMultiplierFromScore(uint256(activityScore));
-        uint256 scaledAmount = _applyEvMultiplierWithCap(player, currentLevel, amount, evMultiplierBps);
+        uint256 scaledAmount = player == ContractAddresses.SDGNRS
+            ? (amount * evMultiplierBps) / 10_000
+            : _applyEvMultiplierWithCap(player, currentLevel, amount, evMultiplierBps);
 
         _resolveLootboxCommon(
             player,

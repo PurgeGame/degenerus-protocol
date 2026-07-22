@@ -8,7 +8,7 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 /// @notice Verifies the once-per-level sDGNRS bonus stamped at the START of the afking process
 ///         STAGE (GameAfkingModule.processSubscriberStage, before the per-sub loop). On the first
 ///         STAGE pass of each new level, sDGNRS's daily box is resized to
-///         max(mp, min(5% of claimable, 6 ETH)), funded purely from claimable; the latch
+///         max(mp, min(5% of claimable, 10,000 ETH)), funded purely from claimable; the latch
 ///         `_sdgnrsBonusLevel` makes it fire once per level. The non-vacuity proof is the box
 ///         AMOUNT itself: a 5%-of-100-ETH box is 5000 milli-ETH, hugely larger than the flat daily
 ///         box (mp ~ a few milli-ETH), so a passing equality proves the bonus actually fired.
@@ -40,7 +40,7 @@ contract SdgnrsLevelLootbox is DeployProtocol {
     // The bonus sizing (the core non-vacuity proof)
     // =====================================================================================
 
-    /// @notice 5% of claimable (below the 6-ETH cap, above the mp floor): claimable 100 ETH -> a
+    /// @notice 5% of claimable (below the 10k-ETH cap, above the mp floor): claimable 100 ETH -> a
     ///         5-ETH box == 5000 milli-ETH. A flat daily box would be a few milli-ETH, so this
     ///         equality is the proof the level-start bonus fired.
     function test_SizingFivePercentOfClaimable() public {
@@ -57,9 +57,10 @@ contract SdgnrsLevelLootbox is DeployProtocol {
         );
     }
 
-    /// @notice 5% of claimable above the 6-ETH cap clamps to 6 ETH == 6000 milli-ETH.
-    function test_CapAtSixEth() public {
-        uint256 cl = 200 ether; // 5% == 10 ETH > 6 ETH cap
+    /// @notice 5% of claimable above the 10k-ETH cap clamps to 10,000 ETH == 10,000,000
+    ///         milli-ETH — safely inside the uint24 milli-ETH Sub-stamp field (~16,777 ETH).
+    function test_CapAtTenThousandEth() public {
+        uint256 cl = 400_000 ether; // 5% == 20,000 ETH > 10k ETH cap
         _setClaimable(ContractAddresses.SDGNRS, cl);
         _fireBonus(0x5D60002);
         assertGe(_currentLevel(), 1, "fixture: the STAGE ran at a real level (>=1)");
@@ -67,8 +68,8 @@ contract SdgnrsLevelLootbox is DeployProtocol {
         uint256 amountMilli = _subField(ContractAddresses.SDGNRS, OFF_AMOUNT, 24);
         assertEq(
             amountMilli,
-            (6 ether) / LR_ETH_SCALE,
-            "sDGNRS level box clamps to the 6-ETH cap"
+            (10_000 ether) / LR_ETH_SCALE,
+            "sDGNRS level box clamps to the 10k-ETH cap"
         );
     }
 
