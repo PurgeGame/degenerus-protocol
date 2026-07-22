@@ -2805,4 +2805,21 @@ abstract contract DegenerusGameStorage {
         bonusSet = uint32((packed >> _FOIL_DRAW_BONUS_SHIFT) & _FOIL_DRAW_MAIN_MASK);
         lvl = uint24((packed >> _FOIL_DRAW_LEVEL_SHIFT) & _FOIL_DRAW_LEVEL_MASK);
     }
+
+    /// @dev Gold-rush cross-day state, one packed slot (declared last so every
+    ///      prior slot keeps its index). Armed on a 4-gold main board (jackpot
+    ///      phase); resolved by the next main-board draw. Written and read only
+    ///      inside VRF fulfillment — players can never touch it.
+    ///      Layout (LSB up):
+    ///      [159:0]   armed winner (solo bucket winner of the arm day)
+    ///      [161:160] armed solo quadrant
+    ///      [164:162] armed solo symbol (official, post-hero)
+    ///      [188:165] armedIdx — frozen dailyIdx during the arm draw
+    ///      [189]     armed flag
+    ///      [190]     resolve-day ban flag (keeps the hero ban stable for the
+    ///                resolve day's later re-rolls after the armed fields are
+    ///                cleared or overwritten by a same-day chain arm)
+    ///      [192:191] resolve-day ban quadrant
+    ///      [216:193] resolve-day ban idx — frozen dailyIdx of the resolve draw
+    uint256 internal goldRush;
 }

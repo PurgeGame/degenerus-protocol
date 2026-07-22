@@ -9,6 +9,12 @@ import {PriceLookupLib} from "../libraries/PriceLookupLib.sol";
 import {JackpotBucketLib} from "../libraries/JackpotBucketLib.sol";
 import {IDegenerusJackpots} from "../interfaces/IDegenerusJackpots.sol";
 
+/// @dev Minimal WWXRP surface for the gold-rush consolation mint. The delegatecall
+///      context makes msg.sender the Game, which is a whitelisted WWXRP minter.
+interface IWwxrpMintPrize {
+    function mintPrize(address to, uint256 amount) external;
+}
+
 /**
  * @title DegenerusGameJackpotModule
  * @author Burnie Degenerus
@@ -109,6 +115,35 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         uint256 halfPassCount
     );
 
+    /// @dev Gold rush armed: the main board rolled 4 gold colors and the solo bucket
+    ///      winner awaits the next main-board draw. `quadrant`/`symbol` are the solo
+    ///      bucket's official (post-hero) values — the target the resolve board must
+    ///      repeat (with 4 golds) for the grand.
+    event GoldRushArmed(
+        address indexed winner,
+        uint24 indexed level,
+        uint8 quadrant,
+        uint8 symbol
+    );
+
+    /// @dev Gold-rush resolution: the draw after an armed 4-gold day pays the armed
+    ///      winner by this board's gold count. `grand` is true when this board also
+    ///      rolled 4 golds AND repeated the armed quadrant's symbol (the hero is
+    ///      banned from the armed quadrant on this draw, so that symbol is the raw
+    ///      base roll). ethAmount moved futurePrizePool -> winner claimable;
+    ///      halfPassCount and flipCredit are face-value credits with no pool debit;
+    ///      wwxrpAmount is the 0-gold consolation.
+    event GoldRushWin(
+        address indexed winner,
+        uint24 indexed level,
+        uint8 bonusGolds,
+        bool grand,
+        uint256 ethAmount,
+        uint256 halfPassCount,
+        uint256 flipCredit,
+        uint256 wwxrpAmount
+    );
+
     // -------------------------------------------------------------------------
     // External Contract References (compile-time constants)
     // -------------------------------------------------------------------------
@@ -125,6 +160,9 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     uint8 private constant JACKPOT_LEVEL_CAP = 5;
 
     uint256 private constant SMALL_LOOTBOX_THRESHOLD = 0.5 ether;
+
+    /// @dev Gold-rush consolation when the bonus board shows 0 golds: 100 WWXRP.
+    uint256 private constant GOLD_RUSH_WWXRP = 100 ether;
 
     /// @dev Sentinel traitId stamped on BAF jackpot payout events so indexers can
     ///      distinguish BAF wins from trait-bucketed daily/coin wins. Sits above
@@ -176,6 +214,9 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     ///      roll runs over the full wager pool. The bonus draw instead passes the
     ///      main hero's packed slot to force a distinct hero.
     uint8 private constant _NO_HERO_EXCLUDE = 0xFF;
+
+    /// @dev Sentinel for _rollHeroSymbol's banQuadrant param: no quadrant banned.
+    uint8 private constant _NO_QUADRANT_BAN = 0xFF;
 
     /// @dev Max forward offset for carryover source selection (lvl+1..lvl+4).
     uint8 private constant DAILY_CARRYOVER_MAX_OFFSET = 4;
@@ -265,7 +306,8 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
             traitIds,
             shareBps,
             bucketCounts,
-            false // not jackpot phase
+            false, // not jackpot phase
+            false // no solo bucket, gold rush never arms here
         );
     }
 
@@ -303,6 +345,20 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
             uint32 winningTraitsPacked,
             uint32 bonusTraitsPacked
         ) = _rollWinningTraitsPair(randWord);
+
+        // An armed gold rush resolves against the first main board rolled after the
+        // arm draw — this draw, whenever dailyIdx has advanced past the arm draw's
+        // index. Runs before any pool math so the ladder's futurePrizePool debit is
+        // visible to every later read in this call.
+        {
+            uint256 g = goldRush;
+            if (
+                (g >> 189) & 1 != 0 &&
+                dailyIdx > uint24((g >> 165) & 0xFFFFFF)
+            ) {
+                _resolveGoldRush(g, winningTraitsPacked, lvl);
+            }
+        }
 
         if (isJackpotPhase) {
             uint256 dailyEthBudget;
@@ -415,6 +471,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
                 traitIdsDaily,
                 EntropyLib.hash2(randWord, lvl)
             );
+            bool armGold = _allGold(traitIdsDaily);
 
             if (dailyEthBudget != 0) {
                 uint16[4] memory bucketCountsDaily = JackpotBucketLib
@@ -439,7 +496,8 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
                     traitIdsDaily,
                     shareBpsDaily,
                     bucketCountsDaily,
-                    true // jackpot phase (solo bucket gets whale pass)
+                    true, // jackpot phase (solo bucket gets whale pass)
+                    armGold
                 );
                 if (isFinalPhysicalDay) {
                     uint256 unpaidDailyEth = dailyEthBudget - paidDailyEth;
@@ -521,7 +579,8 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
                 traitIds,
                 shareBps,
                 bucketCounts,
-                false // not jackpot phase
+                false, // not jackpot phase
+                false // no solo bucket, gold rush never arms here
             );
         }
 
@@ -1017,6 +1076,92 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         return (entropy & ~uint256(3)) | uint256((3 - soloQuadrant) & 3);
     }
 
+    /// @dev True when all 4 quadrant colors are gold (color 7). Colors are never
+    ///      hero-touched, so this reads the same on the official and base boards.
+    function _allGold(uint8[4] memory traits) private pure returns (bool) {
+        for (uint8 i; i < 4; ) {
+            if (((traits[i] >> 3) & 7) != 7) return false;
+            unchecked {
+                ++i;
+            }
+        }
+        return true;
+    }
+
+    /// @dev Quadrant the hero is banned from for the current draw, or
+    ///      _NO_QUADRANT_BAN. On the resolve draw (any draw after the arm draw) the
+    ///      armed quadrant cannot receive a hero, so its official symbol is the raw
+    ///      base roll — hero wagers placed during the suspense window can neither
+    ///      boost nor block the grand symbol match. The resolve-day ban fields keep
+    ///      the answer identical for later re-rolls of the same board (phase 2)
+    ///      after `_resolveGoldRush` clears the armed fields or a chain arm
+    ///      overwrites them.
+    function _goldRushBanQuadrant() private view returns (uint8) {
+        uint256 g = goldRush;
+        if (g == 0) return _NO_QUADRANT_BAN;
+        uint24 d = dailyIdx;
+        if ((g >> 189) & 1 != 0 && d > uint24((g >> 165) & 0xFFFFFF)) {
+            return uint8((g >> 160) & 3);
+        }
+        if ((g >> 190) & 1 != 0 && d == uint24((g >> 193) & 0xFFFFFF)) {
+            return uint8((g >> 191) & 3);
+        }
+        return _NO_QUADRANT_BAN;
+    }
+
+    /// @dev Arms the gold rush for the solo bucket winner of a 4-gold main board.
+    ///      Stores winner, solo quadrant, official symbol, and the arm draw's frozen
+    ///      dailyIdx; the resolve-day ban fields are preserved so a chain arm (a
+    ///      resolve day that itself rolls 4 golds) keeps the current day's hero ban
+    ///      intact for later re-rolls of this board.
+    function _armGoldRush(address winner, uint24 lvl, uint8 traitId) private {
+        uint8 quadrant = traitId >> 6;
+        uint8 symbol = traitId & 7;
+        goldRush =
+            (goldRush & ~((uint256(1) << 190) - 1)) |
+            uint256(uint160(winner)) |
+            (uint256(quadrant) << 160) |
+            (uint256(symbol) << 162) |
+            (uint256(dailyIdx) << 165) |
+            (uint256(1) << 189);
+        emit GoldRushArmed(winner, lvl, quadrant, symbol);
+    }
+
+    /// @dev Resolves an armed gold rush against this draw's official main board:
+    ///      the board's gold count picks the ladder rung; 4 golds AND the armed
+    ///      quadrant repeating the armed symbol is the grand. Rewrites the slot to
+    ///      resolve-day ban fields only (armed cleared, ban pinned to this dailyIdx)
+    ///      before paying, so re-rolls of this board and any chain arm stay
+    ///      consistent and the payout can never double-fire.
+    function _resolveGoldRush(
+        uint256 g,
+        uint32 mainTraitsPacked,
+        uint24 lvl
+    ) private {
+        uint8[4] memory traits = JackpotBucketLib.unpackWinningTraits(
+            mainTraitsPacked
+        );
+        uint8 golds;
+        for (uint8 i; i < 4; ) {
+            if (((traits[i] >> 3) & 7) == 7) {
+                unchecked {
+                    ++golds;
+                }
+            }
+            unchecked {
+                ++i;
+            }
+        }
+        uint8 quadrant = uint8((g >> 160) & 3);
+        bool grand = golds == 4 &&
+            (traits[quadrant] & 7) == uint8((g >> 162) & 7);
+        goldRush =
+            (uint256(1) << 190) |
+            (uint256(quadrant) << 191) |
+            (uint256(dailyIdx) << 193);
+        _payGoldRush(address(uint160(g)), lvl, golds, grand);
+    }
+
     // =========================================================================
     // Daily Jackpot ETH — Distribution
     // =========================================================================
@@ -1037,6 +1182,8 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     /// @param shareBps Basis-point share for each of the 4 buckets.
     /// @param bucketCounts Number of holders in each trait bucket.
     /// @param isJackpotPhase True during jackpot phase (solo bucket gets whale pass).
+    /// @param armGold True when the main board rolled 4 golds — the solo bucket
+    ///        winner becomes the armed gold-rush candidate for the next draw.
     /// @return paidEth Total ETH actually paid out in this call.
     function _processDailyEth(
         uint24 lvl,
@@ -1045,7 +1192,8 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         uint8[4] memory traitIds,
         uint16[4] memory shareBps,
         uint16[4] memory bucketCounts,
-        bool isJackpotPhase
+        bool isJackpotPhase,
+        bool armGold
     ) private returns (uint256 paidEth) {
         if (ethPool == 0) {
             return 0;
@@ -1089,7 +1237,8 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
                 count,
                 share,
                 entropyState,
-                isJackpotPhase && traitIdx == remainderIdx
+                isJackpotPhase && traitIdx == remainderIdx,
+                armGold
             );
             paidEth += paidDelta;
             liabilityDelta += claimDelta;
@@ -1117,7 +1266,8 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         uint16 count,
         uint256 share,
         uint256 entropy,
-        bool isSolo
+        bool isSolo,
+        bool armGold
     ) private returns (uint256 paidDelta, uint256 claimDelta, uint256 newEntropy) {
         newEntropy = entropy;
 
@@ -1145,7 +1295,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
             if (w != address(0)) {
                 (claimDelta, paidDelta, newEntropy) = _handleSoloBucketWinner(
                     w, lvl, traitId, ticketIndexes[0],
-                    perWinner, newEntropy
+                    perWinner, newEntropy, armGold
                 );
             }
         } else {
@@ -1169,7 +1319,8 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         uint8 traitId,
         uint256 ticketIndex,
         uint256 perWinner,
-        uint256 entropy
+        uint256 entropy,
+        bool armGold
     )
         private
         returns (uint256 claimDelta, uint256 paidDelta, uint256 newEntropy)
@@ -1195,6 +1346,9 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         if (wpSpent != 0) {
             emit JackpotWhalePassWin(w, lvl, wpSpent / HALF_WHALE_PASS_PRICE);
             paidDelta += wpSpent;
+        }
+        if (armGold) {
+            _armGoldRush(w, lvl, traitId);
         }
     }
 
@@ -1264,6 +1418,94 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         }
     }
 
+    /// @dev Pays the gold-rush ladder to the armed winner at resolution. The resolve
+    ///      board's gold count picks the rung. ETH rungs move futurePrizePool into
+    ///      the winner's claimable (the only real ETH leg); half-pass and flip-credit
+    ///      rungs are face-value credits with no pool debit — pass dilution is
+    ///      absorbed by future prize pools and the flip credit stakes the next day's
+    ///      coinflip. The grand pays 25% of futurePrizePool in ETH and denominates
+    ///      the rest of the headline (current + next + future + claimable pools) 75%
+    ///      in half-passes at HALF_WHALE_PASS_PRICE and 25% in flip credit at the
+    ///      level's ticket rate.
+    function _payGoldRush(
+        address winner,
+        uint24 lvl,
+        uint8 golds,
+        bool grand
+    ) private {
+        uint256 ethAward;
+        uint256 halfPasses;
+        uint256 flipValueWei;
+        uint256 wwxrpAward;
+        (uint128 nextBal, uint128 futBal) = _getPrizePools();
+
+        if (golds == 0) {
+            wwxrpAward = GOLD_RUSH_WWXRP;
+        } else if (golds == 1) {
+            halfPasses = 2; // one whole whale pass
+        } else if (golds == 2) {
+            ethAward = futBal / 50; // 2% of futurePrizePool
+            halfPasses = ethAward / HALF_WHALE_PASS_PRICE; // equal value, rounded down
+        } else if (golds == 3) {
+            ethAward = futBal / 20; // 5% of futurePrizePool
+            halfPasses = ethAward / HALF_WHALE_PASS_PRICE;
+        } else if (!grand) {
+            ethAward = futBal / 10; // 10% of futurePrizePool
+            halfPasses = (2 * ethAward) / HALF_WHALE_PASS_PRICE; // double the ETH leg
+            flipValueWei = futBal / 20; // 5% of futurePrizePool as flip credit
+        } else {
+            // Grand: 25% of futurePrizePool in ETH; the rest of the headline owed
+            // 75% in half-passes / 25% in flip credit. The headline counts the
+            // three prize pools plus the segregated yield accumulator — all
+            // written only by the advance path. Claimable is player money
+            // already owed, and the pending accumulators move with in-window
+            // purchases, so neither may size a VRF-derived award.
+            ethAward = futBal / 4;
+            uint256 headline = _getCurrentPrizePool() +
+                nextBal +
+                futBal +
+                yieldAccumulator;
+            uint256 remainder = headline - ethAward;
+            uint256 passValue = (remainder * 3) / 4;
+            halfPasses = passValue / HALF_WHALE_PASS_PRICE;
+            flipValueWei = remainder - passValue;
+        }
+
+        if (ethAward != 0) {
+            _setPrizePools(nextBal, uint128(futBal - ethAward));
+            _creditClaimable(winner, ethAward);
+            claimablePool += uint128(ethAward);
+        }
+        if (halfPasses != 0) {
+            whalePassClaims[winner] += halfPasses;
+        }
+        uint256 flipCredit;
+        if (flipValueWei != 0) {
+            flipCredit =
+                (flipValueWei * PRICE_COIN_UNIT) /
+                PriceLookupLib.priceForLevel(lvl + 1);
+            if (flipCredit != 0) {
+                coinflip.creditFlip(winner, flipCredit);
+            }
+        }
+        if (wwxrpAward != 0) {
+            IWwxrpMintPrize(ContractAddresses.WWXRP).mintPrize(
+                winner,
+                wwxrpAward
+            );
+        }
+        emit GoldRushWin(
+            winner,
+            lvl,
+            golds,
+            grand,
+            ethAward,
+            halfPasses,
+            flipCredit,
+            wwxrpAward
+        );
+    }
+
     /// @dev Replaces the winning quadrant's trait with a hero-symbol override sampled by
     ///      `_rollHeroSymbol` from the prior day's settled wager pool. Applied to all jackpot
     ///      paths (purchase phase + jackpot phase). Reads `dailyHeroWagers[dailyIdx]`:
@@ -1286,7 +1528,14 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
             bool hasHeroWinner,
             uint8 heroQuadrant,
             uint8 heroSymbol
-        ) = _rollHeroSymbol(dailyIdx, heroEntropy, _NO_HERO_EXCLUDE);
+        ) = _rollHeroSymbol(
+                dailyIdx,
+                heroEntropy,
+                _NO_HERO_EXCLUDE,
+                // Terminal-only path (sole _applyHeroOverride caller): the gold
+                // rush never arms, resolves, or bans on a terminal board.
+                _NO_QUADRANT_BAN
+            );
         _applyHeroResult(w, hasHeroWinner, heroQuadrant, heroSymbol);
     }
 
@@ -1320,10 +1569,16 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     ///      symbol` to force a distinct hero. Pass `_NO_HERO_EXCLUDE` (>= 32, matching
     ///      no real slot) for an unconstrained roll; when zeroing empties the pool the
     ///      result is `(false, 0, 0)` and the caller applies no hero (a pure-VRF set).
+    ///
+    ///      `banQuadrant` zeroes an entire quadrant's 8 slots the same way — main
+    ///      rolls pass `_goldRushBanQuadrant()` so on a gold-rush resolve day the
+    ///      armed quadrant keeps its base-rolled symbol (hero wagers can neither
+    ///      boost nor block the grand match). Pass `_NO_QUADRANT_BAN` otherwise.
     function _rollHeroSymbol(
         uint24 day,
         uint256 entropy,
-        uint8 excludeIdx
+        uint8 excludeIdx,
+        uint8 banQuadrant
     )
         private
         view
@@ -1335,6 +1590,12 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         uint8 leaderIdx;
 
         for (uint8 q; q < 4; ) {
+            if (q == banQuadrant) {
+                unchecked {
+                    ++q;
+                }
+                continue;
+            }
             uint256 packed = dailyHeroWagers[day][q];
             for (uint8 s; s < 8; ) {
                 uint8 idx;
@@ -1750,10 +2011,16 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         (bool mHas, uint8 mQ, uint8 mS) = _rollHeroSymbol(
             dailyIdx,
             randWord,
-            _NO_HERO_EXCLUDE
+            _NO_HERO_EXCLUDE,
+            _goldRushBanQuadrant()
         );
         uint8 excl = mHas ? ((mQ << 3) | mS) : _NO_HERO_EXCLUDE;
-        (bool bHas, uint8 bQ, uint8 bS) = _rollHeroSymbol(dailyIdx, r, excl);
+        (bool bHas, uint8 bQ, uint8 bS) = _rollHeroSymbol(
+            dailyIdx,
+            r,
+            excl,
+            _NO_QUADRANT_BAN
+        );
         _applyHeroResult(traits, bHas, bQ, bS);
         packed = JackpotBucketLib.packWinningTraits(traits);
     }
@@ -1772,7 +2039,12 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
             bool hasHeroWinner,
             uint8 heroQuadrant,
             uint8 heroSymbol
-        ) = _rollHeroSymbol(dailyIdx, randWord, _NO_HERO_EXCLUDE);
+        ) = _rollHeroSymbol(
+                dailyIdx,
+                randWord,
+                _NO_HERO_EXCLUDE,
+                _goldRushBanQuadrant()
+            );
 
         uint8[4] memory traits = JackpotBucketLib.getRandomTraits(randWord);
         _applyHeroResult(traits, hasHeroWinner, heroQuadrant, heroSymbol);
@@ -1786,7 +2058,12 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         uint8 excl = hasHeroWinner
             ? ((heroQuadrant << 3) | heroSymbol)
             : _NO_HERO_EXCLUDE;
-        (bool bHas, uint8 bQ, uint8 bS) = _rollHeroSymbol(dailyIdx, rBonus, excl);
+        (bool bHas, uint8 bQ, uint8 bS) = _rollHeroSymbol(
+            dailyIdx,
+            rBonus,
+            excl,
+            _NO_QUADRANT_BAN
+        );
         _applyHeroResult(traits, bHas, bQ, bS);
         bonusPacked = JackpotBucketLib.packWinningTraits(traits);
     }

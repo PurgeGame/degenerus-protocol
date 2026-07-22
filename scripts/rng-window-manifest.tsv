@@ -89,6 +89,7 @@ EXEMPT-ADVANCE	lootboxRngPacked	advanceGame	modules/DegenerusGameAdvanceModule.s
 EXEMPT-ADVANCE	lootboxRngWordByIndex	_backfillOrphanedLootboxIndices	modules/DegenerusGameAdvanceModule.sol	READ
 EXEMPT-ADVANCE	lootboxRngWordByIndex	_finalizeLootboxRng	modules/DegenerusGameAdvanceModule.sol	READ
 EXEMPT-ADVANCE	lootboxRngWordByIndex	advanceGame	modules/DegenerusGameAdvanceModule.sol	READ
+EXEMPT-ADVANCE	rngWordByDay	_afKingSubDraw	modules/DegenerusGameAdvanceModule.sol	READ
 EXEMPT-ADVANCE	rngWordByDay	_gameOverEntropy	modules/DegenerusGameAdvanceModule.sol	READ
 EXEMPT-ADVANCE	rngWordByDay	_getHistoricalRngFallback	modules/DegenerusGameAdvanceModule.sol	READ
 EXEMPT-ADVANCE	rngWordByDay	_handleGameOverPath	modules/DegenerusGameAdvanceModule.sol	READ

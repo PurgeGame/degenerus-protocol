@@ -77,6 +77,9 @@ PAIRED-CREDIT	_creditClaimable	_payNormalBucket	modules/DegenerusGameJackpotModu
 PAIRED-CREDIT	claimablePool	_processDailyEth	modules/DegenerusGameJackpotModule.sol	WRITE	winners' liabilityDelta aggregate; per-winner credits in _payNormalBucket/_processSoloBucketWinner; funded by the current-pool debit in payDailyJackpot
 POOL-TO-POOL	_addFuturePrizePool	_processSoloBucketWinner	modules/DegenerusGameJackpotModule.sol	READ	whale-pass cost portion returns to future
 PAIRED-CREDIT	_creditClaimable	_processSoloBucketWinner	modules/DegenerusGameJackpotModule.sol	READ	solo-bucket winner credit folded into liabilityDelta (two sites, one function)
+POOL-TO-POOL	_setPrizePools	_payGoldRush	modules/DegenerusGameJackpotModule.sol	READ	gold-rush ETH rung: future debited (next passed through), re-counted as claimable in tandem
+POOL-TO-POOL	claimablePool	_payGoldRush	modules/DegenerusGameJackpotModule.sol	WRITE	gold-rush ETH rung aggregate: future -> claimable; per-player credit paired below
+PAIRED-CREDIT	_creditClaimable	_payGoldRush	modules/DegenerusGameJackpotModule.sol	READ	armed winner credit, per-player half of the future->claimable tandem
 POOL-TO-POOL	_setPrizePools	_runEarlyBirdTicketJackpot	modules/DegenerusGameJackpotModule.sol	READ	future funds the budget, next backs the queued tickets - single net move on the packed slot
 VALUE-IN	_creditClaimable	distributeYieldSurplus	modules/DegenerusGameJackpotModule.sol	READ	recognized stETH yield surplus: runs only when balance+stETH exceeds the full obligation set; three sink credits
 VALUE-IN	claimablePool	distributeYieldSurplus	modules/DegenerusGameJackpotModule.sol	WRITE	aggregate for the three sink credits (23% x3)
