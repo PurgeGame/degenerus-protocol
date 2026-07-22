@@ -26,8 +26,9 @@ import {IGameAfkingModule} from "../../contracts/interfaces/IDegenerusGameModule
 /// @notice The designed-against vectors (each a legible "this exact vector is closed" regression):
 ///   1. Affiliate re-claim churn — sub/unsub/re-sub neither forfeits nor duplicates the accrued base; the
 ///      total drained EQUALS honest continuous accrual.
-///   2. Streak decay / gap dodge — miss one funded day -> the read decays to 0; resume after a gap -> the run
-///      re-bases (`afkingStartDay`/streak base reset on the delivered day); advances ONLY on delivered days.
+///   2. Streak gap dodge — a gap day earns nothing (the base day shifts forward, the streak freezes; a live
+///      run never resets); the streak advances ONLY on delivered days, and a sub-ending finalize hands the
+///      earned streak back intact (anchored at the day before the sub ended).
 ///   3. pendingFlip double-claim CEI idempotency (Task 2).
 ///   4. The surviving finalize hooks write the decay-applied streak BEFORE the slot delete (Task 2). The
 ///      membership credential is the AFKing Subscription Token (sub <=> coin), enforced only at subscribe (NoCoin) and at
@@ -169,39 +170,40 @@ contract V56SecUnmanipulable is DeployProtocol {
     }
 
     // =========================================================================
-    // Repro 2 — streak decay / gap dodge (compute-on-read; advances only on delivered days)
+    // Repro 2 — streak gap dodge (compute-on-read; advances only on delivered days)
     // =========================================================================
 
-    /// @notice Miss ONE funded day -> the effective afking streak DECAYS to 0. The compute-on-read decay
-    ///         (`covered + 1 < currentDay -> 0`, GameAfkingModule.sol:784) is observed through the finalize
-    ///         WRITE: cancel the sub on a day strictly after the gap, and `quests.finalizeAfking`'s own
-    ///         funding-kill guard (`lastValid + 1 >= currentDay`, DegenerusQuests.sol:474) zeroes the
-    ///         handed-back streak. The streak therefore credits no non-delivered day.
-    function testStreakDecaysToZeroAfterOneMissedFundedDay() public {
+    /// @notice A live funded sub's gap is a protocol-side skip (the no-orphan guard is the only gap source
+    ///         for a live funded sub), so the run survives it: the finalize WRITE hands the earned streak
+    ///         back intact, anchored at the day before the sub ended. Gap days still earn nothing — the
+    ///         streak freezes across the gap, never resets.
+    function testStreakSurvivesProtocolSkipGapIntact() public {
         address p = makeAddr("decay_p");
         _grantSeat(p);
         _fundPool(p, 50 ether);
         _subscribeLootbox(p, 1);
 
-        // Build a few delivered days so the run has a covered high-water.
+        // Build a few delivered days so the run has a covered high-water and a real earned streak.
         _deliverDay(_singleton(p), 0xDECA01);
         _deliverDay(_singleton(p), 0xDECA02);
         uint32 coveredBefore = _afkCoveredOf(p);
-        assertGt(coveredBefore, 0, "non-vacuity: the run covered delivered days");
+        uint32 earnedBefore = coveredBefore - _afkingStartOf(p);
+        assertGt(earnedBefore, 0, "non-vacuity: the run earned a streak over delivered days");
 
-        // Advance several days WITHOUT a delivered buy (warp the days, never run a delivery), so BOTH the
-        // afking covered high-water AND the manual lastActiveDay go stale by >= 2 days — currentDay is then
-        // strictly more than lastValid + 1 (the funding-kill decay window). The sub funding-kills out across
-        // the gap (no delivery), which is the natural decay path.
+        // Advance several days WITHOUT opening the stamped boxes. The first no-open day still DELIVERS
+        // (the sub was box-clean, so the STAGE stamps a new box — one more earned day); every later cycle
+        // hits the no-orphan guard and skips the funded sub (the protocol-side gap — the sub never misses
+        // a day it could have paid for). The covered high-water then goes stale by >= 2 days.
         _skipDaysNoDelivery(0xDECA03);
         _skipDaysNoDelivery(0xDECA04);
         _skipDaysNoDelivery(0xDECA05);
 
         uint32 currentDay = game.currentDayView();
-        assertGt(currentDay, coveredBefore + 1, "decay window: a full funded day was missed (covered + 1 < currentDay)");
+        assertGt(currentDay, coveredBefore + 1, "gap window: covered + 1 < currentDay (a protocol-skip gap exists)");
 
-        // CANCEL on a post-gap day -> finalize hands back the streak, but the decay guard zeroes it (a full
-        // prior funded day was missed with no valid mint). The quest streak written is 0.
+        // CANCEL on a post-gap day -> finalize hands the earned streak back INTACT: the handback anchor is
+        // the day before the cancel (floored at the funded high-water), so the protocol-skip gap zeroes
+        // nothing. Gap days earned nothing — the handback equals the pre-gap earned streak.
         if (_subscriberIndexOf(p) == 0) {
             _settleForfeit(p); // the funding-kill left the forfeit gate set
             _subscribeLootbox(p, 1); // re-create the slot to drive the explicit-cancel finalize
@@ -210,12 +212,17 @@ contract V56SecUnmanipulable is DeployProtocol {
         vm.prank(p);
         game.subscribe(address(0), false, false, 0, address(0));
         uint24 finalStreak = _lastFinalizeStreakFor(p);
-        assertEq(finalStreak, 0, "decay: one missed funded day -> finalize wrote streak 0 (no non-delivered-day credit)");
+        assertEq(
+            finalStreak,
+            earnedBefore + 1,
+            "protocol-skip gap: finalize handed back the earned streak intact (+1 for the first no-open day's delivery; the skipped gap days earned nothing)"
+        );
     }
 
-    /// @notice Gap-reset-on-resume: after a gap, a fresh delivered buy RE-BASES the run — `afkingStartDay`
-    ///         is set to the resume day and the streak base resets to 0 (GameAfkingModule.sol:763-766), so
-    ///         the post-gap window credits NO stale-span days. The per-window streak advances ONLY on the
+    /// @notice Kill-then-resume re-bases the run: a funding-kill finalizes the old run (handing its streak
+    ///         to the manual system, where the missed post-kill days decay it), and the post-gap re-subscribe
+    ///         starts a NEW run — `afkingStartDay` at the resume day, base = the (decayed) manual snapshot —
+    ///         so the post-gap window credits NO stale-span days. The per-window streak advances ONLY on the
     ///         debit-DELIVERED days since the resume.
     function testGapResetOnResumeRebasesTheRun() public {
         address p = makeAddr("gapresume_p");
@@ -240,8 +247,8 @@ contract V56SecUnmanipulable is DeployProtocol {
         _skipDaysNoDelivery(0x6A9006);
 
         // RESUME: re-fund (grounds the re-sub's NEW-run cover-buy — D-12) + re-subscribe + deliver a
-        // fresh day after the gap. The buy re-bases the run (afkingStartDay := the resume day; base := 0)
-        // because covered + 1 < processDay (decay-on-read).
+        // fresh day after the gap. The funding-kill finalized the old run, so the re-sub starts a NEW run
+        // (afkingStartDay := the resume day; base := the manual snapshot, decayed to 0 across the gap).
         _fundPool(p, 50 ether);
         if (_subscriberIndexOf(p) == 0) {
             _settleForfeit(p); // the funding-kill left the forfeit gate set

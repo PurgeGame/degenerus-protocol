@@ -379,19 +379,21 @@ contract QuestStreakStallForgiveness is DeployProtocol {
         assertEq(_subField(player, OFF_SUB_STREAK_BASE, 16), 12, "base survives repeated pending-gap covers");
     }
 
-    function test_AfkingGapDoesNotForgiveRealMissBeforeStall() public {
+    function test_AfkingGapFreezesRunAcrossSealedMissBeforeStall() public {
         address player = _startAfkingPlayer("real-before-gap", 12);
         uint24 coveredBefore = uint24(_subField(player, OFF_SUB_COVERED, 24));
 
-        // Two sealed calendar days with no funded delivery precede the pending gap.
+        // Two sealed calendar days with no funded delivery precede the pending gap. A live
+        // funded sub only gaps on sealed days through a protocol-side skip, so the run
+        // FREEZES across the whole gap — the base survives and the gap days earn nothing.
         _setDailyIdx(coveredBefore + 2);
         vm.warp(block.timestamp + 5 days);
         vm.prank(player);
         game.subscribe(address(0), false, false, 1, address(0));
 
         uint24 today = uint24(game.currentDayView());
-        assertEq(_subField(player, OFF_SUB_STREAK_BASE, 16), 0, "real pre-stall miss re-bases the streak");
-        assertEq(_subField(player, OFF_SUB_START, 24), today, "fresh run begins on the delivered day");
+        assertEq(_subField(player, OFF_SUB_STREAK_BASE, 16), 12, "the streak base survives the sealed-miss gap");
+        assertEq(_subField(player, OFF_SUB_START, 24), today - 1, "the gap days shift the base day forward, earning nothing");
         assertEq(_subField(player, OFF_SUB_COVERED, 24), today, "delivery still advances coverage");
     }
 

@@ -121,7 +121,6 @@ GATE	lootboxRngWordByIndex	_placeDegeneretteBetCore	modules/DegenerusGameDegener
 GATE	lootboxRngWordByIndex	_buyPresaleBoxFor	modules/DegenerusGameMintModule.sol	READ
 GATE	rngWordByDay	_afkingStreak	storage/DegenerusGameStorage.sol	READ
 GATE	rngWordByDay	_foilDrainPending	storage/DegenerusGameStorage.sol	READ
-GATE	rngWordByDay	_pendingAfkingGapStart	modules/GameAfkingModule.sol	READ
 CURSOR	lootboxRngPacked	_purchaseForWithCached	modules/DegenerusGameMintModule.sol	READ
 CURSOR	lootboxRngPacked	_recordLootboxEntry	modules/DegenerusGameWhaleModule.sol	READ
 CURSOR	lootboxRngPacked	_recordAfkingCoverBox	modules/GameAfkingModule.sol	READ

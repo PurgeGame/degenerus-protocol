@@ -614,18 +614,21 @@ contract DegenerusQuests is IDegenerusQuests {
      *         system. Idempotent — a no-op unless the player is currently afking.
      * @dev GAME-only, called on every sub-ending path (cancel / cancel-reclaim / pass-eviction
      *      / funding-kill) BEFORE the Sub slot is deleted. The last valid mint day is the later of
-     *      the afking funded high-water (`afkingCoveredDay`, Game-side) and `lastActiveDay` (which
+     *      the Game-side handback anchor (`afkingCoveredDay` — the day before the sub ended,
+     *      floored at the funded high-water, since any covered-day lag on a live sub is
+     *      protocol-caused) and `lastActiveDay` (which
      *      captures manual completions during the run — slot completions still bump it even though
      *      they are streak-neutral while afking). The rolled-day bitmap then answers whether any
      *      playable quest existed strictly after that anchor and before `currentDay`; skipped stall
      *      days have no bit, and a delivered anchor remains valid even when its quest rolls later.
-     *      Anchors the manual system at the actual delivered/completed high-water and clears
+     *      Anchors the manual system at that handback day and clears
      *      `afkingActive`. A
      *      double-call (cancel then in-stage reclaim) is safe: the second finds `afkingActive`
      *      already false and returns.
      * @param player The subscriber whose run is ending.
      * @param earnedStreak The run's earned streak (snapshot + funded delivered days), Game-computed.
-     * @param afkingCoveredDay The afking funded high-water day (Game-side).
+     * @param afkingCoveredDay The Game-side handback anchor (the day before the sub ended,
+     *        floored at the afking funded high-water day).
      * @param currentDay The current calendar day (the decay reference).
      * @custom:reverts OnlyGame When caller is not GAME contract.
      */
