@@ -1885,7 +1885,8 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
       |  • Daily jackpot - Paid each day to the level's trait-entry holders (day 5 = full pool)       |
       |  • BAF (Big Ass Flip) - At every x10 level, and only if that day's flip won: 10% of the       |
       |    future pool, raised to 20% at level 50 and at every x00. A losing flip marks the           |
-      |    bracket skipped and leaves the pool in place.                                              |
+      |    bracket skipped and leaves the pool in place — except at x00, where 25% of the             |
+      |    would-be pool pays one WWXRP burner drawn from the level-x99 incinerator entries.            |
       |  • Decimator - 10% of the future pool at x5 levels (excluding x95), 30% at every x00.         |
       +===============================================================================================+*/
 

@@ -233,15 +233,29 @@ contract WWXRPDailyDrawTest is DeployProtocol {
         assertEq(b1, expected, "derivation");
     }
 
-    function test_ScoreOverflowGuard() public {
+    function test_ScoreSaturatesAtUint96() public {
         _bootstrap();
-        // Accumulators are whole-WWXRP units: overflow needs (2^96) tokens.
+        // Accumulators are whole-WWXRP units and saturate at uint96.max: the
+        // burn still succeeds, the bucket caps, and a follow-up entry records
+        // a zero-width interval (no winner weight, no revert).
+        uint24 day = game.currentDayView();
         uint256 huge = (uint256(type(uint96).max) + 1) * 1 ether;
         vm.prank(address(game));
         wwxrp.mintPrize(alice, huge);
         vm.prank(alice);
-        vm.expectRevert(abi.encodeWithSignature("ScoreOverflow()"));
         wwxrp.enter(huge);
+
+        uint8 bucketA = wwxrp.bucketOf(day, alice);
+        (uint256 raw, uint256 total, ) = wwxrp.bucketInfo(day, bucketA);
+        assertEq(raw, type(uint96).max, "raw saturated");
+        assertEq(total, type(uint96).max, "weight saturated");
+
+        // Same-bucket follow-up burn: accepted, zero additional weight.
+        address mate = _addrInBucket(day, bucketA, "sat_mate");
+        _enterAs(mate, 25 ether);
+        (, uint256 totalAfter, uint32 count) = wwxrp.bucketInfo(day, bucketA);
+        assertEq(totalAfter, type(uint96).max, "weight unchanged post-cap");
+        assertEq(count, 2, "post-cap entry recorded");
     }
 
     function test_EnterDustBurnsButAddsNoWeight() public {

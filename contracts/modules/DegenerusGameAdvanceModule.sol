@@ -31,6 +31,16 @@ interface IVaultOwnerCheck {
     function isVaultOwner(address account) external view returns (bool);
 }
 
+/// @dev WWXRP surface for the century BAF-incinerator draw: level-x99 burn
+///      entries resolve to one winner when the x00 BAF skips.
+interface IWwxrpIncinerator {
+    function resolveIncinerator(
+        uint24 bracket,
+        uint256 rngWord,
+        uint256 poolWei
+    ) external returns (address winner);
+}
+
 /// @notice Delegate-called module for advanceGame and VRF lifecycle handling.
 contract DegenerusGameAdvanceModule is DegenerusGameStorage {
     /*+======================================================================+
@@ -132,6 +142,9 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
     /// @notice Jackpots contract — direct handle for skip-marker on losing flip days.
     IDegenerusJackpots private constant jackpots =
         IDegenerusJackpots(ContractAddresses.JACKPOTS);
+    /// @notice WWXRP token — century BAF-incinerator draw resolution.
+    IWwxrpIncinerator private constant wwxrpIncinerator =
+        IWwxrpIncinerator(ContractAddresses.WWXRP);
     /*+======================================================================+
       |                           CONSTANTS                                  |
       +======================================================================+*/
@@ -1095,8 +1108,9 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
 
         // BAF Jackpot (every 10 levels) — only if the daily flip won (bit 0 of
         // rngWord = 1). On a losing flip the bracket is marked skipped, the pool
-        // stays in futurePool, and pre-skip winning-flip credit is filtered out
-        // of future claims via the lastBafResolvedDay bump.
+        // stays in futurePool (less the century incinerator payout at x00), and
+        // pre-skip winning-flip credit is filtered out of future claims via the
+        // lastBafResolvedDay bump.
         if (prevMod10 == 0) {
             if ((rngWord & 1) == 1) {
                 uint256 bafPct = prevMod100 == 0 ? 20 : (lvl == 50 ? 20 : 10);
@@ -1111,6 +1125,26 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                 claimableDelta += claimed;
             } else {
                 jackpots.markBafSkipped(lvl);
+
+                // Century BAF incinerator: level-x99 WWXRP burners bet on this
+                // exact skip. 25% of the would-be BAF pool pays one
+                // burn-weighted winner; the rest rolls forward in futurePool
+                // as on any skip. An empty bracket leaves the full pool.
+                if (prevMod100 == 0) {
+                    uint256 incinPoolWei = ((baseMemFuture * 20) / 100) / 4;
+                    if (incinPoolWei != 0) {
+                        address incinWinner = wwxrpIncinerator.resolveIncinerator(
+                            lvl,
+                            rngWord,
+                            incinPoolWei
+                        );
+                        if (incinWinner != address(0)) {
+                            _creditClaimable(incinWinner, incinPoolWei);
+                            memFuture -= incinPoolWei;
+                            claimableDelta += incinPoolWei;
+                        }
+                    }
+                }
             }
         }
 
@@ -1336,6 +1370,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
     // low      Additive skim random        rngWord % (ADDITIVE_RANDOM_BPS+1) _consolidatePoolsAndRewardJackpots
     // full     Prize pool consolidation    in-module memory batch            _consolidatePoolsAndRewardJackpots
     // full     Reward jackpots (BAF/Dec)   self-call (BAF/Decimator)         _consolidatePoolsAndRewardJackpots
+    // full     Incinerator winner           domain-hashed in WWXRP            _consolidatePoolsAndRewardJackpots -> WWXRP.resolveIncinerator
     // full     Lootbox RNG                 stored as lootboxRngWordByIndex   _finalizeLootboxRng
     //
     // NOTE: Direct bit-level consumers are bit 0, bits 8+, and the future-take

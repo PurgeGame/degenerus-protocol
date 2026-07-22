@@ -18,6 +18,9 @@ pragma solidity 0.8.34;
  *        mints targeting it de-circulate into its mint allowance, and its
  *        burns (WWXRP bets) spend from that allowance (FLIP model)
  *      - enter()/claim(): daily burn draw for a fixed FLIP prize
+ *      - Century BAF incinerator: a level-x99 enter() burn also bets on the
+ *        upcoming x00 BAF skipping — one burn-weighted winner is paid 25% of
+ *        the would-be BAF pool game-side when the century flip loses
  *
  * @dev DAILY DRAW (per participation day d):
  *      - A player burns at least 25 WWXRP via enter(); the burn and the
@@ -83,6 +86,8 @@ interface IDrawGame {
     function playerActivityScore(
         address player
     ) external view returns (uint256);
+
+    function level() external view returns (uint24);
 }
 
 /// @dev Coinflip stake-credit channel for draw prizes (WWXRP is an authorized
@@ -162,6 +167,38 @@ contract WWXRP {
         uint32 entryIndex
     );
 
+    /// @notice Emitted for every recorded century BAF-incinerator entry
+    /// @param bracket Century bracket the burn bets on (level x00)
+    /// @param player Entrant (always msg.sender of the burn)
+    /// @param entryIndex Index of this entry within the bracket
+    /// @param burnAmount WWXRP burned (18 decimals)
+    /// @param effectiveScore Activity-weighted score recorded for this burn
+    ///        (wei units — full precision)
+    /// @param cumulativeScore Bracket cumulative score endpoint after this
+    ///        burn (wei units)
+    event IncineratorEntered(
+        uint24 indexed bracket,
+        address indexed player,
+        uint32 entryIndex,
+        uint256 burnAmount,
+        uint256 effectiveScore,
+        uint256 cumulativeScore
+    );
+
+    /// @notice Emitted when a skipped century BAF resolves its incinerator draw
+    /// @param bracket Century bracket whose BAF skipped (level x00)
+    /// @param winner Player recorded in the winning entry (paid game-side)
+    /// @param poolWei ETH pool credited to the winner by the game
+    /// @param roll Winner roll in [0, totalScore)
+    /// @param totalScore Bracket total effective score (wei units)
+    event IncineratorResolved(
+        uint24 indexed bracket,
+        address indexed winner,
+        uint256 poolWei,
+        uint256 roll,
+        uint256 totalScore
+    );
+
     /*+======================================================================+
       |                              ERRORS                                  |
       +======================================================================+
@@ -189,7 +226,8 @@ contract WWXRP {
     /// @notice Thrown when a draw burn is below the 25 WWXRP minimum
     error BelowMinBurn();
 
-    /// @notice Thrown when a draw bucket's packed accumulator would overflow
+    /// @notice Thrown when a draw bucket's or incinerator bracket's entry
+    ///         count would overflow (score accumulators saturate instead)
     error ScoreOverflow();
 
     /// @notice Thrown when claiming a day whose settlement word is not yet
@@ -305,6 +343,9 @@ contract WWXRP {
     bytes32 private constant DOM_WIN_BUCKET = "WWXRP_DRAW_WIN_BUCKET";
     bytes32 private constant DOM_WINNER = "WWXRP_DRAW_WINNER";
 
+    /// @dev Domain tag for the BAF-incinerator winner roll
+    bytes32 private constant DOM_INCIN_WINNER = "WWXRP_INCIN_WINNER";
+
     /*+======================================================================+
       |                          DAILY DRAW STATE                            |
       +======================================================================+
@@ -331,6 +372,40 @@ contract WWXRP {
 
     /// @notice True once a day's draw prize has been claimed
     mapping(uint24 => bool) public dayClaimed;
+
+    /*+======================================================================+
+      |                    CENTURY BAF-INCINERATOR STATE                       |
+      +======================================================================+
+      |  Burn-weighted entries recorded during a level x99, betting that the |
+      |  next century BAF (level x00) skips. Interval accounting mirrors the |
+      |  daily draw but is keyed by bracket and denominated in full wei.     |
+      +======================================================================+*/
+
+    /// @dev Unlike the whole-token daily draw, incinerator scores are full
+    ///      18-decimal wei: the supply is uncapped-inflationary, so no
+    ///      whole-token uint96 bound can be guaranteed. uint192 for the
+    ///      bracket total (~6.3e57 wei at a 3x activity ceiling) is safe for
+    ///      any reachable supply; entry endpoints get a full uint256 slot.
+
+    /// @dev Header per bracket (level x00):
+    ///      bits [0..191]   total effective score (last cumulative endpoint,
+    ///                      wei units)
+    ///      bits [192..223] entry count
+    mapping(uint24 => uint256) private _incinHeader;
+
+    /// @notice One incinerator interval entry (two slots: full-precision
+    ///         endpoint + player).
+    struct IncinEntry {
+        /// @notice Cumulative effective score endpoint (exclusive, wei units).
+        uint256 cum;
+        /// @notice Entrant credited if the winner roll lands in this interval.
+        address player;
+    }
+
+    /// @dev Entry per (bracket, index). Key: (bracket << 32) | index. The
+    ///      resolve binary search touches only the cum slot per probe; the
+    ///      player slot is read once for the winner.
+    mapping(uint256 => IncinEntry) private _incinEntry;
 
     /// @notice Total supply including uncirculating vault allowance
     /// @dev Used by dashboards to show circulation + reserve.
@@ -524,17 +599,22 @@ contract WWXRP {
       +======================================================================+*/
 
     /// @notice Burn WWXRP from the caller for a weighted entry in today's draw.
+    ///         During a level x99 the same burn also enters the century
+    ///         BAF-incinerator draw for the upcoming x00 bracket.
     /// @dev The burned balance and the entry belong to msg.sender only — no
     ///      beneficiary parameter, so nobody can burn another player's balance
     ///      or attach another player's activity score. Multiple burns per day
     ///      are allowed; each records its own activity snapshot and interval.
     ///      Entry stays open during the daily RNG lock (like flip deposits):
     ///      the lock covers TODAY's word while this entry settles on
-    ///      TOMORROW's, which cannot exist yet (checked explicitly).
+    ///      TOMORROW's, which cannot exist yet (checked explicitly). The
+    ///      incinerator piggyback needs no such care: its deciding word's
+    ///      request bumps the level off x99 first (see
+    ///      _recordIncineratorEntry).
     /// @param amount WWXRP to burn (18 decimals, at least MIN_BURN). The full
     ///        amount burns; winner weight counts whole WWXRP only.
     /// @custom:reverts BelowMinBurn When amount is under 25 WWXRP.
-    /// @custom:reverts ScoreOverflow When a bucket accumulator would overflow.
+    /// @custom:reverts ScoreOverflow When the bucket entry count would overflow.
     /// @custom:reverts InsufficientBalance When the caller's balance is short.
     function enter(uint256 amount) external {
         if (amount < MIN_BURN) revert BelowMinBurn();
@@ -557,16 +637,25 @@ contract WWXRP {
 
         uint256 newRaw = raw + amount / SCORE_UNIT;
         uint256 newTotal = total + effective;
-        if (
-            newRaw > type(uint96).max ||
-            newTotal > type(uint96).max ||
-            count >= type(uint32).max
-        ) revert ScoreOverflow();
+        if (count >= type(uint32).max) revert ScoreOverflow();
+        // Saturate rather than revert: a capped bucket keeps accepting burns.
+        // Post-cap entries record zero-width intervals (cumEnd == cumStart ==
+        // cap), so they carry no winner weight and can never falsely verify.
+        if (newRaw > type(uint96).max) newRaw = type(uint96).max;
+        if (newTotal > type(uint96).max) newTotal = type(uint96).max;
 
         _drawHeader[hKey] = newRaw | (newTotal << 96) | ((count + 1) << 192);
         _drawEntry[_drawEntryKey(day, bucket, uint32(count))] =
             newTotal |
             (uint256(uint160(msg.sender)) << 96);
+
+        // Level-x99 burns double as century BAF-incinerator entries: the same
+        // burn and activity multiplier also arm the next x00 bracket's skip
+        // draw (at full wei precision there — no whole-token truncation).
+        uint24 lvl = game.level();
+        if (lvl % 100 == 99) {
+            _recordIncineratorEntry(lvl + 1, amount, multBps);
+        }
 
         _burn(msg.sender, amount);
 
@@ -773,6 +862,148 @@ contract WWXRP {
         }
         uint256 entry = _drawEntry[_drawEntryKey(day, bucket, lo)];
         return (true, lo, address(uint160(entry >> 96)));
+    }
+
+    /*+======================================================================+
+      |                       CENTURY BAF INCINERATOR                        |
+      +======================================================================+
+      |  A hedge on the century BAF's 50/50 fire gate: daily-draw burns made |
+      |  during a level x99 (via enter()) also arm the next x00 bracket and  |
+      |  pay one burn-weighted winner iff that level's BAF skips (daily flip |
+      |  lost). The ETH pool is game-side — 25% of the would-be BAF pool,    |
+      |  credited claimable by the advance path.                             |
+      +======================================================================+*/
+
+    /// @dev Record an incinerator entry riding a daily-draw burn during a
+    ///      level x99. The burn itself happened in enter(); this only appends
+    ///      the bracket-keyed interval entry, weighting the FULL 18-decimal
+    ///      amount by the same activity multiplier the carrying entry
+    ///      snapshotted (no whole-token truncation). The level increments to
+    ///      x00 in the same transaction that requests the VRF word whose
+    ///      bit 0 decides the BAF fire gate, so enter()'s level check alone
+    ///      closes entries before the deciding word can exist — no separate
+    ///      rng-lock gate is needed. On a fired (won) BAF the bracket's
+    ///      entries are simply never resolved: the burn was the losing side
+    ///      of the hedge (the daily-draw entry it rode on still settles
+    ///      normally).
+    /// @param bracket Century bracket being armed (level x00).
+    /// @param amount WWXRP burned by the carrying enter() (18 decimals).
+    /// @param multBps Activity multiplier snapshotted by the carrying entry.
+    /// @custom:reverts ScoreOverflow When the bracket entry count would overflow.
+    function _recordIncineratorEntry(
+        uint24 bracket,
+        uint256 amount,
+        uint256 multBps
+    ) private {
+        uint256 effective = (amount * multBps) / BPS;
+
+        uint256 header = _incinHeader[bracket];
+        uint256 total = header & type(uint192).max;
+        uint256 count = header >> 192;
+
+        uint256 newTotal = total + effective;
+        if (count >= type(uint32).max) revert ScoreOverflow();
+        // Saturate rather than revert (same policy as the daily draw): a
+        // capped bracket keeps accepting burns; post-cap entries record
+        // zero-width intervals and carry no winner weight.
+        if (newTotal > type(uint192).max) newTotal = type(uint192).max;
+
+        _incinHeader[bracket] = newTotal | ((count + 1) << 192);
+        IncinEntry storage e = _incinEntry[
+            _incinEntryKey(bracket, uint32(count))
+        ];
+        e.cum = newTotal;
+        e.player = msg.sender;
+
+        emit IncineratorEntered(
+            bracket,
+            msg.sender,
+            uint32(count),
+            amount,
+            effective,
+            newTotal
+        );
+    }
+
+    /// @notice Resolve a skipped century BAF's incinerator draw to one winner.
+    /// @dev Called by the game's advance path exactly once per skipped x00
+    ///      bracket, in the same call that processes the skip — the caller
+    ///      credits poolWei to the returned winner claimable-side. Returns
+    ///      address(0) when the bracket has no entries (caller then leaves
+    ///      the full pool in futurePool). Winner selection is a
+    ///      domain-separated roll over the burn-weighted cumulative
+    ///      intervals, located by binary search.
+    /// @param bracket Skipped century bracket (level x00).
+    /// @param rngWord VRF word of the transition that skipped the BAF.
+    /// @param poolWei ETH the caller pays the winner (event data only here).
+    /// @return winner Recorded winner, or address(0) for an empty bracket.
+    /// @custom:reverts OnlyMinter When caller is not the game contract.
+    function resolveIncinerator(
+        uint24 bracket,
+        uint256 rngWord,
+        uint256 poolWei
+    ) external returns (address winner) {
+        if (msg.sender != MINTER_GAME) revert OnlyMinter();
+
+        uint256 header = _incinHeader[bracket];
+        uint256 total = header & type(uint192).max;
+        if (total == 0) return address(0);
+
+        uint256 roll = uint256(
+            keccak256(
+                abi.encodePacked(
+                    DOM_INCIN_WINNER,
+                    address(this),
+                    bracket,
+                    rngWord
+                )
+            )
+        ) % total;
+
+        // Smallest index whose cumulative endpoint exceeds the roll.
+        uint32 lo = 0;
+        uint32 hi = uint32(header >> 192) - 1;
+        while (lo < hi) {
+            uint32 mid = lo + (hi - lo) / 2;
+            if (_incinEntry[_incinEntryKey(bracket, mid)].cum > roll) {
+                hi = mid;
+            } else {
+                lo = mid + 1;
+            }
+        }
+        winner = _incinEntry[_incinEntryKey(bracket, lo)].player;
+
+        emit IncineratorResolved(bracket, winner, poolWei, roll, total);
+    }
+
+    /// @notice Incinerator bracket totals.
+    /// @return totalScore Total effective (activity-weighted) score in wei
+    ///         units.
+    /// @return entryCount Number of entries recorded.
+    function incineratorInfo(
+        uint24 bracket
+    ) external view returns (uint256 totalScore, uint32 entryCount) {
+        uint256 header = _incinHeader[bracket];
+        totalScore = header & type(uint192).max;
+        entryCount = uint32(header >> 192);
+    }
+
+    /// @notice A recorded incinerator entry's player and cumulative score
+    ///         endpoint (wei units).
+    function incineratorEntryAt(
+        uint24 bracket,
+        uint32 index
+    ) external view returns (address player, uint256 cumulativeScore) {
+        IncinEntry storage e = _incinEntry[_incinEntryKey(bracket, index)];
+        player = e.player;
+        cumulativeScore = e.cum;
+    }
+
+    function _incinEntryKey(
+        uint24 bracket,
+        uint32 index
+    ) private pure returns (uint256) {
+        return (uint256(bracket) << 32) | index;
     }
 
     /*+======================================================================+
