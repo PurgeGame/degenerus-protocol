@@ -67,8 +67,8 @@ const MINT_MODULE_SOURCE_PATH = path.resolve(
 // ---------------------------------------------------------------------------
 // entriesOwedPacked slot-derivation — D-278-TST-CROSS-DEPTH-01 live-state read.
 //
-// `entriesOwedPacked` is declared `mapping(uint24 => mapping(address => uint40))`
-// at DegenerusGameStorage.sol:465. The compiled storage layout (hardhat
+// `entriesOwedPacked` is declared `mapping(uint24 => mapping(address => uint48))`
+// in DegenerusGameStorage.sol. The compiled storage layout (hardhat
 // build-info `storageLayout`) places it at STORAGE SLOT 13 in DegenerusGame and
 // every module (the modules share DegenerusGame's layout because they are
 // delegatecall targets over the same storage).
@@ -78,9 +78,10 @@ const MINT_MODULE_SOURCE_PATH = path.resolve(
 //   inner = keccak256(abi.encode(k1, baseSlot))
 //   slot  = keccak256(abi.encode(k2, inner))
 // Here k1 is the `uint24` write-key `wk` (abi-encoded to a full 32-byte word)
-// and k2 is the `address` buyer. The packed `uint40` value occupies the low
-// 40 bits of the slot word; `rem = uint8(value)` is its low 8 bits and the
-// owed-entries count is `value >> 8`.
+// and k2 is the `address` buyer. The packed `uint48` value occupies the low
+// 48 bits of the slot word; `rem = uint8(value)` is its low 8 bits, the
+// owed-entries count is `value >> 8` (bits [8..39]), and the snap-done marker
+// rides bit 40. Reading the low 40 bits isolates owed+rem below that marker.
 //
 // This slot math is cross-checked at runtime against the public
 // `entriesOwedView(lvl, player)` accessor (which returns `packed >> 8` for the
@@ -108,7 +109,9 @@ async function readTicketsOwedSlot(gameAddress, wk, buyer) {
   const slot = entriesOwedPackedSlot(wk, buyer);
   const raw = await hre.ethers.provider.getStorage(gameAddress, slot);
   const word = BigInt(raw);
-  // The uint40 value lives in the low 40 bits of the slot.
+  // The value is uint48, but owed (bits [8..39]) and rem (bits [0..7]) both sit
+  // in the low 40 bits; masking there isolates them below the bit-40 snap-done
+  // marker, mirroring the contract's `uint32(packed >> 8)` owed read.
   const packed = word & ((1n << 40n) - 1n);
   const rem = Number(packed & 0xffn); // low 8 bits
   const owed = packed >> 8n; // owed-entries count
@@ -693,16 +696,16 @@ describe("CrossSurfaceTicketMixing — Phase 278 Wave 2 TST-CLEAN-02/03 + TST-CR
       const jackpotSrc = fs.readFileSync(JACKPOT_SOURCE_PATH, "utf8");
       const mintSrc = fs.readFileSync(MINT_MODULE_SOURCE_PATH, "utf8");
 
-      // (1) `_queueEntries` body packs `(uint40(owed) << 8) | uint40(rem)` with
+      // (1) `_queueEntries` body packs `(uint48(owed) << 8) | uint48(rem)` with
       //     `rem` carried UNCHANGED from the pre-existing slot value — it never
       //     computes a fraction.
       const queueBody = extractBody(storage, "function _queueEntries(");
       expect(queueBody, "_queueEntries body not found").to.not.equal(null);
       expect(
-        /entriesOwedPacked\[wk\]\[buyer\]\s*=\s*\(uint40\(owed\)\s*<<\s*8\)\s*\|\s*uint40\(rem\)/.test(
+        /entriesOwedPacked\[wk\]\[buyer\]\s*=\s*\(uint48\(owed\)\s*<<\s*8\)\s*\|\s*uint48\(rem\)/.test(
           queueBody
         ),
-        "_queueEntries must pack `(uint40(owed) << 8) | uint40(rem)` with rem carried from the existing slot"
+        "_queueEntries must pack `(uint48(owed) << 8) | uint48(rem)` with rem carried from the existing slot"
       ).to.equal(true);
       expect(
         queueBody.includes("% QTY_SCALE"),

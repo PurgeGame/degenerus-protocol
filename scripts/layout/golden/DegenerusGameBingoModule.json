@@ -285,7 +285,7 @@
     "label": "entriesOwedPacked",
     "offset": 0,
     "slot": 13,
-    "typeLabel": "mapping(uint24 => mapping(address => uint40))"
+    "typeLabel": "mapping(uint24 => mapping(address => uint48))"
   },
   {
     "bytes": "4",
@@ -302,6 +302,30 @@
     "offset": 4,
     "slot": 14,
     "typeLabel": "uint24"
+  },
+  {
+    "bytes": "1",
+    "encoding": "inplace",
+    "label": "snapShift",
+    "offset": 7,
+    "slot": 14,
+    "typeLabel": "uint8"
+  },
+  {
+    "bytes": "3",
+    "encoding": "inplace",
+    "label": "snapLevel",
+    "offset": 8,
+    "slot": 14,
+    "typeLabel": "uint24"
+  },
+  {
+    "bytes": "1",
+    "encoding": "inplace",
+    "label": "snapPendingShift",
+    "offset": 11,
+    "slot": 14,
+    "typeLabel": "uint8"
   },
   {
     "bytes": "32",
@@ -790,5 +814,13 @@
     "offset": 0,
     "slot": 64,
     "typeLabel": "mapping(address => mapping(address => uint8))"
+  },
+  {
+    "bytes": "32",
+    "encoding": "inplace",
+    "label": "goldRush",
+    "offset": 0,
+    "slot": 65,
+    "typeLabel": "uint256"
   }
 ]

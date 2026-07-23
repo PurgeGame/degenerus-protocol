@@ -79,17 +79,17 @@ describe("LootboxAutoResolveRemByte — Phase 275 Wave 2 TST-LBX-AR-05", functio
   this.timeout(30_000);
 
   describe("`_queueEntries` body proof: writes ONLY whole tickets — rem byte carried unchanged from existing slot value (LBX-AR-06)", function () {
-    it("[01a] `_queueEntries` body in `entriesOwedPacked` write packs `(uint40(owed) << 8) | uint40(rem)` where `rem = uint8(packed)` from the PRE-existing slot value (no fractional accumulation)", function () {
+    it("[01a] `_queueEntries` body in `entriesOwedPacked` write packs `(uint48(owed) << 8) | uint48(rem)` where `rem = uint8(packed)` from the PRE-existing slot value (no fractional accumulation)", function () {
       const storage = fs.readFileSync(STORAGE_PATH, "utf8");
       const body = extractBody(storage, "function _queueEntries(");
       expect(body, "`_queueEntries` body not found").to.not.equal(null);
 
       // The write site MUST pack `rem` from the existing slot, never from a
       // newly-computed fractional value. The pattern is:
-      //   entriesOwedPacked[wk][buyer] = (uint40(owed) << 8) | uint40(rem);
+      //   entriesOwedPacked[wk][buyer] = (uint48(owed) << 8) | uint48(rem);
       expect(
-        /entriesOwedPacked\[wk\]\[buyer\]\s*=\s*\(uint40\(owed\)\s*<<\s*8\)\s*\|\s*uint40\(rem\)/.test(body),
-        "_queueEntries must pack `(uint40(owed) << 8) | uint40(rem)` with rem carried from existing slot"
+        /entriesOwedPacked\[wk\]\[buyer\]\s*=\s*\(uint48\(owed\)\s*<<\s*8\)\s*\|\s*uint48\(rem\)/.test(body),
+        "_queueEntries must pack `(uint48(owed) << 8) | uint48(rem)` with rem carried from existing slot"
       ).to.equal(true);
 
       // No fractional/remainder arithmetic appears in the body — specifically,
@@ -182,13 +182,15 @@ describe("LootboxAutoResolveRemByte — Phase 275 Wave 2 TST-LBX-AR-05", functio
       expect(lootbox.includes("_rollRemainder("), "LootboxModule must not invoke _rollRemainder").to.equal(false);
     });
 
-    it("[03b] `entriesOwedPacked` rem byte (uint8) layout: low 8 bits of the packed uint40, whole-count occupies bits [8..39]", function () {
+    it("[03b] `entriesOwedPacked` rem byte (uint8) layout: low 8 bits of the packed uint48, whole-count occupies bits [8..39], snap-done marker at bit 40", function () {
       const storage = fs.readFileSync(STORAGE_PATH, "utf8");
-      // The packing pattern `(uint40(owed) << 8) | uint40(rem)` confirms the
-      // layout: low 8 bits = rem, high 32 bits = owed (whole count). This is
-      // the structural anchor for the rem-byte snapshot strategy.
+      // The packing pattern `(uint48(owed) << 8) | uint48(rem)` confirms the
+      // layout: low 8 bits = rem, bits [8..39] = owed (whole count). The slot
+      // widened from uint40 to uint48 to hold the snap-done marker (bit 40)
+      // above the owed field. This is the structural anchor for the rem-byte
+      // snapshot strategy.
       expect(
-        /\(uint40\(owed\)\s*<<\s*8\)\s*\|\s*uint40\(rem\)/.test(storage),
+        /\(uint48\(owed\)\s*<<\s*8\)\s*\|\s*uint48\(rem\)/.test(storage),
         "entriesOwedPacked layout pattern not found in storage"
       ).to.equal(true);
     });

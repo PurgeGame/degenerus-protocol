@@ -40,8 +40,8 @@
 //     `_processFutureTicketBatch`) both emit in one drain run, with
 //     `path-accumulator=A|B` log discrimination per Phase 282 precedent.
 //   TST-MINTCLN-04 — `entriesOwedPacked[rk][player]` slot read decodes to
-//     the expected 40-bit packed form `(uint40(owed) << 8) | uint40(rem)`
-//     at storage:465; outer-mapping key `rk` is derived per-path via
+//     the expected packed form `(uint48(owed) << 8) | uint48(rem)` (owed in
+//     bits [8..39], snap-done marker at bit 40); outer-mapping key `rk` is derived per-path via
 //     `_tqWriteKey(lvl)` (Path B) and `_tqFarFutureKey(lvl)` (Path A) —
 //     NOT raw `lvl`. Storage-layout slot index pinned to 13 (BLK-2 lock).
 //   TST-MINTCLN-05 — satisfied by this JSDoc header (no separate test case).
@@ -540,7 +540,7 @@ describe("MintCleanupRegression — Phase 291 v42.0 MINTCLN regression fixture",
       return { fixture, gameAddr, ticketWriteSlot };
     }
 
-    it("entriesOwedPacked[rk][player] slot reads decode to the expected (rem | (owed<<8)) 40-bit packed form on the queued state — Path A (lvl=2..5 far-future) AND Path B (lvl=1 current-level) outer-mapping keys both resolve to non-zero packed values with owed > 0", async function () {
+    it("entriesOwedPacked[rk][player] slot reads decode to the expected (rem | (owed<<8)) 48-bit packed form on the queued state — Path A (lvl=2..5 far-future) AND Path B (lvl=1 current-level) outer-mapping keys both resolve to non-zero packed values with owed > 0", async function () {
       try {
         const forgeOut = execSync(
           "forge inspect contracts/storage/DegenerusGameStorage.sol:DegenerusGameStorage storage-layout 2>/dev/null"
