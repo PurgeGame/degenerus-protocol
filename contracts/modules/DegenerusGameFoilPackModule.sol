@@ -172,7 +172,12 @@ contract DegenerusGameFoilPackModule is
         // DirectEth forbids claimable: either way an uncovered remainder reverts. ethUsed
         // is the fresh-rate affiliate basis; remaining is the recycle-rate basis.
         uint256 priceWei = PriceLookupLib.priceForLevel(lvl);
-        uint256 cost = FOIL_PACK_TICKETS * priceWei;
+        // Snap valve: the pack keeps its full four lines and match game on a thanos
+        // level — the price carries the exponent instead (2^s times ten ticket
+        // prices), the same effective cost-per-entry scaling the ticket path gets
+        // from quantity division.
+        uint8 snapS = _snapShiftFor(lvl);
+        uint256 cost = (FOIL_PACK_TICKETS * priceWei) << snapS;
         uint256 ethUsed = ethSent < cost ? ethSent : cost;
         uint256 remaining = cost - ethUsed;
         if (remaining != 0) {
@@ -206,12 +211,16 @@ contract DegenerusGameFoilPackModule is
             );
         }
 
-        // Ten whole tickets' worth of mint units — the pack costs ten ticket prices, so it
-        // records the same units a ten-whole-ticket purchase would, in the ticket leg's
-        // quantity scale (one whole ticket = 4 * QTY_SCALE units). Via the shared
-        // _recordMintData. Runs before the quest + boost so the units feed the activity
-        // score exactly like a ten-ticket purchase.
-        _recordMintData(buyer, lvl, uint32(FOIL_PACK_TICKETS * 4 * QTY_SCALE));
+        // Price-equivalent mint units — the pack costs 2^s times ten ticket prices,
+        // so it records the units the same ETH spent on tickets would, in the ticket
+        // leg's quantity scale (one whole ticket = 4 * QTY_SCALE units). Via the
+        // shared _recordMintData. Runs before the quest + boost so the units feed
+        // the activity score exactly like the equivalent ticket purchase.
+        _recordMintData(
+            buyer,
+            lvl,
+            uint32((FOIL_PACK_TICKETS * 4 * QTY_SCALE) << snapS)
+        );
 
         // Affiliate, 20% fresh / 5% recycle exactly like a normal ticket mint: the fresh
         // portion (ethUsed) at the fresh rate, the claimable portion (remaining) at the

@@ -2080,6 +2080,17 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
             _rewardTopAffiliate(lvl);
             level = lvl;
 
+            // Fold a reached thanos declaration into the active shift: from this
+            // level onward every drain target resolves to the declared exponent via
+            // snapShift, and the pending pair frees for the next declaration.
+            {
+                uint24 pl = snapLevel;
+                if (pl != 0 && lvl >= pl) {
+                    snapShift = snapPendingShift;
+                    snapLevel = 0;
+                }
+            }
+
             // Decimator window: open at x4/x99, close at x5/x00
             uint24 mod100 = lvl % 100;
             uint24 mod10 = lvl % 10;

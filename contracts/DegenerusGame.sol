@@ -607,17 +607,72 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         emit LootboxRngThresholdUpdated(prev, newThreshold);
     }
 
+    /// @dev Ceiling on any declared snap exponent: 2^8 = 256x is the deepest
+    ///      division a thanos level can apply.
+    uint8 private constant SNAP_SHIFT_MAX = 8;
+
+    /// @dev Floor on a thanos declaration: after division, the target level's
+    ///      projected entries (current purchase-target pool at the target level's
+    ///      price) must still reach 10M whole tickets (40M entries). Keeps any
+    ///      non-zero shift undeclarable until demand genuinely reaches runaway scale.
+    uint256 private constant SNAP_FLOOR_ENTRIES = 40_000_000;
+
+    /// @notice Declare a future level a thanos level: every entry drained for
+    ///         targetLevel onward divides by 2^shift. A pure prospective price
+    ///         increase — declarations land at least 6 levels ahead, strictly
+    ///         before the target's first materialization (the far-future promotion
+    ///         at the transition to target-5), so no materialized ticket is touched
+    ///         and one level's entries always share one exponent. Already-queued
+    ///         raw entries for covered levels divide with everyone else's at
+    ///         drain; the uniform division cancels in the pot-share fraction, so
+    ///         a raw entry's replacement cost and expected pot share are both
+    ///         unchanged by any declaration.
+    /// @dev Access: vault owner only (DGVE majority holder). Bounds: 6-level
+    ///      notice; shift capped at SNAP_SHIFT_MAX (raising and lowering both
+    ///      allowed — fairness needs only that each level's exponent is fixed
+    ///      before its first ticket materializes); a non-zero shift must leave the
+    ///      target level's projected entries at or above SNAP_FLOOR_ENTRIES, so
+    ///      snapping is undeclarable below runaway scale; a pending declaration
+    ///      locks once its 6-level window opens and clears when its level commits.
+    /// @custom:reverts OnlyVault If caller is not the vault owner.
+    /// @custom:reverts ThanosBounds If any declaration bound is violated.
+    function setThanosLevel(uint24 targetLevel, uint8 shift) external {
+        if (!vault.isVaultOwner(msg.sender)) revert OnlyVault();
+        uint24 lvl = level;
+        if (
+            targetLevel < lvl + 6 ||
+            shift > SNAP_SHIFT_MAX ||
+            // A pending declaration whose materialization window has opened is
+            // immutable until its level commits and folds it into snapShift.
+            (snapLevel != 0 && lvl + 6 > snapLevel)
+        ) revert ThanosBounds();
+        if (shift != 0) {
+            // Projected entries for the target at the PREVIOUS level's final pool
+            // target — settled history whose _endPhase (including the x00
+            // futurePool/3 rewrite) has already run, so the floor's basis can
+            // never decrease after the declaration. levelPrizePool[level] would
+            // be live: an x00's value shrinks to futurePool/3 at its phase end,
+            // letting a jackpot-phase declaration overstate the floor.
+            uint256 projected = (levelPrizePool[lvl == 0 ? 0 : lvl - 1] << 2) /
+                PriceLookupLib.priceForLevel(targetLevel);
+            if ((projected >> shift) < SNAP_FLOOR_ENTRIES) revert ThanosBounds();
+        }
+        snapLevel = targetLevel;
+        snapPendingShift = shift;
+        emit ThanosLevelSet(targetLevel, shift);
+    }
+
     /// @notice Purchase any combination of tickets and loot boxes with ETH or claimable.
     /// @dev Main entry point for all ETH/claimable purchases. For FLIP purchases, use redeemFlip().
     ///      Recycling at least 3 tickets' worth of claimable winnings earns a 10% FLIP flip-credit bonus.
     ///      Adds affiliate support for loot box purchases.
-    ///      SECURITY: Blocked when RNG is locked.
     /// @param buyer Player address to receive purchases (address(0) = msg.sender).
     /// @param entryQuantityScaled Purchase units (400 = 4*QTY_SCALE = one whole ticket = 4 entries; 0 to skip).
     /// @param lootBoxAmount ETH amount for loot boxes, minimum 0.01 ETH (0 to skip).
     /// @param affiliateCode Affiliate/referral code for all purchases.
     /// @param payKind Payment method (DirectEth, Claimable, or Combined).
-    /// @param foil True to additively buy one foil pack (10x the level price) in the same
+    /// @param foil True to additively buy one foil pack (10x the level price, shifted by
+    ///        the level's snap exponent) in the same
     ///        tx. The foil leg is one-per-cycle and adds to — never replaces — the ticket
     ///        and lootbox legs, sharing the combined spend's affiliate, quest, and streak
     ///        recording so a foil pack counts exactly like a ticket purchase.
@@ -673,7 +728,8 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
 
     /// @dev Foil branch of purchase(): the foil pack is an additive leg on top of the
     ///      optional ticket/lootbox legs. Fresh ETH is capped at the combined cost (tickets +
-    ///      lootbox + a foil pack at ten level prices), and any overpay is credited to the
+    ///      lootbox + a foil pack at ten level prices shifted by the level's snap
+    ///      exponent), and any overpay is credited to the
     ///      payer's withdrawable afking so excess never reverts or strands. The ticket/lootbox
     ///      leg takes fresh ETH first (capped at its own cost) through the mint module's
     ///      purchaseWith, which uses the explicit ethValue and ignores the carried msg.value;
@@ -691,12 +747,17 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     ) private {
         // Quote both legs at the routed level (the level the ticket queue and the foil module
         // both deliver to), so the final-jackpot-day reroute to level+1 cannot strand the
-        // buyer's overpay or under-quote the foil cost.
-        uint256 priceWei = PriceLookupLib.priceForLevel(_activeTicketLevel());
+        // buyer's overpay or under-quote the foil cost. The foil term carries the level's
+        // snap exponent — the SAME quote the foil module charges — so the fresh-ETH cap
+        // covers the full shifted price and a thanos level cannot brick DirectEth foils or
+        // force an unintended claimable draw.
+        uint24 routedLvl = _activeTicketLevel();
+        uint256 priceWei = PriceLookupLib.priceForLevel(routedLvl);
         uint256 mintCost = (priceWei * entryQuantityScaled) /
             (4 * QTY_SCALE) +
             lootBoxAmount;
-        uint256 cost = mintCost + FOIL_PACK_TICKETS * priceWei;
+        uint256 cost = mintCost +
+            ((FOIL_PACK_TICKETS * priceWei) << _snapShiftFor(routedLvl));
         uint256 fresh = payKind == MintPaymentKind.Claimable
             ? 0
             : (msg.value < cost ? msg.value : cost);

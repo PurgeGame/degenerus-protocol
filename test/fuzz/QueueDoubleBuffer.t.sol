@@ -42,7 +42,7 @@ contract QueueHarness is DegenerusGameAdvanceModule {
         return ticketQueue[key][idx];
     }
 
-    function getTicketsOwedPacked(uint24 key, address buyer) external view returns (uint40) {
+    function getTicketsOwedPacked(uint24 key, address buyer) external view returns (uint48) {
         return entriesOwedPacked[key][buyer];
     }
 

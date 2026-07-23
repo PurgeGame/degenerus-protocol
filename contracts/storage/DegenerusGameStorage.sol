@@ -162,6 +162,13 @@ abstract contract DegenerusGameStorage {
     ///      100 means 1 ticket = 100 scaled units.
     uint256 internal constant QTY_SCALE = 100;
 
+    /// @dev Marker bit on entriesOwedPacked values: set by the drain once a player's
+    ///      owed balance has been divided by 2^snapShift, so a budget-split resume
+    ///      never divides the same balance twice.
+    uint48 internal constant SNAP_DONE_BIT = uint48(1) << 40;
+
+
+
     /// @dev ETH threshold for whale pass claim eligibility from lootbox wins.
     uint256 internal constant LOOTBOX_CLAIM_THRESHOLD = 5 ether;
 
@@ -219,6 +226,7 @@ abstract contract DegenerusGameStorage {
     error OnlyAdmin();          // admin-only entrypoint
     error OnlyVault();          // vault / vault-owner entrypoint
     error OnlySDGNRS();         // sDGNRS-contract-only entrypoint
+    error ThanosBounds();       // thanos declaration outside its sanity bounds
     error OnlyCoordinator();    // VRF-coordinator-only callback
     error Unauthorized();       // generic access-control failure
     error GameOver();           // the game has ended (or the liveness-timeout game-over trigger is active)
@@ -542,10 +550,12 @@ abstract contract DegenerusGameStorage {
     mapping(uint24 => address[]) internal ticketQueue;
 
     /// @dev Packed owed entries per level per player.
-    ///      Layout: [32 bits owed][8 bits remainder].
+    ///      Layout: [1 bit snap-done @ 40][32 bits owed][8 bits remainder].
     ///      `owed` is denominated in ENTRIES (each entry = price/4),
     ///      NOT whole tickets — 4 entries make one whole ticket (priceForLevel(level)).
-    mapping(uint24 => mapping(address => uint40)) internal entriesOwedPacked;
+    ///      The snap-done bit (SNAP_DONE_BIT) is set only by the drains; queue writers
+    ///      run strictly before their key's drain window, so they never observe it.
+    mapping(uint24 => mapping(address => uint48)) internal entriesOwedPacked;
 
     /// @dev Cursor for ticket queue processing (dual-purpose).
     ///      - SETUP phase: tracks near-future level progress (1-4), reset to 0 when done.
@@ -556,6 +566,24 @@ abstract contract DegenerusGameStorage {
 
     /// @dev Current level being processed in ticket queue operations.
     uint24 internal ticketLevel;
+
+    /// @dev Active snap divisor exponent: drained owed balances for levels below
+    ///      snapLevel divide by 2^snapShift. Moves only at level commit, by folding
+    ///      in a reached declaration. Zero outside runaway-demand states.
+    uint8 internal snapShift;
+
+    /// @dev Pending thanos declaration: levels >= snapLevel drain at snapPendingShift
+    ///      instead of snapShift. Declared via setThanosLevel at least 6 levels ahead,
+    ///      strictly before the target's first materialization (the far-future
+    ///      promotion at the transition to target-5), so one level's entries always
+    ///      share one exponent regardless of when they were bought or drained —
+    ///      the invariant that keeps any declared change (raise or lower) EV-neutral.
+    ///      snapLevel == 0 means no pending declaration.
+    uint24 internal snapLevel;
+
+    /// @dev Shift that applies from snapLevel onward. Folded into snapShift at the
+    ///      level commit that reaches snapLevel.
+    uint8 internal snapPendingShift;
 
     // =========================================================================
     // Ticket Queue Helpers
@@ -568,6 +596,9 @@ abstract contract DegenerusGameStorage {
         uint256 baseKey,
         uint32 take
     );
+
+    /// @notice Emitted when a future level is declared a thanos level.
+    event ThanosLevelSet(uint24 targetLevel, uint8 shift);
 
     /// @notice Emitted when entries are queued for a buyer at a specific level.
     event EntriesQueued(
@@ -711,7 +742,7 @@ abstract contract DegenerusGameStorage {
         uint24 wk = isFarFuture
             ? _tqFarFutureKey(targetLevel)
             : _tqWriteKey(targetLevel);
-        uint40 packed = entriesOwedPacked[wk][buyer];
+        uint48 packed = entriesOwedPacked[wk][buyer];
         uint32 owed = uint32(packed >> 8);
         uint8 rem = uint8(packed);
         if (packed == 0) {
@@ -720,7 +751,7 @@ abstract contract DegenerusGameStorage {
         unchecked {
             owed += entries;
         }
-        entriesOwedPacked[wk][buyer] = (uint40(owed) << 8) | uint40(rem);
+        entriesOwedPacked[wk][buyer] = (uint48(owed) << 8) | uint48(rem);
     }
 
     /// @dev Converts a post-Bernoulli whole-ticket count into the entries unit the
@@ -733,6 +764,16 @@ abstract contract DegenerusGameStorage {
     /// @return Entries count (each = price/4); 4 per whole ticket.
     function wholeTicketsToEntries(uint32 wholeTickets) internal pure returns (uint32) {
         return wholeTickets << 2;
+    }
+
+    /// @dev Snap exponent for a target level's drain: the pending declaration for
+    ///      levels at or past snapLevel, the active snapShift below it. One warm
+    ///      SLOAD (shares the ticketCursor slot) plus two compares. Shared by the
+    ///      ticket drains (MintModule) and the foil buy gate (FoilPackModule).
+    function _snapShiftFor(uint24 targetLvl) internal view returns (uint8) {
+        uint24 pl = snapLevel;
+        if (pl != 0 && targetLvl >= pl) return snapPendingShift;
+        return snapShift;
     }
 
     /// @dev Queues scaled entries (2 decimal places) for fractional purchases.
@@ -755,7 +796,7 @@ abstract contract DegenerusGameStorage {
         uint24 wk = isFarFuture
             ? _tqFarFutureKey(targetLevel)
             : _tqWriteKey(targetLevel);
-        uint40 packed = entriesOwedPacked[wk][buyer];
+        uint48 packed = entriesOwedPacked[wk][buyer];
         uint32 owed = uint32(packed >> 8);
         uint8 rem = uint8(packed);
         if (packed == 0) {
@@ -781,7 +822,7 @@ abstract contract DegenerusGameStorage {
             }
             rem = uint8(newRem);
         }
-        uint40 newPacked = (uint40(owed) << 8) | uint40(rem);
+        uint48 newPacked = (uint48(owed) << 8) | uint48(rem);
         if (newPacked != packed) {
             entriesOwedPacked[wk][buyer] = newPacked;
         }
@@ -840,7 +881,7 @@ abstract contract DegenerusGameStorage {
             bool isFarFuture = lvl > currentLevel + 5;
             if (isFarFuture && rngLockedCached && !rngBypass) revert RngLocked();
             uint24 wk = isFarFuture ? _tqFarFutureKey(lvl) : (lvl | writeSlotBit);
-            uint40 packed = entriesOwedPacked[wk][buyer];
+            uint48 packed = entriesOwedPacked[wk][buyer];
             uint32 owed = uint32(packed >> 8);
             uint8 rem = uint8(packed);
             if (packed == 0) {
@@ -849,7 +890,7 @@ abstract contract DegenerusGameStorage {
             unchecked {
                 owed += entriesPerLevel;
             }
-            entriesOwedPacked[wk][buyer] = (uint40(owed) << 8) | uint40(rem);
+            entriesOwedPacked[wk][buyer] = (uint48(owed) << 8) | uint48(rem);
 
             unchecked {
                 lvl += stride;

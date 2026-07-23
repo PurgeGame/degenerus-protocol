@@ -59,7 +59,7 @@ contract TicketEdgeCasesHarness is DegenerusGameStorage {
         return ticketQueue[key].length;
     }
 
-    function getTicketsOwedPacked(uint24 key, address player) external view returns (uint40) {
+    function getTicketsOwedPacked(uint24 key, address player) external view returns (uint48) {
         return entriesOwedPacked[key][player];
     }
 
@@ -197,7 +197,7 @@ contract TicketEdgeCasesTest is Test {
         assertEq(harness.getQueueLength(writeKey), 0, "write key should be empty");
 
         // entriesOwedPacked at FF key has owed=3
-        uint40 ffPacked = harness.getTicketsOwedPacked(ffKey, BUYER);
+        uint48 ffPacked = harness.getTicketsOwedPacked(ffKey, BUYER);
         assertEq(uint32(ffPacked >> 8), 3, "FF key owed should be 3");
 
         // Advance level: now 15 <= 10+5=15, near-future
@@ -208,12 +208,12 @@ contract TicketEdgeCasesTest is Test {
 
         // FF key unchanged
         assertEq(harness.getQueueLength(ffKey), 1, "FF key should still have 1 entry");
-        uint40 ffPackedAfter = harness.getTicketsOwedPacked(ffKey, BUYER);
+        uint48 ffPackedAfter = harness.getTicketsOwedPacked(ffKey, BUYER);
         assertEq(uint32(ffPackedAfter >> 8), 3, "FF key owed should still be 3 (unchanged)");
 
         // Write key has new entry
         assertEq(harness.getQueueLength(writeKey), 1, "write key should have 1 entry");
-        uint40 writePacked = harness.getTicketsOwedPacked(writeKey, BUYER);
+        uint48 writePacked = harness.getTicketsOwedPacked(writeKey, BUYER);
         assertEq(uint32(writePacked >> 8), 5, "write key owed should be 5");
 
         // Key assertion: the two key spaces are independent.
@@ -288,7 +288,7 @@ contract TicketEdgeCasesTest is Test {
         assertEq(harness.getQueueLength(writeKey), 1, "write key still 1 entry (same player accumulated)");
         assertEq(harness.getQueueLength(ffKey), 0, "FF key still empty");
 
-        uint40 writePacked = harness.getTicketsOwedPacked(writeKey, BUYER);
+        uint48 writePacked = harness.getTicketsOwedPacked(writeKey, BUYER);
         assertEq(uint32(writePacked >> 8), 3, "write key owed should be 2+1=3 (accumulated)");
 
         // Key assertion: once level >= L-5 (here 9 >= 14-5=9), the isFarFuture

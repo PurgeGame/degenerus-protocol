@@ -68,12 +68,12 @@ contract TicketBatchStageHarness is DegenerusGameMintModule {
 
         uint24 rk = _tqReadKey(lvl);
         address[] storage queue = ticketQueue[rk];
-        mapping(address => uint40) storage owedMap = entriesOwedPacked[rk];
+        mapping(address => uint48) storage owedMap = entriesOwedPacked[rk];
         for (uint256 i; i < n; ++i) {
             address p = address(base + uint160(i + 1));
             queue.push(p);
             // packed layout: owed in bits [8:], remainder in bits [0:8]. Set owed=owedEach, rem=0.
-            owedMap[p] = uint40(uint40(owedEach) << 8);
+            owedMap[p] = uint48(uint48(owedEach) << 8);
         }
     }
 

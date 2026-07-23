@@ -319,7 +319,7 @@ contract DegenerusGameMintModule is
     ) external returns (bool worked, bool finished, uint32 writesUsed) {
         bool inFarFuture = (ticketLevel == (lvl | TICKET_FAR_FUTURE_BIT));
         uint24 rk = inFarFuture ? _tqFarFutureKey(lvl) : _tqReadKey(lvl);
-        mapping(address => uint40) storage owedMap = entriesOwedPacked[rk];
+        mapping(address => uint48) storage owedMap = entriesOwedPacked[rk];
         address[] storage queue = ticketQueue[rk];
         uint256 total = queue.length;
         if (total == 0) {
@@ -355,99 +355,39 @@ contract DegenerusGameMintModule is
         uint32[256] memory counts;
         uint8[256] memory touchedTraits;
 
+        // Snap valve exponent for this target level; constant across the whole
+        // queue drain (declarations lock 6 levels out and level commits are gated
+        // on full drainage). Division and snap-done marking happen inside
+        // _processOneTicketEntry — the single per-entry engine shared with
+        // processTicketBatch.
+        uint8 shift = _snapShiftFor(lvl);
+
         while (idx < total && used < writesBudget) {
-            address player = queue[idx];
-            uint40 packed = owedMap[player];
-            uint32 owed = uint32(packed >> 8);
-            uint8 rem = uint8(packed);
-            uint256 baseKey = (uint256(lvl) << 224) |
-                (idx << 192) |
-                (uint256(uint160(player)) << 32) |
-                uint256(owed);
-            if (owed == 0) {
-                if (rem == 0) {
-                    if (packed != 0) {
-                        owedMap[player] = 0;
-                    }
-                    // Charge one budget unit for skip/cleanup progress so sparse
-                    // queues cannot consume unbounded work in one call.
-                    unchecked {
-                        ++idx;
-                        ++used;
-                    }
-                    processed = 0;
-                    continue;
-                }
-                if (!_rollRemainder(entropy, baseKey, rem)) {
-                    owedMap[player] = 0;
-                    unchecked {
-                        ++idx;
-                        ++used;
-                    }
-                    processed = 0;
-                    continue;
-                }
-                uint40 rolledPacked = uint40(1) << 8;
-                if (rolledPacked != packed) {
-                    owedMap[player] = rolledPacked;
-                }
-                packed = rolledPacked;
-                owed = 1;
-                rem = 0;
-            }
-            uint32 room = writesBudget - used;
-            uint32 baseOv = (processed == 0 && owed <= 2) ? 4 : 2;
-            if (room <= baseOv) break;
-            room -= baseOv;
-
-            uint32 maxT = (room <= 256) ? (room / 2) : (room - 256);
-            uint32 take = owed > maxT ? maxT : owed;
-            // Budget-limited takes stay whole-ticket (%4) aligned: `processed` does not
-            // survive a cross-call resume, so the quadrant cycle (i & 3) restarts at 0 —
-            // an aligned split boundary makes that restart the correct continuation.
-            if (take != owed) take &= ~uint32(3);
-            if (take == 0) break;
-
-            _raritySymbolBatch(
-                player,
-                baseKey,
-                processed,
-                take,
-                entropy,
-                counts,
-                touchedTraits
-            );
-            emit TraitsGenerated(player, baseKey, take);
-
-            // Calculate actual write cost
-            uint32 writesThis = (take <= 256) ? (take * 2) : (take + 256);
-            writesThis += baseOv;
-            if (take == owed) writesThis += 1;
-
-            uint32 remainingOwed;
+            (
+                uint32 writesThis,
+                uint32 take,
+                bool advance
+            ) = _processOneTicketEntry(
+                    queue[idx],
+                    lvl,
+                    owedMap,
+                    writesBudget - used,
+                    processed,
+                    entropy,
+                    idx,
+                    shift,
+                    counts,
+                    touchedTraits
+                );
+            if (writesThis == 0 && !advance) break;
             unchecked {
-                remainingOwed = owed - take;
-            }
-            if (remainingOwed == 0 && rem != 0) {
-                if (_rollRemainder(entropy, baseKey, rem)) {
-                    remainingOwed = 1;
-                }
-                rem = 0;
-            }
-            uint40 newPacked = (uint40(remainingOwed) << 8) | uint40(rem);
-            if (newPacked != packed) {
-                owedMap[player] = newPacked;
-            }
-            unchecked {
-                processed += take;
                 used += writesThis;
-            }
-
-            if (remainingOwed == 0) {
-                unchecked {
+                if (advance) {
                     ++idx;
+                    processed = 0;
+                } else {
+                    processed += take;
                 }
-                processed = 0;
             }
         }
 
@@ -593,6 +533,19 @@ contract DegenerusGameMintModule is
         }
     }
 
+    /// @dev Divide a not-yet-snapped owed balance by 2^s, folding the shifted-out
+    ///      fraction into the QTY_SCALE remainder (sub-remainder residue evaporates,
+    ///      matching the sub-unit handling of scaled purchases). Marks the value
+    ///      snap-done so a resumed drain never divides it again.
+    function _snapOwedPacked(uint48 packed, uint8 s) internal pure returns (uint48) {
+        uint256 scaled = (uint256(uint32(packed >> 8)) * QTY_SCALE +
+            uint8(packed)) >> s;
+        return
+            SNAP_DONE_BIT |
+            (uint48(scaled / QTY_SCALE) << 8) |
+            uint48(scaled % QTY_SCALE);
+    }
+
     /// @dev Roll remainder chance for a fractional ticket (0-99).
     function _rollRemainder(
         uint256 entropy,
@@ -627,7 +580,7 @@ contract DegenerusGameMintModule is
         returns (bool finished, bool didWork)
     {
         uint24 rk = _tqReadKey(lvl);
-        mapping(address => uint40) storage owedMap = entriesOwedPacked[rk];
+        mapping(address => uint48) storage owedMap = entriesOwedPacked[rk];
         address[] storage queue = ticketQueue[rk];
         uint256 total = queue.length;
 
@@ -664,6 +617,7 @@ contract DegenerusGameMintModule is
 
         uint32 used;
         uint32 processed;
+        uint8 shift = _snapShiftFor(lvl);
 
         // Trait-batch scratch buffers shared by every normal entry this call (zeroed
         // between entries inside _raritySymbolBatch), so memory does not grow per
@@ -680,6 +634,7 @@ contract DegenerusGameMintModule is
                 processed,
                 entropy,
                 idx,
+                shift,
                 counts,
                 touchedTraits
             );
@@ -769,14 +724,17 @@ contract DegenerusGameMintModule is
         return abi.decode(data, (bool, bool));
     }
 
-    /// @dev Resolves the zero-owed remainder case for ticket processing.
+    /// @dev Resolves the zero-owed remainder case for ticket processing. `packed` is
+    ///      the caller's post-snap value; `snapDone` rides the rolled write-back so a
+    ///      budget-split resume sees the balance as already snapped.
     function _resolveZeroOwedRemainder(
-        uint40 packed,
-        mapping(address => uint40) storage owedMap,
+        uint48 packed,
+        mapping(address => uint48) storage owedMap,
         address player,
         uint256 entropy,
-        uint256 baseKey
-    ) private returns (uint40 newPacked, bool skip) {
+        uint256 baseKey,
+        uint48 snapDone
+    ) private returns (uint48 newPacked, bool skip) {
         uint8 rem = uint8(packed);
         if (rem == 0) {
             if (packed != 0) {
@@ -791,7 +749,7 @@ contract DegenerusGameMintModule is
             return (0, true);
         }
 
-        newPacked = uint40(1) << 8;
+        newPacked = snapDone | (uint48(1) << 8);
         if (newPacked != packed) {
             owedMap[player] = newPacked;
         }
@@ -799,18 +757,27 @@ contract DegenerusGameMintModule is
     }
 
     /// @dev Processes a single ticket entry, returning writes used and whether to advance.
+    ///      `shift` is the snap exponent (snapShift, constant across a queue drain): a
+    ///      not-yet-snapped balance is divided by 2^shift on first touch and every
+    ///      write-back carries the snap-done marker so a budget-split resume never
+    ///      divides it twice.
     function _processOneTicketEntry(
         address player,
         uint24 lvl,
-        mapping(address => uint40) storage owedMap,
+        mapping(address => uint48) storage owedMap,
         uint32 room,
         uint32 processed,
         uint256 entropy,
         uint256 queueIdx,
+        uint8 shift,
         uint32[256] memory counts,
         uint8[256] memory touchedTraits
     ) private returns (uint32 writesUsed, uint32 take, bool advance) {
-        uint40 packed = owedMap[player];
+        uint48 snapDone = shift == 0 ? 0 : SNAP_DONE_BIT;
+        uint48 packed = owedMap[player];
+        if (snapDone != 0 && packed != 0 && packed & SNAP_DONE_BIT == 0) {
+            packed = _snapOwedPacked(packed, shift);
+        }
         uint32 owed = uint32(packed >> 8);
         uint256 baseKey = (uint256(lvl) << 224) |
             (queueIdx << 192) |
@@ -824,7 +791,8 @@ contract DegenerusGameMintModule is
                 owedMap,
                 player,
                 entropy,
-                baseKey
+                baseKey,
+                snapDone
             );
             if (skip) return (1, 0, true);
             owed = 1;
@@ -871,7 +839,8 @@ contract DegenerusGameMintModule is
             }
             rem = 0;
         }
-        uint40 newPacked = (uint40(remainingOwed) << 8) | uint40(rem);
+        uint48 newPacked = (uint48(remainingOwed) << 8) | uint48(rem);
+        if (newPacked != 0) newPacked |= snapDone;
         if (newPacked != packed) {
             owedMap[player] = newPacked;
         }
@@ -1247,7 +1216,7 @@ contract DegenerusGameMintModule is
         uint256 idx
     ) internal {
         uint24 ffk = _tqFarFutureKey(L);
-        uint40 packed = entriesOwedPacked[ffk][player];
+        uint48 packed = entriesOwedPacked[ffk][player];
         uint32 owed = uint32(packed >> 8);
         if (owed < entries) revert E(); // ownership / over-sell guard
         uint8 rem = uint8(packed);
@@ -1260,7 +1229,7 @@ contract DegenerusGameMintModule is
             q.pop();
             entriesOwedPacked[ffk][player] = 0;
         } else {
-            entriesOwedPacked[ffk][player] = (uint40(newOwed) << 8) | uint40(rem);
+            entriesOwedPacked[ffk][player] = (uint48(newOwed) << 8) | uint48(rem);
         }
     }
 
