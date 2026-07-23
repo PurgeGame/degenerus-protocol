@@ -114,6 +114,11 @@ contract DegenerusGameDecimatorModule is DegenerusGamePayoutUtils {
     ///      conviction against the information value of waiting for the window close.
     uint16 private constant DEC_DAY_ONE_BONUS_BPS = 12_000;
 
+    /// @dev Weight debuff on decimator burns placed during a level's final purchase
+    ///      day (prize target met): 0.9x, tempering last-look burns placed with the
+    ///      level's outcome largely visible.
+    uint16 private constant DEC_LAST_DAY_DEBUFF_BPS = 9_000;
+
     /// @dev Keeper box-bounty target (ETH wei) per settled decimator claim. Sized so the FLIP
     ///      bounty's ETH-value reimburses the ~30k-gas per-box settle at the ~0.5-gwei reference.
     ///      The reward is an illiquid coinflip credit, and every claimable bet costs a real
@@ -185,6 +190,15 @@ contract DegenerusGameDecimatorModule is DegenerusGamePayoutUtils {
         // accrual.
         if (decDayOneActive) {
             multBps = (multBps * DEC_DAY_ONE_BONUS_BPS) / BPS_DENOMINATOR;
+        }
+
+        // Final-purchase-day debuff: once the level's prize target is met, burns
+        // carry 0.9x weight — a burn placed with the level's outcome largely
+        // visible pays a haircut versus early commitment. Stacks multiplicatively
+        // with the day-one bonus and rides multBps, so DECIMATOR_MULTIPLIER_CAP
+        // still bounds the accrual.
+        if (lastPurchaseDay) {
+            multBps = (multBps * DEC_LAST_DAY_DEBUFF_BPS) / BPS_DENOMINATOR;
         }
 
         uint256 effectiveAmount = _decEffectiveAmount(
