@@ -680,7 +680,12 @@ contract KeeperRewardRoutingSameResults is DeployProtocol {
             vm.warp(simTime);
             _seedNextPrizePool(49.9 ether);
             _buyManyTickets(poolFiller, 4000);
-            for (uint256 j; j < 50; j++) {
+            // Drive until the protocol stops accepting work (NotTimeYet), not a fixed
+            // ration: mainnet keepers are unbounded, and the sDGNRS level-bonus box can
+            // legitimately queue multi-batch ticket drains (its size scales with the
+            // claimable a played-out game accumulates). A fixed per-day call budget
+            // starves the drain and manufactures a fake liveness trip.
+            for (uint256 j; j < 4000; j++) {
                 _fulfillVrfIfPending(uint256(keccak256(abi.encode(simTime, j, "ffdrain"))));
                 (bool ok, ) = address(game).call(abi.encodeWithSignature("advanceGame()"));
                 if (!ok) break;

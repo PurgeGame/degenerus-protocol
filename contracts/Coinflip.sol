@@ -429,16 +429,27 @@ contract Coinflip {
     }
 
     /// @notice Credit de-circulated FLIP to sDGNRS's redemption backing (FLIP only).
-    /// @dev Called by FLIP when a transfer lands on ContractAddresses.SDGNRS: FLIP removes the
-    ///      amount from circulating supply and routes it here as sDGNRS claimable backing, so
-    ///      sDGNRS never holds a wallet balance and its FLIP stays uncirculated. Storage-only
-    ///      (no callback into FLIP). Folds into claimableStored, where redemptions/salvage read it.
-    /// @param amount FLIP (wei) to add to sDGNRS's claimable backing.
+    /// @dev Called by FLIP when a transfer or an intercepted mint lands on
+    ///      ContractAddresses.SDGNRS: FLIP keeps the amount out of circulating supply and
+    ///      routes it here, so sDGNRS never holds a wallet balance and its FLIP stays
+    ///      uncirculated. Day-keyed like every deposit — the credit becomes TOMORROW's
+    ///      stake, whose word cannot exist yet (the same structural freeze-safety all
+    ///      player deposits have). Direct stake write, off the leaderboard/bounty like
+    ///      the constructor seed. A win settles through the sDGNRS payout branch into
+    ///      the rolling carry; claimableStored stays the genesis seed reserve burns
+    ///      drain first.
+    /// @param amount FLIP (wei) staked onto sDGNRS's next flip.
     function creditSdgnrsBacking(uint256 amount) external onlyFLIP {
         if (amount == 0) return;
-        PlayerCoinflipState storage state = playerState[ContractAddresses.SDGNRS];
-        state.claimableStored = uint128(uint256(state.claimableStored) + amount);
-        _emitClaimState(ContractAddresses.SDGNRS);
+        uint24 targetDay = _targetFlipDay();
+        uint256 newStake = _flipStake(targetDay, ContractAddresses.SDGNRS) + amount;
+        _setFlipStake(targetDay, ContractAddresses.SDGNRS, newStake);
+        emit CoinflipStakeUpdated(
+            ContractAddresses.SDGNRS,
+            targetDay,
+            amount,
+            newStake
+        );
     }
 
     /// @dev Emit the player's committed coinflip claim-state (claimable + carry + cursor) for
@@ -963,10 +974,11 @@ contract Coinflip {
         // stay off the rngLocked guard). sDGNRS never mints FLIP to a wallet balance:
         // its FLIP stays uncirculated as coinflip backing and is read by redemptions /
         // salvage as claimableStored + carry. During the seed window each settled win
-        // folds into claimableStored (no mint); once auto-rebuy is armed, winnings
-        // settle into the rolling carry (structurally zero return under 0-take-profit
-        // rebuy). FLIP leaves sDGNRS's position solely through a redemption/salvage
-        // consume leg.
+        // folds into claimableStored — the genesis seed reserve burns drain first;
+        // once auto-rebuy is armed, winnings (including incoming credits staked via
+        // creditSdgnrsBacking) settle into the rolling carry (structurally zero
+        // return under 0-take-profit rebuy). FLIP leaves sDGNRS's position solely
+        // through a redemption/salvage consume leg.
         if (sdgnrsAutoRebuyArmed) {
             _claimCoinflipsInternal(ContractAddresses.SDGNRS, false);
         } else {
@@ -1056,8 +1068,10 @@ contract Coinflip {
     ///      components are disjoint and current even after a multi-day advance stall (otherwise a
     ///      resolved-but-unsettled win day could be counted in both claimable and the carry). In
     ///      steady state sDGNRS is already settled each advance, so the walk is a no-op.
-    /// @return backing sDGNRS's claimableStored + autoRebuyCarry — its entire FLIP backing
-    ///         (sDGNRS never holds a wallet balance; incoming FLIP de-circulates into claimable).
+    /// @return backing sDGNRS's claimableStored + autoRebuyCarry — its settled FLIP
+    ///         backing (sDGNRS never holds a wallet balance; incoming FLIP de-circulates
+    ///         into tomorrow's stake and settles here; claimableStored is the genesis
+    ///         seed reserve burns drain first).
     function redeemableFlipBacking() external returns (uint256 backing) {
         if (msg.sender != ContractAddresses.SDGNRS) revert OnlysDGNRS();
         address s = ContractAddresses.SDGNRS;
@@ -1084,13 +1098,13 @@ contract Coinflip {
         if (base == 0) return;
         address s = ContractAddresses.SDGNRS;
 
-        // Consume settled claimable first (no token mint — removes a future mint of `consumed`).
+        // Consume the settled genesis seed reserve first (no token mint — removes a
+        // future mint of `consumed`).
         uint256 consumed = _claimCoinflipsAmount(s, base, false);
         uint256 remainder = base - consumed;
         if (remainder == 0) return;
 
-        // Decrement the rolling auto-rebuy carry for the rest (post-day-20 steady state, where
-        // sDGNRS's FLIP lives entirely in the carry).
+        // Decrement the rolling auto-rebuy carry for the rest (post-day-20 steady state).
         PlayerCoinflipState storage state = playerState[s];
         uint256 carry = state.autoRebuyCarry;
         if (remainder > carry) revert Insufficient();

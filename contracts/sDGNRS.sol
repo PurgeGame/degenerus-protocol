@@ -56,7 +56,7 @@ interface ICoinflipPlayer {
     function claimCoinflips(address player, uint256 amount) external returns (uint256 claimed);
     /// @notice Preview claimable coinflip winnings for a player.
     function previewClaimCoinflips(address player) external view returns (uint256 mintable);
-    /// @notice Settle-then-read sDGNRS's redeemable coinflip backing (claimableStored + carry, disjoint).
+    /// @notice Settle-then-read sDGNRS's redeemable coinflip backing (seed claimable + carry, disjoint).
     function redeemableFlipBacking() external returns (uint256 backing);
     /// @notice Remove `base` (wei) of sDGNRS's FLIP backing at submit (held → claimable → carry).
     function withdrawRedeemedFlip(uint256 base) external;
@@ -936,11 +936,13 @@ contract sDGNRS {
             stethOut = totalValueOwed - ethOut;
         }
 
-        // GameOver burns pay no FLIP. sDGNRS's full FLIP backing is its claimable coinflip winnings +
-        // the auto-rebuy carry (where its FLIP lives post-day-20); it holds no wallet balance.
+        // GameOver burns pay no FLIP. sDGNRS's full FLIP backing is its seed-reserve claimable +
+        // the auto-rebuy carry (incoming FLIP rides tomorrow's stake and settles into these);
+        // it holds no wallet balance.
         // No reserve term: a submit removes its escrowed slice from this backing immediately, so these
         // live reads are already net of outstanding redemptions. Best-effort (the carry/claimable can
-        // momentarily lag a stalled advance); truncated to whole FLIP to match the settled submit path.
+        // momentarily lag a stalled advance or an in-flight stake); truncated to whole FLIP to match
+        // the settled submit path.
         if (!game.gameOver()) {
             uint256 claimableFlip = coinflip.previewClaimCoinflips(address(this));
             (, , uint256 carry, ) = coinflip.coinflipAutoRebuyInfo(address(this));
@@ -950,11 +952,12 @@ contract sDGNRS {
     }
 
 
-    /// @notice Get FLIP backing available for new burns (claimable coinflips + auto-rebuy carry).
+    /// @notice Get FLIP backing available for new burns (seed claimable + auto-rebuy carry).
     /// @dev No reserve subtraction: a submit removes its escrowed slice from this backing immediately,
     ///      so these live reads are already net of outstanding redemptions. sDGNRS holds no wallet
-    ///      balance; its FLIP lives in claimable + the auto-rebuy carry (post-day-20 steady state).
-    /// @return FLIP backing value (claimable coinflips + auto-rebuy carry).
+    ///      balance; its FLIP lives in the seed-reserve claimable and the auto-rebuy carry
+    ///      (incoming FLIP rides tomorrow's stake and settles into these).
+    /// @return FLIP backing value (seed claimable + auto-rebuy carry).
     function flipReserve() external view returns (uint256) {
         uint256 claimableFlip = coinflip.previewClaimCoinflips(address(this));
         (, , uint256 carry, ) = coinflip.coinflipAutoRebuyInfo(address(this));

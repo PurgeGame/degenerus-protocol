@@ -1064,16 +1064,20 @@ contract StakedStonkRedemption is DeployProtocol {
     //   REDEEM-08: FLIP-can't-block-ETH + R1/R3/R4 refinement coverage
     // =====================================================================
 
-    /// @dev Fund sDGNRS's FLIP backing. sDGNRS holds no wallet balance; its FLIP lives as
-    ///      uncirculated coinflip claimable. Mint to a scratch holder, then transfer to sDGNRS —
-    ///      FLIP's redirect de-circulates the transfer into sDGNRS's claimable backing (the real
-    ///      funding path), where redemptions read it via redeemableFlipBacking.
+    /// @dev Fund sDGNRS's FLIP backing. sDGNRS holds no wallet balance; its settled backing
+    ///      lives in Coinflip.playerState[SDGNRS].claimableStored (the genesis seed reserve
+    ///      redemptions drain first), seeded directly here. A live transfer would instead
+    ///      stake onto tomorrow's flip and stay outside redeemableFlipBacking until settled.
+    ///      Coinflip declaration order: coinflipStakePacked=0, coinflipDayResultPacked=1,
+    ///      playerState=2; claimableStored is the low 128 bits of the struct's first slot.
     function _fundSdgnrsFlip(uint256 amount) internal {
-        address holder = address(0xF11D);
-        vm.prank(address(game));
-        coin.mintForGame(holder, amount);
-        vm.prank(holder);
-        coin.transfer(ContractAddresses.SDGNRS, amount);
+        bytes32 base = keccak256(abi.encode(ContractAddresses.SDGNRS, uint256(2)));
+        uint256 s0 = uint256(vm.load(address(coinflip), base));
+        vm.store(
+            address(coinflip),
+            base,
+            bytes32((s0 & (type(uint256).max << 128)) | uint128(amount))
+        );
     }
 
     /// @dev Seed a generous claimable[SDGNRS] + claimablePool + game ETH so submit-time

@@ -511,17 +511,17 @@ contract FarFutureVaultFallbackTest is DeployProtocol {
     }
 
     /// @notice The FLIP burn waterfall consumes settled claimable BEFORE the carry; sDGNRS has no
-    ///         wallet leg (incoming FLIP de-circulates into its claimable backing).
+    ///         wallet leg (incoming FLIP now stakes onto tomorrow's flip; claimableStored is the
+    ///         settled genesis seed reserve, seeded directly here).
     function test_SalvageFlipLeg_ClaimableBeforeCarry() public {
         // Steady-state sDGNRS: rebuy-armed + settled with a large carry, plus a settled claimable
-        // slice funded via the de-circulating transfer path (FLIP redirect -> claimableStored).
+        // slice seeded directly into claimableStored (the seed-reserve half the waterfall drains
+        // first; a live transfer would ride tomorrow's stake instead of landing here).
         _seedRebuyCarry(ContractAddresses.SDGNRS, 5_000_000 ether);
         uint256 claimable = 50 ether;
-        address holder = address(0xF11D);
-        vm.prank(ContractAddresses.GAME);
-        coin.mintForGame(holder, claimable);
-        vm.prank(holder);
-        coin.transfer(ContractAddresses.SDGNRS, claimable);
+        bytes32 base = keccak256(abi.encode(ContractAddresses.SDGNRS, PLAYERSTATE_SLOT));
+        uint256 s0 = uint256(vm.load(address(coinflip), base));
+        vm.store(address(coinflip), base, bytes32(s0 | uint256(uint128(claimable))));
 
         assertEq(coin.balanceOf(ContractAddresses.SDGNRS), 0, "sDGNRS holds no wallet FLIP");
         assertEq(

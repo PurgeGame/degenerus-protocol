@@ -405,7 +405,8 @@ contract FLIP {
 
         if (to == ContractAddresses.SDGNRS) {
             // sDGNRS holds no circulating FLIP; de-circulate and route to its redemption
-            // backing (Coinflip claimable). Storage-only credit, no callback into FLIP.
+            // backing (staked onto tomorrow's coinflip, day-keyed like every deposit).
+            // Storage-only credit, no callback into FLIP.
             unchecked {
                 _supply.totalSupply -= _toUint128(amount);
             }
@@ -431,6 +432,14 @@ contract FLIP {
                 _supply.vaultAllowance += amount128;
             }
             emit VaultEscrowRecorded(address(0), amount);
+            return;
+        }
+        if (to == ContractAddresses.SDGNRS) {
+            // sDGNRS holds no circulating FLIP; a mint routed here (box-spin wins on
+            // its self-subscription) never enters supply — it stakes onto tomorrow's
+            // coinflip as redemption backing. Mirrors the _transfer intercept with
+            // zero supply mutation (nothing was circulating).
+            coinflip.creditSdgnrsBacking(amount);
             return;
         }
         _supply.totalSupply += amount128;
