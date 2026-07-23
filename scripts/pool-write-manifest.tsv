@@ -40,6 +40,7 @@ POOL-TO-POOL	_setPrizePools	_consolidatePoolsAndRewardJackpots	modules/Degenerus
 POOL-TO-POOL	claimablePool	_consolidatePoolsAndRewardJackpots	modules/DegenerusGameAdvanceModule.sol	WRITE	BAF + decimator claimableDelta: future -> claimable; rounds thereby PRE-COUNTED for later per-player claims
 POOL-TO-POOL	currentPrizePool	_consolidatePoolsAndRewardJackpots	modules/DegenerusGameAdvanceModule.sol	WRITE	consolidation: next merges into current, x00 keep-roll moves future->current
 POOL-TO-POOL	yieldAccumulator	_consolidatePoolsAndRewardJackpots	modules/DegenerusGameAdvanceModule.sol	WRITE	insurance skim in (from next), x00 half-dump out (to future) - both intra-set
+PAIRED-CREDIT	_creditClaimable	_consolidatePoolsAndRewardJackpots	modules/DegenerusGameAdvanceModule.sol	READ	century BAF incinerator winner credit; aggregate folded once via claimableDelta (future -> claimable, sum preserved)
 POOL-TO-POOL	_setFuturePrizePool	_freezePool	modules/DegenerusGameAdvanceModule.sol	READ	freeze seed: 1% of future moves to the pending-future buffer
 POOL-TO-POOL	_setPendingPools	_freezePool	modules/DegenerusGameAdvanceModule.sol	READ	freeze seed target (pending future)
 POOL-TO-POOL	prizePoolPendingPacked	_freezePool	modules/DegenerusGameAdvanceModule.sol	WRITE	zero-seed branch: clears stale pending at freeze; no value moves
