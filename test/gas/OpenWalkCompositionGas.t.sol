@@ -6,23 +6,23 @@ import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 
 /// @title OpenWalkCompositionGas -- baseline gas measurements for the permissionless box-open
-///        path (`game.mintFlip()`'s box-open leg, `GameAfkingModule._autoOpen` + the human
+///        path (`game.mineFlip()`'s box-open leg, `GameAfkingModule._autoOpen` + the human
 ///        `openHumanBoxes` sweep), calibrating how the subscriber-RING SCAN cost composes with
 ///        the human box sweep. These are neutral engineering measurements for a planned
 ///        refactor's work-budget weights -- NOT a regression gate; loose assertions only.
 ///
 /// @notice The subject under measurement (`GameAfkingModule._autoOpen`, GameAfkingModule.sol:1562):
-///         `mintFlip()`'s OPEN branch first calls `_autoOpen(OPEN_BATCH)` (the afking leg), which
+///         `mineFlip()`'s OPEN branch first calls `_autoOpen(OPEN_BATCH)` (the afking leg), which
 ///         does a FULL-RING SCAN: `while (scanned < len && opened < maxCount)` visits up to `len`
 ///         (the WHOLE `_subscribers` set) even when every box is already opened -- a 0-open result
 ///         means the whole ring was walked, not just `[cursor, len)` (GameAfkingModule.sol:1583-1588
 ///         "Full-ring scan" comment). Each visited-but-already-opened sub costs one skip: an
 ///         `_subscribers[cursor]` SLOAD + the packed `Sub` slot's `lastOpenedDay`/`lastAutoBoughtDay`
-///         SLOAD + compare, `continue`. If the afking leg opens fewer than `OPEN_BATCH` (mintFlip.sol
+///         SLOAD + compare, `continue`. If the afking leg opens fewer than `OPEN_BATCH` (mineFlip.sol
 ///         GameAfkingModule.sol:1675-1707) the human sweep (`openHumanBoxes`, delegatecalled into
 ///         `DegenerusGameLootboxModule`) runs with the REMAINING budget (`OPEN_BATCH - opened`),
 ///         consuming its own opens+skips+index-header steps. If NEITHER leg does real work (no
-///         afking open, no human open, no human-frontier skip-advance) `mintFlip()` reverts
+///         afking open, no human open, no human-frontier skip-advance) `mineFlip()` reverts
 ///         `NoWork()` (GameAfkingModule.sol:1716-1719) -- so a caller still PAYS for the whole
 ///         ring scan even on a "nothing to do" call.
 ///
@@ -38,10 +38,10 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 ///         (2) drained-scan + human-sweep composition: a 1000-subscriber fully-drained ring PLUS
 ///             a queue of 90 pending human lootboxes (>= the OPEN_BATCH=80 remaining budget once
 ///             the afking leg opens 0), so the human sweep consumes its full 80-step budget in the
-///             SAME `mintFlip()` call as the drained-ring scan. Measures the total call gas
-///             (a SUCCESSFUL mintFlip(), not a revert).
+///             SAME `mineFlip()` call as the drained-ring scan. Measures the total call gas
+///             (a SUCCESSFUL mineFlip(), not a revert).
 ///         (3) NoWork probe cost: 1000 drained subscribers, ZERO human work -- the caller-paid cost
-///             to discover there is nothing to do (`mintFlip()` reverts `NoWork()`). Measured via a
+///             to discover there is nothing to do (`mineFlip()` reverts `NoWork()`). Measured via a
 ///             low-level call recording gasleft before/after (same technique as (1), and in fact the
 ///             SAME fixture shape as (1)'s N=1000 case, rebuilt standalone here as its own labeled
 ///             measurement per the task brief).
@@ -88,7 +88,7 @@ contract OpenWalkCompositionGas is DeployProtocol {
     ///      suite is a baseline recorder, not a tight regression gate.
     uint256 internal constant EFFECTIVE_GAS_CEILING = 16_700_000;
 
-    /// @dev OPEN_BATCH (GameAfkingModule.sol:263): the flat per-call open-leg budget. `mintFlip()`
+    /// @dev OPEN_BATCH (GameAfkingModule.sol:263): the flat per-call open-leg budget. `mineFlip()`
     ///      spends up to this many afking opens, then (if any budget remains) up to the remainder
     ///      on the human sweep.
     uint256 internal constant OPEN_BATCH = 80;
@@ -142,7 +142,7 @@ contract OpenWalkCompositionGas is DeployProtocol {
     /// @notice Builds THREE independent fully-drained rings (100, 500, 998 new subs => ring
     ///         sizes 102/502/1000 incl. the 2 deploy subs) from the SAME clean baseline
     ///         (snapshot/revert between each), and at each size probes the ring-scan cost via a
-    ///         reverting `mintFlip()` (NoWork — the ring is fully drained and no human backlog
+    ///         reverting `mineFlip()` (NoWork — the ring is fully drained and no human backlog
     ///         exists). Derives the per-subscriber ring-scan-skip marginal from the deltas
     ///         between adjacent ring sizes. Loose assert only: each probe stays under the 16.7M
     ///         ceiling.
@@ -174,7 +174,7 @@ contract OpenWalkCompositionGas is DeployProtocol {
 
     /// @notice A 1000-subscriber fully-drained ring (998 new + 2 deploy subs) PLUS 90 pending
     ///         human lootboxes (>= the 80-step remaining budget once the afking leg opens 0) —
-    ///         one `mintFlip()` call pays BOTH the full drained-ring scan AND a full-budget human
+    ///         one `mineFlip()` call pays BOTH the full drained-ring scan AND a full-budget human
     ///         sweep. This is the composition an external review measured heavy human entries at
     ///         ~15.06M for; this fixture uses ORDINARY (LOOTBOX_MIN, single-leg) human entries, so
     ///         the measured number here is expected to sit BELOW that heavy-entry reference — the
@@ -231,14 +231,14 @@ contract OpenWalkCompositionGas is DeployProtocol {
         require(openedDrain2 >= pendingAfterRestamp, "fixture: the drain call opened every pending afking box");
         require(_countPendingAfking() == 0, "fixture: ring fully drained again pre-measurement");
 
-        // MEASURE: one mintFlip() call. The afking leg does a full-ring-scan (every subscriber
+        // MEASURE: one mineFlip() call. The afking leg does a full-ring-scan (every subscriber
         // already opened -> 0 afking opens), so `opened(0) < OPEN_BATCH(80)` routes into the human
         // sweep with the full 80-step remaining budget; 90 queued human entries (>= 80) means the
         // sweep consumes its ENTIRE budget on real opens.
         _coolProtocol();
         vm.prank(makeAddr(string(abi.encodePacked(prefix, "measure"))));
         uint256 gasBefore = gasleft();
-        game.mintFlip();
+        game.mineFlip();
         uint256 gasUsed = gasBefore - gasleft();
 
         emit log_named_uint("composition_drained_ring_plus_full_human_sweep_gas", gasUsed);
@@ -257,7 +257,7 @@ contract OpenWalkCompositionGas is DeployProtocol {
     // (3) NoWork probe cost at a 1000-subscriber drained ring, zero human work
     // =========================================================================
 
-    /// @notice The caller-paid cost of a `mintFlip()` call that discovers there is NOTHING to do:
+    /// @notice The caller-paid cost of a `mineFlip()` call that discovers there is NOTHING to do:
     ///         1000 fully-drained subscribers (998 new + 2 deploy), zero human backlog. The
     ///         `_pendingBoxCount` gate answers "any afking work?" in O(1) (no ring scan), and the
     ///         human-sweep leg's zero-work no-frontier-advance short-circuits into
@@ -322,7 +322,7 @@ contract OpenWalkCompositionGas is DeployProtocol {
         _coolProtocol();
         vm.prank(makeAddr(string(abi.encodePacked(prefix, "measure"))));
         uint256 gasBefore = gasleft();
-        game.mintFlip();
+        game.mineFlip();
         uint256 gasUsed = gasBefore - gasleft();
 
         // Non-vacuity: the walk really crossed the wall and materialized the parked box.
@@ -389,7 +389,7 @@ contract OpenWalkCompositionGas is DeployProtocol {
     /// @dev Builds `n` fresh GROUNDED lootbox-mode subs (+ the 2 permanent deploy subs already in
     ///      the ring), stamps + lands their first day's word, settles clean, then fully drains
     ///      every pending afking box (no human backlog exists in this fixture, so the drain call's
-    ///      leftover budget is harmless). Returns the gas of the immediately-following `mintFlip()`
+    ///      leftover budget is harmless). Returns the gas of the immediately-following `mineFlip()`
     ///      probe call, which must revert `NoWork()` (fully-drained ring, zero human work) —
     ///      measured via a low-level call bracketing gasleft before/after.
     function _buildDrainedRingAndProbeNoWork(uint256 n, string memory prefix) internal returns (uint256 gasUsed) {
@@ -404,7 +404,7 @@ contract OpenWalkCompositionGas is DeployProtocol {
         // must walk (and commit) past every EMPTY finalized lootbox index accumulated by the
         // day-advances above (each index-header visit costs a step regardless of content,
         // openHumanBoxes:688-691) — otherwise the probe below sees an un-caught-up frontier and
-        // `mintFlip()` treats that frontier advance as real (non-reverting) work, not NoWork.
+        // `mineFlip()` treats that frontier advance as real (non-reverting) work, not NoWork.
         vm.prank(makeAddr(string(abi.encodePacked(prefix, "drain"))));
         game.openBoxes(ringSize + 1000);
         require(_countPendingAfking() == 0, "fixture: ring fully drained pre-probe");
@@ -412,7 +412,7 @@ contract OpenWalkCompositionGas is DeployProtocol {
         _coolProtocol();
         vm.prank(makeAddr(string(abi.encodePacked(prefix, "probe"))));
         uint256 gasBefore = gasleft();
-        (bool ok, ) = address(game).call(abi.encodeWithSignature("mintFlip()"));
+        (bool ok, ) = address(game).call(abi.encodeWithSignature("mineFlip()"));
         gasUsed = gasBefore - gasleft();
         require(!ok, "fixture: the NoWork probe reverted as expected (drained ring, zero human work)");
     }
@@ -432,11 +432,11 @@ contract OpenWalkCompositionGas is DeployProtocol {
         }
 
         _settleClean(uint256(keccak256(abi.encodePacked(prefix, "clean"))) | 1);
-        require(!game.advanceDue(), "fixture: clean so mintFlip opens");
+        require(!game.advanceDue(), "fixture: clean so mineFlip opens");
         _coolProtocol();
         vm.prank(makeAddr(string(abi.encodePacked(prefix, "opener"))));
         uint256 gasBefore = gasleft();
-        game.mintFlip();
+        game.mineFlip();
         openGas = gasBefore - gasleft();
 
         for (uint256 i; i < n; ++i) {
@@ -487,7 +487,7 @@ contract OpenWalkCompositionGas is DeployProtocol {
     }
 
     /// @dev A robust settle DEMANDING a clean (`!advanceDue && !rngLocked`) state before
-    ///      returning — used before a mintFlip open so it reliably takes the OPEN leg.
+    ///      returning — used before a mineFlip open so it reliably takes the OPEN leg.
     function _settleClean(uint256 vrfWord) internal {
         for (uint256 d; d < 240; d++) {
             if (!game.advanceDue() && !game.rngLocked()) return;

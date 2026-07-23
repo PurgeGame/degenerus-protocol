@@ -153,10 +153,10 @@ contract RngLockDeterminism is DeployProtocol {
     // ────────────────────────────────────────────────────────────────────
 
     // 9 legacy v43 classes (0..8) + 2 v55 game-resident router classes (9..10) + 1 v50
-    // whale-pass-claim class (11). [v55 Δ3: doWork→mintFlip; the standalone autoBuy
+    // whale-pass-claim class (11). [v55 Δ3: doWork→mineFlip; the standalone autoBuy
     // escape has no successor (the buy folded into advanceGame's STAGE), reframed to the
     // box-open no-op.]
-    // cls 9 = game.mintFlip() — the v55 unified router (the Δ3 doWork successor) fired
+    // cls 9 = game.mineFlip() — the v55 unified router (the Δ3 doWork successor) fired
     //   same-tx inside the locked window (RD-1..5): the advance-consume `cw +=
     //   totalFlipReversals` (DegenerusGameAdvanceModule.sol:257) must read only FROZEN state.
     // cls 10 = game.openBoxes(0) — the v55 box-open clear (the standalone afKing.autoBuy
@@ -233,15 +233,15 @@ contract RngLockDeterminism is DeployProtocol {
             vm.warp(block.timestamp + 1 days + 4 hours + 1);
             try game.advanceGame() returns (uint8) {} catch { return; }
         } else if (cls == 9) {
-            // v55 game-resident router (Δ3 doWork→mintFlip): fire the one-category router
-            // same-tx inside the locked window. mintFlip routes advance → afking-box open by
+            // v55 game-resident router (Δ3 doWork→mineFlip): fire the one-category router
+            // same-tx inside the locked window. mineFlip routes advance → afking-box open by
             // priority; every leg targets a pinned ContractAddresses.* (GAME self-call /
             // LootboxModule delegatecall / COINFLIP) and the advance-consume reads only FROZEN
             // state. May revert NoWork() depending on the routed leg — the try/catch absorbs
             // that (the freeze proof is the byte-identity of the consumed word, not whether
-            // mintFlip found work).
+            // mineFlip found work).
             vm.prank(actor);
-            try game.mintFlip() {} catch { return; }
+            try game.mineFlip() {} catch { return; }
         } else if (cls == 10) {
             // v55 reframe (the standalone afKing.autoBuy escape has NO successor — the per-sub
             // buy folded into advanceGame's required-path STAGE, 349-05). The faithful v55
@@ -1662,7 +1662,7 @@ contract RngLockDeterminism is DeployProtocol {
     // _finalizeLootboxRng(cw)` (DegenerusGameAdvanceModule.sol:254-259) reads
     // `totalFlipReversals` INSIDE the daily drain. ADV-04 / v45-vrf-freeze-invariant
     // require that read to be FROZEN between the VRF request and the consume — even
-    // when the v55 unified router (game.mintFlip, the Δ3 doWork successor) or the box-open
+    // when the v55 unified router (game.mineFlip, the Δ3 doWork successor) or the box-open
     // clear (game.autoOpen, the standalone-autoBuy-escape successor) fires same-tx inside the
     // locked window (RD-1..5).
     //
@@ -2012,14 +2012,14 @@ contract RngLockDeterminism is DeployProtocol {
         uint256 opened = game.openBoxes(100);
         assertEq(opened, 0, "autoOpen-noop: autoOpen must return 0 during rngLock");
 
-        // The v55 unified router mintFlip() (the ONLY afking-open entry — the standalone afking
+        // The v55 unified router mineFlip() (the ONLY afking-open entry — the standalone afking
         // autoOpen selector collides with the human autoOpen(uint256) so it is NOT re-exposed on the
         // Game) is likewise safe during lock: its open leg no-ops via the `rngLockedFlag` entry-gate
         // (_autoOpen, GameAfkingModule.sol:941), and a NoWork() on an empty router is the expected
         // clean signal — never a freeze-aborting revert.
         address keeperCaller = makeAddr("tst01-autoopen-keeper");
         vm.prank(keeperCaller);
-        try game.mintFlip() {} catch {} // must not abort the lock
+        try game.mineFlip() {} catch {} // must not abort the lock
     }
 
     /// @dev Read the lootboxEth amount sub-field (bits [0:128]) for [index][who] — the box-owed
@@ -2070,7 +2070,7 @@ contract RngLockDeterminism is DeployProtocol {
         assertFalse(game.boxesPending(), "no-maroon: boxesPending() false during lock (RD-3)");
         assertEq(game.openBoxes(100), 0, "no-maroon: zero boxes open during lock (RD-5 no-op)");
         vm.prank(keeper);
-        try game.mintFlip() {} catch {} // v55 unified router: must not abort the lock (afking open no-ops via the entry-gate)
+        try game.mineFlip() {} catch {} // v55 unified router: must not abort the lock (afking open no-ops via the entry-gate)
         assertGt(
             _lootboxEthBase(boxIndex, boxOwner), 0,
             "no-maroon: the queued box is NOT consumed by the lock (deferred, not dropped)"

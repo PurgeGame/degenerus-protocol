@@ -43,7 +43,7 @@ interface ISeatToken {
  * @author Burnie Degenerus
  * @notice Delegate-called module owning the AfKing subscription logic. The bulk of that
  *         logic sits in this module's OWN EIP-170 budget; only the thin dispatch stubs
- *         (subscribe / mintFlip / claimAfkingFlip / drainAffiliateBase / decurse /
+ *         (subscribe / mineFlip / claimAfkingFlip / drainAffiliateBase / decurse /
  *         subscriberCount / the sub-record view) occupy space in the DegenerusGame image.
  *
  * @dev DELEGATECALL CONTEXT: the module inherits `DegenerusGameStorage` (via
@@ -69,10 +69,10 @@ interface ISeatToken {
  *      afking-stamp open leg, driven by `_subOpenCursor`, materializing each box
  *      from its frozen stamp via a delegatecall to the LootboxModule's
  *      `resolveAfkingBox` — the FROZEN-INPUT twin of `resolveLootboxDirect`) and
- *      the ROUTER (`mintFlip`/`_autoOpen`, the one-category early-return
+ *      the ROUTER (`mineFlip`/`_autoOpen`, the one-category early-return
  *      dispatch). The open consumes the stamp the PART-A process STAGE produces.
  * @dev Bounty: the buy/process bounty FOLDS INTO the advance bounty
- *      (`mintFlip`'s advance leg pays `2×·mult`, scaling the AdvanceModule's
+ *      (`mineFlip`'s advance leg pays `2×·mult`, scaling the AdvanceModule's
  *      day-epoch stall `mult` 2×/4×/6× — the process STAGE rides it); the OPEN
  *      stays a NORMAL post-RNG `OPEN_BATCH`-style router category with the
  *      `OPEN_KNEE` work-scaled pro-rate (farm-by-splitting resistant). Payment is
@@ -106,7 +106,7 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
     /// @dev subscribe would grow the active subscriber set past SUBSCRIBER_CAP
     ///      (2005). NEW-subscriber path only — re-subscribe never trips it.
     error SubscriberCapReached();
-    /// @dev mintFlip() found all router categories empty — the clean no-work signal
+    /// @dev mineFlip() found all router categories empty — the clean no-work signal
     ///      (the unbounded-scan-free early-return on no pending work).
     error NoWork();
     /// @dev subscribe (upsert) where the subscriber holds no AFKing Subscription Token — holding
@@ -265,7 +265,7 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
     uint256 internal constant BOUNTY_ETH_TARGET = 885_000_000_000_000;
 
     /// @dev Advance reward ratio (2× · mult). The process STAGE rides the advance
-    ///      bounty: mintFlip's advance leg pays `unit · 2 · mult`, scaling
+    ///      bounty: mineFlip's advance leg pays `unit · 2 · mult`, scaling
     ///      the AdvanceModule's day-epoch stall `mult` (1/2/4/6).
     uint256 internal constant ADVANCE_RATIO_NUM = 2;
 
@@ -1682,7 +1682,7 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
     ///      — never an ETH push the router receives. The human-open leg is likewise
     ///      pull-only (no callee on that path hands control to player code), so it keeps
     ///      the no-reentrancy property. The legs return raw counts/mult and NEVER
-    ///      self-credit; only `mintFlip` credits, ONCE, CEI-last after the
+    ///      self-credit; only `mineFlip` credits, ONCE, CEI-last after the
     ///      one-category early-return.
     /// @dev Bounty: the buy/process bounty FOLDS INTO the advance bounty — the
     ///      process STAGE runs inside `advanceGame` (the required path), so the
@@ -1691,7 +1691,7 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
     ///      the `OPEN_KNEE` work-scaled pro-rate on the COMBINED afking+human open
     ///      count (boxes are bountied identically; pay for work done, farm-by-splitting
     ///      resistant). `mult == 0` (the gameover advance path) pays no bounty.
-    function mintFlip() external {
+    function mineFlip() external {
         uint256 bountyEarned;
 
         // (1) advance — highest priority, liveness-critical (TRUE regardless of rngLock).
@@ -1844,7 +1844,7 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
 
     /// @notice Drain up to `count` ready afking boxes (walks `_subOpenCursor`); returns the
     ///         number opened so the caller can budget the remaining per-tx work. Unrewarded —
-    ///         only mintFlip() credits. Reached via the Game's openBoxes() liveness valve
+    ///         only mineFlip() credits. Reached via the Game's openBoxes() liveness valve
     ///         (which pairs this afking cursor walk with the lootbox module's openHumanBoxes
     ///         human sweep; calling this module contract directly hits empty storage).
     /// @param count Max afking boxes to open this call (0 = the default OPEN_BATCH-equivalent

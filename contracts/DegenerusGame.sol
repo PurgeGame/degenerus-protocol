@@ -235,7 +235,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
       +===================================================================================================+
       |                                                                                                   |
       |  Progresses one "tick" of work per call. advanceGame() is permissionless — anyone may call it;    |
-      |  caller tier gates only the keeper bounty (in mintFlip), never the advance work. gameOver is      |
+      |  caller tier gates only the keeper bounty (in mineFlip), never the advance work. gameOver is      |
       |  terminal.                                                                                        |
       |                                                                                                   |
       |  Level-centered lifecycle. jackpotPhaseFlag selects the daily PAYOUT mode, not access:            |
@@ -274,7 +274,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     ///         - PURCHASE/JACKPOT: Process phase-specific logic
     ///
     ///      Returns the day-epoch stall multiplier. A standalone caller earns nothing; the
-    ///      keeper bounty is paid by the AFKing mintFlip router, which gates on _bountyEligible.
+    ///      keeper bounty is paid by the AFKing mineFlip router, which gates on _bountyEligible.
     ///
     ///      SECURITY:
     ///      - Liveness guards prevent abandoned game lockup
@@ -343,10 +343,10 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
       |  The afking subscriber set / cursors / Sub stamps live in this Game's    |
       |  storage (DegenerusGameStorage), so the module MUST run in this          |
       |  contract's context — delegatecall preserves msg.sender, so the consent  |
-      |  gates and the mintFlip bounty payee read the real caller. These are the |
+      |  gates and the mineFlip bounty payee read the real caller. These are the |
       |  canonical afking entrypoints. `subscribe` is the SINGLE subscription    |
       |  mutator (create / replace / cancel). The afking box-open is reached via |
-      |  mintFlip's router (which also drains human boxes after the afking ones, |
+      |  mineFlip's router (which also drains human boxes after the afking ones, |
       |  the same as openBoxes) and, unrewarded, via openBoxes; the module's     |
       |  cursor walk is exposed as drainAfkingBoxes, not re-stubbed here.        |
       +==========================================================================+*/
@@ -380,7 +380,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     ///         credits msg.sender (preserved via delegatecall).
     /// @dev The signature matches the module function exactly (identical selector), so the calldata
     ///      forwards as-is — re-encoding here would cost contract-size headroom for no behavior change.
-    function mintFlip() external {
+    function mineFlip() external {
         (bool ok, bytes memory data) = ContractAddresses
             .GAME_AFKING_MODULE
             .delegatecall(msg.data);
@@ -1681,7 +1681,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         return false;
     }
 
-    /// @notice Would `who` earn the mintFlip advance bounty if they cranked right now?
+    /// @notice Would `who` earn the mineFlip advance bounty if they cranked right now?
     /// @dev The advance work is always permitted; this only reflects pay-eligibility
     ///      (the soft must-mint gate), so off-chain keepers can pre-check before cranking.
     function bountyEligible(address who) external view returns (bool) {
@@ -1720,7 +1720,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     ///         opened; for the human sweep the remaining budget caps ENTRIES SCANNED (opens + skips),
     ///         which keeps the tx gas-bounded even past a long already-opened / presale-only prefix and
     ///         lets successive calls catch the open frontier up across many finalized indices.
-    ///         Unrewarded — only mintFlip() pays a bounty.
+    ///         Unrewarded — only mineFlip() pays a bounty.
     /// @param maxCount Afking boxes opened + human-sweep entries scanned, both bounded by this.
     /// @return opened Total boxes opened (afking + human).
     function openBoxes(uint256 maxCount) external returns (uint256 opened) {
@@ -1745,7 +1745,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         // leg above. The afking leg's FULL step consumption (opens AND ring-scan skips, in
         // open-step currency) is charged against maxCount, so a long drained-ring scan can
         // never hand the human sweep an uncharged full budget — the same shared-budget rule
-        // the rewarded mintFlip crank enforces.
+        // the rewarded mineFlip crank enforces.
         if (afkingSteps < maxCount) {
             (ok, data) = ContractAddresses
                 .GAME_LOOTBOX_MODULE

@@ -90,7 +90,7 @@ contract OpenBountyCarry is DeployProtocol {
     function _mintFlipKeeperCredit(address keeper) internal returns (uint256 total) {
         vm.recordLogs();
         vm.prank(keeper);
-        game.mintFlip();
+        game.mineFlip();
         VmSafe.Log[] memory logs = vm.getRecordedLogs();
         for (uint256 i; i < logs.length; ++i) {
             if (

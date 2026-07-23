@@ -380,7 +380,7 @@ contract V56SubHardening is DeployProtocol {
     // =========================================================================
     // 357 advance-incentive redesign (HEAD'' = 61315ecd) — advanceGame is pure
     // liveness; the must-mint ladder is the SOFT pay-gate _bountyEligible(addr),
-    // surfaced as game.bountyEligible(addr). mintFlip() reads it BEFORE the
+    // surfaced as game.bountyEligible(addr). mineFlip() reads it BEFORE the
     // self-call and pays the advance bounty only when mult>0 && eligible.
     // =========================================================================
 
@@ -449,13 +449,13 @@ contract V56SubHardening is DeployProtocol {
         assertTrue(game.bountyEligible(fresh), "after 30 min: anyone-tier flips the fresh keeper eligible");
     }
 
-    /// @notice mintFlip pay soft-gate (ELIGIBLE): a deity-holding keeper cranking mintFlip when an
+    /// @notice mineFlip pay soft-gate (ELIGIBLE): a deity-holding keeper cranking mineFlip when an
     ///         advance is due earns the advance bounty (coinflipAmount strictly increases). The deity tier
     ///         makes the keeper eligible regardless of the clock, so mult>0 && eligible -> bountyEarned>0.
     function testMintFlipEligibleKeeperEarnsAdvanceBounty() public {
         _settleClean(uint256(keccak256("pay_e_settle")) | 1);
         _warpToDayBoundary(5);
-        assertTrue(game.advanceDue(), "fixture: advance due so mintFlip runs the advance leg");
+        assertTrue(game.advanceDue(), "fixture: advance due so mineFlip runs the advance leg");
 
         address keeper = makeAddr("pay_eligible");
         _grantDeityPass(keeper);       // eligible via the deity tier (time-independent)
@@ -463,32 +463,32 @@ contract V56SubHardening is DeployProtocol {
 
         uint256 before = coinflip.coinflipAmount(keeper);
         vm.prank(keeper);
-        game.mintFlip();             // advance leg runs; mult>0 && eligible -> bounty credited
+        game.mineFlip();             // advance leg runs; mult>0 && eligible -> bounty credited
         assertGt(coinflip.coinflipAmount(keeper), before, "ELIGIBLE keeper earned a nonzero advance bounty");
     }
 
-    /// @notice mintFlip pay soft-gate (INELIGIBLE): a fresh non-minter keeper (first 15 min, no coin,
-    ///         no sub, non-DGVE) cranking mintFlip still performs the advance WORK but earns ZERO
+    /// @notice mineFlip pay soft-gate (INELIGIBLE): a fresh non-minter keeper (first 15 min, no coin,
+    ///         no sub, non-DGVE) cranking mineFlip still performs the advance WORK but earns ZERO
     ///         advance bounty (mult>0 but !eligible -> bountyEarned == 0; the creditFlip is skipped).
     ///         Directional invariant: the work is done (advance consumed), the keeper's flip balance is
     ///         byte-unchanged.
     function testMintFlipIneligibleKeeperEarnsZeroButWorkRuns() public {
         _settleClean(uint256(keccak256("pay_i_settle")) | 1);
         _warpToDayBoundary(5);         // < 15 min in
-        assertTrue(game.advanceDue(), "fixture: advance due so mintFlip runs the advance leg");
+        assertTrue(game.advanceDue(), "fixture: advance due so mineFlip runs the advance leg");
 
         address keeper = makeAddr("pay_ineligible"); // coinless, unfunded, non-DGVE, no sub
         assertFalse(game.bountyEligible(keeper), "fixture: the keeper is NOT bounty-eligible");
 
         uint256 before = coinflip.coinflipAmount(keeper);
         vm.prank(keeper);
-        game.mintFlip();             // advance work runs regardless; bounty withheld
+        game.mineFlip();             // advance work runs regardless; bounty withheld
         assertEq(coinflip.coinflipAmount(keeper), before, "INELIGIBLE keeper earned ZERO advance bounty");
         // The work still ran (the due-state was consumed or the word was requested) — pure liveness.
         assertTrue(!game.advanceDue() || game.rngLocked(), "the advance work ran for the ineligible keeper too");
     }
 
-    /// @notice Vault keeper routing: DegenerusVault.gameAdvance() now routes through game.mintFlip()
+    /// @notice Vault keeper routing: DegenerusVault.gameAdvance() now routes through game.mineFlip()
     ///         (earning the bounty); it performs the crank when work is due and reverts NoWork() when
     ///         idle. The vault is owner-gated (onlyVaultOwner) — prank as CREATOR (the DGVE majority
     ///         owner, also a permanent deity holder -> always eligible). Both arms asserted.
@@ -503,18 +503,18 @@ contract V56SubHardening is DeployProtocol {
         vm.expectRevert(abi.encodeWithSignature("NoWork()"));
         vault.gameAdvance();
 
-        // Work-due arm: roll a fresh day -> advance due -> gameAdvance cranks via mintFlip (no revert).
+        // Work-due arm: roll a fresh day -> advance due -> gameAdvance cranks via mineFlip (no revert).
         _warpToDayBoundary(5);
         assertTrue(game.advanceDue(), "fixture: advance due for the vault crank");
         vm.prank(ContractAddresses.CREATOR);
-        vault.gameAdvance();           // MUST NOT revert — routes through mintFlip and does the work
+        vault.gameAdvance();           // MUST NOT revert — routes through mineFlip and does the work
         assertTrue(!game.advanceDue() || game.rngLocked(), "vault.gameAdvance ran the due advance work");
     }
 
-    /// @notice sDGNRS keeper routing: sDGNRS.gameAdvance() routes through game.mintFlip()
+    /// @notice sDGNRS keeper routing: sDGNRS.gameAdvance() routes through game.mineFlip()
     ///         and is PERMISSIONLESS (no owner gate). It performs the crank when work is due and reverts
     ///         NoWork() when idle. (sDGNRS self-subscribed at construction -> it holds an afking sub, so
-    ///         when it is the msg.sender of mintFlip it is bounty-eligible — but the routing/NoWork
+    ///         when it is the msg.sender of mineFlip it is bounty-eligible — but the routing/NoWork
     ///         behavior is what this proves.)
     function testSdgnrsGameAdvanceRoutesThroughMintFlip() public {
         // Idle arm: clean, no day-roll -> NoWork().
@@ -527,11 +527,11 @@ contract V56SubHardening is DeployProtocol {
         vm.expectRevert(abi.encodeWithSignature("NoWork()"));
         sdgnrs.gameAdvance();
 
-        // Work-due arm: roll a fresh day -> advance due -> gameAdvance cranks via mintFlip (no revert).
+        // Work-due arm: roll a fresh day -> advance due -> gameAdvance cranks via mineFlip (no revert).
         _warpToDayBoundary(5);
         assertTrue(game.advanceDue(), "fixture: advance due for the sDGNRS crank");
         vm.prank(makeAddr("anyone_sdgnrs2"));
-        sdgnrs.gameAdvance();          // MUST NOT revert — routes through mintFlip and does the work
+        sdgnrs.gameAdvance();          // MUST NOT revert — routes through mineFlip and does the work
         assertTrue(!game.advanceDue() || game.rngLocked(), "sdgnrs.gameAdvance ran the due advance work");
     }
 

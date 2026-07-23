@@ -12,7 +12,7 @@ import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 /// @notice v55 REFRAME (the load-bearing adaptation). The standalone `AfKing` de-custody contract is
 ///         DISSOLVED (`contracts/AfKing.sol` deleted); the per-sub buy is FOLDED into `advanceGame()`'s
 ///         required-path process STAGE and the open is the game-resident open leg:
-///           - `afKing.doWork()`            -> `game.mintFlip()`                     (Δ3 rename)
+///           - `afKing.doWork()`            -> `game.mineFlip()`                     (Δ3 rename)
 ///           - `afKing.autoBuy(total)`      -> a new-day `game.advanceGame()` STAGE     (Δ4 SEMANTIC REMAP:
 ///                                             `processSubscriberStage(SUB_STAGE_BATCH)` runs PRE-RNG)
 ///           - `afKing.autoOpen(N)`         -> `game.autoOpen(N)`  (the game-resident open leg)
@@ -206,9 +206,9 @@ contract RouterWorstCaseGas is DeployProtocol {
     /// @notice TST-06 open leg (350-SPEC §2): stamp N>=32 funded lootbox subs (a new-day STAGE), land their
     ///         frozen-stamp-day word, drive the afking open leg over the N ready stamped boxes, divide by N
     ///         -> the per-box marginal. The afking open leg is `_autoOpen(OPEN_BATCH)`, reached ONLY via
-    ///         `mintFlip()` (the afking standalone open collides with the HUMAN `game.autoOpen(uint256)`
-    ///         `boxPlayers` selector, so `mintFlip` is the canonical afking open route). N < OPEN_BATCH so
-    ///         one `mintFlip()` opens all N. Asserts each box opened (non-vacuity: lastOpenedDay advanced
+    ///         `mineFlip()` (the afking standalone open collides with the HUMAN `game.autoOpen(uint256)`
+    ///         `boxPlayers` selector, so `mineFlip` is the canonical afking open route). N < OPEN_BATCH so
+    ///         one `mineFlip()` opens all N. Asserts each box opened (non-vacuity: lastOpenedDay advanced
     ///         to the stamp day) and the whole open leg < 16.7M. The afking open is a cheap stamp-derived
     ///         resolve (uniform O(1) per box — no cold-ledger walk; 350-SPEC §2).
     function testOpenLegPerBoxMarginalAndWholeLegFitsCeiling() public {
@@ -227,13 +227,13 @@ contract RouterWorstCaseGas is DeployProtocol {
         }
         assertTrue(rngWordByDay(stampDay) != 0, "open worst case: the stamp-day word landed (boxes ready)");
 
-        // Settle clean so mintFlip routes to the OPEN leg (not the advance leg), then bracket the afking
+        // Settle clean so mineFlip routes to the OPEN leg (not the advance leg), then bracket the afking
         // open leg over the N ready boxes (caller-bounded by OPEN_BATCH; N < OPEN_BATCH so all open).
         _settleClean(0x09E20FE);
-        assertFalse(game.advanceDue(), "mintFlip routes to OPEN (advance not due)");
+        assertFalse(game.advanceDue(), "mineFlip routes to OPEN (advance not due)");
         vm.prank(makeAddr("openM_opener"));
         uint256 gasBefore = gasleft();
-        game.mintFlip();
+        game.mineFlip();
         uint256 wholeLegGas = gasBefore - gasleft();
 
         // Non-vacuity: every box actually opened (lastOpenedDay advanced on open), so the marginal is a
@@ -253,14 +253,14 @@ contract RouterWorstCaseGas is DeployProtocol {
     }
 
     /// @notice CR-01 open-leg marginal (the loop-N-divide idiom, KeeperOpenBoxWorstCaseGas:184/350-SPEC §0):
-    ///         the per-box marginal is (whole mintFlip open-leg gas for N ready boxes) / N measured at
+    ///         the per-box marginal is (whole mineFlip open-leg gas for N ready boxes) / N measured at
     ///         N=32 — the loop-N-divide MARGINAL, NEVER a single-box total. The afking open is uniform O(1)
     ///         per box (no cold-ledger walk; the anti-gas-DoS property), so the per-box marginal is stable.
     ///         Asserts the converged marginal fits the ceiling AND that a full OPEN_BATCH of boxes projects
     ///         under the 16.7M ceiling (the uniform-O(1) chunk is safe). A single robust fixture.
     function testOpenLegPerBoxMarginalLoopNDivideUnderCeiling() public {
         vm.skip(true, "357-00b D-12 supersession: the worst-case router-gas harness subscribes ungrounded subs then measures the STAGE/open-leg ceiling; the grounded subscribe shifts the per-sub/per-box marginal; re-proven by V56AfkingGasMarginal (the ceiling-fit + per-sub/per-box marginals, all green)");
-        // N + 2 deploy boxes open this mintFlip; divide by (N + 2) so the per-box number is over the boxes
+        // N + 2 deploy boxes open this mineFlip; divide by (N + 2) so the per-box number is over the boxes
         // actually opened (the loop-N-divide MARGINAL — a conservative figure, never a single-box total).
         uint256 totalN = _measureOpenLegGas(N_MARGINAL, "opMa_");
         uint256 perBoxMarginal = totalN / (N_MARGINAL + 2);
@@ -281,14 +281,14 @@ contract RouterWorstCaseGas is DeployProtocol {
     }
 
     // =========================================================================
-    // mintFlip router -- the rewarded advance + open legs each fit the ceiling
+    // mineFlip router -- the rewarded advance + open legs each fit the ceiling
     // =========================================================================
 
-    /// @notice TST-06 / Δ3: the rewarded `mintFlip()` router (the v55 successor to `doWork()`) routes ONE
+    /// @notice TST-06 / Δ3: the rewarded `mineFlip()` router (the v55 successor to `doWork()`) routes ONE
     ///         category per call — the advance leg OR the open leg — and pays ONE bounty. Drive its open leg
-    ///         over a set of ready afking boxes and assert the whole `mintFlip()` tx fits the 16.7M
+    ///         over a set of ready afking boxes and assert the whole `mineFlip()` tx fits the 16.7M
     ///         ceiling (the open leg + the once-per-tx routing + creditFlip). Non-vacuity: at least one box
-    ///         materialized this `mintFlip()`.
+    ///         materialized this `mineFlip()`.
     function testMintFlipOpenLegRouterFitsCeiling() public {
         vm.skip(true, "357-00b D-12 supersession: the worst-case router-gas harness subscribes ungrounded subs then measures the STAGE/open-leg ceiling; the grounded subscribe shifts the per-sub/per-box marginal; re-proven by V56AfkingGasMarginal (the ceiling-fit + per-sub/per-box marginals, all green)");
         address[] memory subs = _setupFundedLootboxSubs(N_MARGINAL, "mbOpen_", 5 ether);
@@ -296,26 +296,26 @@ contract RouterWorstCaseGas is DeployProtocol {
         uint32 stampDay = _readStampDay(subs);
         assertTrue(rngWordByDay(stampDay) != 0, "ready: stamp-day word landed");
 
-        // Settle to a clean (!advanceDue && !rngLocked) state so mintFlip takes the OPEN leg, not advance.
+        // Settle to a clean (!advanceDue && !rngLocked) state so mineFlip takes the OPEN leg, not advance.
         _settleClean(0xC0FFEE);
-        assertFalse(game.advanceDue(), "mintFlip routes to OPEN (advance not due)");
+        assertFalse(game.advanceDue(), "mineFlip routes to OPEN (advance not due)");
 
         vm.prank(makeAddr("mbOpen_opener"));
         uint256 gasBefore = gasleft();
-        game.mintFlip();
+        game.mineFlip();
         uint256 mintFlipGas = gasBefore - gasleft();
 
-        // Non-vacuity: at least one box materialized this mintFlip open leg.
+        // Non-vacuity: at least one box materialized this mineFlip open leg.
         uint256 openedCount;
         for (uint256 i; i < N_MARGINAL; ++i) {
             if (_lastOpenedDayOf(subs[i]) == stampDay) ++openedCount;
         }
-        assertGt(openedCount, 0, "mintFlip open non-vacuity: at least one afking box materialized");
+        assertGt(openedCount, 0, "mineFlip open non-vacuity: at least one afking box materialized");
 
         assertLt(
             mintFlipGas,
             EFFECTIVE_GAS_CEILING,
-            "16.7M ceiling: the mintFlip() open-leg router tx (open + routing + creditFlip) fits under 16.7M"
+            "16.7M ceiling: the mineFlip() open-leg router tx (open + routing + creditFlip) fits under 16.7M"
         );
 
         emit log_named_uint("mintflip_open_leg_router_gas", mintFlipGas);
@@ -323,7 +323,7 @@ contract RouterWorstCaseGas is DeployProtocol {
         emit log_named_uint("effective_gas_ceiling", EFFECTIVE_GAS_CEILING);
     }
 
-    /// @notice TST-06 / Δ3 advance leg: with NO subscribers and NO ready boxes, `mintFlip()` routes to the
+    /// @notice TST-06 / Δ3 advance leg: with NO subscribers and NO ready boxes, `mineFlip()` routes to the
     ///         advance leg (the router's `if (advanceDue) {...}` structural early-return). Drive a real
     ///         new-day advance THROUGH the router and assert the whole tx fits the 16.7M ceiling.
     ///         Non-vacuity: the day actually advanced (the game entered rngLock, i.e. the day's RNG was
@@ -340,13 +340,13 @@ contract RouterWorstCaseGas is DeployProtocol {
 
         vm.warp(block.timestamp + 1 days);
         assertTrue(game.advanceDue(), "advanceDue on the new day");
-        assertFalse(game.boxesPending(), "no boxes pending -> mintFlip routes to advance");
+        assertFalse(game.boxesPending(), "no boxes pending -> mineFlip routes to advance");
 
         bool lockedBefore = game.rngLocked();
 
         vm.prank(makeAddr("mbAdv_opener"));
         uint256 gasBefore = gasleft();
-        game.mintFlip();
+        game.mineFlip();
         uint256 mintFlipGas = gasBefore - gasleft();
 
         // Non-vacuity: a real new-day advance step ran (rngLock flipped, or advanceDue cleared).
@@ -356,7 +356,7 @@ contract RouterWorstCaseGas is DeployProtocol {
         assertLt(
             mintFlipGas,
             EFFECTIVE_GAS_CEILING,
-            "16.7M ceiling: the mintFlip() advance-leg router tx (new-day step + routing) fits under 16.7M"
+            "16.7M ceiling: the mineFlip() advance-leg router tx (new-day step + routing) fits under 16.7M"
         );
 
         emit log_named_uint("mintflip_advance_leg_router_gas", mintFlipGas);
@@ -393,10 +393,10 @@ contract RouterWorstCaseGas is DeployProtocol {
     }
 
     /// @dev Measure the afking open-leg gas over N freshly-stamped + ready afking boxes, returning the
-    ///      bracketed `mintFlip()` open-leg gas. Used by the CR-01 open marginal (gas for N − gas for
+    ///      bracketed `mineFlip()` open-leg gas. Used by the CR-01 open marginal (gas for N − gas for
     ///      N−1). The 2 deploy subs add a CONSTANT 2 ready boxes to BOTH the N and N−1 measurements, so
     ///      they cancel in the difference — the marginal isolates exactly one box. Each call stamps N subs
-    ///      (new-day STAGE), lands the stamp-day word, settles clean (so mintFlip routes to OPEN), opens.
+    ///      (new-day STAGE), lands the stamp-day word, settles clean (so mineFlip routes to OPEN), opens.
     function _measureOpenLegGas(uint256 n, string memory prefix) internal returns (uint256 openGas) {
         address[] memory subs = _setupFundedLootboxSubs(n, prefix, 5 ether);
         _runStageNewDay(uint256(keccak256(abi.encodePacked(prefix, "word"))) | 1);
@@ -408,10 +408,10 @@ contract RouterWorstCaseGas is DeployProtocol {
         }
 
         _settleClean(uint256(keccak256(abi.encodePacked(prefix, "clean"))) | 1);
-        require(!game.advanceDue(), "fixture: clean so mintFlip opens");
+        require(!game.advanceDue(), "fixture: clean so mineFlip opens");
         vm.prank(makeAddr(string(abi.encodePacked(prefix, "opener"))));
         uint256 gasBefore = gasleft();
-        game.mintFlip();
+        game.mineFlip();
         openGas = gasBefore - gasleft();
 
         for (uint256 i; i < n; ++i) {
@@ -476,7 +476,7 @@ contract RouterWorstCaseGas is DeployProtocol {
     }
 
     /// @dev A robust settle DEMANDING a clean (`!advanceDue && !rngLocked`) state before returning — used
-    ///      before a mintFlip open so it reliably takes the OPEN leg.
+    ///      before a mineFlip open so it reliably takes the OPEN leg.
     function _settleClean(uint256 vrfWord) internal {
         for (uint256 d; d < 240; d++) {
             if (!game.advanceDue() && !game.rngLocked()) return;

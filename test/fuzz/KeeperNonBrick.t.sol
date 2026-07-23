@@ -184,7 +184,7 @@ contract KeeperNonBrick is DeployProtocol {
     }
 
     /// @notice REVERT-01 (class A, the FUNDED box OPEN never bricks): a FUNDED sub's stamped box, opened via
-    ///         the real `mintFlip` open leg, materializes without reverting — the open leg is revert-free
+    ///         the real `mineFlip` open leg, materializes without reverting — the open leg is revert-free
     ///         under the readiness pre-gate (a landed `rngWordByDay[day]`), NO per-item valve. Non-vacuous:
     ///         the box demonstrably materialized (lastOpenedDay advanced to the stamp day).
     function testFundedBoxOpenNeverBricks() public {
@@ -199,10 +199,10 @@ contract KeeperNonBrick is DeployProtocol {
         assertGt(stampDay, 0, "non-vacuity: stamped");
         assertTrue(_lastOpenedDayOf(afk) < stampDay, "box pending pre-open");
 
-        // Open via the real mintFlip open leg (the afking box open is reached ONLY via mintFlip).
+        // Open via the real mineFlip open leg (the afking box open is reached ONLY via mineFlip).
         _settleClean(0xC0FFEE);
         vm.prank(makeAddr("ca_open_opener"));
-        try game.mintFlip() {} catch {} // MUST materialize, not brick
+        try game.mineFlip() {} catch {} // MUST materialize, not brick
 
         assertEq(_lastOpenedDayOf(afk), stampDay, "FUNDED box open materialized (class A, no valve, non-vacuous)");
     }
@@ -280,7 +280,7 @@ contract KeeperNonBrick is DeployProtocol {
     ///         via the OBSERVABLE: with `gameOver` set, an active funded subscriber set present, and the
     ///         advance due, `advanceGame()` takes the gameover path and returns `mult == 0` (the gameover
     ///         advance leg, DegenerusGameAdvanceModule.sol:193-199) — it does NOT revert, and the afking
-    ///         STAGE (which runs only on the non-gameover new-day path) never blocks it. `mintFlip()`
+    ///         STAGE (which runs only on the non-gameover new-day path) never blocks it. `mineFlip()`
     ///         then pays no bounty (mult == 0) but does NOT revert (the category ran).
     function testGameOverRoutingNotBlockedByAfkingStage() public {
         vm.skip(true, "357-00b D-12 supersession: the no-brick harness subscribes ungrounded/unfunded subs to exercise the STAGE/reclaim/pass-evict no-brick paths; the grounded subscribe stamps a no-orphan-protected box; re-proven by V56SubHardening (crossing eviction) + V56SecUnmanipulable (finalize hooks + no-orphan) + V56FreezeSolvency (solvency under churn)");
@@ -301,11 +301,11 @@ contract KeeperNonBrick is DeployProtocol {
         uint8 mult = game.advanceGame();
         assertEq(mult, 0, "class C: the gameover advance leg proceeded and returned mult == 0 (no bounty, no block)");
 
-        // mintFlip routes through advanceDue -> the gameover advance leg -> mult == 0 -> pays NO bounty,
+        // mineFlip routes through advanceDue -> the gameover advance leg -> mult == 0 -> pays NO bounty,
         // but the category RAN so it returns rather than reverting NoWork (the afking router is unblocked).
         if (game.advanceDue()) {
             vm.prank(makeAddr("cc_go_opener"));
-            game.mintFlip(); // MUST NOT revert (gameover advance ran; mult==0 => no creditFlip)
+            game.mineFlip(); // MUST NOT revert (gameover advance ran; mult==0 => no creditFlip)
         }
     }
 
@@ -622,7 +622,7 @@ contract KeeperNonBrick is DeployProtocol {
     }
 
     /// @dev A robust settle DEMANDING a clean (`!advanceDue && !rngLocked`) state before returning (the
-    ///      251-04 240-iter drain) — used before an afking box open so `mintFlip` reliably takes the OPEN leg.
+    ///      251-04 240-iter drain) — used before an afking box open so `mineFlip` reliably takes the OPEN leg.
     function _settleClean(uint256 vrfWord) internal {
         for (uint256 d; d < 240; d++) {
             if (!game.advanceDue() && !game.rngLocked()) return;

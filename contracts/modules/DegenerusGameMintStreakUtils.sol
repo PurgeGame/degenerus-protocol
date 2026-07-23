@@ -44,7 +44,7 @@ abstract contract DegenerusGameMintStreakUtils is DegenerusGameStorage {
         (BitPackingLib.MASK_24 << BitPackingLib.MINT_STREAK_LAST_COMPLETED_SHIFT) |
         (BitPackingLib.MASK_24 << BitPackingLib.LEVEL_STREAK_SHIFT);
 
-    /// @dev Soft pay-gate for the mintFlip advance bounty: is `who` entitled to the
+    /// @dev Soft pay-gate for the mineFlip advance bounty: is `who` entitled to the
     ///      advance bounty right now? The advance work itself is always permitted — this
     ///      only decides whether the keeper earns the re-homed bounty, so real participants
     ///      get first shot while anyone may still do the work for free. Tiers, cheapest

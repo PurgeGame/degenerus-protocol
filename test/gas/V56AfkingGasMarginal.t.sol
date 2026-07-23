@@ -297,7 +297,7 @@ contract V56AfkingGasMarginal is DeployProtocol {
     // =========================================================================
 
     /// @notice The per-open marginal = (gas for N opens − gas for N−1 opens) / 1, snapshot/revert. The afking
-    ///         open leg is `_autoOpen(OPEN_BATCH)`, reached via `mintFlip()`; each afking box rolls boons
+    ///         open leg is `_autoOpen(OPEN_BATCH)`, reached via `mineFlip()`; each afking box rolls boons
     ///         like a human box (~75k/box, uniform O(1) — a cheap stamp-derived resolve, no boxPlayers walk /
     ///         no lootboxEth read-zero, the anti-gas-DoS property the human openLootBox lacks). All numbers
     ///         are EMITTED first (the measured per-box marginal + the OPEN_BATCH chunk + the derived max-safe
@@ -322,7 +322,7 @@ contract V56AfkingGasMarginal is DeployProtocol {
         uint256 perOpen = gasN - gasNm1; // (gas for N − gas for N−1) / 1 — the loop-N-divide MARGINAL
 
         // Derive the OPEN_BATCH chunk. fixed_open_overhead = the open-leg tx overhead at N opens minus the N
-        // per-box marginals (the constant mintFlip entry/exit + advance-check + bounty cost shared by any
+        // per-box marginals (the constant mineFlip entry/exit + advance-check + bounty cost shared by any
         // open chunk size). The chunk at a batch B = fixed + B×perOpen.
         uint256 fixedOpenOverhead = gasN > perOpen * N_HI ? gasN - perOpen * N_HI : 0;
         uint256 openChunkAtBatch = fixedOpenOverhead + OPEN_BATCH * perOpen;
@@ -703,7 +703,7 @@ contract V56AfkingGasMarginal is DeployProtocol {
         // Non-vacuity: every box actually took the ETH-spin path (proves the worst-case forcing worked).
         assertEq(ethSpins, OPEN_BATCH, "R3: every forced box rolled the ETH-spin (the heaviest outcome)");
         // The full forced all-ETH-spin OPEN_BATCH chunk stays under the 16,777,216 EIP-7825 per-tx cap,
-        // so the fixed-OPEN_BATCH mintFlip crank can never become un-submittable on a worst-case batch.
+        // so the fixed-OPEN_BATCH mineFlip crank can never become un-submittable on a worst-case batch.
         assertLt(chunkGas, EIP7825_TX_GAS_CAP, "R3: forced all-ETH-spin OPEN_BATCH chunk stays < 16,777,216");
     }
 
@@ -953,12 +953,12 @@ contract V56AfkingGasMarginal is DeployProtocol {
     }
 
     /// @notice LIVE-01 (f) individual-open byte-unchanged: the box a sub gets via the unified valve (openBoxes
-    ///         -> drainAfkingBoxes -> _openAfkingBox) is the SAME materialized box as via the rewarded mintFlip
+    ///         -> drainAfkingBoxes -> _openAfkingBox) is the SAME materialized box as via the rewarded mineFlip
     ///         open leg — both route through _autoOpen with the same frozen stamp-day word, so the open path is
     ///         byte-unchanged across the two reachable afking-open entrypoints (the valve and the bounty router).
     function testLive01IndividualOpenPathByteUnchanged() public {
         // Two identical funded subs stamped on the same day with the same word; open one via the valve, one via
-        // mintFlip. Each opens to the SAME stamp-day marker (lastOpenedDay == lastAutoBoughtDay) — the open
+        // mineFlip. Each opens to the SAME stamp-day marker (lastOpenedDay == lastAutoBoughtDay) — the open
         // outcome is identical (same _autoOpen path, same rngWordByDay[stampDay] seed).
         address viaValve = makeAddr("vbu_valve");
         address viaBounty = makeAddr("vbu_bounty");
@@ -982,14 +982,14 @@ contract V56AfkingGasMarginal is DeployProtocol {
         // Open one via the unified valve.
         vm.prank(makeAddr("vbu_op1"));
         game.openBoxes(SUBSCRIBER_CAP);
-        // Open the rest via the rewarded bounty router (mintFlip).
+        // Open the rest via the rewarded bounty router (mineFlip).
         vm.prank(makeAddr("vbu_op2"));
-        try game.mintFlip() {} catch {}
+        try game.mineFlip() {} catch {}
 
         // Both materialized to the SAME open marker (lastOpenedDay == the shared stamp day) — byte-unchanged
         // open outcome across the valve path and the bounty path.
         assertEq(_lastOpenedDayOf(viaValve), stampValve, "LIVE-01(f): valve-opened box materialized at the stamp day");
-        assertEq(_lastOpenedDayOf(viaBounty), stampBounty, "LIVE-01(f): bounty(mintFlip)-opened box materialized at the same stamp day");
+        assertEq(_lastOpenedDayOf(viaBounty), stampBounty, "LIVE-01(f): bounty(mineFlip)-opened box materialized at the same stamp day");
         assertEq(_lastOpenedDayOf(viaValve), _lastOpenedDayOf(viaBounty), "LIVE-01(f): the two open entrypoints produce the identical open marker (byte-unchanged path)");
     }
 
@@ -1237,10 +1237,10 @@ contract V56AfkingGasMarginal is DeployProtocol {
     }
 
     /// @dev Measure the afking open-leg gas over N freshly-stamped + ready LOOTBOX afking boxes, returning
-    ///      the bracketed `mintFlip()` open-leg gas. The 2 deploy subs add a CONSTANT 2 ready boxes to BOTH
+    ///      the bracketed `mineFlip()` open-leg gas. The 2 deploy subs add a CONSTANT 2 ready boxes to BOTH
     ///      the N and N−1 measurements, so they cancel in the (gasN − gasNm1) difference — the marginal
     ///      isolates exactly one box. Each call stamps N subs (new-day STAGE), lands the stamp-day word,
-    ///      settles clean (so mintFlip routes to OPEN), opens all.
+    ///      settles clean (so mineFlip routes to OPEN), opens all.
     function _measureOpenLegGas(uint256 n, string memory prefix) internal returns (uint256 openGas) {
         address[] memory subs = _setupFundedSubs(n, prefix, 5 ether, false);
         _runStageNewDay(uint256(keccak256(abi.encodePacked(prefix, "word"))) | 1);
@@ -1252,10 +1252,10 @@ contract V56AfkingGasMarginal is DeployProtocol {
         }
 
         _settleClean(uint256(keccak256(abi.encodePacked(prefix, "clean"))) | 1);
-        require(!game.advanceDue(), "fixture: clean so mintFlip opens");
+        require(!game.advanceDue(), "fixture: clean so mineFlip opens");
         vm.prank(makeAddr(string(abi.encodePacked(prefix, "opener"))));
         uint256 gasBefore = gasleft();
-        game.mintFlip();
+        game.mineFlip();
         openGas = gasBefore - gasleft();
 
         for (uint256 i; i < n; ++i) {
@@ -1336,7 +1336,7 @@ contract V56AfkingGasMarginal is DeployProtocol {
     }
 
     /// @dev A robust settle DEMANDING a clean (`!advanceDue && !rngLocked`) state before returning — used
-    ///      before a mintFlip open so it reliably takes the OPEN leg.
+    ///      before a mineFlip open so it reliably takes the OPEN leg.
     function _settleClean(uint256 vrfWord) internal {
         for (uint256 d; d < 240; d++) {
             if (!game.advanceDue() && !game.rngLocked()) return;

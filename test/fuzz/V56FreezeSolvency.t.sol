@@ -28,7 +28,7 @@ import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 ///   inline-resolves pre-RNG (no LootBoxOpened at subscribe time). The single-roll open seed is
 ///   `keccak256(abi.encode(rngWordByDay[stampDay], player, stampDay, amount))` — it carries NO block.*
 ///   entropy, so two opens of the SAME stamp at DIFFERENT blocks (vm.roll/warp + perturbed
-///   prevrandao/coinbase) materialize byte-identical boxes. The afking open is reached via mintFlip() (the
+///   prevrandao/coinbase) materialize byte-identical boxes. The afking open is reached via mineFlip() (the
 ///   autoOpen selector was dropped — not re-exposed on the Game).
 ///
 /// @dev Reuses the funded-sub + seated + new-day STAGE harness (the accumulating-`_t` warp +
@@ -376,7 +376,7 @@ contract V56FreezeSolvency is DeployProtocol {
     /// @dev Open `afk`'s stamped afking box at a perturbed block context and return the materialized box
     ///      decoded from the LootBoxOpened event. Perturbs block number / timestamp (sub-day, level held) /
     ///      prevrandao / coinbase (NONE enter the single-roll afking seed by design), then settles any
-    ///      in-flight advance so mintFlip takes the OPEN leg (!advanceDue) and fires the open. Uses a FIXED
+    ///      in-flight advance so mineFlip takes the OPEN leg (!advanceDue) and fires the open. Uses a FIXED
     ///      drain word (NOT derived from the perturbation — the perturbation touches only the block context).
     function _openAfkingBoxAt(
         address afk,
@@ -394,7 +394,7 @@ contract V56FreezeSolvency is DeployProtocol {
 
         vm.recordLogs();
         vm.prank(makeAddr("freeze_opener"));
-        try game.mintFlip() {} catch {}
+        try game.mineFlip() {} catch {}
         return _decodeLootBoxOpenedFor(afk);
     }
 
@@ -492,7 +492,7 @@ contract V56FreezeSolvency is DeployProtocol {
     }
 
     /// @dev A robust settle DEMANDING a clean (`!advanceDue && !rngLocked`) state before returning — used
-    ///      before an afking open so mintFlip reliably takes the OPEN leg (Don't-Hand-Roll).
+    ///      before an afking open so mineFlip reliably takes the OPEN leg (Don't-Hand-Roll).
     function _settleClean(uint256 vrfWord) internal {
         for (uint256 d; d < 240; d++) {
             if (!game.advanceDue() && !game.rngLocked()) return;

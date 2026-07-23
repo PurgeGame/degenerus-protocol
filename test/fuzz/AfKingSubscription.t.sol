@@ -7,7 +7,7 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 
 /// @title AfKingSubscription -- Proves the v55.0 game-resident afking subscription acceptance
 ///        properties: the pass-eviction-OR-refresh crossing gate (AFSUB-02/03), the absence of any
-///        FLIP-prepay window (AFSUB-01), the single-creditFlip mintFlip bounty (REW-02), and the
+///        FLIP-prepay window (AFSUB-01), the single-creditFlip mineFlip bounty (REW-02), and the
 ///        OPEN-E cross-account subscribe-only auth (OPENE-04). The afking surface is now GAME-resident
 ///        (GameAfkingModule reached via DegenerusGame delegatecall) -- the standalone `AfKing` contract
 ///        was DISSOLVED (D-351-01, PATTERNS §2).
@@ -20,8 +20,8 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 ///     reclaim path (dailyQuantity = 0, _removeFromSet, SubscriptionExpired(.,1)) WITHOUT reverting.
 ///   - No FLIP in subscribe (AFSUB-01): subscribe never issues any FLIP keeper-burn; a no-pass
 ///     subscriber's FLIP balance is UNTOUCHED across subscribe.
-///   - Bounty (REW-02 / PLACE-02): the REWARDED entrypoint is the parameterless `mintFlip()` router;
-///     a mintFlip() whose advance leg processes the buy STAGE emits exactly ONE creditFlip to the
+///   - Bounty (REW-02 / PLACE-02): the REWARDED entrypoint is the parameterless `mineFlip()` router;
+///     a mineFlip() whose advance leg processes the buy STAGE emits exactly ONE creditFlip to the
 ///     caller (never per-item).
 ///   - OPEN-E (OPENE-04): a non-zero non-self fundingSource MUST be operator-approved by the source for
 ///     the subscriber AT subscribe (the consent gate at GameAfkingModule.sol:259-265); no later re-check
@@ -34,7 +34,7 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 ///      compare `currentLevel <= sub.validThroughLevel`, GameAfkingModule.sol:612 — only the crossing
 ///      branch re-reads the horizon).
 ///   Δ2 subscribe: `afKing.subscribe(...)` -> `game.subscribe(...)` (identical 6-arg sig).
-///   Δ3 doWork: `afKing.doWork()` -> `game.mintFlip()`.
+///   Δ3 doWork: `afKing.doWork()` -> `game.mineFlip()`.
 ///   Δ4 autoBuy: `afKing.autoBuy(N)` -> the per-sub buy folded into `advanceGame()`'s STAGE; driven via
 ///      a new-day advanceGame + the `_settleGame` VRF drain.
 ///   Δ5 views/cancel: `afKing.subscriptionOf(x).field` -> read `_subOf[x]` via vm.load (RE-DERIVED
@@ -126,11 +126,11 @@ contract AfKingSubscription is DeployProtocol {
     }
 
     // =========================================================================
-    // Task 3c — Single-creditFlip mintFlip bounty (REW-02 / PLACE-02)
+    // Task 3c — Single-creditFlip mineFlip bounty (REW-02 / PLACE-02)
     // =========================================================================
 
     /// @notice REW-02 (PLACE-02 bounty folded into advance): the REWARDED entrypoint is the
-    ///         parameterless `mintFlip()` router. A mintFlip() whose advance leg runs the buy STAGE
+    ///         parameterless `mineFlip()` router. A mineFlip() whose advance leg runs the buy STAGE
     ///         emits AT MOST ONE creditFlip to the caller (never per-item) — the one-bounty-per-tx
     ///         property. (The advance leg pays `unit·2·mult`; a `mult==0` gameover advance pays none.)
     function testMintFlipEmitsAtMostOneBuyBounty() public {
@@ -141,15 +141,15 @@ contract AfKingSubscription is DeployProtocol {
 
         address keeper = makeAddr("bounty_keeper");
 
-        // mintFlip routes ONE category (advance, here) and pays ONE bounty CEI-last. The advance leg
+        // mineFlip routes ONE category (advance, here) and pays ONE bounty CEI-last. The advance leg
         // runs the buy STAGE in-context. Assert at most one creditFlip emission to the caller.
         vm.recordLogs();
         vm.prank(keeper);
-        try game.mintFlip() {} catch {} // may revert NoWork() if nothing is due — that is the no-bounty case
-        assertLe(_countCreditFlipTo(keeper), 1, "at most one bounty creditFlip per mintFlip tx (REW-02)");
+        try game.mineFlip() {} catch {} // may revert NoWork() if nothing is due — that is the no-bounty case
+        assertLe(_countCreditFlipTo(keeper), 1, "at most one bounty creditFlip per mineFlip tx (REW-02)");
     }
 
-    /// @notice REW-02 tail: a standalone `autoOpen` is UNREWARDED — only mintFlip() credits. An
+    /// @notice REW-02 tail: a standalone `autoOpen` is UNREWARDED — only mineFlip() credits. An
     ///         autoOpen with no openable boxes is a NO-OP that emits no creditFlip.
     function testAutoOpenIsUnrewardedNoOp() public {
         address keeper = makeAddr("autoopen_keeper");

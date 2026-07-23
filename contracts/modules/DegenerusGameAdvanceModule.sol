@@ -289,7 +289,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
             (bool goReturn, uint8 goStage) = _handleGameOverPath(day, lvl);
             if (goReturn) {
                 // Gameover path: advance ran but earns NO router bounty (the flip-credit
-                // coin is worthless at gameover) — return mult = 0 so mintFlip pays nothing.
+                // coin is worthless at gameover) — return mult = 0 so mineFlip pays nothing.
                 emit Advance(goStage, lvl);
                 return 0;
             }

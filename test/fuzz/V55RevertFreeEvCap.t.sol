@@ -31,8 +31,8 @@ import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 ///
 /// @dev DRIVING (ported from V55FreezeDeterminism / V55SetMutationOpenE / KeeperRewardRoutingSameResults):
 ///   per-sub buy STAGE = a new-day `advanceGame()` (`_runStageNewDay` → the pre-RNG STAGE stamps the sub,
-///   then `_settleGame` lands `rngWordByDay[stampDay]`); afking box open = `mintFlip()`'s open leg
-///   (reached ONLY via mintFlip — the afking standalone `autoOpen` selector collides with the human
+///   then `_settleGame` lands `rngWordByDay[stampDay]`); afking box open = `mineFlip()`'s open leg
+///   (reached ONLY via mineFlip — the afking standalone `autoOpen` selector collides with the human
 ///   `autoOpen(uint256)`); the EV-cap budget is read via the RE-DERIVED `lootboxEvBenefitUsedByLevel` slot.
 ///   RE-DERIVED every pinned slot via `forge inspect storage DegenerusGame`. Test-only: ZERO
 ///   `contracts/*.sol` mutation (`git diff 453f8073 HEAD -- contracts/` EMPTY); FROZEN subject honored.
@@ -159,7 +159,7 @@ contract V55RevertFreeEvCap is DeployProtocol {
     }
 
     /// @notice class A (the FUNDED box OPEN never reverts): a FUNDED sub's stamped box, opened via the real
-    ///         `mintFlip` open leg, materializes without reverting — the open leg is revert-free under the
+    ///         `mineFlip` open leg, materializes without reverting — the open leg is revert-free under the
     ///         readiness pre-gate (a landed `rngWordByDay[day]`), NO per-item valve. Non-vacuous: the box
     ///         demonstrably materialized (lastOpenedDay advanced to the stamp day; a LootBoxOpened emitted).
     function testClassA_FundedBoxOpenNeverReverts() public {
@@ -177,7 +177,7 @@ contract V55RevertFreeEvCap is DeployProtocol {
         _settleClean(0xC0FFEE);
         vm.recordLogs();
         vm.prank(makeAddr("clA_opener"));
-        try game.mintFlip() {} catch {} // MUST materialize, not revert
+        try game.mineFlip() {} catch {} // MUST materialize, not revert
         Box memory box = _decodeLootBoxOpenedFor(afk);
 
         assertEq(_lastOpenedDayOf(afk), stampDay, "class A: FUNDED box open materialized (no revert)");
@@ -290,7 +290,7 @@ contract V55RevertFreeEvCap is DeployProtocol {
     ///         active funded subscriber set present, the advance gameover leg still PROCEEDS — the afking
     ///         STAGE does NOT gate terminal routing (the STAGE is on the non-gameover new-day path only,
     ///         DegenerusGameAdvanceModule.sol:192-200 returns early on the gameover path before the STAGE).
-    ///         `advanceGame()` returns mult == 0 (the gameover advance leg) WITHOUT reverting; `mintFlip()`
+    ///         `advanceGame()` returns mult == 0 (the gameover advance leg) WITHOUT reverting; `mineFlip()`
     ///         then pays no bounty (mult == 0) but does NOT revert (the category ran).
     function testClassC_GameOverRoutingUnblockedByStage() public {
         vm.skip(true, "357-00b D-12 supersession: the v55 revert-free/EV-cap harness subscribes ungrounded subs then drives the STAGE buy/open; the grounded subscribe changes the first-buy + EV-cap accrual (the v56 milli-ETH unmask, ledger 356-07 D2/D3); re-proven by V56FreezeSolvency + V56SecUnmanipulable (no-positive-EV churn)");
@@ -310,11 +310,11 @@ contract V55RevertFreeEvCap is DeployProtocol {
         uint8 mult = game.advanceGame();
         assertEq(mult, 0, "class C: gameover advance leg proceeded, mult == 0 (no bounty, never blocked by the STAGE)");
 
-        // mintFlip routes advanceDue -> the gameover advance leg -> mult == 0 -> no bounty, but the category
+        // mineFlip routes advanceDue -> the gameover advance leg -> mult == 0 -> no bounty, but the category
         // RAN so it returns rather than reverting NoWork (the afking router is unblocked at terminal).
         if (game.advanceDue()) {
             vm.prank(makeAddr("clC_opener"));
-            game.mintFlip(); // MUST NOT revert
+            game.mineFlip(); // MUST NOT revert
         }
     }
 
@@ -362,10 +362,10 @@ contract V55RevertFreeEvCap is DeployProtocol {
         assertEq(_evBenefitUsed(afk, lvl), 0, "post-stamp: budget STILL clean (the stamp did not draw the cap)");
         assertTrue(_lastOpenedDayOf(afk) < _lastBoughtDayOf(afk), "afking box pending (poked)");
 
-        // OPEN via the real mintFlip open leg -> the SINGLE _applyEvMultiplierWithCap RMW draws the cap.
-        assertFalse(game.rngLocked(), "mintFlip takes the OPEN leg (not locked)");
+        // OPEN via the real mineFlip open leg -> the SINGLE _applyEvMultiplierWithCap RMW draws the cap.
+        assertFalse(game.rngLocked(), "mineFlip takes the OPEN leg (not locked)");
         vm.prank(makeAddr("evcap_once_opener"));
-        try game.mintFlip() {} catch {}
+        try game.mineFlip() {} catch {}
 
         // AFTER: the budget incremented by EXACTLY the open's adjustedPortion (== amount, since amount <= cap
         // on a clean budget). ONE draw — exactly once, no double-draw.
@@ -404,7 +404,7 @@ contract V55RevertFreeEvCap is DeployProtocol {
         _pokeAfkingStamp(p, aAmt, day, BONUS_SCORE);
         _setRngWordByDay(day, uint256(keccak256("shared-afk-word")));
         vm.prank(makeAddr("evcap_shared_opener"));
-        try game.mintFlip() {} catch {}
+        try game.mineFlip() {} catch {}
         assertEq(_lastOpenedDayOf(p), day, "afking box materialized");
         assertEq(_evBenefitUsed(p, lvl), aAmt, "afking open drew aAmt from the shared key");
 
@@ -447,7 +447,7 @@ contract V55RevertFreeEvCap is DeployProtocol {
         _pokeAfkingStamp(p, amount, day, BONUS_SCORE);
         _setRngWordByDay(day, uint256(keccak256("clamp-word")));
         vm.prank(makeAddr("evcap_clamp_opener"));
-        try game.mintFlip() {} catch {} // MUST NOT revert at the cap
+        try game.mineFlip() {} catch {} // MUST NOT revert at the cap
 
         assertEq(_lastOpenedDayOf(p), day, "non-vacuity: the box materialized (open ran, did not revert)");
         // CLAMP: the budget saturated at exactly the 10-ETH cap (drew only the remaining 1 ETH, not the full 5).
@@ -493,7 +493,7 @@ contract V55RevertFreeEvCap is DeployProtocol {
             _pokeAfkingStamp(p, amts[i], d, BONUS_SCORE);
             _setRngWordByDay(d, uint256(keccak256(abi.encode("fz-word", i))));
             vm.prank(makeAddr(string(abi.encodePacked("evcap_fz_op_", _u(i)))));
-            try game.mintFlip() {} catch {}
+            try game.mineFlip() {} catch {}
             assertEq(_lastOpenedDayOf(p), d, "non-vacuity: open i materialized");
         }
 
@@ -532,7 +532,7 @@ contract V55RevertFreeEvCap is DeployProtocol {
     }
 
     /// @dev A robust settle DEMANDING a clean (`!advanceDue && !rngLocked`) state before returning — used
-    ///      before an afking box open so `mintFlip` reliably takes the OPEN leg.
+    ///      before an afking box open so `mineFlip` reliably takes the OPEN leg.
     function _settleClean(uint256 vrfWord) internal {
         for (uint256 d; d < 240; d++) {
             if (!game.advanceDue() && !game.rngLocked()) return;

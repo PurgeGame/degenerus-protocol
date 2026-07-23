@@ -9,7 +9,7 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 ///        `_subOpenCursor` sits in `_subscribers`, not just the suffix `[cursor, len)`.
 ///
 /// @notice The open leg (`GameAfkingModule._autoOpen`, reached via Game.openBoxes -> delegatecall
-///   drainAfkingBoxes, and via Game.mintFlip's open category) walks `_subscribers` from `_subOpenCursor`,
+///   drainAfkingBoxes, and via Game.mineFlip's open category) walks `_subscribers` from `_subOpenCursor`,
 ///   opening up to `maxCount` materializable boxes. A box is OPENABLE when, under the entry-gate (not
 ///   rngLocked, not the terminal-liveness control), the sub has a pending box (`lastOpenedDay <
 ///   lastAutoBoughtDay`) AND its frozen stamp-day word has landed (`rngWordByDay[lastAutoBoughtDay] != 0`).
@@ -18,7 +18,7 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 ///   whose sub is non-pending — e.g. a `subscribe` pushes a fresh (un-stamped, so non-openable) player to
 ///   the tail while the cursor sits at the prior length, or any non-pending sub sits at/after the cursor.
 ///   A suffix-only scan starting there would visit only `[cursor, len)`, find no openable box, return 0,
-///   and (through mintFlip) revert NoWork() — stranding the still-openable boxes in `[0, cursor)`, never
+///   and (through mineFlip) revert NoWork() — stranding the still-openable boxes in `[0, cursor)`, never
 ///   re-reaching them. The full-ring scan visits up to `len` subs from the cursor, wrapping mid-scan, so a
 ///   0-open result means the WHOLE set is drained, never just the suffix. Per-call opens stay bounded by
 ///   `maxCount` (OPEN_BATCH = 80).
@@ -28,7 +28,7 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 ///   post-PACK Sub-slot offset block). Adds the `_subscribers`-array reads (slot 56) and the packed
 ///   cursor-slot read/poke (slot 58: `_subCursor` u16 at byte 0, `_subOpenCursor` u16 at byte 2). The open path
 ///   is driven through the production Game.openBoxes(maxCount) valve (delegatecalls drainAfkingBoxes ->
-///   _autoOpen) and through Game.mintFlip() as a keeper. Test-only: ZERO contracts/*.sol mutation.
+///   _autoOpen) and through Game.mineFlip() as a keeper. Test-only: ZERO contracts/*.sol mutation.
 contract AutoOpenCursorRing is DeployProtocol {
     // -------------------------------------------------------------------------
     // Game-resident storage slots + the post-PACK Sub-slot offset block
@@ -109,8 +109,8 @@ contract AutoOpenCursorRing is DeployProtocol {
         }
     }
 
-    /// @notice The same wedge driven through the keeper path (Game.mintFlip's open category) opens the
-    ///         stranded boxes too — mintFlip pays the open bounty rather than reverting NoWork while
+    /// @notice The same wedge driven through the keeper path (Game.mineFlip's open category) opens the
+    ///         stranded boxes too — mineFlip pays the open bounty rather than reverting NoWork while
     ///         openable boxes exist below the cursor.
     function test_StrandedSubsDrainViaMintFlipKeeper() public {
         address[] memory subs = _stampSealedOpenableSubs(4);
@@ -123,13 +123,13 @@ contract AutoOpenCursorRing is DeployProtocol {
             assertTrue(_isOpenable(subs[i]), "fixture: sub below cursor openable");
         }
 
-        // A keeper cranks mintFlip while no advance is due (settled clean) -> the open category runs. With
-        // openable boxes below the wedged cursor, the full-ring scan finds them, so mintFlip does NOT revert.
+        // A keeper cranks mineFlip while no advance is due (settled clean) -> the open category runs. With
+        // openable boxes below the wedged cursor, the full-ring scan finds them, so mineFlip does NOT revert.
         address keeper = makeAddr("mf_keeper");
         _grantDeityPass(keeper); // eligible so the open-bounty creditFlip path is exercised end-to-end
-        require(!game.advanceDue() && !game.rngLocked(), "fixture: settled clean so mintFlip runs the OPEN leg");
+        require(!game.advanceDue() && !game.rngLocked(), "fixture: settled clean so mineFlip runs the OPEN leg");
         vm.prank(keeper);
-        game.mintFlip(); // MUST NOT revert NoWork — the open category had work below the cursor
+        game.mineFlip(); // MUST NOT revert NoWork — the open category had work below the cursor
 
         for (uint256 i; i < subs.length; i++) {
             assertEq(_lastOpenedDayOf(subs[i]), _lastBoughtDayOf(subs[i]), "ring(keeper): stranded box opened");
@@ -153,12 +153,12 @@ contract AutoOpenCursorRing is DeployProtocol {
             assertTrue(_subscriberIndexOf(subs[i]) - 1 < wedgeIdx, "fails-without: openable box strictly < cursor");
         }
 
-        // While openable boxes exist below the cursor, mintFlip's open leg has work -> NO NoWork revert.
+        // While openable boxes exist below the cursor, mineFlip's open leg has work -> NO NoWork revert.
         address keeper = makeAddr("nw_keeper");
         _grantDeityPass(keeper);
         require(!game.advanceDue() && !game.rngLocked(), "fixture: settled clean so the open leg is the only category");
         vm.prank(keeper);
-        game.mintFlip(); // MUST NOT revert NoWork — there IS open work
+        game.mineFlip(); // MUST NOT revert NoWork — there IS open work
 
         // Every afking box is now opened: the whole afking ring is drained (the ring scan reached the
         // stranded [0, cursor) subs, not just the suffix).
@@ -170,13 +170,13 @@ contract AutoOpenCursorRing is DeployProtocol {
         _drainValveToZero();
         assertEq(_openViaValve(OPEN_BATCH), 0, "drained: a follow-up open valve returns 0 (whole set drained)");
 
-        // NOW (and only now) mintFlip cleanly signals no work: with no advance due and the afking ring
+        // NOW (and only now) mineFlip cleanly signals no work: with no advance due and the afking ring
         // fully drained, both router categories are empty -> the clean NoWork no-op (not a suffix-strand
         // false-positive while [0, cursor) boxes remained).
         require(!game.advanceDue() && !game.rngLocked(), "fixture: still clean -> NoWork is the genuine drained signal");
         vm.prank(keeper);
         vm.expectRevert(abi.encodeWithSignature("NoWork()"));
-        game.mintFlip();
+        game.mineFlip();
     }
 
     // =========================================================================

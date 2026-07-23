@@ -64,8 +64,8 @@ contract PendingBoxCountInvariant is DeployProtocol {
         // Rewarded crank (counter-gated path) drains more.
         if (!game.advanceDue() && !game.rngLocked()) {
             vm.prank(makeAddr("pb_crank"));
-            game.mintFlip();
-            _assertInvariant("after a rewarded mintFlip drain");
+            game.mineFlip();
+            _assertInvariant("after a rewarded mineFlip drain");
         }
 
         // Full drain to zero.

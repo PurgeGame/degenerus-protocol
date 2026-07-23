@@ -336,7 +336,7 @@ contract SweepWorstCaseDrain is DeployProtocol {
     }
 
     /// @dev Regression: when the human sweep scans only stale entries (opens nothing) but advances
-    ///      the monotonic open frontier, mintFlip COMMITS that progress with no bounty instead of
+    ///      the monotonic open frontier, mineFlip COMMITS that progress with no bounty instead of
     ///      reverting NoWork and rolling it back. So the keeper route advances through a skip wall
     ///      cumulatively across calls and reaches the live box behind it. Pre-fix this
     ///      reverted NoWork every call, rolling cursor=79 back to 0 and stranding the tail box on
@@ -347,7 +347,7 @@ contract SweepWorstCaseDrain is DeployProtocol {
 
         // Settle any pending advance WITHOUT warping the clock: advanceGame catches dailyIdx up to
         // the fixed sim day (fulfilling each VRF request), after which advance is not due and the
-        // game is unlocked — the state where mintFlip takes the box-open arm.
+        // game is unlocked — the state where mineFlip takes the box-open arm.
         for (uint256 i = 0; i < 40 && (game.advanceDue() || game.rngLocked()); i++) {
             try game.advanceGame() {} catch {}
             uint256 reqId = mockVRF.lastRequestId();
@@ -359,7 +359,7 @@ contract SweepWorstCaseDrain is DeployProtocol {
             }
         }
 
-        // Clear any incidental afking boxes so mintFlip's only possible work is the human queue.
+        // Clear any incidental afking boxes so mineFlip's only possible work is the human queue.
         vm.prank(actor);
         game.openBoxes(1_000);
         require(!game.advanceDue() && !game.rngLocked(), "fixture: no advance work, unlocked");
@@ -376,19 +376,19 @@ contract SweepWorstCaseDrain is DeployProtocol {
         _landWord(index, uint256(keccak256("audit-word")) | 1);
         _parkFrontier(index);
         assertTrue(game.boxesPending(), "fixture: router advertises human-box work");
-        require(!game.advanceDue(), "fixture: mintFlip takes open arm");
+        require(!game.advanceDue(), "fixture: mineFlip takes open arm");
 
         (uint48 beforeIdx, uint48 beforeCur) = _frontier();
         assertEq(beforeIdx, index, "fixture: frontier index");
         assertEq(beforeCur, 0, "fixture: zero cursor");
 
         // Call 1: budget 80 spends one step on the index header and 79 on stale entries, opening
-        // nothing — but the frontier advanced to cur=79. Post-fix mintFlip does NOT revert; it
+        // nothing — but the frontier advanced to cur=79. Post-fix mineFlip does NOT revert; it
         // COMMITS that skip-only progress (no bounty).
         uint256 keeperFlipBefore = coinflip.coinflipAmount(actor);
         uint256 gasBefore = gasleft();
         vm.prank(actor);
-        game.mintFlip();
+        game.mineFlip();
         uint256 skipOnlyGas = gasBefore - gasleft();
 
         (uint48 afterIdx, uint48 afterCur) = _frontier();
@@ -405,7 +405,7 @@ contract SweepWorstCaseDrain is DeployProtocol {
         // Call 2: the keeper route resumes past the committed frontier and opens the live box. This
         // call performs an actual open, so it receives the normal work-scaled bounty.
         vm.prank(actor);
-        game.mintFlip();
+        game.mineFlip();
         assertEq(_lootAmt(index, liveOwner), 0, "regression: keeper route reaches and opens the live tail box");
         assertGt(
             coinflip.coinflipAmount(actor),
@@ -420,7 +420,7 @@ contract SweepWorstCaseDrain is DeployProtocol {
         require(!game.advanceDue(), "fixture: no advance work remains");
         vm.prank(actor);
         vm.expectRevert(abi.encodeWithSignature("NoWork()"));
-        game.mintFlip();
+        game.mineFlip();
     }
 
     /// @dev The logical frontier clamps the uninitialized storage value 0 to genesis index 1 on
@@ -442,7 +442,7 @@ contract SweepWorstCaseDrain is DeployProtocol {
         // incorrectly see 1 != 0.
         vm.prank(actor);
         vm.expectRevert(abi.encodeWithSignature("NoWork()"));
-        game.mintFlip();
+        game.mineFlip();
         (uint48 afterIdx, uint48 afterCur) = _frontier();
         assertEq(afterIdx, beforeIdx, "genesis no-work leaves the raw frontier unchanged");
         assertEq(afterCur, beforeCur, "genesis no-work leaves the raw cursor unchanged");
@@ -453,7 +453,7 @@ contract SweepWorstCaseDrain is DeployProtocol {
         _advanceLrIndexBy(1);
         vm.prank(actor);
         vm.expectRevert(abi.encodeWithSignature("NoWork()"));
-        game.mintFlip();
+        game.mineFlip();
         (afterIdx, afterCur) = _frontier();
         assertEq(afterIdx, 0, "unworded-index probe cannot commit the raw clamp as work");
         assertEq(afterCur, 0, "unworded-index probe leaves the entry cursor unchanged");
@@ -462,13 +462,13 @@ contract SweepWorstCaseDrain is DeployProtocol {
         // That bounded housekeeping progress commits once, then a stationary follow-up is NoWork.
         _landWord(1, uint256(keccak256("genesis-frontier-word")) | 1);
         vm.prank(actor);
-        game.mintFlip();
+        game.mineFlip();
         (afterIdx, afterCur) = _frontier();
         assertEq(afterIdx, 2, "worded empty index advances and commits the logical frontier");
         assertEq(afterCur, 0, "empty index leaves the entry cursor zero");
 
         vm.prank(actor);
         vm.expectRevert(abi.encodeWithSignature("NoWork()"));
-        game.mintFlip();
+        game.mineFlip();
     }
 }

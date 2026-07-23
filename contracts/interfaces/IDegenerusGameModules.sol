@@ -307,7 +307,7 @@ interface IDegenerusGameLootboxModule {
     function openBox(address player, uint48 index) external;
 
     /// @notice Permissionless multi-index human-box auto-open sweep (the human leg of
-    ///         openBoxes AND of mintFlip's open category). Runs in the Game's storage via delegatecall.
+    ///         openBoxes AND of mineFlip's open category). Runs in the Game's storage via delegatecall.
     /// @param budget Maximum entries (opens + skips + index-headers) scanned this call
     /// @return opened Total human boxes opened this call
     function openHumanBoxes(uint256 budget) external returns (uint256 opened);
@@ -513,7 +513,7 @@ interface IGameAfkingModule {
 
     /// @notice Unified permissionless router: do ONE category of pending work this call
     ///         (advance → box open: afking boxes first, then human boxes) and pay ONE bounty.
-    function mintFlip() external;
+    function mineFlip() external;
 
     /// @notice Drain up to `count` ready afking boxes (walks _subOpenCursor under a weighted
     ///         budget of count × open-weight units); returns the number opened AND the walk

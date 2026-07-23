@@ -5,9 +5,9 @@ import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 
-/// @title MintFlipLifecycleCoverage -- the mintFlip afking lifecycle invariant: every subscriber is
+/// @title MintFlipLifecycleCoverage -- the mineFlip afking lifecycle invariant: every subscriber is
 ///        STAMPED an afking box each day (the buy/stamp leg), then after the day's RNG/jackpot work
-///        every stamped box is OPENED (the open leg), and `mintFlip()` signals `NoWork()` ONLY once
+///        every stamped box is OPENED (the open leg), and `mineFlip()` signals `NoWork()` ONLY once
 ///        both legs are fully drained. No subscriber is ever permanently skipped by either cursor leg.
 ///
 /// @notice The two cursor legs, each proven non-stranding here:
@@ -20,7 +20,7 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 ///     call and resuming mid-ring across calls. A 0-open result means the WHOLE set is drained, never
 ///     just the suffix `[cursor, len)`. The open category then drains HUMAN boxes with the leftover
 ///     budget (the `openHumanBoxes` multi-index sweep) — the same afking-then-human order as `openBoxes`.
-///   - `mintFlip()` reverts `NoWork()` ONLY when the advance category has no work AND `_autoOpen`
+///   - `mineFlip()` reverts `NoWork()` ONLY when the advance category has no work AND `_autoOpen`
 ///     returns 0 AND the human-box sweep (`openHumanBoxes`) returns 0 — i.e. advance, afking, and
 ///     human boxes all fully drained.
 ///
@@ -32,7 +32,7 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 ///   `test_OpenLegSpansMultipleCalls`). Reuses the V56SecUnmanipulable / AutoOpenCursorRing afking
 ///   drive VERBATIM (deity-pass + funded-sub + new-day STAGE harness, the fulfill-first settle loop,
 ///   the accumulating-`t` warp, the post-PACK Sub-slot offset block, the packed-cursor slot reads).
-///   The full day cycle is driven through the production valves (advanceGame / openBoxes / mintFlip);
+///   The full day cycle is driven through the production valves (advanceGame / openBoxes / mineFlip);
 ///   per-sub markers are read from `_subOf[player]`. Test-only: ZERO contracts/*.sol mutation.
 contract MintFlipLifecycleCoverage is DeployProtocol {
     // -------------------------------------------------------------------------
@@ -81,11 +81,11 @@ contract MintFlipLifecycleCoverage is DeployProtocol {
     /// @notice The headline invariant. With N > OPEN_BATCH subs, drive ONE full day cycle:
     ///   (a) after the stamp phase, EVERY sub has `lastAutoBoughtDay == activeDay` (full STAMP coverage,
     ///       proving the buy-leg cursor walked the whole [0, len) set with no strand);
-    ///   (b) drain the boxes across MULTIPLE mintFlip/openBoxes calls (the open leg spans calls and
+    ///   (b) drain the boxes across MULTIPLE mineFlip/openBoxes calls (the open leg spans calls and
     ///       resumes mid-ring because N > OPEN_BATCH);
     ///   (c) after draining, EVERY sub has `lastOpenedDay == lastAutoBoughtDay` (full OPEN coverage,
     ///       proving the open-leg full-ring scan reached every sub with no strand);
-    ///   (d) ONLY THEN does `mintFlip()` revert `NoWork()` — never while either leg had pending work.
+    ///   (d) ONLY THEN does `mineFlip()` revert `NoWork()` — never while either leg had pending work.
     function test_AllSubsStampedThenAllBoxesOpenedBeforeNoWork() public {
         uint256 N = 100; // > OPEN_BATCH (80): the open leg MUST span >= 2 calls
         address[] memory subs = _spawnSubs(N, "life_");
@@ -105,22 +105,22 @@ contract MintFlipLifecycleCoverage is DeployProtocol {
             assertTrue(_isOpenable(subs[i]), "post-stamp: every sub carries a sealed openable box (word landed)");
         }
 
-        // (b) DRAIN via the mintFlip keeper across MULTIPLE calls. Each mintFlip open category opens up
+        // (b) DRAIN via the mineFlip keeper across MULTIPLE calls. Each mineFlip open category opens up
         // to OPEN_BATCH (80) boxes; with N=100 a single call cannot drain the set, so the cursor must
         // resume mid-ring across calls. Count the distinct open calls that did real work.
         address keeper = makeAddr("life_keeper");
         _grantDeityPass(keeper); // bounty-eligible so the full creditFlip path runs end-to-end
-        require(!game.advanceDue() && !game.rngLocked(), "fixture: settled clean so mintFlip runs the OPEN leg");
+        require(!game.advanceDue() && !game.rngLocked(), "fixture: settled clean so mineFlip runs the OPEN leg");
 
         uint256 openCalls;
         for (uint256 i; i < 64; i++) {
             uint256 before = _countOpenable(subs);
             if (before == 0) break;
             vm.prank(keeper);
-            game.mintFlip(); // open category: MUST NOT revert while boxes remain
+            game.mineFlip(); // open category: MUST NOT revert while boxes remain
             uint256 afterCnt = _countOpenable(subs);
             if (afterCnt < before) openCalls++;
-            // Per-call bound: a single mintFlip open category never opens more than OPEN_BATCH boxes.
+            // Per-call bound: a single mineFlip open category never opens more than OPEN_BATCH boxes.
             assertLe(before - afterCnt, OPEN_BATCH, "per-call opens bounded by OPEN_BATCH");
         }
         assertGt(openCalls, 1, "load-bearing: draining N>OPEN_BATCH spanned MULTIPLE open calls (cursor resumed mid-ring)");
@@ -131,7 +131,7 @@ contract MintFlipLifecycleCoverage is DeployProtocol {
             assertFalse(_isOpenable(subs[i]), "OPEN coverage: no openable box left behind for any sub");
         }
 
-        // (d) NoWork ONLY after BOTH box types are drained. The afking ring is fully open (c); mintFlip's
+        // (d) NoWork ONLY after BOTH box types are drained. The afking ring is fully open (c); mineFlip's
         // open leg now ALSO drains HUMAN boxes after the afking ones (the subs' cover-buy / daily-buy
         // lootboxes), so the afking-keyed loop above can leave a human-box backlog the open leg would
         // still service. Clear it via the openBoxes valve (the same afking-then-human drain) so every
@@ -140,7 +140,7 @@ contract MintFlipLifecycleCoverage is DeployProtocol {
         require(!game.advanceDue() && !game.rngLocked(), "fixture: still clean -> NoWork is the genuine drained signal");
         vm.prank(keeper);
         vm.expectRevert(abi.encodeWithSignature("NoWork()"));
-        game.mintFlip();
+        game.mineFlip();
     }
 
     /// @notice Load-bearing isolation: prove a SINGLE bounded open call (openBoxes(OPEN_BATCH)) does NOT
@@ -193,10 +193,10 @@ contract MintFlipLifecycleCoverage is DeployProtocol {
     // 2 — NoWork NEVER fires while pending work exists (stamp-pending OR open-pending)
     // =========================================================================
 
-    /// @notice Across the cycle, `mintFlip()` never signals NoWork while ANY leg has work:
-    ///   - while a stamp box is landed-and-unopened, mintFlip's open category has work (no NoWork);
+    /// @notice Across the cycle, `mineFlip()` never signals NoWork while ANY leg has work:
+    ///   - while a stamp box is landed-and-unopened, mineFlip's open category has work (no NoWork);
     ///   - the only clean NoWork is after BOTH legs are fully drained.
-    ///   Probes mintFlip at intermediate points and asserts it does NOT revert NoWork while work remains.
+    ///   Probes mineFlip at intermediate points and asserts it does NOT revert NoWork while work remains.
     function test_NoWorkNeverWhilePendingExists() public {
         uint256 N = 100; // > OPEN_BATCH so the open phase spans calls
         address[] memory subs = _spawnSubs(N, "nw_");
@@ -215,17 +215,17 @@ contract MintFlipLifecycleCoverage is DeployProtocol {
         for (uint256 i; i < 64; i++) {
             uint256 pending = _countOpenable(subs);
             if (pending == 0) break;
-            // PROBE: with pending boxes, a static mintFlip MUST NOT be the NoWork no-op.
+            // PROBE: with pending boxes, a static mineFlip MUST NOT be the NoWork no-op.
             assertFalse(_mintFlipWouldNoWork(keeper), "NoWork must NOT fire while open-pending boxes exist");
             // Real crank to advance the drain.
             vm.prank(keeper);
-            game.mintFlip();
+            game.mineFlip();
             cranks++;
         }
         assertGt(cranks, 1, "open phase spanned multiple cranks (N>OPEN_BATCH)");
         assertEq(_countOpenable(subs), 0, "open phase fully drained the afking set");
 
-        // mintFlip's open leg now also drains HUMAN boxes after the afking ones (the subs' cover-buy /
+        // mineFlip's open leg now also drains HUMAN boxes after the afking ones (the subs' cover-buy /
         // daily-buy lootboxes); the afking-keyed crank loop can leave a human-box backlog. Clear it so
         // the final probe sees every category empty.
         _drainAllOpenable();
@@ -290,13 +290,13 @@ contract MintFlipLifecycleCoverage is DeployProtocol {
             assertEq(_lastOpenedDayOf(wave1[i]), _lastBoughtDayOf(wave1[i]), "churn: each wave1 sub's box opened (no strand below the parked cursor)");
         }
 
-        // Both legs drained -> mintFlip cleanly signals NoWork (no churned sub permanently skipped).
+        // Both legs drained -> mineFlip cleanly signals NoWork (no churned sub permanently skipped).
         address keeper = makeAddr("churn_keeper");
         _grantDeityPass(keeper);
         require(!game.advanceDue() && !game.rngLocked(), "fixture: clean");
         vm.prank(keeper);
         vm.expectRevert(abi.encodeWithSignature("NoWork()"));
-        game.mintFlip();
+        game.mineFlip();
     }
 
     // =========================================================================
@@ -372,14 +372,14 @@ contract MintFlipLifecycleCoverage is DeployProtocol {
         revert("drain did not converge");
     }
 
-    /// @dev Would `keeper`'s mintFlip be the clean NoWork no-op RIGHT NOW? Probes via a try/catch that
+    /// @dev Would `keeper`'s mineFlip be the clean NoWork no-op RIGHT NOW? Probes via a try/catch that
     ///      reverts state on a successful call (so the probe never advances the drain). A NoWork revert
     ///      => true; any other outcome (work done, or any other revert) => false.
     function _mintFlipWouldNoWork(address keeper) internal returns (bool) {
         uint256 snap = vm.snapshotState();
         bool noWork;
         vm.prank(keeper);
-        try game.mintFlip() {
+        try game.mineFlip() {
             noWork = false; // a category had work -> not NoWork
         } catch (bytes memory reason) {
             noWork = (reason.length == 4 && bytes4(reason) == bytes4(keccak256("NoWork()")));
