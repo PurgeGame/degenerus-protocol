@@ -1199,7 +1199,7 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
         // sDGNRS level-start lootbox top-up, done ONCE here at the start of afking processing
         // (out of the per-sub loop, so it adds NO per-sub cost). On the first STAGE pass of each
         // new level (the `_sdgnrsBonusLevel` latch), stamp sDGNRS's daily box at 5% of its
-        // claimable (capped 10k ETH, floored at the normal box) rather than the flat daily box.
+        // claimable (capped 500 ETH, floored at the normal box) rather than the flat daily box.
         // sDGNRS is the pinned `_subscribers[1]`; stamping its Sub box HERE makes the loop's
         // no-orphan guard skip its own iteration, so it gets exactly ONE box (a normal day-keyed
         // Sub-stamp box, just larger), resolved off `rngWordByDay[processDay]`. Sized off the live
@@ -1221,10 +1221,13 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
             ) {
                 _sdgnrsBonusLevel = currentLevel;
                 uint256 box = cl / 20;
-                // 10k ETH ceiling: keeps the box safely inside the uint24 milli-ETH
-                // Sub-stamp field (~16,777 ETH), which would otherwise silently
-                // truncate the resolved amount while debiting full claimable.
-                if (box > 10_000 ether) box = 10_000 ether;
+                // 500 ETH ceiling: bounds the ticket-drain work one box can queue. At a
+                // large claimable the box resolves (45% ticket-roll) into entries the
+                // advance chain drains at a bounded per-call budget; an uncapped box could
+                // queue millions of entries and stall level commit past the liveness window.
+                // Well inside the uint24 milli-ETH Sub-stamp field (~16,777 ETH), so the
+                // stamp never truncates while debiting full claimable.
+                if (box > 500 ether) box = 500 ether;
                 if (box < mp) box = mp;
                 _deliverAfkingBuy(
                     ContractAddresses.SDGNRS,

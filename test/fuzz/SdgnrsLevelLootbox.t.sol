@@ -40,7 +40,7 @@ contract SdgnrsLevelLootbox is DeployProtocol {
     // The bonus sizing (the core non-vacuity proof)
     // =====================================================================================
 
-    /// @notice 5% of claimable (below the 10k-ETH cap, above the mp floor): claimable 100 ETH -> a
+    /// @notice 5% of claimable (below the 500-ETH cap, above the mp floor): claimable 100 ETH -> a
     ///         5-ETH box == 5000 milli-ETH. A flat daily box would be a few milli-ETH, so this
     ///         equality is the proof the level-start bonus fired.
     function test_SizingFivePercentOfClaimable() public {
@@ -57,10 +57,11 @@ contract SdgnrsLevelLootbox is DeployProtocol {
         );
     }
 
-    /// @notice 5% of claimable above the 10k-ETH cap clamps to 10,000 ETH == 10,000,000
-    ///         milli-ETH — safely inside the uint24 milli-ETH Sub-stamp field (~16,777 ETH).
-    function test_CapAtTenThousandEth() public {
-        uint256 cl = 400_000 ether; // 5% == 20,000 ETH > 10k ETH cap
+    /// @notice 5% of claimable above the 500-ETH cap clamps to 500 ETH == 500,000 milli-ETH.
+    ///         The cap bounds the ticket-drain volume one box can queue (an uncapped box could
+    ///         queue millions of entries and stall level commit past the liveness window).
+    function test_CapAtFiveHundredEth() public {
+        uint256 cl = 400_000 ether; // 5% == 20,000 ETH > 500 ETH cap
         _setClaimable(ContractAddresses.SDGNRS, cl);
         _fireBonus(0x5D60002);
         assertGe(_currentLevel(), 1, "fixture: the STAGE ran at a real level (>=1)");
@@ -68,8 +69,8 @@ contract SdgnrsLevelLootbox is DeployProtocol {
         uint256 amountMilli = _subField(ContractAddresses.SDGNRS, OFF_AMOUNT, 24);
         assertEq(
             amountMilli,
-            (10_000 ether) / LR_ETH_SCALE,
-            "sDGNRS level box clamps to the 10k-ETH cap"
+            (500 ether) / LR_ETH_SCALE,
+            "sDGNRS level box clamps to the 500-ETH cap"
         );
     }
 
