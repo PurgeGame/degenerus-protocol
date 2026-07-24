@@ -307,7 +307,8 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
             shareBps,
             bucketCounts,
             false, // not jackpot phase
-            false // no solo bucket, gold rush never arms here
+            false, // no solo bucket, gold rush never arms here
+            PriceLookupLib.priceForLevel(targetLvl + 1) >> 2
         );
     }
 
@@ -362,6 +363,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
 
         if (isJackpotPhase) {
             uint256 dailyEthBudget;
+            uint256 dailyUnit; // ticket unit from _budgetToEntries, threaded into _processDailyEth
             uint8 counterStep = 1;
             bool isFinalPhysicalDay;
             uint256 curPool;
@@ -408,7 +410,8 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
                 budget -= dailyTicketBudget;
 
                 // Calculate daily ticket units (distributed in Phase 2 via payDailyJackpotCoinAndTickets)
-                uint256 dailyEntries = _budgetToEntries(
+                uint256 dailyEntries;
+                (dailyEntries, dailyUnit) = _budgetToEntries(
                     dailyTicketBudget,
                     lvl + 1
                 );
@@ -451,7 +454,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
                             uint128(reserveSlice),
                         futPool - uint128(reserveSlice)
                     );
-                    carryoverEntries = _budgetToEntries(
+                    (carryoverEntries, ) = _budgetToEntries(
                         reserveSlice,
                         lvl
                     );
@@ -506,7 +509,8 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
                     shareBpsDaily,
                     bucketCountsDaily,
                     true, // jackpot phase (solo bucket gets whale pass)
-                    armGold
+                    armGold,
+                    dailyUnit
                 );
                 if (isFinalPhysicalDay) {
                     uint256 unpaidDailyEth = dailyEthBudget - paidDailyEth;
@@ -589,7 +593,8 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
                 shareBps,
                 bucketCounts,
                 false, // not jackpot phase
-                false // no solo bucket, gold rush never arms here
+                false, // no solo bucket, gold rush never arms here
+                PriceLookupLib.priceForLevel(lvl + 1) >> 2
             );
         }
 
@@ -699,7 +704,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         uint256 totalBudget = (uint256(futureBal) * 300) / 10_000; // 3%
         if (totalBudget == 0) return;
 
-        uint256 entries = _budgetToEntries(totalBudget, lvl);
+        (uint256 entries, ) = _budgetToEntries(totalBudget, lvl);
         if (entries != 0) {
             _distributeTicketJackpot(
                 lvl,
@@ -769,9 +774,13 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     function _budgetToEntries(
         uint256 budget,
         uint24 lvl
-    ) private pure returns (uint256) {
+    ) private pure returns (uint256 entries, uint256 unit) {
         uint256 ticketPrice = PriceLookupLib.priceForLevel(lvl);
-        return (budget << 2) / ticketPrice;
+        // `unit` (ticketPrice >> 2, a quarter-ticket) is the same value the jackpot-phase
+        // _processDailyEth derives from priceForLevel(lvl+1); returned so the caller can thread
+        // it in and skip the recompute.
+        unit = ticketPrice >> 2;
+        entries = (budget << 2) / ticketPrice;
     }
 
     // =========================================================================
@@ -812,7 +821,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         // Tickets are queued at the current purchase level (`lvl`), matching the
         // nextPrizePool credit above that backs them.
         uint256 ticketBasis = (budget * ticketConversionBps) / 10_000;
-        uint256 entries = _budgetToEntries(ticketBasis, lvl);
+        (uint256 entries, ) = _budgetToEntries(ticketBasis, lvl);
         if (entries != 0) {
             _distributeTicketJackpot(
                 lvl,
@@ -1105,10 +1114,8 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     ///      the answer identical for later re-rolls of the same board (phase 2)
     ///      after `_resolveGoldRush` clears the armed fields or a chain arm
     ///      overwrites them.
-    function _goldRushBanQuadrant() private view returns (uint8) {
-        uint256 g = goldRush;
+    function _goldRushBanQuadrant(uint256 g, uint24 d) private pure returns (uint8) {
         if (g == 0) return _NO_QUADRANT_BAN;
-        uint24 d = dailyIdx;
         if ((g >> 189) & 1 != 0 && d > uint24((g >> 165) & 0xFFFFFF)) {
             return uint8((g >> 160) & 3);
         }
@@ -1202,13 +1209,13 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         uint16[4] memory shareBps,
         uint16[4] memory bucketCounts,
         bool isJackpotPhase,
-        bool armGold
+        bool armGold,
+        uint256 unit
     ) private returns (uint256 paidEth) {
         if (ethPool == 0) {
             return 0;
         }
 
-        uint256 unit = PriceLookupLib.priceForLevel(lvl + 1) >> 2;
         uint8 remainderIdx = JackpotBucketLib.soloBucketIndex(entropy);
         uint256[4] memory shares = JackpotBucketLib.bucketShares(
             ethPool, shareBps, bucketCounts, remainderIdx, unit
@@ -2017,15 +2024,18 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         // word, matching _rollWinningTraitsPair so both producers agree).
         uint256 r = EntropyLib.hash2(randWord, uint256(BONUS_TRAITS_TAG));
         uint8[4] memory traits = JackpotBucketLib.getRandomTraits(r);
+        // dailyIdx is frozen for this whole view (no writes/external calls between the reads),
+        // so cache it once for both hero rolls and the ban-quadrant derivation.
+        uint24 dIdx = dailyIdx;
         (bool mHas, uint8 mQ, uint8 mS) = _rollHeroSymbol(
-            dailyIdx,
+            dIdx,
             randWord,
             _NO_HERO_EXCLUDE,
-            _goldRushBanQuadrant()
+            _goldRushBanQuadrant(goldRush, dIdx)
         );
         uint8 excl = mHas ? ((mQ << 3) | mS) : _NO_HERO_EXCLUDE;
         (bool bHas, uint8 bQ, uint8 bS) = _rollHeroSymbol(
-            dailyIdx,
+            dIdx,
             r,
             excl,
             _NO_QUADRANT_BAN
@@ -2044,15 +2054,18 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     function _rollWinningTraitsPair(
         uint256 randWord
     ) private view returns (uint32 mainPacked, uint32 bonusPacked) {
+        // dailyIdx is frozen for this whole view (no writes/external calls between the reads),
+        // so cache it once for both hero rolls and the ban-quadrant derivation.
+        uint24 dIdx = dailyIdx;
         (
             bool hasHeroWinner,
             uint8 heroQuadrant,
             uint8 heroSymbol
         ) = _rollHeroSymbol(
-                dailyIdx,
+                dIdx,
                 randWord,
                 _NO_HERO_EXCLUDE,
-                _goldRushBanQuadrant()
+                _goldRushBanQuadrant(goldRush, dIdx)
             );
 
         uint8[4] memory traits = JackpotBucketLib.getRandomTraits(randWord);
@@ -2068,7 +2081,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
             ? ((heroQuadrant << 3) | heroSymbol)
             : _NO_HERO_EXCLUDE;
         (bool bHas, uint8 bQ, uint8 bS) = _rollHeroSymbol(
-            dailyIdx,
+            dIdx,
             rBonus,
             excl,
             _NO_QUADRANT_BAN

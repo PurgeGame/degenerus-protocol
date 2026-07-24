@@ -1028,7 +1028,8 @@ contract DegenerusQuests is IDegenerusQuests {
         returns (uint256 reward, uint8 questType, uint32 streak, bool completed)
     {
         return _handlePurchase(
-            player, ethMintSpendWei, flipMintQty, lootBoxAmount, mintPrice, levelQuestPrice
+            player, ethMintSpendWei, flipMintQty, lootBoxAmount, mintPrice, levelQuestPrice,
+            _loadActiveQuests()
         );
     }
 
@@ -1066,15 +1067,20 @@ contract DegenerusQuests is IDegenerusQuests {
         onlyGame
         returns (uint256 reward, uint8 questType, bool completed, uint32 streakSnapshot)
     {
+        // Load the active-quests slot once and thread it into both the primary purchase legs
+        // and the streak snapshot: nothing in the foil tree writes activeQuestsPacked
+        // (rollDailyQuest is GAME-gated and unreachable here), so one load serves both.
+        DailyQuest[QUEST_SLOT_COUNT] memory quests = _loadActiveQuests();
         (reward, questType, , completed) = _handlePurchase(
-            player, ethMintSpendWei, flipMintQty, lootBoxAmount, mintPrice, levelQuestPrice
+            player, ethMintSpendWei, flipMintQty, lootBoxAmount, mintPrice, levelQuestPrice,
+            quests
         );
         // Snapshot the reward streak post-primary, pre-floor: the foil-EV boost freezes
         // against this streak, captured before the secondary quest and streak floor below
         // mutate it.
         streakSnapshot = _effectiveBaseStreak(
             questPlayerState[player],
-            _currentQuestDay(_loadActiveQuests())
+            _currentQuestDay(quests)
         );
         _handleFoilPackQuest(player);
         _foilStreakFloor(player);
@@ -1088,12 +1094,12 @@ contract DegenerusQuests is IDegenerusQuests {
         uint32 flipMintQty,
         uint256 lootBoxAmount,
         uint256 mintPrice,
-        uint256 levelQuestPrice
+        uint256 levelQuestPrice,
+        DailyQuest[QUEST_SLOT_COUNT] memory quests
     )
         private
         returns (uint256 reward, uint8 questType, uint32 streak, bool completed)
     {
-        DailyQuest[QUEST_SLOT_COUNT] memory quests = _loadActiveQuests();
         uint24 currentDay = _currentQuestDay(quests);
         PlayerQuestState storage state = questPlayerState[player];
         if (player == address(0) || currentDay == 0) {

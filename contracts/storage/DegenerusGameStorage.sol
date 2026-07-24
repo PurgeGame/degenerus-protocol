@@ -859,23 +859,22 @@ abstract contract DegenerusGameStorage {
     /// @param numLevels Number of covered levels.
     /// @param stride Gap between covered levels (1 = contiguous).
     /// @param entriesPerLevel Entries to award per covered level (4 entries = 1 whole ticket).
-    function _queueEntryRangeStrided(
+    function _queueEntryRangeStridedCore(
         address buyer,
         uint24 startLevel,
         uint24 numLevels,
         uint24 stride,
         uint32 entriesPerLevel,
-        bool rngBypass
-    ) internal {
+        bool rngBypass,
+        uint24 currentLevel,
+        bool rngLockedCached,
+        uint24 writeSlotBit
+    ) private {
         // No liveness gate (see _queueEntries): post-liveness queued tickets are harmless.
         emit EntriesQueuedRange(buyer, startLevel, numLevels, stride, entriesPerLevel);
-        // Loop-invariant slot-0 reads cached outside the loop (the body's mapping
-        // SSTOREs block the optimizer from hoisting them; neither value has a
-        // writer reachable from the body). The per-level lock check observes the
-        // same locked value either way.
-        uint24 currentLevel = level;
-        bool rngLockedCached = rngLockedFlag;
-        uint24 writeSlotBit = ticketWriteSlot ? TICKET_SLOT_BIT : uint24(0);
+        // level / rngLockedFlag / ticketWriteSlot are loop-invariant and threaded in by the
+        // caller (read once per award, not per stride-leg); none has a writer reachable from
+        // this body, so the per-level lock check observes the same value either way.
         uint24 lvl = startLevel;
         for (uint24 i = 0; i < numLevels; ) {
             bool isFarFuture = lvl > currentLevel + 5;
@@ -899,6 +898,23 @@ abstract contract DegenerusGameStorage {
         }
     }
 
+    /// @dev Wrapper preserving the original single-range signature: reads the loop-invariant
+    ///      slot-0 fields once and delegates to the core. Multi-leg awards (_queueHalfPassAward)
+    ///      read the fields once and call the core per leg instead.
+    function _queueEntryRangeStrided(
+        address buyer,
+        uint24 startLevel,
+        uint24 numLevels,
+        uint24 stride,
+        uint32 entriesPerLevel,
+        bool rngBypass
+    ) internal {
+        _queueEntryRangeStridedCore(
+            buyer, startLevel, numLevels, stride, entriesPerLevel, rngBypass,
+            level, rngLockedFlag, ticketWriteSlot ? TICKET_SLOT_BIT : uint24(0)
+        );
+    }
+
     /// @dev Queues a half-pass award (1 half-pass = 1 entry/level over the span) as
     ///      whole-ticket (4-entry) chunks so every chunk spans all four trait quadrants:
     ///      - base leg: (halfPasses / 4) * 4 entries on every level of the span;
@@ -920,19 +936,24 @@ abstract contract DegenerusGameStorage {
         uint256 halfPasses,
         bool rngBypass
     ) internal {
+        // Read the loop-invariant slot-0 fields once for all <=3 legs — none is written by the
+        // core body, so this is identical to each leg re-reading them, minus the repeated SLOADs.
+        uint24 currentLevel = level;
+        bool rngLockedCached = rngLockedFlag;
+        uint24 writeSlotBit = ticketWriteSlot ? TICKET_SLOT_BIT : uint24(0);
         uint32 baseEntries = uint32((halfPasses / 4) * 4);
         if (baseEntries != 0) {
-            _queueEntryRangeStrided(buyer, startLevel, span, 1, baseEntries, rngBypass);
+            _queueEntryRangeStridedCore(buyer, startLevel, span, 1, baseEntries, rngBypass, currentLevel, rngLockedCached, writeSlotBit);
         }
         uint256 rem = halfPasses % 4;
         if (rem == 0) return;
         if (rem >= 2) {
-            _queueEntryRangeStrided(buyer, startLevel, (span + 1) / 2, 2, 4, rngBypass);
+            _queueEntryRangeStridedCore(buyer, startLevel, (span + 1) / 2, 2, 4, rngBypass, currentLevel, rngLockedCached, writeSlotBit);
         }
         if (rem == 1) {
-            _queueEntryRangeStrided(buyer, startLevel, (span + 3) / 4, 4, 4, rngBypass);
+            _queueEntryRangeStridedCore(buyer, startLevel, (span + 3) / 4, 4, 4, rngBypass, currentLevel, rngLockedCached, writeSlotBit);
         } else if (rem == 3) {
-            _queueEntryRangeStrided(buyer, startLevel + 1, (span + 2) / 4, 4, 4, rngBypass);
+            _queueEntryRangeStridedCore(buyer, startLevel + 1, (span + 2) / 4, 4, 4, rngBypass, currentLevel, rngLockedCached, writeSlotBit);
         }
     }
 

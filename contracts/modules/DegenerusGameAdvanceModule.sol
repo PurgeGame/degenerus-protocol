@@ -359,6 +359,11 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         do {
             // --- Daily drain gate: ensure read slot is fully processed before RNG ---
             if (!ticketsFullyProcessed) {
+                // One packed read of lootboxRngPacked covers LR_INDEX (preIdx) and the post-drain
+                // LR_MID_DAY check below: the _runProcessTicketBatch delegatecall (a CSE barrier)
+                // never writes this slot, and the only writer on a path reaching the mid-day check
+                // (_requestRng) breaks out before it.
+                uint256 lrCached = lootboxRngPacked;
                 uint24 preRk = _tqReadKey(purchaseLevel);
                 // The draw is gated on BOTH the normal queue AND the foil drain: keep
                 // draining while the normal queue OR a sealed-but-un-drained foil bucket
@@ -368,7 +373,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                     _foilDrainPending()
                 ) {
                     uint48 preIdx = uint48(
-                        _lrRead(LR_INDEX_SHIFT, LR_INDEX_MASK)
+                        (lrCached >> LR_INDEX_SHIFT) & LR_INDEX_MASK
                     ) - 1;
                     if (lootboxRngWordByIndex[preIdx] == 0) {
                         uint256 cw = rngWordCurrent;
@@ -422,7 +427,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                 // on the new-day path: the same-day release runs only while day == dIdx, so a
                 // batch whose drain crosses the day boundary completes here instead. Guarded so
                 // the daily-swapped drain (latch already clear) skips the write.
-                if (_lrRead(LR_MID_DAY_SHIFT, LR_MID_DAY_MASK) != 0) {
+                if (((lrCached >> LR_MID_DAY_SHIFT) & LR_MID_DAY_MASK) != 0) {
                     _lrWrite(LR_MID_DAY_SHIFT, LR_MID_DAY_MASK, 0);
                 }
             }
