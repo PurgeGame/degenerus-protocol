@@ -486,7 +486,7 @@ contract DegenerusQuests is IDegenerusQuests {
         if (player == address(0) || amount == 0 || currentDay == 0) return;
 
         PlayerQuestState storage state = questPlayerState[player];
-        uint24 questDay = _currentQuestDay(_loadActiveQuests());
+        uint24 questDay = _currentQuestDayFast();
         uint24 syncDay = questDay == 0 ? currentDay : questDay;
         _questSyncState(state, player, syncDay);
 
@@ -616,7 +616,7 @@ contract DegenerusQuests is IDegenerusQuests {
     {
         if (player == address(0)) return 0;
         PlayerQuestState storage state = questPlayerState[player];
-        uint24 questDay = _currentQuestDay(_loadActiveQuests());
+        uint24 questDay = _currentQuestDayFast();
         uint24 syncDay = questDay == 0 ? currentDay : questDay;
         if (syncDay != 0) _questSyncState(state, player, syncDay);
         streak = state.streak;
@@ -1398,7 +1398,7 @@ contract DegenerusQuests is IDegenerusQuests {
     /// @return afking True while the player is mid afking-run.
     function effectiveBaseStreakAndAfking(address player) external view returns (uint32 streak, bool afking) {
         PlayerQuestState memory state = questPlayerState[player];
-        streak = _effectiveBaseStreak(state, _currentQuestDay(_materializeActiveQuestsForView()));
+        streak = _effectiveBaseStreak(state, _currentQuestDayFast());
         afking = state.afkingActive;
     }
 
@@ -1801,16 +1801,20 @@ contract DegenerusQuests is IDegenerusQuests {
             if (state.lastSyncDay != 0 && state.lastSyncDay - 1 > anchorDay) {
                 anchorDay = state.lastSyncDay - 1;
             }
+            // streakShield is read here and again below; the _missedQuestDays view-call between them
+            // is a CSE barrier, so cache the pre-decrement value once (the L1816 decrement is the
+            // first write; the post-decrement emit read further below stays live).
+            uint8 shieldsBefore = state.streakShield;
             (uint32 missedDays, uint32 forgivenDays) = _missedQuestDays(
                 anchorDay,
                 currentDay,
-                uint32(state.streakShield) + 1
+                uint32(shieldsBefore) + 1
             );
             if (forgivenDays != 0) {
                 emit QuestStreakStallForgiven(player, forgivenDays, currentDay);
             }
             if (missedDays != 0) {
-                uint16 shields = state.streakShield;
+                uint16 shields = shieldsBefore;
                 if (shields != 0) {
                     uint32 used = missedDays > uint32(shields) ? uint32(shields) : missedDays;
                     state.streakShield = uint8(shields - uint16(used));
@@ -2328,6 +2332,17 @@ contract DegenerusQuests is IDegenerusQuests {
         uint24 day0 = quests[0].day;
         if (day0 != 0) return day0;
         return quests[1].day;
+    }
+
+    /// @dev Current quest day without materializing the DailyQuest[2] array: quest-0's day (low 24
+    ///      bits of activeQuestsPacked), or quest-1's day (low 24 bits of the high 64-bit record)
+    ///      when quest 0 is empty. Bit-identical to _currentQuestDay(_loadActiveQuests()); used by
+    ///      the callers that materialized the array only to read the day.
+    function _currentQuestDayFast() private view returns (uint24) {
+        uint256 packed = activeQuestsPacked;
+        uint24 day0 = uint24(packed);
+        if (day0 != 0) return day0;
+        return uint24(packed >> 64);
     }
 
     // =========================================================================

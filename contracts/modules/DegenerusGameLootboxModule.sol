@@ -2319,8 +2319,10 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     ) private pure returns (uint256) {
         uint256 total = 0;
         for (uint24 i = 0; i < 10; ) {
-            total += PriceLookupLib.priceForLevel(passLevel + i);
+            // 10x loop; each priceForLevel <= ~0.24 ETH -> total <= ~2.4 ETH; passLevel+i cannot
+            // wrap uint24 at realistic game levels.
             unchecked {
+                total += PriceLookupLib.priceForLevel(passLevel + i);
                 ++i;
             }
         }

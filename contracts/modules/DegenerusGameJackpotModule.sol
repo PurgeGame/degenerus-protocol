@@ -403,22 +403,23 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
 
                 // Gas optimization: 20% = 1/5 (cheaper than * 2000 / 10000)
                 uint256 dailyTicketBudget = budget / 5;
-                if (dailyTicketBudget != 0) {
-                    budget -= dailyTicketBudget;
-                }
+                // Jackpot phase: the currentPrizePool floor (>= 10 ETH) dwarfs the ticket price, so
+                // budget and dailyTicketBudget are always nonzero — no zero-guard needed.
+                budget -= dailyTicketBudget;
 
                 // Calculate daily ticket units (distributed in Phase 2 via payDailyJackpotCoinAndTickets)
                 uint256 dailyEntries = _budgetToEntries(
                     dailyTicketBudget,
                     lvl + 1
                 );
-                if (dailyEntries != 0) {
-                    // Deduct from current pool and add to next pool to back tickets.
-                    // curPool is still exact: nothing above writes currentPrizePool.
-                    curPool -= dailyTicketBudget;
-                    _setCurrentPrizePool(curPool);
-                    _addNextPrizePool(dailyTicketBudget);
-                }
+                // dailyEntries is always >= 1 in jackpot phase (the currentPrizePool floor dwarfs
+                // the ticket price), so the daily-ticket credit is unconditional. Deduct from the
+                // current pool to back the tickets; the matching next-pool credit is folded into the
+                // carryover packed write below (or applied on its own in the early-bird branch), so
+                // the daily add and the future->next move share one prizePoolsPacked RMW. curPool is
+                // still exact: nothing above writes currentPrizePool.
+                curPool -= dailyTicketBudget;
+                _setCurrentPrizePool(curPool);
 
                 uint8 sourceLevelOffset;
                 uint24 sourceLevel;
@@ -438,18 +439,26 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
                     );
                     sourceLevel = lvl + uint24(sourceLevelOffset);
 
-                    // 0.5% of futurePrizePool reserved for carryover tickets,
-                    // moved future -> next in one packed-slot read/write.
+                    // 0.5% of futurePrizePool reserved for carryover tickets, moved future -> next
+                    // in one packed-slot read/write that also folds in the daily-ticket next credit
+                    // (checked uint128 adds: both addends are < 2^128 and the sum reverts on overflow
+                    // exactly as the two separate writes did).
                     (uint128 nextBal, uint128 futPool) = _getPrizePools();
                     reserveSlice = uint256(futPool) / 200;
                     _setPrizePools(
-                        nextBal + uint128(reserveSlice),
+                        nextBal +
+                            uint128(dailyTicketBudget) +
+                            uint128(reserveSlice),
                         futPool - uint128(reserveSlice)
                     );
                     carryoverEntries = _budgetToEntries(
                         reserveSlice,
                         lvl
                     );
+                } else {
+                    // Early-bird day skips the carryover move, so apply the daily-ticket next
+                    // credit on its own here.
+                    _addNextPrizePool(dailyTicketBudget);
                 }
 
                 // Store ticket units for Phase 2 distribution

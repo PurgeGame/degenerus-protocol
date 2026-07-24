@@ -341,7 +341,7 @@ contract DegenerusGameDecimatorModule is DegenerusGamePayoutUtils {
         );
         if (amountWei == 0) revert DecNotWinner();
 
-        _claimDecimatorJackpotFor(player, lvl, e, round, amountWei, gameOver);
+        _claimDecimatorJackpotFor(player, lvl, e, round.rngWord, amountWei, gameOver);
     }
 
     /// @notice Permissionlessly resolve Decimator jackpot claims for a batch of players.
@@ -365,6 +365,8 @@ contract DegenerusGameDecimatorModule is DegenerusGamePayoutUtils {
         // game-over resolution — none of the claim effects below can change them.
         uint64 packedOffsets = decBucketOffsetPacked[lvl];
         uint256 totalBurn = uint256(round.totalBurn);
+        // Loop-invariant: each iteration's lootbox delegatecall would otherwise force a re-SLOAD.
+        uint32 rngWordCached = round.rngWord;
         mapping(address => DecBet) storage decLevelBets = decBurn[lvl];
         bool over = gameOver;
         uint256 settled;
@@ -378,7 +380,7 @@ contract DegenerusGameDecimatorModule is DegenerusGamePayoutUtils {
                 packedOffsets
             );
             if (amountWei == 0) continue;
-            _claimDecimatorJackpotFor(players[i], lvl, e, round, amountWei, over);
+            _claimDecimatorJackpotFor(players[i], lvl, e, rngWordCached, amountWei, over);
             unchecked {
                 ++settled;
             }
@@ -414,7 +416,7 @@ contract DegenerusGameDecimatorModule is DegenerusGamePayoutUtils {
         address player,
         uint24 lvl,
         DecBet storage e,
-        DecClaimRound storage round,
+        uint32 rngWord,
         uint256 amountWei,
         bool over
     ) private {
@@ -435,7 +437,7 @@ contract DegenerusGameDecimatorModule is DegenerusGamePayoutUtils {
         uint256 lootboxPortion = _creditDecJackpotClaimCore(
             player,
             amountWei,
-            round.rngWord,
+            rngWord,
             _minScoreForBucket(winBucket)
         );
         if (lootboxPortion != 0) {

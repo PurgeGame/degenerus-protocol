@@ -1560,10 +1560,13 @@ contract DegenerusGameDegeneretteModule is
         uint32 resultTraits,
         uint8 score
     ) private pure returns (uint256) {
-        return
-            (uint256(playerTraits) |
-                (uint256(resultTraits) << 32) |
-                (uint256(score) << 64)) << (i * 72);
+        // i in {0,1,2} (BOX_FLIP_SPINS = 3) -> i*72 <= 144, nowhere near uint256 overflow.
+        unchecked {
+            return
+                (uint256(playerTraits) |
+                    (uint256(resultTraits) << 32) |
+                    (uint256(score) << 64)) << (i * 72);
+        }
     }
 
     /// @notice One WWXRP Degenerette spin staking a lootbox WWXRP roll (replaces the flat mint).
