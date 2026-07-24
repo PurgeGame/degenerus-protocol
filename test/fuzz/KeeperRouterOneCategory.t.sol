@@ -21,8 +21,9 @@ import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 ///
 ///   D-02 (no-stacking proven by COUNTING `creditFlip`, NOT exact amounts): each `mineFlip()` tx fires
 ///   EXACTLY ONE `coinflip.creditFlip` across both category branches (advance / open), ZERO on the
-///   `bountyEarned==0` skip (a mult==0 gameover advance runs the category but credits nothing, still no
-///   revert), and ZERO + `revert NoWork()` when BOTH O(1) predicates are empty. The count is taken via the
+///   `bountyEarned==0` skip (the sweep-pending gameover advance, or an ineligible keeper's advance, runs
+///   the category but credits nothing, still no revert), and ZERO + `revert NoWork()` when there is no
+///   work — BOTH O(1) predicates empty, OR a post-gameover idle crank with no final sweep pending. The count is taken via the
 ///   recipient-isolated `_countCoinflipStakeUpdatedFor(keeper)` oracle (topics[1] == keeper) so a
 ///   box-owner's / player's winnings credit can never inflate or mask the router bounty count. Asserting
 ///   COUNT (==1 / ==0) across both branches IS the proof the else early-return can never credit two
@@ -211,29 +212,28 @@ contract KeeperRouterOneCategory is DeployProtocol {
         assertEq(_lastOpenedDayOf(sub), stampDay, "non-vacuity: the open leg materialized the afking box");
     }
 
-    /// @notice bountyEarned==0 SKIP path: a gameover advance (mult==0) runs the advance CATEGORY (the
-    ///         `if (advanceDue)` arm executes advanceGame) but credits ZERO (no creditFlip) and does NOT
-    ///         revert. Proves the early-return took a category yet the single CEI-last creditFlip was
-    ///         skipped at bountyEarned==0 (the category still ran, so mineFlip RETURNS, not NoWork()).
-    function testBountyEarnedZeroSkipCreditsNothing() public {
+    /// @notice GAMEOVER idle crank reverts: post-gameover the advance predicate stays true (dailyIdx
+    ///         freezes) but the only remaining advance work is the one-time 30-day final sweep. With no
+    ///         sweep pending (GO_TIME==0 here == the real within-30-day / already-swept states) mineFlip
+    ///         reverts NoWork() rather than running the gameover advance leg as a free unrewarded no-op.
+    ///         Zero creditFlip either way.
+    function testGameoverIdleCrankRevertsNoWork() public {
         _settleGame(0x5C1F0001);
         assertFalse(game.advanceDue(), "pre: settled");
         vm.warp(block.timestamp + 1 days);
         assertTrue(game.advanceDue(), "pre: a fresh day-advance is due");
 
-        // Latch gameOver so the advance leg returns mult==0 (the flip-credit is worthless at gameover).
+        // Latch gameOver; GO_TIME stays 0, so _finalSweepPending() is false — no sweep due.
         _latchGameOver();
         assertTrue(game.gameOver(), "pre: gameOver latched");
-        assertTrue(game.advanceDue(), "pre: advance still due (mineFlip routes to the advance leg)");
 
         vm.recordLogs();
         vm.prank(keeper);
-        // Must NOT revert: the advance category ran (it just earned mult==0) so mineFlip returns, not NoWork().
+        vm.expectRevert(); // GameAfkingModule.NoWork() — no sweep pending, no free idle crank
         game.mineFlip();
 
-        // ZERO router creditFlips — the bounty was skipped at bountyEarned == 0.
-        assertEq(_countCoinflipStakeUpdatedFor(keeper), 0, "SKIP path: zero creditFlip when the advance leg earned mult==0");
-        assertEq(_countCoinflipStakeUpdated(), 0, "SKIP path: zero creditFlip emissions at all (no stacking, no winnings credit)");
+        // ZERO creditFlips — the idle crank reverted before any bounty could pay.
+        assertEq(_countCoinflipStakeUpdated(), 0, "GAMEOVER idle: zero creditFlip emissions on the NoWork revert");
     }
 
     /// @notice NoWork: BOTH O(1) predicates empty -> `mineFlip()` reverts `NoWork()` and credits

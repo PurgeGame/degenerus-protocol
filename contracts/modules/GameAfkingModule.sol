@@ -353,6 +353,11 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
         // stay frozen across [request -> unlock]. Callers wait for the unlock.
         if (rngLockedFlag) revert RngLocked();
 
+        // Closed post-gameOver: no advance will consume the subscriber set again.
+        // Accrued value stays recoverable — afkingFunding via claim, pendingFlip via
+        // claimAfkingFlip, affiliateBase via the affiliate claim path.
+        if (gameOver) revert GameOver();
+
         // Self-consent (player == 0 or msg.sender) or operator-approval.
         address subscriber = player == address(0) ? msg.sender : player;
         if (subscriber != msg.sender) {
@@ -1701,6 +1706,10 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
         // The self-call re-enters the Game's advanceGame, which runs the required-path
         // process STAGE in-context; the process bounty rides this 2x·mult.
         if (_advanceDueInContext()) {
+            // Post-gameover dailyIdx freezes, so _advanceDueInContext stays true while the
+            // only remaining advance work is the one-time final sweep. Revert the idle
+            // no-op (checked BEFORE the advance, so a still-pending sweep runs and commits).
+            if (gameOver && !_finalSweepPending()) revert NoWork();
             // Read pay-eligibility BEFORE the advance — it sees the pre-advance day (the
             // advance bumps dailyIdx). The advance work runs regardless; an ineligible
             // keeper just earns no bounty (real participants get first shot, free cranks
@@ -1888,6 +1897,18 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
             if (ticketQueue[_tqReadKey(purchaseLevel)].length > 0) return true;
         }
         return false;
+    }
+
+    /// @dev The 30-days-post-gameover final sweep is still owed: game over, the sweep
+    ///      window has opened, and the swept latch is unset. The sole advance-work item
+    ///      that survives once dailyIdx freezes — mineFlip reverts NoWork on any other
+    ///      post-gameover call so a settled game can't be cranked as a free no-op.
+    function _finalSweepPending() internal view returns (bool) {
+        uint256 goTime = _goRead(GO_TIME_SHIFT, GO_TIME_MASK);
+        return
+            goTime != 0 &&
+            block.timestamp >= goTime + 30 days &&
+            _goRead(GO_SWEPT_SHIFT, GO_SWEPT_MASK) == 0;
     }
 
     /// @dev In-context mint price (the bounty's ETH→FLIP conversion divisor). Mirrors

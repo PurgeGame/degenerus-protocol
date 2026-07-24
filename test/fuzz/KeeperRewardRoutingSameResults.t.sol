@@ -289,10 +289,11 @@ contract KeeperRewardRoutingSameResults is DeployProtocol {
         );
     }
 
-    /// @notice GAMEOVER leg (mult == 0) is UNREWARDED via mineFlip: the advance runs the gameover path
-    ///         (the flip-credit coin is worthless at gameover) and returns mult=0, so the router skips
-    ///         the creditFlip entirely — zero credit. The one-category early-return RETURNS (does not
-    ///         revert NoWork) — the advance category ran, it just earned nothing.
+    /// @notice GAMEOVER idle crank reverts via mineFlip: post-gameover dailyIdx freezes so the advance
+    ///         predicate stays true forever, but the only remaining advance work is the one-time 30-day
+    ///         final sweep. With no sweep pending (GO_TIME==0 here, mirroring the real within-30-day /
+    ///         already-swept states) mineFlip refuses the idle crank with NoWork() rather than running the
+    ///         gameover advance leg as a free unrewarded no-op. Zero creditFlip either way.
     function testGameoverAdvanceUnrewarded() public {
         // Settle, then make a fresh day-advance due.
         _settleGame(0x90E00004);
@@ -300,29 +301,21 @@ contract KeeperRewardRoutingSameResults is DeployProtocol {
         vm.warp(block.timestamp + 1 days);
         assertTrue(game.advanceDue(), "pre: a fresh day-advance is due");
 
-        // Latch the terminal gameOver flag (the public bool). With gameOver==true and the gameover-time
-        // slot still 0, the gameover advance branch -> handleFinalSweep early-returns ("Game not over yet"
-        // at GO_TIME==0, a harmless no-op) -> advanceGame returns mult=0 (advance ran but earns no bounty).
+        // Latch the terminal gameOver flag (the public bool). GO_TIME stays 0, so _finalSweepPending()
+        // is false — the same result the real within-30-day / already-swept post-gameover states give.
         _latchGameOver();
         assertTrue(game.gameOver(), "pre: gameOver latched");
-        assertTrue(game.advanceDue(), "pre: advance still due (the router routes to the advance leg)");
 
         vm.recordLogs();
         vm.prank(keeper);
+        vm.expectRevert(); // GameAfkingModule.NoWork() — no sweep pending, no free idle crank
         game.mineFlip();
 
-        // mult==0 => the advance leg's `if (mult > 0)` guard skips the bounty, and the CEI-last creditFlip
-        // is the `bountyEarned > 0` skip — ZERO credit to the keeper.
-        assertEq(
-            _countCoinflipStakeUpdatedFor(keeper),
-            0,
-            "GAMEOVER: the mult==0 advance leg credits the keeper zero (the flip-credit is worthless at gameover)"
-        );
-        // And zero creditFlip emissions at all from the gameover advance (no stacking, no winnings credit).
+        // Nothing credited (the revert rolls back, but assert zero regardless of the count oracle).
         assertEq(
             _countCoinflipStakeUpdated(),
             0,
-            "GAMEOVER: zero creditFlip emissions on the mult==0 advance leg"
+            "GAMEOVER: zero creditFlip emissions on the idle-crank NoWork revert"
         );
     }
 
