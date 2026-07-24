@@ -34,6 +34,8 @@ interface IDegenerusGamePlayer {
     function rngLocked() external view returns (bool);
     /// @notice Check if game is over.
     function gameOver() external view returns (bool);
+    /// @notice Check if `operator` is approved to act for `owner` (game operator approval).
+    function isOperatorApproved(address owner, address operator) external view returns (bool);
     /// @notice Check if the liveness-timeout game-over trigger is active (fires before gameOver latches).
     function livenessTriggered() external view returns (bool);
     /// @notice Get RNG word for a specific day.
@@ -736,8 +738,9 @@ contract sDGNRS {
         // Storage refund: free the day's pool slot.
         delete pendingByDay[dayToResolve];
 
-        // Clear the single-pool sentinel if this resolve targeted the stamped day.
-        if (_pendingResolveDay == dayToResolve) _pendingResolveDay = 0;
+        // Clear the single-pool sentinel — the early-return above guarantees this resolve
+        // targeted the stamped day, so the clear is unconditional.
+        _pendingResolveDay = 0;
     }
 
     /// @notice Claim a resolved gambling-burn redemption for `player` on day `day`.
@@ -757,27 +760,38 @@ contract sDGNRS {
         if (roll == 0) revert NotResolved();
 
         bool isGameOver = game.gameOver();
-        if (isGameOver && player != msg.sender) revert Unauthorized();
+        // Post-gameOver the claim direct-pushes ETH to `player`, so it is restricted to `player` or
+        // an operator `player` approved on the GAME (the value still lands on `player`; an approved
+        // delegate is consensual). Live game stays permissionless (credit into the gated claimable).
+        if (
+            isGameOver &&
+            player != msg.sender &&
+            !game.isOperatorApproved(player, msg.sender)
+        ) revert Unauthorized();
 
-        if (!_claimRedemptionFor(player, day, roll, isGameOver)) revert NoClaim();
+        // Single claim: pass 0 so the lootbox leg (live game only) fetches day+1's word lazily.
+        if (!_claimRedemptionFor(player, day, roll, isGameOver, 0)) revert NoClaim();
     }
 
     /// @notice Claim resolved gambling-burn redemptions for a batch of players on day `day`.
     /// @dev Players with nothing pending for `day` are skipped, not reverted, so one stale
-    ///      address can't poison a mass-claim sweep. Post-gameOver only the caller's own entry
-    ///      settles (self-claim rule); all others are skipped.
+    ///      address can't poison a mass-claim sweep. LIVE-GAME ONLY: post-gameOver a batch could
+    ///      settle only the caller's own entry (all others are access-restricted self-claims),
+    ///      which the single claimRedemption already does — so the batch reverts once game is over.
     /// @param players Claimants whose redemptions to settle.
     /// @param day Wall-clock day whose claims to settle.
     function claimRedemptionMany(address[] calldata players, uint24 day) external {
         uint16 roll = redemptionPeriods[day];
         if (roll == 0) revert NotResolved();
+        // Batch settlement is live-game only (see above); at gameOver use the single self-claim.
+        if (game.gameOver()) revert Unauthorized();
 
-        bool isGameOver = game.gameOver();
+        // day+1's redemption-lootbox word is identical for every player in this live-game batch;
+        // fetch it once up front and pass it into each claim (every lootbox leg reuses it).
+        uint256 rngWordNext = game.rngWordForDay(day + 1);
         uint256 settled;
         for (uint256 i; i < players.length; ++i) {
-            address player = players[i];
-            if (isGameOver && player != msg.sender) continue;
-            if (_claimRedemptionFor(player, day, roll, isGameOver)) {
+            if (_claimRedemptionFor(players[i], day, roll, false, rngWordNext)) {
                 unchecked {
                     ++settled;
                 }
@@ -785,12 +799,11 @@ contract sDGNRS {
         }
 
         // Keeper bounty: a small FLIP flip-credit per box actually settled this call, paid to the
-        // caller during a live game (no liveness need post-gameOver, where only self-claims settle).
-        // Counts only settled boxes — empty (player, day) slots are skipped and earn nothing. The
-        // ETH-value tracks the per-box settle gas at the 0.5-gwei reference (FLIP per ETH =
+        // caller. Counts only settled boxes — empty (player, day) slots are skipped and earn nothing.
+        // The ETH-value tracks the per-box settle gas at the 0.5-gwei reference (FLIP per ETH =
         // PRICE_COIN_UNIT / mintPrice), so the credit holds its gas-reimbursement value across the
         // price curve. sDGNRS is an authorized flip creditor, so this credits AS sDGNRS.
-        if (!isGameOver && settled != 0) {
+        if (settled != 0) {
             coinflip.creditFlip(
                 msg.sender,
                 (settled * BOX_BOUNTY_ETH_TARGET * PRICE_COIN_UNIT) / game.mintPrice()
@@ -802,7 +815,7 @@ contract sDGNRS {
     ///      verified the period is resolved and (post-gameOver) the self-claim rule; the
     ///      pending-claim existence check lives here (one slot load), returning false on an
     ///      empty (player, day) slot so the batch path skips and the single path reverts.
-    function _claimRedemptionFor(address player, uint24 day, uint16 roll, bool isGameOver) private returns (bool) {
+    function _claimRedemptionFor(address player, uint24 day, uint16 roll, bool isGameOver, uint256 rngWordNext) private returns (bool) {
         PendingRedemption memory claim = pendingRedemptions[player][day];
         // Existence: a live-game claim is reachable on a nonzero ETH base OR a nonzero FLIP escrow
         // (a gwei-floored zero-ETH claim can still owe escrowed FLIP). Post-gameOver FLIP is
@@ -886,7 +899,9 @@ contract sDGNRS {
             // submitted (day+1 isn't drawn yet), so a post-advance burn can't grind a known
             // draw. Only reached when !gameOver (lootboxEth != 0); in a live game day+1's word
             // is always set by claim time (the daily advance, or gap-backfill after a stall).
-            uint256 rngWord = game.rngWordForDay(day + 1);
+            // day+1's word is fixed for this settle day. The batch pre-fetches it once and passes
+            // it in (live game -> always nonzero); the single-claim path passes 0, so fetch lazily.
+            uint256 rngWord = rngWordNext == 0 ? game.rngWordForDay(day + 1) : rngWordNext;
             uint256 entropy = EntropyLib.hash2(rngWord, uint256(uint160(player)));
             uint256 bal = address(this).balance;
             uint256 ethForLootbox = bal < lootboxEth ? bal : lootboxEth;

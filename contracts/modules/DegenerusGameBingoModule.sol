@@ -258,7 +258,7 @@ contract DegenerusGameBingoModule is DegenerusGameStorage {
         if (isDeityHolder) {
             uint256 bonus = (score * AFFILIATE_DGNRS_DEITY_BONUS_BPS) / 10_000;
             uint256 cap = (AFFILIATE_DGNRS_DEITY_BONUS_CAP_ETH *
-                PRICE_COIN_UNIT) / PriceLookupLib.priceForLevel(level);
+                PRICE_COIN_UNIT) / PriceLookupLib.priceForLevel(currLevel);
             if (bonus > cap) {
                 bonus = cap;
             }

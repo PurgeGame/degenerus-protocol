@@ -515,7 +515,8 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                 day,
                 purchaseLevel,
                 lastPurchase,
-                coinflipBonus
+                coinflipBonus,
+                dIdx
             );
             psd += uint24(gapDays);
             if (rngWord == 1) {
@@ -1386,7 +1387,8 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         uint24 day,
         uint24 lvl,
         bool isTicketJackpotDay,
-        uint8 coinflipBonus
+        uint8 coinflipBonus,
+        uint24 dIdx
     ) internal returns (uint256 word, uint32 gapDays) {
         // Already recorded for today
         uint256 recordedWord = rngWordByDay[day];
@@ -1403,7 +1405,9 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
             // this branch on each new wall-clock day and re-process the
             // same gap range, doubling purchaseStartDay and re-running
             // coinflip payouts for already-resolved days.
-            uint24 idx = dailyIdx;
+            // dIdx == dailyIdx here (caller cached it; _unlockRng, the sole writer, runs after
+            // rngGate returns), so reuse it instead of re-SLOADing the slot-0 field.
+            uint24 idx = dIdx;
             if (day > idx + 1 && rngWordByDay[idx + 1] == 0) {
                 uint24 gapCount = day - idx - 1;
                 _backfillGapDays(currentWord, idx + 1, day);
@@ -2191,9 +2195,11 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         // mirrors the settled end-of-day pools and a solvency total (ETH + stETH) from logs alone.
         // Game-over also seals here but emits its own terminal snapshot in the drain, so skip it.
         if (!gameOver) {
+            // One packed SLOAD for next|future (via-IR does not coalesce the two tuple getters).
+            (uint128 nextP, uint128 futureP) = _getPrizePools();
             emit PrizePoolDailySnapshot(
-                _getNextPrizePool(),
-                _getFuturePrizePool(),
+                nextP,
+                futureP,
                 _getCurrentPrizePool(),
                 claimablePool,
                 address(this).balance + steth.balanceOf(address(this)),

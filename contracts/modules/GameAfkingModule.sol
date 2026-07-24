@@ -825,18 +825,23 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
     ) private {
         if (ethValue != 0) {
             _debitAfking(src, ethValue);
-            claimablePool -= uint128(ethValue);
         }
         // Reinvest/drainFirst claimable portion of the cost. The _resolveBuy 1-wei sentinel
         // guarantees claimableUse <= claimable - 1, so this never underflows. claimableWinnings
         // rides in claimablePool, so the pool moves in tandem (the solvency invariant).
         if (claimableUse != 0) {
             _debitClaimable(player, claimableUse);
-            claimablePool -= uint128(claimableUse);
             // ClaimableSpent is NOT emitted here. claimableUse is already folded into
             // AfkingDelivered.weiIn (= ethValue + claimableUse), so the off-chain indexer
             // nets the full draw at that event. Emitting ClaimableSpent here too would
             // double-count the debit.
+        }
+        // Both legs draw the solvency-tracked claimablePool (afking-funded ETH and claimableWinnings
+        // both ride in it); apply the combined debit as one checked RMW after the per-account writes
+        // above. The merged uint128 underflow guard reverts on the same condition as the two separate
+        // subtractions, and the whole call is atomic.
+        if (ethValue != 0 || claimableUse != 0) {
+            claimablePool -= uint128(ethValue + claimableUse);
         }
 
         // Reframe the run before freezing any lootbox activity score. The returned value is the
@@ -878,14 +883,17 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
             // drainAffiliateBase; the slot-0 reward into pendingFlip). The frozen score
             // (the EV input at open, off the compute-on-read streak — no STATICCALL) is computed
             // once for either box shape.
-            uint256 activityScore = _playerActivityScore(
+            uint256 activityScore = _playerActivityScoreAt(
                 player,
                 preBuyStreak,
                 // Streak basis is the phase-correct active ticket level (== the level the manual mint
                 // streak is recorded against), NOT the EV-cap/resolver open level (currentLevel + 1):
                 // in jackpot phase those differ, and currentLevel + 1 would silently zero a streak
                 // whose lastCompleted == level - 1.
-                ticketTargetLevel
+                ticketTargetLevel,
+                // currentLevel == storage `level` here (sole writer advanceGame, no in-window
+                // advance), so pass it directly and skip the 3-arg wrapper's redundant `level` SLOAD.
+                currentLevel
             );
             uint16 score = activityScore > type(uint16).max
                 ? type(uint16).max

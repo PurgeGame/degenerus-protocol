@@ -146,8 +146,9 @@ contract DegenerusGameGameOverModule is DegenerusGameStorage {
         flip.tombstoneAtGameOver();
 
         _goWrite(GO_JACKPOT_PAID_SHIFT, GO_JACKPOT_PAID_MASK, 1);
-        _setNextPrizePool(0);
-        _setFuturePrizePool(0);
+        // next|future share one slot; zero both in a single SSTORE (no read needed). currentPrizePool
+        // is a separate slot, still zeroed below.
+        _setPrizePools(0, 0);
         _setCurrentPrizePool(0);
         yieldAccumulator = 0;
         // Terminal state also clears the freeze: with the live pools drained, _unlockRng's
@@ -163,8 +164,8 @@ contract DegenerusGameGameOverModule is DegenerusGameStorage {
             0,
             0,
             claimablePool,
-            address(this).balance + steth.balanceOf(address(this)),
-            yieldAccumulator
+            totalFunds, // ETH + stETH unchanged since line 82 (burns/tombstone move no ETH/stETH)
+            0 // yieldAccumulator was just zeroed above
         );
 
         // Recalculate available after refunds (claimablePool may have grown).

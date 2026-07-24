@@ -736,9 +736,9 @@ abstract contract DegenerusGameStorage {
         // can be manipulated by them. Player purchase paths gate liveness at their own entry; the
         // advance-chain daily-jackpot distribution also queues through this sink and must NOT be
         // reverted here, so the gate stays off the shared sink.
-        emit EntriesQueued(buyer, targetLevel, entries);
         bool isFarFuture = targetLevel > level + 5;
         if (isFarFuture && rngLockedFlag && !rngBypass) revert RngLocked();
+        emit EntriesQueued(buyer, targetLevel, entries);
         uint24 wk = isFarFuture
             ? _tqFarFutureKey(targetLevel)
             : _tqWriteKey(targetLevel);
@@ -790,9 +790,9 @@ abstract contract DegenerusGameStorage {
     ) internal {
         if (entriesScaled == 0) return;
         // No liveness gate (see _queueEntries): post-liveness queued tickets are harmless.
-        emit EntriesQueuedScaled(buyer, targetLevel, entriesScaled);
         bool isFarFuture = targetLevel > level + 5;
         if (isFarFuture && rngLockedFlag && !rngBypass) revert RngLocked();
+        emit EntriesQueuedScaled(buyer, targetLevel, entriesScaled);
         uint24 wk = isFarFuture
             ? _tqFarFutureKey(targetLevel)
             : _tqWriteKey(targetLevel);

@@ -59,10 +59,10 @@ library JackpotBucketLib {
         uint16[4] memory baseCounts,
         uint256 ethPool,
         uint32 maxScaleBps
-    ) internal pure returns (uint16[4] memory counts) {
-        counts = baseCounts;
-
-        if (ethPool < JACKPOT_SCALE_MIN_WEI) return counts;
+    ) internal pure returns (uint16[4] memory) {
+        // Mutate + return baseCounts directly — a named return would alloc a dead uint16[4]
+        // that line-1 immediately aliases to baseCounts.
+        if (ethPool < JACKPOT_SCALE_MIN_WEI) return baseCounts;
 
         uint256 scaleBps;
         if (ethPool < JACKPOT_SCALE_FIRST_WEI) {
@@ -79,12 +79,12 @@ library JackpotBucketLib {
 
         if (scaleBps != JACKPOT_SCALE_BASE_BPS) {
             for (uint8 i; i < 4; ) {
-                uint16 baseCount = counts[i];
+                uint16 baseCount = baseCounts[i];
                 if (baseCount > 1) {
                     uint256 scaled = (uint256(baseCount) * scaleBps) / 10_000;
                     if (scaled < baseCount) scaled = baseCount;
                     if (scaled > type(uint16).max) scaled = type(uint16).max;
-                    counts[i] = uint16(scaled);
+                    baseCounts[i] = uint16(scaled);
                 }
                 unchecked {
                     ++i;
@@ -92,7 +92,7 @@ library JackpotBucketLib {
             }
         }
 
-        return counts;
+        return baseCounts;
     }
 
     /// @dev Computes base + scaled bucket counts for a given pool; returns zeroes when pool is empty.

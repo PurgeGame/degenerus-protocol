@@ -65,7 +65,7 @@ POOL-TO-POOL	claimablePool	buyFoilPack	modules/DegenerusGameFoilPackModule.sol	W
 DRAIN-ZERO	claimablePool	handleFinalSweep	modules/DegenerusGameGameOverModule.sol	WRITE	30-day final sweep: sinks paid their claimable, residual forfeited three-way, claims closed (GO_SWEPT)
 PAIRED-CREDIT	_creditClaimable	handleGameOverDrain	modules/DegenerusGameGameOverModule.sol	READ	per-owner refunds; aggregate bumped once via totalRefunded
 DRAIN-ZERO	_setCurrentPrizePool	handleGameOverDrain	modules/DegenerusGameGameOverModule.sol	READ	live pools zeroed at the game-over drain
-DRAIN-ZERO	_setFuturePrizePool	handleGameOverDrain	modules/DegenerusGameGameOverModule.sol	READ	live pools zeroed at the game-over drain; value re-credited as claimable or distributed
+DRAIN-ZERO	_setPrizePools	handleGameOverDrain	modules/DegenerusGameGameOverModule.sol	READ	live pools (next|future) zeroed in one packed setter at the game-over drain; value re-credited as claimable or distributed
 POOL-TO-POOL	claimablePool	handleGameOverDrain	modules/DegenerusGameGameOverModule.sol	WRITE	two sites: refund total and terminal-decimator round - both move drained live-pool value into claimable
 DRAIN-ZERO	prizePoolPendingPacked	handleGameOverDrain	modules/DegenerusGameGameOverModule.sol	WRITE	pending buffer folded into the drained total and zeroed
 DRAIN-ZERO	yieldAccumulator	handleGameOverDrain	modules/DegenerusGameGameOverModule.sol	WRITE	yield accumulator folded into the drained total and zeroed

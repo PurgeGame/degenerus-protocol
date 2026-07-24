@@ -203,9 +203,11 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         purchaseStartDay = currentDay;
         dailyIdx = currentDay;
         levelPrizePool[0] = BOOTSTRAP_PRIZE_POOL;
-        // Vault addresses get deity-equivalent score boost (no symbol, not in deityPassOwners)
-        mintPacked_[ContractAddresses.SDGNRS] = BitPackingLib.setPacked(mintPacked_[ContractAddresses.SDGNRS], BitPackingLib.HAS_DEITY_PASS_SHIFT, 1, 1);
-        mintPacked_[ContractAddresses.VAULT] = BitPackingLib.setPacked(mintPacked_[ContractAddresses.VAULT], BitPackingLib.HAS_DEITY_PASS_SHIFT, 1, 1);
+        // Vault addresses get deity-equivalent score boost (no symbol, not in deityPassOwners).
+        // Fresh storage: these mapping slots are provably zero at construction (never written
+        // above), so pass literal 0 as the base and skip two cold SLOADs + the mask read.
+        mintPacked_[ContractAddresses.SDGNRS] = BitPackingLib.setPacked(0, BitPackingLib.HAS_DEITY_PASS_SHIFT, 1, 1);
+        mintPacked_[ContractAddresses.VAULT] = BitPackingLib.setPacked(0, BitPackingLib.HAS_DEITY_PASS_SHIFT, 1, 1);
         // Perpetual vault/SDGNRS tickets (levels 1-100) are queued post-deploy by VAULT and
         // SDGNRS via initPerpetualTickets(), keeping GAME's deploy under the per-tx gas cap.
 

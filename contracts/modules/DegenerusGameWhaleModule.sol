@@ -488,12 +488,15 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
         uint256 totalPrice;
         uint256 benefitValue;
         uint32 bonusEntries;
+        // priceForLevel(startLevel) is pure; compute once so both the level-0-2 bonus-entry calc
+        // and the affiliate FLIP basis below reuse it (the conditional use below does not dominate
+        // the unconditional one, so the optimizer would otherwise recompute it).
+        uint256 startLevelPrice = PriceLookupLib.priceForLevel(startLevel);
         if (currentLevel <= 2) {
             benefitValue = 0.24 ether;
             uint256 balance = benefitValue - baseCost;
             if (balance != 0) {
-                uint256 ticketPrice = PriceLookupLib.priceForLevel(startLevel);
-                bonusEntries = uint32((balance * 4) / ticketPrice);
+                bonusEntries = uint32((balance * 4) / startLevelPrice);
             }
             if (hasValidBoon) {
                 totalPrice =
@@ -532,7 +535,7 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
         // same as tickets). The FLIP basis converts at the pass start level's price; the
         // kickback share is credited back to the buyer in one Coinflip write.
         {
-            uint256 passPriceWei = PriceLookupLib.priceForLevel(startLevel);
+            uint256 passPriceWei = startLevelPrice;
             uint256 kickback;
             if (freshPaid != 0) {
                 kickback = affiliate.payAffiliate(
