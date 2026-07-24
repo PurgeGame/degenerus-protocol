@@ -604,9 +604,11 @@ interface IDegenerusGameFoilPackModule {
     ) external;
 
     /// @notice Permissionlessly resolve a batch of foil match claims.
-    /// @dev Non-claimable tuples are skipped (not reverted); each settled win credits
-    ///      its own player and the caller earns a small per-settled-claim FLIP bounty
-    ///      during a live game. The four arrays are parallel.
+    /// @dev Non-claimable tuples past index 0 are skipped (not reverted); each settled
+    ///      win credits its own player and the caller earns a small per-settled-claim
+    ///      FLIP bounty during a live game. A non-claimable tuple AT index 0 reverts the
+    ///      whole call (StaleBatch), marking an already-swept list. The four arrays are
+    ///      parallel.
     /// @param players Pack owners the wins credit to.
     /// @param drawDays Draw days to claim against.
     /// @param ticketIndexes Which pack ticket (0-3) per claim.

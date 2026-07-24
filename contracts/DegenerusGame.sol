@@ -871,10 +871,12 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
 
     /// @notice Permissionlessly resolve a batch of foil match claims (address[] players,
     ///         uint24[] days, uint8[] ticketIndexes, uint8[] drawKinds).
-    /// @dev Non-claimable tuples are skipped, not reverted; each settled win credits its
-    ///      own player and the caller earns a per-settled-claim FLIP bounty during a live
-    ///      game. The signature matches the module function exactly, so the calldata
-    ///      forwards as-is.
+    /// @dev Non-claimable tuples past index 0 are skipped, not reverted; each settled win
+    ///      credits its own player and the caller earns a per-settled-claim FLIP bounty
+    ///      during a live game. A non-claimable tuple AT index 0 reverts the whole call
+    ///      (StaleBatch), so a second sender handed an already-swept list sees the failure
+    ///      in simulation instead of paying to walk it. The signature matches the module
+    ///      function exactly, so the calldata forwards as-is.
     function claimFoilMatchMany(
         address[] calldata,
         uint24[] calldata,

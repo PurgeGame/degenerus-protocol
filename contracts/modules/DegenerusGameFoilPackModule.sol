@@ -38,6 +38,7 @@ contract DegenerusGameFoilPackModule is
     error StaleAdvance(); // Simulated day is more than one day ahead of the processed daily index; multi-day stall detected.
     error DirectEthInsufficient(); // DirectEth payment kind cannot cover the foil cost shortfall from claimable balance.
     error NoClaimableMatch(); // The given (player, day, ticketIndex, drawKind) tuple does not resolve to a claimable foil match.
+    error StaleBatch(); // The batch's opening tuple is not claimable: the list has already been swept.
 
     // -------------------------------------------------------------------------
     // External Contract References (compile-time constants)
@@ -362,8 +363,11 @@ contract DegenerusGameFoilPackModule is
     ///      look-back, already claimed, no match) OR a payout spin that reverts (e.g. an
     ///      ETH tier too large for the frozen pool's pending buffer) — rolls back ONLY
     ///      that claim (its marker, whale pass, and spin together) and the sweep moves
-    ///      on. One stale or unpayable tuple can never poison the batch, so a keeper can
-    ///      submit an off-chain-computed superset. Each settled win credits its own
+    ///      on. One stale or unpayable tuple past the opener can never poison the batch.
+    ///      The tuple at index 0 is the exception: a revert there reverts the whole call
+    ///      with StaleBatch(), because an already-swept list fails there first and the
+    ///      cheap revert is what a wallet's pre-flight simulation shows a second sender.
+    ///      Put a tuple expected to settle first. Each settled win credits its own
     ///      `player`. The arrays are parallel: claim i is (players[i], drawDays[i],
     ///      ticketIndexes[i], drawKinds[i]).
     /// @param players Pack owners the wins credit to.
@@ -403,7 +407,14 @@ contract DegenerusGameFoilPackModule is
                     ++settled;
                 }
             } catch {
-                // Non-claimable or payout-reverting tuple: skip.
+                // The opening tuple doubles as the spent-list probe. One tuple list is
+                // handed to many senders and the first to land settles every tuple in
+                // it, so a dead opener means the list is already swept. Reverting lets a
+                // wallet's pre-flight simulation warn every later sender: a sweep that
+                // settles nothing would otherwise SUCCEED, drawing no warning and
+                // charging the full walk. Costs one tuple of gas instead of n.
+                if (i == 0) revert StaleBatch();
+                // Non-claimable or payout-reverting tuple past the opener: skip.
             }
             unchecked {
                 ++i;
