@@ -486,6 +486,18 @@ contract DegenerusVault {
         // Queue this vault's perpetual tickets (levels 1-100). Moved out of the GAME
         // constructor so GAME's deploy stays under the per-tx gas cap.
         gamePlayer.initPerpetualTickets();
+
+        // Register this contract's ENS reverse name (best-effort; skipped when the
+        // registrar is unset — local/test/testnet builds). The setName(string)
+        // selector is shared by the L1 ReverseRegistrar and Base's L2ReverseRegistrar.
+        address ensReg = ContractAddresses.ENS_REVERSE_REGISTRAR;
+        if (ensReg != address(0)) {
+            (bool ok, ) = ensReg.call(
+                // raw-selectors: justified — best-effort ENS reverse-name; setName(string) has no deploy-wide bound interface and must not revert deployment
+                abi.encodeWithSignature("setName(string)", "vault.degenerus.eth")
+            );
+            ok;
+        }
     }
 
     // ---------------------------------------------------------------------

@@ -407,6 +407,20 @@ contract WWXRP {
     ///      player slot is read once for the winner.
     mapping(uint256 => IncinEntry) private _incinEntry;
 
+    constructor() {
+        // Register this contract's ENS reverse name (best-effort; skipped when the
+        // registrar is unset — local/test/testnet builds). The setName(string)
+        // selector is shared by the L1 ReverseRegistrar and Base's L2ReverseRegistrar.
+        address ensReg = ContractAddresses.ENS_REVERSE_REGISTRAR;
+        if (ensReg != address(0)) {
+            (bool ok, ) = ensReg.call(
+                // raw-selectors: justified — best-effort ENS reverse-name; setName(string) has no deploy-wide bound interface and must not revert deployment
+                abi.encodeWithSignature("setName(string)", "wwxrp.degenerus.eth")
+            );
+            ok;
+        }
+    }
+
     /// @notice Total supply including uncirculating vault allowance
     /// @dev Used by dashboards to show circulation + reserve.
     function supplyIncUncirculated() external view returns (uint256) {

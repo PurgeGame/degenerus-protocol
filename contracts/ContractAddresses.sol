@@ -71,4 +71,9 @@ library ContractAddresses {
         address(0x7FA9385bE102ac3EAc297483Dd6233D62b3e1496);
     address internal constant VRF_COORDINATOR =
         address(0x5615dEB798BB3E4dFa0139dFa1b3D433Cc23b72f);
+    // ENS reverse registrar for contract self-naming. Optional: address(0) disables
+    // it (local/test/testnet builds skip the constructor setName call). Patched per
+    // network — L1 ReverseRegistrar on mainnet, L2ReverseRegistrar on Base.
+    address internal constant ENS_REVERSE_REGISTRAR =
+        address(0);
 }

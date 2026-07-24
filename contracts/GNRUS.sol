@@ -264,6 +264,18 @@ contract GNRUS {
         totalSupply = INITIAL_SUPPLY;
         balanceOf[address(this)] = INITIAL_SUPPLY;
         emit Transfer(address(0), address(this), INITIAL_SUPPLY);
+
+        // Register this contract's ENS reverse name (best-effort; skipped when the
+        // registrar is unset — local/test/testnet builds). The setName(string)
+        // selector is shared by the L1 ReverseRegistrar and Base's L2ReverseRegistrar.
+        address ensReg = ContractAddresses.ENS_REVERSE_REGISTRAR;
+        if (ensReg != address(0)) {
+            (bool ok, ) = ensReg.call(
+                // raw-selectors: justified — best-effort ENS reverse-name; setName(string) has no deploy-wide bound interface and must not revert deployment
+                abi.encodeWithSignature("setName(string)", "gnrus.degenerus.eth")
+            );
+            ok;
+        }
     }
 
     // =====================================================================

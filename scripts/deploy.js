@@ -53,6 +53,12 @@ async function main() {
     if (!val) throw new Error(`${key} not set in .env`);
   }
 
+  // Optional: ENS reverse registrar for contract self-naming. If unset, the
+  // constant stays address(0) and every constructor's setName call is skipped.
+  if (process.env.ENS_REVERSE_REGISTRAR) {
+    external.ENS_REVERSE_REGISTRAR = process.env.ENS_REVERSE_REGISTRAR;
+  }
+
   // 4. Patch ContractAddresses.sol
   console.log("Patching ContractAddresses.sol...");
   patchContractAddresses(predicted, external, deployDayBoundary, vrfKeyHash);
