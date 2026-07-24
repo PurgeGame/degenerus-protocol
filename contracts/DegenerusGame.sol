@@ -1498,12 +1498,15 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     ///        ignored post-gameOver, when the claim settles ALL claimable + afking.
     function _claimWinningsInternal(address player, bool stethFirst, uint256 maxClaim) private {
         if (_goRead(GO_SWEPT_SHIFT, GO_SWEPT_MASK) != 0) revert AlreadySwept();
-        uint256 amount = _claimableOf(player);
+        // One packed load: claimable is the low half, afking the high half. The read reuse
+        // below and the debit both ride this single SLOAD (no external call intervenes).
+        uint256 packed = balancesPacked[player];
+        uint256 amount = uint128(packed);
         // Post-gameOver the claim ALSO pays the caller's prepaid
         // afking ETH (lazy per-player merge — no unbounded loop). Pre-gameOver afkingFunding
         // stays its own bucket (spent by afking auto-buys / reclaimed via withdrawAfkingFunding).
         // Both this merge and withdrawAfkingFunding zero the SAME bucket → no double-spend.
-        uint256 afking = gameOver ? _afkingOf(player) : 0;
+        uint256 afking = gameOver ? (packed >> 128) : 0;
         uint256 claimDebit;
         unchecked {
             if (amount > 1) {
@@ -1520,8 +1523,11 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
             payout = claimDebit + afking;
         }
         if (payout == 0) revert NothingToClaim();
-        // Both halves of the packed per-player slot debited in one load + store.
-        _debitClaimableAndAfking(player, claimDebit, afking);
+        // Debit both halves in one store from the load above. _debitClaimableAndAfking's two
+        // Insolvent guards are provably dead here: claimDebit <= amount-1 < uint128(packed), and
+        // afking is packed>>128 (or 0) — neither half can borrow, so the subtraction is
+        // byte-identical to the helper's (which stays for its other callers).
+        balancesPacked[player] = packed - claimDebit - (afking << 128);
         claimablePool -= uint128(payout); // CEI: update state before external call (checked math)
         emit WinningsClaimed(player, msg.sender, payout);
         if (stethFirst) {
@@ -1551,9 +1557,12 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     function withdrawAfkingFunding(uint256 amount) external {
         if (_goRead(GO_SWEPT_SHIFT, GO_SWEPT_MASK) != 0) revert AlreadySwept();
         if (amount == 0) return;
-        uint256 bal = _afkingOf(msg.sender);
-        if (amount > bal) revert Insolvent();
-        _debitAfking(msg.sender, amount);
+        // One packed load: the guard reads the afking high half and the debit writes it back.
+        uint256 packed = balancesPacked[msg.sender];
+        if (amount > (packed >> 128)) revert Insolvent();
+        // Guard proved amount <= high half, so `amount << 128` subtracts only from the afking
+        // half (no borrow into claimable) — byte-identical to _debitAfking's checked store.
+        balancesPacked[msg.sender] = packed - (amount << 128);
         claimablePool -= uint128(amount); // tandem release (checked math)
         (bool ok, ) = msg.sender.call{value: amount}("");
         if (!ok) revert TransferFailed();
@@ -1855,13 +1864,17 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
 
         // ETH leg (as today): the claimable[SDGNRS] ledger AND the game's liquid ETH both cover
         // `amount` — segregate the at-risk ETH out to sDGNRS. CHECKED debit (no unchecked); CEI.
+        uint256 packedSD = balancesPacked[ContractAddresses.SDGNRS];
         if (
-            _claimableOf(ContractAddresses.SDGNRS) >= amount &&
+            uint128(packedSD) >= amount &&
             address(this).balance >= amount
         ) {
-            _debitClaimable(ContractAddresses.SDGNRS, amount);
+            // _debitClaimable's guard is dead here — the branch already proved the low half
+            // covers `amount`, so `packedSD - amount` touches only the low half (no borrow).
+            // Residual for the event is the post-debit low half, computed from the cache.
+            balancesPacked[ContractAddresses.SDGNRS] = packedSD - amount;
             claimablePool -= uint128(amount);
-            emit ClaimableSpent(ContractAddresses.SDGNRS, amount, _claimableOf(ContractAddresses.SDGNRS), MintPaymentKind.Internal, amount);
+            emit ClaimableSpent(ContractAddresses.SDGNRS, amount, uint128(packedSD) - amount, MintPaymentKind.Internal, amount);
             (bool ok, ) = payable(ContractAddresses.SDGNRS).call{value: amount}("");
             if (!ok) revert TransferFailed();
             return;

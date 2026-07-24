@@ -1131,23 +1131,31 @@ abstract contract DegenerusGameStorage {
         returns (uint256 claimableUsed, uint256 afkingUsed)
     {
         if (shortfall == 0) return (0, 0);
+        // Single packed load; both halves debited in one combined store below. No external call
+        // in this body, so the cache cannot go stale between the reads and the write.
+        uint256 packed = balancesPacked[buyer];
         if (allowClaimable) {
-            uint256 claimable = _claimableOf(buyer);
+            uint256 claimable = uint128(packed);
             if (claimable > 1) {
                 uint256 available = claimable - 1; // preserve the 1-wei sentinel
                 claimableUsed = shortfall < available ? shortfall : available;
                 if (claimableUsed != 0) {
-                    _debitClaimable(buyer, claimableUsed);
+                    // _debitClaimable's guard is dead here: claimableUsed <= claimable-1 < low half.
                     emit ClaimableSpent(buyer, claimableUsed, claimable - claimableUsed, MintPaymentKind.Internal, claimableUsed);
                 }
             }
         }
         uint256 remaining = shortfall - claimableUsed;
         if (remaining != 0) {
-            if (_afkingOf(buyer) < remaining) revert Insolvent();
+            if ((packed >> 128) < remaining) revert Insolvent();
             afkingUsed = remaining;
-            _debitAfking(buyer, afkingUsed);
             emit AfkingSpent(buyer, afkingUsed);
+        }
+        // One combined store == sequential _debitClaimable + _debitAfking: claimableUsed sits in
+        // the low half (< it, no borrow) and afkingUsed in the high half (guarded >= above), so
+        // neither borrows across halves. At least one is non-zero past the early return.
+        if (claimableUsed != 0 || afkingUsed != 0) {
+            balancesPacked[buyer] = packed - claimableUsed - (afkingUsed << 128);
         }
     }
 
