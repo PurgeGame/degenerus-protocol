@@ -19,7 +19,7 @@ library GameTimeLib {
      * @return Current day index (1-indexed from deploy day).
      */
     function currentDayIndex() internal view returns (uint24) {
-        return currentDayIndexAt(uint48(block.timestamp));
+        return currentDayIndexAt(block.timestamp);
     }
 
     /**
@@ -29,7 +29,7 @@ library GameTimeLib {
      *        earlier values underflow the unsigned subtraction and wrap.
      * @return Day index (1-indexed from deploy day).
      */
-    function currentDayIndexAt(uint48 ts) internal pure returns (uint24) {
+    function currentDayIndexAt(uint256 ts) internal pure returns (uint24) {
         uint24 currentDayBoundary = uint24((ts - JACKPOT_RESET_TIME) / 1 days);
         return currentDayBoundary - uint24(ContractAddresses.DEPLOY_DAY_BOUNDARY) + 1;
     }

@@ -818,7 +818,11 @@ contract DegenerusGameDegeneretteModule is
             );
 
             if (payout != 0) {
-                totalPayout += payout;
+                // Bounded by maxSpins * amountPerSpin(uint128) * max payout factor — ~23.6M
+                // below 2^256, so the per-spin accumulation cannot overflow.
+                unchecked {
+                    totalPayout += payout;
+                }
 
                 // Accumulate this spin's payout. ETH credits + the running-pool
                 // decrement / cap land in `acc` (flushed cross-bet); the spin's
@@ -1014,11 +1018,18 @@ contract DegenerusGameDegeneretteModule is
 
             // Accumulate ETH claimable cross-bet (flushed once). The lootbox-share
             // is returned to the caller, summed per betId, and resolved once per bet.
-            acc.ethClaimable += ethShare;
+            // Bounded far below 2^256 (see totalPayout note), so the accumulation is safe.
+            unchecked {
+                acc.ethClaimable += ethShare;
+            }
         } else if (currency == CURRENCY_FLIP) {
-            acc.flipMint += payout;
+            unchecked {
+                acc.flipMint += payout;
+            }
         } else if (currency == CURRENCY_WWXRP) {
-            acc.wwxrpMint += payout;
+            unchecked {
+                acc.wwxrpMint += payout;
+            }
         }
     }
 
@@ -1085,11 +1096,12 @@ contract DegenerusGameDegeneretteModule is
     /// @param traits The packed player traits (uint32, [QQ][CCC][SSS] per byte).
     /// @return count Number of gold quadrants (0..4).
     function _countGoldQuadrants(uint32 traits) private pure returns (uint8 count) {
+        // Unrolled fixed-4: color bits are (q*8+3) => shifts 3, 11, 19, 27 for q=0..3.
         unchecked {
-            for (uint8 q = 0; q < 4; ++q) {
-                uint8 color = uint8((traits >> (q * 8 + 3)) & 7);
-                if (color == 7) ++count;
-            }
+            if (uint8((traits >> 3) & 7) == 7) ++count;
+            if (uint8((traits >> 11) & 7) == 7) ++count;
+            if (uint8((traits >> 19) & 7) == 7) ++count;
+            if (uint8((traits >> 27) & 7) == 7) ++count;
         }
     }
 
@@ -1111,24 +1123,33 @@ contract DegenerusGameDegeneretteModule is
         uint32 resultTraits,
         uint8 heroQuadrant
     ) private pure returns (uint8 s) {
-        for (uint8 q = 0; q < 4; ) {
-            uint8 pQuad = uint8(playerTraits >> (q * 8));
-            uint8 rQuad = uint8(resultTraits >> (q * 8));
-
-            // Symbol = bits 2-0. A symbol match scores +1 (hero quadrant +2). The
-            // quadrant's COLOR (bits 5-3) scores +1 ONLY IF the symbol also matched
-            // (Variant-2: color gated behind symbol — never counted on its own).
+        // Unrolled fixed-4 (q = 0,1,2,3 => byte shifts 0,8,16,24). Symbol = bits 2-0: a
+        // symbol match scores +1 (the hero quadrant +2); that quadrant's COLOR (bits 5-3)
+        // scores +1 ONLY IF the symbol also matched (Variant-2: color gated behind symbol).
+        unchecked {
+            uint8 pQuad = uint8(playerTraits);
+            uint8 rQuad = uint8(resultTraits);
             if ((pQuad & 7) == (rQuad & 7)) {
-                unchecked {
-                    s += (q == heroQuadrant) ? 2 : 1;
-                    if (((pQuad >> 3) & 7) == ((rQuad >> 3) & 7)) {
-                        ++s;
-                    }
-                }
+                s += (heroQuadrant == 0) ? 2 : 1;
+                if (((pQuad >> 3) & 7) == ((rQuad >> 3) & 7)) ++s;
             }
-
-            unchecked {
-                ++q;
+            pQuad = uint8(playerTraits >> 8);
+            rQuad = uint8(resultTraits >> 8);
+            if ((pQuad & 7) == (rQuad & 7)) {
+                s += (heroQuadrant == 1) ? 2 : 1;
+                if (((pQuad >> 3) & 7) == ((rQuad >> 3) & 7)) ++s;
+            }
+            pQuad = uint8(playerTraits >> 16);
+            rQuad = uint8(resultTraits >> 16);
+            if ((pQuad & 7) == (rQuad & 7)) {
+                s += (heroQuadrant == 2) ? 2 : 1;
+                if (((pQuad >> 3) & 7) == ((rQuad >> 3) & 7)) ++s;
+            }
+            pQuad = uint8(playerTraits >> 24);
+            rQuad = uint8(resultTraits >> 24);
+            if ((pQuad & 7) == (rQuad & 7)) {
+                s += (heroQuadrant == 3) ? 2 : 1;
+                if (((pQuad >> 3) & 7) == ((rQuad >> 3) & 7)) ++s;
             }
         }
     }

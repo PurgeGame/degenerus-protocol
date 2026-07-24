@@ -40,7 +40,6 @@ library ActivityCurveLib {
     /// @notice Decimator burn multiplier in bps from a whole-point activity score.
     function decMultBps(uint256 score) internal pure returns (uint256) {
         if (score == 0) return MULT_MIN_BPS;
-        if (score >= ACTIVITY_EFFECTIVE_CAP_POINTS) return MULT_MAX_BPS;
         if (score <= MULT_K_POINTS) {
             return
                 MULT_MIN_BPS +
@@ -53,6 +52,9 @@ library ActivityCurveLib {
                 ((score - MULT_K_POINTS) * (MULT_VB_BPS - MULT_VA_BPS)) /
                 (ACTIVITY_SEG_B_KNEE_POINTS - MULT_K_POINTS);
         }
+        // Cap moved below the two segment checks: low scores (the common case) skip this
+        // comparison; the disjoint [K<SegB<CAP] partition keeps every region bit-identical.
+        if (score >= ACTIVITY_EFFECTIVE_CAP_POINTS) return MULT_MAX_BPS;
         return
             MULT_VB_BPS +
             ((score - ACTIVITY_SEG_B_KNEE_POINTS) * (MULT_MAX_BPS - MULT_VB_BPS)) /
@@ -71,7 +73,6 @@ library ActivityCurveLib {
     /// @notice Century purchase/afking bonus as bps of the base quantity.
     /// @dev Caller computes bonusQty = baseQty * centuryBps(score) / CENTURY_MAX_BPS.
     function centuryBps(uint256 score) internal pure returns (uint256) {
-        if (score >= ACTIVITY_EFFECTIVE_CAP_POINTS) return CENTURY_MAX_BPS;
         if (score <= CENTURY_K_POINTS) {
             return (score * CENTURY_VA_BPS) / CENTURY_K_POINTS;
         }
@@ -81,6 +82,9 @@ library ActivityCurveLib {
                 ((score - CENTURY_K_POINTS) * (CENTURY_VB_BPS - CENTURY_VA_BPS)) /
                 (ACTIVITY_SEG_B_KNEE_POINTS - CENTURY_K_POINTS);
         }
+        // Cap moved below the segment checks (see decMultBps); score 0 still resolves via the
+        // first segment ((0*VA)/K == 0), so the zero/cap endpoints are preserved.
+        if (score >= ACTIVITY_EFFECTIVE_CAP_POINTS) return CENTURY_MAX_BPS;
         return
             CENTURY_VB_BPS +
             ((score - ACTIVITY_SEG_B_KNEE_POINTS) *
@@ -106,7 +110,6 @@ library ActivityCurveLib {
     ///      beyond. The two endpoint guards make 0 and the cap exact (no interp rounding).
     function foilBoostBps(uint256 score) internal pure returns (uint256) {
         if (score == 0) return FOIL_MIN_BPS;
-        if (score >= ACTIVITY_EFFECTIVE_CAP_POINTS) return FOIL_MAX_BPS;
         if (score <= FOIL_K_POINTS) {
             return
                 FOIL_MIN_BPS +
@@ -119,6 +122,8 @@ library ActivityCurveLib {
                 ((score - FOIL_K_POINTS) * (FOIL_VB_BPS - FOIL_VA_BPS)) /
                 (ACTIVITY_SEG_B_KNEE_POINTS - FOIL_K_POINTS);
         }
+        // Cap moved below the two segment checks (see decMultBps); endpoints preserved.
+        if (score >= ACTIVITY_EFFECTIVE_CAP_POINTS) return FOIL_MAX_BPS;
         return
             FOIL_VB_BPS +
             ((score - ACTIVITY_SEG_B_KNEE_POINTS) * (FOIL_MAX_BPS - FOIL_VB_BPS)) /

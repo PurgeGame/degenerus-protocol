@@ -375,10 +375,12 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
             }
         }
 
-        // Split payment: pre-game 70/30, post-game 95/5 (future/next)
+        // Split payment: pre-game 70/30, post-game 95/5 (future/next). `level` is invariant
+        // across this call (no reachable callee advances it), so the cached `passLevel`
+        // (== level + 1) decides the split: passLevel == 1 iff level == 0 (pre-game).
         uint256 nextShare;
 
-        if (level == 0) {
+        if (passLevel == 1) {
             nextShare = (totalPrice * 3000) / 10_000;
         } else {
             nextShare = (totalPrice * 500) / 10_000;
@@ -698,7 +700,7 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
                 upline2 = affiliate.getReferrer(upline);
             }
         }
-        _rewardDeityPassDgnrs(buyer, affiliateAddr, upline, upline2);
+        _rewardDeityPassDgnrs(buyer, affiliateAddr, upline, upline2, passLevel - 1);
 
         // The deity buyer's OWN jackpot benefit is the virtual symbol-bucket entries
         // (JackpotModule via deityBySymbol) — they get NO queued tickets. The whale pass the
@@ -805,7 +807,8 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
         address buyer,
         address affiliateAddr,
         address upline,
-        address upline2
+        address upline2,
+        uint24 currentLevel
     ) private {
         uint256 whaleReserve = dgnrs.poolBalance(
             IsDGNRS.Pool.Whale
@@ -828,7 +831,7 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
         if (affiliateReserve == 0) return;
         // Reserve the outstanding level claim allocation so deity purchases
         // cannot drain tokens owed to affiliate claimants.
-        (uint256 allocation, uint256 claimed) = _getLevelDgnrs(level);
+        (uint256 allocation, uint256 claimed) = _getLevelDgnrs(currentLevel);
         uint256 reserved = allocation - claimed;
         if (reserved >= affiliateReserve) return;
         affiliateReserve -= reserved;

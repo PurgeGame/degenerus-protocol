@@ -299,7 +299,7 @@ contract Coinflip {
             if (_coinflipLockedDuringTransition()) revert CoinflipLocked();
         }
 
-        uint256 mintable = _claimCoinflipsInternal(player, false);
+        uint256 mintable = _claimCoinflipsInternal(player, state, false);
         // storedAfter mirrors claimableStored through this frame; no call below can
         // mutate it (burnForCoinflip and handleFlip never reach a claimable writer).
         uint128 storedAfter = state.claimableStored;
@@ -480,7 +480,7 @@ contract Coinflip {
         bool mintTokens
     ) private returns (uint256 claimed) {
         PlayerCoinflipState storage state = playerState[player];
-        uint256 mintable = _claimCoinflipsInternal(player, false);
+        uint256 mintable = _claimCoinflipsInternal(player, state, false);
         uint256 stored = state.claimableStored + mintable;
         if (stored == 0) {
             // _claimCoinflipsInternal may still have advanced lastClaim / settled carry.
@@ -508,10 +508,10 @@ contract Coinflip {
     /// @dev Process daily coinflip claims and calculate winnings.
     function _claimCoinflipsInternal(
         address player,
+        PlayerCoinflipState storage state,
         bool deepAutoRebuy
     ) internal returns (uint256 mintable) {
         IDegenerusGame game = degenerusGame;
-        PlayerCoinflipState storage state = playerState[player];
         uint24 latest = flipsClaimableDay;
         uint24 start = state.lastClaim;
 
@@ -800,7 +800,7 @@ contract Coinflip {
         if (degenerusGame.rngLocked()) revert RngLocked();
 
         if (enabled) {
-            mintable = _claimCoinflipsInternal(player, false);
+            mintable = _claimCoinflipsInternal(player, state, false);
             if (state.autoRebuyEnabled) {
                 if (strict) revert AutoRebuyAlreadyEnabled();
                 state.autoRebuyStop = uint128(takeProfit);
@@ -813,7 +813,7 @@ contract Coinflip {
                 emit CoinflipAutoRebuyToggled(player, true);
             }
         } else {
-            mintable = _claimCoinflipsInternal(player, true);
+            mintable = _claimCoinflipsInternal(player, state, true);
             uint256 carry = state.autoRebuyCarry;
             if (carry != 0) {
                 mintable += carry;
@@ -840,7 +840,7 @@ contract Coinflip {
         PlayerCoinflipState storage state = playerState[player];
         if (!state.autoRebuyEnabled) revert AutoRebuyNotEnabled();
 
-        uint256 mintable = _claimCoinflipsInternal(player, false);
+        uint256 mintable = _claimCoinflipsInternal(player, state, false);
         state.autoRebuyStop = uint128(takeProfit);
         emit CoinflipAutoRebuyStopSet(player, takeProfit);
 
@@ -871,7 +871,7 @@ contract Coinflip {
         PlayerCoinflipState storage state = playerState[player];
         if (!state.autoRebuyEnabled) revert AutoRebuyNotEnabled();
 
-        uint256 mintable = _claimCoinflipsInternal(player, false);
+        uint256 mintable = _claimCoinflipsInternal(player, state, false);
         if (mintable != 0) {
             state.claimableStored = uint128(
                 uint256(state.claimableStored) + mintable
@@ -991,13 +991,13 @@ contract Coinflip {
         // creditSdgnrsBacking) settle into the rolling carry (structurally zero
         // return under 0-take-profit rebuy). FLIP leaves sDGNRS's position solely
         // through a redemption/salvage consume leg.
+        PlayerCoinflipState storage sdgnrsState = playerState[
+            ContractAddresses.SDGNRS
+        ];
         if (sdgnrsAutoRebuyArmed) {
-            _claimCoinflipsInternal(ContractAddresses.SDGNRS, false);
+            _claimCoinflipsInternal(ContractAddresses.SDGNRS, sdgnrsState, false);
         } else {
-            uint256 mintable = _claimCoinflipsInternal(ContractAddresses.SDGNRS, false);
-            PlayerCoinflipState storage sdgnrsState = playerState[
-                ContractAddresses.SDGNRS
-            ];
+            uint256 mintable = _claimCoinflipsInternal(ContractAddresses.SDGNRS, sdgnrsState, false);
             if (mintable != 0) {
                 sdgnrsState.claimableStored = uint128(
                     uint256(sdgnrsState.claimableStored) + mintable
@@ -1087,8 +1087,8 @@ contract Coinflip {
     function redeemableFlipBacking() external returns (uint256 backing) {
         if (msg.sender != ContractAddresses.SDGNRS) revert OnlysDGNRS();
         address s = ContractAddresses.SDGNRS;
-        uint256 mintable = _claimCoinflipsInternal(s, false);
         PlayerCoinflipState storage state = playerState[s];
+        uint256 mintable = _claimCoinflipsInternal(s, state, false);
         if (mintable != 0) {
             state.claimableStored = uint128(uint256(state.claimableStored) + mintable);
         }
