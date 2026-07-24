@@ -754,20 +754,28 @@ contract DegenerusGameDegeneretteModule is
         for (uint8 spinIdx; spinIdx < spinCount; ) {
             // Spin results are derived deterministically from the lootbox RNG word + index.
             // Spin 0 uses a shorter preimage (no spinIdx mixed in) to produce a distinct seed.
-            uint256 resultSeed = spinIdx == 0
-                ? uint256(
-                    keccak256(abi.encodePacked(rngWord, index, QUICK_PLAY_SALT))
-                )
-                : uint256(
-                    keccak256(
-                        abi.encodePacked(
-                            rngWord,
-                            index,
-                            spinIdx,
-                            QUICK_PLAY_SALT
-                        )
-                    )
-                );
+            // Scratch-space keccak of the packed preimage — byte-identical layout to the
+            // abi.encodePacked form: rngWord[32] | index[4] | (spinIdx[1], spin>0 only) | salt[1].
+            // index is uint32 (shl 224 lands its 4 bytes at 0x20..0x23); QUICK_PLAY_SALT is bytes1
+            // (left-aligned) so byte(0,·) lifts its single byte into the low lane for mstore8.
+            // Writes only scratch (0x00..0x25); the free-memory pointer at 0x40 is untouched.
+            uint256 resultSeed;
+            if (spinIdx == 0) {
+                assembly ("memory-safe") {
+                    mstore(0x00, rngWord)
+                    mstore(0x20, shl(224, index))
+                    mstore8(0x24, byte(0, QUICK_PLAY_SALT))
+                    resultSeed := keccak256(0x00, 37)
+                }
+            } else {
+                assembly ("memory-safe") {
+                    mstore(0x00, rngWord)
+                    mstore(0x20, shl(224, index))
+                    mstore8(0x24, spinIdx)
+                    mstore8(0x25, byte(0, QUICK_PLAY_SALT))
+                    resultSeed := keccak256(0x00, 38)
+                }
+            }
             uint32 resultTraits = DegenerusTraitUtils.packedTraitsDegenerette(
                 resultSeed
             );

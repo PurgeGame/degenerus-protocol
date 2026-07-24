@@ -318,7 +318,7 @@ contract KeeperLeversAndPacking is DeployProtocol {
         // empty, guaranteed-non-reverting under the entry-gate) — a long queue can never gas-wall
         // the tx.
         assertGt(_countOccurrences(game_, "try this.resolveDegeneretteBets(players[i], ids)"), 0, "G7: per-item bet isolation via this.resolveDegeneretteBets");
-        assertGt(_countOccurrences(lootbox, "_openLootBoxLegWith(player, idx, packed, word);"), 0, "G7: per-entry box-open isolation (the sweep opens one entry at a time)");
+        assertGt(_countOccurrences(lootbox, "_openLootBoxLegWith(player, idx, packed, word, currentLevel);"), 0, "G7: per-entry box-open isolation (the sweep opens one entry at a time)");
         assertGt(_countOccurrences(game_, "if (msg.sender != address(this)) revert OnlySelf();"), 0, "G7: onlySelf (msg.sender == self) guard byte-present");
 
         // G9 — (v49 batchPurchase AF_KING keeper gate) DROPPED, D-351-02. v55: the afking auth is the
