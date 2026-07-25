@@ -241,6 +241,13 @@ interface IDegenerusGame {
     ///      Reverts if daily RNG locked, request pending, threshold not met, or VRF fails.
     function requestLootboxRng() external;
 
+    /// @notice Mint mid-day RNG credit to a LINK donor.
+    /// @dev Access: ADMIN only. Credits waive the pending-value gates on
+    ///      requestLootboxRng; the subscription LINK floor there still applies.
+    /// @param to Donor to credit.
+    /// @param linkAmount LINK donated, in juels.
+    function creditMiddayRng(address to, uint256 linkAmount) external;
+
     /// @notice Get lootbox status for a player on a specific lootbox index.
     /// @param player The player to query.
     /// @param lootboxIndex Lootbox RNG index assigned at purchase time.

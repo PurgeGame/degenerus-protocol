@@ -101,6 +101,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
 
     /// @notice No resolvable work in the supplied batch (degeneretteResolve at zero resolutions).
     error NoWork();
+    error OutOfBounds(); // A tunable parameter was set outside its permitted range.
 
     /*+======================================================================+
       |                              EVENTS                                  |
@@ -619,6 +620,24 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         }
         _lrWrite(LR_THRESHOLD_SHIFT, LR_THRESHOLD_MASK, _packEthToMilliEth(newThreshold));
         emit LootboxRngThresholdUpdated(prev, newThreshold);
+    }
+
+    /// @notice Update the basefee ceiling above which mid-day RNG requests are refused.
+    /// @dev Access: vault owner only (DGVE majority holder). Zero disables the gate.
+    ///      Bounds what a mid-day fulfillment can cost the subscription by declining to
+    ///      issue the request while the block is expensive; the daily advance is never
+    ///      gated, so the game's own RNG is unaffected and pending boxes simply wait for
+    ///      it. A lower ceiling narrows the gap a fulfillment can open between its own
+    ///      price and the basefee its redemption was charged at.
+    /// @param newGwei New ceiling in whole gwei, at most MIDDAY_MAX_BASEFEE_GWEI_CAP.
+    /// @custom:reverts OnlyVault If caller is not the vault owner.
+    /// @custom:reverts OutOfBounds If newGwei exceeds the packed field's range.
+    function setMiddayMaxBasefee(uint256 newGwei) external {
+        if (!vault.isVaultOwner(msg.sender)) revert OnlyVault();
+        if (newGwei > MIDDAY_MAX_BASEFEE_GWEI_CAP) revert OutOfBounds();
+        uint256 prev = _lrRead(LR_MAX_BASEFEE_SHIFT, LR_MAX_BASEFEE_MASK);
+        _lrWrite(LR_MAX_BASEFEE_SHIFT, LR_MAX_BASEFEE_MASK, newGwei);
+        emit MiddayMaxBasefeeUpdated(prev, newGwei);
     }
 
     /// @dev Ceiling on any declared snap exponent: 2^8 = 256x is the deepest
@@ -2099,6 +2118,33 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
             .GAME_ADVANCE_MODULE
             .delegatecall(msg.data);
         if (!ok) _revertDelegate(data);
+    }
+
+    /// @notice Mint mid-day RNG credit to a LINK donor.
+    /// @dev Access: ADMIN only — called from the LINK donation hook once the donated LINK
+    ///      has reached the VRF coordinator, so credit only ever trails LINK the
+    ///      subscription already holds. Handled inline (not delegated): the body is one
+    ///      SLOAD, two divisions and one SSTORE, so the module delegatecall's cold account
+    ///      access would cost more than the code it saves.
+    ///      The donated LINK is banked verbatim, with no reward multiplier applied — a
+    ///      request debits a multiple of what it actually bills, so the price lives at
+    ///      redemption rather than in a stored rate. Credit waives the pending-value gates
+    ///      on requestLootboxRng; the subscription LINK floor there still binds on every
+    ///      request, credited or not.
+    /// @param to Donor to credit.
+    /// @param linkAmount LINK donated, in juels.
+    /// @custom:reverts OnlyAdmin If caller is not ADMIN.
+    function creditMiddayRng(address to, uint256 linkAmount) external {
+        if (msg.sender != ContractAddresses.ADMIN) revert OnlyAdmin();
+        uint256 balance = middayRngCredit[to] + linkAmount;
+        middayRngCredit[to] = balance;
+        emit MiddayRngCredited(to, linkAmount, balance);
+    }
+
+    /// @notice Read a donor's unspent mid-day RNG credit, in juels of donated LINK.
+    /// @param account Address to query.
+    function middayRngCredits(address account) external view returns (uint256) {
+        return middayRngCredit[account];
     }
 
     /// @notice Pay FLIP to nudge the next RNG word by +1.

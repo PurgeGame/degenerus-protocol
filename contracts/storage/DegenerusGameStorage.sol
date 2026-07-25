@@ -664,6 +664,26 @@ abstract contract DegenerusGameStorage {
     ///      the AdvanceModule, so it lives in the shared base.
     event LootboxRngApplied(uint48 index, uint256 word, uint256 requestId);
 
+    /// @dev Emitted when a LINK donation adds mid-day RNG credit, in juels.
+    ///      `balance` is the post-credit balance.
+    event MiddayRngCredited(
+        address indexed donor,
+        uint256 added,
+        uint256 balance
+    );
+
+    /// @dev Emitted when credit is charged to waive a mid-day request's pending-value
+    ///      gates. `balance` is the post-charge balance. Emitted from the AdvanceModule,
+    ///      paired with MiddayRngCredited from the Game, so both live in the shared base.
+    event MiddayRngCreditSpent(
+        address indexed spender,
+        uint256 charged,
+        uint256 balance
+    );
+
+    /// @dev Emitted when the vault owner retunes the mid-day basefee ceiling, in gwei.
+    event MiddayMaxBasefeeUpdated(uint256 prev, uint256 next);
+
     /// @dev Emitted whenever prepaid afking ETH is spent to fund a buy (the afking-as-payment
     ///      waterfall's third tier) — full observability of where afking principal goes.
     event AfkingSpent(address indexed player, uint256 amount);
@@ -1780,15 +1800,18 @@ abstract contract DegenerusGameStorage {
     //   [bits   0:47]   lootboxRngIndex          uint48   (281T indices)
     //   [bits  48:111]  lootboxRngPendingEth     uint64   (scaled /1e15, 0.001 ETH res, far exceeds ETH supply)
     //   [bits 112:175]  lootboxRngThreshold      uint64   (scaled /1e15, 0.001 ETH res, far exceeds ETH supply)
-    //   [bits 176:183]  (unused)
+    //   [bits 176:183]  middayMaxBasefeeGwei     uint8    (whole gwei, 0 disables the gate)
     //   [bits 184:223]  lootboxRngPendingFlip  uint40   (scaled /1e18, 1 FLIP res, max ~1.1T FLIP)
     //   [bits 224:231]  midDayTicketRngPending   uint8    (bool flag, 8 bits)
+    //   [bits 232:255]  (unused)
 
     /// @dev Packed lootbox RNG state. See layout comment above.
-    ///      Initialized with lootboxRngIndex=1, lootboxRngThreshold=1 ether (scaled=1000).
+    ///      Initialized with lootboxRngIndex=1, lootboxRngThreshold=1 ether (scaled=1000),
+    ///      middayMaxBasefeeGwei=5.
     uint256 internal lootboxRngPacked =
         uint256(1)                                  // lootboxRngIndex = 1
-        | (uint256(1000) << 112);                   // lootboxRngThreshold = 1 ether / 1e15 = 1000
+        | (uint256(1000) << 112)                    // lootboxRngThreshold = 1 ether / 1e15 = 1000
+        | (uint256(5) << 176);                      // middayMaxBasefeeGwei = 5
 
     // ---- lootboxRng shifts and masks ----
     uint256 internal constant LR_INDEX_SHIFT = 0;
@@ -1801,6 +1824,31 @@ abstract contract DegenerusGameStorage {
     uint256 internal constant LR_PENDING_FLIP_MASK = 0xFFFFFFFFFF;         // 40 bits
     uint256 internal constant LR_MID_DAY_SHIFT = 224;
     uint256 internal constant LR_MID_DAY_MASK = 0xFF;                       // 8 bits
+    uint256 internal constant LR_MAX_BASEFEE_SHIFT = 176;
+    uint256 internal constant LR_MAX_BASEFEE_MASK = 0xFF;                   // 8 bits
+
+    /// @dev Ceiling on the tunable mid-day basefee gate, in whole gwei (the field is 8
+    ///      bits). Zero disables the gate, letting mid-day requests issue at any price.
+    uint256 internal constant MIDDAY_MAX_BASEFEE_GWEI_CAP = 255;
+
+    /// @dev Gas a mid-day fulfillment bills, summing the three terms the coordinator
+    ///      charges for: the ~50k callback, mainnet's ~112k proof verification, and the
+    ///      coordinator's own gasAfterPaymentCalculation of 38,900, which it adds to the
+    ///      gas it measured. It bills gas actually used, not the request's
+    ///      callbackGasLimit, so this tracks the real figure rather than the reservation.
+    uint256 internal constant MIDDAY_RNG_BILLED_GAS = 201_000;
+
+    /// @dev Multiple of the billed gas charged against a donor's credit: a 5x markup times
+    ///      the coordinator's 20% LINK premium. Charging a multiple of what the request
+    ///      actually costs — rather than a fixed price — keeps the charge tracking gas
+    ///      with no stored rate to re-calibrate as gas or LINK/ETH drifts. The markup
+    ///      holds while a fulfillment prices within 5x the request block's basefee and the
+    ///      feed tracks the coordinator's own LINK valuation; outside that band a
+    ///      redemption bills more than it charged. What bounds the subscription's exposure
+    ///      is the mid-day LINK floor rather than this multiple — requests stop below
+    ///      MIN_LINK_FOR_LOOTBOX_RNG, leaving that balance to the daily word, which is
+    ///      never gated.
+    uint256 internal constant MIDDAY_RNG_CHARGE_MULT = 6;
 
     /// @dev Scale factor for ETH/LINK packing (0.001 resolution).
     uint256 internal constant LR_ETH_SCALE = 1e15;
@@ -2876,7 +2924,7 @@ abstract contract DegenerusGameStorage {
         lvl = uint24((packed >> _FOIL_DRAW_LEVEL_SHIFT) & _FOIL_DRAW_LEVEL_MASK);
     }
 
-    /// @dev Gold-rush cross-day state, one packed slot (declared last so every
+    /// @dev Gold-rush cross-day state, one packed slot (appended so every
     ///      prior slot keeps its index). Armed on a 4-gold main board (jackpot
     ///      phase); resolved by the next main-board draw. Written and read only
     ///      inside VRF fulfillment — players can never touch it.
@@ -2892,4 +2940,13 @@ abstract contract DegenerusGameStorage {
     ///      [192:191] resolve-day ban quadrant
     ///      [216:193] resolve-day ban idx — frozen dailyIdx of the resolve draw
     uint256 internal goldRush;
+
+    /// @dev Unspent mid-day RNG credit per donor, in juels of donated LINK (appended so
+    ///      every prior slot keeps its index). Held in LINK because LINK is what the
+    ///      subscription is billed in, so a balance means exactly what it says: the LINK
+    ///      this donor put in and has not yet spent against.
+    ///      A redemption debits MIDDAY_RNG_CHARGE_MULT times what the request itself
+    ///      bills, priced at redemption rather than banked at a fixed rate — so the
+    ///      balance buys fewer requests when gas is expensive and more when it is cheap.
+    mapping(address => uint256) internal middayRngCredit;
 }

@@ -152,6 +152,14 @@ interface ILinkTokenLike {
     ) external returns (bool success);
 }
 
+/// @dev Game interface for minting mid-day RNG credit to LINK donors.
+interface IGameMiddayCredit {
+    /// @notice Mint mid-day RNG credit earned by a LINK donation.
+    /// @param to Donor to credit.
+    /// @param linkAmount LINK donated, in juels.
+    function creditMiddayRng(address to, uint256 linkAmount) external;
+}
+
 /// @dev Coinflip interface for LINK donation flip credits.
 interface ICoinflipLinkReward {
     /// @notice Credit FLIP stake to a player as a LINK donation reward.
@@ -1099,6 +1107,13 @@ contract DegenerusAdmin {
         } catch {
             revert InvalidAmount();
         }
+
+        // Mid-day RNG credit banks the donated LINK verbatim — no valuation, no reward
+        // multiplier — so it is granted before the multiplier path returns. A donation
+        // made while no price feed is installed still banks its credit, even though it
+        // earns no FLIP; the feed is only needed later, to price a redemption.
+        IGameMiddayCredit(ContractAddresses.GAME).creditMiddayRng(from, amount);
+
         if (mult == 0) return;
 
         uint256 ethEquivalent = _linkAmountToEth(amount, feed);

@@ -26,6 +26,12 @@ interface IGNRUSResolve {
     function pickCharity(uint24 level) external;
 }
 
+/// @dev Admin surface for the guarded LINK/ETH valuation. Passing one whole LINK yields
+///      wei-per-LINK, capped and staleness-checked, or zero when it cannot be priced.
+interface IAdminLinkValue {
+    function linkAmountToEth(uint256 amount) external view returns (uint256);
+}
+
 /// @dev Vault interface for the >50.1%-DGVE owner check (daily VRF retry head start).
 interface IVaultOwnerCheck {
     function isVaultOwner(address account) external view returns (bool);
@@ -54,6 +60,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
     error NoPendingLootbox(); // No pending lootbox ETH or FLIP value; nothing to trigger a mid-day RNG request for.
     error BelowThreshold(); // Pending lootbox ETH-equivalent value is below the configured threshold required to trigger mid-day RNG.
     error RngInFlight(); // A VRF request is already in flight (rngRequestTime != 0); cannot start another.
+    error GasTooHigh(); // Block basefee is above the mid-day ceiling; the request would bill the subscription at a bad price.
     error NotTimeYet();
     error RngNotReady();
     // error RngLocked() — inherited from DegenerusGameStorage
@@ -1300,6 +1307,20 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         // Block while mid-day ticket processing is active — prevents entropy reroll
         // by requesting a new VRF word after inspecting the current one.
         if (_lrRead(LR_MID_DAY_SHIFT, LR_MID_DAY_MASK) != 0) revert MidDayActive();
+        // Decline to issue while the block is expensive: the fulfillment is billed at the
+        // node's gas price a block or so later, so holding the request back while the
+        // basefee is high bounds what a mid-day word can cost the subscription. Gates only
+        // this path — the daily advance must run at any price — so a refused request just
+        // leaves the pending boxes to the next daily word. Zero disables the gate.
+        {
+            uint256 maxBasefee = _lrRead(
+                LR_MAX_BASEFEE_SHIFT,
+                LR_MAX_BASEFEE_MASK
+            );
+            if (maxBasefee != 0 && block.basefee > maxBasefee * 1 gwei) {
+                revert GasTooHigh();
+            }
+        }
         uint48 nowTs = uint48(block.timestamp);
         uint24 currentDay = _simulatedDayIndexAt(nowTs);
 
@@ -1326,7 +1347,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         uint256 pendingFlip = _unpackWholeFlipToWei(
             uint40(_lrRead(LR_PENDING_FLIP_SHIFT, LR_PENDING_FLIP_MASK))
         );
-        if (pendingEth == 0 && pendingFlip == 0) revert NoPendingLootbox();
+        bool noPending = pendingEth == 0 && pendingFlip == 0;
         uint256 totalEthEquivalent = pendingEth;
         if (pendingFlip != 0) {
             uint256 priceWei = PriceLookupLib.priceForLevel(level);
@@ -1339,7 +1360,17 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         uint256 threshold = _unpackMilliEthToWei(
             uint64(_lrRead(LR_THRESHOLD_SHIFT, LR_THRESHOLD_MASK))
         );
-        if (threshold != 0 && totalEthEquivalent < threshold) revert BelowThreshold();
+        // Donation credit waives both pending-value gates — an empty queue and a
+        // below-threshold one alike. Charged only where one actually binds, so a request
+        // that already clears them costs a holder nothing, and a caller holding no credit
+        // still gets the specific gate as the revert. Ordered after the LINK floor above
+        // so credit is never charged for a request the subscription cannot pay for.
+        if (noPending || (threshold != 0 && totalEthEquivalent < threshold)) {
+            if (!_tryChargeMiddayCredit()) {
+                if (noPending) revert NoPendingLootbox();
+                revert BelowThreshold();
+            }
+        }
 
         // Freeze ticket buffer: swap write→read so tickets purchased after
         // VRF delivery can't be resolved by this word.
@@ -1555,6 +1586,43 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         // Need fresh RNG
         _requestRng(isTicketJackpotDay, lvl);
         return (1, 0);
+    }
+
+    /// @dev Charge the caller's donation credit for one mid-day request, in the LINK the
+    ///      subscription is billed in: the gas a fulfillment bills at this block's
+    ///      basefee, times MIDDAY_RNG_CHARGE_MULT, converted at the same capped and
+    ///      staleness-checked feed the donation reward values with. Pricing from what the
+    ///      request actually costs, rather than a stored rate, keeps the charge tracking
+    ///      gas as it moves. The markup is not a surplus at every price: a fulfillment
+    ///      landing above 5x the request block's basefee, or a feed reading above the
+    ///      coordinator's own LINK valuation, bills more than the redemption charged. The
+    ///      LINK floor gating this request is what bounds the drain that opens up.
+    ///      Priced off block.basefee, not tx.gasprice: the requester sets the latter and
+    ///      could otherwise submit at a trivial price to be charged almost nothing while
+    ///      the node fulfills at market. Basefee omits the node's tip; the multiple covers
+    ///      it. A feed that cannot price right now returns zero and the waiver is refused
+    ///      rather than granted free — the free path is unaffected either way.
+    /// @return charged True if the caller's balance covered the charge.
+    function _tryChargeMiddayCredit() private returns (bool charged) {
+        uint256 balance = middayRngCredit[msg.sender];
+        // A zero balance never qualifies, even where basefee (and so the charge) is zero.
+        if (balance == 0) return false;
+
+        uint256 weiPerLink = IAdminLinkValue(ContractAddresses.ADMIN)
+            .linkAmountToEth(1 ether);
+        if (weiPerLink == 0) return false;
+
+        uint256 charge = (MIDDAY_RNG_BILLED_GAS *
+            block.basefee *
+            MIDDAY_RNG_CHARGE_MULT *
+            1 ether) / weiPerLink;
+        if (balance < charge) return false;
+        unchecked {
+            balance -= charge;
+        }
+        middayRngCredit[msg.sender] = balance;
+        emit MiddayRngCreditSpent(msg.sender, charge, balance);
+        return true;
     }
 
     function _finalizeLootboxRng(uint256 rngWord) private {
