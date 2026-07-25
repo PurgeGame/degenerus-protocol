@@ -3,7 +3,7 @@
 For a gambling protocol, economic transparency matters as much as contract transparency.
 **Every figure below cites the exact contract line that defines it.** Nothing here is
 marketing math — verify each number against the frozen subject (`contracts/` tree
-`9bf29cc8`, tag `degenerus-c4a`).
+`975fb0e0`, tag `degenerus-c4a`).
 
 The code is **not yet deployed**. There are no live token prices. Figures are on-chain
 constants and formulas, not projected returns.
@@ -142,7 +142,8 @@ holder; that authority — and these claims — move with the DGVE token.
 - **The one admin power that reaches player pricing: thanos-level declaration.**
   `DegenerusGame.setThanosLevel(targetLevel, shift)` (`DegenerusGame.sol:653-677`) declares that every
   ticket entry drained for `targetLevel` onward divides by `2^shift` — i.e. it raises the effective
-  entry price, and the foil-pack price, from that level on. Disclosed here because it is economic, not
+  entry price, and the foil-pack price (whose match-bonus payout carries the same exponent, so the
+  raise is EV-neutral rather than a value cut), from that level on. Disclosed here because it is economic, not
   merely operational. It moves **no ETH**, credits nothing to the vault, and cannot touch
   `claimablePool` or any player balance; it is bounded to a *prospective* change: `targetLevel >=
   level + 6` (which lands it strictly before the target level's first materialization, so one level's
