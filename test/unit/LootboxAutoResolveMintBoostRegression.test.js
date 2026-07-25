@@ -105,16 +105,26 @@ describe("LootboxAutoResolveMintBoostRegression — Phase 275 Wave 2 TST-LBX-AR-
       ).to.equal(true);
     });
 
-    it("[02b] `_rollRemainder` is invoked at ≥4 callsites in MintModule (mint-boost activation paths)", function () {
+    it("[02b] every MintModule drain path still reaches `_rollRemainder` (via the shared per-entry engine)", function () {
       const mint = fs.readFileSync(MINT_MODULE_PATH, "utf8");
-      // Count callsites (exclude the definition itself). Each invocation is
-      // of the shape `_rollRemainder(entropy, ..., rem)`.
+      // Both remainder-roll sites live in the single per-entry engine now: the zero-owed
+      // roll inside _resolveZeroOwedRemainder, and the end-of-take roll inside
+      // _processOneTicketEntry. Assert the roll sites AND that both drain entrypoints route
+      // through that engine — a stronger guard than a raw occurrence count, which used to
+      // encode the duplicated inline loop processFutureTicketBatch carried before it was
+      // collapsed onto _processOneTicketEntry.
       const callsites = (mint.match(/_rollRemainder\(/g) || []).length;
-      // 1 definition + ≥4 callsites = ≥5 total occurrences.
       expect(
         callsites,
-        "expected ≥5 occurrences of `_rollRemainder(` (1 def + ≥4 callsites in mint-boost activation paths)"
-      ).to.be.gte(5);
+        "expected ≥3 occurrences of `_rollRemainder(` (1 def + the zero-owed and end-of-take roll sites)"
+      ).to.be.gte(3);
+      for (const entrypoint of ["processTicketBatch", "processFutureTicketBatch"]) {
+        const body = mint.slice(mint.indexOf(`function ${entrypoint}(`));
+        expect(
+          body.slice(0, body.indexOf("\n    function ")).includes("_processOneTicketEntry("),
+          `${entrypoint} must drain through _processOneTicketEntry (the only remainder-roll path)`
+        ).to.equal(true);
+      }
     });
 
     it("[02c] cross-module negation: `_rollRemainder` is NOT defined in DegenerusGameStorage.sol or DegenerusGameLootboxModule.sol — it's MintModule-local", function () {

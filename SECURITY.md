@@ -120,8 +120,9 @@ retro-price a materialized ticket nor be used to extract value:
 custodied position (its shares, its tickets, its escrow). It cannot reach into player balances or the
 game's claimablePool. The vault's reserve is a virtual-allowance model (`balanceOf[VAULT] == 0`). The
 price-feed swap only affects LINK→FLIP donation valuation and is itself death-clock-gated in Admin.
-The two GNRUS recovery actions are the sole vault-owner powers that reach beyond the vault's own
-position, and only narrowly: they act on *charity residual* on a contract already post-gameOver and
+Besides the thanos declaration above, the two GNRUS recovery actions are the only vault-owner powers
+that reach beyond the vault's own position, and only narrowly: they act on *charity residual* on a
+contract already post-gameOver and
 past its final sweep — never live player balances or the game claimablePool. `vaultRedeemFor` is
 value-preserving (the holder receives exactly what `burn()` would pay it; the owner cannot extract
 holder value), and `sweepResidualToVault` is time-locked to 3 years past the final sweep — a grace
