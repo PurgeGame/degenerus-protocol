@@ -577,6 +577,25 @@ contract DegenerusGameFoilPackModule is
     ///      the double-claim marker is set (CEI). The matched signature `sel` is the
     ///      spin's player ticket, so the win plays the exact four-quadrant line that
     ///      matched (its boosted gold count is EV-neutral under the per-N tables).
+    ///
+    ///      Snap valve: the value-bearing face amounts carry the level's snap exponent,
+    ///      the same one the buy charged. Without it the whole match leg would be worth
+    ///      2^s less against a 2^s price — the one foil term that would break the
+    ///      declaration's EV-neutrality (the sixteen jackpot entries already hold their
+    ///      ratio: they are fixed at FOIL_PACK_ENTRIES and each is worth 2^s more once
+    ///      the divisor thins the level's entry population). The ETH leg's over-cap
+    ///      remainder recircs to a lootbox whose ticket award queues 2^s more raw
+    ///      entries and is divided by the SAME exponent at materialization, so the
+    ///      delivered entry count is snap-invariant and no drain grows with s. WWXRP
+    ///      stays unshifted: the lane is worthless by design, so scaling it would
+    ///      inflate a cosmetic number and nothing else.
+    ///
+    ///      Reading the exponent here (rather than freezing it into foilRecord) is
+    ///      exact: a pack only matches on days whose sealed draw records level `L`, so
+    ///      every claim lands inside `L`; snapShift moves only at a level commit; and a
+    ///      fresh declaration needs `targetLevel >= level + 6` (an armed one cannot be
+    ///      redeclared at all), so no in-flight level's exponent can shift under a
+    ///      claim. `_snapShiftFor(L)` therefore returns exactly what buyFoilPack charged.
     function _payFoilTier(
         address player,
         uint256 day,
@@ -609,12 +628,15 @@ contract DegenerusGameFoilPackModule is
         // can move the payout. The per-N tables hold EV flat across the foil's boosted
         // trait mix.
 
+        // The level's snap exponent, matching the buy charge (see the note above).
+        uint8 snapS = _snapShiftFor(L);
+
         if (c < 40) {
             // ETH (40%): one pool-capped spin; over-cap recircs to the lootbox.
             _foilSpin(
                 IDegenerusGameDegeneretteModule.resolveEthSpinFromBox.selector,
                 player,
-                faces * PriceLookupLib.priceForLevel(L),
+                (faces * PriceLookupLib.priceForLevel(L)) << snapS,
                 activityScore,
                 seed,
                 sel
@@ -625,7 +647,7 @@ contract DegenerusGameFoilPackModule is
             _foilSpin(
                 IDegenerusGameDegeneretteModule.resolveFlipSpinsFromBox.selector,
                 player,
-                faces * FLIP_FACE_AMOUNT,
+                (faces * FLIP_FACE_AMOUNT) << snapS,
                 activityScore,
                 seed,
                 sel
