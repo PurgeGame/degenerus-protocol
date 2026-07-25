@@ -1,6 +1,6 @@
 # Security Policy
 
-Frozen subject: `contracts/` tree `dc0a3bdf` @ tag `degenerus-c4a` (post-v75.0 hardening freeze).
+Frozen subject: `contracts/` tree `9bf29cc8` @ tag `degenerus-c4a` (post-v75.0 hardening freeze).
 
 ## Reporting a vulnerability
 
@@ -78,7 +78,9 @@ its own constructor). CREATOR holds the initial 1T supply of each; the role tran
 **Powers (`onlyVaultOwner`, unilateral):** swap/stake ETH↔stETH (the vault's own custodied position),
 set the lootbox mid-day-RNG threshold (the pending-lootbox ETH-equivalent value that must accumulate
 before an extra *intra-day* lootbox VRF request may be triggered — a LINK-cost-limiting operational
-knob, not a security parameter), the owner-gated salvage-buy fallback, **AFKing seat grants**
+knob, not a security parameter), **thanos-level declaration** (`DegenerusGame.setThanosLevel` — see
+the dedicated bounds below; the one vault-owner power that reaches every player's pricing),
+the owner-gated salvage-buy fallback, **AFKing seat grants**
 (`afkingGrant` — grant seat claim rights from the vault's 998-seat allowance on
 `AFKingSubscriptionToken`; the token itself enforces the sale lock — grants revert until all 1,000
 free-tranche seats are claimed — and the 998 lifetime cap, so the owner cannot dilute the free
@@ -95,9 +97,28 @@ unhealthy 2d / VRF stalled 44h); neither executes without sDGNRS-majority govern
 death-clock (decaying vote threshold + kill-on-recovery — see role 1). `proposeFeedSwap` /
 `voteFeedSwap`; the 0.5%-sDGNRS community path (7d) is the other proposal entry.
 
-**Bounds:** every vault-owner action operates only on the vault's *own* custodied position
-(its shares, its tickets, its escrow). It cannot reach into player balances or the game's
-claimablePool. The vault's reserve is a virtual-allowance model (`balanceOf[VAULT] == 0`). The
+**Bounds — thanos-level declaration (the one power that is NOT vault-position-local).**
+`setThanosLevel(targetLevel, shift)` declares that every ticket entry drained for `targetLevel`
+onward divides by `2^shift`, i.e. it raises the effective entry price (and the foil-pack price) for
+everyone from that level on. It is a purely *prospective* price change, bounded so it can neither
+retro-price a materialized ticket nor be used to extract value:
+- **6-level notice, pre-materialization.** `targetLevel >= level + 6`, which lands the declaration
+  strictly before the target's first materialization (the far-future promotion at the transition to
+  `target - 5`). One level's entries therefore always share one exponent regardless of when they
+  were bought or drained, and the uniform division cancels in the pot-share fraction — a raw entry's
+  replacement cost and expected pot share are both unchanged by any declaration.
+- **Immutable once armed.** A pending declaration whose 6-level window has opened cannot be changed
+  (`level + 6 > snapLevel` reverts `ThanosBounds`); it clears when its level commits.
+- **Capped depth.** `shift <= 8` (256× maximum divisor).
+- **Runaway-scale floor.** A non-zero shift requires the target level's projected entries — the
+  previous level's *settled* pool target at the target level's price — to still exceed 40,000,000
+  entries (10M whole tickets) after division, so snapping is undeclarable below runaway demand.
+- **No value path.** It moves no ETH, credits nothing to the vault, and cannot touch
+  `claimablePool`, player balances, or any already-drained entry.
+
+**Bounds (all other powers):** every other vault-owner action operates only on the vault's *own*
+custodied position (its shares, its tickets, its escrow). It cannot reach into player balances or the
+game's claimablePool. The vault's reserve is a virtual-allowance model (`balanceOf[VAULT] == 0`). The
 price-feed swap only affects LINK→FLIP donation valuation and is itself death-clock-gated in Admin.
 The two GNRUS recovery actions are the sole vault-owner powers that reach beyond the vault's own
 position, and only narrowly: they act on *charity residual* on a contract already post-gameOver and
@@ -128,6 +149,24 @@ days backfill (`keccak256(vrfWord, gapDay)`) on recovery, capped at 120 days. Af
 > 120-day VRF death the deadman (role-independent) commits a non-steerable historical+prevrandao
 fallback so the protocol can drain rather than brick (see KNOWN-ISSUES.md "VRF-death deadman").
 
+### 5. ENS reverse registrar — optional, constructor-only, zero authority
+
+**Who:** the `ENS_REVERSE_REGISTRAR` constant in `ContractAddresses.sol`. **It is `address(0)` in the
+frozen subject**, so in the audited tree the call site is unreachable dead code; a mainnet/Base
+deployment patches in the L1 `ReverseRegistrar` or Base's `L2ReverseRegistrar` (the `setName(string)`
+selector is shared).
+
+**Powers:** none over the protocol. Fourteen player-facing contracts make **one** best-effort
+`setName("<label>.degenerus.eth")` low-level call from their own constructor to register their ENS
+reverse name. The return value is deliberately discarded so a missing/hostile/reverting registrar can
+never revert a deployment.
+
+**Bounds:** constructor-only (unreachable after deploy), no state read from it, no value sent, no
+storage written from its response. A hostile registrar can at most refuse to name the contracts or
+publish a misleading reverse record off-protocol — it cannot affect game state, funds, or access
+control. This is the only address in the system that is *not* protocol-controlled, and it is why the
+raw-selector gate carries an explicit justification comment at each of the 14 call sites.
+
 ### Roles that do NOT exist
 
 No pausing role, no fee-setter, no treasury withdrawer, no mint/blacklist admin, no proxy admin, no
@@ -146,8 +185,19 @@ safe under one rule, applied uniformly:
 - **Harvest-inward-only settlement (ungated).** `openBox`/`openBoxes`, `claimBingo(player,…)`
   (sender-or-approved, player-keyed dedup), `claimWhalePass`, `claimAffiliateDgnrs` (single + batch
   with per-item try/catch), `resolveDegeneretteBets`, `resolveRedemptionLootbox` (sDGNRS-only),
+  `claimFoilMatchMany` (each settled win credits its own pack owner; a non-claimable tuple *at index
+  0* reverts `StaleBatch` so a second sender handed an already-swept list fails in simulation instead
+  of paying to walk it — later non-claimable tuples are still skipped), `sDGNRS.claimRedemption` /
+  `claimRedemptionMany` during a live game (both halves of the rolled ETH route to the GAME — the
+  direct half into the claimant's *gated* claimable, the lootbox half resolved to the claimant),
   ticket settlement, and the advance crank all credit the *resolved owner/contract* — the caller can
   never redirect the value to itself.
+- **Post-gameOver push exception (gated).** Once the game is over, `sDGNRS.claimRedemption`
+  direct-*pushes* ETH to `player`, so it narrows to `player` or an operator `player` approved on the
+  GAME; `claimRedemptionMany` reverts `Unauthorized` post-gameOver (use the single self-claim). Same
+  rule, applied to a push instead of a credit. `subscribe` and the idle `mineFlip` crank likewise
+  close post-gameOver (`GameOver()` / `NoWork()`), except that `mineFlip` still runs a pending 30-day
+  final sweep.
 - **Caller-funded gifts (ungated, but spend = funder).** `Coinflip.depositCoinflip(player, amount)`
   and the Degenerette gift placement source the FLIP principal from `msg.sender` on the gift branch
   (`funder = msg.sender` when caller ≠ player and not operator-approved); the stake/position belongs

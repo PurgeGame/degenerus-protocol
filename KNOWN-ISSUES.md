@@ -4,14 +4,14 @@ Pre-disclosure for audit wardens. **If a finding's mechanism + impact is describ
 already known and is not eligible.** This is a precise perimeter — each entry names the exact
 mechanism and why it is by-design, defended, or out-of-scope. There are no vague blanket disclaimers.
 
-Frozen subject: `contracts/` tree `dc0a3bdf` @ tag `degenerus-c4a`. Pre-scanned with Slither v0.11.5
+Frozen subject: `contracts/` tree `9bf29cc8` @ tag `degenerus-c4a`. Pre-scanned with Slither v0.11.5
 + Aderyn 0.6.8; those findings are triaged in the automated-tools section below.
 
 ---
 
 ## 1. Design decisions (architectural, not vulnerabilities)
 
-**Daily-advance assumption.** The protocol assumes the daily crank `mintFlip` — which drives
+**Daily-advance assumption.** The protocol assumes the daily crank `mineFlip` — which drives
 `advanceGame` to completion and pays the keeper bounty — is called each day. An escalating bounty
 (≈0.005→0.03 ETH-equiv over ~2h) plus the fact that the advance delivers jackpot payments makes daily
 calling economically rational. If skipped for multiple days the next call backfills gap days, **capped
@@ -20,7 +20,7 @@ skipped day never resolves — `_unlockRng` advances `dailyIdx` straight to the 
 `processCoinflipPayouts` is never called for that day and the stake stays permanently unclaimable. The
 staked FLIP was already burned at deposit (as every coinflip stake is), so the loss is confined to the
 affected bettor and never touches stETH solvency. Reaching >120 skipped days requires >120 consecutive
-days with nobody calling `mintFlip` at all — a total abandonment under which FLIP is already valueless.
+days with nobody calling `mineFlip` at all — a total abandonment under which FLIP is already valueless.
 
 **Non-VRF entropy for the affiliate winner roll.** Deterministic seed (gas optimization). Worst case:
 a player times purchases to direct affiliate credit to a different affiliate. No protocol value is
@@ -71,12 +71,12 @@ is no victim. An admin-power finding must exhibit an **engaged-community victim*
 ## 3. Accepted out-of-scope risk: the > 120-day VRF-death deadman fallback (do NOT submit)
 
 **Mechanism.** When the game has not sealed a day for more than 120 days
-(`_vrfDeadmanFired ≡ _simulatedDayIndex() − dailyIdx > 120`, `DegenerusGameStorage.sol:1658-1659`;
+(`_vrfDeadmanFired ≡ _simulatedDayIndex() − dailyIdx > 120`, `DegenerusGameStorage.sol:1728-1730`;
 `dailyIdx` is uint24 and always `<= _simulatedDayIndex()` so no underflow), the terminal release no
-longer waits for Chainlink. `_getHistoricalRngFallback` (`DegenerusGameAdvanceModule.sol:1613-1637`)
+longer waits for Chainlink. `_getHistoricalRngFallback` (`DegenerusGameAdvanceModule.sol:1678-1702`)
 commits a fallback word from sealed historical `rngWordByDay` admixed with `block.prevrandao`; the
 `reverseFlip` nudge is cancelled-and-consumed (`unchecked fallbackWord -= totalFlipReversals`,
-`:1562`, against the consumption in `_applyDailyRng :2199-2215`).
+`:1627`, against the consumption in `_applyDailyRng :2314-2330`).
 
 **Why a block proposer's 1-bit `prevrandao` grind over the terminal distribution is accepted:** this
 path is reachable **only** after a catastrophic, unrecovered Chainlink VRF death — VRF itself dead
@@ -104,18 +104,38 @@ transaction (a coin credit, not ETH-backed value). Immaterial; documented, not e
 
 ## 5. Automated tool findings (pre-disclosed)
 
-The full machine-readable Slither/Aderyn baseline is maintained internally — Slither 0.11.5 (2,915
-results / 101 detectors at tree `dc0a3bdf`; the 146 "High" are dominated by `uninitialized-state`
-false positives from the shared-storage delegatecall architecture) + Aderyn 0.6.8 (9 High / 19 Low).
+The full machine-readable Slither/Aderyn baseline is maintained internally — Slither 0.11.5 (2,973
+results / 101 detectors over 139 contracts at tree `9bf29cc8`; 153 High / 409 Medium / 353 Low /
+2,005 Informational / 53 Optimization, and the "High" tier is dominated by 117 `uninitialized-state`
+false positives from the shared-storage delegatecall architecture) + Aderyn 0.6.8 (9 High / 20 Low).
 Slither totals are sensitive to the scan environment (solc/toolchain resolution), so the absolute
 count is not comparable across machines — re-runs should compare category triage, not the total.
-These counts were measured directly at tree `dc0a3bdf`, not carried forward from an earlier scan.
+These counts were measured directly at tree `9bf29cc8`, not carried forward from an earlier scan.
 CI re-runs both
 analyzers on every push (`.github/workflows/ci.yml`); the standing per-category triage — why each is
 by-design, defended, or not-applicable — is below.
 
 **Arbitrary-send-eth.** `_payoutWithStethFallback` / `_payoutWithEthFallback` / `_payEth` send ETH via
 `.call{value:}` to `msg.sender` or player addresses read from game state — all access-controlled.
+
+**incorrect-exp (High ×2) — both false positives.** One is in `node_modules/@openzeppelin` (out of
+scope). The other, `otherSlot = slot ^ 1` in `DegenerusQuests._questCompleteWithPair`, is a deliberate
+XOR toggle between the two quest slots (0↔1), not a mistyped `**`.
+
+**shadowing-state (High ×1).** `DegenerusGameMintModule.JACKPOT_LEVEL_CAP` re-declares the same
+constant value as `DegenerusGameMintStreakUtils.JACKPOT_LEVEL_CAP`. Both are `constant` with identical
+values, so no storage is shadowed and no read can diverge — a duplicate literal, not a state bug.
+
+**locked-ether (Medium ×3).** The flagged contracts are `delegatecall` modules (Boon, Whale, …) plus a
+test mock. A module never holds ETH: it executes in `DegenerusGame`'s context, so `payable` entrypoints
+there are the *game's* payable surface and the game has the withdrawal paths.
+
+**low-level-calls (Informational ×14) — ENS self-naming.** Fourteen constructors make one best-effort
+`setName(string)` call to `ContractAddresses.ENS_REVERSE_REGISTRAR` (`address(0)` in this subject, so
+unreachable here). The return value is intentionally discarded so a missing or hostile registrar can
+never revert a deployment; each site carries a raw-selector justification comment. Zero authority,
+constructor-only — see SECURITY.md role 5. Aderyn additionally reports the discard as a "Redundant
+Statement" Low (the `ok;` no-op that silences the unused-variable warning).
 
 **events-maths.** `resolveRedemptionLootbox` decrements `claimablePool` without a dedicated event;
 higher-level redemption events capture the context (the variable is a running tally, not a balance).
@@ -188,3 +208,18 @@ VAULT` de-circulates the tokens (totalSupply reduced) into the vault's virtual m
 (`balanceOf[VAULT]` stays 0; the reserve lives in `_supply.vaultAllowance`). `to == SDGNRS` de-circulates
 them into sDGNRS's redemption backing (`coinflip.creditSdgnrsBacking`). Both reduce totalSupply and emit
 `Transfer(from, address(0))`. Intentional virtual-reserve architecture.
+
+**FLIP *minted* to VAULT or sDGNRS never enters `totalSupply` either.** `_mint` mirrors the same two
+intercepts: a mint to VAULT lands in `vaultAllowance`, and a mint to SDGNRS (e.g. a box-spin FLIP win on
+sDGNRS's own self-subscription) routes straight to `coinflip.creditSdgnrsBacking` with **zero** supply
+mutation — nothing was circulating, so nothing is de-circulated, and no `Transfer` event is emitted for
+that leg. Consequence: neither address can ever hold a `balanceOf` FLIP balance, by construction on both
+the transfer and the mint side. `totalSupply + vaultAllowance = supplyIncUncirculated` still holds.
+
+**sDGNRS's FLIP backing is staked, not held.** `creditSdgnrsBacking` places incoming FLIP on the *next*
+day's coinflip stake (day-keyed like every other deposit) rather than crediting `claimableStored`
+directly. sDGNRS's redeemable FLIP backing is therefore `claimableStored` (the genesis seed reserve,
+which redemption burns drain first) **plus** the rolling auto-rebuy carry, and it moves with coinflip
+outcomes. This is by design: FLIP is the game's own coin, its backing role is redemption-side only, and
+the 0-take-profit perpetual rebuy makes the position structurally roll rather than pay out. No ETH or
+stETH solvency term depends on it.

@@ -14,7 +14,7 @@ Three products share one economy:
 
 The protocol extracts zero rake after presale. Every wei of ETH that enters goes into prize pools and recirculates to players. No operator fees, no admin withdrawal function. The contracts are immutable with no upgrade path.
 
-Ownership is vault-based: the DGVE holder (>50.1% of vault governance token) acts as admin. Powers are narrowly scoped — VRF coordinator swaps (via sDGNRS-holder governance with decaying approval threshold), ETH→stETH liquidity conversion, lootbox RNG threshold, and LINK price feed configuration. The admin cannot access player funds or modify core game rules. A community governance path allows 0.5%+ sDGNRS holders to propose VRF coordinator swaps after a 7-day VRF stall.
+Ownership is vault-based: the DGVE holder (>50.1% of vault governance token) acts as admin. Powers are narrowly scoped — VRF coordinator swaps (via sDGNRS-holder governance with decaying approval threshold), ETH→stETH liquidity conversion, lootbox RNG threshold, LINK price feed configuration, and thanos-level declaration (a pre-announced, prospective-only entry divisor for a level at least 6 levels out; see `SECURITY.md` role 2 for its full bounds). The admin cannot access player funds or modify core game rules. A community governance path allows 0.5%+ sDGNRS holders to propose VRF coordinator swaps after a 7-day VRF stall.
 
 Two liveness guards prevent permanent fund lockup. At level 0, a 365-day deploy timeout fires if no level ever completes. Once past level 0, a 120-day inactivity guard fires if no level completes for 120 consecutive days (VRF stall durations are excluded from this count). When either guard triggers, remaining funds are distributed: deity pass holders receive refunds of up to 20 ETH each (if game ends before level 10), then 10% goes to Decimator death-bet holders and 90% to the phase-correct terminal ticket cohort (next-level tickets during the ordinary purchase phase; current-level tickets during jackpot phase or a locked final-purchase transition). Any uncredited remainder is split three ways between the vault, sDGNRS backing, and GNRUS. A 30-day final sweep forfeits unclaimed winnings and splits all remaining balances three ways between the vault, sDGNRS, and GNRUS. The terminal payout math makes buying during a stall individually rational, which is what prevents the stall from lasting 120 days. Full analysis in the [game theory paper](https://degener.us/theory/).
 
@@ -22,8 +22,10 @@ Two liveness guards prevent permanent fund lockup. At level 0, a 365-day deploy 
 
 - **27 deployable contracts** (15 core + 12 delegatecall modules), sharing storage via `DegenerusGameStorage`
 - Solidity 0.8.34, `viaIR` enabled, optimizer runs = 1000, EVM target `osaka`
-- All contracts under the 24,576-byte EIP-170 limit (largest: MintModule at ~23.6KB)
-- External dependencies: Chainlink VRF V2.5, Lido stETH, LINK token
+- All contracts under the 24,576-byte EIP-170 limit (largest: MintModule at 23,333 bytes, 1,243 to spare; DegenerusGame at 23,067)
+- External dependencies: Chainlink VRF V2.5, Lido stETH, LINK token, and (optionally) an ENS
+  reverse registrar — `ENS_REVERSE_REGISTRAR` is `address(0)` in this tree, which disables the
+  constructor self-naming call entirely
 - Pull-pattern ETH/stETH withdrawals (no push payments)
 
 ```
@@ -88,6 +90,8 @@ The `ContractAddresses.sol` values committed here are the **Foundry deterministi
 
 - **VRF State Machine:** `rngLockedFlag` prevents concurrent daily VRF requests. Request -> fulfill -> unlock cycle. 12-hour retry timeout, 14-day emergency game-over fallback.
 - **Prize Pool Split:** 90% current level / 10% future levels on ticket purchase.
+- **Thanos levels (snap valve):** the vault owner may declare a level at least 6 levels out a "thanos level", after which every drained ticket entry for that level onward divides by `2^shift` (shift ≤ 8). Purely prospective — the declaration lands strictly before the target level's first materialization, so one level's entries always share one exponent and the uniform division cancels in the pot-share fraction. A non-zero shift is only declarable once projected demand exceeds 40M entries at the target level. Foil-pack price carries the same exponent.
+- **Century BAF incinerator:** at an ×00 level whose BAF *loses* its flip (the bracket is skipped and the pool normally just rolls forward), 25% of the would-be BAF pool instead pays one burn-weighted winner drawn from the WWXRP burns made during the preceding ×99 level. Entries close when the level increments off ×99 — the same transaction that requests the VRF word deciding the flip.
 - **Whale Pricing:** Bundles 2.4-4 ETH, lazy passes 0.24 ETH+, deity passes 24 + T(n) ETH triangular.
 - **Game Over:** Liveness guard fires inside `advanceGame` (120-day inactivity or 365-day deploy timeout). `handleGameOverDrain` distributes funds using historical RNG (14-day fallback if Chainlink is stalled, or immediate fallback once the >120-day suppressed-phase deadman fires). A 30-day final sweep sends unclaimed remainder three ways to the vault, sDGNRS, and GNRUS.
 - **Pull Payments:** All ETH/stETH withdrawals use pull pattern via `claimWinnings()`.
@@ -107,17 +111,17 @@ The Solidity build is pinned — `foundry.toml` fixes the compiler (solc 0.8.34)
 
 The full assurance pipeline lives in this repository and runs in CI (`.github/workflows/ci.yml`) on every push:
 
-- **`forge test`** — **1,200 Foundry tests across 174 suites**, all passing: unit, integration, fuzz, invariant, gas, access-control, governance, economics, and named regression harnesses for every fixed finding.
+- **`forge test`** — **1,225 Foundry tests across 177 suites**, all passing: unit, integration, fuzz, invariant, gas, access-control, governance, economics, and named regression harnesses for every fixed finding.
 - **EIP-170 size gate** — CI fails if any deployed contract breaches the 24,576-byte limit.
 - **Storage-layout oracle** (`scripts/layout/storage_layout_oracle.sh`) — 12 modules execute by `delegatecall` against one shared `DegenerusGameStorage`, so CI fails the build if any storage slot in the game, any state contract, or any module moves versus a committed golden. This makes the "a module writes a slot the game uses for something else" corruption class un-shippable.
 - **Source-drift gates** (`make check-*`) — interface coverage, delegatecall target alignment, raw-selector bans, RNG-window consumer classification, pool-write provenance.
 - **Static analysis** — Slither + Aderyn (non-blocking).
-- **Weekly** — 31 Halmos symbolic proofs + a deep invariant sweep (runs=1000, depth=256).
+- **Weekly** — 34 Halmos symbolic proofs + a deep invariant sweep (runs=1000, depth=256).
 
 Reproduce the core suite locally:
 
 ```
-forge test    # 1,200 passing
+forge test    # 1,225 passing
 make check-interfaces check-delegatecall check-raw-selectors check-rng-window check-pool-writes
 bash scripts/layout/storage_layout_oracle.sh
 ```
@@ -126,7 +130,7 @@ A secondary Hardhat behavioral suite (`npx hardhat test`) provides additional co
 
 ## Scope & Known Issues
 
-- **`scope.txt` / `out_of_scope.txt`** — the exact audited surface, pinned to `contracts/` tree `dc0a3bdf` (tag `degenerus-c4a`).
+- **`scope.txt` / `out_of_scope.txt`** — the exact audited surface, pinned to `contracts/` tree `9bf29cc8` (tag `degenerus-c4a`).
 - **`KNOWN-ISSUES.md`** — every pre-triaged finding, by-design ruling, and static-analysis disposition, each with its precise mechanism. Not vague disclaimers.
 - **`SECURITY.md`** — threat model, trusted-role matrix (functional authority, not just Solidity modifiers), and disclosure process.
 - **`ECONOMIC_DISCLOSURES.md`** — creator allocations, vesting, governance control, the WWXRP reserve, and terminal value — every figure cited to a contract line.

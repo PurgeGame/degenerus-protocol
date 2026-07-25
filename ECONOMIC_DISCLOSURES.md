@@ -3,7 +3,7 @@
 For a gambling protocol, economic transparency matters as much as contract transparency.
 **Every figure below cites the exact contract line that defines it.** Nothing here is
 marketing math — verify each number against the frozen subject (`contracts/` tree
-`dc0a3bdf`, tag `degenerus-c4a`).
+`9bf29cc8`, tag `degenerus-c4a`).
 
 The code is **not yet deployed**. There are no live token prices. Figures are on-chain
 constants and formulas, not projected returns.
@@ -31,28 +31,28 @@ constants and formulas, not projected returns.
 ### (a) The DegenerusVault — effectively the creator's private vault
 
 The creator holds **100% of both vault share classes** (DGVE + DGVF) at deploy
-(`DegenerusVault.sol:238-243`), so the two-token split is internal abstraction — functionally the
+(`DegenerusVault.sol:248-254`), so the two-token split is internal abstraction — functionally the
 creator owns the vault. It has **several ongoing inflows, not just yield**:
 
 - **stETH yield — the largest ongoing inflow.** Protocol surplus (balance above obligations) is split
   into four ~23% shares — sDGNRS backing, the vault, GNRUS charity, and a yield-accumulator — via
-  `quarterShare = yieldPool * 2300 / 10_000` (`modules/DegenerusGameJackpotModule.sol:661-698`),
+  `quarterShare = yieldPool * 2300 / 10_000` (`modules/DegenerusGameJackpotModule.sol:761-772`),
   leaving ~8% undistributed as the immediate solvency cushion. The vault's *immediate* share is ~23%;
   because that residual is redistributed on later rounds, each destination tends toward ~25% over
   time — but 25% is asymptotic, not guaranteed or immediate. The accumulator is not vault-bound
   either: half of it dumps into the players' future pool at every ×00 level
-  (`modules/DegenerusGameAdvanceModule.sol:1062-1066`).
+  (`modules/DegenerusGameAdvanceModule.sol:1104-1106`).
 - **Default-referrer affiliate rewards.** The vault is the terminal referrer for every player with no
-  valid referral code (`DegenerusAffiliate.sol:358` — *"referral chains always terminate at the
+  valid referral code (`DegenerusAffiliate.sol:374` — *"referral chains always terminate at the
   VAULT"*), so it collects affiliate rewards on all unreferred spend at **25% / 20% / 5%** of reward
-  basis (fresh L1-3 / fresh L4+ / recycled; `DegenerusAffiliate.sol:398`). No-referrer deity purchases
+  basis (fresh L1-3 / fresh L4+ / recycled; `DegenerusAffiliate.sol:411-413`). No-referrer deity purchases
   additionally route an affiliate whale pass and DGNRS rewards to the vault
-  (`modules/DegenerusGameWhaleModule.sol:701`).
+  (`modules/DegenerusGameWhaleModule.sol:706`).
 - **Perpetual daily lootbox subscription.** At genesis the vault self-subscribes to a claimable-first
   daily lootbox (quantity 1, no FLIP rebuy) — a protocol-owned position (`DegenerusVault.sol:470-478`).
 - **An up-front, worse-than-retail deity pass.** The vault is given the deity activity-score boost
   (nerfed: no trait symbol or automatic gold entry, not counted as a deity-pass holder) plus a
-  standing queue of **4 tickets per level** (`DegenerusGame.sol:210-233`, `initPerpetualTickets`).
+  standing queue of **4 tickets per level** (`DegenerusGame.sol:209-232`, `initPerpetualTickets`).
   Economically this is a *nerfed deity pass* — the same kind of standing, up-front position a
   deity-pass buyer holds, except granted rather than purchased. It earns jackpot entries and score; it
   is a fixed genesis grant, not a privileged withdrawal path against player ETH/stETH.
@@ -64,15 +64,15 @@ holders collectively, not the creator personally.)
 
 ### (b) Reserve-token stake — 20% of sDGNRS (200B), held as DGNRS
 
-`CREATOR_BPS = 2000` → 20% of sDGNRS `INITIAL_SUPPLY` = 200B (`sDGNRS.sol:298,375`). **sDGNRS and
+`CREATOR_BPS = 2000` → 20% of sDGNRS `INITIAL_SUPPLY` = 200B (`sDGNRS.sol:300,377`). **sDGNRS and
 DGNRS are the same position, not two:** sDGNRS is the soulbound reserve token, DGNRS its transferable
 1:1 wrapper. The sDGNRS constructor mints the creator's 20% **directly into the DGNRS wrapper
-contract** (`sDGNRS.sol:373` — *"Mints creator allocation to DGNRS wrapper address"*), which issues
-200B DGNRS against it (`DGNRS.sol:109-112`). Of that, 50B is liquid at deploy and the rest vests over
+contract** (`sDGNRS.sol:375` — *"Mints creator allocation to DGNRS wrapper address"*), which issues
+200B DGNRS against it (`DGNRS.sol:109-118`). Of that, 50B is liquid at deploy and the rest vests over
 levels (§3). It is **not** 20% sDGNRS *plus* a separate 200B DGNRS.
 
 For context, that 20% is one slice of the full sDGNRS `INITIAL_SUPPLY` — the other **80%** funds game
-pools, not the creator (`sDGNRS.sol:301-305,385-395`):
+pools, not the creator (`sDGNRS.sol:303-307,377-395`):
 
 | Pool | Share | Constant |
 |---|---|---|
@@ -83,33 +83,33 @@ pools, not the creator (`sDGNRS.sol:301-305,385-395`):
 | Presale box | 10% | `PRESALE_BOX_POOL_BPS = 1000` |
 | *(Creator)* | *20%* | *`CREATOR_BPS = 2000`* |
 
-Sum = 10,000 bps (100%); any rounding dust is retained by the reserve (`sDGNRS.sol:385-387`).
+Sum = 10,000 bps (100%); any rounding dust is retained by the reserve (`sDGNRS.sol:384-390`).
 
 ### (c) Presale box — a bounded initial coin offering (≤40 ETH to the creator)
 
 The presale box is a **primary sale at genesis**: buyers voluntarily exchange ETH for presale-box
 credits (backed by the 10% presale-box sDGNRS pool, §2b). It is an initial offering of coin — **not a
 rake**; no fee is taken from player gameplay. Total presale-box ETH is capped at **50 ETH**
-(`PRESALE_BOX_ETH_CAP = 50 ether`, `storage/DegenerusGameStorage.sol:1257`); proceeds route **80% to
-the vault (creator), 20% to sDGNRS** (`_creditBoxProceeds`, `modules/DegenerusGamePayoutUtils.sol:13-26`),
+(`PRESALE_BOX_ETH_CAP = 50 ether`, `storage/DegenerusGameStorage.sol:1327`); proceeds route **80% to
+the vault (creator), 20% to sDGNRS** (`_creditBoxProceeds`, `modules/DegenerusGamePayoutUtils.sol:20-26`),
 with `claimablePool` bumped by the full amount so solvency holds. The creator's proceeds are therefore
 **bounded at ≈40 ETH** (80% of the 50-ETH cap; the integer-division remainder — at most a few
 thousand wei — rounds to the vault).
 
 On top of the ETH proceeds, presale boxes distribute DGNRS to buyers from the 10% presale-box pool on a
-tiered curve (`_presaleBoxDgnrsReward`, `modules/DegenerusGameLootboxModule.sol:793,827`). The vault's
+tiered curve (`_presaleBoxDgnrsReward`, `modules/DegenerusGameLootboxModule.sol:797,831`). The vault's
 default-referrer position (§2a) captures the affiliate share of DGNRS on unreferred presale spend — the
 builder estimates this at ~20% of the distributed DGNRS, roughly **2 ETH-equivalent** — so the full
 presale-side creator take is ≈40 ETH plus ~2 ETH of DGNRS.
 
 Everything else is rake-free: all lootbox and post-genesis ticket ETH routes **100% to the prize
-pools** (`modules/DegenerusGameMintModule.sol:1514-1515`) — none to the creator. Presale-box eligibility
+pools** (`modules/DegenerusGameMintModule.sol:1483-1484`) — none to the creator. Presale-box eligibility
 is **earned by playing** during the presale window (`presaleBoxCredit` accrues as 25% of spend),
 not bought.
 
 ## 3. Creator DGNRS vesting
 
-Level-gated, defined in `DGNRS.sol:95-97,199-206`:
+Level-gated, defined in `DGNRS.sol:95-97,211-222`:
 
 ```
 vested = CREATOR_INITIAL + level × VEST_PER_LEVEL,  capped at CREATOR_TOTAL
@@ -123,7 +123,7 @@ vested = CREATOR_INITIAL + level × VEST_PER_LEVEL,  capped at CREATOR_TOTAL
 The creator cannot claim ahead of level progression — vesting tracks the game actually
 advancing, which requires real player activity. Only the 50B is minted to `CREATOR` at deploy; the
 vesting increments are paid to **whoever holds the DGVE majority** at claim time (`claimVested` gates
-on `isVaultOwner`, `DGNRS.sol:197-210`), so the unvested ~150B follows vault ownership rather than the
+on `isVaultOwner`, `DGNRS.sol:211-212`), so the unvested ~150B follows vault ownership rather than the
 original creator irrevocably. Throughout this document, "the creator" means the initial DGVE majority
 holder; that authority — and these claims — move with the DGVE token.
 
@@ -136,31 +136,56 @@ holder; that authority — and these claims — move with the DGVE token.
   and the lootbox RNG threshold. The VRF-coordinator and LINK price-feed swaps are **gated proposals,
   not free configuration** — the admin path requires the feed/VRF to be unhealthy/stalled for a delay
   (2d+ for the feed, longer for VRF), and there is a parallel sDGNRS-voting community path
-  (`DegenerusAdmin.sol:521`). Full matrix and bounds: [`SECURITY.md`](SECURITY.md).
+  (`DegenerusAdmin.sol:727`). Full matrix and bounds: [`SECURITY.md`](SECURITY.md).
 - **Community path:** 0.5%+ voting sDGNRS can propose a VRF-coordinator swap after a 7-day VRF stall,
   or a feed swap after 7 days of an unhealthy feed.
+- **The one admin power that reaches player pricing: thanos-level declaration.**
+  `DegenerusGame.setThanosLevel(targetLevel, shift)` (`DegenerusGame.sol:653-677`) declares that every
+  ticket entry drained for `targetLevel` onward divides by `2^shift` — i.e. it raises the effective
+  entry price, and the foil-pack price, from that level on. Disclosed here because it is economic, not
+  merely operational. It moves **no ETH**, credits nothing to the vault, and cannot touch
+  `claimablePool` or any player balance; it is bounded to a *prospective* change: `targetLevel >=
+  level + 6` (which lands it strictly before the target level's first materialization, so one level's
+  entries always share one exponent and the uniform division cancels in the pot-share fraction —
+  a raw entry's replacement cost and expected pot share are both unchanged), `shift <= 8`, immutable
+  once its 6-level window opens, and undeclarable non-zero until the target level's projected entries
+  exceed 40,000,000 after division. Full bounds: [`SECURITY.md`](SECURITY.md) role 2.
 
 ## 5. WWXRP reserve, the initial FLIP program, and the WWXRP draw
 
 Neither FLIP nor WWXRP is minted to the creator's balance at deploy.
 
 - **Only WWXRP has a deploy-time reserve.** `INITIAL_VAULT_ALLOWANCE = 1_000_000_000e18` seeds
-  `vaultAllowance` (`WWXRP.sol:233,237`) — an *"uncirculating reserve the vault can mint from"* via
-  `vaultMintTo` (vault-only, `WWXRP.sol:491-508`). Since the vault is creator-owned (§2a), that 1B is
+  `vaultAllowance` (`WWXRP.sol:271,275`) — an *"uncirculating reserve the vault can mint from"* via
+  `vaultMintTo` (vault-only, `WWXRP.sol:587-597`). Since the vault is creator-owned (§2a), that 1B is
   effectively creator-controllable supply.
-- **FLIP starts fully zero.** Both `totalSupply` and `vaultAllowance` are 0 at deploy (`FLIP.sol:174-183`,
+- **FLIP starts fully zero.** Both `totalSupply` and `vaultAllowance` are 0 at deploy (`FLIP.sol:175-185`,
   *"Starts fully zero"*) — there is **no** deploy-time FLIP reserve. The vault's FLIP mint allowance
-  accrues later from vault operations (the DGVF yield leg, `DegenerusVault.sol:145`), not a premine.
+  accrues later from vault operations (the DGVF claim leg — `DegenerusVault.sol:155,785-798`, where the vault's redeemable FLIP is read as mint allowance + balance + claimable coinflips), not a premine.
 - **Initial FLIP program (first 20 days).** The Coinflip contract stakes **200k FLIP/day** each to the
   vault and sDGNRS (~4M gross each), but these are **coinflip stakes contingent on the flip outcome**,
-  not a guaranteed allocation (`FLIP.sol:16-17`, `Coinflip.sol:152`).
+  not a guaranteed allocation (`FLIP.sol:16-17`, `Coinflip.sol:154`).
 
 WWXRP is a deliberately meme/worthless game token. Its **daily burn draw**: burn ≥25 WWXRP (`MIN_BURN`)
 to enter. Each day carries a **global** 1/365 chance of being a big-prize day and, failing that, 1/30
 of a small-prize day (`BIG_GATE`/`SMALL_GATE` — day-level gates, *not* per-entrant odds). On a prize day
 one of 10 buckets and one activity-weighted entrant is selected (an empty selected bucket yields no
 prize); the winner receives `BIG_PRIZE = 100_000` / `SMALL_PRIZE = 10_000` FLIP as coinflip credit via
-`coinflip.creditFlip` (`WWXRP.sol:275-286,619-620`).
+`coinflip.creditFlip` (`WWXRP.sol:314-324,722-723`).
+
+**The century BAF incinerator is the one WWXRP burn utility that pays ETH.** A daily-draw burn made
+during a level ×99 additionally records a burn-weighted entry betting that the upcoming ×00 BAF
+*skips* (its flip loses). If it does, 25% of the would-be BAF pool — 25% of 20% of the future pool, so
+5% of it — pays one entrant drawn over the burn-weighted intervals; the rest rolls forward in
+`futurePool` exactly as on any other skip, and an empty bracket leaves the full pool
+(`WWXRP.resolveIncinerator` at `WWXRP.sol:955-991`, paid game-side at
+`modules/DegenerusGameAdvanceModule.sol:1135-1152`). This is a **player-to-player transfer inside the
+prize pool**, not a new inflow and not a creator take: the ETH was already players' future-pool ETH and
+5% of it is redirected to a burner instead of rolling forward. Entries close when the level increments
+off ×99 — the same transaction that requests the VRF word whose bit 0 decides the flip — so no entry
+can be placed after the deciding word could exist. On a *fired* (won) BAF the bracket is simply never
+resolved: the burn was the losing side of the hedge, and the daily-draw entry it rode on still settles
+normally.
 
 ## 6. EV and redemption (honesty about the gamble)
 
@@ -175,8 +200,16 @@ prize); the winner receives `BIG_PRIZE = 100_000` / `SMALL_PRIZE = 10_000` FLIP 
 - **Redemption is not simple proportional during the live game.** Burning sDGNRS/DGNRS enters an
   RNG-gated redemption that rolls **25%–175%** of the proportional share, with daily caps, a **50/50
   direct-ETH / lootbox split**, forfeiture of sub-minimum lootbox legs, and contingent FLIP
-  settlement (`sDGNRS.sol:310,621,848`). It becomes deterministic proportional **only after game
+  settlement (`sDGNRS.sol:310-312,326-332,845`). It becomes deterministic proportional **only after game
   over**.
+- **The FLIP side of that backing is staked, not held.** FLIP routed to sDGNRS (both transfers and
+  mints — e.g. a box-spin win on its own self-subscription) never enters `totalSupply`; it is placed on
+  the *next* day's coinflip via `Coinflip.creditSdgnrsBacking`, day-keyed like any other deposit. So
+  sDGNRS's redeemable FLIP backing is its genesis seed reserve (`claimableStored`, which redemption
+  burns drain first) plus the rolling 0-take-profit auto-rebuy carry, and it moves with coinflip
+  outcomes rather than sitting still. FLIP is the game's own coin and no ETH/stETH solvency term
+  depends on this — the ETH half of a redemption is segregated out of the game at submit and is
+  unaffected.
 - Coinflip and Degenerette are calibrated games; their by-design dispositions (not a full RTP model)
   are documented in [`KNOWN-ISSUES.md`](KNOWN-ISSUES.md).
 
@@ -188,7 +221,7 @@ On a liveness-guard game-over (`modules/DegenerusGameGameOverModule.sol`):
    level 10.
 2. Decimator death-bet holders receive a 10% budget; the refunded remainder returns to the ticket
    cohort.
-3. **30-day final sweep** (`handleFinalSweep`, `GameOverModule:217-228`): each sink (vault, sDGNRS,
+3. **30-day final sweep** (`handleFinalSweep`, `GameOverModule:220-261`): each sink (vault, sDGNRS,
    GNRUS) is first paid the claimable it earned in-game; **all other unclaimed player balances are then
    forfeited**; the remainder is split ~1/3 each (GNRUS absorbs dust). The same sweep **shuts down the
    VRF subscription and sends remaining LINK to the vault**.
@@ -196,7 +229,7 @@ On a liveness-guard game-over (`modules/DegenerusGameGameOverModule.sol`):
 Additional creator-side (vault) terminal inflows:
 
 - **1 year post-gameover:** remaining DGNRS backing is swept **50/50 to GNRUS and VAULT** (`yearSweep`,
-  `DGNRS.sol:284-300`).
+  `DGNRS.sol:312-330`).
 - **3 years after the final sweep:** residual GNRUS backing can route to the VAULT (`GameOverModule`
   GNRUS recovery gates).
 
