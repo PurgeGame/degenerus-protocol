@@ -738,7 +738,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         // indices <= presaleCloseIndex is now opened). One-way, sweep-only; gated on presaleOver so
         // it never fires before the close index is meaningful (zero while presale is open / never
         // closed). Thereafter every open path skips the cold presaleBoxEth SLOAD.
-        if (presaleOver && !presaleDrained && idx > presaleCloseIndex) presaleDrained = true;
+        if (presaleOver && checkPresale && idx > presaleCloseIndex) presaleDrained = true;
     }
 
     /// @dev Resolve a presale box: 50% FLIP / 40% DGNRS / 10% WWXRP off the salted

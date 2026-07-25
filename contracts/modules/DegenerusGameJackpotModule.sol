@@ -598,11 +598,17 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
             );
         }
 
-        // Deferred deduction: deduct only what was actually consumed.
-        // futureBal is still exact: nothing above writes prizePoolsPacked
+        // Single packed-slot RMW folds both legs: credit the ticket leg's backing to nextPrizePool
+        // and debit the future pool (drip consumed + ETH paid). ticketLegBudget is nonzero only when
+        // ethDaySlice is, so the next credit rides this write; _distributePoolBackedTickets below no
+        // longer credits next itself. futureBal is still exact — nothing above writes prizePoolsPacked
         // (purchase-phase distribution never reaches the solo whale-pass leg).
         if (ethDaySlice != 0) {
-            _setFuturePrizePool(futureBal - ticketLegBudget - paidEth);
+            (uint128 nextBal, uint128 futBal) = _getPrizePools();
+            _setPrizePools(
+                nextBal + uint128(ticketLegBudget),
+                futBal - uint128(ticketLegBudget) - uint128(paidEth)
+            );
         }
 
         if (ticketLegBudget != 0) {
@@ -803,10 +809,11 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     // Internal Helpers — Ticket Rewards
     // =========================================================================
 
-    /// @dev Moves the full budget to nextPrizePool and distributes pool-backed
-    ///      tickets to trait winners.
+    /// @dev Distributes pool-backed tickets to trait winners. The sole caller folds the budget's
+    ///      full nextPrizePool credit into its own packed-slot write, so this helper only queues the
+    ///      tickets that credit backs.
     /// @param ticketConversionBps Fraction of budget used for ticket calculation (10000 = 100%).
-    ///        Full budget always flows to nextPrizePool regardless of this parameter.
+    ///        The caller moves the full budget to nextPrizePool regardless of this parameter.
     function _distributePoolBackedTickets(
         uint24 lvl,
         uint32 winningTraitsPacked,
@@ -814,12 +821,9 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         uint256 randWord,
         uint16 ticketConversionBps
     ) private {
-        // Full budget backs the tickets via nextPrizePool
-        _addNextPrizePool(budget);
-
         // Distribute tickets to winners (may use reduced basis for backing ratio)
         // Tickets are queued at the current purchase level (`lvl`), matching the
-        // nextPrizePool credit above that backs them.
+        // nextPrizePool credit the caller applied that backs them.
         uint256 ticketBasis = (budget * ticketConversionBps) / 10_000;
         (uint256 entries, ) = _budgetToEntries(ticketBasis, lvl);
         if (entries != 0) {

@@ -35,19 +35,31 @@ library JackpotBucketLib {
     /// @param entropy Used for rotation offset (bottom 2 bits).
     /// @return counts Winner counts for each bucket [bucket0, bucket1, bucket2, bucket3].
     function traitBucketCounts(uint256 entropy) internal pure returns (uint16[4] memory counts) {
-        uint16[4] memory base;
-        base[0] = 25; // Large bucket
-        base[1] = 15; // Mid bucket
-        base[2] = 8; // Small bucket
-        base[3] = 1; // Solo bucket (receives the 60% share via rotation)
-
-        // Rotate bucket assignments based on entropy for fairness across traits.
+        // Base counts [25,15,8,1] (large/mid/small/solo) rotated by entropy for fairness across
+        // traits: counts[i] = base[(i + offset) & 3]. Unrolled to a 4-way branch on the offset to
+        // skip allocating the base[4] scratch array. The solo bucket (1) receives the 60% share via
+        // its landing index. Rotations MUST stay [25,15,8,1]/[15,8,1,25]/[8,1,25,15]/[1,25,15,8].
         uint8 offset = uint8(entropy & 3);
-        for (uint8 i; i < 4; ) {
-            counts[i] = base[(i + offset) & 3];
-            unchecked {
-                ++i;
-            }
+        if (offset == 0) {
+            counts[0] = 25;
+            counts[1] = 15;
+            counts[2] = 8;
+            counts[3] = 1;
+        } else if (offset == 1) {
+            counts[0] = 15;
+            counts[1] = 8;
+            counts[2] = 1;
+            counts[3] = 25;
+        } else if (offset == 2) {
+            counts[0] = 8;
+            counts[1] = 1;
+            counts[2] = 25;
+            counts[3] = 15;
+        } else {
+            counts[0] = 1;
+            counts[1] = 25;
+            counts[2] = 15;
+            counts[3] = 8;
         }
     }
 
