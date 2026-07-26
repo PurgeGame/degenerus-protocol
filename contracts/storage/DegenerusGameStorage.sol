@@ -1103,15 +1103,19 @@ abstract contract DegenerusGameStorage {
 
     /// @dev Effective next-pool ratchet target for a purchase level: the previous
     ///      level's recorded pool, raised at century levels (x00) to at least the
-    ///      curved multiple of the previous century's achieved pool
-    ///      (lastCenturyPrizePool). Every gate compares nextPrizePool strictly
-    ///      greater than this target.
+    ///      curved multiple of the previous century's achieved pool — the newest entry
+    ///      of centuryPrizePools. Every gate compares nextPrizePool strictly greater
+    ///      than this target. The history is empty until the first century completes,
+    ///      and a zero snapshot imposes no floor, so level 100 runs on the plain ratchet.
     function _prizePoolTarget(
         uint24 purchaseLvl
     ) internal view returns (uint256 target) {
         target = levelPrizePool[purchaseLvl - 1];
         if (purchaseLvl % 100 == 0) {
-            uint256 snap = uint256(lastCenturyPrizePool);
+            uint256 completed = centuryPrizePools.length;
+            uint256 snap = completed == 0
+                ? 0
+                : uint256(centuryPrizePools[completed - 1]);
             uint256 multBps = snap > CENTURY_FLOOR_TOP_THRESHOLD
                 ? CENTURY_FLOOR_TOP_BPS
                 : snap > CENTURY_FLOOR_MID_THRESHOLD
@@ -2800,16 +2804,6 @@ abstract contract DegenerusGameStorage {
     uint24 internal foilDrainDay;
     uint24 internal foilLastResolveDay;
 
-    /// @dev The previous century level's achieved prize pool: the pre-skim nextPrizePool
-    ///      recorded at the last x00 purchase→jackpot transition. _prizePoolTarget
-    ///      raises every x00 level's ratchet target to at least the curved multiple of
-    ///      this (CENTURY_FLOOR_*), so each century jackpot must outgrow the last. Zero
-    ///      until the first century completes — a zero snapshot imposes no floor, so
-    ///      level 100 itself runs on the plain ratchet. Snapshotted separately because
-    ///      _endPhase overwrites levelPrizePool[x00] with futurePool/3 as the reachable
-    ///      x01 ratchet base. Packs into the foil-cursor slot's free bytes.
-    uint128 internal lastCenturyPrizePool;
-
     /// @dev Lifetime count of deity boons issued from a given deity to a given
     ///      recipient, keyed [deity][recipient]. Capped at DEITY_RECIPIENT_BOON_CAP
     ///      in issueDeityBoon.
@@ -2949,4 +2943,39 @@ abstract contract DegenerusGameStorage {
     ///      bills, priced at redemption rather than banked at a fixed rate — so the
     ///      balance buys fewer requests when gas is expensive and more when it is cheap.
     mapping(address => uint256) internal middayRngCredit;
+
+    /// @dev Achieved prize pool of every completed century level (x00) — the pre-skim
+    ///      nextPrizePool recorded at each x00 purchase→jackpot transition — in completion
+    ///      order, so century N sits at index N-1 (appended so every prior slot keeps its
+    ///      index). levelPrizePool[x00] cannot serve as this history: _endPhase overwrites
+    ///      it with futurePool/3 as the reachable x01 ratchet base, so the achieved value
+    ///      survives only here.
+    ///
+    ///      Two readers, both needing the value past that overwrite. _prizePoolTarget
+    ///      takes the newest entry as the century floor, so each century jackpot must
+    ///      outgrow the last. _growthRatchet takes the entry for a specific century, so
+    ///      the growth market prices a boundary round against real growth — and, because
+    ///      an entry is written once and never revisited, a settled round's answer can
+    ///      never change.
+    uint128[] internal centuryPrizePools;
+
+    /// @dev The ratchet entry for `lvl` as the growth market must see it: a century level
+    ///      reads its pushed achieved pool rather than the overwritten levelPrizePool
+    ///      entry, so growth across a century boundary measures the game and not the
+    ///      reset artifact.
+    ///
+    ///      Returns 0 for a century that has not completed. That is the point: the market
+    ///      treats a zero successor entry as "not settled yet", and a bare index would
+    ///      revert out of bounds instead, bricking the read. Level 0 is excluded from the
+    ///      century branch so the genesis round keeps reading BOOTSTRAP_PRIZE_POOL.
+    function _growthRatchet(uint24 lvl) internal view returns (uint256) {
+        if (lvl != 0 && lvl % 100 == 0) {
+            uint256 idx = lvl / 100 - 1;
+            return
+                idx < centuryPrizePools.length
+                    ? uint256(centuryPrizePools[idx])
+                    : 0;
+        }
+        return levelPrizePool[lvl];
+    }
 }

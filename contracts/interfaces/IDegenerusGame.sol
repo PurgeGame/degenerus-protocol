@@ -76,6 +76,32 @@ interface IDegenerusGame {
     /// @return approved True if operator can act for owner.
     function isOperatorApproved(address owner, address operator) external view returns (bool);
 
+    /// @notice Everything the growth-bet parimutuel reads out of the game.
+    /// @param round The round to report pool terms for; 0 skips the pool reads.
+    /// @return prevPool The ratchet entry for round - 1.
+    /// @return currPool The ratchet entry for round.
+    /// @return nextPool The ratchet entry for round + 1 (0 until the successor banks).
+    /// @return currentLevel The current game level — the round a bet placed now joins.
+    /// @return bettingOpen True while the jackpot phase is live. Deliberately just the
+    ///         flag: the market consumes no randomness and its terms are write-once, so
+    ///         the RNG lock is not its business, and game over only ever lands with the
+    ///         flag already down for good.
+    /// @return phaseDay Jackpot-phase day counter, which decays the quest reward. The
+    ///         phase runs four jackpot days, 1-4, each tier advancing when its day's
+    ///         processing completes; 0 is only the sliver between the transition and the
+    ///         same day's first processing — day 1 before its settlement.
+    function growthState(uint24 round)
+        external
+        view
+        returns (
+            uint256 prevPool,
+            uint256 currPool,
+            uint256 nextPool,
+            uint24 currentLevel,
+            bool bettingOpen,
+            uint8 phaseDay
+        );
+
     /// @notice Consume coinflip boon for next coinflip stake bonus.
     /// @dev Grants bonus to the next coinflip deposit.
     /// @param player The player consuming the boon.

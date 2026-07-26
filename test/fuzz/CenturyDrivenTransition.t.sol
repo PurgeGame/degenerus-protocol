@@ -26,8 +26,6 @@ contract CenturyDrivenTransitionTest is DeployProtocol {
     uint256 private constant RNG_LOCKED_SHIFT = 152; // byte 19: rngLockedFlag
     uint256 private constant PRIZE_POOLS_PACKED_SLOT = 2; // [future:128][next:128]
     uint256 private constant LEVEL_PRIZE_POOL_SLOT = 23; // mapping(uint24 => uint256)
-    uint256 private constant CENTURY_SLOT = 63;
-    uint256 private constant CENTURY_SHIFT = 80; // bytes [10:26): lastCenturyPrizePool
 
     uint256 private simTime;
 
@@ -87,11 +85,12 @@ contract CenturyDrivenTransitionTest is DeployProtocol {
         return uint256(vm.load(address(game), slot));
     }
 
-    function _centurySnapshot() internal view returns (uint128) {
-        return uint128(
-            uint256(vm.load(address(game), bytes32(CENTURY_SLOT))) >>
-                CENTURY_SHIFT
-        );
+    /// @dev A century level's recorded achieved pool, read through the same public view the
+    ///      growth market uses. Reading it rather than the raw slot keeps this test honest
+    ///      about layout drift: the entry lives in centuryPrizePools, and growthState is
+    ///      what resolves a century level to it. 0 until that century completes.
+    function _centurySnapshot(uint24 centuryLvl) internal view returns (uint256 achieved) {
+        (, achieved, , , , ) = game.growthState(centuryLvl);
     }
 
     function _targetView() internal view returns (uint256) {
@@ -143,7 +142,7 @@ contract CenturyDrivenTransitionTest is DeployProtocol {
         // --- Phase B: no floor at the first century; the transition snapshots it ---
         uint256 plainRatchet = _levelPrizePool(99);
         assertGt(plainRatchet, 0, "ratchet base must be recorded");
-        assertEq(_centurySnapshot(), 0, "snapshot must still be zero before level 100");
+        assertEq(_centurySnapshot(100), 0, "snapshot must still be zero before level 100");
         assertEq(
             _targetView(),
             plainRatchet,
@@ -163,7 +162,7 @@ contract CenturyDrivenTransitionTest is DeployProtocol {
         }
         assertEq(game.level(), 100, "target-met pool must advance into level 100");
 
-        uint256 achieved = uint256(_centurySnapshot());
+        uint256 achieved = _centurySnapshot(100);
         assertGe(
             achieved,
             10_000 ether,
@@ -183,8 +182,8 @@ contract CenturyDrivenTransitionTest is DeployProtocol {
             "endPhase must reset levelPrizePool[100] to the x01 restart base"
         );
         assertEq(
-            _centurySnapshot(),
-            uint128(achieved),
+            _centurySnapshot(100),
+            achieved,
             "century snapshot must survive the endPhase reset"
         );
 
@@ -222,7 +221,7 @@ contract CenturyDrivenTransitionTest is DeployProtocol {
             _driveDay();
         }
         assertEq(game.level(), 200, "supra-floor pool must advance into level 200");
-        uint256 achieved200 = uint256(_centurySnapshot());
+        uint256 achieved200 = _centurySnapshot(200);
         assertGt(
             achieved200,
             floor,

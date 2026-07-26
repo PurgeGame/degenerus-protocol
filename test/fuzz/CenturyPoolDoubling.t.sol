@@ -2,26 +2,44 @@
 pragma solidity ^0.8.26;
 
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
+import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage.sol";
+
+/// @dev Drives _prizePoolTarget over the real storage layout without pinning a single slot:
+///      inheriting the storage base gets the compiler to resolve every offset, so a layout
+///      change cannot silently corrupt what these assertions read.
+contract CenturyTargetHarness is DegenerusGameStorage {
+    function setLevelPool(uint24 lvl, uint256 pool) external {
+        levelPrizePool[lvl] = pool;
+    }
+
+    function pushCentury(uint128 pool) external {
+        centuryPrizePools.push(pool);
+    }
+
+    function target(uint24 purchaseLvl) external view returns (uint256) {
+        return _prizePoolTarget(purchaseLvl);
+    }
+}
 
 /// @title CenturyPoolDoubling -- regression suite for the century (x00) prize-pool
 ///        doubling floor in DegenerusGameStorage._prizePoolTarget.
 ///
 /// @notice A century level's next-pool ratchet target is the previous level's recorded
-///         pool raised to a curved multiple of the previous century's achieved pool
-///         (lastCenturyPrizePool, zero until the first x00 purchase->jackpot transition
-///         snapshots it): 2x by default, 1.5x above 500k ETH, 1.3x above 1M ETH. A zero
-///         snapshot imposes no floor, and non-century levels use the plain ratchet.
-///         These tests pin the target math through prizePoolTargetView and the FLIP
-///         redeem gate by forcing level, the ratchet mapping, and the century snapshot
-///         directly.
+///         pool raised to a curved multiple of the previous century's achieved pool — the
+///         newest entry of centuryPrizePools, empty until the first x00 purchase->jackpot
+///         transition pushes one: 2x by default, 1.5x above 500k ETH, 1.3x above 1M ETH.
+///         An empty history imposes no floor, and non-century levels use the plain ratchet.
+///
+///         The target math is pinned against a storage harness, so the table costs no slot
+///         constants. The redeem gate is pinned against the REAL deployed game, which is
+///         the only part that needs raw storage seeding.
 contract CenturyPoolDoublingTest is DeployProtocol {
     // Slot positions (confirmed via `forge inspect DegenerusGame storageLayout`).
     uint256 private constant SLOT_0 = 0;
     uint256 private constant LEVEL_SHIFT = 96; // slot 0 bytes [12:15): level (uint24)
     uint256 private constant PRIZE_POOLS_PACKED_SLOT = 2; // [future:128][next:128]
     uint256 private constant LEVEL_PRIZE_POOL_SLOT = 23; // mapping(uint24 => uint256)
-    uint256 private constant CENTURY_SLOT = 63; // shared with foil cursors
-    uint256 private constant CENTURY_SHIFT = 80; // slot 63 bytes [10:26): lastCenturyPrizePool (uint128)
+    uint256 private constant CENTURY_POOLS_SLOT = 67; // uint128[] centuryPrizePools
 
     uint256 private constant REDEEM_QTY = 4000; // 10 whole tickets, above the min buy-in
 
@@ -44,6 +62,14 @@ contract CenturyPoolDoublingTest is DeployProtocol {
         coin.mintForGame(who, amount);
     }
 
+    function _harness(uint24 prevLvl, uint256 ratchet)
+        internal
+        returns (CenturyTargetHarness h)
+    {
+        h = new CenturyTargetHarness();
+        h.setLevelPool(prevLvl, ratchet);
+    }
+
     function _setLevel(uint24 lvl) internal {
         uint256 s0 = uint256(vm.load(address(game), bytes32(SLOT_0)));
         s0 &= ~(uint256(0xFFFFFF) << LEVEL_SHIFT);
@@ -58,13 +84,20 @@ contract CenturyPoolDoublingTest is DeployProtocol {
         vm.store(address(game), slot, bytes32(pool));
     }
 
-    function _setLastCenturyPool(uint128 pool) internal {
-        uint256 word = uint256(
-            vm.load(address(game), bytes32(CENTURY_SLOT))
+    /// @dev Seed the real game's century history with one completed century. A dynamic
+    ///      uint128[] keeps its length at its own slot and its elements from
+    ///      keccak256(slot), two to a word — so element 0 is the low half of that word.
+    function _seedCenturyHistory(uint128 pool) internal {
+        vm.store(
+            address(game),
+            bytes32(CENTURY_POOLS_SLOT),
+            bytes32(uint256(1))
         );
-        word &= ~(((uint256(1) << 128) - 1) << CENTURY_SHIFT);
-        word |= uint256(pool) << CENTURY_SHIFT;
-        vm.store(address(game), bytes32(CENTURY_SLOT), bytes32(word));
+        vm.store(
+            address(game),
+            keccak256(abi.encode(CENTURY_POOLS_SLOT)),
+            bytes32(uint256(pool))
+        );
     }
 
     function _setNextPool(uint128 next) internal {
@@ -99,79 +132,81 @@ contract CenturyPoolDoublingTest is DeployProtocol {
     }
 
     // ---------------------------------------------------------------------
-    // Pre-first-century state
+    // Pre-first-century state (real game)
     // ---------------------------------------------------------------------
 
-    /// @notice The snapshot starts at zero and a zero snapshot imposes no floor:
-    ///         level 100 runs on the plain ratchet until a century has completed.
-    function testZeroSnapshotImposesNoFloor() public {
-        uint256 word = uint256(
-            vm.load(address(game), bytes32(CENTURY_SLOT))
-        );
-        assertEq(uint128(word >> CENTURY_SHIFT), 0, "snapshot must start at zero");
+    /// @notice The history starts empty and an empty history imposes no floor: level 100
+    ///         runs on the plain ratchet until a century has completed.
+    function testEmptyHistoryImposesNoFloor() public {
+        (, uint256 century100, , , , ) = game.growthState(100);
+        assertEq(century100, 0, "history must start empty");
         _setLevel(99); // purchase level 100, no century completed yet
         _setLevelPrizePool(99, 60 ether);
-        assertEq(_targetView(), 60 ether, "zero snapshot must leave the plain ratchet");
+        assertEq(_targetView(), 60 ether, "empty history must leave the plain ratchet");
     }
 
     // ---------------------------------------------------------------------
-    // Target math (prizePoolTargetView)
+    // Target math (harness — no slot constants)
     // ---------------------------------------------------------------------
 
     /// @notice Century purchase level (100): the doubling floor binds when it exceeds the
     ///         plain ratchet base.
     function testCenturyFloorRaisesTarget() public {
-        _setLevel(99); // purchase level 100
-        _setLevelPrizePool(99, 60 ether);
-        _setLastCenturyPool(100 ether);
-        assertEq(_targetView(), 200 ether, "target must be 2x the previous century pool");
+        CenturyTargetHarness h = _harness(99, 60 ether);
+        h.pushCentury(100 ether);
+        assertEq(h.target(100), 200 ether, "target must be 2x the previous century pool");
     }
 
     /// @notice Century purchase level: the plain ratchet base wins when it already exceeds
     ///         double the previous century pool.
     function testCenturyRatchetWinsWhenAboveFloor() public {
-        _setLevel(99);
-        _setLevelPrizePool(99, 300 ether);
-        _setLastCenturyPool(100 ether);
-        assertEq(_targetView(), 300 ether, "ratchet base must win above the century floor");
+        CenturyTargetHarness h = _harness(99, 300 ether);
+        h.pushCentury(100 ether);
+        assertEq(h.target(100), 300 ether, "ratchet base must win above the century floor");
     }
 
     /// @notice Curve mid tier: above 500k ETH the floor multiplier tapers to 1.5x.
     function testCenturyCurveMidTier() public {
-        _setLevel(99);
-        _setLevelPrizePool(99, 60 ether);
-        _setLastCenturyPool(600_000 ether);
-        assertEq(_targetView(), 900_000 ether, "floor must be 1.5x above 500k ETH");
+        CenturyTargetHarness h = _harness(99, 60 ether);
+        h.pushCentury(600_000 ether);
+        assertEq(h.target(100), 900_000 ether, "floor must be 1.5x above 500k ETH");
     }
 
     /// @notice Curve top tier: above 1M ETH the floor multiplier tapers to 1.3x.
     function testCenturyCurveTopTier() public {
-        _setLevel(99);
-        _setLevelPrizePool(99, 60 ether);
-        _setLastCenturyPool(2_000_000 ether);
-        assertEq(_targetView(), 2_600_000 ether, "floor must be 1.3x above 1M ETH");
+        CenturyTargetHarness h = _harness(99, 60 ether);
+        h.pushCentury(2_000_000 ether);
+        assertEq(h.target(100), 2_600_000 ether, "floor must be 1.3x above 1M ETH");
     }
 
     /// @notice Curve boundaries are strict: exactly 500k stays 2x, exactly 1M stays 1.5x.
     function testCenturyCurveBoundaries() public {
-        _setLevel(99);
-        _setLevelPrizePool(99, 60 ether);
-        _setLastCenturyPool(500_000 ether);
-        assertEq(_targetView(), 1_000_000 ether, "exactly 500k must still be 2x");
-        _setLastCenturyPool(1_000_000 ether);
-        assertEq(_targetView(), 1_500_000 ether, "exactly 1M must still be 1.5x");
+        CenturyTargetHarness a = _harness(99, 60 ether);
+        a.pushCentury(500_000 ether);
+        assertEq(a.target(100), 1_000_000 ether, "exactly 500k must still be 2x");
+
+        CenturyTargetHarness b = _harness(99, 60 ether);
+        b.pushCentury(1_000_000 ether);
+        assertEq(b.target(100), 1_500_000 ether, "exactly 1M must still be 1.5x");
     }
 
-    /// @notice Non-century purchase level (99): the century snapshot is ignored entirely.
-    function testNonCenturyIgnoresCenturySnapshot() public {
-        _setLevel(98); // purchase level 99
-        _setLevelPrizePool(98, 60 ether);
-        _setLastCenturyPool(1_000 ether);
-        assertEq(_targetView(), 60 ether, "non-century target must be the plain ratchet");
+    /// @notice Non-century purchase level (99): the century history is ignored entirely.
+    function testNonCenturyIgnoresCenturyHistory() public {
+        CenturyTargetHarness h = _harness(98, 60 ether);
+        h.pushCentury(1_000 ether);
+        assertEq(h.target(99), 60 ether, "non-century target must be the plain ratchet");
+    }
+
+    /// @notice Only the NEWEST century governs the floor — the history is a log, not a sum.
+    function testFloorTracksTheNewestCentury() public {
+        CenturyTargetHarness h = _harness(199, 60 ether);
+        h.pushCentury(100 ether); // century 1
+        h.pushCentury(400 ether); // century 2 — the one that must bind
+        assertEq(h.target(200), 800 ether, "floor must follow the newest century");
     }
 
     // ---------------------------------------------------------------------
-    // FLIP redeem gate
+    // FLIP redeem gate (real game)
     // ---------------------------------------------------------------------
 
     /// @notice At a century purchase level the redeem window stays shut while nextPool
@@ -179,7 +214,8 @@ contract CenturyPoolDoublingTest is DeployProtocol {
     function testRedeemGateEnforcesCenturyFloor() public {
         _setLevel(99);
         _setLevelPrizePool(99, 60 ether);
-        _setLastCenturyPool(100 ether);
+        _seedCenturyHistory(100 ether);
+        assertEq(_targetView(), 200 ether, "setup: seeded history must raise the target");
         _setNextPool(150 ether); // > 60 ratchet, < 200 floor
         assertFalse(_redeem(), "redeem must revert below the century doubling floor");
     }
@@ -188,7 +224,10 @@ contract CenturyPoolDoublingTest is DeployProtocol {
     function testRedeemGateOpensAboveCenturyFloor() public {
         _setLevel(99);
         _setLevelPrizePool(99, 60 ether);
-        _setLastCenturyPool(100 ether);
+        _seedCenturyHistory(100 ether);
+        // Without this the case is vacuous: an unseeded history leaves the target at the
+        // 60-ETH ratchet, which 201 clears for the wrong reason.
+        assertEq(_targetView(), 200 ether, "setup: seeded history must raise the target");
         _setNextPool(201 ether); // > 200 floor
         assertTrue(_redeem(), "redeem should succeed above the century doubling floor");
     }

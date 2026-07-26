@@ -223,6 +223,16 @@ interface IDegenerusQuests {
     /// @param entropy VRF-derived entropy for quest type selection.
     function rollLevelQuest(uint256 entropy) external;
 
+    /// @notice Credit the growth-bet participation quest for a player.
+    /// @dev Called directly by PARIMUTUEL when a bet is placed, and gated on that identity.
+    ///      Idempotent within a level — a repeat call in the same version epoch pays 0.
+    /// @param player The player who placed the bet.
+    /// @param lvl The level the bet was placed on, which the caller already read from the
+    ///        game in this same call — passing it through saves re-reading it.
+    /// @param reward FLIP to credit on first completion this level.
+    /// @return paid The FLIP actually credited (0 when ineligible or already completed).
+    function recordGrowthBet(address player, uint24 lvl, uint256 reward) external returns (uint256 paid);
+
     /// @notice Returns a player's level quest state for frontend display.
     /// @param player The player address to query.
     /// @return questType The active level quest type (0-8).

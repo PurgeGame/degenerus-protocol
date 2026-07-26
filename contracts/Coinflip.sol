@@ -236,8 +236,9 @@ contract Coinflip {
     ///      QUESTS (level quest rewards), AFFILIATE, ADMIN, SDGNRS (redemption win-credit at claim:
     ///      the escrowed slice was already removed from sDGNRS's backing at submit via
     ///      withdrawRedeemedFlip, so the claim-time mint to the redeemer is FLIP-neutral),
-    ///      and WWXRP (daily-draw prizes: a fixed, RNG-verified stake credited to the
-    ///      recorded winner).
+    ///      WWXRP (daily-draw prizes: a fixed, RNG-verified stake credited to the
+    ///      recorded winner), and PARIMUTUEL (growth-bet payouts: a re-mint of stakes the
+    ///      market already burned at placement, so the credit is FLIP-neutral).
     modifier onlyFlipCreditors() {
         address sender = msg.sender;
         if (
@@ -246,7 +247,8 @@ contract Coinflip {
             sender != ContractAddresses.AFFILIATE &&
             sender != ContractAddresses.ADMIN &&
             sender != ContractAddresses.SDGNRS &&
-            sender != ContractAddresses.WWXRP
+            sender != ContractAddresses.WWXRP &&
+            sender != ContractAddresses.PARIMUTUEL
         ) revert OnlyFlipCreditors();
         _;
     }
@@ -1033,7 +1035,8 @@ contract Coinflip {
         _addDailyFlip(player, amount, 0, false, false);
     }
 
-    /// @notice Credit flips to multiple players (called by GAME jackpot modules).
+    /// @notice Credit flips to multiple players (called by GAME jackpot modules and the
+    ///         PARIMUTUEL settlement crank).
     /// @param players Player addresses to credit (address(0) entries are skipped).
     /// @param amounts FLIP-denominated flip stake amounts, one per player (0 entries are skipped).
     function creditFlipBatch(

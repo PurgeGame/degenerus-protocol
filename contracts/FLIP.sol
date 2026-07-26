@@ -552,6 +552,20 @@ contract FLIP {
         _;
     }
 
+    /// @dev Restricts access to GAME or the growth-bet parimutuel. Used for: burnCoin.
+    ///      PARIMUTUEL burns exactly one fixed stake, and only from a player who is the
+    ///      caller or has approved them, so the widening reaches no non-consenting balance.
+    ///      burnCoinForSalvage keeps plain onlyGame — the salvage burn drains the auto-rebuy
+    ///      carry as well, which no bet has any business touching.
+    modifier onlyGameOrParimutuel() {
+        address sender = msg.sender;
+        if (
+            sender != ContractAddresses.GAME &&
+            sender != ContractAddresses.PARIMUTUEL
+        ) revert OnlyGame();
+        _;
+    }
+
     /// @dev Restricts access to the ContractAddresses.VAULT contract only.
     ///      Used for: vaultMintTo.
     modifier onlyVault() {
@@ -617,12 +631,15 @@ contract FLIP {
     }
 
     /// @notice Burn FLIP from `target` during gameplay/affiliate flows.
-    /// @dev Access: GAME only (onlyGame modifier).
-    ///      Used for purchases, fees, and affiliate utilities.
+    /// @dev Access: GAME or PARIMUTUEL (onlyGameOrParimutuel modifier).
+    ///      Used for purchases, fees, affiliate utilities, and growth-bet stakes.
     ///      Reverts on zero address or insufficient balance.
     /// @param target The address to burn from.
     /// @param amount The amount to burn (18 decimals).
-    function burnCoin(address target, uint256 amount) external onlyGame {
+    function burnCoin(
+        address target,
+        uint256 amount
+    ) external onlyGameOrParimutuel {
         uint256 consumed = _consumeCoinflipShortfall(target, amount);
         _burn(target, amount - consumed);
     }

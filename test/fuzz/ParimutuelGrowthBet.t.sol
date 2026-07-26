@@ -1,0 +1,995 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+pragma solidity ^0.8.26;
+
+import {DeployProtocol} from "./helpers/DeployProtocol.sol";
+import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage.sol";
+
+/// @dev Exposes _growthRatchet and the two entries it chooses between. Inheriting the real
+///      storage layout rather than pinning slots keeps this honest if the layout moves.
+contract GrowthRatchetHarness is DegenerusGameStorage {
+    function setLevelPool(uint24 lvl, uint256 value) external {
+        levelPrizePool[lvl] = value;
+    }
+
+    function pushCentury(uint128 value) external {
+        centuryPrizePools.push(value);
+    }
+
+    function ratchet(uint24 lvl) external view returns (uint256) {
+        return _growthRatchet(lvl);
+    }
+}
+
+/// @title ParimutuelGrowthBet -- the growth-bet parimutuel.
+///
+/// @notice Two halves. The scoring half drives DegenerusParimutuel against a mocked
+///         game.growthState so arbitrary ratchet histories (century resets, contractions,
+///         exact ties) are reachable without simulating a hundred levels; FLIP,
+///         Coinflip and Quests stay REAL throughout, so the burn/credit conservation
+///         assertions are load-bearing. The lifecycle half drives the real advance path
+///         end to end: bet during a jackpot phase, transition, claim.
+contract ParimutuelGrowthBetTest is DeployProtocol {
+    // growthState(uint24) — mocked per (round) key in the scoring half.
+    bytes4 private constant GROWTH_STATE = bytes4(keccak256("growthState(uint24)"));
+    bytes4 private constant IS_OP_APPROVED =
+        bytes4(keccak256("isOperatorApproved(address,address)"));
+
+    uint256 private constant STAKE = 1_000 ether;
+
+    address private alice = address(0xA11CE);
+    address private bob = address(0xB0B);
+    address private carol = address(0xCAB0);
+    address private keeper = address(0xC1A9);
+
+    uint256 private simTime;
+
+    function setUp() public {
+        _deployProtocol();
+        vm.warp(block.timestamp + 1 days);
+        simTime = block.timestamp;
+        vm.deal(address(game), 100_000 ether);
+    }
+
+    // ---------------------------------------------------------------------
+    // Helpers
+    // ---------------------------------------------------------------------
+
+    /// @dev Mint FLIP through the GAME-gated path.
+    function _fund(address who, uint256 amount) internal {
+        vm.prank(address(game));
+        coin.mintForGame(who, amount);
+    }
+
+    /// @dev Pin game.growthState(round) to a fixed tuple.
+    function _mockState(
+        uint24 round,
+        uint256 ratchetPrev,
+        uint256 ratchetRound,
+        uint256 ratchetNext,
+        uint24 currentLevel,
+        bool open,
+        uint8 phaseDay
+    ) internal {
+        vm.mockCall(
+            address(game),
+            abi.encodeWithSelector(GROWTH_STATE, round),
+            abi.encode(
+                ratchetPrev,
+                ratchetRound,
+                ratchetNext,
+                currentLevel,
+                open,
+                phaseDay
+            )
+        );
+    }
+
+    /// @dev Open the market at `currentLevel`. Two keys: growthState(0) is what the
+    ///      placement path asks, and the round's own key is what marketState asks — both
+    ///      carry the same phase half. The round key gets no ratchet terms, which is
+    ///      exactly how the open round reads before its successor banks.
+    function _mockOpenAt(uint24 currentLevel, uint8 phaseDay, bool open) internal {
+        _mockState(0, 0, 0, 0, currentLevel, open, phaseDay);
+        _mockState(currentLevel, 0, 0, 0, currentLevel, open, phaseDay);
+    }
+
+    function _bet(address who, bool over) internal {
+        vm.prank(who);
+        parimutuel.placeBet(address(0), over);
+    }
+
+    function _claimOne(address who, uint24 round) internal returns (uint256) {
+        uint24[] memory rounds = new uint24[](1);
+        rounds[0] = round;
+        vm.prank(who);
+        return parimutuel.claim(who, rounds);
+    }
+
+    /// @dev Total FLIP a player can currently reach: wallet balance, settled coinflip
+    ///      winnings, and the stake still riding on an unsettled flip. creditFlip books a
+    ///      payout as that third term, which balanceOfWithClaimable does not span — it
+    ///      counts only what previewClaimCoinflips already resolved.
+    function _flipReach(address who) internal view returns (uint256) {
+        return
+            coin.balanceOfWithClaimable(who) + coinflip.coinflipAmount(who);
+    }
+
+    // =====================================================================
+    // Scoring: outcome derivation
+    // =====================================================================
+
+    /// A round resolves OVER only when the next level's growth RATE strictly exceeds its own.
+    function testOutcomeOverRequiresStrictAcceleration() public {
+        _fund(alice, STAKE);
+        _fund(bob, STAKE);
+
+        // Round 50: growth(50) = 100/40 = 2.5x. growth(51) = 300/100 = 3.0x > 2.5x -> OVER.
+        _mockOpenAt(50, 0, true);
+        _bet(alice, true);
+        _bet(bob, false);
+
+        _mockState(50, 40 ether, 100 ether, 300 ether, 51, false, 0);
+
+        (, , , , , , uint8 outcome, ) = parimutuel.marketState(alice, 50);
+        assertEq(outcome, 1, "accelerating growth must resolve OVER");
+
+        assertGt(_claimOne(alice, 50), 0, "OVER bettor must be paid");
+        assertEq(_claimOne(bob, 50), 0, "UNDER bettor must be paid nothing");
+    }
+
+    /// An exact tie is not acceleration, so it resolves UNDER.
+    function testOutcomeTieResolvesUnder() public {
+        _fund(alice, STAKE);
+        _mockOpenAt(50, 0, true);
+        _bet(alice, true);
+
+        // growth(50) = 100/40 = 2.5x. growth(51) = 250/100 = 2.5x — equal, not greater.
+        _mockState(50, 40 ether, 100 ether, 250 ether, 51, false, 0);
+
+        (, , , , , , uint8 outcome, ) = parimutuel.marketState(alice, 50);
+        assertEq(outcome, 2, "an exact tie must resolve UNDER");
+        assertEq(_claimOne(alice, 50), 0, "the OVER bettor loses a tie");
+    }
+
+    /// A contracting level is just a ratio below 1, and a shallower contraction still
+    /// beats a deeper one. An absolute-difference subject would rank these the same way only
+    /// by accident; the ratio makes it the definition.
+    function testOutcomeShallowerContractionBeatsDeeper() public {
+        _fund(alice, STAKE);
+        _mockOpenAt(50, 0, true);
+        _bet(alice, true);
+
+        // growth(50) = 100/300 = 0.33x. growth(51) = 90/100 = 0.9x > 0.33x -> OVER.
+        _mockState(50, 300 ether, 100 ether, 90 ether, 51, false, 0);
+
+        (, , , , , , uint8 outcome, ) = parimutuel.marketState(alice, 50);
+        assertEq(outcome, 1, "a shallower contraction must still resolve OVER");
+        assertGt(_claimOne(alice, 50), 0, "the shallower-contraction OVER side must be paid");
+    }
+
+    /// Both levels contracted and the subject contracted HARDER -> UNDER.
+    function testOutcomeDeepeningContractionResolvesUnder() public {
+        _fund(alice, STAKE);
+        _mockOpenAt(50, 0, true);
+        _bet(alice, true);
+
+        // growth(50) = 100/110 = 0.91x. growth(51) = 1 wei / 100 ETH ~ 0 -> UNDER.
+        _mockState(50, 110 ether, 100 ether, 1, 51, false, 0);
+        (, , , , , , uint8 outcome, ) = parimutuel.marketState(alice, 50);
+        assertEq(outcome, 2, "a deepening contraction must resolve UNDER");
+    }
+
+    /// A round stays unsettled until its successor level banks its ratchet entry. `level`
+    /// is promoted one RNG request BEFORE the transition writes that entry, so "the level
+    /// moved on" is not a sound settled-predicate; a zero entry is.
+    function testRoundUnsettledUntilSuccessorPoolBanked() public {
+        _fund(alice, STAKE);
+        _mockOpenAt(50, 0, true);
+        _bet(alice, true);
+
+        // Level has already advanced to 51, but levelPrizePool[51] is still unwritten.
+        _mockState(50, 40 ether, 100 ether, 0, 51, false, 0);
+
+        (, , , , , , uint8 outcome, uint256 payout) = parimutuel.marketState(alice, 50);
+        assertEq(outcome, 0, "a round must stay unsettled while its successor entry is 0");
+        assertEq(payout, 0, "an unsettled round must quote no payout");
+        assertEq(_claimOne(alice, 50), 0, "an unsettled round must pay nothing");
+    }
+
+    // =====================================================================
+    // Century + genesis skips
+    // =====================================================================
+
+    /// _endPhase overwrites levelPrizePool[x00], but the game serves every century term
+    /// from the pushed achieved pool instead, so the three boundary rounds are ordinary
+    /// rounds and take bets like any other.
+    function testCenturyRoundsAcceptBets() public {
+        uint24[3] memory boundary = [uint24(199), uint24(200), uint24(201)];
+        for (uint256 i; i < boundary.length; ++i) {
+            _fund(alice, STAKE);
+            _mockOpenAt(boundary[i], 0, true);
+            _bet(alice, true);
+            (uint24 openRound, , , , uint8 side, , , ) = parimutuel.marketState(
+                alice,
+                boundary[i]
+            );
+            assertEq(openRound, boundary[i], "a century boundary round must be open");
+            assertEq(side, 1, "the bet must be recorded");
+        }
+    }
+
+    /// The neighbours of the skipped band still take bets, so the skip is three rounds
+    /// wide and not a level more.
+    function testCenturyNeighboursStillOpen() public {
+        uint24[2] memory live = [uint24(198), uint24(202)];
+        for (uint256 i; i < live.length; ++i) {
+            _fund(alice, STAKE);
+            _mockOpenAt(live[i], 0, true);
+            _bet(alice, true);
+            (uint24 openRound, , , , uint8 side, , , ) = parimutuel.marketState(
+                alice,
+                live[i]
+            );
+            assertEq(openRound, live[i], "round adjacent to a century must be open");
+            assertEq(side, 1, "the bet must be recorded");
+        }
+    }
+
+    /// Round 0 is the sole skip: growthState reports no ratchet terms for it, so it could
+    /// never settle and a stake left there would strand.
+    function testRoundZeroRefusesBets() public {
+        _fund(alice, STAKE);
+        _mockOpenAt(0, 0, true);
+        vm.prank(alice);
+        vm.expectRevert();
+        parimutuel.placeBet(address(0), true);
+    }
+
+    /// Round 1 needs no case of its own: its reference is BOOTSTRAP_PRIZE_POOL, written at
+    /// construction and every bit as permanent as a banked entry, so it scores normally.
+    function testRoundOneScoresOffBootstrap() public {
+        _fund(alice, STAKE);
+        _mockOpenAt(1, 0, true);
+        _bet(alice, true);
+
+        // growth(1) = 40/10 = 4x. growth(2) = 200/40 = 5x > 4x -> OVER.
+        _mockState(1, 10 ether, 40 ether, 200 ether, 2, false, 0);
+        (, , , , , , uint8 outcome, ) = parimutuel.marketState(alice, 1);
+        assertEq(outcome, 1, "round 1 must score against the bootstrap reference");
+        assertEq(_claimOne(alice, 1), STAKE, "the uncontested winner takes the stake back");
+    }
+
+    // =====================================================================
+    // Century ratchet substitution
+    // =====================================================================
+
+    /// The reason boundary rounds are scoreable at all: a century level's term comes from
+    /// the pushed achieved pool, so _endPhase rewriting levelPrizePool[x00] to futurePool/3
+    /// cannot move it. Without this, the same round answers one way during the century's
+    /// jackpot phase and the other way after — paying both sides and minting FLIP.
+    function testCenturyTermIgnoresTheEndPhaseOverwrite() public {
+        GrowthRatchetHarness h = new GrowthRatchetHarness();
+        h.pushCentury(900 ether); // level 100's achieved pool, snapshotted at transition
+
+        // Pre-overwrite: levelPrizePool[100] still holds the achieved value.
+        h.setLevelPool(100, 900 ether);
+        assertEq(h.ratchet(100), 900 ether, "century term must read the pushed pool");
+
+        // _endPhase lands and rewrites the entry to the reachable x01 base.
+        h.setLevelPool(100, 7 ether);
+        assertEq(
+            h.ratchet(100),
+            900 ether,
+            "the overwrite must not move the century term"
+        );
+    }
+
+    /// A century that has not completed reads 0 — the market's unsettled predicate — rather
+    /// than reverting out of bounds and bricking marketState/claim for the x99 round.
+    function testUncompletedCenturyReadsZeroRatherThanReverting() public {
+        GrowthRatchetHarness h = new GrowthRatchetHarness();
+        assertEq(h.ratchet(100), 0, "an uncompleted century must read 0");
+        assertEq(h.ratchet(200), 0, "a far-future century must read 0");
+
+        h.pushCentury(500 ether);
+        assertEq(h.ratchet(100), 500 ether, "century 1 resolves once pushed");
+        assertEq(h.ratchet(200), 0, "century 2 is still uncompleted");
+    }
+
+    /// Level 0 is excluded from the century branch, so round 1 keeps reading the seeded
+    /// BOOTSTRAP_PRIZE_POOL instead of a century that will never exist.
+    function testLevelZeroReadsTheSeededEntryNotACentury() public {
+        GrowthRatchetHarness h = new GrowthRatchetHarness();
+        h.setLevelPool(0, 50 ether);
+        assertEq(h.ratchet(0), 50 ether, "level 0 must read its seeded ratchet entry");
+    }
+
+    /// Non-century levels are untouched by the substitution.
+    function testNonCenturyLevelsReadLevelPrizePool() public {
+        GrowthRatchetHarness h = new GrowthRatchetHarness();
+        h.pushCentury(900 ether);
+        h.setLevelPool(99, 400 ether);
+        h.setLevelPool(101, 600 ether);
+        assertEq(h.ratchet(99), 400 ether, "x99 reads levelPrizePool");
+        assertEq(h.ratchet(101), 600 ether, "x01 reads levelPrizePool");
+    }
+
+    // =====================================================================
+    // Stake, access and one-bet-per-address
+    // =====================================================================
+
+    /// The stake is fixed, so exactly one ticket's worth of FLIP leaves the bettor.
+    function testFixedStakeBurnsExactlyOneTicket() public {
+        _fund(alice, STAKE + 7 ether);
+        uint256 before = _flipReach(alice);
+
+        _mockOpenAt(50, 0, true);
+        _bet(alice, true);
+
+        assertEq(
+            before - _flipReach(alice),
+            STAKE,
+            "a bet must cost exactly the fixed stake"
+        );
+    }
+
+    function testSecondBetSameRoundReverts() public {
+        _fund(alice, STAKE * 2);
+        _mockOpenAt(50, 0, true);
+        _bet(alice, true);
+
+        vm.prank(alice);
+        vm.expectRevert();
+        parimutuel.placeBet(address(0), false);
+    }
+
+    /// A bet spends the player's FLIP, so it stays on the gated side: an unapproved third
+    /// party cannot place one on someone else's behalf.
+    function testUnapprovedThirdPartyCannotBet() public {
+        _fund(alice, STAKE);
+        _mockOpenAt(50, 0, true);
+
+        vm.mockCall(
+            address(game),
+            abi.encodeWithSelector(IS_OP_APPROVED, alice, bob),
+            abi.encode(false)
+        );
+        vm.prank(bob);
+        vm.expectRevert();
+        parimutuel.placeBet(alice, true);
+    }
+
+    /// An approved operator may bet, and the bet belongs to the player — not the operator.
+    function testApprovedOperatorBetsForPlayer() public {
+        _fund(alice, STAKE);
+        _mockOpenAt(50, 0, true);
+
+        vm.mockCall(
+            address(game),
+            abi.encodeWithSelector(IS_OP_APPROVED, alice, bob),
+            abi.encode(true)
+        );
+        uint256 aliceBefore = _flipReach(alice);
+        uint256 bobBefore = _flipReach(bob);
+
+        vm.prank(bob);
+        parimutuel.placeBet(alice, true);
+
+        (, , , , uint8 aliceSide, , , ) = parimutuel.marketState(alice, 50);
+        (, , , , uint8 bobSide, , , ) = parimutuel.marketState(bob, 50);
+        assertEq(aliceSide, 1, "the bet must be recorded to the player");
+        assertEq(bobSide, 0, "the operator must hold no position");
+        assertEq(
+            aliceBefore - _flipReach(alice),
+            STAKE,
+            "the player's FLIP must fund it"
+        );
+        assertEq(_flipReach(bob), bobBefore, "the operator must pay nothing");
+    }
+
+    /// Betting is shut outside the jackpot phase, during the daily RNG window, and after
+    /// game over — all three collapse into the single bettingOpen term.
+    function testClosedMarketRefusesBets() public {
+        _fund(alice, STAKE);
+        _mockOpenAt(50, 0, false);
+        vm.prank(alice);
+        vm.expectRevert();
+        parimutuel.placeBet(address(0), true);
+    }
+
+    // =====================================================================
+    // Payout
+    // =====================================================================
+
+    /// Every winner is paid the same, and the pot is the whole book.
+    function testPayoutUniformAcrossWinners() public {
+        _fund(alice, STAKE);
+        _fund(bob, STAKE);
+        _fund(carol, STAKE);
+
+        _mockOpenAt(50, 0, true);
+        _bet(alice, true);
+        _bet(bob, true);
+        _bet(carol, false); // one loser funds the two winners
+
+        _mockState(50, 40 ether, 100 ether, 300 ether, 51, false, 0);
+
+        uint256 aliceOut = _claimOne(alice, 50);
+        uint256 bobOut = _claimOne(bob, 50);
+        assertEq(aliceOut, bobOut, "a fixed stake must pay every winner identically");
+        assertEq(
+            aliceOut,
+            (STAKE * 3) / 2,
+            "two winners must split a three-bet pot evenly"
+        );
+        assertEq(_claimOne(carol, 50), 0, "the loser must be paid nothing");
+    }
+
+    /// An empty losing side needs no special case: the payout collapses to the stake back.
+    function testEmptyLosingSidePaysStakeBack() public {
+        _fund(alice, STAKE);
+        _mockOpenAt(50, 0, true);
+        _bet(alice, true);
+
+        _mockState(50, 40 ether, 100 ether, 300 ether, 51, false, 0);
+        assertEq(
+            _claimOne(alice, 50),
+            STAKE,
+            "an uncontested winner must get exactly the stake back"
+        );
+    }
+
+    /// When the winning side is empty nobody can claim, so the losing side stays burned.
+    /// That is deflationary, never inflationary — the failure direction that matters.
+    function testEmptyWinningSideLeavesStakesBurned() public {
+        uint256 supplyBefore = coin.totalSupply();
+        _fund(alice, STAKE);
+        _fund(bob, STAKE);
+        assertEq(coin.totalSupply(), supplyBefore + 2 * STAKE, "funding sanity");
+
+        _mockOpenAt(50, 0, true);
+        _bet(alice, false);
+        _bet(bob, false); // nobody took OVER
+
+        // ...and OVER wins.
+        _mockState(50, 40 ether, 100 ether, 300 ether, 51, false, 0);
+
+        assertEq(_claimOne(alice, 50), 0, "a losing bettor must claim nothing");
+        assertEq(_claimOne(bob, 50), 0, "a losing bettor must claim nothing");
+        assertEq(
+            coin.totalSupply(),
+            supplyBefore,
+            "both stakes must stay burned when no winner exists"
+        );
+    }
+
+    /// A claim is once-only; the second is a silent no-op rather than a double payout.
+    function testDoubleClaimPaysOnce() public {
+        _fund(alice, STAKE);
+        _fund(bob, STAKE);
+        _mockOpenAt(50, 0, true);
+        _bet(alice, true);
+        _bet(bob, false);
+
+        _mockState(50, 40 ether, 100 ether, 300 ether, 51, false, 0);
+
+        uint256 first = _claimOne(alice, 50);
+        assertGt(first, 0, "the first claim must pay");
+        assertEq(_claimOne(alice, 50), 0, "a repeat claim must pay nothing");
+
+        (, , , , , bool claimed, , uint256 quoted) = parimutuel.marketState(alice, 50);
+        assertTrue(claimed, "the claimed bit must latch");
+        assertEq(quoted, 0, "a claimed round must quote no payout");
+    }
+
+    /// Claiming is permissionless because it only ever credits the bettor: a stranger may
+    /// crank it, and the FLIP still lands on the player.
+    function testClaimIsPermissionlessAndCreditsTheBettor() public {
+        _fund(alice, STAKE);
+        _fund(bob, STAKE);
+        _mockOpenAt(50, 0, true);
+        _bet(alice, true);
+        _bet(bob, false);
+        _mockState(50, 40 ether, 100 ether, 300 ether, 51, false, 0);
+
+        uint256 aliceBefore = _flipReach(alice);
+        uint256 keeperBefore = _flipReach(keeper);
+
+        uint24[] memory rounds = new uint24[](1);
+        rounds[0] = 50;
+        vm.prank(keeper);
+        parimutuel.claim(alice, rounds);
+
+        assertGt(_flipReach(alice), aliceBefore, "the bettor must receive the payout");
+        assertEq(_flipReach(keeper), keeperBefore, "the cranker must receive nothing");
+    }
+
+    /// The whole book is redistribution: winners can never be credited more FLIP than the
+    /// round burned.
+    function testRoundNeverMintsNetFlip() public {
+        uint256 supplyBefore = coin.totalSupply();
+        _fund(alice, STAKE);
+        _fund(bob, STAKE);
+        _fund(carol, STAKE);
+        uint256 funded = coin.totalSupply() - supplyBefore;
+
+        _mockOpenAt(50, 0, true);
+        _bet(alice, true);
+        _bet(bob, false);
+        _bet(carol, false);
+        _mockState(50, 40 ether, 100 ether, 300 ether, 51, false, 0);
+
+        _claimOne(alice, 50);
+        _claimOne(bob, 50);
+        _claimOne(carol, 50);
+
+        assertLe(
+            coin.totalSupply(),
+            supplyBefore + funded,
+            "a round must never mint net FLIP"
+        );
+    }
+
+    /// A batch tolerates junk: unbet, unsettled and lost rounds are skipped instead of
+    /// reverting, so one stale id cannot brick the rest.
+    function testClaimBatchSkipsUnclaimableRounds() public {
+        _fund(alice, STAKE);
+        _fund(bob, STAKE);
+        _mockOpenAt(50, 0, true);
+        _bet(alice, true);
+        _bet(bob, false);
+        _mockState(50, 40 ether, 100 ether, 300 ether, 51, false, 0);
+        _mockState(49, 0, 0, 0, 51, false, 0); // never bet, unsettled
+
+        uint24[] memory rounds = new uint24[](3);
+        rounds[0] = 49;
+        rounds[1] = 50;
+        rounds[2] = 49;
+
+        vm.prank(keeper);
+        uint256 total = parimutuel.claim(alice, rounds);
+        assertEq(total, STAKE * 2, "the settled round must still pay through a junk batch");
+    }
+
+    // =====================================================================
+    // Crank: settling one round for many players
+    // =====================================================================
+
+    /// @dev Pin `round` so it resolves OVER: 300/100 accelerates over 100/40.
+    function _settleOver(uint24 round) internal {
+        _mockState(round, 40 ether, 100 ether, 300 ether, round + 1, false, 0);
+    }
+
+    function _crank(
+        address caller,
+        uint24 round,
+        address[] memory players
+    ) internal returns (uint256) {
+        vm.prank(caller);
+        return parimutuel.claimRound(round, players);
+    }
+
+    function _list3(
+        address a,
+        address b,
+        address c
+    ) internal pure returns (address[] memory out) {
+        out = new address[](3);
+        out[0] = a;
+        out[1] = b;
+        out[2] = c;
+    }
+
+    /// @dev Three bettors on round 50 — alice and bob on OVER, carol on UNDER — with the round
+    ///      pinned so OVER takes it. Two winners split a three-bet pot.
+    function _threeBetRound() internal {
+        _fund(alice, STAKE);
+        _fund(bob, STAKE);
+        _fund(carol, STAKE);
+        _mockOpenAt(50, 0, true);
+        _bet(alice, true);
+        _bet(bob, true);
+        _bet(carol, false);
+        _settleOver(50);
+    }
+
+    /// One call settles the whole book: every winner is paid, the loser is not.
+    function testCrankPaysEveryWinnerOnTheRound() public {
+        _threeBetRound();
+        uint256 carolBefore = _flipReach(carol);
+
+        uint256 total = _crank(keeper, 50, _list3(alice, bob, carol));
+        assertEq(total, STAKE * 3, "the crank must pay out the whole book");
+        assertEq(_flipReach(carol), carolBefore, "the losing side must be paid nothing");
+    }
+
+    /// The outcome and the per-winner payout are properties of the round, so every winner
+    /// on it is paid the same amount.
+    function testCrankPaysEveryWinnerTheSameShare() public {
+        _threeBetRound();
+        uint256 aliceBefore = _flipReach(alice);
+        uint256 bobBefore = _flipReach(bob);
+
+        _crank(keeper, 50, _list3(alice, bob, carol));
+        assertEq(
+            _flipReach(alice) - aliceBefore,
+            (STAKE * 3) / 2,
+            "each winner takes an equal share of the three-bet pot"
+        );
+        assertEq(
+            _flipReach(bob) - bobBefore,
+            (STAKE * 3) / 2,
+            "both winners must be paid identically"
+        );
+    }
+
+    /// A repeated address is paid once: its first pass sets the claimed bit.
+    function testCrankPaysARepeatedAddressOnce() public {
+        _threeBetRound();
+        uint256 total = _crank(keeper, 50, _list3(alice, alice, alice));
+        assertEq(total, (STAKE * 3) / 2, "a duplicated winner must be paid a single share");
+    }
+
+    /// Junk entries are skipped rather than reverted, so one bad address cannot brick the
+    /// batch for everyone else.
+    function testCrankToleratesAddressesThatNeverBet() public {
+        _threeBetRound();
+        uint256 total = _crank(keeper, 50, _list3(keeper, alice, address(0xDEAD)));
+        assertEq(total, (STAKE * 3) / 2, "the one real winner in the list must still be paid");
+    }
+
+    /// A settled round whose winning side is empty has nobody to pay — and no divisor.
+    /// The crank must return 0 rather than revert on the payout division.
+    function testCrankOnEmptyWinningSidePaysNobody() public {
+        uint256 supplyBefore = coin.totalSupply();
+        _fund(alice, STAKE);
+        _fund(bob, STAKE);
+        uint256 funded = coin.totalSupply() - supplyBefore;
+
+        _mockOpenAt(50, 0, true);
+        _bet(alice, false);
+        _bet(bob, false); // everyone on UNDER...
+        _settleOver(50); // ...and the round resolves OVER
+
+        uint256 total = _crank(keeper, 50, _list3(alice, bob, carol));
+        assertEq(total, 0, "an empty winning side must pay nobody");
+        assertLe(
+            coin.totalSupply(),
+            supplyBefore + funded,
+            "the losing stakes must stay burned"
+        );
+    }
+
+    /// An unsettled round pays nobody and reverts nobody, and the same list works once it
+    /// settles.
+    function testCrankOnUnsettledRoundPaysNobodyThenPaysOnceSettled() public {
+        _fund(alice, STAKE);
+        _fund(bob, STAKE);
+        _mockOpenAt(50, 0, true);
+        _bet(alice, true);
+        _bet(bob, false);
+
+        address[] memory list = _list3(alice, bob, carol);
+        assertEq(_crank(keeper, 50, list), 0, "an unsettled round must pay nobody");
+
+        _settleOver(50);
+        assertEq(_crank(keeper, 50, list), STAKE * 2, "the settled round must pay the winner");
+    }
+
+    /// Permissionless: the crank credits the bettors, never the caller.
+    function testCrankIsPermissionlessAndCreditsTheBettors() public {
+        _threeBetRound();
+        uint256 keeperBefore = _flipReach(keeper);
+        uint256 aliceBefore = _flipReach(alice);
+
+        _crank(keeper, 50, _list3(alice, bob, carol));
+        assertGt(_flipReach(alice), aliceBefore, "the bettor must receive the payout");
+        assertEq(_flipReach(keeper), keeperBefore, "the cranker must receive nothing");
+    }
+
+    /// A player who already claimed for themselves is skipped by the crank.
+    function testCrankDoesNotRepayANamedClaim() public {
+        _threeBetRound();
+
+        uint24[] memory rounds = new uint24[](1);
+        rounds[0] = 50;
+        vm.prank(alice);
+        assertEq(
+            parimutuel.claim(alice, rounds),
+            (STAKE * 3) / 2,
+            "the named claim must pay alice her share"
+        );
+
+        uint256 total = _crank(keeper, 50, _list3(alice, bob, carol));
+        assertEq(total, (STAKE * 3) / 2, "the crank must pay only the share still owed");
+    }
+
+    /// Every winner reads as claimed afterwards, with nothing left owing.
+    function testCrankMarksWinnersClaimed() public {
+        _threeBetRound();
+        _crank(keeper, 50, _list3(alice, bob, carol));
+
+        (, , , , uint8 side, bool claimed, uint8 outcome, uint256 payout) = parimutuel
+            .marketState(alice, 50);
+        assertEq(side, 1, "the side must survive the crank");
+        assertTrue(claimed, "the crank must set the claimed bit");
+        assertEq(outcome, 1, "the round stays settled OVER");
+        assertEq(payout, 0, "nothing may remain claimable");
+    }
+
+    /// The crank is redistribution like the named claim: it can never mint net FLIP.
+    function testCrankNeverMintsNetFlip() public {
+        uint256 supplyBefore = coin.totalSupply();
+        _threeBetRound();
+        uint256 funded = coin.totalSupply() - supplyBefore;
+
+        _crank(keeper, 50, _list3(alice, bob, carol));
+        assertLe(
+            coin.totalSupply(),
+            supplyBefore + funded,
+            "a crank must never mint net FLIP"
+        );
+    }
+
+    // =====================================================================
+    // Quest
+    // =====================================================================
+
+    /// The reward halves per jackpot-phase day and floors to a whole FLIP:
+    /// 150 / 75 / 37 / 18 across the phase's four jackpot days. Days 0 and 1 share the
+    /// top tier — the counter reads 0 only until the first daily jackpot settles, and the
+    /// whole first day prices at 150 rather than dropping a tier when that settlement
+    /// lands. This is the sole corrective for parimutuel's last-mover advantage, so the
+    /// schedule itself is the invariant.
+    function testQuestRewardLadderSharesTheTopTierAcrossDayOne() public {
+        uint256[5] memory expected = [
+            uint256(150 ether), // day 0: transition until the first settlement
+            150 ether, // day 1: the rest of the first day
+            75 ether,
+            37 ether,
+            18 ether
+        ];
+        for (uint8 day; day <= 4; ++day) {
+            _mockOpenAt(50, day, true);
+            (, , , uint256 reward, , , , ) = parimutuel.marketState(alice, 50);
+            assertEq(
+                reward,
+                expected[day],
+                "quest reward must follow the four-day ladder"
+            );
+        }
+    }
+
+    /// A closed market still quotes the ladder: phaseDay 0 maps to the top tier, so the
+    /// number shown before a phase opens is what the first day will actually pay.
+    function testQuestRewardQuotesTheTopTierWhileClosed() public {
+        _mockOpenAt(50, 0, false);
+        (, , , uint256 reward, , , , ) = parimutuel.marketState(alice, 50);
+        assertEq(reward, 150 ether, "a closed market must quote the first day's tier");
+    }
+
+    /// An ineligible player (no ticket bought this level window) still bets, but earns no
+    /// quest reward — the gate is the level quest's, so it reaches active players only.
+    function testIneligiblePlayerBetsButEarnsNoQuestReward() public {
+        _fund(alice, STAKE);
+        uint256 before = _flipReach(alice);
+
+        _mockOpenAt(50, 0, true);
+        _bet(alice, true);
+
+        assertEq(
+            before - _flipReach(alice),
+            STAKE,
+            "an ineligible bettor pays the stake and receives no quest credit"
+        );
+    }
+
+    /// An active afking run stands in for the eligibility gate: the sub is buying this
+    /// level's tickets from the player's own funding, so a bettor with zero manually
+    /// minted units still earns the participation reward.
+    function testAfkingRunSubstitutesForQuestEligibility() public {
+        vm.prank(address(game));
+        quests.beginAfking(alice, 1);
+
+        _fund(alice, STAKE);
+        uint256 before = _flipReach(alice);
+        _mockOpenAt(50, 1, true);
+        _bet(alice, true);
+
+        assertEq(
+            before - _flipReach(alice),
+            STAKE - 150 ether,
+            "an afking bettor with no minted units must still earn the day-1 reward"
+        );
+    }
+
+    /// recordGrowthBet is PARIMUTUEL-only — no other caller can mint quest rewards.
+    function testQuestRewardRejectsForeignCaller() public {
+        vm.prank(alice);
+        vm.expectRevert();
+        quests.recordGrowthBet(alice, 50, 150 ether);
+
+        vm.prank(address(game));
+        vm.expectRevert();
+        quests.recordGrowthBet(alice, 50, 150 ether);
+    }
+
+    // =====================================================================
+    // Lifecycle through the real advance path
+    // =====================================================================
+
+    function _fulfillVrfIfPending() internal {
+        uint256 reqId = mockVRF.lastRequestId();
+        if (reqId == 0) return;
+        (, , bool fulfilled) = mockVRF.pendingRequests(reqId);
+        if (fulfilled) return;
+        uint256 randomWord = uint256(
+            keccak256(abi.encode(block.timestamp, game.level(), reqId))
+        );
+        try mockVRF.fulfillRandomWords(reqId, randomWord) {} catch {}
+    }
+
+    function _driveDay() internal {
+        simTime += 1 days + 1;
+        vm.warp(simTime);
+        for (uint256 j = 0; j < 200; j++) {
+            _fulfillVrfIfPending();
+            (bool ok, ) = address(game).call(
+                abi.encodeWithSignature("advanceGame()")
+            );
+            if (!ok) break;
+        }
+    }
+
+    /// @dev Raise nextPrizePool over the live target so the next drive latches a transition.
+    function _seedNextPool(uint256 targetNext) internal {
+        uint256 packed = uint256(vm.load(address(game), bytes32(uint256(2))));
+        if (uint256(uint128(packed)) >= targetNext) return;
+        uint128 future = uint128(packed >> 128);
+        vm.store(
+            address(game),
+            bytes32(uint256(2)),
+            bytes32((uint256(future) << 128) | targetNext)
+        );
+    }
+
+    /// @dev Drive the real game into a live, settled jackpot phase on an ordinary round
+    ///      (level >= 2, clear of the century band) and return that round.
+    function _driveToLiveJackpotPhase() internal returns (uint24 round) {
+        for (uint256 i = 0; i < 40 && game.level() < 2; i++) {
+            if (!game.jackpotPhase()) _seedNextPool(50 ether);
+            _driveDay();
+        }
+        for (uint256 i = 0; i < 40; i++) {
+            if (game.jackpotPhase() && !game.rngLocked() && game.level() >= 2) break;
+            if (!game.jackpotPhase()) _seedNextPool(200 ether);
+            _driveDay();
+        }
+
+        require(game.jackpotPhase() && !game.rngLocked(), "harness: no live jackpot phase");
+        round = game.level();
+        require(round >= 2 && round % 100 > 1 && round % 100 != 99, "harness: skipped round");
+    }
+
+    /// Betting deliberately ignores the RNG lock: the market consumes no randomness and
+    /// its terms are write-once, so the morning window — the day's word in flight, the
+    /// day's results landing, players at their most attentive — takes bets like any other
+    /// moment of the phase.
+    function testBettingStaysOpenDuringTheRngWindow() public {
+        vm.pauseGasMetering();
+        uint24 round = _driveToLiveJackpotPhase();
+
+        // Open a fresh day and advance exactly once: the first call of a day requests the
+        // day's RNG and latches the lock, and nothing settles until the mock fulfills.
+        simTime += 1 days + 1;
+        vm.warp(simTime);
+        (bool ok, ) = address(game).call(abi.encodeWithSignature("advanceGame()"));
+        require(ok, "harness: advance must request the day's RNG");
+        require(game.rngLocked(), "harness: the day's word must be in flight");
+        require(game.jackpotPhase(), "harness: the phase must still be live");
+
+        (uint24 openRound, , , , , , , ) = parimutuel.marketState(alice, round);
+        assertEq(openRound, round, "the locked window must still expose the open round");
+
+        _fund(alice, STAKE);
+        _bet(alice, true);
+        (, uint128 overCount, , , uint8 side, , , ) = parimutuel.marketState(
+            alice,
+            round
+        );
+        assertEq(overCount, 1, "the locked-window bet must book");
+        assertEq(side, 1, "the locked-window bet must record its side");
+    }
+
+    /// The quest's streak leg is a counter credit only, never the daily activity marker:
+    /// a bet adds exactly +1 and leaves lastActiveDay untouched, so it cannot stand in
+    /// for a daily quest. Observable through the decay-aware view: with no anchor ever
+    /// set, later missed days have nothing to bill against and the +1 survives them —
+    /// where the old anchor-bumping behavior would have lapsed it to 0.
+    function testGrowthBetAddsAStreakDayWithoutMarkingActivity() public {
+        vm.pauseGasMetering();
+        uint24 round = _driveToLiveJackpotPhase();
+
+        // Make alice level-quest eligible: a whole ticket (400 units) tagged at the
+        // current level, and levelStreak 5 for the loyalty gate.
+        uint256 packedMint = (uint256(400) << 228) |
+            (uint256(round) << 104) |
+            (uint256(5) << 48);
+        vm.mockCall(
+            address(game),
+            abi.encodeWithSelector(
+                bytes4(keccak256("mintPackedFor(address)")),
+                alice
+            ),
+            abi.encode(packedMint)
+        );
+
+        assertEq(quests.effectiveBaseStreak(alice), 0, "harness: fresh streak");
+        _fund(alice, STAKE);
+        _bet(alice, true);
+
+        // Two full protocol days pass with no daily quest from alice, then one read
+        // separates every world. No bump at all reads 0. A bump that also marked
+        // activity (the old behavior) anchors the lapse clock to the bet day, so the
+        // missed day bills the streak to 0. Only the pure counter credit — +1, no
+        // anchor, nothing for missed days to bill against — reads 1.
+        _driveDay();
+        _driveDay();
+        assertEq(
+            quests.effectiveBaseStreak(alice),
+            1,
+            "the bet must add one streak day that carries no daily-quest protection"
+        );
+    }
+
+    /// End to end on the real game: bet during a live jackpot phase, let the protocol
+    /// transition, then claim against the ratchet the transition actually wrote. Nothing
+    /// pushes a result into the market — the outcome is derived from levelPrizePool alone.
+    function testLifecycleBetTransitionClaim() public {
+        vm.pauseGasMetering();
+
+        uint24 round = _driveToLiveJackpotPhase();
+
+        (uint24 openRound, , , , , , , ) = parimutuel.marketState(alice, round);
+        assertEq(openRound, round, "the live jackpot phase must expose an open round");
+
+        _fund(alice, STAKE);
+        _fund(bob, STAKE);
+        _bet(alice, true);
+        _bet(bob, false);
+
+        (, uint128 overCount, uint128 underCount, , , , , ) = parimutuel.marketState(
+            alice,
+            round
+        );
+        assertEq(overCount, 1, "one OVER bet must be booked");
+        assertEq(underCount, 1, "one UNDER bet must be booked");
+
+        // The round is unsettled until the NEXT level banks its pool.
+        (, , , , , , uint8 midOutcome, ) = parimutuel.marketState(alice, round);
+        assertEq(midOutcome, 0, "an in-flight round must not be settled");
+
+        // Drive through the transition into the next level.
+        for (uint256 i = 0; i < 60 && game.level() <= round; i++) {
+            if (!game.jackpotPhase()) _seedNextPool(5_000 ether);
+            _driveDay();
+        }
+        assertGt(game.level(), round, "the protocol must advance past the bet round");
+
+        (, , , , , , uint8 outcome, ) = parimutuel.marketState(alice, round);
+        assertTrue(outcome == 1 || outcome == 2, "the round must settle after transition");
+
+        // Exactly one side is paid, and it is paid the whole book.
+        uint256 aliceOut = _claimOne(alice, round);
+        uint256 bobOut = _claimOne(bob, round);
+        assertEq(
+            aliceOut + bobOut,
+            STAKE * 2,
+            "the winning side must take the entire two-bet pot"
+        );
+        assertTrue(
+            (aliceOut == 0) != (bobOut == 0),
+            "exactly one side of a two-sided book may be paid"
+        );
+    }
+}

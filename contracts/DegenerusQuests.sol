@@ -145,6 +145,13 @@ contract DegenerusQuests is IDegenerusQuests {
         uint256 reward
     );
 
+    /// @notice Emitted when a player completes the growth-bet participation quest.
+    event GrowthBetQuestCompleted(
+        address indexed player,
+        uint24 indexed level,
+        uint256 reward
+    );
+
     // =========================================================================
     //                              CONSTANTS
     // =========================================================================
@@ -2493,6 +2500,80 @@ contract DegenerusQuests is IDegenerusQuests {
             packed = uint256(currentVersion) | (uint256(progress) << 8);
             levelQuestPlayerState[player] = packed;
         }
+    }
+
+    /// @dev Bit position in levelQuestPlayerState marking the growth-bet quest complete.
+    ///      The word's low bits are version (0-7), progress (8-135) and the level quest's
+    ///      completed flag (136); everything above is free. Sharing the version byte is
+    ///      exact, not a shortcut: rollLevelQuest bumps it at the same level transition
+    ///      that opens the growth round, so the two quests share one lifecycle and the
+    ///      existing stale-version reset clears both flags together.
+    uint16 private constant LQ_GROWTH_BET_BIT = 137;
+
+    /// @dev The growth-bet quest is a participation quest, so it moves the streak by a
+    ///      +1 rather than the level quest's LEVEL_QUEST_STREAK_BONUS — and, like that
+    ///      bonus, it is a counter credit only, never the daily activity marker.
+    uint16 private constant GROWTH_QUEST_STREAK_BONUS = 1;
+
+    /// @notice Credit the growth-bet participation quest for a player.
+    /// @dev Access: PARIMUTUEL only. Eligibility is the level quest's gate, or an active
+    ///      afking run: the sub is buying this level's tickets out of the player's own
+    ///      funding — participation as real as a manual mint, just never routed through
+    ///      the units tally — and a funded seat clears the loyalty bar besides. The level
+    ///      quest proper keeps the plain gate. Idempotent within a level: a second call
+    ///      in the same version epoch pays 0, which is what makes one-bet-per-round and
+    ///      one-reward-per-round agree.
+    /// @param player The player who placed the bet.
+    /// @param lvl The level the bet was placed on. Taken from the caller rather than read
+    ///        back off the game: PARIMUTUEL is the only permitted caller and it read this
+    ///        from the game in the same call, so the value is the same one questGame.level()
+    ///        would return, for one less external call.
+    /// @param reward FLIP to credit on first completion this level.
+    /// @return paid The FLIP actually credited (0 when ineligible or already completed).
+    function recordGrowthBet(address player, uint24 lvl, uint256 reward)
+        external
+        override
+        returns (uint256 paid)
+    {
+        if (msg.sender != ContractAddresses.PARIMUTUEL) revert OnlyGame();
+        if (player == address(0) || reward == 0) return 0;
+
+        uint8 currentVersion = levelQuestVersion;
+        uint256 packed = levelQuestPlayerState[player];
+
+        // Version mismatch: this is the first touch of the word this level, so drop the
+        // previous level's progress and both completion flags.
+        if (uint8(packed) != currentVersion) packed = uint256(currentVersion);
+        if ((packed >> LQ_GROWTH_BET_BIT) & 1 == 1) return 0;
+
+        if (
+            !_isLevelQuestEligible(player, lvl) &&
+            !questPlayerState[player].afkingActive
+        ) return 0;
+
+        levelQuestPlayerState[player] = packed | (uint256(1) << LQ_GROWTH_BET_BIT);
+
+        // Advance the streak by the participation +1 WITHOUT touching lastActiveDay —
+        // the level-quest completion's pattern, so the missed-day reset stays keyed to
+        // the daily primary and a bet never stands in for a daily quest. Sync first so
+        // the bump lands on a post-lapse streak rather than resurrecting one already
+        // missed; while afking it feeds the Sub streak base so finalize reconciles it.
+        uint24 questDay = _currentQuestDay(_loadActiveQuests());
+        if (questDay != 0) {
+            PlayerQuestState storage qs = questPlayerState[player];
+            _questSyncState(qs, player, questDay);
+            if (qs.afkingActive) {
+                questGame.recordAfkingSecondary(player, GROWTH_QUEST_STREAK_BONUS);
+            } else {
+                uint32 bumped = uint32(qs.streak) + GROWTH_QUEST_STREAK_BONUS;
+                qs.streak = bumped > type(uint16).max ? type(uint16).max : uint16(bumped);
+                _grantCenturyShield(player, qs);
+            }
+        }
+
+        coinflip.creditFlip(player, reward);
+        emit GrowthBetQuestCompleted(player, lvl, reward);
+        return reward;
     }
 
     /// @notice Returns a player's level quest state for frontend display.

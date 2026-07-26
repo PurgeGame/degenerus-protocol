@@ -2495,6 +2495,71 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         return jackpotPhaseFlag;
     }
 
+    /// @notice Everything the growth-bet parimutuel reads out of this contract.
+    /// @dev One call rather than five: PARIMUTUEL is a standalone contract, so each term
+    ///      it needs would otherwise be its own staticcall.
+    ///
+    ///      The three terms are RATCHET ENTRIES, not the live next/current/future prize
+    ///      pools — each is 0 until its level transitions and its banked value forever
+    ///      after. A round's benchmark is the ratio ratchetRound / ratchetPrev and its
+    ///      subject is ratchetNext / ratchetRound; the market cross-multiplies the two, so
+    ///      every term stays unsigned and a level that achieves less than its predecessor
+    ///      is simply a ratio below 1.
+    ///
+    ///      Century levels are read through _growthRatchet rather than levelPrizePool,
+    ///      because _endPhase overwrites levelPrizePool[x00] with futurePool/3 once the
+    ///      century's jackpot phase ends. Serving the pushed achieved pool instead keeps
+    ///      each term write-once: a boundary round scores the growth the game actually
+    ///      delivered, and its answer can never change after it first settles.
+    ///
+    ///      ratchetNext == 0 is therefore the settled/unsettled predicate, and it is a
+    ///      sounder one than the level number: `level` is promoted one RNG request BEFORE
+    ///      the transition writes the entry, so a round whose successor level already
+    ///      exists can still be unsettled.
+    ///
+    ///      bettingOpen deliberately ignores the RNG lock: the market consumes no
+    ///      randomness and its terms are write-once, so a bet is placeable the whole
+    ///      jackpot phase — including while a day's word is in flight. The one mid-window
+    ///      restriction lives where it belongs, in FLIP: a stake burn tops up from
+    ///      unclaimed coinflip winnings only outside the lock, so a locked-window bet must
+    ///      be wallet-funded.
+    /// @param round The round to report ratchet terms for; 0 skips those reads (the
+    ///        placement path only needs the phase half, and has no round to name yet).
+    /// @return ratchetPrev The ratchet entry for round - 1.
+    /// @return ratchetRound The ratchet entry for round.
+    /// @return ratchetNext The ratchet entry for round + 1 (0 until the successor banks).
+    /// @return currentLevel The current game level — the round a bet placed now joins.
+    /// @return bettingOpen True while the jackpot phase is live. The flag alone: game
+    ///         over is only ever declared out of a failed purchase phase, where it is
+    ///         already down and, with no transition ever coming, stays down.
+    /// @return phaseDay Jackpot-phase day counter, which decays the quest reward. The
+    ///         phase runs four jackpot days, 1-4, each tier advancing when its day's
+    ///         processing completes; 0 is only the sliver between the transition and the
+    ///         same day's first processing — day 1 before its settlement.
+    function growthState(
+        uint24 round
+    )
+        external
+        view
+        returns (
+            uint256 ratchetPrev,
+            uint256 ratchetRound,
+            uint256 ratchetNext,
+            uint24 currentLevel,
+            bool bettingOpen,
+            uint8 phaseDay
+        )
+    {
+        if (round != 0) {
+            ratchetPrev = _growthRatchet(round - 1);
+            ratchetRound = _growthRatchet(round);
+            ratchetNext = _growthRatchet(round + 1);
+        }
+        currentLevel = level;
+        bettingOpen = jackpotPhaseFlag;
+        phaseDay = jackpotCounter;
+    }
+
     /// @notice Comprehensive purchase info for UI consumption.
     /// @dev Bundles level, state, flags, and price into a single call. lvl is the ACTUAL game
     ///      level (Coinflip keys BAF bracketing / the transition lock on it from this one

@@ -19,6 +19,7 @@ import {DegenerusGameBingoModule} from "../../../contracts/modules/DegenerusGame
 import {GameAfkingModule} from "../../../contracts/modules/GameAfkingModule.sol";
 import {DegenerusGameFoilPackModule} from "../../../contracts/modules/DegenerusGameFoilPackModule.sol";
 import {AFKingSubscriptionToken} from "../../../contracts/AFKingSubscriptionToken.sol";
+import {DegenerusParimutuel} from "../../../contracts/DegenerusParimutuel.sol";
 import {FLIP} from "../../../contracts/FLIP.sol";
 import {Coinflip} from "../../../contracts/Coinflip.sol";
 import {DegenerusGame} from "../../../contracts/DegenerusGame.sol";
@@ -68,6 +69,7 @@ abstract contract DeployProtocol is Test {
     GameAfkingModule public afkingModule;
     DegenerusGameFoilPackModule public foilModule;
     AFKingSubscriptionToken public afkingSubToken;
+    DegenerusParimutuel public parimutuel;
     FLIP public coin;
     Coinflip public coinflip;
     DegenerusGame public game;
@@ -170,6 +172,10 @@ abstract contract DeployProtocol is Test {
         // the coin gate's identity carve, which exists precisely because the coin
         // deploys after them.
         afkingSubToken = new AFKingSubscriptionToken();                  // N+26 = nonce 31
+
+        // Growth-bet parimutuel — appended, so it shifts no earlier nonce. No ctor args
+        // and no deploy-time deps; it reads GAME and burns/credits FLIP at runtime only.
+        parimutuel = new DegenerusParimutuel();                          // N+27 = nonce 32
     }
 
     /// @dev Grant `player` an AFKing seat (the sole afking credential —

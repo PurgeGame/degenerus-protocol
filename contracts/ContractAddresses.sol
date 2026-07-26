@@ -67,6 +67,9 @@ library ContractAddresses {
         address(0x89CA9F4f77B267778EB2eA0Ba1bEAdEe8523af36);
     address internal constant AFKING_SUB_TOKEN =
         address(0xe54a55121A47451c5727ADBAF9b9FC1643477e25);
+    // Growth-bet parimutuel — appended, so it shifts no prior address.
+    address internal constant PARIMUTUEL =
+        address(0x94771550282853f6E0124c302F7dE1Cf50aa45CA);
     address internal constant CREATOR =
         address(0x7FA9385bE102ac3EAc297483Dd6233D62b3e1496);
     address internal constant VRF_COORDINATOR =

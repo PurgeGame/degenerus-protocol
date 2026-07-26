@@ -62,6 +62,10 @@ export const DEPLOY_ORDER = [
   // VAULT/SDGNRS; GAME (its minter + seat-exit target) is a compile-time
   // constant, so it has no deploy-time dependents.
   "AFKING_SUB_TOKEN",           // N+26: AFKingSubscriptionToken
+  // Growth-bet parimutuel. Appended LAST so adding it
+  // shifts no existing predicted address. No ctor args and no deploy-time dependents — it
+  // reads GAME and burns/credits FLIP at runtime only.
+  "PARIMUTUEL",             // N+27: DegenerusParimutuel
 ];
 
 /**
@@ -95,6 +99,7 @@ export const KEY_TO_CONTRACT = {
   GNRUS: "GNRUS",
   GAME_FOILPACK_MODULE: "DegenerusGameFoilPackModule",
   AFKING_SUB_TOKEN: "AFKingSubscriptionToken",
+  PARIMUTUEL: "DegenerusParimutuel",
 };
 
 /**

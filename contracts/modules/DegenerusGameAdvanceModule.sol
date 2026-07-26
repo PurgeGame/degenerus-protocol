@@ -682,14 +682,14 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                 }
 
                 // Consolidate prize pools for level transition. A century level's
-                // achieved pool is also snapshotted as the doubling base for the
-                // next x00 target (levelPrizePool[x00] itself is later overwritten
-                // by _endPhase with the reachable x01 ratchet base).
+                // achieved pool is also appended to the century history, which is the
+                // only place it survives: _endPhase later overwrites levelPrizePool[x00]
+                // with the reachable x01 ratchet base.
                 {
                     uint256 achievedPool = _getNextPrizePool();
                     levelPrizePool[purchaseLevel] = achievedPool;
                     if (purchaseLevel % 100 == 0) {
-                        lastCenturyPrizePool = uint128(achievedPool);
+                        centuryPrizePools.push(uint128(achievedPool));
                     }
                 }
                 _distributeYieldSurplus(rngWord);
