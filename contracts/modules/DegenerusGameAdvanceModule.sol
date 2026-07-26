@@ -1337,26 +1337,19 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         );
         if (linkBal < MIN_LINK_FOR_LOOTBOX_RNG) revert InsufficientLink();
 
-        // Threshold check: pending ETH plus the FLIP ETH-equivalent (valued at the
-        // current ticket price) must clear the owner-tunable threshold. This gates
+        // Threshold check: pending ETH must clear the owner-tunable threshold. This gates
         // only the mid-day fast path — the daily advance assigns the day's word to
         // the current index regardless, so pending boxes never wait past one cycle.
         uint256 pendingEth = _unpackMilliEthToWei(
             uint64(_lrRead(LR_PENDING_ETH_SHIFT, LR_PENDING_ETH_MASK))
         );
-        uint256 pendingFlip = _unpackWholeFlipToWei(
-            uint40(_lrRead(LR_PENDING_FLIP_SHIFT, LR_PENDING_FLIP_MASK))
-        );
-        bool noPending = pendingEth == 0 && pendingFlip == 0;
+        // Pending FLIP counts as work outstanding but adds nothing to the threshold: only ETH
+        // pays for a mid-day word, so only ETH justifies buying one. A FLIP-denominated queue
+        // resolves on the daily word instead, and anyone wanting it sooner can donate LINK for
+        // the credit that waives this gate, or have an ETH buyer trigger it.
+        bool noPending = pendingEth == 0 &&
+            _lrRead(LR_PENDING_FLIP_SHIFT, LR_PENDING_FLIP_MASK) == 0;
         uint256 totalEthEquivalent = pendingEth;
-        if (pendingFlip != 0) {
-            uint256 priceWei = PriceLookupLib.priceForLevel(level);
-            if (priceWei != 0) {
-                totalEthEquivalent +=
-                    (pendingFlip * priceWei) /
-                    PRICE_COIN_UNIT;
-            }
-        }
         uint256 threshold = _unpackMilliEthToWei(
             uint64(_lrRead(LR_THRESHOLD_SHIFT, LR_THRESHOLD_MASK))
         );
