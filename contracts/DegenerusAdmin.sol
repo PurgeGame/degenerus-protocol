@@ -238,6 +238,8 @@ contract DegenerusAdmin {
     error NotWired();
     error NoSubscription();
     error InvalidAmount();
+    error SubscriptionActive(); // Named pair is the live subscription, not a retired one.
+    error TransferFailed(); // A LINK transfer returned false.
     error GameOver();
     error FeedHealthy();
     error InvalidFeedDecimals();
@@ -257,6 +259,15 @@ contract DegenerusAdmin {
     event ConsumerAdded(address indexed consumer);
     event SubscriptionCreated(uint256 indexed subId);
     event SubscriptionCancelled(uint256 indexed subId, address indexed to);
+
+    /// @dev Emitted when a retired subscription's LINK is routed back. `amount` is what
+    ///      actually moved: zero means the forward failed and the LINK is still held here,
+    ///      recoverable by calling again with subId zero.
+    event SubscriptionRecovered(
+        uint256 indexed subId,
+        address indexed to,
+        uint256 amount
+    );
     event SubscriptionShutdown(
         uint256 indexed subId,
         address indexed to,
@@ -1062,6 +1073,65 @@ contract DegenerusAdmin {
         }
 
         emit SubscriptionShutdown(subId, target, 0);
+    }
+
+    /// @notice Retry cancelling a retired VRF subscription and route its LINK back.
+    /// @dev Access: vault owner only. A coordinator swap overwrites `coordinator` and
+    ///      `subscriptionId` but never transfers subscription ownership, so this contract
+    ///      stays the retired subscription's owner and can still cancel it. That matters
+    ///      because `cancelSubscription` reverts while the subscription has an outstanding
+    ///      request — the normal state at swap time, since a swap is what a dead coordinator
+    ///      triggers — so the first attempt fails and the balance would otherwise sit
+    ///      unreachable once the handle is overwritten.
+    ///      Atomic and unlimited-retry by construction: nothing is wrapped, so a still-pending
+    ///      backlog or a failed forward reverts the whole call, rolling the cancel back with
+    ///      it. The subscription is either cancelled AND its LINK delivered, or the attempt
+    ///      never happened — so a failure can never leave LINK parked here with the handle
+    ///      already spent, and the same call can simply be made again later.
+    ///      Recovered LINK funds the live subscription while the game runs, and goes to the
+    ///      vault at game over.
+    ///      Vault-owner gated rather than permissionless because `retiredCoordinator` is a
+    ///      caller-supplied address this contract then calls into; recovery is unhurried and
+    ///      the caller must know a retired subId off-chain regardless.
+    /// @param retiredCoordinator Coordinator holding the retired subscription.
+    /// @param subId Retired subscription to cancel.
+    /// @custom:reverts NotAuthorized If caller is not the vault owner.
+    /// @custom:reverts SubscriptionActive If the pair names the live subscription.
+    /// @custom:reverts TransferFailed If routing the recovered LINK returns false.
+    function retrySubCancel(address retiredCoordinator, uint256 subId) external {
+        if (!vault.isVaultOwner(msg.sender)) revert NotAuthorized();
+        // Cancelling the live pair would delete the subscription the game still points at,
+        // stranding its own RNG. Only retired subscriptions are recoverable here.
+        if (
+            retiredCoordinator == coordinator && subId == subscriptionId
+        ) revert SubscriptionActive();
+
+        IVRFCoordinatorV2_5Owner(retiredCoordinator).cancelSubscription(
+            subId,
+            address(this)
+        );
+
+        uint256 bal = linkToken.balanceOf(address(this));
+        if (bal == 0) return;
+
+        // Refuel the live subscription while the game runs; at game over the vault is the
+        // terminal destination, matching shutdownVrf. Only shutdownVrf zeroes subscriptionId
+        // and only at game over, so this one test covers the unwired case too.
+        address target;
+        bool ok;
+        if (gameAdmin.gameOver()) {
+            target = ContractAddresses.VAULT;
+            ok = linkToken.transfer(target, bal);
+        } else {
+            target = coordinator;
+            ok = linkToken.transferAndCall(
+                target,
+                bal,
+                abi.encode(subscriptionId)
+            );
+        }
+        if (!ok) revert TransferFailed();
+        emit SubscriptionRecovered(subId, target, bal);
     }
 
     // =========================================================================

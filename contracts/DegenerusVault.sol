@@ -92,6 +92,17 @@ interface ICoinPlayerActions {
     function decimatorBurn(address player, uint256 amount) external;
 }
 
+/// @dev Minimal ERC20 surface for sweeping foreign tokens the vault has no other handling for.
+interface IERC20Sweep {
+    function transfer(address to, uint256 amount) external returns (bool);
+    function balanceOf(address account) external view returns (uint256);
+}
+
+/// @dev Minimal ERC721 surface for sweeping foreign NFTs sent to the vault.
+interface IERC721Sweep {
+    function transferFrom(address from, address to, uint256 tokenId) external;
+}
+
 /// @notice Interface for sDGNRS player actions used by DegenerusVault.
 interface IsDGNRSBurn {
     /// @notice Burn sDGNRS to claim proportional backing assets.
@@ -367,6 +378,12 @@ contract DegenerusVault {
     /// @notice ETH or token transfer failed
     error TransferFailed();
 
+    /// @notice Token backs vault accounting and can never be swept out.
+    error ProtectedToken();
+
+    /// @notice Sweep recipient is the zero address.
+    error ZeroAddress();
+
     // ---------------------------------------------------------------------
     // EVENTS
     // ---------------------------------------------------------------------
@@ -376,6 +393,18 @@ contract DegenerusVault {
     /// @param stEthAmount Always 0 (stETH arrives via direct ERC20 transfers, which do not announce)
     /// @param coinAmount Always 0 (FLIP arrives as mint allowance credited inside FLIP)
     event Deposit(address indexed from, uint256 ethAmount, uint256 stEthAmount, uint256 coinAmount);
+
+    /// @notice Emitted when a foreign ERC20 is swept out of the vault
+    /// @param token Token swept
+    /// @param to Recipient
+    /// @param amount Amount sent
+    event TokenSwept(address indexed token, address indexed to, uint256 amount);
+
+    /// @notice Emitted when a foreign ERC721 is swept out of the vault
+    /// @param token NFT contract swept from
+    /// @param to Recipient
+    /// @param tokenId Token serial sent
+    event NftSwept(address indexed token, address indexed to, uint256 tokenId);
     /// @notice Emitted when user burns DGVF or DGVE shares to claim assets
     /// @param from User who burned shares
     /// @param sharesBurned Amount of shares burned
@@ -770,6 +799,65 @@ contract DegenerusVault {
         sdgnrsToken.claimRedemption(address(this), day);
     }
 
+    /// @notice Sweep a foreign ERC20 out of the vault.
+    /// @dev Access: vault owner. The vault can receive tokens it has no other handling for —
+    ///      LINK recovered from a retired VRF subscription lands here with no way back out
+    ///      otherwise. Without this, routing a recovery to the vault only relocates the
+    ///      stranding.
+    ///      stETH is permanently excluded: it sits here as a real balance backing DGVE, so
+    ///      sweeping it would move value out from under holders. FLIP needs no exclusion —
+    ///      FLIP redirects VAULT-destined transfers and mints into vaultMintAllowance, so this
+    ///      contract never holds a FLIP balance to sweep. Nor does sDGNRS, which is soulbound
+    ///      and has no transfer function to call.
+    /// @param token Foreign ERC20 to sweep.
+    /// @param to Recipient.
+    /// @param amount Amount to send; zero sweeps the full balance.
+    /// @custom:reverts NotVaultOwner If caller is not the vault owner.
+    /// @custom:reverts ZeroAddress If `to` is the zero address.
+    /// @custom:reverts ProtectedToken If `token` backs vault accounting.
+    /// @custom:reverts Insufficient If the vault holds less than `amount`, or holds nothing.
+    /// @custom:reverts TransferFailed If the token transfer returns false.
+    function sweepToken(
+        address token,
+        address to,
+        uint256 amount
+    ) external onlyVaultOwner {
+        if (to == address(0)) revert ZeroAddress();
+        if (token == ContractAddresses.STETH_TOKEN) revert ProtectedToken();
+
+        uint256 bal = IERC20Sweep(token).balanceOf(address(this));
+        uint256 send = amount == 0 ? bal : amount;
+        if (send == 0 || send > bal) revert Insufficient();
+        if (!IERC20Sweep(token).transfer(to, send)) revert TransferFailed();
+        emit TokenSwept(token, to, send);
+    }
+
+    /// @notice Sweep a foreign ERC721 out of the vault.
+    /// @dev Access: vault owner. Rescues NFTs sent here by outside parties, which otherwise
+    ///      have no exit — the only NFT-out path is afkingSeatTransfer, hardwired to the
+    ///      AFKing seat token.
+    ///      No exclusion list, because nothing here needs one: the vault reads no NFT
+    ///      ownership or balance for accounting; the AFKing seat lock lives in the token, so a
+    ///      transfer emptying this contract's seat balance still reverts SeatInUse and the
+    ///      construction seat's tenure survives; and deity passes are soulbound, so they
+    ///      revert on their own.
+    ///      Plain transferFrom, not safeTransferFrom: the caller picks `to`, and the receiver
+    ///      hook would only add a failure mode on contract recipients.
+    /// @param token NFT contract to sweep from.
+    /// @param to Recipient.
+    /// @param tokenId Token serial to send.
+    /// @custom:reverts NotVaultOwner If caller is not the vault owner.
+    /// @custom:reverts ZeroAddress If `to` is the zero address.
+    function sweepNft(
+        address token,
+        address to,
+        uint256 tokenId
+    ) external onlyVaultOwner {
+        if (to == address(0)) revert ZeroAddress();
+        IERC721Sweep(token).transferFrom(address(this), to, tokenId);
+        emit NftSwept(token, to, tokenId);
+    }
+
     // ---------------------------------------------------------------------
     // CLAIMS (Burn Shares to Redeem Assets)
     // ---------------------------------------------------------------------
@@ -786,10 +874,12 @@ contract DegenerusVault {
         DegenerusVaultShare share = flipShare;
         if (amount == 0) revert Insufficient();
 
+        // No balanceOf leg: FLIP._transfer and _mint both redirect VAULT-destined FLIP into
+        // vaultMintAllowance and return before crediting balanceOf, so this contract's FLIP
+        // reserve is the allowance plus what is still claimable from coinflip.
         uint256 coinBal = flipToken.vaultMintAllowance();
-        uint256 vaultBal = flipToken.balanceOf(address(this));
         uint256 claimable = coinflipPlayer.previewClaimCoinflips(address(this));
-        coinBal += vaultBal + claimable;
+        coinBal += claimable;
 
         // vaultBurn returns the pre-burn supply, so no separate totalSupply() round-trip is
         // needed; it touches only share-token storage, never the coin/coinflip state read above.
@@ -802,13 +892,7 @@ contract DegenerusVault {
         emit Claim(msg.sender, amount, 0, 0, flipOut);
         if (flipOut != 0) {
             uint256 remaining = flipOut;
-            if (vaultBal != 0) {
-                uint256 payBal = remaining <= vaultBal ? remaining : vaultBal;
-                remaining -= payBal;
-                if (!flipToken.transfer(msg.sender, payBal)) revert TransferFailed();
-            }
-
-            if (remaining != 0 && claimable != 0) {
+            if (claimable != 0) {
                 uint256 claimed = coinflipPlayer.claimCoinflips(address(this), remaining);
                 if (claimed != 0) {
                     remaining -= claimed;
@@ -982,12 +1066,10 @@ contract DegenerusVault {
     /// @dev View helper for FLIP reserves.
     /// @return mainReserve DGVF claimable reserve (allowance + vault balance + claimable)
     function _coinReservesView() private view returns (uint256 mainReserve) {
-        uint256 allowance = flipToken.vaultMintAllowance();
-        mainReserve = allowance;
-        uint256 vaultBal = flipToken.balanceOf(address(this));
+        mainReserve = flipToken.vaultMintAllowance();
         uint256 claimable = coinflipPlayer.previewClaimCoinflips(address(this));
         unchecked {
-            mainReserve += vaultBal + claimable;
+            mainReserve += claimable;
         }
     }
 
