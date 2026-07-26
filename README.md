@@ -50,6 +50,7 @@ DegenerusGame.sol (main entry point, delegatecall dispatcher)
 |----------|---------|
 | FLIP | Deflationary ERC-20 game token |
 | Coinflip | Daily coinflip side-game |
+| DegenerusParimutuel | Over/under side-book on prize-pool growth |
 | DegenerusVault | stETH yield treasury |
 | DegenerusJackpots | Jackpot pool accounting |
 | DegenerusQuests | On-chain quest/streak system |
@@ -92,6 +93,7 @@ The `ContractAddresses.sol` values committed here are the **Foundry deterministi
 - **Prize Pool Split:** 90% current level / 10% future levels on ticket purchase.
 - **Thanos levels (snap valve):** the vault owner may declare a level at least 6 levels out a "thanos level", after which every drained ticket entry for that level onward divides by `2^shift` (shift ≤ 8). Purely prospective — the declaration lands strictly before the target level's first materialization, so one level's entries always share one exponent and the uniform division cancels in the pot-share fraction. A non-zero shift is only declarable once projected demand exceeds 40M entries at the target level. The foil pack expresses the same valve the other way round — it keeps its entry count and pays `2^shift` the price, and its match-bonus payout carries the exponent too, so the declaration is EV-neutral on both SKUs rather than a value cut to either.
 - **Century BAF incinerator:** at an ×00 level whose BAF *loses* its flip (the bracket is skipped and the pool normally just rolls forward), 25% of the would-be BAF pool instead pays one burn-weighted winner drawn from the WWXRP burns made during the preceding ×99 level. Entries close when the level increments off ×99 — the same transaction that requests the VRF word deciding the flip.
+- **Growth parimutuel:** an over/under book on the ratchet the game already records. Round L, open through level L's whole jackpot phase, resolves OVER iff `growth(L+1) > growth(L)` where `growth(L) = ratchet(L)/ratchet(L-1)` — compared cross-multiplied so the arithmetic is exact, with a push resolving UNDER. One fixed 1,000-FLIP stake per address per round, burned at placement; winners split the entire book evenly through the coinflip credit rail. There is no settlement transaction: every claim re-derives the outcome from write-once ratchet entries (century levels served from the append-only achieved-pool history), so a settled round's answer can never change.
 - **Whale Pricing:** Bundles 2.4-4 ETH, lazy passes 0.24 ETH+, deity passes 24 + T(n) ETH triangular.
 - **Game Over:** Liveness guard fires inside `advanceGame` (120-day inactivity or 365-day deploy timeout). `handleGameOverDrain` distributes funds using historical RNG (14-day fallback if Chainlink is stalled, or immediate fallback once the >120-day suppressed-phase deadman fires). A 30-day final sweep sends unclaimed remainder three ways to the vault, sDGNRS, and GNRUS.
 - **Pull Payments:** All ETH/stETH withdrawals use pull pattern via `claimWinnings()`.
@@ -111,7 +113,7 @@ The Solidity build is pinned — `foundry.toml` fixes the compiler (solc 0.8.34)
 
 The full assurance pipeline lives in this repository and runs in CI (`.github/workflows/ci.yml`) on every push:
 
-- **`forge test`** — **1,227 Foundry tests across 178 suites**, all passing: unit, integration, fuzz, invariant, gas, access-control, governance, economics, and named regression harnesses for every fixed finding.
+- **`forge test`** — **1,314 Foundry tests across 182 suites**, all passing: unit, integration, fuzz, invariant, gas, access-control, governance, economics, and named regression harnesses for every fixed finding.
 - **EIP-170 size gate** — CI fails if any deployed contract breaches the 24,576-byte limit.
 - **Storage-layout oracle** (`scripts/layout/storage_layout_oracle.sh`) — 12 modules execute by `delegatecall` against one shared `DegenerusGameStorage`, so CI fails the build if any storage slot in the game, any state contract, or any module moves versus a committed golden. This makes the "a module writes a slot the game uses for something else" corruption class un-shippable.
 - **Source-drift gates** (`make check-*`) — interface coverage, delegatecall target alignment, raw-selector bans, RNG-window consumer classification, pool-write provenance.
@@ -121,7 +123,7 @@ The full assurance pipeline lives in this repository and runs in CI (`.github/wo
 Reproduce the core suite locally:
 
 ```
-forge test    # 1,227 passing
+forge test    # 1,314 passing
 make check-interfaces check-delegatecall check-raw-selectors check-rng-window check-pool-writes
 bash scripts/layout/storage_layout_oracle.sh
 ```
@@ -130,7 +132,7 @@ A secondary Hardhat behavioral suite (`npx hardhat test`) provides additional co
 
 ## Scope & Known Issues
 
-- **`scope.txt` / `out_of_scope.txt`** — the exact audited surface, pinned to `contracts/` tree `975fb0e0` (tag `degenerus-c4a`).
+- **`scope.txt` / `out_of_scope.txt`** — the exact audited surface, pinned to `contracts/` tree `bea8c013` (tag `degenerus-c4a`).
 - **`KNOWN-ISSUES.md`** — every pre-triaged finding, by-design ruling, and static-analysis disposition, each with its precise mechanism. Not vague disclaimers.
 - **`SECURITY.md`** — threat model, trusted-role matrix (functional authority, not just Solidity modifiers), and disclosure process.
 - **`ECONOMIC_DISCLOSURES.md`** — creator allocations, vesting, governance control, the WWXRP reserve, and terminal value — every figure cited to a contract line.

@@ -4,7 +4,7 @@ Pre-disclosure for audit wardens. **If a finding's mechanism + impact is describ
 already known and is not eligible.** This is a precise perimeter — each entry names the exact
 mechanism and why it is by-design, defended, or out-of-scope. There are no vague blanket disclaimers.
 
-Frozen subject: `contracts/` tree `975fb0e0` @ tag `degenerus-c4a`. Pre-scanned with Slither v0.11.5
+Frozen subject: `contracts/` tree `bea8c013` @ tag `degenerus-c4a`. Pre-scanned with Slither v0.11.5
 + Aderyn 0.6.8; those findings are triaged in the automated-tools section below.
 
 ---
@@ -33,6 +33,19 @@ over a 168h lifetime and requires approve-weight > reject-weight. A proposal is 
 moment VRF recovers or a word is fulfilled after creation (see SECURITY.md role 1, "kill-on-recovery"). Feed swap
 requires the feed unhealthy 2d (admin) / 7d (community); a down feed only suspends LINK→FLIP donation
 credit (LINK donations still process). This is the intended trust model (see SECURITY.md).
+
+**Growth-parimutuel scoring is claim-time-derived, and betting ignores the RNG lock.**
+`DegenerusParimutuel` stores no settlement result: every claim re-derives its round's outcome
+from three write-once ratchet entries — century levels are served from the append-only
+achieved-pool history (`centuryPrizePools`), so the `_endPhase` restart-base overwrite of
+`levelPrizePool[x00]` never distorts a settled round — with `ratchet(round+1) == 0` as the
+unsettled predicate. Betting stays open through the daily RNG window by design: the market
+consumes no randomness and no write a bet performs reaches VRF-consumed state (the quest credit
+books to calendar-day+1; the one lock-sensitive path — topping a stake up from unclaimed
+coinflip winnings — stays gated inside FLIP, so a mid-window bet must be wallet-funded). An
+exact growth tie resolves UNDER (OVER must clear the line strictly). One fixed 1,000-FLIP bet
+per address per round; backing both sides is EV-0 in a pooled book, not an exploit. Positions
+unclaimed at game over tombstone with FLIP itself — there is no unwind path, by design.
 
 **Lido stETH dependency.** Protocol revenue depends on staking yield, not the prize pool: yield surplus
 above all pool obligations is split four ways (vault / sDGNRS / charity / buffer). The prize pool itself
@@ -104,16 +117,20 @@ transaction (a coin credit, not ETH-backed value). Immaterial; documented, not e
 
 ## 5. Automated tool findings (pre-disclosed)
 
-The full machine-readable Slither/Aderyn baseline is maintained internally — Slither 0.11.5 (2,973
-results / 101 detectors over 139 contracts at tree `975fb0e0`; 153 High / 409 Medium / 353 Low /
-2,005 Informational / 53 Optimization, and the "High" tier is dominated by 117 `uninitialized-state`
+The full machine-readable Slither/Aderyn baseline is maintained internally — Slither 0.11.5 (3,075
+results / 101 detectors at tree `bea8c013`; 154 High / 415 Medium / 359 Low /
+2,095 Informational / 52 Optimization, and the "High" tier is dominated by 118 `uninitialized-state`
 false positives from the shared-storage delegatecall architecture) + Aderyn 0.6.8 (9 High / 20 Low).
 Slither totals are sensitive to the scan environment (solc/toolchain resolution), so the absolute
 count is not comparable across machines — re-runs should compare category triage, not the total.
-These counts were measured directly at tree `975fb0e0`, not carried forward from an earlier scan.
-They are identical to the previous tree's scan because the only intervening change was two shifted
-arithmetic expressions and one local — no new detector-visible pattern, so a zero delta is the
-attributable result rather than a skipped re-run.
+These counts were measured directly at tree `bea8c013`, not carried forward from an earlier scan.
+The delta against the prior tree (+102 / +1 High over the mid-day-credit, LINK-recovery, and
+parimutuel span) is attributable: the one new High is `uninitialized-state` on the added
+`centuryPrizePools` array — the same shared-storage delegatecall false-positive class as the
+existing 117 — the High tier is otherwise composition-identical, and the new DegenerusParimutuel
+contributes 11 findings, none High (naming/pragma/unused-return noise, one `low-level-calls`
+Informational for its ENS constructor matching the established per-constructor pattern, and the
+`ok;` discard both tools flag).
 CI re-runs both
 analyzers on every push (`.github/workflows/ci.yml`); the standing per-category triage — why each is
 by-design, defended, or not-applicable — is below.

@@ -3,7 +3,7 @@
 For a gambling protocol, economic transparency matters as much as contract transparency.
 **Every figure below cites the exact contract line that defines it.** Nothing here is
 marketing math — verify each number against the frozen subject (`contracts/` tree
-`975fb0e0`, tag `degenerus-c4a`).
+`bea8c013`, tag `degenerus-c4a`).
 
 The code is **not yet deployed**. There are no live token prices. Figures are on-chain
 constants and formulas, not projected returns.
@@ -133,7 +133,7 @@ holder; that authority — and these claims — move with the DGVE token.
   (§2), the creator is the **initial admin**. DGVE is an ERC-20 share class; authority moves
   with the token.
 - **Admin powers are narrowly scoped** and cannot touch player funds: ETH→stETH liquidity conversion
-  and the lootbox RNG threshold. The VRF-coordinator and LINK price-feed swaps are **gated proposals,
+  the lootbox RNG threshold, and recovery sweeps of foreign assets mistakenly sent to the vault (stETH excluded). LINK donors accrue mid-day lootbox-RNG request credit, billed at the redemption-time LINK price, that waives the threshold's pending-value gates for requests they trigger — an operational perk that moves no player value. The VRF-coordinator and LINK price-feed swaps are **gated proposals,
   not free configuration** — the admin path requires the feed/VRF to be unhealthy/stalled for a delay
   (2d+ for the feed, longer for VRF), and there is a parallel sDGNRS-voting community path
   (`DegenerusAdmin.sol:727`). Full matrix and bounds: [`SECURITY.md`](SECURITY.md).
@@ -198,6 +198,14 @@ normally.
   per-account per-level). This is a design goal realized through sustained play — not a guaranteed
   per-open ETH profit for a casual buyer. They fund prize pools up front and receive future-level
   tickets in return.
+- **The growth parimutuel is pure redistribution.** `DegenerusParimutuel` books one fixed
+  1,000-FLIP stake per address per round on whether the next level's pool growth beats the
+  current level's (exact cross-multiplied comparison; a push resolves UNDER). Stakes are burned
+  at placement and winners are re-minted at most what the round burned, so the market can never
+  inflate FLIP — a round whose winning side is empty leaves the losing side burned. The
+  attached participation quest (150/75/37/18 FLIP by jackpot-phase day, once per level per
+  address, gated on level-quest eligibility or an active AFKing run) is an emission — the
+  incentive to participate — capped at 150 FLIP against the 1,000-FLIP stake it requires.
 - **Redemption is not simple proportional during the live game.** Burning sDGNRS/DGNRS enters an
   RNG-gated redemption that rolls **25%–175%** of the proportional share, with daily caps, a **50/50
   direct-ETH / lootbox split**, forfeiture of sub-minimum lootbox legs, and contingent FLIP

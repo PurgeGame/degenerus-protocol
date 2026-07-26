@@ -1,6 +1,6 @@
 # Security Policy
 
-Frozen subject: `contracts/` tree `975fb0e0` @ tag `degenerus-c4a` (post-v75.0 hardening freeze).
+Frozen subject: `contracts/` tree `bea8c013` @ tag `degenerus-c4a` (post-v75.0 hardening freeze).
 
 ## Reporting a vulnerability
 
@@ -80,7 +80,7 @@ set the lootbox mid-day-RNG threshold (the pending-lootbox ETH-equivalent value 
 before an extra *intra-day* lootbox VRF request may be triggered — a LINK-cost-limiting operational
 knob, not a security parameter), **thanos-level declaration** (`DegenerusGame.setThanosLevel` — see
 the dedicated bounds below; the one vault-owner power that reaches every player's pricing),
-the owner-gated salvage-buy fallback, **AFKing seat grants**
+the owner-gated salvage-buy fallback, **foreign-asset sweeps** (`DegenerusVault.sweepToken` / `sweepNft` — recover tokens or NFTs stranded in the vault by mistaken transfer; stETH is the one protected token, so the custodied backing is unreachable), **retired-VRF-subscription recovery** (`DegenerusAdmin.retrySubCancel` — cancel a *retired* coordinator's subscription and recover its LINK; the live coordinator/sub pair reverts `SubscriptionActive`, so the game's active RNG can never be stranded by it), **AFKing seat grants**
 (`afkingGrant` — grant seat claim rights from the vault's 998-seat allowance on
 `AFKingSubscriptionToken`; the token itself enforces the sale lock — grants revert until all 1,000
 free-tranche seats are claimed — and the 998 lifetime cap, so the owner cannot dilute the free
@@ -123,7 +123,8 @@ same exponent, so no leg of either product loses value against the raised price.
 custodied position (its shares, its tickets, its escrow). It cannot reach into player balances or the
 game's claimablePool. The vault's reserve is a virtual-allowance model (`balanceOf[VAULT] == 0`). The
 price-feed swap only affects LINK→FLIP donation valuation and is itself death-clock-gated in Admin.
-Besides the thanos declaration above, the two GNRUS recovery actions are the only vault-owner powers
+Besides the thanos declaration above, the two GNRUS recovery actions and the retired-VRF-
+subscription recovery are the only vault-owner powers
 that reach beyond the vault's own position, and only narrowly: they act on *charity residual* on a
 contract already post-gameOver and
 past its final sweep — never live player balances or the game claimablePool. `vaultRedeemFor` is
