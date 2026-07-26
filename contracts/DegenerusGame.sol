@@ -963,16 +963,19 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     /// @notice Purchase whale pass: boosts levelCount, queues 100 levels of ticket entries, includes lootbox.
     /// @dev Available at any level. Can be purchased multiple times (1-100 per call).
     ///      Price: 2.4 ETH (levels 0-3), 4 ETH (levels 4+), or discounted with boon.
-    ///      Per pass x quantity: 40 entries/level for [passLevel..10] and 2 entries/level for the rest,
-    ///      spanning 100 levels from passLevel = level+1 (4 entries = 1 whole ticket).
+    ///      Per pass x quantity: 20 entries/level for [passLevel..9]; the rest of the 100-level
+    ///      span from passLevel = level+1 pays 2 x quantity half-passes as whole tickets
+    ///      (4 entries = 1 whole ticket), strided so one pass earns a ticket every 2nd level.
     ///      Includes lootbox (10% of price).
     ///      Frozen stats don't increment until game reaches the frozen level.
     ///
     ///      Fund distribution - Level 0: 30% next / 70% future.
     ///      Fund distribution - Other levels: 5% next / 95% future.
     ///
-    ///      Example at level 1 (passLevel 2): 40 entries/lvl for 2-10, 2 entries/lvl for 11-101, frozen until 101.
-    ///      Example at level 51 (passLevel 52): no bonus levels, 2 entries/lvl for 52-151, frozen until 151.
+    ///      Example at level 1 (passLevel 2): 20 entries/lvl for 2-9, one whole ticket every 2nd
+    ///      level over 10-101, frozen until 101.
+    ///      Example at level 51 (passLevel 52): no bonus levels, one whole ticket every 2nd level
+    ///      over 52-151, frozen until 151.
     /// @param buyer Player address to receive pass rewards (address(0) = msg.sender).
     /// @param quantity Number of passes to purchase.
     /// @param affiliateCode Affiliate/referral code for the purchase (bytes32(0) = stored code).
@@ -2529,13 +2532,35 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     /// @return ratchetRound The ratchet entry for round.
     /// @return ratchetNext The ratchet entry for round + 1 (0 until the successor banks).
     /// @return currentLevel The current game level — the round a bet placed now joins.
-    /// @return bettingOpen True while the jackpot phase is live. The flag alone: game
-    ///         over is only ever declared out of a failed purchase phase, where it is
-    ///         already down and, with no transition ever coming, stays down.
+    /// @return bettingOpen True while the jackpot phase is live, its draws have not ended,
+    ///         and the phase is not armed to collapse. Three legs, each closing a window
+    ///         that is not a real one:
+    ///
+    ///         phaseTransitionActive — _endPhase seals the level but leaves
+    ///         jackpotPhaseFlag up until the far-future ticket drain finishes, a span of
+    ///         one or more advances whose length answers to gas chunking rather than to
+    ///         anything about the market. _endPhase also zeroes the day counter, so that
+    ///         span would quote the FIRST day's quest reward to the last mover, inverting
+    ///         the decay exactly where it should bite hardest. This is the standalone
+    ///         "this level's draws have ended" signal, read the same way by
+    ///         _activeTicketLevel.
+    ///
+    ///         compressedJackpotFlag < 2 — a turbo phase (2, or 3 before its predecessor's
+    ///         bonus is paid down to 2) takes all five logical days in one physical day,
+    ///         so its market would open and shut inside a single advance cycle: minutes,
+    ///         not days. A window that short is not a market — nobody outside the mempool
+    ///         could act on it — so a turbo level simply has none. The threshold matches
+    ///         _endPhase's own turbo test. Compressed (1) keeps three physical days and
+    ///         stays open.
+    ///
+    ///         Game over needs no leg: it is only ever declared out of a failed purchase
+    ///         phase, where the flag is already down and, with no transition ever coming,
+    ///         stays down.
     /// @return phaseDay Jackpot-phase day counter, which decays the quest reward. The
     ///         phase runs four jackpot days, 1-4, each tier advancing when its day's
     ///         processing completes; 0 is only the sliver between the transition and the
-    ///         same day's first processing — day 1 before its settlement.
+    ///         same day's first processing — day 1 before its settlement. The counter is
+    ///         also zeroed at _endPhase, but bettingOpen is already false by then.
     function growthState(
         uint24 round
     )
@@ -2556,7 +2581,10 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
             ratchetNext = _growthRatchet(round + 1);
         }
         currentLevel = level;
-        bettingOpen = jackpotPhaseFlag;
+        bettingOpen =
+            jackpotPhaseFlag &&
+            !phaseTransitionActive &&
+            compressedJackpotFlag < 2;
         phaseDay = jackpotCounter;
     }
 

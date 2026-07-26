@@ -892,12 +892,12 @@ contract TicketLifecycleTest is DeployProtocol {
             "FF queue at level 10 should have >= 3 entries (2 constructor + 1 whale buyer)");
 
         // Also verify a higher FF level got whale entries. One pass's standard leg is a
-        // whole ticket every 2nd level from level 11 (bonus window ends at 10), so odd
-        // levels 11-99 are covered and even levels get no whale entries.
-        uint256 ff51 = _ffQueueLength(51);
-        assertGe(ff51, 3, "FF queue at level 51 (covered stride offset) should have >= 3 entries (2 constructor + 1 whale)");
+        // whole ticket every 2nd level from level 10 (bonus window ends at 9), so even
+        // levels 10-100 are covered and odd levels get no whale entries.
         uint256 ff50 = _ffQueueLength(50);
-        assertEq(ff50, 2, "FF queue at level 50 (uncovered stride offset) should hold only the 2 constructor entries");
+        assertGe(ff50, 3, "FF queue at level 50 (covered stride offset) should have >= 3 entries (2 constructor + 1 whale)");
+        uint256 ff51 = _ffQueueLength(51);
+        assertEq(ff51, 2, "FF queue at level 51 (uncovered stride offset) should hold only the 2 constructor entries");
 
         // Verify that buyer1 has ticketsOwed at a near-future level (proves write-key routing)
         bool hasNearTicketsOwed = false;

@@ -223,10 +223,11 @@ contract DegenerusGameFoilPackModule is
             uint32((FOIL_PACK_TICKETS * 4 * QTY_SCALE) << snapS)
         );
 
-        // Affiliate, 20% fresh / 5% recycle exactly like a normal ticket mint: the fresh
-        // portion (ethUsed) at the fresh rate, the claimable portion (remaining) at the
-        // recycle rate, both frozen at level + 1 like the ticket affiliate (score 0, same
-        // as tickets). FLIP kickbacks accumulate and are credited once below.
+        // Affiliate, fresh 25% at levels 0-3 / 20% at 4+ and 5% recycle exactly like a
+        // normal ticket mint: the fresh portion (ethUsed) at the fresh rate, the claimable
+        // portion (remaining) at the recycle rate, both frozen at level + 1 like the ticket
+        // affiliate (score 0, same as tickets). FLIP kickbacks accumulate and are credited
+        // once below.
         uint24 affLevel = level + 1;
         uint256 kickback;
         if (ethUsed != 0) {

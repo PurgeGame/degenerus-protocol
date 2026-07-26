@@ -22,7 +22,7 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
 
     // error E() — inherited from DegenerusGameStorage
     // error InvalidQuantity() — inherited from DegenerusGameMintStreakUtils
-    error MinQuantityRequired(); // At a century milestone level (passLevel % 100 == 0) at least two whale passes must be purchased.
+    error MinQuantityRequired(); // At a century milestone level (passLevel % 100 == 0) a standard-price purchase must take at least two whale passes; the boon-discount branch is not gated.
     error InvalidLevelForPass(); // Current game level is not eligible for a lazy pass purchase (not level 0-2, x9, x0, or an unlocked century) and the caller has no valid lazy pass boon.
     error DeityPassConflict(); // Buyer already holds a deity pass, which is incompatible with purchasing a lazy pass.
     error PassNotExpired(); // The player's existing frozen pass has more than 7 levels remaining and is not yet eligible for early renewal.
@@ -127,15 +127,16 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
     /// @dev Whale pass standard price (levels 4+).
     uint256 private constant WHALE_PASS_STANDARD_PRICE = 4 ether;
 
-    /// @dev Whale pass bonus entries per level for levels up to 10.
-    uint32 private constant WHALE_BONUS_ENTRIES_PER_LEVEL = 40;
+    /// @dev Whale pass bonus entries per level over the intro-price window (5 whole tickets).
+    uint32 private constant WHALE_BONUS_ENTRIES_PER_LEVEL = 20;
 
     /// @dev Half-passes per whale pass (1 half-pass = 1 entry/level equivalent); the
     ///      standard leg awards these as whole-ticket chunks via _queueHalfPassAward.
     uint256 private constant WHALE_HALF_PASSES_PER_PASS = 2;
 
-    /// @dev Last level eligible for whale pass bonus entries.
-    uint24 private constant WHALE_BONUS_END_LEVEL = 10;
+    /// @dev Last level eligible for whale pass bonus entries — the end of the intro price
+    ///      tier (levels 0-9); level 10 opens the standard 100-level cycle pricing.
+    uint24 private constant WHALE_BONUS_END_LEVEL = 9;
 
     /// @dev Whale pass lootbox share (10%).
     uint16 private constant WHALE_LOOTBOX_BPS = 1000;
@@ -157,13 +158,13 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
      * @notice Purchase a 100-level whale pass.
      * @dev Available at any level. Tickets always start at x1.
      *      - Boosts levelCount by delta between current freeze and new freeze (max 100, no double dipping).
-     *      - Queues 40 × quantity bonus entries/lvl for levels passLevel-10; the rest of the span
+     *      - Queues 20 × quantity bonus entries/lvl for levels passLevel-9; the rest of the span
      *        is awarded as whole tickets (4 entries each): quantity/2 tickets on every level, plus
      *        one ticket every 2nd level when quantity is odd (1 pass = 1 whole ticket per 2 levels).
      *      - Lootbox: 10% of price.
      *      - Distributes DGNRS minter rewards to the buyer.
-     *      - Affiliate: 20% fresh / 5% recycled of the price in FLIP, exactly like a ticket mint
-     *        (kickback share credited back to the buyer).
+     *      - Affiliate: fresh 25% (levels 0-3) or 20% (levels 4+), 5% recycled, of the price
+     *        in FLIP, exactly like a ticket mint (kickback share credited back to the buyer).
      *
      *      Price: 2.4 ETH at levels 0-3, 4 ETH at levels 4+, 10/25/50% off standard with boon.
      *
@@ -175,7 +176,8 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
      * @param affiliateCode Affiliate/referral code for the purchase (bytes32(0) = stored code).
      * @custom:reverts GameOver When gameOver is true.
      * @custom:reverts InvalidQuantity When quantity is 0 or exceeds 100.
-     * @custom:reverts MinQuantityRequired When a century (x00) pass level is purchased with quantity < 2.
+     * @custom:reverts MinQuantityRequired When a century (x00) pass level is purchased with quantity < 2
+     *         on the standard-price path. A boon purchase takes the discount branch and is not gated.
      */
     function purchaseWhalePass(
         address buyer,
@@ -313,7 +315,7 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
 
         mintPacked_[buyer] = data;
 
-        // Queue entries: 40*quantity/lvl for bonus levels (passLevel to 10); the standard
+        // Queue entries: 20*quantity/lvl for bonus levels (passLevel to 9); the standard
         // leg awards 2*quantity half-passes as whole-ticket chunks (strided when odd).
         uint32 bonusEntries = uint32(WHALE_BONUS_ENTRIES_PER_LEVEL * quantity);
         uint24 bonusCount = passLevel <= WHALE_BONUS_END_LEVEL
@@ -336,11 +338,12 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
             false
         );
 
-        // Affiliate, 20% fresh / 5% recycle exactly like a normal ticket mint: the fresh
-        // portion (freshPaid) at the fresh rate, the claimable/afking-funded remainder at
-        // the recycle rate, both frozen at level + 1 like the ticket affiliate (score 0,
-        // same as tickets). The FLIP basis converts at the pass ticket level's price; the
-        // kickback share is credited back to the buyer in one Coinflip write.
+        // Affiliate, fresh 25% at levels 0-3 / 20% at 4+ and 5% recycle exactly like a
+        // normal ticket mint: the fresh portion (freshPaid) at the fresh rate, the
+        // claimable/afking-funded remainder at the recycle rate, both frozen at level + 1
+        // like the ticket affiliate (score 0, same as tickets). The FLIP basis converts at
+        // the pass ticket level's price; the kickback share is credited back to the buyer
+        // in one Coinflip write.
         {
             uint256 passPriceWei = PriceLookupLib.priceForLevel(passLevel);
             uint256 kickback;
@@ -417,8 +420,8 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
      *        ticket prices across the 10-level window at levels 3+.
      *      - Awards a lootbox equal to 10% of pass value.
      *      - Boon purchases apply the boon's tier discount (10/25/50%) to the payment amount.
-     *      - Affiliate: 20% fresh / 5% recycled of the price in FLIP, exactly like a ticket mint
-     *        (kickback share credited back to the buyer).
+     *      - Affiliate: fresh 25% (levels 0-3) or 20% (levels 4+), 5% recycled, of the price
+     *        in FLIP, exactly like a ticket mint (kickback share credited back to the buyer).
      * @param buyer The address receiving the pass.
      * @param affiliateCode Affiliate/referral code for the purchase (bytes32(0) = stored code).
      * @custom:reverts OnlyDelegatecall When invoked outside the Game delegatecall context.
@@ -531,11 +534,12 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
             presaleBoxCredit[buyer] += totalPrice / 4;
         }
 
-        // Affiliate, 20% fresh / 5% recycle exactly like a normal ticket mint: the fresh
-        // portion (freshPaid) at the fresh rate, the claimable/afking-funded remainder at
-        // the recycle rate, both frozen at level + 1 like the ticket affiliate (score 0,
-        // same as tickets). The FLIP basis converts at the pass start level's price; the
-        // kickback share is credited back to the buyer in one Coinflip write.
+        // Affiliate, fresh 25% at levels 0-3 / 20% at 4+ and 5% recycle exactly like a
+        // normal ticket mint: the fresh portion (freshPaid) at the fresh rate, the
+        // claimable/afking-funded remainder at the recycle rate, both frozen at level + 1
+        // like the ticket affiliate (score 0, same as tickets). The FLIP basis converts at
+        // the pass start level's price; the kickback share is credited back to the buyer
+        // in one Coinflip write.
         {
             uint256 passPriceWei = startLevelPrice;
             uint256 kickback;
@@ -706,7 +710,7 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
         // (JackpotModule via deityBySymbol) — they get NO queued tickets. The whale pass the
         // purchase confers goes to the deity's affiliate (affiliateAddr is always non-zero —
         // getReferrer defaults to VAULT when the buyer has no real referrer): queued immediately
-        // for 100 levels from passLevel (= level + 1), 40/lvl over the level-1-10 bonus window +
+        // for 100 levels from passLevel (= level + 1), 20/lvl over the level-1-9 bonus window +
         // one whole ticket every 2nd level standard, plus the whale-pass freeze/stat boost.
         uint24 ticketStartLevel = passLevel;
         uint24 bonusCount = passLevel <= WHALE_BONUS_END_LEVEL

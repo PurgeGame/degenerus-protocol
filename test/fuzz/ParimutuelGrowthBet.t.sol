@@ -3,6 +3,8 @@ pragma solidity ^0.8.26;
 
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage.sol";
+import {DegenerusParimutuel} from "../../contracts/DegenerusParimutuel.sol";
+import {PriceLookupLib} from "../../contracts/libraries/PriceLookupLib.sol";
 
 /// @dev Exposes _growthRatchet and the two entries it chooses between. Inheriting the real
 ///      storage layout rather than pinning slots keeps this honest if the layout moves.
@@ -569,6 +571,24 @@ contract ParimutuelGrowthBetTest is DeployProtocol {
         return parimutuel.claimRound(round, players);
     }
 
+    /// @dev The crank bounty for `settled` winners actually paid, priced at the ROUTED
+    ///      level — jackpot phase targets `crankLevel`, purchase phase the next — mirroring
+    ///      the Game's mintPrice and the decimator/foil bounties. _settleOver pins
+    ///      crankLevel to round + 1 in purchase phase, so the routed level is round + 2.
+    ///      The 15e12 wei target is spelled out here rather than read off the contract, so
+    ///      moving the constant fails these tests instead of silently re-scaling them.
+    function _expectedBounty(
+        uint256 settled,
+        uint24 crankLevel,
+        bool bettingOpen
+    ) internal pure returns (uint256) {
+        return
+            (settled * 15_000_000_000_000 * 1000 ether) /
+            PriceLookupLib.priceForLevel(
+                bettingOpen ? crankLevel : crankLevel + 1
+            );
+    }
+
     function _list3(
         address a,
         address b,
@@ -630,17 +650,17 @@ contract ParimutuelGrowthBetTest is DeployProtocol {
         assertEq(total, (STAKE * 3) / 2, "a duplicated winner must be paid a single share");
     }
 
-    /// Junk entries are skipped rather than reverted, so one bad address cannot brick the
-    /// batch for everyone else.
+    /// Junk entries PAST THE OPENER are skipped rather than reverted, so one bad address
+    /// cannot brick the batch for everyone else.
     function testCrankToleratesAddressesThatNeverBet() public {
         _threeBetRound();
-        uint256 total = _crank(keeper, 50, _list3(keeper, alice, address(0xDEAD)));
+        uint256 total = _crank(keeper, 50, _list3(alice, keeper, address(0xDEAD)));
         assertEq(total, (STAKE * 3) / 2, "the one real winner in the list must still be paid");
     }
 
     /// A settled round whose winning side is empty has nobody to pay — and no divisor.
-    /// The crank must return 0 rather than revert on the payout division.
-    function testCrankOnEmptyWinningSidePaysNobody() public {
+    /// The crank must refuse rather than revert on the payout division.
+    function testCrankOnEmptyWinningSideReverts() public {
         uint256 supplyBefore = coin.totalSupply();
         _fund(alice, STAKE);
         _fund(bob, STAKE);
@@ -651,8 +671,8 @@ contract ParimutuelGrowthBetTest is DeployProtocol {
         _bet(bob, false); // everyone on UNDER...
         _settleOver(50); // ...and the round resolves OVER
 
-        uint256 total = _crank(keeper, 50, _list3(alice, bob, carol));
-        assertEq(total, 0, "an empty winning side must pay nobody");
+        vm.expectRevert(DegenerusParimutuel.NothingToSettle.selector);
+        _crank(keeper, 50, _list3(alice, bob, carol));
         assertLe(
             coin.totalSupply(),
             supplyBefore + funded,
@@ -660,9 +680,9 @@ contract ParimutuelGrowthBetTest is DeployProtocol {
         );
     }
 
-    /// An unsettled round pays nobody and reverts nobody, and the same list works once it
-    /// settles.
-    function testCrankOnUnsettledRoundPaysNobodyThenPaysOnceSettled() public {
+    /// An unsettled round settles nothing, so the crank refuses it — and the same list
+    /// works once it settles.
+    function testCrankOnUnsettledRoundRevertsThenPaysOnceSettled() public {
         _fund(alice, STAKE);
         _fund(bob, STAKE);
         _mockOpenAt(50, 0, true);
@@ -670,13 +690,41 @@ contract ParimutuelGrowthBetTest is DeployProtocol {
         _bet(bob, false);
 
         address[] memory list = _list3(alice, bob, carol);
-        assertEq(_crank(keeper, 50, list), 0, "an unsettled round must pay nobody");
+        vm.expectRevert(DegenerusParimutuel.NothingToSettle.selector);
+        _crank(keeper, 50, list);
 
         _settleOver(50);
         assertEq(_crank(keeper, 50, list), STAKE * 2, "the settled round must pay the winner");
     }
 
-    /// Permissionless: the crank credits the bettors, never the caller.
+    /// An empty list settles nothing and is refused rather than succeeding as a no-op.
+    function testCrankOnEmptyListReverts() public {
+        _threeBetRound();
+        vm.expectRevert(DegenerusParimutuel.NothingToSettle.selector);
+        _crank(keeper, 50, new address[](0));
+    }
+
+    /// The opener is the spent-list probe: a list whose first address is already paid
+    /// reverts instead of walking the rest for nothing, so the loser of a crank race
+    /// fails its simulation rather than paying for the whole walk.
+    function testCrankRevertsOnAnAlreadySweptOpener() public {
+        _threeBetRound();
+        address[] memory list = _list3(alice, bob, carol);
+        _crank(keeper, 50, list);
+
+        vm.expectRevert(DegenerusParimutuel.NothingToSettle.selector);
+        _crank(keeper, 50, list);
+    }
+
+    /// The opener must be a WINNER, not merely a bettor: a loser in front reverts.
+    function testCrankRevertsOnALosingOpener() public {
+        _threeBetRound();
+        vm.expectRevert(DegenerusParimutuel.NothingToSettle.selector);
+        _crank(keeper, 50, _list3(carol, alice, bob));
+    }
+
+    /// Permissionless, and paid for the work: the crank credits the bettors their payouts
+    /// and the caller a gas-pegged bounty per winner it actually settled.
     function testCrankIsPermissionlessAndCreditsTheBettors() public {
         _threeBetRound();
         uint256 keeperBefore = _flipReach(keeper);
@@ -684,10 +732,15 @@ contract ParimutuelGrowthBetTest is DeployProtocol {
 
         _crank(keeper, 50, _list3(alice, bob, carol));
         assertGt(_flipReach(alice), aliceBefore, "the bettor must receive the payout");
-        assertEq(_flipReach(keeper), keeperBefore, "the cranker must receive nothing");
+        assertEq(
+            _flipReach(keeper) - keeperBefore,
+            _expectedBounty(2, 51, false),
+            "the cranker must earn the bounty for the two winners it settled"
+        );
     }
 
-    /// A player who already claimed for themselves is skipped by the crank.
+    /// A player who already claimed for themselves is skipped by the crank — and earns
+    /// the cranker no bounty, since no claim was paid for them.
     function testCrankDoesNotRepayANamedClaim() public {
         _threeBetRound();
 
@@ -700,8 +753,15 @@ contract ParimutuelGrowthBetTest is DeployProtocol {
             "the named claim must pay alice her share"
         );
 
-        uint256 total = _crank(keeper, 50, _list3(alice, bob, carol));
+        uint256 keeperBefore = _flipReach(keeper);
+        // bob leads: alice is spent, and a spent opener would refuse the whole call.
+        uint256 total = _crank(keeper, 50, _list3(bob, alice, carol));
         assertEq(total, (STAKE * 3) / 2, "the crank must pay only the share still owed");
+        assertEq(
+            _flipReach(keeper) - keeperBefore,
+            _expectedBounty(1, 51, false),
+            "only the one winner actually settled may earn a bounty"
+        );
     }
 
     /// Every winner reads as claimed afterwards, with nothing left owing.
@@ -717,17 +777,181 @@ contract ParimutuelGrowthBetTest is DeployProtocol {
         assertEq(payout, 0, "nothing may remain claimable");
     }
 
-    /// The crank is redistribution like the named claim: it can never mint net FLIP.
-    function testCrankNeverMintsNetFlip() public {
-        uint256 supplyBefore = coin.totalSupply();
+    /// The bounty is per winner ACTUALLY PAID, so it scales with settled count.
+    function testCrankBountyScalesWithWinnersSettled() public {
+        // Round 50: two winners on OVER, one loser.
         _threeBetRound();
-        uint256 funded = coin.totalSupply() - supplyBefore;
+        uint256 beforeTwo = _flipReach(keeper);
+        _crank(keeper, 50, _list3(alice, bob, carol));
+        uint256 earnedTwo = _flipReach(keeper) - beforeTwo;
+
+        // Round 51: a single winner.
+        _fund(alice, STAKE);
+        _fund(carol, STAKE);
+        _mockOpenAt(51, 0, true);
+        _bet(alice, true);
+        _bet(carol, false);
+        _settleOver(51);
+
+        uint256 beforeOne = _flipReach(keeper);
+        _crank(keeper, 51, _list3(alice, carol, address(0xDEAD)));
+        uint256 earnedOne = _flipReach(keeper) - beforeOne;
+
+        assertEq(earnedTwo, _expectedBounty(2, 51, false), "two settled winners pay two bounties");
+        assertEq(earnedOne, _expectedBounty(1, 52, false), "one settled winner pays one bounty");
+        assertEq(earnedTwo, earnedOne * 2, "the bounty is linear in winners settled");
+    }
+
+    /// Losers, non-bettors and duplicates settle nothing, so padding a list earns the
+    /// cranker nothing extra — the only anti-farm the bounty needs.
+    function testCrankBountyIgnoresPaddedEntries() public {
+        _threeBetRound();
+
+        address[] memory padded = new address[](6);
+        padded[0] = alice; // winner
+        padded[1] = carol; // loser
+        padded[2] = alice; // duplicate, already settled by index 0
+        padded[3] = address(0xDEAD); // never bet
+        padded[4] = bob; // winner
+        padded[5] = keeper; // never bet
+
+        uint256 keeperBefore = _flipReach(keeper);
+        _crank(keeper, 50, padded);
+        assertEq(
+            _flipReach(keeper) - keeperBefore,
+            _expectedBounty(2, 51, false),
+            "a padded list may earn no more than its two genuine settlements"
+        );
+    }
+
+    /// The crank reads no game-over state: FLIP is tombstoned there, so the credit is
+    /// already worthless and the read would withhold nothing. Settlement is unchanged.
+    function testCrankIsIndifferentToGameOver() public {
+        _threeBetRound();
+        vm.mockCall(
+            address(game),
+            abi.encodeWithSelector(bytes4(keccak256("gameOver()"))),
+            abi.encode(true)
+        );
+
+        uint256 keeperBefore = _flipReach(keeper);
+        uint256 total = _crank(keeper, 50, _list3(alice, bob, carol));
+        assertEq(total, STAKE * 3, "winners must still be paid the whole book");
+        assertEq(
+            _flipReach(keeper) - keeperBefore,
+            _expectedBounty(2, 51, false),
+            "the bounty is paid without consulting game-over state"
+        );
+    }
+
+    /// The bounty rides the winners' batch in its tail slot, so a cranker that also won
+    /// the round takes two slots. The stake write accumulates: it is paid its share AND
+    /// its bounty, exactly as two separate credit calls would have paid.
+    function testCrankBountyReachesACallerWhoAlsoWon() public {
+        _fund(alice, STAKE);
+        _fund(keeper, STAKE);
+        _fund(carol, STAKE);
+        _mockOpenAt(50, 0, true);
+        _bet(alice, true);
+        _bet(keeper, true);
+        _bet(carol, false);
+        _settleOver(50);
+
+        uint256 keeperBefore = _flipReach(keeper);
+        _crank(keeper, 50, _list3(alice, keeper, carol));
+        assertEq(
+            _flipReach(keeper) - keeperBefore,
+            (STAKE * 3) / 2 + _expectedBounty(2, 51, false),
+            "a winning cranker takes its share and its bounty, neither swallowing the other"
+        );
+    }
+
+    /// The bounty is the CRANK's, not the named claim's: claiming for yourself or for one
+    /// player across rounds pays the payout and nothing else.
+    function testNamedClaimPaysNoBounty() public {
+        _threeBetRound();
+
+        uint24[] memory rounds = new uint24[](1);
+        rounds[0] = 50;
+        uint256 keeperBefore = _flipReach(keeper);
+        vm.prank(keeper);
+        parimutuel.claim(alice, rounds);
+        assertEq(
+            _flipReach(keeper),
+            keeperBefore,
+            "the named claim pays the bettor only"
+        );
+    }
+
+    /// The payout leg is pure redistribution — the winners split exactly the burned stakes
+    /// and the loser gets nothing — so the caller's bounty is the only FLIP the crank
+    /// creates beyond them. Asserted on reach rather than totalSupply: creditFlipBatch
+    /// books a next-day coinflip stake and never moves the ERC-20 supply, so a supply
+    /// assertion here would hold no matter what the bounty paid.
+    function testCrankCreatesOnlyTheBountyBeyondTheBurnedStakes() public {
+        _threeBetRound();
+        uint256 aliceBefore = _flipReach(alice);
+        uint256 bobBefore = _flipReach(bob);
+        uint256 carolBefore = _flipReach(carol);
+        uint256 keeperBefore = _flipReach(keeper);
 
         _crank(keeper, 50, _list3(alice, bob, carol));
-        assertLe(
-            coin.totalSupply(),
-            supplyBefore + funded,
-            "a crank must never mint net FLIP"
+
+        assertEq(
+            (_flipReach(alice) - aliceBefore) + (_flipReach(bob) - bobBefore),
+            STAKE * 3,
+            "the winners must split exactly the three burned stakes"
+        );
+        assertEq(_flipReach(carol), carolBefore, "the losing side must be paid nothing");
+        assertEq(
+            _flipReach(keeper) - keeperBefore,
+            _expectedBounty(2, 51, false),
+            "the bounty is the only FLIP created beyond the burned stakes"
+        );
+    }
+
+    /// The bounty is priced at the ROUTED level, mirroring the Game's mintPrice and the
+    /// decimator/foil bounties: purchase phase targets the NEXT level. Pinned at the x00
+    /// boundary, where routed (x01, 0.04 ETH) and raw (x00, 0.24 ETH) differ 6x — the one
+    /// place a regression to the raw level is visible, since every other test sits inside
+    /// a single price tier.
+    function testCrankBountyPricesAtTheNextLevelInPurchasePhase() public {
+        _fund(alice, STAKE);
+        _fund(carol, STAKE);
+        _mockOpenAt(50, 0, true);
+        _bet(alice, true);
+        _bet(carol, false);
+        // Settled, sitting at level 100 in PURCHASE phase -> routed level is 101.
+        _mockState(50, 40 ether, 100 ether, 300 ether, 100, false, 0);
+
+        uint256 before = _flipReach(keeper);
+        _crank(keeper, 50, _list3(alice, carol, address(0xDEAD)));
+
+        assertEq(
+            _flipReach(keeper) - before,
+            _expectedBounty(1, 100, false),
+            "purchase phase must price the bounty at the next level"
+        );
+    }
+
+    /// The other half of the routing: in jackpot phase the crank prices at the CURRENT
+    /// level. Same x00 boundary, so this pins 0.24 ETH where the sibling test pins 0.04.
+    function testCrankBountyPricesAtTheCurrentLevelInJackpotPhase() public {
+        _fund(alice, STAKE);
+        _fund(carol, STAKE);
+        _mockOpenAt(50, 0, true);
+        _bet(alice, true);
+        _bet(carol, false);
+        // Settled, sitting at level 100 in JACKPOT phase -> routed level is 100.
+        _mockState(50, 40 ether, 100 ether, 300 ether, 100, true, 0);
+
+        uint256 before = _flipReach(keeper);
+        _crank(keeper, 50, _list3(alice, carol, address(0xDEAD)));
+
+        assertEq(
+            _flipReach(keeper) - before,
+            _expectedBounty(1, 100, true),
+            "jackpot phase must price the bounty at the current level"
         );
     }
 
@@ -945,6 +1169,90 @@ contract ParimutuelGrowthBetTest is DeployProtocol {
     /// End to end on the real game: bet during a live jackpot phase, let the protocol
     /// transition, then claim against the ratchet the transition actually wrote. Nothing
     /// pushes a result into the market — the outcome is derived from levelPrizePool alone.
+    /// A turbo phase takes all five logical days in ONE physical day, so its market would
+    /// open and shut inside a single advance cycle — minutes, not days. Nobody outside the
+    /// mempool could act on that, so a turbo level gets no market at all. Driven one advance
+    /// at a time: at EVERY point where a turbo phase is live, betting must be shut.
+    function testTurboLevelNeverOpensAMarket() public {
+        vm.pauseGasMetering();
+
+        // Run a level's jackpot phase out, landing in the next level's purchase phase.
+        _driveToLiveJackpotPhase();
+        for (uint256 i = 0; i < 20 && game.jackpotPhase(); i++) _driveDay();
+        require(!game.jackpotPhase(), "harness: jackpot phase never ended");
+
+        // Clear the ratchet target inside the two-day window that arms turbo
+        // (AdvanceModule: purchaseDays <= 1 && nextPool > target).
+        _seedNextPool(game.prizePoolTargetView() + 10 ether);
+
+        uint256 turboObservations;
+        for (uint256 d = 0; d < 8; d++) {
+            simTime += 1 days + 1;
+            vm.warp(simTime);
+            for (uint256 j = 0; j < 200; j++) {
+                _fulfillVrfIfPending();
+                (bool ok, ) = address(game).call(
+                    abi.encodeWithSignature("advanceGame()")
+                );
+                if (!ok) break;
+                if (game.jackpotPhase() && game.jackpotCompressionTier() >= 2) {
+                    (, , , , bool open, ) = game.growthState(0);
+                    assertFalse(open, "a turbo phase must never take bets");
+                    turboObservations++;
+                }
+            }
+        }
+
+        assertGt(turboObservations, 0, "harness: never observed a live turbo phase");
+    }
+
+    /// The market closes when the level's DRAWS end, not when jackpotPhaseFlag drops.
+    /// _endPhase seals the level but leaves the flag up through the far-future ticket
+    /// drain — one or more advances — and zeroes the day counter on the way, so a market
+    /// keyed on the flag alone would stay open there AND quote the first day's 150 FLIP
+    /// to the last mover. Driven one advance at a time so the span is observable.
+    function testBettingClosesWhenDrawsEndNotWhenFlagDrops() public {
+        vm.pauseGasMetering();
+
+        uint24 round = _driveToLiveJackpotPhase();
+        _fund(alice, STAKE);
+        _bet(alice, true); // in-phase bet still books
+
+        bool sawSpan;
+        for (uint256 d = 0; d < 40 && !sawSpan; d++) {
+            simTime += 1 days + 1;
+            vm.warp(simTime);
+            for (uint256 j = 0; j < 200; j++) {
+                _fulfillVrfIfPending();
+                (bool ok, ) = address(game).call(
+                    abi.encodeWithSignature("advanceGame()")
+                );
+                if (!ok) break;
+                // The span: draws ended, flag not yet dropped.
+                if (game.jackpotPhase()) {
+                    (, , , , bool open, uint8 phaseDay) = game.growthState(0);
+                    if (!open) {
+                        sawSpan = true;
+                        assertEq(
+                            phaseDay,
+                            0,
+                            "_endPhase zeroed the counter, which is what made the span quote 150"
+                        );
+                        _fund(bob, STAKE);
+                        vm.prank(bob);
+                        vm.expectRevert(DegenerusParimutuel.MarketClosed.selector);
+                        parimutuel.placeBet(address(0), true);
+                        break;
+                    }
+                }
+                if (game.level() > round) break;
+            }
+            if (game.level() > round) break;
+        }
+
+        assertTrue(sawSpan, "harness: never observed the post-draw span");
+    }
+
     function testLifecycleBetTransitionClaim() public {
         vm.pauseGasMetering();
 
