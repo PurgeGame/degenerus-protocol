@@ -219,9 +219,11 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         uint48 ts = uint48(block.timestamp);
         uint24 wallDay = _simulatedDayIndexAt(ts);
         uint24 day = wallDay;
-        // dailyIdx and rngLockedFlag are stable across every read below: their
-        // only writers (_unlockRng, _finalizeRngRequest) execute after the last
-        // use of these locals, or on paths that return before reaching it.
+        // dailyIdx is stable across every read below: its only writer (_unlockRng)
+        // executes after the last use, or on paths that return before reaching it.
+        // locked is deliberately the ENTRY snapshot: rngGate's retry re-fires the
+        // request mid-flow (_finalizeRngRequest), and the sentinel branch below keys
+        // its swap decision off the pre-request lock state.
         uint24 dIdx = dailyIdx;
         bool locked = rngLockedFlag;
         // RNGREUSE guard: never resolve a NEW wall-day with a prior day's still-unsealed
@@ -553,7 +555,16 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
             );
             psd += uint24(gapDays);
             if (rngWord == 1) {
-                _swapTicketSlot();
+                // Sentinel from an already-locked entry = the daily retry re-firing the
+                // outstanding request. The original request's swap already committed the
+                // read cohort (in jackpot phase it sits at level, which the pre-drain
+                // gate's purchaseLevel probe does not see), so swapping again would flip
+                // it back to the write slot — and past the phase transition no drain
+                // probes that key again. Only an unlocked entry (fresh request or
+                // promoted mid-day stall) commits the buffer here.
+                if (!locked) {
+                    _swapTicketSlot();
+                }
                 _freezePool(day);
                 stage = STAGE_RNG_REQUESTED;
                 break;

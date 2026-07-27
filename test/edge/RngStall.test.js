@@ -214,20 +214,39 @@ describe("RngStall", function () {
       ).to.be.revertedWithCustomError(advanceModule, "RngNotReady");
     });
 
-    it("calling advanceGame at 11h 59m elapsed reverts with RngNotReady", async function () {
-      const { game, deployer, advanceModule } = await loadFixture(
+    it("calling advanceGame at 11h 59m elapsed reverts with RngNotReady for a non-owner", async function () {
+      const { game, alice, advanceModule } = await loadFixture(
+        deployFullProtocol
+      );
+
+      await advanceToNextDay();
+      await issueFirstRequest(game, alice);
+
+      // 11 hours and 59 minutes = just under the permissionless 12-hour
+      // threshold. The vault owner's 1-hour head start opens at 11h, so the
+      // sub-12h boundary is pinned with a non-owner caller.
+      await advanceTime(11 * 3600 + 59 * 60);
+
+      await expect(
+        game.connect(alice).advanceGame()
+      ).to.be.revertedWithCustomError(advanceModule, "RngNotReady");
+    });
+
+    it("the vault owner's head start opens the retry at 11h+ (no revert)", async function () {
+      const { game, deployer, mockVRF } = await loadFixture(
         deployFullProtocol
       );
 
       await advanceToNextDay();
       await issueFirstRequest(game, deployer);
+      const stalledId = await getLastVRFRequestId(mockVRF);
 
-      // 11 hours and 59 minutes = just under the 12-hour threshold.
-      await advanceTime(11 * 3600 + 59 * 60);
+      // 11 hours and 1 minute — inside the owner-only head-start window.
+      await advanceTime(11 * 3600 + 60);
 
-      await expect(
-        game.connect(deployer).advanceGame()
-      ).to.be.revertedWithCustomError(advanceModule, "RngNotReady");
+      await game.connect(deployer).advanceGame();
+      const retriedId = await getLastVRFRequestId(mockVRF);
+      expect(retriedId).to.be.gt(stalledId);
     });
 
     it("calling advanceGame at 12h+ triggers retry (no revert)", async function () {
