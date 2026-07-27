@@ -38,7 +38,7 @@ contract TLKeyComputer is DegenerusGameStorage {
 ///      - Slot 1: [0:16]currentPrizePool(uint128) [16:32]claimablePool(uint128)
 ///      - ticketQueue: slot 12 (mapping(uint24 => address[]))
 ///      - entriesOwedPacked: slot 13 (mapping(uint24 => mapping(address => uint40)))
-///      - prizePoolsPacked: slot 2 ([future:128][next:128])
+///      - prizePoolsPacked: slot 2 ([volume:48][future:104][next:104])
 ///
 /// @dev Requirement coverage:
 ///      - SRC-01: testPurchasePhaseTicketsProcessed (purchase-phase → level+1)
@@ -75,6 +75,10 @@ contract TicketLifecycleTest is DeployProtocol {
     uint256 private constant TICKET_QUEUE_SLOT = 12;
     uint256 private constant TICKETS_OWED_PACKED_SLOT = 13;
     uint256 private constant PRIZE_POOLS_PACKED_SLOT = 2;
+
+    /// @dev Low 104 bits of the packed pool slots: the next half. Layout is
+    ///      [volume:48 | future:104 | next:104].
+    uint256 private constant POOL_HALF_MASK = (uint256(1) << 104) - 1;
 
     // =========================================================================
     // Bit offsets within packed slots (byte offset * 8)
@@ -2388,12 +2392,13 @@ contract TicketLifecycleTest is DeployProtocol {
     }
 
     /// @notice Seed the next prize pool to accelerate level transitions
+    /// @dev Slot 2 packs [volume:48 | future:104 | next:104]; replace only the next half
+    ///      and preserve the future half and the ticket-volume counter above it.
     function _seedNextPrizePool(uint256 targetNext) internal {
         uint256 currentPacked = uint256(vm.load(address(game), bytes32(uint256(PRIZE_POOLS_PACKED_SLOT))));
-        uint128 currentNext = uint128(currentPacked);
-        if (uint256(currentNext) >= targetNext) return;
-        uint128 currentFuture = uint128(currentPacked >> 128);
-        uint256 newPacked = (uint256(currentFuture) << 128) | targetNext;
+        uint256 currentNext = currentPacked & POOL_HALF_MASK;
+        if (currentNext >= targetNext) return;
+        uint256 newPacked = (currentPacked & ~POOL_HALF_MASK) | targetNext;
         vm.store(address(game), bytes32(uint256(PRIZE_POOLS_PACKED_SLOT)), bytes32(newPacked));
     }
 

@@ -23,7 +23,7 @@ import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 ///     before the transition → assert the level still increments. FAILS on the buggy code
 ///     (level stuck), PASSES once `isRetry` is made phase-aware (`&& rngLockedFlag`).
 contract RngRetryLootboxStallTest is DeployProtocol {
-    /// @dev prizePoolsPacked slot (confirmed via the BAF tests): [hi128 future][lo128 next].
+    /// @dev prizePoolsPacked slot (confirmed via the BAF tests): [volume:48 | future:104 | next:104].
     uint256 private constant PRIZE_POOLS_PACKED_SLOT = 2;
 
     address private buyer;
@@ -170,13 +170,12 @@ contract RngRetryLootboxStallTest is DeployProtocol {
 
     function _seedNextPrizePool(uint256 targetNext) internal {
         uint256 packed = uint256(vm.load(address(game), bytes32(uint256(PRIZE_POOLS_PACKED_SLOT))));
-        uint128 currentNext = uint128(packed);
-        if (uint256(currentNext) >= targetNext) return;
-        uint128 currentFuture = uint128(packed >> 128);
+        uint256 currentNext = packed & ((uint256(1) << 104) - 1);
+        if (currentNext >= targetNext) return;
         vm.store(
             address(game),
             bytes32(uint256(PRIZE_POOLS_PACKED_SLOT)),
-            bytes32((uint256(currentFuture) << 128) | targetNext)
+            bytes32((packed & ~((uint256(1) << 104) - 1)) | targetNext)
         );
     }
 }

@@ -3,12 +3,14 @@ pragma solidity 0.8.34;
 
 import {Test} from "forge-std/Test.sol";
 import {DegenerusGameAdvanceModule} from "../../contracts/modules/DegenerusGameAdvanceModule.sol";
+import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 
 /// @title AdvanceHarness -- Exposes drain-gate logic and freeze/queue helpers for advanceGame rewrite tests.
 contract AdvanceHarness is DegenerusGameAdvanceModule {
     // --- Freeze / Unfreeze ---
     function exposed_swapAndFreeze(uint24 /* purchaseLevel */) external {
-        _swapAndFreeze();
+        _swapTicketSlot();
+        _freezePool(1);
     }
 
     function exposed_unfreezePool() external {
@@ -105,6 +107,10 @@ contract AdvanceGameRewriteTest is Test {
     uint24 constant TICKET_SLOT_BIT = 1 << 23;
 
     function setUp() public {
+        // The freeze push calls the parimutuel at its fixed address; this harness deploys
+        // no protocol, so give that address one STOP byte — the typed void call needs code
+        // to pass the extcodesize check and returns success without any market logic.
+        vm.etch(ContractAddresses.PARIMUTUEL, hex"00");
         harness = new AdvanceHarness();
     }
 

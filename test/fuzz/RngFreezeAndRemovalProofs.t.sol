@@ -975,12 +975,11 @@ contract RngFreezeAndRemovalProofs is DeployProtocol {
         return uint64(uint256(vm.load(address(game), slot)));
     }
 
-    /// @dev Seed the live futurePrizePool (upper 128 bits of prizePoolsPacked slot 2) so winning
-    ///      ETH payouts are solvent. Preserves the lower 128 bits (nextPrizePool).
+    /// @dev Seed the live futurePrizePool (future half (bits 104-207) of prizePoolsPacked slot 2) so winning
+    ///      ETH payouts are solvent. Preserves the next half and the volume counter.
     function _seedFuturePrizePool(uint256 targetFuture) internal {
         uint256 packed = uint256(vm.load(address(game), bytes32(uint256(2))));
-        uint128 currentNext = uint128(packed);
-        uint256 newPacked = (targetFuture << 128) | uint256(currentNext);
+        uint256 newPacked = (packed & ~(((uint256(1) << 104) - 1) << 104)) | (targetFuture << 104);
         vm.store(address(game), bytes32(uint256(2)), bytes32(newPacked));
     }
 

@@ -404,10 +404,31 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                             ) {
                                 _requestRng(lastPurchase, purchaseLevel);
                                 if (ticketQueue[preRk].length == 0) {
-                                    _swapAndFreeze();
-                                } else {
-                                    _freezePool();
+                                    _swapTicketSlot();
                                 }
+                                _freezePool(day);
+                                stage = STAGE_RNG_REQUESTED;
+                                break;
+                            }
+                            // A stalled DAILY request dead-ends here — the cohort needs
+                            // the word this gate is waiting for, and rngGate's retry sits
+                            // behind the gate. Offer the same single retry on the same
+                            // terms (LSB latch, 12h, vault-owner head start): the cohort
+                            // is staged and the pool frozen, so the re-request IS the
+                            // recovery; _finalizeRngRequest recognizes the daily lock and
+                            // finalizes it as a retry.
+                            if (
+                                rngLockedFlag &&
+                                rngRequestTime != 0 &&
+                                (rngRequestTime & 1) == 0 &&
+                                (ts - rngRequestTime >= DAILY_RNG_RETRY_TIMEOUT ||
+                                    (ts - rngRequestTime >=
+                                        DAILY_RNG_RETRY_TIMEOUT -
+                                            DAILY_RNG_RETRY_HEAD_START &&
+                                        IVaultOwnerCheck(ContractAddresses.VAULT)
+                                            .isVaultOwner(msg.sender)))
+                            ) {
+                                _requestRng(lastPurchase, purchaseLevel);
                                 stage = STAGE_RNG_REQUESTED;
                                 break;
                             }
@@ -532,7 +553,8 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
             );
             psd += uint24(gapDays);
             if (rngWord == 1) {
-                _swapAndFreeze();
+                _swapTicketSlot();
+                _freezePool(day);
                 stage = STAGE_RNG_REQUESTED;
                 break;
             }
@@ -690,6 +712,20 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                     levelPrizePool[purchaseLevel] = achievedPool;
                     if (purchaseLevel % 100 == 0) {
                         centuryPrizePools.push(uint128(achievedPool));
+                    }
+                    // Banking this entry finalizes growth round purchaseLevel - 1; settle
+                    // it after the century append so a century term reads its pushed pool.
+                    // Level 1 has no round to settle (round 0 never opens), which also
+                    // keeps purchaseLevel - 2 from underflowing.
+                    if (purchaseLevel >= 2) {
+                        parimutuel.recordGrowth(
+                            purchaseLevel - 1,
+                            _growthOver(
+                                _growthRatchet(purchaseLevel - 2),
+                                _growthRatchet(purchaseLevel - 1),
+                                achievedPool
+                            )
+                        );
                     }
                 }
                 _distributeYieldSurplus(rngWord);
@@ -2046,33 +2082,51 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
     ///      during freeze without waiting for bet inflow. Unconsumed remainder rolls back to
     ///      futurePool via _unfreezePool. If already frozen (jackpot phase), accumulators keep
     ///      growing.
-    function _freezePool() internal {
+    ///
+    ///      The freeze is the volume round's crossover: buys route to pending from here,
+    ///      so the live counter is final and is pushed to the market before the unfreeze
+    ///      overwrites it. A re-entered freeze closes no round and pushes nothing.
+    /// @param round The round closing at this crossover.
+    function _freezePool(uint24 round) internal {
         if (!prizePoolFrozen) {
             prizePoolFrozen = true;
+            parimutuel.recordVolume(round, _getLiveTicketVolume());
             uint256 futureBal = _getFuturePrizePool();
             uint256 seed = futureBal / 100;
-            if (seed != 0) {
-                _setFuturePrizePool(futureBal - seed);
-                _setPendingPools(0, uint128(seed));
-            } else {
-                prizePoolPendingPacked = 0;
-            }
+            _setFuturePrizePool(futureBal - seed);
+            // Full reset: the seed lands in the pending future half and the volume counter
+            // starts the new round at zero.
+            _resetPendingPools(0, uint128(seed));
         }
     }
 
-    /// @dev Swap queue buffer AND activate the prize pool freeze (daily RNG path only).
-    function _swapAndFreeze() internal {
-        _swapTicketSlot();
-        _freezePool();
+    /// @dev Whether a growth round resolves OVER: the successor's growth RATE strictly
+    ///      exceeds the round's own — cross-multiplied (nextR * prevR > currR * currR) so
+    ///      the comparison is exact, unsigned, division-free. Ties are UNDER.
+    function _growthOver(
+        uint256 prevR,
+        uint256 currR,
+        uint256 nextR
+    ) internal pure returns (bool) {
+        return nextR * prevR > currR * currR;
     }
 
-    /// @dev Apply pending accumulators to live pools and clear freeze.
-    ///      No-op if not currently frozen.
+    /// @dev Fold pending into live and clear freeze; no-op if not frozen. One read and
+    ///      one write per slot: the halves ADD (saturating), the volume counter ROLLS —
+    ///      its outgoing value was already scored at the freeze.
     function _unfreezePool() internal {
         if (!prizePoolFrozen) return;
-        (uint128 pNext, uint128 pFuture) = _getPendingPools();
-        (uint128 next, uint128 future) = _getPrizePools();
-        _setPrizePools(next + pNext, future + pFuture);
+        uint256 pending = prizePoolPendingPacked;
+        uint256 live = prizePoolsPacked;
+        uint256 next = (live & POOL_HALF_MAX) + (pending & POOL_HALF_MAX);
+        uint256 future = ((live >> POOL_FUTURE_SHIFT) & POOL_HALF_MAX) +
+            ((pending >> POOL_FUTURE_SHIFT) & POOL_HALF_MAX);
+        if (next > POOL_HALF_MAX) next = POOL_HALF_MAX;
+        if (future > POOL_HALF_MAX) future = POOL_HALF_MAX;
+        prizePoolsPacked =
+            (pending & ~POOL_HALVES_MASK) |
+            (future << POOL_FUTURE_SHIFT) |
+            next;
         prizePoolPendingPacked = 0;
         prizePoolFrozen = false;
     }

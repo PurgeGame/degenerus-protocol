@@ -339,7 +339,12 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         uint24 lvl,
         uint256 randWord
     ) external {
-        uint24 questDay = _simulatedDayIndex();
+        // The day being SEALED, not the wall day: dailyIdx has not advanced yet on this
+        // path, so dailyIdx + 1 is the logical day this word resolves. The two diverge
+        // when processing straddles the 22:57 break or the word lands a day late — the
+        // advance clamps to the logical day, and a wall-day key here would write the foil
+        // board (and the traits event) under the WRONG day, stranding that day's claims.
+        uint24 questDay = dailyIdx + 1;
         // One VRF word drives both rolls; each rolls its OWN hero — the bonus hero is
         // forced distinct from the main hero (main slot excluded from the bonus roll).
         (
@@ -1820,7 +1825,8 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     /// @param bonusTargetLevel Target level for the first (main-equivalent) coin distribution.
     function emitDailyWinningTraits(uint24, uint256 randWord, uint24 bonusTargetLevel) external {
         if (msg.sender != ContractAddresses.GAME) revert OnlyGame();
-        uint24 questDay = _simulatedDayIndex();
+        // The sealed day, matching payDailyJackpot: dailyIdx + 1, never the wall clock.
+        uint24 questDay = dailyIdx + 1;
         uint32 mainTraitsPacked = _rollWinningTraits(randWord, true);
         uint256 saltedRng = EntropyLib.hash2(randWord, uint256(BONUS_TRAITS_TAG));
         uint32 bonusTraitsPacked = _rollWinningTraits(saltedRng, true);

@@ -47,7 +47,7 @@ contract GoldRushHarness is DegenerusGameJackpotModule {
     }
 
     function setPending(uint128 nextPending, uint128 futPending) external {
-        prizePoolPendingPacked = (uint256(futPending) << 128) | nextPending;
+        _setPendingPools(nextPending, futPending);
     }
 
     function setYieldAcc(uint256 v) external {

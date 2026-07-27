@@ -723,11 +723,10 @@ contract DegeneretteResolveRepeg is DeployProtocol {
         return uint64(uint256(vm.load(address(game), slot)));
     }
 
-    /// @dev Seed futurePrizePool (upper 128 bits of prizePoolsPacked, slot 2). Preserves nextPrizePool.
+    /// @dev Seed futurePrizePool (future half, bits 104-207 of prizePoolsPacked, slot 2). Preserves nextPrizePool.
     function _seedFuturePrizePool(uint256 targetFuture) internal {
         uint256 currentPacked = uint256(vm.load(address(game), bytes32(uint256(PRIZE_POOLS_PACKED_SLOT))));
-        uint128 currentNext = uint128(currentPacked);
-        uint256 newPacked = (targetFuture << 128) | uint256(currentNext);
+        uint256 newPacked = (currentPacked & ~(((uint256(1) << 104) - 1) << 104)) | (targetFuture << 104);
         vm.store(address(game), bytes32(uint256(PRIZE_POOLS_PACKED_SLOT)), bytes32(newPacked));
     }
 

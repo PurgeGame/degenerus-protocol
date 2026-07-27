@@ -22,7 +22,7 @@ contract FlipRedeemWindowTest is DeployProtocol {
     uint256 private constant JACKPOT_PHASE_SHIFT = 120; // byte 15: jackpotPhaseFlag
     uint256 private constant RNG_LOCKED_SHIFT = 152; // byte 19: rngLockedFlag
     uint256 private constant WINDOW_OPEN_SHIFT = 240; // byte 30: ticketRedemptionOpen
-    uint256 private constant PRIZE_POOLS_PACKED_SLOT = 2; // [future:128][next:128]
+    uint256 private constant PRIZE_POOLS_PACKED_SLOT = 2; // [volume:48][future:104][next:104]
 
     // levelPrizePool[0] = BOOTSTRAP_PRIZE_POOL (DegenerusGame constructor).
     uint128 private constant BOOTSTRAP_PRIZE_POOL = 50 ether;
@@ -66,11 +66,10 @@ contract FlipRedeemWindowTest is DeployProtocol {
         uint256 packed = uint256(
             vm.load(address(game), bytes32(uint256(PRIZE_POOLS_PACKED_SLOT)))
         );
-        uint128 future = uint128(packed >> 128);
         vm.store(
             address(game),
             bytes32(uint256(PRIZE_POOLS_PACKED_SLOT)),
-            bytes32((uint256(future) << 128) | uint256(next))
+            bytes32((packed & ~((uint256(1) << 104) - 1)) | uint256(next))
         );
     }
 

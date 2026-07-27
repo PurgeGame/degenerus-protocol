@@ -230,19 +230,17 @@ contract BafConsolationClaimTest is DeployProtocol {
 
     function _seedNextPrizePool(uint256 targetNext) internal {
         uint256 packed = uint256(vm.load(address(game), bytes32(uint256(PRIZE_POOLS_PACKED_SLOT))));
-        uint128 currentNext = uint128(packed);
-        if (uint256(currentNext) >= targetNext) return;
-        uint128 currentFuture = uint128(packed >> 128);
-        uint256 newPacked = (uint256(currentFuture) << 128) | targetNext;
+        uint256 currentNext = packed & ((uint256(1) << 104) - 1);
+        if (currentNext >= targetNext) return;
+        uint256 newPacked = (packed & ~((uint256(1) << 104) - 1)) | targetNext;
         vm.store(address(game), bytes32(uint256(PRIZE_POOLS_PACKED_SLOT)), bytes32(newPacked));
     }
 
     function _seedFuturePrizePool(uint256 targetFuture) internal {
         uint256 packed = uint256(vm.load(address(game), bytes32(uint256(PRIZE_POOLS_PACKED_SLOT))));
-        uint128 currentNext = uint128(packed);
-        uint128 currentFuture = uint128(packed >> 128);
-        if (uint256(currentFuture) >= targetFuture) return;
-        uint256 newPacked = (targetFuture << 128) | uint256(currentNext);
+        uint256 currentFuture = (packed >> 104) & ((uint256(1) << 104) - 1);
+        if (currentFuture >= targetFuture) return;
+        uint256 newPacked = (packed & ~(((uint256(1) << 104) - 1) << 104)) | (targetFuture << 104);
         vm.store(address(game), bytes32(uint256(PRIZE_POOLS_PACKED_SLOT)), bytes32(newPacked));
     }
 

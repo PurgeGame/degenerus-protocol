@@ -3,6 +3,7 @@ pragma solidity ^0.8.26;
 
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage.sol";
+import {DegenerusGameAdvanceModule} from "../../contracts/modules/DegenerusGameAdvanceModule.sol";
 import {DegenerusParimutuel} from "../../contracts/DegenerusParimutuel.sol";
 import {PriceLookupLib} from "../../contracts/libraries/PriceLookupLib.sol";
 
@@ -22,19 +23,36 @@ contract GrowthRatchetHarness is DegenerusGameStorage {
     }
 }
 
+/// @dev Exposes the transition's growth comparison — the cross-multiplied scoring the
+///      game evaluates once per level and pushes to the market as a settled bit.
+contract GrowthMathHarness is DegenerusGameAdvanceModule {
+    function over(
+        uint256 prevR,
+        uint256 currR,
+        uint256 nextR
+    ) external pure returns (bool) {
+        return _growthOver(prevR, currR, nextR);
+    }
+}
+
 /// @title ParimutuelGrowthBet -- the growth-bet parimutuel.
 ///
-/// @notice Two halves. The scoring half drives DegenerusParimutuel against a mocked
-///         game.growthState so arbitrary ratchet histories (century resets, contractions,
+/// @notice Two halves. The scoring half drives DegenerusParimutuel with settlement
+///         pushes pranked as GAME — the transition's own act — plus the extracted
+///         comparison targeted directly, so arbitrary ratchet histories (contractions,
 ///         exact ties) are reachable without simulating a hundred levels; FLIP,
 ///         Coinflip and Quests stay REAL throughout, so the burn/credit conservation
 ///         assertions are load-bearing. The lifecycle half drives the real advance path
-///         end to end: bet during a jackpot phase, transition, claim.
+///         end to end: bet during a jackpot phase, transition, claim — the push landing
+///         from the real transition, nothing pranked.
 contract ParimutuelGrowthBetTest is DeployProtocol {
-    // growthState(uint24) — mocked per (round) key in the scoring half.
+    // growthState(uint24) — the scoring half mocks only the key-0 route tuple; ratchet
+    // terms left the market's reads entirely (settlement arrives as a pushed bit).
     bytes4 private constant GROWTH_STATE = bytes4(keccak256("growthState(uint24)"));
     bytes4 private constant IS_OP_APPROVED =
         bytes4(keccak256("isOperatorApproved(address,address)"));
+    bytes4 private constant MARKET_GATES =
+        bytes4(keccak256("marketBetGates(address,uint24)"));
 
     uint256 private constant STAKE = 1_000 ether;
 
@@ -56,8 +74,21 @@ contract ParimutuelGrowthBetTest is DeployProtocol {
     // Helpers
     // ---------------------------------------------------------------------
 
-    /// @dev Mint FLIP through the GAME-gated path.
+    /// @dev Mint FLIP through the GAME-gated path, and clear the lifetime bet gate: a
+    ///      funded bettor in these tests stands for a player who has bought before, so
+    ///      the gate is pinned open per player (prefix match — any level).
     function _fund(address who, uint256 amount) internal {
+        _fundNoGate(who, amount);
+        vm.mockCall(
+            address(quests),
+            abi.encodeWithSelector(MARKET_GATES, who),
+            abi.encode(true, true)
+        );
+    }
+
+    /// @dev Fund WITHOUT clearing the gate — for the never-bought case, where the real
+    ///      quests answer (mintPackedFor == 0) is the subject.
+    function _fundNoGate(address who, uint256 amount) internal {
         vm.prank(address(game));
         coin.mintForGame(who, amount);
     }
@@ -86,10 +117,9 @@ contract ParimutuelGrowthBetTest is DeployProtocol {
         );
     }
 
-    /// @dev Open the market at `currentLevel`. Two keys: growthState(0) is what the
-    ///      placement path asks, and the round's own key is what marketState asks — both
-    ///      carry the same phase half. The round key gets no ratchet terms, which is
-    ///      exactly how the open round reads before its successor banks.
+    /// @dev Open the market at `currentLevel`. growthState(0) is the one key every path
+    ///      asks now — placement, view and crank all read only the route tuple. The round
+    ///      key is mocked too for older shapes, harmlessly.
     function _mockOpenAt(uint24 currentLevel, uint8 phaseDay, bool open) internal {
         _mockState(0, 0, 0, 0, currentLevel, open, phaseDay);
         _mockState(currentLevel, 0, 0, 0, currentLevel, open, phaseDay);
@@ -122,18 +152,24 @@ contract ParimutuelGrowthBetTest is DeployProtocol {
 
     /// A round resolves OVER only when the next level's growth RATE strictly exceeds its own.
     function testOutcomeOverRequiresStrictAcceleration() public {
+        // growth(50) = 100/40 = 2.5x. growth(51) = 300/100 = 3.0x > 2.5x -> OVER. The
+        // comparison is the game's, evaluated at the transition; the market receives it.
+        GrowthMathHarness math = new GrowthMathHarness();
+        assertTrue(
+            math.over(40 ether, 100 ether, 300 ether),
+            "accelerating growth must score OVER"
+        );
+
         _fund(alice, STAKE);
         _fund(bob, STAKE);
-
-        // Round 50: growth(50) = 100/40 = 2.5x. growth(51) = 300/100 = 3.0x > 2.5x -> OVER.
         _mockOpenAt(50, 0, true);
         _bet(alice, true);
         _bet(bob, false);
 
-        _mockState(50, 40 ether, 100 ether, 300 ether, 51, false, 0);
+        _settleOver(50);
 
         (, , , , , , uint8 outcome, ) = parimutuel.marketState(alice, 50);
-        assertEq(outcome, 1, "accelerating growth must resolve OVER");
+        assertEq(outcome, 1, "the pushed OVER must be the round's outcome");
 
         assertGt(_claimOne(alice, 50), 0, "OVER bettor must be paid");
         assertEq(_claimOne(bob, 50), 0, "UNDER bettor must be paid nothing");
@@ -146,7 +182,7 @@ contract ParimutuelGrowthBetTest is DeployProtocol {
         _bet(alice, true);
 
         // growth(50) = 100/40 = 2.5x. growth(51) = 250/100 = 2.5x — equal, not greater.
-        _mockState(50, 40 ether, 100 ether, 250 ether, 51, false, 0);
+        _settle(50, false);
 
         (, , , , , , uint8 outcome, ) = parimutuel.marketState(alice, 50);
         assertEq(outcome, 2, "an exact tie must resolve UNDER");
@@ -157,12 +193,18 @@ contract ParimutuelGrowthBetTest is DeployProtocol {
     /// beats a deeper one. An absolute-difference subject would rank these the same way only
     /// by accident; the ratio makes it the definition.
     function testOutcomeShallowerContractionBeatsDeeper() public {
+        // growth(50) = 100/300 = 0.33x. growth(51) = 90/100 = 0.9x > 0.33x -> OVER.
+        GrowthMathHarness math = new GrowthMathHarness();
+        assertTrue(
+            math.over(300 ether, 100 ether, 90 ether),
+            "a shallower contraction must score OVER"
+        );
+
         _fund(alice, STAKE);
         _mockOpenAt(50, 0, true);
         _bet(alice, true);
 
-        // growth(50) = 100/300 = 0.33x. growth(51) = 90/100 = 0.9x > 0.33x -> OVER.
-        _mockState(50, 300 ether, 100 ether, 90 ether, 51, false, 0);
+        _settleOver(50);
 
         (, , , , , , uint8 outcome, ) = parimutuel.marketState(alice, 50);
         assertEq(outcome, 1, "a shallower contraction must still resolve OVER");
@@ -171,26 +213,32 @@ contract ParimutuelGrowthBetTest is DeployProtocol {
 
     /// Both levels contracted and the subject contracted HARDER -> UNDER.
     function testOutcomeDeepeningContractionResolvesUnder() public {
+        // growth(50) = 100/110 = 0.91x. growth(51) = 1 wei / 100 ETH ~ 0 -> UNDER.
+        GrowthMathHarness math = new GrowthMathHarness();
+        assertFalse(
+            math.over(110 ether, 100 ether, 1),
+            "a deepening contraction must score UNDER"
+        );
+
         _fund(alice, STAKE);
         _mockOpenAt(50, 0, true);
         _bet(alice, true);
 
-        // growth(50) = 100/110 = 0.91x. growth(51) = 1 wei / 100 ETH ~ 0 -> UNDER.
-        _mockState(50, 110 ether, 100 ether, 1, 51, false, 0);
+        _settle(50, false);
         (, , , , , , uint8 outcome, ) = parimutuel.marketState(alice, 50);
         assertEq(outcome, 2, "a deepening contraction must resolve UNDER");
     }
 
-    /// A round stays unsettled until its successor level banks its ratchet entry. `level`
-    /// is promoted one RNG request BEFORE the transition writes that entry, so "the level
-    /// moved on" is not a sound settled-predicate; a zero entry is.
+    /// A round stays unsettled until the transition that banks its successor entry pushes
+    /// the bit. `level` is promoted one RNG request BEFORE that transition, so "the level
+    /// moved on" is not a sound settled-predicate; an unwritten bit is.
     function testRoundUnsettledUntilSuccessorPoolBanked() public {
         _fund(alice, STAKE);
         _mockOpenAt(50, 0, true);
         _bet(alice, true);
 
-        // Level has already advanced to 51, but levelPrizePool[51] is still unwritten.
-        _mockState(50, 40 ether, 100 ether, 0, 51, false, 0);
+        // Level has already advanced to 51, but no transition has pushed round 50's bit.
+        _mockState(0, 0, 0, 0, 51, false, 0);
 
         (, , , , , , uint8 outcome, uint256 payout) = parimutuel.marketState(alice, 50);
         assertEq(outcome, 0, "a round must stay unsettled while its successor entry is 0");
@@ -248,16 +296,23 @@ contract ParimutuelGrowthBetTest is DeployProtocol {
     }
 
     /// Round 1 needs no case of its own: its reference is BOOTSTRAP_PRIZE_POOL, written at
-    /// construction and every bit as permanent as a banked entry, so it scores normally.
+    /// construction and every bit as permanent as a banked entry, so the game scores it
+    /// normally and the market takes its bet like any other round.
     function testRoundOneScoresOffBootstrap() public {
+        // growth(1) = 40/10 = 4x. growth(2) = 200/40 = 5x > 4x -> OVER.
+        GrowthMathHarness math = new GrowthMathHarness();
+        assertTrue(
+            math.over(10 ether, 40 ether, 200 ether),
+            "round 1 must score against the bootstrap reference"
+        );
+
         _fund(alice, STAKE);
         _mockOpenAt(1, 0, true);
         _bet(alice, true);
 
-        // growth(1) = 40/10 = 4x. growth(2) = 200/40 = 5x > 4x -> OVER.
-        _mockState(1, 10 ether, 40 ether, 200 ether, 2, false, 0);
+        _settleOver(1);
         (, , , , , , uint8 outcome, ) = parimutuel.marketState(alice, 1);
-        assertEq(outcome, 1, "round 1 must score against the bootstrap reference");
+        assertEq(outcome, 1, "round 1 settles like any other round");
         assertEq(_claimOne(alice, 1), STAKE, "the uncontested winner takes the stake back");
     }
 
@@ -414,7 +469,7 @@ contract ParimutuelGrowthBetTest is DeployProtocol {
         _bet(bob, true);
         _bet(carol, false); // one loser funds the two winners
 
-        _mockState(50, 40 ether, 100 ether, 300 ether, 51, false, 0);
+        _settleOver(50);
 
         uint256 aliceOut = _claimOne(alice, 50);
         uint256 bobOut = _claimOne(bob, 50);
@@ -433,7 +488,7 @@ contract ParimutuelGrowthBetTest is DeployProtocol {
         _mockOpenAt(50, 0, true);
         _bet(alice, true);
 
-        _mockState(50, 40 ether, 100 ether, 300 ether, 51, false, 0);
+        _settleOver(50);
         assertEq(
             _claimOne(alice, 50),
             STAKE,
@@ -454,7 +509,7 @@ contract ParimutuelGrowthBetTest is DeployProtocol {
         _bet(bob, false); // nobody took OVER
 
         // ...and OVER wins.
-        _mockState(50, 40 ether, 100 ether, 300 ether, 51, false, 0);
+        _settleOver(50);
 
         assertEq(_claimOne(alice, 50), 0, "a losing bettor must claim nothing");
         assertEq(_claimOne(bob, 50), 0, "a losing bettor must claim nothing");
@@ -473,7 +528,7 @@ contract ParimutuelGrowthBetTest is DeployProtocol {
         _bet(alice, true);
         _bet(bob, false);
 
-        _mockState(50, 40 ether, 100 ether, 300 ether, 51, false, 0);
+        _settleOver(50);
 
         uint256 first = _claimOne(alice, 50);
         assertGt(first, 0, "the first claim must pay");
@@ -492,7 +547,7 @@ contract ParimutuelGrowthBetTest is DeployProtocol {
         _mockOpenAt(50, 0, true);
         _bet(alice, true);
         _bet(bob, false);
-        _mockState(50, 40 ether, 100 ether, 300 ether, 51, false, 0);
+        _settleOver(50);
 
         uint256 aliceBefore = _flipReach(alice);
         uint256 keeperBefore = _flipReach(keeper);
@@ -519,7 +574,7 @@ contract ParimutuelGrowthBetTest is DeployProtocol {
         _bet(alice, true);
         _bet(bob, false);
         _bet(carol, false);
-        _mockState(50, 40 ether, 100 ether, 300 ether, 51, false, 0);
+        _settleOver(50);
 
         _claimOne(alice, 50);
         _claimOne(bob, 50);
@@ -540,8 +595,7 @@ contract ParimutuelGrowthBetTest is DeployProtocol {
         _mockOpenAt(50, 0, true);
         _bet(alice, true);
         _bet(bob, false);
-        _mockState(50, 40 ether, 100 ether, 300 ether, 51, false, 0);
-        _mockState(49, 0, 0, 0, 51, false, 0); // never bet, unsettled
+        _settleOver(50); // round 49: never bet, never pushed — stays unsettled
 
         uint24[] memory rounds = new uint24[](3);
         rounds[0] = 49;
@@ -557,9 +611,17 @@ contract ParimutuelGrowthBetTest is DeployProtocol {
     // Crank: settling one round for many players
     // =====================================================================
 
-    /// @dev Pin `round` so it resolves OVER: 300/100 accelerates over 100/40.
+    /// @dev Settle `round` OVER exactly as the game does: push the bit pranked as GAME,
+    ///      and move the routing tuple past the round — level promoted, purchase phase —
+    ///      which is where a just-settled round always finds the game.
     function _settleOver(uint24 round) internal {
-        _mockState(round, 40 ether, 100 ether, 300 ether, round + 1, false, 0);
+        _settle(round, true);
+    }
+
+    function _settle(uint24 round, bool over) internal {
+        vm.prank(address(game));
+        parimutuel.recordGrowth(round, over);
+        _mockState(0, 0, 0, 0, round + 1, false, 0);
     }
 
     function _crank(
@@ -573,8 +635,8 @@ contract ParimutuelGrowthBetTest is DeployProtocol {
 
     /// @dev The crank bounty for `settled` winners actually paid, priced at the ROUTED
     ///      level — jackpot phase targets `crankLevel`, purchase phase the next — mirroring
-    ///      the Game's mintPrice and the decimator/foil bounties. _settleOver pins
-    ///      crankLevel to round + 1 in purchase phase, so the routed level is round + 2.
+    ///      the Game's mintPrice and the decimator/foil bounties. _settle leaves the
+    ///      route tuple at (round + 1, purchase phase), so the routed level is round + 2.
     ///      The 15e12 wei target is spelled out here rather than read off the contract, so
     ///      moving the constant fails these tests instead of silently re-scaling them.
     function _expectedBounty(
@@ -922,7 +984,8 @@ contract ParimutuelGrowthBetTest is DeployProtocol {
         _bet(alice, true);
         _bet(carol, false);
         // Settled, sitting at level 100 in PURCHASE phase -> routed level is 101.
-        _mockState(50, 40 ether, 100 ether, 300 ether, 100, false, 0);
+        _settle(50, true);
+        _mockState(0, 0, 0, 0, 100, false, 0);
 
         uint256 before = _flipReach(keeper);
         _crank(keeper, 50, _list3(alice, carol, address(0xDEAD)));
@@ -943,7 +1006,8 @@ contract ParimutuelGrowthBetTest is DeployProtocol {
         _bet(alice, true);
         _bet(carol, false);
         // Settled, sitting at level 100 in JACKPOT phase -> routed level is 100.
-        _mockState(50, 40 ether, 100 ether, 300 ether, 100, true, 0);
+        _settle(50, true);
+        _mockState(0, 0, 0, 0, 100, true, 0);
 
         uint256 before = _flipReach(keeper);
         _crank(keeper, 50, _list3(alice, carol, address(0xDEAD)));
@@ -992,8 +1056,9 @@ contract ParimutuelGrowthBetTest is DeployProtocol {
         assertEq(reward, 150 ether, "a closed market must quote the first day's tier");
     }
 
-    /// An ineligible player (no ticket bought this level window) still bets, but earns no
-    /// quest reward — the gate is the level quest's, so it reaches active players only.
+    /// A player past the lifetime bar but short of the LEVEL quest still bets, and earns
+    /// no quest reward — the reward gate is the level quest's, so it reaches active
+    /// players only, while the weaker ever-bought bar decides who may bet at all.
     function testIneligiblePlayerBetsButEarnsNoQuestReward() public {
         _fund(alice, STAKE);
         uint256 before = _flipReach(alice);
@@ -1025,6 +1090,37 @@ contract ParimutuelGrowthBetTest is DeployProtocol {
             STAKE - 150 ether,
             "an afking bettor with no minted units must still earn the day-1 reward"
         );
+    }
+
+    /// The lifetime bar, unmocked: a wallet that has never bought anything gets the real
+    /// quests answer (mintPackedFor == 0 on both arms) and may not bet at all.
+    function testNeverBoughtPlayerCannotBet() public {
+        _fundNoGate(alice, STAKE);
+        _mockOpenAt(50, 0, true);
+        vm.prank(alice);
+        vm.expectRevert(DegenerusParimutuel.NotEligible.selector);
+        parimutuel.placeBet(address(0), true);
+    }
+
+    /// The curse counter is the one mintPacked_ field a third party can write into a
+    /// stranger's word (a deity smite), so it is masked out of the ever-bought test: a
+    /// smitten wallet that never bought anything still may not bet.
+    function testSmittenNeverBoughtPlayerStillCannotBet() public {
+        _fundNoGate(alice, STAKE);
+        // mintPacked_ holding ONLY curse bits (215-222), as a smite against a fresh
+        // address leaves it.
+        vm.mockCall(
+            address(game),
+            abi.encodeWithSelector(
+                bytes4(keccak256("mintPackedFor(address)")),
+                alice
+            ),
+            abi.encode(uint256(20) << 215)
+        );
+        _mockOpenAt(50, 0, true);
+        vm.prank(alice);
+        vm.expectRevert(DegenerusParimutuel.NotEligible.selector);
+        parimutuel.placeBet(address(0), true);
     }
 
     /// recordGrowthBet is PARIMUTUEL-only — no other caller can mint quest rewards.
@@ -1065,15 +1161,16 @@ contract ParimutuelGrowthBetTest is DeployProtocol {
         }
     }
 
-    /// @dev Raise nextPrizePool over the live target so the next drive latches a transition.
+    /// @dev Raise nextPrizePool over the live target so the next drive latches a
+    ///      transition. Slot 2 packs [volume:48 | future:104 | next:104]; replace the next
+    ///      half only.
     function _seedNextPool(uint256 targetNext) internal {
         uint256 packed = uint256(vm.load(address(game), bytes32(uint256(2))));
-        if (uint256(uint128(packed)) >= targetNext) return;
-        uint128 future = uint128(packed >> 128);
+        if ((packed & ((uint256(1) << 104) - 1)) >= targetNext) return;
         vm.store(
             address(game),
             bytes32(uint256(2)),
-            bytes32((uint256(future) << 128) | targetNext)
+            bytes32((packed & ~((uint256(1) << 104) - 1)) | targetNext)
         );
     }
 

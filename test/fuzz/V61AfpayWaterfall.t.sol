@@ -44,7 +44,7 @@ contract V61AfpayWaterfall is DeployProtocol {
     uint256 private constant BALANCES_PACKED_SLOT = 7; // mapping(address=>uint256) [afking:hi128 | claimable:lo128]
     uint256 private constant CLAIMABLE_POOL_SLOT = 1; // uint128 @ slot 1, byte 16
     uint256 private constant CLAIMABLE_POOL_OFFBYTES = 16;
-    uint256 private constant PRIZE_POOLS_SLOT = 2; // prizePoolsPacked [future:hi128 | next:lo128]
+    uint256 private constant PRIZE_POOLS_SLOT = 2; // prizePoolsPacked [volume:48 | future:104 | next:104]
     uint256 private constant PRIZE_POOL_PENDING_SLOT = 11; // prizePoolPendingPacked (frozen-phase sink)
 
     /// @dev AfkingSpent(address indexed player, uint256 amount) — the headline transparency signal.
@@ -395,14 +395,15 @@ contract V61AfpayWaterfall is DeployProtocol {
     }
 
     /// @dev Total prize pool the buy's prizeContribution lands in: the active prizePoolsPacked (slot 2,
-    ///      [future:hi128 | next:lo128]) PLUS the pending prizePoolPendingPacked (slot 11) — a contribution
+    ///      [volume:48 | future:104 | next:104]) PLUS the pending prizePoolPendingPacked (slot 11) — a contribution
     ///      goes to exactly one (active when !prizePoolFrozen, pending when frozen), so the sum captures it
     ///      regardless of the freeze state.
     function _prizePoolTotal() internal view returns (uint256) {
         uint256 active = uint256(vm.load(address(game), bytes32(uint256(PRIZE_POOLS_SLOT))));
         uint256 pending = uint256(vm.load(address(game), bytes32(uint256(PRIZE_POOL_PENDING_SLOT))));
-        uint256 sum = uint128(active) + (active >> 128);
-        sum += uint128(pending) + (pending >> 128);
+        uint256 halfMask = (uint256(1) << 104) - 1;
+        uint256 sum = (active & halfMask) + ((active >> 104) & halfMask);
+        sum += (pending & halfMask) + ((pending >> 104) & halfMask);
         return sum;
     }
 

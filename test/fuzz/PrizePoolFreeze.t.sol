@@ -3,12 +3,14 @@ pragma solidity 0.8.34;
 
 import {Test} from "forge-std/Test.sol";
 import {DegenerusGameAdvanceModule} from "../../contracts/modules/DegenerusGameAdvanceModule.sol";
+import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 
 /// @title FreezeHarness -- Exposes freeze-related internal helpers for testing.
 contract FreezeHarness is DegenerusGameAdvanceModule {
     // --- Freeze / Unfreeze ---
     function exposed_swapAndFreeze(uint24 /* purchaseLevel */) external {
-        _swapAndFreeze();
+        _swapTicketSlot();
+        _freezePool(1);
     }
 
     function exposed_unfreezePool() external {
@@ -52,6 +54,10 @@ contract FreezeLifecycleTest is Test {
     FreezeHarness harness;
 
     function setUp() public {
+        // The freeze push calls the parimutuel at its fixed address; this harness deploys
+        // no protocol, so give that address one STOP byte — the typed void call needs code
+        // to pass the extcodesize check and returns success without any market logic.
+        vm.etch(ContractAddresses.PARIMUTUEL, hex"00");
         harness = new FreezeHarness();
     }
 

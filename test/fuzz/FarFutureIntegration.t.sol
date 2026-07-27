@@ -34,7 +34,7 @@ contract FFKeyComputer is DegenerusGameStorage {
 /// @dev To fast-track level transitions, this test seeds the nextPrizePool via vm.store
 ///      to just below the BOOTSTRAP_PRIZE_POOL target (50 ETH). A small purchase then triggers
 ///      the level transition without burning gas on prize pool accumulation.
-///      Storage layout: prizePoolsPacked at slot 2 = [128:256] future | [0:128] next.
+///      Storage layout: prizePoolsPacked at slot 2 = [volume:48 | future:104 | next:104].
 contract FarFutureIntegrationTest is DeployProtocol {
     /// @dev Storage slot of ticketQueue mapping in DegenerusGameStorage (confirmed via forge inspect)
     uint256 private constant TICKET_QUEUE_SLOT = 12;
@@ -156,15 +156,14 @@ contract FarFutureIntegrationTest is DeployProtocol {
     }
 
     /// @notice Seed the next prize pool to accelerate level transitions
-    /// @dev Sets prizePoolsPacked slot 3: lower 128 bits = nextPrizePool.
-    ///      Preserves the upper 128 bits (futurePrizePool).
+    /// @dev Sets prizePoolsPacked slot 2: the low 104 bits = nextPrizePool.
+    ///      Preserves the future half and the volume counter.
     function _seedNextPrizePool(uint256 targetNext) internal {
         uint256 currentPacked = uint256(vm.load(address(game), bytes32(uint256(PRIZE_POOLS_PACKED_SLOT))));
-        uint128 currentNext = uint128(currentPacked);
+        uint256 currentNext = currentPacked & ((uint256(1) << 104) - 1);
         // Only seed if current next pool is below target
-        if (uint256(currentNext) >= targetNext) return;
-        uint128 currentFuture = uint128(currentPacked >> 128);
-        uint256 newPacked = (uint256(currentFuture) << 128) | targetNext;
+        if (currentNext >= targetNext) return;
+        uint256 newPacked = (currentPacked & ~((uint256(1) << 104) - 1)) | targetNext;
         vm.store(address(game), bytes32(uint256(PRIZE_POOLS_PACKED_SLOT)), bytes32(newPacked));
     }
 

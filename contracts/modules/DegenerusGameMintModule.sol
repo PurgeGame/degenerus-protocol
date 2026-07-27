@@ -1401,7 +1401,12 @@ contract DegenerusGameMintModule is
         uint256 ticketFutureShare;
         // Ticket-leg claimable + afking drawn; folded with the lootbox draw into one pool RMW.
         uint256 ticketClaimableDraw;
+        // Raw purchased units (400 = 1 ticket) for the day's volume counter — unboosted
+        // and unrounded. This manual purchase path is the counter's ONLY feeder; afking
+        // and every award route deliberately bypass it.
+        uint48 ticketUnits;
         if (ticketCost != 0) {
+            ticketUnits = uint48(entryQuantityScaled);
             (
                 lootboxFlipCredit,
                 adjustedQty,
@@ -1507,7 +1512,8 @@ contract DegenerusGameMintModule is
         // mid-purchase, so both legs route to the same accumulator.
         _addPrizeContribution(
             uint128(ticketNextShare + lbNextShare),
-            uint128(ticketFutureShare + lbFutureShare)
+            uint128(ticketFutureShare + lbFutureShare),
+            ticketUnits
         );
 
         // --- One combined claimablePool decrement for both legs ---

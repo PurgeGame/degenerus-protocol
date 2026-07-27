@@ -3,6 +3,7 @@ pragma solidity 0.8.34;
 
 import {Test} from "forge-std/Test.sol";
 import {DegenerusGameAdvanceModule} from "../../contracts/modules/DegenerusGameAdvanceModule.sol";
+import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 
 /// @title StorageHarness -- Exposes internal DegenerusGameStorage helpers for testing.
 contract StorageHarness is DegenerusGameAdvanceModule {
@@ -38,7 +39,8 @@ contract StorageHarness is DegenerusGameAdvanceModule {
     }
 
     function exposed_swapAndFreeze(uint24 /* purchaseLevel */) external {
-        _swapAndFreeze();
+        _swapTicketSlot();
+        _freezePool(1);
     }
 
     function exposed_unfreezePool() external {
@@ -92,6 +94,10 @@ contract StorageFoundationTest is Test {
     uint24 constant TICKET_SLOT_BIT = 1 << 23;
 
     function setUp() public {
+        // The freeze push calls the parimutuel at its fixed address; this harness deploys
+        // no protocol, so give that address one STOP byte — the typed void call needs code
+        // to pass the extcodesize check and returns success without any market logic.
+        vm.etch(ContractAddresses.PARIMUTUEL, hex"00");
         harness = new StorageHarness();
     }
 
@@ -122,21 +128,44 @@ contract StorageFoundationTest is Test {
         assertEq(uint8(uint256(slot0) >> 192), 1, "ticketsFullyProcessed not at slot 0 offset 24");
     }
 
-    /// @dev Verify prizePoolsPacked at Slot 2 and prizePoolPendingPacked at Slot 11.
+    /// @dev Verify prizePoolsPacked at Slot 2 and prizePoolPendingPacked at Slot 11, and
+    ///      that both decode as [volume:48 | future:104 | next:104] — the volume counter
+    ///      rides the top of each slot so a ticket buy counts inside the pool RMW it
+    ///      already performs.
     function testPackedPoolSlotsUnshifted() public {
         // Write a known value to Slot 2 via vm.store, then read back via harness getter
         uint256 sentinel2 = 0xDEADBEEF00000000000000000000000100000000000000000000000000000002;
         vm.store(address(harness), bytes32(uint256(2)), bytes32(sentinel2));
         (uint128 next2, uint128 future2) = harness.exposed_getPrizePools();
-        assertEq(uint256(next2), sentinel2 & type(uint128).max, "prizePoolsPacked not at slot 2 (next)");
-        assertEq(uint256(future2), sentinel2 >> 128, "prizePoolsPacked not at slot 2 (future)");
+        assertEq(uint256(next2), sentinel2 & POOL_HALF, "prizePoolsPacked not at slot 2 (next)");
+        assertEq(uint256(future2), (sentinel2 >> 104) & POOL_HALF, "prizePoolsPacked not at slot 2 (future)");
 
         // Write a known value to Slot 11 via vm.store, then read back via harness getter
         uint256 sentinel11 = 0x0000000000000000000000000000000300000000000000000000000000000004;
         vm.store(address(harness), bytes32(uint256(11)), bytes32(sentinel11));
         (uint128 next11, uint128 future11) = harness.exposed_getPendingPools();
-        assertEq(uint256(next11), sentinel11 & type(uint128).max, "prizePoolPendingPacked not at slot 11 (next)");
-        assertEq(uint256(future11), sentinel11 >> 128, "prizePoolPendingPacked not at slot 11 (future)");
+        assertEq(uint256(next11), sentinel11 & POOL_HALF, "prizePoolPendingPacked not at slot 11 (next)");
+        assertEq(uint256(future11), (sentinel11 >> 104) & POOL_HALF, "prizePoolPendingPacked not at slot 11 (future)");
+    }
+
+    /// @dev Widest value either pool half holds. The halves are uint104 so the top 48 bits
+    ///      of each slot can carry the day's ticket-volume counter.
+    uint256 private constant POOL_HALF = type(uint104).max;
+
+    /// @dev A write above the half's ceiling SATURATES rather than reverting: the setters
+    ///      sit on the purchase path and inside the daily advance, where a revert would
+    ///      brick the game. uint104 is ~169,000x the total ETH supply, so the clamp is
+    ///      unreachable from real value.
+    function testPoolHalvesSaturateAboveCeiling() public {
+        harness.exposed_setPrizePools(type(uint128).max, type(uint128).max);
+        (uint128 n, uint128 f) = harness.exposed_getPrizePools();
+        assertEq(uint256(n), POOL_HALF, "next saturates at uint104");
+        assertEq(uint256(f), POOL_HALF, "future saturates at uint104");
+
+        harness.exposed_setPendingPools(type(uint128).max, type(uint128).max);
+        (uint128 pn, uint128 pf) = harness.exposed_getPendingPools();
+        assertEq(uint256(pn), POOL_HALF, "pending next saturates at uint104");
+        assertEq(uint256(pf), POOL_HALF, "pending future saturates at uint104");
     }
 
     /// @dev Pin the post-v62 consolidated tail pack `levelDgnrsPacked` to slot 25 with the
@@ -182,7 +211,7 @@ contract StorageFoundationTest is Test {
     function testPrizePoolPackingMaxNext() public {
         harness.exposed_setPrizePools(type(uint128).max, 0);
         (uint128 n, uint128 f) = harness.exposed_getPrizePools();
-        assertEq(n, type(uint128).max);
+        assertEq(uint256(n), POOL_HALF);
         assertEq(f, 0);
     }
 
@@ -190,14 +219,14 @@ contract StorageFoundationTest is Test {
         harness.exposed_setPrizePools(0, type(uint128).max);
         (uint128 n, uint128 f) = harness.exposed_getPrizePools();
         assertEq(n, 0);
-        assertEq(f, type(uint128).max);
+        assertEq(uint256(f), POOL_HALF);
     }
 
     function testPrizePoolPackingMaxBoth() public {
         harness.exposed_setPrizePools(type(uint128).max, type(uint128).max);
         (uint128 n, uint128 f) = harness.exposed_getPrizePools();
-        assertEq(n, type(uint128).max);
-        assertEq(f, type(uint128).max);
+        assertEq(uint256(n), POOL_HALF);
+        assertEq(uint256(f), POOL_HALF);
     }
 
     function testPrizePoolPackingArbitrary() public {
@@ -219,24 +248,24 @@ contract StorageFoundationTest is Test {
     }
 
     function testPendingPoolPackingMaxNext() public {
-        harness.exposed_setPendingPools(type(uint128).max, 0);
+        harness.exposed_setPendingPools(uint128(POOL_HALF), 0);
         (uint128 n, uint128 f) = harness.exposed_getPendingPools();
-        assertEq(n, type(uint128).max);
+        assertEq(uint256(n), POOL_HALF);
         assertEq(f, 0);
     }
 
     function testPendingPoolPackingMaxFuture() public {
-        harness.exposed_setPendingPools(0, type(uint128).max);
+        harness.exposed_setPendingPools(0, uint128(POOL_HALF));
         (uint128 n, uint128 f) = harness.exposed_getPendingPools();
         assertEq(n, 0);
-        assertEq(f, type(uint128).max);
+        assertEq(uint256(f), POOL_HALF);
     }
 
     function testPendingPoolPackingMaxBoth() public {
-        harness.exposed_setPendingPools(type(uint128).max, type(uint128).max);
+        harness.exposed_setPendingPools(uint128(POOL_HALF), uint128(POOL_HALF));
         (uint128 n, uint128 f) = harness.exposed_getPendingPools();
-        assertEq(n, type(uint128).max);
-        assertEq(f, type(uint128).max);
+        assertEq(uint256(n), POOL_HALF);
+        assertEq(uint256(f), POOL_HALF);
     }
 
     function testPendingPoolPackingArbitrary() public {

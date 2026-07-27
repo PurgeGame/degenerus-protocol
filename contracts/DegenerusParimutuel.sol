@@ -6,69 +6,44 @@ import {IDegenerusGame} from "./interfaces/IDegenerusGame.sol";
 import {IDegenerusCoin} from "./interfaces/IDegenerusCoin.sol";
 import {ICoinflip} from "./interfaces/ICoinflip.sol";
 import {IDegenerusQuests} from "./interfaces/IDegenerusQuests.sol";
+import {IDegenerusParimutuel} from "./interfaces/IDegenerusParimutuel.sol";
 import {PriceLookupLib} from "./libraries/PriceLookupLib.sol";
+import {GameTimeLib} from "./libraries/GameTimeLib.sol";
 
 /**
  * @title DegenerusParimutuel
  * @author Burnie Degenerus
- * @notice A parimutuel market on whether the next level's target growth beats the prior
- *         level's. Opened during the jackpot phase, denominated in FLIP, one fixed-size
- *         bet per address.
+ * @notice Two parimutuel markets on the game's own trajectory, denominated in FLIP, one
+ *         fixed-size bet per address per round: GROWTH — will the next level's pool-growth
+ *         rate beat this level's — and VOLUME — will today's manual ETH ticket volume beat
+ *         yesterday's.
  *
- * @dev THE SUBJECT. A level's growth is the level-over-level RATIO of the achieved pool,
- *      read straight off the ratchet the game already records:
+ * @dev Growth round L resolves OVER iff ratchet(L+1) * ratchet(L-1) > ratchet(L)^2 — the
+ *      cross-multiplied rate comparison, exact and unsigned; ties are UNDER. Century terms
+ *      read the write-once achieved-pool history, so the x01-base overwrite never moves a
+ *      settled term; mature-century rounds x99/x00/x01 are lopsided, and knowingly so.
  *
- *          growth(L) = ratchet(L) / ratchet(L-1)
+ *      Volume round D resolves OVER iff volume(D) > volume(D-1), counted in raw purchase
+ *      units (400 = one ticket) of MANUAL ETH ticket buys only — FLIP-paid, afking, pass,
+ *      box, foil and award tickets are all outside the count, both ends. A round runs RNG
+ *      request to RNG request; betting is open 22:57–00:00 UTC, computed off the clock.
+ *      OVER can force its win by buying tickets: that is the design — the book leans OVER
+ *      and every bettor is an incentivized buyer, each win ratcheting the next benchmark.
  *
- *      Round L is bet during level L's jackpot phase and resolves OVER iff
- *      growth(L+1) > growth(L). A ratio rather than a difference because the pools compound:
- *      absolute level-over-level deltas grow with the game, so a difference would drift
- *      toward OVER over time, where a rate stays comparable across the whole run. It also
- *      keeps every term unsigned — a level that achieves less than its predecessor is just
- *      a ratio below 1 — and cross-multiplying makes the comparison exact (see _outcome).
+ *      Settlement is PUSHED by the game the instant a round's terms go final (growth: the
+ *      level transition; volume: the daily RNG request) into write-once two-bit outcomes,
+ *      128 rounds per word; claims read the bit and never re-derive. A volume round sealed
+ *      without a scoreable benchmark — the first seal ever, or a VRF-stall gap breaking
+ *      seal adjacency — never settles, and once a later round seals, its bets refund the
+ *      stake, both sides, once.
  *
- *      The benchmark is settled the instant the round opens: growth(L) is already banked
- *      when level L's jackpot phase begins. Settlement one level later re-reads the
- *      identical expression, shifted by one.
- *
- *      NO SETTLEMENT WRITE. The outcome is a pure function of three ratchet entries the
- *      game already stores, so nothing pushes a result here and no round-settlement
- *      storage exists. A claim derives its own outcome from game.growthState(round) and
- *      writes only the claimant's own bit. ratchet(round + 1) == 0 is the unsettled
- *      predicate — each entry is 0 until its level transitions and its banked value
- *      forever after, which is what makes a settled round's answer permanent.
- *
- *      CENTURY BOUNDARIES SCORE NORMALLY. _endPhase overwrites levelPrizePool[x00] with
- *      futurePool/3 as the reachable x01 ratchet base, so that entry is both distorted and
- *      — for the whole of the century's jackpot phase, before the overwrite lands — still
- *      holding the achieved value. Scoring a boundary round off it would let the same round
- *      answer one way during that phase and the other way after, paying both sides and
- *      minting FLIP. The game instead serves every century term from its pushed achieved
- *      pool (see growthState), which is written once at the transition and never touched
- *      again, so x99, x00 and x01 are ordinary rounds measuring real growth.
- *
- *      ROUND 0 IS SKIPPED. growthState(0) reports no ratchet terms — the placement path has
- *      no round to name — so round 0 could never settle and a stake left there would strand.
- *      Round 1 needs no case of its own: its reference is the synthetic BOOTSTRAP_PRIZE_POOL,
- *      which is written at construction and equally permanent.
- *
- *      FLIP NEUTRALITY. Stakes are burned at placement and re-minted to winners through
- *      the standard coinflip credit rail, so the market itself mints nothing net.
- *      Floor-division dust is never minted, and a round whose winning side is empty leaves
- *      the losing side burned — both leave the market deflationary on its own terms. The
- *      settlement bounty is the one credit that rail pays beyond the burned stakes: a
- *      gas-pegged reimbursement per winner the crank actually settles, bounded by the
- *      claimed bit at one per winning bet ever placed, and between 667x (intro pricing)
- *      and 16,000x (a century level) under the 1,000 FLIP that bet burned. It is the same
- *      keeper reimbursement the decimator box and foil claims pay, on the same peg and at
- *      the same 15e12 target. The participation quest a placement earns is not part of this
- *      rail — it is the game's ordinary gated incentive, priced and capped in Quests.
- *
- *      GAME OVER. FLIP is tombstoned at GAMEOVER, so an unresolved book needs no unwind
- *      rule: every position in the game becomes worthless together. Rounds simply stop
- *      settling, because no further level banks a pool.
+ *      Stakes burn at placement; winners re-mint through the coinflip rail; dust and an
+ *      empty winning side stay burned. Beyond the stakes the rail pays the gas-pegged
+ *      settlement bounty (capped at one per winning bet ever) and the volume market's
+ *      gated placement credit. Both markets require having ever bought anything. FLIP is
+ *      tombstoned at game over, so an unresolved book needs no unwind rule.
  */
-contract DegenerusParimutuel {
+contract DegenerusParimutuel is IDegenerusParimutuel {
     // =========================================================================
     // Wiring
     // =========================================================================
@@ -101,13 +76,22 @@ contract DegenerusParimutuel {
     ///      the stake is one whole ticket — but priced here, not staked.
     uint256 private constant PRICE_COIN_UNIT = 1000 ether;
 
-    /// @dev Settlement-crank bounty target (ETH wei) per winner actually paid. The measured
-    ///      marginal cost of one settled winner is ~30k gas — the bet's cold read, its
-    ///      claimed-bit write, the event, and the winner's share of creditFlipBatch — which
-    ///      at the 0.5-gwei reference is this figure, the same peg and the same number the
-    ///      foil-claim bounty carries. It reimburses the marginal, not the call's fixed
-    ///      overhead: the crank is meant to be run over a batch, where that amortizes away.
+    /// @dev Settlement-crank bounty target (ETH wei) per winner actually paid: the ~30k-gas
+    ///      marginal cost of one settled winner at the 0.5-gwei reference — the same peg
+    ///      and number the foil-claim bounty carries.
     uint256 private constant CRANK_BOUNTY_ETH_TARGET = 15_000_000_000_000;
+
+    /// @dev FLIP credited for placing a ticket-volume bet at the top of the window — the
+    ///      daily market's participation incentive, in place of the growth market's
+    ///      decaying quest. At most 2.5% of the stake it accompanies, so a placement is
+    ///      deflationary on its own terms whatever the round pays.
+    uint256 public constant VOLUME_BET_CREDIT = 25 ether;
+
+    /// @dev The credit's decay clock: anchored at 23:15 UTC, -5 FLIP per full 10 minutes
+    ///      elapsed — 25 through 23:24:59, then 20/15/10, and 5 from 23:55 to close. Late
+    ///      bettors have watched more of the round; the decay prices that back out.
+    uint256 private constant CREDIT_DECAY_START = 83_700; // 23:15:00 UTC
+    uint256 private constant CREDIT_DECAY_STEP = 10 minutes;
 
     uint8 private constant SIDE_OVER = 1;
     uint8 private constant SIDE_UNDER = 2;
@@ -120,12 +104,29 @@ contract DegenerusParimutuel {
 
     /// @dev Per-round side counts: overCount in the low 128 bits, underCount in the high 128.
     ///      One slot, and a placement is a single read-modify-write of it.
-    mapping(uint24 => uint256) private roundCounts;
+    mapping(uint24 => uint256) private growthCounts;
 
     /// @dev Per-round bets: the low two bits carry the side, bit 2 marks the payout taken.
     ///      Keyed by round then player so a round left unclaimed is never destroyed by the
     ///      next round's placement.
-    mapping(uint24 => mapping(address => uint8)) private bets;
+    mapping(uint24 => mapping(address => uint8)) private growthBets;
+
+    /// @dev Settled sides, two bits per round, 128 rounds to a word — keyed by `round >> 7`.
+    ///      Values are the SIDE_OVER/SIDE_UNDER encoding; 0 = unsettled. Separate mappings:
+    ///      the markets number rounds independently (levels vs days) and would collide.
+    mapping(uint24 => uint256) private growthOutcomeWords;
+    mapping(uint24 => uint256) private volumeOutcomeWords;
+
+    /// @dev The ticket-volume book, mirroring growthCounts / bets for the other market.
+    mapping(uint24 => uint256) private volumeCounts;
+    mapping(uint24 => mapping(address => uint8)) private volumeBets;
+
+    /// @dev The ticket-volume benchmark, one slot: the last round the game sealed and that
+    ///      round's total. A round is scoreable only against its immediate predecessor, so
+    ///      both fields are needed — see recordVolume. lastVolumeRound doubles as the
+    ///      closed-round marker the void rule reads.
+    uint24 private lastVolumeRound;
+    uint48 private prevVolume;
 
     // =========================================================================
     // Errors
@@ -146,6 +147,12 @@ contract DegenerusParimutuel {
     ///         winning side is empty, the list is empty, or that first address did not
     ///         win the round or was already paid.
     error NothingToSettle();
+
+    /// @notice A settlement push arrived from something other than GAME.
+    error OnlyGame();
+
+    /// @notice The player has never bought anything, so may not bet.
+    error NotEligible();
 
     // =========================================================================
     // Events
@@ -174,6 +181,49 @@ contract DegenerusParimutuel {
         uint8 outcome,
         uint256 payout
     );
+
+    /// @notice Emitted when a ticket-volume bet is placed.
+    /// @param player The player the bet belongs to.
+    /// @param round The round (game day) the bet joins.
+    /// @param over True for the OVER side (volume rises), false for UNDER.
+    /// @param credit FLIP credited for placing (0 when the player fails the gate).
+    event VolumeBetPlaced(
+        address indexed player,
+        uint24 indexed round,
+        bool over,
+        uint256 credit
+    );
+
+    /// @notice Emitted when a ticket-volume bet is settled.
+    /// @param player The bettor being paid.
+    /// @param round The round (game day).
+    /// @param outcome The round's side (1 = OVER, 2 = UNDER, 0 = voided).
+    /// @param payout FLIP credited: a winner's share, or the stake back on a void.
+    event VolumeBetClaimed(
+        address indexed player,
+        uint24 indexed round,
+        uint8 outcome,
+        uint256 payout
+    );
+
+    /// @notice Emitted when the game closes a ticket-volume round at its RNG request.
+    /// @dev Carries the volume series the game no longer stores, so the history stays
+    ///      reconstructible from logs. A round whose bits stay 0 after this event was not
+    ///      scoreable against its predecessor — first seal, or a VRF-stall gap.
+    /// @param round The round that closed.
+    /// @param total The round's ticket volume, in raw purchase units (400 = 1 ticket).
+    /// @param previous The benchmark it was scored against.
+    event VolumeRoundSealed(
+        uint24 indexed round,
+        uint48 total,
+        uint48 previous
+    );
+
+    /// @notice Emitted when the game settles a growth round at the level transition that
+    ///         banks its successor ratchet entry.
+    /// @param round The growth round that settled.
+    /// @param over True if the round resolved OVER.
+    event GrowthRoundSealed(uint24 indexed round, bool over);
 
     // =========================================================================
     // Construction
@@ -215,20 +265,31 @@ contract DegenerusParimutuel {
         // Round 0 is the sole unscoreable round — growthState reports no ratchet terms
         // for it, so it could never settle and a stake left there would strand.
         if (!open || round == 0) revert MarketClosed();
-        if (bets[round][player] != 0) revert AlreadyBet();
+        if (growthBets[round][player] != 0) revert AlreadyBet();
 
-        bets[round][player] = over ? SIDE_OVER : SIDE_UNDER;
+        // A wallet that has never bought anything cannot take a position on how the game
+        // grows.
+        (bool mayBet, bool earnsReward) = quests.marketBetGates(player, round);
+        if (!mayBet) revert NotEligible();
+
+        growthBets[round][player] = over ? SIDE_OVER : SIDE_UNDER;
         // overCount occupies the low half, underCount the high half, so each side increments
         // by its own unit and the two can never carry into one another.
-        roundCounts[round] += over ? 1 : (uint256(1) << 128);
+        growthCounts[round] += over ? 1 : (uint256(1) << 128);
 
         coin.burnCoin(player, STAKE);
 
-        uint256 reward = quests.recordGrowthBet(
-            player,
-            round,
-            _questReward(phaseDay)
-        );
+        // Only an eligible bettor reaches for the quest: recordGrowthBet applies the same
+        // gate internally and pays such a call 0 with no side effects, so skipping it for
+        // the ineligible is behavior-identical and one external call cheaper.
+        uint256 reward;
+        if (earnsReward) {
+            reward = quests.recordGrowthBet(
+                player,
+                round,
+                _questReward(phaseDay)
+            );
+        }
         emit BetPlaced(player, round, over, reward);
     }
 
@@ -260,7 +321,7 @@ contract DegenerusParimutuel {
     /// @dev The settlement crank. A round's outcome and its per-winner payout are
     ///      properties of the ROUND, not of the claimant, so both are derived once for the
     ///      whole list and the credits land as one creditFlipBatch call: settling a
-    ///      hundred bettors costs one growthState call, one roundCounts read and one
+    ///      hundred bettors costs one growthState call, one growthCounts read and one
     ///      credit call, where a hundred single claims would repeat all three.
     ///
     ///      Permissionless for the same reason as claim — a payout can only ever reach the
@@ -282,46 +343,43 @@ contract DegenerusParimutuel {
         uint24 round,
         address[] calldata players
     ) external returns (uint256 total) {
-        // Destructured rather than routed through _outcome: the same call already carries
-        // the level and phase the bounty is priced at, so the crank makes exactly one
-        // game call.
-        (
-            uint256 prev,
-            uint256 curr,
-            uint256 next,
-            uint24 currentLevel,
-            bool bettingOpen,
+        uint256 len = players.length;
+        if (len == 0) revert NothingToSettle();
 
-        ) = game.growthState(round);
-        uint8 outcome = _outcomeFrom(prev, curr, next);
-        if (outcome == 0) revert NothingToSettle();
+        // Opener first, before the outcome read and the bounty's game call: most cranks
+        // are duplicates racing one broadcast list, and a spent opener proves the sweep
+        // for one cold slot. (A winner who claimed alone can false-positive this; the
+        // cost is one rebuilt broadcast.)
+        uint8 opener = growthBets[round][players[0]];
+        if (opener == 0 || (opener & CLAIMED_BIT) != 0) revert NothingToSettle();
 
-        // An empty winning side has nobody to pay — and no divisor. The named path never
-        // meets this case (it derives the payout only after matching a winner's bet), so
-        // the guard lives here, where the payout is derived before any bet is read.
-        uint256 packed = roundCounts[round];
-        uint256 winCount = outcome == SIDE_OVER
-            ? uint128(packed)
-            : packed >> 128;
-        if (winCount == 0) revert NothingToSettle();
+        // One cold SLOAD, no game call: the side was written by the push at the level
+        // transition that banked this round's successor entry.
+        uint8 outcome = _readOutcome(growthOutcomeWords, round);
+        if (outcome == 0 || (opener & SIDE_MASK) != outcome) {
+            revert NothingToSettle();
+        }
+
+        // The opener is a confirmed winner on this side, so its own placement already
+        // incremented the winning count — the divisor below cannot be zero, and needs no
+        // guard of its own.
+        uint256 packed = growthCounts[round];
         uint256 payout = _payoutFrom(packed, outcome);
 
         // Credits land through one creditFlipBatch call rather than one credit per
         // winner. The arrays stay list-shaped: a skipped entry leaves its slot zeroed,
         // and the batch ignores zero entries by contract. One slot past the list carries
         // the caller's bounty, so the whole settlement is a single credit call.
-        uint256 len = players.length;
-        if (len == 0) revert NothingToSettle();
         address[] memory winners = new address[](len + 1);
         uint256[] memory payouts = new uint256[](len + 1);
         uint256 settled;
         for (uint256 i; i < len; ) {
             address player = players[i];
-            uint8 bet = bets[round][player];
+            uint8 bet = growthBets[round][player];
             // A repeated address fails this on its second pass: the first already set the
             // claimed bit.
             if ((bet & SIDE_MASK) == outcome && (bet & CLAIMED_BIT) == 0) {
-                bets[round][player] = bet | CLAIMED_BIT;
+                growthBets[round][player] = bet | CLAIMED_BIT;
                 winners[i] = player;
                 payouts[i] = payout;
                 total += payout;
@@ -329,38 +387,20 @@ contract DegenerusParimutuel {
                     ++settled;
                 }
                 emit BetClaimed(player, round, outcome, payout);
-            } else if (i == 0) {
-                // The opening address doubles as the spent-list probe. One winner list is
-                // broadcast to many UIs and the first to land settles every address in it,
-                // so K-1 of every K cranks are duplicates by construction: the revert path
-                // is the COMMON path, and it has to be cheap. A dead opener does not prove
-                // the list is swept — a winner may have taken the named claim path alone —
-                // but it is the cheap signal that it probably is, read in one cold slot
-                // instead of n, and a wallet's pre-flight warns the sender before they pay
-                // for the walk. A false positive costs one rebuilt broadcast.
-                revert NothingToSettle();
             }
             unchecked {
                 ++i;
             }
         }
 
-        // Keeper bounty: a small FLIP credit per winner actually paid, to the caller, in the
-        // batch's tail slot. Losers, non-bettors and already-paid addresses settle nothing
-        // and earn nothing, so a padded list cannot farm it, and the claimed bit caps the
-        // round's whole bounty at one per winning bet. The ETH-value tracks the per-winner
-        // settle gas at the reference price (FLIP per ETH = PRICE_COIN_UNIT / mintPrice),
-        // so the credit holds its gas-reimbursement value across the price curve. Priced off
-        // the ROUTED level the crank runs at, not the round's own: the table cycles within a
-        // century, so a round's price says nothing about what FLIP is worth when the work is
-        // finally done. bettingOpen is the same routing signal the decimator box and foil
-        // claim bounties take from jackpotPhaseFlag, one step tighter — it also drops at
-        // phaseTransitionActive, which is where _activeTicketLevel starts answering level + 1.
-        // The opener probe above guarantees settled != 0. A caller that also won the round
-        // takes two slots in the batch, which credits it twice over — the stake write
-        // accumulates, so that is its payout plus its bounty, exactly as two calls would have
-        // paid. Unconditional past game over: FLIP is tombstoned there, so the credit is
-        // already worthless and a gameOver read would withhold nothing.
+        // Keeper bounty in the batch's tail slot: per winner ACTUALLY settled (padding
+        // earns nothing; the claimed bit caps it at one per winning bet ever), priced at
+        // the ROUTED level the crank runs at so the FLIP tracks settle gas. A caller who
+        // also won takes two slots — payout plus bounty, as two calls would pay.
+        // growthState(0) rather than growthState(round): round 0 skips the three ratchet
+        // reads, and settlement no longer wants them — the outcome came from the bit. All
+        // this call carries now is the routing half the bounty is priced at.
+        (, , , uint24 currentLevel, bool bettingOpen, ) = game.growthState(0);
         winners[len] = msg.sender;
         payouts[len] =
             (settled * CRANK_BOUNTY_ETH_TARGET * PRICE_COIN_UNIT) /
@@ -374,58 +414,293 @@ contract DegenerusParimutuel {
     /// @dev Settle one round for one player. Returns the payout, or 0 when there is
     ///      nothing to pay.
     function _claim(address player, uint24 round) private returns (uint256) {
-        uint8 bet = bets[round][player];
+        uint8 bet = growthBets[round][player];
         if (bet == 0 || (bet & CLAIMED_BIT) != 0) return 0;
 
-        uint8 outcome = _outcome(round);
+        uint8 outcome = _readOutcome(growthOutcomeWords, round);
         if (outcome == 0 || (bet & SIDE_MASK) != outcome) return 0;
 
         uint256 payout = _payout(round, outcome);
-        bets[round][player] = bet | CLAIMED_BIT;
+        growthBets[round][player] = bet | CLAIMED_BIT;
         emit BetClaimed(player, round, outcome, payout);
         return payout;
     }
 
     // =========================================================================
-    // Scoring
+    // Ticket-volume market
     // =========================================================================
 
-    /// @dev A round's outcome, derived from the game's ratchet entries. 0 while the round's
-    ///      successor level has not yet banked its entry.
-    ///
-    ///      The benchmark is fixed the moment the round opens — it is the growth the level
-    ///      just delivered — and settlement re-reads the identical expression one level on:
-    ///
-    ///          growth(L) = ratchet[L] / ratchet[L-1]
-    ///          round L resolves OVER iff growth(L+1) > growth(L)
-    ///
-    ///      Cross-multiplied, so the comparison is exact integer arithmetic with no
-    ///      division, no rounding, and no signed terms:
-    ///
-    ///          next / curr > curr / prev   <=>   next * prev > curr * curr
-    ///
-    ///      Both denominators are guaranteed non-zero: levels bank in order, so a non-zero
-    ///      `next` implies a non-zero `curr`, and every round below it has banked too —
-    ///      leaving `prev` either a banked entry, a completed century's pushed pool, or,
-    ///      at round 1, the seeded ratchet[0].
-    function _outcome(uint24 round) private view returns (uint8) {
-        (uint256 prev, uint256 curr, uint256 next, , , ) = game.growthState(
-            round
+    /// @notice Place the ticket-volume bet for the open round.
+    /// @dev Same shape and stake as the growth bet; the window and round come off the
+    ///      clock (_openVolumeRound). Placement pays the decaying volumeBetCredit() off
+    ///      the coinflip rail instead of a quest — a daily market on the quest ladder
+    ///      would out-earn the growth bet several times over for the same act.
+    /// @param player The player the bet belongs to (zero address for msg.sender).
+    /// @param over True to bet volume rises against the previous round, false for UNDER.
+    function placeVolumeBet(address player, bool over) external {
+        if (player == address(0)) player = msg.sender;
+        if (
+            player != msg.sender &&
+            !game.isOperatorApproved(player, msg.sender)
+        ) revert NotApproved();
+
+        (uint24 round, bool open) = _openVolumeRound();
+        // Nothing has sealed yet, so the open round has no benchmark to be scored against
+        // and could only ever void. Closed rather than open-and-worthless.
+        if (!open || lastVolumeRound == 0) revert MarketClosed();
+        if (volumeBets[round][player] != 0) revert AlreadyBet();
+
+        (bool mayBet, bool earnsReward) = quests.marketBetGates(
+            player,
+            game.level()
         );
-        return _outcomeFrom(prev, curr, next);
+        if (!mayBet) revert NotEligible();
+
+        volumeBets[round][player] = over ? SIDE_OVER : SIDE_UNDER;
+        volumeCounts[round] += over ? 1 : (uint256(1) << 128);
+
+        coin.burnCoin(player, STAKE);
+
+        // Gate-cleared bettors earn the decaying credit; past the lifetime bar but short
+        // of the level quest still bets, just without the bonus.
+        uint256 credit;
+        if (earnsReward) {
+            credit = volumeBetCredit();
+            coinflip.creditFlip(player, credit);
+        }
+        emit VolumeBetPlaced(player, round, over, credit);
     }
 
-    /// @dev The comparison itself, split out so a caller that already holds the round's
-    ///      terms scores them without a second growthState call.
-    function _outcomeFrom(
-        uint256 prev,
-        uint256 curr,
-        uint256 next
-    ) private pure returns (uint8) {
-        if (next == 0) return 0;
-        // Strictly greater: the line is the level's own growth rate, and OVER must clear
-        // it outright — a push belongs to the UNDER.
-        return next * prev > curr * curr ? SIDE_OVER : SIDE_UNDER;
+    /// @dev The open round and window, off the clock alone: 22:57–00:00 UTC, round =
+    ///      day index + 1 (the break's RNG request closes one round and opens the next,
+    ///      so an in-window bet joins the round that request opened).
+    function _openVolumeRound() private view returns (uint24 round, bool open) {
+        open = block.timestamp % 1 days >= GameTimeLib.JACKPOT_RESET_TIME;
+        round = GameTimeLib.currentDayIndex() + 1;
+    }
+
+    /// @notice FLIP the placement credit pays a gate-clearing bettor right now.
+    /// @dev Pure clock schedule (CREDIT_DECAY_START); in-window steps never exceed four,
+    ///      so the quote never falls below 5 FLIP.
+    function volumeBetCredit() public view returns (uint256) {
+        uint256 tod = block.timestamp % 1 days;
+        if (tod < CREDIT_DECAY_START) return VOLUME_BET_CREDIT;
+        return
+            VOLUME_BET_CREDIT -
+            ((tod - CREDIT_DECAY_START) / CREDIT_DECAY_STEP) * 5 ether;
+    }
+
+    /// @notice Claim ticket-volume payouts for the named rounds.
+    /// @dev Permissionless on the same grounds as the growth claim: a payout only ever
+    ///      reaches the bettor who placed it.
+    /// @param player The bettor to pay (zero address for msg.sender).
+    /// @param rounds The rounds to claim.
+    /// @return total FLIP credited across the batch.
+    function claimVolume(
+        address player,
+        uint24[] calldata rounds
+    ) external returns (uint256 total) {
+        if (player == address(0)) player = msg.sender;
+
+        uint256 len = rounds.length;
+        for (uint256 i; i < len; ) {
+            total += _claimVolume(player, rounds[i]);
+            unchecked {
+                ++i;
+            }
+        }
+
+        if (total != 0) coinflip.creditFlip(player, total);
+    }
+
+    /// @dev Settle one ticket-volume round for one player: a winner's share, or on a
+    ///      voided round the stake back. `round <= lastVolumeRound` is the closed test —
+    ///      a later seal proves this round's crossover passed; above it, an unset bit
+    ///      means "not yet" rather than "never".
+    function _claimVolume(
+        address player,
+        uint24 round
+    ) private returns (uint256) {
+        uint8 bet = volumeBets[round][player];
+        if (bet == 0 || (bet & CLAIMED_BIT) != 0) return 0;
+
+        uint8 outcome = _readOutcome(volumeOutcomeWords, round);
+        uint256 payout;
+        if (outcome == 0) {
+            if (round > lastVolumeRound) return 0;
+            payout = STAKE;
+        } else {
+            if ((bet & SIDE_MASK) != outcome) return 0;
+            payout = _payoutFrom(volumeCounts[round], outcome);
+        }
+
+        volumeBets[round][player] = bet | CLAIMED_BIT;
+        emit VolumeBetClaimed(player, round, outcome, payout);
+        return payout;
+    }
+
+    /// @notice Pay every winner on one settled ticket-volume round.
+    /// @dev Mirror of claimRound. A voided round is not crankable — every position pays
+    ///      the same stake back, so there is no shared divisor to amortize.
+    /// @param round The round to settle.
+    /// @param players The bettors to pay, a genuine unpaid winner first.
+    /// @custom:reverts NothingToSettle If the round is unsettled or voided, the list is
+    ///         empty, or the opening address is not an unpaid winner.
+    /// @return total FLIP credited to winners, excluding the caller's bounty.
+    function claimVolumeRound(
+        uint24 round,
+        address[] calldata players
+    ) external returns (uint256 total) {
+        uint256 len = players.length;
+        if (len == 0) revert NothingToSettle();
+
+        uint8 opener = volumeBets[round][players[0]];
+        if (opener == 0 || (opener & CLAIMED_BIT) != 0) revert NothingToSettle();
+
+        uint8 outcome = _readOutcome(volumeOutcomeWords, round);
+        if (outcome == 0 || (opener & SIDE_MASK) != outcome) {
+            revert NothingToSettle();
+        }
+
+        uint256 packed = volumeCounts[round];
+        uint256 payout = _payoutFrom(packed, outcome);
+
+        address[] memory winners = new address[](len + 1);
+        uint256[] memory payouts = new uint256[](len + 1);
+        uint256 settled;
+        for (uint256 i; i < len; ) {
+            address player = players[i];
+            uint8 bet = volumeBets[round][player];
+            if ((bet & SIDE_MASK) == outcome && (bet & CLAIMED_BIT) == 0) {
+                volumeBets[round][player] = bet | CLAIMED_BIT;
+                winners[i] = player;
+                payouts[i] = payout;
+                total += payout;
+                unchecked {
+                    ++settled;
+                }
+                emit VolumeBetClaimed(player, round, outcome, payout);
+            }
+            unchecked {
+                ++i;
+            }
+        }
+
+        (, , , uint24 currentLevel, bool bettingOpen, ) = game.growthState(0);
+        winners[len] = msg.sender;
+        payouts[len] =
+            (settled * CRANK_BOUNTY_ETH_TARGET * PRICE_COIN_UNIT) /
+            PriceLookupLib.priceForLevel(
+                bettingOpen ? currentLevel : currentLevel + 1
+            );
+
+        coinflip.creditFlipBatch(winners, payouts);
+    }
+
+    /// @notice The open ticket-volume round, plus one player's position on a round.
+    /// @param player The player whose position to report (address(0) for none).
+    /// @param round The round to report the position for.
+    /// @return openRound The round a bet placed now would join (0 when betting is closed).
+    /// @return overCount Bets on the OVER side of `round`.
+    /// @return underCount Bets on the UNDER side of `round`.
+    /// @return side The player's side on `round`: 1 = OVER, 2 = UNDER (0 = no bet).
+    /// @return claimed True once the player has taken the payout for `round`.
+    /// @return outcome `round`'s side (0 = unsettled, or voided once it has closed).
+    /// @return voided True when `round` closed with no comparable benchmark.
+    /// @return payout FLIP claimable now — a winner's share, or the stake back on a void.
+    function volumeMarketState(
+        address player,
+        uint24 round
+    )
+        external
+        view
+        returns (
+            uint24 openRound,
+            uint128 overCount,
+            uint128 underCount,
+            uint8 side,
+            bool claimed,
+            uint8 outcome,
+            bool voided,
+            uint256 payout
+        )
+    {
+        (uint24 open, bool bettingOpen) = _openVolumeRound();
+        if (bettingOpen && lastVolumeRound != 0) openRound = open;
+
+        uint256 packed = volumeCounts[round];
+        overCount = uint128(packed);
+        underCount = uint128(packed >> 128);
+
+        uint8 bet = volumeBets[round][player];
+        side = bet & SIDE_MASK;
+        claimed = (bet & CLAIMED_BIT) != 0;
+        outcome = _readOutcome(volumeOutcomeWords, round);
+        voided = outcome == 0 && round <= lastVolumeRound && lastVolumeRound != 0;
+
+        if (side != 0 && !claimed) {
+            if (voided) payout = STAKE;
+            else if (side == outcome) payout = _payoutFrom(packed, outcome);
+        }
+    }
+
+    // =========================================================================
+    // Settlement pushes (GAME only)
+    // =========================================================================
+
+    /// @inheritdoc IDegenerusParimutuel
+    /// @dev Scored only against the immediately preceding round: the first-ever seal and
+    ///      any VRF-stall gap have no honest benchmark, get no bit, and void rather than
+    ///      hand the outcome to whoever watched the stall.
+    function recordVolume(uint24 round, uint48 total) external {
+        if (msg.sender != ContractAddresses.GAME) revert OnlyGame();
+        uint24 last = lastVolumeRound;
+        uint48 prev = prevVolume;
+        lastVolumeRound = round;
+        prevVolume = total;
+        if (last != 0 && round == last + 1) {
+            _writeOutcome(
+                volumeOutcomeWords,
+                round,
+                total > prev ? SIDE_OVER : SIDE_UNDER
+            );
+        }
+        emit VolumeRoundSealed(round, total, prev);
+    }
+
+    /// @inheritdoc IDegenerusParimutuel
+    function recordGrowth(uint24 round, bool over) external {
+        if (msg.sender != ContractAddresses.GAME) revert OnlyGame();
+        _writeOutcome(
+            growthOutcomeWords,
+            round,
+            over ? SIDE_OVER : SIDE_UNDER
+        );
+        emit GrowthRoundSealed(round, over);
+    }
+
+    /// @dev Write-once latch: a settled round's answer is permanent by structure.
+    function _writeOutcome(
+        mapping(uint24 => uint256) storage words,
+        uint24 round,
+        uint8 side
+    ) private {
+        uint24 word = round >> 7;
+        uint256 shift = (uint256(round) & 127) << 1;
+        uint256 packed = words[word];
+        if (((packed >> shift) & SIDE_MASK) != 0) return;
+        words[word] = packed | (uint256(side) << shift);
+    }
+
+    /// @dev A round's settled side, or 0 if it has not settled.
+    function _readOutcome(
+        mapping(uint24 => uint256) storage words,
+        uint24 round
+    ) private view returns (uint8) {
+        return
+            uint8(
+                (words[round >> 7] >> ((uint256(round) & 127) << 1)) & SIDE_MASK
+            );
     }
 
     /// @dev What one winning bet on `round` pays.
@@ -433,7 +708,7 @@ contract DegenerusParimutuel {
         uint24 round,
         uint8 outcome
     ) private view returns (uint256) {
-        return _payoutFrom(roundCounts[round], outcome);
+        return _payoutFrom(growthCounts[round], outcome);
     }
 
     /// @dev The payout arithmetic over an already-loaded counts word. A winning bet exists
@@ -498,29 +773,21 @@ contract DegenerusParimutuel {
             uint256 payout
         )
     {
-        // One call, not two: growthState carries the phase half whatever round it is asked
-        // about, so asking about `round` answers the position half as well. Round 0 needs
-        // no guard of its own — growthState reports no terms for it, and a zero `next` is
-        // already the unsettled reading.
-        (
-            uint256 prev,
-            uint256 curr,
-            uint256 next,
-            uint24 lvl,
-            bool open,
-            uint8 phaseDay
-        ) = game.growthState(round);
+        // growthState(0): the ratchet terms are no longer a settlement input — the outcome
+        // is a bit this contract holds — so the view asks only for the routing half, and
+        // round 0 skips the three ratchet reads.
+        (, , , uint24 lvl, bool open, uint8 phaseDay) = game.growthState(0);
         if (open && lvl != 0) openRound = lvl;
         questReward = _questReward(phaseDay);
 
-        uint256 packed = roundCounts[round];
+        uint256 packed = growthCounts[round];
         overCount = uint128(packed);
         underCount = uint128(packed >> 128);
 
-        uint8 bet = bets[round][player];
+        uint8 bet = growthBets[round][player];
         side = bet & SIDE_MASK;
         claimed = (bet & CLAIMED_BIT) != 0;
-        outcome = _outcomeFrom(prev, curr, next);
+        outcome = _readOutcome(growthOutcomeWords, round);
         if (side != 0 && !claimed && side == outcome) {
             payout = _payoutFrom(packed, outcome);
         }

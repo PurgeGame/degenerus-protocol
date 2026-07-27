@@ -1392,7 +1392,10 @@ contract RngLockDeterminism is DeployProtocol {
 
         assertTrue(game.rngLocked(), "StakedStonkRedemption: lock must not lift under perturbation");
 
-        _deliverMockVrf(reqId, vrfWord);
+        // Deliver to the id live NOW: a stalled daily >= 12h old is retried by the first
+        // advance (drain-gate retry), so the pre-perturbation capture can be superseded.
+        // The determinism claim rides the WORD, not the request id.
+        _deliverMockVrf(mockVRF.lastRequestId(), vrfWord);
 
         bytes32 perturbedOutputs = _captureStonkRedemptionOutputs();
 

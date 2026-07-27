@@ -15,7 +15,7 @@ import {DegenerusGame} from "../../../contracts/DegenerusGame.sol";
 ///
 ///         1. FREEZE-WINDOW PENDING BUFFER (must be INCLUDED). During the daily-RNG freeze window,
 ///            `_swapAndFreeze` (DegenerusGameStorage.sol:755) moves 1% of futurePrizePool into
-///            `prizePoolPendingPacked` (slot 11, packed `[future<<128 | next]`). That buffer has NO
+///            `prizePoolPendingPacked` (slot 11, packed `[volume:48 | future:104 | next:104]`). That buffer has NO
 ///            external view, so `futurePrizePoolView()` drops by the seed while the ETH is still in
 ///            balance and still owed. The contract counts it (`distributeYieldSurplus` adds
 ///            `pNext + pFuture`, JackpotModule:710-711), so the harness must too. Reads 0 when not
@@ -39,7 +39,8 @@ library SolvencyObligations {
     /// @dev Authoritative slot for `prizePoolPendingPacked` on DegenerusGame, re-attested at the
     ///      frozen audit subject c4d48008 via `forge inspect DegenerusGame storageLayout`
     ///      (prizePoolPendingPacked: slot 11, offset 0, full uint256). Packed
-    ///      `(uint256(future) << 128) | uint256(next)`, matching _setPendingPools.
+    ///      `[volume:48 | future:104 | next:104]`, matching _setPendingPools; the volume
+    ///      counter above the halves is not an ETH obligation and is masked off.
     uint256 internal constant PRIZE_POOL_PENDING_PACKED_SLOT = 11;
 
     // Cheatcode address (forge-std Vm). Used to read the no-external-view pending buffer.
@@ -68,8 +69,8 @@ library SolvencyObligations {
     }
 
     /// @notice Read the freeze-window pending buffer (no external view exists for it).
-    /// @return next  The pending next-pool accumulator (low 128 bits of slot 11).
-    /// @return future The pending future-pool accumulator (high 128 bits of slot 11).
+    /// @return next  The pending next-pool accumulator (low 104 bits of slot 11).
+    /// @return future The pending future-pool accumulator (bits 104-207 of slot 11).
     function pendingPools(DegenerusGame game)
         internal
         view
@@ -79,7 +80,8 @@ library SolvencyObligations {
             address(game),
             bytes32(PRIZE_POOL_PENDING_PACKED_SLOT)
         );
-        next = uint256(uint128(uint256(packed)));
-        future = uint256(uint128(uint256(packed) >> 128));
+        uint256 halfMask = (uint256(1) << 104) - 1;
+        next = uint256(packed) & halfMask;
+        future = (uint256(packed) >> 104) & halfMask;
     }
 }

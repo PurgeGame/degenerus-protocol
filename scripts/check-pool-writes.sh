@@ -43,7 +43,7 @@ EXTRACT="scripts/lib/rng_window_extract.py"
 
 # The counted terms + canonical mutator helpers. Must equal the manifest's
 # TRACKED_SET header line (SOLV-03).
-TRACKED_IDENTIFIERS="claimablePool,currentPrizePool,prizePoolsPacked,prizePoolPendingPacked,yieldAccumulator,_setPrizePools,_setPendingPools,_setCurrentPrizePool,_setFuturePrizePool,_addPrizeContribution,_creditClaimable,_addNextPrizePool,_addFuturePrizePool"
+TRACKED_IDENTIFIERS="claimablePool,currentPrizePool,prizePoolsPacked,prizePoolPendingPacked,yieldAccumulator,_setPrizePools,_setPendingPools,_resetPendingPools,_setCurrentPrizePool,_setFuturePrizePool,_addPrizeContribution,_creditClaimable,_addNextPrizePool,_addFuturePrizePool"
 
 # contracts/test holds test-only harnesses (not production surface).
 SCAN_EXCLUDE_DIRS="interfaces,mocks,test"

@@ -59,7 +59,7 @@ contract KeeperResolveBetWorstCaseGas is DeployProtocol {
     uint256 private constant DEGENERETTE_BETS_SLOT = 37;
     /// @dev degeneretteBetNonce mapping root slot (address => uint64) (post Stage-B game-storage repack: was 41).
     uint256 private constant DEGENERETTE_BET_NONCE_SLOT = 38;
-    /// @dev prizePoolsPacked at slot 2 ((future << 128) | next).
+    /// @dev prizePoolsPacked at slot 2 ([volume:48 | future:104 | next:104]).
     uint256 private constant PRIZE_POOLS_SLOT = 2;
 
     // -------------------------------------------------------------------------
@@ -614,14 +614,13 @@ contract KeeperResolveBetWorstCaseGas is DeployProtocol {
         vm.store(address(game), slot, bytes32(rngWord));
     }
 
-    /// @dev Set the futurePrizePool (high 128 bits of prizePoolsPacked at slot 2), keeping next intact.
+    /// @dev Set the futurePrizePool (future half, bits 104-207 of slot 2), keeping next and the volume counter intact.
     function _setFuturePool(uint128 future) internal {
         uint256 packed = uint256(vm.load(address(game), bytes32(uint256(PRIZE_POOLS_SLOT))));
-        uint128 next = uint128(packed);
         vm.store(
             address(game),
             bytes32(uint256(PRIZE_POOLS_SLOT)),
-            bytes32((uint256(future) << 128) | uint256(next))
+            bytes32((packed & ~(((uint256(1) << 104) - 1) << 104)) | (uint256(future) << 104))
         );
     }
 

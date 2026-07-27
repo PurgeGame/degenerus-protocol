@@ -1002,8 +1002,7 @@ contract DegeneretteHeroScoreTest is DeployProtocol {
         uint256 currentPacked = uint256(
             vm.load(address(game), bytes32(uint256(PRIZE_POOLS_PACKED_SLOT)))
         );
-        uint128 currentNext = uint128(currentPacked);
-        uint256 newPacked = (targetFuture << 128) | uint256(currentNext);
+        uint256 newPacked = (currentPacked & ~(((uint256(1) << 104) - 1) << 104)) | (targetFuture << 104);
         vm.store(address(game), bytes32(uint256(PRIZE_POOLS_PACKED_SLOT)), bytes32(newPacked));
     }
 

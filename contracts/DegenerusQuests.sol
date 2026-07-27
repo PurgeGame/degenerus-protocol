@@ -5,6 +5,7 @@ import "./interfaces/IDegenerusQuests.sol";
 import "./interfaces/IDegenerusGame.sol";
 import {ICoinflip} from "./interfaces/ICoinflip.sol";
 import {ContractAddresses} from "./ContractAddresses.sol";
+import {BitPackingLib} from "./libraries/BitPackingLib.sol";
 
 /**
  * @title DegenerusQuests
@@ -2514,6 +2515,32 @@ contract DegenerusQuests is IDegenerusQuests {
     ///      +1 rather than the level quest's LEVEL_QUEST_STREAK_BONUS — and, like that
     ///      bonus, it is a counter credit only, never the daily activity marker.
     uint16 private constant GROWTH_QUEST_STREAK_BONUS = 1;
+
+    /// @notice The two gates a parimutuel market applies to a bet. Read-only — no quest
+    ///         ledger writes.
+    /// @dev earnsReward = recordGrowthBet's own eligibility (level quest or active
+    ///      afking). mayBet = that, or an ever-written mintPacked_ word with the curse
+    ///      counter masked out — the one field a third party can write into a stranger's
+    ///      word (deity smite), and a curse alone must not open the markets.
+    /// @param player The player to test.
+    /// @param lvl The level to test against.
+    /// @return mayBet True if the player may place a bet at all.
+    /// @return earnsReward True if the placement also earns its quest or credit.
+    function marketBetGates(address player, uint24 lvl)
+        external
+        view
+        override
+        returns (bool mayBet, bool earnsReward)
+    {
+        earnsReward =
+            _isLevelQuestEligible(player, lvl) ||
+            questPlayerState[player].afkingActive;
+        mayBet =
+            earnsReward ||
+            (questGame.mintPackedFor(player) &
+                ~(BitPackingLib.MASK_8 << BitPackingLib.CURSE_COUNT_SHIFT)) !=
+            0;
+    }
 
     /// @notice Credit the growth-bet participation quest for a player.
     /// @dev Access: PARIMUTUEL only. Eligibility is the level quest's gate, or an active
