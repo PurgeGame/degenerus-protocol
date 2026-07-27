@@ -438,4 +438,56 @@ contract DailyRngStallRecovery is DeployProtocol {
         uint256 s0 = uint256(vm.load(address(game), bytes32(uint256(0))));
         return uint24(s0 >> 24);
     }
+
+    // ---------------------------------------------------------------------
+    // (4) The death clock owns game-over
+    // ---------------------------------------------------------------------
+
+    /// A VRF outage is a reason to keep waiting, never a cause of death: no stall, however
+    /// long, ends a level before its own day deadline.
+    function testVrfOutageCannotEndTheGameBeforeTheDeadline() public {
+        vm.pauseGasMetering();
+        _driveDay();
+        _stallDailyRequest();
+
+        // Far beyond the grace window, but nowhere near the 120-day deadline.
+        simTime += 60 days;
+        vm.warp(simTime);
+        assertFalse(
+            game.livenessTriggered(),
+            "a stall must not end the game before its day deadline"
+        );
+        assertFalse(game.gameOver(), "no game-over before the deadline");
+    }
+
+    /// Game-over is permanent in both directions: once the terminal path has run, the trigger
+    /// it latched on must keep reading true, or every liveness-gated paid entrypoint reopens
+    /// while the game is dead. The deadman reads currentDay - dailyIdx, so the terminal seal
+    /// must not retire that staleness.
+    function testGameOverImpliesLivenessAfterAJackpotPhaseDeadman() public {
+        vm.pauseGasMetering();
+        _driveToJackpotPhase();
+        _drainUntilUnlocked();
+        assertTrue(game.jackpotPhase(), "harness: must be inside the jackpot phase");
+
+        // VRF dies mid-jackpot-phase and never returns; the deadman is the only trigger here.
+        simTime += 121 days;
+        vm.warp(simTime);
+        assertTrue(game.livenessTriggered(), "harness: the deadman must fire");
+
+        for (uint256 j = 0; j < 400; j++) {
+            if (game.gameOver()) break;
+            _fulfillPending();
+            (bool ok, ) = address(game).call(
+                abi.encodeWithSignature("advanceGame()")
+            );
+            if (!ok) break;
+        }
+        assertTrue(game.gameOver(), "harness: the terminal path must latch game-over");
+
+        assertTrue(
+            game.livenessTriggered(),
+            "game-over must keep the liveness trigger set, not retire its own evidence"
+        );
+    }
 }

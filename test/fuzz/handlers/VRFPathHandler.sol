@@ -6,6 +6,7 @@ import {DegenerusGame} from "../../../contracts/DegenerusGame.sol";
 import {DegenerusAdmin} from "../../../contracts/DegenerusAdmin.sol";
 import {MockVRFCoordinator} from "../../../contracts/mocks/MockVRFCoordinator.sol";
 import {MintPaymentKind} from "../../../contracts/interfaces/IDegenerusGame.sol";
+import {GameTimeLib} from "../../../contracts/libraries/GameTimeLib.sol";
 
 /// @title VRFPathHandler -- Invariant handler for VRF path lifecycle testing
 /// @notice Wraps purchase/advanceGame/VRF/coordinatorSwap/warp operations while
@@ -74,7 +75,8 @@ contract VRFPathHandler is Test {
     ///      one slot-0 load: purchaseStartDay uint24 at byte 0, rngRequestTime uint48 at
     ///      byte 6, level uint24 at byte 12, jackpotPhaseFlag bool at byte 15,
     ///      lastPurchaseDay bool at byte 17. Constants mirror _DEPLOY_IDLE_TIMEOUT_DAYS
-    ///      (365), the 120-day mid-game idle timeout, and _VRF_GRACE_PERIOD (14 days).
+    ///      (365) and the 120-day mid-game idle timeout; past either deadline an in-flight
+    ///      pre-deadline request suppresses the trigger for _VRF_GRACE_PERIOD (14 days).
     ///      Once true at an advanceGame entry, that advance routes into the staged
     ///      terminal flow, whose entropy path (_gameOverEntropy) by design does NOT
     ///      backfill gap days.
@@ -84,10 +86,13 @@ contract VRFPathHandler is Test {
         uint24 lvl = uint24(raw >> 96);
         uint256 psd = uint24(raw);
         uint256 currentDay = game.currentDayView();
-        if (lvl == 0 && currentDay > psd + 365) return true;
-        if (lvl != 0 && currentDay > psd + 120) return true;
+        uint256 deadlineDay = psd + (lvl == 0 ? 365 : 120);
+        if (currentDay <= deadlineDay) return false;
         uint48 rngStart = uint48(raw >> 48);
-        return rngStart != 0 && block.timestamp - rngStart >= 14 days;
+        return
+            rngStart == 0 ||
+            block.timestamp - rngStart >= 14 days ||
+            GameTimeLib.currentDayIndexAt(rngStart) > deadlineDay;
     }
 
     modifier useActor(uint256 seed) {

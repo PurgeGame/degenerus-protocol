@@ -76,10 +76,12 @@ contract TerminalCohortSeeder is DegenerusGame {
     ) external {
         uint24 day = _simulatedDayIndex();
 
-        // Trigger game-over solely through the expired VRF-grace timer. Day-based liveness and the
-        // >120-day deadman remain false, so clearing this timer before gameOver latches would make
-        // the terminal path unreachable on the next transaction.
-        purchaseStartDay = day;
+        // Trigger game-over through an expired VRF-grace timer on a level already past its day
+        // deadline — past the deadline the grace window suppresses the trigger until the stall
+        // outlives it, so both legs are required. dailyIdx stays at `day`, keeping the >120-day
+        // deadman false, so clearing this timer before gameOver latches would make the terminal
+        // path unreachable on the next transaction.
+        purchaseStartDay = day - 121;
         dailyIdx = day;
         level = lvl;
         levelPrizePool[lvl] = type(uint256).max;

@@ -2314,7 +2314,11 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
     ///      Resets VRF state and re-enables RNG usage.
     /// @param day Current day index to record.
     function _unlockRng(uint24 day) private {
-        dailyIdx = day;
+        // Game-over keeps its stale dailyIdx: the deadman reads currentDay - dailyIdx, so
+        // advancing it here would retire the very staleness that declared the game dead and
+        // let _livenessTriggered read false again while gameOver stays true — reopening every
+        // liveness-gated paid entrypoint. A dead game seals no day, so nothing else wants it.
+        if (!gameOver) dailyIdx = day;
         rngLockedFlag = false;
         rngWordCurrent = 0;
         vrfRequestId = 0;

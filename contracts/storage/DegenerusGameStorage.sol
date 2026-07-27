@@ -1805,31 +1805,38 @@ abstract contract DegenerusGameStorage {
     ///      rngRequestTime during _handleGameOverPath) cannot transiently flip
     ///      liveness back to false while the drain is in progress.
     ///
-    ///      Stalled-advance bailout: if day math has not yet been met, ANY
-    ///      condition that leaves rngRequestTime non-zero for _VRF_GRACE_PERIOD
-    ///      fires liveness. This covers genuine VRF death (callback never lands)
-    ///      and any bug that prevents the advance state machine from reaching
-    ///      _unlockRng — gas exhaustion, unexpected reverts in drain/jackpot
-    ///      paths, or any other failure mode that bricks the cycle after a
-    ///      fulfilled callback. In all cases the historical-fallback path in
-    ///      _gameOverEntropy engages, letting funds drain to players via
-    ///      terminal jackpot rather than remaining trapped. Below that
-    ///      threshold, liveness stays false — players can propose a coordinator
-    ///      rotation via DegenerusAdmin, and missed days are credited back to
-    ///      purchaseStartDay in AdvanceModule.rngGate on fulfillment.
+    ///      The day clock is the sole cause of death: nothing ends a level
+    ///      before its deadline. Past the deadline, a request already in flight
+    ///      SUPPRESSES the trigger for _VRF_GRACE_PERIOD rather than confirming
+    ///      it, so a stall beginning near the deadline gets its full window to
+    ///      recover — players can propose a coordinator rotation via
+    ///      DegenerusAdmin, the 12h retry re-arms, and missed days are credited
+    ///      back to purchaseStartDay in AdvanceModule.rngGate on fulfillment.
+    ///      Once the stall outlives the window — genuine VRF death, or any bug
+    ///      that bricks the cycle before _unlockRng — the trigger fires and the
+    ///      historical-fallback path in _gameOverEntropy engages, letting funds
+    ///      drain to players via terminal jackpot rather than staying trapped.
+    ///      Suppression is bounded by the window, so terminal release is always
+    ///      reachable within it.
     function _livenessTriggered() internal view returns (bool) {
         // Jackpot / last-purchase suppress the in-phase clocks (they would false-fire in the
         // productive window between target-met and phase-transition close), but the
         // phase-independent VRF-death deadman still fires here so a permanently-stalled game in
         // these phases reaches terminal fund release instead of bricking.
         if (lastPurchaseDay || jackpotPhaseFlag) return _vrfDeadmanFired();
-        uint24 lvl = level;
-        uint24 psd = purchaseStartDay;
-        uint24 currentDay = _simulatedDayIndex();
-        if (lvl == 0 && currentDay - psd > _DEPLOY_IDLE_TIMEOUT_DAYS) return true;
-        if (lvl != 0 && currentDay - psd > 120) return true;
+        uint24 deadlineDay = purchaseStartDay +
+            uint24(level == 0 ? _DEPLOY_IDLE_TIMEOUT_DAYS : 120);
+        if (_simulatedDayIndex() <= deadlineDay) return false;
+        // Past the deadline. A request already in flight when it passed SUPPRESSES the trigger
+        // for the grace window instead of confirming it: the word can still land, and both the
+        // 12h retry and a coordinator rotation re-arm inside that window. Only a pre-deadline
+        // request suppresses — every later stamp is the terminal path's own request, which must
+        // never flip the trigger back off while the multi-tx drain is in progress.
         uint48 rngStart = rngRequestTime;
-        return rngStart != 0 && block.timestamp - rngStart >= _VRF_GRACE_PERIOD;
+        return
+            rngStart == 0 ||
+            block.timestamp - rngStart >= _VRF_GRACE_PERIOD ||
+            _simulatedDayIndexAt(rngStart) > deadlineDay;
     }
 
     /// @dev VRF-death deadman: true once no day has sealed for _VRF_DEADMAN_DAYS. dailyIdx
