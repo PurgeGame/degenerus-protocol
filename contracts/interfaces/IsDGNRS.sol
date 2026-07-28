@@ -65,13 +65,14 @@ interface IsDGNRS {
     function flipReserve() external view returns (uint256);
 
 
-    /// @notice Preview the output amounts from burning sDGNRS tokens
-    /// @dev Returns proportional amounts based on current reserves
+    /// @notice Preview the output from burning sDGNRS tokens
+    /// @dev Proportional share of current reserves, net of the redemption reservation. The value
+    ///      is paid as ETH, stETH, or a mix chosen at pay time — the two are at par, so it is
+    ///      reported as one wei-denominated figure.
     /// @param amount Amount of sDGNRS to simulate burning
-    /// @return ethOut Amount of ETH that would be returned
-    /// @return stethOut Amount of stETH that would be returned
+    /// @return ethOut Total value that would be returned, in wei (paid as ETH and/or stETH)
     /// @return flipOut Amount of FLIP that would be minted
-    function previewBurn(uint256 amount) external view returns (uint256 ethOut, uint256 stethOut, uint256 flipOut);
+    function previewBurnValue(uint256 amount) external view returns (uint256 ethOut, uint256 flipOut);
 
     /// @notice Check if day `day` has an unresolved gambling-burn pool.
     /// @param day Wall-clock day to query.
@@ -83,9 +84,11 @@ interface IsDGNRS {
     ///         Read by AdvanceModule to derive `dayToResolve` under both normal and stall paths.
     function pendingResolveDay() external view returns (uint24);
 
-    /// @notice Total ETH physically held but reserved for in-flight gambling-burn redemptions.
-    /// @dev Already excluded from the Game's terminal-drain balance: pullRedemptionReserve moves this
-    ///      ETH out of the Game and into sDGNRS at submit, so handleGameOverDrain never re-subtracts it.
+    /// @notice Total ETH value reserved in sDGNRS custody for in-flight gambling-burn redemptions.
+    /// @dev Backed sDGNRS-side either way — the ETH leg of pullRedemptionReserve moves the ETH out
+    ///      of the Game at submit, the custody leg pins sDGNRS's existing ETH + stETH — so it is
+    ///      never part of the Game's balance and handleGameOverDrain never subtracts it. Read by
+    ///      the custody leg to enforce cumulative coverage.
     function pendingRedemptionEthValue() external view returns (uint256);
 
     /// @notice Resolve day `dayToResolve`'s gambling-burn pool with RNG results.

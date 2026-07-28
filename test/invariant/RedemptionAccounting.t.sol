@@ -637,20 +637,32 @@ contract RedemptionAccounting is DeployProtocol {
             "lever: the burn pool must be resolved before the fail-closed phase"
         );
 
-        // Now drain sDGNRS's stETH so neither leg covers, and confirm the fail-closed branch fires.
-        // Move sDGNRS's stETH out (transfer to a sink) so the stETH leg can no longer cover.
+        // Now leave the custody leg zero headroom so no new increment can be admitted: drain
+        // sDGNRS's stETH to a sink and pin its ETH to exactly the outstanding reserve (custody ==
+        // pending keeps the solvency clauses green while covering nothing beyond what is owed).
         uint256 sdgnrsSteth = mockStETH.balanceOf(address(sdgnrs));
         if (sdgnrsSteth != 0) {
             vm.prank(address(sdgnrs));
             mockStETH.transfer(address(0xDEAD), sdgnrsSteth);
         }
         assertEq(mockStETH.balanceOf(address(sdgnrs)), 0, "lever: sDGNRS stETH must be drained for fail-closed");
+        vm.deal(address(sdgnrs), sdgnrs.pendingRedemptionEthValue());
+
+        // Re-seed claimable[SDGNRS] + claimablePool (mirrors setUp) so the submit base stays
+        // non-zero — custody nets to zero in the base, so the base is claimable-driven — and every
+        // burn below attempts a real reservation. The ETH leg still fails on the game's drained
+        // liquid ETH (action_burn deals it to 0 in fallback mode).
+        bytes32 claimableSlot = keccak256(abi.encode(address(sdgnrs), uint256(7)));
+        vm.store(address(game), claimableSlot, bytes32(uint256(100 ether)));
+        uint256 slot1Val = uint256(vm.load(address(game), bytes32(uint256(1))));
+        slot1Val = (slot1Val & type(uint128).max) | (uint256(100 ether) << 128);
+        vm.store(address(game), bytes32(uint256(1)), bytes32(slot1Val));
 
         // Re-assert ON mode without re-topping stETH (seed=3 -> seed%3==0 -> topUp=0).
         handler.action_toggleStethFallback(3);
         assertTrue(handler.stethFallbackMode(), "lever: fallback mode must remain ON");
 
-        // These burns must fail-closed (game ETH drained + stETH 0 + claimable possibly too small).
+        // These burns must fail-closed (game ETH drained + custody with zero headroom).
         for (uint256 i = 0; i < 10; i++) {
             handler.action_burn(100 + i, 5_000_000 ether);
             _assertSolvencyLocal("steth-lever fail-closed");

@@ -1120,7 +1120,8 @@ contract DegenerusGameMintModule is
         // Resolve the counterparty fail-closed: sDGNRS funds from its OWN claimable above a >=1 ETH
         // floor; if it cannot and the vault owner enabled the fallback, the vault buys above its
         // owner-set reserve floor; otherwise address(0) -> revert. The gambling-burn redemption desk is
-        // protected STRUCTURALLY (its ETH is segregated out of claimable at submit), so NO
+        // protected STRUCTURALLY (reservations are backed sDGNRS-side at submit: the ETH leg moves
+        // the ETH out of claimable, the custody leg pins sDGNRS's own holdings), so NO
         // pendingRedemptionEthValue term is needed; NO daily cap. The full budget is gated against the
         // buyer's claimable even though only the ETH part leaves claimable below (the FLIP part is paid
         // from the buyer's FLIP) — a strictly more conservative funding check.

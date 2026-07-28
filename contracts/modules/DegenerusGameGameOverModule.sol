@@ -83,9 +83,10 @@ contract DegenerusGameGameOverModule is DegenerusGameStorage {
 
         // Compute available funds FIRST (before any side effects)
         // Deity pass refunds have not happened yet, so claimablePool is pre-refund.
-        // sDGNRS redemption ETH is segregated out of the game at submit (pullRedemptionReserve
-        // transfers it to the sDGNRS contract), so it is no longer part of totalFunds here —
-        // subtracting pendingRedemptionEthValue would double-count it.
+        // sDGNRS redemption reservations are backed sDGNRS-side at submit (pullRedemptionReserve's
+        // ETH leg moves the ETH out of the game; its custody leg pins sDGNRS's own holdings), so
+        // they are never part of totalFunds here — subtracting pendingRedemptionEthValue would
+        // double-count them.
         uint256 reserved = uint256(claimablePool);
         uint256 preRefundAvailable = totalFunds > reserved ? totalFunds - reserved : 0;
 
@@ -169,8 +170,8 @@ contract DegenerusGameGameOverModule is DegenerusGameStorage {
         );
 
         // Recalculate available after refunds (claimablePool may have grown).
-        // sDGNRS redemption ETH was already segregated out of the game at submit, so it is not
-        // part of totalFunds here — only claimablePool is reserved.
+        // sDGNRS redemption reservations are backed sDGNRS-side at submit, so they are not part
+        // of totalFunds here — only claimablePool is reserved.
         uint256 postRefundReserved = uint256(claimablePool);
         uint256 available = totalFunds > postRefundReserved ? totalFunds - postRefundReserved : 0;
 

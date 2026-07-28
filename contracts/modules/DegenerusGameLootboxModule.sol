@@ -3,6 +3,7 @@ pragma solidity 0.8.34;
 
 import {IsDGNRS} from "../interfaces/IsDGNRS.sol";
 import {IStETH} from "../interfaces/IStETH.sol";
+import {MintPaymentKind} from "../interfaces/IDegenerusGame.sol";
 
 import {IDegenerusGameBoonModule, IDegenerusGameDegeneretteModule} from "../interfaces/IDegenerusGameModules.sol";
 import {IDegenerusQuests} from "../interfaces/IDegenerusQuests.sol";
@@ -941,9 +942,10 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     ///      max). This lets a partial- or zero-ETH sDGNRS (mid-game depletion) still settle — an
     ///      ETH-only forward would revert and strand the whole claim. Both media credit
     ///      futurePrizePool and count toward the game's claimablePool backing identically. No
-    ///      claimableWinnings[SDGNRS] debit occurs — the value was already pulled out of claimable
-    ///      at submit via pullRedemptionReserve, so reclassifying claimable here would double-spend
-    ///      it. Splits into 5 ETH boxes resolved by plain internal calls inside this one
+    ///      claimableWinnings[SDGNRS] debit occurs — pullRedemptionReserve backed the reservation
+    ///      sDGNRS-side at submit (claimable already debited on the ETH leg, never owed on the
+    ///      custody leg), so debiting claimable here would double-spend it. Splits into 5 ETH
+    ///      boxes resolved by plain internal calls inside this one
     ///      delegatecall frame (same Game storage context, identical per-chunk seed-rehash chain).
     /// @param player Player receiving lootbox rewards
     /// @param amount Total lootbox value to resolve (msg.value ETH + the stETH remainder pulled here)
@@ -1041,6 +1043,66 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         }
         _creditClaimable(player, amount);
         claimablePool += uint128(amount);
+    }
+
+    /// @notice Back the sDGNRS redemption reservation: segregate game-side ETH, or verify custody.
+    /// @dev Delegatecall target of the Game's pullRedemptionReserve stub, so msg.sender (sDGNRS)
+    ///      and address(this) (the Game) are both the caller's — the ETH leg's debit hits the
+    ///      Game's ledger and the transfer draws the Game's balance, exactly as an inline body
+    ///      would. Called by sDGNRS at gambling-burn submit to reserve the MAX (175%) owed for this
+    ///      burn so it can never be re-spent by a concurrent claimable drain (AfKing self-sub,
+    ///      claimWinnings, a second same-day claimant). Fail-closed, donation-robust:
+    ///      - ETH leg: if claimableWinnings[SDGNRS] AND the game's liquid ETH both cover `amount`,
+    ///        physically move the at-risk ETH out to sDGNRS (CHECKED debit, CEI).
+    ///      - Custody leg: otherwise (mid-game ETH depletion, or a stETH donation inflating the
+    ///        submit base beyond claimable), sDGNRS's own ETH + stETH custody backs the reservation
+    ///        in place — no game-side move or ledger debit; the caller's pendingRedemptionEthValue
+    ///        records it and the claim pays from custody. Coverage is CUMULATIVE (custody covers
+    ///        every outstanding reservation plus this one), keeping in-contract ETH + stETH >=
+    ///        pendingRedemptionEthValue an invariant.
+    ///      - Neither leg covers => revert (fail-closed).
+    /// @param amount The MAX 175% reservation for this burn.
+    /// @custom:reverts OnlySDGNRS If caller is not sDGNRS.
+    /// @custom:reverts TransferFailed If the ETH transfer fails.
+    /// @custom:reverts Insolvent If neither the ETH nor the custody leg covers `amount`.
+    function pullRedemptionReserve(uint256 amount) external {
+        if (msg.sender != ContractAddresses.SDGNRS) revert OnlySDGNRS();
+        if (amount == 0) return;
+
+        // ETH leg: the claimable[SDGNRS] ledger AND the game's liquid ETH both cover
+        // `amount` — segregate the at-risk ETH out to sDGNRS. CHECKED debit (no unchecked); CEI.
+        uint256 packedSD = balancesPacked[ContractAddresses.SDGNRS];
+        if (
+            uint128(packedSD) >= amount &&
+            address(this).balance >= amount
+        ) {
+            // _debitClaimable's guard is dead here — the branch already proved the low half
+            // covers `amount`, so `packedSD - amount` touches only the low half (no borrow).
+            // Residual for the event is the post-debit low half, computed from the cache.
+            balancesPacked[ContractAddresses.SDGNRS] = packedSD - amount;
+            claimablePool -= uint128(amount);
+            emit ClaimableSpent(ContractAddresses.SDGNRS, amount, uint128(packedSD) - amount, MintPaymentKind.Internal, amount);
+            (bool ok, ) = payable(ContractAddresses.SDGNRS).call{value: amount}("");
+            if (!ok) revert TransferFailed();
+            return;
+        }
+
+        // Custody leg (fallback): the ETH side cannot cover (mid-game ETH depletion, or a stETH
+        // donation inflated the submit base beyond claimable[SDGNRS]). sDGNRS's own ETH + stETH
+        // custody backs the reservation in place, so NO game-side move or ledger debit is needed —
+        // the caller's pendingRedemptionEthValue records it and the claim pays from custody.
+        // Coverage is CUMULATIVE: custody must cover every outstanding reservation plus this one
+        // (pendingRedemptionEthValue is read pre-increment), so the same custody can never back two
+        // reservations and in-contract ETH + stETH >= pendingRedemptionEthValue holds inductively.
+        if (
+            ContractAddresses.SDGNRS.balance + steth.balanceOf(ContractAddresses.SDGNRS) >=
+            IsDGNRS(ContractAddresses.SDGNRS).pendingRedemptionEthValue() + amount
+        ) {
+            return;
+        }
+
+        // Neither leg covers => fail-closed.
+        revert Insolvent();
     }
 
     /// @notice Resolve an AfKing-subscription box at the LIVE level from a caller-passed

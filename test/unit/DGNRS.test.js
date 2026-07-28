@@ -528,7 +528,7 @@ describe("DGNRS", function () {
       await fundGameClaimableForSdgnrs(gameAddr, sdgnrsAddr, eth("100"));
 
       // Preview before burn
-      const [ethOut, stethOut, flipOut] = await sdgnrs.previewBurn(sdgnrsAmount);
+      const [ethOut, flipOut] = await sdgnrs.previewBurnValue(sdgnrsAmount);
 
       // Burn — during active game this enters the gambling path (RedemptionSubmitted).
       // ETH is segregated but not immediately paid; payout is deferred until redemption is claimed.
@@ -589,12 +589,11 @@ describe("DGNRS", function () {
         params: [gameAddr],
       });
 
-      // previewBurn's ETH/stETH split is byte-identical to v46: when ETH-available
-      // (ethBal + claimableEth - pendingRedemptionEthValue) is below the owed value,
-      // the remainder spills to stETH. Take the preview here, with claimableEth
-      // still unfunded, to assert the (unchanged) stETH-allocation behavior.
-      const [, stethPreview] = await sdgnrs.previewBurn(sdgnrsAmount);
-      expect(stethPreview).to.be.gt(0n);
+      // previewBurnValue reports one wei figure paid as ETH and/or stETH; the deposited
+      // stETH is part of the base, so the preview must be positive here with claimableEth
+      // still unfunded.
+      const [valuePreview] = await sdgnrs.previewBurnValue(sdgnrsAmount);
+      expect(valuePreview).to.be.gt(0n);
 
       // v47: now fund the segregation source (claimableWinnings[SDGNRS]) so the
       // CHECKED pullRedemptionReserve in the gambling-burn path succeeds. See the
@@ -625,24 +624,22 @@ describe("DGNRS", function () {
   });
 
   // ---------------------------------------------------------------------------
-  // 11. previewBurn
+  // 11. previewBurnValue
   // ---------------------------------------------------------------------------
-  describe("previewBurn", function () {
+  describe("previewBurnValue", function () {
     it("returns zeros when amount is 0", async function () {
       const { sdgnrs } = await loadFixture(deployFullProtocol);
-      const [ethOut, stethOut, flipOut] = await sdgnrs.previewBurn(0n);
+      const [ethOut, flipOut] = await sdgnrs.previewBurnValue(0n);
       expect(ethOut).to.equal(0n);
-      expect(stethOut).to.equal(0n);
       expect(flipOut).to.equal(0n);
     });
 
     it("returns zeros when amount exceeds total supply", async function () {
       const { sdgnrs } = await loadFixture(deployFullProtocol);
-      const [ethOut, stethOut, flipOut] = await sdgnrs.previewBurn(
+      const [ethOut, flipOut] = await sdgnrs.previewBurnValue(
         INITIAL_SUPPLY * 2n
       );
       expect(ethOut).to.equal(0n);
-      expect(stethOut).to.equal(0n);
       expect(flipOut).to.equal(0n);
     });
 
@@ -668,7 +665,7 @@ describe("DGNRS", function () {
 
       // Preview for 1% of supply
       const onePercent = INITIAL_SUPPLY / 100n;
-      const [ethOut, stethOut, flipOut] = await sdgnrs.previewBurn(onePercent);
+      const [ethOut, flipOut] = await sdgnrs.previewBurnValue(onePercent);
       // 1% of 100 ETH = 1 ETH
       expect(ethOut).to.be.closeTo(eth("1"), eth("0.01"));
     });

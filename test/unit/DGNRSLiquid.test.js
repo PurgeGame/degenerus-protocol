@@ -412,9 +412,9 @@ describe("DGNRS (DGNRS Liquid Token)", function () {
       await sdgnrs.connect(gameSigner).depositSteth(eth("10"));
       await hre.network.provider.request({ method: "hardhat_stopImpersonatingAccount", params: [gameAddr] });
 
-      // Preview should show stETH output
-      const [, stethPreview] = await dgnrs.previewBurn(amount);
-      expect(stethPreview).to.be.gt(0n);
+      // Preview should reflect the stETH backing in the combined value
+      const [valuePreview] = await dgnrs.previewBurnValue(amount);
+      expect(valuePreview).to.be.gt(0n);
 
       // Burn and verify stETH forwarded
       const stethBefore = await mockStETH.balanceOf(alice.address);
@@ -432,19 +432,18 @@ describe("DGNRS (DGNRS Liquid Token)", function () {
   });
 
   // ===========================================================================
-  // 5. previewBurn
+  // 5. previewBurnValue
   // ===========================================================================
-  describe("previewBurn", function () {
-    it("delegates to sDGNRS previewBurn", async function () {
+  describe("previewBurnValue", function () {
+    it("delegates to sDGNRS previewBurnValue", async function () {
       const { dgnrs, sdgnrs, game } = await loadFixture(deployFullProtocol);
       await depositETH(sdgnrs, game, eth("100"));
 
       const amount = eth("1000");
-      const [ethD, stethD, flipD] = await dgnrs.previewBurn(amount);
-      const [ethS, stethS, flipS] = await sdgnrs.previewBurn(amount);
+      const [ethD, flipD] = await dgnrs.previewBurnValue(amount);
+      const [ethS, flipS] = await sdgnrs.previewBurnValue(amount);
 
       expect(ethD).to.equal(ethS);
-      expect(stethD).to.equal(stethS);
       expect(flipD).to.equal(flipS);
     });
   });

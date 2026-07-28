@@ -343,6 +343,12 @@ interface IDegenerusGameLootboxModule {
     /// @param amount Total direct-half value (msg.value ETH + the stETH remainder pulled here).
     function creditRedemptionDirect(address player, uint256 amount) external payable;
 
+    /// @notice Back an sDGNRS redemption reservation — segregate game-side ETH (ETH leg) or verify
+    ///         sDGNRS's cumulative ETH + stETH custody (custody leg); delegatecall target of the
+    ///         Game's thin stub. Fail-closed when neither leg covers.
+    /// @param amount The MAX 175% reservation for the burn.
+    function pullRedemptionReserve(uint256 amount) external;
+
     /// @notice Resolve an AfKing-subscription box at the LIVE level from a caller-passed
     ///         frozen-day word.
     /// @dev The LIVE-level twin of resolveLootboxDirect — the box rolls from the LIVE level

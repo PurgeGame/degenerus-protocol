@@ -995,24 +995,23 @@ contract StakedStonkRedemption is DeployProtocol {
         );
     }
 
-    /// @notice REDEEM-08 C5 fail-closed drain variant (AfKing SUB-09): if claimableWinnings[SDGNRS]
-    ///         is drained below the MAX(175%) the submit needs, the CHECKED pullRedemptionReserve
-    ///         reverts — fail-closed — rather than leaving a virtual reserve a later drain could
-    ///         underflow. Once claimable recovers, the same burn succeeds.
+    /// @notice REDEEM-08 C5 drain variant (AfKing SUB-09): when claimableWinnings[SDGNRS] is
+    ///         drained below the MAX(175%) the submit needs, the ETH leg is skipped — its CHECKED
+    ///         debit never touches the short ledger, so claimable cannot wrap — and the custody leg
+    ///         admits the reservation only because sDGNRS's own ETH + stETH covers ALL outstanding
+    ///         reservations plus this one. The claim stays fully backed in-contract; once claimable
+    ///         and the game's liquid ETH recover, later burns take the ETH leg again.
     /// @dev The realistic drain: by the time the submit computes its MAX(175%) increment, the
     ///      AfKing SUB-09 self-sub has already pulled claimableWinnings[SDGNRS] down (between days).
     ///      The burn's `ethValueOwed` is proportional to `totalMoney = sDGNRS.balance + stETH +
-    ///      claimable - pendingRedemptionEthValue`; to reach a positive `ethValueOwed` (hence a
-    ///      positive `maxIncrement` to segregate) WHILE claimable is short, fund sDGNRS's own ETH
-    ///      balance (drives totalMoney up) but starve claimableWinnings[SDGNRS] (the segregation
-    ///      source). The CHECKED debit in pullRedemptionReserve then underflows → reverts → the whole
-    ///      burn reverts (the redeemer's sDGNRS is NOT burned). After claimable recovers, the burn lands.
-    function testReproSubmitFailClosedOnClaimableShortfall() public {
+    ///      claimable - pendingRedemptionEthValue`, so sDGNRS's own ETH balance both drives the
+    ///      base up AND backs the reservation the custody leg admits against.
+    function testReproSubmitCustodyBackedOnClaimableShortfall() public {
         uint32 dayBurn = game.currentDayView();
         uint256 burnAmount = 1000 ether;
 
-        // Drive totalMoney up via sDGNRS's own ETH balance (so ethValueOwed > 0 → maxIncrement > 0),
-        // but STARVE claimable[SDGNRS] (the segregation source the CHECKED pull draws from).
+        // Fund sDGNRS's own ETH custody (drives totalMoney up so ethValueOwed > 0 → maxIncrement
+        // > 0, AND backs the reservation), but STARVE claimable[SDGNRS] so the ETH leg cannot run.
         // slot 7 = balancesPacked (v61); starve the claimable LOW half, preserve the afking high half.
         vm.deal(address(sdgnrs), 100 ether);
         bytes32 claimableSlot = keccak256(abi.encode(address(sdgnrs), uint256(7)));
@@ -1026,23 +1025,27 @@ contract StakedStonkRedemption is DeployProtocol {
         uint256 supplyBefore = sdgnrs.totalSupply();
         uint256 balBefore = sdgnrs.balanceOf(playerA);
 
-        // Prime dayBurn's RNG so the burn passes the admission gate and the revert it hits is the
-        // intended shortfall fail-closed (CHECKED pullRedemptionReserve underflow), not the gate.
-        // Both this fail-closed burn and the post-recovery burn below land on dayBurn → one prime.
+        // Prime dayBurn's RNG so the burn passes the admission gate. Both this custody-backed burn
+        // and the post-recovery burn below land on dayBurn → one prime.
         _primeCurrentDayRng();
 
-        // Fail-closed: the burn reverts because the CHECKED pull can't segregate the MAX.
+        // Custody-backed: the burn lands without touching the starved claimable.
         vm.prank(playerA);
-        vm.expectRevert();
         sdgnrs.burn(burnAmount);
 
-        // No sDGNRS was burned (fail-closed: state rolled back), claimable did NOT wrap.
-        assertEq(sdgnrs.totalSupply(), supplyBefore, "drain: supply changed on a fail-closed burn");
-        assertEq(sdgnrs.balanceOf(playerA), balBefore, "drain: balance changed on a fail-closed burn");
-        assertLt(_claimableSdgnrs(), uint256(type(uint96).max), "drain: claimable wrapped on shortfall");
+        assertLt(sdgnrs.totalSupply(), supplyBefore, "drain: custody-backed burn did not land");
+        assertEq(sdgnrs.balanceOf(playerA), balBefore - burnAmount, "drain: burn debited the wrong amount");
+        assertEq(_claimableSdgnrs(), 1, "drain: starved claimable was touched (ETH leg must be skipped)");
+        (uint96 evShort, , ) = sdgnrs.pendingRedemptions(playerA, uint24(dayBurn));
+        assertGt(uint256(evShort), 0, "drain: claim slot not populated by the custody-backed burn");
+        assertGe(
+            address(sdgnrs).balance + mockStETH.balanceOf(address(sdgnrs)),
+            sdgnrs.pendingRedemptionEthValue(),
+            "drain: reservation exceeds sDGNRS custody"
+        );
 
-        // Recover claimable (the AfKing drain reverses / the pool refills) → the burn now succeeds.
-        // Refill the claimable LOW half of balancesPacked, preserving the afking high half.
+        // Recover claimable + the game's liquid ETH (the AfKing drain reverses / the pool refills)
+        // → a further same-day burn takes the ETH leg again (the pull debits claimable).
         packed = uint256(vm.load(address(game), claimableSlot));
         packed = (packed & (type(uint256).max << 128)) | uint128(uint256(100 ether));
         vm.store(address(game), claimableSlot, bytes32(packed));
@@ -1051,13 +1054,15 @@ contract StakedStonkRedemption is DeployProtocol {
         vm.store(address(game), bytes32(uint256(1)), bytes32(slot1));
         vm.deal(address(game), 100 ether);
 
+        uint256 claimableBeforeRecovery = _claimableSdgnrs();
         vm.prank(playerA);
         sdgnrs.burn(burnAmount);
 
-        // Burn landed: supply dropped, a claim slot exists for the day.
-        assertLt(sdgnrs.totalSupply(), supplyBefore, "drain: burn did not land after claimable recovered");
+        // Burn landed on the ETH leg: supply dropped further, claimable was debited by the pull.
+        assertLt(sdgnrs.totalSupply(), supplyBefore - burnAmount, "drain: burn did not land after claimable recovered");
+        assertLt(_claimableSdgnrs(), claimableBeforeRecovery, "drain: recovery burn did not take the ETH leg");
         (uint96 ev, , ) = sdgnrs.pendingRedemptions(playerA, uint24(dayBurn));
-        assertGt(uint256(ev), 0, "drain: claim slot not populated after recovery burn");
+        assertGt(uint256(ev), uint256(evShort), "drain: claim slot not accumulated by the recovery burn");
     }
 
     // =====================================================================

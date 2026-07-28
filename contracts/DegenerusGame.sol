@@ -1854,54 +1854,21 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         if (!ok) _revertDelegate(data);
     }
 
-    /// @notice Physically segregate the sDGNRS redemption reservation as pure ETH or pure stETH.
+    /// @notice Back the sDGNRS redemption reservation: segregate game-side ETH, or verify custody.
     /// @dev Called by sDGNRS at gambling-burn submit to reserve the MAX (175%) owed for this burn so
     ///      it can never be re-spent by a concurrent claimable drain (AfKing self-sub, claimWinnings,
-    ///      a second same-day claimant). Pure-ETH OR pure-stETH (no mix), fail-closed, donation-robust:
-    ///      - ETH leg: if claimableWinnings[SDGNRS] AND the game's liquid ETH both cover `amount`,
-    ///        physically move the at-risk ETH out to sDGNRS (CHECKED debit, CEI).
-    ///      - stETH leg: otherwise (mid-game ETH depletion, or a stETH donation inflating the submit
-    ///        base beyond claimable), sDGNRS's own stETH already backs the reservation in safe custody,
-    ///        so no game-side move or ledger debit is needed — the caller's pendingRedemptionEthValue
-    ///        records it and the claim pays stETH. Coverage is checked against sDGNRS's stETH balance.
-    ///      - Neither pure leg covers => revert (fail-closed; not a realistic state).
-    /// @param amount The MAX 175% reservation for this burn.
-    /// @custom:reverts OnlySDGNRS If caller is not sDGNRS.
-    /// @custom:reverts TransferFailed If the ETH transfer fails.
-    /// @custom:reverts Insolvent If neither the ETH nor the stETH leg covers `amount`.
-    function pullRedemptionReserve(uint256 amount) external {
-        if (msg.sender != ContractAddresses.SDGNRS) revert OnlySDGNRS();
-        if (amount == 0) return;
-
-        // ETH leg (as today): the claimable[SDGNRS] ledger AND the game's liquid ETH both cover
-        // `amount` — segregate the at-risk ETH out to sDGNRS. CHECKED debit (no unchecked); CEI.
-        uint256 packedSD = balancesPacked[ContractAddresses.SDGNRS];
-        if (
-            uint128(packedSD) >= amount &&
-            address(this).balance >= amount
-        ) {
-            // _debitClaimable's guard is dead here — the branch already proved the low half
-            // covers `amount`, so `packedSD - amount` touches only the low half (no borrow).
-            // Residual for the event is the post-debit low half, computed from the cache.
-            balancesPacked[ContractAddresses.SDGNRS] = packedSD - amount;
-            claimablePool -= uint128(amount);
-            emit ClaimableSpent(ContractAddresses.SDGNRS, amount, uint128(packedSD) - amount, MintPaymentKind.Internal, amount);
-            (bool ok, ) = payable(ContractAddresses.SDGNRS).call{value: amount}("");
-            if (!ok) revert TransferFailed();
-            return;
-        }
-
-        // stETH leg (fallback): the ETH side cannot cover (mid-game ETH depletion, or a stETH
-        // donation inflated the submit base beyond claimable[SDGNRS]). sDGNRS already holds its own
-        // stETH backing in safe custody, so NO game-side move or ledger debit is needed — the
-        // reservation is recorded by the caller's pendingRedemptionEthValue and paid in stETH at
-        // claim. Coverage is checked against sDGNRS's stETH balance (the basis a donation inflates).
-        if (steth.balanceOf(ContractAddresses.SDGNRS) >= amount) {
-            return;
-        }
-
-        // Neither pure leg covers => fail-closed.
-        revert Insolvent();
+    ///      a second same-day claimant). Thin delegatecall dispatch stub into the lootbox module —
+    ///      the sDGNRS-gated redemption surface, alongside resolveRedemptionLootbox and
+    ///      creditRedemptionDirect — which holds the auth gate, the ETH leg's CHECKED debit and
+    ///      transfer, and the cumulative custody leg. The signature matches the module function
+    ///      exactly (identical selector), so the calldata forwards as-is — re-encoding here would
+    ///      cost contract-size headroom for no behavior change.
+    ///      Signature: pullRedemptionReserve(uint256 amount). `amount` is the MAX 175% reservation.
+    function pullRedemptionReserve(uint256) external {
+        (bool ok, bytes memory data) = ContractAddresses
+            .GAME_LOOTBOX_MODULE
+            .delegatecall(msg.data);
+        if (!ok) _revertDelegate(data);
     }
 
     /// @notice Sell far-future ticket entries to sDGNRS for current-level tickets + cash (-EV exit).

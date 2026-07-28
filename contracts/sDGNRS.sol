@@ -48,7 +48,8 @@ interface IDegenerusGamePlayer {
     function resolveRedemptionLootbox(address player, uint256 amount, uint256 rngWord, uint16 activityScore) external payable;
     /// @notice Credit a redemption's direct half to `player`'s game claimable (same ETH + stETH-remainder funding).
     function creditRedemptionDirect(address player, uint256 amount) external payable;
-    /// @notice Segregate redemption ETH out of claimableWinnings[SDGNRS] into the sDGNRS balance.
+    /// @notice Back a redemption reservation: segregate claimableWinnings[SDGNRS] ETH into the
+    ///         sDGNRS balance, or verify sDGNRS's cumulative ETH + stETH custody covers it.
     function pullRedemptionReserve(uint256 amount) external;
 }
 
@@ -212,8 +213,10 @@ contract sDGNRS {
     ///      / `pendingRedemptionEthValue()` / `pendingResolveDay()` getters preserve the original ABI.
     uint128 private _totalSupply;
 
-    /// @dev Total physically-segregated redemption ETH across all unresolved periods. uint96 holds
-    ///      7.9e28 wei (~658x the total ETH supply) — real-ETH-bounded, safe. Packed into slot 0.
+    /// @dev Total reserved redemption ETH value across all unresolved periods, backed by this
+    ///      contract's own ETH + stETH custody (the ETH leg moves it in; the custody leg pins
+    ///      existing holdings). uint96 holds 7.9e28 wei (~658x the total ETH supply) —
+    ///      real-ETH-bounded, safe. Packed into slot 0.
     uint96 private _pendingRedemptionEthValue;
 
     /// @notice Wall-day of the currently-pending unresolved gambling-burn pool, or 0 if none.
@@ -310,10 +313,11 @@ contract sDGNRS {
     uint256 private constant MAX_DAILY_REDEMPTION_EV = 160 ether;
 
     /// @dev Maximum redemption roll (percent). The resolve roll is in [25, 175]; at submit the
-    ///      MAX possible payout (base × MAX_ROLL / 100) is physically segregated out of
-    ///      claimableWinnings[SDGNRS] into this contract so no concurrent claimable drain can
-    ///      under-fund a later claim. Resolve lowers the reservation from MAX down to the rolled
-    ///      amount (accounting only — the over-pull stays as free backing).
+    ///      MAX possible payout (base × MAX_ROLL / 100) is reserved — moved out of
+    ///      claimableWinnings[SDGNRS] into this contract, or pinned against this contract's own
+    ///      ETH + stETH custody — so no concurrent claimable drain can under-fund a later claim.
+    ///      Resolve lowers the reservation from MAX down to the rolled amount (accounting only —
+    ///      any over-pull stays as free backing).
     uint256 private constant MAX_ROLL = 175;
 
     /// @dev Minimum gambling-burn amount (1 whole sDGNRS = 1e18 raw). Required by the 1-slot
@@ -838,8 +842,10 @@ contract sDGNRS {
         if (claim.ethValueOwed == 0 && (isTerminal || claim.flipEscrow == 0)) return false;
         uint16 claimActivityScore = claim.activityScore;
 
-        // Total rolled ETH. Per-claimant floor division may leave up to (n-1) wei
-        // dust in pendingRedemptionEthValue per period — economically negligible.
+        // Total rolled ETH. `ethValueOwed` is gwei-snapped at submit and 1e9 / 100 is an exact
+        // integer, so this division truncates nothing: a day's per-claim releases sum to exactly
+        // the `rolledEth` that resolve left in pendingRedemptionEthValue — no residue, and the
+        // decrement below cannot underflow.
         uint256 totalRolledEth = (claim.ethValueOwed * roll) / 100;
 
         // 50/50 split (unless terminal → 100% direct)
@@ -953,36 +959,23 @@ contract sDGNRS {
     //                          VIEW FUNCTIONS
     // =====================================================================
 
-    /// @notice Preview ETH, stETH, and FLIP output for burning sDGNRS
-    /// @dev Reflects ETH-preferential payout logic using current balances and claimables.
-    ///      Deducts pendingRedemptionEthValue to exclude the ETH physically segregated for
-    ///      gambling-burn claimants. GameOver burns pay no FLIP (pure ETH/stETH).
+    /// @notice Preview the value and FLIP output for burning sDGNRS
+    /// @dev Mirrors the burn's sizing exactly: the proportional share of ETH + stETH + claimable,
+    ///      net of pendingRedemptionEthValue (owed to gambling-burn claimants). The value is paid
+    ///      as ETH, stETH, or a mix chosen at pay time — the two are at par protocol-wide, so it
+    ///      is reported as one wei-denominated figure. GameOver burns pay no FLIP.
     /// @param amount Amount of sDGNRS to burn
-    /// @return ethOut ETH that would be received
-    /// @return stethOut stETH that would be received
+    /// @return ethOut Total value that would be received, in wei (paid as ETH and/or stETH)
     /// @return flipOut FLIP that would be received (0 during gameOver)
-    function previewBurn(uint256 amount) external view returns (uint256 ethOut, uint256 stethOut, uint256 flipOut) {
+    function previewBurnValue(uint256 amount) external view returns (uint256 ethOut, uint256 flipOut) {
         uint256 supply = _totalSupply;
-        if (amount == 0 || amount > supply) return (0, 0, 0);
+        if (amount == 0 || amount > supply) return (0, 0);
 
-        uint256 ethBal = address(this).balance;
-        uint256 stethBal = steth.balanceOf(address(this));
-        uint256 claimableEth = _claimableWinnings();
-        uint256 totalMoney = ethBal + stethBal + claimableEth - _pendingRedemptionEthValue;
-        uint256 totalValueOwed = (totalMoney * amount) / supply;
-
-        uint256 ethAvailable = ethBal + claimableEth;
-        if (ethAvailable > _pendingRedemptionEthValue) {
-            ethAvailable -= _pendingRedemptionEthValue;
-        } else {
-            ethAvailable = 0;
-        }
-        if (totalValueOwed <= ethAvailable) {
-            ethOut = totalValueOwed;
-        } else {
-            ethOut = ethAvailable;
-            stethOut = totalValueOwed - ethOut;
-        }
+        uint256 totalMoney = address(this).balance +
+            steth.balanceOf(address(this)) +
+            _claimableWinnings() -
+            _pendingRedemptionEthValue;
+        ethOut = (totalMoney * amount) / supply;
 
         // GameOver burns pay no FLIP. sDGNRS's full FLIP backing is its seed-reserve claimable +
         // the auto-rebuy carry (incoming FLIP rides tomorrow's stake and settles into these);
@@ -1021,9 +1014,10 @@ contract sDGNRS {
         _submitGamblingClaimFrom(player, player, amount);
     }
 
-    /// @dev Core gambling burn logic. Burns sDGNRS from burnFrom, physically segregates the MAX
-    ///      (175%) proportional ETH payout out of claimableWinnings[SDGNRS] into this contract's
-    ///      balance (fail-closed if it cannot), and settles the proportional FLIP share entirely
+    /// @dev Core gambling burn logic. Burns sDGNRS from burnFrom, reserves the MAX (175%)
+    ///      proportional ETH payout (moved out of claimableWinnings[SDGNRS], or pinned against
+    ///      this contract's own ETH + stETH custody; fail-closed if neither covers), and settles
+    ///      the proportional FLIP share entirely
     ///      at submit as a conserved coinflip flip-credit (no reserve, no roll, no claim-time FLIP).
     ///      Enforces 50% supply cap per day (lazy-init) and 160 ETH per-(wallet, day) EV cap.
     ///      Writes the per-claim slot at composite key `pendingRedemptions[beneficiary][currentPeriod]`,
@@ -1099,12 +1093,13 @@ contract sDGNRS {
         }
         emit Transfer(burnFrom, address(0), amount);
 
-        // === Reserve the MAX (175%) payout for this burn (pure ETH OR pure stETH) ===
+        // === Reserve the MAX (175%) payout for this burn ===
         // Pull the MAX so no concurrent claimable drain (the protocol-owned self-sub, a 2nd same-day
         // claimant, claimWinnings) can under-fund a later claim. pullRedemptionReserve segregates the
         // reservation as pure ETH (moved out of claimableWinnings[SDGNRS]) when the ETH side covers it,
-        // else pure stETH backed by sDGNRS's own balance (no game-side move); it reverts fail-closed
-        // only if NEITHER pure leg covers. pendingRedemptionEthValue below records the segregated MAX.
+        // else verifies this contract's own ETH + stETH custody covers ALL outstanding reservations
+        // plus this one (custody leg, no game-side move); it reverts fail-closed when neither leg
+        // covers. pendingRedemptionEthValue below records the segregated MAX.
         //
         // The per-day pool tracks the BASE (100%) in gwei; resolve reconstructs the segregated MAX
         // as floor(poolBaseWei × MAX_ROLL / 100). To make the cumulative increment here reconcile
@@ -1156,8 +1151,8 @@ contract sDGNRS {
     /// @dev Pay the redemption from this contract's balance: ETH first, falling back to stETH if the
     ///      ETH balance is insufficient. No game.claimWinnings pull — at submit, pullRedemptionReserve
     ///      either physically moved the ETH out of claimableWinnings[SDGNRS] into this contract (ETH
-    ///      leg) or left sDGNRS's own stETH backing the reservation (stETH leg); either way the
-    ///      backing is already in this contract's balance.
+    ///      leg) or verified this contract's own ETH + stETH custody covers all outstanding
+    ///      reservations (custody leg); either way the backing is already in this contract's balance.
     function _payEth(address player, uint256 amount) private {
         if (amount == 0) return;
         uint256 ethBal = address(this).balance;

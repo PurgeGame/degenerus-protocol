@@ -34,7 +34,7 @@
 # TRACKED_SET: claimablePool currentPrizePool prizePoolsPacked prizePoolPendingPacked yieldAccumulator _setPrizePools _setPendingPools _resetPendingPools _setCurrentPrizePool _setFuturePrizePool _addPrizeContribution _creditClaimable _addNextPrizePool _addFuturePrizePool
 CLASS	IDENTIFIER	FUNCTION	FILE	MODE	RATIONALE
 VALUE-OUT	claimablePool	_claimWinningsInternal	DegenerusGame.sol	WRITE	player withdrawal: aggregate falls as ETH leaves (CEI); per-player claimable zeroed in tandem
-VALUE-OUT	claimablePool	pullRedemptionReserve	DegenerusGame.sol	WRITE	redemption reserve segregated to sDGNRS: ETH transfers out; re-counted there as pendingRedemptionEthValue (boundary paired by RedemptionAccounting)
+VALUE-OUT	claimablePool	pullRedemptionReserve	modules/DegenerusGameLootboxModule.sol	WRITE	redemption reserve segregated to sDGNRS: ETH transfers out; re-counted there as pendingRedemptionEthValue (boundary paired by RedemptionAccounting)
 VALUE-OUT	claimablePool	withdrawAfkingFunding	DegenerusGame.sol	WRITE	prepaid afking returned to funder; per-player afking half debited in tandem
 POOL-TO-POOL	_setPrizePools	_consolidatePoolsAndRewardJackpots	modules/DegenerusGameAdvanceModule.sol	READ	end-of-level consolidation write-back of the memory-composed next/future pools
 POOL-TO-POOL	claimablePool	_consolidatePoolsAndRewardJackpots	modules/DegenerusGameAdvanceModule.sol	WRITE	BAF + decimator claimableDelta: future -> claimable; rounds thereby PRE-COUNTED for later per-player claims

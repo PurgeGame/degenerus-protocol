@@ -7,7 +7,7 @@ import {sDGNRS} from "../../contracts/sDGNRS.sol";
 
 /// @title RedemptionGasTest -- Gas benchmarks for all sDGNRS redemption functions
 /// @notice Exercises burn, burnWrapped, resolveRedemptionPeriod, claimRedemption,
-///         hasPendingRedemptions, and previewBurn in isolation for clean gas measurement.
+///         hasPendingRedemptions, and previewBurnValue in isolation for clean gas measurement.
 /// @dev Inherits DeployProtocol for full 28-contract deployment. Gas snapshot baseline
 ///      captured via `forge snapshot --match-path "test/fuzz/RedemptionGas.t.sol"`.
 contract RedemptionGasTest is DeployProtocol {
@@ -179,11 +179,11 @@ contract RedemptionGasTest is DeployProtocol {
     //                     PREVIEW BURN
     // =====================================================================
 
-    /// @notice Gas benchmark: previewBurn() view function
-    function test_gas_previewBurn() external view {
-        (uint256 ethOut, uint256 stethOut, uint256 flipOut) = sdgnrs.previewBurn(PLAYER_SDGNRS / 10);
+    /// @notice Gas benchmark: previewBurnValue() view function
+    function test_gas_previewBurnValue() external view {
+        (uint256 ethOut, uint256 flipOut) = sdgnrs.previewBurnValue(PLAYER_SDGNRS / 10);
         // Sanity: ETH backing exists so ethOut should be nonzero
-        assertTrue(ethOut > 0 || stethOut > 0 || flipOut > 0, "Expected non-zero preview");
+        assertTrue(ethOut > 0 || flipOut > 0, "Expected non-zero preview");
     }
 
     // =====================================================================

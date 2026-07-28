@@ -12,8 +12,8 @@ interface IsDGNRS {
     function balanceOf(address account) external view returns (uint256);
     /// @notice Transfer sDGNRS from wrapper to recipient (wrapper only).
     function wrapperTransferTo(address to, uint256 amount) external;
-    /// @notice Preview ETH, stETH, and FLIP output for a given burn amount.
-    function previewBurn(uint256 amount) external view returns (uint256 ethOut, uint256 stethOut, uint256 flipOut);
+    /// @notice Preview the wei-denominated value (paid as ETH and/or stETH) and FLIP output for a given burn amount.
+    function previewBurnValue(uint256 amount) external view returns (uint256 ethOut, uint256 flipOut);
 }
 
 /// @dev Game interface for RNG lock (unwrap guard), game-over check (burn guard), and level (vesting).
@@ -256,14 +256,13 @@ contract DGNRS {
     //                          VIEW FUNCTIONS
     // =====================================================================
 
-    /// @notice Preview ETH, stETH, and FLIP output for burning a given amount of DGNRS
-    /// @dev Delegates to sDGNRS.previewBurn; does not modify state
+    /// @notice Preview the value and FLIP output for burning a given amount of DGNRS
+    /// @dev Delegates to sDGNRS.previewBurnValue; does not modify state
     /// @param amount Amount of DGNRS to simulate burning (18 decimals)
-    /// @return ethOut ETH that would be received
-    /// @return stethOut stETH that would be received
+    /// @return ethOut Total value that would be received, in wei (paid as ETH and/or stETH)
     /// @return flipOut FLIP that would be received
-    function previewBurn(uint256 amount) external view returns (uint256 ethOut, uint256 stethOut, uint256 flipOut) {
-        return staked.previewBurn(amount);
+    function previewBurnValue(uint256 amount) external view returns (uint256 ethOut, uint256 flipOut) {
+        return staked.previewBurnValue(amount);
     }
 
     // =====================================================================

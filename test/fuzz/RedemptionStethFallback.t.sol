@@ -624,8 +624,8 @@ contract RedemptionStethFallback is DeployProtocol {
 
     /// @notice (a) The sDGNRS receive() reads reserves LIVE via address(this).balance — no running
     ///         counter. A GAME-sourced credit (v55 gate: receive() accepts msg.sender == GAME) IS
-    ///         reflected in the submit base (proven by previewBurn moving up by the credited amount's
-    ///         share), and there is no separate counter that could disagree with the balance.
+    ///         reflected in the submit base (proven by previewBurnValue moving up by the credited
+    ///         amount's share), and there is no separate counter that could disagree with the balance.
     ///         v55.0 D-351-02 reframe: the credit sender moved from AF_KING to GAME (the v54 AF_KING
     ///         receive() relaxation dissolved; the afking-funding withdraw send-back now routes through
     ///         GAME). The live-read property is unchanged — only the authorized sender differs.
@@ -637,9 +637,9 @@ contract RedemptionStethFallback is DeployProtocol {
         _setGameClaimablePool(0);
 
         uint256 balBefore = address(sdgnrs).balance;
-        // previewBurn reads the SAME 4-term base (balance + stETH + claimable - pending). With
+        // previewBurnValue reads the SAME 4-term base (balance + stETH + claimable - pending). With
         // claimable/stETH/pending all 0, the ETH term == address(sdgnrs).balance.
-        (uint256 ethOutBefore, , ) = sdgnrs.previewBurn(BURN_AMOUNT);
+        (uint256 ethOutBefore, ) = sdgnrs.previewBurnValue(BURN_AMOUNT);
 
         // Send ETH in via the GAME-gated receive() (the afking-funding withdraw send-back path —
         // the Game's `.call` carries msg.sender == GAME, sDGNRS.sol:433-434).
@@ -652,16 +652,17 @@ contract RedemptionStethFallback is DeployProtocol {
         // The credit is reflected LIVE in the balance...
         assertEq(address(sdgnrs).balance, balBefore + credit, "(POOL04a) GAME credit not reflected in live balance");
 
-        // ... and therefore in the submit base read by previewBurn. ethValueOwed scales linearly with
-        // the balance term, so the preview output must INCREASE after the credit (live read, not stale
-        // counter). A running counter that ignored receive() would leave previewBurn unchanged.
-        (uint256 ethOutAfter, , ) = sdgnrs.previewBurn(BURN_AMOUNT);
+        // ... and therefore in the submit base read by previewBurnValue. ethValueOwed scales linearly
+        // with the balance term, so the preview output must INCREASE after the credit (live read, not
+        // stale counter). A running counter that ignored receive() would leave previewBurnValue
+        // unchanged.
+        (uint256 ethOutAfter, ) = sdgnrs.previewBurnValue(BURN_AMOUNT);
         assertGt(ethOutAfter, ethOutBefore, "(POOL04a) submit base did not move with the GAME credit (stale counter?)");
     }
 
     /// @notice (b) The GAME-sourced ETH is counted EXACTLY ONCE in the redemption base: the
-    ///         previewBurn delta equals the credit's proportional share, NOT 2× (no double-count from a
-    ///         counter + balance both being read). v55.0 D-351-02 reframe: credit sender AF_KING → GAME
+    ///         previewBurnValue delta equals the credit's proportional share, NOT 2× (no double-count
+    ///         from a counter + balance both being read). v55.0 D-351-02 reframe: credit sender AF_KING → GAME
     ///         (the GAME-only receive() gate); the counted-once invariant is unchanged.
     function test_POOL04_GameCreditNotDoubleCounted() public {
         vm.deal(address(game), 0);
@@ -669,7 +670,7 @@ contract RedemptionStethFallback is DeployProtocol {
         _setGameClaimablePool(0);
 
         uint256 supply = sdgnrs.totalSupply();
-        (uint256 ethOutBefore, , ) = sdgnrs.previewBurn(BURN_AMOUNT);
+        (uint256 ethOutBefore, ) = sdgnrs.previewBurnValue(BURN_AMOUNT);
 
         uint256 credit = 10 ether;
         vm.deal(ContractAddresses.GAME, credit);
@@ -677,11 +678,11 @@ contract RedemptionStethFallback is DeployProtocol {
         (bool ok, ) = address(sdgnrs).call{value: credit}("");
         assertTrue(ok, "(POOL04b) GAME receive() must accept the credit");
 
-        (uint256 ethOutAfter, , ) = sdgnrs.previewBurn(BURN_AMOUNT);
+        (uint256 ethOutAfter, ) = sdgnrs.previewBurnValue(BURN_AMOUNT);
 
         // The submit base term increased by EXACTLY `credit`; its proportional share of the burn is
-        // floor(credit * BURN_AMOUNT / supply). The previewBurn ethOut delta must equal that single
-        // share — a double-count (credit counted twice) would yield ~2× this delta.
+        // floor(credit * BURN_AMOUNT / supply). The previewBurnValue ethOut delta must equal that
+        // single share — a double-count (credit counted twice) would yield ~2× this delta.
         uint256 expectedDelta = (credit * BURN_AMOUNT) / supply;
         uint256 actualDelta = ethOutAfter - ethOutBefore;
         assertEq(actualDelta, expectedDelta, "(POOL04b) GAME credit not counted exactly once in the base");
