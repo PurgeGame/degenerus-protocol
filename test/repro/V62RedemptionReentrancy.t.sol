@@ -243,6 +243,9 @@ contract V62RedemptionReentrancy is DeployProtocol {
 
         // gameOver latches AFTER the resolve: the claim now pays 100% direct via _payEth.
         vm.mockCall(address(game), abi.encodeWithSelector(game.gameOver.selector), abi.encode(true));
+        // The redemption claim reads livenessTriggered, which gameOver implies on chain
+        // (_unlockRng leaves dailyIdx stale at game over). Mock it to match.
+        vm.mockCall(address(game), abi.encodeWithSelector(game.livenessTriggered.selector), abi.encode(true));
 
         uint256 totalRolledEth = (uint256(owedBase) * 175) / 100;
         uint256 ethDirect = totalRolledEth; // gameOver: no lootbox leg

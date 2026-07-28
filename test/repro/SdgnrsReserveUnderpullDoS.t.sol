@@ -90,6 +90,9 @@ contract SdgnrsReserveUnderpullDoS is DeployProtocol {
 
         // 3. gameOver latches AFTER the resolve → the deterministic burn path is now open.
         vm.mockCall(address(game), abi.encodeWithSelector(game.gameOver.selector), abi.encode(true));
+        // The redemption claim reads livenessTriggered, which gameOver implies on chain
+        // (_unlockRng leaves dailyIdx stale at game over). Mock it to match.
+        vm.mockCall(address(game), abi.encodeWithSelector(game.livenessTriggered.selector), abi.encode(true));
 
         // 4. Shape Case-B: in-contract ETH = P, stETH = S (~0), game-side claimable C with S + C <= P.
         uint256 S = mockStETH.balanceOf(address(sdgnrs));

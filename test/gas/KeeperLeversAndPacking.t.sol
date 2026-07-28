@@ -144,10 +144,11 @@ contract KeeperLeversAndPacking is DeployProtocol {
             "GAS-02 (v55): mineFlip does ONE CEI-last bounty creditFlip per tx (one-category router)"
         );
         // The one-category structural early-return (no advance+open bounty stacked in one tx): the advance
-        // branch then the `else` open branch — exactly one category routed per call. The predicate is the
-        // in-context mirror of the Game's external advanceDue (same reads, no self-call round-trip).
+        // branch then the `else` open branch — exactly one category routed per call. The predicate is
+        // _advanceDue, the storage-level discovery shared with the Game's external advanceDue view
+        // (same reads in-context, no self-call round-trip).
         assertGt(
-            _countOccurrences(afking, "if (_advanceDueInContext()) {"),
+            _countOccurrences(afking, "if (_advanceDue()) {"),
             0,
             "GAS-02 (v55): mineFlip's one-category early-return (advance branch) byte-present"
         );

@@ -565,59 +565,32 @@ contract DegenerusGameMintModule is
     // External Entry Point — Current-Level Ticket Batch Processing
     // -------------------------------------------------------------------------
 
-    /// @notice Processes a batch of current-level tickets with gas-bounded iteration.
-    /// @dev Called iteratively until all tickets for the level are processed. Uses a writes budget
-    ///      to stay within block gas limits. The first batch in a new level round is
-    ///      scaled down by 35% to account for cold storage access costs.
-    /// @param lvl Level whose tickets should be processed.
-    /// @return finished True if all tickets for this level have been fully processed.
+    /// @notice Processes ticket batches across the six-key read window on one
+    ///         gas-bounded writes budget.
+    /// @dev The unified sweep worker: walks [anchor-1 .. anchor+4] in ascending
+    ///      (routed-priority) order, draining each non-empty read queue and continuing
+    ///      into the next level whenever one finishes with budget to spare, so no
+    ///      call wastes headroom. The first batch of each fresh level derates the
+    ///      remaining budget by 35% for cold storage access. The per-buy-day foil
+    ///      buckets drain on the final leftover. Level switches happen only at queue
+    ///      release, so the shared ticketLevel/ticketCursor resume marker is never
+    ///      reset mid-queue.
+    /// @param anchor The building level (purchaseLevel); the window trails it by one.
+    /// @return finished True when every windowed read queue AND the foil drain are
+    ///         caught up.
     /// @return didWork True if this call materialized at least one ticket entry or foil
     ///         buyer. Lets the advance chain break out before composing a finishing batch
     ///         with a same-tx BAF/jackpot, even when the batch both starts and finishes in
     ///         one call (cursor returns to 0, so a cursor-delta probe would read no work).
-    function processTicketBatch(uint24 lvl)
+    function processTicketBatch(uint24 anchor)
         external
         returns (bool finished, bool didWork)
     {
-        uint24 rk = _tqReadKey(lvl);
-        mapping(address => uint48) storage owedMap = entriesOwedPacked[rk];
-        address[] storage queue = ticketQueue[rk];
-        uint256 total = queue.length;
-
-        if (ticketLevel != lvl) {
-            ticketLevel = lvl;
-            ticketCursor = 0;
-        }
-
-        uint256 idx = ticketCursor;
-        uint32 writesBudget = WRITES_BUDGET_SAFE;
-        if (idx == 0) {
-            writesBudget -= (writesBudget * 35) / 100; // 65% scaling for cold storage
-        }
-
-        if (idx >= total) {
-            // Normal queue already drained (empty this level, or finished on a prior
-            // tx). Still drain the per-buy-day foil buckets on the full budget before
-            // declaring the level finished — the readiness gate depends on it. Returns
-            // false (resume next tx) only if a budget-short foil pack defers. _drainFoil
-            // short-circuits on _foilDrainPending, so a no-foil call is a single SLOAD.
-            if (total != 0) {
-                _releaseTicketQueue(rk);
-            }
-            (bool foilDoneEmpty, bool foilDrainedEmpty) = _drainFoil(writesBudget);
-            ticketCursor = 0;
-            if (foilDoneEmpty) {
-                ticketLevel = 0;
-                return (true, foilDrainedEmpty);
-            }
-            return (false, foilDrainedEmpty);
-        }
-
-        uint256 entropy = lootboxRngWordByIndex[uint48(_lrRead(LR_INDEX_SHIFT, LR_INDEX_MASK)) - 1];
-
-        uint32 used;
-        uint32 processed;
-        uint8 shift = _snapShiftFor(lvl);
+        uint32 remaining = WRITES_BUDGET_SAFE;
+        // Lazily read on the first non-empty level: read-side content implies a
+        // committed cohort implies a prior request, so the lootbox index is >= 1
+        // whenever this loads. A stored word is never zero.
+        uint256 entropy;
 
         // Trait-batch scratch buffers shared by every normal entry this call (zeroed
         // between entries inside _raritySymbolBatch), so memory does not grow per
@@ -625,68 +598,117 @@ contract DegenerusGameMintModule is
         uint32[256] memory counts;
         uint8[256] memory touchedTraits;
 
-        while (idx < total && used < writesBudget) {
-            (uint32 writesUsed, uint32 take, bool advance) = _processOneTicketEntry(
-                queue[idx],
-                lvl,
-                owedMap,
-                writesBudget - used,
-                processed,
-                entropy,
-                idx,
-                shift,
-                counts,
-                touchedTraits
-            );
-            if (writesUsed == 0 && !advance) break;
-            unchecked {
-                used += writesUsed;
-                if (advance) {
-                    ++idx;
-                    processed = 0;
-                } else {
-                    // Advance the within-player startIndex by the per-iter ticket
-                    // count, matching processFutureTicketBatch. A gas-budget-derived
-                    // writesUsed>>1 heuristic would diverge for take > 256.
-                    processed += take;
+        // TICKET_SLOT_BIT set on the anchor = the game-over caller's explicit
+        // single-key request: the terminal payout samples only drainLevel's trait
+        // buckets, so every queued ticket at any other level is worthless and is
+        // never touched. Live-game sweeps always pass a bare anchor. (The bit can
+        // never be a real level — levels stay far below 2^23.)
+        bool terminal = (anchor & TICKET_SLOT_BIT) != 0;
+        anchor &= ~TICKET_SLOT_BIT;
+        uint24 t = terminal || anchor == 0 ? anchor : anchor - 1;
+        uint24 windowEnd = terminal ? anchor : anchor + 4;
+        for (; t <= windowEnd; ) {
+            uint24 rk = _tqReadKey(t);
+            address[] storage queue = ticketQueue[rk];
+            uint256 total = queue.length;
+            if (total == 0) {
+                unchecked {
+                    ++t;
                 }
+                continue;
+            }
+
+            if (ticketLevel != t) {
+                ticketLevel = t;
+                ticketCursor = 0;
+            }
+            uint256 idx = ticketCursor;
+            if (idx == 0) {
+                // Fresh level: derate the remaining budget for cold storage access.
+                remaining -= (remaining * 35) / 100;
+            }
+            if (remaining == 0) {
+                ticketCursor = uint32(idx);
+                return (false, didWork);
+            }
+            if (entropy == 0) {
+                entropy = lootboxRngWordByIndex[
+                    uint48(_lrRead(LR_INDEX_SHIFT, LR_INDEX_MASK)) - 1
+                ];
+            }
+
+            mapping(address => uint48) storage owedMap = entriesOwedPacked[rk];
+            uint32 used;
+            uint32 processed;
+            uint8 shift = _snapShiftFor(t);
+
+            while (idx < total && used < remaining) {
+                (
+                    uint32 writesUsed,
+                    uint32 take,
+                    bool advance
+                ) = _processOneTicketEntry(
+                        queue[idx],
+                        t,
+                        owedMap,
+                        remaining - used,
+                        processed,
+                        entropy,
+                        idx,
+                        shift,
+                        counts,
+                        touchedTraits
+                    );
+                if (writesUsed == 0 && !advance) break;
+                unchecked {
+                    used += writesUsed;
+                    if (advance) {
+                        ++idx;
+                        processed = 0;
+                    } else {
+                        // Advance the within-player startIndex by the per-iter ticket
+                        // count, matching processFutureTicketBatch. A gas-budget-derived
+                        // writesUsed>>1 heuristic would diverge for take > 256.
+                        processed += take;
+                    }
+                }
+            }
+            didWork = didWork || used > 0;
+            // A final loop iteration can push `used` past the budget, so clamp the
+            // leftover to 0 rather than underflowing the subtraction.
+            remaining = used >= remaining ? 0 : remaining - used;
+
+            if (idx < total) {
+                // Mid-queue stop: persist the resume cursor. Level switches only
+                // happen at queue release, so the marker is never lost mid-queue.
+                ticketCursor = uint32(idx);
+                return (false, didWork);
+            }
+            _releaseTicketQueue(rk);
+            unchecked {
+                ++t;
             }
         }
 
-        if (idx >= total) {
-            // Normal queue drained. Continue into the per-buy-day foil buckets on the
-            // leftover write budget (one shared envelope, so the combined advance
-            // stays gas-bounded). A foil buyer resolves a fixed FOIL_PACK_ENTRIES
-            // (16) boosted entries atomically; foilDrainDay/foilCursor make a
-            // budget-short deferral resumable. Only when BOTH the queue and the foil
-            // drain are caught up is the level finished, so the readiness gate cannot
-            // let the jackpot draw early.
-            if (total != 0) {
-                _releaseTicketQueue(rk);
-            }
-            // A final loop iteration can push `used` past writesBudget, so clamp the
-            // leftover to 0 (an over-budget call leaves no room for foil and defers it
-            // to the next tx) rather than underflowing the subtraction.
-            uint32 foilRoom = used >= writesBudget ? 0 : writesBudget - used;
-            (bool foilDone, bool foilDrained) = _drainFoil(foilRoom);
-            // Real work this call iff the normal loop consumed budget OR a foil buyer
-            // resolved — the signal the advance chain reads to refuse same-tx composition.
-            bool didWorkThisCall = used > 0 || foilDrained;
-            if (foilDone) {
-                ticketCursor = 0;
-                ticketLevel = 0;
-                return (true, didWorkThisCall);
-            }
-            // Foil queue has more entries than the budget could fit: resume next tx.
-            // The normal cursor stays at its terminal position (idx == total).
-            ticketCursor = uint32(idx);
-            return (false, didWorkThisCall);
+        // Window drained. Continue into the per-buy-day foil buckets on the leftover
+        // write budget (one shared envelope, so the combined advance stays
+        // gas-bounded). A foil buyer resolves a fixed FOIL_PACK_ENTRIES (16) boosted
+        // entries atomically; foilDrainDay/foilCursor make a budget-short deferral
+        // resumable. Only when BOTH the window and the foil drain are caught up is
+        // the sweep finished, so the readiness gate cannot let the jackpot draw
+        // early. A call that ran no queue segment derates the foil room the same way
+        // a fresh level would (its trait-bucket writes are equally cold).
+        if (remaining == WRITES_BUDGET_SAFE) {
+            remaining -= (remaining * 35) / 100;
         }
-        // Mid-queue stop: persist the resume cursor. The finished path above writes
-        // its own terminal cursor/level pair, so the shared packed slot is stored
-        // exactly once per path.
-        ticketCursor = uint32(idx);
-        return (false, used > 0);
+        (bool foilDone, bool foilDrained) = _drainFoil(remaining);
+        didWork = didWork || foilDrained;
+        ticketCursor = 0;
+        if (foilDone) {
+            ticketLevel = 0;
+            return (true, didWork);
+        }
+        return (false, didWork);
     }
 
     /// @dev Hand the per-buy-day foil buckets to the foil module on the leftover write

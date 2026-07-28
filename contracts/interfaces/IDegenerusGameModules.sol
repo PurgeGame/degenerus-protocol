@@ -288,9 +288,10 @@ interface IDegenerusGameMintModule {
         uint256 entropy
     ) external returns (bool worked, bool finished, uint32 writesUsed);
 
-    /// @notice Processes a batch of current-level ticket entries
-    /// @param lvl The level to process tickets for
-    /// @return finished True if all tickets have been processed
+    /// @notice The unified ticket sweep: drains the six-key read window
+    ///         [anchor-1 .. anchor+4] plus the foil buckets on one writes budget
+    /// @param lvl The window anchor (purchaseLevel)
+    /// @return finished True when the whole window and the foil drain are caught up
     /// @return didWork True if this call materialized at least one ticket or foil entry
     function processTicketBatch(uint24 lvl)
         external

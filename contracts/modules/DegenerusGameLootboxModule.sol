@@ -610,7 +610,16 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     /// @param index The shared RNG index the box(es) queued at.
     /// @custom:reverts NothingToClaim When neither leg has a box queued at this index for the player.
     /// @custom:reverts RngNotReady When a queued leg's committed RNG word is not yet set.
+    /// @custom:reverts E Once the liveness timeout has fired (see the gate below).
     function openBox(address player, uint48 index) external {
+        // A roll queues ticket entries at the write buffer, so the open is a
+        // position-creating action and closes with the game: past the liveness
+        // trigger the terminal word is public, which would let a caller open only
+        // the boxes whose entries match the already-known winning traits and have
+        // the terminal swap commit them. The sweep sibling gates identically. The
+        // box's ETH is not stranded — it was banked into the pools at purchase and
+        // is distributed by the terminal drain.
+        if (_livenessTriggered()) revert E();
         // Permissionless: box rewards always credit the owner, so any caller may open any
         // player's ready boxes (zero address = caller).
         if (player == address(0)) player = msg.sender;

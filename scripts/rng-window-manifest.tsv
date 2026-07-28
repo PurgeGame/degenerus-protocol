@@ -88,6 +88,7 @@ EXEMPT-ADVANCE	lootboxRngPacked	_lrAdvanceIndexClearPending	modules/DegenerusGam
 EXEMPT-ADVANCE	lootboxRngPacked	advanceGame	modules/DegenerusGameAdvanceModule.sol	READ
 EXEMPT-ADVANCE	lootboxRngWordByIndex	_backfillOrphanedLootboxIndices	modules/DegenerusGameAdvanceModule.sol	READ
 EXEMPT-ADVANCE	lootboxRngWordByIndex	_finalizeLootboxRng	modules/DegenerusGameAdvanceModule.sol	READ
+EXEMPT-ADVANCE	lootboxRngWordByIndex	_gameOverEntropy	modules/DegenerusGameAdvanceModule.sol	READ
 EXEMPT-ADVANCE	lootboxRngWordByIndex	advanceGame	modules/DegenerusGameAdvanceModule.sol	READ
 EXEMPT-ADVANCE	rngWordByDay	_afKingSubDraw	modules/DegenerusGameAdvanceModule.sol	READ
 EXEMPT-ADVANCE	rngWordByDay	_gameOverEntropy	modules/DegenerusGameAdvanceModule.sol	READ
@@ -112,6 +113,7 @@ CONSUMER-SEALED	lootboxRngWordByIndex	processTicketBatch	modules/DegenerusGameMi
 CONSUMER-SEALED	rngWordByDay	deityBoonData	DegenerusGame.sol	READ
 CONSUMER-SEALED	rngWordByDay	_payFoilTier	modules/DegenerusGameFoilPackModule.sol	READ
 CONSUMER-SEALED	rngWordByDay	_processFoilDrain	modules/DegenerusGameFoilPackModule.sol	READ
+EXEMPT-ADVANCE	rngWordCurrent	_processFoilDrain	modules/DegenerusGameFoilPackModule.sol	READ	terminal fallback only (LR_GO_FALLBACK latched): settles a bucket whose own day the dead VRF never worded; reached only from the game-over drain, and every affected pack predates the word (foil buys are liveness-gated)
 CONSUMER-SEALED	rngWordByDay	_tryClaimFoilMatch	modules/DegenerusGameFoilPackModule.sol	READ
 CONSUMER-SEALED	rngWordByDay	issueDeityBoon	modules/DegenerusGameLootboxModule.sol	READ
 CONSUMER-SEALED	rngWordByDay	_farFutureSeed	modules/DegenerusGameMintStreakUtils.sol	READ
@@ -121,6 +123,7 @@ GATE	lootboxRngWordByIndex	_placeDegeneretteBetCore	modules/DegenerusGameDegener
 GATE	lootboxRngWordByIndex	_buyPresaleBoxFor	modules/DegenerusGameMintModule.sol	READ
 GATE	rngWordByDay	_afkingStreak	storage/DegenerusGameStorage.sol	READ
 GATE	rngWordByDay	_foilDrainPending	storage/DegenerusGameStorage.sol	READ
+GATE	rngWordCurrent	_foilDrainPending	storage/DegenerusGameStorage.sol	READ	existence check only, behind the latch test: keeps the terminal readiness gate in step with the walker so an unsealed bucket is not reported drained
 CURSOR	lootboxRngPacked	_purchaseForWithCached	modules/DegenerusGameMintModule.sol	READ
 CURSOR	lootboxRngPacked	_recordLootboxEntry	modules/DegenerusGameWhaleModule.sol	READ
 CURSOR	lootboxRngPacked	_recordAfkingCoverBox	modules/GameAfkingModule.sol	READ

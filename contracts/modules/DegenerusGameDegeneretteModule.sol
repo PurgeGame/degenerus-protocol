@@ -427,6 +427,12 @@ contract DegenerusGameDegeneretteModule is
         uint32 customTraits,
         uint8 heroQuadrant
     ) external payable {
+        // Closed from the liveness trigger on, matching the settlement side: resolution
+        // already reverts there, so a bet placed after it can never pay out. The stake is
+        // real value — an ETH bet moves fresh ETH into the pools — and it is lost either
+        // way: distributed by the terminal drain before game over, swept to the terminal
+        // sinks after it, and simply trapped once the one-shot final sweep has run.
+        if (_livenessTriggered()) revert GameOver();
         if (player == address(0)) player = msg.sender;
         address funder;
         if (player == msg.sender || operatorApprovals[player][msg.sender]) {

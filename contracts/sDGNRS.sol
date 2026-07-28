@@ -183,7 +183,7 @@ contract sDGNRS {
 
     /// @notice Emitted when a player claims their resolved redemption.
     /// @param flipPaid Escrowed FLIP (wei) minted to the redeemer as a flip credit — nonzero only
-    ///        on a winning resolving-day coinflip; 0 on a loss or after gameOver (FLIP ignored).
+    ///        on a winning resolving-day coinflip; 0 on a loss or in terminal mode (FLIP ignored).
     event RedemptionClaimed(address indexed player, uint16 roll, uint256 ethPayout, uint256 lootboxEth, uint256 flipPaid);
 
     // =====================================================================
@@ -327,8 +327,8 @@ contract sDGNRS {
     ///      (i.e. total rolled value under ~0.02 ETH), the lootbox leg is dropped entirely. The player
     ///      keeps only the direct half plus the FLIP share settled at submit; the dropped lootbox
     ///      value is NOT paid out to the player — it is forfeited back to sDGNRS's own claimable on the
-    ///      Game as free backing, raising backing for remaining holders. Live-game only; gameOver claims
-    ///      are already 100% direct.
+    ///      Game as free backing, raising backing for remaining holders. Live-game only; terminal
+    ///      claims are already 100% direct.
     uint256 private constant MIN_REDEMPTION_LOOTBOX_ETH = 0.01 ether;
 
     /// @dev FLIP base unit (1000 ETH worth) — the ETH→FLIP conversion numerator for the keeper
@@ -751,31 +751,42 @@ contract sDGNRS {
     ///      Both halves of the rolled ETH route to the Game (50% credits the player's claimable
     ///      winnings, 50% funds lootbox rewards), so a third-party trigger pushes no ETH and the
     ///      winner holds no exclusive timing control over the lootbox draw.
-    ///      Post-gameOver: SELF-CLAIM only — 100% direct push with no lootbox leg (no timing
-    ///      edge); a game-claimable credit would forfeit in the post-gameover sweep.
+    ///      Terminal mode (liveness triggered): SELF-CLAIM only, since the payout direct-pushes
+    ///      ETH rather than crediting the Game. 100% direct with no lootbox leg — a game-claimable
+    ///      credit would forfeit in the post-gameover sweep.
     /// @param player Claimant whose redemption to settle.
     /// @param day Wall-clock day whose claim to settle.
     function claimRedemption(address player, uint24 day) external {
         uint16 roll = redemptionPeriods[day];
         if (roll == 0) revert NotResolved();
 
-        bool isGameOver = game.gameOver();
-        // Post-gameOver the claim direct-pushes ETH to `player`, so it is restricted to `player` or
+        // Liveness is the terminal predicate for the whole claim. It is true across the
+        // multi-tx drain (where gameOver is still unlatched) and stays true past the
+        // latch, since _unlockRng deliberately leaves dailyIdx stale at game over — so it
+        // covers both halves of death in one read. Terminal mode pays the whole claim as
+        // ETH straight to the claimant because both halves of the live shape are wrong at
+        // death: the direct half credits the Game's claimable, which forfeits in the
+        // post-gameover sweep, and the lootbox half only mints ticket entries into a cohort
+        // already being drained. The redemption value was segregated to this contract at
+        // submit either way, so nothing is withheld — it simply stops minting game
+        // positions on the way out.
+        bool isTerminal = game.livenessTriggered();
+        // In terminal mode the claim direct-pushes ETH to `player`, so it is restricted to `player` or
         // an operator `player` approved on the GAME (the value still lands on `player`; an approved
         // delegate is consensual). Live game stays permissionless (credit into the gated claimable).
         if (
-            isGameOver &&
+            isTerminal &&
             player != msg.sender &&
             !game.isOperatorApproved(player, msg.sender)
         ) revert Unauthorized();
 
         // Single claim: pass 0 so the lootbox leg (live game only) fetches day+1's word lazily.
-        if (!_claimRedemptionFor(player, day, roll, isGameOver, 0)) revert NoClaim();
+        if (!_claimRedemptionFor(player, day, roll, isTerminal, 0)) revert NoClaim();
     }
 
     /// @notice Claim resolved gambling-burn redemptions for a batch of players on day `day`.
     /// @dev Players with nothing pending for `day` are skipped, not reverted, so one stale
-    ///      address can't poison a mass-claim sweep. LIVE-GAME ONLY: post-gameOver a batch could
+    ///      address can't poison a mass-claim sweep. LIVE-GAME ONLY: in terminal mode a batch could
     ///      settle only the caller's own entry (all others are access-restricted self-claims),
     ///      which the single claimRedemption already does — so the batch reverts once game is over.
     /// @param players Claimants whose redemptions to settle.
@@ -783,8 +794,11 @@ contract sDGNRS {
     function claimRedemptionMany(address[] calldata players, uint24 day) external {
         uint16 roll = redemptionPeriods[day];
         if (roll == 0) revert NotResolved();
-        // Batch settlement is live-game only (see above); at gameOver use the single self-claim.
-        if (game.gameOver()) revert Unauthorized();
+        // Batch settlement is live-game only (see above); from the liveness trigger on use
+        // the single self-claim, which switches to the direct-pay terminal shape. The batch
+        // hard-codes the live split, so leaving it open would queue lootbox-rolled entries
+        // against the already-public terminal word.
+        if (game.gameOver() || game.livenessTriggered()) revert Unauthorized();
 
         // day+1's redemption-lootbox word is identical for every player in this live-game batch;
         // fetch it once up front and pass it into each claim (every lootbox leg reuses it).
@@ -812,26 +826,27 @@ contract sDGNRS {
     }
 
     /// @dev Shared settle core for the single and batch claim entry points. Callers must have
-    ///      verified the period is resolved and (post-gameOver) the self-claim rule; the
+    ///      verified the period is resolved and (in terminal mode) the self-claim rule; the
     ///      pending-claim existence check lives here (one slot load), returning false on an
     ///      empty (player, day) slot so the batch path skips and the single path reverts.
-    function _claimRedemptionFor(address player, uint24 day, uint16 roll, bool isGameOver, uint256 rngWordNext) private returns (bool) {
+    function _claimRedemptionFor(address player, uint24 day, uint16 roll, bool isTerminal, uint256 rngWordNext) private returns (bool) {
         PendingRedemption memory claim = pendingRedemptions[player][day];
         // Existence: a live-game claim is reachable on a nonzero ETH base OR a nonzero FLIP escrow
-        // (a gwei-floored zero-ETH claim can still owe escrowed FLIP). Post-gameOver FLIP is
-        // worthless and ignored, so only the ETH base keeps a claim alive.
-        if (claim.ethValueOwed == 0 && (isGameOver || claim.flipEscrow == 0)) return false;
+        // (a gwei-floored zero-ETH claim can still owe escrowed FLIP). In terminal mode FLIP is
+        // worthless and ignored, so only the ETH base keeps a claim alive. This returns before
+        // any write, so an escrow-only claim reading terminal is deferred, never consumed.
+        if (claim.ethValueOwed == 0 && (isTerminal || claim.flipEscrow == 0)) return false;
         uint16 claimActivityScore = claim.activityScore;
 
         // Total rolled ETH. Per-claimant floor division may leave up to (n-1) wei
         // dust in pendingRedemptionEthValue per period — economically negligible.
         uint256 totalRolledEth = (claim.ethValueOwed * roll) / 100;
 
-        // 50/50 split (unless gameOver → 100% direct)
+        // 50/50 split (unless terminal → 100% direct)
         uint256 ethDirect;
         uint256 lootboxEth;
         uint256 forfeitEth;
-        if (isGameOver) {
+        if (isTerminal) {
             ethDirect = totalRolledEth;
         } else {
             ethDirect = totalRolledEth / 2;
@@ -863,10 +878,16 @@ contract sDGNRS {
         // (the bonus is fresh flip credit; the flip is net-emissive — a losing flip deletes coin, a
         // win mints it). A loss pays nothing (symmetric with the auto-rebuy carry zeroing for every
         // holder on a losing flip). Read the ABSOLUTE day+1 result, never a resolve-time word —
-        // stall-correct. Post-gameOver FLIP is worthless and skipped entirely. The slot is already
-        // cleared (CEI) and creditFlip makes no callback into this contract.
+        // stall-correct. In terminal mode FLIP is worthless and skipped entirely. The slot is
+        // already cleared (CEI) and creditFlip makes no callback into this contract.
         uint256 flipPaid;
-        if (!isGameOver && claim.flipEscrow != 0) {
+        // Liveness keys the escrow as it keys the rest of the claim, and it leads the gameOver
+        // latch by at most one crank in either direction: the next advance either latches game
+        // over, or — when the pool target is met — suppresses it and sets lastPurchaseDay in the
+        // same call, which routes liveness back to the deadman. A claim settled inside that
+        // lead-in on a level the met target then rescues forfeits its escrow, which is cheaper
+        // than reading gameOver on every escrowed claim to close a one-crank window.
+        if (claim.flipEscrow != 0 && !isTerminal) {
             // In a live game day + 1 is normally resolved by claim time (resolveRedemptionPeriod for
             // `day` runs on the advance that settles day + 1). `win` is true only on a resolved win;
             // a resolved loss — or an unresolved day in the narrow level-0 gameOver pre-latch window,
@@ -882,7 +903,7 @@ contract sDGNRS {
 
         emit RedemptionClaimed(player, roll, ethDirect, lootboxEth, flipPaid);
 
-        if (isGameOver) {
+        if (isTerminal) {
             // 100% direct push (self-claim enforced by callers; the untrusted .call comes after
             // the slot delete above — CEI).
             _payEth(player, ethDirect);
@@ -897,7 +918,7 @@ contract sDGNRS {
             uint16 actScore = claimActivityScore > 0 ? claimActivityScore - 1 : 0;
             // Key the lootbox draw to the NEXT day's word (day+1) - unknown when the burn was
             // submitted (day+1 isn't drawn yet), so a post-advance burn can't grind a known
-            // draw. Only reached when !gameOver (lootboxEth != 0); in a live game day+1's word
+            // draw. Only reached when not terminal (lootboxEth != 0); in a live game day+1's word
             // is always set by claim time (the daily advance, or gap-backfill after a stall).
             // day+1's word is fixed for this settle day. The batch pre-fetches it once and passes
             // it in (live game -> always nonzero); the single-claim path passes 0, so fetch lazily.

@@ -14,11 +14,11 @@ import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 ///         cohort first, then the award queue — before the mid-day latch clears. The same
 ///         holds for the new-day pre-RNG gate when a mid-day batch crosses the day boundary.
 ///
-///         On the level's PENULTIMATE day the swap is refused outright (the guard in
-///         requestLootboxRng): a freeze window opened there can cross into the final day via
-///         a stalled-word promotion with the read slot busy, leaving the post-request write
-///         cohort at a key no later swap ever commits. The queues instead wait for the final
-///         request's own sentinel commit, which its chain drains.
+///         The unified sweep drains every read-side key in the trailing window
+///         [purchaseLevel-1 .. purchaseLevel+4], so a retired level keeps being named until
+///         both its parities are empty: leftovers that a boundary crossing, promotion, or
+///         turbo collapse parks on the write side are re-committed by a later swap and
+///         drained instead of stranding.
 ///
 ///         Suite shape:
 ///           A  mechanism   — an early-day swap commits the routed cohort and the mid-day
@@ -46,6 +46,7 @@ contract MiddaySwapJackpotCohort is DeployProtocol {
     uint256 private simTime;
 
     uint24 private constant TICKET_SLOT_BIT = uint24(1) << 23;
+    uint24 private constant TICKET_FAR_FUTURE_BIT = uint24(1) << 22;
     uint8 private constant JACKPOT_LEVEL_CAP = 5;
     uint8 private constant MIDDAY_NEVER = 255;
 
@@ -124,7 +125,8 @@ contract MiddaySwapJackpotCohort is DeployProtocol {
     /// ONE permissionless mid-day request on the penultimate jackpot day — the original
     /// defect's trigger: the probe hardcoded level + 1, the swap flipped the routed cohort
     /// out of reach, the final day's swap flipped it further, and the transition retired the
-    /// level's keys for good. Now the guard refuses that swap and nothing strands.
+    /// level's keys for good. The windowed sweep drains every committed key, so nothing
+    /// strands.
     function testSingleMiddayRequestOnThePenultimateJackpotDayStrandsTheCohort() public {
         vm.pauseGasMetering();
         (uint24 L, uint256 priceWei, ) = _runJackpotPhase(
@@ -393,12 +395,14 @@ contract MiddaySwapJackpotCohort is DeployProtocol {
     }
 
     // ---------------------------------------------------------------------
-    // I. The penultimate-day guard
+    // I. The penultimate-day eligibility guard
     // ---------------------------------------------------------------------
 
     /// On the penultimate day the request is served — the word still resolves pending
-    /// lootboxes — but the buffer swap is refused: no parity flip, no latch, and the read
-    /// slot stays drained. The queued cohorts wait for the final request's own commit.
+    /// lootboxes — but the buffer swap is refused. The sweep's trailing window would
+    /// drain a crossing cohort safely either way, but only AFTER the level retired
+    /// (drawless); the guard keeps the whole evening cohort together on the write side
+    /// for the final request's own commit, which its chain drains before the final draw.
     function testPenultimateDayRequestIsServedWithoutASwap() public {
         vm.pauseGasMetering();
         _driveToJackpotPhase();
@@ -420,7 +424,7 @@ contract MiddaySwapJackpotCohort is DeployProtocol {
         assertFalse(swapped, "the penultimate-day request must not flip the buffer");
         assertTrue(
             _ticketsFullyProcessed(),
-            "the read slot stays drained: no latch, no pending mid-day batch"
+            "the read window stays drained: no latch, no pending mid-day batch"
         );
     }
 
@@ -430,10 +434,11 @@ contract MiddaySwapJackpotCohort is DeployProtocol {
 
     /// A latched mid-day batch from a fresh purchase-phase evening crosses the boundary
     /// into a morning whose pool already exceeds the next target — the turbo-arm state.
-    /// The arm must defer to the compressed path: the promotion cannot swap (read slot
-    /// busy), and a collapsed same-lock jackpot phase would leave the post-request buys
-    /// at a key no drain ever names again. With the defer, the next day's real request
-    /// swaps and drains them; nothing strands at the building level's keys.
+    /// The promotion cannot swap (read slot busy) and the collapsed same-lock jackpot
+    /// phase issues no sentinel swap, so the post-request buys sit on the write side
+    /// through the whole collapse. The trailing window keeps naming that level through
+    /// the following purchase phase: the next request's swap re-commits them and the
+    /// sweep drains them. Nothing strands at the building level's keys.
     function testTurboArmCrossingStrandsNothing() public {
         vm.pauseGasMetering();
         _driveToJackpotPhase();
@@ -479,6 +484,246 @@ contract MiddaySwapJackpotCohort is DeployProtocol {
             0,
             "no owed entries may strand at the building level"
         );
+    }
+
+    // ---------------------------------------------------------------------
+    // M. Terminal two-case entropy
+    // ---------------------------------------------------------------------
+
+    /// Economic death with working VRF — the normal ending. Death is detected before
+    /// the day's request fires, so the terminal swap commits everything, the FRESH
+    /// terminal word resolves it in a single drain, and no window key on either
+    /// parity survives.
+    function testTerminalFreshWordClearsEverythingInOneCohort() public {
+        vm.pauseGasMetering();
+        (uint24 L, , ) = _runJackpotPhase(MIDDAY_NEVER, MODE_DRAIN_SAME_DAY, true);
+
+        // Purchase phase: queue a live cohort, then drive the liveness ending with
+        // VRF fully working (fulfill everything).
+        _buyTickets();
+        assertGt(
+            _queueLen(_writeKeyOf(L + 1)),
+            0,
+            "harness: the evening cohort must stage on the write side"
+        );
+        // ONE warp straight past the liveness deadline from the settled evening:
+        // no intermediate day is ever requested, so the first advance detects
+        // death on a fully-idle game (no recorded word, nothing in flight) and
+        // the terminal path owns the whole swap/request/drain sequence. Repeated
+        // shorter warps would instead run the stall-recovery re-walk, whose
+        // recorded-but-unsealed day word is the delivered-word terminal case —
+        // a different (write-buffer-forfeiting) ending than this test pins.
+        simTime += 150 days;
+        vm.warp(simTime);
+        for (uint256 j = 0; j < 60 && !game.gameOver(); j++) {
+            (bool ok, ) = address(game).call(
+                abi.encodeWithSignature("advanceGame()")
+            );
+            ok;
+            _fulfillPending();
+        }
+        assertTrue(game.gameOver(), "harness: liveness death must latch game over");
+
+        _assertPayoutKeyClear(L + 1);
+    }
+
+    /// Dead-VRF death — the fallback ending. A daily request commits a cohort and is
+    /// never fulfilled; stall-window buys land on the write side. Past the fallback
+    /// grace the read cohort drains against the fallback word, then the fallbackDue
+    /// swap commits the write cohort, which drains against the same word. Both
+    /// parities of every window key end empty.
+    function testTerminalFallbackClearsBothBuffers() public {
+        vm.pauseGasMetering();
+        (uint24 L, , ) = _runJackpotPhase(MIDDAY_NEVER, MODE_DRAIN_SAME_DAY, true);
+
+        // Evening buys -> next day's request fires and swaps them committed; the
+        // word never arrives; stall-window buys land on the fresh write side.
+        _buyTickets();
+        assertGt(
+            _queueLen(_writeKeyOf(L + 1)),
+            0,
+            "harness: the evening cohort must stage on the write side"
+        );
+        simTime += 1 days + 1;
+        vm.warp(simTime);
+        (bool ok, ) = address(game).call(abi.encodeWithSignature("advanceGame()"));
+        ok;
+        require(game.rngLocked(), "harness: the daily request must be in flight");
+        // Stall-window cohort: the daily lock does not block ticket buys (they land
+        // on the fresh write buffer), so bypass the checked helper's lock-skip.
+        _buyTicketsUnchecked();
+        assertGt(
+            _queueLen(_writeKeyOf(L + 1)),
+            0,
+            "harness: the stall-window cohort must stage on the write side"
+        );
+
+        // Dead VRF: never fulfill again; big warps ride the deadman + fallback
+        // grace to the terminal fallback ending.
+        for (uint256 i = 0; i < 10 && !game.gameOver(); i++) {
+            simTime += 90 days;
+            vm.warp(simTime);
+            for (uint256 j = 0; j < 40; j++) {
+                (ok, ) = address(game).call(
+                    abi.encodeWithSignature("advanceGame()")
+                );
+                if (!ok) break;
+            }
+        }
+        assertTrue(game.gameOver(), "harness: dead-VRF death must latch game over");
+
+        _assertPayoutKeyClear(L + 1);
+    }
+
+    /// @dev Terminal end-state: the PAYOUT key is fully drained on both parities and
+    ///      its owed fully materialized. Queues at every other level are worthless at
+    ///      game over and are deliberately never touched (no assertion on them).
+    function _assertPayoutKeyClear(uint24 payoutKey) internal view {
+        assertEq(
+            _queueLen(payoutKey),
+            0,
+            "terminal: payout plain-parity queue must be empty"
+        );
+        assertEq(
+            _queueLen(payoutKey | TICKET_SLOT_BIT),
+            0,
+            "terminal: payout alt-parity queue must be empty"
+        );
+        assertEq(
+            _entriesOwed(payoutKey, buyer) +
+                _entriesOwed(payoutKey | TICKET_SLOT_BIT, buyer),
+            0,
+            "terminal: the payout key's owed must be fully materialized"
+        );
+    }
+
+    // ---------------------------------------------------------------------
+    // L. The far-future barrier
+    // ---------------------------------------------------------------------
+
+    /// The crossing contract: when level L's transition runs, the far-future key of
+    /// L+5 (the level that just became near) is drained WHOLE before the transition
+    /// can complete — and from the arm's level increment onward that key is
+    /// write-dead (the distance routing sends every target <= level+5 to the plain
+    /// window keys), so it never holds content again.
+    function testFarFutureBarrierCrossesWholeAndNeverRefills() public {
+        vm.pauseGasMetering();
+        _driveToJackpotPhase();
+        _drainUntilUnlocked();
+        assertTrue(game.jackpotPhase(), "harness: must be inside the jackpot phase");
+        uint24 L = _level();
+        uint24 ffKey = (L + 5) | TICKET_FAR_FUTURE_BIT;
+
+        // Non-vacuity: the deploy-time perpetual seeding guarantees far-future
+        // content at the crossing key before its transition.
+        assertGt(
+            _queueLen(ffKey),
+            0,
+            "reachability: the crossing key must hold far-future content pre-transition"
+        );
+
+        // Run the phase out through the transition (the crossing drain runs inside it).
+        for (uint256 d = 0; d < 12 && game.jackpotPhase(); d++) {
+            _buyTickets();
+            _runFullDay();
+        }
+        require(!game.jackpotPhase(), "harness: the phase must have transitioned");
+        _runFullDay();
+
+        assertEq(
+            _queueLen(ffKey),
+            0,
+            "the crossing drain must empty the WHOLE far key at the transition"
+        );
+
+        // Drive the following level with daily buys and lootbox purchases (whose award
+        // rolls exercise the near-offset routing): the crossed key must never refill.
+        for (uint256 i = 0; i < 12 && _level() <= L + 1; i++) {
+            if (!game.jackpotPhase()) {
+                _seedNextPrizePool(500 ether);
+            }
+            _buyTickets();
+            vm.prank(buyer);
+            game.purchase{value: 2 ether}(
+                buyer,
+                0,
+                2 ether,
+                bytes32(0),
+                MintPaymentKind.DirectEth,
+                false
+            );
+            _runFullDay();
+            assertEq(
+                _queueLen(ffKey),
+                0,
+                "a crossed far key must never be written again"
+            );
+            if (game.gameOver()) break;
+        }
+        assertGt(_level(), L, "harness: the game must have moved past the level");
+
+        // The barrier moved exactly one level: the NEXT crossing key drained at the
+        // next transition.
+        assertEq(
+            _queueLen((L + 6) | TICKET_FAR_FUTURE_BIT),
+            0,
+            "the next level's transition must have crossed the next far key"
+        );
+    }
+
+    // ---------------------------------------------------------------------
+    // K. Six-segment sweep gas shape
+    // ---------------------------------------------------------------------
+
+    /// The worst chained-call shape: every windowed read key non-empty at once, so one
+    /// worker call opens six fresh segments (six cold derates, six releases) and then
+    /// probes foil. The whole advance transaction must stay under the 10M per-tx target.
+    function testSixSegmentSweepSingleCallStaysUnderTarget() public {
+        vm.pauseGasMetering();
+        _driveToJackpotPhase();
+        _drainUntilUnlocked();
+        assertTrue(game.jackpotPhase(), "harness: must be inside the jackpot phase");
+        uint24 L = _level();
+
+        // Seed a 1-address / 4-entry cohort onto the READ side of every window key
+        // [purchaseLevel-1 .. purchaseLevel+4] = [L .. L+5], and reopen the drain.
+        for (uint24 t = L; t <= L + 5; t++) {
+            _seedReadCohort(t, buyer, 4);
+        }
+        uint256 s0 = uint256(vm.load(address(game), bytes32(uint256(0))));
+        vm.store(
+            address(game),
+            bytes32(uint256(0)),
+            bytes32(s0 & ~(uint256(1) << 192)) // ticketsFullyProcessed = false
+        );
+
+        vm.resumeGasMetering();
+        uint256 g = gasleft();
+        (bool ok, ) = address(game).call(abi.encodeWithSignature("advanceGame()"));
+        g -= gasleft();
+        assertTrue(ok, "harness: the sweep advance must succeed");
+        emit log_named_uint("six-segment sweep advance gas", g);
+        assertGt(g, 0, "harness: gas metering must be live for the measurement");
+        assertLt(g, 10_000_000, "the chained sweep call must stay under the 10M target");
+    }
+
+    /// @dev Seed one queued address with `entries` owed onto the CURRENT READ side of
+    ///      level key `lvl` (queue mapping slot 12, owed mapping slot 13).
+    function _seedReadCohort(uint24 lvl, address who, uint32 entries) internal {
+        uint24 rk = _readKeyOf(lvl);
+        bytes32 lenSlot = keccak256(abi.encode(uint256(rk), uint256(12)));
+        uint256 len = uint256(vm.load(address(game), lenSlot));
+        vm.store(address(game), lenSlot, bytes32(len + 1));
+        bytes32 dataBase = keccak256(abi.encode(lenSlot));
+        vm.store(
+            address(game),
+            bytes32(uint256(dataBase) + len),
+            bytes32(uint256(uint160(who)))
+        );
+        bytes32 owedSlot = keccak256(
+            abi.encode(who, keccak256(abi.encode(uint256(rk), uint256(13))))
+        );
+        vm.store(address(game), owedSlot, bytes32(uint256(entries) << 8));
     }
 
     // ---------------------------------------------------------------------
@@ -558,6 +803,22 @@ contract MiddaySwapJackpotCohort is DeployProtocol {
     function _buyTickets() internal {
         (, , , bool rngLocked_, uint256 priceWei) = game.purchaseInfo();
         if (rngLocked_) return;
+        vm.prank(buyer);
+        game.purchase{value: (priceWei * 4000) / 400}(
+            buyer,
+            4000,
+            0,
+            bytes32(0),
+            MintPaymentKind.DirectEth,
+            false
+        );
+    }
+
+    /// @dev Mid-stall purchase: ticket buys stay open under the daily RNG lock and
+    ///      land on the write buffer; the checked helper's lock-skip would silently
+    ///      drop a stall-window cohort.
+    function _buyTicketsUnchecked() internal {
+        (, , , , uint256 priceWei) = game.purchaseInfo();
         vm.prank(buyer);
         game.purchase{value: (priceWei * 4000) / 400}(
             buyer,

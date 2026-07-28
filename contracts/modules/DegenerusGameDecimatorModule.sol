@@ -67,7 +67,6 @@ contract DegenerusGameDecimatorModule is DegenerusGamePayoutUtils {
     // -------------------------------------------------------------------------
 
     // error E() — inherited from DegenerusGameStorage
-    error PrizePoolFrozen(); // Claim attempted while the prize pool is frozen (advanceGame in progress).
 
     /// @notice Caller is not the authorized coin contract.
     error OnlyCoin();
@@ -323,8 +322,10 @@ contract DegenerusGameDecimatorModule is DegenerusGamePayoutUtils {
         // winner), never the caller. Taking the winner's exclusive claim timing away removes the
         // lootbox round-up from any single party's control. Resolution-into-claimable only (no ETH
         // leaves here); the player withdraws via the access-gated claimWinnings.
-        if (prizePoolFrozen) revert PrizePoolFrozen();
-
+        // A frozen pool is no bar: the lootbox backing routes to the pending buffer and
+        // the roll seeds off this level's own committed word, never a live one. Only
+        // far-future ticket creation is lock-sensitive, and _queueEntries rejects that
+        // on its own, so a roll that lands far-future waits for the unlock.
         DecClaimRound storage round = decClaimRounds[lvl];
         uint256 poolWei = round.poolWei;
         if (poolWei == 0) revert DecClaimInactive();
@@ -341,7 +342,22 @@ contract DegenerusGameDecimatorModule is DegenerusGamePayoutUtils {
         );
         if (amountWei == 0) revert DecNotWinner();
 
-        _claimDecimatorJackpotFor(player, lvl, e, round.rngWord, amountWei, gameOver);
+        // Terminal mode covers the whole death sequence: from the liveness trigger to the
+        // gameOver latch the claim would otherwise take the live branch and mint a
+        // lootbox, whose roll queues ticket entries against an already-public terminal
+        // word. Terminal mode pays the full amount as claimable instead — the claim stays
+        // open, it just stops creating positions. Both terms are load-bearing: gameOver is
+        // the authoritative latch this routing decision must never misread, and liveness
+        // extends the same treatment back over the multi-tx drain that precedes it. They
+        // share slot 0, so the pair costs one bit-test on an already-loaded word.
+        _claimDecimatorJackpotFor(
+            player,
+            lvl,
+            e,
+            round.rngWord,
+            amountWei,
+            gameOver || _livenessTriggered()
+        );
     }
 
     /// @notice Permissionlessly resolve Decimator jackpot claims for a batch of players.
@@ -354,21 +370,21 @@ contract DegenerusGameDecimatorModule is DegenerusGamePayoutUtils {
         address[] calldata players,
         uint24 lvl
     ) external {
-        if (prizePoolFrozen) revert PrizePoolFrozen();
-
         DecClaimRound storage round = decClaimRounds[lvl];
         uint256 poolWei = round.poolWei;
         if (poolWei == 0) revert DecClaimInactive();
 
         // Loop-invariant snapshot values: the claim round is written exactly once
-        // (runDecimatorJackpot is idempotent per level) and gameOver only flips in
-        // game-over resolution — none of the claim effects below can change them.
+        // (runDecimatorJackpot is idempotent per level) and the terminal-mode flag only
+        // flips in game-over resolution — none of the claim effects below can change them.
         uint64 packedOffsets = decBucketOffsetPacked[lvl];
         uint256 totalBurn = uint256(round.totalBurn);
         // Loop-invariant: each iteration's lootbox delegatecall would otherwise force a re-SLOAD.
         uint32 rngWordCached = round.rngWord;
         mapping(address => DecBet) storage decLevelBets = decBurn[lvl];
-        bool over = gameOver;
+        // Terminal mode spans the whole death sequence (see the single-claim path): the
+        // live branch would mint a lootbox whose roll queues entries against a public word.
+        bool over = gameOver || _livenessTriggered();
         uint256 settled;
         for (uint256 i; i < players.length; ++i) {
             DecBet storage e = decLevelBets[players[i]];
@@ -407,9 +423,10 @@ contract DegenerusGameDecimatorModule is DegenerusGamePayoutUtils {
         return PriceLookupLib.priceForLevel(jackpotPhaseFlag ? level : level + 1);
     }
 
-    /// @dev Shared claim core for the single and batch entry points. Callers must check
-    ///      prizePoolFrozen first — this path writes to futurePrizePool (lootbox portion);
-    ///      allowing it during freeze would corrupt the live pool that advanceGame operates on.
+    /// @dev Shared claim core for the single and batch entry points. The lootbox portion's
+    ///      pool credit is freeze-aware at the call site below — it lands in the pending
+    ///      buffer while the pool is frozen and in the live future pool otherwise — so a
+    ///      frozen pool is no bar to claiming and callers do not gate on it.
     ///      Callers validate eligibility and compute `amountWei` (nonzero, unclaimed bet);
     ///      this core marks the bet claimed before any credit is applied.
     function _claimDecimatorJackpotFor(
@@ -441,7 +458,16 @@ contract DegenerusGameDecimatorModule is DegenerusGamePayoutUtils {
             _minScoreForBucket(winBucket)
         );
         if (lootboxPortion != 0) {
-            _setFuturePrizePool(_getFuturePrizePool() + lootboxPortion);
+            // Credit the lootbox backing to whichever accumulator is live: the pending
+            // buffer while the pool is frozen (folded back by _unfreezePool), else the
+            // live pools. Same shape as the sDGNRS redemption leg, which credits the
+            // future pool ahead of its own lootbox resolution.
+            if (prizePoolFrozen) {
+                (uint128 pNext, uint128 pFuture) = _getPendingPools();
+                _setPendingPools(pNext, pFuture + uint128(lootboxPortion));
+            } else {
+                _setFuturePrizePool(_getFuturePrizePool() + lootboxPortion);
+            }
         }
         emit DecimatorClaimed(
             player,

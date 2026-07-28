@@ -15,7 +15,7 @@ import {IDegenerusAffiliate} from "../interfaces/IDegenerusAffiliate.sol";
 ///         the self-call re-enters the Game's own `advanceGame` dispatch (which
 ///         delegatecalls the AdvanceModule, running the required-path process STAGE
 ///         in-context). The signature matches `DegenerusGame.sol`.
-///         Advance-work discovery (`_advanceDueInContext`) and `mintPrice` / `level`
+///         Advance-work discovery (`_advanceDue`, the shared storage predicate) and `mintPrice` / `level`
 ///         are read in-context (inherited storage/helpers), so they are NOT routed
 ///         through here.
 interface IGameRouter {
@@ -353,10 +353,19 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
         // stay frozen across [request -> unlock]. Callers wait for the unlock.
         if (rngLockedFlag) revert RngLocked();
 
-        // Closed post-gameOver: no advance will consume the subscriber set again.
-        // Accrued value stays recoverable — afkingFunding via claim, pendingFlip via
-        // claimAfkingFlip, affiliateBase via the affiliate claim path.
-        if (gameOver) revert GameOver();
+        // Closed from the liveness trigger onward, which subsumes post-gameOver: the
+        // predicate stays true once death is declared (_unlockRng deliberately freezes
+        // dailyIdx so the deadman never un-fires, and the phase flags it reads can no
+        // longer be cleared). The subscribe path delivers its cover buy
+        // in-transaction, which queues ticket entries, and the terminal drain spans
+        // several transactions with gameOver still unlatched. The rngLock does not span
+        // that whole window — the terminal sequence takes it only when the fallback word
+        // commits, leaving the drain's earlier transactions unlocked — so liveness, not
+        // the lock, is what keeps a subscribe from queueing entries into the terminal
+        // cohort. Accrued value stays recoverable — afkingFunding
+        // via claim, pendingFlip via claimAfkingFlip, affiliateBase via the affiliate
+        // claim path.
+        if (_livenessTriggered()) revert GameOver();
 
         // Self-consent (player == 0 or msg.sender) or operator-approval.
         address subscriber = player == address(0) ? msg.sender : player;
@@ -1713,8 +1722,8 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
         // (1) advance — highest priority, liveness-critical (TRUE regardless of rngLock).
         // The self-call re-enters the Game's advanceGame, which runs the required-path
         // process STAGE in-context; the process bounty rides this 2x·mult.
-        if (_advanceDueInContext()) {
-            // Post-gameover dailyIdx freezes, so _advanceDueInContext stays true while the
+        if (_advanceDue()) {
+            // Post-gameover dailyIdx freezes, so _advanceDue stays true while the
             // only remaining advance work is the one-time final sweep. Revert the idle
             // no-op (checked BEFORE the advance, so a still-pending sweep runs and commits).
             if (gameOver && !_finalSweepPending()) revert NoWork();
@@ -1886,26 +1895,6 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
         stepsUsed = (unitsUsed + OPEN_ITEM_WEIGHT - 1) / OPEN_ITEM_WEIGHT;
     }
 
-    /// @dev O(1) in-context advance-work discovery for the router — a verbatim copy of
-    ///      the Game's external `advanceDue` predicate (`DegenerusGame.advanceDue`, which
-    ///      stays the documented off-chain keeper discovery view; the two bodies must be
-    ///      diffed together if either changes). TRUE for a new-day advance (regardless of
-    ///      rngLock — advance is liveness-critical) OR a mid-day partial-drain whose read
-    ///      slot still holds queued tickets. Every read is inherited in-context storage,
-    ///      so discovery needs no external self-call.
-    function _advanceDueInContext() internal view returns (bool) {
-        if (_simulatedDayIndex() != dailyIdx) return true;
-        if (!ticketsFullyProcessed) {
-            uint24 lvl = level;
-            uint24 purchaseLevel = (!jackpotPhaseFlag &&
-                lastPurchaseDay &&
-                rngLockedFlag)
-                ? lvl
-                : lvl + 1;
-            if (ticketQueue[_tqReadKey(purchaseLevel)].length > 0) return true;
-        }
-        return false;
-    }
 
     /// @dev The 30-days-post-gameover final sweep is still owed: game over, the sweep
     ///      window has opened, and the swept latch is unset. The sole advance-work item

@@ -2242,10 +2242,10 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         // Ticket-roll floor. A roll can land on the floor level exactly (its 30% leg), and the
         // swap that would commit that queue already fired at this level's RNG request. A normal
         // phase swaps again on jackpot day 2 and drains lvl there, so the floor is lvl. Turbo
-        // collapses the whole phase inside one lock — no further swap, mid-day requests locked
-        // out — and the transition then moves every drain to lvl+1 and beyond, past a level
-        // that is never probed again. Route the floor one level out so those awards land where
-        // the next purchase phase drains them.
+        // collapses the whole phase inside one lock — no further swap fires for the level, so
+        // a floor-lvl award would be committed and materialized only after lvl's draws ended
+        // (the trailing sweep reaches it, but drawless). Route the floor one level out so the
+        // awards land where they still draw.
         uint24 ticketFloorLvl = compressedJackpotFlag >= 2 ? lvl + 1 : lvl;
 
         uint256 winnersLen = winnersArr.length;

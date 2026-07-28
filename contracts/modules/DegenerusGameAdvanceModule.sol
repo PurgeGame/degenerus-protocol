@@ -81,7 +81,6 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
     uint8 private constant STAGE_RNG_REQUESTED = 1;
     uint8 private constant STAGE_TRANSITION_WORKING = 2;
     uint8 private constant STAGE_TRANSITION_DONE = 3;
-    uint8 private constant STAGE_FUTURE_TICKETS_WORKING = 4;
     uint8 private constant STAGE_TICKETS_WORKING = 5;
     uint8 private constant STAGE_PURCHASE_DAILY = 6;
     uint8 private constant STAGE_ENTERED_JACKPOT = 7;
@@ -269,15 +268,13 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         // the subtraction unsafe) and, even after it reaches psd, must not arm turbo: its word is
         // already cached, so rngGate would skip the request that performs the level promotion.
         // Turbo is therefore restricted to the real wall day with an unrequested word.
-        //
-        // Latched mid-day stall: a swapped mid-day request that crossed the boundary
-        // (latch set, word outstanding) resolves via the pre-gate promotion, which
-        // cannot swap while the committed cohort occupies the read slot. Arming turbo
-        // here would collapse the whole next jackpot phase inside that promotion's
-        // lock — no sentinel swap ever fires, so buys queued after the mid-day request
-        // would sit at a key no drain names again. Defer the arm: the evening
-        // target-met latch takes the compressed path instead, whose next-day request
-        // swaps and drains them normally.
+        // Latched mid-day stall: the pre-gate promotion cannot swap while the
+        // committed cohort occupies the read slot, and a collapsed turbo phase issues
+        // no sentinel swap — so buys queued after the stalled request would drain (the
+        // sweep's trailing window guarantees that) but only after the level retired:
+        // safe yet drawless. Defer the arm; the evening target-met latch takes the
+        // compressed path instead, whose next-day request commits them in time to
+        // draw.
         if (
             !inJackpot &&
             !lastPurchaseDay &&
@@ -329,39 +326,36 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                     if (word == 0) revert RngNotReady();
                 }
 
-                // In the jackpot phase the swapped read slot spans TWO keys: the routed
-                // buy cohort at lvl plus the flipped award queue at purchaseLevel. Drain
-                // the routed key first — the selection is stable across partial batches
-                // because a queue's length is only released when its drain completes —
-                // and clear the latch only once BOTH keys are empty.
-                uint24 midLvl = purchaseLevel;
-                if (inJackpot && ticketQueue[_tqReadKey(lvl)].length > 0) {
-                    midLvl = lvl;
-                }
+                // Unified sweep: the swapped read slot may span several windowed keys
+                // (the routed cohort, the award queue, future-level cohorts, or a
+                // self-healing leftover). The pick is stable across partial batches —
+                // a queue's length is only released when its drain completes — and the
+                // latch clears only once the whole window is empty.
+                (, bool midFound) = _sweepReadLevel(purchaseLevel);
                 // The draw is gated on BOTH the normal queue AND the foil drain: keep
                 // draining while the normal queue OR a sealed-but-un-drained foil bucket
                 // (resolved on leftover budget) remains, else foil's boosted entries
                 // silently under-resolve into the jackpot.
-                if (
-                    ticketQueue[_tqReadKey(midLvl)].length > 0 ||
-                    _foilDrainPending()
-                ) {
-                    (
-                        bool ticketWorked,
-                        bool ticketsFinished
-                    ) = _runProcessTicketBatch(midLvl);
-                    if (ticketWorked || !ticketsFinished) {
-                        if (
-                            ticketsFinished &&
-                            ticketQueue[_tqReadKey(purchaseLevel)].length == 0
-                        ) {
-                            ticketsFullyProcessed = true;
-                            _lrWrite(LR_MID_DAY_SHIFT, LR_MID_DAY_MASK, 0);
-                        }
-                        emit Advance(STAGE_TICKETS_WORKING, lvl);
-                        // Mid-day partial-drain: mult = 1 (no escalation).
-                        return mult;
+                if (midFound || _foilDrainPending()) {
+                    (, bool ticketsFinished) = _runProcessTicketBatch(
+                        purchaseLevel
+                    );
+                    // Commit unconditionally: the outer gate already proved there was
+                    // work to attempt, and every outcome the worker can return carries
+                    // progress worth keeping. A finished walk that resolved no buyers
+                    // still advanced foilDrainDay past a drained-empty bucket — reverting
+                    // that write would roll the cursor back onto the same bucket, leaving
+                    // _foilDrainPending (and so _advanceDue) true and re-entering this
+                    // branch on every call until the day boundary resets the latch.
+                    // The sweep worker's finished means the WHOLE window and the foil
+                    // drain are caught up, so the latch releases directly.
+                    if (ticketsFinished) {
+                        ticketsFullyProcessed = true;
+                        _lrWrite(LR_MID_DAY_SHIFT, LR_MID_DAY_MASK, 0);
                     }
+                    emit Advance(STAGE_TICKETS_WORKING, lvl);
+                    // Mid-day partial-drain: mult = 1 (no escalation).
+                    return mult;
                 }
             }
 
@@ -395,29 +389,16 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                 // never writes this slot, and the only writer on a path reaching the mid-day check
                 // (_requestRng) breaks out before it.
                 uint256 lrCached = lootboxRngPacked;
-                // A mid-day-swapped batch that crossed the day boundary holds read-side
-                // work at TWO keys in the jackpot phase: the routed cohort at lvl plus
-                // the flipped award queue at purchaseLevel. Finish the routed key first,
-                // then fall back to purchaseLevel — both must drain before rngGate's
-                // swap re-points the read slot, or the leftover cohort flips back into
-                // the write stream and strands for good when the crossing lands on the
-                // final jackpot day.
-                uint24 preLvl = purchaseLevel;
-                if (
-                    inJackpot &&
-                    ((lrCached >> LR_MID_DAY_SHIFT) & LR_MID_DAY_MASK) != 0 &&
-                    ticketQueue[_tqReadKey(lvl)].length > 0
-                ) {
-                    preLvl = lvl;
-                }
-                uint24 preRk = _tqReadKey(preLvl);
+                // Unified sweep: any windowed read-side key may hold committed work — a
+                // mid-day batch that crossed the day boundary, the award queue, a
+                // future-level cohort, or a self-healing leftover a later swap
+                // re-committed. Everything must drain before rngGate's swap re-points
+                // the read slot.
+                (, bool preFound) = _sweepReadLevel(purchaseLevel);
                 // The draw is gated on BOTH the normal queue AND the foil drain: keep
                 // draining while the normal queue OR a sealed-but-un-drained foil bucket
                 // remains.
-                if (
-                    ticketQueue[preRk].length > 0 ||
-                    _foilDrainPending()
-                ) {
+                if (preFound || _foilDrainPending()) {
                     uint48 preIdx = uint48(
                         (lrCached >> LR_INDEX_SHIFT) & LR_INDEX_MASK
                     ) - 1;
@@ -442,7 +423,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                                 ts - rngRequestTime >= MIDDAY_RNG_STALL_TIMEOUT
                             ) {
                                 _requestRng(lastPurchase, purchaseLevel);
-                                if (ticketQueue[preRk].length == 0) {
+                                if (!preFound) {
                                     _swapTicketSlot();
                                 }
                                 _freezePool(day);
@@ -482,7 +463,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                         emit LootboxRngApplied(preIdx, cw, vrfRequestId);
                     }
                     (bool preWorked, bool preFinished) = _runProcessTicketBatch(
-                        preLvl
+                        purchaseLevel
                     );
                     if (preWorked || !preFinished) {
                         stage = STAGE_TICKETS_WORKING;
@@ -594,11 +575,9 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
             if (rngWord == 1) {
                 // Sentinel from an already-locked entry = the daily retry re-firing the
                 // outstanding request. The original request's swap already committed the
-                // read cohort (in jackpot phase it sits at level, which the pre-drain
-                // gate's purchaseLevel probe does not see), so swapping again would flip
-                // it back to the write slot — and past the phase transition no drain
-                // probes that key again. Only an unlocked entry (fresh request or
-                // promoted mid-day stall) commits the buffer here.
+                // read cohort; swapping again would flip it back to the write slot
+                // mid-drain. Only an unlocked entry (fresh request or promoted mid-day
+                // stall) commits the buffer here.
                 if (!locked) {
                     _swapTicketSlot();
                 }
@@ -661,25 +640,10 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                 break;
             }
 
-            // Process near-future ticket queues before daily draws
-            // to include fresh lootbox-driven tickets
-            if (!dailyJackpotCoinTicketsPending) {
-                if (
-                    !_prepareFutureTickets(
-                        inJackpot ? lvl : purchaseLevel,
-                        rngWord
-                    )
-                ) {
-                    stage = STAGE_FUTURE_TICKETS_WORKING;
-                    break;
-                }
-            }
-
-            // Process current level tickets:
-            // Purchase phase processes purchaseLevel (= level+1) where new tickets route.
-            // Jackpot phase processes level where jackpot-phase tickets route.
+            // Unified sweep over the windowed read keys (routed cohort first); an
+            // empty-window call is the foil drain's continuation vehicle.
             (bool ticketWorked, bool ticketsFinished) = _runProcessTicketBatch(
-                inJackpot ? lvl : purchaseLevel
+                purchaseLevel
             );
             if (ticketWorked || !ticketsFinished) {
                 stage = STAGE_TICKETS_WORKING;
@@ -735,20 +699,6 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                     _unlockRng(day);
                     stage = STAGE_PURCHASE_DAILY;
                     break;
-                }
-
-                // Activate next-level tickets before jackpot phase
-                {
-                    uint24 nextLevel = purchaseLevel + 1;
-                    (
-                        bool futureWorked,
-                        bool futureFinished,
-
-                    ) = _processFutureTicketBatch(nextLevel, rngWord);
-                    if (futureWorked || !futureFinished) {
-                        stage = STAGE_FUTURE_TICKETS_WORKING;
-                        break;
-                    }
                 }
 
                 // Consolidate prize pools for level transition. A century level's
@@ -911,23 +861,75 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         // enter the new write buffer during the multi-tx drain. Foil buckets carry their own sealed
         // resolve-day entropy and may be drained without promoting the normal-ticket write buffer.
         uint256 dayWord = rngWordByDay[day];
-        bool entropyCommitted = dayWord != 0 ||
-            rngWordCurrent != 0 ||
-            vrfRequestId != 0 ||
-            rngLockedFlag ||
-            prizePoolFrozen ||
-            _lrRead(LR_MID_DAY_SHIFT, LR_MID_DAY_MASK) != 0;
+        // Terminal entropy is two-case by design: a real word if VRF works, the
+        // fallback if it does not — and BOTH buffers clear against whichever one
+        // applies. A DELIVERED word blocks the write swap permanently (entries may
+        // postdate it), but a dead request does not: once the fallback regime is
+        // due, the terminal word will be derived AFTER the liveness gate froze
+        // purchases, so every write-side entry predates it and the abandonment
+        // cohort commits and drains like any other. The read cohort always drains
+        // first (branch priority below), so the swap can never displace it.
+        // The regime is LATCHED at derivation (LR_GO_FALLBACK): the committed
+        // fallback replays through rngWordCurrent for entropy idempotence, which
+        // would otherwise read as a delivered word here and re-block the write
+        // swap on the entry after the read cohort releases.
+        bool deliveredWord = dayWord != 0 || rngWordCurrent != 0;
+        bool fallbackDue = _lrRead(LR_GO_FALLBACK_SHIFT, LR_GO_FALLBACK_MASK) !=
+            0 ||
+            (!deliveredWord &&
+                (((jackpotPhaseFlag || lastPurchaseDay) && _vrfDeadmanFired()) ||
+                    (rngRequestTime != 0 &&
+                        uint48(block.timestamp) - rngRequestTime >=
+                        GAMEOVER_RNG_FALLBACK_DELAY)));
+        bool entropyCommitted = !fallbackDue &&
+            (deliveredWord ||
+                vrfRequestId != 0 ||
+                rngLockedFlag ||
+                prizePoolFrozen ||
+                _lrRead(LR_MID_DAY_SHIFT, LR_MID_DAY_MASK) != 0);
+        // Terminal scope: the payout samples only lvlTraitEntry[drainLevel], so the
+        // probes and the swap decision are drainLevel-only; every other windowed
+        // cohort is dead value whether materialized or not (its level never draws)
+        // and is discarded at the drain step below, after the terminal entropy
+        // commitment makes termination irreversible.
         bool readPending = ticketQueue[_tqReadKey(drainLevel)].length != 0;
         bool writePending = ticketQueue[_tqWriteKey(drainLevel)].length != 0;
         if (readPending) {
             // The selected read queue is already the oldest committed snapshot. Trust the queue
             // itself over a stale-true completion flag and resume it without touching write state.
             ticketsFullyProcessed = false;
-        } else if (writePending && !entropyCommitted) {
-            // No selected read cohort and no entropy boundary: freeze the abandonment cohort now.
+        } else if (
+            writePending &&
+            !entropyCommitted &&
+            _lrRead(LR_GO_SWAP_SHIFT, LR_GO_SWAP_MASK) == 0
+        ) {
+            // No selected read cohort and no entropy boundary: freeze the abandonment
+            // cohort now. ONE terminal swap, ever. Two parities means a single handoff,
+            // and every path needs at most that: when no request was in flight the read
+            // side is provably empty (rngRequestTime == 0 only after _unlockRng, which
+            // follows a completed drain), so this fires once before any word exists;
+            // when a request WAS in flight its cohort holds the read side and this is
+            // the one handoff behind it. Without the bound the sticky fallback regime
+            // would re-promote every later write queue in turn, so a queue created after
+            // the terminal word went public could still be drawn.
             _swapTicketSlot();
+            _lrWrite(LR_GO_SWAP_SHIFT, LR_GO_SWAP_MASK, 1);
         } else if (_foilDrainPending()) {
             ticketsFullyProcessed = false;
+        }
+
+        // Record which bucket the terminal sequence pays from, while rngLockedFlag still
+        // carries its normal meaning. The VRF-dead and failed-request branches below take
+        // the lock themselves (the successful-request path already gets it from
+        // _finalizeRngRequest), and _gameOverTicketLevel would otherwise read that lock as
+        // "the last-purchase request already promoted level" and move the bucket between
+        // transactions. Latched once, before any of those branches run.
+        if (_lrRead(LR_GO_LVL_SHIFT, LR_GO_LVL_MASK) == 0) {
+            _lrWrite(
+                LR_GO_LVL_SHIFT,
+                LR_GO_LVL_MASK,
+                drainLevel == lvl ? 1 : 2
+            );
         }
 
         // Pre-gameover: acquire RNG, drain the committed cohort, then unlock.
@@ -941,6 +943,17 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
             if (rngWord == 1 || rngWord == 0) return (true, STAGE_GAMEOVER);
         }
 
+        // Re-ask now that a word exists. The probe above ran before the entropy step, so
+        // on the transaction that commits the fallback it could not yet see the regime
+        // that makes an unworded foil bucket drainable — the latch and rngWordCurrent are
+        // both written inside the call above. Without this second look a game whose only
+        // outstanding work is such a bucket keeps ticketsFullyProcessed true, skips the
+        // worker, and pays the terminal jackpot with those paid packs missing from the
+        // trait buckets while their ETH is still in the distributed pool.
+        if (ticketsFullyProcessed && _foilDrainPending()) {
+            ticketsFullyProcessed = false;
+        }
+
         // Best-effort drain of the single RNG-committed ticket snapshot. One batch runs per tx
         // (mirroring the normal daily drain), and a finishing batch still breaks so the terminal
         // jackpot executes in its OWN transaction below the EIP-7825 per-tx gas ceiling.
@@ -951,12 +964,16 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         // trait-bucket eligibility, but terminal fund release is never blocked.
         //
         if (!ticketsFullyProcessed) {
+            // TICKET_SLOT_BIT on the anchor asks the worker for its single-key
+            // terminal mode: drain exactly drainLevel plus the foil tail — every
+            // queued ticket at any other level is worthless at game over and is
+            // never touched.
             (bool dOk, bytes memory dData) = ContractAddresses
                 .GAME_MINT_MODULE
                 .delegatecall(
                     abi.encodeWithSelector(
                         IDegenerusGameMintModule.processTicketBatch.selector,
-                        drainLevel
+                        drainLevel | TICKET_SLOT_BIT
                     )
                 );
             if (dOk && dData.length >= 64) {
@@ -1450,26 +1467,23 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         }
 
         // Freeze ticket buffer: swap write→read so tickets purchased after
-        // VRF delivery can't be resolved by this word. Probe the level buys route
-        // to (jackpot phase = level, else level + 1 — the lock-sensitive branches
-        // of _activeTicketLevel are dead here: this path reverts while
-        // rngLockedFlag is set, and the transition span holds that lock until
-        // jackpotPhaseFlag clears). The global swap also flips the jackpot
-        // phase's award queue at level + 1 into the read slot, so probe both;
-        // whenever the swap fires, the mid-day drain empties both keys before
-        // releasing the latch.
-        //
-        // Penultimate-day guard: when the NEXT daily request caps the jackpot
-        // counter, a freeze window opened now can cross into that final day (a
-        // stalled word promotes onto it with the read slot busy, so no swap can
-        // fire), leaving the post-request write-side cohort at a key no later
-        // swap ever commits. Skip the swap entirely — the queues wait for the
-        // final request's own sentinel commit, which its chain drains — and the
-        // word still serves the pending lootboxes.
+        // VRF delivery can't be resolved by this word. Any write-side key in the
+        // trailing window may hold pending work (this path reverts while
+        // rngLockedFlag is set, so the building level here is always level + 1
+        // and the window is [level .. level + 5]). Stranding is impossible either
+        // way — the unified sweep keeps naming a retired level until both its
+        // parities are empty — but the guard below protects DRAW ELIGIBILITY:
+        // when the NEXT daily request caps the jackpot counter, a freeze window
+        // opened now can cross into that final day via a stalled-word promotion,
+        // which cannot swap (the committed cohort occupies the read slot). The
+        // stall-window buys would then materialize only after the level retires —
+        // safe but drawless. Skipping the swap keeps the whole evening cohort
+        // together on the write side for the final request's own commit, which
+        // its chain drains BEFORE the final draw. The word still serves the
+        // pending lootboxes.
         {
-            bool inJackpot = jackpotPhaseFlag;
             bool lastSwapAhead;
-            if (inJackpot) {
+            if (jackpotPhaseFlag) {
                 uint8 cnt = jackpotCounter;
                 uint8 comp = compressedJackpotFlag;
                 uint8 step = comp == 2
@@ -1478,10 +1492,17 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                 lastSwapAhead = cnt + step >= JACKPOT_LEVEL_CAP;
             }
             if (!lastSwapAhead) {
-                uint24 routedLvl = inJackpot ? level : level + 1;
-                bool queuedWork = ticketQueue[_tqWriteKey(routedLvl)].length > 0;
-                if (!queuedWork && inJackpot) {
-                    queuedWork = ticketQueue[_tqWriteKey(level + 1)].length > 0;
+                bool queuedWork;
+                uint24 t = level;
+                uint24 end = level + 5;
+                for (; t <= end; ) {
+                    if (ticketQueue[_tqWriteKey(t)].length > 0) {
+                        queuedWork = true;
+                        break;
+                    }
+                    unchecked {
+                        ++t;
+                    }
                 }
                 if (queuedWork && ticketsFullyProcessed) {
                     _swapTicketSlot();
@@ -1820,7 +1841,49 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                     sdgnrs.resolveRedemptionPeriod(redemptionRoll, toResolve);
                 }
             }
+            // The terminal cohorts must compose against fresh-or-fallback entropy,
+            // never the last delivered (public) word: when no empty reserved slot
+            // exists (VRF died with no request in flight, or the terminal request
+            // attempt reverted without advancing the index), reserve a fresh slot
+            // so the fallback word becomes the drain's entropy.
+            if (
+                lootboxRngWordByIndex[
+                    uint48(_lrRead(LR_INDEX_SHIFT, LR_INDEX_MASK)) - 1
+                ] != 0
+            ) {
+                _lrAdvanceIndexClearPending();
+            }
             _finalizeLootboxRng(fallbackWord);
+            // A deadman entry with no request ever armed must still latch the timer:
+            // rngWordCurrent now holds the committed fallback, and an armed timer makes
+            // a terminal drain that crosses a wall-day boundary take the delivered-word
+            // replay branch above — the SAME word instead of a second fallback that
+            // would drift the cohort's entropy mid-drain.
+            if (rngRequestTime == 0) {
+                rngRequestTime = ts;
+            }
+            // Latch the fallback regime for the multi-tx drain: the replayed word
+            // reads as delivered on later entries, and without the latch the
+            // write-buffer swap _handleGameOverPath owes the abandonment cohort
+            // would stay blocked.
+            _lrWrite(LR_GO_FALLBACK_SHIFT, LR_GO_FALLBACK_MASK, 1);
+            // Take the RNG lock the successful-request path gets from
+            // _finalizeRngRequest. A word is committed right here and consumed by later
+            // calls, so this is an RNG window like any other — but it is the one the
+            // normal path never reaches, which is why every lock-keyed guard
+            // (reverseFlip, requestLootboxRng, far-future queueing, subscribe) has been
+            // reading an unlocked state through the whole terminal drain. The swap
+            // decision upstream has already been made this call, and later calls stay
+            // swap-eligible through fallbackDue, so the lock cannot suppress it.
+            //
+            // Coupling worth knowing: holding the lock also arms the "buffered" arm of
+            // the RNGREUSE day clamp, so from here on `day` resolves to dailyIdx + 1
+            // rather than the wall day. That is entropy-neutral — the replay branch
+            // writes this same word to whichever day key it lands on, and _unlockRng
+            // leaves dailyIdx stale at game over — but it does decide which day key the
+            // terminal coinflip settlement, handleGameOverDrain, and the terminal events
+            // record against.
+            rngLockedFlag = true;
             // Keep the already-expired timer as a terminal-intent latch until _unlockRng. Ticket
             // processing and handleGameOverDrain intentionally run in separate transactions; if
             // this grace timer were cleared here before day-based liveness had independently fired,
@@ -1834,6 +1897,9 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         }
 
         // VRF request failed; start fallback timer (rngRequestTime != 0 acts as lock).
+        // The timer alone suffices here: no word exists yet, so nothing is predictable,
+        // and this state feeds the fallback branch above — which takes the real lock at
+        // the moment it commits a word.
         rngWordCurrent = 0;
         rngRequestTime = ts;
         return 0;
@@ -1951,52 +2017,6 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         return abi.decode(data, (bool, bool, uint32));
     }
 
-    /// @dev Before daily draws, process near-future ticket read queues.
-    ///      Caller passes level during jackpot phase (range lvl+1..lvl+4) or
-    ///      purchaseLevel during purchase phase (range lvl+2..lvl+5).
-    ///      FF promotion is handled separately at phase transition time.
-    /// @param lvl Base level (level during jackpot, purchaseLevel during purchase).
-    /// @param entropy Today's daily RNG word (from rngGate) threaded to ticket rarity rolls.
-    /// @return finished True when all target future levels are fully processed.
-    function _prepareFutureTickets(
-        uint24 lvl,
-        uint256 entropy
-    ) private returns (bool finished) {
-        uint24 startLevel = lvl + 1;
-        uint24 endLevel = lvl + 4;
-        uint24 resumeLevel = ticketLevel;
-
-        // The current-level ticket drain shares this resume cursor and runs after prepare on
-        // every advance call. While that drain is mid-flight across transactions (marker == lvl),
-        // defer: probing future levels here lets an empty-queue probe reset the shared cursor,
-        // restarting the current drain from index 0 on each call and wedging a large queue
-        // permanently. Future levels are processed once the current drain clears the marker.
-        if (resumeLevel == lvl) return true;
-
-        // Continue an in-flight future level first to preserve progress.
-        if (resumeLevel >= startLevel && resumeLevel <= endLevel) {
-            (bool worked, bool levelFinished, ) = _processFutureTicketBatch(
-                resumeLevel,
-                entropy
-            );
-            if (worked || !levelFinished) return false;
-        }
-
-        // Then probe remaining target levels in order.
-        for (uint24 target = startLevel; target <= endLevel; ) {
-            if (target != resumeLevel) {
-                (bool worked, bool levelFinished, ) = _processFutureTicketBatch(
-                    target,
-                    entropy
-                );
-                if (worked || !levelFinished) return false;
-            }
-            unchecked {
-                ++target;
-            }
-        }
-        return true;
-    }
 
     /*+======================================================================+
       |                    TICKET / TOKEN AIRDROP BATCHING                   |
@@ -2005,13 +2025,14 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
       |  Large purchases are queued and processed across multiple txs.       |
       +======================================================================+*/
 
-    /// @dev Process a batch of current level tickets via mint module delegatecall.
-    /// @param lvl Current level.
+    /// @dev Run the windowed ticket sweep via mint module delegatecall: one writes
+    ///      budget drains the read window [anchor-1 .. anchor+4] plus foil.
+    /// @param lvl The window anchor (purchaseLevel).
     /// @return worked True if the batch materialized at least one ticket or foil entry.
     ///         Reported directly by the mint module rather than inferred from a cursor
     ///         delta, so a batch that both starts and finishes in one call (cursor returns
     ///         to 0) still reports its work and the chain breaks before BAF/jackpot.
-    /// @return finished True if all tickets for this level have been fully processed.
+    /// @return finished True when the whole window and the foil drain are caught up.
     function _runProcessTicketBatch(
         uint24 lvl
     ) private returns (bool worked, bool finished) {
@@ -2144,6 +2165,32 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
     // =========================================================================
     // Queue Swap and Prize Pool Freeze
     // =========================================================================
+
+    /// @dev The unified sweep's key picker: the first non-empty READ-side plain queue in
+    ///      the six-level window [purchaseLevel-1 .. purchaseLevel+4] — one key per level
+    ///      the distance routing can currently target (plain iff target <= level + 5)
+    ///      plus the trailing key. Ascending order is routed-priority in both phases: in
+    ///      the jackpot phase purchaseLevel-1 IS the routed level, and in the purchase
+    ///      phase purchaseLevel-1 is the just-finished level, whose self-healing
+    ///      leftovers must drain first anyway. The trailing key keeps a retired level
+    ///      named until both its parities are provably empty — a leftover re-committed
+    ///      by any later swap drains instead of stranding. Far-future keys are never
+    ///      probed: each is emptied once per level by the transition's crossing drain
+    ///      and is write-dead afterward.
+    function _sweepReadLevel(
+        uint24 purchaseLevel
+    ) private view returns (uint24 pick, bool found) {
+        unchecked {
+            uint24 t = purchaseLevel == 0 ? 0 : purchaseLevel - 1;
+            uint24 end = purchaseLevel + 4;
+            for (; t <= end; ++t) {
+                if (ticketQueue[_tqReadKey(t)].length > 0) {
+                    return (t, true);
+                }
+            }
+        }
+        return (purchaseLevel, false);
+    }
 
     /// @dev Toggle the active ticket queue buffer and reset the read-slot drained flag.
     ///      Normal-cycle callers swap only after the read slot is drained. The terminal caller may

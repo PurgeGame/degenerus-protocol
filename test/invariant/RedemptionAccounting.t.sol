@@ -616,14 +616,26 @@ contract RedemptionAccounting is DeployProtocol {
         // PROOF (1): the stETH leg was reached at least once (ETH-side starved, stETH covered).
         assertGt(handler.ghost_stethLegBurns(), 0, "lever: stETH leg never reached (only ETH leg ran)");
 
-        // Settle any in-flight daily RNG before the fail-closed phase: a stale buffered word
-        // seals only its request day (RNGREUSE buffered clamp), so the drive above can end with
-        // a fresh request outstanding — and action_burn no-ops while rngLocked, which would
-        // leave the fail-closed loop below vacuous.
-        for (uint256 i = 0; i < 6 && game.rngLocked(); i++) {
+        // Settle any in-flight daily RNG AND the sentinel-stamped burn pool before the
+        // fail-closed phase: the drive above can end mid-day (request outstanding) or with
+        // the wall day rolled past the last sealed day (no request fired yet), and in
+        // either state the prior day's pool is unresolved — action_burn no-ops on both
+        // rngLocked and a stale pendingResolveDay, which would leave the fail-closed loop
+        // below vacuous. Advance until the pool sentinel clears (the next sealed day's
+        // rngGate resolves it).
+        for (
+            uint256 i = 0;
+            i < 6 && (game.rngLocked() || sdgnrs.pendingResolveDay() != 0);
+            i++
+        ) {
             handler.action_advanceDay(uint256(keccak256(abi.encode("settle", i))));
         }
         assertFalse(game.rngLocked(), "lever: day must be settled before the fail-closed phase");
+        assertEq(
+            sdgnrs.pendingResolveDay(),
+            0,
+            "lever: the burn pool must be resolved before the fail-closed phase"
+        );
 
         // Now drain sDGNRS's stETH so neither leg covers, and confirm the fail-closed branch fires.
         // Move sDGNRS's stETH out (transfer to a sink) so the stETH leg can no longer cover.

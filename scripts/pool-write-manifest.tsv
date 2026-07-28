@@ -47,6 +47,7 @@ POOL-TO-POOL	prizePoolPendingPacked	_unfreezePool	modules/DegenerusGameAdvanceMo
 POOL-TO-POOL	prizePoolsPacked	_unfreezePool	modules/DegenerusGameAdvanceModule.sol	WRITE	pending accumulators fold into the live pools at unlock: halves add saturating, the volume counter rolls pending->live, one RMW
 PRE-COUNTED	_creditClaimable	_claimDecimatorJackpotFor	modules/DegenerusGameDecimatorModule.sol	READ	game-over claim leg: round pool entered claimablePool at snapshot (AdvanceModule claimableDelta)
 POOL-TO-POOL	_setFuturePrizePool	_claimDecimatorJackpotFor	modules/DegenerusGameDecimatorModule.sol	READ	live-claim lootbox half returns to future; paired claimablePool -= in _creditDecJackpotClaimCore
+POOL-TO-POOL	_setPendingPools	_claimDecimatorJackpotFor	modules/DegenerusGameDecimatorModule.sol	READ	same lootbox half on the frozen path (pending future instead of live); same pairing
 PRE-COUNTED	_creditClaimable	_creditDecJackpotClaimCore	modules/DegenerusGameDecimatorModule.sol	READ	ETH half of a live decimator claim; aggregate counted at snapshot
 POOL-TO-POOL	claimablePool	_creditDecJackpotClaimCore	modules/DegenerusGameDecimatorModule.sol	WRITE	lootbox half leaves claimable, paired with the future += at the caller
 PRE-COUNTED	_creditClaimable	claimTerminalDecimatorJackpot	modules/DegenerusGameDecimatorModule.sol	READ	terminal round pre-counted at the game-over drain (claimablePool += decSpend)

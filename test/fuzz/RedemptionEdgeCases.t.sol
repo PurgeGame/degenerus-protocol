@@ -743,6 +743,9 @@ contract RedemptionEdgeCases is DeployProtocol {
 
         // Mock game.gameOver() = true ahead of resolve (Variant 1)
         vm.mockCall(address(game), abi.encodeWithSelector(game.gameOver.selector), abi.encode(true));
+        // The redemption claim reads livenessTriggered, which gameOver implies on chain
+        // (_unlockRng leaves dailyIdx stale at game over). Mock it to match.
+        vm.mockCall(address(game), abi.encodeWithSelector(game.livenessTriggered.selector), abi.encode(true));
 
         _advanceWallDay();
         _resolveDay(dayD, 100);
@@ -790,6 +793,9 @@ contract RedemptionEdgeCases is DeployProtocol {
 
         // NOW mock gameOver=true (post-resolve, pre-claim)
         vm.mockCall(address(game), abi.encodeWithSelector(game.gameOver.selector), abi.encode(true));
+        // The redemption claim reads livenessTriggered, which gameOver implies on chain
+        // (_unlockRng leaves dailyIdx stale at game over). Mock it to match.
+        vm.mockCall(address(game), abi.encodeWithSelector(game.livenessTriggered.selector), abi.encode(true));
 
         uint256 ethBeforeV2 = playerC.balance;
         (uint96 evV2Pre, , ) = sdgnrs.pendingRedemptions(playerC, uint24(dayD2));

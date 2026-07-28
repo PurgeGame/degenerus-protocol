@@ -727,8 +727,45 @@ abstract contract DegenerusGameStorage {
     ///      at `lvl`, while later write-buffer purchases target `lvl + 1`. Shared by the game-over
     ///      ticket DRAIN (AdvanceModule) and terminal-jackpot READ (GameOverModule), keeping the
     ///      materialized trait bucket and payout bucket identical in every terminal state.
+    ///      The terminal path latches the answer on its first entry and every later read
+    ///      returns the latch. That is what lets the terminal sequence hold the RNG lock:
+    ///      the un-latched form infers "the last-purchase request already promoted level"
+    ///      from rngLockedFlag, so a lock taken for terminal reasons would otherwise move
+    ///      this level between transactions and split the drained cohort from the payout
+    ///      bucket. `level` itself cannot move once the game-over path owns the advance.
     function _gameOverTicketLevel(uint24 lvl) internal view returns (uint24) {
+        uint256 latched = _lrRead(LR_GO_LVL_SHIFT, LR_GO_LVL_MASK);
+        if (latched != 0) return latched == 1 ? lvl : lvl + 1;
         return (jackpotPhaseFlag || (lastPurchaseDay && rngLockedFlag)) ? lvl : lvl + 1;
+    }
+
+    /// @dev O(1) advance-work discovery, shared by the external keeper view
+    ///      (DegenerusGame.advanceDue) and the afking router's in-context predicate.
+    ///      TRUE for a new-day advance (regardless of rngLock — advance is
+    ///      liveness-critical) OR a mid-day partial-drain whose read window still holds
+    ///      queued tickets or whose sealed foil bucket awaits its drain. The probe
+    ///      mirrors the unified sweep's window [purchaseLevel-1 .. purchaseLevel+4]; a
+    ///      fixed six-key scan, not unbounded.
+    function _advanceDue() internal view returns (bool) {
+        if (_simulatedDayIndex() != dailyIdx) return true;
+        if (!ticketsFullyProcessed) {
+            uint24 lvl = level;
+            uint24 purchaseLevel = (!jackpotPhaseFlag &&
+                lastPurchaseDay &&
+                rngLockedFlag)
+                ? lvl
+                : lvl + 1;
+            uint24 t = purchaseLevel == 0 ? 0 : purchaseLevel - 1;
+            uint24 end = purchaseLevel + 4;
+            for (; t <= end; ) {
+                if (ticketQueue[_tqReadKey(t)].length > 0) return true;
+                unchecked {
+                    ++t;
+                }
+            }
+            if (_foilDrainPending()) return true;
+        }
+        return false;
     }
 
     /// @dev True when gameover liveness guard would fire within ~1 day (day-granularity).
@@ -1893,7 +1930,7 @@ abstract contract DegenerusGameStorage {
     uint256 internal vrfSubscriptionId;
 
     // =========================================================================
-    // Lootbox RNG Packed Slot (5 variables in 232/256 bits)
+    // Lootbox RNG Packed Slot (7 variables in 240/256 bits)
     // =========================================================================
     //
     // Layout (LSB -> MSB):
@@ -1903,7 +1940,9 @@ abstract contract DegenerusGameStorage {
     //   [bits 176:183]  middayMaxBasefeeGwei     uint8    (whole gwei, 0 disables the gate)
     //   [bits 184:223]  lootboxRngPendingFlip  uint40   (scaled /1e18, 1 FLIP res, max ~1.1T FLIP)
     //   [bits 224:231]  midDayTicketRngPending   uint8    (bool flag, 8 bits)
-    //   [bits 232:255]  (unused)
+    //   [bits 232:239]  gameOverFallbackLatched  uint8    (bool flag, 8 bits)
+    //   [bits 240:247]  gameOverDrainLevelLatch  uint8    (0=unset, 1=lvl, 2=lvl+1)
+    //   [bits 248:255]  gameOverSwapConsumed     uint8    (bool flag, 8 bits)
 
     /// @dev Packed lootbox RNG state. See layout comment above.
     ///      Initialized with lootboxRngIndex=1, lootboxRngThreshold=1 ether (scaled=1000),
@@ -1926,6 +1965,12 @@ abstract contract DegenerusGameStorage {
     uint256 internal constant LR_MID_DAY_MASK = 0xFF;                       // 8 bits
     uint256 internal constant LR_MAX_BASEFEE_SHIFT = 176;
     uint256 internal constant LR_MAX_BASEFEE_MASK = 0xFF;                   // 8 bits
+    uint256 internal constant LR_GO_FALLBACK_SHIFT = 232;
+    uint256 internal constant LR_GO_FALLBACK_MASK = 0xFF;                   // 8 bits
+    uint256 internal constant LR_GO_LVL_SHIFT = 240;
+    uint256 internal constant LR_GO_LVL_MASK = 0xFF;                        // 8 bits
+    uint256 internal constant LR_GO_SWAP_SHIFT = 248;
+    uint256 internal constant LR_GO_SWAP_MASK = 0xFF;                       // 8 bits
 
     /// @dev Ceiling on the tunable mid-day basefee gate, in whole gwei (the field is 8
     ///      bits). Zero disables the gate, letting mid-day requests issue at any price.
@@ -2974,11 +3019,20 @@ abstract contract DegenerusGameStorage {
     ///      on one SLOAD; otherwise it is pending only while the low-water bucket is
     ///      at/below the high-water mark AND its daily word has sealed (a future-dated
     ///      bucket whose word is not yet sealed does not gate the current jackpot).
+    ///      Under the terminal fallback regime an unsealed bucket is pending too: its day
+    ///      will never be worded, and the drain settles it against the committed fallback
+    ///      word instead of leaving those packs out of the terminal cohort. The latch read
+    ///      sits behind the sealed-word test, so live play only reaches it for a
+    ///      future-dated bucket, where the answer is false either way.
     function _foilDrainPending() internal view returns (bool) {
         uint24 last = foilLastResolveDay;
         if (last == 0) return false;
         uint24 dd = foilDrainDay;
-        return dd <= last && rngWordByDay[dd] != 0;
+        if (dd > last) return false;
+        return
+            rngWordByDay[dd] != 0 ||
+            (_lrRead(LR_GO_FALLBACK_SHIFT, LR_GO_FALLBACK_MASK) != 0 &&
+                rngWordCurrent != 0);
     }
 
     /// @dev The per-cycle one-pack cap: true iff the player already bought a foil

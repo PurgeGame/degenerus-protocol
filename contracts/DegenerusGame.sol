@@ -1711,21 +1711,10 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     }
 
     /// @notice O(1) discovery: does advanceGame() have pending work?
-    /// @dev TRUE for a new-day advance (regardless of rngLock — advance is liveness-critical)
-    ///      OR a mid-day partial-drain whose read slot still holds queued tickets. No
-    ///      unbounded scan.
+    /// @dev The shared storage-level predicate (`_advanceDue`) exposed for off-chain
+    ///      keepers; the afking router reads the same predicate in-context.
     function advanceDue() external view returns (bool) {
-        if (_simulatedDayIndex() != dailyIdx) return true;
-        if (!ticketsFullyProcessed) {
-            uint24 lvl = level;
-            uint24 purchaseLevel = (!jackpotPhaseFlag &&
-                lastPurchaseDay &&
-                rngLockedFlag)
-                ? lvl
-                : lvl + 1;
-            if (ticketQueue[_tqReadKey(purchaseLevel)].length > 0) return true;
-        }
-        return false;
+        return _advanceDue();
     }
 
     /// @notice Would `who` earn the mineFlip advance bounty if they cranked right now?
@@ -2156,8 +2145,15 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     ///      MECHANISM: Adds 1 to the VRF word for each nudge, changing outcomes.
     ///      SECURITY: Players cannot predict the base word, only influence it.
     /// @custom:reverts RngLocked If RNG is currently locked (VRF request pending).
+    /// @custom:reverts E Once the liveness timeout has fired (see the gate below).
     function reverseFlip() external {
         if (rngLockedFlag) revert RngLocked();
+        // A nudge shifts the next word by +1, and the terminal path applies pending
+        // nudges to the word it publishes. Past the liveness trigger that word is the
+        // committed terminal word, already public and already known to select the
+        // winning traits, so a nudge bought here is a post-reveal steer of the final
+        // payout rather than an influence on an unknown future word.
+        if (_livenessTriggered()) revert E();
         uint256 reversals = totalFlipReversals;
         uint256 cost = _currentNudgeCost(reversals);
         coin.burnCoin(msg.sender, cost);
@@ -2270,8 +2266,9 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         }
     }
 
-    /// @dev Send stETH first, then ETH for remainder.
-    ///      Used for vault/DGNRS reserve claims (stETH preferred).
+    /// @dev Send stETH first, then ETH for remainder. Reached only from
+    ///      claimWinningsStethFirst, which is VAULT-gated — sDGNRS and players claim
+    ///      through the ETH-first path.
     /// @param to Recipient address.
     /// @param amount Total wei to send.
     function _payoutWithEthFallback(address to, uint256 amount) private {

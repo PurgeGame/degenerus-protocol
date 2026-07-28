@@ -355,6 +355,15 @@ contract DegenerusGameFoilPackModule is
         uint8 drawKind
     ) external {
         if (address(this) != ContractAddresses.GAME) revert OnlyDelegatecall();
+        // Closed from the liveness trigger on. The ETH lane recirculates its over-cap
+        // remainder into a lootbox, which queues ticket entries; during the terminal
+        // drain both the drain entropy that assigns those entries' traits and the
+        // terminal word that picks the winning traits are already public, so a holder
+        // of several unclaimed tuples could settle only the one that lands winners.
+        // The pack's own entries are unaffected — the foil drain still materializes
+        // them into the terminal cohort. The batch variant self-calls this entrypoint
+        // under try/catch, so it inherits the gate and skips instead of reverting.
+        if (_livenessTriggered()) revert GameOver();
         if (!_tryClaimFoilMatch(player, day, ticketIndex, drawKind)) revert NoClaimableMatch();
     }
 
@@ -739,7 +748,19 @@ contract DegenerusGameFoilPackModule is
 
         while (dd <= last) {
             uint256 entropy = rngWordByDay[dd];
-            if (entropy == 0) break; // future-dated bucket: its word has not sealed yet
+            if (entropy == 0) {
+                // A bucket whose own day never sealed. In normal play that is simply a
+                // future-dated bucket and the drain stops here. Under the terminal
+                // fallback regime it is instead a day the dead VRF never worded, and no
+                // later advance will ever seal it — so settle it against the committed
+                // fallback word rather than reporting the drain complete and dropping
+                // paid packs whose level is the one the terminal jackpot pays from.
+                // rngWordCurrent holds that word for the whole drain; _unlockRng clears
+                // it only after handleGameOverDrain has run.
+                if (_lrRead(LR_GO_FALLBACK_SHIFT, LR_GO_FALLBACK_MASK) == 0) break;
+                entropy = rngWordCurrent;
+                if (entropy == 0) break;
+            }
 
             // Meter the day-walk itself. A drained-past (empty) bucket between the low- and
             // high-water marks advances dd without entering the per-buyer loop, so a long run
