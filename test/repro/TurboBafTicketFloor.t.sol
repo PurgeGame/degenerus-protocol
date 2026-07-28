@@ -1,0 +1,245 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+pragma solidity ^0.8.26;
+
+import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
+import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
+
+/// @title TurboBafTicketFloor — BAF award tickets rolled onto the floor level under turbo.
+///
+/// @notice `_awardJackpotTickets` rolls a winner's lootbox leg into ticket entries at a level
+///         >= the passed floor, and the roll's 30% leg can land ON the floor exactly. In a
+///         NORMAL x10 jackpot phase the floor `lvl` is safe: the entries queue into the write
+///         slot, jackpot day 2's swap commits them, and the jackpot-phase drain names lvl. A
+///         TURBO phase (compressedJackpotFlag >= 2) collapses all draws inside one RNG lock —
+///         no further swap ever fires for the level (mid-day requests are locked out), and the
+///         transition moves every later drain to lvl + 1 and beyond — so a floor-level award
+///         queued during the collapse would sit at a key no drain ever names again.
+///         `runBafJackpot` therefore routes the floor to lvl + 1 when the flag reads >= 2.
+///
+///         Drive: turbo-chain levels from genesis (seed the next pool over target every
+///         purchase day, so each level collapses in one locked chain), deposit coinflips
+///         daily so the buyer accrues BAF bracket-10 score (recordBafFlip on claim), and let
+///         level 10's collapsed chain run its BAF. Reachability is asserted (turbo flag,
+///         BAF resolved = epoch bump), then: no entries may remain at level 10's queue keys.
+contract TurboBafTicketFloor is DeployProtocol {
+    address private buyer = address(0xB4A1);
+
+    uint256 private simTime;
+
+    uint24 private constant TICKET_SLOT_BIT = uint24(1) << 23;
+
+    /// @dev Clock offset folded into every fulfillment word (word = keccak(simTime, reqId)).
+    ///      Chosen so the level-10 BAF's daily-flip bit lands 1 (a skipped BAF would leave
+    ///      the floor path unexercised; the epoch reachability assert guards against that).
+    uint256 private constant WORD_NUDGE = 1;
+
+    function setUp() public {
+        _deployProtocol();
+        // Derive simTime arithmetically from ONE pre-warp timestamp read: a second
+        // block.timestamp read after vm.warp can be CSE'd to the pre-warp value,
+        // which would silently drop WORD_NUDGE from every fulfillment word.
+        simTime = block.timestamp + 1 days + WORD_NUDGE;
+        vm.warp(simTime);
+        vm.deal(address(game), 10_000 ether);
+        vm.deal(buyer, 500_000 ether);
+        mockVRF.fundSubscription(1, 1_000 ether);
+        // FLIP stake for daily coinflip deposits (BAF score accrues on claimed wins).
+        deal(address(coin), buyer, 5_000_000 ether, true);
+    }
+
+    function testTurboBafFloorAwardsDoNotStrandAtTheCollapsedLevel() public {
+        vm.pauseGasMetering();
+        _driveThroughLevelTenTurbo();
+
+        // Reachability: the level-10 phase collapsed under turbo and its BAF resolved.
+        assertGe(
+            _compressedFlag(),
+            2,
+            "harness: level 10 must have collapsed under turbo (flag preserved as bonus latch)"
+        );
+        assertEq(
+            _bafEpoch(10),
+            1,
+            "harness: the level-10 BAF must have resolved (epoch bump), not skipped"
+        );
+
+        // Let the next level's purchase days drain the lvl+1 queues normally.
+        _runFullDay();
+        _runFullDay();
+
+        assertEq(
+            _queueLen(10) + _queueLen(10 | TICKET_SLOT_BIT),
+            0,
+            "no BAF award entries may strand at the collapsed level's queue keys"
+        );
+        assertEq(
+            _entriesOwed(10, buyer) + _entriesOwed(10 | TICKET_SLOT_BIT, buyer),
+            0,
+            "no owed entries may strand at the collapsed level"
+        );
+    }
+
+    // ---------------------------------------------------------------------
+    // Drive
+    // ---------------------------------------------------------------------
+
+    /// @dev Turbo-chain from genesis until level 10's jackpot phase has completed: every
+    ///      purchase day seeds the next pool over target (purchaseDays <= 1 arms turbo), buys
+    ///      tickets into the building level, and deposits coinflips for BAF score.
+    function _driveThroughLevelTenTurbo() internal {
+        // Settle the deploy-warp day first: warping over an un-advanced day makes the
+        // next chain gap-backfill (purchaseStartDay += gap), which pushes purchaseDays
+        // past 1 and structurally disarms turbo.
+        _settleToday();
+        for (uint256 i = 0; i < 120; i++) {
+            require(!game.gameOver(), "harness: gameOver before level 10");
+            if (_level() >= 10 && !game.jackpotPhase()) return;
+            if (!game.jackpotPhase()) {
+                // Seed just over the ratcheting target (target(L+1) = levelPrizePool[L])
+                // so every level arms turbo while the pools stay small enough that BAF
+                // winner slices remain below the whale-pass threshold (ticket rolls).
+                _seedNextPrizePool(_levelPrizePool(_level()) + 25 ether);
+                _buyTickets();
+                _tryCoinflipDeposit();
+            }
+            _runFullDay();
+        }
+        revert("harness: never completed level 10");
+    }
+
+    /// @dev Run the advance chain to exhaustion on the current (already-warped) day.
+    function _settleToday() internal {
+        for (uint256 i = 0; i < 300; i++) {
+            _fulfillPending();
+            (bool ok, ) = address(game).call(
+                abi.encodeWithSignature("advanceGame()")
+            );
+            if (!ok) break;
+        }
+    }
+
+    /// @dev levelPrizePool[lvl] — the mapping sits at slot 23. levelPrizePool[L] is the
+    ///      target the NEXT level's pool must exceed; 0 until first recorded.
+    function _levelPrizePool(uint24 lvl) internal view returns (uint256) {
+        uint256 v = uint256(
+            vm.load(
+                address(game),
+                keccak256(abi.encode(uint256(lvl), uint256(23)))
+            )
+        );
+        return v < 50 ether ? 50 ether : v;
+    }
+
+    function _tryCoinflipDeposit() internal {
+        vm.prank(buyer);
+        try coinflip.depositCoinflip(buyer, 500 ether) {} catch {}
+    }
+
+    // ---------------------------------------------------------------------
+    // Helpers (shared shape with MiddaySwapJackpotCohort)
+    // ---------------------------------------------------------------------
+
+    function _fulfillPending() internal {
+        uint256 reqId = mockVRF.lastRequestId();
+        if (reqId == 0) return;
+        (, , bool fulfilled) = mockVRF.pendingRequests(reqId);
+        if (fulfilled) return;
+        uint256 word = uint256(keccak256(abi.encode(simTime, reqId)));
+        try mockVRF.fulfillRandomWords(reqId, word) {} catch {}
+    }
+
+    function _buyTickets() internal {
+        (, , , bool rngLocked_, uint256 priceWei) = game.purchaseInfo();
+        if (rngLocked_) return;
+        vm.prank(buyer);
+        game.purchase{value: (priceWei * 4000) / 400}(
+            buyer,
+            4000,
+            0,
+            bytes32(0),
+            MintPaymentKind.DirectEth,
+            false
+        );
+    }
+
+    /// @dev Cross the day boundary and run the whole advance chain to the day seal.
+    function _runFullDay() internal {
+        simTime += 1 days + 1;
+        vm.warp(simTime);
+        for (uint256 i = 0; i < 300; i++) {
+            _fulfillPending();
+            (bool ok, ) = address(game).call(
+                abi.encodeWithSignature("advanceGame()")
+            );
+            if (!ok) break;
+        }
+    }
+
+    /// @dev Seed the live next-pool half (slot 2, low 104 bits) up to targetNext.
+    function _seedNextPrizePool(uint256 targetNext) internal {
+        uint256 packed = uint256(vm.load(address(game), bytes32(uint256(2))));
+        uint256 currentNext = packed & ((uint256(1) << 104) - 1);
+        if (currentNext >= targetNext) return;
+        vm.store(
+            address(game),
+            bytes32(uint256(2)),
+            bytes32((packed & ~((uint256(1) << 104) - 1)) | targetNext)
+        );
+    }
+
+    // ---- storage probes ----
+
+    /// @dev ticketQueue[key].length — the mapping sits at slot 12.
+    function _queueLen(uint24 key) internal view returns (uint256) {
+        return
+            uint256(
+                vm.load(
+                    address(game),
+                    keccak256(abi.encode(uint256(key), uint256(12)))
+                )
+            );
+    }
+
+    /// @dev entriesOwedPacked[key][player] >> 8 — the mapping sits at slot 13.
+    function _entriesOwed(
+        uint24 key,
+        address player
+    ) internal view returns (uint256) {
+        bytes32 outer = keccak256(abi.encode(uint256(key), uint256(13)));
+        return
+            uint256(vm.load(address(game), keccak256(abi.encode(player, outer)))) >>
+            8;
+    }
+
+    /// @dev level — slot 0, bytes [12:15).
+    function _level() internal view returns (uint24) {
+        uint256 s0 = uint256(vm.load(address(game), bytes32(uint256(0))));
+        return uint24(s0 >> 96);
+    }
+
+    /// @dev jackpotCounter — slot 0, byte 16.
+    function _jackpotCounter() internal view returns (uint8) {
+        uint256 s0 = uint256(vm.load(address(game), bytes32(uint256(0))));
+        return uint8(s0 >> 128);
+    }
+
+    /// @dev compressedJackpotFlag — slot 0, byte 23.
+    function _compressedFlag() internal view returns (uint8) {
+        uint256 s0 = uint256(vm.load(address(game), bytes32(uint256(0))));
+        return uint8(s0 >> 184);
+    }
+
+    /// @dev jackpots.bafLevel[lvl].epoch — the mapping sits at Jackpots slot 2; epoch is
+    ///      the low uint64 of the packed struct slot.
+    function _bafEpoch(uint24 lvl) internal view returns (uint64) {
+        return
+            uint64(
+                uint256(
+                    vm.load(
+                        address(jackpots),
+                        keccak256(abi.encode(uint256(lvl), uint256(2)))
+                    )
+                )
+            );
+    }
+}

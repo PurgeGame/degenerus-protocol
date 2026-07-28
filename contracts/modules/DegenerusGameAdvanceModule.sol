@@ -269,13 +269,24 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         // the subtraction unsafe) and, even after it reaches psd, must not arm turbo: its word is
         // already cached, so rngGate would skip the request that performs the level promotion.
         // Turbo is therefore restricted to the real wall day with an unrequested word.
+        //
+        // Latched mid-day stall: a swapped mid-day request that crossed the boundary
+        // (latch set, word outstanding) resolves via the pre-gate promotion, which
+        // cannot swap while the committed cohort occupies the read slot. Arming turbo
+        // here would collapse the whole next jackpot phase inside that promotion's
+        // lock — no sentinel swap ever fires, so buys queued after the mid-day request
+        // would sit at a key no drain names again. Defer the arm: the evening
+        // target-met latch takes the compressed path instead, whose next-day request
+        // swaps and drains them normally.
         if (
             !inJackpot &&
             !lastPurchaseDay &&
             !locked &&
             day == wallDay &&
             day >= psd &&
-            rngWordByDay[day] == 0
+            rngWordByDay[day] == 0 &&
+            !(rngRequestTime != 0 &&
+                _lrRead(LR_MID_DAY_SHIFT, LR_MID_DAY_MASK) != 0)
         ) {
             uint32 purchaseDays = day - psd;
             if (
@@ -318,21 +329,32 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                     if (word == 0) revert RngNotReady();
                 }
 
-                uint24 rk = _tqReadKey(purchaseLevel);
+                // In the jackpot phase the swapped read slot spans TWO keys: the routed
+                // buy cohort at lvl plus the flipped award queue at purchaseLevel. Drain
+                // the routed key first — the selection is stable across partial batches
+                // because a queue's length is only released when its drain completes —
+                // and clear the latch only once BOTH keys are empty.
+                uint24 midLvl = purchaseLevel;
+                if (inJackpot && ticketQueue[_tqReadKey(lvl)].length > 0) {
+                    midLvl = lvl;
+                }
                 // The draw is gated on BOTH the normal queue AND the foil drain: keep
                 // draining while the normal queue OR a sealed-but-un-drained foil bucket
                 // (resolved on leftover budget) remains, else foil's boosted entries
                 // silently under-resolve into the jackpot.
                 if (
-                    ticketQueue[rk].length > 0 ||
+                    ticketQueue[_tqReadKey(midLvl)].length > 0 ||
                     _foilDrainPending()
                 ) {
                     (
                         bool ticketWorked,
                         bool ticketsFinished
-                    ) = _runProcessTicketBatch(purchaseLevel);
+                    ) = _runProcessTicketBatch(midLvl);
                     if (ticketWorked || !ticketsFinished) {
-                        if (ticketsFinished) {
+                        if (
+                            ticketsFinished &&
+                            ticketQueue[_tqReadKey(purchaseLevel)].length == 0
+                        ) {
                             ticketsFullyProcessed = true;
                             _lrWrite(LR_MID_DAY_SHIFT, LR_MID_DAY_MASK, 0);
                         }
@@ -373,7 +395,22 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                 // never writes this slot, and the only writer on a path reaching the mid-day check
                 // (_requestRng) breaks out before it.
                 uint256 lrCached = lootboxRngPacked;
-                uint24 preRk = _tqReadKey(purchaseLevel);
+                // A mid-day-swapped batch that crossed the day boundary holds read-side
+                // work at TWO keys in the jackpot phase: the routed cohort at lvl plus
+                // the flipped award queue at purchaseLevel. Finish the routed key first,
+                // then fall back to purchaseLevel — both must drain before rngGate's
+                // swap re-points the read slot, or the leftover cohort flips back into
+                // the write stream and strands for good when the crossing lands on the
+                // final jackpot day.
+                uint24 preLvl = purchaseLevel;
+                if (
+                    inJackpot &&
+                    ((lrCached >> LR_MID_DAY_SHIFT) & LR_MID_DAY_MASK) != 0 &&
+                    ticketQueue[_tqReadKey(lvl)].length > 0
+                ) {
+                    preLvl = lvl;
+                }
+                uint24 preRk = _tqReadKey(preLvl);
                 // The draw is gated on BOTH the normal queue AND the foil drain: keep
                 // draining while the normal queue OR a sealed-but-un-drained foil bucket
                 // remains.
@@ -445,7 +482,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                         emit LootboxRngApplied(preIdx, cw, vrfRequestId);
                     }
                     (bool preWorked, bool preFinished) = _runProcessTicketBatch(
-                        purchaseLevel
+                        preLvl
                     );
                     if (preWorked || !preFinished) {
                         stage = STAGE_TICKETS_WORKING;
@@ -1413,13 +1450,43 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         }
 
         // Freeze ticket buffer: swap write→read so tickets purchased after
-        // VRF delivery can't be resolved by this word.
+        // VRF delivery can't be resolved by this word. Probe the level buys route
+        // to (jackpot phase = level, else level + 1 — the lock-sensitive branches
+        // of _activeTicketLevel are dead here: this path reverts while
+        // rngLockedFlag is set, and the transition span holds that lock until
+        // jackpotPhaseFlag clears). The global swap also flips the jackpot
+        // phase's award queue at level + 1 into the read slot, so probe both;
+        // whenever the swap fires, the mid-day drain empties both keys before
+        // releasing the latch.
+        //
+        // Penultimate-day guard: when the NEXT daily request caps the jackpot
+        // counter, a freeze window opened now can cross into that final day (a
+        // stalled word promotes onto it with the read slot busy, so no swap can
+        // fire), leaving the post-request write-side cohort at a key no later
+        // swap ever commits. Skip the swap entirely — the queues wait for the
+        // final request's own sentinel commit, which its chain drains — and the
+        // word still serves the pending lootboxes.
         {
-            uint24 purchaseLevel_ = level + 1;
-            uint24 wk = _tqWriteKey(purchaseLevel_);
-            if (ticketQueue[wk].length > 0 && ticketsFullyProcessed) {
-                _swapTicketSlot();
-                _lrWrite(LR_MID_DAY_SHIFT, LR_MID_DAY_MASK, 1);
+            bool inJackpot = jackpotPhaseFlag;
+            bool lastSwapAhead;
+            if (inJackpot) {
+                uint8 cnt = jackpotCounter;
+                uint8 comp = compressedJackpotFlag;
+                uint8 step = comp == 2
+                    ? JACKPOT_LEVEL_CAP
+                    : (comp == 1 && cnt > 0 && cnt < JACKPOT_LEVEL_CAP - 1 ? 2 : 1);
+                lastSwapAhead = cnt + step >= JACKPOT_LEVEL_CAP;
+            }
+            if (!lastSwapAhead) {
+                uint24 routedLvl = inJackpot ? level : level + 1;
+                bool queuedWork = ticketQueue[_tqWriteKey(routedLvl)].length > 0;
+                if (!queuedWork && inJackpot) {
+                    queuedWork = ticketQueue[_tqWriteKey(level + 1)].length > 0;
+                }
+                if (queuedWork && ticketsFullyProcessed) {
+                    _swapTicketSlot();
+                    _lrWrite(LR_MID_DAY_SHIFT, LR_MID_DAY_MASK, 1);
+                }
             }
         }
 

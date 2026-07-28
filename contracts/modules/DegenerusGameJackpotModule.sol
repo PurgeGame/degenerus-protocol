@@ -2239,6 +2239,15 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
 
         uint256 largeWinnerThreshold = poolWei / 20; // 5% of total BAF pool
 
+        // Ticket-roll floor. A roll can land on the floor level exactly (its 30% leg), and the
+        // swap that would commit that queue already fired at this level's RNG request. A normal
+        // phase swaps again on jackpot day 2 and drains lvl there, so the floor is lvl. Turbo
+        // collapses the whole phase inside one lock — no further swap, mid-day requests locked
+        // out — and the transition then moves every drain to lvl+1 and beyond, past a level
+        // that is never probed again. Route the floor one level out so those awards land where
+        // the next purchase phase drains them.
+        uint24 ticketFloorLvl = compressedJackpotFlag >= 2 ? lvl + 1 : lvl;
+
         uint256 winnersLen = winnersArr.length;
         for (uint256 i; i < winnersLen; ) {
             address winner = winnersArr[i];
@@ -2263,7 +2272,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
                     (rngWord, cd) = _awardJackpotTickets(
                         winner,
                         lootboxPortion,
-                        lvl,
+                        ticketFloorLvl,
                         rngWord
                     );
                     claimableDelta += cd;
@@ -2291,7 +2300,12 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
                 // whale-pass fallback (amount > LOOTBOX_CLAIM_THRESHOLD) emits
                 // JackpotWhalePassWin inside _awardJackpotTickets.
                 uint256 cd;
-                (rngWord, cd) = _awardJackpotTickets(winner, amount, lvl, rngWord);
+                (rngWord, cd) = _awardJackpotTickets(
+                    winner,
+                    amount,
+                    ticketFloorLvl,
+                    rngWord
+                );
                 claimableDelta += cd;
             }
 
