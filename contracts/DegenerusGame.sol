@@ -2302,6 +2302,14 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     }
 
     /// @notice Get queued future entry rewards owed for a level.
+    /// @dev Sums every key space an entry for `lvl` can occupy: the committed read cohort, the
+    ///      accumulating write cohort, and the far-future space that buys land in while
+    ///      `lvl > level + 5`. Reading one space alone under-reports — the write key drops the
+    ///      committed cohort at every daily slot swap, and misses far-future buys entirely. The
+    ///      three keys are pairwise distinct (slot bit 23, far-future bit 22), so nothing is
+    ///      counted twice. No overflow guard on the sum: each lane is uint32-bounded and a
+    ///      combined total past that needs ~10.7M tickets at one level, the same economically
+    ///      unreachable scale the uint32 caps were stripped at.
     /// @param lvl Target level for the queued entries.
     /// @param player Player address to query.
     /// @return The number of entries owed (fractional remainder resolves at batch time).
@@ -2309,7 +2317,12 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         uint24 lvl,
         address player
     ) external view returns (uint32) {
-        return uint32(entriesOwedPacked[_tqWriteKey(lvl)][player] >> 8);
+        unchecked {
+            return
+                uint32(entriesOwedPacked[_tqReadKey(lvl)][player] >> 8) +
+                uint32(entriesOwedPacked[_tqWriteKey(lvl)][player] >> 8) +
+                uint32(entriesOwedPacked[_tqFarFutureKey(lvl)][player] >> 8);
+        }
     }
 
     /// @notice Get loot box status for a player/index.
@@ -2867,7 +2880,16 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     function getPlayerPurchases(
         address player
     ) external view returns (uint32 tickets) {
-        tickets = uint32(entriesOwedPacked[_tqWriteKey(level)][player] >> 8);
+        // Both near cohorts, so the count survives the daily slot swap: entries queued before
+        // it sit under what is now the read key. The far-future space is included for the case
+        // where a level's far-future buys have not yet been drained across the transition.
+        uint24 lvl = level;
+        unchecked {
+            tickets =
+                uint32(entriesOwedPacked[_tqReadKey(lvl)][player] >> 8) +
+                uint32(entriesOwedPacked[_tqWriteKey(lvl)][player] >> 8) +
+                uint32(entriesOwedPacked[_tqFarFutureKey(lvl)][player] >> 8);
+        }
     }
 
     /*+======================================================================+
