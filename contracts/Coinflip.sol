@@ -1250,10 +1250,19 @@ contract Coinflip {
         return uint128(coinflipStakePacked[day >> 1][p] >> ((day & 1) * 128));
     }
 
-    /// @dev Masked write of `day`'s stake lane, preserving the sibling day. weiAmount
-    ///      is provably <= uint128 (FLIP caps total supply at uint128, and a
-    ///      stake never exceeds supply). Fresh SLOAD/SSTORE.
+    /// @dev Masked write of `day`'s stake lane, preserving the sibling day. Saturating,
+    ///      on the same grounds as the prize pools' packed halves: the lane is 128 bits
+    ///      wide and the write is masked, so an over-wide value would not truncate — it
+    ///      would spill into the SIBLING DAY's lane and hand that day a stake nobody
+    ///      deposited. Clamping makes that impossible by construction instead of by an
+    ///      invariant every caller has to keep holding.
+    ///
+    ///      The clamp is unreachable in practice: FLIP caps total supply at uint128 and
+    ///      a stake never exceeds supply. It is here so that if the credit paths ever
+    ///      outgrow that, the failure is one capped stake rather than a neighbouring
+    ///      day's books. Fresh SLOAD/SSTORE.
     function _setFlipStake(uint24 day, address p, uint256 weiAmount) internal {
+        if (weiAmount > type(uint128).max) weiAmount = type(uint128).max;
         uint256 shift = (day & 1) * 128;
         uint24 key = day >> 1;
         uint256 w = coinflipStakePacked[key][p];
