@@ -4,7 +4,7 @@ Pre-disclosure for audit wardens. **If a finding's mechanism + impact is describ
 already known and is not eligible.** This is a precise perimeter — each entry names the exact
 mechanism and why it is by-design, defended, or out-of-scope. There are no vague blanket disclaimers.
 
-Frozen subject: `contracts/` tree `bea8c013` @ tag `degenerus-c4a`. Pre-scanned with Slither v0.11.5
+Frozen subject: `contracts/` tree `39279e31` @ tag `degenerus-c4a`. Pre-scanned with Slither v0.11.5
 + Aderyn 0.6.8; those findings are triaged in the automated-tools section below.
 
 ---
@@ -84,9 +84,9 @@ is no victim. An admin-power finding must exhibit an **engaged-community victim*
 ## 3. Accepted out-of-scope risk: the > 120-day VRF-death deadman fallback (do NOT submit)
 
 **Mechanism.** When the game has not sealed a day for more than 120 days
-(`_vrfDeadmanFired ≡ _simulatedDayIndex() − dailyIdx > 120`, `DegenerusGameStorage.sol:1728-1730`;
+(`_vrfDeadmanFired ≡ _simulatedDayIndex() − dailyIdx > 120`, `DegenerusGameStorage.sol:1885-1887`;
 `dailyIdx` is uint24 and always `<= _simulatedDayIndex()` so no underflow), the terminal release no
-longer waits for Chainlink. `_getHistoricalRngFallback` (`DegenerusGameAdvanceModule.sol:1678-1702`)
+longer waits for Chainlink. `_getHistoricalRngFallback` (`DegenerusGameAdvanceModule.sol:1919-1943`)
 commits a fallback word from sealed historical `rngWordByDay` admixed with `block.prevrandao`; the
 `reverseFlip` nudge is cancelled-and-consumed (`unchecked fallbackWord -= totalFlipReversals`,
 `:1627`, against the consumption in `_applyDailyRng :2314-2330`).
@@ -117,20 +117,22 @@ transaction (a coin credit, not ETH-backed value). Immaterial; documented, not e
 
 ## 5. Automated tool findings (pre-disclosed)
 
-The full machine-readable Slither/Aderyn baseline is maintained internally — Slither 0.11.5 (3,075
-results / 101 detectors at tree `bea8c013`; 154 High / 415 Medium / 359 Low /
-2,095 Informational / 52 Optimization, and the "High" tier is dominated by 118 `uninitialized-state`
+The full machine-readable Slither/Aderyn baseline is maintained internally — Slither 0.11.5 (3,137
+results / 101 detectors over 145 contracts at tree `39279e31`; 156 High / 432 Medium / 375 Low /
+2,122 Informational / 52 Optimization, and the "High" tier is dominated by 118 `uninitialized-state`
 false positives from the shared-storage delegatecall architecture) + Aderyn 0.6.8 (9 High / 20 Low).
 Slither totals are sensitive to the scan environment (solc/toolchain resolution), so the absolute
 count is not comparable across machines — re-runs should compare category triage, not the total.
-These counts were measured directly at tree `bea8c013`, not carried forward from an earlier scan.
-The delta against the prior tree (+102 / +1 High over the mid-day-credit, LINK-recovery, and
-parimutuel span) is attributable: the one new High is `uninitialized-state` on the added
-`centuryPrizePools` array — the same shared-storage delegatecall false-positive class as the
-existing 117 — the High tier is otherwise composition-identical, and the new DegenerusParimutuel
-contributes 11 findings, none High (naming/pragma/unused-return noise, one `low-level-calls`
-Informational for its ENS constructor matching the established per-constructor pattern, and the
-`ok;` discard both tools flag).
+These counts were measured directly at tree `39279e31`, not carried forward from an earlier scan.
+The delta against the prior tree (+62 / +2 High over the liveness, mid-day-routing, terminal-sweep,
+sDGNRS-custody, golden-ticket and volume-market span) is fully attributable: **both** new Highs are
+`weak-prng`, and both are in `DegenerusParimutuel` — `_openVolumeRound()` and `volumeBetCredit()`,
+each reading `block.timestamp % 86400` to decide whether the day's betting window is open. That is a
+time-of-day gate, not a source of randomness: nothing is drawn from it, and the same benign pattern
+is already triaged for `requestLootboxRng` and `_bountyEligible`. Every other High category is
+composition-identical (118 `uninitialized-state`, 6 `arbitrary-send-eth`, 6 `reentrancy-balance`,
+5 `delegatecall-loop`, 3 `encode-packed-collision`, 3 `reentrancy-eth`, 2 `incorrect-exp`,
+1 `shadowing-state`). The golden-ticket foil route added no High of any kind.
 CI re-runs both
 analyzers on every push (`.github/workflows/ci.yml`); the standing per-category triage — why each is
 by-design, defended, or not-applicable — is below.

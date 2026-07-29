@@ -1,6 +1,6 @@
 # Security Policy
 
-Frozen subject: `contracts/` tree `bea8c013` @ tag `degenerus-c4a` (post-v75.0 hardening freeze).
+Frozen subject: `contracts/` tree `39279e31` @ tag `degenerus-c4a` (post-v75.0 hardening freeze).
 
 ## Reporting a vulnerability
 
@@ -101,10 +101,14 @@ death-clock (decaying vote threshold + kill-on-recovery — see role 1). `propos
 `setThanosLevel(targetLevel, shift)` declares that every ticket entry drained for `targetLevel`
 onward divides by `2^shift`, i.e. it raises the effective entry price (and the foil-pack price) for
 everyone from that level on. It is a purely *prospective* price change, bounded so it can neither
-retro-price a materialized ticket nor be used to extract value. It is also EV-neutral on **both**
-in-scope SKUs: a plain ticket keeps its price and delivers `1/2^s` the entries, a foil pack keeps its
-entry count and pays `2^s` the price — and the foil match bonus's value-bearing face amounts carry the
-same exponent, so no leg of either product loses value against the raised price. Bounds:
+retro-price a materialized ticket nor be used to extract value. On the plain ticket it is
+EV-neutral: the price is fixed, the delivered entries divide by `2^s`, and the uniform division
+cancels in the pot-share fraction. On the **foil pack it is not** — the pack keeps its entry count
+and pays `2^s` the price while **no** foil payout scales with the exponent, so a declaration makes
+that SKU deliberately bad value for as long as it is in force. That is a design ruling rather than
+an oversight: scaling a foil payout would mean reading the exponent at claim time, and a foil claim
+can settle arbitrarily later than its buy, so a claim parked across a fresh declaration would pay
+`2^(new - old)` times its face. Bounds:
 - **6-level notice, pre-materialization.** `targetLevel >= level + 6`, which lands the declaration
   strictly before the target's first materialization (the far-future promotion at the transition to
   `target - 5`). One level's entries therefore always share one exponent regardless of when they

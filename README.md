@@ -20,9 +20,9 @@ Two liveness guards prevent permanent fund lockup. At level 0, a 365-day deploy 
 
 ## Architecture
 
-- **27 deployable contracts** (15 core + 12 delegatecall modules), sharing storage via `DegenerusGameStorage`
+- **28 deployable contracts** (16 core + 12 delegatecall modules), sharing storage via `DegenerusGameStorage`
 - Solidity 0.8.34, `viaIR` enabled, optimizer runs = 1000, EVM target `osaka`
-- All contracts under the 24,576-byte EIP-170 limit (largest: MintModule at 23,333 bytes, 1,243 to spare; DegenerusGame at 23,067)
+- All contracts under the 24,576-byte EIP-170 limit (largest: DegenerusGame at 23,918 bytes, 658 to spare; MintModule at 23,853, 723 to spare)
 - External dependencies: Chainlink VRF V2.5, Lido stETH, LINK token, and (optionally) an ENS
   reverse registrar — `ENS_REVERSE_REGISTRAR` is `address(0)` in this tree, which disables the
   constructor self-naming call entirely
@@ -79,7 +79,7 @@ DegenerusGame.sol (main entry point, delegatecall dispatcher)
 
 ## Repository Layout
 
-50 production Solidity files: 18 in `contracts/` (16 deployable + `ContractAddresses` + `DegenerusTraitUtils`), 14 in `modules/` (12 deployable + 2 abstract utils), 1 shared storage contract, 6 libraries, and 11 interfaces. `contracts/mocks/` and `contracts/test/` are test scaffolding and are never deployed.
+52 production Solidity files: 19 in `contracts/` (16 deployable + `ContractAddresses` + `DegenerusTraitUtils` + `DeityBoonViewer`), 14 in `modules/` (12 deployable + 2 abstract utils), 1 shared storage contract, 6 libraries, and 12 interfaces. `contracts/mocks/` and `contracts/test/` are test scaffolding and are never deployed.
 
 ## Deployment
 
@@ -132,7 +132,7 @@ A secondary Hardhat behavioral suite (`npx hardhat test`) provides additional co
 
 ## Scope & Known Issues
 
-- **`scope.txt` / `out_of_scope.txt`** — the exact audited surface, pinned to `contracts/` tree `bea8c013` (tag `degenerus-c4a`).
+- **`scope.txt` / `out_of_scope.txt`** — the exact audited surface, pinned to `contracts/` tree `39279e31` (tag `degenerus-c4a`).
 - **`KNOWN-ISSUES.md`** — every pre-triaged finding, by-design ruling, and static-analysis disposition, each with its precise mechanism. Not vague disclaimers.
 - **`SECURITY.md`** — threat model, trusted-role matrix (functional authority, not just Solidity modifiers), and disclosure process.
 - **`ECONOMIC_DISCLOSURES.md`** — creator allocations, vesting, governance control, the WWXRP reserve, and terminal value — every figure cited to a contract line.
