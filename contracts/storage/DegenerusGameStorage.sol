@@ -786,7 +786,9 @@ abstract contract DegenerusGameStorage {
     ///      entry units (price/4 each), NOT whole tickets — 4 entries per
     ///      whole ticket. `owed` accumulates entries.
     ///      If buyer has no existing entries at that level, adds them to the queue.
-    ///      Caps at uint32 max to prevent overflow.
+    ///      `owed` accumulates unchecked in the packed slot's uint32 lane. That ceiling sits
+    ///      at ~1.07 billion whole tickets for a single level (4 entries each), which no
+    ///      reachable purchase or award volume approaches.
     /// @param buyer Address to receive entries.
     /// @param targetLevel Level for which entries are queued.
     /// @param entries Number of entries to queue (price/4 units).
