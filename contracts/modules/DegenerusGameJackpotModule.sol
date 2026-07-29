@@ -471,9 +471,14 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
                             uint128(reserveSlice),
                         futPool - uint128(reserveSlice)
                     );
+                    // Priced at the level these entries are queued at, the same basis the
+                    // daily leg above uses: Phase 2 sends the final physical day's carryover
+                    // to lvl + 1 because this level ends tonight. Pricing off the other level
+                    // would size the award by the boundary price ratio instead of by the
+                    // reserveSlice that backs it.
                     (carryoverEntries, ) = _budgetToEntries(
                         reserveSlice,
-                        lvl
+                        isFinalPhysicalDay ? lvl + 1 : lvl
                     );
                 } else {
                     // Early-bird day skips the carryover move, so apply the daily-ticket next
