@@ -910,6 +910,21 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         if (!ok) _revertDelegate(data);
     }
 
+    /// @notice Claim a foil pack's gold: a FLIP ladder from three golds up, or the
+    ///         golden-ticket grand when two whole tickets came out all gold.
+    /// @dev Signature: claimGoldenTicket(address player, uint24 lvl). The pack's four
+    ///      lines are re-derived inside the module from the sealed word its buy froze
+    ///      against, so nothing about the gold is stored and the drain stays untouched.
+    ///      The win credits to `player`, never the caller, and a pack pays at most once
+    ///      (CEI marker), so anyone may trigger it. The signature matches the module
+    ///      function exactly (identical selector), so the calldata forwards as-is.
+    function claimGoldenTicket(address, uint24) external {
+        (bool ok, bytes memory data) = ContractAddresses
+            .GAME_FOILPACK_MODULE
+            .delegatecall(msg.data);
+        if (!ok) _revertDelegate(data);
+    }
+
     /// @notice Buy tickets/lootbox AND a presale box in one tx, sharing one RNG index.
     /// @dev The mint leg earns 25% presale-box credit that gates the box leg. msg.value is
     ///      split across both legs (mint cost first, remainder to the box), so the box is

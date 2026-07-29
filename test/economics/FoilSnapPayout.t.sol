@@ -5,24 +5,23 @@ import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 import {PriceLookupLib} from "../../contracts/libraries/PriceLookupLib.sol";
 
-/// @title FoilSnapPayout — the foil match payout carries the level's snap exponent
-/// @notice A thanos declaration multiplies the foil pack's PRICE by 2^s. This pins the
-///         other half of that trade: the match bonus's value-bearing face amounts carry
-///         the same exponent, so the declaration stays EV-neutral for the foil SKU
-///         exactly as it already is for plain tickets (which instead divide delivered
-///         entries by 2^s and leave the price alone).
+/// @title FoilSnapPayout — the foil match payout ignores the level's snap exponent
+/// @notice A thanos declaration multiplies the foil pack's PRICE by 2^s and stops there:
+///         no foil payout scales with the exponent, so on a thanos level the pack is
+///         simply bad value. That is the ruling, and this pins both halves of it — the
+///         price doubles, the match bonus does not.
 /// @dev Differential, not absolute. One scenario is driven to the point where real foil
 ///      matches are claimable, then the SAME claims are settled twice from one snapshot —
-///      once at snapShift = 0 and once at snapShift = 1. Because the packs were bought
-///      before the shift is applied, the frozen boost / activity score / derived lines /
-///      sealed draws / tier / ROI are all bit-identical across the two settlements, so the
-///      ONLY difference is the staked magnitude. That isolates the changed term.
+///      once at snapShift = 0 and once at snapShift = 1. Everything the payout reads (the
+///      frozen boost / activity score / derived lines / sealed draws / tier / ROI) is
+///      bit-identical across the two settlements, so if the exponent leaked into any lane
+///      it would be the only term that moved. Every lane must come out equal.
 ///
-///      In production the shift cannot move between a pack's buy and its claim (a pack
-///      only matches on days whose sealed draw records its level, snapShift moves only at
-///      a level commit, and a fresh declaration needs targetLevel >= level + 6). This
-///      test creates that split deliberately to isolate the payout arithmetic; it asserts
-///      the shift is honoured, not that the split state is reachable.
+///      Settling across a shift is the exact shape the ruling exists to defuse: a claim
+///      can land arbitrarily later than its buy, and a live `_snapShiftFor` read hands
+///      every past level whatever exponent the newest declaration committed — so a claim
+///      parked across a commit would have paid 2^(new - old) times its face. The test
+///      constructs that straddle deliberately and asserts nothing moves.
 contract FoilSnapPayout is DeployProtocol {
     uint256 private _lastFulfilledReqId;
 
@@ -40,9 +39,10 @@ contract FoilSnapPayout is DeployProtocol {
     /// @dev snapShift is a uint8 at slot 14, byte 7 — packed with ticketCursor (bytes 0-3)
     ///      and ticketLevel (bytes 4-6). Read from scripts/layout/golden/DegenerusGame.json.
     ///      The poke is read-modify-write so it cannot clobber its slot-mates, the storage
-    ///      layout oracle fails the build if the field moves, and _forceSnapShift is
-    ///      self-checking: a poke that stops landing makes the price assertion below fail
-    ///      loudly rather than pass vacuously.
+    ///      layout oracle fails the build if the field moves, and the price test below
+    ///      proves the poke still lands. That proof is load-bearing: the payout property
+    ///      is now an EQUALITY, which a poke that quietly stopped writing would satisfy
+    ///      vacuously. The price test is what keeps the pair honest.
     uint256 private constant SNAP_SLOT = 14;
     uint256 private constant SNAP_BYTE = 7;
 
@@ -198,7 +198,7 @@ contract FoilSnapPayout is DeployProtocol {
     // The property
     // ──────────────────────────────────────────────────────────────────────
 
-    function test_matchPayoutCarriesSnapExponent() public {
+    function test_matchPayoutIgnoresSnapExponent() public {
         _buyAndDrive();
 
         uint256 snap = vm.snapshotState();
@@ -218,30 +218,20 @@ contract FoilSnapPayout is DeployProtocol {
         emit log_named_uint("ETH payout at shift 0", eth0);
         emit log_named_uint("ETH payout at shift 1", eth1);
 
-        // Identical matches settle either way: the shift moves magnitudes, never eligibility.
+        // Identical matches settle either way: the shift touches neither eligibility nor
+        // magnitude.
         assertEq(claims1, claims0, "shift changed which tuples are claimable");
 
-        // FLIP lane is the clean signal: a free mint with no pool cap, and its 50/50
-        // survival flip is seeded independently of the stake, so it doubles outright.
-        // Tolerance is wei-scale only — the three-way perSpin split and the
-        // bet*base*roi/1e6 payout each truncate, so 2x is exact to rounding, not to the wei.
-        assertApproxEqRel(flip1, 2 * flip0, 1e9, "FLIP match payout did not carry 2^s");
-
-        // WWXRP is deliberately NOT shifted (worthless lane — scaling it would inflate a
-        // cosmetic number only). This pins that choice so a future sweep cannot "fix" it.
-        assertEq(wx1, wx0, "WWXRP lane must stay unshifted");
-
-        // ETH lane doubles too, but ETH_WIN_CAP_BPS clips any single spin at 10% of
-        // futurePrizePool and recircs the remainder to a lootbox, so 2x is an upper bound
-        // rather than an identity. Bracket it: strictly more than the unshifted run, never
-        // more than double. If the pool never binds the cap this is tight at 2x.
-        if (eth0 != 0) {
-            assertGt(eth1, eth0, "ETH match payout did not grow with 2^s");
-            assertLe(eth1, 2 * eth0 + 1, "ETH match payout exceeded 2^s");
-        }
+        // Every lane is bit-equal, not approximately so. The two settlements replay one
+        // snapshot through the same code with the same inputs, so a difference of a single
+        // wei anywhere means an exponent leaked back into a face amount.
+        assertEq(flip1, flip0, "FLIP match payout moved with 2^s");
+        assertEq(wx1, wx0, "WWXRP match payout moved with 2^s");
+        assertEq(eth1, eth0, "ETH match payout moved with 2^s");
     }
 
-    /// @dev Fixture sanity: the poke reaches the SAME `_snapShiftFor` the buy path reads,
+    /// @dev The other half of the ruling, and the guard that keeps the equality above from
+    ///      passing vacuously: the poke reaches the SAME `_snapShiftFor` the buy path reads,
     ///      proven through production code rather than by re-reading storage. At shift 1 a
     ///      pack costs 2x, so the unshifted price must no longer cover a DirectEth buy.
     function test_snapShiftDoublesFoilPrice() public {

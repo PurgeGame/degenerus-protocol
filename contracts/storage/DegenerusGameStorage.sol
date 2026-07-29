@@ -2968,6 +2968,8 @@ abstract contract DegenerusGameStorage {
     uint256 private constant _FOIL_MULT_MASK = (uint256(1) << 16) - 1;
     uint256 internal constant _FOIL_SCORE_SHIFT = 40;
     uint256 private constant _FOIL_SCORE_MASK = (uint256(1) << 16) - 1;
+    uint256 internal constant _FOIL_SNAP_SHIFT = 56;
+    uint256 private constant _FOIL_SNAP_MASK = (uint256(1) << 8) - 1;
 
     uint256 private constant _FOIL_DRAW_MAIN_MASK = (uint256(1) << 32) - 1;
     uint256 private constant _FOIL_DRAW_BONUS_SHIFT = 32;
@@ -3001,6 +3003,23 @@ abstract contract DegenerusGameStorage {
         resolveDay = uint24(packed & _FOIL_RESOLVEDAY_MASK);
         multBps = uint16((packed >> _FOIL_MULT_SHIFT) & _FOIL_MULT_MASK);
         activityScore = uint16((packed >> _FOIL_SCORE_SHIFT) & _FOIL_SCORE_MASK);
+    }
+
+    /// @dev The snap exponent frozen into a player's foil record at buy (one SLOAD).
+    ///      Claims MUST use this rather than a live `_snapShiftFor(lvl)`: a pending
+    ///      thanos declaration always targets `level + 6` or later, so once it commits
+    ///      `_snapShiftFor` returns the CURRENT exponent for every past level, not the
+    ///      one that level's buy was charged at. A claim held across a commit would
+    ///      otherwise pay 2^(new - old) times its face — the exponent is the buy's
+    ///      price basis, so it has to travel with the record.
+    function _foilSnapShiftFor(address player, uint256 lvl)
+        internal
+        view
+        returns (uint8)
+    {
+        return uint8(
+            (foilRecord[uint24(lvl)][player] >> _FOIL_SNAP_SHIFT) & _FOIL_SNAP_MASK
+        );
     }
 
     /// @dev The frozen activity multiplier from a player's foil record for a cycle
@@ -3068,7 +3087,7 @@ abstract contract DegenerusGameStorage {
         lvl = uint24((packed >> _FOIL_DRAW_LEVEL_SHIFT) & _FOIL_DRAW_LEVEL_MASK);
     }
 
-    /// @dev Gold-rush cross-day state, one packed slot (appended so every
+    /// @dev Golden-ticket cross-day state, one packed slot (appended so every
     ///      prior slot keeps its index). Armed on a 4-gold main board (jackpot
     ///      phase); resolved by the next main-board draw. Written and read only
     ///      inside VRF fulfillment — players can never touch it.
@@ -3083,7 +3102,7 @@ abstract contract DegenerusGameStorage {
     ///                cleared or overwritten by a same-day chain arm)
     ///      [192:191] resolve-day ban quadrant
     ///      [216:193] resolve-day ban idx — frozen dailyIdx of the resolve draw
-    uint256 internal goldRush;
+    uint256 internal goldenTicket;
 
     /// @dev Unspent mid-day RNG credit per donor, in juels of donated LINK (appended so
     ///      every prior slot keeps its index). Held in LINK because LINK is what the

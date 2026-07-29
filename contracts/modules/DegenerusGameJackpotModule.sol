@@ -9,7 +9,7 @@ import {PriceLookupLib} from "../libraries/PriceLookupLib.sol";
 import {JackpotBucketLib} from "../libraries/JackpotBucketLib.sol";
 import {IDegenerusJackpots} from "../interfaces/IDegenerusJackpots.sol";
 
-/// @dev Minimal WWXRP surface for the gold-rush consolation mint. The delegatecall
+/// @dev Minimal WWXRP surface for the golden-ticket consolation mint. The delegatecall
 ///      context makes msg.sender the Game, which is a whitelisted WWXRP minter.
 interface IWwxrpMintPrize {
     function mintPrize(address to, uint256 amount) external;
@@ -115,28 +115,34 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         uint256 halfPassCount
     );
 
-    /// @dev Gold rush armed: the main board rolled 4 gold colors and the solo bucket
+    /// @dev Golden ticket armed: the main board rolled 4 gold colors and the solo bucket
     ///      winner awaits the next main-board draw. `quadrant`/`symbol` are the solo
     ///      bucket's official (post-hero) values — the target the resolve board must
     ///      repeat (with 4 golds) for the grand.
-    event GoldRushArmed(
+    event GoldenTicketArmed(
         address indexed winner,
         uint24 indexed level,
         uint8 quadrant,
         uint8 symbol
     );
 
-    /// @dev Gold-rush resolution: the draw after an armed 4-gold day pays the armed
-    ///      winner by this board's gold count. `grand` is true when this board also
-    ///      rolled 4 golds AND repeated the armed quadrant's symbol (the hero is
-    ///      banned from the armed quadrant on this draw, so that symbol is the raw
-    ///      base roll). ethAmount moved futurePrizePool -> winner claimable;
-    ///      halfPassCount and flipCredit are face-value credits with no pool debit;
-    ///      wwxrpAmount is the 0-gold consolation.
-    event GoldRushWin(
+    /// @dev Golden-ticket payout. `route` names which of the two routes won:
+    ///      GOLDEN_TICKET_ROUTE_BOARD (0) is the cross-day board resolution — the draw
+    ///      after an armed 4-gold day pays the armed winner by this board's gold count,
+    ///      and `grand` is true when this board also rolled 4 golds AND repeated the
+    ///      armed quadrant's symbol (the hero is banned from the armed quadrant on this
+    ///      draw, so that symbol is the raw base roll). GOLDEN_TICKET_ROUTE_FOIL (1) is
+    ///      the foil-pack route — a pack whose drain rolled two all-gold tickets takes
+    ///      the grand outright, so `grand` is always true there. `goldCount` is the
+    ///      resolve board's gold count on the board route and the qualifying pack's gold
+    ///      quadrant count on the foil route. ethAmount moved futurePrizePool -> winner
+    ///      claimable; halfPassCount and flipCredit are face-value credits with no pool
+    ///      debit; wwxrpAmount is the 0-gold consolation.
+    event GoldenTicketWin(
         address indexed winner,
         uint24 indexed level,
-        uint8 bonusGolds,
+        uint8 route,
+        uint8 goldCount,
         bool grand,
         uint256 ethAmount,
         uint256 halfPassCount,
@@ -161,8 +167,14 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
 
     uint256 private constant SMALL_LOOTBOX_THRESHOLD = 0.5 ether;
 
-    /// @dev Gold-rush consolation when the bonus board shows 0 golds: 100 WWXRP.
-    uint256 private constant GOLD_RUSH_WWXRP = 100 ether;
+    /// @dev Golden-ticket consolation when the bonus board shows 0 golds: 100 WWXRP.
+    uint256 private constant GOLDEN_TICKET_WWXRP = 100 ether;
+
+    /// @dev Golden-ticket routes, stamped on GoldenTicketWin. BOARD is the armed
+    ///      cross-day board resolution; FOIL is a foil pack holding two or more
+    ///      all-gold tickets, which takes the grand outright.
+    uint8 private constant GOLDEN_TICKET_ROUTE_BOARD = 0;
+    uint8 private constant GOLDEN_TICKET_ROUTE_FOIL = 1;
 
     /// @dev Sentinel traitId stamped on BAF jackpot payout events so indexers can
     ///      distinguish BAF wins from trait-bucketed daily/coin wins. Sits above
@@ -307,7 +319,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
             shareBps,
             bucketCounts,
             false, // not jackpot phase
-            false, // no solo bucket, gold rush never arms here
+            false, // no solo bucket, golden ticket never arms here
             PriceLookupLib.priceForLevel(targetLvl + 1) >> 2
         );
     }
@@ -352,17 +364,17 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
             uint32 bonusTraitsPacked
         ) = _rollWinningTraitsPair(randWord);
 
-        // An armed gold rush resolves against the first main board rolled after the
+        // An armed golden ticket resolves against the first main board rolled after the
         // arm draw — this draw, whenever dailyIdx has advanced past the arm draw's
         // index. Runs before any pool math so the ladder's futurePrizePool debit is
         // visible to every later read in this call.
         {
-            uint256 g = goldRush;
+            uint256 g = goldenTicket;
             if (
                 (g >> 189) & 1 != 0 &&
                 dailyIdx > uint24((g >> 165) & 0xFFFFFF)
             ) {
-                _resolveGoldRush(g, winningTraitsPacked, lvl);
+                _resolveGoldenTicket(g, winningTraitsPacked, lvl);
             }
         }
 
@@ -598,7 +610,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
                 shareBps,
                 bucketCounts,
                 false, // not jackpot phase
-                false, // no solo bucket, gold rush never arms here
+                false, // no solo bucket, golden ticket never arms here
                 PriceLookupLib.priceForLevel(lvl + 1) >> 2
             );
         }
@@ -1121,9 +1133,9 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     ///      base roll — hero wagers placed during the suspense window can neither
     ///      boost nor block the grand symbol match. The resolve-day ban fields keep
     ///      the answer identical for later re-rolls of the same board (phase 2)
-    ///      after `_resolveGoldRush` clears the armed fields or a chain arm
+    ///      after `_resolveGoldenTicket` clears the armed fields or a chain arm
     ///      overwrites them.
-    function _goldRushBanQuadrant(uint256 g, uint24 d) private pure returns (uint8) {
+    function _goldenTicketBanQuadrant(uint256 g, uint24 d) private pure returns (uint8) {
         if (g == 0) return _NO_QUADRANT_BAN;
         if ((g >> 189) & 1 != 0 && d > uint24((g >> 165) & 0xFFFFFF)) {
             return uint8((g >> 160) & 3);
@@ -1134,31 +1146,31 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         return _NO_QUADRANT_BAN;
     }
 
-    /// @dev Arms the gold rush for the solo bucket winner of a 4-gold main board.
+    /// @dev Arms the golden ticket for the solo bucket winner of a 4-gold main board.
     ///      Stores winner, solo quadrant, official symbol, and the arm draw's frozen
     ///      dailyIdx; the resolve-day ban fields are preserved so a chain arm (a
     ///      resolve day that itself rolls 4 golds) keeps the current day's hero ban
     ///      intact for later re-rolls of this board.
-    function _armGoldRush(address winner, uint24 lvl, uint8 traitId) private {
+    function _armGoldenTicket(address winner, uint24 lvl, uint8 traitId) private {
         uint8 quadrant = traitId >> 6;
         uint8 symbol = traitId & 7;
-        goldRush =
-            (goldRush & ~((uint256(1) << 190) - 1)) |
+        goldenTicket =
+            (goldenTicket & ~((uint256(1) << 190) - 1)) |
             uint256(uint160(winner)) |
             (uint256(quadrant) << 160) |
             (uint256(symbol) << 162) |
             (uint256(dailyIdx) << 165) |
             (uint256(1) << 189);
-        emit GoldRushArmed(winner, lvl, quadrant, symbol);
+        emit GoldenTicketArmed(winner, lvl, quadrant, symbol);
     }
 
-    /// @dev Resolves an armed gold rush against this draw's official main board:
+    /// @dev Resolves an armed golden ticket against this draw's official main board:
     ///      the board's gold count picks the ladder rung; 4 golds AND the armed
     ///      quadrant repeating the armed symbol is the grand. Rewrites the slot to
     ///      resolve-day ban fields only (armed cleared, ban pinned to this dailyIdx)
     ///      before paying, so re-rolls of this board and any chain arm stay
     ///      consistent and the payout can never double-fire.
-    function _resolveGoldRush(
+    function _resolveGoldenTicket(
         uint256 g,
         uint32 mainTraitsPacked,
         uint24 lvl
@@ -1180,11 +1192,42 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         uint8 quadrant = uint8((g >> 160) & 3);
         bool grand = golds == 4 &&
             (traits[quadrant] & 7) == uint8((g >> 162) & 7);
-        goldRush =
+        goldenTicket =
             (uint256(1) << 190) |
             (uint256(quadrant) << 191) |
             (uint256(dailyIdx) << 193);
-        _payGoldRush(address(uint160(g)), lvl, golds, grand);
+        _payGoldenTicket(
+            address(uint160(g)),
+            lvl,
+            GOLDEN_TICKET_ROUTE_BOARD,
+            golds,
+            grand
+        );
+    }
+
+    /// @notice Pay the golden-ticket grand to a foil pack holding two all-gold
+    ///         tickets — the second route into the same top rung the armed board pays.
+    /// @dev Delegatecall-only entry, invoked by the foil gold claim
+    ///      (DegenerusGameFoilPackModule._settleGoldenTicket) so both routes share ONE
+    ///      grand definition and can never drift. Runs in the Game's storage context:
+    ///      the guard rejects a direct call on the deployed module, and no facade stub
+    ///      exposes the selector, so the foil gold claim is the only reachable caller.
+    ///      The armed-board state is untouched — a foil grand neither arms, resolves,
+    ///      nor consumes an armed board, so a pending arm still resolves on its own
+    ///      next draw.
+    /// @param winner The foil buyer whose pack rolled the two all-gold tickets.
+    /// @param lvl The pack's cycle level (the flip-credit rate's basis).
+    /// @param golds The pack's total gold quadrants — 8, 12 or 16, since the grand
+    ///        fires on two, three or four all-gold tickets. Stamped as the event's
+    ///        goldCount; always above the board route's 0-4 range, so the two routes
+    ///        never read alike even on the count alone.
+    function payGoldenTicketGrand(
+        address winner,
+        uint24 lvl,
+        uint8 golds
+    ) external {
+        if (address(this) != ContractAddresses.GAME) revert OnlyDelegatecall();
+        _payGoldenTicket(winner, lvl, GOLDEN_TICKET_ROUTE_FOIL, golds, true);
     }
 
     // =========================================================================
@@ -1208,7 +1251,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     /// @param bucketCounts Number of holders in each trait bucket.
     /// @param isJackpotPhase True during jackpot phase (solo bucket gets whale pass).
     /// @param armGold True when the main board rolled 4 golds — the solo bucket
-    ///        winner becomes the armed gold-rush candidate for the next draw.
+    ///        winner becomes the armed golden-ticket candidate for the next draw.
     /// @return paidEth Total ETH actually paid out in this call.
     function _processDailyEth(
         uint24 lvl,
@@ -1373,7 +1416,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
             paidDelta += wpSpent;
         }
         if (armGold) {
-            _armGoldRush(w, lvl, traitId);
+            _armGoldenTicket(w, lvl, traitId);
         }
     }
 
@@ -1443,8 +1486,10 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         }
     }
 
-    /// @dev Pays the gold-rush ladder to the armed winner at resolution. The resolve
-    ///      board's gold count picks the rung. ETH rungs move futurePrizePool into
+    /// @dev Pays the golden-ticket ladder. On the board route the resolve board's gold
+    ///      count picks the rung; the foil route enters at `grand` directly (its
+    ///      `golds` is the pack's gold quadrant count, above every rung boundary, so it
+    ///      falls through to the grand branch). ETH rungs move futurePrizePool into
     ///      the winner's claimable (the only real ETH leg); half-pass and flip-credit
     ///      rungs are face-value credits with no pool debit — pass dilution is
     ///      absorbed by future prize pools and the flip credit stakes the next day's
@@ -1452,9 +1497,10 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     ///      the rest of the headline (current + next + future + claimable pools) 75%
     ///      in half-passes at HALF_WHALE_PASS_PRICE and 25% in flip credit at the
     ///      level's ticket rate.
-    function _payGoldRush(
+    function _payGoldenTicket(
         address winner,
         uint24 lvl,
+        uint8 route,
         uint8 golds,
         bool grand
     ) private {
@@ -1465,7 +1511,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         (uint128 nextBal, uint128 futBal) = _getPrizePools();
 
         if (golds == 0) {
-            wwxrpAward = GOLD_RUSH_WWXRP;
+            wwxrpAward = GOLDEN_TICKET_WWXRP;
         } else if (golds == 1) {
             halfPasses = 2; // one whole whale pass
         } else if (golds == 2) {
@@ -1519,9 +1565,10 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
                 wwxrpAward
             );
         }
-        emit GoldRushWin(
+        emit GoldenTicketWin(
             winner,
             lvl,
+            route,
             golds,
             grand,
             ethAward,
@@ -1596,7 +1643,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     ///      result is `(false, 0, 0)` and the caller applies no hero (a pure-VRF set).
     ///
     ///      `banQuadrant` zeroes an entire quadrant's 8 slots the same way — main
-    ///      rolls pass `_goldRushBanQuadrant()` so on a gold-rush resolve day the
+    ///      rolls pass `_goldenTicketBanQuadrant()` so on a golden-ticket resolve day the
     ///      armed quadrant keeps its base-rolled symbol (hero wagers can neither
     ///      boost nor block the grand match). Pass `_NO_QUADRANT_BAN` otherwise.
     function _rollHeroSymbol(
@@ -2041,7 +2088,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
             dIdx,
             randWord,
             _NO_HERO_EXCLUDE,
-            _goldRushBanQuadrant(goldRush, dIdx)
+            _goldenTicketBanQuadrant(goldenTicket, dIdx)
         );
         uint8 excl = mHas ? ((mQ << 3) | mS) : _NO_HERO_EXCLUDE;
         (bool bHas, uint8 bQ, uint8 bS) = _rollHeroSymbol(
@@ -2075,7 +2122,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
                 dIdx,
                 randWord,
                 _NO_HERO_EXCLUDE,
-                _goldRushBanQuadrant(goldRush, dIdx)
+                _goldenTicketBanQuadrant(goldenTicket, dIdx)
             );
 
         uint8[4] memory traits = JackpotBucketLib.getRandomTraits(randWord);

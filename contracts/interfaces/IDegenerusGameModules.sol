@@ -63,6 +63,17 @@ interface IDegenerusGameJackpotModule {
     /// @param randWord Random word for distribution
     function payDailyJackpotCoinAndTickets(uint256 randWord) external;
 
+    /// @notice Pay the golden-ticket grand to a foil pack holding two all-gold tickets.
+    /// @dev Delegatecall-only; the foil gold claim is the only caller.
+    /// @param winner The foil buyer whose pack rolled the two all-gold tickets.
+    /// @param lvl The pack's cycle level.
+    /// @param golds The pack's total gold quadrants (8, 12 or 16).
+    function payGoldenTicketGrand(
+        address winner,
+        uint24 lvl,
+        uint8 golds
+    ) external;
+
     /// @notice Pays daily coin jackpot rewards
     /// @param lvl The current game level
     /// @param randWord Random word for winner selection
@@ -609,6 +620,16 @@ interface IDegenerusGameFoilPackModule {
         uint256 ticketIndex,
         uint8 drawKind
     ) external;
+
+    /// @notice Claim a foil pack's gold (permissionless).
+    /// @dev A FLIP ladder on the pack's total gold count from three up, plus a kicker
+    ///      for one all-gold ticket; two all-gold tickets take the golden-ticket grand
+    ///      instead. The pack's lines are re-derived from the sealed word its buy froze
+    ///      against, so nothing about the gold is stored. The win credits to `player`,
+    ///      never the caller, and a pack pays at most once.
+    /// @param player Pack owner the win credits to.
+    /// @param lvl The pack's cycle level.
+    function claimGoldenTicket(address player, uint24 lvl) external;
 
     /// @notice Permissionlessly resolve a batch of foil match claims.
     /// @dev Non-claimable tuples past index 0 are skipped (not reverted); each settled

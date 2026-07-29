@@ -8,13 +8,13 @@ import {JackpotBucketLib} from "../../contracts/libraries/JackpotBucketLib.sol";
 import {PriceLookupLib} from "../../contracts/libraries/PriceLookupLib.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 
-/// @title GoldRushHarness -- drives the live payDailyJackpot arm/resolve surface
+/// @title GoldenTicketHarness -- drives the live payDailyJackpot arm/resolve surface
 /// @notice Extends the production DegenerusGameJackpotModule so the inherited external
-///         `payDailyJackpot` executes the live gold-rush arm/resolve path in THIS
+///         `payDailyJackpot` executes the live golden-ticket arm/resolve path in THIS
 ///         contract's storage. Adds only storage seeders and read-only views; overrides
 ///         NO production logic.
 /// @dev Test-only. NO contracts/*.sol is mutated; this harness lives entirely under test/.
-contract GoldRushHarness is DegenerusGameJackpotModule {
+contract GoldenTicketHarness is DegenerusGameJackpotModule {
     function seedBucket(uint24 lvl, uint8 traitId, uint256 count, uint160 base) external {
         address[] storage holders = lvlTraitEntry[lvl][traitId];
         for (uint256 i; i < count; ++i) {
@@ -42,8 +42,8 @@ contract GoldRushHarness is DegenerusGameJackpotModule {
         _setPrizePools(nextBal, futBal);
     }
 
-    function setGoldRushRaw(uint256 v) external {
-        goldRush = v;
+    function setGoldenTicketRaw(uint256 v) external {
+        goldenTicket = v;
     }
 
     function setPending(uint128 nextPending, uint128 futPending) external {
@@ -60,8 +60,8 @@ contract GoldRushHarness is DegenerusGameJackpotModule {
         dailyHeroWagers[day][q] |= uint256(amount) << (uint256(s) * 32);
     }
 
-    function goldRushRaw() external view returns (uint256) {
-        return goldRush;
+    function goldenTicketRaw() external view returns (uint256) {
+        return goldenTicket;
     }
 
     function claimableOf(address who) external view returns (uint256) {
@@ -135,7 +135,7 @@ contract ReturnZeroSink {
     }
 }
 
-/// @title GoldRushArmResolve -- cross-day gold-rush arm/resolve/ban proofs
+/// @title GoldenTicketArmResolve -- cross-day golden-ticket arm/resolve/ban proofs
 /// @notice Locks the drafted mechanic:
 ///         - a 4-gold main board arms the solo bucket winner (slot fields + event)
 ///         - non-4-gold and same-idx draws neither arm nor resolve
@@ -146,8 +146,8 @@ contract ReturnZeroSink {
 ///           and on same-idx re-rolls after resolution (prevBan rule)
 ///         - resolution rewrites the slot exactly once (no double fire); a chain arm
 ///           preserves the resolve-day ban fields
-contract GoldRushArmResolve is Test {
-    GoldRushHarness internal h;
+contract GoldenTicketArmResolve is Test {
+    GoldenTicketHarness internal h;
     CoinflipRecorder internal flipRec;
     WwxrpRecorder internal wwxrpRec;
 
@@ -159,17 +159,18 @@ contract GoldRushArmResolve is Test {
     uint256 internal constant HALF_PASS = 2.25 ether;
     uint256 internal constant COIN_UNIT = 1000 ether;
 
-    event GoldRushArmed(
+    event GoldenTicketArmed(
         address indexed winner,
         uint24 indexed level,
         uint8 quadrant,
         uint8 symbol
     );
 
-    event GoldRushWin(
+    event GoldenTicketWin(
         address indexed winner,
         uint24 indexed level,
-        uint8 bonusGolds,
+        uint8 route,
+        uint8 goldCount,
         bool grand,
         uint256 ethAmount,
         uint256 halfPassCount,
@@ -178,7 +179,7 @@ contract GoldRushArmResolve is Test {
     );
 
     function setUp() public {
-        h = new GoldRushHarness();
+        h = new GoldenTicketHarness();
 
         CoinflipRecorder fr = new CoinflipRecorder();
         vm.etch(ContractAddresses.COINFLIP, address(fr).code);
@@ -241,7 +242,7 @@ contract GoldRushArmResolve is Test {
         seedBoardBuckets(word, 0x1000);
         h.payDailyJackpot(true, LVL, word);
 
-        uint256 g = h.goldRushRaw();
+        uint256 g = h.goldenTicketRaw();
         assertEq((g >> 189) & 1, 1, "armed flag set");
         winner = address(uint160(g));
         quadrant = uint8((g >> 160) & 3);
@@ -251,7 +252,7 @@ contract GoldRushArmResolve is Test {
         assertTrue(winner != address(0), "armed winner nonzero");
     }
 
-    /// @dev Runs a resolve draw at `idx` with `word`, returning the GoldRushWin payload.
+    /// @dev Runs a resolve draw at `idx` with `word`, returning the GoldenTicketWin payload.
     function resolveDay(
         uint24 idx,
         uint256 word
@@ -264,19 +265,21 @@ contract GoldRushArmResolve is Test {
         h.payDailyJackpot(true, LVL, word);
         Vm.Log[] memory logs = vm.getRecordedLogs();
         bytes32 topic = keccak256(
-            "GoldRushWin(address,uint24,uint8,bool,uint256,uint256,uint256,uint256)"
+            "GoldenTicketWin(address,uint24,uint8,uint8,bool,uint256,uint256,uint256,uint256)"
         );
         bool found;
         for (uint256 i; i < logs.length; ++i) {
             if (logs[i].topics[0] == topic) {
                 found = true;
-                (golds, grand, eth, passes, flip, wwxrp) = abi.decode(
+                uint8 route;
+                (route, golds, grand, eth, passes, flip, wwxrp) = abi.decode(
                     logs[i].data,
-                    (uint8, bool, uint256, uint256, uint256, uint256)
+                    (uint8, uint8, bool, uint256, uint256, uint256, uint256)
                 );
+                assertEq(route, 0, "board route");
             }
         }
-        assertTrue(found, "GoldRushWin emitted");
+        assertTrue(found, "GoldenTicketWin emitted");
     }
 
     function officialMainBoard(Vm.Log[] memory logs) internal pure returns (uint32 mainPacked) {
@@ -294,7 +297,7 @@ contract GoldRushArmResolve is Test {
         vm.recordLogs();
         (address winner, uint8 quadrant, uint8 symbol, ) = armDay([1, 2, 3, 4]);
         Vm.Log[] memory logs = vm.getRecordedLogs();
-        bytes32 topic = keccak256("GoldRushArmed(address,uint24,uint8,uint8)");
+        bytes32 topic = keccak256("GoldenTicketArmed(address,uint24,uint8,uint8)");
         bool found;
         for (uint256 i; i < logs.length; ++i) {
             if (logs[i].topics[0] == topic) {
@@ -305,41 +308,41 @@ contract GoldRushArmResolve is Test {
                 assertEq(s, symbol, "event symbol");
             }
         }
-        assertTrue(found, "GoldRushArmed emitted");
+        assertTrue(found, "GoldenTicketArmed emitted");
     }
 
     function testNoArmWithoutFourGolds() public {
         uint256 word = wordFor([7, 7, 7, 6], [1, 2, 3, 4], 0xA11CE);
         seedBoardBuckets(word, 0x1000);
         h.payDailyJackpot(true, LVL, word);
-        assertEq(h.goldRushRaw(), 0, "3 golds never arms");
+        assertEq(h.goldenTicketRaw(), 0, "3 golds never arms");
     }
 
     function testNoArmOnPurchasePhase() public {
         uint256 word = allGoldWord([1, 2, 3, 4], 0xA11CE);
         seedBoardBuckets(word, 0x1000);
         h.payDailyJackpot(false, LVL, word);
-        assertEq(h.goldRushRaw(), 0, "purchase phase never arms (no solo bucket)");
+        assertEq(h.goldenTicketRaw(), 0, "purchase phase never arms (no solo bucket)");
     }
 
     // -- resolve gating -------------------------------------------------------
 
     function testNoResolveOnSameIdx() public {
         (address winner, , , ) = armDay([1, 2, 3, 4]);
-        uint256 gBefore = h.goldRushRaw();
+        uint256 gBefore = h.goldenTicketRaw();
         // Same frozen idx (a re-run of the arm draw's index) must not resolve.
         vm.recordLogs();
         h.payDailyJackpot(true, LVL, allGoldWord([1, 2, 3, 4], 0xBEEF));
         Vm.Log[] memory logs = vm.getRecordedLogs();
         bytes32 topic = keccak256(
-            "GoldRushWin(address,uint24,uint8,bool,uint256,uint256,uint256,uint256)"
+            "GoldenTicketWin(address,uint24,uint8,uint8,bool,uint256,uint256,uint256,uint256)"
         );
         for (uint256 i; i < logs.length; ++i) {
-            assertTrue(logs[i].topics[0] != topic, "no GoldRushWin at armedIdx");
+            assertTrue(logs[i].topics[0] != topic, "no GoldenTicketWin at armedIdx");
         }
         // Same-day re-arm overwrites with identical armedIdx; winner may differ but
         // the armed flag and idx are unchanged.
-        uint256 gAfter = h.goldRushRaw();
+        uint256 gAfter = h.goldenTicketRaw();
         assertEq((gAfter >> 189) & 1, 1, "still armed");
         assertEq((gAfter >> 165) & 0xFFFFFF, (gBefore >> 165) & 0xFFFFFF, "armedIdx unchanged");
         assertTrue(winner != address(0));
@@ -366,7 +369,7 @@ contract GoldRushArmResolve is Test {
         h.payDailyJackpot(true, LVL, wordFor([0, 1, 2, 3], [5, 5, 5, 5], 0xFEED));
         Vm.Log[] memory logs = vm.getRecordedLogs();
         bytes32 topic = keccak256(
-            "GoldRushWin(address,uint24,uint8,bool,uint256,uint256,uint256,uint256)"
+            "GoldenTicketWin(address,uint24,uint8,uint8,bool,uint256,uint256,uint256,uint256)"
         );
         for (uint256 i; i < logs.length; ++i) {
             assertTrue(logs[i].topics[0] != topic, "resolution fires exactly once");
@@ -537,7 +540,7 @@ contract GoldRushArmResolve is Test {
         // Slot in resolved state only: prevBan flag, quadrant 2, idx == current.
         uint24 idx = 42;
         h.setDailyIdx(idx);
-        h.setGoldRushRaw(
+        h.setGoldenTicketRaw(
             (uint256(1) << 190) | (uint256(2) << 191) | (uint256(idx) << 193)
         );
         h.setHeroWager(idx, 2, 6, type(uint32).max);
@@ -546,7 +549,7 @@ contract GoldRushArmResolve is Test {
         h.payDailyJackpot(true, LVL, word);
         Vm.Log[] memory logs = vm.getRecordedLogs();
         bytes32 winTopic = keccak256(
-            "GoldRushWin(address,uint24,uint8,bool,uint256,uint256,uint256,uint256)"
+            "GoldenTicketWin(address,uint24,uint8,uint8,bool,uint256,uint256,uint256,uint256)"
         );
         for (uint256 i; i < logs.length; ++i) {
             assertTrue(logs[i].topics[0] != winTopic, "prevBan-only state never pays");
@@ -560,7 +563,7 @@ contract GoldRushArmResolve is Test {
     function testPrevBanExpiresNextIdx() public {
         uint24 idx = 42;
         h.setDailyIdx(idx + 1);
-        h.setGoldRushRaw(
+        h.setGoldenTicketRaw(
             (uint256(1) << 190) | (uint256(2) << 191) | (uint256(idx) << 193)
         );
         h.setHeroWager(idx + 1, 2, 6, type(uint32).max);
@@ -578,7 +581,7 @@ contract GoldRushArmResolve is Test {
     function testResolutionWritesPrevBan() public {
         (, uint8 quadrant, , ) = armDay([1, 2, 3, 4]);
         resolveDay(ARM_IDX + 1, wordFor([0, 1, 2, 3], [5, 5, 5, 5], 0xD00D));
-        uint256 g = h.goldRushRaw();
+        uint256 g = h.goldenTicketRaw();
         assertEq((g >> 189) & 1, 0, "armed cleared");
         assertEq((g >> 190) & 1, 1, "prevBan flag set");
         assertEq((g >> 191) & 3, quadrant, "prevBan quadrant = armed quadrant");
@@ -597,9 +600,9 @@ contract GoldRushArmResolve is Test {
         h.payDailyJackpot(true, LVL, word);
         Vm.Log[] memory logs = vm.getRecordedLogs();
         bytes32 winTopic = keccak256(
-            "GoldRushWin(address,uint24,uint8,bool,uint256,uint256,uint256,uint256)"
+            "GoldenTicketWin(address,uint24,uint8,uint8,bool,uint256,uint256,uint256,uint256)"
         );
-        bytes32 armTopic = keccak256("GoldRushArmed(address,uint24,uint8,uint8)");
+        bytes32 armTopic = keccak256("GoldenTicketArmed(address,uint24,uint8,uint8)");
         bool sawWin;
         bool sawArm;
         for (uint256 i; i < logs.length; ++i) {
@@ -608,7 +611,7 @@ contract GoldRushArmResolve is Test {
         }
         assertTrue(sawWin, "chain draw resolves the old rush");
         assertTrue(sawArm, "chain draw arms a new rush");
-        uint256 g = h.goldRushRaw();
+        uint256 g = h.goldenTicketRaw();
         assertEq((g >> 189) & 1, 1, "new armed flag");
         assertEq((g >> 165) & 0xFFFFFF, ARM_IDX + 1, "new armedIdx = chain draw idx");
         assertEq((g >> 190) & 1, 1, "prevBan preserved through chain arm");

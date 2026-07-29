@@ -115,6 +115,7 @@ CONSUMER-SEALED	rngWordByDay	_payFoilTier	modules/DegenerusGameFoilPackModule.so
 CONSUMER-SEALED	rngWordByDay	_processFoilDrain	modules/DegenerusGameFoilPackModule.sol	READ
 EXEMPT-ADVANCE	rngWordCurrent	_processFoilDrain	modules/DegenerusGameFoilPackModule.sol	READ	terminal fallback only (LR_GO_FALLBACK latched): settles a bucket whose own day the dead VRF never worded; reached only from the game-over drain, and every affected pack predates the word (foil buys are liveness-gated)
 CONSUMER-SEALED	rngWordByDay	_tryClaimFoilMatch	modules/DegenerusGameFoilPackModule.sol	READ
+CONSUMER-SEALED	rngWordByDay	claimGoldenTicket	modules/DegenerusGameFoilPackModule.sol	READ
 CONSUMER-SEALED	rngWordByDay	issueDeityBoon	modules/DegenerusGameLootboxModule.sol	READ
 CONSUMER-SEALED	rngWordByDay	_farFutureSeed	modules/DegenerusGameMintStreakUtils.sol	READ
 CONSUMER-SEALED	rngWordByDay	_autoOpen	modules/GameAfkingModule.sol	READ

@@ -3,7 +3,8 @@ pragma solidity 0.8.34;
 
 import {MintPaymentKind} from "../interfaces/IDegenerusGame.sol";
 import {
-    IDegenerusGameDegeneretteModule
+    IDegenerusGameDegeneretteModule,
+    IDegenerusGameJackpotModule
 } from "../interfaces/IDegenerusGameModules.sol";
 import {ContractAddresses} from "../ContractAddresses.sol";
 import {DegenerusTraitUtils} from "../DegenerusTraitUtils.sol";
@@ -16,9 +17,11 @@ import {PriceLookupLib} from "../libraries/PriceLookupLib.sol";
  * @title DegenerusGameFoilPackModule
  * @author Burnie Degenerus
  * @notice Delegate-called module for the foil pack: a 10x-priced four-ticket SKU
- *         whose boost multiplier and activity score freeze at buy (the match lines resolve later), and a
+ *         whose boost multiplier and activity score freeze at buy (the match lines resolve later), a
  *         per-(day, ticket, drawKind) match claim that reads the day's sealed
- *         winning sets and pays an isolated 40/40/20 spin.
+ *         winning sets and pays an isolated 40/40/20 spin, and a per-pack gold route
+ *         on how much gold the pack's own sixteen quadrants came out holding — pulled
+ *         as a claim, except the grand, which the drain pushes where it is decided.
  * @dev All storage reads/writes operate on the inherited DegenerusGameStorage.
  *      The buy keys on the active ticket level (the cycle the pack bets into), so
  *      a pack and the draws it bets against share one cycle key. The claim never
@@ -39,6 +42,7 @@ contract DegenerusGameFoilPackModule is
     error DirectEthInsufficient(); // DirectEth payment kind cannot cover the foil cost shortfall from claimable balance.
     error NoClaimableMatch(); // The given (player, day, ticketIndex, drawKind) tuple does not resolve to a claimable foil match.
     error StaleBatch(); // The batch's opening tuple is not claimable: the list has already been swept.
+    error NoGoldenTicket(); // No pack at that cycle, its lines have not resolved yet, it holds under three golds, or it is already claimed.
 
     // -------------------------------------------------------------------------
     // External Contract References (compile-time constants)
@@ -70,6 +74,46 @@ contract DegenerusGameFoilPackModule is
     uint256 private constant FOIL_FACES_T6 = 35;
     uint256 private constant FOIL_FACES_T7 = 400;
     uint256 private constant FOIL_FACES_T8 = 10_000;
+
+    // The gold ladder: FLIP on the pack's TOTAL gold count, its sixteen quadrants read
+    // as one pool. This is the rung players actually meet — the boost sets a per-quadrant
+    // gold cut of 1.5625% at the floor to 4.6875% at the cap, so three or more golds
+    // lands 1 pack in 545 at score 0, 1 in 114 at 150, 1 in 44 at 300 and 1 in 27 at the
+    // cap. Calibrated so a score-300 pack averages ~689 FLIP (0.69 tickets of coin at the
+    // reference rate); the same table pays ~43 at score 0 and ~1,209 at the cap, so the
+    // ladder's value tracks activity the way the boost that produced it does.
+    // Rungs accelerate ~3x against a ~10x rarity step, so the low rung carries the EV
+    // (3 golds = 58% of it, 4 golds = 31%) and the tail is a lottery, not a subsidy.
+    uint256 private constant GOLD_LADDER_3 = 20_000e18;
+    uint256 private constant GOLD_LADDER_4 = 80_000e18;
+    uint256 private constant GOLD_LADDER_5 = 250_000e18;
+    uint256 private constant GOLD_LADDER_6 = 750_000e18;
+    uint256 private constant GOLD_LADDER_7 = 2_500_000e18;
+    uint256 private constant GOLD_LADDER_8 = 7_500_000e18;
+
+    /// @dev Kicker on top of the ladder when the pack holds exactly ONE all-gold ticket
+    ///      — four golds landing in the SAME ticket rather than scattered, which is
+    ///      ~1 pack in 107,000 at score 300 against 1 in 381 for four golds anywhere.
+    ///      It pays for the shape, not the count. Two all-gold tickets skip both the
+    ///      ladder and this and take the grand.
+    uint256 private constant GOLDEN_TICKET_FLIP = 25_000e18;
+
+    /// @dev Budget units the grand's own writes cost when a pack pushes it from the
+    ///      drain: the futurePrizePool debit, the winner's claimable credit, the
+    ///      claimable-pool total, the whale-pass credit, and the coinflip module's own
+    ///      write behind an external call, plus the claim marker that closes the pull
+    ///      behind it — roughly 110k gas against this budget's ~10k-per-unit
+    ///      calibration, rounded up for headroom. Charged only on the pack that fires
+    ///      it, never folded into the fixed per-pack charge, so the ~7.1 billion packs
+    ///      that do not reach it pay nothing toward it.
+    uint32 private constant GRAND_DRAIN_UNITS = 14;
+
+    /// @dev Domain tag for the golden-ticket claim's double-claim marker, which shares
+    ///      the foilMatchClaimed map with the per-draw match markers. Those fold five
+    ///      fields (player, level, day, drawKind, ticketIndex) against this key's three,
+    ///      so the preimages differ in length as well as in this tag — the two claim
+    ///      families can never mint the same marker.
+    bytes32 private constant GOLDEN_TICKET_TAG = keccak256("foil-golden-ticket");
 
     /// @dev Per-settled-claim keeper bounty target (ETH-equivalent wei) for the
     ///      permissionless batch claimer, converted to FLIP at the reference price.
@@ -109,6 +153,21 @@ contract DegenerusGameFoilPackModule is
         uint8 drawKind,
         uint8 tier,
         uint256 faces
+    );
+
+    /// @notice Emitted when a pack's gold is claimed.
+    /// @param player The pack's buyer.
+    /// @param level The pack's cycle level.
+    /// @param golds The pack's total gold quadrants (3-16); the ladder rung.
+    /// @param allGoldTickets How many of the pack's four tickets came out all gold.
+    /// @param flipCredit FLIP credited (ladder + any single-all-gold-ticket kicker);
+    ///        0 on the grand, whose payout is stamped by GoldenTicketWin instead.
+    event GoldenTicketFoil(
+        address indexed player,
+        uint24 indexed level,
+        uint8 golds,
+        uint8 allGoldTickets,
+        uint256 flipCredit
     );
 
     // =========================================================================
@@ -308,7 +367,8 @@ contract DegenerusGameFoilPackModule is
         // Freeze the record: resolveDay (>= 1), multBps (>= 20000), and the buy-time
         // activity score. The slot is non-zero, so its presence IS the one-per-cycle cap.
         // No signatures are stored — the drain and the claim re-derive the four match
-        // lines from rngWordByDay[resolveDay] + multBps.
+        // lines from rngWordByDay[resolveDay] + multBps. The snap exponent is NOT
+        // recorded: no foil payout scales with it (see _payFoilTier).
         foilRecord[lvl][buyer] =
             uint256(resolveDay) |
             (uint256(multBps) << _FOIL_MULT_SHIFT) |
@@ -365,6 +425,70 @@ contract DegenerusGameFoilPackModule is
         // under try/catch, so it inherits the gate and skips instead of reverting.
         if (_livenessTriggered()) revert GameOver();
         if (!_tryClaimFoilMatch(player, day, ticketIndex, drawKind)) revert NoClaimableMatch();
+    }
+
+    /// @notice Claim a foil pack's gold: the ladder on its total gold count, plus a
+    ///         kicker when one whole ticket came out all gold.
+    /// @dev Delegatecall-only (see buyFoilPack). The pack's four lines are the ones the
+    ///      drain filed into the jackpot buckets, re-derived here from the same
+    ///      (buyer, level, resolveDay word, frozen boost) — so how much gold a pack
+    ///      holds is a fact about a sealed word, decided before the pack drained and
+    ///      unchanged by anything the buyer does afterwards. Nothing about the gold is
+    ///      stored: this is a PULL, deliberately kept out of the drain, which is a
+    ///      gas-budgeted hot path that gates every jackpot. A revert here costs the
+    ///      claimant their own tx and nothing else.
+    ///
+    ///      Claimable from three golds up to one all-gold ticket (see _settleGoldenTicket
+    ///      for the rungs). TWO all-gold tickets are not claimable here at all: that pack
+    ///      took the grand at the drain, which pushed it without waiting to be claimed
+    ///      (see _pushFoilGrand). Only the FLIP legs are left to pull, and neither of
+    ///      them reads a pool — which is why this claim needs no RNG-lock guard either.
+    ///
+    ///      Anyone may settle any player's pack — every rung credits `player`, never the
+    ///      caller, and the marker is set before the payout (CEI), so a pack pays at
+    ///      most once regardless of who triggers it.
+    ///
+    ///      Closed from the liveness trigger on, matching the match claim and the drain's
+    ///      own grand push: past that point the terminal path is drawing down the pools,
+    ///      and a claim held back to straddle it would settle against a pool the terminal
+    ///      jackpot has already committed.
+    /// @param player Pack owner the win credits to.
+    /// @param lvl The pack's cycle level.
+    function claimGoldenTicket(address player, uint24 lvl) external {
+        if (address(this) != ContractAddresses.GAME) revert OnlyDelegatecall();
+        if (_livenessTriggered()) revert GameOver();
+
+        (bool present, uint16 multBps, uint24 resolveDay, ) = _foilRecordFor(
+            player,
+            lvl
+        );
+        if (!present) revert NoGoldenTicket();
+
+        // The pack's lines exist only once its resolveDay word has sealed.
+        uint256 entropy = rngWordByDay[resolveDay];
+        if (entropy == 0) revert NoGoldenTicket();
+
+        // Already settled — including by the drain, which burns this exact marker when
+        // it pushes a pack's grand.
+        bytes32 mk = _goldenTicketKey(player, lvl);
+        if (foilMatchClaimed[mk]) revert NoGoldenTicket();
+
+        (uint8 golds, uint8 allGold) = _packGold(
+            _deriveFoilLines(player, lvl, entropy, multBps)
+        );
+        // Three golds anywhere in the sixteen is the floor, and it subsumes every
+        // richer shape: an all-gold ticket is four golds by construction.
+        if (golds < 3) revert NoGoldenTicket();
+        // Belt to the marker's braces: two all-gold tickets took the grand at the
+        // drain, and the grand supersedes the FLIP legs rather than stacking. The
+        // marker above already closes the settled case; this closes the shape itself,
+        // so a pack that somehow reached here unmarked still cannot mint the ladder's
+        // top rung on top of a pool-sized grand.
+        if (allGold >= 2) revert NoGoldenTicket();
+
+        // Mark before any payout (CEI).
+        foilMatchClaimed[mk] = true;
+        _settleGoldenTicket(player, lvl, golds, allGold);
     }
 
     /// @notice Permissionlessly resolve a batch of foil match claims.
@@ -588,24 +712,16 @@ contract DegenerusGameFoilPackModule is
     ///      spin's player ticket, so the win plays the exact four-quadrant line that
     ///      matched (its boosted gold count is EV-neutral under the per-N tables).
     ///
-    ///      Snap valve: the value-bearing face amounts carry the level's snap exponent,
-    ///      the same one the buy charged. Without it the whole match leg would be worth
-    ///      2^s less against a 2^s price — the one foil term that would break the
-    ///      declaration's EV-neutrality (the sixteen jackpot entries already hold their
-    ///      ratio: they are fixed at FOIL_PACK_ENTRIES and each is worth 2^s more once
-    ///      the divisor thins the level's entry population). The ETH leg's over-cap
-    ///      remainder recircs to a lootbox whose ticket award queues 2^s more raw
-    ///      entries and is divided by the SAME exponent at materialization, so the
-    ///      delivered entry count is snap-invariant and no drain grows with s. WWXRP
-    ///      stays unshifted: the lane is worthless by design, so scaling it would
-    ///      inflate a cosmetic number and nothing else.
-    ///
-    ///      Reading the exponent here (rather than freezing it into foilRecord) is
-    ///      exact: a pack only matches on days whose sealed draw records level `L`, so
-    ///      every claim lands inside `L`; snapShift moves only at a level commit; and a
-    ///      fresh declaration needs `targetLevel >= level + 6` (an armed one cannot be
-    ///      redeclared at all), so no in-flight level's exponent can shift under a
-    ///      claim. `_snapShiftFor(L)` therefore returns exactly what buyFoilPack charged.
+    ///      Snap valve: NO foil payout carries the exponent. The buy still pays 2^s
+    ///      (the price tracks the ticket path), so on a thanos level the pack is simply
+    ///      bad value — a deliberate ruling, not an oversight. Scaling the payout
+    ///      instead would mean reading an exponent at claim time, and the claim can
+    ///      land arbitrarily later than the buy: a declaration always targets
+    ///      `level + 6` or beyond, so once one commits a live `_snapShiftFor` hands
+    ///      every PAST level the new exponent, and a claim parked across the commit
+    ///      would pay 2^(new - old) times its face. Freezing the exponent into the
+    ///      record would close that, but the valve is an emergency lever nobody should
+    ///      be farming around, so the foil legs just do not scale.
     function _payFoilTier(
         address player,
         uint256 day,
@@ -638,15 +754,12 @@ contract DegenerusGameFoilPackModule is
         // can move the payout. The per-N tables hold EV flat across the foil's boosted
         // trait mix.
 
-        // The level's snap exponent, matching the buy charge (see the note above).
-        uint8 snapS = _snapShiftFor(L);
-
         if (c < 40) {
             // ETH (40%): one pool-capped spin; over-cap recircs to the lootbox.
             _foilSpin(
                 IDegenerusGameDegeneretteModule.resolveEthSpinFromBox.selector,
                 player,
-                (faces * PriceLookupLib.priceForLevel(L)) << snapS,
+                faces * PriceLookupLib.priceForLevel(L),
                 activityScore,
                 seed,
                 sel
@@ -657,7 +770,7 @@ contract DegenerusGameFoilPackModule is
             _foilSpin(
                 IDegenerusGameDegeneretteModule.resolveFlipSpinsFromBox.selector,
                 player,
-                (faces * FLIP_FACE_AMOUNT) << snapS,
+                faces * FLIP_FACE_AMOUNT,
                 activityScore,
                 seed,
                 sel
@@ -733,6 +846,11 @@ contract DegenerusGameFoilPackModule is
     ///      when the leftover budget can't cover the fixed 35-unit charge. A bucket
     ///      whose word is not yet sealed (a future day) stops the walk — it does not
     ///      gate the current jackpot.
+    ///
+    ///      The one payout this path makes is the golden-ticket grand, on a pack whose
+    ///      four lines came out holding two or more all-gold tickets. Everything else
+    ///      the gold is worth stays a pull. See _pushFoilGrand for why the debit needs
+    ///      no RNG-lock guard here, and GRAND_DRAIN_UNITS for how it is metered.
     function _processFoilDrain(uint32 room)
         private
         returns (bool done, bool drained)
@@ -740,6 +858,11 @@ contract DegenerusGameFoilPackModule is
         uint24 dd = foilDrainDay;
         uint24 last = foilLastResolveDay;
         uint256 cursor = foilCursor;
+
+        // The grand push is closed from the liveness trigger on, matching the pull
+        // claim: past that point the terminal path is drawing down the same pools the
+        // grand debits. Read once for the whole walk — it cannot change mid-call.
+        bool terminal = _livenessTriggered();
 
         // Trait-batch scratch shared across every buyer this call (re-zeroed per buyer
         // inside _resolveFoilBuyer), so memory does not grow per queue entry.
@@ -791,11 +914,31 @@ contract DegenerusGameFoilPackModule is
                     foilCursor = uint32(cursor);
                     return (false, drained);
                 }
-                _resolveFoilBuyer(bucket[cursor], entropy, counts, touchedTraits);
+                bool grand = _resolveFoilBuyer(
+                    bucket[cursor],
+                    entropy,
+                    terminal,
+                    counts,
+                    touchedTraits
+                );
                 drained = true;
                 unchecked {
                     room -= (FOIL_PACK_ENTRIES * 2) + 3; // 16*2 + baseOv(2) + 1 = 35
                     ++cursor;
+                }
+                // The grand's own writes, charged only to the pack that fired it. This
+                // subtraction SATURATES where the fixed charge above wraps: the entry
+                // guard is sized for a plain pack, so a grand landing on the last pack
+                // a batch can afford would underflow an unchecked charge and hand the
+                // rest of the walk a budget of ~4 billion units — draining every
+                // remaining bucket in one transaction, which is the exact failure the
+                // guard-equals-charge rule above exists to prevent. Saturating instead
+                // overshoots this one batch's gas target by GRAND_DRAIN_UNITS (~140k
+                // against a sub-10M target) on a pack that arrives once in 7.1 billion.
+                if (grand) {
+                    room = room < GRAND_DRAIN_UNITS
+                        ? 0
+                        : room - GRAND_DRAIN_UNITS;
                 }
             }
 
@@ -821,12 +964,23 @@ contract DegenerusGameFoilPackModule is
     ///      file all sixteen traits into the cycle level's trait buckets. No stamp —
     ///      the claim re-derives the SAME lines from rngWordByDay[resolveDay] + the
     ///      frozen multBps, so the stored record stays just (multBps, resolveDay).
+    ///
+    ///      Counts the pack's gold on the way past. The lines are already in memory and
+    ///      already unpacked below, so reading how much gold they hold is opcode work on
+    ///      data this function has in hand — a fraction of a percent of the sixteen
+    ///      entry writes it is here to do. Only the grand acts on it: the ladder and its
+    ///      kicker stay a pull, off this budgeted path.
+    /// @param terminal Whether liveness has triggered; suppresses the grand push, so the
+    ///        terminal drain never carves a pool the terminal jackpot is settling from.
+    /// @return grandPaid True when this pack pushed the grand, so the caller can charge
+    ///         its writes against the batch budget.
     function _resolveFoilBuyer(
         uint256 packedLvlBuyer,
         uint256 entropy,
+        bool terminal,
         uint32[256] memory counts,
         uint8[256] memory touchedTraits
-    ) private {
+    ) private returns (bool grandPaid) {
         address buyer = address(uint160(packedLvlBuyer));
         uint24 lvl = uint24(packedLvlBuyer >> 160);
         uint32[4] memory lines = _deriveFoilLines(
@@ -885,5 +1039,156 @@ contract DegenerusGameFoilPackModule is
         uint256 baseKey = (uint256(lvl) << 224) |
             (uint256(uint160(buyer)) << 32);
         emit TraitsGenerated(buyer, baseKey, FOIL_PACK_ENTRIES);
+
+        // Two or more all-gold tickets: push the grand now rather than wait to be
+        // claimed. Runs AFTER the pack's own entries are filed, so the sixteen it just
+        // bought are in the buckets the draw this drain gates will read — the pack wins
+        // the grand and still plays the board it paid for.
+        if (!terminal) {
+            (uint8 golds, uint8 allGold) = _packGold(lines);
+            if (allGold >= 2) {
+                _pushFoilGrand(buyer, lvl, golds, allGold);
+                grandPaid = true;
+            }
+        }
+    }
+
+    /// @dev Read a pack's gold two ways in one pass over the four lines the drain
+    ///      filed: the total gold quadrants (the ladder's rung) and how many whole
+    ///      tickets came out all gold (the kicker and the grand). Each quadrant byte is
+    ///      [QQ][CCC][SSS], so the color is bits 5-3 and gold is color 7. Pure and
+    ///      re-derivable — the claim recomputes the same lines the drain filed, so
+    ///      nothing about the pack's gold has to be stored.
+    /// @param lines The pack's four four-quadrant lines.
+    /// @return golds Total gold quadrants across the pack (0..16).
+    /// @return allGoldTickets How many of the four lines are all gold (0..4).
+    function _packGold(
+        uint32[4] memory lines
+    ) internal pure returns (uint8 golds, uint8 allGoldTickets) {
+        for (uint256 i; i < 4; ++i) {
+            uint32 line = lines[i];
+            uint8 inLine;
+            for (uint256 q; q < 4; ++q) {
+                if (((uint8(line >> (8 * q)) >> 3) & 7) == 7) {
+                    unchecked {
+                        ++inLine;
+                    }
+                }
+            }
+            unchecked {
+                golds += inLine;
+                if (inLine == 4) ++allGoldTickets;
+            }
+        }
+    }
+
+    /// @dev The gold ladder's FLIP for a pack's total gold count. Only reached with
+    ///      `golds >= 3` (the claim's floor), so the fallthrough is the 3 rung; 8 caps
+    ///      it, since past there the rarity outruns any table worth writing.
+    function _goldLadderFlip(uint8 golds) internal pure returns (uint256) {
+        if (golds >= 8) return GOLD_LADDER_8;
+        if (golds == 7) return GOLD_LADDER_7;
+        if (golds == 6) return GOLD_LADDER_6;
+        if (golds == 5) return GOLD_LADDER_5;
+        if (golds == 4) return GOLD_LADDER_4;
+        return GOLD_LADDER_3;
+    }
+
+    /// @dev Pay the pull's half of the foil gold route: the ladder rung for the pack's
+    ///      total gold count, plus GOLDEN_TICKET_FLIP when exactly ONE whole ticket came
+    ///      out all gold (which pays for the shape, not the count).
+    ///
+    ///      Two or more all-gold tickets never arrive here — the drain pushed their
+    ///      grand and burned the pack's claim marker on the way. The grand supersedes
+    ///      rather than stacks, the same way the board route pays one rung: a pack that
+    ///      reached it has already been paid the top of the whole structure, so adding
+    ///      the ladder's own top rung would only blur the headline.
+    ///
+    ///      Neither leg carries the snap exponent (see _payFoilTier: no foil payout
+    ///      does), and neither reads a pool — so nothing here is sized off state a
+    ///      pending draw is about to move, and the claim needs no RNG-lock guard.
+    ///
+    ///      Internal, not private, so a test exposer can drive one rung at a time:
+    ///      every (golds, allGold) shape is reachable in production, but each needs its
+    ///      own brute-forced (buyer, entropy) vector to reach through the live claim.
+    ///      No production contract derives from this module, so the reachable surface is
+    ///      unchanged.
+    /// @param player The pack's buyer, who every rung credits.
+    /// @param lvl The pack's cycle level.
+    /// @param golds The pack's total gold quadrants (3..7, or 8+ scattered across at
+    ///        most one whole ticket).
+    /// @param allGold How many of the pack's four tickets came out all gold (0 or 1).
+    function _settleGoldenTicket(
+        address player,
+        uint24 lvl,
+        uint8 golds,
+        uint8 allGold
+    ) internal {
+        uint256 flipCredit = _goldLadderFlip(golds);
+        if (allGold == 1) flipCredit += GOLDEN_TICKET_FLIP;
+        coinflip.creditFlip(player, flipCredit);
+        emit GoldenTicketFoil(player, lvl, golds, allGold, flipCredit);
+    }
+
+    /// @dev Push the golden-ticket grand for a pack that drained holding two or more
+    ///      all-gold tickets. Delegatecalls the jackpot module's single grand definition
+    ///      in the Game's storage context, so the foil route and the armed board route
+    ///      pay the identical rung off one body of code — the amounts cannot drift. It
+    ///      neither arms nor consumes the armed board slot: a pending arm still resolves
+    ///      on its own next draw.
+    ///
+    ///      NO RNG-lock guard, deliberately. This runs inside advanceGame, which is a
+    ///      deterministic protocol function with no player discretion, and the drain
+    ///      strictly precedes the draw it feeds — the readiness gate holds rngGate until
+    ///      _foilDrainPending clears, so the futurePrizePool debit always lands before
+    ///      any pool math that reads it. That is exactly how the armed board route's own
+    ///      grand already settles from payDailyJackpot. Nothing is double-committed: the
+    ///      later draw simply reads the pool this call left behind.
+    ///
+    ///      Internal, not private, only so a test exposer can drive it: a pack reaches
+    ///      two all-gold tickets once in 7.1 billion, far past what a search over
+    ///      buyer/entropy can construct. Same precedent as the jackpot module's
+    ///      _pickSoloQuadrant, and no production contract derives from this module, so
+    ///      the reachable surface is unchanged.
+    /// @param player The pack's buyer, who the grand credits.
+    /// @param lvl The pack's cycle level.
+    /// @param golds The pack's total gold quadrants — 8, 12 or 16.
+    /// @param allGold How many of the pack's four tickets came out all gold (2..4).
+    function _pushFoilGrand(
+        address player,
+        uint24 lvl,
+        uint8 golds,
+        uint8 allGold
+    ) internal {
+        // Burn the pack's claim marker before paying (CEI), the SAME one the pull
+        // checks. The grand supersedes the FLIP legs rather than stacking, so a pack
+        // paid here must not go on to pull the ladder's top rung as well — eight golds
+        // is exactly what two all-gold tickets are, so an unmarked pack would qualify
+        // for 7.5M FLIP on top of a pool-sized grand. The marker closes that outright
+        // rather than leaving it to the pull's re-derivation.
+        foilMatchClaimed[_goldenTicketKey(player, lvl)] = true;
+        (bool ok, ) = ContractAddresses.GAME_JACKPOT_MODULE.delegatecall(
+            abi.encodeWithSelector(
+                IDegenerusGameJackpotModule.payGoldenTicketGrand.selector,
+                player,
+                lvl,
+                golds
+            )
+        );
+        if (!ok) revert EmptyRevert();
+        // flipCredit 0: the grand's own legs are stamped by GoldenTicketWin.
+        emit GoldenTicketFoil(player, lvl, golds, allGold, 0);
+    }
+
+    /// @dev The pack's golden-ticket claim marker key. Shares the foilMatchClaimed map
+    ///      with the per-draw match markers: those fold five fields (player, level, day,
+    ///      drawKind, ticketIndex) against this key's three, so the preimages differ in
+    ///      length as well as in the tag — the two claim families can never mint the
+    ///      same marker.
+    function _goldenTicketKey(
+        address player,
+        uint24 lvl
+    ) private pure returns (bytes32) {
+        return keccak256(abi.encode(player, uint256(lvl), GOLDEN_TICKET_TAG));
     }
 }
