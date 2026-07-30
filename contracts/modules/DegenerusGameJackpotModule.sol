@@ -1499,9 +1499,9 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     ///      rungs are face-value credits with no pool debit — pass dilution is
     ///      absorbed by future prize pools and the flip credit stakes the next day's
     ///      coinflip. The grand pays 25% of futurePrizePool in ETH and denominates
-    ///      the rest of the headline (current + next + future + claimable pools) 75%
-    ///      in half-passes at HALF_WHALE_PASS_PRICE and 25% in flip credit at the
-    ///      level's ticket rate.
+    ///      the rest of the headline (the three prize pools plus the yield accumulator —
+    ///      claimable is player money already owed and is excluded) 75% in half-passes at
+    ///      HALF_WHALE_PASS_PRICE and 25% in flip credit at the level's ticket rate.
     function _payGoldenTicket(
         address winner,
         uint24 lvl,

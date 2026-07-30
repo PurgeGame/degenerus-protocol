@@ -621,7 +621,9 @@ contract WWXRP {
     ///      are allowed; each records its own activity snapshot and interval.
     ///      Entry stays open during the daily RNG lock (like flip deposits):
     ///      the lock covers TODAY's word while this entry settles on
-    ///      TOMORROW's, which cannot exist yet (checked explicitly). The
+    ///      TOMORROW's, which cannot exist yet — structurally, since the game
+    ///      only ever records words for days <= the current wall day, so no
+    ///      in-path check is needed. The
     ///      incinerator piggyback needs no such care: its deciding word's
     ///      request bumps the level off x99 first (see
     ///      _recordIncineratorEntry).

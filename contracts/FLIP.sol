@@ -492,7 +492,9 @@ contract FLIP {
       +======================================================================+*/
 
     /// @notice Burns FLIP from a player for coinflip deposits.
-    /// @dev Only callable by the Coinflip contract.
+    /// @dev Access: COINFLIP only. The rejection selector is the shared `OnlyGame()` generic —
+    ///      this contract carries no per-caller error type, so a trace reads OnlyGame() for a
+    ///      gate that admits COINFLIP alone.
     /// @param from The player's address to burn from.
     /// @param amount The amount of FLIP to burn (18 decimals).
     function burnForCoinflip(address from, uint256 amount) external {
@@ -557,6 +559,8 @@ contract FLIP {
     ///      caller or has approved them, so the widening reaches no non-consenting balance.
     ///      burnCoinForSalvage keeps plain onlyGame — the salvage burn drains the auto-rebuy
     ///      carry as well, which no bet has any business touching.
+    ///      Rejection reuses the shared `OnlyGame()` generic, so a trace names OnlyGame() even
+    ///      though PARIMUTUEL is equally admitted.
     modifier onlyGameOrParimutuel() {
         address sender = msg.sender;
         if (
@@ -583,6 +587,8 @@ contract FLIP {
 
     /// @notice Increase the vault's mint allowance without transferring tokens.
     /// @dev Called by GAME (delegatecall modules) or VAULT to credit virtual FLIP to the vault.
+    ///      Rejection reuses the shared `OnlyVault()` generic, so a trace names OnlyVault() even
+    ///      though GAME is equally admitted.
     /// @param amount Amount to add to vault's mint allowance.
     function vaultEscrow(uint256 amount) external {
         address sender = msg.sender;

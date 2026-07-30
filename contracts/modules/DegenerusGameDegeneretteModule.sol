@@ -1264,9 +1264,11 @@ contract DegenerusGameDegeneretteModule is
     }
 
     /// @dev Dispatches to the base payout table for the given score S.
-    ///      S = 0..7 are packed 32 bits each into the table's _PACKED constant; S = 8 and
-    ///      S = 9 each exceed the 32-bit slot so each table has separate _S8 / _S9
-    ///      constants (S=9 is the jackpot tier). On the honest (ETH/FLIP) lane the table
+    ///      S = 0..7 are packed 32 bits each into the table's _PACKED constant, which fills
+    ///      the whole 256-bit word at eight lanes — so S = 8 and S = 9 have nowhere left to
+    ///      sit and each table carries separate _S8 / _S9 constants (every pin itself fits
+    ///      uint32; it is the word that is full, not the lane that overflows). S=9 is the
+    ///      jackpot tier. On the honest (ETH/FLIP) lane the table
     ///      is indexed by (N, heroIsGold) (exact EV-equality); the rigged
     ///      WWXRP lane is indexed by N only (heroIsGold ignored — averaged by-design). The
     ///      S=9 pin is by N only (P(S=9) is placement-independent, shared across lanes).
