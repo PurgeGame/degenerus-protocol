@@ -22,11 +22,14 @@ interface ICoinflip {
       +======================================================================+*/
 
     /// @notice Deposit FLIP into the daily coinflip system.
-    /// @dev Burns FLIP from the funder via FLIP.burnForCoinflip, processes any pending claims,
-    ///      applies quest bonuses and recycling bonuses, then adds stake for the next day's flip.
+    /// @dev Processes any pending claims, funds the stake, applies quest and recycling bonuses,
+    ///      then adds stake for the next day's flip.
     ///      Permissionless: the player (player=address(0) or player=msg.sender) or an approved
-    ///      operator funds the deposit from the player's FLIP; any other caller funds it from
-    ///      their own FLIP as a gift credited to `player`.
+    ///      operator funds the deposit from the player's settled coinflip winnings first and
+    ///      burns the player's wallet FLIP via FLIP.burnForCoinflip for the remainder; any other
+    ///      caller funds the whole stake by burning their own FLIP as a gift credited to
+    ///      `player`, leaving the player's winnings untouched. The recycling bonus pays on the
+    ///      winnings leg only.
     /// @param player The player making the deposit (address(0) or msg.sender for direct deposit).
     /// @param amount Amount of FLIP to deposit (must be >= 100 FLIP minimum).
     /// @custom:reverts AmountLTMin If amount is non-zero but less than 100 FLIP.

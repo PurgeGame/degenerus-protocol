@@ -147,13 +147,12 @@ contract FlipEmissionSeeds is DeployProtocol {
         vm.prank(GAME);
         coinflip.creditFlip(SDGNRS, credit);
 
-        // Day 21 WIN: the payout settles into the rolling carry (plus the capped
+        // Day 21 WIN: the payout settles into the rolling carry (plus the flat
         // recycle bonus on the roll) - nothing mints, nothing becomes claimable.
         _resolveDay(SEED_DAYS + 1, true);
         (uint16 r, ) = coinflip.getCoinflipDayResult(SEED_DAYS + 1);
         uint256 payout = credit + (credit * uint256(r)) / 100;
         uint256 bonus = (payout * 75) / 10_000;
-        if (bonus > 1000 ether) bonus = 1000 ether;
         (, , uint256 carry, ) = coinflip.coinflipAutoRebuyInfo(SDGNRS);
         assertEq(carry, payout + bonus, "win rolls into carry (with recycle bonus)");
         assertEq(coin.balanceOf(SDGNRS), 0, "post-arming win never mints to the wallet");

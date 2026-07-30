@@ -82,7 +82,6 @@ contract CoinflipCarryClaim is DeployProtocol {
         (uint16 r, ) = coinflip.getCoinflipDayResult(epoch);
         uint256 payout = stake + (stake * uint256(r)) / 100;
         uint256 bonus = (payout * 75) / 10_000;
-        if (bonus > 1000 ether) bonus = 1000 ether;
         return payout + bonus;
     }
 
@@ -159,7 +158,6 @@ contract CoinflipCarryClaim is DeployProtocol {
         assertGt(reserved, 0, "fixture must bank at least one chunk");
         assertGt(remainder, 0, "fixture must leave a rolling remainder");
         uint256 bonus = (remainder * 75) / 10_000;
-        if (bonus > 1000 ether) bonus = 1000 ether;
         uint256 expectedCarry = remainder + bonus;
 
         vm.prank(player);

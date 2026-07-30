@@ -275,8 +275,10 @@ contract Coinflip {
 
     /// @notice Deposit FLIP into the daily coinflip system.
     /// @dev The deposit (stake, quest progress, winnings) belongs to `player`. The player or an
-    ///      approved operator funds it from the player's FLIP; any other caller funds it from their
-    ///      own FLIP — a permissionless gift (the caller pays, the player gets the stake).
+    ///      approved operator funds it from the player's settled winnings first and their wallet
+    ///      FLIP for the remainder; any other caller funds the whole stake from their own FLIP —
+    ///      a permissionless gift (the caller pays, the player gets the stake) that never touches
+    ///      the player's winnings. The recycling bonus pays on the winnings leg only.
     /// @param player The stake owner — i.e. the player (address(0) or msg.sender for self-deposit).
     /// @param amount Amount of FLIP to deposit (min 100 FLIP, or 0 to settle pending claims).
     function depositCoinflip(address player, uint256 amount) external {
@@ -293,8 +295,9 @@ contract Coinflip {
     }
 
     /// @dev Internal deposit for daily coinflip mode. The stake (quest progress, winnings)
-    ///      belongs to `player`; the FLIP principal is burned from `funder` (== player for a
-    ///      self/approved deposit, == the caller for a permissionless gift).
+    ///      belongs to `player`; the FLIP principal is funded claimable-first when funder == player
+    ///      (a self/approved deposit) and burned from `funder`'s wallet for whatever the settled
+    ///      winnings did not cover. A permissionless gift (funder == the caller) is wallet-only.
     function _depositCoinflip(
         address player,
         address funder,
@@ -310,15 +313,33 @@ contract Coinflip {
         }
 
         uint256 mintable = _claimCoinflipsInternal(player, state, false);
-        // storedAfter mirrors claimableStored through this frame; no call below can
-        // mutate it (burnForCoinflip and handleFlip never reach a claimable writer).
         uint128 storedAfter = state.claimableStored;
         if (mintable != 0) {
             storedAfter = uint128(uint256(storedAfter) + mintable);
+        }
+
+        // Claimable-first waterfall: settled winnings fund the stake before the wallet does, so a
+        // rebet spends the bank instead of requiring a claim-out that would mint the FLIP just to
+        // burn it again. Supply-neutral by the same accounting _stakeSdgnrsReserveSlice relies on —
+        // claimableStored is UNMINTED and a day stake is off-supply, so moving between the two
+        // mints and burns nothing. Gated on funder == player (self or operator-approved): a
+        // permissionless gift funds the whole stake from the caller's own FLIP and can never
+        // push a non-consenting player's winnings onto a flip.
+        uint256 fromClaimable;
+        if (funder == player) {
+            fromClaimable = amount <= storedAfter ? amount : storedAfter;
+            if (fromClaimable != 0) {
+                unchecked {
+                    storedAfter = uint128(uint256(storedAfter) - fromClaimable);
+                }
+            }
+        }
+        if (mintable != 0 || fromClaimable != 0) {
             state.claimableStored = storedAfter;
         }
         // claimableStored / lastClaim / carry are finalized here — nothing below mutates them
-        // (_addDailyFlip writes only per-day stake). One emit covers both exits.
+        // (burnForCoinflip and handleFlip never reach a claimable writer, _addDailyFlip writes
+        // only per-day stake). One emit covers both exits.
         _emitClaimState(player);
 
         if (amount == 0) {
@@ -326,8 +347,13 @@ contract Coinflip {
             return;
         }
 
-        // CEI PATTERN: Burn first so reentrancy into downstream module calls cannot spend the same balance twice.
-        flip.burnForCoinflip(funder, amount);
+        // CEI PATTERN: the claimable leg is already debited above and the wallet leg burns here,
+        // so reentrancy into downstream module calls cannot spend either source twice.
+        uint256 fromWallet;
+        unchecked {
+            fromWallet = amount - fromClaimable;
+        }
+        if (fromWallet != 0) flip.burnForCoinflip(funder, fromWallet);
 
         // Quests can layer on bonus flip credit when the quest is active/completed. Quest
         // progress is credited to the funder (the spender earns the quest); the resulting
@@ -349,15 +375,11 @@ contract Coinflip {
 
         // Principal + quest bonus become the pending flip stake.
         uint256 creditedFlip = amount + questReward;
-        uint256 rollAmount = state.autoRebuyEnabled
-            ? state.autoRebuyCarry
-            : uint256(storedAfter);
-        uint256 rebetAmount = creditedFlip <= rollAmount
-            ? creditedFlip
-            : rollAmount;
-        if (rebetAmount != 0) {
-            // Recycling bonus applies only to the rebet portion (not fresh money).
-            creditedFlip += _recyclingBonus(rebetAmount);
+        if (fromClaimable != 0) {
+            // Recycling bonus applies only to the rebet portion (not fresh money): the winnings
+            // this deposit actually spent, never the wallet-funded remainder. An auto-rebuy
+            // player's carry earns its own bonus where it rolls, in _claimCoinflipsInternal.
+            creditedFlip += _recyclingBonus(fromClaimable);
         }
         // Direct deposits can set biggestFlip/bounty; indirect deposits cannot.
         _addDailyFlip(
@@ -749,8 +771,12 @@ contract Coinflip {
             if (recordAmount > record && !game.rngLocked()) {
                 address currentBountyOwner = bountyOwedTo;
                 uint128 bounty = currentBounty;
-                // recordAmount fits uint128: it was already burned via FLIP._burn,
-                // whose supply accounting bounds every burn amount to uint128.
+                // recordAmount is the deposit total across both funding legs: the claimable leg
+                // is bounded by claimableStored's uint128 width, the wallet leg by FLIP._burn,
+                // whose supply accounting bounds every burn amount to uint128. Their sum needs
+                // ~1.7e20 FLIP in each leg to leave uint128, so the cast is width-bound in every
+                // reachable state rather than by a single burn as it was when one burn covered
+                // the whole principal.
                 biggestFlipEver = uint128(recordAmount);
                 emit BiggestFlipUpdated(player, recordAmount);
 
@@ -1373,16 +1399,16 @@ contract Coinflip {
         locked = lvl != 0 && lvl % 10 == 0;
     }
 
-    /// @dev Calculate recycling bonus for daily flip deposits (0.75% bonus, capped at 1000 FLIP).
+    /// @dev Calculate recycling bonus for daily flip deposits (flat 0.75%).
     ///      Base is the recycled amount (the re-bet or auto-rebuy carry being deposited).
     ///      Bonus feeds into creditedFlip, not back into claimableStored (no feedback loop).
+    ///      Rate-only, so the same percentage applies at every size: splitting a recycle
+    ///      across several deposits earns exactly what one deposit would, and the RTP the
+    ///      day's reward percent is sized against holds for a whale and a minnow alike.
     function _recyclingBonus(
         uint256 amount
     ) private pure returns (uint256 bonus) {
-        if (amount == 0) return 0;
         bonus = (amount * uint256(RECYCLE_BONUS_BPS)) / uint256(BPS_DENOMINATOR);
-        uint256 bonusCap = 1000 ether;
-        if (bonus > bonusCap) bonus = bonusCap;
     }
 
     /// @dev Calculate the target day for new coinflip deposits.
