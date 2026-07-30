@@ -1965,6 +1965,12 @@ contract DegenerusGameMintModule is
         uint256 costWei = (priceWei * quantity) / (4 * QTY_SCALE);
         if (costWei == 0) revert E();
         if (costWei < TICKET_MIN_BUYIN_WEI) revert E();
+        // A ticket leg that cannot survive the routed level's snap divide fails closed instead of
+        // charging full price for zero entries. The drain divides the accumulated (player, level)
+        // balance by 2^s ONCE, so a buy under 2^s scaled units truncates to nothing on its own and
+        // the remainder roll cannot recover it (rem == 0 always loses). The exponent comes from
+        // targetLevel — the level these entries queue at — so it is the same one the drain applies.
+        if (quantity >> _snapShiftFor(targetLevel) == 0) revert E();
 
         uint256 adjustedQuantity = quantity;
         if (!payInCoin) {
