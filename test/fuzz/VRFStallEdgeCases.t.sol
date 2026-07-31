@@ -422,8 +422,9 @@ contract VRFStallEdgeCases is DeployProtocol {
 
         // Apply nudges (reverseFlip increments totalFlipReversals)
         for (uint8 n = 0; n < nudges; n++) {
+            (, uint256 cost) = game.rngNudgeQuote();
             vm.prank(buyer);
-            try game.reverseFlip() {} catch {
+            try game.reverseFlip(cost) {} catch {
                 break; // Not enough FLIP or RNG locked
             }
         }

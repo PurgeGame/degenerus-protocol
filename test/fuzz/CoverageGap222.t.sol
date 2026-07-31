@@ -217,7 +217,9 @@ contract CoverageGap222 is DeployProtocol {
     /// @notice Exercise reverseFlip (coinflip control; caller must hold coinflip state).
     function test_gap_reverseFlip_path() public {
         vm.prank(buyer);
-        (bool ok, ) = address(game).call(abi.encodeWithSignature("reverseFlip()"));
+        (bool ok, ) = address(game).call(
+            abi.encodeWithSignature("reverseFlip(uint256)", 100 ether)
+        );
         // Caller has no pending flip; guard rejects.
         assertFalse(ok, "reverseFlip rejected caller with no pending flip");
     }

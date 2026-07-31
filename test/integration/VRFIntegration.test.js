@@ -34,8 +34,7 @@ import {
  *  - RngNotReady, RngLocked are custom errors in DegenerusGameAdvanceModule.
  *    When the module reverts, `_revertDelegate` re-throws the raw ABI-encoded error.
  *    To assert these with `revertedWithCustomError`, pass `advanceModule` as the contract.
- *  - reverseFlip() on DegenerusGame and the advance module both take no arguments.
- *    The game proxy wraps the call via delegatecall; the module uses msg.sender.
+ *  - reverseFlip(expectedCost) on DegenerusGame checks the caller's quoted FLIP price.
  *
  * Advance stage constants (from DegenerusGameAdvanceModule):
  *  STAGE_RNG_REQUESTED      = 1
@@ -264,7 +263,7 @@ describe("VRFIntegration", function () {
   // ---------------------------------------------------------------------------
 
   describe("rngLocked state during pending VRF", function () {
-    it("reverseFlip() reverts with RngLocked while VRF is pending", async function () {
+    it("reverseFlip(expectedCost) reverts with RngLocked while VRF is pending", async function () {
       const { game, deployer, advanceModule } = await loadFixture(deployFullProtocol);
 
       await advanceToNextDay();
@@ -272,22 +271,22 @@ describe("VRFIntegration", function () {
 
       expect(await game.rngLocked()).to.equal(true);
 
-      // reverseFlip() is blocked when RNG is locked.
+      // reverseFlip(expectedCost) is blocked when RNG is locked.
       // The error RngLocked is defined in DegenerusGameAdvanceModule, which is
       // the module that executes via delegatecall. We check against advanceModule.
       await expect(
-        game.connect(deployer).reverseFlip()
+        game.connect(deployer).reverseFlip(eth("100"))
       ).to.be.revertedWithCustomError(advanceModule, "RngLocked");
     });
 
-    it("reverseFlip() fails for a different reason when RNG is not locked (no FLIP)", async function () {
+    it("reverseFlip(expectedCost) fails for a different reason when RNG is not locked (no FLIP)", async function () {
       const { game, deployer, advanceModule } = await loadFixture(deployFullProtocol);
 
       // RNG not locked — deployer has no FLIP, so burnCoin fails, not RngLocked.
       expect(await game.rngLocked()).to.equal(false);
 
       await expect(
-        game.connect(deployer).reverseFlip()
+        game.connect(deployer).reverseFlip(eth("100"))
       ).to.not.be.revertedWithCustomError(advanceModule, "RngLocked");
     });
 

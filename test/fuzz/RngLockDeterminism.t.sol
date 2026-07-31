@@ -1732,8 +1732,9 @@ contract RngLockDeterminism is DeployProtocol {
         uint256 nudges = 1 + (seed % 3);
         _fundFlip(buyer, 100_000 ether); // ample FLIP for the compounding nudge cost
         for (uint256 n = 0; n < nudges; n++) {
+            (, uint256 cost) = game.rngNudgeQuote();
             vm.prank(buyer);
-            try game.reverseFlip() {} catch { break; }
+            try game.reverseFlip(cost) {} catch { break; }
         }
         uint256 movedReversals = _readTotalFlipReversals();
         // NON-VACUITY (A): the perturbation actually moved totalFlipReversals before the consume.
@@ -1887,8 +1888,9 @@ contract RngLockDeterminism is DeployProtocol {
         uint256 nudges = 1 + (seed % 3);
         _fundFlip(buyer, 100_000 ether); // ample FLIP for the compounding nudge cost
         for (uint256 n = 0; n < nudges; n++) {
+            (, uint256 cost) = game.rngNudgeQuote();
             vm.prank(buyer);
-            try game.reverseFlip() {} catch { break; }
+            try game.reverseFlip(cost) {} catch { break; }
         }
         uint256 movedReversals = _readTotalFlipReversals();
         // NON-VACUITY (A): the consume genuinely reads totalFlipReversals (non-zero pre-lock).

@@ -90,6 +90,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     // error E() — inherited from DegenerusGameStorage
     error SelfBoon(); // Deity attempted to issue a boon to themselves.
     error ValueMismatch(); // Amount is zero or msg.value does not match the required amount.
+    error NudgeCostChanged();
 
     // error RngLocked() — inherited from DegenerusGameStorage
 
@@ -2121,14 +2122,18 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         return middayRngCredit[account];
     }
 
-    /// @notice Pay FLIP to nudge the next RNG word by +1.
-    /// @dev Cost scales +50% per queued nudge and resets after fulfillment.
+    /// @notice Pay the quoted FLIP cost to nudge the next daily RNG word by +1.
+    /// @dev Cost scales +50% per queued nudge, rounds up to a whole FLIP, and resets after
+    ///      the queued nudges are applied. The caller-supplied quote prevents a transaction
+    ///      from paying a higher price if another nudge lands first.
     ///      Only available while RNG is unlocked (before VRF request is in-flight).
     ///      MECHANISM: Adds 1 to the VRF word for each nudge, changing outcomes.
     ///      SECURITY: Players cannot predict the base word, only influence it.
+    /// @param expectedCost Exact FLIP amount the caller authorizes, in token wei.
     /// @custom:reverts RngLocked If RNG is currently locked (VRF request pending).
+    /// @custom:reverts NudgeCostChanged If the live quote differs from expectedCost.
     /// @custom:reverts E Once the liveness timeout has fired (see the gate below).
-    function reverseFlip() external {
+    function reverseFlip(uint256 expectedCost) external {
         if (rngLockedFlag) revert RngLocked();
         // A nudge shifts the next word by +1, and the terminal path applies pending
         // nudges to the word it publishes. Past the liveness trigger that word is the
@@ -2138,6 +2143,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         if (_livenessTriggered()) revert E();
         uint256 reversals = totalFlipReversals;
         uint256 cost = _currentNudgeCost(reversals);
+        if (cost != expectedCost) revert NudgeCostChanged();
         coin.burnCoin(msg.sender, cost);
         uint256 newCount = reversals + 1;
         // Fits uint64: every nudge burns >= RNG_NUDGE_BASE_COST (100 FLIP), so the
@@ -2147,8 +2153,17 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         emit ReverseFlip(msg.sender, newCount, cost);
     }
 
+    /// @notice Return the queued nudge count and exact cost of the next nudge.
+    /// @return queued Number of nudges waiting for the next daily RNG word.
+    /// @return cost Whole-FLIP price required by reverseFlip.
+    function rngNudgeQuote() external view returns (uint256 queued, uint256 cost) {
+        queued = totalFlipReversals;
+        cost = _currentNudgeCost(queued);
+    }
+
     /// @dev Calculate nudge cost with compounding.
-    ///      Base cost is 100 FLIP, +50% per queued nudge.
+    ///      Base cost is 100 FLIP, +50% per queued nudge, then rounded up to
+    ///      the nearest whole FLIP. Rounding occurs after the full compound calculation.
     /// @param reversals Number of nudges already queued.
     /// @return cost FLIP cost for the next nudge.
     function _currentNudgeCost(
@@ -2161,6 +2176,8 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
                 --reversals;
             }
         }
+        uint256 remainder = cost % 1 ether;
+        if (remainder != 0) cost += 1 ether - remainder;
     }
 
     /// @notice Chainlink VRF callback for random word fulfillment.

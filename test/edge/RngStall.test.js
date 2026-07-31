@@ -454,7 +454,7 @@ describe("RngStall", function () {
       expect(await game.rngLocked()).to.equal(true);
 
       await expect(
-        game.connect(deployer).reverseFlip()
+        game.connect(deployer).reverseFlip(eth("100"))
       ).to.be.revertedWithCustomError(advanceModule, "RngLocked");
     });
 
@@ -486,7 +486,7 @@ describe("RngStall", function () {
       // will revert for a different reason. The key assertion is that the error
       // is NOT RngLocked — confirming the lock check is not reached.
       await expect(
-        game.connect(deployer).reverseFlip()
+        game.connect(deployer).reverseFlip(eth("100"))
       ).to.not.be.revertedWithCustomError(advanceModule, "RngLocked");
     });
 
