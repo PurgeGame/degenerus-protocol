@@ -108,6 +108,12 @@ contract DegenerusGameMintModule is
     uint256 private constant PRESALE_BOX_MIN = 0.01 ether;
     /// @dev Absolute minimum ticket buy-in (ETH equivalent).
     uint256 private constant TICKET_MIN_BUYIN_WEI = 0.0025 ether;
+    /// @dev Buys under 0.04 tickets (4 * QTY_SCALE = 400 units per ticket) are tested against the
+    ///      routed level's snap exponent; larger buys skip that read. This is where the smallest
+    ///      legal buys land — TICKET_MIN_BUYIN_WEI floors a buy at 5 units at the 0.24 ETH
+    ///      milestone price and 13 at 0.08 ETH — so the cheap constant compare covers the dust
+    ///      case and leaves the hot path paying nothing for a slot no purchase otherwise touches.
+    uint256 private constant SNAP_CHECK_MAX_UNITS = 16;
 
     /// @dev Lootbox boost value cap and expiry for the next lootbox purchase.
     uint256 private constant LOOTBOX_BOOST_MAX_VALUE = 10 ether;
@@ -1965,12 +1971,18 @@ contract DegenerusGameMintModule is
         uint256 costWei = (priceWei * quantity) / (4 * QTY_SCALE);
         if (costWei == 0) revert E();
         if (costWei < TICKET_MIN_BUYIN_WEI) revert E();
-        // A ticket leg that cannot survive the routed level's snap divide fails closed instead of
-        // charging full price for zero entries. The drain divides the accumulated (player, level)
-        // balance by 2^s ONCE, so a buy under 2^s scaled units truncates to nothing on its own and
-        // the remainder roll cannot recover it (rem == 0 always loses). The exponent comes from
-        // targetLevel — the level these entries queue at — so it is the same one the drain applies.
-        if (quantity >> _snapShiftFor(targetLevel) == 0) revert E();
+        // A dust ticket leg that cannot survive the routed level's snap divide fails closed instead
+        // of charging full price for zero entries. The drain divides the accumulated
+        // (player, level) balance by 2^s ONCE, so a buy under 2^s scaled units truncates to nothing
+        // on its own and the remainder roll cannot recover it (rem == 0 always loses). The exponent
+        // comes from targetLevel — the level these entries queue at — so it is the one the drain
+        // applies. Gated on SNAP_CHECK_MAX_UNITS so only a dust-sized buy pays for the exponent
+        // read: a buy at or above it still truncates once s exceeds 4, which is left uncovered
+        // rather than charging every purchase for a slot it does not otherwise touch.
+        if (
+            quantity < SNAP_CHECK_MAX_UNITS &&
+            quantity >> _snapShiftFor(targetLevel) == 0
+        ) revert E();
 
         uint256 adjustedQuantity = quantity;
         if (!payInCoin) {
