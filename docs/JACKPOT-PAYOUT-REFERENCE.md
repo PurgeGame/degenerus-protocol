@@ -278,7 +278,7 @@ BAF pool from external `DegenerusJackpots` contract. Up to 107 winners (1 top BA
 
 ### Pool Source
 
-`_calcDailyCoinBudget(lvl)` -- FLIP budget for this level (0.5% of prize pool target in FLIP).
+`_calcDailyCoinBudget(lvl, currLevel)` -- FLIP budget for this level (0.25% of the previous level's recorded ratchet pool, converted to FLIP at the current-level price).
 
 ### Split
 

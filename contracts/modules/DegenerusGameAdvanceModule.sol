@@ -1374,7 +1374,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
 
     /// @dev Pay daily FLIP jackpot via jackpot module delegatecall.
     ///      Called each day during purchase phase in its own transaction.
-    ///      Awards 0.5% of prize pool target in FLIP to trait-matched winners in [minLevel, maxLevel].
+    ///      Awards 0.25% of prize pool target in FLIP to trait-matched winners in [minLevel, maxLevel].
     /// @param lvl Current level.
     /// @param randWord VRF random word for winner selection.
     /// @param minLevel Minimum target level for near-future coin distribution (inclusive).

@@ -1824,7 +1824,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     }
 
     /// @notice Pays daily FLIP jackpot to random ticket holders.
-    /// @dev Runs every day in its own transaction. Awards 0.5% of prize pool target in FLIP.
+    /// @dev Runs every day in its own transaction. Awards 0.25% of prize pool target in FLIP.
     ///      75% goes to near-future trait-matched winners in [minLevel, maxLevel].
     ///      25% goes to far-future ticketQueue holders ([lvl+5, lvl+99]).
     /// @param lvl Current level.
@@ -2180,7 +2180,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         );
     }
 
-    /// @dev Calculate 0.5% of prize pool target in FLIP.
+    /// @dev Calculate 0.25% of prize pool target in FLIP.
     /// @param lvl Level keying the prize pool snapshot (purchase level on the
     ///        payDailyFlipJackpot path, where it differs from the current level).
     /// @param currLevel Current game level, used for FLIP pricing.
@@ -2190,7 +2190,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     ) private view returns (uint256) {
         uint256 priceWei = PriceLookupLib.priceForLevel(currLevel);
         if (priceWei == 0) return 0;
-        return (levelPrizePool[lvl - 1] * PRICE_COIN_UNIT) / (priceWei * 200);
+        return (levelPrizePool[lvl - 1] * PRICE_COIN_UNIT) / (priceWei * 400);
     }
 
     /// @dev Current-pool daily jackpot share for non-final days: random 6%-14%
