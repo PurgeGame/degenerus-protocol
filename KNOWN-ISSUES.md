@@ -74,6 +74,30 @@ else is unprofitable grief; and selective non-resolution is self-defeating — r
 permissionless and keeper transactions settle outstanding bets regardless. Only re-orderings that
 break the 4.5 ETH per-account-per-level bonus bound are eligible findings.
 
+**A lone sub-`2^shift` ticket balance on a thanos level rounds to nothing — bounded, accepted.**
+The drain divides an accumulated `(player, level)` entry balance by `2^shift` exactly once, over
+`owed * 100 + rem` scaled units (`_snapOwedPacked`). A balance below `2^shift` scaled units therefore
+truncates to zero, and the probabilistic remainder settle cannot recover it because `rem == 0` always
+loses the roll. `_callTicketPurchase` fails such a purchase closed, but only below
+`SNAP_CHECK_MAX_UNITS` (16 scaled units = 0.04 tickets): reading the exponent costs a cold SLOAD of a
+slot no purchase otherwise touches, so every buy at or above that gate skips the check. A buy of `q`
+scaled units with `16 <= q < 2^shift`, which is the buyer's whole balance at that level, is accepted
+and pays full price for zero entries.
+
+Reachable only at `shift >= 5` (a smaller exponent cannot zero 16 units) and only where
+`TICKET_MIN_BUYIN_WEI` admits such a `q` — it floors a legal buy at `ceil(1e18 / priceWei)` scaled
+units, so 100 units at the 0.01 ETH intro price and 5 at the 0.24 ETH century price. The loss is
+bounded by the buy itself: at most `2^shift - 1` scaled units, under 0.64 tickets even at the
+maximum exponent of 8, so **≈ 0.153 ETH worst case per (player, level)** at the highest ticket price.
+Any player already holding entries at that level is unaffected, because the divide is applied to the
+accumulated balance, not per purchase.
+
+Accepted rather than fixed: closing it means an exponent read on every ticket purchase, for a case
+that needs a shift of 5 or more — itself undeclarable until projected demand reaches 40M entries at
+the target level — *and* a lone sub-`2^shift` position. Findings that break the bound above (a loss
+larger than the buy, a player with an accumulated balance losing it, or truncation at `shift < 5`)
+are eligible; the bounded case described here is not.
+
 **Genesis admin self-break is a NON-finding.** An admin (or anyone) breaking their *own* game at
 genesis, when `sDGNRS.votingSupply() == 0` (no engaged community yet), is not a vulnerability — there
 is no victim. An admin-power finding must exhibit an **engaged-community victim**: a snapshot with
