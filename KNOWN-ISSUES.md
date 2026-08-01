@@ -4,7 +4,7 @@ Pre-disclosure for audit wardens. **If a finding's mechanism + impact is describ
 already known and is not eligible.** This is a precise perimeter — each entry names the exact
 mechanism and why it is by-design, defended, or out-of-scope. There are no vague blanket disclaimers.
 
-Frozen subject: `contracts/` tree `39279e31` @ tag `degenerus-c4a`. Pre-scanned with Slither v0.11.5
+Frozen subject: `contracts/` tree `4e616db4` @ tag `degenerus-c4a`. Pre-scanned with Slither v0.11.5
 + Aderyn 0.6.8; those findings are triaged in the automated-tools section below.
 
 ---
@@ -117,22 +117,51 @@ transaction (a coin credit, not ETH-backed value). Immaterial; documented, not e
 
 ## 5. Automated tool findings (pre-disclosed)
 
-The full machine-readable Slither/Aderyn baseline is maintained internally — Slither 0.11.5 (3,137
-results / 101 detectors over 145 contracts at tree `39279e31`; 156 High / 432 Medium / 375 Low /
-2,122 Informational / 52 Optimization, and the "High" tier is dominated by 118 `uninitialized-state`
+The full machine-readable Slither/Aderyn baseline is maintained internally — Slither 0.11.5 (3,143
+results / 101 detectors over 145 contracts at tree `4e616db4`; 156 High / 434 Medium / 378 Low /
+2,123 Informational / 52 Optimization, and the "High" tier is dominated by 118 `uninitialized-state`
 false positives from the shared-storage delegatecall architecture) + Aderyn 0.6.8 (9 High / 20 Low).
 Slither totals are sensitive to the scan environment (solc/toolchain resolution), so the absolute
 count is not comparable across machines — re-runs should compare category triage, not the total.
-These counts were measured directly at tree `39279e31`, not carried forward from an earlier scan.
-The delta against the prior tree (+62 / +2 High over the liveness, mid-day-routing, terminal-sweep,
-sDGNRS-custody, golden-ticket and volume-market span) is fully attributable: **both** new Highs are
-`weak-prng`, and both are in `DegenerusParimutuel` — `_openVolumeRound()` and `volumeBetCredit()`,
-each reading `block.timestamp % 86400` to decide whether the day's betting window is open. That is a
-time-of-day gate, not a source of randomness: nothing is drawn from it, and the same benign pattern
-is already triaged for `requestLootboxRng` and `_bountyEligible`. Every other High category is
-composition-identical (118 `uninitialized-state`, 6 `arbitrary-send-eth`, 6 `reentrancy-balance`,
+These counts were measured directly at tree `4e616db4`, not carried forward from an earlier scan,
+and the previously tagged tree was re-scanned in the same environment, so the delta below is a
+measured diff rather than a comparison against a recorded figure.
+
+The delta against the previously tagged tree (`39279e31`) is **+6 results, ZERO removed and ZERO
+new High**, spanning the carryover-pricing fix, the sDGNRS seed-reserve roll, the entries-owed view
+widening, the coinflip claimable-rebet deposit path, the dust-buy snap guard, the quote-checked
+nudge, the daily-FLIP-jackpot rate change and several comment corrections. Every one of the six
+lands in `Coinflip.sol`, and they split across exactly two changes:
+
+- **The sDGNRS reserve roll (+4)**, which introduces one external call (`questModule.handleFlip`)
+  into the daily coinflip resolution path: **+1 Medium** `reentrancy-no-eth` on
+  `Coinflip.processCoinflipPayouts` (state writes now follow an external call in its call tree),
+  and **+3 Low** `reentrancy-events` — twice on the new `Coinflip._stakeSdgnrsReserveSlice` (it
+  emits after the quest call) and once more on `processCoinflipPayouts` for the same reason.
+- **The claimable-first deposit path (+2)**: **+1 Medium** `uninitialized-local` on
+  `Coinflip._depositCoinflip.fromClaimable`, and **+1 Informational** `cyclomatic-complexity` on
+  `_depositCoinflip` (12). `fromClaimable` is declared then assigned only inside the
+  claimable-funded branch; on the other branch its default zero is the intended value and every
+  later use is correct at zero (`fromWallet = amount - fromClaimable`), so it is the same benign
+  class as the existing `uninitialized-local` population.
+
+The four reentrancy-* additions are the same benign class as the existing population: every callee
+is a trusted in-protocol contract at a compile-time-constant address, and the affected paths hold
+CEI. Nothing was removed. A further block of findings re-keyed without changing in substance —
+Slither embeds the external-call list and the full function signature in its description text, so
+adding one call rewrites the description of every finding in that call tree, and changing
+`reverseFlip()` to `reverseFlip(uint256)` rewrites every finding that names it. Diffing
+line-insensitively, and keying on (check, impact, subject function) rather than raw description,
+separates those re-keys from the six real additions.
+
+The High tier is composition-identical to the prior tree across every check (118
+`uninitialized-state`, 12 `weak-prng`, 6 `arbitrary-send-eth`, 6 `reentrancy-balance`,
 5 `delegatecall-loop`, 3 `encode-packed-collision`, 3 `reentrancy-eth`, 2 `incorrect-exp`,
-1 `shadowing-state`). The golden-ticket foil route added no High of any kind.
+1 `shadowing-state`). The 12 `weak-prng` include the two `DegenerusParimutuel` entries
+(`_openVolumeRound()` and `volumeBetCredit()`, each reading `block.timestamp % 86400` to decide
+whether the day's betting window is open) — a time-of-day gate, not a source of randomness:
+nothing is drawn from it, and the same benign pattern is already triaged for `requestLootboxRng`
+and `_bountyEligible`.
 CI re-runs both
 analyzers on every push (`.github/workflows/ci.yml`); the standing per-category triage — why each is
 by-design, defended, or not-applicable — is below.

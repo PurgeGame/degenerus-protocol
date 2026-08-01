@@ -1,7 +1,7 @@
 # Degenerus Protocol — Audit Scope
 # Solidity 0.8.34 | Hardhat + Foundry | viaIR=true | Optimizer runs=1000 | evmVersion=osaka
 #
-# Frozen subject: contracts/ tree 39279e31 @ tag degenerus-c4a (post-v75.0 hardening freeze).
+# Frozen subject: contracts/ tree 4e616db4 @ tag degenerus-c4a (post-v75.0 hardening freeze).
 # Checkout: git checkout degenerus-c4a
 # This list supersedes the v55-era scope.txt (which named BurnieCoin/BurnieCoinflip/
 # WrappedWrappedXRP/EndgameModule — all renamed or removed in this subject).
@@ -19,11 +19,11 @@
 # DeityBoonViewer is an in-scope production contract NOT wired into deploy.js.
 
 ## In Scope — Core deployed contracts (16)                                  nSLOC
-contracts/DegenerusGame.sol                  # router / delegatecall dispatcher  1411
+contracts/DegenerusGame.sol                  # router / delegatecall dispatcher  1430
 contracts/DegenerusAdmin.sol                 # VRF + feed governance (sDGNRS)     774
 contracts/DegenerusAffiliate.sol             # referral codes + bonus points      592
 contracts/FLIP.sol                           # FLIP ERC-20 (coinflip + vault)     371
-contracts/Coinflip.sol                       # coinflip resolution + bounty       892
+contracts/Coinflip.sol                       # coinflip resolution + bounty       923
 contracts/sDGNRS.sol                         # soulbound; reserves/pools/redeem    495
 contracts/DGNRS.sol                          # transferable wrapper over sDGNRS    177
 contracts/DegenerusVault.sol                 # stETH vault; DGVE/DGVF share ERC20s 482
@@ -38,7 +38,7 @@ contracts/DegenerusParimutuel.sol            # over/under growth-bet parimutuel 
 
 ## In Scope — Deployed delegatecall game modules (12)                       nSLOC
 # All share DegenerusGameStorage; execute in DegenerusGame's context.
-contracts/modules/DegenerusGameMintModule.sol         #                          1348
+contracts/modules/DegenerusGameMintModule.sol         #                          1353
 contracts/modules/DegenerusGameAdvanceModule.sol      # VRF + advance + deadman   1462
 contracts/modules/DegenerusGameWhaleModule.sol        # whale/lazy/deity passes    677
 contracts/modules/DegenerusGameJackpotModule.sol      # daily jackpots + BAF      1642
@@ -89,15 +89,15 @@ contracts/interfaces/IVRFCoordinator.sol              #                         
 contracts/DeityBoonViewer.sol      # read-only deity-boon lens (no value custody)  154
 
 ## nSLOC totals
-#   Core deployed (16)              9244
-#   Deployed modules (12)          10240
+#   Core deployed (16)              9294
+#   Deployed modules (12)          10245
 #   Abstract module bases (2)        461
 #   Shared storage (1)              1332
 #   Libraries (8)                    495
 #   Interfaces (12)                  699
 #   Standalone in-scope (1)          154
 #   --------------------------------------
-#   TOTAL  52 files                22625 nSLOC
+#   TOTAL  52 files                22680 nSLOC
 #   (nSLOC = non-blank, non-comment source lines, comment- and string-aware. Every
 #    per-file value above and every subtotal here is measured directly at the pinned
 #    tree; rows sum to their group subtotal and the subtotals sum to TOTAL.)

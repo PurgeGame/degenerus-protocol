@@ -3,7 +3,7 @@
 For a gambling protocol, economic transparency matters as much as contract transparency.
 **Every figure below cites the exact contract line that defines it.** Nothing here is
 marketing math — verify each number against the frozen subject (`contracts/` tree
-`39279e31`, tag `degenerus-c4a`).
+`4e616db4`, tag `degenerus-c4a`).
 
 The code is **not yet deployed**. There are no live token prices. Figures are on-chain
 constants and formulas, not projected returns.
@@ -31,7 +31,7 @@ constants and formulas, not projected returns.
 ### (a) The DegenerusVault — effectively the creator's private vault
 
 The creator holds **100% of both vault share classes** (DGVE + DGVF) at deploy
-(`DegenerusVault.sol:248-254`), so the two-token split is internal abstraction — functionally the
+(`DegenerusVault.sol:262-264`), so the two-token split is internal abstraction — functionally the
 creator owns the vault. It has **several ongoing inflows, not just yield**:
 
 - **stETH yield — the largest ongoing inflow.** Protocol surplus (balance above obligations) is split
@@ -49,7 +49,7 @@ creator owns the vault. It has **several ongoing inflows, not just yield**:
   additionally route an affiliate whale pass and DGNRS rewards to the vault
   (`modules/DegenerusGameWhaleModule.sol:712`).
 - **Perpetual daily lootbox subscription.** At genesis the vault self-subscribes to a claimable-first
-  daily lootbox (quantity 1, no FLIP rebuy) — a protocol-owned position (`DegenerusVault.sol:470-478`).
+  daily lootbox (quantity 1, no FLIP rebuy) — a protocol-owned position (`DegenerusVault.sol:510-513`).
 - **An up-front, worse-than-retail deity pass.** The vault is given the deity activity-score boost
   (nerfed: no trait symbol or automatic gold entry, not counted as a deity-pass holder) plus a
   standing queue of **4 tickets per level** (`DegenerusGame.sol:233`, `initPerpetualTickets`).
@@ -103,7 +103,7 @@ builder estimates this at ~20% of the distributed DGNRS, roughly **2 ETH-equival
 presale-side creator take is ≈40 ETH plus ~2 ETH of DGNRS.
 
 Everything else is rake-free: all lootbox and post-genesis ticket ETH routes **100% to the prize
-pools** (`modules/DegenerusGameMintModule.sol:117-118`) — none to the creator. Presale-box eligibility
+pools** (`modules/DegenerusGameMintModule.sol:123-124`) — none to the creator. Presale-box eligibility
 is **earned by playing** during the presale window (`presaleBoxCredit` accrues as 25% of spend),
 not bought.
 
@@ -136,7 +136,7 @@ holder; that authority — and these claims — move with the DGVE token.
   the lootbox RNG threshold, and recovery sweeps of foreign assets mistakenly sent to the vault (stETH excluded). LINK donors accrue mid-day lootbox-RNG request credit, billed at the redemption-time LINK price, that waives the threshold's pending-value gates for requests they trigger — an operational perk that moves no player value. The VRF-coordinator and LINK price-feed swaps are **gated proposals,
   not free configuration** — the admin path requires the feed/VRF to be unhealthy/stalled for a delay
   (2d+ for the feed, longer for VRF), and there is a parallel sDGNRS-voting community path
-  (`DegenerusAdmin.sol:727`). Full matrix and bounds: [`SECURITY.md`](SECURITY.md).
+  (`DegenerusAdmin.sol:461-474`). Full matrix and bounds: [`SECURITY.md`](SECURITY.md).
 - **Community path:** 0.5%+ voting sDGNRS can propose a VRF-coordinator swap after a 7-day VRF stall,
   or a feed swap after 7 days of an unhealthy feed.
 - **The one admin power that reaches player pricing: thanos-level declaration.**
@@ -164,10 +164,23 @@ Neither FLIP nor WWXRP is minted to the creator's balance at deploy.
   effectively creator-controllable supply.
 - **FLIP starts fully zero.** Both `totalSupply` and `vaultAllowance` are 0 at deploy (`FLIP.sol:175-185`,
   *"Starts fully zero"*) — there is **no** deploy-time FLIP reserve. The vault's FLIP mint allowance
-  accrues later from vault operations (the DGVF claim leg — `DegenerusVault.sol:155,785-798`, where the vault's redeemable FLIP is read as mint allowance + balance + claimable coinflips), not a premine.
+  accrues later from vault operations (the DGVF claim leg — `DegenerusVault.sol:873,878-881`, where the vault's redeemable FLIP is read as mint allowance + claimable coinflips — there is deliberately no balance leg, because FLIP redirects VAULT-destined transfers into `vaultMintAllowance` before crediting `balanceOf`), not a premine.
 - **Initial FLIP program (first 20 days).** The Coinflip contract stakes **200k FLIP/day** each to the
   vault and sDGNRS (~4M gross each), but these are **coinflip stakes contingent on the flip outcome**,
   not a guaranteed allocation (`FLIP.sol:16-17`, `Coinflip.sol:154`).
+- **After the seed window, sDGNRS rolls 2% of its remaining seed reserve onto the flip each day.**
+  Once the 20 days close, sDGNRS goes on perpetual auto-rebuy: later winnings settle into a rolling
+  carry, so what survived the seed window sits as a *static* reserve (`claimableStored`). Each day's
+  resolution moves `RESERVE_STAKE_BPS = 200` (2%) of that reserve onto the next flip window
+  (`Coinflip._stakeSdgnrsReserveSlice`). **This puts redemption backing at risk that previously was
+  not:** a losing flip destroys the staked slice, and a pending day-stake sits outside
+  `redeemableFlipBacking` until it settles into the carry. It is not a creator take and not an
+  inflow — the FLIP never leaves sDGNRS's own position, and the move mints and burns nothing (both
+  `claimableStored` and a day stake are uncirculated). The reserve therefore decays geometrically
+  and stops on its own once 2% of what remains falls below the 100-FLIP minimum stake. The slice
+  scores the flip quest for sDGNRS on the same terms as a player deposit, and any quest reward joins
+  the stake; it is deliberately excluded from the biggest-flip record, the bounty, the coinflip boon
+  and the daily top-bettor board, so it cannot win player-facing prizes with protocol funds.
 
 WWXRP is a deliberately meme/worthless game token. Its **daily burn draw**: burn ≥25 WWXRP (`MIN_BURN`)
 to enter. Each day carries a **global** 1/365 chance of being a big-prize day and, failing that, 1/30

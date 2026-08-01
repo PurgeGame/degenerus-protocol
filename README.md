@@ -22,7 +22,7 @@ Two liveness guards prevent permanent fund lockup. At level 0, a 365-day deploy 
 
 - **28 deployable contracts** (16 core + 12 delegatecall modules), sharing storage via `DegenerusGameStorage`
 - Solidity 0.8.34, `viaIR` enabled, optimizer runs = 1000, EVM target `osaka`
-- All contracts under the 24,576-byte EIP-170 limit (largest: DegenerusGame at 23,918 bytes, 658 to spare; MintModule at 23,853, 723 to spare)
+- All contracts under the 24,576-byte EIP-170 limit (largest: DegenerusGame at 24,331 bytes, 245 to spare; MintModule at 23,929, 647 to spare; AdvanceModule at 23,756, 820 to spare)
 - External dependencies: Chainlink VRF V2.5, Lido stETH, LINK token, and (optionally) an ENS
   reverse registrar — `ENS_REVERSE_REGISTRAR` is `address(0)` in this tree, which disables the
   constructor self-naming call entirely
@@ -113,7 +113,7 @@ The Solidity build is pinned — `foundry.toml` fixes the compiler (solc 0.8.34)
 
 The full assurance pipeline lives in this repository and runs in CI (`.github/workflows/ci.yml`) on every push:
 
-- **`forge test`** — **1,314 Foundry tests across 182 suites**, all passing: unit, integration, fuzz, invariant, gas, access-control, governance, economics, and named regression harnesses for every fixed finding.
+- **`forge test`** — **1,423 Foundry tests across 191 suites**, all passing: unit, integration, fuzz, invariant, gas, access-control, governance, economics, and named regression harnesses for every fixed finding.
 - **EIP-170 size gate** — CI fails if any deployed contract breaches the 24,576-byte limit.
 - **Storage-layout oracle** (`scripts/layout/storage_layout_oracle.sh`) — 12 modules execute by `delegatecall` against one shared `DegenerusGameStorage`, so CI fails the build if any storage slot in the game, any state contract, or any module moves versus a committed golden. This makes the "a module writes a slot the game uses for something else" corruption class un-shippable.
 - **Source-drift gates** (`make check-*`) — interface coverage, delegatecall target alignment, raw-selector bans, RNG-window consumer classification, pool-write provenance.
@@ -132,7 +132,7 @@ A secondary Hardhat behavioral suite (`npx hardhat test`) provides additional co
 
 ## Scope & Known Issues
 
-- **`scope.txt` / `out_of_scope.txt`** — the exact audited surface, pinned to `contracts/` tree `39279e31` (tag `degenerus-c4a`).
+- **`scope.txt` / `out_of_scope.txt`** — the exact audited surface, pinned to `contracts/` tree `4e616db4` (tag `degenerus-c4a`).
 - **`KNOWN-ISSUES.md`** — every pre-triaged finding, by-design ruling, and static-analysis disposition, each with its precise mechanism. Not vague disclaimers.
 - **`SECURITY.md`** — threat model, trusted-role matrix (functional authority, not just Solidity modifiers), and disclosure process.
 - **`ECONOMIC_DISCLOSURES.md`** — creator allocations, vesting, governance control, the WWXRP reserve, and terminal value — every figure cited to a contract line.
