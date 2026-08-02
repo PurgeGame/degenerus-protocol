@@ -135,6 +135,14 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         uint256 amount
     );
 
+    /// @notice Emitted when a lootbox-drawn boon is discarded instead of delivered — the
+    ///         statically-drawn type is not currently usable by this player (decimator tier
+    ///         outside the burn window; deity tier while the player holds a pass or supply
+    ///         is capped). Nothing is written; the draw itself stays fully deterministic.
+    /// @param player The player whose draw was discarded
+    /// @param boonType The statically-drawn boon type that was discarded
+    event BoonDiscarded(address indexed player, uint8 boonType);
+
     /// @notice Emitted when a deity issues a boon to another player
     /// @param deity The deity pass holder issuing the boon
     /// @param recipient The player receiving the boon
@@ -172,11 +180,10 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     /// @dev Assumed utilization of max boon value (50%)
     uint16 private constant LOOTBOX_BOON_UTILIZATION_BPS = 5000;
 
-    /// @dev Whale boon discount tiers 1/2/3 (10%, 20%, 35%). The _25/_50 suffixes name the
-    ///      tier slot, not the literal percentage.
+    /// @dev Whale boon discount tiers 1/2/3 (10%, 20%, 35%).
     uint16 private constant LOOTBOX_WHALE_BOON_DISCOUNT_10_BPS = 1000;
-    uint16 private constant LOOTBOX_WHALE_BOON_DISCOUNT_25_BPS = 2000;
-    uint16 private constant LOOTBOX_WHALE_BOON_DISCOUNT_50_BPS = 3500;
+    uint16 private constant LOOTBOX_WHALE_BOON_DISCOUNT_20_BPS = 2000;
+    uint16 private constant LOOTBOX_WHALE_BOON_DISCOUNT_35_BPS = 3500;
     /// @dev Lazy pass boon discount tiers (10%, 25%, 50%).
     uint16 private constant LOOTBOX_LAZY_PASS_DISCOUNT_10_BPS = 1000;
     uint16 private constant LOOTBOX_LAZY_PASS_DISCOUNT_25_BPS = 2500;
@@ -184,9 +191,9 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     /// @dev Tier identifier for 10% deity pass discount boon (1000 bps)
     uint8 private constant DEITY_PASS_BOON_TIER_10 = 1;
     /// @dev Tier identifier for the tier-2 deity pass discount boon (20%, 2000 bps)
-    uint8 private constant DEITY_PASS_BOON_TIER_25 = 2;
+    uint8 private constant DEITY_PASS_BOON_TIER_20 = 2;
     /// @dev Tier identifier for the tier-3 deity pass discount boon (35%, 3500 bps)
-    uint8 private constant DEITY_PASS_BOON_TIER_50 = 3;
+    uint8 private constant DEITY_PASS_BOON_TIER_35 = 3;
     /// @dev Threshold used by deity-pass discount boon availability logic.
     uint32 private constant DEITY_PASS_MAX_TOTAL = 32;
 
@@ -391,15 +398,15 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     /// @dev Boon type: 25% lootbox boost
     uint8 private constant BOON_LOOTBOX_25 = 22;
     /// @dev Boon type: tier-2 whale discount (20%)
-    uint8 private constant BOON_WHALE_25 = 23;
+    uint8 private constant BOON_WHALE_20 = 23;
     /// @dev Boon type: tier-3 whale discount (35%)
-    uint8 private constant BOON_WHALE_50 = 24;
+    uint8 private constant BOON_WHALE_35 = 24;
     /// @dev Boon type: 10% deity pass discount
     uint8 private constant BOON_DEITY_PASS_10 = 25;
     /// @dev Boon type: tier-2 deity pass discount (20%)
-    uint8 private constant BOON_DEITY_PASS_25 = 26;
+    uint8 private constant BOON_DEITY_PASS_20 = 26;
     /// @dev Boon type: tier-3 deity pass discount (35%)
-    uint8 private constant BOON_DEITY_PASS_50 = 27;
+    uint8 private constant BOON_DEITY_PASS_35 = 27;
     /// @dev Boon type: whale pass award
     uint8 private constant BOON_WHALE_PASS = 28;
     /// @dev Boon type: 10% lazy pass discount
@@ -437,15 +444,15 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     /// @dev Weight for 10% whale boon
     uint16 private constant BOON_WEIGHT_WHALE_10 = 28;
     /// @dev Weight for tier-2 whale boon (20%)
-    uint16 private constant BOON_WEIGHT_WHALE_25 = 10;
+    uint16 private constant BOON_WEIGHT_WHALE_20 = 10;
     /// @dev Weight for tier-3 whale boon (35%)
-    uint16 private constant BOON_WEIGHT_WHALE_50 = 2;
+    uint16 private constant BOON_WEIGHT_WHALE_35 = 2;
     /// @dev Weight for 10% deity pass discount boon
     uint16 private constant BOON_WEIGHT_DEITY_PASS_10 = 28;
     /// @dev Weight for tier-2 deity pass discount boon (20%)
-    uint16 private constant BOON_WEIGHT_DEITY_PASS_25 = 10;
+    uint16 private constant BOON_WEIGHT_DEITY_PASS_20 = 10;
     /// @dev Weight for tier-3 deity pass discount boon (35%)
-    uint16 private constant BOON_WEIGHT_DEITY_PASS_50 = 2;
+    uint16 private constant BOON_WEIGHT_DEITY_PASS_35 = 2;
     /// @dev Weight for 10 point activity boon
     uint16 private constant BOON_WEIGHT_ACTIVITY_10 = 100;
     /// @dev Weight for 25 point activity boon
@@ -464,10 +471,24 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     uint16 private constant BOON_WEIGHT_LAZY_PASS_50 = 2;
     /// @dev Combined weight of deity pass discount boons (10% + 25% + 50%)
     uint16 private constant BOON_WEIGHT_DEITY_PASS_ALL = 40;
+
+    /// @dev Fixed nominal deity-pass price for the boon-chance normalization (mid-curve k=16:
+    ///      BASE + 16·17/2 ether). The live triangular price is collectively player-movable
+    ///      (pass purchases), so it must not reach `totalChance` — a constant keeps the hit
+    ///      boundary a pure function of committed inputs. The mis-pricing only moves boon
+    ///      FREQUENCY, never a payout amount, and is bounded by the deity tiers' 40/1498
+    ///      weight share.
+    uint256 private constant DEITY_PASS_NOMINAL_PRICE = DEITY_PASS_BASE + 136 ether;
     /// @dev Total weight sum when decimator boons are allowed (includes the +200 quest-shield weight)
     uint16 private constant BOON_WEIGHT_TOTAL = 1498;
-    /// @dev Total weight sum when decimator boons are not allowed
-    uint16 private constant BOON_WEIGHT_TOTAL_NO_DECIMATOR = 1448;
+    /// @dev Cursor position where the decimator band starts in the `_boonFromRoll` walk
+    ///      (sum of the coinflip + lootbox + purchase weights ahead of it).
+    uint16 private constant BOON_WEIGHT_PRE_DECIMATOR = 982;
+    /// @dev Combined weight of the three decimator tiers (a band the deity roll skips).
+    uint16 private constant BOON_WEIGHT_DECIMATOR_ALL = 50;
+    /// @dev Cursor position where the deity-pass band starts (pre-dec 982 + dec 50 +
+    ///      whale-discount 40), in full-table coordinates after the dec skip re-adds 50.
+    uint16 private constant BOON_WEIGHT_PRE_DEITY_PASS = 1072;
 
     // =========================================================================
     // Lootbox Opening Functions
@@ -883,10 +904,11 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     }
 
     /// @notice Resolve a lootbox directly for decimator/degenerette wins (no RNG wait needed)
-    /// @dev Rolls full boons + passes via the common resolver (passes still gated by real
-    ///      game-state: lazyPassValue != 0 / deity eligibility). Emits the per-box
-    ///      `LootBoxOpened` summary like every box path; no cold-bust consolation on this
-    ///      auto-resolve path.
+    /// @dev Rolls full boons + passes via the common resolver over the STATIC table — this
+    ///      path's open timing is claimant-controlled, so no live eligibility may reach the
+    ///      draw; ineligible drawn types are discarded at delivery (`_deliverBoon`). Emits
+    ///      the per-box `LootBoxOpened` summary like every box path; no cold-bust
+    ///      consolation on this auto-resolve path.
     /// @param player Player address to resolve for
     /// @param amount ETH amount for the lootbox resolution
     /// @param rngWord RNG word to use for resolution
@@ -1253,9 +1275,10 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         deityBoonRecipientDay[recipient] = day;
         deityRecipientBoonCount[deity][recipient] = pairBoonCount + 1;
 
-        bool decimatorAllowed = _isDecimatorWindow();
-        bool deityPassAvailable = deityPassOwners.length < DEITY_PASS_MAX_TOTAL;
-        uint8 boonType = _deityBoonForSlot(deity, day, slot, decimatorAllowed, deityPassAvailable, rngWord);
+        // Every menu type is always issuable — the deity roll excludes the two
+        // conditionally-usable families (decimator, deity-pass) unconditionally — so
+        // issuance never reverts on the rolled type.
+        uint8 boonType = _deityBoonForSlot(deity, day, slot, rngWord);
         _applyBoon(recipient, boonType, day, day, 0, true);
 
         emit DeityBoonIssued(deity, recipient, day, slot, boonType);
@@ -1527,22 +1550,13 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
 
         uint256 lazyPassValue = _lazyPassPriceForLevel(currentLevel + 1);
 
-        bool decimatorAllowed = _isDecimatorWindow();
-        // The owner-count SLOAD stays short-circuited away when the player already
-        // holds a deity pass; when read, the count is threaded into _boonPoolStats.
-        uint256 deityPassCount;
-        bool deityEligible;
-        if (mintPacked_[player] >> BitPackingLib.HAS_DEITY_PASS_SHIFT & 1 == 0) {
-            deityPassCount = deityPassOwners.length;
-            deityEligible = deityPassCount < DEITY_PASS_MAX_TOTAL;
-        }
-
+        // Static table: no eligibility feeds the chance or the mapping, so the outcome of
+        // this draw is fully determined the moment the box's word lands — nothing any player
+        // writes afterwards (pass purchases, window state) can remap it. Eligibility is
+        // applied AFTER the draw as keep-vs-discard only (`_deliverBoon`).
         (uint256 totalWeight, uint256 avgMaxValue) = _boonPoolStats(
-            decimatorAllowed,
-            deityEligible,
             lazyPassValue,
-            currentLevel,
-            deityPassCount
+            currentLevel
         );
         if (totalWeight == 0 || avgMaxValue == 0) return;
 
@@ -1558,12 +1572,40 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         uint256 roll = uint32(seed >> 120) % BOON_PPM_SCALE;
         if (roll >= totalChance) return;
 
-        uint8 boonType = _boonFromRoll(
-            (roll * totalWeight) / totalChance,
-            decimatorAllowed,
-            deityEligible
-        );
+        uint8 boonType = _boonFromRoll((roll * totalWeight) / totalChance);
 
+        _deliverBoon(player, boonType, currentDay, originalAmount);
+    }
+
+    /// @dev Keep-or-discard delivery filter for a lootbox-drawn boon. The TYPE is already
+    ///      fixed (static table); live state may only decide whether the known outcome is
+    ///      delivered. A discard writes nothing — occupying the category slot with a dead
+    ///      boon would block a later useful one under upgrade-only semantics — and emits
+    ///      `BoonDiscarded` so indexers keep the full draw history. Discard conditions:
+    ///      decimator tiers outside the burn window (unusable), deity tiers when the
+    ///      recipient already holds a pass or supply is capped (undiscountable). Every other
+    ///      type is always deliverable — lazy boons bypass the purchase level gate at
+    ///      consumption, so no level condition exists for them.
+    function _deliverBoon(
+        address player,
+        uint8 boonType,
+        uint24 currentDay,
+        uint256 originalAmount
+    ) private {
+        if (boonType >= BOON_DECIMATOR_10 && boonType <= BOON_DECIMATOR_50) {
+            if (!_isDecimatorWindow()) {
+                emit BoonDiscarded(player, boonType);
+                return;
+            }
+        } else if (boonType >= BOON_DEITY_PASS_10 && boonType <= BOON_DEITY_PASS_35) {
+            if (
+                mintPacked_[player] >> BitPackingLib.HAS_DEITY_PASS_SHIFT & 1 == 1 ||
+                deityPassOwners.length >= DEITY_PASS_MAX_TOTAL
+            ) {
+                emit BoonDiscarded(player, boonType);
+                return;
+            }
+        }
         _applyBoon(player, boonType, 0, currentDay, originalAmount, false);
     }
 
@@ -1587,19 +1629,15 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         whalePassClaims[player] += 1;
     }
 
-    /// @dev Calculate total weight and average max boon value (in ETH) for EV budgeting.
-    ///      The two pass-type boons (the whale-pass jackpot and the lazy-pass discount
-    ///      awards) are always included; the lazy-pass weights are gated by a non-zero
-    ///      `lazyPassValue` (real game-state).
+    /// @dev Calculate total weight and average max boon value (in ETH) for EV budgeting
+    ///      over the STATIC full table: `totalWeight` always sums to BOON_WEIGHT_TOTAL and
+    ///      no player-writable state reaches the values (deity tiers use the fixed nominal
+    ///      price). Level-scaled values (`priceWei`, `lazyPassValue`) stay live — level
+    ///      moves only via advanceGame and auto-open denies holders the timing lever.
     /// @param currentLevel Current game level (level + 1, threaded from the caller)
-    /// @param deityPassCount Deity-pass owner count, loaded by the caller; meaningful
-    ///        only when `deityEligible`
     function _boonPoolStats(
-        bool decimatorAllowed,
-        bool deityEligible,
         uint256 lazyPassValue,
-        uint24 currentLevel,
-        uint256 deityPassCount
+        uint24 currentLevel
     ) private pure returns (uint256 totalWeight, uint256 avgMaxValue) {
         uint256 weightedMax = 0;
         // currentLevel == level + 1, so this is the price at the stored `level`.
@@ -1654,51 +1692,54 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         totalWeight += BOON_WEIGHT_PURCHASE_25;
         weightedMax += BOON_WEIGHT_PURCHASE_25 * purchaseMax25;
 
-        if (decimatorAllowed) {
-            uint256 decMax10 = _flipToEthValue(
-                (DECIMATOR_BOON_CAP * LOOTBOX_DECIMATOR_10_BONUS_BPS) / 10_000,
-                priceWei
-            );
-            uint256 decMax25 = _flipToEthValue(
-                (DECIMATOR_BOON_CAP * LOOTBOX_DECIMATOR_25_BONUS_BPS) / 10_000,
-                priceWei
-            );
-            uint256 decMax50 = _flipToEthValue(
-                (DECIMATOR_BOON_CAP * LOOTBOX_DECIMATOR_50_BONUS_BPS) / 10_000,
-                priceWei
-            );
-            totalWeight += BOON_WEIGHT_DECIMATOR_10;
-            weightedMax += BOON_WEIGHT_DECIMATOR_10 * decMax10;
-            totalWeight += BOON_WEIGHT_DECIMATOR_25;
-            weightedMax += BOON_WEIGHT_DECIMATOR_25 * decMax25;
-            totalWeight += BOON_WEIGHT_DECIMATOR_50;
-            weightedMax += BOON_WEIGHT_DECIMATOR_50 * decMax50;
-        }
+        // Decimator tiers are ALWAYS in the table; an out-of-window draw is discarded at
+        // delivery. Window state must not reach the weights: on the claim-timed direct
+        // resolve path (`resolveLootboxDirect`) the claimant controls WHEN the box opens,
+        // so a window-gated table would let a known roll be remapped by claim timing.
+        uint256 decMax10 = _flipToEthValue(
+            (DECIMATOR_BOON_CAP * LOOTBOX_DECIMATOR_10_BONUS_BPS) / 10_000,
+            priceWei
+        );
+        uint256 decMax25 = _flipToEthValue(
+            (DECIMATOR_BOON_CAP * LOOTBOX_DECIMATOR_25_BONUS_BPS) / 10_000,
+            priceWei
+        );
+        uint256 decMax50 = _flipToEthValue(
+            (DECIMATOR_BOON_CAP * LOOTBOX_DECIMATOR_50_BONUS_BPS) / 10_000,
+            priceWei
+        );
+        totalWeight += BOON_WEIGHT_DECIMATOR_10;
+        weightedMax += BOON_WEIGHT_DECIMATOR_10 * decMax10;
+        totalWeight += BOON_WEIGHT_DECIMATOR_25;
+        weightedMax += BOON_WEIGHT_DECIMATOR_25 * decMax25;
+        totalWeight += BOON_WEIGHT_DECIMATOR_50;
+        weightedMax += BOON_WEIGHT_DECIMATOR_50 * decMax50;
 
         // Whale discount boons (10/20/35% off standard price)
         uint256 whaleMax10 = (WHALE_PASS_STANDARD_PRICE * LOOTBOX_WHALE_BOON_DISCOUNT_10_BPS) / 10_000;
-        uint256 whaleMax25 = (WHALE_PASS_STANDARD_PRICE * LOOTBOX_WHALE_BOON_DISCOUNT_25_BPS) / 10_000;
-        uint256 whaleMax50 = (WHALE_PASS_STANDARD_PRICE * LOOTBOX_WHALE_BOON_DISCOUNT_50_BPS) / 10_000;
+        uint256 whaleMax20 = (WHALE_PASS_STANDARD_PRICE * LOOTBOX_WHALE_BOON_DISCOUNT_20_BPS) / 10_000;
+        uint256 whaleMax35 = (WHALE_PASS_STANDARD_PRICE * LOOTBOX_WHALE_BOON_DISCOUNT_35_BPS) / 10_000;
         totalWeight += BOON_WEIGHT_WHALE_10;
         weightedMax += BOON_WEIGHT_WHALE_10 * whaleMax10;
-        totalWeight += BOON_WEIGHT_WHALE_25;
-        weightedMax += BOON_WEIGHT_WHALE_25 * whaleMax25;
-        totalWeight += BOON_WEIGHT_WHALE_50;
-        weightedMax += BOON_WEIGHT_WHALE_50 * whaleMax50;
+        totalWeight += BOON_WEIGHT_WHALE_20;
+        weightedMax += BOON_WEIGHT_WHALE_20 * whaleMax20;
+        totalWeight += BOON_WEIGHT_WHALE_35;
+        weightedMax += BOON_WEIGHT_WHALE_35 * whaleMax35;
 
-        // Deity pass discount boons (if eligible)
-        if (deityEligible) {
-            uint256 k = deityPassCount;
-            uint256 deityPrice = DEITY_PASS_BASE + (k * (k + 1) * 1 ether) / 2;
-            uint256 deityMax10 = (deityPrice * 1000) / 10_000;
-            uint256 deityMax25 = (deityPrice * 2000) / 10_000;
-            uint256 deityMax50 = (deityPrice * 3500) / 10_000;
+        // Deity tiers are ALWAYS in the table at a FIXED nominal price; an ineligible draw
+        // (recipient holds a pass / supply capped) is discarded at delivery. Neither the
+        // player's own pass bit nor the append-only owner count may reach the weights or
+        // the value normalization — both are player-writable after the word is public.
+        {
+            uint256 deityMax10 = (DEITY_PASS_NOMINAL_PRICE * 1000) / 10_000;
+            uint256 deityMax20 = (DEITY_PASS_NOMINAL_PRICE * 2000) / 10_000;
+            uint256 deityMax35 = (DEITY_PASS_NOMINAL_PRICE * 3500) / 10_000;
             totalWeight += BOON_WEIGHT_DEITY_PASS_10;
             weightedMax += BOON_WEIGHT_DEITY_PASS_10 * deityMax10;
-            totalWeight += BOON_WEIGHT_DEITY_PASS_25;
-            weightedMax += BOON_WEIGHT_DEITY_PASS_25 * deityMax25;
-            totalWeight += BOON_WEIGHT_DEITY_PASS_50;
-            weightedMax += BOON_WEIGHT_DEITY_PASS_50 * deityMax50;
+            totalWeight += BOON_WEIGHT_DEITY_PASS_20;
+            weightedMax += BOON_WEIGHT_DEITY_PASS_20 * deityMax20;
+            totalWeight += BOON_WEIGHT_DEITY_PASS_35;
+            weightedMax += BOON_WEIGHT_DEITY_PASS_35 * deityMax35;
         }
 
         // Activity boons (value assumed 0 for EV budgeting)
@@ -1712,7 +1753,10 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         // Pass awards (now eligible on every ETH lootbox path)
         totalWeight += BOON_WEIGHT_WHALE_PASS;
         weightedMax += BOON_WEIGHT_WHALE_PASS * LOOTBOX_WHALE_PASS_PRICE;
-        if (lazyPassValue != 0) {
+        // Lazy weights are unconditional (static table); at a level with no lazy price the
+        // tiers contribute zero VALUE but stay drawable — a lazy boon bypasses the purchase
+        // level gate at consumption (WhaleModule), so the draw is never dead weight.
+        {
             uint256 lpMax10 = (lazyPassValue * LOOTBOX_LAZY_PASS_DISCOUNT_10_BPS) / 10_000;
             uint256 lpMax25 = (lazyPassValue * LOOTBOX_LAZY_PASS_DISCOUNT_25_BPS) / 10_000;
             uint256 lpMax50 = (lazyPassValue * LOOTBOX_LAZY_PASS_DISCOUNT_50_BPS) / 10_000;
@@ -1729,13 +1773,12 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         avgMaxValue = weightedMax / totalWeight;
     }
 
-    /// @dev Convert a weighted roll into a lootbox boon type with eligibility filters.
-    ///      The two pass-type boons (the whale-pass jackpot and the lazy-pass discount
-    ///      awards) are always reachable; weight inclusion is handled in `_boonPoolStats`.
+    /// @dev Convert a weighted roll into a lootbox boon type over the STATIC full table.
+    ///      No eligibility reaches the walk: the mapping is a pure function of the roll, so
+    ///      the drawn type is fixed the moment the word lands. Live state only decides
+    ///      keep-vs-discard afterwards (`_deliverBoon` / `issueDeityBoon`).
     function _boonFromRoll(
-        uint256 roll,
-        bool decimatorAllowed,
-        bool deityEligible
+        uint256 roll
     ) private pure returns (uint8 boonType) {
         // Fixed uint16 weight constants; the running cursor sum never exceeds BOON_WEIGHT_TOTAL
         // (1498), so no accumulation can overflow — the checked adds are pure overhead.
@@ -1759,28 +1802,24 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         if (roll < cursor) return BOON_PURCHASE_15;
         cursor += BOON_WEIGHT_PURCHASE_25;
         if (roll < cursor) return BOON_PURCHASE_25;
-        if (decimatorAllowed) {
-            cursor += BOON_WEIGHT_DECIMATOR_10;
-            if (roll < cursor) return BOON_DECIMATOR_10;
-            cursor += BOON_WEIGHT_DECIMATOR_25;
-            if (roll < cursor) return BOON_DECIMATOR_25;
-            cursor += BOON_WEIGHT_DECIMATOR_50;
-            if (roll < cursor) return BOON_DECIMATOR_50;
-        }
+        cursor += BOON_WEIGHT_DECIMATOR_10;
+        if (roll < cursor) return BOON_DECIMATOR_10;
+        cursor += BOON_WEIGHT_DECIMATOR_25;
+        if (roll < cursor) return BOON_DECIMATOR_25;
+        cursor += BOON_WEIGHT_DECIMATOR_50;
+        if (roll < cursor) return BOON_DECIMATOR_50;
         cursor += BOON_WEIGHT_WHALE_10;
         if (roll < cursor) return BOON_WHALE_10;
-        cursor += BOON_WEIGHT_WHALE_25;
-        if (roll < cursor) return BOON_WHALE_25;
-        cursor += BOON_WEIGHT_WHALE_50;
-        if (roll < cursor) return BOON_WHALE_50;
-        if (deityEligible) {
-            cursor += BOON_WEIGHT_DEITY_PASS_10;
-            if (roll < cursor) return BOON_DEITY_PASS_10;
-            cursor += BOON_WEIGHT_DEITY_PASS_25;
-            if (roll < cursor) return BOON_DEITY_PASS_25;
-            cursor += BOON_WEIGHT_DEITY_PASS_50;
-            if (roll < cursor) return BOON_DEITY_PASS_50;
-        }
+        cursor += BOON_WEIGHT_WHALE_20;
+        if (roll < cursor) return BOON_WHALE_20;
+        cursor += BOON_WEIGHT_WHALE_35;
+        if (roll < cursor) return BOON_WHALE_35;
+        cursor += BOON_WEIGHT_DEITY_PASS_10;
+        if (roll < cursor) return BOON_DEITY_PASS_10;
+        cursor += BOON_WEIGHT_DEITY_PASS_20;
+        if (roll < cursor) return BOON_DEITY_PASS_20;
+        cursor += BOON_WEIGHT_DEITY_PASS_35;
+        if (roll < cursor) return BOON_DEITY_PASS_35;
         cursor += BOON_WEIGHT_ACTIVITY_10;
         if (roll < cursor) return BOON_ACTIVITY_10;
         cursor += BOON_WEIGHT_ACTIVITY_25;
@@ -1921,10 +1960,10 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         }
 
         // Whale discount boons (types 16, 23, 24) — slot0
-        if (boonType == BOON_WHALE_10 || boonType == BOON_WHALE_25 || boonType == BOON_WHALE_50) {
-            uint16 bps = boonType == BOON_WHALE_50
-                ? LOOTBOX_WHALE_BOON_DISCOUNT_50_BPS
-                : (boonType == BOON_WHALE_25 ? LOOTBOX_WHALE_BOON_DISCOUNT_25_BPS : LOOTBOX_WHALE_BOON_DISCOUNT_10_BPS);
+        if (boonType == BOON_WHALE_10 || boonType == BOON_WHALE_20 || boonType == BOON_WHALE_35) {
+            uint16 bps = boonType == BOON_WHALE_35
+                ? LOOTBOX_WHALE_BOON_DISCOUNT_35_BPS
+                : (boonType == BOON_WHALE_20 ? LOOTBOX_WHALE_BOON_DISCOUNT_20_BPS : LOOTBOX_WHALE_BOON_DISCOUNT_10_BPS);
             uint256 s0 = bp.slot0;
             uint8 newTier = _whaleBpsToTier(bps);
             uint8 existingTier = uint8(s0 >> BP_WHALE_TIER_SHIFT);
@@ -1975,10 +2014,10 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         }
 
         // Deity pass discount boons (types 25, 26, 27) — slot1
-        if (boonType == BOON_DEITY_PASS_10 || boonType == BOON_DEITY_PASS_25 || boonType == BOON_DEITY_PASS_50) {
-            uint8 tier = boonType == BOON_DEITY_PASS_50
-                ? DEITY_PASS_BOON_TIER_50
-                : (boonType == BOON_DEITY_PASS_25 ? DEITY_PASS_BOON_TIER_25 : DEITY_PASS_BOON_TIER_10);
+        if (boonType == BOON_DEITY_PASS_10 || boonType == BOON_DEITY_PASS_20 || boonType == BOON_DEITY_PASS_35) {
+            uint8 tier = boonType == BOON_DEITY_PASS_35
+                ? DEITY_PASS_BOON_TIER_35
+                : (boonType == BOON_DEITY_PASS_20 ? DEITY_PASS_BOON_TIER_20 : DEITY_PASS_BOON_TIER_10);
             uint256 s1 = bp.slot1;
             uint8 existingTier = uint8(s1 >> BP_DEITY_PASS_TIER_SHIFT);
             // Only a genuine tier upgrade applies the boon and (re)sets its expiry; an
@@ -1993,7 +2032,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
                 bp.slot1 = s1;
             }
             if (!isDeity) {
-                uint16 bps = tier == DEITY_PASS_BOON_TIER_50 ? 3500 : (tier == DEITY_PASS_BOON_TIER_25 ? 2000 : 1000);
+                uint16 bps = tier == DEITY_PASS_BOON_TIER_35 ? 3500 : (tier == DEITY_PASS_BOON_TIER_20 ? 2000 : 1000);
                 emit LootBoxReward(player, 10, originalAmount, bps);
             }
             return;
@@ -2421,25 +2460,29 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     /// @param deity The deity address
     /// @param day The day index
     /// @param slot The slot index (0-2)
-    /// @param decimatorAllowed Whether decimator boons can be generated
-    /// @param deityPassAvailable Whether deity passes are still available for purchase
     /// @param rngWord The day's VRF word (`rngWordByDay[day]`, nonzero-checked by the caller)
     /// @return boonType The boon type (1-31)
+    /// @dev Static modulus + static mapping: the day's three-slot menu is fixed the moment
+    ///      the word lands. Eligibility must not reach the modulus — the issuer controls
+    ///      issuance timing, so any live term here would let a deity re-map a slot by
+    ///      issuing before/after a window or supply flip. Decimator AND deity-pass tiers
+    ///      are excluded UNCONDITIONALLY (not eligibility-gated — that would be the same
+    ///      live term): a gift slot must never arrive dead, so those types are
+    ///      lootbox-only and every menu slot is always issuable to any valid recipient.
+    ///      The reduced roll skips both bands arithmetically — the composed mapping is
+    ///      exactly the renormalized 1,408-weight table over the same walk.
     function _deityBoonForSlot(
         address deity,
         uint24 day,
         uint8 slot,
-        bool decimatorAllowed,
-        bool deityPassAvailable,
         uint256 rngWord
     ) private pure returns (uint8 boonType) {
         uint256 seed = uint256(keccak256(abi.encode(rngWord, deity, day, slot)));
-        uint256 total = decimatorAllowed
-            ? BOON_WEIGHT_TOTAL
-            : BOON_WEIGHT_TOTAL_NO_DECIMATOR;
-        if (!deityPassAvailable) total -= BOON_WEIGHT_DEITY_PASS_ALL;
-        uint256 roll = seed % total;
-        return _boonFromRoll(roll, decimatorAllowed, deityPassAvailable);
+        uint256 roll = seed %
+            (BOON_WEIGHT_TOTAL - BOON_WEIGHT_DECIMATOR_ALL - BOON_WEIGHT_DEITY_PASS_ALL);
+        if (roll >= BOON_WEIGHT_PRE_DECIMATOR) roll += BOON_WEIGHT_DECIMATOR_ALL;
+        if (roll >= BOON_WEIGHT_PRE_DEITY_PASS) roll += BOON_WEIGHT_DEITY_PASS_ALL;
+        return _boonFromRoll(roll);
     }
 
 }

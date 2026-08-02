@@ -45,11 +45,11 @@ contract DeityBoonViewer {
     uint8 private constant DEITY_BOON_ACTIVITY_25 = 18;
     uint8 private constant DEITY_BOON_ACTIVITY_50 = 19;
     uint8 private constant DEITY_BOON_LOOTBOX_25 = 22;
-    uint8 private constant DEITY_BOON_WHALE_25 = 23;
-    uint8 private constant DEITY_BOON_WHALE_50 = 24;
+    uint8 private constant DEITY_BOON_WHALE_20 = 23;
+    uint8 private constant DEITY_BOON_WHALE_35 = 24;
     uint8 private constant DEITY_BOON_DEITY_PASS_10 = 25;
-    uint8 private constant DEITY_BOON_DEITY_PASS_25 = 26;
-    uint8 private constant DEITY_BOON_DEITY_PASS_50 = 27;
+    uint8 private constant DEITY_BOON_DEITY_PASS_20 = 26;
+    uint8 private constant DEITY_BOON_DEITY_PASS_35 = 27;
     uint8 private constant DEITY_BOON_WHALE_PASS = 28;
     uint8 private constant DEITY_BOON_LAZY_PASS_10 = 29;
     uint8 private constant DEITY_BOON_LAZY_PASS_25 = 30;
@@ -69,11 +69,11 @@ contract DeityBoonViewer {
     uint16 private constant W_DECIMATOR_25 = 8;
     uint16 private constant W_DECIMATOR_50 = 2;
     uint16 private constant W_WHALE_10 = 28;
-    uint16 private constant W_WHALE_25 = 10;
-    uint16 private constant W_WHALE_50 = 2;
+    uint16 private constant W_WHALE_20 = 10;
+    uint16 private constant W_WHALE_35 = 2;
     uint16 private constant W_DEITY_PASS_10 = 28;
-    uint16 private constant W_DEITY_PASS_25 = 10;
-    uint16 private constant W_DEITY_PASS_50 = 2;
+    uint16 private constant W_DEITY_PASS_20 = 10;
+    uint16 private constant W_DEITY_PASS_35 = 2;
     uint16 private constant W_ACTIVITY_10 = 100;
     uint16 private constant W_ACTIVITY_25 = 30;
     uint16 private constant W_ACTIVITY_50 = 8;
@@ -82,9 +82,11 @@ contract DeityBoonViewer {
     uint16 private constant W_LAZY_PASS_10 = 30;
     uint16 private constant W_LAZY_PASS_25 = 8;
     uint16 private constant W_LAZY_PASS_50 = 2;
-    uint16 private constant W_DEITY_PASS_ALL = 40;
     uint16 private constant W_TOTAL = 1498;
-    uint16 private constant W_TOTAL_NO_DECIMATOR = 1448;
+    uint16 private constant W_PRE_DECIMATOR = 982;
+    uint16 private constant W_DECIMATOR_ALL = 50;
+    uint16 private constant W_PRE_DEITY_PASS = 1072;
+    uint16 private constant W_DEITY_PASS_ALL = 40;
 
     /// @notice Compute deity boon slots for a given deity.
     /// @param game Address of the DegenerusGame contract.
@@ -100,8 +102,8 @@ contract DeityBoonViewer {
             uint256 dailySeed,
             uint24 d,
             uint8 mask,
-            bool decimatorOpen,
-            bool deityPassAvailable
+            ,
+
         ) = IDeityBoonDataSource(game).deityBoonData(deity);
 
         day = d;
@@ -111,26 +113,25 @@ contract DeityBoonViewer {
         // than a fabricated menu that won't match the real ones.
         if (dailySeed == 0) return (slots, usedMask, day);
 
-        uint256 total = decimatorOpen ? W_TOTAL : W_TOTAL_NO_DECIMATOR;
-        if (!deityPassAvailable) total -= W_DEITY_PASS_ALL;
-
+        // Static modulus + static mapping — mirrors LootboxModule._deityBoonForSlot: the
+        // menu is fixed the moment the word lands and never remaps with eligibility.
+        // Decimator and deity-pass tiers are excluded unconditionally (those families are
+        // lootbox-only, so a gift slot never arrives dead): the reduced roll skips both
+        // bands, and every menu slot is always issuable.
         for (uint8 i = 0; i < DEITY_DAILY_BOON_COUNT; ) {
             uint256 seed = uint256(keccak256(abi.encode(dailySeed, deity, d, i)));
-            slots[i] = _boonFromRoll(seed % total, decimatorOpen, deityPassAvailable);
+            uint256 roll = seed % (W_TOTAL - W_DECIMATOR_ALL - W_DEITY_PASS_ALL);
+            if (roll >= W_PRE_DECIMATOR) roll += W_DECIMATOR_ALL;
+            if (roll >= W_PRE_DEITY_PASS) roll += W_DEITY_PASS_ALL;
+            slots[i] = _boonFromRoll(roll);
             unchecked { ++i; }
         }
     }
 
-    /// @dev Map a weighted random roll to a boon type ID.
-    /// @param roll Random value in [0, total weight).
-    /// @param decimatorAllowed Whether decimator boon types are in the pool.
-    /// @param deityEligible Whether deity pass boon types are in the pool.
+    /// @dev Map a weighted random roll to a boon type ID over the static full table.
+    /// @param roll Random value in [0, W_TOTAL).
     /// @return Boon type ID constant.
-    function _boonFromRoll(
-        uint256 roll,
-        bool decimatorAllowed,
-        bool deityEligible
-    ) private pure returns (uint8) {
+    function _boonFromRoll(uint256 roll) private pure returns (uint8) {
         uint256 cursor = 0;
         cursor += W_COINFLIP_5;
         if (roll < cursor) return DEITY_BOON_COINFLIP_5;
@@ -150,28 +151,24 @@ contract DeityBoonViewer {
         if (roll < cursor) return DEITY_BOON_PURCHASE_15;
         cursor += W_PURCHASE_25;
         if (roll < cursor) return DEITY_BOON_PURCHASE_25;
-        if (decimatorAllowed) {
-            cursor += W_DECIMATOR_10;
-            if (roll < cursor) return DEITY_BOON_DECIMATOR_10;
-            cursor += W_DECIMATOR_25;
-            if (roll < cursor) return DEITY_BOON_DECIMATOR_25;
-            cursor += W_DECIMATOR_50;
-            if (roll < cursor) return DEITY_BOON_DECIMATOR_50;
-        }
+        cursor += W_DECIMATOR_10;
+        if (roll < cursor) return DEITY_BOON_DECIMATOR_10;
+        cursor += W_DECIMATOR_25;
+        if (roll < cursor) return DEITY_BOON_DECIMATOR_25;
+        cursor += W_DECIMATOR_50;
+        if (roll < cursor) return DEITY_BOON_DECIMATOR_50;
         cursor += W_WHALE_10;
         if (roll < cursor) return DEITY_BOON_WHALE_10;
-        cursor += W_WHALE_25;
-        if (roll < cursor) return DEITY_BOON_WHALE_25;
-        cursor += W_WHALE_50;
-        if (roll < cursor) return DEITY_BOON_WHALE_50;
-        if (deityEligible) {
-            cursor += W_DEITY_PASS_10;
-            if (roll < cursor) return DEITY_BOON_DEITY_PASS_10;
-            cursor += W_DEITY_PASS_25;
-            if (roll < cursor) return DEITY_BOON_DEITY_PASS_25;
-            cursor += W_DEITY_PASS_50;
-            if (roll < cursor) return DEITY_BOON_DEITY_PASS_50;
-        }
+        cursor += W_WHALE_20;
+        if (roll < cursor) return DEITY_BOON_WHALE_20;
+        cursor += W_WHALE_35;
+        if (roll < cursor) return DEITY_BOON_WHALE_35;
+        cursor += W_DEITY_PASS_10;
+        if (roll < cursor) return DEITY_BOON_DEITY_PASS_10;
+        cursor += W_DEITY_PASS_20;
+        if (roll < cursor) return DEITY_BOON_DEITY_PASS_20;
+        cursor += W_DEITY_PASS_35;
+        if (roll < cursor) return DEITY_BOON_DEITY_PASS_35;
         cursor += W_ACTIVITY_10;
         if (roll < cursor) return DEITY_BOON_ACTIVITY_10;
         cursor += W_ACTIVITY_25;
