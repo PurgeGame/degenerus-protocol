@@ -1416,6 +1416,19 @@ contract DegenerusQuests is IDegenerusQuests {
         afking = state.afkingActive;
     }
 
+    /// @notice A player's held streak-shield stack and the highest streak-century
+    ///         already credited a milestone shield this run. Each shield absorbs one
+    ///         missed quest day before the streak drops; the century high-water
+    ///         re-arms down on a streak reset.
+    /// @param player The player address to query.
+    /// @return shields Stackable quest-streak shields currently held.
+    /// @return centuryHighWater Highest streak-century credited a milestone shield this run.
+    function shieldsOf(address player) external view returns (uint8 shields, uint8 centuryHighWater) {
+        PlayerQuestState storage state = questPlayerState[player];
+        shields = state.streakShield;
+        centuryHighWater = state.shieldCenturyHighWater;
+    }
+
     // =========================================================================
     //                           INTERNAL HELPERS
     // =========================================================================

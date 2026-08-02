@@ -122,6 +122,13 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         uint256 dgnrsAmount
     );
 
+    /// @notice Emitted when the level's per-affiliate DGNRS claim pool is segregated
+    ///         at the level transition — the allocation half of levelDgnrsPacked[lvl],
+    ///         which per-affiliate claims draw down against frozen lvl-index scores.
+    /// @param level Level the allocation is keyed to.
+    /// @param allocation DGNRS amount segregated for per-affiliate claims.
+    event LevelDgnrsAllocated(uint24 indexed level, uint256 allocation);
+
     /// @notice Daily seat-tenure drawing paid out: one uniform draw over the afking
     ///         ring (the VAULT's pinned slot 0 excluded) at each day-seal, prize
     ///         proportional to the winner's funded tenure. A drawn tombstone or
@@ -1065,10 +1072,10 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
 
         // Segregate 5% of remaining affiliate pool for per-affiliate claims.
         // Scores at index lvl are frozen (new scores go to lvl + 1).
-        _setLevelDgnrsAllocation(
-            lvl,
-            (poolBalance * AFFILIATE_DGNRS_LEVEL_BPS) / 10_000
-        );
+        uint256 levelAllocation = (poolBalance * AFFILIATE_DGNRS_LEVEL_BPS) /
+            10_000;
+        _setLevelDgnrsAllocation(lvl, levelAllocation);
+        emit LevelDgnrsAllocated(lvl, levelAllocation);
     }
 
     /// @dev Distribute yield surplus via JackpotModule delegatecall.

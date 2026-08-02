@@ -123,6 +123,7 @@ GATE	lootboxRngWordByIndex	boxesPending	DegenerusGame.sol	READ
 GATE	lootboxRngWordByIndex	_placeDegeneretteBetCore	modules/DegenerusGameDegeneretteModule.sol	READ
 GATE	lootboxRngWordByIndex	_buyPresaleBoxFor	modules/DegenerusGameMintModule.sol	READ
 GATE	rngWordByDay	_afkingStreak	storage/DegenerusGameStorage.sol	READ
+GATE	rngWordByDay	_rngWordByDayOf	DegenerusGameLens.sol	READ	read-only periphery mirror of _afkingStreak's decay gate (existence test on the sealed word via extsload); the lens is never called by game logic and can move no value
 GATE	rngWordByDay	_foilDrainPending	storage/DegenerusGameStorage.sol	READ
 GATE	rngWordCurrent	_foilDrainPending	storage/DegenerusGameStorage.sol	READ	existence check only, behind the latch test: keeps the terminal readiness gate in step with the walker so an unsealed bucket is not reported drained
 CURSOR	lootboxRngPacked	_purchaseForWithCached	modules/DegenerusGameMintModule.sol	READ

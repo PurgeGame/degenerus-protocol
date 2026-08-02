@@ -161,9 +161,36 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
 
     /// @notice Emitted once per subscriber per delivered afking day — the authoritative
     ///         afking-buy delivery signal (covers VAULT / sDGNRS and every real afker).
+    ///         Carries the post-accrue accumulator balances so the in-slot accrual
+    ///         (slot-0 reward + ticket buyer-bonus into `pendingFlip`, flat 7% into
+    ///         `affiliateBase`, both saturating) is observable without a storage read.
     /// @param player The subscriber the afking buy was delivered to.
     /// @param day The delivered afking day (the funded-day high-water the delivery covers).
-    event AfkingDelivered(address indexed player, uint24 day, uint256 weiIn);
+    /// @param weiIn The delivery's ETH-in (fresh-ETH leg + claimable leg; cover-buy box = 0).
+    /// @param pendingFlipAfter The sub's claimable whole-FLIP balance after this day's accrue.
+    /// @param affiliateBaseAfter The sub's unclaimed whole-FLIP affiliate base after this day's accrue.
+    event AfkingDelivered(
+        address indexed player,
+        uint24 day,
+        uint256 weiIn,
+        uint24 pendingFlipAfter,
+        uint32 affiliateBaseAfter
+    );
+
+    /// @notice Emitted when the affiliate claim drains a sub's accrued `affiliateBase`
+    ///         to the upline tree — attributes afking-sourced affiliate income to the
+    ///         subscriber whose buys generated it. Zero drains (already drained /
+    ///         never accrued) do not emit.
+    /// @param sub The subscriber whose base was drained.
+    /// @param base The drained whole-FLIP affiliate base.
+    event AffiliateBaseDrained(address indexed sub, uint256 base);
+
+    /// @notice Emitted when a sub's accrued `pendingFlip` is settled (player-pull
+    ///         claim or the finalize path) — the zeroing half of the balance
+    ///         `AfkingDelivered.pendingFlipAfter` reports accruing.
+    /// @param player The subscriber credited.
+    /// @param owed The settled whole-FLIP amount.
+    event AfkingFlipClaimed(address indexed player, uint256 owed);
 
     /*------------------------------------------------------------------
                               Constants
@@ -972,7 +999,13 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
         // The cover-buy box reports weiIn 0 — its spend is carried by LootBoxBuy — keeping the
         // off-chain ETH-in total free of double counting.
         uint256 weiIn = (isTicket || !coverBuy) ? ethValue + claimableUse : 0;
-        emit AfkingDelivered(player, processDay, weiIn);
+        emit AfkingDelivered(
+            player,
+            processDay,
+            weiIn,
+            sub.pendingFlip,
+            sub.affiliateBase
+        );
     }
 
     /// @dev Returns the pre-delivery streak and advances the run through `processDay`.
@@ -1153,6 +1186,7 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
                 credit /= (s.dailyQuantity >= 10 ? 3 : 2);
             presaleBoxCredit[player] += credit;
         }
+        emit AfkingFlipClaimed(player, owed);
         coinflip.creditFlip(player, owed * 1 ether); // whole → base units
     }
 
@@ -1975,7 +2009,10 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
         if (msg.sender != ContractAddresses.AFFILIATE) revert NotApproved();
         Sub storage s = _subOf[sub];
         base = s.affiliateBase;
-        s.affiliateBase = 0;
+        if (base != 0) {
+            s.affiliateBase = 0;
+            emit AffiliateBaseDrained(sub, base);
+        }
     }
 
     /// @notice QUESTS-only: record a secondary/level quest completion against an afking sub's

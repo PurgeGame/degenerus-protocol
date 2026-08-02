@@ -38,6 +38,28 @@ contract DegenerusGameDecimatorModule is DegenerusGamePayoutUtils {
         uint256 newTotalBurn
     );
 
+    /// @notice Emitted when a rising activity score migrates a player's prior burn
+    ///         to a strictly better (lower-denominator) bucket — the carried burn
+    ///         moves between subbucket aggregates, so event-derived pro-rata
+    ///         denominators stay exact (DecBurnRecorded carries only the fresh
+    ///         delta against the NEW bucket).
+    /// @param player Address of the player.
+    /// @param lvl Current game level.
+    /// @param fromBucket Prior denominator bucket the burn leaves.
+    /// @param fromSubBucket Prior subbucket the burn leaves.
+    /// @param toBucket New denominator bucket the burn enters.
+    /// @param toSubBucket New subbucket the burn enters.
+    /// @param movedBurn The carried-over burn (0 when the entry had no burn yet).
+    event DecBurnMigrated(
+        address indexed player,
+        uint24 indexed lvl,
+        uint8 fromBucket,
+        uint8 fromSubBucket,
+        uint8 toBucket,
+        uint8 toSubBucket,
+        uint192 movedBurn
+    );
+
     /// @dev Emitted when decimator winning subbuckets are resolved for a level.
     ///      packedOffsets encodes the winning subbucket for each denom 2-12
     ///      (same packing as decBucketOffsetPacked).
@@ -172,6 +194,8 @@ contract DegenerusGameDecimatorModule is DegenerusGamePayoutUtils {
         } else if (bucket < m.bucket) {
             // Better bucket selected: migrate burn to new subbucket.
             _decRemoveSubbucket(lvl, m.bucket, m.subBucket, prevBurn);
+            uint8 fromBucket = m.bucket;
+            uint8 fromSubBucket = m.subBucket;
             m.bucket = bucket;
             m.subBucket = _decSubbucketFor(player, lvl, bucket);
             e.bucket = m.bucket;
@@ -180,6 +204,15 @@ contract DegenerusGameDecimatorModule is DegenerusGamePayoutUtils {
             if (prevBurn != 0) {
                 _decUpdateSubbucket(lvl, m.bucket, m.subBucket, prevBurn);
             }
+            emit DecBurnMigrated(
+                player,
+                lvl,
+                fromBucket,
+                fromSubBucket,
+                m.bucket,
+                m.subBucket,
+                prevBurn
+            );
         }
 
         bucketUsed = m.bucket;

@@ -477,6 +477,18 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         afkCoveredThroughDay = s.afkCoveredThroughDay;
     }
 
+    /// @notice Read a raw storage slot. Periphery escape hatch for lens/viewer
+    ///         contracts (e.g. DegenerusGameLens): rich packed-state decodes live
+    ///         off-contract where EIP-170 headroom is free, and new read surfaces
+    ///         can deploy without touching this contract. Read-only — storage is
+    ///         already public to off-chain readers via eth_getStorageAt; this
+    ///         mirrors that visibility to eth_call/staticcall consumers.
+    function extsload(bytes32 slot) external view returns (bytes32 value) {
+        assembly {
+            value := sload(slot)
+        }
+    }
+
     /// @notice AFKING_SUB_TOKEN-only: clear `holder`'s SEAT_ENCUMBERED latch after the
     ///         coin's reclaimSeat seizes an evicted holder's forfeited seat to the vault.
     /// @dev Thin delegatecall dispatch stub into GameAfkingModule's clearSeatEncumbrance

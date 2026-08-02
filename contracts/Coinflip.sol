@@ -185,7 +185,7 @@ contract Coinflip {
     // Bounty system
     uint128 public currentBounty = 1_000 ether;
     uint128 public biggestFlipEver;
-    address internal bountyOwedTo;
+    address public bountyOwedTo;
 
     // RNG state (packs with bountyOwedTo)
     uint24 internal flipsClaimableDay;
