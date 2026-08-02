@@ -25,12 +25,6 @@ abstract contract DegenerusGameMintStreakUtils is DegenerusGameStorage {
     ///      declared here for _activeTicketLevel's final-jackpot-day reroute.
     uint8 private constant JACKPOT_LEVEL_CAP = 5;
 
-    /// @notice Emitted when a player's mint streak advances a step.
-    /// @param player The player whose mint streak advanced.
-    /// @param mintLevel The level whose mint advanced the streak step.
-    /// @param streak The new mint-streak value (the on-chain LEVEL_STREAK field, post-update).
-    event MintStreakRecorded(address indexed player, uint24 mintLevel, uint24 streak);
-
     /// @notice Emitted whenever a player's cashout/smite curse counter changes, carrying the
     ///         resulting absolute value so indexers need no eth_call and never replay cap logic.
     /// @param player The cursed (or cured) player.
@@ -118,7 +112,7 @@ abstract contract DegenerusGameMintStreakUtils is DegenerusGameStorage {
             (uint256(mintLevel) << BitPackingLib.MINT_STREAK_LAST_COMPLETED_SHIFT) |
             (uint256(newStreak) << BitPackingLib.LEVEL_STREAK_SHIFT);
         mintPacked_[player] = updated;
-        emit MintStreakRecorded(player, mintLevel, newStreak);
+        emit MintRecorded(player, updated);
     }
 
     /// @dev Effective mint streak computed from an already-loaded mintPacked_ word
@@ -566,6 +560,7 @@ abstract contract DegenerusGameMintStreakUtils is DegenerusGameStorage {
             );
             if (data != prevData) {
                 mintPacked_[player] = data;
+                emit MintRecorded(player, data);
             }
             return;
         }
@@ -601,6 +596,7 @@ abstract contract DegenerusGameMintStreakUtils is DegenerusGameStorage {
             );
             if (data != prevData) {
                 mintPacked_[player] = data;
+                emit MintRecorded(player, data);
             }
             return;
         }
@@ -695,6 +691,7 @@ abstract contract DegenerusGameMintStreakUtils is DegenerusGameStorage {
 
         if (data != prevData) {
             mintPacked_[player] = data;
+            emit MintRecorded(player, data);
         }
         return;
     }

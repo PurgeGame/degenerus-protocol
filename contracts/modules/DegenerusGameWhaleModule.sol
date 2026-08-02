@@ -314,6 +314,7 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
         );
 
         mintPacked_[buyer] = data;
+        emit PassActivated(buyer, true, ticketStartLevel, newFrozenLevel, data);
 
         // Queue entries: 20*quantity/lvl for bonus levels (passLevel to 9); the standard
         // leg awards 2*quantity half-passes as whole-ticket chunks (strided when odd).
@@ -679,12 +680,14 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
             presaleBoxCredit[buyer] += totalPrice / 4;
         }
 
-        mintPacked_[buyer] = BitPackingLib.setPacked(
+        uint256 deityPacked = BitPackingLib.setPacked(
             mp,
             BitPackingLib.HAS_DEITY_PASS_SHIFT,
             1,
             1
         );
+        mintPacked_[buyer] = deityPacked;
+        emit MintRecorded(buyer, deityPacked);
         deityPassOwners.push(buyer);
         deityBySymbol[symbolId] = buyer;
 
@@ -1059,9 +1062,10 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
     function _grantSeatCoin(address who) private {
         uint256 packed = mintPacked_[who];
         if ((packed >> BitPackingLib.SEAT_CLAIMED_SHIFT) & 1 == 0) {
-            mintPacked_[who] =
-                packed |
+            uint256 seatPacked = packed |
                 (uint256(1) << BitPackingLib.SEAT_CLAIMED_SHIFT);
+            mintPacked_[who] = seatPacked;
+            emit MintRecorded(who, seatPacked);
         }
     }
 }

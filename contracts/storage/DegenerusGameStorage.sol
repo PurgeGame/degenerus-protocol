@@ -1647,6 +1647,40 @@ abstract contract DegenerusGameStorage {
         return data;
     }
 
+    /// @notice Emitted with the absolute post-write `mintPacked_` word whenever a
+    ///         mint-lane path writes it (units/streak/count/day/affiliate-cache
+    ///         records, the boon level-count grant, the deity/seat bit latches).
+    ///         One data word carries every field — units + their level, mint streak
+    ///         + last-completed, lifetime count, mint day, freeze window, pass type,
+    ///         curse, affiliate cache — so indexers fold absolute state per log and
+    ///         never accumulate deltas or replay price math. Pass activations carry
+    ///         the same word on PassActivated, and curse writes carry their absolute
+    ///         field on CurseChanged: every post-genesis mintPacked_ write emits
+    ///         absolute state on exactly one of the three.
+    /// @param player The player whose mintPacked_ record was written.
+    /// @param packedAfter The full mintPacked_ word after the write (BitPackingLib layout).
+    event MintRecorded(address indexed player, uint256 packedAfter);
+
+    /// @notice Emitted on every pass activation (purchase AND award paths — the one
+    ///         authoritative signal; the shared internals below and the whale
+    ///         purchase's inline stats write all emit it). Carries the post-merge
+    ///         freeze end so stacked/overlapping passes need no span heuristics,
+    ///         plus the absolute post-write mintPacked_ word (the activation also
+    ///         moves levelCount / passType / front-loaded streak).
+    /// @param player The player the pass activates for.
+    /// @param isWhale true = 100-level whale pass; false = 10-level lazy pass.
+    /// @param startLevel First level of the pass's ticket range.
+    /// @param frozenUntilAfter The FROZEN_UNTIL_LEVEL field after this activation
+    ///        (max of the prior freeze and this pass's span end).
+    /// @param packedAfter The full mintPacked_ word after the activation write.
+    event PassActivated(
+        address indexed player,
+        bool isWhale,
+        uint24 startLevel,
+        uint24 frozenUntilAfter,
+        uint256 packedAfter
+    );
+
     /// @dev Activates a 10-level pass for a player. Shared logic for lazy pass purchases and awards.
     ///      Updates mintPacked_ (levelCount +10, frozenUntilLevel, passType, lastLevel, day)
     ///      and queues tickets for the 10-level range.
@@ -1741,6 +1775,7 @@ abstract contract DegenerusGameStorage {
         mintPacked_[player] = data;
 
         _queueEntryRange(player, ticketStartLevel, 10, entriesPerLevel, false);
+        emit PassActivated(player, false, ticketStartLevel, newFrozenLevel, data);
     }
 
     /// @dev Apply whale pass stats (levelCount/freeze/passType/lastLevel/day) without queueing tickets.
@@ -1818,6 +1853,7 @@ abstract contract DegenerusGameStorage {
         );
 
         mintPacked_[player] = data;
+        emit PassActivated(player, true, ticketStartLevel, newFrozenLevel, data);
     }
 
     /// @dev Returns the current day index.

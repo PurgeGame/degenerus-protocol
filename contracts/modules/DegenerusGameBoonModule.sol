@@ -335,6 +335,7 @@ contract DegenerusGameBoonModule is DegenerusGameStorage {
         );
         if (data != prevData) {
             mintPacked_[player] = data;
+            emit MintRecorded(player, data);
         }
 
         uint16 bonus = pending > type(uint16).max ? type(uint16).max : uint16(pending);

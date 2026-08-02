@@ -123,6 +123,20 @@ contract DegenerusQuests is IDegenerusQuests {
         uint8 newTotal
     );
 
+    /// @notice Emitted once per level-quest roll — the stored row for the quest the
+    ///         entropy selected, so consumers never replay the weighted roll.
+    /// @param lvl The game level at roll time.
+    /// @param version The level-quest version the roll produced (the progress join key).
+    /// @param questType The rolled quest type.
+    /// @param target The completion target at roll time (ETH-based types scale with
+    ///        mintPrice, so the live boundary check re-derives; FLIP types are fixed).
+    event LevelQuestRolled(
+        uint24 indexed lvl,
+        uint8 version,
+        uint8 questType,
+        uint256 target
+    );
+
     /// @notice Emitted when quest streak is manually increased.
     event QuestStreakBonusAwarded(
         address indexed player,
@@ -2381,8 +2395,15 @@ contract DegenerusQuests is IDegenerusQuests {
     /// @param entropy VRF-derived entropy for quest type selection.
     function rollLevelQuest(uint256 entropy) external override onlyGame {
         bool decAllowed = _canRollDecimatorQuest();
-        levelQuestType = _bonusQuestType(entropy, type(uint8).max, decAllowed);
+        uint8 rolled = _bonusQuestType(entropy, type(uint8).max, decAllowed);
+        levelQuestType = rolled;
         unchecked { ++levelQuestVersion; }
+        emit LevelQuestRolled(
+            questGame.level(),
+            levelQuestVersion,
+            rolled,
+            _levelQuestTargetValue(rolled, questGame.mintPrice())
+        );
     }
 
     /// @dev Checks if a player is eligible for the level quest.
