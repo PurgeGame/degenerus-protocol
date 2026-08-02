@@ -7,8 +7,10 @@ import {DeityBoonViewer} from "../../contracts/DeityBoonViewer.sol";
 
 /// @title BoonStaticDiscard -- static boon table, discard-at-delivery, deity exclusions
 /// @notice Boon outcomes are pure functions of (word, player, amount). LOOTBOX draws walk
-///         the full 1,498-weight table with dec + deity tiers always present; live state
-///         only keep-vs-discards the already-determined type (BoonDiscarded, no write).
+///         the full 1,498-weight table with dec + deity tiers always present. Live state
+///         only keep-vs-discards the already-determined type, and ONLY for permanently dead
+///         outcomes (deity-pass tiers when a pass is held or supply is capped); decimator
+///         tiers always deliver and bank for a later window (BoonDiscarded, no write).
 ///         DEITY menu rolls exclude the dec and deity-pass bands UNCONDITIONALLY (those
 ///         families are lootbox-only), so every gift slot is always issuable and issuance
 ///         has no rolled-type revert path at all.
@@ -74,11 +76,12 @@ contract BoonStaticDiscard is DeployProtocol {
         return bytes32(uint256(keccak256(abi.encode(player, SLOT_BOON_PACKED))) + offset);
     }
 
-    /// @notice At a level with the decimator window SHUT (the default fixture never reaches
-    ///         x4/x99), dec-tier draws MUST surface as BoonDiscarded events with no dec tier
-    ///         ever written; deity-tier discards may appear only under held-pass/supply-cap
-    ///         conditions (neither holds here, so none are expected).
-    function test_decDrawOutsideWindowDiscardsWithoutStateWrite() public {
+    /// @notice At a level with the decimator window SHUT, dec-tier draws must still be
+    ///         DELIVERED (the tier field is written), never discarded: a lootbox-sourced
+    ///         decimator boon carries no time expiry, so it banks for the next burn window.
+    ///         Drawing dec tiers here at all is impossible under the old eligibility-gated
+    ///         table, which excluded them from the walk entirely outside a window.
+    function test_decDrawOutsideWindowIsDeliveredNotDiscarded() public {
         _completeDay(0xD15C0001);
         vm.warp(block.timestamp + 1 days);
         _completeDay(0xD15C0002);
@@ -86,7 +89,6 @@ contract BoonStaticDiscard is DeployProtocol {
         address player = makeAddr("discardPlayer");
         vm.deal(player, 10 ether);
 
-        uint256 discards;
         uint256 decDiscards;
         for (uint256 i = 1; i <= 150; i++) {
             uint256 vrfWord = uint256(keccak256(abi.encode("staticDiscard", i)));
@@ -100,27 +102,27 @@ contract BoonStaticDiscard is DeployProtocol {
             Vm.Log[] memory logs = vm.getRecordedLogs();
             for (uint256 j = 0; j < logs.length; j++) {
                 if (logs[j].topics[0] != BOON_DISCARDED_SIG) continue;
-                discards++;
                 uint8 boonType = uint8(abi.decode(logs[j].data, (uint8)));
-                assertTrue(
+                // Only the deity-pass family may ever discard, and only when permanently
+                // dead. This player holds no pass and supply is open, so nothing should.
+                assertFalse(
                     boonType >= BOON_DECIMATOR_10 && boonType <= BOON_DECIMATOR_50,
-                    "outside a dec window, only dec tiers may discard here"
+                    "decimator draw was discarded: it banks for the next window"
                 );
                 decDiscards++;
             }
         }
+        assertEq(decDiscards, 0, "unexpected discard in an all-deliverable fixture");
 
-        // The static table draws dec tiers at their 50/1498 share; over 150 near-certain
-        // boon hits the fixed word set must produce at least one dec draw. Zero would mean
-        // the walk is still eligibility-gated (the exact regression this guards against).
-        assertGt(decDiscards, 0, "no dec-tier draw discarded: static table not in effect");
-        assertEq(discards, decDiscards, "unexpected non-dec discard in this fixture");
-
-        // Discards must write nothing: the dec tier field stays 0 for the whole run. (Deity
-        // tiers are DELIVERABLE here — this player holds no pass and supply is open — so a
-        // deity draw legitimately writes; only the shut-window dec draws must leave no trace.)
+        // Non-vacuity: over 150 near-certain boon hits the static table must actually have
+        // drawn a decimator tier at some point, and it must be sitting in the tier field.
+        // (Zero would mean the walk is still eligibility-gated -- the regression this guards.)
         uint256 s0 = uint256(vm.load(address(game), _boonSlot(player, 0)));
-        assertEq(uint8(s0 >> BP_DECIMATOR_TIER_SHIFT), 0, "dec tier written despite shut window");
+        assertGt(
+            uint256(uint8(s0 >> BP_DECIMATOR_TIER_SHIFT)),
+            0,
+            "no decimator tier banked: static table not in effect"
+        );
     }
 
     bytes32 constant DEITY_BOON_ISSUED_SIG =

@@ -2398,8 +2398,19 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         // questDay == wall day mirrors the fulfilment roll's own guard: a day the RNGREUSE
         // clamp held in the past must stay unrolled, since a retroactive quest lands already
         // missed and bills every streak. That case keeps the old behaviour — no roll at all.
+        //
+        // !isDailyRetry pins the roll to the request that MOVED the boundary. The level
+        // increment above carries the same gate, so a retry re-requests a word for a
+        // transition already made. A retry that crosses midnight carries the NEW wall day
+        // (no RNGREUSE clamp applies while a request is pending — rngWordCurrent is 0), so
+        // an ungated roll would force a SECOND foil daily on a day whose one-per-cycle slot
+        // the first day's quest may already have spent: a quest that can only miss.
         uint24 questDay = uint24(lvlAndQuestDay >> 24);
-        if (finalJackpotRequest && questDay == _simulatedDayIndex()) {
+        if (
+            finalJackpotRequest &&
+            !isDailyRetry &&
+            questDay == _simulatedDayIndex()
+        ) {
             quests.rollDailyQuest(questDay, 0, false, true, decDayOneActive);
         }
     }

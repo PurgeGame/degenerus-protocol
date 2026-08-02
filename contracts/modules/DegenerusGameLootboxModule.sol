@@ -1581,10 +1581,15 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     ///      fixed (static table); live state may only decide whether the known outcome is
     ///      delivered. A discard writes nothing — occupying the category slot with a dead
     ///      boon would block a later useful one under upgrade-only semantics — and emits
-    ///      `BoonDiscarded` so indexers keep the full draw history. Discard conditions:
-    ///      decimator tiers outside the burn window (unusable), deity tiers when the
-    ///      recipient already holds a pass or supply is capped (undiscountable). Every other
-    ///      type is always deliverable — lazy boons bypass the purchase level gate at
+    ///      `BoonDiscarded` so indexers keep the full draw history.
+    ///
+    ///      Only PERMANENTLY dead types are discarded, and only the deity-pass family
+    ///      qualifies: the recipient already holds a pass, or supply is capped, so no future
+    ///      state makes the discount spendable. Decimator tiers are always delivered even
+    ///      outside a burn window — a lootbox-sourced decimator boon carries NO time expiry
+    ///      (BoonModule: "no time expiry, only deity day"), so it simply waits for the next
+    ///      window; discarding it would destroy a bankable reward. Every other type is
+    ///      likewise always deliverable — lazy boons bypass the purchase level gate at
     ///      consumption, so no level condition exists for them.
     function _deliverBoon(
         address player,
@@ -1592,12 +1597,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         uint24 currentDay,
         uint256 originalAmount
     ) private {
-        if (boonType >= BOON_DECIMATOR_10 && boonType <= BOON_DECIMATOR_50) {
-            if (!_isDecimatorWindow()) {
-                emit BoonDiscarded(player, boonType);
-                return;
-            }
-        } else if (boonType >= BOON_DEITY_PASS_10 && boonType <= BOON_DEITY_PASS_35) {
+        if (boonType >= BOON_DEITY_PASS_10 && boonType <= BOON_DEITY_PASS_35) {
             if (
                 mintPacked_[player] >> BitPackingLib.HAS_DEITY_PASS_SHIFT & 1 == 1 ||
                 deityPassOwners.length >= DEITY_PASS_MAX_TOTAL
@@ -2448,12 +2448,6 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
             }
         }
         return total;
-    }
-
-    /// @dev Check if decimator window is currently open.
-    /// @return True if decimator boons can be awarded/used
-    function _isDecimatorWindow() private view returns (bool) {
-        return decWindowOpen;
     }
 
     /// @dev Deterministically generate a boon type for a deity's slot on a given day.
