@@ -429,7 +429,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                                 rngRequestTime != 0 &&
                                 ts - rngRequestTime >= MIDDAY_RNG_STALL_TIMEOUT
                             ) {
-                                _requestRng(lastPurchase, purchaseLevel);
+                                _requestRng(lastPurchase, (uint48(day) << 24) | uint48(purchaseLevel));
                                 if (!preFound) {
                                     _swapTicketSlot();
                                 }
@@ -455,7 +455,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                                         IVaultOwnerCheck(ContractAddresses.VAULT)
                                             .isVaultOwner(msg.sender)))
                             ) {
-                                _requestRng(lastPurchase, purchaseLevel);
+                                _requestRng(lastPurchase, (uint48(day) << 24) | uint48(purchaseLevel));
                                 stage = STAGE_RNG_REQUESTED;
                                 break;
                             }
@@ -1627,7 +1627,9 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
             // first jackpot day, which is final only for turbo — where its own flag-2 exclusion
             // already stands it down. Gated on gapDays == 0 so a VRF-stall backfill (which
             // defers the whole transition to the next advance, line 412) does not roll the
-            // foil quest early.
+            // foil quest early. The final-jackpot REQUEST already rolls this quest at the
+            // routing boundary (_finalizeRngRequest), so on those days this force is an
+            // idempotent no-op backstop.
             //
             // Force the decimator daily on the day a burn window arms. decDayOneActive is
             // exactly that day: the arming request raises it a few lines after opening the
@@ -1708,18 +1710,18 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                             IVaultOwnerCheck(ContractAddresses.VAULT)
                                 .isVaultOwner(msg.sender)))
                 ) {
-                    _requestRng(isTicketJackpotDay, lvl);
+                    _requestRng(isTicketJackpotDay, (uint48(day) << 24) | uint48(lvl));
                     return (1, 0);
                 }
             } else if (elapsed >= MIDDAY_RNG_STALL_TIMEOUT) {
-                _requestRng(isTicketJackpotDay, lvl);
+                _requestRng(isTicketJackpotDay, (uint48(day) << 24) | uint48(lvl));
                 return (1, 0);
             }
             revert RngNotReady();
         }
 
         // Need fresh RNG
-        _requestRng(isTicketJackpotDay, lvl);
+        _requestRng(isTicketJackpotDay, (uint48(day) << 24) | uint48(lvl));
         return (1, 0);
     }
 
@@ -2098,12 +2100,15 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
     /// @dev Request new VRF random word from Chainlink.
     ///      Sets RNG lock to prevent manipulation during pending window.
     /// @param isTicketJackpotDay True if this is the last purchase day.
-    /// @param lvl Current level.
-    function _requestRng(bool isTicketJackpotDay, uint24 lvl) private {
+    /// @param lvlAndQuestDay Low 24 bits: current level. High 24 bits: the day this request
+    ///        seals — the caller's `day`, which the RNGREUSE clamp may hold below the wall
+    ///        day. Only the foil-quest roll reads the day, and only when it IS the wall day;
+    ///        0 suppresses that roll.
+    function _requestRng(bool isTicketJackpotDay, uint48 lvlAndQuestDay) private {
         // Hard revert if Chainlink request fails; this intentionally halts game progress until VRF funding/config is fixed.
         _finalizeRngRequest(
             isTicketJackpotDay,
-            lvl,
+            lvlAndQuestDay,
             _requestVrfWord(VRF_REQUEST_CONFIRMATIONS)
         );
     }
@@ -2124,7 +2129,9 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                 })
             )
         returns (uint256 id) {
-            _finalizeRngRequest(isTicketJackpotDay, lvl, id);
+            // questDay 0: the game-over entropy path never rolls the foil daily. A foil buy
+            // reverts GameOver from here on, so the quest could only bill an unmeetable miss.
+            _finalizeRngRequest(isTicketJackpotDay, uint48(lvl), id);
             requested = true;
         } catch {}
     }
@@ -2265,9 +2272,10 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
 
     function _finalizeRngRequest(
         bool isTicketJackpotDay,
-        uint24 lvl,
+        uint48 lvlAndQuestDay,
         uint256 requestId
     ) private {
+        uint24 lvl = uint24(lvlAndQuestDay);
         // isRetry: some VRF request already reserved the lootbox index (a daily retry OR an
         // in-flight mid-day lootbox request) — so the index must not be advanced again.
         bool isRetry = vrfRequestId != 0 &&
@@ -2309,7 +2317,11 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         // module). jackpotCounter + step catches the final daily jackpot; the isTicketJackpotDay
         // (level-transition) request catches the single-day turbo jackpot, where jackpotPhaseFlag is
         // not yet set here.
-        if (ticketRedemptionOpen && (jackpotPhaseFlag || isTicketJackpotDay)) {
+        // The redemption latch is opened lazily by the first FLIP redeem of a phase, so it
+        // cannot gate the test itself: finalJackpotRequest must be decided on a cycle where
+        // nobody redeemed. Only the clearing write stays behind the latch.
+        bool finalJackpotRequest;
+        if (jackpotPhaseFlag || isTicketJackpotDay) {
             uint8 jpStep = 1;
             // >= 2 covers the chained-arm request, whose flag is 3 (turbo + owed latch).
             if (compressedJackpotFlag >= 2 && jackpotCounter == 0) {
@@ -2322,7 +2334,8 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                 jpStep = 2;
             }
             if (jackpotCounter + jpStep >= JACKPOT_LEVEL_CAP) {
-                ticketRedemptionOpen = false;
+                finalJackpotRequest = true;
+                if (ticketRedemptionOpen) ticketRedemptionOpen = false;
             }
         }
 
@@ -2367,6 +2380,27 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
             // The game's level 0->1 transition means level 0 gameplay is complete,
             // so we resolve governance for level 0 = lvl - 1.
             charityResolve.pickCharity(lvl - 1);
+        }
+
+        // Buy-a-foil-pack daily: rolled at the REQUEST, not at the word's fulfilment.
+        // This request is the boundary where _activeTicketLevel starts routing to level + 1,
+        // so from here a foil pack spends the one-per-cycle slot for the very cycle whose
+        // opening day carries this quest. The fulfilment roll rides the next advanceGame
+        // (rawFulfillRandomWords only records the word), so leaving it there strands that
+        // gap and hands the buyer a quest that can only revert FoilAlreadyBought.
+        //
+        // No entropy is read: a forced slot-1 type never reaches the weighted roll, and one
+        // of the two forces always wins here. decDayOneActive is read AFTER the arming block
+        // above so DECIMATOR-over-FOIL precedence matches the fulfilment roll on a turbo
+        // x4/x99 level, where the final run is also the arming day. rollDailyQuest is
+        // idempotent per day, so the fulfilment call no-ops on this day.
+        //
+        // questDay == wall day mirrors the fulfilment roll's own guard: a day the RNGREUSE
+        // clamp held in the past must stay unrolled, since a retroactive quest lands already
+        // missed and bills every streak. That case keeps the old behaviour — no roll at all.
+        uint24 questDay = uint24(lvlAndQuestDay >> 24);
+        if (finalJackpotRequest && questDay == _simulatedDayIndex()) {
+            quests.rollDailyQuest(questDay, 0, false, true, decDayOneActive);
         }
     }
 
