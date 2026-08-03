@@ -3,7 +3,7 @@
 For a gambling protocol, economic transparency matters as much as contract transparency.
 **Every figure below cites the exact contract line that defines it.** Nothing here is
 marketing math — verify each number against the frozen subject (`contracts/` tree
-`99c07b99`, tag `degenerus-c4a`).
+`fc18277c`, tag `degenerus-c4a`).
 
 The code is **not yet deployed**. There are no live token prices. Figures are on-chain
 constants and formulas, not projected returns.
@@ -97,7 +97,7 @@ with `claimablePool` bumped by the full amount so solvency holds. The creator's 
 thousand wei — rounds to the vault).
 
 On top of the ETH proceeds, presale boxes distribute DGNRS to buyers from the 10% presale-box pool on a
-tiered curve (`_presaleBoxDgnrsReward`, `modules/DegenerusGameLootboxModule.sol:807,841`). The vault's
+tiered curve (`_presaleBoxDgnrsReward`, `modules/DegenerusGameLootboxModule.sol:826,860`). The vault's
 default-referrer position (§2a) captures the affiliate share of DGNRS on unreferred presale spend — the
 builder estimates this at ~20% of the distributed DGNRS, roughly **2 ETH-equivalent** — so the full
 presale-side creator take is ≈40 ETH plus ~2 ETH of DGNRS.

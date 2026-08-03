@@ -4,7 +4,7 @@ Pre-disclosure for audit wardens. **If a finding's mechanism + impact is describ
 already known and is not eligible.** This is a precise perimeter — each entry names the exact
 mechanism and why it is by-design, defended, or out-of-scope. There are no vague blanket disclaimers.
 
-Frozen subject: `contracts/` tree `99c07b99` @ tag `degenerus-c4a`. Pre-scanned with Slither v0.11.5
+Frozen subject: `contracts/` tree `fc18277c` @ tag `degenerus-c4a`. Pre-scanned with Slither v0.11.5
 + Aderyn 0.6.8; those findings are triaged in the automated-tools section below.
 
 ---
@@ -142,21 +142,21 @@ transaction (a coin credit, not ETH-backed value). Immaterial; documented, not e
 ## 5. Automated tool findings (pre-disclosed)
 
 The full machine-readable Slither/Aderyn baseline is maintained internally — Slither 0.11.5 (3,319
-results / 101 detectors over 148 contracts at tree `99c07b99`; 171 High / 442 Medium / 383 Low /
+results / 101 detectors over 148 contracts at tree `fc18277c`; 171 High / 442 Medium / 383 Low /
 2,271 Informational / 52 Optimization, and the "High" tier is dominated by 131 `uninitialized-state`
 false positives from the shared-storage delegatecall architecture — the deployed-module compilation
 units plus the new `DegenerusGameLens` unit, see below) + Aderyn 0.6.8 (9 High / 20 Low, unchanged).
 Slither totals are sensitive to the scan environment (solc/toolchain resolution), so the absolute
 count is not comparable across machines — re-runs should compare category triage, not the total.
-These counts were measured directly at tree `99c07b99`, not carried forward from an earlier scan,
+These counts were measured directly at tree `fc18277c`, not carried forward from an earlier scan,
 and the previously tagged tree was re-scanned in the same environment (reproducing its recorded
 3,143 / 156 High exactly), so the delta below is a measured diff rather than a comparison against a
 recorded figure.
 
 The delta against the previously tagged tree (`4e616db4`) is **+176 results and +15 High**, spanning
-seven changes: the `extsload` observability lens, the module observability events, the foil daily
+eight changes: the `extsload` observability lens, the module observability events, the foil daily
 quest moving to the final-jackpot RNG request, the static boon tables, the council-review fixes,
-the seat push-mint, and the dead-code removal. Keyed line-insensitively on (check, impact, subject function), every addition is
+the seat push-mint, the dead-code removal, and the size-scaled lootbox WWXRP stake. Keyed line-insensitively on (check, impact, subject function), every addition is
 attributable:
 
 - **The new `DegenerusGameLens` compilation unit (~160 of the additions).** The lens imports
@@ -193,6 +193,10 @@ attributable:
   (`_setNextPrizePool`, `_unpackWholeFlipToWei`, `_foilSnapShiftFor`). Removing the unreachable
   `DegenerusQuests.handleMint` and the always-zero `DegenerusGameLens.snapExponent` field moved no
   finding, because neither carried one.
+- **The size-scaled lootbox WWXRP stake (ZERO, in every tier).** Replacing the two flat WWXRP
+  constants with the `_boxWwxrpStake` helper — a `private pure` multiply-and-floor consumed by the
+  box spin and the cold-bust consolation — added, removed and re-keyed nothing: the scan totals and
+  the full High-tier composition are identical to the prior tree, detector for detector.
 
 The High tier is composition-identical to the prior tagged tree across every other check (6
 `arbitrary-send-eth`, 6 `reentrancy-balance`, 5 `delegatecall-loop`, 3 `encode-packed-collision`,

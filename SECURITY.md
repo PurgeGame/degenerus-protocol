@@ -1,6 +1,6 @@
 # Security Policy
 
-Frozen subject: `contracts/` tree `99c07b99` @ tag `degenerus-c4a` (post-v75.0 hardening freeze).
+Frozen subject: `contracts/` tree `fc18277c` @ tag `degenerus-c4a` (post-v75.0 hardening freeze).
 
 ## Reporting a vulnerability
 
