@@ -22,7 +22,7 @@ import {
  *    - slot 1 is different from slot 0
  *    - emits QuestSlotRolled for both slots
  *  - awardQuestStreakBonus (onlyGame, happy path, clamping)
- *  - handleMint (onlyCoin, progress, completion, reward)
+ *  - handlePurchase (onlyCoin, progress, completion, reward)
  *  - handleFlip (onlyCoin, progress, completion)
  *  - handleDecimator (onlyCoin, access)
  *  - handleAffiliate (onlyCoin, access)
@@ -349,33 +349,35 @@ describe("DegenerusQuests", function () {
   });
 
   // =========================================================================
-  // 5. handleMint - Access Control
+  // 5. handlePurchase - Access Control
   // =========================================================================
-  describe("handleMint - access control", function () {
+  describe("handlePurchase - access control", function () {
     it("reverts OnlyCoin when called by EOA", async function () {
       const { quests, alice } = await loadFixture(deployFullProtocol);
       await expect(
-        quests.connect(alice).handleMint(alice.address, 2, true, 0)
+        quests.connect(alice).handlePurchase(alice.address, 2, 0, 0, 0, 0)
       ).to.be.revertedWithCustomError(quests, "OnlyCoin");
     });
 
     it("succeeds when called by coin contract", async function () {
       const { quests, coin, game, alice } = await loadFixture(deployFullProtocol);
       await expect(
-        callHandlerAsCoin(hre.ethers, coin, quests, "handleMint", [
+        callHandlerAsCoin(hre.ethers, coin, quests, "handlePurchase", [
           alice.address,
           2,
-          true,
           0,
+          0,
+        0,
+        0,
         ])
       ).to.not.be.reverted;
     });
   });
 
   // =========================================================================
-  // 6. handleMint - Progress and Completion
+  // 6. handlePurchase - Progress and Completion
   // =========================================================================
-  describe("handleMint - progress and completion", function () {
+  describe("handlePurchase - progress and completion", function () {
     it("returns (0, type, 0, false) when no active quest for player/type", async function () {
       const { quests, coin, game, alice } = await loadFixture(deployFullProtocol);
       // No quest rolled yet; currentDay = 0 => returns early
@@ -383,23 +385,21 @@ describe("DegenerusQuests", function () {
         hre.ethers,
         coin,
         quests,
-        "handleMint",
-        [alice.address, 2, true, 0]
+        "handlePurchase", [alice.address, 2, 0, 0, 0, 0]
       );
       const [reward, , , completed] = result;
       expect(completed).to.equal(false);
       expect(reward).to.equal(0n);
     });
 
-    it("emits QuestProgressUpdated after handleMint on active quest", async function () {
+    it("emits QuestProgressUpdated after a purchase on active quest", async function () {
       const { quests, coin, game, alice } = await loadFixture(deployFullProtocol);
       await rollQuestAsGame(hre.ethers, game, quests, 1n, 99n);
       const { tx } = await callHandlerAsCoin(
         hre.ethers,
         coin,
         quests,
-        "handleMint",
-        [alice.address, 1, true, 0]
+        "handlePurchase", [alice.address, 1, 0, 0, 0, 0]
       );
       const evs = await getEvents(tx, quests, "QuestProgressUpdated");
       expect(evs.length).to.be.gte(1);
@@ -413,8 +413,7 @@ describe("DegenerusQuests", function () {
         hre.ethers,
         coin,
         quests,
-        "handleMint",
-        [alice.address, 2, true, 0]
+        "handlePurchase", [alice.address, 2, 0, 0, 0, 0]
       );
       const evs = await getEvents(tx, quests, "QuestCompleted");
       expect(evs.length).to.be.gte(1);
@@ -429,8 +428,7 @@ describe("DegenerusQuests", function () {
         hre.ethers,
         coin,
         quests,
-        "handleMint",
-        [alice.address, 2, true, 0]
+        "handlePurchase", [alice.address, 2, 0, 0, 0, 0]
       );
       const [reward, , streak, completed] = result;
       if (completed) {
@@ -448,8 +446,7 @@ describe("DegenerusQuests", function () {
         hre.ethers,
         coin,
         quests,
-        "handleMint",
-        [alice.address, 0, true, 0]
+        "handlePurchase", [alice.address, 0, 0, 0, 0, 0]
       );
       const [, , , completed] = result;
       expect(completed).to.equal(false);
@@ -459,23 +456,27 @@ describe("DegenerusQuests", function () {
       const { quests, coin, game } = await loadFixture(deployFullProtocol);
       await rollQuestAsGame(hre.ethers, game, quests, 1n, 99n);
       await expect(
-        callHandlerAsCoin(hre.ethers, coin, quests, "handleMint", [
+        callHandlerAsCoin(hre.ethers, coin, quests, "handlePurchase", [
           ZERO_ADDRESS,
           2,
-          true,
           0,
+          0,
+        0,
+        0,
         ])
       ).to.not.be.reverted;
     });
 
-    it("playerQuestStates reflects completion after successful handleMint", async function () {
+    it("playerQuestStates reflects completion after a successful purchase", async function () {
       const { quests, coin, game, alice } = await loadFixture(deployFullProtocol);
       await rollQuestAsGame(hre.ethers, game, quests, 1n, 99n);
-      await callHandlerAsCoin(hre.ethers, coin, quests, "handleMint", [
+      await callHandlerAsCoin(hre.ethers, coin, quests, "handlePurchase", [
         alice.address,
         2,
-        true,
         0,
+        0,
+      0,
+      0,
       ]);
       const [, , , completed] = await quests.playerQuestStates(alice.address);
       // At least slot 0 should be completed
@@ -547,11 +548,13 @@ describe("DegenerusQuests", function () {
       if (!found) this.skip();
 
       // First complete slot 0 (MINT_ETH)
-      await callHandlerAsCoin(hre.ethers, coin, quests, "handleMint", [
+      await callHandlerAsCoin(hre.ethers, coin, quests, "handlePurchase", [
         alice.address,
         2,
-        true,
         0,
+        0,
+      0,
+      0,
       ]);
 
       // Now complete slot 1 (FLIP) with enough volume
@@ -704,11 +707,13 @@ describe("DegenerusQuests", function () {
     it("streak increments to 1 on first quest completion", async function () {
       const { quests, coin, game, alice } = await loadFixture(deployFullProtocol);
       await rollQuestAsGame(hre.ethers, game, quests, 1n, 99n);
-      await callHandlerAsCoin(hre.ethers, coin, quests, "handleMint", [
+      await callHandlerAsCoin(hre.ethers, coin, quests, "handlePurchase", [
         alice.address,
         2,
-        true,
         0,
+        0,
+      0,
+      0,
       ]);
       const [streak] = await quests.playerQuestStates(alice.address);
       expect(streak).to.equal(1n);
@@ -718,17 +723,21 @@ describe("DegenerusQuests", function () {
       const { quests, coin, game, alice } = await loadFixture(deployFullProtocol);
       await rollQuestAsGame(hre.ethers, game, quests, 1n, 99n);
       // Complete slot 0 twice (second should be no-op for streak)
-      await callHandlerAsCoin(hre.ethers, coin, quests, "handleMint", [
+      await callHandlerAsCoin(hre.ethers, coin, quests, "handlePurchase", [
         alice.address,
         2,
-        true,
         0,
+        0,
+      0,
+      0,
       ]);
-      await callHandlerAsCoin(hre.ethers, coin, quests, "handleMint", [
+      await callHandlerAsCoin(hre.ethers, coin, quests, "handlePurchase", [
         alice.address,
         2,
-        true,
         0,
+        0,
+      0,
+      0,
       ]);
       const [streak] = await quests.playerQuestStates(alice.address);
       expect(streak).to.equal(1n);
@@ -739,11 +748,13 @@ describe("DegenerusQuests", function () {
 
       // Day 1: complete quest (streak = 1)
       await rollQuestAsGame(hre.ethers, game, quests, 1n, 99n);
-      await callHandlerAsCoin(hre.ethers, coin, quests, "handleMint", [
+      await callHandlerAsCoin(hre.ethers, coin, quests, "handlePurchase", [
         alice.address,
         2,
-        true,
         0,
+        0,
+      0,
+      0,
       ]);
 
       // Day 2 rolls a quest alice never completes (a real rolled miss — an
@@ -756,8 +767,7 @@ describe("DegenerusQuests", function () {
         hre.ethers,
         coin,
         quests,
-        "handleMint",
-        [alice.address, 1, true, 0]
+        "handlePurchase", [alice.address, 1, 0, 0, 0, 0]
       );
       const evs = await getEvents(tx, quests, "QuestStreakReset");
       expect(evs.length).to.be.gte(1);
@@ -768,11 +778,13 @@ describe("DegenerusQuests", function () {
 
       // Day 1: complete slot 0 (MINT_ETH, target = 1 ticket at current mintPrice)
       await rollQuestAsGame(hre.ethers, game, quests, 1n, 99n);
-      await callHandlerAsCoin(hre.ethers, coin, quests, "handleMint", [
+      await callHandlerAsCoin(hre.ethers, coin, quests, "handlePurchase", [
         alice.address,
         2,
-        true,
         0,
+        0,
+      0,
+      0,
       ]);
 
       // Verify streak is 1 after completion
@@ -781,18 +793,20 @@ describe("DegenerusQuests", function () {
 
       // Days 2-4 each roll a quest alice never completes (real rolled misses — unrolled
       // days would be stall-forgiven instead), then day 5 rolls.
-      // QuestStreakReset fires during the next sync action (handleMint triggers syncState).
+      // QuestStreakReset fires during the next sync action (handlePurchase triggers syncState).
       await rollQuestAsGame(hre.ethers, game, quests, 2n, 22n);
       await rollQuestAsGame(hre.ethers, game, quests, 3n, 33n);
       await rollQuestAsGame(hre.ethers, game, quests, 4n, 44n);
       await rollQuestAsGame(hre.ethers, game, quests, 5n, 88n);
-      // Call handleMint on day 5 - this triggers _questSyncState which fires QuestStreakReset
+      // Call handlePurchase on day 5 - this triggers _questSyncState which fires QuestStreakReset
       // Note: slot 0 target is 1 * mintPrice, so 1 ticket completes it, resetting then re-incrementing streak
-      const { tx } = await callHandlerAsCoin(hre.ethers, coin, quests, "handleMint", [
+      const { tx } = await callHandlerAsCoin(hre.ethers, coin, quests, "handlePurchase", [
         alice.address,
         1,
-        true,
         0,
+        0,
+      0,
+      0,
       ]);
 
       // QuestStreakReset event confirms the reset happened with previousStreak = 1
@@ -817,11 +831,13 @@ describe("DegenerusQuests", function () {
       // Roll day 1
       await rollQuestAsGame(hre.ethers, game, quests, 1n, 99n);
       // Partial progress on day 1
-      await callHandlerAsCoin(hre.ethers, coin, quests, "handleMint", [
+      await callHandlerAsCoin(hre.ethers, coin, quests, "handlePurchase", [
         alice.address,
         1,
-        true,
         0,
+        0,
+      0,
+      0,
       ]);
 
       // Re-roll day 2 (new day, new version)
@@ -865,11 +881,13 @@ describe("DegenerusQuests", function () {
     it("getPlayerQuestView reflects completed slots", async function () {
       const { quests, coin, game, alice } = await loadFixture(deployFullProtocol);
       await rollQuestAsGame(hre.ethers, game, quests, 1n, 99n);
-      await callHandlerAsCoin(hre.ethers, coin, quests, "handleMint", [
+      await callHandlerAsCoin(hre.ethers, coin, quests, "handlePurchase", [
         alice.address,
         2,
-        true,
         0,
+        0,
+      0,
+      0,
       ]);
 
       const view = await quests.getPlayerQuestView(alice.address);
@@ -880,11 +898,13 @@ describe("DegenerusQuests", function () {
     it("playerQuestStates streak matches completed count", async function () {
       const { quests, coin, game, alice } = await loadFixture(deployFullProtocol);
       await rollQuestAsGame(hre.ethers, game, quests, 1n, 99n);
-      await callHandlerAsCoin(hre.ethers, coin, quests, "handleMint", [
+      await callHandlerAsCoin(hre.ethers, coin, quests, "handlePurchase", [
         alice.address,
         2,
-        true,
         0,
+        0,
+      0,
+      0,
       ]);
 
       const [streak, lastCompletedDay] = await quests.playerQuestStates(
@@ -894,7 +914,7 @@ describe("DegenerusQuests", function () {
       expect(lastCompletedDay).to.equal(1n);
     });
 
-    it("playerQuestStates progress[0] is 0 before any handleMint", async function () {
+    it("playerQuestStates progress[0] is 0 before any purchase", async function () {
       const { quests, coin, game, alice } = await loadFixture(deployFullProtocol);
       await rollQuestAsGame(hre.ethers, game, quests, 1n, 99n);
       const [, , progress] = await quests.playerQuestStates(alice.address);
@@ -908,8 +928,7 @@ describe("DegenerusQuests", function () {
         hre.ethers,
         coin,
         quests,
-        "handleMint",
-        [alice.address, 2, true, 0]
+        "handlePurchase", [alice.address, 2, 0, 0, 0, 0]
       );
       const evs = await getEvents(tx, quests, "QuestCompleted");
       expect(evs.length).to.be.gte(1);
@@ -931,11 +950,13 @@ describe("DegenerusQuests", function () {
       await rollQuestAsGame(hre.ethers, game, quests, 1n, 99n);
 
       // Alice completes slot 0
-      await callHandlerAsCoin(hre.ethers, coin, quests, "handleMint", [
+      await callHandlerAsCoin(hre.ethers, coin, quests, "handlePurchase", [
         alice.address,
         2,
-        true,
         0,
+        0,
+      0,
+      0,
       ]);
 
       // Bob has no progress

@@ -409,6 +409,5 @@ contract LensParityTest is Test {
         assertEq(f.resolveDay, resolveDay, "resolveDay");
         assertEq(f.multBps, multBps, "multBps");
         assertEq(f.activityScore, score, "activityScore");
-        assertEq(f.snapExponent, snap, "snapExponent");
     }
 }

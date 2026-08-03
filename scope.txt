@@ -1,7 +1,7 @@
 # Degenerus Protocol — Audit Scope
 # Solidity 0.8.34 | Hardhat + Foundry | viaIR=true | Optimizer runs=1000 | evmVersion=osaka
 #
-# Frozen subject: contracts/ tree 7d9d31c5 @ tag degenerus-c4a (post-v75.0 hardening freeze).
+# Frozen subject: contracts/ tree 99c07b99 @ tag degenerus-c4a (post-v75.0 hardening freeze).
 # Checkout: git checkout degenerus-c4a
 # This list supersedes the v55-era scope.txt (which named BurnieCoin/BurnieCoinflip/
 # WrappedWrappedXRP/EndgameModule — all renamed or removed in this subject).
@@ -29,7 +29,7 @@ contracts/sDGNRS.sol                         # soulbound; reserves/pools/redeem 
 contracts/DGNRS.sol                          # transferable wrapper over sDGNRS    177
 contracts/DegenerusVault.sol                 # stETH vault; DGVE/DGVF share ERC20s 496
 contracts/DegenerusJackpots.sol              # jackpot state + BAF helpers         383
-contracts/DegenerusQuests.sol                # quest streaks + activity score     1513
+contracts/DegenerusQuests.sol                # quest streaks + activity score     1462
 contracts/DegenerusDeityPass.sol             # ERC-721 deity passes (triangular)   324
 contracts/Icons32Data.sol                    # on-chain SVG icon data               57
 contracts/GNRUS.sol                          # soulbound charity token             311
@@ -58,7 +58,7 @@ contracts/modules/DegenerusGameMintStreakUtils.sol    #                         
 contracts/modules/DegenerusGamePayoutUtils.sol        #                             29
 
 ## In Scope — Shared storage (1)                                            nSLOC
-contracts/storage/DegenerusGameStorage.sol            #                           1342
+contracts/storage/DegenerusGameStorage.sol            #                           1324
 
 ## In Scope — Libraries (8)                                                 nSLOC
 contracts/DegenerusTraitUtils.sol            # trait generation library            80
@@ -78,7 +78,7 @@ contracts/interfaces/IDegenerusGameModules.sol        #                         
 contracts/interfaces/IDegenerusGame.sol               #                            178
 contracts/interfaces/IDegenerusJackpots.sol           #                             13
 contracts/interfaces/IDegenerusParimutuel.sol         #                              5
-contracts/interfaces/IDegenerusQuests.sol             #                             87
+contracts/interfaces/IDegenerusQuests.sol             #                             84
 contracts/interfaces/IsDGNRS.sol                      #                             24
 contracts/interfaces/IStETH.sol                       #                              8
 contracts/interfaces/IVaultCoin.sol                   #                              7
@@ -88,18 +88,18 @@ contracts/interfaces/IVRFCoordinator.sol              #                         
 # Frozen production code, custody-free; audited this milestone.
 # (DegenerusGasFaucet relocated to the degenerus-utilities repo — no longer in this tree.)
 contracts/DeityBoonViewer.sol      # read-only deity-boon lens (no value custody)  148
-contracts/DegenerusGameLens.sol    # extsload observability lens (no value custody) 355
+contracts/DegenerusGameLens.sol    # extsload observability lens (no value custody) 353
 
 ## nSLOC totals
-#   Core deployed (16)              9360
+#   Core deployed (16)              9309
 #   Deployed modules (12)          10290
 #   Abstract module bases (2)        463
-#   Shared storage (1)              1342
+#   Shared storage (1)              1324
 #   Libraries (8)                    495
-#   Interfaces (12)                  699
-#   Standalone in-scope (2)          503
+#   Interfaces (12)                  696
+#   Standalone in-scope (2)          501
 #   --------------------------------------
-#   TOTAL  53 files                23152 nSLOC
+#   TOTAL  53 files                23078 nSLOC
 #   (nSLOC = non-blank, non-comment source lines, comment- and string-aware. Every
 #    per-file value above and every subtotal here is measured directly at the pinned
 #    tree; rows sum to their group subtotal and the subtotals sum to TOTAL.)

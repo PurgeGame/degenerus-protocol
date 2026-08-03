@@ -29,14 +29,12 @@ contract GoldenTicketFoilHarness is DegenerusGameFoilPackModule {
         address buyer,
         uint16 multBps,
         uint24 resolveDay,
-        uint16 score,
-        uint8 snapS
+        uint16 score
     ) external {
         foilRecord[lvl][buyer] =
             uint256(resolveDay) |
             (uint256(multBps) << _FOIL_MULT_SHIFT) |
-            (uint256(score) << _FOIL_SCORE_SHIFT) |
-            (uint256(snapS) << _FOIL_SNAP_SHIFT);
+            (uint256(score) << _FOIL_SCORE_SHIFT);
     }
 
     function pushFoilBuyer(uint24 day, uint24 lvl, address buyer) external {
@@ -282,11 +280,8 @@ contract GoldenTicketFoilPack is Test {
 
     /// @dev Seed BUYER's pack for RESOLVE_DAY against `word` and run the drain, so the
     ///      claim below sees exactly the state a real pack leaves behind.
-    /// @dev The snap exponent the seeded pack was "bought" at.
-    uint8 internal snapAtBuy;
-
     function seedAndDrain(uint256 word) internal {
-        h.setFoilRecord(LVL, BUYER, MAX_MULT, RESOLVE_DAY, 0, snapAtBuy);
+        h.setFoilRecord(LVL, BUYER, MAX_MULT, RESOLVE_DAY, 0);
         h.pushFoilBuyer(RESOLVE_DAY, LVL, BUYER);
         h.setRngWord(RESOLVE_DAY, word);
         h.setDrainWindow(RESOLVE_DAY, RESOLVE_DAY);
@@ -458,7 +453,7 @@ contract GoldenTicketFoilPack is Test {
 
     /// @dev A pack whose resolveDay word has not sealed has no lines yet.
     function testClaimRevertsBeforeTheWordSeals() public {
-        h.setFoilRecord(LVL, BUYER, MAX_MULT, RESOLVE_DAY, 0, snapAtBuy);
+        h.setFoilRecord(LVL, BUYER, MAX_MULT, RESOLVE_DAY, 0);
         vm.expectRevert(DegenerusGameFoilPackModule.NoGoldenTicket.selector);
         h.claimGoldenTicket(BUYER, LVL);
     }
@@ -477,17 +472,9 @@ contract GoldenTicketFoilPack is Test {
     // -- the snap valve reaches the price and stops there ----------------------
     //
     // No foil payout scales with the exponent, so on a thanos level the pack is simply
-    // bad value: the buy pays 2^s and the ladder pays flat. The three cases below cover
-    // every way an exponent could reach a claim — set at buy, committed after the buy,
-    // lifted after the buy — and all three must land on the same unshifted credit.
-
-    /// @dev Bought under a live snap. The buy paid 2^s more; the ladder does not follow.
-    function testFlipRungIgnoresTheBuysSnapShift() public {
-        snapAtBuy = 3;
-        seedAndDrain(ALL_GOLD_WORD);
-        h.claimGoldenTicket(BUYER, LVL);
-        assertEq(flipRec.lastAmount(), EXPECTED_FLIP, "credit took the buy's snap");
-    }
+    // bad value: the buy pays 2^s and the ladder pays flat. The record never stores the
+    // exponent, so the only way one could reach a claim is a LIVE read; the two cases
+    // below move the live shift in both directions and must land on the same credit.
 
     /// @dev THE LEVER THIS CLOSES: a thanos declaration always targets level + 6 or
     ///      beyond, so once it commits a LIVE _snapShiftFor(pastLvl) returns the NEW
@@ -495,7 +482,6 @@ contract GoldenTicketFoilPack is Test {
     ///      its face if any leg read the exponent live — which would make holding a
     ///      claim back strictly dominant. Nothing reads it, so nothing moves.
     function testClaimIgnoresASnapCommittedAfterTheBuy() public {
-        snapAtBuy = 0; // bought before any declaration
         seedAndDrain(ALL_GOLD_WORD);
 
         // A declaration commits: snapShift is now 8 for every level from here on, and
@@ -516,7 +502,6 @@ contract GoldenTicketFoilPack is Test {
     ///      credit once the valve lifts. The exponent is not stored, so there is nothing
     ///      to lose here either — the claim is snap-invariant in both directions.
     function testClaimIgnoresTheValveLifting() public {
-        snapAtBuy = 2;
         seedAndDrain(ALL_GOLD_WORD);
         h.setLiveSnapShift(0);
         h.claimGoldenTicket(BUYER, LVL);

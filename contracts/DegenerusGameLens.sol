@@ -99,7 +99,6 @@ contract DegenerusGameLens is DegenerusGameMintStreakUtils {
         uint24 resolveDay; // seed day + no-look-back floor
         uint16 multBps; // frozen foilBoostBps (20000..60000)
         uint16 activityScore; // frozen at buy (claim-spin RTP input)
-        uint8 snapExponent; // frozen thanos snap exponent (price basis)
     }
 
     /*+======================================================================+
@@ -493,6 +492,5 @@ contract DegenerusGameLens is DegenerusGameMintStreakUtils {
         f.resolveDay = uint24(w);
         f.multBps = uint16(w >> _FOIL_MULT_SHIFT);
         f.activityScore = uint16(w >> _FOIL_SCORE_SHIFT);
-        f.snapExponent = uint8(w >> _FOIL_SNAP_SHIFT);
     }
 }

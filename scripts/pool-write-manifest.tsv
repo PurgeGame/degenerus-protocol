@@ -125,7 +125,6 @@ MUTATOR-DEF	_setCurrentPrizePool	_setCurrentPrizePool	storage/DegenerusGameStora
 MUTATOR-DEF	currentPrizePool	_setCurrentPrizePool	storage/DegenerusGameStorage.sol	WRITE	the raw write inside the canonical setter
 MUTATOR-DEF	_setFuturePrizePool	_setFuturePrizePool	storage/DegenerusGameStorage.sol	READ	canonical future setter definition
 MUTATOR-DEF	_setPrizePools	_setFuturePrizePool	storage/DegenerusGameStorage.sol	READ	helper body delegates to the packed-slot setter
-MUTATOR-DEF	_setPrizePools	_setNextPrizePool	storage/DegenerusGameStorage.sol	READ	nested canonical setter (next half)
 MUTATOR-DEF	_setPendingPools	_setPendingPools	storage/DegenerusGameStorage.sol	READ	canonical pending-slot setter definition
 MUTATOR-DEF	prizePoolPendingPacked	_setPendingPools	storage/DegenerusGameStorage.sol	WRITE	the packed write inside the canonical setter
 MUTATOR-DEF	_setPrizePools	_setPrizePools	storage/DegenerusGameStorage.sol	READ	canonical packed-slot setter definition

@@ -1333,7 +1333,7 @@ contract CoverageGap222 is DeployProtocol {
         vm.prank(buyer);
         (bool o1, ) = address(quests).call(
             abi.encodeWithSignature(
-                "handleMint(address,uint32,bool,uint256)",
+                "handlePurchase(address,uint256,uint32,uint256,uint256,uint256)",
                 buyer,
                 uint32(1),
                 true,
@@ -1386,7 +1386,7 @@ contract CoverageGap222 is DeployProtocol {
                 uint256(1 ether)
             )
         );
-        assertFalse(o1, "quests.handleMint rejected non-coin caller");
+        assertFalse(o1, "quests.handlePurchase rejected non-coin caller");
         assertFalse(o2, "quests.handleFlip rejected non-coin caller");
         assertFalse(o3, "quests.handleDecimator rejected non-coin caller");
         assertFalse(o4, "quests.handleAffiliate rejected non-coin caller");

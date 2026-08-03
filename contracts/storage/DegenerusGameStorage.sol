@@ -1201,12 +1201,6 @@ abstract contract DegenerusGameStorage {
         return uint256(next);
     }
 
-    /// @dev Sets only the next pool component.
-    function _setNextPrizePool(uint256 val) internal {
-        (, uint128 future) = _getPrizePools();
-        _setPrizePools(uint128(val), future);
-    }
-
     /// @dev Returns the future pool component.
     function _getFuturePrizePool() internal view returns (uint256) {
         (, uint128 future) = _getPrizePools();
@@ -2093,11 +2087,6 @@ abstract contract DegenerusGameStorage {
     /// @dev Pack a wei amount to whole FLIP (divide by 1e18). 1 FLIP resolution.
     function _packFlipToWhole(uint256 wei_) internal pure returns (uint40) {
         return uint40(wei_ / LR_FLIP_SCALE);
-    }
-
-    /// @dev Unpack whole FLIP to wei (multiply by 1e18).
-    function _unpackWholeFlipToWei(uint40 whole) internal pure returns (uint256) {
-        return uint256(whole) * LR_FLIP_SCALE;
     }
 
     /// @dev Pack a lootbox box into one uint256 word (the lootboxEth slot).
@@ -3009,8 +2998,6 @@ abstract contract DegenerusGameStorage {
     uint256 private constant _FOIL_MULT_MASK = (uint256(1) << 16) - 1;
     uint256 internal constant _FOIL_SCORE_SHIFT = 40;
     uint256 private constant _FOIL_SCORE_MASK = (uint256(1) << 16) - 1;
-    uint256 internal constant _FOIL_SNAP_SHIFT = 56;
-    uint256 private constant _FOIL_SNAP_MASK = (uint256(1) << 8) - 1;
 
     uint256 private constant _FOIL_DRAW_MAIN_MASK = (uint256(1) << 32) - 1;
     uint256 private constant _FOIL_DRAW_BONUS_SHIFT = 32;
@@ -3044,23 +3031,6 @@ abstract contract DegenerusGameStorage {
         resolveDay = uint24(packed & _FOIL_RESOLVEDAY_MASK);
         multBps = uint16((packed >> _FOIL_MULT_SHIFT) & _FOIL_MULT_MASK);
         activityScore = uint16((packed >> _FOIL_SCORE_SHIFT) & _FOIL_SCORE_MASK);
-    }
-
-    /// @dev The snap exponent frozen into a player's foil record at buy (one SLOAD).
-    ///      Claims MUST use this rather than a live `_snapShiftFor(lvl)`: a pending
-    ///      thanos declaration always targets `level + 6` or later, so once it commits
-    ///      `_snapShiftFor` returns the CURRENT exponent for every past level, not the
-    ///      one that level's buy was charged at. A claim held across a commit would
-    ///      otherwise pay 2^(new - old) times its face — the exponent is the buy's
-    ///      price basis, so it has to travel with the record.
-    function _foilSnapShiftFor(address player, uint256 lvl)
-        internal
-        view
-        returns (uint8)
-    {
-        return uint8(
-            (foilRecord[uint24(lvl)][player] >> _FOIL_SNAP_SHIFT) & _FOIL_SNAP_MASK
-        );
     }
 
     /// @dev The frozen activity multiplier from a player's foil record for a cycle

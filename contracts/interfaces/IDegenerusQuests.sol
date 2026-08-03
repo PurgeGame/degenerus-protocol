@@ -57,20 +57,6 @@ interface IDegenerusQuests {
         bool forceDecimator
     ) external;
 
-    /// @notice Records player minting activity and checks quest completion
-    /// @dev Called by the game contract when a player mints tickets
-    /// @param player The address of the player who minted
-    /// @param quantity The number of tickets minted
-    /// @param paidWithEth Whether the mint was paid for with ETH (vs tokens)
-    /// @param mintPrice Current ticket price in wei (0 for FLIP mints)
-    /// @return reward The quest reward amount earned (0 if quest not completed)
-    /// @return questType The type of quest that was completed
-    /// @return streak The player's current quest streak
-    /// @return completed Whether a quest was completed by this action
-    function handleMint(address player, uint32 quantity, bool paidWithEth, uint256 mintPrice)
-        external
-        returns (uint256 reward, uint8 questType, uint32 streak, bool completed);
-
     /// @notice Records player flip activity and checks quest completion
     /// @dev Called by the game contract when a player performs a coinflip
     /// @param player The address of the player who flipped

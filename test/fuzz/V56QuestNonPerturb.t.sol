@@ -32,7 +32,7 @@ import {QuestInfo} from "../../contracts/interfaces/IDegenerusQuests.sol";
 /// @dev Drives the DegenerusQuests core directly through its access-gated entrypoints — pranking the
 ///      GAME address for the `onlyGame` surface (`rollDailyQuest`/`beginAfking`/`awardQuestStreakBonus`/
 ///      `finalizeAfking`) and the COIN address for the `onlyCoin` progress handlers
-///      (`handleMint`/`handleFlip`/...). State is read through the `playerQuestStates` view (streak) and
+///      (`handlePurchase`/`handleFlip`/...). State is read through the `playerQuestStates` view (streak) and
 ///      direct `vm.load` of the single-slot PlayerQuestState (RE-DERIVED via `forge inspect
 ///      DegenerusQuests storageLayout`: `questPlayerState` root = slot 1; the struct packs into one
 ///      256-bit word — lastActiveDay u24 byte-3, streak u16 byte-9, afkingActive bool byte-13).
@@ -60,7 +60,7 @@ contract V56QuestNonPerturb is DeployProtocol {
     uint8 private constant QT_DEGENERETTE_FLIP = 8;
     uint8 private constant QT_MINT_FLIP = 9;
 
-    /// @dev A mint price comfortably above the slot-0 MINT_ETH target so one handleMint completes it.
+    /// @dev A mint price comfortably above the slot-0 MINT_ETH target so one purchase completes it.
     ///      Slot-0 target = min(mintPrice * 1, 0.5 ether); a 1-ticket ETH mint at this price clears it.
     uint256 private constant MINT_PRICE = 0.5 ether;
 
@@ -299,24 +299,24 @@ contract V56QuestNonPerturb is DeployProtocol {
     }
 
     /// @dev Complete a LOOTBOX slot-1 quest via the COIN-gated handlePurchase (the O1 region) with the
-    ///      lootbox leg ISOLATED: slot 0 (MINT_ETH) is completed first in a separate handleMint, then a
+    ///      lootbox leg ISOLATED: slot 0 (MINT_ETH) is completed first in a separate purchase, then a
     ///      lootbox-only handlePurchase (ethMintSpendWei = 0) clears the slot-1 LOOTBOX target so the
     ///      returned reward is PURELY the single lootbox reward (the value the caller credits once).
     function _completeLootboxSlot1(address player, uint32 /*day*/) internal returns (uint256 reward) {
         vm.prank(ContractAddresses.COIN);
-        quests.handleMint(player, 1, true, MINT_PRICE); // slot-0 pre-req (its reward is returned, not relevant here)
+        quests.handlePurchase(player, MINT_PRICE, 0, 0, MINT_PRICE, MINT_PRICE); // slot-0 pre-req (its reward is returned, not relevant here)
         vm.prank(ContractAddresses.COIN);
         (reward, , , ) = quests.handlePurchase(player, 0, 0, 1 ether, MINT_PRICE, MINT_PRICE);
     }
 
-    /// @dev Complete slot 0 (MINT_ETH) via the COIN-gated handleMint with a 1-ticket ETH mint sized
+    /// @dev Complete slot 0 (MINT_ETH) via the COIN-gated handlePurchase with a 1-ticket ETH mint sized
     ///      above the slot-0 target. Returns the handler tuple.
     function _completeSlot0(address player, uint32 /*day*/)
         internal
         returns (uint256 reward, uint8 questType, uint32 streak, bool completed)
     {
         vm.prank(ContractAddresses.COIN);
-        (reward, questType, streak, completed) = quests.handleMint(player, 1, true, MINT_PRICE);
+        (reward, questType, streak, completed) = quests.handlePurchase(player, MINT_PRICE, 0, 0, MINT_PRICE, MINT_PRICE);
     }
 
     /// @dev Complete the player's own slot 1 by reading its rolled type and routing the matching
@@ -345,7 +345,7 @@ contract V56QuestNonPerturb is DeployProtocol {
             (reward, qt, s, completed) = quests.handleDegenerette(player, 10_000 ether, true, MINT_PRICE);
         } else if (t == QT_MINT_FLIP) {
             vm.prank(ContractAddresses.COIN);
-            (reward, qt, s, completed) = quests.handleMint(player, 100, false, MINT_PRICE);
+            (reward, qt, s, completed) = quests.handlePurchase(player, 0, 100, 0, MINT_PRICE, MINT_PRICE);
         } else {
             // LOOTBOX / MINT_ETH share the purchase path; an ETH-mint spend + lootbox spend clears the
             // ETH-denominated target. handlePurchase credits the lootbox reward via the caller, so the

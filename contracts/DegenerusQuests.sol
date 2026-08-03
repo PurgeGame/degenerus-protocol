@@ -34,7 +34,7 @@ import {PriceLookupLib} from "./libraries/PriceLookupLib.sol";
  * 1. GAME (AdvanceModule) calls `rollDailyQuest()` with VRF entropy at day transition
  * 2. Slot 0 is always a fixed "deposit new ETH" quest (mint with ETH)
  * 3. Slot 1 is a weighted-random quest from the remaining quest types
- * 4. Player actions trigger handle* functions (handleMint, handleFlip, etc.)
+ * 4. Player actions trigger handle* functions (handlePurchase, handleFlip, etc.)
  * 5. Progress accumulates until target is met; each completion (primary, secondary, level) credits streak
  *
  * Progress Freshness
@@ -715,79 +715,6 @@ contract DegenerusQuests is IDegenerusQuests {
     // - questType: The type of quest that was processed
     // - streak: Player's current streak after this action
     // - completed: True if a quest was completed by this action
-
-    /**
-     * @notice Handle mint progress for a player; covers both FLIP and ETH paid mints.
-     * @dev Access: COIN or COINFLIP contract only.
-     *      Slot 0 is always the MINT_ETH quest and the slot-1 bonus roll excludes the
-     *      primary type, so each mint kind checks exactly one slot.
-     * @param player The player who performed the mint.
-     * @param quantity Number of tickets minted.
-     * @param paidWithEth True if ETH was used (MINT_ETH quest), false for FLIP (MINT_FLIP).
-     * @return reward FLIP tokens earned (in base units, 18 decimals).
-     * @return questType The type of quest that was processed.
-     * @return streak Player's current streak after this action.
-     * @return completed True if a quest was completed by this action.
-     * @custom:reverts OnlyCoin When caller is not COIN or COINFLIP contract.
-     */
-    function handleMint(
-        address player,
-        uint32 quantity,
-        bool paidWithEth,
-        uint256 mintPrice
-    )
-        external
-        onlyCoin
-        returns (uint256 reward, uint8 questType, uint32 streak, bool completed)
-    {
-        DailyQuest[QUEST_SLOT_COUNT] memory quests = _loadActiveQuests();
-        uint24 currentDay = _currentQuestDay(quests);
-        PlayerQuestState storage state = questPlayerState[player];
-        if (player == address(0) || quantity == 0 || currentDay == 0) {
-            return (0, quests[0].questType, state.streak, false);
-        }
-
-        _questSyncState(state, player, currentDay);
-
-        uint8 outQuestType = paidWithEth ? QUEST_TYPE_MINT_ETH : QUEST_TYPE_MINT_FLIP;
-        uint32 outStreak = state.streak;
-
-        // Slot 0 is always the MINT_ETH quest and the slot-1 bonus roll excludes the
-        // primary type, so each mint kind can only ever match one fixed slot:
-        // MINT_ETH -> slot 0, MINT_FLIP -> slot 1.
-        uint8 slot = paidWithEth ? 0 : 1;
-        DailyQuest memory quest = quests[slot];
-        if (quest.day == currentDay && quest.questType == outQuestType) {
-            uint256 delta = paidWithEth ? uint256(quantity) * mintPrice : quantity;
-            uint256 target = _questTargetValue(quest, slot, mintPrice);
-            (reward, questType, streak, completed) = _questHandleProgressSlot(
-                player,
-                state,
-                quests,
-                quest,
-                slot,
-                delta,
-                target,
-                currentDay,
-                mintPrice,
-                outQuestType,
-                delta,
-                mintPrice
-            );
-            if (completed) {
-                if (!paidWithEth && reward != 0) {
-                    coinflip.creditFlip(player, reward);
-                }
-                return (reward, questType, streak, true);
-            }
-        } else if (paidWithEth) {
-            // No daily quest slot matched — still credit level quest progress
-            _handleLevelQuestProgress(player, QUEST_TYPE_MINT_ETH, uint256(quantity) * mintPrice, mintPrice);
-        } else {
-            _handleLevelQuestProgress(player, QUEST_TYPE_MINT_FLIP, quantity, 0);
-        }
-        return (0, outQuestType, outStreak, false);
-    }
 
     /**
      * @notice Handle flip-stake progress credited in FLIP base units (18 decimals).

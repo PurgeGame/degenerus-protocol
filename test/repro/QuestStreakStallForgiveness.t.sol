@@ -439,7 +439,7 @@ contract QuestStreakStallForgiveness is DeployProtocol {
         returns (uint256 reward, uint8 questType, uint32 streak, bool completed)
     {
         vm.prank(ContractAddresses.COIN);
-        return quests.handleMint(player, 1, true, MINT_PRICE);
+        return quests.handlePurchase(player, MINT_PRICE, 0, 0, MINT_PRICE, MINT_PRICE);
     }
 
     function _startAfkingPlayer(string memory label, uint16 streak) private returns (address player) {

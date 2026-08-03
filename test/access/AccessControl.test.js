@@ -238,11 +238,11 @@ describe("AccessControl", function () {
       ).to.be.revertedWithCustomError(quests, "OnlyGame");
     });
 
-    it("handleMint: reverts when called by alice (onlyCoin → OnlyCoin)", async function () {
+    it("handlePurchase: reverts when called by alice (onlyCoin → OnlyCoin)", async function () {
       const { quests, alice } = await loadFixture(deployFullProtocol);
 
       await expect(
-        quests.connect(alice).handleMint(alice.address, 1, true, 0)
+        quests.connect(alice).handlePurchase(alice.address, 1, 0, 0, 0, 0)
       ).to.be.revertedWithCustomError(quests, "OnlyCoin");
     });
 

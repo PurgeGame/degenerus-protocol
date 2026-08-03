@@ -4,7 +4,7 @@ Pre-disclosure for audit wardens. **If a finding's mechanism + impact is describ
 already known and is not eligible.** This is a precise perimeter — each entry names the exact
 mechanism and why it is by-design, defended, or out-of-scope. There are no vague blanket disclaimers.
 
-Frozen subject: `contracts/` tree `7d9d31c5` @ tag `degenerus-c4a`. Pre-scanned with Slither v0.11.5
+Frozen subject: `contracts/` tree `99c07b99` @ tag `degenerus-c4a`. Pre-scanned with Slither v0.11.5
 + Aderyn 0.6.8; those findings are triaged in the automated-tools section below.
 
 ---
@@ -108,7 +108,7 @@ is no victim. An admin-power finding must exhibit an **engaged-community victim*
 ## 3. Accepted out-of-scope risk: the > 120-day VRF-death deadman fallback (do NOT submit)
 
 **Mechanism.** When the game has not sealed a day for more than 120 days
-(`_vrfDeadmanFired ≡ _simulatedDayIndex() − dailyIdx > 120`, `DegenerusGameStorage.sol:1926-1928`;
+(`_vrfDeadmanFired ≡ _simulatedDayIndex() − dailyIdx > 120`, `DegenerusGameStorage.sol:1920-1922`;
 `dailyIdx` is uint24 and always `<= _simulatedDayIndex()` so no underflow), the terminal release no
 longer waits for Chainlink. `_getHistoricalRngFallback` (`DegenerusGameAdvanceModule.sol:1928-1952`)
 commits a fallback word from sealed historical `rngWordByDay` admixed with `block.prevrandao`; the
@@ -141,22 +141,22 @@ transaction (a coin credit, not ETH-backed value). Immaterial; documented, not e
 
 ## 5. Automated tool findings (pre-disclosed)
 
-The full machine-readable Slither/Aderyn baseline is maintained internally — Slither 0.11.5 (3,322
-results / 101 detectors over 148 contracts at tree `7d9d31c5`; 171 High / 442 Medium / 383 Low /
-2,274 Informational / 52 Optimization, and the "High" tier is dominated by 131 `uninitialized-state`
+The full machine-readable Slither/Aderyn baseline is maintained internally — Slither 0.11.5 (3,319
+results / 101 detectors over 148 contracts at tree `99c07b99`; 171 High / 442 Medium / 383 Low /
+2,271 Informational / 52 Optimization, and the "High" tier is dominated by 131 `uninitialized-state`
 false positives from the shared-storage delegatecall architecture — the deployed-module compilation
 units plus the new `DegenerusGameLens` unit, see below) + Aderyn 0.6.8 (9 High / 20 Low, unchanged).
 Slither totals are sensitive to the scan environment (solc/toolchain resolution), so the absolute
 count is not comparable across machines — re-runs should compare category triage, not the total.
-These counts were measured directly at tree `7d9d31c5`, not carried forward from an earlier scan,
+These counts were measured directly at tree `99c07b99`, not carried forward from an earlier scan,
 and the previously tagged tree was re-scanned in the same environment (reproducing its recorded
 3,143 / 156 High exactly), so the delta below is a measured diff rather than a comparison against a
 recorded figure.
 
-The delta against the previously tagged tree (`4e616db4`) is **+179 results and +15 High**, spanning
-six changes: the `extsload` observability lens, the module observability events, the foil daily
-quest moving to the final-jackpot RNG request, the static boon tables, the council-review fixes, and
-the seat push-mint. Keyed line-insensitively on (check, impact, subject function), every addition is
+The delta against the previously tagged tree (`4e616db4`) is **+176 results and +15 High**, spanning
+seven changes: the `extsload` observability lens, the module observability events, the foil daily
+quest moving to the final-jackpot RNG request, the static boon tables, the council-review fixes,
+the seat push-mint, and the dead-code removal. Keyed line-insensitively on (check, impact, subject function), every addition is
 attributable:
 
 - **The new `DegenerusGameLens` compilation unit (~160 of the additions).** The lens imports
@@ -188,6 +188,11 @@ attributable:
   its function. The remaining two are Informational on the token itself: `costly-loop` on
   `_mintSeat` (reached from the vault tranche's bounded mint loop) and `missing-inheritance`
   (it implements the ERC-721 surface without declaring an interface, as it always has).
+- **The dead-code removal (−3, nothing added, ZERO High).** Deleting three unreachable
+  `DegenerusGameStorage` helpers cleared exactly their three Informational `dead-code` findings
+  (`_setNextPrizePool`, `_unpackWholeFlipToWei`, `_foilSnapShiftFor`). Removing the unreachable
+  `DegenerusQuests.handleMint` and the always-zero `DegenerusGameLens.snapExponent` field moved no
+  finding, because neither carried one.
 
 The High tier is composition-identical to the prior tagged tree across every other check (6
 `arbitrary-send-eth`, 6 `reentrancy-balance`, 5 `delegatecall-loop`, 3 `encode-packed-collision`,

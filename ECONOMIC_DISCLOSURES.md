@@ -3,7 +3,7 @@
 For a gambling protocol, economic transparency matters as much as contract transparency.
 **Every figure below cites the exact contract line that defines it.** Nothing here is
 marketing math — verify each number against the frozen subject (`contracts/` tree
-`7d9d31c5`, tag `degenerus-c4a`).
+`99c07b99`, tag `degenerus-c4a`).
 
 The code is **not yet deployed**. There are no live token prices. Figures are on-chain
 constants and formulas, not projected returns.
@@ -90,7 +90,7 @@ Sum = 10,000 bps (100%); any rounding dust is retained by the reserve (`sDGNRS.s
 The presale box is a **primary sale at genesis**: buyers voluntarily exchange ETH for presale-box
 credits (backed by the 10% presale-box sDGNRS pool, §2b). It is an initial offering of coin — **not a
 rake**; no fee is taken from player gameplay. Total presale-box ETH is capped at **50 ETH**
-(`PRESALE_BOX_ETH_CAP = 50 ether`, `storage/DegenerusGameStorage.sol:1479`); proceeds route **80% to
+(`PRESALE_BOX_ETH_CAP = 50 ether`, `storage/DegenerusGameStorage.sol:1473`); proceeds route **80% to
 the vault (creator), 20% to sDGNRS** (`_creditBoxProceeds`, `modules/DegenerusGamePayoutUtils.sol:20-26`),
 with `claimablePool` bumped by the full amount so solvency holds. The creator's proceeds are therefore
 **bounded at ≈40 ETH** (80% of the 50-ETH cap; the integer-division remainder — at most a few
