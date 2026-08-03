@@ -239,7 +239,7 @@ describe("LootboxAutoResolveSilentColdBust — Phase 275 Wave 2 TST-LBX-AR-03", 
       // whole=0. The DIFFERENCE is the `payColdBustConsolation` gate downstream:
       //   - Manual caller `openBox` (payColdBustConsolation = true): the
       //     `if (payColdBustConsolation && whole == 0)` gate opens — pays
-      //     LOOTBOX_WWXRP_CONSOLATION via wwxrp.mintPrize (observable via the WWXRP
+      //     _boxWwxrpStake(rollAmount) via wwxrp.mintPrize (observable via the WWXRP
       //     ERC-20 `Transfer` event). (v47: the FLIP-lootbox manual caller
       //     openFlipLootBox, which also passed payColdBustConsolation=true, was
       //     removed — terminal-paradox closure.)
@@ -256,13 +256,13 @@ describe("LootboxAutoResolveSilentColdBust — Phase 275 Wave 2 TST-LBX-AR-03", 
 
     it("[03b] consolation mintPrize IS present and gated by `payColdBustConsolation && whole == 0`", function () {
       const source = fs.readFileSync(MODULE_SOURCE_PATH, "utf8");
-      // The `wwxrp.mintPrize(player, LOOTBOX_WWXRP_CONSOLATION)` payout appears
+      // The `wwxrp.mintPrize(player, _boxWwxrpStake(rollAmount))` payout appears
       // inside the `if (payColdBustConsolation && whole == 0)` gate — the
       // manual-only cold-bust consolation per D-277-CONSOLATION-GATE-01. The
       // payout is observable off-chain via the WWXRP ERC-20 `Transfer` event;
       // there is no dedicated lootbox-WWXRP event.
       expect(
-        source.includes("wwxrp.mintPrize(player, LOOTBOX_WWXRP_CONSOLATION)"),
+        source.includes("wwxrp.mintPrize(player, _boxWwxrpStake(rollAmount))"),
         "consolation `wwxrp.mintPrize(...)` missing"
       ).to.equal(true);
       expect(
@@ -272,7 +272,7 @@ describe("LootboxAutoResolveSilentColdBust — Phase 275 Wave 2 TST-LBX-AR-03", 
       // The mint must be gated by `if (payColdBustConsolation && whole == 0)` —
       // the gate appears before it in source order.
       const gateIdx = source.indexOf("if (payColdBustConsolation && whole == 0)");
-      const mintPrizeIdx = source.indexOf("wwxrp.mintPrize(player, LOOTBOX_WWXRP_CONSOLATION)");
+      const mintPrizeIdx = source.indexOf("wwxrp.mintPrize(player, _boxWwxrpStake(rollAmount))");
       expect(gateIdx, "consolation gate `if (payColdBustConsolation && whole == 0)` missing").to.be.greaterThan(-1);
       expect(mintPrizeIdx).to.be.greaterThan(gateIdx);
     });

@@ -8,7 +8,7 @@
 //
 //   _queueEntries(player, rollLevel, wholeTicketsToEntries(whole), false);
 //   if (payColdBustConsolation && whole == 0) {
-//       wwxrp.mintPrize(player, LOOTBOX_WWXRP_CONSOLATION);
+//       wwxrp.mintPrize(player, _boxWwxrpStake(rollAmount));
 //   }
 //
 // The consolation payout is `wwxrp.mintPrize`, which emits a standard WWXRP
@@ -39,9 +39,10 @@
 //     that the consolation `mintPrize` call sits INSIDE the
 //     `if (payColdBustConsolation && whole == 0)` gate, and that
 //     `_queueEntries` is the single unconditional ticket-award callsite.
-//   - TST-WX-03 (magnitude assertion) — direct on-chain constant inspection
-//     via the LootboxBernoulliTester mirror constants AND source-grep cross
-//     check.
+//   - TST-WX-03 (magnitude assertion) — the consolation magnitude is
+//     `_boxWwxrpStake(rollAmount)`: 500 WWXRP per ETH of roll value, floored at
+//     one whole token. Verified against the LootboxBernoulliTester mirror AND a
+//     source-grep cross check that the production helper keeps both halves.
 //   - TST-WX-04 (behavioral gate coverage) — deployed-contract verification via
 //     the `LootboxBernoulliTester.coldBustConsolationFires` mirror of the
 //     production gate, driven with each of the four callers' actual flag values.
@@ -51,8 +52,8 @@
 //     FLIP-lootbox caller was removed.)
 //
 // CROSS-CITES:
-//   - D-274-WX-AMOUNT-01 (magnitude equivalence LOOTBOX_WWXRP_CONSOLATION ==
-//     LOOTBOX_WWXRP_PRIZE)
+//   - D-274-WX-AMOUNT-01 (consolation and spin stake share `_boxWwxrpStake`, so
+//     they are magnitude-equal at equal roll value by construction)
 //   - D-274-MANUAL-ONLY-01 (consolation fires on the manual paths only)
 //   - D-277-CONSOLATION-GATE-01 (cold-bust consolation gating)
 //   - LBX-WX-01..04 requirements per .planning/REQUIREMENTS.md
@@ -112,7 +113,7 @@ describe("LootboxConsolation — Phase 274 Wave 2 TST-WX-01..03", function () {
       // The consolation payout is the `wwxrp.mintPrize` call — there is no
       // dedicated lootbox-WWXRP event. Walk backward to find the enclosing gate.
       const consolationMint = source.indexOf(
-        "wwxrp.mintPrize(player, LOOTBOX_WWXRP_CONSOLATION)"
+        "wwxrp.mintPrize(player, _boxWwxrpStake(rollAmount))"
       );
       expect(consolationMint).to.be.greaterThan(-1);
       // The retired LootBoxWwxrpReward event must not appear anywhere.
@@ -133,7 +134,7 @@ describe("LootboxConsolation — Phase 274 Wave 2 TST-WX-01..03", function () {
     it("[01d] consolation `wwxrp.mintPrize` is gated by `payColdBustConsolation && whole == 0` (auto-resolve cannot trigger)", function () {
       const source = fs.readFileSync(MODULE_SOURCE_PATH, "utf8");
       const mintPrize = source.indexOf(
-        "wwxrp.mintPrize(player, LOOTBOX_WWXRP_CONSOLATION)"
+        "wwxrp.mintPrize(player, _boxWwxrpStake(rollAmount))"
       );
       expect(mintPrize).to.be.greaterThan(-1);
       // Within 600 chars preceding the mintPrize call, the
@@ -190,7 +191,7 @@ describe("LootboxConsolation — Phase 274 Wave 2 TST-WX-01..03", function () {
         tail.includes("if (payColdBustConsolation && whole == 0)"),
         "consolation gate `if (payColdBustConsolation && whole == 0)` must follow the queue call"
       ).to.equal(true);
-      const mintIdx = tail.indexOf("wwxrp.mintPrize(player, LOOTBOX_WWXRP_CONSOLATION)");
+      const mintIdx = tail.indexOf("wwxrp.mintPrize(player, _boxWwxrpStake(rollAmount))");
       const gateIdx = tail.indexOf("if (payColdBustConsolation && whole == 0)");
       expect(mintIdx, "consolation mintPrize must sit after the gate").to.be.greaterThan(gateIdx);
     });
@@ -211,60 +212,99 @@ describe("LootboxConsolation — Phase 274 Wave 2 TST-WX-01..03", function () {
       expect(consolationGate).to.be.greaterThan(queueCall);
       // Consolation `mintPrize` also inside outer guard.
       const mintPrize = source.indexOf(
-        "wwxrp.mintPrize(player, LOOTBOX_WWXRP_CONSOLATION)"
+        "wwxrp.mintPrize(player, _boxWwxrpStake(rollAmount))"
       );
       expect(mintPrize).to.be.greaterThan(outerGuard);
     });
 
-    it("[02d] the standard WWXRP win at `_resolveLootboxRoll` stakes LOOTBOX_WWXRP_PRIZE, NOT LOOTBOX_WWXRP_CONSOLATION (separate concern)", function () {
+    it("[02d] the standard WWXRP win and the cold-bust consolation both draw `_boxWwxrpStake`, each off its OWN roll amount", function () {
       const source = fs.readFileSync(MODULE_SOURCE_PATH, "utf8");
-      // The standard WWXRP win is now a Degenerette spin staking the standard WWXRP
-      // prize: `_callWwxrpSpin(player, LOOTBOX_WWXRP_PRIZE, ...)`. It stakes the PRIZE
-      // constant, never the cold-bust consolation constant — they remain separate concerns.
+      // Both WWXRP magnitudes derive from the same helper, so they are equal by
+      // construction at equal roll value. The spin sits in `_resolveLootboxRoll`
+      // (param `amount`); the consolation sits in `_settleLootboxRoll` (param
+      // `rollAmount`) — each passes the roll amount its own frame carries.
       expect(
-        /_callWwxrpSpin\(\s*player,\s*LOOTBOX_WWXRP_PRIZE\b/.test(source),
-        "the standard WWXRP win must stake LOOTBOX_WWXRP_PRIZE via `_callWwxrpSpin(player, LOOTBOX_WWXRP_PRIZE, ...)`"
+        /_callWwxrpSpin\(\s*player,\s*_boxWwxrpStake\(amount\)/.test(source),
+        "the standard WWXRP win must stake `_boxWwxrpStake(amount)` via `_callWwxrpSpin`"
       ).to.equal(true);
       expect(
-        /_callWwxrpSpin\(\s*player,\s*LOOTBOX_WWXRP_CONSOLATION\b/.test(source),
-        "the standard WWXRP win must NOT stake LOOTBOX_WWXRP_CONSOLATION"
+        source.includes("wwxrp.mintPrize(player, _boxWwxrpStake(rollAmount))"),
+        "the cold-bust consolation must pay `_boxWwxrpStake(rollAmount)`"
+      ).to.equal(true);
+      // Neither site may re-introduce a flat magnitude that ignores box size.
+      expect(
+        /_callWwxrpSpin\(\s*player,\s*LOOTBOX_WWXRP_PRIZE\b/.test(source),
+        "the WWXRP spin must not stake a flat constant"
       ).to.equal(false);
     });
   });
 
-  describe("TST-WX-03 — magnitude assertion (LOOTBOX_WWXRP_CONSOLATION == LOOTBOX_WWXRP_PRIZE == 1 ether)", function () {
-    it("[03a] tester contract constants: LOOTBOX_WWXRP_PRIZE == LOOTBOX_WWXRP_CONSOLATION == 1 ether", async function () {
+  describe("TST-WX-03 — magnitude assertion (`_boxWwxrpStake`: 500 WWXRP per ETH, floored at one whole token)", function () {
+    it("[03a] tester mirror scales at 500 WWXRP per ETH — 5 WWXRP per 0.01 ETH of roll value", async function () {
       const tester = await deployTester();
-      const prize = await tester.LOOTBOX_WWXRP_PRIZE();
-      const consolation = await tester.LOOTBOX_WWXRP_CONSOLATION();
+      for (const [eth, expected] of [
+        ["0.01", "5"],
+        ["0.09", "45"],
+        ["0.45", "225"],
+        ["1", "500"],
+        ["49.5", "24750"],
+      ]) {
+        expect(
+          await tester.boxWwxrpStake(hre.ethers.parseEther(eth)),
+          `stake at ${eth} ETH roll`
+        ).to.equal(hre.ethers.parseEther(expected));
+      }
+    });
+
+    it("[03b] tester mirror floors at one whole token so the smallest box still clears MIN_BET_WWXRP", async function () {
+      const tester = await deployTester();
       const oneEther = hre.ethers.parseEther("1");
-      expect(prize).to.equal(oneEther);
-      expect(consolation).to.equal(oneEther);
-      expect(prize).to.equal(consolation);
-    });
-
-    it("[03b] production module declares both constants at `= 1 ether` (defensive drift catch)", function () {
-      const source = fs.readFileSync(MODULE_SOURCE_PATH, "utf8");
-      const prizePattern = /uint256 private constant LOOTBOX_WWXRP_PRIZE\s*=\s*1 ether;/;
-      const consolationPattern =
-        /uint256 private constant LOOTBOX_WWXRP_CONSOLATION\s*=\s*1 ether;/;
-      expect(source.match(prizePattern), "LOOTBOX_WWXRP_PRIZE = 1 ether declaration missing").to.not.be.null;
+      // Below 0.002 ETH the ×500 scaling would fall under one token; the floor holds
+      // it at exactly one, which is MIN_BET_WWXRP and keeps the spin whale-halfpass
+      // eligible (`s == 9 && betAmount >= MIN_BET_WWXRP` in resolveWwxrpSpinFromBox).
+      for (const eth of ["0", "0.0000001", "0.0005", "0.001", "0.0019"]) {
+        expect(
+          await tester.boxWwxrpStake(hre.ethers.parseEther(eth)),
+          `floor at ${eth} ETH roll`
+        ).to.equal(oneEther);
+      }
+      // 0.002 ETH is the exact crossover — scaling takes over at and above it.
+      expect(await tester.boxWwxrpStake(hre.ethers.parseEther("0.002"))).to.equal(oneEther);
       expect(
-        source.match(consolationPattern),
-        "LOOTBOX_WWXRP_CONSOLATION = 1 ether declaration missing"
-      ).to.not.be.null;
+        await tester.boxWwxrpStake(hre.ethers.parseEther("0.003"))
+      ).to.equal(hre.ethers.parseEther("1.5"));
     });
 
-    it("[03c] the two constants live as siblings (declared near each other for visual drift catch)", function () {
+    it("[03c] production module declares the ratio and the floor, and the helper applies both", function () {
+      const source = fs.readFileSync(MODULE_SOURCE_PATH, "utf8");
+      expect(
+        source.match(/uint256 private constant LOOTBOX_WWXRP_PRIZE\s*=\s*1 ether;/),
+        "LOOTBOX_WWXRP_PRIZE = 1 ether declaration missing"
+      ).to.not.be.null;
+      expect(
+        source.match(/uint256 private constant LOOTBOX_WWXRP_PER_ETH\s*=\s*500;/),
+        "LOOTBOX_WWXRP_PER_ETH = 500 declaration missing"
+      ).to.not.be.null;
+      // The helper must both scale and floor — dropping either half is the drift
+      // this catches (an unfloored stake silently loses whale-halfpass eligibility).
+      expect(
+        source.includes("stake = amount * LOOTBOX_WWXRP_PER_ETH;"),
+        "`_boxWwxrpStake` must scale by LOOTBOX_WWXRP_PER_ETH"
+      ).to.equal(true);
+      expect(
+        source.includes("if (stake < LOOTBOX_WWXRP_PRIZE) stake = LOOTBOX_WWXRP_PRIZE;"),
+        "`_boxWwxrpStake` must floor at LOOTBOX_WWXRP_PRIZE"
+      ).to.equal(true);
+    });
+
+    it("[03d] the two constants live as siblings (declared near each other for visual drift catch)", function () {
       const source = fs.readFileSync(MODULE_SOURCE_PATH, "utf8");
       const prizeIdx = source.indexOf("uint256 private constant LOOTBOX_WWXRP_PRIZE");
-      const consolationIdx = source.indexOf(
-        "uint256 private constant LOOTBOX_WWXRP_CONSOLATION"
-      );
+      const perEthIdx = source.indexOf("uint256 private constant LOOTBOX_WWXRP_PER_ETH");
       expect(prizeIdx).to.be.greaterThan(-1);
-      expect(consolationIdx).to.be.greaterThan(-1);
-      // Within 500 chars of each other (NatSpec for the new constant fits).
-      expect(Math.abs(prizeIdx - consolationIdx)).to.be.lessThan(500);
+      expect(perEthIdx).to.be.greaterThan(-1);
+      // Within 500 chars of each other (NatSpec for the sibling constant fits).
+      expect(Math.abs(prizeIdx - perEthIdx)).to.be.lessThan(500);
     });
   });
 

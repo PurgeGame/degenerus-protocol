@@ -453,12 +453,12 @@ describe("EventSurfaceUnification — Phase 277 Wave 2 TST-EVT-UNI-01..06", func
         /if \(payColdBustConsolation && whole == 0\)/.test(body),
         "manual cold-bust consolation must be gated on `payColdBustConsolation && whole == 0`"
       ).to.equal(true);
-      // It pays LOOTBOX_WWXRP_CONSOLATION via wwxrp.mintPrize; the payout is
+      // It pays _boxWwxrpStake(rollAmount) via wwxrp.mintPrize; the payout is
       // observable off-chain through the WWXRP ERC-20 `Transfer` event the mint
       // emits (no dedicated lootbox-WWXRP event).
       expect(
-        body.includes("wwxrp.mintPrize(player, LOOTBOX_WWXRP_CONSOLATION)"),
-        "consolation must mint LOOTBOX_WWXRP_CONSOLATION"
+        body.includes("wwxrp.mintPrize(player, _boxWwxrpStake(rollAmount))"),
+        "consolation must mint _boxWwxrpStake(rollAmount)"
       ).to.equal(true);
       // No dedicated LootBoxWwxrpReward event exists anymore — the ERC-20 Transfer
       // plus same-tx context is the correlation surface.
@@ -502,13 +502,13 @@ describe("EventSurfaceUnification — Phase 277 Wave 2 TST-EVT-UNI-01..06", func
       ).to.equal(false);
     });
 
-    it("[05c] the manual cold-bust consolation (wwxrp.mintPrize with LOOTBOX_WWXRP_CONSOLATION) appears exactly once and is inside the `if (payColdBustConsolation && whole == 0)` gate (manual-only)", function () {
+    it("[05c] the manual cold-bust consolation (wwxrp.mintPrize with _boxWwxrpStake) appears exactly once and is inside the `if (payColdBustConsolation && whole == 0)` gate (manual-only)", function () {
       const src = fs.readFileSync(LOOTBOX_SOURCE_PATH, "utf8");
       // Module-wide single-site.
       expect(
-        (src.match(/wwxrp\.mintPrize\(player, LOOTBOX_WWXRP_CONSOLATION\)/g) || [])
+        (src.match(/wwxrp\.mintPrize\(player, _boxWwxrpStake\(rollAmount\)\)/g) || [])
           .length,
-        "the LOOTBOX_WWXRP_CONSOLATION mint must be single-site"
+        "the cold-bust WWXRP mint must be single-site"
       ).to.equal(1);
       // The dedicated LootBoxWwxrpReward event is removed — the WWXRP ERC-20
       // Transfer the mint emits is the correlation surface.

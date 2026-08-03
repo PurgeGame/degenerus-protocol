@@ -9,7 +9,7 @@ pragma solidity 0.8.34;
 ///             (exact under an ideal uniform mod-100 draw; the uint32 % 100 bias is ~2e-8)
 ///           - Boundary cases at scaledPre ∈ {0, 1, 99, 100, 101, 199, 200}
 ///           - bits[224..255] bit-slice independence from other primary-chunk consumers
-///           - Magnitude equivalence: `LOOTBOX_WWXRP_CONSOLATION == LOOTBOX_WWXRP_PRIZE`
+///           - `_boxWwxrpStake` scaling and its one-whole-token floor
 /// @dev    The arithmetic mirrored here is the EXACT instruction sequence that ships
 ///         in `DegenerusGameLootboxModule._settleLootboxRoll`. The test suite asserts
 ///         byte-identical reproduction by grepping the production source for the
@@ -23,7 +23,19 @@ contract LootboxBernoulliTester {
 
     /// @notice Magnitudes from `DegenerusGameLootboxModule.sol`.
     uint256 public constant LOOTBOX_WWXRP_PRIZE = 1 ether;
-    uint256 public constant LOOTBOX_WWXRP_CONSOLATION = 1 ether;
+    uint256 public constant LOOTBOX_WWXRP_PER_ETH = 500;
+
+    /// @notice Mirror of `DegenerusGameLootboxModule._boxWwxrpStake` — the WWXRP magnitude
+    ///         a roll both stakes on its spin and pays as its cold-bust consolation.
+    /// @dev    Instruction-sequence parity with the production helper:
+    ///           stake = amount * LOOTBOX_WWXRP_PER_ETH;
+    ///           if (stake < LOOTBOX_WWXRP_PRIZE) stake = LOOTBOX_WWXRP_PRIZE;
+    /// @param amount The roll's ETH chunk in wei.
+    /// @return stake WWXRP staked/paid for that roll, floored at one whole token.
+    function boxWwxrpStake(uint256 amount) external pure returns (uint256 stake) {
+        stake = amount * LOOTBOX_WWXRP_PER_ETH;
+        if (stake < LOOTBOX_WWXRP_PRIZE) stake = LOOTBOX_WWXRP_PRIZE;
+    }
 
     /// @notice Bernoulli whole-ticket collapse on bits[224..255] of `seed`.
     /// @dev Instruction-sequence parity with the Bernoulli-collapse sub-step of the manual
@@ -69,11 +81,11 @@ contract LootboxBernoulliTester {
     /// @notice Mirror of the ticket-path cold-bust consolation gate in
     ///         `DegenerusGameLootboxModule._settleLootboxRoll`: runs the Bernoulli
     ///         collapse, then applies the `payColdBustConsolation && whole == 0` gate
-    ///         that decides whether the `LOOTBOX_WWXRP_CONSOLATION` payout fires.
+    ///         that decides whether the WWXRP cold-bust payout fires.
     /// @dev    Instruction-sequence parity with the production gate:
     ///           _queueEntries(player, rollLevel, whole, false);
     ///           if (payColdBustConsolation && whole == 0) {
-    ///               wwxrp.mintPrize(player, LOOTBOX_WWXRP_CONSOLATION);
+    ///               wwxrp.mintPrize(player, _boxWwxrpStake(rollAmount));
     ///           }
     ///         The manual callers and `resolveAfkingBox` pass `payColdBustConsolation = true`;
     ///         the other auto-resolve callers (`resolveLootboxDirect`,

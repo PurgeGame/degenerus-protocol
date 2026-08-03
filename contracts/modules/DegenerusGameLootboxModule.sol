@@ -288,14 +288,12 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     uint16 private constant LOOTBOX_DGNRS_POOL_LARGE_PPM = 800;
     /// @dev 0.8% of DGNRS pool per ETH for mega tier
     uint16 private constant LOOTBOX_DGNRS_POOL_MEGA_PPM = 8000;
-    /// @dev Fixed WWXRP prize amount (1 token); staked as the bet for the WWXRP spin roll.
+    /// @dev One whole WWXRP token: the presale box's flat 10%-path award, and the floor
+    ///      under every size-scaled box WWXRP amount (see `_boxWwxrpStake`).
     uint256 private constant LOOTBOX_WWXRP_PRIZE = 1 ether;
-    /// @dev Cold-bust consolation magnitude (1 token). Paid on a manual lootbox open
-    ///      whose ticket-path produced non-zero scaled tickets but the Bernoulli
-    ///      round-up failed to award a whole ticket. Magnitude-equal to
-    ///      LOOTBOX_WWXRP_PRIZE — the consolation trigger is much rarer than the
-    ///      10%-path WWXRP win, so 1:1 magnitude is intentional.
-    uint256 private constant LOOTBOX_WWXRP_CONSOLATION = 1 ether;
+    /// @dev WWXRP per ETH of roll value — 5 tokens per 0.01 ETH. Since WWXRP carries 18
+    ///      decimals like wei, the conversion is a bare multiply on the wei amount.
+    uint256 private constant LOOTBOX_WWXRP_PER_ETH = 500;
     /// @dev Domain-separation tags mixed (via hash2) into the box seed to derive each
     ///      Degenerette-spin sub-seed. Counter-tagged off the primary chunk, so the spins
     ///      consume no primary-chunk bits and never collide with the box's own draws.
@@ -1352,8 +1350,8 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     ///      target level (seed2 bits[0..39], unused by chunk 1's reward draw).
     ///      The Degenerette-spin rolls (WWXRP / FLIP-spins / ETH-spin) derive their sub-seeds
     ///      via hash2(seed, BOX_*_SPIN_TAG) — fresh tagged chunks that consume no primary bits.
-    /// @param payColdBustConsolation Whether a ticket-path cold-bust (`whole == 0`) pays
-    ///        the `LOOTBOX_WWXRP_CONSOLATION`; `true` for the manual caller `_openLootBoxLeg`
+    /// @param payColdBustConsolation Whether a ticket-path cold-bust (`whole == 0`) pays the
+    ///        roll's `_boxWwxrpStake` in WWXRP; `true` for the manual caller `_openLootBoxLeg`
     ///        and `resolveAfkingBox`, `false` for the auto-resolve callers (`resolveLootboxDirect`,
     ///        `resolveRedemptionLootbox`), which stay silent on cold-bust
     /// @param distressEth Portion of lootbox ETH bought during distress mode (pre-EV-scaling basis)
@@ -1491,7 +1489,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
             // pay the WWXRP cold-bust consolation here; the other auto-resolve callers stay silent.
             _queueEntries(player, rollLevel, wholeTicketsToEntries(whole), false);
             if (payColdBustConsolation && whole == 0) {
-                wwxrp.mintPrize(player, LOOTBOX_WWXRP_CONSOLATION);
+                wwxrp.mintPrize(player, _boxWwxrpStake(rollAmount));
             }
         }
 
@@ -2140,10 +2138,10 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
                 }
             }
         } else if (roll < 14) {
-            // 15% chance: one WWXRP Degenerette spin staking the standard WWXRP prize.
+            // 15% chance: one WWXRP Degenerette spin staking the roll's size-scaled WWXRP.
             _callWwxrpSpin(
                 player,
-                LOOTBOX_WWXRP_PRIZE,
+                _boxWwxrpStake(amount),
                 activityScore,
                 EntropyLib.hash2(seed, BOX_WWXRP_SPIN_TAG)
             );
@@ -2233,6 +2231,16 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         return
             (flipBudget * PRICE_COIN_UNIT) /
             PriceLookupLib.priceForLevel(currentLevel);
+    }
+
+    /// @dev The WWXRP magnitude a roll works with: `LOOTBOX_WWXRP_PER_ETH` scaled off the
+    ///      roll's own ETH chunk — the same basis the ticket, FLIP and DGNRS legs use, so a
+    ///      split box's two halves stay EV-equal to the unsplit box they replace. Floored at
+    ///      one whole token so the smallest box still clears `MIN_BET_WWXRP`, which is what
+    ///      keeps its spin eligible for the S=9 whale-halfpass award.
+    function _boxWwxrpStake(uint256 amount) private pure returns (uint256 stake) {
+        stake = amount * LOOTBOX_WWXRP_PER_ETH;
+        if (stake < LOOTBOX_WWXRP_PRIZE) stake = LOOTBOX_WWXRP_PRIZE;
     }
 
     /// @dev Delegatecall the Degenerette module's WWXRP box-spin resolver (Game storage context).

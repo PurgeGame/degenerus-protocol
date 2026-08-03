@@ -809,11 +809,11 @@ describe("LootboxWholeTicket — Phase 274 Wave 2 TST-WT-01..07", function () {
       ).to.not.be.null;
     });
 
-    it("[07c] the manual cold-bust consolation pays LOOTBOX_WWXRP_CONSOLATION via `wwxrp.mintPrize` under the `payColdBustConsolation && whole == 0` gate", function () {
+    it("[07c] the manual cold-bust consolation pays `_boxWwxrpStake(rollAmount)` via `wwxrp.mintPrize` under the `payColdBustConsolation && whole == 0` gate", function () {
       const source = fs.readFileSync(MODULE_SOURCE_PATH, "utf8");
       const gateIdx = source.indexOf("if (payColdBustConsolation && whole == 0)");
       const consolationMint = source.indexOf(
-        "wwxrp.mintPrize(player, LOOTBOX_WWXRP_CONSOLATION)"
+        "wwxrp.mintPrize(player, _boxWwxrpStake(rollAmount))"
       );
       expect(gateIdx, "`payColdBustConsolation && whole == 0` gate not found").to.be.greaterThan(
         -1
@@ -833,15 +833,15 @@ describe("LootboxWholeTicket — Phase 274 Wave 2 TST-WT-01..07", function () {
     it("[07d] the consolation `wwxrp.mintPrize` call is the single payout site inside the `payColdBustConsolation` gate", function () {
       const source = fs.readFileSync(MODULE_SOURCE_PATH, "utf8");
       const mintPrizeCount = (source.match(
-        /wwxrp\.mintPrize\(player, LOOTBOX_WWXRP_CONSOLATION\)/g
+        /wwxrp\.mintPrize\(player, _boxWwxrpStake\(rollAmount\)\)/g
       ) || []).length;
       expect(
         mintPrizeCount,
-        "the LOOTBOX_WWXRP_CONSOLATION mint must be single-site"
+        "the cold-bust WWXRP mint must be single-site"
       ).to.equal(1);
       const gateIdx = source.indexOf("if (payColdBustConsolation && whole == 0)");
       const mintPrizeIdx = source.indexOf(
-        "wwxrp.mintPrize(player, LOOTBOX_WWXRP_CONSOLATION)"
+        "wwxrp.mintPrize(player, _boxWwxrpStake(rollAmount))"
       );
       expect(gateIdx).to.be.greaterThan(-1);
       expect(mintPrizeIdx).to.be.greaterThan(gateIdx);

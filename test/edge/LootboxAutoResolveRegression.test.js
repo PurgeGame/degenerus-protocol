@@ -340,12 +340,12 @@ describe("LootboxAutoResolveRegression — Phase 274 Wave 2 TST-REG-01..04", fun
 
     it("[03f] the cold-bust WWXRP consolation is single-site and sits under the `payColdBustConsolation` gate (manual-only)", function () {
       const source = fs.readFileSync(MODULE_SOURCE_PATH, "utf8");
-      // The `wwxrp.mintPrize(..., LOOTBOX_WWXRP_CONSOLATION)` call is single-site,
+      // The `wwxrp.mintPrize(..., _boxWwxrpStake(rollAmount))` call is single-site,
       // inside the `payColdBustConsolation && whole == 0` block. The payout is
       // observable off-chain via the WWXRP ERC-20 `Transfer` event the mint
       // emits — there is no dedicated lootbox-WWXRP event.
       const mintCount = (source.match(
-        /wwxrp\.mintPrize\(player, LOOTBOX_WWXRP_CONSOLATION\)/g
+        /wwxrp\.mintPrize\(player, _boxWwxrpStake\(rollAmount\)\)/g
       ) || []).length;
       expect(mintCount).to.equal(1);
       expect(
@@ -356,7 +356,7 @@ describe("LootboxAutoResolveRegression — Phase 274 Wave 2 TST-REG-01..04", fun
       // `payColdBustConsolation && whole == 0` gate that opens its block.
       const gateIdx = source.indexOf("if (payColdBustConsolation && whole == 0)");
       const mintIdx = source.indexOf(
-        "wwxrp.mintPrize(player, LOOTBOX_WWXRP_CONSOLATION)"
+        "wwxrp.mintPrize(player, _boxWwxrpStake(rollAmount))"
       );
       expect(gateIdx, "`payColdBustConsolation && whole == 0` gate not found").to.be.greaterThan(
         -1
