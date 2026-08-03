@@ -175,7 +175,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
       |  [104-127] unitsLevel      - Level index for unitsAtLevel tracking   |
       |  [128-151] frozenUntilLevel - Whale pass freeze level (0 = none)     |
       |  [152-153] whalePassType  - Pass type (0=none,1=10,3=100)            |
-      |  [154]    seatClaimed      - AFKing seat eligibility latch (1b)      |
+      |  [154]    seatClaimed      - AFKing seat mint latch (1b)            |
       |  [155-159] (reserved)       - 5 unused bits                          |
       |  [160-183] mintStreakLast  - Mint streak last completed level (24b)  |
       |  [184]    hasDeityPass     - Deity pass holder flag (1b)             |

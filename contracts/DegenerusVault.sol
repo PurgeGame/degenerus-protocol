@@ -122,13 +122,22 @@ interface IWWXRPMint {
 ///         and vault-held seats (the construction seat plus eviction-forfeit
 ///         repossessions sent in by reclaimSeat).
 interface IAFKingSubscriptionToken {
-    /// @notice Grant seat claim rights from the vault's allowance; the
-    ///         grantee mints via claimSeat with their own traits.
-    function vaultGrant(address to, uint256 amount) external;
+    /// @notice Mint seats from the vault's allowance straight to a recipient
+    ///         (default art; the recipient may restyle it afterwards).
+    function vaultMintSeats(address to, uint256 amount) external;
 
     /// @notice ERC721 transfer of a vault-held seat (the vault is the owner,
     ///         so the direct-owner authorization path applies).
     function transferFrom(address from, address to, uint256 tokenId) external;
+
+    /// @notice Restyle a vault-held seat's cosmetic art (owner-authorized on
+    ///         the token side, which is the vault itself for these serials).
+    function setSeatTraits(
+        uint256 tokenId,
+        uint8 symbolId,
+        uint24 bgRgb,
+        uint24 trimRgb
+    ) external;
 }
 
 /*
@@ -750,17 +759,17 @@ contract DegenerusVault {
         wwxrpToken.vaultMintTo(to, amount);
     }
 
-    /// @notice Grant AFKing seat claim rights from the vault's 998-seat mint
-    ///         allowance (the sale tranche is never pre-minted — grantees
-    ///         mint via the token's claimSeat with their own traits)
-    /// @dev The token enforces the sale lock (grants revert until all 1,000
-    ///      free-tranche seats are claimed) and the 998-grant lifetime cap.
-    /// @param to Grantee address
-    /// @param amount Seat claim rights to grant
+    /// @notice Mint AFKing seats from the vault's 998-seat tranche straight to a
+    ///         recipient. Seats carry deterministic default art the recipient can restyle,
+    ///         so no claim step stands between the sale and the seat.
+    /// @dev The token enforces the sale lock (mints revert until all 1,000 free-tranche
+    ///      seats are gone) and the 998 lifetime cap.
+    /// @param to Seat recipient
+    /// @param amount Seats to mint
     /// @custom:reverts NotVaultOwner If caller does not hold >50.1% of DGVE
-    function afkingGrant(address to, uint256 amount) external onlyVaultOwner {
+    function afkingSeatMint(address to, uint256 amount) external onlyVaultOwner {
         if (amount == 0) return;
-        afkingSubToken.vaultGrant(to, amount);
+        afkingSubToken.vaultMintSeats(to, amount);
     }
 
     /// @notice Transfer a vault-held AFKing seat out — the disposal path for
@@ -776,6 +785,30 @@ contract DegenerusVault {
     /// @custom:reverts NotVaultOwner If caller does not hold >50.1% of DGVE
     function afkingSeatTransfer(uint256 tokenId, address to) external onlyVaultOwner {
         afkingSubToken.transferFrom(address(this), to, tokenId);
+    }
+
+    /// @notice Restyle a vault-held AFKing seat — the construction seat (serial 2) and any
+    ///         eviction-forfeit repossession — or the SDGNRS construction seat (serial 1),
+    ///         which the token authorizes the vault to restyle because SDGNRS has no admin
+    ///         surface of its own and its art would otherwise be frozen forever. Seat art is
+    ///         cosmetic and mutable by design, and the token authorizes restyles by direct
+    ///         ownership, so a contract holder needs this passthrough to reach it at all.
+    /// @dev Cosmetic only: touches no seat tenure, subscription, or transfer state, and
+    ///      carries no value path — restyling the SDGNRS seat confers no authority over it
+    ///      (SDGNRS still owns it, and it has no ERC721-out path). Reverts token-side if the
+    ///      vault owns neither the seat nor the SDGNRS-steward right to it.
+    /// @param tokenId Vault-held seat serial to restyle
+    /// @param symbolId Icon index (0-31)
+    /// @param bgRgb 24-bit card background
+    /// @param trimRgb 24-bit card trim
+    /// @custom:reverts NotVaultOwner If caller does not hold >50.1% of DGVE
+    function afkingSeatRestyle(
+        uint256 tokenId,
+        uint8 symbolId,
+        uint24 bgRgb,
+        uint24 trimRgb
+    ) external onlyVaultOwner {
+        afkingSubToken.setSeatTraits(tokenId, symbolId, bgRgb, trimRgb);
     }
 
     /// @notice Burn vault-held sDGNRS to claim proportional backing assets

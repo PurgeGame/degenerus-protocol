@@ -47,7 +47,7 @@ import {ActivityCurveLib} from "../libraries/ActivityCurveLib.sol";
  * Bits 104-127: unitsLevel         - Level index for levelUnits tracking
  * Bits 128-151: frozenUntilLevel   - Whale pass: freeze stats until this level (0 = not frozen)
  * Bits 152-153: whalePassType    - Active pass type (0=none, 1=lazy/10-lvl, 3=whale/100-lvl) [Activity Score]
- * Bit  154:     seatClaimed        - AFKing seat-claim latch
+ * Bit  154:     seatClaimed        - AFKing seat mint latch
  * Bits 155-159: (unused)
  * Bits 160-183: mintStreakLast      - Last level credited for mint streak
  * Bit  184:     hasDeityPass        - Deity pass flag

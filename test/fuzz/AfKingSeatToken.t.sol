@@ -85,7 +85,7 @@ contract AfKingSeatToken is DeployProtocol {
         assertEq(afkingSubToken.ownerOf(2), address(vault), "serial 2 -> VAULT");
         assertEq(afkingSubToken.balanceOf(address(sdgnrs)), 1, "sdgnrs seat");
         assertEq(afkingSubToken.balanceOf(address(vault)), 1, "vault seat");
-        assertEq(afkingSubToken.vaultGranted(), 0, "no claim-rights grants at deploy");
+        assertEq(afkingSubToken.vaultGranted(), 0, "no vault-tranche seats minted at deploy");
     }
 
     function testProtocolSelfSubsActiveViaIdentityCarve() public view {
@@ -122,7 +122,7 @@ contract AfKingSeatToken is DeployProtocol {
     // Pass-acquisition eligibility latch -> claim (organic whale-module drive)
     // ──────────────────────────────────────────────────────────────────────
 
-    function testLazyPassLatchesEligibilityAndSeatClaims() public {
+    function testLazyPassMintsSeatAndArtIsRestylable() public {
         address buyer = makeAddr("lazy-buyer");
         assertFalse(_isEligible(buyer), "fresh address unlatched");
 
@@ -130,18 +130,44 @@ contract AfKingSeatToken is DeployProtocol {
         vm.prank(buyer);
         game.purchaseLazyPass{value: 0.24 ether}(buyer, bytes32(0));
         assertTrue(_isEligible(buyer), "pass purchase latches bit 154");
-        assertEq(afkingSubToken.balanceOf(buyer), 0, "latch-only: nothing minted yet");
-
-        vm.prank(buyer);
-        uint256 id = afkingSubToken.claimSeat(12, 0xff8800, 0x123abc);
-        assertEq(afkingSubToken.ownerOf(id), buyer, "claim mints the seat");
-        (uint8 s, uint24 bg, uint24 tr) = afkingSubToken.seatTraits(id);
-        assertEq(s, 12, "buyer-chosen symbol");
-        assertEq(bg, 0xff8800, "buyer-chosen background RGB");
-        assertEq(tr, 0x123abc, "buyer-chosen trim RGB");
+        // The seat ARRIVES with the pass -- no separate claim step.
+        assertEq(afkingSubToken.balanceOf(buyer), 1, "pass acquisition mints the seat");
         assertEq(afkingSubToken.freeClaims(), 1, "free-tranche accounting");
 
-        // The full credential path: latched -> claimed -> subscribed.
+        // Serials are monotonic with no burn path, so the freshest one is the buyer's.
+        uint256 id = uint256(afkingSubToken.nextSerial()) - 1;
+        assertEq(afkingSubToken.ownerOf(id), buyer, "buyer owns the minted seat");
+
+        // Default art is deterministic in (recipient, serial) -- no entropy is read.
+        uint256 seed = uint256(keccak256(abi.encode(buyer, uint16(id))));
+        (uint8 s, uint24 bg, uint24 tr) = afkingSubToken.seatTraits(id);
+        assertEq(s, uint8(seed & 31), "default symbol is seeded, not chosen");
+        assertEq(bg, uint24((seed >> 8) & 0xFFFFFF), "default background is seeded");
+        assertEq(tr, uint24((seed >> 32) & 0xFFFFFF), "default trim is seeded");
+
+        // ...and the holder restyles it whenever they like (art is mutable by design).
+        vm.prank(buyer);
+        afkingSubToken.setSeatTraits(id, 12, 0xff8800, 0x123abc);
+        (s, bg, tr) = afkingSubToken.seatTraits(id);
+        assertEq(s, 12, "restyled symbol");
+        assertEq(bg, 0xff8800, "restyled background RGB");
+        assertEq(tr, 0x123abc, "restyled trim RGB");
+
+        // A restyle REPLACES the lane rather than ORing into it: a later low-value
+        // restyle must not leave high bits of the previous colors behind.
+        vm.prank(buyer);
+        afkingSubToken.setSeatTraits(id, 0, 0, 0);
+        (s, bg, tr) = afkingSubToken.seatTraits(id);
+        assertEq(s, 0, "restyle clears symbol");
+        assertEq(bg, 0, "restyle clears background, no OR residue");
+        assertEq(tr, 0, "restyle clears trim, no OR residue");
+
+        // Only the owner may restyle.
+        vm.prank(makeAddr("not-the-owner"));
+        vm.expectRevert(AFKingSubscriptionToken.NotAuthorized.selector);
+        afkingSubToken.setSeatTraits(id, 1, 1, 1);
+
+        // The full credential path: pass -> seat -> subscribed.
         _fundPool(buyer, 1 ether);
         vm.prank(buyer);
         game.subscribe(address(0), false, false, 1, address(0));
@@ -154,45 +180,71 @@ contract AfKingSeatToken is DeployProtocol {
         vm.prank(buyer);
         game.purchaseWhalePass{value: 2.4 ether}(buyer, 1, bytes32(0));
         assertTrue(_isEligible(buyer), "whale purchase latches too");
+        assertEq(afkingSubToken.balanceOf(buyer), 1, "whale purchase mints the seat");
 
-        vm.prank(buyer);
-        afkingSubToken.claimSeat(0, 0, 0);
-
-        // A second pass acquisition (deity — a different trigger site)
-        // re-runs the already-set latch but can never re-open the free
-        // claim: one per address, lifetime, across all four triggers.
+        // A second pass acquisition (deity — a different trigger site) re-runs the
+        // already-set latch but can never mint a second free seat: one per address,
+        // lifetime, across all four triggers. The repeat path pays only the bit test.
         vm.deal(buyer, 24 ether);
         vm.prank(buyer);
         game.purchaseDeityPass{value: 24 ether}(buyer, 5);
-        vm.prank(buyer);
-        vm.expectRevert(AFKingSubscriptionToken.NotEligible.selector);
-        afkingSubToken.claimSeat(1, 1, 1);
         assertEq(afkingSubToken.balanceOf(buyer), 1, "still exactly one seat");
-    }
-
-    function testUnlatchedClaimReverts() public {
-        address nobody = makeAddr("no-pass");
-        vm.prank(nobody);
-        vm.expectRevert(AFKingSubscriptionToken.NotEligible.selector);
-        afkingSubToken.claimSeat(0, 0, 0);
+        // The deity purchase also latches the buyer's AFFILIATE, which defaults to the
+        // VAULT when unreferred — so the vault takes its own one-per-address seat here.
+        // That is one seat for the vault's lifetime, not one per purchase: the latch is
+        // idempotent per address, so only this first unreferred deity purchase mints it.
+        assertEq(
+            afkingSubToken.balanceOf(ContractAddresses.VAULT),
+            2,
+            "vault holds its construction seat plus its one default-affiliate seat"
+        );
+        assertEq(afkingSubToken.freeClaims(), 2, "buyer + vault, one tranche slot each");
     }
 
     // ──────────────────────────────────────────────────────────────────────
     // Vault grant surface
     // ──────────────────────────────────────────────────────────────────────
 
-    function testVaultGrantLockedUntilFreeTrancheFills() public {
-        // Token-side: only the vault may grant, and grants stay locked while
-        // the free tranche is open (0 of 1,000 claimed here).
+    function testVaultMintLockedUntilFreeTrancheFills() public {
+        // Token-side: only the vault may mint from its tranche, and that stays locked
+        // while the free tranche is open (0 of 1,000 minted here), so paid seats can
+        // never crowd out free ones.
         vm.prank(address(vault));
         vm.expectRevert(AFKingSubscriptionToken.FreeTrancheOpen.selector);
-        afkingSubToken.vaultGrant(makeAddr("grantee"), 1);
+        afkingSubToken.vaultMintSeats(makeAddr("grantee"), 1);
     }
 
-    function testVaultAfkingGrantIsOwnerGated() public {
+    function testVaultSeatMintIsOwnerGated() public {
         vm.prank(makeAddr("rando"));
         vm.expectRevert(NotVaultOwner.selector);
-        vault.afkingGrant(makeAddr("grantee"), 1);
+        vault.afkingSeatMint(makeAddr("grantee"), 1);
+    }
+
+    function testVaultSeatRestyleIsOwnerGated() public {
+        vm.prank(makeAddr("rando"));
+        vm.expectRevert(NotVaultOwner.selector);
+        vault.afkingSeatRestyle(2, 1, 1, 1);
+    }
+
+    /// @dev The vault restyles its own construction seat (serial 2) AND the SDGNRS
+    ///      construction seat (serial 1), which the token authorizes it to steward
+    ///      because SDGNRS has no admin surface of its own.
+    function testVaultRestylesOwnAndSdgnrsConstructionSeats() public {
+        address owner_ = ContractAddresses.CREATOR;
+        vm.prank(owner_);
+        vault.afkingSeatRestyle(2, 9, 0xabcdef, 0x123456);
+        (uint8 s2, uint24 bg2, uint24 tr2) = afkingSubToken.seatTraits(2);
+        assertEq(s2, 9, "vault seat restyled");
+        assertEq(bg2, 0xabcdef);
+        assertEq(tr2, 0x123456);
+
+        vm.prank(owner_);
+        vault.afkingSeatRestyle(1, 4, 0x0f0f0f, 0xf0f0f0);
+        (uint8 s1, uint24 bg1, uint24 tr1) = afkingSubToken.seatTraits(1);
+        assertEq(s1, 4, "sdgnrs seat restyled by its vault steward");
+        assertEq(bg1, 0x0f0f0f);
+        assertEq(tr1, 0xf0f0f0);
+        assertEq(afkingSubToken.ownerOf(1), address(sdgnrs), "ownership unchanged by a restyle");
     }
 
     // ──────────────────────────────────────────────────────────────────────
@@ -384,9 +436,11 @@ contract AfKingSeatToken is DeployProtocol {
 
     function testTokenURIRendersAgainstRealIcons() public {
         address buyer = makeAddr("art-buyer");
-        _markSeatEligible(buyer);
+        vm.prank(ContractAddresses.GAME);
+        afkingSubToken.mintSeatFor(buyer);
+        uint256 id = uint256(afkingSubToken.nextSerial()) - 1;
         vm.prank(buyer);
-        uint256 id = afkingSubToken.claimSeat(7, 0x1e1e2e, 0xffd700);
+        afkingSubToken.setSeatTraits(id, 7, 0x1e1e2e, 0xffd700);
 
         string memory uri = afkingSubToken.tokenURI(id);
         bytes memory b = bytes(uri);

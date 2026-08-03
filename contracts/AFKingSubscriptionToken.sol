@@ -6,22 +6,24 @@ pragma solidity 0.8.34;
  * @author Burnie Degenerus
  * @notice The afking seat license: holding at least 1 seat is the sole
  *         credential for an afking-mode subscription on the game. A
- *         2,000-serial ERC721 collection with fully on-chain SVG art —
- *         each claimer picks their seat's symbol (0-31) plus ANY 24-bit
- *         RGB background and trim color, cosmetic only (the game reads
- *         nothing but balanceOf).
+ *         2,000-serial ERC721 collection with fully on-chain SVG art. A seat
+ *         is MINTED to its holder (no claim step): pass acquisition mints one
+ *         game-side, and the vault mints from its own tranche. Art starts at a
+ *         deterministic default and every holder may restyle it — symbol (0-31)
+ *         plus ANY 24-bit RGB background and trim — cosmetic only (the game
+ *         reads nothing but balanceOf).
  *
  * @dev SEAT MODEL (sub <=> seat):
  *      - Fixed 2,000 serials, minted only through three bounded tranches:
  *        2 permanent construction seats — serial 1 to SDGNRS, serial 2 to
  *        the VAULT (default colors; neither has an ERC721-out path, so both
  *        protocol self-subscribers hold their seats forever) — a 1,000-seat
- *        FREE tranche claimed by pass buyers (the game latches lifetime
- *        eligibility on pass acquisition; first 1,000 claims win), and a
- *        998-seat VAULT tranche: the vault holds a mint ALLOWANCE (never
- *        further pre-minted tokens) and grants claim rights via its
- *        owner-gated afkingGrant — locked until the free tranche's 1,000
- *        are fully claimed, so paid seats can never crowd out free ones.
+ *        FREE tranche minted to pass buyers as they acquire (one per address
+ *        for life, enforced by the game's SEAT_CLAIMED latch; past 1,000 a
+ *        pass simply confers no seat), and a 998-seat VAULT tranche the vault
+ *        mints directly to any recipient via its owner-gated afkingSeatMint —
+ *        locked until the free tranche's 1,000 are gone, so paid seats can
+ *        never crowd out free ones.
  *        2 + 1,000 + 998 = 2,000: the tranche accounting IS the supply cap
  *        (MAX_SERIAL is a fail-loud backstop).
  *      - The game gates subscribe on balanceOf >= 1. Ownership is checked
@@ -87,10 +89,10 @@ interface IIcons32 {
 
 /// @dev Game surface consumed by this token: subInfo backs the seat lock
 ///      (only `active` — the first return — is read: true while the holder
-///      has a live afking subscription); mintPackedFor backs the free-claim
-///      eligibility check (the SEAT_CLAIMED bit is the lifetime latch the
-///      whale module sets on every pass acquisition) AND the seat lock /
-///      forfeit checks (the SEAT_ENCUMBERED bit); clearSeatEncumbrance is
+///      has a live afking subscription); mintPackedFor backs the seat lock /
+///      forfeit checks (the SEAT_ENCUMBERED bit) — the game keeps its own
+///      SEAT_CLAIMED latch as the once-per-address mint gate, and this token
+///      no longer reads it; clearSeatEncumbrance is
 ///      the one mutator — AFKING_SUB_TOKEN-only game-side, called by
 ///      reclaimSeat after seizing a forfeited seat.
 interface ISeatGameViews {
@@ -171,19 +173,18 @@ contract AFKingSubscriptionToken {
     ///         state (SEAT_ENCUMBERED set with no active sub)
     error NotEvicted();
 
-    /// @notice Caller has no seat to claim: not latched eligible game-side,
-    ///         free tranche exhausted or already used, and no vault grant
-    error NotEligible();
-
-    /// @notice Vault grants are locked until all 1,000 free-tranche seats
-    ///         are claimed
+    /// @notice Vault-tranche mints are locked until all 1,000 free-tranche
+    ///         seats are minted
     error FreeTrancheOpen();
 
-    /// @notice Grant would exceed the vault's 998-seat allowance
+    /// @notice Mint would exceed the vault's 998-seat tranche
     error GrantExceedsTranche();
 
-    /// @notice Thrown when a claim-rights grant is not from the vault
+    /// @notice Thrown when a vault-tranche mint is not from the vault
     error OnlyVault();
+
+    /// @notice Caller is not the GAME contract
+    error OnlyGame();
 
     /// @notice Safe transfer to a contract that did not accept the token
     error UnsafeRecipient();
@@ -204,33 +205,44 @@ contract AFKingSubscriptionToken {
 
     /// @notice ERC721 operator approval
     event ApprovalForAll(address indexed owner, address indexed operator, bool approved);
-
-    /// @notice A seat was claimed with its buyer-chosen traits
-    /// @param owner Claimer (and initial owner) of the seat
-    /// @param tokenId Serial minted (1-2000)
-    /// @param symbolId Chosen icon (0-31)
-    /// @param bgRgb Chosen 24-bit background color
-    /// @param trimRgb Chosen 24-bit trim color
-    /// @param freeTranche True for a free-tranche claim, false for a vault-granted claim
-    event SeatClaimed(
-        address indexed owner,
+    /// @notice Emitted when a seat is minted — on pass acquisition (game-driven) or
+    ///         from the vault's 998-seat tranche. Art is the deterministic default and
+    ///         is restylable at any time via setSeatTraits.
+    /// @param to Seat recipient
+    /// @param tokenId Serial minted
+    /// @param symbolId Default icon index
+    /// @param bgRgb Default background
+    /// @param trimRgb Default trim
+    event SeatMinted(
+        address indexed to,
         uint256 indexed tokenId,
         uint8 symbolId,
         uint24 bgRgb,
-        uint24 trimRgb,
-        bool freeTranche
+        uint24 trimRgb
     );
 
-    /// @notice The vault granted seat claim rights from its 998-seat allowance
-    /// @param to Grantee who may now claimSeat
-    /// @param amount Claim rights granted
-    /// @param granted Lifetime total granted after this call (<= 998)
-    event VaultSeatsGranted(address indexed to, uint256 amount, uint256 granted);
+    /// @notice The vault minted seats from its 998-seat tranche
+    /// @param to Seat recipient
+    /// @param amount Seats minted in this call
+    /// @param minted Lifetime total minted from the tranche after this call (<= 998)
+    event VaultSeatsMinted(address indexed to, uint256 amount, uint256 minted);
 
     /// @notice An evicted holder's forfeited seat was reclaimed to the vault
     /// @param holder Evicted holder the seat was seized from
     /// @param tokenId Serial force-transferred to the VAULT
     event SeatReclaimed(address indexed holder, uint256 indexed tokenId);
+
+    /// @notice Emitted when a seat owner restyles their card art.
+    /// @param tokenId Seat serial restyled
+    /// @param symbolId New icon index (0-31)
+    /// @param bgRgb New 24-bit background
+    /// @param trimRgb New 24-bit trim
+    event SeatRestyled(
+        uint256 indexed tokenId,
+        uint8 symbolId,
+        uint24 bgRgb,
+        uint24 trimRgb
+    );
 
     /// @notice External renderer changed
     event RendererUpdated(address indexed previousRenderer, address indexed newRenderer);
@@ -269,8 +281,8 @@ contract AFKingSubscriptionToken {
       |                          WIRED CONTRACTS                             |
       +======================================================================+*/
 
-    /// @dev Game contract: seat-lock subInfo view + free-claim eligibility
-    ///      latch (mintPackedFor)
+    /// @dev Game contract: seat-lock subInfo view + the SEAT_ENCUMBERED
+    ///      forfeit latch (mintPackedFor)
     ISeatGameViews private constant game =
         ISeatGameViews(ContractAddresses.GAME);
 
@@ -292,24 +304,16 @@ contract AFKingSubscriptionToken {
     ///      (trimRgb << 29) | (bgRgb << 5) | symbolId (53 bits used).
     mapping(uint256 => uint256) private _traitWords;
 
-    /// @notice True once an address has used its one-per-address-lifetime
-    ///         free-tranche claim (the game-side eligibility latch stays set
-    ///         forever; this is the claimed half of eligible-not-yet-claimed)
-    mapping(address => bool) public seatClaimed;
-
-    /// @notice Outstanding vault-granted claim rights per address
-    mapping(address => uint256) public vaultGrants;
-
     /// @notice Optional external renderer (address(0) = internal only)
     address public renderer;
 
     /// @notice Next serial to mint (serials are 1-2000; monotonic, no burn)
     uint16 public nextSerial;
 
-    /// @notice Free-tranche seats claimed so far (of FREE_TRANCHE)
+    /// @notice Free-tranche seats minted so far (of FREE_TRANCHE)
     uint16 public freeClaims;
 
-    /// @notice Vault claim rights granted lifetime (of VAULT_TRANCHE)
+    /// @notice Vault-tranche seats minted lifetime (of VAULT_TRANCHE)
     uint16 public vaultGranted;
 
     modifier onlyOwner() {
@@ -319,10 +323,12 @@ contract AFKingSubscriptionToken {
 
     constructor() {
         // The protocol self-subscribers' permanent seats: serial 1 to SDGNRS,
-        // serial 2 to the VAULT (default colors). Neither has an ERC721-out
-        // path — the vault sells claim RIGHTS (vaultGrant), never tokens — so
-        // both hold real seats forever and the game's coin gate and the seat
-        // lock need no protocol special cases.
+        // serial 2 to the VAULT (default colors). Neither leaves: SDGNRS has no
+        // transfer surface, and the seat lock binds a last seat held by an active
+        // subscriber, which both perpetually are (the vault's 998-seat tranche
+        // mints fresh serials to others, so selling never touches this one). Both
+        // hold real seats forever and the game's coin gate and the seat lock need
+        // no protocol special cases.
         nextSerial = 1;
         _mintSeat(ContractAddresses.SDGNRS, 0, DEFAULT_BG, DEFAULT_TRIM);
         _mintSeat(ContractAddresses.VAULT, 0, DEFAULT_BG, DEFAULT_TRIM);
@@ -356,73 +362,115 @@ contract AFKingSubscriptionToken {
       |                            CLAIM FLOW                                |
       +======================================================================+*/
 
-    /// @notice Claim a seat with chosen traits. Free tranche first: an
-    ///         address the game latched eligible (any pass acquisition —
-    ///         whale/lazy/deity purchase, whale-pass claim, or a deity
-    ///         purchase's conferred affiliate pass; one latch per
-    ///         address, lifetime) claims free while fewer than 1,000 free
-    ///         seats are out and its own free claim is unused. Otherwise a
-    ///         vault-granted claim right is consumed.
-    /// @param symbolId Icon for the seat's on-chain art (0-31), cosmetic only
-    /// @param bgRgb Any 24-bit RGB card background (e.g. 0xff8800), cosmetic only
-    /// @param trimRgb Any 24-bit RGB card trim (outline stroke), cosmetic only
-    /// @return tokenId Serial minted to the caller
+    /// @notice Mint a free-tranche seat directly to a pass acquirer (GAME only).
+    /// @dev Called by the game on every pass acquisition, so a seat arrives WITHOUT a
+    ///      separate claim step. Traits are seeded deterministically from (recipient,
+    ///      serial) and the holder may restyle them at any time via `setSeatTraits` — the
+    ///      art was always designed to be changeable, so nothing is lost by not choosing
+    ///      at mint. No entropy is read: the seed is cosmetic-only and never touches a VRF
+    ///      word, so this is outside the RNG-freeze surface entirely.
+    ///
+    ///      Silent no-op (never a revert) on an exhausted 1,000-seat tranche and on the
+    ///      zero address, because this rides inside a purchase and must never brick one.
+    ///      Past the tranche a pass simply confers no seat; the vault's separate 998-seat
+    ///      tranche is untouched by this path.
+    ///
+    ///      The one-per-address limit is GAME-side, not here: the caller sets its
+    ///      SEAT_CLAIMED latch before calling and mints only on the transition, so this
+    ///      function mints whatever it is handed. Neither construction-seat holder is
+    ///      excluded, so each can reach a mint once as a deity purchase's conferred
+    ///      affiliate — the VAULT when the buyer has no referrer, SDGNRS through the
+    ///      built-in DGNRS code it owns. One extra seat apiece, for their lifetimes.
+    /// @param to Pass acquirer receiving the seat
+    /// @custom:reverts OnlyGame When the caller is not the GAME contract
+    function mintSeatFor(address to) external {
+        if (msg.sender != ContractAddresses.GAME) revert OnlyGame();
+        if (to == address(0)) return;
+        uint256 free = freeClaims;
+        if (free >= FREE_TRANCHE) return;
+        unchecked {
+            freeClaims = uint16(free + 1);
+        }
+        _mintDefaultSeat(to);
+    }
+
+    /// @dev Mint one seat with deterministic default art seeded from (recipient, serial).
+    ///      Cosmetic only — no VRF word is read, so this sits outside the RNG-freeze
+    ///      surface entirely, and the holder may restyle at any time.
+    function _mintDefaultSeat(address to) private returns (uint256 tokenId) {
+        uint256 seed = uint256(keccak256(abi.encode(to, nextSerial)));
+        uint8 symbolId = uint8(seed & 31);
+        uint24 bgRgb = uint24((seed >> 8) & 0xFFFFFF);
+        uint24 trimRgb = uint24((seed >> 32) & 0xFFFFFF);
+        tokenId = _mintSeat(to, symbolId, bgRgb, trimRgb);
+        emit SeatMinted(to, tokenId, symbolId, bgRgb, trimRgb);
+    }
+
+    /// @notice Restyle a seat you own. Traits are cosmetic and freely mutable by design.
+    /// @dev Clears the serial's 64-bit trait lane before writing, so a restyle REPLACES
+    ///      rather than ORs into the previous value (the mint path can assume a zero lane;
+    ///      this one cannot).
+    ///      The VAULT may additionally restyle the SDGNRS-held construction seat (serial 1).
+    ///      SDGNRS is a protocol contract with no admin surface, so that seat's art would
+    ///      otherwise be frozen at the constructor defaults forever; the vault (owner-gated
+    ///      on its side, `afkingSeatRestyle`) is its steward. Cosmetic only — it confers no
+    ///      authority over the seat itself, which SDGNRS still owns and which has no
+    ///      ERC721-out path.
+    /// @param tokenId Seat serial to restyle
+    /// @param symbolId Icon index (0-31)
+    /// @param bgRgb 24-bit card background
+    /// @param trimRgb 24-bit card trim
+    /// @custom:reverts NotAuthorized When the caller neither owns the seat nor is the VAULT
+    ///                 restyling the SDGNRS construction seat
     /// @custom:reverts InvalidTrait When symbolId >= 32
-    /// @custom:reverts NotEligible When no free claim is available to the
-    ///                 caller and it holds no vault grant
-    function claimSeat(
+    function setSeatTraits(
+        uint256 tokenId,
         uint8 symbolId,
         uint24 bgRgb,
         uint24 trimRgb
-    ) external returns (uint256 tokenId) {
-        if (symbolId >= 32) revert InvalidTrait();
-
-        uint256 free = freeClaims;
+    ) external {
+        address holder = _owners[tokenId];
         if (
-            free < FREE_TRANCHE &&
-            !seatClaimed[msg.sender] &&
-            (game.mintPackedFor(msg.sender) >>
-                BitPackingLib.SEAT_CLAIMED_SHIFT) &
-                1 !=
-            0
-        ) {
-            seatClaimed[msg.sender] = true;
-            unchecked {
-                freeClaims = uint16(free + 1);
-            }
-            tokenId = _mintSeat(msg.sender, symbolId, bgRgb, trimRgb);
-            emit SeatClaimed(msg.sender, tokenId, symbolId, bgRgb, trimRgb, true);
-        } else {
-            uint256 grants = vaultGrants[msg.sender];
-            if (grants == 0) revert NotEligible();
-            unchecked {
-                vaultGrants[msg.sender] = grants - 1;
-            }
-            tokenId = _mintSeat(msg.sender, symbolId, bgRgb, trimRgb);
-            emit SeatClaimed(msg.sender, tokenId, symbolId, bgRgb, trimRgb, false);
-        }
+            holder != msg.sender &&
+            !(holder == ContractAddresses.SDGNRS &&
+                msg.sender == ContractAddresses.VAULT)
+        ) revert NotAuthorized();
+        if (symbolId >= 32) revert InvalidTrait();
+        uint256 shift = (tokenId & 3) << 6;
+        uint256 word = _traitWords[tokenId >> 2];
+        word &= ~(uint256(0xFFFFFFFFFFFFFFFF) << shift);
+        _traitWords[tokenId >> 2] =
+            word |
+            (((uint256(trimRgb) << 29) | (uint256(bgRgb) << 5) | symbolId) <<
+                shift);
+        emit SeatRestyled(tokenId, symbolId, bgRgb, trimRgb);
     }
 
-    /// @notice Grant seat claim rights from the vault's 998-seat allowance
-    ///         (vault only — reached through the vault's owner-gated
-    ///         afkingGrant). Grantees mint via claimSeat with their own
-    ///         traits. Locked until the free tranche's 1,000 seats are all
-    ///         claimed, so paid seats can never crowd out free ones.
-    /// @param to Grantee address
-    /// @param amount Claim rights to grant
+    /// @notice Mint seats from the vault's 998-seat tranche straight to a
+    ///         recipient (vault only — reached through the vault's owner-gated
+    ///         afkingSeatMint), each with default art the recipient may
+    ///         restyle. Locked until the free tranche's 1,000 seats are all
+    ///         out, so paid seats can never crowd out free ones.
+    /// @param to Seat recipient
+    /// @param amount Seats to mint
     /// @custom:reverts OnlyVault When caller is not the vault contract
     /// @custom:reverts ZeroAddress When to is address(0)
-    /// @custom:reverts FreeTrancheOpen While fewer than 1,000 free seats are claimed
-    /// @custom:reverts GrantExceedsTranche When lifetime grants would pass 998
-    function vaultGrant(address to, uint256 amount) external {
+    /// @custom:reverts FreeTrancheOpen While fewer than 1,000 free seats are out
+    /// @custom:reverts GrantExceedsTranche When lifetime tranche mints would pass 998
+    function vaultMintSeats(address to, uint256 amount) external {
         if (msg.sender != ContractAddresses.VAULT) revert OnlyVault();
         if (to == address(0)) revert ZeroAddress();
         if (freeClaims < FREE_TRANCHE) revert FreeTrancheOpen();
-        uint256 granted = uint256(vaultGranted) + amount;
-        if (granted > VAULT_TRANCHE) revert GrantExceedsTranche();
-        vaultGranted = uint16(granted);
-        vaultGrants[to] += amount;
-        emit VaultSeatsGranted(to, amount, granted);
+        uint256 minted = uint256(vaultGranted) + amount;
+        if (minted > VAULT_TRANCHE) revert GrantExceedsTranche();
+        vaultGranted = uint16(minted);
+        for (uint256 i; i < amount; ) {
+            _mintDefaultSeat(to);
+            unchecked {
+                ++i;
+            }
+        }
+        emit VaultSeatsMinted(to, amount, minted);
     }
 
     /// @dev Mint the next serial with packed traits. The three tranches

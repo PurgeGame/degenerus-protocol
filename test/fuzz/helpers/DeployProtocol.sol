@@ -178,16 +178,17 @@ abstract contract DeployProtocol is Test {
         parimutuel = new DegenerusParimutuel();                          // N+27 = nonce 32
     }
 
-    /// @dev Grant `player` an AFKing seat (the sole afking credential —
-    ///      subscribe reverts NoCoin without one): latch the game-side
-    ///      eligibility bit exactly as a pass acquisition would, then claim
-    ///      through the token's free tranche with default traits.
-    ///      Idempotent: skips holders (returns 0 then).
+    /// @dev Give `player` an AFKing seat (the sole afking credential — subscribe reverts
+    ///      NoCoin without one) by driving the real game-side mint: seats are pushed on
+    ///      pass acquisition, so this pranks the GAME into the token's gated mint exactly
+    ///      as `_grantSeatCoin` does, and also sets the game-side latch so the production
+    ///      path would not mint a second one. Idempotent: skips holders (returns 0 then).
     function _grantSeat(address player) internal returns (uint256 tokenId) {
         if (afkingSubToken.balanceOf(player) == 0) {
             _markSeatEligible(player);
-            vm.prank(player);
-            tokenId = afkingSubToken.claimSeat(0, 0xd9d9d9, 0x3f1a82);
+            vm.prank(ContractAddresses.GAME);
+            afkingSubToken.mintSeatFor(player);
+            tokenId = uint256(afkingSubToken.nextSerial()) - 1;
         }
     }
 

@@ -736,7 +736,6 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
             false
         );
         _applyWhalePassStats(affiliateAddr, ticketStartLevel);
-        _grantSeatCoin(affiliateAddr);
 
         // Fund distribution: pre-game 70/30, post-game 95/5 (future/next).
         // passLevel == 1 <=> level == 0: level cannot move within the purchase.
@@ -765,7 +764,13 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
         _recordLootboxEntry(buyer, lootboxAmount);
 
         emit DeityPassPurchased(buyer, symbolId, totalPrice, passLevel);
+        // The BUYER takes their seat before the conferred affiliate does. Seats are now
+        // minted here rather than claimed later, so at the free tranche's last slot this
+        // order decides who gets it — and it must not be the incidental affiliate over the
+        // address that paid for the pass. (The affiliate's own stats were applied above;
+        // only the seat leg is deferred.)
         _grantSeatCoin(buyer);
+        _grantSeatCoin(affiliateAddr);
     }
 
     // -------------------------------------------------------------------------
@@ -1049,16 +1054,21 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
         _grantSeatCoin(player);
     }
 
-    /// @dev One-per-address-LIFETIME AFKing seat eligibility latch, fired on
+    /// @dev One-per-address-LIFETIME AFKing seat latch, fired on
     ///      every pass acquisition through this module (whale/lazy/deity
     ///      purchase, the deity purchase's conferred affiliate pass, and the
-    ///      whale-pass claim). Latch-only — no external call: the AFKing Subscription Token reads the
-    ///      `mintPacked_` SEAT_CLAIMED bit through the game's mintPackedFor
-    ///      view when the buyer claims their seat (claimSeat, buyer-chosen
-    ///      traits), and the token caps free claims at 1,000 on its side.
-    ///      The bit stays set even once the free tranche is exhausted, so
-    ///      each address consumes its one chance exactly once and every
-    ///      pass acquisition after the first pays only this bit test.
+    ///      whale-pass claim). The seat ARRIVES here — `mintSeatFor` mints it with
+    ///      deterministic default art the holder can restyle at any time (setSeatTraits),
+    ///      so no separate claim step stands between a pass and its seat. The token
+    ///      silently declines once its 1,000-seat free tranche is exhausted, so this never
+    ///      brings down a purchase.
+    ///
+    ///      The `mintPacked_` bit is the ONLY once-per-address guard — the token keeps no
+    ///      twin and mints whatever it is handed. So the bit is set BEFORE the call, and
+    ///      every call site keeps this last in its function, where no later whole-word
+    ///      write to `mintPacked_[who]` can clobber it. Each address consumes its one
+    ///      chance exactly once, and every pass acquisition after the first pays only the
+    ///      bit test — no external call on the repeat path.
     function _grantSeatCoin(address who) private {
         uint256 packed = mintPacked_[who];
         if ((packed >> BitPackingLib.SEAT_CLAIMED_SHIFT) & 1 == 0) {
@@ -1066,8 +1076,16 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
                 (uint256(1) << BitPackingLib.SEAT_CLAIMED_SHIFT);
             mintPacked_[who] = seatPacked;
             emit MintRecorded(who, seatPacked);
+            IAFKingSeatMint(ContractAddresses.AFKING_SUB_TOKEN).mintSeatFor(who);
         }
     }
+}
+
+/// @dev Minimal interface for the GAME-gated AFKing seat mint.
+interface IAFKingSeatMint {
+    /// @param to Pass acquirer receiving a free-tranche seat (silent no-op once the
+    ///        1,000-seat free tranche is exhausted).
+    function mintSeatFor(address to) external;
 }
 
 /// @dev Minimal interface for minting deity pass ERC721 tokens.
