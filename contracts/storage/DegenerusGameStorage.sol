@@ -1655,8 +1655,11 @@ abstract contract DegenerusGameStorage {
     ///         curse, affiliate cache — so indexers fold absolute state per log and
     ///         never accumulate deltas or replay price math. Pass activations carry
     ///         the same word on PassActivated, and curse writes carry their absolute
-    ///         field on CurseChanged: every post-genesis mintPacked_ write emits
-    ///         absolute state on exactly one of the three.
+    ///         field on CurseChanged: between them the three cover every post-genesis
+    ///         mintPacked_ write but one — the SEAT_ENCUMBERED bit, set on subscribe
+    ///         and cleared on cancel (both beside SubscriptionUpdated) and cleared by
+    ///         clearSeatEncumbrance (beside the token's SeatReclaimed). A folder
+    ///         tracking that bit reads those; the next mint-lane log re-syncs it.
     /// @param player The player whose mintPacked_ record was written.
     /// @param packedAfter The full mintPacked_ word after the write (BitPackingLib layout).
     event MintRecorded(address indexed player, uint256 packedAfter);

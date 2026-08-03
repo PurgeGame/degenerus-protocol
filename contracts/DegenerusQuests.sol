@@ -6,6 +6,7 @@ import "./interfaces/IDegenerusGame.sol";
 import {ICoinflip} from "./interfaces/ICoinflip.sol";
 import {ContractAddresses} from "./ContractAddresses.sol";
 import {BitPackingLib} from "./libraries/BitPackingLib.sol";
+import {PriceLookupLib} from "./libraries/PriceLookupLib.sol";
 
 /**
  * @title DegenerusQuests
@@ -125,11 +126,12 @@ contract DegenerusQuests is IDegenerusQuests {
 
     /// @notice Emitted once per level-quest roll — the stored row for the quest the
     ///         entropy selected, so consumers never replay the weighted roll.
-    /// @param lvl The game level at roll time.
+    /// @param lvl The level the quest belongs to — the one being entered, matching the
+    ///        level LevelQuestCompleted reports.
     /// @param version The level-quest version the roll produced (the progress join key).
     /// @param questType The rolled quest type.
-    /// @param target The completion target at roll time (ETH-based types scale with
-    ///        mintPrice, so the live boundary check re-derives; FLIP types are fixed).
+    /// @param target The completion target (ETH-based types scale with that level's ticket
+    ///        price, the same one every progress handler enforces; FLIP types are fixed).
     event LevelQuestRolled(
         uint24 indexed lvl,
         uint8 version,
@@ -2392,17 +2394,29 @@ contract DegenerusQuests is IDegenerusQuests {
 
     /// @notice Roll the level quest for the current level.
     /// @dev Selects a quest type, bumps version to invalidate stale player progress.
+    ///      The quest belongs to the level being entered, so both the reported level and
+    ///      the ETH-scaled target read `level + 1` — the same price every progress handler
+    ///      scales its target with, so the announced target is the one enforced.
     /// @param entropy VRF-derived entropy for quest type selection.
     function rollLevelQuest(uint256 entropy) external override onlyGame {
         bool decAllowed = _canRollDecimatorQuest();
         uint8 rolled = _bonusQuestType(entropy, type(uint8).max, decAllowed);
         levelQuestType = rolled;
-        unchecked { ++levelQuestVersion; }
+        uint24 questLevel;
+        unchecked {
+            ++levelQuestVersion;
+            // advanceGame must never gain a revert; level is a uint24 the game
+            // increments once per level, so the +1 cannot reach the boundary.
+            questLevel = questGame.level() + 1;
+        }
         emit LevelQuestRolled(
-            questGame.level(),
+            questLevel,
             levelQuestVersion,
             rolled,
-            _levelQuestTargetValue(rolled, questGame.mintPrice())
+            _levelQuestTargetValue(
+                rolled,
+                PriceLookupLib.priceForLevel(questLevel)
+            )
         );
     }
 
@@ -2656,7 +2670,11 @@ contract DegenerusQuests is IDegenerusQuests {
             completed = (packed >> 136) & 1 == 1;
         }
 
-        target = _levelQuestTargetValue(questType, questGame.mintPrice());
-        eligible = _isLevelQuestEligible(player, questGame.level());
+        uint24 lvl = questGame.level();
+        target = _levelQuestTargetValue(
+            questType,
+            PriceLookupLib.priceForLevel(lvl + 1)
+        );
+        eligible = _isLevelQuestEligible(player, lvl);
     }
 }

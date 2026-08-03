@@ -4,7 +4,7 @@ Pre-disclosure for audit wardens. **If a finding's mechanism + impact is describ
 already known and is not eligible.** This is a precise perimeter — each entry names the exact
 mechanism and why it is by-design, defended, or out-of-scope. There are no vague blanket disclaimers.
 
-Frozen subject: `contracts/` tree `4e616db4` @ tag `degenerus-c4a`. Pre-scanned with Slither v0.11.5
+Frozen subject: `contracts/` tree `7d9d31c5` @ tag `degenerus-c4a`. Pre-scanned with Slither v0.11.5
 + Aderyn 0.6.8; those findings are triaged in the automated-tools section below.
 
 ---
@@ -108,9 +108,9 @@ is no victim. An admin-power finding must exhibit an **engaged-community victim*
 ## 3. Accepted out-of-scope risk: the > 120-day VRF-death deadman fallback (do NOT submit)
 
 **Mechanism.** When the game has not sealed a day for more than 120 days
-(`_vrfDeadmanFired ≡ _simulatedDayIndex() − dailyIdx > 120`, `DegenerusGameStorage.sol:1885-1887`;
+(`_vrfDeadmanFired ≡ _simulatedDayIndex() − dailyIdx > 120`, `DegenerusGameStorage.sol:1926-1928`;
 `dailyIdx` is uint24 and always `<= _simulatedDayIndex()` so no underflow), the terminal release no
-longer waits for Chainlink. `_getHistoricalRngFallback` (`DegenerusGameAdvanceModule.sol:1919-1943`)
+longer waits for Chainlink. `_getHistoricalRngFallback` (`DegenerusGameAdvanceModule.sol:1928-1952`)
 commits a fallback word from sealed historical `rngWordByDay` admixed with `block.prevrandao`; the
 `reverseFlip` nudge is cancelled-and-consumed (`unchecked fallbackWord -= totalFlipReversals`,
 `:1627`, against the consumption in `_applyDailyRng :2314-2330`).
@@ -141,51 +141,62 @@ transaction (a coin credit, not ETH-backed value). Immaterial; documented, not e
 
 ## 5. Automated tool findings (pre-disclosed)
 
-The full machine-readable Slither/Aderyn baseline is maintained internally — Slither 0.11.5 (3,143
-results / 101 detectors over 145 contracts at tree `4e616db4`; 156 High / 434 Medium / 378 Low /
-2,123 Informational / 52 Optimization, and the "High" tier is dominated by 118 `uninitialized-state`
-false positives from the shared-storage delegatecall architecture) + Aderyn 0.6.8 (9 High / 20 Low).
+The full machine-readable Slither/Aderyn baseline is maintained internally — Slither 0.11.5 (3,322
+results / 101 detectors over 148 contracts at tree `7d9d31c5`; 171 High / 442 Medium / 383 Low /
+2,274 Informational / 52 Optimization, and the "High" tier is dominated by 131 `uninitialized-state`
+false positives from the shared-storage delegatecall architecture — the deployed-module compilation
+units plus the new `DegenerusGameLens` unit, see below) + Aderyn 0.6.8 (9 High / 20 Low, unchanged).
 Slither totals are sensitive to the scan environment (solc/toolchain resolution), so the absolute
 count is not comparable across machines — re-runs should compare category triage, not the total.
-These counts were measured directly at tree `4e616db4`, not carried forward from an earlier scan,
-and the previously tagged tree was re-scanned in the same environment, so the delta below is a
-measured diff rather than a comparison against a recorded figure.
+These counts were measured directly at tree `7d9d31c5`, not carried forward from an earlier scan,
+and the previously tagged tree was re-scanned in the same environment (reproducing its recorded
+3,143 / 156 High exactly), so the delta below is a measured diff rather than a comparison against a
+recorded figure.
 
-The delta against the previously tagged tree (`39279e31`) is **+6 results, ZERO removed and ZERO
-new High**, spanning the carryover-pricing fix, the sDGNRS seed-reserve roll, the entries-owed view
-widening, the coinflip claimable-rebet deposit path, the dust-buy snap guard, the quote-checked
-nudge, the daily-FLIP-jackpot rate change and several comment corrections. Every one of the six
-lands in `Coinflip.sol`, and they split across exactly two changes:
+The delta against the previously tagged tree (`4e616db4`) is **+179 results and +15 High**, spanning
+six changes: the `extsload` observability lens, the module observability events, the foil daily
+quest moving to the final-jackpot RNG request, the static boon tables, the council-review fixes, and
+the seat push-mint. Keyed line-insensitively on (check, impact, subject function), every addition is
+attributable:
 
-- **The sDGNRS reserve roll (+4)**, which introduces one external call (`questModule.handleFlip`)
-  into the daily coinflip resolution path: **+1 Medium** `reentrancy-no-eth` on
-  `Coinflip.processCoinflipPayouts` (state writes now follow an external call in its call tree),
-  and **+3 Low** `reentrancy-events` — twice on the new `Coinflip._stakeSdgnrsReserveSlice` (it
-  emits after the quest call) and once more on `processCoinflipPayouts` for the same reason.
-- **The claimable-first deposit path (+2)**: **+1 Medium** `uninitialized-local` on
-  `Coinflip._depositCoinflip.fromClaimable`, and **+1 Informational** `cyclomatic-complexity` on
-  `_depositCoinflip` (12). `fromClaimable` is declared then assigned only inside the
-  claimable-funded branch; on the other branch its default zero is the intended value and every
-  later use is correct at zero (`fromWallet = amount - fromClaimable`), so it is the same benign
-  class as the existing `uninitialized-local` population.
+- **The new `DegenerusGameLens` compilation unit (~160 of the additions).** The lens imports
+  `DegenerusGameMintStreakUtils`, which pulls `DegenerusGameStorage` into its compilation unit, so
+  the long-triaged shared-storage class fires through a second compilation path: **+13 High**
+  `uninitialized-state` (the same false-positive family, 118 → 131 — the fields are written by the
+  deployed modules exactly as the standing triage describes), ~130 Informational `unused-state` on
+  storage fields the lens unit never touches, Informational `assembly` on its `extsload` word
+  decoders, and one `missing-inheritance`. No new code defect is involved. One `unused-return`
+  Medium covers the viewer deliberately discarding two data-source flags it no longer needs for
+  selection.
+- **The foil-quest request-side roll (+2 High, plus a few Medium/Low).** The High pair is
+  `weak-prng` on the pre-existing `lvl % 10` / `lvl % 100` decimator-window arithmetic (12 → 14),
+  newly flagged only because its result now flows into the `rollDailyQuest` external call; these
+  are level-index gates, nothing random is drawn from them — the same benign class as
+  `requestLootboxRng`'s time-of-day gate. The rest are `incorrect-equality` on the intended
+  exact-day gate and mod comparisons, one `uninitialized-local` on the deliberate default-false
+  `finalJackpotRequest`, and one `timestamp` taint artifact.
+- **The static boon tables REMOVED findings.** Deleting the eligibility locals cleared two
+  `uninitialized-local` Mediums (`deityEligible`, `deityPassCount`), and dropping the now-dead
+  `_isDecimatorWindow()` helper cleared one High `uninitialized-state` on `decWindowOpen`
+  (132 → 131), which downgraded to an Informational `unused-state` in that unit.
+- **The seat push-mint (+10, ZERO High, nothing removed).** `_grantSeatCoin` now calls the seat
+  token, so the three pass-purchase entrypoints carry an external call: **+4 Medium**
+  `reentrancy-no-eth` and **+4 Low** `reentrancy-events` across `purchaseDeityPass` (×2 each, one
+  per `_grantSeatCoin` leg), `purchaseLazyPass`, and `purchaseWhalePass`. The callee is
+  `AFKING_SUB_TOKEN`, a protocol contract whose mint writes storage and emits `Transfer` with no
+  ERC-721 receiver callback, so it cannot re-enter; each call site is also the final statement of
+  its function. The remaining two are Informational on the token itself: `costly-loop` on
+  `_mintSeat` (reached from the vault tranche's bounded mint loop) and `missing-inheritance`
+  (it implements the ERC-721 surface without declaring an interface, as it always has).
 
-The four reentrancy-* additions are the same benign class as the existing population: every callee
-is a trusted in-protocol contract at a compile-time-constant address, and the affected paths hold
-CEI. Nothing was removed. A further block of findings re-keyed without changing in substance —
-Slither embeds the external-call list and the full function signature in its description text, so
-adding one call rewrites the description of every finding in that call tree, and changing
-`reverseFlip()` to `reverseFlip(uint256)` rewrites every finding that names it. Diffing
-line-insensitively, and keying on (check, impact, subject function) rather than raw description,
-separates those re-keys from the six real additions.
-
-The High tier is composition-identical to the prior tree across every check (118
-`uninitialized-state`, 12 `weak-prng`, 6 `arbitrary-send-eth`, 6 `reentrancy-balance`,
-5 `delegatecall-loop`, 3 `encode-packed-collision`, 3 `reentrancy-eth`, 2 `incorrect-exp`,
-1 `shadowing-state`). The 12 `weak-prng` include the two `DegenerusParimutuel` entries
-(`_openVolumeRound()` and `volumeBetCredit()`, each reading `block.timestamp % 86400` to decide
-whether the day's betting window is open) — a time-of-day gate, not a source of randomness:
-nothing is drawn from it, and the same benign pattern is already triaged for `requestLootboxRng`
-and `_bountyEligible`.
+The High tier is composition-identical to the prior tagged tree across every other check (6
+`arbitrary-send-eth`, 6 `reentrancy-balance`, 5 `delegatecall-loop`, 3 `encode-packed-collision`,
+3 `reentrancy-eth`, 2 `incorrect-exp`, 1 `shadowing-state`); only `uninitialized-state`
+(118 → 131) and `weak-prng` (12 → 14) moved, as attributed above. The 14 `weak-prng` include the two
+`DegenerusParimutuel` entries (`_openVolumeRound()` and `volumeBetCredit()`, each reading
+`block.timestamp % 86400` to decide whether the day's betting window is open) — a time-of-day gate,
+not a source of randomness: nothing is drawn from it, and the same benign pattern is already
+triaged for `requestLootboxRng` and `_bountyEligible`.
 CI re-runs both
 analyzers on every push (`.github/workflows/ci.yml`); the standing per-category triage — why each is
 by-design, defended, or not-applicable — is below.

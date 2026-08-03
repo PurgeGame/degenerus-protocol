@@ -1,6 +1,6 @@
 # Security Policy
 
-Frozen subject: `contracts/` tree `4e616db4` @ tag `degenerus-c4a` (post-v75.0 hardening freeze).
+Frozen subject: `contracts/` tree `7d9d31c5` @ tag `degenerus-c4a` (post-v75.0 hardening freeze).
 
 ## Reporting a vulnerability
 
@@ -81,10 +81,15 @@ before an extra *intra-day* lootbox VRF request may be triggered — a LINK-cost
 knob, not a security parameter), **thanos-level declaration** (`DegenerusGame.setThanosLevel` — see
 the dedicated bounds below; the one vault-owner power that reaches every player's pricing),
 the owner-gated salvage-buy fallback, **foreign-asset sweeps** (`DegenerusVault.sweepToken` / `sweepNft` — recover tokens or NFTs stranded in the vault by mistaken transfer; stETH is the one protected token, so the custodied backing is unreachable), **retired-VRF-subscription recovery** (`DegenerusAdmin.retrySubCancel` — cancel a *retired* coordinator's subscription and recover its LINK; the live coordinator/sub pair reverts `SubscriptionActive`, so the game's active RNG can never be stranded by it), **AFKing seat grants**
-(`afkingGrant` — grant seat claim rights from the vault's 998-seat allowance on
-`AFKingSubscriptionToken`; the token itself enforces the sale lock — grants revert until all 1,000
-free-tranche seats are claimed — and the 998 lifetime cap, so the owner cannot dilute the free
-tranche or mint past supply), and a family of `game*` /
+(`afkingSeatMint` — mint seats from the vault's 998-seat tranche on `AFKingSubscriptionToken`
+straight to a recipient; the token itself enforces the sale lock — mints revert until all 1,000
+free-tranche seats are out — and the 998 lifetime cap, so the owner cannot dilute the free
+tranche or mint past supply), **AFKing seat restyling**
+(`DegenerusVault.afkingSeatRestyle` — rewrite the cosmetic card art of a vault-held seat, and of
+the SDGNRS-held construction seat, which the token authorizes the vault to restyle because SDGNRS
+has no admin surface of its own; purely cosmetic — it moves no seat, touches no subscription or
+tenure state, and confers no authority over the SDGNRS seat, which SDGNRS still owns and which has
+no ERC721-out path), and a family of `game*` /
 `coin*` / `wwxrp*` / `sdgnrs*` proxy actions the vault performs *as itself* (it custodies perpetual
 tickets and reserves). **Post-gameOver GNRUS charity recovery** (`VAULT.isVaultOwner`-gated, on the
 GNRUS contract): once the game's final sweep has run, `GNRUS.vaultRedeemFor(holder)` redeems a

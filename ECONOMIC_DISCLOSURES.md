@@ -3,7 +3,7 @@
 For a gambling protocol, economic transparency matters as much as contract transparency.
 **Every figure below cites the exact contract line that defines it.** Nothing here is
 marketing math — verify each number against the frozen subject (`contracts/` tree
-`4e616db4`, tag `degenerus-c4a`).
+`7d9d31c5`, tag `degenerus-c4a`).
 
 The code is **not yet deployed**. There are no live token prices. Figures are on-chain
 constants and formulas, not projected returns.
@@ -31,7 +31,7 @@ constants and formulas, not projected returns.
 ### (a) The DegenerusVault — effectively the creator's private vault
 
 The creator holds **100% of both vault share classes** (DGVE + DGVF) at deploy
-(`DegenerusVault.sol:262-264`), so the two-token split is internal abstraction — functionally the
+(`DegenerusVault.sol:271-273`), so the two-token split is internal abstraction — functionally the
 creator owns the vault. It has **several ongoing inflows, not just yield**:
 
 - **stETH yield — the largest ongoing inflow.** Protocol surplus (balance above obligations) is split
@@ -47,12 +47,12 @@ creator owns the vault. It has **several ongoing inflows, not just yield**:
   VAULT"*), so it collects affiliate rewards on all unreferred spend at **25% / 20% / 5%** of reward
   basis (fresh L1-3 / fresh L4+ / recycled; `DegenerusAffiliate.sol:411-413`). No-referrer deity purchases
   additionally route an affiliate whale pass and DGNRS rewards to the vault
-  (`modules/DegenerusGameWhaleModule.sol:712`).
+  (`modules/DegenerusGameWhaleModule.sol:715`).
 - **Perpetual daily lootbox subscription.** At genesis the vault self-subscribes to a claimable-first
-  daily lootbox (quantity 1, no FLIP rebuy) — a protocol-owned position (`DegenerusVault.sol:510-513`).
+  daily lootbox (quantity 1, no FLIP rebuy) — a protocol-owned position (`DegenerusVault.sol:519-522`).
 - **An up-front, worse-than-retail deity pass.** The vault is given the deity activity-score boost
   (nerfed: no trait symbol or automatic gold entry, not counted as a deity-pass holder) plus a
-  standing queue of **4 tickets per level** (`DegenerusGame.sol:233`, `initPerpetualTickets`).
+  standing queue of **4 tickets per level** (`DegenerusGame.sol:234`, `initPerpetualTickets`).
   Economically this is a *nerfed deity pass* — the same kind of standing, up-front position a
   deity-pass buyer holds, except granted rather than purchased. It earns jackpot entries and score; it
   is a fixed genesis grant, not a privileged withdrawal path against player ETH/stETH.
@@ -90,7 +90,7 @@ Sum = 10,000 bps (100%); any rounding dust is retained by the reserve (`sDGNRS.s
 The presale box is a **primary sale at genesis**: buyers voluntarily exchange ETH for presale-box
 credits (backed by the 10% presale-box sDGNRS pool, §2b). It is an initial offering of coin — **not a
 rake**; no fee is taken from player gameplay. Total presale-box ETH is capped at **50 ETH**
-(`PRESALE_BOX_ETH_CAP = 50 ether`, `storage/DegenerusGameStorage.sol:1477`); proceeds route **80% to
+(`PRESALE_BOX_ETH_CAP = 50 ether`, `storage/DegenerusGameStorage.sol:1479`); proceeds route **80% to
 the vault (creator), 20% to sDGNRS** (`_creditBoxProceeds`, `modules/DegenerusGamePayoutUtils.sol:20-26`),
 with `claimablePool` bumped by the full amount so solvency holds. The creator's proceeds are therefore
 **bounded at ≈40 ETH** (80% of the 50-ETH cap; the integer-division remainder — at most a few
@@ -140,7 +140,7 @@ holder; that authority — and these claims — move with the DGVE token.
 - **Community path:** 0.5%+ voting sDGNRS can propose a VRF-coordinator swap after a 7-day VRF stall,
   or a feed swap after 7 days of an unhealthy feed.
 - **The one admin power that reaches player pricing: thanos-level declaration.**
-  `DegenerusGame.setThanosLevel(targetLevel, shift)` (`DegenerusGame.sol:653-677`) declares that every
+  `DegenerusGame.setThanosLevel(targetLevel, shift)` (`DegenerusGame.sol:685-709`) declares that every
   ticket entry drained for `targetLevel` onward divides by `2^shift` — i.e. it raises the effective
   entry price, and the foil-pack price, from that level on. On the plain ticket the raise is
   EV-neutral (price fixed, entries divided, the division cancelling in the pot-share fraction); on
@@ -164,7 +164,7 @@ Neither FLIP nor WWXRP is minted to the creator's balance at deploy.
   effectively creator-controllable supply.
 - **FLIP starts fully zero.** Both `totalSupply` and `vaultAllowance` are 0 at deploy (`FLIP.sol:175-185`,
   *"Starts fully zero"*) — there is **no** deploy-time FLIP reserve. The vault's FLIP mint allowance
-  accrues later from vault operations (the DGVF claim leg — `DegenerusVault.sol:873,878-881`, where the vault's redeemable FLIP is read as mint allowance + claimable coinflips — there is deliberately no balance leg, because FLIP redirects VAULT-destined transfers into `vaultMintAllowance` before crediting `balanceOf`), not a premine.
+  accrues later from vault operations (the DGVF claim leg — `DegenerusVault.sol:906,878-881`, where the vault's redeemable FLIP is read as mint allowance + claimable coinflips — there is deliberately no balance leg, because FLIP redirects VAULT-destined transfers into `vaultMintAllowance` before crediting `balanceOf`), not a premine.
 - **Initial FLIP program (first 20 days).** The Coinflip contract stakes **200k FLIP/day** each to the
   vault and sDGNRS (~4M gross each), but these are **coinflip stakes contingent on the flip outcome**,
   not a guaranteed allocation (`FLIP.sol:16-17`, `Coinflip.sol:154`).
@@ -229,6 +229,21 @@ normally.
   per-account per-level). This is a design goal realized through sustained play — not a guaranteed
   per-open ETH profit for a casual buyer. They fund prize pools up front and receive future-level
   tickets in return.
+- **Boon draws are fully deterministic, and ineligible draws burn.** The lootbox boon roll and the
+  deity daily menu run over static weight tables — no eligibility, pass count, or window state
+  reaches the selection, so the drawn type is fixed the moment the VRF word lands
+  (`modules/DegenerusGameLootboxModule.sol`, `_boonFromRoll`/`_boonPoolStats`). Only a
+  **permanently** dead outcome is discarded rather than delivered: a deity-pass tier drawn by a
+  player who already holds a pass or once supply is capped (~2.7% of hits), where no future state
+  makes the discount spendable. The budget behind such a draw is simply not paid out
+  (`BoonDiscarded`). A decimator tier drawn outside a burn window is still **delivered** — that
+  boon carries no time expiry, so it banks for the next window. The deity gift menu excludes both
+  the decimator and deity-pass families unconditionally (they are lootbox-only), so every gift
+  slot is always issuable and issuance has no rolled-type failure mode. The boon-frequency
+  normalization prices deity tiers at a fixed nominal (`DEITY_PASS_NOMINAL_PRICE`) rather than the
+  live bonding-curve price, which spans roughly 24–520 ETH; realized boon frequency therefore
+  drifts from true EV as the pass count moves — the deity contribution to the average is pinned
+  instead of tracking that curve. This shifts how often boons land, never any payout amount.
 - **The growth parimutuel is pure redistribution.** `DegenerusParimutuel` books one fixed
   1,000-FLIP stake per address per round on whether the next level's pool growth beats the
   current level's (exact cross-multiplied comparison; a push resolves UNDER). Stakes are burned
