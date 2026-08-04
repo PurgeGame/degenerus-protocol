@@ -132,7 +132,7 @@ A secondary Hardhat behavioral suite (`npx hardhat test`) provides additional co
 
 ## Scope & Known Issues
 
-- **`scope.txt` / `out_of_scope.txt`** — the exact audited surface, pinned to `contracts/` tree `fc18277c` (tag `degenerus-c4a`).
+- **`scope.txt` / `out_of_scope.txt`** — the exact audited surface, pinned to `contracts/` tree `3e146f95` (tag `degenerus-c4a`).
 - **`KNOWN-ISSUES.md`** — every pre-triaged finding, by-design ruling, and static-analysis disposition, each with its precise mechanism. Not vague disclaimers.
 - **`SECURITY.md`** — threat model, trusted-role matrix (functional authority, not just Solidity modifiers), and disclosure process.
 - **`ECONOMIC_DISCLOSURES.md`** — creator allocations, vesting, governance control, the WWXRP reserve, and terminal value — every figure cited to a contract line.

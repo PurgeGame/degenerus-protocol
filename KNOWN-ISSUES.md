@@ -4,7 +4,7 @@ Pre-disclosure for audit wardens. **If a finding's mechanism + impact is describ
 already known and is not eligible.** This is a precise perimeter — each entry names the exact
 mechanism and why it is by-design, defended, or out-of-scope. There are no vague blanket disclaimers.
 
-Frozen subject: `contracts/` tree `fc18277c` @ tag `degenerus-c4a`. Pre-scanned with Slither v0.11.5
+Frozen subject: `contracts/` tree `3e146f95` @ tag `degenerus-c4a`. Pre-scanned with Slither v0.11.5
 + Aderyn 0.6.8; those findings are triaged in the automated-tools section below.
 
 ---
@@ -141,23 +141,24 @@ transaction (a coin credit, not ETH-backed value). Immaterial; documented, not e
 
 ## 5. Automated tool findings (pre-disclosed)
 
-The full machine-readable Slither/Aderyn baseline is maintained internally — Slither 0.11.5 (3,319
-results / 101 detectors over 148 contracts at tree `fc18277c`; 171 High / 442 Medium / 383 Low /
-2,271 Informational / 52 Optimization, and the "High" tier is dominated by 131 `uninitialized-state`
+The full machine-readable Slither/Aderyn baseline is maintained internally — Slither 0.11.5 (3,321
+results / 101 detectors over 148 contracts at tree `3e146f95`; 171 High / 443 Medium / 383 Low /
+2,272 Informational / 52 Optimization, and the "High" tier is dominated by 131 `uninitialized-state`
 false positives from the shared-storage delegatecall architecture — the deployed-module compilation
 units plus the new `DegenerusGameLens` unit, see below) + Aderyn 0.6.8 (9 High / 20 Low, unchanged).
 Slither totals are sensitive to the scan environment (solc/toolchain resolution), so the absolute
 count is not comparable across machines — re-runs should compare category triage, not the total.
-These counts were measured directly at tree `fc18277c`, not carried forward from an earlier scan,
-and the previously tagged tree was re-scanned in the same environment (reproducing its recorded
-3,143 / 156 High exactly), so the delta below is a measured diff rather than a comparison against a
-recorded figure.
+These counts were measured directly at tree `3e146f95`, not carried forward from an earlier scan,
+and the previously tagged tree `fc18277c` was re-scanned in the same environment (reproducing its
+recorded 3,319 / 171 High exactly), so the delta below is a measured diff rather than a comparison
+against a recorded figure.
 
-The delta against the previously tagged tree (`4e616db4`) is **+176 results and +15 High**, spanning
-eight changes: the `extsload` observability lens, the module observability events, the foil daily
-quest moving to the final-jackpot RNG request, the static boon tables, the council-review fixes,
-the seat push-mint, the dead-code removal, and the size-scaled lootbox WWXRP stake. Keyed line-insensitively on (check, impact, subject function), every addition is
-attributable:
+The delta against the tree tagged before this chain began (`4e616db4`) is **+178 results and +15
+High**, spanning nine changes: the `extsload` observability lens, the module observability events,
+the foil daily quest moving to the final-jackpot RNG request, the static boon tables, the
+council-review fixes, the seat push-mint, the dead-code removal, the size-scaled lootbox WWXRP
+stake, and the coinflip claimable-preview fix. Keyed line-insensitively on (check, impact, subject
+function), every addition is attributable:
 
 - **The new `DegenerusGameLens` compilation unit (~160 of the additions).** The lens imports
   `DegenerusGameMintStreakUtils`, which pulls `DegenerusGameStorage` into its compilation unit, so
@@ -197,6 +198,15 @@ attributable:
   constants with the `_boxWwxrpStake` helper — a `private pure` multiply-and-floor consumed by the
   box spin and the cold-bust consolation — added, removed and re-keyed nothing: the scan totals and
   the full High-tier composition are identical to the prior tree, detector for detector.
+- **The coinflip claimable-preview fix (+2, ZERO High, nothing removed).** `_viewClaimableCoin` now
+  replays the settle's auto-rebuy accounting instead of scoring each winning day independently, so
+  the two preview views cannot disagree with the claim that follows them. Both additions land on
+  that one function: **+1 Medium** `divide-before-multiply` on `(payout / takeProfit) * takeProfit`
+  and **+1 Informational** `cyclomatic-complexity`. The floor-then-multiply is the take-profit
+  semantic itself — bank whole chunks, roll the remainder — copied from the settle path
+  (`_claimCoinflipsInternal`), which already carries the identical finding; the partition is exact
+  by construction and fuzz-pinned (`reserved + remainder == payout` at every take-profit size).
+  The added branching is the point of the change.
 
 The High tier is composition-identical to the prior tagged tree across every other check (6
 `arbitrary-send-eth`, 6 `reentrancy-balance`, 5 `delegatecall-loop`, 3 `encode-packed-collision`,
