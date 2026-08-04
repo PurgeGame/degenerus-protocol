@@ -191,10 +191,16 @@ contract FarFutureVaultFallbackTest is DeployProtocol {
     // FLIP carry symmetry
     // =====================================================================================
 
-    /// @notice The salvage-spendable read includes the auto-rebuy carry; the legacy claimable read does not.
-    ///         The delta between the two is EXACTLY the carry, independent of wallet/claimable balances.
+    /// @notice On a LIVE auto-rebuy position the salvage-spendable read includes the carry and the legacy
+    ///         claimable read does not; the delta between the two is EXACTLY the carry. The distinction is
+    ///         the settle's, not the view's: a live carry survives a claim (it keeps rolling), so only the
+    ///         carry-reaching salvage waterfall can spend it.
     function test_SalvageSpendableIncludesCarry() public {
         uint128 carry = 3_000_000 ether;
+        // Steady-state sDGNRS: rebuy ENABLED and already settled, so the carry is a live
+        // rolling position rather than a remnant the next claim would cash out.
+        _seedRebuyCarry(ContractAddresses.SDGNRS, 0);
+
         uint256 legacyBefore = coin.balanceOfWithClaimable(ContractAddresses.SDGNRS);
         uint256 salvageBefore = coin.balanceOfSpendableForSalvage(ContractAddresses.SDGNRS);
         assertEq(salvageBefore - legacyBefore, 0, "no carry seeded yet -> reads agree");
@@ -203,8 +209,34 @@ contract FarFutureVaultFallbackTest is DeployProtocol {
 
         uint256 legacyAfter = coin.balanceOfWithClaimable(ContractAddresses.SDGNRS);
         uint256 salvageAfter = coin.balanceOfSpendableForSalvage(ContractAddresses.SDGNRS);
-        assertEq(legacyAfter, legacyBefore, "legacy read must ignore the carry");
+        assertEq(legacyAfter, legacyBefore, "legacy read must ignore a LIVE rebuy carry");
         assertEq(salvageAfter - legacyAfter, carry, "salvage read adds exactly the carry");
+    }
+
+    /// @notice A carry left on a DISABLED position is a different animal: _claimCoinflipsInternal folds it
+    ///         straight into `mintable` (Coinflip.sol:562-565), so an ordinary claim or a
+    ///         consumeCoinflipsForBurn CAN spend it — and both reads must therefore surface it. The two
+    ///         reads agree here precisely because the carry is no longer salvage-only.
+    function test_DisabledPositionCarrySurfacesToBothReads() public {
+        uint128 carry = 3_000_000 ether;
+        (bool enabled, , , ) = coinflip.coinflipAutoRebuyInfo(ContractAddresses.SDGNRS);
+        assertFalse(enabled, "fixture: position is not on auto-rebuy");
+
+        uint256 legacyBefore = coin.balanceOfWithClaimable(ContractAddresses.SDGNRS);
+        uint256 salvageBefore = coin.balanceOfSpendableForSalvage(ContractAddresses.SDGNRS);
+
+        _setCarry(ContractAddresses.SDGNRS, carry);
+
+        assertEq(
+            coin.balanceOfWithClaimable(ContractAddresses.SDGNRS) - legacyBefore,
+            carry,
+            "a disabled position's carry is claimable, so the legacy read reports it"
+        );
+        assertEq(
+            coin.balanceOfSpendableForSalvage(ContractAddresses.SDGNRS) - salvageBefore,
+            carry,
+            "and the salvage read counts it exactly once, not twice"
+        );
     }
 
     /// @notice With sDGNRS FLIP entirely in the carry (held + claimable == 0), a salvage swap's FLIP
@@ -562,6 +594,9 @@ contract FarFutureVaultFallbackTest is DeployProtocol {
     function test_SalvageSpendableIncludesCarry_Vault() public {
         (, , uint256 carry0, ) = coinflip.coinflipAutoRebuyInfo(ContractAddresses.VAULT);
         assertEq(carry0, 0, "fixture: no pre-existing vault carry");
+
+        // A rebuy-armed vault: the carry is live, so it stays salvage-only.
+        _seedRebuyCarry(ContractAddresses.VAULT, 0);
 
         uint256 legacyBefore = coin.balanceOfWithClaimable(ContractAddresses.VAULT);
         uint256 salvageBefore = coin.balanceOfSpendableForSalvage(ContractAddresses.VAULT);

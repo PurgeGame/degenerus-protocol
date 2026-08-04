@@ -1218,20 +1218,25 @@ contract Coinflip {
       +======================================================================+*/
 
     /// @notice Preview claimable coinflip winnings.
+    /// @dev Equals the ceiling `claimCoinflips` would pay: the settled bank plus whatever
+    ///      the pending resolved days surface. The carry is excluded — it is not claimable
+    ///      through this path — except where a disabled position still holds one, which a
+    ///      claim cashes out.
     function previewClaimCoinflips(address player) external view returns (uint256 mintable) {
-        uint256 daily = _viewClaimableCoin(player);
+        (uint256 daily, ) = _viewClaimableCoin(player);
         uint256 stored = playerState[player].claimableStored;
         return daily + stored;
     }
 
     /// @notice Preview `player`'s salvage-spendable coinflip backing: claimable + auto-rebuy carry (view).
-    /// @dev The carry-inclusive read the salvage quote caps against, mirroring redeemableFlipBacking's
-    ///      components but as a pure VIEW (no settle) so the preview and execution offer stay re-derivable.
-    ///      Conservative: reads the carry before any pending settle, so a resolving win day not yet rolled
-    ///      in is excluded — the cap can only under-state, never over-state, the burnable backing.
+    /// @dev The carry-inclusive read the salvage quote caps against, mirroring
+    ///      redeemableFlipBacking's components but as a pure VIEW (no settle) so the preview
+    ///      and execution offer stay re-derivable. Both legs come from the same replay, so
+    ///      the carry reported is the one the settle LEAVES — a pending losing day has
+    ///      already wiped it here, exactly as consumeFlipForSalvage will.
     function previewSalvageFlipBacking(address player) external view returns (uint256) {
-        PlayerCoinflipState storage state = playerState[player];
-        return _viewClaimableCoin(player) + state.claimableStored + state.autoRebuyCarry;
+        (uint256 daily, uint256 carry) = _viewClaimableCoin(player);
+        return daily + playerState[player].claimableStored + carry;
     }
 
     /// @notice Get player's current coinflip stake for next day.
@@ -1270,24 +1275,63 @@ contract Coinflip {
         return (top.player, uint128(top.score));
     }
 
-    /// @dev View helper for daily coinflip claimable winnings.
+    /// @dev View twin of the settle walk in _claimCoinflipsInternal: replays the resolved
+    ///      days a claim would process and reports what they leave behind, so a preview and
+    ///      the claim that follows it can never disagree.
+    ///
+    ///      Auto-rebuy accounting is mirrored, not approximated. A rebuy position is ONE
+    ///      rolling stake, not a series of independent day payouts: the carry joins every
+    ///      day's stake, a win splits into banked take-profit chunks plus a re-rolled
+    ///      remainder carrying its recycle bonus, and a loss zeroes the whole carry. Scoring
+    ///      each winning day on its stored stake alone would report a win that a later
+    ///      losing day has already destroyed.
+    ///
+    ///      Walks the non-deep window (COIN_CLAIM_FIRST_DAYS / COIN_CLAIM_DAYS), matching
+    ///      every consumer of the two preview views; the deeper walk belongs to the
+    ///      auto-rebuy exit, which is not previewed.
+    /// @param player The position to replay.
+    /// @return mintable Winnings a claim would surface: settled payouts and banked
+    ///         take-profit chunks, plus a stale carry left on a disabled position.
+    /// @return endCarry The rolling carry the walk leaves in place; 0 when auto-rebuy is off.
     function _viewClaimableCoin(
         address player
-    ) internal view returns (uint256 total) {
-        // Pending flip winnings within the claim window; staking removed.
+    ) internal view returns (uint256 mintable, uint256 endCarry) {
+        PlayerCoinflipState storage state = playerState[player];
         uint24 latestDay = flipsClaimableDay;
-        uint24 startDay = playerState[player].lastClaim;
-        if (startDay >= latestDay) return 0;
+        uint24 startDay = state.lastClaim;
+
+        bool rebuyActive = state.autoRebuyEnabled;
+        uint256 carry = state.autoRebuyCarry;
+        if (rebuyActive) {
+            endCarry = carry;
+        } else if (carry != 0) {
+            // A disabled position's leftover carry cashes out on the next claim.
+            mintable = carry;
+            carry = 0;
+        }
+        if (startDay >= latestDay) return (mintable, endCarry);
+
+        uint256 takeProfit = rebuyActive ? state.autoRebuyStop : 0;
 
         uint16 windowDays = startDay == 0 ? COIN_CLAIM_FIRST_DAYS : COIN_CLAIM_DAYS;
         uint24 minClaimableDay;
-        unchecked {
-            minClaimableDay = latestDay > windowDays
-                ? latestDay - windowDays
-                : 0;
+        if (rebuyActive) {
+            minClaimableDay = state.autoRebuyStartDay;
+            if (minClaimableDay > latestDay) {
+                minClaimableDay = latestDay;
+            }
+        } else {
+            unchecked {
+                minClaimableDay = latestDay > windowDays
+                    ? latestDay - windowDays
+                    : 0;
+            }
         }
         if (startDay < minClaimableDay) {
             startDay = minClaimableDay;
+            if (rebuyActive && carry != 0) {
+                carry = 0;
+            }
         }
 
         uint16 remaining = windowDays;
@@ -1304,20 +1348,45 @@ contract Coinflip {
                 continue;
             }
 
-            if (win) {
-                uint256 flipStake = _flipStake(cursor, player);
-                if (flipStake != 0) {
+            uint256 stake = _flipStake(cursor, player);
+            if (rebuyActive && carry != 0) {
+                stake += carry;
+            }
+
+            if (stake != 0) {
+                if (win) {
                     // Payout = principal + (principal * rewardPercent%)
-                    uint256 payout = flipStake +
-                        (flipStake * uint256(rewardPercent)) /
+                    uint256 payout = stake +
+                        (stake * uint256(rewardPercent)) /
                         100;
-                    total += payout;
+                    if (rebuyActive) {
+                        if (takeProfit != 0) {
+                            uint256 reserved = (payout / takeProfit) *
+                                takeProfit;
+                            if (reserved != 0) {
+                                mintable += reserved;
+                            }
+                            carry = payout - reserved;
+                        } else {
+                            carry = payout;
+                        }
+                        if (carry != 0) {
+                            carry += _recyclingBonus(carry);
+                        }
+                    } else {
+                        mintable += payout;
+                    }
+                } else if (rebuyActive) {
+                    carry = 0;
                 }
             }
             unchecked {
                 ++cursor;
                 --remaining;
             }
+        }
+        if (rebuyActive) {
+            endCarry = carry;
         }
     }
 
