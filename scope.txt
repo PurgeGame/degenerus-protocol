@@ -1,7 +1,7 @@
 # Degenerus Protocol — Audit Scope
 # Solidity 0.8.34 | Hardhat + Foundry | viaIR=true | Optimizer runs=1000 | evmVersion=osaka
 #
-# Frozen subject: contracts/ tree 3e146f95 @ tag degenerus-c4a (post-v75.0 hardening freeze).
+# Frozen subject: contracts/ tree d93ef47a @ tag degenerus-c4a (post-v75.0 hardening freeze).
 # Checkout: git checkout degenerus-c4a
 # This list supersedes the v55-era scope.txt (which named BurnieCoin/BurnieCoinflip/
 # WrappedWrappedXRP/EndgameModule — all renamed or removed in this subject).
@@ -24,10 +24,10 @@ contracts/DegenerusGame.sol                  # router / delegatecall dispatcher 
 contracts/DegenerusAdmin.sol                 # VRF + feed governance (sDGNRS)     774
 contracts/DegenerusAffiliate.sol             # referral codes + bonus points      592
 contracts/FLIP.sol                           # FLIP ERC-20 (coinflip + vault)     371
-contracts/Coinflip.sol                       # coinflip resolution + bounty       923
+contracts/Coinflip.sol                       # coinflip resolution + bounty       967
 contracts/sDGNRS.sol                         # soulbound; reserves/pools/redeem    495
 contracts/DGNRS.sol                          # transferable wrapper over sDGNRS    177
-contracts/DegenerusVault.sol                 # stETH vault; DGVE/DGVF share ERC20s 496
+contracts/DegenerusVault.sol                 # stETH vault; DGVE/DGVF share ERC20s 503
 contracts/DegenerusJackpots.sol              # jackpot state + BAF helpers         383
 contracts/DegenerusQuests.sol                # quest streaks + activity score     1462
 contracts/DegenerusDeityPass.sol             # ERC-721 deity passes (triangular)   324
@@ -91,7 +91,7 @@ contracts/DeityBoonViewer.sol      # read-only deity-boon lens (no value custody
 contracts/DegenerusGameLens.sol    # extsload observability lens (no value custody) 353
 
 ## nSLOC totals
-#   Core deployed (16)              9309
+#   Core deployed (16)              9360
 #   Deployed modules (12)          10294
 #   Abstract module bases (2)        463
 #   Shared storage (1)              1324
@@ -99,7 +99,7 @@ contracts/DegenerusGameLens.sol    # extsload observability lens (no value custo
 #   Interfaces (12)                  696
 #   Standalone in-scope (2)          501
 #   --------------------------------------
-#   TOTAL  53 files                23082 nSLOC
+#   TOTAL  53 files                23133 nSLOC
 #   (nSLOC = non-blank, non-comment source lines, comment- and string-aware. Every
 #    per-file value above and every subtotal here is measured directly at the pinned
 #    tree; rows sum to their group subtotal and the subtotals sum to TOTAL.)

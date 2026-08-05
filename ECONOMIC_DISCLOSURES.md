@@ -3,7 +3,7 @@
 For a gambling protocol, economic transparency matters as much as contract transparency.
 **Every figure below cites the exact contract line that defines it.** Nothing here is
 marketing math — verify each number against the frozen subject (`contracts/` tree
-`3e146f95`, tag `degenerus-c4a`).
+`d93ef47a`, tag `degenerus-c4a`).
 
 The code is **not yet deployed**. There are no live token prices. Figures are on-chain
 constants and formulas, not projected returns.
@@ -31,7 +31,7 @@ constants and formulas, not projected returns.
 ### (a) The DegenerusVault — effectively the creator's private vault
 
 The creator holds **100% of both vault share classes** (DGVE + DGVF) at deploy
-(`DegenerusVault.sol:271-273`), so the two-token split is internal abstraction — functionally the
+(`DegenerusVault.sol:272-274`), so the two-token split is internal abstraction — functionally the
 creator owns the vault. It has **several ongoing inflows, not just yield**:
 
 - **stETH yield — the largest ongoing inflow.** Protocol surplus (balance above obligations) is split
@@ -49,7 +49,7 @@ creator owns the vault. It has **several ongoing inflows, not just yield**:
   additionally route an affiliate whale pass and DGNRS rewards to the vault
   (`modules/DegenerusGameWhaleModule.sol:715`).
 - **Perpetual daily lootbox subscription.** At genesis the vault self-subscribes to a claimable-first
-  daily lootbox (quantity 1, no FLIP rebuy) — a protocol-owned position (`DegenerusVault.sol:519-522`).
+  daily lootbox (quantity 1, no FLIP rebuy) — a protocol-owned position (`DegenerusVault.sol:532-535`).
 - **An up-front, worse-than-retail deity pass.** The vault is given the deity activity-score boost
   (nerfed: no trait symbol or automatic gold entry, not counted as a deity-pass holder) plus a
   standing queue of **4 tickets per level** (`DegenerusGame.sol:234`, `initPerpetualTickets`).
@@ -164,7 +164,7 @@ Neither FLIP nor WWXRP is minted to the creator's balance at deploy.
   effectively creator-controllable supply.
 - **FLIP starts fully zero.** Both `totalSupply` and `vaultAllowance` are 0 at deploy (`FLIP.sol:175-185`,
   *"Starts fully zero"*) — there is **no** deploy-time FLIP reserve. The vault's FLIP mint allowance
-  accrues later from vault operations (the DGVF claim leg — `DegenerusVault.sol:906,878-881`, where the vault's redeemable FLIP is read as mint allowance + claimable coinflips — there is deliberately no balance leg, because FLIP redirects VAULT-destined transfers into `vaultMintAllowance` before crediting `balanceOf`), not a premine.
+  accrues later from vault operations (the DGVF claim leg — `DegenerusVault.sol:919,926-928`, where the vault's redeemable FLIP is read as mint allowance + claimable coinflips — there is deliberately no balance leg, because FLIP redirects VAULT-destined transfers into `vaultMintAllowance` before crediting `balanceOf`), not a premine.
 - **Initial FLIP program (first 20 days).** The Coinflip contract stakes **200k FLIP/day** each to the
   vault and sDGNRS (~4M gross each), but these are **coinflip stakes contingent on the flip outcome**,
   not a guaranteed allocation (`FLIP.sol:16-17`, `Coinflip.sol:154`).

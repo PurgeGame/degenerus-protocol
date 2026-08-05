@@ -136,7 +136,7 @@ jobs:
           name: aderyn-report
           path: aderyn-report.md
 
-  # Strong-but-slow guarantees the per-PR gate skips: the 34 Halmos symbolic proofs
+  # Strong-but-slow guarantees the per-PR gate skips: the 35 Halmos symbolic proofs
   # and the deep-profile invariant sweep (runs=1000/depth=256, ~8x the per-PR budget).
   # Runs on the weekly schedule and on manual dispatch — a proof or deep invariant that
   # regresses fails here instead of silently shipping green. (The mutation campaign is

@@ -1,6 +1,6 @@
 # Security Policy
 
-Frozen subject: `contracts/` tree `3e146f95` @ tag `degenerus-c4a` (post-v75.0 hardening freeze).
+Frozen subject: `contracts/` tree `d93ef47a` @ tag `degenerus-c4a` (post-v75.0 hardening freeze).
 
 ## Reporting a vulnerability
 
@@ -170,16 +170,17 @@ frozen subject**, so in the audited tree the call site is unreachable dead code;
 deployment patches in the L1 `ReverseRegistrar` or Base's `L2ReverseRegistrar` (the `setName(string)`
 selector is shared).
 
-**Powers:** none over the protocol. Fourteen player-facing contracts make **one** best-effort
-`setName("<label>.degenerus.eth")` low-level call from their own constructor to register their ENS
-reverse name. The return value is deliberately discarded so a missing/hostile/reverting registrar can
-never revert a deployment.
+**Powers:** none over the protocol. Seventeen player-facing contracts — the fifteen standalone
+deployments plus the vault's two share-class tokens (which take their name as a constructor
+argument) — make **one** best-effort `setName("<label>.degenerus.eth")` low-level call from their
+own constructor to register their ENS reverse name. The return value is deliberately discarded so a
+missing/hostile/reverting registrar can never revert a deployment.
 
 **Bounds:** constructor-only (unreachable after deploy), no state read from it, no value sent, no
 storage written from its response. A hostile registrar can at most refuse to name the contracts or
 publish a misleading reverse record off-protocol — it cannot affect game state, funds, or access
 control. This is the only address in the system that is *not* protocol-controlled, and it is why the
-raw-selector gate carries an explicit justification comment at each of the 14 call sites.
+raw-selector gate carries an explicit justification comment at each of the 16 call sites.
 
 ### Roles that do NOT exist
 

@@ -4,7 +4,7 @@ Pre-disclosure for audit wardens. **If a finding's mechanism + impact is describ
 already known and is not eligible.** This is a precise perimeter — each entry names the exact
 mechanism and why it is by-design, defended, or out-of-scope. There are no vague blanket disclaimers.
 
-Frozen subject: `contracts/` tree `3e146f95` @ tag `degenerus-c4a`. Pre-scanned with Slither v0.11.5
+Frozen subject: `contracts/` tree `d93ef47a` @ tag `degenerus-c4a`. Pre-scanned with Slither v0.11.5
 + Aderyn 0.6.8; those findings are triaged in the automated-tools section below.
 
 ---
@@ -141,24 +141,24 @@ transaction (a coin credit, not ETH-backed value). Immaterial; documented, not e
 
 ## 5. Automated tool findings (pre-disclosed)
 
-The full machine-readable Slither/Aderyn baseline is maintained internally — Slither 0.11.5 (3,321
-results / 101 detectors over 148 contracts at tree `3e146f95`; 171 High / 443 Medium / 383 Low /
-2,272 Informational / 52 Optimization, and the "High" tier is dominated by 131 `uninitialized-state`
+The full machine-readable Slither/Aderyn baseline is maintained internally — Slither 0.11.5 (3,323
+results / 101 detectors over 148 contracts at tree `d93ef47a`; 171 High / 443 Medium / 383 Low /
+2,274 Informational / 52 Optimization, and the "High" tier is dominated by 131 `uninitialized-state`
 false positives from the shared-storage delegatecall architecture — the deployed-module compilation
 units plus the new `DegenerusGameLens` unit, see below) + Aderyn 0.6.8 (9 High / 20 Low, unchanged).
 Slither totals are sensitive to the scan environment (solc/toolchain resolution), so the absolute
 count is not comparable across machines — re-runs should compare category triage, not the total.
-These counts were measured directly at tree `3e146f95`, not carried forward from an earlier scan,
-and the previously tagged tree `fc18277c` was re-scanned in the same environment (reproducing its
-recorded 3,319 / 171 High exactly), so the delta below is a measured diff rather than a comparison
+These counts were measured directly at tree `d93ef47a`, not carried forward from an earlier scan,
+and the previously tagged tree `3e146f95` was re-scanned in the same environment (reproducing its
+recorded 3,321 / 171 High exactly), so the delta below is a measured diff rather than a comparison
 against a recorded figure.
 
-The delta against the tree tagged before this chain began (`4e616db4`) is **+178 results and +15
-High**, spanning nine changes: the `extsload` observability lens, the module observability events,
+The delta against the tree tagged before this chain began (`4e616db4`) is **+180 results and +15
+High**, spanning ten changes: the `extsload` observability lens, the module observability events,
 the foil daily quest moving to the final-jackpot RNG request, the static boon tables, the
 council-review fixes, the seat push-mint, the dead-code removal, the size-scaled lootbox WWXRP
-stake, and the coinflip claimable-preview fix. Keyed line-insensitively on (check, impact, subject
-function), every addition is attributable:
+stake, the coinflip claimable-preview fix, and the vault share-token ENS reverse names. Keyed
+line-insensitively on (check, impact, subject function), every addition is attributable:
 
 - **The new `DegenerusGameLens` compilation unit (~160 of the additions).** The lens imports
   `DegenerusGameMintStreakUtils`, which pulls `DegenerusGameStorage` into its compilation unit, so
@@ -207,6 +207,13 @@ function), every addition is attributable:
   (`_claimCoinflipsInternal`), which already carries the identical finding; the partition is exact
   by construction and fuzz-pinned (`reserved + remainder == payout` at every take-profit size).
   The added branching is the point of the change.
+- **The vault share-token ENS reverse names (+2, ZERO High, nothing removed).**
+  `DegenerusVaultShare`'s constructor now makes the same best-effort `setName` call as every other
+  deployed contract (the name arrives as a constructor argument, so one source site covers both the
+  DGVF and DGVE instances). Both additions are Informational on that constructor: one
+  `low-level-calls` (the sixteenth entry in the standing ENS triage below) and one
+  `redundant-statements` on the `ok;` result discard — the exact per-constructor pair every other
+  ENS call site already carries. Constructor-only code; no runtime bytecode moved.
 
 The High tier is composition-identical to the prior tagged tree across every other check (6
 `arbitrary-send-eth`, 6 `reentrancy-balance`, 5 `delegatecall-loop`, 3 `encode-packed-collision`,
@@ -235,10 +242,12 @@ values, so no storage is shadowed and no read can diverge — a duplicate litera
 test mock. A module never holds ETH: it executes in `DegenerusGame`'s context, so `payable` entrypoints
 there are the *game's* payable surface and the game has the withdrawal paths.
 
-**low-level-calls (Informational ×14) — ENS self-naming.** Fourteen constructors make one best-effort
-`setName(string)` call to `ContractAddresses.ENS_REVERSE_REGISTRAR` (`address(0)` in this subject, so
-unreachable here). The return value is intentionally discarded so a missing or hostile registrar can
-never revert a deployment; each site carries a raw-selector justification comment. Zero authority,
+**low-level-calls (Informational ×16) — ENS self-naming.** Sixteen constructor call sites — the
+fifteen standalone deployed contracts plus one parameterized site in the vault's share-class token
+(compiled once, deployed twice as DGVF/DGVE) — make one best-effort `setName(string)` call to
+`ContractAddresses.ENS_REVERSE_REGISTRAR` (`address(0)` in this subject, so unreachable here). The
+return value is intentionally discarded so a missing or hostile registrar can never revert a
+deployment; each site carries a raw-selector justification comment. Zero authority,
 constructor-only — see SECURITY.md role 5. Aderyn additionally reports the discard as a "Redundant
 Statement" Low (the `ok;` no-op that silences the unused-variable warning).
 
