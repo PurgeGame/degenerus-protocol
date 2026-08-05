@@ -265,12 +265,25 @@ contract DegenerusVaultShare {
     /// @dev Initial supply is minted to ContractAddresses.CREATOR
     /// @param name_ Token name
     /// @param symbol_ Token symbol
-    constructor(string memory name_, string memory symbol_) {
+    /// @param ensName_ ENS reverse name for this share class (e.g., "dgvf.degenerus.eth")
+    constructor(string memory name_, string memory symbol_, string memory ensName_) {
         name = name_;
         symbol = symbol_;
         totalSupply = INITIAL_SUPPLY;
         balanceOf[ContractAddresses.CREATOR] = INITIAL_SUPPLY;
         emit Transfer(address(0), ContractAddresses.CREATOR, INITIAL_SUPPLY);
+
+        // Register this contract's ENS reverse name (best-effort; skipped when the
+        // registrar is unset — local/test/testnet builds). The setName(string)
+        // selector is shared by the L1 ReverseRegistrar and Base's L2ReverseRegistrar.
+        address ensReg = ContractAddresses.ENS_REVERSE_REGISTRAR;
+        if (ensReg != address(0)) {
+            (bool ok, ) = ensReg.call(
+                // raw-selectors: justified — best-effort ENS reverse-name; setName(string) has no deploy-wide bound interface and must not revert deployment
+                abi.encodeWithSignature("setName(string)", ensName_)
+            );
+            ok;
+        }
     }
 
     // ---------------------------------------------------------------------
@@ -508,8 +521,8 @@ contract DegenerusVault {
     /// @notice Deploy the vault and create all share class tokens
     /// @dev Deploys DGVF and DGVE tokens. Creator receives initial 1T supply of each.
     constructor() {
-        flipShare = new DegenerusVaultShare("Degenerus Vault Flip", "DGVF");
-        ethShare = new DegenerusVaultShare("Degenerus Vault Eth", "DGVE");
+        flipShare = new DegenerusVaultShare("Degenerus Vault Flip", "DGVF", "dgvf.degenerus.eth");
+        ethShare = new DegenerusVaultShare("Degenerus Vault Eth", "DGVE", "dgve.degenerus.eth");
 
         // Protocol-owned self-subscription: claimable-first daily lootbox
         // buy of flat quantity 1, no FLIP rebuy. Self-consent —

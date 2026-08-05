@@ -103,6 +103,18 @@ async function main() {
     verifyAddresses(predicted, deployed);
     console.log("All addresses match predictions.\n");
 
+    // 7b. Record the vault's constructor-deployed share tokens (DGVF/DGVE) so
+    // downstream tooling (ens-register.js forward records) can reach them.
+    const vault = await hre.ethers.getContractAt(
+      "DegenerusVault",
+      deployed.get("VAULT"),
+      deployer
+    );
+    deployed.set("VAULT_FLIP_SHARE", await vault.flipShare());
+    deployed.set("VAULT_ETH_SHARE", await vault.ethShare());
+    console.log(`  [VAULT_FLIP_SHARE] DGVF ${deployed.get("VAULT_FLIP_SHARE")}`);
+    console.log(`  [VAULT_ETH_SHARE]  DGVE ${deployed.get("VAULT_ETH_SHARE")}\n`);
+
     // 8. Wire + finalize Icons32Data (paths, symbols, then permanent lock)
     console.log("Wiring Icons32Data (33 paths, 3 name quadrants, finalize)...");
     const iconsData = JSON.parse(

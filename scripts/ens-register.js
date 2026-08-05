@@ -23,6 +23,7 @@ import hre from "hardhat";
 import { readdirSync, readFileSync } from "node:fs";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
+import { forwardConfirmedName } from "./lib/ensForwardConfirmed.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -46,7 +47,17 @@ const LABELS = {
   WWXRP: "wwxrp",
   AFKING_SUB_TOKEN: "afking",
   ADMIN: "admin",
+  PARIMUTUEL: "parimutuel",
+  VAULT_FLIP_SHARE: "dgvf",
+  VAULT_ETH_SHARE: "dgve",
 };
+
+// Every contract whose constructor calls setName MUST appear in LABELS, or its
+// forward record is never written and its reverse name displays nowhere.
+// Guard against the list drifting out of sync with the contracts again.
+// Note: DegenerusVaultShare has ONE parameterized setName site covering TWO
+// deployed instances (dgvf + dgve), so labels = setName grep hits + 1.
+const EXPECTED_LABEL_COUNT = 17;
 
 const REGISTRY_ABI = [
   "function setSubnodeRecord(bytes32 node, bytes32 label, address owner, address resolver, uint64 ttl) external",
@@ -77,6 +88,15 @@ async function main() {
   const registryAddr = process.env.ENS_REGISTRY || DEFAULT_ENS_REGISTRY;
   if (!parentName) throw new Error("ENS_PARENT_NAME not set (e.g. degenerus.eth)");
   if (!resolverAddr) throw new Error("ENS_PUBLIC_RESOLVER not set");
+
+  const labelCount = Object.keys(LABELS).length;
+  if (labelCount !== EXPECTED_LABEL_COUNT) {
+    throw new Error(
+      `LABELS has ${labelCount} entries, expected ${EXPECTED_LABEL_COUNT}. Every ` +
+        `contract with an in-constructor setName needs one. Verify against: ` +
+        `grep -rn 'setName(string)", "' contracts/`
+    );
+  }
 
   const manifestPath = process.env.ENS_MANIFEST || newestManifest(network);
   const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
@@ -131,12 +151,21 @@ async function main() {
     const addr = contracts[key];
     if (!addr) continue;
     const expected = `${label}.${parentName}`;
-    const got = await ethers.provider.lookupAddress(addr).catch(() => null);
+    // Deliberately NOT provider.lookupAddress(): that needs an ENS plugin in
+    // ethers' network config (mainnet/sepolia/holesky only) and throws
+    // "network does not support ENS" anywhere else, reporting a false MISS for
+    // every contract. This applies the same forward-confirmation rule against
+    // the registry actually in use.
+    const { name: got, reason } = await forwardConfirmedName(
+      ethers.provider,
+      registryAddr,
+      addr
+    );
     if (got === expected) {
       console.log(`PASS  ${addr} -> ${got}`);
     } else {
       missing++;
-      console.log(`MISS  ${addr} expected ${expected}, got ${got ?? "<none>"}`);
+      console.log(`MISS  ${addr} expected ${expected} — ${reason}`);
     }
   }
   if (missing > 0) {
