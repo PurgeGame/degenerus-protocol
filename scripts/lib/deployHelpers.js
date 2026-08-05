@@ -20,24 +20,46 @@ export async function deployContract(hre, contractName, args = []) {
  * stored name arrays. Quadrants are 0-based on this contract:
  * setSymbols(0) = crypto (symQ1), 1 = zodiac (symQ2), 2 = cards (symQ3);
  * quadrant 3 (dice) stores no names — renderers generate "Dice N".
- * Ends with finalize(), locking the data permanently, so the caller must
- * be CREATOR and the icon JSON must be final before this runs.
+ *
+ * ## ⛔ The ordering trap
+ *
+ * `_paths[i]` is indexed by tokenId (`quadrant*8 + symbolIdx`) and `_symQ3[idx]`
+ * by symbolIdx, so slot 16+s must hold the icon for cards symbolIdx s. The
+ * legacy fixture `data/icons32Data.json` is ordered by badge FILE index
+ * instead: the two coincide for crypto and zodiac and DIVERGE for cards.
+ * Wiring the raw fixture gives every cards pass the wrong name AND glyph.
+ *
+ * `data/icons32Data.symbolOrder.json` has `CARD_IDX=[3,4,5,6,0,2,1,7]` already
+ * applied to `paths[16..23]` and `symQ3`, matching the order every consumer
+ * encodes (database `src/api/routes/player.ts`, `app/app/dgn-traits.js`,
+ * `beta/app/constants.js`). Quick tell: `symQ3[0]` must be `Club`.
  *
  * @param {import("ethers").Contract} icons32 - Icons32Data connected as CREATOR
  * @param {{paths: string[], symQ1: string[], symQ2: string[], symQ3: string[]}} iconsData
- *   Parsed scripts/data/icons32Data.json (its legacy `diamond` key is unused —
- *   the current contract folds that icon into the 33-slot path array)
+ *   Parsed scripts/data/icons32Data.symbolOrder.json (its legacy `diamond` key
+ *   is unused — the current contract folds that icon into the 33-slot array)
+ * @param {{finalize?: boolean}} [opts] - finalize() is IRREVERSIBLE and opt-in;
+ *   verify the wired data on-chain first, then lock it as a deliberate step.
  */
-export async function wireIcons32(icons32, iconsData) {
+export async function wireIcons32(icons32, iconsData, opts = {}) {
+  const { finalize = false } = opts;
   if (iconsData.paths.length !== 33) {
     throw new Error(
-      `icons32Data.json must hold exactly 33 paths, got ${iconsData.paths.length}`
+      `icons32 dataset must hold exactly 33 paths, got ${iconsData.paths.length}`
     );
   }
   for (const q of ["symQ1", "symQ2", "symQ3"]) {
     if (!Array.isArray(iconsData[q]) || iconsData[q].length !== 8) {
-      throw new Error(`icons32Data.json ${q} must hold exactly 8 names`);
+      throw new Error(`icons32 dataset ${q} must hold exactly 8 names`);
     }
+  }
+  // Ordering guard: catches the file-ordered fixture being wired by mistake.
+  if (iconsData.symQ3[0] !== "Club") {
+    throw new Error(
+      `icons32 dataset looks FILE-ordered, not symbol-ordered: symQ3[0] is ` +
+        `${JSON.stringify(iconsData.symQ3[0])}, expected "Club". Apply ` +
+        `CARD_IDX=[3,4,5,6,0,2,1,7] to paths[16..23] and symQ3 before wiring.`
+    );
   }
   for (let start = 0; start < 33; start += 10) {
     const batch = iconsData.paths.slice(start, Math.min(start + 10, 33));
@@ -46,7 +68,9 @@ export async function wireIcons32(icons32, iconsData) {
   await (await icons32.setSymbols(0, iconsData.symQ1)).wait();
   await (await icons32.setSymbols(1, iconsData.symQ2)).wait();
   await (await icons32.setSymbols(2, iconsData.symQ3)).wait();
-  await (await icons32.finalize()).wait();
+  if (finalize) {
+    await (await icons32.finalize()).wait();
+  }
 }
 
 /**

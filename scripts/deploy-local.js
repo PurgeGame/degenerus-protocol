@@ -133,13 +133,21 @@ async function main() {
     verifyAddresses(predicted, deployedAddrs);
     console.log("  All addresses verified.");
 
-    // Wire + finalize Icons32Data (paths, symbols, then permanent lock)
-    console.log("  Wiring Icons32Data (33 paths, 3 name quadrants, finalize)...");
-    const iconsData = JSON.parse(
-      readFileSync(resolve(__dirname, "data/icons32Data.json"), "utf8")
+    // Wire Icons32Data. Symbol-ordered dataset only — the legacy
+    // icons32Data.json is badge-FILE ordered and mismaps the cards quadrant.
+    // A local chain is disposable, so finalize() here matches the testnet and
+    // mainnet paths: opt-in via ICONS32_FINALIZE=1, never automatic.
+    const finalizeIcons = process.env.ICONS32_FINALIZE === "1";
+    console.log(
+      `  Wiring Icons32Data (33 paths, 3 name quadrants, finalize=${finalizeIcons})...`
     );
-    await wireIcons32(contracts.ICONS_32.connect(deployer), iconsData);
-    console.log("  Icons32Data wired and finalized.");
+    const iconsData = JSON.parse(
+      readFileSync(resolve(__dirname, "data/icons32Data.symbolOrder.json"), "utf8")
+    );
+    await wireIcons32(contracts.ICONS_32.connect(deployer), iconsData, {
+      finalize: finalizeIcons,
+    });
+    console.log(`  Icons32Data wired${finalizeIcons ? " and FINALIZED" : ""}.`);
     console.log("");
 
     // =========================================================================

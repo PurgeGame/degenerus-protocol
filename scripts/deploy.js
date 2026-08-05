@@ -115,18 +115,29 @@ async function main() {
     console.log(`  [VAULT_FLIP_SHARE] DGVF ${deployed.get("VAULT_FLIP_SHARE")}`);
     console.log(`  [VAULT_ETH_SHARE]  DGVE ${deployed.get("VAULT_ETH_SHARE")}\n`);
 
-    // 8. Wire + finalize Icons32Data (paths, symbols, then permanent lock)
-    console.log("Wiring Icons32Data (33 paths, 3 name quadrants, finalize)...");
+    // 8. Wire Icons32Data (33 paths + 3 name quadrants). MUST use the
+    //    symbol-ordered dataset — the legacy icons32Data.json is badge-FILE
+    //    ordered and mismaps the whole cards quadrant. finalize() is an
+    //    IRREVERSIBLE lock, so it stays opt-in: verify the wired data on-chain,
+    //    then run with ICONS32_FINALIZE=1 as a deliberate second step.
+    const finalizeIcons = process.env.ICONS32_FINALIZE === "1";
+    console.log(
+      `Wiring Icons32Data (33 paths, 3 name quadrants, finalize=${finalizeIcons})...`
+    );
     const iconsData = JSON.parse(
-      readFileSync(resolve(__dirname, "data/icons32Data.json"), "utf8")
+      readFileSync(resolve(__dirname, "data/icons32Data.symbolOrder.json"), "utf8")
     );
     const icons32 = await hre.ethers.getContractAt(
       "Icons32Data",
       deployed.get("ICONS_32"),
       deployer
     );
-    await wireIcons32(icons32, iconsData);
-    console.log("Icons32Data wired and finalized.\n");
+    await wireIcons32(icons32, iconsData, { finalize: finalizeIcons });
+    console.log(
+      finalizeIcons
+        ? "Icons32Data wired and FINALIZED (permanently immutable).\n"
+        : "Icons32Data wired (NOT finalized — verify, then ICONS32_FINALIZE=1).\n"
+    );
 
     // 9. Save deployment manifest
     const manifest = {
