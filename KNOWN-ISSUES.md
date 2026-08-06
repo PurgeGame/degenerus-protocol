@@ -4,7 +4,7 @@ Pre-disclosure for audit wardens. **If a finding's mechanism + impact is describ
 already known and is not eligible.** This is a precise perimeter — each entry names the exact
 mechanism and why it is by-design, defended, or out-of-scope. There are no vague blanket disclaimers.
 
-Frozen subject: `contracts/` tree `d93ef47a` @ tag `degenerus-c4a`. Pre-scanned with Slither v0.11.5
+Frozen subject: `contracts/` tree `0e7b02fe` @ tag `degenerus-c4a`. Pre-scanned with Slither v0.11.5
 + Aderyn 0.6.8; those findings are triaged in the automated-tools section below.
 
 ---
@@ -141,24 +141,26 @@ transaction (a coin credit, not ETH-backed value). Immaterial; documented, not e
 
 ## 5. Automated tool findings (pre-disclosed)
 
-The full machine-readable Slither/Aderyn baseline is maintained internally — Slither 0.11.5 (3,323
-results / 101 detectors over 148 contracts at tree `d93ef47a`; 171 High / 443 Medium / 383 Low /
-2,274 Informational / 52 Optimization, and the "High" tier is dominated by 131 `uninitialized-state`
+The full machine-readable Slither/Aderyn baseline is maintained internally — Slither 0.11.5 (3,325
+results / 101 detectors over 151 contracts at tree `0e7b02fe`; 172 High / 445 Medium / 384 Low /
+2,272 Informational / 52 Optimization, and the "High" tier is dominated by 132 `uninitialized-state`
 false positives from the shared-storage delegatecall architecture — the deployed-module compilation
 units plus the new `DegenerusGameLens` unit, see below) + Aderyn 0.6.8 (9 High / 20 Low, unchanged).
 Slither totals are sensitive to the scan environment (solc/toolchain resolution), so the absolute
 count is not comparable across machines — re-runs should compare category triage, not the total.
-These counts were measured directly at tree `d93ef47a`, not carried forward from an earlier scan,
-and the previously tagged tree `3e146f95` was re-scanned in the same environment (reproducing its
-recorded 3,321 / 171 High exactly), so the delta below is a measured diff rather than a comparison
-against a recorded figure.
+These counts were measured directly at tree `0e7b02fe`, not carried forward from an earlier scan,
+and the previously tagged tree `d93ef47a` was re-scanned in the same environment (reproducing its
+recorded 3,323 / 171 High exactly, detector-for-detector), so the delta below is a measured diff
+rather than a comparison against a recorded figure.
 
-The delta against the tree tagged before this chain began (`4e616db4`) is **+180 results and +15
-High**, spanning ten changes: the `extsload` observability lens, the module observability events,
-the foil daily quest moving to the final-jackpot RNG request, the static boon tables, the
+The delta against the tree tagged before this chain began (`4e616db4`) is **+182 results and +16
+High**, spanning thirteen changes: the `extsload` observability lens, the module observability
+events, the foil daily quest moving to the final-jackpot RNG request, the static boon tables, the
 council-review fixes, the seat push-mint, the dead-code removal, the size-scaled lootbox WWXRP
-stake, the coinflip claimable-preview fix, and the vault share-token ENS reverse names. Keyed
-line-insensitively on (check, impact, subject function), every addition is attributable:
+stake, the coinflip claimable-preview fix, the vault share-token ENS reverse names, the solo-quadrant
+drop from the main-board ticket draw, the foil-pack spend-waterfall refactor, and the award-rounding
+granules. Keyed line-insensitively on (check, impact, subject function), every addition is
+attributable:
 
 - **The new `DegenerusGameLens` compilation unit (~160 of the additions).** The lens imports
   `DegenerusGameMintStreakUtils`, which pulls `DegenerusGameStorage` into its compilation unit, so
@@ -169,6 +171,22 @@ line-insensitively on (check, impact, subject function), every addition is attri
   decoders, and one `missing-inheritance`. No new code defect is involved. One `unused-return`
   Medium covers the viewer deliberately discarding two data-source flags it no longer needs for
   selection.
+- **The award-rounding granules (+4 Medium, −3, ZERO High) and the foil spend waterfall (+1 High,
+  +1 Medium, +1 Low).** The award-rounding span adds four `divide-before-multiply` Mediums — on
+  `FlipRoundLib.roundFlipToHundreds`, `FlipRoundLib.floorWholeFlip`,
+  `DegenerusGameJackpotModule._payGoldenTicket` and `_distributeTicketJackpot`. Each is the
+  deliberate `(x / granule) * granule` truncation that produces the round award figure, the same
+  benign pattern already triaged on the Coinflip take-profit partition; the floor is the feature.
+  Three findings went away in the same span: the two `divide-before-multiply` Mediums on
+  `_resolvePresaleBox` / `_settleLootboxRoll` did not disappear but MOVED into `FlipRoundLib` when
+  the inline whole-FLIP floor became a library call, and `uninitialized-local` on
+  `_distributeTicketsToBuckets.globalIdx` went with the deleted remainder-window cursor. **The
+  award-rounding work contributes no High.** The one new High in this span is
+  `uninitialized-state` on `DegenerusGameStorage.presaleOver` (131 → 132) from the foil-pack spend
+  waterfall — the same shared-storage delegatecall false-positive family described above; the field
+  is written by the deployed modules, and it flipped out of the `unused-state` Informational tier
+  precisely because the waterfall now reads it.
+
 - **The foil-quest request-side roll (+2 High, plus a few Medium/Low).** The High pair is
   `weak-prng` on the pre-existing `lvl % 10` / `lvl % 100` decimator-window arithmetic (12 → 14),
   newly flagged only because its result now flows into the `rollDailyQuest` external call; these

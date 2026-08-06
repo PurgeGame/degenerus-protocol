@@ -81,13 +81,24 @@ describe("SURF-01 — hero-override gold-color byte-layout spot-check", function
     expect(expectedByte & 7).to.equal(3);          // symbol 3
   });
 
-  it("hero color path does NOT route through weightedColorBucket (literal-slice preservation)", function () {
-    // Structural assertion: SURF-01 NOTE in REQUIREMENTS.md states hero color is
-    // RNG-derived 3-bit literal slice, NOT through weightedColorBucket. The
-    // _applyHeroOverride function body at L1582-1609 of
-    // contracts/modules/DegenerusGameJackpotModule.sol contains 4 literal-slice
-    // expressions and ZERO `weightedColorBucket` calls. Verify by parsing the
-    // function body via brace-depth matching, then grep within that body.
+  it("hero color path does NOT route through weightedColorBucket (colour bits preserved)", function () {
+    // RE-EXPRESSED (2026-08-06). The PROPERTY is unchanged and still load-bearing:
+    // the hero override must never derive a colour through `weightedColorBucket`,
+    // whose /256 ladder is heavy-tailed and would bias hero colours.
+    //
+    // The MECHANISM that guarantees it changed, so the old positive evidence went
+    // stale and this gate had been failing unnoticed (`test/stat/` is not run by
+    // `make test-hardhat`). It used to build the whole trait byte from four literal
+    // slices of `randomWord` (& 7, >> 3, >> 6, >> 9). `_applyHeroOverride` now takes
+    // `heroEntropy`, delegates to `_rollHeroSymbol`, and applies the result through
+    // `_applyHeroResult`, which does:
+    //     w[heroQuadrant] = (w[heroQuadrant] & 0xF8) | heroSymbol;
+    // i.e. it PRESERVES the existing colour bits outright and replaces only the low
+    // 3 symbol bits. That satisfies the property more strongly than the literal
+    // slices did — no colour is derived on this path at all.
+    //
+    // So the negation is asserted over the whole hero call chain (not just the one
+    // body), and the positive evidence is now the 0xF8 colour-preserving mask.
     const source = fs.readFileSync(JACKPOT_MODULE_PATH, "utf8");
     const start = source.indexOf("function _applyHeroOverride(");
     expect(start, "could not locate _applyHeroOverride in module source").to.be.gte(0);
@@ -112,14 +123,46 @@ describe("SURF-01 — hero-override gold-color byte-layout spot-check", function
 
     const body = source.slice(start, bodyEnd);
 
-    // Negation: the helper body must NOT call weightedColorBucket.
-    expect(body).to.not.include("weightedColorBucket");
+    // Negation, over the whole hero call chain: none of the three functions that
+    // make up the hero override may reach weightedColorBucket.
+    for (const fn of [
+      "function _applyHeroOverride(",
+      "function _applyHeroResult(",
+      "function _rollHeroSymbol(",
+    ]) {
+      const fnStart = source.indexOf(fn);
+      expect(fnStart, `could not locate ${fn} in module source`).to.be.gte(0);
+      let d = 0, seen = false, end = -1;
+      for (let i = fnStart; i < source.length; i++) {
+        if (source[i] === "{") { d++; seen = true; }
+        else if (source[i] === "}") { d--; if (seen && d === 0) { end = i + 1; break; } }
+      }
+      expect(end, `could not locate end of ${fn}`).to.be.gte(0);
+      expect(
+        source.slice(fnStart, end),
+        `${fn} must not route the hero colour through weightedColorBucket`,
+      ).to.not.include("weightedColorBucket");
+    }
 
-    // Positive evidence: the 4 literal-slice expressions are present.
-    expect((body.match(/randomWord & 7/g) || []).length).to.be.gte(1);
-    expect((body.match(/randomWord >> 3/g) || []).length).to.be.gte(1);
-    expect((body.match(/randomWord >> 6/g) || []).length).to.be.gte(1);
-    expect((body.match(/randomWord >> 9/g) || []).length).to.be.gte(1);
+    // Positive evidence: the override preserves the existing colour bits and
+    // replaces only the low 3 symbol bits. If this mask ever widens past 0xF8 the
+    // hero path starts writing colour, and this gate must fail.
+    const resultStart = source.indexOf("function _applyHeroResult(");
+    let rd = 0, rseen = false, rend = -1;
+    for (let i = resultStart; i < source.length; i++) {
+      if (source[i] === "{") { rd++; rseen = true; }
+      else if (source[i] === "}") { rd--; if (rseen && rd === 0) { rend = i + 1; break; } }
+    }
+    const resultBody = source.slice(resultStart, rend);
+    expect(
+      /w\[heroQuadrant\]\s*=\s*\(\s*w\[heroQuadrant\]\s*&\s*0xF8\s*\)\s*\|\s*heroSymbol\s*;/.test(
+        resultBody,
+      ),
+      "the hero result must preserve the colour bits via the 0xF8 mask and write only the symbol",
+    ).to.equal(true);
+
+    // The override itself must still be the sole entry point that applies it.
+    expect(body).to.include("_applyHeroResult(");
   });
 });
 
@@ -152,7 +195,22 @@ describe.skip("SURF-02 + SURF-03 — no new test, see referenced existing carrie
 // ---------------------------------------------------------------------------
 
 describe("SURF-04 — 8 documented non-injection lines byte-identical vs v33.0 anchor", function () {
-  it("git diff vs v33.0 anchor does NOT modify any of [513, 527, 598, 599, 683, 1687, 1713, 1715]", function () {
+  // SUPERSEDED 2026-08-06 (documented skip, matching this file's convention for a
+  // baseline that can no longer hold — see the v40.0 SURF-01/02/03/05 skips below).
+  //
+  // The gate pins ORIGINAL-side lines [513, 527, 598, 599, 683, 1687, 1713, 1715] of
+  // DegenerusGameJackpotModule.sol against the v33.0 anchor 4ce3703d. Many milestones
+  // have since rewritten that module by design — the per-pull level resample, the solo
+  // quadrant drop, the whole-ticket award split — and 6 of the 8 lines are now touched.
+  // Verified as pre-existing rather than caused by the change under test: replaying this
+  // gate's own hunk logic over `anchor..HEAD` and over `anchor..worktree` yields the
+  // identical touched set, so no uncommitted work contributes to it.
+  //
+  // The line-level property is not re-expressible against a module this far evolved. The
+  // structures those lines guarded are pinned behaviourally instead by the dedicated
+  // source-structural unit suites (JackpotNearFutureCoinUnits, JackpotFarFutureCoinUnits,
+  // JackpotTicketRollSilentColdBust, FlipHundredsInvariant).
+  it.skip("git diff vs v33.0 anchor does NOT modify any of [513, 527, 598, 599, 683, 1687, 1713, 1715]", function () {
     // Soft-fail mode: if the anchor commit is unreachable (shallow clone,
     // force-push, etc.), skip with a CI warning rather than report a vacuous pass.
     let anchorReachable = false;
@@ -764,7 +822,16 @@ describe("v37.0 SURF-01..04 — protected surfaces vs v36.0 baseline 1c0f0913", 
     return { skipped: false, trivial: false };
   }
 
-  it("SURF-01 — DegenerusTraitUtils.sol existing functions byte-identical vs v36.0 baseline 1c0f0913 (additions to packedTraitsDegenerette + _degTrait permitted)", function () {
+  // SUPERSEDED 2026-08-06 (documented skip, matching this file's convention).
+  // `DegenerusTraitUtils.sol` has legitimately moved across SEVEN commits since this
+  // baseline — dd09cb99 (gas sweep), f255d56c (v71 foil pack), e94f1719 (dead foil
+  // producer removal), 03a6ec5d (ASCII reflow), 609628c0 (dead-code removal),
+  // 68402ddd (NatSpec), b9ab0f30 (stale-comment fix) — so a file-level zero-diff can
+  // never hold again. This gate had been failing unnoticed for many milestones because
+  // `make test-hardhat` does not run `test/stat/`; it is NOT drift caused by the change
+  // under test. The producer paths it guarded are pinned behaviourally by
+  // DegeneretteProducerChi2, TraitDistribution and PerPullLevelDistribution.
+  it.skip("SURF-01 — DegenerusTraitUtils.sol existing functions byte-identical vs v36.0 baseline 1c0f0913 (additions to packedTraitsDegenerette + _degTrait permitted)", function () {
     const result = walkAndAssertV37(V36_BASELINE, TRAIT_UTILS_PATH, SURF_01_PROTECTED_RANGES_V37);
     if (result.skipped) this.skip();
   });
@@ -905,7 +972,16 @@ describe("v38.0 SURF-01..02 — protected surfaces vs v37.0 baseline 2654fcc2", 
     if (result.skipped) this.skip();
   });
 
-  it("SURF-01b — DegenerusTraitUtils.sol file-level zero-diff vs v37.0 baseline 2654fcc2 (Mint + Jackpot + Degenerette producer paths UNTOUCHED at v38)", function () {
+  // SUPERSEDED 2026-08-06 (documented skip, matching this file's convention).
+  // `DegenerusTraitUtils.sol` has legitimately moved across SEVEN commits since this
+  // baseline — dd09cb99 (gas sweep), f255d56c (v71 foil pack), e94f1719 (dead foil
+  // producer removal), 03a6ec5d (ASCII reflow), 609628c0 (dead-code removal),
+  // 68402ddd (NatSpec), b9ab0f30 (stale-comment fix) — so a file-level zero-diff can
+  // never hold again. This gate had been failing unnoticed for many milestones because
+  // `make test-hardhat` does not run `test/stat/`; it is NOT drift caused by the change
+  // under test. The producer paths it guarded are pinned behaviourally by
+  // DegeneretteProducerChi2, TraitDistribution and PerPullLevelDistribution.
+  it.skip("SURF-01b — DegenerusTraitUtils.sol file-level zero-diff vs v37.0 baseline 2654fcc2 (Mint + Jackpot + Degenerette producer paths UNTOUCHED at v38)", function () {
     const result = expectFileLevelZeroDiffV38(V37_BASELINE, TRAIT_UTILS_PATH);
     if (result.skipped) this.skip();
   });
@@ -1224,12 +1300,20 @@ describe("v40.0 SURF-01..05 — protected surfaces vs v39.0 baseline 6a7455d1", 
     expect(fs.existsSync(entropyLibPath), `${entropyLibPath} must exist`).to.equal(true);
     const src = fs.readFileSync(entropyLibPath, "utf8");
     const fnMatches = src.match(/function\s+\w+/g) || [];
+    // RE-PINNED 2026-08-06 from 1 -> 2 members. `hash1` was added deliberately by
+    // `dbb31aab` (gas round 7, small-contract sweep) as the single-operand twin of
+    // `hash2`; the v40.0 gate predates it and had been failing unnoticed ever since,
+    // because `make test-hardhat` does not run `test/stat/`. The gate's PURPOSE is
+    // unchanged — it is drift detection for an unreviewed member appearing in the
+    // library — so it is re-pinned to the current intended surface rather than
+    // dropped. A THIRD member still fails here.
     expect(
       fnMatches.length,
-      `[v40.0 SURF] EntropyLib.sol must contain exactly one function (hash2); ` +
+      `[v40.0 SURF] EntropyLib.sol must contain exactly two functions (hash2, hash1); ` +
       `found ${fnMatches.length}: ${fnMatches.join(", ")}`,
-    ).to.equal(1);
+    ).to.equal(2);
     expect(src).to.include("function hash2");
+    expect(src).to.include("function hash1");
     expect(src).to.not.include("entropyStep");
   });
 
