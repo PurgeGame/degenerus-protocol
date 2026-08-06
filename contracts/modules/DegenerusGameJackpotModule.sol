@@ -230,6 +230,10 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     /// @dev Sentinel for _rollHeroSymbol's banQuadrant param: no quadrant banned.
     uint8 private constant _NO_QUADRANT_BAN = 0xFF;
 
+    /// @dev Sentinel for _computeBucketCounts' excludeIdx param: every bucket eligible.
+    ///      Any value >= 4 matches no bucket index.
+    uint8 private constant _NO_QUADRANT_EXCLUDE = 0xFF;
+
     /// @dev Max forward offset for carryover source selection (lvl+1..lvl+4).
     uint8 private constant DAILY_CARRYOVER_MAX_OFFSET = 4;
 
@@ -686,7 +690,8 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
                 dailyEntries,
                 EntropyLib.hash2(randWord, lvl),
                 TICKET_JACKPOT_MAX_WINNERS,
-                241
+                241,
+                true // main board: solo quadrant took the ETH remainder
             );
         }
 
@@ -704,7 +709,8 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
                 carryoverEntries,
                 EntropyLib.hash2(randWord, sourceLevel),
                 TICKET_JACKPOT_MAX_WINNERS,
-                240
+                240,
+                false // bonus board: no ETH distribution, no solo quadrant
             );
         }
 
@@ -741,7 +747,8 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
                 entries,
                 EntropyLib.hash2(rngWord, lvl),
                 TICKET_JACKPOT_MAX_WINNERS,
-                239
+                239,
+                false // bonus board: no ETH distribution, no solo quadrant
             );
         }
 
@@ -856,12 +863,19 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
                 entries,
                 EntropyLib.hash2(randWord, lvl),
                 PURCHASE_PHASE_TICKET_MAX_WINNERS,
-                242
+                242,
+                true // main board: solo quadrant took the ETH remainder
             );
         }
     }
 
     /// @dev Distributes ticket rewards to winners drawn from winning trait pools.
+    /// @param excludeSolo True on main-board legs, where the solo quadrant already
+    ///        pays the day's headline ETH prize to a single winner: that quadrant is
+    ///        dropped from the ticket draw so matching it means the big prize or
+    ///        nothing, never a consolation trickle. `entropy` is the pre-splice value
+    ///        the ETH leg fed `_soloAdjustedEntropy`, so the pick reproduces exactly.
+    ///        False on bonus-board legs, which run no ETH distribution.
     function _distributeTicketJackpot(
         uint24 sourceLvl,
         uint24 queueLvl,
@@ -869,7 +883,8 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         uint256 entries,
         uint256 entropy,
         uint16 maxWinners,
-        uint8 saltBase
+        uint8 saltBase,
+        bool excludeSolo
     ) private {
         if (entries == 0) return;
 
@@ -884,7 +899,15 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
             uint8 activeCount,
             uint256[4] memory lens,
             address[4] memory deities
-        ) = _computeBucketCounts(sourceLvl, traitIds, cap, entropy);
+        ) = _computeBucketCounts(
+                sourceLvl,
+                traitIds,
+                cap,
+                entropy,
+                excludeSolo
+                    ? _pickSoloQuadrant(traitIds, entropy)
+                    : _NO_QUADRANT_EXCLUDE
+            );
         if (activeCount == 0) return;
 
         _distributeTicketsToBuckets(
@@ -1012,11 +1035,15 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     /// @dev Computes bucket winner counts for active trait buckets (including virtual deity entries).
     ///      Also returns each trait's bucket length and deity address so the
     ///      distribution loop reuses them instead of re-reading storage.
+    /// @param excludeIdx Bucket dropped from the draw, or `_NO_QUADRANT_EXCLUDE`.
+    ///        Dropping is skipped when it would leave no active bucket, so the
+    ///        award is never stranded against backing already moved to nextPrizePool.
     function _computeBucketCounts(
         uint24 lvl,
         uint8[4] memory traitIds,
         uint16 maxWinners,
-        uint256 entropy
+        uint256 entropy,
+        uint8 excludeIdx
     )
         private
         view
@@ -1048,6 +1075,21 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
                 ++i;
             }
         }
+
+        // Drop the excluded bucket unless it is the only active one. Everything
+        // below keys off activeMask, so the base split and the remainder rotation
+        // both route its winners to the surviving buckets; maxWinners is unchanged,
+        // so the same total entries go out across fewer quadrants.
+        if (excludeIdx < 4 && (activeMask & uint8(1 << excludeIdx)) != 0) {
+            uint8 kept = activeMask & ~uint8(1 << excludeIdx);
+            if (kept != 0) {
+                activeMask = kept;
+                unchecked {
+                    --activeCount;
+                }
+            }
+        }
+
         if (activeCount == 0) return (counts, 0, lens, deities);
 
         uint16 baseCount = maxWinners / activeCount;
