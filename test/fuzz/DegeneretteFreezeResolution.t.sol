@@ -3,6 +3,8 @@ pragma solidity ^0.8.26;
 
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {DegenerusTraitUtils} from "../../contracts/DegenerusTraitUtils.sol";
+import {EntropyLib} from "../../contracts/libraries/EntropyLib.sol";
+import {FlipRoundLib} from "../../contracts/libraries/FlipRoundLib.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {sDGNRS} from "../../contracts/sDGNRS.sol";
 
@@ -57,6 +59,10 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
 
     /// @dev Salt used in degenerette bet resolution for the first spin.
     bytes1 private constant QUICK_PLAY_SALT = 0x51; // 'Q'
+
+    /// @dev Mirrors `DegenerusGameDegeneretteModule.FLIP_ROUND_TAG` (private there), the
+    ///      domain separator the 100-FLIP award collapse is keyed under.
+    uint256 private constant FLIP_ROUND_TAG = 0x466c6970526f756e64; // "FlipRound"
 
     // --- DGAS-05 same-results constants ---
 
@@ -348,6 +354,18 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
     ///         `DegeneretteResult` events; the ETH ethShare is the 3-tier split of
     ///         each spin's raw payout (a LARGE pool is seeded so the 10% cap never
     ///         binds in this Tier-1 test — Tier-2 owns the cap). Byte-identical (==).
+    /// @dev The §3c award gate as `_resolveBet` applies it: collapse onto a whole 100-FLIP
+    ///      multiple above the threshold, floor to whole FLIP at or below it.
+    function _gateFlipAward(uint256 amount, uint256 entropy)
+        private
+        pure
+        returns (uint256)
+    {
+        return amount > FlipRoundLib.FLIP_ROUND_THRESHOLD
+            ? FlipRoundLib.roundFlipToHundreds(amount, entropy)
+            : FlipRoundLib.floorWholeFlip(amount);
+    }
+
     function testBatchedPayoutEqualsPerSpinExpectation_Tier1() public {
         // Large unfrozen pool so the ETH 10% cap never binds (cap is Tier-2's job).
         _seedFuturePrizePool(1_000_000 ether);
@@ -411,12 +429,33 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
         assertEq(payoutCappedCount, 0, "Tier-1: large pool -> no spin should cap");
 
         // FLIP survival flip (bet-keyed double-or-nothing on the bet's summed payout):
-        // the mint is 2x the per-spin sum on a winning flip, 0 on a losing one. The
+        // the raw mint is 2x the per-spin sum on a winning flip, 0 on a losing one. The
         // chosen word wins the flip for this bet, so the doubled path is live.
-        uint256 expectedFlipMint = (uint256(
+        uint256 rawFlipMint = (uint256(
             keccak256(abi.encode(word, flipBet))
         ) & 1 == 1) ? expectedFlip * 2 : 0;
-        assertGt(expectedFlipMint, 0, "Tier-1: word must win the FLIP survival flip");
+        assertGt(rawFlipMint, 0, "Tier-1: word must win the FLIP survival flip");
+
+        // The award granule then collapses the SURVIVED total onto a whole 100-FLIP
+        // multiple. Replicated here from the same inputs the module uses, so this stays a
+        // byte-identical amount assertion rather than a tolerance: the collapse is keyed on
+        // hash2(rngWord, betId ^ FLIP_ROUND_TAG), both operands fixed at fulfillment.
+        uint256 expectedFlipMint = _gateFlipAward(
+            rawFlipMint,
+            EntropyLib.hash2(word, uint256(flipBet) ^ FLIP_ROUND_TAG)
+        );
+        // Non-vacuity for the collapse itself: this batch must actually cross the
+        // threshold, or the assertion below degrades to the pre-granule behaviour.
+        assertGt(
+            rawFlipMint,
+            FlipRoundLib.FLIP_ROUND_THRESHOLD,
+            "Tier-1: the FLIP payout must clear the granule threshold"
+        );
+        assertEq(
+            expectedFlipMint % FlipRoundLib.FLIP_ROUND_UNIT,
+            0,
+            "Tier-1: the collapsed mint must be a whole 100-FLIP multiple"
+        );
 
         // Tier-1 byte-identical assertions.
         uint256 flipDelta = coin.balanceOf(player) - preFlip;
@@ -425,7 +464,7 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
         uint256 claimablePoolDelta = _readClaimablePool() - preClaimablePool;
 
         assertEq(flipDelta, expectedFlipMint,
-            "Tier-1: FLIP mint delta == 2x Sum of per-spin FLIP payouts (survival flip won)");
+            "Tier-1: FLIP mint delta == the 100-FLIP collapse of 2x Sum of per-spin FLIP payouts (survival flip won)");
         assertEq(wwxrpDelta, expectedWwxrp,
             "Tier-1: WWXRP mint delta == Sum of per-spin WWXRP payouts (additive)");
         assertEq(claimableDelta, expectedEthShare,

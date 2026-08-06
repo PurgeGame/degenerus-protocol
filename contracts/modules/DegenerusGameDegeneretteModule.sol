@@ -8,6 +8,7 @@ import {
 import {ContractAddresses} from "../ContractAddresses.sol";
 import {DegenerusTraitUtils} from "../DegenerusTraitUtils.sol";
 import {EntropyLib} from "../libraries/EntropyLib.sol";
+import {FlipRoundLib} from "../libraries/FlipRoundLib.sol";
 import {ActivityCurveLib} from "../libraries/ActivityCurveLib.sol";
 import {DegenerusGamePayoutUtils} from "./DegenerusGamePayoutUtils.sol";
 import {DegenerusGameMintStreakUtils} from "./DegenerusGameMintStreakUtils.sol";
@@ -892,6 +893,32 @@ contract DegenerusGameDegeneretteModule is
                 acc.flipMint -= totalPayout;
                 totalPayout = 0;
             }
+
+            // Collapse what the player actually receives onto a whole 100-FLIP multiple,
+            // EV-preserving, above the threshold where the granule is a small slice of the
+            // award; below it the payout keeps the whole-FLIP floor. A bet that loses its
+            // survival flip is zero and both forms leave it there. The delta rides into the
+            // accumulator so the single flush mints exactly this bet's payout — the
+            // subtraction cannot underflow because the accumulator already holds at least it.
+            //
+            // The roll is per-bet on a betId-keyed word, and that is load-bearing: settling
+            // is permissionless and `betIds[]` is caller-composed, so rounding the summed
+            // `acc.flipMint` at the flush instead would let a caller enumerate batch
+            // partitions against the already-committed word and take the split with the
+            // most round-ups. Keyed per bet, the outcome is fixed at fulfillment however the
+            // bets are batched.
+            uint256 rounded = totalPayout > FlipRoundLib.FLIP_ROUND_THRESHOLD
+                ? FlipRoundLib.roundFlipToHundreds(
+                    totalPayout,
+                    EntropyLib.hash2(rngWord, uint256(betId) ^ FLIP_ROUND_TAG)
+                )
+                : FlipRoundLib.floorWholeFlip(totalPayout);
+            if (rounded > totalPayout) {
+                acc.flipMint += rounded - totalPayout;
+            } else if (rounded < totalPayout) {
+                acc.flipMint -= totalPayout - rounded;
+            }
+            totalPayout = rounded;
         }
 
         // One lootbox per betId, on the summed lootbox-share. The box seed binds the immutable
@@ -1567,6 +1594,10 @@ contract DegenerusGameDegeneretteModule is
     uint256 private constant BOX_FLIP_SPINS = 3;
     uint256 private constant BOX_SURVIVAL_TAG = 0x537572766976616c; // "Survival"
     uint256 private constant BOX_RECIRC_TAG = 0x5265636972; // "Recir"
+    /// @dev Domain-separation tag for the 100-FLIP award collapse. Mixed with the immutable
+    ///      per-award key (the betId, the box seed) so the roll is fixed at VRF fulfillment
+    ///      and cannot be steered by how a settle batch is composed.
+    uint256 private constant FLIP_ROUND_TAG = 0x466c6970526f756e64; // "FlipRound"
 
     // Box-spin BoxSpin.betId header. Bit 63 is a box-origin sentinel (real bet nonces increment
     // from 1, so they never reach it); bits 62-60 carry the spin type; bits 59-0 are seed entropy
@@ -1727,6 +1758,17 @@ contract DegenerusGameDegeneretteModule is
         bool survived = total != 0 &&
             (EntropyLib.hash2(seed, BOX_SURVIVAL_TAG) & 1 == 1);
         total = survived ? total * 2 : 0;
+        // Collapse the surviving mint onto a whole 100-FLIP multiple, EV-preserving, above
+        // the threshold; a minimum box stakes about 13 FLIP at the milestone price, so
+        // smaller spins keep the whole-FLIP floor rather than round to nothing. The box seed
+        // is immutable per box and keyed here under its own tag, distinct from the survival
+        // draw.
+        total = total > FlipRoundLib.FLIP_ROUND_THRESHOLD
+            ? FlipRoundLib.roundFlipToHundreds(
+                total,
+                EntropyLib.hash2(seed, FLIP_ROUND_TAG)
+            )
+            : FlipRoundLib.floorWholeFlip(total);
         if (total != 0) coin.mintForGame(player, total);
 
         // One self-contained record: all three reels + count + survival + the final FLIP mint.

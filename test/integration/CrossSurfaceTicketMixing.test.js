@@ -16,7 +16,7 @@
 //
 //   TST-CLEAN-03 — `JackpotTicketWin` entries-basis emit regression:
 //     The 2 `JackpotTicketWin` emit sites emit the ENTRIES count queued into
-//     `entriesOwedPacked` — the already-correct `uint32(units)` leg and the BAF
+//     `entriesOwedPacked` — the `uint32(entriesEach)` leg and the BAF
 //     roll's `wholeTicketsToEntries(whole)` — neither multiplies the 4th arg by
 //     `QTY_SCALE`. This block asserts that, plus that the `JackpotTicketWin`
 //     event definition (field types + `indexed` markers) is unchanged: the value
@@ -169,7 +169,7 @@ function extractCallArgs(source, prefix) {
 }
 
 // Split a parenthesised arg list (inclusive of outer parens) into top-level
-// args, respecting nested parens so `uint32(units)` stays one arg.
+// args, respecting nested parens so `uint32(entriesEach)` stays one arg.
 function splitTopLevelArgs(parenList) {
   const inner = parenList.slice(1, -1);
   const args = [];
@@ -265,7 +265,7 @@ describe("CrossSurfaceTicketMixing — Phase 278 Wave 2 TST-CLEAN-02/03 + TST-CR
           "every JackpotTicketWin emit must supply 7 args"
         ).to.equal(7);
         // The 4th positional arg (index 3) is `ticketCount`. It carries the
-        // entries count queued (`uint32(units)` / `wholeTicketsToEntries(whole)`)
+        // entries count queued (`uint32(entriesEach)` / `wholeTicketsToEntries(whole)`)
         // — never a `* QTY_SCALE` scaled value.
         expect(
           /QTY_SCALE/.test(args[3]),
@@ -274,7 +274,7 @@ describe("CrossSurfaceTicketMixing — Phase 278 Wave 2 TST-CLEAN-02/03 + TST-CR
       }
     });
 
-    it("[03b] the 2 emit sites emit, in source order, the entries counts `uint32(units)`, `wholeTicketsToEntries(whole)`", function () {
+    it("[03b] the 2 emit sites emit, in source order, the entries counts `uint32(entriesEach)`, `wholeTicketsToEntries(whole)`", function () {
       const src = fs.readFileSync(JACKPOT_SOURCE_PATH, "utf8");
       const emitMatches = [...src.matchAll(/emit JackpotTicketWin\(/g)];
       const fourthArgs = emitMatches.map((m) => {
@@ -284,13 +284,14 @@ describe("CrossSurfaceTicketMixing — Phase 278 Wave 2 TST-CLEAN-02/03 + TST-CR
         );
         return splitTopLevelArgs(argList)[3];
       });
-      // Site 1 (the already-correct coin/units leg): `uint32(units)` —
+      // Site 1 (the ticket-jackpot leg): `uint32(entriesEach)`, a whole-ticket
+      // multiple identical for every winner in the draw —
       // `_budgetToEntries` already returns entries. Site 2 (the BAF
       // `_jackpotTicketRoll`): the post-Bernoulli whole count routed through the
       // canonical `wholeTicketsToEntries`. Each matches the entries value passed
       // to the adjacent `_queueEntries` call.
       expect(fourthArgs).to.deep.equal([
-        "uint32(units)",
+        "uint32(entriesEach)",
         "wholeTicketsToEntries(whole)",
       ]);
     });

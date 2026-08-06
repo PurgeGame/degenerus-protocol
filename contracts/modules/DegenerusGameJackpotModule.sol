@@ -5,6 +5,7 @@ import {IStETH} from "../interfaces/IStETH.sol";
 import {DegenerusGamePayoutUtils} from "./DegenerusGamePayoutUtils.sol";
 import {ContractAddresses} from "../ContractAddresses.sol";
 import {EntropyLib} from "../libraries/EntropyLib.sol";
+import {FlipRoundLib} from "../libraries/FlipRoundLib.sol";
 import {PriceLookupLib} from "../libraries/PriceLookupLib.sol";
 import {JackpotBucketLib} from "../libraries/JackpotBucketLib.sol";
 import {IDegenerusJackpots} from "../interfaces/IDegenerusJackpots.sol";
@@ -272,6 +273,10 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     /// @dev Maximum winners per ticket jackpot distribution (gas safety);
     ///      the daily, carryover, and early-bird legs each apply it separately.
     uint16 private constant TICKET_JACKPOT_MAX_WINNERS = 100;
+
+    /// @dev Entries per whole ticket. Jackpot budgets are denominated in entries
+    ///      (quarter-tickets), but awards are paid in whole tickets only.
+    uint256 private constant ENTRIES_PER_TICKET = 4;
 
     /// @dev Daily jackpot max scale (6.36x) producing bucket counts 159/95/50/1 at 200+ ETH.
     ///      All 305 winners (159 + 95 + 50 + 1) are paid in a single call.
@@ -888,11 +893,17 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     ) private {
         if (entries == 0) return;
 
+        // Awards are whole tickets only. Flooring the winner count to the whole tickets
+        // the budget covers makes every winner worth at least one ticket, so no winner is
+        // ever queued a bare quarter and none is credited zero.
+        uint256 tickets = entries / ENTRIES_PER_TICKET;
+        if (tickets == 0) return;
+
         uint8[4] memory traitIds = JackpotBucketLib.unpackWinningTraits(
             winningTraitsPacked
         );
         uint16 cap = maxWinners;
-        if (entries < cap) cap = uint16(entries);
+        if (tickets < cap) cap = uint16(tickets);
 
         (
             uint16[4] memory counts,
@@ -910,6 +921,10 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
             );
         if (activeCount == 0) return;
 
+        // One figure for the whole distribution: every winner in every bucket takes the
+        // SAME number of whole tickets. The `tickets % cap` leftover is not queued — two
+        // winners comparing their awards must never find one short, and the event feed
+        // carries a single number per draw.
         _distributeTicketsToBuckets(
             sourceLvl,
             queueLvl,
@@ -917,9 +932,8 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
             counts,
             lens,
             deities,
-            entries,
+            (tickets / cap) * ENTRIES_PER_TICKET,
             entropy,
-            cap,
             saltBase
         );
     }
@@ -935,31 +949,23 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         uint16[4] memory counts,
         uint256[4] memory lens,
         address[4] memory deities,
-        uint256 entries,
+        uint256 entriesEach,
         uint256 entropy,
-        uint16 cap,
         uint8 saltBase
     ) private {
-        uint256 baseEntries = entries / cap;
-        uint256 distParams = (entries % cap) | ((entropy % cap) << 128);
-        uint256 globalIdx;
-
         for (uint8 traitIdx; traitIdx < 4; ) {
             if (counts[traitIdx] != 0) {
                 entropy = uint256(
-                    keccak256(abi.encode(entropy, traitIdx, entries))
+                    keccak256(abi.encode(entropy, traitIdx, entriesEach))
                 );
-                globalIdx = _distributeTicketsToBucket(
+                _distributeTicketsToBucket(
                     sourceLvl,
                     queueLvl,
                     traitIds[traitIdx],
                     counts[traitIdx],
                     entropy,
                     uint8(saltBase + traitIdx),
-                    baseEntries,
-                    distParams,
-                    cap,
-                    globalIdx,
+                    entriesEach,
                     lens[traitIdx],
                     deities[traitIdx]
                 );
@@ -970,7 +976,8 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         }
     }
 
-    /// @dev Distributes tickets to winners in a single bucket.
+    /// @dev Distributes tickets to winners in a single bucket. Every winner receives
+    ///      `entriesEach` — a whole number of tickets, identical across the whole draw.
     function _distributeTicketsToBucket(
         uint24 sourceLvl,
         uint24 queueLvl,
@@ -978,13 +985,10 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         uint16 count,
         uint256 entropy,
         uint8 salt,
-        uint256 baseEntries,
-        uint256 distParams,
-        uint16 cap,
-        uint256 startIdx,
+        uint256 entriesEach,
         uint256 bucketLen,
         address deity
-    ) private returns (uint256 endIdx) {
+    ) private {
         (
             address[] memory winners,
             uint256[] memory ticketIndexes
@@ -998,38 +1002,28 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
                 deity
             );
 
-        uint256 extra = distParams & type(uint128).max;
-        uint256 offset = distParams >> 128;
         uint256 len = winners.length;
-        uint256 cursor = (startIdx + offset) % cap;
         for (uint256 i; i < len; ) {
             address winner = winners[i];
-            uint256 units = baseEntries;
-            if (extra != 0 && cursor < extra) {
-                units += 1;
-            }
-            if (winner != address(0) && units != 0) {
-                _queueEntries(winner, queueLvl, uint32(units), true);
+            if (winner != address(0)) {
+                _queueEntries(winner, queueLvl, uint32(entriesEach), true);
                 // ticketCount carries the entries count awarded (price/4 units;
-                // _budgetToEntries already returns entries).
+                // _budgetToEntries already returns entries). It is always a whole
+                // multiple of ENTRIES_PER_TICKET.
                 emit JackpotTicketWin(
                     winner,
                     queueLvl,
                     traitId,
-                    uint32(units),
+                    uint32(entriesEach),
                     sourceLvl,
                     ticketIndexes[i],
                     false
                 );
             }
             unchecked {
-                ++cursor;
-                if (cursor == cap) cursor = 0;
-                ++startIdx;
                 ++i;
             }
         }
-        return startIdx;
     }
 
     /// @dev Computes bucket winner counts for active trait buckets (including virtual deity entries).
@@ -1602,6 +1596,14 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
             flipCredit =
                 (flipValueWei * PRICE_COIN_UNIT) /
                 PriceLookupLib.priceForLevel(lvl + 1);
+            // Truncate to a whole 100-FLIP multiple. This leg is 5% of futurePrizePool on
+            // the 4-gold rung and a quarter of the grand's non-ETH remainder, so the
+            // discarded tail is under 1% at any pool worth winning and the path needs no
+            // VRF seed threaded into it to pay a round number. The event carries the
+            // truncated figure, which is what the winner receives.
+            flipCredit =
+                (flipCredit / FlipRoundLib.FLIP_ROUND_UNIT) *
+                FlipRoundLib.FLIP_ROUND_UNIT;
             if (flipCredit != 0) {
                 coinflip.creditFlip(winner, flipCredit);
             }
@@ -1932,10 +1934,11 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
 
     /// @dev Awards FLIP to per-pull random ticket holders across [minLevel, maxLevel].
     ///      Each pull samples its own random level via keccak256(randomWord, FLIP_LEVEL_TAG, i)
-    ///      and rotates trait deterministically via i % 4. Each pull awards the floored
-    ///      whole-FLIP `baseAmount` (1 FLIP = 1 ether); empty (lvl', trait_i) buckets
-    ///      silently skip. Sub-1-FLIP residues — the `coinBudget % cap` remainder and any
-    ///      sub-1-ether base — evaporate.
+    ///      and rotates trait deterministically via i % 4. The budget is split into whole
+    ///      100-FLIP units and the pull count floored to the units available, so every
+    ///      pull is worth at least one unit and every pull is worth the SAME; empty
+    ///      (lvl', trait_i) buckets silently skip and their share is simply not minted.
+    ///      The uneven-division leftover and the sub-100-FLIP budget remainder evaporate.
     ///      Per-trait deity addresses are cached at loop entry; the holder-index keccak is
     ///      keccak256(randomWord, trait_i, lvlPrime, i) so two pulls at the same (trait, i)
     ///      but different sampled levels do not collapse to the same holder index.
@@ -1947,8 +1950,14 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         uint256 randomWord
     ) private {
         if (coinBudget == 0) return;
-        uint16 cap = DAILY_COIN_MAX_WINNERS;
-        if (cap > coinBudget) cap = uint16(coinBudget);
+        // Flooring the pull count to the whole 100-FLIP units the budget covers makes
+        // every pull worth at least one unit, so the split is plain integer arithmetic
+        // and no winner is ever credited zero.
+        uint256 units = coinBudget / FlipRoundLib.FLIP_ROUND_UNIT;
+        uint256 cap = units < DAILY_COIN_MAX_WINNERS
+            ? units
+            : DAILY_COIN_MAX_WINNERS;
+        if (cap == 0) return;
 
         uint8[4] memory traitIds = JackpotBucketLib.unpackWinningTraits(
             winningTraitsPacked
@@ -1966,10 +1975,11 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
             unchecked { ++t; }
         }
 
-        uint256 baseAmount = ((coinBudget / cap) / 1 ether) * 1 ether;
-        // Sub-1-FLIP per-pull budget: every pull would award 0, so the
-        // selection loop has no effect — skip it entirely.
-        if (baseAmount == 0) return;
+        // Every paid pull carries the SAME amount. The `units % cap` leftover is simply
+        // not minted: an equal share is worth more than a fully-spent budget, because no
+        // winner can hold their pull against a neighbour's and find it short. The
+        // discarded tail is under one unit per pull.
+        uint256 amount = (units / cap) * FlipRoundLib.FLIP_ROUND_UNIT;
         uint24 range = maxLevel - minLevel + 1;
 
         // Winners accumulate into one creditFlipBatch call after the loop
@@ -2010,9 +2020,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
                 ticketIdx = type(uint256).max;
             }
 
-            uint256 amount = baseAmount;
-
-            if (winner != address(0) && amount != 0) {
+            if (winner != address(0)) {
                 emit JackpotFlipWin(
                     winner,
                     lvlPrime,
@@ -2037,7 +2045,8 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
 
     /// @dev Awards 25% of the FLIP coin budget to random ticket holders on far-future levels.
     ///      Samples up to 10 random levels in [lvl+5, lvl+99], picks 1 winner per level from
-    ///      that level's ticketQueue (traits not yet assigned), and splits the budget evenly.
+    ///      that level's ticketQueue (traits not yet assigned), and splits the budget into
+    ///      whole 100-FLIP units across a prefix of them, an equal share each.
     function _awardFarFutureCoinJackpot(
         uint24 lvl,
         uint256 farBudget,
@@ -2081,24 +2090,30 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
 
         if (found == 0) return;
 
-        // Distribute evenly among found winners, floored to whole-FLIP
-        // (1 FLIP = 1 ether); sub-1-FLIP residue evaporates.
-        uint256 perWinner = ((farBudget / found) / 1 ether) * 1 ether;
-        if (perWinner == 0) return;
+        // Split into whole 100-FLIP units and pay a prefix of the sampled winners, one
+        // unit minimum each. `winners[]` is already ordered by its own VRF draw, so
+        // truncating to `payCount` introduces no new choice. Every paid winner receives
+        // the SAME amount; the `units % payCount` leftover and the sub-100-FLIP budget
+        // remainder both evaporate.
+        uint256 units = farBudget / FlipRoundLib.FLIP_ROUND_UNIT;
+        uint256 payCount = units < found ? units : found;
+        if (payCount == 0) return;
 
-        address[] memory batchPlayers = new address[](found);
-        uint256[] memory batchAmounts = new uint256[](found);
+        uint256 amount = (units / payCount) * FlipRoundLib.FLIP_ROUND_UNIT;
 
-        for (uint8 i; i < found; ) {
+        address[] memory batchPlayers = new address[](payCount);
+        uint256[] memory batchAmounts = new uint256[](payCount);
+
+        for (uint256 i; i < payCount; ) {
             emit FarFutureFlipJackpotWinner(
                 winners[i],
                 lvl,
                 winnerLevels[i],
-                perWinner
+                amount
             );
 
             batchPlayers[i] = winners[i];
-            batchAmounts[i] = perWinner;
+            batchAmounts[i] = amount;
 
             unchecked {
                 ++i;

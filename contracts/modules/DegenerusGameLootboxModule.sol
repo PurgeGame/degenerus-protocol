@@ -11,6 +11,8 @@ import {ContractAddresses} from "../ContractAddresses.sol";
 import {DegenerusGameStorage} from "../storage/DegenerusGameStorage.sol";
 import {BitPackingLib} from "../libraries/BitPackingLib.sol";
 import {EntropyLib} from "../libraries/EntropyLib.sol";
+import {FlipRoundLib} from "../libraries/FlipRoundLib.sol";
+import {SigFigLib} from "../libraries/SigFigLib.sol";
 import {PriceLookupLib} from "../libraries/PriceLookupLib.sol";
 
 /// @notice Interface for minting WWXRP prize tokens
@@ -300,6 +302,10 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     uint256 private constant BOX_WWXRP_SPIN_TAG = 0x57777872705370696e; // "WwxrpSpin"
     uint256 private constant BOX_FLIP_SPIN_TAG = 0x4275726e69655370696e; // "FlipSpin"
     uint256 private constant BOX_ETH_SPIN_TAG = 0x4574685370696e; // "EthSpin"
+    /// @dev Domain-separation tag for the 100-FLIP award collapse. Keyed off the box/roll
+    ///      seed rather than a spare bit-slice, so the bit budgets documented above stay
+    ///      accurate and the roll is fixed at VRF fulfillment.
+    uint256 private constant FLIP_ROUND_TAG = 0x466c6970526f756e64; // "FlipRound"
     /// @dev Base BPS for low FLIP path (43.88%)
     uint16 private constant LOOTBOX_LARGE_FLIP_LOW_BASE_BPS = 4_388;
     /// @dev Step increase in BPS for low FLIP path (3.60% per step)
@@ -816,8 +822,18 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
             uint256 priceWei = PriceLookupLib.priceForLevel(currentLevel);
             uint256 flipBudget = (amount * flipBps) / 10_000;
             flipOut = (flipBudget * PRICE_COIN_UNIT) / priceWei;
-            // Floor to whole FLIP (1 FLIP = 1 ether), mirroring the lootbox.
-            flipOut = (flipOut / 1 ether) * 1 ether;
+            // Collapse onto a whole 100-FLIP multiple, EV-preserving, mirroring the lootbox.
+            // Only above the threshold: at the milestone price a minimum box bottoms out near
+            // 59 FLIP, where a 100-FLIP granule would be the whole prize, so small awards keep
+            // the whole-FLIP floor instead. The roll keys on this box's own committed seed —
+            // immutable buy data hashed with the index's word — so it is fixed at fulfillment
+            // and unsteerable.
+            flipOut = flipOut > FlipRoundLib.FLIP_ROUND_THRESHOLD
+                ? FlipRoundLib.roundFlipToHundreds(
+                    flipOut,
+                    EntropyLib.hash2(seed, FLIP_ROUND_TAG)
+                )
+                : FlipRoundLib.floorWholeFlip(flipOut);
             if (flipOut != 0) {
                 coinflip.creditFlip(player, flipOut);
             }
@@ -872,7 +888,11 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         uint256 tierTenths = _presaleBoxDgnrsTierTenths(soldBefore);
         // amount (wei) * (poolStart/40) per ETH * tier/10:
         //   = poolStart * tierTenths * amount / (40 * 10 * 1 ether)
-        uint256 dgnrsAmount = (poolStart * tierTenths * amount) / (400 * 1 ether);
+        // Collapse onto three significant figures so the award reads as a round number
+        // at any pool size. A pure floor: no entropy, and the truncation is under 1%.
+        uint256 dgnrsAmount = SigFigLib.floorToThreeSigFigs(
+            (poolStart * tierTenths * amount) / (400 * 1 ether)
+        );
         if (dgnrsAmount == 0) return 0;
         paid = dgnrs.transferFromPool(
             IsDGNRS.Pool.PresaleBox,
@@ -1461,8 +1481,17 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         (uint256 flipOut, uint32 scaledWholeTickets, bool wasSpin) =
             _resolveLootboxRoll(player, rollAmount, fullAmount, targetPrice, rollSeed, isFarFuture, activityScore, allowEthSpin, currentLevel);
 
-        // Floored to whole-FLIP (1 FLIP = 1 ether); sub-1-FLIP residue evaporates.
-        uint256 flipAmount = (flipOut / 1 ether) * 1 ether;
+        // Collapsed onto a whole 100-FLIP multiple, EV-preserving, above the threshold where
+        // the granule is a small slice of the award; a minimum box at the milestone price
+        // pays about 18 FLIP, so smaller awards keep the whole-FLIP floor rather than round
+        // to nothing. The roll keys on a domain-separated hash of this roll's own seed,
+        // consuming none of the primary chunk's documented bit windows.
+        uint256 flipAmount = flipOut > FlipRoundLib.FLIP_ROUND_THRESHOLD
+            ? FlipRoundLib.roundFlipToHundreds(
+                flipOut,
+                EntropyLib.hash2(rollSeed, FLIP_ROUND_TAG)
+            )
+            : FlipRoundLib.floorWholeFlip(flipOut);
 
         bool roundedUp;
         if (scaledWholeTickets != 0) {
@@ -2419,8 +2448,12 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         uint256 poolBalance = dgnrs.poolBalance(IsDGNRS.Pool.Lootbox);
 
         if (poolBalance == 0 || ppm == 0) return 0;
-        dgnrsAmount = (poolBalance * ppm * amount) /
-            (1_000_000 * 1 ether);
+        // Three significant figures, mirroring the presale box. The pool clamp is applied
+        // AFTER the collapse, so a clamped award is the pool balance exactly rather than a
+        // figure the pool cannot cover.
+        dgnrsAmount = SigFigLib.floorToThreeSigFigs(
+            (poolBalance * ppm * amount) / (1_000_000 * 1 ether)
+        );
         if (dgnrsAmount > poolBalance) {
             dgnrsAmount = poolBalance;
         }
