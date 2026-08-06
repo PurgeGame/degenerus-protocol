@@ -241,6 +241,10 @@ contract DegenerusQuests is IDegenerusQuests {
     /// @dev Total number of quest types for iteration bounds.
     uint8 private constant QUEST_TYPE_COUNT = 10;
 
+    /// @dev The level the deploy-time seeded quest belongs to. The game opens at `level == 0`
+    ///      and its first purchase phase runs for `level + 1`, so that level is provably 1.
+    uint24 private constant GENESIS_QUEST_LEVEL = 1;
+
     // -------------------------------------------------------------------------
     // Quest Targets (fixed)
     // -------------------------------------------------------------------------
@@ -370,6 +374,40 @@ contract DegenerusQuests is IDegenerusQuests {
     mapping(uint16 => uint256) private questRolledDayBitmap;
 
     constructor() {
+        // Seed the level-1 quest at deploy so a level quest is ALWAYS active.
+        //
+        // `rollLevelQuest` fires only at a purchase->jackpot transition, and it rolls for
+        // `level + 1`. The first transition therefore rolls for level 2, which left level 1's
+        // purchase phase — the first one players ever see — with `levelQuestType == 0`. Zero
+        // is not a member of the 1..9 type space, so `_handleLevelQuestProgress` short-circuited
+        // on every handler and no progress could accrue at all.
+        //
+        // The type is FIXED rather than rolled because no entropy exists at deploy: there is no
+        // VRF word, and reaching for block data would put an ambient value into quest selection.
+        // Determinism costs nothing here — genesis is the one point where every player has
+        // identical (empty) state, so an announced-in-advance quest confers no edge, and the
+        // active type is public from the event either way.
+        //
+        // MINT_ETH is the only type guaranteed reachable in level 1's purchase phase: the
+        // FLIP-denominated types need FLIP nobody has yet, and foil / decimator / affiliate /
+        // degenerette / lootbox all depend on surfaces that are not live or not yet fundable at
+        // genesis. `_canRollDecimatorQuest` would reject the decimator type here anyway (`lvl < 5`).
+        //
+        // Version starts at 1, not 0, so a player carrying the zero-initialized
+        // `levelQuestPlayerState` takes the normal stale-progress reset path rather than
+        // matching version 0 by accident. The first real roll bumps it to 2 for level 2.
+        levelQuestType = QUEST_TYPE_MINT_ETH;
+        levelQuestVersion = 1;
+        emit LevelQuestRolled(
+            GENESIS_QUEST_LEVEL,
+            1,
+            QUEST_TYPE_MINT_ETH,
+            _levelQuestTargetValue(
+                QUEST_TYPE_MINT_ETH,
+                PriceLookupLib.priceForLevel(GENESIS_QUEST_LEVEL)
+            )
+        );
+
         // Register this contract's ENS reverse name (best-effort; skipped when the
         // registrar is unset — local/test/testnet builds). The setName(string)
         // selector is shared by the L1 ReverseRegistrar and Base's L2ReverseRegistrar.
