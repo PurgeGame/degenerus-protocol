@@ -61,7 +61,6 @@ POOL-TO-POOL	_setFuturePrizePool	resolveEthSpinFromBox	modules/DegenerusGameDege
 POOL-TO-POOL	_setPendingPools	resolveEthSpinFromBox	modules/DegenerusGameDegeneretteModule.sol	READ	box ETH-spin flush (same shape as resolveDegeneretteBets)
 VALUE-IN	_setPendingPools	buyFoilPack	modules/DegenerusGameFoilPackModule.sol	READ	foil premium lands in pending pools during freeze (75/25 split; fresh ETH + relabel mix)
 VALUE-IN	_setPrizePools	buyFoilPack	modules/DegenerusGameFoilPackModule.sol	READ	foil premium lands in live pools (75/25 split)
-POOL-TO-POOL	claimablePool	buyFoilPack	modules/DegenerusGameFoilPackModule.sol	WRITE	foil cost drawn from buyer claimable/afking (settle waterfall): claimable relabels into the prize pools
 DRAIN-ZERO	claimablePool	handleFinalSweep	modules/DegenerusGameGameOverModule.sol	WRITE	30-day final sweep: sinks paid their claimable, residual forfeited three-way, claims closed (GO_SWEPT)
 PAIRED-CREDIT	_creditClaimable	handleGameOverDrain	modules/DegenerusGameGameOverModule.sol	READ	per-owner refunds; aggregate bumped once via totalRefunded
 DRAIN-ZERO	_setCurrentPrizePool	handleGameOverDrain	modules/DegenerusGameGameOverModule.sol	READ	live pools zeroed at the game-over drain

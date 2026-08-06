@@ -779,8 +779,8 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     ///      payer's withdrawable afking so excess never reverts or strands. The ticket/lootbox
     ///      leg takes fresh ETH first (capped at its own cost) through the mint module's
     ///      purchaseWith, which uses the explicit ethValue and ignores the carried msg.value;
-    ///      the foil leg gets the remainder, with claimable covering any foil shortfall,
-    ///      through the foil module. Each leg routes its own money/affiliate and completes the
+    ///      the foil leg gets the remainder, with claimable then prepaid afking covering any
+    ///      foil shortfall, through the foil module. Each leg routes its own money/affiliate and completes the
     ///      daily MINT_ETH primary (idempotent across legs). Orchestrated here, not in the mint
     ///      module, so the near-full mint module's purchase body stays within the via-IR stack
     ///      budget and the EIP-170 size limit.

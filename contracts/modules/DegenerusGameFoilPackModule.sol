@@ -39,7 +39,6 @@ contract DegenerusGameFoilPackModule is
     // error E() — inherited from DegenerusGameStorage
     error FoilAlreadyBought(); // Buyer already holds a foil pack for this cycle level.
     error StaleAdvance(); // Simulated day is more than one day ahead of the processed daily index; multi-day stall detected.
-    error DirectEthInsufficient(); // DirectEth payment kind cannot cover the foil cost shortfall from claimable balance.
     error NoClaimableMatch(); // The given (player, day, ticketIndex, drawKind) tuple does not resolve to a claimable foil match.
     error StaleBatch(); // The batch's opening tuple is not claimable: the list has already been swept.
     error NoGoldenTicket(); // No pack at that cycle, its lines have not resolved yet, it holds under three golds, or it is already claimed.
@@ -188,7 +187,8 @@ contract DegenerusGameFoilPackModule is
     /// @param buyer Player receiving the pack (already operator-resolved).
     /// @param ethSent Fresh ETH the purchase path carved for the foil leg.
     /// @param affiliateCode Affiliate/referral code for the foil leg.
-    /// @param payKind Payment method (DirectEth forbids drawing claimable).
+    /// @param payKind Payment method (DirectEth forbids drawing claimable; prepaid afking
+    ///        still covers the shortfall on every kind).
     function buyFoilPack(
         address buyer,
         uint256 ethSent,
@@ -227,10 +227,10 @@ contract DegenerusGameFoilPackModule is
         if (day > dailyIdx + 1) revert StaleAdvance();
 
         // Price: ten ticket prices for the level. The fresh ETH the purchase path carved
-        // for the foil leg covers it first (overpay ignored); any shortfall is taken from
-        // claimable down to the 1-wei sentinel. The afking principal is NEVER tapped, and
-        // DirectEth forbids claimable: either way an uncovered remainder reverts. ethUsed
-        // is the fresh-rate affiliate basis; remaining is the recycle-rate basis.
+        // for the foil leg covers it first (overpay ignored); any shortfall runs the
+        // canonical spend waterfall, so the pack is funded by the same mix as every other
+        // purchase. cost - claimableUsed (fresh ETH plus the afking draw, the buyer's own
+        // principal) is the fresh-rate affiliate basis; claimableUsed is the recycle-rate basis.
         uint256 priceWei = PriceLookupLib.priceForLevel(lvl);
         // Snap valve: the pack keeps its full four lines and match game on a thanos
         // level — the price carries the exponent instead (2^s times ten ticket
@@ -239,17 +239,17 @@ contract DegenerusGameFoilPackModule is
         uint8 snapS = _snapShiftFor(lvl);
         uint256 cost = (FOIL_PACK_TICKETS * priceWei) << snapS;
         uint256 ethUsed = ethSent < cost ? ethSent : cost;
-        uint256 remaining = cost - ethUsed;
-        if (remaining != 0) {
-            if (payKind == MintPaymentKind.DirectEth) revert DirectEthInsufficient();
-            // One slot read covers the check and the debit. remaining must stay at or
-            // below claimable - 1 (the 1-wei sentinel), so remaining < claimable and
-            // the low-half subtraction cannot borrow into the afking principal above.
-            uint256 bal = balancesPacked[buyer];
-            if (remaining + 1 > uint128(bal)) revert Insolvent();
-            balancesPacked[buyer] = bal - remaining;
-            claimablePool -= uint128(remaining);
-            emit ClaimableSpent(buyer, remaining, uint128(bal - remaining), MintPaymentKind.Internal, remaining);
+        uint256 claimableUsed;
+        if (ethUsed != cost) {
+            // Canonical waterfall (the ticket leg's _processMintPayment tiers): claimable
+            // down to the 1-wei sentinel — skipped on DirectEth — then the buyer's prepaid
+            // afking, reverting when the tiers together fall short. The sink emits
+            // ClaimableSpent / AfkingSpent and pairs the claimablePool debit.
+            (claimableUsed, ) = _settleShortfall(
+                buyer,
+                cost - ethUsed,
+                payKind != MintPaymentKind.DirectEth
+            );
         }
 
         // Pool fork: 25% future / 75% next (inverse of the 90/10 ticket split), applied to
@@ -283,15 +283,16 @@ contract DegenerusGameFoilPackModule is
         );
 
         // Affiliate, fresh 25% at levels 0-3 / 20% at 4+ and 5% recycle exactly like a
-        // normal ticket mint: the fresh portion (ethUsed) at the fresh rate, the claimable
-        // portion (remaining) at the recycle rate, both frozen at level + 1 like the ticket
-        // affiliate (score 0, same as tickets). FLIP kickbacks accumulate and are credited
-        // once below.
+        // normal ticket mint: the fresh portion (cost - claimableUsed, fresh ETH plus the
+        // afking-drawn principal) at the fresh rate, the claimable portion at the recycle
+        // rate, both frozen at level + 1 like the ticket affiliate (score 0, same as
+        // tickets). FLIP kickbacks accumulate and are credited once below.
         uint24 affLevel = level + 1;
         uint256 kickback;
-        if (ethUsed != 0) {
+        uint256 freshBasis = cost - claimableUsed;
+        if (freshBasis != 0) {
             kickback += affiliate.payAffiliate(
-                (ethUsed * PRICE_COIN_UNIT) / priceWei,
+                (freshBasis * PRICE_COIN_UNIT) / priceWei,
                 affiliateCode,
                 buyer,
                 affLevel,
@@ -299,9 +300,9 @@ contract DegenerusGameFoilPackModule is
                 0
             );
         }
-        if (remaining != 0) {
+        if (claimableUsed != 0) {
             kickback += affiliate.payAffiliate(
-                (remaining * PRICE_COIN_UNIT) / priceWei,
+                (claimableUsed * PRICE_COIN_UNIT) / priceWei,
                 affiliateCode,
                 buyer,
                 affLevel,
@@ -335,11 +336,19 @@ contract DegenerusGameFoilPackModule is
             }
         }
 
+        // Coin-presale-box credit accrual: while the box presale is open, the foil premium
+        // earns 25% spendable box credit on its gross cost, exactly as the ticket/lootbox
+        // spend and the pass buys do, independent of the funding mix.
+        if (!presaleOver) {
+            presaleBoxCredit[buyer] += cost / 4;
+        }
+
         // Recycle bonus: spending at least three whole tickets' worth of claimable on the
-        // foil leg (remaining is that claimable spend) earns 10% back as FLIP, exactly as a
-        // recycled ticket buy does.
-        if (remaining >= priceWei * 3) {
-            kickback += (remaining * PRICE_COIN_UNIT * 10) / (priceWei * 100);
+        // foil leg earns 10% of that claimable spend back as FLIP, exactly as a recycled
+        // ticket buy does. The afking-drawn portion is own principal, not recycled winnings,
+        // so it stays out of the basis.
+        if (claimableUsed >= priceWei * 3) {
+            kickback += (claimableUsed * PRICE_COIN_UNIT * 10) / (priceWei * 100);
         }
 
         if (kickback != 0) coinflip.creditFlip(buyer, kickback);

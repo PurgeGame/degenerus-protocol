@@ -46,6 +46,7 @@ contract SolvencyActionHandler is Test {
     uint256 public ghost_presaleBuys; // successful presale-box OR lootbox-bearing buys (a box persisted)
     uint256 public ghost_claims; // successful claimWinnings cashouts
     uint256 public ghost_afkingDeposited; // ETH credited via depositAfkingFunding
+    uint256 public ghost_foilBuys; // successful foil packs (short fresh leg -> claimable + afking tiers)
 
     // --- Call counters (coverage visibility) ---
     uint256 public calls_whalePass;
@@ -53,6 +54,7 @@ contract SolvencyActionHandler is Test {
     uint256 public calls_deityPass;
     uint256 public calls_presaleBox;
     uint256 public calls_fundAfking;
+    uint256 public calls_foil;
     uint256 public calls_claim;
     uint256 public calls_advance;
 
@@ -216,7 +218,32 @@ contract SolvencyActionHandler is Test {
     }
 
     // =========================================================================
-    // Action 6: claim (claimWinnings; the payout debit pairs claimablePool -=)
+    // Action 6: foil pack with a short fresh leg (the waterfall's claimable + afking tiers)
+    // =========================================================================
+
+    /// @notice Buy a foil pack whose fresh-ETH leg is deliberately allowed to fall short of the ten-ticket
+    ///         premium, so the canonical `_settleShortfall` waterfall carries the remainder out of the actor's
+    ///         claimable and prepaid afking — the surface that used to revert rather than draw afking. Both
+    ///         directions of the split stay paired: a shortfall pairs `claimablePool -=` the combined draw, and
+    ///         an overpay is credited back as prepaid afking (`claimablePool +=`), so the Σ identity covers the
+    ///         whole leg. The pack is one-per-cycle, so most calls past the first are caught no-ops.
+    function buyFoil(uint256 actorSeed, uint256 freshSeed) external useActor(actorSeed) {
+        calls_foil++;
+        if (game.gameOver()) return;
+
+        (, , , , uint256 priceWei) = game.purchaseInfo();
+        if (priceWei == 0) return;
+        uint256 cost = 10 * priceWei; // FOIL_PACK_TICKETS ticket prices (no thanos shift in this campaign)
+        uint256 fresh = bound(freshSeed, 0, cost);
+        if (fresh > currentActor.balance) return;
+        vm.prank(currentActor);
+        try game.purchase{value: fresh}(currentActor, 0, 0, bytes32(0), MintPaymentKind.Combined, true) {
+            ghost_foilBuys++;
+        } catch {}
+    }
+
+    // =========================================================================
+    // Action 7: claim (claimWinnings; the payout debit pairs claimablePool -=)
     // =========================================================================
 
     /// @notice Cash out the actor's claimable via the public claimWinnings. The claim's claimablePool debit is
@@ -231,7 +258,7 @@ contract SolvencyActionHandler is Test {
     }
 
     // =========================================================================
-    // Action 7: advance (drives jackpot claimable credits to actors; sets LR_INDEX; fulfills VRF)
+    // Action 8: advance (drives jackpot claimable credits to actors; sets LR_INDEX; fulfills VRF)
     // =========================================================================
 
     /// @notice Satisfy the daily purchase gate with a small actor buy, advance the state machine, and fulfill

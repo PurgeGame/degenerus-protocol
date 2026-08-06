@@ -592,13 +592,14 @@ interface IDegenerusGameFoilPackModule {
     /// @notice Deliver one foil pack (four tickets) for the active cycle. Delegatecall
     ///         target invoked by the mint module's purchase path (the foil leg of an
     ///         additive ticket/lootbox/foil buy). Handles the foil leg's own payment
-    ///         (fresh-then-claimable, afking protected), 75/25 pool split, 20/5
+    ///         (the canonical fresh -> claimable -> afking waterfall), 75/25 pool split, 20/5
     ///         affiliate, and delivery (boost freeze, queue push). The foil's mint units,
     ///         streak, and secondary quest are recorded by the purchase path.
     /// @param buyer Player receiving the pack (already operator-resolved).
     /// @param ethSent Fresh ETH the purchase path allocated to the foil leg.
     /// @param affiliateCode Affiliate/referral code for the foil leg.
-    /// @param payKind Payment method for the foil leg (DirectEth blocks claimable).
+    /// @param payKind Payment method for the foil leg (DirectEth blocks claimable; prepaid
+    ///        afking covers the shortfall on every kind).
     function buyFoilPack(
         address buyer,
         uint256 ethSent,

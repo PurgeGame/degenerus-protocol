@@ -243,10 +243,10 @@ contract FoilSnapPayout is DeployProtocol {
         address a = makeAddr("fsnapPriceA");
         vm.deal(a, 1_000 ether);
         vm.prank(a);
-        // DirectEthInsufficient: 1x no longer covers the shifted quote, and DirectEth
-        // forbids the claimable fallback. Selector-pinned so an unrelated revert cannot
-        // make this pass by accident.
-        vm.expectRevert(bytes4(keccak256("DirectEthInsufficient()")));
+        // Insolvent: 1x no longer covers the shifted quote, DirectEth forbids the claimable
+        // tier, and this fresh actor has no prepaid afking for the waterfall's last tier to
+        // draw. Selector-pinned so an unrelated revert cannot make this pass by accident.
+        vm.expectRevert(bytes4(keccak256("Insolvent()")));
         game.purchase{value: baseCost}(a, 0, 0, bytes32(0), MintPaymentKind.DirectEth, true);
 
         address b = makeAddr("fsnapPriceB");
