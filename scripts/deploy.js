@@ -1,5 +1,12 @@
 import hre from "hardhat";
-import { readFileSync, writeFileSync, mkdirSync, existsSync } from "node:fs";
+import {
+  readFileSync,
+  writeFileSync,
+  mkdirSync,
+  existsSync,
+  copyFileSync,
+  readdirSync,
+} from "node:fs";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
@@ -96,6 +103,21 @@ async function main() {
       const addr = await contract.getAddress();
       deployed.set(key, addr);
       console.log(` ${addr}`);
+
+      // Fail at the FIRST divergence, not after all 28. Every address is baked
+      // into ContractAddresses.sol as a compile-time constant, so once one lands
+      // off-prediction the whole deployment is unusable — there is nothing to
+      // salvage by continuing, and each further deploy is wasted gas.
+      const want = predicted.get(key);
+      if (addr.toLowerCase() !== want.toLowerCase()) {
+        throw new Error(
+          `Address divergence at [${key}] (${deployed.size}/${DEPLOY_ORDER.length}):\n` +
+            `  expected ${want}\n  got      ${addr}\n` +
+            `The deployer nonce moved unexpectedly — something else spent a nonce ` +
+            `from ${deployer.address} mid-deploy. STOP: every already-deployed ` +
+            `contract is unusable. Re-run from a clean nonce on a quiet key.`
+        );
+      }
     }
 
     // 7. Verify addresses
@@ -153,12 +175,73 @@ async function main() {
     if (!existsSync(deploymentsDir)) {
       mkdirSync(deploymentsDir, { recursive: true });
     }
-    const manifestPath = resolve(
-      deploymentsDir,
-      `${network}-${Date.now()}.json`
-    );
+    const stamp = Date.now();
+    const manifestPath = resolve(deploymentsDir, `${network}-${stamp}.json`);
     writeFileSync(manifestPath, JSON.stringify(manifest, null, 2));
     console.log(`Manifest saved: ${manifestPath}`);
+
+    // 10. Archive everything Etherscan verification needs, RIGHT NOW.
+    //
+    //     ContractAddresses.sol is generated: this run patched it with the real
+    //     predicted addresses, and it is the only source that compiles to the
+    //     deployed bytecode. It is also destroyed by the next `make test-foundry`
+    //     (that target ends with `git checkout -- contracts/ContractAddresses.sol`)
+    //     and re-patched by any hardhat run. Copy it, plus the solc build-info
+    //     (full standard-json input + output), before anything can touch them.
+    const archiveDir = resolve(deploymentsDir, `${network}-${stamp}`);
+    mkdirSync(archiveDir, { recursive: true });
+    writeFileSync(
+      resolve(archiveDir, "manifest.json"),
+      JSON.stringify(manifest, null, 2)
+    );
+    copyFileSync(
+      resolve(__dirname, "../contracts/ContractAddresses.sol"),
+      resolve(archiveDir, "ContractAddresses.sol")
+    );
+
+    const buildInfoDir = resolve(__dirname, "../artifacts/build-info");
+    let buildInfoCount = 0;
+    if (existsSync(buildInfoDir)) {
+      for (const f of readdirSync(buildInfoDir).filter((n) => n.endsWith(".json"))) {
+        copyFileSync(resolve(buildInfoDir, f), resolve(archiveDir, f));
+        buildInfoCount++;
+      }
+    }
+
+    // ABIs for the indexer / frontend (deploy-local.js exports these; production
+    // did not, so every mainnet consumer was left to dig them out of artifacts/).
+    const abisDir = resolve(archiveDir, "abis");
+    mkdirSync(abisDir, { recursive: true });
+    const abiNames = new Set([
+      ...Object.values(KEY_TO_CONTRACT),
+      "DegenerusVaultShare", // DGVF/DGVE, deployed from the vault constructor
+      "DegenerusGameLens", // deployment-decoupled periphery, deployed separately
+      "DeityBoonViewer",
+    ]);
+    let abiCount = 0;
+    for (const name of abiNames) {
+      try {
+        const artifact = await hre.artifacts.readArtifact(name);
+        writeFileSync(
+          resolve(abisDir, `${name}.json`),
+          JSON.stringify(artifact.abi, null, 2)
+        );
+        abiCount++;
+      } catch {
+        console.log(`  WARN: no artifact for ${name}, ABI skipped`);
+      }
+    }
+
+    console.log(`Archive saved: ${archiveDir}`);
+    console.log(
+      `  ContractAddresses.sol + ${buildInfoCount} build-info + ${abiCount} ABIs`
+    );
+    if (buildInfoCount === 0) {
+      console.log(
+        "  WARN: no build-info found — Etherscan verification will need a rebuild " +
+          "from the archived ContractAddresses.sol."
+      );
+    }
   } finally {
     // ContractAddresses.sol is generated on demand — leave it as-patched and
     // just purge any stale backup so it can't resurrect a removed constant.

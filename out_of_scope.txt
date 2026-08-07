@@ -18,6 +18,8 @@ contracts/mocks/MockVRFCoordinator.sol
 #   DegenerusAdmin.receive() handles it (see SECURITY.md / KNOWN-ISSUES.md).
 
 ## In-tree Solidity test harnesses — exercise internal functions, NOT deployed
+contracts/test/EnsReverseProbe.sol      # deploy-only ENS reverse-name probe
+contracts/test/FlipRoundBernoulliTester.sol
 contracts/test/JackpotBernoulliTester.sol
 contracts/test/JackpotSoloTester.sol
 contracts/test/LootboxBernoulliTester.sol
