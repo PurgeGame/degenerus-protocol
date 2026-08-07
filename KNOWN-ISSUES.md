@@ -4,7 +4,7 @@ Pre-disclosure for audit wardens. **If a finding's mechanism + impact is describ
 already known and is not eligible.** This is a precise perimeter — each entry names the exact
 mechanism and why it is by-design, defended, or out-of-scope. There are no vague blanket disclaimers.
 
-Frozen subject: `contracts/` tree `623927c5` @ tag `degenerus-c4a`. Pre-scanned with Slither v0.11.5
+Frozen subject: `contracts/` tree `9564ce8d` @ tag `degenerus-c4a`. Pre-scanned with Slither v0.11.5
 + Aderyn 0.6.8; those findings are triaged in the automated-tools section below.
 
 ---
@@ -141,30 +141,43 @@ transaction (a coin credit, not ETH-backed value). Immaterial; documented, not e
 
 ## 5. Automated tool findings (pre-disclosed)
 
-The full machine-readable Slither/Aderyn baseline is maintained internally — Slither 0.11.5 (3,325
-results / 101 detectors over 151 contracts at tree `623927c5`; 172 High / 445 Medium / 384 Low /
-2,272 Informational / 52 Optimization, and the "High" tier is dominated by 132 `uninitialized-state`
+The full machine-readable Slither/Aderyn baseline is maintained internally — Slither 0.11.5 (3,329
+results / 101 detectors over 152 contracts at tree `9564ce8d`; 172 High / 448 Medium / 384 Low /
+2,273 Informational / 52 Optimization, and the "High" tier is dominated by 132 `uninitialized-state`
 false positives from the shared-storage delegatecall architecture — the deployed-module compilation
 units plus the new `DegenerusGameLens` unit, see below) + Aderyn 0.6.8 (9 High / 20 Low, unchanged).
 Slither totals are sensitive to the scan environment (solc/toolchain resolution), so the absolute
 count is not comparable across machines — re-runs should compare category triage, not the total.
-These counts were measured directly at tree `623927c5`, not carried forward from an earlier scan.
-The immediately preceding tree `0e7b02fe` was scanned in the same environment and this tree is
-**identical to it in every tier** — total, High, Medium, Low, Informational, Optimization, and the
-High composition detector-for-detector — because the only change between them seeds a level-1 quest
-from a constructor, which writes two storage slots and emits an event and is therefore invisible to
-every detector. That tree in turn re-scanned its own parent `d93ef47a` and reproduced its recorded
-3,323 / 171 High exactly, so the chain below is a measured diff rather than a comparison against a
-recorded figure.
+These counts were measured directly at tree `9564ce8d`, not carried forward from an earlier scan.
+The immediately preceding tree `623927c5` was re-scanned in the same environment and reproduced its
+recorded 3,325 / 172 High / 445 Medium / 384 Low / 2,272 Informational / 52 Optimization exactly, so
+the delta below is measured rather than compared against a recorded figure. **The High tier does not
+move**: the span adds +3 Medium and +1 Informational and nothing higher. Contract count rises 151 →
+152 with the out-of-scope `EnsReverseProbe`.
 
-The delta against the tree tagged before this chain began (`4e616db4`) is **+182 results and +16
-High**, spanning fourteen changes: the `extsload` observability lens, the module observability
+The delta against the tree tagged before this chain began (`4e616db4`) is **+186 results and +16
+High**, spanning sixteen changes: the `extsload` observability lens, the module observability
 events, the foil daily quest moving to the final-jackpot RNG request, the static boon tables, the
 council-review fixes, the seat push-mint, the dead-code removal, the size-scaled lootbox WWXRP
 stake, the coinflip claimable-preview fix, the vault share-token ENS reverse names, the solo-quadrant
 drop from the main-board ticket draw, the foil-pack spend-waterfall refactor, the award-rounding
-granules, and the deploy-time level-1 quest seed (which contributes zero findings in every tier). Keyed line-insensitively on (check, impact, subject function), every addition is
-attributable:
+granules, the deploy-time level-1 quest seed (which contributes zero findings in every tier), the
+purchase-phase insurance skim, and the ENS reverse probe. Keyed line-insensitively on (check, impact,
+subject function), every addition is attributable:
+
+- **The purchase-phase insurance skim (+2 Medium, ZERO High) and the `EnsReverseProbe` harness
+  (+1 Medium, +1 Informational, ZERO High).** The skim routes 2% of the daily 1% `futurePrizePool`
+  drip to `yieldAccumulator`, splitting the slice 75 ticket / 23 ETH / 2 insurance. Its two Mediums
+  are both standing classes: one `divide-before-multiply` (the function already carried one for the
+  same `futureBal / 100` budget carve — the detector now sees a second `× bps / 10_000` chain off
+  that quotient) and one `uninitialized-local` on `insuranceCut`, the exact sibling of the
+  already-triaged `ticketLegBudget` in the same function, both declared then assigned inside the
+  same `if (ethPool != 0)` guard where the zero default is the intended value. The move is
+  obligation-neutral — `futurePrizePool` and `yieldAccumulator` are both counted in the yield-surplus
+  obligation set, so no surplus is freed. The probe contributes one `low-level-calls` Informational,
+  matching the established per-constructor ENS pattern, and one `uninitialized-local` on its `ok`
+  flag, deliberately false when no registrar is configured. The probe is listed in `out_of_scope.txt`
+  with the other in-tree harnesses and is not deployed.
 
 - **The new `DegenerusGameLens` compilation unit (~160 of the additions).** The lens imports
   `DegenerusGameMintStreakUtils`, which pulls `DegenerusGameStorage` into its compilation unit, so
