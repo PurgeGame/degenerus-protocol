@@ -86,7 +86,8 @@ VALUE-IN	yieldAccumulator	distributeYieldSurplus	modules/DegenerusGameJackpotMod
 POOL-TO-POOL	_addFuturePrizePool	payDailyJackpot	modules/DegenerusGameJackpotModule.sol	READ	unpaid daily ETH returns to future
 POOL-TO-POOL	_addNextPrizePool	payDailyJackpot	modules/DegenerusGameJackpotModule.sol	READ	daily lootbox budget -> next pool
 POOL-TO-POOL	_setCurrentPrizePool	payDailyJackpot	modules/DegenerusGameJackpotModule.sol	READ	daily ETH/lootbox budgets carved from the current pool (three call sites, one function)
-POOL-TO-POOL	_setPrizePools	payDailyJackpot	modules/DegenerusGameJackpotModule.sol	READ	jackpot-day pool recomposition, and the purchase-phase drip merge (future debit + ticket-leg next credit) — one packed write each
+POOL-TO-POOL	_setPrizePools	payDailyJackpot	modules/DegenerusGameJackpotModule.sol	READ	jackpot-day pool recomposition, and the purchase-phase drip merge (future debit + ticket-leg next credit + insurance skim debit) — one packed write each
+POOL-TO-POOL	yieldAccumulator	payDailyJackpot	modules/DegenerusGameJackpotModule.sol	WRITE	purchase-phase drip insurance skim (2% of the 1% slice, the 75/23/2 split): credited here and debited from future in the same packed write above — intra-set, obligation sum preserved
 PRE-COUNTED	_creditClaimable	runBafJackpot	modules/DegenerusGameJackpotModule.sol	READ	BAF winner credits; the summed claimed returns to AdvanceModule and enters claimablePool via claimableDelta
 VALUE-IN	_creditClaimable	creditRedemptionDirect	modules/DegenerusGameLootboxModule.sol	READ	direct redemption half arrives and credits the player (tandem with the aggregate below)
 VALUE-IN	claimablePool	creditRedemptionDirect	modules/DegenerusGameLootboxModule.sol	WRITE	aggregate in tandem with the arriving value

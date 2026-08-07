@@ -246,6 +246,14 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     ///      backing ETH moves to nextPrizePool, tickets go to trait winners.
     uint16 private constant PURCHASE_REWARD_JACKPOT_TICKET_BPS = 7500;
 
+    /// @dev Portion of the purchase-phase drip skimmed to the yield accumulator (2%),
+    ///      splitting the day's slice 75 ticket / 23 ETH / 2 insurance. Sized off the
+    ///      whole drip alongside the ticket leg and taken before bucket sizing, so it
+    ///      never reaches a winner. The move is obligation-neutral: futurePrizePool and
+    ///      the accumulator both sit in the yield-surplus obligation set, so the skim
+    ///      shifts the wei between two liabilities without freeing any surplus.
+    uint16 private constant PURCHASE_INSURANCE_BPS = 200;
+
     /// @dev Max winners per single trait bucket (must fit in uint8 for _randTraitTicket).
     ///      Set to 250 to allow all ticket winners in single trait if others are empty.
     uint8 private constant MAX_BUCKET_WINNERS = 250;
@@ -348,9 +356,9 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     ///      - Triggered during purchase phase when burns occur.
     ///      - Rolls winning traits (random + hero override) and runs trait-based jackpot.
     ///      - Fixed winner counts [20, 12, 6, 1] = 39 ETH winners, up to 120 ticket winners.
-    ///      - Adds a 1% futurePrizePool ETH slice every purchase day: 75% routed to
-    ///        the ticket leg (backing ETH → nextPrizePool, tickets to trait winners)
-    ///        and the remainder distributed as ETH.
+    ///      - Adds a 1% futurePrizePool ETH slice every purchase day, split 75/23/2:
+    ///        75% to the ticket leg (backing ETH → nextPrizePool, tickets to trait
+    ///        winners), 2% skimmed to the yield accumulator, 23% distributed as ETH.
     ///
     /// @param isJackpotPhase True for jackpot phase dailies, false for purchase phase jackpot.
     /// @param lvl Current game level.
@@ -589,9 +597,14 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
 
         uint256 ethPool = ethDaySlice;
         uint256 ticketLegBudget;
+        uint256 insuranceCut;
         if (ethPool != 0) {
+            // Both legs are sized off the whole slice, so the split is 75/23/2 and the
+            // ETH leg keeps the two flooring remainders. Deducting before bucket sizing
+            // leaves the day's whole-granule rounding working off the payable figure.
             ticketLegBudget = (ethPool * PURCHASE_REWARD_JACKPOT_TICKET_BPS) / 10_000;
-            if (ticketLegBudget != 0) ethPool -= ticketLegBudget;
+            insuranceCut = (ethPool * PURCHASE_INSURANCE_BPS) / 10_000;
+            ethPool -= ticketLegBudget + insuranceCut;
         }
 
         // Fixed bucket counts [20, 12, 6, 1] = 39 winners, rotated by entropy.
@@ -629,17 +642,27 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
             );
         }
 
-        // Single packed-slot RMW folds both legs: credit the ticket leg's backing to nextPrizePool
-        // and debit the future pool (drip consumed + ETH paid). ticketLegBudget is nonzero only when
-        // ethDaySlice is, so the next credit rides this write; _distributePoolBackedTickets below no
-        // longer credits next itself. futureBal is still exact — nothing above writes prizePoolsPacked
-        // (purchase-phase distribution never reaches the solo whale-pass leg).
+        // Single packed-slot RMW folds every leg: credit the ticket leg's backing to nextPrizePool
+        // and debit the future pool (drip consumed + ETH paid + insurance skim). ticketLegBudget and
+        // insuranceCut are nonzero only when ethDaySlice is, so both ride this write;
+        // _distributePoolBackedTickets below no longer credits next itself. futureBal is still exact —
+        // nothing above writes prizePoolsPacked (purchase-phase distribution never reaches the solo
+        // whale-pass leg). The ticket leg, the skim and the ETH leg partition ethDaySlice exactly and
+        // paidEth never exceeds the ETH leg, so the three debits sum to at most the 1% slice and the
+        // subtraction cannot underflow. The accumulator write touches its own slot, leaving the
+        // packed read above exact.
         if (ethDaySlice != 0) {
             (uint128 nextBal, uint128 futBal) = _getPrizePools();
             _setPrizePools(
                 nextBal + uint128(ticketLegBudget),
-                futBal - uint128(ticketLegBudget) - uint128(paidEth)
+                futBal -
+                    uint128(ticketLegBudget) -
+                    uint128(paidEth) -
+                    uint128(insuranceCut)
             );
+            if (insuranceCut != 0) {
+                yieldAccumulator += insuranceCut;
+            }
         }
 
         if (ticketLegBudget != 0) {
