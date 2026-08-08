@@ -351,6 +351,139 @@ describe("Coinflip", function () {
       expect(evs[0].args.player).to.equal(bob.address);
     });
 
+    it("a sub-10% beat steals the bounty without locking it", async function () {
+      const { coinflip, coin, alice, bob, vault } = await loadFixture(
+        deployFullProtocol
+      );
+      const vaultAddr = await vault.getAddress();
+      await giveFlip(coin, alice, eth(2000), vaultAddr);
+      await giveFlip(coin, bob, eth(2000), vaultAddr);
+
+      await deposit(coinflip, alice, eth(1000));
+      // 1050 clears the 1% steal bar (1010) but not the 10% lock bar (1100).
+      await deposit(coinflip, bob, eth(1050));
+
+      expect(await coinflip.bountyOwedTo()).to.equal(bob.address);
+      expect(await coinflip.bountyLocked()).to.equal(false);
+    });
+
+    it("a 10% beat locks the bounty", async function () {
+      const { coinflip, coin, alice, bob, vault } = await loadFixture(
+        deployFullProtocol
+      );
+      const vaultAddr = await vault.getAddress();
+      await giveFlip(coin, alice, eth(2000), vaultAddr);
+      await giveFlip(coin, bob, eth(2000), vaultAddr);
+
+      await deposit(coinflip, alice, eth(1000));
+      // 10% of 1000 = 100, so 1100 is exactly the lock bar.
+      await deposit(coinflip, bob, eth(1100));
+
+      expect(await coinflip.bountyOwedTo()).to.equal(bob.address);
+      expect(await coinflip.bountyLocked()).to.equal(true);
+    });
+
+    it("a locked bounty survives a larger flip, which still ratchets the record", async function () {
+      const { coinflip, coin, alice, bob, carol, vault } = await loadFixture(
+        deployFullProtocol
+      );
+      const vaultAddr = await vault.getAddress();
+      await giveFlip(coin, alice, eth(2000), vaultAddr);
+      await giveFlip(coin, bob, eth(2000), vaultAddr);
+      await giveFlip(coin, carol, eth(9000), vaultAddr);
+
+      await deposit(coinflip, alice, eth(1000));
+      await deposit(coinflip, bob, eth(1100)); // locks; record is now 1100
+
+      // 2000 beats the record but falls short of the 2200 override bar.
+      const tx = await deposit(coinflip, carol, eth(2000));
+
+      // Carol takes no bounty...
+      expect(await getEvents(tx, coinflip, "BountyOwed")).to.have.lengthOf(0);
+      expect(await coinflip.bountyOwedTo()).to.equal(bob.address);
+      expect(await coinflip.bountyLocked()).to.equal(true);
+      // ...but the record still ratchets to her deposit.
+      expect(await coinflip.biggestFlipEver()).to.equal(eth(2000));
+      expect(
+        await getEvents(tx, coinflip, "BiggestFlipUpdated")
+      ).to.have.lengthOf(1);
+    });
+
+    it("doubling the standing record overrides a lock and re-locks for the new owner", async function () {
+      const { coinflip, coin, alice, bob, carol, vault } = await loadFixture(
+        deployFullProtocol
+      );
+      const vaultAddr = await vault.getAddress();
+      await giveFlip(coin, alice, eth(2000), vaultAddr);
+      await giveFlip(coin, bob, eth(2000), vaultAddr);
+      await giveFlip(coin, carol, eth(9000), vaultAddr);
+
+      await deposit(coinflip, alice, eth(1000));
+      await deposit(coinflip, bob, eth(1100)); // locks; record is now 1100
+
+      // 2200 is exactly 2x the standing record.
+      const tx = await deposit(coinflip, carol, eth(2200));
+
+      const evs = await getEvents(tx, coinflip, "BountyOwed");
+      expect(evs).to.have.lengthOf(1);
+      expect(evs[0].args.player).to.equal(carol.address);
+      expect(await coinflip.bountyOwedTo()).to.equal(carol.address);
+      // An override clears the 10% bar by construction, so the claim stays locked.
+      expect(await coinflip.bountyLocked()).to.equal(true);
+      expect(await coinflip.biggestFlipEver()).to.equal(eth(2200));
+    });
+
+    it("an override bar tracks the record, not the locker's stake", async function () {
+      const { coinflip, coin, alice, bob, carol, vault } = await loadFixture(
+        deployFullProtocol
+      );
+      const vaultAddr = await vault.getAddress();
+      await giveFlip(coin, alice, eth(5000), vaultAddr);
+      await giveFlip(coin, bob, eth(5000), vaultAddr);
+      await giveFlip(coin, carol, eth(9000), vaultAddr);
+
+      await deposit(coinflip, alice, eth(1000));
+      await deposit(coinflip, bob, eth(1100)); // locks; record is now 1100
+
+      // Alice ratchets the record without taking the claim, lifting the override bar
+      // from 2200 to 4000.
+      await deposit(coinflip, alice, eth(2000));
+      expect(await coinflip.bountyOwedTo()).to.equal(bob.address);
+
+      // 2200 would have overridden a moment ago; against the new record it does nothing.
+      const tx = await deposit(coinflip, carol, eth(2200));
+      expect(await getEvents(tx, coinflip, "BountyOwed")).to.have.lengthOf(0);
+      expect(await coinflip.bountyOwedTo()).to.equal(bob.address);
+      expect(await coinflip.bountyLocked()).to.equal(true);
+    });
+
+    it("the first arm from a zero record does not lock", async function () {
+      const { coinflip, coin, alice, vault } = await loadFixture(deployFullProtocol);
+      const vaultAddr = await vault.getAddress();
+      await giveFlip(coin, alice, eth(2000), vaultAddr);
+      await deposit(coinflip, alice, eth(500));
+      expect(await coinflip.bountyOwedTo()).to.equal(alice.address);
+      expect(await coinflip.bountyLocked()).to.equal(false);
+    });
+
+    it("settlement clears the lock alongside the owner", async function () {
+      const { coinflip, coin, game, alice, bob, vault } = await loadFixture(
+        deployFullProtocol
+      );
+      const vaultAddr = await vault.getAddress();
+      await giveFlip(coin, alice, eth(2000), vaultAddr);
+      await giveFlip(coin, bob, eth(2000), vaultAddr);
+
+      await deposit(coinflip, alice, eth(1000));
+      await deposit(coinflip, bob, eth(1100));
+      expect(await coinflip.bountyLocked()).to.equal(true);
+
+      await resolveDay(hre.ethers, game, coinflip, 1n, 1n);
+
+      expect(await coinflip.bountyLocked()).to.equal(false);
+      expect(await coinflip.bountyOwedTo()).to.equal(ZERO_ADDRESS);
+    });
+
     it("biggestFlipEver tracks the largest direct deposit", async function () {
       const { coinflip, coin, alice, vault } = await loadFixture(deployFullProtocol);
       const vaultAddr = await vault.getAddress();

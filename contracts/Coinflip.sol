@@ -191,6 +191,10 @@ contract Coinflip {
     uint24 internal flipsClaimableDay;
     /// @dev One-shot latch: sDGNRS perpetual auto-rebuy arms once the final seeded day settles.
     bool internal sdgnrsAutoRebuyArmed;
+    /// @dev Set when a record clears the standing one by 10%: the claim then survives every
+    ///      challenger short of one who doubles the standing record. Larger flips still ratchet
+    ///      biggestFlipEver; they just take no bounty. Cleared with bountyOwedTo at settlement.
+    bool public bountyLocked;
 
     // Leaderboard
     struct PlayerScore {
@@ -769,8 +773,6 @@ contract Coinflip {
         if (canArmBounty && bountyEligible && recordAmount != 0) {
             uint128 record = biggestFlipEver;
             if (recordAmount > record && !game.rngLocked()) {
-                address currentBountyOwner = bountyOwedTo;
-                uint128 bounty = currentBounty;
                 // recordAmount is the deposit total across both funding legs: the claimable leg
                 // is bounded by claimableStored's uint128 width, the wallet leg by FLIP._burn,
                 // whose supply accounting bounds every burn amount to uint128. Their sum needs
@@ -780,17 +782,33 @@ contract Coinflip {
                 biggestFlipEver = uint128(recordAmount);
                 emit BiggestFlipUpdated(player, recordAmount);
 
-                // Bounty arms when setting a new record with an eligible stake.
-                // If bounty already armed, must exceed by 1% (min +1) to steal it.
-                uint256 threshold = record;
-                if (currentBountyOwner != address(0)) {
-                    uint256 onePercent = uint256(record) / 100;
-                    // Ensure minimum 1 wei increase if 1% rounds to 0
-                    threshold = uint256(record) + (onePercent == 0 ? 1 : onePercent);
-                }
-                if (recordAmount >= threshold) {
-                    bountyOwedTo = player;
-                    emit BountyOwed(player, bounty, recordAmount);
+                // A locked claim holds to settlement unless a challenger doubles the standing
+                // record outright. Short of that the ratchet above still runs for every larger
+                // flip, but ownership stops moving: a bigger deposit raises the bar for
+                // tomorrow without taking today's bounty.
+                if (!bountyLocked || recordAmount >= uint256(record) * 2) {
+                    address currentBountyOwner = bountyOwedTo;
+                    uint128 bounty = currentBounty;
+                    // Bounty arms when setting a new record with an eligible stake.
+                    // If bounty already armed, must exceed by 1% (min +1) to steal it.
+                    uint256 threshold = record;
+                    if (currentBountyOwner != address(0)) {
+                        uint256 onePercent = uint256(record) / 100;
+                        // Ensure minimum 1 wei increase if 1% rounds to 0
+                        threshold = uint256(record) + (onePercent == 0 ? 1 : onePercent);
+                    }
+                    if (recordAmount >= threshold) {
+                        bountyOwedTo = player;
+                        // +10% over the standing record locks the claim. A zero record has no
+                        // bar to clear by 10%, so the game's first arm stays stealable.
+                        if (
+                            record != 0 &&
+                            recordAmount >= uint256(record) + uint256(record) / 10
+                        ) {
+                            bountyLocked = true;
+                        }
+                        emit BountyOwed(player, bounty, recordAmount);
+                    }
                 }
             }
         }
@@ -999,8 +1017,9 @@ contract Coinflip {
                 game.payCoinflipBountyDgnrs(to, slice, currentBounty_);
                 bountyPaid = uint128(slice);
             }
-            // Clear bounty owner regardless of win/loss
+            // Clear bounty owner and any lock regardless of win/loss (same slot, one SSTORE)
             bountyOwedTo = address(0);
+            bountyLocked = false;
         }
 
         // Move the active window forward; the resolved day becomes claimable immediately.

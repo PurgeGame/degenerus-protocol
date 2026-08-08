@@ -310,7 +310,7 @@ contract FLIP {
       |                         BOUNTY STATE                                 |
       +======================================================================+*/
 
-    // Bounty state (currentBounty, biggestFlipEver, bountyOwedTo) is in Coinflip.
+    // Bounty state (currentBounty, biggestFlipEver, bountyOwedTo, bountyLocked) is in Coinflip.
 
     /*+======================================================================+
       |                       ERC20 DECIMALS                                 |

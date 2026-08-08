@@ -64,6 +64,14 @@
     "typeLabel": "bool"
   },
   {
+    "bytes": "1",
+    "encoding": "inplace",
+    "label": "bountyLocked",
+    "offset": 24,
+    "slot": 4,
+    "typeLabel": "bool"
+  },
+  {
     "bytes": "32",
     "encoding": "mapping",
     "label": "coinflipTopByDay",
