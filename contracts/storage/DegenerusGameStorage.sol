@@ -1442,6 +1442,25 @@ abstract contract DegenerusGameStorage {
     ///      latch, so its cold-slot cost is confined to the presale window.
     uint96 internal presaleBoxEthSold;
 
+    // =========================================================================
+    // Degenerette Biggest-Spin Record
+    // =========================================================================
+    //
+    // Both fields sit in presaleBoxEthSold's slot (12 + 16 + 3 = 31 of 32 bytes)
+    // and MUST stay declared here: relocating them to the Degenerette section
+    // below moves them to a fresh slot and shifts the slot-pinned harnesses.
+
+    /// @dev Largest ETH `amountPerSpin` ever placed on a Degenerette bet. Ratchets
+    ///      on any larger ETH spin; a spin clearing it by a tenth also claims the
+    ///      accrued record bonus (DegeneretteModule).
+    uint128 internal biggestDegeneretteEthEver;
+
+    /// @dev Day index the record bonus last reset. Stamped on the first record write
+    ///      (bootstrap — an unstamped zero would read the whole day index as elapsed)
+    ///      and on every claim. A bare ratchet leaves it alone, so the bonus keeps
+    ///      accruing while the bar rises, and no dust ratchet can zero the pot.
+    uint24 internal biggestDegeneretteDay;
+
     /// @dev Spendable presale-box credit accrued per player from ETH buys while
     ///      the presale is open (presaleBoxCredit += 0.25 * purchaseEth). Consumed
     ///      1:1 when a box is bought.
@@ -2188,6 +2207,8 @@ abstract contract DegenerusGameStorage {
     /// - [170..201] RNG index (uint32)
     /// - [202..217] activity score in whole points (uint16)
     /// - [218..219] heroQuadrant (always-on hero quadrant, 0..3)
+    /// - [220..235] record bonus in bps (uint16, 0 = none) — armed and frozen at
+    ///              placement, never re-derived at resolve
     mapping(address => mapping(uint64 => uint256)) internal degeneretteBets;
 
     /// @dev Per-player bet counters for Degenerette.
