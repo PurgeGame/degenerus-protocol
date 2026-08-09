@@ -4,7 +4,7 @@ Pre-disclosure for audit wardens. **If a finding's mechanism + impact is describ
 already known and is not eligible.** This is a precise perimeter — each entry names the exact
 mechanism and why it is by-design, defended, or out-of-scope. There are no vague blanket disclaimers.
 
-Frozen subject: `contracts/` tree `9564ce8d` @ tag `degenerus-c4a`. Pre-scanned with Slither v0.11.5
+Frozen subject: `contracts/` tree `4018e0d4` @ tag `degenerus-c4a`. Pre-scanned with Slither v0.11.5
 + Aderyn 0.6.8; those findings are triaged in the automated-tools section below.
 
 ---
@@ -108,12 +108,12 @@ is no victim. An admin-power finding must exhibit an **engaged-community victim*
 ## 3. Accepted out-of-scope risk: the > 120-day VRF-death deadman fallback (do NOT submit)
 
 **Mechanism.** When the game has not sealed a day for more than 120 days
-(`_vrfDeadmanFired ≡ _simulatedDayIndex() − dailyIdx > 120`, `DegenerusGameStorage.sol:1920-1922`;
+(`_vrfDeadmanFired ≡ _simulatedDayIndex() − dailyIdx > 120`, `DegenerusGameStorage.sol:1923-1925`;
 `dailyIdx` is uint24 and always `<= _simulatedDayIndex()` so no underflow), the terminal release no
-longer waits for Chainlink. `_getHistoricalRngFallback` (`DegenerusGameAdvanceModule.sol:1928-1952`)
+longer waits for Chainlink. `_getHistoricalRngFallback` (`DegenerusGameAdvanceModule.sol:1946-1970`)
 commits a fallback word from sealed historical `rngWordByDay` admixed with `block.prevrandao`; the
 `reverseFlip` nudge is cancelled-and-consumed (`unchecked fallbackWord -= totalFlipReversals`,
-`:1627`, against the consumption in `_applyDailyRng :2314-2330`).
+`:1862`, against the consumption in `_applyDailyRng :2640-2651`).
 
 **Why a block proposer's 1-bit `prevrandao` grind over the terminal distribution is accepted:** this
 path is reachable **only** after a catastrophic, unrecovered Chainlink VRF death — VRF itself dead
@@ -141,29 +141,56 @@ transaction (a coin credit, not ETH-backed value). Immaterial; documented, not e
 
 ## 5. Automated tool findings (pre-disclosed)
 
-The full machine-readable Slither/Aderyn baseline is maintained internally — Slither 0.11.5 (3,329
-results / 101 detectors over 152 contracts at tree `9564ce8d`; 172 High / 448 Medium / 384 Low /
-2,273 Informational / 52 Optimization, and the "High" tier is dominated by 132 `uninitialized-state`
+The full machine-readable Slither/Aderyn baseline is maintained internally — Slither 0.11.5 (3,349
+results / 101 detectors over 152 contracts at tree `4018e0d4`; 172 High / 450 Medium / 392 Low /
+2,283 Informational / 52 Optimization, and the "High" tier is dominated by 132 `uninitialized-state`
 false positives from the shared-storage delegatecall architecture — the deployed-module compilation
-units plus the new `DegenerusGameLens` unit, see below) + Aderyn 0.6.8 (9 High / 20 Low, unchanged).
+units plus the `DegenerusGameLens` unit, see below) + Aderyn 0.6.8 (9 High / 20 Low, unchanged).
 Slither totals are sensitive to the scan environment (solc/toolchain resolution), so the absolute
 count is not comparable across machines — re-runs should compare category triage, not the total.
-These counts were measured directly at tree `9564ce8d`, not carried forward from an earlier scan.
-The immediately preceding tree `623927c5` was re-scanned in the same environment and reproduced its
-recorded 3,325 / 172 High / 445 Medium / 384 Low / 2,272 Informational / 52 Optimization exactly, so
+These counts were measured directly at tree `4018e0d4`, not carried forward from an earlier scan.
+The immediately preceding tree `9564ce8d` was re-scanned in the same environment and reproduced its
+recorded 3,329 / 172 High / 448 Medium / 384 Low / 2,273 Informational / 52 Optimization exactly, so
 the delta below is measured rather than compared against a recorded figure. **The High tier does not
-move**: the span adds +3 Medium and +1 Informational and nothing higher. Contract count rises 151 →
-152 with the out-of-scope `EnsReverseProbe`.
+move**: the span adds +2 Medium, +8 Low and +10 Informational and nothing higher, and the High tier
+is identical to the prior tree detector for detector (132 `uninitialized-state`, 14 `weak-prng`, 6,
+6, 5, 3, 3, 2, 1). Contract count is unchanged at 152.
 
-The delta against the tree tagged before this chain began (`4e616db4`) is **+186 results and +16
-High**, spanning sixteen changes: the `extsload` observability lens, the module observability
+The delta against the tree tagged before this chain began (`4e616db4`) is **+206 results and +16
+High**, spanning twenty changes: the `extsload` observability lens, the module observability
 events, the foil daily quest moving to the final-jackpot RNG request, the static boon tables, the
 council-review fixes, the seat push-mint, the dead-code removal, the size-scaled lootbox WWXRP
 stake, the coinflip claimable-preview fix, the vault share-token ENS reverse names, the solo-quadrant
 drop from the main-board ticket draw, the foil-pack spend-waterfall refactor, the award-rounding
 granules, the deploy-time level-1 quest seed (which contributes zero findings in every tier), the
-purchase-phase insurance skim, and the ENS reverse probe. Keyed line-insensitively on (check, impact,
-subject function), every addition is attributable:
+purchase-phase insurance skim, the ENS reverse probe, the unified all-time record pool (which
+retired the coinflip bounty ladder), the x9 snapshot behind the daily top-bettor board gate, the x0
+full-last-purchase-day pacing, and the deploy-day daily-quest seed. Keyed line-insensitively on
+(check, impact, subject function), every addition is attributable:
+
+- **The unified all-time record pool (+2 Medium, +8 Low, +10 Informational, ZERO High), against
+  which the retired bounty ladder gives back 9.** Four records now share one FLIP pot, so three
+  purchase-side paths gained an external `armRecord` call and `_endPhase` gained `fundRecordPool`:
+  that is the whole reentrancy family here — `reentrancy-no-eth` ×4 and `reentrancy-benign` ×3 plus
+  `reentrancy-events` ×5 across `_armBigRecord`, `_placeDegeneretteBet(Core)`,
+  `_purchaseForWithCached` and `_endPhase`. Every callee is a protocol contract reached as the
+  final statement of its branch, and the claim it may pay is credit-only (`_addDailyFlip`), never a
+  transfer. The rest are shape, not behaviour: `costly-loop` ×10 and `calls-loop` ×2 on the record
+  helpers (the "loop" is the four-category `if` ladder in `_stampRecordDay` / `_armBigRecord`, not
+  an unbounded iteration), `events-maths` on `fundRecordPool`, one `low-level-calls` on the
+  `_armBuyRecord` self-call, a `timestamp` taint artifact on `_endPhase`, `unused-state` on a
+  `PRICE_COIN_UNIT` whose notional conversion moved to the funding site, and `uninitialized-local`
+  on the deliberate default-zero `paid` / `sdgnrsPaid`. Removing the bounty ladder cleared nine in
+  the same tiers (`processCoinflipPayouts` reentrancy ×5, its two locals,
+  `_coinflipLockedDuringTransition` and `payCoinflipBountyDgnrs` unused-return) plus three on the
+  restructured `_addDailyFlip`.
+- **The board gate, the x0 pacing and the quest seed (+3 Medium, −1 Medium, ZERO High).** The x9
+  snapshot adds `uninitialized-local` on `_depositCoinflip.trackTop` (default false is the answer
+  for a non-qualifying deposit) and `unused-return` on `_depositTracksTop` discarding the
+  `purchaseInfo` tuple members it does not read. The quest seed adds `uninitialized-local` on the
+  constructor's `seeded` array, populated field-by-field through `_seedQuestType`. The x0 pacing
+  **removes** one: its mid-day swap guard initialises `lastSwapAhead` at its declaration, clearing
+  the `uninitialized-local` the old declare-then-assign form carried.
 
 - **The purchase-phase insurance skim (+2 Medium, ZERO High) and the `EnsReverseProbe` harness
   (+1 Medium, +1 Informational, ZERO High).** The skim routes 2% of the daily 1% `futurePrizePool`
@@ -323,8 +350,9 @@ internal paths use `msg.sender` / contract-to-contract addresses.
 **Unchecked downcasting `[L-18]`.** 50 instances; each preceded by range validation or mathematically
 guaranteed to fit (BPS < 10,000 → uint16, timestamps < 2^48 → uint48).
 
-**Missing address(0) `[NC-2]`.** Coinflip `bountyOwedTo` comes from game logic (always valid player);
-the DeityPass renderer setter is admin-only. Neither loses funds if zero.
+**Missing address(0) `[NC-2]`.** The two renderer setters (DeityPass, AFKing subscription token) are
+admin-only, and the VRF coordinator swap is governance-gated with its own liveness checks. None
+loses funds if zero.
 
 **Magic numbers / event indexing / old+new values / long functions / setter validation / unchecked
 arithmetic** (`[NC-6]`,`[NC-10]`,`[NC-11]`,`[NC-13]`,`[NC-16]`,`[NC-17]`,`[GAS-7]`): documented

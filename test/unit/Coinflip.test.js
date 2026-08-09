@@ -102,9 +102,9 @@ describe("Coinflip", function () {
       expect(await coinflip.wwxrp()).to.equal(await wwxrp.getAddress());
     });
 
-    it("initial recordPool is 1000 FLIP", async function () {
+    it("initial recordPool is 10,000 FLIP", async function () {
       const { coinflip } = await loadFixture(deployFullProtocol);
-      expect(await coinflip.recordPool()).to.equal(eth(1000));
+      expect(await coinflip.recordPool()).to.equal(eth(10_000));
     });
 
     it("initial biggestFlipEver is zero", async function () {
@@ -320,10 +320,13 @@ describe("Coinflip", function () {
       expect(evs[0].args.kind).to.equal(0n); // RECORD_KIND_FLIP
       expect(evs[0].args.player).to.equal(alice.address);
       expect(evs[0].args.value).to.equal(eth(200_000));
-      expect(evs[0].args.paid).to.equal(0n);
       expect(await coinflip.biggestFlipEver()).to.equal(eth(200_000));
-      // Bootstrap only stamps the category's clock — it claims nothing.
-      expect(await coinflip.recordPool()).to.equal(poolBefore);
+      // The clocks start at deploy, so the first mark has no bar to clear and draws
+      // the share accrued since launch. The event's paid leg and the pool decrement
+      // are the same amount.
+      const paid = evs[0].args.paid;
+      expect(paid).to.be.gt(0n);
+      expect(await coinflip.recordPool()).to.equal(poolBefore - paid);
     });
 
     it("a ratchet under the 20% beat bar pays nothing and leaves the pool untouched", async function () {

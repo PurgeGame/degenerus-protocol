@@ -293,6 +293,18 @@ contract KeeperResolveBetWorstCaseGas is DeployProtocol {
     ///         MEASURE: assert ticketCount == 25, all 25 spins resolved, gas < 30M with comfortable
     ///         margin. A block-limit overflow would be a real finding (the cap would be unsafe).
     function testWorstCaseResolveBet25SpinAllMatchFitsBlockGasLimit() public {
+        // Take the 10-spin reference FIRST, from the same cold fixture Test A measures it in.
+        // Measured after the 25-spin bet instead, the reference inherits whatever one-time
+        // slot initialization that bet's placement performed — most visibly the all-time
+        // record bootstrap, whose claim writes the bettor's day stake — and reads ~30%
+        // cheaper than the legacy worst case it is supposed to stand for, tightening this
+        // ratio against a numerator that never moved. Ordering it first makes the 25-spin
+        // figure below a steady-state resolve rather than a cold-start one; Test A keeps the
+        // cold reading, and both sit orders of magnitude under the block limit either way.
+        uint256 legacyGas = _measureTenSpinWorstCase();
+
+        // That reference leaves its own word injected at INDEX; placement requires word == 0.
+        _injectLootboxRngWord(INDEX, 0);
         uint64 betId = _placeWorstCaseBetN(player, MAX_SPINS_ETH, worstCaseTicket25);
         // Small pool so the 10% ETH-win cap flips every winning spin into the lootbox branch.
         _setFuturePool(SMALL_POOL_WEI);
@@ -342,7 +354,6 @@ contract KeeperResolveBetWorstCaseGas is DeployProtocol {
         // Absorption: re-measure the legacy 10-spin worst case in this test's own state, and assert
         // the 25-spin cost is BELOW a naive 2.5x of it — demonstrating the single-flush write savings
         // absorb the raised cap (the marginal per-spin work is roll-only, not write-per-spin).
-        uint256 legacyGas = _measureTenSpinWorstCase();
         assertLt(
             gasUsed,
             (legacyGas * 5) / 2,

@@ -95,16 +95,25 @@ contract CoinflipClaimableRebet is DeployProtocol {
     function test_RebetSpendsClaimableWithZeroWalletAndPaysBonus() public {
         uint256 payout = _bankAWin(100_000 ether);
 
+        // This payout clears the 200,000-FLIP record floor, so the deposit is also the
+        // first-ever biggest-flip mark and claims its launch-accrued pool share into the
+        // same day stake. Measure that share off the pool decrement and account for it
+        // separately, so the recycle arithmetic stays the thing under test.
+        uint256 poolBefore = coinflip.recordPool();
+
         // The whole deposit is funded from the bank — the player holds no FLIP at all.
         vm.prank(player);
         coinflip.depositCoinflip(address(0), payout);
+
+        uint256 recordClaim = poolBefore - coinflip.recordPool();
+        assertGt(recordClaim, 0, "fixture: the deposit bootstrapped the flip record");
 
         assertEq(coin.balanceOf(player), 0, "no wallet FLIP was needed or minted");
         assertEq(coinflip.previewClaimCoinflips(player), 0, "the bank funded the whole stake");
         assertEq(
             coinflip.coinflipAmount(player),
-            payout + _recyclingBonus(payout),
-            "recycled principal plus its 0.75% bonus rides day 4"
+            payout + _recyclingBonus(payout) + recordClaim,
+            "recycled principal plus its 0.75% bonus rides day 4 (beside the record claim)"
         );
     }
 

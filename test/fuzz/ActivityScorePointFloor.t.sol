@@ -28,6 +28,7 @@ contract ActivityScorePointFloorTest is DeployProtocol {
     uint256 private constant QUESTSTATE_SLOT = 1;
     uint256 private constant OFF_QS_SYNCDAY = 6;
     uint256 private constant OFF_QS_STREAK = 9;
+    uint256 private constant OFF_QS_BASESTREAK = 11;
 
     /// @dev Game-resident slots + the AFKing-Coin-era Sub-slot accumulator offsets (DegenerusGameStorage.sol
     ///      struct Sub, post `validThroughLevel` deletion): _subOf mapping root @ slot 54; mintPacked_ deity
@@ -141,7 +142,13 @@ contract ActivityScorePointFloorTest is DeployProtocol {
     ///      with no Sub-slot read — the score's sole contributor.
     function _setManualQuestStreak(address player, uint16 q) internal {
         bytes32 slot = keccak256(abi.encode(player, QUESTSTATE_SLOT));
-        uint256 word = (uint256(q) << (OFF_QS_STREAK * 8)) | (uint256(1) << (OFF_QS_SYNCDAY * 8));
+        // baseStreak carries q as well as streak: _effectiveBaseStreak returns baseStreak
+        // when lastSyncDay equals the active quest day, and the constructor-seeded
+        // deploy-day quest makes that collision reachable (the marker day below is 1).
+        // Writing both keeps the driven value branch-independent.
+        uint256 word = (uint256(q) << (OFF_QS_STREAK * 8)) |
+            (uint256(q) << (OFF_QS_BASESTREAK * 8)) |
+            (uint256(1) << (OFF_QS_SYNCDAY * 8));
         vm.store(address(quests), slot, bytes32(word));
     }
 

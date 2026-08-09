@@ -1,6 +1,6 @@
 # Security Policy
 
-Frozen subject: `contracts/` tree `623927c5` @ tag `degenerus-c4a` (post-v75.0 hardening freeze).
+Frozen subject: `contracts/` tree `4018e0d4` @ tag `degenerus-c4a` (post-v75.0 hardening freeze).
 
 ## Reporting a vulnerability
 
@@ -217,9 +217,9 @@ safe under one rule, applied uniformly:
   and the Degenerette gift placement source the FLIP principal from `msg.sender` on the gift branch
   (`funder = msg.sender` when caller ≠ player and not operator-approved); the stake/position belongs
   to `player`. No branch burns a non-consenting party's FLIP. WWXRP is gift-excluded.
-  `directDeposit=false` on gift/operator deposits suppresses biggestFlip/bounty credit so a funder
-  cannot farm a streak; quest progress credits the spender (the funder), which is the consenting
-  payer.
+  Gift/operator deposits carry a zero record amount, so they never arm the all-time flip record or
+  the top-bettor board and a funder cannot farm those on someone else's position; quest progress
+  credits the spender (the funder), which is the consenting payer.
 - **Cashout / spend (gated).** Moving value *out* to a chosen address, or spending a non-consenting
   party's balance, requires self, owner, or operator approval. Operator approval
   (`setOperatorApproval`) is the trust boundary — granting it is the player's consent.
