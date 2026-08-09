@@ -362,14 +362,15 @@ contract BigRecordPoolTest is DeployProtocol {
         assertEq(top, address(0), "ordinary-day deposits stay off the board");
     }
 
-    /// @notice On an x0 level's last purchase day (purchaseInfo mocked), a deposit
-    ///         whose stake total reaches the 200k qualifying floor writes the board;
-    ///         a sub-floor rival stays invisible.
+    /// @notice On an x0 level's last purchase day (purchaseInfo mocked: the game's
+    ///         level reads x9 while the x0 level sells, purchaseLevel = level + 1),
+    ///         a deposit whose stake total reaches the 200k qualifying floor writes
+    ///         the board; a sub-floor rival stays invisible.
     function testBafEveDepositWritesTopBettorBoard() public {
         vm.mockCall(
             GAME,
             abi.encodeWithSelector(IDegenerusGame.purchaseInfo.selector),
-            abi.encode(uint24(10), false, true, false, uint256(0.04 ether))
+            abi.encode(uint24(19), false, true, false, uint256(0.04 ether))
         );
         _selfDeposit(rival, FLIP_MIN - 1 ether); // sub-floor: skips the board
         _selfDeposit(player, FLIP_MIN);
@@ -387,7 +388,7 @@ contract BigRecordPoolTest is DeployProtocol {
         vm.mockCall(
             GAME,
             abi.encodeWithSelector(IDegenerusGame.purchaseInfo.selector),
-            abi.encode(uint24(10), false, true, false, uint256(0.04 ether))
+            abi.encode(uint24(19), false, true, false, uint256(0.04 ether))
         );
         _selfDeposit(player, FLIP_MIN - 1 ether);
         vm.clearMockedCalls();
@@ -395,6 +396,23 @@ contract BigRecordPoolTest is DeployProtocol {
         _resolveDay(3, true);
         (address top, ) = coinflip.coinflipTopLastDay();
         assertEq(top, address(0), "sub-floor stakes stay off the board");
+    }
+
+    /// @notice A last purchase day whose snapshot level reads x0 is an x1 level's
+    ///         eve (purchaseLevel = level + 1) — no BAF reads that day's board, so
+    ///         even a qualifying deposit skips the write.
+    function testX0LevelSnapshotIsNotTheBafEve() public {
+        vm.mockCall(
+            GAME,
+            abi.encodeWithSelector(IDegenerusGame.purchaseInfo.selector),
+            abi.encode(uint24(10), false, true, false, uint256(0.04 ether))
+        );
+        _selfDeposit(player, FLIP_MIN);
+        vm.clearMockedCalls();
+
+        _resolveDay(3, true);
+        (address top, ) = coinflip.coinflipTopLastDay();
+        assertEq(top, address(0), "an x0-snapshot eve feeds no BAF; board untouched");
     }
 
     // ---------------------------------------------------------------------

@@ -1565,10 +1565,6 @@ contract Coinflip {
         coinflipDayResultPacked[key] = w;
     }
 
-    /// @dev Check if coinflip deposits are locked during BAF resolution levels.
-    ///      Only blocks at levels where BAF jackpot fires (every 10th). Deposits
-    ///      trigger auto-claim which records BAF leaderboard credit — must block
-    ///      to prevent front-running the leaderboard between VRF request and fulfillment.
     /// @dev Whether deposits made now feed the day the BAF top-flipper slice reads —
     ///      an x0 level's last purchase day. The daily top-bettor board is written on
     ///      that day alone: the BAF slice is its only reader, so every other day's
@@ -1585,8 +1581,10 @@ contract Coinflip {
         // restricts the answer to purchase-phase states. No game-over state can
         // reach here: every gameOver latch leaves jackpotPhaseFlag set or
         // lastPurchaseDay false, and neither is ever written again post-latch. lvl is the
-        // ACTUAL game level from the same snapshot — no separate level() read needed.
-        trackTop = lastPurchaseDay_ && lvl != 0 && lvl % 10 == 0;
+        // ACTUAL game level from the same snapshot, and it runs one behind the level
+        // being sold (purchaseLevel = level + 1) — on an x0 level's last purchase day
+        // it reads x9.
+        trackTop = lastPurchaseDay_ && lvl % 10 == 9;
     }
 
     /// @dev Calculate recycling bonus for daily flip deposits (flat 0.75%).
