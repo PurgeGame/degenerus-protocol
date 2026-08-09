@@ -23,6 +23,7 @@ import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 ///         BAF resolved = epoch bump), then: no entries may remain at level 10's queue keys.
 contract TurboBafTicketFloor is DeployProtocol {
     address private buyer = address(0xB4A1);
+    address private crank = address(0xC4A9);
 
     uint256 private simTime;
 
@@ -79,6 +80,55 @@ contract TurboBafTicketFloor is DeployProtocol {
         );
     }
 
+    /// @notice The x0 evening latch (tier 2) keeps purchases open for the rest of the
+    ///         sealed day, so a mid-day lootbox request can fire inside the window. Its
+    ///         ticket-buffer swap must be refused: the next daily request is the
+    ///         transition that collapses every draw under its lock, so a swapped cohort
+    ///         crossed by a stall would sit write-side through the collapse — safe but
+    ///         drawless. Drive: reach the level-10 latch day, fire a mid-day request
+    ///         between two buys, assert no buffer flip, then cross WITHOUT fulfilling
+    ///         (stall promotion) and run the collapse out. Nothing may strand at the
+    ///         x0 level's keys.
+    function testLatchDayMiddayRequestRefusesTheSwap() public {
+        vm.pauseGasMetering();
+        _driveToLevelTenLatchDay();
+
+        _buyTickets();
+        bool swapped = _middayRequest();
+        assertFalse(
+            swapped,
+            "the latch-day mid-day request must not flip the ticket buffer"
+        );
+        assertTrue(
+            _ticketsFullyProcessed(),
+            "the read window stays drained: no latch, no pending mid-day batch"
+        );
+        _buyTickets();
+
+        // Cross without fulfilling: the stalled request resolves via promotion or
+        // orphan backfill, and the transition collapses the whole phase.
+        _runPromotedCrossingDay();
+        require(
+            _level() >= 10,
+            "harness: the level-10 transition must have run"
+        );
+
+        // Let the next level's purchase days drain any trailing keys.
+        _runFullDay();
+        _runFullDay();
+
+        assertEq(
+            _queueLen(10) + _queueLen(10 | TICKET_SLOT_BIT),
+            0,
+            "no cohort may strand at the collapsed x0 level's queue keys"
+        );
+        assertEq(
+            _entriesOwed(10, buyer) + _entriesOwed(10 | TICKET_SLOT_BIT, buyer),
+            0,
+            "no owed entries may strand at the collapsed x0 level"
+        );
+    }
+
     // ---------------------------------------------------------------------
     // Drive
     // ---------------------------------------------------------------------
@@ -105,6 +155,35 @@ contract TurboBafTicketFloor is DeployProtocol {
             _runFullDay();
         }
         revert("harness: never completed level 10");
+    }
+
+    /// @dev Turbo-chain levels 1-9 (same seeding as above), stopping ON the day the
+    ///      level-10 evening latch fires: lastPurchaseDay with the tier-2 flag, the
+    ///      phase not yet entered — the x0 last-purchase window. purchaseInfo's lvl
+    ///      runs one behind the level being sold, so the latch day reads lvl == 9.
+    function _driveToLevelTenLatchDay() internal {
+        _settleToday();
+        for (uint256 i = 0; i < 120; i++) {
+            require(
+                !game.gameOver(),
+                "harness: gameOver before the level-10 latch"
+            );
+            (uint24 lvl, , bool lastPurchaseDay_, , ) = game.purchaseInfo();
+            if (lastPurchaseDay_ && lvl == 9) {
+                require(
+                    _compressedFlag() == 2,
+                    "harness: the x0 latch must be tier 2"
+                );
+                return;
+            }
+            if (!game.jackpotPhase()) {
+                _seedNextPrizePool(_levelPrizePool(_level()) + 25 ether);
+                _buyTickets();
+                _tryCoinflipDeposit();
+            }
+            _runFullDay();
+        }
+        revert("harness: never reached the level-10 latch day");
     }
 
     /// @dev Run the advance chain to exhaustion on the current (already-warped) day.
@@ -175,6 +254,45 @@ contract TurboBafTicketFloor is DeployProtocol {
         }
     }
 
+    /// @dev Buy a lootbox and fire a mid-day lootbox request; report whether the
+    ///      ticket buffer flipped (shared shape with MiddaySwapJackpotCohort).
+    function _middayRequest() internal returns (bool swapped) {
+        vm.prank(buyer);
+        game.purchase{value: 2 ether}(
+            buyer,
+            0,
+            2 ether,
+            bytes32(0),
+            MintPaymentKind.DirectEth,
+            false
+        );
+        bool before = _ticketWriteSlot();
+        vm.prank(crank);
+        (bool ok, ) = address(game).call(
+            abi.encodeWithSignature("requestLootboxRng()")
+        );
+        require(ok, "harness: requestLootboxRng must be callable");
+        swapped = _ticketWriteSlot() != before;
+    }
+
+    /// @dev Cross the day boundary WITHOUT fulfilling the outstanding request, then
+    ///      run the chain to exhaustion (fulfilling from the first loop entry on).
+    function _runPromotedCrossingDay() internal {
+        simTime += 1 days + 1;
+        vm.warp(simTime);
+        (bool ok, ) = address(game).call(
+            abi.encodeWithSignature("advanceGame()")
+        );
+        ok; // the promotion entry may or may not revert once its stage breaks
+        for (uint256 i = 0; i < 300; i++) {
+            _fulfillPending();
+            (ok, ) = address(game).call(
+                abi.encodeWithSignature("advanceGame()")
+            );
+            if (!ok) break;
+        }
+    }
+
     /// @dev Seed the live next-pool half (slot 2, low 104 bits) up to targetNext.
     function _seedNextPrizePool(uint256 targetNext) internal {
         uint256 packed = uint256(vm.load(address(game), bytes32(uint256(2))));
@@ -227,6 +345,18 @@ contract TurboBafTicketFloor is DeployProtocol {
     function _compressedFlag() internal view returns (uint8) {
         uint256 s0 = uint256(vm.load(address(game), bytes32(uint256(0))));
         return uint8(s0 >> 184);
+    }
+
+    /// @dev ticketsFullyProcessed — slot 0, byte 24 bit 0.
+    function _ticketsFullyProcessed() internal view returns (bool) {
+        uint256 s0 = uint256(vm.load(address(game), bytes32(uint256(0))));
+        return ((s0 >> 192) & 1) != 0;
+    }
+
+    /// @dev Ticket write-slot parity bit — slot 0, byte 25 bit 0.
+    function _ticketWriteSlot() internal view returns (bool) {
+        uint256 s0 = uint256(vm.load(address(game), bytes32(uint256(0))));
+        return ((s0 >> 200) & 1) != 0;
     }
 
     /// @dev jackpots.bafLevel[lvl].epoch — the mapping sits at Jackpots slot 2; epoch is

@@ -331,7 +331,10 @@ abstract contract DegenerusGameStorage {
 
     /// @dev Jackpot compression tier: 0=normal (5d), 1=compressed (3d), 2=turbo (1d).
     ///      Set when purchase-phase target is met quickly, signaling high player interest.
-    ///      Turbo (2): target met within 1 day — entire jackpot in 1 physical day.
+    ///      Turbo (2): target met within 1 day — entire jackpot in 1 physical day. On a
+    ///      non-x0 level the morning arm collapses the phase that same day; an x0 (BAF)
+    ///      level latches 2 on the evening path instead, keeping a real last purchase
+    ///      day (the BAF top-flipper board's feed day) before the one-day collapse.
     ///      Compressed (1): target met within 3 days — 5 logical days in 3 physical.
     ///      0/1 clear at phase end; 2 survives as the coinflip bonus-day latch and is
     ///      consumed by the next level's first purchase-day settlement in rngGate. When

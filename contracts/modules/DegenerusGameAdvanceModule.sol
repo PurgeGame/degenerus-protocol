@@ -275,6 +275,11 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         // the subtraction unsafe) and, even after it reaches psd, must not arm turbo: its word is
         // already cached, so rngGate would skip the request that performs the level promotion.
         // Turbo is therefore restricted to the real wall day with an unrequested word.
+        // An x0 (BAF) purchase level never arms same-day: deposits on day D feed
+        // board[D+1], so a same-day collapse would leave the BAF top-flipper board
+        // empty. Its turbo-speed latch lives on the evening path instead (flag 2
+        // there), keeping a real last-purchase window ahead of the one-day
+        // collapse.
         // Latched mid-day stall: the pre-gate promotion cannot swap while the
         // committed cohort occupies the read slot, and a collapsed turbo phase issues
         // no sentinel swap — so buys queued after the stalled request would drain (the
@@ -295,6 +300,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
             uint32 purchaseDays = day - psd;
             if (
                 purchaseDays <= 1 &&
+                lvl % 10 != 9 &&
                 _getNextPrizePool() > _prizePoolTarget(lvl + 1)
             ) {
                 lastPurchaseDay = true;
@@ -699,7 +705,16 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                     // the compressed-phase subtraction safe after the death-clock adjustment.
                     if (targetMet && day == wallDay && day >= psd) {
                         lastPurchaseDay = true;
-                        if (day - psd <= 3) {
+                        // Turbo-speed x0 (BAF) level: the one-day collapse latches
+                        // here rather than at the morning arm, leaving the rest of
+                        // the sealed day as a real last-purchase window — the only
+                        // day whose flip deposits (day D writes board[D+1]) feed
+                        // the board tomorrow's transition word reads for the BAF
+                        // top-flipper slice. That transition request collapses all
+                        // five logical jackpot days exactly as an armed turbo does.
+                        if (purchaseLevel % 10 == 0 && day - psd <= 1) {
+                            compressedJackpotFlag = 2;
+                        } else if (day - psd <= 3) {
                             compressedJackpotFlag = 1;
                         }
                     }
@@ -1496,8 +1511,16 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         // its chain drains BEFORE the final draw. The word still serves the
         // pending lootboxes.
         {
-            bool lastSwapAhead;
-            if (jackpotPhaseFlag) {
+            // A latched one-day collapse (lastPurchaseDay with flag >= 2 — an x0
+            // evening latch, or an armed turbo whose advance chain broke on
+            // ticket work before its request) is the same final-day shape: the
+            // next daily request is the transition that collapses every draw
+            // under its lock, so a swap here, crossed by a stall, would hold the
+            // post-request cohort write-side until the level retires — safe but
+            // drawless. Refused, the whole day's cohort stays together on the
+            // write side for that request's own commit.
+            bool lastSwapAhead = lastPurchaseDay && compressedJackpotFlag >= 2;
+            if (!lastSwapAhead && jackpotPhaseFlag) {
                 uint8 cnt = jackpotCounter;
                 uint8 comp = compressedJackpotFlag;
                 uint8 step = comp == 2
