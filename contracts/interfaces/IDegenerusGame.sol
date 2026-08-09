@@ -252,12 +252,13 @@ interface IDegenerusGame {
     /// @param amount ETH value to reserve (the MAX 175% payout for the burn).
     function pullRedemptionReserve(uint256 amount) external;
 
-    /// @notice Pay DGNRS bounty for biggest flip record holder.
-    /// @dev Called by COIN contract when bounty is paid.
-    /// @param player Player receiving the bounty payout.
-    /// @param winningBet FLIP value of the winning flip (must meet minimum bet threshold).
-    /// @param bountyPool FLIP value of the bounty pool (must meet minimum pool threshold).
-    function payCoinflipBountyDgnrs(address player, uint256 winningBet, uint256 bountyPool) external;
+    /// @notice Pay the sDGNRS leg of an all-time record claim.
+    /// @dev COINFLIP only. Pays the claim's accrued record-pool share at 1/500 scale
+    ///      from the sDGNRS reward pool.
+    /// @param player Recipient of the sDGNRS.
+    /// @param shareBps The claim's accrued record-pool share in bps.
+    /// @return paid The sDGNRS actually transferred.
+    function payRecordSdgnrs(address player, uint256 shareBps) external returns (uint256 paid);
 
     /// @notice Check if RNG is currently locked (VRF request pending).
     /// @return True if RNG is locked, false otherwise.

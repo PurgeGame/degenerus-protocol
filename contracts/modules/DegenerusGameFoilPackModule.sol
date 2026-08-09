@@ -2,6 +2,7 @@
 pragma solidity 0.8.34;
 
 import {MintPaymentKind} from "../interfaces/IDegenerusGame.sol";
+import {RECORD_KIND_BUY} from "../interfaces/ICoinflip.sol";
 import {
     IDegenerusGameDegeneretteModule,
     IDegenerusGameJackpotModule
@@ -172,6 +173,36 @@ contract DegenerusGameFoilPackModule is
     // =========================================================================
     // Buy
     // =========================================================================
+
+    /// @dev Entry floor for the biggest-buy record, in whole tickets.
+    uint256 private constant BIGGEST_BUY_MIN_TICKETS = 100;
+
+    /// @notice Arm the biggest-buy record for a settled router purchase.
+    /// @dev Payable: delegatecall preserves the purchase's msg.value, so a nonpayable
+    ///      guard here would reject every ETH-carrying qualifying buy.
+    ///      Delegatecall-only from the purchase router, after its module leg settles —
+    ///      hosted here because neither the Game nor the mint module has EIP-170 room
+    ///      for the arm site. The record and the shared pool it pays from live in
+    ///      Coinflip; a direct call on the deployed module is inert (Coinflip rejects
+    ///      any caller but the GAME). The unit is whole tickets counted RAW off the
+    ///      requested quantity — the pre-boost purchase — so a boon boost cannot carry
+    ///      a buy over the bar. The floor is sound because the mark is only ever
+    ///      written by a buy that cleared it: a smaller buy could not have beaten the
+    ///      mark anyway. Any claim settles inside Coinflip as flip credit.
+    /// @param buyer Player the record and any claim accrue to (already operator-resolved).
+    /// @param entryQuantityScaled The requested raw quantity (entries x QTY_SCALE).
+    function armBuyRecord(
+        address buyer,
+        uint256 entryQuantityScaled
+    ) external payable {
+        if (entryQuantityScaled >= BIGGEST_BUY_MIN_TICKETS * 4 * QTY_SCALE) {
+            coinflip.armRecord(
+                RECORD_KIND_BUY,
+                buyer,
+                entryQuantityScaled / (4 * QTY_SCALE)
+            );
+        }
+    }
 
     /// @notice Deliver one foil pack (four tickets) for the active cycle as the foil leg
     ///         of an additive ticket/lootbox/foil purchase.

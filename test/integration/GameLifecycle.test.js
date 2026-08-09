@@ -525,12 +525,12 @@ describe("GameLifecycle", function () {
       await game.connect(deployer).advanceGame();
       expect(await game.rngLocked()).to.equal(true);
 
-      // Coinflip deposit should NOT revert with CoinflipLocked since level is not BAF
+      // Coinflip deposits flow during RNG locks (no deposit-level lock exists).
       await expect(
         coinflip
           .connect(alice)
           .depositCoinflip("0x0000000000000000000000000000000000000000", eth(100))
-      ).to.not.be.revertedWithCustomError(coinflip, "CoinflipLocked");
+      ).to.not.be.reverted;
     });
   });
 

@@ -26,7 +26,7 @@
   {
     "bytes": "16",
     "encoding": "inplace",
-    "label": "currentBounty",
+    "label": "recordPool",
     "offset": 0,
     "slot": 3,
     "typeLabel": "uint128"
@@ -40,18 +40,10 @@
     "typeLabel": "uint128"
   },
   {
-    "bytes": "20",
-    "encoding": "inplace",
-    "label": "bountyOwedTo",
-    "offset": 0,
-    "slot": 4,
-    "typeLabel": "address"
-  },
-  {
     "bytes": "3",
     "encoding": "inplace",
     "label": "flipsClaimableDay",
-    "offset": 20,
+    "offset": 0,
     "slot": 4,
     "typeLabel": "uint24"
   },
@@ -59,17 +51,41 @@
     "bytes": "1",
     "encoding": "inplace",
     "label": "sdgnrsAutoRebuyArmed",
-    "offset": 23,
+    "offset": 3,
     "slot": 4,
     "typeLabel": "bool"
   },
   {
-    "bytes": "1",
+    "bytes": "3",
     "encoding": "inplace",
-    "label": "bountyLocked",
-    "offset": 24,
+    "label": "recordDayFlip",
+    "offset": 4,
     "slot": 4,
-    "typeLabel": "bool"
+    "typeLabel": "uint24"
+  },
+  {
+    "bytes": "3",
+    "encoding": "inplace",
+    "label": "recordDaySpin",
+    "offset": 7,
+    "slot": 4,
+    "typeLabel": "uint24"
+  },
+  {
+    "bytes": "3",
+    "encoding": "inplace",
+    "label": "recordDayLuckbox",
+    "offset": 10,
+    "slot": 4,
+    "typeLabel": "uint24"
+  },
+  {
+    "bytes": "3",
+    "encoding": "inplace",
+    "label": "recordDayBuy",
+    "offset": 13,
+    "slot": 4,
+    "typeLabel": "uint24"
   },
   {
     "bytes": "32",
@@ -78,5 +94,29 @@
     "offset": 0,
     "slot": 5,
     "typeLabel": "mapping(uint24 => struct Coinflip.PlayerScore)"
+  },
+  {
+    "bytes": "16",
+    "encoding": "inplace",
+    "label": "biggestSpinEver",
+    "offset": 0,
+    "slot": 6,
+    "typeLabel": "uint128"
+  },
+  {
+    "bytes": "16",
+    "encoding": "inplace",
+    "label": "biggestLuckboxEver",
+    "offset": 16,
+    "slot": 6,
+    "typeLabel": "uint128"
+  },
+  {
+    "bytes": "16",
+    "encoding": "inplace",
+    "label": "biggestBuyEver",
+    "offset": 0,
+    "slot": 7,
+    "typeLabel": "uint128"
   }
 ]

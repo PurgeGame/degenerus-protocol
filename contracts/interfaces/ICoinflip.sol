@@ -7,6 +7,15 @@ pragma solidity 0.8.34;
  * @dev Standalone daily coinflip wagering system extracted from FLIP to reduce contract size.
  *      Integrates with FLIP for burn/mint operations and DegenerusGame for game state.
  */
+
+/// @dev All-time record kinds. Coinflip owns the four records and the shared pool;
+///      the game modules arm the three game-side kinds via armRecord. The flip
+///      record arms internally on direct deposits and is not reachable externally.
+uint8 constant RECORD_KIND_FLIP = 0;
+uint8 constant RECORD_KIND_SPIN = 1;
+uint8 constant RECORD_KIND_LUCKBOX = 2;
+uint8 constant RECORD_KIND_BUY = 3;
+
 interface ICoinflip {
     /// @notice Emitted whenever a player's coinflip claim-state changes (claimable + carry + claim
     ///         cursor), so off-chain consumers can reconstruct valuation from logs without an eth_call.
@@ -33,7 +42,6 @@ interface ICoinflip {
     /// @param player The player making the deposit (address(0) or msg.sender for direct deposit).
     /// @param amount Amount of FLIP to deposit (must be >= 100 FLIP minimum).
     /// @custom:reverts AmountLTMin If amount is non-zero but less than 100 FLIP.
-    /// @custom:reverts CoinflipLocked If deposits are locked during level transition RNG resolution.
     function depositCoinflip(address player, uint256 amount) external;
 
     /// @notice Claim an exact amount of coinflip winnings as FLIP tokens.
@@ -106,7 +114,7 @@ interface ICoinflip {
       +======================================================================+*/
 
     /// @notice Process coinflip payout for a completed epoch (called by game contract after VRF fulfillment).
-    /// @dev Determines win/loss and reward percent from RNG, resolves bounty, advances claimable day.
+    /// @dev Determines win/loss and reward percent from RNG, drips the record pool, advances claimable day.
     ///      Reward percent ranges: 5% chance of 50% (unlucky), 5% chance of 150% (lucky),
     ///      90% chance of 78-115% (normal). The caller adds a precomputed bonus on top.
     /// @param bonus Reward-percent bonus precomputed by the caller from frozen state: 0 = normal day,
@@ -126,7 +134,7 @@ interface ICoinflip {
 
     /// @notice Credit flip stake to a player without burning tokens.
     /// @dev Called by authorized creditors (GAME, QUESTS, AFFILIATE, ADMIN, SDGNRS, WWXRP) for rewards.
-    ///      Does not set bounty records or trigger bounty eligibility.
+    ///      Never touches the biggest-flip record (credits carry recordAmount 0).
     /// @param player The player receiving the flip credit.
     /// @param amount Amount of flip credit to add to next day's stake.
     /// @custom:reverts OnlyFlipCreditors If caller is not an authorized creditor.
@@ -156,6 +164,21 @@ interface ICoinflip {
         address player2,
         uint256 amount2
     ) external;
+
+    /// @notice Arm a game-side all-time record for `player` with `candidate` in the
+    ///         record's own unit (spin and lootbox deposit: ETH wei; buy: whole tickets).
+    /// @dev GAME only (delegatecall modules). Larger-than-mark candidates ratchet the
+    ///      record; clearing the mark by a fifth also claims the category's accrued
+    ///      share of the record pool as flip credit, plus the sDGNRS leg at 1/500
+    ///      scale. Callers gate each record's entry floor before paying for the call.
+    ///      The flip record arms internally on direct deposits, never here.
+    /// @custom:reverts BadRecordKind If `kind` is the flip record or out of range.
+    function armRecord(uint8 kind, address player, uint256 candidate) external;
+
+    /// @notice Add FLIP to the shared all-time record pool.
+    /// @dev GAME only. Level transitions push 0.5% of the completed level's prize pool,
+    ///      converted notionally at that level's ticket price — no ETH moves.
+    function fundRecordPool(uint256 amount) external;
 
     /// @notice Settle-then-read sDGNRS's redeemable coinflip backing (claimableStored + carry).
     /// @dev sDGNRS-only. Settles all resolved days first so the two summed components are disjoint

@@ -2,6 +2,7 @@
 pragma solidity 0.8.34;
 
 import {IsDGNRS} from "../interfaces/IsDGNRS.sol";
+import {RECORD_KIND_SPIN} from "../interfaces/ICoinflip.sol";
 import {
     IDegenerusGameLootboxModule
 } from "../interfaces/IDegenerusGameModules.sol";
@@ -79,8 +80,8 @@ contract DegenerusGameDegeneretteModule is
     /// @param betId The bet ID.
     /// @param spinCount Number of spins resolved.
     /// @param totalPayout Total payout across all spins. Diverges from the per-spin
-    ///        DegeneretteResult sums in two cases: a FLIP bet's survival flip (doubled or
-    ///        zeroed) and an ETH bet's biggest-spin bonus (the packed bet carries the bps).
+    ///        DegeneretteResult sums in one case: a FLIP bet's survival flip (doubled or
+    ///        zeroed).
     /// @param resultTraits The spin-0 result traits (additional spin results are derived per spinIndex).
     event DegeneretteResolved(
         address indexed player,
@@ -115,25 +116,6 @@ contract DegenerusGameDegeneretteModule is
         address indexed player,
         uint256 cappedEthPayout,
         uint256 excessConverted
-    );
-
-    /// @notice Emitted when an ETH spin sets the all-time biggest-spin record.
-    /// @param player The player the record belongs to (the bet owner, not the funder).
-    /// @param amountPerSpin The new record — per-spin size, not the bet total.
-    event BiggestDegeneretteUpdated(
-        address indexed player,
-        uint256 amountPerSpin
-    );
-
-    /// @notice Emitted when a record clears the standing one by a tenth and claims
-    ///         the accrued bonus, resetting it to the floor.
-    /// @param player The player the bonus is frozen to.
-    /// @param amountPerSpin The claiming spin size.
-    /// @param bonusBps The claimed bonus in bps, applied to both payout legs at resolve.
-    event BiggestDegeneretteClaimed(
-        address indexed player,
-        uint256 amountPerSpin,
-        uint16 bonusBps
     );
 
     /// @notice Emitted when a WWXRP jackpot awards the bracket's whale halfpass.
@@ -257,34 +239,21 @@ contract DegenerusGameDegeneretteModule is
     // Biggest-Spin Record Bonus (ETH only)
     // -------------------------------------------------------------------------
     //
-    // An ETH spin that beats the all-time `amountPerSpin` record by a tenth claims
-    // a bonus applied to BOTH payout legs at resolve. The bonus starts at the floor
-    // and accrues per elapsed day since the last claim, so a record nobody can beat
-    // grows its own incentive to be beaten rather than retiring the mechanic.
-    // Every larger spin still ratchets the record without claiming, which raises the
-    // bar and leaves the bonus accruing.
+    // An ETH bet above the entry floor is offered against the all-time
+    // biggest-bet record, which Coinflip owns alongside the other three
+    // all-time records and the shared FLIP pool they pay from. The unit is the
+    // bet's TOTAL ETH (the whole transaction's wager). Beating the mark by a
+    // fifth claims the category's accrued pool share as flip credit; any larger
+    // bet ratchets the mark for free. The award settles inside Coinflip at
+    // placement, so nothing rides the packed bet.
 
-    /// @dev Entry floor for the record path. A spin under this never reads the record
-    ///      slot at all, which keeps the cold SLOAD off the overwhelming majority of ETH
-    ///      bets. Sound because the record is only ever written by a spin that cleared
-    ///      this floor, so it is always 0 or >= the floor: a smaller spin could not have
-    ///      beaten it anyway. The floor is the record's bootstrap minimum.
+    /// @dev Entry floor for the record path, on the bet's total ETH. A bet under this
+    ///      never pays the record call at all, which keeps the external arm off the
+    ///      overwhelming majority of ETH bets. Sound because the record is only ever
+    ///      written by a bet that cleared this floor, so it is always 0 or >= the
+    ///      floor: a smaller bet could not have beaten it anyway. The floor is the
+    ///      record's bootstrap minimum.
     uint256 private constant BIGGEST_SPIN_MIN_ETH = 1 ether;
-
-    /// @dev A claim must clear the standing record by record/10 (a tenth).
-    uint256 private constant BIGGEST_SPIN_BEAT_DIV = 10;
-
-    /// @dev Bonus on the day of a claim (5%), so a freshly reset pot still pays.
-    uint256 private constant BIGGEST_SPIN_FLOOR_BPS = 500;
-
-    /// @dev Bonus accrued per elapsed day since the last claim (+0.2%).
-    uint256 private constant BIGGEST_SPIN_PER_DAY_BPS = 20;
-
-    /// @dev Bonus ceiling (50%, reached 225 days after a claim). Held far inside the
-    ///      uint16 pack field, so the clamp bounds the payout rather than guarding a
-    ///      truncation. Below the point where the ETH leg alone would return the
-    ///      claimant's whole stake.
-    uint256 private constant BIGGEST_SPIN_CEIL_BPS = 5_000;
 
     /// @dev Maximum spins per bet, per currency (encoded as ticketCount in the packed bet).
     uint8 private constant MAX_SPINS_ETH = 25;
@@ -432,7 +401,6 @@ contract DegenerusGameDegeneretteModule is
     // [170..201] index (32 bits): lootbox RNG index
     // [202..217] activityScore (16 bits)
     // [218..219] heroQuadrant (2 bits): always-on hero quadrant (0..3)
-    // [220..235] recordBonusBps (16 bits): claimed biggest-spin bonus, 0 = none
     //
     /// EV-equality across picks: each pick maps to exactly one of 5 per-N tables;
     /// basePayoutEV is calibrated to 100 centi-x per table; runtime payout =
@@ -448,7 +416,6 @@ contract DegenerusGameDegeneretteModule is
     uint256 private constant DEGEN_INDEX_SHIFT = 170;
     uint256 private constant DEGEN_ACTIVITY_SHIFT = 202;
     uint256 private constant DEGEN_HERO_SHIFT = 218; // 2 bits: hero quadrant (0..3)
-    uint256 private constant DEGEN_BONUS_BPS_SHIFT = 220; // 16 bits: record bonus bps
 
     // Common masks
     uint256 private constant MASK_2 = 0x3;
@@ -669,17 +636,18 @@ contract DegenerusGameDegeneretteModule is
             _playerActivityScore(player, questStreak, lvl + 1)
         );
 
-        // ETH-only per-bet bookkeeping: the biggest-spin record (whose bonus must be
-        // armed BEFORE the pack, since it rides the packed word) and the daily hero
-        // wager ledger, sharing one day read and one currency branch.
-        uint16 recordBonusBps;
+        // ETH-only per-bet bookkeeping: the biggest-spin record and the daily hero
+        // wager ledger, sharing one currency branch.
         if (currency == CURRENCY_ETH) {
             uint24 day = _simulatedDayIndex();
-            // Gate the record slot behind the entry floor: a spin under it can never hold
-            // the record, so skipping the read costs no outcome and saves the cold SLOAD
-            // on the bets that make up nearly all ETH volume.
-            if (uint256(amountPerSpin) >= BIGGEST_SPIN_MIN_ETH) {
-                recordBonusBps = _armBiggestSpin(player, amountPerSpin, day);
+            // Gate the record behind the entry floor: a bet under it can never hold
+            // the record, so skipping the call costs no outcome and keeps the external
+            // arm off the bets that make up nearly all ETH volume. The candidate is
+            // the bet's TOTAL ETH — the whole transaction's wager, spins included.
+            // Any claim settles inside Coinflip as flip credit. Gifted bets arm
+            // normally: the ETH is real and the record belongs to `player`.
+            if (totalBet >= BIGGEST_SPIN_MIN_ETH) {
+                coinflip.armRecord(RECORD_KIND_SPIN, player, totalBet);
             }
 
             // Daily hero symbol tracking (heroQuadrant validated to {0..3} above)
@@ -706,8 +674,7 @@ contract DegenerusGameDegeneretteModule is
             amountPerSpin,
             uint32(index),
             activityScore,
-            heroQuadrant,
-            recordBonusBps
+            heroQuadrant
         );
 
         uint64 nonce = degeneretteBetNonce[player];
@@ -718,61 +685,6 @@ contract DegenerusGameDegeneretteModule is
 
         degeneretteBets[player][nonce] = packed;
         emit BetPlaced(player, uint32(index), nonce, packed);
-    }
-
-    /// @dev Ratchets the all-time ETH `amountPerSpin` record and returns the bonus this
-    ///      spin claims (0 if it claims none). A spin beating the record by a tenth claims
-    ///      the pot — the floor plus per-day accrual since the last claim, clamped at the
-    ///      ceiling — and resets the clock; every other larger spin ratchets the record
-    ///      alone, raising the bar while the pot keeps growing. The clock is stamped on
-    ///      the game's first ETH spin too: an unstamped zero would read the whole day index
-    ///      as elapsed and max the very next claim.
-    ///
-    ///      Called only from the placement path, which reverts unless this index's RNG word
-    ///      is still unfulfilled — so the bonus is fixed against an unknowable outcome and
-    ///      rides the packed bet to resolve rather than being re-derived there. Gifted bets
-    ///      arm normally: the ETH is real and the record belongs to `player`.
-    ///
-    ///      The caller gates on BIGGEST_SPIN_MIN_ETH, so every write here clears the floor
-    ///      and the record is always 0 or >= it.
-    /// @param player The bet owner the record and bonus accrue to.
-    /// @param amountPerSpin This bet's per-spin ETH size — the record unit (a bet's spin
-    ///        count multiplies the wager, not the record). At or above the entry floor.
-    /// @param day The current day index, shared with the caller's hero-wager write.
-    /// @return bonusBps The claimed bonus in bps, 0 when this spin claims nothing.
-    function _armBiggestSpin(
-        address player,
-        uint128 amountPerSpin,
-        uint24 day
-    ) private returns (uint16 bonusBps) {
-        uint256 record = biggestDegeneretteEthEver;
-        if (uint256(amountPerSpin) <= record) return 0;
-
-        if (record == 0) {
-            // Bootstrap: the first ETH spin sets the mark and starts the clock. No bar
-            // to clear by a tenth, so it claims nothing.
-            biggestDegeneretteDay = day;
-        } else if (
-            // Exact tenth: `record + record / 10` floors the bar, so a record not divisible
-            // by ten would let a spin claim on strictly less than a tenth. Multiplying the
-            // increase instead is exact. `amountPerSpin - record` is bounded by uint128, so
-            // the widening multiply cannot overflow.
-            (uint256(amountPerSpin) - record) * BIGGEST_SPIN_BEAT_DIV >= record
-        ) {
-            uint256 stamped = biggestDegeneretteDay;
-            uint256 elapsed = uint256(day) > stamped ? uint256(day) - stamped : 0;
-            uint256 bps = BIGGEST_SPIN_FLOOR_BPS +
-                elapsed *
-                BIGGEST_SPIN_PER_DAY_BPS;
-            bonusBps = uint16(
-                bps > BIGGEST_SPIN_CEIL_BPS ? BIGGEST_SPIN_CEIL_BPS : bps
-            );
-            biggestDegeneretteDay = day;
-            emit BiggestDegeneretteClaimed(player, amountPerSpin, bonusBps);
-        }
-
-        biggestDegeneretteEthEver = amountPerSpin;
-        emit BiggestDegeneretteUpdated(player, amountPerSpin);
     }
 
     /// @dev Processes bet funds (burn tokens, handle ETH, check pool).
@@ -843,10 +755,6 @@ contract DegenerusGameDegeneretteModule is
         uint32 index = uint32((packed >> DEGEN_INDEX_SHIFT) & MASK_32);
         uint16 activityScore = uint16((packed >> DEGEN_ACTIVITY_SHIFT) & MASK_16);
         uint8 heroQuadrant = uint8((packed >> DEGEN_HERO_SHIFT) & MASK_2);
-        // Frozen at placement against an unfulfilled RNG word; ETH bets only.
-        uint16 recordBonusBps = uint16(
-            (packed >> DEGEN_BONUS_BPS_SHIFT) & MASK_16
-        );
 
         uint256 rngWord = lootboxRngWordByIndex[index];
         if (rngWord == 0) {
@@ -940,10 +848,7 @@ contract DegenerusGameDegeneretteModule is
                 heroIsGold
             );
 
-            // The per-spin result reports the RAW payout, before the bet's record bonus —
-            // the same convention FLIP's survival flip already uses, where the bet's
-            // DegeneretteResolved total is what diverges from the per-spin sums. Keeping
-            // the emit here also holds the log order PayoutCapped is read against: it
+            // The emit here holds the log order PayoutCapped is read against: it
             // fires inside _distributePayout, immediately after the spin it caps.
             emit DegeneretteResult(
                 player,
@@ -958,20 +863,16 @@ contract DegenerusGameDegeneretteModule is
                 // Accumulate this spin's payout. ETH credits + the running-pool
                 // decrement / cap land in `acc` (flushed cross-bet); the spin's
                 // lootbox-share is returned and summed into this bet's box. `paid` is
-                // what the spin actually pays across both legs — `payout` plus the record
-                // bonus, applied per-leg inside so the bonus cannot move the spin across
-                // a 3-tier split boundary.
+                // what the spin actually pays across both legs.
                 (uint256 spinLootboxShare, uint256 paid) = _distributePayout(
                     player,
                     currency,
                     amountPerSpin,
                     payout,
-                    recordBonusBps,
                     acc
                 );
-                // Bounded by maxSpins * amountPerSpin(uint128) * max payout factor * the
-                // 1.5x bonus ceiling — ~15.7M below 2^256, so the per-spin accumulation
-                // cannot overflow.
+                // Bounded by maxSpins * amountPerSpin(uint128) * max payout factor —
+                // ~15.7M below 2^256, so the per-spin accumulation cannot overflow.
                 unchecked {
                     totalPayout += paid;
                 }
@@ -1111,25 +1012,18 @@ contract DegenerusGameDegeneretteModule is
     /// @param player The player to receive the payout.
     /// @param currency The currency type (0=ETH, 1=FLIP, 3=WWXRP).
     /// @param betAmount The per-ticket bet amount (uint128) — the tier-threshold reference.
-    /// @param payout The total payout amount (uint256), BEFORE the record bonus.
-    /// @param recordBonusBps The biggest-spin bonus frozen into the bet (0 = none;
-    ///        non-zero only on ETH bets). Applied to each leg AFTER the split — scaling
-    ///        `payout` first would push an outcome across a tier boundary and, in the
-    ///        3×bet case, shrink the ETH leg to the 2.5×bet floor on a bonused win.
+    /// @param payout The total payout amount (uint256).
     /// @param acc Cross-bet accumulator: ETH claimable + the running prize-pool
     ///        local accumulate here (flushed once by resolveDegeneretteBets); FLIP/WWXRP
     ///        mint totals accumulate here too.
     /// @return lootboxShare The ETH lootbox-share for this spin (0 for FLIP/WWXRP),
     ///         summed by the caller into the per-bet box.
-    /// @return paid What this spin actually pays out across both legs — `payout` plus the
-    ///         record bonus. Per-leg rounding leaves at most 1 wei of the bonus with the
-    ///         house, so `paid` can be a wei under `payout × (1 + bps/10000)`.
+    /// @return paid What this spin actually pays out across both legs.
     function _distributePayout(
         address player,
         uint8 currency,
         uint128 betAmount,
         uint256 payout,
-        uint16 recordBonusBps,
         ResolveAcc memory acc
     ) private returns (uint256 lootboxShare, uint256 paid) {
         paid = payout;
@@ -1149,17 +1043,6 @@ contract DegenerusGameDegeneretteModule is
                 uint256 stdEth = payout / 4;                    // 25% of payout
                 ethShare = stdEth > minEth ? stdEth : minEth;
                 lootboxShare = payout - ethShare;
-            }
-
-            // Biggest-spin bonus: both legs scale by the same frozen bps, so the tier
-            // this spin landed in — and the ETH/lootbox ratio it set — carry through
-            // untouched. The pool cap below still applies to the bonused ETH leg.
-            if (recordBonusBps != 0) {
-                unchecked {
-                    ethShare += (ethShare * recordBonusBps) / 10_000;
-                    lootboxShare += (lootboxShare * recordBonusBps) / 10_000;
-                }
-                paid = ethShare + lootboxShare;
             }
 
             // Load the running prize-pool local on the first ETH win. The first
@@ -1260,8 +1143,7 @@ contract DegenerusGameDegeneretteModule is
         uint128 amountPerSpin,
         uint32 index,
         uint16 activityScore,
-        uint8 heroQuadrant,
-        uint16 recordBonusBps
+        uint8 heroQuadrant
     ) private pure returns (uint256 packed) {
         packed =
             (uint256(customTraits) << DEGEN_TRAITS_SHIFT) |
@@ -1270,8 +1152,7 @@ contract DegenerusGameDegeneretteModule is
             (uint256(amountPerSpin) << DEGEN_AMOUNT_SHIFT) |
             (uint256(index) << DEGEN_INDEX_SHIFT) |
             (uint256(activityScore) << DEGEN_ACTIVITY_SHIFT) |
-            (uint256(heroQuadrant) << DEGEN_HERO_SHIFT) |
-            (uint256(recordBonusBps) << DEGEN_BONUS_BPS_SHIFT);
+            (uint256(heroQuadrant) << DEGEN_HERO_SHIFT);
     }
 
     // -------------------------------------------------------------------------
@@ -1981,15 +1862,14 @@ contract DegenerusGameDegeneretteModule is
         }
 
         ResolveAcc memory acc;
-        // A box spin stakes a lootbox roll's budget rather than a placed bet, so it never
-        // carries a biggest-spin bonus (and never touches the record — the record ratchets
-        // only on a placed ETH bet's amountPerSpin).
+        // A box spin stakes a lootbox roll's budget rather than a placed bet, so it
+        // never touches the biggest-spin record — that arms only on a placed ETH
+        // bet's amountPerSpin.
         (uint256 lootboxShare, ) = _distributePayout(
             player,
             CURRENCY_ETH,
             betAmount,
             payout,
-            0,
             acc
         );
         if (s >= 7) _awardDegeneretteDgnrs(player, betAmount, s);

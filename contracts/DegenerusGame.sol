@@ -154,10 +154,12 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
       |  private to prevent external dependency on specific values.          |
       +======================================================================+*/
 
-    /// @dev DGNRS bounty share for biggest flip payout (0.2% of reward pool).
-    uint16 private constant COINFLIP_BOUNTY_DGNRS_BPS = 20;
-    uint256 private constant COINFLIP_BOUNTY_DGNRS_MIN_BET = 50_000 ether;
-    uint256 private constant COINFLIP_BOUNTY_DGNRS_MIN_POOL = 20_000 ether;
+    /// @dev The sDGNRS leg of a record claim pays the claim's accrued pool share at
+    ///      this scale-down from the sDGNRS reward pool (0.01%-0.15% per claim).
+    uint256 private constant RECORD_SDGNRS_SCALE_DIV = 500;
+
+    /// @dev Entry floor for the biggest-buy record, in whole tickets.
+    uint256 private constant BIGGEST_BUY_MIN_TICKETS = 100;
 
     /// @dev Base cost for RNG nudge (100 FLIP), compounds +50% per queued nudge.
     uint256 private constant RNG_NUDGE_BASE_COST = 100 ether;
@@ -534,40 +536,26 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         if (!ok) _revertDelegate(data);
     }
 
-    /// @notice Pay the DGNRS kicker to a coinflip bounty collector on a mature pool.
-    /// @dev Access: COIN or COINFLIP contract only.
-    ///      Pays a share of the DGNRS reward pool when a long-accrued coinflip bounty
-    ///      is collected: the collected half-pool slice must reach
-    ///      COINFLIP_BOUNTY_DGNRS_MIN_BET (50k FLIP — the pool accrues 1,000 FLIP/day,
-    ///      so this means ~100 uncollected days) and the post-collection remainder
-    ///      must reach COINFLIP_BOUNTY_DGNRS_MIN_POOL.
-    /// @param player Recipient of the DGNRS bounty.
-    /// @param bountySlice The collected half-pool bounty slice (FLIP base units).
-    /// @param bountyPool The post-collection remaining bounty pool (FLIP base units).
-    /// @custom:reverts Unauthorized If caller is not COIN or COINFLIP contract.
-    function payCoinflipBountyDgnrs(
+    /// @notice Pay the sDGNRS leg of an all-time record claim.
+    /// @dev Access: COINFLIP only, which owns the four records and computes the
+    ///      claim's accrued pool share. Pays that share at 1/500 scale from the
+    ///      sDGNRS reward pool — 0.01% to 0.15% of the pool per claim across the
+    ///      share curve. transferFromPool clamps to the available balance and
+    ///      returns the exact decrement, zero on an empty pool.
+    /// @param player Recipient of the sDGNRS.
+    /// @param shareBps The claim's accrued record-pool share in bps.
+    /// @return paid The sDGNRS actually transferred.
+    function payRecordSdgnrs(
         address player,
-        uint256 bountySlice,
-        uint256 bountyPool
-    ) external {
-        if (
-            msg.sender != ContractAddresses.COIN &&
-            msg.sender != ContractAddresses.COINFLIP
-        ) revert Unauthorized();
-        if (player == address(0)) return;
-        if (bountySlice < COINFLIP_BOUNTY_DGNRS_MIN_BET) return;
-        if (bountyPool < COINFLIP_BOUNTY_DGNRS_MIN_POOL) return;
-        uint256 poolBalance = dgnrs.poolBalance(
-            IsDGNRS.Pool.Reward
-        );
-        if (poolBalance == 0) return;
-        uint256 payout = (poolBalance * COINFLIP_BOUNTY_DGNRS_BPS) / 10_000;
-        if (payout == 0) return;
-        dgnrs.transferFromPool(
-            IsDGNRS.Pool.Reward,
-            player,
-            payout
-        );
+        uint256 shareBps
+    ) external returns (uint256 paid) {
+        if (msg.sender != ContractAddresses.COINFLIP) revert Unauthorized();
+        uint256 poolBalance = dgnrs.poolBalance(IsDGNRS.Pool.Reward);
+        if (poolBalance == 0) return 0;
+        uint256 payout = (poolBalance * shareBps) /
+            (10_000 * RECORD_SDGNRS_SCALE_DIV);
+        if (payout == 0) return 0;
+        paid = dgnrs.transferFromPool(IsDGNRS.Pool.Reward, player, payout);
     }
 
     /*+======================================================================+
@@ -747,6 +735,34 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
                 affiliateCode,
                 payKind
             );
+        }
+
+        // The biggest-buy candidate is the plain ticket leg alone —
+        // entryQuantityScaled never includes the foil pack's own tickets, so a
+        // foil purchase still competes on the tickets it bought outright.
+        _armBuyRecord(buyer, entryQuantityScaled);
+    }
+
+    /// @dev Offer a settled manual ticket buy against the biggest-buy record — both
+    ///      manual-purchase entries (purchase, buyLootboxAndPresaleBox) arm here once
+    ///      their module leg has settled, so a reverted buy never arms. Coin-paid
+    ///      buys stay off the record structurally: they route through FLIP
+    ///      redemption, never these entries. The floor gate keeps the dispatch off
+    ///      ordinary buys; the arm body is dispatched through the foil-pack module
+    ///      purely as bytecode hosting — neither this contract nor the mint module
+    ///      has EIP-170 room for the arm site itself.
+    function _armBuyRecord(address buyer, uint256 entryQuantityScaled) private {
+        if (entryQuantityScaled >= BIGGEST_BUY_MIN_TICKETS * 4 * QTY_SCALE) {
+            (bool okArm, bytes memory dataArm) = ContractAddresses
+                .GAME_FOILPACK_MODULE
+                .delegatecall(
+                    abi.encodeWithSelector(
+                        IDegenerusGameFoilPackModule.armBuyRecord.selector,
+                        buyer,
+                        entryQuantityScaled
+                    )
+                );
+            if (!okArm) _revertDelegate(dataArm);
         }
     }
 
@@ -972,6 +988,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
                 )
             );
         if (!ok) _revertDelegate(data);
+        _armBuyRecord(buyer, entryQuantityScaled);
     }
 
     /// @notice Open every box queued at an RNG index — the ETH-lootbox leg, the coin-presale-box

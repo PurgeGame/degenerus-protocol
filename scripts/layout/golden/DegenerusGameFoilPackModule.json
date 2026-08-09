@@ -344,22 +344,6 @@
     "typeLabel": "uint96"
   },
   {
-    "bytes": "16",
-    "encoding": "inplace",
-    "label": "biggestDegeneretteEthEver",
-    "offset": 12,
-    "slot": 16,
-    "typeLabel": "uint128"
-  },
-  {
-    "bytes": "3",
-    "encoding": "inplace",
-    "label": "biggestDegeneretteDay",
-    "offset": 28,
-    "slot": 16,
-    "typeLabel": "uint24"
-  },
-  {
     "bytes": "32",
     "encoding": "mapping",
     "label": "presaleBoxCredit",

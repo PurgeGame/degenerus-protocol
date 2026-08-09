@@ -21,11 +21,12 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 ///                         leaves the player's bank untouched (no forced wager, no bonus).
 ///         6. SUPPLY     — a fully claimable-funded rebet is supply-neutral: claimableStored is
 ///                         unminted and a day stake is off-supply, so nothing mints or burns.
-///         7. BOUNTY     — a claimable-funded self-deposit is bounty/biggest-flip eligible.
+///         7. RECORD     — a claimable-funded self-deposit is biggest-flip-record eligible.
 /// @dev The fixture deposit is OPERATOR-ROUTED (indirect), so it cannot set the biggest-flip
-///      record or arm the bounty. That matters: an armed bounty pays its slice as a stake on
-///      _targetFlipDay() during resolution — the very day these tests assert on — which would
-///      silently pad every stake assertion by half the bounty pool.
+///      record. That matters: a record claim pays its pool share as an extra stake on
+///      _targetFlipDay() at deposit time — the very day these tests assert on — which would
+///      silently pad the stake assertions. (A first arm only bootstraps and pays nothing,
+///      but staying off the record entirely keeps the fixtures inert.)
 contract CoinflipClaimableRebet is DeployProtocol {
     address internal constant GAME = ContractAddresses.GAME;
 
@@ -357,7 +358,11 @@ contract CoinflipClaimableRebet is DeployProtocol {
             draw + _recyclingBonus(draw),
             "the stake landed on tomorrow, whose word cannot exist yet"
         );
-        assertEq(coinflip.biggestFlipEver(), 0, "the bounty stays unarmable under the lock");
+        assertEq(
+            coinflip.biggestFlipEver(),
+            0,
+            "a 50k deposit sits under the 200k record floor and stays off the record"
+        );
     }
 
     // ---------------------------------------------------------------- 6. SUPPLY
@@ -378,9 +383,10 @@ contract CoinflipClaimableRebet is DeployProtocol {
 
     // ---------------------------------------------------------------- 7. BOUNTY
 
-    function test_ClaimableFundedSelfDepositIsBountyEligible() public {
-        uint256 payout = _bankAWin(100_000 ether);
-        assertGt(payout, coinflip.biggestFlipEver(), "fixture: the rebet must beat the record");
+    function test_ClaimableFundedSelfDepositIsRecordEligible() public {
+        // Bank enough that the payout clears the 200k FLIP record entry floor.
+        uint256 payout = _bankAWin(200_000 ether);
+        assertGt(payout, 200_000 ether, "fixture: the payout must clear the floor");
 
         vm.prank(player);
         coinflip.depositCoinflip(address(0), payout);

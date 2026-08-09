@@ -589,6 +589,14 @@ interface IGameAfkingModule {
 ///      both bodies run in the Game's storage context (delegatecall), so the resolved
 ///      player is passed explicitly and msg.value rides through the call.
 interface IDegenerusGameFoilPackModule {
+    /// @notice Arm the biggest-buy record for a settled router purchase. Delegatecall
+    ///         target invoked by the purchase router after its module leg settles;
+    ///         hosted here because neither the Game nor the mint module has EIP-170
+    ///         room for the arm site.
+    /// @param buyer Player the record and any claim accrue to (already operator-resolved).
+    /// @param entryQuantityScaled The requested raw pre-boost quantity (entries x QTY_SCALE).
+    function armBuyRecord(address buyer, uint256 entryQuantityScaled) external payable;
+
     /// @notice Deliver one foil pack (four tickets) for the active cycle. Delegatecall
     ///         target invoked by the mint module's purchase path (the foil leg of an
     ///         additive ticket/lootbox/foil buy). Handles the foil leg's own payment

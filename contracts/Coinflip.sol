@@ -10,7 +10,8 @@ pragma solidity 0.8.34;
  *      - A standalone contract separate from FLIP, keeping FLIP within its size budget
  *      - Manages the daily coinflip system with a flat recycle bonus
  *      - Integrates with FLIP for burn/mint operations
- *      - Handles the bounty system and quest rewards
+ *      - Holds the all-time record pool (flip / degenerette spin / lootbox deposit /
+ *        ticket buy) and quest rewards
  *      - Seeds the initial FLIP emission as flip stakes (200k/day, days 1-20, to
  *        VAULT and sDGNRS); arms sDGNRS perpetual auto-rebuy after the seed window
  *
@@ -22,6 +23,7 @@ pragma solidity 0.8.34;
  */
 
 import {IDegenerusGame} from "./interfaces/IDegenerusGame.sol";
+import {RECORD_KIND_FLIP, RECORD_KIND_SPIN, RECORD_KIND_LUCKBOX, RECORD_KIND_BUY} from "./interfaces/ICoinflip.sol";
 import {IDegenerusQuests} from "./interfaces/IDegenerusQuests.sol";
 import {IDegenerusJackpots} from "./interfaces/IDegenerusJackpots.sol";
 import {ContractAddresses} from "./ContractAddresses.sol";
@@ -70,16 +72,12 @@ contract Coinflip {
     /// @param day The resolved day.
     /// @param win Whether the flip outcome is a win.
     /// @param rewardPercent Bonus percent applied on wins.
-    /// @param bountyAfter The bounty pool amount after rollover.
-    /// @param bountyPaid Amount paid to the bounty owner for this day (0 if none).
-    /// @param bountyRecipient Recipient of bounty payout (address(0) if none).
+    /// @param recordPoolAfter The record pool after the daily drip.
     event CoinflipDayResolved(
         uint24 indexed day,
         bool win,
         uint16 rewardPercent,
-        uint128 bountyAfter,
-        uint128 bountyPaid,
-        address bountyRecipient
+        uint128 recordPoolAfter
     );
     /// @notice Emitted when the daily top bettor is updated.
     /// @param day The day being updated.
@@ -90,12 +88,24 @@ contract Coinflip {
         address indexed player,
         uint96 score
     );
-    /// @notice Emitted when the biggest flip record is updated.
-    /// @param player The player setting the record.
-    /// @param recordAmount The new record amount (raw, before bonuses).
-    event BiggestFlipUpdated(address indexed player, uint256 recordAmount);
-    event BountyOwed(address indexed player, uint128 bounty, uint256 recordFlip);
-    event BountyPaid(address indexed to, uint256 amount);
+    /// @notice Emitted whenever an all-time record moves. One event covers both
+    ///         outcomes: a zero `paid` is a bare ratchet, anything else is a claim.
+    /// @param kind Which record moved (RECORD_KIND_*).
+    /// @param player The player the record — and any claim — accrues to.
+    /// @param value The new mark, in that record's unit (flip: FLIP wei; spin and
+    ///        lootbox deposit: ETH wei; ticket buy: whole tickets).
+    /// @param paid FLIP credited for the claim — the category's accrued share of the
+    ///        record pool — 0 when the candidate ratcheted the mark without clearing
+    ///        it by a fifth.
+    /// @param sdgnrsPaid sDGNRS paid for the claim from the reward pool (the same
+    ///        accrued share at 1/500 scale), 0 on a bare ratchet or an empty pool.
+    event BigRecordUpdated(
+        uint8 indexed kind,
+        address indexed player,
+        uint256 value,
+        uint128 paid,
+        uint256 sdgnrsPaid
+    );
 
     /// @notice Emitted whenever a player's coinflip claim-state changes, so off-chain consumers can
     ///         reconstruct claimable + carry from logs alone (no eth_call). Carries the committed
@@ -116,11 +126,11 @@ contract Coinflip {
       +======================================================================+*/
 
     error AmountLTMin();
-    error CoinflipLocked();
     error OnlyFlipCreditors();
     error OnlyFLIP();
     error OnlysDGNRS();
     error OnlyDegenerusGame();
+    error BadRecordKind();
     error AutoRebuyNotEnabled();
     error AutoRebuyAlreadyEnabled();
     error RngLocked();
@@ -145,6 +155,23 @@ contract Coinflip {
     uint16 private constant BPS_DENOMINATOR = 10_000;
     uint16 private constant RECYCLE_BONUS_BPS = 75;
     uint256 private constant PRICE_COIN_UNIT = 1000 ether;
+    /// @dev Daily drip into the shared record pool, applied at settlement.
+    uint256 private constant RECORD_POOL_DAILY_FLIP = 2_000 ether;
+    /// @dev A record claim must clear the standing mark by mark/5 (a fifth).
+    uint256 private constant RECORD_BEAT_DIV = 5;
+    /// @dev Claim share of the pool: a 5% floor, +0.5% per day the record's own
+    ///      category has gone unclaimed, capped at 75% (reached 140 days after a
+    ///      claim). Each category keeps its own clock, and the clock resets on a
+    ///      claim only — a bare ratchet cannot zero an accrued share.
+    uint256 private constant RECORD_SHARE_FLOOR_BPS = 500;
+    uint256 private constant RECORD_SHARE_PER_DAY_BPS = 50;
+    uint256 private constant RECORD_SHARE_CEIL_BPS = 7_500;
+    /// @dev Entry floor for the flip record. A direct deposit under it never reads the
+    ///      record slot, and the mark is only ever written by a deposit that cleared it —
+    ///      so the mark is always 0 or at or above the floor, and a sub-floor deposit
+    ///      could not have beaten it anyway. The game-side records gate their own floors
+    ///      at their call sites.
+    uint256 private constant BIGGEST_FLIP_MIN = 200_000 ether;
     uint16 private constant COIN_CLAIM_DAYS = 365;
     uint16 private constant COIN_CLAIM_FIRST_DAYS = 180;
     uint16 private constant AUTO_REBUY_OFF_CLAIM_DAYS_MAX = 1460;
@@ -182,30 +209,48 @@ contract Coinflip {
     mapping(address => PlayerCoinflipState) internal playerState;
 
 
-    // Bounty system
-    uint128 public currentBounty = 1_000 ether;
+    // All-time record pool: one FLIP pool shared by the four biggest-* records
+    // (flip deposit, degenerette spin, lootbox deposit, ticket buy). Grows by a
+    // daily settlement drip and by level-transition funding; a record beaten by
+    // a fifth claims an accruing share of it (RECORD_SHARE_*). The three
+    // game-armed marks sit at the end of the storage section so every prior
+    // slot keeps its index.
+    uint128 public recordPool = 1_000 ether;
     uint128 public biggestFlipEver;
-    address public bountyOwedTo;
 
-    // RNG state (packs with bountyOwedTo)
+    // RNG state + the four per-category record claim clocks (all pack into one slot)
     uint24 internal flipsClaimableDay;
     /// @dev One-shot latch: sDGNRS perpetual auto-rebuy arms once the final seeded day settles.
     bool internal sdgnrsAutoRebuyArmed;
-    /// @dev Set when a record clears the standing one by 10%: the claim then survives every
-    ///      challenger short of one who doubles the standing record. Larger flips still ratchet
-    ///      biggestFlipEver; they just take no bounty. Cleared with bountyOwedTo at settlement.
-    bool public bountyLocked;
+    /// @dev Day a record category last claimed, one clock per kind. Stamped on the
+    ///      category's bootstrap write too — an unstamped zero would read the whole
+    ///      day index as elapsed and max the very next claim's share.
+    uint24 internal recordDayFlip;
+    uint24 internal recordDaySpin;
+    uint24 internal recordDayLuckbox;
+    uint24 internal recordDayBuy;
 
-    // Leaderboard
+    // Leaderboard. Written only on an x0 level's last purchase day (the deposit
+    // path's trackTop gate) and only by a direct deposit at or above the flip
+    // record's 200k floor, scored as that deposit's raw amount — the one day and
+    // the one weight class the BAF top-flipper slice can ever pay — so ordinary
+    // deposits never pay for it.
     struct PlayerScore {
         address player;
         uint96 score;
     }
     mapping(uint24 => PlayerScore) internal coinflipTopByDay;
 
+    /// @dev The game-armed all-time records (appended so every prior slot keeps its
+    ///      index; the flip mark packs with recordPool above). biggestSpinEver and
+    ///      biggestLuckboxEver are ETH wei; biggestBuyEver is whole tickets.
+    uint128 public biggestSpinEver;
+    uint128 public biggestLuckboxEver;
+    uint128 public biggestBuyEver;
+
     /// @notice Seeds the initial FLIP emission as flip stakes: 200k per day for days 1-20,
     ///         each to VAULT and sDGNRS. Direct storage writes (not _addDailyFlip) keep the
-    ///         seeds off the daily top-bettor leaderboard and the bounty/biggest-flip records.
+    ///         seeds off the daily top-bettor leaderboard and the flip record.
     ///         Nothing mints up front — each day's seed only becomes claimable FLIP if it
     ///         survives that day's flip.
     constructor() {
@@ -309,11 +354,26 @@ contract Coinflip {
         bool directDeposit
     ) private {
         PlayerCoinflipState storage state = playerState[player];
+        bool trackTop;
         if (amount != 0) {
             if (amount < MIN) revert AmountLTMin();
-            // Block deposits during BAF jackpot resolution to prevent
-            // auto-claim from updating the BAF leaderboard mid-resolution.
-            if (_coinflipLockedDuringTransition()) revert CoinflipLocked();
+            // Deposits flow through every RNG lock. A deposit on day N writes
+            // board[N+1], and the word that reads board[N+1] is not requested
+            // until day N+1 — so every board write structurally precedes the
+            // request of the word that consumes it. The BAF bracket needs no
+            // deposit lock either: an in-window auto-claim records its credit to
+            // the NEXT bracket (claim-time routing off the promoted level) —
+            // state the pending draw never reads.
+            //
+            // The board's qualifying bar doubles as the gas gate: only a DIRECT
+            // self-deposit at or above the flip record's 200k floor pays the
+            // purchaseInfo call that asks whether today's flips feed the BAF
+            // top-flipper slice. The board then scores THIS deposit — the fresh
+            // flip input, the same unit the flip record judges — never an
+            // accumulated stake.
+            if (player == msg.sender && amount >= BIGGEST_FLIP_MIN) {
+                trackTop = _depositTracksTop();
+            }
         }
 
         uint256 mintable = _claimCoinflipsInternal(player, state, false);
@@ -385,14 +445,8 @@ contract Coinflip {
             // player's carry earns its own bonus where it rolls, in _claimCoinflipsInternal.
             creditedFlip += _recyclingBonus(fromClaimable);
         }
-        // Direct deposits can set biggestFlip/bounty; indirect deposits cannot.
-        _addDailyFlip(
-            player,
-            creditedFlip,
-            directDeposit ? amount : 0,
-            directDeposit,
-            directDeposit
-        );
+        // Direct deposits can set the flip record; indirect deposits cannot.
+        _addDailyFlip(player, creditedFlip, directDeposit ? amount : 0, trackTop);
         emit CoinflipDeposit(player, amount);
     }
 
@@ -482,7 +536,7 @@ contract Coinflip {
     ///      routes it here, so sDGNRS never holds a wallet balance and its FLIP stays
     ///      uncirculated. Day-keyed like every deposit — the credit becomes TOMORROW's
     ///      stake, whose word cannot exist yet (the same structural freeze-safety all
-    ///      player deposits have). Direct stake write, off the leaderboard/bounty like
+    ///      player deposits have). Direct stake write, off the leaderboard/flip record like
     ///      the constructor seed. A win settles through the sDGNRS payout branch into
     ///      the rolling carry; claimableStored stays the genesis seed reserve burns
     ///      drain first.
@@ -638,6 +692,10 @@ contract Coinflip {
                         bafResolvedDay = jackpots.getLastBafResolvedDay();
                         bafResolvedDayCached = true;
                     }
+                    // Inclusive: a flip that RESOLVED on the BAF day itself (staked
+                    // the day before) seeds the NEXT bracket via claim-time routing,
+                    // so no flip day is score-dead. Days before the resolution stay
+                    // filtered out.
                     if (cursor >= bafResolvedDay) {
                         winningBafCredit += payout;
                     }
@@ -675,35 +733,24 @@ contract Coinflip {
             }
         }
 
-        // sDGNRS gets no BAF score: skip the recordBafFlip call entirely for it. This is also
-        // load-bearing for advanceGame — the daily coinflip resolution auto-claims sDGNRS here,
-        // and skipping the BAF section keeps that path off the rngLocked guard below.
+        // sDGNRS gets no BAF score: skip the recordBafFlip call entirely for it (the
+        // daily coinflip resolution auto-claims sDGNRS through this walk).
         if (winningBafCredit != 0 && player != ContractAddresses.SDGNRS) {
-            (
-                uint24 cachedLevel,
-                ,
-                bool lastPurchaseDay_,
-                bool rngLocked_,
-
-            ) = game.purchaseInfo();
-            // purchaseInfo.lvl is the ACTUAL game level (one snapshot covers level + flags, no
-            // separate level() read). The BAF guard and bracket key on the real level, not the
-            // routed buy level (which diverges on the final jackpot day).
-            // lastPurchaseDay_ is true only outside the jackpot phase, so it alone
-            // restricts this guard to purchase-phase states. No game-over state can
-            // reach it: every gameOver latch leaves jackpotPhaseFlag set or
-            // lastPurchaseDay false, and neither is ever written again post-latch.
-            if (
-                lastPurchaseDay_ &&
-                rngLocked_ &&
-                cachedLevel != 0 &&
-                cachedLevel % 10 == 0
-            ) {
-                revert RngLocked();
-            }
-            // BAF bracket = the level's decade ceiling: a level in [10k, 10k+9] records to
-            // bracket 10*(k+1). _bafBracketLevel rounds up to the next multiple of 10, so
-            // (level + 1) maps every decade — including the x10 boundary — to its closing bracket.
+            (uint24 cachedLevel, , , , ) = game.purchaseInfo();
+            // purchaseInfo.lvl is the ACTUAL game level (one snapshot, no separate
+            // level() read); the bracket keys on the real level, not the routed buy
+            // level (which diverges on the final jackpot day).
+            //
+            // Recording is unconditional — even inside a resolving BAF window. The
+            // bracket below is _bafBracketLevel(level + 1), which during an x0 window
+            // is the NEXT bracket: state the pending draw never reads, so a mid-window
+            // claim is freeze-safe, and a flip that resolved on the BAF day seeds the
+            // next bracket rather than dying with the old one.
+            //
+            // BAF bracket = the level's decade ceiling: a level in [10k, 10k+9] records
+            // to bracket 10*(k+1). _bafBracketLevel rounds up to the next multiple of
+            // 10, so (level + 1) maps every decade — including the x10 boundary — to
+            // its closing bracket.
             uint24 bafLvl = _bafBracketLevel(cachedLevel + 1);
             jackpots.recordBafFlip(player, bafLvl, winningBafCredit);
         }
@@ -734,8 +781,7 @@ contract Coinflip {
         address player,
         uint256 coinflipDeposit,
         uint256 recordAmount,
-        bool canArmBounty,
-        bool bountyEligible
+        bool trackTop
     ) private {
         IDegenerusGame game = degenerusGame;
         if (recordAmount != 0) {
@@ -760,58 +806,142 @@ contract Coinflip {
 
         // Update player's stake for target day
         _setFlipStake(targetDay, player, newStake);
-        // sDGNRS is excluded from the day-leader board: its position is protocol backing that
-        // stakes every day and would hold the slot permanently. creditSdgnrsBacking already
-        // stakes it without scoring, so this keeps every sDGNRS route consistent.
-        if (player != ContractAddresses.SDGNRS) {
-            _updateTopDayBettor(player, newStake, targetDay);
+        // The day-leader board is written only when `trackTop` marks this as a
+        // qualifying flip (a single direct 200k+ deposit) on an x0 level's last
+        // purchase day — the one day whose flips the BAF top-flipper slice
+        // reads — so ordinary deposits skip the board's cold slot entirely. The
+        // score is THIS deposit's raw amount (recordAmount — the fresh flip
+        // input, the flip record's unit), never an accumulated stake. sDGNRS is
+        // excluded: its position is protocol backing, not a wager.
+        if (trackTop && player != ContractAddresses.SDGNRS) {
+            _updateTopDayBettor(player, recordAmount, targetDay);
         }
         emit CoinflipStakeUpdated(player, targetDay, coinflipDeposit, newStake);
 
-        // Bounty logic: only when RNG not locked (prevents manipulation after VRF request).
-        // Uses the raw deposit amount (recordAmount), not bonuses or existing stake.
-        if (canArmBounty && bountyEligible && recordAmount != 0) {
-            uint128 record = biggestFlipEver;
-            if (recordAmount > record && !game.rngLocked()) {
-                // recordAmount is the deposit total across both funding legs: the claimable leg
-                // is bounded by claimableStored's uint128 width, the wallet leg by FLIP._burn,
-                // whose supply accounting bounds every burn amount to uint128. Their sum needs
-                // ~1.7e20 FLIP in each leg to leave uint128, so the cast is width-bound in every
-                // reachable state rather than by a single burn as it was when one burn covered
-                // the whole principal.
-                biggestFlipEver = uint128(recordAmount);
-                emit BiggestFlipUpdated(player, recordAmount);
-
-                // A locked claim holds to settlement unless a challenger doubles the standing
-                // record outright. Short of that the ratchet above still runs for every larger
-                // flip, but ownership stops moving: a bigger deposit raises the bar for
-                // tomorrow without taking today's bounty.
-                if (!bountyLocked || recordAmount >= uint256(record) * 2) {
-                    address currentBountyOwner = bountyOwedTo;
-                    uint128 bounty = currentBounty;
-                    // Bounty arms when setting a new record with an eligible stake.
-                    // If bounty already armed, must exceed by 1% (min +1) to steal it.
-                    uint256 threshold = record;
-                    if (currentBountyOwner != address(0)) {
-                        uint256 onePercent = uint256(record) / 100;
-                        // Ensure minimum 1 wei increase if 1% rounds to 0
-                        threshold = uint256(record) + (onePercent == 0 ? 1 : onePercent);
-                    }
-                    if (recordAmount >= threshold) {
-                        bountyOwedTo = player;
-                        // +10% over the standing record locks the claim. A zero record has no
-                        // bar to clear by 10%, so the game's first arm stays stealable.
-                        if (
-                            record != 0 &&
-                            recordAmount >= uint256(record) + uint256(record) / 10
-                        ) {
-                            bountyLocked = true;
-                        }
-                        emit BountyOwed(player, bounty, recordAmount);
-                    }
-                }
-            }
+        // Flip record: judged on the raw direct-deposit amount (recordAmount — zero for
+        // every credit path, so credits and record claims can never re-arm), not bonuses
+        // or existing stake. The entry-floor gate keeps the record SLOAD off ordinary
+        // deposits. No RNG-lock gate: the claim pays instantly and independently of any
+        // flip outcome, so there is nothing to arm against a known word.
+        if (recordAmount >= BIGGEST_FLIP_MIN && recordAmount > biggestFlipEver) {
+            _armBigRecord(RECORD_KIND_FLIP, player, recordAmount);
         }
+    }
+
+    /// @dev Ratchets record `kind` to `candidate` and pays the claim when the candidate
+    ///      clears the standing mark by a fifth: an accruing share of the record pool —
+    ///      the RECORD_SHARE_* floor plus per-day growth since this category last
+    ///      claimed, clamped at the ceiling — credited as next-day flip stake, never a
+    ///      wallet mint. Every other larger candidate ratchets the mark alone, raising
+    ///      the bar while the share keeps accruing. The first mark a record ever takes
+    ///      has no bar to clear, so it stamps the category's clock and claims nothing.
+    ///      Marks never reset.
+    ///
+    ///      Callers gate their record's entry floor, so a mark is always 0 or at or
+    ///      above that floor — a sub-floor candidate could not have beaten it anyway.
+    /// @param kind Which record (RECORD_KIND_*).
+    /// @param player The player the record and any claim accrue to.
+    /// @param candidate The value offered against the mark, in the record's unit.
+    ///        Width-bound to uint128 by every caller: the flip deposit's two funding
+    ///        legs are each uint128-bound (claimableStored width, FLIP._burn supply
+    ///        accounting), the spin and lootbox units are ETH wei, and the buy unit
+    ///        is a whole-ticket count.
+    function _armBigRecord(
+        uint8 kind,
+        address player,
+        uint256 candidate
+    ) private {
+        uint128 mark;
+        if (kind == RECORD_KIND_FLIP) mark = biggestFlipEver;
+        else if (kind == RECORD_KIND_SPIN) mark = biggestSpinEver;
+        else if (kind == RECORD_KIND_LUCKBOX) mark = biggestLuckboxEver;
+        else mark = biggestBuyEver;
+        if (candidate <= mark) return;
+
+        uint128 paid;
+        uint256 sdgnrsPaid;
+        if (mark == 0) {
+            // Bootstrap: the first qualifying candidate sets the mark and starts the
+            // category's clock. There is no bar to clear by a fifth, so it claims
+            // nothing.
+            _stampRecordDay(kind, GameTimeLib.currentDayIndex());
+        } else if (
+            // Exact fifth: `mark + mark / 5` floors the bar, so a mark not divisible
+            // by five would let a candidate claim on strictly less than a fifth.
+            // Multiplying the increase instead is exact.
+            (candidate - mark) * RECORD_BEAT_DIV >= mark
+        ) {
+            uint24 today = GameTimeLib.currentDayIndex();
+            uint256 stamped = _recordDay(kind);
+            uint256 shareBps = RECORD_SHARE_FLOOR_BPS +
+                (uint256(today) > stamped ? uint256(today) - stamped : 0) *
+                RECORD_SHARE_PER_DAY_BPS;
+            if (shareBps > RECORD_SHARE_CEIL_BPS) {
+                shareBps = RECORD_SHARE_CEIL_BPS;
+            }
+            uint128 pool = recordPool;
+            paid = uint128((uint256(pool) * shareBps) / 10_000);
+            if (paid != 0) {
+                recordPool = pool - paid;
+                // recordAmount = 0: a claim credit can never re-arm the flip record.
+                _addDailyFlip(player, paid, 0, false);
+            }
+            // The sDGNRS leg rides the same accrued share at 1/500 scale, drawn from
+            // the sDGNRS reward pool via the game (which sDGNRS authorizes).
+            sdgnrsPaid = degenerusGame.payRecordSdgnrs(player, shareBps);
+            _stampRecordDay(kind, today);
+        }
+
+        if (kind == RECORD_KIND_FLIP) biggestFlipEver = uint128(candidate);
+        else if (kind == RECORD_KIND_SPIN) biggestSpinEver = uint128(candidate);
+        else if (kind == RECORD_KIND_LUCKBOX) biggestLuckboxEver = uint128(candidate);
+        else biggestBuyEver = uint128(candidate);
+        emit BigRecordUpdated(kind, player, candidate, paid, sdgnrsPaid);
+    }
+
+    /// @dev The day record category `kind` last claimed (or bootstrapped).
+    function _recordDay(uint8 kind) private view returns (uint24) {
+        if (kind == RECORD_KIND_FLIP) return recordDayFlip;
+        if (kind == RECORD_KIND_SPIN) return recordDaySpin;
+        if (kind == RECORD_KIND_LUCKBOX) return recordDayLuckbox;
+        return recordDayBuy;
+    }
+
+    /// @dev Stamp record category `kind`'s claim clock to `day`.
+    function _stampRecordDay(uint8 kind, uint24 day) private {
+        if (kind == RECORD_KIND_FLIP) recordDayFlip = day;
+        else if (kind == RECORD_KIND_SPIN) recordDaySpin = day;
+        else if (kind == RECORD_KIND_LUCKBOX) recordDayLuckbox = day;
+        else recordDayBuy = day;
+    }
+
+    /// @notice Arm a game-side all-time record for `player` with `candidate` in the
+    ///         record's own unit (spin and lootbox deposit: ETH wei; buy: whole tickets).
+    /// @dev GAME only — the modules gate each record's entry floor at the call site
+    ///      before paying for this call. The flip record arms internally on direct
+    ///      deposits and is not reachable here.
+    /// @custom:reverts BadRecordKind If `kind` is the flip record or out of range.
+    function armRecord(
+        uint8 kind,
+        address player,
+        uint256 candidate
+    ) external onlyDegenerusGameContract {
+        if (kind == RECORD_KIND_FLIP || kind > RECORD_KIND_BUY) {
+            revert BadRecordKind();
+        }
+        _armBigRecord(kind, player, candidate);
+    }
+
+    /// @notice Add FLIP to the shared record pool.
+    /// @dev GAME only. Level transitions push 0.5% of the completed level's prize pool,
+    ///      converted notionally at that level's ticket price — no ETH moves. Clamped
+    ///      at the pool's uint128 width rather than wrapping, so a huge push cannot
+    ///      zero an accrued pool.
+    function fundRecordPool(uint256 amount) external onlyDegenerusGameContract {
+        uint256 grown = uint256(recordPool) + amount;
+        recordPool = grown > type(uint128).max
+            ? type(uint128).max
+            : uint128(grown);
     }
 
     /*+======================================================================+
@@ -982,7 +1112,6 @@ contract Coinflip {
                 (seedWord % COINFLIP_EXTRA_RANGE) + COINFLIP_EXTRA_MIN_PERCENT
             );
         }
-        IDegenerusGame game = degenerusGame;
         // Apply the day's coinflip bonus, precomputed by the caller from frozen protocol state
         // (not a player-flippable flag): 0 on a normal day, +2 on a bonus day (a level-0 day,
         // the second day of a level's jackpot phase, or the first purchase day after a turbo
@@ -998,49 +1127,20 @@ contract Coinflip {
         // Record the day's result for future claims
         _storeDayResult(epoch, rewardPercent, win);
 
-        // Bounty resolution: if someone armed the bounty, remove half; if win, credit that half to them.
-        uint128 currentBounty_ = currentBounty;
-        uint256 slice;
-        address to;
-        address bountyOwner = bountyOwedTo;
-        uint128 bountyPaid;
-        if (bountyOwner != address(0) && currentBounty_ > 0) {
-            slice = currentBounty_ >> 1; // pay/delete half of the bounty pool
-            unchecked {
-                currentBounty_ -= uint128(slice);
-            }
-            if (win) {
-                to = bountyOwner;
-                // Credit as flip stake, not direct mint
-                _addDailyFlip(to, slice, 0, false, false);
-                emit BountyPaid(to, slice);
-                game.payCoinflipBountyDgnrs(to, slice, currentBounty_);
-                bountyPaid = uint128(slice);
-            }
-            // Clear bounty owner and any lock regardless of win/loss (same slot, one SSTORE)
-            bountyOwedTo = address(0);
-            bountyLocked = false;
-        }
-
         // Move the active window forward; the resolved day becomes claimable immediately.
         flipsClaimableDay = epoch;
 
-        // Accumulate bounty pool for next window
-        uint128 newBounty;
+        // Daily drip into the shared record pool. Saturating like fundRecordPool:
+        // a wrap here would zero a pool the funding path deliberately clamped.
+        uint128 newPool = recordPool;
         unchecked {
-            // Gas-optimized: wraps on overflow, which would effectively reset the bounty.
-            newBounty = currentBounty_ + uint128(PRICE_COIN_UNIT);
+            newPool = newPool > type(uint128).max - uint128(RECORD_POOL_DAILY_FLIP)
+                ? type(uint128).max
+                : newPool + uint128(RECORD_POOL_DAILY_FLIP);
         }
-        currentBounty = newBounty;
+        recordPool = newPool;
 
-        emit CoinflipDayResolved(
-            epoch,
-            win,
-            rewardPercent,
-            newBounty,
-            bountyPaid,
-            to
-        );
+        emit CoinflipDayResolved(epoch, win, rewardPercent, newPool);
 
         // Keep sDGNRS's flip cursor current (BAF is skipped for sDGNRS, so both paths
         // stay off the rngLocked guard). sDGNRS never mints FLIP to a wallet balance:
@@ -1096,9 +1196,9 @@ contract Coinflip {
     ///      word cannot exist yet, giving it the same freeze-safety as every player deposit.
     ///
     ///      The quest hook is the deposit path's, so a chosen flip quest scores exactly as it
-    ///      does for a player. recordAmount 0 keeps the slice off biggestFlip, off the bounty
-    ///      and off the coinflip boon: this is protocol backing rotating into its own position,
-    ///      not a wager anyone placed.
+    ///      does for a player. recordAmount 0 keeps the slice off the flip record and off the
+    ///      coinflip boon: this is protocol backing rotating into its own position, not a
+    ///      wager anyone placed.
     /// @param state sDGNRS's coinflip state, already settled by the caller in this frame.
     function _stakeSdgnrsReserveSlice(PlayerCoinflipState storage state) private {
         uint256 stored = state.claimableStored;
@@ -1120,7 +1220,7 @@ contract Coinflip {
             streak,
             completed
         );
-        _addDailyFlip(s, amount + questReward, 0, false, false);
+        _addDailyFlip(s, amount + questReward, 0, false);
     }
 
     /*+======================================================================+
@@ -1135,7 +1235,7 @@ contract Coinflip {
         uint256 amount
     ) external onlyFlipCreditors {
         if (player == address(0) || amount == 0) return;
-        _addDailyFlip(player, amount, 0, false, false);
+        _addDailyFlip(player, amount, 0, false);
     }
 
     /// @notice Credit flips to multiple players (called by GAME jackpot modules and the
@@ -1151,7 +1251,7 @@ contract Coinflip {
             address player = players[i];
             uint256 amount = amounts[i];
             if (player != address(0) && amount != 0) {
-                _addDailyFlip(player, amount, 0, false, false);
+                _addDailyFlip(player, amount, 0, false);
             }
             unchecked {
                 ++i;
@@ -1174,10 +1274,10 @@ contract Coinflip {
         uint256 amount2
     ) external onlyFlipCreditors {
         if (player1 != address(0) && amount1 != 0) {
-            _addDailyFlip(player1, amount1, 0, false, false);
+            _addDailyFlip(player1, amount1, 0, false);
         }
         if (player2 != address(0) && amount2 != 0) {
-            _addDailyFlip(player2, amount2, 0, false, false);
+            _addDailyFlip(player2, amount2, 0, false);
         }
     }
 
@@ -1282,7 +1382,10 @@ contract Coinflip {
         startDay = state.autoRebuyStartDay;
     }
 
-    /// @notice Get last day's coinflip leaderboard winner.
+    /// @notice Get last day's coinflip leaderboard winner. Meaningful only when the
+    ///         last settled day was staked on an x0 level's last purchase day — the
+    ///         one day the board is written and the one day the BAF slice reads it;
+    ///         on any other day it returns an empty (or stale) entry.
     function coinflipTopLastDay()
         external
         view
@@ -1466,25 +1569,24 @@ contract Coinflip {
     ///      Only blocks at levels where BAF jackpot fires (every 10th). Deposits
     ///      trigger auto-claim which records BAF leaderboard credit — must block
     ///      to prevent front-running the leaderboard between VRF request and fulfillment.
-    function _coinflipLockedDuringTransition()
-        private
-        view
-        returns (bool locked)
-    {
+    /// @dev Whether deposits made now feed the day the BAF top-flipper slice reads —
+    ///      an x0 level's last purchase day. The daily top-bettor board is written on
+    ///      that day alone: the BAF slice is its only reader, so every other day's
+    ///      board write would buy nothing.
+    function _depositTracksTop() private view returns (bool trackTop) {
         (
             uint24 lvl,
             ,
             bool lastPurchaseDay_,
-            bool rngLocked_,
+            ,
 
         ) = degenerusGame.purchaseInfo();
         // lastPurchaseDay_ is true only outside the jackpot phase, so it alone
-        // restricts the lock to purchase-phase states. No game-over state can
+        // restricts the answer to purchase-phase states. No game-over state can
         // reach here: every gameOver latch leaves jackpotPhaseFlag set or
         // lastPurchaseDay false, and neither is ever written again post-latch. lvl is the
         // ACTUAL game level from the same snapshot — no separate level() read needed.
-        if (!lastPurchaseDay_ || !rngLocked_) return false;
-        locked = lvl != 0 && lvl % 10 == 0;
+        trackTop = lastPurchaseDay_ && lvl != 0 && lvl % 10 == 0;
     }
 
     /// @dev Calculate recycling bonus for daily flip deposits (flat 0.75%).
@@ -1537,10 +1639,10 @@ contract Coinflip {
     /// @dev Update day leaderboard if player's score is higher.
     function _updateTopDayBettor(
         address player,
-        uint256 stakeScore,
+        uint256 flipAmount,
         uint24 day
     ) private {
-        uint96 score = _score96(stakeScore);
+        uint96 score = _score96(flipAmount);
         PlayerScore memory dayLeader = coinflipTopByDay[day];
         if (score > dayLeader.score || dayLeader.player == address(0)) {
             coinflipTopByDay[day] = PlayerScore({player: player, score: score});

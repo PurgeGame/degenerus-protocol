@@ -384,13 +384,13 @@ describe("DegenerusGame", function () {
   });
 
   // ---------------------------------------------------------------------------
-  // 13. payCoinflipBountyDgnrs access control
+  // 13. payRecordSdgnrs access control
   // ---------------------------------------------------------------------------
-  describe("payCoinflipBountyDgnrs", function () {
+  describe("payRecordSdgnrs", function () {
     it("reverts when called by unauthorized address", async function () {
       const { game, alice } = await loadFixture(deployFullProtocol);
       await expect(
-        game.connect(alice).payCoinflipBountyDgnrs(alice.address, 0, 0)
+        game.connect(alice).payRecordSdgnrs(alice.address, 0)
       ).to.be.reverted;
     });
   });

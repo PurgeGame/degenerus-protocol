@@ -1306,16 +1306,16 @@ contract RngLockDeterminism is DeployProtocol {
     }
 
     /// @dev Coinflip post-state digest. `coinflipDayResult` is internal so the
-    ///      harness hashes `currentBounty` (public) + per-depositor
+    ///      harness hashes `recordPool` (public) + per-depositor
     ///      `coinflipAmount` getter as the observable VRF-derived sink set.
     function _captureCoinflipResolveOutputs() internal view returns (bytes32) {
-        uint128 cb = coinflip.currentBounty();
+        uint128 cb = coinflip.recordPool();
         // Note: a known coinflip depositor probe address (coinflipDepositor) is
         // recreated via makeAddr in scope of the calling function -- but since
-        // this view helper is shared, we hash the global currentBounty value
+        // this view helper is shared, we hash the global recordPool value
         // plus the harness-side balance + block.timestamp for a per-step
         // fingerprint. This is a coarse digest; perturbation-induced drift
-        // in currentBounty will still surface as a mismatch.
+        // in recordPool will still surface as a mismatch.
         return keccak256(abi.encode(cb, address(coinflip).balance, block.timestamp));
     }
 

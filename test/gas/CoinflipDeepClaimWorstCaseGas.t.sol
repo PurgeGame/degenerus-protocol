@@ -137,11 +137,11 @@ contract CoinflipDeepClaimWorstCaseGas is DeployProtocol {
         );
     }
 
-    /// @dev flipsClaimableDay slot 4, byte-offset 20 (shares the slot with bountyOwedTo).
+    /// @dev flipsClaimableDay slot 4, byte-offset 0 (shares the slot with sdgnrsAutoRebuyArmed).
     function _setFlipsClaimableDay(uint24 day) internal {
         bytes32 slot = bytes32(uint256(4));
         uint256 w = uint256(vm.load(address(coinflip), slot));
-        w = (w & ~(uint256(0xFFFFFF) << 160)) | (uint256(day) << 160);
+        w = (w & ~uint256(0xFFFFFF)) | uint256(day);
         vm.store(address(coinflip), slot, bytes32(w));
     }
 

@@ -1,0 +1,436 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+pragma solidity ^0.8.26;
+
+import {DeployProtocol} from "./helpers/DeployProtocol.sol";
+import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
+import {IsDGNRS} from "../../contracts/interfaces/IsDGNRS.sol";
+import {IDegenerusGame} from "../../contracts/interfaces/IDegenerusGame.sol";
+import {
+    RECORD_KIND_FLIP,
+    RECORD_KIND_SPIN,
+    RECORD_KIND_LUCKBOX,
+    RECORD_KIND_BUY
+} from "../../contracts/interfaces/ICoinflip.sol";
+
+/// @title BigRecordPoolTest — pins the unified all-time record pool in Coinflip.
+///
+/// @notice Four records (flip deposit, degenerette spin, lootbox deposit, ticket buy)
+///         share one FLIP pool and one ruleset: a candidate larger than the standing
+///         mark ratchets it for free; clearing the mark by a FIFTH claims an accruing
+///         share of the pool — 5% floor, +0.5% per day the record's own category has
+///         gone unclaimed, capped at 75% — credited as next-day flip stake, never a
+///         wallet mint. Claims also pay an sDGNRS leg (same share at 1/500 scale of
+///         the sDGNRS reward pool) via the game.
+///
+/// @dev The behaviours pinned here are the ones a refactor would quietly break:
+///      - The clock is stamped at each category's bootstrap. An unstamped zero would
+///        read the whole day index as elapsed and max the very next claim's share.
+///      - A bare ratchet (larger, but under +20%) must NOT restamp the clock.
+///      - Each category accrues on its OWN clock: one category's claim leaves the
+///        other categories' accrual untouched.
+///      - The claim credit re-enters the stake path with recordAmount = 0, so a big
+///        claim can never re-arm the flip record off its own payout.
+///      - The flip record arms on DIRECT self-deposits only, at or above the 200k
+///        FLIP entry floor.
+///      All assertions are behavioural (getters, stakes, pool balances) — nothing
+///      here pins a storage slot.
+contract BigRecordPoolTest is DeployProtocol {
+    address internal constant GAME = ContractAddresses.GAME;
+
+    uint256 internal constant FLIP_MIN = 200_000 ether;
+    uint256 internal constant SHARE_FLOOR_BPS = 500;
+    uint256 internal constant SHARE_PER_DAY_BPS = 50;
+    uint256 internal constant SHARE_CEIL_BPS = 7_500;
+    uint256 internal constant DAILY_DRIP = 2_000 ether;
+    uint256 internal constant POOL_SEED = 1_000 ether;
+
+    address private player;
+    address private rival;
+    address private operator;
+
+    function setUp() public {
+        _deployProtocol();
+        player = makeAddr("record_player");
+        rival = makeAddr("record_rival");
+        operator = makeAddr("record_operator");
+        // Wall clock at day 2 so deposits target day 3 (clear of the day-1/2 seeds).
+        _warpToDay(2);
+        vm.prank(player);
+        game.setOperatorApproval(operator, true);
+    }
+
+    // ---------------------------------------------------------------------
+    // Pool basics
+    // ---------------------------------------------------------------------
+
+    function testPoolSeedsAtOneThousand() public view {
+        assertEq(coinflip.recordPool(), POOL_SEED, "pool seeds at 1,000 FLIP");
+    }
+
+    /// @notice Every settled day drips 2,000 FLIP into the pool.
+    function testSettlementDripsIntoPool() public {
+        uint256 before = coinflip.recordPool();
+        _resolveDay(2, true);
+        assertEq(
+            coinflip.recordPool(),
+            before + DAILY_DRIP,
+            "settlement drips 2,000 FLIP"
+        );
+    }
+
+    function testFundRecordPoolIsGameOnly() public {
+        vm.prank(player);
+        vm.expectRevert();
+        coinflip.fundRecordPool(1 ether);
+
+        uint256 before = coinflip.recordPool();
+        vm.prank(GAME);
+        coinflip.fundRecordPool(123 ether);
+        assertEq(coinflip.recordPool(), before + 123 ether, "game funding lands");
+    }
+
+    /// @notice A push past uint128 clamps at the width instead of wrapping to dust.
+    function testFundRecordPoolClampsAtWidth() public {
+        vm.prank(GAME);
+        coinflip.fundRecordPool(type(uint128).max);
+        assertEq(
+            coinflip.recordPool(),
+            type(uint128).max,
+            "oversized funding clamps, never wraps"
+        );
+    }
+
+    // ---------------------------------------------------------------------
+    // armRecord surface
+    // ---------------------------------------------------------------------
+
+    function testArmRecordIsGameOnly() public {
+        vm.prank(player);
+        vm.expectRevert();
+        coinflip.armRecord(RECORD_KIND_SPIN, player, 1 ether);
+    }
+
+    /// @notice The flip record arms only internally; out-of-range kinds are rejected.
+    function testArmRecordRejectsFlipKindAndOutOfRange() public {
+        vm.startPrank(GAME);
+        vm.expectRevert();
+        coinflip.armRecord(RECORD_KIND_FLIP, player, FLIP_MIN);
+        vm.expectRevert();
+        coinflip.armRecord(RECORD_KIND_BUY + 1, player, 100);
+        vm.stopPrank();
+    }
+
+    // ---------------------------------------------------------------------
+    // Ratchet vs claim (spin kind via armRecord — the shared path)
+    // ---------------------------------------------------------------------
+
+    /// @notice The first qualifying candidate sets the mark but claims nothing —
+    ///         there is no bar to clear by a fifth.
+    function testBootstrapSetsMarkClaimsNothing() public {
+        uint256 poolBefore = coinflip.recordPool();
+        _arm(RECORD_KIND_SPIN, player, 10 ether);
+
+        assertEq(coinflip.biggestSpinEver(), 10 ether, "bootstrap sets the mark");
+        assertEq(coinflip.recordPool(), poolBefore, "bootstrap claims nothing");
+        assertEq(coinflip.coinflipAmount(player), 0, "no credit on bootstrap");
+    }
+
+    /// @notice Under +20% ratchets the mark for free; the pool is untouched.
+    function testSubFifthRatchetIsFree() public {
+        _arm(RECORD_KIND_SPIN, player, 10 ether);
+        uint256 poolBefore = coinflip.recordPool();
+
+        _arm(RECORD_KIND_SPIN, rival, 11.99 ether); // +19.9%, under the fifth
+
+        assertEq(coinflip.biggestSpinEver(), 11.99 ether, "ratchet still moves the mark");
+        assertEq(coinflip.recordPool(), poolBefore, "ratchet claims nothing");
+        assertEq(coinflip.coinflipAmount(rival), 0, "no credit on a ratchet");
+    }
+
+    /// @notice At exactly +20% the candidate claims the floor share the same day.
+    function testClaimAtExactFifthPaysFloorShare() public {
+        _arm(RECORD_KIND_SPIN, player, 10 ether);
+        uint256 pool = coinflip.recordPool();
+        uint256 expected = (pool * SHARE_FLOOR_BPS) / 10_000;
+
+        _arm(RECORD_KIND_SPIN, rival, 12 ether); // exactly mark + mark/5
+
+        assertEq(coinflip.biggestSpinEver(), 12 ether, "claim ratchets the mark");
+        assertEq(coinflip.recordPool(), pool - expected, "pool pays the floor share");
+        assertEq(
+            coinflip.coinflipAmount(rival),
+            expected,
+            "share lands as next-day flip stake"
+        );
+    }
+
+    /// @notice The share accrues +0.5%/day on the category's clock.
+    function testShareAccruesPerDay() public {
+        _arm(RECORD_KIND_SPIN, player, 10 ether);
+
+        _warpToDay(12); // 10 days after the day-2 bootstrap
+        uint256 pool = coinflip.recordPool();
+        uint256 expected = (pool * (SHARE_FLOOR_BPS + 10 * SHARE_PER_DAY_BPS)) /
+            10_000;
+
+        _arm(RECORD_KIND_SPIN, rival, 12 ether);
+        assertEq(
+            coinflip.coinflipAmount(rival),
+            expected,
+            "10 unhit days pay 10% of the pool"
+        );
+    }
+
+    /// @notice The share clamps at 75% (day 140) rather than growing without bound.
+    function testShareClampsAtCeiling() public {
+        _arm(RECORD_KIND_SPIN, player, 10 ether);
+
+        _warpToDay(202); // 200 days unhit, far past the day-140 cap
+        uint256 pool = coinflip.recordPool();
+        uint256 expected = (pool * SHARE_CEIL_BPS) / 10_000;
+
+        _arm(RECORD_KIND_SPIN, rival, 12 ether);
+        assertEq(coinflip.coinflipAmount(rival), expected, "share clamps at 75%");
+    }
+
+    /// @notice A bare ratchet must not restamp the clock — the later claim still pays
+    ///         the full accrual measured from the bootstrap.
+    function testBareRatchetDoesNotRestampClock() public {
+        _arm(RECORD_KIND_SPIN, player, 10 ether);
+
+        _warpToDay(12);
+        _arm(RECORD_KIND_SPIN, rival, 11 ether); // +10%: ratchet only
+
+        _warpToDay(22); // 20 days since bootstrap, 10 since the ratchet
+        uint256 pool = coinflip.recordPool();
+        uint256 expected = (pool * (SHARE_FLOOR_BPS + 20 * SHARE_PER_DAY_BPS)) /
+            10_000;
+
+        _arm(RECORD_KIND_SPIN, player, 14 ether); // clears 11 by well over a fifth
+        assertEq(
+            coinflip.coinflipAmount(player),
+            expected,
+            "accrual runs 20 days from bootstrap, not 10 from the ratchet"
+        );
+    }
+
+    /// @notice A claim restamps its OWN category's clock: a same-day follow-up claim
+    ///         pays only the floor.
+    function testClaimResetsOwnClock() public {
+        _arm(RECORD_KIND_SPIN, player, 10 ether);
+
+        _warpToDay(32);
+        _arm(RECORD_KIND_SPIN, rival, 12 ether); // claims 5% + 30 days' accrual
+
+        uint256 pool = coinflip.recordPool();
+        uint256 expected = (pool * SHARE_FLOOR_BPS) / 10_000;
+        _arm(RECORD_KIND_SPIN, player, 15 ether); // same day, clears 12 by a fifth
+        assertEq(
+            coinflip.coinflipAmount(player),
+            expected,
+            "a claim resets its category to the floor"
+        );
+    }
+
+    /// @notice Categories accrue independently: one category's claim leaves another's
+    ///         clock untouched.
+    function testCategoriesKeepIndependentClocks() public {
+        _arm(RECORD_KIND_SPIN, player, 10 ether);
+        _arm(RECORD_KIND_LUCKBOX, player, 10 ether);
+
+        _warpToDay(12); // both clocks at 10 unhit days
+        uint256 pool = coinflip.recordPool();
+        uint256 spinShare = (pool * (SHARE_FLOOR_BPS + 10 * SHARE_PER_DAY_BPS)) /
+            10_000;
+        _arm(RECORD_KIND_SPIN, rival, 12 ether);
+        assertEq(coinflip.coinflipAmount(rival), spinShare, "spin pays 10%");
+
+        // The luckbox clock did not restamp on the spin claim: it still pays 30%
+        // of what remains, not the 20% floor.
+        uint256 remaining = coinflip.recordPool();
+        uint256 boxShare = (remaining *
+            (SHARE_FLOOR_BPS + 10 * SHARE_PER_DAY_BPS)) / 10_000;
+        _arm(RECORD_KIND_LUCKBOX, player, 12 ether);
+        assertEq(
+            coinflip.coinflipAmount(player),
+            boxShare,
+            "the spin claim left the luckbox clock alone"
+        );
+    }
+
+    // ---------------------------------------------------------------------
+    // Flip record (internal arming via direct deposits)
+    // ---------------------------------------------------------------------
+
+    /// @notice A direct self-deposit at the floor bootstraps the flip record.
+    function testDirectDepositAtFloorArmsFlipRecord() public {
+        _selfDeposit(player, FLIP_MIN);
+        assertEq(
+            coinflip.biggestFlipEver(),
+            FLIP_MIN,
+            "a floor deposit bootstraps the record"
+        );
+    }
+
+    /// @notice A deposit under the floor never arms, however large the standing pool.
+    function testSubFloorDepositNeverArms() public {
+        _selfDeposit(player, FLIP_MIN - 1 ether);
+        assertEq(coinflip.biggestFlipEver(), 0, "sub-floor deposit never arms");
+    }
+
+    /// @notice An operator-routed (indirect) deposit never arms the record.
+    function testIndirectDepositNeverArms() public {
+        vm.prank(GAME);
+        coin.mintForGame(player, FLIP_MIN);
+        vm.prank(operator);
+        coinflip.depositCoinflip(player, FLIP_MIN);
+        assertEq(coinflip.biggestFlipEver(), 0, "indirect deposits stay off the record");
+    }
+
+    /// @notice A flip claim pays the accrued share on top of the deposit's own stake.
+    function testFlipClaimPaysShareOnTopOfStake() public {
+        _selfDeposit(player, FLIP_MIN);
+
+        uint256 pool = coinflip.recordPool();
+        uint256 expected = (pool * SHARE_FLOOR_BPS) / 10_000;
+        uint256 claimAmount = FLIP_MIN + FLIP_MIN / 5; // exactly +20%
+
+        _selfDeposit(rival, claimAmount);
+        assertEq(coinflip.biggestFlipEver(), claimAmount, "claim ratchets the record");
+        assertEq(
+            coinflip.coinflipAmount(rival),
+            claimAmount + expected,
+            "stake carries the deposit plus the claimed share"
+        );
+        assertEq(coinflip.recordPool(), pool - expected, "pool paid the share");
+    }
+
+    /// @notice The claim credit re-enters the stake path with recordAmount = 0, so a
+    ///         payout larger than the standing mark can never re-arm the record.
+    function testClaimCreditCannotRearmFlipRecord() public {
+        _selfDeposit(player, FLIP_MIN);
+
+        // Inflate the pool so the floor share (20%) dwarfs the next mark.
+        vm.prank(GAME);
+        coinflip.fundRecordPool(10_000_000 ether);
+
+        uint256 claimAmount = FLIP_MIN + FLIP_MIN / 5;
+        _selfDeposit(rival, claimAmount);
+
+        uint256 paid = coinflip.coinflipAmount(rival) - claimAmount;
+        assertGt(paid, claimAmount, "fixture: the credit exceeds the new mark");
+        assertEq(
+            coinflip.biggestFlipEver(),
+            claimAmount,
+            "the credit did not re-arm the record"
+        );
+    }
+
+    // ---------------------------------------------------------------------
+    // sDGNRS leg
+    // ---------------------------------------------------------------------
+
+    function testPayRecordSdgnrsIsCoinflipOnly() public {
+        vm.prank(player);
+        vm.expectRevert();
+        game.payRecordSdgnrs(player, SHARE_CEIL_BPS);
+    }
+
+    /// @notice The leg pays the accrued share at 1/500 scale of the live reward pool
+    ///         (zero on an empty pool), and never reverts the claim.
+    function testPayRecordSdgnrsPaysScaledShare() public {
+        uint256 rewardPool = IsDGNRS(ContractAddresses.SDGNRS).poolBalance(
+            IsDGNRS.Pool.Reward
+        );
+        uint256 expected = (rewardPool * SHARE_CEIL_BPS) / (10_000 * 500);
+
+        vm.prank(ContractAddresses.COINFLIP);
+        uint256 paid = game.payRecordSdgnrs(player, SHARE_CEIL_BPS);
+        assertEq(paid, expected, "the leg pays shareBps of rewardPool/500");
+    }
+
+    // ---------------------------------------------------------------------
+    // Top-day-bettor gate
+    // ---------------------------------------------------------------------
+
+    /// @notice On an ordinary day a deposit never writes the top-bettor board — its
+    ///         only reader is the BAF slice, fed by an x0 level's last purchase day.
+    function testOrdinaryDayDepositSkipsTopBettorBoard() public {
+        _selfDeposit(player, 1_000 ether);
+        _resolveDay(3, true); // the deposit staked day 3
+        (address top, ) = coinflip.coinflipTopLastDay();
+        assertEq(top, address(0), "ordinary-day deposits stay off the board");
+    }
+
+    /// @notice On an x0 level's last purchase day (purchaseInfo mocked), a deposit
+    ///         whose stake total reaches the 200k qualifying floor writes the board;
+    ///         a sub-floor rival stays invisible.
+    function testBafEveDepositWritesTopBettorBoard() public {
+        vm.mockCall(
+            GAME,
+            abi.encodeWithSelector(IDegenerusGame.purchaseInfo.selector),
+            abi.encode(uint24(10), false, true, false, uint256(0.04 ether))
+        );
+        _selfDeposit(rival, FLIP_MIN - 1 ether); // sub-floor: skips the board
+        _selfDeposit(player, FLIP_MIN);
+        vm.clearMockedCalls();
+
+        _resolveDay(3, true); // the deposits staked day 3
+        (address top, uint128 score) = coinflip.coinflipTopLastDay();
+        assertEq(top, player, "the qualifying BAF-eve deposit tops the board");
+        assertGt(score, 0, "the board carries the staked score");
+    }
+
+    /// @notice Even on the tracked day, a stake total under the 200k qualifying
+    ///         floor never touches the board.
+    function testSubFloorStakeNeverReachesTheBoard() public {
+        vm.mockCall(
+            GAME,
+            abi.encodeWithSelector(IDegenerusGame.purchaseInfo.selector),
+            abi.encode(uint24(10), false, true, false, uint256(0.04 ether))
+        );
+        _selfDeposit(player, FLIP_MIN - 1 ether);
+        vm.clearMockedCalls();
+
+        _resolveDay(3, true);
+        (address top, ) = coinflip.coinflipTopLastDay();
+        assertEq(top, address(0), "sub-floor stakes stay off the board");
+    }
+
+    // ---------------------------------------------------------------------
+    // Helpers
+    // ---------------------------------------------------------------------
+
+    /// @dev Wall clock just inside GameTimeLib day `d`.
+    function _warpToDay(uint24 d) internal {
+        vm.warp(
+            (uint256(d - 1) + ContractAddresses.DEPLOY_DAY_BOUNDARY) *
+                1 days +
+                82_620 +
+                1
+        );
+    }
+
+    /// @dev Resolve day `epoch` as the GAME, wall clock at `epoch`.
+    function _resolveDay(uint24 epoch, bool win) internal {
+        _warpToDay(epoch);
+        uint256 word = uint256(keccak256(abi.encodePacked("record_word", epoch)));
+        word = win ? (word | 1) : (word & ~uint256(1));
+        vm.prank(GAME);
+        coinflip.processCoinflipPayouts(0, word, epoch);
+    }
+
+    /// @dev Arm a game-side record as the GAME.
+    function _arm(uint8 kind, address who, uint256 candidate) internal {
+        vm.prank(GAME);
+        coinflip.armRecord(kind, who, candidate);
+    }
+
+    /// @dev Mint wallet FLIP and self-deposit it (direct — arms the flip record).
+    function _selfDeposit(address who, uint256 amount) internal {
+        vm.prank(GAME);
+        coin.mintForGame(who, amount);
+        vm.prank(who);
+        coinflip.depositCoinflip(address(0), amount);
+    }
+}

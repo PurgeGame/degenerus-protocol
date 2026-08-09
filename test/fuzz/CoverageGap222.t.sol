@@ -1515,17 +1515,16 @@ contract CoverageGap222 is DeployProtocol {
         assertFalse(ok, "resolveRedemptionLootbox rejected non-authorized caller");
     }
 
-    function test_gap_game_payCoinflipBountyDgnrs_guard() public {
+    function test_gap_game_payRecordSdgnrs_guard() public {
         vm.prank(buyer);
         (bool ok, ) = address(game).call(
             abi.encodeWithSignature(
-                "payCoinflipBountyDgnrs(address,uint256,uint256)",
+                "payRecordSdgnrs(address,uint256)",
                 buyer,
-                uint256(1),
                 uint256(1)
             )
         );
-        assertFalse(ok, "payCoinflipBountyDgnrs rejected non-coinflip caller");
+        assertFalse(ok, "payRecordSdgnrs rejected non-coinflip caller");
     }
 
     function test_gap_game_openBox_paths() public {

@@ -15,7 +15,9 @@ import {
 
 /**
  * BafCreditRouting — verifies the BAF credit-routing changes in Coinflip.sol:
- *   - :525  cursor >= bafResolvedDay  (was strict >, orphaned the resolution day)
+ *   - :525  cursor >= bafResolvedDay (INCLUSIVE by design: a flip that resolved ON
+ *           the BAF day — staked the day before — seeds the NEXT bracket via
+ *           claim-time routing; no flip day is score-dead)
  *   - :585  RngLocked guard now keys off storage `level` (was `purchaseLevel_ = level + 1`,
  *           which never matched at x10 boundaries because level is pre-bumped in
  *           _finalizeRngRequest atomically with rngLockedFlag = true)
@@ -191,9 +193,12 @@ describe("BafCreditRouting", function () {
   // BAF-ROUTE-03a/b — Lock predicate (the security-critical fix)
   // =========================================================================
   describe("BAF-ROUTE-03 lock predicate", function () {
-    it("[03a] claim REVERTS RngLocked when level=10 + rngLocked + lastPurchaseDay (BAF window)", async function () {
+    it("[03a] claim FLOWS in the BAF window and records to the NEXT bracket", async function () {
+      // Recording is unconditional: claim-time routing off the promoted level
+      // sends in-window credit to bracket level+10 — state the pending draw
+      // never reads — so the claim needs no lock and no drop.
       const fixture = await loadFixture(deployFullProtocol);
-      const { game, coinflip, alice } = fixture;
+      const { game, coinflip, coin, alice } = fixture;
 
       await setupAliceWinningFlip(fixture);
       const gameAddr = await game.getAddress();
@@ -216,12 +221,23 @@ describe("BafCreditRouting", function () {
       expect(info.lvl).to.equal(10n); // purchaseInfo.lvl now returns the actual game level (not level+1)
       expect(await game.level()).to.equal(10n);
 
-      await expect(
-        coinflip.connect(alice).claimCoinflips(alice.address, eth(10000))
-      ).to.be.revertedWithCustomError(coinflip, "RngLocked");
+      const balBefore = await coin.balanceOf(alice.address);
+      const tx = await coinflip
+        .connect(alice)
+        .claimCoinflips(alice.address, eth(10000));
+      expect(await coin.balanceOf(alice.address)).to.be.gt(balBefore);
+      const events = await getEvents(tx, fixture.jackpots, "BafFlipRecorded");
+      const aliceEvents = events.filter(
+        (e) => e.args.player.toLowerCase() === alice.address.toLowerCase()
+      );
+      expect(aliceEvents.length).to.be.gte(1);
+      expect(aliceEvents[0].args.lvl).to.equal(20n); // level 10 window -> bracket 20
     });
 
-    it("[03b] deposit REVERTS CoinflipLocked under the same state", async function () {
+    it("[03b] deposit FLOWS under the same state (no deposit-level lock)", async function () {
+      // A deposit on day N writes board[N+1], read by a word not requested until
+      // day N+1 — so deposits are freeze-safe through every RNG lock. A claim
+      // carrying pending BAF credit flows too, recording to the next bracket ([03a]).
       const fixture = await loadFixture(deployFullProtocol);
       const { game, coinflip, coin, alice, vault } = fixture;
 
@@ -237,7 +253,7 @@ describe("BafCreditRouting", function () {
         coinflip
           .connect(alice)
           .depositCoinflip(alice.address, eth(100))
-      ).to.be.revertedWithCustomError(coinflip, "CoinflipLocked");
+      ).to.not.be.reverted;
     });
 
     it("[03c] claim does NOT revert when level is bumped but lastPurchaseDay is false", async function () {
@@ -299,7 +315,7 @@ describe("BafCreditRouting", function () {
         coinflip
           .connect(alice)
           .depositCoinflip(alice.address, eth(100))
-      ).to.not.be.revertedWithCustomError(coinflip, "CoinflipLocked");
+      ).to.not.be.reverted;
     });
 
     it("[04c] claim at level=10 with rngLocked=false does NOT revert (lock requires rngLocked)", async function () {
@@ -409,10 +425,10 @@ describe("BafCreditRouting", function () {
   });
 
   // =========================================================================
-  // BAF-ROUTE-02 — cursor >= bafResolvedDay filter
+  // BAF-ROUTE-02 — cursor >= bafResolvedDay filter (inclusive by design)
   // =========================================================================
-  describe("BAF-ROUTE-02 cursor >= bafResolvedDay (day-of-resolution NOT orphaned)", function () {
-    it("[02a] cursor == lastBafResolvedDay is INCLUDED (was excluded under strict >)", async function () {
+  describe("BAF-ROUTE-02 cursor >= bafResolvedDay (day-of-resolution seeds the next bracket)", function () {
+    it("[02a] cursor == lastBafResolvedDay is INCLUDED (resolution-day flips seed the next bracket)", async function () {
       const fixture = await loadFixture(deployFullProtocol);
       const { game, coinflip, jackpots, alice } = fixture;
 
@@ -420,8 +436,8 @@ describe("BafCreditRouting", function () {
       const jackpotsAddr = await jackpots.getAddress();
 
       // Pin lastBafResolvedDay = winningDay. cursor == winningDay.
-      // Pre-fix: cursor > lastBafResolvedDay was false → excluded. Orphan.
-      // Post-fix: cursor >= lastBafResolvedDay is true → included.
+      // A flip that resolved ON the BAF day (staked the day before) seeds the
+      // NEXT bracket via claim-time routing — no flip day is score-dead.
       await setLastBafResolvedDay(jackpotsAddr, Number(winningDay));
 
       const tx = await coinflip
@@ -433,7 +449,7 @@ describe("BafCreditRouting", function () {
       );
       expect(
         aliceEvents.length,
-        "day-of-resolution wins must be credited under the >= filter"
+        "day-of-resolution wins must be credited under the inclusive filter"
       ).to.be.gte(1);
     });
 
@@ -531,7 +547,7 @@ describe("BafCreditRouting", function () {
   // BAF-ROUTE-08 — markBafSkipped path routes identically to runBafJackpot
   // =========================================================================
   describe("BAF-ROUTE-08 markBafSkipped routing equivalence", function () {
-    it("[08] markBafSkipped bumps lastBafResolvedDay; day-D claim routes to bracket 20 like the runBafJackpot path", async function () {
+    it("[08] markBafSkipped bumps lastBafResolvedDay; day-D claims seed bracket 20, like the runBafJackpot path", async function () {
       const fixture = await loadFixture(deployFullProtocol);
       const { game, coinflip, jackpots, alice } = fixture;
 
@@ -566,10 +582,10 @@ describe("BafCreditRouting", function () {
       const currentDay = await game.currentDayView();
       expect(dayAfter).to.equal(currentDay);
 
-      // Now drive a routing scenario equivalent to BAF-ROUTE-05a: day-D claim
-      // during era-10 jackpot phase post-skip. Set lastBafResolvedDay back to
-      // winningDay (the day of alice's win) so cursor == lastBafResolvedDay
-      // passes the >= filter.
+      // Day-D claim post-skip: the skip bumped lastBafResolvedDay to the same
+      // boundary the resolved path uses, and the inclusive filter treats both
+      // branches identically — a flip that resolved ON the (skipped) BAF day
+      // seeds the next bracket.
       await setLastBafResolvedDay(jackpotsAddr, Number(winningDay));
       await setLevel(gameAddr, 10);
       await setSlot0Bool(gameAddr, 15, true); // jackpotPhaseFlag = true (post-skip phase)
@@ -583,9 +599,8 @@ describe("BafCreditRouting", function () {
       const aliceEvents = events.filter(
         (e) => e.args.player.toLowerCase() === alice.address.toLowerCase()
       );
+      // Identical boundary rule to the resolved path: credited to bracket 20.
       expect(aliceEvents.length).to.be.gte(1);
-      // Override fires (level=10, jackpot phase) → credit lands in bracket 20
-      // — identical routing to the runBafJackpot path in BAF-ROUTE-05a.
       expect(aliceEvents[0].args.lvl).to.equal(20n);
     });
   });

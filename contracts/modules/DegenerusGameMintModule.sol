@@ -2,6 +2,7 @@
 pragma solidity 0.8.34;
 
 import {MintPaymentKind} from "../interfaces/IDegenerusGame.sol";
+import {RECORD_KIND_LUCKBOX} from "../interfaces/ICoinflip.sol";
 import {
     IDegenerusGameBoonModule,
     IDegenerusGameFoilPackModule
@@ -118,6 +119,16 @@ contract DegenerusGameMintModule is
     /// @dev Lootbox boost value cap and expiry for the next lootbox purchase.
     uint256 private constant LOOTBOX_BOOST_MAX_VALUE = 10 ether;
     uint32 private constant LOOTBOX_BOOST_EXPIRY_DAYS = 2;
+
+    /// @dev Entry floor for the biggest-lootbox-deposit record, on the raw purchased
+    ///      deposit (no boon boost). The record is armed into Coinflip, which owns the
+    ///      four all-time records and the shared FLIP pool they pay from; the floor
+    ///      gates the external arm call off ordinary purchases, and is sound because a
+    ///      mark is only ever written by a deposit that cleared it — a sub-floor
+    ///      deposit could not have beaten the mark anyway. (The biggest-BUY record
+    ///      arms via DegenerusGame's purchase router: this module has no EIP-170 room
+    ///      for a second arm site, and the router already holds the raw quantity.)
+    uint256 private constant BIGGEST_BOX_MIN_ETH = 5 ether;
 
     /// @dev Loot box pool split: 90% future, 10% next.
     uint16 private constant LOOTBOX_SPLIT_FUTURE_BPS = 9000;
@@ -1500,6 +1511,15 @@ contract DegenerusGameMintModule is
 
             uint256 boostedAmount = _applyLootboxBoostOnPurchase(buyer, lootBoxAmount);
             lbNewAmount = existingAmount + boostedAmount;
+
+            // Biggest-box record. The candidate is THIS deposit's raw purchased ETH —
+            // no boon boost, and never the box total: whale-pass and afking covers
+            // write the same (index, buyer) box slot, so a total would let a dust
+            // purchase deposit arm the record on ETH those excluded paths contributed.
+            // Any claim settles inside Coinflip as flip credit — the box is untouched.
+            if (lootBoxAmount >= BIGGEST_BOX_MIN_ETH) {
+                coinflip.armRecord(RECORD_KIND_LUCKBOX, buyer, lootBoxAmount);
+            }
             uint256 newPendingEth = ((lrWord >> LR_PENDING_ETH_SHIFT) &
                 LR_PENDING_ETH_MASK) + _packEthToMilliEth(lootBoxAmount);
             lootboxRngPacked =
