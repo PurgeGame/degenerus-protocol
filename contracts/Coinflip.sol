@@ -215,7 +215,7 @@ contract Coinflip {
     // a fifth claims an accruing share of it (RECORD_SHARE_*). The three
     // game-armed marks sit at the end of the storage section so every prior
     // slot keeps its index.
-    uint128 public recordPool = 1_000 ether;
+    uint128 public recordPool = 10_000 ether;
     uint128 public biggestFlipEver;
 
     // RNG state + the four per-category record claim clocks (all pack into one slot)
@@ -254,6 +254,16 @@ contract Coinflip {
     ///         Nothing mints up front — each day's seed only becomes claimable FLIP if it
     ///         survives that day's flip.
     constructor() {
+        // Record clocks start at deploy, so each category's FIRST claim draws the
+        // share accrued since launch (the 5% floor plus 0.5% per untouched day,
+        // ceiling 75%) — a dormant category grows until its bounty justifies its
+        // entry floor.
+        uint24 recordStartDay = GameTimeLib.currentDayIndex();
+        recordDayFlip = recordStartDay;
+        recordDaySpin = recordStartDay;
+        recordDayLuckbox = recordStartDay;
+        recordDayBuy = recordStartDay;
+
         for (uint24 d = 1; d <= SEED_FLIP_DAYS; ) {
             _setFlipStake(d, ContractAddresses.VAULT, SEED_FLIP_DAILY);
             _setFlipStake(d, ContractAddresses.SDGNRS, SEED_FLIP_DAILY);
@@ -834,8 +844,9 @@ contract Coinflip {
     ///      claimed, clamped at the ceiling — credited as next-day flip stake, never a
     ///      wallet mint. Every other larger candidate ratchets the mark alone, raising
     ///      the bar while the share keeps accruing. The first mark a record ever takes
-    ///      has no bar to clear, so it stamps the category's clock and claims nothing.
-    ///      Marks never reset.
+    ///      has no bar to clear and draws the share accrued since deploy (the
+    ///      constructor starts every category clock at the deploy day). Marks never
+    ///      reset.
     ///
     ///      Callers gate their record's entry floor, so a mark is always 0 or at or
     ///      above that floor — a sub-floor candidate could not have beaten it anyway.
@@ -860,17 +871,11 @@ contract Coinflip {
 
         uint128 paid;
         uint256 sdgnrsPaid;
-        if (mark == 0) {
-            // Bootstrap: the first qualifying candidate sets the mark and starts the
-            // category's clock. There is no bar to clear by a fifth, so it claims
-            // nothing.
-            _stampRecordDay(kind, GameTimeLib.currentDayIndex());
-        } else if (
-            // Exact fifth: `mark + mark / 5` floors the bar, so a mark not divisible
-            // by five would let a candidate claim on strictly less than a fifth.
-            // Multiplying the increase instead is exact.
-            (candidate - mark) * RECORD_BEAT_DIV >= mark
-        ) {
+        // A first mark has no bar to clear; after that the candidate must clear the
+        // mark by an exact fifth: `mark + mark / 5` floors the bar, so a mark not
+        // divisible by five would let a candidate claim on strictly less than a
+        // fifth. Multiplying the increase instead is exact.
+        if (mark == 0 || (candidate - mark) * RECORD_BEAT_DIV >= mark) {
             uint24 today = GameTimeLib.currentDayIndex();
             uint256 stamped = _recordDay(kind);
             uint256 shareBps = RECORD_SHARE_FLOOR_BPS +

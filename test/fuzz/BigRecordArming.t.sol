@@ -189,7 +189,9 @@ contract BigRecordArmingTest is DeployProtocol {
     }
 
     /// @notice A claim pays flip credit and leaves the box exactly at its deposits —
-    ///         the box is never inflated.
+    ///         the box is never inflated. Asserted on the pool decrement: the box buy
+    ///         also completes the seeded deploy-day MINT_ETH quest, whose reward lands
+    ///         in the same flip-stake observable.
     function testBoxClaimPaysFlipCreditNotBoxInflation() public {
         _buyBox(player, 10 ether);
         uint256 pool = coinflip.recordPool();
@@ -199,9 +201,9 @@ contract BigRecordArmingTest is DeployProtocol {
 
         assertEq(_boxOf(rival), 12 ether, "the box holds the deposit alone");
         assertEq(
-            coinflip.coinflipAmount(rival),
-            expected,
-            "the claim lands as flip credit instead"
+            coinflip.recordPool(),
+            pool - expected,
+            "the claim drew exactly its share from the pool"
         );
     }
 

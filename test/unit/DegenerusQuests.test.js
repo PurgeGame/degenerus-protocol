@@ -214,7 +214,9 @@ describe("DegenerusQuests", function () {
 
     it("emits QuestSlotRolled for slot 0 and slot 1", async function () {
       const { quests, game } = await loadFixture(deployFullProtocol);
-      const { tx } = await rollQuestAsGame(hre.ethers, game, quests, 1n, 99n);
+      // Day 2: the deploy day itself is pre-stamped by the constructor seed, so a
+      // same-day roll is an idempotent no-op and emits nothing.
+      const { tx } = await rollQuestAsGame(hre.ethers, game, quests, 2n, 99n);
       const evs = await getEvents(tx, quests, "QuestSlotRolled");
       expect(evs.length).to.equal(2);
       expect(evs[0].args.slot).to.equal(0);
@@ -380,12 +382,13 @@ describe("DegenerusQuests", function () {
   describe("handlePurchase - progress and completion", function () {
     it("returns (0, type, 0, false) when no active quest for player/type", async function () {
       const { quests, coin, game, alice } = await loadFixture(deployFullProtocol);
-      // No quest rolled yet; currentDay = 0 => returns early
+      // The constructor seeds MINT_ETH + DEGENERETTE_ETH for the deploy day, so a
+      // FLIP-type action has no matching active quest and takes the early return.
       const { result } = await callHandlerAsCoin(
         hre.ethers,
         coin,
         quests,
-        "handlePurchase", [alice.address, 2, 0, 0, 0, 0]
+        "handleFlip", [alice.address, eth(1000)]
       );
       const [reward, , , completed] = result;
       expect(completed).to.equal(false);
@@ -849,11 +852,15 @@ describe("DegenerusQuests", function () {
       expect(progress[0]).to.equal(0n);
     });
 
-    it("getActiveQuests returns day=0 questType before any roll", async function () {
-      const { quests } = await loadFixture(deployFullProtocol);
+    it("getActiveQuests returns the seeded deploy-day pair before any roll", async function () {
+      const { quests, game } = await loadFixture(deployFullProtocol);
       const active = await quests.getActiveQuests();
-      // Before any roll, quests[0].day should be 0
-      expect(active[0].day).to.equal(0n);
+      // The constructor stamps the deploy day: slot 0 MINT_ETH, slot 1 DEGENERETTE_ETH.
+      const day0 = await game.currentDayView();
+      expect(active[0].day).to.equal(day0);
+      expect(Number(active[0].questType)).to.equal(QUEST_TYPE_MINT_ETH);
+      expect(active[1].day).to.equal(day0);
+      expect(Number(active[1].questType)).to.equal(7);
     });
   });
 

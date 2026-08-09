@@ -23,8 +23,10 @@ import {
 ///         the sDGNRS reward pool) via the game.
 ///
 /// @dev The behaviours pinned here are the ones a refactor would quietly break:
-///      - The clock is stamped at each category's bootstrap. An unstamped zero would
-///        read the whole day index as elapsed and max the very next claim's share.
+///      - Every category clock is constructor-seeded to the deploy day, so a
+///        category's FIRST claim draws the share accrued since launch — and a
+///        bootstrap restamps its category's clock like any claim. An unstamped zero
+///        would read the whole day index as elapsed and max the next claim's share.
 ///      - A bare ratchet (larger, but under +20%) must NOT restamp the clock.
 ///      - Each category accrues on its OWN clock: one category's claim leaves the
 ///        other categories' accrual untouched.
@@ -42,7 +44,7 @@ contract BigRecordPoolTest is DeployProtocol {
     uint256 internal constant SHARE_PER_DAY_BPS = 50;
     uint256 internal constant SHARE_CEIL_BPS = 7_500;
     uint256 internal constant DAILY_DRIP = 2_000 ether;
-    uint256 internal constant POOL_SEED = 1_000 ether;
+    uint256 internal constant POOL_SEED = 10_000 ether;
 
     address private player;
     address private rival;
@@ -63,8 +65,8 @@ contract BigRecordPoolTest is DeployProtocol {
     // Pool basics
     // ---------------------------------------------------------------------
 
-    function testPoolSeedsAtOneThousand() public view {
-        assertEq(coinflip.recordPool(), POOL_SEED, "pool seeds at 1,000 FLIP");
+    function testPoolSeedsAtTenThousand() public view {
+        assertEq(coinflip.recordPool(), POOL_SEED, "pool seeds at 10,000 FLIP");
     }
 
     /// @notice Every settled day drips 2,000 FLIP into the pool.
@@ -124,15 +126,42 @@ contract BigRecordPoolTest is DeployProtocol {
     // Ratchet vs claim (spin kind via armRecord — the shared path)
     // ---------------------------------------------------------------------
 
-    /// @notice The first qualifying candidate sets the mark but claims nothing —
-    ///         there is no bar to clear by a fifth.
-    function testBootstrapSetsMarkClaimsNothing() public {
+    /// @notice The first qualifying candidate has no bar to clear and draws the share
+    ///         accrued since deploy — the constructor starts every clock on day 1, so
+    ///         a day-2 bootstrap pays the floor plus one day.
+    function testBootstrapClaimsTheShareAccruedSinceDeploy() public {
         uint256 poolBefore = coinflip.recordPool();
+        uint256 expected = (poolBefore *
+            (SHARE_FLOOR_BPS + 1 * SHARE_PER_DAY_BPS)) / 10_000;
         _arm(RECORD_KIND_SPIN, player, 10 ether);
 
         assertEq(coinflip.biggestSpinEver(), 10 ether, "bootstrap sets the mark");
-        assertEq(coinflip.recordPool(), poolBefore, "bootstrap claims nothing");
-        assertEq(coinflip.coinflipAmount(player), 0, "no credit on bootstrap");
+        assertEq(
+            coinflip.recordPool(),
+            poolBefore - expected,
+            "bootstrap draws the accrued share"
+        );
+        assertEq(
+            coinflip.coinflipAmount(player),
+            expected,
+            "the share lands as next-day flip stake"
+        );
+    }
+
+    /// @notice A category untouched since launch accrues on the deploy-seeded clock:
+    ///         the very first hit on day 12 pays 5% + 11 days at 0.5%.
+    function testFirstClaimAccruesFromDeploy() public {
+        _warpToDay(12);
+        uint256 pool = coinflip.recordPool();
+        uint256 expected = (pool * (SHARE_FLOOR_BPS + 11 * SHARE_PER_DAY_BPS)) /
+            10_000;
+
+        _arm(RECORD_KIND_SPIN, player, 10 ether);
+        assertEq(
+            coinflip.coinflipAmount(player),
+            expected,
+            "a dormant category's first hit pays the launch-accrued share"
+        );
     }
 
     /// @notice Under +20% ratchets the mark for free; the pool is untouched.

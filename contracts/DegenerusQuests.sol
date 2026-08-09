@@ -6,6 +6,7 @@ import "./interfaces/IDegenerusGame.sol";
 import {ICoinflip} from "./interfaces/ICoinflip.sol";
 import {ContractAddresses} from "./ContractAddresses.sol";
 import {BitPackingLib} from "./libraries/BitPackingLib.sol";
+import {GameTimeLib} from "./libraries/GameTimeLib.sol";
 import {PriceLookupLib} from "./libraries/PriceLookupLib.sol";
 
 /**
@@ -407,6 +408,25 @@ contract DegenerusQuests is IDegenerusQuests {
                 PriceLookupLib.priceForLevel(GENESIS_QUEST_LEVEL)
             )
         );
+
+        // Seed the deploy day's daily quest pair for the same reason the level quest
+        // is seeded: the first rollDailyQuest fires only when the deploy day's word
+        // is delivered, so the launch window from deploy to that delivery carries no
+        // daily quest at all — and the same-day idempotency guard then holds this
+        // seeded pair for the whole deploy day, with the first entropy roll landing
+        // on day two. Types are fixed (no VRF exists at deploy): slot 0 is the
+        // roll's own always-MINT_ETH slot; slot 1 is DEGENERETTE_ETH — the ETH
+        // degenerette bet has no level or phase gate and its quest progress credits
+        // at placement, so the quest is completable before any word settles. The
+        // rolled-day bit makes the seed a real rolled day for streak accounting.
+        uint24 day0 = GameTimeLib.currentDayIndex();
+        DailyQuest[QUEST_SLOT_COUNT] memory seeded;
+        _seedQuestType(seeded[0], day0, QUEST_TYPE_MINT_ETH);
+        _seedQuestType(seeded[1], day0, QUEST_TYPE_DEGENERETTE_ETH);
+        _storeActiveQuests(seeded);
+        questRolledDayBitmap[uint16(day0 >> 8)] |= uint256(1) << uint8(day0);
+        emit QuestSlotRolled(day0, 0, QUEST_TYPE_MINT_ETH, 0, day0);
+        emit QuestSlotRolled(day0, 1, QUEST_TYPE_DEGENERETTE_ETH, 0, day0);
 
         // Register this contract's ENS reverse name (best-effort; skipped when the
         // registrar is unset — local/test/testnet builds). The setName(string)
