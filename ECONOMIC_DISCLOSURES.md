@@ -3,7 +3,7 @@
 For a gambling protocol, economic transparency matters as much as contract transparency.
 **Every figure below cites the exact contract line that defines it.** Nothing here is
 marketing math — verify each number against the frozen subject (`contracts/` tree
-`4018e0d4`, tag `degenerus-c4a`).
+`a054e52d`, tag `degenerus-c4a`).
 
 The code is **not yet deployed**. There are no live token prices. Figures are on-chain
 constants and formulas, not projected returns.
@@ -300,6 +300,19 @@ normally.
   unaffected.
 - Coinflip and Degenerette are calibrated games; their by-design dispositions (not a full RTP model)
   are documented in [`KNOWN-ISSUES.md`](KNOWN-ISSUES.md).
+- **The WWXRP Degenerette lane is openly rigged, and the rig is banded.** WWXRP spins run a reel rig
+  that forces one unmatched score-bearing cell to a real match with probability 3/5, but only when the
+  drawn reel already sits in the `2 <= M <= 6` band of matched axes (`_rigWwxrpResult`). The upper cap
+  is what keeps the jackpot honest — a rigged reel can never reach S = 9, so WWXRP's jackpot odds are
+  identical to the unrigged lanes (1 in 12,960,000 at zero gold quadrants) — and the lower floor stops
+  the rig manufacturing the smallest paying tier out of a near-empty reel. WWXRP therefore carries its
+  **own** payout tables and its own payout shape rather than sharing the honest ETH/FLIP ones: its
+  smallest win returns exactly the stake, no tier pays less than the stake, and the tables sit strictly
+  below the honest tables at every scoring tier. The practical effect is a lane that wins slightly more
+  often than the honest lanes (25.8% vs 19.6% at zero gold quadrants) and reaches the high tiers far
+  more often (roughly 6x at S = 6, 9x at S = 7, 15x at S = 8), at correspondingly smaller multiples.
+  WWXRP itself is a deliberately worthless game token (§5); none of this touches an ETH or stETH
+  solvency term, since WWXRP prizes are minted with no pool leg.
 
 ## 7. Terminal value (game over)
 

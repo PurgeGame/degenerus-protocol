@@ -4,7 +4,7 @@ Pre-disclosure for audit wardens. **If a finding's mechanism + impact is describ
 already known and is not eligible.** This is a precise perimeter — each entry names the exact
 mechanism and why it is by-design, defended, or out-of-scope. There are no vague blanket disclaimers.
 
-Frozen subject: `contracts/` tree `4018e0d4` @ tag `degenerus-c4a`. Pre-scanned with Slither v0.11.5
+Frozen subject: `contracts/` tree `a054e52d` @ tag `degenerus-c4a`. Pre-scanned with Slither v0.11.5
 + Aderyn 0.6.8; those findings are triaged in the automated-tools section below.
 
 ---
@@ -142,22 +142,25 @@ transaction (a coin credit, not ETH-backed value). Immaterial; documented, not e
 ## 5. Automated tool findings (pre-disclosed)
 
 The full machine-readable Slither/Aderyn baseline is maintained internally — Slither 0.11.5 (3,349
-results / 101 detectors over 152 contracts at tree `4018e0d4`; 172 High / 450 Medium / 392 Low /
+results / 101 detectors over 152 contracts at tree `a054e52d`; 172 High / 450 Medium / 392 Low /
 2,283 Informational / 52 Optimization, and the "High" tier is dominated by 132 `uninitialized-state`
 false positives from the shared-storage delegatecall architecture — the deployed-module compilation
 units plus the `DegenerusGameLens` unit, see below) + Aderyn 0.6.8 (9 High / 20 Low, unchanged).
 Slither totals are sensitive to the scan environment (solc/toolchain resolution), so the absolute
 count is not comparable across machines — re-runs should compare category triage, not the total.
-These counts were measured directly at tree `4018e0d4`, not carried forward from an earlier scan.
-The immediately preceding tree `9564ce8d` was re-scanned in the same environment and reproduced its
-recorded 3,329 / 172 High / 448 Medium / 384 Low / 2,273 Informational / 52 Optimization exactly, so
-the delta below is measured rather than compared against a recorded figure. **The High tier does not
-move**: the span adds +2 Medium, +8 Low and +10 Informational and nothing higher, and the High tier
-is identical to the prior tree detector for detector (132 `uninitialized-state`, 14 `weak-prng`, 6,
-6, 5, 3, 3, 2, 1). Contract count is unchanged at 152.
+These counts were measured directly at tree `a054e52d`, not carried forward from an earlier scan.
+This tree reproduced the immediately preceding tree `4018e0d4`'s recorded 3,349 / 172 High / 450
+Medium / 392 Low / 2,283 Informational / 52 Optimization exactly, in the same environment and tier
+for tier, so the environment is validated and **the span moves nothing in any tier**. The High tier
+is identical detector for detector (132 `uninitialized-state`, 14 `weak-prng`, 6, 6, 5, 3, 3, 2, 1)
+and the contract count is unchanged at 152. The span is one behavioural change — the WWXRP
+Degenerette reel rig narrowed to a 2 <= M <= 6 band with its own payout ladder — which alters a
+comparison and fifteen packed payout constants inside a single delegatecall module; a change of that
+shape is invisible to every detector, consistent with the earlier calibration point that a
+`private pure` helper replacing two flat constants also moved nothing.
 
 The delta against the tree tagged before this chain began (`4e616db4`) is **+206 results and +16
-High**, spanning twenty changes: the `extsload` observability lens, the module observability
+High**, spanning twenty-one changes: the `extsload` observability lens, the module observability
 events, the foil daily quest moving to the final-jackpot RNG request, the static boon tables, the
 council-review fixes, the seat push-mint, the dead-code removal, the size-scaled lootbox WWXRP
 stake, the coinflip claimable-preview fix, the vault share-token ENS reverse names, the solo-quadrant
@@ -165,7 +168,8 @@ drop from the main-board ticket draw, the foil-pack spend-waterfall refactor, th
 granules, the deploy-time level-1 quest seed (which contributes zero findings in every tier), the
 purchase-phase insurance skim, the ENS reverse probe, the unified all-time record pool (which
 retired the coinflip bounty ladder), the x9 snapshot behind the daily top-bettor board gate, the x0
-full-last-purchase-day pacing, and the deploy-day daily-quest seed. Keyed line-insensitively on
+full-last-purchase-day pacing, the deploy-day daily-quest seed, and the WWXRP Degenerette rig band
+(which likewise contributes zero findings in every tier). Keyed line-insensitively on
 (check, impact, subject function), every addition is attributable:
 
 - **The unified all-time record pool (+2 Medium, +8 Low, +10 Informational, ZERO High), against
