@@ -2191,8 +2191,6 @@ abstract contract DegenerusGameStorage {
     /// - [170..201] RNG index (uint32)
     /// - [202..217] activity score in whole points (uint16)
     /// - [218..219] heroQuadrant (always-on hero quadrant, 0..3)
-    /// - [220..235] record bonus in bps (uint16, 0 = none) — armed and frozen at
-    ///              placement, never re-derived at resolve
     mapping(address => mapping(uint64 => uint256)) internal degeneretteBets;
 
     /// @dev Per-player bet counters for Degenerette.

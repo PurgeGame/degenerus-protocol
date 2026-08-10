@@ -176,7 +176,7 @@ interface ICoinflip {
     function armRecord(uint8 kind, address player, uint256 candidate) external;
 
     /// @notice Add FLIP to the shared all-time record pool.
-    /// @dev GAME only. Level transitions push 0.5% of the completed level's prize pool,
+    /// @dev GAME only. Level transitions push 0.1% of the completed level's prize pool,
     ///      converted notionally at that level's ticket price — no ETH moves.
     function fundRecordPool(uint256 amount) external;
 

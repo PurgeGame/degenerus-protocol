@@ -27,7 +27,7 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 ///      State is installed directly (vm.store) against the authoritative slots
 ///      (forge inspect storageLayout): coinflipStakePacked slot 0,
 ///      coinflipDayResultPacked slot 1, playerState slot 2, flipsClaimableDay slot 4
-///      byte-offset 20. The install is
+///      byte-offset 0. The install is
 ///      proven correct by reading it back through the contract's own getters and,
 ///      after the measured call, by asserting the exact minted payout — so a future
 ///      storage-layout drift fails loudly instead of silently mis-measuring.

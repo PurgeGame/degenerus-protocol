@@ -938,7 +938,7 @@ contract Coinflip {
     }
 
     /// @notice Add FLIP to the shared record pool.
-    /// @dev GAME only. Level transitions push 0.5% of the completed level's prize pool,
+    /// @dev GAME only. Level transitions push 0.1% of the completed level's prize pool,
     ///      converted notionally at that level's ticket price — no ETH moves. Clamped
     ///      at the pool's uint128 width rather than wrapping, so a huge push cannot
     ///      zero an accrued pool.
