@@ -242,8 +242,9 @@ function rigBasePayout(consts, N, s) {
 // R2 rigged analytical P_N(S) (float; mirrors p_score_distribution_rigged).
 //
 // Averaged over hero placement. Per full-roll outcome the rig forces ONE
-// score-bearing cell w.p. 3/5 when M<=6: a +1 cell (e1) or a +2 color-unlock cell
-// (e2). M>=7 untouched; empty pool (e1+e2==0) no-op. Eligible pool:
+// score-bearing cell w.p. 3/5 when 2 <= M <= 6: a +1 cell (e1) or a +2 color-unlock
+// cell (e2). M>=7 untouched (P(S=9) invariant) and M<2 untouched (the rig never
+// manufactures the S=2 dribble tier); empty pool (e1+e2==0) no-op. Eligible pool:
 //   (a) unmatched non-hero symbol -> +1 (cm==0) or +2 unlock (cm==1)
 //   (b) unmatched color on a symbol-matched quad (incl. hero color) -> +1
 // ---------------------------------------------------------------------------
@@ -303,7 +304,9 @@ function riggedAnalyticalPScore(N) {
     for (const [key, p] of partials) {
       const [S, M, e1, e2] = key.split(",").map(Number);
       const etot = e1 + e2;
-      if (M >= 7) out[S] += p;
+      // Rig fires only inside the 2 <= M <= 6 band: M>=7 keeps P(S=9) invariant,
+      // M<2 stops the rig manufacturing the S=2 dribble tier from a near-empty reel.
+      if (M >= 7 || M < 2) out[S] += p;
       else if (etot === 0) out[S] += p;
       else {
         out[S] += p * (1 - pf);

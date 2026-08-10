@@ -481,14 +481,21 @@ contract DegeneretteHeroScoreTest is DeployProtocol {
     // WWXRP RIG — controlled on-chain behavior of the rigged WWXRP reel path.
     // =========================================================================
 
-    /// @notice DEC-01 R2 per-sample correctness. Drives many single-spin WWXRP bets
-    ///         through the live resolve path and checks each rigged score against the
-    ///         pre-rig (honest) reel: the rig lifts by exactly 0, +1, or +2 (the +2
-    ///         color-unlock is ALLOWED under Variant-2), never below honest, never
-    ///         fires when the honest reel is full / 1-off (M >= 7), and can NEVER lift
-    ///         a reel to the S=9 jackpot (a rigged S=9 only ever coincides with an
-    ///         honest S=9). Over the batch the lift rate among eligible (M <= 6) reels
-    ///         sits at ~60% (the 3/5 gate). Validates `_rigWwxrpResult` end-to-end.
+    /// @notice R2 per-sample correctness. Drives single-spin WWXRP bets through the live
+    ///         resolve path and checks each rigged score against the pre-rig (honest)
+    ///         reel: the rig lifts by exactly 0, +1, or +2 (the +2 color-unlock is
+    ///         ALLOWED under Variant-2), never below honest, and can NEVER lift a reel to
+    ///         the S=9 jackpot (a rigged S=9 only ever coincides with an honest S=9).
+    ///         The rig fires ONLY inside the 2 <= M <= 6 band, so the test covers both
+    ///         edges: below the M=2 floor it must never fire, and inside the band the
+    ///         lift rate sits at ~60% (the 3/5 gate).
+    ///
+    ///         Both edges need a decent sample — P(2 <= M <= 6) ~ 27.7% for this ticket,
+    ///         so a flat sequential run would skew heavily to below-floor reels.
+    ///         `_resultTicketForSpin` / `_honestScoreAndM`
+    ///         are both `pure`, so the loop below pre-screens candidate RNG words for free
+    ///         and spends the expensive place/resolve round-trip only on words that land
+    ///         where each assertion needs them. Validates `_rigWwxrpResult` end-to-end.
     function test_WWXRP_Rig_ControlledBehavior() public {
         _seedFuturePrizePool(1_000_000 ether);
         _fundWwxrp(player, 400 ether);
@@ -496,30 +503,44 @@ contract DegeneretteHeroScoreTest is DeployProtocol {
         uint8 heroQuadrant = 2;
         uint32 customTraits = _ticketWithHero(heroQuadrant, 4);
 
-        uint256 eligible; // honest M <= 6 (rig may fire)
+        // Pre-screen (pure, no state touched): collect words whose honest reel lands
+        // in the rig band, and words that land below the M=4 floor.
+        uint256 wantBand = 150;
+        uint256 wantFloor = 100;
+        uint256[] memory bandWords = new uint256[](wantBand);
+        uint256[] memory floorWords = new uint256[](wantFloor);
+        uint256 nBand;
+        uint256 nFloor;
+        for (uint256 i; (nBand < wantBand || nFloor < wantFloor) && i < 200_000; ++i) {
+            uint256 word = uint256(keccak256(abi.encodePacked("wwxrp_rig", i)));
+            (, uint8 hM) = _honestScoreAndM(
+                customTraits, _resultTicketForSpin(index, word, 0), heroQuadrant
+            );
+            if (hM >= 2 && hM <= 6) {
+                if (nBand < wantBand) bandWords[nBand++] = word;
+            } else if (hM < 2) {
+                if (nFloor < wantFloor) floorWords[nFloor++] = word;
+            }
+        }
+        assertEq(nBand, wantBand, "pre-screen: found enough in-band (2 <= M <= 6) reels");
+        assertEq(nFloor, wantFloor, "pre-screen: found enough below-floor (M < 2) reels");
+
         uint256 lifted; // rigged score > honest (rig fired and a cell was forced)
         uint256 lifted2; // rigged score == honest + 2 (the color-unlock)
-        uint256 samples = 300;
 
-        for (uint256 i; i < samples; ++i) {
-            uint256 word = uint256(keccak256(abi.encodePacked("wwxrp_rig", i)));
-            vm.prank(player);
-            game.placeDegeneretteBet(address(0), CURRENCY_WWXRP, 1 ether, 1, customTraits, heroQuadrant);
-            uint64 betId = _betNonce(player);
-            _injectLootboxRngWord(index, word);
-            vm.recordLogs();
-            vm.prank(player);
-            game.resolveDegeneretteBets(address(0), _one(betId));
-            (uint8 s, ) = _firstSpinScoreAndPayout();
-            _injectLootboxRngWord(index, 0);
+        // Below the M=4 floor the rig must be inert on every single sample.
+        for (uint256 i; i < nFloor; ++i) {
+            (uint8 s, uint8 honestS, ) = _resolveOneWwxrpSpin(
+                floorWords[i], index, customTraits, heroQuadrant
+            );
+            assertEq(s, honestS, "rig must NOT fire below the M = 2 floor");
+        }
 
-            // Honest (pre-rig) reel + score/M for this spin.
-            uint32 honestResult = _resultTicketForSpin(index, word, 0);
-            (uint8 honestS, uint8 honestM) =
-                _honestScoreAndM(customTraits, honestResult, heroQuadrant);
-
-            // Per-sample correctness: lift is 0, +1, or +2 (+2 = color-unlock), never
-            // negative.
+        // Inside the band the rig fires on ~3/5 of samples, lifting by +1 or +2.
+        for (uint256 i; i < nBand; ++i) {
+            (uint8 s, uint8 honestS, ) = _resolveOneWwxrpSpin(
+                bandWords[i], index, customTraits, heroQuadrant
+            );
             assertTrue(
                 s >= honestS && s <= honestS + 2,
                 "rig lifts the score by 0, +1, or +2 (never below honest)"
@@ -529,22 +550,39 @@ contract DegeneretteHeroScoreTest is DeployProtocol {
             if (s == 9) {
                 assertEq(honestS, 9, "rig must NEVER lift a reel to S=9 (jackpot unreachable by the rig)");
             }
-            if (honestM >= 7) {
-                assertEq(s, honestS, "rig must NOT fire on a full / 1-off reel (M >= 7)");
-            } else {
-                ++eligible;
-                if (s > honestS) ++lifted;
-                if (s == honestS + 2) ++lifted2;
-            }
+            if (s > honestS) ++lifted;
+            if (s == honestS + 2) ++lifted2;
         }
 
-        // Non-vacuity + ~60% gate: among eligible reels the rig fires ~3/5 of the time.
-        assertGt(eligible, 150, "non-vacuity: most reels are rig-eligible (M <= 6)");
+        // Non-vacuity + ~60% gate: among in-band reels the rig fires ~3/5 of the time.
         assertGt(lifted, 0, "non-vacuity: the rig actually lifts some reels");
         assertGt(lifted2, 0, "non-vacuity: the +2 color-unlock actually occurs (R2)");
-        assertLt(lifted, eligible, "non-vacuity: the rig is NOT always-on (40% no-op)");
-        assertGe(lifted * 100, eligible * 45, "lift rate >= 45% (3/5 gate, sample tolerance)");
-        assertLe(lifted * 100, eligible * 75, "lift rate <= 75% (3/5 gate, sample tolerance)");
+        assertLt(lifted, nBand, "non-vacuity: the rig is NOT always-on (40% no-op)");
+        assertGe(lifted * 100, nBand * 45, "lift rate >= 45% (3/5 gate, sample tolerance)");
+        assertLe(lifted * 100, nBand * 75, "lift rate <= 75% (3/5 gate, sample tolerance)");
+    }
+
+    /// @dev One single-spin WWXRP bet through the live place/resolve path.
+    ///      Returns the resolved (rigged) score alongside the honest pre-rig score and
+    ///      matched-axis count for the same reel.
+    function _resolveOneWwxrpSpin(
+        uint256 word,
+        uint48 index,
+        uint32 customTraits,
+        uint8 heroQuadrant
+    ) internal returns (uint8 s, uint8 honestS, uint8 honestM) {
+        vm.prank(player);
+        game.placeDegeneretteBet(address(0), CURRENCY_WWXRP, 1 ether, 1, customTraits, heroQuadrant);
+        uint64 betId = _betNonce(player);
+        _injectLootboxRngWord(index, word);
+        vm.recordLogs();
+        vm.prank(player);
+        game.resolveDegeneretteBets(address(0), _one(betId));
+        (s, ) = _firstSpinScoreAndPayout();
+        _injectLootboxRngWord(index, 0);
+        (honestS, honestM) = _honestScoreAndM(
+            customTraits, _resultTicketForSpin(index, word, 0), heroQuadrant
+        );
     }
 
     /// @notice DEC-01 R2 DISTRIBUTION parity — runs the REAL `_rigWwxrpResult` over
@@ -583,10 +621,11 @@ contract DegeneretteHeroScoreTest is DeployProtocol {
             sumS += s;
         }
 
-        // Analytical riggedPScore(N=0), scaled to 1e6 (derive_5_tables.py R2 model):
-        //   S0 234473  S1 391904  S2 219128  S3 102687  S4 39080  S>=5 12728
+        // Analytical riggedPScore(N=0), scaled to 1e6 (derive_5_tables.py R2 model,
+        // 2 <= M <= 6 rig band):
+        //   S0 555002  S1 186940  S2 131909  S3 74341  S4 39080  S>=5 12728
         uint32[6] memory expScaled = [
-            uint32(234473), 391904, 219128, 102687, 39080, 12728
+            uint32(555002), 186940, 131909, 74341, 39080, 12728
         ];
         uint256[6] memory obs;
         for (uint8 s; s < 5; ++s) obs[s] = counts[s];
@@ -607,9 +646,9 @@ contract DegeneretteHeroScoreTest is DeployProtocol {
             );
         }
 
-        // Mean parity: analytical E[S | N=0] = 1.36088 (scaled x1000 = 1361), ±0.09.
+        // Mean parity: analytical E[S | N=0] = 0.89645 (scaled x1000 = 896), ±0.09.
         uint256 meanScaled = (sumS * 1000) / K;
-        uint256 meanDiff = meanScaled > 1361 ? meanScaled - 1361 : 1361 - meanScaled;
+        uint256 meanDiff = meanScaled > 896 ? meanScaled - 896 : 896 - meanScaled;
         assertLt(meanDiff, 90, "rig-parity: empirical mean score diverges from analytical E[S]");
 
         // The rig essentially never reaches S=9 here (honest 1/12.96M); over K=3000 it

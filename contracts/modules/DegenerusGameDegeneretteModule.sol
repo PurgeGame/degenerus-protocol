@@ -352,39 +352,45 @@ contract DegenerusGameDegeneretteModule is
     // WWXRP RIG FAMILY — rigged base tables + factors (WWXRP currency only)
     // -------------------------------------------------------------------------
     //
-    // WWXRP reels are rigged (color-gating aware): when >= 2 cells are unmatched
-    // (M <= 6), one *score-bearing* cell is forced to a real match with probability 3/5 —
-    // an unmatched non-hero symbol (+1, or +2 when the color already matched: the unlock),
-    // or an unmatched color on a symbol-matched quad (+1, incl. the hero color). The hero
-    // symbol and no-op colors are excluded; an empty pool is a no-op. Caps at M=7 so the
-    // rig can never make S=9 (P(S=9) invariant). The rig shifts the WWXRP score
-    // distribution upward, so WWXRP uses its OWN per-N base tables — calibrated to
-    // basePayoutEV = 100 centi-x against the RIGGED distribution P_N^rig(S) — and its OWN
-    // per-N redistribution factors (the rigged family stays AVERAGED at 5 by-N tables;
-    // WWXRP hero-placement drift accepted by-design). S=8 differs; S=9 reuses the honest
-    // QUICK_PLAY_PAYOUT_N{N}_S9 pin (the jackpot event and odds are unchanged by the rig).
+    // WWXRP reels are rigged (color-gating aware): when the reel sits in the
+    // 2 <= M <= 6 band, one *score-bearing* cell is forced to a real match with
+    // probability 3/5 — an unmatched non-hero symbol (+1, or +2 when the color already
+    // matched: the unlock), or an unmatched color on a symbol-matched quad (+1, incl.
+    // the hero color). The hero symbol and no-op colors are excluded; an empty pool is
+    // a no-op. Caps at M=7 so the rig can never make S=9 (P(S=9) invariant), and floors
+    // at M=2 so it never manufactures the S=2 dribble tier out of a near-empty reel —
+    // P(S>=4) and P(S>=6) match an ungated rig exactly, P(S=2) stays near honest.
+    // The rig still shifts the WWXRP score distribution upward, so WWXRP uses its OWN
+    // per-N base tables — calibrated to basePayoutEV = 100 centi-x against the RIGGED
+    // distribution P_N^rig(S) — and its OWN per-N redistribution factors (the rigged
+    // family stays AVERAGED at 5 by-N tables; WWXRP hero-placement drift accepted
+    // by-design). It also uses its OWN payout SHAPE (SHAPE_RIG in the generator), which
+    // lifts the low tiers so the smallest WWXRP win is a money-back push at S=2 rather
+    // than a sub-stake dribble; the EV that funds it comes off S=6..8. S=8 differs;
+    // S=9 reuses the honest QUICK_PLAY_PAYOUT_N{N}_S9 pin (the jackpot event and odds
+    // are unchanged by the rig).
     // ETH/FLIP keep the per-(N,hero-gold) honest tables above. The byte-reproduce gate
     // regenerates these from derive_5_tables.py — never hand-typed.
-    uint256 private constant QUICK_PLAY_PAYOUTS_RIG_N0_PACKED = 0x00005e9a00001273000004030000016c000000730000002e0000000000000000;  // EV=99.9986
-    uint256 private constant QUICK_PLAY_PAYOUTS_RIG_N1_PACKED = 0x000070aa000015f6000004cc000001af00000089000000370000000000000000;  // EV=99.9995
-    uint256 private constant QUICK_PLAY_PAYOUTS_RIG_N2_PACKED = 0x00008532000019f6000005aa000001fe000000a2000000410000000000000000;  // EV=99.9989
-    uint256 private constant QUICK_PLAY_PAYOUTS_RIG_N3_PACKED = 0x00009b9a00001e5a0000069d00000254000000bd0000004c0000000000000000;  // EV=99.9990
-    uint256 private constant QUICK_PLAY_PAYOUTS_RIG_N4_PACKED = 0x0000b330000022ed0000079d000002b1000000da000000570000000000000000;  // EV=99.9992
+    uint256 private constant QUICK_PLAY_PAYOUTS_RIG_N0_PACKED = 0x0000363700000a920000044c000001f4000001040000008f0000000000000000;  // EV=99.9995
+    uint256 private constant QUICK_PLAY_PAYOUTS_RIG_N1_PACKED = 0x00003d8800000bfe000004df0000023900000127000000a20000000000000000;  // EV=99.9994
+    uint256 private constant QUICK_PLAY_PAYOUTS_RIG_N2_PACKED = 0x0000457900000d8c00000581000002820000014d000000b70000000000000000;  // EV=99.9991
+    uint256 private constant QUICK_PLAY_PAYOUTS_RIG_N3_PACKED = 0x00004df900000f340000062d000002ce00000176000000ce0000000000000000;  // EV=99.9994
+    uint256 private constant QUICK_PLAY_PAYOUTS_RIG_N4_PACKED = 0x00005707000010f8000006e400000322000001a1000000e60000000000000000;  // EV=99.9991
 
     /// @dev Per-N rigged S=8 tier (separate uint256; calibrated to EV=100 under the rigged dist).
-    uint256 private constant QUICK_PLAY_PAYOUT_RIG_N0_S8 =     1210913;  //    12,109.13x bet
-    uint256 private constant QUICK_PLAY_PAYOUT_RIG_N1_S8 =     1442106;  //    14,421.06x bet
-    uint256 private constant QUICK_PLAY_PAYOUT_RIG_N2_S8 =     1704918;  //    17,049.18x bet
-    uint256 private constant QUICK_PLAY_PAYOUT_RIG_N3_S8 =     1991686;  //    19,916.86x bet
-    uint256 private constant QUICK_PLAY_PAYOUT_RIG_N4_S8 =     2293601;  //    22,936.01x bet
+    uint256 private constant QUICK_PLAY_PAYOUT_RIG_N0_S8 =      693937;  //     6,939.37x bet
+    uint256 private constant QUICK_PLAY_PAYOUT_RIG_N1_S8 =      787558;  //     7,875.58x bet
+    uint256 private constant QUICK_PLAY_PAYOUT_RIG_N2_S8 =      889235;  //     8,892.35x bet
+    uint256 private constant QUICK_PLAY_PAYOUT_RIG_N3_S8 =      998014;  //     9,980.14x bet
+    uint256 private constant QUICK_PLAY_PAYOUT_RIG_N4_S8 =     1113925;  //    11,139.25x bet
 
     /// @dev Per-N rigged WWXRP factors (B=6..9 packed, B=6 low). 10/30/30/30 split over
     ///      the rigged dist + rigged tables → bonus uplift = bonusBps/10000 of RTP exactly.
-    uint256 private constant WWXRP_FACTORS_RIG_N0_PACKED = 0x0000000002278add00000000000ccc0200000000004153c400000000000fda8b;
-    uint256 private constant WWXRP_FACTORS_RIG_N1_PACKED = 0x0000000003aef46a00000000000f5126000000000046a39f00000000000fa6f4;
-    uint256 private constant WWXRP_FACTORS_RIG_N2_PACKED = 0x0000000006442ce7000000000013314300000000004ecda200000000000fd37a;
-    uint256 private constant WWXRP_FACTORS_RIG_N3_PACKED = 0x000000000a96251f000000000019298500000000005b77db0000000000108293;
-    uint256 private constant WWXRP_FACTORS_RIG_N4_PACKED = 0x0000000011ba25db00000000002269d300000000006ee3e2000000000011eefc;
+    uint256 private constant WWXRP_FACTORS_RIG_N0_PACKED = 0x0000000002278add0000000000165499000000000071fdf200000000001babb3;
+    uint256 private constant WWXRP_FACTORS_RIG_N1_PACKED = 0x0000000003aef46a00000000001c0c0f000000000081573600000000001ca9d1;
+    uint256 private constant WWXRP_FACTORS_RIG_N2_PACKED = 0x0000000006442ce7000000000024cc22000000000097159200000000001e5429;
+    uint256 private constant WWXRP_FACTORS_RIG_N3_PACKED = 0x000000000a96251f00000000003237030000000000b6887b000000000020f5f2;
+    uint256 private constant WWXRP_FACTORS_RIG_N4_PACKED = 0x0000000011ba25db000000000046dba90000000000e45210000000000024e95a;
 
     /// @dev Reel-independent seed tag for the WWXRP rig draw (gate + cell pick).
     uint256 private constant WWXRP_RIG_SALT = 0x52494721; // "RIG!"
@@ -820,8 +826,9 @@ contract DegenerusGameDegeneretteModule is
                 resultSeed
             );
             // WWXRP-only reel rig (R2): lift one unmatched score-bearing cell to a real
-            // match (60%) when >= 2 cells miss, so the displayed reel and the scored
-            // result agree. A no-op for ETH/FLIP (and for WWXRP full / 1-off reels).
+            // match (60%) when the reel sits in the 2 <= M <= 6 band, so the displayed reel
+            // and the scored result agree. A no-op for ETH/FLIP (and for WWXRP reels that
+            // are full / 1-off, or near-empty).
             if (currency == CURRENCY_WWXRP) {
                 resultTraits = _rigWwxrpResult(
                     playerTraits,
@@ -1474,8 +1481,8 @@ contract DegenerusGameDegeneretteModule is
     }
 
     /// @dev WWXRP-only reel rig — SCORE-BEARING pool (color-gating aware).
-    ///      When >= 2 cells are unmatched (M <= 6), force ONE *score-bearing* cell to a
-    ///      real match with probability 3/5. Only these unmatched cells
+    ///      When the reel sits in the 2 <= M <= 6 band, force ONE *score-bearing* cell to
+    ///      a real match with probability 3/5. Only these unmatched cells
     ///      RAISE S, so the eligible pool is narrowed to:
     ///        (a) an unmatched NON-HERO symbol (any color state) — forcing the symbol
     ///            lifts S by +1, or by +2 when that quadrant's color already matched (the
@@ -1486,10 +1493,13 @@ contract DegenerusGameDegeneretteModule is
     ///            SYMBOL is excluded from the pool.
     ///      EXCLUDED: the hero symbol cell, and *no-op* colors (an unmatched color on a
     ///      quadrant whose symbol is still unmatched — buys nothing while color is gated).
-    ///      EMPTY-POOL no-op: if M <= 6 but every unmatched cell is excluded (only the
+    ///      EMPTY-POOL no-op: if 2 <= M <= 6 but every unmatched cell is excluded (only the
     ///      hero symbol and/or no-op colors), the eligible count u == 0 — no lift this
-    ///      round (and the `% u` pick is guarded against div-by-zero). Caps at M=7, so a
-    ///      fired roll has M <= 6 -> post-force M <= 7 -> S <= 8: the rig can NEVER make
+    ///      round (and the `% u` pick is guarded against div-by-zero). Floors at M=2, so a
+    ///      near-empty reel is never pushed — the rig cannot manufacture the S=2 dribble
+    ///      tier, and nothing above it is affected, because reaching S >= 4 post-force
+    ///      always started at M >= 2. Caps at M=7, so a
+    ///      fired roll has 2 <= M <= 6 -> post-force M <= 7 -> S <= 8: the rig can NEVER make
     ///      S=9 (P(S=9) invariant). Rewrites `resultTraits` so the displayed reel honestly
     ///      shows the forced match; `_score` then reads the lifted score. `rigSeed` is a
     ///      frozen, reel-independent hash of the spin seed. Lifts the score by the
@@ -1527,8 +1537,13 @@ contract DegenerusGameDegeneretteModule is
                 ++q;
             }
         }
-        // Only rig when >= 2 cells miss (M <= 6); leave full match / 1-off alone.
-        if (m >= 7) return rigged;
+        // Rig only inside the 2 <= M <= 6 band. The upper cap leaves a full match /
+        // 1-off alone, which is what keeps P(S=9) invariant. The lower floor leaves a
+        // near-empty reel (0 or 1 matched axes) alone, so the rig never manufactures the
+        // S=2 dribble tier out of nothing. The floor costs nothing above it: reaching
+        // S >= 4 post-force always started at M >= 2, so P(S>=4) and P(S>=6) match an
+        // ungated rig exactly while P(S=2) stays near its honest value.
+        if (m >= 7 || m < 2) return rigged;
         // 60% gate (3 of 5); 40% no-op.
         if (rigSeed % 5 >= 3) return rigged;
         // Empty score-bearing pool (every unmatched cell is excluded): no lift, guard the
@@ -1701,7 +1716,7 @@ contract DegenerusGameDegeneretteModule is
             EntropyLib.hash2(seed, 1)
         );
         // WWXRP reel rig (identical to a regular WWXRP bet spin, R2): lift one unmatched
-        // score-bearing cell to a real match (60%) when >= 2 cells miss. The emitted
+        // score-bearing cell to a real match (60%) inside the 2 <= M <= 6 band. The emitted
         // BoxSpin packs the rigged reel, so the displayed result and the score agree.
         resultTraits = _rigWwxrpResult(
             playerTraits,

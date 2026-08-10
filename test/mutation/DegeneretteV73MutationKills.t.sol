@@ -152,19 +152,27 @@ contract DegeneretteV73MutationKills is DeployProtocol {
         _fundWwxrp(player, 400 ether);
         uint8 hero = 2;
         uint32 customTraits = _ticketWithHeroSym(hero, 4); // all-common, N=0
+        // The rig fires only inside the 2 <= M <= 6 band (~27.7% of reels here), so a
+        // flat sample would skew the denominator toward below-floor reels that can never
+        // lift and drag the measured rate under the floor. `_resultTicketForSpin` / `_scoreAndM` are
+        // pure, so pre-screen candidate words for free and spend the resolve round-trip
+        // only on in-band reels.
         uint256 eligible;
         uint256 lifted;
-        for (uint256 i; i < 300; ++i) {
+        uint256 want = 150;
+        uint256[] memory bandWords = new uint256[](want);
+        for (uint256 i; eligible < want && i < 200_000; ++i) {
             uint256 word = uint256(keccak256(abi.encodePacked("gatedir", i)));
-            uint8 riggedS = _resolveWwxrpScore(word, customTraits, hero);
-            uint32 reel = _resultTicketForSpin(1, word, 0);
-            (uint8 honestS, uint8 honestM) = _scoreAndM(customTraits, reel, hero);
-            if (honestM <= 6) {
-                ++eligible;
-                if (riggedS > honestS) ++lifted;
-            }
+            (, uint8 hM) = _scoreAndM(customTraits, _resultTicketForSpin(1, word, 0), hero);
+            if (hM >= 2 && hM <= 6) bandWords[eligible++] = word;
         }
-        assertGt(eligible, 150, "non-vacuity: most reels are rig-eligible");
+        assertEq(eligible, want, "pre-screen: found enough in-band (2 <= M <= 6) reels");
+        for (uint256 i; i < eligible; ++i) {
+            uint256 word = bandWords[i];
+            uint8 riggedS = _resolveWwxrpScore(word, customTraits, hero);
+            (uint8 honestS, ) = _scoreAndM(customTraits, _resultTicketForSpin(1, word, 0), hero);
+            if (riggedS > honestS) ++lifted;
+        }
         // 60% gate; a flipped (<3) gate -> ~40% -> below this floor.
         assertGe(lifted * 100, eligible * 45, "lift rate >= 45% (kills the flipped-gate ~40% mutant)");
         assertLe(lifted * 100, eligible * 75, "lift rate <= 75%");

@@ -150,7 +150,9 @@ function riggedPScore(N) {
     for (const [key, p] of partials) {
       const [S, M, e1, e2] = key.split(",").map(Number);
       const etot = e1 + e2;
-      if (M >= 7) out[S] += p;
+      // Rig fires only inside the 2 <= M <= 6 band: M>=7 keeps P(S=9) invariant,
+      // M<2 stops the rig manufacturing the S=2 dribble tier from a near-empty reel.
+      if (M >= 7 || M < 2) out[S] += p;
       else if (etot === 0) out[S] += p;
       else {
         out[S] += p * (1 - pf);
