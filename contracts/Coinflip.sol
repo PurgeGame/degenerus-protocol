@@ -43,6 +43,12 @@ interface IWWXRP {
     function mintPrize(address to, uint256 amount) external;
 }
 
+/// @notice Interface for the soulbound record-bounty trophy moved on record ratchets.
+interface IDegenerusRecordBounty {
+    /// @notice Stamp record `kind`'s new mark and hand its trophy to `to`.
+    function recordSet(uint8 kind, address to, uint256 value) external;
+}
+
 contract Coinflip {
     /*+======================================================================+
       |                              EVENTS                                  |
@@ -79,14 +85,21 @@ contract Coinflip {
         uint16 rewardPercent,
         uint128 recordPoolAfter
     );
-    /// @notice Emitted when the daily top bettor is updated.
-    /// @param day The day being updated.
-    /// @param player New top bettor.
-    /// @param score The score in whole tokens (uint96-capped).
-    event CoinflipTopUpdated(
+    /// @notice Emitted when the game arms a flip day for the BAF weighted draw.
+    /// @param day The flip day whose direct deposits enter the draw.
+    event BafDrawArmed(uint24 indexed day);
+    /// @notice Emitted for every interval recorded in an armed day's draw book.
+    /// @param day The armed flip day.
+    /// @param player The depositor the interval pays if the winner roll lands in it.
+    /// @param index The entry's index in the day's book.
+    /// @param weight This deposit's weight: the whole-FLIP floor of its raw principal.
+    /// @param cumulativeWeight The entry's cumulative endpoint (exclusive).
+    event BafDrawEntered(
         uint24 indexed day,
         address indexed player,
-        uint96 score
+        uint32 index,
+        uint96 weight,
+        uint96 cumulativeWeight
     );
     /// @notice Emitted whenever an all-time record moves. One event covers both
     ///         outcomes: a zero `paid` is a bare ratchet, anything else is a claim.
@@ -171,6 +184,8 @@ contract Coinflip {
     ///      could not have beaten it anyway. The game-side records gate their own floors
     ///      at their call sites.
     uint256 private constant BIGGEST_FLIP_MIN = 200_000 ether;
+    /// @dev Domain tag for the BAF weighted-draw winner roll.
+    bytes32 private constant BAF_DRAW_TAG = "COINFLIP_BAF_DRAW_WINNER";
     uint16 private constant COIN_CLAIM_DAYS = 365;
     uint16 private constant COIN_CLAIM_FIRST_DAYS = 180;
     uint16 private constant AUTO_REBUY_OFF_CLAIM_DAYS_MAX = 1460;
@@ -228,17 +243,22 @@ contract Coinflip {
     uint24 internal recordDaySpin;
     uint24 internal recordDayLuckbox;
     uint24 internal recordDayBuy;
+    /// @dev The flip day whose direct deposits enter the BAF weighted draw — armed
+    ///      by the game when an x0 purchase level enters its last purchase day
+    ///      (that day's deposits stake day + 1). Packs into the slot the deposit
+    ///      path's claim walk already loads, so the per-deposit gate costs one
+    ///      warm read.
+    uint24 internal bafDrawDay;
 
-    // Leaderboard. Written only on an x0 level's last purchase day (the deposit
-    // path's trackTop gate) and only by a direct deposit at or above the flip
-    // record's 200k floor, scored as that deposit's raw amount — the one day and
-    // the one weight class the BAF top-flipper slice can ever pay — so ordinary
-    // deposits never pay for it.
-    struct PlayerScore {
-        address player;
-        uint96 score;
-    }
-    mapping(uint24 => PlayerScore) internal coinflipTopByDay;
+    // BAF weighted draw. Book-kept only for the armed day (the x0 level's last
+    // purchase day stakes it): every direct self-funded deposit staking that day
+    // appends a cumulative interval weighted by its raw FLIP principal, and the
+    // BAF top-flipper slice pays ONE winner drawn over those intervals. Declared
+    // here so the record marks below keep their slot indexes.
+    /// @dev Per-day draw header:
+    ///      bits [0..95]   total weight (whole FLIP; the last cumulative endpoint)
+    ///      bits [96..127] entry count
+    mapping(uint24 => uint256) internal bafDrawHeader;
 
     /// @dev The game-armed all-time records (appended so every prior slot keeps its
     ///      index; the flip mark packs with recordPool above). biggestSpinEver and
@@ -247,9 +267,16 @@ contract Coinflip {
     uint128 public biggestLuckboxEver;
     uint128 public biggestBuyEver;
 
+    /// @dev One packed interval entry per (armed day, index):
+    ///      bits [0..95]   cumulative weight endpoint (exclusive, whole FLIP)
+    ///      bits [96..255] player address
+    ///      Key: (day << 32) | index. Never zero for a recorded entry — MIN is
+    ///      100 FLIP, so every weight is at least 100.
+    mapping(uint256 => uint256) internal bafDrawEntry;
+
     /// @notice Seeds the initial FLIP emission as flip stakes: 200k per day for days 1-20,
     ///         each to VAULT and sDGNRS. Direct storage writes (not _addDailyFlip) keep the
-    ///         seeds off the daily top-bettor leaderboard and the flip record.
+    ///         seeds off the BAF weighted draw and the flip record.
     ///         Nothing mints up front — each day's seed only becomes claimable FLIP if it
     ///         survives that day's flip.
     constructor() {
@@ -363,27 +390,15 @@ contract Coinflip {
         bool directDeposit
     ) private {
         PlayerCoinflipState storage state = playerState[player];
-        bool trackTop;
-        if (amount != 0) {
-            if (amount < MIN) revert AmountLTMin();
-            // Deposits flow through every RNG lock. A deposit on day N writes
-            // board[N+1], and the word that reads board[N+1] is not requested
-            // until day N+1 — so every board write structurally precedes the
-            // request of the word that consumes it. The BAF bracket needs no
-            // deposit lock either: an in-window auto-claim records its credit to
-            // the NEXT bracket (claim-time routing off the promoted level) —
-            // state the pending draw never reads.
-            //
-            // The board's qualifying bar doubles as the gas gate: only a DIRECT
-            // self-deposit at or above the flip record's 200k floor pays the
-            // purchaseInfo call that asks whether today's flips feed the BAF
-            // top-flipper slice. The board then scores THIS deposit — the fresh
-            // flip input, the same unit the flip record judges — never an
-            // accumulated stake.
-            if (player == msg.sender && amount >= BIGGEST_FLIP_MIN) {
-                trackTop = _depositTracksTop();
-            }
-        }
+        if (amount != 0 && amount < MIN) revert AmountLTMin();
+        // Deposits flow through every RNG lock. A deposit on day N stakes day
+        // N+1, and the word that resolves day N+1 is not requested until day
+        // N+1 — so every stake write (and every BAF draw interval, which keys
+        // the same target day) structurally precedes the request of the word
+        // that consumes it. The BAF bracket needs no deposit lock either: an
+        // in-window auto-claim records its credit to the NEXT bracket
+        // (claim-time routing off the promoted level) — state the pending draw
+        // never reads.
 
         uint256 mintable = _claimCoinflipsInternal(player, state, false);
         uint128 storedAfter = state.claimableStored;
@@ -454,8 +469,9 @@ contract Coinflip {
             // player's carry earns its own bonus where it rolls, in _claimCoinflipsInternal.
             creditedFlip += _recyclingBonus(fromClaimable);
         }
-        // Direct deposits can set the flip record; indirect deposits cannot.
-        _addDailyFlip(player, creditedFlip, directDeposit ? amount : 0, trackTop);
+        // Direct deposits can set the flip record and enter the BAF weighted
+        // draw; indirect deposits cannot.
+        _addDailyFlip(player, creditedFlip, directDeposit ? amount : 0);
         emit CoinflipDeposit(player, amount);
     }
 
@@ -785,12 +801,13 @@ contract Coinflip {
       |                    STAKE MANAGEMENT                                  |
       +======================================================================+*/
 
-    /// @dev Add daily flip stake for player.
+    /// @dev Add daily flip stake for player. recordAmount is the raw principal of a
+    ///      direct self-funded deposit (zero for every credit path): it alone can arm
+    ///      the flip record and it alone carries BAF draw weight.
     function _addDailyFlip(
         address player,
         uint256 coinflipDeposit,
-        uint256 recordAmount,
-        bool trackTop
+        uint256 recordAmount
     ) private {
         IDegenerusGame game = degenerusGame;
         if (recordAmount != 0) {
@@ -831,20 +848,44 @@ contract Coinflip {
 
         // Update player's stake for target day
         _setFlipStake(targetDay, player, newStake);
-        // The day-leader board is written only when `trackTop` marks this as a
-        // qualifying flip (a single direct 200k+ deposit) on an x0 level's last
-        // purchase day — the one day whose flips the BAF top-flipper slice
-        // reads — so ordinary deposits skip the board's cold slot entirely. The
-        // score is THIS deposit's raw amount (recordAmount — the fresh flip
-        // input, the flip record's unit), never an accumulated stake. sDGNRS is
-        // excluded: its position is protocol backing, not a wager.
-        if (trackTop && player != ContractAddresses.SDGNRS) {
-            _updateTopDayBettor(player, recordAmount, targetDay);
+        // BAF weighted draw: on the armed day (an x0 level's last purchase day
+        // stakes it), every direct self-funded deposit appends an interval
+        // weighted by its raw principal (recordAmount) — never bonuses, boon
+        // boosts, record claims, or credits, so free stake carries no draw
+        // weight. Ordinary days pay one warm read: bafDrawDay shares the packed
+        // slot the deposit's claim walk already loaded. Credit paths (quests,
+        // gifts via funder!=player, operators, sDGNRS backing) skip even that —
+        // their recordAmount is zero and the compare short-circuits.
+        if (recordAmount != 0 && targetDay == bafDrawDay) {
+            _appendBafDrawEntry(targetDay, player, recordAmount);
         }
         // `coinflipDeposit` is everything credited by this call — principal, quest and
         // recycling bonuses, the boon boost, and any flip-record claim folded in above.
         // BigRecordUpdated itemizes the claim's own share.
         emit CoinflipStakeUpdated(player, targetDay, coinflipDeposit, newStake);
+    }
+
+    /// @dev Append `player`'s weighted interval to the armed day's draw book.
+    ///      Weight is the whole-FLIP floor of the raw deposited principal, so a
+    ///      player's win probability is their recorded principal over the day's
+    ///      total by interval measure: repeat deposits are additive and splitting
+    ///      a deposit (or a wallet) moves no probability. The uint96 cumulative
+    ///      lane cannot saturate — FLIP supply is uint128-wei capped (~3.4e20
+    ///      whole tokens) against a 7.9e28 lane.
+    function _appendBafDrawEntry(
+        uint24 day,
+        address player,
+        uint256 amount
+    ) private {
+        uint96 weight = _score96(amount);
+        uint256 header = bafDrawHeader[day];
+        uint256 newTotal = (header & type(uint96).max) + weight;
+        uint32 index = uint32(header >> 96);
+        bafDrawEntry[(uint256(day) << 32) | index] =
+            (uint256(uint160(player)) << 96) |
+            newTotal;
+        bafDrawHeader[day] = (uint256(index + 1) << 96) | newTotal;
+        emit BafDrawEntered(day, player, index, weight, uint96(newTotal));
     }
 
     /// @dev Ratchets record `kind` to `candidate` and pays the claim when the candidate
@@ -911,6 +952,17 @@ contract Coinflip {
         else if (kind == RECORD_KIND_LUCKBOX) biggestLuckboxEver = uint128(candidate);
         else biggestBuyEver = uint128(candidate);
         emit BigRecordUpdated(kind, player, candidate, paid, sdgnrsPaid);
+
+        // Hand the record's soulbound trophy to the new mark holder. Every
+        // ratchet moves it — the claim bar gates only the pool share, never the
+        // trophy. Cosmetic-only state (nothing game-side reads the trophy
+        // contract), and recordSet does no recipient callback, so the call
+        // cannot re-enter or brick the arming path.
+        IDegenerusRecordBounty(ContractAddresses.RECORD_BOUNTY).recordSet(
+            kind,
+            player,
+            candidate
+        );
     }
 
     /// @dev The day record category `kind` last claimed (or bootstrapped).
@@ -954,6 +1006,17 @@ contract Coinflip {
         recordPool = grown > type(uint128).max
             ? type(uint128).max
             : uint128(grown);
+    }
+
+    /// @notice Arm flip day `day` for the BAF weighted draw (GAME only).
+    /// @dev The advance path arms exactly one day per BAF bracket: when an x0
+    ///      purchase level enters its last purchase day, it arms day + 1 — the flip
+    ///      day the sealed window's direct deposits stake, and the day the bracket's
+    ///      transition word resolves. Entries close structurally at the day
+    ///      boundary, before that word can be requested.
+    function armBafDraw(uint24 day) external onlyDegenerusGameContract {
+        bafDrawDay = day;
+        emit BafDrawArmed(day);
     }
 
     /*+======================================================================+
@@ -1232,7 +1295,7 @@ contract Coinflip {
             streak,
             completed
         );
-        _addDailyFlip(s, amount + questReward, 0, false);
+        _addDailyFlip(s, amount + questReward, 0);
     }
 
     /*+======================================================================+
@@ -1247,7 +1310,7 @@ contract Coinflip {
         uint256 amount
     ) external onlyFlipCreditors {
         if (player == address(0) || amount == 0) return;
-        _addDailyFlip(player, amount, 0, false);
+        _addDailyFlip(player, amount, 0);
     }
 
     /// @notice Credit flips to multiple players (called by GAME jackpot modules and the
@@ -1263,7 +1326,7 @@ contract Coinflip {
             address player = players[i];
             uint256 amount = amounts[i];
             if (player != address(0) && amount != 0) {
-                _addDailyFlip(player, amount, 0, false);
+                _addDailyFlip(player, amount, 0);
             }
             unchecked {
                 ++i;
@@ -1286,10 +1349,10 @@ contract Coinflip {
         uint256 amount2
     ) external onlyFlipCreditors {
         if (player1 != address(0) && amount1 != 0) {
-            _addDailyFlip(player1, amount1, 0, false);
+            _addDailyFlip(player1, amount1, 0);
         }
         if (player2 != address(0) && amount2 != 0) {
-            _addDailyFlip(player2, amount2, 0, false);
+            _addDailyFlip(player2, amount2, 0);
         }
     }
 
@@ -1394,19 +1457,58 @@ contract Coinflip {
         startDay = state.autoRebuyStartDay;
     }
 
-    /// @notice Get last day's coinflip leaderboard winner. Meaningful only when the
-    ///         last settled day was staked on an x0 level's last purchase day — the
-    ///         one day the board is written and the one day the BAF slice reads it;
-    ///         on any other day it returns an empty (or stale) entry.
-    function coinflipTopLastDay()
+    /// @notice One amount-weighted random winner among the armed day's direct
+    ///         deposits, or address(0) when the day recorded no entries (the BAF
+    ///         slice then refunds its 5% share to the pool).
+    /// @dev Winner probability = a player's recorded principal / the day's total,
+    ///      by cumulative-interval measure. The roll is domain-separated from the
+    ///      BAF transition word (fixed tag, this contract, the armed day), so it
+    ///      perturbs no other consumer of that word. Winner = the entry with the
+    ///      smallest cumulative endpoint strictly above the roll, by binary search.
+    /// @param rngWord The BAF transition VRF word.
+    function bafDrawWinner(uint256 rngWord) external view returns (address winner) {
+        uint24 day = bafDrawDay;
+        uint256 header = bafDrawHeader[day];
+        uint256 total = header & type(uint96).max;
+        if (total == 0) return address(0);
+        uint256 roll = uint256(
+            keccak256(abi.encodePacked(BAF_DRAW_TAG, address(this), day, rngWord))
+        ) % total;
+
+        // Smallest index whose cumulative endpoint exceeds the roll.
+        uint32 lo;
+        uint32 hi = uint32(header >> 96) - 1;
+        while (lo < hi) {
+            uint32 mid = lo + (hi - lo) / 2;
+            if ((bafDrawEntry[(uint256(day) << 32) | mid] & type(uint96).max) > roll) {
+                hi = mid;
+            } else {
+                lo = mid + 1;
+            }
+        }
+        winner = address(uint160(bafDrawEntry[(uint256(day) << 32) | lo] >> 96));
+    }
+
+    /// @notice The armed BAF draw day and its book totals.
+    function bafDrawInfo()
         external
         view
-        returns (address player, uint128 score)
+        returns (uint24 day, uint96 totalWeight, uint32 entryCount)
     {
-        uint24 lastDay = flipsClaimableDay;
-        if (lastDay == 0) return (address(0), 0);
-        PlayerScore memory top = coinflipTopByDay[lastDay];
-        return (top.player, uint128(top.score));
+        day = bafDrawDay;
+        uint256 header = bafDrawHeader[day];
+        totalWeight = uint96(header);
+        entryCount = uint32(header >> 96);
+    }
+
+    /// @notice A recorded draw entry's player and cumulative endpoint (whole FLIP).
+    function bafDrawEntryAt(
+        uint24 day,
+        uint32 index
+    ) external view returns (address player, uint96 cumulativeWeight) {
+        uint256 entry = bafDrawEntry[(uint256(day) << 32) | index];
+        player = address(uint160(entry >> 96));
+        cumulativeWeight = uint96(entry);
     }
 
     /// @dev View twin of the settle walk in _claimCoinflipsInternal: replays the resolved
@@ -1577,28 +1679,6 @@ contract Coinflip {
         coinflipDayResultPacked[key] = w;
     }
 
-    /// @dev Whether deposits made now feed the day the BAF top-flipper slice reads —
-    ///      an x0 level's last purchase day. The daily top-bettor board is written on
-    ///      that day alone: the BAF slice is its only reader, so every other day's
-    ///      board write would buy nothing.
-    function _depositTracksTop() private view returns (bool trackTop) {
-        (
-            uint24 lvl,
-            ,
-            bool lastPurchaseDay_,
-            ,
-
-        ) = degenerusGame.purchaseInfo();
-        // lastPurchaseDay_ is true only outside the jackpot phase, so it alone
-        // restricts the answer to purchase-phase states. No game-over state can
-        // reach here: every gameOver latch leaves jackpotPhaseFlag set or
-        // lastPurchaseDay false, and neither is ever written again post-latch. lvl is the
-        // ACTUAL game level from the same snapshot, and it runs one behind the level
-        // being sold (purchaseLevel = level + 1) — on an x0 level's last purchase day
-        // it reads x9.
-        trackTop = lastPurchaseDay_ && lvl % 10 == 9;
-    }
-
     /// @dev Calculate recycling bonus for daily flip deposits (flat 0.75%).
     ///      Base is the recycled amount (the re-bet or auto-rebuy carry being deposited).
     ///      Bonus feeds into creditedFlip, not back into claimableStored (no feedback loop).
@@ -1644,20 +1724,6 @@ contract Coinflip {
             wholeTokens = type(uint96).max;
         }
         return uint96(wholeTokens);
-    }
-
-    /// @dev Update day leaderboard if player's score is higher.
-    function _updateTopDayBettor(
-        address player,
-        uint256 flipAmount,
-        uint24 day
-    ) private {
-        uint96 score = _score96(flipAmount);
-        PlayerScore memory dayLeader = coinflipTopByDay[day];
-        if (score > dayLeader.score || dayLeader.player == address(0)) {
-            coinflipTopByDay[day] = PlayerScore({player: player, score: score});
-            emit CoinflipTopUpdated(day, player, score);
-        }
     }
 
     /// @dev Round level up to next BAF bracket (multiple of 10).

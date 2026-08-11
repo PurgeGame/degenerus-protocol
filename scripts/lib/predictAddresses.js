@@ -66,6 +66,11 @@ export const DEPLOY_ORDER = [
   // shifts no existing predicted address. No ctor args and no deploy-time dependents — it
   // reads GAME and burns/credits FLIP at runtime only.
   "PARIMUTUEL",             // N+27: DegenerusParimutuel
+  // Record-bounty trophy. Appended LAST so adding it shifts no existing
+  // predicted address. Constructor mints the four trophies to CREATOR and makes
+  // no cross-contract calls; COINFLIP (its only mutator) is a compile-time
+  // constant, so it has no deploy-time dependents.
+  "RECORD_BOUNTY",          // N+28: DegenerusRecordBounty
 ];
 
 /**
@@ -100,6 +105,7 @@ export const KEY_TO_CONTRACT = {
   GAME_FOILPACK_MODULE: "DegenerusGameFoilPackModule",
   AFKING_SUB_TOKEN: "AFKingSubscriptionToken",
   PARIMUTUEL: "DegenerusParimutuel",
+  RECORD_BOUNTY: "DegenerusRecordBounty",
 };
 
 /**

@@ -26,7 +26,7 @@ import {
  *  - setCoinflipAutoRebuyTakeProfit
  *  - Record system (BigRecordUpdated: bootstrap, ratchet, and pool-share claim on the
  *    flip record; armRecord / fundRecordPool access control)
- *  - BAF top bettor (CoinflipTopUpdated — only on BAF lastPurchaseDay)
+ *  - BAF weighted draw (BafDrawEntered — only on the game-armed draw day)
  *  - Events
  */
 
@@ -167,15 +167,15 @@ describe("Coinflip", function () {
       expect(stake).to.be.gte(eth(300));
     });
 
-    it("does not emit CoinflipTopUpdated on an ordinary-day deposit", async function () {
-      // The top-bettor board is written only on an x0 level's last purchase day —
-      // the one day the BAF top-flipper slice reads. The fixture sits on an
-      // ordinary day, so the deposit must skip the board entirely.
+    it("does not emit BafDrawEntered on an ordinary-day deposit", async function () {
+      // Draw intervals are recorded only on the game-armed BAF draw day. The
+      // fixture sits on an ordinary (un-armed) day, so the deposit must skip
+      // the draw book entirely.
       const { coinflip, coin, alice, vault } = await loadFixture(deployFullProtocol);
       const vaultAddr = await vault.getAddress();
       await giveFlip(coin, alice, eth(1000), vaultAddr);
       const tx = await deposit(coinflip, alice, eth(500));
-      const evs = await getEvents(tx, coinflip, "CoinflipTopUpdated");
+      const evs = await getEvents(tx, coinflip, "BafDrawEntered");
       expect(evs.length).to.equal(0);
     });
 
@@ -783,17 +783,18 @@ describe("Coinflip", function () {
       expect(await coinflip.previewClaimCoinflips(alice.address)).to.equal(0n);
     });
 
-    it("coinflipTopLastDay returns zero address before any resolved day", async function () {
+    it("bafDrawInfo reads empty before the game arms a draw day", async function () {
       const { coinflip } = await loadFixture(deployFullProtocol);
-      const [player, score] = await coinflip.coinflipTopLastDay();
-      expect(player).to.equal(ZERO_ADDRESS);
-      expect(score).to.equal(0n);
+      const [day, totalWeight, entryCount] = await coinflip.bafDrawInfo();
+      expect(day).to.equal(0n);
+      expect(totalWeight).to.equal(0n);
+      expect(entryCount).to.equal(0n);
     });
 
-    it("coinflipTopLastDay stays empty after an ordinary-day deposit", async function () {
-      // Board writes are gated to an x0 level's last purchase day; an ordinary-day
-      // deposit leaves the settled day's entry empty. (The positive path is pinned
-      // in the Foundry suite via a mocked purchaseInfo snapshot.)
+    it("bafDrawInfo stays empty after an ordinary-day deposit", async function () {
+      // Draw intervals record only on the game-armed BAF draw day; an
+      // ordinary-day deposit leaves the book empty. (The armed path is pinned
+      // in the Foundry suite.)
       const { coinflip, coin, game, alice, vault } = await loadFixture(
         deployFullProtocol
       );
@@ -804,9 +805,10 @@ describe("Coinflip", function () {
       const currentDay = await game.currentDayView();
       await resolveDay(hre.ethers, game, coinflip, currentDay + 1n, 1n);
 
-      const [player, score] = await coinflip.coinflipTopLastDay();
-      expect(player).to.equal(ZERO_ADDRESS);
-      expect(score).to.equal(0n);
+      const [day, totalWeight, entryCount] = await coinflip.bafDrawInfo();
+      expect(day).to.equal(0n);
+      expect(totalWeight).to.equal(0n);
+      expect(entryCount).to.equal(0n);
     });
 
     it("coinflipAmount returns 0 for player with no stake", async function () {

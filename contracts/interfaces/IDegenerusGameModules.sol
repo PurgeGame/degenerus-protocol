@@ -13,7 +13,13 @@ interface IDegenerusGameAdvanceModule {
 
     /// @notice Requests mid-day lootbox RNG when threshold conditions are met.
     function requestLootboxRng() external;
+}
 
+/// @title IDegenerusGameGameOverModule
+/// @notice Interface for handling game over state and final fund distribution,
+///         plus the cold VRF admin surface (deploy wiring + emergency rotation)
+///         hosted here for the advance module's EIP-170 headroom.
+interface IDegenerusGameGameOverModule {
     /// @notice Configures the Chainlink VRF coordinator and subscription
     /// @param coordinator_ Address of the VRF coordinator contract
     /// @param subId Chainlink VRF subscription ID
@@ -33,11 +39,7 @@ interface IDegenerusGameAdvanceModule {
         uint256 newSubId,
         bytes32 newKeyHash
     ) external;
-}
 
-/// @title IDegenerusGameGameOverModule
-/// @notice Interface for handling game over state and final fund distribution
-interface IDegenerusGameGameOverModule {
     /// @notice Handles draining funds during game over state
     /// @param day The day identifier for the drain operation
     function handleGameOverDrain(uint24 day) external;

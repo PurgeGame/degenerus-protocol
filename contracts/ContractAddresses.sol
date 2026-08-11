@@ -70,6 +70,9 @@ library ContractAddresses {
     // Growth-bet parimutuel — appended, so it shifts no prior address.
     address internal constant PARIMUTUEL =
         address(0x94771550282853f6E0124c302F7dE1Cf50aa45CA);
+    // Record-bounty trophy — appended, so it shifts no prior address.
+    address internal constant RECORD_BOUNTY =
+        address(0x8227724C33C1748A42d1C1cD06e21AB8Deb6eB0A);
     address internal constant CREATOR =
         address(0x7FA9385bE102ac3EAc297483Dd6233D62b3e1496);
     address internal constant VRF_COORDINATOR =

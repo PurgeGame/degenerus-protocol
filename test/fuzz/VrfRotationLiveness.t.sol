@@ -18,7 +18,7 @@ import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 ///         failure mode was a revert (RngNotReady at the :271/:213 drain gate); under the bug
 ///         these positive-outcome assertions fail naturally because the drain reverts.
 ///
-///         Three rotation branches of updateVrfCoordinatorAndSub (AdvanceModule:1712) are
+///         Three rotation branches of updateVrfCoordinatorAndSub (GameOverModule) are
 ///         exercised, plus the daily-takeover failsafe (a stalled mid-day re-issue folded into
 ///         the daily word after MIDDAY_RNG_STALL_TIMEOUT):
 ///           1. Mid-day in flight (LR_MID_DAY==1, :1726): re-issue lands in the reserved

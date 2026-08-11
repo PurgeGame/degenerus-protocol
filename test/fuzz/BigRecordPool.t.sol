@@ -4,7 +4,6 @@ pragma solidity ^0.8.26;
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {IsDGNRS} from "../../contracts/interfaces/IsDGNRS.sol";
-import {IDegenerusGame} from "../../contracts/interfaces/IDegenerusGame.sol";
 import {
     RECORD_KIND_SPIN,
     RECORD_KIND_LUCKBOX
@@ -364,71 +363,9 @@ contract BigRecordPoolTest is DeployProtocol {
         assertEq(paid, expected, "the leg pays shareBps of rewardPool/500");
     }
 
-    // ---------------------------------------------------------------------
-    // Top-day-bettor gate
-    // ---------------------------------------------------------------------
-
-    /// @notice On an ordinary day a deposit never writes the top-bettor board — its
-    ///         only reader is the BAF slice, fed by an x0 level's last purchase day.
-    function testOrdinaryDayDepositSkipsTopBettorBoard() public {
-        _selfDeposit(player, 1_000 ether);
-        _resolveDay(3, true); // the deposit staked day 3
-        (address top, ) = coinflip.coinflipTopLastDay();
-        assertEq(top, address(0), "ordinary-day deposits stay off the board");
-    }
-
-    /// @notice On an x0 level's last purchase day (purchaseInfo mocked: the game's
-    ///         level reads x9 while the x0 level sells, purchaseLevel = level + 1),
-    ///         a deposit whose stake total reaches the 200k qualifying floor writes
-    ///         the board; a sub-floor rival stays invisible.
-    function testBafEveDepositWritesTopBettorBoard() public {
-        vm.mockCall(
-            GAME,
-            abi.encodeWithSelector(IDegenerusGame.purchaseInfo.selector),
-            abi.encode(uint24(19), false, true, false, uint256(0.04 ether))
-        );
-        _selfDeposit(rival, FLIP_MIN - 1 ether); // sub-floor: skips the board
-        _selfDeposit(player, FLIP_MIN);
-        vm.clearMockedCalls();
-
-        _resolveDay(3, true); // the deposits staked day 3
-        (address top, uint128 score) = coinflip.coinflipTopLastDay();
-        assertEq(top, player, "the qualifying BAF-eve deposit tops the board");
-        assertGt(score, 0, "the board carries the staked score");
-    }
-
-    /// @notice Even on the tracked day, a stake total under the 200k qualifying
-    ///         floor never touches the board.
-    function testSubFloorStakeNeverReachesTheBoard() public {
-        vm.mockCall(
-            GAME,
-            abi.encodeWithSelector(IDegenerusGame.purchaseInfo.selector),
-            abi.encode(uint24(19), false, true, false, uint256(0.04 ether))
-        );
-        _selfDeposit(player, FLIP_MIN - 1 ether);
-        vm.clearMockedCalls();
-
-        _resolveDay(3, true);
-        (address top, ) = coinflip.coinflipTopLastDay();
-        assertEq(top, address(0), "sub-floor stakes stay off the board");
-    }
-
-    /// @notice A last purchase day whose snapshot level reads x0 is an x1 level's
-    ///         eve (purchaseLevel = level + 1) — no BAF reads that day's board, so
-    ///         even a qualifying deposit skips the write.
-    function testX0LevelSnapshotIsNotTheBafEve() public {
-        vm.mockCall(
-            GAME,
-            abi.encodeWithSelector(IDegenerusGame.purchaseInfo.selector),
-            abi.encode(uint24(10), false, true, false, uint256(0.04 ether))
-        );
-        _selfDeposit(player, FLIP_MIN);
-        vm.clearMockedCalls();
-
-        _resolveDay(3, true);
-        (address top, ) = coinflip.coinflipTopLastDay();
-        assertEq(top, address(0), "an x0-snapshot eve feeds no BAF; board untouched");
-    }
+    // The BAF weighted-draw surface (the top-day-bettor board's replacement) is
+    // pinned in test/fuzz/BafWeightedDraw.t.sol; this suite keeps only the record
+    // behaviours.
 
     // ---------------------------------------------------------------------
     // Helpers

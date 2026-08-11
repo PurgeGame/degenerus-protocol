@@ -20,6 +20,7 @@ import {GameAfkingModule} from "../../../contracts/modules/GameAfkingModule.sol"
 import {DegenerusGameFoilPackModule} from "../../../contracts/modules/DegenerusGameFoilPackModule.sol";
 import {AFKingSubscriptionToken} from "../../../contracts/AFKingSubscriptionToken.sol";
 import {DegenerusParimutuel} from "../../../contracts/DegenerusParimutuel.sol";
+import {DegenerusRecordBounty} from "../../../contracts/DegenerusRecordBounty.sol";
 import {FLIP} from "../../../contracts/FLIP.sol";
 import {Coinflip} from "../../../contracts/Coinflip.sol";
 import {DegenerusGame} from "../../../contracts/DegenerusGame.sol";
@@ -41,7 +42,7 @@ import {MockLinkToken} from "../../../contracts/mocks/MockLinkToken.sol";
 import {MockLinkEthFeed} from "../../../contracts/mocks/MockLinkEthFeed.sol";
 
 /// @title DeployProtocol -- Abstract base for Foundry invariant tests
-/// @notice Deploys all 4 mocks + 27 protocol contracts in setUp().
+/// @notice Deploys all 4 mocks + 29 protocol contracts in setUp().
 ///         Inherit this, call _deployProtocol() in your setUp().
 /// @dev Address correctness depends on patchForFoundry.js having patched
 ///      ContractAddresses.sol before forge build (there is no pretest hook —
@@ -70,6 +71,7 @@ abstract contract DeployProtocol is Test {
     DegenerusGameFoilPackModule public foilModule;
     AFKingSubscriptionToken public afkingSubToken;
     DegenerusParimutuel public parimutuel;
+    DegenerusRecordBounty public recordBounty;
     FLIP public coin;
     Coinflip public coinflip;
     DegenerusGame public game;
@@ -91,7 +93,7 @@ abstract contract DeployProtocol is Test {
         vm.warp(86400);
 
         // --- Deploy 4 mocks (nonces 1-4) ---
-        // Then 27 protocol contracts (nonces 5-31) ---
+        // Then 29 protocol contracts (nonces 5-33) ---
         mockVRF = new MockVRFCoordinator();           // nonce 1
         mockStETH = new MockStETH();                  // nonce 2
         mockLINK = new MockLinkToken();               // nonce 3
@@ -176,6 +178,11 @@ abstract contract DeployProtocol is Test {
         // Growth-bet parimutuel — appended, so it shifts no earlier nonce. No ctor args
         // and no deploy-time deps; it reads GAME and burns/credits FLIP at runtime only.
         parimutuel = new DegenerusParimutuel();                          // N+27 = nonce 32
+
+        // Record-bounty trophy — appended, so it shifts no earlier nonce. Constructor
+        // mints the four trophies to CREATOR with no cross-contract calls; only
+        // COINFLIP's runtime recordSet calls reference it.
+        recordBounty = new DegenerusRecordBounty();                      // N+28 = nonce 33
     }
 
     /// @dev Give `player` an AFKing seat (the sole afking credential — subscribe reverts

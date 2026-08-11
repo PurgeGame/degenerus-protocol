@@ -106,10 +106,6 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         uint256 nudges,
         uint256 finalWord
     );
-    event VrfCoordinatorUpdated(
-        address indexed previous,
-        address indexed current
-    );
     event StEthStakeFailed(uint256 amount);
 
     /// @notice Emitted when DGNRS is rewarded to the top affiliate.
@@ -705,14 +701,20 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                     // the compressed-phase subtraction safe after the death-clock adjustment.
                     if (targetMet && day == wallDay && day >= psd) {
                         lastPurchaseDay = true;
-                        // Turbo-speed x0 (BAF) level: the one-day collapse latches
-                        // here rather than at the morning arm, leaving the rest of
-                        // the sealed day as a real last-purchase window — the only
-                        // day whose flip deposits (day D writes board[D+1]) feed
-                        // the board tomorrow's transition word reads for the BAF
-                        // top-flipper slice. That transition request collapses all
-                        // five logical jackpot days exactly as an armed turbo does.
-                        if (purchaseLevel % 10 == 0 && day - psd <= 1) {
+                        // x0 (BAF) level: arm tomorrow's flip day for the
+                        // weighted depositor draw — the sealed day's direct
+                        // deposits stake day + 1, the day the transition word
+                        // resolves. Turbo-speed x0: the one-day collapse
+                        // latches here rather than at the morning arm, leaving
+                        // the rest of the sealed day as a real last-purchase
+                        // window ahead of the collapse; that transition request
+                        // collapses all five logical jackpot days exactly as an
+                        // armed turbo does.
+                        bool bafLevel_ = purchaseLevel % 10 == 0;
+                        if (bafLevel_) {
+                            coinflip.armBafDraw(day + 1);
+                        }
+                        if (bafLevel_ && day - psd <= 1) {
                             compressedJackpotFlag = 2;
                         } else if (day - psd <= 3) {
                             compressedJackpotFlag = 1;
@@ -794,32 +796,6 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         // New-day advance leg: `mult` already holds the day-epoch stall ladder (1/2/4/6)
         // the router scales the re-homed bounty by.
         emit Advance(stage, lvl);
-    }
-
-    /*+========================================================================================+
-      |                    ADMIN VRF FUNCTIONS                                                 |
-      +========================================================================================+
-      |  Deploy-only VRF setup called from the ContractAddresses.ADMIN constructor.            |
-      |  Post-deploy VRF changes use updateVrfCoordinatorAndSub (emergency rotation).          |
-      +========================================================================================+*/
-
-    /// @notice Wire VRF config, called once from the ADMIN constructor during deployment.
-    /// @dev Access: ContractAddresses.ADMIN only. No post-deploy caller exists on ADMIN;
-    ///      emergency VRF rotation uses updateVrfCoordinatorAndSub instead.
-    /// @param coordinator_ Chainlink VRF V2.5 coordinator address.
-    /// @param subId VRF subscription ID for LINK billing.
-    /// @param keyHash_ VRF key hash for gas lane selection.
-    function wireVrf(
-        address coordinator_,
-        uint256 subId,
-        bytes32 keyHash_
-    ) external {
-        if (msg.sender != ContractAddresses.ADMIN) revert OnlyAdmin();
-
-        address current = address(vrfCoordinator);
-        _setVrfConfig(coordinator_, subId, keyHash_);
-        lastVrfProcessedTimestamp = uint48(block.timestamp);
-        emit VrfCoordinatorUpdated(current, coordinator_);
     }
 
     /*+======================================================================+
@@ -2182,16 +2158,6 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         );
     }
 
-    /// @dev Write the VRF coordinator, subscription, and key hash together.
-    /// @param coord VRF coordinator address.
-    /// @param sub VRF subscription ID for LINK billing.
-    /// @param key VRF key hash for gas lane selection.
-    function _setVrfConfig(address coord, uint256 sub, bytes32 key) internal {
-        vrfCoordinator = IVRFCoordinator(coord);
-        vrfSubscriptionId = sub;
-        vrfKeyHash = key;
-    }
-
     /// @dev Advance the lootbox RNG index and zero both pending accumulators in a
     ///      single read-modify-write of the packed slot: new purchases target the
     ///      NEXT RNG index and the pending ETH/FLIP totals restart at zero.
@@ -2443,67 +2409,6 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         ) {
             quests.rollDailyQuest(questDay, 0, false, true, decDayOneActive);
         }
-    }
-
-    /// @notice Emergency VRF coordinator rotation (governance-gated).
-    /// @dev Access: ContractAddresses.ADMIN only. The Admin contract enforces
-    ///      stall duration via sDGNRS-holder governance (propose/vote/execute).
-    /// @param newCoordinator New VRF coordinator address.
-    /// @param newSubId New subscription ID.
-    /// @param newKeyHash New key hash for the gas lane.
-    function updateVrfCoordinatorAndSub(
-        address newCoordinator,
-        uint256 newSubId,
-        bytes32 newKeyHash
-    ) external {
-        if (msg.sender != ContractAddresses.ADMIN) revert OnlyAdmin();
-
-        address current = address(vrfCoordinator);
-        _setVrfConfig(newCoordinator, newSubId, newKeyHash);
-
-        // Detect what is in flight and re-issue on the new coordinator.
-        // The request is accepted before the new subscription is LINK-funded; DegenerusAdmin
-        // funds it in the same _executeSwap transaction (transferAndCall), and the VRF node
-        // fulfills once funded. If the new coordinator also stalls, the daily advance abandons a
-        // mid-day request and promotes it to the daily word after MIDDAY_RNG_STALL_TIMEOUT.
-        if (
-            _lrRead(LR_MID_DAY_SHIFT, LR_MID_DAY_MASK) != 0 &&
-            vrfRequestId != 0 &&
-            !rngLockedFlag
-        ) {
-            // Mid-day request actually in flight: KEEP LR_MID_DAY=1; LR_INDEX preserved so the
-            // new word lands in the same reserved slot [N] via the mid-day fulfillment branch.
-            // `vrfRequestId != 0` is the mid-day counterpart of the daily branch's
-            // `rngWordCurrent == 0` guard: an outstanding request is cleared to 0 only on
-            // fulfillment (rawFulfillRandomWords mid-day branch), whereas LR_MID_DAY stays set
-            // after the word lands until the ticket batch drains. Keying on rngRequestTime alone
-            // is unsafe -- _gameOverEntropy's failed-request fallback re-sets rngRequestTime with
-            // no request in flight (vrfRequestId already 0), so a rotation in that window would
-            // re-issue a spurious request whose fulfillment overwrites the already-delivered
-            // write-once lootbox word. `!rngLockedFlag` routes a promoted mid-day->daily request
-            // (LR_MID_DAY set alongside the daily lock) to the daily branch for correct
-            // confirmation depth. When no genuine mid-day request is pending, fall through.
-            vrfRequestId = _requestVrfWord(VRF_MIDDAY_CONFIRMATIONS);
-            rngRequestTime = uint48(block.timestamp);
-        } else if (rngLockedFlag) {
-            // Daily in flight: KEEP rngLockedFlag=true.
-            if (rngWordCurrent == 0) {
-                // Daily word not yet delivered: re-request on the new coordinator. The cleared
-                // LSB re-arms the single daily retry — a new coordinator gets its own retry.
-                vrfRequestId = _requestVrfWord(VRF_REQUEST_CONFIRMATIONS);
-                rngRequestTime = uint48(block.timestamp) & ~uint48(1);
-            }
-            // else: daily word already delivered and valid -> preserve it; no re-issue
-            // (a fresh callback would be rejected by the :1761 rngWordCurrent!=0 guard).
-        }
-        // else: nothing in flight -> config repoint only; no re-issue, no flag change.
-
-        // Intentional: totalFlipReversals is NOT reset here. Nudges were purchased
-        // with irreversible FLIP burns before or during the stall. They carry over
-        // and apply to the first post-swap VRF word via _applyDailyRng. Resetting
-        // would steal user value (burned FLIP for zero effect).
-
-        emit VrfCoordinatorUpdated(current, newCoordinator);
     }
 
     /// @dev Unlock RNG after processing is complete for the day.

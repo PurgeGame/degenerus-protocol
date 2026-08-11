@@ -238,14 +238,11 @@ interface ICoinflip {
             uint24 startDay
         );
 
-    /// @notice Get the top bettor from the most recently resolved flip day.
-    /// @dev Returns the player with the highest stake on the last completed day.
-    /// @return player The address of the top bettor (address(0) if no flips resolved yet).
-    /// @return score The top stake amount in whole tokens (saturates at uint96 max).
-    function coinflipTopLastDay()
-        external
-        view
-        returns (address player, uint128 score);
+    /// @notice Arm flip day `day` for the BAF weighted draw (GAME only).
+    /// @dev The advance path arms the flip day an x0 level's last-purchase-day
+    ///      deposits stake (day + 1); direct self-funded deposits staking that day
+    ///      record amount-weighted draw intervals.
+    function armBafDraw(uint24 day) external;
 
     /// @notice Get the result of a coinflip day.
     /// @param day The day to query.

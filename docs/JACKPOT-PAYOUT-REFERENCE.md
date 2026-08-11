@@ -248,7 +248,7 @@ Deferred claim model. The pool (`poolWei`) is locked at resolution time. Players
 
 ### Pool Source
 
-BAF pool from external `DegenerusJackpots` contract. Up to 107 winners (1 top BAF + 1 top flip + 1 pick + 4 far-future x2 + 50 + 50 scatter).
+BAF pool from external `DegenerusJackpots` contract. Up to 107 winners (1 top BAF + 1 weighted-random final-day depositor + 1 pick + 4 far-future x2 + 50 + 50 scatter). The depositor slice (5%) is drawn in Coinflip over the armed final purchase-day's direct deposits, weighted by raw FLIP principal (100-FLIP deposit minimum, no whale floor).
 
 ### Payout Structure
 

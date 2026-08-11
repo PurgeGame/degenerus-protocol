@@ -27,6 +27,7 @@ CONTRACTS=(
   DegenerusGame
   Coinflip sDGNRS DGNRS DegenerusVaultShare DegenerusAffiliate DegenerusQuests
   FLIP GNRUS WWXRP DegenerusDeityPass DegenerusJackpots DegenerusAdmin
+  DegenerusRecordBounty
 )
 # Delegatecall modules — must share DegenerusGame's storage layout exactly (run in its context).
 MODULES=(

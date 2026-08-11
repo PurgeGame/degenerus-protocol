@@ -19,12 +19,12 @@ import {GameTimeLib} from "./libraries/GameTimeLib.sol";
 // ===========================================================================
 
 /// @notice View interface for coin contract jackpot-related queries.
-/// @dev Used to retrieve coinflip statistics for leaderboards.
+/// @dev Used to draw the weighted final-day depositor slice.
 interface IDegenerusCoinJackpotView {
-    /// @notice Get top coinflip bettor from the last 24-hour window.
-    /// @return player Top bettor address.
-    /// @return score Bettor's score.
-    function coinflipTopLastDay() external view returns (address player, uint96 score);
+    /// @notice One amount-weighted random winner among the armed final-day direct
+    ///         coinflip deposits (address(0) when the day recorded none).
+    /// @param rngWord The BAF transition VRF word (domain-separated inside Coinflip).
+    function bafDrawWinner(uint256 rngWord) external view returns (address winner);
 }
 
 // ===========================================================================
@@ -41,7 +41,8 @@ interface IWwxrpMintPrize {
 /// @author Burnie Degenerus
 /// @notice Standalone contract managing the BAF jackpot system.
 /// @dev Coinflip forwards flips into this contract; game calls to resolve jackpots.
-///      - BAF: Leaderboard-based distribution to top coinflip bettors
+///      - BAF: Leaderboard-based distribution to top BAF bettors, plus one
+///        amount-weighted random final-day coinflip depositor
 ///      - Decimator: handled in the game decimator module
 ///      - Skipped brackets (daily flip lost): players claim a WWXRP consolation
 ///        proportional to their frozen bracket score via claimBafConsolation
@@ -264,7 +265,7 @@ contract DegenerusJackpots is IDegenerusJackpots {
       |  PRIZE DISTRIBUTION:                                                   |
       |  +-------------------------------------------------------------------+ |
       |  | 10% | Top BAF bettor for this level                               | |
-      |  |  5% | Top coinflip bettor from last 24h window                    | |
+      |  |  5% | Weighted-random final-day coinflip depositor                | |
       |  |  5% | Random pick: 3rd or 4th BAF slot                            | |
       |  |  5% | Far-future ticket holders (3% 1st / 2% 2nd by BAF score)    | |
       |  |  5% | Far-future ticket holders 2nd draw (3% 1st / 2% 2nd)        | |
@@ -273,7 +274,9 @@ contract DegenerusJackpots is IDegenerusJackpots {
       |  +-------------------------------------------------------------------+ |
       |                                                                        |
       |  ELIGIBILITY:                                                          |
-      |  * Top-BAF/top-flip/pick: any non-zero address (no streak req)         |
+      |  * Top-BAF/pick: any non-zero address (no streak req)                  |
+      |  * Weighted depositor slice: drawn in Coinflip over the armed final    |
+      |    day's direct deposits, weight = raw FLIP principal                  |
       |  * Far-future & scatter: additionally require a positive BAF score;    |
       |    zero-score candidates are skipped and their share refunds           |
       |                                                                        |
@@ -332,9 +335,12 @@ contract DegenerusJackpots is IDegenerusJackpots {
         }
 
         {
-            // Slice A2: 5% to the top coinflip bettor from the last day window.
+            // Slice A2: 5% to one amount-weighted random direct depositor from the
+            // armed final purchase-day flip window. The roll is domain-separated
+            // inside Coinflip from the same transition word; the entropy/salt
+            // chain below is untouched (this slice consumes none of it).
             uint256 topPrize = P / 20;
-            (address w, ) = coin.coinflipTopLastDay();
+            address w = coin.bafDrawWinner(rngWord);
             if (_creditOrRefund(w, topPrize, tmpW, tmpA, n)) {
                 unchecked {
                     ++n;

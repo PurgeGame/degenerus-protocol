@@ -323,7 +323,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     ///      re-encoding here would cost contract-size headroom for no behavior change.
     function wireVrf(address, uint256, bytes32) external {
         (bool ok, bytes memory data) = ContractAddresses
-            .GAME_ADVANCE_MODULE
+            .GAME_GAMEOVER_MODULE
             .delegatecall(msg.data);
         if (!ok) _revertDelegate(data);
     }
@@ -2075,7 +2075,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         bytes32
     ) external {
         (bool ok, bytes memory data) = ContractAddresses
-            .GAME_ADVANCE_MODULE
+            .GAME_GAMEOVER_MODULE
             .delegatecall(msg.data);
         if (!ok) _revertDelegate(data);
     }

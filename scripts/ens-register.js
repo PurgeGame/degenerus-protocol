@@ -43,6 +43,7 @@ const LABELS = {
   JACKPOTS: "jackpots",
   QUESTS: "quests",
   DEITY_PASS: "deity",
+  RECORD_BOUNTY: "bounty",
   GNRUS: "gnrus",
   WWXRP: "wwxrp",
   AFKING_SUB_TOKEN: "afking",
@@ -57,7 +58,7 @@ const LABELS = {
 // Guard against the list drifting out of sync with the contracts again.
 // Note: DegenerusVaultShare has ONE parameterized setName site covering TWO
 // deployed instances (dgvf + dgve), so labels = setName grep hits + 1.
-const EXPECTED_LABEL_COUNT = 17;
+const EXPECTED_LABEL_COUNT = 18;
 
 const REGISTRY_ABI = [
   "function setSubnodeRecord(bytes32 node, bytes32 label, address owner, address resolver, uint64 ttl) external",
