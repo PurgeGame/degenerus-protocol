@@ -4,7 +4,7 @@ Pre-disclosure for audit wardens. **If a finding's mechanism + impact is describ
 already known and is not eligible.** This is a precise perimeter — each entry names the exact
 mechanism and why it is by-design, defended, or out-of-scope. There are no vague blanket disclaimers.
 
-Frozen subject: `contracts/` tree `a054e52d` @ tag `degenerus-c4a`. Pre-scanned with Slither v0.11.5
+Frozen subject: `contracts/` tree `33ccd5b9` @ tag `degenerus-c4a`. Pre-scanned with Slither v0.11.5
 + Aderyn 0.6.8; those findings are triaged in the automated-tools section below.
 
 ---
@@ -141,23 +141,26 @@ transaction (a coin credit, not ETH-backed value). Immaterial; documented, not e
 
 ## 5. Automated tool findings (pre-disclosed)
 
-The full machine-readable Slither/Aderyn baseline is maintained internally — Slither 0.11.5 (3,349
-results / 101 detectors over 152 contracts at tree `a054e52d`; 172 High / 450 Medium / 392 Low /
-2,283 Informational / 52 Optimization, and the "High" tier is dominated by 132 `uninitialized-state`
+The full machine-readable Slither/Aderyn baseline is maintained internally — Slither 0.11.5 (3,410
+results / 101 detectors over 156 contracts at tree `33ccd5b9`; 178 High / 454 Medium / 403 Low /
+2,323 Informational / 52 Optimization, and the "High" tier is dominated by 138 `uninitialized-state`
 false positives from the shared-storage delegatecall architecture — the deployed-module compilation
 units plus the `DegenerusGameLens` unit, see below) + Aderyn 0.6.8 (9 High / 20 Low, unchanged).
 Slither totals are sensitive to the scan environment (solc/toolchain resolution), so the absolute
 count is not comparable across machines — re-runs should compare category triage, not the total.
-These counts were measured directly at tree `a054e52d`, not carried forward from an earlier scan.
-This tree reproduced the immediately preceding tree `4018e0d4`'s recorded 3,349 / 172 High / 450
-Medium / 392 Low / 2,283 Informational / 52 Optimization exactly, in the same environment and tier
-for tier, so the environment is validated and **the span moves nothing in any tier**. The High tier
-is identical detector for detector (132 `uninitialized-state`, 14 `weak-prng`, 6, 6, 5, 3, 3, 2, 1)
-and the contract count is unchanged at 152. The span is one behavioural change — the WWXRP
-Degenerette reel rig narrowed to a 2 <= M <= 6 band with its own payout ladder — which alters a
-comparison and fifteen packed payout constants inside a single delegatecall module; a change of that
-shape is invisible to every detector, consistent with the earlier calibration point that a
-`private pure` helper replacing two flat constants also moved nothing.
+These counts were measured directly at tree `33ccd5b9`, not carried forward from an earlier scan.
+The immediately preceding tree `a054e52d` re-scanned in the same environment reproduced its recorded
+3,349 / 172 High / 450 Medium / 392 Low / 2,283 Informational / 52 Optimization exactly, tier for
+tier, so the environment is validated and the delta is real: **+61 results, +6 High**, over a
+two-change span (the Degenerette per-currency boon lanes, and the BAF weighted-depositor draw
+shipped alongside the soulbound record-trophy token). The High tier gains no new detector class —
+its composition is identical except `uninitialized-state` (132 -> 138), and all six additions are
+that same shared-storage false-positive class, each attributable: `boonPacked` read by the
+Degenerette module, and `vrfCoordinator` / `vrfKeyHash` / `vrfSubscriptionId` / `rngLockedFlag` /
+`rngWordCurrent` becoming read-without-writer inside the advance module's compilation unit once the
+cold VRF admin pair (`wireVrf`, `updateVrfCoordinatorAndSub`) relocated to the game-over module for
+EIP-170 headroom. The contract count moves 152 -> 156 for the new token and the two new interfaces
+(`DegenerusRecordBounty`, `IDegenerusRecordBounty`, `IDegenerusCoinJackpotView`).
 
 The delta against the tree tagged before this chain began (`4e616db4`) is **+206 results and +16
 High**, spanning twenty-one changes: the `extsload` observability lens, the module observability

@@ -19,7 +19,8 @@
 //     4. `_resolvePresaleBox`             — LootboxModule
 //     5. `_settleLootboxRoll`             — LootboxModule
 //     6. `_resolveBet`                    — DegeneretteModule
-//     7. `resolveFlipSpinsFromBox`        — DegeneretteModule
+//     7. `_flipSpinChain`                  — DegeneretteModule (both FLIP-spin
+//                                            entry points delegate to it)
 //
 // It also carries the NEGATIVE assertions — the paths deliberately left ragged, each of
 // which would look like an oversight to the next audit pass without a test saying so:
@@ -256,12 +257,11 @@ describe("FlipHundredsInvariant (stat-suite) — seven-site 100-FLIP granule gat
         seed: "rollSeed",
       },
       { n: 6, file: DEGENERETTE, sig: "function _resolveBet(", seed: "rngWord" },
-      {
-        n: 7,
-        file: DEGENERETTE,
-        sig: "function resolveFlipSpinsFromBox(",
-        seed: "seed",
-      },
+      // Site 7's collapse lives in `_flipSpinChain`, the helper both FLIP-spin entry
+      // points delegate to (`resolveFlipSpinsFromBox` for the lootbox roll and the
+      // biggest-spin record bounty for its replay). The entry points carry no award
+      // arithmetic of their own, so the chain IS the award site.
+      { n: 7, file: DEGENERETTE, sig: "function _flipSpinChain(", seed: "seed" },
     ];
 
     for (const site of SITES) {
