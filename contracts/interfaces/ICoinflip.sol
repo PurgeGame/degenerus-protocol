@@ -169,14 +169,20 @@ interface ICoinflip {
     ///         record's own unit (spin and lootbox deposit: ETH wei; buy: whole tickets).
     /// @dev GAME only (delegatecall modules). Larger-than-mark candidates ratchet the
     ///      record; clearing the mark by a fifth also claims the category's accrued
-    ///      share of the record pool as flip credit, plus the sDGNRS leg at 1/500
-    ///      scale. Callers gate each record's entry floor before paying for the call.
-    ///      The flip record arms internally on direct deposits, never here.
-    /// @custom:reverts BadRecordKind If `kind` is the flip record or out of range.
-    function armRecord(uint8 kind, address player, uint256 candidate) external;
+    ///      share of the record pool, plus the sDGNRS leg at 1/500 scale. Callers gate
+    ///      each record's entry floor before paying for the call. The flip record arms
+    ///      internally on direct deposits, never here.
+    /// @return The FLIP claimed from the record pool (0 when the candidate only ratcheted
+    ///         the mark). Coinflip does NOT credit it — the caller folds it into the FLIP
+    ///         its own path already pays, so a claim costs no second stake write.
+    function armRecord(
+        uint8 kind,
+        address player,
+        uint256 candidate
+    ) external returns (uint256);
 
     /// @notice Add FLIP to the shared all-time record pool.
-    /// @dev GAME only. Level transitions push 0.1% of the completed level's prize pool,
+    /// @dev GAME only. Level transitions push 0.2% of the completed level's prize pool,
     ///      converted notionally at that level's ticket price — no ETH moves.
     function fundRecordPool(uint256 amount) external;
 

@@ -6,10 +6,8 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {IsDGNRS} from "../../contracts/interfaces/IsDGNRS.sol";
 import {IDegenerusGame} from "../../contracts/interfaces/IDegenerusGame.sol";
 import {
-    RECORD_KIND_FLIP,
     RECORD_KIND_SPIN,
-    RECORD_KIND_LUCKBOX,
-    RECORD_KIND_BUY
+    RECORD_KIND_LUCKBOX
 } from "../../contracts/interfaces/ICoinflip.sol";
 
 /// @title BigRecordPoolTest — pins the unified all-time record pool in Coinflip.
@@ -112,16 +110,6 @@ contract BigRecordPoolTest is DeployProtocol {
         coinflip.armRecord(RECORD_KIND_SPIN, player, 1 ether);
     }
 
-    /// @notice The flip record arms only internally; out-of-range kinds are rejected.
-    function testArmRecordRejectsFlipKindAndOutOfRange() public {
-        vm.startPrank(GAME);
-        vm.expectRevert();
-        coinflip.armRecord(RECORD_KIND_FLIP, player, FLIP_MIN);
-        vm.expectRevert();
-        coinflip.armRecord(RECORD_KIND_BUY + 1, player, 100);
-        vm.stopPrank();
-    }
-
     // ---------------------------------------------------------------------
     // Ratchet vs claim (spin kind via armRecord — the shared path)
     // ---------------------------------------------------------------------
@@ -133,7 +121,7 @@ contract BigRecordPoolTest is DeployProtocol {
         uint256 poolBefore = coinflip.recordPool();
         uint256 expected = (poolBefore *
             (SHARE_FLOOR_BPS + 1 * SHARE_PER_DAY_BPS)) / 10_000;
-        _arm(RECORD_KIND_SPIN, player, 10 ether);
+        uint256 claim = _arm(RECORD_KIND_SPIN, player, 10 ether);
 
         assertEq(coinflip.biggestSpinEver(), 10 ether, "bootstrap sets the mark");
         assertEq(
@@ -141,11 +129,7 @@ contract BigRecordPoolTest is DeployProtocol {
             poolBefore - expected,
             "bootstrap draws the accrued share"
         );
-        assertEq(
-            coinflip.coinflipAmount(player),
-            expected,
-            "the share lands as next-day flip stake"
-        );
+        assertEq(claim, expected, "the accrued share is handed back to the caller");
     }
 
     /// @notice A category untouched since launch accrues on the deploy-seeded clock:
@@ -156,9 +140,8 @@ contract BigRecordPoolTest is DeployProtocol {
         uint256 expected = (pool * (SHARE_FLOOR_BPS + 11 * SHARE_PER_DAY_BPS)) /
             10_000;
 
-        _arm(RECORD_KIND_SPIN, player, 10 ether);
         assertEq(
-            coinflip.coinflipAmount(player),
+            _arm(RECORD_KIND_SPIN, player, 10 ether),
             expected,
             "a dormant category's first hit pays the launch-accrued share"
         );
@@ -169,11 +152,12 @@ contract BigRecordPoolTest is DeployProtocol {
         _arm(RECORD_KIND_SPIN, player, 10 ether);
         uint256 poolBefore = coinflip.recordPool();
 
-        _arm(RECORD_KIND_SPIN, rival, 11.99 ether); // +19.9%, under the fifth
+        // +19.9%, under the fifth
+        uint256 claim = _arm(RECORD_KIND_SPIN, rival, 11.99 ether);
 
         assertEq(coinflip.biggestSpinEver(), 11.99 ether, "ratchet still moves the mark");
         assertEq(coinflip.recordPool(), poolBefore, "ratchet claims nothing");
-        assertEq(coinflip.coinflipAmount(rival), 0, "no credit on a ratchet");
+        assertEq(claim, 0, "a ratchet hands back nothing");
     }
 
     /// @notice At exactly +20% the candidate claims the floor share the same day.
@@ -182,15 +166,12 @@ contract BigRecordPoolTest is DeployProtocol {
         uint256 pool = coinflip.recordPool();
         uint256 expected = (pool * SHARE_FLOOR_BPS) / 10_000;
 
-        _arm(RECORD_KIND_SPIN, rival, 12 ether); // exactly mark + mark/5
+        // exactly mark + mark/5
+        uint256 claim = _arm(RECORD_KIND_SPIN, rival, 12 ether);
 
         assertEq(coinflip.biggestSpinEver(), 12 ether, "claim ratchets the mark");
         assertEq(coinflip.recordPool(), pool - expected, "pool pays the floor share");
-        assertEq(
-            coinflip.coinflipAmount(rival),
-            expected,
-            "share lands as next-day flip stake"
-        );
+        assertEq(claim, expected, "the floor share is handed back to the caller");
     }
 
     /// @notice The share accrues +0.5%/day on the category's clock.
@@ -202,9 +183,8 @@ contract BigRecordPoolTest is DeployProtocol {
         uint256 expected = (pool * (SHARE_FLOOR_BPS + 10 * SHARE_PER_DAY_BPS)) /
             10_000;
 
-        _arm(RECORD_KIND_SPIN, rival, 12 ether);
         assertEq(
-            coinflip.coinflipAmount(rival),
+            _arm(RECORD_KIND_SPIN, rival, 12 ether),
             expected,
             "10 unhit days pay 10% of the pool"
         );
@@ -218,8 +198,11 @@ contract BigRecordPoolTest is DeployProtocol {
         uint256 pool = coinflip.recordPool();
         uint256 expected = (pool * SHARE_CEIL_BPS) / 10_000;
 
-        _arm(RECORD_KIND_SPIN, rival, 12 ether);
-        assertEq(coinflip.coinflipAmount(rival), expected, "share clamps at 75%");
+        assertEq(
+            _arm(RECORD_KIND_SPIN, rival, 12 ether),
+            expected,
+            "share clamps at 75%"
+        );
     }
 
     /// @notice A bare ratchet must not restamp the clock — the later claim still pays
@@ -235,9 +218,9 @@ contract BigRecordPoolTest is DeployProtocol {
         uint256 expected = (pool * (SHARE_FLOOR_BPS + 20 * SHARE_PER_DAY_BPS)) /
             10_000;
 
-        _arm(RECORD_KIND_SPIN, player, 14 ether); // clears 11 by well over a fifth
+        // clears 11 by well over a fifth
         assertEq(
-            coinflip.coinflipAmount(player),
+            _arm(RECORD_KIND_SPIN, player, 14 ether),
             expected,
             "accrual runs 20 days from bootstrap, not 10 from the ratchet"
         );
@@ -253,9 +236,9 @@ contract BigRecordPoolTest is DeployProtocol {
 
         uint256 pool = coinflip.recordPool();
         uint256 expected = (pool * SHARE_FLOOR_BPS) / 10_000;
-        _arm(RECORD_KIND_SPIN, player, 15 ether); // same day, clears 12 by a fifth
+        // same day, clears 12 by a fifth
         assertEq(
-            coinflip.coinflipAmount(player),
+            _arm(RECORD_KIND_SPIN, player, 15 ether),
             expected,
             "a claim resets its category to the floor"
         );
@@ -271,17 +254,19 @@ contract BigRecordPoolTest is DeployProtocol {
         uint256 pool = coinflip.recordPool();
         uint256 spinShare = (pool * (SHARE_FLOOR_BPS + 10 * SHARE_PER_DAY_BPS)) /
             10_000;
-        _arm(RECORD_KIND_SPIN, rival, 12 ether);
-        assertEq(coinflip.coinflipAmount(rival), spinShare, "spin pays 10%");
+        assertEq(
+            _arm(RECORD_KIND_SPIN, rival, 12 ether),
+            spinShare,
+            "spin pays 10%"
+        );
 
         // The luckbox clock did not restamp on the spin claim: it still pays 30%
         // of what remains, not the 20% floor.
         uint256 remaining = coinflip.recordPool();
         uint256 boxShare = (remaining *
             (SHARE_FLOOR_BPS + 10 * SHARE_PER_DAY_BPS)) / 10_000;
-        _arm(RECORD_KIND_LUCKBOX, player, 12 ether);
         assertEq(
-            coinflip.coinflipAmount(player),
+            _arm(RECORD_KIND_LUCKBOX, player, 12 ether),
             boxShare,
             "the spin claim left the luckbox clock alone"
         );
@@ -334,8 +319,9 @@ contract BigRecordPoolTest is DeployProtocol {
         assertEq(coinflip.recordPool(), pool - expected, "pool paid the share");
     }
 
-    /// @notice The claim credit re-enters the stake path with recordAmount = 0, so a
-    ///         payout larger than the standing mark can never re-arm the record.
+    /// @notice Every credit path enters the stake path with recordAmount = 0 (only a
+    ///         direct deposit's raw amount arms), so a payout larger than the standing
+    ///         mark can never re-arm the record.
     function testClaimCreditCannotRearmFlipRecord() public {
         _selfDeposit(player, FLIP_MIN);
 
@@ -467,10 +453,16 @@ contract BigRecordPoolTest is DeployProtocol {
         coinflip.processCoinflipPayouts(0, word, epoch);
     }
 
-    /// @dev Arm a game-side record as the GAME.
-    function _arm(uint8 kind, address who, uint256 candidate) internal {
+    /// @dev Arm a game-side record as the GAME, returning the claim it hands back.
+    ///      Coinflip credits nothing itself — the arming module folds the claim into
+    ///      the FLIP its own path already pays — so the return IS the payout under test.
+    function _arm(
+        uint8 kind,
+        address who,
+        uint256 candidate
+    ) internal returns (uint256) {
         vm.prank(GAME);
-        coinflip.armRecord(kind, who, candidate);
+        return coinflip.armRecord(kind, who, candidate);
     }
 
     /// @dev Mint wallet FLIP and self-deposit it (direct — arms the flip record).

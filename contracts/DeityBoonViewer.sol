@@ -54,6 +54,15 @@ contract DeityBoonViewer {
     uint8 private constant DEITY_BOON_LAZY_PASS_10 = 29;
     uint8 private constant DEITY_BOON_LAZY_PASS_25 = 30;
     uint8 private constant DEITY_BOON_LAZY_PASS_50 = 31;
+    uint8 private constant DEITY_BOON_DEGEN_ETH_4 = 32;
+    uint8 private constant DEITY_BOON_DEGEN_ETH_8 = 33;
+    uint8 private constant DEITY_BOON_DEGEN_ETH_12 = 34;
+    uint8 private constant DEITY_BOON_DEGEN_FLIP_4 = 35;
+    uint8 private constant DEITY_BOON_DEGEN_FLIP_8 = 36;
+    uint8 private constant DEITY_BOON_DEGEN_FLIP_12 = 37;
+    uint8 private constant DEITY_BOON_DEGEN_WWXRP_4 = 38;
+    uint8 private constant DEITY_BOON_DEGEN_WWXRP_8 = 39;
+    uint8 private constant DEITY_BOON_DEGEN_WWXRP_12 = 40;
 
     // Boon weights
     uint16 private constant W_COINFLIP_5 = 200;
@@ -76,13 +85,22 @@ contract DeityBoonViewer {
     uint16 private constant W_DEITY_PASS_35 = 2;
     uint16 private constant W_ACTIVITY_10 = 100;
     uint16 private constant W_ACTIVITY_25 = 30;
-    uint16 private constant W_ACTIVITY_50 = 8;
+    uint16 private constant W_ACTIVITY_50 = 4;
     uint16 private constant W_QUEST_SHIELD = 200;
-    uint16 private constant W_WHALE_PASS = 8;
+    uint16 private constant W_WHALE_PASS = 2;
     uint16 private constant W_LAZY_PASS_10 = 30;
     uint16 private constant W_LAZY_PASS_25 = 8;
     uint16 private constant W_LAZY_PASS_50 = 2;
-    uint16 private constant W_TOTAL = 1498;
+    uint16 private constant W_DEGEN_ETH_4 = 200;
+    uint16 private constant W_DEGEN_ETH_8 = 50;
+    uint16 private constant W_DEGEN_ETH_12 = 10;
+    uint16 private constant W_DEGEN_FLIP_4 = 200;
+    uint16 private constant W_DEGEN_FLIP_8 = 50;
+    uint16 private constant W_DEGEN_FLIP_12 = 10;
+    uint16 private constant W_DEGEN_WWXRP_4 = 200;
+    uint16 private constant W_DEGEN_WWXRP_8 = 200;
+    uint16 private constant W_DEGEN_WWXRP_12 = 200;
+    uint16 private constant W_TOTAL = 2608;
     uint16 private constant W_PRE_DECIMATOR = 982;
     uint16 private constant W_DECIMATOR_ALL = 50;
     uint16 private constant W_PRE_DEITY_PASS = 1072;
@@ -185,6 +203,22 @@ contract DeityBoonViewer {
         if (roll < cursor) return DEITY_BOON_LAZY_PASS_25;
         cursor += W_LAZY_PASS_50;
         if (roll < cursor) return DEITY_BOON_LAZY_PASS_50;
-        return DEITY_BOON_ACTIVITY_50;
+        cursor += W_DEGEN_ETH_4;
+        if (roll < cursor) return DEITY_BOON_DEGEN_ETH_4;
+        cursor += W_DEGEN_ETH_8;
+        if (roll < cursor) return DEITY_BOON_DEGEN_ETH_8;
+        cursor += W_DEGEN_ETH_12;
+        if (roll < cursor) return DEITY_BOON_DEGEN_ETH_12;
+        cursor += W_DEGEN_FLIP_4;
+        if (roll < cursor) return DEITY_BOON_DEGEN_FLIP_4;
+        cursor += W_DEGEN_FLIP_8;
+        if (roll < cursor) return DEITY_BOON_DEGEN_FLIP_8;
+        cursor += W_DEGEN_FLIP_12;
+        if (roll < cursor) return DEITY_BOON_DEGEN_FLIP_12;
+        cursor += W_DEGEN_WWXRP_4;
+        if (roll < cursor) return DEITY_BOON_DEGEN_WWXRP_4;
+        cursor += W_DEGEN_WWXRP_8;
+        if (roll < cursor) return DEITY_BOON_DEGEN_WWXRP_8;
+        return DEITY_BOON_DEGEN_WWXRP_12;
     }
 }

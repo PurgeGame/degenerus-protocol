@@ -2,7 +2,7 @@
 pragma solidity 0.8.34;
 
 import {MintPaymentKind} from "../interfaces/IDegenerusGame.sol";
-import {RECORD_KIND_LUCKBOX} from "../interfaces/ICoinflip.sol";
+import {RECORD_KIND_BUY, RECORD_KIND_LUCKBOX} from "../interfaces/ICoinflip.sol";
 import {
     IDegenerusGameBoonModule,
     IDegenerusGameFoilPackModule
@@ -109,6 +109,8 @@ contract DegenerusGameMintModule is
     uint256 private constant PRESALE_BOX_MIN = 0.01 ether;
     /// @dev Absolute minimum ticket buy-in (ETH equivalent).
     uint256 private constant TICKET_MIN_BUYIN_WEI = 0.0025 ether;
+    /// @dev Entry floor for the biggest-buy record, in whole tickets.
+    uint256 private constant BIGGEST_BUY_MIN_TICKETS = 100;
     /// @dev Buys under 0.04 tickets (4 * QTY_SCALE = 400 units per ticket) are tested against the
     ///      routed level's snap exponent; larger buys skip that read. This is where the smallest
     ///      legal buys land — TICKET_MIN_BUYIN_WEI floors a buy at 5 units at the 0.24 ETH
@@ -1376,7 +1378,26 @@ contract DegenerusGameMintModule is
         uint256 ticketCost
     ) private {
         if (_livenessTriggered()) revert E();
+
+        // Biggest-buy record, armed up front so any claim seeds the flip credit this
+        // purchase already pays out below — the bounty rides the buy's own credit
+        // instead of taking a second Coinflip write. The unit is whole tickets counted
+        // RAW off the requested quantity (the pre-boost buy), so a boon boost cannot
+        // carry a buy over the bar, and the floor is sound because the mark is only
+        // ever written by a buy that cleared it. A revert anywhere below unwinds the
+        // arm with the rest of the purchase, so a failed buy never arms. Every ticket
+        // path through this body arms — manual buys and the far-future salvage swap's
+        // recycled ticket leg alike (a qualifying conversion is a real current-level
+        // ticket mint and may hold the record). Coin-paid buys stay off the record
+        // structurally: they route through FLIP redemption, never this body.
         uint256 lootboxFlipCredit;
+        if (entryQuantityScaled >= BIGGEST_BUY_MIN_TICKETS * 4 * QTY_SCALE) {
+            lootboxFlipCredit = coinflip.armRecord(
+                RECORD_KIND_BUY,
+                buyer,
+                entryQuantityScaled / (4 * QTY_SCALE)
+            );
+        }
 
         if (lootBoxAmount != 0 && lootBoxAmount < LOOTBOX_MIN) revert E();
 
@@ -1447,8 +1468,11 @@ contract DegenerusGameMintModule is
         uint48 ticketUnits;
         if (ticketCost != 0) {
             ticketUnits = uint48(entryQuantityScaled);
+            // Accumulated, not assigned: lootboxFlipCredit may already carry the
+            // biggest-buy record claim armed above.
+            uint256 ticketBonusCredit;
             (
-                lootboxFlipCredit,
+                ticketBonusCredit,
                 adjustedQty,
                 targetLevel,
                 flipMintUnits,
@@ -1465,6 +1489,7 @@ contract DegenerusGameMintModule is
                     remainingEth,
                     cachedJpFlag
                 );
+            lootboxFlipCredit += ticketBonusCredit;
         }
 
         // --- Lootbox setup (pool splits, RNG request, presale/distress tracking) ---
@@ -1516,9 +1541,13 @@ contract DegenerusGameMintModule is
             // no boon boost, and never the box total: whale-pass and afking covers
             // write the same (index, buyer) box slot, so a total would let a dust
             // purchase deposit arm the record on ETH those excluded paths contributed.
-            // Any claim settles inside Coinflip as flip credit — the box is untouched.
+            // Any claim joins this purchase's flip credit below — the box is untouched.
             if (lootBoxAmount >= BIGGEST_BOX_MIN_ETH) {
-                coinflip.armRecord(RECORD_KIND_LUCKBOX, buyer, lootBoxAmount);
+                lootboxFlipCredit += coinflip.armRecord(
+                    RECORD_KIND_LUCKBOX,
+                    buyer,
+                    lootBoxAmount
+                );
             }
             uint256 newPendingEth = ((lrWord >> LR_PENDING_ETH_SHIFT) &
                 LR_PENDING_ETH_MASK) + _packEthToMilliEth(lootBoxAmount);

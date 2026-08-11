@@ -4,7 +4,8 @@ pragma solidity 0.8.34;
 import {IsDGNRS} from "../interfaces/IsDGNRS.sol";
 import {RECORD_KIND_SPIN} from "../interfaces/ICoinflip.sol";
 import {
-    IDegenerusGameLootboxModule
+    IDegenerusGameLootboxModule,
+    IDegenerusGameBoonModule
 } from "../interfaces/IDegenerusGameModules.sol";
 import {ContractAddresses} from "../ContractAddresses.sol";
 import {DegenerusTraitUtils} from "../DegenerusTraitUtils.sol";
@@ -123,13 +124,14 @@ contract DegenerusGameDegeneretteModule is
     /// @param bracket The level/10 bracket whose one halfpass is now claimed.
     event WwxrpJackpotWhalePass(address indexed player, uint256 indexed bracket);
 
-    /// @notice A lootbox roll resolved as a Degenerette spin (WWXRP / FLIP×3 / ETH) — the single
-    ///         self-contained record of a box-spin outcome (replaces the per-spin DegeneretteResult /
-    ///         DegeneretteResolved for box rolls). Every reel + every output reward is here or, for
+    /// @notice A stake resolved as a Degenerette spin outside the ordinary bet flow — a lootbox
+    ///         roll (WWXRP / FLIP×3 / ETH) or a biggest-spin record bounty (FLIP×3) — the single
+    ///         self-contained record of that outcome (replaces the per-spin DegeneretteResult /
+    ///         DegeneretteResolved for these rolls). Every reel + every output reward is here or, for
     ///         the ETH recirc, in the fresh box's own (now-emitted) events.
     /// @param player The reward recipient.
-    /// @param betId Self-classifying id: bit 63 = box-origin sentinel, bits 62-60 = spin type
-    ///        (0=WWXRP, 1=FLIP, 2=ETH), bits 59-0 = seed entropy (unique per box-spin).
+    /// @param betId Self-classifying id: bit 63 = synthetic-origin sentinel, bits 62-60 = spin type
+    ///        (0=WWXRP, 1=FLIP, 2=ETH, 3=record bounty), bits 59-0 = seed entropy (unique per spin).
     /// @param packedSpins Per-spin reels packed low→high, each spin = [playerTraits:32 |
     ///        resultTraits:32 | score:8] (72 bits, spin 0 lowest); bits 216-223 = spin count;
     ///        bit 224 = FLIP survival flag (1 = the survival flip won; unused for WWXRP/ETH).
@@ -243,9 +245,15 @@ contract DegenerusGameDegeneretteModule is
     // biggest-bet record, which Coinflip owns alongside the other three
     // all-time records and the shared FLIP pool they pay from. The unit is the
     // bet's TOTAL ETH (the whole transaction's wager). Beating the mark by a
-    // fifth claims the category's accrued pool share as flip credit; any larger
-    // bet ratchets the mark for free. The award settles inside Coinflip at
-    // placement, so nothing rides the packed bet.
+    // fifth claims the category's accrued pool share; any larger bet ratchets the
+    // mark for free.
+    //
+    // The claim is drawn from the pool at placement but paid as a FLIP spin chain,
+    // not as flip credit: it rides the packed bet in whole FLIP (DEGEN_RECORD_*)
+    // and spins when the bet resolves, off the same word the bet itself is bound
+    // to. Placement already refuses an index whose word is revealed, so the claim
+    // is armed against an unknown word by construction — the same freeze the bet's
+    // own spins rest on.
 
     /// @dev Entry floor for the record path, on the bet's total ETH. A bet under this
     ///      never pays the record call at all, which keeps the external arm off the
@@ -422,6 +430,14 @@ contract DegenerusGameDegeneretteModule is
     uint256 private constant DEGEN_INDEX_SHIFT = 170;
     uint256 private constant DEGEN_ACTIVITY_SHIFT = 202;
     uint256 private constant DEGEN_HERO_SHIFT = 218; // 2 bits: hero quadrant (0..3)
+    /// @dev A biggest-spin record claim riding this bet, in WHOLE FLIP, at bits
+    ///      [220..255] — the word's free tail (every other field ends at bit 219), so
+    ///      carrying the claim costs no slot and no extra write. Saturating at the
+    ///      36-bit ceiling (~68.7 billion FLIP) rather than wrapping: unreachable in
+    ///      practice against a pool that drips RECORD_POOL_DAILY_FLIP a day, and a clamp
+    ///      can only ever under-pay where a wrap could hand out a wrong number.
+    uint256 private constant DEGEN_RECORD_SHIFT = 220;
+    uint256 private constant DEGEN_RECORD_MASK = (uint256(1) << 36) - 1;
 
     // Common masks
     uint256 private constant MASK_2 = 0x3;
@@ -578,7 +594,8 @@ contract DegenerusGameDegeneretteModule is
             spinCount,
             customTraits,
             heroQuadrant,
-            lvl
+            lvl,
+            funder == player
         );
 
         _collectBetFunds(funder, currency, totalBet, msg.value);
@@ -604,7 +621,8 @@ contract DegenerusGameDegeneretteModule is
         uint8 spinCount,
         uint32 customTraits,
         uint8 heroQuadrant,
-        uint24 lvl
+        uint24 lvl,
+        bool selfFunded
     ) private returns (uint256 totalBet) {
         // Single per-currency dispatch: spin cap + min bet together. The explicit
         // WWXRP arm keeps any unknown currency out of the WWXRP bounds — unsupported
@@ -644,16 +662,30 @@ contract DegenerusGameDegeneretteModule is
 
         // ETH-only per-bet bookkeeping: the biggest-spin record and the daily hero
         // wager ledger, sharing one currency branch.
+        uint256 recordBounty;
         if (currency == CURRENCY_ETH) {
             uint24 day = _simulatedDayIndex();
             // Gate the record behind the entry floor: a bet under it can never hold
             // the record, so skipping the call costs no outcome and keeps the external
             // arm off the bets that make up nearly all ETH volume. The candidate is
             // the bet's TOTAL ETH — the whole transaction's wager, spins included.
-            // Any claim settles inside Coinflip as flip credit. Gifted bets arm
-            // normally: the ETH is real and the record belongs to `player`.
+            // Gifted bets arm normally: the ETH is real and the record belongs to
+            // `player`.
+            //
+            // The claim does not pay out here. It rides the packed bet as whole FLIP
+            // and resolves as its own FLIP spin chain off the very word THIS bet is
+            // already bound to — an index whose word the gate above proved unrevealed,
+            // so a claim can never be armed against a known word. Beating the
+            // biggest-spin record therefore buys a spin, not flip credit.
             if (totalBet >= BIGGEST_SPIN_MIN_ETH) {
-                coinflip.armRecord(RECORD_KIND_SPIN, player, totalBet);
+                uint256 whole = coinflip.armRecord(
+                    RECORD_KIND_SPIN,
+                    player,
+                    totalBet
+                ) / LR_FLIP_SCALE;
+                recordBounty = whole > DEGEN_RECORD_MASK
+                    ? DEGEN_RECORD_MASK
+                    : whole;
             }
 
             // Daily hero symbol tracking (heroQuadrant validated to {0..3} above)
@@ -672,15 +704,52 @@ contract DegenerusGameDegeneretteModule is
             }
         }
 
+        // Degenerette stake boon: consumed here, AFTER every raw-stake consumer above (the
+        // biggest-spin record, the daily hero wager ledger, and the caller's `totalBet` —
+        // which funds collection and the pool credit). The bonus rides the PACKED bet only,
+        // so the player spins on more than they paid without any unfunded ETH entering the
+        // pools. ETH solvency is unaffected: an ETH win is capped at a share of the live pool
+        // at distribution time, never at the bet's own size.
+        //
+        // Self-or-operator-funded bets only, mirroring the coinflip deposit boon's funder
+        // gate: a permissionless gift must never spend the recipient's boon (a dust gift
+        // could burn it), so a gifted bet skips even the lane read. The bet's own currency
+        // lane is read inline first (this module shares the Game's storage), so a player
+        // holding no boon in THIS currency — the overwhelmingly common case — pays one
+        // SLOAD instead of a nested dispatch; boons in the other currency lanes are
+        // untouched by construction.
+        uint128 stakePerSpin = amountPerSpin;
+        uint16 boonBps;
+        if (
+            selfFunded &&
+            ((boonPacked[player].slot1 >> _degeneretteLaneShift(currency)) &
+                BP_DEGEN_LANE_TIER_MASK) != 0
+        ) {
+            boonBps = _consumeDegeneretteBoon(player, currency);
+        }
+        if (boonBps != 0) {
+            uint256 boostBase = totalBet;
+            if (currency == CURRENCY_ETH) {
+                if (boostBase > DEGENERETTE_BOON_ETH_CAP) boostBase = DEGENERETTE_BOON_ETH_CAP;
+            } else if (currency == CURRENCY_FLIP) {
+                if (boostBase > DEGENERETTE_BOON_FLIP_CAP) boostBase = DEGENERETTE_BOON_FLIP_CAP;
+            }
+            // Spread across the spins; integer division drops sub-spin dust, matching the
+            // whole-granule rounding used by the other award paths.
+            uint256 bonusPerSpin = ((boostBase * boonBps) / 10_000) / spinCount;
+            stakePerSpin = uint128(uint256(amountPerSpin) + bonusPerSpin);
+        }
+
         // Pack the bet
         uint256 packed = _packDegeneretteBet(
             customTraits,
             spinCount,
             currency,
-            amountPerSpin,
+            stakePerSpin,
             uint32(index),
             activityScore,
-            heroQuadrant
+            heroQuadrant,
+            recordBounty
         );
 
         uint64 nonce = degeneretteBetNonce[player];
@@ -761,6 +830,8 @@ contract DegenerusGameDegeneretteModule is
         uint32 index = uint32((packed >> DEGEN_INDEX_SHIFT) & MASK_32);
         uint16 activityScore = uint16((packed >> DEGEN_ACTIVITY_SHIFT) & MASK_16);
         uint8 heroQuadrant = uint8((packed >> DEGEN_HERO_SHIFT) & MASK_2);
+        uint256 recordBounty = (packed >> DEGEN_RECORD_SHIFT) &
+            DEGEN_RECORD_MASK;
 
         uint256 rngWord = lootboxRngWordByIndex[index];
         if (rngWord == 0) {
@@ -992,6 +1063,24 @@ contract DegenerusGameDegeneretteModule is
             totalPayout,
             firstResultTraits
         );
+
+        // Biggest-spin record bounty: the claim this bet armed at placement, staked as
+        // its own FLIP spin chain rather than paid as flip credit — beating the spin
+        // record buys a spin. Mint-only (no pool / ETH / claimable touch), so it is
+        // solvency-neutral and independent of everything settled above. The seed binds
+        // the bet's committed word and its immutable betId, so the outcome was fixed at
+        // fulfillment and no batch composition can steer it. The player's own picked
+        // traits carry over — the record spin uses the reel that set the record.
+        if (recordBounty != 0) {
+            _flipSpinChain(
+                player,
+                recordBounty * LR_FLIP_SCALE,
+                activityScore,
+                EntropyLib.hash2(rngWord, uint256(betId) ^ RECORD_SPIN_TAG),
+                customTraits,
+                BOX_SPIN_TYPE_RECORD
+            );
+        }
     }
 
     /// @dev Distributes payout to player. ETH-currency 3-tier split rule:
@@ -1110,6 +1199,26 @@ contract DegenerusGameDegeneretteModule is
         }
     }
 
+    /// @dev Delegates to the boon module to consume the degenerette stake boon in this
+    ///      bet's own currency lane. Returns 0 when the lane is empty or expired (an
+    ///      expired lane is cleared); the other currencies' lanes are never touched.
+    function _consumeDegeneretteBoon(
+        address player,
+        uint8 currency
+    ) private returns (uint16 boonBps) {
+        (bool ok, bytes memory data) = ContractAddresses
+            .GAME_BOON_MODULE
+            .delegatecall(
+                abi.encodeWithSelector(
+                    IDegenerusGameBoonModule.consumeDegeneretteBoon.selector,
+                    player,
+                    currency
+                )
+            );
+        if (!ok) _revertDelegate(data);
+        boonBps = abi.decode(data, (uint16));
+    }
+
     /// @dev Delegates to the lootbox open module to resolve lootbox rewards directly.
     ///      Applies activity-score EV multiplier (90-145%) to match regular lootbox opens.
     ///      The resolved box itemizes its contents via `LootBoxOpened` like every box path.
@@ -1150,7 +1259,8 @@ contract DegenerusGameDegeneretteModule is
         uint128 amountPerSpin,
         uint32 index,
         uint16 activityScore,
-        uint8 heroQuadrant
+        uint8 heroQuadrant,
+        uint256 recordBounty
     ) private pure returns (uint256 packed) {
         packed =
             (uint256(customTraits) << DEGEN_TRAITS_SHIFT) |
@@ -1159,7 +1269,8 @@ contract DegenerusGameDegeneretteModule is
             (uint256(amountPerSpin) << DEGEN_AMOUNT_SHIFT) |
             (uint256(index) << DEGEN_INDEX_SHIFT) |
             (uint256(activityScore) << DEGEN_ACTIVITY_SHIFT) |
-            (uint256(heroQuadrant) << DEGEN_HERO_SHIFT);
+            (uint256(heroQuadrant) << DEGEN_HERO_SHIFT) |
+            (recordBounty << DEGEN_RECORD_SHIFT);
     }
 
     // -------------------------------------------------------------------------
@@ -1659,6 +1770,12 @@ contract DegenerusGameDegeneretteModule is
     uint8 private constant BOX_SPIN_TYPE_WWXRP = 0;
     uint8 private constant BOX_SPIN_TYPE_FLIP = 1;
     uint8 private constant BOX_SPIN_TYPE_ETH = 2;
+    /// @dev Not a box roll: a biggest-spin record bounty spun as FLIP off the bet that
+    ///      won it. Shares the BoxSpin record so the reels stay itemized one way.
+    uint8 private constant BOX_SPIN_TYPE_RECORD = 3;
+    /// @dev Domain-separation tag for the record bounty's spin seed, keyed under the
+    ///      resolving bet's own word so the outcome is fixed at VRF fulfillment.
+    uint256 private constant RECORD_SPIN_TAG = 0x5265636f7264; // "Record"
     // BoxSpin.packedSpins layout: spin i occupies bits [i*72 .. i*72+71] as
     // [playerTraits:32 | resultTraits:32 | score:8]; bits 216-223 = spin count; bit 224 = survived.
     uint256 private constant BOX_SPIN_COUNT_SHIFT = 216;
@@ -1771,17 +1888,42 @@ contract DegenerusGameDegeneretteModule is
         uint32 customTraits
     ) external payable {
         if (address(this) != ContractAddresses.GAME) revert OnlyDelegatecall();
+        _flipSpinChain(
+            player,
+            totalStake,
+            activityScore,
+            seed,
+            customTraits,
+            BOX_SPIN_TYPE_FLIP
+        );
+    }
+
+    /// @dev The FLIP spin chain itself, shared by the lootbox FLIP roll and the
+    ///      biggest-spin record bounty. `spinType` tags the emitted betId so the indexer
+    ///      can tell the two apart, and routes the trait source: a record bounty always
+    ///      spins the winning bet's own picked traits — the all-zero pick included, which
+    ///      is valid on ordinary bets — while the box roll treats customTraits == 0 as
+    ///      "generate per spin". The mechanics are otherwise identical.
+    function _flipSpinChain(
+        address player,
+        uint256 totalStake,
+        uint16 activityScore,
+        uint256 seed,
+        uint32 customTraits,
+        uint8 spinType
+    ) private {
         if (totalStake == 0) return;
         uint128 perSpin = uint128(totalStake / BOX_FLIP_SPINS);
         if (perSpin == 0) return;
-        uint64 betId = _boxBetId(seed, BOX_SPIN_TYPE_FLIP);
+        uint64 betId = _boxBetId(seed, spinType);
         uint256 roiBps = _roiBpsFromScore(activityScore);
 
         uint256 total;
         uint256 packedSpins;
+        bool pickedTraits = spinType == BOX_SPIN_TYPE_RECORD;
         for (uint256 i; i < BOX_FLIP_SPINS; ) {
             uint256 ss = EntropyLib.hash2(seed, i);
-            uint32 playerTraits = customTraits != 0
+            uint32 playerTraits = (pickedTraits || customTraits != 0)
                 ? customTraits
                 : DegenerusTraitUtils.packedTraitsDegenerette(ss);
             uint32 resultTraits = DegenerusTraitUtils.packedTraitsDegenerette(

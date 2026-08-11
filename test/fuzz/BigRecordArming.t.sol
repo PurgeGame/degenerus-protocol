@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
 
+import {Vm} from "forge-std/Vm.sol";
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 
@@ -20,8 +21,21 @@ import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 contract BigRecordArmingTest is DeployProtocol {
     uint256 private constant LOOTBOX_ETH_SLOT = 15;
     uint256 private constant LOOTBOX_RNG_PACKED_SLOT = 33;
+    uint256 private constant LOOTBOX_RNG_WORD_SLOT = 34;
+    uint256 private constant DEGENERETTE_BET_NONCE_SLOT = 38;
     uint256 private constant PRIZE_POOLS_PACKED_SLOT = 2;
     uint256 private constant LB_AMOUNT_MASK = (uint256(1) << 128) - 1;
+
+    /// @dev Packed-bet tail carrying a biggest-spin record claim, in whole FLIP.
+    uint256 private constant DEGEN_RECORD_SHIFT = 220;
+    uint256 private constant DEGEN_RECORD_MASK = (uint256(1) << 36) - 1;
+    /// @dev BoxSpin betId spin-type tag for a record bounty (bits 62-60).
+    uint256 private constant BOX_SPIN_TYPE_RECORD = 3;
+
+    bytes32 private constant BET_PLACED_SIG =
+        keccak256("BetPlaced(address,uint32,uint64,uint256)");
+    bytes32 private constant BOX_SPIN_SIG =
+        keccak256("BoxSpin(address,uint64,uint256,uint256,uint256)");
 
     uint256 private constant SPIN_MIN_ETH = 1 ether;
     uint256 private constant BOX_MIN_ETH = 5 ether;
@@ -122,18 +136,56 @@ contract BigRecordArmingTest is DeployProtocol {
         assertEq(coinflip.biggestSpinEver(), 2 ether, "gifted bets arm the record");
     }
 
-    /// @notice A 20%-beat spin claims flip credit for the bettor inside Coinflip.
-    function testSpinClaimPaysFlipCredit() public {
+    /// @notice A 20%-beat spin draws its share from the pool but pays NO flip credit:
+    ///         the claim rides the packed bet in whole FLIP and spins at resolution.
+    function testSpinClaimRidesTheBetInsteadOfPayingCredit() public {
         _placeEth(player, 10 ether, 1);
         uint256 pool = coinflip.recordPool();
         uint256 expected = (pool * SHARE_FLOOR_BPS) / 10_000;
 
+        vm.recordLogs();
         _placeEth(rival, 12 ether, 1); // exactly mark + mark/5
+
+        assertEq(coinflip.recordPool(), pool - expected, "the pool pays the share");
         assertEq(
             coinflip.coinflipAmount(rival),
-            expected,
-            "the claim lands as the bettor's next-day flip stake"
+            0,
+            "a spin claim never lands as flip stake"
         );
+        assertEq(
+            (_lastBetPacked() >> DEGEN_RECORD_SHIFT) & DEGEN_RECORD_MASK,
+            expected / 1 ether,
+            "the claim rides the bet in whole FLIP"
+        );
+    }
+
+    /// @notice A bet under the beat bar carries no bounty at all.
+    function testRatchetOnlyBetCarriesNoBounty() public {
+        _placeEth(player, 10 ether, 1);
+
+        vm.recordLogs();
+        _placeEth(rival, 11 ether, 1); // +10%, under the fifth
+
+        assertEq(
+            (_lastBetPacked() >> DEGEN_RECORD_SHIFT) & DEGEN_RECORD_MASK,
+            0,
+            "a bare ratchet packs no bounty"
+        );
+    }
+
+    /// @notice The bounty resolves as its own FLIP spin chain off the bet's own word —
+    ///         tagged type 3, distinct from the bet's DegeneretteResolved.
+    function testSpinClaimSpinsAtResolution() public {
+        _placeEth(player, 10 ether, 1);
+        _placeEth(rival, 12 ether, 1); // claims the floor share
+        uint64 betId = _betNonce(rival);
+
+        _injectLootboxRngWord(1, uint256(keccak256("record-spin-word")));
+        vm.recordLogs();
+        vm.prank(rival);
+        game.resolveDegeneretteBets(address(0), _one(betId));
+
+        assertTrue(_sawRecordBoxSpin(), "the bounty spun as a type-3 BoxSpin");
     }
 
     // ---------------------------------------------------------------------
@@ -242,6 +294,29 @@ contract BigRecordArmingTest is DeployProtocol {
         );
     }
 
+    /// @notice The drawn share actually lands in the claimant's flip stake — the arm
+    ///         seeds the purchase's flip credit and must survive the ticket leg's own
+    ///         credit landing on top. Differential against an identical same-day buy
+    ///         that cannot claim (candidate == mark), so the ticket leg's quest and
+    ///         recycle credit cancels and the difference is the claim alone.
+    function testBuyClaimLandsInBuyerStake() public {
+        _buyTickets(player, 100); // bootstrap: mark = 100
+        uint256 pool = coinflip.recordPool();
+        uint256 expected = (pool * SHARE_FLOOR_BPS) / 10_000;
+
+        address bystander = makeAddr("arming_bystander");
+        vm.deal(bystander, 100_000 ether);
+
+        _buyTickets(rival, 120); // exactly mark + mark/5: claims the floor share
+        _buyTickets(bystander, 120); // candidate == new mark: identical buy, no claim
+
+        assertEq(
+            coinflip.coinflipAmount(rival) - coinflip.coinflipAmount(bystander),
+            expected,
+            "the claim joins the buyer's own purchase flip credit"
+        );
+    }
+
     // ---------------------------------------------------------------------
     // Helpers
     // ---------------------------------------------------------------------
@@ -261,6 +336,56 @@ contract BigRecordArmingTest is DeployProtocol {
             bytes32(uint256(PRIZE_POOLS_PACKED_SLOT)),
             bytes32(newPacked)
         );
+    }
+
+    /// @dev The `packed` word of the most recent BetPlaced in the recorded logs.
+    function _lastBetPacked() internal returns (uint256 packed) {
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+        for (uint256 i = logs.length; i != 0; --i) {
+            if (
+                logs[i - 1].topics.length != 0 &&
+                logs[i - 1].topics[0] == BET_PLACED_SIG
+            ) {
+                return abi.decode(logs[i - 1].data, (uint256));
+            }
+        }
+        revert("no BetPlaced");
+    }
+
+    /// @dev Did a record-bounty spin (BoxSpin, type 3) fire in the recorded logs?
+    function _sawRecordBoxSpin() internal returns (bool) {
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+        for (uint256 i; i < logs.length; ++i) {
+            if (
+                logs[i].topics.length == 0 ||
+                logs[i].topics[0] != BOX_SPIN_SIG
+            ) continue;
+            (uint64 betId, , , ) = abi.decode(
+                logs[i].data,
+                (uint64, uint256, uint256, uint256)
+            );
+            if ((uint256(betId) >> 60) & 7 == BOX_SPIN_TYPE_RECORD) return true;
+        }
+        return false;
+    }
+
+    function _one(uint64 betId) internal pure returns (uint64[] memory a) {
+        a = new uint64[](1);
+        a[0] = betId;
+    }
+
+    function _betNonce(address who) internal view returns (uint64) {
+        bytes32 slot = keccak256(
+            abi.encode(who, uint256(DEGENERETTE_BET_NONCE_SLOT))
+        );
+        return uint64(uint256(vm.load(address(game), slot)));
+    }
+
+    function _injectLootboxRngWord(uint48 index, uint256 rngWord) internal {
+        bytes32 slot = keccak256(
+            abi.encode(uint256(index), uint256(LOOTBOX_RNG_WORD_SLOT))
+        );
+        vm.store(address(game), slot, bytes32(rngWord));
     }
 
     function _placeEth(address who, uint128 perSpin, uint8 spins) internal {

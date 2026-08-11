@@ -113,6 +113,41 @@ contract DegenerusGameBoonModule is DegenerusGameStorage {
         emit BoonConsumed(player, 3, boostBps);
     }
 
+    /// @notice Consume a player's degenerette stake boon for a bet in `currency`
+    /// @dev Called via nested delegatecall from the Degenerette module during bet placement.
+    ///      Payable: an ETH bet carries its stake as msg.value, which delegatecall keeps in
+    ///      flight through this nested dispatch.
+    ///
+    ///      Each currency has its own independent lane; a bet reads and spends ONLY its own
+    ///      currency's lane, so a WWXRP bet can never burn a held ETH boon — boons for the
+    ///      other currencies are untouched by construction. An expired lane pays nothing
+    ///      and is cleared here.
+    /// @param player The player placing the bet
+    /// @param currency The bet's currency (0=ETH, 1=FLIP, 3=WWXRP)
+    /// @return boostBps The stake bonus in basis points (0 if none, else 400/800/1200)
+    function consumeDegeneretteBoon(
+        address player,
+        uint8 currency
+    ) external payable returns (uint16 boostBps) {
+        // Delegatecall-only: address(this) == GAME under the nested dispatch. A direct call on the
+        // deployed module would trap the in-flight msg.value (empty local state returns silently).
+        if (address(this) != ContractAddresses.GAME) revert OnlyDelegatecall();
+        if (player == address(0)) return 0;
+        BoonPacked storage bp = boonPacked[player];
+        uint256 s1 = bp.slot1;
+        uint256 shift = _degeneretteLaneShift(currency);
+        uint256 lane = (s1 >> shift) & BP_DEGEN_LANE_MASK;
+        uint8 tier = uint8(lane & BP_DEGEN_LANE_TIER_MASK);
+        if (tier == 0) return 0;
+        if (!_degeneretteLaneLive(lane, uint24(_simulatedDayIndex()))) {
+            bp.slot1 = s1 & ~(BP_DEGEN_LANE_MASK << shift);
+            return 0;
+        }
+        boostBps = _degeneretteTierToBps(tier);
+        bp.slot1 = s1 & ~(BP_DEGEN_LANE_MASK << shift);
+        emit BoonConsumed(player, 4, boostBps);
+    }
+
     // =========================================================================
     // Boon Maintenance Functions (called via nested delegatecall from LootboxModule)
     // =========================================================================
@@ -273,6 +308,20 @@ contract DegenerusGameBoonModule is DegenerusGameStorage {
             }
         }
 
+        // --- Slot 1: Degenerette lanes (one independent boon per bet currency) ---
+        bool degeneretteLive;
+        for (uint256 i; i < 3; ++i) {
+            uint256 laneShift = BP_DEGEN_LANE0_SHIFT + i * 24;
+            uint256 lane = (s1 >> laneShift) & BP_DEGEN_LANE_MASK;
+            if (lane & BP_DEGEN_LANE_TIER_MASK == 0) continue;
+            if (_degeneretteLaneLive(lane, currentDay)) {
+                degeneretteLive = true;
+            } else {
+                s1 = s1 & ~(BP_DEGEN_LANE_MASK << laneShift);
+                changed1 = true;
+            }
+        }
+
         // Write back only changed slots
         if (changed0) bp.slot0 = s0;
         if (changed1) bp.slot1 = s1;
@@ -284,6 +333,7 @@ contract DegenerusGameBoonModule is DegenerusGameStorage {
             purchaseTierLocal != 0 ||
             decimatorTierLocal != 0 ||
             activityPendingLocal != 0 ||
+            degeneretteLive ||
             deityPassTierLocal != 0);
     }
 

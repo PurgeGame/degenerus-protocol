@@ -438,6 +438,36 @@ contract FarFutureSalvageSwapTest is DeployProtocol {
         assertGt(totalBudget, 0, "budget must be positive");
     }
 
+    /// @notice The salvage swap's recycled ticket leg is a real current-level ticket mint
+    ///         and arms the biggest-buy record like any purchase through the mint body,
+    ///         judged in raw whole tickets. Pins the design ruling that a qualifying
+    ///         conversion may hold the record (farming it this way is dominated by simply
+    ///         buying tickets: the seller pays the salvage haircut on a ~5x position).
+    function test_SWAP10_SalvageTicketLegArmsBuyRecordInRawTickets() public {
+        (uint32[] memory levels, uint256[] memory qtys, uint256[] memory idxs) =
+            _setupExecutableSwap(6, 600, uint256(keccak256("record_jitter")), 500 ether);
+
+        (, , uint256 ticketWei, , ) = game.previewSellFarFutureEntries(seller, levels, qtys);
+        uint256 oneTicketWei = PriceLookupLib.priceForLevel(game.level() + 1);
+        assertGe(
+            ticketWei,
+            100 * oneTicketWei,
+            "fixture must clear the 100-ticket record floor to be meaningful"
+        );
+
+        vm.prank(seller);
+        game.sellFarFutureEntries(seller, levels, qtys, idxs);
+
+        // Same unit math as the mint body: qty in purchase units (400 = one whole
+        // ticket), then whole tickets.
+        uint256 qty = (ticketWei * 400) / oneTicketWei;
+        assertEq(
+            coinflip.biggestBuyEver(),
+            qty / 400,
+            "the salvage leg holds the record at its raw whole-ticket count"
+        );
+    }
+
     /// @notice (b) Entry floor: a swap whose totalBudget < oneTicketWei/4 (one entry) REVERTS; a swap that
     ///         clears the entry floor succeeds and the ticket leg delivers >= one entry. The floor is one
     ///         ENTRY of budget even though quantities are whole-ticket multiples (4 entries = 1 whole ticket).

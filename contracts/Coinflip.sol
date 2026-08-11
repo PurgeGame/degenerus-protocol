@@ -23,7 +23,7 @@ pragma solidity 0.8.34;
  */
 
 import {IDegenerusGame} from "./interfaces/IDegenerusGame.sol";
-import {RECORD_KIND_FLIP, RECORD_KIND_SPIN, RECORD_KIND_LUCKBOX, RECORD_KIND_BUY} from "./interfaces/ICoinflip.sol";
+import {RECORD_KIND_FLIP, RECORD_KIND_SPIN, RECORD_KIND_LUCKBOX} from "./interfaces/ICoinflip.sol";
 import {IDegenerusQuests} from "./interfaces/IDegenerusQuests.sol";
 import {IDegenerusJackpots} from "./interfaces/IDegenerusJackpots.sol";
 import {ContractAddresses} from "./ContractAddresses.sol";
@@ -130,7 +130,6 @@ contract Coinflip {
     error OnlyFLIP();
     error OnlysDGNRS();
     error OnlyDegenerusGame();
-    error BadRecordKind();
     error AutoRebuyNotEnabled();
     error AutoRebuyAlreadyEnabled();
     error RngLocked();
@@ -808,6 +807,22 @@ contract Coinflip {
             }
         }
 
+        // Flip record: judged on the raw direct-deposit amount (recordAmount — zero for
+        // every credit path, so credits and record claims can never re-arm), not bonuses
+        // or existing stake. The entry-floor gate keeps the record SLOAD off ordinary
+        // deposits. No RNG-lock gate: the claim is fixed by pool state alone and rides
+        // this deposit's own coin toss, so there is nothing to arm against a known word.
+        // Armed AFTER the boon boost (a claim never earns the boon) and BEFORE the stake
+        // read below, so the claim joins this deposit in one write and the read still
+        // follows every external call this frame makes.
+        if (recordAmount >= BIGGEST_FLIP_MIN && recordAmount > biggestFlipEver) {
+            coinflipDeposit += _armBigRecord(
+                RECORD_KIND_FLIP,
+                player,
+                recordAmount
+            );
+        }
+
         // Determine which future day this stake applies to (always the next window).
         uint24 targetDay = _targetFlipDay();
 
@@ -826,23 +841,19 @@ contract Coinflip {
         if (trackTop && player != ContractAddresses.SDGNRS) {
             _updateTopDayBettor(player, recordAmount, targetDay);
         }
+        // `coinflipDeposit` is everything credited by this call — principal, quest and
+        // recycling bonuses, the boon boost, and any flip-record claim folded in above.
+        // BigRecordUpdated itemizes the claim's own share.
         emit CoinflipStakeUpdated(player, targetDay, coinflipDeposit, newStake);
-
-        // Flip record: judged on the raw direct-deposit amount (recordAmount — zero for
-        // every credit path, so credits and record claims can never re-arm), not bonuses
-        // or existing stake. The entry-floor gate keeps the record SLOAD off ordinary
-        // deposits. No RNG-lock gate: the claim pays instantly and independently of any
-        // flip outcome, so there is nothing to arm against a known word.
-        if (recordAmount >= BIGGEST_FLIP_MIN && recordAmount > biggestFlipEver) {
-            _armBigRecord(RECORD_KIND_FLIP, player, recordAmount);
-        }
     }
 
     /// @dev Ratchets record `kind` to `candidate` and pays the claim when the candidate
     ///      clears the standing mark by a fifth: an accruing share of the record pool —
     ///      the RECORD_SHARE_* floor plus per-day growth since this category last
-    ///      claimed, clamped at the ceiling — credited as next-day flip stake, never a
-    ///      wallet mint. Every other larger candidate ratchets the mark alone, raising
+    ///      claimed, clamped at the ceiling. The claim is RETURNED, never credited here:
+    ///      every arming path already pays the player FLIP in the same transaction, so
+    ///      the caller folds the claim into that credit rather than taking a second
+    ///      stake write. Every other larger candidate ratchets the mark alone, raising
     ///      the bar while the share keeps accruing. The first mark a record ever takes
     ///      has no bar to clear and draws the share accrued since deploy (the
     ///      constructor starts every category clock at the deploy day). Marks never
@@ -857,19 +868,19 @@ contract Coinflip {
     ///        legs are each uint128-bound (claimableStored width, FLIP._burn supply
     ///        accounting), the spin and lootbox units are ETH wei, and the buy unit
     ///        is a whole-ticket count.
+    /// @return paid FLIP drawn from the record pool for the caller to credit.
     function _armBigRecord(
         uint8 kind,
         address player,
         uint256 candidate
-    ) private {
+    ) private returns (uint128 paid) {
         uint128 mark;
         if (kind == RECORD_KIND_FLIP) mark = biggestFlipEver;
         else if (kind == RECORD_KIND_SPIN) mark = biggestSpinEver;
         else if (kind == RECORD_KIND_LUCKBOX) mark = biggestLuckboxEver;
         else mark = biggestBuyEver;
-        if (candidate <= mark) return;
+        if (candidate <= mark) return 0;
 
-        uint128 paid;
         uint256 sdgnrsPaid;
         // A first mark has no bar to clear; after that the candidate must clear the
         // mark by an exact fifth: `mark + mark / 5` floors the bar, so a mark not
@@ -888,8 +899,6 @@ contract Coinflip {
             paid = uint128((uint256(pool) * shareBps) / 10_000);
             if (paid != 0) {
                 recordPool = pool - paid;
-                // recordAmount = 0: a claim credit can never re-arm the flip record.
-                _addDailyFlip(player, paid, 0, false);
             }
             // The sDGNRS leg rides the same accrued share at 1/500 scale, drawn from
             // the sDGNRS reward pool via the game (which sDGNRS authorizes).
@@ -923,22 +932,20 @@ contract Coinflip {
     /// @notice Arm a game-side all-time record for `player` with `candidate` in the
     ///         record's own unit (spin and lootbox deposit: ETH wei; buy: whole tickets).
     /// @dev GAME only — the modules gate each record's entry floor at the call site
-    ///      before paying for this call. The flip record arms internally on direct
-    ///      deposits and is not reachable here.
-    /// @custom:reverts BadRecordKind If `kind` is the flip record or out of range.
+    ///      before paying for this call, and each passes its own kind as a constant.
+    ///      The flip record arms internally on direct deposits; nothing routes it here.
+    /// @return The FLIP claimed from the pool, for the calling module to fold into the
+    ///         FLIP its own path already pays. Nothing is credited here.
     function armRecord(
         uint8 kind,
         address player,
         uint256 candidate
-    ) external onlyDegenerusGameContract {
-        if (kind == RECORD_KIND_FLIP || kind > RECORD_KIND_BUY) {
-            revert BadRecordKind();
-        }
-        _armBigRecord(kind, player, candidate);
+    ) external onlyDegenerusGameContract returns (uint256) {
+        return _armBigRecord(kind, player, candidate);
     }
 
     /// @notice Add FLIP to the shared record pool.
-    /// @dev GAME only. Level transitions push 0.1% of the completed level's prize pool,
+    /// @dev GAME only. Level transitions push 0.2% of the completed level's prize pool,
     ///      converted notionally at that level's ticket price — no ETH moves. Clamped
     ///      at the pool's uint128 width rather than wrapping, so a huge push cannot
     ///      zero an accrued pool.

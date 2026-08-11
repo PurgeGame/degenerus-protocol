@@ -405,6 +405,17 @@ interface IDegenerusGameBoonModule {
     /// @return boostBps Boost value in basis points
     function consumeDecimatorBoost(address player) external returns (uint16 boostBps);
 
+    /// @notice Consumes a player's degenerette stake boon for a bet in `currency`
+    /// @dev Each currency has its own independent boon lane; only the bet currency's
+    ///      lane is read and spent.
+    /// @param player Address of the player
+    /// @param currency Bet currency (0=ETH, 1=FLIP, 3=WWXRP)
+    /// @return boostBps Stake bonus in basis points (0 if the lane is empty or expired)
+    function consumeDegeneretteBoon(
+        address player,
+        uint8 currency
+    ) external payable returns (uint16 boostBps);
+
     /// @notice Clear all expired boons for a player
     /// @param player Address of the player
     /// @return hasAnyBoon True if any active boon remains
@@ -589,14 +600,6 @@ interface IGameAfkingModule {
 ///      both bodies run in the Game's storage context (delegatecall), so the resolved
 ///      player is passed explicitly and msg.value rides through the call.
 interface IDegenerusGameFoilPackModule {
-    /// @notice Arm the biggest-buy record for a settled router purchase. Delegatecall
-    ///         target invoked by the purchase router after its module leg settles;
-    ///         hosted here because neither the Game nor the mint module has EIP-170
-    ///         room for the arm site.
-    /// @param buyer Player the record and any claim accrue to (already operator-resolved).
-    /// @param entryQuantityScaled The requested raw pre-boost quantity (entries x QTY_SCALE).
-    function armBuyRecord(address buyer, uint256 entryQuantityScaled) external payable;
-
     /// @notice Deliver one foil pack (four tickets) for the active cycle. Delegatecall
     ///         target invoked by the mint module's purchase path (the foil leg of an
     ///         additive ticket/lootbox/foil buy). Handles the foil leg's own payment

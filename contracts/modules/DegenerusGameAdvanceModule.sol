@@ -1028,12 +1028,12 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
       +======================================================================+*/
     function _endPhase(uint24 lvl) private {
         phaseTransitionActive = true;
-        // Fund the all-time record pool with 0.1% of the completed level's achieved
+        // Fund the all-time record pool with 0.2% of the completed level's achieved
         // prize pool, converted notionally at that level's ticket price — pure FLIP
         // supply, no ETH moves. Read before the x00 overwrite below, so a century
         // level funds off its achieved pool rather than the reset artifact.
         uint256 recordFundFlip = (levelPrizePool[lvl] * PRICE_COIN_UNIT) /
-            (PriceLookupLib.priceForLevel(lvl) * 1000);
+            (PriceLookupLib.priceForLevel(lvl) * 500);
         if (recordFundFlip != 0) coinflip.fundRecordPool(recordFundFlip);
         if (lvl % 100 == 0) {
             levelPrizePool[lvl] = _getFuturePrizePool() / 3;

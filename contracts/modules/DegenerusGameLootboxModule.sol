@@ -127,9 +127,9 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
 
     /// @notice Unified lootbox reward event for boon awards
     /// @param player The player receiving the reward
-    /// @param rewardType The type of reward (2=CoinflipBoon, 4=Boost5, 5=Boost15, 6=Boost25/Purchase, 8=DecimatorBoost, 9=WhaleBoon, 10=ActivityBoon/DeityPassBoon, 11=LazyPassBoon, 12=QuestShield)
+    /// @param rewardType The type of reward (2=CoinflipBoon, 4=Boost5, 5=Boost15, 6=Boost25/Purchase, 8=DecimatorBoost, 9=WhaleBoon, 10=ActivityBoon/DeityPassBoon, 11=LazyPassBoon, 12=QuestShield, 13=DegeneretteBoon)
     /// @param lootboxAmount The lootbox amount spent (ETH-equivalent for FLIP lootboxes)
-    /// @param amount Primary reward amount (varies by type: BPS for boosts, token amount for boons)
+    /// @param amount Primary reward amount (varies by type: BPS for boosts, token amount for boons; for type 13 the rolled boonType 32-40, which identifies the boon's currency and size)
     event LootBoxReward(
         address indexed player,
         uint8 indexed rewardType,
@@ -150,7 +150,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     /// @param recipient The player receiving the boon
     /// @param day The day index when the boon was issued
     /// @param slot The slot index (0-2) of the boon
-    /// @param boonType The type of boon issued (1-31)
+    /// @param boonType The type of boon issued (1-40; 10-12 and 20-21 are unused)
     event DeityBoonIssued(
         address indexed deity,
         address indexed recipient,
@@ -419,6 +419,18 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     uint8 private constant BOON_LAZY_PASS_25 = 30;
     /// @dev Boon type: 50% lazy pass discount
     uint8 private constant BOON_LAZY_PASS_50 = 31;
+    /// @dev Degenerette stake boons, contiguous 32-40 (ids 10-12 and 20-21 stay free).
+    ///      Each targets ONE bet currency; the tier byte written to `boonPacked` re-orders
+    ///      them by value (see `_degeneretteTierToBps`).
+    uint8 private constant BOON_DEGEN_ETH_4 = 32;
+    uint8 private constant BOON_DEGEN_ETH_8 = 33;
+    uint8 private constant BOON_DEGEN_ETH_12 = 34;
+    uint8 private constant BOON_DEGEN_FLIP_4 = 35;
+    uint8 private constant BOON_DEGEN_FLIP_8 = 36;
+    uint8 private constant BOON_DEGEN_FLIP_12 = 37;
+    uint8 private constant BOON_DEGEN_WWXRP_4 = 38;
+    uint8 private constant BOON_DEGEN_WWXRP_8 = 39;
+    uint8 private constant BOON_DEGEN_WWXRP_12 = 40;
 
     // Deity boon weights (used for weighted random selection)
     /// @dev Weight for 5% coinflip boon
@@ -462,11 +474,11 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     /// @dev Weight for 25 point activity boon
     uint16 private constant BOON_WEIGHT_ACTIVITY_25 = 30;
     /// @dev Weight for 50 point activity boon
-    uint16 private constant BOON_WEIGHT_ACTIVITY_50 = 8;
+    uint16 private constant BOON_WEIGHT_ACTIVITY_50 = 4;
     /// @dev Weight for the quest-streak-shield boon
     uint16 private constant BOON_WEIGHT_QUEST_SHIELD = 200;
     /// @dev Weight for whale pass award
-    uint16 private constant BOON_WEIGHT_WHALE_PASS = 8;
+    uint16 private constant BOON_WEIGHT_WHALE_PASS = 2;
     /// @dev Weight for 10% lazy pass discount boon
     uint16 private constant BOON_WEIGHT_LAZY_PASS_10 = 30;
     /// @dev Weight for 25% lazy pass discount boon
@@ -475,16 +487,28 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     uint16 private constant BOON_WEIGHT_LAZY_PASS_50 = 2;
     /// @dev Combined weight of deity pass discount boons (10% + 25% + 50%)
     uint16 private constant BOON_WEIGHT_DEITY_PASS_ALL = 40;
+    /// @dev Weights for the degenerette stake boons. ETH and FLIP taper hard (200/50/10)
+    ///      because their stake bonus is real value; WWXRP sits flat at 200 across all three
+    ///      tiers — it is worthless by design, so a bigger WWXRP boon costs the game nothing.
+    uint16 private constant BOON_WEIGHT_DEGEN_ETH_4 = 200;
+    uint16 private constant BOON_WEIGHT_DEGEN_ETH_8 = 50;
+    uint16 private constant BOON_WEIGHT_DEGEN_ETH_12 = 10;
+    uint16 private constant BOON_WEIGHT_DEGEN_FLIP_4 = 200;
+    uint16 private constant BOON_WEIGHT_DEGEN_FLIP_8 = 50;
+    uint16 private constant BOON_WEIGHT_DEGEN_FLIP_12 = 10;
+    uint16 private constant BOON_WEIGHT_DEGEN_WWXRP_4 = 200;
+    uint16 private constant BOON_WEIGHT_DEGEN_WWXRP_8 = 200;
+    uint16 private constant BOON_WEIGHT_DEGEN_WWXRP_12 = 200;
 
     /// @dev Fixed nominal deity-pass price for the boon-chance normalization (mid-curve k=16:
     ///      BASE + 16·17/2 ether). The live triangular price is collectively player-movable
     ///      (pass purchases), so it must not reach `totalChance` — a constant keeps the hit
     ///      boundary a pure function of committed inputs. The mis-pricing only moves boon
-    ///      FREQUENCY, never a payout amount, and is bounded by the deity tiers' 40/1498
+    ///      FREQUENCY, never a payout amount, and is bounded by the deity tiers' 40/2608
     ///      weight share.
     uint256 private constant DEITY_PASS_NOMINAL_PRICE = DEITY_PASS_BASE + 136 ether;
     /// @dev Total weight sum when decimator boons are allowed (includes the +200 quest-shield weight)
-    uint16 private constant BOON_WEIGHT_TOTAL = 1498;
+    uint16 private constant BOON_WEIGHT_TOTAL = 2608;
     /// @dev Cursor position where the decimator band starts in the `_boonFromRoll` walk
     ///      (sum of the coinflip + lootbox + purchase weights ahead of it).
     uint16 private constant BOON_WEIGHT_PRE_DECIMATOR = 982;
@@ -1670,7 +1694,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         // currentLevel == level + 1, so this is the price at the stored `level`.
         uint256 priceWei = PriceLookupLib.priceForLevel(currentLevel - 1);
 
-        // Bounded weight/value arithmetic: fixed uint16 weights (running sum <= 1498) times
+        // Bounded weight/value arithmetic: fixed uint16 weights (running sum <= 2608) times
         // per-boon max values each < ~1e34; no accumulation approaches 2^256.
         unchecked {
         // Coinflip boons (max bonus on 100k FLIP deposit)
@@ -1795,6 +1819,32 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
             weightedMax += BOON_WEIGHT_LAZY_PASS_50 * lpMax50;
         }
 
+        // Degenerette stake boons: +4/8/12% of the next bet's stake, capped per currency at
+        // the enforcement site. WWXRP carries WEIGHT but no VALUE (worthless by design, like
+        // the activity and quest-shield tiers), so only its weight enters the normalization.
+        {
+            totalWeight += BOON_WEIGHT_DEGEN_ETH_4;
+            weightedMax += BOON_WEIGHT_DEGEN_ETH_4 * ((DEGENERETTE_BOON_ETH_CAP * 400) / 10_000);
+            totalWeight += BOON_WEIGHT_DEGEN_ETH_8;
+            weightedMax += BOON_WEIGHT_DEGEN_ETH_8 * ((DEGENERETTE_BOON_ETH_CAP * 800) / 10_000);
+            totalWeight += BOON_WEIGHT_DEGEN_ETH_12;
+            weightedMax += BOON_WEIGHT_DEGEN_ETH_12 * ((DEGENERETTE_BOON_ETH_CAP * 1200) / 10_000);
+
+            totalWeight += BOON_WEIGHT_DEGEN_FLIP_4;
+            weightedMax += BOON_WEIGHT_DEGEN_FLIP_4 *
+                _flipToEthValue((DEGENERETTE_BOON_FLIP_CAP * 400) / 10_000, priceWei);
+            totalWeight += BOON_WEIGHT_DEGEN_FLIP_8;
+            weightedMax += BOON_WEIGHT_DEGEN_FLIP_8 *
+                _flipToEthValue((DEGENERETTE_BOON_FLIP_CAP * 800) / 10_000, priceWei);
+            totalWeight += BOON_WEIGHT_DEGEN_FLIP_12;
+            weightedMax += BOON_WEIGHT_DEGEN_FLIP_12 *
+                _flipToEthValue((DEGENERETTE_BOON_FLIP_CAP * 1200) / 10_000, priceWei);
+
+            totalWeight += BOON_WEIGHT_DEGEN_WWXRP_4;
+            totalWeight += BOON_WEIGHT_DEGEN_WWXRP_8;
+            totalWeight += BOON_WEIGHT_DEGEN_WWXRP_12;
+        }
+
         }
         if (totalWeight == 0) return (0, 0);
         avgMaxValue = weightedMax / totalWeight;
@@ -1808,7 +1858,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         uint256 roll
     ) private pure returns (uint8 boonType) {
         // Fixed uint16 weight constants; the running cursor sum never exceeds BOON_WEIGHT_TOTAL
-        // (1498), so no accumulation can overflow — the checked adds are pure overhead.
+        // (2608), so no accumulation can overflow — the checked adds are pure overhead.
         unchecked {
         uint256 cursor = 0;
         cursor += BOON_WEIGHT_COINFLIP_5;
@@ -1863,6 +1913,24 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         if (roll < cursor) return BOON_LAZY_PASS_25;
         cursor += BOON_WEIGHT_LAZY_PASS_50;
         if (roll < cursor) return BOON_LAZY_PASS_50;
+        cursor += BOON_WEIGHT_DEGEN_ETH_4;
+        if (roll < cursor) return BOON_DEGEN_ETH_4;
+        cursor += BOON_WEIGHT_DEGEN_ETH_8;
+        if (roll < cursor) return BOON_DEGEN_ETH_8;
+        cursor += BOON_WEIGHT_DEGEN_ETH_12;
+        if (roll < cursor) return BOON_DEGEN_ETH_12;
+        cursor += BOON_WEIGHT_DEGEN_FLIP_4;
+        if (roll < cursor) return BOON_DEGEN_FLIP_4;
+        cursor += BOON_WEIGHT_DEGEN_FLIP_8;
+        if (roll < cursor) return BOON_DEGEN_FLIP_8;
+        cursor += BOON_WEIGHT_DEGEN_FLIP_12;
+        if (roll < cursor) return BOON_DEGEN_FLIP_12;
+        cursor += BOON_WEIGHT_DEGEN_WWXRP_4;
+        if (roll < cursor) return BOON_DEGEN_WWXRP_4;
+        cursor += BOON_WEIGHT_DEGEN_WWXRP_8;
+        if (roll < cursor) return BOON_DEGEN_WWXRP_8;
+        cursor += BOON_WEIGHT_DEGEN_WWXRP_12;
+        if (roll < cursor) return BOON_DEGEN_WWXRP_12;
         }
     }
 
@@ -2074,6 +2142,41 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
                 // tickets start at the level when the player calls claimWhalePass —
                 // not necessarily `level + 1` here.
                 emit LootBoxWhalePassJackpot(player, originalAmount, level + 1, WHALE_PASS_ENTRIES_PER_LEVEL, 0, 0);
+            }
+            return;
+        }
+
+        // Degenerette stake boons (types 32-40) — slot1, one independent 24-bit lane per
+        // bet currency (ETH / FLIP / WWXRP). A roll competes ONLY within its own currency's
+        // lane, so boons for different currencies coexist and a held boon is never displaced
+        // by one of another currency. The boon is spent by the next bet in ITS OWN currency.
+        if (boonType >= BOON_DEGEN_ETH_4 && boonType <= BOON_DEGEN_WWXRP_12) {
+            // 32/33/34 -> ETH lane, 35/36/37 -> FLIP lane, 38/39/40 -> WWXRP lane;
+            // within a lane the three types map to tier 1/2/3 (+4/8/12%).
+            uint8 offset = boonType - BOON_DEGEN_ETH_4;
+            uint8 newTier = (offset % 3) + 1;
+            uint256 laneShift = BP_DEGEN_LANE0_SHIFT + uint256(offset / 3) * 24;
+            uint256 s1 = bp.slot1;
+            uint256 lane = (s1 >> laneShift) & BP_DEGEN_LANE_MASK;
+            // A dead lane never blocks a fresh award: the deity gift path applies without
+            // the box-roll expiry sweep, so liveness is re-checked here, not assumed swept.
+            uint8 heldTier = _degeneretteLaneLive(lane, uint24(currentDay))
+                ? uint8(lane & BP_DEGEN_LANE_TIER_MASK)
+                : 0;
+            // Only a genuine tier upgrade applies the boon and (re)sets its expiry; an
+            // ignored lower/equal-tier roll is a no-op and must not refresh the timer.
+            if (newTier > heldTier) {
+                uint256 stamp = (isDeity ? uint256(uint24(day)) : uint256(uint24(currentDay))) &
+                    BP_DEGEN_LANE_DAY_MASK;
+                uint256 fresh = (stamp << BP_DEGEN_LANE_DAY_SHIFT) |
+                    (isDeity ? BP_DEGEN_LANE_DEITY_BIT : 0) |
+                    newTier;
+                bp.slot1 = (s1 & ~(BP_DEGEN_LANE_MASK << laneShift)) | (fresh << laneShift);
+            }
+            if (!isDeity) {
+                // The value field is the rolled boonType itself (32-40): unlike bps —
+                // identical across currencies — it identifies both the currency and size.
+                emit LootBoxReward(player, 13, originalAmount, boonType);
             }
             return;
         }
@@ -2496,7 +2599,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     /// @param day The day index
     /// @param slot The slot index (0-2)
     /// @param rngWord The day's VRF word (`rngWordByDay[day]`, nonzero-checked by the caller)
-    /// @return boonType The boon type (1-31)
+    /// @return boonType The boon type (1-40; 10-12 and 20-21 are unused)
     /// @dev Static modulus + static mapping: the day's three-slot menu is fixed the moment
     ///      the word lands. Eligibility must not reach the modulus — the issuer controls
     ///      issuance timing, so any live term here would let a deity re-map a slot by
@@ -2505,7 +2608,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     ///      live term): a gift slot must never arrive dead, so those types are
     ///      lootbox-only and every menu slot is always issuable to any valid recipient.
     ///      The reduced roll skips both bands arithmetically — the composed mapping is
-    ///      exactly the renormalized 1,408-weight table over the same walk.
+    ///      exactly the renormalized 2,518-weight table over the same walk.
     function _deityBoonForSlot(
         address deity,
         uint24 day,

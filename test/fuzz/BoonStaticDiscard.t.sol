@@ -7,7 +7,7 @@ import {DeityBoonViewer} from "../../contracts/DeityBoonViewer.sol";
 
 /// @title BoonStaticDiscard -- static boon table, discard-at-delivery, deity exclusions
 /// @notice Boon outcomes are pure functions of (word, player, amount). LOOTBOX draws walk
-///         the full 1,498-weight table with dec + deity tiers always present. Live state
+///         the full 2,608-weight table with dec + deity tiers always present. Live state
 ///         only keep-vs-discards the already-determined type, and ONLY for permanently dead
 ///         outcomes (deity-pass tiers when a pass is held or supply is capped); decimator
 ///         tiers always deliver and bank for a later window (BoonDiscarded, no write).
@@ -176,7 +176,7 @@ contract BoonStaticDiscard is DeployProtocol {
     /// @notice The deity three-slot menu excludes the decimator AND deity-pass families
     ///         unconditionally (they are lootbox-only), so every gift slot is always
     ///         issuable: across many candidate deities, no menu slot may ever show either
-    ///         family. Under the full 1,498-weight table ~6% of 600 sampled slots would --
+    ///         family. Under the full 2,608-weight table ~3.5% of 600 sampled slots would --
     ///         zero here proves the two-band skip is live in the viewer's mirror.
     function test_deityMenuNeverContainsDecOrDeityTiers() public {
         _completeDay(0xD15C0003);

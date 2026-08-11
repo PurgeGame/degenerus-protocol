@@ -158,9 +158,6 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     ///      this scale-down from the sDGNRS reward pool (0.01%-0.15% per claim).
     uint256 private constant RECORD_SDGNRS_SCALE_DIV = 500;
 
-    /// @dev Entry floor for the biggest-buy record, in whole tickets.
-    uint256 private constant BIGGEST_BUY_MIN_TICKETS = 100;
-
     /// @dev Base cost for RNG nudge (100 FLIP), compounds +50% per queued nudge.
     uint256 private constant RNG_NUDGE_BASE_COST = 100 ether;
 
@@ -736,34 +733,6 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
                 payKind
             );
         }
-
-        // The biggest-buy candidate is the plain ticket leg alone —
-        // entryQuantityScaled never includes the foil pack's own tickets, so a
-        // foil purchase still competes on the tickets it bought outright.
-        _armBuyRecord(buyer, entryQuantityScaled);
-    }
-
-    /// @dev Offer a settled manual ticket buy against the biggest-buy record — both
-    ///      manual-purchase entries (purchase, buyLootboxAndPresaleBox) arm here once
-    ///      their module leg has settled, so a reverted buy never arms. Coin-paid
-    ///      buys stay off the record structurally: they route through FLIP
-    ///      redemption, never these entries. The floor gate keeps the dispatch off
-    ///      ordinary buys; the arm body is dispatched through the foil-pack module
-    ///      purely as bytecode hosting — neither this contract nor the mint module
-    ///      has EIP-170 room for the arm site itself.
-    function _armBuyRecord(address buyer, uint256 entryQuantityScaled) private {
-        if (entryQuantityScaled >= BIGGEST_BUY_MIN_TICKETS * 4 * QTY_SCALE) {
-            (bool okArm, bytes memory dataArm) = ContractAddresses
-                .GAME_FOILPACK_MODULE
-                .delegatecall(
-                    abi.encodeWithSelector(
-                        IDegenerusGameFoilPackModule.armBuyRecord.selector,
-                        buyer,
-                        entryQuantityScaled
-                    )
-                );
-            if (!okArm) _revertDelegate(dataArm);
-        }
     }
 
     function _purchaseFor(
@@ -988,7 +957,6 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
                 )
             );
         if (!ok) _revertDelegate(data);
-        _armBuyRecord(buyer, entryQuantityScaled);
     }
 
     /// @notice Open every box queued at an RNG index — the ETH-lootbox leg, the coin-presale-box
