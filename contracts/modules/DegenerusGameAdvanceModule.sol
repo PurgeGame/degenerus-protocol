@@ -69,7 +69,11 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
       |                              EVENTS                                  |
       +======================================================================+*/
 
-    event Advance(uint8 stage, uint24 lvl);
+    /// @dev Advance-leg outcome. `day` is the wall day the leg ran against, so the
+    ///      log is self-describing: at STAGE_TRANSITION_DONE this is the same value
+    ///      the leg latched into purchaseStartDay, making it the post-transition
+    ///      ticket truth without correlating against surrounding events.
+    event Advance(uint8 stage, uint24 lvl, uint24 day);
     event RewardJackpotsSettled(
         uint24 indexed lvl,
         uint256 futurePool,
@@ -316,7 +320,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
             if (goReturn) {
                 // Gameover path: advance ran but earns NO router bounty (the flip-credit
                 // coin is worthless at gameover) — return mult = 0 so mineFlip pays nothing.
-                emit Advance(goStage, lvl);
+                emit Advance(goStage, lvl, day);
                 return 0;
             }
         }
@@ -362,7 +366,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                         ticketsFullyProcessed = true;
                         _lrWrite(LR_MID_DAY_SHIFT, LR_MID_DAY_MASK, 0);
                     }
-                    emit Advance(STAGE_TICKETS_WORKING, lvl);
+                    emit Advance(STAGE_TICKETS_WORKING, lvl, day);
                     // Mid-day partial-drain: mult = 1 (no escalation).
                     return mult;
                 }
@@ -795,7 +799,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
 
         // New-day advance leg: `mult` already holds the day-epoch stall ladder (1/2/4/6)
         // the router scales the re-homed bounty by.
-        emit Advance(stage, lvl);
+        emit Advance(stage, lvl, day);
     }
 
     /*+======================================================================+
@@ -2439,7 +2443,8 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                 _getCurrentPrizePool(),
                 claimablePool,
                 address(this).balance + steth.balanceOf(address(this)),
-                yieldAccumulator
+                yieldAccumulator,
+                day
             );
             _afKingSubDraw(day);
         }

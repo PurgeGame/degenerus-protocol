@@ -1720,7 +1720,14 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         // Flat ~1-FLIP "lose": pay ONCE at >=3 non-WWXRP resolutions; revert
         // NoWork() if nothing resolved; 1-2 resolved commit UNPAID (never strand the tail).
         if (totalResolved == 0) revert NoWork();
-        if (successCount >= 3) coinflip.creditFlip(msg.sender, RESOLVE_FLAT_FLIP);
+        if (successCount >= 3) {
+            coinflip.creditFlip(msg.sender, RESOLVE_FLAT_FLIP);
+            emit MinerBounty(
+                MINER_BOUNTY_DEGENERETTE_RESOLVE,
+                msg.sender,
+                RESOLVE_FLAT_FLIP
+            );
+        }
     }
 
     /// @notice O(1) discovery: does advanceGame() have pending work?

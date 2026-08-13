@@ -1754,6 +1754,9 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
     ///      resistant). `mult == 0` (the gameover advance path) pays no bounty.
     function mineFlip() external {
         uint256 bountyEarned;
+        // Category for the unified credit below. The two legs are a strict if/else, so
+        // each sets it alongside the bounty it prices; it is read only when one paid.
+        uint8 bountyKind;
 
         // (1) advance — highest priority, liveness-critical (TRUE regardless of rngLock).
         // The self-call re-enters the Game's advanceGame, which runs the required-path
@@ -1776,7 +1779,10 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
                     _mintPriceInContext();
             }
             uint8 mult = IGameRouter(address(this)).advanceGame();
-            if (mult > 0 && eligible) bountyEarned = unit * ADVANCE_RATIO_NUM * mult;
+            if (mult > 0 && eligible) {
+                bountyEarned = unit * ADVANCE_RATIO_NUM * mult;
+                bountyKind = MINER_BOUNTY_ADVANCE;
+            }
         }
         // (2) box open — FALSE during rngLock; opens mid-day-resolved stamped boxes.
         // Afking boxes FIRST via _subOpenCursor, then human boxes with the leftover
@@ -1891,6 +1897,7 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
                     _mintPriceInContext();
                 uint256 k = afkKneeCredit < OPEN_KNEE ? afkKneeCredit : OPEN_KNEE;
                 bountyEarned = (unit * k) / OPEN_KNEE;
+                bountyKind = MINER_BOUNTY_BOX_OPEN;
             } else if (!sweptFrontier && !afkProgress) {
                 // Nothing opened AND neither cursor moved (no afking box, no human box,
                 // no skip run swept on either leg) — the clean no-work signal.
@@ -1904,6 +1911,7 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
         // still ran, so we return rather than reverting NoWork().
         if (bountyEarned > 0) {
             coinflip.creditFlip(msg.sender, bountyEarned);
+            emit MinerBounty(bountyKind, msg.sender, bountyEarned);
         }
     }
 

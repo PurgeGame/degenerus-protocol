@@ -33,7 +33,7 @@ contract BigRecordArmingTest is DeployProtocol {
     uint256 private constant BOX_SPIN_TYPE_RECORD = 3;
 
     bytes32 private constant BET_PLACED_SIG =
-        keccak256("BetPlaced(address,uint32,uint64,uint256)");
+        keccak256("DegeneretteBetPlaced(address,uint32,uint64,uint256)");
     bytes32 private constant BOX_SPIN_SIG =
         keccak256("BoxSpin(address,uint64,uint256,uint256,uint256)");
 
@@ -338,7 +338,7 @@ contract BigRecordArmingTest is DeployProtocol {
         );
     }
 
-    /// @dev The `packed` word of the most recent BetPlaced in the recorded logs.
+    /// @dev The `packed` word of the most recent DegeneretteBetPlaced in the recorded logs.
     function _lastBetPacked() internal returns (uint256 packed) {
         Vm.Log[] memory logs = vm.getRecordedLogs();
         for (uint256 i = logs.length; i != 0; --i) {
@@ -349,7 +349,7 @@ contract BigRecordArmingTest is DeployProtocol {
                 return abi.decode(logs[i - 1].data, (uint256));
             }
         }
-        revert("no BetPlaced");
+        revert("no DegeneretteBetPlaced");
     }
 
     /// @dev Did a record-bounty spin (BoxSpin, type 3) fire in the recorded logs?

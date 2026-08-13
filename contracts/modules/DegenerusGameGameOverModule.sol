@@ -180,7 +180,8 @@ contract DegenerusGameGameOverModule is DegenerusGameStorage {
             0,
             claimablePool,
             totalFunds, // ETH + stETH unchanged since line 82 (burns/tombstone move no ETH/stETH)
-            0 // yieldAccumulator was just zeroed above
+            0, // yieldAccumulator was just zeroed above
+            day
         );
 
         // Recalculate available after refunds (claimablePool may have grown).

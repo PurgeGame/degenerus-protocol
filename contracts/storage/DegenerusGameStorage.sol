@@ -657,13 +657,18 @@ abstract contract DegenerusGameStorage {
     ///         of each daily advance and once at game-over. Lets the off-chain indexer mirror the
     ///         pool balances — which are mutated at many sites with no per-delta event — and keep a
     ///         daily solvency checksum from logs alone. Field order/names are read by the indexer.
+    ///         `day` is the sealed day the snapshot belongs to, so the reading side never
+    ///         infers it from surrounding event order. It carries no level or phase: the
+    ///         seal runs ahead of the stage-3 purchaseStartDay/jackpotPhaseFlag writes, so
+    ///         those fields would report pre-transition state here.
     event PrizePoolDailySnapshot(
         uint256 next,
         uint256 future,
         uint256 current,
         uint256 claimable,
         uint256 totalBalance,
-        uint256 yieldAccumulator
+        uint256 yieldAccumulator,
+        uint24 day
     );
 
     /// @notice Emitted when final sweep forfeits unclaimed winnings 30 days post-gameover.
@@ -700,6 +705,23 @@ abstract contract DegenerusGameStorage {
     /// @dev Emitted whenever prepaid afking ETH is spent to fund a buy (the afking-as-payment
     ///      waterfall's third tier) — full observability of where afking principal goes.
     event AfkingSpent(address indexed player, uint256 amount);
+
+    /// @dev A mining crank paid in FLIP. The credit itself rides `coinflip.creditFlip`, which
+    ///      emits nothing attributable, so without this the whole miner revenue stream is
+    ///      readable only by scanning tx selectors. `kind` is one of the MINER_BOUNTY_*
+    ///      constants below and is set explicitly per branch — the paying call sites converge
+    ///      on a single credit and carry no category of their own. Emitted from both the
+    ///      afking module and the Game, so it lives in the shared base.
+    event MinerBounty(
+        uint8 kind,
+        address indexed miner,
+        uint256 flipAmount
+    );
+
+    /// @dev `MinerBounty.kind` values.
+    uint8 internal constant MINER_BOUNTY_ADVANCE = 1;
+    uint8 internal constant MINER_BOUNTY_BOX_OPEN = 2;
+    uint8 internal constant MINER_BOUNTY_DEGENERETTE_RESOLVE = 3;
 
     /// @dev Emitted whenever a player's claimable balance is debited by the protocol. Covers
     ///      mint payments (MintPaymentKind.Claimable / Combined), lootbox/ticket shortfall

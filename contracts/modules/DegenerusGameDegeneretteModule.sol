@@ -69,7 +69,7 @@ contract DegenerusGameDegeneretteModule is
     /// @param index The lootbox RNG index this bet is tied to.
     /// @param betId The unique bet identifier for this player.
     /// @param packed The packed bet data.
-    event BetPlaced(
+    event DegeneretteBetPlaced(
         address indexed player,
         uint32 indexed index,
         uint64 indexed betId,
@@ -759,7 +759,7 @@ contract DegenerusGameDegeneretteModule is
         degeneretteBetNonce[player] = nonce;
 
         degeneretteBets[player][nonce] = packed;
-        emit BetPlaced(player, uint32(index), nonce, packed);
+        emit DegeneretteBetPlaced(player, uint32(index), nonce, packed);
     }
 
     /// @dev Processes bet funds (burn tokens, handle ETH, check pool).

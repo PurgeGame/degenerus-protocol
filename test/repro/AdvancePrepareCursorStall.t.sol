@@ -55,7 +55,7 @@ contract AdvancePrepareCursorStall is DeployProtocol {
     /// @dev AdvanceModule STAGE_TICKETS_WORKING (private const in AdvanceModule). Hardcoded.
     uint8 private constant STAGE_TICKETS_WORKING = 5;
     /// @dev topic0 of `event Advance(uint8 stage, uint24 lvl)` (both params non-indexed → in data).
-    bytes32 private constant TOPIC_ADVANCE = keccak256("Advance(uint8,uint24)");
+    bytes32 private constant TOPIC_ADVANCE = keccak256("Advance(uint8,uint24,uint24)");
 
     /// @dev Distinct jackpot-phase buyers. Well above the ~358 cold-budget plateau so a broken
     ///      resume would strand a tail; a correct resume drains all of them in a handful of calls.

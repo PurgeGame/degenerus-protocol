@@ -109,12 +109,22 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         uint24 bonusTargetLevel
     );
 
-    /// @dev Whale pass awarded to solo bucket winner.
+    /// @dev Whale pass awarded in place of an ETH or lootbox payout — otherwise the
+    ///      `whalePassClaims` increment is silent. The award is a bare half-pass counter
+    ///      binding to no level: claimWhalePass sets the target from the level standing at
+    ///      claim time and reports it on WhalePassClaimed. The paying level is not carried
+    ///      here either — every emit site sits in a receipt that already stamps it.
+    ///      `source` is one of the WHALE_PASS_SRC_* constants.
     event JackpotWhalePassWin(
         address indexed winner,
-        uint24 indexed level,
-        uint256 halfPassCount
+        uint256 halfPassCount,
+        uint8 source
     );
+
+    /// @dev `JackpotWhalePassWin.source` values.
+    uint8 private constant WHALE_PASS_SRC_SOLO = 1;
+    uint8 private constant WHALE_PASS_SRC_BAF_DIRECT = 2;
+    uint8 private constant WHALE_PASS_SRC_AWARD_TICKETS = 3;
 
     /// @dev Golden ticket armed: the main board rolled 4 gold colors and the solo bucket
     ///      winner awaits the next main-board draw. `quadrant`/`symbol` are the solo
@@ -1476,7 +1486,11 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
             paidDelta += paid;
         }
         if (wpSpent != 0) {
-            emit JackpotWhalePassWin(w, lvl, wpSpent / HALF_WHALE_PASS_PRICE);
+            emit JackpotWhalePassWin(
+                w,
+                wpSpent / HALF_WHALE_PASS_PRICE,
+                WHALE_PASS_SRC_SOLO
+            );
             paidDelta += wpSpent;
         }
         if (armGold) {
@@ -2415,8 +2429,8 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
                     claimableDelta += _queueWhalePassClaimCore(winner, lootboxPortion);
                     emit JackpotWhalePassWin(
                         winner,
-                        lvl,
-                        lootboxPortion / HALF_WHALE_PASS_PRICE
+                        lootboxPortion / HALF_WHALE_PASS_PRICE,
+                        WHALE_PASS_SRC_BAF_DIRECT
                     );
                 }
             }
@@ -2477,8 +2491,8 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
             claimableDelta = _queueWhalePassClaimCore(winner, amount);
             emit JackpotWhalePassWin(
                 winner,
-                minTargetLevel,
-                amount / HALF_WHALE_PASS_PRICE
+                amount / HALF_WHALE_PASS_PRICE,
+                WHALE_PASS_SRC_AWARD_TICKETS
             );
             return (entropy, claimableDelta);
         }

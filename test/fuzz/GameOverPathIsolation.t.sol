@@ -33,9 +33,9 @@ contract GameOverBestEffortDrainTest is DeployProtocol {
     bytes32 internal constant TOPIC_TRAITS_GENERATED =
         keccak256("TraitsGenerated(address,uint256,uint32)");
 
-    /// @dev Keccak topic-0 for Advance(uint8 stage, uint24 level).
+    /// @dev Keccak topic-0 for Advance(uint8 stage, uint24 level, uint24 day).
     bytes32 internal constant TOPIC_ADVANCE =
-        keccak256("Advance(uint8,uint24)");
+        keccak256("Advance(uint8,uint24,uint24)");
 
     address internal buyer;
 

@@ -54,7 +54,7 @@ contract DegeneretteBoonStake is DeployProtocol {
     uint24 private constant EXPIRY_DAYS = 2;
 
     bytes32 private constant BET_PLACED_SIG =
-        keccak256("BetPlaced(address,uint32,uint64,uint256)");
+        keccak256("DegeneretteBetPlaced(address,uint32,uint64,uint256)");
 
     address private player;
 
@@ -130,7 +130,7 @@ contract DegeneretteBoonStake is DeployProtocol {
     }
 
     /// @dev Place a bet and return the per-spin stake the module actually PACKED (the payout
-    ///      basis), read off BetPlaced. `packed` is the event's only non-indexed field.
+    ///      basis), read off DegeneretteBetPlaced. `packed` is the event's only non-indexed field.
     function _placeAndReadPackedStake(
         uint8 currency,
         uint128 perSpin,
@@ -180,7 +180,7 @@ contract DegeneretteBoonStake is DeployProtocol {
             uint256 packed = abi.decode(logs[i].data, (uint256));
             return (packed >> DEGEN_AMOUNT_SHIFT) & MASK_128;
         }
-        revert("BetPlaced not emitted");
+        revert("DegeneretteBetPlaced not emitted");
     }
 
     /// @dev futurePrizePool occupies bits [104..207] (POOL_FUTURE_SHIFT = 104, 104-bit halves).

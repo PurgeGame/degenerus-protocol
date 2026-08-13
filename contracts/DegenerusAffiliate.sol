@@ -102,6 +102,10 @@ contract DegenerusAffiliate {
     /// @param sender The player whose action generated the reward.
     /// @param code The referral code used.
     /// @param isFreshEth Fresh-vs-recycled flag for the single-leg payAffiliate path; always true for the pooled total in payAffiliateCombined, and false in claim to mark the afking-claim leaderboard write.
+    /// @param targetDay The coinflip day this credit stakes into — `currentDayIndex() + 1`,
+    ///        the same value Coinflip._targetFlipDay() resolves to from the same pure time
+    ///        source in the same block, so the day is readable without pairing this event
+    ///        against the CoinflipStakeUpdated it shares a receipt with.
     event AffiliateEarningsRecorded(
         uint24 indexed level,
         address indexed affiliate,
@@ -109,7 +113,8 @@ contract DegenerusAffiliate {
         uint256 newTotal,
         address indexed sender,
         bytes32 code,
-        bool isFreshEth
+        bool isFreshEth,
+        uint24 targetDay
     );
     /// @notice Emitted when the top affiliate for a level changes.
     /// @param level The game level.
@@ -537,7 +542,8 @@ contract DegenerusAffiliate {
             newTotal,
             sender,
             storedCode,
-            isFreshEth
+            isFreshEth,
+            GameTimeLib.currentDayIndex() + 1
         );
         _updateTopAffiliate(affiliateAddr, newTotal, lvl);
 
@@ -667,7 +673,16 @@ contract DegenerusAffiliate {
         uint256 newTotal = affiliateCoinEarned[lvl][affiliateAddr] + sumScaled;
         affiliateCoinEarned[lvl][affiliateAddr] = newTotal;
         _totalAffiliateScore[lvl] += sumScaled;
-        emit AffiliateEarningsRecorded(lvl, affiliateAddr, sumScaled, newTotal, sender, storedCode, true);
+        emit AffiliateEarningsRecorded(
+            lvl,
+            affiliateAddr,
+            sumScaled,
+            newTotal,
+            sender,
+            storedCode,
+            true,
+            GameTimeLib.currentDayIndex() + 1
+        );
         _updateTopAffiliate(affiliateAddr, newTotal, lvl);
 
         uint256 sumShareBase = sumScaled - playerKickback;
@@ -864,7 +879,16 @@ contract DegenerusAffiliate {
         // Mirror the auto-path AffiliateEarningsRecorded at the claim() leaderboard write so the
         // per-level affiliate score is fully event-derived: the affiliate is the subject in the
         // sender slot; code 0x0 and isFreshEth false identify the manual-claim path.
-        emit AffiliateEarningsRecorded(lvl, a, scaled, newTotal, a, bytes32(0), false);
+        emit AffiliateEarningsRecorded(
+            lvl,
+            a,
+            scaled,
+            newTotal,
+            a,
+            bytes32(0),
+            false,
+            GameTimeLib.currentDayIndex() + 1
+        );
 
         // Pay the (at most 3) recipients directly. creditFlip is a pure ledger add (recordAmount=0).
         coinflip.creditFlip(a, aShare * 1 ether);
