@@ -121,6 +121,11 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         uint8 source
     );
 
+    /// @dev Yield surplus split three ways at the level transition. `perRecipientShare` is
+    ///      credited to each of VAULT, sDGNRS and GNRUS — equal shares to pinned addresses,
+    ///      so one field describes the whole distribution.
+    event YieldSurplusDistributed(uint256 perRecipientShare);
+
     /// @dev `JackpotWhalePassWin.source` values.
     uint8 private constant WHALE_PASS_SRC_SOLO = 1;
     uint8 private constant WHALE_PASS_SRC_BAF_DIRECT = 2;
@@ -836,6 +841,10 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
             // claimablePool / yieldAccumulator values are still exact here.
             claimablePool = claimablePoolCached + uint128(quarterShare * 3);
             yieldAccumulator = yieldAccCached + quarterShare;
+            // The three credits above are the only ones in the protocol with no domain
+            // event of their own to pair with in the receipt. One marker names them;
+            // the recipients are pinned constants and all three take the same share.
+            emit YieldSurplusDistributed(quarterShare);
         }
     }
 

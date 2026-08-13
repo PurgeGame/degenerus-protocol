@@ -68,6 +68,11 @@ contract DegenerusGameGameOverModule is DegenerusGameStorage {
         address indexed current
     );
 
+    /// @dev Deity-pass early-gameover refunds, as one aggregate. The per-owner credits are
+    ///      the only ones in the drain, so `totalRefunded` bounds them exactly; a per-owner
+    ///      event would cost a log per holder on a path that already walks the whole set.
+    event DeityPassRefundsSettled(uint256 totalRefunded);
+
     // error E() — inherited from DegenerusGameStorage
 
     /// @notice Process game over by distributing remaining funds via jackpots.
@@ -147,6 +152,10 @@ contract DegenerusGameGameOverModule is DegenerusGameStorage {
             }
             if (totalRefunded != 0) {
                 claimablePool += uint128(totalRefunded); // Safe: totalRefunded bounded by preRefundAvailable which fits uint128
+                // The per-owner credits above carry no domain event. One aggregate marker
+                // names them: this function credits nothing else, so the receipt's refund
+                // rows are exactly the credits summing to totalRefunded.
+                emit DeityPassRefundsSettled(totalRefunded);
             }
         }
 

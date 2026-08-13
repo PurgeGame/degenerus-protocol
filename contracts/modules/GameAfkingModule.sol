@@ -7,6 +7,7 @@ import {BitPackingLib} from "../libraries/BitPackingLib.sol";
 import {PriceLookupLib} from "../libraries/PriceLookupLib.sol";
 import {IDegenerusGameLootboxModule} from "../interfaces/IDegenerusGameModules.sol";
 import {IDegenerusAffiliate} from "../interfaces/IDegenerusAffiliate.sol";
+import {MintPaymentKind} from "../interfaces/IDegenerusGame.sol";
 
 /// @title IGameRouter
 /// @notice Minimal in-context self-call surface the router uses to reach the
@@ -165,17 +166,21 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
     ///         (slot-0 reward + ticket buyer-bonus into `pendingFlip`, flat 7% into
     ///         `affiliateBase`, both saturating) is observable without a storage read.
     /// @param player The subscriber the afking buy was delivered to.
-    /// @param day The delivered afking day (the funded-day high-water the delivery covers).
-    /// @param weiIn The delivery's ETH-in (fresh-ETH leg + claimable leg; cover-buy box = 0).
-    /// @param pendingFlipAfter The sub's claimable whole-FLIP balance after this day's accrue.
-    /// @param affiliateBaseAfter The sub's unclaimed whole-FLIP affiliate base after this day's accrue.
-    event AfkingDelivered(
-        address indexed player,
-        uint24 day,
-        uint256 weiIn,
-        uint24 pendingFlipAfter,
-        uint32 affiliateBaseAfter
-    );
+    /// @param packed The four payload fields in one word; layout below.
+    /// @dev The hottest log in the protocol — up to 250 per advance chunk — so its four
+    ///      fields ride one word instead of four. Each was a full 32-byte slot for at most
+    ///      32 bits of payload; packed they cost 256 gas instead of 1,024.
+    ///      Packed layout (LSB -> MSB):
+    ///      - [0..127]   weiIn: delivery ETH-in, fresh afking leg + claimable leg (cover-buy
+    ///                   box reports 0; its spend rides LootBoxBuy). Bounded by ETH supply.
+    ///      - [128..151] day: the delivered afking day (funded-day high-water covered)
+    ///      - [152..175] pendingFlipAfter: claimable whole-FLIP balance after this accrue
+    ///      - [176..207] affiliateBaseAfter: unclaimed whole-FLIP affiliate base after it
+    ///      Widths are load-bearing: this word has no version field, so any change to a
+    ///      field's size must rename the event rather than shift bits under a live decoder.
+    ///      The claimable leg of `weiIn` is itemised by the ClaimableSpent emitted in the
+    ///      same receipt, and only when the drain actually moves money.
+    event AfkingDelivered(address indexed player, uint256 packed);
 
     /// @notice Emitted when the affiliate claim drains a sub's accrued `affiliateBase`
     ///         to the upline tree — attributes afking-sourced affiliate income to the
@@ -869,10 +874,20 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
         // rides in claimablePool, so the pool moves in tandem (the solvency invariant).
         if (claimableUse != 0) {
             _debitClaimable(player, claimableUse);
-            // ClaimableSpent is NOT emitted here. claimableUse is already folded into
-            // AfkingDelivered.weiIn (= ethValue + claimableUse), so the off-chain indexer
-            // nets the full draw at that event. Emitting ClaimableSpent here too would
-            // double-count the debit.
+            // The drain is the one claimable debit with no event of its own, which forces a
+            // reader to carry the balance forward from every prior credit. ClaimableSpent
+            // already has the shape for it, post-state included, and the slot is warm from
+            // the debit above — so the delta and its checkpoint both land here, on the only
+            // deliveries that move claimable. `weiIn` on AfkingDelivered still reports the
+            // full cost including this leg; the two are the same money seen twice, not two
+            // draws (`costWei` below carries that full cost, so the pairing is explicit).
+            emit ClaimableSpent(
+                player,
+                claimableUse,
+                _claimableOf(player),
+                MintPaymentKind.Internal,
+                ethValue + claimableUse
+            );
         }
         // Both legs draw the solvency-tracked claimablePool (afking-funded ETH and claimableWinnings
         // both ride in it); apply the combined debit as one checked RMW after the per-account writes
@@ -1003,10 +1018,10 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
         uint256 weiIn = (isTicket || !coverBuy) ? ethValue + claimableUse : 0;
         emit AfkingDelivered(
             player,
-            processDay,
-            weiIn,
-            sub.pendingFlip,
-            sub.affiliateBase
+            uint128(weiIn) |
+                (uint256(processDay) << 128) |
+                (uint256(sub.pendingFlip) << 152) |
+                (uint256(sub.affiliateBase) << 176)
         );
     }
 

@@ -264,8 +264,7 @@ describe("AffiliateHardening", function () {
 
         const events = await getEvents(tx, affiliate, "AffiliateEarningsRecorded");
         expect(events.length).to.equal(1);
-        expect(events[0].args.amount).to.equal(eth("1"));
-        expect(events[0].args.newTotal).to.equal(eth("1"));
+        expect((events[0].args.packed >> 24n)).to.equal(eth("1"));
       });
 
       it("allows exactly 0.5 ETH when scaled amount equals cap", async function () {
@@ -794,8 +793,7 @@ describe("AffiliateHardening", function () {
         const events = await getEvents(tx, affiliate, "AffiliateEarningsRecorded");
         expect(events.length).to.equal(1);
         // The emitted amount is the post-taper scaled amount
-        expect(events[0].args.amount).to.equal(taperedScaled);
-        expect(events[0].args.newTotal).to.equal(taperedScaled);
+        expect((events[0].args.packed >> 24n)).to.equal(taperedScaled);
       });
 
       it("top affiliate tracks post-taper cumulative across multiple tapered calls", async function () {

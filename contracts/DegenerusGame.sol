@@ -1472,12 +1472,14 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
 
     /// @notice Emitted when claimable ETH winnings are paid out.
     /// @param player Player whose balance is claimed.
-    /// @param caller Address that initiated the claim.
     /// @param amount Total value paid — native ETH plus any stETH fallback (excludes the 1 wei sentinel).
+    /// @param claimableAfter Claimable balance left after the draw, as stored (includes the
+    ///        1-wei sentinel). Not derivable from `amount`: claimWinnings(player, amount) is a
+    ///        partial cashout, so the residual is arbitrary pre-gameOver.
     event WinningsClaimed(
         address indexed player,
-        address indexed caller,
-        uint256 amount
+        uint256 amount,
+        uint128 claimableAfter
     );
 
     /// @notice Emitted when a funding source withdraws its prepaid afking ETH.
@@ -1564,7 +1566,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         // byte-identical to the helper's (which stays for its other callers).
         balancesPacked[player] = packed - claimDebit - (afking << 128);
         claimablePool -= uint128(payout); // CEI: update state before external call (checked math)
-        emit WinningsClaimed(player, msg.sender, payout);
+        emit WinningsClaimed(player, payout, uint128(amount - claimDebit));
         if (stethFirst) {
             _payoutWithEthFallback(player, payout);
         } else {

@@ -69,14 +69,33 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
       |                              EVENTS                                  |
       +======================================================================+*/
 
-    /// @dev Advance-leg outcome. `day` is the wall day the leg ran against, so the
-    ///      log is self-describing: at STAGE_TRANSITION_DONE this is the same value
-    ///      the leg latched into purchaseStartDay, making it the post-transition
-    ///      ticket truth without correlating against surrounding events.
-    event Advance(uint8 stage, uint24 lvl, uint24 day);
-    event RewardJackpotsSettled(
+    event Advance(uint8 stage, uint24 lvl);
+    /// @dev The level-transition skim, reported as the two amounts it moves: `take` from
+    ///      next into future, `insuranceSkim` from next into the yield accumulator. The
+    ///      curve that sized them is deliberately not carried — the take is already
+    ///      post-variance and post-cap, so no ratio of these fields reproduces the bps,
+    ///      and publishing one invites reconstructing the curve off-chain instead of
+    ///      reading the outcome.
+    event PoolSkimApplied(
         uint24 indexed lvl,
+        uint256 take,
+        uint256 insuranceSkim
+    );
+
+    /// @dev Every pool balance as the level transition leaves it, emitted after the pool
+    ///      SSTOREs and the claimablePool credit. This is the pool truth and never the
+    ///      phase truth: jackpotPhaseFlag, lastPurchaseDay and the level quest roll all
+    ///      happen after this function returns, so a reader that treats this as "the
+    ///      transition completed" is one state write ahead of the chain.
+    event PoolsSettled(
+        uint24 indexed lvl,
+        uint24 day,
+        uint24 purchaseStartDay,
+        uint256 nextPool,
         uint256 futurePool,
+        uint256 currentPool,
+        uint256 yieldAccumulator,
+        uint256 claimablePool,
         uint256 claimableDelta
     );
 
@@ -320,7 +339,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
             if (goReturn) {
                 // Gameover path: advance ran but earns NO router bounty (the flip-credit
                 // coin is worthless at gameover) — return mult = 0 so mineFlip pays nothing.
-                emit Advance(goStage, lvl, day);
+                emit Advance(goStage, lvl);
                 return 0;
             }
         }
@@ -366,7 +385,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                         ticketsFullyProcessed = true;
                         _lrWrite(LR_MID_DAY_SHIFT, LR_MID_DAY_MASK, 0);
                     }
-                    emit Advance(STAGE_TICKETS_WORKING, lvl, day);
+                    emit Advance(STAGE_TICKETS_WORKING, lvl);
                     // Mid-day partial-drain: mult = 1 (no escalation).
                     return mult;
                 }
@@ -799,7 +818,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
 
         // New-day advance leg: `mult` already holds the day-epoch stall ladder (1/2/4/6)
         // the router scales the re-homed bounty by.
-        emit Advance(stage, lvl, day);
+        emit Advance(stage, lvl);
     }
 
     /*+======================================================================+
@@ -1214,6 +1233,10 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
             memNext -= take + insuranceSkim;
             memFuture += take;
             memYieldAcc += insuranceSkim;
+            // Emitted here, inside the block, so the two amounts are read where they are
+            // still live — the pools they move keep mutating through the reward jackpots
+            // below, so a later emit would have to carry them out by hand.
+            emit PoolSkimApplied(lvl, take, insuranceSkim);
         }
 
         // --- x00 yield accumulator dump: 50% into futurePool (memory) ---
@@ -1337,7 +1360,17 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         if (claimableDelta != 0) {
             claimablePool += uint128(claimableDelta); // Safe: claimableDelta bounded by futurePool which fits uint128
         }
-        emit RewardJackpotsSettled(lvl, memFuture, claimableDelta);
+        emit PoolsSettled(
+            lvl,
+            day,
+            psd,
+            memNext,
+            memFuture,
+            memCurrent,
+            memYieldAcc,
+            claimablePool,
+            claimableDelta
+        );
     }
 
     /// @dev Pay daily jackpot via jackpot module delegatecall.

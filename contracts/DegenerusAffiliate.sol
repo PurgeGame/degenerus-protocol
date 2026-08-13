@@ -95,27 +95,36 @@ contract DegenerusAffiliate {
         bool locked
     );
     /// @notice Emitted when affiliate earnings are recorded for a level.
-    /// @param level The game level.
     /// @param affiliate The affiliate receiving credit.
-    /// @param amount The scaled amount credited for leaderboard (pre-kickback, excludes quest bonus).
-    /// @param newTotal The affiliate's new total for this level.
-    /// @param sender The player whose action generated the reward.
-    /// @param code The referral code used.
-    /// @param isFreshEth Fresh-vs-recycled flag for the single-leg payAffiliate path; always true for the pooled total in payAffiliateCombined, and false in claim to mark the afking-claim leaderboard write.
-    /// @param targetDay The coinflip day this credit stakes into — `currentDayIndex() + 1`,
-    ///        the same value Coinflip._targetFlipDay() resolves to from the same pure time
-    ///        source in the same block, so the day is readable without pairing this event
-    ///        against the CoinflipStakeUpdated it shares a receipt with.
-    event AffiliateEarningsRecorded(
-        uint24 indexed level,
-        address indexed affiliate,
-        uint256 amount,
-        uint256 newTotal,
-        address indexed sender,
-        bytes32 code,
-        bool isFreshEth,
-        uint24 targetDay
-    );
+    /// @param packed The two payload fields in one word; layout below.
+    /// @dev The protocol's highest-volume event, so it carries only what nothing else does.
+    ///      Dropped as sibling-derivable within the receipt: `amount` (the delta of this
+    ///      affiliate's `newTotal` at this level), `sender` (the buyer on purchase paths, the
+    ///      affiliate itself on the claim path), `code` (the ReferralUpdated projection —
+    ///      `_setReferralCode` is the sole writer of playerReferralCode and always emits;
+    ///      a projection value of REF_CODE_LOCKED books here as AFFILIATE_CODE_VAULT), and
+    ///      `targetDay` (the CoinflipStakeUpdated sibling), and `isFreshEth` — which no
+    ///      consumer read and which could not mean what its name said: payAffiliateCombined
+    ///      pools four fresh and recycled legs into ONE emit, so it reported "fresh" for a
+    ///      recycled-only purchase. The fresh/recycled rate split still drives the payout
+    ///      (see `_scaleLeg`); it is simply not a fact this event can carry honestly.
+    ///      What remains rides ONE word rather than five 32-byte slots.
+    ///      Packed layout (LSB -> MSB):
+    ///      - [0..23]   level: the level this credit books against. Deliberately not a topic —
+    ///                  nothing filters by it, and it is not always the current level (the
+    ///                  claim path books at level + 1).
+    ///      - [24..255] newTotal: the affiliate's running total at that level — the
+    ///                  leaderboard state itself. A single credit's amount is this minus the
+    ///                  prior total. Note the winner-takes-all payout roll may pay an upline
+    ///                  instead; the recipient is the coinflip credit in the same receipt,
+    ///                  never this field. 232 bits is far above any reachable FLIP-scaled
+    ///                  total, so the shift never truncates.
+    ///      Widths are load-bearing: no version field rides this word, so a width change must
+    ///      rename the event rather than shift bits under a live decoder.
+    event AffiliateEarningsRecorded(address indexed affiliate, uint256 packed);
+
+    /// @dev `AffiliateEarningsRecorded.packed` field offset.
+    uint256 private constant AFF_EARN_TOTAL_SHIFT = 24;
     /// @notice Emitted when the top affiliate for a level changes.
     /// @param level The game level.
     /// @param player The new top affiliate.
@@ -536,14 +545,8 @@ contract DegenerusAffiliate {
         earned[affiliateAddr] = newTotal;
         _totalAffiliateScore[lvl] += scaledAmount;
         emit AffiliateEarningsRecorded(
-            lvl,
             affiliateAddr,
-            scaledAmount,
-            newTotal,
-            sender,
-            storedCode,
-            isFreshEth,
-            GameTimeLib.currentDayIndex() + 1
+            uint256(lvl) | (newTotal << AFF_EARN_TOTAL_SHIFT)
         );
         _updateTopAffiliate(affiliateAddr, newTotal, lvl);
 
@@ -674,14 +677,8 @@ contract DegenerusAffiliate {
         affiliateCoinEarned[lvl][affiliateAddr] = newTotal;
         _totalAffiliateScore[lvl] += sumScaled;
         emit AffiliateEarningsRecorded(
-            lvl,
             affiliateAddr,
-            sumScaled,
-            newTotal,
-            sender,
-            storedCode,
-            true,
-            GameTimeLib.currentDayIndex() + 1
+            uint256(lvl) | (newTotal << AFF_EARN_TOTAL_SHIFT)
         );
         _updateTopAffiliate(affiliateAddr, newTotal, lvl);
 
@@ -877,17 +874,12 @@ contract DegenerusAffiliate {
         _totalAffiliateScore[lvl] += scaled;
         _updateTopAffiliate(a, newTotal, lvl);
         // Mirror the auto-path AffiliateEarningsRecorded at the claim() leaderboard write so the
-        // per-level affiliate score is fully event-derived: the affiliate is the subject in the
-        // sender slot; code 0x0 and isFreshEth false identify the manual-claim path.
+        // per-level affiliate score is fully event-derived. The receipt's AffiliateBaseDrained
+        // identifies this as the manual-claim path (sumB != 0 is checked above, so a claim
+        // reaching here always drained).
         emit AffiliateEarningsRecorded(
-            lvl,
             a,
-            scaled,
-            newTotal,
-            a,
-            bytes32(0),
-            false,
-            GameTimeLib.currentDayIndex() + 1
+            uint256(lvl) | (newTotal << AFF_EARN_TOTAL_SHIFT)
         );
 
         // Pay the (at most 3) recipients directly. creditFlip is a pure ledger add (recordAmount=0).

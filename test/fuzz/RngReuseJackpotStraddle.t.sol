@@ -42,8 +42,8 @@ contract RngReuseJackpotStraddleTest is DeployProtocol {
     uint256 private constant PRIZE_POOLS_PACKED_SLOT = 2;
     /// @dev AdvanceModule stage emitted when payDailyJackpot(true) sets the pending and breaks (no unlock).
     uint8 private constant STAGE_JACKPOT_DAILY_STARTED = 10;
-    /// @dev topic0 of `event Advance(uint8 stage, uint24 lvl, uint24 day)` (both params non-indexed → in data).
-    bytes32 private constant TOPIC_ADVANCE = keccak256("Advance(uint8,uint24,uint24)");
+    /// @dev topic0 of `event Advance(uint8 stage, uint24 lvl)` (both params non-indexed → in data).
+    bytes32 private constant TOPIC_ADVANCE = keccak256("Advance(uint8,uint24)");
 
     address private buyer;
     uint256 private lastFulfilledReqId;
@@ -260,7 +260,7 @@ contract RngReuseJackpotStraddleTest is DeployProtocol {
                 lg.topics.length > 0 &&
                 lg.topics[0] == TOPIC_ADVANCE
             ) {
-                (uint8 s, , ) = abi.decode(lg.data, (uint8, uint24, uint24));
+                (uint8 s, ) = abi.decode(lg.data, (uint8, uint24));
                 return (s, true);
             }
         }

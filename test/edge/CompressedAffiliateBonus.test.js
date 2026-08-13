@@ -107,19 +107,16 @@ describe("CompressedAffiliateBonus", function () {
   }
 
   /**
-   * Get the scaled affiliate FLIP recorded for a purchase tx.
-   * The combined purchase path emits AffiliateEarningsRecorded (the legacy
-   * Affiliate event is only emitted on the foil path). The `amount` field is the
-   * scaled FLIP for this call; since scaling is linear (×bps), the baseline/bonus
-   * ratio equals the ratio of the underlying freshFlip — so the 7/5 inflation
-   * check is preserved. We match by the buyer's address (sender field).
+   * Get the affiliate's RUNNING per-level total after a purchase tx.
+   * AffiliateEarningsRecorded carries only the running `newTotal`, so a single call's
+   * scaled FLIP is its delta — callers subtract the prior total. Every buyer here uses
+   * the same code, so the totals accumulate across txs. Since scaling is linear (×bps),
+   * the baseline/bonus ratio of those deltas equals the ratio of the underlying
+   * freshFlip, so the 7/5 inflation check is preserved.
    */
-  async function getRawAffiliateBasis(tx, affiliate, buyerAddr) {
+  async function getAffiliateRunningTotal(tx, affiliate) {
     const events = await getEvents(tx, affiliate, "AffiliateEarningsRecorded");
-    const fromBuyer = events.filter(
-      (e) => e.args.sender.toLowerCase() === buyerAddr.toLowerCase()
-    );
-    return fromBuyer.length > 0 ? fromBuyer[0].args.amount : null;
+    return events.length > 0 ? (events[events.length - 1].args.packed >> 24n) : null;
   }
 
   // ---------------------------------------------------------------------------
@@ -203,8 +200,9 @@ describe("CompressedAffiliateBonus", function () {
 
       // Remaining day 1 (no bonus): buyerBaseline purchases
       const tx1 = await buyFullTickets(game, buyerBaseline, 10, 0.1, aliceCode);
-      const baseline = await getRawAffiliateBasis(tx1, affiliate, buyerBaseline.address);
-      expect(baseline).to.not.be.null;
+      const total1 = await getAffiliateRunningTotal(tx1, affiliate);
+      expect(total1).to.not.be.null;
+      const baseline = total1;
       expect(baseline).to.be.gt(0n, "Baseline freshFlip should be non-zero");
 
       // Advance to penultimate day (bonus expected)
@@ -213,8 +211,9 @@ describe("CompressedAffiliateBonus", function () {
 
       // buyerBonus purchases same amount on bonus day
       const tx2 = await buyFullTickets(game, buyerBonus, 10, 0.1, aliceCode);
-      const bonus = await getRawAffiliateBasis(tx2, affiliate, buyerBonus.address);
-      expect(bonus).to.not.be.null;
+      const total2 = await getAffiliateRunningTotal(tx2, affiliate);
+      expect(total2).to.not.be.null;
+      const bonus = total2 - total1;
       expect(bonus).to.be.gt(0n, "Bonus day freshFlip should be non-zero");
 
       // Bonus day freshFlip should be 7/5 of baseline (same ETH → same base FLIP, inflated)
@@ -239,8 +238,9 @@ describe("CompressedAffiliateBonus", function () {
 
       // Day 1 (no bonus): buyerBaseline purchases
       const tx1 = await buyFullTickets(game, buyerBaseline, 10, 0.1, aliceCode);
-      const baseline = await getRawAffiliateBasis(tx1, affiliate, buyerBaseline.address);
-      expect(baseline).to.not.be.null;
+      const total1 = await getAffiliateRunningTotal(tx1, affiliate);
+      expect(total1).to.not.be.null;
+      const baseline = total1;
       expect(baseline).to.be.gt(0n);
 
       // Advance to penultimate day (counter=4, bonus expected)
@@ -251,8 +251,9 @@ describe("CompressedAffiliateBonus", function () {
 
       // buyerBonus purchases same amount on bonus day
       const tx4 = await buyFullTickets(game, buyerBonus, 10, 0.1, aliceCode);
-      const bonus = await getRawAffiliateBasis(tx4, affiliate, buyerBonus.address);
-      expect(bonus).to.not.be.null;
+      const total4 = await getAffiliateRunningTotal(tx4, affiliate);
+      expect(total4).to.not.be.null;
+      const bonus = total4 - total1;
       expect(bonus).to.be.gt(0n);
 
       // Bonus should be ~7/5 of baseline
@@ -288,8 +289,9 @@ describe("CompressedAffiliateBonus", function () {
 
       // Pre-compressed baseline: buy with affiliate before advancing
       const txBaseline = await buyFullTickets(game, buyerPre, 10, 0.1, aliceCode);
-      const baseline = await getRawAffiliateBasis(txBaseline, affiliate, buyerPre.address);
-      expect(baseline).to.not.be.null;
+      const totalBaseline = await getAffiliateRunningTotal(txBaseline, affiliate);
+      expect(totalBaseline).to.not.be.null;
+      const baseline = totalBaseline;
       expect(baseline).to.be.gt(0n, "Should have baseline freshFlip pre-compressed");
 
       // Trigger compressed via full cycle (day 3, purchaseDays=2)
@@ -301,7 +303,9 @@ describe("CompressedAffiliateBonus", function () {
       // Buy during compressed jackpot phase — first day should NOT inflate
       if (await game.jackpotPhase()) {
         const txCompressed = await buyFullTickets(game, buyerCompressed, 10, 0.1, aliceCode);
-        const compressedAmount = await getRawAffiliateBasis(txCompressed, affiliate, buyerCompressed.address);
+        const totalCompressed = await getAffiliateRunningTotal(txCompressed, affiliate);
+        const compressedAmount =
+          totalCompressed === null ? null : totalCompressed - totalBaseline;
 
         if (compressedAmount !== null && compressedAmount > 0n) {
           // First compressed day freshFlip should NOT be inflated — ratio should be ~1:1

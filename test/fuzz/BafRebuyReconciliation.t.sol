@@ -24,7 +24,7 @@ import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 ///         Proof strategy: seed futurePrizePool to exactly 100 ether before BAF,
 ///         enable auto-rebuy for the #1 BAF bettor (take profit = 0 => rebuy all
 ///         winnings), then verify the game completes the level transition and
-///         the future pool is nonzero. The RewardJackpotsSettled event (captured
+///         the future pool is nonzero. The PoolsSettled event (captured
 ///         in -vvvv traces) confirms the post-reconciliation pool value exceeds the
 ///         naive stale-overwrite value.
 ///
