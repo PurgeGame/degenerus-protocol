@@ -277,6 +277,18 @@ contract AFKingSubscriptionToken {
     uint32 private constant RING_MID = 35;
     uint32 private constant RING_INNER = 28;
 
+    /// @dev Dice 6 — quadrant 3 index 5, since quadrant = symbolId / 8.
+    uint8 private constant GOLD_DICE6_SYMBOL_ID = 29;
+    /// @dev The website's canonical gold trim.
+    uint24 private constant GOLD_RGB = 0xAB8D3F;
+    /// @dev Darkens the Dice 6 pips without touching the shared Icons32 slot: the
+    ///      six pips carry an explicit fill="#fff", and a presentation attribute
+    ///      loses to any CSS rule, so this flips them where the icon data cannot
+    ///      be changed. Scoped to `#ico` so the badge rings — siblings of the
+    ///      symbol group — keep their own fills, and the die body (a <rect>, no
+    ///      fill of its own) still inherits the gold trim.
+    string private constant GOLD_DICE6_PIP_STYLE = "<style>#ico circle{fill:#111}</style>";
+
     /*+======================================================================+
       |                          WIRED CONTRACTS                             |
       +======================================================================+*/
@@ -776,7 +788,8 @@ contract AFKingSubscriptionToken {
                     isCrypto,
                     seatLocked,
                     backgroundColor,
-                    trimColor
+                    trimColor,
+                    symbolId == GOLD_DICE6_SYMBOL_ID && trimRgb == GOLD_RGB
                 );
         }
 
@@ -814,7 +827,8 @@ contract AFKingSubscriptionToken {
         bool isCrypto,
         bool seatLocked,
         string memory backgroundColor,
-        string memory trimColor
+        string memory trimColor,
+        bool goldDice6
     ) private pure returns (string memory) {
         uint32 fitSym1e6 = _symbolFitScale(quadrant, symbolIdx);
         uint32 sSym1e6 = uint32((uint256(2) * RING_INNER * fitSym1e6) / ICON_VB);
@@ -842,6 +856,7 @@ contract AFKingSubscriptionToken {
                 "<g transform='",
                 _mat6(sSym1e6, t, t),
                 colorOpen,
+                goldDice6 ? GOLD_DICE6_PIP_STYLE : "",
                 iconPath,
                 "</g></g>"
             )
@@ -854,7 +869,7 @@ contract AFKingSubscriptionToken {
             '" stroke="',
             trimColor,
             '" stroke-width="2.2"/>',
-            _rings(trimColor),
+            _rings(trimColor, goldDice6),
             symbolGroup,
             seatLocked ? _lockGlyph() : "",
             "</svg>"
@@ -913,7 +928,8 @@ contract AFKingSubscriptionToken {
     }
 
     /// @dev Concentric badge rings centered on the card (cx/cy default 0).
-    function _rings(string memory outer) private pure returns (string memory) {
+    ///      `inverted` swaps the middle and inner fills for the gold Dice 6 only.
+    function _rings(string memory outer, bool inverted) private pure returns (string memory) {
         return string(abi.encodePacked(
             '<circle r="',
             Strings.toString(uint256(RING_OUTER)),
@@ -921,9 +937,13 @@ contract AFKingSubscriptionToken {
             outer,
             '"/><circle r="',
             Strings.toString(uint256(RING_MID)),
-            '" fill="#111"/><circle r="',
+            '" fill="',
+            inverted ? "#fff" : "#111",
+            '"/><circle r="',
             Strings.toString(uint256(RING_INNER)),
-            '" fill="#fff"/>'
+            '" fill="',
+            inverted ? "#111" : "#fff",
+            '"/>'
         ));
     }
 

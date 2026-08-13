@@ -81,6 +81,20 @@ contract DegenerusDeityPass {
     uint32 private constant RING_MID = 35;
     uint32 private constant RING_INNER = 28;
 
+    /// @dev Dice 6 is quadrant 3 index 5 — token 29, since tokenURI derives
+    ///      quadrant = id / 8 and symbolIdx = id % 8.
+    uint8 private constant DICE_QUADRANT = 3;
+    uint8 private constant DICE6_IDX = 5;
+    /// @dev The website's canonical gold, lowercase; `_isGoldHex` folds case.
+    bytes6 private constant GOLD_HEX = "ab8d3f";
+    /// @dev Darkens the Dice 6 pips without touching the shared Icons32 slot: the
+    ///      six pips carry an explicit fill="#fff", and a presentation attribute
+    ///      loses to any CSS rule, so this flips them where the icon data cannot
+    ///      be changed. Scoped to `#ico` so the badge rings — siblings of the
+    ///      symbol group — keep their own fills, and the die body (a <rect>, no
+    ///      fill of its own) still inherits the gold ink.
+    string private constant GOLD_DICE6_PIP_STYLE = "<style>#ico circle{fill:#111}</style>";
+
     string private _outlineColor = "#3f1a82";
     string private _backgroundColor = "#d9d9d9";
     string private _nonCryptoSymbolColor = "#111111";
@@ -221,10 +235,19 @@ contract DegenerusDeityPass {
         // tinted by ATTRIBUTE inheritance (fill/stroke on the wrapper group),
         // so explicit fills inside an icon — dice pips, cutouts — survive.
         string memory colorOpen;
+        // The gold Dice 6 inverts its badge: white middle ring, dark inner circle,
+        // dark pips over the gold die. Both the ring and the ink must be gold, so a
+        // recolored pass falls back to the standard treatment.
+        bool goldDice6;
         if (isCrypto) {
             colorOpen = "'><g style='vector-effect:non-scaling-stroke'>";
         } else {
             string memory ncColor = _nonCryptoSymbolColor;
+            goldDice6 =
+                quadrant == DICE_QUADRANT &&
+                symbolIdx == DICE6_IDX &&
+                _isGoldHex(ncColor) &&
+                _isGoldHex(_outlineColor);
             colorOpen = string(
                 abi.encodePacked(
                     "'><g fill='",
@@ -240,6 +263,7 @@ contract DegenerusDeityPass {
                 "<g transform='",
                 _mat6(sSym1e6, t, t),
                 colorOpen,
+                goldDice6 ? GOLD_DICE6_PIP_STYLE : "",
                 iconPath,
                 "</g></g>"
             )
@@ -252,14 +276,15 @@ contract DegenerusDeityPass {
             '" stroke="',
             _outlineColor,
             '" stroke-width="2.2"/>',
-            _rings(_outlineColor),
+            _rings(_outlineColor, goldDice6),
             symbolGroup,
             "</svg>"
         ));
     }
 
     /// @dev Concentric badge rings centered on the card (cx/cy default 0).
-    function _rings(string memory outer) private pure returns (string memory) {
+    ///      `inverted` swaps the middle and inner fills for the gold Dice 6 only.
+    function _rings(string memory outer, bool inverted) private pure returns (string memory) {
         return string(abi.encodePacked(
             '<circle r="',
             Strings.toString(uint256(RING_OUTER)),
@@ -267,10 +292,28 @@ contract DegenerusDeityPass {
             outer,
             '"/><circle r="',
             Strings.toString(uint256(RING_MID)),
-            '" fill="#111"/><circle r="',
+            '" fill="',
+            inverted ? "#fff" : "#111",
+            '"/><circle r="',
             Strings.toString(uint256(RING_INNER)),
-            '" fill="#fff"/>'
+            '" fill="',
+            inverted ? "#111" : "#fff",
+            '"/>'
         ));
+    }
+
+    /// @dev True when `c` is the canonical gold #ab8d3f, case-insensitively — the
+    ///      setter accepts any of 0-9a-fA-F, so an uppercase pass is still gold.
+    function _isGoldHex(string memory c) private pure returns (bool) {
+        bytes memory b = bytes(c);
+        if (b.length != 7 || b[0] != "#") return false;
+        bytes6 got;
+        for (uint256 i; i < 6; ++i) {
+            bytes1 ch = b[i + 1];
+            if (ch >= "A" && ch <= "F") ch = bytes1(uint8(ch) + 32);
+            got |= bytes6(ch) >> (i * 8);
+        }
+        return got == GOLD_HEX;
     }
 
     function _tryRenderExternal(
