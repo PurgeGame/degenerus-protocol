@@ -3,6 +3,7 @@ pragma solidity ^0.8.26;
 
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
+import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 
 /// @title OverpayToAfking
 /// @notice Every ETH a buy doesn't need, and any bare send, is credited to the payer's
@@ -117,5 +118,58 @@ contract OverpayToAfking is DeployProtocol {
 
         assertEq(game.afkingFundingOf(buyer), 0, "withdrew all");
         assertEq(buyer.balance, amt, "ETH back in wallet");
+    }
+
+    /// @dev Mirror of the Game's ledger-credit log (DegenerusGameStorage).
+    event AfkingFunded(address indexed player, uint256 amount);
+
+    /// @notice A funded subscribe routes its msg.value through the emitting credit helper,
+    ///         so the afking ledger's credits are observable and not merely its debits.
+    ///         Without the log a funded subscribe made from a contract wallet cannot be
+    ///         attributed off-chain at all (the top-level tx value is not the sub's).
+    function test_SubscribeValueEmitsAfkingFunded() public {
+        address sub = makeAddr("subSelfFunded");
+        vm.deal(sub, 2 ether);
+
+        // A sub needs a seat (the sole afking credential) and a grounding purchase.
+        vm.prank(ContractAddresses.GAME);
+        afkingSubToken.mintSeatFor(sub);
+        vm.prank(sub);
+        game.purchase{value: 0.01 ether}(
+            sub, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false
+        );
+
+        uint256 funded = 1 ether;
+        vm.expectEmit(true, false, false, true, address(game));
+        emit AfkingFunded(sub, funded);
+        vm.prank(sub);
+        game.subscribe{value: funded}(address(0), false, true, 1, address(0));
+    }
+
+    /// @notice On an operator-funded sub the credit — and the log — name the FUNDER's
+    ///         bucket, never the subscriber's. This is the misdirection guard.
+    function test_SubscribeValueEmitsAfkingFundedForOperatorFunder() public {
+        address sub = makeAddr("subOperatorFunded");
+        address funder = makeAddr("subFunder");
+        vm.deal(sub, 2 ether);
+
+        vm.prank(ContractAddresses.GAME);
+        afkingSubToken.mintSeatFor(sub);
+        vm.prank(sub);
+        game.purchase{value: 0.01 ether}(
+            sub, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false
+        );
+
+        // The funder consents to fund this subscriber.
+        vm.prank(funder);
+        game.setOperatorApproval(sub, true);
+
+        uint256 funded = 1 ether;
+        vm.expectEmit(true, false, false, true, address(game));
+        emit AfkingFunded(funder, funded);
+        vm.prank(sub);
+        game.subscribe{value: funded}(address(0), false, true, 1, funder);
+
+        assertEq(game.afkingFundingOf(sub), 0, "subscriber's own bucket untouched");
     }
 }

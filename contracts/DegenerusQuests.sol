@@ -256,8 +256,14 @@ contract DegenerusQuests is IDegenerusQuests {
     /// @dev Fixed foil-pack target in whole packs (buy one foil pack).
     uint32 private constant QUEST_FOIL_TARGET = 1;
 
-    /// @dev Fixed FLIP target for flip/affiliate/decimator quests (2x price in FLIP).
+    /// @dev Fixed FLIP target for flip/decimator/degenerette-FLIP quests (2x price in FLIP).
     uint256 private constant QUEST_FLIP_TARGET = 2 * PRICE_COIN_UNIT;
+
+    /// @dev Fixed FLIP target for the affiliate quest (0.6x price in FLIP). Lower than the
+    ///      shared FLIP target because affiliate progress is not self-served: it needs a
+    ///      referee to buy AND the 75/20/5 payout roll to land on the affiliate, neither of
+    ///      which the player controls.
+    uint256 private constant QUEST_AFFILIATE_TARGET = (6 * PRICE_COIN_UNIT) / 10;
 
     /// @dev Fixed ETH multiplier for lootbox quests (2x current mint price).
     uint256 private constant QUEST_LOOTBOX_TARGET_MULTIPLIER = 2;
@@ -1667,7 +1673,7 @@ contract DegenerusQuests is IDegenerusQuests {
     // -------------------------------------------------------------------------
     // Daily progress is stored in a compact per-family unit so it fits uint16:
     //   ETH-value quests    -> milli-ETH   (wei / 1e15; target <= 500)
-    //   FLIP-value quests -> whole FLIP (wei / 1e18; target = 2000)
+    //   FLIP-value quests -> whole FLIP (wei / 1e18; target <= 2000)
     //   MINT_FLIP         -> ticket count (already a count; target = 1)
     // Accumulation converts the native delta to stored units before adding, and the
     // stored target compares against it like-for-like. View/event surfaces convert
@@ -1975,10 +1981,11 @@ contract DegenerusQuests is IDegenerusQuests {
             nativeTarget = QUEST_MINT_TARGET;
         } else if (qType == QUEST_TYPE_FOIL) {
             nativeTarget = QUEST_FOIL_TARGET;
+        } else if (qType == QUEST_TYPE_AFFILIATE) {
+            nativeTarget = QUEST_AFFILIATE_TARGET;
         } else if (
             qType == QUEST_TYPE_FLIP ||
             qType == QUEST_TYPE_DECIMATOR ||
-            qType == QUEST_TYPE_AFFILIATE ||
             qType == QUEST_TYPE_DEGENERETTE_FLIP
         ) {
             nativeTarget = QUEST_FLIP_TARGET;
@@ -2441,7 +2448,8 @@ contract DegenerusQuests is IDegenerusQuests {
     /// @dev Returns the 10x target for a level quest type.
     ///      MINT_FLIP targets 10 tickets, MINT_ETH targets mintPrice * 10,
     ///      LOOTBOX and DEGENERETTE_ETH target mintPrice * 20,
-    ///      FLIP-denominated types target 20,000 FLIP.
+    ///      FLIP-denominated types target 20,000 FLIP, and AFFILIATE 6,000 FLIP
+    ///      (10x its own lower daily target).
     ///      No ETH cap applied (unlike daily quests).
     /// @param questType The quest type constant (1-9, 0 reserved as unrolled sentinel).
     /// @param mintPrice Current mint price in wei.
@@ -2452,10 +2460,10 @@ contract DegenerusQuests is IDegenerusQuests {
         if (questType == QUEST_TYPE_LOOTBOX || questType == QUEST_TYPE_DEGENERETTE_ETH) {
             return mintPrice * 20;
         }
+        if (questType == QUEST_TYPE_AFFILIATE) return QUEST_AFFILIATE_TARGET * 10;
         if (
             questType == QUEST_TYPE_FLIP ||
             questType == QUEST_TYPE_DECIMATOR ||
-            questType == QUEST_TYPE_AFFILIATE ||
             questType == QUEST_TYPE_DEGENERETTE_FLIP
         ) {
             return 20_000 ether;

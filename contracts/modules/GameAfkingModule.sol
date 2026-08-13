@@ -421,14 +421,16 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
         // above, so the funder consented to fund this subscriber), else the subscriber
         // itself. So a deposit attached to subscribe always funds the bucket that
         // actually pays for this sub's auto-buys — never misdirected to an unused player
-        // bucket on an operator-funded sub.
+        // bucket on an operator-funded sub. Routed through _creditAfkingValue so the credit
+        // emits AfkingFunded like every other money-in path; the ledger is otherwise
+        // write-asymmetric here (debits log, credits do not) and off-chain consumers cannot
+        // attribute a funded subscribe made through a contract wallet.
         if (msg.value > 0) {
             address fundDest = (fundingSource != address(0) &&
                 fundingSource != subscriber)
                 ? fundingSource
                 : subscriber;
-            _creditAfking(fundDest, msg.value);
-            claimablePool += uint128(msg.value);
+            _creditAfkingValue(fundDest, msg.value);
         }
 
         // Cancel branch — dailyQuantity == 0 writes the `dailyQuantity = 0` tombstone in

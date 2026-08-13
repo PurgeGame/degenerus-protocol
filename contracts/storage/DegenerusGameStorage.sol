@@ -1363,15 +1363,11 @@ abstract contract DegenerusGameStorage {
         balancesPacked[player] -= weiAmount;
     }
 
-    /// @dev Credit afking (the high half). A full-word add is safe: afking + amount <= 2*supply
-    ///      << 2^128 (no overflow), and amount << 128 leaves the claimable low half untouched.
-    function _creditAfking(address player, uint256 weiAmount) internal {
-        if (weiAmount == 0) return;
-        balancesPacked[player] += weiAmount << 128;
-    }
-
-    /// @dev Debit afking (the high half). The full-word subtraction is naturally fail-loud: if
-    ///      afking < amount the whole word underflows and 0.8 reverts (no silent low-half borrow).
+    /// @dev Debit afking (the high half). Stands alone, unlike the credit side, because the
+    ///      daily STAGE pass debits each sub in turn and the caller folds ONE aggregate
+    ///      claimablePool move for the batch — there is no per-player site to pair against.
+    ///      The full-word subtraction is naturally fail-loud: if afking < amount the whole word
+    ///      underflows and 0.8 reverts (no silent low-half borrow).
     function _debitAfking(address player, uint256 weiAmount) internal {
         if (weiAmount == 0) return;
         balancesPacked[player] -= weiAmount << 128;
@@ -1401,9 +1397,19 @@ abstract contract DegenerusGameStorage {
     ///      absorb purchase overpay and bare sends instead of reverting, stranding, or routing
     ///      to the prize pool — the ETH is already held by the contract, so this just records
     ///      the liability. Withdrawable via withdrawAfkingFunding (pre final sweep).
+    ///
+    ///      This is the ONLY afking credit: the per-player half, the claimablePool half and the
+    ///      log move together or not at all. No bare credit primitive exists — an unpaired
+    ///      credit raises obligations without the pool backing them (the SOLVENCY-01 break) and
+    ///      touches no identifier the pool-write gate tracks. The debit twin stands alone only
+    ///      because the daily STAGE pass debits each sub in a loop and folds ONE aggregate pool
+    ///      move for the batch; credit is never batched, so it always pairs in place.
+    ///
+    ///      The full-word add is safe: afking + amount <= 2*supply << 2^128 (no overflow), and
+    ///      amount << 128 leaves the claimable low half untouched.
     function _creditAfkingValue(address player, uint256 weiAmount) internal {
         if (weiAmount == 0) return;
-        _creditAfking(player, weiAmount);
+        balancesPacked[player] += weiAmount << 128;
         claimablePool += uint128(weiAmount);
         emit AfkingFunded(player, weiAmount);
     }

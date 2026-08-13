@@ -108,7 +108,6 @@ VALUE-IN	_setPrizePools	purchaseWhalePass	modules/DegenerusGameWhaleModule.sol	R
 POOL-TO-POOL	claimablePool	_deliverAfkingBuy	modules/GameAfkingModule.sol	WRITE	afking/claimable funding spent on the daily buy (two sites); pools credited via _routeAfkingPoolEth
 POOL-TO-POOL	_setPendingPools	_routeAfkingPoolEth	modules/GameAfkingModule.sol	READ	the afking buy's pool credit, freeze path
 POOL-TO-POOL	_setPrizePools	_routeAfkingPoolEth	modules/GameAfkingModule.sol	READ	the afking buy's pool credit, live path
-VALUE-IN	claimablePool	subscribe	modules/GameAfkingModule.sol	WRITE	prepaid afking funding arrives (msg.value); per-player afking half in tandem (SOLVENCY-01 identity)
 MUTATOR-DEF	_addPrizeContribution	<file-scope>	storage/DegenerusGameStorage.sol	READ	freeze-aware contribution helper definition; the multi-line signature sits outside any body, so the scope is the file
 DECL	claimablePool	<file-scope>	storage/DegenerusGameStorage.sol	DECL	counted-term state variable declaration
 DECL	currentPrizePool	<file-scope>	storage/DegenerusGameStorage.sol	DECL	counted-term state variable declaration
@@ -117,7 +116,7 @@ DECL	prizePoolsPacked	<file-scope>	storage/DegenerusGameStorage.sol	DECL	counted
 DECL	yieldAccumulator	<file-scope>	storage/DegenerusGameStorage.sol	DECL	counted-term state variable declaration
 MUTATOR-DEF	prizePoolPendingPacked	_addPrizeContribution	storage/DegenerusGameStorage.sol	WRITE	the packed write inside the helper: frozen branch, one RMW carrying both pool halves and the ticket-volume counter
 MUTATOR-DEF	prizePoolsPacked	_addPrizeContribution	storage/DegenerusGameStorage.sol	WRITE	the packed write inside the helper: live branch, same single RMW
-VALUE-IN	claimablePool	_creditAfkingValue	storage/DegenerusGameStorage.sol	WRITE	overpay/bare-send absorbed as prepaid afking liability; ETH already in balance, per-player afking half in tandem
+VALUE-IN	claimablePool	_creditAfkingValue	storage/DegenerusGameStorage.sol	WRITE	overpay/bare-send absorbed as prepaid afking liability, and the funded-subscribe deposit (msg.value); per-player afking half in tandem (SOLVENCY-01 identity)
 MUTATOR-DEF	_creditClaimable	_creditClaimable	storage/DegenerusGameStorage.sol	READ	per-player credit helper definition (writes balancesPacked only; every call site pairs an aggregate move)
 MUTATOR-DEF	_resetPendingPools	_resetPendingPools	storage/DegenerusGameStorage.sol	READ	canonical pending-slot reset definition: writes both halves and clears the volume counter rather than preserving it
 MUTATOR-DEF	prizePoolPendingPacked	_resetPendingPools	storage/DegenerusGameStorage.sol	WRITE	the packed write inside the canonical reset

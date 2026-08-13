@@ -1194,5 +1194,161 @@ describe("DegenerusQuests", function () {
         "afking branch leaves the dormant manual streak untouched (no manual +5)"
       ).to.equal(0n);
     });
+
+    // AFFILIATE is the one FLIP-denominated type that does NOT share the 20,000
+    // level target: its progress needs a referee to buy AND the 75/20/5 payout
+    // roll to land on the affiliate, so it sits at 30% of the shared target.
+    it("affiliate level quest targets 6,000 FLIP and completes exactly on the boundary", async function () {
+      const ctx = await loadFixture(deployFullProtocol);
+      const { quests, game, coin, alice } = ctx;
+
+      // A daily must be rolled (handleAffiliate early-returns on currentDay == 0).
+      // Pick one whose slot 1 is NOT affiliate so only the level leg accrues.
+      const gameAddr = await game.getAddress();
+      await hre.ethers.provider.send("hardhat_impersonateAccount", [gameAddr]);
+      await hre.ethers.provider.send("hardhat_setBalance", [
+        gameAddr,
+        "0x1000000000000000000",
+      ]);
+      const gameSigner = await hre.ethers.getSigner(gameAddr);
+      let chosenDay = 0n;
+      for (let d = 1n; d <= 300n; d++) {
+        await quests.connect(gameSigner).rollDailyQuest(d, d * 7919n, false, false, false);
+        const active = await quests.getActiveQuests();
+        if (Number(active[1].questType) !== QUEST_TYPE_AFFILIATE) {
+          chosenDay = d;
+          break;
+        }
+      }
+      await hre.ethers.provider.send("hardhat_stopImpersonatingAccount", [gameAddr]);
+      expect(chosenDay, "rolled a daily with a non-AFFILIATE slot 1").to.not.equal(0n);
+
+      const ok = await rollLevelQuestOfType(
+        hre.ethers,
+        game,
+        quests,
+        QUEST_TYPE_AFFILIATE
+      );
+      if (!ok) this.skip();
+      await makeLevelQuestEligible(hre.ethers, game, alice.address);
+
+      const view = await quests.getPlayerLevelQuestView(alice.address);
+      expect(view.target, "affiliate level target is 6,000 FLIP").to.equal(eth(6000));
+
+      // One wei short must not settle it.
+      await callHandlerAsCoin(hre.ethers, coin, quests, "handleAffiliate", [
+        alice.address,
+        eth(6000) - 1n,
+      ]);
+      expect(
+        (await quests.getPlayerLevelQuestView(alice.address)).completed,
+        "6,000 FLIP less one wei leaves the level quest open"
+      ).to.equal(false);
+
+      // The boundary wei crosses it.
+      await callHandlerAsCoin(hre.ethers, coin, quests, "handleAffiliate", [
+        alice.address,
+        1n,
+      ]);
+      expect(
+        (await quests.getPlayerLevelQuestView(alice.address)).completed,
+        "the boundary wei completes the affiliate level quest"
+      ).to.equal(true);
+    });
+  });
+
+  // =========================================================================
+  // 15. Affiliate daily quest target — 600 FLIP, split out of QUEST_FLIP_TARGET.
+  // =========================================================================
+  describe("Affiliate daily quest target", function () {
+    // rollDailyQuest returns nothing and early-returns once a day is stamped, so a
+    // slot-1 type cannot be searched by re-rolling one day under different entropy.
+    // Advance the day instead, taking the first whose slot 1 is the wanted type.
+    async function rollDailyUntilBonusType(hreEthers, game, quests, targetType) {
+      const gameAddr = await game.getAddress();
+      await hreEthers.provider.send("hardhat_impersonateAccount", [gameAddr]);
+      await hreEthers.provider.send("hardhat_setBalance", [
+        gameAddr,
+        "0x1000000000000000000",
+      ]);
+      const gameSigner = await hreEthers.getSigner(gameAddr);
+      let chosenDay = 0n;
+      for (let d = 1n; d <= 300n; d++) {
+        await quests.connect(gameSigner).rollDailyQuest(d, d * 7919n, false, false, false);
+        const active = await quests.getActiveQuests();
+        if (Number(active[1].questType) === targetType) {
+          chosenDay = d;
+          break;
+        }
+      }
+      await hreEthers.provider.send("hardhat_stopImpersonatingAccount", [gameAddr]);
+      return chosenDay;
+    }
+
+    it("reports a 600 FLIP target on QuestProgressUpdated", async function () {
+      const { quests, coin, game, alice } = await loadFixture(deployFullProtocol);
+      const day = await rollDailyUntilBonusType(
+        hre.ethers,
+        game,
+        quests,
+        QUEST_TYPE_AFFILIATE
+      );
+      expect(day, "rolled a daily whose slot 1 is AFFILIATE").to.not.equal(0n);
+
+      const { tx } = await callHandlerAsCoin(
+        hre.ethers,
+        coin,
+        quests,
+        "handleAffiliate",
+        [alice.address, eth(1)]
+      );
+      const evs = await getEvents(tx, quests, "QuestProgressUpdated");
+      expect(evs.length).to.be.gte(1);
+      expect(evs[0].args.questType).to.equal(QUEST_TYPE_AFFILIATE);
+      expect(
+        evs[0].args.target,
+        "affiliate daily target is 600 FLIP, not the shared 2,000"
+      ).to.equal(eth(600));
+    });
+
+    it("completes at 600 FLIP of credited commission, not before", async function () {
+      const { quests, coin, game, alice } = await loadFixture(deployFullProtocol);
+      const day = await rollDailyUntilBonusType(
+        hre.ethers,
+        game,
+        quests,
+        QUEST_TYPE_AFFILIATE
+      );
+      expect(day, "rolled a daily whose slot 1 is AFFILIATE").to.not.equal(0n);
+
+      // Slot 1 cannot settle before slot 0 (always MINT_ETH), so clear it first.
+      await callHandlerAsCoin(hre.ethers, coin, quests, "handlePurchase", [
+        alice.address,
+        eth(1),
+        0,
+        0,
+        eth(1),
+        0,
+      ]);
+
+      const short = await callHandlerAsCoin(
+        hre.ethers,
+        coin,
+        quests,
+        "handleAffiliate",
+        [alice.address, eth(599)]
+      );
+      expect(short.result[3], "599 FLIP does not complete").to.equal(false);
+
+      const boundary = await callHandlerAsCoin(
+        hre.ethers,
+        coin,
+        quests,
+        "handleAffiliate",
+        [alice.address, eth(1)]
+      );
+      expect(boundary.result[3], "the 600th FLIP completes").to.equal(true);
+      expect(boundary.result[1]).to.equal(QUEST_TYPE_AFFILIATE);
+    });
   });
 });

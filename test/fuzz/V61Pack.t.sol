@@ -11,7 +11,7 @@ import {SettleClaimableShortfallTester} from "../../contracts/test/SettleClaimab
 ///
 /// @notice The v61 PACK fold replaced two balance mappings with one `balancesPacked` (slot 7,
 ///   `[afking:high128 | claimable:low128]`, DegenerusGameStorage.sol:418). Every read/write flows through the
-///   accessors `_claimableOf` / `_afkingOf` / `_creditClaimable` / `_debitClaimable` / `_creditAfking` /
+///   accessors `_claimableOf` / `_afkingOf` / `_creditClaimable` / `_debitClaimable` / `_creditAfkingValue` /
 ///   `_debitAfking` (Storage:892-928). This file exercises that EXACT production accessor layer through the
 ///   SettleClaimableShortfallTester (it inherits the canonical storage layout and runs the real accessor
 ///   bodies — its setters/getters are thin wrappers over `_credit*` / `_debit*` / `_*Of`).
@@ -66,7 +66,9 @@ contract V61Pack is Test {
     }
 
     /// @notice Crediting afking round-trips the HIGH half exactly via _afkingOf, and the raw packed slot shows
-    ///         the LOW (claimable) half byte-UNCHANGED.
+    ///         the LOW (claimable) half byte-UNCHANGED. Driven through `creditAfkingValue` — the canonical
+    ///         PAIRED credit, and since the bare primitive was inlined the only afking credit in production —
+    ///         so this proves the real write, not a harness copy of it.
     function testCreditAfkingRoundTripLowHalfUntouched() public {
         address p = makeAddr("rt_afking");
         uint256 claimableSeed = 91 ether;
@@ -75,7 +77,7 @@ contract V61Pack is Test {
         assertEq(lowBefore, claimableSeed, "seed: claimable low half set");
 
         uint256 amount = 256 ether;
-        t.setAfking(p, amount);
+        t.creditAfkingValue(p, amount); // high half starts empty, so additive == absolute here
 
         assertEq(t.getAfking(p), amount, "high half round-trips to the credited afking");
         assertEq(_rawHigh(p), amount, "raw high half == credited afking");

@@ -23,10 +23,24 @@ contract SettleClaimableShortfallTester is DegenerusGameStorage {
     }
 
     /// @notice Seed `buyer`'s prepaid afking balance to `amount` (absolute, not additive).
+    /// @dev Writes the high half RAW and leaves `claimablePool` alone. Production has no bare
+    ///      afking-credit primitive — the only credit is `_creditAfkingValue`, which moves the
+    ///      pool in tandem — so seeding an arbitrary balance (including the deliberately
+    ///      unpaired states this harness exists to build) has to write the slot directly.
+    ///      Callers that care about the identity set the pool explicitly via setClaimablePool.
+    ///      Byte-identical to the paired credit's own write, so the halves cannot cross-bleed.
     function setAfking(address buyer, uint256 amount) external {
         uint256 cur = _afkingOf(buyer);
         if (cur != 0) _debitAfking(buyer, cur);
-        _creditAfking(buyer, amount);
+        if (amount != 0) balancesPacked[buyer] += amount << 128;
+    }
+
+    /// @notice Run the canonical PAIRED afking credit (`_creditAfkingValue`) verbatim.
+    /// @dev Additive, and moves `claimablePool` and emits AfkingFunded exactly as production
+    ///      does — so packing proofs can assert cross-half non-interference against the real
+    ///      production write rather than against a copy of it in this harness.
+    function creditAfkingValue(address buyer, uint256 amount) external {
+        _creditAfkingValue(buyer, amount);
     }
 
     /// @notice Seed `claimablePool` to `amount` (narrows to the uint128 storage width).
