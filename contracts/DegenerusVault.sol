@@ -891,11 +891,11 @@ contract DegenerusVault {
     /// @notice Burn DGVF shares to redeem proportional FLIP
     /// @dev Formula: flipOut = (DGVF reserve * sharesBurned) / totalSupply.
     ///      If burning entire supply, caller receives 1T new shares (refill mechanism).
-    ///      Pays from vault balance first, then claimable coinflips, then mints remainder.
+    ///      Claims outstanding coinflip winnings into the vault's mint allowance, then mints
+    ///      the whole redemption from that allowance.
     /// @param amount Amount of DGVF shares to burn
     /// @return flipOut Amount of FLIP sent to caller
     /// @custom:reverts Insufficient If amount is 0 or reserve is insufficient
-    /// @custom:reverts TransferFailed If FLIP transfer fails
     function burnCoin(uint256 amount) external returns (uint256 flipOut) {
         DegenerusVaultShare share = flipShare;
         if (amount == 0) revert Insufficient();
@@ -917,19 +917,16 @@ contract DegenerusVault {
 
         emit Claim(msg.sender, amount, 0, 0, flipOut);
         if (flipOut != 0) {
-            uint256 remaining = flipOut;
             if (claimable != 0) {
-                uint256 claimed = coinflipPlayer.claimCoinflips(address(this), remaining);
-                if (claimed != 0) {
-                    remaining -= claimed;
-                    if (!flipToken.transfer(msg.sender, claimed)) revert TransferFailed();
-                }
+                // Claiming credits vaultMintAllowance, not balanceOf: the payout runs through
+                // FLIP._mint, which intercepts VAULT-destined mints into the allowance. That
+                // allowance is exactly what vaultMintTo below spends, so the claim funds the
+                // whole redemption rather than a separate transferable leg.
+                coinflipPlayer.claimCoinflips(address(this), flipOut);
             }
 
-            if (remaining != 0) {
-                // Any over-mint attempt reverts inside vaultMintTo against the live allowance.
-                flipToken.vaultMintTo(msg.sender, remaining);
-            }
+            // Any over-mint attempt reverts inside vaultMintTo against the live allowance.
+            flipToken.vaultMintTo(msg.sender, flipOut);
         }
     }
 
