@@ -229,7 +229,7 @@ contract BoxCreationHandler is Test {
 
         uint48 idx = _lrIndex();
         vm.prank(currentActor);
-        try game.purchaseDeityPass{value: cost}(currentActor, symbolId) {
+        try game.purchaseDeityPass{value: cost}(currentActor, symbolId, bytes32(0)) {
             boxesCreated_deity++;
             _track(idx, currentActor);
         } catch {}

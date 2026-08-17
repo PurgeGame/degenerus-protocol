@@ -153,7 +153,7 @@ contract SolvencyActionHandler is Test {
         symbolId = bound(symbolId, 0, 31);
         if (DEITY_PASS_BASE > currentActor.balance) return;
         vm.prank(currentActor);
-        try game.purchaseDeityPass{value: DEITY_PASS_BASE}(currentActor, uint8(symbolId)) {
+        try game.purchaseDeityPass{value: DEITY_PASS_BASE}(currentActor, uint8(symbolId), bytes32(0)) {
             ghost_passBuys++;
         } catch {}
     }

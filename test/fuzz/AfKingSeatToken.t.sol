@@ -187,7 +187,7 @@ contract AfKingSeatToken is DeployProtocol {
         // lifetime, across all four triggers. The repeat path pays only the bit test.
         vm.deal(buyer, 24 ether);
         vm.prank(buyer);
-        game.purchaseDeityPass{value: 24 ether}(buyer, 5);
+        game.purchaseDeityPass{value: 24 ether}(buyer, 5, bytes32(0));
         assertEq(afkingSubToken.balanceOf(buyer), 1, "still exactly one seat");
         // The deity purchase also latches the buyer's AFFILIATE, which defaults to the
         // VAULT when unreferred — so the vault takes its own one-per-address seat here.

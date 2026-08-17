@@ -28,6 +28,6 @@ contract DelegateOnlyGuards is DeployProtocol {
 
     function test_purchaseDeityPass_directCallReverts() public {
         vm.expectRevert();
-        whaleModule.purchaseDeityPass{value: 1 ether}(address(this), 0);
+        whaleModule.purchaseDeityPass{value: 1 ether}(address(this), 0, bytes32(0));
     }
 }

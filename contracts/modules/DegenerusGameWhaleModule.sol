@@ -610,11 +610,16 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
      *      Price: 24 + T(n) ETH where n = passes sold so far, T(n) = n*(n+1)/2.
      *      First pass costs 24 ETH, last (32nd) costs 520 ETH.
      *
+     *      - Affiliate: no FLIP commission — the conferred whale pass below is the affiliate's
+     *        compensation. A supplied code only binds the buyer's referrer (when they have none
+     *        yet) so that pass and the DGNRS uplines reach the right address.
+     *
      *      Fund distribution:
      *      - Pre-game (level 0): 30% next pool, 70% future pool
      *      - Post-game (level > 0): 5% next pool, 95% future pool
      * @param buyer The address receiving the pass.
      * @param symbolId Symbol to claim (0-31: Q0 Crypto 0-7, Q1 Zodiac 8-15, Q2 Cards 16-23, Q3 Dice 24-31).
+     * @param affiliateCode Affiliate/referral code for the purchase (bytes32(0) = stored code).
      * @custom:reverts OnlyDelegatecall When invoked outside the Game delegatecall context.
      * @custom:reverts RngLocked When an RNG word is locked.
      * @custom:reverts GameOver When the liveness/game-over state is triggered.
@@ -622,7 +627,11 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
      * @custom:reverts SymbolTaken When the symbol is already claimed.
      * @custom:reverts AlreadyOwnsDeityPass When the buyer already owns a deity pass.
      */
-    function purchaseDeityPass(address buyer, uint8 symbolId) external payable {
+    function purchaseDeityPass(
+        address buyer,
+        uint8 symbolId,
+        bytes32 affiliateCode
+    ) external payable {
         // Delegatecall-only: address(this) == GAME under the nested dispatch. A direct call on the
         // deployed module would trap the in-flight msg.value against empty local state.
         if (address(this) != ContractAddresses.GAME) revert OnlyDelegatecall();
@@ -630,6 +639,15 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
         if (_livenessTriggered()) revert GameOver();
         if (symbolId >= 32) revert InvalidSymbol();
         if (deityBySymbol[symbolId] != address(0)) revert SymbolTaken();
+        // Link the buyer's referral before anything reads it, exactly as a ticket mint does:
+        // payAffiliate stores the supplied code when the buyer has none yet, and keeps the
+        // stored one otherwise. The zero amount takes its no-reward return, so the pass links
+        // without paying — the conferred whale pass below stays the affiliate's compensation.
+        // A blank code is skipped rather than forwarded: forwarding it would lock an unreferred
+        // buyer to the VAULT, which the pass does not do today.
+        if (affiliateCode != bytes32(0)) {
+            affiliate.payAffiliate(0, affiliateCode, buyer, level + 1, true, 0);
+        }
         // mintPacked_[buyer] is read once and reused for the deity-bit set below — nothing
         // between here and that write touches mintPacked_ or makes an external call.
         uint256 mp = mintPacked_[buyer];

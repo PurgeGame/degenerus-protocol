@@ -195,7 +195,12 @@ interface IDegenerusGameWhaleModule {
     /// @notice Purchases a deity pass for a specific symbol
     /// @param buyer Address receiving the deity pass
     /// @param symbolId Symbol index (0-31) to bind the pass to
-    function purchaseDeityPass(address buyer, uint8 symbolId) external payable;
+    /// @param affiliateCode Affiliate/referral code for the purchase (bytes32(0) = stored code)
+    function purchaseDeityPass(
+        address buyer,
+        uint8 symbolId,
+        bytes32 affiliateCode
+    ) external payable;
 
     /// @notice Claim deferred whale pass rewards for a player.
     /// @param player Player address to claim for.

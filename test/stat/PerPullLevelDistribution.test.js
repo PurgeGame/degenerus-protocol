@@ -492,7 +492,7 @@ describe("D-IMPL-01 — JS replica jsLvlPrime EXACTLY matches on-chain JackpotFl
         );
         await game
           .connect(deityBuyers[q])
-          .purchaseDeityPass(deityBuyers[q].address, symbolId, {
+          .purchaseDeityPass(deityBuyers[q].address, symbolId, hre.ethers.ZeroHash, {
             value: basePrice,
           });
       }

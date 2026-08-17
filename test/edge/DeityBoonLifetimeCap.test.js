@@ -60,7 +60,7 @@ describe("Deity boon per-(deity, recipient) lifetime cap", function () {
     // Deity pass purchased at genesis, before any day is settled.
     await game
       .connect(alice)
-      .purchaseDeityPass(alice.address, 0, { value: eth(24) });
+      .purchaseDeityPass(alice.address, 0, "0x0000000000000000000000000000000000000000000000000000000000000000", { value: eth(24) });
 
     // One boon per day to Bob (recipient is limited to one boon per day). Slot 0
     // is always free on a fresh day because the deity's used-slot mask resets on
@@ -85,7 +85,7 @@ describe("Deity boon per-(deity, recipient) lifetime cap", function () {
 
     await game
       .connect(alice)
-      .purchaseDeityPass(alice.address, 0, { value: eth(24) });
+      .purchaseDeityPass(alice.address, 0, "0x0000000000000000000000000000000000000000000000000000000000000000", { value: eth(24) });
 
     // Fill the alice->bob pair to the cap.
     for (let i = 0; i < PAIR_CAP; i++) {
@@ -111,11 +111,11 @@ describe("Deity boon per-(deity, recipient) lifetime cap", function () {
     // Two independent deities.
     await game
       .connect(alice)
-      .purchaseDeityPass(alice.address, 0, { value: eth(24) });
+      .purchaseDeityPass(alice.address, 0, "0x0000000000000000000000000000000000000000000000000000000000000000", { value: eth(24) });
     // Second deity pass: the bonding-curve price has stepped up from 24 to 25.
     await game
       .connect(dan)
-      .purchaseDeityPass(dan.address, 1, { value: eth(25) });
+      .purchaseDeityPass(dan.address, 1, "0x0000000000000000000000000000000000000000000000000000000000000000", { value: eth(25) });
 
     // Fill the alice->bob pair to the cap.
     for (let i = 0; i < PAIR_CAP; i++) {

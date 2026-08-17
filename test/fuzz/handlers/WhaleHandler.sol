@@ -106,7 +106,7 @@ contract WhaleHandler is Test {
         if (cost > currentActor.balance) return;
 
         vm.prank(currentActor);
-        try game.purchaseDeityPass{value: cost}(currentActor, uint8(symbolId)) {
+        try game.purchaseDeityPass{value: cost}(currentActor, uint8(symbolId), bytes32(0)) {
             ghost_deityPassDeposited += cost;
         } catch {}
     }

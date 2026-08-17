@@ -37,8 +37,6 @@ interface IDegenerusGamePlayerActions {
     function claimWinnings(address player) external;
     /// @notice Claim winnings preferring stETH over ETH.
     function claimWinningsStethFirst() external;
-    /// @notice Purchase a deity pass with ETH.
-    function purchaseDeityPass(address buyer, uint8 symbolId) external payable;
     /// @notice Place full-ticket bets on degenerette.
     function placeDegeneretteBet(
         address player,
@@ -616,24 +614,6 @@ contract DegenerusVault {
     function gamePurchaseTicketsFlip(uint256 entryQuantityScaled) external onlyVaultOwner {
         if (entryQuantityScaled == 0) revert Insufficient();
         gamePlayer.redeemFlip(address(this), entryQuantityScaled);
-    }
-
-    /// @notice Purchase a deity pass using an active boon for the vault
-    /// @dev Uses vault ETH + claimable winnings; forwards priceWei to the deity pass contract.
-    /// @param priceWei Expected deity pass price (24 + T(n) ETH where T(n) = n*(n+1)/2)
-    /// @param symbolId The deity symbol to mint (0-based index into deity pass types)
-    /// @custom:reverts NotVaultOwner If caller does not hold >50.1% of DGVE
-    /// @custom:reverts Insufficient If price is zero or vault cannot fund the purchase
-    function gamePurchaseDeityPassFromBoon(uint256 priceWei, uint8 symbolId) external payable onlyVaultOwner {
-        if (priceWei == 0) revert Insufficient();
-        if (address(this).balance < priceWei) {
-            uint256 claimable = gamePlayer.claimableWinningsOf(address(this));
-            if (claimable > 1) {
-                gamePlayer.claimWinnings(address(this));
-            }
-        }
-        if (address(this).balance < priceWei) revert Insufficient();
-        gamePlayer.purchaseDeityPass{value: priceWei}(address(this), symbolId);
     }
 
     /// @notice Claim winnings for the vault (preferring stETH)

@@ -1082,17 +1082,12 @@ contract CoverageGap222 is DeployProtocol {
         // negative-auth probe is dropped — the selector no longer exists to be access-controlled.
         // vault.gameOpenLootBox removed: opening boxes for any address is permissionless, so the
         // vault needs no owner-gated open wrapper — there is no selector left to access-control.
-        vm.prank(buyer);
-        (bool o5, ) = address(vault).call{value: 1 ether}(
-            abi.encodeWithSignature(
-                "gamePurchaseDeityPassFromBoon(uint256,uint8)",
-                uint256(1 ether),
-                uint8(0)
-            )
-        );
+        // vault.gamePurchaseDeityPassFromBoon removed (the GAME constructor sets the vault's
+        // HAS_DEITY_PASS bit and nothing clears it, so the call could only ever revert
+        // AlreadyOwnsDeityPass); its negative-auth probe is dropped — the selector no longer
+        // exists to be access-controlled.
         assertFalse(o1, "vault.gamePurchase rejected non-vaultOwner caller");
         assertFalse(o2, "vault.gamePurchaseTicketsFlip rejected non-vaultOwner caller");
-        assertFalse(o5, "vault.gamePurchaseDeityPassFromBoon rejected non-vaultOwner caller");
     }
 
     function test_gap_vault_game_degenerette_guards() public {
@@ -1619,9 +1614,10 @@ contract CoverageGap222 is DeployProtocol {
         vm.prank(buyer);
         (bool o3, ) = address(game).call{value: 1 ether}(
             abi.encodeWithSignature(
-                "purchaseDeityPass(address,uint8)",
+                "purchaseDeityPass(address,uint8,bytes32)",
                 buyer,
-                uint8(0)
+                uint8(0),
+                bytes32(0)
             )
         );
         // v47: game.purchaseFlipLootbox removed (FLIP-lootbox surface deleted); its

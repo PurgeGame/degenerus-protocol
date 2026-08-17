@@ -142,7 +142,7 @@ contract BoonStaticDiscard is DeployProtocol {
         address deity = makeAddr("parityDeity");
         vm.deal(deity, 100 ether);
         vm.prank(deity);
-        game.purchaseDeityPass{value: 24 ether}(deity, 5);
+        game.purchaseDeityPass{value: 24 ether}(deity, 5, bytes32(0));
 
         (uint8[3] memory menu, , ) = viewer.deityBoonSlots(address(game), deity);
 

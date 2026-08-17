@@ -356,11 +356,9 @@ contract RngLockDeterminism is DeployProtocol {
             return;
         }
         if (action == 10) {
-            uint256 price = bound(nonce, 24 ether, 25 ether);
-            uint8 sym = uint8(bound(nonce >> 8, 0, 31));
-            vm.deal(address(vault), price);
-            vm.prank(vaultOwner);
-            try vault.gamePurchaseDeityPassFromBoon{value: 0}(price, sym) {} catch { return; }
+            // gamePurchaseDeityPassFromBoon removed — the GAME constructor sets the vault's
+            // HAS_DEITY_PASS bit and nothing clears it, so the call could only ever revert
+            // AlreadyOwnsDeityPass. No-op slot (keeps the action numbering stable).
             return;
         }
         if (action == 11) {

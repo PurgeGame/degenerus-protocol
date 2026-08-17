@@ -1045,19 +1045,29 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     /// @notice Purchase a deity pass for a specific symbol (0-31).
     /// @param buyer Player address to receive pass (address(0) = msg.sender).
     /// @param symbolId Symbol to claim (0-31: Q0 Crypto 0-7, Q1 Zodiac 8-15, Q2 Cards 16-23, Q3 Dice 24-31).
-    function purchaseDeityPass(address buyer, uint8 symbolId) external payable {
+    /// @param affiliateCode Affiliate/referral code for the purchase (bytes32(0) = stored code).
+    function purchaseDeityPass(
+        address buyer,
+        uint8 symbolId,
+        bytes32 affiliateCode
+    ) external payable {
         buyer = _resolvePlayer(buyer);
-        _purchaseDeityPassFor(buyer, symbolId);
+        _purchaseDeityPassFor(buyer, symbolId, affiliateCode);
     }
 
-    function _purchaseDeityPassFor(address buyer, uint8 symbolId) private {
+    function _purchaseDeityPassFor(
+        address buyer,
+        uint8 symbolId,
+        bytes32 affiliateCode
+    ) private {
         (bool ok, bytes memory data) = ContractAddresses
             .GAME_WHALE_MODULE
             .delegatecall(
                 abi.encodeWithSelector(
                     IDegenerusGameWhaleModule.purchaseDeityPass.selector,
                     buyer,
-                    symbolId
+                    symbolId,
+                    affiliateCode
                 )
             );
         if (!ok) _revertDelegate(data);

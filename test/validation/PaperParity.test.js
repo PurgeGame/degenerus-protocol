@@ -658,7 +658,7 @@ describe("Paper Parity (Phase 46)", function () {
       const expectedPrice = ethers.parseEther("24");
       await game
         .connect(alice)
-        .purchaseDeityPass(alice.address, 0, { value: expectedPrice });
+        .purchaseDeityPass(alice.address, 0, hre.ethers.ZeroHash, { value: expectedPrice });
     });
 
     it("second deity pass (k=1): 25 ETH", async function () {
@@ -667,7 +667,7 @@ describe("Paper Parity (Phase 46)", function () {
       // Buy first pass
       await game
         .connect(alice)
-        .purchaseDeityPass(alice.address, 0, {
+        .purchaseDeityPass(alice.address, 0, hre.ethers.ZeroHash, {
           value: ethers.parseEther("24"),
         });
 
@@ -675,7 +675,7 @@ describe("Paper Parity (Phase 46)", function () {
       const expectedPrice = ethers.parseEther("25");
       await game
         .connect(bob)
-        .purchaseDeityPass(bob.address, 1, { value: expectedPrice });
+        .purchaseDeityPass(bob.address, 1, hre.ethers.ZeroHash, { value: expectedPrice });
     });
 
     it("third deity pass (k=2): 27 ETH", async function () {
@@ -684,12 +684,12 @@ describe("Paper Parity (Phase 46)", function () {
 
       await game
         .connect(alice)
-        .purchaseDeityPass(alice.address, 0, {
+        .purchaseDeityPass(alice.address, 0, hre.ethers.ZeroHash, {
           value: ethers.parseEther("24"),
         });
       await game
         .connect(bob)
-        .purchaseDeityPass(bob.address, 1, {
+        .purchaseDeityPass(bob.address, 1, hre.ethers.ZeroHash, {
           value: ethers.parseEther("25"),
         });
 
@@ -697,7 +697,7 @@ describe("Paper Parity (Phase 46)", function () {
       const expectedPrice = ethers.parseEther("27");
       await game
         .connect(carol)
-        .purchaseDeityPass(carol.address, 2, { value: expectedPrice });
+        .purchaseDeityPass(carol.address, 2, hre.ethers.ZeroHash, { value: expectedPrice });
     });
 
     it("T(n) formula verified for k=0..5", async function () {

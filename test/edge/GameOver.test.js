@@ -260,7 +260,7 @@ describe("GameOver", function () {
       // 20 ETH cap, so min(pricePaid, 20 ETH) binds at exactly 20 ETH.
       await game
         .connect(alice)
-        .purchaseDeityPass(alice.address, 0, { value: eth(24) });
+        .purchaseDeityPass(alice.address, 0, hre.ethers.ZeroHash, { value: eth(24) });
 
       expect(await game.level()).to.equal(0n);
 
@@ -288,12 +288,12 @@ describe("GameOver", function () {
       const price1 = eth(24);
       await game
         .connect(alice)
-        .purchaseDeityPass(alice.address, 0, { value: price1 });
+        .purchaseDeityPass(alice.address, 0, hre.ethers.ZeroHash, { value: price1 });
 
       const price2 = eth(25);
       await game
         .connect(bob)
-        .purchaseDeityPass(bob.address, 1, { value: price2 });
+        .purchaseDeityPass(bob.address, 1, hre.ethers.ZeroHash, { value: price2 });
 
       // Both hold ONLY deity passes (no tickets/jackpot position), so the full claimable
       // delta across gameOver is the capped refund.
@@ -364,7 +364,7 @@ describe("GameOver", function () {
       try {
         await game
           .connect(alice)
-          .purchaseDeityPass(alice.address, 0, { value: eth(24) });
+          .purchaseDeityPass(alice.address, 0, hre.ethers.ZeroHash, { value: eth(24) });
         // If it succeeds, verify no refund flag set
       } catch {
         // If it reverts (e.g., some other guard), that's acceptable too
@@ -426,7 +426,7 @@ describe("GameOver", function () {
       const deityPrice = eth(24);
       await game
         .connect(alice)
-        .purchaseDeityPass(alice.address, 0, { value: deityPrice });
+        .purchaseDeityPass(alice.address, 0, hre.ethers.ZeroHash, { value: deityPrice });
 
       await advanceTime(SECONDS_912_DAYS + 86400);
       await triggerGameOverAtLevel0(game, deployer, mockVRF);

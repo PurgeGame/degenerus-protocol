@@ -138,7 +138,7 @@ describe("Multi-category boon coexistence", function () {
     // Alice becomes a deity
     await game
       .connect(alice)
-      .purchaseDeityPass(alice.address, 0, { value: eth(24) });
+      .purchaseDeityPass(alice.address, 0, hre.ethers.ZeroHash, { value: eth(24) });
 
     const Viewer = await hre.ethers.getContractFactory("DeityBoonViewer");
     const viewer = await Viewer.deploy();
@@ -184,7 +184,7 @@ describe("Multi-category boon coexistence", function () {
 
     await game
       .connect(alice)
-      .purchaseDeityPass(alice.address, 0, { value: eth(24) });
+      .purchaseDeityPass(alice.address, 0, hre.ethers.ZeroHash, { value: eth(24) });
 
     const Viewer = await hre.ethers.getContractFactory("DeityBoonViewer");
     const viewer = await Viewer.deploy();
@@ -225,7 +225,7 @@ describe("Multi-category boon coexistence", function () {
 
     await game
       .connect(alice)
-      .purchaseDeityPass(alice.address, 0, { value: eth(24) });
+      .purchaseDeityPass(alice.address, 0, hre.ethers.ZeroHash, { value: eth(24) });
 
     const Viewer = await hre.ethers.getContractFactory("DeityBoonViewer");
     const viewer = await Viewer.deploy();
@@ -270,7 +270,7 @@ describe("Multi-category boon coexistence", function () {
 
     await game
       .connect(alice)
-      .purchaseDeityPass(alice.address, 0, { value: eth(24) });
+      .purchaseDeityPass(alice.address, 0, hre.ethers.ZeroHash, { value: eth(24) });
 
     const Viewer = await hre.ethers.getContractFactory("DeityBoonViewer");
     const viewer = await Viewer.deploy();
@@ -322,7 +322,7 @@ describe("Multi-category boon coexistence", function () {
 
     await game
       .connect(alice)
-      .purchaseDeityPass(alice.address, 0, { value: eth(24) });
+      .purchaseDeityPass(alice.address, 0, hre.ethers.ZeroHash, { value: eth(24) });
 
     const Viewer = await hre.ethers.getContractFactory("DeityBoonViewer");
     const viewer = await Viewer.deploy();

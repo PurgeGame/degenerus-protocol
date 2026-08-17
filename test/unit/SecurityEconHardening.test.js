@@ -139,7 +139,7 @@ describe("SecurityEconHardening", function () {
       await expect(
         game
           .connect(alice)
-          .purchaseDeityPass(alice.address, 0, { value: eth(24) })
+          .purchaseDeityPass(alice.address, 0, hre.ethers.ZeroHash, { value: eth(24) })
       ).to.be.reverted;
     });
   });
@@ -206,7 +206,7 @@ describe("SecurityEconHardening", function () {
       // Purchase deity pass (symbol 0, base price 24 ETH)
       await game
         .connect(alice)
-        .purchaseDeityPass(alice.address, 0, { value: eth(24) });
+        .purchaseDeityPass(alice.address, 0, hre.ethers.ZeroHash, { value: eth(24) });
 
       // After purchase, the buyer holds exactly one deity pass NFT (the
       // HAS_DEITY_PASS gate blocks a second; deityPassPricePaid records the price).
@@ -222,10 +222,10 @@ describe("SecurityEconHardening", function () {
       // Alice and Bob buy deity passes
       await game
         .connect(alice)
-        .purchaseDeityPass(alice.address, 0, { value: eth(24) });
+        .purchaseDeityPass(alice.address, 0, hre.ethers.ZeroHash, { value: eth(24) });
       await game
         .connect(bob)
-        .purchaseDeityPass(bob.address, 1, { value: eth(25) });
+        .purchaseDeityPass(bob.address, 1, hre.ethers.ZeroHash, { value: eth(25) });
 
       // Check pass counts via the DeityPass NFT balanceOf
       expect(
@@ -281,7 +281,7 @@ describe("SecurityEconHardening", function () {
       // Buy a deity pass
       await game
         .connect(alice)
-        .purchaseDeityPass(alice.address, 0, { value: eth(24) });
+        .purchaseDeityPass(alice.address, 0, hre.ethers.ZeroHash, { value: eth(24) });
 
       const claimBefore = await game.claimableWinningsOf(alice.address);
 
@@ -310,7 +310,7 @@ describe("SecurityEconHardening", function () {
 
       await game
         .connect(alice)
-        .purchaseDeityPass(alice.address, 0, { value: eth(24) });
+        .purchaseDeityPass(alice.address, 0, hre.ethers.ZeroHash, { value: eth(24) });
 
       const claimBefore = await game.claimableWinningsOf(alice.address);
 
@@ -331,13 +331,13 @@ describe("SecurityEconHardening", function () {
       // Buy passes in order: alice(0), bob(1), carol(2)
       await game
         .connect(alice)
-        .purchaseDeityPass(alice.address, 0, { value: eth(24) });
+        .purchaseDeityPass(alice.address, 0, hre.ethers.ZeroHash, { value: eth(24) });
       await game
         .connect(bob)
-        .purchaseDeityPass(bob.address, 1, { value: eth(25) });
+        .purchaseDeityPass(bob.address, 1, hre.ethers.ZeroHash, { value: eth(25) });
       await game
         .connect(carol)
-        .purchaseDeityPass(carol.address, 2, { value: eth(27) });
+        .purchaseDeityPass(carol.address, 2, hre.ethers.ZeroHash, { value: eth(27) });
 
       const aliceBefore = await game.claimableWinningsOf(alice.address);
       const bobBefore = await game.claimableWinningsOf(bob.address);
@@ -368,7 +368,7 @@ describe("SecurityEconHardening", function () {
 
       await game
         .connect(alice)
-        .purchaseDeityPass(alice.address, 0, { value: eth(24) });
+        .purchaseDeityPass(alice.address, 0, hre.ethers.ZeroHash, { value: eth(24) });
 
       await advanceTime(DEPLOY_IDLE_TIMEOUT_DAYS * DAY + DAY);
       await triggerGameOverAtLevel0(game, deployer, mockVRF);
@@ -459,7 +459,7 @@ describe("SecurityEconHardening", function () {
       // The simplest way: buy a deity pass, trigger gameOver refund.
       await game
         .connect(alice)
-        .purchaseDeityPass(alice.address, 0, { value: eth(24) });
+        .purchaseDeityPass(alice.address, 0, hre.ethers.ZeroHash, { value: eth(24) });
 
       await advanceTime(DEPLOY_IDLE_TIMEOUT_DAYS * DAY + DAY);
       await triggerGameOverAtLevel0(game, deployer, mockVRF);
@@ -482,7 +482,7 @@ describe("SecurityEconHardening", function () {
 
       await game
         .connect(alice)
-        .purchaseDeityPass(alice.address, 0, { value: eth(24) });
+        .purchaseDeityPass(alice.address, 0, hre.ethers.ZeroHash, { value: eth(24) });
 
       await advanceTime(DEPLOY_IDLE_TIMEOUT_DAYS * DAY + DAY);
       await triggerGameOverAtLevel0(game, deployer, mockVRF);
@@ -504,7 +504,7 @@ describe("SecurityEconHardening", function () {
       // Give alice some claimable by buying deity pass and triggering gameOver
       await game
         .connect(alice)
-        .purchaseDeityPass(alice.address, 0, { value: eth(24) });
+        .purchaseDeityPass(alice.address, 0, hre.ethers.ZeroHash, { value: eth(24) });
 
       await advanceTime(DEPLOY_IDLE_TIMEOUT_DAYS * DAY + DAY);
       await triggerGameOverAtLevel0(game, deployer, mockVRF);
@@ -815,7 +815,7 @@ describe("SecurityEconHardening", function () {
           .catch(() => true),
         game
           .connect(carol)
-          .purchaseDeityPass(carol.address, 0, { value: eth(24) })
+          .purchaseDeityPass(carol.address, 0, hre.ethers.ZeroHash, { value: eth(24) })
           .then(() => false)
           .catch(() => true),
       ]);
@@ -852,7 +852,7 @@ describe("SecurityEconHardening", function () {
 
       await game
         .connect(alice)
-        .purchaseDeityPass(alice.address, 0, { value: eth(24) });
+        .purchaseDeityPass(alice.address, 0, hre.ethers.ZeroHash, { value: eth(24) });
 
       await expect(
         deityPass.connect(alice).transferFrom(alice.address, bob.address, 0)
@@ -890,7 +890,7 @@ describe("SecurityEconHardening", function () {
       await expect(
         game
           .connect(alice)
-          .purchaseDeityPass(alice.address, 0, { value: eth(24) })
+          .purchaseDeityPass(alice.address, 0, hre.ethers.ZeroHash, { value: eth(24) })
       ).to.not.be.reverted;
     });
 

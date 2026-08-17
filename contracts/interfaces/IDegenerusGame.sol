@@ -380,7 +380,12 @@ interface IDegenerusGame {
     /// @notice Purchase a deity pass for a specific symbol (0-31).
     /// @param buyer Player address to receive pass (address(0) = msg.sender).
     /// @param symbolId Symbol to claim (0-31).
-    function purchaseDeityPass(address buyer, uint8 symbolId) external payable;
+    /// @param affiliateCode Affiliate/referral code for the purchase (bytes32(0) = stored code).
+    function purchaseDeityPass(
+        address buyer,
+        uint8 symbolId,
+        bytes32 affiliateCode
+    ) external payable;
 
     /// @notice Purchase a 10-level lazy pass (direct in-game activation).
     /// @param buyer Player address to receive pass (address(0) = msg.sender).
