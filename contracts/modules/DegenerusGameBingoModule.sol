@@ -11,15 +11,13 @@ import {PriceLookupLib} from "../libraries/PriceLookupLib.sol";
  * @author Burnie Degenerus
  * @notice Delegate-called module handling claimBingo color-completion claims.
  * @dev A player who owns one post-RNG-resolved ticket entry in each of the 8 color
- *      buckets of a single symbol on a level may claim a tiered reward:
- *        - regular         (0.05% Pool.Reward + 1_000e18 FLIP),
- *        - symbol-first     (additive: 0.1% + 2_000e18 FLIP),
- *        - quadrant-first   (replacement: 0.5% + 5_000e18 FLIP, suppresses symbol bonus).
+ *      buckets of a single symbol on a level may claim one reward for that level:
+ *      0.05% Pool.Reward + 1_000e18 FLIP.
  *      All storage reads/writes operate on the inherited DegenerusGameStorage layout.
  *      claimBingo is a strict READ-ONLY consumer of lvlTraitEntry — it adds NO write
  *      to it (RNG-freeze-safe). The only state it writes is
- *      its own bitfields (bingoClaimed / bingoFirsts). CEI:
- *      effects (the bit sets) precede interactions (transferFromPool / creditFlip).
+ *      its own per-player/per-level bingoClaimed flag. CEI: the claim flag is set
+ *      before interactions (transferFromPool / creditFlip).
  */
 contract DegenerusGameBingoModule is DegenerusGameStorage {
     // -------------------------------------------------------------------------
@@ -36,26 +34,18 @@ contract DegenerusGameBingoModule is DegenerusGameStorage {
     /// @notice Thrown when the symbol is out of range (>= 32).
     error InvalidSymbol();
 
-    /// @notice Thrown when this player has already claimed this (level, quadrant).
+    /// @notice Thrown when this player has already claimed on this level.
     error AlreadyClaimed();
 
     // -------------------------------------------------------------------------
     // Reward constants
     // -------------------------------------------------------------------------
 
-    /// @dev Baseline sDGNRS draw: 0.05% of Pool.Reward.
-    uint256 internal constant REGULAR_DGNRS_BPS = 5;
-    /// @dev Symbol-first bonus sDGNRS: +0.05% ADDED to regular (-> 0.1% total).
-    uint256 internal constant FIRST_SYMBOL_BONUS_DGNRS_BPS = 5;
-    /// @dev Quadrant-first sDGNRS: 0.5% REPLACEMENT (supersedes regular + symbol bonus).
-    uint256 internal constant FIRST_QUADRANT_DGNRS_BPS = 50;
+    /// @dev sDGNRS draw: 0.05% of Pool.Reward.
+    uint256 internal constant BINGO_DGNRS_BPS = 5;
 
-    /// @dev Baseline FLIP flip credit.
-    uint256 internal constant REGULAR_FLIP = 1_000e18;
-    /// @dev Symbol-first bonus FLIP: ADDED to regular (-> 2_000e18 total).
-    uint256 internal constant FIRST_SYMBOL_BONUS_FLIP = 1_000e18;
-    /// @dev Quadrant-first FLIP: REPLACES regular + symbol bonus.
-    uint256 internal constant FIRST_QUADRANT_FLIP = 5_000e18;
+    /// @dev FLIP credit paid for a bingo.
+    uint256 internal constant BINGO_FLIP = 1_000e18;
 
     // -------------------------------------------------------------------------
     // claimAffiliateDgnrs constants
@@ -74,12 +64,6 @@ contract DegenerusGameBingoModule is DegenerusGameStorage {
     // -------------------------------------------------------------------------
     // Events (player-only indexed; amounts/level/symbol non-indexed)
     // -------------------------------------------------------------------------
-
-    /// @notice Emitted on a quadrant-first claim (the systemwide first bingo for a quadrant).
-    event FirstQuadrantBingo(address indexed player, uint256 level, uint8 symbol);
-
-    /// @notice Emitted on a symbol-first (non-quadrant-first) claim.
-    event FirstSymbolBingo(address indexed player, uint256 level, uint8 symbol);
 
     /// @notice Universal record emitted on every successful claim, carrying the paid amounts.
     event BingoClaimed(
@@ -105,11 +89,11 @@ contract DegenerusGameBingoModule is DegenerusGameStorage {
     // claimBingo
     // -------------------------------------------------------------------------
 
-    /// @notice Claim color-completion bingo: all 8 colors of one symbol on a level.
+    /// @notice Claim a level's color-completion bingo: all 8 colors of one symbol.
     /// @dev Permissionless: the reward settles to `player` (the slot owner the 8-color check
     ///      verifies), never the caller, so an uninvited claim only ever harvests inward.
-    ///      Claiming early is never worse — Pool.Reward only shrinks and bingoFirsts bits only
-    ///      get set, so an earlier claim pays >= a later one.
+    ///      Each player may claim at most once per level, regardless of which qualifying
+    ///      symbol they use.
     /// @param player The bingo owner to claim for (address(0) = msg.sender).
     /// @param level The level to claim on (uint24 — the internal storage key width;
     ///        the ABI decoder fail-closes on an oversized value, no truncation).
@@ -122,16 +106,15 @@ contract DegenerusGameBingoModule is DegenerusGameStorage {
         // No level upper-bound guard: the 8-color ownership check below is
         // self-gating — an unresolved/future-level bucket is empty, so the
         // require fails closed on its own. claimBingo only READS lvlTraitEntry
-        // (never writes it) and writes only its own 3 bitfields, so a read
+        // (never writes it) and writes only its own claim flag, so a read
         // against an in-flight/future bucket simply reverts; it cannot corrupt
         // VRF state (freeze-safe; no level gate is needed).
         if (gameOver) revert GameOver();
         if (symbol >= 32) revert InvalidSymbol();
+        if (bingoClaimed[level][player]) revert AlreadyClaimed();
 
         uint8 quadrant = symbol >> 3; // bits 7-6 of the trait byte
         uint8 symInQ = symbol & 7; // bits 2-0 of the trait byte
-        uint8 qMask = uint8(1 << quadrant);
-        uint32 sMask = uint32(1) << symbol;
 
         // ---- Ownership read (READ-ONLY; NO write to lvlTraitEntry) ----
         // For each color c the owner must occupy slots[c] in the holder array of
@@ -151,57 +134,24 @@ contract DegenerusGameBingoModule is DegenerusGameStorage {
             }
         }
 
-        // ---- Per-player (level, quadrant) dedup (EFFECT) ----
-        uint8 claimedBits = bingoClaimed[level][player];
-        if (claimedBits & qMask != 0) revert AlreadyClaimed();
-        bingoClaimed[level][player] = claimedBits | qMask;
-
-        // ---- Tier cascade (EFFECTS — bits set before any external call) ----
-        // Quadrant-first is checked BEFORE symbol-first (the binding ordering).
-        // A quadrant-first marks BOTH bits — the double-pay-trap guard — and
-        // suppresses the symbol-first bonus.
-        uint64 bf = bingoFirsts[level];
-        uint8 fq = uint8(bf >> 32); // quadrant mask in bits [32:36)
-        uint32 fs = uint32(bf); // symbol mask in bits [0:32)
-        bool isQuadrantFirst = (fq & qMask) == 0;
-        bool isSymbolFirst = (fs & sMask) == 0;
-
-        uint256 dgnrsBps;
-        uint256 flip;
-        if (isQuadrantFirst) {
-            // BOTH bits — closes the double-pay window — in one packed write
-            bingoFirsts[level] =
-                uint64(uint32(fs | sMask)) |
-                (uint64(uint8(fq | qMask)) << 32);
-            dgnrsBps = FIRST_QUADRANT_DGNRS_BPS;
-            flip = FIRST_QUADRANT_FLIP;
-            emit FirstQuadrantBingo(player, level, symbol);
-        } else if (isSymbolFirst) {
-            // mark only the symbol bit, preserving the co-resident quadrant mask
-            bingoFirsts[level] = (bf & ~uint64(0xFFFFFFFF)) | uint64(fs | sMask);
-            dgnrsBps = REGULAR_DGNRS_BPS + FIRST_SYMBOL_BONUS_DGNRS_BPS;
-            flip = REGULAR_FLIP + FIRST_SYMBOL_BONUS_FLIP;
-            emit FirstSymbolBingo(player, level, symbol);
-        } else {
-            dgnrsBps = REGULAR_DGNRS_BPS;
-            flip = REGULAR_FLIP;
-        }
+        // ---- Per-player/per-level dedup (EFFECT) ----
+        bingoClaimed[level][player] = true;
 
         // ---- Interactions (after all effects) ----
         // sDGNRS draw: transferFromPool clamps to the available Reward pool and
         // returns the actual amount paid. An empty/0 pool is a graceful no-op
-        // (dgnrsPaid == 0, no revert; bits stay set and FLIP is still credited).
+        // (dgnrsPaid == 0, no revert; the claim stays set and FLIP is still credited).
         uint256 poolBal = dgnrs.poolBalance(IsDGNRS.Pool.Reward);
         uint256 dgnrsPaid = dgnrs.transferFromPool(
             IsDGNRS.Pool.Reward,
             player,
-            (poolBal * dgnrsBps) / 10_000
+            (poolBal * BINGO_DGNRS_BPS) / 10_000
         );
 
-        // FLIP flip credit (always paid; tier amount is always non-zero).
-        coinflip.creditFlip(player, flip);
+        // FLIP credit is always paid, even when the Reward pool is empty.
+        coinflip.creditFlip(player, BINGO_FLIP);
 
-        emit BingoClaimed(player, level, symbol, flip, dgnrsPaid);
+        emit BingoClaimed(player, level, symbol, BINGO_FLIP, dgnrsPaid);
     }
 
     // -------------------------------------------------------------------------

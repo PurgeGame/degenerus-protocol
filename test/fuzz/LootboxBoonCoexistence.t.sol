@@ -20,20 +20,22 @@ contract LootboxBoonCoexistence is DeployProtocol {
     // ──────────────────────────────────────────────────────────────────────
 
     // Authoritative slots from `solc --storage-layout` on the working tree (post Stage B Game-storage packing).
-    // The V62 lootbox repack FOLDED lootboxEthBase / lootboxPurchasePacked / lootboxDistressEth into
-    // the single lootboxEth word (amount[0:128] | adj[128:192] | scorePlus1[192:208] |
-    // distressUnits[208:256]) and removed the dead lootboxFlip mapping; the Stage B packing further
-    // folded deity/VRF/boon fields, shifting lootboxRngPacked, lootboxRngWordByIndex, and boonPacked down.
+    // The box-order rework folded lootboxEthBase / lootboxPurchasePacked / lootboxDistressEth into
+    // the single lootboxOrder word (level[0:24] | score[24:39] | boostBps[39:53] |
+    // distressBps[53:67] | adjBps[67:81] | small[81:89] | med[89:97] | large[97:105] |
+    // customCount[105:113] | customSize[113:161]@1e12 | coverWei[161:209]@1e12) and removed the
+    // dead lootboxFlip mapping; the Stage B packing further folded deity/VRF/boon fields, shifting
+    // lootboxRngPacked, lootboxRngWordByIndex, and boonPacked down.
     uint256 constant SLOT_BOON_PACKED     = 50;   // mapping(address => BoonPacked)
-    uint256 constant SLOT_LOOTBOX_ETH     = 15;   // mapping(uint48 => mapping(address => uint256)) (folded word)
+    uint256 constant SLOT_LOOTBOX_ETH     = 15;   // mapping(uint48 => mapping(address => uint256)) (packed order word)
     uint256 constant SLOT_LOOTBOX_RNG_IDX = 33;   // lootboxRngPacked (low 48 bits = lootboxRngIndex)
     uint256 constant SLOT_LOOTBOX_WORD    = 34;   // mapping(uint48 => uint256) lootboxRngWordByIndex
 
-    // Packed lootboxEth bit layout (mirrors DegenerusGameStorage _packLootbox).
-    uint256 constant LB_AMOUNT_MASK    = (uint256(1) << 128) - 1; // amount   [0:128]
-    uint256 constant LB_ADJ_SHIFT      = 128;                     // adj      [128:192]
-    uint256 constant LB_SCORE_SHIFT    = 192;                     // score+1  [192:208]
-    uint256 constant LB_DISTRESS_SHIFT = 208;                     // distress [208:256]
+    // Packed lootboxOrder bit layout (mirrors DegenerusGameStorage lootboxOrder — see LB_* there).
+    uint256 constant LB_SCORE_SHIFT       = 24;   // score        [24:39]
+    uint256 constant LB_CUSTOM_COUNT_SHIFT = 105; // customCount  [105:113]
+    uint256 constant LB_CUSTOM_SIZE_SHIFT  = 113; // customSize   [113:161] @1e12
+    uint256 constant LB_CUSTOM_SCALE       = 1e12;
 
     // BoonPacked bit layout (slot0)
     uint256 constant BP_COINFLIP_DAY_SHIFT  = 0;
@@ -131,12 +133,17 @@ contract LootboxBoonCoexistence is DeployProtocol {
         uint48 day,
         uint256 vrfWord
     ) internal {
-        // lootboxEth[index][player] = the single folded word: amount[0:128] (=ethAmount),
-        // adj=0, score=1 (a low raw activity score) at [192:208], distress=0. openLootBox unpacks
-        // score and feeds it straight to the EV multiplier (no offset); the purchaseLevel field is
-        // gone (vestigial — the box rolls from the LIVE level at open). purchaseLevel is unused now.
+        // lootboxOrder[index][player] = one CUSTOM box of `ethAmount`, score=1 (a low raw activity
+        // score), frozen to the live level. openLootBox reads score straight into the EV
+        // multiplier (no +1 offset in the new layout); purchaseLevel is unused (vestigial — the
+        // box rolls off the level embedded in the word, pinned here to the live level so the
+        // level-scoped price lookup stays sane).
         purchaseLevel; // silence unused-parameter (kept in the signature for callers)
-        uint256 packed = (ethAmount & LB_AMOUNT_MASK) | (uint256(1) << LB_SCORE_SHIFT);
+        uint256 customUnits = ethAmount / LB_CUSTOM_SCALE;
+        uint256 packed = uint256(game.level())
+            | (uint256(1) << LB_SCORE_SHIFT)
+            | (uint256(1) << LB_CUSTOM_COUNT_SHIFT)
+            | (customUnits << LB_CUSTOM_SIZE_SHIFT);
         vm.store(address(game), _nestedMappingSlot(SLOT_LOOTBOX_ETH, index, player), bytes32(packed));
 
         // lootboxRngWordByIndex[index] = vrfWord

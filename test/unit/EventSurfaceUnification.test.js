@@ -339,23 +339,37 @@ describe("EventSurfaceUnification — Phase 277 Wave 2 TST-EVT-UNI-01..06", func
       }
     });
 
-    it("[03d] the per-roll ticket-queue path calls `_queueEntries(player, rollLevel, wholeTicketsToEntries(whole), false)` at one source site inside _settleLootboxRoll — not inside any index-conditional branch", function () {
+    it("[03d] the per-roll ticket accumulation calls `_addBoxTickets` inside _settleLootboxRoll, and the touched-lane flush calls `_queueEntries` at one source site inside _flushBoxAcc — neither is gated on any index-conditional branch", function () {
       const src = fs.readFileSync(LOOTBOX_SOURCE_PATH, "utf8");
-      // The ticket/emit/consolation logic moved to `_settleLootboxRoll` (the
-      // void `_resolveLootboxCommon` dispatcher calls it once per roll).
-      const body = extractBody(src, "function _settleLootboxRoll(");
-      expect(body, "_settleLootboxRoll body not found").to.not.equal(null);
+      // The per-roll ticket write routes through `_addBoxTickets` inside
+      // `_settleLootboxRoll` (the void `_resolveLootboxCommon` dispatcher calls it
+      // once per roll); the actual `_queueEntries` call is flushed once per entry,
+      // per distinct level, by `_flushBoxAcc`.
+      const settleBody = extractBody(src, "function _settleLootboxRoll(");
+      expect(settleBody, "_settleLootboxRoll body not found").to.not.equal(null);
+      // No `if (index` conditional should wrap any logic in this function body.
+      expect(
+        /if\s*\(\s*index\b/.test(settleBody),
+        "_settleLootboxRoll must not branch on `index` after sentinel retirement"
+      ).to.equal(false);
+      expect(
+        settleBody.includes("_addBoxTickets(acc, rollLevel - currentLevel, whole)"),
+        "_settleLootboxRoll must accumulate tickets through the touched-lane helper"
+      ).to.equal(true);
+
+      const flushBody = extractBody(src, "function _flushBoxAcc(");
+      expect(flushBody, "_flushBoxAcc body not found").to.not.equal(null);
       const calls = (
-        body.match(/_queueEntries\(player, rollLevel, wholeTicketsToEntries\(whole\), false\)/g) || []
+        flushBody.match(/_queueEntries\(player, currentLevel \+ uint24\(offset\), wholeTicketsToEntries\(whole\), false\)/g) || []
       ).length;
       expect(
         calls,
-        "_settleLootboxRoll must contain exactly one `_queueEntries(player, rollLevel, wholeTicketsToEntries(whole), false)` call (unconditional)"
+        "_flushBoxAcc must contain exactly one offset-based `_queueEntries` call"
       ).to.equal(1);
-      // No `if (index` conditional should wrap any logic in this function body.
+      // No `if (index` conditional should wrap the flush either.
       expect(
-        /if\s*\(\s*index\b/.test(body),
-        "_settleLootboxRoll must not branch on `index` after sentinel retirement"
+        /if\s*\(\s*index\b/.test(flushBody),
+        "_flushBoxAcc must not branch on `index`"
       ).to.equal(false);
     });
   });
@@ -453,12 +467,21 @@ describe("EventSurfaceUnification — Phase 277 Wave 2 TST-EVT-UNI-01..06", func
         /if \(payColdBustConsolation && whole == 0\)/.test(body),
         "manual cold-bust consolation must be gated on `payColdBustConsolation && whole == 0`"
       ).to.equal(true);
-      // It pays _boxWwxrpStake(rollAmount) via wwxrp.mintPrize; the payout is
-      // observable off-chain through the WWXRP ERC-20 `Transfer` event the mint
-      // emits (no dedicated lootbox-WWXRP event).
+      // Box-order rework: the gate no longer mints immediately — it accumulates
+      // into `acc.wwxrp`, single-site, inside the gate.
       expect(
-        body.includes("wwxrp.mintPrize(player, _boxWwxrpStake(rollAmount))"),
-        "consolation must mint _boxWwxrpStake(rollAmount)"
+        body.includes("acc.wwxrp += _boxWwxrpStake(rollAmount);"),
+        "consolation must accumulate _boxWwxrpStake(rollAmount) into acc.wwxrp"
+      ).to.equal(true);
+      // The accumulated total is flushed ONCE per entry by `_flushBoxAcc`'s
+      // `if (acc.wwxrp != 0) wwxrp.mintPrize(player, acc.wwxrp);`, observable
+      // off-chain through the WWXRP ERC-20 `Transfer` event the mint emits (no
+      // dedicated lootbox-WWXRP event).
+      const flushBody = extractBody(src, "function _flushBoxAcc(");
+      expect(flushBody, "_flushBoxAcc body not found").to.not.equal(null);
+      expect(
+        flushBody.includes("if (acc.wwxrp != 0) wwxrp.mintPrize(player, acc.wwxrp);"),
+        "the accumulated WWXRP total must flush via wwxrp.mintPrize(player, acc.wwxrp)"
       ).to.equal(true);
       // No dedicated LootBoxWwxrpReward event exists anymore — the ERC-20 Transfer
       // plus same-tx context is the correlation surface.
@@ -502,13 +525,18 @@ describe("EventSurfaceUnification — Phase 277 Wave 2 TST-EVT-UNI-01..06", func
       ).to.equal(false);
     });
 
-    it("[05c] the manual cold-bust consolation (wwxrp.mintPrize with _boxWwxrpStake) appears exactly once and is inside the `if (payColdBustConsolation && whole == 0)` gate (manual-only)", function () {
+    it("[05c] the manual cold-bust consolation accumulates single-site under the `if (payColdBustConsolation && whole == 0)` gate (manual-only) and flushes once per entry via wwxrp.mintPrize (box-order rework: rewards settle once per entry)", function () {
       const src = fs.readFileSync(LOOTBOX_SOURCE_PATH, "utf8");
-      // Module-wide single-site.
+      // Module-wide single-site accumulation (no longer an immediate per-box mint).
       expect(
-        (src.match(/wwxrp\.mintPrize\(player, _boxWwxrpStake\(rollAmount\)\)/g) || [])
+        (src.match(/acc\.wwxrp \+= _boxWwxrpStake\(rollAmount\);/g) || []).length,
+        "the cold-bust WWXRP accumulation must be single-site"
+      ).to.equal(1);
+      // The accumulated total flushes exactly once, in `_flushBoxAcc`.
+      expect(
+        (src.match(/if \(acc\.wwxrp != 0\) wwxrp\.mintPrize\(player, acc\.wwxrp\);/g) || [])
           .length,
-        "the cold-bust WWXRP mint must be single-site"
+        "the per-entry WWXRP flush must be single-site"
       ).to.equal(1);
       // The dedicated LootBoxWwxrpReward event is removed — the WWXRP ERC-20
       // Transfer the mint emits is the correlation surface.
@@ -531,13 +559,16 @@ describe("EventSurfaceUnification — Phase 277 Wave 2 TST-EVT-UNI-01..06", func
 
     it("[05d] auto-resolve ticket awards stay observable via the unified `_queueEntries` path → `EntriesQueued`", function () {
       const lootbox = fs.readFileSync(LOOTBOX_SOURCE_PATH, "utf8");
-      const body = extractBody(lootbox, "function _settleLootboxRoll(");
-      // The per-roll path calls _queueEntries unconditionally (proven single-site
+      const body = extractBody(lootbox, "function _flushBoxAcc(");
+      // The per-entry flush calls _queueEntries unconditionally (proven single-site
       // in [03d]); _queueEntries is what makes auto-resolve awards observable
-      // without a LootBoxOpened emit.
+      // without a LootBoxOpened emit. Auto-resolve callers (resolveLootboxDirect /
+      // resolveRedemptionLootbox) call `_flushBoxAcc` themselves after
+      // `_resolveLootboxCommon` returns, so their accumulated tickets flush through
+      // this same shared site.
       expect(
-        body.includes("_queueEntries(player, rollLevel, wholeTicketsToEntries(whole), false)"),
-        "the per-roll path must call _queueEntries so auto-resolve awards remain observable via EntriesQueued"
+        body.includes("_queueEntries(player, currentLevel + uint24(offset), wholeTicketsToEntries(whole), false)"),
+        "the per-entry flush path must call _queueEntries so auto-resolve awards remain observable via EntriesQueued"
       ).to.equal(true);
       // _queueEntries emits EntriesQueued (verified at the storage layer).
       const storage = fs.readFileSync(

@@ -7,6 +7,7 @@ import {DegenerusTraitUtils} from "../../contracts/DegenerusTraitUtils.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {PriceLookupLib} from "../../contracts/libraries/PriceLookupLib.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
+import {BoxOrderLib} from "../helpers/BoxOrderLib.sol";
 
 /// @title RngFreezeAndRemovalProofs -- Proves SAFE-04 (the v45 RNG-freeze hard-floor is
 ///        intact under the new permissionless crank) plus the v46 REMOVE proofs (the legacy
@@ -76,11 +77,10 @@ contract RngFreezeAndRemovalProofs is DeployProtocol {
     uint256 private constant DEGENERETTE_BETS_SLOT = 37;
     /// @dev degeneretteBetNonce mapping root slot (address => uint64).
     uint256 private constant DEGENERETTE_BET_NONCE_SLOT = 38;
-    /// @dev lootboxEth (the single folded box word) mapping root slot. The amount sub-field (low
-    ///      128 bits) is the box-owed signal (set on first deposit, zeroed on open) — it replaced
+    /// @dev lootboxOrder (the packed box-order word) mapping root slot. The whole word is the
+    ///      box-owed signal (set on first deposit, zeroed on open in one SSTORE) — it replaced
     ///      the removed lootboxEthBase mapping the old pin read.
     uint256 private constant LOOTBOX_ETH_SLOT = 15;
-    uint256 private constant LB_AMOUNT_MASK = (uint256(1) << 128) - 1;
 
     // -------------------------------------------------------------------------
     // Crank reward peg mirror (the contract's own FIXED constants, REW-03)
@@ -446,7 +446,10 @@ contract RngFreezeAndRemovalProofs is DeployProtocol {
     /// @dev    Source-level proof complement: assert the `whalePassClaims[player] += 1;` write site
     ///         is byte-present in the LootboxModule (post-Plan-335-02 shape).
     function testWhalePassClaimsWriteIsNonFrozenSlot() public view {
-        string memory src = vm.readFile("contracts/modules/DegenerusGameLootboxModule.sol");
+        // Box-order migration: the deity-boon issuance delegatecall (and this box-open whale-pass
+        // activation write) relocated from the Lootbox module to the Boon module
+        // (DegenerusGame.issueDeityBoon now targets GAME_BOON_MODULE).
+        string memory src = vm.readFile("contracts/modules/DegenerusGameBoonModule.sol");
         // Plan 335-02 settled the O(1) write shape: `whalePassClaims[player] += 1;` inside the
         // (post-USER-simplification) one-line whale-pass activation body.
         assertGt(
@@ -896,7 +899,7 @@ contract RngFreezeAndRemovalProofs is DeployProtocol {
         game.purchase{value: lootboxAmount + 0.01 ether}(
             buyer,
             400,
-            lootboxAmount,
+            BoxOrderLib.boCustomFloor(lootboxAmount),
             bytes32(0),
             MintPaymentKind.DirectEth, false
         );
@@ -925,12 +928,12 @@ contract RngFreezeAndRemovalProofs is DeployProtocol {
         );
     }
 
-    /// @dev Park the auto-open frontier (boxCursorIndex byte 13 + boxCursor byte 7, both slot 58)
+    /// @dev Park the auto-open frontier (boxCursorIndex byte 13 + boxCursor byte 7, both slot 56)
     ///      at `index` with a zero in-index cursor, so the relocated sweep begins exactly at this
     ///      finalized index (the realistic state where lower indices are drained). Without this the
     ///      sweep would orphan-break at the first un-worded lower index.
     function _parkBoxFrontier(uint48 index) internal {
-        bytes32 slot = bytes32(uint256(57));
+        bytes32 slot = bytes32(uint256(56));
         uint256 packed = uint256(vm.load(address(game), slot));
         uint256 cursorMask = (uint256(1) << 48) - 1;
         packed &= ~(cursorMask << (7 * 8));   // boxCursor = 0
@@ -954,7 +957,7 @@ contract RngFreezeAndRemovalProofs is DeployProtocol {
             abi.encode(uint256(index), uint256(LOOTBOX_ETH_SLOT))
         );
         bytes32 leaf = keccak256(abi.encode(who, uint256(inner)));
-        return uint256(vm.load(address(game), leaf)) & LB_AMOUNT_MASK;
+        return uint256(vm.load(address(game), leaf));
     }
 
     function _readBetPacked(

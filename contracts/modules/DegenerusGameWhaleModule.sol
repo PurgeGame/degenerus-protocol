@@ -3,6 +3,7 @@ pragma solidity 0.8.34;
 
 import {IsDGNRS} from "../interfaces/IsDGNRS.sol";
 import {ContractAddresses} from "../ContractAddresses.sol";
+import {IDegenerusGameLootboxModule} from "../interfaces/IDegenerusGameModules.sol";
 import {DegenerusGameStorage} from "../storage/DegenerusGameStorage.sol";
 import {BitPackingLib} from "../libraries/BitPackingLib.sol";
 import {PriceLookupLib} from "../libraries/PriceLookupLib.sol";
@@ -89,10 +90,8 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
     // -------------------------------------------------------------------------
 
     /// @dev Maximum lootbox value eligible for boost (10 ETH scaled).
-    uint256 private constant LOOTBOX_BOOST_MAX_VALUE = 10 ether;
 
     /// @dev Lootbox boost expiry duration (2 game days, expires at jackpot reset).
-    uint32 private constant LOOTBOX_BOOST_EXPIRY_DAYS = 2;
 
     /// @dev PPM scale for DGNRS pool calculations (1,000,000 = 100%).
     uint32 private constant DGNRS_WHALE_REWARD_PPM_SCALE = 1_000_000;
@@ -902,144 +901,36 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
         address buyer,
         uint256 lootboxAmount
     ) private {
-        // Single read of lootboxRngPacked: nothing below writes the slot (the units
-        // recorder writes mintPacked_, the boost writes boonPacked, the box enqueue
-        // writes boxPlayers, the score read only staticcalls quests), so the pending-eth
-        // update at the end is rebuilt from this cached word.
-        uint256 lr = lootboxRngPacked;
-        uint48 index = uint48((lr >> LR_INDEX_SHIFT) & LR_INDEX_MASK);
-        uint24 capKey = level + 1; // resolver open level == the per-(player, level) cap key
-
         // Pass-bundled lootbox spend joins the minted-units tally (400 units = one
         // ticket-price), combining with ticket spend for the participation floor.
         _recordLootboxUnits(buyer, lootboxAmount);
 
-        uint256 packed = lootboxEth[index][buyer];
-        uint256 existingAmount = packed & LB_AMOUNT_MASK;
-
-        uint16 score;
-        uint64 adj;
-        if (existingAmount == 0) {
-            // Purchase-time EV-cap tally (first deposit). The score is snapshotted
-            // inline (DIV-2) and the multiplier frozen from it; the cap key is
-            // level + 1 (== the resolver's currentLevel = level + 1). A bonus box
-            // (mult > NEUTRAL) draws add = min(deposit, CAP - used) from the shared
-            // per-(player, level) accumulator; sub-neutral/neutral boxes draw zero cap.
-            uint256 activityScore = _playerActivityScore(
+        // The cover box itself is recorded by the Lootbox module — one place owns the order
+        // slot's encoding, and boons stay ON for the pass bundle.
+        (bool ok, bytes memory data) = ContractAddresses.GAME_LOOTBOX_MODULE.delegatecall(
+            abi.encodeWithSelector(
+                IDegenerusGameLootboxModule.recordCoverBox.selector,
                 buyer,
-                _effectiveQuestStreak(buyer)
-            );
-            score = uint16(activityScore);
-            uint256 mult = _lootboxEvMultiplierFromScore(activityScore);
-            if (mult > LOOTBOX_EV_NEUTRAL_BPS) {
-                uint256 used = _lootboxEvUsedFor(buyer, capKey);
-                uint256 remaining = used >= LOOTBOX_EV_BENEFIT_CAP
-                    ? 0
-                    : LOOTBOX_EV_BENEFIT_CAP - used;
-                uint256 add = lootboxAmount < remaining ? lootboxAmount : remaining;
-                _setLootboxEvUsedFor(buyer, capKey, used + add);
-                adj = uint64(add);
-            }
-            // First deposit for this (index, buyer): enqueue for the permissionless
-            // box auto-open cursor, exactly like the human-mint and afking-cover box
-            // paths. Without it a pass-bundled lootbox never auto-opens, letting the
-            // sole opener (manual openBox is operator-gated) hold the box and time
-            // the open against the known per-index word. The consumer gates each index
-            // on lootboxRngWordByIndex != 0, so this is producer-only.
-            boxPlayers[index].push(buyer);
-        } else {
-            // Subsequent deposit: the frozen score and accumulated adj come from the box's
-            // prior packed word; the multiplier stays FROZEN from the first-deposit snapshot.
-            (, uint64 priorAdj, uint16 priorScore, ) = _unpackLootbox(packed);
-            score = priorScore;
-            adj = priorAdj;
-            uint256 mult = _lootboxEvMultiplierFromScore(uint256(priorScore));
-            if (mult > LOOTBOX_EV_NEUTRAL_BPS) {
-                uint256 used = _lootboxEvUsedFor(buyer, capKey);
-                uint256 remaining = used >= LOOTBOX_EV_BENEFIT_CAP
-                    ? 0
-                    : LOOTBOX_EV_BENEFIT_CAP - used;
-                uint256 add = lootboxAmount < remaining ? lootboxAmount : remaining;
-                if (add != 0) {
-                    _setLootboxEvUsedFor(buyer, capKey, used + add);
-                    adj = priorAdj + uint64(add);
-                }
+                lootboxAmount,
+                _clampScore(_playerActivityScore(buyer, _effectiveQuestStreak(buyer))),
+                level + 1,
+                true
+            )
+        );
+        if (!ok) {
+            if (data.length == 0) revert E();
+            assembly ("memory-safe") {
+                revert(add(32, data), mload(data))
             }
         }
-        // Subsequent deposits accumulate onto the existing box — no day-coherence gate and no stored
-        // day (the box binds to lootboxRngWordByIndex[index] and rolls from the LIVE open level, so
-        // cross-day deposits at an un-advanced index are harmless).
-
-        uint256 boostedAmount = _applyLootboxBoostOnPurchase(buyer, lootboxAmount);
-        uint256 newAmount = existingAmount + boostedAmount;
-        uint256 pendingEth = ((lr >> LR_PENDING_ETH_SHIFT) & LR_PENDING_ETH_MASK) +
-            _packEthToMilliEth(lootboxAmount);
-        lootboxRngPacked =
-            (lr & ~(LR_PENDING_ETH_MASK << LR_PENDING_ETH_SHIFT)) |
-            ((pendingEth & LR_PENDING_ETH_MASK) << LR_PENDING_ETH_SHIFT);
-
-        // Track distress-mode portion (0.01-ETH granularity) for the proportional ticket bonus
-        // at open time; it rides in the same packed slot, accumulated per-deposit.
-        uint256 distressUnits = (packed >> LB_DISTRESS_SHIFT) & LB_DISTRESS_MASK;
-        if (_isDistressMode()) {
-            distressUnits += boostedAmount / LB_DISTRESS_SCALE;
-        }
-
-        lootboxEth[index][buyer] = _packLootbox(newAmount, adj, score, distressUnits);
-
-        // One box-buy event across paths (same topic as the mint module's LootBoxBuy), on every
-        // deposit.
-        emit LootBoxBuy(buyer, index, lootboxAmount);
     }
 
-    /// @dev Apply any active lootbox boost boon to the purchase amount.
-    ///      Reads packed lootbox tier from boonPacked[player].slot0. The purchase day is read
-    ///      in-function (only on the boost path) for the expiry check.
-    ///      Boost is capped at LOOTBOX_BOOST_MAX_VALUE (10 ETH) and expires after 2 game days.
-    /// @param player The player whose boost to check and consume.
-    /// @param amount The base lootbox amount before boost.
-    /// @return boostedAmount The lootbox amount after applying any boost.
-    function _applyLootboxBoostOnPurchase(
-        address player,
-        uint256 amount
-    ) private returns (uint256 boostedAmount) {
-        boostedAmount = amount;
-        BoonPacked storage bp = boonPacked[player];
-        uint256 s0 = bp.slot0;
-        uint8 tier = uint8(s0 >> BP_LOOTBOX_TIER_SHIFT);
-        if (tier == 0) return boostedAmount;
-
-        // The purchase day (== the buy is happening now) — read here, only on the boost path.
-        uint24 day = _simulatedDayIndex();
-        // Deity-granted boosts are valid only on the grant day.
-        uint24 deityDay = uint24(s0 >> BP_DEITY_LOOTBOX_DAY_SHIFT);
-        if (deityDay != 0 && deityDay != day) {
-            bp.slot0 = s0 & BP_LOOTBOX_CLEAR;
-            return boostedAmount;
-        }
-        // Check expiry
-        uint24 stampDay = uint24(s0 >> BP_LOOTBOX_DAY_SHIFT);
-        if (
-            stampDay > 0 && day > stampDay + LOOTBOX_BOOST_EXPIRY_DAYS
-        ) {
-            // Expired: clear lootbox fields
-            bp.slot0 = s0 & BP_LOOTBOX_CLEAR;
-            return boostedAmount;
-        }
-
-        // Apply boost
-        uint16 boostBps = _lootboxTierToBps(tier);
-        uint256 cappedAmount = amount > LOOTBOX_BOOST_MAX_VALUE
-            ? LOOTBOX_BOOST_MAX_VALUE
-            : amount;
-        uint256 boost = (cappedAmount * boostBps) / 10_000;
-        boostedAmount += boost;
-
-        // Clear lootbox fields (consumed)
-        bp.slot0 = s0 & BP_LOOTBOX_CLEAR;
-
-        emit LootBoxBoostConsumed(player, day, amount, boostedAmount, boostBps);
+    /// @dev Clamp a raw activity score into the cover call's uint16 — a bare cast would wrap
+    ///      a large score to a small one. Mirrors the afking cover's guard.
+    function _clampScore(uint256 raw) private pure returns (uint16) {
+        return raw > type(uint16).max ? type(uint16).max : uint16(raw);
     }
+
 
     // =========================================================================
     // Whale Pass Claims

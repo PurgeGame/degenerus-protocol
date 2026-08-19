@@ -279,12 +279,6 @@ interface IDegenerusGame {
     /// @param linkAmount LINK donated, in juels.
     function creditMiddayRng(address to, uint256 linkAmount) external;
 
-    /// @notice Get lootbox status for a player on a specific lootbox index.
-    /// @param player The player to query.
-    /// @param lootboxIndex Lootbox RNG index assigned at purchase time.
-    /// @return amount Lootbox value in wei.
-    /// @return presale True if presale mode is currently active (global flag, not per-lootbox).
-    function lootboxStatus(address player, uint48 lootboxIndex) external view returns (uint256 amount, bool presale);
 
     /// @notice Check whether lootbox presale mode is currently active.
     /// @return active True if presale is active.
@@ -304,14 +298,14 @@ interface IDegenerusGame {
     /// @notice Buy tickets/lootbox AND a presale box in one tx, sharing one RNG index.
     /// @param buyer Player to receive both legs (address(0) = msg.sender).
     /// @param entryQuantityScaled Scaled entry quantity (400 units = 1 whole ticket; 0 to skip).
-    /// @param lootBoxAmount ETH lootbox spend (0 to skip).
+    /// @param boxOrder Packed box order (0 to skip; see purchase()).
     /// @param affiliateCode Affiliate/referral code for the mint leg.
     /// @param payKind Payment method for the mint leg.
     /// @param boxAmount Requested presale-box ETH (claimable-funded).
     function buyLootboxAndPresaleBox(
         address buyer,
         uint256 entryQuantityScaled,
-        uint256 lootBoxAmount,
+        uint256 boxOrder,
         bytes32 affiliateCode,
         MintPaymentKind payKind,
         uint256 boxAmount
@@ -405,7 +399,8 @@ interface IDegenerusGame {
     ///      Recycling at least 3 tickets' worth of claimable winnings earns a 10% FLIP flip-credit bonus.
     /// @param buyer Player address to receive purchases (address(0) = msg.sender).
     /// @param entryQuantityScaled Scaled entry quantity (400 units = 1 whole ticket; 0 to skip).
-    /// @param lootBoxAmount ETH amount for loot boxes, minimum 0.01 ETH (0 to skip).
+    /// @param boxOrder Packed box order (0 to skip):
+    ///        [small:8][med:8][large:8][customCount:8][customSize:48 in 1e12-wei units].
     /// @param affiliateCode Affiliate/referral code for all purchases.
     /// @param payKind Payment method (DirectEth, Claimable, or Combined).
     /// @param foil True to additively buy one foil pack (10x price) in the same tx; the
@@ -413,7 +408,7 @@ interface IDegenerusGame {
     function purchase(
         address buyer,
         uint256 entryQuantityScaled,
-        uint256 lootBoxAmount,
+        uint256 boxOrder,
         bytes32 affiliateCode,
         MintPaymentKind payKind,
         bool foil
@@ -429,8 +424,8 @@ interface IDegenerusGame {
     ) external;
 
     /// @notice Claim color-completion bingo: all 8 colors of one symbol on a level.
-    /// @dev Tiered reward (regular / symbol-first / quadrant-first); dispatches to the bingo module.
-    ///      Permissionless: settles to `player`, the slot owner, never the caller (address(0) = msg.sender).
+    /// @dev One reward per player per level; dispatches to the bingo module. Permissionless:
+    ///      settles to `player`, the slot owner, never the caller (address(0) = msg.sender).
     /// @param player Bingo owner to claim for (address(0) = msg.sender).
     /// @param level The level to claim on (uint24 storage-key width).
     /// @param symbol Symbol 0-31 (quadrant = symbol >> 3, symInQ = symbol & 7).

@@ -31,11 +31,11 @@ contract ActivityScorePointFloorTest is DeployProtocol {
     uint256 private constant OFF_QS_BASESTREAK = 11;
 
     /// @dev Game-resident slots + the AFKing-Coin-era Sub-slot accumulator offsets (DegenerusGameStorage.sol
-    ///      struct Sub, post `validThroughLevel` deletion): _subOf mapping root @ slot 54; mintPacked_ deity
+    ///      struct Sub, post `validThroughLevel` deletion): _subOf mapping root @ slot 52; mintPacked_ deity
     ///      bit @ bit 184. The accumulator section is affiliateBase u32 off19, pendingFlip u24 off23,
     ///      subStreakLatch u16 off26. The two afking day markers are afkCoveredThroughDay u24 off13,
     ///      afkingStartDay u24 off16.
-    uint256 private constant SUBOF_SLOT = 53;
+    uint256 private constant SUBOF_SLOT = 52;
     uint256 private constant MINTPACKED_SLOT = 9;
     uint256 private constant DEITY_SHIFT = 184;
     uint256 private constant OFF_AFKCOVERED = 13;

@@ -5,6 +5,7 @@ import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
+import {BoxOrderLib} from "../helpers/BoxOrderLib.sol";
 
 /// @title V55SetMutationOpenE -- The dedicated TST-04 proof: the v55.0 two-path open coexistence
 ///        (BOX-05, no shared mutable-state hazard), the NO-ORPHAN guard (a sub removed between stamp and
@@ -44,9 +45,9 @@ contract V55SetMutationOpenE is DeployProtocol {
     // Game-resident storage slots (RE-DERIVED via `forge inspect DegenerusGame storageLayout`, post
     // Stage B Game-storage packing — corrected to authoritative values).
     // -------------------------------------------------------------------------
-    uint256 private constant SUBOF_SLOT = 53; // _subOf mapping root
-    uint256 private constant SUBSCRIBERS_SLOT = 55; // _subscribers address[] (length here; data at keccak(56))
-    uint256 private constant SUBSCRIBER_INDEX_SLOT = 56; // _subscriberIndex mapping root (1-indexed)
+    uint256 private constant SUBOF_SLOT = 52; // _subOf mapping root
+    uint256 private constant SUBSCRIBERS_SLOT = 54; // _subscribers address[] (length here; data at keccak(54))
+    uint256 private constant SUBSCRIBER_INDEX_SLOT = 55; // _subscriberIndex mapping root (1-indexed)
 
     // Sub packed-field byte offsets — the v56 compute-on-read re-pack (single 256-bit slot); the
     // validThroughLevel field is deleted (the AFKing Subscription Token replaced the pass-horizon credential), so
@@ -97,7 +98,7 @@ contract V55SetMutationOpenE is DeployProtocol {
         address human = makeAddr("human_player");
         vm.deal(human, 5 ether);
         vm.prank(human);
-        game.purchase{value: 1.01 ether}(human, 400, 1 ether, bytes32(0), MintPaymentKind.DirectEth, false);
+        game.purchase{value: 1.01 ether}(human, 400, BoxOrderLib.boCustomFloor(1 ether), bytes32(0), MintPaymentKind.DirectEth, false);
 
         // Settle so the afking open leg (mineFlip, !advanceDue) and the human autoOpen can run.
         _settleGame(0xC0A2);
@@ -449,7 +450,7 @@ contract V55SetMutationOpenE is DeployProtocol {
         vm.store(address(game), keccak256(abi.encode(who, uint256(SUBSCRIBER_INDEX_SLOT))), bytes32(uint256(0)));
     }
 
-    // ---- Sub field reads (RE-DERIVED slot 54 + verified offsets) ----
+    // ---- Sub field reads (RE-DERIVED slot 52 + verified offsets) ----
 
     function _subSlot(address who) internal pure returns (bytes32) {
         return keccak256(abi.encode(who, uint256(SUBOF_SLOT)));

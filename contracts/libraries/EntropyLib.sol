@@ -3,7 +3,7 @@ pragma solidity 0.8.34;
 
 /**
  * @title EntropyLib
- * @notice Shared PRNG utility: keccak scratch-slot hashing of one or two words
+ * @notice Shared PRNG utility: allocation-free keccak hashing of fixed-width words
  * @dev Full-diffusion keccak256 over the EVM scratch space, suited to
  *      consumers that read low bits of a word derived from structured
  *      (high-bit) input.
@@ -25,6 +25,29 @@ library EntropyLib {
             mstore(0x00, a)
             mstore(0x20, b)
             r := keccak256(0x00, 0x40)
+        }
+    }
+
+    /**
+     * @notice Keccak mix of four ABI words without allocating an encoded bytes buffer.
+     * @dev Byte-identical to `uint256(keccak256(abi.encode(a, b, c, d)))`. Four words do not
+     *      fit in Solidity's 64-byte scratch region, so the preimage temporarily uses memory at
+     *      the free-memory pointer without advancing it; the block makes no calls and leaves the
+     *      pointer itself untouched.
+     */
+    function hash4(
+        uint256 a,
+        uint256 b,
+        uint256 c,
+        uint256 d
+    ) internal pure returns (uint256 r) {
+        assembly ("memory-safe") {
+            let p := mload(0x40)
+            mstore(p, a)
+            mstore(add(p, 0x20), b)
+            mstore(add(p, 0x40), c)
+            mstore(add(p, 0x60), d)
+            r := keccak256(p, 0x80)
         }
     }
 

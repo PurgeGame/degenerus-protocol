@@ -5,6 +5,7 @@ import "forge-std/Test.sol";
 import {DegenerusGame} from "../../../contracts/DegenerusGame.sol";
 import {MockVRFCoordinator} from "../../../contracts/mocks/MockVRFCoordinator.sol";
 import {MintPaymentKind} from "../../../contracts/interfaces/IDegenerusGame.sol";
+import {BoxOrderLib} from "../../helpers/BoxOrderLib.sol";
 
 /// @title RngWindowFreezeHandler — the FUZZ-02 RNG-FREEZE durable-invariant action handler.
 ///
@@ -284,7 +285,7 @@ contract RngWindowFreezeHandler is Test {
             return;
         }
         vm.prank(currentActor);
-        try game.purchase{value: cost}(currentActor, qty, boxAmt, bytes32(0), MintPaymentKind.DirectEth, false) {} catch {}
+        try game.purchase{value: cost}(currentActor, qty, BoxOrderLib.boCustomFloor(boxAmt), bytes32(0), MintPaymentKind.DirectEth, false) {} catch {}
         _checkFrozenAfterIsolatedAction();
     }
 
@@ -417,7 +418,7 @@ contract RngWindowFreezeHandler is Test {
             uint256 cost = priceWei + boxAmt; // 1 whole ticket (400 entries) + the box leg
             if (cost > currentActor.balance) return false;
             vm.prank(currentActor);
-            try game.purchase{value: cost}(currentActor, 400, boxAmt, bytes32(0), MintPaymentKind.DirectEth, false) {} catch {}
+            try game.purchase{value: cost}(currentActor, 400, BoxOrderLib.boCustomFloor(boxAmt), bytes32(0), MintPaymentKind.DirectEth, false) {} catch {}
 
             vm.prank(currentActor);
             try game.requestLootboxRng() {} catch {}
@@ -467,7 +468,7 @@ contract RngWindowFreezeHandler is Test {
             return;
         }
         vm.prank(currentActor);
-        try game.purchase{value: cost}(currentActor, qty, boxAmt, bytes32(0), MintPaymentKind.DirectEth, false) {} catch {}
+        try game.purchase{value: cost}(currentActor, qty, BoxOrderLib.boCustomFloor(boxAmt), bytes32(0), MintPaymentKind.DirectEth, false) {} catch {}
         _checkMidDayFrozenAfterIsolatedAction();
     }
 

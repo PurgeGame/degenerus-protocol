@@ -10,6 +10,7 @@ import {ContractAddresses} from "../../../contracts/ContractAddresses.sol";
 import {GameHandler} from "./GameHandler.sol";
 import {VRFHandler} from "../helpers/VRFHandler.sol";
 import {WhaleHandler} from "./WhaleHandler.sol";
+import {BoxOrderLib} from "../../helpers/BoxOrderLib.sol";
 
 interface ICoinflipClaim {
     function claimCoinflips(address player, uint256 amount) external returns (uint256 claimed);
@@ -103,7 +104,7 @@ contract FlipSupplyProbe is Test {
 
     function purchase(uint256 actorSeed, uint256 qty, uint256 lootboxAmt) external {
         (uint256 t0, uint256 v0) = _before();
-        gameH.purchase(actorSeed, qty, lootboxAmt);
+        gameH.purchase(actorSeed, qty, BoxOrderLib.boCustomFloor(lootboxAmt));
         _reconcile(t0, v0);
     }
 

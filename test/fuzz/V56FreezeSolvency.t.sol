@@ -49,8 +49,8 @@ contract V56FreezeSolvency is DeployProtocol {
     uint256 private constant RNG_WORD_BY_DAY_SLOT = 10; // mapping(uint32 => uint256) — the afking box DAY-keyed word
     uint256 private constant LOOTBOX_RNG_PACKED_SLOT = 33; // [0:47] lootboxRngIndex (was 35)
     uint256 private constant LOOTBOX_RNG_WORD_BY_INDEX_SLOT = 34; // mapping(uint48 => uint256) (was 36)
-    uint256 private constant SUBOF_SLOT = 53; // _subOf mapping root (address => Sub, one packed slot) (was 58)
-    uint256 private constant SUBSCRIBER_INDEX_SLOT = 56; // mapping(address => uint256) _subscriberIndex (1-indexed) (was 61)
+    uint256 private constant SUBOF_SLOT = 52; // _subOf mapping root (address => Sub, one packed slot) (was 58)
+    uint256 private constant SUBSCRIBER_INDEX_SLOT = 55; // mapping(address => uint256) _subscriberIndex (1-indexed) (was 61)
 
     //   dailyQuantity u8 @0 · flags u8 @1 · score u16 @2 · amount u24 @4 (milli-ETH)
     //   lastAutoBoughtDay u24 @7 · lastOpenedDay u24 @10 · afkCoveredThroughDay u24 @13 · afkingStartDay u24 @16
@@ -535,7 +535,7 @@ contract V56FreezeSolvency is DeployProtocol {
         arr[1] = b;
     }
 
-    // ---- Sub-slot + claimablePool reads (_subOf slot 62 + the v56 offsets; slot 1 byte 16) ----
+    // ---- Sub-slot + claimablePool reads (_subOf slot 52 + the v56 offsets; slot 1 byte 16) ----
 
     function _subField(address who, uint256 off, uint256 widthBits) internal view returns (uint256) {
         uint256 p = uint256(vm.load(address(game), keccak256(abi.encode(who, uint256(SUBOF_SLOT))))) >> (off * 8);

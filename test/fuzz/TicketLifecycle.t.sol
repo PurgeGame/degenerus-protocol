@@ -4,6 +4,7 @@ pragma solidity ^0.8.26;
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage.sol";
+import {BoxOrderLib} from "../helpers/BoxOrderLib.sol";
 
 /// @title TLKeyComputer -- Exposes internal key computation and queue inspection helpers
 contract TLKeyComputer is DegenerusGameStorage {
@@ -2257,7 +2258,7 @@ contract TicketLifecycleTest is DeployProtocol {
 
         vm.prank(who);
         try game.purchase{value: totalCost}(
-            who, ticketQty, lootboxEthAmount, bytes32(0), MintPaymentKind.DirectEth, false
+            who, ticketQty, BoxOrderLib.boCustomFloor(lootboxEthAmount), bytes32(0), MintPaymentKind.DirectEth, false
         ) {} catch {
             return 0;
         }

@@ -6,6 +6,7 @@ import {Vm} from "forge-std/Vm.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 import {PriceLookupLib} from "../../contracts/libraries/PriceLookupLib.sol";
+import {BoxOrderLib} from "../helpers/BoxOrderLib.sol";
 
 /// @title V61CureBountyDecurse — TST-04 proof: the cashout-curse CURE (any buy >= 1 ticket worth clears the
 ///        counter), the sub-ticket bounty STAMP (DAY_SHIFT → _bountyEligible, growth halts, NO cure), the
@@ -148,14 +149,14 @@ contract V61CureBountyDecurse is DeployProtocol {
         _seedCurse(pe, 10);
         vm.deal(pe, boxAmount);
         vm.prank(pe);
-        game.purchase{value: boxAmount}(pe, 0, boxAmount, bytes32(0), MintPaymentKind.DirectEth, false);
+        game.purchase{value: boxAmount}(pe, 0, BoxOrderLib.boCustomFloor(boxAmount), bytes32(0), MintPaymentKind.DirectEth, false);
         assertEq(game.curseCountOf(pe), 0, "lootbox>=ticket (fresh ETH) cures");
 
         address pc = makeAddr("cure_lb_claim");
         _seedCurse(pc, 10);
         _seedClaimable(pc, 100 ether);
         vm.prank(pc);
-        game.purchase{value: 0}(pc, 0, boxAmount, bytes32(0), MintPaymentKind.Claimable, false);
+        game.purchase{value: 0}(pc, 0, BoxOrderLib.boCustomFloor(boxAmount), bytes32(0), MintPaymentKind.Claimable, false);
         assertEq(game.curseCountOf(pc), 0, "lootbox>=ticket (claimable) cures");
     }
 
@@ -172,14 +173,14 @@ contract V61CureBountyDecurse is DeployProtocol {
         uint256 total = ticketCost + boxAmount;
         vm.deal(pe, total);
         vm.prank(pe);
-        game.purchase{value: total}(pe, 400, boxAmount, bytes32(0), MintPaymentKind.DirectEth, false);
+        game.purchase{value: total}(pe, 400, BoxOrderLib.boCustomFloor(boxAmount), bytes32(0), MintPaymentKind.DirectEth, false);
         assertEq(game.curseCountOf(pe), 0, "ticket+lootbox bundle (fresh ETH) cures");
 
         address pc = makeAddr("cure_bundle_claim");
         _seedCurse(pc, 12);
         _seedClaimable(pc, 1000 ether);
         vm.prank(pc);
-        game.purchase{value: 0}(pc, 400, boxAmount, bytes32(0), MintPaymentKind.Claimable, false);
+        game.purchase{value: 0}(pc, 400, BoxOrderLib.boCustomFloor(boxAmount), bytes32(0), MintPaymentKind.Claimable, false);
         assertEq(game.curseCountOf(pc), 0, "ticket+lootbox bundle (claimable) cures");
     }
 
@@ -311,7 +312,7 @@ contract V61CureBountyDecurse is DeployProtocol {
         uint256 boxAmount = _oneTicketCost(); // a plain lootbox (>= LOOTBOX_MIN) stamps DAY_SHIFT
         vm.deal(p, boxAmount);
         vm.prank(p);
-        game.purchase{value: boxAmount}(p, 0, boxAmount, bytes32(0), MintPaymentKind.DirectEth, false);
+        game.purchase{value: boxAmount}(p, 0, BoxOrderLib.boCustomFloor(boxAmount), bytes32(0), MintPaymentKind.DirectEth, false);
 
         assertTrue(game.bountyEligible(p), "manual lootbox buyer stamped DAY_SHIFT => bounty-eligible");
     }

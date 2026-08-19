@@ -1817,9 +1817,9 @@ contract DegenerusGameDegeneretteModule is
         uint16 activityScore,
         uint256 seed,
         uint32 customTraits
-    ) external payable {
+    ) external payable returns (uint256 wwxrpOut) {
         if (address(this) != ContractAddresses.GAME) revert OnlyDelegatecall();
-        if (stake == 0 || stake > type(uint128).max) return;
+        if (stake == 0 || stake > type(uint128).max) return 0;
         uint64 betId = _boxBetId(seed, BOX_SPIN_TYPE_WWXRP);
         uint128 betAmount = uint128(stake);
         uint256 roiBps = WWXRP_FLOOR_BPS;
@@ -1852,7 +1852,8 @@ contract DegenerusGameDegeneretteModule is
             ((playerTraits >> (heroQuadrant * 8 + 3)) & 7) == 7
         );
 
-        if (payout != 0) wwxrp.mintPrize(player, payout);
+        // Returned, not minted: the caller sums every WWXRP lane in the entry and mints once.
+        wwxrpOut = payout;
 
         // S==9 jackpot grants the bracket's one whale halfpass (identical to a regular
         // WWXRP bet jackpot; the per-bracket flag is shared, so still one award per bracket).
@@ -1886,16 +1887,18 @@ contract DegenerusGameDegeneretteModule is
         uint16 activityScore,
         uint256 seed,
         uint32 customTraits
-    ) external payable {
+    ) external payable returns (uint256 flipOut) {
         if (address(this) != ContractAddresses.GAME) revert OnlyDelegatecall();
-        _flipSpinChain(
-            player,
-            totalStake,
-            activityScore,
-            seed,
-            customTraits,
-            BOX_SPIN_TYPE_FLIP
-        );
+        // Returned, not minted: the caller sums every FLIP lane in the entry and credits once.
+        return
+            _flipSpinChain(
+                player,
+                totalStake,
+                activityScore,
+                seed,
+                customTraits,
+                BOX_SPIN_TYPE_FLIP
+            );
     }
 
     /// @dev The FLIP spin chain itself, shared by the lootbox FLIP roll and the
@@ -1911,10 +1914,10 @@ contract DegenerusGameDegeneretteModule is
         uint256 seed,
         uint32 customTraits,
         uint8 spinType
-    ) private {
-        if (totalStake == 0) return;
+    ) private returns (uint256 minted) {
+        if (totalStake == 0) return 0;
         uint128 perSpin = uint128(totalStake / BOX_FLIP_SPINS);
-        if (perSpin == 0) return;
+        if (perSpin == 0) return 0;
         uint64 betId = _boxBetId(seed, spinType);
         uint256 roiBps = _roiBpsFromScore(activityScore);
 
@@ -1963,7 +1966,12 @@ contract DegenerusGameDegeneretteModule is
                 EntropyLib.hash2(seed, FLIP_ROUND_TAG)
             )
             : FlipRoundLib.floorWholeFlip(total);
-        if (total != 0) coin.mintForGame(player, total);
+        // The BOX caller sums this into the entry's FLIP lane; the record-bounty caller has no
+        // accumulator and mints here.
+        if (total != 0) {
+            if (spinType == BOX_SPIN_TYPE_RECORD) coin.mintForGame(player, total);
+            else minted = total;
+        }
 
         // One self-contained record: all three reels + count + survival + the final FLIP mint.
         packedSpins |=

@@ -122,39 +122,41 @@ describe("LootboxAutoResolveRemByte — Phase 275 Wave 2 TST-LBX-AR-05", functio
   });
 
   describe("LootboxModule auto-resolve branch calls `_queueEntries` (whole) — not `_queueEntriesScaled` (LBX-AR-02)", function () {
-    it("[02a] LootboxModule contains `_queueEntries(player, rollLevel, wholeTicketsToEntries(whole), false)` at one source site and ZERO occurrences of `_queueEntriesScaled`", function () {
+    it("[02a] LootboxModule contains `_queueEntries(player, currentLevel + uint24(offset), wholeTicketsToEntries(whole), false)` at one source site and ZERO occurrences of `_queueEntriesScaled`", function () {
       const source = fs.readFileSync(MODULE_SOURCE_PATH, "utf8");
       // Pre-refactor the manual true-branch and auto-resolve else-arm each had
       // their own `_queueEntries(player, targetLevel, wholeTicketsToEntries(whole), false)` call (the
-      // "exactly twice" structure). The refactor unifies both paths into a
-      // single per-roll `_settleLootboxRoll` helper, so the whole-ticket queue
-      // is now ONE source site (invoked once per roll at runtime — a split box
-      // runs the helper twice). The load-bearing invariant survives: the lootbox
-      // path queues WHOLE tickets via `_queueEntries`, never `_queueEntriesScaled`.
-      const callPattern = /_queueEntries\(player, rollLevel, wholeTicketsToEntries\(whole\), false\)/g;
+      // "exactly twice" structure). Box-order rework: both paths accumulate into
+      // a shared `BoxAcc` (`_settleLootboxRoll` per roll) and flush the
+      // whole-ticket queue ONCE per entry from `_flushBoxAcc` — one source site,
+      // reached at most once per distinct target level per entry. The
+      // load-bearing invariant survives: the lootbox path queues WHOLE tickets
+      // via `_queueEntries`, never `_queueEntriesScaled`.
+      const callPattern = /_queueEntries\(player, currentLevel \+ uint24\(offset\), wholeTicketsToEntries\(whole\), false\)/g;
       const calls = (source.match(callPattern) || []).length;
-      expect(calls, "expected exactly one `_queueEntries(player, rollLevel, wholeTicketsToEntries(whole), false)` source site (unified per-roll settle path)").to.equal(1);
+      expect(calls, "expected exactly one `_queueEntries(player, currentLevel + uint24(offset), wholeTicketsToEntries(whole), false)` source site (per-entry flush path)").to.equal(1);
       expect(
         source.includes("_queueEntriesScaled"),
         "`_queueEntriesScaled` must not appear in DegenerusGameLootboxModule.sol"
       ).to.equal(false);
     });
 
-    it("[02b] the single whole-ticket queue site lives inside `_settleLootboxRoll` (the unified per-roll helper that replaced the manual/auto branch arms)", function () {
+    it("[02b] the single whole-ticket queue site lives inside `_flushBoxAcc` (the per-entry flush that replaced the manual/auto branch arms)", function () {
       const source = fs.readFileSync(MODULE_SOURCE_PATH, "utf8");
       // The pre-refactor manual-first / auto-second branch-ordering invariant is
       // retired: there are no longer two arms. The equivalent structural anchor
-      // is that the sole whole-ticket queue call sits inside `_settleLootboxRoll`,
-      // which both the manual (payColdBustConsolation = true) and auto-resolve
-      // (payColdBustConsolation = false) paths invoke via `_resolveLootboxCommon`.
-      const settleBody = extractBody(source, "function _settleLootboxRoll(");
-      expect(settleBody, "`_settleLootboxRoll` body not found").to.not.equal(null);
+      // is that the sole whole-ticket queue call sits inside `_flushBoxAcc`,
+      // which every entry point (manual openBox, both auto-resolve callers)
+      // reaches once its `_settleLootboxRoll`-driven `BoxAcc` accumulation
+      // completes.
+      const flushBody = extractBody(source, "function _flushBoxAcc(");
+      expect(flushBody, "`_flushBoxAcc` body not found").to.not.equal(null);
       expect(
-        settleBody.includes("_queueEntries(player, rollLevel, wholeTicketsToEntries(whole), false)"),
-        "the whole-ticket queue call must live inside `_settleLootboxRoll`"
+        flushBody.includes("_queueEntries(player, currentLevel + uint24(offset), wholeTicketsToEntries(whole), false)"),
+        "the whole-ticket queue call must live inside `_flushBoxAcc`"
       ).to.equal(true);
       // The queue site appears nowhere else in the module.
-      const totalCalls = (source.match(/_queueEntries\(player, rollLevel, wholeTicketsToEntries\(whole\), false\)/g) || []).length;
+      const totalCalls = (source.match(/_queueEntries\(player, currentLevel \+ uint24\(offset\), wholeTicketsToEntries\(whole\), false\)/g) || []).length;
       expect(totalCalls, "the whole-ticket queue call must be single-site").to.equal(1);
     });
   });

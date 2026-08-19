@@ -26,9 +26,9 @@ interface IFlipCoinflipPlayerMock {
 ///         1. LootboxModule.resolveRedemptionLootbox — the delegatecall target of the Game's
 ///            5-ETH-chunk loop. Non-payable, its compiled callvalue guard reverts the whole
 ///            claim whenever sDGNRS holds ANY liquid ETH (the normal funded state).
-///         2. BoonModule.checkAndClearExpiredBoon and BoonModule.consumeActivityBoon — nested
-///            delegatecall dispatches inside `_resolveLootboxCommon`, reached whenever the
-///            claimant has boon state. Same guard, one frame deeper.
+///         2. BoonModule.checkAndClearExpiredBoon — a nested delegatecall dispatch inside
+///            `_resolveLootboxCommon`, reached whenever the claimant has boon state. Same
+///            guard, one frame deeper.
 ///
 ///         Every prior suite missed this because the module-side target was mocked
 ///         (vm.mockCall intercepts a delegatecall BEFORE the callvalue guard runs) or sDGNRS
@@ -50,8 +50,6 @@ contract RedemptionLootboxPayableForward is DeployProtocol {
     /// @dev BoonPacked.slot0 bit layout (coinflip fields).
     uint256 internal constant BP_COINFLIP_DAY_SHIFT = 0;
     uint256 internal constant BP_COINFLIP_TIER_SHIFT = 48;
-    /// @dev BoonPacked.slot1 bit layout: pending activity bonus (uint24) at bit 0.
-    uint256 internal constant BP_ACTIVITY_PENDING_SHIFT = 0;
 
     /// @dev sDGNRS funding / burn sizing mirrors V62RedemptionReentrancy: large enough that the
     ///      175% MAX roll yields a multi-ETH lootbox half (so the Game-side 5-ETH-chunk loop
@@ -122,17 +120,15 @@ contract RedemptionLootboxPayableForward is DeployProtocol {
         sdgnrs.resolveRedemptionPeriod(roll, uint24(dayToResolve));
     }
 
-    /// @dev Give `who` live boon state: an unexpired coinflip boon (slot0) and a pending
-    ///      activity bonus (slot1). The claim-time lootbox resolution then takes BOTH nested
-    ///      BoonModule delegatecalls (checkAndClearExpiredBoon via the any-bits gate,
-    ///      consumeActivityBoon via the pending-bits gate) with the claim's msg.value in flight.
+    /// @dev Give `who` live boon state: an unexpired coinflip boon (slot0). The claim-time
+    ///      lootbox resolution then takes the nested BoonModule delegatecall
+    ///      (checkAndClearExpiredBoon via the any-bits gate) with the claim's msg.value in
+    ///      flight.
     function _injectBoonState(address who) internal {
         bytes32 base = keccak256(abi.encode(who, SLOT_BOON_PACKED));
         uint24 day = game.currentDayView();
         uint256 s0 = (uint256(day) << BP_COINFLIP_DAY_SHIFT) | (uint256(1) << BP_COINFLIP_TIER_SHIFT);
         vm.store(address(game), base, bytes32(s0));
-        uint256 s1 = uint256(100) << BP_ACTIVITY_PENDING_SHIFT;
-        vm.store(address(game), bytes32(uint256(base) + 1), bytes32(s1));
     }
 
     /// @dev Drive a full burn → resolve → custody-shape cycle and return the claim's rolled
@@ -207,10 +203,9 @@ contract RedemptionLootboxPayableForward is DeployProtocol {
     }
 
     /// @notice Same claim with the claimant holding live boon state. The lootbox resolution then
-    ///         delegatecalls BoonModule.checkAndClearExpiredBoon (any-boon-bits gate) and
-    ///         BoonModule.consumeActivityBoon (pending-activity gate) while the claim's
-    ///         msg.value is still in flight — both must be payable or the claim reverts one
-    ///         frame deeper than the outer fix.
+    ///         delegatecalls BoonModule.checkAndClearExpiredBoon (any-boon-bits gate) while the
+    ///         claim's msg.value is still in flight — it must be payable or the claim reverts
+    ///         one frame deeper than the outer fix.
     function test_LiveClaimSettlesWithBoonStateAndForwardedEthLeg() public {
         (uint24 dayD, uint256 ethDirect, uint256 lootboxEth) = _burnResolveAndShapeCustody();
         _injectBoonState(player);
@@ -230,14 +225,5 @@ contract RedemptionLootboxPayableForward is DeployProtocol {
             "full rolled value must arrive at the game"
         );
         assertEq(sdgnrs.pendingRedemptionEthValue(), 0, "reservation must be fully released");
-
-        // The pending activity bonus was consumed by the real BoonModule dispatch.
-        bytes32 base = keccak256(abi.encode(player, SLOT_BOON_PACKED));
-        uint256 s1 = uint256(vm.load(address(game), bytes32(uint256(base) + 1)));
-        assertEq(
-            uint24(s1 >> BP_ACTIVITY_PENDING_SHIFT),
-            0,
-            "consumeActivityBoon must consume the pending bonus during the claim"
-        );
     }
 }

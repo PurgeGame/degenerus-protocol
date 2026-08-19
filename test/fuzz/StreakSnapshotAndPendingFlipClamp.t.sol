@@ -35,10 +35,10 @@ contract StreakSnapshotAndPendingFlipClampTest is DeployProtocol {
     // -------------------------------------------------------------------------
     // Game-resident slots + the AFKing-Coin-era Sub accumulator offsets (DegenerusGameStorage.sol struct Sub)
     // -------------------------------------------------------------------------
-    /// @dev _subOf mapping root @ slot 54. The accumulator section is affiliateBase u32 off19,
+    /// @dev _subOf mapping root @ slot 52. The accumulator section is affiliateBase u32 off19,
     ///      pendingFlip u24 off23, subStreakLatch u16 off26. The afking day markers:
     ///      afkCoveredThroughDay u24 off13, afkingStartDay u24 off16.
-    uint256 private constant SUBOF_SLOT = 53;
+    uint256 private constant SUBOF_SLOT = 52;
     uint256 private constant OFF_AFKCOVERED = 13;
     uint256 private constant OFF_AFKINGSTART = 16;
     uint256 private constant OFF_PENDINGFLIP = 23; // uint24 pendingFlip (bytes 23..25)

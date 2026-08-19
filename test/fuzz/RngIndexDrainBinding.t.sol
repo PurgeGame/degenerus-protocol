@@ -4,6 +4,8 @@ pragma solidity ^0.8.26;
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
+import {BoxOrderLib} from "../helpers/BoxOrderLib.sol";
+import {PriceLookupLib} from "../../contracts/libraries/PriceLookupLib.sol";
 
 /// @title RngIndexDrainBinding -- Phase 232.1 SPEC AC-3 (binding consistency)
 /// @notice For a ticket frozen at lootbox RNG index X, the entropy parameter
@@ -23,7 +25,7 @@ contract RngIndexDrainBindingTest is DeployProtocol {
     uint256 internal constant SLOT_LR_INDEX = 33;
     /// @dev Base slot for `boxPlayers` mapping(uint48 => address[]). Authoritative
     ///      at the working tree (confirmed at runtime: boxPlayers[idx][0] == buyer).
-    uint256 internal constant SLOT_BOX_PLAYERS_MAPPING = 58;
+    uint256 internal constant SLOT_BOX_PLAYERS_MAPPING = 57;
     /// @dev Base slot for `presaleBoxEth` mapping(uint48 => mapping(address => uint256)).
     ///      Authoritative at the working tree (confirmed at runtime: low-96 cell == applied box ETH).
     uint256 internal constant SLOT_PRESALE_BOX_ETH_MAPPING = 15;
@@ -50,21 +52,24 @@ contract RngIndexDrainBindingTest is DeployProtocol {
     /// @dev Read the player recorded at boxPlayers[index][0]. boxPlayers is the
     ///      `mapping(uint48 => address[])` queued by a presale-box purchase
     ///      (DegenerusGameMintModule:1965 `boxPlayers[index].push(buyer)`), so element
-    ///      [0] is the FIRST buyer keyed at `index`. Authoritative mapping base = slot 59.
+    ///      [0] is the FIRST buyer keyed at `index`. Authoritative mapping base = slot 57.
     function _boxPlayerAt0(uint48 index) internal view returns (address) {
         bytes32 arrSlot = keccak256(abi.encode(uint256(index), SLOT_BOX_PLAYERS_MAPPING));
         bytes32 elem0 = keccak256(abi.encode(arrSlot));
         return address(uint160(uint256(vm.load(address(game), elem0))));
     }
 
-    /// @dev Read presaleBoxEth[index][player] (low 96 bits = applied box ETH). A box buy
-    ///      records itself at the LIVE LR_INDEX (DegenerusGameMintModule:1949/1960), so a
-    ///      nonzero cell at (index, player) proves the box bound to that exact index.
-    ///      Authoritative nested-mapping base = slot 15.
+    /// @dev Read lootboxOrder[index][player] (nested mapping base = slot 15) and decode its
+    ///      nominal applied box ETH. A box buy records itself at the LIVE LR_INDEX
+    ///      (DegenerusGameMintModule:1949/1960), so a nonzero cell at (index, player) proves the
+    ///      box bound to that exact index. (Despite the name — pre-dating the box-order migration
+    ///      — this reads the lootboxOrder slot, not presaleBoxEth.)
     function _presaleBoxEth(uint48 index, address player) internal view returns (uint256) {
         bytes32 inner = keccak256(abi.encode(uint256(index), SLOT_PRESALE_BOX_ETH_MAPPING));
         bytes32 cell = keccak256(abi.encode(player, inner));
-        return uint256(vm.load(address(game), cell));
+        uint256 word = uint256(vm.load(address(game), cell));
+        if (word == 0) return 0;
+        return BoxOrderLib.boNominal(word, PriceLookupLib.priceForLevel(uint24(word & 0xFFFFFF)));
     }
 
     /// @dev Read lootboxRngWordByIndex[index] directly from storage.
@@ -87,7 +92,7 @@ contract RngIndexDrainBindingTest is DeployProtocol {
         game.purchase{value: total}(
             buyer,
             qty,
-            lootboxWei,
+            BoxOrderLib.boCustomFloor(lootboxWei),
             bytes32(0),
             MintPaymentKind.DirectEth, false
         );
@@ -266,7 +271,7 @@ contract RngIndexDrainBindingTest is DeployProtocol {
         uint256 ticketCost = (priceWei * 400) / 400;
         vm.prank(buyerB);
         game.purchase{value: ticketCost + 1 ether}(
-            buyerB, 400, 1 ether, bytes32(0), MintPaymentKind.DirectEth, false
+            buyerB, 400, BoxOrderLib.boCustomFloor(1 ether), bytes32(0), MintPaymentKind.DirectEth, false
         );
         assertEq(_boxPlayerAt0(idxLive), buyerB, "box B not keyed at the LIVE post-request index");
         assertEq(uint96(_presaleBoxEth(idxLive, buyerB)), 1 ether, "box B applied-ETH not at live index");

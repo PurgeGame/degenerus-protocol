@@ -10,7 +10,7 @@ import {DegenerusGame} from "../../../contracts/DegenerusGame.sol";
 ///      one-shot's BoxQueueViewer shape (PassBoxAutoOpenEnqueue.t.sol) and extends it with a presaleBoxEth
 ///      base reader so the invariant can distinguish a persisted presale box (base != 0) from a resolved one.
 ///      The viewer is a DegenerusGame subclass: etching type().runtimeCode (no constructor) gives the reads
-///      access to the live internal boxPlayers / lootboxEth / presaleBoxEth maps without a storage change;
+///      access to the live internal boxPlayers / lootboxOrder / presaleBoxEth maps without a storage change;
 ///      the real code is restored after the read.
 contract BoxQueueViewer is DegenerusGame {
     function lrIndexView() external view returns (uint48) {
@@ -27,11 +27,11 @@ contract BoxQueueViewer is DegenerusGame {
         return false;
     }
 
-    /// @notice The persisted lootbox amount (the [0:128] amount sub-field of the folded lootboxEth word).
-    ///         amount != 0 => a persisted, not-yet-opened box; amount == 0 => already resolved (drained on
-    ///         open, the whole word cleared in one SSTORE) and correctly absent from the queue.
+    /// @notice The raw persisted lootboxOrder word. word != 0 => a persisted, not-yet-opened box;
+    ///         word == 0 => already resolved (drained on open, the whole word cleared in one
+    ///         SSTORE) and correctly absent from the queue.
     function lootboxAmountFor(uint48 index, address who) external view returns (uint256) {
-        return lootboxEth[index][who] & LB_AMOUNT_MASK;
+        return lootboxOrder[index][who];
     }
 
     /// @notice The persisted presale-box applied-ETH base (the low 96-bit field; the closing flag at bit 255

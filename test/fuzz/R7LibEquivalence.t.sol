@@ -117,6 +117,19 @@ contract R7LibEquivalence is Test {
         assertEq(EntropyLib.hash2(a, b), uint256(keccak256(abi.encodePacked(a, b))));
     }
 
+    /// @dev Lootbox count-model seed: abi.encode(uint256, address, uint256, uint256).
+    function testFuzz_hash4_wordAddressSizeNonce(
+        uint256 word,
+        address player,
+        uint256 size,
+        uint256 nonce
+    ) public pure {
+        assertEq(
+            EntropyLib.hash4(word, uint256(uint160(player)), size, nonce),
+            uint256(keccak256(abi.encode(word, player, size, nonce)))
+        );
+    }
+
     /// @dev LIBS-04 reseed shape: abi.encode of a single uint256 is one raw word.
     function testFuzz_hash1_singleWord(uint256 x) public pure {
         assertEq(EntropyLib.hash1(x), uint256(keccak256(abi.encode(x))));

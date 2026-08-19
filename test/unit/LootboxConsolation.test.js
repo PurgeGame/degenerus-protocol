@@ -110,10 +110,11 @@ describe("LootboxConsolation — Phase 274 Wave 2 TST-WX-01..03", function () {
 
     it("[01c] source: consolation payout only reachable when `payColdBustConsolation && whole == 0`", function () {
       const source = fs.readFileSync(MODULE_SOURCE_PATH, "utf8");
-      // The consolation payout is the `wwxrp.mintPrize` call — there is no
-      // dedicated lootbox-WWXRP event. Walk backward to find the enclosing gate.
+      // The consolation payout ACCUMULATES into `acc.wwxrp` here (box-order rework:
+      // rewards settle once per entry) — there is no dedicated lootbox-WWXRP event,
+      // and no per-box mint anymore. Walk backward to find the enclosing gate.
       const consolationMint = source.indexOf(
-        "wwxrp.mintPrize(player, _boxWwxrpStake(rollAmount))"
+        "acc.wwxrp += _boxWwxrpStake(rollAmount);"
       );
       expect(consolationMint).to.be.greaterThan(-1);
       // The retired LootBoxWwxrpReward event must not appear anywhere.
@@ -131,10 +132,10 @@ describe("LootboxConsolation — Phase 274 Wave 2 TST-WX-01..03", function () {
       ).to.equal(true);
     });
 
-    it("[01d] consolation `wwxrp.mintPrize` is gated by `payColdBustConsolation && whole == 0` (auto-resolve cannot trigger)", function () {
+    it("[01d] consolation accumulation is gated by `payColdBustConsolation && whole == 0` (auto-resolve cannot trigger)", function () {
       const source = fs.readFileSync(MODULE_SOURCE_PATH, "utf8");
       const mintPrize = source.indexOf(
-        "wwxrp.mintPrize(player, _boxWwxrpStake(rollAmount))"
+        "acc.wwxrp += _boxWwxrpStake(rollAmount);"
       );
       expect(mintPrize).to.be.greaterThan(-1);
       // Within 600 chars preceding the mintPrize call, the
@@ -167,54 +168,79 @@ describe("LootboxConsolation — Phase 274 Wave 2 TST-WX-01..03", function () {
       }
     });
 
-    it("[02b] ticket award is a single unconditional `_queueEntries` call; the consolation is `payColdBustConsolation`-gated below it", function () {
+    it("[02b] ticket award is a single unconditional `_queueEntries` call (flushed once per entry); the consolation accumulation is `payColdBustConsolation`-gated in the per-roll settle function", function () {
       const source = fs.readFileSync(MODULE_SOURCE_PATH, "utf8");
-      // The sentinel branch is retired: `_queueEntries(player, rollLevel,
-      // wholeTicketsToEntries(whole), false)` is a single source site in `_settleLootboxRoll`,
-      // reached unconditionally for every path (manual openBox + both
-      // auto-resolve callers). Its `if (entries == 0) return;` early-return
-      // absorbs the cold-bust case.
-      const callLine = "_queueEntries(player, rollLevel, wholeTicketsToEntries(whole), false)";
+      // Box-order rework: `_queueEntries` moved out of the per-roll
+      // `_settleLootboxRoll` into `_flushBoxAcc`, which flushes the accumulated
+      // per-level tallies ONCE per entry (reached unconditionally for every
+      // caller — manual openBox + both auto-resolve callers — its own
+      // `if (whole != 0)` per-lane guard absorbs an all-cold-bust entry).
+      const callLine =
+        "_queueEntries(player, currentLevel + uint24(offset), wholeTicketsToEntries(whole), false)";
       const firstIdx = source.indexOf(callLine);
       const secondIdx = source.indexOf(callLine, firstIdx + 1);
-      expect(firstIdx, "`_queueEntries(player, rollLevel, wholeTicketsToEntries(whole), false)` callsite not found").to.be.greaterThan(-1);
+      expect(firstIdx, "`_queueEntries(player, currentLevel + uint24(offset), wholeTicketsToEntries(whole), false)` callsite not found").to.be.greaterThan(-1);
       expect(
         secondIdx,
-        "`_queueEntries(player, rollLevel, wholeTicketsToEntries(whole), false)` must appear at exactly one source site (sentinel-branch duplication retired)"
+        "`_queueEntries(player, currentLevel + uint24(offset), wholeTicketsToEntries(whole), false)` must appear at exactly one source site (sentinel-branch duplication retired)"
       ).to.equal(-1);
-      // Immediately after the queue call comes the
-      // `if (payColdBustConsolation && whole == 0)` consolation gate — the
-      // consolation `mintPrize` call is inside it, so auto-resolve callers
-      // (payColdBustConsolation = false) never reach it.
-      const tail = source.slice(firstIdx, firstIdx + 600);
       expect(
-        tail.includes("if (payColdBustConsolation && whole == 0)"),
-        "consolation gate `if (payColdBustConsolation && whole == 0)` must follow the queue call"
+        source.indexOf("function _flushBoxAcc("),
+        "`_flushBoxAcc` must exist"
+      ).to.be.greaterThan(-1);
+      // Separately: the consolation ACCUMULATION (not the flush) is
+      // `payColdBustConsolation`-gated inside `_settleLootboxRoll` — auto-resolve
+      // callers (payColdBustConsolation = false) never add to `acc.wwxrp`, so
+      // the shared flush in `_flushBoxAcc` is a no-op for them.
+      const accLine = "acc.wwxrp += _boxWwxrpStake(rollAmount);";
+      const accIdx = source.indexOf(accLine);
+      expect(accIdx, "`acc.wwxrp += _boxWwxrpStake(rollAmount);` callsite not found").to.be.greaterThan(-1);
+      const gateWindow = source.slice(Math.max(0, accIdx - 600), accIdx);
+      expect(
+        gateWindow.includes("if (payColdBustConsolation && whole == 0)"),
+        "consolation gate `if (payColdBustConsolation && whole == 0)` must precede the accumulation"
       ).to.equal(true);
-      const mintIdx = tail.indexOf("wwxrp.mintPrize(player, _boxWwxrpStake(rollAmount))");
-      const gateIdx = tail.indexOf("if (payColdBustConsolation && whole == 0)");
-      expect(mintIdx, "consolation mintPrize must sit after the gate").to.be.greaterThan(gateIdx);
+      const flushLine = "if (acc.wwxrp != 0) wwxrp.mintPrize(player, acc.wwxrp);";
+      expect(
+        source.includes(flushLine),
+        "the per-entry WWXRP flush site must exist"
+      ).to.equal(true);
     });
 
-    it("[02c] ticket-path-not-selected case: when `scaledWholeTickets == 0` the outer `if (scaledWholeTickets != 0)` guard skips the entire Bernoulli/queue/consolation block", function () {
+    it("[02c] ticket-path-not-selected case: when `scaledWholeTickets == 0` the outer `if (scaledWholeTickets != 0)` guard skips the Bernoulli collapse + ticket accumulation + consolation accumulation", function () {
       const source = fs.readFileSync(MODULE_SOURCE_PATH, "utf8");
-      // The outer `if (scaledWholeTickets != 0)` guard wraps the whole Bernoulli
-      // collapse + `_queueEntries` + consolation. Anything inside it requires
-      // a non-zero scaled pre-Bernoulli ticket count.
+      // Box-order rework: the outer `if (scaledWholeTickets != 0)` guard (inside
+      // `_settleLootboxRoll`) wraps the Bernoulli collapse, the per-level ticket
+      // accumulation (`acc.tickets[...]`), AND the consolation accumulation
+      // (`acc.wwxrp += ...`) — anything inside it requires a non-zero scaled
+      // pre-Bernoulli ticket count. The actual `_queueEntries` flush moved out
+      // to `_flushBoxAcc` (reached unconditionally later), but a zero-tier
+      // never populates `acc.tickets[i]`, so `_flushBoxAcc`'s own
+      // `if (whole != 0)` per-lane guard skips queuing for it — same net
+      // effect, different mechanism.
       const outerGuard = source.indexOf("if (scaledWholeTickets != 0)");
       expect(outerGuard).to.be.greaterThan(-1);
-      // The `_queueEntries` callsite is inside the outer guard.
-      const queueCall = source.indexOf("_queueEntries(player, rollLevel, wholeTicketsToEntries(whole), false)");
-      expect(queueCall).to.be.greaterThan(outerGuard);
-      // The `payColdBustConsolation && whole == 0` consolation gate is inside the
-      // outer guard too (it sits immediately below the queue call).
-      const consolationGate = source.indexOf("if (payColdBustConsolation && whole == 0)");
-      expect(consolationGate).to.be.greaterThan(queueCall);
-      // Consolation `mintPrize` also inside outer guard.
-      const mintPrize = source.indexOf(
-        "wwxrp.mintPrize(player, _boxWwxrpStake(rollAmount))"
+      const guardWindow = source.slice(outerGuard, outerGuard + 3000);
+      const consolationGate = guardWindow.indexOf("if (payColdBustConsolation && whole == 0)");
+      expect(
+        consolationGate,
+        "consolation gate must sit inside the outer `scaledWholeTickets != 0` guard"
+      ).to.be.greaterThan(-1);
+      const accLine = guardWindow.indexOf(
+        "acc.wwxrp += _boxWwxrpStake(rollAmount);",
+        consolationGate
       );
-      expect(mintPrize).to.be.greaterThan(outerGuard);
+      expect(
+        accLine,
+        "consolation accumulation must sit inside the outer guard, after its own gate"
+      ).to.be.greaterThan(consolationGate);
+      // The `_flushBoxAcc` queue call must exist, but is intentionally NOT
+      // inside this guard — it lives in a different function, gated instead by
+      // its own per-lane `if (whole != 0)`.
+      expect(
+        source.includes("_queueEntries(player, currentLevel + uint24(offset), wholeTicketsToEntries(whole), false)"),
+        "the per-entry `_queueEntries` flush callsite must exist"
+      ).to.equal(true);
     });
 
     it("[02d] the standard WWXRP win and the cold-bust consolation both draw `_boxWwxrpStake`, each off its OWN roll amount", function () {
@@ -228,8 +254,8 @@ describe("LootboxConsolation — Phase 274 Wave 2 TST-WX-01..03", function () {
         "the standard WWXRP win must stake `_boxWwxrpStake(amount)` via `_callWwxrpSpin`"
       ).to.equal(true);
       expect(
-        source.includes("wwxrp.mintPrize(player, _boxWwxrpStake(rollAmount))"),
-        "the cold-bust consolation must pay `_boxWwxrpStake(rollAmount)`"
+        source.includes("acc.wwxrp += _boxWwxrpStake(rollAmount);"),
+        "the cold-bust consolation must accumulate `_boxWwxrpStake(rollAmount)`"
       ).to.equal(true);
       // Neither site may re-introduce a flat magnitude that ignores box size.
       expect(

@@ -12,6 +12,7 @@ import {
   ZERO_BYTES32,
   getLastVRFRequestId,
 } from "../helpers/testUtils.js";
+import { boCustom } from "../helpers/boxOrder.js";
 
 /**
  * GameLifecycle integration tests.
@@ -168,7 +169,7 @@ describe("GameLifecycle", function () {
       const tx = await game.connect(alice).purchase(
         alice.address,
         100,
-        eth("0.01"), // lootBoxAmount
+        boCustom(eth("0.01")), // lootBoxAmount
         ZERO_BYTES32,
         0,false, 
         { value: eth("0.02") }

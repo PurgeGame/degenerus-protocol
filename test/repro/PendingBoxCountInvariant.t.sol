@@ -4,7 +4,7 @@ pragma solidity ^0.8.26;
 import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
 
 /// @title PendingBoxCountInvariant — `_pendingBoxCount` == Σ pending day-markers, everywhere
-/// @notice The `_pendingBoxCount` counter (DegenerusGameStorage slot 58, bits [224,240)) gates
+/// @notice The `_pendingBoxCount` counter (DegenerusGameStorage slot 56, bits [224,240)) gates
 ///         the rewarded open crank's afking ring walk: it MUST equal the number of subscribers
 ///         whose `lastOpenedDay < lastAutoBoughtDay` (a stamped-but-unopened box) after EVERY
 ///         lifecycle transition, or the gate under-counts (walk skipped with real work pending —
@@ -19,9 +19,9 @@ import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
 ///      eviction is not driven here: the no-orphan guard makes it unreachable while pending,
 ///      and a box-clean evict never touches the counter (see GameAfkingModule stage loop).
 contract PendingBoxCountInvariant is DeployProtocol {
-    uint256 private constant SUBOF_SLOT = 53;
-    uint256 private constant SUBSCRIBERS_SLOT = 55;
-    uint256 private constant CURSOR_SLOT = 57;
+    uint256 private constant SUBOF_SLOT = 52;
+    uint256 private constant SUBSCRIBERS_SLOT = 54;
+    uint256 private constant CURSOR_SLOT = 56;
     uint256 private constant PENDING_COUNT_SHIFT = 224;
     uint256 private constant OFF_LASTBOUGHT = 7;  // uint24 lastAutoBoughtDay (bytes 7..9)
     uint256 private constant OFF_LASTOPENED = 10; // uint24 lastOpenedDay     (bytes 10..12)

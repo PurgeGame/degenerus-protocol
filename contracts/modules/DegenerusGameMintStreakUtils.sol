@@ -23,7 +23,6 @@ abstract contract DegenerusGameMintStreakUtils is DegenerusGameStorage {
 
     /// @dev Jackpots processed per level before the phase ends. Mirrors the per-module copies;
     ///      declared here for _activeTicketLevel's final-jackpot-day reroute.
-    uint8 private constant JACKPOT_LEVEL_CAP = 5;
 
     /// @notice Emitted whenever a player's cashout/smite curse counter changes, carrying the
     ///         resulting absolute value so indexers need no eth_call and never replay cap logic.
@@ -134,32 +133,6 @@ abstract contract DegenerusGameMintStreakUtils is DegenerusGameStorage {
     // Activity Score (shared across DegenerusGame and DegeneretteModule)
     // =========================================================================
 
-    /// @dev The level a ticket bought RIGHT NOW routes to — the single source of truth for the
-    ///      purchase quote/charge, the ticket + foil delivery, participation/streak recording, and
-    ///      every buy-now price view, so they can never diverge. Jackpot phase → current level;
-    ///      purchase phase → next. Once the level's jackpots end this level seals no further daily
-    ///      draw, so buys route to level + 1 — quoting the old level would strand the buyer's overpay
-    ///      or misprice tickets in a level that has ended. Two states mark that sealed window: the
-    ///      final jackpot day's RNG request (rngLocked, jackpot counter about to reach the cap), and
-    ///      the span after _endPhase runs (phaseTransitionActive, jackpotCounter already zeroed, level
-    ///      not yet incremented) while the transition drains. (Salvage/settlement callers are
-    ///      rngLock-gated, so this branch is a no-op for them.)
-    function _activeTicketLevel() internal view returns (uint24) {
-        if (!jackpotPhaseFlag) return level + 1;
-        // Transition underway: _endPhase set phaseTransitionActive and zeroed jackpotCounter, so the
-        // counter test below can no longer key off the sealed level. phaseTransitionActive is the
-        // standalone signal that this level's draws have ended, so buys route to the next level.
-        if (phaseTransitionActive) return level + 1;
-        if (rngLockedFlag) {
-            uint8 cnt = jackpotCounter;
-            uint8 comp = compressedJackpotFlag;
-            uint8 step = comp == 2
-                ? JACKPOT_LEVEL_CAP
-                : (comp == 1 && cnt > 0 && cnt < JACKPOT_LEVEL_CAP - 1 ? 2 : 1);
-            if (cnt + step >= JACKPOT_LEVEL_CAP) return level + 1;
-        }
-        return level;
-    }
 
     /// @dev Far-future salvage discount curve (bps of face): two lines, 15% @ d6 -> 10% @ d20 ->
     ///      5% @ d100. Caller guarantees 6 <= d <= 100. Integer truncation is sub-bps, acceptable.

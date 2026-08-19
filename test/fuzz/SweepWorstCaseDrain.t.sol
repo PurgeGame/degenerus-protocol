@@ -4,10 +4,11 @@ pragma solidity ^0.8.26;
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {DegenerusGame} from "../../contracts/DegenerusGame.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
+import {BoxOrderLib} from "../helpers/BoxOrderLib.sol";
 
 /// @dev Read-only view overlay etched onto the live game to inspect internal box-queue state.
 ///      A DegenerusGame subclass: etching type().runtimeCode (no constructor) gives the reads access
-///      to the live internal boxPlayers / lootboxEth / presaleBoxEth maps + the packed cursor pair
+///      to the live internal boxPlayers / lootboxOrder / presaleBoxEth maps + the packed cursor pair
 ///      without any storage change; the real code is restored after each read.
 contract SweepViewer is DegenerusGame {
     function lrIndexView() external view returns (uint48) {
@@ -19,7 +20,7 @@ contract SweepViewer is DegenerusGame {
     }
 
     function lootboxAmountFor(uint48 index, address who) external view returns (uint256) {
-        return lootboxEth[index][who] & LB_AMOUNT_MASK;
+        return lootboxOrder[index][who];
     }
 
     function presaleAmountFor(uint48 index, address who) external view returns (uint256) {
@@ -60,8 +61,8 @@ contract SweepWorstCaseDrain is DeployProtocol {
     // Authoritative slots (post Stage B pack), RE-DERIVED via `solc --storage-layout`.
     uint256 private constant SLOT_LOOTBOX_RNG_PACKED = 33;   // [0:47] lootboxRngIndex
     uint256 private constant SLOT_LOOTBOX_RNG_WORD = 34;     // mapping(uint48 => uint256)
-    uint256 private constant SLOT_BOX_PLAYERS = 58;          // mapping(uint48 => address[])
-    uint256 private constant SLOT_BOX_CURSORS = 57;          // boxCursor @ byte 7, boxCursorIndex @ byte 13
+    uint256 private constant SLOT_BOX_PLAYERS = 57;          // mapping(uint48 => address[])
+    uint256 private constant SLOT_BOX_CURSORS = 56;          // boxCursor @ byte 7, boxCursorIndex @ byte 13
     uint256 private constant LR_INDEX_MASK = 0xFFFFFFFFFFFF;
 
     // Hard per-tx ceilings (mirrors V56AfkingGasMarginal): 16.7M = the gameover-composition gg bound.
@@ -140,7 +141,7 @@ contract SweepWorstCaseDrain is DeployProtocol {
         vm.store(address(game), slot, bytes32(word));
     }
 
-    /// @dev Park the open frontier (boxCursorIndex @ byte 13, boxCursor @ byte 7, both slot 58) at
+    /// @dev Park the open frontier (boxCursorIndex @ byte 13, boxCursor @ byte 7, both slot 56) at
     ///      `index` with a zero in-index cursor, so the sweep begins exactly there.
     function _parkFrontier(uint48 index) internal {
         bytes32 slot = bytes32(uint256(SLOT_BOX_CURSORS));
@@ -154,7 +155,7 @@ contract SweepWorstCaseDrain is DeployProtocol {
 
     /// @dev Append `count` no-box addresses to boxPlayers[index] — a pure skip-prefix. Each entry has
     ///      a zero lootbox amount AND zero presale leg, so the sweep skips it (one step, no
-    ///      resolution, never reverts). boxPlayers[index] is mapping(uint48 => address[]) at slot 59:
+    ///      resolution, never reverts). boxPlayers[index] is mapping(uint48 => address[]) at slot 57:
     ///      length at keccak(index, 59); element i at keccak(keccak(index,59)) + i.
     function _appendSkipPrefix(uint48 index, uint256 count, uint256 saltSeed) internal {
         bytes32 lenSlot = keccak256(abi.encode(uint256(index), uint256(SLOT_BOX_PLAYERS)));
@@ -209,7 +210,7 @@ contract SweepWorstCaseDrain is DeployProtocol {
     function _buyLootbox(address who, uint256 lootboxWei) internal {
         vm.deal(who, lootboxWei + 2 ether);
         vm.prank(who);
-        game.purchase{value: lootboxWei + 1 ether}(who, 400, lootboxWei, bytes32(0), MintPaymentKind.DirectEth, false);
+        game.purchase{value: lootboxWei + 1 ether}(who, 400, BoxOrderLib.boCustomFloor(lootboxWei), bytes32(0), MintPaymentKind.DirectEth, false);
     }
 
     /// @dev Buy a REAL presale box at the current active index (credit-funded; enqueues for auto-open).
@@ -312,16 +313,20 @@ contract SweepWorstCaseDrain is DeployProtocol {
 
             (uint48 nowIdx, uint48 nowCur) = _frontier();
 
-            // (3)+drained check: stop once the frontier has swept past the live (highest) index.
-            if (nowIdx > liveIndex) break;
-
-            // (2) monotonic progress: the frontier (index, then cursor) never regresses, and a
-            //     non-terminal call ALWAYS makes forward progress (the step budget crosses the wall).
+            // (2) monotonic progress: the frontier (index, then cursor) never regresses. Computed
+            // BEFORE the drained-check break below: the box-order migration's much larger
+            // per-call walk budget (rem * OPEN_HUMAN_ENTRY_WEIGHT) can now fully drain this small
+            // fuzzed queue in a SINGLE call, so progress must still be recorded on the call that
+            // both advances the frontier AND finishes the drain (not just on non-terminal calls).
             bool advanced = (nowIdx > prevIdx) || (nowIdx == prevIdx && nowCur > prevCur);
-            assertTrue(advanced, "MONOTONIC: each non-terminal sweep chunk advances the open frontier (no stall, no regress)");
             progressedOnce = progressedOnce || advanced;
             prevIdx = nowIdx;
             prevCur = nowCur;
+
+            // (3)+drained check: stop once the frontier has swept past the live (highest) index.
+            if (nowIdx > liveIndex) break;
+
+            assertTrue(advanced, "MONOTONIC: each non-terminal sweep chunk advances the open frontier (no stall, no regress)");
         }
         assertTrue(progressedOnce, "non-vacuity: the sweep actually walked the queue");
         assertLt(guard, 4000, "DRAIN COMPLETE: the whole multi-index queue drains in bounded chunks (no brick / infinite stall)");
@@ -339,8 +344,13 @@ contract SweepWorstCaseDrain is DeployProtocol {
     ///      the monotonic open frontier, mineFlip COMMITS that progress with no bounty instead of
     ///      reverting NoWork and rolling it back. So the keeper route advances through a skip wall
     ///      cumulatively across calls and reaches the live box behind it. Pre-fix this
-    ///      reverted NoWork every call, rolling cursor=79 back to 0 and stranding the tail box on
+    ///      reverted NoWork every call, rolling the cursor back to 0 and stranding the tail box on
     ///      the rewarded route (recoverable only via the unrewarded openBoxes valve).
+    /// @dev SKIP_PREFIX_LEN is sized to exactly exhaust mineFlip's human-sweep walk budget with
+    ///      zero afking subscribers: OPEN_WEIGHT_BUDGET (80 * OPEN_ITEM_WEIGHT(24) = 1920 units,
+    ///      GameAfkingModule.sol) minus the 1-unit index-header charge that
+    ///      DegenerusGameLootboxModule.openHumanBoxes spends entering the index, leaves exactly
+    ///      1919 one-unit skip steps before the budget is exhausted — one short of the live box.
     function testRegression_MintFlipCommitsSkipProgressAndReachesLiveTail() public {
         _driveDailyCycleOnce();
         require(!game.rngLocked(), "fixture: game unlocked");
@@ -365,11 +375,12 @@ contract SweepWorstCaseDrain is DeployProtocol {
         require(!game.advanceDue() && !game.rngLocked(), "fixture: no advance work, unlocked");
 
         uint48 index = _lrIndex();
-        _appendSkipPrefix(index, 80, 0xBAD5EED);
+        uint256 skipPrefixLen = 1919;
+        _appendSkipPrefix(index, skipPrefixLen, 0xBAD5EED);
 
         address liveOwner = makeAddr("audit-live-owner");
         _buyLootbox(liveOwner, 1 ether);
-        assertEq(_queueLen(index), 81, "fixture: eighty stale entries precede one live box");
+        assertEq(_queueLen(index), skipPrefixLen + 1, "fixture: 1919 stale entries precede one live box");
         assertGt(_lootAmt(index, liveOwner), 0, "fixture: tail box is live");
 
         _advanceLrIndexBy(1);
@@ -382,9 +393,9 @@ contract SweepWorstCaseDrain is DeployProtocol {
         assertEq(beforeIdx, index, "fixture: frontier index");
         assertEq(beforeCur, 0, "fixture: zero cursor");
 
-        // Call 1: budget 80 spends one step on the index header and 79 on stale entries, opening
-        // nothing — but the frontier advanced to cur=79. Post-fix mineFlip does NOT revert; it
-        // COMMITS that skip-only progress (no bounty).
+        // Call 1: the 1920-unit walk budget spends one unit on the index header and 1919 on stale
+        // entries, opening nothing — but the frontier advanced to cur=1919. Post-fix mineFlip does
+        // NOT revert; it COMMITS that skip-only progress (no bounty).
         uint256 keeperFlipBefore = coinflip.coinflipAmount(actor);
         uint256 gasBefore = gasleft();
         vm.prank(actor);
@@ -393,7 +404,7 @@ contract SweepWorstCaseDrain is DeployProtocol {
 
         (uint48 afterIdx, uint48 afterCur) = _frontier();
         assertEq(afterIdx, beforeIdx, "regression: still sweeping the same index");
-        assertEq(afterCur, 79, "regression: skip-only progress is COMMITTED, not rolled back");
+        assertEq(afterCur, skipPrefixLen, "regression: skip-only progress is COMMITTED, not rolled back");
         assertGt(_lootAmt(index, liveOwner), 0, "regression: budget hit the wall - tail box not yet reached");
         assertEq(
             coinflip.coinflipAmount(actor),

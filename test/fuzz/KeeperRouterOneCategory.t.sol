@@ -5,6 +5,7 @@ import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
+import {BoxOrderLib} from "../helpers/BoxOrderLib.sol";
 
 /// @title KeeperRouterOneCategory -- TST-02 (Phase 351, v55.0 game-resident): one-rewarded-category-per-tx
 ///        (no bounty-stacking) on `mineFlip()` + the router->game->creditFlip double-pay disposition + the
@@ -79,10 +80,10 @@ contract KeeperRouterOneCategory is DeployProtocol {
     // pins are now stale; corrected to the authoritative values below.)
     // -------------------------------------------------------------------------
 
-    uint256 private constant SUBOF_SLOT = 53; // _subOf mapping root (address => Sub, one packed slot)
+    uint256 private constant SUBOF_SLOT = 52; // _subOf mapping root (address => Sub, one packed slot)
     uint256 private constant OFF_LASTBOUGHT = 10; // uint24 lastAutoBoughtDay (bytes 11..13)
     uint256 private constant OFF_LASTOPENED = 13; // uint24 lastOpenedDay     (bytes 14..16)
-    uint256 private constant SUBSCRIBERS_SLOT = 55; // _subscribers address[] (length here)
+    uint256 private constant SUBSCRIBERS_SLOT = 54; // _subscribers address[] (length here)
     uint256 private constant MINTPACKED_SLOT = 9; // mintPacked_ mapping root (deity bit)
     uint256 private constant DEITY_SHIFT = 184; // HAS_DEITY_PASS_SHIFT in mintPacked_
 
@@ -90,10 +91,10 @@ contract KeeperRouterOneCategory is DeployProtocol {
     uint256 private constant LOOTBOX_RNG_PACKED_SLOT = 33;
     /// @dev lootboxRngWordByIndex mapping root slot.
     uint256 private constant LOOTBOX_RNG_WORD_SLOT = 34;
-    /// @dev lootboxEth (the single folded box word) mapping root slot. The amount sub-field (low 128
-    ///      bits) is the first-deposit / box-owed signal that replaced the removed lootboxEthBase.
+    /// @dev lootboxOrder (the packed box-order word) mapping root slot. The whole word is the
+    ///      first-deposit / box-owed signal that replaced the removed lootboxEthBase (zeroed in
+    ///      one SSTORE on open).
     uint256 private constant LOOTBOX_ETH_SLOT = 15;
-    uint256 private constant LB_AMOUNT_MASK = (uint256(1) << 128) - 1;
 
     /// @dev ticketQueue mapping root (uint24 => address[]) + entriesOwedPacked
     ///      (uint24 => address => uint40) — for forcing advanceDue via a read-slot backlog.
@@ -618,7 +619,7 @@ contract KeeperRouterOneCategory is DeployProtocol {
         vm.store(address(game), slot, bytes32(packed));
     }
 
-    // ---- Sub field reads (_subOf slot 54 + verified offsets) ----
+    // ---- Sub field reads (_subOf slot 52 + verified offsets) ----
 
     function _subField(address who, uint256 off, uint256 widthBits) internal view returns (uint256) {
         uint256 p = uint256(vm.load(address(game), keccak256(abi.encode(who, uint256(SUBOF_SLOT))))) >> (off * 8);
@@ -652,7 +653,7 @@ contract KeeperRouterOneCategory is DeployProtocol {
     function _buyBox(address buyer, uint256 lootboxAmount) internal {
         vm.prank(buyer);
         game.purchase{value: lootboxAmount + 0.01 ether}(
-            buyer, 400, lootboxAmount, bytes32(0), MintPaymentKind.DirectEth, false
+            buyer, 400, BoxOrderLib.boCustomFloor(lootboxAmount), bytes32(0), MintPaymentKind.DirectEth, false
         );
     }
 
@@ -678,10 +679,10 @@ contract KeeperRouterOneCategory is DeployProtocol {
         vm.store(address(game), bytes32(uint256(LOOTBOX_RNG_PACKED_SLOT)), bytes32(packed));
     }
 
-    /// @dev Park the auto-open frontier (boxCursorIndex byte 13 + boxCursor byte 7, both slot 58)
+    /// @dev Park the auto-open frontier (boxCursorIndex byte 13 + boxCursor byte 7, both slot 56)
     ///      at `index` so the relocated sweep begins exactly at this finalized index.
     function _parkBoxFrontier(uint48 index) internal {
-        bytes32 slot = bytes32(uint256(57));
+        bytes32 slot = bytes32(uint256(56));
         uint256 packed = uint256(vm.load(address(game), slot));
         uint256 cursorMask = (uint256(1) << 48) - 1;
         packed &= ~(cursorMask << (7 * 8));   // boxCursor = 0
@@ -690,12 +691,12 @@ contract KeeperRouterOneCategory is DeployProtocol {
         vm.store(address(game), slot, bytes32(packed));
     }
 
-    /// @dev Read the lootboxEth amount sub-field (bits [0:128]) for [index][who] — the box-owed
-    ///      signal, zeroed on open (replaced the removed lootboxEthBase first-deposit signal).
+    /// @dev Read the raw lootboxOrder word for [index][who] — the box-owed signal, zeroed in one
+    ///      SSTORE on open (replaced the removed lootboxEthBase first-deposit signal).
     function _lootboxEthBase(uint48 index, address who) internal view returns (uint256) {
         bytes32 inner = keccak256(abi.encode(uint256(index), uint256(LOOTBOX_ETH_SLOT)));
         bytes32 leaf = keccak256(abi.encode(who, uint256(inner)));
-        return uint256(vm.load(address(game), leaf)) & LB_AMOUNT_MASK;
+        return uint256(vm.load(address(game), leaf));
     }
 
     // ---- read-slot ticket seeding (force advanceDue via a non-empty current-level read slot) ----

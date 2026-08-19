@@ -48,8 +48,8 @@ contract V56SecUnmanipulable is DeployProtocol {
     // -------------------------------------------------------------------------
     // Game-resident storage slots + the v56 Sub-slot offset block (V56AfkingGasMarginal:68-89)
     // -------------------------------------------------------------------------
-    uint256 private constant SUBOF_SLOT = 53;            // _subOf mapping root (address => Sub, one packed slot) (was 58)
-    uint256 private constant SUBSCRIBER_INDEX_SLOT = 56; // mapping(address => uint256) _subscriberIndex (1-indexed) (was 61)
+    uint256 private constant SUBOF_SLOT = 52;            // _subOf mapping root (address => Sub, one packed slot) (was 58)
+    uint256 private constant SUBSCRIBER_INDEX_SLOT = 55; // mapping(address => uint256) _subscriberIndex (1-indexed) (was 61)
 
     //   dailyQuantity u8 @0 · flags u8 @1 · score u16 @2 · amount u24 @4
     //   lastAutoBoughtDay u24 @7 · lastOpenedDay u24 @10 · afkCoveredThroughDay u24 @13 · afkingStartDay u24 @16
@@ -697,7 +697,7 @@ contract V56SecUnmanipulable is DeployProtocol {
         arr[1] = b;
     }
 
-    // ---- Sub-slot reads (_subOf slot 62 + the v56 offsets) ----
+    // ---- Sub-slot reads (_subOf slot 52 + the v56 offsets) ----
 
     function _subField(address who, uint256 off, uint256 widthBits) internal view returns (uint256) {
         uint256 p = uint256(vm.load(address(game), keccak256(abi.encode(who, uint256(SUBOF_SLOT))))) >> (off * 8);

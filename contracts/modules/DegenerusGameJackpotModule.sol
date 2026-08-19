@@ -178,9 +178,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     // Constants — Timing & Thresholds
     // -------------------------------------------------------------------------
 
-    /// @dev Maximum number of daily jackpots per level before forcing level transition.
-    uint8 private constant JACKPOT_LEVEL_CAP = 5;
-
+    /// @dev Small-lootbox threshold for the jackpot lootbox portion split.
     uint256 private constant SMALL_LOOTBOX_THRESHOLD = 0.5 ether;
 
     /// @dev Golden-ticket consolation when the bonus board shows 0 golds: 100 WWXRP.

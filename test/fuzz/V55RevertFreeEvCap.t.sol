@@ -5,6 +5,7 @@ import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
+import {BoxOrderLib} from "../helpers/BoxOrderLib.sol";
 
 /// @title V55RevertFreeEvCap -- the dedicated TST-02 (revert-free + no-valve no-brick) + TST-03 (EV-cap
 ///        exactly-once) proofs for the v55.0 AfKing-in-Game redesign (Phase 351, FROZEN subject 453f8073).
@@ -52,9 +53,9 @@ contract V55RevertFreeEvCap is DeployProtocol {
     uint256 private constant LOOTBOX_RNG_WORD_BY_INDEX_SLOT = 34; // mapping(uint48 => uint256)
     uint256 private constant EV_CAP_PACKED_SLOT = 39; // mapping(address => uint256) lootboxEvCapPacked — two level-stamped windows (TST-03 budget)
     uint256 private constant EV_USED_MASK = (uint256(1) << 64) - 1;
-    uint256 private constant SUBOF_SLOT = 53; // _subOf mapping root (address => Sub, one packed slot)
-    uint256 private constant SUBSCRIBERS_SLOT = 55; // address[] _subscribers
-    uint256 private constant SUBSCRIBER_INDEX_SLOT = 56; // mapping(address => uint256) _subscriberIndex
+    uint256 private constant SUBOF_SLOT = 52; // _subOf mapping root (address => Sub, one packed slot)
+    uint256 private constant SUBSCRIBERS_SLOT = 54; // address[] _subscribers
+    uint256 private constant SUBSCRIBER_INDEX_SLOT = 55; // mapping(address => uint256) _subscriberIndex
 
     uint256 private constant GAME_OVER_SHIFT = 184;
 
@@ -636,7 +637,7 @@ contract V55RevertFreeEvCap is DeployProtocol {
         uint48 index = _liveLootboxIndex();
         vm.deal(buyer, lootboxAmount + 1 ether);
         vm.prank(buyer);
-        game.purchase{value: lootboxAmount + 0.01 ether}(buyer, 400, lootboxAmount, bytes32(0), MintPaymentKind.DirectEth, false);
+        game.purchase{value: lootboxAmount + 0.01 ether}(buyer, 400, BoxOrderLib.boCustomFloor(lootboxAmount), bytes32(0), MintPaymentKind.DirectEth, false);
         // The buy-time draw already happened (lbFirstDeposit branch). Open the box to complete the human leg
         // (the open reads the FROZEN adj — no second draw; the draw was buy-time).
         _forceLootboxWord(index, uint256(keccak256("human-shared-word")));
@@ -657,7 +658,7 @@ contract V55RevertFreeEvCap is DeployProtocol {
         return uint32((block.timestamp - 82_620) / 1 days);
     }
 
-    // ---- Sub field reads (RE-DERIVED slot 66 + verified offsets) ----
+    // ---- Sub field reads (RE-DERIVED slot 52 + verified offsets) ----
 
     function _subField(address who, uint256 off, uint256 widthBits) internal view returns (uint256) {
         uint256 p = uint256(vm.load(address(game), keccak256(abi.encode(who, uint256(SUBOF_SLOT))))) >> (off * 8);

@@ -5,6 +5,7 @@ import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {VRFHandler} from "./helpers/VRFHandler.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
+import {BoxOrderLib} from "../helpers/BoxOrderLib.sol";
 
 /// @title VRFLifecycle -- Proves VRF fulfillment works and game advances past level 0
 /// @notice Final validation that Phase 14 infrastructure is ready for invariant testing.
@@ -99,7 +100,7 @@ contract VRFLifecycle is DeployProtocol {
             game.purchase{value: 1.01 ether}(
                 buyer,
                 400,       // 1 full ticket
-                1 ether,   // lootbox amount
+                BoxOrderLib.boCustomFloor(1 ether),   // lootbox amount
                 bytes32(0),
                 MintPaymentKind.DirectEth, false
             );

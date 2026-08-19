@@ -3,6 +3,7 @@ pragma solidity ^0.8.26;
 
 import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
+import {BoxOrderLib} from "../helpers/BoxOrderLib.sol";
 
 /// @title TurboBafTicketFloor — BAF award tickets rolled onto the floor level under turbo.
 ///
@@ -261,7 +262,7 @@ contract TurboBafTicketFloor is DeployProtocol {
         game.purchase{value: 2 ether}(
             buyer,
             0,
-            2 ether,
+            BoxOrderLib.boCustom(2 ether),
             bytes32(0),
             MintPaymentKind.DirectEth,
             false

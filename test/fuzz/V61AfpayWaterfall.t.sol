@@ -7,6 +7,7 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 import {PriceLookupLib} from "../../contracts/libraries/PriceLookupLib.sol";
 import {SettleClaimableShortfallTester} from "../../contracts/test/SettleClaimableShortfallTester.sol";
+import {BoxOrderLib} from "../helpers/BoxOrderLib.sol";
 
 /// @title V61AfpayWaterfall — TST-01 proof: the AfKing-as-payment waterfall (msg.value → claimable → afking).
 ///
@@ -306,7 +307,7 @@ contract V61AfpayWaterfall is DeployProtocol {
         // The DirectEth lootbox shortfall draws afking (AFPAY-03), so AfkingSpent fires; the box queues.
         vm.recordLogs();
         vm.prank(buyer);
-        game.purchase{value: ethSent}(buyer, 0, boxAmount, bytes32(0), MintPaymentKind.DirectEth, false);
+        game.purchase{value: ethSent}(buyer, 0, BoxOrderLib.boCustomFloor(boxAmount), bytes32(0), MintPaymentKind.DirectEth, false);
 
         assertTrue(_sawAfkingSpent(buyer, shortfall), "AFPAY-03: DirectEth lootbox shortfall drew afking + emitted AfkingSpent");
         assertEq(game.claimableWinningsOf(buyer), claimableBefore, "AFPAY-03 DirectEth: claimable byte-UNCHANGED");

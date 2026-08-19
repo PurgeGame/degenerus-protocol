@@ -32,6 +32,7 @@ import {MockVRFCoordinator} from "../../contracts/mocks/MockVRFCoordinator.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {Vm} from "forge-std/Vm.sol";
+import {BoxOrderLib} from "../helpers/BoxOrderLib.sol";
 
 /// @title RngLockDeterminism -- Foundry fuzz harness asserting byte-identical
 ///        VRF-derived outputs under mid-rngLock-window state perturbations.
@@ -48,9 +49,9 @@ contract RngLockDeterminism is DeployProtocol {
     // lootboxRngPacked = slot 34 (the lootbox RNG index lives in bits[0:47]), lootboxRngWordByIndex = slot 35.
     uint256 constant SLOT_LOOTBOX_RNG_INDEX = 33;
     uint256 constant SLOT_LOOTBOX_RNG_WORD_BY_INDEX = 34;
-    // lootboxEth (the single folded box word) = slot 15; amount is the low 128 bits (the box-owed signal).
+    // lootboxOrder (the packed box-order word) = slot 15; the whole word is zeroed on open, so
+    // nonzero/zero is still the box-owed signal regardless of the internal bit layout.
     uint256 constant SLOT_LOOTBOX_ETH = 15;
-    uint256 constant LB_AMOUNT_MASK = (uint256(1) << 128) - 1;
     // Defensive slot constants for sec4 RunTerminalDecimatorJackpot
     // contribution. Exact values are placeholders; aggregator hash captures
     // post-resolution storage state at these slots for byte-identity
@@ -198,7 +199,7 @@ contract RngLockDeterminism is DeployProtocol {
             uint256 lootboxAmount = 0;
             vm.prank(actor);
             try game.purchase{value: 1 ether}(
-                actor, numCoins, lootboxAmount, bytes32(0), MintPaymentKind.DirectEth, false
+                actor, numCoins, BoxOrderLib.boCustomFloor(lootboxAmount), bytes32(0), MintPaymentKind.DirectEth, false
             ) {} catch { return; }
         } else if (cls == 2) {
             vm.prank(actor);
@@ -607,7 +608,7 @@ contract RngLockDeterminism is DeployProtocol {
         game.purchase{value: 1.01 ether}(
             coinAndTicketsBuyer,
             400,
-            1 ether,
+            BoxOrderLib.boCustomFloor(1 ether),
             bytes32(0),
             MintPaymentKind.DirectEth, false
         );
@@ -642,7 +643,7 @@ contract RngLockDeterminism is DeployProtocol {
         game.purchase{value: 1.01 ether}(
             coinAndTicketsBuyer,
             400,
-            1 ether,
+            BoxOrderLib.boCustomFloor(1 ether),
             bytes32(0),
             MintPaymentKind.DirectEth, false
         );
@@ -796,7 +797,7 @@ contract RngLockDeterminism is DeployProtocol {
         vm.deal(buyer, 100 ether);
         vm.prank(buyer);
         game.purchase{value: 1.01 ether}(
-            buyer, 400, 1 ether, bytes32(0), MintPaymentKind.DirectEth, false
+            buyer, 400, BoxOrderLib.boCustomFloor(1 ether), bytes32(0), MintPaymentKind.DirectEth, false
         );
 
         mockVRF.fundSubscription(1, 100e18);
@@ -817,7 +818,7 @@ contract RngLockDeterminism is DeployProtocol {
         _deliverMockVrf(reqId, vrfWord);
 
         uint256 storedVrfWord = _lootboxRngWord(indexBefore);
-        (uint256 amountAtIndex, ) = game.lootboxStatus(buyer, indexBefore);
+        uint256 amountAtIndex = _lootboxEthBase(indexBefore, buyer);
         uint256 buyerFlipBalance = coin.balanceOf(buyer);
         uint256 buyerWwxrpBalance = wwxrp.balanceOf(buyer);
         uint256 buyerClaimable = game.claimableWinningsOf(buyer);
@@ -841,7 +842,7 @@ contract RngLockDeterminism is DeployProtocol {
         _deliverMockVrf(reqId, vrfWord);
 
         uint256 baselineStoredVrfWord = _lootboxRngWord(indexBefore);
-        (uint256 baselineAmount, ) = game.lootboxStatus(buyer, indexBefore);
+        uint256 baselineAmount = _lootboxEthBase(indexBefore, buyer);
         uint256 baselineFlip = coin.balanceOf(buyer);
         uint256 baselineWwxrp = wwxrp.balanceOf(buyer);
         uint256 baselineClaimable = game.claimableWinningsOf(buyer);
@@ -886,7 +887,7 @@ contract RngLockDeterminism is DeployProtocol {
         uint48 purchaseIndex = _readLootboxRngIndex();
         vm.prank(buyer);
         game.purchase{value: 1.01 ether}(
-            buyer, 400, 1 ether, bytes32(0), MintPaymentKind.DirectEth, false
+            buyer, 400, BoxOrderLib.boCustomFloor(1 ether), bytes32(0), MintPaymentKind.DirectEth, false
         );
 
         game.advanceGame();
@@ -932,8 +933,8 @@ contract RngLockDeterminism is DeployProtocol {
         vm.prank(buyer);
         game.openBox(buyer, purchaseIndex);
 
-        (uint256 amountAfterOpen, bool presaleAfterOpen) =
-            game.lootboxStatus(buyer, purchaseIndex);
+        uint256 amountAfterOpen = _lootboxEthBase(purchaseIndex, buyer);
+        bool presaleAfterOpen = game.lootboxPresaleActiveFlag();
 
         bytes32 perturbedOutputs = keccak256(
             abi.encode(
@@ -968,8 +969,8 @@ contract RngLockDeterminism is DeployProtocol {
         vm.prank(buyer);
         game.openBox(buyer, purchaseIndex);
 
-        (uint256 baselineAmount, bool baselinePresale) =
-            game.lootboxStatus(buyer, purchaseIndex);
+        uint256 baselineAmount = _lootboxEthBase(purchaseIndex, buyer);
+        bool baselinePresale = game.lootboxPresaleActiveFlag();
 
         bytes32 baselineOutputs = keccak256(
             abi.encode(
@@ -1723,7 +1724,7 @@ contract RngLockDeterminism is DeployProtocol {
         uint48 purchaseIndex = _readLootboxRngIndex();
         vm.prank(buyer);
         game.purchase{value: 1.01 ether}(
-            buyer, 400, 1 ether, bytes32(0), MintPaymentKind.DirectEth, false
+            buyer, 400, BoxOrderLib.boCustomFloor(1 ether), bytes32(0), MintPaymentKind.DirectEth, false
         );
 
         // Move totalFlipReversals nonzero PRE-lock (reverseFlip is RngLocked-gated). 1-3 nudges.
@@ -1861,7 +1862,7 @@ contract RngLockDeterminism is DeployProtocol {
         uint48 purchaseIndex = _readLootboxRngIndex();
         vm.prank(buyer);
         game.purchase{value: 1.01 ether}(
-            buyer, 400, 1 ether, bytes32(0), MintPaymentKind.DirectEth, false
+            buyer, 400, BoxOrderLib.boCustomFloor(1 ether), bytes32(0), MintPaymentKind.DirectEth, false
         );
 
         // Pre-load whalePassClaims[claimant] > 0 so the perturbation reaches the rngLock-gated
@@ -2000,7 +2001,7 @@ contract RngLockDeterminism is DeployProtocol {
         // Queue a lootbox, then engage rngLock via the daily advance boundary.
         vm.prank(buyer);
         game.purchase{value: 1.01 ether}(
-            buyer, 400, 1 ether, bytes32(0), MintPaymentKind.DirectEth, false
+            buyer, 400, BoxOrderLib.boCustomFloor(1 ether), bytes32(0), MintPaymentKind.DirectEth, false
         );
         game.advanceGame();
         assertTrue(game.rngLocked(), "autoOpen-noop: rngLock must be engaged");
@@ -2025,14 +2026,14 @@ contract RngLockDeterminism is DeployProtocol {
         try game.mineFlip() {} catch {} // must not abort the lock
     }
 
-    /// @dev Read the lootboxEth amount sub-field (bits [0:128]) for [index][who] — the box-owed
-    ///      signal, zeroed on open (the un-opened/opened oracle for a box). Post-repack this is the
-    ///      first-deposit signal: it goes non-zero on first deposit and is cleared on a successful
-    ///      open (the old lootboxEthBase mapping it replaced was folded away into this word).
+    /// @dev Read the raw lootboxOrder word for [index][who] — the box-owed signal, zeroed on open
+    ///      (the un-opened/opened oracle for a box). The whole word goes non-zero on first deposit
+    ///      (level/counts land together) and is cleared in one SSTORE on a successful open, so
+    ///      nonzero/zero is the same signal it always was regardless of the packed layout inside.
     function _lootboxEthBase(uint48 index, address who) internal view returns (uint256) {
         bytes32 inner = keccak256(abi.encode(uint256(index), uint256(SLOT_LOOTBOX_ETH)));
         bytes32 leaf = keccak256(abi.encode(who, uint256(inner)));
-        return uint256(vm.load(address(game), leaf)) & LB_AMOUNT_MASK;
+        return uint256(vm.load(address(game), leaf));
     }
 
     /// @notice TST-01 — no marooned boxes (locked autoOpen no-op + post-unlock cursor open).
@@ -2060,7 +2061,7 @@ contract RngLockDeterminism is DeployProtocol {
         uint48 boxIndex = _readLootboxRngIndex();
         vm.prank(boxOwner);
         game.purchase{value: 1.01 ether}(
-            boxOwner, 400, 1 ether, bytes32(0), MintPaymentKind.DirectEth, false
+            boxOwner, 400, BoxOrderLib.boCustomFloor(1 ether), bytes32(0), MintPaymentKind.DirectEth, false
         );
         assertGt(
             _lootboxEthBase(boxIndex, boxOwner), 0,
@@ -2102,7 +2103,7 @@ contract RngLockDeterminism is DeployProtocol {
         uint48 queuedIndex = _readLootboxRngIndex();
         vm.prank(boxOwner2);
         game.purchase{value: 1.01 ether}(
-            boxOwner2, 400, 1 ether, bytes32(0), MintPaymentKind.DirectEth, false
+            boxOwner2, 400, BoxOrderLib.boCustomFloor(1 ether), bytes32(0), MintPaymentKind.DirectEth, false
         );
         assertGt(_lootboxEthBase(queuedIndex, boxOwner2), 0, "no-maroon: 2nd box queued at the round's index");
         // The relocated multi-index sweep opens FINALIZED indices (boxCursorIndex .. LR_INDEX-1) —
@@ -2144,10 +2145,10 @@ contract RngLockDeterminism is DeployProtocol {
     }
 
     /// @dev Park the auto-open frontier (boxCursorIndex byte 13, boxCursor byte 7 — both in slot
-    ///      62) at `index` with a zero in-index cursor, so the relocated multi-index sweep begins
+    ///      56) at `index` with a zero in-index cursor, so the relocated multi-index sweep begins
     ///      exactly at this finalized index (the realistic state where every lower index is already
     ///      drained). Without this the sweep would orphan-break at the first un-worded lower index.
-    uint256 constant SLOT_BOX_CURSORS = 57;
+    uint256 constant SLOT_BOX_CURSORS = 56;
     function _parkBoxFrontier(uint48 index) internal {
         bytes32 slot = bytes32(uint256(SLOT_BOX_CURSORS));
         uint256 packed = uint256(vm.load(address(game), slot));

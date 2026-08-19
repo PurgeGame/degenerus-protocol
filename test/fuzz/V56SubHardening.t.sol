@@ -50,8 +50,8 @@ contract V56SubHardening is DeployProtocol {
     // Game-resident storage slots + the Sub-slot offset block (post-coin-gate layout;
     // validThroughLevel deleted, every later field shifted down 3 bytes)
     // -------------------------------------------------------------------------
-    uint256 private constant SUBOF_SLOT = 53;            // _subOf mapping root (address => Sub, one packed slot)
-    uint256 private constant SUBSCRIBER_INDEX_SLOT = 56; // mapping(address => uint256) _subscriberIndex (1-indexed)
+    uint256 private constant SUBOF_SLOT = 52;            // _subOf mapping root (address => Sub, one packed slot)
+    uint256 private constant SUBSCRIBER_INDEX_SLOT = 55; // mapping(address => uint256) _subscriberIndex (1-indexed)
     uint256 private constant MINTPACKED_SLOT = 9;        // mintPacked_ mapping root (deity bit @ 184)
 
     //   dailyQuantity u8 @0 · flags u8 @1 · score u16 @2 · amount u24 @4
@@ -648,7 +648,7 @@ contract V56SubHardening is DeployProtocol {
         arr[0] = a;
     }
 
-    // ---- Sub-slot reads (_subOf slot 53 + the post-coin-gate offsets) ----
+    // ---- Sub-slot reads (_subOf slot 52 + the post-coin-gate offsets) ----
 
     function _subField(address who, uint256 off, uint256 widthBits) internal view returns (uint256) {
         uint256 p = uint256(vm.load(address(game), keccak256(abi.encode(who, uint256(SUBOF_SLOT))))) >> (off * 8);

@@ -22,8 +22,10 @@ contract BoonStaticDiscard is DeployProtocol {
     uint256 constant SLOT_LOOTBOX_ETH = 15; // mapping(uint48 => mapping(address => uint256))
     uint256 constant SLOT_LOOTBOX_WORD = 34; // mapping(uint48 => uint256)
 
-    uint256 constant LB_AMOUNT_MASK = (uint256(1) << 128) - 1;
-    uint256 constant LB_SCORE_SHIFT = 192;
+    uint256 constant LB_SCORE_SHIFT = 24;
+    uint256 constant LB_CUSTOM_COUNT_SHIFT = 105;
+    uint256 constant LB_CUSTOM_SIZE_SHIFT = 113;
+    uint256 constant LB_CUSTOM_SCALE = 1e12;
 
     // BoonPacked field shifts (DegenerusGameStorage)
     uint256 constant BP_DECIMATOR_TIER_SHIFT = 168; // slot0
@@ -67,7 +69,12 @@ contract BoonStaticDiscard is DeployProtocol {
     }
 
     function _setupLootbox(address player, uint48 index, uint256 ethAmount, uint256 vrfWord) internal {
-        uint256 packed = (ethAmount & LB_AMOUNT_MASK) | (uint256(1) << LB_SCORE_SHIFT);
+        // One CUSTOM box of `ethAmount`, score=1, frozen to the live level (see
+        // LootboxBoonCoexistence._setupLootbox for the same migration pattern).
+        uint256 packed = uint256(game.level())
+            | (uint256(1) << LB_SCORE_SHIFT)
+            | (uint256(1) << LB_CUSTOM_COUNT_SHIFT)
+            | ((ethAmount / LB_CUSTOM_SCALE) << LB_CUSTOM_SIZE_SHIFT);
         vm.store(address(game), _nestedMappingSlot(SLOT_LOOTBOX_ETH, index, player), bytes32(packed));
         vm.store(address(game), _simpleMappingSlot(SLOT_LOOTBOX_WORD, index), bytes32(vrfWord));
     }

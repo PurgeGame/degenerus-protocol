@@ -4,6 +4,7 @@ pragma solidity ^0.8.26;
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {MockVRFCoordinator} from "../../contracts/mocks/MockVRFCoordinator.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
+import {BoxOrderLib} from "../helpers/BoxOrderLib.sol";
 
 /// @title StallResilience -- Proves VRF stall -> coordinator swap -> resume cycle
 /// @notice Integration tests for gap day RNG backfill (TEST-01), coinflip resolution
@@ -189,7 +190,7 @@ contract StallResilience is DeployProtocol {
         // Day 1: purchase with lootbox amount
         // lootboxRngIndex = 1, so this writes to lootboxEth[1][buyer]
         vm.prank(buyer);
-        game.purchase{value: 1.01 ether}(buyer, 400, 1 ether, bytes32(0), MintPaymentKind.DirectEth, false);
+        game.purchase{value: 1.01 ether}(buyer, 400, BoxOrderLib.boCustomFloor(1 ether), bytes32(0), MintPaymentKind.DirectEth, false);
 
         // Complete day 1 (VRF request reserves lootbox index 1, fulfillment writes word for index 1)
         // After this: lootboxRngIndex = 2
@@ -204,7 +205,7 @@ contract StallResilience is DeployProtocol {
         // Purchase with lootbox amount BEFORE advanceGame so lootboxEth[preStallIndex][buyer] has value
         // lootboxRngIndex is still preStallIndex (2), so this writes to lootboxEth[2][buyer]
         vm.prank(buyer);
-        game.purchase{value: 1.01 ether}(buyer, 400, 1 ether, bytes32(0), MintPaymentKind.DirectEth, false);
+        game.purchase{value: 1.01 ether}(buyer, 400, BoxOrderLib.boCustomFloor(1 ether), bytes32(0), MintPaymentKind.DirectEth, false);
 
         // advanceGame triggers VRF request, which reserves lootbox index preStallIndex (2)
         // and increments lootboxRngIndex to 3

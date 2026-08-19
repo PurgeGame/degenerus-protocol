@@ -5,6 +5,7 @@ import "forge-std/Test.sol";
 import {DegenerusGame} from "../../../contracts/DegenerusGame.sol";
 import {MockVRFCoordinator} from "../../../contracts/mocks/MockVRFCoordinator.sol";
 import {MintPaymentKind} from "../../../contracts/interfaces/IDegenerusGame.sol";
+import {BoxOrderLib} from "../../helpers/BoxOrderLib.sol";
 
 /// @title FSMHandler -- Handler that snapshots game FSM state for invariant testing
 /// @notice Wraps purchase/advanceGame/VRF operations while tracking FSM ghost state.
@@ -92,7 +93,7 @@ contract FSMHandler is Test {
                 try game.purchase{value: totalCost}(
                     currentActor,
                     qty,
-                    lootboxAmt,
+                    BoxOrderLib.boCustomFloor(lootboxAmt),
                     bytes32(0),
                     MintPaymentKind.DirectEth, false
                 ) {} catch {}

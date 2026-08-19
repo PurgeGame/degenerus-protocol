@@ -11,6 +11,7 @@ import {
   ZERO_ADDRESS,
   ZERO_BYTES32,
 } from "../helpers/testUtils.js";
+import { boCustom } from "../helpers/boxOrder.js";
 
 // Presale is a single latch: `lootboxPresaleActiveFlag()` returns `!presaleOver`,
 // where presaleOver is set only by the coin-presale-box 50-ETH cap. Mint-only
@@ -33,7 +34,7 @@ describe("Presale flag is independent of mint-lootbox volume", function () {
       .purchase(
         ZERO_ADDRESS,
         0n,
-        amount,
+        boCustom(amount),
         ZERO_BYTES32,
         MintPaymentKind.DirectEth,
         false,

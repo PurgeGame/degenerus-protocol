@@ -4,6 +4,7 @@ pragma solidity ^0.8.26;
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {MockVRFCoordinator} from "../../contracts/mocks/MockVRFCoordinator.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
+import {BoxOrderLib} from "../helpers/BoxOrderLib.sol";
 
 /// @title VRFPathCoverage -- Parametric fuzz tests for gap backfill edge cases (TEST-03)
 /// @notice Complements the invariant tests from VRFPathInvariants by testing specific
@@ -97,7 +98,7 @@ contract VRFPathCoverage is DeployProtocol {
         vm.deal(player, 100 ether);
         vm.prank(player);
         game.purchase{value: lootboxAmount + 0.01 ether}(
-            player, 400, lootboxAmount, bytes32(0), MintPaymentKind.DirectEth, false
+            player, 400, BoxOrderLib.boCustomFloor(lootboxAmount), bytes32(0), MintPaymentKind.DirectEth, false
         );
     }
 
@@ -254,7 +255,7 @@ contract VRFPathCoverage is DeployProtocol {
         vm.deal(buyer, 100 ether);
         vm.prank(buyer);
         game.purchase{value: 1.01 ether}(
-            buyer, 400, 1 ether, bytes32(0), MintPaymentKind.DirectEth, false
+            buyer, 400, BoxOrderLib.boCustomFloor(1 ether), bytes32(0), MintPaymentKind.DirectEth, false
         );
 
         // Fund VRF subscription for mid-day request

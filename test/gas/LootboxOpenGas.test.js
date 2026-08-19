@@ -99,6 +99,7 @@ import { loadFixture } from "@nomicfoundation/hardhat-toolbox/network-helpers.js
 import { expect } from "chai";
 import hre from "hardhat";
 import { deployFullProtocol, restoreAddresses } from "../helpers/deployFixture.js";
+import { boSmalls } from "../helpers/boxOrder.js";
 import {
   eth,
   advanceToNextDay,
@@ -123,18 +124,20 @@ async function buyFullTickets(game, buyer, n, totalEth) {
     0n,
     ZERO_BYTES32,
     MintPaymentKind.DirectEth,
+    false,
     { value: eth(totalEth) },
   );
 }
 
-/** Purchase a fixed lootbox quantity at level-0 (0.001 ETH per lootbox). */
+/** Purchase `n` small boxes at level-0 (a small is 1x the level price, 0.01 ETH). */
 async function buyLootboxes(game, buyer, n, totalEth) {
   return game.connect(buyer).purchase(
     ZERO_ADDRESS,
     0n,
-    BigInt(n),
+    boSmalls(BigInt(n)),
     ZERO_BYTES32,
     MintPaymentKind.DirectEth,
+    false,
     { value: eth(totalEth) },
   );
 }
@@ -148,9 +151,9 @@ async function buyLootboxes(game, buyer, n, totalEth) {
 async function reachOpenableLootbox(fixture) {
   const { game, deployer, mockVRF, alice } = fixture;
 
-  // 1. Purchase lootboxes (allocates lootboxEth[index][alice]).
+  // 1. Purchase lootboxes (allocates lootboxOrder[index][alice]).
   try {
-    await buyLootboxes(game, alice, 20, 0.02);
+    await buyLootboxes(game, alice, 20, 0.2);
   } catch (err) {
     return { reason: `lootbox purchase failed: ${err.message.slice(0, 80)}` };
   }

@@ -39,6 +39,7 @@ pragma solidity ^0.8.26;
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {MockVRFCoordinator} from "../../contracts/mocks/MockVRFCoordinator.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
+import {BoxOrderLib} from "../helpers/BoxOrderLib.sol";
 
 /// @title RngLockRotationDeterminism -- VTST-03 freeze-invariant fuzz under rotation.
 /// @notice Asserts byte-identical VRF-derived outputs between a rotation-perturbed
@@ -276,7 +277,7 @@ contract RngLockRotationDeterminism is DeployProtocol {
         address buyer = makeAddr("midDayRotationBuyer");
         vm.deal(buyer, 100 ether);
         vm.prank(buyer);
-        game.purchase{value: 1.01 ether}(buyer, 400, 1 ether, bytes32(0), MintPaymentKind.DirectEth, false);
+        game.purchase{value: 1.01 ether}(buyer, 400, BoxOrderLib.boCustomFloor(1 ether), bytes32(0), MintPaymentKind.DirectEth, false);
 
         mockVRF.fundSubscription(1, 100e18);
     }

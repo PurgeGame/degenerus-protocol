@@ -3,6 +3,7 @@ pragma solidity ^0.8.26;
 
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
+import {BoxOrderLib} from "../helpers/BoxOrderLib.sol";
 
 /// @title RngRetryLootboxStall — PoC for the phase-blind `isRetry` RNG bug (v60 R2, RNGRETRY).
 /// @notice A mid-day lootbox VRF request and the daily VRF request share one
@@ -62,7 +63,7 @@ contract RngRetryLootboxStallTest is DeployProtocol {
         // --- Inject a stalled mid-day lootbox VRF request ---
         // 1) create lootbox pending (>= 1 ETH threshold) via a real purchase.
         vm.prank(attacker);
-        game.purchase{value: 3 ether}(attacker, 0, 3 ether, bytes32(0), MintPaymentKind.DirectEth, false);
+        game.purchase{value: 3 ether}(attacker, 0, BoxOrderLib.boCustomFloor(3 ether), bytes32(0), MintPaymentKind.DirectEth, false);
 
         // 2) fire the mid-day lootbox RNG request (leaves rngLockedFlag = false).
         vm.prank(attacker);

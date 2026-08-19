@@ -4,6 +4,7 @@ pragma solidity ^0.8.26;
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {StdStorage, stdStorage} from "forge-std/StdStorage.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
+import {BoxOrderLib} from "../helpers/BoxOrderLib.sol";
 
 /// @title MiddayRngCredit — coverage for the LINK-donor mid-day RNG credit path.
 /// @notice A LINK donation banks per-donor credit that waives ONLY the pending-value gates
@@ -102,7 +103,7 @@ contract MiddayRngCreditTest is DeployProtocol {
     function _purchaseBelowThreshold() internal {
         vm.prank(outsider);
         game.purchase{value: 0.5 ether}(
-            outsider, 0, 0.5 ether, bytes32(0), MintPaymentKind.DirectEth, false
+            outsider, 0, BoxOrderLib.boCustomFloor(0.5 ether), bytes32(0), MintPaymentKind.DirectEth, false
         );
     }
 
@@ -110,7 +111,7 @@ contract MiddayRngCreditTest is DeployProtocol {
     function _purchaseAboveThreshold() internal {
         vm.prank(outsider);
         game.purchase{value: 1.01 ether}(
-            outsider, 400, 1 ether, bytes32(0), MintPaymentKind.DirectEth, false
+            outsider, 400, BoxOrderLib.boCustomFloor(1 ether), bytes32(0), MintPaymentKind.DirectEth, false
         );
     }
 

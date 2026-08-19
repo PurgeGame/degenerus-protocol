@@ -5,6 +5,7 @@ import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {GameTimeLib} from "../../contracts/libraries/GameTimeLib.sol";
+import {BoxOrderLib} from "../helpers/BoxOrderLib.sol";
 
 contract SimAdvanceOverflow is DeployProtocol {
     function setUp() public {
@@ -28,7 +29,7 @@ contract SimAdvanceOverflow is DeployProtocol {
             address buyer = address(uint160(0x1000 + i));
             vm.deal(buyer, 10 ether);
             vm.prank(buyer);
-            game.purchase{value: 1 ether}(buyer, 400, 0.5 ether, bytes32(0), MintPaymentKind.DirectEth, false);
+            game.purchase{value: 1 ether}(buyer, 400, BoxOrderLib.boCustomFloor(0.5 ether), bytes32(0), MintPaymentKind.DirectEth, false);
         }
         vm.warp(block.timestamp + 1 days + 1861);
         game.advanceGame();

@@ -115,7 +115,7 @@ contract KeeperFaucetResistance is DeployProtocol {
     // -------------------------------------------------------------------------
 
     /// @dev _subOf mapping root (one packed Sub slot per subscriber).
-    uint256 private constant SUBOF_SLOT = 53;
+    uint256 private constant SUBOF_SLOT = 52;
     uint256 private constant OFF_LASTBOUGHT = 10; // uint24 lastAutoBoughtDay (bytes 11..13)
     uint256 private constant OFF_LASTOPENED = 13; // uint24 lastOpenedDay     (bytes 14..16)
     uint256 private constant MINTPACKED_SLOT = 9; // mintPacked_ mapping root (deity bit)
@@ -814,7 +814,7 @@ contract KeeperFaucetResistance is DeployProtocol {
         vm.store(address(game), slot, bytes32(packed));
     }
 
-    /// @dev Read `who`'s lastAutoBoughtDay (_subOf slot 54, uint24 bytes 11..13) — the buy non-vacuity oracle.
+    /// @dev Read `who`'s lastAutoBoughtDay (_subOf slot 52, uint24 bytes 11..13) — the buy non-vacuity oracle.
     function _lastAutoBoughtDayOf(address who) internal view returns (uint32) {
         bytes32 slot = keccak256(abi.encode(who, uint256(SUBOF_SLOT)));
         uint256 packed = uint256(vm.load(address(game), slot));

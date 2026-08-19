@@ -8,12 +8,14 @@ import {MintPaymentKind} from "../interfaces/IDegenerusGame.sol";
 import {IDegenerusGameBoonModule, IDegenerusGameDegeneretteModule} from "../interfaces/IDegenerusGameModules.sol";
 import {IDegenerusQuests} from "../interfaces/IDegenerusQuests.sol";
 import {ContractAddresses} from "../ContractAddresses.sol";
+import {RECORD_KIND_LUCKBOX} from "../interfaces/ICoinflip.sol";
 import {DegenerusGameStorage} from "../storage/DegenerusGameStorage.sol";
 import {BitPackingLib} from "../libraries/BitPackingLib.sol";
 import {EntropyLib} from "../libraries/EntropyLib.sol";
 import {FlipRoundLib} from "../libraries/FlipRoundLib.sol";
 import {SigFigLib} from "../libraries/SigFigLib.sol";
 import {PriceLookupLib} from "../libraries/PriceLookupLib.sol";
+import {ActivityCurveLib} from "../libraries/ActivityCurveLib.sol";
 
 /// @notice Interface for minting WWXRP prize tokens
 interface IWWXRP {
@@ -43,11 +45,6 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
 
     // error E() — inherited from DegenerusGameStorage
     error MsgValueExceedsAmount(); // msg.value exceeds the declared lootbox or credit amount
-    error SelfBoon(); // deity attempted to issue a boon to themselves
-    error InvalidSlot(); // deity boon slot index is >= DEITY_DAILY_BOON_COUNT
-    error RecipientAlreadyBoonedToday(); // recipient already received a deity boon on the current day
-    error RecipientBoonCapReached(); // recipient hit the lifetime cap on boons from this deity
-    error SlotAlreadyUsed(); // deity boon slot has already been used on the current day
 
     /// @notice RNG word has not been set for the requested lootbox index
     error RngNotReady();
@@ -79,7 +76,6 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
 
     /// @notice Emitted when a lootbox awards a whale pass jackpot
     /// @param player The player who won the jackpot
-    /// @param lootboxAmount The ETH amount of the lootbox
     /// @param targetLevel Level AT BOX-OPEN TIME (`level + 1`), reported for
     ///        downstream indexers. Ticket queuing is deferred to the player-paid
     ///        `claimWhalePass` endpoint; tickets actually get queued at the level
@@ -97,15 +93,13 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         uint24 frozenUntilLevel
     );
 
-    /// @notice Emitted when a lootbox awards DGNRS tokens
-    /// @param player The player who received the reward
-    /// @param lootboxAmount The ETH amount of the lootbox
-    /// @param dgnrsAmount The amount of DGNRS tokens awarded
-    event LootBoxDgnrsReward(
-        address indexed player,
-        uint256 lootboxAmount,
-        uint256 dgnrsAmount
-    );
+    /// @notice Aggregated DGNRS settlement for an opened entry's contiguous reward batch.
+    /// @dev An ETH-spin boundary may split one entry into multiple batches because that spin can
+    ///      recursively open another box and mutate the same pool.
+    /// @param player Reward recipient.
+    /// @param requested Total DGNRS this contiguous batch priced (pre-clamp).
+    /// @param paid DGNRS actually credited from the pool.
+    event LootBoxDgnrsBatch(address indexed player, uint256 requested, uint256 paid);
 
     /// @notice Emitted when a coin-presale box is resolved.
     /// @param player The box owner.
@@ -128,7 +122,6 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     /// @notice Unified lootbox reward event for boon awards
     /// @param player The player receiving the reward
     /// @param rewardType The type of reward (2=CoinflipBoon, 4=Boost5, 5=Boost15, 6=Boost25/Purchase, 8=DecimatorBoost, 9=WhaleBoon, 10=ActivityBoon/DeityPassBoon, 11=LazyPassBoon, 12=QuestShield, 13=DegeneretteBoon)
-    /// @param lootboxAmount The lootbox amount spent (ETH-equivalent for FLIP lootboxes)
     /// @param amount Primary reward amount (varies by type: BPS for boosts, token amount for boons; for type 13 the rolled boonType 32-40, which identifies the boon's currency and size)
     event LootBoxReward(
         address indexed player,
@@ -174,79 +167,9 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     // Constants
     // =========================================================================
 
-    /// @dev Portion of lootbox EV reserved for boon/pass draw (10%)
-    uint16 private constant LOOTBOX_BOON_BUDGET_BPS = 1000;
-    /// @dev Maximum boon/pass budget per lootbox (1 ETH scaled)
-    uint256 private constant LOOTBOX_BOON_MAX_BUDGET =
-        1 ether;
-    /// @dev Assumed utilization of max boon value (50%)
-    uint16 private constant LOOTBOX_BOON_UTILIZATION_BPS = 5000;
 
-    /// @dev Whale boon discount tiers 1/2/3 (10%, 20%, 35%).
-    uint16 private constant LOOTBOX_WHALE_BOON_DISCOUNT_10_BPS = 1000;
-    uint16 private constant LOOTBOX_WHALE_BOON_DISCOUNT_20_BPS = 2000;
-    uint16 private constant LOOTBOX_WHALE_BOON_DISCOUNT_35_BPS = 3500;
-    /// @dev Lazy pass boon discount tiers (10%, 25%, 50%).
-    uint16 private constant LOOTBOX_LAZY_PASS_DISCOUNT_10_BPS = 1000;
-    uint16 private constant LOOTBOX_LAZY_PASS_DISCOUNT_25_BPS = 2500;
-    uint16 private constant LOOTBOX_LAZY_PASS_DISCOUNT_50_BPS = 5000;
-    /// @dev Tier identifier for 10% deity pass discount boon (1000 bps)
-    uint8 private constant DEITY_PASS_BOON_TIER_10 = 1;
-    /// @dev Tier identifier for the tier-2 deity pass discount boon (20%, 2000 bps)
-    uint8 private constant DEITY_PASS_BOON_TIER_20 = 2;
-    /// @dev Tier identifier for the tier-3 deity pass discount boon (35%, 3500 bps)
-    uint8 private constant DEITY_PASS_BOON_TIER_35 = 3;
-    /// @dev Threshold used by deity-pass discount boon availability logic.
-    uint32 private constant DEITY_PASS_MAX_TOTAL = 32;
 
     // Boon bonus values
-    /// @dev 5% bonus in basis points for coinflip boon
-    uint16 private constant LOOTBOX_BOON_BONUS_BPS = 500;
-    /// @dev Maximum bonus amount for coinflip boon (5000 FLIP)
-    uint256 private constant LOOTBOX_BOON_MAX_BONUS = 5000 ether;
-    /// @dev Coinflip boon cap for max deposit (100k FLIP) used in EV estimation.
-    uint256 private constant COINFLIP_BOON_MAX_DEPOSIT = 100_000 ether;
-    /// @dev Decimator boon cap for base amount (50k FLIP) used in EV estimation.
-    uint256 private constant DECIMATOR_BOON_CAP = 50_000 ether;
-    /// @dev Whale pass standard price (used for whale discount boon EV estimation).
-    uint256 private constant WHALE_PASS_STANDARD_PRICE =
-        4 ether;
-    /// @dev Whale pass standard entries per level (4 entries = 1 ticket). Reported in the
-    ///      LootBoxWhalePassJackpot event for downstream indexers; the
-    ///      actual ticket materialization happens in claimWhalePass.
-    uint32 private constant WHALE_PASS_ENTRIES_PER_LEVEL = 2;
-    /// @dev Deity pass base price (used for deity discount boon EV estimation).
-    uint256 private constant DEITY_PASS_BASE = 24 ether;
-    /// @dev 10% bonus in basis points for coinflip boon
-    uint16 private constant LOOTBOX_COINFLIP_10_BONUS_BPS = 1000;
-    /// @dev 25% bonus in basis points for coinflip boon
-    uint16 private constant LOOTBOX_COINFLIP_25_BONUS_BPS = 2500;
-    /// @dev 5% lootbox boost in basis points
-    uint16 private constant LOOTBOX_BOOST_5_BONUS_BPS = 500;
-    /// @dev 15% lootbox boost in basis points
-    uint16 private constant LOOTBOX_BOOST_15_BONUS_BPS = 1500;
-    /// @dev 25% lootbox boost in basis points
-    uint16 private constant LOOTBOX_BOOST_25_BONUS_BPS = 2500;
-    /// @dev 5% purchase boost in basis points
-    uint16 private constant LOOTBOX_PURCHASE_BOOST_5_BONUS_BPS = 500;
-    /// @dev 15% purchase boost in basis points
-    uint16 private constant LOOTBOX_PURCHASE_BOOST_15_BONUS_BPS = 1500;
-    /// @dev 25% purchase boost in basis points
-    uint16 private constant LOOTBOX_PURCHASE_BOOST_25_BONUS_BPS = 2500;
-    /// @dev 10% decimator boost in basis points
-    uint16 private constant LOOTBOX_DECIMATOR_10_BONUS_BPS = 1000;
-    /// @dev 25% decimator boost in basis points
-    uint16 private constant LOOTBOX_DECIMATOR_25_BONUS_BPS = 2500;
-    /// @dev 50% decimator boost in basis points
-    uint16 private constant LOOTBOX_DECIMATOR_50_BONUS_BPS = 5000;
-    /// @dev 10 point activity boon bonus
-    uint24 private constant LOOTBOX_ACTIVITY_BOON_10_BONUS = 10;
-    /// @dev 25 point activity boon bonus
-    uint24 private constant LOOTBOX_ACTIVITY_BOON_25_BONUS = 25;
-    /// @dev 50 point activity boon bonus
-    uint24 private constant LOOTBOX_ACTIVITY_BOON_50_BONUS = 50;
-    /// @dev Quest-streak shields granted per quest-shield boon
-    uint16 private constant LOOTBOX_QUEST_SHIELD_GRANT = 1;
 
     // Lootbox roll constants
     /// @dev Base ticket roll budget in BPS (~155% EV after variance, 45% chance path).
@@ -344,179 +267,20 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     /// @dev Cumulative box-ETH width of each DGNRS tier (10 ETH).
     uint256 private constant PRESALE_BOX_DGNRS_TIER_WIDTH = 10 ether;
 
-    /// @dev Whale pass price (200 entries = 50 tickets over 100 levels)
-    uint256 private constant LOOTBOX_WHALE_PASS_PRICE =
-        4.50 ether;
-    /// @dev Threshold above which lootbox is split into two rolls (0.5 ETH scaled)
-    uint256 private constant LOOTBOX_SPLIT_THRESHOLD =
-        0.5 ether;
 
     /// @dev Distress-mode ticket bonus in basis points (25%).
     uint16 private constant DISTRESS_TICKET_BONUS_BPS = 2500;
 
-    /// @dev Probability scale for granular boon rolls (ppm = 1e6).
-    uint256 private constant BOON_PPM_SCALE = 1_000_000;
 
     // Boon categories — players may hold one boon per category simultaneously.
     // Within a category, upgrade semantics apply (higher tier replaces lower).
 
     // Deity boon constants
-    /// @dev Number of boon slots available per deity per day
-    uint8 private constant DEITY_DAILY_BOON_COUNT = 3;
 
-    /// @dev Lifetime cap on deity boons a single deity may issue to a single recipient
-    uint8 private constant DEITY_RECIPIENT_BOON_CAP = 10;
 
-    /// @dev Boon type: 5% coinflip bonus
-    uint8 private constant BOON_COINFLIP_5 = 1;
-    /// @dev Boon type: 10% coinflip bonus
-    uint8 private constant BOON_COINFLIP_10 = 2;
-    /// @dev Boon type: 25% coinflip bonus
-    uint8 private constant BOON_COINFLIP_25 = 3;
-    /// @dev Boon type: grant one quest-streak shield
-    uint8 private constant BOON_QUEST_SHIELD = 4;
-    /// @dev Boon type: 5% lootbox boost
-    uint8 private constant BOON_LOOTBOX_5 = 5;
-    /// @dev Boon type: 15% lootbox boost
-    uint8 private constant BOON_LOOTBOX_15 = 6;
-    /// @dev Boon type: 5% purchase boost
-    uint8 private constant BOON_PURCHASE_5 = 7;
-    /// @dev Boon type: 15% purchase boost
-    uint8 private constant BOON_PURCHASE_15 = 8;
-    /// @dev Boon type: 25% purchase boost
-    uint8 private constant BOON_PURCHASE_25 = 9;
-    /// @dev Boon type: 10% decimator boost
-    uint8 private constant BOON_DECIMATOR_10 = 13;
-    /// @dev Boon type: 25% decimator boost
-    uint8 private constant BOON_DECIMATOR_25 = 14;
-    /// @dev Boon type: 50% decimator boost
-    uint8 private constant BOON_DECIMATOR_50 = 15;
-    /// @dev Boon type: 10% whale discount
-    uint8 private constant BOON_WHALE_10 = 16;
-    /// @dev Boon type: 10 point activity bonus
-    uint8 private constant BOON_ACTIVITY_10 = 17;
-    /// @dev Boon type: 25 point activity bonus
-    uint8 private constant BOON_ACTIVITY_25 = 18;
-    /// @dev Boon type: 50 point activity bonus
-    uint8 private constant BOON_ACTIVITY_50 = 19;
-    /// @dev Boon type: 25% lootbox boost
-    uint8 private constant BOON_LOOTBOX_25 = 22;
-    /// @dev Boon type: tier-2 whale discount (20%)
-    uint8 private constant BOON_WHALE_20 = 23;
-    /// @dev Boon type: tier-3 whale discount (35%)
-    uint8 private constant BOON_WHALE_35 = 24;
-    /// @dev Boon type: 10% deity pass discount
-    uint8 private constant BOON_DEITY_PASS_10 = 25;
-    /// @dev Boon type: tier-2 deity pass discount (20%)
-    uint8 private constant BOON_DEITY_PASS_20 = 26;
-    /// @dev Boon type: tier-3 deity pass discount (35%)
-    uint8 private constant BOON_DEITY_PASS_35 = 27;
-    /// @dev Boon type: whale pass award
-    uint8 private constant BOON_WHALE_PASS = 28;
-    /// @dev Boon type: 10% lazy pass discount
-    uint8 private constant BOON_LAZY_PASS_10 = 29;
-    /// @dev Boon type: 25% lazy pass discount
-    uint8 private constant BOON_LAZY_PASS_25 = 30;
-    /// @dev Boon type: 50% lazy pass discount
-    uint8 private constant BOON_LAZY_PASS_50 = 31;
-    /// @dev Degenerette stake boons, contiguous 32-40 (ids 10-12 and 20-21 stay free).
-    ///      Each targets ONE bet currency; the tier byte written to `boonPacked` re-orders
-    ///      them by value (see `_degeneretteTierToBps`).
-    uint8 private constant BOON_DEGEN_ETH_4 = 32;
-    uint8 private constant BOON_DEGEN_ETH_8 = 33;
-    uint8 private constant BOON_DEGEN_ETH_12 = 34;
-    uint8 private constant BOON_DEGEN_FLIP_4 = 35;
-    uint8 private constant BOON_DEGEN_FLIP_8 = 36;
-    uint8 private constant BOON_DEGEN_FLIP_12 = 37;
-    uint8 private constant BOON_DEGEN_WWXRP_4 = 38;
-    uint8 private constant BOON_DEGEN_WWXRP_8 = 39;
-    uint8 private constant BOON_DEGEN_WWXRP_12 = 40;
 
     // Deity boon weights (used for weighted random selection)
-    /// @dev Weight for 5% coinflip boon
-    uint16 private constant BOON_WEIGHT_COINFLIP_5 = 200;
-    /// @dev Weight for 10% coinflip boon
-    uint16 private constant BOON_WEIGHT_COINFLIP_10 = 40;
-    /// @dev Weight for 25% coinflip boon
-    uint16 private constant BOON_WEIGHT_COINFLIP_25 = 8;
-    /// @dev Weight for 5% lootbox boost boon
-    uint16 private constant BOON_WEIGHT_LOOTBOX_5 = 200;
-    /// @dev Weight for 15% lootbox boost boon
-    uint16 private constant BOON_WEIGHT_LOOTBOX_15 = 30;
-    /// @dev Weight for 25% lootbox boost boon
-    uint16 private constant BOON_WEIGHT_LOOTBOX_25 = 8;
-    /// @dev Weight for 5% purchase boost boon
-    uint16 private constant BOON_WEIGHT_PURCHASE_5 = 400;
-    /// @dev Weight for 15% purchase boost boon
-    uint16 private constant BOON_WEIGHT_PURCHASE_15 = 80;
-    /// @dev Weight for 25% purchase boost boon
-    uint16 private constant BOON_WEIGHT_PURCHASE_25 = 16;
-    /// @dev Weight for 10% decimator boost boon
-    uint16 private constant BOON_WEIGHT_DECIMATOR_10 = 40;
-    /// @dev Weight for 25% decimator boost boon
-    uint16 private constant BOON_WEIGHT_DECIMATOR_25 = 8;
-    /// @dev Weight for 50% decimator boost boon
-    uint16 private constant BOON_WEIGHT_DECIMATOR_50 = 2;
-    /// @dev Weight for 10% whale boon
-    uint16 private constant BOON_WEIGHT_WHALE_10 = 28;
-    /// @dev Weight for tier-2 whale boon (20%)
-    uint16 private constant BOON_WEIGHT_WHALE_20 = 10;
-    /// @dev Weight for tier-3 whale boon (35%)
-    uint16 private constant BOON_WEIGHT_WHALE_35 = 2;
-    /// @dev Weight for 10% deity pass discount boon
-    uint16 private constant BOON_WEIGHT_DEITY_PASS_10 = 28;
-    /// @dev Weight for tier-2 deity pass discount boon (20%)
-    uint16 private constant BOON_WEIGHT_DEITY_PASS_20 = 10;
-    /// @dev Weight for tier-3 deity pass discount boon (35%)
-    uint16 private constant BOON_WEIGHT_DEITY_PASS_35 = 2;
-    /// @dev Weight for 10 point activity boon
-    uint16 private constant BOON_WEIGHT_ACTIVITY_10 = 100;
-    /// @dev Weight for 25 point activity boon
-    uint16 private constant BOON_WEIGHT_ACTIVITY_25 = 30;
-    /// @dev Weight for 50 point activity boon
-    uint16 private constant BOON_WEIGHT_ACTIVITY_50 = 4;
-    /// @dev Weight for the quest-streak-shield boon
-    uint16 private constant BOON_WEIGHT_QUEST_SHIELD = 200;
-    /// @dev Weight for whale pass award
-    uint16 private constant BOON_WEIGHT_WHALE_PASS = 2;
-    /// @dev Weight for 10% lazy pass discount boon
-    uint16 private constant BOON_WEIGHT_LAZY_PASS_10 = 30;
-    /// @dev Weight for 25% lazy pass discount boon
-    uint16 private constant BOON_WEIGHT_LAZY_PASS_25 = 8;
-    /// @dev Weight for 50% lazy pass discount boon
-    uint16 private constant BOON_WEIGHT_LAZY_PASS_50 = 2;
-    /// @dev Combined weight of deity pass discount boons (10% + 25% + 50%)
-    uint16 private constant BOON_WEIGHT_DEITY_PASS_ALL = 40;
-    /// @dev Weights for the degenerette stake boons. ETH and FLIP taper hard (200/50/10)
-    ///      because their stake bonus is real value; WWXRP sits flat at 200 across all three
-    ///      tiers — it is worthless by design, so a bigger WWXRP boon costs the game nothing.
-    uint16 private constant BOON_WEIGHT_DEGEN_ETH_4 = 200;
-    uint16 private constant BOON_WEIGHT_DEGEN_ETH_8 = 50;
-    uint16 private constant BOON_WEIGHT_DEGEN_ETH_12 = 10;
-    uint16 private constant BOON_WEIGHT_DEGEN_FLIP_4 = 200;
-    uint16 private constant BOON_WEIGHT_DEGEN_FLIP_8 = 50;
-    uint16 private constant BOON_WEIGHT_DEGEN_FLIP_12 = 10;
-    uint16 private constant BOON_WEIGHT_DEGEN_WWXRP_4 = 200;
-    uint16 private constant BOON_WEIGHT_DEGEN_WWXRP_8 = 200;
-    uint16 private constant BOON_WEIGHT_DEGEN_WWXRP_12 = 200;
 
-    /// @dev Fixed nominal deity-pass price for the boon-chance normalization (mid-curve k=16:
-    ///      BASE + 16·17/2 ether). The live triangular price is collectively player-movable
-    ///      (pass purchases), so it must not reach `totalChance` — a constant keeps the hit
-    ///      boundary a pure function of committed inputs. The mis-pricing only moves boon
-    ///      FREQUENCY, never a payout amount, and is bounded by the deity tiers' 40/2608
-    ///      weight share.
-    uint256 private constant DEITY_PASS_NOMINAL_PRICE = DEITY_PASS_BASE + 136 ether;
-    /// @dev Total weight sum when decimator boons are allowed (includes the +200 quest-shield weight)
-    uint16 private constant BOON_WEIGHT_TOTAL = 2608;
-    /// @dev Cursor position where the decimator band starts in the `_boonFromRoll` walk
-    ///      (sum of the coinflip + lootbox + purchase weights ahead of it).
-    uint16 private constant BOON_WEIGHT_PRE_DECIMATOR = 982;
-    /// @dev Combined weight of the three decimator tiers (a band the deity roll skips).
-    uint16 private constant BOON_WEIGHT_DECIMATOR_ALL = 50;
-    /// @dev Cursor position where the deity-pass band starts (pre-dec 982 + dec 50 +
-    ///      whale-discount 40), in full-table coordinates after the dec skip re-adds 50.
-    uint16 private constant BOON_WEIGHT_PRE_DEITY_PASS = 1072;
 
     // =========================================================================
     // Lootbox Opening Functions
@@ -568,6 +332,541 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         scaledAmount = adjustedValue + neutralPortion;
     }
 
+    // =========================================================================
+    // Box-order buy leg (delegatecalled from the Mint module)
+    // =========================================================================
+    //
+    // The buy path's box work lives here rather than in the Mint module for two reasons: it
+    // belongs with the rest of the box logic, and the Mint module sits ~250 bytes under the
+    // EIP-170 ceiling while this one has room. The Mint module keeps only what is genuinely
+    // mint-side — the minted-units tally, the payment split, the combined pool write.
+
+    /// @dev Portion of a box's EV reserved for the boon/pass draw (10%), capped. The haircut
+    ///      is taken here because it comes off each box's reward amount; the DRAW itself lives
+    ///      in the boon module.
+    uint16 private constant LOOTBOX_BOON_BUDGET_BPS = 1000;
+    uint256 private constant LOOTBOX_BOON_MAX_BUDGET = 1 ether;
+
+    /// @notice Emitted when boxes are bought and queued for resolution. Same topic as the
+    ///         Mint / Whale / Afking declarations — one box-buy event across every path.
+    event LootBoxBuy(address indexed buyer, uint48 indexed index, uint256 amount);
+
+    /// @notice Emitted when a lootbox-boost boon is consumed by a buy.
+    event BoostUsed(
+        address indexed player,
+        uint24 indexed day,
+        uint256 originalAmount,
+        uint256 boostedAmount,
+        uint16 boostBps
+    );
+
+    /// @dev Minimum wei for a custom box. Presets clear it structurally: the cheapest ticket
+    ///      price is 0.01 ETH and a small is one of those.
+    uint256 private constant BOX_CUSTOM_MIN = 0.01 ether;
+    /// @dev Floor for the biggest-box bounty.
+    uint256 private constant BIGGEST_BOX_MIN_ETH = 5 ether;
+    /// @dev Rake-free: all box ETH routes to the prize pools. Distress sends 100% next;
+    ///      otherwise 90% future / 10% next.
+    uint16 private constant BOX_SPLIT_FUTURE_BPS = 9000;
+    uint16 private constant BOX_SPLIT_NEXT_BPS = 1000;
+    /// @dev Boon boost: capped uplift, expiring, consumed on use.
+    uint256 private constant BOX_BOOST_MAX_VALUE = 10 ether;
+    uint32 private constant BOX_BOOST_EXPIRY_DAYS = 2;
+
+    // Packed order calldata: [small:8][med:8][large:8][customCount:8][customSize:48], 80 bits
+    // of 256. `customSize` carries the SAME 1e12-granularity units the slot stores, so the size
+    // charged and the size stored are the same number by construction rather than by a flooring
+    // step that could drift. Callers scale wei down by LB_CUSTOM_SCALE; the UI owns that.
+    uint256 private constant BO_MED_SHIFT = 8;
+    uint256 private constant BO_LARGE_SHIFT = 16;
+    uint256 private constant BO_CUSTOM_COUNT_SHIFT = 24;
+    uint256 private constant BO_CUSTOM_SIZE_SHIFT = 32;
+    uint256 private constant BO_COUNT_MASK = 0xFF;
+    uint256 private constant BO_CUSTOM_SIZE_MASK = 0xFFFFFFFFFFFF;               // 48 bits
+
+    /// @dev Merge a purchase's order into the player's existing order for this index and price
+    ///      it. Works on the packed word in place — the order is one uint256, and a memory
+    ///      struct would cost a full word per field to materialise something already packed.
+    ///
+    ///      `level` freezes on the period's first box, so a small costs what a small cost when
+    ///      the player started — a period can straddle a level change, and pricing tiers off a
+    ///      moving level would let the charge and the rolled size disagree. `customSize` freezes
+    ///      the same way: a second custom at a different size REVERTS rather than repricing
+    ///      boxes already held. The UI reads the frozen size and locks the input. Only the
+    ///      player or their APPROVED operators can reach this at all (_resolvePlayer), and
+    ///      operators are trusted by design — the size freeze is not defended against them.
+    /// @return word Merged order, counts applied, bps lanes still to be folded.
+    /// @return costWei Total wei this order costs.
+    /// @return priorNominal Nominal wei already held here — the denominator the bps lanes
+    ///         re-weight against.
+    /// @custom:reverts E On an empty order, a sub-minimum custom, a custom-size change, or a
+    ///         count over MAX_BOXES_PER_ORDER.
+    function _mergeBoxOrder(
+        uint256 existing,
+        uint256 boxOrder,
+        uint24 activeLevel
+    ) private pure returns (uint256 word, uint256 costWei, uint256 priorNominal) {
+        uint256 small = boxOrder & BO_COUNT_MASK;
+        uint256 med = (boxOrder >> BO_MED_SHIFT) & BO_COUNT_MASK;
+        uint256 large = (boxOrder >> BO_LARGE_SHIFT) & BO_COUNT_MASK;
+        uint256 customCount = (boxOrder >> BO_CUSTOM_COUNT_SHIFT) & BO_COUNT_MASK;
+        // Same 1e12 units the slot stores, so charge and storage agree by construction.
+        uint256 customScaled = (boxOrder >> BO_CUSTOM_SIZE_SHIFT) & BO_CUSTOM_SIZE_MASK;
+
+        uint256 added = small + med + large + customCount;
+        if (added == 0) revert E();
+        if (customCount != 0 && customScaled * LB_CUSTOM_SCALE < BOX_CUSTOM_MIN) revert E();
+
+        word = existing;
+        if (word == 0) {
+            word =
+                _lbSet(0, LB_LEVEL_SHIFT, LB_LEVEL_MASK, activeLevel) |
+                (customScaled << LB_CUSTOM_SIZE_SHIFT);
+        } else if (customCount != 0) {
+            uint256 held = _lbGet(word, LB_CUSTOM_SIZE_SHIFT, LB_CUSTOM_SIZE_MASK);
+            if (_lbGet(word, LB_CUSTOM_COUNT_SHIFT, LB_COUNT_MASK) == 0) {
+                word = _lbSet(word, LB_CUSTOM_SIZE_SHIFT, LB_CUSTOM_SIZE_MASK, customScaled);
+            } else if (held != customScaled) {
+                revert E();
+            }
+        }
+
+        uint256 sHeld = _lbGet(word, LB_SMALL_SHIFT, LB_COUNT_MASK);
+        uint256 mHeld = _lbGet(word, LB_MED_SHIFT, LB_COUNT_MASK);
+        uint256 lHeld = _lbGet(word, LB_LARGE_SHIFT, LB_COUNT_MASK);
+        uint256 cHeld = _lbGet(word, LB_CUSTOM_COUNT_SHIFT, LB_COUNT_MASK);
+
+        // Summed as uint256 before the cap check: 8-bit lanes would wrap a large request back
+        // under the ceiling and let it through.
+        if (sHeld + mHeld + lHeld + cHeld + added > MAX_BOXES_PER_ORDER) revert E();
+
+        uint256 price = PriceLookupLib.priceForLevel(
+            uint24(_lbGet(word, LB_LEVEL_SHIFT, LB_LEVEL_MASK))
+        );
+        uint256 customWei = _lbGet(word, LB_CUSTOM_SIZE_SHIFT, LB_CUSTOM_SIZE_MASK) *
+            LB_CUSTOM_SCALE;
+
+        unchecked {
+            // Nominal already held, while the counts still describe only that. The cover lane
+            // is part of it: the bps lanes blend against the WHOLE order, and
+            // `applyBoxOrderScore` keys its score freeze off this being zero — omitting the
+            // cover would erase a cover-first period's blended fractions and re-freeze its
+            // score on the next manual buy.
+            priorNominal =
+                (sHeld + LB_MED_MULTIPLE * mHeld + LB_LARGE_MULTIPLE * lHeld) *
+                price +
+                cHeld *
+                customWei +
+                _lbGet(word, LB_COVER_SHIFT, LB_COVER_MASK) *
+                LB_CUSTOM_SCALE;
+
+            costWei =
+                (small + LB_MED_MULTIPLE * med + LB_LARGE_MULTIPLE * large) *
+                price +
+                customCount *
+                customWei;
+
+            word = _lbSet(word, LB_SMALL_SHIFT, LB_COUNT_MASK, sHeld + small);
+            word = _lbSet(word, LB_MED_SHIFT, LB_COUNT_MASK, mHeld + med);
+            word = _lbSet(word, LB_LARGE_SHIFT, LB_COUNT_MASK, lHeld + large);
+            word = _lbSet(word, LB_CUSTOM_COUNT_SHIFT, LB_COUNT_MASK, cHeld + customCount);
+        }
+    }
+
+    /// @dev Fold one purchase's extra into a running fraction of the order's nominal value.
+    ///      All three lanes have this shape: each purchase contributes its own uplift over its
+    ///      own slice, and the stored fraction must stay correct for the order as a whole.
+    ///      Saturates at 100%; a zero-value order reads zero.
+    ///
+    ///      One ACCEPTED approximation: re-blending from an already-floored fraction makes
+    ///      the stored bps depend on purchase batching by up to ~1 bps per purchase. (The
+    ///      boost/distress correlation is NOT approximated — the distress lane blends over
+    ///      boosted value precisely so the resolver's product is exact.)
+    function _blendBps(
+        uint16 oldBps,
+        uint256 priorNominal,
+        uint256 extra,
+        uint256 addedNominal
+    ) private pure returns (uint16) {
+        uint256 t = priorNominal + addedNominal;
+        if (t == 0) return 0;
+        uint256 bps = (uint256(oldBps) * priorNominal + extra * 10_000) / t;
+        return uint16(bps > 10_000 ? 10_000 : bps);
+    }
+
+    /// @dev Capped boon uplift on one purchase's spend.
+    function _boostAmount(uint256 amount, uint16 bonusBps) private pure returns (uint256) {
+        uint256 capped = amount > BOX_BOOST_MAX_VALUE ? BOX_BOOST_MAX_VALUE : amount;
+        unchecked {
+            return (capped * bonusBps) / 10_000;
+        }
+    }
+
+    /// @dev Consume the player's lootbox-boost boon, if live, and return the uplift in wei.
+    ///      Deity-granted boosts are valid only on their grant day; others expire after
+    ///      BOX_BOOST_EXPIRY_DAYS. Either way the boon is cleared here — it is one-shot.
+    function _consumeBoxBoost(address player, uint256 amount) private returns (uint256 extra) {
+        BoonPacked storage bp = boonPacked[player];
+        uint256 s0 = bp.slot0;
+        uint8 tier = uint8(s0 >> BP_LOOTBOX_TIER_SHIFT);
+        if (tier == 0) return 0;
+
+        uint24 day = _simulatedDayIndex();
+        uint24 deityDay = uint24(s0 >> BP_DEITY_LOOTBOX_DAY_SHIFT);
+        if (deityDay != 0 && deityDay != day) {
+            bp.slot0 = s0 & BP_LOOTBOX_CLEAR;
+            return 0;
+        }
+        uint24 stampDay = uint24(s0 >> BP_LOOTBOX_DAY_SHIFT);
+        if (stampDay != 0 && day > stampDay + BOX_BOOST_EXPIRY_DAYS) {
+            bp.slot0 = s0 & BP_LOOTBOX_CLEAR;
+            return 0;
+        }
+
+        uint16 boostBps = _lootboxTierToBps(tier);
+        extra = _boostAmount(amount, boostBps);
+        bp.slot0 = s0 & BP_LOOTBOX_CLEAR;
+        emit BoostUsed(player, day, amount, amount + extra, boostBps);
+    }
+
+    /// @notice Price a box order without touching state — the buy path's overpay cap needs the
+    ///         cost before it splits payment, and the cost depends on stored state because the
+    ///         tier sizes come off the order's FROZEN level.
+    /// @dev Delegatecall entrypoint from the Mint module; runs in the Game's storage context.
+    /// @param buyer Player the order is for.
+    /// @param boxOrder Packed order.
+    /// @return costWei Total wei the order costs.
+    function quoteBoxOrder(address buyer, uint256 boxOrder)
+        external
+        payable
+        returns (uint256 costWei)
+    {
+        if (address(this) != ContractAddresses.GAME) revert OnlyDelegatecall();
+        if (boxOrder == 0) return 0;
+        uint48 idx = uint48((lootboxRngPacked >> LR_INDEX_SHIFT) & LR_INDEX_MASK);
+        (, costWei, ) = _mergeBoxOrder(
+            lootboxOrder[idx][buyer],
+            boxOrder,
+            _activeTicketLevel()
+        );
+    }
+
+    /// @notice Record a purchase's box order: merge the counts, freeze level and custom size,
+    ///         fold the boost and distress lanes, enqueue the player once per index, bump the
+    ///         RNG pending-eth, and arm the biggest-box bounty.
+    /// @dev Delegatecall entrypoint from the Mint module; runs in the Game's storage context.
+    ///      The EV lane is left zero here and folded by `applyBoxOrderScore` once the caller
+    ///      has its post-action score — two warm writes to one slot rather than deferring the
+    ///      pool split past the point the buy path can publish it.
+    /// @param buyer Player the order is for.
+    /// @param boxOrder Packed order.
+    /// @return costWei Total wei the order costs.
+    /// @return shares Prize-pool shares packed as (future << 128) | next. One return value
+    ///         rather than two: the caller holds them across a long stretch of its body, and
+    ///         two live locals there is exactly what tips it into a Yul stack-too-deep.
+    /// @return flipCredit Any biggest-box bounty claim, to join the buyer's flip credit.
+    /// @return priorNominal Nominal wei held here before this purchase — the caller threads it
+    ///         back into `applyBoxOrderScore` so the EV lane weights the same way.
+    function beginBoxOrder(address buyer, uint256 boxOrder)
+        external
+        payable
+        returns (
+            uint256 costWei,
+            uint256 shares,
+            uint256 flipCredit,
+            uint256 priorNominal
+        )
+    {
+        if (address(this) != ContractAddresses.GAME) revert OnlyDelegatecall();
+        if (boxOrder == 0) return (0, 0, 0, 0);
+
+        uint256 lrWord = lootboxRngPacked;
+        uint48 idx = uint48((lrWord >> LR_INDEX_SHIFT) & LR_INDEX_MASK);
+        uint256 existing = lootboxOrder[idx][buyer];
+
+        uint256 word;
+        (word, costWei, priorNominal) = _mergeBoxOrder(existing, boxOrder, _activeTicketLevel());
+
+        if (existing == 0) {
+            // First box for this (index, buyer): enqueue for the permissionless open cursor.
+            // The consumer walk gates each index on lootboxRngWordByIndex != 0 (VRF
+            // orphan-index protection), so enqueue is producer-only here — and it happens ONCE
+            // per player per index however many boxes they buy, which is what keeps the sweep
+            // queue bounded by buyers rather than by boxes.
+            boxPlayers[idx].push(buyer);
+        }
+
+        // The boon uplift is capped per purchase and only one purchase in a period can carry a
+        // boon at all, so it cannot be a frozen multiplier on the whole order. It rides as a
+        // running fraction of RAW nominal; the resolver scales each box's derived size by it.
+        uint16 oldBoost = uint16(_lbGet(word, LB_BOOST_SHIFT, LB_BPS_MASK));
+        uint256 boostExtra = _consumeBoxBoost(buyer, costWei);
+        word = _lbSet(
+            word,
+            LB_BOOST_SHIFT,
+            LB_BPS_MASK,
+            _blendBps(oldBoost, priorNominal, boostExtra, costWei)
+        );
+
+        // Distress can toggle between two purchases in one period, so it is a fraction too.
+        // It blends over BOOSTED value — the denominator grossed by the PRIOR boost fraction,
+        // this purchase's weight including its own uplift only when the purchase itself lands
+        // in distress — because the resolver takes distressEth = boostedSize * distressBps:
+        // a raw-basis fraction would let a boosted non-distress buy inflate (or deflate) the
+        // distress ticket-bonus basis of the boxes around it.
+        bool distress = _isDistressMode();
+        {
+            uint256 boostedPrior = priorNominal + (priorNominal * oldBoost) / 10_000;
+            uint256 boostedAdded = costWei + boostExtra;
+            word = _lbSet(
+                word,
+                LB_DISTRESS_SHIFT,
+                LB_BPS_MASK,
+                _blendBps(
+                    uint16(_lbGet(word, LB_DISTRESS_SHIFT, LB_BPS_MASK)),
+                    boostedPrior,
+                    distress ? boostedAdded : 0,
+                    boostedAdded
+                )
+            );
+        }
+
+        lootboxOrder[idx][buyer] = word;
+
+        // Biggest-box bounty: a CUSTOM only, and its per-box size, never the order's total.
+        // Presets are excluded outright — the bounty marks deliberately going big, and a large
+        // at a milestone price would clear the floor on its own. With presets out and the
+        // candidate a single box, no quantity of small buys can reach it.
+        if (((boxOrder >> BO_CUSTOM_COUNT_SHIFT) & BO_COUNT_MASK) != 0) {
+            uint256 candidate = ((boxOrder >> BO_CUSTOM_SIZE_SHIFT) & BO_CUSTOM_SIZE_MASK) *
+                LB_CUSTOM_SCALE;
+            if (candidate >= BIGGEST_BOX_MIN_ETH) {
+                flipCredit = coinflip.armRecord(RECORD_KIND_LUCKBOX, buyer, candidate);
+            }
+        }
+
+        uint256 newPendingEth = ((lrWord >> LR_PENDING_ETH_SHIFT) & LR_PENDING_ETH_MASK) +
+            _packEthToMilliEth(costWei);
+        lootboxRngPacked =
+            (lrWord & ~(LR_PENDING_ETH_MASK << LR_PENDING_ETH_SHIFT)) |
+            ((newPendingEth & LR_PENDING_ETH_MASK) << LR_PENDING_ETH_SHIFT);
+
+        unchecked {
+            shares =
+                (((costWei * (distress ? 0 : BOX_SPLIT_FUTURE_BPS)) / 10_000) << 128) |
+                ((costWei * (distress ? 10_000 : BOX_SPLIT_NEXT_BPS)) / 10_000);
+        }
+
+        emit LootBoxBuy(buyer, idx, costWei);
+    }
+
+    /// @notice Record a system-granted cover box — the whale-pass bundle and the afking
+    ///         auto-buy. Accumulates into the order's cover lane and resolves as ONE extra box.
+    /// @dev Delegatecall entrypoint shared by the Whale and Afking modules; runs in the Game's
+    ///      storage context. Deliberately outside `MAX_BOXES_PER_ORDER`: a cover is granted, not
+    ///      chosen, so it must never be able to lock a player out of buying — and it never
+    ///      touches `customSize`, so it cannot strand a player behind a size they did not pick.
+    ///      The player's own EV score/level freeze on the first box either way, so a cover
+    ///      arriving first is what seeds them.
+    /// @param player Player receiving the cover.
+    /// @param amountWei Cover spend in wei.
+    /// @param score Caller's activity-score snapshot, used only if this is the first box.
+    /// @param capKey Level key for the shared per-(player, level) EV-cap accumulator.
+    /// @param boost Whether to consume a live lootbox-boost boon (whale bundle yes, afking no).
+    function recordCoverBox(
+        address player,
+        uint256 amountWei,
+        uint16 score,
+        uint24 capKey,
+        bool boost
+    ) external payable {
+        if (address(this) != ContractAddresses.GAME) revert OnlyDelegatecall();
+        // Below storage granularity the cover lane would round to a ZERO count while the
+        // level/score write left the word non-zero — a queue slot the sweep skips forever.
+        // Sub-1e12-wei covers are unreachable from both cover paths; the guard makes the
+        // invariant (non-zero word => openable) structural rather than incidental.
+        if (amountWei < LB_CUSTOM_SCALE) return;
+
+        uint256 lrWord = lootboxRngPacked;
+        uint48 idx = uint48((lrWord >> LR_INDEX_SHIFT) & LR_INDEX_MASK);
+        uint256 word = lootboxOrder[idx][player];
+
+        if (word == 0) {
+            boxPlayers[idx].push(player);
+            word =
+                _lbSet(0, LB_LEVEL_SHIFT, LB_LEVEL_MASK, _activeTicketLevel()) |
+                _lbSet(
+                    0,
+                    LB_SCORE_SHIFT,
+                    LB_SCORE_MASK,
+                    score > ActivityCurveLib.ACTIVITY_EFFECTIVE_CAP_POINTS
+                        ? ActivityCurveLib.ACTIVITY_EFFECTIVE_CAP_POINTS
+                        : score
+                );
+        }
+
+        uint256 priorNominal = _orderNominal(word);
+        uint16 oldBoost = uint16(_lbGet(word, LB_BOOST_SHIFT, LB_BPS_MASK));
+        uint256 extra = boost ? _consumeBoxBoost(player, amountWei) : 0;
+        word = _lbSet(
+            word,
+            LB_BOOST_SHIFT,
+            LB_BPS_MASK,
+            _blendBps(oldBoost, priorNominal, extra, amountWei)
+        );
+
+        // Distress rides the same flag as the boost: the whale bundle carried both lanes
+        // before the relocation, the afking cover carried neither (it always preserved zero
+        // distress). Blended over BOOSTED value, mirroring beginBoxOrder — the resolver's
+        // distress basis is boostedSize * distressBps.
+        {
+            uint256 boostedPrior = priorNominal + (priorNominal * oldBoost) / 10_000;
+            uint256 boostedAdded = amountWei + extra;
+            word = _lbSet(
+                word,
+                LB_DISTRESS_SHIFT,
+                LB_BPS_MASK,
+                _blendBps(
+                    uint16(_lbGet(word, LB_DISTRESS_SHIFT, LB_BPS_MASK)),
+                    boostedPrior,
+                    (boost && _isDistressMode()) ? boostedAdded : 0,
+                    boostedAdded
+                )
+            );
+        }
+
+        // EV-cap draw against the shared per-(player, level) accumulator, same as a bought box.
+        uint256 evExtra;
+        if (
+            _lootboxEvMultiplierFromScore(_lbGet(word, LB_SCORE_SHIFT, LB_SCORE_MASK)) >
+            LOOTBOX_EV_NEUTRAL_BPS
+        ) {
+            uint256 used = _lootboxEvUsedFor(player, capKey);
+            uint256 remaining = used >= LOOTBOX_EV_BENEFIT_CAP
+                ? 0
+                : LOOTBOX_EV_BENEFIT_CAP - used;
+            evExtra = amountWei < remaining ? amountWei : remaining;
+            if (evExtra != 0) _setLootboxEvUsedFor(player, capKey, used + evExtra);
+        }
+        word = _lbSet(
+            word,
+            LB_ADJ_SHIFT,
+            LB_BPS_MASK,
+            _blendBps(
+                uint16(_lbGet(word, LB_ADJ_SHIFT, LB_BPS_MASK)),
+                priorNominal,
+                evExtra,
+                amountWei
+            )
+        );
+
+        // Covers accumulate into one box rather than one each: they arrive on a schedule the
+        // player does not control, so counting them would let the sweep's per-entry cost drift
+        // with subscription cadence rather than with what anyone chose to buy.
+        word = _lbSet(
+            word,
+            LB_COVER_SHIFT,
+            LB_COVER_MASK,
+            _lbGet(word, LB_COVER_SHIFT, LB_COVER_MASK) + amountWei / LB_CUSTOM_SCALE
+        );
+        lootboxOrder[idx][player] = word;
+
+        uint256 newPendingEth = ((lrWord >> LR_PENDING_ETH_SHIFT) & LR_PENDING_ETH_MASK) +
+            _packEthToMilliEth(amountWei);
+        lootboxRngPacked =
+            (lrWord & ~(LR_PENDING_ETH_MASK << LR_PENDING_ETH_SHIFT)) |
+            ((newPendingEth & LR_PENDING_ETH_MASK) << LR_PENDING_ETH_SHIFT);
+
+        emit LootBoxBuy(player, idx, amountWei);
+    }
+
+    /// @dev Nominal wei an order currently represents — the four bought tiers at the frozen
+    ///      level's prices, plus the cover lane. The denominator every bps lane re-weights on.
+    function _orderNominal(uint256 word) private pure returns (uint256) {
+        uint256 price = PriceLookupLib.priceForLevel(
+            uint24(_lbGet(word, LB_LEVEL_SHIFT, LB_LEVEL_MASK))
+        );
+        unchecked {
+            return
+                (_lbGet(word, LB_SMALL_SHIFT, LB_COUNT_MASK) +
+                    LB_MED_MULTIPLE *
+                    _lbGet(word, LB_MED_SHIFT, LB_COUNT_MASK) +
+                    LB_LARGE_MULTIPLE *
+                    _lbGet(word, LB_LARGE_SHIFT, LB_COUNT_MASK)) *
+                price +
+                _lbGet(word, LB_CUSTOM_COUNT_SHIFT, LB_COUNT_MASK) *
+                _lbGet(word, LB_CUSTOM_SIZE_SHIFT, LB_CUSTOM_SIZE_MASK) *
+                LB_CUSTOM_SCALE +
+                _lbGet(word, LB_COVER_SHIFT, LB_COVER_MASK) *
+                LB_CUSTOM_SCALE;
+        }
+    }
+
+    /// @notice Freeze the order's activity score (first box of the period only) and fold this
+    ///         purchase's EV-cap draw into the order's adj lane.
+    /// @dev Delegatecall entrypoint from the Mint module, called after its post-action score is
+    ///      known. The score is the resolver's frozen EV knob — the anti-gaming property, since
+    ///      the open level is not player-timable but the buy is.
+    /// @param buyer Player the order is for.
+    /// @param cachedScore Caller's post-action activity score in whole points.
+    /// @param capLevel Level key for the shared per-(player, level) EV-cap accumulator.
+    /// @param costWei This purchase's box spend, the lane's weight for this slice.
+    /// @param priorNominal Nominal wei held before this purchase.
+    function applyBoxOrderScore(
+        address buyer,
+        uint256 cachedScore,
+        uint24 capLevel,
+        uint256 costWei,
+        uint256 priorNominal
+    ) external payable {
+        if (address(this) != ContractAddresses.GAME) revert OnlyDelegatecall();
+        uint48 idx = uint48((lootboxRngPacked >> LR_INDEX_SHIFT) & LR_INDEX_MASK);
+        uint256 word = lootboxOrder[idx][buyer];
+        if (word == 0) return;
+
+        // Score freezes on the period's FIRST box. Clamped to the curve's effective cap so it
+        // fits the 15-bit lane; the multiplier is flat above that point, so the clamp changes
+        // no outcome.
+        if (priorNominal == 0) {
+            word = _lbSet(
+                word,
+                LB_SCORE_SHIFT,
+                LB_SCORE_MASK,
+                cachedScore > ActivityCurveLib.ACTIVITY_EFFECTIVE_CAP_POINTS
+                    ? ActivityCurveLib.ACTIVITY_EFFECTIVE_CAP_POINTS
+                    : cachedScore
+            );
+        }
+
+        // A bonus order (mult > NEUTRAL) draws min(spend, CAP - used) from the shared
+        // per-(player, level) accumulator; neutral and sub-neutral orders draw nothing.
+        uint256 evExtra;
+        if (
+            _lootboxEvMultiplierFromScore(_lbGet(word, LB_SCORE_SHIFT, LB_SCORE_MASK)) >
+            LOOTBOX_EV_NEUTRAL_BPS
+        ) {
+            uint256 used = _lootboxEvUsedFor(buyer, capLevel);
+            uint256 remaining = used >= LOOTBOX_EV_BENEFIT_CAP
+                ? 0
+                : LOOTBOX_EV_BENEFIT_CAP - used;
+            evExtra = costWei < remaining ? costWei : remaining;
+            if (evExtra != 0) _setLootboxEvUsedFor(buyer, capLevel, used + evExtra);
+        }
+        word = _lbSet(
+            word,
+            LB_ADJ_SHIFT,
+            LB_BPS_MASK,
+            _blendBps(
+                uint16(_lbGet(word, LB_ADJ_SHIFT, LB_BPS_MASK)),
+                priorNominal,
+                evExtra,
+                costWei
+            )
+        );
+
+        lootboxOrder[idx][buyer] = word;
+    }
+
     /// @dev Open the ETH-lootbox leg of an index for a player, if one is queued. Applies the
     ///      frozen activity-score EV multiplier (the 10 ETH cap was drawn at deposit). Returns
     ///      false (no-op) when no lootbox is queued, so the unified open path can still resolve
@@ -577,80 +876,345 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     /// @return opened True if a lootbox leg was resolved.
     /// @custom:reverts RngNotReady When the lootbox is queued but its RNG word is not yet set.
     function _openLootBoxLeg(address player, uint48 index, uint24 currentLevel) internal returns (bool opened) {
-        uint256 packed = lootboxEth[index][player];
-        // Early-out before the rngWord SLOAD when no lootbox leg is queued (the presale leg
-        // loads the word itself).
-        if ((packed & LB_AMOUNT_MASK) == 0) return false;
-        return _openLootBoxLegWith(player, index, packed, lootboxRngWordByIndex[index], currentLevel);
+        uint256 word = lootboxOrder[index][player];
+        // Early-out before the rngWord SLOAD when no boxes are queued (the presale leg loads
+        // the word itself).
+        if (_boxOrderCount(word) == 0) return false;
+        return _openLootBoxLegWith(player, index, word, lootboxRngWordByIndex[index], currentLevel);
     }
 
-    /// @dev Lootbox-leg body operating on pre-loaded values: `packed` is the player's
-    ///      lootboxEth word at `index`, `rngWord` the index's committed VRF word. The
-    ///      sweep (`openHumanBoxes`) loads both once per entry/index and threads them down;
-    ///      the manual shell (`_openLootBoxLeg`) loads them itself. Values cannot go stale
-    ///      between load and use: no callee on this path hands control to player code, and
-    ///      a lootboxEth write at a worded index is unreachable from the buy path.
-    /// @custom:reverts RngNotReady When a lootbox is queued but `rngWord` is zero.
+    /// @dev Per-entry reward accumulator. Every lane an entry's boxes can pay into is summed
+    ///      here and normally settled ONCE at the end, rather than credited per roll: the
+    ///      fungible lanes collapse to a single call each, and tickets collapse to one write per
+    ///      distinct target level. DGNRS is the sole exception: it is checkpointed before an
+    ///      ETH spin because that spin can recursively open another box against the same pool.
+    ///      That asymmetry is the point of the count model — a hundred boxes for one player share
+    ///      every per-player slot, where a hundred players would each pay for their own cold set.
+    ///
+    ///      Tickets index by level OFFSET from the open level. `_rollTargetLevel` only ever
+    ///      produces `base + 0..4` (80%) or `base + 5..50` (20%), so a fixed 51-wide lane is
+    ///      exhaustive. A touched-lane bitmap makes settlement proportional to distinct winning
+    ///      levels rather than scanning all 51 lanes.
+    struct BoxAcc {
+        uint256 flip;
+        uint256 dgnrs;
+        uint256 wwxrp;
+        uint256 dgnrsPool;    // Lootbox-pool snapshot, read once per recursion-delimited batch
+        bool dgnrsPoolLoaded;
+        // One bit per non-zero ticket lane. The counters stay unpacked for cheap per-roll
+        // updates; bit-scanning makes the final flush proportional to distinct winning levels
+        // while preserving the old ascending-level event/write order.
+        uint64 ticketTouched;
+        uint32[51] tickets;
+    }
+
+    /// @dev Resolution context for one entry, carried as a single memory struct rather than a
+    ///      spread of locals: the tier loop threads all of it, and a wide parameter list here is
+    ///      exactly what tips this module into a Yul stack-too-deep.
+    struct BoxRoll {
+        address player;
+        uint48 index;
+        uint256 rngWord;
+        uint24 currentLevel;
+        uint256 evBps;
+        uint256 boostBps;
+        uint256 distressBps;
+        uint256 adjBps;
+        BoxAcc acc;         // the entry's shared reward accumulator
+        uint16 score;
+        uint256 nonce;      // boxes rolled so far — also each box's seed nonce
+        uint256 boonSeed;   // player-mixed; each box's draw is (boonSeed, its nonce)
+    }
+
+    /// @dev Box-leg body operating on pre-loaded values: `word` is the player's packed order at
+    ///      `index`, `rngWord` the index's committed VRF word. The sweep loads both once per
+    ///      entry and threads them down; the manual shell loads them itself. Values cannot go
+    ///      stale between load and use: no callee on this path hands control to player code, and
+    ///      an order write at a worded index is unreachable from the buy path.
+    ///
+    ///      Every box in the order resolves as its OWN roll at its OWN size — a small rolls
+    ///      small and a medium rolls medium. There is no split threshold: one box, one roll.
+    /// @custom:reverts RngNotReady When boxes are queued but `rngWord` is zero.
     function _openLootBoxLegWith(
         address player,
         uint48 index,
-        uint256 packed,
+        uint256 word,
         uint256 rngWord,
         uint24 currentLevel
     ) internal returns (bool opened) {
-        (uint256 amount, uint64 adj, uint16 score, uint256 distressUnits) =
-            _unpackLootbox(packed);
-        if (amount == 0) return false;
-
+        if (_boxOrderCount(word) == 0) return false;
         if (rngWord == 0) revert RngNotReady();
 
-        // The box rolls from the LIVE level at open — no stored purchase-level basis, no grace
-        // window. Auto-open (the permissionless openBoxes bounty) opens every ready box ASAP and a
-        // holder cannot prevent it, so the open level is NOT player-timable: the holder can never
-        // steer the box to a level they prefer, whichever way the level cuts. The EV multiplier
-        // stays FROZEN at deposit (`score`) — that is the anti-gaming knob. One unified roll
-        // basis with `resolveAfkingBox` / `resolveLootboxDirect`. amount, adj, score, and the
-        // distress fraction all ride in the single packed lootboxEth word.
+        // Cleared before any resolution: the roll path makes external calls, and a zeroed slot
+        // means a re-entrant open finds nothing left to open.
+        lootboxOrder[index][player] = 0;
 
-        // Seed = the per-index VRF anchor `rngWord` (fixed at the index's advance, never knowable at
-        // deposit) + player + amount. No day term: the box binds to the index word for uniqueness and
-        // freeze-safety, so a day adds nothing — and a day keyed to the OPEN day would be re-rollable
-        // by timing the open. The boon path reads its own live day internally.
-        uint256 seed = uint256(keccak256(abi.encode(rngWord, player, amount)));
-        uint24 targetLevel = _rollTargetLevel(currentLevel, seed);
+        // `c`'s declaration allocates its nested BoxAcc; use it directly rather than
+        // allocating a second one and repointing.
+        BoxRoll memory c;
+        c.player = player;
+        c.index = index;
+        c.rngWord = rngWord;
+        // The boon seed MUST mix the player: the raw index word is shared by every entry at
+        // this index, and an unmixed seed would hand every player the same per-box roll
+        // values — correlated boon outcomes across the whole index.
+        c.boonSeed = EntropyLib.hash2(rngWord, uint256(uint160(player)));
+        c.currentLevel = currentLevel;
+        c.score = uint16(_lbGet(word, LB_SCORE_SHIFT, LB_SCORE_MASK));
+        // The EV multiplier stays FROZEN at buy (`score`) — that is the anti-gaming knob. The
+        // box rolls from the LIVE level at open, which the holder cannot steer: the
+        // permissionless bounty opens every ready box as soon as it can.
+        c.evBps = _lootboxEvMultiplierFromScore(c.score);
+        c.boostBps = _lbGet(word, LB_BOOST_SHIFT, LB_BPS_MASK);
+        c.distressBps = _lbGet(word, LB_DISTRESS_SHIFT, LB_BPS_MASK);
+        c.adjBps = _lbGet(word, LB_ADJ_SHIFT, LB_BPS_MASK);
 
-        // Apply the activity score EV multiplier to the reward amount (90% to 145%).
-        // score is the raw activity-score snapshot written at first deposit on every
-        // ETH-lootbox allocation path and frozen thereafter; the multiplier uses the
-        // committed score.
-        uint256 evMultiplierBps = _lootboxEvMultiplierFromScore(uint256(score));
-        // Frozen application: penalty/neutral boxes scale the full amount; a bonus box
-        // scales only the cap-eligible adjustedPortion (frozen at deposit time) and pays
-        // the remainder at 100%. No cap SLOAD/SSTORE here — the cap was drawn at deposit.
-        uint256 scaledAmount = evMultiplierBps <= LOOTBOX_EV_NEUTRAL_BPS
-            ? (amount * evMultiplierBps) / 10_000
-            : (uint256(adj) * evMultiplierBps) / 10_000 + (amount - uint256(adj));
-
-        // distress was stored at 0.01-ETH granularity; restore to wei for the bonus ratio.
-        uint256 distressEth = distressUnits * LB_DISTRESS_SCALE;
-
-        // Clear amount, adj, score, and distress in one SSTORE of the whole word.
-        lootboxEth[index][player] = 0;
-        _resolveLootboxCommon(
-            player,
-            index,
-            scaledAmount,
-            targetLevel,
-            currentLevel,
-            seed,
-            true,
-            distressEth,
-            amount,
-            true,
-            score,
-            true
+        uint256 price = PriceLookupLib.priceForLevel(
+            uint24(_lbGet(word, LB_LEVEL_SHIFT, LB_LEVEL_MASK))
         );
+
+        // Keep the overwhelmingly common one-tier order on the lean existing path. Only a
+        // genuinely mixed order allocates the five-lane batch and pays its packing work.
+        if (_boxOrderIsMixed(word)) {
+            _rollBatchedTiers(c, word, price);
+        } else {
+            _rollTierImmediate(c, _lbGet(word, LB_SMALL_SHIFT, LB_COUNT_MASK), price);
+            _rollTierImmediate(c, _lbGet(word, LB_MED_SHIFT, LB_COUNT_MASK), price * LB_MED_MULTIPLE);
+            _rollTierImmediate(c, _lbGet(word, LB_LARGE_SHIFT, LB_COUNT_MASK), price * LB_LARGE_MULTIPLE);
+            _rollTierImmediate(
+                c,
+                _lbGet(word, LB_CUSTOM_COUNT_SHIFT, LB_COUNT_MASK),
+                _lbGet(word, LB_CUSTOM_SIZE_SHIFT, LB_CUSTOM_SIZE_MASK) * LB_CUSTOM_SCALE
+            );
+            // The cover lane resolves as ONE box of its accumulated value.
+            _rollTierImmediate(c, 1, _lbGet(word, LB_COVER_SHIFT, LB_COVER_MASK) * LB_CUSTOM_SCALE);
+        }
+
+        // Final settlement for the whole entry: one call per remaining fungible lane, one ticket
+        // write per distinct level. DGNRS may already be checkpointed at an ETH-spin boundary.
+        // Boon draws have completed before this remaining fungible/ticket flush.
+        _flushBoxAcc(player, c.acc, currentLevel);
+
         return true;
+    }
+
+    /// @dev One box's boon draw, for the resolvers that settle a single box outside the
+    ///      entry sweep (afking covers, decimator/degenerette auto-resolve, ETH-spin recirc,
+    ///      sDGNRS redemption chunks). Identical draw to the entry path's per-tier call;
+    ///      `seed` is the box's own player-specific resolution seed, drawn at nonce 0.
+    function _rollSingleBoxBoons(
+        address player,
+        uint256 amount,
+        uint24 currentLevel,
+        uint256 seed
+    ) private {
+        (bool ok, ) = ContractAddresses.GAME_BOON_MODULE.delegatecall(
+            abi.encodeWithSelector(
+                IDegenerusGameBoonModule.rollBoxBoons.selector,
+                player,
+                _lootboxBoonBudget(amount),
+                1,
+                amount,
+                currentLevel,
+                seed,
+                0
+            )
+        );
+        if (!ok) revert EmptyRevert();
+    }
+
+    /// @dev Settle an entry's remaining accumulated rewards: one call per fungible lane, one
+    ///      ticket write per distinct target level. DGNRS may already have been checkpointed at
+    ///      an ETH-spin recursion boundary; every other lane settles only here.
+    function _flushBoxAcc(address player, BoxAcc memory acc, uint24 currentLevel) private {
+        uint256 touched = acc.ticketTouched;
+        while (touched != 0) {
+            // Find the least-significant set bit in six bounded steps (all lanes are 0..50),
+            // then clear it. This walks only populated lanes, in the same ascending order as
+            // the former exhaustive 0..50 scan.
+            uint256 scan = touched;
+            uint256 offset;
+            if (uint32(scan) == 0) {
+                offset = 32;
+                scan >>= 32;
+            }
+            if (uint16(scan) == 0) {
+                offset += 16;
+                scan >>= 16;
+            }
+            if (uint8(scan) == 0) {
+                offset += 8;
+                scan >>= 8;
+            }
+            if ((scan & 0xF) == 0) {
+                offset += 4;
+                scan >>= 4;
+            }
+            if ((scan & 0x3) == 0) {
+                offset += 2;
+                scan >>= 2;
+            }
+            if ((scan & 1) == 0) offset += 1;
+
+            uint32 whole = acc.tickets[offset];
+            _queueEntries(player, currentLevel + uint24(offset), wholeTicketsToEntries(whole), false);
+            unchecked {
+                touched &= touched - 1;
+            }
+        }
+        if (acc.dgnrs != 0) {
+            uint256 paid = _creditDgnrsReward(player, acc.dgnrs);
+            // One aggregated emit for the entry's remaining batch, under its OWN event: reusing the per-box
+            // LootBoxDgnrsReward schema would silently put DGNRS units in a field indexers
+            // read as box ETH.
+            if (paid != 0) emit LootBoxDgnrsBatch(player, acc.dgnrs, paid);
+        }
+        if (acc.flip != 0) coinflip.creditFlip(player, acc.flip);
+        if (acc.wwxrp != 0) wwxrp.mintPrize(player, acc.wwxrp);
+    }
+
+    /// @dev Add whole tickets to one target-level offset and remember that offset on first touch.
+    ///      The same saturation rule as the former inline update keeps the eventual entry shift
+    ///      (`wholeTicketsToEntries`) in range and prevents an extreme order from wedging a sweep.
+    function _addBoxTickets(BoxAcc memory acc, uint256 offset, uint32 whole) private pure {
+        if (whole == 0) return;
+
+        uint32 prior = acc.tickets[offset];
+        if (prior == 0) {
+            acc.ticketTouched |= uint64(uint256(1) << offset);
+        }
+
+        uint256 lane = uint256(prior) + whole;
+        uint256 laneCap = uint256(type(uint32).max) >> 2;
+        acc.tickets[offset] = lane > laneCap ? uint32(laneCap) : uint32(lane);
+    }
+
+    /// @dev True when two or more of small/medium/large/custom/cover are populated. The four
+    ///      bought counts are contiguous bytes, so collapse each byte to one presence bit and
+    ///      use the standard `x & (x - 1)` multiple-bit test; the cover becomes a fifth bit.
+    function _boxOrderIsMixed(uint256 word) private pure returns (bool) {
+        uint256 laneBits = (word >> LB_SMALL_SHIFT) & 0xFFFFFFFF;
+        laneBits |= laneBits >> 4;
+        laneBits |= laneBits >> 2;
+        laneBits = (laneBits | (laneBits >> 1)) & 0x01010101;
+        if (_lbGet(word, LB_COVER_SHIFT, LB_COVER_MASK) != 0) laneBits |= uint256(1) << 32;
+        return laneBits != 0 && (laneBits & (laneBits - 1)) != 0;
+    }
+
+    /// @dev Resolve one populated tier and immediately dispatch its boon draws. Kept separate
+    ///      from `_rollTier` so one-tier orders never allocate or carry the mixed-order batch.
+    function _rollTierImmediate(BoxRoll memory c, uint256 count, uint256 size) private {
+        if (count == 0 || size == 0) return;
+        uint256 nonceBase = c.nonce;
+        uint256 scaled = _rollTier(c, count, size);
+
+        (bool okBoon, ) = ContractAddresses.GAME_BOON_MODULE.delegatecall(
+            abi.encodeWithSelector(
+                IDegenerusGameBoonModule.rollBoxBoons.selector,
+                c.player,
+                _lootboxBoonBudget(scaled),
+                count,
+                scaled,
+                c.currentLevel,
+                c.boonSeed,
+                nonceBase
+            )
+        );
+        if (!okBoon) revert EmptyRevert();
+    }
+
+    /// @dev Roll `count` boxes of `size` wei each. Every box takes its own seed — the nonce is
+    ///      its position in the entry — so two same-size boxes from one player at one index can
+    ///      never resolve identically. Returns zero for an empty lane, otherwise its scaled size.
+    function _rollTier(BoxRoll memory c, uint256 count, uint256 size) private returns (uint256 scaled) {
+        if (count == 0 || size == 0) return 0;
+
+        unchecked {
+            // The boon uplift was banked as a fraction of the order's nominal value; each box
+            // carries its proportional share.
+            uint256 boosted = size + (size * c.boostBps) / 10_000;
+            // Frozen EV application: a penalty or neutral order scales the whole box; a bonus
+            // order scales only the cap-eligible fraction drawn at buy and pays the rest —
+            // including the boon uplift — at 100%. The adj fraction applies to the RAW size,
+            // matching the buy-side draw (which capped raw spend, not boosted): applying it to
+            // the boosted basis would quietly extend the EV bonus onto the boost itself. No
+            // cap read here — the draw happened at purchase.
+            uint256 adjWei = (size * c.adjBps) / 10_000;
+            scaled = c.evBps <= LOOTBOX_EV_NEUTRAL_BPS
+                ? (boosted * c.evBps) / 10_000
+                : (adjWei * c.evBps) / 10_000 + (boosted - adjWei);
+            uint256 distressEth = (boosted * c.distressBps) / 10_000;
+
+            for (uint256 i; i < count; ++i) {
+                // Seed = the per-index VRF anchor (fixed at the index's advance, unknowable at
+                // buy) + player + size + this box's position. No day term: the box binds to the
+                // index word, and a day keyed to the OPEN day would be re-rollable by timing.
+                uint256 seed = EntropyLib.hash4(
+                    c.rngWord,
+                    uint256(uint160(c.player)),
+                    size,
+                    ++c.nonce
+                );
+                _resolveLootboxCommon(
+                    c.player,
+                    c.index,
+                    scaled,
+                    _rollTargetLevel(c.currentLevel, seed),
+                    c.currentLevel,
+                    seed,
+                    true,
+                    distressEth,
+                    boosted,
+                    c.score,
+                    true,
+                    c.acc
+                );
+            }
+        }
+    }
+
+    /// @dev Resolve all five lanes of a mixed order, then dispatch their boon draws together.
+    ///      Tier amounts stay separate so chance saturation is byte-identical; only call frames
+    ///      and repeated normalization collapse. This helper is never entered by one-tier orders,
+    ///      so its fixed array is not allocated on their hot path.
+    function _rollBatchedTiers(BoxRoll memory c, uint256 word, uint256 price) private {
+        uint256[5] memory amounts;
+        uint40 countsPacked;
+        uint256 count = _lbGet(word, LB_SMALL_SHIFT, LB_COUNT_MASK);
+        amounts[0] = _rollTier(c, count, price);
+        if (amounts[0] != 0) countsPacked = uint40(count);
+
+        count = _lbGet(word, LB_MED_SHIFT, LB_COUNT_MASK);
+        amounts[1] = _rollTier(c, count, price * LB_MED_MULTIPLE);
+        if (amounts[1] != 0) countsPacked |= uint40(count << 8);
+
+        count = _lbGet(word, LB_LARGE_SHIFT, LB_COUNT_MASK);
+        amounts[2] = _rollTier(c, count, price * LB_LARGE_MULTIPLE);
+        if (amounts[2] != 0) countsPacked |= uint40(count << 16);
+
+        count = _lbGet(word, LB_CUSTOM_COUNT_SHIFT, LB_COUNT_MASK);
+        amounts[3] = _rollTier(
+            c,
+            count,
+            _lbGet(word, LB_CUSTOM_SIZE_SHIFT, LB_CUSTOM_SIZE_MASK) * LB_CUSTOM_SCALE
+        );
+        if (amounts[3] != 0) countsPacked |= uint40(count << 24);
+
+        uint256 coverSize = _lbGet(word, LB_COVER_SHIFT, LB_COVER_MASK) * LB_CUSTOM_SCALE;
+        amounts[4] = _rollTier(c, 1, coverSize);
+        if (amounts[4] != 0) countsPacked |= uint40(1) << 32;
+
+        (bool okBoon, ) = ContractAddresses.GAME_BOON_MODULE.delegatecall(
+            abi.encodeWithSelector(
+                IDegenerusGameBoonModule.rollBoxBoonTiers.selector,
+                c.player,
+                amounts,
+                countsPacked,
+                c.currentLevel,
+                c.boonSeed
+            )
+        );
+        if (!okBoon) revert EmptyRevert();
     }
 
     /// @notice Open every box queued at an RNG index for a player — the ETH-lootbox leg, the
@@ -670,6 +1234,11 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         // box's ETH is not stranded — it was banked into the pools at purchase and
         // is distributed by the terminal drain.
         if (_livenessTriggered()) revert E();
+        // A wide order queues tickets at up to 51 levels and the far band reverts under the
+        // daily RNG lock, so a 100-box open during the lock fails with near-certainty anyway
+        // (P ~= 1 - 0.92^N). Gate here so it fails FAST with the real reason; the sweep is
+        // already lock-gated, and the lock clears within the day.
+        if (rngLockedFlag) revert RngLocked();
         // Permissionless: box rewards always credit the owner, so any caller may open any
         // player's ready boxes (zero address = caller).
         if (player == address(0)) player = msg.sender;
@@ -720,15 +1289,24 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     ///      (orphaned mid-day by a coordinator rotation) instead of advancing past it, so its boxes
     ///      are never marooned — it resumes once the re-issued word lands. Every leg is O(1)
     ///      (whale-pass materialization is deferred to claimWhalePass).
-    /// @param budget Maximum entries (opens + skips + index-headers) scanned this call.
-    /// @return opened Total human boxes opened this call.
-    function openHumanBoxes(uint256 budget) external returns (uint256 opened) {
+    /// @param budget Walk budget in the shared open-weight unit (~4.7k gas each) — the same
+    ///        unit the afking leg spends. An entry costs OPEN_HUMAN_ENTRY_WEIGHT plus
+    ///        OPEN_HUMAN_BOX_WEIGHT for each box; a skip or index-header costs
+    ///        one. Neither entries nor boxes are the unit, because neither predicts the gas.
+    /// @return opened Total boxes opened this call.
+    /// @return unitsSpent Walk units this call consumed — the crank's work-based bounty basis.
+    ///         Crediting the knee per BOX would let one five-small order saturate it at a
+    ///         fraction of the work five distinct entries used to represent.
+    function openHumanBoxes(uint256 budget)
+        external
+        returns (uint256 opened, uint256 unitsSpent)
+    {
         // Entry-gate: the open path's revert sources — rngLock and the terminal-jackpot
         // liveness control — are excluded pre-loop so the loop body is guaranteed-non-reverting.
-        if (rngLockedFlag || _livenessTriggered()) return 0;
+        if (rngLockedFlag || _livenessTriggered()) return (0, 0);
 
         uint48 active = uint48(_lrRead(LR_INDEX_SHIFT, LR_INDEX_MASK));
-        if (active <= 1) return 0; // no finalized index yet (LR_INDEX is genesis-1, monotonic)
+        if (active <= 1) return (0, 0); // no finalized index yet (LR_INDEX is genesis-1, monotonic)
         uint48 finalized = active - 1; // highest openable index — where the word lands
 
         uint48 idx = boxCursorIndex;
@@ -750,37 +1328,63 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
             }
             // Orphan-index coupling: never advance past an un-worded index, or its boxes maroon.
             // The word is loaded once per index and threaded into every open below.
-            uint256 word = lootboxRngWordByIndex[idx];
-            if (word == 0) break;
+            uint256 indexWord = lootboxRngWordByIndex[idx];
+            if (indexWord == 0) break;
 
             address[] storage queue = boxPlayers[idx];
             uint256 qlen = queue.length;
             while (cur < qlen && steps < budget) {
                 address player = queue[cur];
+                // Open if EITHER leg is still owed: the box order or the presale leg
+                // (presaleBoxEth, probed only while boxes are outstanding). Both are zeroed on
+                // open, so a zero/zero entry is already-drained (or never carried a box of this
+                // type) and is skipped. Each leg's word is loaded ONCE here and threaded into
+                // its open — the skip-check values double as the open's inputs.
+                uint256 word = lootboxOrder[idx][player];
+                uint256 stored = checkPresale ? presaleBoxEth[idx][player] : 0;
+                uint256 boxes = _boxOrderCount(word);
+                if (boxes == 0 && stored == 0) {
+                    unchecked {
+                        ++cur;
+                        ++steps; // a skip still costs a step, so a long drained prefix cannot wall
+                    }
+                    continue;
+                }
+
+                // Charge what the entry ACTUALLY costs, in the shared walk unit. The floor is
+                // the per-entry weight — the cold per-player settlement every entry pays however
+                // few boxes it holds — plus a lighter weight for each box. Boxes after the first
+                // ride the lanes the first one already opened. A flat step per entry stopped
+                // meaning anything the moment counts landed, and a flat step per BOX would
+                // over-charge wide entries by ~5x.
+                uint256 cost = OPEN_HUMAN_ENTRY_WEIGHT +
+                    boxes * OPEN_HUMAN_BOX_WEIGHT +
+                    (stored == 0 ? 0 : OPEN_HUMAN_ENTRY_WEIGHT);
+                // BREAK, never skip. Advancing `cur` past an entry that did not fit would lose
+                // it: the cursor is monotonic and never revisits. Breaking leaves the cursor on
+                // it for the next call. Paired with the `opened != 0` guard — the first entry of
+                // a call always runs, whatever its size — every entry is eventually attempted
+                // against a full fresh budget, so nothing can wedge behind a large one.
+                if (opened != 0 && steps + cost > budget) break;
                 unchecked {
                     ++cur;
-                    ++steps;
+                    steps += cost;
                 }
-                // Open if EITHER leg is still owed: the lootbox leg (lootboxEth amount) or the
-                // presale leg (presaleBoxEth, probed only while boxes are outstanding). Both are
-                // zeroed on open, so a zero/zero entry is already-drained (or never carried a box
-                // of this type) and is skipped. Each leg's word is loaded ONCE here and threaded
-                // into its open — the skip-check values double as the open's inputs.
-                uint256 packed = lootboxEth[idx][player];
-                uint256 stored = checkPresale ? presaleBoxEth[idx][player] : 0;
-                if ((packed & LB_AMOUNT_MASK) == 0 && stored == 0) continue;
+
                 // Guaranteed-non-reverting under the entry-gate + the word!=0 index gate above:
-                // resolves the lootbox AND presale legs (each robust to being empty). The cached
-                // values cannot go stale across the lootbox leg's external calls: no callee on
-                // that path hands control to player code, and a presaleBoxEth write at a worded
-                // index is unreachable from the buy path.
-                _openLootBoxLegWith(player, idx, packed, word, currentLevel);
+                // resolves the box AND presale legs (each robust to being empty). The cached
+                // values cannot go stale across the box leg's external calls: no callee on that
+                // path hands control to player code, and a presaleBoxEth write at a worded index
+                // is unreachable from the buy path.
+                _openLootBoxLegWith(player, idx, word, indexWord, currentLevel);
                 if (stored != 0) {
                     presaleBoxEth[idx][player] = 0; // dequeue before resolution
-                    _resolvePresaleBox(player, idx, stored, word, currentLevel);
+                    _resolvePresaleBox(player, idx, stored, indexWord, currentLevel);
                 }
                 unchecked {
-                    ++opened;
+                    // The presale leg counts as one open: `opened` feeds the crank's progress
+                    // and bounty accounting, and a presale-only entry is real work.
+                    opened += boxes + (stored != 0 ? 1 : 0);
                 }
             }
 
@@ -791,6 +1395,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
             cur = 0;
         }
 
+        unitsSpent = steps;
         boxCursorIndex = idx;
         boxCursor = uint48(cur);
         // Presale is fully drained once the cursor has advanced PAST the close index (every box at
@@ -982,6 +1587,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         // ETH-pool flush window — an ETH-spin RMW here would be clobbered by that flush. Roll
         // 19 awards tickets instead. Every box itemizes its contents, so this path emits the
         // `LootBoxOpened` summary unconditionally (gated only by the spin suppression downstream).
+        BoxAcc memory acc;
         _resolveLootboxCommon(
             player,
             0,
@@ -992,10 +1598,17 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
             false,
             0,
             0,
-            true,
             activityScore,
-            false
+            false,
+            acc
         );
+        // Single-box entry: the accumulator exists for uniformity, and flushing it
+        // here keeps every reward credit on one path.
+        _flushBoxAcc(player, acc, currentLevel);
+        // The boon draw the box's 10% haircut paid for. The common resolver takes the
+        // haircut for EVERY caller, so every caller must also draw — the entry sweep does
+        // it per tier; the single-box resolvers do it here.
+        _rollSingleBoxBoons(player, scaledAmount, currentLevel, seed);
     }
 
     /// @notice Resolve redemption lootboxes for an sDGNRS gambling burn claim.
@@ -1071,6 +1684,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         // on a redemption cold-bust).
         // allowEthSpin=true: redemption credits the pool to storage before this loop, so each
         // chunk's ETH-spin reads/writes fresh storage — no deferred memory-accumulator to race.
+        BoxAcc memory acc;
         _resolveLootboxCommon(
             player,
             0,
@@ -1081,10 +1695,17 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
             false,
             0,
             0,
-            true,
             activityScore,
-            true
+            true,
+            acc
         );
+        // Single-box entry: the accumulator exists for uniformity, and flushing it
+        // here keeps every reward credit on one path.
+        _flushBoxAcc(player, acc, currentLevel);
+        // The boon draw the box's 10% haircut paid for. The common resolver takes the
+        // haircut for EVERY caller, so every caller must also draw — the entry sweep does
+        // it per tier; the single-box resolvers do it here.
+        _rollSingleBoxBoons(player, scaledAmount, currentLevel, seed);
     }
 
     /// @notice Credit the direct half of an sDGNRS redemption claim to `player`'s claimable winnings.
@@ -1207,7 +1828,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     ///      summary like any box open, and `payColdBustConsolation = true` (a
     ///      bust pays the same WWXRP consolation a human box does). The ONE intentional
     ///      exception is the distress bonus — `distressEth = 0` / `totalPackedEth = 0`: the
-    ///      human value is frozen at buy in the packed lootboxEth distress field, which the
+    ///      human value is frozen at buy in the order's distress fraction, which the
     ///      stamp-only afking box never writes. Deliberately omitted as a mega-niche
     ///      end-game feature (active only the final day before game-over, by which point
     ///      afking subscribers are gone). No `RngNotReady` guard here — the caller (the
@@ -1253,6 +1874,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
             ? (amount * evMultiplierBps) / 10_000
             : _applyEvMultiplierWithCap(player, currentLevel, amount, evMultiplierBps);
 
+        BoxAcc memory acc;
         _resolveLootboxCommon(
             player,
             0,
@@ -1263,68 +1885,23 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
             true,
             0,
             0,
-            false,
             activityScore,
-            true
+            true,
+            acc
         );
+        // Single-box entry: the accumulator exists for uniformity, and flushing it
+        // here keeps every reward credit on one path.
+        _flushBoxAcc(player, acc, currentLevel);
+        // The boon draw the box's 10% haircut paid for. The common resolver takes the
+        // haircut for EVERY caller, so every caller must also draw — the entry sweep does
+        // it per tier; the single-box resolvers do it here.
+        _rollSingleBoxBoons(player, scaledAmount, currentLevel, seed);
     }
 
     // =========================================================================
     // Deity Boon Functions
     // =========================================================================
 
-    /// @notice Issue a deity boon to a recipient
-    /// @dev Deity can issue up to 3 boons per day, one per recipient per day.
-    ///      A deity can issue at most DEITY_RECIPIENT_BOON_CAP boons to any one
-    ///      recipient over the game's lifetime.
-    /// @param deity The deity pass holder issuing the boon
-    /// @param recipient The player receiving the boon
-    /// @param slot The slot index (0-2) to use
-    /// @custom:reverts ZeroAddress When deity or recipient is zero address
-    /// @custom:reverts SelfBoon When deity tries to issue boon to themselves
-    /// @custom:reverts InvalidSlot When slot is >= 3
-    /// @custom:reverts Unauthorized When deity does not own a deity pass
-    /// @custom:reverts RngNotReady When no RNG is available for the day
-    /// @custom:reverts RecipientAlreadyBoonedToday When recipient already received a boon today
-    /// @custom:reverts RecipientBoonCapReached When this deity has hit the lifetime boon cap for the recipient
-    /// @custom:reverts SlotAlreadyUsed When slot was already used today
-    function issueDeityBoon(address deity, address recipient, uint8 slot) external {
-        if (deity == address(0) || recipient == address(0)) revert ZeroAddress();
-        if (deity == recipient) revert SelfBoon();
-        if (slot >= DEITY_DAILY_BOON_COUNT) revert InvalidSlot();
-        if (mintPacked_[deity] >> BitPackingLib.HAS_DEITY_PASS_SHIFT & 1 == 0) revert Unauthorized();
-
-        uint24 day = _simulatedDayIndex();
-        uint256 rngWord = rngWordByDay[day];
-        if (rngWord == 0) revert RngNotReady();
-        // Day + used-mask share one slot (deityBoonPacked). On a day rollover the mask
-        // starts empty: a stale day's mask is never read (every reader gates on the day
-        // matching), and the single packed write below re-stamps the day with the fresh
-        // mask in one store.
-        uint32 boonPacked = deityBoonPacked[deity];
-        uint8 mask = uint24(boonPacked) == day ? uint8(boonPacked >> 24) : 0;
-        // One boon per recipient per day, across all deities.
-        if (deityBoonRecipientDay[recipient] == day) revert RecipientAlreadyBoonedToday();
-        // Lifetime cap is per (deity, recipient) pair.
-        uint8 pairBoonCount = deityRecipientBoonCount[deity][recipient];
-        if (pairBoonCount >= DEITY_RECIPIENT_BOON_CAP) revert RecipientBoonCapReached();
-
-        uint8 slotMask = uint8(1) << slot;
-        if ((mask & slotMask) != 0) revert SlotAlreadyUsed();
-        deityBoonPacked[deity] =
-            uint32(day) |
-            (uint32(mask | slotMask) << 24);
-        deityBoonRecipientDay[recipient] = day;
-        deityRecipientBoonCount[deity][recipient] = pairBoonCount + 1;
-
-        // Every menu type is always issuable — the deity roll excludes the two
-        // conditionally-usable families (decimator, deity-pass) unconditionally — so
-        // issuance never reverts on the rolled type.
-        uint8 boonType = _deityBoonForSlot(deity, day, slot, rngWord);
-        _applyBoon(recipient, boonType, day, day, 0, true);
-
-        emit DeityBoonIssued(deity, recipient, day, slot, boonType);
-    }
 
     // =========================================================================
     // Internal Helper Functions
@@ -1400,9 +1977,6 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     ///        `resolveRedemptionLootbox`), which stay silent on cold-bust
     /// @param distressEth Portion of lootbox ETH bought during distress mode (pre-EV-scaling basis)
     /// @param totalPackedEth Total packed lootbox ETH (pre-EV-scaling basis, denominator for distress fraction)
-    /// @param allowSplit When true, a box over LOOTBOX_SPLIT_THRESHOLD resolves as two
-    ///        independent rolls (the 2nd re-rolling its own target level); afking passes false
-    ///        so afking boxes always resolve as a single roll (a bounded per-open cost).
     /// @param activityScore Frozen whole-point activity score threaded to the Degenerette spin rolls
     ///        (WWXRP / FLIP-spins / ETH-spin); identical to the score the box committed.
     /// @param allowEthSpin When false (recirc entry), the 5% ETH-spin roll awards tickets
@@ -1417,68 +1991,32 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         bool payColdBustConsolation,
         uint256 distressEth,
         uint256 totalPackedEth,
-        bool allowSplit,
         uint16 activityScore,
-        bool allowEthSpin
+        bool allowEthSpin,
+        BoxAcc memory acc
     ) private {
         uint256 boonBudget = _lootboxBoonBudget(amount);
         uint256 mainAmount = amount - boonBudget;
-        uint256 amountFirst = mainAmount;
-        uint256 amountSecond;
-        // Boxes over the split threshold resolve as two independent rolls — UNLESS the caller
-        // forbids it (afking boxes always resolve as one roll, for a bounded per-open cost).
-        if (allowSplit && mainAmount > LOOTBOX_SPLIT_THRESHOLD) {
-            amountFirst = mainAmount / 2;
-            amountSecond = mainAmount - amountFirst;
-        }
 
-        // Box-level boon work runs ONCE (not per roll). Boons always roll on every ETH lootbox
-        // path (the haircut above always pairs with a spent boon budget); pass-type boons stay
-        // gated by real game-state inside the roll.
-        _rollLootboxBoons(player, amount, boonBudget, currentLevel, seed);
-        // consumeActivityBoon is a no-op unless a pending bonus is set; gate the BoonModule
-        // delegatecall on a direct read of the (warm) pending field, skipping the call frame on
-        // the common no-boon box.
-        if (uint24(boonPacked[player].slot1 >> BP_ACTIVITY_PENDING_SHIFT) != 0) {
-            (bool okAct, ) = ContractAddresses.GAME_BOON_MODULE.delegatecall(
-                abi.encodeWithSelector(IDegenerusGameBoonModule.consumeActivityBoon.selector, player)
-            );
-            if (!okAct) revert EmptyRevert();
-        }
-
-        // Roll 1 settles at the caller-rolled `targetLevel` (from the primary seed).
-        // A target >= base + 5 is a far-future roll (near offsets are 0-4), which weights
-        // the ticket budget up.
+        // One box, one roll, at the box's own size. The old split-into-two threshold is gone:
+        // a medium that resolved as two smalls was the thing the count model exists to stop.
+        // A target >= base + 5 is a far-future roll (near offsets are 0-4), which weights the
+        // ticket budget up.
         _settleLootboxRoll(
-            player, index, amountFirst, amount, targetLevel, seed,
+            player, index, mainAmount, amount, targetLevel, seed,
             payColdBustConsolation, distressEth, totalPackedEth,
-            targetLevel >= currentLevel + 5, activityScore, allowEthSpin, currentLevel
+            targetLevel >= currentLevel + 5, activityScore, allowEthSpin, currentLevel, acc
         );
-
-        // Roll 2 (split paths only) draws from the counter-tagged seed2 and RE-ROLLS its own
-        // target level (seed2 bits[0..39], unused by roll 2's reward draw), so its tickets can
-        // land at a different level than roll 1.
-        if (amountSecond != 0) {
-            uint256 seed2 = EntropyLib.hash2(seed, 1);
-            uint24 level2 = _rollTargetLevel(currentLevel, seed2);
-            _settleLootboxRoll(
-                player, index, amountSecond, amount, level2, seed2,
-                payColdBustConsolation, distressEth, totalPackedEth,
-                level2 >= currentLevel + 5, activityScore, allowEthSpin, currentLevel
-            );
-        }
     }
 
     /// @dev Settle ONE reward roll: the reward-type draw, then (for a ticket roll) the distress
     ///      bonus + single Bernoulli whole-collapse + queue at `rollLevel`, the whole-FLIP
     ///      floor + creditFlip, and one LootBoxOpened. `rollAmount` drives the reward calc;
-    ///      `fullAmount` fills the event's amount field, so an UNSPLIT box settles and
-    ///      emits exactly as a single combined resolution did; a split box runs this twice, each
-    ///      half at its own re-rolled level with its own event.
-    /// @param rollAmount This roll's ETH chunk (the whole main amount, or one split half).
+    ///      `fullAmount` fills the event's amount field. One box resolves here exactly once.
+    /// @param rollAmount This roll's ETH chunk (the box's main amount, boon budget removed).
     /// @param fullAmount The box's full ETH-equivalent amount — event amount field only, not the reward basis.
     /// @param rollLevel The target level this roll's tickets queue at.
-    /// @param rollSeed This roll's seed (primary `seed` for roll 1, `seed2` for roll 2).
+    /// @param rollSeed This box's seed.
     /// @param isFarFuture True when rollLevel is far-future (>= base + 5) — weights the ticket budget.
     function _settleLootboxRoll(
         address player,
@@ -1493,7 +2031,8 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         bool isFarFuture,
         uint16 activityScore,
         bool allowEthSpin,
-        uint24 currentLevel
+        uint24 currentLevel,
+        BoxAcc memory acc
     ) private {
         if (rollAmount == 0) return;
         // priceForLevel returns a non-zero constant for every level, so targetPrice is
@@ -1502,8 +2041,10 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         // _largeFlipOut.
         uint256 targetPrice = PriceLookupLib.priceForLevel(rollLevel);
 
-        (uint256 flipOut, uint32 scaledWholeTickets, bool wasSpin) =
-            _resolveLootboxRoll(player, rollAmount, fullAmount, targetPrice, rollSeed, isFarFuture, activityScore, allowEthSpin, currentLevel);
+        (uint256 flipOut, uint32 scaledWholeTickets, uint256 dgnrsOut, uint256 wwxrpOut, bool wasSpin) =
+            _resolveLootboxRoll(player, rollAmount, targetPrice, rollSeed, isFarFuture, activityScore, allowEthSpin, currentLevel, acc);
+        acc.dgnrs += dgnrsOut;
+        acc.wwxrp += wwxrpOut;
 
         // Collapsed onto a whole 100-FLIP multiple, EV-preserving, above the threshold where
         // the granule is a small slice of the award; a minimum box at the milestone price
@@ -1538,17 +2079,22 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
                 unchecked { whole += 1; }
                 roundedUp = true;
             }
-            // `_queueEntries` early-returns on `whole == 0`. `_openLootBoxLeg` and `resolveAfkingBox`
-            // pay the WWXRP cold-bust consolation here; the other auto-resolve callers stay silent.
-            _queueEntries(player, rollLevel, wholeTicketsToEntries(whole), false);
+            // Accumulated by level offset, flushed once per distinct level by `_flushBoxAcc`.
+            // Saturated, never checked-overflowed: one roll's `whole` fits uint32 by the roll
+            // cap, but a hundred accumulated rolls need not — and a checked revert here would
+            // wedge the sweep on this entry forever (first-entry-always-runs retries it every
+            // call). The cap keeps `wholeTicketsToEntries`' `<< 2` in range too. Reachable
+            // only at economically absurd (though encodable) order sizes; saturation matches
+            // the per-roll ceiling's own graceful-cap policy.
+            // `_openLootBoxLeg` and `resolveAfkingBox` pay the WWXRP cold-bust consolation;
+            // the other auto-resolve callers stay silent.
+            _addBoxTickets(acc, rollLevel - currentLevel, whole);
             if (payColdBustConsolation && whole == 0) {
-                wwxrp.mintPrize(player, _boxWwxrpStake(rollAmount));
+                acc.wwxrp += _boxWwxrpStake(rollAmount);
             }
         }
 
-        if (flipAmount != 0) {
-            coinflip.creditFlip(player, flipAmount);
-        }
+        acc.flip += flipAmount;
 
         // Every box roll emits exactly one settlement event. Spin rolls (WWXRP / FLIP-spins /
         // ETH-spin) are recorded by their own single BoxSpin event from the Degenerette module, so
@@ -1566,644 +2112,12 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         }
     }
 
-    /// @dev Roll for lootbox boons. Lootbox can award at most one boon.
-    ///      Categories are independent and coexist; within a category only a strictly higher tier upgrades.
-    ///      Uses a single roll with granular ppm-based probability and deity-weighted pool.
-    ///      Bit budget (consumed from `seed`):
-    ///        - boon roll: bits[120..151] via uint32(seed >> 120) % BOON_PPM_SCALE (bias 0.022%; BOON_PPM_SCALE = 1_000_000)
-    /// @param player Player address
-    /// @param originalAmount Amount used for chance calculations
-    /// @param boonBudget Amount of lootbox value allocated to boon/pass draw
-    /// @param currentLevel Current game level (level + 1, threaded from the resolution caller)
-    /// @param seed Per-resolution 256-bit keccak seed (sliced inline; no advance)
-    function _rollLootboxBoons(
-        address player,
-        uint256 originalAmount,
-        uint256 boonBudget,
-        uint24 currentLevel,
-        uint256 seed
-    ) private {
-        if (player == address(0) || originalAmount == 0) return;
 
-        // Expiry cleanup is a no-op unless some boon bit is set (every clear branch is gated
-        // on a non-zero tier/day field), so gate the BoonModule delegatecall on a direct read
-        // of the two packed slots — the same SLOADs the sweep would do, minus the call frame
-        // on the common no-boon box.
-        BoonPacked storage bp = boonPacked[player];
-        if (bp.slot0 != 0 || bp.slot1 != 0) {
-            (bool okClr, ) = ContractAddresses.GAME_BOON_MODULE.delegatecall(
-                abi.encodeWithSelector(IDegenerusGameBoonModule.checkAndClearExpiredBoon.selector, player)
-            );
-            if (!okClr) revert EmptyRevert();
-        }
 
-        uint24 currentDay = _simulatedDayIndex();
 
-        uint256 lazyPassValue = _lazyPassPriceForLevel(currentLevel + 1);
 
-        // Static table: no eligibility feeds the chance or the mapping, so the outcome of
-        // this draw is fully determined the moment the box's word lands — nothing any player
-        // writes afterwards (pass purchases, window state) can remap it. Eligibility is
-        // applied AFTER the draw as keep-vs-discard only (`_deliverBoon`).
-        (uint256 totalWeight, uint256 avgMaxValue) = _boonPoolStats(
-            lazyPassValue,
-            currentLevel
-        );
-        if (totalWeight == 0 || avgMaxValue == 0) return;
 
-        uint256 expectedPerBoon = (avgMaxValue * LOOTBOX_BOON_UTILIZATION_BPS) / 10_000;
-        if (expectedPerBoon == 0) return;
 
-        if (boonBudget == 0) return;
-
-        uint256 totalChance = (boonBudget * BOON_PPM_SCALE) / expectedPerBoon;
-        if (totalChance > BOON_PPM_SCALE) totalChance = BOON_PPM_SCALE;
-        if (totalChance == 0) return;
-
-        uint256 roll = uint32(seed >> 120) % BOON_PPM_SCALE;
-        if (roll >= totalChance) return;
-
-        uint8 boonType = _boonFromRoll((roll * totalWeight) / totalChance);
-
-        _deliverBoon(player, boonType, currentDay, originalAmount);
-    }
-
-    /// @dev Keep-or-discard delivery filter for a lootbox-drawn boon. The TYPE is already
-    ///      fixed (static table); live state may only decide whether the known outcome is
-    ///      delivered. A discard writes nothing — occupying the category slot with a dead
-    ///      boon would block a later useful one under upgrade-only semantics — and emits
-    ///      `BoonDiscarded` so indexers keep the full draw history.
-    ///
-    ///      Only PERMANENTLY dead types are discarded, and only the deity-pass family
-    ///      qualifies: the recipient already holds a pass, or supply is capped, so no future
-    ///      state makes the discount spendable. Decimator tiers are always delivered even
-    ///      outside a burn window — a lootbox-sourced decimator boon carries NO time expiry
-    ///      (BoonModule: "no time expiry, only deity day"), so it simply waits for the next
-    ///      window; discarding it would destroy a bankable reward. Every other type is
-    ///      likewise always deliverable — lazy boons bypass the purchase level gate at
-    ///      consumption, so no level condition exists for them.
-    function _deliverBoon(
-        address player,
-        uint8 boonType,
-        uint24 currentDay,
-        uint256 originalAmount
-    ) private {
-        if (boonType >= BOON_DEITY_PASS_10 && boonType <= BOON_DEITY_PASS_35) {
-            if (
-                mintPacked_[player] >> BitPackingLib.HAS_DEITY_PASS_SHIFT & 1 == 1 ||
-                deityPassOwners.length >= DEITY_PASS_MAX_TOTAL
-            ) {
-                emit BoonDiscarded(player, boonType);
-                return;
-            }
-        }
-        _applyBoon(player, boonType, 0, currentDay, originalAmount, false);
-    }
-
-    /// @dev Convert FLIP amount to ETH value using current price (`priceWei` is
-    ///      always a non-zero price-table constant).
-    function _flipToEthValue(
-        uint256 flipAmount,
-        uint256 priceWei
-    ) private pure returns (uint256 valueWei) {
-        if (flipAmount == 0) return 0;
-        valueWei = (flipAmount * priceWei) / PRICE_COIN_UNIT;
-    }
-
-    /// @dev Activate a 100-level whale pass for a player by recording an O(1)
-    ///      pending claim. Opens are uniform O(1) regardless of pass status.
-    ///      Materialization (stats + 100 levels × tickets) is deferred to the
-    ///      player-paid `claimWhalePass` endpoint, where the stats helper is
-    ///      applied immediately after the read-then-zero of `whalePassClaims[player]`.
-    function _activateWhalePass(address player) private {
-        // O(1) record of one half-pass claim.
-        whalePassClaims[player] += 1;
-    }
-
-    /// @dev Calculate total weight and average max boon value (in ETH) for EV budgeting
-    ///      over the STATIC full table: `totalWeight` always sums to BOON_WEIGHT_TOTAL and
-    ///      no player-writable state reaches the values (deity tiers use the fixed nominal
-    ///      price). Level-scaled values (`priceWei`, `lazyPassValue`) stay live — level
-    ///      moves only via advanceGame and auto-open denies holders the timing lever.
-    /// @param currentLevel Current game level (level + 1, threaded from the caller)
-    function _boonPoolStats(
-        uint256 lazyPassValue,
-        uint24 currentLevel
-    ) private pure returns (uint256 totalWeight, uint256 avgMaxValue) {
-        uint256 weightedMax = 0;
-        // currentLevel == level + 1, so this is the price at the stored `level`.
-        uint256 priceWei = PriceLookupLib.priceForLevel(currentLevel - 1);
-
-        // Bounded weight/value arithmetic: fixed uint16 weights (running sum <= 2608) times
-        // per-boon max values each < ~1e34; no accumulation approaches 2^256.
-        unchecked {
-        // Coinflip boons (max bonus on 100k FLIP deposit)
-        uint256 coinflipMax5 = _flipToEthValue(
-            (COINFLIP_BOON_MAX_DEPOSIT * LOOTBOX_BOON_BONUS_BPS) / 10_000,
-            priceWei
-        );
-        uint256 coinflipMax10 = _flipToEthValue(
-            (COINFLIP_BOON_MAX_DEPOSIT * LOOTBOX_COINFLIP_10_BONUS_BPS) / 10_000,
-            priceWei
-        );
-        uint256 coinflipMax25 = _flipToEthValue(
-            (COINFLIP_BOON_MAX_DEPOSIT * LOOTBOX_COINFLIP_25_BONUS_BPS) / 10_000,
-            priceWei
-        );
-
-        totalWeight += BOON_WEIGHT_COINFLIP_5;
-        weightedMax += BOON_WEIGHT_COINFLIP_5 * coinflipMax5;
-        totalWeight += BOON_WEIGHT_COINFLIP_10;
-        weightedMax += BOON_WEIGHT_COINFLIP_10 * coinflipMax10;
-        totalWeight += BOON_WEIGHT_COINFLIP_25;
-        weightedMax += BOON_WEIGHT_COINFLIP_25 * coinflipMax25;
-
-        // Lootbox boost boons (max 10 ETH)
-        uint256 boostCap = 10 ether;
-        uint256 lootboxMax5 = (boostCap * LOOTBOX_BOOST_5_BONUS_BPS) / 10_000;
-        uint256 lootboxMax15 = (boostCap * LOOTBOX_BOOST_15_BONUS_BPS) / 10_000;
-        uint256 lootboxMax25 = (boostCap * LOOTBOX_BOOST_25_BONUS_BPS) / 10_000;
-
-        totalWeight += BOON_WEIGHT_LOOTBOX_5;
-        weightedMax += BOON_WEIGHT_LOOTBOX_5 * lootboxMax5;
-        totalWeight += BOON_WEIGHT_LOOTBOX_15;
-        weightedMax += BOON_WEIGHT_LOOTBOX_15 * lootboxMax15;
-        totalWeight += BOON_WEIGHT_LOOTBOX_25;
-        weightedMax += BOON_WEIGHT_LOOTBOX_25 * lootboxMax25;
-
-        // Purchase boost boons (max 10 ETH)
-        uint256 purchaseMax5 = (boostCap * LOOTBOX_PURCHASE_BOOST_5_BONUS_BPS) / 10_000;
-        uint256 purchaseMax15 = (boostCap * LOOTBOX_PURCHASE_BOOST_15_BONUS_BPS) / 10_000;
-        uint256 purchaseMax25 = (boostCap * LOOTBOX_PURCHASE_BOOST_25_BONUS_BPS) / 10_000;
-
-        totalWeight += BOON_WEIGHT_PURCHASE_5;
-        weightedMax += BOON_WEIGHT_PURCHASE_5 * purchaseMax5;
-        totalWeight += BOON_WEIGHT_PURCHASE_15;
-        weightedMax += BOON_WEIGHT_PURCHASE_15 * purchaseMax15;
-        totalWeight += BOON_WEIGHT_PURCHASE_25;
-        weightedMax += BOON_WEIGHT_PURCHASE_25 * purchaseMax25;
-
-        // Decimator tiers are ALWAYS in the table; an out-of-window draw is discarded at
-        // delivery. Window state must not reach the weights: on the claim-timed direct
-        // resolve path (`resolveLootboxDirect`) the claimant controls WHEN the box opens,
-        // so a window-gated table would let a known roll be remapped by claim timing.
-        uint256 decMax10 = _flipToEthValue(
-            (DECIMATOR_BOON_CAP * LOOTBOX_DECIMATOR_10_BONUS_BPS) / 10_000,
-            priceWei
-        );
-        uint256 decMax25 = _flipToEthValue(
-            (DECIMATOR_BOON_CAP * LOOTBOX_DECIMATOR_25_BONUS_BPS) / 10_000,
-            priceWei
-        );
-        uint256 decMax50 = _flipToEthValue(
-            (DECIMATOR_BOON_CAP * LOOTBOX_DECIMATOR_50_BONUS_BPS) / 10_000,
-            priceWei
-        );
-        totalWeight += BOON_WEIGHT_DECIMATOR_10;
-        weightedMax += BOON_WEIGHT_DECIMATOR_10 * decMax10;
-        totalWeight += BOON_WEIGHT_DECIMATOR_25;
-        weightedMax += BOON_WEIGHT_DECIMATOR_25 * decMax25;
-        totalWeight += BOON_WEIGHT_DECIMATOR_50;
-        weightedMax += BOON_WEIGHT_DECIMATOR_50 * decMax50;
-
-        // Whale discount boons (10/20/35% off standard price)
-        uint256 whaleMax10 = (WHALE_PASS_STANDARD_PRICE * LOOTBOX_WHALE_BOON_DISCOUNT_10_BPS) / 10_000;
-        uint256 whaleMax20 = (WHALE_PASS_STANDARD_PRICE * LOOTBOX_WHALE_BOON_DISCOUNT_20_BPS) / 10_000;
-        uint256 whaleMax35 = (WHALE_PASS_STANDARD_PRICE * LOOTBOX_WHALE_BOON_DISCOUNT_35_BPS) / 10_000;
-        totalWeight += BOON_WEIGHT_WHALE_10;
-        weightedMax += BOON_WEIGHT_WHALE_10 * whaleMax10;
-        totalWeight += BOON_WEIGHT_WHALE_20;
-        weightedMax += BOON_WEIGHT_WHALE_20 * whaleMax20;
-        totalWeight += BOON_WEIGHT_WHALE_35;
-        weightedMax += BOON_WEIGHT_WHALE_35 * whaleMax35;
-
-        // Deity tiers are ALWAYS in the table at a FIXED nominal price; an ineligible draw
-        // (recipient holds a pass / supply capped) is discarded at delivery. Neither the
-        // player's own pass bit nor the append-only owner count may reach the weights or
-        // the value normalization — both are player-writable after the word is public.
-        {
-            uint256 deityMax10 = (DEITY_PASS_NOMINAL_PRICE * 1000) / 10_000;
-            uint256 deityMax20 = (DEITY_PASS_NOMINAL_PRICE * 2000) / 10_000;
-            uint256 deityMax35 = (DEITY_PASS_NOMINAL_PRICE * 3500) / 10_000;
-            totalWeight += BOON_WEIGHT_DEITY_PASS_10;
-            weightedMax += BOON_WEIGHT_DEITY_PASS_10 * deityMax10;
-            totalWeight += BOON_WEIGHT_DEITY_PASS_20;
-            weightedMax += BOON_WEIGHT_DEITY_PASS_20 * deityMax20;
-            totalWeight += BOON_WEIGHT_DEITY_PASS_35;
-            weightedMax += BOON_WEIGHT_DEITY_PASS_35 * deityMax35;
-        }
-
-        // Activity boons (value assumed 0 for EV budgeting)
-        totalWeight += BOON_WEIGHT_ACTIVITY_10;
-        totalWeight += BOON_WEIGHT_ACTIVITY_25;
-        totalWeight += BOON_WEIGHT_ACTIVITY_50;
-
-        // Quest-streak-shield boon (value assumed 0 for EV budgeting, like activity)
-        totalWeight += BOON_WEIGHT_QUEST_SHIELD;
-
-        // Pass awards (now eligible on every ETH lootbox path)
-        totalWeight += BOON_WEIGHT_WHALE_PASS;
-        weightedMax += BOON_WEIGHT_WHALE_PASS * LOOTBOX_WHALE_PASS_PRICE;
-        // Lazy weights are unconditional (static table); at a level with no lazy price the
-        // tiers contribute zero VALUE but stay drawable — a lazy boon bypasses the purchase
-        // level gate at consumption (WhaleModule), so the draw is never dead weight.
-        {
-            uint256 lpMax10 = (lazyPassValue * LOOTBOX_LAZY_PASS_DISCOUNT_10_BPS) / 10_000;
-            uint256 lpMax25 = (lazyPassValue * LOOTBOX_LAZY_PASS_DISCOUNT_25_BPS) / 10_000;
-            uint256 lpMax50 = (lazyPassValue * LOOTBOX_LAZY_PASS_DISCOUNT_50_BPS) / 10_000;
-            totalWeight += BOON_WEIGHT_LAZY_PASS_10;
-            weightedMax += BOON_WEIGHT_LAZY_PASS_10 * lpMax10;
-            totalWeight += BOON_WEIGHT_LAZY_PASS_25;
-            weightedMax += BOON_WEIGHT_LAZY_PASS_25 * lpMax25;
-            totalWeight += BOON_WEIGHT_LAZY_PASS_50;
-            weightedMax += BOON_WEIGHT_LAZY_PASS_50 * lpMax50;
-        }
-
-        // Degenerette stake boons: +4/8/12% of the next bet's stake, capped per currency at
-        // the enforcement site. WWXRP carries WEIGHT but no VALUE (worthless by design, like
-        // the activity and quest-shield tiers), so only its weight enters the normalization.
-        {
-            totalWeight += BOON_WEIGHT_DEGEN_ETH_4;
-            weightedMax += BOON_WEIGHT_DEGEN_ETH_4 * ((DEGENERETTE_BOON_ETH_CAP * 400) / 10_000);
-            totalWeight += BOON_WEIGHT_DEGEN_ETH_8;
-            weightedMax += BOON_WEIGHT_DEGEN_ETH_8 * ((DEGENERETTE_BOON_ETH_CAP * 800) / 10_000);
-            totalWeight += BOON_WEIGHT_DEGEN_ETH_12;
-            weightedMax += BOON_WEIGHT_DEGEN_ETH_12 * ((DEGENERETTE_BOON_ETH_CAP * 1200) / 10_000);
-
-            totalWeight += BOON_WEIGHT_DEGEN_FLIP_4;
-            weightedMax += BOON_WEIGHT_DEGEN_FLIP_4 *
-                _flipToEthValue((DEGENERETTE_BOON_FLIP_CAP * 400) / 10_000, priceWei);
-            totalWeight += BOON_WEIGHT_DEGEN_FLIP_8;
-            weightedMax += BOON_WEIGHT_DEGEN_FLIP_8 *
-                _flipToEthValue((DEGENERETTE_BOON_FLIP_CAP * 800) / 10_000, priceWei);
-            totalWeight += BOON_WEIGHT_DEGEN_FLIP_12;
-            weightedMax += BOON_WEIGHT_DEGEN_FLIP_12 *
-                _flipToEthValue((DEGENERETTE_BOON_FLIP_CAP * 1200) / 10_000, priceWei);
-
-            totalWeight += BOON_WEIGHT_DEGEN_WWXRP_4;
-            totalWeight += BOON_WEIGHT_DEGEN_WWXRP_8;
-            totalWeight += BOON_WEIGHT_DEGEN_WWXRP_12;
-        }
-
-        }
-        if (totalWeight == 0) return (0, 0);
-        avgMaxValue = weightedMax / totalWeight;
-    }
-
-    /// @dev Convert a weighted roll into a lootbox boon type over the STATIC full table.
-    ///      No eligibility reaches the walk: the mapping is a pure function of the roll, so
-    ///      the drawn type is fixed the moment the word lands. Live state only decides
-    ///      keep-vs-discard afterwards (`_deliverBoon` / `issueDeityBoon`).
-    function _boonFromRoll(
-        uint256 roll
-    ) private pure returns (uint8 boonType) {
-        // Fixed uint16 weight constants; the running cursor sum never exceeds BOON_WEIGHT_TOTAL
-        // (2608), so no accumulation can overflow — the checked adds are pure overhead.
-        unchecked {
-        uint256 cursor = 0;
-        cursor += BOON_WEIGHT_COINFLIP_5;
-        if (roll < cursor) return BOON_COINFLIP_5;
-        cursor += BOON_WEIGHT_COINFLIP_10;
-        if (roll < cursor) return BOON_COINFLIP_10;
-        cursor += BOON_WEIGHT_COINFLIP_25;
-        if (roll < cursor) return BOON_COINFLIP_25;
-        cursor += BOON_WEIGHT_LOOTBOX_5;
-        if (roll < cursor) return BOON_LOOTBOX_5;
-        cursor += BOON_WEIGHT_LOOTBOX_15;
-        if (roll < cursor) return BOON_LOOTBOX_15;
-        cursor += BOON_WEIGHT_LOOTBOX_25;
-        if (roll < cursor) return BOON_LOOTBOX_25;
-        cursor += BOON_WEIGHT_PURCHASE_5;
-        if (roll < cursor) return BOON_PURCHASE_5;
-        cursor += BOON_WEIGHT_PURCHASE_15;
-        if (roll < cursor) return BOON_PURCHASE_15;
-        cursor += BOON_WEIGHT_PURCHASE_25;
-        if (roll < cursor) return BOON_PURCHASE_25;
-        cursor += BOON_WEIGHT_DECIMATOR_10;
-        if (roll < cursor) return BOON_DECIMATOR_10;
-        cursor += BOON_WEIGHT_DECIMATOR_25;
-        if (roll < cursor) return BOON_DECIMATOR_25;
-        cursor += BOON_WEIGHT_DECIMATOR_50;
-        if (roll < cursor) return BOON_DECIMATOR_50;
-        cursor += BOON_WEIGHT_WHALE_10;
-        if (roll < cursor) return BOON_WHALE_10;
-        cursor += BOON_WEIGHT_WHALE_20;
-        if (roll < cursor) return BOON_WHALE_20;
-        cursor += BOON_WEIGHT_WHALE_35;
-        if (roll < cursor) return BOON_WHALE_35;
-        cursor += BOON_WEIGHT_DEITY_PASS_10;
-        if (roll < cursor) return BOON_DEITY_PASS_10;
-        cursor += BOON_WEIGHT_DEITY_PASS_20;
-        if (roll < cursor) return BOON_DEITY_PASS_20;
-        cursor += BOON_WEIGHT_DEITY_PASS_35;
-        if (roll < cursor) return BOON_DEITY_PASS_35;
-        cursor += BOON_WEIGHT_ACTIVITY_10;
-        if (roll < cursor) return BOON_ACTIVITY_10;
-        cursor += BOON_WEIGHT_ACTIVITY_25;
-        if (roll < cursor) return BOON_ACTIVITY_25;
-        cursor += BOON_WEIGHT_ACTIVITY_50;
-        if (roll < cursor) return BOON_ACTIVITY_50;
-        cursor += BOON_WEIGHT_QUEST_SHIELD;
-        if (roll < cursor) return BOON_QUEST_SHIELD;
-        cursor += BOON_WEIGHT_WHALE_PASS;
-        if (roll < cursor) return BOON_WHALE_PASS;
-        cursor += BOON_WEIGHT_LAZY_PASS_10;
-        if (roll < cursor) return BOON_LAZY_PASS_10;
-        cursor += BOON_WEIGHT_LAZY_PASS_25;
-        if (roll < cursor) return BOON_LAZY_PASS_25;
-        cursor += BOON_WEIGHT_LAZY_PASS_50;
-        if (roll < cursor) return BOON_LAZY_PASS_50;
-        cursor += BOON_WEIGHT_DEGEN_ETH_4;
-        if (roll < cursor) return BOON_DEGEN_ETH_4;
-        cursor += BOON_WEIGHT_DEGEN_ETH_8;
-        if (roll < cursor) return BOON_DEGEN_ETH_8;
-        cursor += BOON_WEIGHT_DEGEN_ETH_12;
-        if (roll < cursor) return BOON_DEGEN_ETH_12;
-        cursor += BOON_WEIGHT_DEGEN_FLIP_4;
-        if (roll < cursor) return BOON_DEGEN_FLIP_4;
-        cursor += BOON_WEIGHT_DEGEN_FLIP_8;
-        if (roll < cursor) return BOON_DEGEN_FLIP_8;
-        cursor += BOON_WEIGHT_DEGEN_FLIP_12;
-        if (roll < cursor) return BOON_DEGEN_FLIP_12;
-        cursor += BOON_WEIGHT_DEGEN_WWXRP_4;
-        if (roll < cursor) return BOON_DEGEN_WWXRP_4;
-        cursor += BOON_WEIGHT_DEGEN_WWXRP_8;
-        if (roll < cursor) return BOON_DEGEN_WWXRP_8;
-        cursor += BOON_WEIGHT_DEGEN_WWXRP_12;
-        if (roll < cursor) return BOON_DEGEN_WWXRP_12;
-        }
-    }
-
-    /// @dev Apply a boon to a player. Handles both lootbox-sourced and deity-sourced boons.
-    ///      Both sources use upgrade semantics (only if higher tier/amount).
-    ///      Lootbox boons: emit events, deity day = 0.
-    ///      Deity boons: no events, deity day = day.
-    ///      All boon state is stored in boonPacked[player] (2-slot packed struct).
-    ///      Players can hold one boon per category simultaneously (8 categories).
-    ///      Isolated bit fields per category -- applying a boon in one category cannot
-    ///      affect another category's bits (targeted bitmask operations: & ~mask | value).
-    function _applyBoon(
-        address player,
-        uint8 boonType,
-        uint24 day,
-        uint24 currentDay,
-        uint256 originalAmount,
-        bool isDeity
-    ) private {
-        // Every state-touching branch below resolves the same per-player record; derive its
-        // storage slot once (a pointer, not a cached value — reads stay live). The two
-        // slot-less branches (quest-shield, whale-pass) simply never touch it.
-        BoonPacked storage bp = boonPacked[player];
-        // Coinflip boons (types 1-3) — slot0
-        if (boonType <= BOON_COINFLIP_25) {
-            uint16 bps = boonType == BOON_COINFLIP_25
-                ? LOOTBOX_COINFLIP_25_BONUS_BPS
-                : (boonType == BOON_COINFLIP_10 ? LOOTBOX_COINFLIP_10_BONUS_BPS : LOOTBOX_BOON_BONUS_BPS);
-            uint256 s0 = bp.slot0;
-            uint8 newTier = _coinflipBpsToTier(bps);
-            uint8 existingTier = uint8(s0 >> BP_COINFLIP_TIER_SHIFT);
-            // Only a genuine tier upgrade applies the boon and (re)sets its expiry; an
-            // ignored lower/equal-tier roll is a no-op and must not refresh the timer
-            // (nor zero a held deity boon's same-day flag).
-            if (newTier > existingTier) {
-                s0 = (s0 & ~(uint256(BP_MASK_8) << BP_COINFLIP_TIER_SHIFT)) | (uint256(newTier) << BP_COINFLIP_TIER_SHIFT);
-                // Set coinflipDay = currentDay
-                s0 = (s0 & ~(uint256(BP_MASK_24) << BP_COINFLIP_DAY_SHIFT)) | (uint256(uint24(currentDay)) << BP_COINFLIP_DAY_SHIFT);
-                // Set deityCoinflipDay = isDeity ? day : 0
-                uint24 deityDayVal = isDeity ? uint24(day) : uint24(0);
-                s0 = (s0 & ~(uint256(BP_MASK_24) << BP_DEITY_COINFLIP_DAY_SHIFT)) | (uint256(deityDayVal) << BP_DEITY_COINFLIP_DAY_SHIFT);
-                bp.slot0 = s0;
-            }
-            if (!isDeity) emit LootBoxReward(player, 2, originalAmount, LOOTBOX_BOON_MAX_BONUS);
-            return;
-        }
-
-        // Lootbox boost boons (types 5, 6, 22) — slot0, single tier field
-        if (boonType == BOON_LOOTBOX_5 || boonType == BOON_LOOTBOX_15 || boonType == BOON_LOOTBOX_25) {
-            uint8 newTier = boonType == BOON_LOOTBOX_25 ? uint8(3) :
-                            (boonType == BOON_LOOTBOX_15 ? uint8(2) : uint8(1));
-            uint256 s0 = bp.slot0;
-            uint8 existingTier = uint8(s0 >> BP_LOOTBOX_TIER_SHIFT);
-            // Both deity and lootbox: upgrade semantics — keep higher tier
-            uint8 activeTier = newTier > existingTier ? newTier : existingTier;
-            // Only a genuine tier upgrade applies the boon and (re)sets its expiry; an
-            // ignored lower/equal-tier roll is a no-op and must not refresh the timer.
-            if (newTier > existingTier) {
-                // Clear lootbox fields, set new values
-                s0 = s0 & BP_LOOTBOX_CLEAR;
-                s0 = s0 | (uint256(uint24(currentDay)) << BP_LOOTBOX_DAY_SHIFT);
-                uint24 deityDayVal = isDeity ? uint24(day) : uint24(0);
-                s0 = s0 | (uint256(deityDayVal) << BP_DEITY_LOOTBOX_DAY_SHIFT);
-                s0 = s0 | (uint256(activeTier) << BP_LOOTBOX_TIER_SHIFT);
-                bp.slot0 = s0;
-            }
-            if (!isDeity) {
-                // Map active tier back to BPS and rewardType for event
-                uint16 activeBps = _lootboxTierToBps(activeTier);
-                uint8 rewardType = activeTier == 3 ? 6 : (activeTier == 2 ? 5 : 4);
-                emit LootBoxReward(player, rewardType, originalAmount, activeBps);
-            }
-            return;
-        }
-
-        // Purchase boost boons (types 7, 8, 9) — slot0
-        if (boonType == BOON_PURCHASE_5 || boonType == BOON_PURCHASE_15 || boonType == BOON_PURCHASE_25) {
-            uint16 bps = boonType == BOON_PURCHASE_25
-                ? LOOTBOX_PURCHASE_BOOST_25_BONUS_BPS
-                : (boonType == BOON_PURCHASE_15 ? LOOTBOX_PURCHASE_BOOST_15_BONUS_BPS : LOOTBOX_PURCHASE_BOOST_5_BONUS_BPS);
-            uint256 s0 = bp.slot0;
-            uint8 newTier = _purchaseBpsToTier(bps);
-            uint8 existingTier = uint8(s0 >> BP_PURCHASE_TIER_SHIFT);
-            // Only a genuine tier upgrade applies the boon and (re)sets its expiry; an
-            // ignored lower/equal-tier roll is a no-op and must not refresh the timer.
-            if (newTier > existingTier) {
-                s0 = (s0 & ~(uint256(BP_MASK_8) << BP_PURCHASE_TIER_SHIFT)) | (uint256(newTier) << BP_PURCHASE_TIER_SHIFT);
-                // Set purchaseDay = currentDay
-                s0 = (s0 & ~(uint256(BP_MASK_24) << BP_PURCHASE_DAY_SHIFT)) | (uint256(uint24(currentDay)) << BP_PURCHASE_DAY_SHIFT);
-                // Set deityPurchaseDay
-                uint24 deityDayVal = isDeity ? uint24(day) : uint24(0);
-                s0 = (s0 & ~(uint256(BP_MASK_24) << BP_DEITY_PURCHASE_DAY_SHIFT)) | (uint256(deityDayVal) << BP_DEITY_PURCHASE_DAY_SHIFT);
-                bp.slot0 = s0;
-            }
-            if (!isDeity) {
-                uint8 rewardType = bps == LOOTBOX_PURCHASE_BOOST_25_BONUS_BPS
-                    ? 6 : (bps == LOOTBOX_PURCHASE_BOOST_15_BONUS_BPS ? 5 : 4);
-                emit LootBoxReward(player, rewardType, originalAmount, bps);
-            }
-            return;
-        }
-
-        // Decimator boost boons (types 13, 14, 15) — slot0 (no award day, only tier + deity day)
-        if (boonType == BOON_DECIMATOR_10 || boonType == BOON_DECIMATOR_25 || boonType == BOON_DECIMATOR_50) {
-            uint16 bps = boonType == BOON_DECIMATOR_50
-                ? LOOTBOX_DECIMATOR_50_BONUS_BPS
-                : (boonType == BOON_DECIMATOR_25 ? LOOTBOX_DECIMATOR_25_BONUS_BPS : LOOTBOX_DECIMATOR_10_BONUS_BPS);
-            uint256 s0 = bp.slot0;
-            uint8 newTier = _decimatorBpsToTier(bps);
-            uint8 existingTier = uint8(s0 >> BP_DECIMATOR_TIER_SHIFT);
-            // Only a genuine tier upgrade applies the boon and (re)sets its deity-day; an
-            // ignored lower/equal-tier roll is a no-op and must not zero a held deity boon.
-            if (newTier > existingTier) {
-                s0 = (s0 & ~(uint256(BP_MASK_8) << BP_DECIMATOR_TIER_SHIFT)) | (uint256(newTier) << BP_DECIMATOR_TIER_SHIFT);
-                // Set deityDecimatorDay (no award day for decimator)
-                uint24 deityDayVal = isDeity ? uint24(day) : uint24(0);
-                s0 = (s0 & ~(uint256(BP_MASK_24) << BP_DEITY_DECIMATOR_DAY_SHIFT)) | (uint256(deityDayVal) << BP_DEITY_DECIMATOR_DAY_SHIFT);
-                bp.slot0 = s0;
-            }
-            if (!isDeity) emit LootBoxReward(player, 8, originalAmount, bps);
-            return;
-        }
-
-        // Whale discount boons (types 16, 23, 24) — slot0
-        if (boonType == BOON_WHALE_10 || boonType == BOON_WHALE_20 || boonType == BOON_WHALE_35) {
-            uint16 bps = boonType == BOON_WHALE_35
-                ? LOOTBOX_WHALE_BOON_DISCOUNT_35_BPS
-                : (boonType == BOON_WHALE_20 ? LOOTBOX_WHALE_BOON_DISCOUNT_20_BPS : LOOTBOX_WHALE_BOON_DISCOUNT_10_BPS);
-            uint256 s0 = bp.slot0;
-            uint8 newTier = _whaleBpsToTier(bps);
-            uint8 existingTier = uint8(s0 >> BP_WHALE_TIER_SHIFT);
-            // Only a genuine tier upgrade applies the boon and (re)sets its expiry; an
-            // ignored lower/equal-tier roll is a no-op and must not refresh the timer.
-            if (newTier > existingTier) {
-                s0 = (s0 & ~(uint256(BP_MASK_8) << BP_WHALE_TIER_SHIFT)) | (uint256(newTier) << BP_WHALE_TIER_SHIFT);
-                // whaleDay = isDeity ? day : currentDay
-                uint24 whaleDayVal = isDeity ? uint24(day) : uint24(currentDay);
-                s0 = (s0 & ~(uint256(BP_MASK_24) << BP_WHALE_DAY_SHIFT)) | (uint256(whaleDayVal) << BP_WHALE_DAY_SHIFT);
-                // deityWhaleDay = isDeity ? day : 0
-                uint24 deityDayVal = isDeity ? uint24(day) : uint24(0);
-                s0 = (s0 & ~(uint256(BP_MASK_24) << BP_DEITY_WHALE_DAY_SHIFT)) | (uint256(deityDayVal) << BP_DEITY_WHALE_DAY_SHIFT);
-                bp.slot0 = s0;
-            }
-            if (!isDeity) emit LootBoxReward(player, 9, originalAmount, bps);
-            return;
-        }
-
-        // Quest-streak-shield boon (type 4) — instant grant, no boon-mapping state.
-        // Runs in GAME's delegatecall context, so the call to QUESTS is GAME-authorized.
-        if (boonType == BOON_QUEST_SHIELD) {
-            IDegenerusQuests(ContractAddresses.QUESTS).awardQuestStreakShield(player, LOOTBOX_QUEST_SHIELD_GRANT);
-            if (!isDeity) emit LootBoxReward(player, 12, originalAmount, LOOTBOX_QUEST_SHIELD_GRANT);
-            return;
-        }
-
-        // Activity boons (types 17, 18, 19) — slot1
-        if (boonType == BOON_ACTIVITY_10 || boonType == BOON_ACTIVITY_25 || boonType == BOON_ACTIVITY_50) {
-            uint24 amt = boonType == BOON_ACTIVITY_50
-                ? LOOTBOX_ACTIVITY_BOON_50_BONUS
-                : (boonType == BOON_ACTIVITY_25 ? LOOTBOX_ACTIVITY_BOON_25_BONUS : LOOTBOX_ACTIVITY_BOON_10_BONUS);
-            uint256 s1 = bp.slot1;
-            uint24 existingAmt = uint24(s1 >> BP_ACTIVITY_PENDING_SHIFT);
-            // Only a genuine increase applies the boon and (re)sets its expiry; an ignored
-            // lower/equal roll is a no-op and must not refresh the timer.
-            if (amt > existingAmt) {
-                s1 = (s1 & ~(uint256(BP_MASK_24) << BP_ACTIVITY_PENDING_SHIFT)) | (uint256(amt) << BP_ACTIVITY_PENDING_SHIFT);
-                // Set activityDay = currentDay
-                s1 = (s1 & ~(uint256(BP_MASK_24) << BP_ACTIVITY_DAY_SHIFT)) | (uint256(uint24(currentDay)) << BP_ACTIVITY_DAY_SHIFT);
-                // Set deityActivityDay
-                uint24 deityDayVal = isDeity ? uint24(day) : uint24(0);
-                s1 = (s1 & ~(uint256(BP_MASK_24) << BP_DEITY_ACTIVITY_DAY_SHIFT)) | (uint256(deityDayVal) << BP_DEITY_ACTIVITY_DAY_SHIFT);
-                bp.slot1 = s1;
-            }
-            if (!isDeity) emit LootBoxReward(player, 10, originalAmount, amt);
-            return;
-        }
-
-        // Deity pass discount boons (types 25, 26, 27) — slot1
-        if (boonType == BOON_DEITY_PASS_10 || boonType == BOON_DEITY_PASS_20 || boonType == BOON_DEITY_PASS_35) {
-            uint8 tier = boonType == BOON_DEITY_PASS_35
-                ? DEITY_PASS_BOON_TIER_35
-                : (boonType == BOON_DEITY_PASS_20 ? DEITY_PASS_BOON_TIER_20 : DEITY_PASS_BOON_TIER_10);
-            uint256 s1 = bp.slot1;
-            uint8 existingTier = uint8(s1 >> BP_DEITY_PASS_TIER_SHIFT);
-            // Only a genuine tier upgrade applies the boon and (re)sets its expiry; an
-            // ignored lower/equal-tier roll is a no-op and must not refresh the timer.
-            if (tier > existingTier) {
-                s1 = (s1 & ~(uint256(BP_MASK_8) << BP_DEITY_PASS_TIER_SHIFT)) | (uint256(tier) << BP_DEITY_PASS_TIER_SHIFT);
-                // Set deityPassDay = currentDay
-                s1 = (s1 & ~(uint256(BP_MASK_24) << BP_DEITY_PASS_DAY_SHIFT)) | (uint256(uint24(currentDay)) << BP_DEITY_PASS_DAY_SHIFT);
-                // Set deityDeityPassDay
-                uint24 deityDayVal = isDeity ? uint24(day) : uint24(0);
-                s1 = (s1 & ~(uint256(BP_MASK_24) << BP_DEITY_DEITY_PASS_DAY_SHIFT)) | (uint256(deityDayVal) << BP_DEITY_DEITY_PASS_DAY_SHIFT);
-                bp.slot1 = s1;
-            }
-            if (!isDeity) {
-                uint16 bps = tier == DEITY_PASS_BOON_TIER_35 ? 3500 : (tier == DEITY_PASS_BOON_TIER_20 ? 2000 : 1000);
-                emit LootBoxReward(player, 10, originalAmount, bps);
-            }
-            return;
-        }
-
-        // Whale pass (type 28) — no boon mapping access, delegates to _activateWhalePass
-        if (boonType == BOON_WHALE_PASS) {
-            _activateWhalePass(player);
-            if (!isDeity) {
-                // `level + 1` records the level AT BOX-OPEN TIME for indexers;
-                // actual ticket queuing is deferred to claim-time, so the queued
-                // tickets start at the level when the player calls claimWhalePass —
-                // not necessarily `level + 1` here.
-                emit LootBoxWhalePassJackpot(player, originalAmount, level + 1, WHALE_PASS_ENTRIES_PER_LEVEL, 0, 0);
-            }
-            return;
-        }
-
-        // Degenerette stake boons (types 32-40) — slot1, one independent 24-bit lane per
-        // bet currency (ETH / FLIP / WWXRP). A roll competes ONLY within its own currency's
-        // lane, so boons for different currencies coexist and a held boon is never displaced
-        // by one of another currency. The boon is spent by the next bet in ITS OWN currency.
-        if (boonType >= BOON_DEGEN_ETH_4 && boonType <= BOON_DEGEN_WWXRP_12) {
-            // 32/33/34 -> ETH lane, 35/36/37 -> FLIP lane, 38/39/40 -> WWXRP lane;
-            // within a lane the three types map to tier 1/2/3 (+4/8/12%).
-            uint8 offset = boonType - BOON_DEGEN_ETH_4;
-            uint8 newTier = (offset % 3) + 1;
-            uint256 laneShift = BP_DEGEN_LANE0_SHIFT + uint256(offset / 3) * 24;
-            uint256 s1 = bp.slot1;
-            uint256 lane = (s1 >> laneShift) & BP_DEGEN_LANE_MASK;
-            // A dead lane never blocks a fresh award: the deity gift path applies without
-            // the box-roll expiry sweep, so liveness is re-checked here, not assumed swept.
-            uint8 heldTier = _degeneretteLaneLive(lane, uint24(currentDay))
-                ? uint8(lane & BP_DEGEN_LANE_TIER_MASK)
-                : 0;
-            // Only a genuine tier upgrade applies the boon and (re)sets its expiry; an
-            // ignored lower/equal-tier roll is a no-op and must not refresh the timer.
-            if (newTier > heldTier) {
-                uint256 stamp = (isDeity ? uint256(uint24(day)) : uint256(uint24(currentDay))) &
-                    BP_DEGEN_LANE_DAY_MASK;
-                uint256 fresh = (stamp << BP_DEGEN_LANE_DAY_SHIFT) |
-                    (isDeity ? BP_DEGEN_LANE_DEITY_BIT : 0) |
-                    newTier;
-                bp.slot1 = (s1 & ~(BP_DEGEN_LANE_MASK << laneShift)) | (fresh << laneShift);
-            }
-            if (!isDeity) {
-                // The value field is the rolled boonType itself (32-40): unlike bps —
-                // identical across currencies — it identifies both the currency and size.
-                emit LootBoxReward(player, 13, originalAmount, boonType);
-            }
-            return;
-        }
-
-        // Lazy pass discount boons (types 29, 30, 31) — slot1
-        if (boonType == BOON_LAZY_PASS_10 || boonType == BOON_LAZY_PASS_25 || boonType == BOON_LAZY_PASS_50) {
-            uint16 bps = boonType == BOON_LAZY_PASS_50
-                ? LOOTBOX_LAZY_PASS_DISCOUNT_50_BPS
-                : (boonType == BOON_LAZY_PASS_25 ? LOOTBOX_LAZY_PASS_DISCOUNT_25_BPS : LOOTBOX_LAZY_PASS_DISCOUNT_10_BPS);
-            uint256 s1 = bp.slot1;
-            uint8 newTier = _lazyPassBpsToTier(bps);
-            uint8 existingTier = uint8(s1 >> BP_LAZY_PASS_TIER_SHIFT);
-            // Only a genuine tier upgrade applies the boon and (re)sets its expiry; an
-            // ignored lower/equal-tier roll is a no-op and must not refresh the timer.
-            if (newTier > existingTier) {
-                s1 = (s1 & ~(uint256(BP_MASK_8) << BP_LAZY_PASS_TIER_SHIFT)) | (uint256(newTier) << BP_LAZY_PASS_TIER_SHIFT);
-                // lazyPassDay = isDeity ? day : currentDay
-                uint24 lazyDayVal = isDeity ? uint24(day) : uint24(currentDay);
-                s1 = (s1 & ~(uint256(BP_MASK_24) << BP_LAZY_PASS_DAY_SHIFT)) | (uint256(lazyDayVal) << BP_LAZY_PASS_DAY_SHIFT);
-                // deityLazyPassDay = isDeity ? day : 0
-                uint24 deityDayVal = isDeity ? uint24(day) : uint24(0);
-                s1 = (s1 & ~(uint256(BP_MASK_24) << BP_DEITY_LAZY_PASS_DAY_SHIFT)) | (uint256(deityDayVal) << BP_DEITY_LAZY_PASS_DAY_SHIFT);
-                bp.slot1 = s1;
-            }
-            if (!isDeity) emit LootBoxReward(player, 11, originalAmount, bps);
-        }
-    }
 
     /// @dev Resolve a single lootbox roll to determine reward type. Split (roll % 20):
     ///      40% tickets, 15% DGNRS, 15% WWXRP-spin, 15% FLIP (flat),
@@ -2215,7 +2129,6 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     ///      context) free of an ETH-pool read-modify-write.
     /// @param player Player receiving the reward
     /// @param amount Amount for this roll (may be half of total for split lootboxes)
-    /// @param lootboxAmount Total lootbox amount (for events)
     /// @param targetPrice Price at the rolled target level (ticket legs only)
     /// @param seed Per-resolution 256-bit keccak seed (sliced inline; first invocation uses primary chunk, ETH-amount-second branch uses seed2 = EntropyLib.hash2(seed, 1))
     /// @param isFarFuture True when this roll's target level is far-future (>= base + 5),
@@ -2235,18 +2148,18 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     function _resolveLootboxRoll(
         address player,
         uint256 amount,
-        uint256 lootboxAmount,
         uint256 targetPrice,
         uint256 seed,
         bool isFarFuture,
         uint16 activityScore,
         bool allowEthSpin,
-        uint24 currentLevel
+        uint24 currentLevel,
+        BoxAcc memory acc
     )
         private
-        returns (uint256 flipOut, uint32 ticketsOut, bool wasSpin)
+        returns (uint256 flipOut, uint32 ticketsOut, uint256 dgnrsOut, uint256 wwxrpOut, bool wasSpin)
     {
-        if (amount == 0) return (0, 0, false);
+        if (amount == 0) return (0, 0, 0, 0, false);
 
         uint256 roll = uint16(seed >> 40) % 20;
         if (roll < 8) {
@@ -2257,21 +2170,25 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
                 seed
             );
         } else if (roll < 11) {
-            // 15% chance: DGNRS tokens
-            uint256 dgnrsAmount = _lootboxDgnrsReward(amount, seed);
-            if (dgnrsAmount != 0) {
-                uint256 paid = _creditDgnrsReward(player, dgnrsAmount);
-                if (paid != 0) {
-                    emit LootBoxDgnrsReward(
-                        player,
-                        lootboxAmount,
-                        paid
-                    );
-                }
+            // 15% chance: DGNRS tokens. Returned rather than credited — the entry credits each
+            // recursion-delimited batch once. Each roll prices against that batch's snapshot
+            // MINUS what earlier rolls already claimed, reproducing sequential-purchase economics:
+            // pricing every roll off the undecremented balance would let a batched entry take
+            // measurably more from a low pool than the same boxes settled one at a time. One
+            // staticcall per batch instead of one per DGNRS-winning box. Only an intervening
+            // ETH spin can start another batch.
+            if (!acc.dgnrsPoolLoaded) {
+                acc.dgnrsPool = dgnrs.poolBalance(IsDGNRS.Pool.Lootbox);
+                acc.dgnrsPoolLoaded = true;
             }
+            dgnrsOut = _lootboxDgnrsReward(
+                amount,
+                seed,
+                acc.dgnrsPool > acc.dgnrs ? acc.dgnrsPool - acc.dgnrs : 0
+            );
         } else if (roll < 14) {
             // 15% chance: one WWXRP Degenerette spin staking the roll's size-scaled WWXRP.
-            _callWwxrpSpin(
+            wwxrpOut = _callWwxrpSpin(
                 player,
                 _boxWwxrpStake(amount),
                 activityScore,
@@ -2288,7 +2205,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
             uint256 stake = (_largeFlipOut(amount, seed, currentLevel) *
                 LOOTBOX_FLIP_SPINS_STAKE_BPS) / 10_000;
             if (stake != 0) {
-                _callFlipSpins(
+                flipOut = _callFlipSpins(
                     player,
                     stake,
                     activityScore,
@@ -2305,12 +2222,26 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
                 uint256 ethStake = (_ticketBudget(amount, isFarFuture) *
                     _ticketVarianceBps(seed)) / 10_000;
                 if (ethStake != 0) {
+                    // The ETH spin may recursively resolve a recirculated lootbox, whose own
+                    // accumulator debits Pool.Lootbox immediately. Settle the parent's pending
+                    // DGNRS first so the child cannot price against tokens already promised to
+                    // the parent. Clear before the external interaction so the final entry flush
+                    // cannot pay this batch twice.
+                    uint256 pendingDgnrs = acc.dgnrs;
+                    if (pendingDgnrs != 0) {
+                        acc.dgnrs = 0;
+                        uint256 paid = _creditDgnrsReward(player, pendingDgnrs);
+                        if (paid != 0) emit LootBoxDgnrsBatch(player, pendingDgnrs, paid);
+                    }
                     _callEthSpin(
                         player,
                         ethStake,
                         activityScore,
                         EntropyLib.hash2(seed, BOX_ETH_SPIN_TAG)
                     );
+                    // The child may have changed Pool.Lootbox even when the parent had nothing
+                    // pending. Force any later parent DGNRS roll to observe the live balance.
+                    acc.dgnrsPoolLoaded = false;
                     wasSpin = true;
                 }
             } else {
@@ -2381,8 +2312,8 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         uint256 stake,
         uint16 activityScore,
         uint256 seed
-    ) private {
-        (bool ok, ) = ContractAddresses.GAME_DEGENERETTE_MODULE.delegatecall(
+    ) private returns (uint256 wwxrpOut) {
+        (bool ok, bytes memory data) = ContractAddresses.GAME_DEGENERETTE_MODULE.delegatecall(
             abi.encodeWithSelector(
                 IDegenerusGameDegeneretteModule.resolveWwxrpSpinFromBox.selector,
                 player,
@@ -2393,6 +2324,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
             )
         );
         if (!ok) revert EmptyRevert();
+        wwxrpOut = abi.decode(data, (uint256));
     }
 
     /// @dev Delegatecall the Degenerette module's triple-FLIP box-spin resolver.
@@ -2401,8 +2333,8 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         uint256 stake,
         uint16 activityScore,
         uint256 seed
-    ) private {
-        (bool ok, ) = ContractAddresses.GAME_DEGENERETTE_MODULE.delegatecall(
+    ) private returns (uint256 flipOut) {
+        (bool ok, bytes memory data) = ContractAddresses.GAME_DEGENERETTE_MODULE.delegatecall(
             abi.encodeWithSelector(
                 IDegenerusGameDegeneretteModule.resolveFlipSpinsFromBox.selector,
                 player,
@@ -2413,6 +2345,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
             )
         );
         if (!ok) revert EmptyRevert();
+        flipOut = abi.decode(data, (uint256));
     }
 
     /// @dev Delegatecall the Degenerette module's ETH box-spin resolver.
@@ -2534,8 +2467,9 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     /// @return dgnrsAmount DGNRS tokens to award
     function _lootboxDgnrsReward(
         uint256 amount,
-        uint256 entropy
-    ) private view returns (uint256 dgnrsAmount) {
+        uint256 entropy,
+        uint256 poolBalance
+    ) private pure returns (uint256 dgnrsAmount) {
         uint256 tierRoll = uint24(entropy >> 56) % 1000;
         uint256 ppm;
         if (tierRoll < 795) {
@@ -2547,8 +2481,6 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         } else {
             ppm = LOOTBOX_DGNRS_POOL_MEGA_PPM;
         }
-
-        uint256 poolBalance = dgnrs.poolBalance(IsDGNRS.Pool.Lootbox);
 
         if (poolBalance == 0 || ppm == 0) return 0;
         // Three significant figures, mirroring the presale box. The pool clamp is applied
@@ -2575,52 +2507,6 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         );
     }
 
-    /// @dev Get the value for a lazy pass at a specific level.
-    ///      Value equals the sum of per-level ticket prices across 10 levels.
-    /// @param passLevel The lazy pass start level
-    /// @return The value in ETH (scaled by cost divisor)
-    function _lazyPassPriceForLevel(
-        uint24 passLevel
-    ) private pure returns (uint256) {
-        uint256 total = 0;
-        for (uint24 i = 0; i < 10; ) {
-            // 10x loop; each priceForLevel <= ~0.24 ETH -> total <= ~2.4 ETH; passLevel+i cannot
-            // wrap uint24 at realistic game levels.
-            unchecked {
-                total += PriceLookupLib.priceForLevel(passLevel + i);
-                ++i;
-            }
-        }
-        return total;
-    }
 
-    /// @dev Deterministically generate a boon type for a deity's slot on a given day.
-    /// @param deity The deity address
-    /// @param day The day index
-    /// @param slot The slot index (0-2)
-    /// @param rngWord The day's VRF word (`rngWordByDay[day]`, nonzero-checked by the caller)
-    /// @return boonType The boon type (1-40; 10-12 and 20-21 are unused)
-    /// @dev Static modulus + static mapping: the day's three-slot menu is fixed the moment
-    ///      the word lands. Eligibility must not reach the modulus — the issuer controls
-    ///      issuance timing, so any live term here would let a deity re-map a slot by
-    ///      issuing before/after a window or supply flip. Decimator AND deity-pass tiers
-    ///      are excluded UNCONDITIONALLY (not eligibility-gated — that would be the same
-    ///      live term): a gift slot must never arrive dead, so those types are
-    ///      lootbox-only and every menu slot is always issuable to any valid recipient.
-    ///      The reduced roll skips both bands arithmetically — the composed mapping is
-    ///      exactly the renormalized 2,518-weight table over the same walk.
-    function _deityBoonForSlot(
-        address deity,
-        uint24 day,
-        uint8 slot,
-        uint256 rngWord
-    ) private pure returns (uint8 boonType) {
-        uint256 seed = uint256(keccak256(abi.encode(rngWord, deity, day, slot)));
-        uint256 roll = seed %
-            (BOON_WEIGHT_TOTAL - BOON_WEIGHT_DECIMATOR_ALL - BOON_WEIGHT_DEITY_PASS_ALL);
-        if (roll >= BOON_WEIGHT_PRE_DECIMATOR) roll += BOON_WEIGHT_DECIMATOR_ALL;
-        if (roll >= BOON_WEIGHT_PRE_DEITY_PASS) roll += BOON_WEIGHT_DEITY_PASS_ALL;
-        return _boonFromRoll(roll);
-    }
 
 }

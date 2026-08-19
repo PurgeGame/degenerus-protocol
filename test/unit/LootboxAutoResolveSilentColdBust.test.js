@@ -112,35 +112,38 @@ describe("LootboxAutoResolveSilentColdBust — Phase 275 Wave 2 TST-LBX-AR-03", 
   });
 
   describe("Source-level proof: ticket award is a single unconditional _queueEntries call; auto-resolve callers pass payColdBustConsolation = false", function () {
-    it("[02a] `_queueEntries(player, rollLevel, wholeTicketsToEntries(whole), false)` appears at one source site; the consolation that follows it is `payColdBustConsolation`-gated", function () {
+    it("[02a] `_queueEntries(player, currentLevel + uint24(offset), wholeTicketsToEntries(whole), false)` appears at one source site (in `_flushBoxAcc`); the consolation accumulation is `payColdBustConsolation`-gated (in `_settleLootboxRoll`)", function () {
       const source = fs.readFileSync(MODULE_SOURCE_PATH, "utf8");
-      // The sentinel branch is retired: the ticket award is a single
-      // `_queueEntries(player, rollLevel, wholeTicketsToEntries(whole), false)` source site inside the
-      // per-roll `_settleLootboxRoll` helper. The cold-bust case is absorbed by
-      // the helper's `if (entries == 0) return;` early-return.
-      const callLine = "_queueEntries(player, rollLevel, wholeTicketsToEntries(whole), false)";
+      // Box-order rework: the ticket award queue call moved to `_flushBoxAcc`
+      // (flushed once per entry); the cold-bust case is absorbed by
+      // `_flushBoxAcc`'s per-lane `if (whole != 0)` guard (a zero-tier never
+      // populates `acc.tickets[i]`).
+      const callLine = "_queueEntries(player, currentLevel + uint24(offset), wholeTicketsToEntries(whole), false)";
       const firstIdx = source.indexOf(callLine);
       const secondIdx = source.indexOf(callLine, firstIdx + 1);
-      expect(firstIdx, "`_queueEntries(player, rollLevel, wholeTicketsToEntries(whole), false)` callsite not found").to.be.greaterThan(-1);
+      expect(firstIdx, "`_queueEntries(player, currentLevel + uint24(offset), wholeTicketsToEntries(whole), false)` callsite not found").to.be.greaterThan(-1);
       expect(
         secondIdx,
-        "`_queueEntries(player, rollLevel, wholeTicketsToEntries(whole), false)` must appear at exactly one source site (sentinel-branch duplication retired)"
+        "`_queueEntries(player, currentLevel + uint24(offset), wholeTicketsToEntries(whole), false)` must appear at exactly one source site"
       ).to.equal(-1);
-      // The consolation `mintPrize` payout that follows the queue call sits
-      // inside `if (payColdBustConsolation && whole == 0)` — so an auto-resolve
-      // caller (payColdBustConsolation = false) never reaches it. There is no
-      // dedicated lootbox-WWXRP event; the WWXRP ERC-20 `Transfer` the mint
-      // emits is the off-chain correlation surface.
-      const tail = source.slice(firstIdx, firstIdx + 600);
+      // The consolation ACCUMULATION (not the queue call — different function
+      // now) sits inside `if (payColdBustConsolation && whole == 0)` in
+      // `_settleLootboxRoll` — so an auto-resolve caller (payColdBustConsolation
+      // = false) never adds to `acc.wwxrp`, and the shared per-entry flush in
+      // `_flushBoxAcc` is a no-op for them. There is no dedicated
+      // lootbox-WWXRP event; the WWXRP ERC-20 `Transfer` the mint emits is the
+      // off-chain correlation surface.
+      const accIdx = source.indexOf("acc.wwxrp += _boxWwxrpStake(rollAmount);");
+      expect(accIdx, "consolation accumulation callsite not found").to.be.greaterThan(-1);
+      const gateWindow = source.slice(Math.max(0, accIdx - 600), accIdx);
       expect(
-        tail.includes("if (payColdBustConsolation && whole == 0)"),
-        "consolation gate `if (payColdBustConsolation && whole == 0)` must follow the queue call"
+        gateWindow.includes("if (payColdBustConsolation && whole == 0)"),
+        "consolation gate `if (payColdBustConsolation && whole == 0)` must precede the accumulation"
       ).to.equal(true);
-      const gateIdx = tail.indexOf("if (payColdBustConsolation && whole == 0)");
       expect(
-        tail.indexOf("wwxrp.mintPrize", gateIdx),
-        "consolation mintPrize must sit inside the payColdBustConsolation gate"
-      ).to.be.greaterThan(gateIdx);
+        source.includes("if (acc.wwxrp != 0) wwxrp.mintPrize(player, acc.wwxrp);"),
+        "consolation flush must sit at its own per-entry site"
+      ).to.equal(true);
       expect(
         source.includes("LootBoxWwxrpReward"),
         "the retired LootBoxWwxrpReward event must not appear in the module"
@@ -151,12 +154,15 @@ describe("LootboxAutoResolveSilentColdBust — Phase 275 Wave 2 TST-LBX-AR-03", 
       const source = fs.readFileSync(MODULE_SOURCE_PATH, "utf8");
       // `_resolveLootboxCommon` positional args (12): player(1), index(2), amount(3),
       // targetLevel(4), currentLevel(5), seed(6), payColdBustConsolation(7),
-      // distressEth(8), totalPackedEth(9), allowSplit(10), activityScore(11),
-      // allowEthSpin(12) — the last two thread the frozen score + the ETH-spin gate down
-      // to the Degenerette-spin rolls. The always-true `emitLootboxEvent` flag was removed
+      // distressEth(8), totalPackedEth(9), activityScore(10), allowEthSpin(11),
+      // acc(12) — box-order rework added the trailing `BoxAcc memory acc`
+      // accumulator param (each roll's tickets/dgnrs/wwxrp/flip land there,
+      // flushed once per entry by `_flushBoxAcc`); `allowSplit` no longer
+      // exists (the 0.5-ETH auto-split was deleted — one box = one roll,
+      // always). The always-true `emitLootboxEvent` flag was removed
       // (every box path emits LootBoxOpened, gated only by !wasSpin). The auto-resolve
       // callers pass `index = 0` and `payColdBustConsolation = false` (silent on cold-bust);
-      // allowEthSpin(12) differs by caller (false on the resolveLootboxDirect recirc, true on
+      // allowEthSpin(11) differs by caller (false on the resolveLootboxDirect recirc, true on
       // the redemption chunk). The redemption auto-resolve path holds its
       // `_resolveLootboxCommon` call in the private `_resolveRedemptionChunk` helper (per 5-ETH chunk).
       for (const fnName of ["function resolveLootboxDirect(", "function _resolveRedemptionChunk("]) {
@@ -192,7 +198,8 @@ describe("LootboxAutoResolveSilentColdBust — Phase 275 Wave 2 TST-LBX-AR-03", 
         // payColdBustConsolation (7th positional) stays false on both auto-resolve callers —
         // silent on cold-bust. The emitLootboxEvent flag is gone (every box path emits).
         expect(args[6], `${fnName} must pass payColdBustConsolation = false (7th positional)`).to.equal("false");
-        expect(args[10], `${fnName} must pass activityScore (11th positional)`).to.equal("activityScore");
+        expect(args[9], `${fnName} must pass activityScore (10th positional)`).to.equal("activityScore");
+        expect(args[11], `${fnName} must pass acc (12th positional)`).to.equal("acc");
         expect(
           body.includes("type(uint48).max"),
           `${fnName} must NOT reference the retired type(uint48).max sentinel`
@@ -254,27 +261,33 @@ describe("LootboxAutoResolveSilentColdBust — Phase 275 Wave 2 TST-LBX-AR-03", 
       // and behaviorally in LootboxConsolation.test.js TST-WX-04.
     });
 
-    it("[03b] consolation mintPrize IS present and gated by `payColdBustConsolation && whole == 0`", function () {
+    it("[03b] consolation accumulation IS present and gated by `payColdBustConsolation && whole == 0`, flushed once per entry via `wwxrp.mintPrize`", function () {
       const source = fs.readFileSync(MODULE_SOURCE_PATH, "utf8");
-      // The `wwxrp.mintPrize(player, _boxWwxrpStake(rollAmount))` payout appears
-      // inside the `if (payColdBustConsolation && whole == 0)` gate — the
-      // manual-only cold-bust consolation per D-277-CONSOLATION-GATE-01. The
-      // payout is observable off-chain via the WWXRP ERC-20 `Transfer` event;
-      // there is no dedicated lootbox-WWXRP event.
+      // Box-order rework: the payout ACCUMULATES via `acc.wwxrp +=
+      // _boxWwxrpStake(rollAmount)` inside the `if (payColdBustConsolation &&
+      // whole == 0)` gate — the manual-only cold-bust consolation per
+      // D-277-CONSOLATION-GATE-01 — then flushes once per entry via
+      // `if (acc.wwxrp != 0) wwxrp.mintPrize(player, acc.wwxrp);`. The payout
+      // is observable off-chain via the WWXRP ERC-20 `Transfer` event; there is
+      // no dedicated lootbox-WWXRP event.
       expect(
-        source.includes("wwxrp.mintPrize(player, _boxWwxrpStake(rollAmount))"),
-        "consolation `wwxrp.mintPrize(...)` missing"
+        source.includes("acc.wwxrp += _boxWwxrpStake(rollAmount);"),
+        "consolation accumulation `acc.wwxrp += _boxWwxrpStake(rollAmount);` missing"
+      ).to.equal(true);
+      expect(
+        source.includes("if (acc.wwxrp != 0) wwxrp.mintPrize(player, acc.wwxrp);"),
+        "per-entry WWXRP flush missing"
       ).to.equal(true);
       expect(
         source.includes("LootBoxWwxrpReward"),
         "the retired LootBoxWwxrpReward event must not appear in the module"
       ).to.equal(false);
-      // The mint must be gated by `if (payColdBustConsolation && whole == 0)` —
-      // the gate appears before it in source order.
+      // The accumulation must be gated by `if (payColdBustConsolation && whole
+      // == 0)` — the gate appears before it in source order.
       const gateIdx = source.indexOf("if (payColdBustConsolation && whole == 0)");
-      const mintPrizeIdx = source.indexOf("wwxrp.mintPrize(player, _boxWwxrpStake(rollAmount))");
+      const accIdx = source.indexOf("acc.wwxrp += _boxWwxrpStake(rollAmount);");
       expect(gateIdx, "consolation gate `if (payColdBustConsolation && whole == 0)` missing").to.be.greaterThan(-1);
-      expect(mintPrizeIdx).to.be.greaterThan(gateIdx);
+      expect(accIdx).to.be.greaterThan(gateIdx);
     });
 
     it("[03c] the retired `LootboxTicketRoll` event has zero references in the module (Phase 277 deletion)", function () {

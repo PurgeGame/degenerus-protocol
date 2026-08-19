@@ -118,12 +118,12 @@ describe("LootboxAutoResolveRegression — Phase 274 Wave 2 TST-REG-01..04", fun
   this.timeout(60_000);
 
   describe("TST-REG-01 — manual-only queues skip _rollRemainder", function () {
-    it("[01a] the per-roll settle path invokes `_queueEntries` (the whole-helper, no rem write)", function () {
+    it("[01a] the per-entry touched-lane flush invokes `_queueEntries` (the whole-helper, no rem write)", function () {
       const source = fs.readFileSync(MODULE_SOURCE_PATH, "utf8");
-      const manualPattern = /_queueEntries\(player, rollLevel, wholeTicketsToEntries\(whole\), false\)/;
+      const manualPattern = /_queueEntries\(player, currentLevel \+ uint24\(offset\), wholeTicketsToEntries\(whole\), false\)/;
       expect(
         source.match(manualPattern),
-        "per-roll `_queueEntries(player, rollLevel, wholeTicketsToEntries(whole), false)` missing"
+        "offset-based per-entry `_queueEntries` flush missing"
       ).to.not.be.null;
     });
 
@@ -276,16 +276,16 @@ describe("LootboxAutoResolveRegression — Phase 274 Wave 2 TST-REG-01..04", fun
       ).to.equal("false");
     });
 
-    it("[03c] the per-roll ticket-queue path in `_settleLootboxRoll` calls `_queueEntries(player, rollLevel, wholeTicketsToEntries(whole), false)` at one source site (sentinel retired — no per-branch duplication)", function () {
+    it("[03c] the touched-lane flush calls offset-based `_queueEntries` at one source site (sentinel retired — no per-branch duplication)", function () {
       const source = fs.readFileSync(MODULE_SOURCE_PATH, "utf8");
       // The `index != type(uint48).max` sentinel branch is retired. The manual
-      // and auto-resolve paths share one `_queueEntries(player, rollLevel, whole,
-      // false)` source site inside the per-roll `_settleLootboxRoll` helper.
-      const callPattern = /_queueEntries\(player, rollLevel, wholeTicketsToEntries\(whole\), false\)/g;
+      // and auto-resolve paths share one offset-based `_queueEntries` source site
+      // inside the per-entry `_flushBoxAcc` helper.
+      const callPattern = /_queueEntries\(player, currentLevel \+ uint24\(offset\), wholeTicketsToEntries\(whole\), false\)/g;
       const calls = (source.match(callPattern) || []).length;
       expect(
         calls,
-        "expected exactly one `_queueEntries(player, rollLevel, wholeTicketsToEntries(whole), false)` source site (per-roll settle path)"
+        "expected exactly one offset-based `_queueEntries` source site (per-entry flush path)"
       ).to.equal(1);
       // `_queueEntriesScaled` MUST no longer appear in `DegenerusGameLootboxModule.sol`
       expect(
@@ -338,32 +338,36 @@ describe("LootboxAutoResolveRegression — Phase 274 Wave 2 TST-REG-01..04", fun
       expect(emits).to.equal(0);
     });
 
-    it("[03f] the cold-bust WWXRP consolation is single-site and sits under the `payColdBustConsolation` gate (manual-only)", function () {
+    it("[03f] the cold-bust WWXRP consolation accumulates single-site under the `payColdBustConsolation` gate and flushes once per entry (box-order rework: rewards settle once per entry)", function () {
       const source = fs.readFileSync(MODULE_SOURCE_PATH, "utf8");
-      // The `wwxrp.mintPrize(..., _boxWwxrpStake(rollAmount))` call is single-site,
-      // inside the `payColdBustConsolation && whole == 0` block. The payout is
-      // observable off-chain via the WWXRP ERC-20 `Transfer` event the mint
-      // emits — there is no dedicated lootbox-WWXRP event.
-      const mintCount = (source.match(
-        /wwxrp\.mintPrize\(player, _boxWwxrpStake\(rollAmount\)\)/g
+      // Per-roll: `acc.wwxrp += _boxWwxrpStake(rollAmount)` is single-site,
+      // inside the `payColdBustConsolation && whole == 0` block — it no longer
+      // mints immediately per box. The accumulated total is flushed ONCE per
+      // entry by `_flushBoxAcc`'s `if (acc.wwxrp != 0) wwxrp.mintPrize(player,
+      // acc.wwxrp);`, observable off-chain via the WWXRP ERC-20 `Transfer`
+      // event the mint emits — there is no dedicated lootbox-WWXRP event.
+      const accCount = (source.match(
+        /acc\.wwxrp \+= _boxWwxrpStake\(rollAmount\);/g
       ) || []).length;
-      expect(mintCount).to.equal(1);
+      expect(accCount, "expected exactly one cold-bust WWXRP accumulation site").to.equal(1);
+      const flushCount = (source.match(
+        /if \(acc\.wwxrp != 0\) wwxrp\.mintPrize\(player, acc\.wwxrp\);/g
+      ) || []).length;
+      expect(flushCount, "expected exactly one per-entry WWXRP flush site").to.equal(1);
       expect(
         source.includes("LootBoxWwxrpReward"),
         "the retired LootBoxWwxrpReward event must not appear in the module"
       ).to.equal(false);
-      // The consolation mint sits textually after the
+      // The accumulation sits textually after the
       // `payColdBustConsolation && whole == 0` gate that opens its block.
       const gateIdx = source.indexOf("if (payColdBustConsolation && whole == 0)");
-      const mintIdx = source.indexOf(
-        "wwxrp.mintPrize(player, _boxWwxrpStake(rollAmount))"
-      );
+      const accIdx = source.indexOf("acc.wwxrp += _boxWwxrpStake(rollAmount);");
       expect(gateIdx, "`payColdBustConsolation && whole == 0` gate not found").to.be.greaterThan(
         -1
       );
       expect(
-        mintIdx,
-        "the consolation mint must sit inside the `payColdBustConsolation` gate"
+        accIdx,
+        "the consolation accumulation must sit inside the `payColdBustConsolation` gate"
       ).to.be.greaterThan(gateIdx);
     });
   });
@@ -433,7 +437,7 @@ describe("LootboxAutoResolveRegression — Phase 274 Wave 2 TST-REG-01..04", fun
       // `emitLootboxEvent` emit flag (every box path now emits LootBoxOpened, gated only
       // by !wasSpin). The sole remaining per-path bool is `payColdBustConsolation`, which
       // gates the manual cold-bust WWXRP consolation. The
-      // `_queueEntries(player, rollLevel, wholeTicketsToEntries(whole), false)` call is unconditional and shared.
+      // The offset-based `_queueEntries` call in `_flushBoxAcc` is unconditional and shared.
       expect(
         source.includes("if (index != type(uint48).max)"),
         "the `index != type(uint48).max` sentinel gate must be fully retired"
@@ -441,11 +445,11 @@ describe("LootboxAutoResolveRegression — Phase 274 Wave 2 TST-REG-01..04", fun
       // The `_queueEntries` call appears at exactly one source site — no
       // per-branch duplication, so manual and auto-resolve cannot cross over.
       const callMatches = (
-        source.match(/_queueEntries\(player, rollLevel, wholeTicketsToEntries\(whole\), false\)/g) || []
+        source.match(/_queueEntries\(player, currentLevel \+ uint24\(offset\), wholeTicketsToEntries\(whole\), false\)/g) || []
       ).length;
       expect(
         callMatches,
-        "the per-roll ticket-queue path must call `_queueEntries(player, rollLevel, wholeTicketsToEntries(whole), false)` at one source site"
+        "the per-entry ticket-queue path must call offset-based `_queueEntries` at one source site"
       ).to.equal(1);
       // The `LootBoxOpened` emit fires on every box path, suppressed only for
       // Degenerette-spin rolls (`!wasSpin`), which carry their own settlement event;

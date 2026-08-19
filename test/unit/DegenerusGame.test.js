@@ -14,6 +14,7 @@ import {
   ZERO_ADDRESS,
   ZERO_BYTES32,
 } from "../helpers/testUtils.js";
+import { boCustom } from "../helpers/boxOrder.js";
 
 // MintPaymentKind enum values
 const MintPaymentKind = { DirectEth: 0, Claimable: 1, Combined: 2 };
@@ -235,7 +236,7 @@ describe("DegenerusGame", function () {
         game.connect(alice).purchase(
           ZERO_ADDRESS,
           0n,
-          eth("0.01"), // lootbox amount
+          boCustom(eth("0.01")), // lootbox amount
           ZERO_BYTES32,
           MintPaymentKind.DirectEth,false, 
           { value: eth("0.01") }
@@ -302,7 +303,7 @@ describe("DegenerusGame", function () {
         game.connect(alice).purchase(
           ZERO_ADDRESS,
           0n,
-          mintPrice,
+          boCustom(mintPrice),
           ZERO_BYTES32,
           MintPaymentKind.DirectEth,false, 
           { value: mintPrice }

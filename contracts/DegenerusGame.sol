@@ -331,7 +331,8 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     /// @notice Claim color-completion bingo: all 8 colors of one symbol on a level.
     /// @dev Dispatches to GAME_BINGO_MODULE via delegatecall; void return. Permissionless:
     ///      the bingo settles to `player` (the slot owner), never the caller, so any caller
-    ///      may settle any owner's claim (address(0) = msg.sender).
+    ///      may settle any owner's claim (address(0) = msg.sender). Each player may claim
+    ///      one bingo reward per level, regardless of which qualifying symbol they use.
     ///      Signature: claimBingo(address player, uint24 level, uint8 symbol, uint32[8] slots) —
     ///      the owner to claim for, the level (uint24 storage-key width), the symbol 0-31
     ///      (quadrant = symbol >> 3, symInQ = symbol & 7), and the per-color positions in
@@ -699,7 +700,10 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     ///      Adds affiliate support for loot box purchases.
     /// @param buyer Player address to receive purchases (address(0) = msg.sender).
     /// @param entryQuantityScaled Purchase units (400 = 4*QTY_SCALE = one whole ticket = 4 entries; 0 to skip).
-    /// @param lootBoxAmount ETH amount for loot boxes, minimum 0.01 ETH (0 to skip).
+    /// @param boxOrder Packed box order (0 to skip):
+    ///        [small:8][med:8][large:8][customCount:8][customSize:48 in 1e12-wei units].
+    ///        Presets are 1x/5x/25x the frozen level's ticket price; a custom is customCount
+    ///        boxes of customSize each (min 0.01 ETH, frozen for the period on first buy).
     /// @param affiliateCode Affiliate/referral code for all purchases.
     /// @param payKind Payment method (DirectEth, Claimable, or Combined).
     /// @param foil True to additively buy one foil pack (10x the level price, shifted by
@@ -710,7 +714,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     function purchase(
         address buyer,
         uint256 entryQuantityScaled,
-        uint256 lootBoxAmount,
+        uint256 boxOrder,
         bytes32 affiliateCode,
         MintPaymentKind payKind,
         bool foil
@@ -720,7 +724,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
             _purchaseWithFoil(
                 buyer,
                 entryQuantityScaled,
-                lootBoxAmount,
+                boxOrder,
                 affiliateCode,
                 payKind
             );
@@ -728,7 +732,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
             _purchaseFor(
                 buyer,
                 entryQuantityScaled,
-                lootBoxAmount,
+                boxOrder,
                 affiliateCode,
                 payKind
             );
@@ -738,7 +742,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     function _purchaseFor(
         address buyer,
         uint256 entryQuantityScaled,
-        uint256 lootBoxAmount,
+        uint256 boxOrder,
         bytes32 affiliateCode,
         MintPaymentKind payKind
     ) private {
@@ -749,12 +753,28 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
                     IDegenerusGameMintModule.purchase.selector,
                     buyer,
                     entryQuantityScaled,
-                    lootBoxAmount,
+                    boxOrder,
                     affiliateCode,
                     payKind
                 )
             );
         if (!ok) _revertDelegate(data);
+    }
+
+    /// @dev Price a packed box order via the Lootbox module (delegatecall — the tier sizes
+    ///      come off the order's FROZEN level in this Game's storage, so no local math can
+    ///      reproduce it).
+    function _quoteBoxOrderCost(address buyer, uint256 boxOrder) private returns (uint256) {
+        if (boxOrder == 0) return 0;
+        (bool ok, bytes memory data) = ContractAddresses.GAME_LOOTBOX_MODULE.delegatecall(
+            abi.encodeWithSelector(
+                IDegenerusGameLootboxModule.quoteBoxOrder.selector,
+                buyer,
+                boxOrder
+            )
+        );
+        if (!ok) _revertDelegate(data);
+        return abi.decode(data, (uint256));
     }
 
     /// @dev Foil branch of purchase(): the foil pack is an additive leg on top of the
@@ -772,7 +792,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     function _purchaseWithFoil(
         address buyer,
         uint256 entryQuantityScaled,
-        uint256 lootBoxAmount,
+        uint256 boxOrder,
         bytes32 affiliateCode,
         MintPaymentKind payKind
     ) private {
@@ -784,9 +804,11 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         // force an unintended claimable draw.
         uint24 routedLvl = _activeTicketLevel();
         uint256 priceWei = PriceLookupLib.priceForLevel(routedLvl);
+        // The box term is a QUOTE of the packed order — the parameter is counts and a size,
+        // not wei, and adding it raw would misroute the fresh-ETH split between the legs.
         uint256 mintCost = (priceWei * entryQuantityScaled) /
             (4 * QTY_SCALE) +
-            lootBoxAmount;
+            _quoteBoxOrderCost(buyer, boxOrder);
         uint256 cost = mintCost +
             ((FOIL_PACK_TICKETS * priceWei) << _snapShiftFor(routedLvl));
         uint256 fresh = payKind == MintPaymentKind.Claimable
@@ -802,7 +824,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
                         IDegenerusGameMintModule.purchaseWith.selector,
                         buyer,
                         entryQuantityScaled,
-                        lootBoxAmount,
+                        boxOrder,
                         affiliateCode,
                         payKind,
                         mintFresh
@@ -930,14 +952,14 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     ///      per payKind. Both queue at one index for co-resolution.
     /// @param buyer Player to receive both legs (address(0) = msg.sender).
     /// @param entryQuantityScaled Purchase units (400 = one whole ticket = 4 entries; 0 to skip).
-    /// @param lootBoxAmount ETH lootbox spend (0 to skip).
+    /// @param boxOrder Packed box order (0 to skip; see purchase()).
     /// @param affiliateCode Affiliate/referral code for the mint leg.
     /// @param payKind Payment method for the mint leg.
     /// @param boxAmount Requested presale-box ETH (claimable-funded).
     function buyLootboxAndPresaleBox(
         address buyer,
         uint256 entryQuantityScaled,
-        uint256 lootBoxAmount,
+        uint256 boxOrder,
         bytes32 affiliateCode,
         MintPaymentKind payKind,
         uint256 boxAmount
@@ -950,7 +972,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
                     IDegenerusGameMintModule.buyLootboxAndPresaleBox.selector,
                     buyer,
                     entryQuantityScaled,
-                    lootBoxAmount,
+                    boxOrder,
                     affiliateCode,
                     payKind,
                     boxAmount
@@ -1198,10 +1220,10 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         deity = _resolvePlayer(deity);
         if (recipient == deity) revert SelfBoon();
         (bool ok, bytes memory data) = ContractAddresses
-            .GAME_LOOTBOX_MODULE
+            .GAME_BOON_MODULE
             .delegatecall(
                 abi.encodeWithSelector(
-                    IDegenerusGameLootboxModule.issueDeityBoon.selector,
+                    IDegenerusGameBoonModule.issueDeityBoon.selector,
                     deity,
                     recipient,
                     slot
@@ -1789,7 +1811,11 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     ///         which keeps the tx gas-bounded even past a long already-opened / presale-only prefix and
     ///         lets successive calls catch the open frontier up across many finalized indices.
     ///         Unrewarded — only mineFlip() pays a bounty.
-    /// @param maxCount Afking boxes opened + human-sweep entries scanned, both bounded by this.
+    /// @param maxCount Work budget, in box-open-sized units shared across both legs: the
+    ///        afking leg spends it on box opens directly; the remainder converts to the human
+    ///        sweep's walk units at the per-entry weight, so one unit buys about one human
+    ///        entry-open. An entry's boxes are charged inside the sweep at the lighter per-box
+    ///        weight — MAX_BOXES_PER_ORDER of them can ride one entry.
     /// @return opened Total boxes opened (afking + human).
     function openBoxes(uint256 maxCount) external returns (uint256 opened) {
         if (maxCount == 0) return 0;
@@ -1815,16 +1841,24 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         // never hand the human sweep an uncharged full budget — the same shared-budget rule
         // the rewarded mineFlip crank enforces.
         if (afkingSteps < maxCount) {
+            // The human sweep budgets in WALK UNITS (~4.7k gas each) while the afking leg
+            // above counts box opens, so the remainder is converted at the per-entry weight:
+            // one leftover unit of maxCount buys about one human entry-open's worth of work.
+            // Clamped before the multiply — openBoxes(type(uint256).max) is the natural
+            // "drain everything" call for this permissionless valve, and a checked overflow
+            // here would revert it instead of handing the loop-bounded sweep a big budget.
+            uint256 rem = maxCount - afkingSteps;
+            if (rem > 1 << 40) rem = 1 << 40;
             (ok, data) = ContractAddresses
                 .GAME_LOOTBOX_MODULE
                 .delegatecall(
                     abi.encodeWithSelector(
                         IDegenerusGameLootboxModule.openHumanBoxes.selector,
-                        maxCount - afkingSteps
+                        rem * OPEN_HUMAN_ENTRY_WEIGHT
                     )
                 );
             if (!ok) _revertDelegate(data);
-            opened = abi.decode(data, (uint256));
+            (opened, ) = abi.decode(data, (uint256, uint256));
         }
         opened += openedAfking;
     }
@@ -2358,20 +2392,6 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         }
     }
 
-    /// @notice Get loot box status for a player/index.
-    /// @param player Player address to query.
-    /// @param lootboxIndex Lootbox RNG index assigned at purchase time.
-    /// @return amount ETH amount recorded for the loot box (wei).
-    /// @return presale True if presale mode is currently active.
-    function lootboxStatus(
-        address player,
-        uint48 lootboxIndex
-    ) external view returns (uint256 amount, bool presale) {
-        // Direct storage access - lootboxEth stores the box amount in the low 128 bits.
-        uint256 packed = lootboxEth[lootboxIndex][player];
-        amount = packed & LB_AMOUNT_MASK;
-        presale = !presaleOver;
-    }
 
     /// @notice View Degenerette packed bet info for a player/betId.
     /// @param player Player address to query.

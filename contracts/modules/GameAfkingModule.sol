@@ -960,8 +960,7 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
                     player,
                     currentLevel,
                     amount,
-                    score,
-                    activityScore
+                    score
                 );
                 sub.lastOpenedDay = uint24(processDay);
             } else {
@@ -1065,86 +1064,30 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
     /// @param currentLevel The live game level (== the STAGE's hoisted currentLevel).
     /// @param amount The lootbox spend in wei (boons off ⇒ no boost; amount == spend).
     /// @param score The frozen activity score EV input (first deposit only).
-    /// @param activityScore The raw activity score (first-deposit EV mult; == score, uncapped).
     function _recordAfkingCoverBox(
         address player,
         uint24 currentLevel,
         uint256 amount,
-        uint16 score,
-        uint256 activityScore
+        uint16 score
     ) private {
-        // The packed lootbox-RNG word is loaded ONCE into a local: the index field reads
-        // from this copy, and the pending-ETH accrual at the end recombines into a single
-        // store. Nothing in between touches `lootboxRngPacked` (only the lootboxEth /
-        // EV-cap / boxPlayers slots are written; no external call).
-        uint256 lr = lootboxRngPacked;
-        uint48 index = uint48((lr >> LR_INDEX_SHIFT) & LR_INDEX_MASK);
-        uint24 capKey = currentLevel + 1; // resolver open level == the per-(player, level) cap key
-        uint256 packed = lootboxEth[index][player];
-        uint256 existingAmount = packed & LB_AMOUNT_MASK;
-
-        uint16 sc;
-        uint64 adj;
-        if (existingAmount == 0) {
-            sc = score;
-            if (
-                _lootboxEvMultiplierFromScore(activityScore) >
-                LOOTBOX_EV_NEUTRAL_BPS
-            ) {
-                uint256 used = _lootboxEvUsedFor(player, capKey);
-                uint256 remaining = used >= LOOTBOX_EV_BENEFIT_CAP
-                    ? 0
-                    : LOOTBOX_EV_BENEFIT_CAP - used;
-                uint256 add = amount < remaining ? amount : remaining;
-                _setLootboxEvUsedFor(player, capKey, used + add);
-                adj = uint64(add);
-            }
-            // First deposit for this (index, player): enqueue for the permissionless auto-open
-            // cursor (the consumer gates each index on lootboxRngWordByIndex != 0, so this is
-            // producer-only). The box is discovered via that cursor walk, not an event.
-            boxPlayers[index].push(player);
-        } else {
-            // Subsequent deposit at the same un-advanced index (only reachable in the
-            // pre-first-advance genesis window): the frozen score and accumulated adj come
-            // from the box's prior packed word, the multiplier stays FROZEN from the
-            // first-deposit snapshot.
-            (, uint64 priorAdj, uint16 priorScore, ) = _unpackLootbox(packed);
-            sc = priorScore;
-            adj = priorAdj;
-            if (amount != 0) {
-                if (
-                    _lootboxEvMultiplierFromScore(uint256(priorScore)) >
-                    LOOTBOX_EV_NEUTRAL_BPS
-                ) {
-                    uint256 used = _lootboxEvUsedFor(player, capKey);
-                    uint256 remaining = used >= LOOTBOX_EV_BENEFIT_CAP
-                        ? 0
-                        : LOOTBOX_EV_BENEFIT_CAP - used;
-                    uint256 add = amount < remaining ? amount : remaining;
-                    if (add != 0) {
-                        _setLootboxEvUsedFor(player, capKey, used + add);
-                        adj = priorAdj + uint64(add);
-                    }
-                }
+        // The cover box is recorded by the Lootbox module — one place owns the order slot's
+        // encoding. Boons stay OFF for afking covers, so no boost is consumed here.
+        (bool ok, bytes memory data) = ContractAddresses.GAME_LOOTBOX_MODULE.delegatecall(
+            abi.encodeWithSelector(
+                IDegenerusGameLootboxModule.recordCoverBox.selector,
+                player,
+                amount,
+                score,
+                currentLevel + 1,
+                false
+            )
+        );
+        if (!ok) {
+            if (data.length == 0) revert E();
+            assembly ("memory-safe") {
+                revert(add(32, data), mload(data))
             }
         }
-
-        // boons OFF for afking covers ⇒ no boost, so the stored amount is the raw spend; the
-        // afking path never writes distress (preserved as zero in the packed word). All live
-        // fields land in the single lootboxEth slot.
-        uint256 distressUnits = (packed >> LB_DISTRESS_SHIFT) & LB_DISTRESS_MASK;
-        lootboxEth[index][player] =
-            _packLootbox(existingAmount + amount, adj, sc, distressUnits);
-        // Accrue the pending-ETH field into the cached word and store the recombined
-        // word — one SSTORE, field-masked exactly as `_lrWrite`.
-        uint256 pendingEth = ((lr >> LR_PENDING_ETH_SHIFT) & LR_PENDING_ETH_MASK) +
-            _packEthToMilliEth(amount);
-        lootboxRngPacked =
-            (lr & ~(LR_PENDING_ETH_MASK << LR_PENDING_ETH_SHIFT)) |
-            ((pendingEth & LR_PENDING_ETH_MASK) << LR_PENDING_ETH_SHIFT);
-
-        // One box-buy event across paths (same topic as the mint + whale LootBoxBuy).
-        emit LootBoxBuy(player, index, amount);
     }
 
     /// @dev Hand the afking-computed streak back to the manual quest system on a sub-ending path,
@@ -1865,12 +1808,28 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
                     if (newCarry != carry) _openBountyCarry = newCarry;
                 }
             }
-            // Human-box leg with the remaining budget, converted back to sweep steps —
-            // the multi-index sweep lives in the lootbox module (delegatecall runs it in
-            // this Game's storage, the same nested pattern as _openAfkingBox's
-            // resolveAfkingBox) and charges every entry/skip/index-header as one step.
+            // Human-box leg — the multi-index sweep lives in the lootbox module (delegatecall
+            // runs it in this Game's storage, the same nested pattern as _openAfkingBox's
+            // resolveAfkingBox). Its unit is BOXES now, not entries: one order can carry up to
+            // MAX_BOXES_PER_ORDER of them.
+            //
+            // The legs stop sharing a call only when the afking leg does REAL work: the sweep
+            // always runs its first entry whatever its size, so stacking a maximum entry on a
+            // call that already spent its weight on afking OPENS could blow past the ceiling —
+            // afking keeps those calls, and the human leg gets whole fresh ones. But a walk
+            // that only SCANNED (opens == 0 — a drained ring, or a stuck/wrapped
+            // _pendingBoxCount, whose unchecked decrement is documented safe precisely
+            // because a wrong walk finds nothing) must hand the REMAINDER on, exactly as the
+            // shared budget always did — gating on units consumed would let a scan-only walk
+            // starve the rewarded human sweep on every crank, permanently under a wedged
+            // counter. Scan + remainder is budget-bounded (<= OPEN_WEIGHT_BUDGET total), so
+            // the stacked case stays within the old shared-budget ceiling.
             bool sweptFrontier;
-            uint256 humanSteps = (OPEN_WEIGHT_BUDGET - unitsUsed) / OPEN_ITEM_WEIGHT;
+            // Passed in WALK UNITS, not steps: the sweep prices its own entries now, because
+            // only it knows how many boxes each holds.
+            uint256 humanSteps = opened == 0
+                ? (unitsUsed < OPEN_WEIGHT_BUDGET ? OPEN_WEIGHT_BUDGET - unitsUsed : 0)
+                : 0;
             if (humanSteps != 0) {
                 // Snapshot the monotonic human-box frontier: the sweep advances it over
                 // already-opened / dead entries (skips) even when it opens nothing, and that
@@ -1891,11 +1850,18 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
                         )
                     );
                 if (!ok) _revertDelegate(data);
-                uint256 humanOpened = abi.decode(data, (uint256));
+                (uint256 humanOpened, uint256 humanUnits) = abi.decode(
+                    data,
+                    (uint256, uint256)
+                );
                 opened += humanOpened;
-                // Human opens knee-credit at face value every call — the human sweep's steps
-                // are always charged, so only the afking side carries forced-split netting.
-                afkKneeCredit += humanOpened;
+                // Knee credit in WORK, not boxes: one entry-weight of walk units is about one
+                // old-style open's worth of gas, and boxes after an entry's first cost a
+                // fraction of that. Crediting per box would let a single five-small order
+                // saturate the knee at ~a third of the work five entries used to represent.
+                if (humanOpened != 0) {
+                    afkKneeCredit += humanUnits / OPEN_HUMAN_ENTRY_WEIGHT;
+                }
                 uint48 finalFrontierIdx = boxCursorIndex == 0
                     ? 1
                     : boxCursorIndex;

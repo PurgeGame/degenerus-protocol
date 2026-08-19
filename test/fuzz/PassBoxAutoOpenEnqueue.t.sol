@@ -19,7 +19,7 @@ contract BoxQueueViewer is DegenerusGame {
     }
 
     function lootboxAmountFor(uint48 index, address who) external view returns (uint256) {
-        return lootboxEth[index][who] & LB_AMOUNT_MASK;
+        return lootboxOrder[index][who];
     }
 }
 
@@ -36,7 +36,7 @@ contract BoxQueueViewer is DegenerusGame {
 ///         auto-open. PRE-FIX the buyer is absent from boxPlayers[index] and this FAILS; POST-FIX it
 ///         is present and this PASSES.
 /// @dev Test-only. No contracts/*.sol is mutated. A read-only viewer is etched (type().runtimeCode,
-///      no constructor) to inspect the internal boxPlayers/lootboxEth maps, then real code restored.
+///      no constructor) to inspect the internal boxPlayers/lootboxOrder maps, then real code restored.
 contract PassBoxAutoOpenEnqueue is DeployProtocol {
     function setUp() public {
         _deployProtocol();

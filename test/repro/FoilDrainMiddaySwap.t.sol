@@ -5,6 +5,7 @@ import {Vm} from "forge-std/Vm.sol";
 import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 import {DegenerusTraitUtils} from "../../contracts/DegenerusTraitUtils.sol";
+import {BoxOrderLib} from "../helpers/BoxOrderLib.sol";
 
 /// @title FoilDrainMiddaySwap — the foil pack's sixteen entries against the queue swaps.
 ///
@@ -46,9 +47,9 @@ contract FoilDrainMiddaySwap is DeployProtocol {
     // Storage slots (forge inspect DegenerusGame storage-layout).
     uint256 private constant SLOT_LVL_TRAIT_ENTRY = 8;
     uint256 private constant SLOT_RNG_WORD_BY_DAY = 10;
-    uint256 private constant SLOT_FOIL_RECORD = 59;
-    uint256 private constant SLOT_FOIL_BUYERS = 62;
-    uint256 private constant SLOT_FOIL_CURSORS = 63;
+    uint256 private constant SLOT_FOIL_RECORD = 58;
+    uint256 private constant SLOT_FOIL_BUYERS = 61;
+    uint256 private constant SLOT_FOIL_CURSORS = 62;
 
     struct Pack {
         address buyer;
@@ -428,7 +429,7 @@ contract FoilDrainMiddaySwap is DeployProtocol {
         game.purchase{value: 2 ether}(
             ticketBuyer,
             0,
-            2 ether,
+            BoxOrderLib.boCustom(2 ether),
             bytes32(0),
             MintPaymentKind.DirectEth,
             false
@@ -477,7 +478,7 @@ contract FoilDrainMiddaySwap is DeployProtocol {
     // Storage probes
     // =====================================================================
 
-    /// foilRecord[lvl][buyer] — slot 59; [0-23] resolveDay, [24-39] multBps.
+    /// foilRecord[lvl][buyer] — slot 58; [0-23] resolveDay, [24-39] multBps.
     function _foilRecord(
         uint24 lvl,
         address who
@@ -492,7 +493,7 @@ contract FoilDrainMiddaySwap is DeployProtocol {
         multBps = uint16(packed >> 24);
     }
 
-    /// foilBuyers[day].length — slot 62.
+    /// foilBuyers[day].length — slot 61.
     function _foilBucketLen(uint24 day) internal view returns (uint256) {
         return
             uint256(
@@ -503,7 +504,7 @@ contract FoilDrainMiddaySwap is DeployProtocol {
             );
     }
 
-    /// foilCursor | foilDrainDay | foilLastResolveDay — slot 63 at byte offsets 0/4/7.
+    /// foilCursor | foilDrainDay | foilLastResolveDay — slot 62 at byte offsets 0/4/7.
     function _foilDrainDay() internal view returns (uint24) {
         uint256 s = uint256(
             vm.load(address(game), bytes32(SLOT_FOIL_CURSORS))

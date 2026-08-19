@@ -427,30 +427,36 @@ describe("LootboxWholeTicket — Phase 274 Wave 2 TST-WT-01..07", function () {
 
     it("[03-static] the per-roll ticket-queue path consumes `rollSeed >> 224` exactly once — single source site", function () {
       const source = fs.readFileSync(MODULE_SOURCE_PATH, "utf8");
-      // The `_queueEntries(player, rollLevel, wholeTicketsToEntries(whole), false)` call is a single
-      // source site inside `_settleLootboxRoll` (invoked once per roll), so the
-      // Bernoulli slice is consumed exactly once per roll from one source site.
-      const callLine = "_queueEntries(player, rollLevel, wholeTicketsToEntries(whole), false)";
+      // Box-order rework: the actual `_queueEntries` write moved out of the
+      // per-roll `_settleLootboxRoll` into `_flushBoxAcc` (flushed once per
+      // entry), but it is still a single source site in the whole module.
+      const callLine =
+        "_queueEntries(player, currentLevel + uint24(offset), wholeTicketsToEntries(whole), false)";
       const callMatches = (
-        source.match(/_queueEntries\(player, rollLevel, wholeTicketsToEntries\(whole\), false\)/g) || []
+        source.match(/_queueEntries\(player, currentLevel \+ uint24\(offset\), wholeTicketsToEntries\(whole\), false\)/g) || []
       ).length;
       expect(
         callMatches,
-        "the per-roll ticket-queue path must call `_queueEntries(player, rollLevel, wholeTicketsToEntries(whole), false)` at exactly one source site"
+        "the per-entry ticket-queue flush must call the offset-based `_queueEntries` at exactly one source site"
       ).to.equal(1);
+      expect(source.indexOf(callLine), "_queueEntries callsite not found").to.be.greaterThan(-1);
       // The slice itself appears at exactly one source site.
       const sliceMatches = (source.match(/rollSeed >> 224/g) || []).length;
       expect(
         sliceMatches,
         "bits[224..255] must appear at exactly one source site"
       ).to.equal(1);
-      // And the queue call sits after the slice (collapse precedes the queue).
-      const callIdx = source.indexOf(callLine);
+      // This roll's ticket accumulation (through `_addBoxTickets`, which the eventual
+      // touched-lane flush reads) sits after the slice within `_settleLootboxRoll`
+      // (collapse precedes accumulation) — the flush call itself now lives in a
+      // different function so a textual-order check against it no longer applies.
+      const accLine = "_addBoxTickets(acc, rollLevel - currentLevel, whole)";
+      const accIdx = source.indexOf(accLine);
       const sliceIdx = source.indexOf("rollSeed >> 224");
-      expect(callIdx, "_queueEntries callsite not found").to.be.greaterThan(-1);
+      expect(accIdx, "ticket accumulation site not found").to.be.greaterThan(-1);
       expect(
-        callIdx,
-        "the `_queueEntries` call must come after the Bernoulli slice"
+        accIdx,
+        "the ticket accumulation must come after the Bernoulli slice"
       ).to.be.greaterThan(sliceIdx);
     });
 
@@ -531,15 +537,16 @@ describe("LootboxWholeTicket — Phase 274 Wave 2 TST-WT-01..07", function () {
   });
 
   describe("TST-WT-04 — `EntriesQueued` (not `EntriesQueuedScaled`) on the unified ticket-queue path (Phase 277)", function () {
-    it("the per-roll ticket-queue path calls `_queueEntries(player, rollLevel, wholeTicketsToEntries(whole), false)` at one source site — `_queueEntriesScaled` no longer appears in LootboxModule", function () {
+    it("the touched-lane ticket flush calls offset-based `_queueEntries` at one source site — `_queueEntriesScaled` no longer appears in LootboxModule", function () {
       const source = fs.readFileSync(MODULE_SOURCE_PATH, "utf8");
-      // The `_queueEntries(player, rollLevel, wholeTicketsToEntries(whole), false)` call is a single
-      // source site inside `_settleLootboxRoll` (invoked per roll).
-      const callPattern = /_queueEntries\(player, rollLevel, wholeTicketsToEntries\(whole\), false\)/g;
+      // The `_queueEntries` write is a single source site inside `_flushBoxAcc`
+      // (flushed once per entry, after `_settleLootboxRoll` accumulates every
+      // roll's tickets into `acc.tickets[...]`).
+      const callPattern = /_queueEntries\(player, currentLevel \+ uint24\(offset\), wholeTicketsToEntries\(whole\), false\)/g;
       const calls = (source.match(callPattern) || []).length;
       expect(
         calls,
-        "expected exactly one `_queueEntries(player, rollLevel, wholeTicketsToEntries(whole), false)` source site (per-roll settle path)"
+        "expected exactly one offset-based `_queueEntries` source site (per-entry flush path)"
       ).to.equal(1);
 
       // `_queueEntriesScaled` must no longer appear in this module.
@@ -548,19 +555,21 @@ describe("LootboxWholeTicket — Phase 274 Wave 2 TST-WT-01..07", function () {
         "`_queueEntriesScaled` must not appear in LootboxModule"
       ).to.equal(false);
 
-      // The call sits inside the outer `if (scaledWholeTickets != 0)` guard
-      // and is NOT wrapped in any `index`-conditional branch.
-      const callLine = "_queueEntries(player, rollLevel, wholeTicketsToEntries(whole), false)";
-      const callIdx = source.indexOf(callLine);
-      expect(callIdx).to.be.greaterThan(-1);
-      const preamble = source.slice(0, callIdx);
+      // The per-roll ACCUMULATION feeding the flush sits inside the outer
+      // `if (scaledWholeTickets != 0)` guard (in `_settleLootboxRoll`) and is
+      // NOT wrapped in any `index`-conditional branch. The flush call itself
+      // now lives in `_flushBoxAcc`, a different function.
+      const accLine = "_addBoxTickets(acc, rollLevel - currentLevel, whole)";
+      const accIdx = source.indexOf(accLine);
+      expect(accIdx).to.be.greaterThan(-1);
+      const preamble = source.slice(0, accIdx);
       expect(
         preamble.lastIndexOf("if (scaledWholeTickets != 0)"),
-        "the `_queueEntries` call must sit inside the `if (scaledWholeTickets != 0)` guard"
+        "the ticket accumulation must sit inside the `if (scaledWholeTickets != 0)` guard"
       ).to.be.greaterThan(-1);
       expect(
         source.includes("if (index != type(uint48).max)"),
-        "no `index != type(uint48).max` sentinel branch should wrap the queue call"
+        "no `index != type(uint48).max` sentinel branch should wrap the accumulation"
       ).to.equal(false);
     });
 
@@ -669,41 +678,49 @@ describe("LootboxWholeTicket — Phase 274 Wave 2 TST-WT-01..07", function () {
       ).to.equal(0);
     });
 
-    it("[06b] the per-roll ticket-queue path sits inside the outer `if (scaledWholeTickets != 0)` guard with no `index`-conditional gate", function () {
+    it("[06b] the per-roll ticket accumulation sits inside the outer `if (scaledWholeTickets != 0)` guard with no `index`-conditional gate; the flush call exists", function () {
       const source = fs.readFileSync(MODULE_SOURCE_PATH, "utf8");
-      // The `index != type(uint48).max` sentinel gate is retired. The
-      // `_queueEntries` call sits directly inside the outer
-      // `if (scaledWholeTickets != 0)` guard.
+      // The `index != type(uint48).max` sentinel gate is retired. Box-order
+      // rework: the actual `_queueEntries` write moved to `_flushBoxAcc`
+      // (flushed once per entry), but the per-roll ACCUMULATION that feeds it
+      // (`_addBoxTickets(...)`) still sits directly inside the outer
+      // `if (scaledWholeTickets != 0)` guard in `_settleLootboxRoll`.
       expect(
         source.includes("if (index != type(uint48).max)"),
         "the `index != type(uint48).max` sentinel gate must be fully retired"
       ).to.equal(false);
-      const callIdx = source.indexOf(
-        "_queueEntries(player, rollLevel, wholeTicketsToEntries(whole), false)"
+      const accIdx = source.indexOf(
+        "_addBoxTickets(acc, rollLevel - currentLevel, whole)"
       );
-      expect(callIdx, "the `_queueEntries` callsite not found").to.be.greaterThan(
+      expect(accIdx, "the ticket accumulation site not found").to.be.greaterThan(
         -1
       );
-      const preamble = source.slice(0, callIdx);
+      const preamble = source.slice(0, accIdx);
       expect(
         preamble.lastIndexOf("if (scaledWholeTickets != 0)"),
-        "the `_queueEntries` call must sit inside the `if (scaledWholeTickets != 0)` guard"
+        "the ticket accumulation must sit inside the `if (scaledWholeTickets != 0)` guard"
       ).to.be.greaterThan(-1);
+      expect(
+        source.includes(
+          "_queueEntries(player, currentLevel + uint24(offset), wholeTicketsToEntries(whole), false)"
+        ),
+        "the per-entry `_queueEntries` flush callsite must exist in `_flushBoxAcc`"
+      ).to.equal(true);
     });
 
-    it("[06c] the per-roll `_queueEntries` call + the `payColdBustConsolation`-gated consolation are ALL inside the outer `if (scaledWholeTickets != 0)` guard", function () {
+    it("[06c] the per-roll ticket accumulation + the `payColdBustConsolation`-gated consolation accumulation are ALL inside the outer `if (scaledWholeTickets != 0)` guard", function () {
       const source = fs.readFileSync(MODULE_SOURCE_PATH, "utf8");
       const outerGuardIdx = source.indexOf("if (scaledWholeTickets != 0)");
       expect(outerGuardIdx, "outer `if (scaledWholeTickets != 0)` guard not found").to.be.greaterThan(
         -1
       );
-      const callIdx = source.indexOf(
-        "_queueEntries(player, rollLevel, wholeTicketsToEntries(whole), false)"
+      const accIdx = source.indexOf(
+        "_addBoxTickets(acc, rollLevel - currentLevel, whole)"
       );
       const consolationGateIdx = source.indexOf(
         "if (payColdBustConsolation && whole == 0)"
       );
-      expect(callIdx).to.be.greaterThan(outerGuardIdx);
+      expect(accIdx, "the ticket accumulation site not found").to.be.greaterThan(outerGuardIdx);
       expect(
         consolationGateIdx,
         "the `payColdBustConsolation && whole == 0` consolation gate not found"
@@ -809,19 +826,23 @@ describe("LootboxWholeTicket — Phase 274 Wave 2 TST-WT-01..07", function () {
       ).to.not.be.null;
     });
 
-    it("[07c] the manual cold-bust consolation pays `_boxWwxrpStake(rollAmount)` via `wwxrp.mintPrize` under the `payColdBustConsolation && whole == 0` gate", function () {
+    it("[07c] the manual cold-bust consolation accumulates `_boxWwxrpStake(rollAmount)` into `acc.wwxrp` under the `payColdBustConsolation && whole == 0` gate (flushed once per entry via `wwxrp.mintPrize`)", function () {
       const source = fs.readFileSync(MODULE_SOURCE_PATH, "utf8");
       const gateIdx = source.indexOf("if (payColdBustConsolation && whole == 0)");
       const consolationMint = source.indexOf(
-        "wwxrp.mintPrize(player, _boxWwxrpStake(rollAmount))"
+        "acc.wwxrp += _boxWwxrpStake(rollAmount);"
       );
       expect(gateIdx, "`payColdBustConsolation && whole == 0` gate not found").to.be.greaterThan(
         -1
       );
       expect(
         consolationMint,
-        "consolation `wwxrp.mintPrize` call not found"
+        "consolation accumulation call not found"
       ).to.be.greaterThan(gateIdx);
+      expect(
+        source.includes("if (acc.wwxrp != 0) wwxrp.mintPrize(player, acc.wwxrp);"),
+        "the per-entry WWXRP flush site must exist"
+      ).to.equal(true);
       // No dedicated lootbox-WWXRP event — the WWXRP ERC-20 `Transfer` the mint
       // emits is the off-chain correlation surface.
       expect(
@@ -830,21 +851,25 @@ describe("LootboxWholeTicket — Phase 274 Wave 2 TST-WT-01..07", function () {
       ).to.equal(false);
     });
 
-    it("[07d] the consolation `wwxrp.mintPrize` call is the single payout site inside the `payColdBustConsolation` gate", function () {
+    it("[07d] the consolation accumulation is the single accrual site inside the `payColdBustConsolation` gate, flushed at one site", function () {
       const source = fs.readFileSync(MODULE_SOURCE_PATH, "utf8");
       const mintPrizeCount = (source.match(
-        /wwxrp\.mintPrize\(player, _boxWwxrpStake\(rollAmount\)\)/g
+        /acc\.wwxrp \+= _boxWwxrpStake\(rollAmount\);/g
       ) || []).length;
       expect(
         mintPrizeCount,
-        "the cold-bust WWXRP mint must be single-site"
+        "the cold-bust WWXRP accumulation must be single-site"
       ).to.equal(1);
       const gateIdx = source.indexOf("if (payColdBustConsolation && whole == 0)");
       const mintPrizeIdx = source.indexOf(
-        "wwxrp.mintPrize(player, _boxWwxrpStake(rollAmount))"
+        "acc.wwxrp += _boxWwxrpStake(rollAmount);"
       );
       expect(gateIdx).to.be.greaterThan(-1);
       expect(mintPrizeIdx).to.be.greaterThan(gateIdx);
+      const flushCount = (source.match(
+        /if \(acc\.wwxrp != 0\) wwxrp\.mintPrize\(player, acc\.wwxrp\);/g
+      ) || []).length;
+      expect(flushCount, "the per-entry WWXRP flush must be single-site").to.equal(1);
     });
   });
 });

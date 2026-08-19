@@ -54,7 +54,7 @@ describe("Deity boon per-(deity, recipient) lifetime cap", function () {
   }
 
   it("reverts the 11th boon from one deity to the same recipient", async function () {
-    const { game, deployer, alice, bob, mockVRF, lootboxModule } =
+    const { game, deployer, alice, bob, mockVRF, boonModule } =
       await loadFixture(deployFullProtocol);
 
     // Deity pass purchased at genesis, before any day is settled.
@@ -76,11 +76,11 @@ describe("Deity boon per-(deity, recipient) lifetime cap", function () {
     await settleRngDay(game, deployer, mockVRF, 9001n);
     await expect(
       game.connect(alice).issueDeityBoon(alice.address, bob.address, 0)
-    ).to.be.revertedWithCustomError(lootboxModule, "RecipientBoonCapReached");
+    ).to.be.revertedWithCustomError(boonModule, "RecipientBoonCapReached");
   });
 
   it("cap is per recipient: a second recipient is unaffected by the first hitting the cap", async function () {
-    const { game, deployer, alice, bob, carol, mockVRF, lootboxModule } =
+    const { game, deployer, alice, bob, carol, mockVRF, boonModule } =
       await loadFixture(deployFullProtocol);
 
     await game
@@ -97,7 +97,7 @@ describe("Deity boon per-(deity, recipient) lifetime cap", function () {
     // alice->bob is capped...
     await expect(
       game.connect(alice).issueDeityBoon(alice.address, bob.address, 0)
-    ).to.be.revertedWithCustomError(lootboxModule, "RecipientBoonCapReached");
+    ).to.be.revertedWithCustomError(boonModule, "RecipientBoonCapReached");
     // ...but alice->carol (fresh recipient) still receives on the same day.
     await expect(
       game.connect(alice).issueDeityBoon(alice.address, carol.address, 1)
@@ -105,7 +105,7 @@ describe("Deity boon per-(deity, recipient) lifetime cap", function () {
   });
 
   it("cap is per deity: a second deity can still boon a recipient the first deity has capped", async function () {
-    const { game, deployer, alice, bob, dan, mockVRF, lootboxModule } =
+    const { game, deployer, alice, bob, dan, mockVRF, boonModule } =
       await loadFixture(deployFullProtocol);
 
     // Two independent deities.
@@ -127,7 +127,7 @@ describe("Deity boon per-(deity, recipient) lifetime cap", function () {
     // alice->bob is capped...
     await expect(
       game.connect(alice).issueDeityBoon(alice.address, bob.address, 0)
-    ).to.be.revertedWithCustomError(lootboxModule, "RecipientBoonCapReached");
+    ).to.be.revertedWithCustomError(boonModule, "RecipientBoonCapReached");
     // ...but dan->bob is a fresh pair, so dan can still boon bob the same day
     // (the failed alice attempt did not consume bob's one-boon-per-day slot).
     await expect(

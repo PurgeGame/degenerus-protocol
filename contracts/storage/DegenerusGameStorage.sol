@@ -12,6 +12,7 @@ import {IDegenerusQuests} from "../interfaces/IDegenerusQuests.sol";
 import {BitPackingLib} from "../libraries/BitPackingLib.sol";
 import {GameTimeLib} from "../libraries/GameTimeLib.sol";
 import {ActivityCurveLib} from "../libraries/ActivityCurveLib.sol";
+import {PriceLookupLib} from "../libraries/PriceLookupLib.sol";
 import {MintPaymentKind} from "../interfaces/IDegenerusGame.sol";
 
 /**
@@ -1440,28 +1441,140 @@ abstract contract DegenerusGameStorage {
     // Loot Box State
     // =========================================================================
 
-    /// @dev Loot box state per RNG index per player, packed into one word. The amount may
-    ///      accumulate within an index across deposits; the frozen-at-deposit EV inputs
-    ///      (adjustedPortion, score) and the distress fraction ride alongside it so a box
-    ///      lives in a single slot. All four fields are frozen at deposit and read-only at
-    ///      open. distress is stored at 0.01-ETH granularity (distressEth / LB_DISTRESS_SCALE).
-    ///      Bit layout (LSB -> MSB):
-    ///      - [0:128]    amount        (uint128; boosted ETH in wei, drives the EV roll + pool credit)
-    ///      - [128:192]  adjustedPortion (uint64; cap-eligible ETH that received the bonus, <= 10 ETH)
-    ///      - [192:208]  score         (uint16; the frozen EV multiplier knob)
-    ///      - [208:256]  distressUnits (uint48; distressEth / 1e16, the 25%-ticket-bonus basis)
-    mapping(uint48 => mapping(address => uint256)) internal lootboxEth;
+    /// @dev A player's box order for one RNG index, packed into one word. Four tiers, each a
+    ///      COUNT against a size: small / medium / large take their size from `level`'s ticket
+    ///      price (1x / 5x / 25x), the custom tier carries its own. Storing counts rather than
+    ///      summed wei is what keeps an unlimited mix of boxes in a single slot, and keeps
+    ///      `boxPlayers` bounded by unique buyers rather than by boxes.
+    ///
+    ///      `level`, `score` and `customSize` freeze on the period's first buy; later buys in
+    ///      the same period only bump counts. The three bps lanes are running fractions of the
+    ///      order's nominal value (which the counts themselves derive), not absolute wei —
+    ///      `boostBps` because the boon uplift is capped per purchase and only the first buy in
+    ///      a period carries one, `distressBps` because distress can toggle mid-period, and
+    ///      `adjBps` because the EV cap is drawn against a per-level running total. All three
+    ///      are only ever read as ratios, which is what lets them fit in 14 bits apiece.
+    ///
+    ///      Bit layout (LSB -> MSB), 209 bits used of 256:
+    ///      - [0:24]     level        (uint24; frozen buy level, derives every preset size)
+    ///      - [24:39]    score        (uint15; EV knob, clamped at ACTIVITY_EFFECTIVE_CAP_POINTS)
+    ///      - [39:53]    boostBps     (uint14; boon uplift as a fraction of nominal order value)
+    ///      - [53:67]    distressBps  (uint14; distress-bought fraction, the 25%-ticket-bonus basis)
+    ///      - [67:81]    adjBps       (uint14; cap-eligible fraction that received the EV bonus)
+    ///      - [81:89]    smallCount   (uint8)
+    ///      - [89:97]    medCount     (uint8)
+    ///      - [97:105]   largeCount   (uint8)
+    ///      - [105:113]  customCount  (uint8)
+    ///      - [113:161]  customSize   (uint48; per-box wei / LB_CUSTOM_SCALE)
+    ///      - [161:209]  coverWei     (uint48; system-granted cover spend / LB_CUSTOM_SCALE)
+    mapping(uint48 => mapping(address => uint256)) internal lootboxOrder;
 
-    /// @dev Bit offsets / masks for the packed lootboxEth word.
-    uint256 internal constant LB_AMOUNT_MASK = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF; // 128 bits
-    uint256 internal constant LB_ADJ_SHIFT = 128;
-    uint256 internal constant LB_ADJ_MASK = 0xFFFFFFFFFFFFFFFF;                    // 64 bits
-    uint256 internal constant LB_SCORE_SHIFT = 192;
-    uint256 internal constant LB_SCORE_MASK = 0xFFFF;                             // 16 bits
-    uint256 internal constant LB_DISTRESS_SHIFT = 208;
-    uint256 internal constant LB_DISTRESS_MASK = 0xFFFFFFFFFFFF;                  // 48 bits
-    /// @dev Distress ETH is stored at 0.01-ETH (1e16 wei) granularity in the packed slot.
-    uint256 internal constant LB_DISTRESS_SCALE = 1e16;
+    /// @dev Bit offsets / masks for the packed lootboxOrder word.
+    uint256 internal constant LB_LEVEL_SHIFT = 0;
+    uint256 internal constant LB_LEVEL_MASK = 0xFFFFFF;                           // 24 bits
+    uint256 internal constant LB_SCORE_SHIFT = 24;
+    uint256 internal constant LB_SCORE_MASK = 0x7FFF;                             // 15 bits
+    uint256 internal constant LB_BOOST_SHIFT = 39;
+    uint256 internal constant LB_DISTRESS_SHIFT = 53;
+    uint256 internal constant LB_ADJ_SHIFT = 67;
+    uint256 internal constant LB_BPS_MASK = 0x3FFF;                               // 14 bits, holds 0..10000
+    uint256 internal constant LB_SMALL_SHIFT = 81;
+    uint256 internal constant LB_MED_SHIFT = 89;
+    uint256 internal constant LB_LARGE_SHIFT = 97;
+    uint256 internal constant LB_CUSTOM_COUNT_SHIFT = 105;
+    uint256 internal constant LB_COUNT_MASK = 0xFF;                               // 8 bits per tier
+    uint256 internal constant LB_CUSTOM_SIZE_SHIFT = 113;
+    uint256 internal constant LB_CUSTOM_SIZE_MASK = 0xFFFFFFFFFFFF;               // 48 bits
+    /// @dev Whale-pass and afking covers grant box value the player did not choose and cannot
+    ///      size, so it cannot be a count against a preset. It accumulates in its own lane and
+    ///      resolves as ONE extra box — outside MAX_BOXES_PER_ORDER, since a cover must never
+    ///      be able to lock a player out of buying, and never touching customSize.
+    uint256 internal constant LB_COVER_SHIFT = 161;
+    uint256 internal constant LB_COVER_MASK = 0xFFFFFFFFFFFF;                     // 48 bits
+
+    /// @dev Custom-box wei is stored at 1e12 granularity — 0.0001% of the 0.01-ETH minimum
+    ///      box, and 48 bits then span far past the ETH supply. The truncation is reward-side
+    ///      only: the pool split at buy banks the exact wei paid, so it cannot move solvency.
+    uint256 internal constant LB_CUSTOM_SCALE = 1e12;
+
+    /// @dev Preset multipliers against the frozen level's ticket price.
+    uint256 internal constant LB_MED_MULTIPLE = 5;
+    uint256 internal constant LB_LARGE_MULTIPLE = 25;
+
+    /// @dev Human-sweep walk weights, in the shared open-budget unit (1 unit ~= 4.7k gas, the
+    ///      same unit the afking ring-scan skip is calibrated in).
+    ///
+    ///      Two weights, because an entry's cost is not linear in its boxes. MEASURED
+    ///      (test/gas/BoxOrderOpenGas.t.sol): a one-box entry costs ~83.4k because it pays that
+    ///      player's cold settlement slots, while each ADDITIONAL box in the same entry costs
+    ///      ~15.2k at N=100 — the second box through the hundredth share every lane with the first. A
+    ///      single rate would either starve the sweep on wide entries or blow the ceiling on
+    ///      many narrow ones.
+    ///
+    ///      Sanity against the measurements: a 1920-unit sweep opened 90 one-box entries for
+    ///      ~5.11M gas, and one maximum 100-box entry costs 15 + 100*6 = 615 units ~= 2.89M
+    ///      against 2.37M for the most expensive measured shape.
+    ///
+    ///      BOX_WEIGHT is sized on the N=20 secant (~26k/box), not the N=100 one (~15k/box):
+    ///      the true marginal is concave (ticket write-keys saturate with width), so a
+    ///      100-fit weight under-charges every mid-width entry — the common shape — while
+    ///      the 20-fit only over-charges very wide entries, the safe direction. Charged per
+    ///      box INCLUDING the first, on top of the entry floor.
+    uint256 internal constant OPEN_HUMAN_ENTRY_WEIGHT = 15; // ~70.5k, the per-entry floor
+    uint256 internal constant OPEN_HUMAN_BOX_WEIGHT = 6;    // ~28k, per box, N=20 secant
+
+    /// @dev Boxes one player may hold in one RNG index. Sized so a maximum entry — every box
+    ///      rolled, plus one recirculated box per ETH spin — resolves inside a block alongside
+    ///      the afking leg that shares the `mineFlip()` transaction. Not a spend limit: a
+    ///      player wanting more exposure buys a larger custom, not more boxes.
+    uint256 internal constant MAX_BOXES_PER_ORDER = 100;
+
+    /// @dev Daily jackpots a level runs before it seals. Shared here because the active
+    ///      ticket level below keys off it.
+    uint8 internal constant JACKPOT_LEVEL_CAP = 5;
+
+    /// @dev The level a ticket bought RIGHT NOW routes to — the single source of truth for the
+    ///      purchase quote/charge, the ticket + foil delivery, participation/streak recording, and
+    ///      every buy-now price view, so they can never diverge. Jackpot phase → current level;
+    ///      purchase phase → next. Once the level's jackpots end this level seals no further daily
+    ///      draw, so buys route to level + 1 — quoting the old level would strand the buyer's overpay
+    ///      or misprice tickets in a level that has ended. Two states mark that sealed window: the
+    ///      final jackpot day's RNG request (rngLocked, jackpot counter about to reach the cap), and
+    ///      the span after _endPhase runs (phaseTransitionActive, jackpotCounter already zeroed, level
+    ///      not yet incremented) while the transition drains. (Salvage/settlement callers are
+    ///      rngLock-gated, so this branch is a no-op for them.)
+    function _activeTicketLevel() internal view returns (uint24) {
+        if (!jackpotPhaseFlag) return level + 1;
+        // Transition underway: _endPhase set phaseTransitionActive and zeroed jackpotCounter, so the
+        // counter test below can no longer key off the sealed level. phaseTransitionActive is the
+        // standalone signal that this level's draws have ended, so buys route to the next level.
+        if (phaseTransitionActive) return level + 1;
+        if (rngLockedFlag) {
+            uint8 cnt = jackpotCounter;
+            uint8 comp = compressedJackpotFlag;
+            uint8 step = comp == 2
+                ? JACKPOT_LEVEL_CAP
+                : (comp == 1 && cnt > 0 && cnt < JACKPOT_LEVEL_CAP - 1 ? 2 : 1);
+            if (cnt + step >= JACKPOT_LEVEL_CAP) return level + 1;
+        }
+        return level;
+    }
+
+    /// @dev Read a field from a packed box order.
+    function _lbGet(uint256 word, uint256 shift, uint256 mask) internal pure returns (uint256) {
+        return (word >> shift) & mask;
+    }
+
+    /// @dev Write a field into a packed box order, masked to its width so an over-wide value
+    ///      cannot alias a neighbour.
+    function _lbSet(
+        uint256 word,
+        uint256 shift,
+        uint256 mask,
+        uint256 value
+    ) internal pure returns (uint256) {
+        return (word & ~(mask << shift)) | ((value & mask) << shift);
+    }
 
     // =========================================================================
     // Coin-Presale-Box State
@@ -2120,27 +2233,16 @@ abstract contract DegenerusGameStorage {
         return uint40(wei_ / LR_FLIP_SCALE);
     }
 
-    /// @dev Pack a lootbox box into one uint256 word (the lootboxEth slot).
-    ///      Layout: amount at [0:128], adjustedPortion at [128:192], score at [192:208],
-    ///      distressUnits at [208:256]. distressUnits is distressEth / LB_DISTRESS_SCALE,
-    ///      already scaled by the caller. Each field is masked to its width before shifting
-    ///      so an over-wide argument cannot alias an adjacent field.
-    function _packLootbox(uint256 amount, uint64 adj, uint16 score, uint256 distressUnits)
-        internal pure returns (uint256) {
-        return (amount & LB_AMOUNT_MASK)
-            | (uint256(adj) & LB_ADJ_MASK) << LB_ADJ_SHIFT
-            | (uint256(score) & LB_SCORE_MASK) << LB_SCORE_SHIFT
-            | (distressUnits & LB_DISTRESS_MASK) << LB_DISTRESS_SHIFT;
-    }
-
-    /// @dev Unpack a lootbox box word into its four fields. distressUnits is at
-    ///      0.01-ETH granularity; multiply by LB_DISTRESS_SCALE for wei.
-    function _unpackLootbox(uint256 word)
-        internal pure returns (uint256 amount, uint64 adj, uint16 score, uint256 distressUnits) {
-        amount = word & LB_AMOUNT_MASK;
-        adj = uint64((word >> LB_ADJ_SHIFT) & LB_ADJ_MASK);
-        score = uint16((word >> LB_SCORE_SHIFT) & LB_SCORE_MASK);
-        distressUnits = (word >> LB_DISTRESS_SHIFT) & LB_DISTRESS_MASK;
+    /// @dev Total boxes in a packed order — the four bought tiers plus the cover box, if any.
+    ///      The sweep's skip check wants only this, and it runs per entry.
+    function _boxOrderCount(uint256 word) internal pure returns (uint256) {
+        unchecked {
+            return ((word >> LB_SMALL_SHIFT) & LB_COUNT_MASK)
+                + ((word >> LB_MED_SHIFT) & LB_COUNT_MASK)
+                + ((word >> LB_LARGE_SHIFT) & LB_COUNT_MASK)
+                + ((word >> LB_CUSTOM_COUNT_SHIFT) & LB_COUNT_MASK)
+                + (((word >> LB_COVER_SHIFT) & LB_COVER_MASK) == 0 ? 0 : 1);
+        }
     }
 
     /// @dev EV multiplier from a raw activity score (whole points).
@@ -2445,10 +2547,9 @@ abstract contract DegenerusGameStorage {
     ///   [224-247] deityWhaleDay        uint24   Deity-source day for whale boon
     ///   [248-255] whaleTier            uint8    0=none, 1=10%, 2=20%, 3=35%
     ///
-    /// Slot 1 (256 bits, fully used):
-    ///   [0-23]    activityPending      uint24   Pending activity bonus levels
-    ///   [24-47]   activityDay          uint24   Day activity boon was awarded
-    ///   [48-71]   deityActivityDay     uint24   Deity-source day for activity boon
+    /// Slot 1 (bits 72-255 used; bits 0-71 free):
+    ///   [0-71]    (free)                        Activity awards are credited to player
+    ///                                           stats on award and hold no boon state
     ///   [72-79]   deityPassTier        uint8    0=none, 1=10%, 2=20%, 3=35%
     ///   [80-103]  deityPassDay         uint24   Day deity pass boon was awarded
     ///   [104-127] deityDeityPassDay    uint24   Deity-granted deity pass boon day
@@ -2477,20 +2578,15 @@ abstract contract DegenerusGameStorage {
     mapping(address => BoonPacked) public boonPacked;
 
     // =========================================================================
-    // claimBingo color-completion bitfields (claimBingo-EXCLUSIVE)
+    // claimBingo color-completion flags (claimBingo-EXCLUSIVE)
     //
     // Keyed by uint24 level. The ONLY reader/writer of these mappings is
     // DegenerusGameBingoModule.claimBingo.
     // =========================================================================
 
-    /// @dev Per-player 4-bit quadrant mask: which quadrants this player has already
-    ///      claimed on a level (max 4 claims/player/level). bingoClaimed[level][player].
-    mapping(uint24 => mapping(address => uint8)) internal bingoClaimed;
-
-    /// @dev Systemwide bingo-first bitfields per level, packed: bits [0:32) = symbol mask
-    ///      (which symbols 0-31 have had their first bingo), bits [32:36) = quadrant mask
-    ///      (which of 4 quadrants have had their first bingo). bingoFirsts[level].
-    mapping(uint24 => uint64) internal bingoFirsts;
+    /// @dev Whether a player has claimed their one bingo reward on a level.
+    ///      bingoClaimed[level][player].
+    mapping(uint24 => mapping(address => bool)) internal bingoClaimed;
 
     // ---- Slot 0 shifts ----
     uint256 internal constant BP_COINFLIP_DAY_SHIFT = 0;
@@ -2508,10 +2604,7 @@ abstract contract DegenerusGameStorage {
     uint256 internal constant BP_DEITY_WHALE_DAY_SHIFT = 224;
     uint256 internal constant BP_WHALE_TIER_SHIFT = 248;
 
-    // ---- Slot 1 shifts ----
-    uint256 internal constant BP_ACTIVITY_PENDING_SHIFT = 0;
-    uint256 internal constant BP_ACTIVITY_DAY_SHIFT = 24;
-    uint256 internal constant BP_DEITY_ACTIVITY_DAY_SHIFT = 48;
+    // ---- Slot 1 shifts (bits 0-71 are free) ----
     uint256 internal constant BP_DEITY_PASS_TIER_SHIFT = 72;
     uint256 internal constant BP_DEITY_PASS_DAY_SHIFT = 80;
     uint256 internal constant BP_DEITY_DEITY_PASS_DAY_SHIFT = 104;
@@ -2529,8 +2622,8 @@ abstract contract DegenerusGameStorage {
     /// @dev Stake-bonus base caps for the degenerette boon (+4/8/12% of the bet's total,
     ///      up to the cap). WWXRP has NO cap — it is worthless by design, so an uncapped
     ///      percentage on it moves no real value. Shared by the Degenerette module (the
-    ///      enforcement site) and the Lootbox module's `_boonPoolStats` EV normalization
-    ///      so the two sites can never drift apart.
+    ///      enforcement site) and the Boon module's closed-form EV normalization so the two
+    ///      sites can never drift apart.
     uint256 internal constant DEGENERETTE_BOON_ETH_CAP = 10 ether;
     uint256 internal constant DEGENERETTE_BOON_FLIP_CAP = 100_000 ether;
 
@@ -2554,8 +2647,6 @@ abstract contract DegenerusGameStorage {
     uint256 internal constant BP_WHALE_CLEAR = ~(uint256((1 << 56) - 1) << 200);
 
     // ---- Clear masks for boon categories (slot 1) ----
-    // Activity: bits 0-71 (activityPending[24] + activityDay[24] + deityActivityDay[24])
-    uint256 internal constant BP_ACTIVITY_CLEAR = ~uint256((1 << 72) - 1);
     // Deity pass: bits 72-127 (deityPassTier[8] + deityPassDay[24] + deityDeityPassDay[24])
     uint256 internal constant BP_DEITY_PASS_CLEAR =
         ~(uint256((1 << 56) - 1) << 72);

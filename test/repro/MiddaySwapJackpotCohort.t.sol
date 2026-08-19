@@ -3,6 +3,7 @@ pragma solidity ^0.8.26;
 
 import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
+import {BoxOrderLib} from "../helpers/BoxOrderLib.sol";
 
 /// @title MiddaySwapJackpotCohort — the mid-day lootbox freeze against a jackpot-phase cohort.
 ///
@@ -647,7 +648,7 @@ contract MiddaySwapJackpotCohort is DeployProtocol {
             game.purchase{value: 2 ether}(
                 buyer,
                 0,
-                2 ether,
+                BoxOrderLib.boCustom(2 ether),
                 bytes32(0),
                 MintPaymentKind.DirectEth,
                 false
@@ -838,7 +839,7 @@ contract MiddaySwapJackpotCohort is DeployProtocol {
         game.purchase{value: 2 ether}(
             buyer,
             0,
-            2 ether,
+            BoxOrderLib.boCustom(2 ether),
             bytes32(0),
             MintPaymentKind.DirectEth,
             false

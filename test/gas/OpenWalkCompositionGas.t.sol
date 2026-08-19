@@ -4,6 +4,7 @@ pragma solidity ^0.8.26;
 import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
+import {BoxOrderLib} from "../helpers/BoxOrderLib.sol";
 
 /// @title OpenWalkCompositionGas -- baseline gas measurements for the permissionless box-open
 ///        path (`game.mineFlip()`'s box-open leg, `GameAfkingModule._autoOpen` + the human
@@ -18,13 +19,17 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 ///         means the whole ring was walked, not just `[cursor, len)` (GameAfkingModule.sol:1583-1588
 ///         "Full-ring scan" comment). Each visited-but-already-opened sub costs one skip: an
 ///         `_subscribers[cursor]` SLOAD + the packed `Sub` slot's `lastOpenedDay`/`lastAutoBoughtDay`
-///         SLOAD + compare, `continue`. If the afking leg opens fewer than `OPEN_BATCH` (mineFlip.sol
-///         GameAfkingModule.sol:1675-1707) the human sweep (`openHumanBoxes`, delegatecalled into
-///         `DegenerusGameLootboxModule`) runs with the REMAINING budget (`OPEN_BATCH - opened`),
-///         consuming its own opens+skips+index-header steps. If NEITHER leg does real work (no
-///         afking open, no human open, no human-frontier skip-advance) `mineFlip()` reverts
-///         `NoWork()` (GameAfkingModule.sol:1716-1719) -- so a caller still PAYS for the whole
-///         ring scan even on a "nothing to do" call.
+///         SLOAD + compare, `continue`. Post box-order-migration, the human sweep only runs when
+///         the afking leg opened NOTHING (`opened == 0` — a pure scan, no real afking open): it
+///         then gets the REMAINING shared walk budget (`OPEN_WEIGHT_BUDGET - unitsUsed`) directly,
+///         in the same walk-unit currency, consuming its own opens+skips+index-header steps
+///         (`openHumanBoxes`, delegatecalled into `DegenerusGameLootboxModule`). If the afking leg
+///         DID open a real box, the human sweep gets ZERO budget and does not run in that call at
+///         all — the two legs never stack a real afking open with a human sweep in one tx
+///         (a deliberate gas-safety change; see testWorstMixSkipWallPlusHumanSweepComposition's
+///         skip reason). If NEITHER leg does real work (no afking open, no human open, no
+///         human-frontier skip-advance) `mineFlip()` reverts `NoWork()` -- so a caller still PAYS
+///         for the whole ring scan even on a "nothing to do" call.
 ///
 /// @notice Measurements (loose asserts only -- this is a baseline RECORDER, not a tight gate):
 ///         (1) per-skip marginal: the ring-scan cost per ALREADY-OPENED subscriber, derived from
@@ -71,9 +76,9 @@ contract OpenWalkCompositionGas is DeployProtocol {
     // -------------------------------------------------------------------------
 
     uint256 private constant RNG_WORD_BY_DAY_SLOT = 10; // mapping(uint24 => uint256) — afking box's DAY-keyed word + readiness gate
-    uint256 private constant SUBOF_SLOT = 53;            // _subOf mapping root (address => Sub, one packed slot)
-    uint256 private constant CURSOR_SLOT = 57;           // packed: _subCursor/_subOpenCursor/.../_pendingBoxCount
-    uint256 private constant SUBSCRIBERS_SLOT = 55;      // address[] _subscribers (slot holds the length; elements at keccak256(slot)+i)
+    uint256 private constant SUBOF_SLOT = 52;            // _subOf mapping root (address => Sub, one packed slot)
+    uint256 private constant CURSOR_SLOT = 56;           // packed: _subCursor/_subOpenCursor/.../_pendingBoxCount
+    uint256 private constant SUBSCRIBERS_SLOT = 54;      // address[] _subscribers (slot holds the length; elements at keccak256(slot)+i)
 
     // Sub packed-field byte offsets (DegenerusGameStorage.sol struct Sub, post `validThroughLevel` deletion).
     uint256 private constant OFF_LASTBOUGHT = 7;  // uint24 lastAutoBoughtDay (bytes 7..9)
@@ -205,7 +210,7 @@ contract OpenWalkCompositionGas is DeployProtocol {
             address buyer = makeAddr(string(abi.encodePacked(prefix, "human_", _u(i))));
             vm.deal(buyer, 1 ether);
             vm.prank(buyer);
-            game.purchase{value: LOOTBOX_MIN}(buyer, 0, LOOTBOX_MIN, bytes32(0), MintPaymentKind.DirectEth, false);
+            game.purchase{value: LOOTBOX_MIN}(buyer, 0, BoxOrderLib.boCustom(LOOTBOX_MIN), bytes32(0), MintPaymentKind.DirectEth, false);
         }
 
         // One more day cycle: re-stamps the afking ring's daily boxes AND finalizes (lands the
@@ -218,23 +223,27 @@ contract OpenWalkCompositionGas is DeployProtocol {
         // Re-drain ONLY the newly re-stamped afking boxes: pass the EXACT currently-pending count
         // as maxCount, so `_autoOpen` stops the moment `opened == maxCount` (== every pending
         // afking box) — the Game's `openBoxes` only falls through to the human sweep leg when
-        // `openedAfking < maxCount` (DegenerusGame.sol:1633), so an exact-match drain never
+        // `afkingSteps < maxCount` (DegenerusGame.sol openBoxes), so an exact-match drain never
         // touches the freshly-queued, still-pending human backlog.
         uint256 pendingAfterRestamp = _countPendingAfking();
         require(pendingAfterRestamp > 0, "fixture: the afking ring was re-stamped for the new day");
         vm.prank(makeAddr(string(abi.encodePacked(prefix, "drain2"))));
-        // +2 skip allowance: the walk budget is WEIGHTED (skip = 1 unit) and the 2 unfunded
-        // deploy subs sit in the ring as skips; the allowance keeps every pending open
-        // affordable. The human-sweep leg may leak <= 2 steps (opens <= 2 of the 90 queued
-        // human boxes), leaving >= 88 — still past the full 80-step measured sweep.
+        // +2 skip allowance: openBoxes' remaining budget converts to human WALK units
+        // (rem * OPEN_HUMAN_ENTRY_WEIGHT). The entry-gate always runs the FIRST available human
+        // entry regardless of cost (DegenerusGameLootboxModule.openHumanBoxes's `opened != 0`
+        // guard), so this pre-drain can leak at most ONE of the 90 queued human boxes before the
+        // budget hits the wall on the second — leaving >= 89, still comfortably past the
+        // measured sweep's real capacity (~40 entries at OPEN_WEIGHT_BUDGET / entry cost).
         uint256 openedDrain2 = game.openBoxes(pendingAfterRestamp + 2);
         require(openedDrain2 >= pendingAfterRestamp, "fixture: the drain call opened every pending afking box");
         require(_countPendingAfking() == 0, "fixture: ring fully drained again pre-measurement");
 
         // MEASURE: one mineFlip() call. The afking leg does a full-ring-scan (every subscriber
-        // already opened -> 0 afking opens), so `opened(0) < OPEN_BATCH(80)` routes into the human
-        // sweep with the full 80-step remaining budget; 90 queued human entries (>= 80) means the
-        // sweep consumes its ENTIRE budget on real opens.
+        // already opened -> 0 afking opens), so `opened == 0` hands the human sweep the full
+        // remaining walk budget (OPEN_WEIGHT_BUDGET - the ring-scan's unitsUsed, GameAfkingModule);
+        // 90 queued human entries is comfortably more than that budget can afford at
+        // OPEN_HUMAN_ENTRY_WEIGHT+OPEN_HUMAN_BOX_WEIGHT per entry, so the sweep consumes its
+        // ENTIRE remaining budget on real opens (a partial, not full, drain of the 90).
         _coolProtocol();
         vm.prank(makeAddr(string(abi.encodePacked(prefix, "measure"))));
         uint256 gasBefore = gasleft();
@@ -276,13 +285,14 @@ contract OpenWalkCompositionGas is DeployProtocol {
     // (5) Worst surviving mix: pending box behind a full skip wall + human backlog
     // =========================================================================
 
-    /// @notice The post-fix WORST composition one rewarded crank can pay: `_pendingBoxCount`
-    ///         != 0 (one pending box parked at ring index 0), the open cursor just PAST it
-    ///         (index 1), so the weighted walk crosses ~999 skips (1 unit each), wraps, opens
-    ///         the box (OPEN_ITEM_WEIGHT units), and hands the remaining units to the human
-    ///         sweep over a deep backlog. Pre-fix this shape stacked a FREE full-ring scan on
-    ///         a FULL 80-step human sweep (~9.4M ordinary / ~15.1M heavy); the shared weighted
-    ///         budget caps the mix structurally at ≈ OPEN_WEIGHT_BUDGET × ~4.7k/unit.
+    /// @notice SKIPPED post box-order-migration: this fixture parks ONE pending afking box behind
+    ///         a skip wall specifically so the crank's afking leg materializes a real open
+    ///         (`opened > 0`) in the measured call. mineFlip's open leg now hands the human sweep a
+    ///         nonzero budget ONLY when the afking leg opened NOTHING (`opened == 0`), so a call
+    ///         that opens the wall box no longer stacks a human sweep in the same tx — the "skip
+    ///         wall crossing + a full human sweep in one call" worst case this test measured is
+    ///         structurally unreachable now (a deliberate gas-safety change, not a regression).
+    ///         See the file header's `_autoOpen` note and the vm.skip reason below.
     function testWorstMixSkipWallPlusHumanSweepComposition() public {
         string memory prefix = "wmix_";
         _setupFundedSubs(RING_1000_NEW_SUBS, prefix, 50 ether, false);
@@ -297,7 +307,7 @@ contract OpenWalkCompositionGas is DeployProtocol {
             address buyer = makeAddr(string(abi.encodePacked(prefix, "human_", _u(i))));
             vm.deal(buyer, 1 ether);
             vm.prank(buyer);
-            game.purchase{value: LOOTBOX_MIN}(buyer, 0, LOOTBOX_MIN, bytes32(0), MintPaymentKind.DirectEth, false);
+            game.purchase{value: LOOTBOX_MIN}(buyer, 0, BoxOrderLib.boCustom(LOOTBOX_MIN), bytes32(0), MintPaymentKind.DirectEth, false);
         }
 
         _runStageNewDay(uint256(keccak256(abi.encodePacked(prefix, "w2"))) | 1);
@@ -307,6 +317,17 @@ contract OpenWalkCompositionGas is DeployProtocol {
         vm.prank(makeAddr(string(abi.encodePacked(prefix, "drain2"))));
         game.openBoxes(pendingAfterRestamp + 2);
         require(_countPendingAfking() == 0, "fixture: ring fully drained again");
+
+        // SKIP (box-order migration): GameAfkingModule's mineFlip open leg now gates the human
+        // sweep on `opened == 0` for the AFKING leg (GameAfkingModule.sol, the
+        // `humanSteps = opened == 0 ? ... : 0` branch) — once the afking leg materializes ANY
+        // real box (as this fixture's parked wall-box forces), the human sweep gets ZERO budget
+        // and does not run in the same call at all. The "skip-wall crossing + a stacked human
+        // sweep in one tx" composition this test measured is therefore structurally unreachable
+        // post-migration (a deliberate gas-safety change, not a regression — see the "legs stop
+        // sharing a call" comment at the mineFlip open leg). The opened==0 (scan-only, no afking
+        // open) composition is already covered by testDrainedScanPlusHumanSweepComposition.
+        vm.skip(true, "box-order migration: human sweep now gates on afking opened==0; this fixture forces an afking open, so the stacked composition it measured no longer occurs in one tx");
 
         // Park ONE pending box behind a full skip wall: re-arm the day markers of the first
         // FUNDED sub (ring indices 0-1 are the unfunded deploy subs, never stamped; index 2
@@ -399,14 +420,18 @@ contract OpenWalkCompositionGas is DeployProtocol {
         require(!game.advanceDue(), "fixture: clean before the drain");
 
         uint256 ringSize = _subscriberCount();
-        // maxCount = ringSize + a generous pad: the afking leg opens every pending box well
-        // before exhausting maxCount, so the LEFTOVER budget flows to the human-sweep leg, which
-        // must walk (and commit) past every EMPTY finalized lootbox index accumulated by the
-        // day-advances above (each index-header visit costs a step regardless of content,
-        // openHumanBoxes:688-691) — otherwise the probe below sees an un-caught-up frontier and
-        // `mineFlip()` treats that frontier advance as real (non-reverting) work, not NoWork.
+        // maxCount = a generous multiple of ringSize + a flat pad. Each lootbox-mode sub carries
+        // BOTH an afking-cover box AND a real human lootbox box after the STAGE, so this drain
+        // must clear the afking leg AND fully open every one of those ~ringSize human boxes AND
+        // walk (and commit) past every EMPTY finalized lootbox index the day-advances accumulated
+        // — otherwise the probe below finds either an un-drained human box (real, non-reverting
+        // work) or an un-caught-up frontier (also non-reverting), and `mineFlip()` does not
+        // revert NoWork. openBoxes' human leg converts its remaining COUNT-like budget to WALK
+        // units at OPEN_HUMAN_ENTRY_WEIGHT(15), while each single-box human entry costs
+        // OPEN_HUMAN_ENTRY_WEIGHT+OPEN_HUMAN_BOX_WEIGHT(21) walk units — a >1x pad on ringSize
+        // alone is not enough headroom once the afking leg's own budget draw is netted out.
         vm.prank(makeAddr(string(abi.encodePacked(prefix, "drain"))));
-        game.openBoxes(ringSize + 1000);
+        game.openBoxes(ringSize * 3 + 5_000);
         require(_countPendingAfking() == 0, "fixture: ring fully drained pre-probe");
 
         _coolProtocol();
@@ -511,7 +536,7 @@ contract OpenWalkCompositionGas is DeployProtocol {
         }
     }
 
-    // ---- Sub-slot reads (_subOf at slot 54 + v56 offsets) ----
+    // ---- Sub-slot reads (_subOf at slot 52 + v56 offsets) ----
 
     function _subField(address who, uint256 off, uint256 widthBits) internal view returns (uint256) {
         uint256 p = uint256(vm.load(address(game), keccak256(abi.encode(who, uint256(SUBOF_SLOT))))) >> (off * 8);
@@ -568,7 +593,7 @@ contract OpenWalkCompositionGas is DeployProtocol {
         vm.store(address(game), slot, bytes32(w));
     }
 
-    /// @dev RMW the packed cursor slot (58): `_subOpenCursor` (uint16 at bit 16) and
+    /// @dev RMW the packed cursor slot (56): `_subOpenCursor` (uint16 at bit 16) and
     ///      `_pendingBoxCount` (uint16 at bit 224), leaving the other six packed fields intact.
     function _pokeOpenCursorAndPendingCount(uint16 cursor, uint16 pendingCount) internal {
         uint256 w = uint256(vm.load(address(game), bytes32(CURSOR_SLOT)));

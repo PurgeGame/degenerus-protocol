@@ -213,13 +213,13 @@ interface IDegenerusGameMintModule {
     /// @notice Processes a ticket and lootbox purchase
     /// @param buyer Address of the buyer
     /// @param entryQuantityScaled Ticket quantity in scaled entry units (400 = one whole ticket; 2 decimals, x100)
-    /// @param lootBoxAmount Amount of lootboxes to purchase
+    /// @param boxOrder Packed box order (0 to skip): [small:8][med:8][large:8][customCount:8][customSize:48 @1e12].
     /// @param affiliateCode Affiliate code for referral tracking
     /// @param payKind Payment method used for the purchase
     function purchase(
         address buyer,
         uint256 entryQuantityScaled,
-        uint256 lootBoxAmount,
+        uint256 boxOrder,
         bytes32 affiliateCode,
         MintPaymentKind payKind
     ) external payable;
@@ -232,7 +232,7 @@ interface IDegenerusGameMintModule {
     function purchaseWith(
         address buyer,
         uint256 entryQuantityScaled,
-        uint256 lootBoxAmount,
+        uint256 boxOrder,
         bytes32 affiliateCode,
         MintPaymentKind payKind,
         uint256 ethValue
@@ -282,14 +282,14 @@ interface IDegenerusGameMintModule {
     /// @notice Buys a mint leg AND a presale box in one tx sharing one RNG index
     /// @param buyer Player receiving both legs
     /// @param entryQuantityScaled Tickets to buy
-    /// @param lootBoxAmount ETH lootbox spend
+    /// @param boxOrder Packed box order (0 to skip): [small:8][med:8][large:8][customCount:8][customSize:48 @1e12].
     /// @param affiliateCode Affiliate code for the mint leg
     /// @param payKind Payment method for the mint leg
     /// @param boxAmount Requested presale-box ETH (funded by the mint leg's leftover fresh ETH, then claimable, then afking)
     function buyLootboxAndPresaleBox(
         address buyer,
         uint256 entryQuantityScaled,
-        uint256 lootBoxAmount,
+        uint256 boxOrder,
         bytes32 affiliateCode,
         MintPaymentKind payKind,
         uint256 boxAmount
@@ -320,16 +320,73 @@ interface IDegenerusGameMintModule {
 /// @title IDegenerusGameLootboxModule
 /// @notice Interface for opening lootboxes and managing boons
 interface IDegenerusGameLootboxModule {
-    /// @notice Opens every box queued at an RNG index for a player — lootbox, presale, or both
+    /// @notice Opens every box queued at an RNG index for a player — the whole order (all four
+    ///         bought tiers plus any cover box), the presale leg, or both. The order is the unit,
+    ///         so this needs no per-box position.
     /// @param player Address of the box owner
     /// @param index Shared RNG index the box(es) queued at
     function openBox(address player, uint48 index) external;
 
+    /// @notice Price a packed box order without touching state
+    /// @param buyer Player the order is for
+    /// @param boxOrder Packed order: [small:8][med:8][large:8][customCount:8][customSize:48]
+    /// @return costWei Total wei the order costs
+    function quoteBoxOrder(address buyer, uint256 boxOrder) external payable returns (uint256 costWei);
+
+    /// @notice Record a purchase's box order — merge counts, freeze level and custom size, fold
+    ///         the boost and distress lanes, enqueue, bump pending RNG eth, arm the box bounty
+    /// @param buyer Player the order is for
+    /// @param boxOrder Packed order
+    /// @return costWei Total wei the order costs
+    /// @return shares Prize-pool shares packed as (future << 128) | next
+    /// @return flipCredit Biggest-box bounty claim, to join the buyer's flip credit
+    /// @return priorNominal Nominal wei held before this purchase
+    function beginBoxOrder(address buyer, uint256 boxOrder)
+        external
+        payable
+        returns (
+            uint256 costWei,
+            uint256 shares,
+            uint256 flipCredit,
+            uint256 priorNominal
+        );
+
+    /// @notice Record a system-granted cover box (whale-pass bundle, afking auto-buy)
+    /// @param player Player receiving the cover
+    /// @param amountWei Cover spend in wei
+    /// @param score Activity-score snapshot, used only if this is the player's first box here
+    /// @param capKey Level key for the shared per-(player, level) EV-cap accumulator
+    /// @param boost Whether to consume a live lootbox-boost boon
+    function recordCoverBox(
+        address player,
+        uint256 amountWei,
+        uint16 score,
+        uint24 capKey,
+        bool boost
+    ) external payable;
+
+    /// @notice Freeze the order's activity score and fold this purchase's EV-cap draw
+    /// @param buyer Player the order is for
+    /// @param cachedScore Caller's post-action activity score in whole points
+    /// @param capLevel Level key for the shared per-(player, level) EV-cap accumulator
+    /// @param costWei This purchase's box spend
+    /// @param priorNominal Nominal wei held before this purchase
+    function applyBoxOrderScore(
+        address buyer,
+        uint256 cachedScore,
+        uint24 capLevel,
+        uint256 costWei,
+        uint256 priorNominal
+    ) external payable;
+
     /// @notice Permissionless multi-index human-box auto-open sweep (the human leg of
     ///         openBoxes AND of mineFlip's open category). Runs in the Game's storage via delegatecall.
-    /// @param budget Maximum entries (opens + skips + index-headers) scanned this call
-    /// @return opened Total human boxes opened this call
-    function openHumanBoxes(uint256 budget) external returns (uint256 opened);
+    /// @param budget Walk budget in open-weight units (~4.7k gas each)
+    /// @return opened Total boxes opened this call
+    /// @return unitsSpent Walk units consumed — the crank's work-based bounty basis
+    function openHumanBoxes(uint256 budget)
+        external
+        returns (uint256 opened, uint256 unitsSpent);
 
     /// @notice Resolves a lootbox directly with provided randomness
     /// @param player Address of the lootbox owner
@@ -387,16 +444,46 @@ interface IDegenerusGameLootboxModule {
         uint16 activityScore
     ) external;
 
-    /// @notice Issues a deity boon from a deity to a recipient
-    /// @param deity Address of the deity issuing the boon
-    /// @param recipient Address receiving the boon
-    /// @param slot Slot index of the boon to issue
-    function issueDeityBoon(address deity, address recipient, uint8 slot) external;
 }
 
 /// @title IDegenerusGameBoonModule
 /// @notice Interface for boon consumption
 interface IDegenerusGameBoonModule {
+    /// @notice Draw boons for every box in one opened entry, in a single call
+    /// @param player Box owner
+    /// @param perBoxBudget Boon budget of a single box, in wei of ETH-equivalent value
+    /// @param boxCount Boxes rolled in this entry
+    /// @param originalAmount One box's resolution amount, for the reward events
+    /// @param currentLevel Open level (level + 1)
+    /// @param seed Player-mixed entry seed; box i draws off a (nonceBase + i)-tagged derivative
+    /// @param nonceBase Global box position of this batch's first box within its entry
+    function rollBoxBoons(
+        address player,
+        uint256 perBoxBudget,
+        uint256 boxCount,
+        uint256 originalAmount,
+        uint24 currentLevel,
+        uint256 seed,
+        uint256 nonceBase
+    ) external payable;
+
+    /// @notice Draw boons for a mixed box order in one delegatecall
+    /// @param player Box owner
+    /// @param amounts Per-box resolution amount for small/medium/large/custom/cover lanes
+    /// @param countsPacked Five uint8 lane counts packed from least significant to most
+    /// @param currentLevel Open level (level + 1)
+    /// @param seed Player-mixed entry seed; nonces run cumulatively across populated lanes
+    function rollBoxBoonTiers(
+        address player,
+        uint256[5] calldata amounts,
+        uint40 countsPacked,
+        uint24 currentLevel,
+        uint256 seed
+    ) external payable;
+
+    /// @notice Issues a deity boon from a deity to a recipient
+    function issueDeityBoon(address deity, address recipient, uint8 slot) external;
+
     /// @notice Consumes a player's coinflip boon and returns its value
     /// @param player Address of the player
     /// @return boonBps Boon value in basis points
@@ -427,10 +514,6 @@ interface IDegenerusGameBoonModule {
     /// @param player Address of the player
     /// @return hasAnyBoon True if any active boon remains
     function checkAndClearExpiredBoon(address player) external payable returns (bool hasAnyBoon);
-
-    /// @notice Consume a pending activity boon and apply to player stats
-    /// @param player Address of the player
-    function consumeActivityBoon(address player) external payable;
 }
 
 /// @title IDegenerusGameDegeneretteModule
@@ -472,7 +555,10 @@ interface IDegenerusGameDegeneretteModule {
         uint16 activityScore,
         uint256 seed,
         uint32 customTraits
-    ) external payable;
+    )
+        external
+        payable
+        returns (uint256 wwxrpOut);
 
     /// @notice Resolve a lootbox roll as three FLIP Degenerette spins under one survival flip.
     /// @param player The reward recipient.
@@ -486,7 +572,10 @@ interface IDegenerusGameDegeneretteModule {
         uint16 activityScore,
         uint256 seed,
         uint32 customTraits
-    ) external payable;
+    )
+        external
+        payable
+        returns (uint256 flipOut);
 
     /// @notice Resolve a lootbox roll as one ETH Degenerette spin (claimable + recirc split).
     /// @param player The reward recipient.
@@ -507,6 +596,7 @@ interface IDegenerusGameDegeneretteModule {
 /// @notice Interface for color-completion bingo claims + the affiliate-DGNRS claim.
 interface IDegenerusGameBingoModule {
     /// @notice Claim color-completion bingo: all 8 colors of one symbol on a level.
+    /// @dev Each player may claim one bingo reward per level.
     /// @param player Bingo owner to claim for (address(0) = msg.sender); permissionless.
     /// @param level The level to claim on (uint24 storage-key width).
     /// @param symbol Symbol 0-31 (quadrant = symbol >> 3, symInQ = symbol & 7).

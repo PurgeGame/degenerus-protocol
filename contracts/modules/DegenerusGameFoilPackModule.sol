@@ -28,6 +28,10 @@ import {PriceLookupLib} from "../libraries/PriceLookupLib.sol";
  *      re-derives the winning sets — it reads dailyFoilDraw[day], which the
  *      jackpot sealed, so the foil numbers equal the coin jackpot's.
  */
+interface IFoilWwxrp {
+    function mintPrize(address to, uint256 amount) external;
+}
+
 contract DegenerusGameFoilPackModule is
     DegenerusGamePayoutUtils,
     DegenerusGameMintStreakUtils
@@ -810,7 +814,7 @@ contract DegenerusGameFoilPackModule is
         uint256 seed,
         uint32 customTraits
     ) private {
-        (bool ok, ) = ContractAddresses.GAME_DEGENERETTE_MODULE.delegatecall(
+        (bool ok, bytes memory data) = ContractAddresses.GAME_DEGENERETTE_MODULE.delegatecall(
             abi.encodeWithSelector(
                 selector,
                 player,
@@ -821,6 +825,20 @@ contract DegenerusGameFoilPackModule is
             )
         );
         if (!ok) revert EmptyRevert();
+        // The FLIP and WWXRP box-spin resolvers RETURN their payout for the caller to credit
+        // (the box sweep pools them into its entry accumulator); a foil tier is a single spin,
+        // so it credits inline. The ETH resolver still settles its own payout and returns
+        // nothing — crediting its (empty) return here would be a decode revert, so it is
+        // routed by selector.
+        if (selector == IDegenerusGameDegeneretteModule.resolveFlipSpinsFromBox.selector) {
+            uint256 flipOut = abi.decode(data, (uint256));
+            if (flipOut != 0) coinflip.creditFlip(player, flipOut);
+        } else if (
+            selector == IDegenerusGameDegeneretteModule.resolveWwxrpSpinFromBox.selector
+        ) {
+            uint256 wwxrpOut = abi.decode(data, (uint256));
+            if (wwxrpOut != 0) IFoilWwxrp(ContractAddresses.WWXRP).mintPrize(player, wwxrpOut);
+        }
     }
 
     // =========================================================================

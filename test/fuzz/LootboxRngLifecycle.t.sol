@@ -5,6 +5,8 @@ import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {VRFHandler} from "./helpers/VRFHandler.sol";
 import {MockVRFCoordinator} from "../../contracts/mocks/MockVRFCoordinator.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
+import {BoxOrderLib} from "../helpers/BoxOrderLib.sol";
+import {PriceLookupLib} from "../../contracts/libraries/PriceLookupLib.sol";
 
 /// @title LootboxRngLifecycle -- Audit tests for lootbox RNG index lifecycle
 /// @notice Covers LBOX-01 (index mutations), LBOX-02 (word writes), LBOX-03 (zero guards),
@@ -92,7 +94,7 @@ contract LootboxRngLifecycle is DeployProtocol {
         address buyer = makeAddr("lootboxBuyer");
         vm.deal(buyer, 100 ether);
         vm.prank(buyer);
-        game.purchase{value: 1.01 ether}(buyer, 400, 1 ether, bytes32(0), MintPaymentKind.DirectEth, false);
+        game.purchase{value: 1.01 ether}(buyer, 400, BoxOrderLib.boCustomFloor(1 ether), bytes32(0), MintPaymentKind.DirectEth, false);
 
         // Fund VRF subscription with LINK
         mockVRF.fundSubscription(1, 100e18);
@@ -117,13 +119,30 @@ contract LootboxRngLifecycle is DeployProtocol {
         return _lootboxRngWord(index);
     }
 
+    /// @dev Read the packed lootboxOrder word for [index][who] directly from storage
+    ///      (mapping root at slot 15 — same slot position as the pre-migration lootboxEth word).
+    function _lootboxOrderWord(uint48 index, address who) internal view returns (uint256) {
+        bytes32 inner = keccak256(abi.encode(uint256(index), uint256(15)));
+        bytes32 leaf = keccak256(abi.encode(who, uint256(inner)));
+        return uint256(vm.load(address(game), leaf));
+    }
+
+    /// @dev Nominal wei the stored order represents — the migration replacement for the old
+    ///      lootboxEth low-128-bit amount (excludes boon boost; frozen level decodes off the
+    ///      word itself, bits [0:24]).
+    function _lootboxAmount(uint48 index, address who) internal view returns (uint256) {
+        uint256 word = _lootboxOrderWord(index, who);
+        if (word == 0) return 0;
+        return BoxOrderLib.boNominal(word, PriceLookupLib.priceForLevel(uint24(word & 0xFFFFFF)));
+    }
+
     /// @dev Make a lootbox purchase for buyer with the given lootbox ETH amount.
     function _makePurchase(address buyer, uint256 lootboxAmount) internal {
         vm.deal(buyer, 100 ether);
         vm.prank(buyer);
         // numCoins = 400 (minimum for 1 ETH lootbox), total = purchase + lootbox
         game.purchase{value: lootboxAmount + 0.01 ether}(
-            buyer, 400, lootboxAmount, bytes32(0), MintPaymentKind.DirectEth, false
+            buyer, 400, BoxOrderLib.boCustomFloor(lootboxAmount), bytes32(0), MintPaymentKind.DirectEth, false
         );
     }
 
@@ -471,8 +490,8 @@ contract LootboxRngLifecycle is DeployProtocol {
         // Read buyer1's stored day from lootboxStatus (day is what was recorded at purchase time)
         // Both purchased on day 1, so day = 1 for both.
         // Read amounts from lootboxStatus
-        (uint256 amount1, ) = game.lootboxStatus(buyer1, purchaseIndex);
-        (uint256 amount2, ) = game.lootboxStatus(buyer2, purchaseIndex);
+        uint256 amount1 = _lootboxAmount(purchaseIndex, buyer1);
+        uint256 amount2 = _lootboxAmount(purchaseIndex, buyer2);
         assertTrue(amount1 != 0, "Buyer1 should have lootbox amount");
         assertTrue(amount2 != 0, "Buyer2 should have lootbox amount");
 
@@ -500,7 +519,7 @@ contract LootboxRngLifecycle is DeployProtocol {
         _completeDay(vrfWord);
 
         uint256 word1 = _readLootboxWord(index1);
-        (uint256 amount1, ) = game.lootboxStatus(buyer, index1);
+        uint256 amount1 = _lootboxAmount(index1, buyer);
 
         // Warp to day 3: purchase 2 ether lootbox
         vm.warp(3 * 86400);
@@ -511,7 +530,7 @@ contract LootboxRngLifecycle is DeployProtocol {
         _completeDay(word2Seed);
 
         uint256 word2 = _readLootboxWord(index2);
-        (uint256 amount2, ) = game.lootboxStatus(buyer, index2);
+        uint256 amount2 = _lootboxAmount(index2, buyer);
 
         // Compute entropy for each
         uint256 entropy1 = uint256(keccak256(abi.encode(word1, buyer, uint48(2), amount1)));
@@ -534,7 +553,7 @@ contract LootboxRngLifecycle is DeployProtocol {
         _completeDay(vrfWord);
 
         uint256 word1 = _readLootboxWord(index1);
-        (uint256 amount1, ) = game.lootboxStatus(buyer, index1);
+        uint256 amount1 = _lootboxAmount(index1, buyer);
 
         // Warp to day 3: purchase same amount
         vm.warp(3 * 86400);
@@ -544,7 +563,7 @@ contract LootboxRngLifecycle is DeployProtocol {
         _completeDay(vrfWord);
 
         uint256 word2 = _readLootboxWord(index2);
-        (uint256 amount2, ) = game.lootboxStatus(buyer, index2);
+        uint256 amount2 = _lootboxAmount(index2, buyer);
 
         // Compute entropy using the recorded day for each purchase
         // First purchase is day=2, second purchase is day=3
@@ -565,14 +584,14 @@ contract LootboxRngLifecycle is DeployProtocol {
         _makePurchase(buyer, 0.5 ether);
 
         // Check accumulated amount after first purchase
-        (uint256 amountAfterFirst, ) = game.lootboxStatus(buyer, purchaseIndex);
+        uint256 amountAfterFirst = _lootboxAmount(purchaseIndex, buyer);
         assertTrue(amountAfterFirst != 0, "Should have amount after first purchase");
 
         // Second purchase: another 0.5 ether lootbox at the same index (same day)
         _makePurchase(buyer, 0.5 ether);
 
         // Check accumulated amount after second purchase
-        (uint256 amountAfterSecond, ) = game.lootboxStatus(buyer, purchaseIndex);
+        uint256 amountAfterSecond = _lootboxAmount(purchaseIndex, buyer);
 
         // Amount should have increased (accumulated)
         assertTrue(
@@ -666,7 +685,12 @@ contract LootboxRngLifecycle is DeployProtocol {
         game.openBox(buyer, purchaseIndex);
     }
 
-    /// @notice Attempting openLootBox before VRF fulfillment reverts with RngNotReady.
+    /// @notice Attempting openBox before VRF fulfillment reverts. Box-order migration: `openBox`
+    ///         now gates on `rngLockedFlag` FIRST ("fails FAST with the real reason",
+    ///         DegenerusGameLootboxModule.openBox) — while the daily RNG lock is engaged (as here,
+    ///         immediately post-advanceGame with no fulfillment yet) the revert is `RngLocked()`,
+    ///         not the deeper per-index `RngNotReady()` check (which only a mid-day, non-locked,
+    ///         still-unworded index would reach).
     function test_fullLifecycleRngNotReady() public {
         address buyer = makeAddr("notReadyBuyer");
 
@@ -682,9 +706,10 @@ contract LootboxRngLifecycle is DeployProtocol {
 
         // Do NOT fulfill VRF -- word at purchaseIndex is still 0
 
-        // openLootBox must revert with RngNotReady
+        // openBox must revert with RngLocked (the lock is engaged) before it would ever reach
+        // the deeper per-index RngNotReady check.
         vm.prank(buyer);
-        vm.expectRevert(abi.encodeWithSignature("RngNotReady()"));
+        vm.expectRevert(abi.encodeWithSignature("RngLocked()"));
         game.openBox(buyer, purchaseIndex);
     }
 

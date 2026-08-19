@@ -59,10 +59,10 @@ contract RouterWorstCaseGas is DeployProtocol {
     uint256 private constant LOOTBOX_ETH_SLOT = 15;                 // folded box word; amount[0:128] = box-owed signal
     uint256 private constant LOOTBOX_RNG_PACKED_SLOT = 33;          // [0:47] lootboxRngIndex
     uint256 private constant LOOTBOX_RNG_WORD_BY_INDEX_SLOT = 34;   // mapping(uint48 => uint256) (human box)
-    uint256 private constant SUBOF_SLOT = 53;                       // _subOf mapping root (address => Sub, one packed slot)
-    uint256 private constant SUBSCRIBERS_SLOT = 55;                 // address[] _subscribers (slot holds the length)
-    uint256 private constant SUBSCRIBER_INDEX_SLOT = 56;            // mapping(address => uint256) _subscriberIndex
-    uint256 private constant SUBCURSOR_SLOT = 57;                   // _subCursor (uint16 @ byte 0) + _subOpenCursor (@ byte 2) + _afkingResetDay (@ byte 4)
+    uint256 private constant SUBOF_SLOT = 52;                       // _subOf mapping root (address => Sub, one packed slot)
+    uint256 private constant SUBSCRIBERS_SLOT = 54;                 // address[] _subscribers (slot holds the length)
+    uint256 private constant SUBSCRIBER_INDEX_SLOT = 55;            // mapping(address => uint256) _subscriberIndex
+    uint256 private constant SUBCURSOR_SLOT = 56;                   // _subCursor (uint16 @ byte 0) + _subOpenCursor (@ byte 2) + _afkingResetDay (@ byte 4)
 
     // Sub packed-field byte offsets (DegenerusGameStorage.sol; the v56 re-packed single 256-bit slot,
     // 241/256 bits used — the markers are uint24 each, not the old uint32 232-bit layout).
@@ -499,7 +499,7 @@ contract RouterWorstCaseGas is DeployProtocol {
         }
     }
 
-    // ---- Sub-stamp slot reads (_subOf at slot 54 + verified offsets) ----
+    // ---- Sub-stamp slot reads (_subOf at slot 52 + verified offsets) ----
 
     function _subField(address who, uint256 off, uint256 widthBits) internal view returns (uint256) {
         uint256 p = uint256(vm.load(address(game), keccak256(abi.encode(who, uint256(SUBOF_SLOT))))) >> (off * 8);
@@ -518,7 +518,7 @@ contract RouterWorstCaseGas is DeployProtocol {
         return uint256(vm.load(address(game), bytes32(uint256(SUBSCRIBERS_SLOT))));
     }
 
-    /// @dev Read the STAGE cursor `_subCursor` (slot 66, byte 0, uint16) — the number of set entries the
+    /// @dev Read the STAGE cursor `_subCursor` (slot 56, byte 0, uint16) — the number of set entries the
     ///      current cycle's STAGE has advanced past (the weighted-budget chunk advances it by as many subs
     ///      as fit the gas-weight budget).
     function _subCursor() internal view returns (uint256) {

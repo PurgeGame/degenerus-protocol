@@ -384,6 +384,7 @@ describe("SURF-06 — advanceGame STAGE_PURCHASE_DAILY gas under the 10M per-cal
           0n,
           ZERO_BYTES32,
           MintPaymentKind.DirectEth,
+          false,
           { value: eth(0.01) },
         );
       } catch (_) {

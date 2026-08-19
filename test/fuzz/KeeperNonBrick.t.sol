@@ -67,9 +67,9 @@ contract KeeperNonBrick is DeployProtocol {
     uint256 private constant CLAIMABLE_WINNINGS_SLOT = 7; // balancesPacked root; low 128 bits = claimable
     uint256 private constant MINTPACKED_SLOT = 9; // mintPacked_ mapping root (deity bit @ bit 184)
     uint256 private constant RNG_WORD_BY_DAY_SLOT = 10; // mapping(uint24 => uint256) — the afking box's DAY-keyed word
-    uint256 private constant SUBOF_SLOT = 53; // _subOf mapping root (address => Sub, one packed slot)
-    uint256 private constant SUBSCRIBERS_SLOT = 55; // address[] _subscribers
-    uint256 private constant SUBSCRIBER_INDEX_SLOT = 56; // mapping(address => uint256) _subscriberIndex (1-indexed)
+    uint256 private constant SUBOF_SLOT = 52; // _subOf mapping root (address => Sub, one packed slot)
+    uint256 private constant SUBSCRIBERS_SLOT = 54; // address[] _subscribers
+    uint256 private constant SUBSCRIBER_INDEX_SLOT = 55; // mapping(address => uint256) _subscriberIndex (1-indexed)
 
     // Sub packed-field byte offsets (DegenerusGameStorage.sol:2341; the AFKing-Coin repack dropped
     // validThroughLevel, shifting every field after it down 3 bytes).
@@ -686,7 +686,7 @@ contract KeeperNonBrick is DeployProtocol {
         return uint32((block.timestamp - 82_620) / 1 days);
     }
 
-    // ---- Sub field reads (RE-DERIVED slot 54 + verified offsets) ----
+    // ---- Sub field reads (RE-DERIVED slot 52 + verified offsets) ----
 
     function _subField(address who, uint256 off, uint256 widthBits) internal view returns (uint256) {
         uint256 p = uint256(vm.load(address(game), keccak256(abi.encode(who, uint256(SUBOF_SLOT))))) >> (off * 8);

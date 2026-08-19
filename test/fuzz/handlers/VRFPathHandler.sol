@@ -7,6 +7,7 @@ import {DegenerusAdmin} from "../../../contracts/DegenerusAdmin.sol";
 import {MockVRFCoordinator} from "../../../contracts/mocks/MockVRFCoordinator.sol";
 import {MintPaymentKind} from "../../../contracts/interfaces/IDegenerusGame.sol";
 import {GameTimeLib} from "../../../contracts/libraries/GameTimeLib.sol";
+import {BoxOrderLib} from "../../helpers/BoxOrderLib.sol";
 
 /// @title VRFPathHandler -- Invariant handler for VRF path lifecycle testing
 /// @notice Wraps purchase/advanceGame/VRF/coordinatorSwap/warp operations while
@@ -144,7 +145,7 @@ contract VRFPathHandler is Test {
         try game.purchase{value: totalCost}(
             currentActor,
             qty,
-            lootboxAmt,
+            BoxOrderLib.boCustomFloor(lootboxAmt),
             bytes32(0),
             MintPaymentKind.DirectEth, false
         ) {} catch {

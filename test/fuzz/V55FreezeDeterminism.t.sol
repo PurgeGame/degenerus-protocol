@@ -5,6 +5,7 @@ import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
+import {BoxOrderLib} from "../helpers/BoxOrderLib.sol";
 
 /// @title V55FreezeDeterminism -- TST-01 (Phase 351, v55.0 game-resident): the AfKing-in-Game box
 ///        stamp+open is FREEZE/DETERMINISTIC. The committed Sub stamp is the 4-field
@@ -45,15 +46,20 @@ contract V55FreezeDeterminism is DeployProtocol {
     // RE-DERIVED via `solc --storage-layout` on the working tree after the V62 lootbox repack (the
     // folded lootboxEth word + removed lootboxEthBase/Flip/Purchase/Distress shifted later slots
     // down). The prior 65/10/11/16/23/38/39 pins were stale; corrected to authoritative values.
-    uint256 private constant SUBOF_SLOT = 53; // _subOf mapping root (address => Sub, one packed slot)
+    uint256 private constant SUBOF_SLOT = 52; // _subOf mapping root (address => Sub, one packed slot)
     uint256 private constant MINTPACKED_SLOT = 9; // mintPacked_ mapping root (deity bit)
     uint256 private constant RNG_WORD_BY_DAY_SLOT = 10; // mapping(uint24 => uint256) — the afking box's DAY-keyed word
-    // lootboxEth (the single folded box word): amount[0:128] | adj[128:192] | scorePlus1[192:208] |
-    // distressUnits[208:256]. Replaces the former separate lootboxEth/lootboxEthBase/lootboxPurchasePacked.
+    // lootboxOrder (the packed box-order word): level[0:24] | score[24:39] | boostBps[39:53] |
+    // distressBps[53:67] | adjBps[67:81] | small[81:89] | med[89:97] | large[97:105] |
+    // customCount[105:113] | customSize[113:161]@1e12 | coverWei[161:209]@1e12. Replaces the former
+    // separate lootboxEth/lootboxEthBase/lootboxPurchasePacked (and the old absolute-wei amount /
+    // adj sub-fields — adjBps is now a bps FRACTION of the order's nominal value, not wei).
     uint256 private constant LOOTBOX_ETH_SLOT = 15;
-    uint256 private constant LB_AMOUNT_MASK = (uint256(1) << 128) - 1;
-    uint256 private constant LB_ADJ_SHIFT = 128;
-    uint256 private constant LB_SCORE_SHIFT = 192;
+    uint256 private constant LB_SCORE_SHIFT = 24;
+    uint256 private constant LB_ADJ_BPS_SHIFT = 67;
+    uint256 private constant LB_CUSTOM_COUNT_SHIFT = 105;
+    uint256 private constant LB_CUSTOM_SIZE_SHIFT = 113;
+    uint256 private constant LB_CUSTOM_SCALE = 1e12;
     uint256 private constant LOOTBOX_RNG_PACKED_SLOT = 33; // [0:47] lootboxRngIndex
     uint256 private constant LOOTBOX_RNG_WORD_BY_INDEX_SLOT = 34; // mapping(uint48 => uint256)
 
@@ -471,7 +477,7 @@ contract V55FreezeDeterminism is DeployProtocol {
         uint48 index = _liveLootboxIndex();
         vm.deal(player, amount + 1 ether);
         vm.prank(player);
-        game.purchase{value: amount + 0.01 ether}(player, 400, amount, bytes32(0), MintPaymentKind.DirectEth, false);
+        game.purchase{value: amount + 0.01 ether}(player, 400, BoxOrderLib.boCustomFloor(amount), bytes32(0), MintPaymentKind.DirectEth, false);
 
         // Force the human box's per-index word + per-(index,player) day to MATCH the afking seed preimage
         // (the human seed reads `rngWord = lootboxRngWordByIndex[index]` and `day = lootboxDay[index][player]`,
@@ -592,7 +598,7 @@ contract V55FreezeDeterminism is DeployProtocol {
         return uint32((block.timestamp - 82_620) / 1 days);
     }
 
-    // ---- Sub field reads (RE-DERIVED slot 66 + verified offsets) ----
+    // ---- Sub field reads (RE-DERIVED slot 52 + verified offsets) ----
 
     function _subField(address who, uint256 off, uint256 widthBits) internal view returns (uint256) {
         uint256 p = uint256(vm.load(address(game), keccak256(abi.encode(who, uint256(SUBOF_SLOT))))) >> (off * 8);
@@ -657,37 +663,45 @@ contract V55FreezeDeterminism is DeployProtocol {
         index; who; day; // no-op: the resolution no longer reads a per-(index,player) day
     }
 
-    /// @dev The frozen EV inputs (scorePlus1 + adj) now ride in the SINGLE folded lootboxEth word,
-    ///      not a separate lootboxPurchasePacked slot. Pin scorePlus1 = score+1 (the EV input) and
-    ///      adj = amount (the cap-eligible portion; for amount <= 10 ETH this equals the afking arm's
-    ///      adjustedPortion, so the bonus branch is byte-identical). Folded together with the amount
-    ///      in _forceLootboxAmount — this writes the score+adj sub-fields, preserving the amount.
+    /// @dev The frozen EV inputs (score + adjBps) now ride in the SINGLE packed lootboxOrder word,
+    ///      not a separate lootboxPurchasePacked slot. Pin score (raw, no +1 offset in the new
+    ///      layout) and adjBps = 10_000 (100% cap-eligible — the migration replacement for the old
+    ///      absolute-wei adj == amount, since adjBps is a bps FRACTION of the order's nominal value
+    ///      now, not wei). Folded together with the amount in _forceLootboxAmount — this writes the
+    ///      score+adjBps sub-fields, preserving the custom-box amount fields.
+    /// @dev NOTE: only reached from tests that are permanently `vm.skip(true)`d upstream (v56
+    ///      Sub.amount milli-ETH divergence, unrelated to the box-order migration) — kept
+    ///      compiling as a best-effort mechanical translation, not behaviorally re-validated.
     function _forceLootboxPurchasePacked(uint48 index, address who, uint16 score, uint256 amount) internal {
+        amount; // unused: the old adj==amount pin has no absolute-wei analog in the bps layout
         bytes32 leaf = _lootboxLeaf(LOOTBOX_ETH_SLOT, index, who);
         uint256 word = uint256(vm.load(address(game), leaf));
-        // Clear adj[128:192] + scorePlus1[192:208], then set them (amount[0:128] preserved).
-        word &= ~(uint256(0xFFFFFFFFFFFFFFFF) << LB_ADJ_SHIFT);
-        word &= ~(uint256(0xFFFF) << LB_SCORE_SHIFT);
-        word |= (uint256(uint64(amount)) << LB_ADJ_SHIFT);
-        word |= (uint256(uint16(score) + 1) << LB_SCORE_SHIFT);
+        // Clear score[24:39] + adjBps[67:81], then set them (custom-box fields preserved).
+        word &= ~(uint256(0x7FFF) << LB_SCORE_SHIFT);
+        word &= ~(uint256(0x3FFF) << LB_ADJ_BPS_SHIFT);
+        word |= (uint256(score) << LB_SCORE_SHIFT);
+        word |= (uint256(10_000) << LB_ADJ_BPS_SHIFT);
         vm.store(address(game), leaf, bytes32(word));
     }
 
-    /// @dev The single folded lootboxEth word (slot 15): amount[0:128] is the box-owed signal that
-    ///      drives the EV roll. purchaseLevel is gone (vestigial — the box rolls from the LIVE level
-    ///      at open). Set the amount sub-field; the score/adj sub-fields are written separately by
-    ///      _forceLootboxPurchasePacked (the open reads scorePlus1 + adj + amount from this one word).
+    /// @dev The packed lootboxOrder word (slot 15): a nonzero customCount/customSize is the
+    ///      box-owed signal that drives the EV roll. purchaseLevel is gone (vestigial — the box
+    ///      rolls from the LIVE level at open). Set a single custom box of `amount`; the
+    ///      score/adjBps sub-fields are written separately by _forceLootboxPurchasePacked.
     function _forceLootboxAmount(uint48 index, address who, uint256 amount, uint24 currentLevel) internal {
         currentLevel; // no longer stored — the box rolls from the live level at open
         bytes32 leaf = _lootboxLeaf(LOOTBOX_ETH_SLOT, index, who);
         uint256 word = uint256(vm.load(address(game), leaf));
-        word &= ~LB_AMOUNT_MASK;
-        word |= (amount & LB_AMOUNT_MASK);
+        word &= ~(uint256(0xFF) << LB_CUSTOM_COUNT_SHIFT);
+        word &= ~(uint256(0xFFFFFFFFFFFF) << LB_CUSTOM_SIZE_SHIFT);
+        word |= (uint256(1) << LB_CUSTOM_COUNT_SHIFT);
+        word |= ((amount / LB_CUSTOM_SCALE) << LB_CUSTOM_SIZE_SHIFT);
         vm.store(address(game), leaf, bytes32(word));
     }
 
     function _lootboxAmountRaw(uint48 index, address who) internal view returns (uint256) {
-        return uint256(vm.load(address(game), _lootboxLeaf(LOOTBOX_ETH_SLOT, index, who))) & LB_AMOUNT_MASK;
+        uint256 word = uint256(vm.load(address(game), _lootboxLeaf(LOOTBOX_ETH_SLOT, index, who)));
+        return ((word >> LB_CUSTOM_SIZE_SHIFT) & 0xFFFFFFFFFFFF) * LB_CUSTOM_SCALE;
     }
 
     function _u(uint256 v) internal pure returns (string memory) {

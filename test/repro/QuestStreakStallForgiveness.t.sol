@@ -18,7 +18,7 @@ contract QuestStreakStallForgiveness is DeployProtocol {
 
     uint256 private constant GAME_HEADER_SLOT = 0;
     uint256 private constant OFF_DAILY_IDX = 3;
-    uint256 private constant SUB_OF_SLOT = 53;
+    uint256 private constant SUB_OF_SLOT = 52;
     uint256 private constant OFF_SUB_SCORE = 2;       // uint16 score              (bytes 2..3)
     uint256 private constant OFF_SUB_LAST_AUTO = 7;   // uint24 lastAutoBoughtDay  (bytes 7..9)
     uint256 private constant OFF_SUB_COVERED = 13;    // uint24 afkCoveredThroughDay (bytes 13..15)

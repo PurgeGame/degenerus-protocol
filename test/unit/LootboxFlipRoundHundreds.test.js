@@ -152,32 +152,34 @@ describe("LootboxFlipRoundHundreds — threshold-gated 100-FLIP collapse (§3c)"
       ).to.equal(false);
     });
 
-    it("[01c] index-ordering: the collapse precedes the `!= 0` guard, which precedes `creditFlip`", function () {
+    it("[01c] index-ordering: the collapse precedes the per-roll accumulation; the `!= 0` guard + `creditFlip` flush once per entry", function () {
+      // Box-order rework: `_settleLootboxRoll` no longer credits FLIP
+      // immediately — it accumulates `acc.flip += flipAmount;` unconditionally
+      // (adding zero is harmless, so no per-roll guard is needed). The `!= 0`
+      // guard + `coinflip.creditFlip` call moved to `_flushBoxAcc`, flushing
+      // the entry's total ONCE (rewards settle once per entry).
       const body = loadBody(SIG);
       const collapseIdx = body.search(/uint256\s+flipAmount\s*=\s*flipOut\s*>/);
-      const guardIdx = body.search(/if\s*\(\s*flipAmount\s*!=\s*0\s*\)/);
-      const creditIdx = body.indexOf("coinflip.creditFlip(player, flipAmount)");
+      const accIdx = body.indexOf("acc.flip += flipAmount;");
 
       expect(collapseIdx, "`flipAmount` collapse not found").to.be.greaterThan(
         -1
       );
       expect(
-        guardIdx,
-        "`if (flipAmount != 0)` guard not found"
+        accIdx,
+        "`acc.flip += flipAmount;` accumulation not found"
       ).to.be.greaterThan(-1);
-      expect(
-        creditIdx,
-        "`coinflip.creditFlip(player, flipAmount)` call not found"
-      ).to.be.greaterThan(-1);
-
       expect(
         collapseIdx,
-        "the collapse must precede the `!= 0` guard so a collapsed-to-zero award makes no credit call"
-      ).to.be.lessThan(guardIdx);
+        "the collapse must precede the per-roll accumulation"
+      ).to.be.lessThan(accIdx);
+
+      const source = fs.readFileSync(MODULE_SOURCE_PATH, "utf8");
+      const flushLine = "if (acc.flip != 0) coinflip.creditFlip(player, acc.flip);";
       expect(
-        guardIdx,
-        "the `!= 0` guard must precede the `creditFlip` call"
-      ).to.be.lessThan(creditIdx);
+        source.includes(flushLine),
+        "the per-entry `if (acc.flip != 0) coinflip.creditFlip(player, acc.flip);` flush not found"
+      ).to.equal(true);
     });
 
     it("[01d] the collapse is derived ONCE from this roll's raw `flipOut` — per-roll, no cross-roll accumulator", function () {

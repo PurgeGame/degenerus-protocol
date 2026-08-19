@@ -69,9 +69,8 @@ DECL	lootboxRngWordByIndex	<file-scope>	storage/DegenerusGameStorage.sol	DECL
 DECL	rngWordByDay	<file-scope>	storage/DegenerusGameStorage.sol	DECL
 DECL	rngWordCurrent	<file-scope>	storage/DegenerusGameStorage.sol	DECL
 PRODUCER	lootboxRngPacked	_lrAdvanceIndexClearPending	modules/DegenerusGameAdvanceModule.sol	WRITE
-PRODUCER	lootboxRngPacked	_purchaseForWithCached	modules/DegenerusGameMintModule.sol	WRITE
-PRODUCER	lootboxRngPacked	_recordLootboxEntry	modules/DegenerusGameWhaleModule.sol	WRITE
-PRODUCER	lootboxRngPacked	_recordAfkingCoverBox	modules/GameAfkingModule.sol	WRITE
+PRODUCER	lootboxRngPacked	beginBoxOrder	modules/DegenerusGameLootboxModule.sol	WRITE
+PRODUCER	lootboxRngPacked	recordCoverBox	modules/DegenerusGameLootboxModule.sol	WRITE
 PRODUCER	lootboxRngWordByIndex	_backfillOrphanedLootboxIndices	modules/DegenerusGameAdvanceModule.sol	WRITE
 PRODUCER	lootboxRngWordByIndex	_finalizeLootboxRng	modules/DegenerusGameAdvanceModule.sol	WRITE
 PRODUCER	lootboxRngWordByIndex	advanceGame	modules/DegenerusGameAdvanceModule.sol	WRITE
@@ -116,7 +115,7 @@ CONSUMER-SEALED	rngWordByDay	_processFoilDrain	modules/DegenerusGameFoilPackModu
 EXEMPT-ADVANCE	rngWordCurrent	_processFoilDrain	modules/DegenerusGameFoilPackModule.sol	READ	terminal fallback only (LR_GO_FALLBACK latched): settles a bucket whose own day the dead VRF never worded; reached only from the game-over drain, and every affected pack predates the word (foil buys are liveness-gated)
 CONSUMER-SEALED	rngWordByDay	_tryClaimFoilMatch	modules/DegenerusGameFoilPackModule.sol	READ
 CONSUMER-SEALED	rngWordByDay	claimGoldenTicket	modules/DegenerusGameFoilPackModule.sol	READ
-CONSUMER-SEALED	rngWordByDay	issueDeityBoon	modules/DegenerusGameLootboxModule.sol	READ
+CONSUMER-SEALED	rngWordByDay	issueDeityBoon	modules/DegenerusGameBoonModule.sol	READ
 CONSUMER-SEALED	rngWordByDay	_farFutureSeed	modules/DegenerusGameMintStreakUtils.sol	READ
 CONSUMER-SEALED	rngWordByDay	_autoOpen	modules/GameAfkingModule.sol	READ
 GATE	lootboxRngWordByIndex	boxesPending	DegenerusGame.sol	READ
@@ -126,9 +125,10 @@ GATE	rngWordByDay	_afkingStreak	storage/DegenerusGameStorage.sol	READ
 GATE	rngWordByDay	_rngWordByDayOf	DegenerusGameLens.sol	READ	read-only periphery mirror of _afkingStreak's decay gate (existence test on the sealed word via extsload); the lens is never called by game logic and can move no value
 GATE	rngWordByDay	_foilDrainPending	storage/DegenerusGameStorage.sol	READ
 GATE	rngWordCurrent	_foilDrainPending	storage/DegenerusGameStorage.sol	READ	existence check only, behind the latch test: keeps the terminal readiness gate in step with the walker so an unsealed bucket is not reported drained
-CURSOR	lootboxRngPacked	_purchaseForWithCached	modules/DegenerusGameMintModule.sol	READ
-CURSOR	lootboxRngPacked	_recordLootboxEntry	modules/DegenerusGameWhaleModule.sol	READ
-CURSOR	lootboxRngPacked	_recordAfkingCoverBox	modules/GameAfkingModule.sol	READ
+CURSOR	lootboxRngPacked	applyBoxOrderScore	modules/DegenerusGameLootboxModule.sol	READ
+CURSOR	lootboxRngPacked	beginBoxOrder	modules/DegenerusGameLootboxModule.sol	READ
+CURSOR	lootboxRngPacked	quoteBoxOrder	modules/DegenerusGameLootboxModule.sol	READ
+CURSOR	lootboxRngPacked	recordCoverBox	modules/DegenerusGameLootboxModule.sol	READ
 ACCESSOR	lootboxRngPacked	_lrAdd	storage/DegenerusGameStorage.sol	READ
 ACCESSOR	lootboxRngPacked	_lrAdd	storage/DegenerusGameStorage.sol	WRITE
 ACCESSOR	lootboxRngPacked	_lrRead	storage/DegenerusGameStorage.sol	READ

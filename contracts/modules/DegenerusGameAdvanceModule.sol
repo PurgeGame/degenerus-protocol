@@ -182,7 +182,6 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
       +======================================================================+*/
 
     uint48 private constant GAMEOVER_RNG_FALLBACK_DELAY = 14 days;
-    uint8 private constant JACKPOT_LEVEL_CAP = 5;
     uint32 private constant VRF_CALLBACK_GAS_LIMIT = 300_000;
 
     uint16 private constant VRF_REQUEST_CONFIRMATIONS = 10;

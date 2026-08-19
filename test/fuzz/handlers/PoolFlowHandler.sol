@@ -5,6 +5,7 @@ import "forge-std/Test.sol";
 import {DegenerusGame} from "../../../contracts/DegenerusGame.sol";
 import {MockVRFCoordinator} from "../../../contracts/mocks/MockVRFCoordinator.sol";
 import {MintPaymentKind} from "../../../contracts/interfaces/IDegenerusGame.sol";
+import {BoxOrderLib} from "../../helpers/BoxOrderLib.sol";
 
 /// @title PoolFlowHandler — invariant handler driving the four-pool value flow for FUZZ-05 (POOL-CONSERVATION)
 /// @notice Exercises the operations that MOVE value between the four prize pools so the conservation oracle in
@@ -100,7 +101,7 @@ contract PoolFlowHandler is Test {
         if (sent > currentActor.balance) return;
 
         vm.prank(currentActor);
-        try game.purchase{value: sent}(currentActor, qty, boxAmt, bytes32(0), MintPaymentKind.DirectEth, false) {
+        try game.purchase{value: sent}(currentActor, qty, BoxOrderLib.boCustomFloor(boxAmt), bytes32(0), MintPaymentKind.DirectEth, false) {
             success_buy++;
             ghost_realInflow += sent; // real ETH that crossed into the contract
         } catch {}

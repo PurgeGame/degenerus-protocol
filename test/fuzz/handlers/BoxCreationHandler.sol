@@ -6,6 +6,7 @@ import {DegenerusGame} from "../../../contracts/DegenerusGame.sol";
 import {DegenerusDeityPass} from "../../../contracts/DegenerusDeityPass.sol";
 import {MockVRFCoordinator} from "../../../contracts/mocks/MockVRFCoordinator.sol";
 import {MintPaymentKind} from "../../../contracts/interfaces/IDegenerusGame.sol";
+import {BoxOrderLib} from "../../helpers/BoxOrderLib.sol";
 
 /// @title BoxCreationHandler — drives every box-creating entrypoint for the FUZZ-04 ENQUEUE invariant
 /// @notice The box-creating family the ASYM-02 sweep enumerates has FOUR enqueue sites, each guarded by a
@@ -169,7 +170,7 @@ contract BoxCreationHandler is Test {
 
         uint48 idx = _lrIndex();
         vm.prank(currentActor);
-        try game.purchase{value: value}(currentActor, 400, lootboxAmt, bytes32(0), kind, false) {
+        try game.purchase{value: value}(currentActor, 400, BoxOrderLib.boCustomFloor(lootboxAmt), bytes32(0), kind, false) {
             // A successful lootbox-bearing purchase persists a box at this index; count the path and track the
             // (index, owner) for the invariant. The counter is bumped per successful creating-call (the
             // non-vacuity signal that this PATH fired); the tracked list is deduped so the invariant iterates

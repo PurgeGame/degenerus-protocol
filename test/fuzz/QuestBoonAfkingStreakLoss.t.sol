@@ -7,9 +7,9 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 /// @title QuestBoonAfkingStreakLossTest -- reproduces the activity-boon streak-award value-loss + orphaned
 ///        century-shield defect when the recipient has a LIVE afking run.
 ///
-/// @notice The activity boon (lootbox open path, including an afking auto-open) routes through
-///         DegenerusGameBoonModule.consumeActivityBoon, which runs in the GAME storage context (delegatecall)
-///         and calls `quests.awardQuestStreakBonus(player, bonus, currentDay)` (DegenerusQuests.sol:439).
+/// @notice The activity boon (lootbox open path including an afking auto-open, and the deity gift path)
+///         routes through DegenerusGameBoonModule._creditActivity, which runs in the GAME storage context
+///         (delegatecall) and calls `quests.awardQuestStreakBonus(player, bonus, currentDay)`.
 ///         `awardQuestStreakBonus` is `onlyGame`; the faithful reachable reproduction is therefore a direct
 ///         `vm.prank(ContractAddresses.GAME)` call into `quests.awardQuestStreakBonus(...)` with the player
 ///         holding a live afking run -- byte-identical to the call the boon module makes.
@@ -50,7 +50,7 @@ contract QuestBoonAfkingStreakLossTest is DeployProtocol {
     // -------------------------------------------------------------------------
     // Game-resident _subOf accumulator (AFKing-Coin-era offsets, DegenerusGameStorage.sol struct Sub)
     // -------------------------------------------------------------------------
-    uint256 private constant SUBOF_SLOT = 53;
+    uint256 private constant SUBOF_SLOT = 52;
     uint256 private constant OFF_AFKINGSTART = 16; // uint24 afkingStartDay
     uint256 private constant OFF_STREAKLATCH = 26; // uint16 subStreakLatch (the afking sub streak base)
 

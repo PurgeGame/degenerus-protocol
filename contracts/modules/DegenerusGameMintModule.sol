@@ -5,7 +5,8 @@ import {MintPaymentKind} from "../interfaces/IDegenerusGame.sol";
 import {RECORD_KIND_BUY, RECORD_KIND_LUCKBOX} from "../interfaces/ICoinflip.sol";
 import {
     IDegenerusGameBoonModule,
-    IDegenerusGameFoilPackModule
+    IDegenerusGameFoilPackModule,
+    IDegenerusGameLootboxModule
 } from "../interfaces/IDegenerusGameModules.sol";
 import {ContractAddresses} from "../ContractAddresses.sol";
 import {DegenerusGameStorage} from "../storage/DegenerusGameStorage.sol";
@@ -101,8 +102,6 @@ contract DegenerusGameMintModule is
     // Purchase / Lootbox Constants
     // -------------------------------------------------------------------------
 
-    /// @dev Loot box minimum purchase amount (0.01 ETH).
-    uint256 private constant LOOTBOX_MIN = 0.01 ether;
     /// @dev Coin-presale-box minimum purchase amount (0.01 ETH). Checked on the
     ///      REQUESTED amount BEFORE the exactly-50-ETH clamp, so a sub-floor gap to
     ///      the 50-ETH cap can never lock the presale close.
@@ -120,7 +119,6 @@ contract DegenerusGameMintModule is
 
     /// @dev Lootbox boost value cap and expiry for the next lootbox purchase.
     uint256 private constant LOOTBOX_BOOST_MAX_VALUE = 10 ether;
-    uint32 private constant LOOTBOX_BOOST_EXPIRY_DAYS = 2;
 
     /// @dev Entry floor for the biggest-lootbox-deposit record, on the raw purchased
     ///      deposit (no boon boost). The record is armed into Coinflip, which owns the
@@ -130,17 +128,13 @@ contract DegenerusGameMintModule is
     ///      deposit could not have beaten the mark anyway. (The biggest-BUY record
     ///      arms via DegenerusGame's purchase router: this module has no EIP-170 room
     ///      for a second arm site, and the router already holds the raw quantity.)
-    uint256 private constant BIGGEST_BOX_MIN_ETH = 5 ether;
 
     /// @dev Loot box pool split: 90% future, 10% next.
-    uint16 private constant LOOTBOX_SPLIT_FUTURE_BPS = 9000;
-    uint16 private constant LOOTBOX_SPLIT_NEXT_BPS = 1000;
 
     /// @dev Share of ticket purchases routed to future prize pool (10%).
     uint16 private constant PURCHASE_TO_FUTURE_BPS = 1000;
 
     /// @dev Number of daily jackpots per level (must match AdvanceModule).
-    uint8 private constant JACKPOT_LEVEL_CAP = 5;
 
     // -------------------------------------------------------------------------
     // Events
@@ -169,13 +163,6 @@ contract DegenerusGameMintModule is
     ///         rides LootBoxBuy, so the two stay disjoint for off-chain ETH-in totals.
     event EntriesBought(address indexed buyer, uint256 entryQuantityScaled, uint256 weiIn);
 
-    event BoostUsed(
-        address indexed player,
-        uint24 indexed day,
-        uint256 originalAmount,
-        uint256 boostedAmount,
-        uint16 boostBps
-    );
 
     // -------------------------------------------------------------------------
     // Mint Payment + Data Recording
@@ -896,20 +883,20 @@ contract DegenerusGameMintModule is
     /// @dev Delegatecalled by DegenerusGame. Handles payment routing, affiliates, and queues.
     /// @param buyer Recipient of the purchased items.
     /// @param entryQuantityScaled Number of tickets to purchase (2 decimals, scaled by 100).
-    /// @param lootBoxAmount ETH amount for loot boxes.
+    /// @param boxOrder Packed box order: [small:8][med:8][large:8][customCount:8][customSize:48 @1e12].
     /// @param affiliateCode Referral code for affiliate attribution.
     /// @param payKind Payment kind selector (ETH/claimable/combined).
     function purchase(
         address buyer,
         uint256 entryQuantityScaled,
-        uint256 lootBoxAmount,
+        uint256 boxOrder,
         bytes32 affiliateCode,
         MintPaymentKind payKind
     ) external payable {
         _purchaseFor(
             buyer,
             entryQuantityScaled,
-            lootBoxAmount,
+            boxOrder,
             affiliateCode,
             payKind
         );
@@ -924,7 +911,7 @@ contract DegenerusGameMintModule is
     function purchaseWith(
         address buyer,
         uint256 entryQuantityScaled,
-        uint256 lootBoxAmount,
+        uint256 boxOrder,
         bytes32 affiliateCode,
         MintPaymentKind payKind,
         uint256 ethValue
@@ -932,7 +919,7 @@ contract DegenerusGameMintModule is
         _purchaseForWith(
             buyer,
             entryQuantityScaled,
-            lootBoxAmount,
+            boxOrder,
             affiliateCode,
             payKind,
             ethValue
@@ -1280,7 +1267,7 @@ contract DegenerusGameMintModule is
     function _purchaseFor(
         address buyer,
         uint256 entryQuantityScaled,
-        uint256 lootBoxAmount,
+        uint256 boxOrder,
         bytes32 affiliateCode,
         MintPaymentKind payKind
     ) private {
@@ -1293,7 +1280,7 @@ contract DegenerusGameMintModule is
         // Single-tx path: cap fresh ETH at the mint cost and credit any overpay to the
         // payer's withdrawable afking, so excess never reverts or strands. The afking
         // ticket-buy path (purchaseWith) bypasses this, so it is unaffected.
-        uint256 cost = ticketCost + lootBoxAmount;
+        uint256 cost = ticketCost + _quoteBoxOrder(buyer, boxOrder);
         uint256 fresh = payKind == MintPaymentKind.Claimable
             ? 0
             : (msg.value < cost ? msg.value : cost);
@@ -1301,7 +1288,7 @@ contract DegenerusGameMintModule is
         _purchaseForWithCached(
             buyer,
             entryQuantityScaled,
-            lootBoxAmount,
+            boxOrder,
             affiliateCode,
             payKind,
             fresh,
@@ -1337,7 +1324,7 @@ contract DegenerusGameMintModule is
     function _purchaseForWith(
         address buyer,
         uint256 entryQuantityScaled,
-        uint256 lootBoxAmount,
+        uint256 boxOrder,
         bytes32 affiliateCode,
         MintPaymentKind payKind,
         uint256 ethValue
@@ -1351,7 +1338,7 @@ contract DegenerusGameMintModule is
         _purchaseForWithCached(
             buyer,
             entryQuantityScaled,
-            lootBoxAmount,
+            boxOrder,
             affiliateCode,
             payKind,
             ethValue,
@@ -1362,13 +1349,44 @@ contract DegenerusGameMintModule is
         );
     }
 
+    // ---- Box-order legs, delegatecalled into the Lootbox module ----
+    // The order codec, the three bps lanes and the boon-boost consume live there: they belong
+    // with the rest of the box logic, and this module sits ~250 bytes under the EIP-170 ceiling
+    // while that one has room. Three calls per purchase, all to the same (warm after the first)
+    // address — noise against a path that already delegatecalls the ticket and boon legs.
+
+    /// @dev Price an order without touching state, for the single-tx overpay cap.
+    function _quoteBoxOrder(address buyer, uint256 boxOrder) private returns (uint256) {
+        if (boxOrder == 0) return 0;
+        return abi.decode(_lootboxLeg(
+            abi.encodeWithSelector(
+                IDegenerusGameLootboxModule.quoteBoxOrder.selector,
+                buyer,
+                boxOrder
+            )
+        ), (uint256));
+    }
+
+    /// @dev Delegatecall the Lootbox module in the Game's storage context, bubbling its revert
+    ///      reason so an over-cap or custom-size-change surfaces as itself.
+    function _lootboxLeg(bytes memory payload) private returns (bytes memory) {
+        (bool ok, bytes memory data) = ContractAddresses.GAME_LOOTBOX_MODULE.delegatecall(payload);
+        if (!ok) {
+            if (data.length == 0) revert E();
+            assembly ("memory-safe") {
+                revert(add(32, data), mload(data))
+            }
+        }
+        return data;
+    }
+
     /// @dev Core purchase body. `cachedJpFlag`/`cachedLevel`/`priceWei`/`ticketCost` are the
     ///      caller's same-frame _purchaseCostInputs snapshot (no external call sits between
     ///      that read and this frame, so the values cannot have changed).
     function _purchaseForWithCached(
         address buyer,
         uint256 entryQuantityScaled,
-        uint256 lootBoxAmount,
+        uint256 boxOrder,
         bytes32 affiliateCode,
         MintPaymentKind payKind,
         uint256 ethValue,
@@ -1399,7 +1417,31 @@ contract DegenerusGameMintModule is
             );
         }
 
-        if (lootBoxAmount != 0 && lootBoxAmount < LOOTBOX_MIN) revert E();
+        // --- Box-order leg (delegatecalled into the Lootbox module) ---
+        // Runs before the payment split because the split needs the cost, and the cost depends
+        // on stored state: the tier sizes come off the order's FROZEN level, not the live one.
+        // Its writes unwind with the rest of the purchase if anything below reverts.
+        uint256 lootBoxAmount;
+        uint256 lbShares; // (future << 128) | next
+        uint256 lbPriorNominal;
+        if (boxOrder != 0) {
+            uint256 lbCredit;
+            (lootBoxAmount, lbShares, lbCredit, lbPriorNominal) = abi.decode(
+                _lootboxLeg(
+                    abi.encodeWithSelector(
+                        IDegenerusGameLootboxModule.beginBoxOrder.selector,
+                        buyer,
+                        boxOrder
+                    )
+                ),
+                (uint256, uint256, uint256, uint256)
+            );
+            lootboxFlipCredit += lbCredit;
+            // Box spend joins the minted-units tally (400 units = one ticket-price), combining
+            // with the ticket leg so cumulative spend of either kind crosses the whole-ticket
+            // participation floor (mint day / streak / quest gate). Mint-side, so it stays here.
+            _recordLootboxUnits(buyer, lootBoxAmount);
+        }
 
         uint256 totalCost = ticketCost + lootBoxAmount;
         if (totalCost == 0) revert E();
@@ -1492,96 +1534,6 @@ contract DegenerusGameMintModule is
             lootboxFlipCredit += ticketBonusCredit;
         }
 
-        // --- Lootbox setup (pool splits, RNG request, presale/distress tracking) ---
-        uint48 lbIndex;
-        bool lbFirstDeposit;
-        // The box's amount + distress fraction are computed here (score-independent); the EV
-        // inputs (adj, score) are computed in the score block below, then all four pack into
-        // the single lootboxEth slot in ONE SSTORE. The prior frozen score / adj (for a
-        // subsequent deposit) are snapshotted here from the pre-deposit packed word.
-        uint256 lbNewAmount;
-        uint256 lbDistressUnits;
-        uint64 lbPriorAdj;
-        uint16 lbPriorScore;
-        uint256 lbNextShare;
-        uint256 lbFutureShare;
-        if (lootBoxAmount != 0) {
-            // Lootbox spend joins the minted-units tally (400 units = one ticket-price),
-            // combining with the ticket leg so cumulative spend of either kind crosses
-            // the whole-ticket participation floor (mint day / streak / quest gate).
-            _recordLootboxUnits(buyer, lootBoxAmount);
-            // Single SLOAD of the packed slot, written back once below. Nothing in
-            // between touches lootboxRngPacked (the queue push writes boxPlayers;
-            // the boost consume writes boonPacked only).
-            uint256 lrWord = lootboxRngPacked;
-            lbIndex = uint48((lrWord >> LR_INDEX_SHIFT) & LR_INDEX_MASK);
-
-            uint256 packed = lootboxEth[lbIndex][buyer];
-            uint256 existingAmount = packed & LB_AMOUNT_MASK;
-            (, lbPriorAdj, lbPriorScore, ) = _unpackLootbox(packed);
-
-            if (existingAmount == 0) {
-                lbFirstDeposit = true;
-                // First deposit for this (index, buyer): enqueue the box index for
-                // the permissionless box auto-open cursor. The consumer-side
-                // walk gates each index on lootboxRngWordByIndex != 0 (VRF
-                // orphan-index protection), so enqueue is producer-only here. The
-                // per-buy LootBoxBuy event (below) carries the index for off-chain.
-                boxPlayers[lbIndex].push(buyer);
-            }
-            // Subsequent deposits accumulate onto the existing box. No day-coherence gate and no
-            // stored day at all: the box binds to lootboxRngWordByIndex[index] and rolls from the
-            // LIVE open level, so cross-day deposits at an un-advanced index (only reachable in the
-            // pre-first-advance genesis window) are harmless.
-
-            uint256 boostedAmount = _applyLootboxBoostOnPurchase(buyer, lootBoxAmount);
-            lbNewAmount = existingAmount + boostedAmount;
-
-            // Biggest-box record. The candidate is THIS deposit's raw purchased ETH —
-            // no boon boost, and never the box total: whale-pass and afking covers
-            // write the same (index, buyer) box slot, so a total would let a dust
-            // purchase deposit arm the record on ETH those excluded paths contributed.
-            // Any claim joins this purchase's flip credit below — the box is untouched.
-            if (lootBoxAmount >= BIGGEST_BOX_MIN_ETH) {
-                lootboxFlipCredit += coinflip.armRecord(
-                    RECORD_KIND_LUCKBOX,
-                    buyer,
-                    lootBoxAmount
-                );
-            }
-            uint256 newPendingEth = ((lrWord >> LR_PENDING_ETH_SHIFT) &
-                LR_PENDING_ETH_MASK) + _packEthToMilliEth(lootBoxAmount);
-            lootboxRngPacked =
-                (lrWord & ~(LR_PENDING_ETH_MASK << LR_PENDING_ETH_SHIFT)) |
-                ((newPendingEth & LR_PENDING_ETH_MASK) << LR_PENDING_ETH_SHIFT);
-
-            bool distress = _isDistressMode();
-            // Distress fraction rides in the packed slot at 0.01-ETH granularity. Accumulate
-            // the per-deposit units (sub-0.01-ETH residue on the bonus basis is accepted); the
-            // existing units come from the box's prior packed word.
-            lbDistressUnits = (packed >> LB_DISTRESS_SHIFT) & LB_DISTRESS_MASK;
-            if (distress) {
-                lbDistressUnits += boostedAmount / LB_DISTRESS_SCALE;
-            }
-            // Rake-free: ALL lootbox ETH (presale and after) routes 100% to the
-            // prize pools. Distress routes 100% next; otherwise 90% future / 10% next.
-            uint256 futureBps;
-            uint256 nextBps;
-            if (distress) {
-                futureBps = 0;
-                nextBps = 10_000;
-            } else {
-                futureBps = LOOTBOX_SPLIT_FUTURE_BPS;
-                nextBps = LOOTBOX_SPLIT_NEXT_BPS;
-            }
-
-            // Each leg's split is held in locals; the combined pool RMW runs once below.
-            lbFutureShare = (lootBoxAmount * futureBps) / 10_000;
-            lbNextShare = (lootBoxAmount * nextBps) / 10_000;
-
-            emit LootBoxBuy(buyer, lbIndex, lootBoxAmount);
-        }
-
         // --- One combined prize-pool RMW for both legs ---
         // Each leg's next/future split was computed above (ticket inside _callTicketPurchase,
         // lootbox in the block above); summing the post-split totals lands both in a single
@@ -1589,8 +1541,8 @@ contract DegenerusGameMintModule is
         // observer ever sees a half-applied contribution, and prizePoolFrozen never flips
         // mid-purchase, so both legs route to the same accumulator.
         _addPrizeContribution(
-            uint128(ticketNextShare + lbNextShare),
-            uint128(ticketFutureShare + lbFutureShare),
+            uint128(ticketNextShare + uint128(lbShares)),
+            uint128(ticketFutureShare + (lbShares >> 128)),
             ticketUnits
         );
 
@@ -1682,57 +1634,20 @@ contract DegenerusGameMintModule is
             _queueEntriesScaled(buyer, targetLevel, adjustedQty, false);
         }
 
-        // --- Lootbox EV score write (uses cached score). Affiliate legs are settled below by the
-        //     single combined call, alongside the ticket legs. ---
+        // --- Box-order EV lane (delegatecalled; needs the post-action score) ---
+        // A second warm write to the order slot rather than deferring the pool split past the
+        // point the buy path publishes it.
         if (lootBoxAmount != 0) {
-            // Purchase-time EV-cap tally. The box's multiplier is frozen from the
-            // first-deposit score snapshot; the cap key is cachedLevel + 1 (the lootbox
-            // open level == the resolver's currentLevel = level + 1). Bonus boxes
-            // (mult > NEUTRAL) draw add = min(deposit, CAP - used) from the shared
-            // per-(player, level) accumulator and accumulate adjustedPortion; sub-neutral/
-            // neutral boxes draw zero cap. amount + adj + score + distressUnits then land
-            // in the single lootboxEth slot in one SSTORE.
-            uint16 lbScore;
-            uint64 lbAdj;
-            if (lbFirstDeposit) {
-                lbScore = uint16(cachedScore);
-                uint256 mult = _lootboxEvMultiplierFromScore(cachedScore);
-                if (mult > LOOTBOX_EV_NEUTRAL_BPS) {
-                    uint256 used = _lootboxEvUsedFor(buyer, cachedLevel + 1);
-                    uint256 remaining = used >= LOOTBOX_EV_BENEFIT_CAP
-                        ? 0
-                        : LOOTBOX_EV_BENEFIT_CAP - used;
-                    uint256 add = lootBoxAmount < remaining ? lootBoxAmount : remaining;
-                    if (add != 0) {
-                        _setLootboxEvUsedFor(buyer, cachedLevel + 1, used + add);
-                        lbAdj = uint64(add);
-                    }
-                }
-            } else {
-                // Subsequent deposit: the frozen score and accumulated adj come from the
-                // box's PRIOR packed word (snapshotted above), the multiplier stays frozen
-                // from the first-deposit snapshot.
-                lbScore = lbPriorScore;
-                lbAdj = lbPriorAdj;
-                if (lootBoxAmount != 0) {
-                    uint256 mult = _lootboxEvMultiplierFromScore(
-                        uint256(lbPriorScore)
-                    );
-                    if (mult > LOOTBOX_EV_NEUTRAL_BPS) {
-                        uint256 used = _lootboxEvUsedFor(buyer, cachedLevel + 1);
-                        uint256 remaining = used >= LOOTBOX_EV_BENEFIT_CAP
-                            ? 0
-                            : LOOTBOX_EV_BENEFIT_CAP - used;
-                        uint256 add = lootBoxAmount < remaining ? lootBoxAmount : remaining;
-                        if (add != 0) {
-                            _setLootboxEvUsedFor(buyer, cachedLevel + 1, used + add);
-                            lbAdj = lbPriorAdj + uint64(add);
-                        }
-                    }
-                }
-            }
-            lootboxEth[lbIndex][buyer] =
-                _packLootbox(lbNewAmount, lbAdj, lbScore, lbDistressUnits);
+            _lootboxLeg(
+                abi.encodeWithSelector(
+                    IDegenerusGameLootboxModule.applyBoxOrderScore.selector,
+                    buyer,
+                    cachedScore,
+                    cachedLevel + 1,
+                    lootBoxAmount,
+                    lbPriorNominal
+                )
+            );
         }
 
         // Settle all affiliate legs (ticket + lootbox, fresh + recycled) in ONE call. The kickback
@@ -1817,14 +1732,14 @@ contract DegenerusGameMintModule is
     ///         covered by the just-earned + banked credit gate).
     /// @param buyer Player receiving both legs (already operator-resolved by the entrypoint).
     /// @param entryQuantityScaled Tickets to buy (0 to skip).
-    /// @param lootBoxAmount ETH lootbox spend (0 to skip).
+    /// @param boxOrder Packed box order (0 to skip): [small:8][med:8][large:8][customCount:8][customSize:48 @1e12].
     /// @param affiliateCode Affiliate/referral code for the mint leg.
     /// @param payKind Payment method for the mint leg.
     /// @param boxAmount Requested presale-box ETH (>= PRESALE_BOX_MIN, claimable-funded).
     function buyLootboxAndPresaleBox(
         address buyer,
         uint256 entryQuantityScaled,
-        uint256 lootBoxAmount,
+        uint256 boxOrder,
         bytes32 affiliateCode,
         MintPaymentKind payKind,
         uint256 boxAmount
@@ -1841,7 +1756,7 @@ contract DegenerusGameMintModule is
             uint256 priceWei,
             uint256 ticketCost
         ) = _purchaseCostInputs(entryQuantityScaled);
-        uint256 mintCost = ticketCost + lootBoxAmount;
+        uint256 mintCost = ticketCost + _quoteBoxOrder(buyer, boxOrder);
         uint256 mintFresh = payKind == MintPaymentKind.Claimable
             ? 0
             : (msg.value < mintCost ? msg.value : mintCost);
@@ -1849,7 +1764,7 @@ contract DegenerusGameMintModule is
         _purchaseForWithCached(
             buyer,
             entryQuantityScaled,
-            lootBoxAmount,
+            boxOrder,
             affiliateCode,
             payKind,
             mintFresh,
@@ -2149,54 +2064,5 @@ contract DegenerusGameMintModule is
         return (amountWei * PRICE_COIN_UNIT) / priceWei;
     }
 
-    /// @dev Calculate boost amount given base amount and bonus bps
-    function _calculateBoost(
-        uint256 amount,
-        uint16 bonusBps
-    ) private pure returns (uint256) {
-        uint256 cappedAmount = amount > LOOTBOX_BOOST_MAX_VALUE
-            ? LOOTBOX_BOOST_MAX_VALUE
-            : amount;
-        unchecked {
-            return (cappedAmount * bonusBps) / 10_000;
-        }
-    }
 
-    function _applyLootboxBoostOnPurchase(
-        address player,
-        uint256 amount
-    ) private returns (uint256 boostedAmount) {
-        boostedAmount = amount;
-        BoonPacked storage bp = boonPacked[player];
-        uint256 s0 = bp.slot0;
-        uint8 tier = uint8(s0 >> BP_LOOTBOX_TIER_SHIFT);
-        if (tier == 0) return boostedAmount;
-
-        // The purchase day (== the buy is happening now) — read here, only on the boost path.
-        uint24 day = _simulatedDayIndex();
-        // Deity-granted boosts are valid only on the grant day.
-        uint24 deityDay = uint24(s0 >> BP_DEITY_LOOTBOX_DAY_SHIFT);
-        if (deityDay != 0 && deityDay != day) {
-            bp.slot0 = s0 & BP_LOOTBOX_CLEAR;
-            return boostedAmount;
-        }
-        // Check expiry
-        uint24 stampDay = uint24(s0 >> BP_LOOTBOX_DAY_SHIFT);
-        if (
-            stampDay != 0 && day > stampDay + LOOTBOX_BOOST_EXPIRY_DAYS
-        ) {
-            // Expired: clear lootbox fields
-            bp.slot0 = s0 & BP_LOOTBOX_CLEAR;
-            return boostedAmount;
-        }
-
-        // Apply boost
-        uint16 boostBps = _lootboxTierToBps(tier);
-        boostedAmount += _calculateBoost(amount, boostBps);
-
-        // Clear lootbox fields (consumed)
-        bp.slot0 = s0 & BP_LOOTBOX_CLEAR;
-
-        emit BoostUsed(player, day, amount, boostedAmount, boostBps);
-    }
 }

@@ -4,6 +4,8 @@ pragma solidity ^0.8.26;
 import {Vm} from "forge-std/Vm.sol";
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
+import {BoxOrderLib} from "../helpers/BoxOrderLib.sol";
+import {PriceLookupLib} from "../../contracts/libraries/PriceLookupLib.sol";
 
 /// @title BigRecordArmingTest — pins the game-side arming of the all-time records.
 ///
@@ -24,7 +26,8 @@ contract BigRecordArmingTest is DeployProtocol {
     uint256 private constant LOOTBOX_RNG_WORD_SLOT = 34;
     uint256 private constant DEGENERETTE_BET_NONCE_SLOT = 38;
     uint256 private constant PRIZE_POOLS_PACKED_SLOT = 2;
-    uint256 private constant LB_AMOUNT_MASK = (uint256(1) << 128) - 1;
+    uint256 private constant LB_COVER_SHIFT = 161; // coverWei [161:209] @1e12 (lootboxOrder word)
+    uint256 private constant LB_CUSTOM_SCALE = 1e12;
 
     /// @dev Packed-bet tail carrying a biggest-spin record claim, in whole FLIP.
     uint256 private constant DEGEN_RECORD_SHIFT = 220;
@@ -198,6 +201,9 @@ contract BigRecordArmingTest is DeployProtocol {
         _buyBox(player, 3 ether);
         assertEq(coinflip.biggestLuckboxEver(), 0, "sub-floor deposits never arm");
 
+        // Fresh index: BOX_MIN_ETH differs from the 3-ether custom size already frozen at the
+        // current index (a same-index differently-sized buy reverts E(), see _advanceLootboxIndex).
+        _advanceLootboxIndex();
         _buyBox(player, BOX_MIN_ETH);
         assertEq(
             coinflip.biggestLuckboxEver(),
@@ -325,6 +331,18 @@ contract BigRecordArmingTest is DeployProtocol {
         vm.warp(vm.getBlockTimestamp() + numDays * 1 days);
     }
 
+    /// @dev Bump the active lootbox RNG index by one (test-only slot poke, mirrors the established
+    ///      idiom elsewhere in this suite). A box order's custom-box size freezes for the period at
+    ///      one index (DegenerusGameLootboxModule._mergeBoxOrder) — a fixture that buys DIFFERENT
+    ///      custom sizes for the SAME player must move to a fresh index between buys, or the second,
+    ///      differently-sized buy reverts E() against the frozen size.
+    function _advanceLootboxIndex() internal {
+        uint256 lrPacked = uint256(vm.load(address(game), bytes32(uint256(LOOTBOX_RNG_PACKED_SLOT))));
+        uint256 idx = lrPacked & 0xFFFFFFFFFFFF;
+        lrPacked = (lrPacked & ~uint256(0xFFFFFFFFFFFF)) | (idx + 1);
+        vm.store(address(game), bytes32(uint256(LOOTBOX_RNG_PACKED_SLOT)), bytes32(lrPacked));
+    }
+
     function _seedFuturePrizePool(uint256 targetFuture) internal {
         uint256 currentPacked = uint256(
             vm.load(address(game), bytes32(uint256(PRIZE_POOLS_PACKED_SLOT)))
@@ -406,7 +424,7 @@ contract BigRecordArmingTest is DeployProtocol {
         game.purchase{value: amount}(
             who,
             0,
-            amount,
+            BoxOrderLib.boCustomFloor(amount),
             bytes32(0),
             MintPaymentKind.DirectEth,
             false
@@ -440,16 +458,22 @@ contract BigRecordArmingTest is DeployProtocol {
         return keccak256(abi.encode(who, inner));
     }
 
+    /// @dev Nominal wei the stored box order represents (the migration replacement for the old
+    ///      lootboxEth low-128-bit amount) — the frozen level decodes off the word itself.
     function _boxOf(address who) internal view returns (uint256) {
-        return uint256(vm.load(address(game), _boxSlot(who))) & LB_AMOUNT_MASK;
+        uint256 word = uint256(vm.load(address(game), _boxSlot(who)));
+        if (word == 0) return 0;
+        return BoxOrderLib.boNominal(word, PriceLookupLib.priceForLevel(uint24(word & 0xFFFFFF)));
     }
 
-    /// @dev Stand in for a whale-pass / afking-cover deposit: put ETH in the box
-    ///      without going through the purchase path that arms the record.
+    /// @dev Stand in for a whale-pass / afking-cover deposit: put ETH in the box's dedicated
+    ///      cover lane (coverWei [161:209], scaled x1e12 — box value the player did not
+    ///      choose/purchase) without going through the purchase path that arms the record.
     function _presetBox(address who, uint256 amount) internal {
         bytes32 slot = _boxSlot(who);
         uint256 word = uint256(vm.load(address(game), slot));
-        word = (word & ~LB_AMOUNT_MASK) | (amount & LB_AMOUNT_MASK);
+        word &= ~(uint256(0xFFFFFFFFFFFF) << LB_COVER_SHIFT);
+        word |= ((amount / LB_CUSTOM_SCALE) << LB_COVER_SHIFT);
         vm.store(address(game), slot, bytes32(word));
     }
 }

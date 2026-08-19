@@ -39,7 +39,7 @@ contract CenturyPoolDoublingTest is DeployProtocol {
     uint256 private constant LEVEL_SHIFT = 96; // slot 0 bytes [12:15): level (uint24)
     uint256 private constant PRIZE_POOLS_PACKED_SLOT = 2; // [volume:48][future:104][next:104]
     uint256 private constant LEVEL_PRIZE_POOL_SLOT = 23; // mapping(uint24 => uint256)
-    uint256 private constant CENTURY_POOLS_SLOT = 67; // uint128[] centuryPrizePools
+    uint256 private constant CENTURY_POOLS_SLOT = 66; // uint128[] centuryPrizePools
 
     uint256 private constant REDEEM_QTY = 4000; // 10 whole tickets, above the min buy-in
 

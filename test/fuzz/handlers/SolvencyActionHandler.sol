@@ -7,6 +7,7 @@ import {DegenerusDeityPass} from "../../../contracts/DegenerusDeityPass.sol";
 import {MockVRFCoordinator} from "../../../contracts/mocks/MockVRFCoordinator.sol";
 import {ContractAddresses} from "../../../contracts/ContractAddresses.sol";
 import {MintPaymentKind} from "../../../contracts/interfaces/IDegenerusGame.sol";
+import {BoxOrderLib} from "../../helpers/BoxOrderLib.sol";
 
 /// @title SolvencyActionHandler — widens the SOLVENCY-01 action space to the pass + presale-box + claim
 ///        surfaces so the packed-balance Σ identity is fuzzed beyond the afking-only V61AfkingSpendHandler.
@@ -195,7 +196,7 @@ contract SolvencyActionHandler is Test {
         uint256 ethSent = priceWei + lootBoxAmount; // one ticket of fresh ETH + the lootbox spend
         if (ethSent > currentActor.balance) return;
         vm.prank(currentActor);
-        try game.purchase{value: ethSent}(currentActor, 400, lootBoxAmount, bytes32(0), MintPaymentKind.DirectEth, false) {
+        try game.purchase{value: ethSent}(currentActor, 400, BoxOrderLib.boCustomFloor(lootBoxAmount), bytes32(0), MintPaymentKind.DirectEth, false) {
             ghost_presaleBuys++;
         } catch {}
     }

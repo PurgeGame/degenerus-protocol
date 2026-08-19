@@ -4,6 +4,7 @@ pragma solidity ^0.8.26;
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 import {sDGNRS} from "../../contracts/sDGNRS.sol";
+import {BoxOrderLib} from "../helpers/BoxOrderLib.sol";
 
 /// @title AffiliateDgnrsClaim -- Tests for segregated affiliate DGNRS claim system
 /// @notice Validates proportional distribution, claim window, and edge cases.
@@ -59,7 +60,7 @@ contract AffiliateDgnrsClaim is DeployProtocol {
         vm.deal(buyer, 5 ether);
         vm.prank(buyer);
         game.purchase{value: 1.01 ether}(
-            buyer, 400, 1 ether, code, MintPaymentKind.DirectEth, false
+            buyer, 400, BoxOrderLib.boCustomFloor(1 ether), code, MintPaymentKind.DirectEth, false
         );
     }
 

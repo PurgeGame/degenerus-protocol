@@ -1728,6 +1728,7 @@ describe("v36.0 — AdvanceGame Gas Envelope (Phase 266 lootbox-entropy refactor
           0n,
           ZERO_BYTES32,
           MintPaymentKind.DirectEth,
+          false,
           { value: eth(0.01) },
         );
       } catch (_) {

@@ -6,6 +6,7 @@ import {DegenerusGame} from "../../../contracts/DegenerusGame.sol";
 import {DegenerusAdmin} from "../../../contracts/DegenerusAdmin.sol";
 import {MockVRFCoordinator} from "../../../contracts/mocks/MockVRFCoordinator.sol";
 import {MintPaymentKind} from "../../../contracts/interfaces/IDegenerusGame.sol";
+import {BoxOrderLib} from "../../helpers/BoxOrderLib.sol";
 
 /// @title RngIndexDrainHandler -- Phase 232.1 invariant-suite handler
 /// @notice Drives advanceGame / VRF-fulfillment / purchase / warp actions and
@@ -142,7 +143,7 @@ contract RngIndexDrainHandler is Test {
         try game.purchase{value: total}(
             currentActor,
             qty,
-            lootboxWei,
+            BoxOrderLib.boCustomFloor(lootboxWei),
             bytes32(0),
             MintPaymentKind.DirectEth, false
         ) {} catch {

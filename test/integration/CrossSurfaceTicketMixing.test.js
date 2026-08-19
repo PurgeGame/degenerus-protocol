@@ -58,6 +58,7 @@ import {
   getLastVRFRequestId,
   ZERO_BYTES32,
 } from "../helpers/testUtils.js";
+import { boSmalls } from "../helpers/boxOrder.js";
 
 const MINT_MODULE_SOURCE_PATH = path.resolve(
   process.cwd(),
@@ -455,7 +456,7 @@ describe("CrossSurfaceTicketMixing — Phase 278 Wave 2 TST-CLEAN-02/03 + TST-CR
     async function buyLootboxes(game, buyer, n, totalEth) {
       return game
         .connect(buyer)
-        .purchase(hre.ethers.ZeroAddress, 0n, BigInt(n), ZERO_BYTES32, 0,false,  {
+        .purchase(hre.ethers.ZeroAddress, 0n, boSmalls(BigInt(n)), ZERO_BYTES32, 0,false,  {
           value: eth(totalEth),
         });
     }
@@ -465,7 +466,7 @@ describe("CrossSurfaceTicketMixing — Phase 278 Wave 2 TST-CLEAN-02/03 + TST-CR
     async function reachOpenableLootbox(fixture) {
       const { game, deployer, mockVRF, alice } = fixture;
       try {
-        await buyLootboxes(game, alice, 20, 0.02);
+        await buyLootboxes(game, alice, 20, 0.2);
       } catch (err) {
         return { reason: `lootbox purchase failed: ${err.message.slice(0, 80)}` };
       }
@@ -734,14 +735,16 @@ describe("CrossSurfaceTicketMixing — Phase 278 Wave 2 TST-CLEAN-02/03 + TST-CR
         "_queueEntriesScaled must have a `newRem` local (the rem-byte writer)"
       ).to.equal(true);
 
-      // (3) Manual + auto-resolve lootbox surfaces: LootboxModule routes its
-      //     per-roll ticket award through `_queueEntries` at this roll's
-      //     `rollLevel`, converting the post-Bernoulli whole count to entries via
-      //     the canonical `wholeTicketsToEntries`, and contains ZERO
+      // (3) Manual + auto-resolve lootbox surfaces: both settle through the
+      //     shared per-entry `_flushBoxAcc` (box-order rework: one box = one
+      //     roll, rewards settle once per entry), which routes each tier's
+      //     ticket award through `_queueEntries` at `currentLevel + uint24(offset)`,
+      //     converting the post-Bernoulli whole count to entries via the
+      //     canonical `wholeTicketsToEntries`, and contains ZERO
       //     `_queueEntriesScaled` invocations.
       expect(
         lootboxSrc.includes(
-          "_queueEntries(player, rollLevel, wholeTicketsToEntries(whole), false)"
+          "_queueEntries(player, currentLevel + uint24(offset), wholeTicketsToEntries(whole), false)"
         ),
         "LootboxModule must route the ticket award through `_queueEntries` on the entries basis (`wholeTicketsToEntries(whole)`)"
       ).to.equal(true);

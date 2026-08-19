@@ -18,6 +18,7 @@ import {
   restoreAddresses,
 } from "../helpers/deployFixture.js";
 import { eth, ZERO_ADDRESS, ZERO_BYTES32 } from "../helpers/testUtils.js";
+import { boCustom } from "../helpers/boxOrder.js";
 
 const { ethers } = hre;
 const ZeroHash = ethers.ZeroHash;
@@ -232,7 +233,7 @@ describe("Paper Parity (Phase 46)", function () {
 
       await game
         .connect(alice)
-        .purchase(alice.address, 0, lootboxAmount, ZeroHash, 0,false,  {
+        .purchase(alice.address, 0, boCustom(lootboxAmount), ZeroHash, 0,false,  {
           value: lootboxAmount,
         });
 

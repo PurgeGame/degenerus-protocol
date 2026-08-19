@@ -4,6 +4,7 @@ pragma solidity ^0.8.26;
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 import {Vm} from "forge-std/Vm.sol";
+import {BoxOrderLib} from "../helpers/BoxOrderLib.sol";
 
 /// @title EthInEventsTest
 /// @notice The ETH-in slices that lack a natural 1:1 event get a dedicated per-product event
@@ -49,7 +50,7 @@ contract EthInEventsTest is DeployProtocol {
         vm.recordLogs();
         vm.prank(buyer);
         game.purchase{value: 0.05 ether}(
-            buyer, 0, 0.05 ether, bytes32(0), MintPaymentKind.DirectEth, false
+            buyer, 0, BoxOrderLib.boCustomFloor(0.05 ether), bytes32(0), MintPaymentKind.DirectEth, false
         );
         (, , bool found) = _evt2(vm.getRecordedLogs(), TICKETS_SIG, buyer);
         assertFalse(found, "ticketCost==0 -> no EntriesBought");

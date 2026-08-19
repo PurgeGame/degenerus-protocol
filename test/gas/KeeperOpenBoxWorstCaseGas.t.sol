@@ -50,8 +50,8 @@ contract KeeperOpenBoxWorstCaseGas is DeployProtocol {
     // -------------------------------------------------------------------------
 
     uint256 private constant RNG_WORD_BY_DAY_SLOT = 10; // mapping(uint24 => uint256) — the afking box's DAY-keyed word + readiness gate
-    uint256 private constant SUBOF_SLOT = 53;           // _subOf mapping root (address => Sub, one packed slot)
-    uint256 private constant SUBSCRIBERS_SLOT = 55;     // address[] _subscribers (slot holds the length)
+    uint256 private constant SUBOF_SLOT = 52;           // _subOf mapping root (address => Sub, one packed slot)
+    uint256 private constant SUBSCRIBERS_SLOT = 54;     // address[] _subscribers (slot holds the length)
 
     // Sub packed-field byte offsets (DegenerusGameStorage.sol; the v56 re-packed single 256-bit slot,
     // 241/256 bits used — the markers are uint24 each, not the old uint32 232-bit layout).
@@ -385,7 +385,7 @@ contract KeeperOpenBoxWorstCaseGas is DeployProtocol {
         }
     }
 
-    // ---- Sub-stamp slot reads (_subOf at slot 62 + verified offsets) ----
+    // ---- Sub-stamp slot reads (_subOf at slot 52 + verified offsets) ----
 
     function _subField(address who, uint256 off, uint256 widthBits) internal view returns (uint256) {
         uint256 p = uint256(vm.load(address(game), keccak256(abi.encode(who, uint256(SUBOF_SLOT))))) >> (off * 8);

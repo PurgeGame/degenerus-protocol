@@ -6,6 +6,7 @@ import {Vm, VmSafe} from "forge-std/Vm.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {IGameAfkingModule} from "../../contracts/interfaces/IDegenerusGameModules.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
+import {BoxOrderLib} from "../helpers/BoxOrderLib.sol";
 
 /// @title V56AfkingGasMarginal -- the v56 everyday-afking gas-MARGINAL harness (Phase 355) on the
 ///        compute-on-read applied tree (baseline 453f8073). Measures every marginal the GAS phase needs:
@@ -73,9 +74,9 @@ contract V56AfkingGasMarginal is DeployProtocol {
     // RE-DERIVED via `solc --storage-layout` on the working tree after the V62 lootbox repack — the
     // folded lootboxEth word + removed lootboxEthBase/Flip/Purchase/Distress shifted later slots down.
     uint256 private constant RNG_WORD_BY_DAY_SLOT = 10; // mapping(uint24 => uint256) — the afking box's DAY-keyed word + readiness gate
-    uint256 private constant SUBOF_SLOT = 53;           // _subOf mapping root (address => Sub, one packed slot)
-    uint256 private constant SUBSCRIBERS_SLOT = 55;     // address[] _subscribers (slot holds the length)
-    uint256 private constant SUBCURSOR_SLOT = 57;       // _subCursor (uint16 @ byte 0) + _subOpenCursor (uint16 @ byte 2) + _afkingResetDay (uint24 @ byte 4) + boxCursor (uint48 @ byte 7) + boxCursorIndex (uint48 @ byte 13)
+    uint256 private constant SUBOF_SLOT = 52;           // _subOf mapping root (address => Sub, one packed slot)
+    uint256 private constant SUBSCRIBERS_SLOT = 54;     // address[] _subscribers (slot holds the length)
+    uint256 private constant SUBCURSOR_SLOT = 56;       // _subCursor (uint16 @ byte 0) + _subOpenCursor (uint16 @ byte 2) + _afkingResetDay (uint24 @ byte 4) + boxCursor (uint48 @ byte 7) + boxCursorIndex (uint48 @ byte 13)
 
     // Sub packed-field byte offsets — RE-DERIVED via `forge inspect DegenerusGame storageLayout`. The
     // AFKing Subscription Token credential (sub <=> coin) needs no stored pass horizon, so `validThroughLevel` (the old
@@ -835,7 +836,7 @@ contract V56AfkingGasMarginal is DeployProtocol {
         address human = makeAddr("v_human");
         vm.deal(human, 5 ether);
         vm.prank(human);
-        game.purchase{value: 1.01 ether}(human, 400, 1 ether, bytes32(0), MintPaymentKind.DirectEth, false);
+        game.purchase{value: 1.01 ether}(human, 400, BoxOrderLib.boCustom(1 ether), bytes32(0), MintPaymentKind.DirectEth, false);
 
         _settleClean(0xA0F2);
         require(_lastOpenedDayOf(afk) < _lastBoughtDayOf(afk), "fixture: afking box pending pre-valve");
@@ -1359,7 +1360,7 @@ contract V56AfkingGasMarginal is DeployProtocol {
         }
     }
 
-    // ---- Sub-slot reads (_subOf at slot 62 + v56 offsets) ----
+    // ---- Sub-slot reads (_subOf at slot 52 + v56 offsets) ----
 
     function _subField(address who, uint256 off, uint256 widthBits) internal view returns (uint256) {
         uint256 p = uint256(vm.load(address(game), keccak256(abi.encode(who, uint256(SUBOF_SLOT))))) >> (off * 8);
@@ -1431,20 +1432,20 @@ contract V56AfkingGasMarginal is DeployProtocol {
         vm.store(address(game), bytes32(uint256(HEADER_SLOT)), bytes32(cur));
     }
 
-    /// @dev Read the STAGE cursor `_subCursor` (slot 62, byte 0, uint16) — advances by SUB_STAGE_BATCH on a
+    /// @dev Read the STAGE cursor `_subCursor` (slot 56, byte 0, uint16) — advances by SUB_STAGE_BATCH on a
     ///      full chunk.
     function _subCursor() internal view returns (uint256) {
         return uint256(vm.load(address(game), bytes32(uint256(SUBCURSOR_SLOT)))) & 0xFFFF;
     }
 
-    /// @dev Read the afking-open cursor `_subOpenCursor` (slot 62, byte 2, uint16) — the afking-side open
+    /// @dev Read the afking-open cursor `_subOpenCursor` (slot 56, byte 2, uint16) — the afking-side open
     ///      walk (drainAfkingBoxes -> _autoOpen). Distinct from the human boxCursor (byte 7) — LIVE-01
     ///      cursor independence.
     function _subOpenCursor() internal view returns (uint256) {
         return (uint256(vm.load(address(game), bytes32(uint256(SUBCURSOR_SLOT)))) >> 16) & 0xFFFF;
     }
 
-    /// @dev Read the human-box cursor `boxCursor` (slot 62, byte 7, uint48) — the human open walk
+    /// @dev Read the human-box cursor `boxCursor` (slot 56, byte 7, uint48) — the human open walk
     ///      (openHumanBoxes over boxPlayers[index]). Distinct from _subOpenCursor (byte 2).
     function _boxCursor() internal view returns (uint256) {
         return (uint256(vm.load(address(game), bytes32(uint256(SUBCURSOR_SLOT)))) >> 56) & 0xFFFFFFFFFFFF;
@@ -1754,23 +1755,31 @@ contract V56AfkingGasMarginal is DeployProtocol {
         vm.expectRevert(); // RngLocked() — GameAfkingModule:328, blocks create/replace/cancel under the lock
         game.subscribe(address(0), false, false, 1, address(0));
 
-        // THE ENTRY GATE, proven organically: drive the buffered-clamp consuming advance and
-        // assert the subscriber STAGE did not run in it — zero PlayerSkipped emissions (the walk
-        // visits nothing under the lock; the old code re-opened an all-skip walk here) while the
-        // clamp still made real progress (the day applied / sealed). The gate is why a completing
+        // THE ENTRY GATE, proven organically: drive the buffered-clamp consuming drain and
+        // assert the subscriber STAGE did not run in ANY locked call — zero PlayerSkipped
+        // emissions (the walk visits nothing under the lock; the old code re-opened an all-skip
+        // walk here). A ticket batch may legitimately interpose before the day seals, so keep
+        // draining under the same lock until dailyIdx advances. The gate is why a completing
         // subscriber chunk and a buffered-word jackpot apply can never share one tx.
         uint32 idxBeforeConsume = _dailyIdx();
-        vm.recordLogs();
-        game.advanceGame();
-        Vm.Log[] memory consumeLogs = vm.getRecordedLogs();
         bytes32 skippedSig = keccak256("PlayerSkipped(address,uint8)");
-        for (uint256 i; i < consumeLogs.length; ++i) {
-            assertTrue(
-                consumeLogs[i].topics.length == 0 || consumeLogs[i].topics[0] != skippedSig,
-                "GATE: the subscriber stage never runs while rngLocked (no ring visits in the consuming tx)"
-            );
+        uint256 consumeCalls;
+        while (_dailyIdx() == idxBeforeConsume && consumeCalls < DRAIN_MAX_ITERATIONS) {
+            vm.recordLogs();
+            game.advanceGame();
+            Vm.Log[] memory consumeLogs = vm.getRecordedLogs();
+            for (uint256 i; i < consumeLogs.length; ++i) {
+                assertTrue(
+                    consumeLogs[i].topics.length == 0 || consumeLogs[i].topics[0] != skippedSig,
+                    "GATE: the subscriber stage never runs while rngLocked (no ring visits in the consuming drain)"
+                );
+            }
+            unchecked {
+                ++consumeCalls;
+            }
         }
         assertGt(_dailyIdx(), idxBeforeConsume, "non-vacuity: the consuming advance applied/sealed a day");
+        emit log_named_uint("buffered_clamp_consuming_calls", consumeCalls);
 
         emit log_named_string(
             "FINDING",

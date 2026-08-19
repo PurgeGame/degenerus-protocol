@@ -4,6 +4,7 @@ pragma solidity ^0.8.26;
 import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
 import {DegenerusGame} from "../../contracts/DegenerusGame.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
+import {BoxOrderLib} from "../helpers/BoxOrderLib.sol";
 
 /// @dev Read-only view overlay etched onto the live game to inspect internal box-queue state. A
 ///      DegenerusGame subclass: etching type().runtimeCode (no constructor) gives the reads access to
@@ -22,14 +23,13 @@ contract C1Viewer is DegenerusGame {
         return false;
     }
 
-    /// @notice The packed lootboxEth amount sub-field (bits [0:128]) for [index][who] — the live
-    ///         "box still owed" signal that the auto-open sweep gates on (openHumanBoxes skips an
-    ///         entry whose lootbox amount AND presale leg are both zero) and that openLootBox zeroes
+    /// @notice The raw packed lootboxOrder word for [index][who] — the live "box still owed" signal
+    ///         that the auto-open sweep gates on (openHumanBoxes skips an entry whose box order AND
+    ///         presale leg are both zero) and that openLootBox zeroes (the whole word, one SSTORE)
     ///         on a successful open. The decisive "opened vs not" signal: != 0 => the box is still
-    ///         closed; 0 => it was opened/drained. (The post-repack lootboxEth word folds amount +
-    ///         adj + score + distress; only the amount sub-field is the owed-ETH signal.)
+    ///         closed; 0 => it was opened/drained.
     function lootboxBaseFor(uint48 index, address who) external view returns (uint256) {
-        return lootboxEth[index][who] & LB_AMOUNT_MASK;
+        return lootboxOrder[index][who];
     }
 
     /// @notice lootboxRngWordByIndex[index] — the per-index VRF word the open path gates on.
@@ -97,12 +97,12 @@ contract C1BoxAutoOpen is DeployProtocol {
         vm.etch(address(game), real);
     }
 
-    /// @dev Park the auto-open frontier (boxCursorIndex @ byte 13, boxCursor @ byte 7, both slot 57)
+    /// @dev Park the auto-open frontier (boxCursorIndex @ byte 13, boxCursor @ byte 7, both slot 56)
     ///      at `index` with a zero in-index cursor, so the O(1) boxesPending hint + the multi-index
     ///      sweep begin exactly at this finalized index (the realistic state where the empty lower
     ///      indices are already drained). No contract mutation — a field-isolated slot poke.
     function _parkBoxFrontier(uint48 index) internal {
-        bytes32 slot = bytes32(uint256(57));
+        bytes32 slot = bytes32(uint256(56));
         uint256 packed = uint256(vm.load(address(game), slot));
         uint256 m = (uint256(1) << 48) - 1;
         packed &= ~(m << (7 * 8));   // boxCursor = 0
@@ -153,7 +153,7 @@ contract C1BoxAutoOpen is DeployProtocol {
         uint256 lootboxDeposit = 1.2 ether;
         vm.prank(actor);
         game.purchase{value: lootboxDeposit + 1 ether}(
-            actor, 400, lootboxDeposit, bytes32(0), MintPaymentKind.DirectEth, false
+            actor, 400, BoxOrderLib.boCustom(lootboxDeposit), bytes32(0), MintPaymentKind.DirectEth, false
         );
         base = _base(N, actor);
         assertGt(base, 0, "fixture: a human lootbox box persisted at index N (base != 0)");
@@ -204,7 +204,7 @@ contract C1BoxAutoOpen is DeployProtocol {
         uint256 openedAuto = game.openBoxes(50);
 
         emit log_named_uint("openBoxes() opened count", openedAuto);
-        emit log_named_uint("lootboxEth amount[N][actor] AFTER auto-open", _base(N, actor));
+        emit log_named_uint("lootboxOrder word[N][actor] AFTER auto-open", _base(N, actor));
         emit log_named_uint("N", N);
 
         assertGt(openedAuto, 0, "FIX: openBoxes() opened at least one box");
