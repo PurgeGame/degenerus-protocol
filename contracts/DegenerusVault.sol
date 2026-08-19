@@ -28,7 +28,7 @@ interface IDegenerusGamePlayerActions {
     function purchase(
         address buyer,
         uint256 entryQuantityScaled,
-        uint256 lootBoxAmount,
+        uint256 boxOrder,
         bytes32 affiliateCode,
         MintPaymentKind payKind,
         bool foil
@@ -583,7 +583,7 @@ contract DegenerusVault {
     /// @notice Purchase tickets and lootboxes for the vault
     /// @dev Combines msg.value with vault ETH balance if ethValue > 0
     /// @param entryQuantityScaled Number of tickets to purchase
-    /// @param lootBoxAmount Number of lootboxes to purchase
+    /// @param boxOrder Packed box order (0 to skip; see purchase()).
     /// @param affiliateCode Affiliate code for referral tracking
     /// @param payKind Payment method for minting
     /// @param ethValue Additional ETH from vault balance to use (on top of msg.value)
@@ -591,7 +591,7 @@ contract DegenerusVault {
     /// @custom:reverts Insufficient If total value exceeds vault balance
     function gamePurchase(
         uint256 entryQuantityScaled,
-        uint256 lootBoxAmount,
+        uint256 boxOrder,
         bytes32 affiliateCode,
         MintPaymentKind payKind,
         uint256 ethValue
@@ -600,7 +600,7 @@ contract DegenerusVault {
         gamePlayer.purchase{value: totalValue}(
             address(this),
             entryQuantityScaled,
-            lootBoxAmount,
+            boxOrder,
             affiliateCode,
             payKind,
             false
