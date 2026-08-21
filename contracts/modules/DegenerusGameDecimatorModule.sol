@@ -345,7 +345,8 @@ contract DegenerusGameDecimatorModule is DegenerusGamePayoutUtils {
 
     /// @notice Resolve a Decimator jackpot claim for `player` (permissionless).
     /// @dev Anyone may crank any winner's claim; payout always credits `player`, never the
-    ///      caller. Resolution-into-claimable only (no ETH leaves here).
+    ///      caller. Resolution-into-claimable only (no ETH leaves here). Whole Whale Pass
+    ///      units in a large lootbox portion materialize immediately on this single path.
     /// @param lvl Level to claim from.
     /// @custom:reverts DecClaimInactive When no decimator snapshot exists for this level.
     /// @custom:reverts DecAlreadyClaimed When caller has already claimed for this level.
@@ -389,13 +390,15 @@ contract DegenerusGameDecimatorModule is DegenerusGamePayoutUtils {
             e,
             round.rngWord,
             amountWei,
-            gameOver || _livenessTriggered()
+            gameOver || _livenessTriggered(),
+            false
         );
     }
 
     /// @notice Permissionlessly resolve Decimator jackpot claims for a batch of players.
     /// @dev Non-claimable entries (already claimed / non-winner) are skipped, not reverted,
-    ///      so one stale address can't poison a mass-claim sweep.
+    ///      so one stale address can't poison a mass-claim sweep. Whole Whale Pass units are
+    ///      accumulated in `whalePassClaims`; any sub-unit remainder still resolves here.
     /// @param players Winners whose claims to resolve.
     /// @param lvl Level to claim from (any persisted round; snapshots never expire).
     /// @custom:reverts DecClaimInactive When no decimator snapshot exists for this level.
@@ -429,7 +432,15 @@ contract DegenerusGameDecimatorModule is DegenerusGamePayoutUtils {
                 packedOffsets
             );
             if (amountWei == 0) continue;
-            _claimDecimatorJackpotFor(players[i], lvl, e, rngWordCached, amountWei, over);
+            _claimDecimatorJackpotFor(
+                players[i],
+                lvl,
+                e,
+                rngWordCached,
+                amountWei,
+                over,
+                true
+            );
             unchecked {
                 ++settled;
             }
@@ -461,14 +472,16 @@ contract DegenerusGameDecimatorModule is DegenerusGamePayoutUtils {
     ///      buffer while the pool is frozen and in the live future pool otherwise — so a
     ///      frozen pool is no bar to claiming and callers do not gate on it.
     ///      Callers validate eligibility and compute `amountWei` (nonzero, unclaimed bet);
-    ///      this core marks the bet claimed before any credit is applied.
+    ///      this core marks the bet claimed before any credit is applied. `deferWhalePass`
+    ///      changes only delivery timing for whole half-pass units.
     function _claimDecimatorJackpotFor(
         address player,
         uint24 lvl,
         DecBet storage e,
         uint32 rngWord,
         uint256 amountWei,
-        bool over
+        bool over,
+        bool deferWhalePass
     ) private {
         // Capture the winning entry's bucket before the claim consumes it; the bucket encodes
         // the activity score sealed at decimator-burn time (see _minScoreForBucket), freezing
@@ -488,7 +501,8 @@ contract DegenerusGameDecimatorModule is DegenerusGamePayoutUtils {
             player,
             amountWei,
             rngWord,
-            _minScoreForBucket(winBucket)
+            _minScoreForBucket(winBucket),
+            deferWhalePass
         );
         if (lootboxPortion != 0) {
             // Credit the lootbox backing to whichever accumulator is live: the pending
@@ -522,7 +536,8 @@ contract DegenerusGameDecimatorModule is DegenerusGamePayoutUtils {
         address account,
         uint256 amount,
         uint256 rngWord,
-        uint16 evScore
+        uint16 evScore,
+        bool deferWhalePass
     ) private returns (uint256 lootboxPortion) {
         // Split 50/50: half ETH, half lootbox tickets
         uint256 ethPortion = amount >> 1;
@@ -532,7 +547,13 @@ contract DegenerusGameDecimatorModule is DegenerusGamePayoutUtils {
 
         // Lootbox portion is no longer claimable ETH; remove from reserved pool.
         claimablePool -= uint128(lootboxPortion); // Safe: lootboxPortion is a fraction of claimablePool, fits uint128
-        _awardDecimatorLootbox(account, lootboxPortion, rngWord, evScore);
+        _awardDecimatorLootbox(
+            account,
+            lootboxPortion,
+            rngWord,
+            evScore,
+            deferWhalePass
+        );
     }
 
     /// @dev Apply multiplier until the cap is reached; extra amount is counted at 1x.
@@ -687,20 +708,27 @@ contract DegenerusGameDecimatorModule is DegenerusGamePayoutUtils {
     /// @param winner Address to receive tickets.
     /// @param amount Lootbox portion of decimator claim in wei.
     /// @param rngWord VRF random word for lootbox resolution.
+    /// @param evScore Activity score frozen when the winning burn was bucketed.
+    /// @param deferWhalePass Whether whole half-pass units are recorded for later claiming.
     function _awardDecimatorLootbox(
         address winner,
         uint256 amount,
         uint256 rngWord,
-        uint16 evScore
+        uint16 evScore,
+        bool deferWhalePass
     ) private {
         if (winner == address(0) || amount == 0) return;
         if (amount > LOOTBOX_CLAIM_THRESHOLD) {
             // amount > 5 ether here, so fullHalfPasses = amount / 2.25 ether >= 2.
             uint256 fullHalfPasses = amount / HALF_WHALE_PASS_PRICE;
             uint256 remainder = amount % HALF_WHALE_PASS_PRICE;
-            uint24 startLevel = level + 1;
-            _applyWhalePassStats(winner, startLevel);
-            _queueHalfPassAward(winner, startLevel, 100, fullHalfPasses, false);
+            if (deferWhalePass) {
+                whalePassClaims[winner] += fullHalfPasses;
+            } else {
+                uint24 startLevel = level + 1;
+                _applyWhalePassStats(winner, startLevel);
+                _queueHalfPassAward(winner, startLevel, 100, fullHalfPasses, false);
+            }
             // Sub-half-pass remainder (< 2.25 ether, so always below the threshold):
             // falls through to direct-resolve as a futurePool-backed lootbox (like any
             // small decimator claim), staying in futurePrizePool where the caller put it
