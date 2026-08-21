@@ -501,22 +501,24 @@ contract VRFCore is DeployProtocol {
         assertEq(_lrMidDay(), 0, "LR_MID_DAY released after the batch drains on the new-day path");
     }
 
-    /// @notice requestLootboxRng within 15 minutes of day boundary must revert.
-    function test_preResetWindow_blocksMidDay() public {
+    /// @notice requestLootboxRng remains open until the final minute before reset.
+    function test_preResetWindow_isOneMinute() public {
         _setupForMidDayRng();
 
-        // Current day is day 2 (after completing days 1 and 2).
-        // Day 3 boundary = (current day index + 1) * 86400.
-        // We need to warp to 15 minutes before the day 3 boundary.
-        uint48 currentDay = game.currentDayView();
-        uint256 nextDayBoundary = uint256(currentDay + 1) * 86400;
-        uint256 preResetTime = nextDayBoundary - 15 minutes;
+        uint256 secondsIntoGameDay = (block.timestamp - 82_620) % 1 days;
+        uint256 nextDayBoundary = block.timestamp + 1 days - secondsIntoGameDay;
+        uint256 snapshot = vm.snapshotState();
 
-        // Warp to 15 minutes before next day boundary
-        vm.warp(preResetTime);
+        // One second outside the final-minute window remains available.
+        vm.warp(nextDayBoundary - 1 minutes - 1);
+        game.requestLootboxRng();
+        assertGt(mockVRF.lastRequestId(), 0, "mid-day request should remain open outside final minute");
 
-        // requestLootboxRng should revert (15-minute pre-reset guard)
-        vm.expectRevert();
+        assertTrue(vm.revertToState(snapshot), "restore pre-request state");
+
+        // The exact start of the final minute is blocked.
+        vm.warp(nextDayBoundary - 1 minutes);
+        vm.expectRevert(bytes4(keccak256("PreResetWindow()")));
         game.requestLootboxRng();
     }
 

@@ -55,7 +55,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
 
     // error E() — inherited from DegenerusGameStorage
     error MidDayActive(); // A mid-day ticket-swap VRF request is already in flight; cannot start another lootbox RNG request.
-    error PreResetWindow(); // Request blocked: within the 15-minute pre-reset window before the daily boundary to avoid competing with daily jackpot RNG.
+    error PreResetWindow(); // Request blocked: within the 1-minute pre-reset window before the daily boundary to avoid competing with daily jackpot RNG.
     error InsufficientLink(); // VRF subscription LINK balance is below the minimum required for a lootbox RNG request.
     error NoPendingLootbox(); // No pending lootbox ETH or FLIP value; nothing to trigger a mid-day RNG request for.
     error BelowThreshold(); // Pending lootbox ETH-equivalent value is below the configured threshold required to trigger mid-day RNG.
@@ -1466,8 +1466,8 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         uint48 nowTs = uint48(block.timestamp);
         uint24 currentDay = _simulatedDayIndexAt(nowTs);
 
-        // Block in the 15-minute pre-reset window to avoid competing with daily jackpot RNG flow.
-        if ((nowTs - 82620) % 1 days >= 1 days - 15 minutes) revert PreResetWindow();
+        // Block only in the final minute before reset to avoid competing with daily jackpot RNG flow.
+        if ((nowTs - 82620) % 1 days >= 1 days - 1 minutes) revert PreResetWindow();
         // Block until today's daily RNG has been consumed and recorded.
         if (rngWordByDay[currentDay] == 0) revert RngNotReady();
 
