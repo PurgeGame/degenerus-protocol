@@ -71,13 +71,13 @@ library BitPackingLib {
     /// @notice Bit position for whale pass type (bits 152-153)
     uint256 internal constant WHALE_PASS_TYPE_SHIFT = 152;
 
-    /// @notice Bit position for the AFKing seat latch (bit 154). Set on the
-    ///         FIRST pass acquisition (whale/lazy/deity purchase, whale-pass
-    ///         claim, or a deity purchase's conferred affiliate pass), which
-    ///         is also when the seat is minted; one free-tranche seat per
-    ///         address, ever. This bit is the sole once-per-address guard —
-    ///         the token caps the tranche at 1,000 but keeps no per-address
-    ///         record of its own.
+    /// @notice Bit position for the AFKing seat latch (bit 154). Set on an
+    ///         address's FIRST pass PURCHASE (whale/lazy/deity), which is also
+    ///         when the seat is minted; one free-tranche seat per address,
+    ///         ever. Passes that are won (the whale-pass claim lane) or
+    ///         conferred (a deity buyer's affiliate) never set it. This bit is
+    ///         the sole once-per-address guard — the token caps the tranche at
+    ///         1,000 but keeps no per-address record of its own.
     uint256 internal constant SEAT_CLAIMED_SHIFT = 154;
 
     /// @notice Bit position for the AFKing seat encumbrance latch (bit 155).

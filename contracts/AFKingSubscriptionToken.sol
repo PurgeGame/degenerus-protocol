@@ -7,7 +7,7 @@ pragma solidity 0.8.34;
  * @notice The afking seat license: holding at least 1 seat is the sole
  *         credential for an afking-mode subscription on the game. A
  *         2,000-serial ERC721 collection with fully on-chain SVG art. A seat
- *         is MINTED to its holder (no claim step): pass acquisition mints one
+ *         is MINTED to its holder (no claim step): buying a pass mints one
  *         game-side, and the vault mints from its own tranche. Art starts at a
  *         deterministic default and every holder may restyle it — symbol (0-31)
  *         plus ANY 24-bit RGB background and trim — cosmetic only (the game
@@ -18,7 +18,7 @@ pragma solidity 0.8.34;
  *        2 permanent construction seats — serial 1 to SDGNRS, serial 2 to
  *        the VAULT (default colors; neither has an ERC721-out path, so both
  *        protocol self-subscribers hold their seats forever) — a 1,000-seat
- *        FREE tranche minted to pass buyers as they acquire (one per address
+ *        FREE tranche minted to pass buyers when they buy (one per address
  *        for life, enforced by the game's SEAT_CLAIMED latch; past 1,000 a
  *        pass simply confers no seat), and a 998-seat VAULT tranche the vault
  *        mints directly to any recipient via its owner-gated afkingSeatMint —
@@ -205,7 +205,7 @@ contract AFKingSubscriptionToken {
 
     /// @notice ERC721 operator approval
     event ApprovalForAll(address indexed owner, address indexed operator, bool approved);
-    /// @notice Emitted when a seat is minted — on pass acquisition (game-driven) or
+    /// @notice Emitted when a seat is minted — on a pass PURCHASE (game-driven) or
     ///         from the vault's 998-seat tranche. Art is the deterministic default and
     ///         is restylable at any time via setSeatTraits.
     /// @param to Seat recipient
@@ -371,13 +371,15 @@ contract AFKingSubscriptionToken {
     }
 
     /*+======================================================================+
-      |                            CLAIM FLOW                                |
+      |                      PASS-PURCHASE MINT FLOW                        |
       +======================================================================+*/
 
-    /// @notice Mint a free-tranche seat directly to a pass acquirer (GAME only).
-    /// @dev Called by the game on every pass acquisition, so a seat arrives WITHOUT a
-    ///      separate claim step. Traits are seeded deterministically from (recipient,
-    ///      serial) and the holder may restyle them at any time via `setSeatTraits` — the
+    /// @notice Mint a free-tranche seat directly to a pass purchaser (GAME only).
+    /// @dev Called by the game on every pass PURCHASE, so a seat arrives WITHOUT a
+    ///      separate claim step. Won and conferred passes never reach here — the seat
+    ///      is a perk of paying for a pass, not of receiving one. Traits are seeded
+    ///      deterministically from (recipient, serial) and the holder may restyle them at
+    ///      any time via `setSeatTraits` — the
     ///      art was always designed to be changeable, so nothing is lost by not choosing
     ///      at mint. No entropy is read: the seed is cosmetic-only and never touches a VRF
     ///      word, so this is outside the RNG-freeze surface entirely.
@@ -389,11 +391,9 @@ contract AFKingSubscriptionToken {
     ///
     ///      The one-per-address limit is GAME-side, not here: the caller sets its
     ///      SEAT_CLAIMED latch before calling and mints only on the transition, so this
-    ///      function mints whatever it is handed. Neither construction-seat holder is
-    ///      excluded, so each can reach a mint once as a deity purchase's conferred
-    ///      affiliate — the VAULT when the buyer has no referrer, SDGNRS through the
-    ///      built-in DGNRS code it owns. One extra seat apiece, for their lifetimes.
-    /// @param to Pass acquirer receiving the seat
+    ///      function mints whatever it is handed. The game never calls it for a won or
+    ///      conferred pass, including a deity purchase's affiliate reward.
+    /// @param to Pass purchaser receiving the seat
     /// @custom:reverts OnlyGame When the caller is not the GAME contract
     function mintSeatFor(address to) external {
         if (msg.sender != ContractAddresses.GAME) revert OnlyGame();

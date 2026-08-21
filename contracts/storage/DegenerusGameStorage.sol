@@ -1802,8 +1802,9 @@ abstract contract DegenerusGameStorage {
     /// @param packedAfter The full mintPacked_ word after the write (BitPackingLib layout).
     event MintRecorded(address indexed player, uint256 packedAfter);
 
-    /// @notice Emitted on every pass activation (purchase AND award paths — the one
-    ///         authoritative signal; the shared internals below and the whale
+    /// @notice Emitted on every pass activation (purchase AND award paths — this event
+    ///         does not imply that the player bought the pass or received an AFKing seat).
+    ///         It is the authoritative pass signal; the shared internals below and the whale
     ///         purchase's inline stats write all emit it). Carries the post-merge
     ///         freeze end so stacked/overlapping passes need no span heuristics,
     ///         plus the absolute post-write mintPacked_ word (the activation also

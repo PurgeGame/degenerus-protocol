@@ -36,8 +36,8 @@ import {ActivityCurveLib} from "../libraries/ActivityCurveLib.sol";
  * - **Level Streak**: Consecutive level purchases
  * - **Quest Streak**: Daily quest completion streak (tracked in DegenerusQuests)
  * - **Affiliate Points**: Referral program bonus points (tracked in DegenerusAffiliate)
- * - **Pass**: Active pass type (lazy = 10-lvl, whale = 100-lvl; every pass also acts as an
- *   AFKing pass)
+ * - **Pass**: Active pass type (lazy = 10-lvl, whale = 100-lvl). Buying one also grants
+ *   the buyer's one-time AFKing seat; awarded or conferred passes do not.
  *
  * ### Mint Data Bit Packing Layout (mintPacked_):
  *

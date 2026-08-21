@@ -781,13 +781,10 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
         _recordLootboxEntry(buyer, lootboxAmount);
 
         emit DeityPassPurchased(buyer, symbolId, totalPrice, passLevel);
-        // The BUYER takes their seat before the conferred affiliate does. Seats are now
-        // minted here rather than claimed later, so at the free tranche's last slot this
-        // order decides who gets it — and it must not be the incidental affiliate over the
-        // address that paid for the pass. (The affiliate's own stats were applied above;
-        // only the seat leg is deferred.)
+        // Only the buyer takes a seat: the affiliate's pass is conferred by someone else's
+        // purchase, so it earns no seat and never competes for the free tranche's last slot.
+        // (The affiliate's own pass stats were applied above; only the seat leg is withheld.)
         _grantSeatCoin(buyer);
-        _grantSeatCoin(affiliateAddr);
     }
 
     // -------------------------------------------------------------------------
@@ -960,23 +957,23 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
         _applyWhalePassStats(player, startLevel);
         emit WhalePassClaimed(player, msg.sender, halfPasses, startLevel);
         _queueHalfPassAward(player, startLevel, 100, halfPasses, false);
-        _grantSeatCoin(player);
     }
 
-    /// @dev One-per-address-LIFETIME AFKing seat latch, fired on
-    ///      every pass acquisition through this module (whale/lazy/deity
-    ///      purchase, the deity purchase's conferred affiliate pass, and the
-    ///      whale-pass claim). The seat ARRIVES here — `mintSeatFor` mints it with
-    ///      deterministic default art the holder can restyle at any time (setSeatTraits),
-    ///      so no separate claim step stands between a pass and its seat. The token
-    ///      silently declines once its 1,000-seat free tranche is exhausted, so this never
-    ///      brings down a purchase.
+    /// @dev One-per-address-LIFETIME AFKing seat latch. The seat is a perk of BUYING a
+    ///      pass, never of winning or being handed one, so this fires only where an
+    ///      address pays for its own pass (whale/lazy/deity purchase). Passes that arrive
+    ///      any other way — the whale-pass claim and every `whalePassClaims` feeder behind
+    ///      it, and a deity buyer's conferred affiliate pass — mint no seat. The seat
+    ///      ARRIVES here: `mintSeatFor` mints it with deterministic default art the holder
+    ///      can restyle at any time (setSeatTraits), so no separate claim step stands
+    ///      between a purchased pass and its seat. The token silently declines once its
+    ///      1,000-seat free tranche is exhausted, so this never brings down a purchase.
     ///
     ///      The `mintPacked_` bit is the ONLY once-per-address guard — the token keeps no
     ///      twin and mints whatever it is handed. So the bit is set BEFORE the call, and
     ///      every call site keeps this last in its function, where no later whole-word
     ///      write to `mintPacked_[who]` can clobber it. Each address consumes its one
-    ///      chance exactly once, and every pass acquisition after the first pays only the
+    ///      chance exactly once, and every pass purchase after the first pays only the
     ///      bit test — no external call on the repeat path.
     function _grantSeatCoin(address who) private {
         uint256 packed = mintPacked_[who];
@@ -992,7 +989,7 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
 
 /// @dev Minimal interface for the GAME-gated AFKing seat mint.
 interface IAFKingSeatMint {
-    /// @param to Pass acquirer receiving a free-tranche seat (silent no-op once the
+    /// @param to Pass purchaser receiving a free-tranche seat (silent no-op once the
     ///        1,000-seat free tranche is exhausted).
     function mintSeatFor(address to) external;
 }

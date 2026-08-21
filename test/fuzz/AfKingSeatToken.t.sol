@@ -7,9 +7,9 @@ import {AFKingSubscriptionToken} from "../../contracts/AFKingSubscriptionToken.s
 import {GameAfkingModule} from "../../contracts/modules/GameAfkingModule.sol";
 
 /// @title AfKingSeatToken — integration tests for the AFKing seat ERC721
-///        (sub <=> seat): the pass-acquisition eligibility latch (whale
+///        (sub <=> seat): the pass-purchase seat latch (whale
 ///        module -> mintPacked_ bit 154, read back through mintPackedFor),
-///        the two-step claim flow, the subscribe coin gate, the seat lock
+///        immediate buyer minting, the subscribe coin gate, the seat lock
 ///        (an encumbered holder's last-seat transfer reverts SeatInUse until
 ///        manual unsub; an eviction forfeits the seat to the vault via
 ///        reclaimSeat), and the subscriberCount/subInfo views. Real
@@ -119,7 +119,7 @@ contract AfKingSeatToken is DeployProtocol {
     }
 
     // ──────────────────────────────────────────────────────────────────────
-    // Pass-acquisition eligibility latch -> claim (organic whale-module drive)
+    // Pass-purchase seat latch -> immediate mint (organic whale-module drive)
     // ──────────────────────────────────────────────────────────────────────
 
     function testLazyPassMintsSeatAndArtIsRestylable() public {
@@ -131,7 +131,7 @@ contract AfKingSeatToken is DeployProtocol {
         game.purchaseLazyPass{value: 0.24 ether}(buyer, bytes32(0));
         assertTrue(_isEligible(buyer), "pass purchase latches bit 154");
         // The seat ARRIVES with the pass -- no separate claim step.
-        assertEq(afkingSubToken.balanceOf(buyer), 1, "pass acquisition mints the seat");
+        assertEq(afkingSubToken.balanceOf(buyer), 1, "pass purchase mints the seat");
         assertEq(afkingSubToken.freeClaims(), 1, "free-tranche accounting");
 
         // Serials are monotonic with no burn path, so the freshest one is the buyer's.
@@ -182,23 +182,42 @@ contract AfKingSeatToken is DeployProtocol {
         assertTrue(_isEligible(buyer), "whale purchase latches too");
         assertEq(afkingSubToken.balanceOf(buyer), 1, "whale purchase mints the seat");
 
-        // A second pass acquisition (deity — a different trigger site) re-runs the
+        // A second pass purchase (deity — a different trigger site) re-runs the
         // already-set latch but can never mint a second free seat: one per address,
-        // lifetime, across all four triggers. The repeat path pays only the bit test.
+        // lifetime, across every trigger. The repeat path pays only the bit test.
         vm.deal(buyer, 24 ether);
         vm.prank(buyer);
         game.purchaseDeityPass{value: 24 ether}(buyer, 5, bytes32(0));
         assertEq(afkingSubToken.balanceOf(buyer), 1, "still exactly one seat");
-        // The deity purchase also latches the buyer's AFFILIATE, which defaults to the
-        // VAULT when unreferred — so the vault takes its own one-per-address seat here.
-        // That is one seat for the vault's lifetime, not one per purchase: the latch is
-        // idempotent per address, so only this first unreferred deity purchase mints it.
+        // The deity purchase also confers a pass on the buyer's AFFILIATE, which defaults
+        // to the VAULT when unreferred. A conferred pass is not a purchase, so it mints no
+        // seat: the vault keeps only its construction seat and burns no tranche slot.
         assertEq(
             afkingSubToken.balanceOf(ContractAddresses.VAULT),
-            2,
-            "vault holds its construction seat plus its one default-affiliate seat"
+            1,
+            "vault holds only its construction seat; a conferred pass mints none"
         );
-        assertEq(afkingSubToken.freeClaims(), 2, "buyer + vault, one tranche slot each");
+        assertEq(afkingSubToken.freeClaims(), 1, "only the buyer consumed a tranche slot");
+    }
+
+    function testDeityPassBuyerGetsSeatButConferredAffiliateDoesNot() public {
+        address buyer = makeAddr("fresh-deity-buyer");
+        vm.deal(buyer, 24 ether);
+
+        vm.prank(buyer);
+        game.purchaseDeityPass{value: 24 ether}(buyer, 6, bytes32(0));
+
+        assertEq(afkingSubToken.balanceOf(buyer), 1, "deity buyer receives a seat");
+        assertEq(
+            afkingSubToken.balanceOf(ContractAddresses.VAULT),
+            1,
+            "default affiliate keeps only its construction seat"
+        );
+        assertEq(
+            afkingSubToken.freeClaims(),
+            1,
+            "only the purchased-pass recipient uses the free tranche"
+        );
     }
 
     // ──────────────────────────────────────────────────────────────────────
