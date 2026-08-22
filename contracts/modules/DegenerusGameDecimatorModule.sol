@@ -903,14 +903,19 @@ contract DegenerusGameDecimatorModule is DegenerusGamePayoutUtils {
         uint256 weightedAmount = (effectiveAmount * timeMultBps) /
             BPS_DENOMINATOR;
 
-        // Update post-time-multiplier total (for claim share)
-        uint256 newWeighted = uint256(e.weightedBurn) + weightedAmount;
+        // Update post-time-multiplier total (for claim share), saturating at
+        // uint88 max. The aggregate takes only the delta the stored weight
+        // actually rose by, so the claim-share denominator stays equal to the
+        // sum of stored weights even once the clamp binds.
+        uint256 oldWeighted = uint256(e.weightedBurn);
+        uint256 newWeighted = oldWeighted + weightedAmount;
         if (newWeighted > type(uint88).max) newWeighted = type(uint88).max;
         e.weightedBurn = uint88(newWeighted);
+        uint256 creditedWeight = newWeighted - oldWeighted;
 
         // Update bucket aggregate (key includes lvl, so old-level entries are naturally stale)
         bytes32 bucketKey = keccak256(abi.encode(lvl, decBetBucket, decBetSubBucket));
-        terminalDecBucketBurnTotal[bucketKey] += weightedAmount;
+        terminalDecBucketBurnTotal[bucketKey] += creditedWeight;
 
         emit TerminalDecBurnRecorded(
             player,
@@ -918,7 +923,7 @@ contract DegenerusGameDecimatorModule is DegenerusGamePayoutUtils {
             decBetBucket,
             decBetSubBucket,
             effectiveAmount,
-            weightedAmount,
+            creditedWeight,
             timeMultBps
         );
     }
