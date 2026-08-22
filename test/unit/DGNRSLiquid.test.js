@@ -114,9 +114,9 @@ describe("DGNRS (DGNRS Liquid Token)", function () {
   // 1. Constructor / Initial State
   // ===========================================================================
   describe("Constructor", function () {
-    it("name is 'Degenerus Stonk'", async function () {
+    it("name is 'Degenerus Protocol Revenue Token'", async function () {
       const { dgnrs } = await loadFixture(deployFullProtocol);
-      expect(await dgnrs.name()).to.equal("Degenerus Protocol Equity Token");
+      expect(await dgnrs.name()).to.equal("Degenerus Protocol Revenue Token");
     });
 
     it("symbol is 'DGNRS'", async function () {

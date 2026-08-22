@@ -218,7 +218,7 @@ safe under one rule, applied uniformly:
   (`funder = msg.sender` when caller ≠ player and not operator-approved); the stake/position belongs
   to `player`. No branch burns a non-consenting party's FLIP. WWXRP is gift-excluded.
   Gift/operator deposits carry a zero record amount, so they never arm the all-time flip record or
-  the top-bettor board and a funder cannot farm those on someone else's position; quest progress
+  enter the BAF weighted draw, and a funder cannot farm those on someone else's position; quest progress
   credits the spender (the funder), which is the consenting payer.
 - **Cashout / spend (gated).** Moving value *out* to a chosen address, or spending a non-consenting
   party's balance, requires self, owner, or operator approval. Operator approval

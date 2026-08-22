@@ -93,9 +93,9 @@ describe("DGNRS", function () {
   // 1. Constructor / Initial State
   // ---------------------------------------------------------------------------
   describe("Initial state", function () {
-    it("token name is 'Staked Degenerus Stonk'", async function () {
+    it("token name is 'Degenerus Protocol Revenue and Governance Token'", async function () {
       const { sdgnrs } = await loadFixture(deployFullProtocol);
-      expect(await sdgnrs.name()).to.equal("Degenerus Protocol Equity Token (staked)");
+      expect(await sdgnrs.name()).to.equal("Degenerus Protocol Revenue and Governance Token");
     });
 
     it("token symbol is 'sDGNRS'", async function () {

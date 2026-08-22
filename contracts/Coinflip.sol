@@ -1,6 +1,30 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.34;
 
+/*
+ * TERMS OF INTERACTION — submitting a transaction to this contract accepts them.
+ *
+ * THIS IS GAMBLING. Outcomes are decided by chance. You can lose everything you put in
+ * simply by being unlucky. That is the software working exactly as intended, not a
+ * malfunction and not a defect. Do not commit funds you are not prepared to lose
+ * entirely.
+ *
+ * The deployed bytecode is the entire agreement, and controls over every comment, name,
+ * document and statement made about it. It has been audited but is not proven correct:
+ * it may contain defects the author did not find, and by interacting with it you accept
+ * that risk in full.
+ *
+ * Any state transition the code permits is authorised — including one that exploits a
+ * defect, and including sequences the author did not intend or foresee. A bug is not a
+ * breach of these terms. There is no unwritten rule behind the code for a permitted
+ * transaction to violate, and no unauthorised access to this contract.
+ *
+ * You bear all resulting loss, whether it follows from chance or from a defect. There is
+ * no refund, no rollback and no privileged party able to restore a position.
+ *
+ * Provided AS IS, without warranty of any kind. Full text: TERMS.md
+ */
+
 /**
  * @title Coinflip
  * @author Burnie Degenerus
@@ -74,6 +98,21 @@ contract Coinflip {
         uint256 amount,
         uint256 newTotal
     );
+    /// @notice Emitted when an x00 level's seed window is armed for VAULT and sDGNRS.
+    /// @param century The century index (level / 100) the window belongs to.
+    /// @param firstDay First flip day carrying the seed stake.
+    /// @param dayCount Number of consecutive days seeded.
+    /// @param amountPerDay Seed stake added per day, per recipient.
+    event SeedWindowArmed(
+        uint24 indexed century,
+        uint24 indexed firstDay,
+        uint24 dayCount,
+        uint256 amountPerDay
+    );
+    /// @notice Emitted when a century arm tops up the vault's WWXRP reserve.
+    /// @param century The century index that paid it.
+    /// @param amount WWXRP added to the vault's uncirculated allowance.
+    event VaultWwxrpToppedUp(uint24 indexed century, uint256 amount);
     /// @notice Emitted when a coinflip day is resolved.
     /// @param day The resolved day.
     /// @param win Whether the flip outcome is a win.
@@ -148,6 +187,7 @@ contract Coinflip {
     error RngLocked();
     error Insufficient();
     error NotApproved();
+    error SeedNotDue();
 
     /*+======================================================================+
       |                         STORAGE VARIABLES                            |
@@ -194,6 +234,18 @@ contract Coinflip {
     ///      VAULT and sDGNRS. All initial FLIP must survive a coinflip before minting.
     uint256 private constant SEED_FLIP_DAILY = 200_000 ether;
     uint24 private constant SEED_FLIP_DAYS = 20;
+    /// @dev Levels between seed windows. The deploy window covers the first, and every
+    ///      x00 level re-arms one for VAULT and sDGNRS on the same terms.
+    uint24 private constant SEED_CENTURY_LEVELS = 100;
+    /// @dev Mirrors `WWXRP.INITIAL_VAULT_ALLOWANCE`, the vault's deploy-time WWXRP reserve.
+    ///      Each century arm pays the vault double the previous payment, counting that
+    ///      deploy reserve as the first, so arm N pays `WWXRP_VAULT_SEED << N`. Held as a
+    ///      local constant rather than read across the wire; the equality is pinned by test.
+    uint256 private constant WWXRP_VAULT_SEED = 1_000_000_000 ether;
+    /// @dev Doubling stops past this century. `<<` truncates silently rather than
+    ///      reverting, and the seed overflows uint256 somewhere past 166 doublings; 60 is
+    ///      far beyond any reachable level and keeps the shift provably in range.
+    uint24 private constant WWXRP_MAX_DOUBLINGS = 60;
 
     /// @dev Share of sDGNRS's static seed reserve that joins the active flip position each day,
     ///      in bps. Applies only once the seed window closes and auto-rebuy arms, from which
@@ -249,6 +301,9 @@ contract Coinflip {
     ///      path's claim walk already loads, so the per-deposit gate costs one
     ///      warm read.
     uint24 internal bafDrawDay;
+    /// @dev Highest century (level / SEED_CENTURY_LEVELS) whose seed window has been armed.
+    ///      Appended into this slot's free bytes, so every later slot keeps its index.
+    uint24 internal lastSeededCentury;
 
     // BAF weighted draw. Book-kept only for the armed day (the x0 level's last
     // purchase day stakes it): every direct self-funded deposit staking that day
@@ -994,6 +1049,64 @@ contract Coinflip {
         uint256 candidate
     ) external onlyDegenerusGameContract returns (uint256) {
         return _armBigRecord(kind, player, candidate);
+    }
+
+    /// @notice Arm an x00 level's seed window: SEED_FLIP_DAILY per day for SEED_FLIP_DAYS
+    ///         consecutive days, to VAULT and to sDGNRS, on the same terms as the deploy seed.
+    /// @dev Permissionless and deliberately off the advance path — the daily crank is the
+    ///      gas-DoS-sensitive route, and this writes ten cold slots per recipient, so it pays
+    ///      its own way in its own transaction instead of riding the century transition.
+    ///      Nothing here can move value from a non-consenting party: both recipients and the
+    ///      amount are fixed, and the only caller-chosen input is timing.
+    ///
+    ///      Century N becomes armable the moment level N*100 opens and stays armable until it
+    ///      is used, so a missed call delays a window rather than losing it: a caller arriving
+    ///      at level 250 with nothing armed claims century 1, and a second call claims century
+    ///      2. Once a century is armed its latch makes a repeat call for it revert.
+    ///
+    ///      Stakes ADD to the day's lane rather than replacing it: sDGNRS is on perpetual
+    ///      auto-rebuy by this point and already holds a stake on the near days, which a
+    ///      masked overwrite would destroy. `_setFlipStake` saturates at the lane width.
+    ///
+    ///      Gated on the RNG lock and starting at `_targetFlipDay()` (the next unresolved day)
+    ///      so the seed can never be aimed at a day whose word is already committed.
+    function armCenturySeed() external {
+        (uint24 lvl, , , bool rngLocked_, ) = degenerusGame.purchaseInfo();
+        if (rngLocked_) revert RngLocked();
+        // Arms the LOWEST unarmed century, not the current one, so a century nobody called
+        // is claimed by the next call rather than skipped. Two centuries behind therefore
+        // takes two calls, and the WWXRP doubling below pays each century its own figure in
+        // order. Widened for the compare: century * 100 can exceed uint24 at absurd levels.
+        uint24 century = lastSeededCentury + 1;
+        if (uint256(lvl) < uint256(century) * SEED_CENTURY_LEVELS) revert SeedNotDue();
+        lastSeededCentury = century;
+
+        uint24 firstDay = _targetFlipDay();
+        for (uint24 i = 0; i < SEED_FLIP_DAYS; ) {
+            uint24 d = firstDay + i;
+            uint256 vaultTotal = _flipStake(d, ContractAddresses.VAULT) + SEED_FLIP_DAILY;
+            uint256 sdgnrsTotal = _flipStake(d, ContractAddresses.SDGNRS) + SEED_FLIP_DAILY;
+            _setFlipStake(d, ContractAddresses.VAULT, vaultTotal);
+            _setFlipStake(d, ContractAddresses.SDGNRS, sdgnrsTotal);
+            emit CoinflipStakeUpdated(ContractAddresses.VAULT, d, SEED_FLIP_DAILY, vaultTotal);
+            emit CoinflipStakeUpdated(ContractAddresses.SDGNRS, d, SEED_FLIP_DAILY, sdgnrsTotal);
+            unchecked {
+                ++i;
+            }
+        }
+
+        emit SeedWindowArmed(century, firstDay, SEED_FLIP_DAYS, SEED_FLIP_DAILY);
+
+        // Vault WWXRP reserve, doubling each century off the deploy allowance: century N
+        // pays `WWXRP_VAULT_SEED << N`. Derived from the century rather than a paid-count,
+        // so a century armed late pays its own figure and no state is kept for it.
+        // `mintPrize` to VAULT is intercepted by WWXRP._mint into `vaultAllowance`, so this
+        // raises the uncirculated reserve the vault may mint from, not a balance.
+        if (century <= WWXRP_MAX_DOUBLINGS) {
+            uint256 wwxrpAmount = WWXRP_VAULT_SEED << uint256(century);
+            wwxrp.mintPrize(ContractAddresses.VAULT, wwxrpAmount);
+            emit VaultWwxrpToppedUp(century, wwxrpAmount);
+        }
     }
 
     /// @notice Add FLIP to the shared record pool.
