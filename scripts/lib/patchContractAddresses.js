@@ -47,16 +47,22 @@ export function patchContractAddresses(
   }
 
   // Patch DEPLOY_DAY_BOUNDARY
-  src = src.replace(
-    /uint48 internal constant DEPLOY_DAY_BOUNDARY = \d+;/,
-    `uint48 internal constant DEPLOY_DAY_BOUNDARY = ${deployDayBoundary};`
+  src = replaceScalarConstant(
+    src,
+    "uint48",
+    "DEPLOY_DAY_BOUNDARY",
+    "\\d+",
+    `${deployDayBoundary}`
   );
 
   // Patch VRF_KEY_HASH
   if (vrfKeyHash) {
-    src = src.replace(
-      /bytes32 internal constant VRF_KEY_HASH = 0x[0-9a-fA-F]+;/,
-      `bytes32 internal constant VRF_KEY_HASH = ${vrfKeyHash};`
+    src = replaceScalarConstant(
+      src,
+      "bytes32",
+      "VRF_KEY_HASH",
+      "0x[0-9a-fA-F]+",
+      vrfKeyHash
     );
   }
 
@@ -78,6 +84,27 @@ export function cleanupBackup(contractFilePath) {
 }
 
 // --- Internal ---
+
+function replaceScalarConstant(src, typeName, constantName, valuePattern, value) {
+  // The `=` may be followed by whitespace including a newline/indent when the
+  // declaration wraps (prettier splits `bytes32 ... VRF_KEY_HASH =` across two
+  // lines), so match any whitespace between `=` and the value literal.
+  const regex = new RegExp(
+    `(${typeName} internal constant ${constantName} =\\s*)${valuePattern};`,
+    "g"
+  );
+  // Assert exactly one match: a renamed/removed constant or a format change would
+  // otherwise silently no-op and deploy the checked-in placeholder value.
+  const matches = src.match(regex);
+  if (!matches || matches.length !== 1) {
+    throw new Error(
+      `patchContractAddresses: expected exactly one '${constantName}' constant, ` +
+        `found ${matches ? matches.length : 0} — refusing to patch (renamed/removed constant ` +
+        `or format drift in ContractAddresses.sol).`
+    );
+  }
+  return src.replace(regex, `$1${value};`);
+}
 
 function replaceAddressConstant(src, constantName, address) {
   // Match: address internal constant NAME = address(0);
