@@ -4,7 +4,7 @@ Pre-disclosure for audit wardens. **If a finding's mechanism + impact is describ
 already known and is not eligible.** This is a precise perimeter — each entry names the exact
 mechanism and why it is by-design, defended, or out-of-scope. There are no vague blanket disclaimers.
 
-Frozen subject: `contracts/` tree `33ccd5b9` @ tag `degenerus-c4a`. Pre-scanned with Slither v0.11.5
+Frozen subject: `contracts/` tree `46cc1c67` @ tag `degenerus-c4a`. Pre-scanned with Slither v0.11.5
 + Aderyn 0.6.8; those findings are triaged in the automated-tools section below.
 
 ---
@@ -108,9 +108,9 @@ is no victim. An admin-power finding must exhibit an **engaged-community victim*
 ## 3. Accepted out-of-scope risk: the > 120-day VRF-death deadman fallback (do NOT submit)
 
 **Mechanism.** When the game has not sealed a day for more than 120 days
-(`_vrfDeadmanFired ≡ _simulatedDayIndex() − dailyIdx > 120`, `DegenerusGameStorage.sol:1923-1925`;
+(`_vrfDeadmanFired ≡ _simulatedDayIndex() − dailyIdx > 120`, `DegenerusGameStorage.sol:2065-2066`;
 `dailyIdx` is uint24 and always `<= _simulatedDayIndex()` so no underflow), the terminal release no
-longer waits for Chainlink. `_getHistoricalRngFallback` (`DegenerusGameAdvanceModule.sol:1946-1970`)
+longer waits for Chainlink. `_getHistoricalRngFallback` (`DegenerusGameAdvanceModule.sol:1959-1970`)
 commits a fallback word from sealed historical `rngWordByDay` admixed with `block.prevrandao`; the
 `reverseFlip` nudge is cancelled-and-consumed (`unchecked fallbackWord -= totalFlipReversals`,
 `:1862`, against the consumption in `_applyDailyRng :2640-2651`).
@@ -141,29 +141,52 @@ transaction (a coin credit, not ETH-backed value). Immaterial; documented, not e
 
 ## 5. Automated tool findings (pre-disclosed)
 
-The full machine-readable Slither/Aderyn baseline is maintained internally — Slither 0.11.5 (3,410
-results / 101 detectors over 156 contracts at tree `33ccd5b9`; 178 High / 454 Medium / 403 Low /
-2,323 Informational / 52 Optimization, and the "High" tier is dominated by 138 `uninitialized-state`
+The full machine-readable Slither/Aderyn baseline is maintained internally — Slither 0.11.5 (3,695
+results / 101 detectors over 163 contracts at tree `46cc1c67`; 171 High / 447 Medium / 431 Low /
+2,594 Informational / 52 Optimization, and the "High" tier is dominated by 134 `uninitialized-state`
 false positives from the shared-storage delegatecall architecture — the deployed-module compilation
-units plus the `DegenerusGameLens` unit, see below) + Aderyn 0.6.8 (9 High / 20 Low, unchanged).
+units plus the `DegenerusGameLens` unit, see below) + Aderyn 0.6.8 (9 High / 21 Low).
 Slither totals are sensitive to the scan environment (solc/toolchain resolution), so the absolute
 count is not comparable across machines — re-runs should compare category triage, not the total.
-These counts were measured directly at tree `33ccd5b9`, not carried forward from an earlier scan.
-The immediately preceding tree `a054e52d` re-scanned in the same environment reproduced its recorded
-3,349 / 172 High / 450 Medium / 392 Low / 2,283 Informational / 52 Optimization exactly, tier for
-tier, so the environment is validated and the delta is real: **+61 results, +6 High**, over a
-two-change span (the Degenerette per-currency boon lanes, and the BAF weighted-depositor draw
-shipped alongside the soulbound record-trophy token). The High tier gains no new detector class —
-its composition is identical except `uninitialized-state` (132 -> 138), and all six additions are
-that same shared-storage false-positive class, each attributable: `boonPacked` read by the
-Degenerette module, and `vrfCoordinator` / `vrfKeyHash` / `vrfSubscriptionId` / `rngLockedFlag` /
-`rngWordCurrent` becoming read-without-writer inside the advance module's compilation unit once the
-cold VRF admin pair (`wireVrf`, `updateVrfCoordinatorAndSub`) relocated to the game-over module for
-EIP-170 headroom. The contract count moves 152 -> 156 for the new token and the two new interfaces
-(`DegenerusRecordBounty`, `IDegenerusRecordBounty`, `IDegenerusCoinJackpotView`).
+These counts were measured directly at tree `46cc1c67`, not carried forward from an earlier scan.
+The immediately preceding tree `33ccd5b9` re-scanned in the same environment reproduced its recorded
+3,410 / 178 High / 454 Medium / 403 Low / 2,323 Informational / 52 Optimization exactly, tier for
+tier, so the environment is validated and the delta is real: **+285 results, and seven FEWER High**,
+over a twelve-commit span (the self-describing event surface and miner bounty, the affiliate quest
+retarget, the gold Dice 6 badge inversion, the affiliate code on deity-pass purchases, the vault
+coinflip-leg redemption fix, the one-box-one-roll packed box order, the AFKing seat rule, the
+decimator whale-pass deferral and its saturation-cap fix, and the one-minute pre-jackpot lockout).
 
-The delta against the tree tagged before this chain began (`4e616db4`) is **+206 results and +16
-High**, spanning twenty-one changes: the `extsload` observability lens, the module observability
+The High tier gains no new detector class, and one retires entirely. A single finding is added —
+`delegatecall-loop` on the new `_rollSingleBoxBoons` — and eight clear: the two `delegatecall-loop`
+entries on the `_resolveLootboxCommon` / `_rollLootboxBoons` pair that one roll replaces, one of the
+three `encode-packed-collision` entries on `AFKingSubscriptionToken._renderSvgInternal` (the badge
+inversion collapsed one SVG concatenation), the lone `shadowing-state` — the duplicate
+`JACKPOT_LEVEL_CAP` constant in the mint module is gone, so that standing triage entry retires with
+it — and four `uninitialized-state` shared-storage false positives (`boxPlayers`,
+`jackpotPhaseFlag`, `lootboxEth`, `rngLockedFlag`), each of which gained a writer inside the unit
+that reads it. The contract count moves 156 -> 163 for the six test-only `tokenURI` renderer probes
+(`out_of_scope.txt`) and the new `IFoilWwxrp` interface.
+
+The +285 is dominated by one Informational detector: `unused-state` at **+251** (+360 / −109), the
+same shared-storage delegatecall artifact as the High tier and equally not a defect. The packed box
+order adds roughly nineteen members to `DegenerusGameStorage` — the thirteen `LB_*` packing
+constants, `lootboxOrder`, `MAX_BOXES_PER_ORDER`, the three `MINER_BOUNTY_*` sizes and the
+`OPEN_HUMAN_*` weights — and each is reported once per compilation unit that inherits the storage
+without touching it, fourteen units in all; the 109 that cleared are the members the same rework
+retired. The remaining movement is small and attributable: `reentrancy-events` +20 and `calls-loop`
++6 from the self-describing event surface; `divide-before-multiply` **−17**, because the retired
+`_boonPoolStats` carried eighteen of them and the replacement `_rollTier` carries one;
+`reentrancy-no-eth` +5 across `beginBoxOrder`, the two pass purchases that now bind an affiliate
+code, and the funded-subscribe logging; `uninitialized-local` +4 net as the old `lb*` locals in
+`_purchaseForWithCached` gave way to packed-order locals of the same deliberate default-zero kind;
+`missing-inheritance` +6, exactly the six renderer probes; and `unused-return` +2 on
+`purchaseDeityPass` and on `DegenerusVault.burnCoin`, which now discards the `vaultMintTo` result.
+
+The delta against the tree tagged before this chain began (`4e616db4`, whose retained scan
+re-counts to 3,143 results / 156 High) is **+552 results and +15 High**. That span is the
+twelve-commit chain enumerated above plus every change below: the `extsload`
+observability lens, the module observability
 events, the foil daily quest moving to the final-jackpot RNG request, the static boon tables, the
 council-review fixes, the seat push-mint, the dead-code removal, the size-scaled lootbox WWXRP
 stake, the coinflip claimable-preview fix, the vault share-token ENS reverse names, the solo-quadrant
@@ -284,10 +307,11 @@ full-last-purchase-day pacing, the deploy-day daily-quest seed, and the WWXRP De
   `redundant-statements` on the `ok;` result discard — the exact per-constructor pair every other
   ENS call site already carries. Constructor-only code; no runtime bytecode moved.
 
-The High tier is composition-identical to the prior tagged tree across every other check (6
-`arbitrary-send-eth`, 6 `reentrancy-balance`, 5 `delegatecall-loop`, 3 `encode-packed-collision`,
-3 `reentrancy-eth`, 2 `incorrect-exp`, 1 `shadowing-state`); only `uninitialized-state`
-(118 → 131) and `weak-prng` (12 → 14) moved, as attributed above. The 14 `weak-prng` include the two
+The High tier at this tree is 134 `uninitialized-state`, 14 `weak-prng`, 6 `arbitrary-send-eth`,
+6 `reentrancy-balance`, 4 `delegatecall-loop`, 3 `reentrancy-eth`, 2 `encode-packed-collision` and
+2 `incorrect-exp`. Every check either held or fell against the prior tagged tree; nothing rose, and
+the `shadowing-state` entry that stood for many milestones is gone with the duplicate constant that
+caused it. The 14 `weak-prng` include the two
 `DegenerusParimutuel` entries (`_openVolumeRound()` and `volumeBetCredit()`, each reading
 `block.timestamp % 86400` to decide whether the day's betting window is open) — a time-of-day gate,
 not a source of randomness: nothing is drawn from it, and the same benign pattern is already
@@ -303,16 +327,12 @@ by-design, defended, or not-applicable — is below.
 scope). The other, `otherSlot = slot ^ 1` in `DegenerusQuests._questCompleteWithPair`, is a deliberate
 XOR toggle between the two quest slots (0↔1), not a mistyped `**`.
 
-**shadowing-state (High ×1).** `DegenerusGameMintModule.JACKPOT_LEVEL_CAP` re-declares the same
-constant value as `DegenerusGameMintStreakUtils.JACKPOT_LEVEL_CAP`. Both are `constant` with identical
-values, so no storage is shadowed and no read can diverge — a duplicate literal, not a state bug.
+**locked-ether (Medium ×2).** The flagged contracts are the `DegenerusGameBoonModule` `delegatecall`
+module plus a test mock. A module never holds ETH: it executes in `DegenerusGame`'s context, so
+`payable` entrypoints there are the *game's* payable surface and the game has the withdrawal paths.
 
-**locked-ether (Medium ×3).** The flagged contracts are `delegatecall` modules (Boon, Whale, …) plus a
-test mock. A module never holds ETH: it executes in `DegenerusGame`'s context, so `payable` entrypoints
-there are the *game's* payable surface and the game has the withdrawal paths.
-
-**low-level-calls (Informational ×16) — ENS self-naming.** Sixteen constructor call sites — the
-fifteen standalone deployed contracts plus one parameterized site in the vault's share-class token
+**low-level-calls (Informational ×17) — ENS self-naming.** Seventeen constructor call sites — the
+sixteen standalone deployed contracts plus one parameterized site in the vault's share-class token
 (compiled once, deployed twice as DGVF/DGVE) — make one best-effort `setName(string)` call to
 `ContractAddresses.ENS_REVERSE_REGISTRAR` (`address(0)` in this subject, so unreachable here). The
 return value is intentionally discarded so a missing or hostile registrar can never revert a
@@ -322,6 +342,13 @@ Statement" Low (the `ok;` no-op that silences the unused-variable warning).
 
 **events-maths.** `resolveRedemptionLootbox` decrements `claimablePool` without a dedicated event;
 higher-level redemption events capture the context (the variable is a running tally, not a balance).
+
+**Unused import (Aderyn Low ×3) — the one Aderyn category this subject added.** The packed-box-order
+rework left three `import` statements with no remaining reference: `IDegenerusQuests` and
+`BitPackingLib` in `DegenerusGameLootboxModule.sol`, and `PriceLookupLib` in
+`DegenerusGameStorage.sol`. Solidity emits no code for an unused import, so no deployed bytecode is
+affected and no behaviour can depend on them; they are catalogued here rather than edited on the
+frozen tree.
 
 **encode-packed-collision.** `AFKingSubscriptionToken._renderSvgInternal` concatenates SVG fragments
 with `abi.encodePacked(string, ...)`; the bytes render a tokenURI image and are never hashed for

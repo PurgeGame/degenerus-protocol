@@ -1,6 +1,6 @@
 # Degenerus Protocol — Out of Scope
 #
-# Frozen subject: contracts/ tree 33ccd5b9 @ tag degenerus-c4a (post-v75.0 hardening freeze).
+# Frozen subject: contracts/ tree 46cc1c67 @ tag degenerus-c4a (post-v76.0 audit freeze).
 # Anything not listed in scope.txt is out of scope. The items below are the in-tree
 # Solidity and tooling that exist alongside the audited sources but are NOT part of the
 # deployed/production system. Findings against these are not eligible.
@@ -24,6 +24,7 @@ contracts/test/JackpotBernoulliTester.sol
 contracts/test/JackpotSoloTester.sol
 contracts/test/LootboxBernoulliTester.sol
 contracts/test/PriceLookupTester.sol
+contracts/test/RendererProbes.sol       # external tokenURI renderer probes (ok/empty/revert)
 contracts/test/SettleClaimableShortfallTester.sol
 contracts/test/TraitUtilsTester.sol
 

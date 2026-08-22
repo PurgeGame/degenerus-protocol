@@ -22,7 +22,7 @@ Two liveness guards prevent permanent fund lockup. At level 0, a 365-day deploy 
 
 - **29 deployable contracts** (17 core + 12 delegatecall modules), sharing storage via `DegenerusGameStorage`
 - Solidity 0.8.34, `viaIR` enabled, optimizer runs = 1000, EVM target `osaka`
-- All contracts under the 24,576-byte EIP-170 limit (largest: DegenerusMintModule at 24,351 bytes, 225 to spare; DegenerusGame at 24,318, 258 to spare; AdvanceModule at 24,068, 508 to spare)
+- All contracts under the 24,576-byte EIP-170 limit (largest: DegenerusGame at 24,487 bytes, 89 to spare; AdvanceModule at 24,207, 369 to spare; DegenerusMintModule at 22,399, 2,177 to spare)
 - External dependencies: Chainlink VRF V2.5, Lido stETH, LINK token, and (optionally) an ENS
   reverse registrar — `ENS_REVERSE_REGISTRAR` is `address(0)` in this tree, which disables the
   constructor self-naming call entirely
@@ -81,7 +81,7 @@ DegenerusGame.sol (main entry point, delegatecall dispatcher)
 
 ## Repository Layout
 
-55 production Solidity files: 20 in `contracts/` (16 deployable + `ContractAddresses` + `DegenerusTraitUtils` + `DeityBoonViewer` + `DegenerusGameLens`), 14 in `modules/` (12 deployable + 2 abstract utils), 1 shared storage contract, 8 libraries, and 12 interfaces. `contracts/mocks/` and `contracts/test/` are test scaffolding and are never deployed.
+56 production Solidity files: 21 in `contracts/` (17 deployable + `ContractAddresses` + `DegenerusTraitUtils` + `DeityBoonViewer` + `DegenerusGameLens`), 14 in `modules/` (12 deployable + 2 abstract utils), 1 shared storage contract, 8 libraries, and 12 interfaces. `contracts/mocks/` and `contracts/test/` are test scaffolding and are never deployed.
 
 ## Deployment
 
@@ -116,7 +116,8 @@ The Solidity build is pinned — `foundry.toml` fixes the compiler (solc 0.8.34)
 
 The full assurance pipeline lives in this repository and runs in CI (`.github/workflows/ci.yml`) on every push:
 
-- **`forge test`** — **1,554 Foundry tests across 207 suites**, all passing: unit, integration, fuzz, invariant, gas, access-control, governance, economics, and named regression harnesses for every fixed finding.
+- **`forge test`** — **1,722 Foundry tests across 227 suites**: 1,615 passing, 104 skipped, and 3 fixtures left stale by the packed-box-order change (see below). Coverage spans unit, integration, fuzz, invariant, gas, access-control, governance, economics, and named regression harnesses for every fixed finding.
+  The three stale fixtures — `TicketLifecycle::testLootboxFarRollTicketsRouteToFF`, `VRFLifecycle::test_vrfLifecycle_levelAdvancement` and `FoilSnapPayout::test_matchPayoutIgnoresSnapExponent` — encode the superseded model in which repeated lootbox spends of differing sizes accumulated for one buyer in one RNG index. `_mergeBoxOrder` now deliberately admits one custom box *size* per (index, buyer), so those fixtures build a smaller scenario than they assert over. The contracts behave as designed; the fixtures await migration and are tracked as test debt, not findings (`test/` is out of scope).
 - **EIP-170 size gate** — CI fails if any deployed contract breaches the 24,576-byte limit.
 - **Storage-layout oracle** (`scripts/layout/storage_layout_oracle.sh`) — 12 modules execute by `delegatecall` against one shared `DegenerusGameStorage`, so CI fails the build if any storage slot in the game, any state contract, or any module moves versus a committed golden. This makes the "a module writes a slot the game uses for something else" corruption class un-shippable.
 - **Source-drift gates** (`make check-*`) — interface coverage, delegatecall target alignment, raw-selector bans, RNG-window consumer classification, pool-write provenance, unbounded storage-array deletes.
@@ -126,16 +127,16 @@ The full assurance pipeline lives in this repository and runs in CI (`.github/wo
 Reproduce the core suite locally:
 
 ```
-forge test    # 1,554 passing
+forge test    # 1,615 passing, 104 skipped, 3 known-stale fixtures
 make check-interfaces check-delegatecall check-raw-selectors check-rng-window check-pool-writes check-array-delete
 bash scripts/layout/storage_layout_oracle.sh
 ```
 
-A secondary Hardhat behavioral suite (`npx hardhat test`) provides additional coverage — 1,594 passing.
+A secondary Hardhat behavioral suite (`npx hardhat test`) provides additional coverage — 1,627 passing.
 
 ## Scope & Known Issues
 
-- **`scope.txt` / `out_of_scope.txt`** — the exact audited surface, pinned to `contracts/` tree `33ccd5b9` (tag `degenerus-c4a`).
+- **`scope.txt` / `out_of_scope.txt`** — the exact audited surface, pinned to `contracts/` tree `46cc1c67` (tag `degenerus-c4a`).
 - **`KNOWN-ISSUES.md`** — every pre-triaged finding, by-design ruling, and static-analysis disposition, each with its precise mechanism. Not vague disclaimers.
 - **`SECURITY.md`** — threat model, trusted-role matrix (functional authority, not just Solidity modifiers), and disclosure process.
 - **`ECONOMIC_DISCLOSURES.md`** — creator allocations, vesting, governance control, the WWXRP reserve, and terminal value — every figure cited to a contract line.

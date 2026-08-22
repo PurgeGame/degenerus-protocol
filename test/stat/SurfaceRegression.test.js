@@ -1300,19 +1300,21 @@ describe("v40.0 SURF-01..05 — protected surfaces vs v39.0 baseline 6a7455d1", 
     expect(fs.existsSync(entropyLibPath), `${entropyLibPath} must exist`).to.equal(true);
     const src = fs.readFileSync(entropyLibPath, "utf8");
     const fnMatches = src.match(/function\s+\w+/g) || [];
-    // RE-PINNED 2026-08-06 from 1 -> 2 members. `hash1` was added deliberately by
-    // `dbb31aab` (gas round 7, small-contract sweep) as the single-operand twin of
-    // `hash2`; the v40.0 gate predates it and had been failing unnoticed ever since,
-    // because `make test-hardhat` does not run `test/stat/`. The gate's PURPOSE is
-    // unchanged — it is drift detection for an unreviewed member appearing in the
-    // library — so it is re-pinned to the current intended surface rather than
-    // dropped. A THIRD member still fails here.
+    // RE-PINNED 2026-08-22 from 2 -> 3 members. `hash4` was added deliberately by
+    // `40923eefd` (one box, one roll) as the four-operand twin of `hash2`, and is
+    // consumed by the packed-box-order seed in DegenerusGameLootboxModule. The
+    // earlier re-pin (2026-08-06, 1 -> 2) admitted `hash1` from `dbb31aab` on the
+    // same reasoning. The gate's PURPOSE is unchanged — it is drift detection for an
+    // unreviewed member appearing in the library, and it caught this one at the
+    // freeze — so it is re-pinned to the current intended surface rather than
+    // dropped. A FOURTH member still fails here.
     expect(
       fnMatches.length,
-      `[v40.0 SURF] EntropyLib.sol must contain exactly two functions (hash2, hash1); ` +
+      `[v40.0 SURF] EntropyLib.sol must contain exactly three functions (hash2, hash4, hash1); ` +
       `found ${fnMatches.length}: ${fnMatches.join(", ")}`,
-    ).to.equal(2);
+    ).to.equal(3);
     expect(src).to.include("function hash2");
+    expect(src).to.include("function hash4");
     expect(src).to.include("function hash1");
     expect(src).to.not.include("entropyStep");
   });

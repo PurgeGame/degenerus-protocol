@@ -4,6 +4,7 @@ pragma solidity ^0.8.26;
 import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 import {PriceLookupLib} from "../../contracts/libraries/PriceLookupLib.sol";
+import {BoxOrderLib} from "../helpers/BoxOrderLib.sol";
 
 /// @title ThanosMinBuyGuard — a dust ticket buy the snap divide would zero reverts
 /// @notice Under a thanos declaration a plain ticket's PRICE is unchanged and the accumulated
@@ -107,13 +108,16 @@ contract ThanosMinBuyGuard is DeployProtocol {
 
     function _buyEth(uint256 qty, uint256 lootBoxAmount) internal returns (bool ok) {
         uint256 cost = (_priceWei * qty) / (4 * QTY_SCALE) + lootBoxAmount;
+        // The third parameter is a packed box order, not a wei amount: the same spend buys
+        // ONE custom box of that size (BoxOrderLib's documented migration rule).
+        uint256 boxOrder = lootBoxAmount == 0 ? 0 : BoxOrderLib.boCustom(lootBoxAmount);
         vm.prank(_buyer);
         (ok, ) = address(game).call{value: cost}(
             abi.encodeWithSignature(
                 "purchase(address,uint256,uint256,bytes32,uint8,bool)",
                 _buyer,
                 qty,
-                lootBoxAmount,
+                boxOrder,
                 bytes32(0),
                 uint8(MintPaymentKind.DirectEth),
                 false
