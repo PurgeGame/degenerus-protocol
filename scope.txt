@@ -1,7 +1,7 @@
 # Degenerus Protocol — Audit Scope
 # Solidity 0.8.34 | Hardhat + Foundry | viaIR=true | Optimizer runs=1000 | evmVersion=osaka
 #
-# Frozen subject: contracts/ tree 46cc1c67 @ tag degenerus-c4a (post-v76.0 audit freeze).
+# Frozen subject: contracts/ tree 37c5988b @ tag degenerus-c4a (post-v76.0 audit freeze).
 # Checkout: git checkout degenerus-c4a
 # This list supersedes the v55-era scope.txt (which named BurnieCoin/BurnieCoinflip/
 # WrappedWrappedXRP/EndgameModule — all renamed or removed in this subject).
@@ -24,7 +24,7 @@ contracts/DegenerusGame.sol                  # router / delegatecall dispatcher 
 contracts/DegenerusAdmin.sol                 # VRF + feed governance (sDGNRS)     774
 contracts/DegenerusAffiliate.sol             # referral codes + bonus points      586
 contracts/FLIP.sol                           # FLIP ERC-20 (coinflip + vault)     371
-contracts/Coinflip.sol                       # coinflip resolution + records     1017
+contracts/Coinflip.sol                       # coinflip resolution + records     1055
 contracts/sDGNRS.sol                         # soulbound; reserves/pools/redeem    495
 contracts/DGNRS.sol                          # transferable wrapper over sDGNRS    177
 contracts/DegenerusVault.sol                 # stETH vault; DGVE/DGVF share ERC20s 484
@@ -94,7 +94,7 @@ contracts/DeityBoonViewer.sol      # read-only deity-boon lens (no value custody
 contracts/DegenerusGameLens.sol    # extsload observability lens (no value custody) 353
 
 ## nSLOC totals
-#   Core deployed (17)              9715
+#   Core deployed (17)              9753
 #   Deployed modules (12)          10973
 #   Abstract module bases (2)        449
 #   Shared storage (1)              1385
@@ -102,7 +102,7 @@ contracts/DegenerusGameLens.sol    # extsload observability lens (no value custo
 #   Interfaces (12)                  761
 #   Standalone in-scope (2)          535
 #   --------------------------------------
-#   TOTAL  56 files                24363 nSLOC
+#   TOTAL  56 files                24401 nSLOC
 #   (nSLOC = non-blank, non-comment source lines, comment- and string-aware. Every
 #    per-file value above and every subtotal here is measured directly at the pinned
 #    tree; rows sum to their group subtotal and the subtotals sum to TOTAL.)

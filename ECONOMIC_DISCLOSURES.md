@@ -3,7 +3,7 @@
 For a gambling protocol, economic transparency matters as much as contract transparency.
 **Every figure below cites the exact contract line that defines it.** Nothing here is
 marketing math — verify each number against the frozen subject (`contracts/` tree
-`46cc1c67`, tag `degenerus-c4a`).
+`37c5988b`, tag `degenerus-c4a`).
 
 The code is **not yet deployed**. There are no live token prices. Figures are on-chain
 constants and formulas, not projected returns.
@@ -164,7 +164,7 @@ Neither FLIP nor WWXRP is minted to the creator's balance at deploy.
   `WWXRP.sol:611-621`). Since the vault is creator-owned (§2a), that 1B is effectively
   creator-controllable supply. **Every century arm pays the vault double the previous payment**,
   counting the deploy reserve as the first: `WWXRP_VAULT_SEED << N` for century N — 2B at level 100,
-  4B at 200, 8B at 300 (`Coinflip.armCenturySeed`, `Coinflip.sol:1072`), stopping after 60 doublings
+  4B at 200, 8B at 300 (`Coinflip.armCenturySeed`, `Coinflip.sol:1073`), stopping after 60 doublings
   so the shift stays in range. Cumulative vault reserve after N centuries is `1B × (2^(N+1) − 1)`.
   It lands in the uncirculated allowance, not a balance — `WWXRP._mint` intercepts VAULT-destined
   mints — so it raises what the vault *may* mint, not circulating supply.
@@ -187,7 +187,7 @@ Neither FLIP nor WWXRP is minted to the creator's balance at deploy.
   not a guaranteed allocation (`FLIP.sol:40-42`, `Coinflip.sol:221`).
 - **The same program re-arms once per x00 level — a recurring emission channel.** From the moment
   level 100 opens, and again at 200, 300 and so on, anyone may call the permissionless
-  `Coinflip.armCenturySeed()` (`Coinflip.sol:1072`) to open another 20-day window on identical terms:
+  `Coinflip.armCenturySeed()` (`Coinflip.sol:1073`) to open another 20-day window on identical terms:
   `SEED_FLIP_DAILY = 200_000` FLIP per day to the vault and the same to sDGNRS
   (`Coinflip.sol:235,239`). That is **4M gross each, 8M FLIP of stake per century**. Disclosed as a
   genuine inflation source, because unlike a player's deposit — which burns its own principal to
@@ -248,7 +248,7 @@ principal enters. Repeat deposits are additive by interval measure, so splitting
 splitting across wallets, moves no probability. One winner is drawn per bracket by binary search
 over the day's cumulative total — probability is that player's principal over the day's total — off
 a roll domain-separated from the BAF transition word, so it perturbs no other consumer of that word
-(`Coinflip.bafDrawWinner`, `Coinflip.sol:1579`). An x0 level always keeps that feeder day: a
+(`Coinflip.bafDrawWinner`, `Coinflip.sol:1582`). An x0 level always keeps that feeder day: a
 decade that meets its purchase target at turbo speed does not collapse the same day like other
 levels — the collapse latches that evening instead (`modules/DegenerusGameAdvanceModule.sol:320-324`),
 so the sealed day stays a real last-purchase window and the single-day jackpot runs the day after.

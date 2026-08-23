@@ -1299,7 +1299,9 @@ describe("v40.0 SURF-01..05 — protected surfaces vs v39.0 baseline 6a7455d1", 
     const entropyLibPath = "contracts/libraries/EntropyLib.sol";
     expect(fs.existsSync(entropyLibPath), `${entropyLibPath} must exist`).to.equal(true);
     const src = fs.readFileSync(entropyLibPath, "utf8");
-    const fnMatches = src.match(/function\s+\w+/g) || [];
+    // Anchored to a declaration: the unanchored form also matched the word inside prose
+    // (the terms header's "malfunction and"), counting a comment as a library member.
+    const fnMatches = src.match(/^\s*function\s+\w+/gm) || [];
     // RE-PINNED 2026-08-22 from 2 -> 3 members. `hash4` was added deliberately by
     // `40923eefd` (one box, one roll) as the four-operand twin of `hash2`, and is
     // consumed by the packed-box-order seed in DegenerusGameLootboxModule. The

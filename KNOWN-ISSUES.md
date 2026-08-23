@@ -4,7 +4,7 @@ Pre-disclosure for audit wardens. **If a finding's mechanism + impact is describ
 already known and is not eligible.** This is a precise perimeter — each entry names the exact
 mechanism and why it is by-design, defended, or out-of-scope. There are no vague blanket disclaimers.
 
-Frozen subject: `contracts/` tree `46cc1c67` @ tag `degenerus-c4a`. Pre-scanned with Slither v0.11.5
+Frozen subject: `contracts/` tree `37c5988b` @ tag `degenerus-c4a`. Pre-scanned with Slither v0.11.5
 + Aderyn 0.6.8; those findings are triaged in the automated-tools section below.
 
 ---
@@ -141,23 +141,31 @@ transaction (a coin credit, not ETH-backed value). Immaterial; documented, not e
 
 ## 5. Automated tool findings (pre-disclosed)
 
-The full machine-readable Slither/Aderyn baseline is maintained internally — Slither 0.11.5 (3,695
-results / 101 detectors over 163 contracts at tree `46cc1c67`; 171 High / 447 Medium / 431 Low /
+The full machine-readable Slither/Aderyn baseline is maintained internally — Slither 0.11.5 (3,697
+results / 101 detectors over 163 contracts at tree `37c5988b`; 171 High / 448 Medium / 432 Low /
 2,594 Informational / 52 Optimization, and the "High" tier is dominated by 134 `uninitialized-state`
 false positives from the shared-storage delegatecall architecture — the deployed-module compilation
-units plus the `DegenerusGameLens` unit, see below) + Aderyn 0.6.8 (9 High / 21 Low).
+units plus the `DegenerusGameLens` unit, see below) + Aderyn 0.6.8 (9 High / 21 Low, unchanged and
+category-identical to the prior tree).
 Slither totals are sensitive to the scan environment (solc/toolchain resolution), so the absolute
 count is not comparable across machines — re-runs should compare category triage, not the total.
-These counts were measured directly at tree `46cc1c67`, not carried forward from an earlier scan.
-The immediately preceding tree `33ccd5b9` re-scanned in the same environment reproduced its recorded
-3,410 / 178 High / 454 Medium / 403 Low / 2,323 Informational / 52 Optimization exactly, tier for
-tier, so the environment is validated and the delta is real: **+285 results, and seven FEWER High**,
-over a twelve-commit span (the self-describing event surface and miner bounty, the affiliate quest
-retarget, the gold Dice 6 badge inversion, the affiliate code on deity-pass purchases, the vault
-coinflip-leg redemption fix, the one-box-one-roll packed box order, the AFKing seat rule, the
-decimator whale-pass deferral and its saturation-cap fix, and the one-minute pre-jackpot lockout).
+These counts were measured directly at tree `37c5988b`, not carried forward from an earlier scan.
+The immediately preceding tree `37c5988b` re-scanned in the same environment reproduced its recorded
+3,695 / 171 High / 447 Medium / 431 Low / 2,594 Informational / 52 Optimization exactly, tier for
+tier, so the environment is validated and the delta is real: **+2 results, ZERO High**, over a
+one-change span — the permissionless per-century re-arm of the deploy seed window and the vault's
+WWXRP reserve (`Coinflip.armCenturySeed`), plus a terms-of-interaction header applied to every
+in-scope contract, which is comment-only and therefore invisible to every detector.
 
-The High tier gains no new detector class, and one retires entirely. A single finding is added —
+Both additions land on the new function and neither is a defect. `unused-return` (Medium) is the
+`purchaseInfo()` tuple members the arm does not read — it wants the level and the RNG-lock flag and
+discards the other three. `reentrancy-events` (Low) is `VaultWwxrpToppedUp` being emitted after the
+`mintPrize` call that raises the vault's WWXRP allowance; the callee is a protocol contract whose
+mint writes storage and returns, and the call is the last statement of the function. The High tier
+is composition-identical to the prior tree, detector for detector, and nothing was removed.
+
+Across the wider chain from `33ccd5b9`, the High tier gained no new detector class and one retired
+entirely. A single finding was added —
 `delegatecall-loop` on the new `_rollSingleBoxBoons` — and eight clear: the two `delegatecall-loop`
 entries on the `_resolveLootboxCommon` / `_rollLootboxBoons` pair that one roll replaces, one of the
 three `encode-packed-collision` entries on `AFKingSubscriptionToken._renderSvgInternal` (the badge
@@ -184,7 +192,7 @@ code, and the funded-subscribe logging; `uninitialized-local` +4 net as the old 
 `purchaseDeityPass` and on `DegenerusVault.burnCoin`, which now discards the `vaultMintTo` result.
 
 The delta against the tree tagged before this chain began (`4e616db4`, whose retained scan
-re-counts to 3,143 results / 156 High) is **+552 results and +15 High**. That span is the
+re-counts to 3,143 results / 156 High) is **+554 results and +15 High**. That span is the
 twelve-commit chain enumerated above plus every change below: the `extsload`
 observability lens, the module observability
 events, the foil daily quest moving to the final-jackpot RNG request, the static boon tables, the
