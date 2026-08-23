@@ -4,29 +4,27 @@ pragma solidity ^0.8.26;
 import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
 import {Coinflip} from "../../contracts/Coinflip.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
-import {IDegenerusGame} from "../../contracts/interfaces/IDegenerusGame.sol";
 
-/// @title CenturySeedWindow — the permissionless x00 re-seed of the deploy FLIP window.
+/// @title CenturySeedWindow — the x00 re-arm of the deploy seed, driven from the level end.
 ///
-/// @notice `armCenturySeed()` re-arms the deploy-time seed — SEED_FLIP_DAILY per day for
-///         SEED_FLIP_DAYS days, to VAULT and to sDGNRS — once per x00 level. It is
-///         deliberately OFF the advance path, so these tests drive it directly and mock the
-///         game's `purchaseInfo()` to place the level and the RNG lock.
+/// @notice `armCenturySeed(lvl)` is GAME-only and rides the advance's transition-close call, the
+///         one that reopens the purchase phase. It has no revert paths by design: a revert there
+///         would brick the daily crank at a level boundary, so "nothing due" must be a silent
+///         no-op. That shapes every test here — the assertions are on state NOT moving rather
+///         than on reverts.
 ///
-///         The properties that matter, and why each has teeth:
-///         - SEED-01 it is not callable below level 100 (nothing to re-seed yet).
-///         - SEED-02 arming credits exactly SEED_FLIP_DAILY on each of the 20 days, to both
+///         - SEED-01 below the first century it is a no-op, not a revert.
+///         - SEED-02 it credits exactly SEED_FLIP_DAILY on each of the 20 days, to both
 ///           recipients, starting at the next unresolved day.
-///         - SEED-03 it is one-shot per century: the second call reverts.
-///         - SEED-04 it ADDS to a day's existing stake rather than replacing it. This is the
-///           one with real teeth: `_setFlipStake` is a masked overwrite, and sDGNRS is on
-///           perpetual auto-rebuy by level 100, so a replace would silently destroy a stake
-///           the protocol had already rolled forward.
+///         - SEED-03 one century, one arm: a repeat call at the same level changes nothing.
+///         - SEED-04 it ADDS to a day's existing stake rather than replacing it. The one with
+///           real teeth: `_setFlipStake` is a masked overwrite and sDGNRS is on perpetual
+///           auto-rebuy by level 100, so a replace would destroy a stake already rolled forward.
 ///         - SEED-05 a later century re-opens it.
-///         - SEED-06 it is refused while the RNG is locked, so a seed can never be aimed at a
-///           day whose word is already committed.
-///         - SEED-07 the vault's WWXRP reserve doubles each century off the deploy allowance,
-///           and lands in the uncirculated allowance rather than a balance.
+///         - SEED-06 catch-up: arriving a century late claims the SKIPPED one first.
+///         - SEED-07 the vault's WWXRP reserve doubles per century and lands in the
+///           uncirculated allowance, never a balance.
+///         - SEED-08 only GAME may call it.
 contract CenturySeedWindow is DeployProtocol {
     uint256 internal constant SEED_FLIP_DAILY = 200_000 ether;
     uint24 internal constant SEED_FLIP_DAYS = 20;
@@ -36,14 +34,11 @@ contract CenturySeedWindow is DeployProtocol {
         vm.warp(vm.getBlockTimestamp() + 1 days);
     }
 
-    /// @dev Place the game at `lvl` with the RNG lock in the given state. `armCenturySeed`
-    ///      reads level and lock from this one call, so mocking it is the whole surface.
-    function _setLevel(uint24 lvl, bool rngLocked_) internal {
-        vm.mockCall(
-            address(game),
-            abi.encodeWithSelector(IDegenerusGame.purchaseInfo.selector),
-            abi.encode(lvl, false, false, rngLocked_, uint256(0.01 ether))
-        );
+    /// @dev The arm takes its level from the caller, so driving it is a prank plus the level
+    ///      the advance would have passed at that phase end.
+    function _arm(uint24 lvl) internal {
+        vm.prank(address(game));
+        coinflip.armCenturySeed(lvl);
     }
 
     /// @dev Stake standing for `who` on the day `offset` days after the next unresolved one.
@@ -58,48 +53,34 @@ contract CenturySeedWindow is DeployProtocol {
     }
 
     // ------------------------------------------------------------------
-    // SEED-01 / SEED-03 / SEED-05 / SEED-06 — the gate
+    // SEED-01 / 03 / 05 / 08 — the gate, all silent
     // ------------------------------------------------------------------
 
-    function testNotArmableBelowFirstCentury() public {
-        _setLevel(99, false);
-        vm.expectRevert(Coinflip.SeedNotDue.selector);
-        coinflip.armCenturySeed();
+    function testBelowFirstCenturyIsASilentNoOp() public {
+        uint256 v = _stakeAtOffset(ContractAddresses.VAULT, 0);
+        uint256 w = wwxrp.vaultAllowance();
+        _arm(99);
+        assertEq(_stakeAtOffset(ContractAddresses.VAULT, 0), v, "no stake written below level 100");
+        assertEq(wwxrp.vaultAllowance(), w, "no WWXRP paid below level 100");
     }
 
-    function testArmsOncePerCentury() public {
-        _setLevel(100, false);
-        coinflip.armCenturySeed();
+    function testOneArmPerCentury() public {
+        _arm(100);
+        uint256 v = _stakeAtOffset(ContractAddresses.VAULT, 0);
+        uint256 w = wwxrp.vaultAllowance();
 
-        // Same century, whatever the level does inside it: already spent.
-        vm.expectRevert(Coinflip.SeedNotDue.selector);
-        coinflip.armCenturySeed();
-
-        _setLevel(150, false);
-        vm.expectRevert(Coinflip.SeedNotDue.selector);
-        coinflip.armCenturySeed();
-    }
-
-    function testStaysArmableUntilUsed() public {
-        // Opened at level 100 but nobody called; still available deep into the century.
-        uint256 before = _stakeAtOffset(ContractAddresses.VAULT, 0);
-        _setLevel(187, false);
-        coinflip.armCenturySeed();
-        assertEq(
-            _stakeAtOffset(ContractAddresses.VAULT, 0) - before,
-            SEED_FLIP_DAILY,
-            "a late call still seeds the window"
-        );
+        // Every later phase-end inside the same century calls this again; all must be no-ops.
+        _arm(100);
+        _arm(150);
+        _arm(199);
+        assertEq(_stakeAtOffset(ContractAddresses.VAULT, 0), v, "century 1 armed exactly once");
+        assertEq(wwxrp.vaultAllowance(), w, "century 1 paid WWXRP exactly once");
     }
 
     function testNextCenturyReopens() public {
         uint256 before = _stakeAtOffset(ContractAddresses.VAULT, 0);
-
-        _setLevel(100, false);
-        coinflip.armCenturySeed();
-
-        _setLevel(200, false);
-        coinflip.armCenturySeed();
+        _arm(100);
+        _arm(200);
         assertEq(
             _stakeAtOffset(ContractAddresses.VAULT, 0) - before,
             2 * SEED_FLIP_DAILY,
@@ -107,47 +88,43 @@ contract CenturySeedWindow is DeployProtocol {
         );
     }
 
-    /// @dev The catch-up property, and the one the earlier suite missed: arriving late enough
-    ///      to have skipped a whole century must claim the SKIPPED one first, not jump to the
-    ///      current one. A jump would silently forfeit century 1's window and its WWXRP leg.
-    function testLateFirstCallClaimsTheSkippedCenturyNotTheCurrentOne() public {
-        uint256 deployAllowance = wwxrp.INITIAL_VAULT_ALLOWANCE();
-        uint256 before = wwxrp.vaultAllowance();
-
-        // Nothing armed, and we are already deep into century 2.
-        _setLevel(250, false);
-        coinflip.armCenturySeed();
-        assertEq(
-            wwxrp.vaultAllowance() - before,
-            2 * deployAllowance,
-            "first call claims century 1 and pays century 1's figure, not century 2's"
-        );
-
-        // The second call picks up century 2, still at the same level.
-        coinflip.armCenturySeed();
-        assertEq(
-            wwxrp.vaultAllowance() - before,
-            6 * deployAllowance,
-            "second call claims century 2 (2B + 4B cumulative)"
-        );
-
-        // Century 3 is not due at level 250.
-        vm.expectRevert(Coinflip.SeedNotDue.selector);
-        coinflip.armCenturySeed();
-    }
-
-    function testRefusedWhileRngLocked() public {
-        _setLevel(100, true);
-        vm.expectRevert(Coinflip.RngLocked.selector);
-        coinflip.armCenturySeed();
-
-        // And the latch did not burn: it is still armable once the lock clears.
-        _setLevel(100, false);
-        coinflip.armCenturySeed();
+    function testOnlyGameMayArm() public {
+        vm.expectRevert(Coinflip.OnlyDegenerusGame.selector);
+        coinflip.armCenturySeed(100);
     }
 
     // ------------------------------------------------------------------
-    // SEED-02 — the window it actually writes
+    // SEED-06 — catch-up across a skipped century
+    // ------------------------------------------------------------------
+
+    /// @dev Arriving a century late must claim the SKIPPED century first, not jump to the
+    ///      current one — a jump would forfeit century 1's window and its 2B WWXRP leg.
+    function testLateArmClaimsTheSkippedCenturyFirst() public {
+        uint256 deployAllowance = wwxrp.INITIAL_VAULT_ALLOWANCE();
+        uint256 before = wwxrp.vaultAllowance();
+
+        _arm(250);
+        assertEq(
+            wwxrp.vaultAllowance() - before,
+            2 * deployAllowance,
+            "claims century 1 and pays century 1's figure, not century 2's"
+        );
+
+        _arm(250);
+        assertEq(
+            wwxrp.vaultAllowance() - before,
+            6 * deployAllowance,
+            "the next call picks up century 2 (2B + 4B cumulative)"
+        );
+
+        // Century 3 is not due at level 250: silent, and nothing moves.
+        uint256 held = wwxrp.vaultAllowance();
+        _arm(250);
+        assertEq(wwxrp.vaultAllowance(), held, "century 3 is not due at level 250");
+    }
+
+    // ------------------------------------------------------------------
+    // SEED-02 — the window it writes
     // ------------------------------------------------------------------
 
     function testSeedsEveryDayForBothRecipients() public {
@@ -160,8 +137,7 @@ contract CenturySeedWindow is DeployProtocol {
             sdgnrsBefore[d] = _stakeAtOffset(ContractAddresses.SDGNRS, d);
         }
 
-        _setLevel(100, false);
-        coinflip.armCenturySeed();
+        _arm(100);
 
         for (uint24 d = 0; d < SEED_FLIP_DAYS; ++d) {
             assertEq(
@@ -176,7 +152,6 @@ contract CenturySeedWindow is DeployProtocol {
             );
         }
 
-        // The day after the window closes is untouched.
         assertEq(
             _stakeAtOffset(ContractAddresses.VAULT, SEED_FLIP_DAYS),
             vaultBefore[SEED_FLIP_DAYS],
@@ -185,21 +160,18 @@ contract CenturySeedWindow is DeployProtocol {
     }
 
     // ------------------------------------------------------------------
-    // SEED-04 — the one with teeth: add, never replace
+    // SEED-04 — add, never replace
     // ------------------------------------------------------------------
 
     function testAddsToAnExistingStakeInsteadOfReplacingIt() public {
-        // Give sDGNRS a standing stake on the window's first day, the way auto-rebuy
-        // would have. creditFlip is the game-only rail that rolls credit onto the next day.
-        uint256 standing = 12_345 ether;
+        // Give sDGNRS a standing stake on the window's first day, the way auto-rebuy would.
         vm.prank(address(game));
-        coinflip.creditFlip(ContractAddresses.SDGNRS, standing);
+        coinflip.creditFlip(ContractAddresses.SDGNRS, 12_345 ether);
 
         uint256 before = _stakeAtOffset(ContractAddresses.SDGNRS, 0);
         assertGt(before, 0, "non-vacuous: sDGNRS holds a stake before arming");
 
-        _setLevel(100, false);
-        coinflip.armCenturySeed();
+        _arm(100);
 
         assertEq(
             _stakeAtOffset(ContractAddresses.SDGNRS, 0),
@@ -209,11 +181,11 @@ contract CenturySeedWindow is DeployProtocol {
     }
 
     // ------------------------------------------------------------------
-    // SEED-07 — the vault WWXRP reserve doubles off the deploy allowance
+    // SEED-07 — the vault WWXRP reserve
     // ------------------------------------------------------------------
 
-    /// @dev The doubling is stated against WWXRP's deploy allowance, which Coinflip mirrors
-    ///      as a local constant. Pin the equality so the two cannot drift apart silently.
+    /// @dev The doubling is stated against WWXRP's deploy allowance, which Coinflip mirrors as
+    ///      a local constant. Pin the equality so the two cannot drift apart silently.
     function testWwxrpSeedConstantMatchesDeployAllowance() public view {
         assertEq(
             wwxrp.INITIAL_VAULT_ALLOWANCE(),
@@ -222,13 +194,11 @@ contract CenturySeedWindow is DeployProtocol {
         );
     }
 
-    function testVaultWwxrpDoublesEachArm() public {
-        // The deploy allowance is the first payment; the first arm pays double it.
+    function testVaultWwxrpDoublesEachCentury() public {
         uint256 deployAllowance = wwxrp.INITIAL_VAULT_ALLOWANCE();
         assertEq(wwxrp.vaultAllowance(), deployAllowance, "starts at the deploy reserve");
 
-        _setLevel(100, false);
-        coinflip.armCenturySeed();
+        _arm(100);
         assertEq(
             wwxrp.vaultAllowance() - deployAllowance,
             2 * deployAllowance,
@@ -236,13 +206,8 @@ contract CenturySeedWindow is DeployProtocol {
         );
 
         uint256 afterFirst = wwxrp.vaultAllowance();
-        _setLevel(200, false);
-        coinflip.armCenturySeed();
-        assertEq(
-            wwxrp.vaultAllowance() - afterFirst,
-            4 * deployAllowance,
-            "century 2 pays double again"
-        );
+        _arm(200);
+        assertEq(wwxrp.vaultAllowance() - afterFirst, 4 * deployAllowance, "century 2 pays double again");
     }
 
     /// @dev It lands in the uncirculated allowance, not a balance: WWXRP._mint intercepts
@@ -251,25 +216,25 @@ contract CenturySeedWindow is DeployProtocol {
         uint256 balBefore = wwxrp.balanceOf(ContractAddresses.VAULT);
         uint256 supplyBefore = wwxrp.totalSupply();
 
-        _setLevel(100, false);
-        coinflip.armCenturySeed();
+        _arm(100);
 
         assertEq(wwxrp.balanceOf(ContractAddresses.VAULT), balBefore, "no balance credited");
         assertEq(wwxrp.totalSupply(), supplyBefore, "totalSupply untouched: allowance is uncirculated");
     }
 
-    /// @dev Production cost: at an x00 level the seeded days are far past the deploy window,
-    ///      so all twenty slots per recipient are virgin (cold zero -> nonzero).
+    // ------------------------------------------------------------------
+    // Cost, since it now rides a real transaction
+    // ------------------------------------------------------------------
+
+    /// @dev At an x00 level the seeded days sit far past the deploy window, so all twenty
+    ///      slots per recipient are virgin. This is the figure the hosting phase-end tx pays.
     function testArmGasOnVirginDays() public {
         vm.warp(vm.getBlockTimestamp() + 40 days);
-        _setLevel(100, false);
+        vm.prank(address(game));
         uint256 g0 = gasleft();
-        coinflip.armCenturySeed();
+        coinflip.armCenturySeed(100);
         uint256 used = g0 - gasleft();
         emit log_named_uint("armCenturySeed_gas_virgin_days", used);
-        // Ceiling guard, not a target: twenty cold slots per recipient plus the per-day
-        // events. It matters because it is the figure any decision to fold this into
-        // another transaction has to budget for.
-        assertLt(used, 800_000, "century seed arm stays a sub-800k standalone transaction");
+        assertLt(used, 800_000, "the century arm stays a sub-800k addition to the phase-end tx");
     }
 }

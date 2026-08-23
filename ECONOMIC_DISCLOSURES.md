@@ -41,7 +41,7 @@ creator owns the vault. It has **several ongoing inflows, not just yield**:
   because that residual is redistributed on later rounds, each destination tends toward ~25% over
   time — but 25% is asymptotic, not guaranteed or immediate. The accumulator is not vault-bound
   either: half of it dumps into the players' future pool at every ×00 level
-  (`modules/DegenerusGameAdvanceModule.sol:1263-1265`).
+  (`modules/DegenerusGameAdvanceModule.sol:1271-1274`).
 - **Default-referrer affiliate rewards.** The vault is the terminal referrer for every player with no
   valid referral code (`DegenerusAffiliate.sol:397` — *"referral chains always terminate at the
   VAULT"*), so it collects affiliate rewards on all unreferred spend at **25% / 20% / 5%** of reward
@@ -164,7 +164,7 @@ Neither FLIP nor WWXRP is minted to the creator's balance at deploy.
   `WWXRP.sol:610-620`). Since the vault is creator-owned (§2a), that 1B is effectively
   creator-controllable supply. **Every century arm pays the vault double the previous payment**,
   counting the deploy reserve as the first: `WWXRP_VAULT_SEED << N` for century N — 2B at level 100,
-  4B at 200, 8B at 300 (`Coinflip.armCenturySeed`, `Coinflip.sol:1072`), stopping after 60 doublings
+  4B at 200, 8B at 300 (`Coinflip.armCenturySeed`, `Coinflip.sol:1069`), stopping after 60 doublings
   so the shift stays in range. Cumulative vault reserve after N centuries is `1B × (2^(N+1) − 1)`.
   It lands in the uncirculated allowance, not a balance — `WWXRP._mint` intercepts VAULT-destined
   mints — so it raises what the vault *may* mint, not circulating supply.
@@ -185,20 +185,23 @@ Neither FLIP nor WWXRP is minted to the creator's balance at deploy.
 - **Initial FLIP program (first 20 days).** The Coinflip contract stakes **200k FLIP/day** each to the
   vault and sDGNRS (~4M gross each), but these are **coinflip stakes contingent on the flip outcome**,
   not a guaranteed allocation (`FLIP.sol:39-41`, `Coinflip.sol:220`).
-- **The same program re-arms once per x00 level — a recurring emission channel.** From the moment
-  level 100 opens, and again at 200, 300 and so on, anyone may call the permissionless
-  `Coinflip.armCenturySeed()` (`Coinflip.sol:1072`) to open another 20-day window on identical terms:
-  `SEED_FLIP_DAILY = 200_000` FLIP per day to the vault and the same to sDGNRS
-  (`Coinflip.sol:234,238`). That is **4M gross each, 8M FLIP of stake per century**. Disclosed as a
-  genuine inflation source, because unlike a player's deposit — which burns its own principal to
-  create the stake — a seed stake is unfunded, exactly as the deploy program is. It is still
-  contingent: each day is an independent 50/50, so roughly half produce nothing, and the expected
-  minted amount is a little under the staked amount rather than equal to it.
-  Three bounds worth stating. It is **one-shot per century** — a latch records the highest century
-  armed and a second call reverts — and it stays armable until used, so a missed call delays a window
-  rather than creating a second one. The caller chooses only *timing*: recipients and amount are
-  fixed, the caller receives nothing, and the window cannot be aimed at a day whose RNG word is
-  already committed (it is refused while the RNG is locked and starts at the next unresolved day).
+- **The same program re-arms once per x00 level — a recurring emission channel.** As level 100's
+  jackpot phase closes and the next purchase phase reopens, and again at 200, 300 and so on, the
+  advance itself opens another
+  20-day window on identical terms: `SEED_FLIP_DAILY = 200_000` FLIP per day to the vault and the
+  same to sDGNRS (`Coinflip.sol:233,237`). That is **4M gross each, 8M FLIP of stake per century**.
+  Disclosed as a genuine inflation source, because unlike a player's deposit — which burns its own
+  principal to create the stake — a seed stake is unfunded, exactly as the deploy program is. It is
+  still contingent: each day is an independent 50/50, so roughly half produce nothing, and the
+  expected minted amount is a little under the staked amount rather than equal to it.
+  Nobody chooses anything about it. `Coinflip.armCenturySeed` (`Coinflip.sol:1069`) is callable only
+  by the game, takes the level from the advance that is already running, and is invoked from the
+  level's transition close — the recipients, the amount and the timing are all fixed by the code, and no
+  transaction a player can send influences any of them. It has **no revert path**: a revert inside
+  the daily advance would stall the crank at a level boundary, so a call with nothing due writes
+  nothing. It arms the **lowest unarmed century**, so the ledger cannot skip one, and the window
+  starts at the next unresolved flip day — strictly later than the day any pending RNG word
+  resolves, so a seed can never land on a committed outcome.
   The two legs are **not** equivalent, and only one of them is neutral. The sDGNRS half never
   reaches a wallet balance — it stays uncirculated as redemption backing. **The vault half is
   creator-controllable supply**, on the same terms as every other vault holding described in §2a:
@@ -223,8 +226,8 @@ Neither FLIP nor WWXRP is minted to the creator's balance at deploy.
 records over one shared FLIP pot (`recordPool`, seeded 10,000 FLIP): biggest direct coinflip deposit
 (200,000-FLIP entry floor), biggest Degenerette spin (1 ETH, the bet's per-transaction total),
 biggest lootbox deposit (5 ETH, the raw purchased amount — no boons or bonuses), and biggest ticket
-buy (100 whole tickets, the plain ticket leg). The pool grows two ways (`Coinflip.sol:210`,
-`modules/DegenerusGameAdvanceModule.sol:1058-1060`): a 2,000 FLIP/day drip at daily settlement, and
+buy (100 whole tickets, the plain ticket leg). The pool grows two ways (`Coinflip.sol:209`,
+`modules/DegenerusGameAdvanceModule.sol:1062-1064`): a 2,000 FLIP/day drip at daily settlement, and
 0.1% of each completed level's achieved prize pool converted *notionally* at that level's ticket
 price (1 ticket-price = 1,000 FLIP) — pure FLIP supply on both legs, no ETH moves. A larger
 candidate ratchets its record for free; clearing the standing mark by at least a fifth claims 5% of
@@ -248,7 +251,7 @@ principal enters. Repeat deposits are additive by interval measure, so splitting
 splitting across wallets, moves no probability. One winner is drawn per bracket by binary search
 over the day's cumulative total — probability is that player's principal over the day's total — off
 a roll domain-separated from the BAF transition word, so it perturbs no other consumer of that word
-(`Coinflip.bafDrawWinner`, `Coinflip.sol:1581`). An x0 level always keeps that feeder day: a
+(`Coinflip.bafDrawWinner`, `Coinflip.sol:1572`). An x0 level always keeps that feeder day: a
 decade that meets its purchase target at turbo speed does not collapse the same day like other
 levels — the collapse latches that evening instead (`modules/DegenerusGameAdvanceModule.sol:319-323`),
 so the sealed day stays a real last-purchase window and the single-day jackpot runs the day after.
@@ -272,7 +275,7 @@ during a level ×99 additionally records a burn-weighted entry betting that the 
 5% of it — pays one entrant drawn over the burn-weighted intervals; the rest rolls forward in
 `futurePool` exactly as on any other skip, and an empty bracket leaves the full pool
 (`WWXRP.resolveIncinerator` at `WWXRP.sol:978-1014`, paid game-side at
-`modules/DegenerusGameAdvanceModule.sol:1299-1308`). This is a **player-to-player transfer inside the
+`modules/DegenerusGameAdvanceModule.sol:1307-1321`). This is a **player-to-player transfer inside the
 prize pool**, not a new inflow and not a creator take: the ETH was already players' future-pool ETH and
 5% of it is redirected to a burner instead of rolling forward. Entries close when the level increments
 off ×99 — the same transaction that requests the VRF word whose bit 0 decides the flip — so no entry
