@@ -25,7 +25,7 @@ pragma solidity 0.8.34;
  */
 
 /**
- * @title WWXRP (Wacky Wrapped XRP)
+ * @title WWXRP (Wacky Waybetter XRP)
  * @author Burnie Degenerus
  * @notice An ERC20 joke prize token with a daily burn draw.
  *
@@ -279,7 +279,7 @@ contract WWXRP {
       +======================================================================+*/
 
     /// @notice Token name (a parody; not affiliated with or backed by XRP)
-    string public constant name = "Wacky Wrapped XRP";
+    string public constant name = "Wacky Waybetter XRP";
 
     /// @notice Token symbol
     string public constant symbol = "WWXRP";
