@@ -4,7 +4,7 @@ Pre-disclosure for audit wardens. **If a finding's mechanism + impact is describ
 already known and is not eligible.** This is a precise perimeter — each entry names the exact
 mechanism and why it is by-design, defended, or out-of-scope. There are no vague blanket disclaimers.
 
-Frozen subject: `contracts/` tree `37c5988b` @ tag `degenerus-c4a`. Pre-scanned with Slither v0.11.5
+Frozen subject: `contracts/` tree `2cfcd461` @ tag `degenerus-c4a`. Pre-scanned with Slither v0.11.5
 + Aderyn 0.6.8; those findings are triaged in the automated-tools section below.
 
 ---
@@ -108,9 +108,9 @@ is no victim. An admin-power finding must exhibit an **engaged-community victim*
 ## 3. Accepted out-of-scope risk: the > 120-day VRF-death deadman fallback (do NOT submit)
 
 **Mechanism.** When the game has not sealed a day for more than 120 days
-(`_vrfDeadmanFired ≡ _simulatedDayIndex() − dailyIdx > 120`, `DegenerusGameStorage.sol:2089-2090`;
+(`_vrfDeadmanFired ≡ _simulatedDayIndex() − dailyIdx > 120`, `DegenerusGameStorage.sol:2088-2089`;
 `dailyIdx` is uint24 and always `<= _simulatedDayIndex()` so no underflow), the terminal release no
-longer waits for Chainlink. `_getHistoricalRngFallback` (`DegenerusGameAdvanceModule.sol:1983-1994`)
+longer waits for Chainlink. `_getHistoricalRngFallback` (`DegenerusGameAdvanceModule.sol:1982-1993`)
 commits a fallback word from sealed historical `rngWordByDay` admixed with `block.prevrandao`; the
 `reverseFlip` nudge is cancelled-and-consumed (`unchecked fallbackWord -= totalFlipReversals`,
 `:1862`, against the consumption in `_applyDailyRng :2640-2651`).
@@ -142,20 +142,25 @@ transaction (a coin credit, not ETH-backed value). Immaterial; documented, not e
 ## 5. Automated tool findings (pre-disclosed)
 
 The full machine-readable Slither/Aderyn baseline is maintained internally — Slither 0.11.5 (3,697
-results / 101 detectors over 163 contracts at tree `37c5988b`; 171 High / 448 Medium / 432 Low /
+results / 101 detectors over 163 contracts at tree `2cfcd461`; 171 High / 448 Medium / 432 Low /
 2,594 Informational / 52 Optimization, and the "High" tier is dominated by 134 `uninitialized-state`
 false positives from the shared-storage delegatecall architecture — the deployed-module compilation
 units plus the `DegenerusGameLens` unit, see below) + Aderyn 0.6.8 (9 High / 21 Low, unchanged and
 category-identical to the prior tree).
 Slither totals are sensitive to the scan environment (solc/toolchain resolution), so the absolute
 count is not comparable across machines — re-runs should compare category triage, not the total.
-These counts were measured directly at tree `37c5988b`, not carried forward from an earlier scan.
-The immediately preceding tree `37c5988b` re-scanned in the same environment reproduced its recorded
-3,695 / 171 High / 447 Medium / 431 Low / 2,594 Informational / 52 Optimization exactly, tier for
-tier, so the environment is validated and the delta is real: **+2 results, ZERO High**, over a
-one-change span — the permissionless per-century re-arm of the deploy seed window and the vault's
-WWXRP reserve (`Coinflip.armCenturySeed`), plus a terms-of-interaction header applied to every
-in-scope contract, which is comment-only and therefore invisible to every detector.
+These counts were measured directly at tree `2cfcd461`, not carried forward from an earlier scan.
+The immediately preceding tree `37c5988b` re-scanned in the same environment reproduced
+3,697 / 171 High / 448 Medium / 432 Low / 2,594 Informational / 52 Optimization exactly, tier for
+tier, and the delta between the two is **ZERO in every tier** — that span is comment-only (the
+terms-of-interaction header dropping a redundant clause, and the header added to
+`ContractAddresses.sol`, the one in-scope file it had missed), and comments are invisible to every
+detector. Deployed bytecode is byte-identical across the pair and nSLOC is unchanged, which is what
+makes the zero delta a measurement rather than an assumption.
+
+The substantive movement was one tree earlier, from `46cc1c67` to `37c5988b`: **+2 results, ZERO
+High**, for the permissionless per-century re-arm of the deploy seed window and the vault's WWXRP
+reserve (`Coinflip.armCenturySeed`).
 
 Both additions land on the new function and neither is a defect. `unused-return` (Medium) is the
 `purchaseInfo()` tuple members the arm does not read — it wants the level and the RNG-lock flag and
