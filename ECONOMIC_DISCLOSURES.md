@@ -2,8 +2,9 @@
 
 For a gambling protocol, economic transparency matters as much as contract transparency.
 **Every figure below cites the exact contract line that defines it.** Nothing here is
-marketing math — verify each number against the frozen subject (`contracts/` tree
-`2cfcd461`, tag `degenerus-c4a`).
+marketing math — every line reference below resolves against `contracts/` tree `41f04be2`.
+The last audited freeze is tag `degenerus-c4a` (`contracts/` tree `2cfcd461`); the tree cited
+here is four files ahead of it and has not been re-scanned.
 
 The code is **not yet deployed**. There are no live token prices. Figures are on-chain
 constants and formulas, not projected returns.
@@ -43,7 +44,7 @@ creator owns the vault. It has **several ongoing inflows, not just yield**:
   either: half of it dumps into the players' future pool at every ×00 level
   (`modules/DegenerusGameAdvanceModule.sol:1271-1274`).
 - **Default-referrer affiliate rewards.** The vault is the terminal referrer for every player with no
-  valid referral code (`DegenerusAffiliate.sol:397` — *"referral chains always terminate at the
+  valid referral code (`DegenerusAffiliate.sol:411` — *"referral chains always terminate at the
   VAULT"*), so it collects affiliate rewards on all unreferred spend at **25% / 20% / 5%** of reward
   basis (fresh L1-3 / fresh L4+ / recycled; `DegenerusAffiliate.sol:448-450`). No-referrer deity purchases
   additionally route an affiliate whale pass and DGNRS rewards to the vault
@@ -67,7 +68,7 @@ holders collectively, not the creator personally.)
 `CREATOR_BPS = 2000` → 20% of sDGNRS `INITIAL_SUPPLY` = 200B (`sDGNRS.sol:326,421`). **sDGNRS and
 DGNRS are the same position, not two:** sDGNRS is the soulbound reserve token, DGNRS its transferable
 1:1 wrapper. The sDGNRS constructor mints the creator's 20% **directly into the DGNRS wrapper
-contract** (`sDGNRS.sol:421` — *"Mints creator allocation to DGNRS wrapper address"*), which issues
+contract** (`sDGNRS.sol:402,421` — *"Mints creator allocation to DGNRS wrapper address"*), which issues
 200B DGNRS against it (`DGNRS.sol:132-141`). Of that, 50B is liquid at deploy and the rest vests over
 levels (§3). It is **not** 20% sDGNRS *plus* a separate 200B DGNRS.
 
@@ -184,20 +185,20 @@ Neither FLIP nor WWXRP is minted to the creator's balance at deploy.
   accrues later from vault operations (the DGVF claim leg — `DegenerusVault.sol:926-931`, where the vault's redeemable FLIP is read as mint allowance + claimable coinflips — there is deliberately no balance leg, because FLIP redirects VAULT-destined transfers into `vaultMintAllowance` before crediting `balanceOf`), not a premine.
 - **Initial FLIP program (first 20 days).** The Coinflip contract stakes **200k FLIP/day** each to the
   vault and sDGNRS (~4M gross each), but these are **coinflip stakes contingent on the flip outcome**,
-  not a guaranteed allocation (`FLIP.sol:39-41`, `Coinflip.sol:220`).
+  not a guaranteed allocation (`FLIP.sol:39-41`, `Coinflip.sol:346-350`).
 - **The same program re-arms once per x00 level — a recurring emission channel.** As level 100's
   jackpot phase closes and the next purchase phase reopens, and again at 200, 300 and so on, the
-  advance itself opens another
-  20-day window on identical terms: `SEED_FLIP_DAILY = 200_000` FLIP per day to the vault and the
-  same to sDGNRS (`Coinflip.sol:233,237`). That is **4M gross each, 8M FLIP of stake per century**.
+  advance itself opens another 20-day window on identical terms: `SEED_FLIP_DAILY = 200_000` FLIP
+  per day to the vault and the same to sDGNRS (`Coinflip.sol:233,234,237`). That is **4M gross
+  each, 8M FLIP of stake per century**.
   Disclosed as a genuine inflation source, because unlike a player's deposit — which burns its own
   principal to create the stake — a seed stake is unfunded, exactly as the deploy program is. It is
   still contingent: each day is an independent 50/50, so roughly half produce nothing, and the
   expected minted amount is a little under the staked amount rather than equal to it.
   Nobody chooses anything about it. `Coinflip.armCenturySeed` (`Coinflip.sol:1069`) is callable only
   by the game, takes the level from the advance that is already running, and is invoked from the
-  level's transition close — the recipients, the amount and the timing are all fixed by the code, and no
-  transaction a player can send influences any of them. It has **no revert path**: a revert inside
+  level's transition close — the recipients, the amount and the timing are all fixed by the code,
+  and no transaction a player can send influences any of them. It has **no revert path**: a revert inside
   the daily advance would stall the crank at a level boundary, so a call with nothing due writes
   nothing. It arms the **lowest unarmed century**, so the ledger cannot skip one, and the window
   starts at the next unresolved flip day — strictly later than the day any pending RNG word
@@ -228,7 +229,7 @@ records over one shared FLIP pot (`recordPool`, seeded 10,000 FLIP): biggest dir
 biggest lootbox deposit (5 ETH, the raw purchased amount — no boons or bonuses), and biggest ticket
 buy (100 whole tickets, the plain ticket leg). The pool grows two ways (`Coinflip.sol:209`,
 `modules/DegenerusGameAdvanceModule.sol:1062-1064`): a 2,000 FLIP/day drip at daily settlement, and
-0.1% of each completed level's achieved prize pool converted *notionally* at that level's ticket
+0.2% of each completed level's achieved prize pool converted *notionally* at that level's ticket
 price (1 ticket-price = 1,000 FLIP) — pure FLIP supply on both legs, no ETH moves. A larger
 candidate ratchets its record for free; clearing the standing mark by at least a fifth claims 5% of
 the pool plus 0.5% for each day that category has gone unclaimed, capped at 75% (reached 140 days
@@ -335,7 +336,7 @@ normally.
 - **Redemption is not simple proportional during the live game.** Burning sDGNRS/DGNRS enters an
   RNG-gated redemption that rolls **25%–175%** of the proportional share, with daily caps, a **50/50
   direct-ETH / lootbox split**, forfeiture of sub-minimum lootbox legs, and contingent FLIP
-  settlement (`sDGNRS.sol:333-335,349-355,868`). It becomes deterministic proportional **only after game
+  settlement (`sDGNRS.sol:335-336,349-355,868`). It becomes deterministic proportional **only after game
   over**.
 - **The FLIP side of that backing is staked, not held.** FLIP routed to sDGNRS (both transfers and
   mints — e.g. a box-spin win on its own self-subscription) never enters `totalSupply`; it is placed on
