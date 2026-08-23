@@ -4,7 +4,7 @@ Pre-disclosure for audit wardens. **If a finding's mechanism + impact is describ
 already known and is not eligible.** This is a precise perimeter — each entry names the exact
 mechanism and why it is by-design, defended, or out-of-scope. There are no vague blanket disclaimers.
 
-Frozen subject: `contracts/` tree `2cfcd461` @ tag `degenerus-c4a`. Pre-scanned with Slither v0.11.5
+Frozen subject: `contracts/` tree `41f04be2` @ tag `degenerus-c4a`. Pre-scanned with Slither v0.11.5
 + Aderyn 0.6.8; those findings are triaged in the automated-tools section below.
 
 ---
@@ -110,7 +110,7 @@ is no victim. An admin-power finding must exhibit an **engaged-community victim*
 **Mechanism.** When the game has not sealed a day for more than 120 days
 (`_vrfDeadmanFired ≡ _simulatedDayIndex() − dailyIdx > 120`, `DegenerusGameStorage.sol:2088-2089`;
 `dailyIdx` is uint24 and always `<= _simulatedDayIndex()` so no underflow), the terminal release no
-longer waits for Chainlink. `_getHistoricalRngFallback` (`DegenerusGameAdvanceModule.sol:1982-1993`)
+longer waits for Chainlink. `_getHistoricalRngFallback` (`DegenerusGameAdvanceModule.sol:1988-1999`)
 commits a fallback word from sealed historical `rngWordByDay` admixed with `block.prevrandao`; the
 `reverseFlip` nudge is cancelled-and-consumed (`unchecked fallbackWord -= totalFlipReversals`,
 `:1862`, against the consumption in `_applyDailyRng :2640-2651`).
@@ -142,32 +142,34 @@ transaction (a coin credit, not ETH-backed value). Immaterial; documented, not e
 ## 5. Automated tool findings (pre-disclosed)
 
 The full machine-readable Slither/Aderyn baseline is maintained internally — Slither 0.11.5 (3,697
-results / 101 detectors over 163 contracts at tree `2cfcd461`; 171 High / 448 Medium / 432 Low /
+results / 101 detectors over 163 contracts at tree `41f04be2`; 171 High / 447 Medium / 433 Low /
 2,594 Informational / 52 Optimization, and the "High" tier is dominated by 134 `uninitialized-state`
 false positives from the shared-storage delegatecall architecture — the deployed-module compilation
 units plus the `DegenerusGameLens` unit, see below) + Aderyn 0.6.8 (9 High / 21 Low, unchanged and
 category-identical to the prior tree).
 Slither totals are sensitive to the scan environment (solc/toolchain resolution), so the absolute
 count is not comparable across machines — re-runs should compare category triage, not the total.
-These counts were measured directly at tree `2cfcd461`, not carried forward from an earlier scan.
-The immediately preceding tree `37c5988b` re-scanned in the same environment reproduced
+These counts were measured directly at tree `41f04be2`, not carried forward from an earlier scan.
+The immediately preceding tree `2cfcd461` re-scanned in the same environment reproduced
 3,697 / 171 High / 448 Medium / 432 Low / 2,594 Informational / 52 Optimization exactly, tier for
-tier, and the delta between the two is **ZERO in every tier** — that span is comment-only (the
-terms-of-interaction header dropping a redundant clause, and the header added to
-`ContractAddresses.sol`, the one in-scope file it had missed), and comments are invisible to every
-detector. Deployed bytecode is byte-identical across the pair and nSLOC is unchanged, which is what
-makes the zero delta a measurement rather than an assumption.
+tier — the figure recorded for it at the time — so the delta across this span is a measurement
+rather than an assumption.
 
-The substantive movement was one tree earlier, from `46cc1c67` to `37c5988b`: **+2 results, ZERO
-High**, for the permissionless per-century re-arm of the deploy seed window and the vault's WWXRP
-reserve (`Coinflip.armCenturySeed`).
+That delta is **one Medium retired, one Low added, ZERO High, and no change in the total**, both
+sides of it on the same change: `Coinflip.armCenturySeed` becoming a GAME-only call the daily
+advance makes at an x00 level's transition close, rather than a permissionless entrypoint.
 
-Both additions land on the new function and neither is a defect. `unused-return` (Medium) is the
-`purchaseInfo()` tuple members the arm does not read — it wants the level and the RNG-lock flag and
-discards the other three. `reentrancy-events` (Low) is `VaultWwxrpToppedUp` being emitted after the
-`mintPrize` call that raises the vault's WWXRP allowance; the callee is a protocol contract whose
-mint writes storage and returns, and the call is the last statement of the function. The High tier
-is composition-identical to the prior tree, detector for detector, and nothing was removed.
+The retired Medium is the `unused-return` on that function. It previously read
+`degenerusGame.purchaseInfo()` for the level and the RNG-lock flag and discarded the other three
+tuple members; it now takes the level as a parameter from the advance already running, so there is
+no ignored return left to flag. The added Low is `calls-loop` on
+`DegenerusGameAdvanceModule.advanceGame()` — the new `coinflip.armCenturySeed(lvl)` call site sits
+inside the `do { ... } while (false)` block the advance uses as a one-stage-per-call switch, which
+Slither reads as a loop body. It executes at most once per transaction, and at most once per level
+boundary. The High tier is composition-identical to the prior tree, detector for detector, and the
+`reentrancy-events` entry on the arm (`VaultWwxrpToppedUp` emitted after the `mintPrize` that raises
+the vault's WWXRP allowance, the last statement of the function, callee a protocol contract whose
+mint writes storage and returns) carries over unchanged.
 
 Across the wider chain from `33ccd5b9`, the High tier gained no new detector class and one retired
 entirely. A single finding was added —

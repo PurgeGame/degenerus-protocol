@@ -2,9 +2,8 @@
 
 For a gambling protocol, economic transparency matters as much as contract transparency.
 **Every figure below cites the exact contract line that defines it.** Nothing here is
-marketing math — every line reference below resolves against `contracts/` tree `41f04be2`.
-The last audited freeze is tag `degenerus-c4a` (`contracts/` tree `2cfcd461`); the tree cited
-here is four files ahead of it and has not been re-scanned.
+marketing math — verify each number against the frozen subject (`contracts/` tree
+`41f04be2`, tag `degenerus-c4a`).
 
 The code is **not yet deployed**. There are no live token prices. Figures are on-chain
 constants and formulas, not projected returns.

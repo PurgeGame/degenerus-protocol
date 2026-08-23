@@ -22,7 +22,7 @@ Two liveness guards prevent permanent fund lockup. At level 0, a 365-day deploy 
 
 - **29 deployable contracts** (17 core + 12 delegatecall modules), sharing storage via `DegenerusGameStorage`
 - Solidity 0.8.34, `viaIR` enabled, optimizer runs = 1000, EVM target `osaka`
-- All contracts under the 24,576-byte EIP-170 limit (largest: DegenerusGame at 24,487 bytes, 89 to spare; AdvanceModule at 24,207, 369 to spare; DegenerusMintModule at 22,399, 2,177 to spare)
+- All contracts under the 24,576-byte EIP-170 limit (largest: DegenerusGame at 24,487 bytes, 89 to spare; AdvanceModule at 24,382, 194 to spare; DegenerusMintModule at 22,399, 2,177 to spare)
 - External dependencies: Chainlink VRF V2.5, Lido stETH, LINK token, and (optionally) an ENS
   reverse registrar — `ENS_REVERSE_REGISTRAR` is `address(0)` in this tree, which disables the
   constructor self-naming call entirely
@@ -96,7 +96,7 @@ The `ContractAddresses.sol` values committed here are the **Foundry deterministi
 - **Thanos levels (snap valve):** the vault owner may declare a level at least 6 levels out a "thanos level", after which every drained ticket entry for that level onward divides by `2^shift` (shift ≤ 8). Purely prospective — the declaration lands strictly before the target level's first materialization, so one level's entries always share one exponent and the uniform division cancels in the pot-share fraction. A non-zero shift is only declarable once projected demand exceeds 40M entries at the target level. The foil pack expresses the valve the other way round — it keeps its entry count and pays `2^shift` the price. Its payouts do not scale, so a thanos level makes the pack bad value outright: scaling them would mean reading an exponent at claim time, and a claim can land arbitrarily later than its buy, so a claim parked across a fresh declaration would pay `2^(new - old)` times its face. The valve is an emergency lever, not something to farm around.
 - **Century BAF incinerator:** at an ×00 level whose BAF *loses* its flip (the bracket is skipped and the pool normally just rolls forward), 25% of the would-be BAF pool instead pays one burn-weighted winner drawn from the WWXRP burns made during the preceding ×99 level. Entries close when the level increments off ×99 — the same transaction that requests the VRF word deciding the flip.
 - **Growth parimutuel:** an over/under book on the ratchet the game already records. Round L, open through level L's whole jackpot phase, resolves OVER iff `growth(L+1) > growth(L)` where `growth(L) = ratchet(L)/ratchet(L-1)` — compared cross-multiplied so the arithmetic is exact, with a push resolving UNDER. One fixed 1,000-FLIP stake per address per round, burned at placement; winners split the entire book evenly through the coinflip credit rail. There is no settlement transaction: every claim re-derives the outcome from write-once ratchet entries (century levels served from the append-only achieved-pool history), so a settled round's answer can never change.
-- **All-time record pool:** four records — biggest direct coinflip deposit (200k-FLIP floor), biggest Degenerette spin (1 ETH, per-transaction total), biggest lootbox deposit (5 ETH, raw), biggest ticket buy (100 whole tickets) — share one FLIP pot seeded at 10,000 FLIP that drips 2,000/day and takes 0.1% of each completed level's achieved pool, converted notionally at that level's ticket price (no ETH moves). Beating a standing mark by at least a fifth claims 5% of the pot plus 0.5% per day that category went unclaimed (cap 75% at 140 days), paid as coinflip credit plus a 1/500-scale sDGNRS Reward-pool leg; a larger value below the beat threshold still ratchets the mark for free. Category clocks start at deploy, and each category's first mark — still gated by its entry floor — draws the launch-accrued share. Records never reset.
+- **All-time record pool:** four records — biggest direct coinflip deposit (200k-FLIP floor), biggest Degenerette spin (1 ETH, per-transaction total), biggest lootbox deposit (5 ETH, raw), biggest ticket buy (100 whole tickets) — share one FLIP pot seeded at 10,000 FLIP that drips 2,000/day and takes 0.2% of each completed level's achieved pool, converted notionally at that level's ticket price (no ETH moves). Beating a standing mark by at least a fifth claims 5% of the pot plus 0.5% per day that category went unclaimed (cap 75% at 140 days), paid as coinflip credit plus a 1/500-scale sDGNRS Reward-pool leg; a larger value below the beat threshold still ratchets the mark for free. Category clocks start at deploy, and each category's first mark — still gated by its entry floor — draws the launch-accrued share. Records never reset.
 - **Whale Pricing:** Bundles 2.4-4 ETH, lazy passes 0.24 ETH+, deity passes 24 + T(n) ETH triangular.
 - **Game Over:** Liveness guard fires inside `advanceGame` (120-day inactivity or 365-day deploy timeout). `handleGameOverDrain` distributes funds using historical RNG (14-day fallback if Chainlink is stalled, or immediate fallback once the >120-day suppressed-phase deadman fires). A 30-day final sweep sends unclaimed remainder three ways to the vault, sDGNRS, and GNRUS.
 - **Pull Payments:** All ETH/stETH withdrawals use pull pattern via `claimWinnings()`.
@@ -116,7 +116,7 @@ The Solidity build is pinned — `foundry.toml` fixes the compiler (solc 0.8.34)
 
 The full assurance pipeline lives in this repository and runs in CI (`.github/workflows/ci.yml`) on every push:
 
-- **`forge test`** — **1,734 Foundry tests across 228 suites**: 1,627 passing, 104 skipped, and 3 fixtures left stale by the packed-box-order change (see below). Coverage spans unit, integration, fuzz, invariant, gas, access-control, governance, economics, and named regression harnesses for every fixed finding.
+- **`forge test`** — **1,699 Foundry tests across 218 suites**: 1,592 passing, 104 skipped, and 3 fixtures left stale by the packed-box-order change (see below). Coverage spans unit, integration, fuzz, invariant, gas, access-control, governance, economics, and named regression harnesses for every fixed finding.
   The three stale fixtures — `TicketLifecycle::testLootboxFarRollTicketsRouteToFF`, `VRFLifecycle::test_vrfLifecycle_levelAdvancement` and `FoilSnapPayout::test_matchPayoutIgnoresSnapExponent` — encode the superseded model in which repeated lootbox spends of differing sizes accumulated for one buyer in one RNG index. `_mergeBoxOrder` now deliberately admits one custom box *size* per (index, buyer), so those fixtures build a smaller scenario than they assert over. The contracts behave as designed; the fixtures await migration and are tracked as test debt, not findings (`test/` is out of scope).
 - **EIP-170 size gate** — CI fails if any deployed contract breaches the 24,576-byte limit.
 - **Storage-layout oracle** (`scripts/layout/storage_layout_oracle.sh`) — 12 modules execute by `delegatecall` against one shared `DegenerusGameStorage`, so CI fails the build if any storage slot in the game, any state contract, or any module moves versus a committed golden. This makes the "a module writes a slot the game uses for something else" corruption class un-shippable.
@@ -127,7 +127,7 @@ The full assurance pipeline lives in this repository and runs in CI (`.github/wo
 Reproduce the core suite locally:
 
 ```
-forge test    # 1,627 passing, 104 skipped, 3 known-stale fixtures
+forge test    # 1,592 passing, 104 skipped, 3 known-stale fixtures
 make check-interfaces check-delegatecall check-raw-selectors check-rng-window check-pool-writes check-array-delete
 bash scripts/layout/storage_layout_oracle.sh
 ```
@@ -136,7 +136,7 @@ A secondary Hardhat behavioral suite (`npx hardhat test`) provides additional co
 
 ## Scope & Known Issues
 
-- **`scope.txt` / `out_of_scope.txt`** — the exact audited surface, pinned to `contracts/` tree `2cfcd461` (tag `degenerus-c4a`).
+- **`scope.txt` / `out_of_scope.txt`** — the exact audited surface, pinned to `contracts/` tree `41f04be2` (tag `degenerus-c4a`).
 - **`KNOWN-ISSUES.md`** — every pre-triaged finding, by-design ruling, and static-analysis disposition, each with its precise mechanism. Not vague disclaimers.
 - **`SECURITY.md`** — threat model, trusted-role matrix (functional authority, not just Solidity modifiers), and disclosure process.
 - **`ECONOMIC_DISCLOSURES.md`** — creator allocations, vesting, governance control, the WWXRP reserve, and terminal value — every figure cited to a contract line.
