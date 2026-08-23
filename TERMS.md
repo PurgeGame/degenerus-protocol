@@ -7,8 +7,8 @@ of these contracts accepts them.
 ---
 
 **THIS IS GAMBLING.** Outcomes are decided by chance. You can lose everything you put in
-simply by being unlucky. That is the software working exactly as intended, not a malfunction
-and not a defect. Do not commit funds you are not prepared to lose entirely.
+simply by being unlucky. That is the software working exactly as intended. Do not commit
+funds you are not prepared to lose entirely.
 
 **The deployed bytecode is the entire agreement.** It controls over every comment, name,
 document and statement made about it — including this one. Where any description of the

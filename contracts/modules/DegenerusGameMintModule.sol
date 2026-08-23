@@ -5,9 +5,8 @@ pragma solidity 0.8.34;
  * TERMS OF INTERACTION — submitting a transaction to this contract accepts them.
  *
  * THIS IS GAMBLING. Outcomes are decided by chance. You can lose everything you put in
- * simply by being unlucky. That is the software working exactly as intended, not a
- * malfunction and not a defect. Do not commit funds you are not prepared to lose
- * entirely.
+ * simply by being unlucky. That is the software working exactly as intended. Do not
+ * commit funds you are not prepared to lose entirely.
  *
  * The deployed bytecode is the entire agreement, and controls over every comment, name,
  * document and statement made about it. It has been audited but is not proven correct:
