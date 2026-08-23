@@ -209,6 +209,10 @@ interface ICoinflip {
     ///      converted notionally at that level's ticket price — no ETH moves.
     function fundRecordPool(uint256 amount) external;
 
+    /// @notice Arm the x00 seed window if one is due (GAME only, silent when not due).
+    /// @param lvl The level whose jackpot phase just ended.
+    function armCenturySeed(uint24 lvl) external;
+
     /// @notice Settle-then-read sDGNRS's redeemable coinflip backing (claimableStored + carry).
     /// @dev sDGNRS-only. Settles all resolved days first so the two summed components are disjoint
     ///      and current; sDGNRS holds no wallet balance — its entire FLIP backing lives in these two.

@@ -186,7 +186,6 @@ contract Coinflip {
     error RngLocked();
     error Insufficient();
     error NotApproved();
-    error SeedNotDue();
 
     /*+======================================================================+
       |                         STORAGE VARIABLES                            |
@@ -1050,34 +1049,28 @@ contract Coinflip {
         return _armBigRecord(kind, player, candidate);
     }
 
-    /// @notice Arm an x00 level's seed window: SEED_FLIP_DAILY per day for SEED_FLIP_DAYS
-    ///         consecutive days, to VAULT and to sDGNRS, on the same terms as the deploy seed.
-    /// @dev Permissionless and deliberately off the advance path — the daily crank is the
-    ///      gas-DoS-sensitive route, and this writes ten cold slots per recipient, so it pays
-    ///      its own way in its own transaction instead of riding the century transition.
-    ///      Nothing here can move value from a non-consenting party: both recipients and the
-    ///      amount are fixed, and the only caller-chosen input is timing.
+    /// @notice Arm this century's seed window: SEED_FLIP_DAILY per day for
+    ///         SEED_FLIP_DAYS days to VAULT and to sDGNRS, plus the vault's doubling WWXRP
+    ///         reserve, on the same terms as the deploy program.
+    /// @dev GAME only, called from the advance as an x00 level's transition closes and the next
+    ///      purchase phase opens. It has no revert path by design: a revert here would brick the
+    ///      daily crank at a level boundary, so a call with nothing due simply writes nothing. It
+    ///      arms the LOWEST unarmed century, so a boundary the game passed without arming is
+    ///      picked up by the next one rather than lost.
     ///
-    ///      Century N becomes armable the moment level N*100 opens and stays armable until it
-    ///      is used, so a missed call delays a window rather than losing it: a caller arriving
-    ///      at level 250 with nothing armed claims century 1, and a second call claims century
-    ///      2. Once a century is armed its latch makes a repeat call for it revert.
+    ///      Takes the level from the caller rather than reading `purchaseInfo` back, which
+    ///      would re-enter a mid-advance game. No RNG-lock gate is needed: the window starts
+    ///      at `_targetFlipDay()`, strictly later than the day any pending word resolves.
     ///
-    ///      Stakes ADD to the day's lane rather than replacing it: sDGNRS is on perpetual
-    ///      auto-rebuy by this point and already holds a stake on the near days, which a
-    ///      masked overwrite would destroy. `_setFlipStake` saturates at the lane width.
-    ///
-    ///      Gated on the RNG lock and starting at `_targetFlipDay()` (the next unresolved day)
-    ///      so the seed can never be aimed at a day whose word is already committed.
-    function armCenturySeed() external {
-        (uint24 lvl, , , bool rngLocked_, ) = degenerusGame.purchaseInfo();
-        if (rngLocked_) revert RngLocked();
-        // Arms the LOWEST unarmed century, not the current one, so a century nobody called
-        // is claimed by the next call rather than skipped. Two centuries behind therefore
-        // takes two calls, and the WWXRP doubling below pays each century its own figure in
-        // order. Widened for the compare: century * 100 can exceed uint24 at absurd levels.
+    ///      Stakes ADD to a day's lane rather than replacing it — `_setFlipStake` is a masked
+    ///      overwrite and sDGNRS is on perpetual auto-rebuy by level 100, so a replace would
+    ///      destroy a stake the protocol had already rolled forward.
+    /// @param lvl The level whose jackpot phase just ended.
+    function armCenturySeed(uint24 lvl) external {
+        if (msg.sender != ContractAddresses.GAME) revert OnlyDegenerusGame();
+
         uint24 century = lastSeededCentury + 1;
-        if (uint256(lvl) < uint256(century) * SEED_CENTURY_LEVELS) revert SeedNotDue();
+        if (uint256(lvl) < uint256(century) * SEED_CENTURY_LEVELS) return;
         lastSeededCentury = century;
 
         uint24 firstDay = _targetFlipDay();
@@ -1097,10 +1090,8 @@ contract Coinflip {
         emit SeedWindowArmed(century, firstDay, SEED_FLIP_DAYS, SEED_FLIP_DAILY);
 
         // Vault WWXRP reserve, doubling each century off the deploy allowance: century N
-        // pays `WWXRP_VAULT_SEED << N`. Derived from the century rather than a paid-count,
-        // so a century armed late pays its own figure and no state is kept for it.
-        // `mintPrize` to VAULT is intercepted by WWXRP._mint into `vaultAllowance`, so this
-        // raises the uncirculated reserve the vault may mint from, not a balance.
+        // pays `WWXRP_VAULT_SEED << N`. `mintPrize` to VAULT is intercepted by WWXRP._mint
+        // into `vaultAllowance`, so this raises the uncirculated reserve, not a balance.
         if (century <= WWXRP_MAX_DOUBLINGS) {
             uint256 wwxrpAmount = WWXRP_VAULT_SEED << uint256(century);
             wwxrp.mintPrize(ContractAddresses.VAULT, wwxrpAmount);
