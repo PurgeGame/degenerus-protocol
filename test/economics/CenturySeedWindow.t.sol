@@ -237,4 +237,88 @@ contract CenturySeedWindow is DeployProtocol {
         emit log_named_uint("armCenturySeed_gas_virgin_days", used);
         assertLt(used, 800_000, "the century arm stays a sub-800k addition to the phase-end tx");
     }
+
+    // ------------------------------------------------------------------
+    // BRICK-SAFETY — the arm rides the daily crank, so it must be TOTAL
+    // ------------------------------------------------------------------
+    // `armCenturySeed` is called from `advanceGame`'s transition close. A revert anywhere
+    // inside it does not fail one feature, it stalls the daily crank at a level boundary —
+    // the game cannot leave the jackpot phase. These pin the two arithmetic sites that could
+    // ever throw, plus the whole schedule end to end.
+
+    /// @dev The load-bearing guard. `vaultAllowance += amount` is a CHECKED add, and the
+    ///      century payment doubles, so the cap is what bounds it: 60 doublings terminate at
+    ///      1e27 * (2^61 - 1) ~= 2.3e45, about 32 orders of magnitude below uint256. Without
+    ///      the cap the cumulative add overflows at century 166 — level 16,600, which `level`
+    ///      (uint24, max 16,777,215) can reach. Walking every century to the cap and past it
+    ///      proves the arm never throws and the payment stops exactly where it should.
+    function testEveryCenturyToTheCapAndBeyondNeverReverts() public {
+        uint256 deployAllowance = wwxrp.INITIAL_VAULT_ALLOWANCE();
+        uint256 expected = deployAllowance;
+
+        // 70 > WWXRP_MAX_DOUBLINGS (60), so this walks the paying range AND the silent tail.
+        for (uint24 century = 1; century <= 70; ++century) {
+            _arm(century * 100);
+            if (century <= 60) expected += deployAllowance << uint256(century);
+            assertEq(
+                wwxrp.vaultAllowance(),
+                expected,
+                "every century pays its own doubling, and nothing past the cap"
+            );
+        }
+
+        assertEq(
+            wwxrp.vaultAllowance(),
+            deployAllowance * ((uint256(1) << 61) - 1),
+            "terminal reserve is the closed form 1e27 * (2^61 - 1)"
+        );
+        // The tail still arms its FLIP window; only the WWXRP leg stops.
+        assertGt(_stakeAtOffset(ContractAddresses.VAULT, 0), 0, "post-cap centuries still seed FLIP");
+    }
+
+    /// @dev The other arithmetic site. Stakes ADD into a 128-bit lane, so a long-lived lane
+    ///      could exceed it; `_setFlipStake` clamps instead of reverting. Arming many centuries
+    ///      on the SAME wall day drives one lane to the ceiling — the crank must survive it.
+    function testFlipLaneSaturatesRatherThanRevertingTheCrank() public {
+        // Snapshot first: the DEPLOY window already seeded this day, so the property is
+        // "the lane grew by exactly 70 seeds", not "the lane equals 70 seeds".
+        uint256 before = _stakeAtOffset(ContractAddresses.VAULT, 0);
+        for (uint24 century = 1; century <= 70; ++century) {
+            _arm(century * 100);
+        }
+        assertEq(
+            _stakeAtOffset(ContractAddresses.VAULT, 0) - before,
+            70 * SEED_FLIP_DAILY,
+            "70 arms on one day accumulate, none lost"
+        );
+
+        // Now push the same lane past the 128-bit ceiling and confirm it clamps silently.
+        vm.prank(address(game));
+        coinflip.creditFlip(ContractAddresses.VAULT, type(uint128).max);
+        for (uint24 century = 71; century <= 90; ++century) {
+            _arm(century * 100); // must not revert even with the lane at its ceiling
+        }
+        assertLe(
+            _stakeAtOffset(ContractAddresses.VAULT, 0),
+            type(uint128).max,
+            "the lane clamps at its width rather than spilling or reverting"
+        );
+    }
+
+    /// @dev The century counter itself. `lastSeededCentury + 1` is a checked uint24 add, but
+    ///      the level gate bounds it: a century only advances once `lvl >= century * 100`, and
+    ///      `lvl` is uint24, so the counter cannot pass 167,772 — far short of uint24 overflow.
+    function testCenturyCounterCannotOverflowItsWidth() public {
+        uint24 maxLevel = type(uint24).max;
+        // The highest century any reachable level can claim.
+        uint24 maxCentury = maxLevel / 100;
+        assertLt(maxCentury, type(uint24).max, "the counter's ceiling is unreachable by construction");
+        // Arming at the maximum level claims century 1 (the lowest unarmed), never jumps.
+        _arm(maxLevel);
+        assertEq(
+            wwxrp.vaultAllowance(),
+            wwxrp.INITIAL_VAULT_ALLOWANCE() * 3,
+            "even the maximum level claims exactly one century per call"
+        );
+    }
 }
