@@ -71,9 +71,7 @@ contract FlipCrapsHarness is FlipCraps {
     ///      that is how the exit-round salt is proven — so it reaches the SHIPPED `_survived`
     ///      through the harness rather than keeping an unused external on the table.
     function survivedAt(uint48 index, uint256 handsPlayed) external view returns (bool) {
-        uint256 word = wordAt(index);
-        if (word == 0) revert RngNotReady();
-        return _survived(word, index, handsPlayed);
+        return _survived(seedFor(index), handsPlayed);
     }
 
     /// @dev Test tap into the slip engine with a caller-chosen roll budget — organically
@@ -124,6 +122,51 @@ contract FlipCrapsTest is CrapsPins {
     function _ids(uint64 a) internal pure returns (uint64[] memory out) {
         out = new uint64[](1);
         out[0] = a;
+    }
+
+    /// @dev The table's survival coin, recomputed independently of the engine — an indexer or a
+    ///      client replay hardcodes this tag ("Survival") and the seed. The engine rides the same
+    ///      coin both mid-run (as a second chance) and at the end. Mirrors `Craps._survived`.
+    uint256 internal constant _SURVIVAL_TAG = 0x537572766976616c; // "Survival"
+
+    function _survivalCoin(bytes32 seed, uint256 n) internal pure returns (bool) {
+        return uint256(keccak256(abi.encode(_SURVIVAL_TAG, seed, n))) & 1 == 1;
+    }
+
+    /// @dev Reconstruct a slip's final bankroll from scratch: walk the base-board ledger, applying
+    ///      the escalator multiple AND the deterministic second-chance coin exactly where the engine
+    ///      would, so this is a real check on the money path rather than a copy of the engine's own
+    ///      scalar. A played hand below the round's stake proves its second-chance coin survived; the
+    ///      stop round splits a hard bust (remainder kept) from a second-chance bust (bankroll zeroed).
+    function _replaySlipBankroll(Craps.Bets memory b, uint48 idx, CrapsOracle.SlipResult memory r)
+        internal
+        view
+        returns (uint256 bank, uint256 units)
+    {
+        uint256 stake = craps.stakeFor(b);
+        bytes32 seed = craps.seedFor(idx);
+        bank = r.bankrollIn;
+        for (uint256 h = 0; h < r.ledger.length; ++h) {
+            uint256 q = 1 << (h / craps.ESC_HANDS());
+            if (q > 0xFFFF) q = 0xFFFF;
+            uint256 need = q * stake;
+            if (bank < need) {
+                assertGe(bank * 2, need, "played a hand below the second-chance floor");
+                assertTrue(_survivalCoin(seed, h), "played on a losing second-chance coin");
+                bank += bank;
+            }
+            units += q;
+            bank = bank - need + q * uint256(int256(stake) + r.ledger[h].net);
+        }
+        if (r.stop == CrapsOracle.SlipStop.Bust) {
+            uint256 q = 1 << (r.ledger.length / craps.ESC_HANDS());
+            if (q > 0xFFFF) q = 0xFFFF;
+            if (bank * 2 >= q * stake) {
+                // Not a hard bust — the run was in the second-chance band and the coin lost.
+                assertTrue(!_survivalCoin(seed, r.ledger.length), "busted on a surviving coin");
+                bank = 0;
+            }
+        }
     }
 
     // ---------------------------------------------------------------------------------------
@@ -377,9 +420,9 @@ contract FlipCrapsTest is CrapsPins {
         assertEq(bet.goal, uint256(LW) * 40, "goal");
     }
 
-    /// @dev Sweep tables and hold every run to its arithmetic: the final bankroll is exactly the
-    ///      opening bankroll plus the escalator-weighted sum of hand nets, and each stop reason
-    ///      means what it says.
+    /// @dev Sweep tables and hold every run to its arithmetic: the final bankroll is exactly what an
+    ///      independent replay of the base-board ledger — escalator multiple and second-chance coin
+    ///      included — produces, and each stop reason means what it says.
     function test_slipStopsHonestlyAndConservesTheBankroll() public {
         Craps.Bets memory b;
         b.passLine = U;
@@ -395,17 +438,8 @@ contract FlipCrapsTest is CrapsPins {
                 craps.resolveSlipAt(b, idx, UW * 3, UW * 6, craps.MAX_SLIP_HANDS());
 
             assertEq(r.ledger.length, r.handsPlayed, "ledger trimmed to hands played");
-            int256 sum;
-            uint256 units;
-            for (uint256 h = 0; h < r.ledger.length; ++h) {
-                // The mandatory wager doubles every ESC_HANDS shooters; the ledger stays base-board.
-                int256 esc = int256(uint256(1) << (h / craps.ESC_HANDS()));
-                sum += esc * r.ledger[h].net;
-                units += uint256(esc);
-            }
-            assertEq(
-                int256(r.bankrollOut), int256(r.bankrollIn) + sum, "bankroll does not conserve"
-            );
+            (uint256 bank, uint256 units) = _replaySlipBankroll(b, idx, r);
+            assertEq(r.bankrollOut, bank, "bankroll does not match the second-chance replay");
             assertEq(r.unitsPlayed, units, "units != sum of mandatory multipliers");
 
             if (r.stop == CrapsOracle.SlipStop.Bust) {
@@ -419,6 +453,63 @@ contract FlipCrapsTest is CrapsPins {
         }
         assertTrue(sawBust, "no busted run seen");
         assertTrue(sawGoal, "no goal run seen");
+    }
+
+    /// @dev The mid-run second chance. A run that cannot cover a full round but still holds at least
+    ///      half of it takes one committed double-or-nothing: surviving doubles the bankroll and
+    ///      plays on, losing zeroes it. A run short of even half a round gets no coin. Over many
+    ///      tables the coin is fair, and a lost coin always leaves nothing behind.
+    function test_secondChanceIsAFairDoubleOrBust() public {
+        Craps.Bets memory b;
+        b.passLine = U; // cheap one-unit rounds, so a small bankroll dips into the band often
+        uint256 stake = craps.stakeFor(b);
+
+        uint256 survives;
+        uint256 busts;
+        for (uint256 i = 0; i < 400; ++i) {
+            uint48 idx = uint48(40_000 + i);
+            _setIndex(idx);
+            _setWord(idx, uint256(keccak256(abi.encode("2ndchance", i))));
+
+            CrapsOracle.SlipResult memory r =
+                craps.resolveSlipAt(b, idx, UW * 2, 0, craps.MAX_SLIP_HANDS());
+            bytes32 seed = craps.seedFor(idx);
+
+            // Every played hand that opened below its round stake proves a survived coin — and the
+            // engine may never play one that opened below half the round.
+            uint256 bank = r.bankrollIn;
+            for (uint256 h = 0; h < r.ledger.length; ++h) {
+                uint256 q = 1 << (h / craps.ESC_HANDS());
+                if (q > 0xFFFF) q = 0xFFFF;
+                uint256 need = q * stake;
+                if (bank < need) {
+                    assertGe(bank * 2, need, "a coin fired below half a round");
+                    assertTrue(_survivalCoin(seed, h), "played on a lost coin");
+                    ++survives;
+                    bank += bank;
+                }
+                bank = bank - need + q * uint256(int256(stake) + r.ledger[h].net);
+            }
+            // A second-chance bust is the stop round in the band with a lost coin — and it zeroes.
+            if (r.stop == CrapsOracle.SlipStop.Bust) {
+                uint256 q = 1 << (r.ledger.length / craps.ESC_HANDS());
+                if (q > 0xFFFF) q = 0xFFFF;
+                if (bank * 2 >= q * stake) {
+                    assertTrue(!_survivalCoin(seed, r.ledger.length), "busted on a surviving coin");
+                    assertEq(r.bankrollOut, 0, "a second-chance bust kept money");
+                    ++busts;
+                }
+            }
+        }
+
+        emit log_named_uint("second-chance survives", survives);
+        emit log_named_uint("second-chance busts   ", busts);
+        assertGt(survives + busts, 40, "the second-chance band was never exercised");
+        assertGt(busts, 0, "no run ever lost the coin");
+        // Fair: each flip is an independent keccak-LSB coin, so survives and busts split evenly. A
+        // generous band — this counts incidental flips, not a dedicated 10k-trial fairness rig.
+        uint256 survivePct = (survives * 1000) / (survives + busts);
+        assertApproxEqAbs(survivePct, 500, 200, "the second-chance coin looks shaded");
     }
 
     /// @dev A slip that can neither bust nor reach a goal runs to the cap — and its hands are the
@@ -661,16 +752,8 @@ contract FlipCrapsTest is CrapsPins {
 
             CrapsOracle.SlipResult memory r = craps.resolveSlipAt(b, idx, LW * 10, 0, 25);
 
-            uint256 bank = r.bankrollIn;
-            uint256 units;
-            for (uint256 h = 0; h < r.ledger.length; ++h) {
-                uint256 q = 1 << (h / craps.ESC_HANDS());
-                if (q > 0xFFFF) q = 0xFFFF;
-                units += q;
-                bank = bank - q * uint256(LW)
-                    + q * uint256(int256(uint256(LW)) + r.ledger[h].net);
-                if (q > 1) sawDoubling = true;
-            }
+            (uint256 bank, uint256 units) = _replaySlipBankroll(b, idx, r);
+            if (units > r.ledger.length) sawDoubling = true;
             assertEq(r.bankrollOut, bank, "bankroll != linearity replay");
             assertEq(r.unitsPlayed, units, "units != sum of mandatory multipliers");
         }
@@ -786,11 +869,12 @@ contract FlipCrapsTest is CrapsPins {
     }
 
     /// @dev Double-or-nothing at even money is EV-neutral, which is the point: it moves variance
-    ///      and leaves the game's edge alone. Over many independent tables roughly half survive and
-    ///      the survivors are paid double.
+    ///      and leaves the game's edge alone. A run that came home with something flips once, and
+    ///      roughly half of those survive and are paid double; a busted run never flips.
     function test_survivalFlipIsEvNeutral() public {
         uint256 n = 400;
         uint256 survivors;
+        uint256 payers;
         uint256 wonTotal;
         uint256 paidTotal;
 
@@ -801,13 +885,18 @@ contract FlipCrapsTest is CrapsPins {
             _setWord(uint48(1000 + i), uint256(keccak256(abi.encode("seed", i))));
 
             (uint256 won, bool survived, uint256 paid) = craps.previewSettlement(betId);
-            if (survived) ++survivors;
+            // A busted run does not flip — won == 0 is definitionally not survived — so the fair
+            // coin lives on the runs that came home with something.
+            if (won != 0) {
+                ++payers;
+                if (survived) ++survivors;
+            }
             wonTotal += won;
             paidTotal += paid;
         }
 
-        // One flip per table, a fair coin over 400 tables: 4 sigma is 40.
-        assertApproxEqAbs(survivors, n / 2, 60, "survival rate is not a fair coin");
+        // One flip per paying table, a fair coin: survivors sit on half of them.
+        assertApproxEqAbs(survivors * 2, payers, payers / 4 + 20, "survival rate is not a fair coin");
 
         // Survivors pay double, so the paid total tracks the won total. Rounding only ever
         // truncates, so paid must not exceed 2x won.
@@ -815,14 +904,16 @@ contract FlipCrapsTest is CrapsPins {
         assertApproxEqRel(paidTotal, wonTotal, 0.25e18, "paid total drifted from the wins");
     }
 
-    /// @dev The survived flag is a fact about the table AND the round the run ended on: it must
-    ///      agree with `survivedAt(index, handsPlayed)`, and a bet that returned nothing pays
-    ///      nothing either way.
+    /// @dev The survived flag is a fact about the table AND the round the run ended on: for a run
+    ///      that came home with something it must agree with `survivedAt(index, handsPlayed)`; a run
+    ///      that returned nothing busted, so it is "not survived" and pays nothing — it never flips,
+    ///      which is what keeps a busted run from re-using the second-chance coin that busted it.
     function test_survivedFlagIsTheTableAndExitRoundFlip() public {
         Craps.Bets memory b;
         b.passLine = L;
 
         bool sawZero;
+        bool sawPaid;
         for (uint256 i = 0; i < 40; ++i) {
             uint48 idx = uint48(2000 + i);
             _setIndex(idx);
@@ -833,13 +924,18 @@ contract FlipCrapsTest is CrapsPins {
             uint256 hands =
                 craps.resolveSlipAt(b, idx, LW, 0, craps.MAX_SLIP_HANDS()).handsPlayed;
             (uint256 won, bool survived, uint256 paid) = craps.previewSettlement(betId);
-            assertEq(survived, craps.survivedAt(idx, hands), "flag disagrees with the coin");
+            // A paying run's flag is the coin at its exit round; a busted run never flips.
+            assertEq(survived, won != 0 && craps.survivedAt(idx, hands), "flag disagrees with the coin");
             if (won == 0) {
+                assertFalse(survived, "a busted run must not survive");
                 assertEq(paid, 0, "paid on a zero return");
                 sawZero = true;
+            } else if (survived) {
+                sawPaid = true;
             }
         }
         assertTrue(sawZero, "no losing table found");
+        assertTrue(sawPaid, "no surviving paid table found");
     }
 
     // ---------------------------------------------------------------------------------------

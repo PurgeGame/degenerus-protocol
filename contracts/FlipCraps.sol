@@ -34,27 +34,33 @@ interface ICoinflipStake {
 ///         table — the ETH side of Degenerette debits the prize pool and credits the game's
 ///         `claimable`, neither of which anything outside `DegenerusGame` can reach.
 ///
-/// @dev THE SURVIVAL FLIP — ONE PER TABLE, PER EXIT ROUND
+/// @dev THE SURVIVAL FLIP — THE SAME COIN AS THE SECOND CHANCE, AT THE EXIT ROUND
 ///
-///      Every payout double-or-nothings once, at the end of it all, on a coin keyed to the table
-///      and the round the run ended on. Everyone who lasted the same number of shooters at one
-///      index shares a coin — so two identical bets still double or bust together — while a run
-///      that ended on a different round gets its own. EV-neutral either way: half of all coins pay
-///      double, half pay nothing.
+///      A run that comes home with something double-or-nothings it once, on the table's survival
+///      coin for the round it ended on (`Craps._survived(seed, handsPlayed)`). This is the SAME coin
+///      family the run's mid-hand second chances rode — the second chance at round k and the end
+///      flip for a run that stopped after k shooters are one and the same coin. A run never spends
+///      the same coin twice: a surviving second chance always plays on to a later round, and a run
+///      that busted came home with nothing and does not flip at all. Everyone who lasted the same
+///      number of shooters at one index shares a coin, so two identical bets still double or bust
+///      together. EV-neutral: half of all coins pay double, half pay nothing.
 ///
-///      The exit round is in the key so that settling cannot spoil the table. A word is public the
-///      moment it lands, so a single shared coin meant the first player to settle a two-shooter run
-///      published the answer for everyone still holding a long one.
+///      The exit round is in the key so a run's DECIDING flip stays private to its own length. A
+///      word is public the moment it lands, and a single per-table coin would have let the first
+///      player to settle a short run publish the deciding flip for everyone still holding a long
+///      one. Keying on the round closes that: settling a run of one length never publishes a
+///      different length's deciding flip. (It can reveal a coin a longer run later rides as a second
+///      chance, but that is informational only — nothing after the word moves a payout, as below.)
 ///
 ///      What the key must never contain is anything the CALLER composes. Settlement is
 ///      permissionless and `betIds[]` is caller-chosen, so a flip keyed on a batch total would let
 ///      a settler enumerate partitions against an already-public word and take whichever split
-///      flips best. Nothing here is composable: `(word, index)` were both fixed before any bet
-///      could see them, and `handsPlayed` is a pure function of a board, bankroll and goal that
-///      were all committed while the word did not yet exist. No arrangement of `betIds[]`, and no
-///      decision taken after the dice are public, moves any outcome by a single wei. The per-bet
-///      rounding roll stays keyed to `(word, betId)`, both committed at placement, for the same
-///      reason.
+///      flips best. Nothing here is composable: the table `seed` is fixed before any bet could see
+///      it (derived from `(word, index)`, both committed while the word did not yet exist), and
+///      `handsPlayed` is a pure function of a board, bankroll and goal all committed then too. No
+///      arrangement of `betIds[]`, and no decision taken after the dice are public, moves any
+///      outcome by a single wei. The per-bet rounding roll stays keyed to `(word, betId)`, both
+///      committed at placement, for the same reason.
 ///
 ///      The flip lands on everything coming back, stake included, because the stake was burned at
 ///      placement and never returns on its own. So a table that made money can still pay zero, and
@@ -75,11 +81,14 @@ interface ICoinflipStake {
 /// @dev THE BET SLIP — THE ONLY WAY TO PLAY
 ///
 ///      The player puts down a bankroll and the wager repeats out of it, shooter after shooter,
-///      until the bankroll cannot cover one more round, reaches half of the payout goal they
-///      chose, or hits the shooter cap. Stops are judged between shooters, goal before bust. The
-///      half-goal is rounded up, so a surviving table's 2x flip reaches at least the requested
-///      target before award rounding. A busted slip keeps its sub-stake remainder — nothing is
-///      confiscated for stopping. The whole run settles once, so the survival flip lands on the
+///      until it can no longer cover even half a round, reaches half of the payout goal they chose,
+///      or hits the shooter cap. Stops are judged between shooters, goal first. When the bankroll
+///      can cover between half and all of a round it takes one committed double-or-nothing — the
+///      same fair coin as the end-of-run flip, keyed to the round — that either doubles it back
+///      into the race or ends the run with nothing; only a bankroll short of even half a round
+///      busts outright, keeping its sub-stake remainder. The half-goal is rounded up, so a
+///      surviving table's 2x flip reaches at least the requested target before award rounding. The
+///      whole run settles once, so the survival flip lands on the
 ///      FINAL BANKROLL: a slip that reached its bankroll target can still bust the coin, and one
 ///      that limped home can double. Slip hand `i` is the table's shooter `i`, the same dice every
 ///      other slip at the index watches.
@@ -165,10 +174,6 @@ contract FlipCraps is LootboxCraps {
     uint256 public constant RAKE_SCORE_75 = 1000;
     /// @notice The rakeback ceiling, in bps of theo.
     uint256 public constant RAKE_MAX_BPS = 7500;
-    /// @dev Domain tag for the table's survival flip. Distinct preimage shape from `_crapsSeed`
-    ///      (its first word is a keccak digest, this one is 8 ASCII bytes), so the flip bit and the
-    ///      dice can never be the same hash.
-    uint256 internal constant SURVIVAL_TAG = 0x537572766976616c; // "Survival"
     /// @notice Shooter cap on a bet slip; bust or goal is the real stop, and the escalator makes
     ///         even approaching this cap need an astronomical bankroll. At ~6.5k gas per full-board
     ///         shooter a cap-length settlement runs under 2M gas — and the engine's `SLIP_ROLL_BUDGET`
@@ -261,7 +266,8 @@ contract FlipCraps is LootboxCraps {
     // ---------------------------------------------------------------------------------------
 
     /// @notice Stake a bet slip at the table now accepting bets: `b` repeats out of `bankroll` —
-    ///         doubling every `Craps.ESC_HANDS` shooters — until it cannot cover a round, the
+    ///         doubling every `Craps.ESC_HANDS` shooters — until it cannot cover even half a round
+    ///         (a round it can only half-cover takes a second-chance double-or-nothing), the
     ///         bankroll reaches half of the post-flip payout `goal` (zero for no goal), or
     ///         `MAX_SLIP_HANDS` shooters have rolled.
     /// @return betId The wager's id, needed to settle it.
@@ -435,8 +441,14 @@ contract FlipCraps is LootboxCraps {
         unitsPlayed = sr.unitsPlayed;
         if (withLog) rolls = sr.rollLog;
 
-        // The survival flip, salted by the round the run ended on — see `_survived`.
-        survived = _survived(word, index, sr.handsPlayed);
+        // The survival flip, salted by the round the run ended on — see `Craps._survived`. It is
+        // the same coin family the run's mid-hand second chances rode. A run that came home with
+        // nothing does NOT flip: it busted, which is already "not survived", and flipping it would
+        // re-use the very second-chance coin that just busted it (its exit round IS that coin's
+        // round). Only a run that stopped with a positive bankroll takes the end flip — and that
+        // stop is always a round PAST any second chance it took, so `handsPlayed` names a coin this
+        // run has not spent, never the same coin twice.
+        survived = won != 0 && _survived(seed, sr.handsPlayed);
         unchecked {
             paid = survived ? won * 2 : 0;
         }
@@ -526,26 +538,4 @@ contract FlipCraps is LootboxCraps {
         }
     }
 
-    /// @dev The flip bit itself, off committed data only.
-    ///
-    ///      SALTED BY THE EXIT ROUND. Keying on `(word, index)` alone gave one coin to the whole
-    ///      table, and a table's word is public the moment it lands — so the first player to settle
-    ///      a two-shooter run published the result for everyone still holding a long one. Mixing in
-    ///      the round the run ended on gives each length its own coin: learning how a short run
-    ///      landed says nothing about a long one, and the suspense survives until each player's own
-    ///      settlement.
-    ///
-    ///      It costs the manipulation argument nothing, which is the only reason it is allowed in
-    ///      the key. `handsPlayed` is not composed by the settler and cannot be: it is a pure
-    ///      function of the board, bankroll and goal — all fixed at placement — against a word that
-    ///      did not exist yet. No arrangement of `betIds[]`, and no choice made after the dice are
-    ///      public, can move it by one round. Two players who bet identically still run identically,
-    ///      so they still share a coin.
-    function _survived(uint256 word, uint48 index, uint256 handsPlayed)
-        internal
-        pure
-        returns (bool)
-    {
-        return uint256(keccak256(abi.encode(SURVIVAL_TAG, word, index, handsPlayed))) & 1 == 1;
-    }
 }

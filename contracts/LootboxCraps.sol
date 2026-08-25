@@ -130,7 +130,9 @@ contract LootboxCraps is Craps {
     }
 
     function _extsload(bytes32 slot) private view returns (bytes32) {
-        // A zero GAME is the un-pinned placeholder this repo ships on `main`. Without this the
+        // A zero GAME — the un-pinned placeholder this repo ships on `main` — has no code, so this
+        // high-level call reverts on its extcodesize check: every read fails closed until CRAPS is
+        // deployed against a pinned game.
         return IGameSlotReader(GAME).extsload(slot);
     }
 }

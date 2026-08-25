@@ -108,6 +108,11 @@ contract Craps {
     ///      the whole run is still recomputable from the base board and the seed alone.
     uint256 public constant ESC_HANDS = 5;
 
+    /// @notice Domain tag for the table's survival coin — the double-or-nothing consulted both
+    ///         mid-run as a second chance and once at the end of a run. Tagged so its preimage can
+    ///         never collide with the dice stream (`keccak(seed, i)`, untagged).
+    uint256 internal constant SURVIVAL_TAG = 0x537572766976616c; // "Survival"
+
     /// @dev The six totals that can be a point.
     uint256 internal constant _POINT_TOTALS_MASK = (1 << 4) | (1 << 5) | (1 << 6) | (1 << 8) | (1 << 9) | (1 << 10);
 
@@ -167,7 +172,7 @@ contract Craps {
 
     /// @notice Why a bet slip stopped playing.
     enum SlipStop {
-        Bust, // the bankroll could no longer cover one more round
+        Bust, // fell below half a round, or lost the mid-run second-chance flip
         Goal, // the bankroll reached the chosen target
         Cap // the shooter cap arrived before either
     }
@@ -208,11 +213,15 @@ contract Craps {
     ///      per-hand ledgers have no consumer here and are not computed.
     ///
     ///      Stop conditions are judged BETWEEN shooters, in this order: goal first (so a run that
-    ///      is simultaneously at goal and out of the next stake counts as a win), then bust, then
-    ///      the cap. Each round escrows its wager — the base board times the escalating mandatory
-    ///      multiplier (see `ESC_HANDS`) — out of the bankroll, plays one hand, and credits back
-    ///      whatever it returned; the bounded-loss invariant is exactly what makes the escrow
-    ///      subtraction safe unchecked after the bust check. A busted bankroll keeps its remainder.
+    ///      is simultaneously at goal and out of the next stake counts as a win), then the cap, then
+    ///      affordability. A round short of even half its escalating wager busts outright; one that
+    ///      can cover between half and all of it takes a single committed double-or-nothing on the
+    ///      whole bankroll — surviving doubles it (enough to cover the round) and plays on, losing
+    ///      ends the slip with nothing. Each played round escrows its wager — the base board times
+    ///      the escalating mandatory multiplier (see `ESC_HANDS`) — out of the bankroll, plays one
+    ///      hand, and credits back whatever it returned; the bounded-loss invariant is exactly what
+    ///      makes the escrow subtraction safe unchecked after the affordability check. A busted
+    ///      bankroll keeps its remainder.
     ///
     ///      Because every payout is linear in the stakes, a q-unit round is EXACTLY q times the
     ///      base hand: the engine rolls the base board once and scales, which is what keeps the
@@ -257,18 +266,35 @@ contract Craps {
                     r.stop = SlipStop.Goal;
                     break;
                 }
-
-                {
-                    uint256 q = _escOf(cur & 0xFFFF);
-                    if (bankroll < stake * q) {
-                        r.stop = SlipStop.Bust;
-                        break;
-                    }
-                    cur = (cur & ~uint256(0xFFFF0000)) | (q << 16);
-                }
+                // Goal and the hard caps stop cleanly; only a run that is going to continue can be
+                // asked to take a second chance, so both are settled before affordability.
                 if (cur & 0xFFFF == cap || (cur >> 32) - (cur & 0xFFFF) >= rollBudget) {
                     r.stop = SlipStop.Cap;
                     break;
+                }
+
+                {
+                    uint256 q = _escOf(cur & 0xFFFF);
+                    uint256 need = stake * q;
+                    if (bankroll * 2 < need) {
+                        // Short of even half the round: no second chance, the slip busts.
+                        r.stop = SlipStop.Bust;
+                        break;
+                    }
+                    if (bankroll < need) {
+                        // Between half and a full round: the table's survival coin for this round —
+                        // the same double-or-nothing that would decide a run of this length at the
+                        // end — rides the whole bankroll. Surviving doubles it, enough to cover
+                        // exactly this round, and play continues; losing ends the slip with nothing.
+                        if (_survived(seed, cur & 0xFFFF)) {
+                            bankroll += bankroll;
+                        } else {
+                            bankroll = 0;
+                            r.stop = SlipStop.Bust;
+                            break;
+                        }
+                    }
+                    cur = (cur & ~uint256(0xFFFF0000)) | (q << 16);
                 }
 
                 bankroll -= ((cur >> 16) & 0xFFFF) * stake;
@@ -625,11 +651,31 @@ contract Craps {
         }
     }
 
+    /// @dev The table's survival coin at run-length `n`: a fair, committed double-or-nothing keyed
+    ///      on the table seed. It is consulted in two places and is the SAME coin in both — as the
+    ///      mid-run second chance for the round at ordinal `n` (see `_settleSlip`), and as the
+    ///      end-of-run flip for a run that stopped after `n` shooters (see `FlipCraps`).
+    ///
+    ///      SALTED BY THE RUN LENGTH `n`. One coin per table (n dropped) would let the first player
+    ///      to settle a short run publish the deciding flip for everyone still holding a long one,
+    ///      since a table's word is public the moment it lands. Keying on `n` gives each length its
+    ///      own coin, so a run's DECIDING flip — the one at its own exit round — is never published
+    ///      by settling a run of a different length. (A shorter run can reveal a coin a longer one
+    ///      later rides as a mid-hand second chance, but that is informational only: everything is
+    ///      committed before the word exists, so no foreknowledge moves a payout.) It costs the
+    ///      manipulation argument nothing — `n` is a pure function of the committed board, bankroll
+    ///      and goal against a word that did not exist yet, so no arrangement of `betIds[]` and no
+    ///      choice made after the dice are public can move it. Two identical slips flip identically
+    ///      and share it.
+    function _survived(bytes32 seed, uint256 n) internal pure returns (bool) {
+        return uint256(keccak256(abi.encode(SURVIVAL_TAG, seed, n))) & 1 == 1;
+    }
+
     // ---------------------------------------------------------------------------------------
     // Tables
     // ---------------------------------------------------------------------------------------
 
-    /// @dev Place index (0..3) -> dice total: 0,1 -> 5,6 and 2,3 -> 8,9.
+    /// @dev Place index (0..5) -> dice total: 0,1,2 -> 4,5,6 and 3,4,5 -> 8,9,10.
     function _placeTotal(uint256 idx) private pure returns (uint256) {
         return idx < 3 ? idx + 4 : idx + 5;
     }

@@ -100,6 +100,10 @@ contract CrapsOracle {
     ///      the whole run is still recomputable from the base-board ledger alone.
     uint256 public constant ESC_HANDS = 5;
 
+    /// @notice Domain tag for the table's survival coin (see `_slip`). Held independently from the
+    ///         production engine, at the same value, so the differential proves the two agree.
+    uint256 internal constant SURVIVAL_TAG = 0x537572766976616c; // "Survival"
+
     /// @dev The six totals that can be a point, for grading `Outcome.pointsMade`.
     uint256 internal constant _POINT_TOTALS_MASK = (1 << 4) | (1 << 5) | (1 << 6) | (1 << 8) | (1 << 9) | (1 << 10);
 
@@ -187,7 +191,7 @@ contract CrapsOracle {
 
     /// @notice Why a bet slip stopped playing.
     enum SlipStop {
-        Bust, // the bankroll could no longer cover one more round
+        Bust, // fell below half a round, or lost the mid-run second-chance flip
         Goal, // the bankroll reached the chosen target
         Cap // the shooter cap arrived before either
     }
@@ -384,13 +388,15 @@ contract CrapsOracle {
         return _slip(b, seed, bankroll, goal, cap, SLIP_ROLL_BUDGET, true, true);
     }
 
-    /// @dev The slip engine. Stop conditions are judged BETWEEN shooters, in this order: goal
-    ///      first (so a run that is simultaneously at goal and out of the next stake counts as a
-    ///      win), then bust, then the cap. Each round escrows its wager — the base board times the
-    ///      escalating mandatory multiplier (see `ESC_HANDS`) — out of the bankroll, plays one
-    ///      lean hand, and credits back whatever it returned; the resolver's bounded-loss
-    ///      invariant is exactly what makes the escrow subtraction safe unchecked after the bust
-    ///      check. The remainder of a busted bankroll is kept, never confiscated.
+    /// @dev The slip engine. Stop conditions are judged BETWEEN shooters, in this order: goal first
+    ///      (so a run that is simultaneously at goal and out of the next stake counts as a win), then
+    ///      the cap, then affordability. A round short of even half its wager busts; one it can cover
+    ///      between half and all of takes the table's survival coin (survive doubles the bankroll and
+    ///      plays on, lose zeroes it). Each played round escrows its wager — the base board times the
+    ///      escalating mandatory multiplier (see `ESC_HANDS`) — out of the bankroll, plays one lean
+    ///      hand, and credits back whatever it returned; the resolver's bounded-loss invariant is
+    ///      exactly what makes the escrow subtraction safe unchecked after the affordability check.
+    ///      The remainder of a hard-busted bankroll is kept, never confiscated.
     ///
     ///      Because every payout is linear in the stakes, a q-unit round is EXACTLY q times the
     ///      base hand: the engine rolls the base board once and scales, which is what keeps the
@@ -438,23 +444,39 @@ contract CrapsOracle {
                     r.stop = SlipStop.Goal;
                     break;
                 }
-
-                {
-                    uint256 q = _escOf(cur & 0xFFFF);
-                    if (bankroll < stake * q) {
-                        r.stop = SlipStop.Bust;
-                        break;
-                    }
-                    cur = (cur & ~uint256(0xFFFF0000)) | (q << 16);
-                }
-                // The packed cursor is total rolls plus one terminator per completed hand.
+                // Goal and the hard caps stop cleanly; only a continuing run is asked for a second
+                // chance, so both precede affordability. The packed cursor is total rolls plus one
+                // terminator per completed hand.
                 if (cur & 0xFFFF == cap || (cur >> 32) - (cur & 0xFFFF) >= rollBudget) {
                     r.stop = SlipStop.Cap;
                     break;
                 }
 
+                {
+                    uint256 q = _escOf(cur & 0xFFFF);
+                    uint256 need = stake * q;
+                    if (bankroll * 2 < need) {
+                        // Short of even half the round: no second chance, the slip busts.
+                        r.stop = SlipStop.Bust;
+                        break;
+                    }
+                    if (bankroll < need) {
+                        // Between half and a full round: the table's survival coin for this round —
+                        // the same one that decides a run of this length at the end — rides the
+                        // whole bankroll. Survive doubles it and plays on, lose zeroes it.
+                        if (_survived(seed, cur & 0xFFFF)) {
+                            bankroll += bankroll;
+                        } else {
+                            bankroll = 0;
+                            r.stop = SlipStop.Bust;
+                            break;
+                        }
+                    }
+                    cur = (cur & ~uint256(0xFFFF0000)) | (q << 16);
+                }
+
                 // This round's wager, in base-board units: the escalating mandatory multiple the
-                // bust check above already proved affordable.
+                // affordability check above already proved covered.
                 bankroll -= ((cur >> 16) & 0xFFFF) * stake;
 
                 uint256 end = _run(b, handSeed(seed, cur & 0xFFFF), noScript, false, log, cur >> 32, o);
@@ -873,6 +895,12 @@ contract CrapsOracle {
             esc = 1 << (hand / ESC_HANDS);
             if (esc > 0xFFFF) esc = 0xFFFF;
         }
+    }
+
+    /// @dev Independent twin of the production survival coin: a fair, committed double-or-nothing
+    ///      keyed on the table seed and the run-length `n`, consulted both mid-run and at the end.
+    function _survived(bytes32 seed, uint256 n) private pure returns (bool) {
+        return uint256(keccak256(abi.encode(SURVIVAL_TAG, seed, n))) & 1 == 1;
     }
 
     /// @dev Copy one hand's summary into a ledger slot. Split out of the session loops so their
