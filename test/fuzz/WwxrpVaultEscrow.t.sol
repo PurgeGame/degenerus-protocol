@@ -12,8 +12,8 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 ///         supplyIncUncirculated is conserved across both.
 contract WwxrpVaultEscrowTest is DeployProtocol {
     event Transfer(address indexed from, address indexed to, uint256 amount);
-    event VaultEscrowRecorded(address indexed sender, uint256 amount);
-    event VaultAllowanceSpent(address indexed spender, uint256 amount);
+    event WwxrpVaultEscrowRecorded(address indexed sender, uint256 amount);
+    event WwxrpVaultAllowanceSpent(address indexed spender, uint256 amount);
 
     error InsufficientVaultAllowance();
 
@@ -37,7 +37,7 @@ contract WwxrpVaultEscrowTest is DeployProtocol {
         vm.expectEmit(true, true, false, true, address(wwxrp));
         emit Transfer(alice, address(0), 400 ether);
         vm.expectEmit(true, false, false, true, address(wwxrp));
-        emit VaultEscrowRecorded(alice, 400 ether);
+        emit WwxrpVaultEscrowRecorded(alice, 400 ether);
         vm.prank(alice);
         wwxrp.transfer(VAULT, 400 ether);
 
@@ -72,7 +72,7 @@ contract WwxrpVaultEscrowTest is DeployProtocol {
 
         // The live path: coinflip loss rewards can target the vault (it flips daily).
         vm.expectEmit(true, false, false, true, address(wwxrp));
-        emit VaultEscrowRecorded(address(0), 7 ether);
+        emit WwxrpVaultEscrowRecorded(address(0), 7 ether);
         vm.prank(address(coinflip));
         wwxrp.mintPrize(VAULT, 7 ether);
 
@@ -101,7 +101,7 @@ contract WwxrpVaultEscrowTest is DeployProtocol {
         // The live path: game burns the vault's WWXRP Degenerette bet
         // (gameDegeneretteBet passthrough -> placeDegeneretteBet -> burnForGame).
         vm.expectEmit(true, false, false, true, address(wwxrp));
-        emit VaultAllowanceSpent(VAULT, 30 ether);
+        emit WwxrpVaultAllowanceSpent(VAULT, 30 ether);
         vm.prank(address(game));
         wwxrp.burnForGame(VAULT, 30 ether);
 

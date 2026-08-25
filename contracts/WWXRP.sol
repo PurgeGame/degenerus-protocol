@@ -146,13 +146,20 @@ contract WWXRP {
     /// @param spender VAULT when spent via _burn's vault path (WWXRP bets),
     ///        or the token contract (address(this)) when minted out via vaultMintTo
     /// @param amount Amount spent from allowance
-    event VaultAllowanceSpent(address indexed spender, uint256 amount);
+    /// @dev Renamed off FLIP's `VaultAllowanceSpent` for the same reason as
+    ///      `WwxrpVaultEscrowRecorded` below: distinct name, distinct topic0, so the two tokens'
+    ///      vault ledgers never conflate in a signature-subscribed indexer.
+    event WwxrpVaultAllowanceSpent(address indexed spender, uint256 amount);
 
     /// @notice Emitted when WWXRP bound for the vault is escrowed to its mint allowance
+    /// @dev Deliberately NOT named `VaultEscrowRecorded`: FLIP emits an event of that exact
+    ///      shape, and an identical name means an identical topic0 — an indexer subscribing by
+    ///      signature would conflate the two tokens' escrow streams unless it also filters by
+    ///      emitter. A distinct name keeps the streams distinct at the topic level.
     /// @param sender The original transfer sender when routed via _transfer,
     ///        or address(0) on a direct mint to the vault
     /// @param amount Amount added to the vault's mint allowance (18 decimals)
-    event VaultEscrowRecorded(address indexed sender, uint256 amount);
+    event WwxrpVaultEscrowRecorded(address indexed sender, uint256 amount);
 
     /// @notice Emitted for every recorded daily-draw entry
     /// @param day Participation day (settles on rngWordForDay(day + 1))
@@ -520,7 +527,7 @@ contract WWXRP {
                 vaultAllowance += amount;
             }
             emit Transfer(from, address(0), amount);
-            emit VaultEscrowRecorded(from, amount);
+            emit WwxrpVaultEscrowRecorded(from, amount);
             return;
         }
 
@@ -541,7 +548,7 @@ contract WWXRP {
 
         if (to == MINTER_VAULT) {
             vaultAllowance += amount;
-            emit VaultEscrowRecorded(address(0), amount);
+            emit WwxrpVaultEscrowRecorded(address(0), amount);
             return;
         }
 
@@ -564,7 +571,7 @@ contract WWXRP {
             unchecked {
                 vaultAllowance = allowanceVault - amount;
             }
-            emit VaultAllowanceSpent(from, amount);
+            emit WwxrpVaultAllowanceSpent(from, amount);
             return;
         }
 
@@ -616,7 +623,7 @@ contract WWXRP {
             vaultAllowance = allowanceVault - amount;
         }
         _mint(to, amount);
-        emit VaultAllowanceSpent(address(this), amount);
+        emit WwxrpVaultAllowanceSpent(address(this), amount);
     }
 
     /// @notice Burn WWXRP for game bets
