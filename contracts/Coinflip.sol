@@ -382,9 +382,11 @@ contract Coinflip {
     ///      the escrowed slice was already removed from sDGNRS's backing at submit via
     ///      withdrawRedeemedFlip, so the claim-time mint to the redeemer is FLIP-neutral),
     ///      WWXRP (daily-draw prizes: a fixed, RNG-verified stake credited to the
-    ///      recorded winner), and PARIMUTUEL (market payouts and refunds — re-mints of
+    ///      recorded winner), PARIMUTUEL (market payouts and refunds — re-mints of
     ///      stakes the market burned at placement — plus its two bounded extras, the
-    ///      gas-pegged settlement bounty and the gated, decaying volume placement credit).
+    ///      gas-pegged settlement bounty and the gated, decaying volume placement credit),
+    ///      and CRAPS (theo rakeback: a fixed slice of a settled bet's expected loss,
+    ///      comped as next-day stake).
     modifier onlyFlipCreditors() {
         address sender = msg.sender;
         if (
@@ -392,6 +394,7 @@ contract Coinflip {
             sender != ContractAddresses.QUESTS &&
             sender != ContractAddresses.AFFILIATE &&
             sender != ContractAddresses.ADMIN &&
+            sender != ContractAddresses.CRAPS &&
             sender != ContractAddresses.SDGNRS &&
             sender != ContractAddresses.WWXRP &&
             sender != ContractAddresses.PARIMUTUEL
@@ -1405,7 +1408,7 @@ contract Coinflip {
       |                    FLIP CREDITING                                    |
       +======================================================================+*/
 
-    /// @notice Credit flip to a player (called by GAME modules, QUESTS, AFFILIATE, ADMIN, SDGNRS, or WWXRP).
+    /// @notice Credit flip to a player through the authorized protocol/game creditor lane.
     /// @param player The player receiving the flip credit.
     /// @param amount Amount of FLIP-denominated flip stake to credit.
     function creditFlip(

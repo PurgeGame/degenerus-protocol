@@ -520,14 +520,15 @@ contract FLIP {
         _burn(from, amount);
     }
 
-    /// @notice Mint FLIP to a player (coinflip claims, degenerette wins).
-    /// @dev Only callable by COINFLIP or GAME.
+    /// @notice Mint FLIP to a player (coinflip claims, degenerette wins, craps wins).
+    /// @dev Only callable by COINFLIP, GAME, or CRAPS.
     /// @param to The player's address to mint to.
     /// @param amount The amount of FLIP to mint (18 decimals).
     function mintForGame(address to, uint256 amount) external {
         if (
             msg.sender != ContractAddresses.COINFLIP &&
-            msg.sender != ContractAddresses.GAME
+            msg.sender != ContractAddresses.GAME &&
+            msg.sender != ContractAddresses.CRAPS
         ) revert OnlyGame();
         if (amount == 0) return;
         _mint(to, amount);
@@ -583,7 +584,8 @@ contract FLIP {
         address sender = msg.sender;
         if (
             sender != ContractAddresses.GAME &&
-            sender != ContractAddresses.PARIMUTUEL
+            sender != ContractAddresses.PARIMUTUEL &&
+            sender != ContractAddresses.CRAPS
         ) revert OnlyGame();
         _;
     }
@@ -655,8 +657,8 @@ contract FLIP {
     }
 
     /// @notice Burn FLIP from `target` during gameplay/affiliate flows.
-    /// @dev Access: GAME or PARIMUTUEL (onlyGameOrParimutuel modifier).
-    ///      Used for purchases, fees, affiliate utilities, and growth-bet stakes.
+    /// @dev Access: GAME, PARIMUTUEL, or CRAPS (onlyGameOrParimutuel modifier).
+    ///      Used for purchases, fees, affiliate utilities, growth-bet stakes, and craps stakes.
     ///      Reverts on zero address or insufficient balance.
     /// @param target The address to burn from.
     /// @param amount The amount to burn (18 decimals).
