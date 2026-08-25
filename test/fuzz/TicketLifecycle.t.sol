@@ -777,9 +777,19 @@ contract TicketLifecycleTest is DeployProtocol {
     ///         at least one far roll (offset 5-50) routes to the FF key. Then drive levels
     ///         forward and verify all FF queues for processed levels are drained.
     /// @dev SRC-05: Lootbox far roll (offset 5-50) queues to FF key, drained at phase transition.
-    ///      Uses 20 lootbox opens across 4 buyers with different seeds to ensure at least one
-    ///      far roll: P(zero far in 20 opens) = 0.9^20 ~ 12%. With diverse buyer/seed combos,
-    ///      effective probability is much higher.
+    ///
+    ///      ONE ROLL PER (index, player). `_rollTargetLevel` seeds off
+    ///      `EntropyLib.hash2(rngWord, player)`, so independent far-roll trials come from distinct
+    ///      BUYERS — not from repeated buys by one buyer. The original fixture bought five
+    ///      DIFFERENT custom sizes per buyer at one index; `_mergeBoxOrder` freezes one custom
+    ///      size per (index, buyer) and reverts `E()` on a size change, and `_purchaseWithLootbox`
+    ///      swallows that revert, so buys 2-5 vanished silently and 20 intended trials became 4.
+    ///
+    ///      Rebuilt to buy from 20 distinct buyers at one shared size, which is 20 real trials
+    ///      under the current model. The word is then CHOSEN so buyer 0's roll lands in the far
+    ///      band, making the assertion deterministic instead of riding the 0.8^20 (~1.2%) tail the
+    ///      old shape depended on. `_farRollWord` only selects; the assertion below still proves
+    ///      the real FF queue grew.
     function testLootboxFarRollTicketsRouteToFF() public {
         assertEq(game.level(), 0, "Should start at level 0");
 
@@ -791,48 +801,37 @@ contract TicketLifecycleTest is DeployProtocol {
             ffBefore[i] = _ffQueueLength(i + 6);
         }
 
-        // Purchase lootboxes from 4 different buyers with different amounts to create
-        // diverse entropy paths through _rollTargetLevel.
-        address[4] memory lboxBuyers = [buyer1, buyer2, buyer3, makeAddr("lbox_buyer4")];
-        vm.deal(lboxBuyers[3], 50_000 ether);
+        // 20 distinct buyers, ONE buy each at a shared custom size: 20 (index, player) pairs, so
+        // 20 independent rolls. One size per buyer keeps every buy inside the custom-size freeze.
+        address[20] memory lboxBuyers;
+        uint48[20] memory boxIndex;
+        for (uint256 k = 0; k < 20; k++) {
+            lboxBuyers[k] = makeAddr(string.concat("lbox_buyer_", vm.toString(k)));
+            vm.deal(lboxBuyers[k], 50_000 ether);
+            boxIndex[k] = _purchaseWithLootbox(lboxBuyers[k], 0, 0.1 ether);
+        }
 
-        uint48[][] memory allIndices = new uint48[][](4);
-        for (uint256 b = 0; b < 4; b++) {
-            allIndices[b] = new uint48[](5);
-            for (uint256 i = 0; i < 5; i++) {
-                // Vary amounts to produce different entropy chains
-                uint256 amount = 0.1 ether + (i * 0.05 ether) + (b * 0.02 ether);
-                uint48 idx = _purchaseWithLootbox(lboxBuyers[b], 0, amount);
-                if (idx > 0) allIndices[b][i] = idx;
-            }
+        // Every buy must have landed — a silently-swallowed revert is what hollowed out the
+        // original fixture, so failing loudly here is the point.
+        for (uint256 k = 0; k < 20; k++) {
+            assertGt(boxIndex[k], 0, "lootbox purchase did not land");
         }
 
         // Finalize RNG via advance cycle
         _driveAdvanceCycle();
 
-        // Inject diverse RNG words for each buyer's lootboxes. Use very different seeds
-        // so each buyer's lootbox entropy diffuses through a distinct keccak chain.
-        uint256[4] memory baseSeed = [
-            uint256(7),      // distinct keccak-derived entropy chain
-            uint256(42),
-            uint256(0xdead),
-            uint256(0xcafe)
-        ];
-        for (uint256 b = 0; b < 4; b++) {
-            for (uint256 i = 0; i < 5; i++) {
-                if (allIndices[b][i] > 0 && _lootboxRngWord(allIndices[b][i]) == 0) {
-                    _storeLootboxRngWord(allIndices[b][i], baseSeed[b] + i * 1000);
-                }
+        // Seed each index with a word chosen so buyer 0 rolls far; the rest ride the same word
+        // at their own player-salted seeds.
+        uint256 farWord = _farRollWord(lboxBuyers[0]);
+        for (uint256 k = 0; k < 20; k++) {
+            if (_lootboxRngWord(boxIndex[k]) == 0) {
+                _storeLootboxRngWord(boxIndex[k], farWord);
             }
         }
 
         // Open all 20 lootboxes
-        for (uint256 b = 0; b < 4; b++) {
-            for (uint256 i = 0; i < 5; i++) {
-                if (allIndices[b][i] > 0) {
-                    _openLootbox(lboxBuyers[b], allIndices[b][i]);
-                }
-            }
+        for (uint256 k = 0; k < 20; k++) {
+            _openLootbox(lboxBuyers[k], boxIndex[k]);
         }
 
         // Check if any FF queue grew (indicating at least one far roll routed to FF).
@@ -2274,6 +2273,21 @@ contract TicketLifecycleTest is DeployProtocol {
 
         vm.prank(who);
         try game.openBox(who, lootboxIndex) {} catch {}
+    }
+
+    /// @notice Pick an rngWord whose resolution for `player` lands in the far band (offset 5-50).
+    /// @dev SELECTION ONLY — it decides which word to inject, never what the test accepts. The
+    ///      assertion still reads the real FF queue. Mirrors the band test the production roll
+    ///      does (`seed = EntropyLib.hash2(rngWord, player)`, far iff `uint16(seed) % 100 < 20`),
+    ///      which is why a drift in that mapping surfaces as "no far-roll word found" rather than
+    ///      as a quietly-vacuous pass.
+    function _farRollWord(address player) internal pure returns (uint256) {
+        for (uint256 n = 1; n < 10_000; ++n) {
+            uint256 w = uint256(keccak256(abi.encode("SRC-05", n)));
+            uint256 seed = uint256(keccak256(abi.encode(w, uint256(uint160(player)))));
+            if (uint16(seed) % 100 < 20) return w;
+        }
+        revert("no far-roll word found");
     }
 
     /// @notice Store a deterministic lootbox RNG word via vm.store.

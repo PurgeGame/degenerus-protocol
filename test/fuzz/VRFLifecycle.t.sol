@@ -92,18 +92,26 @@ contract VRFLifecycle is DeployProtocol {
         // claimable/afking/future pools), so ~460 buys are needed to cross the 50-ETH
         // bootstrap target (prizePoolTargetView). 480 gives a safety margin over the
         // 50.14-ETH crossing point measured against the frozen subject.
-        address buyer = makeAddr("buyer");
-        vm.deal(buyer, 1000 ether);
-
-        for (uint256 i = 0; i < 480; i++) {
-            vm.prank(buyer);
-            game.purchase{value: 1.01 ether}(
-                buyer,
-                400,       // 1 full ticket
-                BoxOrderLib.boCustomFloor(1 ether),   // lootbox amount
-                bytes32(0),
-                MintPaymentKind.DirectEth, false
-            );
+        // Spread across buyers: every buy adds ONE custom box to that (index, buyer)'s order, and
+        // `_mergeBoxOrder` reverts `E()` once an order passes MAX_BOXES_PER_ORDER (100). A single
+        // buyer doing 480 buys therefore reverts on the 101st — which is the bare `E()` this
+        // fixture used to die on, since `purchase` here is deliberately unwrapped. Eight buyers x
+        // 60 buys keeps every order at 60 boxes while spending the identical 480 x 1.01 ETH, so
+        // the nextPrizePool arithmetic the comment above describes is untouched.
+        uint256 constant_buysPerBuyer = 60;
+        for (uint256 b = 0; b < 8; b++) {
+            address buyer = makeAddr(string.concat("buyer_", vm.toString(b)));
+            vm.deal(buyer, 1000 ether);
+            for (uint256 i = 0; i < constant_buysPerBuyer; i++) {
+                vm.prank(buyer);
+                game.purchase{value: 1.01 ether}(
+                    buyer,
+                    400,       // 1 full ticket
+                    BoxOrderLib.boCustomFloor(1 ether),   // lootbox amount
+                    bytes32(0),
+                    MintPaymentKind.DirectEth, false
+                );
+            }
         }
 
         // Drive daily VRF cycles until level changes or we've done enough days.

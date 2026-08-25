@@ -158,7 +158,13 @@ contract FoilSnapPayout is DeployProtocol {
     function _tally() internal view returns (uint256 eth, uint256 flip, uint256 wx) {
         for (uint256 i = 0; i < FOIL_BUYERS; i++) {
             eth += game.claimableWinningsOf(_fb[i]);
-            flip += coin.balanceOf(_fb[i]);
+            // The FLIP lane is COINFLIP STAKE, not wallet FLIP: every foil FLIP award ships
+            // through `coinflip.creditFlip` (DegenerusGameFoilPackModule:601/858/1179), and this
+            // protocol never wallet-mints an award. Reading `coin.balanceOf` here measured a lane
+            // the payout does not use, so it was pinned at zero and the non-vacuity guard below
+            // fired ("re-seed the run") no matter which draw was replayed — 30 foil buyers still
+            // produced zero. Re-seeding was never the remedy; reading the right lane is.
+            flip += coinflip.coinflipAmount(_fb[i]);
             wx += wwxrp.balanceOf(_fb[i]);
         }
     }
