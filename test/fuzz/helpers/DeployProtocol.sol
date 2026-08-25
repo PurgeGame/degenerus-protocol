@@ -21,6 +21,7 @@ import {DegenerusGameFoilPackModule} from "../../../contracts/modules/DegenerusG
 import {AFKingSubscriptionToken} from "../../../contracts/AFKingSubscriptionToken.sol";
 import {DegenerusParimutuel} from "../../../contracts/DegenerusParimutuel.sol";
 import {DegenerusRecordBounty} from "../../../contracts/DegenerusRecordBounty.sol";
+import {FlipCraps} from "../../../contracts/FlipCraps.sol";
 import {FLIP} from "../../../contracts/FLIP.sol";
 import {Coinflip} from "../../../contracts/Coinflip.sol";
 import {DegenerusGame} from "../../../contracts/DegenerusGame.sol";
@@ -42,7 +43,7 @@ import {MockLinkToken} from "../../../contracts/mocks/MockLinkToken.sol";
 import {MockLinkEthFeed} from "../../../contracts/mocks/MockLinkEthFeed.sol";
 
 /// @title DeployProtocol -- Abstract base for Foundry invariant tests
-/// @notice Deploys all 4 mocks + 29 protocol contracts in setUp().
+/// @notice Deploys all 4 mocks + 30 protocol contracts in setUp().
 ///         Inherit this, call _deployProtocol() in your setUp().
 /// @dev Address correctness depends on patchForFoundry.js having patched
 ///      ContractAddresses.sol before forge build (there is no pretest hook —
@@ -72,6 +73,7 @@ abstract contract DeployProtocol is Test {
     AFKingSubscriptionToken public afkingSubToken;
     DegenerusParimutuel public parimutuel;
     DegenerusRecordBounty public recordBounty;
+    FlipCraps public flipCraps;
     FLIP public coin;
     Coinflip public coinflip;
     DegenerusGame public game;
@@ -93,7 +95,7 @@ abstract contract DeployProtocol is Test {
         vm.warp(86400);
 
         // --- Deploy 4 mocks (nonces 1-4) ---
-        // Then 29 protocol contracts (nonces 5-33) ---
+        // Then 30 protocol contracts (nonces 5-34) ---
         mockVRF = new MockVRFCoordinator();           // nonce 1
         mockStETH = new MockStETH();                  // nonce 2
         mockLINK = new MockLinkToken();               // nonce 3
@@ -183,6 +185,14 @@ abstract contract DeployProtocol is Test {
         // mints the four trophies to CREATOR with no cross-contract calls; only
         // COINFLIP's runtime recordSet calls reference it.
         recordBounty = new DegenerusRecordBounty();                      // N+28 = nonce 33
+
+        // Craps table — appended, so it shifts no earlier nonce. FlipCraps carries Craps and
+        // LootboxCraps by inheritance, so this one deployment is the whole table. It must land
+        // here rather than only in the craps suite's mocks: this is the only place craps meets
+        // the REAL game (its extsload of the lootbox-RNG slots), the REAL FLIP (whose burn/mint
+        // gates authorize ContractAddresses.CRAPS, i.e. exactly this address), and the REAL
+        // Coinflip credit lane. Deployed last so ContractAddresses.CRAPS resolves to code.
+        flipCraps = new FlipCraps();                                     // N+29 = nonce 34
     }
 
     /// @dev Give `player` an AFKing seat (the sole afking credential — subscribe reverts
