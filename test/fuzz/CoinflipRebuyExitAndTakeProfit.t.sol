@@ -19,14 +19,25 @@ import {IDegenerusGame} from "../../contracts/interfaces/IDegenerusGame.sol";
 ///           * `rngWordCurrent` is written ONLY under `rngLockedFlag`
 ///             (DegenerusGame.sol:2215), so the resolving word is never public while
 ///             the lock is down; and
-///           * every carry mutator reverts on `rngLocked()`.
+///           * every carry mutator, ON A POSITION THAT HOLDS A CARRY, reverts until today's
+///             flip is APPLIED — which covers the whole span in which a word can be knowable
+///             but unconsumed, and the pre-request gap before it as well. Arming auto-rebuy
+///             is NOT gated: no carry exists yet, so nothing can be front-run.
 ///         Together those make "observe the word, then move the position" unreachable.
+///
+///         The gate is that settlement marker rather than `rngLocked()`: the lock outlives
+///         the settlement (advanceGame defers `_unlockRng` behind chunked ticket drains, a
+///         pending daily jackpot, and a phase transition), and once the day's payouts are
+///         processed the carry has resolved through that word and rides tomorrow — whose
+///         word is not yet requested. Both halves are asserted below, the open side under a
+///         mocked-up lock so a regression back to the bare lock fails here.
 ///
 ///         Covered here:
 ///           A EXIT-ORDER   — disabling auto-rebuy settles a pending LOSS first, so the
 ///                            exit cannot rescue a carry the loss already killed.
-///           B EXIT-LOCK    — the exit reverts during the lock.
-///           C SPLIT-LOCK   — the take-profit re-split reverts during the lock.
+///           B EXIT-LOCK    — the exit reverts while today's flip is unapplied, and
+///                            reopens once it settles even with the lock still held.
+///           C SPLIT-LOCK   — the take-profit re-split obeys the same two-sided gate.
 ///           D SPLIT-ORDER  — changing take-profit settles the pending day under the OLD
 ///                            value; a win already banked cannot be retroactively re-split.
 ///           E CONSERVATION — reserved + rolled remainder == payout exactly, at every
@@ -44,7 +55,10 @@ contract CoinflipRebuyExitAndTakeProfit is DeployProtocol {
         _deployProtocol();
         player = makeAddr("rebuy_player");
         operator = makeAddr("rebuy_operator");
-        _warpToDay(2);
+        // Day 2 APPLIED, wall clock still on it: the carry gates open only once the day's
+        // word has been processed, and deposits from here target day 3 (clear of the
+        // day-1/2 seeds). The player holds nothing on day 2, so the resolve is inert for it.
+        _resolveDay(2, false);
     }
 
     /// @dev Wall clock just inside GameTimeLib day `d`.
@@ -145,38 +159,162 @@ contract CoinflipRebuyExitAndTakeProfit is DeployProtocol {
     }
 
     // ---------------------------------------------------------------------
-    // B / C. Both remaining carry mutators are lock-gated
+    // B / C. Both remaining carry mutators are gated on the freeze, two-sided
     // ---------------------------------------------------------------------
 
-    function test_ExitRevertsDuringRngLock() public {
+    /// Day 4 is unapplied while the carry rides it: the exit is shut, lock or no lock.
+    function test_ExitRevertsWhileTodaysFlipUnresolved() public {
         _enterRebuyWithStake(0);
         _resolveDay(3, true);
+        _warpToDay(4);
 
-        _lockRng();
         vm.prank(player);
         vm.expectRevert(Coinflip.RngLocked.selector);
         coinflip.setCoinflipAutoRebuy(address(0), false, 0);
-        vm.clearMockedCalls();
     }
 
-    function test_TakeProfitChangeRevertsDuringRngLock() public {
+    /// The other side: day 3's payouts are applied and the lock is STILL held (the drains
+    /// that follow settlement keep it up). The carry has already resolved through day 3's
+    /// word and rides day 4, unrequested — so the exit pays out exactly as it would after
+    /// the unlock. The mocked lock is the point: it must not gate this path.
+    function test_ExitOpensOnceTodaysFlipResolvedUnderHeldLock() public {
+        uint256 stake = _enterRebuyWithStake(0);
+        _resolveDay(3, true);
+
+        uint256 payout = _payoutOf(stake, 3);
+        uint256 expectedCarry = payout + (payout * 75) / 10_000;
+
+        _lockRng();
+        vm.prank(player);
+        coinflip.setCoinflipAutoRebuy(address(0), false, 0);
+        vm.clearMockedCalls();
+
+        assertEq(
+            coin.balanceOf(player),
+            expectedCarry,
+            "B: settled carry pays out under a still-held lock"
+        );
+    }
+
+    function test_TakeProfitChangeRevertsWhileTodaysFlipUnresolved() public {
+        _enterRebuyWithStake(0);
+        _resolveDay(3, true);
+        _warpToDay(4);
+
+        vm.prank(player);
+        vm.expectRevert(Coinflip.RngLocked.selector);
+        coinflip.setCoinflipAutoRebuyTakeProfit(address(0), 1 ether);
+    }
+
+    function test_TakeProfitChangeOpensOnceTodaysFlipResolvedUnderHeldLock() public {
         _enterRebuyWithStake(0);
         _resolveDay(3, true);
 
         _lockRng();
         vm.prank(player);
-        vm.expectRevert(Coinflip.RngLocked.selector);
         coinflip.setCoinflipAutoRebuyTakeProfit(address(0), 1 ether);
         vm.clearMockedCalls();
+
+        (, uint256 stop, , ) = coinflip.coinflipAutoRebuyInfo(player);
+        assertEq(stop, 1 ether, "C: re-split lands under a still-held lock");
     }
 
-    /// Enabling is gated too — otherwise a player could arm rebuy mid-window.
-    function test_EnableRevertsDuringRngLock() public {
-        _lockRng();
+    /// ARMING is NOT gated: a position not yet on auto-rebuy holds no carry, so there is
+    /// nothing the pending day's word can be front-run against. Day 3 is unapplied here.
+    function test_EnableOpensWhileTodaysFlipUnresolved() public {
+        _warpToDay(3);
+
+        vm.prank(player);
+        coinflip.setCoinflipAutoRebuy(address(0), true, 0);
+
+        (bool enabled, , uint256 carry, ) = coinflip.coinflipAutoRebuyInfo(player);
+        assertTrue(enabled, "B: arming is open - no carry exists to protect");
+        assertEq(carry, 0, "B: and it arms with an empty carry");
+    }
+
+    /// But the SAME entrypoint on an already-armed position is frozen: the freeze check leads
+    /// the AutoRebuyAlreadyEnabled guard, so a carrying position cannot re-enter here either.
+    function test_RearmRevertsWhileTodaysFlipUnresolved() public {
+        _enterRebuyWithStake(0);
+        _resolveDay(3, true);
+        _warpToDay(4);
+
         vm.prank(player);
         vm.expectRevert(Coinflip.RngLocked.selector);
-        coinflip.setCoinflipAutoRebuy(address(0), true, 0);
-        vm.clearMockedCalls();
+        coinflip.setCoinflipAutoRebuy(address(0), true, 1 ether);
+    }
+
+    /// A player not on auto-rebuy meets AutoRebuyNotEnabled, never the freeze — the freeze is
+    /// scoped to positions that actually hold a carry.
+    function test_NonRebuyPlayerMeetsNotEnabledNotTheFreeze() public {
+        _warpToDay(4);
+
+        vm.prank(player);
+        vm.expectRevert(Coinflip.AutoRebuyNotEnabled.selector);
+        coinflip.setCoinflipAutoRebuyTakeProfit(address(0), 1 ether);
+
+        vm.prank(player);
+        vm.expectRevert(Coinflip.AutoRebuyNotEnabled.selector);
+        coinflip.claimCoinflipCarry(address(0), 1 ether);
+    }
+
+    // ---------------------------------------------------------------------
+    // B2. What yesterday's walk hands to today, and what may leave
+    // ---------------------------------------------------------------------
+
+    /// `_claimCoinflipsInternal` may walk as far as YESTERDAY during the freeze (its cursor
+    /// stops at flipsClaimableDay, which the freeze puts strictly before today). Under a 0
+    /// take-profit the whole of yesterday's payout becomes the carry — and the carry IS
+    /// today's stake, applied the moment today is walked. So none of it may leave. Drive both
+    /// ungated settle paths and assert not one wei escapes.
+    function test_YesterdaysWinRidesTodayAndNoneOfItCanLeave() public {
+        uint256 stake = _enterRebuyWithStake(0); // 0 take-profit: everything rides
+        _resolveDay(3, true);
+        _warpToDay(4); // today unapplied: frozen, and the carry is staked on it
+
+        uint256 payout = _payoutOf(stake, 3);
+        uint256 expectedCarry = payout + (payout * 75) / 10_000;
+
+        vm.prank(player);
+        uint256 minted = coinflip.claimCoinflips(address(0), type(uint256).max);
+        assertEq(minted, 0, "0 take-profit: nothing banks, it is all staked on today");
+
+        vm.prank(ContractAddresses.COIN);
+        uint256 consumed = coinflip.consumeCoinflipsForBurn(player, type(uint256).max);
+        assertEq(consumed, 0, "and the burn leg cannot reach it either");
+
+        assertEq(coin.balanceOf(player), 0, "not one wei of yesterday's win left the position");
+        (, , uint256 carry, ) = coinflip.coinflipAutoRebuyInfo(player);
+        assertEq(carry, expectedCarry, "the whole payout is the carry, riding today");
+    }
+
+    /// With a take-profit the split is PRE-COMMITTED: floor(payout/T)*T banks — that slice was
+    /// never going to be bet on today, so it is free to leave — and only the remainder plus its
+    /// recycle bonus rides. The threshold itself is frozen, so nobody can read today's word and
+    /// then decide to bank more of what is already staked.
+    function test_OnlyThePreCommittedBankLeavesDuringTheFreeze() public {
+        uint256 T = 50_000 ether;
+        uint256 stake = _enterRebuyWithStake(T);
+        _resolveDay(3, true);
+        _warpToDay(4);
+
+        uint256 payout = _payoutOf(stake, 3);
+        uint256 reserved = (payout / T) * T;
+        uint256 rides = payout - reserved;
+        uint256 expectedCarry = rides + (rides * 75) / 10_000;
+        assertGt(reserved, 0, "precondition: a bank exists");
+        assertGt(rides, 0, "precondition: and a slice rides");
+
+        vm.prank(player);
+        uint256 minted = coinflip.claimCoinflips(address(0), type(uint256).max);
+        assertEq(minted, reserved, "exactly the pre-committed bank leaves, no more");
+
+        (, , uint256 carry, ) = coinflip.coinflipAutoRebuyInfo(player);
+        assertEq(carry, expectedCarry, "the staked remainder stays locked on today");
+
+        vm.prank(player);
+        vm.expectRevert(Coinflip.RngLocked.selector);
+        coinflip.setCoinflipAutoRebuyTakeProfit(address(0), 1 ether);
     }
 
     // ---------------------------------------------------------------------

@@ -4,6 +4,7 @@ pragma solidity ^0.8.26;
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {Coinflip} from "../../contracts/Coinflip.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
+import {FLIP} from "../../contracts/FLIP.sol";
 import {IDegenerusGame} from "../../contracts/interfaces/IDegenerusGame.sol";
 
 /// @title CoinflipCarryClaim — partial carry withdrawal while staying on auto-rebuy
@@ -15,7 +16,8 @@ import {IDegenerusGame} from "../../contracts/interfaces/IDegenerusGame.sol";
 ///                       auto-rebuy ENABLED (it is a withdrawal, not an exit).
 ///         3. ORDER    — a pending loss is settled BEFORE the withdrawal, so a wiped
 ///                       carry cannot be extracted around the loss.
-///         4. GATES    — reverts RngLocked during the lock window and
+///         4. GATES    — reverts RngLocked until today's flip is APPLIED (reopening at
+///                       settlement, even with the game's RNG lock still up), and
 ///                       AutoRebuyNotEnabled for a player not on auto-rebuy.
 ///         5. TAKE-PROFIT — with autoRebuyStop = T, a win banks floor(payout/T)*T
 ///                       into claimableStored (claimCoinflips territory) and only
@@ -31,8 +33,10 @@ contract CoinflipCarryClaim is DeployProtocol {
         _deployProtocol();
         player = makeAddr("carry_player");
         operator = makeAddr("carry_operator");
-        // Wall clock at day 2 so deposits target day 3 (clear of the day-1/2 seeds).
-        _warpToDay(2);
+        // Day 2 APPLIED, wall clock still on it: the carry gates open only once the day's
+        // word has been processed, and deposits from here target day 3 (clear of the
+        // day-1/2 seeds). The player holds nothing on day 2, so the resolve is inert for it.
+        _resolveDay(2, false);
     }
 
     /// @dev Wall clock just inside GameTimeLib day `d`.
@@ -193,19 +197,152 @@ contract CoinflipCarryClaim is DeployProtocol {
         );
     }
 
-    function test_RevertsDuringRngLock() public {
+    /// Day 4 is unapplied while the carry rides it: the claim is shut, lock or no lock.
+    function test_RevertsWhileTodaysFlipUnresolved() public {
+        _enterRebuyWithStake();
+        _resolveDay(3, true);
+        _warpToDay(4);
+
+        vm.prank(player);
+        vm.expectRevert(Coinflip.RngLocked.selector);
+        coinflip.claimCoinflipCarry(address(0), 1 ether);
+    }
+
+    /// The other side: day 3's payouts are applied and the lock is STILL held (advanceGame
+    /// defers the unlock behind its chunked drains). The carry has resolved through day 3's
+    /// word and rides day 4, unrequested, so the withdrawal behaves as it would post-unlock.
+    /// The mocked lock is the point: it must not gate this path.
+    function test_OpensOnceTodaysFlipResolvedUnderHeldLock() public {
         _enterRebuyWithStake();
         _resolveDay(3, true);
 
+        _lockRng();
+        vm.prank(player);
+        uint256 claimed = coinflip.claimCoinflipCarry(address(0), 1 ether);
+        vm.clearMockedCalls();
+
+        assertEq(claimed, 1 ether, "settled carry withdraws under a still-held lock");
+        assertEq(coin.balanceOf(player), 1 ether, "and mints to the player");
+    }
+
+    function _lockRng() internal {
         vm.mockCall(
             GAME,
             abi.encodeWithSelector(IDegenerusGame.rngLocked.selector),
             abi.encode(true)
         );
+    }
+
+    // ---------------------------------------------------------------------
+    // 6. The carry is unreachable from FLIP's burn-shortfall leg
+    // ---------------------------------------------------------------------
+
+    /// FLIP's `_consumeCoinflipShortfall` carries NO freeze gate, on the claim that
+    /// `consumeCoinflipsForBurn` reaches `claimableStored` only — settled days the pending word
+    /// cannot reprice. That claim rests on an adjacency inside `_setCoinflipAutoRebuy`: the sole
+    /// writer of `autoRebuyEnabled = false` drains the carry in the same block, so the
+    /// `else if (oldCarry != 0)` branch in `_claimCoinflipsInternal` (which WOULD fold a carry
+    /// into `mintable`) is unreachable. Pin it here rather than leave it to inspection: the
+    /// position is frozen, a live carry rides the unapplied day, and a consume for an arbitrary
+    /// amount must take the settled bank and leave the carry exactly as it found it.
+    function testFuzz_BurnConsumeNeverReachesTheCarry(uint96 wantRaw) public {
+        _enterRebuyWithStake(50_000 ether); // take-profit banks chunks AND leaves a carry
+        _resolveDay(3, true);
+        vm.prank(player);
+        coinflip.claimCoinflipCarry(address(0), 0); // settle while day 3 is applied
+        _warpToDay(4); // day 4 unapplied: the position is frozen and the carry rides it
+
+        (, , uint256 carryBefore, ) = coinflip.coinflipAutoRebuyInfo(player);
+        uint256 bankBefore = coinflip.previewClaimCoinflips(player);
+        assertGt(carryBefore, 0, "precondition: a carry is riding the unapplied day");
+        assertGt(bankBefore, 0, "precondition: a settled bank exists to draw from");
+
+        vm.prank(ContractAddresses.COIN);
+        uint256 consumed = coinflip.consumeCoinflipsForBurn(player, uint256(wantRaw) + 1);
+
+        (, , uint256 carryAfter, ) = coinflip.coinflipAutoRebuyInfo(player);
+        assertEq(carryAfter, carryBefore, "consume must never reduce the auto-rebuy carry");
+        assertLe(consumed, bankBefore, "consume is capped by the settled bank");
+    }
+
+    /// The adjacency itself: an exit can never leave a carry stranded behind a disabled flag.
+    function test_DisabledPositionNeverHoldsACarry() public {
+        _enterRebuyWithStake();
+        _resolveDay(3, true);
+        vm.prank(player);
+        coinflip.claimCoinflipCarry(address(0), 0);
+        (, , uint256 carry, ) = coinflip.coinflipAutoRebuyInfo(player);
+        assertGt(carry, 0, "precondition: a carry exists to strand");
+
+        vm.prank(player);
+        coinflip.setCoinflipAutoRebuy(address(0), false, 0);
+
+        (bool enabled, , uint256 carryAfter, ) = coinflip.coinflipAutoRebuyInfo(player);
+        assertFalse(enabled, "position is disabled");
+        assertEq(carryAfter, 0, "and holds no carry the burn path could later fold into mintable");
+    }
+
+    /// THE requirement, stated whole: nobody can change the carry amount riding the current
+    /// day's flip after that day's result becomes knowable. `autoRebuyCarry` has six writers;
+    /// five are externally reachable. This drives every one of them while day 4 sits unapplied
+    /// with a live carry on it, and asserts the carry is byte-identical at the end.
+    ///
+    ///   consumeFlipForSalvage      -> only via FLIP.burnCoinForSalvage, frozen-gated (below)
+    ///   _setCoinflipAutoRebuy      -> the exit and the re-arm, both revert here
+    ///   claimCoinflipCarry         -> reverts here
+    ///   withdrawRedeemedFlip       -> sDGNRS-only, gated at sDGNRS.burn by the RNG lock AND by
+    ///                                 its own rngWordForDay(today) != 0 submit check
+    ///   _claimCoinflipsInternal    -> ungated, but its walk stops at flipsClaimableDay, which
+    ///                                 by definition of the freeze is strictly before day 4 —
+    ///                                 so it can only ever fold ALREADY-public resolved days,
+    ///                                 and `lastClaim` makes that idempotent. Driven below.
+    function test_NoReachablePathMovesTheCarryRidingAnUnappliedDay() public {
+        _enterRebuyWithStake(50_000 ether);
+        _resolveDay(3, true);
+        vm.prank(player);
+        coinflip.claimCoinflipCarry(address(0), 0); // settle while day 3 is applied
+        _warpToDay(4); // day 4 unapplied: its word may be public, the carry rides it
+
+        (, , uint256 carry0, ) = coinflip.coinflipAutoRebuyInfo(player);
+        assertGt(carry0, 0, "precondition: a carry is riding the unapplied day");
+
+        // --- gated mutators: every one shut ---
         vm.prank(player);
         vm.expectRevert(Coinflip.RngLocked.selector);
-        coinflip.claimCoinflipCarry(address(0), 1 ether);
-        vm.clearMockedCalls();
+        coinflip.setCoinflipAutoRebuy(address(0), false, 0);
+
+        vm.prank(player);
+        vm.expectRevert(Coinflip.RngLocked.selector);
+        coinflip.setCoinflipAutoRebuy(address(0), true, 1 ether);
+
+        vm.prank(player);
+        vm.expectRevert(Coinflip.RngLocked.selector);
+        coinflip.setCoinflipAutoRebuyTakeProfit(address(0), 1 ether);
+
+        vm.prank(player);
+        vm.expectRevert(Coinflip.RngLocked.selector);
+        coinflip.claimCoinflipCarry(address(0), type(uint256).max);
+
+        vm.prank(ContractAddresses.GAME);
+        vm.expectRevert(FLIP.Insufficient.selector);
+        coin.burnCoinForSalvage(player, 1 ether);
+
+        // --- ungated settle paths: open, and provably carry-neutral ---
+        vm.prank(player);
+        coinflip.claimCoinflips(address(0), type(uint256).max);
+        vm.prank(ContractAddresses.COIN);
+        coinflip.consumeCoinflipsForBurn(player, type(uint256).max);
+        vm.prank(ContractAddresses.COIN);
+        coinflip.claimCoinflipsFromFlip(player, type(uint256).max);
+
+        // --- a fresh deposit rides TOMORROW, never the unapplied day ---
+        vm.prank(GAME);
+        coin.mintForGame(player, 10_000 ether);
+        vm.prank(player);
+        coinflip.depositCoinflip(address(0), 10_000 ether);
+
+        (, , uint256 carry1, ) = coinflip.coinflipAutoRebuyInfo(player);
+        assertEq(carry1, carry0, "no reachable path moved the carry riding the unapplied day");
     }
 
     function test_RevertsWithoutAutoRebuy() public {

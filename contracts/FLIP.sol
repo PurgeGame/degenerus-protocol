@@ -80,6 +80,8 @@ interface ICoinflip {
     ) external view returns (uint256);
     /// @notice Route de-circulated FLIP into sDGNRS's redemption backing (claimable).
     function creditSdgnrsBacking(uint256 amount) external;
+    /// @notice True once today's flip has been applied (word recorded and paid out).
+    function flipResolvedToday() external view returns (bool);
 }
 
 contract FLIP {
@@ -406,15 +408,16 @@ contract FLIP {
     /// @notice Internal transfer helper.
     /// @dev Reverts on zero address or insufficient balance (via Solidity 0.8+ underflow check).
     ///      A shortfall against the sender's balance is covered from unclaimed coinflip
-    ///      winnings (skipped while the RNG window is locked), sharing this function's
-    ///      balance read; the claim credits balanceOf, so the debit re-reads after it.
+    ///      winnings, sharing this function's balance read; the claim credits balanceOf, so the
+    ///      debit re-reads after it. Unfrozen: claimCoinflipsFromFlip reaches claimableStored
+    ///      only — settled days the pending word cannot reprice — never the auto-rebuy carry.
     /// @param from The source address.
     /// @param to The destination address.
     /// @param amount The amount to transfer.
     function _transfer(address from, address to, uint256 amount) internal {
         if (from == address(0) || to == address(0)) revert ZeroAddress();
         uint256 balance = balanceOf[from];
-        if (balance < amount && !degenerusGame.rngLocked()) {
+        if (balance < amount) {
             unchecked {
                 coinflip.claimCoinflipsFromFlip(from, amount - balance);
             }
@@ -534,6 +537,9 @@ contract FLIP {
         _mint(to, amount);
     }
 
+    /// @dev Ungated: consumeCoinflipsForBurn reaches claimableStored only — settled days the
+    ///      pending word cannot reprice — never the auto-rebuy carry. claimCoinflips pays the
+    ///      same bank with no gate at all, so blocking here bought a purchase failure, not safety.
     function _consumeCoinflipShortfall(
         address player,
         uint256 amount
@@ -541,7 +547,6 @@ contract FLIP {
         if (amount == 0) return 0;
         uint256 balance = balanceOf[player];
         if (balance >= amount) return 0;
-        if (degenerusGame.rngLocked()) revert Insufficient();
         unchecked {
             consumed = coinflip.consumeCoinflipsForBurn(
                 player,
@@ -693,7 +698,11 @@ contract FLIP {
             }
         }
         if (remainder == 0) return;
-        if (degenerusGame.rngLocked()) revert Insufficient();
+        // The only FLIP leg that reaches the auto-rebuy carry, so it alone carries the freeze:
+        // both salvage operators (sDGNRS and the vault) run auto-rebuy, and the carry is the
+        // pending day's stake. The far-future ticket sink this swap queues through also reverts
+        // under the game's RNG lock, which covers the rest of that window.
+        if (!coinflip.flipResolvedToday()) revert Insufficient();
         uint256 consumed = coinflip.consumeFlipForSalvage(target, remainder);
         if (remainder > consumed) revert Insufficient();
     }

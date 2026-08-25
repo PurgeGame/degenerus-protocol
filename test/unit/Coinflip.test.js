@@ -81,6 +81,17 @@ async function resolveDay(hreEthers, game, coinflip, epoch, rngWord, bonus = 0) 
   return tx;
 }
 
+/**
+ * Apply TODAY's flip. The carry gates (enable/disable, take-profit, claimCoinflipCarry) stay
+ * shut until the day's word has been processed — Coinflip.flipResolvedToday — which in
+ * production is the first advance of the day. Uses an even word so the day settles as a loss
+ * and no claimable accrues to perturb the caller's assertions.
+ */
+async function applyToday(hreEthers, game, coinflip) {
+  const day = await game.currentDayView();
+  return resolveDay(hreEthers, game, coinflip, day, 2n);
+}
+
 // ---------------------------------------------------------------------------
 // Test Suite
 // ---------------------------------------------------------------------------
@@ -673,7 +684,8 @@ describe("Coinflip", function () {
   // =========================================================================
   describe("setCoinflipAutoRebuy", function () {
     it("enables auto-rebuy and emits CoinflipAutoRebuyToggled", async function () {
-      const { coinflip, alice } = await loadFixture(deployFullProtocol);
+      const { game, coinflip, alice } = await loadFixture(deployFullProtocol);
+      await applyToday(hre.ethers, game, coinflip);
       const tx = await coinflip
         .connect(alice)
         .setCoinflipAutoRebuy(ZERO_ADDRESS, true, eth(1000));
@@ -683,7 +695,8 @@ describe("Coinflip", function () {
     });
 
     it("emits CoinflipAutoRebuyStopSet when enabling with takeProfit", async function () {
-      const { coinflip, alice } = await loadFixture(deployFullProtocol);
+      const { game, coinflip, alice } = await loadFixture(deployFullProtocol);
+      await applyToday(hre.ethers, game, coinflip);
       const tx = await coinflip
         .connect(alice)
         .setCoinflipAutoRebuy(ZERO_ADDRESS, true, eth(5000));
@@ -692,7 +705,8 @@ describe("Coinflip", function () {
     });
 
     it("reverts with AutoRebuyAlreadyEnabled if enabling when already enabled", async function () {
-      const { coinflip, alice } = await loadFixture(deployFullProtocol);
+      const { game, coinflip, alice } = await loadFixture(deployFullProtocol);
+      await applyToday(hre.ethers, game, coinflip);
       await coinflip
         .connect(alice)
         .setCoinflipAutoRebuy(ZERO_ADDRESS, true, eth(1000));
@@ -704,7 +718,8 @@ describe("Coinflip", function () {
     });
 
     it("disables auto-rebuy and emits CoinflipAutoRebuyToggled(false)", async function () {
-      const { coinflip, alice } = await loadFixture(deployFullProtocol);
+      const { game, coinflip, alice } = await loadFixture(deployFullProtocol);
+      await applyToday(hre.ethers, game, coinflip);
       await coinflip
         .connect(alice)
         .setCoinflipAutoRebuy(ZERO_ADDRESS, true, eth(1000));
@@ -716,7 +731,8 @@ describe("Coinflip", function () {
     });
 
     it("coinflipAutoRebuyInfo reflects enabled state after enabling", async function () {
-      const { coinflip, alice } = await loadFixture(deployFullProtocol);
+      const { game, coinflip, alice } = await loadFixture(deployFullProtocol);
+      await applyToday(hre.ethers, game, coinflip);
       await coinflip
         .connect(alice)
         .setCoinflipAutoRebuy(ZERO_ADDRESS, true, eth(2000));
@@ -726,27 +742,47 @@ describe("Coinflip", function () {
     });
 
     it("coinflipAutoRebuyInfo enabled=false after disabling", async function () {
-      const { coinflip, alice } = await loadFixture(deployFullProtocol);
+      const { game, coinflip, alice } = await loadFixture(deployFullProtocol);
+      await applyToday(hre.ethers, game, coinflip);
       await coinflip.connect(alice).setCoinflipAutoRebuy(ZERO_ADDRESS, true, eth(1000));
       await coinflip.connect(alice).setCoinflipAutoRebuy(ZERO_ADDRESS, false, 0n);
       const info = await coinflip.coinflipAutoRebuyInfo(alice.address);
       expect(info.enabled).to.equal(false);
     });
 
-    it("reverts RngLocked if rngLocked is true", async function () {
-      // We cannot easily force rngLocked=true without going through the full game flow.
-      // This test verifies the happy path when rngLocked=false.
+    it("freezes a carrying position until today's flip is applied, never the arm", async function () {
+      // The gate is Coinflip's own settlement marker, not the game's RNG lock: shut while
+      // today's word is unprocessed (a word that prices the carry may be knowable), open the
+      // moment processCoinflipPayouts has run - even though the game holds the lock well past
+      // that point, through the drains that follow settlement. And it is scoped to positions
+      // that hold a carry: arming is always open, because there is no carry to front-run yet.
       const { coinflip, game, alice } = await loadFixture(deployFullProtocol);
       expect(await game.rngLocked()).to.equal(false);
+      expect(await coinflip.flipResolvedToday()).to.equal(false);
+
+      // Arming: open even though today is unapplied.
       await expect(
         coinflip.connect(alice).setCoinflipAutoRebuy(ZERO_ADDRESS, true, eth(1000))
-      ).to.not.be.revertedWithCustomError(coinflip, "RngLocked");
+      ).to.not.be.reverted;
+
+      // Now armed, the EXIT would cash the carry out, so it is frozen.
+      await expect(
+        coinflip.connect(alice).setCoinflipAutoRebuy(ZERO_ADDRESS, false, 0)
+      ).to.be.revertedWithCustomError(coinflip, "RngLocked");
+
+      // ...and opens the moment today's word is processed.
+      await applyToday(hre.ethers, game, coinflip);
+      expect(await coinflip.flipResolvedToday()).to.equal(true);
+      await expect(
+        coinflip.connect(alice).setCoinflipAutoRebuy(ZERO_ADDRESS, false, 0)
+      ).to.not.be.reverted;
     });
   });
 
   describe("setCoinflipAutoRebuyTakeProfit", function () {
     it("reverts AutoRebuyNotEnabled when auto-rebuy is off", async function () {
-      const { coinflip, alice } = await loadFixture(deployFullProtocol);
+      const { game, coinflip, alice } = await loadFixture(deployFullProtocol);
+      await applyToday(hre.ethers, game, coinflip);
       await expect(
         coinflip
           .connect(alice)
@@ -755,7 +791,8 @@ describe("Coinflip", function () {
     });
 
     it("updates stop amount and emits CoinflipAutoRebuyStopSet", async function () {
-      const { coinflip, alice } = await loadFixture(deployFullProtocol);
+      const { game, coinflip, alice } = await loadFixture(deployFullProtocol);
+      await applyToday(hre.ethers, game, coinflip);
       await coinflip
         .connect(alice)
         .setCoinflipAutoRebuy(ZERO_ADDRESS, true, eth(1000));
@@ -825,7 +862,8 @@ describe("Coinflip", function () {
     });
 
     it("coinflipAutoRebuyInfo startDay is lastClaim day when enabled", async function () {
-      const { coinflip, alice } = await loadFixture(deployFullProtocol);
+      const { game, coinflip, alice } = await loadFixture(deployFullProtocol);
+      await applyToday(hre.ethers, game, coinflip);
       await coinflip.connect(alice).setCoinflipAutoRebuy(ZERO_ADDRESS, true, eth(1000));
       const info = await coinflip.coinflipAutoRebuyInfo(alice.address);
       // carry should be 0 initially
@@ -899,6 +937,7 @@ describe("Coinflip", function () {
       const { coinflip, coin, game, alice, vault } = await loadFixture(
         deployFullProtocol
       );
+      await applyToday(hre.ethers, game, coinflip);
       const vaultAddr = await vault.getAddress();
       await giveFlip(coin, alice, eth(5000), vaultAddr);
 

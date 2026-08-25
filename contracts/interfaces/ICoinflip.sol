@@ -276,4 +276,11 @@ interface ICoinflip {
     /// @return rewardPercent The reward percentage for that day.
     /// @return win Whether the flip was a win.
     function getCoinflipDayResult(uint24 day) external view returns (uint16 rewardPercent, bool win);
+
+    /// @notice True once today's flip has been applied — its VRF word recorded and paid out.
+    /// @dev Settlement marker for the carry freeze: past it the carry has resolved through
+    ///      today's word and rides tomorrow, whose word is not yet requested. Reopens the FLIP
+    ///      claim paths ahead of the game's RNG lock, which advanceGame holds through the
+    ///      chunked drains that follow settlement.
+    function flipResolvedToday() external view returns (bool);
 }

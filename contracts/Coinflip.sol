@@ -587,8 +587,8 @@ contract Coinflip {
     ///      claimable FIRST (no mint — removes a future mint of the consumed slice), then the rolling
     ///      auto-rebuy carry. For the vault FLIP first drains the virtual allowance (its held leg);
     ///      sDGNRS has no wallet leg, so this covers its entire backing (claimable + carry). Reaching
-    ///      the carry is freeze-safe because the salvage entrypoint reverts under the RNG lock, so
-    ///      this never runs mid-window.
+    ///      the carry is freeze-safe because the swap queues far-future entries first, and that sink
+    ///      reverts under the RNG lock, so this never runs mid-window.
     /// @param player The backing owner (sDGNRS or the vault).
     /// @param amount Maximum FLIP (wei) to consume from claimable + carry.
     /// @return consumed Actual amount removed (claimable consumed + carry decremented).
@@ -1129,6 +1129,28 @@ contract Coinflip {
       |                    AUTO-REBUY FUNCTIONS                              |
       +======================================================================+*/
 
+    /// @notice True once today's flip has been applied — its VRF word recorded and paid out.
+    /// @dev Settlement marker for the carry freeze, and the sole gate on every carry mutator.
+    ///      The advance records the day's word and runs processCoinflipPayouts in one step, so
+    ///      past this point the carry has resolved through today's word and rides tomorrow —
+    ///      whose word has not been requested. The game's RNG lock is deliberately NOT read:
+    ///      it spans request -> _unlockRng and advanceGame defers that unlock behind chunked
+    ///      ticket drains, a pending daily jackpot, and a phase transition, so it stays up long
+    ///      after the word that priced the carry was consumed. This marker is also strictly
+    ///      tighter than the lock — it stays shut from the day boundary until the word lands,
+    ///      covering the pre-request gap the lock leaves open — and needs no cross-contract
+    ///      read. `day` never exceeds the wall day (the advance clamps it down to dailyIdx + 1),
+    ///      so equality is the settled state and the comparison cannot open early.
+    function flipResolvedToday() external view returns (bool) {
+        return flipsClaimableDay >= GameTimeLib.currentDayIndex();
+    }
+
+    /// @dev Freeze predicate for the carry: today's flip is unapplied, so a word that prices the
+    ///      carry may be knowable but unconsumed.
+    function _flipFrozen() private view returns (bool) {
+        return flipsClaimableDay < GameTimeLib.currentDayIndex();
+    }
+
     /// @notice Configure auto-rebuy mode for coinflips.
     /// @param player The player to configure (address(0) for msg.sender).
     /// @param enabled True to enable auto-rebuy, false to disable and cash out carry.
@@ -1158,7 +1180,11 @@ contract Coinflip {
     }
 
     /// @dev Internal auto-rebuy configuration.
-    ///      Blocked during RNG lock — toggling off would extract carry before a known loss.
+    ///      The freeze applies only to a position ALREADY on auto-rebuy: that is the only state
+    ///      holding a carry, and the carry is the pending day's stake, so toggling off would
+    ///      extract it before a known loss and re-setting the stop would bank a known win whole.
+    ///      A player not on auto-rebuy holds no carry — arming it moves nothing the pending word
+    ///      prices — so the arm stays open.
     function _setCoinflipAutoRebuy(
         address player,
         bool enabled,
@@ -1167,7 +1193,7 @@ contract Coinflip {
     ) private {
         PlayerCoinflipState storage state = playerState[player];
         uint256 mintable;
-        if (degenerusGame.rngLocked()) revert RngLocked();
+        if (state.autoRebuyEnabled && _flipFrozen()) revert RngLocked();
 
         if (enabled) {
             mintable = _claimCoinflipsInternal(player, state, false);
@@ -1201,14 +1227,16 @@ contract Coinflip {
     }
 
     /// @dev Internal auto-rebuy take profit configuration.
-    ///      Blocked during RNG lock — changing take-profit could extract carry before a known loss.
+    ///      Blocked while today's flip is frozen — the threshold splits the pending day's payout
+    ///      between the banked chunk and the rolling carry, so a known win could be banked whole.
+    ///      The enablement check leads, so only a position actually on auto-rebuy meets the freeze.
     function _setCoinflipAutoRebuyTakeProfit(
         address player,
         uint256 takeProfit
     ) private {
-        if (degenerusGame.rngLocked()) revert RngLocked();
         PlayerCoinflipState storage state = playerState[player];
         if (!state.autoRebuyEnabled) revert AutoRebuyNotEnabled();
+        if (_flipFrozen()) revert RngLocked();
 
         uint256 mintable = _claimCoinflipsInternal(player, state, false);
         state.autoRebuyStop = uint128(takeProfit);
@@ -1224,7 +1252,7 @@ contract Coinflip {
     ///         staying on auto-rebuy; the remainder keeps rolling.
     /// @dev Settles all resolved days FIRST — wins roll into the carry per the
     ///      take-profit config and a pending loss zeroes it — then withdraws from the
-    ///      settled carry. Blocked during the RNG lock for the same reason as the
+    ///      settled carry. Blocked while today's flip is frozen for the same reason as the
     ///      rebuy toggle: the carry is the pending day's stake, and the day's word may
     ///      already be on-chain before the resolution walk applies it. Take-profit
     ///      chunks surfaced by the settle bank into claimableStored (claimCoinflips
@@ -1237,9 +1265,9 @@ contract Coinflip {
         uint256 amount
     ) external returns (uint256 claimed) {
         player = _resolvePlayer(player);
-        if (degenerusGame.rngLocked()) revert RngLocked();
         PlayerCoinflipState storage state = playerState[player];
         if (!state.autoRebuyEnabled) revert AutoRebuyNotEnabled();
+        if (_flipFrozen()) revert RngLocked();
 
         uint256 mintable = _claimCoinflipsInternal(player, state, false);
         if (mintable != 0) {
