@@ -104,7 +104,7 @@ async function main() {
       deployed.set(key, addr);
       console.log(` ${addr}`);
 
-      // Fail at the FIRST divergence, not after all 28. Every address is baked
+      // Fail at the FIRST divergence, not after the full deployment. Every address is baked
       // into ContractAddresses.sol as a compile-time constant, so once one lands
       // off-prediction the whole deployment is unusable — there is nothing to
       // salvage by continuing, and each further deploy is wasted gas.

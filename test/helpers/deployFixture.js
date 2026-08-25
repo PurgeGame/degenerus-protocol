@@ -20,9 +20,9 @@ let _patchedVrfKeyHash = null;
  *
  * Flow:
  *   1. Deploy mock contracts (VRF, stETH, LINK)
- *   2. Predict addresses for the 23 protocol contracts
+ *   2. Predict addresses for every protocol contract
  *   3. Patch ContractAddresses.sol + recompile (once per test run)
- *   4. Deploy all 23 protocol contracts in order
+ *   4. Deploy every protocol contract in order
  *   5. Verify deployed addresses match predictions
  */
 export async function deployFullProtocol() {
@@ -68,7 +68,7 @@ export async function deployFullProtocol() {
     _patchedVrfKeyHash = vrfKeyHash;
   }
 
-  // --- Phase 4: Deploy all 23 protocol contracts ---
+  // --- Phase 4: Deploy every protocol contract ---
   const contracts = {};
   const deployedAddrs = new Map();
 

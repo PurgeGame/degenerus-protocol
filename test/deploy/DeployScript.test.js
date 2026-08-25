@@ -13,7 +13,7 @@ describe("Deploy Pipeline", function () {
     restoreAddresses();
   });
 
-  it("deploys all 26 contracts at predicted addresses", async function () {
+  it("deploys every contract at its predicted address", async function () {
     const f = await loadFixture(deployFullProtocol);
     expect(f.deployedAddrs.size).to.equal(DEPLOY_ORDER.length);
 
@@ -26,10 +26,10 @@ describe("Deploy Pipeline", function () {
     }
   });
 
-  it("deployer nonce advances by exactly 26 protocol contracts", async function () {
+  it("deployer nonce advances by exactly the deploy-order length", async function () {
     const f = await loadFixture(deployFullProtocol);
     const endNonce = await f.deployer.getNonce();
-    // startingNonce was captured AFTER mock deploys, so delta = 26
+    // startingNonce was captured after mock deploys, so only protocol deployments count.
     expect(endNonce - f.startingNonce).to.equal(DEPLOY_ORDER.length);
   });
 
