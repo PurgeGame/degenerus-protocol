@@ -32,9 +32,6 @@ const REJECT_EMPTY_SLOT = 0;
 const REJECT_ALREADY_VOTED = 1;
 const REJECT_ZERO_WEIGHT = 2;
 
-// pickCharity() reject reason (consumed by Plan 03c pickCharity describe)
-const REJECT_LEVEL_NOT_ACTIVE = 0;
-
 // Distribution math (consumed by Plan 03c)
 const DISTRIBUTION_BPS = 200n;
 const BPS_DENOM = 10_000n;
@@ -626,9 +623,9 @@ describe("GNRUS Charity Allowlist (v33.0)", function () {
 
   // -------------------------------------------------------------------
   //  Section 7: pickCharity(uint24 level) (TST-04 + D-256-PICKCHARITY-REJECT-01 + D-256-TIEBREAK-01)
-  //  Covers the PickCharityRejected reason code (NOT_ACTIVE — both the wrong-level
-  //  call and the duplicate-resolve re-call, which the currentLevel monotonicity
-  //  guard rejects with the same code),
+  //  Covers the no-op level guard (both the wrong-level call and the duplicate-resolve
+  //  re-call, which the currentLevel monotonicity guard turns into a no-op rather than a
+  //  revert — the sole caller is the daily advance),
   //  Unauthorized (onlyGame), idempotence ordering (currentLevel advance
   //  before flush+winner+distribution), single-active winner with distribution
   //  math (DISTRIBUTION_BPS / BPS_DENOM), multi-vote winner, tie-break (D-256-
@@ -637,29 +634,38 @@ describe("GNRUS Charity Allowlist (v33.0)", function () {
   //  to zero via deterministic balanceOf storage write per Warning #5).
   // -------------------------------------------------------------------
   describe("pickCharity(uint24 level)", function () {
-    it("PickCharityRejected(REJECT_LEVEL_NOT_ACTIVE) on wrong-level call", async function () {
+    it("a wrong-level call resolves nothing and does NOT revert", async function () {
+      // The sole caller is the daily advance, so a mismatched level must cost the crank
+      // nothing. Resolving nothing is the whole behaviour: no state moves and neither
+      // terminal event fires, which is how the caller tells it apart from a real round.
       const { charity, gameAddress } = await loadFixture(deployGNRUSFixture);
       const gameSigner = await impersonate(gameAddress);
+      const before = await charity.currentLevel();
       await expect(charity.connect(gameSigner).pickCharity(5))
-        .to.be.revertedWithCustomError(charity, "PickCharityRejected")
-        .withArgs(REJECT_LEVEL_NOT_ACTIVE);
+        .to.not.be.reverted;
+      expect(await charity.currentLevel()).to.equal(before);
       await stopImpersonating(gameAddress);
     });
 
-    it("re-call for an already-resolved level reverts PickCharityRejected(REJECT_LEVEL_NOT_ACTIVE)", async function () {
+    it("re-call for an already-resolved level pays nothing a second time", async function () {
       // The resolved-level guard is currentLevel monotonicity alone: pickCharity(level)
       // requires level == currentLevel and a successful resolve advances currentLevel
       // (its sole writer, strictly increasing), so a duplicate call for the same level
       // can never match again. A forged "resolved but currentLevel unchanged" state is
-      // structurally unrepresentable.
+      // structurally unrepresentable. THE PROPERTY THAT MATTERS is that the duplicate
+      // distributes nothing — not that it reverts, which on the advance chain would be a
+      // brick rather than a guard.
       const { charity, gameAddress } = await loadFixture(deployGNRUSFixture);
       await runLevelTransitionViaGame(charity, gameAddress, 0);
       expect(await charity.currentLevel()).to.equal(1n);
+      const unallocated = await charity.balanceOf(await charity.getAddress());
 
       const gameSigner = await impersonate(gameAddress);
-      await expect(charity.connect(gameSigner).pickCharity(0))
-        .to.be.revertedWithCustomError(charity, "PickCharityRejected")
-        .withArgs(REJECT_LEVEL_NOT_ACTIVE);
+      const tx = await charity.connect(gameSigner).pickCharity(0);
+      await expect(tx).to.not.emit(charity, "LevelResolved");
+      await expect(tx).to.not.emit(charity, "LevelSkipped");
+      expect(await charity.currentLevel()).to.equal(1n);
+      expect(await charity.balanceOf(await charity.getAddress())).to.equal(unallocated);
       await stopImpersonating(gameAddress);
     });
 

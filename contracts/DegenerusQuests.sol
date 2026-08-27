@@ -591,9 +591,12 @@ contract DegenerusQuests is IDegenerusQuests {
      * @param amount Number of streak days to add.
      * @param currentDay The caller's current calendar day; synchronization is pinned to the
      *        newest rolled quest day when one exists.
-     * @custom:reverts OnlyGame When caller is not GAME contract.
+     * @custom:reverts OnlyGame When caller is not the GAME or CRAPS contract.
      */
-    function awardQuestStreakBonus(address player, uint16 amount, uint24 currentDay) external onlyGame {
+    function awardQuestStreakBonus(address player, uint16 amount, uint24 currentDay) external {
+        // CRAPS sits beside GAME here, the same way it does on FLIP's mint and Coinflip's credit:
+        // taking the whole-day craps ticket is a daily commitment the streak is meant to count.
+        if (msg.sender != ContractAddresses.GAME && msg.sender != ContractAddresses.CRAPS) revert OnlyGame();
         if (player == address(0) || amount == 0 || currentDay == 0) return;
 
         PlayerQuestState storage state = questPlayerState[player];

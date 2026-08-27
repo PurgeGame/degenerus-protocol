@@ -1,4 +1,4 @@
-# Craps Day Passes, Future Prepaid Entries, and Battle Boons — Contract Specification
+# Craps Day Passes and Future Prepaid Entries — Contract Specification
 
 **Status:** Ready for contract implementation
 
@@ -17,7 +17,11 @@
 - `docs/HIGH-ROLLER-BONUS-BATTLE-SPEC.md`
 - `docs/HIGH-ROLLER-BOOST-BUDGET-ADDENDUM-SPEC.md`
 
-**Requirements:** 16 locked
+**Requirements:** 15 locked
+
+**Explicitly out (USER, 2026-08-26):** the Craps battle-discount boon family, and any new view on
+either contract — no room in `CrapsBattle`'s EIP-170 margin. Nothing here touches the boon table,
+`DeityBoonViewer`, the boon weights, or the existing paid Craps entry paths.
 
 **Ambiguity score:** 0.04 (gate: <= 0.20)
 
@@ -32,11 +36,6 @@ The same future-day reservation surface also lets a player prepay directly in FL
 per normal day or 450,000 FLIP per high-roller day. The complete fixed price is burned when the
 reservation is made, before the target day's word or high-roller multiplier is known.
 
-Extend the existing boon table with a separate Craps battle-discount family modeled on the FLIP
-Degenerette boon: 4%, 8%, and 12% tiers, each applied to at most 100,000 FLIP of the player's next
-successful self-funded Craps purchase. It has its own packed lane and does not displace or consume
-the player's FLIP Degenerette boon.
-
 A pass may be committed only to a future protocol day whose daily word has not landed. It covers
 one early full-day entry across all seven scheduled Bonus Battle windows. A normal pass covers a
 1x day entry; a high-roller pass covers the target day's genuine 10x-or-100x high-roller entry.
@@ -46,17 +45,17 @@ This specification supersedes the two documents above only for reserved entries 
 1. A pass-funded entry does not burn the player's FLIP entry cost.
 2. A future-FLIP reservation burns its fixed purchase price once, at reservation time, and never
    burns, refunds, or surcharges against the target day's realized cost.
-3. A battle boon reduces only the FLIP burned for the eligible purchase; it does not reduce the
-   purchased bankroll, bounty, gameplay scale, or settled action.
-4. A reserved seat's notional bankroll action counts toward later boost budgets exactly as if the
+3. A reserved seat's notional bankroll action counts toward later boost budgets exactly as if the
    underlying seat had been bought through the ordinary live path; for a pass-funded seat this is
    economically equivalent to crediting the replaced lootbox FLIP and immediately spending it.
-5. No reservation or bet stores whether it was pass-funded, prepaid, discounted, or “taxed,” and
-   neither fixed purchase price nor its premium enters action accounting.
-6. Every reserved or boon-discounted entry uses the same battle, bounty, boost, ranking, payout,
-   and high-roller rules as its full-price counterpart.
+4. No reservation or bet stores whether it was pass-funded, prepaid, or “taxed,” and neither fixed
+   purchase price nor its premium enters action accounting.
+5. Every reserved entry uses the same battle, bounty, boost, ranking, payout, and high-roller rules
+   as its full-price counterpart.
 
-All rules for immediate paid entries remain unchanged except for optional battle-boon consumption.
+**All rules for immediate paid entries remain completely unchanged.** Nothing in this specification
+touches `enterBattle`, `enterBonusBattle` or the existing `enterBonusDay` paths, their gas, or
+their ABI.
 
 ## 2. Existing Behavior and Required Delta
 
@@ -110,11 +109,10 @@ All FLIP amounts below are token wei unless stated otherwise.
 | `credit` | Uncommitted pass inventory held by a player and usable for a future reservation |
 | `reservation` | One normal or high-roller pass irrevocably assigned to one future protocol day |
 | `prepaid reservation` | A reservation funded by an immediate fixed FLIP burn rather than pass credit; its stored day state is identical to a pass-funded reservation |
-| `P_N` | Fixed gross price of one future normal-day reservation: 25,000 FLIP |
-| `P_H` | Fixed gross price of one future high-roller-day reservation: 450,000 FLIP |
+| `P_N` | Fixed price of one future normal-day reservation: 25,000 FLIP |
+| `P_H` | Fixed price of one future high-roller-day reservation: 450,000 FLIP |
 | `coveredCost` | The exact normal or high-roller FLIP burn that the live full-day path would charge for the target day's realized terms |
-| `grossPurchase` | The full price of an eligible Craps purchase before an optional battle-boon discount |
-| `netBurn` | `grossPurchase - battleBoonDiscount`; the amount actually burned for that purchase |
+| `purchasePrice` | `count * P_N` or `count * P_H`; the whole amount burned by one future-day purchase, and the only figure in it |
 
 ## 4. Pass Value Constants
 
@@ -131,8 +129,24 @@ window's bankroll and bounty:
 | Daily event, period 6 | 14,235.45 |
 | **Complete normal day before design rounding** | **22,802.116666666666666667** |
 
-The exact expectation is `1,368,127 / 60 FLIP`. For a clean, stable denomination, round the
-expected full-day cost to the nearest 100 FLIP (ties round up):
+The exact expectation is `1,368,127 / 60 FLIP`.
+
+✅ **VERIFIED 2026-08-26 against the shipped `_bonusPreset`** — recomputed in exact rationals from
+the live table, including the event's integer bounty flooring, and every row above reproduces to
+the digit. The derivation, should it ever need redoing:
+
+- routine tier costs (bankroll + mean bounty) are 500, 1,966⅔ and 4,833⅓ for the 300 / 1,200 /
+  3,000 tiers, whose bounty bands are {100,200,300}, {300,800,1200} and {1000,1500,3000};
+- period 0 draws its tier **flat**, a third each → 7,300/3 = 2,433⅓;
+- periods 1..5 draw **7:2:1** small:medium:large → 1,226⅔ each, 18,400/3 for the five;
+- the event's bankroll is 30,000 at 5%, 60,000 at 2%, else the 1,500-step ladder to 15,000 →
+  E = 10,372.5, matching the suite's own `test_bonusTierMixMatchesTheAdvertisedOdds` assertion of
+  10,372 ± 1,500; its bounty is `((bank * (25 + 5k)) / 100 / 100) * 100` for k uniform on 0..5,
+  and that double floor must be applied **before** taking the expectation, not after — treating
+  it as a clean 37.5% overstates the event by ~85 FLIP.
+
+For a clean, stable denomination, round the expected full-day cost to the nearest 100 FLIP (ties
+round up):
 
 ```solidity
 uint256 constant NORMAL_DAY_PASS_VALUE = 22_800 ether;
@@ -148,6 +162,10 @@ The target day's `H` is unknown when a pass is committed. Its expectation is:
 ```text
 E[H] = 0.9 * 10 + 0.1 * 100 = 19
 ```
+
+✅ **VERIFIED against the shipped `_highMultOf`**, which is
+`keccak256(word, HIGH_TAG) % 10 == 0 ? 100 : 10` — exactly one in ten at the tail, so E[H] is 19 on
+the nose and the 19x definition below is not an approximation.
 
 Therefore:
 
@@ -189,14 +207,14 @@ The two values are independent constants. `HIGH_ROLLER_FUTURE_DAY_PRICE` is exac
 it must not be derived as nineteen times either normal constant. Against the exact current expected
 costs in Sections 4.1 and 4.2, the prices carry approximate premiums of:
 
-| Reservation | Exact expected cost | Gross prepay price | Difference | Premium vs exact expectation |
+| Reservation | Exact expected cost | Prepay price | Difference | Premium vs exact expectation |
 |---|---:|---:|---:|---:|
 | Normal | 22,802.116666666666666667 | 25,000 | 2,197.883333333333333333 | 9.6389% |
 | High roller | 433,240.216666666666666667 | 450,000 | 16,759.783333333333333333 | 3.8685% |
 
 Those differences are economic consequences of the fixed prices, not on-chain accounting fields.
-The contract burns the gross price, optionally reduced by a live battle boon, and must not derive,
-store, emit, or later book a separate `tax` or `premium` amount.
+The contract burns the price and must not derive, store, emit, or later book a separate `tax` or
+`premium` amount.
 
 The price is fixed before the target day reveals its realized bankroll, bounty, and `H`. Redemption
 therefore never charges a top-up when `coveredCost` exceeds the prepaid price and never refunds a
@@ -289,114 +307,9 @@ than one and it cannot round to zero.
 The WWXRP fallback is intentionally additive consolation EV. It is not deducted from `V` and is
 not budget-neutralized elsewhere.
 
-## 6. Battle-Discount Boon
+## 6. RNG and Commitment Integrity
 
-### 6.1 New boon family and draw weights
-
-Add a separate three-tier boon family to the canonical lootbox/deity boon table:
-
-| Boon type | Suggested id | Discount | Draw weight |
-|---|---:|---:|---:|
-| `BOON_CRAPS_4` | 41 | 4% | 200 |
-| `BOON_CRAPS_8` | 42 | 8% | 50 |
-| `BOON_CRAPS_12` | 43 | 12% | 10 |
-
-The ids follow the current 1..40 table; exact constant names may follow repository conventions.
-The weights are exactly the existing FLIP Degenerette family's 200/50/10 weights. Adding 260 weight
-changes `BOON_WEIGHT_TOTAL` from 2,608 to 2,868. The battle-boon family is eligible from both
-lootbox and deity boon draws wherever the corresponding Degenerette family is eligible. Its draw
-uses the existing genuine VRF-derived boon entropy and creates no new randomness source.
-
-Use a distinct observable reward identity. The recommended encoding is `LootBoxReward.rewardType =
-14` with `amount` equal to boon type 41, 42, or 43, plus a dedicated battle-boon consumption category
-in `BoonConsumed`. Reusing the FLIP Degenerette reward identity is forbidden because indexers must be
-able to distinguish which independent lane was awarded.
-
-### 6.2 Packed state, expiry, and replacement
-
-Use `boonPacked[player].slot1` bits 48..71 as one 24-bit battle-boon lane. Its internal format is
-identical to a Degenerette currency lane:
-
-| Lane bits | Meaning |
-|---:|---|
-| 0..1 | tier: 0 none, 1 = 4%, 2 = 8%, 3 = 12% |
-| 2 | deity-source flag |
-| 3..23 | low 21 bits of award day |
-
-The battle lane is independent of all three Degenerette currency lanes and both pass-credit lanes.
-A Craps purchase must never read or consume the FLIP Degenerette lane, and a Degenerette bet must
-never read or consume the battle lane.
-
-Every lifecycle rule matches the FLIP Degenerette boon:
-
-- a lootbox-drawn boon remains live through award day plus `DEGENERETTE_BOON_EXPIRY_DAYS = 2`;
-- a deity-granted boon is live only on its award day;
-- a higher live tier replaces the held tier and resets the applicable stamp;
-- a lower or equal live tier is discarded and does not refresh expiry;
-- an expired lane is cleared on the normal expiry sweep or the next attempted consumption; and
-- every read-modify-write preserves pass credits and all unrelated boon lanes.
-
-### 6.3 Eligible purchase and exact discount
-
-The live boon is consumed by the player's next **successful, self-funded, FLIP-funded Craps
-purchase**. Eligible purchase surfaces are:
-
-- a custom battle entry through `enterBattle`;
-- one scheduled-window entry through `enterBonusBattle`;
-- one successful `enterBonusDay` call, whether it creates the period-0 full-day seat or a late-day
-  set of remaining paid windows; and
-- one future-day FLIP prepayment call from Section 10.3, regardless of how many days it reserves.
-
-One external purchase consumes at most one boon. For a bundled purchase, `grossPurchase` is the sum
-of all FLIP that the call would otherwise burn for the entries or reservations it actually creates.
-The discount is:
-
-```text
-discountBase = min(grossPurchase, 100_000 FLIP)
-discount     = floor(discountBase * boonBps / 10_000)
-netBurn      = grossPurchase - discount
-```
-
-The 100,000-FLIP base cap, 4/8/12% tiers, and floor rounding are exactly the FLIP Degenerette boon
-limits. Thus the maximum discounts are 4,000, 8,000, or 12,000 FLIP. A future normal reservation
-costs 24,000 / 23,000 / 22,000 FLIP with the three tiers. A single future high reservation costs
-446,000 / 442,000 / 438,000 FLIP because its 450,000-FLIP gross price exceeds the cap.
-
-The following do not consume the boon:
-
-- invalid or fully reverted entry attempts;
-- an `enterBonusDay` call that creates zero paid entries;
-- pass redemption or redemption of an already-prepaid reservation;
-- protocol house/vault seats, free entries, claims, settlement, or walkovers; and
-- bounty/boost donations, which are not battle purchases.
-
-If a future interface ever permits a third party to fund another player's entry, that gifted entry
-must not consume or use the recipient's boon. Boon consumption occurs only after the complete
-purchase has passed validation; any later FLIP-burn or reservation failure reverts both consumption
-and all entry state atomically.
-
-### 6.4 Boon-budget normalization
-
-The existing lootbox boon budget remains 10% of box value capped at 1 ETH, and the existing 50%
-utilization assumption remains. Extend the weighted maximum-value normalization by exactly the same
-FLIP-valued term as the FLIP Degenerette family:
-
-```text
-weightedBattleMax =
-    200 * flipToEthValue(4_000 FLIP, priceWei)
-  +  50 * flipToEthValue(8_000 FLIP, priceWei)
-  +  10 * flipToEthValue(12_000 FLIP, priceWei)
-```
-
-Under the current closed form this changes `BOON_PRICE_WEIGHT` from 3,270 to 4,590 and
-`BOON_WEIGHT_TOTAL` from 2,608 to 2,868; `BOON_FIXED_WEIGHTED_MAX` and `BOON_LAZY_WEIGHT` remain
-unchanged. Update the module's lookup tree, `DeityBoonViewer`, deity eligible-range remapping,
-weighted-average parity test, and exhaustive roll-tree parity test together. Boon frequency is
-re-normalized by this table change; no separate emission budget is added.
-
-## 7. RNG and Commitment Integrity
-
-### 7.1 Genuine entropy only
+### 6.1 Genuine entropy only
 
 The reward bucket, pass rounding, and zero-pass WWXRP spin must all derive from the already
 committed Chainlink-VRF-backed lootbox word.
@@ -427,7 +340,7 @@ The following must never supply, replace, salt, or modify the random decisions:
 
 Repeated evaluation of the same box seed must produce the same reward and rounding result.
 
-### 7.2 Future-day commitment
+### 6.2 Future-day commitment
 
 Every pass application and future-FLIP purchase must satisfy both:
 
@@ -441,15 +354,28 @@ ever prefilled or backfilled unexpectedly. Under the current daily lifecycle, a 
 not made for a wall-clock future day, so a strictly future target also precedes the observable VRF
 request for that day.
 
-A reservation is irrevocable. A prepaid reservation's complete `netBurn` happens in the same
-transaction that creates it. Once the daily word reveals the battle terms and `H`, the player may
+⚠ **BOTH READS ARE ALREADY BUILT, AND BOTH ARE PINNED.** Craps has no typed getter for either:
+
+- the day index is `_currentDayIndex()` in `contracts/LootboxCraps.sol`, arithmetic on
+  `block.timestamp` against `ContractAddresses.DEPLOY_DAY_BOUNDARY` — no call;
+- the word is `_dailyWordAt(day)`, an `extsload` of
+  `keccak256(abi.encode(day, RNG_WORD_BY_DAY_SLOT))` with **`RNG_WORD_BY_DAY_SLOT = 10`
+  hardcoded**, and it accepts an arbitrary day, so a FUTURE day's word is already readable.
+
+Reuse both; do not add a cross-contract call for what is already an `extsload`. The hardcoded slot
+is guarded by exactly one drift gate — `test/craps/LootboxCraps.t.sol:274`, which asserts the live
+`rngWordByDay` slot still equals 10. Every reservation and every eligibility check in this
+specification rests on that gate, so it must stay green and must not be weakened.
+
+A reservation is irrevocable. A prepaid reservation's whole burn happens in the same transaction
+that creates it. Once the daily word reveals the battle terms and `H`, the player may
 use the reservation or let it expire, but cannot recover, move, exchange, or downgrade it. No burn
 may be deferred until redemption. These rules remove the free option to keep only 100x high-roller
 days or unusually expensive normal days.
 
-## 8. Pass and Battle-Boon Packing
+## 7. Pass Credit Packing
 
-### 8.1 Game storage
+### 7.1 Game storage
 
 `DegenerusGameStorage.BoonPacked.slot1` currently leaves bits 0..71 unused. Allocate:
 
@@ -457,16 +383,20 @@ days or unusually expensive normal days.
 |---:|---|---|
 | 0..23 | Uncommitted normal Craps day-pass credits | `uint24` |
 | 24..47 | Uncommitted high-roller Craps day-pass credits | `uint24` |
-| 48..71 | Craps battle-discount boon lane | packed `uint24` |
+| 48..71 | (still free) | — |
 
 The public `boonPacked` getter remains layout-compatible. Every existing boon writer must preserve
-the new low 72 bits through field-isolated read-modify-write logic. Pass-credit writers preserve
-the battle-boon lane; battle-boon and expiry writers preserve both pass balances.
+the new low 48 bits through field-isolated read-modify-write logic, and the pass-credit writer must
+preserve every existing boon lane above them.
+
+**This is also the whole player-facing read path.** `boonPacked` is already a public mapping getter
+returning `(slot0, slot1)`, so a client decodes bits 0..47 for the two balances exactly as it
+already decodes the boon lanes above them. No new view is added anywhere for this.
 
 Balances do not expire. They are nontransferable and have no cash, FLIP, DGNRS, or WWXRP
 redemption path.
 
-### 8.2 Saturation
+### 7.2 Saturation
 
 Credit additions saturate at `type(uint24).max`; they must never wrap or wedge a permissionless
 lootbox sweep. If saturation discards an economically unreachable excess, emit the discarded
@@ -474,7 +404,7 @@ count explicitly.
 
 Credit consumption is checked subtraction. Insufficient credit reverts the complete application.
 
-### 8.3 Lootbox memory accumulation
+### 7.3 Lootbox memory accumulation
 
 Add one packed pass accumulator word to `BoxAcc`, sufficient to hold:
 
@@ -486,20 +416,28 @@ Apply the normal-versus-high threshold per box, then accumulate the already-roun
 Do not add pass counts to `_resolveLootboxRoll`'s already-wide return tuple if mutating the existing
 memory accumulator avoids additional stack pressure.
 
-## 9. Automatic Tomorrow Delivery
+## 8. Automatic Tomorrow Delivery
 
 After one regular lootbox entry finishes resolving all of its boxes:
 
 1. If both accumulated pass counts are zero, make no Craps call and make no pass-balance write.
-2. Set `tomorrow = today + 1`; if the `uint24` addition is unavailable, credit all passes.
-3. If tomorrow already has any seat or pass reservation for the player, credit all passes.
-4. If `rngWordByDay[tomorrow] != 0`, credit all passes.
-5. Otherwise reserve exactly one accumulated pass for tomorrow and credit every remaining pass.
+2. Set `tomorrow = today + 1`. If that overflows `uint24`, credit all passes and stop.
+3. Attempt exactly one `tryReserveLootboxPass(player, tomorrow, type)`.
+4. On `true`, one pass of that type is spent on tomorrow; credit every remaining pass.
+5. On `false` or any failure, credit **all** passes, the attempted one included.
+
+**THE ONE CALL IS ALSO THE ELIGIBILITY TEST.** Whether tomorrow is already seated or reserved is
+Craps-side state, and whether its word has landed is checked there too (§6.2), so the Game does not
+pre-screen either — it asks once and reads the answer. A pre-check would either duplicate the rule
+in two contracts, where the two can drift, or cost a second call to learn what the first returns.
+This is why `tryReserveLootboxPass` returns a bool rather than reverting.
 
 If a single batch contains both pass types, the automatic slot uses one high-roller pass first;
 all normal passes and any remaining high-roller passes become credits. This deterministic
 highest-value priority applies only across distinct boxes in one batch; one box itself never
-mixes denominations.
+mixes denominations. Only ONE attempt is made per batch: if the high-roller attempt returns
+`false`, the normal passes are credited rather than tried in its place, because a `false` means
+tomorrow is unavailable to any type.
 
 The Game must attempt at most one Game-to-Craps reservation call per resolution batch, not one
 call per winning box. The call must use a bounded gas stipend. Ordinary unavailability returns
@@ -510,7 +448,7 @@ be lost, and a broken Craps integration must not wedge lootbox settlement.
 A zero-pass WWXRP fallback is already fully settled as a spin and does not participate in this
 delivery step.
 
-## 10. Future-Day Reservation Applicators
+## 9. Future-Day Reservation Applicators
 
 Expose sibling player functions with behavior equivalent to:
 
@@ -528,12 +466,13 @@ function buyFutureCrapsDays(
 ) external;
 ```
 
-Function names and enum spelling may follow repository conventions, and an implementation may use
-one selector with an explicit funding enum. The user-facing reservation surface must offer both
-funding choices. One call uses exactly one funding source: it never silently consumes available
-pass credits and burns FLIP for a remainder.
+Function names may follow repository conventions, and an implementation may use one selector with
+an explicit funding enum. `CrapsPassType` itself is NOT free-form — it crosses the trust boundary
+and must have the single canonical definition §13 requires. The user-facing reservation surface
+must offer both funding choices. One call uses exactly one funding source: it never silently
+consumes available pass credits and burns FLIP for a remainder.
 
-### 10.1 Common valid input
+### 9.1 Common valid input
 
 - The reservation type is exactly `NORMAL` or `HIGH_ROLLER`.
 - The count is 1 through 255. The `uint8` ABI bound is the gas bound.
@@ -544,7 +483,7 @@ pass credits and burns FLIP for a remainder.
 
 Longer runs are made with multiple calls.
 
-### 10.2 Pass-credit atomic behavior
+### 9.2 Pass-credit atomic behavior
 
 The function must:
 
@@ -560,31 +499,29 @@ Two competing transactions are serialized by normal EVM state ordering: after on
 other must observe either an occupied day or insufficient credit and revert without partial state.
 
 The pass path additionally requires at least `numberOfPasses` live uncommitted credits of the
-selected type. It performs no FLIP burn and does not read or consume a battle boon.
+selected type. It performs no FLIP burn.
 
-### 10.3 Future-FLIP atomic behavior
+### 9.3 Future-FLIP atomic behavior
 
 The FLIP path must:
 
-1. Preflight the complete target range before consuming a boon or burning FLIP.
-2. Compute `grossPurchase = count * P_N` for normal reservations or `count * P_H` for high-roller
-   reservations, using the exact constants in Section 4.4.
-3. Consume at most one live battle boon and compute `netBurn` under Section 6.3.
-4. Burn exactly `netBurn` from `msg.sender` in one `FLIP.burnCoin` call.
-5. Reserve the selected type on every consecutive target day using the same day-state bits as a
+1. Preflight the complete target range before burning FLIP.
+2. Compute `purchasePrice = count * P_N` for normal reservations or `count * P_H` for high-roller
+   reservations, using the exact constants in Section 4.4. The multiplication is checked.
+3. Burn exactly `purchasePrice` from `msg.sender` in one `FLIP.burnCoin` call.
+4. Reserve the selected type on every consecutive target day using the same day-state bits as a
    pass-funded reservation.
-6. Emit one aggregate purchase event.
+5. Emit one aggregate purchase event.
 
-The path does not read or debit either pass-credit balance. If validation, boon consumption, FLIP
-burn, or any reservation write fails, EVM reversion restores the player's boon and FLIP balance and
-leaves every target day unchanged. There is no partial burn, partial reservation, skipped day, or
-credit fallback.
+The path does not read or debit either pass-credit balance. If validation, the FLIP burn, or any
+reservation write fails, EVM reversion restores the player's FLIP balance and leaves every target
+day unchanged. There is no partial burn, partial reservation, skipped day, or credit fallback.
 
-The fixed `netBurn` is final. The target day's eventual 10x/100x result and realized normal terms
-cause neither top-up nor refund. Repeating or racing the same range after one purchase succeeds must
-revert on occupancy before consuming another boon or burning additional FLIP.
+The price is final. The target day's eventual 10x/100x result and realized normal terms cause
+neither top-up nor refund. Repeating or racing the same range after one purchase succeeds must
+revert on occupancy before burning additional FLIP.
 
-### 10.4 Reservation, not automatic seating
+### 9.4 Reservation, not automatic seating
 
 Applying a pass or purchasing a future day reserves a funded full-day entitlement. It does not
 create the battle slip and does not choose the player's chip allocation. The player still calls the
@@ -598,10 +535,10 @@ This is deliberate:
 - `openBonusDay`, `advanceGame`, and settlement never iterate reservation holders.
 
 If the player does not enter during the target day's full-day lane, the reservation expires with
-no refund or action credit. A prepaid reservation's `netBurn` remains deleted. The historical
-mapping word may remain; no cleanup sweep is required.
+no refund or action credit. A prepaid reservation's burn remains deleted. The historical mapping
+word may remain; no cleanup sweep is required.
 
-## 11. Craps Day-State Packing
+## 10. Craps Day-State Packing
 
 Change the value stored at the existing `_daySeated[daySlot][player]` mapping root from `bool` to
 a packed byte or word with these flags:
@@ -619,6 +556,20 @@ The mapping root and key derivation remain unchanged. Existing `false/true` valu
 zero or the seated bit. Update the storage-layout golden because the compiler-reported mapping
 value type changes.
 
+**AS SHIPPED there are exactly five sites**, all in `contracts/CrapsBattle.sol`, and the change has
+to visit all of them:
+
+| Line | Site | What it becomes |
+|---:|---|---|
+| 757 | day-seat test inside the scheduled-window entry guard | any nonzero byte blocks |
+| 908 | `if (_daySeated[daySlot][msg.sender]) revert AlreadyInBonus();` | any nonzero byte reverts |
+| 930 | the paid day-lane seat | sets the seated bit |
+| 1736 | the sDGNRS house day ticket | sets the seated bit only |
+| 1753 | the vault day ticket | sets the seated bit only |
+
+The two protocol seats set **only** bit 0 and never a reservation bit — the house and the vault
+buy their day outright and are never reserved into it.
+
 All existing uses must distinguish the cases:
 
 - A scheduled single-window placement rejects any seated or reserved state for that day.
@@ -627,12 +578,12 @@ All existing uses must distinguish the cases:
 - Protocol house and vault day tickets set only the seated bit.
 - Successful reserved entry replaces the reservation bit with the seated bit in one storage write.
 
-No bit records pass versus FLIP funding, gross price, net burn, premium, battle-boon use, or any
-other purchase history. A pass-funded and prepaid reservation of the same type are byte-identical.
+No bit records pass versus FLIP funding, price, premium, or any other purchase history. A
+pass-funded and a prepaid reservation of the same type are byte-identical.
 
 An existing reservation is what “tomorrow is full” means for automatic lootbox delivery.
 
-## 12. Redeeming a Reserved Day
+## 11. Redeeming a Reserved Day
 
 Expose behavior equivalent to:
 
@@ -645,7 +596,14 @@ function enterReservedBonusDay(Craps.Bets calldata chips)
 An implementation may retain a pass-oriented selector name for compatibility, but its semantics
 must be reservation-generic and it must not require a funding-source argument.
 
-### 12.1 Entry window and validation
+### 11.1 Entry window and validation
+
+**AS SHIPPED, this forks from `_enterDayLane`.** `enterBonusDay` reads
+`(today, period, slot) = _currentBonusSlot()`, reverts `RngNotReady` on a zero daily word, and
+delegates to the private `_enterDayLane(today, word, chips, multiple)` when `period == 0`;
+past period 0 it falls through to the late-day per-window loop. The reserved path is the same
+period-0 branch with the burn skipped and the multiple forced, so it should share
+`_enterDayLane` rather than restate it.
 
 The call is valid only while period 0 still offers the existing early full-day lane. It must use
 the current day's nonzero daily word and the existing validation for:
@@ -658,7 +616,7 @@ the current day's nonzero daily word and the existing validation for:
 After period 0, the reservation cannot fund a partial remainder of the day. It expires without
 refund or settled action.
 
-### 12.2 Entry scale
+### 11.2 Entry scale
 
 - A normal reservation forces `multiple = 1`.
 - A high-roller reservation forces `multiple = _highMultOf(currentDailyWord)`.
@@ -668,7 +626,7 @@ refund or settled action.
 This removes stale-quote risk and prevents the caller from selecting normal versus high mode after
 the daily word is known. The reservation type fixed that choice earlier.
 
-### 12.3 Cost and state effects
+### 11.3 Cost and state effects
 
 Calculate `coveredCost` exactly as the paid full-day path would:
 
@@ -681,21 +639,24 @@ Then:
 
 1. Do not call `FLIP.burnCoin` for `coveredCost`.
 2. Replace the reservation bit with the seated bit.
-3. Increment the ordinary day-ticket count and, for a high reservation, the high-day-ticket count.
+3. Increment the day-ticket counts. **These are already one packed word**: `_dayTickets[daySlot]`
+   is a `uint64` holding the total in its low 32 bits and the high-roller subset above
+   `_DT_HIGH_SHIFT = 32`, and the paid lane advances both in a single write —
+   `_dayTickets[daySlot] + 1 + (high ? 1 << _DT_HIGH_SHIFT : 0)`. Reuse that expression; do not add
+   a second mapping.
 4. Store the same chip allocation, standing, and high-roller flag as a paid entry.
 5. Emit the ordinary slip event plus a reservation-consumption event containing the reservation type,
    multiplier, target day, and `coveredCost`.
 6. Award the ordinary one-per-day quest-streak credit.
 
 The entry participates in all seven main fields. A high-roller reservation also participates in
-all seven high-roller fields. Redemption neither reads nor consumes a battle boon: a prepaid entry
-already had its only purchase-time boon opportunity, and a pass redemption burns no FLIP.
+all seven high-roller fields.
 
-## 13. Battle and Boost Accounting
+## 12. Battle and Boost Accounting
 
-### 13.1 Gameplay and awards are unchanged
+### 12.1 Gameplay and awards are unchanged
 
-A pass-funded, prepaid, or battle-boon-discounted seat uses the same:
+A pass-funded or prepaid seat uses the same:
 
 - Craps engine and true/original odds;
 - bankroll, goal, board, and dice;
@@ -705,22 +666,21 @@ A pass-funded, prepaid, or battle-boon-discounted seat uses the same:
 - high-roller side pool or sole-rider route;
 - main boost and high-roller boost eligibility;
 - activity-score boost rationing;
-- walkover rules and claim paths.
+- payment at finalization: the seat that completes a field is the one that pays it.
 
-Funding and discount mechanics change only when/how much FLIP is burned, not the run.
+Funding mechanics change only when FLIP is burned, not the run.
 
 For one high-roller reserved entrant, the extra high-roller bounty allocation and the applicable
 high-roller boost still ride that player's run exactly as specified in the high-roller documents.
 They return zero on a bust and scale with the run on a win.
 
-### 13.2 Gameplay action is independent of reservation funding and discounts
+### 12.2 Gameplay action is independent of reservation funding
 
 A pass replaces a real flat-FLIP lootbox emission. Economically, redemption is equivalent to
 crediting that FLIP and immediately spending it on the day entry, even though the implementation
-skips both token operations. A future-FLIP reservation burns its fixed price earlier, and a battle
-boon may reduce the burn for either a future or live purchase. None of those facts changes settled
-action. Every resulting seat uses the exact same action accounting as an equivalent full-price
-live seat:
+skips both token operations. A future-FLIP reservation burns its fixed price earlier. Neither fact
+changes settled action. Every resulting seat uses the exact same action accounting as an equivalent
+full-price live seat:
 
 | Settled reserved seat | Add to `T(d)` | Add to `A_H(d)` |
 |---|---:|---:|
@@ -734,46 +694,45 @@ bankroll. Protocol-funded `Q_M`, `Q_H`, and donations remain excluded.
 
 Booking a future reservation writes zero to `_dayStaked` and `_highStaked`; action is booked only
 if/when the created seat settles. An expired prepaid reservation therefore produces no action even
-though its `netBurn` remains deleted.
+though its burn remains deleted.
 
 The following amounts are never added to action and never require a settlement distinction:
 
 - `P_N`, `P_H`, or aggregate future prepayment;
-- the economic difference between fixed prepay and expected/realized `coveredCost`;
-- a battle-boon discount or the resulting `netBurn`; and
+- the economic difference between fixed prepay and expected/realized `coveredCost`; and
 - any label or calculated component called tax or premium.
 
-No funding-, tax-, or discount-specific marker exists in the reservation state or bet header.
-Once a normal or high seat exists, settlement and future boost accounting intentionally cannot
-distinguish a live full-price, boon-discounted, pass-funded, or prepaid copy of that seat.
+No funding- or tax-specific marker exists in the reservation state or bet header. Once a normal or
+high seat exists, settlement and future boost accounting intentionally cannot distinguish a live
+full-price, pass-funded, or prepaid copy of that seat.
 
-## 14. Cross-Contract Authorization and Failure Semantics
+## 13. Cross-Contract Authorization and Failure Semantics
 
 The exact selector names are implementation choices, but the trust boundary must provide:
 
 ### Game-side surface
 
 ```solidity
-function crapsPassBalances(address player)
-    external
-    view
-    returns (uint24 normal, uint24 highRoller);
-
 function consumeCrapsPassCredits(
     address player,
     CrapsPassType passType,
     uint8 count
 ) external; // ContractAddresses.CRAPS only
-
-function consumeCrapsBattleBoon(address player)
-    external
-    returns (uint16 discountBps); // ContractAddresses.CRAPS only
 ```
 
-The lootbox module, executing by delegatecall in Game storage, may add credits directly.
-The boon module, also executing in Game storage, awards, upgrades, expires, and consumes the battle
-lane. No externally owned account, admin, or unrelated protocol contract may create or debit
-credits or consume a player's battle boon.
+**That is the whole new Game-side surface: one function.** There is no balance view — `boonPacked`
+is already a public getter and a client decodes bits 0..47 itself (§7.1) — and Craps needs no
+preflight read either, because `consumeCrapsPassCredits` uses checked subtraction and reverts on
+insufficiency (§7.2). One call debits and validates together.
+
+`CrapsPassType` crosses the trust boundary, so it needs ONE definition, not a copy on each side.
+Declare it in a small shared file both contracts already import — the same place
+`ContractAddresses` lives is acceptable — or pass a plain `uint8` with `0 = NORMAL`,
+`1 = HIGH_ROLLER` and reject every other value at both doors. Two independently declared enums that
+happen to agree today are a silent break the first time either is reordered.
+
+The lootbox module, executing by delegatecall in Game storage, may add credits directly. No
+externally owned account, admin, or unrelated protocol contract may create or debit credits.
 
 ### Craps-side surface
 
@@ -805,18 +764,33 @@ function enterReservedBonusDay(Craps.Bets calldata chips)
 ineligible target. Game nevertheless catches unexpected failure and credits the complete award.
 
 `CrapsBattle` uses its existing `ContractAddresses.CRAPS` authorization on `FLIP.burnCoin` for both
-ordinary entries and future prepayment. The new Game boon-consumption wrapper accepts only
-`ContractAddresses.CRAPS`, then delegatecalls the pinned boon module. Neither call reaches arbitrary
-player code.
+ordinary entries and future prepayment — no new FLIP authorization is required. The new Game
+credit-debit wrapper accepts only `ContractAddresses.CRAPS`. Neither call reaches arbitrary player
+code.
 
 All state transitions are atomic under EVM revert semantics. Existing lootbox order dequeue-before-
-resolution behavior must remain. Validation precedes boon consumption, and a failed FLIP burn or
-later state write reverts the cross-contract boon clear as part of the same transaction.
+resolution behavior must remain. Validation precedes the credit debit, and a failed FLIP burn or
+later state write reverts the cross-contract debit as part of the same transaction.
 
-## 15. Events and Views
+## 14. Events
 
-At minimum, expose enough information to reconstruct every pass, future purchase, and battle-boon
-award/consumption from logs and verify current inventory on chain.
+**EVENTS ONLY — NO NEW VIEWS ANYWHERE.** Everything an indexer or a UI needs is either already
+readable through an existing getter or reconstructable from the log stream:
+
+| What | Where it is read from |
+|---|---|
+| both uncommitted pass balances | the existing public `boonPacked` getter, bits 0..47 (§7.1) |
+| a player's reservations, and whether a day is taken | the `CrapsPassesApplied` / `CrapsFutureDaysPurchased` / `CrapsReservationConsumed` stream |
+| the four price and denomination constants | the source; they are immutable and published |
+| whether a target day is still eligible | replay the same two conditions off the day index and the public daily word (§6.2) |
+
+⚠ **THIS IS A HARD BUDGET RULE, NOT A PREFERENCE.** `CrapsBattle` ships at 20,915 bytes with
+**3,661 bytes of EIP-170 margin** and no public constants at all — the reader surface was
+deliberately taken internal to buy that margin, and §13 already adds four external functions to it.
+A view added here is margin spent on something a log already answers.
+
+The events below are what makes that possible, so their completeness is load-bearing rather than
+nice to have.
 
 Recommended events:
 
@@ -852,9 +826,7 @@ event CrapsFutureDaysPurchased(
     uint24 indexed startDay,
     uint8 count,
     uint8 indexed reservationType,
-    uint256 grossPurchase,
-    uint16 boonBps,
-    uint256 netBurn
+    uint256 purchasePrice
 );
 
 event CrapsReservationConsumed(
@@ -870,24 +842,16 @@ The exact event packing may be optimized, provided these facts remain indexable 
 
 A pass outcome must not masquerade as an ordinary all-zero `LootBoxOpened` event. Either suppress
 that generic event for the pass branch or extend the outcome schema unambiguously. The dedicated
-pass event must also identify a zero-pass WWXRP fallback. The existing boon award/consumption event
-families must identify the new independent battle-boon category. No event needs or may invent a
-separate tax amount; the purchase event reports only gross price, actual boon BPS, and net burn.
+pass event must also identify a zero-pass WWXRP fallback. No event needs or may invent a separate
+tax or premium amount; the purchase event reports the one price that was burned.
 
-Required views:
+No on-chain enumeration of all pass holders or all reservations is required, and no view is added
+to expose one.
 
-- both uncommitted pass balances for a player;
-- raw or decoded day-state flags for a player/day;
-- the two pass denomination constants and two fixed future-purchase prices;
-- decoded live battle-boon tier/expiry state; and
-- whether a target day is still eligible for either reservation funding path.
+## 15. Gas and Liveness Requirements
 
-No on-chain enumeration of all pass holders or all reservations is required.
-
-## 16. Gas and Liveness Requirements
-
-1. `openBonusDay`, `advanceGame`, window arming, battle settlement, and claims must not iterate
-   pass holders, boon holders, or future reservations.
+1. `openBonusDay`, `advanceGame`, window arming, and battle settlement (which is also what pays)
+   must not iterate pass holders or future reservations.
 2. Automatic tomorrow delivery makes at most one bounded-gas Craps call and one packed Game
    credit write per lootbox resolution batch.
 3. A box that awards neither pass type performs neither operation.
@@ -898,16 +862,18 @@ No on-chain enumeration of all pass holders or all reservations is required.
 6. Ten applications should be roughly 0.2M–0.3M gas; one hundred roughly 2M–3M; the 255-day
    worst case must be measured rather than accepted from this estimate.
 7. Both measured 255-day calls must remain below the repository's 10M normal-path target and the
-   16.7M hard transaction ceiling. The FLIP-funded path performs exactly one boon-consumption call
-   and one FLIP burn regardless of count.
+   16.7M hard transaction ceiling. The FLIP-funded path performs exactly one FLIP burn regardless
+   of count, and the pass path exactly one Game call.
 8. Reserved entry reuses the existing day-state read/write and skips the FLIP burn call; it must not
    add a new per-window storage mapping.
-9. An ordinary paid Craps purchase adds at most one authorized Game call when a boon check is
-   required; no boon-holder-dependent loop or per-window boon mapping is permitted.
-10. Contract deployed sizes must remain below EIP-170 limits after extending the boon module,
-    viewer, Game wrapper, and Craps purchase paths.
+9. **Every existing paid Craps purchase is untouched** — `enterBattle`, `enterBonusBattle` and
+   `enterBonusDay` add no call, no read and no branch, and must measure gas-identical to today.
+10. Contract deployed sizes must remain below EIP-170 limits. ⚠ The binding one is `CrapsBattle`:
+    **3,661 bytes of margin** at 20,915, against four new external functions and the `_daySeated`
+    packing change. Measure after every step of the Craps-side work rather than at the end, and
+    add no view to it (§14).
 
-## 17. Normative Requirements
+## 16. Normative Requirements
 
 ### R1 — Reward-table reallocation
 
@@ -940,13 +906,13 @@ No on-chain enumeration of all pass holders or all reservations is required.
 - **Acceptance:** Forced round-down and round-up cases prove exactly one fallback versus exactly
   one pass; high-roller conversion never reaches the fallback.
 
-### R5 — Packed pass inventory and battle-boon lane
+### R5 — Packed pass inventory
 
 - **Current:** `boonPacked.slot1` bits 0..71 are unused.
-- **Target:** Bits 0..23 and 24..47 hold saturating normal and high balances, bits 48..71 hold the
-  independent battle-boon lane, and every existing boon field is preserved.
-- **Acceptance:** Layout-oracle and coexistence tests mutate every boon/pass lane in both orders
-  and prove no cross-lane clobber.
+- **Target:** Bits 0..23 and 24..47 hold saturating normal and high balances, bits 48..71 stay
+  free, and every existing boon field is preserved.
+- **Acceptance:** Layout-oracle and coexistence tests mutate every boon lane and both pass lanes in
+  both orders and prove no cross-lane clobber.
 
 ### R6 — Automatic tomorrow delivery
 
@@ -1010,16 +976,18 @@ No on-chain enumeration of all pass holders or all reservations is required.
 
 - **Current:** Existing generic lootbox events cannot identify a pass.
 - **Target:** Logs distinguish pass roll, zero fallback, automatic reservation, credit delivery,
-  manual application, future purchase, reservation consumption, and battle-boon award/use; views
-  expose balances, prices, boon state, and day state.
-- **Acceptance:** Event-schema tests reconstruct a multi-box mixed delivery, discounted future
-  purchase, and later consumption exactly and prove no pass or boon is misidentified.
+  manual application, future purchase and reservation consumption. **No new view is added on either
+  contract**; balances read through the existing `boonPacked` getter and everything else replays
+  from the log stream.
+- **Acceptance:** Event-schema tests reconstruct a multi-box mixed delivery, a future purchase and
+  its later consumption exactly, and prove no pass is misidentified. An ABI test proves no reader
+  was added to `CrapsBattle` beyond the four functions in §13.
 
 ### R14 — Bounded gas and compatible layout
 
 - **Current:** Daily Craps resolution has no pass loop; Game and Craps layouts are golden-tested.
-- **Target:** Daily system paths remain O(1) in pass/boon-holder count, both user reservation loops
-  are bounded at 255, and all layout/type changes are reflected in the oracle.
+- **Target:** Daily system paths remain O(1) in pass-holder count, both user reservation loops are
+  bounded at 255, and all layout/type changes are reflected in the oracle.
 - **Acceptance:** Source-structure and gas tests find no system-path pass iteration, measure the
   two 255-day calls below 10M/16.7M, and pass storage-layout plus EIP-170 checks.
 
@@ -1027,26 +995,14 @@ No on-chain enumeration of all pass holders or all reservations is required.
 
 - **Current:** A player can buy today's known scheduled entries, but cannot burn FLIP now to reserve
   strictly future unknown normal/high days.
-- **Target:** One call atomically burns 25,000 FLIP per normal day or 450,000 FLIP per high day,
-  optionally reduced by one live battle boon, and creates 1..255 consecutive reservations identical
-  to pass-funded state. Gross price, net burn, premium, and funding source never enter gameplay
-  action or reservation/bet storage.
+- **Target:** One call atomically burns 25,000 FLIP per normal day or 450,000 FLIP per high day
+  and creates 1..255 consecutive reservations identical to pass-funded state. Price, premium and
+  funding source never enter gameplay action or reservation/bet storage.
 - **Acceptance:** Price, count, range, collision, replay, 10x/100x, failure-rollback, expiry, and
   action-parity tests prove one upfront burn, no redemption burn/refund/top-up, no funding marker,
-  and no action from price/premium/discount.
+  and no action from price or premium.
 
-### R16 — Independent battle-discount boon
-
-- **Current:** FLIP Degenerette has an independent 4/8/12% stake-boon lane capped at a 100,000-FLIP
-  base; Craps purchases have no equivalent discount boon.
-- **Target:** Boon ids 41..43 add an independently packed 4/8/12% Craps purchase discount with
-  200/50/10 draw weights, the same 100,000-FLIP cap, expiry, deity, and upgrade-only rules, and
-  consumption only on the next successful self-funded FLIP Craps purchase.
-- **Acceptance:** Exhaustive draw, EV-normalization, storage-coexistence, expiry/upgrade,
-  eligibility, cap/rounding, atomic-consumption, authorization, and action-parity tests match
-  Sections 6.1..6.4 without touching any Degenerette lane.
-
-## 18. Acceptance Criteria
+## 17. Acceptance Criteria
 
 - [ ] **AC-01:** Regular lootbox rolls map 0..19 exactly as Section 2.2; presale boxes are unchanged.
 - [ ] **AC-02:** `NORMAL_DAY_PASS_VALUE` is exactly 22,800 FLIP,
@@ -1059,8 +1015,9 @@ No on-chain enumeration of all pass holders or all reservations is required.
 - [ ] **AC-06:** Zero normal passes execute one genuine-VRF-derived WWXRP spin and create no pass state.
 - [ ] **AC-07:** No pseudo-random, block-derived, caller-derived, target-day-derived, or admin-derived
   entropy enters a pass outcome.
-- [ ] **AC-08:** Normal credits, high credits, and the battle boon occupy only their assigned
-  `boonPacked.slot1` lanes; pass balances saturate without wrapping or reverting a lootbox sweep.
+- [ ] **AC-08:** Normal and high credits occupy only bits 0..47 of `boonPacked.slot1`, leave bits
+  48..71 zero, and clobber no existing boon lane in either write order; pass balances saturate
+  without wrapping or reverting a lootbox sweep.
 - [ ] **AC-09:** A batch makes at most one automatic Craps call and at most one packed credit write.
 - [ ] **AC-10:** Eligible empty tomorrow receives exactly one pass; every remaining pass is credited.
 - [ ] **AC-11:** An occupied, already-worded, overflowed, reverted, or out-of-gas automatic target credits
@@ -1085,59 +1042,47 @@ No on-chain enumeration of all pass holders or all reservations is required.
 - [ ] **AC-22:** Paid entry and single-window entry reject a player with a reservation for that day.
 - [ ] **AC-23:** Reserved entry preserves chip validation, frozen standing, quest-streak credit, main/high ranking,
   bounty, boost, rider, and payout behavior.
-- [ ] **AC-24:** Full-price, battle-boon-discounted, pass-funded, and prepaid copies of an equivalent
-  seat contribute exactly the same amount to `_dayStaked` and `_highStaked`, including the
-  sole-high extra-bounty rider rule.
-- [ ] **AC-25:** Unauthorized Game/Craps pass creation, credit debit, battle-boon consumption, and
-  automatic reservation calls revert.
-- [ ] **AC-26:** Logs and views reconstruct pass awards/dispositions, future purchases, battle-boon
-  awards/consumption, reservations, and consumption; no pass or boon appears as an unexplained generic outcome.
-- [ ] **AC-27:** No pass-, boon-, or reservation-holder loop is reachable from `openBonusDay`,
-  `advanceGame`, arming, settlement, or claim.
+- [ ] **AC-24:** Full-price, pass-funded, and prepaid copies of an equivalent seat contribute
+  exactly the same amount to `_dayStaked` and `_highStaked`, including the sole-high extra-bounty
+  rider rule.
+- [ ] **AC-25:** Unauthorized Game/Craps pass creation, credit debit, and automatic reservation
+  calls revert.
+- [ ] **AC-26:** Logs alone reconstruct pass awards/dispositions, future purchases, reservations
+  and consumption; no pass appears as an unexplained generic outcome. **No new view exists on
+  either contract**, and an ABI snapshot proves `CrapsBattle` gained nothing beyond §13's four
+  functions.
+- [ ] **AC-27:** No pass- or reservation-holder loop is reachable from `openBonusDay`,
+  `advanceGame`, arming, or settlement.
 - [ ] **AC-28:** Measured 255-day pass and FLIP applications are each below 10M gas and the 16.7M
-  hard transaction ceiling; the FLIP path makes one boon call and one burn call regardless of count.
+  hard transaction ceiling; the FLIP path makes exactly one burn call regardless of count.
 - [ ] **AC-29:** Game and Craps storage-layout goldens and the EIP-170 deployed-size checks pass.
-- [ ] **AC-30:** Existing non-pass lootbox, boon, Degenerette, Craps, high-roller, gas-ceiling,
-  RNG-freeze, and storage-coexistence regression suites remain green.
+- [ ] **AC-30:** Existing lootbox, boon, Degenerette, Craps, high-roller, gas-ceiling, RNG-freeze,
+  and storage-coexistence regression suites remain green, and the existing paid Craps entry paths
+  measure gas-identical to today.
 - [ ] **AC-31:** `NORMAL_FUTURE_DAY_PRICE` is exactly 25,000 FLIP and
   `HIGH_ROLLER_FUTURE_DAY_PRICE` is exactly 450,000 FLIP; neither is derived from a pass denomination
   or from the other future price.
 - [ ] **AC-32:** A future-FLIP purchase accepts counts 1 and 255, rejects 0, calculates the exact
   checked gross product, performs one upfront burn, and reserves the complete consecutive range.
-- [ ] **AC-33:** Any invalid/occupied/worded day, overflow, failed boon call, insufficient FLIP,
-  failed burn, or failed reservation write reverts the complete future purchase with no boon loss,
-  FLIP burn, pass debit, or reservation.
+- [ ] **AC-33:** Any invalid/occupied/worded day, overflow, insufficient FLIP, failed burn, or
+  failed reservation write reverts the complete future purchase with no FLIP burn, pass debit, or
+  reservation.
 - [ ] **AC-34:** The same fixed high price is committed before `H` is known and produces the target
   day's genuine 10x or 100x seat with no top-up, refund, surcharge, or second burn; expiry refunds nothing.
 - [ ] **AC-35:** Pass-funded and FLIP-prepaid reservations of the same type have byte-identical day
-  state, and neither reservation nor bet stores funding, gross price, net burn, tax, premium, or boon use.
+  state, and neither reservation nor bet stores funding, price, tax, or premium.
 - [ ] **AC-36:** Future purchase writes no `_dayStaked`/`_highStaked`; settlement books only the
-  ordinary seat-derived action. Gross price, net burn, premium, and boon discount never enter action.
-- [ ] **AC-37:** Boon ids 41/42/43 have exact 200/50/10 weights, the full table totals 2,868, and
-  exhaustive module/viewer draws plus deity remapping agree for every reachable roll.
-- [ ] **AC-38:** The weighted-value formula adds the battle family's 4,000/8,000/12,000-FLIP maxima,
-  yielding `BOON_PRICE_WEIGHT = 4,590` while leaving the 10% budget, 1-ETH cap, 50% utilization,
-  fixed-value term, and lazy term unchanged.
-- [ ] **AC-39:** The battle boon occupies only bits 48..71, coexists with all pass and boon lanes,
-  applies upgrade-only replacement, and matches FLIP Degenerette lootbox/deity expiry semantics.
-- [ ] **AC-40:** On gross costs below, exactly at, and above 100,000 FLIP, the 4/8/12% boon floors
-  the discount exactly as Section 6.3 and never discounts more than 4,000/8,000/12,000 FLIP.
-- [ ] **AC-41:** Exactly one live battle boon is consumed by the next successful self-funded paid
-  custom, scheduled, daily-bundle, or future-prepay purchase; invalid/zero-entry calls, donations,
-  gifts, pass/prepay redemption, house/vault seats, claims, and settlement do not consume it.
-- [ ] **AC-42:** A battle-boon-discounted purchase creates identical bankroll, bounty, odds,
-  rankings, payout, and settled action to the undiscounted purchase, and never reads or clears any
-  Degenerette boon lane.
+  ordinary seat-derived action. Price and premium never enter action.
 
-## 19. Edge Coverage
+## 18. Edge Coverage
 
 The canonical edge-completeness classifier raised 59 applicable edges across R1..R14. The update
-probe explicitly classified R15 and R16 as numeric-range, collection, stateful, and I/O behavior
-and raised seven boundary/adjacency/empty/ordering/precision/idempotency/concurrency edges for each,
-for 73 total. The rows below group candidates only when the same acceptance checks resolve every
-category named.
+probe explicitly classified R15 as numeric-range, collection, stateful, and I/O behavior and raised
+seven boundary/adjacency/empty/ordering/precision/idempotency/concurrency edges for it, for 66
+total. The rows below group candidates only when the same acceptance checks resolve every category
+named.
 
-**Coverage:** 73/73 applicable edges resolved explicitly; 0 unresolved.
+**Coverage:** 66/66 applicable edges resolved explicitly; 0 unresolved.
 
 | Categories | Requirement | Status | Explicit resolution |
 |---|---|---|---|
@@ -1145,7 +1090,7 @@ category named.
 | Boundary, precision, idempotency, concurrency | R2 | Resolved | AC-02..05 pin pre-rounding value, `20N` boundary, per-box ordering, replay, and unbiased rounding. |
 | Idempotency, concurrency | R3 | Resolved | AC-05 and AC-07 pin deterministic replay and immutable entropy inputs. |
 | Boundary, precision, idempotency, concurrency | R4 | Resolved | AC-06 covers zero versus nonzero and exactly-once fallback. |
-| Boundary, precision, idempotency, concurrency | R5 | Resolved | AC-08, AC-15, AC-29, and AC-39 cover zero/max counts, saturation, atomic debit, and every low-slot lane. |
+| Boundary, precision, idempotency, concurrency | R5 | Resolved | AC-08, AC-15 and AC-29 cover zero/max counts, saturation, atomic debit, and lane isolation in both write orders. |
 | Adjacency, empty, ordering, idempotency, concurrency | R6 | Resolved | AC-09..12 define empty batches, occupied tomorrow, mixed ordering, retry, and failure disposition. |
 | Boundary, adjacency, empty, ordering, precision, idempotency, concurrency | R7 | Resolved | AC-13..15 cover 0/1/255, touching ranges, overlap, ordering, overflow, replay, and atomicity. |
 | Adjacency, empty, ordering, idempotency, concurrency | R8 | Resolved | AC-16..18 define mutually exclusive states, replay rejection, and expiry. |
@@ -1153,30 +1098,28 @@ category named.
 | Boundary, precision, idempotency, concurrency | R10 | Resolved | AC-14 and AC-20 pin preword commitment and exact 10x/100x derivation. |
 | Adjacency, empty, ordering, idempotency, concurrency | R11 | Resolved | AC-09..12 cover accumulation order, empty batch, one call/write, and fail-open retry behavior. |
 | Boundary, precision, idempotency, concurrency | R12 | Resolved | AC-08, AC-15, and AC-25 cover max balances, exact debit, authorization, and atomic conservation. |
-| Adjacency, empty, ordering, concurrency | R13 | Resolved | AC-26 fixes event identity, aggregate ordering, zero fallback, and view parity. |
+| Adjacency, empty, ordering, concurrency | R13 | Resolved | AC-26 fixes event identity, aggregate ordering, zero fallback, and log-only reconstruction. |
 | Boundary, adjacency, empty, ordering, precision, idempotency, concurrency | R14 | Resolved | AC-27..30 pin the 255 bound, empty/system paths, stable layout, gas ceiling, and regression behavior. |
 | Boundary, adjacency, empty, ordering, precision, idempotency, concurrency | R15 | Resolved | AC-31..36 pin both prices, 0/1/255 counts, touching/occupied ranges, preflight-before-burn ordering, exact multiplication, replay/races, rollback, target-day uncertainty, and action isolation. |
-| Boundary, adjacency, empty, ordering, precision, idempotency, concurrency | R16 | Resolved | AC-37..42 pin draw boundaries, empty/expired lanes, independent-lane adjacency, award/consume ordering, cap precision, upgrade/replay behavior, atomic rollback, and concurrent next-purchase consumption. |
 
-## 20. Prohibitions (Must NOT)
+## 19. Prohibitions (Must NOT)
 
-The prohibition probe retained seven product-specific constraints. Generic Solidity access control,
+The prohibition probe retained five product-specific constraints. Generic Solidity access control,
 reentrancy, arithmetic safety, and EIP-170 compliance remain mandatory but are canonical contract-
 audit concerns rather than duplicated bespoke prohibitions.
 
-**Coverage:** 7/7 applicable prohibitions resolved; 0 unresolved.
+**Coverage:** 5/5 applicable prohibitions resolved; 0 unresolved.
 
 | Prohibition | Requirement | Status | Verification |
 |---|---|---|---|
 | A reservation must not be assigned to the current day or to a day whose daily word is already known. | R7, R10, R15 | Resolved | Test: AC-14, AC-20, AC-34 |
 | A committed reservation must not become a free option through deferred prepay burn, cancellation, refund, transfer, upgrade, downgrade, or rescheduling after terms are known. | R8, R10, R15 | Resolved | Test: AC-17, AC-18, AC-32..34 |
 | Pass randomness must not silently become pseudo-random, admin-selected, block-derived, caller-derived, or participation-dependent. | R3 | Resolved | Test plus adversarial source review: AC-07 |
-| The protocol must not auto-seat reservation holders or iterate pass/boon holders during daily system work. | R9, R14 | Resolved | Test/source structure: AC-27 |
-| A pass or battle-boon outcome must not be represented to indexers as an unexplained or wrong-category lootbox result. | R13, R16 | Resolved | Test: AC-26, AC-37 |
-| Fixed future price, premium, net burn, or battle-boon discount must not enter settled action or force a funding/tax marker into reservation or bet state. | R15, R16 | Resolved | Test: AC-24, AC-35, AC-36, AC-42 |
-| A battle boon must not consume a Degenerette lane or be spent by an invalid, zero-entry, gifted, free, protocol-funded, donation, redemption, claim, or settlement path. | R16 | Resolved | Test: AC-39, AC-41, AC-42 |
+| The protocol must not auto-seat reservation holders or iterate pass holders during daily system work. | R9, R14 | Resolved | Test/source structure: AC-27 |
+| A pass outcome must not be represented to indexers as an unexplained or wrong-category lootbox result. | R13 | Resolved | Test: AC-26 |
+| Fixed future price or premium must not enter settled action or force a funding/tax marker into reservation or bet state. | R15 | Resolved | Test: AC-24, AC-35, AC-36 |
 
-## 21. Boundaries
+## 20. Boundaries
 
 ### In scope
 
@@ -1186,16 +1129,12 @@ audit concerns rather than duplicated bespoke prohibitions.
 - Per-box exclusive denomination and genuine-VRF Bernoulli rounding.
 - Zero-pass WWXRP Degenerette fallback.
 - Packed normal/high pass inventories in Game storage.
-- Fixed future normal/high purchases at 25,000/450,000 FLIP, with one optional battle-boon
-  discount and immediate atomic burn.
+- Fixed future normal/high purchases at 25,000/450,000 FLIP, burned immediately and atomically.
 - One automatic tomorrow reservation per lootbox resolution batch.
 - Same-type consecutive future-day reservation application funded wholly by pass credit or FLIP.
 - Full-day period-0 reservation redemption for normal and scheduled high-roller seats.
-- Funding/tax/discount-blind, paid-seat-equivalent action accounting.
-- A separate packed Craps battle-boon family with 4/8/12% tiers, 100,000-FLIP discount-base cap,
-  200/50/10 weights, FLIP-Degenerette-equivalent lifecycle, and use on the next eligible purchase.
-- Boon-table/viewer/normalization updates while preserving the existing boon budget.
-- Events, views, interfaces, storage-layout updates, gas tests, and economic/RNG invariants.
+- Funding/tax-blind, paid-seat-equivalent action accounting.
+- Events, interfaces, storage-layout updates, gas tests, and economic/RNG invariants.
 
 ### Out of scope
 
@@ -1209,25 +1148,29 @@ audit concerns rather than duplicated bespoke prohibitions.
 - Reservation cancellation, upgrade, downgrade, refund, or rescheduling — these would recreate outcome selection.
 - Hybrid pass-plus-FLIP funding inside one reservation call — each call chooses one complete funding source.
 - Dynamic, participation-based, day-specific, or admin-set future purchase prices — prices are fixed constants.
-- Transferable, refundable, or cash-redeemable battle boons — the boon is account-bound utility.
-- Applying the battle boon to pass/prepay redemption, gifts, donations, protocol seats, claims, or settlement — only a successful self-funded FLIP purchase consumes it.
-- Admin-set pass outcomes, pass grants, boon outcomes, prices, or entropy — random awards are VRF-derived and prices are immutable.
+- **Any Craps purchase-discount boon** — no boon table, viewer, weight, or normalization change is
+  in scope, and no Craps purchase reads a boon lane. `BOON_WEIGHT_TOTAL` stays 2,608 and
+  `BOON_PRICE_WEIGHT` stays 3,270.
+- **Any new view on either contract** — balances read through the existing `boonPacked` getter and
+  everything else replays from logs; `CrapsBattle` has no margin to spend on readers.
+- Admin-set pass outcomes, pass grants, prices, or entropy — random awards are VRF-derived and
+  prices are immutable.
 - Any change to Craps odds, goals, bankroll tables, bounties, mystery boosts, ranking, or the 90/10 high-multiplier draw.
-- Any change to the lootbox boon budget percentage, 1-ETH cap, 50% utilization assumption, or
-  non-flat-FLIP main-reward magnitudes — only the normalized boon table is extended.
+- Any change to the lootbox boon budget percentage, 1-ETH cap, 50% utilization assumption, boon
+  table, or non-flat-FLIP main-reward magnitudes.
 - On-chain enumeration of all holders/reservations or cleanup of expired historical words.
 
-## 22. Ambiguity Report
+## 21. Ambiguity Report
 
 | Dimension | Score | Minimum | Status | Notes |
 |---|---:|---:|---|---|
-| Goal clarity | 0.98 | 0.75 | Met | Passes, fixed future purchase, and battle-boon outcomes are exact. |
+| Goal clarity | 0.98 | 0.75 | Met | Pass and fixed-future-purchase outcomes are exact. |
 | Boundary clarity | 0.96 | 0.70 | Met | Eligible purchase/reservation surfaces and excluded systems are enumerated. |
-| Constraint clarity | 0.95 | 0.65 | Met | RNG, prices, packing, boon lifecycle, commitment, gas, authorization, and action accounting are fixed. |
-| Acceptance criteria | 0.96 | 0.70 | Met | Forty-two pass/fail checks cover unit, integration, economic, and gas behavior. |
+| Constraint clarity | 0.95 | 0.65 | Met | RNG, prices, packing, commitment, gas, authorization, and action accounting are fixed. |
+| Acceptance criteria | 0.96 | 0.70 | Met | Thirty-six pass/fail checks cover unit, integration, economic, and gas behavior. |
 | **Ambiguity** | **0.04** | **<= 0.20** | **Gate passed** | No unresolved product decision remains. |
 
-## 23. Decision Log
+## 22. Decision Log
 
 | Perspective | Question resolved | Locked decision |
 |---|---|---|
@@ -1241,11 +1184,12 @@ audit concerns rather than duplicated bespoke prohibitions.
 | Economic feedback | Does a pass entry fund future boost? | Yes; the pass replaces real lootbox FLIP emission, so it books exactly the same action as an equivalent paid seat. |
 | Specification close | Which type takes an empty tomorrow slot in a mixed batch? | High-roller first; all other passes become credits. |
 | Future purchase | What are the fixed FLIP prices? | 25,000 normal and 450,000 high roller, burned upfront; the constants are independent. |
-| Accounting simplifier | Does fixed-price premium or boon discount count as action? | No. Only ordinary settled seat action is booked; no funding/tax/discount marker exists. |
-| Boon design | What does the Craps boon mirror? | A separate 4/8/12% lane with the FLIP Degenerette family's 100k cap, 200/50/10 weights, expiry, and upgrade rules. |
-| Boon boundary | Which call spends it? | The next successful self-funded FLIP Craps purchase, including future prepay; never redemption, gifts, donations, protocol seats, or failed calls. |
+| Accounting simplifier | Does fixed-price premium count as action? | No. Only ordinary settled seat action is booked; no funding/tax marker exists. |
+| Scope (2026-08-26) | Is there a Craps purchase-discount boon? | **No — cut.** USER: *"dont worry about boons or views we dont have room for that."* The boon family, its lane, its table/viewer/normalization changes and every discount path are OUT. `BOON_WEIGHT_TOTAL` stays 2,608 and `BOON_PRICE_WEIGHT` stays 3,270, and no Craps purchase reads a boon. |
+| Scope (2026-08-26) | What new views are added? | **None, on either contract.** Balances come from the existing public `boonPacked` getter; everything else replays from the event stream. `CrapsBattle` has 3,661 bytes of margin, no public constants at all, and §13 already spends four externals on it. |
+| Delivery (2026-08-26) | Does the Game pre-screen tomorrow before calling Craps? | No. The one `tryReserveLootboxPass` call IS the eligibility test — its bool answer covers occupancy and the word. A pre-check would duplicate the rule in two contracts that can drift, or cost a second call to learn what the first returns. |
 
-## 24. Required Test Matrix
+## 23. Required Test Matrix
 
 At minimum, the implementation plan must cover:
 
@@ -1257,22 +1201,20 @@ At minimum, the implementation plan must cover:
 - Bernoulli mean, boundary, deterministic-replay, seed-uniqueness, and domain-separation tests.
 - Zero-pass WWXRP fallback and nonzero no-fallback tests.
 - Per-box threshold versus aggregate-batch non-equivalence regression.
-- Exhaustive 0..2,867 boon-table parity across the module and `DeityBoonViewer`, including exact
-  200/50/10 battle-boon bands and deity eligible-range remapping.
-- Legacy-table versus optimized weighted-average parity with the added 4k/8k/12k-FLIP maximum
-  values, `BOON_PRICE_WEIGHT = 4,590`, and total weight 2,868.
+- The existing boon-table parity suites still pass UNCHANGED: `BOON_WEIGHT_TOTAL` is still 2,608
+  and `BOON_PRICE_WEIGHT` still 3,270. This work adds no boon and must not move either.
 - Direct, auto-resolved, recirculated, redemption, afking, and other callers of the shared regular
   lootbox resolver; presale resolver unchanged.
 
 ### Storage and integration tests
 
-- All existing boon lanes, the battle-boon lane, and both pass balances coexisting under every
-  writer/expiry/consume ordering.
+- All existing boon lanes and both pass balances coexisting under every writer/expiry ordering,
+  and bits 48..71 of `slot1` still reading zero afterwards.
 - `uint24` saturation and checked debit.
 - Empty tomorrow, normal-full tomorrow, high-full tomorrow, already-worded tomorrow, day overflow,
   Craps false return, Craps revert, and bounded-call out-of-gas.
 - Multi-box normal-only, high-only, and mixed accumulation with one call/write.
-- Game-only auto reservation and Craps-only credit/battle-boon consumption.
+- Game-only auto reservation and Craps-only credit consumption.
 - Storage-layout oracle proving the Game low-bit allocation and Craps mapping-type change.
 
 ### Reservation-applicator state-machine tests
@@ -1283,27 +1225,11 @@ At minimum, the implementation plan must cover:
 - Exact 25,000/450,000 unit prices and checked aggregate multiplication; high price remains fixed on
   forced 10x and 100x target days.
 - One prepay burn for the complete range and no redemption burn, top-up, surcharge, or refund.
-- Atomic rollback of Game credit debit, battle-boon consumption, FLIP burn, and Craps reservations.
+- Atomic rollback of the Game credit debit, the FLIP burn, and the Craps reservations.
 - Concurrent/replayed application and cross-type overlap.
-- Byte-identical pass/prepaid day states and absence of funding/tax/price/discount markers.
+- Byte-identical pass/prepaid day states and absence of funding/tax/price markers.
 - Expiry without credit restoration, action, refund, cancellation, reschedule, transfer, upgrade,
   or downgrade.
-
-### Battle-boon tests
-
-- Independent slot1 bits 48..71 and no read/write/clear of ETH, FLIP, or WWXRP Degenerette lanes.
-- Lootbox two-day and deity same-day expiry, 21-bit day handling, expired-lane clear, upgrade-only
-  replacement, and no lower/equal-tier refresh.
-- Discount bases below, exactly at, and above 100,000 FLIP for all three tiers; integer-floor dust.
-- Exact future normal net burns 24,000/23,000/22,000 FLIP and single-high net burns
-  446,000/442,000/438,000 FLIP.
-- One consumption per successful `enterBattle`, `enterBonusBattle`, bundled `enterBonusDay`, and
-  future-prepay call, including a late-day bundle with skipped windows.
-- No consumption on invalid/reverted/zero-placement calls, pass/prepay redemption, gifts, donations,
-  house/vault seats, claims, settlement, or walkover.
-- Boon clear rolls back if Game response, FLIP burn, or any later Craps write reverts; concurrent
-  purchases cannot both use the same boon.
-- Unauthorized consumption reverts; award and consumption events identify the battle lane.
 
 ### Entry and economic tests
 
@@ -1313,25 +1239,26 @@ At minimum, the implementation plan must cover:
 - Period boundary immediately before and after the full-day lane closes.
 - Exact skipped burn, one reservation consumption, seven joined windows, and quest credit.
 - Paid day entry and individual-window entry blocked by a reservation.
-- Pass-funded, prepaid, full-price, and boon-discounted main/high winners, busts, walkovers,
-  contested pots, and sole high rider.
-- Identical ranking/gameplay result for full-price, pass-funded, prepaid, and boon-discounted copies
-  of the same committed inputs.
-- Exact `_dayStaked`/`_highStaked` parity across every funding/discount copy of every seat shape,
-  including the sole-high `X` rider; prepayment itself and expired reservations book zero action.
-- Gross price, net burn, premium, and boon discount remain absent from action calculations.
+- Pass-funded, prepaid and full-price main/high winners, busts, contested pots, and sole high rider.
+- Identical ranking/gameplay result for full-price, pass-funded and prepaid copies of the same
+  committed inputs.
+- Exact `_dayStaked`/`_highStaked` parity across every funding copy of every seat shape, including
+  the sole-high `X` rider; prepayment itself and expired reservations book zero action.
+- Price and premium remain absent from action calculations.
 - Protocol-funded boosts and donations remain excluded from action on all seat variants.
 
 ### Gas and size tests
 
 - Automatic no-award, award-plus-credit, and award-plus-reservation marginals.
-- Pass and future-FLIP application gas at 1, 10, 100, and 255 days, proving one boon call and one
-  burn call independent of count.
-- Reserved entry versus full-price and boon-discounted paid-entry gas.
-- No pass-, boon-, or reservation-count-dependent gas in `openBonusDay`, `advanceGame`, arming,
-  settlement, or claim.
-- Game wrapper, boon-module/viewer, and Craps deployed-size deltas; 10M target, 16.7M hard ceiling,
-  EIP-170 size, and existing Craps/lootbox/boon gas suites.
+- Pass and future-FLIP application gas at 1, 10, 100, and 255 days, proving one burn call and one
+  Game call independent of count.
+- Reserved entry versus full-price paid-entry gas.
+- **The three existing paid entry paths measure gas-identical to today** — the strongest single
+  check that nothing was added to them.
+- No pass- or reservation-count-dependent gas in `openBonusDay`, `advanceGame`, arming, or
+  settlement.
+- Game wrapper and `CrapsBattle` deployed-size deltas against the 3,661-byte margin; 10M target,
+  16.7M hard ceiling, EIP-170 size, and the existing Craps/lootbox gas suites.
 
 ---
 

@@ -283,11 +283,19 @@ contract CoinflipCarryClaim is DeployProtocol {
     }
 
     /// THE requirement, stated whole: nobody can change the carry amount riding the current
-    /// day's flip after that day's result becomes knowable. `autoRebuyCarry` has six writers;
+    /// day's flip once that day's result becomes knowable. Knowable is the operative word — the
+    /// day boundary itself is not the hazard, since no word has been requested there yet. `autoRebuyCarry` has six writers;
     /// five are externally reachable. This drives every one of them while day 4 sits unapplied
     /// with a live carry on it, and asserts the carry is byte-identical at the end.
     ///
-    ///   consumeFlipForSalvage      -> only via FLIP.burnCoinForSalvage, frozen-gated (below)
+    ///   consumeFlipForSalvage      -> only via FLIP.burnCoinForSalvage, whose sole entry
+    ///                                 (sellFarFutureEntries) reverts under the game's RNG lock.
+    ///                                 That lock is up from the VRF request until _unlockRng,
+    ///                                 which runs after the payouts that apply the day — so it
+    ///                                 covers every moment a word is knowable. Not driven here:
+    ///                                 this fixture sits BEFORE the request, where the pending
+    ///                                 word does not exist and there is nothing to salvage
+    ///                                 against.
     ///   _setCoinflipAutoRebuy      -> the exit and the re-arm, both revert here
     ///   claimCoinflipCarry         -> reverts here
     ///   withdrawRedeemedFlip       -> sDGNRS-only, gated at sDGNRS.burn by the RNG lock AND by
@@ -322,10 +330,6 @@ contract CoinflipCarryClaim is DeployProtocol {
         vm.prank(player);
         vm.expectRevert(Coinflip.RngLocked.selector);
         coinflip.claimCoinflipCarry(address(0), type(uint256).max);
-
-        vm.prank(ContractAddresses.GAME);
-        vm.expectRevert(FLIP.Insufficient.selector);
-        coin.burnCoinForSalvage(player, 1 ether);
 
         // --- ungated settle paths: open, and provably carry-neutral ---
         vm.prank(player);

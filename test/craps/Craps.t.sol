@@ -151,94 +151,6 @@ contract CrapsTest is Test {
     }
 
     // ---------------------------------------------------------------------------------------
-    // Odds
-    // ---------------------------------------------------------------------------------------
-
-    /// @dev True odds: 2:1 on 4 and 10, 3:2 on 5 and 9, 6:5 on 6 and 8. Nothing shaded, which is
-    ///      what makes the leg zero-edge.
-    function test_passOddsPayTrueOddsOnThePoint() public {
-        Craps.Bets memory b = _bets();
-        b.passLine = U;
-        b.passOddsMult = 2; // 2x the line, so a 2U odds stake
-
-        _reset();
-        _r(1, 3); // come-out 4 -> point 4, odds ride behind the line
-        _r(2, 2); // 4 made -> pass wins 1:1, odds win 2:1; both stakes stay
-        _r(1, 4); // come-out 5 -> point 5, the odds ride again
-        _r(3, 4); // seven-out -> both stakes die riding
-        CrapsOracle.Outcome memory four = _play(b);
-        assertEq(four.legStaked[craps.LEG_PASS_ODDS()], UW * 2, "odds stake");
-        assertEq(four.legReturned[craps.LEG_PASS()], UW, "pass 1:1");
-        // 2:1 winnings on 2U; the stake itself died riding the 5.
-        assertEq(four.legReturned[craps.LEG_PASS_ODDS()], UW * 4, "odds 2:1 on the 4");
-
-        _reset();
-        _r(2, 4); // point 6
-        _r(3, 3); // 6 made -> odds win 6:5, stake stays
-        _r(1, 4); // point 5
-        _r(3, 4); // seven-out -> the odds stake dies riding
-        CrapsOracle.Outcome memory six = _play(b);
-        uint256 stake = UW * 2;
-        assertEq(six.legReturned[craps.LEG_PASS_ODDS()], (stake * 6) / 5, "odds 6:5 on the 6");
-    }
-
-    function test_passOddsLoseOnTheSevenOut() public {
-        Craps.Bets memory b = _bets();
-        b.passLine = U;
-        b.passOddsMult = 3;
-
-        _reset();
-        _r(1, 3); // point 4
-        _r(3, 4); // seven-out
-        CrapsOracle.Outcome memory o = _play(b);
-
-        assertEq(o.legReturned[craps.LEG_PASS()], 0, "pass lost");
-        assertEq(o.legReturned[craps.LEG_PASS_ODDS()], 0, "odds lost");
-        assertEq(o.net, -int256(UW * 4), "line plus 3x odds");
-    }
-
-    /// @dev You cannot lose odds without a point. If the line dies on a come-out craps the odds
-    ///      never rode anything, so the stake comes back untouched — this is what keeps the leg's
-    ///      edge at exactly zero rather than merely close to it.
-    function test_oddsAreRefundedWhenTheyNeverRide() public {
-        Craps.Bets memory b = _bets();
-        b.passLine = U;
-        b.passOddsMult = 5;
-
-        _reset();
-        _r(1, 2); // come-out 3 -> the line craps out before any point exists
-        _r(2, 4); // point 6, but the dead line arms nothing
-        _r(3, 4); // seven-out
-        CrapsOracle.Outcome memory o = _play(b);
-
-        assertEq(o.legReturned[craps.LEG_PASS_ODDS()], UW * 5, "odds refunded in full");
-        // The hand nets exactly the lost line stake: the odds leg is a wash.
-        assertEq(o.net, -int256(UW), "odds contributed nothing either way");
-    }
-
-    /// @dev The odds ride every point established while the line lives, at true odds each cycle,
-    ///      exactly like the line they sit behind.
-    function test_oddsReArmOnEveryPointTheLineLives() public {
-        Craps.Bets memory b = _bets();
-        b.passLine = U;
-        b.passOddsMult = 2;
-
-        _reset();
-        _r(1, 3); // point 4
-        _r(2, 2); // 4 made -> pass 1:1, odds 2:1 winnings; both stakes stay
-        _r(4, 6); // come-out 10 -> point 10, the odds ride again
-        _r(5, 5); // 10 made -> pass 1:1 again, odds 2:1 again
-        _r(1, 4); // point 5
-        _r(3, 4); // seven-out -> both stakes die riding
-        CrapsOracle.Outcome memory o = _play(b);
-
-        // The 4 and the 10 were made; the 5 was only established before the seven-out.
-        assertEq(o.pointsMade, 2, "two points made");
-        assertEq(o.legReturned[craps.LEG_PASS()], UW * 2, "pass paid both points");
-        assertEq(o.legReturned[craps.LEG_PASS_ODDS()], UW * 8, "odds paid 2:1 twice on 2U");
-    }
-
-    // ---------------------------------------------------------------------------------------
     // Place bets
     // ---------------------------------------------------------------------------------------
 
@@ -263,7 +175,8 @@ contract CrapsTest is Test {
     }
 
     function test_placePayoutTable() public {
-        // One post-come-out hit on each number. 4/10 pay 9:5, 5/9 pay 7:5, 6/8 pay 7:6.
+        // One post-come-out hit on each number. 4/10 pay TRUE ODDS at 2:1, 5/9 true odds at 3:2,
+        // 6/8 at 7:6 — the one place leg the table still takes anything from.
         _reset();
         _r(6, 6); // come-out 12 -> pass craps out; still the come-out, every place bet stays off
         _r(3, 3); // come-out 6 -> point 6 (a place 6 would not pay: still the come-out roll)
@@ -287,12 +200,35 @@ contract CrapsTest is Test {
         CrapsOracle.Outcome memory o = _play(b);
         uint256 base = craps.LEG_PLACE();
 
-        assertEq(o.legReturned[base + craps.PLACE_4()], (UW * 9) / 5, "place 4");
-        assertEq(o.legReturned[base + craps.PLACE_5()], (UW * 7) / 5, "place 5");
+        assertEq(o.legReturned[base + craps.PLACE_4()], UW * 2, "place 4");
+        assertEq(o.legReturned[base + craps.PLACE_5()], (UW * 3) / 2, "place 5");
         assertEq(o.legReturned[base + craps.PLACE_6()], (UW * 7) / 6, "place 6");
         assertEq(o.legReturned[base + craps.PLACE_8()], (UW * 7) / 6, "place 8");
-        assertEq(o.legReturned[base + craps.PLACE_9()], (UW * 7) / 5, "place 9");
-        assertEq(o.legReturned[base + craps.PLACE_10()], (UW * 9) / 5, "place 10");
+        assertEq(o.legReturned[base + craps.PLACE_9()], (UW * 3) / 2, "place 9");
+        assertEq(o.legReturned[base + craps.PLACE_10()], UW * 2, "place 10");
+    }
+
+    /// @dev Payouts FLOOR, and they floor in WEI — not in whole FLIP. A one-FLIP place 6 pays
+    ///      7/6 of a wei-denominated stake, which is a repeating fraction: the credit is the
+    ///      floor of it, exactly, and no whole-FLIP rounding happens anywhere in the engine.
+    function test_payoutsFloorAtWeiPrecision() public {
+        _reset();
+        _r(3, 3); // come-out 6 -> point 6
+        _r(2, 4); // 6 again -> place 6 pays and the point is made
+        _r(1, 3); // come-out 4 -> point 4
+        _r(3, 4); // seven-out
+
+        Craps.Bets memory b = _bets();
+        b.place6 = 1; // ONE whole FLIP: 7/6 of 1e18 wei does not divide
+
+        CrapsOracle.Outcome memory o = _play(b);
+        assertEq(
+            o.legReturned[craps.LEG_PLACE() + craps.PLACE_6()],
+            1_166_666_666_666_666_666,
+            "place 6 did not floor at wei"
+        );
+        // Sanity on the direction: the floor is strictly under the exact rational.
+        assertLt(o.legReturned[craps.LEG_PLACE() + craps.PLACE_6()] * 6, 1e18 * 7, "the floor rounded up");
     }
 
     function test_placeIsOffOnTheComeOut() public {
@@ -469,6 +405,7 @@ contract CrapsTest is Test {
         Craps.Bets memory b = _bets();
         b.passLine = U;
         b.place9 = U;
+        b.dontPass = U;
 
         bytes32 seed = keccak256("agree");
         CrapsOracle.Session memory s = craps.resolveHands(b, seed, 64);
@@ -498,6 +435,238 @@ contract CrapsTest is Test {
         craps.resolveHands(b, bytes32(0), tooMany);
     }
 
+
+    // ---------------------------------------------------------------------------------------
+    // The dark side
+    // ---------------------------------------------------------------------------------------
+
+    /// @dev What a WINNING dark wager returns: its own stake plus 3:4 of it, floored once. This
+    ///      is stated here as a literal rather than derived, so a change to the payout rule fails
+    ///      loudly instead of following the engine.
+    uint256 internal constant DONT_WIN = UW + (UW * 3) / 4;
+
+    /// @dev The example from the spec, pinned exactly: a 60 FLIP dark wager comes home with 105.
+    function test_aWinningDontPassReturnsStakePlusThreeQuarters() public {
+        _reset();
+        _r(1, 1); // come-out 2 -> the dark side wins outright
+        _r(3, 3); // come-out 6 -> point 6
+        _r(3, 4); // seven-out
+
+        Craps.Bets memory b = _bets();
+        b.dontPass = 60;
+
+        CrapsOracle.Outcome memory o = _play(b);
+        assertEq(o.legStaked[craps.LEG_DONT_PASS()], 60e18, "stake");
+        assertEq(o.legReturned[craps.LEG_DONT_PASS()], 105e18, "60 principal + 45 profit");
+        assertEq(o.net, 45e18, "net");
+    }
+
+    /// @dev Both craps numbers the dark side wins on, and it RETIRES: the second one is a
+    ///      come-out it is no longer in, so it pays exactly once however many follow.
+    function test_dontPassWinsOnComeOutTwoAndThree() public {
+        uint8[2][2] memory craps_ = [[uint8(1), uint8(1)], [uint8(1), uint8(2)]];
+        for (uint256 i = 0; i < 2; ++i) {
+            _reset();
+            _r(craps_[i][0], craps_[i][1]); // 2 or 3 -> dark side wins and retires
+            _r(1, 1); // another 2 -> nothing left to pay
+            _r(3, 3); // point 6
+            _r(3, 4); // seven-out
+
+            Craps.Bets memory b = _bets();
+            b.dontPass = U;
+
+            CrapsOracle.Outcome memory o = _play(b);
+            assertEq(o.legReturned[craps.LEG_DONT_PASS()], DONT_WIN, "paid other than once at 3:4");
+        }
+    }
+
+    /// @dev BAR THE TWELVE. A come-out 12 is neither a win nor a loss and leaves the SAME wager
+    ///      up — so the very next come-out still decides it. This is the one push on the table.
+    function test_comeOutTwelveBarsAndLeavesDontPassLive() public {
+        _reset();
+        _r(6, 6); // come-out 12 -> barred: no profit, no loss, still live
+        _r(6, 6); // and again, to prove the bar is not a one-off
+        _r(1, 2); // come-out 3 -> now it wins
+        _r(3, 3); // point 6
+        _r(3, 4); // seven-out
+
+        Craps.Bets memory b = _bets();
+        b.dontPass = U;
+
+        CrapsOracle.Outcome memory o = _play(b);
+        assertEq(o.legReturned[craps.LEG_DONT_PASS()], DONT_WIN, "a barred twelve did not leave it live");
+    }
+
+    /// @dev A come-out 7 or 11 kills the dark side and does NOT end the shooter: the hand rolls
+    ///      on, and the seven-out that eventually comes finds nothing left to pay.
+    function test_comeOutSevenAndElevenKillDontPassWithoutEndingTheShooter() public {
+        uint8[2][2] memory naturals = [[uint8(3), uint8(4)], [uint8(5), uint8(6)]];
+        for (uint256 i = 0; i < 2; ++i) {
+            _reset();
+            _r(naturals[i][0], naturals[i][1]); // come-out natural -> dark side dies
+            _r(3, 3); // point 6 — the shooter is still rolling
+            _r(3, 4); // seven-out — nothing left to collect
+
+            Craps.Bets memory b = _bets();
+            b.dontPass = U;
+            b.passLine = U; // the light side is what proves the hand went on
+
+            CrapsOracle.Outcome memory o = _play(b);
+            assertEq(o.legReturned[craps.LEG_DONT_PASS()], 0, "a come-out natural paid the dark side");
+            assertEq(o.legReturned[craps.LEG_PASS()], UW, "the shooter did not carry on");
+            assertEq(o.rolls, 3, "a come-out natural ended the hand");
+        }
+    }
+
+    /// @dev For EVERY point: seven before the point wins the dark side, and it is paid before the
+    ///      hand ends on that same seven.
+    function test_sevenBeforeThePointWinsDontPassOnEveryPoint() public {
+        uint8[2][6] memory points =
+            [[uint8(1), uint8(3)], [uint8(1), uint8(4)], [uint8(2), uint8(4)],
+             [uint8(2), uint8(6)], [uint8(4), uint8(5)], [uint8(4), uint8(6)]];
+        for (uint256 i = 0; i < 6; ++i) {
+            _reset();
+            _r(points[i][0], points[i][1]); // establish the point
+            _r(3, 4); // seven-out -> the dark side collects
+
+            Craps.Bets memory b = _bets();
+            b.dontPass = U;
+
+            CrapsOracle.Outcome memory o = _play(b);
+            assertEq(o.legReturned[craps.LEG_DONT_PASS()], DONT_WIN, "the seven-out did not pay the dark side");
+            assertFalse(o.truncated, "the hand did not end on the seven");
+        }
+    }
+
+    /// @dev For EVERY point: the point made loses the dark side and retires it, and the shooter
+    ///      carries on into a fresh come-out that can no longer decide it.
+    function test_thePointMadeLosesDontPassOnEveryPoint() public {
+        uint8[2][6] memory points =
+            [[uint8(1), uint8(3)], [uint8(1), uint8(4)], [uint8(2), uint8(4)],
+             [uint8(2), uint8(6)], [uint8(4), uint8(5)], [uint8(4), uint8(6)]];
+        for (uint256 i = 0; i < 6; ++i) {
+            _reset();
+            _r(points[i][0], points[i][1]); // establish
+            _r(points[i][0], points[i][1]); // make it -> the dark side dies
+            _r(1, 2); // come-out 3 -> would have won, but there is nothing left
+            _r(3, 3); // point 6
+            _r(3, 4); // seven-out -> also nothing left
+            Craps.Bets memory b = _bets();
+            b.dontPass = U;
+
+            CrapsOracle.Outcome memory o = _play(b);
+            assertEq(o.legReturned[craps.LEG_DONT_PASS()], 0, "the point made still paid the dark side");
+        }
+    }
+
+    /// @dev A hand cut off by the roll cap refunds an UNDECIDED dark wager its stake exactly, and
+    ///      refunds a DECIDED one nothing — the same technical-cap policy every other leg follows.
+    ///      The script never establishes a point, so no seven-out can ever come.
+    function test_truncationRefundsOnlyAnUndecidedDontPass() public {
+        Craps.Bets memory b = _bets();
+        b.dontPass = U;
+
+        // Undecided: 512 barred twelves in a row. The wager is still up at the cap.
+        _reset();
+        for (uint256 i = 0; i < craps.MAX_ROLLS(); ++i) _r(6, 6);
+        CrapsOracle.Outcome memory o = _play(b);
+        assertTrue(o.truncated, "the fixture did not reach the cap");
+        assertEq(o.legReturned[craps.LEG_DONT_PASS()], UW, "an undecided dark wager was not refunded its stake");
+        assertEq(o.net, 0, "a refund is not a payout");
+
+        // Decided, and LOST: one come-out eleven, then twelves to the cap. No second refund.
+        _reset();
+        _r(5, 6);
+        for (uint256 i = 1; i < craps.MAX_ROLLS(); ++i) _r(6, 6);
+        o = _play(b);
+        assertTrue(o.truncated, "the fixture did not reach the cap");
+        assertEq(o.legReturned[craps.LEG_DONT_PASS()], 0, "a lost dark wager was refunded at the cap");
+
+        // Decided, and WON: one come-out two, then twelves to the cap. Paid once, refunded never.
+        _reset();
+        _r(1, 1);
+        for (uint256 i = 1; i < craps.MAX_ROLLS(); ++i) _r(6, 6);
+        o = _play(b);
+        assertTrue(o.truncated, "the fixture did not reach the cap");
+        assertEq(o.legReturned[craps.LEG_DONT_PASS()], DONT_WIN, "a won dark wager was paid twice at the cap");
+    }
+
+    /// @dev THE MIXED BOARD, both sides up at once, over all five decisions. The two legs are
+    ///      opposites on every one of them except the barred twelve, where the line dies and the
+    ///      dark side simply waits.
+    function test_aMixedPassAndDontPassBoardResolvesBothSides() public {
+        Craps.Bets memory b = _bets();
+        b.passLine = U;
+        b.dontPass = U;
+
+        // 2 or 3: the line dies, the dark side wins.
+        _reset();
+        _r(1, 2);
+        _r(3, 3); // point 6
+        _r(3, 4); // seven-out
+        CrapsOracle.Outcome memory o = _play(b);
+        assertEq(o.legReturned[craps.LEG_PASS()], 0, "craps out paid the line");
+        assertEq(o.legReturned[craps.LEG_DONT_PASS()], DONT_WIN, "craps out did not pay the dark side");
+
+        // 12: the line dies, the dark side stays up and takes the seven-out instead.
+        _reset();
+        _r(6, 6);
+        _r(3, 3); // point 6
+        _r(3, 4); // seven-out
+        o = _play(b);
+        assertEq(o.legReturned[craps.LEG_PASS()], 0, "the barred twelve paid the line");
+        assertEq(o.legReturned[craps.LEG_DONT_PASS()], DONT_WIN, "the barred twelve did not leave the dark side up");
+
+        // 7 or 11: the line wins and stays, the dark side dies.
+        _reset();
+        _r(5, 6);
+        _r(3, 3); // point 6
+        _r(3, 4); // seven-out
+        o = _play(b);
+        assertEq(o.legReturned[craps.LEG_PASS()], UW, "the natural did not pay the line");
+        assertEq(o.legReturned[craps.LEG_DONT_PASS()], 0, "the natural paid the dark side");
+
+        // Point made: the line wins, the dark side dies.
+        _reset();
+        _r(3, 3); // point 6
+        _r(2, 4); // made
+        _r(1, 3); // come-out 4 -> point 4
+        _r(3, 4); // seven-out
+        o = _play(b);
+        assertEq(o.legReturned[craps.LEG_PASS()], UW, "the point made did not pay the line");
+        assertEq(o.legReturned[craps.LEG_DONT_PASS()], 0, "the point made paid the dark side");
+
+        // Seven-out: the dark side wins, the line loses.
+        _reset();
+        _r(3, 3); // point 6
+        _r(3, 4); // seven-out
+        o = _play(b);
+        assertEq(o.legReturned[craps.LEG_PASS()], 0, "the seven-out paid the line");
+        assertEq(o.legReturned[craps.LEG_DONT_PASS()], DONT_WIN, "the seven-out did not pay the dark side");
+    }
+
+    /// @dev The dark side on its OWN — no line bet, so the engine takes the side machine rather
+    ///      than the general one. Both must play the identical rule; this is the only test that
+    ///      reaches the side path with a dark wager on it.
+    function test_theDarkSideAloneTakesTheSideMachine() public {
+        Craps.Bets memory b = _bets();
+        b.dontPass = U;
+
+        _reset();
+        _r(6, 6); // barred
+        _r(5, 6); // come-out 11 -> dies, hand rolls on
+        _r(3, 3); // point 6
+        _r(3, 4); // seven-out -> nothing to collect
+        CrapsOracle.Outcome memory o = _play(b);
+        assertEq(o.legReturned[craps.LEG_DONT_PASS()], 0, "the side machine paid a dead dark wager");
+
+        _reset();
+        _r(1, 4); // point 5
+        _r(3, 4); // seven-out
+        o = _play(b);
+        assertEq(o.legReturned[craps.LEG_DONT_PASS()], DONT_WIN, "the side machine did not pay the seven-out");
+    }
+
     // ---------------------------------------------------------------------------------------
     // Invariants
     // ---------------------------------------------------------------------------------------
@@ -518,13 +687,13 @@ contract CrapsTest is Test {
         b.place10 = s;
         b.hard4 = s;
         b.hard8 = s;
-        b.passOddsMult = 2;
+        b.dontPass = s;
 
         CrapsOracle.Outcome memory o = craps.resolveHand(b, bytes32(seed));
 
         assertGe(o.net, -int256(o.staked), "lost more than the stake");
-        // 9 flat legs plus 2x odds behind the line, all in wei.
-        assertEq(o.staked, uint256(s) * 11 * 1e18, "stake vector");
+        // Ten flat legs, all in wei.
+        assertEq(o.staked, uint256(s) * 10 * 1e18, "stake vector");
         // The escrow's charge and the resolver's own count are two functions; pin them together.
         assertEq(craps.stakeFor(b), o.staked, "stakeFor != resolver staked");
 
@@ -612,12 +781,17 @@ contract CrapsTest is Test {
     ///
     ///        pass        -7/251    = -27888   (pay-and-stay: ~1.97 decisions at the textbook
     ///                                          1.41% each before the stake dies)
-    ///        odds        exactly 0
-    ///        place 4/10  -1/10     = -100000  place 5/9 -1/15 = -66667  place 6/8 -1/36 = -27778
+    ///        place 4/10  EXACTLY 0            place 5/9 EXACTLY 0       place 6/8 -1/36 = -27778
     ///        hard 4      -1/8      = -125000  hard 8    -1/10 = -100000
+    ///        don't pass  -151/1100 = -137273
+    ///
+    ///      THE FOUR ZEROES ARE THE POINT. A place 4 stake expects half a hit before the seven and
+    ///      is paid 2:1 for it; a place 5 expects two thirds and is paid 3:2. Both are exactly
+    ///      fair, which is why no legal board carries a guaranteed edge any more.
     ///
     ///      The place and hardway figures are per STAKE for a bet riding until the 7, not the
-    ///      per-decision numbers casinos quote. Both describe the same bet.
+    ///      per-decision numbers casinos quote. Both describe the same bet. The dark figure IS a
+    ///      per-decision number, because that wager is one decision per shooter.
     ///
     ///      Default 200k hands. Crank CRAPS_HANDS and the tolerances tighten automatically.
     function test_houseEdgeConverges() public {
@@ -633,32 +807,33 @@ contract CrapsTest is Test {
         b.place10 = U;
         b.hard4 = U;
         b.hard8 = U;
-        b.passOddsMult = 2;
+        b.dontPass = U;
 
         CrapsOracle.Sim memory s = craps.simulate(b, keccak256("craps"), hands);
 
         assertEq(s.truncatedHands, 0, "a hand hit MAX_ROLLS");
         // Mean hand length is 8.53 rolls — a hard number, and the cheapest possible smoke test on
-        // the point machine and the dice at once.
+        // the point machine and the dice at once. The dark side rides the same dice and moves it
+        // not at all, which is half of what this line is here to catch.
         assertApproxEqAbs((s.totalRolls * 100) / hands, 853, 15, "mean hand length x100");
 
         int256[10] memory target;
-        // Per-hand standard deviation of each leg's net, x1000, used to size the tolerance.
+        // Per-hand standard deviation of each leg's net, x1000, used to size the tolerance. The
+        // place figures are `payout x sd(hits before the seven)`, so raising 4/10 to 2:1 and 5/9
+        // to 3:2 widened them; the dark side's is the two-outcome sd of one decision.
         uint256[10] memory sdMilli;
         string[10] memory name;
 
         (target[0], sdMilli[0], name[0]) = (-27888, 1385, "pass      ");
-        // The odds leg is exactly zero-edge by construction, which makes it the sharpest assertion
-        // in this table: any error in the true-odds ratios shows up with nothing to hide behind.
-        (target[1], sdMilli[1], name[1]) = (0, 1500, "pass odds ");
-        (target[2], sdMilli[2], name[2]) = (-100000, 1560, "place 4   ");
-        (target[3], sdMilli[3], name[3]) = (-66667, 1480, "place 5   ");
-        (target[4], sdMilli[4], name[4]) = (-27778, 1440, "place 6   ");
-        (target[5], sdMilli[5], name[5]) = (-27778, 1440, "place 8   ");
-        (target[6], sdMilli[6], name[6]) = (-66667, 1480, "place 9   ");
-        (target[7], sdMilli[7], name[7]) = (-100000, 1560, "place 10  ");
-        (target[8], sdMilli[8], name[8]) = (-125000, 2630, "hard 4    ");
-        (target[9], sdMilli[9], name[9]) = (-100000, 2980, "hard 8    ");
+        (target[1], sdMilli[1], name[1]) = (0, 1733, "place 4   ");
+        (target[2], sdMilli[2], name[2]) = (0, 1582, "place 5   ");
+        (target[3], sdMilli[3], name[3]) = (-27778, 1440, "place 6   ");
+        (target[4], sdMilli[4], name[4]) = (-27778, 1440, "place 8   ");
+        (target[5], sdMilli[5], name[5]) = (0, 1582, "place 9   ");
+        (target[6], sdMilli[6], name[6]) = (0, 1733, "place 10  ");
+        (target[7], sdMilli[7], name[7]) = (-125000, 2630, "hard 4    ");
+        (target[8], sdMilli[8], name[8]) = (-100000, 2980, "hard 8    ");
+        (target[9], sdMilli[9], name[9]) = (-137273, 917, "dont pass ");
 
         uint256 rootN = _sqrt(hands);
 

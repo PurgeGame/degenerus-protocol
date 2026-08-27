@@ -56,32 +56,17 @@ import {ActivityCurveLib} from "./libraries/ActivityCurveLib.sol";
 /// @notice Interface for Coinflip contract methods used by FLIP.
 interface ICoinflip {
     /// @notice Preview claimable coinflip winnings for a player.
-    function previewClaimCoinflips(
-        address player
-    ) external view returns (uint256 mintable);
+    function previewClaimCoinflips(address player) external view returns (uint256 mintable);
     /// @notice Claim coinflip winnings via FLIP to cover token transfers/burns.
-    function claimCoinflipsFromFlip(
-        address player,
-        uint256 amount
-    ) external returns (uint256 claimed);
+    function claimCoinflipsFromFlip(address player, uint256 amount) external returns (uint256 claimed);
     /// @notice Consume coinflip winnings via FLIP for burns (no mint).
-    function consumeCoinflipsForBurn(
-        address player,
-        uint256 amount
-    ) external returns (uint256 consumed);
+    function consumeCoinflipsForBurn(address player, uint256 amount) external returns (uint256 consumed);
     /// @notice Consume coinflip-resident backing (claimable -> carry) for a salvage swap.
-    function consumeFlipForSalvage(
-        address player,
-        uint256 amount
-    ) external returns (uint256 consumed);
+    function consumeFlipForSalvage(address player, uint256 amount) external returns (uint256 consumed);
     /// @notice Preview claimable + auto-rebuy carry coinflip backing (view).
-    function previewSalvageFlipBacking(
-        address player
-    ) external view returns (uint256);
+    function previewSalvageFlipBacking(address player) external view returns (uint256);
     /// @notice Route de-circulated FLIP into sDGNRS's redemption backing (claimable).
     function creditSdgnrsBacking(uint256 amount) external;
-    /// @notice True once today's flip has been applied (word recorded and paid out).
-    function flipResolvedToday() external view returns (bool);
 }
 
 contract FLIP {
@@ -98,21 +83,13 @@ contract FLIP {
     event Transfer(address indexed from, address indexed to, uint256 amount);
 
     /// @notice Standard ERC20 approval event.
-    event Approval(
-        address indexed owner,
-        address indexed spender,
-        uint256 amount
-    );
+    event Approval(address indexed owner, address indexed spender, uint256 amount);
 
     /// @notice Emitted when a player burns FLIP during a decimator window.
     /// @param player The burner's address.
     /// @param amountBurned The amount burned (18 decimals).
     /// @param bucket The effective bucket weight assigned (lower = more valuable).
-    event DecimatorBurn(
-        address indexed player,
-        uint256 amountBurned,
-        uint8 bucket
-    );
+    event DecimatorBurn(address indexed player, uint256 amountBurned, uint8 bucket);
 
     /// @notice Emitted on a terminal decimator (death bet) burn.
     event TerminalDecimatorBurn(address indexed player, uint256 amountBurned);
@@ -181,7 +158,7 @@ contract FLIP {
     string public constant symbol = "FLIP";
 
     /// @dev Minimum FLIP amount for decimator burns (prevents dust spam).
-    uint256 private constant DECIMATOR_MIN = 1_000 ether;
+    uint256 private constant DECIMATOR_MIN = 1000 ether;
 
     /// @dev Minimum bucket for normal and level-100 decimators.
     uint8 private constant DECIMATOR_MIN_BUCKET_NORMAL = 5;
@@ -241,16 +218,13 @@ contract FLIP {
       +======================================================================+*/
 
     /// @notice The main game contract; provides RNG-lock state, level, decimator/terminal-decimator windows, operator-approval checks, and activity-score/boon bookkeeping.
-    IDegenerusGame internal constant degenerusGame =
-        IDegenerusGame(ContractAddresses.GAME);
+    IDegenerusGame internal constant degenerusGame = IDegenerusGame(ContractAddresses.GAME);
 
     /// @notice The quest module handling daily quests and streak tracking.
-    IDegenerusQuests internal constant questModule =
-        IDegenerusQuests(ContractAddresses.QUESTS);
+    IDegenerusQuests internal constant questModule = IDegenerusQuests(ContractAddresses.QUESTS);
 
     /// @dev Reference to the coinflip contract for claim/consume operations.
-    ICoinflip internal constant coinflip =
-        ICoinflip(ContractAddresses.COINFLIP);
+    ICoinflip internal constant coinflip = ICoinflip(ContractAddresses.COINFLIP);
 
     constructor() {
         // Register this contract's ENS reverse name (best-effort; skipped when the
@@ -258,7 +232,7 @@ contract FLIP {
         // selector is shared by the L1 ReverseRegistrar and Base's L2ReverseRegistrar.
         address ensReg = ContractAddresses.ENS_REVERSE_REGISTRAR;
         if (ensReg != address(0)) {
-            (bool ok, ) = ensReg.call(
+            (bool ok,) = ensReg.call(
                 // raw-selectors: justified — best-effort ENS reverse-name; setName(string) has no deploy-wide bound interface and must not revert deployment
                 abi.encodeWithSignature("setName(string)", "flip.degenerus.eth")
             );
@@ -279,9 +253,7 @@ contract FLIP {
     ///      transient and acceptable for UI purposes.
     /// @param player The address to query.
     /// @return spendable Total spendable amount right now.
-    function balanceOfWithClaimable(
-        address player
-    ) external view returns (uint256 spendable) {
+    function balanceOfWithClaimable(address player) external view returns (uint256 spendable) {
         spendable = balanceOf[player];
         if (player == ContractAddresses.VAULT) {
             spendable += uint256(_supply.vaultAllowance);
@@ -302,9 +274,7 @@ contract FLIP {
     ///      consumeFlipForSalvage.
     /// @param player The address to read.
     /// @return spendable Total FLIP the player can fund a salvage FLIP leg with right now.
-    function balanceOfSpendableForSalvage(
-        address player
-    ) external view returns (uint256 spendable) {
+    function balanceOfSpendableForSalvage(address player) external view returns (uint256 spendable) {
         if (player == ContractAddresses.VAULT) {
             spendable = uint256(_supply.vaultAllowance);
         }
@@ -380,11 +350,7 @@ contract FLIP {
     /// @param to The destination address.
     /// @param amount The amount to transfer (18 decimals).
     /// @return True on success.
-    function transferFrom(
-        address from,
-        address to,
-        uint256 amount
-    ) external returns (bool) {
+    function transferFrom(address from, address to, uint256 amount) external returns (bool) {
         // Game contract bypass: no allowance check needed for trusted game operations
         if (msg.sender != ContractAddresses.GAME) {
             uint256 allowed = allowance[from][msg.sender];
@@ -528,11 +494,11 @@ contract FLIP {
     /// @param to The player's address to mint to.
     /// @param amount The amount of FLIP to mint (18 decimals).
     function mintForGame(address to, uint256 amount) external {
-        if (
-            msg.sender != ContractAddresses.COINFLIP &&
-            msg.sender != ContractAddresses.GAME &&
-            msg.sender != ContractAddresses.CRAPS
-        ) revert OnlyGame();
+        // CRAPS is deliberately absent: the table is burn-only and pays every winning in coinflip
+        // credit, so a liquid mint is authority it has no call site for.
+        if (msg.sender != ContractAddresses.COINFLIP && msg.sender != ContractAddresses.GAME) {
+            revert OnlyGame();
+        }
         if (amount == 0) return;
         _mint(to, amount);
     }
@@ -540,18 +506,17 @@ contract FLIP {
     /// @dev Ungated: consumeCoinflipsForBurn reaches claimableStored only — settled days the
     ///      pending word cannot reprice — never the auto-rebuy carry. claimCoinflips pays the
     ///      same bank with no gate at all, so blocking here bought a purchase failure, not safety.
-    function _consumeCoinflipShortfall(
-        address player,
-        uint256 amount
-    ) private returns (uint256 consumed) {
+    function _consumeCoinflipShortfall(address player, uint256 amount) private returns (uint256 consumed) {
         if (amount == 0) return 0;
         uint256 balance = balanceOf[player];
+        // THE VAULT HOLDS NOTHING HERE. Every mint and transfer into it routes to the virtual
+        // `vaultAllowance`, which is what `_burn` spends on its behalf — so reading `balanceOf`
+        // alone would demand the whole cost from coinflip and revert with the vault's own reserve
+        // untouched. Counting it is what lets the vault pay from the balance it actually has.
+        if (player == ContractAddresses.VAULT) balance += uint256(_supply.vaultAllowance);
         if (balance >= amount) return 0;
         unchecked {
-            consumed = coinflip.consumeCoinflipsForBurn(
-                player,
-                amount - balance
-            );
+            consumed = coinflip.consumeCoinflipsForBurn(player, amount - balance);
         }
         if (balance + consumed < amount) revert Insufficient();
     }
@@ -588,9 +553,8 @@ contract FLIP {
     modifier onlyGameOrParimutuel() {
         address sender = msg.sender;
         if (
-            sender != ContractAddresses.GAME &&
-            sender != ContractAddresses.PARIMUTUEL &&
-            sender != ContractAddresses.CRAPS
+            sender != ContractAddresses.GAME && sender != ContractAddresses.PARIMUTUEL
+                && sender != ContractAddresses.CRAPS
         ) revert OnlyGame();
         _;
     }
@@ -617,10 +581,7 @@ contract FLIP {
     /// @param amount Amount to add to vault's mint allowance.
     function vaultEscrow(uint256 amount) external {
         address sender = msg.sender;
-        if (
-            sender != ContractAddresses.GAME &&
-            sender != ContractAddresses.VAULT
-        ) revert OnlyVault();
+        if (sender != ContractAddresses.GAME && sender != ContractAddresses.VAULT) revert OnlyVault();
         uint128 amount128 = _toUint128(amount);
         unchecked {
             _supply.vaultAllowance += amount128;
@@ -637,9 +598,7 @@ contract FLIP {
         if (msg.sender != ContractAddresses.GAME) revert OnlyGame();
         if (_tombstoneFlooded) return;
         _tombstoneFlooded = true;
-        _supply.vaultAllowance = _toUint128(
-            uint256(_supply.vaultAllowance) + FLIP_TOMBSTONE_WEI
-        );
+        _supply.vaultAllowance = _toUint128(uint256(_supply.vaultAllowance) + FLIP_TOMBSTONE_WEI);
         emit VaultEscrowRecorded(msg.sender, FLIP_TOMBSTONE_WEI);
     }
 
@@ -667,10 +626,7 @@ contract FLIP {
     ///      Reverts on zero address or insufficient balance.
     /// @param target The address to burn from.
     /// @param amount The amount to burn (18 decimals).
-    function burnCoin(
-        address target,
-        uint256 amount
-    ) external onlyGameOrParimutuel {
+    function burnCoin(address target, uint256 amount) external onlyGameOrParimutuel {
         uint256 consumed = _consumeCoinflipShortfall(target, amount);
         _burn(target, amount - consumed);
     }
@@ -698,11 +654,12 @@ contract FLIP {
             }
         }
         if (remainder == 0) return;
-        // The only FLIP leg that reaches the auto-rebuy carry, so it alone carries the freeze:
-        // both salvage operators (sDGNRS and the vault) run auto-rebuy, and the carry is the
-        // pending day's stake. The far-future ticket sink this swap queues through also reverts
-        // under the game's RNG lock, which covers the rest of that window.
-        if (!coinflip.flipResolvedToday()) revert Insufficient();
+        // No freeze read here, though this is the one FLIP leg that reaches the auto-rebuy carry.
+        // The sole entry, sellFarFutureEntries, already reverts under the game's RNG lock, and
+        // that lock is up whenever a word is knowable but unapplied: it is raised at the request
+        // and cleared only by _unlockRng, which runs after the payouts that apply it. The window
+        // the lock leaves open is the day boundary before the request, where the pending word
+        // does not exist yet and there is nothing to salvage against.
         uint256 consumed = coinflip.consumeFlipForSalvage(target, remainder);
         if (remainder > consumed) revert Insufficient();
     }
@@ -743,38 +700,25 @@ contract FLIP {
         _burn(caller, amount - consumed);
 
         // Quest processing (reward creditFlipped internally; bonus boosts decimator weight)
-        (uint256 questReward, , , bool completed) = questModule.handleDecimator(
-            caller,
-            amount
-        );
+        (uint256 questReward,,, bool completed) = questModule.handleDecimator(caller, amount);
         uint256 baseAmount = amount + (completed ? questReward : 0);
 
         // Activity score bonus (whole points); the curve self-saturates at its cap.
         uint256 bonusPoints = degenerusGame.playerActivityScore(caller);
 
         uint256 decBurnMultBps = ActivityCurveLib.decMultBps(bonusPoints);
-        uint8 minBucket = (lvl % 100 == 0)
-            ? DECIMATOR_MIN_BUCKET_100
-            : DECIMATOR_MIN_BUCKET_NORMAL;
+        uint8 minBucket = (lvl % 100 == 0) ? DECIMATOR_MIN_BUCKET_100 : DECIMATOR_MIN_BUCKET_NORMAL;
         uint8 bucket = ActivityCurveLib.decBucket(bonusPoints, minBucket);
 
         // Decimator boon: percent boost on base amount (capped to 50k FLIP).
         uint16 boonBps = degenerusGame.consumeDecimatorBoon(caller);
         if (boonBps > 0) {
-            uint256 cappedBase = baseAmount > DECIMATOR_BOON_CAP
-                ? DECIMATOR_BOON_CAP
-                : baseAmount;
+            uint256 cappedBase = baseAmount > DECIMATOR_BOON_CAP ? DECIMATOR_BOON_CAP : baseAmount;
             uint256 boost = (cappedBase * boonBps) / BPS_DENOMINATOR;
             baseAmount += boost;
         }
 
-        uint8 bucketUsed = degenerusGame.recordDecBurn(
-            caller,
-            lvl,
-            bucket,
-            baseAmount,
-            decBurnMultBps
-        );
+        uint8 bucketUsed = degenerusGame.recordDecBurn(caller, lvl, bucket, baseAmount, decBurnMultBps);
 
         emit DecimatorBurn(caller, amount, bucketUsed);
     }
@@ -816,5 +760,4 @@ contract FLIP {
 
         emit TerminalDecimatorBurn(caller, amount);
     }
-
 }

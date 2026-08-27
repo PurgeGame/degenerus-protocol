@@ -1,13 +1,14 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
 
+import {CrapsViews} from "./CrapsViews.sol";
 import {Test} from "forge-std/Test.sol";
 import {Craps} from "../../contracts/Craps.sol";
 import {LootboxCraps} from "../../contracts/LootboxCraps.sol";
 import {CrapsPins} from "./CrapsPins.sol";
-import {FlipCraps, IFlipCoin, ICoinflipStake} from "../../contracts/FlipCraps.sol";
+import {CrapsBattle, IFlipCoin, ICoinflipStake} from "../../contracts/CrapsBattle.sol";
 
-contract GasHarness is FlipCraps {
+contract GasHarness is CrapsViews {
     /// @dev Engine tap, in exactly the flat-slip configuration a settlement runs (lean books,
     ///      dice log on). `MAX_BANKROLL_MULT` bounds what placement accepts, but the engine's own
     ///      worst case — the roll budget — is what the gas guarantee rests on, so it is measured
@@ -17,7 +18,7 @@ contract GasHarness is FlipCraps {
         view
         returns (Craps.SlipResult memory)
     {
-        return _settleSlip(b, seedFor(index), bankroll, 0, MAX_SLIP_HANDS, SLIP_ROLL_BUDGET);
+        return _settleSlip(b, _seedFor(index), bankroll, 0, MAX_SLIP_HANDS, SLIP_ROLL_BUDGET, address(0));
     }
 }
 
@@ -35,7 +36,7 @@ contract GasHarness is FlipCraps {
 contract CrapsGasTest is CrapsPins {
     GasHarness internal craps;
 
-    uint24 internal constant U = 100;
+    uint24 internal constant U = 120;
 
     uint256 internal constant TABLES = 24;
     /// @dev Covers the escalator's worst case to the cap: mandatory units over 256 hands sum to
@@ -49,11 +50,11 @@ contract CrapsGasTest is CrapsPins {
         craps = new GasHarness();
     }
 
-
-    /// @dev A full board: every leg live, so this is the worst-case per-roll branch load.
+    /// @dev A full board: every leg live, so this is the worst-case per-roll branch load. Only
+    ///      the ENGINE sees this — an entry places seven chips, so it can light at most seven
+    ///      legs itself, and nine live legs are reachable only through a board the dice place.
     function _fullBoard() internal pure returns (Craps.Bets memory b) {
-        b.passLine = U;
-        b.passOddsMult = 3;
+        b.passLine = U * 2;
         b.place4 = U;
         b.place5 = U;
         b.place6 = U;
@@ -64,13 +65,29 @@ contract CrapsGasTest is CrapsPins {
         b.hard8 = U;
     }
 
+    /// @dev The heaviest board an ENTRY can post: seven chips over seven legs, one each.
+    /// @dev Chip COUNTS: seven of the round's ten, spread over as many legs as they can light —
+    ///      the heaviest branch load an entry can post.
+    function _placedBoard() internal pure returns (Craps.Bets memory b) {
+        b.passLine = 1;
+        b.place4 = 1;
+        b.place5 = 1;
+        b.place6 = 1;
+        b.place8 = 1;
+        b.place9 = 1;
+        b.hard8 = 1;
+    }
+
+    /// @dev The round these fixtures play, in whole FLIP: ten chips of `U`.
+    uint32 internal constant PLAYED = uint32(U) * 10;
+
     /// @dev Only the pass line, at the table minimum: the cheapest board, for the spread.
     function _lineOnly() internal pure returns (Craps.Bets memory b) {
-        b.passLine = 600;
+        b.passLine = 700;
     }
 
     function _placeOnly() internal pure returns (Craps.Bets memory b) {
-        b.place6 = 600;
+        b.place6 = 700;
     }
 
     /// @dev The engine's worst case — a run the escalator cannot bust, stopped only by the shooter
@@ -92,21 +109,25 @@ contract CrapsGasTest is CrapsPins {
 
     /// @dev And the real surface: a max-legal slip (ten rounds of the board) placed and settled
     ///      end to end, money plumbing included.
+    /// @dev A FIELD OF ONE, which is what makes this the worst case: the whole per-slot cost —
+    ///      the window read, the table's word, the cursor's first write and the batched credit —
+    ///      lands on the single seat instead of being spread across a field. Roughly 156k of it
+    ///      is the settlement itself and the rest is that fixed plumbing, so the budget sits well
+    ///      above the standalone-slip lane this replaced. What the Nth seat costs once the slot
+    ///      is warm is pinned separately by `test_batchSettleMarginalCost`.
     function test_maxLegalSlipSettles() public {
-        Craps.Bets memory b = _fullBoard();
-        _setIndex(80_000);
-
-        uint128 bankroll = uint128(craps.stakeFor(b) * craps.MAX_BANKROLL_MULT());
+        uint8 bankMult = uint8(craps.MAX_BANKROLL_MULT());
+        uint64 slot = _openBattle(craps, PLAYED, bankMult, uint16(GOAL_FAR_MULT), 0);
         vm.prank(player);
-        uint64 betId = craps.placeSlip(b, bankroll, 0);
-        _setWord(80_000, uint256(keccak256("maxslip")));
+        craps.enterBattle(slot, _placedBoard(), 1);
+        _closeOn(craps, slot, 80_000, uint256(keccak256("maxslip")));
 
         uint256 g = gasleft();
-        craps.resolveBets(_ids(betId));
+        craps.resolveSlot(slot, 4);
         uint256 used = g - gasleft();
 
         emit log_named_uint("max-legal slip settle gas", used);
-        assertLt(used, 250_000, "a max-legal slip regressed past its gas budget");
+        assertLt(used, 300_000, "a max-legal slip regressed past its gas budget");
     }
 
     /// @dev Mass settlement. Every bet in a batch at ONE table re-reads the same VRF word through
@@ -114,39 +135,80 @@ contract CrapsGasTest is CrapsPins {
     ///      once that account and slot are warm — the figure any grouped-resolver optimisation
     ///      would be competing against.
     function test_batchSettleMarginalCost() public {
-        Craps.Bets memory b = _fullBoard();
-        uint256 stake = craps.stakeFor(b);
-        uint48 idx = 90_000;
-        _setIndex(idx);
-
+        uint8 bankMult = uint8(craps.MAX_BANKROLL_MULT());
         uint256 n = 20;
-        uint64[] memory many = new uint64[](n);
+
+        // One field of twenty, and a field of one on identical terms, so the difference is purely
+        // what the Nth entrant costs once the slot's word, terms and scoreboard are warm.
+        uint64 many = _openBattle(craps, PLAYED, bankMult, uint16(GOAL_FAR_MULT), 0);
         vm.startPrank(player);
         for (uint256 i = 0; i < n; ++i) {
-            many[i] = craps.placeSlip(b, uint128(stake * craps.MAX_BANKROLL_MULT()), 0);
+            craps.enterBattle(many, _placedBoard(), 1);
         }
-        uint64 lone = craps.placeSlip(b, uint128(stake * craps.MAX_BANKROLL_MULT()), 0);
         vm.stopPrank();
-        _setWord(idx, uint256(keccak256("batch")));
+        _closeOn(craps, many, 90_000, uint256(keccak256("batch")));
+
+        uint64 lone = _openBattle(craps, PLAYED, bankMult, uint16(GOAL_FAR_MULT), 1);
+        vm.prank(player);
+        craps.enterBattle(lone, _placedBoard(), 1);
+        _closeOn(craps, lone, 90_001, uint256(keccak256("batch")));
 
         uint256 g = gasleft();
-        craps.resolveBets(_ids(lone));
+        craps.resolveSlot(lone, 4);
         uint256 single = g - gasleft();
 
         g = gasleft();
-        craps.resolveBets(many);
+        craps.resolveSlot(many, uint64(n));
         uint256 batch = g - gasleft();
 
         emit log_named_uint("one bet settled alone     ", single);
-        emit log_named_uint("batch of 20, total        ", batch);
-        emit log_named_uint("batch of 20, per bet      ", batch / n);
-        // Identical bets at one table, so the only difference is warm state and loop overhead.
-        emit log_named_uint("saved per bet by batching ", single - batch / n);
+        emit log_named_uint("field of 20, total        ", batch);
+        emit log_named_uint("field of 20, per bet      ", batch / n);
+        emit log_named_uint("saved per bet by the field", single - batch / n);
     }
 
     function _ids(uint64 a) internal pure returns (uint64[] memory out) {
         out = new uint64[](1);
         out[0] = a;
+    }
+
+    /// @dev The battle's own overhead, measured where it lands: placement's group bump (the first
+    ///      entrant pays the slot, the rest a warm RMW), and the one-transaction lane that
+    ///      settles an index and pays its winners in the same call.
+    function test_battleFlowGas() public {
+        uint8 bankMult = uint8(craps.MAX_BANKROLL_MULT());
+        uint256 bank = uint256(PLAYED) * bankMult * 1 ether;
+        // The bounty may be anything up to the bankroll; take a small slice of it.
+        uint24 su = uint24(bank / (5 * craps.BATTLE_STAKE_UNIT()) + 1);
+
+        uint256 g = gasleft();
+        uint64 slot = _openBattle(craps, PLAYED, bankMult, uint16(GOAL_FAR_MULT), su);
+        uint256 create = g - gasleft();
+
+        vm.startPrank(player);
+        g = gasleft();
+        craps.enterBattle(slot, _placedBoard(), 1);
+        uint256 firstSeat = g - gasleft();
+
+        g = gasleft();
+        craps.enterBattle(slot, _placedBoard(), 1);
+        uint256 nextSeat = g - gasleft();
+        vm.stopPrank();
+
+        g = gasleft();
+        _closeOn(craps, slot, 85_000, uint256(keccak256("battlegas")));
+        uint256 close = g - gasleft();
+
+        g = gasleft();
+        craps.resolveSlot(slot, 8);
+        uint256 settle = g - gasleft();
+
+        emit log_named_uint("createBattle              ", create);
+        emit log_named_uint("enterBattle, first seat   ", firstSeat);
+        emit log_named_uint("enterBattle, later seat   ", nextSeat);
+        emit log_named_uint("closeBattle               ", close);
+        emit log_named_uint("resolveSlot, field of 2   ", settle);   // pays, too
+        assertLt(settle, 1_200_000, "the one-transaction field settle regressed");
     }
 
     function test_marginalShooterCost() public {
@@ -200,5 +262,4 @@ contract CrapsGasTest is CrapsPins {
             "a cap-length run regressed past its gas budget"
         );
     }
-
 }

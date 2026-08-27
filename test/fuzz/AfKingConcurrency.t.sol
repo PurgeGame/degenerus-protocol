@@ -492,9 +492,8 @@ contract AfKingConcurrency is DeployProtocol {
 
     /// @dev Run the STAGE exactly ONCE on a fresh day via a SINGLE `advanceGame()` (no full settle),
     ///      used by the pass-eviction tests. The STAGE runs strictly PRE-RNG (AdvanceModule:305-326),
-    ///      so the eviction / buy completes before rngGate — and a single advance never reaches the
-    ///      level-transition `charityResolve.pickCharity` (AdvanceModule:1746), which would revert on
-    ///      a poked level. Subscribers must already be registered (subscribe blocks during rngLock).
+    ///      so the eviction / buy completes before rngGate and the stage is measured on its own.
+    ///      Subscribers must already be registered (subscribe blocks during rngLock).
     function _runStageOnce() internal {
         vm.warp(block.timestamp + 1 days);
         game.advanceGame();

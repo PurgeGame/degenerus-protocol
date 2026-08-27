@@ -2651,6 +2651,26 @@ abstract contract DegenerusGameStorage {
     uint256 internal constant DEGENERETTE_BOON_ETH_CAP = 10 ether;
     uint256 internal constant DEGENERETTE_BOON_FLIP_CAP = 100_000 ether;
 
+    /// @dev What ONE Craps day pass is worth, as a lootbox denomination. This is the expected cost
+    ///      of entering all seven of a day's scheduled windows at 1x — bankroll plus bounty — under
+    ///      the shipped preset table, which comes to exactly 1,368,127/60 FLIP, rounded to the
+    ///      nearest 100.
+    ///
+    ///      A DENOMINATION, NOT A QUOTE. The realised cost of any particular day is drawn from that
+    ///      day's word and moves; the pass is committed before the word lands, and that is what
+    ///      makes a fixed expected-value unit the honest way to price it.
+    ///
+    ///      ⚠ Tied to the preset table. Any edit to the scheduled bankroll or bounty distribution
+    ///      must recompute the expectation, re-round to the nearest 100, and update this — see the
+    ///      preset-change invariant in docs/LOOTBOX-CRAPS-DAY-PASS-SPEC.md.
+    uint256 internal constant NORMAL_DAY_PASS_VALUE = 22_800 ether;
+
+    /// @dev And what a HIGH-ROLLER day pass is worth: exactly nineteen normal ones. The day's
+    ///      multiplier is 10 nine times in ten and 100 the tenth, so its expectation is 19 on the
+    ///      nose — defined as the multiple rather than as a separately rounded figure, so the two
+    ///      denominations can never drift out of proportion.
+    uint256 internal constant HIGH_ROLLER_DAY_PASS_VALUE = 19 * NORMAL_DAY_PASS_VALUE;
+
     // ---- Masks ----
     uint256 internal constant BP_MASK_24 = 0xFFFFFF;
     uint256 internal constant BP_MASK_8 = 0xFF;

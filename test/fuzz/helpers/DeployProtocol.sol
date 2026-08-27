@@ -21,7 +21,7 @@ import {DegenerusGameFoilPackModule} from "../../../contracts/modules/DegenerusG
 import {AFKingSubscriptionToken} from "../../../contracts/AFKingSubscriptionToken.sol";
 import {DegenerusParimutuel} from "../../../contracts/DegenerusParimutuel.sol";
 import {DegenerusRecordBounty} from "../../../contracts/DegenerusRecordBounty.sol";
-import {FlipCraps} from "../../../contracts/FlipCraps.sol";
+import {CrapsViews} from "../../craps/CrapsViews.sol";
 import {FLIP} from "../../../contracts/FLIP.sol";
 import {Coinflip} from "../../../contracts/Coinflip.sol";
 import {DegenerusGame} from "../../../contracts/DegenerusGame.sol";
@@ -73,7 +73,7 @@ abstract contract DeployProtocol is Test {
     AFKingSubscriptionToken public afkingSubToken;
     DegenerusParimutuel public parimutuel;
     DegenerusRecordBounty public recordBounty;
-    FlipCraps public flipCraps;
+    CrapsViews public crapsBattle;
     FLIP public coin;
     Coinflip public coinflip;
     DegenerusGame public game;
@@ -186,13 +186,13 @@ abstract contract DeployProtocol is Test {
         // COINFLIP's runtime recordSet calls reference it.
         recordBounty = new DegenerusRecordBounty();                      // N+28 = nonce 33
 
-        // Craps table — appended, so it shifts no earlier nonce. FlipCraps carries Craps and
+        // Craps table — appended, so it shifts no earlier nonce. CrapsBattle carries Craps and
         // LootboxCraps by inheritance, so this one deployment is the whole table. It must land
         // here rather than only in the craps suite's mocks: this is the only place craps meets
         // the REAL game (its extsload of the lootbox-RNG slots), the REAL FLIP (whose burn/mint
         // gates authorize ContractAddresses.CRAPS, i.e. exactly this address), and the REAL
         // Coinflip credit lane. Deployed last so ContractAddresses.CRAPS resolves to code.
-        flipCraps = new FlipCraps();                                     // N+29 = nonce 34
+        crapsBattle = new CrapsViews();                                     // N+29 = nonce 34
     }
 
     /// @dev Give `player` an AFKing seat (the sole afking credential — subscribe reverts

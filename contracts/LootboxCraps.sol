@@ -34,7 +34,7 @@ interface IGameSlotReader {
 ///        * `lootboxRngIndex` lives in bits 0..47 of `lootboxRngPacked`. It is a monotonic uint48.
 ///        * `requestLootboxRng()` fires the VRF request and advances the index in the same call, so
 ///          the request in flight fulfils into `index - 1` and new commitments queue at `index`.
-///        * Therefore `wordAt(currentIndex())` is always zero, and a bet bound to `currentIndex()`
+///        * Therefore `_wordAt(_currentIndex())` is always zero, and a bet bound to `_currentIndex()`
 ///          is bound to a word nobody can know yet. That is the property being bought.
 ///
 /// @dev ONE INDEX IS ONE TABLE, AND EVERYONE AT IT SEES THE SAME SHOOTER
@@ -42,7 +42,7 @@ interface IGameSlotReader {
 ///      The seed is a function of the index alone — not of the player, not of what they bet, not of
 ///      when they bought in. Every player bound to index N watches the identical dice, so friends
 ///      who buy in at the same index are playing the same table: the same come-out, the same point,
-///      the same hot roll, the same seven-out. That is the whole design, and it is why `seedFor`
+///      the same hot roll, the same seven-out. That is the whole design, and it is why `_seedFor`
 ///      takes nothing but the index.
 ///
 ///      A session at an index reads that table's shooters in order, so hand `i` at index N is the
@@ -78,11 +78,15 @@ contract LootboxCraps is Craps {
     uint256 internal constant LOOTBOX_RNG_PACKED_SLOT = 33;
     /// @dev Base slot of `DegenerusGameStorage.lootboxRngWordByIndex`, a mapping(uint48 => uint256).
     uint256 internal constant LOOTBOX_RNG_WORD_SLOT = 34;
+    /// @dev Base slot of `DegenerusGameStorage.rngWordByDay`, a mapping(uint24 => uint256) — the
+    ///      protocol's DAILY word, a different lane from the per-index lootbox words above. Pinned
+    ///      against the frozen tree exactly like those two, and covered by the same drift gate.
+    uint256 internal constant RNG_WORD_BY_DAY_SLOT = 10;
     /// @dev `LR_INDEX_MASK` — bits 0..47 of the packed slot.
     uint256 internal constant LR_INDEX_MASK = 0xFFFFFFFFFFFF;
 
     /// @notice Domain tag mixed into every craps seed.
-    bytes32 public constant CRAPS_SEED_DOMAIN = keccak256("degenerus.lootbox.craps.v1");
+    bytes32 internal constant _CRAPS_SEED_DOMAIN = keccak256("degenerus.lootbox.craps.v1");
 
     // ---------------------------------------------------------------------------------------
     // Reading the protocol
@@ -91,14 +95,30 @@ contract LootboxCraps is Craps {
     /// @notice The lootbox RNG index new bets must bind to.
     /// @dev Its word is always still zero: the protocol advances the index at request time, so the
     ///      request in flight fulfils into the index below this one.
-    function currentIndex() public view returns (uint48) {
+    function _currentIndex() internal view returns (uint48) {
         return uint48(_sload(LOOTBOX_RNG_PACKED_SLOT) & LR_INDEX_MASK);
     }
 
     /// @notice The VRF word committed to `index`, or zero if it has not been drawn.
-    function wordAt(uint48 index) public view returns (uint256) {
+    function _wordAt(uint48 index) internal view returns (uint256) {
         // Solidity mapping slot: keccak256(h(key) . baseSlot), key left-padded to 32 bytes.
         return uint256(_extsload(keccak256(abi.encode(uint256(index), LOOTBOX_RNG_WORD_SLOT))));
+    }
+
+    /// @notice The protocol's daily VRF word for `day`, or zero if that day has not sealed one.
+    /// @dev Read-only, and used only to pace a bonus that pays no one automatically. Nothing a
+    ///      bet's outcome depends on is derived from it: a table's dice come from its own index
+    ///      word, which is still undrawn while bets bind.
+    function _dailyWordAt(uint24 day) internal view returns (uint256) {
+        return uint256(_extsload(keccak256(abi.encode(uint256(day), RNG_WORD_BY_DAY_SLOT))));
+    }
+
+    /// @notice The protocol's day index right now — `GameTimeLib.currentDayIndexAt`, restated
+    ///         against the same two constants rather than reached for through a call.
+    function _currentDayIndex() internal view returns (uint24) {
+        unchecked {
+            return uint24((block.timestamp - 82_620) / 1 days) - uint24(ContractAddresses.DEPLOY_DAY_BOUNDARY) + 1;
+        }
     }
 
     // ---------------------------------------------------------------------------------------
@@ -108,17 +128,17 @@ contract LootboxCraps is Craps {
     /// @notice The seed for the table at `index`.
     /// @dev Takes nothing but the index on purpose: the shooter belongs to the table, not to a
     ///      player. Reverts until the word lands.
-    function seedFor(uint48 index) public view returns (bytes32) {
-        uint256 word = wordAt(index);
+    function _seedFor(uint48 index) internal view returns (bytes32) {
+        uint256 word = _wordAt(index);
         if (word == 0) revert RngNotReady();
         return _crapsSeed(word, index);
     }
 
-    /// @dev The seed derivation alone, for a caller that already fetched the word — `wordAt` is an
+    /// @dev The seed derivation alone, for a caller that already fetched the word — `_wordAt` is an
     ///      external round-trip into the game, and a settlement needs the word for its own rolls
     ///      too, so it should pay for that read exactly once.
     function _crapsSeed(uint256 word, uint48 index) internal pure returns (bytes32) {
-        return keccak256(abi.encode(CRAPS_SEED_DOMAIN, word, index));
+        return keccak256(abi.encode(_CRAPS_SEED_DOMAIN, word, index));
     }
 
     // ---------------------------------------------------------------------------------------

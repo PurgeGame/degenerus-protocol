@@ -865,11 +865,12 @@ contract Coinflip {
         uint256 coinflipDeposit,
         uint256 recordAmount
     ) private {
-        IDegenerusGame game = degenerusGame;
         if (recordAmount != 0) {
             // Manual deposits only: check and consume coinflip boon (5%/10%/25% boost on max 100k FLIP deposit)
-            // Max bonuses: 5% = 5k, 10% = 10k, 25% = 25k
-            uint16 boonBps = game.consumeCoinflipBoon(player);
+            // Max bonuses: 5% = 5k, 10% = 10k, 25% = 25k. The game handle is read HERE rather than
+            // at the top of the frame: every credit path passes recordAmount 0, and only this
+            // branch consults the game, so a credit must not pay for the storage read.
+            uint16 boonBps = degenerusGame.consumeCoinflipBoon(player);
             if (boonBps > 0) {
                 uint256 maxDeposit = 100_000 ether; // Cap at 100k FLIP for boost calc
                 uint256 cappedDeposit = coinflipDeposit > maxDeposit

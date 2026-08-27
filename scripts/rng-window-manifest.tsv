@@ -25,8 +25,16 @@
 # in rng_window_extract.py and with the enumerated slots in RngWindowFreezeHandler:
 #   rngWordCurrent          the fulfilled-but-not-yet-sealed daily buffer (own slot)
 #   rngWordByDay[day]       the sealed, write-once per-day word            (slot 10)
-#   lootboxRngWordByIndex[] the sealed, write-once per-index lootbox word  (slot 35)
-#   lootboxRngPacked        the packed lootbox cursor; low 48 bits = index (slot 34)
+#   lootboxRngWordByIndex[] the sealed, write-once per-index lootbox word  (slot 34)
+#   lootboxRngPacked        the packed lootbox cursor; low 48 bits = index (slot 33)
+#
+# CROSS-CONTRACT READERS (_wordAt, _dailyWordAt). A satellite outside the game — CRAPS — reads
+# the same three slots through `DegenerusGame.extsload`, naming NUMERIC SLOTS and never a storage
+# variable. Identifier matching alone was therefore blind to it: craps contributed zero rows while
+# the gate still printed full coverage. `LootboxCraps` funnels every such read through exactly two
+# accessors, so those accessor NAMES are tracked here and every craps consumer is classified below
+# like any other. The slot pins themselves are held by test/craps/LootboxCraps.t.sol, which
+# re-derives all three from the audited layout and fails on drift.
 #
 # FROZEN_SET declares the identifiers the runtime net must enumerate; the gate cross-checks
 # that RngWindowFreezeHandler references each. (dailyIdx — the non-VRF day cursor, slot 0
@@ -135,3 +143,16 @@ ACCESSOR	lootboxRngPacked	_lrRead	storage/DegenerusGameStorage.sol	READ
 ACCESSOR	lootboxRngPacked	_lrWrite	storage/DegenerusGameStorage.sol	WRITE
 ACCESSOR	rngWordByDay	rngWordForDay	DegenerusGame.sol	READ
 ACCESSOR	rngWordCurrent	isRngFulfilled	DegenerusGame.sol	READ
+ACCESSOR	_wordAt	_wordAt	LootboxCraps.sol	READ
+ACCESSOR	_dailyWordAt	_dailyWordAt	LootboxCraps.sol	READ
+CONSUMER-SEALED	_wordAt	_seedFor	LootboxCraps.sol	READ
+CONSUMER-SEALED	_wordAt	resolveSlot	CrapsBattle.sol	READ
+ACCESSOR	_wordAt	previewSettlement	CrapsBattle.sol	READ
+CONSUMER-SEALED	_dailyWordAt	_windowTerms	CrapsBattle.sol	READ
+CONSUMER-SEALED	_dailyWordAt	_shareOf	CrapsBattle.sol	READ
+CONSUMER-SEALED	_dailyWordAt	openBonusDay	CrapsBattle.sol	READ
+CONSUMER-SEALED	_dailyWordAt	enterBonusDay	CrapsBattle.sol	READ
+GATE	_dailyWordAt	_reserveDay	CrapsBattle.sol	READ
+ACCESSOR	_dailyWordAt	_bonusDayOf	CrapsBattle.sol	READ
+ACCESSOR	_dailyWordAt	_bonusBoostBand	CrapsBattle.sol	READ
+ACCESSOR	_dailyWordAt	_bonusTermsFor	CrapsBattle.sol	READ

@@ -102,10 +102,6 @@ contract GNRUS {
     /// @dev Reason codes: REJECT_EMPTY_SLOT (0), REJECT_ALREADY_VOTED (1), REJECT_ZERO_WEIGHT (2)
     error VoteRejected(uint8 reason);
 
-    /// @notice Thrown by pickCharity() when the level argument fails a state-based pre-condition.
-    /// @dev Reason code: REJECT_LEVEL_NOT_ACTIVE (0)
-    error PickCharityRejected(uint8 reason);
-
     /// @notice Thrown by vote() when the targeted slot's current recipient equals the previous level's winner.
     /// @dev Prevents consecutive wins by the same recipient. Storage slot lastWinningRecipient is written
     ///      by pickCharity() in the distribution-paid path and read here on every vote(). Skipped levels
@@ -248,9 +244,6 @@ contract GNRUS {
 
     /// @notice VoteRejected reason: voter has zero whole-token sDGNRS balance
     uint8 private constant REJECT_ZERO_WEIGHT = 2;
-
-    /// @notice PickCharityRejected reason: level argument does not match currentLevel
-    uint8 private constant REJECT_LEVEL_NOT_ACTIVE = 0;
 
     // =====================================================================
     //                       IMMUTABLE REFERENCES
@@ -661,7 +654,8 @@ contract GNRUS {
 
     /// @notice Atomically resolve a level: pick winner from CURRENT slate, distribute 2% of unallocated GNRUS, then flush queued edits for next level.
     /// @dev Caller must be the game contract (onlyGame). Operation is atomic per call:
-    ///      (1) Argument validation (level matches currentLevel). This alone enforces idempotence:
+    ///      (1) Argument validation (level matches currentLevel), which RETURNS rather than reverting
+    ///          — the sole caller is the daily advance. This alone enforces idempotence:
     ///          currentLevel only ever advances (sole writer is step 2, strictly increasing), so a
     ///          resolved level can never match again.
     ///      (2) currentLevel = level + 1 SET FIRST so state locks before any further work (zero external
@@ -678,11 +672,15 @@ contract GNRUS {
     ///          L+1, not L. The vault-owner cannot redirect votes already cast for the current level by
     ///          queueing a recipient swap mid-level.
     ///      (7) Terminal LevelSkipped emit when the level was not paid (single emission per call).
-    /// @param level The level to resolve (must equal currentLevel).
+    /// @param level The level to resolve. Anything other than currentLevel resolves nothing.
     function pickCharity(uint24 level) external onlyGame {
         // 1. Argument validation — currentLevel only ever advances (sole writer is step 2 below,
         //    strictly increasing), so this check alone enforces once-per-level resolution.
-        if (level != currentLevel) revert PickCharityRejected(REJECT_LEVEL_NOT_ACTIVE);
+        //    A NO-OP, never a revert: the game's only call site sits on the daily advance, where
+        //    reverting would not skip a governance round, it would stop the protocol's crank. A
+        //    level already resolved and a level out of step both simply do nothing, and the
+        //    absence of both LevelResolved and LevelSkipped is how either is seen.
+        if (level != currentLevel) return;
 
         // 2. Advance currentLevel FIRST — locks state before winner/distribution/flush.
         currentLevel = level + 1;

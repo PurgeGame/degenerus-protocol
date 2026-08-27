@@ -72,13 +72,13 @@ export const DEPLOY_ORDER = [
   // constant, so it has no deploy-time dependents.
   "RECORD_BOUNTY",          // N+28: DegenerusRecordBounty
   // Craps table. Appended LAST so adding it shifts no existing predicted address.
-  // FlipCraps carries Craps + LootboxCraps by inheritance, so the table is ONE
+  // CrapsBattle carries Craps + LootboxCraps by inheritance, so the table is ONE
   // deployment, not three. No ctor args and no deploy-time dependents: it reads
   // GAME's lootbox-RNG slots via extsload and burns/mints FLIP and credits
   // COINFLIP at runtime only, all through compile-time constants. Its own
   // address must be predicted rather than discovered, because FLIP and Coinflip
   // bake CRAPS in as a constant to authorize the burn/mint/credit sinks.
-  "CRAPS",                  // N+29: FlipCraps
+  "CRAPS",                  // N+29: CrapsBattle
 ];
 
 /**
@@ -114,7 +114,7 @@ export const KEY_TO_CONTRACT = {
   AFKING_SUB_TOKEN: "AFKingSubscriptionToken",
   PARIMUTUEL: "DegenerusParimutuel",
   RECORD_BOUNTY: "DegenerusRecordBounty",
-  CRAPS: "FlipCraps",
+  CRAPS: "CrapsBattle",
 };
 
 /**

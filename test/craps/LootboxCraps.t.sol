@@ -19,6 +19,11 @@ contract SlotProbe is DegenerusGameStorage {
     function lootboxRngWordByIndexSlot() external pure returns (uint256 s) {
         assembly { s := lootboxRngWordByIndex.slot }
     }
+
+    function rngWordByDaySlot() external pure returns (uint256 s) {
+        assembly { s := rngWordByDay.slot }
+    }
+
 }
 
 /// @dev Adds only the replay taps the suite grades the binding with. It overrides nothing —
@@ -26,7 +31,7 @@ contract SlotProbe is DegenerusGameStorage {
 contract LootboxCrapsHarness is LootboxCraps {
 
     /// @dev The `resolveHandAt` / `resolveHandsAt` / `shooterDice` replay wrappers were cut from
-    ///      production: they cost `FlipCraps` its EIP-170 headroom and the paying path never called
+    ///      production: they cost `CrapsBattle` its EIP-170 headroom and the paying path never called
     ///      one. What they existed to demonstrate is still a production property — the seed at an
     ///      index is a function of the index alone — so they are rebuilt here over the SHIPPED
     ///      `seedFor` / `handSeed`, with only the resolver behind them supplied by the oracle.
@@ -36,12 +41,28 @@ contract LootboxCrapsHarness is LootboxCraps {
         oracle = new CrapsOracle();
     }
 
+    /// @dev The reader surface production keeps internal, restated for the suite. See
+    ///      `test/craps/CrapsViews.sol` for why the shipped contract no longer carries it.
+    bytes32 public constant CRAPS_SEED_DOMAIN = _CRAPS_SEED_DOMAIN;
+
+    function currentIndex() external view returns (uint48) {
+        return _currentIndex();
+    }
+
+    function wordAt(uint48 index) external view returns (uint256) {
+        return _wordAt(index);
+    }
+
+    function seedFor(uint48 index) external view returns (bytes32) {
+        return _seedFor(index);
+    }
+
     function resolveHandAt(Craps.Bets calldata b, uint48 index)
         external
         view
         returns (CrapsOracle.Outcome memory)
     {
-        return oracle.resolveHand(b, seedFor(index));
+        return oracle.resolveHand(b, _seedFor(index));
     }
 
     function resolveHandsAt(Craps.Bets calldata b, uint48 index, uint256 hands)
@@ -49,7 +70,7 @@ contract LootboxCrapsHarness is LootboxCraps {
         view
         returns (CrapsOracle.Session memory)
     {
-        return oracle.resolveHands(b, seedFor(index), hands);
+        return oracle.resolveHands(b, _seedFor(index), hands);
     }
 
     function shooterDice(uint48 index, uint256 handOrdinal)
@@ -57,9 +78,23 @@ contract LootboxCrapsHarness is LootboxCraps {
         view
         returns (uint8[] memory)
     {
-        return oracle.handDice(handSeed(seedFor(index), handOrdinal));
+        return oracle.handDice(handSeed(_seedFor(index), handOrdinal));
     }
 
+}
+
+/// @dev A FORWARDER and nothing else: it adds no state, overrides nothing, and each body is a
+///      single call into the shipped internal. `currentIndex` / `wordAt` are non-virtual, so this
+///      cannot stand between the test and what production runs — it only makes an internal
+///      function externally observable.
+contract ShippedProbe is LootboxCraps {
+    function currentIndex() external view returns (uint48) {
+        return _currentIndex();
+    }
+
+    function wordAt(uint48 index) external view returns (uint256) {
+        return _wordAt(index);
+    }
 }
 
 /// @title LootboxCraps binding suite
@@ -236,19 +271,22 @@ contract LootboxCrapsTest is CrapsPins {
             WORD_SLOT,
             "lootboxRngWordByIndex moved - update LOOTBOX_RNG_WORD_SLOT"
         );
+        assertEq(probe.rngWordByDaySlot(), DAY_WORD_SLOT, "rngWordByDay moved - update RNG_WORD_BY_DAY_SLOT");
+
     }
 
-    /// @dev With the seams gone there are no harness overrides left to bypass: `currentIndex` and
-    ///      `wordAt` are the shipped, non-virtual functions, and they resolve through the
-    ///      `ContractAddresses.GAME` pin. This pins that explicitly by standing up a bare
-    ///      `LootboxCraps` — no subclass at all — against the etched double.
+    /// @dev With the seams gone there are no harness overrides left to bypass: `_currentIndex`
+    ///      and `_wordAt` are the shipped, non-virtual functions, and they resolve through the
+    ///      `ContractAddresses.GAME` pin. Production keeps them internal, so observing them takes
+    ///      a subclass — but `ShippedProbe` only forwards, and neither function is virtual, so
+    ///      what runs here is the shipped body against the etched double.
     function test_shippedPathReadsThroughThePinnedGame() public {
         assertTrue(ContractAddresses.GAME != address(0), "GAME is unpinned in this tree");
 
         _setIndex(77);
         _setWord(77, 0xBEEF);
 
-        LootboxCraps shipped = new LootboxCraps();
+        ShippedProbe shipped = new ShippedProbe();
         assertEq(shipped.GAME(), ContractAddresses.GAME, "GAME pin");
         assertEq(shipped.currentIndex(), 77, "shipped currentIndex did not read the pinned game");
         assertEq(shipped.wordAt(77), 0xBEEF, "shipped wordAt did not read the pinned game");

@@ -6,7 +6,7 @@ import {Craps} from "../../contracts/Craps.sol";
 /// @title CrapsOracle
 /// @notice TEST-ONLY reference resolver. This is the full-fidelity engine that used to ship
 ///         inside `Craps`: scripted dice, per-leg books, per-hand ledgers, and the many-hand
-///         aggregate. It was cut from production because `FlipCraps` inherited its whole public
+///         aggregate. It was cut from production because `CrapsBattle` inherited its whole public
 ///         surface and blew EIP-170; nothing on the paying path ever called it.
 ///
 ///         It is kept here because it is the SUITE'S ORACLE, and the validation chain only works
@@ -16,7 +16,7 @@ import {Craps} from "../../contracts/Craps.sol";
 ///              only way to assert a rule exactly ("the hard eight pays 9:1", "a come-out craps
 ///              kills the line"). Scripted dice are what make that possible, and the shipped lean
 ///              engine takes a seed, not a script.
-///           2. `FlipCraps.t.sol` and `CrapsEconomics.t.sol` then grade the SHIPPED lean engine
+///           2. `CrapsBattle.t.sol` and `CrapsEconomics.t.sol` then grade the SHIPPED lean engine
 ///              against this one, off the same seed. That step is what makes these assertions
 ///              about production rather than about a test fixture.
 ///
@@ -46,11 +46,12 @@ contract CrapsOracle {
     uint256 internal constant _LEGS = 10;
 
     uint256 public constant LEG_PASS = 0;
-    uint256 public constant LEG_PASS_ODDS = 1;
-    /// @dev Place legs occupy LEG_PLACE + PLACE_* (2..7).
-    uint256 public constant LEG_PLACE = 2;
-    uint256 public constant LEG_HARD4 = 8;
-    uint256 public constant LEG_HARD8 = 9;
+    /// @dev Place legs occupy LEG_PLACE + PLACE_* (1..6).
+    uint256 public constant LEG_PLACE = 1;
+    uint256 public constant LEG_HARD4 = 7;
+    uint256 public constant LEG_HARD8 = 8;
+    /// @dev The dark side, the tenth and last leg — canonical order matches `Craps.Bets`.
+    uint256 public constant LEG_DONT_PASS = 9;
 
     /// @dev Place indexes, ordered by dice total: 4, 5, 6, 8, 9, 10.
     uint256 public constant PLACE_4 = 0;
@@ -85,12 +86,10 @@ contract CrapsOracle {
     /// @dev This is what makes a slip settlement's gas a GUARANTEE instead of a probability. The
     ///      shooter cap alone leaves a bounded-but-huge worst case (cap x MAX_ROLLS rolls); with
     ///      this budget the hard ceiling is `SLIP_ROLL_BUDGET - 1 + MAX_ROLLS` rolls — under two
-    ///      million gas in the measured settlement engine — however the dice fall. A 256-shooter
-    ///      slip averages ~2,200 rolls, so
-    ///      reaching 4,096 needs the average hand nearly doubled across the whole run: organically
-    ///      unreachable, and hitting it anyway is harmless — the slip stops as `Cap` between
-    ///      shooters with the bankroll intact. Every shooter still settles whole; the budget never
-    ///      cuts a hand mid-roll.
+    ///      million gas in the measured settlement engine — however the dice fall. Even a
+    ///      hypothetical 256-shooter slip averages ~2,200 rolls; legal terms stop much earlier,
+    ///      making 4,096 effectively unreachable. Hitting it is an ordinary bust between shooters;
+    ///      every shooter still settles whole, and the budget never cuts a hand mid-roll.
     uint256 public constant SLIP_ROLL_BUDGET = 4096;
 
     /// @notice Shooters between each mandatory doubling of a slip's base wager.
@@ -112,18 +111,18 @@ contract CrapsOracle {
     ///        bits  0..15  live place-bet totals (bit t; only 4, 5, 6, 8, 9, 10 are ever set)
     ///        bits 16..31  distinct points made (bit t, offset 16 — `pointsMade` telemetry)
     ///        bits 32..35  the point (0 = come-out)
-    ///        bits 36..39  the point the pass odds are riding (0 = never armed)
-    ///        bit  40      pass line live          bit 41  pass odds unresolved
-    ///        bit  42      hard eight live         bit 43  seven-out happened
-    ///        bit  44      hard four live
+    ///        bit  40      pass line live          bit 43  seven-out happened
+    ///        bit  41      don't pass unresolved   bit 44  hard four live
+    ///        bit  42      hard eight live
     uint256 private constant ST_FIRE = 16;
     uint256 private constant ST_POINT = 32;
-    uint256 private constant ST_PASS_PT = 36;
     uint256 private constant ST_PLACE_ANY = 0xFFFF;
     uint256 private constant ST_POINT_MASK = 0xF << 32;
-    uint256 private constant ST_PASS_PT_MASK = 0xF << 36;
     uint256 private constant ST_PASS_LIVE = 1 << 40;
-    uint256 private constant ST_PASS_ODDS_LIVE = 1 << 41;
+    /// @dev Independently held at the production engine's value: the dark wager is UNRESOLVED,
+    ///      which is what bounds it to one decision per shooter and what tells a roll-cap
+    ///      truncation whether the stake is still owed back.
+    uint256 private constant ST_DONT_LIVE = 1 << 41;
     uint256 private constant ST_HARD8_LIVE = 1 << 42;
     uint256 private constant ST_SEVEN_OUT = 1 << 43;
     uint256 private constant ST_HARD4_LIVE = 1 << 44;
@@ -192,13 +191,12 @@ contract CrapsOracle {
     /// @notice Why a bet slip stopped playing.
     enum SlipStop {
         Bust, // fell below half a round, or lost the mid-run second-chance flip
-        Goal, // the bankroll reached the chosen target
-        Cap // the shooter cap arrived before either
+        Goal // the bankroll reached the chosen target
     }
 
     /// @notice The full account of one bet-slip run: the same wager repeated shooter after shooter
-    ///         out of a bankroll, until it cannot cover another round, reaches the goal, or hits
-    ///         the cap.
+    ///         out of a bankroll, until it cannot cover another round, reaches the goal, or hits a
+    ///         hard execution bound. Either failure is a bust.
     /// @param bankrollIn   What the slip started with.
     /// @param bankrollOut  What was left when it stopped — the settlement figure. Includes any
     ///                     sub-stake remainder; stopping never confiscates it.
@@ -385,14 +383,27 @@ contract CrapsOracle {
         pure
         returns (SlipResult memory)
     {
-        return _slip(b, seed, bankroll, goal, cap, SLIP_ROLL_BUDGET, true, true);
+        return _slip(b, seed, bankroll, goal, cap, SLIP_ROLL_BUDGET, true, true, address(0));
+    }
+
+    /// @dev The same run for a NAMED owner. The dice are the table's either way; only the survival
+    ///      coin moves, which is what a caller comparing two players at one seat order needs.
+    function resolveSlipFor(
+        Craps.Bets calldata b,
+        bytes32 seed,
+        uint256 bankroll,
+        uint256 goal,
+        uint256 cap,
+        address player
+    ) external pure returns (SlipResult memory) {
+        return _slip(b, seed, bankroll, goal, cap, SLIP_ROLL_BUDGET, true, true, player);
     }
 
     /// @dev The slip engine. Stop conditions are judged BETWEEN shooters, in this order: goal first
     ///      (so a run that is simultaneously at goal and out of the next stake counts as a win), then
-    ///      the cap, then affordability. A round short of even half its wager busts; one it can cover
-    ///      between half and all of takes the table's survival coin (survive doubles the bankroll and
-    ///      plays on, lose zeroes it). Each played round escrows its wager — the base board times the
+    ///      the hard bounds, then affordability. A round short of even half its wager busts; one it can cover
+    ///      between half and all of takes its OWNER's survival coin (survive doubles the bankroll and
+    ///      plays on, lose zeroes it) — the dice are the table's, the second chance is the player's. Each played round escrows its wager — the base board times the
     ///      escalating mandatory multiplier (see `ESC_HANDS`) — out of the bankroll, plays one lean
     ///      hand, and credits back whatever it returned; the resolver's bounded-loss invariant is
     ///      exactly what makes the escrow subtraction safe unchecked after the affordability check.
@@ -413,7 +424,8 @@ contract CrapsOracle {
         uint256 cap,
         uint256 rollBudget,
         bool withLedger,
-        bool withLog
+        bool withLog,
+        address player
     ) internal pure returns (SlipResult memory r) {
         if (cap == 0 || cap > MAX_SESSION_HANDS) revert BadHandCount();
         uint256 stake = stakeFor(b);
@@ -444,11 +456,10 @@ contract CrapsOracle {
                     r.stop = SlipStop.Goal;
                     break;
                 }
-                // Goal and the hard caps stop cleanly; only a continuing run is asked for a second
-                // chance, so both precede affordability. The packed cursor is total rolls plus one
-                // terminator per completed hand.
+                // A hard bound is an ordinary bust. Bust is enum zero, so a bare break mirrors the
+                // lean engine's cheapest path. The packed cursor is total rolls plus one terminator
+                // per completed hand.
                 if (cur & 0xFFFF == cap || (cur >> 32) - (cur & 0xFFFF) >= rollBudget) {
-                    r.stop = SlipStop.Cap;
                     break;
                 }
 
@@ -464,7 +475,7 @@ contract CrapsOracle {
                         // Between half and a full round: the table's survival coin for this round —
                         // the same one that decides a run of this length at the end — rides the
                         // whole bankroll. Survive doubles it and plays on, lose zeroes it.
-                        if (_survived(seed, cur & 0xFFFF)) {
+                        if (_survived(seed, cur & 0xFFFF, player)) {
                             bankroll += bankroll;
                         } else {
                             bankroll = 0;
@@ -562,34 +573,32 @@ contract CrapsOracle {
     /// @dev What an escrow must collect up front, and the exact ceiling on what the player can
     ///      lose. Multiply by the hand count for a session.
     function stakeFor(Craps.Bets memory b) public pure returns (uint256 total) {
-        // Stakes are whole FLIP; the charge is wei. Bounded far below 2^256: nine uint24 legs
-        // plus the odds leg at uint24 x uint16 sum under 2^42 FLIP.
+        // Stakes are whole FLIP; the charge is wei. Bounded far below 2^256: ten uint24 legs.
         unchecked {
-            total =
-                (uint256(b.passLine)
-                        + uint256(b.place4)
-                        + uint256(b.place5)
-                        + uint256(b.place6)
-                        + uint256(b.place8)
-                        + uint256(b.place9)
-                        + uint256(b.place10)
-                        + uint256(b.hard4)
-                        + uint256(b.hard8)
-                        + uint256(b.passLine)
-                        * b.passOddsMult) * FLIP;
+            total = (
+                uint256(b.passLine) + uint256(b.place4) + uint256(b.place5) + uint256(b.place6)
+                    + uint256(b.place8) + uint256(b.place9) + uint256(b.place10) + uint256(b.hard4)
+                    + uint256(b.hard8) + uint256(b.dontPass)
+            ) * FLIP;
         }
     }
 
     /// @notice The expected loss of one hand of `b`, in wei — the theo a casino comps from.
     /// @dev Exact per-leg rationals for the ride-to-the-seven-out model this table plays:
-    ///      pass 7/251, place 4/10 1/10, place 5/9 1/15, place 6/8 1/36, the hard four 1/8, the
-    ///      hard eight 1/10, and odds exactly zero. The MC oracle pins every one of these numbers
-    ///      against the resolver; flooring loses at most a few wei.
+    ///      pass 7/251, place 4/10 and 5/9 EXACTLY ZERO (they pay true odds — 2:1 and 3:2 against
+    ///      the 1/2 and 2/3 hits a stake expects before the seven), place 6/8 1/36, the hard four
+    ///      1/8, the hard eight 1/10, and the dark side 101/1050.
+    ///
+    ///      The dark rational is per SHOOTER, which is also per decision: a barred twelve leaves
+    ///      the wager up, so it always resolves. Excluding pushes the wager wins 949/1925 and
+    ///      loses 976/1925, and at 3:4 that is `(976 - 949 * 3/4) / 1925 = 151/1100` = 13.727%.
+    ///      The MC oracle pins every one of these numbers against the resolver; flooring loses at
+    ///      most a few wei.
     function theoFor(Craps.Bets memory b) public pure returns (uint256) {
         unchecked {
-            return (uint256(b.passLine) * FLIP * 7) / 251 + (uint256(b.place4) * FLIP) / 10 + (uint256(b.place5) * FLIP)
-                / 15 + (uint256(b.place6) * FLIP) / 36 + (uint256(b.place8) * FLIP) / 36 + (uint256(b.place9) * FLIP)
-                / 15 + (uint256(b.place10) * FLIP) / 10 + (uint256(b.hard4) * FLIP) / 8 + (uint256(b.hard8) * FLIP) / 10;
+            return (uint256(b.passLine) * FLIP * 7) / 251 + (uint256(b.place6) * FLIP) / 36
+                + (uint256(b.place8) * FLIP) / 36 + (uint256(b.hard4) * FLIP) / 8
+                + (uint256(b.hard8) * FLIP) / 10 + (uint256(b.dontPass) * FLIP * 151) / 1100;
         }
     }
 
@@ -716,9 +725,8 @@ contract CrapsOracle {
         // 0.8's checked arithmetic costs more than the whole point machine at every roll.
         unchecked {
             // The whole machine lives in `st` (layout above). Keeping the loop's persistent state in
-            // one word is what lets every local stay on the stack; the odds STAKES never ride along at
-            // all — they are pure functions of `b`, recomputed at their at-most-one resolution event —
-            // only their liveness does.
+            // one word is what lets every local stay on the stack; no STAKE ever rides along — each
+            // is a pure function of `b`, recomputed at its resolution event — only liveness does.
             uint256 st;
             if (b.place4 != 0) st |= 1 << 4;
             if (b.place5 != 0) st |= 1 << 5;
@@ -728,10 +736,8 @@ contract CrapsOracle {
             if (b.place10 != 0) st |= 1 << 10;
             if (b.hard4 != 0) st |= ST_HARD4_LIVE;
             if (b.hard8 != 0) st |= ST_HARD8_LIVE;
-            if (b.passLine != 0) {
-                st |= ST_PASS_LIVE;
-                if (b.passOddsMult != 0) st |= ST_PASS_ODDS_LIVE;
-            }
+            if (b.passLine != 0) st |= ST_PASS_LIVE;
+            if (b.dontPass != 0) st |= ST_DONT_LIVE;
 
             uint256 scripted;
             // Production callers pass a zero memory pointer instead of allocating an empty
@@ -799,6 +805,30 @@ contract CrapsOracle {
                     }
                 }
 
+                // --- The dark side: ONE decision per shooter, bar the twelve ---
+                // Ahead of the point machine below, which is what moves the point out from under
+                // it: `comeOut` and the point read here are the ones this roll was judged against.
+                if (st & ST_DONT_LIVE != 0) {
+                    if (comeOut) {
+                        if (t == 2 || t == 3) {
+                            _pay(o, withLegs, LEG_DONT_PASS, _dontWin(b));
+                            st &= ~ST_DONT_LIVE;
+                        } else if (t == 7 || t == 11) {
+                            // A come-out natural kills it, and is NOT a seven-out: the shooter
+                            // rolls on with the wager retired.
+                            st &= ~ST_DONT_LIVE;
+                        }
+                        // 12 is barred: no profit, no loss, and the same wager stays up. A point
+                        // leaves it up too, to be decided by the seven or the point.
+                    } else if (t == 7) {
+                        // The seven-out is the wager's win, and it collects before the hand ends.
+                        _pay(o, withLegs, LEG_DONT_PASS, _dontWin(b));
+                        st &= ~ST_DONT_LIVE;
+                    } else if (t == (st >> ST_POINT) & 0xF) {
+                        st &= ~ST_DONT_LIVE;
+                    }
+                }
+
                 // --- Line bets and the point state machine ---
                 if (comeOut) {
                     if (t == 7 || t == 11) {
@@ -813,10 +843,6 @@ contract CrapsOracle {
                         st &= ~ST_PASS_LIVE;
                     } else {
                         st |= t << ST_POINT;
-                        // Odds ride every point established while the line lives. The nibble was
-                        // cleared when the previous point resolved, so this write never ORs two
-                        // points together.
-                        if (st & ST_PASS_LIVE != 0) st |= t << ST_PASS_PT;
                     }
                 } else if (t == (st >> ST_POINT) & 0xF) {
                     // Distinct points made, kept as telemetry (`pointsMade`).
@@ -824,17 +850,8 @@ contract CrapsOracle {
                     if (st & ST_PASS_LIVE != 0) {
                         _pay(o, withLegs, LEG_PASS, uint256(b.passLine) * FLIP);
                     }
-                    if (st & ST_PASS_ODDS_LIVE != 0 && (st >> ST_PASS_PT) & 0xF == t) {
-                        // Winnings only, at true odds; the stake stays up to ride the next point.
-                        uint256 po = uint256(b.passLine) * b.passOddsMult * FLIP;
-                        _pay(o, withLegs, LEG_PASS_ODDS, _oddsWin(po, t));
-                    }
-                    st &= ~(ST_POINT_MASK | ST_PASS_PT_MASK);
+                    st &= ~ST_POINT_MASK;
                 } else if (t == 7) {
-                    // Taken odds lose on the seven, but ONLY if they were ever armed. A hand whose
-                    // line bet resolved on the come-out reaches a seven-out with the odds never
-                    // posted, and that stake has to come back rather than be swept up here.
-                    if ((st >> ST_PASS_PT) & 0xF != 0) st &= ~ST_PASS_ODDS_LIVE;
                     st &= ~ST_PASS_LIVE;
                     st |= ST_SEVEN_OUT;
                     break;
@@ -842,14 +859,6 @@ contract CrapsOracle {
             }
 
             // --- End of hand ---
-
-            // An odds stake that never died comes straight back: the line died on a come-out craps
-            // (odds sit between points then), no point was ever established behind a live line, or
-            // the hand truncated with a point still open. Winnings from cycles it won are already
-            // credited; only a seven-out mid-point sweeps the stake itself.
-            if (st & ST_PASS_ODDS_LIVE != 0) {
-                _pay(o, withLegs, LEG_PASS_ODDS, uint256(b.passLine) * b.passOddsMult * FLIP);
-            }
 
             o.rolls = uint32(st & ST_SEVEN_OUT != 0 ? i + 1 : i);
             o.pointsMade = uint8(_countPoints((st >> ST_FIRE) & 0xFFFF));
@@ -865,6 +874,9 @@ contract CrapsOracle {
                 }
                 if (st & ST_HARD4_LIVE != 0) _pay(o, withLegs, LEG_HARD4, uint256(b.hard4) * FLIP);
                 if (st & ST_HARD8_LIVE != 0) _pay(o, withLegs, LEG_HARD8, uint256(b.hard8) * FLIP);
+                // An UNDECIDED dark wager gets its stake back; a decided one gets nothing, having
+                // already been paid or lost. The liveness bit is exactly that distinction.
+                if (st & ST_DONT_LIVE != 0) _pay(o, withLegs, LEG_DONT_PASS, uint256(b.dontPass) * FLIP);
             }
 
             o.net = int256(o.returned) - int256(o.staked);
@@ -877,12 +889,12 @@ contract CrapsOracle {
         // equal to this leg vector's sum, so the two derivations cannot drift apart unnoticed.
         unchecked {
             o.legStaked[LEG_PASS] = uint256(b.passLine) * FLIP;
-            o.legStaked[LEG_PASS_ODDS] = uint256(b.passLine) * b.passOddsMult * FLIP;
             for (uint256 k = 0; k < 6; ++k) {
                 o.legStaked[LEG_PLACE + k] = _placeWei(b, k);
             }
             o.legStaked[LEG_HARD4] = uint256(b.hard4) * FLIP;
             o.legStaked[LEG_HARD8] = uint256(b.hard8) * FLIP;
+            o.legStaked[LEG_DONT_PASS] = uint256(b.dontPass) * FLIP;
         }
     }
 
@@ -898,9 +910,10 @@ contract CrapsOracle {
     }
 
     /// @dev Independent twin of the production survival coin: a fair, committed double-or-nothing
-    ///      keyed on the table seed and the run-length `n`, consulted both mid-run and at the end.
-    function _survived(bytes32 seed, uint256 n) private pure returns (bool) {
-        return uint256(keccak256(abi.encode(SURVIVAL_TAG, seed, n))) & 1 == 1;
+    ///      keyed on the table seed, the run-length `n` and the slip's OWNER. The owner is what
+    ///      keeps one player's second chance off the rest of the field.
+    function _survived(bytes32 seed, uint256 n, address player) private pure returns (bool) {
+        return uint256(keccak256(abi.encode(SURVIVAL_TAG, seed, n, player))) & 1 == 1;
     }
 
     /// @dev Copy one hand's summary into a ledger slot. Split out of the session loops so their
@@ -951,26 +964,26 @@ contract CrapsOracle {
         }
     }
 
-    /// @dev Place winnings. Keeping each denominator literal lets the compiler prove it nonzero
-    ///      and removes the generic checked-division guard from every place hit.
+    /// @dev Place winnings. 4/10 and 5/9 pay TRUE ODDS — 2:1 and 3:2 — so those legs are exactly
+    ///      fair; only 6/8 at 7:6 still carries an edge. Keeping each denominator literal lets the
+    ///      compiler prove it nonzero and removes the generic checked-division guard from every
+    ///      place hit.
     function _placeWin(Craps.Bets memory b, uint256 idx) private pure returns (uint256 stake) {
         stake = _placeWei(b, idx);
-        if (idx == PLACE_4 || idx == PLACE_10) return (stake * 9) / 5;
-        if (idx == PLACE_5 || idx == PLACE_9) return (stake * 7) / 5;
+        if (idx == PLACE_4 || idx == PLACE_10) return stake * 2;
+        if (idx == PLACE_5 || idx == PLACE_9) return (stake * 3) / 2;
         return (stake * 7) / 6;
     }
 
-    /// @dev True-odds winnings on a point. These are the real
-    ///      probabilities: 4 and 10 come 3 ways against the seven's 6, so 2:1; 5 and 9 come 4 ways,
-    ///      so 3:2; 6 and 8 come 5 ways, so 6:5. Nothing is shaded, which is what makes odds the
-    ///      only zero-edge bet on the table and a sharp test oracle.
-    function _oddsWin(uint256 stake, uint256 pt) private pure returns (uint256) {
+    /// @dev What a WINNING dark wager returns in full: its own stake back plus 3:4 of it, the
+    ///      profit floored once at wei precision. Unlike everything else on this board the stake
+    ///      comes home with the winnings, because the wager retires the moment it wins.
+    function _dontWin(Craps.Bets memory b) private pure returns (uint256) {
         unchecked {
-            if (pt == 4 || pt == 10) return stake * 2;
-            if (pt == 5 || pt == 9) return (stake * 3) / 2;
-            return (stake * 6) / 5;
+            return uint256(b.dontPass) * FLIP + (uint256(b.dontPass) * (3 * FLIP)) / 4;
         }
     }
+
 
     /// @dev Distinct points made, from the bitmask set at each point-made roll. Counts all six
     ///      point totals — 4 and 10 can still be points even though they take no place bets.

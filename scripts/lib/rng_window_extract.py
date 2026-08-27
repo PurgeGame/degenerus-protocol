@@ -42,6 +42,13 @@ VRF_WORD_IDENTIFIERS = [
     "rngWordByDay",
     "lootboxRngWordByIndex",
     "lootboxRngPacked",
+    # CROSS-CONTRACT READERS. A satellite that reaches the same words through the game's
+    # `extsload` names no storage variable at all — it names a numeric slot — so identifier
+    # matching alone would leave it invisible while the gate still reported full coverage.
+    # These two accessors are the only doors into those slots from outside the game, so
+    # tracking them by name puts every such consumer back under the manifest.
+    "_wordAt",
+    "_dailyWordAt",
 ]
 
 if os.environ.get("IDENTIFIERS"):

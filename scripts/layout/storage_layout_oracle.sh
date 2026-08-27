@@ -28,10 +28,9 @@ CONTRACTS=(
   Coinflip sDGNRS DGNRS DegenerusVaultShare DegenerusAffiliate DegenerusQuests
   FLIP GNRUS WWXRP DegenerusDeityPass DegenerusJackpots DegenerusAdmin
   DegenerusRecordBounty
-  # Craps table. FlipCraps is the only one of the three craps contracts with storage
-  # (_bets, betCount) — Craps and LootboxCraps are stateless and are carried into it by
-  # inheritance, so pinning FlipCraps pins the whole table.
-  FlipCraps
+  # Craps table. CrapsBattle is the only one of the three craps contracts with storage; Craps and
+  # LootboxCraps are stateless and inherited, so pinning CrapsBattle pins the whole table.
+  CrapsBattle
 )
 # Delegatecall modules — must share DegenerusGame's storage layout exactly (run in its context).
 MODULES=(

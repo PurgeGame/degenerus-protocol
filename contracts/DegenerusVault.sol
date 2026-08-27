@@ -76,10 +76,7 @@ interface IDegenerusGamePlayerActions {
     /// @notice View claimable ETH winnings for a player.
     function claimableWinningsOf(address player) external view returns (uint256);
     /// @notice Purchase tickets using FLIP.
-    function redeemFlip(
-        address buyer,
-        uint256 entryQuantityScaled
-    ) external;
+    function redeemFlip(address buyer, uint256 entryQuantityScaled) external;
     /// @notice Sell far-future ticket entries for current-level tickets + cash; the counterparty resolves to sDGNRS, or to the vault as buyer-of-last-resort when sDGNRS cannot fund the swap.
     function sellFarFutureEntries(
         address player,
@@ -111,6 +108,31 @@ interface ICoinflipPlayerActions {
 interface ICoinPlayerActions {
     /// @notice Burn FLIP for decimator jackpot eligibility.
     function decimatorBurn(address player, uint256 amount) external;
+}
+
+/// @dev The craps table's player surface. The vault is seated automatically at every bonus
+///      window it can pay for, so the only doors it needs of its own are joining a custom battle
+///      and re-spreading the chips on slips it already owns.
+///
+///      `CrapsBets` MIRRORS `Craps.Bets` field for field, including the tenth leg, `dontPass` —
+///      the tuple is ABI-encoded by position, so a stale copy would silently mis-place every
+///      chip. The table refuses a ticket naming both `passLine` and `dontPass`.
+interface ICrapsPlayerActions {
+    struct CrapsBets {
+        uint24 passLine;
+        uint24 place4;
+        uint24 place5;
+        uint24 place6;
+        uint24 place8;
+        uint24 place9;
+        uint24 place10;
+        uint24 hard4;
+        uint24 hard8;
+        uint24 dontPass;
+    }
+
+    function enterBattle(uint64 slot, CrapsBets calldata chips, uint16 multiple) external returns (uint256);
+    function amendSlip(uint256 betId, CrapsBets calldata chips) external;
 }
 
 /// @dev Minimal ERC20 surface for sweeping foreign tokens the vault has no other handling for.
@@ -153,12 +175,7 @@ interface IAFKingSubscriptionToken {
 
     /// @notice Restyle a vault-held seat's cosmetic art (owner-authorized on
     ///         the token side, which is the vault itself for these serials).
-    function setSeatTraits(
-        uint256 tokenId,
-        uint8 symbolId,
-        uint24 bgRgb,
-        uint24 trimRgb
-    ) external;
+    function setSeatTraits(uint256 tokenId, uint8 symbolId, uint24 bgRgb, uint24 trimRgb) external;
 }
 
 /*
@@ -299,7 +316,7 @@ contract DegenerusVaultShare {
         // selector is shared by the L1 ReverseRegistrar and Base's L2ReverseRegistrar.
         address ensReg = ContractAddresses.ENS_REVERSE_REGISTRAR;
         if (ensReg != address(0)) {
-            (bool ok, ) = ensReg.call(
+            (bool ok,) = ensReg.call(
                 // raw-selectors: justified — best-effort ENS reverse-name; setName(string) has no deploy-wide bound interface and must not revert deployment
                 abi.encodeWithSignature("setName(string)", ensName_)
             );
@@ -480,14 +497,11 @@ contract DegenerusVault {
     // WIRING (Constants)
     // ---------------------------------------------------------------------
     /// @dev Game contract for player actions
-    IDegenerusGamePlayerActions internal constant gamePlayer =
-        IDegenerusGamePlayerActions(ContractAddresses.GAME);
+    IDegenerusGamePlayerActions internal constant gamePlayer = IDegenerusGamePlayerActions(ContractAddresses.GAME);
     /// @dev Coinflip contract for coinflip actions
-    ICoinflipPlayerActions internal constant coinflipPlayer =
-        ICoinflipPlayerActions(ContractAddresses.COINFLIP);
+    ICoinflipPlayerActions internal constant coinflipPlayer = ICoinflipPlayerActions(ContractAddresses.COINFLIP);
     /// @dev Coin contract for decimator actions
-    ICoinPlayerActions internal constant flipPlayer =
-        ICoinPlayerActions(ContractAddresses.COIN);
+    ICoinPlayerActions internal constant flipPlayer = ICoinPlayerActions(ContractAddresses.COIN);
     /// @dev FLIP token contract for minting and transfers
     IVaultCoin internal constant flipToken = IVaultCoin(ContractAddresses.COIN);
     /// @dev WWXRP token contract for vault minting
@@ -498,8 +512,7 @@ contract DegenerusVault {
     /// @dev stETH (Lido) token contract
     IStETH internal constant steth = IStETH(ContractAddresses.STETH_TOKEN);
     /// @dev sDGNRS contract for burning vault-held sDGNRS
-    IsDGNRSBurn internal constant sdgnrsToken =
-        IsDGNRSBurn(ContractAddresses.SDGNRS);
+    IsDGNRSBurn internal constant sdgnrsToken = IsDGNRSBurn(ContractAddresses.SDGNRS);
 
     // ---------------------------------------------------------------------
     // SALVAGE-BUYER FALLBACK CONFIG (owner-settable; packed into one slot)
@@ -564,7 +577,7 @@ contract DegenerusVault {
         // selector is shared by the L1 ReverseRegistrar and Base's L2ReverseRegistrar.
         address ensReg = ContractAddresses.ENS_REVERSE_REGISTRAR;
         if (ensReg != address(0)) {
-            (bool ok, ) = ensReg.call(
+            (bool ok,) = ensReg.call(
                 // raw-selectors: justified — best-effort ENS reverse-name; setName(string) has no deploy-wide bound interface and must not revert deployment
                 abi.encodeWithSignature("setName(string)", "vault.degenerus.eth")
             );
@@ -621,12 +634,7 @@ contract DegenerusVault {
     ) external payable onlyVaultOwner {
         uint256 totalValue = _combinedValue(ethValue);
         gamePlayer.purchase{value: totalValue}(
-            address(this),
-            entryQuantityScaled,
-            boxOrder,
-            affiliateCode,
-            payKind,
-            false
+            address(this), entryQuantityScaled, boxOrder, affiliateCode, payKind, false
         );
     }
 
@@ -669,12 +677,7 @@ contract DegenerusVault {
             value = _combinedValue(ethValue);
         }
         gamePlayer.placeDegeneretteBet{value: value}(
-            address(this),
-            currency,
-            amountPerSpin,
-            spinCount,
-            customTraits,
-            heroQuadrant
+            address(this), currency, amountPerSpin, spinCount, customTraits, heroQuadrant
         );
     }
 
@@ -727,6 +730,36 @@ contract DegenerusVault {
     /// @custom:reverts NotVaultOwner If caller does not hold >50.1% of DGVE
     function gameSetOperatorApproval(address operator, bool approved) external onlyVaultOwner {
         gamePlayer.setOperatorApproval(operator, approved);
+    }
+
+    /// @notice Join a custom craps battle for the vault, picking its seven chips by COUNT. The
+    ///         slot dictates bankroll, target and bounty, so there is nothing else to name, and
+    ///         both burn from the vault's own FLIP — its virtual mint allowance and settled
+    ///         coinflip claimable — so this spends vault value exactly as a purchase does. The
+    ///         vault is seated at every bonus window automatically and needs no door for those.
+    /// @param slot  The custom battle to join.
+    /// @param chips The seven the vault picks; the remaining three are thrown at settlement.
+    /// @param multiple How many copies of the run to buy, 1 to `MAX_ENTRY_MULTIPLE`: the same
+    ///                  bounty and the same standing in the battle, at that multiple of the
+    ///                  bankroll and that multiple of whatever the table returns.
+    /// @custom:reverts NotVaultOwner If caller does not hold >50.1% of DGVE
+    function crapsEnterBattle(uint64 slot, ICrapsPlayerActions.CrapsBets calldata chips, uint16 multiple)
+        external
+        onlyVaultOwner
+        returns (uint256 betId)
+    {
+        return ICrapsPlayerActions(ContractAddresses.CRAPS).enterBattle(slot, chips, multiple);
+    }
+
+    /// @notice Re-spread the chips on one of the vault's craps slips — the bonus seats it takes
+    ///         automatically included. Only the composition moves: the count, the terms and the
+    ///         seat all belong to the slot, so no value moves and the field does not change.
+    ///         Allowed until the slot closes.
+    /// @param betId The vault's slip: `(slot << 64) | seat`.
+    /// @param chips Where the same seven chips go instead.
+    /// @custom:reverts NotVaultOwner If caller does not hold >50.1% of DGVE
+    function crapsAmendSlip(uint256 betId, ICrapsPlayerActions.CrapsBets calldata chips) external onlyVaultOwner {
+        ICrapsPlayerActions(ContractAddresses.CRAPS).amendSlip(betId, chips);
     }
 
     /// @notice Deposit coins into coinflip for the vault
@@ -818,12 +851,7 @@ contract DegenerusVault {
     /// @param bgRgb 24-bit card background
     /// @param trimRgb 24-bit card trim
     /// @custom:reverts NotVaultOwner If caller does not hold >50.1% of DGVE
-    function afkingSeatRestyle(
-        uint256 tokenId,
-        uint8 symbolId,
-        uint24 bgRgb,
-        uint24 trimRgb
-    ) external onlyVaultOwner {
+    function afkingSeatRestyle(uint256 tokenId, uint8 symbolId, uint24 bgRgb, uint24 trimRgb) external onlyVaultOwner {
         afkingSubToken.setSeatTraits(tokenId, symbolId, bgRgb, trimRgb);
     }
 
@@ -834,7 +862,11 @@ contract DegenerusVault {
     /// @return stethOut stETH received
     /// @return flipOut FLIP received
     /// @custom:reverts NotVaultOwner If caller does not hold >50.1% of DGVE
-    function sdgnrsBurn(uint256 amount) external onlyVaultOwner returns (uint256 ethOut, uint256 stethOut, uint256 flipOut) {
+    function sdgnrsBurn(uint256 amount)
+        external
+        onlyVaultOwner
+        returns (uint256 ethOut, uint256 stethOut, uint256 flipOut)
+    {
         return sdgnrsToken.burn(amount);
     }
 
@@ -866,11 +898,7 @@ contract DegenerusVault {
     /// @custom:reverts ProtectedToken If `token` backs vault accounting.
     /// @custom:reverts Insufficient If the vault holds less than `amount`, or holds nothing.
     /// @custom:reverts TransferFailed If the token transfer returns false.
-    function sweepToken(
-        address token,
-        address to,
-        uint256 amount
-    ) external onlyVaultOwner {
+    function sweepToken(address token, address to, uint256 amount) external onlyVaultOwner {
         if (to == address(0)) revert ZeroAddress();
         if (token == ContractAddresses.STETH_TOKEN) revert ProtectedToken();
 
@@ -897,11 +925,7 @@ contract DegenerusVault {
     /// @param tokenId Token serial to send.
     /// @custom:reverts NotVaultOwner If caller is not the vault owner.
     /// @custom:reverts ZeroAddress If `to` is the zero address.
-    function sweepNft(
-        address token,
-        address to,
-        uint256 tokenId
-    ) external onlyVaultOwner {
+    function sweepNft(address token, address to, uint256 tokenId) external onlyVaultOwner {
         if (to == address(0)) revert ZeroAddress();
         IERC721Sweep(token).transferFrom(address(this), to, tokenId);
         emit NftSwept(token, to, tokenId);
@@ -1024,9 +1048,11 @@ contract DegenerusVault {
     /// @return ethOut Estimated ETH output (based on current balances)
     /// @return stEthOut Estimated stETH output (based on current balances)
     /// @custom:reverts Insufficient If targetValue is 0 or exceeds available reserve
-    function previewBurnForEthOut(
-        uint256 targetValue
-    ) external view returns (uint256 burnAmount, uint256 ethOut, uint256 stEthOut) {
+    function previewBurnForEthOut(uint256 targetValue)
+        external
+        view
+        returns (uint256 burnAmount, uint256 ethOut, uint256 stEthOut)
+    {
         uint256 supply = ethShare.totalSupply();
         (uint256 reserve, uint256 ethBal) = _ethReservesView();
         if (targetValue == 0 || targetValue > reserve) revert Insufficient();
@@ -1124,7 +1150,7 @@ contract DegenerusVault {
     /// @return ethBal Current ETH balance
     function _ethReservesView() private view returns (uint256 mainReserve, uint256 ethBal) {
         uint256 combined;
-        (ethBal, , combined) = _syncEthReserves();
+        (ethBal,, combined) = _syncEthReserves();
         unchecked {
             mainReserve = combined + _netClaimableWinnings();
         }
@@ -1140,7 +1166,7 @@ contract DegenerusVault {
     /// @param to Recipient address
     /// @param amount Amount of ETH to send
     function _payEth(address to, uint256 amount) private {
-        (bool ok, ) = to.call{value: amount}("");
+        (bool ok,) = to.call{value: amount}("");
         if (!ok) revert TransferFailed();
     }
 

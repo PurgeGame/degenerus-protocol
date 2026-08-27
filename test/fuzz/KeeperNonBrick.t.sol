@@ -545,9 +545,8 @@ contract KeeperNonBrick is DeployProtocol {
         // The STAGE MUST NOT revert despite the concurrent mass-eviction. Each crossing takes the EVICT
         // branch (dailyQuantity = 0; _removeFromSet; SubscriptionExpired,1; continue without advancing the
         // cursor) and every swap-pop occupant is re-evaluated at the same slot. Driven via a SINGLE
-        // advanceGame() (the STAGE runs strictly PRE-RNG, AdvanceModule:305-326) — a single advance never
-        // reaches the level-transition charityResolve.pickCharity, which would revert on the poked level
-        // (the 351-02 _runStageOnce pattern; a full settle would cross the transition -> PickCharityRejected).
+        // advanceGame() (the STAGE runs strictly PRE-RNG, AdvanceModule:305-326) so the stage is measured
+        // on its own rather than through a full settle (the 351-02 _runStageOnce pattern).
         vm.recordLogs();
         _runStageOnce(); // MUST NOT revert (no-brick under mass eviction)
 
@@ -598,9 +597,8 @@ contract KeeperNonBrick is DeployProtocol {
 
     /// @dev Run the STAGE exactly ONCE on a fresh day via a SINGLE `advanceGame()` (no full settle) — the
     ///      STAGE runs strictly PRE-RNG (AdvanceModule:305-326), so the eviction/buy completes before
-    ///      rngGate and a single advance never reaches the level-transition `charityResolve.pickCharity`
-    ///      (which reverts on a poked level). Subscribers must already be registered (subscribe blocks
-    ///      during rngLock). The 351-02 _runStageOnce pattern.
+    ///      rngGate and the stage is measured on its own. Subscribers must already be registered
+    ///      (subscribe blocks during rngLock). The 351-02 _runStageOnce pattern.
     function _runStageOnce() internal {
         vm.warp(block.timestamp + 1 days);
         game.advanceGame();

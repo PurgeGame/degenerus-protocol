@@ -318,8 +318,10 @@ contract CoinflipClaimableRebet is DeployProtocol {
     ///         (whose word cannot exist yet), and still leaves the carry — the pending day's live
     ///         stake — untouched, while every carry-extraction entrypoint stays shut. Value only
     ///         moves further ONTO the table here; nothing can be pulled off it.
-    /// @dev The lock flag is mocked rather than driven through a real VRF request: the deposit
-    ///      path branches on `rngLocked()` directly, and the level is 0 here so
+    /// @dev Driven through the real freeze rather than a mocked flag: the carry gates read
+    ///      Coinflip's own settlement marker (`flipsClaimableDay < currentDayIndex()`), not the
+    ///      game's `rngLocked()`, so warping past the resolved day is what shuts them. The error
+    ///      they raise is still `RngLocked`. Level is 0 here, so
     ///      `_coinflipLockedDuringTransition`'s x10 gate is false either way.
     function test_DepositUnderRngLockCannotReachTheCarry() public {
         uint256 stake = 100_000 ether;
@@ -340,7 +342,7 @@ contract CoinflipClaimableRebet is DeployProtocol {
         assertGt(bankBefore, 0, "fixture: a take-profit bank exists");
         assertGt(carryBefore, 0, "fixture: a live carry exists");
 
-        vm.mockCall(GAME, abi.encodeWithSignature("rngLocked()"), abi.encode(true));
+        _warpToDay(4); // day 4 unapplied: the carry freeze is on
 
         // Every path that could pull the carry off the table stays shut.
         vm.prank(player);

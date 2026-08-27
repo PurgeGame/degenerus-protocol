@@ -13,8 +13,8 @@ pragma solidity 0.8.34;
 ///         upfront, played over N consecutive shooters off a single seed and settled once at the
 ///         end. Nothing is decided between hands any more than between rolls.
 ///
-///         This contract holds no funds and has no state. An escrow wrapper supplies a seed that
-///         was unknown when the bets were locked (a VRF word) and pays out the net.
+///         This contract holds no funds and has no state. A wrapper supplies a seed that was
+///         unknown when the board was locked and pays the returned bankroll.
 ///
 /// @dev THE BOUNDED-LOSS INVARIANT
 ///
@@ -22,11 +22,14 @@ pragma solidity 0.8.34;
 ///      bet time. That is not an accident of the payout tables — it is why this exact bet set was
 ///      chosen:
 ///
-///        * Everything "pays and stays": a win credits winnings only, the stake remains at risk,
+///        * The light side "pays and stays": a win credits winnings only, the stake remains at risk,
 ///          and the stake is lost when the bet dies. The pass line pays every natural and every
-///          point made until its first loss — a come-out craps or the seven-out. The odds behind
-///          it ride each point established while the line lives, at true odds every cycle, and die
-///          with the shooter. Place bets and hardways can pay many times but die once, on the 7.
+///          point made until its first loss — a come-out craps or the seven-out. Place bets and
+///          hardways can pay many times but die once, on the 7.
+///        * Don't Pass is the one wager that does NOT stay: it is a single decision per shooter,
+///          settled the first time the dice answer it, and it returns its own stake with the
+///          winnings when it wins. A barred twelve is the only push, and it leaves the same wager
+///          up for the come-out that follows. So it too loses at most its stake, exactly once.
 ///
 ///      So `stakeFor(b)` is the player's exact maximum loss for one hand and no upfront liability
 ///      formula is needed. Winnings are unbounded above (a long hand can hit a place number many
@@ -37,21 +40,23 @@ pragma solidity 0.8.34;
 ///        * Come and Don't Come are structurally impossible here, not merely inconvenient. A Come
 ///          bet IS a bet made during a point phase; there is no such thing as placing one before
 ///          the come-out. Supporting them means accepting a pre-declared betting policy, which
-///          turns this resolver into a strategy interpreter.
+///          turns this resolver into a strategy interpreter. Don't PASS is not in that family — it
+///          is placed before the come-out like everything else here.
 ///        * Field and the one-roll propositions resolve on a single roll, so riding them to the end
 ///          of a hand means re-arming them every roll. That is what actually breaks bounded loss,
-///          and it is why they are out while odds are in.
+///          and it is why they are out.
 ///
 /// @dev HOUSE RULES PINNED HERE (there is no canonical craps; these are the choices)
 ///
-///        * The board is the basics and nothing else: the pass line with true odds, all six place
-///          numbers, and the two iconic hardways — the hard four and the hard eight. Everything
-///          else that only bled (Big 6/8, the other hardways), every side lottery (Fire,
-///          All/Tall/Small), and the whole dark side (Don't Pass, lay odds — the grinder's lane,
-///          not this table's crowd) has been cut. In this ride-to-the-seven-out model the pass
-///          line runs 2.79% (still the textbook 1.41% per decision), the good places 2.78-6.67%,
-///          place 4/10 at 9:5 run 10%, and the hardways are the indulgences: 10% on the eight,
-///          12.5% on the four.
+///        * The board is the basics and nothing else: the pass line, all six place
+///          numbers, the two iconic hardways — the hard four and the hard eight — and one dark
+///          lane, Don't Pass. Everything else that only bled (Big 6/8, the other hardways), every
+///          side lottery (Fire, All/Tall/Small) and pass odds has been cut. In this
+///          ride-to-the-seven-out model the pass line runs 2.79% (still the textbook 1.41% per
+///          decision), place 4/10 and 5/9 pay TRUE ODDS and run exactly 0%, place 6/8 at 7:6 run
+///          2.78%, and the indulgences are the hardways (10% on the eight, 12.5% on the four) and
+///          the dark lane, deliberately the dearest seat on the table: Don't Pass pays 3:4 and
+///          runs 13.73% per decision.
 ///        * Stakes are WHOLE FLIP, uint24 per leg: the type itself is the table maximum of
 ///          16,777,215 FLIP a leg. All payout math still runs in wei internally, so fractions pay
 ///          exactly as they always did. One consequence worth loving: the entire bet slip packs
@@ -71,7 +76,6 @@ contract Craps {
     uint256 internal constant PLACE_6 = 2;
     uint256 internal constant PLACE_8 = 3;
     uint256 internal constant PLACE_9 = 4;
-    uint256 internal constant PLACE_10 = 5;
 
     /// @dev 1 FLIP in wei. Stakes are stored in whole FLIP; every payout computation scales here
     ///      first, so the math is identical to wei-denominated stakes.
@@ -87,30 +91,26 @@ contract Craps {
     ///      below any threshold worth pricing. The cap exists so the loop provably terminates.
     ///      A hand that hits it has every still-live stake refunded rather than being silently
     ///      confiscated.
-    uint256 public constant MAX_ROLLS = 512;
+    uint256 internal constant _MAX_ROLLS = 512;
 
     /// @notice Total dice rolls a bet slip may consume, judged between shooters.
     /// @dev This is what makes a slip settlement's gas a GUARANTEE instead of a probability. The
-    ///      shooter cap alone leaves a bounded-but-huge worst case (cap x MAX_ROLLS rolls); with
-    ///      this budget the hard ceiling is `SLIP_ROLL_BUDGET - 1 + MAX_ROLLS` rolls — under two
-    ///      million gas in the measured settlement engine — however the dice fall. A 256-shooter
-    ///      slip averages ~2,200 rolls, so
-    ///      reaching 4,096 needs the average hand nearly doubled across the whole run: organically
-    ///      unreachable, and hitting it anyway is harmless — the slip stops as `Cap` between
-    ///      shooters with the bankroll intact. Every shooter still settles whole; the budget never
-    ///      cuts a hand mid-roll.
-    uint256 public constant SLIP_ROLL_BUDGET = 4096;
+    ///      shooter cap alone leaves a bounded-but-huge worst case (cap x _MAX_ROLLS rolls); with
+    ///      this budget the hard ceiling is `_SLIP_ROLL_BUDGET - 1 + _MAX_ROLLS` rolls — under two
+    ///      million gas in the measured settlement engine — however the dice fall. Even a
+    ///      hypothetical 256-shooter slip averages ~2,200 rolls; legal terms stop much earlier,
+    ///      making 4,096 effectively unreachable. Hitting it is an ordinary bust between shooters;
+    ///      every shooter still settles whole, and the budget never cuts a hand mid-roll.
+    uint256 internal constant _SLIP_ROLL_BUDGET = 4096;
 
     /// @notice Shooters between each mandatory doubling of a slip's base wager.
     /// @dev The escalator: rounds 0..4 wager 1x the board, 5..9 wager 2x, 10..14 wager 4x, and so
     ///      on, capped at the 65,535-unit table limit. A slip that cannot cover the doubled wager
     ///      busts between shooters with its remainder intact. Deterministic in the hand ordinal, so
     ///      the whole run is still recomputable from the base board and the seed alone.
-    uint256 public constant ESC_HANDS = 5;
+    uint256 internal constant _ESC_HANDS = 5;
 
-    /// @notice Domain tag for the table's survival coin — the double-or-nothing consulted both
-    ///         mid-run as a second chance and once at the end of a run. Tagged so its preimage can
-    ///         never collide with the dice stream (`keccak(seed, i)`, untagged).
+    /// @notice Domain tag for the mid-run second-chance coin, separated from the dice stream.
     uint256 internal constant SURVIVAL_TAG = 0x537572766976616c; // "Survival"
 
     /// @dev The six totals that can be a point.
@@ -120,17 +120,17 @@ contract Craps {
     ///      the stack. Field layout, indexed by dice total `t` where a total is the key:
     ///        bits  0..15  live place-bet totals (bit t; only 4, 5, 6, 8, 9, 10 are ever set)
     ///        bits 32..35  the point (0 = come-out)
-    ///        bits 36..39  the point the pass odds are riding (0 = never armed)
-    ///        bit  40      pass line live          bit 41  pass odds unresolved
-    ///        bit  42      hard eight live         bit 43  seven-out happened
-    ///        bit  44      hard four live
+    ///        bit  40      pass line live          bit 43  seven-out happened
+    ///        bit  41      don't pass live         bit 44  hard four live
+    ///        bit  42      hard eight live
     uint256 private constant ST_POINT = 32;
-    uint256 private constant ST_PASS_PT = 36;
     uint256 private constant ST_PLACE_ANY = 0xFFFF;
     uint256 private constant ST_POINT_MASK = 0xF << 32;
-    uint256 private constant ST_PASS_PT_MASK = 0xF << 36;
     uint256 private constant ST_PASS_LIVE = 1 << 40;
-    uint256 private constant ST_PASS_ODDS_LIVE = 1 << 41;
+    /// @dev Don't Pass is UNRESOLVED, not merely staked: it is cleared the moment the wager wins
+    ///      or loses, which is what makes it at most one decision per shooter and what tells a
+    ///      roll-cap truncation whether the stake is still owed back.
+    uint256 private constant ST_DONT_LIVE = 1 << 41;
     uint256 private constant ST_HARD8_LIVE = 1 << 42;
     uint256 private constant ST_SEVEN_OUT = 1 << 43;
     uint256 private constant ST_HARD4_LIVE = 1 << 44;
@@ -144,19 +144,20 @@ contract Craps {
     ///         leg, and the whole slip fits one storage slot.
     /// @param passLine   Pass Line: every natural and every point made pays 1:1 and the line stays
     ///                   up; dies on its first come-out craps or the seven-out.
-    /// @param place4     Place 4: pays 9:5 on every 4 and stays up; the stake is lost on the 7.
-    /// @param place5     Place 5: 7:5, same shape.
-    /// @param place6     Place 6: 7:6, same shape.
+    /// @param place4     Place 4: pays TRUE ODDS, 2:1 on every 4, and stays up; the stake is lost
+    ///                   on the 7. A fair leg — the table takes nothing from it.
+    /// @param place5     Place 5: 3:2, also true odds, same shape.
+    /// @param place6     Place 6: 7:6, same shape. The one place leg that still carries an edge.
     /// @param place8     Place 8: 7:6, same shape.
-    /// @param place9     Place 9: 7:5, same shape.
-    /// @param place10    Place 10: 9:5, same shape.
+    /// @param place9     Place 9: 3:2, same shape.
+    /// @param place10    Place 10: 2:1, same shape.
     /// @param hard4      The hard four: 2-2 pays 7:1 and stays up; dies on an easy 4 or the 7.
     /// @param hard8      The hard eight: 4-4 pays 9:1 and stays up; dies on an easy 8 or the 7.
-    /// @param passOddsMult   Odds behind the pass line, as a multiple of `passLine`. True odds,
-    ///                       zero edge — 2:1 on 4/10, 3:2 on 5/9, 6:5 on 6/8 — riding each point
-    ///                       established while the line lives, winnings credited per point made;
-    ///                       the stake dies on a seven-out mid-point and is refunded in full if
-    ///                       the hand ends with the odds not riding.
+    /// @param dontPass   Don't Pass: ONE decision per shooter, and the only wager here that does
+    ///                   not stay. It wins on a come-out 2 or 3 and on the seven-out, loses on a
+    ///                   come-out 7 or 11 and on the point made, and pushes on a barred 12 — which
+    ///                   leaves it up for the next come-out. A win returns the stake plus 3:4; a
+    ///                   loss returns nothing. Deliberately the dearest leg on the table.
     struct Bets {
         uint24 passLine;
         uint24 place4;
@@ -167,32 +168,27 @@ contract Craps {
         uint24 place10;
         uint24 hard4;
         uint24 hard8;
-        uint16 passOddsMult;
+        uint24 dontPass;
     }
 
     /// @notice Why a bet slip stopped playing.
     enum SlipStop {
         Bust, // fell below half a round, or lost the mid-run second-chance flip
-        Goal, // the bankroll reached the chosen target
-        Cap // the shooter cap arrived before either
+        Goal // the bankroll reached the chosen target
     }
 
     /// @notice The full account of one bet-slip run: the same wager repeated shooter after shooter
-    ///         out of a bankroll, until it cannot cover another round, reaches the goal, or hits
-    ///         the cap.
+    ///         out of a bankroll, until it cannot cover another round, reaches the goal, or hits a
+    ///         hard execution bound. Either failure is a bust.
     /// @param bankrollIn   What the slip started with.
     /// @param bankrollOut  What was left when it stopped — the settlement figure. Includes any
     ///                     sub-stake remainder; stopping never confiscates it.
     /// @param handsPlayed  Shooters actually played.
     /// @param unitsPlayed  Base-board units wagered across the run — the sum of each round's
-    ///                     escalating mandatory multiplier, which is the true handle and what theo
-    ///                     comps from. Only equals `handsPlayed` for a run short enough that the
-    ///                     escalator never doubled.
+    ///                     escalating mandatory multiplier. Only equals `handsPlayed` before the
+    ///                     escalator first doubles.
     /// @param totalRolls   Dice rolls across the run.
     /// @param stop         Why it ended.
-    /// @param rollLog      The run's dice, one byte per roll — die one in the high nibble, die two
-    ///                     in the low — with a 0x00 byte closing each hand. Recorded during the
-    ///                     same roll loop that settles, so it can never disagree with the money.
     struct SlipResult {
         uint256 bankrollIn;
         uint256 bankrollOut;
@@ -200,7 +196,6 @@ contract Craps {
         uint256 unitsPlayed;
         uint256 totalRolls;
         SlipStop stop;
-        bytes rollLog;
     }
 
     // ---------------------------------------------------------------------------------------
@@ -208,17 +203,15 @@ contract Craps {
     // ---------------------------------------------------------------------------------------
 
     /// @dev The slip engine: the same wager repeated shooter after shooter out of a bankroll. It
-    ///      returns only what a settlement can observe — the bankroll, the wager units, and the
-    ///      packed dice receipt — because that is all the paying path needs. Per-leg books and
-    ///      per-hand ledgers have no consumer here and are not computed.
+    ///      returns a scalar run receipt; per-leg books and per-hand ledgers are not retained.
     ///
     ///      Stop conditions are judged BETWEEN shooters, in this order: goal first (so a run that
-    ///      is simultaneously at goal and out of the next stake counts as a win), then the cap, then
-    ///      affordability. A round short of even half its escalating wager busts outright; one that
+    ///      is simultaneously at goal and out of the next stake counts as a win), then the hard
+    ///      bounds, then affordability. A round short of even half its escalating wager busts outright; one that
     ///      can cover between half and all of it takes a single committed double-or-nothing on the
     ///      whole bankroll — surviving doubles it (enough to cover the round) and plays on, losing
     ///      ends the slip with nothing. Each played round escrows its wager — the base board times
-    ///      the escalating mandatory multiplier (see `ESC_HANDS`) — out of the bankroll, plays one
+    ///      the escalating mandatory multiplier (see `_ESC_HANDS`) — out of the bankroll, plays one
     ///      hand, and credits back whatever it returned; the bounded-loss invariant is exactly what
     ///      makes the escrow subtraction safe unchecked after the affordability check. A busted
     ///      bankroll keeps its remainder.
@@ -228,34 +221,37 @@ contract Craps {
     ///      dice log that of the base board however far the escalator has climbed.
     ///
     ///      Loop state note: `cur` packs the hand counter (bits 0..15), the round's mandatory
-    ///      multiplier (16..31), and the roll-log cursor (32+) into one stack slot — via-IR runs
+    ///      multiplier (16..31), and the ROLL counter (32+) into one stack slot — via-IR runs
     ///      out of stack here with them separate.
-    function _settleSlip(Bets memory b, bytes32 seed, uint256 bankroll, uint256 goal, uint256 cap, uint256 rollBudget)
-        internal
-        pure
-        returns (SlipResult memory r)
-    {
+    function _settleSlip(
+        Bets memory b,
+        bytes32 seed,
+        uint256 bankroll,
+        uint256 goal,
+        uint256 cap,
+        uint256 rollBudget,
+        address player
+    ) internal pure returns (SlipResult memory r) {
         uint256 stake = stakeFor(b);
 
         r.bankrollIn = bankroll;
-        bytes memory log;
-        unchecked {
-            log = new bytes(rollBudget + MAX_ROLLS + cap);
-        }
         uint256 initialState = _settlementState(b);
         uint256 unitsPlayed;
-        uint256[6] memory placeWins;
+        // Indexes 0..5 are the place legs' WINNINGS, by place index; index 6 is the whole figure a
+        // winning Don't Pass returns — its own stake plus the 3:4, floored once. Computed here so
+        // the roll loop pays out of memory rather than redoing a division per hit.
+        uint256[7] memory wins;
         unchecked {
             if (initialState & ST_PLACE_ANY != 0) {
-                placeWins[0] = (uint256(b.place4) * (9 * FLIP)) / 5;
-                placeWins[1] = (uint256(b.place5) * (7 * FLIP)) / 5;
-                placeWins[2] = (uint256(b.place6) * (7 * FLIP)) / 6;
-                placeWins[3] = (uint256(b.place8) * (7 * FLIP)) / 6;
-                placeWins[4] = (uint256(b.place9) * (7 * FLIP)) / 5;
-                placeWins[5] = (uint256(b.place10) * (9 * FLIP)) / 5;
-            } else if (initialState & (ST_HARD4_LIVE | ST_HARD8_LIVE) == 0) {
-                placeWins[0] = uint256(b.passLine) * FLIP;
-                placeWins[1] = placeWins[0] * b.passOddsMult;
+                wins[0] = uint256(b.place4) * (2 * FLIP);
+                wins[1] = (uint256(b.place5) * (3 * FLIP)) / 2;
+                wins[2] = (uint256(b.place6) * (7 * FLIP)) / 6;
+                wins[3] = (uint256(b.place8) * (7 * FLIP)) / 6;
+                wins[4] = (uint256(b.place9) * (3 * FLIP)) / 2;
+                wins[5] = uint256(b.place10) * (2 * FLIP);
+            }
+            if (initialState & ST_DONT_LIVE != 0) {
+                wins[6] = uint256(b.dontPass) * FLIP + (uint256(b.dontPass) * (3 * FLIP)) / 4;
             }
         }
 
@@ -266,10 +262,9 @@ contract Craps {
                     r.stop = SlipStop.Goal;
                     break;
                 }
-                // Goal and the hard caps stop cleanly; only a run that is going to continue can be
-                // asked to take a second chance, so both are settled before affordability.
+                // A hard bound is an ordinary bust. Bust is enum zero, so a bare break is the
+                // cheapest path; the battle wrapper forfeits a busted run's remainder.
                 if (cur & 0xFFFF == cap || (cur >> 32) - (cur & 0xFFFF) >= rollBudget) {
-                    r.stop = SlipStop.Cap;
                     break;
                 }
 
@@ -286,7 +281,7 @@ contract Craps {
                         // the same double-or-nothing that would decide a run of this length at the
                         // end — rides the whole bankroll. Surviving doubles it, enough to cover
                         // exactly this round, and play continues; losing ends the slip with nothing.
-                        if (_survived(seed, cur & 0xFFFF)) {
+                        if (_survived(seed, cur & 0xFFFF, player)) {
                             bankroll += bankroll;
                         } else {
                             bankroll = 0;
@@ -299,8 +294,7 @@ contract Craps {
 
                 bankroll -= ((cur >> 16) & 0xFFFF) * stake;
 
-                uint256 handOut =
-                    _runSettlement(b, handSeed(seed, cur & 0xFFFF), log, cur >> 32, initialState, placeWins);
+                uint256 handOut = _runSettlement(b, handSeed(seed, cur & 0xFFFF), cur >> 32, initialState, wins);
                 bankroll += ((cur >> 16) & 0xFFFF) * uint128(handOut);
                 unitsPlayed += (cur >> 16) & 0xFFFF;
                 cur = (((handOut >> 128) + 1) << 32) | (cur & 0xFFFF0000) | ((cur & 0xFFFF) + 1);
@@ -310,11 +304,6 @@ contract Craps {
             r.bankrollOut = bankroll;
             r.unitsPlayed = unitsPlayed;
             r.totalRolls = (cur >> 32) - (cur & 0xFFFF);
-            uint256 pos = cur >> 32;
-            assembly ("memory-safe") {
-                mstore(log, pos)
-            }
-            r.rollLog = log;
         }
     }
 
@@ -322,8 +311,7 @@ contract Craps {
     /// @dev What an escrow must collect up front, and the exact ceiling on what the player can
     ///      lose. Multiply by the hand count for a session.
     function stakeFor(Bets memory b) public pure returns (uint256 total) {
-        // Stakes are whole FLIP; the charge is wei. Bounded far below 2^256: nine uint24 legs
-        // plus the odds leg at uint24 x uint16 sum under 2^42 FLIP.
+        // Stakes are whole FLIP; the charge is wei. Bounded far below 2^256: ten uint24 legs.
         unchecked {
             total =
                 (uint256(b.passLine)
@@ -335,21 +323,7 @@ contract Craps {
                         + uint256(b.place10)
                         + uint256(b.hard4)
                         + uint256(b.hard8)
-                        + uint256(b.passLine)
-                        * b.passOddsMult) * FLIP;
-        }
-    }
-
-    /// @notice The expected loss of one hand of `b`, in wei — the theo a casino comps from.
-    /// @dev Exact per-leg rationals for the ride-to-the-seven-out model this table plays:
-    ///      pass 7/251, place 4/10 1/10, place 5/9 1/15, place 6/8 1/36, the hard four 1/8, the
-    ///      hard eight 1/10, and odds exactly zero. The MC oracle pins every one of these numbers
-    ///      against the resolver; flooring loses at most a few wei.
-    function theoFor(Bets memory b) public pure returns (uint256) {
-        unchecked {
-            return (uint256(b.passLine) * FLIP * 7) / 251 + (uint256(b.place4) * FLIP) / 10 + (uint256(b.place5) * FLIP)
-                / 15 + (uint256(b.place6) * FLIP) / 36 + (uint256(b.place8) * FLIP) / 36 + (uint256(b.place9) * FLIP)
-                / 15 + (uint256(b.place10) * FLIP) / 10 + (uint256(b.hard4) * FLIP) / 8 + (uint256(b.hard8) * FLIP) / 10;
+                        + uint256(b.dontPass)) * FLIP;
         }
     }
 
@@ -377,32 +351,24 @@ contract Craps {
     ///      `test/craps` grades this against an independent implementation of the same rules off
     ///      the identical seed; that differential is what stands in for the per-leg assertions the
     ///      scalar return cannot make on its own.
-    function _runSettlement(
-        Bets memory b,
-        bytes32 seed,
-        bytes memory rollLog,
-        uint256 logPos,
-        uint256 st,
-        uint256[6] memory placeWins
-    ) private pure returns (uint256 packed) {
+    function _runSettlement(Bets memory b, bytes32 seed, uint256 logPos, uint256 st, uint256[7] memory wins)
+        private
+        pure
+        returns (uint256 packed)
+    {
         uint256 returned;
-        uint256 logPtr;
-        assembly ("memory-safe") {
-            logPtr := add(rollLog, 0x20)
-        }
 
         unchecked {
-            // A line-only board should not pay two dead class checks on every point roll. Select
-            // its smaller machine once per shooter; dice and line/odds semantics remain identical.
-            if (st & (ST_PLACE_ANY | ST_HARD4_LIVE | ST_HARD8_LIVE) == 0) {
-                return _runLineSettlement(seed, rollLog, logPos, st, placeWins);
-            }
+            // A board with no line bet skips the point machine entirely; every other shape runs
+            // the general one. A line-ONLY board is not worth a third machine: the dice place
+            // three of the ten chips uniformly over ten legs, so one board in 1,000 stays
+            // line-only even when all seven picked chips are on the line.
             if (st & ST_PASS_LIVE == 0) {
-                return _runSideSettlement(b, seed, rollLog, logPos, st, placeWins);
+                return _runSideSettlement(b, seed, logPos, st, wins);
             }
 
             uint256 i;
-            for (; i < MAX_ROLLS; ++i) {
+            for (; i < _MAX_ROLLS; ++i) {
                 uint256 w;
                 assembly ("memory-safe") {
                     mstore(0x00, seed)
@@ -413,22 +379,21 @@ contract Craps {
                 uint256 d2 = (uint256(uint32(w >> 32)) % 6) + 1;
                 uint256 t = d1 + d2;
                 bool comeOut = (st & ST_POINT_MASK) == 0;
-                assembly ("memory-safe") {
-                    mstore8(add(logPtr, logPos), or(shl(4, d1), d2))
-                }
                 ++logPos;
 
-                // A point-phase seven ends the hand before any bet can pay. Only the odds-refund
-                // bit matters after the break; every other live stake is swept by the seven-out.
+                // A point-phase seven ends the hand before any LIGHT bet can pay: every live
+                // stake there is swept by the seven-out, so nothing after the break needs the
+                // roll. The dark side is the exception — the seven that kills the table is the
+                // seven it was waiting for — so it collects here, before the break.
                 if (t == 7 && !comeOut) {
-                    if (st & ST_PASS_LIVE != 0) st &= ~ST_PASS_ODDS_LIVE;
+                    if (st & ST_DONT_LIVE != 0) returned += wins[6];
                     st |= ST_SEVEN_OUT;
                     break;
                 }
 
                 if (!comeOut) {
                     if (st & ST_PLACE_ANY != 0 && st & (1 << t) != 0) {
-                        returned += _cachedPlaceWin(placeWins, t);
+                        returned += _cachedPlaceWin(wins, t);
                     }
 
                     if (st & (ST_HARD4_LIVE | ST_HARD8_LIVE) != 0) {
@@ -451,24 +416,28 @@ contract Craps {
                 if (comeOut) {
                     if (t == 7 || t == 11) {
                         if (st & ST_PASS_LIVE != 0) returned += uint256(b.passLine) * FLIP;
-                    } else if (t == 2 || t == 3 || t == 12) {
+                        // A come-out natural is the dark side's loss and NOT a seven-out: the
+                        // shooter rolls on, with that wager retired for the rest of the hand.
+                        st &= ~ST_DONT_LIVE;
+                    } else if (t == 12) {
+                        // Bar the twelve. The line dies; the dark side neither wins nor loses and
+                        // the same wager stays up for the come-out that follows.
                         st &= ~ST_PASS_LIVE;
+                    } else if (t == 2 || t == 3) {
+                        st &= ~ST_PASS_LIVE;
+                        if (st & ST_DONT_LIVE != 0) {
+                            returned += wins[6];
+                            st &= ~ST_DONT_LIVE;
+                        }
                     } else {
                         st |= t << ST_POINT;
-                        if (st & ST_PASS_LIVE != 0) st |= t << ST_PASS_PT;
                     }
                 } else if (t == (st >> ST_POINT) & 0xF) {
                     if (st & ST_PASS_LIVE != 0) returned += uint256(b.passLine) * FLIP;
-                    if (st & ST_PASS_ODDS_LIVE != 0 && (st >> ST_PASS_PT) & 0xF == t) {
-                        uint256 po = uint256(b.passLine) * b.passOddsMult * FLIP;
-                        returned += _oddsWin(po, t);
-                    }
-                    st &= ~(ST_POINT_MASK | ST_PASS_PT_MASK);
+                    // The point made is the dark side's other death, and the table returns to a
+                    // come-out with it already retired.
+                    st &= ~(ST_DONT_LIVE | ST_POINT_MASK);
                 }
-            }
-
-            if (st & ST_PASS_ODDS_LIVE != 0) {
-                returned += uint256(b.passLine) * b.passOddsMult * FLIP;
             }
 
             if (st & ST_SEVEN_OUT == 0) {
@@ -478,9 +447,12 @@ contract Craps {
                 }
                 if (st & ST_HARD4_LIVE != 0) returned += uint256(b.hard4) * FLIP;
                 if (st & ST_HARD8_LIVE != 0) returned += uint256(b.hard8) * FLIP;
+                // A hand cut off by the roll cap owes an UNDECIDED dark wager its stake back, and
+                // owes a decided one nothing: the liveness bit is exactly that distinction.
+                if (st & ST_DONT_LIVE != 0) returned += uint256(b.dontPass) * FLIP;
             }
 
-            // Even 512 consecutive maximum-odds wins stay below 2^112. Pack the log cursor above
+            // Even 512 consecutive maximum place wins stay below 2^112. Pack the log cursor above
             // bit 127 so the hot caller carries one return word.
             packed = returned | (logPos << 128);
         }
@@ -495,27 +467,21 @@ contract Craps {
         if (b.place10 != 0) st |= 1 << 10;
         if (b.hard4 != 0) st |= ST_HARD4_LIVE;
         if (b.hard8 != 0) st |= ST_HARD8_LIVE;
-        if (b.passLine != 0) {
-            st |= ST_PASS_LIVE;
-            if (b.passOddsMult != 0) st |= ST_PASS_ODDS_LIVE;
-        }
+        if (b.passLine != 0) st |= ST_PASS_LIVE;
+        if (b.dontPass != 0) st |= ST_DONT_LIVE;
     }
 
-    /// @dev Pass-line/odds specialization selected by `_runSettlement` when no side bet is live.
-    function _runLineSettlement(bytes32 seed, bytes memory rollLog, uint256 logPos, uint256 st, uint256[6] memory wins)
+    /// @dev Place/hardway specialization selected when the board has no pass line.
+    function _runSideSettlement(Bets memory b, bytes32 seed, uint256 logPos, uint256 st, uint256[7] memory wins)
         private
         pure
         returns (uint256 packed)
     {
         uint256 returned;
-        uint256 logPtr;
-        assembly ("memory-safe") {
-            logPtr := add(rollLog, 0x20)
-        }
 
         unchecked {
             uint256 i;
-            for (; i < MAX_ROLLS; ++i) {
+            for (; i < _MAX_ROLLS; ++i) {
                 uint256 w;
                 assembly ("memory-safe") {
                     mstore(0x00, seed)
@@ -525,85 +491,18 @@ contract Craps {
                 uint256 d1 = (uint256(uint32(w)) % 6) + 1;
                 uint256 d2 = (uint256(uint32(w >> 32)) % 6) + 1;
                 uint256 t = d1 + d2;
-                assembly ("memory-safe") {
-                    mstore8(add(logPtr, logPos), or(shl(4, d1), d2))
-                }
-                ++logPos;
-
-                uint256 point = (st >> ST_POINT) & 0xF;
-                if (point == 0) {
-                    if (t == 7 || t == 11) {
-                        if (st & ST_PASS_LIVE != 0) returned += wins[0];
-                    } else if (t == 2 || t == 3 || t == 12) {
-                        st &= ~ST_PASS_LIVE;
-                    } else {
-                        st |= t << ST_POINT;
-                        if (st & ST_PASS_LIVE != 0) st |= t << ST_PASS_PT;
-                    }
-                } else if (t == 7) {
-                    if (st & ST_PASS_LIVE != 0) st &= ~ST_PASS_ODDS_LIVE;
-                    st |= ST_SEVEN_OUT;
-                    break;
-                } else if (t == point) {
-                    if (st & ST_PASS_LIVE != 0) returned += wins[0];
-                    if (st & ST_PASS_ODDS_LIVE != 0 && (st >> ST_PASS_PT) & 0xF == t) {
-                        returned += _oddsWin(wins[1], t);
-                    }
-                    st &= ~(ST_POINT_MASK | ST_PASS_PT_MASK);
-                }
-            }
-
-            if (st & ST_PASS_ODDS_LIVE != 0) {
-                returned += wins[1];
-            }
-            if (st & ST_SEVEN_OUT == 0 && st & ST_PASS_LIVE != 0) {
-                returned += wins[0];
-            }
-            packed = returned | (logPos << 128);
-        }
-    }
-
-    /// @dev Place/hardway specialization selected when the board has no pass line or odds.
-    function _runSideSettlement(
-        Bets memory b,
-        bytes32 seed,
-        bytes memory rollLog,
-        uint256 logPos,
-        uint256 st,
-        uint256[6] memory placeWins
-    ) private pure returns (uint256 packed) {
-        uint256 returned;
-        uint256 logPtr;
-        assembly ("memory-safe") {
-            logPtr := add(rollLog, 0x20)
-        }
-
-        unchecked {
-            uint256 i;
-            for (; i < MAX_ROLLS; ++i) {
-                uint256 w;
-                assembly ("memory-safe") {
-                    mstore(0x00, seed)
-                    mstore(0x20, i)
-                    w := keccak256(0x00, 0x40)
-                }
-                uint256 d1 = (uint256(uint32(w)) % 6) + 1;
-                uint256 d2 = (uint256(uint32(w >> 32)) % 6) + 1;
-                uint256 t = d1 + d2;
-                assembly ("memory-safe") {
-                    mstore8(add(logPtr, logPos), or(shl(4, d1), d2))
-                }
                 ++logPos;
 
                 uint256 point = (st >> ST_POINT) & 0xF;
                 if (t == 7 && point != 0) {
+                    if (st & ST_DONT_LIVE != 0) returned += wins[6];
                     st |= ST_SEVEN_OUT;
                     break;
                 }
 
                 if (point != 0) {
                     if (st & ST_PLACE_ANY != 0 && st & (1 << t) != 0) {
-                        returned += _cachedPlaceWin(placeWins, t);
+                        returned += _cachedPlaceWin(wins, t);
                     }
                     if (st & (ST_HARD4_LIVE | ST_HARD8_LIVE) != 0) {
                         if (t == 4 && st & ST_HARD4_LIVE != 0) {
@@ -623,9 +522,20 @@ contract Craps {
                 }
 
                 if (point == 0) {
-                    if (_POINT_TOTALS_MASK & (1 << t) != 0) st |= t << ST_POINT;
+                    if (_POINT_TOTALS_MASK & (1 << t) != 0) {
+                        st |= t << ST_POINT;
+                    } else if (st & ST_DONT_LIVE != 0) {
+                        // A come-out that is not a point is the dark side's whole decision: 2 or 3
+                        // wins, 7 or 11 loses, and the barred 12 leaves the wager up.
+                        if (t == 2 || t == 3) {
+                            returned += wins[6];
+                            st &= ~ST_DONT_LIVE;
+                        } else if (t != 12) {
+                            st &= ~ST_DONT_LIVE;
+                        }
+                    }
                 } else if (t == point) {
-                    st &= ~ST_POINT_MASK;
+                    st &= ~(ST_DONT_LIVE | ST_POINT_MASK);
                 }
             }
 
@@ -635,40 +545,32 @@ contract Craps {
                 }
                 if (st & ST_HARD4_LIVE != 0) returned += uint256(b.hard4) * FLIP;
                 if (st & ST_HARD8_LIVE != 0) returned += uint256(b.hard8) * FLIP;
+                if (st & ST_DONT_LIVE != 0) returned += uint256(b.dontPass) * FLIP;
             }
             packed = returned | (logPos << 128);
         }
     }
 
     /// @dev THE ESCALATOR: the mandatory wager for shooter `hand`, in base-board units — doubling
-    ///      every `ESC_HANDS` shooters, capped at the 65,535-unit table limit. Surviving the table
+    ///      every `_ESC_HANDS` shooters, capped at the 65,535-unit table limit. Surviving the table
     ///      means outracing this: a slip cannot flat-grind forever, because the floor under its
     ///      wager keeps rising.
     function _escOf(uint256 hand) private pure returns (uint256 esc) {
         unchecked {
-            esc = 1 << (hand / ESC_HANDS);
+            esc = 1 << (hand / _ESC_HANDS);
             if (esc > 0xFFFF) esc = 0xFFFF;
         }
     }
 
-    /// @dev The table's survival coin at run-length `n`: a fair, committed double-or-nothing keyed
-    ///      on the table seed. It is consulted in two places and is the SAME coin in both — as the
-    ///      mid-run second chance for the round at ordinal `n` (see `_settleSlip`), and as the
-    ///      end-of-run flip for a run that stopped after `n` shooters (see `FlipCraps`).
-    ///
-    ///      SALTED BY THE RUN LENGTH `n`. One coin per table (n dropped) would let the first player
-    ///      to settle a short run publish the deciding flip for everyone still holding a long one,
-    ///      since a table's word is public the moment it lands. Keying on `n` gives each length its
-    ///      own coin, so a run's DECIDING flip — the one at its own exit round — is never published
-    ///      by settling a run of a different length. (A shorter run can reveal a coin a longer one
-    ///      later rides as a mid-hand second chance, but that is informational only: everything is
-    ///      committed before the word exists, so no foreknowledge moves a payout.) It costs the
-    ///      manipulation argument nothing — `n` is a pure function of the committed board, bankroll
-    ///      and goal against a word that did not exist yet, so no arrangement of `betIds[]` and no
-    ///      choice made after the dice are public can move it. Two identical slips flip identically
-    ///      and share it.
-    function _survived(bytes32 seed, uint256 n) internal pure returns (bool) {
-        return uint256(keccak256(abi.encode(SURVIVAL_TAG, seed, n))) & 1 == 1;
+    /// @dev The fair, committed second-chance coin for round `n`. Salting by the round keeps each
+    ///      affordability decision on its own coin, and salting by the OWNER keeps one player's
+    ///      coin off every other player's: the shooter is the table's, but a bust is not, so two
+    ///      seats reaching the same round no longer live or die together. Both inputs were fixed
+    ///      before the word existed — the seed is the table's and the owner is who placed the slip
+    ///      — so settlement order cannot change the result. It is the same salt the board scatter
+    ///      already uses, so a player's whole run is decorrelated from the field by one key.
+    function _survived(bytes32 seed, uint256 n, address player) internal pure returns (bool) {
+        return uint256(keccak256(abi.encode(SURVIVAL_TAG, seed, n, player))) & 1 == 1;
     }
 
     // ---------------------------------------------------------------------------------------
@@ -693,24 +595,12 @@ contract Craps {
         }
     }
 
-    function _cachedPlaceWin(uint256[6] memory wins, uint256 t) private pure returns (uint256 amount) {
+    function _cachedPlaceWin(uint256[7] memory wins, uint256 t) private pure returns (uint256 amount) {
         unchecked {
             uint256 idx = t < 7 ? t - 4 : t - 5;
             assembly ("memory-safe") {
                 amount := mload(add(wins, shl(5, idx)))
             }
-        }
-    }
-
-    /// @dev True-odds winnings on a point. These are the real
-    ///      probabilities: 4 and 10 come 3 ways against the seven's 6, so 2:1; 5 and 9 come 4 ways,
-    ///      so 3:2; 6 and 8 come 5 ways, so 6:5. Nothing is shaded, which is what makes odds the
-    ///      only zero-edge bet on the table and a sharp test oracle.
-    function _oddsWin(uint256 stake, uint256 pt) private pure returns (uint256) {
-        unchecked {
-            if (pt == 4 || pt == 10) return stake * 2;
-            if (pt == 5 || pt == 9) return (stake * 3) / 2;
-            return (stake * 6) / 5;
         }
     }
 }

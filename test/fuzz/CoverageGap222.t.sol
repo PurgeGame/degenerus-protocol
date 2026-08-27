@@ -17,6 +17,7 @@ pragma solidity 0.8.34;
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
+import {GameTimeLib} from "../../contracts/libraries/GameTimeLib.sol";
 
 contract CoverageGap222 is DeployProtocol {
     address internal buyer;
@@ -469,7 +470,15 @@ contract CoverageGap222 is DeployProtocol {
     }
 
     /// @notice Exercise coinflip setters (setCoinflipAutoRebuy / takeProfit).
+    /// @dev An ENROLLED player's auto-rebuy settings freeze while today's flip is unresolved —
+    ///      both setters would otherwise recompute a claim against a day that has not settled.
+    ///      Resolve the day through its own writer first, so the happy path is what is measured
+    ///      rather than the freeze.
     function test_gap_coinflip_setters() public {
+        vm.prank(ContractAddresses.GAME);
+        coinflip.processCoinflipPayouts(0, uint256(keccak256("setters")), GameTimeLib.currentDayIndex());
+        assertTrue(coinflip.flipResolvedToday(), "the day did not resolve");
+
         vm.prank(buyer);
         (bool o1, ) = address(coinflip).call(
             abi.encodeWithSignature(

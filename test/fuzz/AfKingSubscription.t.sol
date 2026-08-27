@@ -233,9 +233,9 @@ contract AfKingSubscription is DeployProtocol {
     // =========================================================================
 
     /// @dev Run the STAGE exactly ONCE on a fresh day via a SINGLE advanceGame() (no full settle) —
-    ///      the STAGE is strictly PRE-RNG so the crossing refresh/evict completes before rngGate, and a
-    ///      single advance never reaches the level-transition charity call (which would revert on a
-    ///      poked level). Subscribers must already be registered (subscribe blocks during rngLock).
+    ///      the STAGE is strictly PRE-RNG so the crossing refresh/evict completes before rngGate and the
+    ///      stage is measured on its own. Subscribers must already be registered (subscribe blocks
+    ///      during rngLock).
     function _runStageOnce() internal {
         vm.warp(block.timestamp + 1 days);
         game.advanceGame();
