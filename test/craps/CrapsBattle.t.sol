@@ -43,7 +43,16 @@ contract BattleHarness is CrapsViews {
         Window memory w;
         w.key = key;
         w.stakeUnits = stakeUnits;
-        _scoreBattle(w, score, seat, 0);
+        _scoreBattle(w, score, seat, 0, 0);
+    }
+
+    /// @dev The same tap, carrying a roll count, so a suite can drive what the scoreboard stores
+    ///      beside the seat without running a whole field through the engine.
+    function scoreRolls(bytes32 key, uint256 score, uint64 seat, uint256 stakeUnits, uint256 rolls) external {
+        Window memory w;
+        w.key = key;
+        w.stakeUnits = stakeUnits;
+        _scoreBattle(w, score, seat, 0, rolls);
     }
 
     /// @dev The seed field's ceiling, in stake units. Internal on the contract, so the harness is
@@ -62,7 +71,7 @@ contract BattleHarness is CrapsViews {
         Window memory w;
         w.key = key;
         w.stakeUnits = stakeUnits;
-        _scoreBattle(w, score, seat, word);
+        _scoreBattle(w, score, seat, word, 0);
     }
 
     /// @dev The composite the fold actually compares: rank, then the money it came home with,
@@ -168,11 +177,6 @@ contract BattleHarness is CrapsViews {
         }
     }
 
-    /// @dev A slot's match key without owning a seat in it. `battleKeyOf` needs a bet to read the
-    ///      slot off, and a window whose only bodies are DAY tickets has no seat of its own.
-    function keyOfSlot(uint64 slot) external view returns (bytes32) {
-        return _slotWindow(slot).key;
-    }
 
 }
 
@@ -307,7 +311,7 @@ contract CrapsBattleTest is CrapsPins {
     function _runSlot(uint128 bank, uint128 goal, uint24 su, uint48 index, uint256 word) internal returns (uint64) {
         uint64 slot = _slotFor(bank, goal, su);
         _closeOn(craps, slot, index, word);
-        craps.resolveSlot(slot, FIELD_CAP);
+        craps.resolveSlot(slot, WHOLE_FIELD);
         // A shut battle takes no more entries, so a sweeping fixture must open a fresh one next
         // time it names these terms.
         delete _fixtureSlot[_slotKey(bank, goal, su)];
@@ -348,7 +352,7 @@ contract CrapsBattleTest is CrapsPins {
         assertEq(craps.battleOf(craps.battleKeyOf(a)).battleStake, 0, "a friendly battle grew a bounty");
 
         _closeOn(craps, slot, 4, uint256(keccak256("plain")));
-        craps.resolveSlot(slot, FIELD_CAP);
+        craps.resolveSlot(slot, WHOLE_FIELD);
 
         // It RANKS. A zero bounty used to skip the scoreboard entirely, so `resolved` never caught
         // `entrants` and the battle could never finalize.
@@ -408,7 +412,7 @@ contract CrapsBattleTest is CrapsPins {
         assertEq(craps.stakeFor(craps.drawnBoardOf(a)), round, "the seven-and-three round moved");
         assertEq(craps.stakeFor(craps.drawnBoardOf(b)), round, "the all-thrown round moved");
 
-        craps.resolveSlot(slot, 8);
+        craps.resolveSlot(slot, WHOLE_FIELD);
         assertTrue(craps.battleOf(key).finalized, "the mixed field did not finalize");
     }
 
@@ -508,7 +512,7 @@ contract CrapsBattleTest is CrapsPins {
             // pot is the three bounties and NOTHING else — what the busted seats were holding was
             // deleted, not swept in here. Read off the log, because the same call also credits
             // each run its own winnings and a balance would carry both.
-            PaidOut memory pot = _onlyPot(craps, slot, FIELD_CAP);
+            PaidOut memory pot = _onlyPot(craps, slot, WHOLE_FIELD);
 
             CrapsBattle.Battle memory info = craps.battleOf(key);
             assertTrue(info.finalized, "battle not finalized after its last entrant");
@@ -564,7 +568,7 @@ contract CrapsBattleTest is CrapsPins {
         if (_tag(tableWord, c) > _tag(tableWord, expected)) expected = uint64(c);
 
         uint256 beforeMint = flip.minted(alice);
-        PaidOut memory pot = _onlyPot(craps, slot, FIELD_CAP);
+        PaidOut memory pot = _onlyPot(craps, slot, WHOLE_FIELD);
 
         CrapsBattle.Battle memory info = craps.battleOf(craps.battleKeyOf(a));
         assertTrue(info.finalized, "finalized");
@@ -588,7 +592,7 @@ contract CrapsBattleTest is CrapsPins {
         uint64 slot = _closeSlot(LW * 2, 0, SU, 4, uint256(keccak256("solo")));
 
         uint256 beforeMint = flip.minted(alice);
-        PaidOut memory pot = _onlyPot(craps, slot, FIELD_CAP);
+        PaidOut memory pot = _onlyPot(craps, slot, WHOLE_FIELD);
 
         // One seat, so the pot is that seat's own bounty — a custom battle draws no house money.
         assertEq(pot.betId, id, "the pot named a seat this battle never had");
@@ -609,7 +613,7 @@ contract CrapsBattleTest is CrapsPins {
         assertEq(_resolveForPots(craps, slot, 1).length, 0, "a half-resolved field paid its leader");
         assertFalse(craps.battleOf(_slotKeyOf(slot)).finalized, "half a field read as final");
 
-        assertEq(_resolveForPots(craps, slot, FIELD_CAP).length, 1, "the last seat did not pay the field");
+        assertEq(_resolveForPots(craps, slot, WHOLE_FIELD).length, 1, "the last seat did not pay the field");
         assertTrue(craps.battleOf(_slotKeyOf(slot)).finalized, "finalized after the last entrant");
     }
 
@@ -711,7 +715,7 @@ contract CrapsBattleTest is CrapsPins {
         assertGt(deleted, 0, "every buster came home with nothing: the test proves nothing");
 
         uint256 creditedBefore = coinflip.totalCredited();
-        PaidOut memory pot = _onlyPot(craps, slot, 8);
+        PaidOut memory pot = _onlyPot(craps, slot, WHOLE_FIELD);
 
         // EVERYTHING the call credited, accounted for twice over: the survivors' own runs, and the
         // one pot the field finished into. A deleted remainder has nowhere else to have gone, so
@@ -754,7 +758,7 @@ contract CrapsBattleTest is CrapsPins {
         assertGt(busts, 0, "no friendly seat busted: the test proves nothing");
         assertGt(deleted, 0, "the friendly busts were holding nothing: the test proves nothing");
 
-        craps.resolveSlot(slot, FIELD_CAP);
+        craps.resolveSlot(slot, WHOLE_FIELD);
 
         CrapsBattle.Battle memory info = craps.battleOf(craps.battleKeyOf(ids[0]));
         address winner = craps.betOf(_idAt(slot, info.winnerId)).player;
@@ -778,7 +782,7 @@ contract CrapsBattleTest is CrapsPins {
 
         // The whole field AND its pot in ONE call — which is the point of the cursor lane: a caller
         // names the battle, not a list of ids, and everything in it settles and is paid together.
-        PaidOut memory pot = _onlyPot(craps, slot, 8);
+        PaidOut memory pot = _onlyPot(craps, slot, WHOLE_FIELD);
         assertTrue(craps.betOf(a).settled && craps.betOf(b).settled && craps.betOf(c).settled, "field missed a slip");
         assertEq(
             coinflip.totalCredited() - before, paidA + paidB + paidC + pot.amount, "the batched credit mispaid"
@@ -1014,7 +1018,7 @@ contract CrapsBattleTest is CrapsPins {
         vm.expectRevert(CrapsBattle.BonusPeriodSpent.selector);
         craps.amendSlip(betId, _boardA());
 
-        craps.resolveSlot(slot, 8);
+        craps.resolveSlot(slot, WHOLE_FIELD);
         assertTrue(craps.betOf(betId).settled, "amended slip did not settle");
     }
 
@@ -1117,7 +1121,7 @@ contract CrapsBattleTest is CrapsPins {
         // Alice holds BOTH seats, so the pot comes home to her as well and the two awards are only
         // separable from it in the log.
         uint256 before = coinflip.staked(alice);
-        PaidOut memory pot = _onlyPot(craps, slot, FIELD_CAP);
+        PaidOut memory pot = _onlyPot(craps, slot, WHOLE_FIELD);
         assertEq(
             coinflip.staked(alice) - before,
             paidOne + paidTen + pot.amount,
@@ -1147,7 +1151,7 @@ contract CrapsBattleTest is CrapsPins {
 
             _closeOn(craps, slot, uint48(20_000 + i), uint256(keccak256(abi.encode("rank", i))));
             (uint256 wonOne,) = craps.previewSettlement(plain);
-            craps.resolveSlot(slot, FIELD_CAP);
+            craps.resolveSlot(slot, WHOLE_FIELD);
 
             // A pair that BUSTS comes home with nothing, and nothing times ten is still nothing —
             // those passes are level whether the multiplier leaks into the score or not, so they
@@ -1337,97 +1341,180 @@ contract CrapsBattleTest is CrapsPins {
         assertEq(craps.boostBaseAt(_slotAt(PER)), was, "the base moved with the field");
     }
 
-    /// @dev THE RULE, END TO END: A DAY'S BUDGET IS ONE SIXTH OF THE AVERAGE DAILY ACTION of the
-    ///      week behind it. It is a chosen share of turnover, not an estimate of what anyone
-    ///      loses. The contract reaches it in two steps — `action / BOOST_ACTION_DIVISOR`, then
-    ///      halved by `BOOST_BURN_SHARE_DIVISOR` on the way out — so both forms are asserted
-    ///      below and neither can drift from the other.
+    /// @dev THE RULE, END TO END: A DAY'S ALLOCATION IS A FLAT 50,000 FLIP PLUS TWELVE PERCENT OF
+    ///      THE AVERAGE DAILY ACTION of the week behind it. The base is ADDED, not a floor — a day
+    ///      with a busy week behind it is paid for that week ON TOP of the base — and the twelve
+    ///      percent is a chosen share of turnover, not an estimate of what anyone loses.
     ///
-    ///      And the budget IS the expected emission, not a ceiling over it: the seven windows'
-    ///      bases partition it exactly, and the ladder pays each base in expectation (E[mult] = 4,
-    ///      divided by 4). So what a day expects to hand out is this figure and nothing else —
-    ///      which is what makes the rate the only dial that moves it.
-    function test_aDaysExpectedEmissionIsHalfTheAssumedLoss() public {
+    ///      HALF OF IT REACHES THE WINDOWS. The allocation splits down the middle: the ladder half
+    ///      is what the seven windows partition, and the other half is banked in the progressive.
+    ///      The ladder half IS the expected immediate emission, not a ceiling over it — the seven
+    ///      bases partition it exactly and the ladder pays each in expectation (E[mult] = 4,
+    ///      divided by 4).
+    function test_aDaysBudgetIsTheBaseSubsidyPlusTwelvePercentOfAction() public {
         vm.warp(vm.getBlockTimestamp() + 10 days);
         uint24 today = craps.currentDayIndex();
-        uint256 days_ = craps.BOOST_BURN_WINDOW_DAYS();
+        uint256 days_ = craps.BOOST_ACTION_WINDOW_DAYS();
         uint256 perDay = 3_600_000 ether;
         for (uint256 i = 1; i <= days_; ++i) craps.bookDay(today - uint24(i), perDay);
 
         uint256 y = perDay * days_;
-        uint256 expected = y / craps.BOOST_ACTION_DIVISOR() / craps.BOOST_BURN_SHARE_DIVISOR() / days_;
+        uint256 linear = (y * craps.BOOST_ACTION_BPS()) / craps.BPS_DENOMINATOR() / days_;
         (uint256 mainBudget, uint256 highBudget) = craps.drawBudgetsFor(today);
-        assertGt(mainBudget, craps.MIN_BOOST_BUDGET(), "the fixture sat on the floor and proves nothing");
         assertEq(highBudget, 0, "ordinary action funded a high lane");
-        assertEq(mainBudget, expected, "a day's budget is not (x/2) * (y/7)");
+        assertEq(mainBudget, craps.BASE_MAIN_BUDGET() + linear, "a day's budget is not base + 12% of action");
         // The same figure said plainly, so the rule is pinned in the terms it was chosen in.
-        assertEq(mainBudget, (y / days_) / 6, "a day's budget is not a sixth of the average daily action");
+        assertEq(mainBudget, 50_000 ether + (y / days_) * 12 / 100, "a day's budget is not 50k + 12%");
 
-        // Half of the week's assumed loss, and no more: a SEVENTH of it lands each day.
-        assertEq(expected * days_ * 2, y / craps.BOOST_ACTION_DIVISOR(), "the week does not give back half");
+        // ADDITIVE, NOT A FLOOR. The linear term dwarfs the base here, so a `max(base, linear)`
+        // implementation would land exactly on `linear` and this is what separates the two.
+        assertGt(linear, craps.BASE_MAIN_BUDGET(), "the fixture's linear term never passes the base");
+        assertEq(mainBudget - linear, craps.BASE_MAIN_BUDGET(), "the base was swallowed by the linear term");
 
-        // And the day actually offers that much: the seven windows partition the banked budget.
+        // And the day actually offers HALF of that: the seven windows partition the ladder, and
+        // the other half is banked in the pool. The two together are the whole allocation.
+        (uint256 ladder, uint256 contribution) = craps.splitMainBudget(mainBudget);
+        assertEq(ladder + contribution, mainBudget, "the split lost or created a wei");
         _setDailyWord(today, PLAIN_WORD);
         vm.prank(ContractAddresses.GAME);
         craps.openBonusDay();
-        assertEq(craps.boostBudgetOf(today), mainBudget, "the day banked a different budget");
+        assertEq(craps.boostBudgetOf(today), ladder, "the day banked other than the ladder half");
+        assertEq(craps.progressivePool(), contribution, "the day banked other than the progressive half");
         uint256 periods = craps.BONUS_PERIODS_PER_DAY();
         uint256 sum;
         for (uint256 p = 0; p < periods; ++p) sum += craps.boostBaseAt(_slotAt(p));
-        assertApproxEqAbs(sum, mainBudget, periods, "the windows do not partition the day's budget");
+        assertApproxEqAbs(sum, ladder, periods, "the windows do not partition the day's ladder");
     }
 
-    /// @dev A BUSIER WEEK buys a bigger bonus, with nothing at the table retuned. Players are
-    ///      taken to lose at least `1 / BOOST_ACTION_DIVISOR` of the bankroll they buy in for, and
-    ///      HALF of that comes back — so with `y` the week's action and `x` that rate, a day's
-    ///      budget is (x/2) * (y/7). The action alone is tracked and the rate applied
-    ///      analytically, so a lucky week cannot starve the next one and an unlucky one cannot
-    ///      inflate it. That rate is a SCHEDULE choice, not a claim about any board's edge: the
-    ///      true-odds place legs are fair, so a field can legally hand the table nothing at all.
+    /// @dev ZERO ACTION STILL PAYS THE BASE, and exactly the base. This is the additive rule at
+    ///      its cheapest end: with nothing behind it a day allocates 50,000 FLIP, which the split
+    ///      then halves — 25,000 to the ladder its seven windows share and 25,000 banked in the
+    ///      progressive. Both halves are emission; only their timing differs.
+    function test_aColdDayOpensOnExactlyTheBaseSubsidy() public {
+        vm.warp(vm.getBlockTimestamp() + 10 days);
+        uint24 today = craps.currentDayIndex();
+        (uint256 mainBudget, uint256 highBudget) = craps.drawBudgetsFor(today);
+        assertEq(mainBudget, craps.BASE_MAIN_BUDGET(), "a cold table did not open on exactly the base");
+        assertEq(mainBudget, 50_000 ether, "the base subsidy is not 50,000 FLIP");
+        assertEq(highBudget, 0, "a cold table funded a high lane");
+
+        (uint256 ladder, uint256 contribution) = craps.splitMainBudget(mainBudget);
+        assertEq(ladder, 25_000 ether, "a cold day's ladder is not half the base");
+        assertEq(contribution, 25_000 ether, "a cold day's progressive contribution is not half the base");
+        assertEq(ladder + contribution, mainBudget, "the split lost or created a wei");
+        assertEq(craps.ladderBudgetFor(today), ladder, "the pre-open ladder quote disagrees with the split");
+
+        // And the day that opens actually banks that: the ladder in the boost budget, the other
+        // half in the pool, and nothing anywhere else.
+        assertEq(craps.progressivePool(), 0, "the pool was not empty before any day opened");
+        _setDailyWord(today, PLAIN_WORD);
+        _openDay();
+        assertEq(craps.boostBudgetOf(today), ladder, "the day banked other than the ladder half");
+        assertEq(craps.progressivePool(), contribution, "the day banked other than the progressive half");
+    }
+
+    /// @dev THE TWO LANES ARE RATED THE SAME AND NEVER SHARE A WEI. Regular action is worth 12%
+    ///      to the main lane. High action is worth 12% too, split two parts in five to the main
+    ///      lane (4.8%) and three to the lane that earned it (7.2%). Mixed action is booked once:
+    ///      `_highStaked` is subtracted out of `_dayStaked` before the regular component is taken,
+    ///      so no unit of action can pay into both.
+    function test_theTwoLanesAreRatedTheSameAndNeverShareAWei() public {
+        vm.warp(vm.getBlockTimestamp() + 10 days);
+        uint24 today = craps.currentDayIndex();
+        uint256 days_ = craps.BOOST_ACTION_WINDOW_DAYS();
+        uint256 base = craps.BASE_MAIN_BUDGET();
+
+        // Regular action alone: 12% to the main lane, nothing to the high one.
+        uint256 perDay = 7_000_000 ether;
+        for (uint256 i = 1; i <= days_; ++i) craps.bookDay(today - uint24(i), perDay);
+        (uint256 m, uint256 h) = craps.drawBudgetsFor(today);
+        assertEq(m, base + perDay * 12 / 100, "regular action is not worth 12% to the main lane");
+        assertEq(h, 0, "regular action funded the high lane");
+
+        // High action alone, on the day after, so the two fixtures never overlap a window.
+        // `bookHighDay` books into the day total AND the high subset, exactly as a real high seat
+        // does, so nothing else is written here.
+        uint24 later = today + uint24(days_);
+        for (uint256 i = 1; i <= days_; ++i) craps.bookHighDay(later - uint24(i), perDay);
+        (m, h) = craps.drawBudgetsFor(later);
+        assertEq(m, base + perDay * 48 / 1000, "high action is not worth 4.8% to the main lane");
+        assertEq(h, perDay * 72 / 1000, "high action is not worth 7.2% to its own lane");
+        // TWELVE PERCENT ACROSS BOTH LANES, whichever lane put it up.
+        assertEq((m - base) + h, perDay * 12 / 100, "the two lanes do not sum to 12% of the action");
+
+        // MIXED, and not double counted: half the day's action is a high seat's.
+        uint24 third = later + uint24(days_);
+        for (uint256 i = 1; i <= days_; ++i) {
+            craps.bookDay(third - uint24(i), perDay / 2);
+            craps.bookHighDay(third - uint24(i), perDay / 2);
+        }
+        (m, h) = craps.drawBudgetsFor(third);
+        uint256 regular = perDay / 2;
+        assertEq(
+            m,
+            base + regular * 12 / 100 + (perDay / 2) * 48 / 1000,
+            "the regular component did not net out the high action"
+        );
+        assertEq(h, (perDay / 2) * 72 / 1000, "the high lane took other than 7.2% of its own action");
+        assertEq((m - base) + h, perDay * 12 / 100, "mixed action was double counted or lost");
+    }
+
+    /// @dev A BUSIER WEEK buys a bigger bonus, with nothing at the table retuned. Twelve percent
+    ///      of the bankroll the seats put up comes back as house money, on top of the flat base.
+    ///      The action alone is tracked and the rate applied analytically, so a lucky week cannot
+    ///      starve the next one and an unlucky one cannot inflate it. That rate is a SCHEDULE
+    ///      choice, not a claim about any board's edge: the true-odds place legs are fair, so a
+    ///      field can legally hand the table nothing at all.
     function test_aBusierWeekBuysABiggerBonus() public {
         // Far enough in that a full seven-day window exists behind today.
         vm.warp(block.timestamp + 10 days);
         uint24 today = craps.currentDayIndex();
-        assertGe(today, craps.BOOST_BURN_WINDOW_DAYS(), "the fixture has no week behind it");
+        assertGe(today, craps.BOOST_ACTION_WINDOW_DAYS(), "the fixture has no week behind it");
 
-        // With no action behind it, a day opens on the floor.
-        assertEq(craps.drawBudgetFor(today), craps.MIN_BOOST_BUDGET(), "a cold table did not open on the floor");
+        // With no action behind it, a day opens on the base and nothing else.
+        assertEq(craps.drawBudgetFor(today), craps.BASE_MAIN_BUDGET(), "a cold table did not open on the base");
 
-        // A week of real action. Each day is budgeted at action / BOOST_ACTION_DIVISOR and half
-        // the week's sum is the budget. The per-day figure is FLOORED before it is summed, so the
-        // fixture uses an action divisible by `divisor * share` — otherwise "twice the action,
-        // twice the bonus" is off by a wei of flooring and says nothing about the rule.
+        // A week of real action. Each day contributes `action * 12 / 100`, and the week's sum is
+        // spread back over the week. The per-day figure is FLOORED before it is summed, so the
+        // fixture uses an action the rate divides exactly — otherwise "twice the action, twice
+        // the linear term" is off by a wei of flooring and says nothing about the rule.
         uint256 perDay = 3_600_000 ether;
-        uint256 days_ = craps.BOOST_BURN_WINDOW_DAYS();
+        uint256 days_ = craps.BOOST_ACTION_WINDOW_DAYS();
         for (uint256 i = 1; i <= days_; ++i) craps.bookDay(today - uint24(i), perDay);
         uint256 week = perDay * days_;
         assertEq(craps.dayStaked(today - 1), perDay, "the day's action did not book");
         assertEq(
-            craps.dayBurn(today - 1),
-            perDay / craps.BOOST_ACTION_DIVISOR(),
-            "the budgeted figure is not action / BOOST_ACTION_DIVISOR"
+            craps.dayActionRate(today - 1),
+            perDay * craps.BOOST_ACTION_BPS() / craps.BPS_DENOMINATOR(),
+            "the day's contribution is not 12% of its action"
         );
 
-        // (x/2) * (y/7): the week's action at the assumed loss rate, halved, spread over the week.
-        uint256 expected =
-            week / craps.BOOST_ACTION_DIVISOR() / craps.BOOST_BURN_WINDOW_DAYS() / craps.BOOST_BURN_SHARE_DIVISOR();
-        assertGt(expected, craps.MIN_BOOST_BUDGET(), "the fixture never clears the floor");
-        assertEq(craps.drawBudgetFor(today), expected, "the budget is not half the week's DAILY figure");
+        // base + 12% of (y/7): the week's action at the schedule's rate, spread over the week.
+        uint256 linear = week * craps.BOOST_ACTION_BPS() / craps.BPS_DENOMINATOR() / days_;
+        uint256 expected = craps.BASE_MAIN_BUDGET() + linear;
+        assertEq(craps.drawBudgetFor(today), expected, "the budget is not base + 12% of the week's DAILY figure");
 
-        // Twice the action, twice the bonus.
+        // Twice the action, twice the LINEAR term — and the base does not double with it.
         for (uint256 i = 1; i <= days_; ++i) craps.bookDay(today - uint24(i), perDay);
-        assertEq(craps.drawBudgetFor(today), expected * 2, "doubling the action did not double the budget");
+        assertEq(
+            craps.drawBudgetFor(today),
+            craps.BASE_MAIN_BUDGET() + linear * 2,
+            "doubling the action did not double the linear term"
+        );
 
         // And the day that opens on it hands every window a seventh. The warp above left this day
         // without a word, and `openBonusDay` is fail-soft on that — so seed it, or the day quietly
         // does not open and every assertion below reads zero.
+        uint256 drawn = craps.BASE_MAIN_BUDGET() + linear * 2;
+        (uint256 ladder, uint256 contribution) = craps.splitMainBudget(drawn);
         _setDailyWord(today, PLAIN_WORD);
         _openDay();
         uint64 slot = _slotAt(PER);
-        assertEq(craps.boostBudgetOf(today), expected * 2, "the day did not open on the drawn budget");
-        // The EVENT takes half the day; the routine window under test takes its size's share of
-        // the other half.
-        uint256 half = expected * 2 / 2;
+        assertEq(craps.boostBudgetOf(today), ladder, "the day did not open on the drawn ladder half");
+        assertEq(craps.progressivePool(), contribution, "the day did not bank the other half");
+        // The EVENT takes half the LADDER; the routine window under test takes its size's share
+        // of the other half of it.
+        uint256 half = ladder / 2;
         assertEq(craps.boostBaseAt(_slotAt(days_ - 1)), half, "the event window did not take half");
         assertEq(
             craps.boostBaseAt(slot),
@@ -1436,18 +1523,17 @@ contract CrapsBattleTest is CrapsPins {
         );
     }
 
-    /// @dev The budget does NOT move with the dice. Only the action is tracked, and the edge is
+    /// @dev The budget does NOT move with the dice. Only the action is tracked, and the rate is
     ///      applied analytically — so however a week's runs happened to land, the same action buys
     ///      the same bonus. That is what keeps the subsidy from being a second bet on variance.
     function test_theBudgetIgnoresHowTheDiceRan() public {
         vm.warp(block.timestamp + 10 days);
         uint24 today = craps.currentDayIndex();
-        // Big enough that ONE day of action clears the floor on its own: the budget spreads the
-        // week, so a fixture sized for the old un-spread figure would sit on the floor and this
-        // would compare 15k to 15k and prove nothing.
+        // Big enough that ONE day of action dwarfs the base on its own: the budget spreads the
+        // week, so a fixture sized too small would be almost all base and prove little.
         craps.bookDay(today - 1, 36_000_000 ether);
         uint256 drawn = craps.drawBudgetFor(today);
-        assertGt(drawn, craps.MIN_BOOST_BUDGET(), "the fixture never leaves the floor");
+        assertGt(drawn, craps.BASE_MAIN_BUDGET(), "the fixture never leaves the base");
         // Settling more of the SAME action changes nothing; only fresh action moves it.
         assertEq(craps.drawBudgetFor(today), drawn, "the budget drifted without new action");
         craps.bookDay(today - 1, 36_000_000 ether);
@@ -1577,20 +1663,29 @@ contract CrapsBattleTest is CrapsPins {
         // The boost rides a heavy-tailed ladder, so most words draw a base too small to clear one
         // granule at this field size. Search for a word that actually pays, or the rationing below
         // is asserted against nothing.
+        // PAST THE ROUNDING STEP, and off it. Under forty granules `_roundBoost` is the identity,
+        // so a fixture that lands there cannot tell a pot that rounded from one that never did —
+        // and a boost already on a whole thousand cannot either.
         uint256 boost;
-        for (uint256 i = 0; i < 64 && boost == 0; ++i) {
+        for (uint256 i = 0; i < 512 && !(boost > 40 && boost % 10 != 0); ++i) {
             _setWord(index, uint256(keccak256(abi.encode("rationed", i))));
             boost = craps.boostUnitsAt(slot);
         }
-        assertGt(boost, 0, "no word drew a boost: the test proves nothing");
-        PaidOut memory pot = _onlyPot(craps, slot, FIELD_CAP);
+        assertGt(boost, 40, "no word drew a boost past the rounding step: the test proves nothing");
+        PaidOut memory pot = _onlyPot(craps, slot, WHOLE_FIELD);
 
         CrapsBattle.Battle memory info = craps.battleOf(_keyOf(PER));
         uint256 winnerId = _idAt(slot, info.winnerId);
         uint256 held = craps.betOf(winnerId).standing;
 
+        // RATIONED FIRST, ROUNDED SECOND, WIDENED LAST — production's own order. Widening before
+        // rounding would leave the rounding a no-op on a wei figure and hand the winner an odd
+        // hundred, so the order is what this asserts and not merely the granule.
+        uint256 share = craps.boostShareFor(boost, held);
         uint256 expected = uint256(BON_SU) * info.entrants * craps.BATTLE_STAKE_UNIT()
-            + craps.boostShareFor(boost, held) * craps.BATTLE_STAKE_UNIT();
+            + craps.roundBoostFor(share) * craps.BATTLE_STAKE_UNIT();
+        // And the fixture has to actually straddle the step, or the two orders agree by accident.
+        assertTrue(craps.roundBoostFor(share) != share, "the winner's share did not straddle the rounding step");
 
         assertEq(pot.betId, winnerId, "the pot named a seat the scoreboard did not");
         assertEq(pot.player, craps.betOf(winnerId).player, "the pot reached an address that held no seat");
@@ -1617,7 +1712,7 @@ contract CrapsBattleTest is CrapsPins {
         assertEq(craps.roundBoostFor(donation), 50, "the fixture no longer straddles the rounding step");
 
         _closeOn(craps, slot, 700, uint256(keccak256("customboost")));
-        PaidOut memory pot = _onlyPot(craps, slot, FIELD_CAP);
+        PaidOut memory pot = _onlyPot(craps, slot, WHOLE_FIELD);
 
         CrapsBattle.Battle memory info = craps.battleOf(_slotKeyOf(slot));
         uint256 winnerId = _idAt(slot, info.winnerId);
@@ -1677,6 +1772,41 @@ contract CrapsBattleTest is CrapsPins {
         vm.prank(bob);
         craps.enterBonusBattle(PER, _seven(), 1);
         assertEq(quests.streakCalls(bob), 0, "a single-window entry credited a streak");
+    }
+
+    /// @dev A HIGH DAY SEAT COUNTS FOR FIVE. It buys the same seven windows at the day's own
+    ///      multiple — the largest single commitment the table sells — so the streak prices it
+    ///      five times an ordinary day. Still ONE credit per address per day: the `_daySeated`
+    ///      latch bounds the high door exactly as it bounds the ordinary one.
+    function test_aHighDayTicketCreditsFiveStreak() public {
+        vm.warp(_dayStart());
+        (, uint256 period,) = craps.currentBonusSlot();
+        assertEq(period, 0, "the fixture is not inside the opening window");
+        _openDay();
+        uint24 today = craps.currentDayIndex();
+        uint256 hm = craps.highMultForDay(today);
+        assertGt(hm, 1, "the fixture's day drew no high lane");
+
+        game.setScore(alice, type(uint96).max);
+        game.setScore(bob, type(uint96).max);
+
+        vm.prank(alice);
+        craps.enterBonusDay(_seven(), uint16(hm));
+        assertEq(quests.streakCalls(alice), 1, "the high day ticket credited no streak");
+        assertEq(quests.streakAwarded(alice), 5, "a high day ticket is not worth five");
+        assertEq(quests.lastDay(), today, "the streak was credited against another day");
+
+        // The ORDINARY day seat on the very same day is still worth one, so the five is the high
+        // multiple's doing and not the day lane's.
+        vm.prank(bob);
+        craps.enterBonusDay(_seven(), 1);
+        assertEq(quests.streakAwarded(bob), 1, "an ordinary day ticket moved off one");
+
+        // One per address per day either way: a refused re-entry credits nothing further.
+        vm.prank(alice);
+        vm.expectRevert(CrapsBattle.AlreadyInBonus.selector);
+        craps.enterBonusDay(_seven(), uint16(hm));
+        assertEq(quests.streakAwarded(alice), 5, "a refused high re-entry credited a second streak");
     }
 
     /// @dev A DAY-WIDE ENTRY SHUTS AS ONE. `enterBonusDay` is a single commitment spread over
@@ -1772,14 +1902,11 @@ contract CrapsBattleTest is CrapsPins {
         return block.timestamp - ((block.timestamp - 82_620) % 1 days);
     }
 
-    /// @dev Bigger than any fixture's field. The walk stops at `entrants` on its own, so a cap
-    ///      past the end simply settles everything.
-    uint64 internal constant FIELD_CAP = 64;
 
-    /// @dev Settle a window's whole field through the slot lane. `FIELD_CAP` exceeds every field
+    /// @dev Settle a window's whole field through the slot lane. `WHOLE_FIELD` exceeds every field
     ///      this suite creates, and the cursor stops at the entrant count.
     function _resolveSlotOn(uint24 day, uint256 period) internal {
-        craps.resolveSlot(uint64(uint256(day) * craps.BONUS_SLOTS_PER_DAY() + period + 1), FIELD_CAP);
+        craps.resolveSlot(uint64(uint256(day) * craps.BONUS_SLOTS_PER_DAY() + period + 1), WHOLE_FIELD);
     }
 
     function _resolveSlot(uint256 period) internal {
@@ -2253,7 +2380,7 @@ contract CrapsBattleTest is CrapsPins {
         uint64 slot = uint64(uint256(day) * craps.BONUS_SLOTS_PER_DAY() + PER + 1);
         uint256[] memory field = _fieldOf(slot);
         assertEq(field.length, 4, "the field is not the house, the vault and the two players");
-        PaidOut memory pot = _onlyPot(craps, slot, FIELD_CAP);
+        PaidOut memory pot = _onlyPot(craps, slot, WHOLE_FIELD);
 
         CrapsBattle.Battle memory done = craps.battleOf(key);
         assertTrue(done.finalized, "battle did not finalize");
@@ -2382,9 +2509,10 @@ contract CrapsBattleTest is CrapsPins {
 
         for (uint24 d = 1; d <= 400; ++d) {
             _setDailyWord(d, uint256(keccak256(abi.encode("mix", d))));
-            // The day's EVENT takes half; the six routine windows split the other half 4:2:1 by
-            // size. The denominator is rebuilt out of the bankrolls the schedule actually drew.
-            uint256 half = craps.drawBudgetFor(d) / 2;
+            // The LADDER is half the day's allocation; the day's EVENT takes half of that, and the
+            // six routine windows split the rest 4:2:1 by size. The denominator is rebuilt out of
+            // the bankrolls the schedule actually drew.
+            uint256 half = craps.ladderBudgetFor(d) / 2;
             uint256 weight = _routineWeightAt(d);
             for (uint256 p = 0; p < periods; ++p) {
                 uint256 base = p == last ? half : half * _weightOf(d, p) / weight;
@@ -2672,7 +2800,7 @@ contract CrapsBattleTest is CrapsPins {
         uint256 entrants = craps.battleOf(_keyOf(PER)).entrants;
         assertEq(craps.boostShareFor(1000, 0), 0, "a scoreless winner can still take house money");
 
-        PaidOut memory pot = _onlyPot(craps, slot, FIELD_CAP);
+        PaidOut memory pot = _onlyPot(craps, slot, WHOLE_FIELD);
         // The protocol's own boost is rationed by the winner's standing and then rounded; the
         // DONATION is neither, and rides on top whole. Written as the sum so it holds whichever
         // seat the dice hand the pot to.
@@ -3249,7 +3377,7 @@ contract CrapsBattleTest is CrapsPins {
 
         uint64 slot = _slotAt(PER);
         uint256[] memory field = _fieldOf(slot);
-        PaidOut memory pot = _onlyPot(craps, slot, FIELD_CAP);
+        PaidOut memory pot = _onlyPot(craps, slot, WHOLE_FIELD);
         CrapsBattle.Battle memory done = craps.battleOf(key);
         (uint24 qday,,) = craps.currentBonusSlot();
         (,, uint256 high) = craps.bonusBoostBand(qday, PER);

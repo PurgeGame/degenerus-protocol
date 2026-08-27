@@ -499,6 +499,9 @@ contract V56SubHardening is DeployProtocol {
         // the wrapper's idle assertion is about a genuinely stationary router.
         game.openBoxes(1_000);
         require(!game.advanceDue(), "fixture: clean so the idle arm is genuine");
+        // The crank has a craps arm now, so a NoWork probe has to quiet the table too or it is
+        // asserting an idleness it never set up.
+        _quietCrapsTable();
         vm.prank(ContractAddresses.CREATOR);
         vm.expectRevert(abi.encodeWithSignature("NoWork()"));
         vault.gameAdvance();
@@ -523,6 +526,9 @@ contract V56SubHardening is DeployProtocol {
         // the wrapper's idle assertion is about a genuinely stationary router.
         game.openBoxes(1_000);
         require(!game.advanceDue(), "fixture: clean so the idle arm is genuine");
+        // The crank has a craps arm now, so a NoWork probe has to quiet the table too or it is
+        // asserting an idleness it never set up.
+        _quietCrapsTable();
         vm.prank(makeAddr("anyone_sdgnrs")); // permissionless — any caller
         vm.expectRevert(abi.encodeWithSignature("NoWork()"));
         sdgnrs.gameAdvance();

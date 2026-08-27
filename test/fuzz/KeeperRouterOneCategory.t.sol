@@ -228,6 +228,9 @@ contract KeeperRouterOneCategory is DeployProtocol {
         _latchGameOver();
         assertTrue(game.gameOver(), "pre: gameOver latched");
 
+        // The crank has a craps arm now, so a NoWork probe has to quiet the table too or it is
+        // asserting an idleness it never set up.
+        _quietCrapsTable();
         vm.recordLogs();
         vm.prank(keeper);
         vm.expectRevert(); // GameAfkingModule.NoWork() — no sweep pending, no free idle crank
@@ -250,6 +253,9 @@ contract KeeperRouterOneCategory is DeployProtocol {
         game.openBoxes(1_000);
         // No afking subscriber stamped a box (no STAGE buy was driven), so the open leg has nothing.
 
+        // The crank has a craps arm now, so a NoWork probe has to quiet the table too or it is
+        // asserting an idleness it never set up.
+        _quietCrapsTable();
         vm.recordLogs();
         vm.prank(keeper);
         vm.expectRevert(); // GameAfkingModule.NoWork()

@@ -18,7 +18,29 @@ contract GasHarness is CrapsViews {
         view
         returns (Craps.SlipResult memory)
     {
-        return _settleSlip(b, _seedFor(index), bankroll, 0, MAX_SLIP_HANDS, SLIP_ROLL_BUDGET, address(0));
+        return _settleSlip(b, _seedFor(index), bankroll, 0, MAX_SLIP_HANDS, SLIP_ROLL_BUDGET, address(0), 0);
+    }
+
+    /// @dev The same worst case UNDER A SCHEDULE, at the dearest terms a scheduled window can
+    ///      hand it: the blank ticket's 15-in-a-hundred draw at the 50x target's +40%. A boosted
+    ///      shooter costs one extra keccak and one multiply-divide, so the guarantee has to be
+    ///      measured with the schedule on — an unboosted ceiling proves nothing about the common
+    ///      case.
+    function engineRunBoosted(Craps.Bets calldata b, uint48 index, uint256 bankroll)
+        external
+        view
+        returns (Craps.SlipResult memory)
+    {
+        return _settleSlip(
+            b,
+            _seedFor(index),
+            bankroll,
+            0,
+            MAX_SLIP_HANDS,
+            SLIP_ROLL_BUDGET,
+            address(0),
+            _shooterBoostTerms(true, 50)
+        );
     }
 }
 
@@ -105,6 +127,18 @@ contract CrapsGasTest is CrapsPins {
         emit log_named_uint("engine worst-case run gas", used);
         assertEq(result.handsPlayed, craps.MAX_SLIP_HANDS(), "benchmark did not reach the shooter cap");
         assertLt(used, 2_250_000, "the engine's worst case regressed past its gas budget");
+
+        // AND WITH A SCHEDULE ON, which is what every protocol window runs. The draw fires on
+        // about one shooter in seven here, so this is the cost the guarantee actually has to
+        // cover — the unboosted figure above is the floor under it, not the ceiling.
+        g = gasleft();
+        Craps.SlipResult memory boosted = craps.engineRunBoosted(b, 70_000, bankroll);
+        uint256 usedBoosted = g - gasleft();
+
+        emit log_named_uint("engine worst-case run gas, scheduled", usedBoosted);
+        emit log_named_uint("  the schedule's own cost", usedBoosted - used);
+        assertEq(boosted.handsPlayed, craps.MAX_SLIP_HANDS(), "the scheduled benchmark stopped early");
+        assertLt(usedBoosted, 2_250_000, "the scheduled worst case regressed past its gas budget");
     }
 
     /// @dev And the real surface: a max-legal slip (ten rounds of the board) placed and settled
@@ -123,7 +157,7 @@ contract CrapsGasTest is CrapsPins {
         _closeOn(craps, slot, 80_000, uint256(keccak256("maxslip")));
 
         uint256 g = gasleft();
-        craps.resolveSlot(slot, 4);
+        craps.resolveSlot(slot, WHOLE_FIELD);
         uint256 used = g - gasleft();
 
         emit log_named_uint("max-legal slip settle gas", used);
@@ -154,11 +188,11 @@ contract CrapsGasTest is CrapsPins {
         _closeOn(craps, lone, 90_001, uint256(keccak256("batch")));
 
         uint256 g = gasleft();
-        craps.resolveSlot(lone, 4);
+        craps.resolveSlot(lone, WHOLE_FIELD);
         uint256 single = g - gasleft();
 
         g = gasleft();
-        craps.resolveSlot(many, uint64(n));
+        craps.resolveSlot(many, WHOLE_FIELD);
         uint256 batch = g - gasleft();
 
         emit log_named_uint("one bet settled alone     ", single);
@@ -200,7 +234,7 @@ contract CrapsGasTest is CrapsPins {
         uint256 close = g - gasleft();
 
         g = gasleft();
-        craps.resolveSlot(slot, 8);
+        craps.resolveSlot(slot, WHOLE_FIELD);
         uint256 settle = g - gasleft();
 
         emit log_named_uint("createBattle              ", create);

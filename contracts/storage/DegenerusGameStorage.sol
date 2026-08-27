@@ -746,6 +746,7 @@ abstract contract DegenerusGameStorage {
     uint8 internal constant MINER_BOUNTY_ADVANCE = 1;
     uint8 internal constant MINER_BOUNTY_BOX_OPEN = 2;
     uint8 internal constant MINER_BOUNTY_DEGENERETTE_RESOLVE = 3;
+    uint8 internal constant MINER_BOUNTY_CRAPS_KEEP = 4;
 
     /// @dev Emitted whenever a player's claimable balance is debited by the protocol. Covers
     ///      mint payments (MintPaymentKind.Claimable / Combined), lootbox/ticket shortfall

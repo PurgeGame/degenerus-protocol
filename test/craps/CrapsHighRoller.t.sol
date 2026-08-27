@@ -56,7 +56,6 @@ contract CrapsHighRollerTest is CrapsPins {
     uint256 internal constant GRANULE = 100e18;
     uint24 internal constant SU = 3;
     uint256 internal constant SUW = uint256(SU) * GRANULE;
-    uint64 internal constant FIELD_CAP = 64;
     uint256 internal constant PLAIN_WORD = 40 << 8;
 
     address internal alice = makeAddr("alice");
@@ -257,8 +256,8 @@ contract CrapsHighRollerTest is CrapsPins {
         vm.warp(vm.getBlockTimestamp() + 10 days);
         _warpToDayStart();
         uint24 today = craps.currentDayIndex();
-        uint256 days_ = craps.BOOST_BURN_WINDOW_DAYS();
-        for (uint256 i = 1; i <= days_; ++i) craps.bookHighDay(today - uint24(i), 3_600_000 ether);
+        uint256 days_ = craps.BOOST_ACTION_WINDOW_DAYS();
+        for (uint256 i = 1; i <= days_; ++i) craps.bookHighDay(today - uint24(i), 7_100_000 ether);
         _setDailyWord(today, _wordFor(10));
         vm.prank(ContractAddresses.GAME);
         craps.openBonusDay();
@@ -277,7 +276,7 @@ contract CrapsHighRollerTest is CrapsPins {
         vm.warp(vm.getBlockTimestamp() + 5 hours);
         uint48 index = craps.armBonusWindow(slot);
         _setWord(index, uint256(keccak256("granule")));
-        PaidOut[] memory lane = _resolveForLane(craps, slot, FIELD_CAP, false);
+        PaidOut[] memory lane = _resolveForLane(craps, slot, WHOLE_FIELD, false);
         assertEq(lane.length, 1, "the contested lane paid other than once");
 
         (,, uint64 seat,,) = craps.highFieldOf(craps.battleKeyOf((uint256(slot) << 64) | 1));
@@ -288,6 +287,22 @@ contract CrapsHighRollerTest is CrapsPins {
         uint256 granule = craps.BATTLE_STAKE_UNIT();
         assertGt(lane[0].amount, 0, "the contested lane paid nothing, so nothing was measured");
         assertEq(lane[0].amount % granule, 0, "the lane paid a figure that is not a whole granule");
+
+        // AND THE ROUNDING ITSELF. `% granule` above is satisfied by the widening multiply on its
+        // own, so it holds whether or not `_roundBoost` ever ran — which is the exact mis-ordering
+        // this fixture is named for. Recompute the figure the way production is meant to reach it
+        // — share in granules, round in granules, widen last — and hold the payment to it.
+        (,,, uint256 battleStake,,) = craps.bonusTermsFor(today, 1);
+        uint256 principal = 2 * (craps.highMultOfSlot(slot) - 1) * battleStake;
+        uint256 units = craps.boostShareOf(craps.highBoostUnitsOf(slot, craps.wordAt(index)), 5);
+        // Under the threshold nothing rounds, so a fixture that landed there would prove nothing.
+        assertGt(units, 40, "the fixture's lane boost is below the rounding threshold");
+        assertTrue(units % 10 != 0, "the fixture's lane boost is already round: rounding is untested");
+        assertEq(
+            lane[0].amount,
+            principal + craps.roundBoost(units) * granule,
+            "the lane did not round in granules before widening to wei"
+        );
     }
 
     // ── The lane's three shapes ─────────────────────────────────────────────
@@ -331,7 +346,7 @@ contract CrapsHighRollerTest is CrapsPins {
         assertEq(quoted, expected, "the preview under-quoted the rider");
 
         uint256 before = coinflip.staked(alice);
-        (PaidOut[] memory pots,) = _resolveForBoth(craps, slot, FIELD_CAP);
+        (PaidOut[] memory pots,) = _resolveForBoth(craps, slot, WHOLE_FIELD);
         assertEq(pots.length, 1, "the field did not pay exactly one pot");
         // The same call pays the field's MAIN POT, and the three seats here play one board — so
         // the coin decides whether that lands on this address too. Take it back out: what is under
@@ -356,7 +371,7 @@ contract CrapsHighRollerTest is CrapsPins {
 
             // Read off the rider's own announcement rather than the balance: the same call also
             // pays the field's main pot, and an all-bust field still has a best bust to pay it to.
-            PaidOut[] memory ride = _resolveForLane(craps, slot, FIELD_CAP, true);
+            PaidOut[] memory ride = _resolveForLane(craps, slot, WHOLE_FIELD, true);
             assertEq(ride.length, 1, "the sole high seat announced no rider at all");
             assertEq(ride[0].amount, 0, "a busted rider still came home with something");
             (,,,, bool done) = craps.highFieldOf(craps.battleKeyOf(hi));
@@ -381,7 +396,7 @@ contract CrapsHighRollerTest is CrapsPins {
         // The LANE PAYS ITSELF OUT during the settlement that finishes the field — the same call
         // that pays the main pot — so what a claim used to collect is now one entry in this
         // stream.
-        PaidOut[] memory lane = _resolveForLane(craps, slot, FIELD_CAP, false);
+        PaidOut[] memory lane = _resolveForLane(craps, slot, WHOLE_FIELD, false);
         assertEq(lane.length, 1, "a contested lane paid other than once");
 
         bytes32 key = craps.battleKeyOf(a);
@@ -422,7 +437,7 @@ contract CrapsHighRollerTest is CrapsPins {
         (,,,, bool done) = craps.highFieldOf(key);
         assertFalse(done, "the lane latched before the field was final");
 
-        assertEq(_resolveForLane(craps, slot, FIELD_CAP, false).length, 1, "the last seat did not pay the lane");
+        assertEq(_resolveForLane(craps, slot, WHOLE_FIELD, false).length, 1, "the last seat did not pay the lane");
         (,,,, done) = craps.highFieldOf(key);
         assertTrue(done, "the lane did not latch when the field finished");
     }
@@ -452,7 +467,7 @@ contract CrapsHighRollerTest is CrapsPins {
 
         // ONE call finishes the field and pays both pots, so the two are told apart by which event
         // carried them rather than by which transaction did.
-        (PaidOut[] memory main, PaidOut[] memory lane) = _resolveForBoth(craps, slot, FIELD_CAP);
+        (PaidOut[] memory main, PaidOut[] memory lane) = _resolveForBoth(craps, slot, WHOLE_FIELD);
         assertEq(main.length, 1, "the main pot paid other than once");
         assertEq(lane.length, 1, "the lane paid other than once");
         assertEq(lane[0].amount, lanePrincipal, "the lane paid other than its own principal");
@@ -474,7 +489,7 @@ contract CrapsHighRollerTest is CrapsPins {
             craps.enterBattle(slot, _boardA(), 10);
             _closeOn(craps, slot, uint48(30_000 + i), uint256(keccak256(abi.encode("rank", i))));
             (uint256 won,) = craps.previewSettlement(plain);
-            craps.resolveSlot(slot, FIELD_CAP);
+            craps.resolveSlot(slot, WHOLE_FIELD);
             if (won == 0) continue;
             ++live;
             if (craps.battleOf(craps.battleKeyOf(plain)).winnerId == uint64(plain)) ++plainWins;
@@ -485,52 +500,53 @@ contract CrapsHighRollerTest is CrapsPins {
 
     // ── The budget split ────────────────────────────────────────────────────
 
-    /// @dev High burn splits 30 to the lane, 20 to the main boost, and 50 unminted. Regular burn
-    ///      still recycles its whole half to main, and the two never share an amount.
-    function test_highBurnSplitsThirtyTwentyAndFifty() public {
+    /// @dev A high seat's action is rated at the SAME twelve percent every other seat is, and the
+    ///      component splits two parts in five to the main boost and three to the lane that earned
+    ///      it — 4.8% of high action to main, 7.2% to the lane. The two never share an amount.
+    function test_highActionSplitsFourPointEightAndSevenPointTwo() public {
         vm.warp(block.timestamp + 10 days);
         uint24 today = craps.currentDayIndex();
 
         // A week of purely HIGH action, chosen so every floor below is exact.
         uint256 perDay = 3_600_000 ether;
-        uint256 days_ = craps.BOOST_BURN_WINDOW_DAYS();
+        uint256 days_ = craps.BOOST_ACTION_WINDOW_DAYS();
         for (uint256 i = 1; i <= days_; ++i) craps.bookHighDay(today - uint24(i), perDay);
 
         // The window is AVERAGED, so a flat week's daily figure is one day's own.
-        uint256 eh = (perDay / craps.BOOST_ACTION_DIVISOR()) * days_ / craps.BOOST_BURN_WINDOW_DAYS();
-        uint256 recycle = eh / 2;
-        uint256 toMain = recycle * 2 / 5;
+        uint256 eh = (perDay * craps.BOOST_ACTION_BPS() / craps.BPS_DENOMINATOR()) * days_
+            / craps.BOOST_ACTION_WINDOW_DAYS();
+        uint256 toMain = eh * craps.HIGH_MAIN_NUM() / craps.HIGH_MAIN_DEN();
         (uint256 mainBudget, uint256 highBudget) = craps.drawBudgetsFor(today);
 
-        assertEq(highBudget, recycle - toMain, "the lane did not keep three fifths of the recycled half");
-        assertEq(highBudget * 10 / eh, 3, "the lane's budget is not 30% of the high burn");
-        assertEq(toMain * 10 / eh, 2, "the main boost did not take 20% of the high burn");
-        assertEq(eh - recycle, eh / 2, "the unrecycled half moved");
-        // Every wei of the recycled half is in one of the two, and nowhere else.
-        assertEq(highBudget + toMain, recycle, "the recycled half did not conserve");
-        assertEq(mainBudget, toMain, "high burn fed the main lane something other than its 20%");
-        // The high action is OUT of the regular lane entirely: with no ordinary action booked,
-        // regular burn is zero and the main budget is the high lane's contribution alone.
+        assertEq(highBudget, eh - toMain, "the lane did not keep three fifths of its own component");
+        assertEq(highBudget, perDay * 72 / 1000, "the lane's budget is not 7.2% of the high action");
+        assertEq(toMain, perDay * 48 / 1000, "the main boost did not take 4.8% of the high action");
+        // Every wei of the component is in one of the two, and nowhere else.
+        assertEq(highBudget + toMain, eh, "the high component did not conserve");
+        assertEq(eh, perDay * 12 / 100, "the high lane was rated at other than 12% of its action");
+        // The BASE rides the main lane alone, so main is base plus the 4.8% and nothing more: the
+        // high action is OUT of the regular lane entirely.
+        assertEq(mainBudget, craps.BASE_MAIN_BUDGET() + toMain, "high action fed main other than its 4.8%");
         assertEq(craps.highStakedOf(today - 1), perDay, "the day did not book its high action");
         assertEq(craps.dayStaked(today - 1), perDay, "high action did not land in the day total too");
     }
 
-    /// @dev The 15,000 FLIP floor is the MAIN lane's cold-table subsidy and never the high one's.
-    ///      A lane nobody played has nothing to give, and printing it one would be house money
-    ///      against a burn that never happened.
-    function test_theMainFloorNeverSubsidisesTheLane() public {
+    /// @dev The 25,000 FLIP base subsidy is the MAIN lane's and never the high one's. A lane
+    ///      nobody played has nothing to give, and printing it one would be house money against
+    ///      action that was never put through it.
+    function test_theMainBaseNeverSubsidisesTheLane() public {
         vm.warp(block.timestamp + 10 days);
         uint24 today = craps.currentDayIndex();
         (uint256 mainBudget, uint256 highBudget) = craps.drawBudgetsFor(today);
-        assertEq(mainBudget, craps.MIN_BOOST_BUDGET(), "a cold table did not open on the floor");
-        assertEq(highBudget, 0, "the floor subsidised a lane nobody played");
+        assertEq(mainBudget, craps.BASE_MAIN_BUDGET(), "a cold table did not open on exactly the base");
+        assertEq(highBudget, 0, "the base subsidised a lane nobody played");
     }
 
     /// @dev Ordinary action stays out of the high lane's books entirely.
     function test_ordinaryActionNeverFeedsTheLane() public {
         vm.warp(block.timestamp + 10 days);
         uint24 today = craps.currentDayIndex();
-        uint256 days_ = craps.BOOST_BURN_WINDOW_DAYS();
+        uint256 days_ = craps.BOOST_ACTION_WINDOW_DAYS();
         for (uint256 i = 1; i <= days_; ++i) craps.bookDay(today - uint24(i), 3_600_000 ether);
         (, uint256 highBudget) = craps.drawBudgetsFor(today);
         assertEq(highBudget, 0, "ordinary action funded the high lane");
@@ -619,7 +635,7 @@ contract CrapsHighRollerTest is CrapsPins {
 
     function _settle(uint64 slot, uint48 index) internal {
         _closeOn(craps, slot, index, uint256(keccak256(abi.encode("settle", slot))));
-        craps.resolveSlot(slot, FIELD_CAP);
+        craps.resolveSlot(slot, WHOLE_FIELD);
     }
 
     function _slotAt(uint24 day, uint256 period) internal view returns (uint64) {
@@ -640,7 +656,6 @@ contract CrapsHighRollerGasTest is CrapsPins {
     uint24 internal constant L = 600;
     uint128 internal constant LW = 600e18;
     uint24 internal constant SU = 3;
-    uint64 internal constant FIELD_CAP = 64;
     uint256 internal constant PLAIN_WORD = 40 << 8;
 
     address[6] internal players;
@@ -751,7 +766,7 @@ contract CrapsHighRollerGasTest is CrapsPins {
         _closeOn(craps, slot, 120, uint256(keccak256("nohigh")));
 
         vm.record();
-        craps.resolveSlot(slot, FIELD_CAP);
+        craps.resolveSlot(slot, WHOLE_FIELD);
         (bytes32[] memory reads, bytes32[] memory writes) = vm.accesses(address(craps));
 
         bytes32 field = _slotOfMapping(key, _HIGH_FIELD_SLOT);
@@ -772,7 +787,7 @@ contract CrapsHighRollerGasTest is CrapsPins {
         _closeOn(craps, slot, 121, uint256(keccak256("high")));
 
         vm.record();
-        craps.resolveSlot(slot, FIELD_CAP);
+        craps.resolveSlot(slot, WHOLE_FIELD);
         (, bytes32[] memory writes) = vm.accesses(address(craps));
 
         bytes32 field = _slotOfMapping(key, _HIGH_FIELD_SLOT);
@@ -804,9 +819,9 @@ contract CrapsHighRollerGasTest is CrapsPins {
         _closeOn(craps, slot, 70, uint256(keccak256("claimgas")));
 
         // Everything but the last seat, so the measured call is the one that finalizes and pays.
-        craps.resolveSlot(slot, 2);
+        craps.resolveSeats(slot, 2);
         uint256 before = gasleft();
-        craps.resolveSlot(slot, 1);
+        craps.resolveSeats(slot, 1);
         uint256 used = before - gasleft();
         emit log_named_uint("finishing batch, both pots      ", used);
 

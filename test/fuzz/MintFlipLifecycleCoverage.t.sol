@@ -138,6 +138,9 @@ contract MintFlipLifecycleCoverage is DeployProtocol {
         // router category is genuinely empty -> the clean no-work signal (not a suffix-strand false positive).
         _drainAllOpenable();
         require(!game.advanceDue() && !game.rngLocked(), "fixture: still clean -> NoWork is the genuine drained signal");
+        // The crank has a craps arm now, so a NoWork probe has to quiet the table too or it is
+        // asserting an idleness it never set up.
+        _quietCrapsTable();
         vm.prank(keeper);
         vm.expectRevert(abi.encodeWithSignature("NoWork()"));
         game.mineFlip();
@@ -230,8 +233,9 @@ contract MintFlipLifecycleCoverage is DeployProtocol {
         // the final probe sees every category empty.
         _drainAllOpenable();
 
-        // Only now does NoWork genuinely fire (advance + afking + human all empty).
+        // Only now does NoWork genuinely fire (advance + afking + human + CRAPS all empty).
         require(!game.advanceDue() && !game.rngLocked(), "fixture: clean -> NoWork is genuine");
+        _quietCrapsTable();
         assertTrue(_mintFlipWouldNoWork(keeper), "NoWork fires once afking AND human boxes are fully drained");
     }
 
@@ -294,6 +298,9 @@ contract MintFlipLifecycleCoverage is DeployProtocol {
         address keeper = makeAddr("churn_keeper");
         _grantDeityPass(keeper);
         require(!game.advanceDue() && !game.rngLocked(), "fixture: clean");
+        // The crank has a craps arm now, so a NoWork probe has to quiet the table too or it is
+        // asserting an idleness it never set up.
+        _quietCrapsTable();
         vm.prank(keeper);
         vm.expectRevert(abi.encodeWithSignature("NoWork()"));
         game.mineFlip();

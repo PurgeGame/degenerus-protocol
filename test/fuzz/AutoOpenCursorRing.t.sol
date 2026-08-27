@@ -175,6 +175,9 @@ contract AutoOpenCursorRing is DeployProtocol {
         // false-positive while [0, cursor) boxes remained).
         require(!game.advanceDue() && !game.rngLocked(), "fixture: still clean -> NoWork is the genuine drained signal");
         vm.prank(keeper);
+        // The crank has a craps arm now, so a NoWork probe has to quiet the table too or it is
+        // asserting an idleness it never set up.
+        _quietCrapsTable();
         vm.expectRevert(abi.encodeWithSignature("NoWork()"));
         game.mineFlip();
     }

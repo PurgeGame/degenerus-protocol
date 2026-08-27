@@ -245,12 +245,6 @@ contract Coinflip {
     ///      far beyond any reachable level and keeps the shift provably in range.
     uint24 private constant WWXRP_MAX_DOUBLINGS = 60;
 
-    /// @dev Share of sDGNRS's static seed reserve that joins the active flip position each day,
-    ///      in bps. Applies only once the seed window closes and auto-rebuy arms, from which
-    ///      point claimableStored no longer grows (winnings settle into the rolling carry), so
-    ///      the slice is taken from a fixed pot and the reserve decays geometrically. MIN is the
-    ///      natural floor: once 2% of what remains falls under a 100-FLIP stake the move stops.
-    uint256 private constant RESERVE_STAKE_BPS = 200;
     IDegenerusQuests internal constant questModule =
         IDegenerusQuests(ContractAddresses.QUESTS);
 
@@ -464,9 +458,10 @@ contract Coinflip {
 
         // Claimable-first waterfall: settled winnings fund the stake before the wallet does, so a
         // rebet spends the bank instead of requiring a claim-out that would mint the FLIP just to
-        // burn it again. Supply-neutral by the same accounting _stakeSdgnrsReserveSlice relies on —
-        // claimableStored is UNMINTED and a day stake is off-supply, so moving between the two
-        // mints and burns nothing. Gated on funder == player (self or operator-approved): a
+        // burn it again. Supply-neutral: claimableStored is UNMINTED (mintForGame fires only when
+        // FLIP is claimed out) and a day stake is off-supply too — a normal deposit burns its
+        // principal to create one — so moving between the two mints and burns nothing. Gated on
+        // funder == player (self or operator-approved): a
         // permissionless gift funds the whole stake from the caller's own FLIP and can never
         // push a non-consenting player's winnings onto a flip.
         uint256 fromClaimable;
@@ -1361,16 +1356,16 @@ contract Coinflip {
         // creditSdgnrsBacking) settle into the rolling carry (structurally zero
         // return under 0-take-profit rebuy). FLIP leaves sDGNRS's position solely
         // through a redemption/salvage consume leg.
+        //
+        // THE RESERVE IS STATIC ONCE ARMED. It used to bleed 2% a day onto the active flip so
+        // the protocol's own backing kept a position on the coin; craps now puts a far larger
+        // and genuinely player-funded burn through the table, so the reserve no longer has to
+        // manufacture one out of the redemption backing it exists to be.
         PlayerCoinflipState storage sdgnrsState = playerState[
             ContractAddresses.SDGNRS
         ];
         if (sdgnrsAutoRebuyArmed) {
             _claimCoinflipsInternal(ContractAddresses.SDGNRS, sdgnrsState, false);
-            // Bleed a fixed share of the seed reserve into the active position. This branch
-            // is the one the latch was already armed on entry for, so the slice begins the
-            // day AFTER arming: the arming day's own settle is what completes the reserve,
-            // and nothing is taken from it until it is final.
-            _stakeSdgnrsReserveSlice(sdgnrsState);
         } else {
             uint256 mintable = _claimCoinflipsInternal(ContractAddresses.SDGNRS, sdgnrsState, false);
             if (mintable != 0) {
@@ -1391,46 +1386,6 @@ contract Coinflip {
         // sDGNRS's claim-state was mutated above (the armed branch settles via _claimCoinflipsInternal,
         // which does not emit); surface the committed post-state for log-only reconstruction.
         _emitClaimState(ContractAddresses.SDGNRS);
-    }
-
-    /// @dev Move RESERVE_STAKE_BPS of sDGNRS's seed reserve onto the next flip window.
-    ///
-    ///      Supply-neutral by construction: claimableStored is UNMINTED (mintForGame fires only
-    ///      when FLIP is claimed out) and a day stake is off-supply too — a normal deposit burns
-    ///      its principal to create one — so moving between the two mints and burns nothing.
-    ///      sDGNRS cannot take the ordinary deposit route at all: FLIP intercepts every transfer
-    ///      and mint addressed to it, so it never holds a wallet balance to fund a burn.
-    ///
-    ///      Sits in the daily advance, so it NEVER reverts — a slice below MIN leaves the
-    ///      reserve untouched and the day proceeds. The stake lands on _targetFlipDay(), whose
-    ///      word cannot exist yet, giving it the same freeze-safety as every player deposit.
-    ///
-    ///      The quest hook is the deposit path's, so a chosen flip quest scores exactly as it
-    ///      does for a player. recordAmount 0 keeps the slice off the flip record and off the
-    ///      coinflip boon: this is protocol backing rotating into its own position, not a
-    ///      wager anyone placed.
-    /// @param state sDGNRS's coinflip state, already settled by the caller in this frame.
-    function _stakeSdgnrsReserveSlice(PlayerCoinflipState storage state) private {
-        uint256 stored = state.claimableStored;
-        uint256 amount = (stored * RESERVE_STAKE_BPS) / 10_000;
-        if (amount < MIN) return;
-        state.claimableStored = uint128(stored - amount);
-
-        address s = ContractAddresses.SDGNRS;
-        (
-            uint256 reward,
-            uint8 questType,
-            uint32 streak,
-            bool completed
-        ) = questModule.handleFlip(s, amount);
-        uint256 questReward = _questApplyReward(
-            s,
-            reward,
-            questType,
-            streak,
-            completed
-        );
-        _addDailyFlip(s, amount + questReward, 0);
     }
 
     /*+======================================================================+

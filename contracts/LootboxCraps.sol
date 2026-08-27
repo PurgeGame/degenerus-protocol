@@ -70,7 +70,7 @@ contract LootboxCraps is Craps {
     error RngNotReady();
 
     /// @notice The live protocol game.
-    address public constant GAME = ContractAddresses.GAME;
+    address internal constant _GAME = ContractAddresses.GAME;
 
     /// @dev Slot of `DegenerusGameStorage.lootboxRngPacked`, whose bits 0..47 hold the index.
     ///      Hardcoded against the frozen contracts tree; `LootboxCraps.t.sol` re-derives both
@@ -102,7 +102,7 @@ contract LootboxCraps is Craps {
     /// @notice The VRF word committed to `index`, or zero if it has not been drawn.
     function _wordAt(uint48 index) internal view returns (uint256) {
         // Solidity mapping slot: keccak256(h(key) . baseSlot), key left-padded to 32 bytes.
-        return uint256(_extsload(keccak256(abi.encode(uint256(index), LOOTBOX_RNG_WORD_SLOT))));
+        return uint256(_extsload(bytes32(_hash2(index, LOOTBOX_RNG_WORD_SLOT))));
     }
 
     /// @notice The protocol's daily VRF word for `day`, or zero if that day has not sealed one.
@@ -110,7 +110,7 @@ contract LootboxCraps is Craps {
     ///      bet's outcome depends on is derived from it: a table's dice come from its own index
     ///      word, which is still undrawn while bets bind.
     function _dailyWordAt(uint24 day) internal view returns (uint256) {
-        return uint256(_extsload(keccak256(abi.encode(uint256(day), RNG_WORD_BY_DAY_SLOT))));
+        return uint256(_extsload(bytes32(_hash2(day, RNG_WORD_BY_DAY_SLOT))));
     }
 
     /// @notice The protocol's day index right now — `GameTimeLib.currentDayIndexAt`, restated
@@ -138,7 +138,7 @@ contract LootboxCraps is Craps {
     ///      external round-trip into the game, and a settlement needs the word for its own rolls
     ///      too, so it should pay for that read exactly once.
     function _crapsSeed(uint256 word, uint48 index) internal pure returns (bytes32) {
-        return keccak256(abi.encode(_CRAPS_SEED_DOMAIN, word, index));
+        return bytes32(_hash3(uint256(_CRAPS_SEED_DOMAIN), word, index));
     }
 
     // ---------------------------------------------------------------------------------------
@@ -153,6 +153,6 @@ contract LootboxCraps is Craps {
         // A zero GAME — the un-pinned placeholder this repo ships on `main` — has no code, so this
         // high-level call reverts on its extcodesize check: every read fails closed until CRAPS is
         // deployed against a pinned game.
-        return IGameSlotReader(GAME).extsload(slot);
+        return IGameSlotReader(_GAME).extsload(slot);
     }
 }

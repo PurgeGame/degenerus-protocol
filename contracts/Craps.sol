@@ -31,7 +31,7 @@ pragma solidity 0.8.34;
 ///          winnings when it wins. A barred twelve is the only push, and it leaves the same wager
 ///          up for the come-out that follows. So it too loses at most its stake, exactly once.
 ///
-///      So `stakeFor(b)` is the player's exact maximum loss for one hand and no upfront liability
+///      So `_stakeFor(b)` is the player's exact maximum loss for one hand and no upfront liability
 ///      formula is needed. Winnings are unbounded above (a long hand can hit a place number many
 ///      times), which is the house's problem, not the escrow's.
 ///
@@ -113,6 +113,10 @@ contract Craps {
     /// @notice Domain tag for the mid-run second-chance coin, separated from the dice stream.
     uint256 internal constant SURVIVAL_TAG = 0x537572766976616c; // "Survival"
 
+    /// @notice Domain tag for the scheduled shooter profit boost, separated from the dice stream,
+    ///         from the survival coin and from every draw the wrapper takes off the same word.
+    uint256 internal constant SHOOTER_BOOST_TAG = 0x53686f6f746572426f6f7374; // "ShooterBoost"
+
     /// @dev The six totals that can be a point.
     uint256 internal constant _POINT_TOTALS_MASK = (1 << 4) | (1 << 5) | (1 << 6) | (1 << 8) | (1 << 9) | (1 << 10);
 
@@ -134,6 +138,26 @@ contract Craps {
     uint256 private constant ST_HARD8_LIVE = 1 << 42;
     uint256 private constant ST_SEVEN_OUT = 1 << 43;
     uint256 private constant ST_HARD4_LIVE = 1 << 44;
+    /// @dev The dark wager COLLECTED this hand. Its win hands back its own stake alongside the
+    ///      3:4, and that stake is principal — so the profit boost needs to know, and the state
+    ///      word already rides the whole roll loop where a second local would not.
+    uint256 private constant ST_DONT_WON = 1 << 45;
+
+    /// @dev One hand's return word, as the resolvers pack it and `_settleSlip` reads it back:
+    ///        bits   0..111  the amount the hand returned
+    ///        bits 112..143  the roll-log cursor
+    ///        bits 144..255  the ELIGIBLE PROFIT inside that amount — winnings only, never a
+    ///                       stake refund and never the principal a winning dark wager hands back
+    ///      Both money fields are bounded by the same argument: 512 rolls of the whole board at
+    ///      the uint24 leg maximum comes to under 2^98, and the profit is a part of that amount.
+    ///      `_settleSlip` adds the boost straight onto the packed word, which is safe on the same
+    ///      figure — a boost is at most a fraction of the profit, so the sum stays fourteen orders
+    ///      of magnitude clear of the cursor. The cursor itself is the roll budget plus one
+    ///      terminator per shooter, far inside its 32 bits.
+    uint256 private constant _HR_LOG_SHIFT = 112;
+    uint256 private constant _HR_PROFIT_SHIFT = 144;
+    uint256 private constant _HR_AMOUNT_MASK = (1 << 112) - 1;
+    uint256 private constant _HR_LOG_MASK = 0xFFFFFFFF;
 
     // ---------------------------------------------------------------------------------------
     // Types
@@ -220,9 +244,20 @@ contract Craps {
     ///      base hand: the engine rolls the base board once and scales, which is what keeps the
     ///      dice log that of the base board however far the escalator has climbed.
     ///
+    ///      THE SHOOTER PROFIT BOOST rides here and nowhere else. `boost` names a schedule the
+    ///      wrapper fixed before the seed existed — how often a shooter is eligible, and what the
+    ///      house adds to that shooter's PROFIT when one is — and zero turns the whole thing off,
+    ///      which is what a custom table passes. Eligibility is drawn per SHOOTER and per PLAYER
+    ///      off the same committed seed the dice come from, so one field shares its shooters and
+    ///      no two seats share a schedule. The boost lands in the base hand, so it is inside the
+    ///      bankroll before the next goal, bound and affordability check — it may cross a goal a
+    ///      shooter early, or buy a round the run could not otherwise afford, on purpose.
+    ///
     ///      Loop state note: `cur` packs the hand counter (bits 0..15), the round's mandatory
     ///      multiplier (16..31), and the ROLL counter (32+) into one stack slot — via-IR runs
     ///      out of stack here with them separate.
+    /// @param boost Packed schedule: the eligible-shooter percentage in bits 0..7 and the percent
+    ///              added to an eligible shooter's profit in bits 8..15. Zero is no schedule.
     function _settleSlip(
         Bets memory b,
         bytes32 seed,
@@ -230,9 +265,10 @@ contract Craps {
         uint256 goal,
         uint256 cap,
         uint256 rollBudget,
-        address player
+        address player,
+        uint256 boost
     ) internal pure returns (SlipResult memory r) {
-        uint256 stake = stakeFor(b);
+        uint256 stake = _stakeFor(b);
 
         r.bankrollIn = bankroll;
         uint256 initialState = _settlementState(b);
@@ -295,9 +331,16 @@ contract Craps {
                 bankroll -= ((cur >> 16) & 0xFFFF) * stake;
 
                 uint256 handOut = _runSettlement(b, handSeed(seed, cur & 0xFFFF), cur >> 32, initialState, wins);
-                bankroll += ((cur >> 16) & 0xFFFF) * uint128(handOut);
+                // THE SHOOTER PROFIT BOOST. House money on the base hand's ELIGIBLE PROFIT and on
+                // nothing else, floored ONCE here so the round's escalating multiple below scales
+                // one boosted base figure rather than drawing a schedule per copy.
+                if (boost != 0 && _boostedShooter(seed, cur & 0xFFFF, player, boost & 0xFF)) {
+                    handOut += ((handOut >> _HR_PROFIT_SHIFT) * (boost >> 8)) / 100;
+                }
+                bankroll += ((cur >> 16) & 0xFFFF) * (handOut & _HR_AMOUNT_MASK);
                 unitsPlayed += (cur >> 16) & 0xFFFF;
-                cur = (((handOut >> 128) + 1) << 32) | (cur & 0xFFFF0000) | ((cur & 0xFFFF) + 1);
+                cur = ((((handOut >> _HR_LOG_SHIFT) & _HR_LOG_MASK) + 1) << 32) | (cur & 0xFFFF0000)
+                    | ((cur & 0xFFFF) + 1);
             }
 
             r.handsPlayed = cur & 0xFFFF;
@@ -310,7 +353,7 @@ contract Craps {
     /// @notice Total staked across every leg of `b` — one hand's charge.
     /// @dev What an escrow must collect up front, and the exact ceiling on what the player can
     ///      lose. Multiply by the hand count for a session.
-    function stakeFor(Bets memory b) public pure returns (uint256 total) {
+    function _stakeFor(Bets memory b) internal pure returns (uint256 total) {
         // Stakes are whole FLIP; the charge is wei. Bounded far below 2^256: ten uint24 legs.
         unchecked {
             total =
@@ -337,6 +380,28 @@ contract Craps {
             mstore(0x00, seed)
             mstore(0x20, i)
             h := keccak256(0x00, 0x40)
+        }
+    }
+
+    /// @dev Exact `keccak256(abi.encode(a, b))` over the EVM scratch space. Kept here because
+    ///      table seeding, mapping-slot reads and several settlement draws all share this shape.
+    function _hash2(uint256 a, uint256 b) internal pure returns (uint256 h) {
+        assembly ("memory-safe") {
+            mstore(0x00, a)
+            mstore(0x20, b)
+            h := keccak256(0x00, 0x40)
+        }
+    }
+
+    /// @dev Exact `keccak256(abi.encode(a, b, c))`, using temporary free memory without moving
+    ///      its pointer. Three words do not fit in the EVM's 64-byte scratch region.
+    function _hash3(uint256 a, uint256 b, uint256 c) internal pure returns (uint256 h) {
+        assembly ("memory-safe") {
+            let ptr := mload(0x40)
+            mstore(ptr, a)
+            mstore(add(ptr, 0x20), b)
+            mstore(add(ptr, 0x40), c)
+            h := keccak256(ptr, 0x60)
         }
     }
 
@@ -386,7 +451,10 @@ contract Craps {
                 // roll. The dark side is the exception — the seven that kills the table is the
                 // seven it was waiting for — so it collects here, before the break.
                 if (t == 7 && !comeOut) {
-                    if (st & ST_DONT_LIVE != 0) returned += wins[6];
+                    if (st & ST_DONT_LIVE != 0) {
+                        returned += wins[6];
+                        st |= ST_DONT_WON;
+                    }
                     st |= ST_SEVEN_OUT;
                     break;
                 }
@@ -427,7 +495,7 @@ contract Craps {
                         st &= ~ST_PASS_LIVE;
                         if (st & ST_DONT_LIVE != 0) {
                             returned += wins[6];
-                            st &= ~ST_DONT_LIVE;
+                            st = (st | ST_DONT_WON) & ~ST_DONT_LIVE;
                         }
                     } else {
                         st |= t << ST_POINT;
@@ -439,6 +507,13 @@ contract Craps {
                     st &= ~(ST_DONT_LIVE | ST_POINT_MASK);
                 }
             }
+
+            // ELIGIBLE PROFIT, banked before the refunds below can dilute it. What is in
+            // `returned` at this point is everything the dice PAID: the light side's winnings,
+            // which never include their own stake, and a winning dark wager's 3:4 once its own
+            // stake is taken back out. The roll-cap refunds are principal to the last wei and are
+            // added after, so a truncated hand can never have its stake boosted.
+            uint256 elig = returned - (st & ST_DONT_WON == 0 ? 0 : uint256(b.dontPass) * FLIP);
 
             if (st & ST_SEVEN_OUT == 0) {
                 if (st & ST_PASS_LIVE != 0) returned += uint256(b.passLine) * FLIP;
@@ -452,9 +527,9 @@ contract Craps {
                 if (st & ST_DONT_LIVE != 0) returned += uint256(b.dontPass) * FLIP;
             }
 
-            // Even 512 consecutive maximum place wins stay below 2^112. Pack the log cursor above
-            // bit 127 so the hot caller carries one return word.
-            packed = returned | (logPos << 128);
+            // ONE RETURN WORD, three fields (see the layout note by `_HR_LOG_SHIFT`): the amount
+            // in bits 0..111, the log cursor in 112..143, the eligible profit in 144..255.
+            packed = returned | (logPos << _HR_LOG_SHIFT) | (elig << _HR_PROFIT_SHIFT);
         }
     }
 
@@ -495,7 +570,10 @@ contract Craps {
 
                 uint256 point = (st >> ST_POINT) & 0xF;
                 if (t == 7 && point != 0) {
-                    if (st & ST_DONT_LIVE != 0) returned += wins[6];
+                    if (st & ST_DONT_LIVE != 0) {
+                        returned += wins[6];
+                        st |= ST_DONT_WON;
+                    }
                     st |= ST_SEVEN_OUT;
                     break;
                 }
@@ -529,7 +607,7 @@ contract Craps {
                         // wins, 7 or 11 loses, and the barred 12 leaves the wager up.
                         if (t == 2 || t == 3) {
                             returned += wins[6];
-                            st &= ~ST_DONT_LIVE;
+                            st = (st | ST_DONT_WON) & ~ST_DONT_LIVE;
                         } else if (t != 12) {
                             st &= ~ST_DONT_LIVE;
                         }
@@ -539,6 +617,8 @@ contract Craps {
                 }
             }
 
+            uint256 elig = returned - (st & ST_DONT_WON == 0 ? 0 : uint256(b.dontPass) * FLIP);
+
             if (st & ST_SEVEN_OUT == 0) {
                 for (uint256 k = 0; k < 6; ++k) {
                     if (st & (1 << _placeTotal(k)) != 0) returned += _placeWei(b, k);
@@ -547,7 +627,7 @@ contract Craps {
                 if (st & ST_HARD8_LIVE != 0) returned += uint256(b.hard8) * FLIP;
                 if (st & ST_DONT_LIVE != 0) returned += uint256(b.dontPass) * FLIP;
             }
-            packed = returned | (logPos << 128);
+            packed = returned | (logPos << _HR_LOG_SHIFT) | (elig << _HR_PROFIT_SHIFT);
         }
     }
 
@@ -570,7 +650,36 @@ contract Craps {
     ///      — so settlement order cannot change the result. It is the same salt the board scatter
     ///      already uses, so a player's whole run is decorrelated from the field by one key.
     function _survived(bytes32 seed, uint256 n, address player) internal pure returns (bool) {
-        return uint256(keccak256(abi.encode(SURVIVAL_TAG, seed, n, player))) & 1 == 1;
+        return _playerDraw(SURVIVAL_TAG, seed, n, player) & 1 == 1;
+    }
+
+    /// @dev Whether shooter `n` carries THIS player's profit boost — `chance` shooters in a
+    ///      hundred do. Its
+    ///      own domain, so it moves neither the dice nor the survival coin and cannot be read off
+    ///      either: the tag separates it from every other draw the same seed answers, and the
+    ///      player separates one seat's schedule from the next's over the shared shooters. Both
+    ///      inputs were fixed before the seed existed — the word is the table's and the player is
+    ///      who placed the slip — so nobody could know the schedule while entry was still open,
+    ///      and settlement order cannot change it afterwards.
+    function _boostedShooter(bytes32 seed, uint256 n, address player, uint256 chance)
+        internal
+        pure
+        returns (bool)
+    {
+        return _playerDraw(SHOOTER_BOOST_TAG, seed, n, player) % 100 < chance;
+    }
+
+    /// @dev Exact `abi.encode(tag, seed, n, player)` digest without allocating or advancing the
+    ///      free-memory pointer. Both caller domains use the same four-word preimage layout.
+    function _playerDraw(uint256 tag, bytes32 seed, uint256 n, address player) private pure returns (uint256 draw) {
+        assembly ("memory-safe") {
+            let ptr := mload(0x40)
+            mstore(ptr, tag)
+            mstore(add(ptr, 0x20), seed)
+            mstore(add(ptr, 0x40), n)
+            mstore(add(ptr, 0x60), player)
+            draw := keccak256(ptr, 0x80)
+        }
     }
 
     // ---------------------------------------------------------------------------------------

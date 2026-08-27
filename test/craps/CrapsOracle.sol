@@ -103,6 +103,10 @@ contract CrapsOracle {
     ///         production engine, at the same value, so the differential proves the two agree.
     uint256 internal constant SURVIVAL_TAG = 0x537572766976616c; // "Survival"
 
+    /// @notice Domain tag for the scheduled shooter profit boost. Held independently from the
+    ///         production engine, at the same value, so the differential proves the two agree.
+    uint256 internal constant SHOOTER_BOOST_TAG = 0x53686f6f746572426f6f7374; // "ShooterBoost"
+
     /// @dev The six totals that can be a point, for grading `Outcome.pointsMade`.
     uint256 internal constant _POINT_TOTALS_MASK = (1 << 4) | (1 << 5) | (1 << 6) | (1 << 8) | (1 << 9) | (1 << 10);
 
@@ -140,9 +144,13 @@ contract CrapsOracle {
     /// @param truncated    True if MAX_ROLLS was reached without a seven-out. Live stakes refunded.
     /// @param legStaked    Per-leg stake, indexed by LEG_*.
     /// @param legReturned  Per-leg credit, indexed by LEG_*.
+    /// @param profit       WINNINGS ONLY, and the base the scheduled shooter boost is taken on.
+    ///                     Accumulated at the paying rolls alone: no stake refunded at the roll
+    ///                     cap is in it, and a winning dark wager contributes only its 3:4.
     struct Outcome {
         uint256 staked;
         uint256 returned;
+        uint256 profit;
         int256 net;
         uint32 rolls;
         uint8 pointsMade;
@@ -383,7 +391,7 @@ contract CrapsOracle {
         pure
         returns (SlipResult memory)
     {
-        return _slip(b, seed, bankroll, goal, cap, SLIP_ROLL_BUDGET, true, true, address(0));
+        return _slip(b, seed, bankroll, goal, cap, SLIP_ROLL_BUDGET, true, true, address(0), 0);
     }
 
     /// @dev The same run for a NAMED owner. The dice are the table's either way; only the survival
@@ -396,7 +404,25 @@ contract CrapsOracle {
         uint256 cap,
         address player
     ) external pure returns (SlipResult memory) {
-        return _slip(b, seed, bankroll, goal, cap, SLIP_ROLL_BUDGET, true, true, player);
+        return _slip(b, seed, bankroll, goal, cap, SLIP_ROLL_BUDGET, true, true, player, 0);
+    }
+
+    /// @dev The same run under a SCHEDULED SHOOTER PROFIT BOOST. `boost` packs the schedule the
+    ///      production engine reads — the eligible-shooter percentage in the low byte, the percent
+    ///      added to an eligible shooter's PROFIT above it — and zero is the bare engine. The
+    ///      eligibility draw and the profit base are both held here independently: this oracle
+    ///      accumulates winnings as it pays them, where production subtracts principal out of a
+    ///      total at the end, so the differential grades two different derivations of one figure.
+    function resolveSlipBoosted(
+        Craps.Bets calldata b,
+        bytes32 seed,
+        uint256 bankroll,
+        uint256 goal,
+        uint256 cap,
+        address player,
+        uint256 boost
+    ) external pure returns (SlipResult memory) {
+        return _slip(b, seed, bankroll, goal, cap, SLIP_ROLL_BUDGET, true, true, player, boost);
     }
 
     /// @dev The slip engine. Stop conditions are judged BETWEEN shooters, in this order: goal first
@@ -425,7 +451,8 @@ contract CrapsOracle {
         uint256 rollBudget,
         bool withLedger,
         bool withLog,
-        address player
+        address player,
+        uint256 boost
     ) internal pure returns (SlipResult memory r) {
         if (cap == 0 || cap > MAX_SESSION_HANDS) revert BadHandCount();
         uint256 stake = stakeFor(b);
@@ -491,6 +518,14 @@ contract CrapsOracle {
                 bankroll -= ((cur >> 16) & 0xFFFF) * stake;
 
                 uint256 end = _run(b, handSeed(seed, cur & 0xFFFF), noScript, false, log, cur >> 32, o);
+                // THE SHOOTER PROFIT BOOST, folded into the base hand before the round's multiple
+                // scales it and before the ledger records it, so a boosted hand's line still says
+                // what that hand was worth. Floored once, on winnings alone.
+                if (boost != 0 && _boostedShooter(seed, cur & 0xFFFF, player, boost & 0xFF)) {
+                    uint256 add = (o.profit * (boost >> 8)) / 100;
+                    o.returned += add;
+                    o.net += int256(add);
+                }
                 bankroll += ((cur >> 16) & 0xFFFF) * o.returned;
                 r.unitsPlayed += (cur >> 16) & 0xFFFF;
 
@@ -704,6 +739,7 @@ contract CrapsOracle {
         // there rather than recomputed per hand. Only `returned` and the full-mode `legReturned`
         // accumulate — every other field is assigned below — so this reset is all reuse requires.
         o.returned = 0;
+        o.profit = 0;
         if (withLegs) {
             _stakeBooks(b, o);
             for (uint256 k = 0; k < _LEGS; ++k) {
@@ -782,7 +818,7 @@ contract CrapsOracle {
                         st &= ~ST_PLACE_ANY;
                     } else if (st & (1 << t) != 0) {
                         uint256 idx = _placeIndex(t);
-                        _pay(o, withLegs, LEG_PLACE + idx, _placeWin(b, idx));
+                        _win(o, withLegs, LEG_PLACE + idx, _placeWin(b, idx));
                     }
                 }
 
@@ -792,13 +828,13 @@ contract CrapsOracle {
                         st &= ~(ST_HARD4_LIVE | ST_HARD8_LIVE);
                     } else if (t == 4 && st & ST_HARD4_LIVE != 0) {
                         if (d1 == d2) {
-                            _pay(o, withLegs, LEG_HARD4, uint256(b.hard4) * (7 * FLIP));
+                            _win(o, withLegs, LEG_HARD4, uint256(b.hard4) * (7 * FLIP));
                         } else {
                             st &= ~ST_HARD4_LIVE;
                         }
                     } else if (t == 8 && st & ST_HARD8_LIVE != 0) {
                         if (d1 == d2) {
-                            _pay(o, withLegs, LEG_HARD8, uint256(b.hard8) * (9 * FLIP));
+                            _win(o, withLegs, LEG_HARD8, uint256(b.hard8) * (9 * FLIP));
                         } else {
                             st &= ~ST_HARD8_LIVE;
                         }
@@ -811,7 +847,7 @@ contract CrapsOracle {
                 if (st & ST_DONT_LIVE != 0) {
                     if (comeOut) {
                         if (t == 2 || t == 3) {
-                            _pay(o, withLegs, LEG_DONT_PASS, _dontWin(b));
+                            _win(o, withLegs, LEG_DONT_PASS, _dontWin(b), uint256(b.dontPass) * FLIP);
                             st &= ~ST_DONT_LIVE;
                         } else if (t == 7 || t == 11) {
                             // A come-out natural kills it, and is NOT a seven-out: the shooter
@@ -822,7 +858,7 @@ contract CrapsOracle {
                         // leaves it up too, to be decided by the seven or the point.
                     } else if (t == 7) {
                         // The seven-out is the wager's win, and it collects before the hand ends.
-                        _pay(o, withLegs, LEG_DONT_PASS, _dontWin(b));
+                        _win(o, withLegs, LEG_DONT_PASS, _dontWin(b), uint256(b.dontPass) * FLIP);
                         st &= ~ST_DONT_LIVE;
                     } else if (t == (st >> ST_POINT) & 0xF) {
                         st &= ~ST_DONT_LIVE;
@@ -835,7 +871,7 @@ contract CrapsOracle {
                         // A 7 on the come-out is NOT a seven-out. The line wins 1:1 and, like every
                         // other bet on this board, pays and stays.
                         if (st & ST_PASS_LIVE != 0) {
-                            _pay(o, withLegs, LEG_PASS, uint256(b.passLine) * FLIP);
+                            _win(o, withLegs, LEG_PASS, uint256(b.passLine) * FLIP);
                         }
                     } else if (t == 2 || t == 3 || t == 12) {
                         // Craps out: the line's one death. With no dark side on the board there is
@@ -848,7 +884,7 @@ contract CrapsOracle {
                     // Distinct points made, kept as telemetry (`pointsMade`).
                     st |= 1 << (ST_FIRE + t);
                     if (st & ST_PASS_LIVE != 0) {
-                        _pay(o, withLegs, LEG_PASS, uint256(b.passLine) * FLIP);
+                        _win(o, withLegs, LEG_PASS, uint256(b.passLine) * FLIP);
                     }
                     st &= ~ST_POINT_MASK;
                 } else if (t == 7) {
@@ -916,6 +952,17 @@ contract CrapsOracle {
         return uint256(keccak256(abi.encode(SURVIVAL_TAG, seed, n, player))) & 1 == 1;
     }
 
+    /// @dev Whether shooter `n` carries THIS player's profit boost. Its own domain, so it moves
+    ///      neither the dice nor the survival coin — held independently at the production
+    ///      engine's tag and shape so the differential proves the two draws agree.
+    function _boostedShooter(bytes32 seed, uint256 n, address player, uint256 chance)
+        private
+        pure
+        returns (bool)
+    {
+        return uint256(keccak256(abi.encode(SHOOTER_BOOST_TAG, seed, n, player))) % 100 < chance;
+    }
+
     /// @dev Copy one hand's summary into a ledger slot. Split out of the session loops so their
     ///      frames hold fewer live memory pointers — inlined, the extra pointers push the
     ///      production compiler profile (via-IR at higher optimizer runs) past stack depth.
@@ -934,6 +981,28 @@ contract CrapsOracle {
         unchecked {
             o.returned += amount;
             if (withLegs) o.legReturned[leg] += amount;
+        }
+    }
+
+    /// @dev A WINNING credit: paid like any other, and booked into `o.profit` as well. Every call
+    ///      site is a roll the dice actually paid — the roll-cap refunds go through `_pay` and are
+    ///      deliberately invisible here, which is the whole distinction the boost rests on.
+    function _win(Outcome memory o, bool withLegs, uint256 leg, uint256 amount) private pure {
+        _pay(o, withLegs, leg, amount);
+        unchecked {
+            o.profit += amount;
+        }
+    }
+
+    /// @dev The dark side's win is the one credit on this board that hands its own stake back, so
+    ///      it names the principal and only the remainder — the 3:4 — is profit.
+    function _win(Outcome memory o, bool withLegs, uint256 leg, uint256 amount, uint256 principal)
+        private
+        pure
+    {
+        _pay(o, withLegs, leg, amount);
+        unchecked {
+            o.profit += amount - principal;
         }
     }
 

@@ -1,4 +1,4 @@
-.PHONY: test test-foundry test-hardhat check-interfaces check-delegatecall check-raw-selectors check-rng-window check-pool-writes check-array-delete coverage-check invariant-test invariant-build invariant-clean
+.PHONY: test test-foundry test-hardhat check-interfaces check-delegatecall check-raw-selectors check-rng-window check-pool-writes check-array-delete check-craps-progressive coverage-check invariant-test invariant-build invariant-clean
 
 # ── Interface coverage gate ─────────────────────────────────────────────
 # Verifies every function declared in contracts/interfaces/ has a matching
@@ -61,6 +61,16 @@ check-array-delete:
 check-pool-writes:
 	@scripts/check-pool-writes.sh
 
+# ── Craps progressive parity gate ───────────────────────────────────────
+# The progressive's base subsidy, its two pool divisors and its nine roll
+# cutoffs live in the contract that pays them AND in the C++ model the
+# economics are calibrated on. Neither can read the other, so this holds the
+# two together on source text: a cutoff moved in one and not the other leaves a
+# model that no longer describes the chain. Operates on source text — no forge
+# build prerequisite.
+check-craps-progressive:
+	@scripts/check-craps-progressive-parity.sh
+
 # ── External-function coverage classification gate (standalone) ─────────
 # Enforces 222-01-COVERAGE-MATRIX.md: every external/public function on
 # every deployable source artifact is classified (no universe drift),
@@ -81,7 +91,7 @@ coverage-check:
 
 # Run all Foundry fuzz tests (patch → test → restore)
 # forge test handles its own compilation with the patched addresses in place.
-test-foundry: check-interfaces check-delegatecall check-raw-selectors check-rng-window check-pool-writes check-array-delete
+test-foundry: check-interfaces check-delegatecall check-raw-selectors check-rng-window check-pool-writes check-array-delete check-craps-progressive
 	@echo "Patching ContractAddresses.sol for Foundry..."
 	@node scripts/lib/patchForFoundry.js
 	@echo "Running Foundry tests..."
@@ -91,7 +101,7 @@ test-foundry: check-interfaces check-delegatecall check-raw-selectors check-rng-
 		exit $$TEST_EXIT
 
 # Run Hardhat tests (no patching needed — Hardhat deploys fresh)
-test-hardhat: check-interfaces check-delegatecall check-raw-selectors check-rng-window check-pool-writes check-array-delete
+test-hardhat: check-interfaces check-delegatecall check-raw-selectors check-rng-window check-pool-writes check-array-delete check-craps-progressive
 	@npx hardhat test $(ARGS)
 
 # Run both suites

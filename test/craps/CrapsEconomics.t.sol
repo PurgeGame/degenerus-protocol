@@ -201,7 +201,7 @@ contract CrapsEconomicsTest is CrapsPins {
             (uint256 won, uint256 paid) = craps.previewSettlement(betId);
             if (paid != 0) expectedWon += won;
             expectedCredit += paid;
-            craps.resolveSlot(slot, 4);
+            craps.resolveSlot(slot, WHOLE_FIELD);
         }
 
         emit log_named_uint("goal returns    ", expectedWon);
@@ -243,7 +243,7 @@ contract CrapsEconomicsTest is CrapsPins {
             Craps.Bets memory drawn = craps.drawnBoardOf(betId);
             CrapsOracle.SlipResult memory r = craps.resolveSlipForBet(drawn, slot, bankroll, uint256(bankroll) * goalMult, craps.MAX_SLIP_HANDS(), craps.betOf(betId).player);
             (uint256 won,) = craps.previewSettlement(betId);
-            craps.resolveSlot(slot, 4);
+            craps.resolveSlot(slot, WHOLE_FIELD);
 
             burned += bankroll;
             rawWon += won;
@@ -331,7 +331,7 @@ contract CrapsEconomicsTest is CrapsPins {
                 b, bankMult, goalMult, uint48(60_000 + i), uint256(keccak256(abi.encode("fairburn", i)))
             );
             (uint256 won, uint256 paid) = craps.previewSettlement(betId);
-            craps.resolveSlot(slot, 4);
+            craps.resolveSlot(slot, WHOLE_FIELD);
             burned += bankroll;
             rawWon += won;
             if (paid == 0) busted += won;

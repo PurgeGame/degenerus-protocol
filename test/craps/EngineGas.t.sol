@@ -57,12 +57,19 @@ contract EngineProbe is Craps {
         }
     }
 
+    /// @dev The stake sum, restated for the probe: production stopped exposing it externally —
+    ///      the wrapper's ten-field struct decode cost 276 bytes of EIP-170 and nothing on chain
+    ///      called it.
+    function stakeFor(Craps.Bets memory b) external pure returns (uint256) {
+        return _stakeFor(b);
+    }
+
     function settle(Craps.Bets memory b, bytes32 seed, uint256 bankroll, uint256 goal)
         external
         pure
         returns (Craps.SlipResult memory)
     {
-        return _settleSlip(b, seed, bankroll, goal, 256, 4096, address(0));
+        return _settleSlip(b, seed, bankroll, goal, 256, 4096, address(0), 0);
     }
 }
 

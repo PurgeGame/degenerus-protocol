@@ -435,6 +435,9 @@ contract OpenWalkCompositionGas is DeployProtocol {
         require(_countPendingAfking() == 0, "fixture: ring fully drained pre-probe");
 
         _coolProtocol();
+        // The crank has a craps arm now, so a drained RING is not a drained CRANK until the table
+        // is quiet too — otherwise this probe measures the craps leg finding a window to shut.
+        _quietCrapsTable();
         vm.prank(makeAddr(string(abi.encodePacked(prefix, "probe"))));
         uint256 gasBefore = gasleft();
         (bool ok, ) = address(game).call(abi.encodeWithSignature("mineFlip()"));

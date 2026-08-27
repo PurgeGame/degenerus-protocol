@@ -95,6 +95,12 @@ contract ShippedProbe is LootboxCraps {
     function wordAt(uint48 index) external view returns (uint256) {
         return _wordAt(index);
     }
+
+    /// @dev The GAME pin, restated: production holds it as an internal constant now — a public
+    ///      getter for a compile-time constant cost 58 bytes of EIP-170 that nothing on chain read.
+    function GAME() external pure returns (address) {
+        return _GAME;
+    }
 }
 
 /// @title LootboxCraps binding suite

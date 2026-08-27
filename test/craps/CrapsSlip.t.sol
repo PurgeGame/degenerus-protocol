@@ -126,7 +126,22 @@ contract CrapsSlipHarness is CrapsViews {
         view
         returns (Craps.SlipResult memory)
     {
-        return _settleSlip(b, _seedFor(index), bankroll, 0, 256, budget, player);
+        return _settleSlip(b, _seedFor(index), bankroll, 0, 256, budget, player, 0);
+    }
+
+    /// @dev The same engine under a SCHEDULE. `boost` is the packed pair `_settleSlip` reads —
+    ///      eligible-shooter percent in the low byte, profit percent above it — so a fixture can
+    ///      pin an exact schedule on an exact seed rather than going through a window's draw.
+    function slipWithBoost(
+        Craps.Bets calldata b,
+        bytes32 seed,
+        uint256 bankroll,
+        uint256 goal,
+        uint256 cap,
+        address player,
+        uint256 boost
+    ) external pure returns (Craps.SlipResult memory) {
+        return _settleSlip(b, seed, bankroll, goal, cap, SLIP_ROLL_BUDGET, player, boost);
     }
 }
 
@@ -387,14 +402,14 @@ contract CrapsSlipTest is CrapsPins {
 
         // Unshut: no table has been chosen, so there is nothing to settle against.
         vm.expectRevert(LootboxCraps.RngNotReady.selector);
-        craps.resolveSlot(slot, 4);
+        craps.resolveSlot(slot, WHOLE_FIELD);
 
         // Shut, but the word has not landed.
         _setIndex(4);
         vm.warp(block.timestamp + 2 hours);
         craps.closeBattle(slot);
         vm.expectRevert(LootboxCraps.RngNotReady.selector);
-        craps.resolveSlot(slot, 4);
+        craps.resolveSlot(slot, WHOLE_FIELD);
 
         assertFalse(craps.betOf(betId).settled, "settled before its table rolled");
         assertEq(coinflip.staked(alice), 0, "paid before its table rolled");
@@ -403,13 +418,13 @@ contract CrapsSlipTest is CrapsPins {
     function test_settlesOnceAndOnlyOnce() public {
         (uint256 betId, uint64 slot) = _run(alice, _bets(), 3, uint16(GOAL_FAR_MULT), 4, uint256(keccak256("vrf")));
 
-        craps.resolveSlot(slot, 4);
+        craps.resolveSlot(slot, WHOLE_FIELD);
         assertTrue(craps.betOf(betId).settled, "settled");
         uint256 paidOnce = coinflip.staked(alice);
 
         // A second sweep is not an error, it is a no-op: the cursor has already passed the whole
         // field, so there is nothing left in the range to walk.
-        craps.resolveSlot(slot, 4);
+        craps.resolveSlot(slot, WHOLE_FIELD);
         assertEq(coinflip.staked(alice), paidOnce, "a second sweep paid the field again");
     }
 
@@ -427,7 +442,7 @@ contract CrapsSlipTest is CrapsPins {
 
             uint256 before = coinflip.staked(alice);
             vm.prank(settler);
-            craps.resolveSlot(slot, 4);
+            craps.resolveSlot(slot, WHOLE_FIELD);
 
             assertEq(coinflip.staked(alice) - before, expected, "owner paid");
             assertEq(coinflip.staked(settler), 0, "settler paid nothing");
@@ -453,7 +468,7 @@ contract CrapsSlipTest is CrapsPins {
 
             (uint256 won, uint256 expected) = craps.previewSettlement(betId);
             uint256 before = coinflip.staked(alice);
-            craps.resolveSlot(slot, 4);
+            craps.resolveSlot(slot, WHOLE_FIELD);
             assertEq(coinflip.staked(alice) - before, expected, "preview != paid");
             // The paying path runs lean (no per-leg books); the public view runs full. Pin them.
             assertEq(
@@ -720,7 +735,7 @@ contract CrapsSlipTest is CrapsPins {
         );
 
         vm.recordLogs();
-        craps.resolveSlot(slot, 4);
+        craps.resolveSlot(slot, WHOLE_FIELD);
         Vm.Log[] memory logs = vm.getRecordedLogs();
 
         assertEq(coinflip.staked(alice), expected, "paid what it previewed");
@@ -812,7 +827,7 @@ contract CrapsSlipTest is CrapsPins {
         assertGt(r.totalRolls, 0, "the replay rolled nothing");
         assertGt(r.handsPlayed, 0, "the replay played no hands");
 
-        craps.resolveSlot(slot, 4);
+        craps.resolveSlot(slot, WHOLE_FIELD);
         assertTrue(craps.betOf(betId).settled, "the slip did not settle");
     }
 
@@ -841,9 +856,9 @@ contract CrapsSlipTest is CrapsPins {
 
         // Walk the field in three arbitrary batches. A settler chooses only how far to go, never
         // which entrants — the cursor fixes the order — but what freedom is left must move nothing.
-        craps.resolveSlot(slot, 1);
-        craps.resolveSlot(slot, 3);
-        craps.resolveSlot(slot, 2);
+        craps.resolveSeats(slot, 1);
+        craps.resolveSeats(slot, 3);
+        craps.resolveSeats(slot, 2);
 
         assertEq(coinflip.staked(alice), total, "a split field changed the payout");
         for (uint256 i = 0; i < 6; ++i) {
@@ -1047,7 +1062,7 @@ contract CrapsSlipTest is CrapsPins {
         assertEq(flip.burned(alice), bankroll, "burned exactly the bankroll");
 
         _closeOn(craps, slot, idx, uint256(keccak256(abi.encode(seed))));
-        craps.resolveSlot(slot, 4);
+        craps.resolveSlot(slot, WHOLE_FIELD);
 
         // Settlement credits; it never burns again. The placement burn is the entire cost.
         assertEq(flip.burned(alice), bankroll, "settlement reached back into the wallet");

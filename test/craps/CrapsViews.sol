@@ -2,6 +2,7 @@
 pragma solidity ^0.8.26;
 
 import {CrapsBattle} from "../../contracts/CrapsBattle.sol";
+import {Craps} from "../../contracts/Craps.sol";
 
 /// @title The reader surface production no longer ships
 /// @notice `CrapsBattle` keeps its whole reader surface internal: nothing on chain calls a craps
@@ -25,10 +26,14 @@ contract CrapsViews is CrapsBattle {
     uint256 public constant BONUS_MED_BANKROLL = _BONUS_MED_BANKROLL;
     uint256 public constant BONUS_LARGE_BANKROLL = _BONUS_LARGE_BANKROLL;
     uint256 public constant BONUS_CHIPS = _BONUS_CHIPS;
-    uint256 public constant BOOST_ACTION_DIVISOR = _BOOST_ACTION_DIVISOR;
-    uint256 public constant BOOST_BURN_SHARE_DIVISOR = _BOOST_BURN_SHARE_DIVISOR;
-    uint256 public constant BOOST_BURN_WINDOW_DAYS = _BOOST_BURN_WINDOW_DAYS;
-    uint256 public constant MIN_BOOST_BUDGET = _MIN_BOOST_BUDGET;
+    uint256 public constant BOOST_ACTION_BPS = _BOOST_ACTION_BPS;
+    uint256 public constant BPS_DENOMINATOR = _BPS_DENOMINATOR;
+    uint256 public constant BOOST_ACTION_WINDOW_DAYS = _BOOST_ACTION_WINDOW_DAYS;
+    uint256 public constant BASE_MAIN_BUDGET = _BASE_MAIN_BUDGET;
+    uint256 public constant HIGH_MAIN_NUM = _HIGH_MAIN_NUM;
+    uint256 public constant HIGH_MAIN_DEN = _HIGH_MAIN_DEN;
+    uint256 public constant BOOST_BLANK_CHANCE = _BOOST_BLANK_CHANCE;
+    uint256 public constant BOOST_PICKED_CHANCE = _BOOST_PICKED_CHANCE;
     uint256 public constant BOOST_MAX_MULT = _BOOST_MAX_MULT;
     uint256 public constant MAX_MIN_SCORE = _MAX_MIN_SCORE;
     uint256 public constant MAX_SLIP_HANDS = _MAX_SLIP_HANDS;
@@ -41,6 +46,59 @@ contract CrapsViews is CrapsBattle {
     uint256 public constant HIGH_MULT = _HIGH_MULT;
     uint256 public constant HIGH_MULT_TAIL = _HIGH_MULT_TAIL;
     uint256 public constant MAX_HIGH_MULT = _MAX_HIGH_MULT;
+
+    /// @dev Three the production table stopped exposing. `stakeFor` alone cost 276 bytes of
+    ///      EIP-170 as an external — its wrapper ABI-decodes a ten-field struct — and nothing on
+    ///      chain called any of them: the indexer rebuilds `battleCreator` from
+    ///      `BattleCreatorSet`, and `GAME` is a compile-time constant anyone can read off the
+    ///      source. The suite still wants them under the names it has always used.
+    function GAME() external pure returns (address) {
+        return _GAME;
+    }
+
+    function battleCreator(address account) external view returns (bool) {
+        return _battleCreator[account];
+    }
+
+    function stakeFor(Craps.Bets memory b) external pure returns (uint256) {
+        return _stakeFor(b);
+    }
+
+    /// @dev THE STRUCT-SHAPED DOORS the shipped table stopped taking. Chips now go in packed —
+    ///      three bits a leg, board order, don't pass at bit 27 — the same word `setVaultBoard`
+    ///      has always taken, the same word a bet is STORED as, and the same word
+    ///      `CrapsSlipPlaced` has always emitted. Decoding a ten-field struct at four separate
+    ///      doors cost 1,931 bytes of EIP-170 to arrive at that word anyway.
+    ///
+    ///      These are OVERLOADS, not replacements: different parameter types, so the packed doors
+    ///      are still right there on the same contract and every assertion below still reads the
+    ///      board the way it always has.
+    function _pack(Craps.Bets calldata c) private pure returns (uint32) {
+        return uint32(
+            uint256(c.passLine) | (uint256(c.place4) << 3) | (uint256(c.place5) << 6) | (uint256(c.place6) << 9)
+                | (uint256(c.place8) << 12) | (uint256(c.place9) << 15) | (uint256(c.place10) << 18)
+                | (uint256(c.hard4) << 21) | (uint256(c.hard8) << 24) | (uint256(c.dontPass) << 27)
+        );
+    }
+
+    function enterBattle(uint64 slot, Craps.Bets calldata chips, uint16 multiple) external returns (uint256) {
+        return enterBattle(slot, _pack(chips), multiple);
+    }
+
+    function enterBonusBattle(uint256 period, Craps.Bets calldata chips, uint16 multiple)
+        external
+        returns (uint256)
+    {
+        return enterBonusBattle(period, _pack(chips), multiple);
+    }
+
+    function enterBonusDay(Craps.Bets calldata chips, uint16 multiple) external returns (uint256) {
+        return enterBonusDay(_pack(chips), multiple);
+    }
+
+    function amendSlip(uint256 betId, Craps.Bets calldata chips) external {
+        amendSlip(betId, _pack(chips));
+    }
 
     // ── Table / RNG ─────────────────────────────────────────────────────────
     function currentIndex() external view returns (uint48) {
@@ -95,6 +153,12 @@ contract CrapsViews is CrapsBattle {
 
     function bonusDayOf() external view returns (uint24 openedDay, bool openableNow) {
         return _bonusDayOf();
+    }
+
+    /// @dev The table a slot shut onto, plus one — zero for a window still taking bets. The raw
+    ///      field, so a fixture can tell "armed" from "not armed" without inferring it.
+    function slotIndexOf(uint64 slot) external view returns (uint48) {
+        return _slotIndex[slot];
     }
 
     function bonusWindowOf(uint256 period)
@@ -216,8 +280,8 @@ contract CrapsViews is CrapsBattle {
         return _highStaked[day];
     }
 
-    function highBurnOf(uint24 day) external view returns (uint256) {
-        return _highStaked[day] / _BOOST_ACTION_DIVISOR;
+    function highActionRateOf(uint24 day) external view returns (uint256) {
+        return (_highStaked[day] * _BOOST_ACTION_BPS) / _BPS_DENOMINATOR;
     }
 
     function highBudgetOf(uint24 day) external view returns (uint256) {
@@ -226,6 +290,60 @@ contract CrapsViews is CrapsBattle {
 
     function drawBudgetsFor(uint24 day) external view returns (uint256 mainBudget, uint256 highBudget) {
         return _drawBudgets(day);
+    }
+
+    /// @dev THE SPLIT, restated. `_drawBudgets` returns the RAW main allocation; this is the one
+    ///      helper that turns it into the ladder half the windows share and the half banked in the
+    ///      progressive, and the suite grades both through it rather than re-deriving `/ 2`.
+    function splitMainBudget(uint256 rawMain) external pure returns (uint256 ladder, uint256 progressive) {
+        return _splitMainBudget(rawMain);
+    }
+
+    /// @dev The ladder half a day would open on, before it opens — what `boostBudgetOf` will hold.
+    function ladderBudgetFor(uint24 day) external view returns (uint256 ladder) {
+        (uint256 m,) = _drawBudgets(day);
+        (ladder,) = _splitMainBudget(m);
+    }
+
+    /// @dev What a day would bank in the progressive when it opens.
+    function progressiveContributionFor(uint24 day) external view returns (uint256 contribution) {
+        (uint256 m,) = _drawBudgets(day);
+        (, contribution) = _splitMainBudget(m);
+    }
+
+    /// @dev The nine formats' roll cutoffs, indexed the way `_payProgressive` indexes them.
+    function progressiveThresholds(uint256 depth, uint256 goalMult)
+        external
+        pure
+        returns (uint256 common, uint256 rare)
+    {
+        uint256 i = 16 * (3 * (depth == 2 ? 0 : (depth == 5 ? 1 : 2)) + (goalMult == 5 ? 0 : (goalMult == 10 ? 1 : 2)));
+        return ((_PROG_COMMON >> i) & 0xFFFF, (_PROG_RARE >> i) & 0xFFFF);
+    }
+
+    function PROG_COMMON_DIV() external pure returns (uint256) {
+        return _PROG_COMMON_DIV;
+    }
+
+    function PROG_RARE_DIV() external pure returns (uint256) {
+        return _PROG_RARE_DIV;
+    }
+
+    /// @dev Write straight into the pool, so a fixture can put a known balance on the table
+    ///      without opening thirty days to accumulate one.
+    function seedProgressive(uint256 amount) external {
+        _progressive = amount;
+    }
+
+    /// @dev EXACTLY `n` SEATS, whatever they cost. `resolveSlot` takes a GAS ALLOWANCE now, so a
+    ///      fixture that wants a chunk of a known size can no longer name one — but the meter is
+    ///      read after a seat rather than before, so the smallest nonzero budget always completes
+    ///      one and stops. One call per seat is therefore the exact count the old lane gave, and
+    ///      it is a statement about the budget rule rather than a way around it.
+    function resolveSeats(uint64 slot, uint64 n) external {
+        for (uint64 i = 0; i < n; ++i) {
+            resolveSlot(slot, 1);
+        }
     }
 
     /// @dev The day's 4:2:1 routine denominator, and one window's slice of a given budget.
@@ -261,13 +379,44 @@ contract CrapsViews is CrapsBattle {
         return _slotWindow(slot).highMult;
     }
 
+    /// @dev A slot's match key without owning a seat in it. `battleKeyOf` needs a bet, and a
+    ///      fixture that only wants the scoreboard has no reason to place one.
+    function keyOfSlot(uint64 slot) external view returns (bytes32) {
+        return _slotWindow(slot).key;
+    }
+
+    /// @dev The ten-chip ROUND a window plays. `bonusTermsFor` quotes the SEVEN chips an entrant
+    ///      POSTS, which is a different number — and the depth every format rule reads is the
+    ///      bankroll against the whole round.
+    function roundOf(uint64 slot) external view returns (uint256) {
+        return _slotWindow(slot).played;
+    }
+
     // ── Day action and budget ───────────────────────────────────────────────
     function dayStaked(uint24 day) external view returns (uint256) {
         return _dayStaked[day];
     }
 
-    function dayBurn(uint24 day) external view returns (uint256) {
-        return _dayBurn(day);
+    function dayActionRate(uint24 day) external view returns (uint256) {
+        return _dayActionRate(day);
+    }
+
+    /// @dev The engine's own shooter-boost primitives, restated so the suite can grade the
+    ///      schedule and the eligibility draw without a second implementation of either.
+    function shooterBoostTerms(bool blank, uint256 goalMult) external pure returns (uint256) {
+        return _shooterBoostTerms(blank, goalMult);
+    }
+
+    function boostedShooter(bytes32 seed, uint256 n, address player, uint256 chance)
+        external
+        pure
+        returns (bool)
+    {
+        return _boostedShooter(seed, n, player, chance);
+    }
+
+    function survived(bytes32 seed, uint256 n, address player) external pure returns (bool) {
+        return _survived(seed, n, player);
     }
 
     function boostBudgetOf(uint24 day) external view returns (uint256) {

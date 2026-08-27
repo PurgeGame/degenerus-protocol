@@ -138,6 +138,11 @@ contract MockQuests {
 }
 
 abstract contract CrapsPins is Test {
+    /// @dev SETTLE EVERYTHING. `resolveSlot`'s second argument is a GAS ALLOWANCE, not a seat
+    ///      count, so "the whole field" is now a budget no field can exhaust rather than a head
+    ///      count above the biggest fixture. The internal seat ceiling still bounds one call.
+    uint64 internal constant WHOLE_FIELD = type(uint64).max;
+
     MockGame internal game;
     MockFlip internal flip;
     MockCoinflip internal coinflip;
@@ -268,9 +273,9 @@ abstract contract CrapsPins is Test {
     ///      Any fixture that subtracts one balance from another is therefore measuring the sum,
     ///      and a pot assertion written that way is asserting against the wrong number. The log is
     ///      where the two are still separate, so a pot is read through here.
-    function _resolveForPots(CrapsViews c, uint64 slot, uint64 count) internal returns (PaidOut[] memory) {
+    function _resolveForPots(CrapsViews c, uint64 slot, uint64 budget) internal returns (PaidOut[] memory) {
         vm.recordLogs();
-        c.resolveSlot(slot, count);
+        c.resolveSlot(slot, budget);
         return _potsIn(vm.getRecordedLogs());
     }
 
@@ -313,31 +318,31 @@ abstract contract CrapsPins is Test {
     /// @dev Settle a field and report the ONE pot it paid. Fails the fixture where the settlement
     ///      paid none or more than one, so a test can never quietly assert against a payment that
     ///      did not happen.
-    function _onlyPot(CrapsViews c, uint64 slot, uint64 count) internal returns (PaidOut memory) {
-        PaidOut[] memory pots = _resolveForPots(c, slot, count);
+    function _onlyPot(CrapsViews c, uint64 slot, uint64 budget) internal returns (PaidOut memory) {
+        PaidOut[] memory pots = _resolveForPots(c, slot, budget);
         assertEq(pots.length, 1, "the settlement did not pay exactly one pot");
         return pots[0];
     }
 
     /// @dev Settle a field and report every LANE payment of one kind that it made.
-    function _resolveForLane(CrapsViews c, uint64 slot, uint64 count, bool rider)
+    function _resolveForLane(CrapsViews c, uint64 slot, uint64 budget, bool rider)
         internal
         returns (PaidOut[] memory)
     {
         vm.recordLogs();
-        c.resolveSlot(slot, count);
+        c.resolveSlot(slot, budget);
         return _lanePaymentsIn(vm.getRecordedLogs(), rider);
     }
 
     /// @dev Settle a field and report BOTH payments it can make: the main pot, and a contested
     ///      lane's. One call finishes the field and pays the two together, so they are separated
     ///      by which event carried them rather than by which transaction did.
-    function _resolveForBoth(CrapsViews c, uint64 slot, uint64 count)
+    function _resolveForBoth(CrapsViews c, uint64 slot, uint64 budget)
         internal
         returns (PaidOut[] memory pots, PaidOut[] memory lane)
     {
         vm.recordLogs();
-        c.resolveSlot(slot, count);
+        c.resolveSlot(slot, budget);
         Vm.Log[] memory logs = vm.getRecordedLogs();
         pots = _potsIn(logs);
         lane = _lanePaymentsIn(logs, false);

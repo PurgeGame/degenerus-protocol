@@ -88,6 +88,20 @@ abstract contract DeployProtocol is Test {
     DegenerusAdmin public admin;
     GNRUS public gnrus;
 
+    /// @dev LEAVE THE CRAPS TABLE WITH NOTHING THE CRANK CAN FIND, so a `NoWork` probe is probing
+    ///      the box legs rather than the table. `mineFlip` grew a craps arm, and a settled game
+    ///      has opened craps days — so a fixture that means "no box work" has to say "and no
+    ///      craps work" too, or it is asserting something it did not set up.
+    ///
+    ///      Arming the one window whose close has passed is enough: the leg's arm then reverts
+    ///      `BonusPeriodSpent` and its walk reverts `RngNotReady` (no table word was landed),
+    ///      both caught, and `_crapsKeep` reports no work. Permissionless, and it pays no bounty.
+    function _quietCrapsTable() internal {
+        uint64 open = afkingModule.keeperCrapsOpenSlot();
+        if (open == 0) return;
+        try crapsBattle.armBonusWindow(open - 1) returns (uint48) {} catch {}
+    }
+
     /// @notice Deploy the full protocol. Must be called from setUp().
     /// @dev Uses vm.warp(86400) to match the fixed timestamp in patchForFoundry.js.
     function _deployProtocol() internal {

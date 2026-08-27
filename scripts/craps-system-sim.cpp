@@ -33,17 +33,101 @@ namespace {
 
 constexpr int kWindows = 7;
 constexpr int kBurnDays = 7;
-constexpr i64 kActionDivisor = 3;
-constexpr i64 kBurnShareDivisor = 2;
-constexpr i64 kMainFloor = 15'000;
+// THE SCHEDULED-BONUS FUNDING RULE, exactly as the contract states it:
+//     a day's budget = kDefaultMainBase + kActionBps / kBpsDenominator of the trailing action.
+// The base is ADDITIVE and is never a floor: a busy week is paid for its action ON TOP of it.
+constexpr i64 kActionBps = 1'200;
+constexpr i64 kBpsDenominator = 10'000;
+constexpr i64 kDefaultMainBase = 50'000;
+// THE SPLIT. Half the day's raw main allocation is the ladder its seven windows share; the other
+// half — the odd unit with it — is banked in one global progressive. Floored on the ladder side,
+// exactly as `_splitMainBudget` floors it, so the two always sum back to the raw figure.
+inline i64 ladderHalf(i64 rawMain) { return rawMain / 2; }
+inline i64 progressiveHalf(i64 rawMain) { return rawMain - rawMain / 2; }
+// The progressive's two rungs, as divisors of the LIVE pool.
+constexpr i64 kProgCommonDiv = 10;
+constexpr i64 kProgRareDiv = 2;
+// THE ROLL CUTOFFS, indexed `depthIndex * 3 + goalIndex` with depth in (2, 5, 10) and target in
+// (5x, 10x, 50x). Cumulative dice rolls, inclusive, and the WINNING ticket's own.
+constexpr int kProgCommon[9] = {150, 205, 340, 215, 275, 405, 265, 325, 455};
+constexpr int kProgRare[9] = {185, 245, 395, 260, 320, 455, 315, 375, 500};
+
+inline int progFormatIndex(int depth, int goalMult) {
+    int d = depth == 2 ? 0 : (depth == 5 ? 1 : 2);
+    int g = goalMult == 5 ? 0 : (goalMult == 10 ? 1 : 2);
+    return d * 3 + g;
+}
+// The two parts the HIGH lane's component splits into: two fifths to the main lane, three to
+// the lane that earned it.
+constexpr i64 kHighToMainNum = 2;
+constexpr i64 kHighToMainDen = 5;
 constexpr int kScoreFloor = 12;
 constexpr int kMaxHands = 256;
 constexpr int kEscHands = 5;
 constexpr int kRollBudget = 4096;
 constexpr int kMaxRolls = 512;
-constexpr i64 kMoneyUnits = 60;
+// 1,200ths keep every current payout denominator exact and also keep an integer percentage
+// uplift on any combination of current profit payments exact. In particular, 25% of a 3:4
+// Don't-Pass profit and 25% of a 7:6 Place profit both remain integral.
+constexpr i64 kMoneyUnits = 1'200;
 int gDontProfitNum = 3;
 int gDontProfitDen = 4;
+i64 gMainBase = kDefaultMainBase;
+// THE SHIPPED SHOOTER PROFIT SCHEDULE, as the defaults. A blank/random ticket carries the boost
+// on 15 shooters in a hundred and a picked one on 5; the amount is FIXED per target — there is no
+// jitter and no fractional rung, so the bps figures below are always whole hundreds.
+//
+//     ticket   eligible   goal 5x   goal 10x   goal 50x
+//     blank        15%       +25%       +30%       +40%
+//     picked        5%        +6%       +20%       +35%
+//
+// Every knob here stays overridable so a sweep can still explore off-schedule settings; nothing
+// but an explicit flag moves them off production.
+int gBoostedShootersPct = 0;
+int gWinningsBoostPct = 0;
+enum class WinningsBoostMode { All, RandomTickets };
+WinningsBoostMode gWinningsBoostMode = WinningsBoostMode::All;
+int gRandomBoostedShootersPct = 15;
+int gPickedBoostedShootersPct = 5;
+int gRandomWinningsBoostPct = -1;
+int gPickedWinningsBoostPct = -1;
+int gRandomWinningsBoostJitterPct = 0;
+int gPickedWinningsBoostJitterPct = 0;
+int gRandomGoal5WinningsBoostBps = 2'500;
+int gRandomGoal10WinningsBoostBps = 3'000;
+int gRandomGoal50WinningsBoostBps = 4'000;
+int gPickedGoal5WinningsBoostBps = 600;
+int gPickedGoal10WinningsBoostBps = 2'000;
+int gPickedGoal50WinningsBoostBps = 3'500;
+
+int winningsBoostFrequency(bool randomTicket) {
+    int overridePct = randomTicket ? gRandomBoostedShootersPct : gPickedBoostedShootersPct;
+    if (overridePct >= 0) return overridePct;
+    if (!randomTicket && gWinningsBoostMode == WinningsBoostMode::RandomTickets) return 0;
+    return gBoostedShootersPct;
+}
+
+int winningsBoostAmount(bool randomTicket) {
+    int overridePct = randomTicket ? gRandomWinningsBoostPct : gPickedWinningsBoostPct;
+    return overridePct >= 0 ? overridePct : gWinningsBoostPct;
+}
+
+int winningsBoostJitter(bool randomTicket) {
+    return randomTicket ? gRandomWinningsBoostJitterPct : gPickedWinningsBoostJitterPct;
+}
+
+int winningsBoostTargetBps(bool randomTicket, int goalMult) {
+    int goalBps = -1;
+    if (goalMult == 5) {
+        goalBps = randomTicket ? gRandomGoal5WinningsBoostBps : gPickedGoal5WinningsBoostBps;
+    } else if (goalMult == 10) {
+        goalBps = randomTicket ? gRandomGoal10WinningsBoostBps : gPickedGoal10WinningsBoostBps;
+    } else if (goalMult == 50) {
+        goalBps = randomTicket ? gRandomGoal50WinningsBoostBps : gPickedGoal50WinningsBoostBps;
+    }
+    if (goalBps >= 0) return goalBps;
+    return winningsBoostAmount(randomTicket) * 100;
+}
 
 u64 mix64(u64 x) {
     x += 0x9e3779b97f4a7c15ULL;
@@ -152,8 +236,10 @@ Terms drawTerms(Rng& rng, int period) {
     Terms t;
     int d = static_cast<int>(rng.below(3));
     t.depth = d == 0 ? 2 : (d == 1 ? 5 : 10);
-    int g = static_cast<int>(rng.below(4));
-    t.goalMult = g == 0 ? 5 : (g == 1 ? 10 : (g == 2 ? 20 : 50));
+    // Three rungs, drawn evenly. The shooter schedule is what separates the targets now, so
+    // weighting the draw as well would subsidise one of them twice.
+    int g = static_cast<int>(rng.below(3));
+    t.goalMult = g == 0 ? 5 : (g == 1 ? 10 : 50);
 
     if (period == kWindows - 1) {
         int tail = static_cast<int>(rng.below(100));
@@ -232,9 +318,8 @@ class ShooterCache {
     std::vector<Shooter> shooters_;
 };
 
-// Board stakes and raw settlement values use sixtieths of one FLIP. That keeps every current
-// payout denominator exact and also lets counterfactual quarter-denominated payouts (for
-// example 3:4 Don't Pass profit) be simulated without floating point.
+// Board stakes and raw settlement values use 1,200ths of one FLIP. That keeps every current
+// payout denominator and integer-percentage profit uplift exact without floating point.
 using BoardMoney = std::array<i64, 10>;
 
 BoardMoney makeBoard(const Terms& t, Strategy strategy, u64 scatterSeed, u64 playerKey) {
@@ -250,11 +335,14 @@ BoardMoney makeBoard(const Terms& t, Strategy strategy, u64 scatterSeed, u64 pla
     return b;
 }
 
-BoardMoney makeSelectedBoard(
+BoardMoney makeBoardChoice(
     const Terms& t, const ChipCounts& selected, u64 scatterSeed, u64 playerKey
 ) {
     ChipCounts counts = selected;
-    for (int i = 0; i < 3; ++i) {
+    // Zero is the contract's other legal board mode: scatter all ten chips. Every nonzero board
+    // enumerated by the search is a legal seven-chip selection and therefore scatters three.
+    int thrown = std::accumulate(selected.begin(), selected.end(), i64{0}) == 0 ? 10 : 3;
+    for (int i = 0; i < thrown; ++i) {
         int leg = static_cast<int>(keyed(scatterSeed, playerKey, static_cast<u64>(i), 0x5ca77eULL) % 10);
         ++counts[leg];
     }
@@ -264,7 +352,7 @@ BoardMoney makeSelectedBoard(
     return b;
 }
 
-i64 runHandMoney(const BoardMoney& b, const Shooter& shooter) {
+i64 runHandMoney(const BoardMoney& b, const Shooter& shooter, bool boosted, int winningsBoostPct) {
     bool pass = b[0] != 0;
     std::array<bool, 6> place{};
     for (int i = 0; i < 6; ++i) place[i] = b[i + 1] != 0;
@@ -273,14 +361,26 @@ i64 runHandMoney(const BoardMoney& b, const Shooter& shooter) {
     bool dark = b[9] != 0;
     int point = 0;
     i64 returned = 0;
+    i64 eligibleProfit = 0;
+
+    auto payProfit = [&](i64 amount) {
+        returned += amount;
+        eligibleProfit += amount;
+    };
+
+    auto payDont = [&]() {
+        i64 profit = b[9] * gDontProfitNum / gDontProfitDen;
+        returned += b[9] + profit;
+        eligibleProfit += profit;
+    };
 
     auto payPlace = [&](int total) {
-        if (total == 4 && place[0]) returned += b[1] * 2;
-        else if (total == 5 && place[1]) returned += b[2] * 3 / 2;
-        else if (total == 6 && place[2]) returned += b[3] * 7 / 6;
-        else if (total == 8 && place[3]) returned += b[4] * 7 / 6;
-        else if (total == 9 && place[4]) returned += b[5] * 3 / 2;
-        else if (total == 10 && place[5]) returned += b[6] * 2;
+        if (total == 4 && place[0]) payProfit(b[1] * 2);
+        else if (total == 5 && place[1]) payProfit(b[2] * 3 / 2);
+        else if (total == 6 && place[2]) payProfit(b[3] * 7 / 6);
+        else if (total == 8 && place[3]) payProfit(b[4] * 7 / 6);
+        else if (total == 9 && place[4]) payProfit(b[5] * 3 / 2);
+        else if (total == 10 && place[5]) payProfit(b[6] * 2);
     };
 
     bool sevenOut = false;
@@ -288,7 +388,7 @@ i64 runHandMoney(const BoardMoney& b, const Shooter& shooter) {
         int total = r.d1 + r.d2;
         bool comeOut = point == 0;
         if (!comeOut && total == 7) {
-            if (dark) returned += b[9] + b[9] * gDontProfitNum / gDontProfitDen;
+            if (dark) payDont();
             sevenOut = true;
             break;
         }
@@ -296,31 +396,31 @@ i64 runHandMoney(const BoardMoney& b, const Shooter& shooter) {
         if (!comeOut) {
             payPlace(total);
             if (total == 4 && hard4) {
-                if (r.d1 == r.d2) returned += b[7] * 7;
+                if (r.d1 == r.d2) payProfit(b[7] * 7);
                 else hard4 = false;
             } else if (total == 8 && hard8) {
-                if (r.d1 == r.d2) returned += b[8] * 9;
+                if (r.d1 == r.d2) payProfit(b[8] * 9);
                 else hard8 = false;
             }
         }
 
         if (comeOut) {
             if (total == 7 || total == 11) {
-                if (pass) returned += b[0];
+                if (pass) payProfit(b[0]);
                 dark = false;
             } else if (total == 12) {
                 pass = false;
             } else if (total == 2 || total == 3) {
                 pass = false;
                 if (dark) {
-                    returned += b[9] + b[9] * gDontProfitNum / gDontProfitDen;
+                    payDont();
                     dark = false;
                 }
             } else {
                 point = total;
             }
         } else if (total == point) {
-            if (pass) returned += b[0];
+            if (pass) payProfit(b[0]);
             dark = false;
             point = 0;
         }
@@ -333,6 +433,7 @@ i64 runHandMoney(const BoardMoney& b, const Shooter& shooter) {
         if (hard8) returned += b[8];
         if (dark) returned += b[9];
     }
+    if (boosted) returned += eligibleProfit * winningsBoostPct / 100;
     return returned;
 }
 
@@ -358,7 +459,14 @@ i64 roundedPaid(i64 rawMoney, u64 seed, u64 playerKey) {
 }
 
 Run settlePreparedBoard(
-    const Terms& t, const BoardMoney& board, ShooterCache& dice, u64 seed, u64 playerKey
+    const Terms& t,
+    const BoardMoney& board,
+    ShooterCache& dice,
+    u64 seed,
+    u64 playerKey,
+    int boostedShootersPct,
+    int winningsBoostTargetBps,
+    int winningsBoostJitterPct
 ) {
     i64 stakeMoney = std::accumulate(board.begin(), board.end(), i64{0});
     i64 bankrollMoney = t.bankroll * kMoneyUnits;
@@ -393,7 +501,24 @@ Run settlePreparedBoard(
 
         bankrollMoney -= needMoney;
         const Shooter& shooter = dice.get(r.hands);
-        bankrollMoney += runHandMoney(board, shooter) * q;
+        bool boosted = boostedShootersPct != 0 && winningsBoostTargetBps != 0
+            && static_cast<int>(keyed(seed, playerKey, static_cast<u64>(r.hands), 0xb0057ULL) % 100)
+                < boostedShootersPct;
+        int shooterBoostPct = winningsBoostTargetBps / 100;
+        int fractionalPct = winningsBoostTargetBps % 100;
+        if (boosted && fractionalPct != 0
+            && static_cast<int>(keyed(seed, playerKey, static_cast<u64>(r.hands), 0xb0058ULL) % 100)
+                < fractionalPct) {
+            ++shooterBoostPct;
+        }
+        if (boosted && winningsBoostJitterPct != 0) {
+            int width = winningsBoostJitterPct * 2 + 1;
+            int offset = static_cast<int>(
+                keyed(seed, playerKey, static_cast<u64>(r.hands), 0xb0059ULL) % width
+            ) - winningsBoostJitterPct;
+            shooterBoostPct = std::max(0, shooterBoostPct + offset);
+        }
+        bankrollMoney += runHandMoney(board, shooter, boosted, shooterBoostPct) * q;
         r.units += q;
         r.rolls += static_cast<int>(shooter.rolls.size());
         ++r.hands;
@@ -406,18 +531,28 @@ Run settlePreparedBoard(
 
 Run settleRun(const Terms& t, Strategy strategy, ShooterCache& dice, u64 seed, u64 playerKey) {
     BoardMoney board = makeBoard(t, strategy, seed, playerKey);
-    return settlePreparedBoard(t, board, dice, seed, playerKey);
+    bool randomTicket = strategy == Strategy::Blank;
+    return settlePreparedBoard(
+        t, board, dice, seed, playerKey,
+        winningsBoostFrequency(randomTicket), winningsBoostTargetBps(randomTicket, t.goalMult),
+        winningsBoostJitter(randomTicket)
+    );
 }
 
-Run settleSelected(
+Run settleBoardChoice(
     const Terms& t,
     const ChipCounts& selected,
     ShooterCache& dice,
     u64 seed,
     u64 playerKey
 ) {
-    BoardMoney board = makeSelectedBoard(t, selected, seed, playerKey);
-    return settlePreparedBoard(t, board, dice, seed, playerKey);
+    BoardMoney board = makeBoardChoice(t, selected, seed, playerKey);
+    bool randomTicket = std::accumulate(selected.begin(), selected.end(), i64{0}) == 0;
+    return settlePreparedBoard(
+        t, board, dice, seed, playerKey,
+        winningsBoostFrequency(randomTicket), winningsBoostTargetBps(randomTicket, t.goalMult),
+        winningsBoostJitter(randomTicket)
+    );
 }
 
 struct ScoredRun {
@@ -494,7 +629,22 @@ struct Totals {
     long double highBudget{};
     long double mainBoostPaid{};
     long double highBoostPaid{};
-    long double modeledBurn{};
+    /// THE PROGRESSIVE'S BOOK. `progressiveFunded` is the half of each day's main allocation that
+    /// is banked rather than laddered — EMISSION, counted the day it lands. `progressiveRolled` is
+    /// protocol money a standing curve denied, which is emission already counted as part of the
+    /// budget it came out of. `progressivePaid` is a RELEASE of that stored liability and must
+    /// never be counted as issuance a second time.
+    long double progressiveFunded{};
+    long double progressiveRolled{};
+    long double progressivePaid{};
+    long double progressiveCommonAwards{};
+    long double progressiveRareAwards{};
+    /// The pool's balance at the end of the counted run, and its trajectory.
+    long double progressiveEnd{};
+    std::vector<long double> progressiveDaily;
+    // The LINEAR TERM the schedule's rate implies on the day's action. Not an estimate of burn
+    // and never was: the rate is a policy choice about the handle.
+    long double linearTerm{};
     std::vector<long double> dailyBoostPaid;
     std::vector<GroupTotals> groups;
 };
@@ -539,16 +689,15 @@ std::pair<i64, i64> drawBudgets(const std::deque<std::pair<i64, i64>>& action) {
     i64 er = 0;
     i64 eh = 0;
     for (const auto& [regular, high] : action) {
-        er += regular / kActionDivisor;
-        eh += high / kActionDivisor;
+        er += regular * kActionBps / kBpsDenominator;
+        eh += high * kActionBps / kBpsDenominator;
     }
     er /= kBurnDays;
     eh /= kBurnDays;
-    i64 recycle = eh / kBurnShareDivisor;
-    i64 fromHigh = recycle * 2 / 5;
-    i64 highBudget = recycle - fromHigh;
-    i64 mainBudget = er / kBurnShareDivisor + fromHigh;
-    if (mainBudget < kMainFloor) mainBudget = kMainFloor;
+    i64 fromHigh = eh * kHighToMainNum / kHighToMainDen;
+    i64 highBudget = eh - fromHigh;
+    // ADDITIVE, NOT A FLOOR: `gMainBase + linear`, never `max(gMainBase, linear)`.
+    i64 mainBudget = gMainBase + er + fromHigh;
     return {mainBudget, highBudget};
 }
 
@@ -586,9 +735,16 @@ Totals simulateScenario(const Scenario& scenario, int days, int warmup, u64 seed
     std::deque<std::pair<i64, i64>> history(kBurnDays, {0, 0});
     Totals out;
     out.groups.resize(scenario.cohorts.size());
+    // ONE POOL, carried across every day and every window of the run. It is warmed through the
+    // burn-in exactly as the contract's would be through its own first days, so the counted run
+    // opens on a realistic balance rather than an empty table.
+    i64 pool = 0;
 
     for (int day = 0; day < days + warmup; ++day) {
-        auto [mainBudget, highBudget] = drawBudgets(history);
+        auto [rawMain, highBudget] = drawBudgets(history);
+        i64 mainBudget = ladderHalf(rawMain);
+        i64 contribution = progressiveHalf(rawMain);
+        pool += contribution;
         int highMult = scenario.forcedHigh != 0 ? scenario.forcedHigh : (rng.below(10) == 0 ? 100 : 10);
         std::array<Terms, kWindows> terms;
         int routineWeight = 0;
@@ -607,8 +763,11 @@ Totals simulateScenario(const Scenario& scenario, int days, int warmup, u64 seed
             out.windows += kWindows;
             out.ordinarySeats += static_cast<long double>(ordinaryHeads) * kWindows;
             out.highSeats += static_cast<long double>(highHeads) * kWindows;
-            out.mainBudget += mainBudget;
+            // THE RAW ALLOCATION is what the emission accounting is against: the ladder half is
+            // paid out immediately and the other half becomes a liability the moment it is banked.
+            out.mainBudget += rawMain;
             out.highBudget += highBudget;
+            out.progressiveFunded += contribution;
             for (int g = 0; g < static_cast<int>(scenario.cohorts.size()); ++g) {
                 const Cohort& c = scenario.cohorts[g];
                 if (c.funding == Funding::Prepaid) {
@@ -674,12 +833,18 @@ Totals simulateScenario(const Scenario& scenario, int days, int warmup, u64 seed
             std::size_t mainWinner = 0;
             for (std::size_t i = 1; i < runs.size(); ++i) if (better(runs[i], runs[mainWinner])) mainWinner = i;
             i64 mainBoost = paidBoost(mainBase, rung, seats[mainWinner].standing);
+            // WHAT THE STANDING DENIED IS NOT UNMINTED. It is protocol money already allocated to
+            // this window, so it goes into the pool — compared at the same rounding stage the
+            // payment lands on, which is what makes credit plus rollover the full-standing award.
+            i64 mainDenied = paidBoost(mainBase, rung, kScoreFloor) - mainBoost;
+            pool += mainDenied;
             i64 mainBounties = t.bounty * static_cast<i64>(seats.size());
             i64 mainPot = mainBounties + mainBoost;
             if (count) {
                 out.totalCredit += mainPot;
                 out.bountyReturned += mainBounties;
                 out.mainBoostPaid += mainBoost;
+                out.progressiveRolled += mainDenied;
                 dayBoostPaid += mainBoost;
                 GroupTotals& gt = out.groups[seats[mainWinner].group];
                 gt.potCredit += mainPot;
@@ -687,14 +852,46 @@ Totals simulateScenario(const Scenario& scenario, int days, int warmup, u64 seed
                 gt.mainWins += 1;
             }
 
+            // THE PROGRESSIVE. No draw of its own: the recipient is the winner the comparator
+            // already named, the qualification is that winner's cumulative roll prefix against
+            // this window's format, and a bust never qualifies however far it ran.
+            if (runs[mainWinner].run.stop == Stop::Goal) {
+                int fi = progFormatIndex(t.depth, t.goalMult);
+                int rolls = runs[mainWinner].run.rolls;
+                i64 candidate = 0;
+                bool rare = rolls >= kProgRare[fi];
+                if (rare) candidate = pool / kProgRareDiv;
+                else if (rolls >= kProgCommon[fi]) candidate = pool / kProgCommonDiv;
+                if (candidate > 0) {
+                    // The candidate is ALREADY in the pool, so the curve applies to it directly
+                    // and only the credit is deducted. What is denied never left.
+                    i64 award = boostShare(candidate, seats[mainWinner].standing);
+                    pool -= award;
+                    if (count) {
+                        out.totalCredit += award;
+                        out.progressivePaid += award;
+                        if (rare) out.progressiveRareAwards += 1;
+                        else out.progressiveCommonAwards += 1;
+                        GroupTotals& gt = out.groups[seats[mainWinner].group];
+                        gt.potCredit += award;
+                        gt.totalCredit += award;
+                    }
+                }
+            }
+
             if (highHeads == 1) {
                 std::size_t h = 0;
                 while (!seats[h].high) ++h;
                 i64 laneBoost = paidBoost(highBase, rung, seats[h].standing);
+                // The denied CAPITAL never gets on the table: it is banked before the dice are
+                // consulted, so nothing here manufactures a return on money the curve refused.
+                i64 laneDenied = paidBoost(highBase, rung, kScoreFloor) - laneBoost;
+                pool += laneDenied;
                 i64 extra = (highMult - 1) * t.bounty;
                 i64 rider = runs[h].run.paid == 0 ? 0 : runs[h].run.paid * (extra + laneBoost) / t.bankroll;
                 i64 boostPart = runs[h].run.paid == 0 ? 0 : runs[h].run.paid * laneBoost / t.bankroll;
                 if (count) {
+                    out.progressiveRolled += laneDenied;
                     out.totalCredit += rider;
                     out.bountyReturned += rider - boostPart;
                     out.highBoostPaid += boostPart;
@@ -711,9 +908,12 @@ Totals simulateScenario(const Scenario& scenario, int days, int warmup, u64 seed
                     if (highWinner == std::numeric_limits<std::size_t>::max() || better(runs[i], runs[highWinner])) highWinner = i;
                 }
                 i64 laneBoost = paidBoost(highBase, rung, seats[highWinner].standing);
+                i64 laneDenied = paidBoost(highBase, rung, kScoreFloor) - laneBoost;
+                pool += laneDenied;
                 i64 laneBounties = static_cast<i64>(highHeads) * (highMult - 1) * t.bounty;
                 i64 lanePot = laneBounties + laneBoost;
                 if (count) {
+                    out.progressiveRolled += laneDenied;
                     out.totalCredit += lanePot;
                     out.bountyReturned += laneBounties;
                     out.highBoostPaid += laneBoost;
@@ -729,12 +929,15 @@ Totals simulateScenario(const Scenario& scenario, int days, int warmup, u64 seed
         if (count) {
             out.actionRegular += dayRegular;
             out.actionHigh += dayHigh;
-            out.modeledBurn += static_cast<long double>(dayRegular + dayHigh) / kActionDivisor;
+            out.linearTerm +=
+                static_cast<long double>(dayRegular + dayHigh) * kActionBps / kBpsDenominator;
             out.dailyBoostPaid.push_back(dayBoostPaid);
+            out.progressiveDaily.push_back(static_cast<long double>(pool));
         }
         history.pop_front();
         history.push_back({dayRegular, dayHigh});
     }
+    out.progressiveEnd = static_cast<long double>(pool);
     return out;
 }
 
@@ -757,7 +960,7 @@ Calibration calibrate(Strategy strategy, int samples, u64 seed) {
         int d = static_cast<int>(rng.below(3));
         t.depth = d == 0 ? 2 : (d == 1 ? 5 : 10);
         int g = static_cast<int>(rng.below(4));
-        t.goalMult = g == 0 ? 5 : (g == 1 ? 10 : (g == 2 ? 20 : 50));
+        t.goalMult = g == 0 ? 5 : (g == 1 ? 10 : 50);
         t.round = t.bankroll / t.depth;
         t.goal = t.bankroll * t.goalMult;
         u64 runSeed = rng.next();
@@ -867,6 +1070,19 @@ std::vector<Scenario> scenarios() {
         {"vault_high_pass_dark", {{"house", 1, 0, S::Blank, 12, F::Cash}, {"vault", 0, 1, S::Dark, 12, F::FreePass}}, 0},
         {"two_body_high_passes", {{"body_high", 0, 2, S::Blank, 12, F::FreePass}}, 0},
         {"tail_100x_contested", {{"protocol", 2, 0, S::Blank, 12, F::Cash}, {"sharp", 10, 0, S::Sharp4, 12, F::Cash}, {"whale", 0, 2, S::Sharp4, 12, F::Cash}}, 100},
+        // THE PROGRESSIVE'S CALIBRATION COHORT. Forty daily tickets, deliberately heterogeneous
+        // and deliberately not efficient: twenty blank/random and five each of fixed place 4/10,
+        // mixed, pass-heavy and 3:4 don't-pass-heavy. The weighted post-shooter edge this field
+        // hands the table is well above the 16% an efficient one would, which is exactly why its
+        // break-even head count is far below the policy figure — the participation equilibrium is
+        // edge-dependent, not a universal number of players.
+        {"mixed_40_cohort",
+         {{"blank", 20, 0, S::Blank, 12, F::Cash},
+          {"place410", 5, 0, S::Sharp4, 12, F::Cash},
+          {"mixed", 5, 0, S::Mixed, 12, F::Cash},
+          {"pass_heavy", 5, 0, S::Pass, 12, F::Cash},
+          {"dont_pass_heavy", 5, 0, S::Dark, 12, F::Cash}},
+         0},
     };
 }
 
@@ -880,8 +1096,9 @@ struct BoardSearchStats {
     long double trials{};
 };
 
-std::vector<ChipCounts> legalSelectedBoards() {
-    std::vector<ChipCounts> boards;
+std::vector<ChipCounts> legalBoardChoices() {
+    // Blank is a first-class legal choice in addition to every seven-chip selection.
+    std::vector<ChipCounts> boards{ChipCounts{}};
     ChipCounts board{};
     auto walk = [&](auto&& self, int leg, int left) -> void {
         if (leg == 10) {
@@ -929,8 +1146,8 @@ std::vector<ChipCounts> strategicField(std::string_view name) {
         fill(Strategy::Dark, 5);
     } else {
         Strategy s = strategyFromName(name);
-        if (s == Strategy::Blank || s == Strategy::FairControl) {
-            throw std::invalid_argument("board search requires a seven-chip selected incumbent field");
+        if (s == Strategy::FairControl) {
+            throw std::invalid_argument("the no-scatter mathematical control is not a legal incumbent board");
         }
         fill(s, 31);
     }
@@ -958,7 +1175,7 @@ long double boardSearchEdge(const BoardSearchStats& s) {
     return 100 * (s.bankroll - s.paid) / s.bankroll;
 }
 
-std::vector<BoardSearchStats> evaluateSelectedBoards(
+std::vector<BoardSearchStats> evaluateBoardChoices(
     const std::vector<ChipCounts>& allBoards,
     const std::vector<std::size_t>& candidateIds,
     const std::vector<ChipCounts>& field,
@@ -981,8 +1198,11 @@ std::vector<BoardSearchStats> evaluateSelectedBoards(
     }
 
     while (counted < samples) {
-        auto [mainBudget, ignoredHighBudget] = drawBudgets(history);
+        auto [rawMain, ignoredHighBudget] = drawBudgets(history);
         (void)ignoredHighBudget;
+        // The LADDER half is what a board can actually race for. The progressive half is not on
+        // any one window's table, and no board choice moves the roll prefix a winner qualifies on.
+        i64 mainBudget = ladderHalf(rawMain);
         std::array<Terms, kWindows> terms;
         int routineWeight = 0;
         i64 dayBankroll = 0;
@@ -1010,7 +1230,7 @@ std::vector<BoardSearchStats> evaluateSelectedBoards(
                 bool haveFieldBest = false;
                 for (std::size_t i = 0; i < field.size(); ++i) {
                     u64 pk = keyed(incumbentOwners[i], static_cast<u64>(day), static_cast<u64>(p));
-                    Run run = settleSelected(t, field[i], dice, windowSeed, pk);
+                    Run run = settleBoardChoice(t, field[i], dice, windowSeed, pk);
                     ScoredRun scored{run, kScoreFloor, keyed(windowSeed, i, 0x71eULL)};
                     if (!haveFieldBest || better(scored, fieldBest)) {
                         fieldBest = scored;
@@ -1021,7 +1241,7 @@ std::vector<BoardSearchStats> evaluateSelectedBoards(
                 u64 candidateKey = keyed(candidateOwner, static_cast<u64>(day), static_cast<u64>(p));
                 u64 candidateTie = keyed(windowSeed, 31, 0x71eULL);
                 for (std::size_t i = 0; i < candidateIds.size(); ++i) {
-                    Run run = settleSelected(
+                    Run run = settleBoardChoice(
                         t, allBoards[candidateIds[i]], dice, windowSeed, candidateKey
                     );
                     ScoredRun scored{run, kScoreFloor, candidateTie};
@@ -1052,11 +1272,11 @@ void printBoardSearch(
     int rows,
     u64 seed
 ) {
-    std::vector<ChipCounts> boards = legalSelectedBoards();
+    std::vector<ChipCounts> boards = legalBoardChoices();
     std::vector<ChipCounts> field = strategicField(fieldName);
     std::vector<std::size_t> allIds(boards.size());
     std::iota(allIds.begin(), allIds.end(), std::size_t{0});
-    std::vector<BoardSearchStats> screened = evaluateSelectedBoards(
+    std::vector<BoardSearchStats> screened = evaluateBoardChoices(
         boards, allIds, field, screenSamples, keyed(seed, 0x5c433aULL)
     );
 
@@ -1079,6 +1299,7 @@ void printBoardSearch(
     retain(boardSearchEdge, 256, false);
 
     std::vector<std::pair<std::string_view, ChipCounts>> probes;
+    probes.push_back({"blank", ChipCounts{}});
     ChipCounts light5{};
     light5[0] = 4;
     light5[2] = 3;
@@ -1099,7 +1320,7 @@ void printBoardSearch(
     std::vector<std::size_t> refineIds;
     for (std::size_t i = 0; i < keep.size(); ++i) if (keep[i]) refineIds.push_back(i);
 
-    std::vector<BoardSearchStats> refined = evaluateSelectedBoards(
+    std::vector<BoardSearchStats> refined = evaluateBoardChoices(
         boards, refineIds, field, refineSamples, keyed(seed, 0x7ef1aeULL)
     );
     std::sort(refined.begin(), refined.end(), [](const BoardSearchStats& a, const BoardSearchStats& b) {
@@ -1110,7 +1331,7 @@ void printBoardSearch(
                  "\trefine_samples\tdont_profit_ratio\taction_divisor\n";
     std::cout << "BOARD_SEARCH\t" << fieldName << '\t' << boards.size() << '\t' << screenSamples << '\t'
               << refineIds.size() << '\t' << refineSamples << '\t' << gDontProfitNum << '/' << gDontProfitDen
-              << '\t' << kActionDivisor << "\n";
+              << '\t' << kActionBps << "\n";
     std::cout << "BOARD_RESULT_HEADER\trank\tboard_pass_p4_p5_p6_p8_p9_p10_h4_h8_dp"
                  "\tmain_win_pct\tengine_edge_pct\tplayer_roi_pct\n";
     rows = std::min(rows, static_cast<int>(refined.size()));
@@ -1137,8 +1358,53 @@ void printBoardSearch(
     }
 }
 
+// THE FUNDING RULE, END TO END, as arithmetic rather than as a sample. Everything here is a
+// division: it fixes the curve the contract tests and the documentation are held to, so a change
+// to the rate or the base shows up in one place before any simulated day is run.
+void printEquilibriumTable() {
+    // The policy calibration. A conservative whole-run engine take, and the bankroll action an
+    // ordinary daily ticket puts through — SEVEN windows of it, not one, and bounties excluded.
+    constexpr i64 kTakeBps = 1'600;
+    constexpr i64 kTicketAction = 15'600;
+    const i64 residual = kTicketAction * (kTakeBps - kActionBps) / 10'000;
+
+    // THE SPLIT DOES NOT MOVE THIS CURVE. A wei banked in the progressive is a wei allocated: it
+    // becomes a liability the moment it lands there, and its later payout releases that liability
+    // rather than issuing again. So the emission below is the WHOLE main allocation.
+    std::cout << "EQUILIBRIUM_HEADER\ttickets\taction\tengine_take_at_16pct\tallocation_base_plus_rate"
+                 "\tladder_half\tprogressive_half\tnet_issuance\n";
+    for (int tickets : {0, 2, 16, 40, 41, 80, 81}) {
+        i64 action = static_cast<i64>(tickets) * kTicketAction;
+        i64 take = action * kTakeBps / 10'000;
+        i64 bonus = gMainBase + action * kActionBps / 10'000;
+        std::cout << "EQUILIBRIUM\t" << tickets << '\t' << action << '\t' << take << '\t' << bonus << '\t'
+                  << ladderHalf(bonus) << '\t' << progressiveHalf(bonus) << '\t' << (bonus - take) << "\n";
+    }
+    std::cout << "EQUILIBRIUM_NOTE\tresidual_burn_per_ticket\t" << residual
+              << "\tbreak_even_tickets\t" << (gMainBase / residual) << "\tbase\t" << gMainBase
+              << "\trate_bps\t" << kActionBps << "\n";
+
+    // THE TWO LANES, RATED THE SAME AND NEVER SHARING A WEI. Regular action pays 12% into the
+    // main lane; high action pays 4.8% there and 7.2% into its own. A mixed day is booked once.
+    std::cout << "LANES_HEADER\tregular_action\thigh_action\traw_main_allocation\tladder_half"
+                 "\tprogressive_half\thigh_budget\tlinear_total\trate_bps_of_action\n";
+    for (auto [reg, high] : std::vector<std::pair<i64, i64>>{
+             {1'000'000, 0}, {0, 1'000'000}, {500'000, 500'000}, {200'000, 100'000}}) {
+        std::deque<std::pair<i64, i64>> h(kBurnDays, {reg, high});
+        auto [m, hi] = drawBudgets(h);
+        i64 linear = m - gMainBase + hi;
+        i64 total = reg + high;
+        std::cout << "LANES\t" << reg << '\t' << high << '\t' << m << '\t' << ladderHalf(m) << '\t'
+                  << progressiveHalf(m) << '\t' << hi << '\t' << linear << '\t'
+                  << (total == 0 ? 0 : linear * 10'000 / total) << "\n";
+    }
+}
+
 void printShockTable() {
     std::deque<std::pair<i64, i64>> h(kBurnDays, {1'000'000, 0});
+    // A SHUTDOWN IS A SEVEN-DAY LAG, NOT A LEAK. The window is the seven days BEHIND the day it
+    // opens, so a table that empties overnight keeps paying its old rate down a ramp for a week
+    // and then sits on the base. Every row below is the rule applied to a shrinking window.
     std::cout << "SHOCK_HEADER\tday\tregular_action\thigh_action\tmain_budget\thigh_budget\n";
     for (int day = 0; day < 10; ++day) {
         auto [m, hi] = drawBudgets(h);
@@ -1161,9 +1427,20 @@ void printShockTable() {
 
 void usage(const char* argv0) {
     std::cerr << "Usage: " << argv0
-              << " [--days N] [--calibration N] [--schedule N] [--settings N]"
+              << " [--days N] [--worlds N] [--calibration N] [--schedule N] [--settings N]"
                  " [--settings-strategy STRATEGY] [--dont-profit-num N] [--dont-profit-den N]"
-                 " [--board-search N] [--search-refine N] [--search-field STRATEGY|strategic_mix]"
+                 " [--main-base FLIP]"
+                 " [--boosted-shooters-pct N] [--winnings-boost-pct N]"
+                 " [--winnings-boost-mode all|random]"
+                 " [--random-boosted-shooters-pct N] [--picked-boosted-shooters-pct N]"
+                 " [--random-winnings-boost-pct N] [--picked-winnings-boost-pct N]"
+                 " [--random-winnings-boost-jitter-pct N] [--picked-winnings-boost-jitter-pct N]"
+                 " [--random-goal5-boost-bps N] [--random-goal10-boost-bps N]"
+                 " [--random-goal50-boost-bps N]"
+                 " [--picked-goal5-boost-bps N] [--picked-goal10-boost-bps N]"
+                 " [--picked-goal50-boost-bps N]"
+                 " [--board-search N] [--search-refine N]"
+                 " [--search-field STRATEGY|strategic_mix|duelN]"
                  " [--search-top N]"
                  " [--seed N] [--scenario NAME]"
                  " [--matchup-incumbent STRATEGY] [--matchup-candidate STRATEGY]\n";
@@ -1173,6 +1450,7 @@ void usage(const char* argv0) {
 
 int main(int argc, char** argv) {
     int days = 10'000;
+    int worlds = 0;
     int calibrationSamples = 250'000;
     int scheduleSamples = 500'000;
     int settingSamples = 0;
@@ -1187,11 +1465,16 @@ int main(int argc, char** argv) {
     std::string searchField = "sharp";
     for (int i = 1; i < argc; ++i) {
         std::string arg = argv[i];
+        if (arg == "--help" || arg == "-h") {
+            usage(argv[0]);
+            return 0;
+        }
         if (i + 1 >= argc) {
             usage(argv[0]);
             return 2;
         }
         if (arg == "--days") days = std::stoi(argv[++i]);
+        else if (arg == "--worlds") worlds = std::stoi(argv[++i]);
         else if (arg == "--calibration") calibrationSamples = std::stoi(argv[++i]);
         else if (arg == "--schedule") scheduleSamples = std::stoi(argv[++i]);
         else if (arg == "--settings") settingSamples = std::stoi(argv[++i]);
@@ -1202,6 +1485,54 @@ int main(int argc, char** argv) {
         else if (arg == "--search-top") searchTop = std::stoi(argv[++i]);
         else if (arg == "--dont-profit-num") gDontProfitNum = std::stoi(argv[++i]);
         else if (arg == "--dont-profit-den") gDontProfitDen = std::stoi(argv[++i]);
+        else if (arg == "--main-base") gMainBase = std::stoll(argv[++i]);
+        else if (arg == "--boosted-shooters-pct") gBoostedShootersPct = std::stoi(argv[++i]);
+        else if (arg == "--winnings-boost-pct") gWinningsBoostPct = std::stoi(argv[++i]);
+        else if (arg == "--random-boosted-shooters-pct") {
+            gRandomBoostedShootersPct = std::stoi(argv[++i]);
+        }
+        else if (arg == "--picked-boosted-shooters-pct") {
+            gPickedBoostedShootersPct = std::stoi(argv[++i]);
+        }
+        else if (arg == "--random-winnings-boost-pct") {
+            gRandomWinningsBoostPct = std::stoi(argv[++i]);
+        }
+        else if (arg == "--picked-winnings-boost-pct") {
+            gPickedWinningsBoostPct = std::stoi(argv[++i]);
+        }
+        else if (arg == "--random-winnings-boost-jitter-pct") {
+            gRandomWinningsBoostJitterPct = std::stoi(argv[++i]);
+        }
+        else if (arg == "--picked-winnings-boost-jitter-pct") {
+            gPickedWinningsBoostJitterPct = std::stoi(argv[++i]);
+        }
+        else if (arg == "--random-goal5-boost-bps") {
+            gRandomGoal5WinningsBoostBps = std::stoi(argv[++i]);
+        }
+        else if (arg == "--random-goal10-boost-bps") {
+            gRandomGoal10WinningsBoostBps = std::stoi(argv[++i]);
+        }
+        else if (arg == "--random-goal50-boost-bps") {
+            gRandomGoal50WinningsBoostBps = std::stoi(argv[++i]);
+        }
+        else if (arg == "--picked-goal5-boost-bps") {
+            gPickedGoal5WinningsBoostBps = std::stoi(argv[++i]);
+        }
+        else if (arg == "--picked-goal10-boost-bps") {
+            gPickedGoal10WinningsBoostBps = std::stoi(argv[++i]);
+        }
+        else if (arg == "--picked-goal50-boost-bps") {
+            gPickedGoal50WinningsBoostBps = std::stoi(argv[++i]);
+        }
+        else if (arg == "--winnings-boost-mode") {
+            std::string mode = argv[++i];
+            if (mode == "all") gWinningsBoostMode = WinningsBoostMode::All;
+            else if (mode == "random" || mode == "blank") {
+                gWinningsBoostMode = WinningsBoostMode::RandomTickets;
+            } else {
+                throw std::invalid_argument("winnings boost mode must be all or random");
+            }
+        }
         else if (arg == "--dont-profit-sixths") {
             // Backward-compatible shorthand retained for reproducing earlier sweeps.
             gDontProfitNum = std::stoi(argv[++i]);
@@ -1222,7 +1553,24 @@ int main(int argc, char** argv) {
     }
     if (gDontProfitNum < 0 || gDontProfitDen <= 0 || gDontProfitNum > gDontProfitDen
         || kMoneyUnits % gDontProfitDen != 0) {
-        throw std::invalid_argument("Don't Pass ratio must satisfy 0 <= numerator <= denominator and divide 60");
+        throw std::invalid_argument("Don't Pass ratio must satisfy 0 <= numerator <= denominator and divide 1200");
+    }
+    if (gMainBase < 0) throw std::invalid_argument("main base cannot be negative");
+    if (gBoostedShootersPct < 0 || gBoostedShootersPct > 100
+        || gWinningsBoostPct < 0 || gWinningsBoostPct > 100
+        || gRandomBoostedShootersPct < -1 || gRandomBoostedShootersPct > 100
+        || gPickedBoostedShootersPct < -1 || gPickedBoostedShootersPct > 100
+        || gRandomWinningsBoostPct < -1 || gRandomWinningsBoostPct > 100
+        || gPickedWinningsBoostPct < -1 || gPickedWinningsBoostPct > 100
+        || gRandomWinningsBoostJitterPct < 0 || gRandomWinningsBoostJitterPct > 100
+        || gPickedWinningsBoostJitterPct < 0 || gPickedWinningsBoostJitterPct > 100
+        || gRandomGoal5WinningsBoostBps < -1 || gRandomGoal5WinningsBoostBps > 10'000
+        || gRandomGoal10WinningsBoostBps < -1 || gRandomGoal10WinningsBoostBps > 10'000
+        || gRandomGoal50WinningsBoostBps < -1 || gRandomGoal50WinningsBoostBps > 10'000
+        || gPickedGoal5WinningsBoostBps < -1 || gPickedGoal5WinningsBoostBps > 10'000
+        || gPickedGoal10WinningsBoostBps < -1 || gPickedGoal10WinningsBoostBps > 10'000
+        || gPickedGoal50WinningsBoostBps < -1 || gPickedGoal50WinningsBoostBps > 10'000) {
+        throw std::invalid_argument("shooter frequency and winnings boost must each be between 0 and 100 percent");
     }
     bool matchupOnly = !matchupIncumbentFilter.empty() || !matchupCandidateFilter.empty();
     if (matchupOnly && !scenarioFilter.empty()) {
@@ -1231,14 +1579,52 @@ int main(int argc, char** argv) {
 
     std::cout << std::fixed << std::setprecision(6);
     std::cout << "CONFIG\tdays\t" << days << "\tcalibration\t" << calibrationSamples
-              << "\tschedule\t" << scheduleSamples << "\tseed\t" << seed << "\taction_divisor\t"
-              << kActionDivisor << "\tdont_profit_ratio\t" << gDontProfitNum << '/' << gDontProfitDen << "\n";
+              << "\tschedule\t" << scheduleSamples << "\tseed\t" << seed << "\taction_bps\t"
+              << kActionBps << "\tmain_base\t" << gMainBase << "\tdont_profit_ratio\t"
+              << gDontProfitNum << '/' << gDontProfitDen << "\tboosted_shooters_pct\t"
+              << gBoostedShootersPct << "\twinnings_boost_pct\t" << gWinningsBoostPct
+              << "\twinnings_boost_mode\t"
+              << (gWinningsBoostMode == WinningsBoostMode::All ? "all" : "random")
+              << "\trandom_shooters_pct\t" << winningsBoostFrequency(true)
+              << "\tpicked_shooters_pct\t" << winningsBoostFrequency(false)
+              << "\trandom_winnings_pct\t" << winningsBoostAmount(true)
+              << "\tpicked_winnings_pct\t" << winningsBoostAmount(false)
+              << "\trandom_winnings_jitter_pct\t" << winningsBoostJitter(true)
+              << "\tpicked_winnings_jitter_pct\t" << winningsBoostJitter(false)
+              << "\trandom_goal_bps_5_10_50\t" << winningsBoostTargetBps(true, 5) << ','
+              << winningsBoostTargetBps(true, 10) << ',' << winningsBoostTargetBps(true, 50)
+              << "\tpicked_goal_bps_5_10_50\t" << winningsBoostTargetBps(false, 5) << ','
+              << winningsBoostTargetBps(false, 10) << ',' << winningsBoostTargetBps(false, 50) << "\n";
     long double darkWinProbability = 949.0L / 1925.0L;
-    long double darkPerShooterEdge =
-        100 * (1 - darkWinProbability * (1 + static_cast<long double>(gDontProfitNum) / gDontProfitDen));
+    auto scheduledProfitRatio = [&](int frequencyPct, int boostBps) {
+        return static_cast<long double>(gDontProfitNum) / gDontProfitDen
+            * (1 + static_cast<long double>(frequencyPct) * boostBps / 1'000'000);
+    };
+    auto darkPerShooterEdge = [&](bool randomTicket, int goalMult) {
+        return 100 * (1 - darkWinProbability * (
+            1 + scheduledProfitRatio(
+                winningsBoostFrequency(randomTicket), winningsBoostTargetBps(randomTicket, goalMult)
+            )
+        ));
+    };
     std::cout << "DONT_PASS\tprofit_ratio\t" << gDontProfitNum << '/' << gDontProfitDen
-              << "\tper_shooter_edge_pct\t"
-              << static_cast<double>(darkPerShooterEdge) << "\n";
+              << "\trandom_ticket_edge_pct_5_10_50\t"
+              << static_cast<double>(darkPerShooterEdge(true, 5)) << ','
+              << static_cast<double>(darkPerShooterEdge(true, 10)) << ','
+              << static_cast<double>(darkPerShooterEdge(true, 50))
+              << "\tpicked_ticket_edge_pct_5_10_50\t"
+              << static_cast<double>(darkPerShooterEdge(false, 5)) << ','
+              << static_cast<double>(darkPerShooterEdge(false, 10)) << ','
+              << static_cast<double>(darkPerShooterEdge(false, 50)) << "\n";
+
+    // An exhaustive board sweep is a self-contained mode. Avoid spending time on, and printing,
+    // unrelated schedule/calibration/scenario tables before returning its result.
+    if (boardSearchSamples != 0) {
+        if (searchRefineSamples == 0) searchRefineSamples = boardSearchSamples * 20;
+        printBoardSearch(searchField, boardSearchSamples, searchRefineSamples, searchTop, seed);
+        return 0;
+    }
+
     printSchedule(scheduleSamples, keyed(seed, 0x5cedULL));
 
     std::cout << "CALIBRATION_HEADER\tstrategy\teffective_edge_pct\tpre_forfeit_engine_drag_pct\tbust_deletion_pct"
@@ -1261,17 +1647,11 @@ int main(int argc, char** argv) {
     }
     printCalibration("CALIBRATION_CONTROL", Strategy::FairControl, keyed(seed, 0xfa17ULL, 0xca1bULL));
 
-    if (boardSearchSamples != 0) {
-        if (searchRefineSamples == 0) searchRefineSamples = boardSearchSamples * 20;
-        printBoardSearch(searchField, boardSearchSamples, searchRefineSamples, searchTop, seed);
-        return 0;
-    }
-
     if (settingSamples != 0) {
         std::cout << "SETTING_HEADER\tstrategy\tdepth\tgoal_multiple\teffective_edge_pct"
                      "\tpre_forfeit_engine_drag_pct\tbust_deletion_pct\tbust_rate_pct\tgoal_rate_pct\tmean_hands\n";
         constexpr std::array<int, 3> depths{2, 5, 10};
-        constexpr std::array<int, 4> goals{5, 10, 20, 50};
+        constexpr std::array<int, 3> goals{5, 10, 50};
         for (std::size_t si = 0; si < strategies.size(); ++si) {
             if (!settingStrategyFilter.empty() && strategies[si] != strategyFromName(settingStrategyFilter)) continue;
             for (int depth : depths) {
@@ -1294,11 +1674,98 @@ int main(int argc, char** argv) {
         }
     }
 
+    // THE PROGRESSIVE'S TRAJECTORY, across independent worlds. One world's pool is a single path
+    // of a heavy-tailed process — the rare rung takes half of it — so a mean over many worlds is
+    // the only honest statement of where it settles. Each world gets its own seed and therefore
+    // its own terms, dice, boost rungs and tie coins.
+    if (worlds > 0) {
+        if (scenarioFilter.empty()) throw std::invalid_argument("--worlds needs --scenario NAME");
+        auto all = scenarios();
+        const Scenario* chosen = nullptr;
+        for (const Scenario& sc : all) {
+            if (sc.name == scenarioFilter) chosen = &sc;
+        }
+        if (chosen == nullptr) throw std::invalid_argument("unknown scenario for --worlds");
+
+        std::vector<long double> ends;
+        ends.reserve(static_cast<std::size_t>(worlds));
+        long double funded = 0;
+        long double rolled = 0;
+        long double paid = 0;
+        long double common = 0;
+        long double rare = 0;
+        long double allocation = 0;
+        long double ladderPaid = 0;
+        long double credit = 0;
+        long double burn = 0;
+        long double action = 0;
+        long double risk = 0;
+        long double engine = 0;
+        long double dayCount = 0;
+        for (int w = 0; w < worlds; ++w) {
+            Totals t = simulateScenario(*chosen, days, 21, keyed(seed, 0x301dULL, static_cast<u64>(w)));
+            ends.push_back(t.progressiveEnd);
+            funded += t.progressiveFunded;
+            rolled += t.progressiveRolled;
+            paid += t.progressivePaid;
+            common += t.progressiveCommonAwards;
+            rare += t.progressiveRareAwards;
+            allocation += t.mainBudget;
+            ladderPaid += t.mainBoostPaid + t.highBoostPaid;
+            credit += t.totalCredit;
+            burn += t.cashBurn;
+            action += t.actionRegular + t.actionHigh;
+            risk += t.riskBankroll;
+            engine += t.engineCredit;
+            dayCount += t.days;
+        }
+        long double d = dayCount;
+        std::cout << "WORLDS_HEADER\tscenario\tworlds\tdays\taction_per_day\tengine_retention_per_day"
+                     "\tengine_edge_pct\traw_allocation_per_day\tladder_paid_per_day"
+                     "\tprog_funded_per_day\tprog_rolled_per_day\tprog_paid_per_day"
+                     "\temission_counting_stored_per_day\tnet_burn_accrual_per_day"
+                     "\tnet_burn_cash_per_day\tpool_growth_per_day\tpool_mean\tpool_p10"
+                     "\tpool_p50\tpool_p90\tcommon_per_year\trare_per_year\n";
+        // EMISSION IS COUNTED WHERE IT LANDS. The ladder half is paid out; the progressive half is
+        // a liability the day it is banked. A later award RELEASES that liability and is therefore
+        // not added here — counting it again would double-count the same wei.
+        long double emission = (ladderPaid + funded) / d;
+        // THE ACCRUAL FIGURE is the one the policy is set on: what the engine kept, less what the
+        // schedule allocated. The CASH figure counts an award when it is credited instead, so the
+        // two differ by exactly the pool's growth while it is still filling — which is the
+        // identity printed beside them.
+        long double netAccrual = (risk - engine) / d - emission;
+        long double netCash = (burn - credit) / d;
+        long double poolGrowth = (funded + rolled - paid) / d;
+        std::cout << "WORLDS\t" << chosen->name << '\t' << worlds << '\t' << days << '\t'
+                  << static_cast<double>(action / d) << '\t' << static_cast<double>((risk - engine) / d) << '\t'
+                  << static_cast<double>(risk == 0 ? 0 : 100 * (risk - engine) / risk) << '\t'
+                  << static_cast<double>(allocation / d) << '\t' << static_cast<double>(ladderPaid / d) << '\t'
+                  << static_cast<double>(funded / d) << '\t' << static_cast<double>(rolled / d) << '\t'
+                  << static_cast<double>(paid / d) << '\t' << static_cast<double>(emission) << '\t'
+                  << static_cast<double>(netAccrual) << '\t' << static_cast<double>(netCash) << '\t'
+                  << static_cast<double>(poolGrowth) << '\t'
+                  << static_cast<double>(std::accumulate(ends.begin(), ends.end(), 0.0L) / worlds) << '\t'
+                  << static_cast<double>(percentile(ends, 0.10L)) << '\t'
+                  << static_cast<double>(percentile(ends, 0.50L)) << '\t'
+                  << static_cast<double>(percentile(ends, 0.90L)) << '\t'
+                  << static_cast<double>(365 * common / d) << '\t' << static_cast<double>(365 * rare / d) << "\n";
+        // THE IDENTITY, printed rather than asserted so a drift is visible in the output itself:
+        // the cash basis exceeds the accrual basis by exactly what the pool grew.
+        std::cout << "WORLDS_IDENTITY\tcash_minus_accrual\t" << static_cast<double>(netCash - netAccrual)
+                  << "\tpool_growth\t" << static_cast<double>(poolGrowth) << "\tresidual\t"
+                  << static_cast<double>(netCash - netAccrual - poolGrowth) << "\n";
+        return 0;
+    }
+
     std::cout << "SCENARIO_HEADER\tname\tordinary_seats_per_window\thigh_seats_per_window"
-                 "\tregular_action_per_day\thigh_action_per_day\tactual_engine_edge_pct\tmodeled_burn_per_day"
-                 "\tmain_budget_per_day\thigh_budget_per_day\tmain_boost_paid_per_day\thigh_boost_paid_per_day"
+                 "\tregular_action_per_day\thigh_action_per_day\tactual_engine_edge_pct\tlinear_term_per_day"
+                 "\traw_main_allocation_per_day\thigh_budget_per_day\tmain_boost_paid_per_day"
+                 "\thigh_boost_paid_per_day"
                  "\tface_cost_per_day\tcash_burn_per_day\ttotal_credit_per_day\tnet_cash_burn_per_day"
-                 "\tboost_paid_p50\tboost_paid_p90\tboost_paid_p99\n";
+                 "\tboost_paid_p50\tboost_paid_p90\tboost_paid_p99"
+                 "\tprog_funded_per_day\tprog_rolled_per_day\tprog_paid_per_day\tprog_pool_end"
+                 "\tprog_common_per_year\tprog_rare_per_year\n";
 
     auto all = scenarios();
     for (std::size_t si = 0; si < all.size(); ++si) {
@@ -1311,14 +1778,20 @@ int main(int argc, char** argv) {
         std::cout << "SCENARIO\t" << scenario.name << '\t' << static_cast<double>(t.ordinarySeats / t.windows) << '\t'
                   << static_cast<double>(t.highSeats / t.windows) << '\t' << static_cast<double>(t.actionRegular / d) << '\t'
                   << static_cast<double>(t.actionHigh / d) << '\t' << static_cast<double>(edge) << '\t'
-                  << static_cast<double>(t.modeledBurn / d) << '\t' << static_cast<double>(t.mainBudget / d) << '\t'
+                  << static_cast<double>(t.linearTerm / d) << '\t' << static_cast<double>(t.mainBudget / d) << '\t'
                   << static_cast<double>(t.highBudget / d) << '\t' << static_cast<double>(t.mainBoostPaid / d) << '\t'
                   << static_cast<double>(t.highBoostPaid / d) << '\t' << static_cast<double>(t.faceCost / d) << '\t'
                   << static_cast<double>(t.cashBurn / d) << '\t' << static_cast<double>(t.totalCredit / d) << '\t'
                   << static_cast<double>((t.cashBurn - t.totalCredit) / d) << '\t'
                   << static_cast<double>(percentile(t.dailyBoostPaid, 0.50L)) << '\t'
                   << static_cast<double>(percentile(t.dailyBoostPaid, 0.90L)) << '\t'
-                  << static_cast<double>(percentile(t.dailyBoostPaid, 0.99L)) << "\n";
+                  << static_cast<double>(percentile(t.dailyBoostPaid, 0.99L)) << '\t'
+                  << static_cast<double>(t.progressiveFunded / d) << '\t'
+                  << static_cast<double>(t.progressiveRolled / d) << '\t'
+                  << static_cast<double>(t.progressivePaid / d) << '\t'
+                  << static_cast<double>(t.progressiveEnd) << '\t'
+                  << static_cast<double>(365 * t.progressiveCommonAwards / d) << '\t'
+                  << static_cast<double>(365 * t.progressiveRareAwards / d) << "\n";
 
         for (std::size_t g = 0; g < scenario.cohorts.size(); ++g) {
             const Cohort& c = scenario.cohorts[g];
@@ -1379,6 +1852,7 @@ int main(int argc, char** argv) {
         }
     }
 
+    printEquilibriumTable();
     printShockTable();
     return 0;
 }

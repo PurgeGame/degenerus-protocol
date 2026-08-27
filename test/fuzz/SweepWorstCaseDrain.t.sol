@@ -2,6 +2,7 @@
 pragma solidity ^0.8.26;
 
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
+import {Vm} from "forge-std/Vm.sol";
 import {DegenerusGame} from "../../contracts/DegenerusGame.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 import {BoxOrderLib} from "../helpers/BoxOrderLib.sol";
@@ -429,6 +430,9 @@ contract SweepWorstCaseDrain is DeployProtocol {
         // Genuine no-work still reverts cleanly: nothing opened AND the frontier cannot move.
         require(!game.boxesPending(), "fixture: no human-box work remains");
         require(!game.advanceDue(), "fixture: no advance work remains");
+        // The crank has a craps arm now, so a NoWork probe has to quiet the table too or it is
+        // asserting an idleness it never set up.
+        _quietCrapsTable();
         vm.prank(actor);
         vm.expectRevert(abi.encodeWithSignature("NoWork()"));
         game.mineFlip();
@@ -451,6 +455,9 @@ contract SweepWorstCaseDrain is DeployProtocol {
         // active <= 1 makes openHumanBoxes return before writing. Logical 1 -> logical 1 is not
         // progress, even though comparing a normalized pre-value against raw post-storage would
         // incorrectly see 1 != 0.
+        // The crank has a craps arm now, so a NoWork probe has to quiet the table too or it is
+        // asserting an idleness it never set up.
+        _quietCrapsTable();
         vm.prank(actor);
         vm.expectRevert(abi.encodeWithSignature("NoWork()"));
         game.mineFlip();
@@ -462,6 +469,9 @@ contract SweepWorstCaseDrain is DeployProtocol {
         // 0 -> 1 clamp before stopping at the orphan guard, but logical 1 -> logical 1 is still no
         // progress; the outer NoWork revert rolls that housekeeping-only store back.
         _advanceLrIndexBy(1);
+        // The crank has a craps arm now, so a NoWork probe has to quiet the table too or it is
+        // asserting an idleness it never set up.
+        _quietCrapsTable();
         vm.prank(actor);
         vm.expectRevert(abi.encodeWithSignature("NoWork()"));
         game.mineFlip();
@@ -478,8 +488,26 @@ contract SweepWorstCaseDrain is DeployProtocol {
         assertEq(afterIdx, 2, "worded empty index advances and commits the logical frontier");
         assertEq(afterCur, 0, "empty index leaves the entry cursor zero");
 
+        // The crank has a craps arm now, so a NoWork probe has to quiet the table too or it is
+        // asserting an idleness it never set up.
+        _quietCrapsTable();
         vm.prank(actor);
         vm.expectRevert(abi.encodeWithSignature("NoWork()"));
         game.mineFlip();
     }
+    /// @dev `MinerBounty(kind, miner, flipAmount)`'s category out of a crank's logs; zero when the
+    ///      crank paid nothing at all.
+    uint8 internal constant MINER_BOUNTY_BOX_OPEN_KIND = 2;
+
+    function _minerBountyKind(Vm.Log[] memory logs) internal pure returns (uint8) {
+        bytes32 sig = keccak256("MinerBounty(uint8,address,uint256)");
+        for (uint256 i = 0; i < logs.length; ++i) {
+            if (logs[i].topics.length != 0 && logs[i].topics[0] == sig) {
+                (uint8 kind, ) = abi.decode(logs[i].data, (uint8, uint256));
+                return kind;
+            }
+        }
+        return 0;
+    }
+
 }

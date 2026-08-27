@@ -113,26 +113,9 @@ interface ICoinPlayerActions {
 /// @dev The craps table's player surface. The vault is seated automatically at every bonus
 ///      window it can pay for, so the only doors it needs of its own are joining a custom battle
 ///      and re-spreading the chips on slips it already owns.
-///
-///      `CrapsBets` MIRRORS `Craps.Bets` field for field, including the tenth leg, `dontPass` —
-///      the tuple is ABI-encoded by position, so a stale copy would silently mis-place every
-///      chip. The table refuses a ticket naming both `passLine` and `dontPass`.
 interface ICrapsPlayerActions {
-    struct CrapsBets {
-        uint24 passLine;
-        uint24 place4;
-        uint24 place5;
-        uint24 place6;
-        uint24 place8;
-        uint24 place9;
-        uint24 place10;
-        uint24 hard4;
-        uint24 hard8;
-        uint24 dontPass;
-    }
-
-    function enterBattle(uint64 slot, CrapsBets calldata chips, uint16 multiple) external returns (uint256);
-    function amendSlip(uint256 betId, CrapsBets calldata chips) external;
+    function enterBattle(uint64 slot, uint32 chips, uint16 multiple) external returns (uint256);
+    function amendSlip(uint256 betId, uint32 chips) external;
 }
 
 /// @dev Minimal ERC20 surface for sweeping foreign tokens the vault has no other handling for.
@@ -743,11 +726,7 @@ contract DegenerusVault {
     ///                  bounty and the same standing in the battle, at that multiple of the
     ///                  bankroll and that multiple of whatever the table returns.
     /// @custom:reverts NotVaultOwner If caller does not hold >50.1% of DGVE
-    function crapsEnterBattle(uint64 slot, ICrapsPlayerActions.CrapsBets calldata chips, uint16 multiple)
-        external
-        onlyVaultOwner
-        returns (uint256 betId)
-    {
+    function crapsEnterBattle(uint64 slot, uint32 chips, uint16 multiple) external onlyVaultOwner returns (uint256 betId) {
         return ICrapsPlayerActions(ContractAddresses.CRAPS).enterBattle(slot, chips, multiple);
     }
 
@@ -758,7 +737,7 @@ contract DegenerusVault {
     /// @param betId The vault's slip: `(slot << 64) | seat`.
     /// @param chips Where the same seven chips go instead.
     /// @custom:reverts NotVaultOwner If caller does not hold >50.1% of DGVE
-    function crapsAmendSlip(uint256 betId, ICrapsPlayerActions.CrapsBets calldata chips) external onlyVaultOwner {
+    function crapsAmendSlip(uint256 betId, uint32 chips) external onlyVaultOwner {
         ICrapsPlayerActions(ContractAddresses.CRAPS).amendSlip(betId, chips);
     }
 
